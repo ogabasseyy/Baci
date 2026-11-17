@@ -143,4 +143,36 @@ describe('ChatwootWidget checkout tenant isolation', () => {
     );
     expect(mocks.outgoingContext).toEqual([]);
   });
+
+  it('does not reset a widget that is still initialising when a deferred switch starts', () => {
+    const reset = vi.fn();
+    const run = vi.fn(({ websiteToken, baseUrl }) => {
+      (window as Window & { $chatwoot?: Record<string, unknown> }).$chatwoot = {
+        reset,
+        toggleBubbleVisibility: vi.fn(),
+        websiteToken,
+        baseUrl,
+      };
+    });
+    (window as Window & { chatwootSDK?: { run: typeof run } }).chatwootSDK = {
+      run,
+    };
+    const view = render(
+      <ChatwootWidget config={config}>
+        <SupportStatus />
+      </ChatwootWidget>
+    );
+    fireEvent.load(document.getElementById('baci-chatwoot-sdk') as HTMLElement);
+
+    mocks.pathname = '/shop/checkout';
+    view.rerender(
+      <ChatwootWidget
+        config={{ ...config, websiteToken: 'next-public-widget-token-123' }}
+      >
+        <SupportStatus />
+      </ChatwootWidget>
+    );
+
+    expect(reset).not.toHaveBeenCalled();
+  });
 });

@@ -1,5 +1,7 @@
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { installChatwootMessageGuard } from './chatwoot-inbound-message-guard';
+import { containPreviousChatwootTenant } from './contain-chatwoot-previous-tenant';
 import { reloadChatwootTenantDocument } from './reload-chatwoot-tenant-document';
 
 export type ChatwootWidgetConfig = {
@@ -109,33 +111,12 @@ export function useChatwootWidgetLifecycle(
       return true;
     };
 
-    // Hide-only paths must still close the previous tenant's conversation.
-    // reset() clears its cookies and reloads only the SDK iframe, never this
-    // document, so checkout state survives. Once per tenant key.
-    const containPreviousTenant = () => {
-      const previous = widgetWindow.$chatwoot;
-      const key = widgetWindow.__baciChatwootConfigKey;
-      if (key && widgetWindow.__baciChatwootContainedKey !== key) {
-        try {
-          previous?.reset?.();
-          widgetWindow.__baciChatwootContainedKey = key;
-        } catch {
-          // Retry on the next navigation; the bubble is still hidden below.
-        }
-      }
-      try {
-        previous?.toggleBubbleVisibility?.('hide');
-      } catch {
-        // The SDK throws before its bubble holder exists; nothing to hide.
-      }
-    };
-
     const activeTenantKey = widgetWindow.__baciChatwootConfigKey;
     if (activeTenantKey && configKey && activeTenantKey !== configKey) {
       if (isCartOrCheckoutPath(pathname, storeSlug)) {
         // Keep shopper-entered cart/checkout state intact. The prior widget
         // stays hidden and tenant switching resumes on the next safe route.
-        containPreviousTenant();
+        containPreviousChatwootTenant(widgetWindow);
         setActiveWidgetKey(null);
         return;
       }
@@ -151,7 +132,7 @@ export function useChatwootWidgetLifecycle(
       !validConfig ||
       window.location.origin !== storefrontOrigin
     ) {
-      containPreviousTenant();
+      containPreviousChatwootTenant(widgetWindow);
       setActiveWidgetKey(null);
       return;
     }
@@ -178,6 +159,7 @@ export function useChatwootWidgetLifecycle(
       setActiveWidgetKey(configKey);
     }
 
+    installChatwootMessageGuard(platformOrigin);
     widgetWindow.chatwootSettings ??= {};
     const scriptId = 'baci-chatwoot-sdk';
     const existingScript = document.getElementById(scriptId);

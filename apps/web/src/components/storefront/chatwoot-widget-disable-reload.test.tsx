@@ -65,6 +65,7 @@ describe('ChatwootWidget disablement', () => {
       .$chatwoot;
     if (!loadedChatwoot) throw new Error('SDK run did not initialize Chatwoot');
     Object.assign(loadedChatwoot, { reset, toggleBubbleVisibility });
+    fireEvent(window, new Event('chatwoot:ready'));
 
     view.rerender(
       <ChatwootWidget config={null}>

@@ -17,10 +17,11 @@ const MONNIFY_VEND_EVIDENCE_FIELDS = new Set(
 );
 
 /**
- * Inside responseBody a plain `status` is the vend's own status (the
- * classifier reads it as a fallback for vendStatus) and a plain `reference`
- * is Monnify's record. At the top level they are often just an error body's
- * HTTP status or an echo of our request reference, so they are not read there.
+ * Below the top level (responseBody and anything nested in it) a plain
+ * `status` string is the vend's own status (the classifier reads it as a
+ * fallback for vendStatus) and a plain `reference` is Monnify's record. At
+ * the top level they are often just an error body's HTTP status or an echo
+ * of our request reference, so they are not read there.
  */
 const MONNIFY_RESPONSE_BODY_EVIDENCE_FIELDS = new Set([
   ...MONNIFY_VEND_EVIDENCE_FIELDS,
@@ -28,7 +29,8 @@ const MONNIFY_RESPONSE_BODY_EVIDENCE_FIELDS = new Set([
   normaliseKey('reference'),
 ]);
 
-const RESPONSE_BODY_KEY = normaliseKey('responseBody');
+const STATUS_KEY = normaliseKey('status');
+const MAX_NESTED_DEPTH = 6;
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -36,39 +38,58 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
+function isEvidenceValue(key: string, value: unknown): boolean {
+  if (typeof value === 'string') {
+    return value.trim() !== '';
+  }
+  // A numeric `status` is an HTTP code, never a vend status.
+  return typeof value === 'number' && key !== STATUS_KEY;
+}
+
 function carriesVendField(
-  value: unknown,
+  record: Record<string, unknown>,
   fields: ReadonlySet<string>
 ): boolean {
-  const record = asRecord(value);
-  if (!record) {
+  return Object.entries(record).some(([rawKey, value]) => {
+    const key = normaliseKey(rawKey);
+    return fields.has(key) && isEvidenceValue(key, value);
+  });
+}
+
+/** Searches every object nested below the top level (responseBody, data…). */
+function nestedCarriesVendField(value: unknown, depth: number): boolean {
+  if (depth > MAX_NESTED_DEPTH || !value || typeof value !== 'object') {
     return false;
   }
-  return Object.entries(record).some(
-    ([key, fieldValue]) =>
-      fields.has(normaliseKey(key)) &&
-      ((typeof fieldValue === 'string' && fieldValue.trim() !== '') ||
-        typeof fieldValue === 'number')
-  );
+  const children = Array.isArray(value) ? value : [value];
+  return children.some((child) => {
+    const record = asRecord(child);
+    if (!record) {
+      return nestedCarriesVendField(child, depth + 1);
+    }
+    return (
+      carriesVendField(record, MONNIFY_RESPONSE_BODY_EVIDENCE_FIELDS) ||
+      Object.values(record).some((inner) =>
+        nestedCarriesVendField(inner, depth + 1)
+      )
+    );
+  });
 }
 
 /**
  * Whether a Monnify answer (a business envelope or a parsed HTTP error body)
- * carries any sign of a vend: a status or a reference, at the top level or in
- * its responseBody, in any key casing. A rejection with such a sign may have
- * reached the network, so it never counts as a pre-vend refusal.
+ * carries any sign of a vend: a status or a reference, at the top level or
+ * in any nested object (responseBody, responseBody.data…), in any key casing.
+ * A rejection with such a sign may have reached the network, so it never
+ * counts as a pre-vend refusal.
  */
 export function hasMonnifyVendEvidence(answer: unknown): boolean {
   const record = asRecord(answer);
   if (!record) {
     return false;
   }
-  if (carriesVendField(record, MONNIFY_VEND_EVIDENCE_FIELDS)) {
-    return true;
-  }
-  return Object.entries(record).some(
-    ([key, body]) =>
-      normaliseKey(key) === RESPONSE_BODY_KEY &&
-      carriesVendField(body, MONNIFY_RESPONSE_BODY_EVIDENCE_FIELDS)
+  return (
+    carriesVendField(record, MONNIFY_VEND_EVIDENCE_FIELDS) ||
+    Object.values(record).some((value) => nestedCarriesVendField(value, 1))
   );
 }

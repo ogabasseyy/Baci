@@ -215,8 +215,8 @@ export async function purchaseBill(
           !error.isDuplicateReference &&
           !error.reportsUnexpectedError &&
           !error.mentionsVendOutcome &&
-          (error.status === 401 ||
-            error.status === 403 ||
+          (((error.status === 401 || error.status === 403) &&
+            error.readsAsAuthRejection) ||
             error.isKnownRefusal),
       };
     }

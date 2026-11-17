@@ -17,6 +17,7 @@ interface MonnifyAnswerReading {
   isKnownRefusal: boolean;
   mentionsVendOutcome: boolean;
   reportsUnexpectedError: boolean;
+  readsAsAuthRejection: boolean;
 }
 
 function readMonnifyAnswer(text: string): MonnifyAnswerReading {
@@ -24,7 +25,12 @@ function readMonnifyAnswer(text: string): MonnifyAnswerReading {
     isDuplicateReference: isMonnifyDuplicateReferenceText(text),
     isKnownRefusal: isMonnifyKnownVendRefusalText(text),
     mentionsVendOutcome: isMonnifyVendOutcomeText(text),
-    reportsUnexpectedError: /"responseCode"\s*:\s*"?99"?(?!\d)/.test(text),
+    // Code 99 in any shape: JSON, plain text or other key casing.
+    reportsUnexpectedError: /code["'\s:=]*"?99(?!\d)/i.test(text),
+    readsAsAuthRejection:
+      /unauthori[sz]ed|forbidden|access denied|invalid (?:access )?token|(?:expired|revoked) token|token (?:expired|revoked)|invalid credentials?|authenticat/i.test(
+        text
+      ),
   };
 }
 
@@ -79,6 +85,11 @@ export class MonnifyHttpError extends Error {
     return this.#reading.reportsUnexpectedError;
   }
 
+  /** The answer reads as an authentication rejection, not just its status. */
+  get readsAsAuthRejection() {
+    return this.#reading.readsAsAuthRejection;
+  }
+
   /** The answer talks about a vend outcome or an unavailable service. */
   get mentionsVendOutcome() {
     return this.#reading.mentionsVendOutcome;
@@ -107,6 +118,8 @@ export class MonnifyTransientVendError extends Error {
 }
 
 export function sanitizeMonnifyErrorDetail(value: string) {
+  // Redact over a generous window first, then cut to the stored length, so
+  // a number that straddles the cut (grouped or not) is already hidden.
   const redactionBound =
     MONNIFY_ERROR_DETAIL_MAX_LENGTH + MONNIFY_ERROR_DETAIL_REDACTION_LOOKAHEAD;
   let boundedValue = value.slice(0, redactionBound);
@@ -116,13 +129,19 @@ export function sanitizeMonnifyErrorDetail(value: string) {
     /\d$/.test(boundedValue) &&
     /^\d/.test(value.slice(redactionBound, redactionBound + 1))
   ) {
-    boundedValue = boundedValue.replace(/\d+$/, '');
+    boundedValue = boundedValue.replace(/[\d .()+-]+$/, '');
   }
 
-  return boundedValue
+  const redacted = boundedValue
     .replace(SENSITIVE_DIGIT_SEQUENCE_PATTERN, '[redacted]')
-    .replace(SENSITIVE_GROUPED_PHONE_PATTERN, '[redacted]')
+    .replace(SENSITIVE_GROUPED_PHONE_PATTERN, '[redacted]');
+  if (redacted.length <= MONNIFY_ERROR_DETAIL_MAX_LENGTH) {
+    return redacted.trim();
+  }
+  // The cut may split a number: drop a trailing digit group it leaves.
+  return redacted
     .slice(0, MONNIFY_ERROR_DETAIL_MAX_LENGTH)
+    .replace(/[\d .()+-]*\d$/, '')
     .trim();
 }
 

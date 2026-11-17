@@ -119,6 +119,22 @@ describe('Monnify vend failures handed to Kuda', () => {
       });
     });
 
+    it('never marks a plain-text code 99 answer as definite', async () => {
+      mockHttpError(400, 'Bad Request', 'Code 99: Insufficient wallet balance');
+
+      await expect(vend()).resolves.toMatchObject({
+        providerDefiniteFailure: false,
+      });
+    });
+
+    it('never marks a 403 that does not read as an auth rejection as definite', async () => {
+      mockHttpError(403, 'Request Blocked', 'Gateway policy');
+
+      await expect(vend()).resolves.toMatchObject({
+        providerDefiniteFailure: false,
+      });
+    });
+
     it('never hands a 408 timeout to Kuda', async () => {
       mockHttpError(408, 'Request Timeout', 'Insufficient wallet balance');
 

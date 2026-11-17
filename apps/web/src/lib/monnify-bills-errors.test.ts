@@ -52,6 +52,14 @@ describe('sanitizeMonnifyErrorDetail', () => {
     );
   });
 
+  it('hides a grouped phone number that straddles the length cut', () => {
+    const sanitized = sanitizeMonnifyErrorDetail(
+      `${'x'.repeat(230)} 0801 234 5678 trailing`
+    );
+
+    expect(sanitized).not.toMatch(/0801|234 5678/);
+  });
+
   it('keeps grouped references that are not phone-shaped', () => {
     expect(sanitizeMonnifyErrorDetail('Ref 1234 5678 99 failed')).toBe(
       'Ref 1234 5678 99 failed'

@@ -62,6 +62,13 @@ export async function executeMonnifyAirtimeKudaFallback({
     provider: 'kuda',
     providerFallback: 'monnify_airtime_to_kuda',
   };
+  // Every fallback is logged so an outage on the Monnify side (expired
+  // credentials, rate limits, low float) shows up instead of hiding behind
+  // Kuda, which keeps airtime working meanwhile.
+  console.warn('Monnify refused airtime; vending through Kuda backup:', {
+    monnifyError: kudaFallbackPatch.monnifyFallbackError,
+    transactionId: row.id,
+  });
   const fallbackMarkerQuery = supabase
     .from('vtu_transactions')
     .update({

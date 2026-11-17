@@ -53,10 +53,17 @@ export class MonnifyHttpError extends Error {
   }
 }
 
+/**
+ * Deliberately broad (fails closed): any answer that talks about the
+ * reference, duplicates, something already existing or in use, or a
+ * conflict is treated as "Monnify may already hold this vend", so it is
+ * never handed to Kuda. A plain refusal such as low float or an invalid
+ * customer id does not match.
+ */
 const MONNIFY_DUPLICATE_REFERENCE_PATTERN =
-  /duplicate|already\s+(?:been\s+)?(?:used|exists?|processed|submitted)/i;
+  /duplicate|reference|already|exist|in\s+use|conflict|idempoten/i;
 
-/** Whether a Monnify message says the vend reference was already used. */
+/** Whether a Monnify message may mean the vend reference was already used. */
 export function isMonnifyDuplicateReferenceText(
   text: string | null | undefined
 ): boolean {

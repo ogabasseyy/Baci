@@ -128,7 +128,7 @@ export async function purchaseBill(
         status: 'failed',
         amount,
         providerDefiniteFailure: !isMonnifyDuplicateReferenceText(
-          parsedEnvelope.responseMessage
+          `${parsedEnvelope.responseCode ?? ''} ${parsedEnvelope.responseMessage ?? ''}`
         ),
       };
     }

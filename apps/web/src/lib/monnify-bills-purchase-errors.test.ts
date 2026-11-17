@@ -129,6 +129,9 @@ describe('Monnify bill purchase errors', () => {
       [409, 'Conflict', 'Request conflict'],
       [400, 'Bad Request', 'Duplicate vendReference'],
       [400, 'Bad Request', 'Reference has already been used'],
+      [400, 'Bad Request', 'Reference exists'],
+      [400, 'Bad Request', 'vendReference in use'],
+      [422, 'Unprocessable Entity', 'Request conflict'],
     ])('never marks a duplicate reference (%i %s) as definite', async (status, statusText, message) => {
       mockHttpError(status, statusText, message);
 
@@ -157,6 +160,18 @@ describe('Monnify bill purchase errors', () => {
           requestSuccessful: false,
           responseCode: '99',
           responseMessage: 'Duplicate transaction reference',
+        }),
+      });
+      await expect(vend()).resolves.toMatchObject({
+        providerDefiniteFailure: false,
+      });
+
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          requestSuccessful: false,
+          responseCode: 'DUPLICATE_REFERENCE',
+          responseMessage: 'Request failed',
         }),
       });
       await expect(vend()).resolves.toMatchObject({

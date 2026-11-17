@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
+import { SavingsContributionProgress } from './SavingsContributionProgress';
 import { SavingsFundingLoadingPanel } from './SavingsFundingLoadingPanel';
 import { lastGoalSetupPhase } from './savings/goal-setup-memory';
 import { SavingsPlanStatusNote } from './savings/SavingsPlanStatusNote';
@@ -82,39 +83,54 @@ export function ManualPrimaryGoalSection(props: ManualPrimaryGoalSectionProps) {
           itself is refused server-side until that wallet exists. */}
       {phase === 'ready' && oneTap && headStart.waiting !== null ? (
         <View style={styles.headStart}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Move ${formatNgnCurrency(headStart.waiting)} from my wallet`}
-            accessibilityState={{ disabled: busy || !headStart.canMove }}
-            disabled={busy || !headStart.canMove}
-            onPress={headStart.move}
-            style={[
-              styles.moveButton,
-              { backgroundColor: colors.primary },
-              busy || !headStart.canMove ? styles.disabled : null,
-            ]}
+          {/* While the cover is up, screen readers skip the buttons under it. */}
+          <View
+            style={styles.headStartButtons}
+            accessibilityElementsHidden={props.isAdding}
+            importantForAccessibility={
+              props.isAdding ? 'no-hide-descendants' : 'auto'
+            }
           >
-            <Text
-              style={[styles.moveText, { color: colors.primaryForeground }]}
-            >
-              Move {formatNgnCurrency(headStart.waiting)} from my wallet
-            </Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            onPress={headStart.dismiss}
-            disabled={busy}
-          >
-            <Text
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Move ${formatNgnCurrency(headStart.waiting)} from my wallet`}
+              accessibilityState={{ disabled: busy || !headStart.canMove }}
+              disabled={busy || !headStart.canMove}
+              onPress={headStart.move}
               style={[
-                styles.note,
-                styles.center,
-                { color: colors.textSecondary },
+                styles.moveButton,
+                { backgroundColor: colors.primary },
+                busy || !headStart.canMove ? styles.disabled : null,
               ]}
             >
-              Choose a different amount
-            </Text>
-          </Pressable>
+              <Text
+                style={[styles.moveText, { color: colors.primaryForeground }]}
+              >
+                Move {formatNgnCurrency(headStart.waiting)} from my wallet
+              </Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              onPress={headStart.dismiss}
+              disabled={busy}
+            >
+              <Text
+                style={[
+                  styles.note,
+                  styles.center,
+                  { color: colors.textSecondary },
+                ]}
+              >
+                Choose a different amount
+              </Text>
+            </Pressable>
+          </View>
+          {props.isAdding ? (
+            <SavingsContributionProgress
+              amount={headStart.waiting}
+              colors={colors}
+            />
+          ) : null}
         </View>
       ) : phase === 'ready' ? (
         <WalletSavingsContributionFlow
@@ -141,6 +157,7 @@ const styles = StyleSheet.create({
   note: { fontSize: 13, lineHeight: 18 },
   center: { textAlign: 'center' },
   headStart: { gap: 12 },
+  headStartButtons: { gap: 12 },
   moveButton: { borderRadius: 999, paddingVertical: 16, alignItems: 'center' },
   moveText: { fontSize: 17, fontWeight: '700' },
   disabled: { opacity: 0.5 },

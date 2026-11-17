@@ -3,7 +3,6 @@ import Ionicons from '@react-native-vector-icons/ionicons';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { BRAND } from '@/constants/Colors';
 import { isHostedStagingTestPaymentsEnabled } from '@/lib/is-hosted-staging-wallet-top-up-blocked';
 import { answerWalletFundPrompt } from './fund/answer-wallet-fund-prompt';
 import { WalletFundPromptCard } from './fund/WalletFundPromptCard';
@@ -19,6 +18,8 @@ import { SavingsNoticeCard } from './savings/SavingsNoticeCard';
 import { useInSheetGoalCancel } from './savings/use-in-sheet-goal-cancel';
 import { usePlanStillSettingUp } from './savings/use-plan-still-setting-up';
 import { WalletPinSheet } from './savings/WalletPinSheet';
+import { withSavingsBrand } from './savings-sheet-colors';
+import { useHeldWhileAdding } from './use-held-while-adding';
 import { WalletPendingSavingsContribution } from './WalletPendingSavingsContribution';
 import { WalletSavingsFundingSection } from './WalletSavingsFundingSection';
 import { walletSavingsProgressModalStyles as styles } from './wallet-savings-progress-modal.styles';
@@ -48,12 +49,7 @@ export function WalletSavingsProgressModal({
   walletBalance,
   walletUpdatedAt,
 }: WalletSavingsProgressModalProps) {
-  const colors = {
-    ...themeColors,
-    primary: BRAND.primary,
-    primaryForeground: BRAND.onPrimary,
-    primaryLowOpacity: BRAND.primaryAlpha12,
-  };
+  const colors = withSavingsBrand(themeColors);
   // Matches the wallet card: "View plan" there means not "Add to savings" here.
   const settingUp = usePlanStillSettingUp(goal);
   const cancel = useInSheetGoalCancel(goal, onRefreshWallet, visible);
@@ -70,6 +66,14 @@ export function WalletSavingsProgressModal({
   const [swapHeight, setSwapHeight] = useState(0);
   const [headerHeight, setHeaderHeight] = useState(0);
   const [bodyHeight, setBodyHeight] = useState(0);
+  // An add in flight hides a few links (Change phone, Cancel/Complete); the
+  // sheet keeps its height meanwhile instead of shrinking under the PIN step.
+  const mainHeight = useHeldWhileAdding(
+    isAdding,
+    headerHeight > 0 && bodyHeight > 0
+      ? headerHeight + HEADER_GAP + bodyHeight
+      : undefined
+  );
   if (!goal && !cancel.goal) {
     return null;
   }
@@ -179,11 +183,7 @@ export function WalletSavingsProgressModal({
       // Nothing saved yet means no progress card: open shorter so the sheet
       // does not end in empty space. It still expands on drag.
       snapPoints={goal.current_amount > 0 ? undefined : COMPACT_SNAP_POINTS}
-      contentHeight={
-        headerHeight > 0 && bodyHeight > 0
-          ? headerHeight + HEADER_GAP + bodyHeight
-          : undefined
-      }
+      contentHeight={mainHeight}
       onClose={closeSheet}
       overlay={overlay}
     >

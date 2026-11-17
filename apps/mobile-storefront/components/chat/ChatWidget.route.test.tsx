@@ -82,9 +82,9 @@ jest.mock('./ChatModal', () => ({ ChatModal: jest.fn(() => null) }));
 // The real hidden-route list, so a route dropped from it fails here.
 jest.mock('./constants', () => ({
   EDGE_MARGIN: 16,
-  HIDDEN_ROUTES:
+  isChatHiddenRoute:
     jest.requireActual<typeof import('./constants')>('./constants')
-      .HIDDEN_ROUTES,
+      .isChatHiddenRoute,
 }));
 jest.mock('./styles', () => ({
   styles: new Proxy({}, { get: () => ({}) }),
@@ -131,6 +131,18 @@ describe('ChatWidget route visibility', () => {
 
   it('returns null on the Wallet PIN screen, where the PIN pad sits', () => {
     mockUsePathname.mockReturnValue('/settings/wallet-pin');
+
+    const { toJSON } = render(<ChatWidget />);
+
+    expect(toJSON()).toBeNull();
+  });
+
+  it.each([
+    '/wallet',
+    '/wallet/savings/start',
+    '/wallet/manage-cards',
+  ])('returns null on the wallet (%s), where it covered the amounts', (path) => {
+    mockUsePathname.mockReturnValue(path);
 
     const { toJSON } = render(<ChatWidget />);
 

@@ -2,12 +2,12 @@ import { describe, expect, it, jest } from '@jest/globals';
 import { render, screen } from '@testing-library/react-native';
 import { type StyleProp, StyleSheet, type ViewStyle } from 'react-native';
 import Colors from '@/constants/Colors';
-import { CHAT_WIDGET_FAB_SIZE } from '@/constants/layout';
 import { WalletPrimaryContext } from './WalletPrimaryContext';
 import {
   STORE_CREDIT_SCOPE_COPY,
   WalletTransactionHistory,
 } from './WalletTransactionHistory';
+import { WALLET_LIST_INSET } from './wallet-list-layout';
 
 jest.mock('react-native-reanimated', () => {
   const { View } = jest.requireActual(
@@ -27,6 +27,10 @@ function renderHistory(primaryReady: boolean) {
     </WalletPrimaryContext.Provider>
   );
 }
+
+const flatStyle = (
+  node: { props: { style?: StyleProp<ViewStyle> } } | null | undefined
+) => StyleSheet.flatten(node?.props.style) ?? {};
 
 describe('bugfix: "No transactions yet" beside a ₦50,000 savings wallet', () => {
   it('names the list store credit activity for a PiggyVest customer', () => {
@@ -50,20 +54,14 @@ describe('server keeps PiggyVest off', () => {
   });
 });
 
-describe('bugfix: store credit heading indented past the wallet cards', () => {
-  it('lines the heading up with the 16pt card edge, not 36pt', () => {
+describe('store credit card sits like the other wallet cards', () => {
+  it('keeps the 16pt card margin with the heading inside the card padding', () => {
     renderHistory(true);
 
-    const heading = screen.getByText('Older store credit');
-    const section = heading.parent?.parent;
-    const flat = Object.assign(
-      {},
-      ...([section?.props.style]
-        .flat(Number.POSITIVE_INFINITY)
-        .filter(Boolean) as object[])
-    ) as { margin?: number; paddingHorizontal?: number };
+    const section = screen.getByText('Older store credit').parent?.parent;
+    const flat = flatStyle(section);
     expect(flat.margin).toBe(16);
-    expect(flat.paddingHorizontal).toBe(0);
+    expect(flat.paddingLeft).toBe(WALLET_LIST_INSET);
   });
 
   it('points to the wallet activity listed above, without a provider name', () => {
@@ -76,30 +74,30 @@ describe('bugfix: store credit heading indented past the wallet cards', () => {
   });
 });
 
-const flatStyle = (
-  node: { props: { style?: StyleProp<ViewStyle> } } | null | undefined
-) => StyleSheet.flatten(node?.props.style) ?? {};
-
-describe('bugfix: store credit amounts ran to the screen edge', () => {
-  it('keeps amounts clear of the AI button, like the activity list above', () => {
+describe('bugfix: older store credit card was misaligned', () => {
+  it('uses the same equal inner inset as the Wallet activity card', () => {
     renderHistory(true);
 
     const section = screen.getByText('Older store credit').parent?.parent;
-    expect(flatStyle(section).paddingRight).toBe(CHAT_WIDGET_FAB_SIZE + 8);
+    const flat = flatStyle(section);
+    expect(flat.paddingLeft).toBe(WALLET_LIST_INSET);
+    expect(flat.paddingRight).toBe(WALLET_LIST_INSET);
   });
 
-  it('centres the empty state on the screen, not on the narrowed list', () => {
+  it('centres the empty state inside the card, with no lopsided offset', () => {
     renderHistory(true);
 
     const empty = screen.getByText('No store credit activity yet').parent
       ?.parent;
-    expect(flatStyle(empty).paddingLeft).toBe(CHAT_WIDGET_FAB_SIZE + 8);
+    expect(flatStyle(empty).paddingLeft).toBe(0);
+    expect(flatStyle(empty).paddingRight).toBe(0);
   });
 
   it('leaves the plain Recent Transactions layout alone', () => {
     renderHistory(false);
 
     const section = screen.getByText('Recent Transactions').parent?.parent;
+    expect(flatStyle(section).padding).toBe(20);
     expect(flatStyle(section).paddingRight).toBeUndefined();
   });
 });

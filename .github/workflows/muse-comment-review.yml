@@ -13,8 +13,8 @@ permissions:
 
 concurrency:
   group: >-
-    muse-comment-review-${{ github.event.issue.number }}-attempt-${{ github.run_attempt }}
-  cancel-in-progress: ${{ github.run_attempt == 1 }}
+    muse-comment-review-${{ github.event.issue.number }}-attempt-${{ github.run_attempt }}${{ (github.event.issue.pull_request != null && contains(github.event.comment.body, '@muse review') && (github.event.comment.author_association == 'OWNER' || github.event.comment.author_association == 'MEMBER' || github.event.comment.author_association == 'COLLABORATOR')) && '' || '-ignored' }}
+  cancel-in-progress: ${{ github.run_attempt == 1 && github.event.issue.pull_request != null && contains(github.event.comment.body, '@muse review') && (github.event.comment.author_association == 'OWNER' || github.event.comment.author_association == 'MEMBER' || github.event.comment.author_association == 'COLLABORATOR') }}
 
 jobs:
   muse-comment-review:

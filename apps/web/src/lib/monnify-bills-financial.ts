@@ -210,7 +210,7 @@ export async function purchaseBill(
         status: 'failed',
         amount,
         // A refusal Monnify gave before vending: an authentication rejection
-        // (401/403, e.g. revoked credentials) or a known refusal. A 401/403
+        // (401/403, e.g. a cached token rejected) or a known refusal. A 401/403
         // comes from the vend request's own bearer-token check, which runs
         // before the request is processed, so nothing was vended; a failed
         // token login never gets this far (it throws a plain Error from

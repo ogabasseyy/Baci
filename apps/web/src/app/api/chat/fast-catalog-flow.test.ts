@@ -275,4 +275,44 @@ describe('tryFastCatalogChat', () => {
     expect(result?.text).toMatch(/couldn.t|unavailable/i);
     expect(result?.unavailable).toBe(true);
   });
+
+  it('answers plural macbooks below 2m through the catalog search flow', async () => {
+    mocks.categories.mockResolvedValue([
+      ...categories,
+      { id: 'laptops', name: 'Laptops', slug: 'laptops' },
+    ]);
+    mocks.products.mockResolvedValue([
+      {
+        id: 'mac-1',
+        name: 'Apple MacBook Air M2',
+        slug: 'apple-macbook-air-m2',
+        brand: 'Apple',
+        category: 'Laptops',
+        description: null,
+        image_url: null,
+        price: 1_450_000,
+        status: 'active',
+        stock: 2,
+        manage_stock: false,
+        has_variants: false,
+      },
+    ]);
+
+    const result = await tryFastCatalogChat({
+      messages: messages('macbooks below 2m'),
+      tenant,
+      signal: new AbortController().signal,
+    });
+
+    expect(result?.events[0]?.products[0]?.name).toBe('Apple MacBook Air M2');
+    expect(mocks.products).toHaveBeenCalledWith(
+      'merchant-1',
+      expect.objectContaining({
+        categoryId: 'laptops',
+        query: 'MacBook',
+        maxPrice: 2_000_000,
+        exclusiveMaxPrice: true,
+      })
+    );
+  });
 });

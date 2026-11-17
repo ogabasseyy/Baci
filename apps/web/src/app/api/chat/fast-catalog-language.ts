@@ -9,8 +9,8 @@ export const uncheckedOption =
 
 export const PHONE_SIGNAL =
   /\b(?:smartphones?|phones?|iphones?|pixel|galaxy\s+(?:[samf]\s*\d+|z\s*(?:fold|flip)\s*\d+))\b/i;
-export const LAPTOP_SIGNAL = /\b(?:laptops?|macbook|notebook)\b/i;
-export const TABLET_SIGNAL = /\b(?:tablets?|ipad)\b/i;
+export const LAPTOP_SIGNAL = /\b(?:laptops?|macbooks?|notebooks?)\b/i;
+export const TABLET_SIGNAL = /\b(?:tablets?|ipads?)\b/i;
 export const ACCESSORY_SIGNAL =
   /\b(?:airpods|earbuds?|headphones?|headsets?|earphones?|chargers?|cables?|adapters?|power[\s-]*banks?|cases?|screen[\s-]*protectors?|speakers?)\b/i;
 
@@ -19,6 +19,15 @@ export function normalizeAccessoryNouns(value: string): string {
     /\b(?:chargers|cables|adapters|cases|headphones|headsets|earphones|earbuds|speakers|banks|protectors)\b/gi,
     (word) => word.slice(0, -1)
   );
+}
+
+/** Singularize plural device and accessory nouns for search and token matching. */
+export function normalizeCatalogSearchNouns(value: string): string {
+  return normalizeAccessoryNouns(value)
+    .replace(/\biphones\b/gi, 'iPhone')
+    .replace(/\bmacbooks\b/gi, 'MacBook')
+    .replace(/\bipads\b/gi, 'iPad')
+    .replace(/\bnotebooks\b/gi, 'notebook');
 }
 
 export function resolveCatalogCategory<T extends { slug: string }>(
@@ -126,7 +135,7 @@ export function stripCatalogAvailabilityPhrases(text: string): string {
       ' '
     )
     .replace(
-      /\b(iphones?|smartphones?|phones?|laptops?|tablets?|ipads?) models\b/gi,
+      /\b(iphones?|smartphones?|phones?|laptops?|notebooks?|macbooks?|tablets?|ipads?) models\b/gi,
       '$1'
     );
 }

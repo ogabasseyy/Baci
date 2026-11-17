@@ -1,4 +1,4 @@
-import type { ModelMessage } from 'ai';
+import type { ModelMessage, StopCondition, ToolSet } from 'ai';
 import {
   type ChainTextResult,
   generateTextWithChain,
@@ -12,6 +12,9 @@ import { createAiSdkAgenticChatTools } from './chat-tool-runtime';
 import { createChatPresentationEventCollector } from './create-chat-presentation-event-collector';
 
 const GEMINI_PROVIDER_PREFIX = 'google:';
+const MAX_AGENTIC_CHAT_STEPS = 5;
+const agenticChatStopWhen: StopCondition<ToolSet> = ({ steps }) =>
+  steps.length >= MAX_AGENTIC_CHAT_STEPS;
 /**
  * One provider attempt's budget inside the chain. The chat route holds back
  * this much from the first-choice stages so the fallback keeps one full
@@ -150,6 +153,7 @@ export async function runChatProviderChain({
       overallTimeoutMs: remainingTimeoutMs(),
       perProviderTimeoutMs: GEMINI_PROVIDER_TIMEOUT_MS,
       shouldStopWalk: () => sideEffectExecuted,
+      stopWhen: agenticChatStopWhen,
       system: buildAgenticSystemPrompt(merchantName, {
         checkoutEnabled: agenticCheckoutEnabled,
         currency,

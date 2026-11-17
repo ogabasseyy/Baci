@@ -44,7 +44,7 @@ export type FastCatalogIntent =
 const CONTEXTUAL_PRICE =
   /^(?:how much(?:\s+(?:is|for)\s+(?:it|that|this))?|what(?:['’]s| is)\s+(?:the\s+)?(?:price|cost)(?:\s+(?:(?:of|for)\s+)?(?:it|that|this))?|(?:what|how)\s+about\s+(?:the\s+)?(?:price|cost)|(?:the\s+)?(?:price|cost))[?!.\s]*$/i;
 const SHOPPING_REQUEST =
-  /\b(?:recommend|recommendation|suggest|looking for|buy|shop|do\s+you\s+(?:(?:currently|still)\s+)?(?:have|sell|carry|stock)|have\s+you\s+got|price|cost|how much|phone|phones|smartphone|smartphones|iphones?|pixel|laptop|laptops|macbook|tablet|tablets|ipad|galaxy\s+(?:[samf]\s*\d+|z\s*(?:fold|flip)\s*\d+))\b/i;
+  /\b(?:recommend|recommendation|suggest|looking for|buy|shop|do\s+you\s+(?:(?:currently|still)\s+)?(?:have|sell|carry|stock)|have\s+you\s+got|price|cost|how much|phone|phones|smartphone|smartphones|iphones?|pixel|laptop|laptops|macbooks?|notebooks?|tablet|tablets|ipads?|galaxy\s+(?:[samf]\s*\d+|z\s*(?:fold|flip)\s*\d+))\b/i;
 const FOLLOW_UP =
   /\b(?:under|below|budget|within|up\s+to|at\s+most|maximum|max|cheaper|cheapest|less|more|instead|wifi|wi-fi|used|new|gaming|camera|battery)\b/i;
 const { PHONE_SIGNAL, LAPTOP_SIGNAL, TABLET_SIGNAL, ACCESSORY_SIGNAL } =
@@ -54,12 +54,11 @@ function searchText(text: string): string {
     analyzeFastCatalogBudget(text).searchText
   );
   return catalogLanguage
-    .normalizeAccessoryNouns(
+    .normalizeCatalogSearchNouns(
       catalogLanguage.stripRelativePricePhrases(
         catalogLanguage.normalizeUseCasePhrases(catalogText)
       )
     )
-    .replace(/\biphones\b/gi, 'iPhone')
     .replace(/\bi['’](?:m|d|ll|ve)\b/gi, ' ')
     .replace(
       /\b(?:(?:not|no|without|avoid|exclude|except|never|don'?t)\s+)?wi[\s-]*fi[\s-]*only\b/gi,

@@ -275,4 +275,40 @@ describe('loadFastCatalogProducts', () => {
       expect.anything()
     );
   });
+
+  it('matches singular product titles even when given a plural device query', async () => {
+    mocks.ranked.mockResolvedValue({
+      productIds: ['mac-1'],
+      count: 1,
+      didYouMean: null,
+      query: 'macbooks',
+    });
+    mocks.query.limit.mockResolvedValue({
+      data: [
+        {
+          ...row,
+          id: 'mac-1',
+          category_id: 'laptops',
+          category: 'Laptops',
+          name: 'Apple MacBook Air M2',
+          slug: 'apple-macbook-air-m2',
+          price: 1_450_000,
+        },
+      ],
+      error: null,
+    });
+
+    const products = await loadFastCatalogProducts('merchant-1', {
+      ...intent,
+      categoryId: 'laptops',
+      query: 'macbooks',
+      isPhoneCategory: false,
+      maxPrice: 2_000_000,
+      exclusiveMaxPrice: true,
+    });
+
+    expect(products.map((product) => product.name)).toEqual([
+      'Apple MacBook Air M2',
+    ]);
+  });
 });

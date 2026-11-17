@@ -253,7 +253,10 @@ export const OgabasseyV2PrivacyPolicy: React.FC<PrivacyProps> = ({ merchant }) =
           {isOgabassey && (
             <section className="rounded-xl bg-[var(--ogabassey-surface,#fff)] p-4 text-[var(--ogabassey-surface-text,#111827)] text-sm md:text-base leading-relaxed">
               <h2 className="text-xl font-bold mb-3">Storefront chat</h2>
-              <p>Storefront chat messages may be sent to OpenAI or DeepSeek to generate responses.</p>
+              <p>
+                Storefront chat messages may be sent to OpenAI, Meta, or
+                DeepSeek to generate responses.
+              </p>
             </section>
           )}
 

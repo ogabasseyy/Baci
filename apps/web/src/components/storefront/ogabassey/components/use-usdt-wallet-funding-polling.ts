@@ -144,6 +144,8 @@ export function useUsdtWalletFundingPolling({
         } else if (result.fundingStatus !== 'pending') {
           stopPolling();
         }
+      } catch (error) {
+        console.error('[usdt-polling] Failed to check funding status', error);
       } finally {
         inFlight = false;
         if (!cancelled) {

@@ -67,6 +67,7 @@ export async function revalidateScheduledPostsByMerchant(
         merchantId
       );
       blogRevalidationByMerchant.set(merchantId, blogRevalidation);
+      let edgePurgeOnly = false;
       try {
         revalidateBlogPosts({
           merchantId,
@@ -83,9 +84,8 @@ export async function revalidateScheduledPostsByMerchant(
           nextRevalError instanceof Error
             ? nextRevalError.message
             : String(nextRevalError);
-        if (!msg.includes('static generation store')) {
-          throw nextRevalError;
-        }
+        const isOutsideRequestContext =
+          msg.includes('static generation store') || msg.includes('Invariant:');
         const purgeIdentifiers = Array.from(
           new Set(
             [
@@ -117,10 +117,16 @@ export async function revalidateScheduledPostsByMerchant(
             purgeCategorySlugs
           )
         );
+        if (!isOutsideRequestContext) {
+          throw nextRevalError;
+        }
+        edgePurgeOnly = true;
       }
       schedulePrewarmBlogImageTransforms(merchantPosts.featuredImageUrls);
       console.log(
-        `🔄 Cron: Revalidated blog cache for merchant ${merchantId} across ${merchantPosts.postSlugs.length} posts`
+        edgePurgeOnly
+          ? `🔄 Cron: Purged Cloudflare blog edge cache for merchant ${merchantId} across ${merchantPosts.postSlugs.length} posts (standalone worker)`
+          : `🔄 Cron: Revalidated blog cache for merchant ${merchantId} across ${merchantPosts.postSlugs.length} posts`
       );
     } catch (revalError) {
       console.error(

@@ -118,15 +118,14 @@ async function generateInsights(
     payload: InsightsPayload,
     ttlSeconds: number
   ): Promise<void> {
+    cache.set(cacheKey, payload, ttlSeconds);
     if (!redis) {
-      cache.set(cacheKey, payload, ttlSeconds);
       return;
     }
     try {
       await withRedisTimeout(redis.set(cacheKey, payload, { ex: ttlSeconds }));
     } catch (error) {
       console.warn('[analytics/insights] Redis cache write failed', error);
-      cache.set(cacheKey, payload, ttlSeconds);
     }
   }
 

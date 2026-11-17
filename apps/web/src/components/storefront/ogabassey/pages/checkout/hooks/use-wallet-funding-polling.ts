@@ -230,6 +230,8 @@ export function useWalletFundingPolling({
     // `completed` can never be applied to a different transfer.
     const requestedIntentId = intentId;
     if (pollingExhausted) {
+      // Bumping pollGeneration re-runs the polling effect on commit, which
+      // immediately invokes poll() and starts a fresh interval.
       setPollingExhausted(false);
       setPollGeneration((current) => current + 1);
       return;

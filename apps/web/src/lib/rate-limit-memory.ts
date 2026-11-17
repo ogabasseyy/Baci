@@ -22,6 +22,11 @@ function pruneStore(now: number): void {
       if (!intervalElapsed && pruned >= PRUNE_BATCH_SIZE) break;
     }
   }
+  while (memoryStore.size >= MAX_STORE_SIZE) {
+    const oldestKey = memoryStore.keys().next().value;
+    if (oldestKey === undefined) break;
+    memoryStore.delete(oldestKey);
+  }
 }
 
 export function checkMemoryRateLimit(

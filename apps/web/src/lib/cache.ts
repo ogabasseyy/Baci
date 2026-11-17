@@ -61,6 +61,10 @@ class InMemoryCache {
       return null;
     }
 
+    // Refresh LRU recency on read so hot keys stay in cache.
+    this.cache.delete(key);
+    this.cache.set(key, entry);
+
     return entry.data;
   }
 

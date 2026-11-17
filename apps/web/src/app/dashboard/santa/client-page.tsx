@@ -24,6 +24,7 @@ export default function SantaClientPage() {
   const [interactions, setInteractions] = useState<SantaInteraction[]>([]);
   const [loading, setLoading] = useState(true);
   const [pollingPaused, setPollingPaused] = useState(false);
+  const [pollError, setPollError] = useState<string | null>(null);
   const [pollGeneration, setPollGeneration] = useState(0);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: pollGeneration intentionally restarts the live polling budget on user refresh.
@@ -32,6 +33,7 @@ export default function SantaClientPage() {
 
     const merchantId = merchant.id; // Capture for closure
     setPollingPaused(false);
+    setPollError(null);
     let isStale = false;
     let inFlight = false;
     let attempts = 0;
@@ -75,11 +77,15 @@ export default function SantaClientPage() {
       ])
         .then(([fetchedStats, fetchedInteractions]) => {
           if (isStale) return;
+          setPollError(null);
           setStats(fetchedStats);
           setInteractions(fetchedInteractions);
         })
         .catch((error: unknown) => {
           console.error('Failed to load Santa data', error);
+          if (!isStale) {
+            setPollError('Unable to refresh live campaign stats.');
+          }
         })
         .finally(() => {
           if (timeoutId !== null) clearTimeout(timeoutId);
@@ -150,9 +156,9 @@ export default function SantaClientPage() {
             Real-time insights from the North Pole AI agent.
           </p>
         </div>
-        {pollingPaused ? (
+        {pollingPaused || pollError ? (
           <div className="flex items-center gap-3 text-xs text-muted-foreground">
-            <span>Live updates paused</span>
+            <span>{pollError ?? 'Live updates paused'}</span>
             <button
               className="rounded-md border px-2.5 py-1 font-medium text-foreground hover:bg-muted"
               onClick={restartPolling}

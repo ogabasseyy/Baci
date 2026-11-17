@@ -19,12 +19,18 @@ export function useAutoWalletHeadStart({
   goalId,
   ready,
   addAmount,
+  walletBalance,
+  remainingAmount,
   onAddAmountChange,
   onAddSavings,
 }: {
   goalId: string;
   ready: boolean;
   addAmount: string;
+  /** Latest wallet balance the sheet knows, in naira. */
+  walletBalance: number;
+  /** What the plan still needs, in naira. */
+  remainingAmount: number;
   onAddAmountChange: (value: string) => void;
   onAddSavings: () => void;
 }) {
@@ -33,6 +39,10 @@ export function useAutoWalletHeadStart({
     setWaiting(pendingWalletHeadStart(goalId));
   }, [goalId]);
   const matches = waiting !== null && Number(addAmount) === waiting;
+  // Re-checked on every render and again at tap time. The server still
+  // refuses a transfer the wallet cannot cover; this keeps the button honest.
+  const fits =
+    waiting !== null && waiting <= walletBalance && waiting <= remainingAmount;
   // Keep the sheet's amount on the head start the customer ticked.
   useEffect(() => {
     if (ready && waiting !== null && Number(addAmount) !== waiting)
@@ -41,11 +51,13 @@ export function useAutoWalletHeadStart({
   return {
     /** The head start still waiting for the customer's tap, or null. */
     waiting,
+    /** The head start still fits the wallet and the plan. */
+    fits,
     /** True once the button may start the transfer. */
-    canMove: ready && matches,
+    canMove: ready && matches && fits,
     /** Starts the PIN-confirmed transfer for exactly the ticked amount. */
     move: () => {
-      if (!ready || !matches) return;
+      if (!ready || !matches || !fits) return;
       takeWalletHeadStart(goalId);
       setWaiting(null);
       onAddSavings();

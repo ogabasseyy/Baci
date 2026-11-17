@@ -6,7 +6,11 @@ import {
 } from './pending-wallet-head-start';
 import { useAutoWalletHeadStart } from './use-auto-wallet-head-start';
 
-type Props = { ready: boolean; addAmount: string };
+type Props = {
+  ready: boolean;
+  addAmount: string;
+  walletBalance?: number;
+};
 
 function setup(goalId: string, initial: Props) {
   const onAddSavings = jest.fn();
@@ -17,7 +21,9 @@ function setup(goalId: string, initial: Props) {
         goalId,
         onAddSavings,
         onAddAmountChange,
+        remainingAmount: 93500,
         ...props,
+        walletBalance: props.walletBalance ?? 220,
       }),
     { initialProps: initial }
   );
@@ -66,6 +72,24 @@ describe('useAutoWalletHeadStart with PiggyVest off', () => {
       expect(onAddSavings).not.toHaveBeenCalled();
       expect(pendingWalletHeadStart('goal-3')).toBe(100);
       takeWalletHeadStart('goal-3');
+    });
+  });
+
+  describe('bugfix (Muse): the tap did not re-check the wallet balance', () => {
+    it('refuses the tap and keeps the head start when the wallet dropped below it', () => {
+      rememberWalletHeadStart('goal-6', 100);
+      const { onAddSavings, result, rerender } = setup('goal-6', {
+        ready: true,
+        addAmount: '100',
+      });
+      expect(result.current.canMove).toBe(true);
+      rerender({ ready: true, addAmount: '100', walletBalance: 40 });
+      expect(result.current.fits).toBe(false);
+      expect(result.current.canMove).toBe(false);
+      act(() => result.current.move());
+      expect(onAddSavings).not.toHaveBeenCalled();
+      expect(pendingWalletHeadStart('goal-6')).toBe(100);
+      takeWalletHeadStart('goal-6');
     });
   });
 

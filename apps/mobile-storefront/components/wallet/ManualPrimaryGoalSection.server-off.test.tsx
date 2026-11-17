@@ -168,6 +168,9 @@ describe('a head start ticked "pay now" when the plan was created', () => {
     mockPhase = 'error';
     renderWith(jest.fn());
     expect(screen.queryByText(/head start is ready to move/)).toBeNull();
+    expect(
+      screen.getByText(/Your ₦100 head start is saved for this plan/)
+    ).toBeOnTheScreen();
     takeWalletHeadStart('goal-a');
   });
 

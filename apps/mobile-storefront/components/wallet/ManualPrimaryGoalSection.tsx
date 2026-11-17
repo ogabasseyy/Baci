@@ -42,6 +42,8 @@ export function ManualPrimaryGoalSection(props: ManualPrimaryGoalSectionProps) {
     goalId: goal.id,
     ready: phase === 'ready',
     addAmount: props.addAmount,
+    walletBalance: props.walletBalance,
+    remainingAmount: props.remainingAmount,
     onAddAmountChange: props.onAddAmountChange,
     onAddSavings: props.onAddSavings,
   });
@@ -49,16 +51,20 @@ export function ManualPrimaryGoalSection(props: ManualPrimaryGoalSectionProps) {
   // The one-tap button only when the head start still fits the wallet and
   // the plan; otherwise the normal entry (prefilled with it) shows, which
   // offers a top-up or a smaller amount like any other contribution.
-  const oneTap =
-    headStart.waiting !== null &&
-    headStart.waiting <= props.walletBalance &&
-    headStart.waiting <= props.remainingAmount;
+  const oneTap = headStart.waiting !== null && headStart.fits;
   return (
     <>
       {headStart.waiting !== null && SETTING_UP.includes(phase) ? (
         <Text style={[styles.note, { color: colors.textSecondary }]}>
           Your {formatNgnCurrency(headStart.waiting)} head start is ready to
           move from your wallet as soon as your plan is ready.
+        </Text>
+      ) : headStart.waiting !== null && phase !== 'ready' ? (
+        // Setup stalled or unavailable: say the head start is kept, without
+        // promising when, next to the status card's own guidance.
+        <Text style={[styles.note, { color: colors.textSecondary }]}>
+          Your {formatNgnCurrency(headStart.waiting)} head start is saved for
+          this plan. You can move it once the plan is set up.
         </Text>
       ) : null}
       <SavingsPlanStatusNote

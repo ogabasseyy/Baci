@@ -9,6 +9,8 @@ describe('isMonnifyDuplicateReferenceText', () => {
     'vendReference in use',
     'Transaction already processed',
     'Request conflict',
+    'Conflict on vend reference',
+    'transaction_conflict',
     'Idempotency key reused',
   ])('treats "%s" as a duplicate reference', (text) => {
     expect(isMonnifyDuplicateReferenceText(text)).toBe(true);
@@ -19,6 +21,7 @@ describe('isMonnifyDuplicateReferenceText', () => {
     'Product does not exist for this biller',
     'Insufficient wallet balance',
     'Amount must be greater than zero',
+    'Gateway conflict note: insufficient wallet balance',
     '',
     null,
     undefined,

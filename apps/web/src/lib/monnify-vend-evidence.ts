@@ -30,6 +30,8 @@ const MONNIFY_RESPONSE_BODY_EVIDENCE_FIELDS = new Set([
 ]);
 
 const STATUS_KEY = normaliseKey('status');
+const VEND_STATUS_WORDS =
+  /^(?:success(?:ful)?|completed?|delivered|vended|failed|failure|pending|processing|in[\s_-]?progress|queued|initiated|reversed|paid)$/i;
 const MAX_NESTED_DEPTH = 6;
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -41,8 +43,10 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 function isEvidenceValue(key: string, value: unknown): boolean {
   // A numeric `status` (number or digit string such as "400") is an HTTP
   // code, never a vend status.
+  // A generic `status` counts only with vend-status wording; "error" or
+  // "Bad Request" are just how the error body is labelled.
   if (key === STATUS_KEY) {
-    return typeof value === 'string' && /[^\d\s]/.test(value);
+    return typeof value === 'string' && VEND_STATUS_WORDS.test(value.trim());
   }
   if (typeof value === 'string') {
     return value.trim() !== '';

@@ -70,6 +70,17 @@ describe('rate-limit route matching', () => {
     });
   });
 
+  it('caps the anonymous swap device check and fails closed without Redis', () => {
+    expect(getRateLimitConfig('/api/ai/grade-device')).toMatchObject({
+      pattern: '/api/ai/grade-device',
+      config: {
+        maxRequests: 5,
+        windowMs: 60_000,
+        failClosedWithoutRedis: true,
+      },
+    });
+  });
+
   it('bounds product-request intake per IP below the merchant DB budget', () => {
     expect(
       getRateLimitConfig('/api/storefront/product-requests')

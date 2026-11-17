@@ -42,3 +42,7 @@ These are the only categories where direct platform branching is expected:
 - iOS action sheets: platform-consistent option menus for destructive/choice flows.
 - Android hardware back: explicit back-handler behavior in modal/detail contexts.
 - Platform telemetry: analytics/reporting hooks that need native OS labels.
+
+## Tests
+
+- Test files without an `x` (`.ts`, `.mts`, `.cts`, `.js`, `.mjs`, `.cjs`) run in Node, and `.tsx` and `.jsx` tests run in jsdom (the pattern is in `vitest.node-project-tests.ts`, the projects in `vitest.config.ts`). A `.ts` test whose subject needs a DOM, for example one that calls `renderHook`, must start with `// @vitest-environment jsdom`. Direct use of `window` or `document` fails loudly with a ReferenceError without it, but code that only checks whether a DOM exists (`typeof window`, or libraries such as react-native-web, TanStack Query and Supabase auth) quietly takes its non-DOM path and the test can pass while exercising different behaviour. Add the docblock in both cases. Tests that go through react-native-web's `canUseDOM` or Supabase's `isBrowser` (the `*.styles.test.ts` files and the auth store tests, for example) carry it for that reason.

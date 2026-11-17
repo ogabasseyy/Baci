@@ -7,12 +7,21 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
 
+// The install commands live in a script so ci.yml stays small; the workflow must keep calling it.
+const INSTALLER = '.github/scripts/install-supabase-replay-toolchain.sh';
+
+function readInstaller(): string {
+  const workflow = readFileSync(
+    path.resolve(process.cwd(), '../../.github/workflows/ci.yml'),
+    'utf8'
+  );
+  expect(workflow).toContain(`run: bash ${INSTALLER}`);
+  return readFileSync(path.resolve(process.cwd(), '../..', INSTALLER), 'utf8');
+}
+
 describe('Supabase replay CLI installation', () => {
   it('retries a reset connection while downloading the pinned CLI archive', async () => {
-    const workflow = readFileSync(
-      path.resolve(process.cwd(), '../../.github/workflows/ci.yml'),
-      'utf8'
-    );
+    const workflow = readInstaller();
     const download = workflow.match(
       /curl[^\n]*\\\n\s*"https:\/\/github\.com\/supabase\/cli\/releases\/download\/v\$\{SUPABASE_CLI_VERSION\}\/supabase_linux_amd64\.tar\.gz"/
     );
@@ -67,10 +76,7 @@ describe('Supabase replay CLI installation', () => {
   });
 
   it('verifies the archive before installing both co-located executables', () => {
-    const workflow = readFileSync(
-      path.resolve(process.cwd(), '../../.github/workflows/ci.yml'),
-      'utf8'
-    );
+    const workflow = readInstaller();
     const verify = workflow.indexOf(
       `echo "\${SUPABASE_CLI_SHA256}  \${SUPABASE_ARCHIVE}" | sha256sum --check`
     );

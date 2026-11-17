@@ -163,14 +163,14 @@ BEGIN
   END IF;
 
   inserted := piggyvest_webhook_intake.inflow_credit_insert(jsonb_build_object(
-    'provider_transaction_id', 'gld-txn', 'event_data_id', 'gld-data', 'event_id', 'gld-evt-1',
+    'pvb_reference', 'PVB01GLD1', 'provider_transaction_id', 'gld-txn', 'event_data_id', 'gld-data', 'event_id', 'gld-evt-1',
     'customer_id', 'gld-cust', 'wallet_id', 'gld-wallet', 'amount_kobo', 1000, 'fee_kobo', 0,
     'reference', 'gld-ref', 'session_id', NULL, 'credited_at', '2026-11-04T10:00:00.000Z'));
   IF jsonb_array_length(inserted) <> 1 THEN
     RAISE EXCEPTION 'inflow credit insert must report one row';
   END IF;
   IF piggyvest_webhook_intake.inflow_credit_insert(jsonb_build_object(
-      'provider_transaction_id', 'gld-txn', 'event_data_id', 'other', 'event_id', 'e2',
+      'pvb_reference', 'PVB01GLD2', 'provider_transaction_id', 'gld-txn', 'event_data_id', 'other', 'event_id', 'e2',
       'customer_id', 'c', 'wallet_id', 'w', 'amount_kobo', 5, 'fee_kobo', 0, 'reference', 'r',
       'credited_at', '2026-11-04T10:00:00.000Z')) <> '[]'::jsonb THEN
     RAISE EXCEPTION 'first writer must win a duplicate transaction id';
@@ -181,7 +181,7 @@ BEGIN
   END IF;
 
   inserted := piggyvest_webhook_intake.interest_payout_insert(jsonb_build_object(
-    'provider_payout_id', 'gld-payout', 'event_id', 'gld-evt-2', 'customer_id', 'gld-cust',
+    'pvb_reference', 'PVB01GLD3', 'provider_payout_id', 'gld-payout', 'event_id', 'gld-evt-2', 'customer_id', 'gld-cust',
     'wallet_id', 'gld-wallet', 'amount_kobo', 90, 'gross_kobo', 100, 'withholding_tax_kobo', 10,
     'net_kobo', 90, 'reference', 'gld-ref', 'batch_id', 'gld-batch',
     'paid_at', '2026-11-04T10:00:00.000Z'));

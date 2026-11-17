@@ -11,6 +11,7 @@ type ExistingBlogPost = {
   featured_image_width: number | null;
   id: string;
   published_at: string | null;
+  requested_publish_at?: string | null;
   slug: string;
   status: string;
   title: string;
@@ -32,7 +33,7 @@ export async function loadBlogPostForUpdate({
   const { data, error } = await supabase
     .from('blog_posts')
     .select(
-      'id, slug, status, content, title, excerpt, category, published_at, author_image_url, featured_image_url, featured_image_width, featured_image_height, featured_image_variants'
+      'id, slug, status, content, title, excerpt, category, published_at, requested_publish_at, author_image_url, featured_image_url, featured_image_width, featured_image_height, featured_image_variants'
     )
     .eq('id', postId)
     .eq('merchant_id', merchantId)

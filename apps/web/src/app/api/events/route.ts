@@ -16,8 +16,10 @@ import {
 } from '@/lib/events/event-pipeline-config';
 import { toClientAnalyticsDomainEventName } from '@/lib/events/event-route-registry';
 import { isEventTimestampWithinWindow } from '@/lib/events/event-timestamp-window';
+import { isBotUserAgent } from '@/lib/events/is-bot-user-agent';
 import { readBoundedJsonBody } from '@/lib/events/read-bounded-json-body';
 import { recordAnalyticsDomainEvent } from '@/lib/events/record-analytics-domain-event';
+import { shopperIp } from '@/lib/events/shopper-ip';
 import { logger } from '@/lib/logger';
 import { createClient as createServerClient } from '@/lib/supabase/server';
 import { createServiceClient } from '@/lib/supabase/service';
@@ -37,10 +39,7 @@ function deliveryData(input: AnalyticsEventRequest, request: NextRequest) {
     external_id: input.user_data?.external_id,
     fbc: input.user_data?.fbc ?? request.cookies.get('_fbc')?.value,
     fbp: input.user_data?.fbp ?? request.cookies.get('_fbp')?.value,
-    ip:
-      request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
-      request.headers.get('x-real-ip') ??
-      undefined,
+    ip: shopperIp(request),
     phone: input.user_data?.ph,
     sccid: input.user_data?.sccid ?? request.cookies.get('ScCid')?.value,
     ttclid: input.user_data?.ttclid,
@@ -106,6 +105,14 @@ export async function POST(request: NextRequest) {
       { error: 'Event timestamp outside allowed window' },
       { status: 400 }
     );
+  }
+  if (
+    input.source !== 'server' &&
+    isBotUserAgent(request.headers.get('user-agent'))
+  ) {
+    // Acknowledge but do not record crawler traffic.
+    logger.debug({ message: 'Skipped crawler analytics event' });
+    return NextResponse.json({ success: true, event_id: input.event_id });
   }
   const rawEventType = input.event_type ?? input.event_name ?? '';
   const eventType = normalizeEventType(rawEventType) ?? rawEventType;

@@ -28,6 +28,10 @@ import {
   performOxygenAction,
   readOxygenSnapshot,
 } from '@/lib/payments/oxygen/runtime-service';
+import {
+  oxygenStatementLinkSentCode,
+  oxygenStatementLinkSentMessage,
+} from '@/lib/payments/oxygen/statement-linking';
 import { checkOxygenProviderRateLimit } from '@/lib/rate-limit';
 import { oxygenPlanQuoteSchema } from '@/schemas/oxygen-plan-quote';
 
@@ -202,6 +206,19 @@ export async function POST(request: NextRequest) {
     )
       return NextResponse.json(
         { error: oxygenInvalidOtpMessage, code: oxygenInvalidOtpCode },
+        { status: 409, headers }
+      );
+    if (
+      input.submission.command.action === 'refresh_eligibility' &&
+      failure instanceof OxygenProviderFailure &&
+      failure.outcome === 'rejected' &&
+      failure.code === oxygenStatementLinkSentCode
+    )
+      return NextResponse.json(
+        {
+          error: oxygenStatementLinkSentMessage,
+          code: oxygenStatementLinkSentCode,
+        },
         { status: 409, headers }
       );
     if (

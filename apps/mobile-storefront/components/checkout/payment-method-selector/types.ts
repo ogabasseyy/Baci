@@ -64,6 +64,8 @@ export interface PaymentMethodSelectorProps {
   methodDisabledReasons?: Partial<Record<PaymentMethodType, string>>;
   methodLabelOverrides?: Partial<Record<PaymentMethodType, string>>;
   walletFundedBankTransferMode?: boolean;
+  /** PiggyVest customer: the wallet balance is labelled store credit. */
+  walletIsStoreCredit?: boolean;
   /**
    * The scrolling ancestor + its live offset, threaded from the checkout payment
    * step so the intent accordion can keep the just-selected card in view when a

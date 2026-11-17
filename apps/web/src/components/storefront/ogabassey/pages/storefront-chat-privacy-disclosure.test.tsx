@@ -1,9 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import {
-  StorefrontChatPrivacyDisclosure,
-  StorefrontChatProviderLinks,
-} from './storefront-chat-privacy-disclosure';
+import { StorefrontChatPrivacyDisclosure } from './storefront-chat-privacy-disclosure';
 
 describe('StorefrontChatPrivacyDisclosure', () => {
   it('renders subprocessor heading and verified privacy links', () => {
@@ -24,10 +21,5 @@ describe('StorefrontChatPrivacyDisclosure', () => {
       'href',
       'https://cdn.deepseek.com/policies/en-US/deepseek-privacy-policy.html'
     );
-  });
-
-  it('supports rendering inline provider links with or conjunction', () => {
-    render(<StorefrontChatProviderLinks conjunction="or" />);
-    expect(screen.getByText(/or/)).toBeInTheDocument();
   });
 });

@@ -29,6 +29,17 @@ describe('ogabassey-catalog-agent-budget', () => {
       )
     ).toEqual({ amount: 2_000_000, exclusive: true });
 
+    // Comparative follow-up without an explicit budget override retains the cap
+    expect(
+      resolveConversationBudgetLimit(
+        [
+          { role: 'user', content: 'Show laptops under ₦2m' },
+          { role: 'user', content: 'Show me more expensive options' },
+        ],
+        'NGN'
+      )
+    ).toEqual({ amount: 2_000_000, exclusive: true });
+
     // Explicit price override clears prior cap
     expect(
       resolveConversationBudgetLimit(

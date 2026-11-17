@@ -1,38 +1,7 @@
-import React from 'react';
+import type React from 'react';
+import { StorefrontChatProviderLinks } from './storefront-chat-provider-links';
 
-export const StorefrontChatProviderLinks: React.FC<{ conjunction: 'or' | 'and' }> = ({
-  conjunction,
-}) => (
-  <>
-    <a
-      href="https://openai.com/privacy"
-      target="_blank"
-      rel="noopener noreferrer"
-      className="underline"
-    >
-      OpenAI
-    </a>
-    ,{' '}
-    <a
-      href="https://dev.meta.ai/legal/commitments"
-      target="_blank"
-      rel="noopener noreferrer"
-      className="underline"
-    >
-      Meta
-    </a>
-    , {conjunction}{' '}
-    <a
-      href="https://cdn.deepseek.com/policies/en-US/deepseek-privacy-policy.html"
-      target="_blank"
-      rel="noopener noreferrer"
-      className="underline"
-    >
-      DeepSeek
-    </a>
-  </>
-);
-
+/** Storefront chat disclosure block for the Ogabassey privacy policy page. */
 export const StorefrontChatPrivacyDisclosure: React.FC = () => (
   <section className="rounded-xl bg-[var(--ogabassey-surface,#fff)] p-4 text-[var(--ogabassey-surface-text,#111827)] text-sm md:text-base leading-relaxed space-y-2">
     <h2 className="text-xl font-bold mb-3">Storefront chat</h2>

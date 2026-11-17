@@ -16,10 +16,8 @@ import {
 } from 'lucide-react';
 import type React from 'react';
 import { SafeHtml } from '@/components/ui/safe-html';
-import {
-  StorefrontChatPrivacyDisclosure,
-  StorefrontChatProviderLinks,
-} from './storefront-chat-privacy-disclosure';
+import { StorefrontChatPrivacyDisclosure } from './storefront-chat-privacy-disclosure';
+import { StorefrontChatProviderLinks } from './storefront-chat-provider-links';
 
 // Define props
 interface PrivacyProps {

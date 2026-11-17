@@ -11,7 +11,7 @@ export type CatalogChatMessage = {
 };
 
 const BUDGET_OVERRIDE_CUE =
-  /\b(?:ignore\s+(?:the\s+|my\s+)?budget|no\s+budget|any\s+price|higher\s+budget|more\s+expensive|over\s+(?:my\s+|the\s+)?budget|above\s+(?:my\s+|the\s+)?budget|(?:over|above)\s+(?:(?:₦|ngn\s*)(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?:\s*(?:million|thousand|[km])\b)?|(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?\s*(?:million|thousand|[km]|naira|ngn)\b|\d{1,3}(?:,\d{3})+(?:\.\d+)?(?=\s|$|[.,!?])))/i;
+  /\b(?:ignore\s+(?:the\s+|my\s+)?budget|no\s+budget|any\s+price|higher\s+budget|over\s+(?:my\s+|the\s+)?budget|above\s+(?:my\s+|the\s+)?budget|(?:over|above)\s+(?:(?:₦|ngn\s*)(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?:\s*(?:million|thousand|[km])\b)?|(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?\s*(?:million|thousand|[km]|naira|ngn)\b|\d{1,3}(?:,\d{3})+(?:\.\d+)?(?=\s|$|[.,!?])))/i;
 
 const CONTINUATION_FOLLOW_UP_CUE =
   /\b(?:it|this|that|these|those|one|ones|same|still|instead|cheaper|less|more|better|over-ear|wireless|options?|another|what\s+about|how\s+about)\b/i;

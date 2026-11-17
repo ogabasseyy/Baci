@@ -282,4 +282,12 @@ describe('catalog availability requests', () => {
       reason: 'options',
     });
   });
+
+  it('routes bare plural pixels directly to phone catalog search', () => {
+    expect(interpretFastCatalogIntent(['pixels'], categories)).toMatchObject({
+      kind: 'search',
+      categoryId: 'phones',
+      query: 'Pixel',
+    });
+  });
 });

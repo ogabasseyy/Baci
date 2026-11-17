@@ -76,6 +76,8 @@ BEGIN
 END $$;
 
 -- Behaviour: owner sees booleans only; a stranger gets NULL; direct read denied.
+INSERT INTO auth.users (id, email)
+VALUES ('bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb', 'r2-owner@example.test');
 INSERT INTO public.merchants(id, user_id, email, business_name, slug)
 VALUES ('aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa', 'bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb',
         'r2-owner@example.test', 'R2 Test Store', 'r2-test-store');

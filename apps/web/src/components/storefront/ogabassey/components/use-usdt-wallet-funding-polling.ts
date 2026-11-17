@@ -110,6 +110,7 @@ export function useUsdtWalletFundingPolling({
       }
       attempts += 1;
       inFlight = true;
+      let isTerminal = false;
       if (!cancelled) setChecking(true);
       try {
         const result = await statusWithTimeout(
@@ -139,9 +140,11 @@ export function useUsdtWalletFundingPolling({
             : current
         );
         if (result.fundingStatus === 'completed') {
+          isTerminal = true;
           stopPolling();
           callbacksRef.current.onFunded();
         } else if (result.fundingStatus !== 'pending') {
+          isTerminal = true;
           stopPolling();
         }
       } catch (error) {
@@ -152,7 +155,9 @@ export function useUsdtWalletFundingPolling({
           setChecking(false);
           if (attempts >= MAX_USDT_POLL_ATTEMPTS) {
             stopPolling();
-            setPollingExhausted(true);
+            if (!isTerminal) {
+              setPollingExhausted(true);
+            }
           }
         }
       }

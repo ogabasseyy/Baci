@@ -10,6 +10,7 @@ import {
   groupPostsByMerchant,
   revalidateScheduledPostsByMerchant,
 } from './publish-scheduled-posts-revalidation';
+import { recoverMerchantBlogReleaseReservations } from './recover-abandoned-reservations';
 
 export async function publishScheduledPosts(supabase: SupabaseClient) {
   try {
@@ -69,6 +70,13 @@ export async function publishScheduledPosts(supabase: SupabaseClient) {
       );
     }
 
+    // Intentionally scoped to merchants with due scheduled posts in this batch;
+    // merchants without due posts can trigger /api/merchant/blog/release-reservations/recover.
+    const reservationRecovery = await recoverMerchantBlogReleaseReservations(
+      supabase,
+      scheduledMerchantIds
+    );
+
     const { eligiblePosts, skipped, warnings } = getEligibleScheduledPosts(
       merchantScheduledPosts as ScheduledPost[],
       featureSettings ?? []
@@ -81,6 +89,7 @@ export async function publishScheduledPosts(supabase: SupabaseClient) {
         published: [],
         skipped,
         warnings,
+        ...(reservationRecovery ? { reservationRecovery } : {}),
       });
     }
 
@@ -226,6 +235,7 @@ export async function publishScheduledPosts(supabase: SupabaseClient) {
         published: [],
         skipped,
         warnings,
+        ...(reservationRecovery ? { reservationRecovery } : {}),
       });
     }
 
@@ -255,6 +265,7 @@ export async function publishScheduledPosts(supabase: SupabaseClient) {
           processed: scheduledPosts.length,
           published: Array.from(claimedPostIds),
           zohoCampaigns: campaignResults,
+          ...(reservationRecovery ? { reservationRecovery } : {}),
         },
         { status: 500 }
       );
@@ -267,6 +278,7 @@ export async function publishScheduledPosts(supabase: SupabaseClient) {
       skipped,
       warnings,
       zohoCampaigns: campaignResults,
+      ...(reservationRecovery ? { reservationRecovery } : {}),
     });
   } catch (error) {
     console.error('Cron Job Failed:', error);

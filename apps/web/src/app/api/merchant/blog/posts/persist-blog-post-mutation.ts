@@ -41,12 +41,13 @@ function readNullableString(value: unknown): string | null {
   return typeof value === 'string' ? value : null;
 }
 
-function readRpcMutationError(
+export function readRpcMutationError(
   error: {
     code?: string;
     details?: string;
     message?: string;
-  } | null
+  } | null,
+  fallbackError = 'Failed to persist post'
 ): {
   code?: string;
   error: string;
@@ -145,7 +146,7 @@ function readRpcMutationError(
       status: 409,
     };
   }
-  return { error: 'Failed to persist post', status: 500 };
+  return { error: fallbackError, status: 500 };
 }
 
 function readMutationPost({

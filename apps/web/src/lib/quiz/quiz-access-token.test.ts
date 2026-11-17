@@ -178,6 +178,15 @@ describe('verifyQuizAccessToken', () => {
     });
   });
 
+  it.each([
+    'es256',
+    'Rs256',
+  ])('rejects the wrong-case algorithm name %s as invalid', async (alg) => {
+    expect(await verify(unsignedToken({ alg, typ: 'JWT' }))).toEqual({
+      status: 'invalid',
+    });
+  });
+
   it('rejects a token that names no algorithm as invalid', async () => {
     expect(await verify(unsignedToken({ typ: 'JWT' }))).toEqual({
       status: 'invalid',

@@ -71,9 +71,9 @@ function resolveSupabaseUrl(override?: string): string | null {
  * - `allowed`: an algorithm this process can verify against the JWKS.
  * - `other`: a real signing algorithm it cannot verify here (legacy HS256, or
  *   one the project moves to later), so Supabase Auth decides.
- * - `rejected`: not a decodable JWT, no algorithm, or the unsigned `none`
- *   algorithm. Never a real access token, so it must not cost a Supabase
- *   Auth call.
+ * - `rejected`: not a decodable JWT, no algorithm, the unsigned `none`
+ *   algorithm, or a wrong-case spelling of a supported one. Never a real
+ *   access token, so it must not cost a Supabase Auth call.
  */
 function classifyAlgorithm(token: string): 'allowed' | 'other' | 'rejected' {
   try {
@@ -81,8 +81,13 @@ function classifyAlgorithm(token: string): 'allowed' | 'other' | 'rejected' {
     if (typeof alg !== 'string') return 'rejected';
     const name = alg.trim().toLowerCase();
     if (name === '' || name === 'none') return 'rejected';
-    return (ALLOWED_ALGORITHMS as readonly string[]).includes(alg)
-      ? 'allowed'
+    if ((ALLOWED_ALGORITHMS as readonly string[]).includes(alg)) {
+      return 'allowed';
+    }
+    // Algorithm names are case-sensitive, so "es256" is not a real token
+    // either: refuse it here rather than spend a Supabase Auth lookup on it.
+    return ALLOWED_ALGORITHMS.some((allowed) => allowed.toLowerCase() === name)
+      ? 'rejected'
       : 'other';
   } catch {
     return 'rejected';

@@ -103,6 +103,8 @@ describe('catalog conversation language', () => {
 
   it('matches bare plural pixels as a phone signal while rejecting camera-resolution phrases', () => {
     expect(PHONE_SIGNAL.test('pixels')).toBe(true);
+    expect(PHONE_SIGNAL.test('pixels?')).toBe(true);
+    expect(PHONE_SIGNAL.test('Pixels.')).toBe(true);
     expect(PHONE_SIGNAL.test('how many pixels does the camera have')).toBe(
       false
     );

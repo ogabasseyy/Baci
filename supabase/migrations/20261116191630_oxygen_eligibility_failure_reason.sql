@@ -8,7 +8,8 @@ DECLARE
   marker constant text := '  INSERT INTO oxygen_private.provider_states(workflow_id,state)';
 BEGIN
   definition := pg_catalog.pg_get_functiondef('oxygen_private.runtime(text,uuid,jsonb)'::regprocedure);
-  IF position(needle IN definition) = 0 OR position(marker IN definition) = 0 THEN
+  IF length(definition) - length(replace(definition, needle, '')) <> length(needle)
+     OR length(definition) - length(replace(definition, marker, '')) <> length(marker) THEN
     RAISE EXCEPTION 'Unexpected Oxygen runtime definition';
   END IF;
   definition := replace(definition, needle, replacement);

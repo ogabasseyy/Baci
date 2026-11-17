@@ -35,10 +35,13 @@ export function WalletSavingsProgressModal({
   goal,
   isAdding,
   hasPendingContribution = false,
+  isCheckingContribution = false,
+  isContributionRetry,
   isFundPending = false,
   onAddAmountChange,
   onAddSavings,
   onChangeDevice,
+  onCheckContribution,
   onClose,
   onFundWallet,
   onRefreshWallet,
@@ -53,9 +56,8 @@ export function WalletSavingsProgressModal({
   // Matches the wallet card: "View plan" there means not "Add to savings" here.
   const settingUp = usePlanStillSettingUp(goal);
   const cancel = useInSheetGoalCancel(goal, onRefreshWallet, visible);
-  // Every close, by the customer or by leaving the wallet, drops an unsent
-  // cancel/complete review, declines a funding question still waiting in this
-  // sheet (otherwise its funding never settles) and lets the parent reset.
+  // Every close drops an unsent cancel/complete review, declines a waiting
+  // funding question (else its funding never settles) and resets the parent.
   const closeSheet = () => {
     cancel.closed();
     answerWalletFundPrompt(false);
@@ -66,8 +68,7 @@ export function WalletSavingsProgressModal({
   const [swapHeight, setSwapHeight] = useState(0);
   const [headerHeight, setHeaderHeight] = useState(0);
   const [bodyHeight, setBodyHeight] = useState(0);
-  // An add in flight hides a few links (Change phone, Cancel/Complete); the
-  // sheet keeps its height meanwhile instead of shrinking under the PIN step.
+  // An add in flight hides a few links: keep the height under the PIN step.
   const mainHeight = useHeldWhileAdding(
     isAdding,
     headerHeight > 0 && bodyHeight > 0
@@ -82,8 +83,7 @@ export function WalletSavingsProgressModal({
     // Sign in, then come back to this goal's savings sheet.
     const signIn = (dismiss: () => void) => {
       dismiss();
-      // Back through the goal link route: it re-checks the goal is still
-      // this (possibly different) account's before opening its sheet.
+      // Back via the goal link route, which re-checks the goal's account.
       const back = `/wallet/savings/goal-actions?goalId=${encodeURIComponent(cancelGoal.id)}`;
       router.push(`/auth/login?returnTo=${encodeURIComponent(back)}`);
     };
@@ -97,8 +97,7 @@ export function WalletSavingsProgressModal({
         overlay={<WalletPinSheet colors={colors} {...cancel.flow.sheetProps} />}
       >
         {(dismiss) => (
-          // Scrolls if large text or a small screen makes it taller than the
-          // sheet can grow, so the buttons always stay reachable.
+          // Scrolls when taller than the sheet: the buttons stay reachable.
           <BottomSheetScrollView
             showsVerticalScrollIndicator={false}
             onContentSizeChange={(_width, height) =>
@@ -252,8 +251,9 @@ export function WalletSavingsProgressModal({
             {hasPendingContribution ? (
               <WalletPendingSavingsContribution
                 colors={colors}
-                isChecking={isAdding}
-                onCheck={onAddSavings}
+                isChecking={isCheckingContribution || isAdding}
+                onCheck={onCheckContribution}
+                retry={isContributionRetry}
               />
             ) : canAddToSavings ? (
               <WalletSavingsFundingSection

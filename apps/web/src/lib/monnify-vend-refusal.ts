@@ -7,7 +7,7 @@
  * re-query, so they stay ordinary failures and never reach Kuda.
  */
 const MONNIFY_KNOWN_REFUSAL_PATTERN =
-  /amount must be greater than zero|insufficient\s+(?:wallet\s+|account\s+)?(?:balance|funds)/i;
+  /amount must be greater than zero|insufficient\s+(?:wallet\s+|account\s+)?(?:balance|funds)|(?:wallet\s+|account\s+|available\s+)?(?:balance|funds)\s+(?:is|are)\s+(?:too\s+low|insufficient)/i;
 
 /** Whether a Monnify message is a known refusal that delivered nothing. */
 export function isMonnifyKnownVendRefusalText(

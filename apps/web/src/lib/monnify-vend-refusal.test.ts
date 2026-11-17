@@ -7,6 +7,9 @@ describe('isMonnifyKnownVendRefusalText', () => {
     'Monnify API error: 400 Bad Request - Insufficient wallet balance',
     'Insufficient Balance',
     'Insufficient funds',
+    'Wallet balance is insufficient',
+    'Available funds are insufficient',
+    'Account balance is too low',
   ])('treats "%s" as a refusal that delivered nothing', (text) => {
     expect(isMonnifyKnownVendRefusalText(text)).toBe(true);
   });
@@ -16,6 +19,7 @@ describe('isMonnifyKnownVendRefusalText', () => {
     'Product is currently unavailable',
     'Network not available',
     'Biller is inactive',
+    'Balance is sufficient',
     'Monnify business failure',
     'Invalid customer reference',
     'Request failed',

@@ -15,6 +15,8 @@ describe('isMonnifyVendOutcomeText', () => {
     'Vend is in progress: insufficient funds',
     'Transaction processing',
     'Vend queued',
+    'Vend initiated',
+    'Transaction reversed: insufficient wallet balance',
     'transaction_failed: insufficient wallet balance',
     'vend_in_progress: insufficient funds',
     'AIRTIME-PURCHASE-FAILED',

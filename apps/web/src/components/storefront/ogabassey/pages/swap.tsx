@@ -55,7 +55,7 @@ export function OgabasseyV2Swap() {
               Get an Instant AI Valuation in Seconds.
             </h2>
             <p className="text-white/80 mb-8 text-sm md:text-base">
-              Simply upload a short video of your device. Our AI will analyze the condition and give you an instant trade-in offer.
+              Simply upload a few photos or a short video of your device. Our AI will analyze the condition and give you an instant trade-in offer.
             </p>
             <button type="button"
               onClick={() => setIsModalOpen(true)}
@@ -78,8 +78,8 @@ export function OgabasseyV2Swap() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {[
               {
-                title: '1. Record Video',
-                desc: 'Take a Quick 10s video showing your device screen and body.',
+                title: '1. Take Photos or a Video',
+                desc: 'Snap a few photos or a quick 10s video showing your device screen and body.',
                 icon: Video,
               },
               {

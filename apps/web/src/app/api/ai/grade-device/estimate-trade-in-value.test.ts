@@ -126,6 +126,24 @@ describe('estimateTradeInValue', () => {
     );
   });
 
+  it('keeps a device whose own model name contains an accessory word', async () => {
+    query.result = {
+      data: [
+        { name: 'Moto G Stylus Case', price: 4000 },
+        { name: 'Motorola Moto G Stylus 128GB', price: 180000 },
+      ],
+      error: null,
+    };
+
+    const estimate = await estimateTradeInValue('merchant-1', {
+      model: 'Moto G Stylus',
+      grade: 'Good',
+      observations: [],
+    });
+
+    expect(estimate.matchedProduct).toBe('Motorola Moto G Stylus 128GB');
+  });
+
   it('gives no estimate when only accessories match', async () => {
     query.result = {
       data: [{ name: 'iPhone 13 Pro Charger', price: 8000 }],

@@ -15,9 +15,13 @@ export type DeviceCheckStorefront =
  * decides whenever it names a store (subdomain or custom domain); the
  * client-supplied slug is only a fallback for platform hosts, where stores
  * are reached by path. Vercel preview deployments are platform hosts too, so
- * their host is not treated as a store's custom domain. The native app sends
- * no slug, so on a platform host it falls back to the server-configured
- * store, the same identity the app's chat uses.
+ * their host is not treated as a store's custom domain.
+ *
+ * The native app sends no slug, so on a platform host it falls back to the
+ * server-configured store, the identity the app's chat uses. Browsers always
+ * send an Origin header on a POST; a browser request without a slug gets no
+ * such fallback, so a page whose store context is missing fails instead of
+ * being priced against another store's catalogue.
  */
 export async function resolveDeviceCheckStorefront(
   request: Request,
@@ -28,8 +32,12 @@ export async function resolveDeviceCheckStorefront(
     ? new Request(`https://${rootDomain}/`)
     : request;
 
+  const nativeAppFallback = request.headers.get('origin')
+    ? undefined
+    : getConfiguredAgenticMerchantSlug();
+
   const resolution = await resolveStorefrontMerchantFromRequest({
-    fallbackIdentifier: merchantSlug ?? getConfiguredAgenticMerchantSlug(),
+    fallbackIdentifier: merchantSlug ?? nativeAppFallback,
     lookupError: 'Failed to validate storefront host',
     notFoundError: NOT_FOUND_ERROR,
     request: resolutionRequest,

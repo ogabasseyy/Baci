@@ -76,6 +76,20 @@ describe('readDeviceMedia', () => {
     ).toEqual({ ok: false, status: 400, error: 'No video file provided' });
   });
 
+  it.each([
+    'video/mp4',
+    'video/quicktime',
+    'video/webm',
+  ])('accepts a %s clip', (type) => {
+    expect(readDeviceMedia(upload([['video', file(3, type)]])).ok).toBe(true);
+  });
+
+  it('rejects a video container outside the allowlist', () => {
+    expect(
+      readDeviceMedia(upload([['video', file(3, 'video/x-evil')]]))
+    ).toEqual({ ok: false, status: 400, error: 'Unsupported file type' });
+  });
+
   it('rejects a video field that is not a video', async () => {
     expect(
       readDeviceMedia(upload([['video', file(3, 'application/pdf')]]))

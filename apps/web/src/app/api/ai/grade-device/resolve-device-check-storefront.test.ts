@@ -17,9 +17,10 @@ vi.mock('@/lib/storefront-merchant', () => ({
 import { getRequestHost } from '@/lib/storefront-host';
 import { resolveDeviceCheckStorefront } from './resolve-device-check-storefront';
 
-function requestFor(host: string): Request {
+function requestFor(host: string, origin?: string): Request {
   return new Request(`https://${host}/api/ai/grade-device`, {
     method: 'POST',
+    headers: origin ? { origin } : {},
   });
 }
 
@@ -82,6 +83,17 @@ describe('resolveDeviceCheckStorefront', () => {
 
     expect(mocks.resolveMerchant).toHaveBeenCalledWith(
       expect.objectContaining({ fallbackIdentifier: 'ogabassey' })
+    );
+  });
+
+  it('gives a browser request without a slug no configured-store fallback', async () => {
+    await resolveDeviceCheckStorefront(
+      requestFor('usebaci.com', 'https://usebaci.com'),
+      null
+    );
+
+    expect(mocks.resolveMerchant).toHaveBeenCalledWith(
+      expect.objectContaining({ fallbackIdentifier: undefined })
     );
   });
 

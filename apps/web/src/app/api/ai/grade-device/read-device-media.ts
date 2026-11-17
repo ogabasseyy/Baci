@@ -2,6 +2,7 @@ import {
   DEVICE_GRADING_FRAME_TYPES,
   DEVICE_GRADING_MAX_FRAMES,
   DEVICE_GRADING_MAX_UPLOAD_BYTES,
+  DEVICE_GRADING_VIDEO_TYPES,
 } from '@/schemas/device-grading';
 
 export interface DeviceMediaPart {
@@ -14,6 +15,7 @@ export type DeviceMediaResult =
   | { ok: false; error: string; status: 400 | 413 };
 
 const FRAME_TYPES = new Set<string>(DEVICE_GRADING_FRAME_TYPES);
+const VIDEO_TYPES = new Set<string>(DEVICE_GRADING_VIDEO_TYPES);
 
 function isFile(value: FormDataEntryValue | null): value is File {
   return typeof value === 'object' && value !== null && 'arrayBuffer' in value;
@@ -58,7 +60,7 @@ export function readDeviceMedia(formData: FormData): DeviceMediaResult {
   const typesAreValid =
     frames.length > 0
       ? frames.every((frame) => FRAME_TYPES.has(frame.type))
-      : files[0].type.startsWith('video/');
+      : VIDEO_TYPES.has(files[0].type);
   if (!typesAreValid) {
     return { ok: false, status: 400, error: 'Unsupported file type' };
   }

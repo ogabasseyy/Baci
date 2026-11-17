@@ -20,6 +20,15 @@ export const DEVICE_GRADING_FRAME_TYPES = [
   'image/webp',
 ] as const;
 
+/** Clip containers the mobile app and browsers produce. */
+export const DEVICE_GRADING_VIDEO_TYPES = [
+  'video/mp4',
+  'video/quicktime',
+  'video/webm',
+  'video/3gpp',
+  'video/x-m4v',
+] as const;
+
 /** What the model must return before any price is looked up. */
 export const deviceGradingAiResultSchema = z.object({
   model: z.string().trim().min(2).max(80),

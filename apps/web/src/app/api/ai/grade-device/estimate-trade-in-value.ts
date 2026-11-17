@@ -47,6 +47,19 @@ function escapeLikePattern(value: string): string {
   return value.replace(/[\\%_]/g, (character) => `\\${character}`);
 }
 
+/**
+ * Whether a listing is an accessory for the model rather than the device.
+ * The model's own words are set aside first, so a device whose name contains
+ * an accessory word ("Moto G Stylus") is not mistaken for one.
+ */
+function isAccessory(productName: string, model: string): boolean {
+  const withoutModel = productName
+    .toLowerCase()
+    .split(model.toLowerCase())
+    .join(' ');
+  return ACCESSORY_NAME.test(withoutModel);
+}
+
 /** The store's cheapest active listing for the model that is not an accessory. */
 async function findCheapestDevice(
   merchantId: string,
@@ -73,7 +86,7 @@ async function findCheapestDevice(
       return undefined;
     }
 
-    const device = data?.find((product) => !ACCESSORY_NAME.test(product.name));
+    const device = data?.find((product) => !isAccessory(product.name, model));
     if (device || !data || data.length < PAGE_SIZE) return device;
   }
 

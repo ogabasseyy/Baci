@@ -16,10 +16,11 @@ const PRICE_LIST_CACHE_TTL_MS = 60_000;
  */
 const PRICE_LIST_LAST_GOOD_MS = 24 * 60 * 60 * 1000;
 /**
- * Kuda bill types sold at the customer's own amount (electricity items are
- * synthesized open-amount), so a saved 100x price cannot exist for them.
+ * Kuda's electricity meter products (KUD-ELE-…, the codes the electricity
+ * list is built from) are priced by the customer, so a saved 100x price
+ * cannot exist for them. Any other code fails closed without a list.
  */
-const OPEN_AMOUNT_BILL_TYPES = new Set(['electricity']);
+const OPEN_AMOUNT_ELECTRICITY_CODE = /^KUD-ELE-/i;
 /** After a failed or empty fetch, wait this long before asking Kuda again. */
 const PRICE_LIST_RETRY_AFTER_MS = 30_000;
 
@@ -97,13 +98,21 @@ function isChosenBiller(biller: Biller, billerName: string) {
   return listed !== '' && (sent === listed || sent.startsWith(`${listed} - `));
 }
 
+/** Item codes compared like the data-plan check does: case and punctuation free. */
+function normalizeItemCode(code: string) {
+  return code
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+}
+
 function collectBillItems(
   items: BillItem[] | undefined,
   itemCode: string,
   found: BillItem[]
 ): BillItem[] {
   for (const item of items ?? []) {
-    if (item.itemCode === itemCode) found.push(item);
+    if (normalizeItemCode(item.itemCode) === itemCode) found.push(item);
     collectBillItems(item.billItems, itemCode, found);
   }
   return found;
@@ -130,7 +139,8 @@ function priceMatches(item: BillItem, amount: number) {
  * while a stale 100x amount (which matches none) is still caught.
  * Open-amount and unknown items pass. If no price list is available (Kuda
  * down or empty, with no good list from the past day in this server
- * instance), every bill type fails closed except open-amount electricity.
+ * instance), every purchase fails closed except Kuda's customer-priced
+ * electricity meter products.
  * After a failed fetch Kuda is not asked again for 30 seconds.
  */
 export async function assertKudaBillItemPriceCurrent({
@@ -148,16 +158,23 @@ export async function assertKudaBillItemPriceCurrent({
   if (billers === null) {
     // Open-amount electricity carries no saved price to go stale, so it
     // continues; every other type fails closed until a list is available.
-    if (OPEN_AMOUNT_BILL_TYPES.has(type)) return;
+    if (
+      type === 'electricity' &&
+      OPEN_AMOUNT_ELECTRICITY_CODE.test(billItemIdentifier.trim())
+    ) {
+      return;
+    }
     throw new Error(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
   }
 
   const listing = billers
     .map((biller) => ({
       biller,
-      items: collectBillItems(biller.billItems, billItemIdentifier, []).filter(
-        hasFixedPrice
-      ),
+      items: collectBillItems(
+        biller.billItems,
+        normalizeItemCode(billItemIdentifier),
+        []
+      ).filter(hasFixedPrice),
     }))
     .filter(({ items }) => items.length > 0);
   if (listing.length === 0) return;

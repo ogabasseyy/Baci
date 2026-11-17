@@ -138,7 +138,7 @@ describe('resolveKudaDataPlanForPurchase', () => {
     });
   });
 
-  it('keeps provider-level data plans when the selected provider has no nested items', async () => {
+  it('bugfix: fails closed for a selected provider listed without packages', async () => {
     mockGetDataProviders.mockResolvedValueOnce([
       {
         billerId: '2082751a-89c7-4862-86c5-5498194b32f3',
@@ -172,12 +172,7 @@ describe('resolveKudaDataPlanForPurchase', () => {
         dataPlanCode: '2082751a-89c7-4862-86c5-5498194b32f3',
         networkProvider: NetworkProvider.MTN,
       })
-    ).resolves.toMatchObject({
-      amount: 1000,
-      itemCode: '2082751a-89c7-4862-86c5-5498194b32f3',
-      providerName: 'MTN',
-      resolvedFrom: 'exact_item_code',
-    });
+    ).rejects.toThrow(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
   });
 
   it('rejects stale amounts for exact fixed-price package codes', async () => {

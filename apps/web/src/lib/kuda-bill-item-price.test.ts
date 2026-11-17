@@ -76,6 +76,16 @@ describe('assertKudaBillItemPriceCurrent', () => {
     });
   });
 
+  it('matches item codes regardless of case and spacing', async () => {
+    await expect(
+      assertKudaBillItemPriceCurrent({
+        ...superPackage,
+        amount: 950000,
+        billItemIdentifier: ' kud-cab-stt-super ',
+      })
+    ).rejects.toThrow(KUDA_BILL_PRICE_CHANGED_MESSAGE);
+  });
+
   it('accepts a cable package at its current price', async () => {
     await expect(
       assertKudaBillItemPriceCurrent(superPackage)
@@ -222,6 +232,18 @@ describe('assertKudaBillItemPriceCurrent', () => {
       expect(mockLoggerWarn).toHaveBeenCalledWith(
         expect.objectContaining({ hasLastGoodList: false, type: 'cable_tv' })
       );
+    });
+
+    it('fails an electricity code outside the meter products closed with no list', async () => {
+      mockGetBillersByCategory.mockResolvedValue([]);
+
+      await expect(
+        assertKudaBillItemPriceCurrent({
+          amount: 5000,
+          billItemIdentifier: 'SOME-FIXED-PLAN',
+          type: 'electricity',
+        })
+      ).rejects.toThrow(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
     });
 
     it('lets open-amount electricity continue with no list', async () => {

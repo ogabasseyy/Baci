@@ -157,26 +157,6 @@ function mapResolvedCandidate(
   };
 }
 
-function mapUnverifiedDataPlan({
-  amount,
-  originalDataPlanCode,
-  providerName,
-}: {
-  amount: number;
-  originalDataPlanCode: string;
-  providerName: string;
-}): ResolvedKudaDataPlan {
-  return {
-    amount,
-    isAmountFixed: false,
-    itemCode: originalDataPlanCode,
-    itemName: originalDataPlanCode,
-    originalDataPlanCode,
-    providerName,
-    resolvedFrom: 'exact_item_code',
-  };
-}
-
 function hasLeafBillItems(provider: Biller) {
   return flattenKudaDataPlanBillItems<BillItem>(provider.billItems).length > 0;
 }
@@ -214,13 +194,10 @@ export async function resolveKudaDataPlanForPurchase({
     throw new Error(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
   }
 
-  // A provider sold without packages has no price to check against.
+  // A selected provider listed without packages gives no price to check the
+  // app's (possibly 100x) amount against, so it fails closed too.
   if (selectedProviderByCode && !hasLeafBillItems(selectedProviderByCode)) {
-    return mapUnverifiedDataPlan({
-      amount,
-      originalDataPlanCode,
-      providerName: selectedProviderByCode?.billerName ?? networkProvider,
-    });
+    throw new Error(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
   }
 
   const normalizedCode = normalizeComparable(originalDataPlanCode);

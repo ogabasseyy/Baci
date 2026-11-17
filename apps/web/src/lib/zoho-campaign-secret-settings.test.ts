@@ -50,6 +50,15 @@ describe('extractZohoCampaignSecrets', () => {
     expect(nulled.refreshToken).toBeNull();
   });
 
+  it('ignores a non-string token value instead of clearing the stored one', () => {
+    const result = extractZohoCampaignSecrets({
+      zohoCampaigns: { enabled: true, refreshToken: 42 },
+    });
+
+    expect(result.refreshToken).toBeUndefined();
+    expect(result.customSettings).toEqual({ zohoCampaigns: { enabled: true } });
+  });
+
   it('leaves the stored token alone when the request does not mention it', () => {
     const result = extractZohoCampaignSecrets({
       zohoCampaigns: { enabled: false, listKey: 'L1' },

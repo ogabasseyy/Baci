@@ -27,26 +27,21 @@ REVOKE ALL ON TABLE public.merchant_zoho_campaign_credentials
   FROM PUBLIC, anon, authenticated;
 GRANT ALL ON TABLE public.merchant_zoho_campaign_credentials TO service_role;
 
--- Backfill: copy any stored refresh token (camelCase object wins, as in the
--- application parser), then strip every token key from custom_settings.
+-- Backfill: copy the first non-blank stored refresh token (either spelling, in either
+-- settings object, the same precedence the API extractor uses), then strip every
+-- token key from custom_settings.
 INSERT INTO public.merchant_zoho_campaign_credentials (merchant_id, refresh_token)
 SELECT src.merchant_id, src.token
 FROM (
   SELECT
     fs.merchant_id,
     COALESCE(
-      NULLIF(pg_catalog.btrim(zoho.obj ->> 'refreshToken'), ''),
-      NULLIF(pg_catalog.btrim(zoho.obj ->> 'refresh_token'), '')
+      NULLIF(pg_catalog.btrim(fs.custom_settings -> 'zohoCampaigns' ->> 'refreshToken'), ''),
+      NULLIF(pg_catalog.btrim(fs.custom_settings -> 'zohoCampaigns' ->> 'refresh_token'), ''),
+      NULLIF(pg_catalog.btrim(fs.custom_settings -> 'zoho_campaigns' ->> 'refreshToken'), ''),
+      NULLIF(pg_catalog.btrim(fs.custom_settings -> 'zoho_campaigns' ->> 'refresh_token'), '')
     ) AS token
   FROM public.merchant_feature_settings AS fs
-  CROSS JOIN LATERAL (
-    SELECT CASE
-      WHEN pg_catalog.jsonb_typeof(fs.custom_settings -> 'zohoCampaigns') = 'object'
-        THEN fs.custom_settings -> 'zohoCampaigns'
-      WHEN pg_catalog.jsonb_typeof(fs.custom_settings -> 'zoho_campaigns') = 'object'
-        THEN fs.custom_settings -> 'zoho_campaigns'
-    END AS obj
-  ) AS zoho
 ) AS src
 JOIN public.merchants AS m ON m.id = src.merchant_id
 WHERE src.token IS NOT NULL

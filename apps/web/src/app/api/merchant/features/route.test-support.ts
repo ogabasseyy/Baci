@@ -54,6 +54,7 @@ interface TestState {
   rpcCalls: Array<{ name: string; args: unknown }>;
   rpcError: { code?: string; message: string } | null;
   selectColumns: string | null;
+  selectLog: string[];
   selectFilter: { column: string; value: unknown } | null;
   settingsData: unknown;
   settingsError: unknown;
@@ -88,6 +89,7 @@ function createInitialTestState(): TestState {
     rpcCalls: [],
     rpcError: null,
     selectColumns: null,
+    selectLog: [],
     selectFilter: null,
     settingsData: {
       id: 'settings-1',
@@ -201,6 +203,7 @@ function createMockSupabase() {
         return {
           select: vi.fn((columns: string) => {
             testState.selectColumns = columns;
+            testState.selectLog.push(columns);
             return {
               eq: vi.fn((column: string, value: unknown) => {
                 testState.selectFilter = { column, value };
@@ -229,6 +232,7 @@ function createMockSupabase() {
             return {
               select: vi.fn((columns: string) => {
                 testState.selectColumns = columns;
+                testState.selectLog.push(columns);
                 return {
                   single: vi.fn(() =>
                     Promise.resolve({
@@ -246,6 +250,7 @@ function createMockSupabase() {
               eq: vi.fn().mockReturnValue({
                 select: vi.fn((columns: string) => {
                   testState.selectColumns = columns;
+                  testState.selectLog.push(columns);
                   return {
                     single: vi.fn(() =>
                       Promise.resolve({
@@ -263,6 +268,7 @@ function createMockSupabase() {
             return {
               select: vi.fn((columns: string) => {
                 testState.selectColumns = columns;
+                testState.selectLog.push(columns);
                 return {
                   single: vi.fn(() =>
                     Promise.resolve({

@@ -48,6 +48,9 @@ export function extractZohoCampaignSecrets<T>(
     for (const tokenKey of ZOHO_REFRESH_TOKEN_KEYS) {
       if (!(tokenKey in zoho)) continue;
       const value = zoho[tokenKey];
+      // Only a string or an explicit null is a statement about the token; any other
+      // value (a number, an object) is ignored so it cannot clear the stored one.
+      if (value !== null && typeof value !== 'string') continue;
       const trimmed = typeof value === 'string' ? value.trim() : '';
       if (trimmed && typeof refreshToken !== 'string') refreshToken = trimmed;
       else if (!trimmed) sawBlankToken = true;

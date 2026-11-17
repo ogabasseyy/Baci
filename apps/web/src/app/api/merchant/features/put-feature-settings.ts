@@ -145,10 +145,15 @@ export function createPutFeatureSettings(
       };
       completeSettings.rewards_page_enabled = completeSettings.loyalty_enabled;
       // The session cannot read the stored secrets (audit R2), so a replace must
-      // not write them back: leaving a secret out of the upsert keeps the
-      // stored value, and sending one (or null) still sets or clears it.
+      // not write them back, and an upsert that mentions a secret column fails
+      // (ON CONFLICT DO UPDATE reads EXCLUDED.<col>, which needs SELECT on it).
+      // Secrets therefore never travel in the upsert: omitting one keeps the
+      // stored value, and a value (or null) is written by a plain UPDATE below.
+      const secretUpdates: Record<string, unknown> = {};
       for (const key of INTEGRATION_SECRET_FIELDS) {
-        if (!(key in sanitizedSettings)) delete completeSettings[key];
+        if (key in sanitizedSettings)
+          secretUpdates[key] = sanitizedSettings[key];
+        delete completeSettings[key];
       }
       const { data: settings, error } = await auth.supabase
         .from('merchant_feature_settings')
@@ -161,6 +166,19 @@ export function createPutFeatureSettings(
           { error: 'Failed to save settings' },
           { status: 500 }
         );
+      }
+      if (Object.keys(secretUpdates).length > 0) {
+        const { error: secretError } = await auth.supabase
+          .from('merchant_feature_settings')
+          .update(secretUpdates)
+          .eq('merchant_id', access.merchantId);
+        if (secretError) {
+          console.error('Error saving integration secrets:', secretError);
+          return jsonNoStore(
+            { error: 'Failed to save settings' },
+            { status: 500 }
+          );
+        }
       }
       revalidateMerchantFeatureCaches(access.merchantId, sanitizedSettings);
       const withPresence = await attachIntegrationSecretPresence(

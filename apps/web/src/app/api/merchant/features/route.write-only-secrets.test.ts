@@ -75,8 +75,13 @@ it.each([
       snapchat_capi_token: 'new-token',
     })
   );
-  const payload =
-    method === 'PATCH' ? testState.updatePayload : testState.upsertPayload;
+  // Both routes write secrets with a plain UPDATE; PUT's upsert never carries them
+  // (an upsert that names a secret column needs SELECT on it and would fail).
+  const payload = testState.updatePayload;
+  if (method === 'PUT') {
+    for (const key of Object.keys(secrets))
+      expect(testState.upsertPayload).not.toHaveProperty(key);
+  }
   expect(payload).toMatchObject({
     tiktok_access_token: null,
     snapchat_capi_token: 'new-token',
@@ -93,14 +98,17 @@ describe('bugfix R2: secret columns are not readable by the signed-in session', 
     'PUT',
   ] as const)('%s never selects an integration secret column', async (method) => {
     const route = await import('./route');
-    await route[method](
+    const response = await route[method](
       makeRequest(
         method,
         method === 'GET' ? undefined : { reviews_enabled: true }
       )
     );
-    for (const key of Object.keys(secrets))
-      expect(testState.selectColumns).not.toContain(key);
+    expect(response.status).toBe(200);
+    expect(testState.selectLog.length).toBeGreaterThan(0);
+    for (const projection of testState.selectLog)
+      for (const key of Object.keys(secrets))
+        expect(projection).not.toContain(key);
   });
 
   it('reports not configured for secrets the owner has not saved', async () => {

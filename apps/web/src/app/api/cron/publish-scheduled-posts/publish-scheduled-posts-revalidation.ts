@@ -1,5 +1,4 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { getInternalApiSecret } from '@/env';
 import { revalidateBlogPosts } from '@/lib/cache-revalidation';
 import { purgeCloudflareUrlsConfirmed } from '@/lib/cloudflare-purge';
 import {
@@ -72,7 +71,7 @@ export async function revalidateScheduledPostsByMerchant(
         // Standalone VPS workers run outside Next.js's static generation store:
         // trigger the authenticated /api/internal/revalidate-blog endpoint so
         // Next.js 'use cache' entries revalidate, then purge Cloudflare edge URLs.
-        const internalSecret = getInternalApiSecret();
+        const internalSecret = process.env.INTERNAL_API_SECRET?.trim();
         const appUrl =
           process.env.NEXT_PUBLIC_APP_URL?.trim() || 'https://usebaci.com';
         if (!internalSecret) {

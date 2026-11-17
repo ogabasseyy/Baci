@@ -40,6 +40,7 @@ type StorefrontPreflightParams = {
   userAgent: string;
   merchantIdentifier: string;
   homePathPrefix?: string;
+  onPdpConfirmedLive?: () => void;
 };
 
 function checkBrandAuthorityEntry(
@@ -220,6 +221,7 @@ export async function runStorefrontPreflight({
   userAgent,
   merchantIdentifier,
   homePathPrefix,
+  onPdpConfirmedLive,
 }: StorefrontPreflightParams): Promise<NextResponse | null> {
   // Every verdict below requires a document navigation. Reject router data,
   // prefetches and mutations before scheduling the async helpers.
@@ -276,13 +278,17 @@ export async function runStorefrontPreflight({
     homePathPrefix
   );
   if (canonical.response) return canonical.response;
-  if (canonical.skipHardNotFound) return null;
+  if (canonical.skipHardNotFound) {
+    onPdpConfirmedLive?.();
+    return null;
+  }
 
   return resolveStorefrontPdpHardNotFound(
     request,
     pathname,
     hostname,
     userAgent,
-    merchantIdentifier
+    merchantIdentifier,
+    onPdpConfirmedLive
   );
 }

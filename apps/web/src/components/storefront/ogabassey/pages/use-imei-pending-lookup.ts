@@ -22,7 +22,7 @@ interface ActivePendingImeiLookup extends PendingImeiLookup {
   scopeKey: string;
 }
 
-type PendingTerminal =
+type PendingTerminal = (
   | {
       kind: 'complete';
       lookupId: string;
@@ -30,21 +30,24 @@ type PendingTerminal =
       tier: ImeiServiceTierKey;
       device?: ImeiDeviceCategory;
     }
-  | { error: string; kind: 'error'; tier: ImeiServiceTierKey };
+  | { error: string; kind: 'error'; tier: ImeiServiceTierKey }
+) & { scopeKey: string | null };
 
 export function useImeiPendingLookup({
   customerId,
+  userId,
   host,
   merchantSlug,
 }: {
   customerId?: string;
+  userId?: string;
   host?: string;
   merchantSlug?: string;
 }) {
   const resolvedHost =
     host ?? (typeof window === 'undefined' ? '' : window.location.host);
   const scopeKey = merchantSlug
-    ? `${resolvedHost.toLowerCase()}:${merchantSlug.toLowerCase()}:${customerId ?? 'anonymous'}`
+    ? `${resolvedHost.toLowerCase()}:${merchantSlug.toLowerCase()}:${customerId ?? 'anonymous'}:${userId ?? ''}`
     : null;
   const storageKey =
     customerId && resolvedHost && merchantSlug
@@ -95,8 +98,9 @@ export function useImeiPendingLookup({
           clearPendingImeiLookup(getPendingImeiStorage(), storageKey);
         setPending(null);
         setPaused(false);
-        setTerminal(
-          outcome.kind === 'complete'
+        setTerminal({
+          scopeKey,
+          ...(outcome.kind === 'complete'
             ? {
                 kind: 'complete',
                 lookupId: pending.lookupId,
@@ -104,8 +108,8 @@ export function useImeiPendingLookup({
                 tier: pending.tier,
                 device: pending.device,
               }
-            : { error: outcome.error, kind: 'error', tier: pending.tier }
-        );
+            : { error: outcome.error, kind: 'error', tier: pending.tier }),
+        });
       },
       isStale ? PAUSED_POLL_MS : pending.pollAfterMs
     );
@@ -161,6 +165,6 @@ export function useImeiPendingLookup({
       setPaused(false);
       setPending({ ...next, canResume });
     },
-    terminal,
+    terminal: terminal?.scopeKey === scopeKey ? terminal : null,
   };
 }

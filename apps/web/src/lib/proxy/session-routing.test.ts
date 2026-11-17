@@ -126,7 +126,9 @@ describe('session routing', () => {
     });
 
     const response = await runSessionRoutingStage(
-      new NextRequest('https://usebaci.com/login?redirect=%2Fdashboard'),
+      new NextRequest('https://usebaci.com/login?redirect=%2Fdashboard', {
+        headers: { cookie: 'sb-project-auth-token=session' },
+      }),
       '/login',
       'usebaci.com',
       'Mozilla'
@@ -143,5 +145,44 @@ describe('session routing', () => {
       secure: true,
       value: 'refreshed-value',
     });
+  });
+
+  it.each([
+    '/login',
+    '/reset-password',
+  ])('skips updateSession on %s when no sb-* auth cookie is present', async (authPath) => {
+    vi.mocked(updateSession).mockClear();
+
+    const response = await runSessionRoutingStage(
+      new NextRequest(`https://usebaci.com${authPath}`, {
+        headers: { cookie: 'baci_pref=dark' },
+      }),
+      authPath,
+      'usebaci.com',
+      'Mozilla'
+    );
+
+    expect(updateSession).not.toHaveBeenCalled();
+    expect(response?.status).toBe(200);
+    expect(response?.headers.get('Content-Security-Policy')).toBeTruthy();
+  });
+
+  it('calls updateSession on /login when an sb-* auth cookie is present', async () => {
+    vi.mocked(updateSession).mockClear();
+    vi.mocked(updateSession).mockResolvedValue({
+      supabaseResponse: NextResponse.next(),
+      user: null,
+    });
+
+    await runSessionRoutingStage(
+      new NextRequest('https://usebaci.com/login', {
+        headers: { cookie: 'sb-project-auth-token=stale-token' },
+      }),
+      '/login',
+      'usebaci.com',
+      'Mozilla'
+    );
+
+    expect(updateSession).toHaveBeenCalledTimes(1);
   });
 });

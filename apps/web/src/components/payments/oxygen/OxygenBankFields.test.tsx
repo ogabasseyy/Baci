@@ -29,6 +29,14 @@ beforeEach(() => {
       : Response.json({ accountName: 'TEST CUSTOMER' })
   );
 });
+it('explains when the application is unavailable instead of offering a nonworking bank lookup', () => {
+  render(<OxygenBankFields busy={false} />);
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    'Unable to load your application. Close and reopen checkout to continue.'
+  );
+  expect(screen.queryByRole('button', { name: 'Load banks' })).toBeNull();
+  expect(m.fetch).not.toHaveBeenCalled();
+});
 it('hides the account name placeholder until verification starts', async () => {
   render(<OxygenBankFields workflowId={id} busy={false} />);
   await waitFor(() => expect(screen.getByLabelText('Bank')).toBeEnabled());

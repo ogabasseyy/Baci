@@ -1,4 +1,5 @@
 import { StyleSheet } from 'react-native';
+import { QUIZ_TILE } from './quiz-stage-colors';
 import type { QuizThemeColors } from './quiz-theme';
 
 export function createQuizLobbyStyles(colors: QuizThemeColors) {
@@ -54,7 +55,7 @@ export function createQuizLobbyStyles(colors: QuizThemeColors) {
       justifyContent: 'space-between',
     },
     prizeMoment: {
-      color: colors.primary,
+      color: colors.warning,
       fontSize: 13,
       fontWeight: '800',
       letterSpacing: 1.2,
@@ -78,7 +79,14 @@ export function createQuizLobbyStyles(colors: QuizThemeColors) {
       fontWeight: '900',
       letterSpacing: 1,
     },
-    prizeStage: { alignItems: 'center', flexDirection: 'row', minHeight: 156 },
+    prizeStage: {
+      alignItems: 'center',
+      flexDirection: 'row',
+      minHeight: 172,
+      paddingLeft: 20,
+      paddingRight: 10,
+      paddingVertical: 8,
+    },
     prizeCopy: { flex: 1, gap: 8, zIndex: 1 },
     prizeImageFrame: {
       alignItems: 'center',
@@ -89,12 +97,12 @@ export function createQuizLobbyStyles(colors: QuizThemeColors) {
     },
     prizeImage: { height: 150, transform: [{ rotate: '9deg' }], width: 125 },
     eventTitle: {
-      color: colors.textSecondary,
+      color: QUIZ_TILE.textSecondary,
       fontSize: 13,
       fontWeight: '700',
     },
     eventPrize: {
-      color: colors.text,
+      color: QUIZ_TILE.text,
       fontSize: 22,
       fontWeight: '900',
       letterSpacing: -0.5,
@@ -102,9 +110,9 @@ export function createQuizLobbyStyles(colors: QuizThemeColors) {
     },
     prizeCondition: {
       alignSelf: 'flex-start',
-      backgroundColor: colors.primaryLowOpacity,
+      backgroundColor: '#FDE7E7',
       borderRadius: 999,
-      color: colors.primary,
+      color: '#B91C1C',
       fontSize: 12,
       fontWeight: '800',
       overflow: 'hidden',
@@ -159,13 +167,13 @@ export function createQuizLobbyStyles(colors: QuizThemeColors) {
       alignItems: 'center',
       borderRadius: 14,
       justifyContent: 'center',
-      minHeight: 50,
+      minHeight: 54,
       paddingHorizontal: 16,
     },
     primaryButtonText: {
       color: colors.primaryForeground,
-      fontSize: 16,
-      fontWeight: '800',
+      fontSize: 17,
+      fontWeight: '900',
     },
     disabledButtonText: {
       color: colors.textSecondary,
@@ -195,7 +203,7 @@ export function createQuizLobbyStyles(colors: QuizThemeColors) {
       justifyContent: 'flex-end',
     },
     rulesSheet: {
-      backgroundColor: colors.card,
+      backgroundColor: '#2A0E11',
       borderTopLeftRadius: 28,
       borderTopRightRadius: 28,
       gap: 22,

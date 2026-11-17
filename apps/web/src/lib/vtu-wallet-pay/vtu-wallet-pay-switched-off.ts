@@ -1,0 +1,93 @@
+import 'server-only';
+import {
+  walletPayAccepted,
+  walletPayRefuse,
+} from '@/lib/piggyvest/wallet-pay-http';
+import { walletPayScope } from '@/lib/piggyvest/wallet-pay-scope';
+import { cancelVtuWalletPay } from './vtu-wallet-pay-close';
+import type { VtuWalletPayStepDeps } from './vtu-wallet-pay-step.types';
+
+/**
+ * A start or PIN-proof request while new airtime/data/bills payments are
+ * switched off. It never issues or sends a payment, and reads only through
+ * the recovery runtime (same store, same customer):
+ *  - a start (a replayed purchase whose operation the app lost) hands back a
+ *    payment that already moved money, so it resumes and is delivered
+ *    (Codex P1); one that moved nothing is released and closed (Codex P2);
+ *  - a PIN proof is refused, and its still-issued payment is released and the
+ *    purchase closed, so a store credit retry never stays held (Codex P2).
+ * Anything else answers `refusal` (the caller's unavailable answer).
+ */
+export async function answerWhileSwitchedOff(
+  deps: VtuWalletPayStepDeps,
+  input: {
+    transactionId: string;
+    merchantId: string;
+    customerId: string;
+    operationId?: string;
+    amountKobo: number;
+  },
+  refusal: () => Promise<Response>
+): Promise<Response> {
+  let runtime: ReturnType<VtuWalletPayStepDeps['readRecoveryRuntime']>;
+  try {
+    runtime = deps.readRecoveryRuntime();
+  } catch {
+    return await refusal();
+  }
+  if (runtime.merchantId !== input.merchantId) return await refusal();
+  const identity = await deps.resolveIdentity(runtime);
+  if (!identity || identity.customerId !== input.customerId)
+    return await refusal();
+  const scope = walletPayScope(runtime, identity);
+  const { transactionId, operationId } = input;
+  if (operationId === undefined) {
+    const existing = await deps.findForPurchase({
+      runtime,
+      scope,
+      purpose: 'vtu',
+      purchaseRef: transactionId,
+    });
+    if (existing && existing.state !== 'issued')
+      return walletPayAccepted(
+        existing.state === 'needs_review'
+          ? 'payment_review'
+          : 'payment_pending',
+        existing.operationId,
+        { transactionId, amountKobo: input.amountKobo }
+      );
+    // Nothing moved money: release a still-issued attempt (or, with none
+    // live, e.g. one that expired) and close the purchase, so it never stays
+    // stuck holding a store credit retry (Codex P2).
+    const ref = { runtime, scope, transactionId };
+    // The close answers true only when the purchase is closed for certain; a
+    // false (a payment was admitted meanwhile) or an error is not a closure
+    // (Codex P1).
+    const closed = await Promise.resolve()
+      .then(() =>
+        deps.closeUnpaid(
+          existing ? { ...ref, cancelOperationId: existing.operationId } : ref
+        )
+      )
+      .then((answer) => answer === true)
+      .catch(() => false);
+    // A confirmed closure is a final answer the app settles on (its key is
+    // dropped, so store credit is offered again); an uncertain one stays the
+    // retryable unavailable answer (Codex P2).
+    return closed
+      ? walletPayRefuse(
+          'This payment did not go through. Please start again.',
+          'PAYMENT_NOT_COMPLETED',
+          409
+        )
+      : await refusal();
+  }
+  // Only this operation, and only while still issued (the database refuses
+  // a reserved one): money already moving is never released.
+  await cancelVtuWalletPay(
+    deps.closeUnpaid,
+    { runtime, scope, transactionId },
+    operationId
+  ).catch(() => null);
+  return await refusal();
+}

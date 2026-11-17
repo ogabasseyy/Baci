@@ -81,7 +81,7 @@ export function PiggyvestWalletActivity({
           </Text>
           {button('Try again', activity.retry)}
         </View>
-      ) : activity.items.length === 0 ? (
+      ) : activity.items.length === 0 && !activity.hasMore ? (
         <View style={[styles.emptyTransactions, walletListLayout.centred]}>
           <Ionicons
             accessible={false}

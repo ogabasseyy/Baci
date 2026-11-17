@@ -1,6 +1,4 @@
-import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
-import { connection } from 'next/server';
 import { Suspense } from 'react';
 import { Hero } from '@/components/storefront/ogabassey/components/Hero';
 import type { LaunchProductSlide } from '@/components/storefront/ogabassey/components/LaunchCarousel';
@@ -9,7 +7,6 @@ import { OGABASSEY_TITLE, OGABASSEY_URL } from '@/config/ogabassey';
 import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
 import { getRequestScopedMerchant } from '@/lib/cached-data';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
-import { resolveMerchantContextIdentifier } from '@/lib/storefront-route-identifier';
 import { OgabasseyHomeDynamicContent } from './ogabassey-home-dynamic-content';
 import { OgabasseyHomeHeroReserveFallback } from './ogabassey-home-hero-reserve-fallback';
 import { loadOgabasseyLaunchProducts } from './ogabassey-home-launch-products';
@@ -35,15 +32,9 @@ interface OgabasseyHomePageContentProps {
   shellSlides: LaunchProductSlide[] | null;
 }
 
-function resolveOgabasseyHomeMerchantIdentifier(headersList: Headers): string {
-  return resolveMerchantContextIdentifier(headersList) || OGABASSEY_TEMPLATE_ID;
-}
-
-export function resolveOgabasseyHomePathPrefix(
-  headersList: Headers,
-  staticPathPrefix: string
-): string {
-  return resolveMerchantContextIdentifier(headersList) ? '' : staticPathPrefix;
+function resolveOgabasseyHomeMerchantIdentifier(pathPrefix: string): string {
+  const slugFromPrefix = pathPrefix.replace(/^\/+/, '').split('/')[0]?.trim();
+  return slugFromPrefix || OGABASSEY_TEMPLATE_ID;
 }
 
 function renderPublishedOgabasseyHomePageContent({
@@ -132,16 +123,10 @@ async function renderOgabasseyHomePageContentAsync({
     merchant = await getRequestScopedMerchant(OGABASSEY_DOMAIN_IDENTIFIER);
     resolvedPathPrefix = '';
   } else {
-    await connection();
-
-    const headersList = await headers();
     merchant = await getRequestScopedMerchant(
-      resolveOgabasseyHomeMerchantIdentifier(headersList)
+      resolveOgabasseyHomeMerchantIdentifier(pathPrefix)
     );
-    resolvedPathPrefix = resolveOgabasseyHomePathPrefix(
-      headersList,
-      pathPrefix
-    );
+    resolvedPathPrefix = pathPrefix;
   }
 
   if (!merchant) {

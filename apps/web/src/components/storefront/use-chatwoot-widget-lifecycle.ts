@@ -24,6 +24,7 @@ type ChatwootWidgetWindow = Window & {
   __baciChatwootRunStarted?: boolean;
   __baciChatwootConfigKey?: string;
   __baciChatwootReadyKey?: string;
+  __baciChatwootContainedKey?: string;
 };
 
 function isExactHttpsOrigin(value: string): boolean {
@@ -108,12 +109,33 @@ export function useChatwootWidgetLifecycle(
       return true;
     };
 
+    // Hide-only paths must still close the previous tenant's conversation.
+    // reset() clears its cookies and reloads only the SDK iframe, never this
+    // document, so checkout state survives. Once per tenant key.
+    const containPreviousTenant = () => {
+      const previous = widgetWindow.$chatwoot;
+      const key = widgetWindow.__baciChatwootConfigKey;
+      if (key && widgetWindow.__baciChatwootContainedKey !== key) {
+        try {
+          previous?.reset?.();
+          widgetWindow.__baciChatwootContainedKey = key;
+        } catch {
+          // Retry on the next navigation; the bubble is still hidden below.
+        }
+      }
+      try {
+        previous?.toggleBubbleVisibility?.('hide');
+      } catch {
+        // The SDK throws before its bubble holder exists; nothing to hide.
+      }
+    };
+
     const activeTenantKey = widgetWindow.__baciChatwootConfigKey;
     if (activeTenantKey && configKey && activeTenantKey !== configKey) {
       if (isCartOrCheckoutPath(pathname, storeSlug)) {
         // Keep shopper-entered cart/checkout state intact. The prior widget
         // stays hidden and tenant switching resumes on the next safe route.
-        widgetWindow.$chatwoot?.toggleBubbleVisibility?.('hide');
+        containPreviousTenant();
         setActiveWidgetKey(null);
         return;
       }
@@ -129,7 +151,7 @@ export function useChatwootWidgetLifecycle(
       !validConfig ||
       window.location.origin !== storefrontOrigin
     ) {
-      widgetWindow.$chatwoot?.toggleBubbleVisibility?.('hide');
+      containPreviousTenant();
       setActiveWidgetKey(null);
       return;
     }
@@ -151,6 +173,7 @@ export function useChatwootWidgetLifecycle(
       widgetWindow.$chatwoot?.websiteToken === websiteToken &&
       widgetWindow.$chatwoot?.baseUrl === platformOrigin
     ) {
+      widgetWindow.__baciChatwootContainedKey = undefined;
       widgetWindow.$chatwoot.toggleBubbleVisibility?.('show');
       setActiveWidgetKey(configKey);
     }
@@ -230,7 +253,12 @@ export function useChatwootWidgetLifecycle(
     const cleanup = () => {
       active = false;
       window.removeEventListener('chatwoot:ready', onReady);
-      widgetWindow.$chatwoot?.toggleBubbleVisibility?.('hide');
+      try {
+        // The real SDK throws here before its bubble holder exists.
+        widgetWindow.$chatwoot?.toggleBubbleVisibility?.('hide');
+      } catch {
+        // Nothing to hide yet; the ready handler shows the bubble later.
+      }
       setActiveWidgetKey(null);
     };
 

@@ -137,7 +137,8 @@ describe('ChatwootWidget tenant switching', () => {
 
     expect(screen.getByTestId('support-active')).toHaveTextContent('false');
     expect(toggleBubbleVisibility).toHaveBeenCalledWith('hide');
-    expect(reset).not.toHaveBeenCalled();
+    // The prior conversation is closed now, but the document is not reloaded.
+    expect(reset).toHaveBeenCalledOnce();
     expect(mocks.reload).not.toHaveBeenCalled();
 
     mocks.pathname = '/shop/product';
@@ -149,7 +150,7 @@ describe('ChatwootWidget tenant switching', () => {
       </ChatwootWidget>
     );
 
-    expect(reset).toHaveBeenCalledOnce();
+    expect(reset).toHaveBeenCalledTimes(2);
     expect(mocks.reload).toHaveBeenCalledOnce();
   });
 

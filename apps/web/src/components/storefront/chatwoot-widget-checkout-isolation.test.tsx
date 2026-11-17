@@ -121,7 +121,19 @@ describe('ChatwootWidget checkout tenant isolation', () => {
 
     expect(toggleBubbleVisibility).toHaveBeenCalledWith('hide');
     expect(screen.getByTestId('support-active')).toHaveTextContent('false');
-    expect(reset).not.toHaveBeenCalled();
+    // bugfix: the prior conversation is closed (SDK reset, no document
+    // reload) exactly once, even across further checkout navigations.
+    expect(reset).toHaveBeenCalledTimes(1);
+    expect(mocks.reload).not.toHaveBeenCalled();
+    mocks.pathname = '/shop/checkout/payment';
+    view.rerender(
+      <ChatwootWidget
+        config={{ ...config, websiteToken: 'next-public-widget-token-123' }}
+      >
+        <SupportStatus />
+      </ChatwootWidget>
+    );
+    expect(reset).toHaveBeenCalledTimes(1);
     expect(mocks.reload).not.toHaveBeenCalled();
     expect(mocks.bridgeMounts).toEqual(['shop']);
     expect(mocks.bridgeUnmounts).toEqual(['shop']);

@@ -71,7 +71,10 @@ describe('ChatwootWidget disablement', () => {
         <span>support disabled</span>
       </ChatwootWidget>
     );
-    expect(reset).not.toHaveBeenCalled();
+    // bugfix: a disabled storefront must close the prior tenant's
+    // conversation without reloading the document.
+    expect(reset).toHaveBeenCalledTimes(1);
+    expect(mocks.reload).not.toHaveBeenCalled();
 
     const nextConfig = {
       ...config,
@@ -84,7 +87,7 @@ describe('ChatwootWidget disablement', () => {
       </ChatwootWidget>
     );
 
-    expect(reset).toHaveBeenCalledTimes(1);
+    expect(reset).toHaveBeenCalledTimes(2);
     expect(toggleBubbleVisibility).toHaveBeenCalledWith('hide');
     expect(mocks.reload).toHaveBeenCalledOnce();
     expect(run).toHaveBeenCalledOnce();

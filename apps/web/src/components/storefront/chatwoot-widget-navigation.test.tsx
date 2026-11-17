@@ -90,4 +90,31 @@ describe('ChatwootWidget navigation during initialisation', () => {
     expect(toggle).toHaveBeenLastCalledWith('show');
     expect(screen.getByTestId('support-active')).toHaveTextContent('true');
   });
+
+  it('does not throw from cleanup when the SDK visibility call fails before its bubble exists', () => {
+    const w = window as TestWindow;
+    const toggle = vi.fn(() => {
+      throw new TypeError('bubble holder missing');
+    });
+    w.chatwootSDK = {
+      run: ({ websiteToken, baseUrl }) => {
+        w.$chatwoot = {
+          websiteToken,
+          baseUrl,
+          toggleBubbleVisibility: toggle,
+        };
+      },
+    };
+    const tree = () => (
+      <ChatwootWidget config={config}>
+        <SupportStatus />
+      </ChatwootWidget>
+    );
+    const { rerender } = render(tree());
+    fireEvent.load(document.getElementById('baci-chatwoot-sdk') as HTMLElement);
+
+    mocks.pathname = '/shop/products';
+    expect(() => rerender(tree())).not.toThrow();
+    expect(toggle).toHaveBeenCalledWith('hide');
+  });
 });

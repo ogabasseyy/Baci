@@ -5,16 +5,17 @@ import { createHash } from 'node:crypto';
 // graph to exactly what the poller executes.
 import { mapKnownGiglStatus } from '@baci/shared/lib/gigl-tracking-status';
 import type { z } from 'zod';
-import {
-  GIGL_ARRIVED_IN_CITY_RAW_STATUS,
-  GIGL_PICKUP_EN_ROUTE_RAW_STATUS,
-} from '@/lib/shipping/gigl-tracking-notification-policy-matrix';
+import { GIGL_PICKUP_EN_ROUTE_RAW_STATUS } from '@/lib/shipping/gigl-tracking-notification-policy-matrix';
 import type { TrackingEvent, TrackingResult } from '../types';
 import {
   GIGL_TRACKING_MAX_FUTURE_SKEW_MS,
   PickupOptions,
 } from './gigl.constants';
 import type { giglSchemas } from './gigl.schemas';
+import {
+  applyLifecycleGuards,
+  currentStatusRank,
+} from './gigl.tracking-lifecycle-guards';
 
 type GiglTrackingShipment = z.input<typeof giglSchemas.trackingShipment>;
 
@@ -56,127 +57,6 @@ function fallbackProviderEventKey(
     scanStatusIncident ?? '',
   ]);
   return `fallback:${createHash('sha256').update(tuple).digest('hex')}`;
-}
-
-const PLACE_NOISE_WORDS = new Set(['FCT', 'STATE', 'CITY', 'THE', 'OF']);
-const DEPARTURE_CODES = new Set(['DSC', 'DPC', 'DCC', 'DST', 'DTR', 'DIWN']);
-
-function placeWords(value: string | undefined): string[] {
-  return (value ?? '')
-    .split('(')[0]
-    .toUpperCase()
-    .split(/[^A-Z0-9]+/)
-    .filter((word) => word.length > 0 && !PLACE_NOISE_WORDS.has(word));
-}
-
-/**
- * Whole-word match: every destination word must appear as a word of the centre
- * name. Known limitation: text after "(" is ignored and abbreviations (PHC for
- * PORT HARCOURT) are not aliased, so such centres miss the name-match arrival
- * (an explicit ARF still counts). Missing a notification beats a false one.
- */
-function matchesDestination(
-  location: string | undefined,
-  destination: string | undefined
-): boolean {
-  const cityWords = placeWords(destination);
-  const centreWords = new Set(placeWords(location));
-  return (
-    cityWords.length > 0 && cityWords.every((word) => centreWords.has(word))
-  );
-}
-
-type Guardable = {
-  event: TrackingEvent;
-  recognizedStatus: TrackingEvent['status'] | null;
-  /** The provider's own status code, before notification-specific rewrites. */
-  providerStatus: string;
-};
-
-function isMshc(candidate: Guardable): number {
-  return candidate.providerStatus.trim().toUpperCase() === 'MSHC' ? 1 : 0;
-}
-
-const TERMINAL_STATUSES: ReadonlySet<string> = new Set([
-  'delivered',
-  'returned',
-  'cancelled',
-]);
-
-/** Equal-timestamp precedence for the current status: terminal (delivered/returned/cancelled) > MSHC (still out for delivery) > rest. */
-function currentStatusRank(candidate: Guardable): number {
-  if (
-    candidate.recognizedStatus !== null &&
-    TERMINAL_STATUSES.has(candidate.recognizedStatus)
-  ) {
-    return 3;
-  }
-  // A demoted (pickup-run) MSHC must not outrank a completed pickup.
-  if (candidate.recognizedStatus === 'pickup_scheduled') return 0;
-  return isMshc(candidate) ? 2 : 1;
-}
-
-/**
- * GIG fires the generic "SHIPMENT ENROUTE DELIVERY" (MSHC) during the pickup
- * run, and an arrival scan also marks the parcel reaching its destination.
- * Walk the events oldest-first: MSHC is only out-for-delivery once the parcel
- * reached the destination or has already moved through GIG centres (centre
- * names rarely equal the destination city, e.g. IKEJA for LAGOS, so absence
- * of a name match is not evidence of first-mile); before any movement it is
- * the pickup rider en route.
- */
-function applyLifecycleGuards(
-  candidates: Guardable[],
-  destination: string | undefined,
-  origin: string | undefined
-): void {
-  // A same-city shipment's origin centre also matches the destination, so a
-  // name match only counts once the parcel has moved through the network. An
-  // unknown origin (the field is optional) is treated the same way: the first
-  // scan could be the origin centre, so require a scan away from the destination.
-  const sameCity =
-    placeWords(origin).length === 0 || matchesDestination(origin, destination);
-  // Equal timestamps: process MSHC last so a contemporaneous arrival or
-  // movement scan is seen first, whatever order the payload listed them in.
-  const ordered = [...candidates].sort(
-    (a, b) =>
-      a.event.timestamp.getTime() - b.event.timestamp.getTime() ||
-      isMshc(a) - isMshc(b)
-  );
-  let arrived = false;
-  let movedThroughNetwork = false;
-  // Same-city shipments: only a scan away from the destination name proves
-  // the parcel left the origin centre (repeat origin scans prove nothing).
-  let leftDestinationCentre = false;
-  for (const candidate of ordered) {
-    const { event } = candidate;
-    const raw = candidate.providerStatus.trim().toUpperCase();
-    const isArrival =
-      raw === 'ARF' ||
-      (candidate.recognizedStatus === 'in_transit' &&
-        !DEPARTURE_CODES.has(raw) &&
-        !/DEPART/i.test(event.description) &&
-        (!sameCity || leftDestinationCentre) &&
-        matchesDestination(event.location, destination));
-    if (isArrival) {
-      arrived = true;
-      event.rawStatus = GIGL_ARRIVED_IN_CITY_RAW_STATUS;
-    } else if (raw === 'MSHC' && !arrived && !movedThroughNetwork) {
-      event.status = 'pickup_scheduled';
-      event.rawStatus = GIGL_PICKUP_EN_ROUTE_RAW_STATUS;
-      candidate.recognizedStatus = 'pickup_scheduled';
-    }
-    if (
-      candidate.recognizedStatus === 'in_transit' ||
-      candidate.recognizedStatus === 'out_for_delivery' ||
-      candidate.recognizedStatus === 'failed'
-    ) {
-      movedThroughNetwork = true;
-      if (!matchesDestination(event.location, destination)) {
-        leftDestinationCentre = true;
-      }
-    }
-  }
 }
 
 export function normalizeGiglTrackingShipment(

@@ -28,5 +28,7 @@ export function resetChatwootGlobals() {
     .__baciChatwootReadyKey;
   delete (window as Window & { __baciChatwootContainedKey?: string })
     .__baciChatwootContainedKey;
+  delete (window as Window & { __baciChatwootPendingContainKey?: string })
+    .__baciChatwootPendingContainKey;
   document.getElementById('baci-chatwoot-sdk')?.remove();
 }

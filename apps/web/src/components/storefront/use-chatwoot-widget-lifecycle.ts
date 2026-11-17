@@ -27,6 +27,7 @@ type ChatwootWidgetWindow = Window & {
   __baciChatwootConfigKey?: string;
   __baciChatwootReadyKey?: string;
   __baciChatwootContainedKey?: string;
+  __baciChatwootPendingContainKey?: string;
 };
 
 function isExactHttpsOrigin(value: string): boolean {
@@ -86,10 +87,17 @@ export function useChatwootWidgetLifecycle(
     let active = true;
     const widgetWindow = window as ChatwootWidgetWindow;
     const getCurrentWidget = () => widgetWindow.$chatwoot;
+    const safeHide = () => {
+      try {
+        widgetWindow.$chatwoot?.toggleBubbleVisibility?.('hide');
+      } catch {
+        // The SDK throws before its bubble holder exists.
+      }
+    };
     const clearPreviousTenant = (): boolean => {
       const previousWidget = widgetWindow.$chatwoot;
       if (!previousWidget?.reset) {
-        previousWidget?.toggleBubbleVisibility?.('hide');
+        safeHide();
         setActiveWidgetKey(null);
         return false;
       }
@@ -99,11 +107,11 @@ export function useChatwootWidgetLifecycle(
         // document after reset returns therefore preserves that ordering.
         previousWidget.reset();
       } catch {
-        previousWidget.toggleBubbleVisibility?.('hide');
+        safeHide();
         setActiveWidgetKey(null);
         return false;
       }
-      widgetWindow.$chatwoot?.toggleBubbleVisibility?.('hide');
+      safeHide();
       widgetWindow.__baciChatwootRunStarted = false;
       widgetWindow.__baciChatwootConfigKey = undefined;
       widgetWindow.__baciChatwootReadyKey = undefined;
@@ -135,6 +143,10 @@ export function useChatwootWidgetLifecycle(
       containPreviousChatwootTenant(widgetWindow);
       setActiveWidgetKey(null);
       return;
+    }
+
+    if (widgetWindow.__baciChatwootPendingContainKey === configKey) {
+      widgetWindow.__baciChatwootPendingContainKey = undefined;
     }
 
     // A widget created outside this loader cannot be safely assigned to a tenant.

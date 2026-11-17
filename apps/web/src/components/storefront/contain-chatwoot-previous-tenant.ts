@@ -6,6 +6,7 @@ type ContainableWidgetWindow = Window & {
   __baciChatwootConfigKey?: string;
   __baciChatwootReadyKey?: string;
   __baciChatwootContainedKey?: string;
+  __baciChatwootPendingContainKey?: string;
 };
 
 /**
@@ -33,5 +34,20 @@ export function containPreviousChatwootTenant(
     previous?.toggleBubbleVisibility?.('hide');
   } catch {
     // The SDK throws before its bubble holder exists; nothing to hide.
+  }
+  if (key && !ready && widgetWindow.__baciChatwootPendingContainKey !== key) {
+    // The pending widget will show its bubble once it loads. Contain it then,
+    // unless its tenant became current again in the meantime.
+    widgetWindow.__baciChatwootPendingContainKey = key;
+    window.addEventListener(
+      'chatwoot:ready',
+      () => {
+        if (widgetWindow.__baciChatwootPendingContainKey !== key) return;
+        widgetWindow.__baciChatwootPendingContainKey = undefined;
+        widgetWindow.__baciChatwootReadyKey = key;
+        containPreviousChatwootTenant(widgetWindow);
+      },
+      { once: true }
+    );
   }
 }

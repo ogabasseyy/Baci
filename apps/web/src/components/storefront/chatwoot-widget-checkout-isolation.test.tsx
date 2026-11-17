@@ -76,6 +76,10 @@ beforeEach(() => {
     .__baciChatwootConfigKey;
   delete (window as Window & { __baciChatwootReadyKey?: string })
     .__baciChatwootReadyKey;
+  delete (window as Window & { __baciChatwootContainedKey?: string })
+    .__baciChatwootContainedKey;
+  delete (window as Window & { __baciChatwootPendingContainKey?: string })
+    .__baciChatwootPendingContainKey;
   document.getElementById('baci-chatwoot-sdk')?.remove();
 });
 
@@ -174,5 +178,49 @@ describe('ChatwootWidget checkout tenant isolation', () => {
     );
 
     expect(reset).not.toHaveBeenCalled();
+  });
+
+  it('contains a widget that finishes loading while another tenant is deferred', () => {
+    const reset = vi.fn();
+    const toggle = vi.fn();
+    let ready = false;
+    const run = vi.fn(({ websiteToken, baseUrl }) => {
+      (window as Window & { $chatwoot?: Record<string, unknown> }).$chatwoot = {
+        reset,
+        toggleBubbleVisibility: (v: string) => {
+          if (!ready) throw new TypeError('bubble holder missing');
+          toggle(v);
+        },
+        websiteToken,
+        baseUrl,
+      };
+    });
+    (window as Window & { chatwootSDK?: { run: typeof run } }).chatwootSDK = {
+      run,
+    };
+    const view = render(
+      <ChatwootWidget config={config}>
+        <SupportStatus />
+      </ChatwootWidget>
+    );
+    fireEvent.load(document.getElementById('baci-chatwoot-sdk') as HTMLElement);
+
+    mocks.pathname = '/shop/checkout';
+    expect(() =>
+      view.rerender(
+        <ChatwootWidget
+          config={{ ...config, websiteToken: 'next-public-widget-token-123' }}
+        >
+          <SupportStatus />
+        </ChatwootWidget>
+      )
+    ).not.toThrow();
+
+    ready = true;
+    fireEvent(window, new Event('chatwoot:ready'));
+
+    expect(reset).toHaveBeenCalledTimes(1);
+    expect(toggle).toHaveBeenLastCalledWith('hide');
+    expect(screen.getByTestId('support-active')).toHaveTextContent('false');
   });
 });

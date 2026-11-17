@@ -9,7 +9,7 @@ export const storefrontPort = Number(
   process.env.CHATWOOT_FIXTURE_STOREFRONT_PORT ?? 43128
 );
 export const resetDelayMs = Number(
-  process.env.CHATWOOT_FIXTURE_RESET_DELAY_MS ?? '0'
+  process.env.CHATWOOT_FIXTURE_RESET_DELAY_MS ?? '300'
 );
 export const platformPort = Number(
   process.env.CHATWOOT_FIXTURE_PLATFORM_PORT ?? 43129

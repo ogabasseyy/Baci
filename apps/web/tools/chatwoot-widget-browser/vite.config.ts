@@ -9,7 +9,9 @@ const webDir = path.resolve(fixtureDir, '../..');
 const platformOrigin = process.env.CHATWOOT_FIXTURE_PLATFORM_ORIGIN;
 const certPath = process.env.CHATWOOT_FIXTURE_CERT;
 const keyPath = process.env.CHATWOOT_FIXTURE_KEY;
-const resetDelayMs = Number(process.env.CHATWOOT_FIXTURE_RESET_DELAY_MS ?? '0');
+const resetDelayMs = Number(
+  process.env.CHATWOOT_FIXTURE_RESET_DELAY_MS ?? '300'
+);
 
 if (!platformOrigin || !certPath || !keyPath) {
   throw new Error('Missing local fixture origin or temporary TLS certificate');

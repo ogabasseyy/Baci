@@ -1,6 +1,10 @@
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { installChatwootMessageGuard } from './chatwoot-inbound-message-guard';
+import {
+  reconcileChatwootTenant,
+  sealChatwootWidget,
+} from './chatwoot-tenant-isolation';
 import { containPreviousChatwootTenant } from './contain-chatwoot-previous-tenant';
 import { reloadChatwootTenantDocument } from './reload-chatwoot-tenant-document';
 
@@ -110,9 +114,7 @@ export function useChatwootWidgetLifecycle(
         return false;
       }
       try {
-        // Chatwoot v4.19.1 reset synchronously removes its conversation and
-        // user cookies before it starts reloading its iframe. Reloading this
-        // document after reset returns therefore preserves that ordering.
+        // v4.19.1 reset() removes the cookies, then reloads its iframe.
         previousWidget.reset();
       } catch {
         safeHide();
@@ -120,6 +122,8 @@ export function useChatwootWidgetLifecycle(
         return false;
       }
       safeHide();
+      // Keep the reloading iframe from rewriting the old cookie.
+      sealChatwootWidget(widgetWindow);
       widgetWindow.__baciChatwootRunStarted = false;
       widgetWindow.__baciChatwootConfigKey = undefined;
       widgetWindow.__baciChatwootReadyKey = undefined;
@@ -197,6 +201,7 @@ export function useChatwootWidgetLifecycle(
         setActiveWidgetKey(null);
         return;
       }
+      reconcileChatwootTenant(configKey);
       widgetWindow.__baciChatwootRunStarted = true;
       widgetWindow.__baciChatwootConfigKey = configKey;
       try {
@@ -255,12 +260,7 @@ export function useChatwootWidgetLifecycle(
     const cleanup = () => {
       active = false;
       window.removeEventListener('chatwoot:ready', onReady);
-      try {
-        // The real SDK throws here before its bubble holder exists.
-        widgetWindow.$chatwoot?.toggleBubbleVisibility?.('hide');
-      } catch {
-        // Nothing to hide yet; the ready handler shows the bubble later.
-      }
+      safeHide(); // The ready handler shows the bubble later.
       setActiveWidgetKey(null);
     };
 

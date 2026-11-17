@@ -51,7 +51,7 @@ synthetic visitor session cookies used to verify tenant isolation.
 
 For reset-race diagnostics, `CHATWOOT_FIXTURE_RESET_DELAY_MS` accepts an
 integer from 0 to 2000 and delays only the fixture's document reload after
-the SDK reset call. The default is 0, matching the normal lifecycle. The
+the SDK reset call. The default is 300 ms, a stand-in for real navigation latency; 0 and 1500 also pass. The
 fixture records whether a post-reset SDK `loaded` or `setAuthCookie` message
 restores tenant A's cookie, without recording cookie values or message
 payloads. It also sends a harmless synthetic `loaded` message from a sandboxed

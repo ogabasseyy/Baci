@@ -123,7 +123,7 @@ export function FollowUpQueueList({
         />
       }
       ListHeaderComponent={
-        isFailedOrdersError && groupedFailedOrders.length > 0 ? (
+        isFailedOrdersError && (failedOrders?.length ?? 0) > 0 ? (
           <FollowUpErrorBanner isRetrying={isRefreshing} onRetry={refresh} />
         ) : null
       }

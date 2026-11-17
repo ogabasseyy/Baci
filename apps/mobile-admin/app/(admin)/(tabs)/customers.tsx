@@ -37,6 +37,7 @@ import { useDebounce } from '@/hooks/useDebounce';
 import type { FailedOrder } from '@/hooks/useFailedOrders';
 import { useMerchant } from '@/hooks/useMerchant';
 import { useTheme } from '@/hooks/useTheme';
+import { getFollowUpStatusLabel } from '@/lib/follow-up-status';
 
 // Helper to get currency symbol from merchant's payout_currency
 const getCurrencySymbol = (currencyCode: string | null | undefined) => {
@@ -101,21 +102,7 @@ function FailedOrderItem({
   onPress,
 }: FailedOrderItemProps) {
   const { colors, shadows } = useTheme();
-  const STATUS_LABELS: Record<string, string> = {
-    bnpl_pending: 'BNPL Drop-off',
-    failed: 'Payment Failed',
-    pending: 'Abandoned Transfer',
-    expired: 'Payment Expired',
-    unpaid: 'Checkout Drop-off',
-  };
-
-  const gatewayMessage =
-    typeof item.gateway_response?.message === 'string' &&
-    item.gateway_response.message.trim() !== ''
-      ? item.gateway_response.message
-      : null;
-  const errorMessage =
-    gatewayMessage ?? STATUS_LABELS[item.payment_status] ?? 'Payment Failed';
+  const errorMessage = getFollowUpStatusLabel(item);
 
   const displayName = item.customer_name || 'Guest';
   const customerPhone = item.customer_phone?.trim() || null;
@@ -158,6 +145,8 @@ function FailedOrderItem({
             styles.errorText,
             {
               color:
+                (item.oxygen_follow_up_status &&
+                  item.oxygen_follow_up_status !== 'needs_review') ||
                 item.payment_status === 'pending' ||
                 item.payment_status === 'unpaid' ||
                 item.payment_status === 'expired'
@@ -165,12 +154,9 @@ function FailedOrderItem({
                   : colors.error,
             },
           ]}
-          numberOfLines={1}
+          numberOfLines={item.oxygen_follow_up_status ? 2 : 1}
         >
-          {formatCurrency(item.total, currencySymbol)} •{' '}
-          {item.attempt_count > 1
-            ? `${item.attempt_count} attempts`
-            : errorMessage}
+          {formatCurrency(item.total, currencySymbol)} • {errorMessage}
         </Text>
       </View>
 
@@ -217,25 +203,27 @@ function FailedOrderItem({
             </Pressable>
           </>
         ) : null}
-        <Pressable
-          style={[
-            styles.miniActionButton,
-            {
-              backgroundColor: colors.primaryLight,
-              minWidth: 44,
-              minHeight: 44,
-            },
-          ]}
-          onPress={(e) => {
-            e.stopPropagation();
-            handleEmail(item.customer_email);
-          }}
-          accessibilityLabel={`Email ${displayName}`}
-          accessibilityRole="button"
-          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-        >
-          <Ionicons name="mail" size={16} color={colors.primary} />
-        </Pressable>
+        {item.customer_email ? (
+          <Pressable
+            style={[
+              styles.miniActionButton,
+              {
+                backgroundColor: colors.primaryLight,
+                minWidth: 44,
+                minHeight: 44,
+              },
+            ]}
+            onPress={(e) => {
+              e.stopPropagation();
+              handleEmail(item.customer_email);
+            }}
+            accessibilityLabel={`Email ${displayName}`}
+            accessibilityRole="button"
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+          >
+            <Ionicons name="mail" size={16} color={colors.primary} />
+          </Pressable>
+        ) : null}
       </View>
     </Pressable>
   );
@@ -486,7 +474,7 @@ export default function CustomersScreen() {
   };
 
   const handleFailedOrderPress = (item: FailedOrder) => {
-    if (item.customer_id) {
+    if (item.customer_id && !item.oxygen_follow_up_status) {
       router.push({
         pathname: '/(admin)/customer/[id]',
         params: { id: item.customer_id },

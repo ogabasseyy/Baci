@@ -13,6 +13,10 @@ export type GroupedFailedOrderListItem =
       type: 'item';
     };
 
+export function getFollowUpActivityAt(order: FailedOrder): string {
+  return order.follow_up_at ?? order.created_at;
+}
+
 export function getLocalDateKey(value: string | Date): string | null {
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) {
@@ -55,7 +59,7 @@ export function groupFailedOrdersByDate(
   const groups = new Map<string, FailedOrder[]>();
 
   for (const order of orders) {
-    const dateKey = getLocalDateKey(order.created_at);
+    const dateKey = getLocalDateKey(getFollowUpActivityAt(order));
     if (!dateKey) {
       continue;
     }
@@ -90,7 +94,8 @@ export function groupFailedOrdersByDate(
 
     const groupOrders = [...(groups.get(dateKey) ?? [])].sort(
       (a, b) =>
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        new Date(getFollowUpActivityAt(b)).getTime() -
+        new Date(getFollowUpActivityAt(a)).getTime()
     );
 
     for (const order of groupOrders) {

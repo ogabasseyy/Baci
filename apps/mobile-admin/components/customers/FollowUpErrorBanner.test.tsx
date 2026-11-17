@@ -22,11 +22,13 @@ vi.mock('@/hooks/useTheme', () => ({
 }));
 
 describe('FollowUpErrorBanner', () => {
-  it('tells the merchant the visible rows are stale', () => {
+  it('warns when follow-ups may be incomplete or stale', () => {
     render(<FollowUpErrorBanner isRetrying={false} onRetry={vi.fn()} />);
 
     expect(
-      screen.getByText("Couldn't refresh. Showing the last loaded follow-ups.")
+      screen.getByText(
+        "Some follow-ups couldn't be loaded or may be out of date."
+      )
     ).toBeTruthy();
   });
 

@@ -15,10 +15,12 @@ vi.mock('@shopify/flash-list', async () => {
     FlashList: ({
       data,
       ListEmptyComponent,
+      ListHeaderComponent,
       refreshControl,
     }: {
       data?: unknown[] | null;
       ListEmptyComponent?: React.ReactNode;
+      ListHeaderComponent?: React.ReactNode;
       refreshControl?: React.ReactNode;
     }) => {
       const refreshProps = React.isValidElement(refreshControl)
@@ -31,6 +33,7 @@ vi.mock('@shopify/flash-list', async () => {
       return React.createElement(
         React.Fragment,
         null,
+        ListHeaderComponent,
         React.createElement(
           'button',
           {
@@ -162,5 +165,28 @@ describe('FollowUpQueueList', () => {
 
     expect(screen.getByText('No matching follow-ups')).toBeTruthy();
     expect(screen.queryByText('No issues')).toBeNull();
+  });
+
+  it('keeps the partial-results warning visible when search filters out loaded rows', () => {
+    mocks.useFollowUpQueue.mockReturnValue({
+      failedOrders: [
+        {
+          id: 'order-1',
+          created_at: '2026-07-27T08:00:00Z',
+          customer_email: 'ada@example.test',
+          customer_name: 'Ada',
+        },
+      ],
+      isFailedOrdersError: true,
+      isRefreshing: false,
+      refresh: mocks.refresh,
+      viewState: { status: 'ready' },
+    });
+    render(<FollowUpQueueList {...defaultProps} searchQuery="no-match" />);
+    expect(
+      screen.getByText(
+        "Some follow-ups couldn't be loaded or may be out of date."
+      )
+    ).toBeTruthy();
   });
 });

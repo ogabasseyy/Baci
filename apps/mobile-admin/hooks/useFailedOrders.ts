@@ -5,6 +5,7 @@ import {
   STALE_PENDING_MINUTES,
 } from '@/config/follow-up-queue';
 import { supabase } from '@/lib/supabase';
+import type { OxygenFollowUpStatus } from '@/schemas/oxygen-follow-up';
 import {
   CUSTOMER_CHECKOUT_ORDER_FILTER,
   ONLINE_CHECKOUT_PAYMENT_METHODS,
@@ -19,12 +20,24 @@ export interface FailedOrder {
   customer_email: string;
   customer_phone: string;
   total: number;
-  payment_status: 'bnpl_pending' | 'failed' | 'pending' | 'expired' | 'unpaid';
+  payment_status:
+    | 'bnpl_pending'
+    | 'bnpl_approved'
+    | 'failed'
+    | 'pending'
+    | 'expired'
+    | 'unpaid'
+    | 'paid'
+    | 'refunded'
+    | 'cancelled'
+    | 'unknown';
   payment_method: string;
   created_at: string;
   gateway_response?: Record<string, unknown> | null;
   gateway?: string;
   attempt_count: number;
+  oxygen_follow_up_status?: OxygenFollowUpStatus;
+  follow_up_at?: string;
 }
 
 type FailedOrderPaymentStatus = FailedOrder['payment_status'];
@@ -115,7 +128,7 @@ export function useFailedOrders() {
         .eq('merchant_id', merchantId)
         .gte('created_at', windowStart)
         .or(
-          `payment_status.in.(bnpl_pending,failed,expired),and(payment_status.eq.pending,created_at.lt.${staleCutoff},payment_method.in.${ONLINE_CHECKOUT_PAYMENT_METHODS},${CUSTOMER_CHECKOUT_ORDER_FILTER}),and(payment_status.eq.unpaid,created_at.lt.${staleCutoff},payment_method.in.${ONLINE_CHECKOUT_PAYMENT_METHODS},${CUSTOMER_CHECKOUT_ORDER_FILTER})`
+          `and(payment_status.in.(bnpl_pending,failed,expired),or(payment_method.is.null,payment_method.not.in.(oxygen))),and(payment_status.eq.pending,created_at.lt.${staleCutoff},payment_method.in.${ONLINE_CHECKOUT_PAYMENT_METHODS},${CUSTOMER_CHECKOUT_ORDER_FILTER}),and(payment_status.eq.unpaid,created_at.lt.${staleCutoff},payment_method.in.${ONLINE_CHECKOUT_PAYMENT_METHODS},${CUSTOMER_CHECKOUT_ORDER_FILTER})`
         )
         .order('created_at', { ascending: false })
         .limit(FOLLOW_UP_QUERY_LIMIT);
@@ -129,6 +142,8 @@ export function useFailedOrders() {
       > = {};
 
       (data as FailedOrderRow[]).forEach((order) => {
+        // Oxygen is classified separately from its saved provider workflow.
+        if (order.payment_method === 'oxygen') return;
         const email = order.customer_email;
         if (!consolidated[email]) {
           consolidated[email] = {

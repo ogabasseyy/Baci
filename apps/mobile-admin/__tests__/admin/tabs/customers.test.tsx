@@ -94,6 +94,7 @@ const customerHookMocks = vi.hoisted(() => ({
   invalidateQueries: vi.fn(),
   useCustomers: vi.fn(),
   useFailedOrders: vi.fn(),
+  useOxygenFollowUps: vi.fn(),
   useCustomerStats: vi.fn(),
   useMerchant: vi.fn(),
 }));
@@ -113,6 +114,9 @@ vi.mock('@/hooks/useCustomers', () => ({
 vi.mock('@/hooks/useFailedOrders', () => ({
   useFailedOrders: customerHookMocks.useFailedOrders,
 }));
+vi.mock('@/hooks/useOxygenFollowUps', () => ({
+  useOxygenFollowUps: customerHookMocks.useOxygenFollowUps,
+}));
 
 vi.mock('@/hooks/useMerchant', () => ({
   useMerchant: customerHookMocks.useMerchant,
@@ -123,6 +127,13 @@ describe('CustomersScreen UI rendering', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    customerHookMocks.useOxygenFollowUps.mockReturnValue({
+      data: [],
+      isError: false,
+      isLoading: false,
+      isFetching: false,
+      refetch: vi.fn(),
+    });
     customerHookMocks.useCustomers.mockReturnValue({
       data: { pages: [{ customers: [] }] },
       isLoading: false,
@@ -229,7 +240,7 @@ describe('CustomersScreen UI rendering', () => {
 
     expect(screen.getByText('No issues')).toBeTruthy();
     expect(
-      screen.getByText('All recent transactions are successful!')
+      screen.getByText('No follow-ups need attention right now.')
     ).toBeTruthy();
 
     fireEvent.click(screen.getByRole('tab', { name: 'People' }));

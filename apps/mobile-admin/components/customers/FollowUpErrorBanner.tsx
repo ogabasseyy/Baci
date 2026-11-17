@@ -9,8 +9,7 @@ interface FollowUpErrorBannerProps {
 }
 
 /**
- * Shown above the Follow Up list when a refresh fails but React Query still
- * holds rows from an earlier successful load.
+ * Shown when either source fails and some rows are still available.
  *
  * The empty state cannot cover this case — it only renders when the list is
  * empty — so without this banner a failed refresh leaves stale follow-ups on
@@ -29,7 +28,7 @@ export function FollowUpErrorBanner({
     >
       <Ionicons name="warning-outline" size={18} color={colors.warning} />
       <Text style={[styles.message, { color: colors.textSecondary }]}>
-        Couldn't refresh. Showing the last loaded follow-ups.
+        Some follow-ups couldn't be loaded or may be out of date.
       </Text>
       <Pressable
         style={({ pressed }) => [

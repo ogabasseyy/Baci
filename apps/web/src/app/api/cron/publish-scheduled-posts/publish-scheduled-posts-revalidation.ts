@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { revalidateBlogPosts } from '@/lib/cache-revalidation';
-import { purgeCloudflareUrls } from '@/lib/cloudflare-purge';
+import { purgeCloudflareUrlsConfirmed } from '@/lib/cloudflare-purge';
 import {
   getMerchantBlogRevalidationContext,
   type MerchantBlogRevalidationContext,
@@ -113,13 +113,18 @@ export async function revalidateScheduledPostsByMerchant(
               .filter((slug): slug is string => Boolean(slug))
           )
         );
-        await purgeCloudflareUrls(
+        const purgeResult = await purgeCloudflareUrlsConfirmed(
           buildStorefrontBlogPurgeUrls(
             purgeIdentifiers,
             purgeSlugs,
             purgeCategorySlugs
           )
         );
+        if (!purgeResult.ok) {
+          throw new Error(
+            `Cloudflare blog edge purge failed: ${purgeResult.reason ?? 'unknown'}`
+          );
+        }
         edgePurgeOnly = true;
       }
       schedulePrewarmBlogImageTransforms(merchantPosts.featuredImageUrls);

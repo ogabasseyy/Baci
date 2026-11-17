@@ -22,11 +22,6 @@ function pruneStore(now: number): void {
       if (!intervalElapsed && pruned >= PRUNE_BATCH_SIZE) break;
     }
   }
-  while (memoryStore.size >= MAX_STORE_SIZE) {
-    const oldestKey = memoryStore.keys().next().value;
-    if (oldestKey === undefined) break;
-    memoryStore.delete(oldestKey);
-  }
 }
 
 export function checkMemoryRateLimit(
@@ -39,6 +34,16 @@ export function checkMemoryRateLimit(
   pruneStore(now);
 
   let entry = memoryStore.get(key);
+  if (!entry && memoryStore.size >= MAX_STORE_SIZE) {
+    // Fail closed for new keys when the fallback map is saturated with live
+    // entries rather than evicting active rate-limit counters.
+    return {
+      allowed: false,
+      limit: config.maxRequests,
+      remaining: 0,
+      resetTime: now + config.windowMs,
+    };
+  }
   if (!entry || now > entry.resetTime) {
     entry = { count: 0, resetTime: now + config.windowMs };
   }

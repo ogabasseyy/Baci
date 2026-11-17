@@ -36,6 +36,7 @@ export default function SantaClientPage() {
     setPollError(null);
     let isStale = false;
     let inFlight = false;
+    let latestRequestId = 0;
     let attempts = 0;
     let interval: ReturnType<typeof setInterval> | null = null;
 
@@ -62,6 +63,7 @@ export default function SantaClientPage() {
 
       attempts += 1;
       inFlight = true;
+      const requestId = ++latestRequestId;
       let timeoutId: ReturnType<typeof setTimeout> | null = null;
       Promise.race([
         Promise.all([
@@ -76,20 +78,22 @@ export default function SantaClientPage() {
         }),
       ])
         .then(([fetchedStats, fetchedInteractions]) => {
-          if (isStale) return;
+          if (isStale || requestId !== latestRequestId) return;
           setPollError(null);
           setStats(fetchedStats);
           setInteractions(fetchedInteractions);
         })
         .catch((error: unknown) => {
           console.error('Failed to load Santa data', error);
-          if (!isStale) {
+          if (!isStale && requestId === latestRequestId) {
             setPollError('Unable to refresh live campaign stats.');
           }
         })
         .finally(() => {
           if (timeoutId !== null) clearTimeout(timeoutId);
-          inFlight = false;
+          if (requestId === latestRequestId) {
+            inFlight = false;
+          }
           if (isStale) return;
           setLoading(false);
           if (attempts >= MAX_SANTA_POLL_ATTEMPTS) {

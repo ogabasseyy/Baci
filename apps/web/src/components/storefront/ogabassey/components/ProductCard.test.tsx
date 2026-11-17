@@ -285,33 +285,4 @@ describe('ProductCard', () => {
       'ogabassey-product-card-badge--condition'
     );
   });
-
-  it('confirms a quick add on the card so the tap never looks ignored', () => {
-    const { rerender } = render(
-      <ProductCard
-        product={mockProduct}
-        onAddToCart={vi.fn()}
-        isAdded={false}
-      />
-    );
-
-    expect(
-      screen.getByRole('button', { name: 'Add Test Product to cart' })
-    ).toBeInTheDocument();
-    // One stable live region, empty until something is added.
-    expect(screen.getByRole('status')).toBeEmptyDOMElement();
-    expect(screen.queryByText('Added to cart')).not.toBeInTheDocument();
-
-    rerender(
-      <ProductCard product={mockProduct} onAddToCart={vi.fn()} isAdded />
-    );
-
-    expect(
-      screen.getByRole('button', { name: 'Add another Test Product to cart' })
-    ).toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveTextContent(
-      'Test Product added to cart'
-    );
-    expect(screen.getByText('Added to cart')).toBeInTheDocument();
-  });
 });

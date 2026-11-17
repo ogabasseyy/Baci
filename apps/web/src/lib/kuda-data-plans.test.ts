@@ -89,6 +89,27 @@ describe('resolveKudaDataPlanForPurchase', () => {
       ).rejects.toThrow(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
     });
 
+    it('fails closed when Kuda answers with billers but no packages', async () => {
+      mockGetDataProviders.mockResolvedValueOnce([
+        {
+          billerId: 'mtn',
+          billerName: 'MTN',
+          billerType: 'Internet Data',
+          categoryId: 'data',
+          categoryName: 'Internet Data',
+          billItems: [],
+        },
+      ]);
+
+      await expect(
+        resolveKudaDataPlanForPurchase({
+          amount: 350000,
+          dataPlanCode: 'MTN-35GB-MONTHLY',
+          networkProvider: NetworkProvider.MTN,
+        })
+      ).rejects.toThrow(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
+    });
+
     it('keeps rejecting stale prices with the last good plan list', async () => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date('2026-11-17T10:00:00Z'));

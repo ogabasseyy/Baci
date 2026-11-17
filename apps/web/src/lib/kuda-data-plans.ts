@@ -208,11 +208,14 @@ export async function resolveKudaDataPlanForPurchase({
       providerMatchesCode(provider, originalDataPlanCode)
     ) ?? null;
   const candidates = collectDataPlanCandidates(providers);
+  if (candidates.length === 0) {
+    // A list with no packages at all is a broken answer, not a price list:
+    // the client's (possibly 100x) amount cannot be checked against it.
+    throw new Error(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
+  }
 
-  if (
-    candidates.length === 0 ||
-    (selectedProviderByCode && !hasLeafBillItems(selectedProviderByCode))
-  ) {
+  // A provider sold without packages has no price to check against.
+  if (selectedProviderByCode && !hasLeafBillItems(selectedProviderByCode)) {
     return mapUnverifiedDataPlan({
       amount,
       originalDataPlanCode,

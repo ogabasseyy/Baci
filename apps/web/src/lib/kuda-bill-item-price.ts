@@ -15,6 +15,11 @@ const PRICE_LIST_CACHE_TTL_MS = 60_000;
  * instance has no last good list; it then fails closed below.
  */
 const PRICE_LIST_LAST_GOOD_MS = 24 * 60 * 60 * 1000;
+/**
+ * Kuda bill types sold at the customer's own amount (electricity items are
+ * synthesized open-amount), so a saved 100x price cannot exist for them.
+ */
+const OPEN_AMOUNT_BILL_TYPES = new Set(['electricity']);
 /** After a failed or empty fetch, wait this long before asking Kuda again. */
 const PRICE_LIST_RETRY_AFTER_MS = 30_000;
 
@@ -125,7 +130,7 @@ function priceMatches(item: BillItem, amount: number) {
  * while a stale 100x amount (which matches none) is still caught.
  * Open-amount and unknown items pass. If no price list is available (Kuda
  * down or empty, with no good list from the past day in this server
- * instance), every bill type fails closed, as the data check now does.
+ * instance), every bill type fails closed except open-amount electricity.
  * After a failed fetch Kuda is not asked again for 30 seconds.
  */
 export async function assertKudaBillItemPriceCurrent({
@@ -141,8 +146,9 @@ export async function assertKudaBillItemPriceCurrent({
 }): Promise<void> {
   const billers = await loadPriceList(type);
   if (billers === null) {
-    // Every Kuda bill type fails closed: these purchases go through Kuda,
-    // so with its price list down they would most likely fail anyway.
+    // Open-amount electricity carries no saved price to go stale, so it
+    // continues; every other type fails closed until a list is available.
+    if (OPEN_AMOUNT_BILL_TYPES.has(type)) return;
     throw new Error(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
   }
 

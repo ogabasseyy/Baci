@@ -224,9 +224,21 @@ describe('assertKudaBillItemPriceCurrent', () => {
       );
     });
 
+    it('lets open-amount electricity continue with no list', async () => {
+      mockGetBillersByCategory.mockResolvedValue([]);
+
+      await expect(
+        assertKudaBillItemPriceCurrent({
+          amount: 5000,
+          billItemIdentifier: 'KUD-ELE-EKED-002',
+          type: 'electricity',
+        })
+      ).resolves.toBeUndefined();
+    });
+
     it.each([
       ['betting', 'KUD-BET-1'],
-      ['electricity', 'KUD-ELE-EKED-002'],
+      ['cable_tv', 'KUD-CAB-STT-SUPER'],
     ])('fails %s closed with no list from the past day', async (type, code) => {
       mockGetBillersByCategory.mockResolvedValue([]);
 

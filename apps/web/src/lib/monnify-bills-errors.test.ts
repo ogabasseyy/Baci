@@ -164,3 +164,16 @@ describe('bugfix: long grouped numbers without a prefix', () => {
     );
   });
 });
+
+describe('bugfix: grouped numbers separated by tabs, newlines or wide spaces', () => {
+  it.each([
+    '0801\t234\t5678',
+    '0801\n234\n5678',
+    '0801\u00a0234\u00a05678',
+    '0801   234   5678',
+  ])('redacts %j', (phone) => {
+    expect(sanitizeMonnifyErrorDetail(`Vend failed for ${phone}`)).toBe(
+      'Vend failed for [redacted]'
+    );
+  });
+});

@@ -14,20 +14,20 @@ const SENSITIVE_DIGIT_SEQUENCE_PATTERN = /(?<!\d)\d{7,}(?!\d)/g;
  * readable (unbroken runs of 7+ digits are already redacted above).
  */
 const SENSITIVE_GROUPED_PHONE_PATTERN =
-  /(?<!\d)\(?(?:\+?234\)?[ ./-]?\(?|0)?[789]\d\d\)?(?:[ ./-]?\d){7}(?!\d)/g;
+  /(?<!\d)\(?(?:\+?234\)?[\s./-]?\(?|0)?[789]\d\d\)?(?:[\s./-]*\d){7}(?!\d)/g;
 /**
  * Any other grouped number that starts like a phone number ("+" or a leading
  * 0) and runs to 9+ digits, e.g. foreign or unusual Nigerian ranges.
  */
 const SENSITIVE_GROUPED_DIALLED_NUMBER_PATTERN =
-  /(?<!\d)(?:\+\(?|\(?0)\d(?:[ ./()-]{0,2}\d){8,}(?!\d)/g;
+  /(?<!\d)(?:\+\(?|\(?0)\d(?:[\s./()-]{0,3}\d){8,}(?!\d)/g;
 /**
  * Any grouped number of 11+ digits whatever its prefix, e.g. an international
  * number written without "+" ("44 20 7946 0958"). Shorter grouped references
  * stay readable.
  */
 const SENSITIVE_LONG_GROUPED_NUMBER_PATTERN =
-  /(?<!\d)\d(?:[ ./()-]{0,2}\d){10,}(?!\d)/g;
+  /(?<!\d)\d(?:[\s./()-]{0,3}\d){10,}(?!\d)/g;
 /** How Monnify's full answer reads, worked out once from the unscrubbed text. */
 interface MonnifyAnswerReading {
   isDuplicateReference: boolean;
@@ -180,7 +180,7 @@ export function sanitizeMonnifyErrorDetail(value: string) {
     /\d$/.test(boundedValue) &&
     /^\d/.test(value.slice(redactionBound, redactionBound + 1))
   ) {
-    boundedValue = boundedValue.replace(/[\d ./()+-]+$/, '');
+    boundedValue = boundedValue.replace(/[\d\s./()+-]+$/, '');
   }
 
   const redacted = boundedValue
@@ -196,9 +196,9 @@ export function sanitizeMonnifyErrorDetail(value: string) {
   const cut = redacted.slice(0, MONNIFY_ERROR_DETAIL_MAX_LENGTH);
   const rest = redacted.slice(MONNIFY_ERROR_DETAIL_MAX_LENGTH);
   const cutSplitANumber =
-    /\d[ ./()+-]?$/.test(cut) && /^[ ./()+-]?\d/.test(rest);
+    /\d[\s./()+-]?$/.test(cut) && /^[\s./()+-]?\d/.test(rest);
   return (
-    cutSplitANumber ? cut.replace(/[\d ./()+-]*\d[ ./()+-]?$/, '') : cut
+    cutSplitANumber ? cut.replace(/[\d\s./()+-]*\d[\s./()+-]?$/, '') : cut
   ).trim();
 }
 

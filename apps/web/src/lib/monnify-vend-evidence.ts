@@ -30,25 +30,35 @@ function isVendStatusKey(key: string): boolean {
   return key === 'vendstatus' || key === STATUS_KEY;
 }
 
+/**
+ * References we supplied before the vend (validation, request or customer
+ * references) are echoes, at any depth, never evidence of a vend.
+ */
+const ECHO_REFERENCE_PREFIX = /^(?:validation|request|customer)/;
+
+function isVendReferenceKey(key: string): boolean {
+  return REFERENCE_LIKE_KEY.test(key) && !ECHO_REFERENCE_PREFIX.test(key);
+}
+
 function isTopLevelEvidenceKey(key: string): boolean {
   return (
     isVendStatusKey(key) ||
-    (REFERENCE_LIKE_KEY.test(key) && !TOP_LEVEL_ECHO_KEYS.has(key))
+    (isVendReferenceKey(key) && !TOP_LEVEL_ECHO_KEYS.has(key))
   );
 }
 
 function isNestedEvidenceKey(key: string): boolean {
-  return isVendStatusKey(key) || REFERENCE_LIKE_KEY.test(key);
+  return isVendStatusKey(key) || isVendReferenceKey(key);
 }
 
 const STATUS_KEY = normaliseKey('status');
 /**
- * Vend-status wording, read anywhere in the value with "_"/"-" as spaces
- * (so "PENDING_CONFIRMATION" counts). Unknown or ambiguous statuses count
- * too: an indeterminate vend must never be handed to Kuda.
+ * HTTP reason phrases and generic error labels that error bodies put in a
+ * `status` field. Any other non-numeric status (FAILED, PENDING, CANCELLED,
+ * DECLINED, UNKNOWN…) is read as the vend's own state and fails closed.
  */
-const VEND_STATUS_WORDS =
-  /\b(?:success(?:ful)?|completed?|delivered|vended|failed|failure|pending|processing|in\s?progress|queued|initiated|reversed|paid|unknown|undetermined|indeterminate|unconfirmed|ambiguous|requery|timeout|timed\s+out)\b/i;
+const HTTP_STATUS_LABEL =
+  /^(?:errors?|ok|bad request|unauthori[sz]ed|forbidden|not found|method not allowed|not acceptable|request timeout|conflict|unprocessable entity|too many requests|internal server error|bad gateway|service unavailable|gateway timeout|invalid request|validation error)$/i;
 const MAX_NESTED_DEPTH = 6;
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -60,13 +70,14 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 function isEvidenceValue(key: string, value: unknown): boolean {
   // A numeric `status` (number or digit string such as "400") is an HTTP
   // code, never a vend status.
-  // A generic `status` counts only with vend-status wording; "error" or
-  // "Bad Request" are just how the error body is labelled.
+  // A generic `status` counts unless it is an HTTP reason phrase or error
+  // label ("error", "Bad Request"): those only label the error body.
   if (key === STATUS_KEY) {
-    return (
-      typeof value === 'string' &&
-      VEND_STATUS_WORDS.test(value.replace(/[_-]+/g, ' '))
-    );
+    if (typeof value !== 'string') {
+      return false;
+    }
+    const label = value.replace(/[_-]+/g, ' ').trim();
+    return /\D/.test(label) && !HTTP_STATUS_LABEL.test(label);
   }
   if (typeof value === 'string') {
     return value.trim() !== '';

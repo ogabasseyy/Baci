@@ -11,6 +11,8 @@ describe('mentionsMonnifyVendEvidence', () => {
     'Insufficient wallet balance vendReference MFBP-1',
     'transaction reference MFBP-2',
     'Insufficient balance; reference=MFBP-3',
+    'Insufficient wallet balance; transactionId=MFBP-1',
+    'order_id: 12345',
   ])('sees vend evidence in %s', (text) => {
     expect(mentionsMonnifyVendEvidence(text)).toBe(true);
   });

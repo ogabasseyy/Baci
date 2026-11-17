@@ -109,6 +109,7 @@ vi.mock('@/lib/store-url', () => ({
 }));
 
 vi.mock('@/lib/validation', () => ({
+  isDomainIdentifier: (value: string) => value.includes('.'),
   isValidMerchantIdentifier: () => true,
 }));
 
@@ -213,7 +214,7 @@ describe('ProductsPageContent maintained buying path modules', () => {
     mockGetRequestScopedMerchant.mockResolvedValue(OGABASSEY_TEST_MERCHANT);
 
     const result = await ProductsPageContent({
-      params: Promise.resolve({ slug: 'ogabassey' }),
+      params: Promise.resolve({ slug: 'ogabassey.com' }),
       searchParams: Promise.resolve({ page: '1' }),
     });
 
@@ -265,7 +266,7 @@ describe('ProductsPageContent maintained buying path modules', () => {
     mockGetRequestScopedMerchant.mockResolvedValue(OGABASSEY_TEST_MERCHANT);
 
     const result = await ProductsPageContent({
-      params: Promise.resolve({ slug: 'ogabassey' }),
+      params: Promise.resolve({ slug: 'ogabassey.com' }),
       searchParams: Promise.resolve({ page: '1' }),
     });
 

@@ -59,6 +59,9 @@ BEGIN
   );
   INSERT INTO pgmq.q_domain_events (msg_id, enqueued_at, vt, message)
   VALUES (9302001, now() - interval '100 days', now(), v_pii);
+  -- Archived late (recent archived_at) but the event itself is 100 days old.
+  INSERT INTO pgmq.a_domain_events (msg_id, enqueued_at, archived_at, message)
+  VALUES (9302002, now() - interval '100 days', now() - interval '1 day', v_pii);
 
   -- Failure first seen long ago but failing again recently: kept.
   INSERT INTO public.domain_event_failures (
@@ -120,6 +123,10 @@ BEGIN
   IF (SELECT message FROM pgmq.q_domain_events WHERE msg_id = 9302001)
        #> '{data,delivery_user_data,ip}' IS NOT NULL THEN
     RAISE EXCEPTION 'old queue message copy kept personal data';
+  END IF;
+  IF (SELECT message FROM pgmq.a_domain_events WHERE msg_id = 9302002)
+       #> '{data,delivery_user_data,ip}' IS NOT NULL THEN
+    RAISE EXCEPTION 'late-archived envelope kept personal data';
   END IF;
   IF (SELECT envelope FROM public.domain_event_ledger WHERE domain_event_id = v_old_done)
        #> '{data,event_data,user_agent}' IS NOT NULL

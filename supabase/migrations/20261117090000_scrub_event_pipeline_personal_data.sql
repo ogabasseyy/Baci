@@ -104,7 +104,7 @@ BEGIN
   GET DIAGNOSTICS v_archive_deleted = ROW_COUNT;
 
   -- Each scrub works in batches of 10,000 until nothing is left or its own
-  -- 6 second budget is used (four scrubs plus the deletes above stay inside
+  -- 4 second budget is used (five scrubs plus the deletes above stay inside
   -- the 30 second statement limit). Anything left over carries to the next
   -- daily run, so a very large backlog drains over days, never in one rolled
   -- back run. Rows are locked (SKIP LOCKED) and the status test is repeated in
@@ -112,7 +112,7 @@ BEGIN
   -- while active.
 
   -- Finished deliveries: remove the shopper block from the per-destination copy.
-  v_deadline := clock_timestamp() + interval '6 seconds';
+  v_deadline := clock_timestamp() + interval '4 seconds';
   LOOP
     WITH expired_deliveries AS (
       SELECT delivery.id
@@ -147,7 +147,7 @@ BEGIN
 
   -- The live queue holds its own copy of each queued envelope; scrub the copy
   -- of a ledger row that is past the period with no open delivery work.
-  v_deadline := clock_timestamp() + interval '6 seconds';
+  v_deadline := clock_timestamp() + interval '4 seconds';
   LOOP
     WITH expired_queue AS (
       SELECT queued.msg_id
@@ -195,7 +195,7 @@ BEGIN
   END LOOP;
 
   -- Ledger rows with no unfinished delivery work left.
-  v_deadline := clock_timestamp() + interval '6 seconds';
+  v_deadline := clock_timestamp() + interval '4 seconds';
   LOOP
     WITH expired_ledger AS (
       SELECT ledger.domain_event_id
@@ -237,7 +237,7 @@ BEGIN
   END LOOP;
 
   -- Dead-letter evidence rows.
-  v_deadline := clock_timestamp() + interval '6 seconds';
+  v_deadline := clock_timestamp() + interval '4 seconds';
   LOOP
     WITH expired_failures AS (
       SELECT failure.id
@@ -265,6 +265,39 @@ BEGIN
     WHERE failure.id = expired.id
       AND failure.first_failed_at < now() - v_personal_data_retention
       AND failure.last_failed_at < now() - v_personal_data_retention;
+    GET DIAGNOSTICS v_batch = ROW_COUNT;
+    EXIT WHEN v_batch < 10000 OR clock_timestamp() > v_deadline;
+  END LOOP;
+
+  -- The queue archive keeps its own copy of every routed envelope, stamped
+  -- with the archive time, so an event archived late would otherwise outlive
+  -- the period. Scrub by the event's own age (enqueued_at).
+  v_deadline := clock_timestamp() + interval '4 seconds';
+  LOOP
+    WITH expired_archive AS (
+      SELECT archived.msg_id
+      FROM pgmq.a_domain_events AS archived
+      WHERE archived.enqueued_at < now() - v_personal_data_retention
+        AND ((jsonb_typeof(archived.message #> '{data,delivery_user_data}') = 'object'
+          AND (archived.message #> '{data,delivery_user_data}') - 'analytics_consent' - 'marketing_consent' <> '{}'::jsonb)
+        OR archived.message #> '{data,event_data,user_agent}' IS NOT NULL)
+      ORDER BY archived.enqueued_at
+      LIMIT 10000
+      FOR UPDATE OF archived SKIP LOCKED
+    )
+    UPDATE pgmq.a_domain_events AS archived
+    SET message = CASE WHEN archived.message #> '{data,delivery_user_data}' IS NULL
+        THEN archived.message #- '{data,event_data,user_agent}'
+        ELSE jsonb_set(
+          archived.message #- '{data,event_data,user_agent}',
+          '{data,delivery_user_data}',
+          jsonb_strip_nulls(jsonb_build_object(
+            'analytics_consent', coalesce(archived.message #> '{data,delivery_user_data,analytics_consent}', 'false'::jsonb),
+            'marketing_consent', coalesce(archived.message #> '{data,delivery_user_data,marketing_consent}', 'false'::jsonb)))
+        ) END
+    FROM expired_archive AS expired
+    WHERE archived.msg_id = expired.msg_id
+      AND archived.enqueued_at < now() - v_personal_data_retention;
     GET DIAGNOSTICS v_batch = ROW_COUNT;
     EXIT WHEN v_batch < 10000 OR clock_timestamp() > v_deadline;
   END LOOP;

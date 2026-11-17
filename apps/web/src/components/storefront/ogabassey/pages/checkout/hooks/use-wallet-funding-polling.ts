@@ -186,7 +186,7 @@ export function useWalletFundingPolling({
       }).finally(() => {
         if (!cancelled && attempts >= maxAttempts) {
           stopPolling();
-          if (isActive()) {
+          if (isActive() && !completedRef.current) {
             setPollingExhausted(true);
           }
         }

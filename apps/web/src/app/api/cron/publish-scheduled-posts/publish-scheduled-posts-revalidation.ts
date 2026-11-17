@@ -79,18 +79,14 @@ export async function revalidateScheduledPostsByMerchant(
         });
       } catch (nextRevalError) {
         // Standalone VPS workers run outside Next.js's static generation store;
-        // still schedule the Cloudflare edge purge for the published blog URLs.
+        // still schedule the Cloudflare edge purge for the published blog URLs,
+        // while keeping unrelated revalidation errors fatal.
         const msg =
           nextRevalError instanceof Error
             ? nextRevalError.message
             : String(nextRevalError);
-        const isStandaloneWorker =
-          process.env.VPS_WORKER === '1' || process.env.VPS_WORKER === 'true';
-        const isOutsideRequestContext =
-          isStandaloneWorker ||
-          msg.includes('static generation store') ||
-          msg.includes('Invariant:');
-        if (!isOutsideRequestContext) {
+        const isStaticGenStoreError = msg.includes('static generation store');
+        if (!isStaticGenStoreError) {
           throw nextRevalError;
         }
         const purgeIdentifiers = Array.from(

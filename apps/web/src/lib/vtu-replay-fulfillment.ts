@@ -29,12 +29,18 @@ export async function fulfillReplayVtuTransaction({
   keyRow,
   supabase,
   user,
+  fulfillTransaction,
+  storeCreditJoin,
 }: {
   authSupabase: SupabaseClient;
   input: VtuWalletOnlyChargeInput;
   keyRow: ExistingIdempotencyRow;
   supabase: SupabaseClient;
   user: ReplayAuthUser;
+  /** Replaces the plain fulfil (pay from the PiggyVest wallet, dark). */
+  fulfillTransaction?: (transactionId: string) => Promise<Response>;
+  /** A store credit request reaching a PiggyVest-paid purchase (tests). */
+  storeCreditJoin?: StoreCreditJoin;
 }) {
   // Owner presence FIRST (Muse R128 medium, Codex R129 P1, Codex
   // P1 PR #3741): legacy/manual key rows can reference an unlinked
@@ -103,9 +109,69 @@ export async function fulfillReplayVtuTransaction({
     customerPhone: input.customerPhone,
     validationReference: input.validationReference,
   });
-  const replayedFulfillment = await fulfillPendingVtuTransaction({
-    supabase,
-    transactionId: keyRow.vtu_transaction_id,
-  });
-  return mapFulfillmentToResponse(replayedFulfillment);
+  const plain = async () =>
+    mapFulfillmentToResponse(
+      await fulfillPendingVtuTransaction({
+        supabase,
+        transactionId: keyRow.vtu_transaction_id,
+      })
+    );
+  // The winning row replays through its own rail (Codex P1): a PiggyVest
+  // request that joined a store credit purchase replays that purchase, never
+  // a terminal mismatch that would free the key for a second purchase. The
+  // reverse join (store credit reaching a PiggyVest-paid purchase) is
+  // answered from that purchase's payment, never by the plain fulfil, whose
+  // PiggyVest gate would answer "processing" forever (Codex P1).
+  // On the store credit path a failed read keeps the plain fulfil, as before
+  // this check existed: its own PiggyVest gate never vends such a row.
+  const piggyvestPaid = fulfillTransaction
+    ? await paysFromPiggyvest(authSupabase, keyRow.vtu_transaction_id)
+    : await paysFromPiggyvest(authSupabase, keyRow.vtu_transaction_id).catch(
+        () => false
+      );
+  if (piggyvestPaid) {
+    if (fulfillTransaction)
+      return await fulfillTransaction(keyRow.vtu_transaction_id);
+    return await (storeCreditJoin ?? defaultStoreCreditJoin)({
+      auth: { supabase: authSupabase, user },
+      transactionId: keyRow.vtu_transaction_id,
+      merchantId: keyRow.merchant_id,
+      customerId: keyRow.customer_id,
+      settled: plain,
+    });
+  }
+  return await plain();
+}
+
+type StoreCreditJoin = (input: {
+  auth: { supabase: SupabaseClient; user: ReplayAuthUser };
+  transactionId: string;
+  merchantId: string;
+  customerId: string;
+  settled: () => Promise<Response>;
+}) => Promise<Response>;
+
+const defaultStoreCreditJoin: StoreCreditJoin = async ({ auth, ...input }) => {
+  const [{ answerStoreCreditJoin }, { createVtuWalletPayStepDeps }] =
+    await Promise.all([
+      import('@/lib/vtu-wallet-pay/vtu-store-credit-join'),
+      import('@/lib/vtu-wallet-pay/vtu-wallet-pay-step-deps'),
+    ]);
+  return await answerStoreCreditJoin(input, createVtuWalletPayStepDeps(auth));
+};
+
+/** Whether the purchase was prepared as PiggyVest-paid (owner-scoped read). */
+async function paysFromPiggyvest(
+  authSupabase: SupabaseClient,
+  transactionId: string
+) {
+  const { data, error } = await authSupabase.rpc(
+    'get_vtu_wallet_pay_purchase',
+    { p_transaction_id: transactionId }
+  );
+  if (error) throw new Error('VTU purchase payment source read failed');
+  const row = (data as Array<{ piggyvest_paid: boolean }> | null)?.[0];
+  // No row this owner can see: never routed to the PiggyVest step; the
+  // store credit replay's own binding checks answer it (Muse).
+  return row?.piggyvest_paid === true;
 }

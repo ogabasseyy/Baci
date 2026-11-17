@@ -38,21 +38,24 @@ export default function NotificationsScreen() {
       edges={['bottom']}
       style={{ backgroundColor: colors.background, flex: 1 }}
     >
-      <Stack.Screen options={{ title: 'Savings notifications' }} />
+      {/* Same name as the Account row that opens it. */}
+      <Stack.Screen options={{ title: 'Notifications' }} />
       <SavingsNotificationsScreen
         merchantId={pickMerchantId(merchantId, CONFIG.MERCHANT_ID)}
         userId={userId}
+        footer={
+          <Pressable
+            accessibilityLabel="View your orders"
+            accessibilityRole="button"
+            onPress={() => router.push('/orders')}
+            style={styles.ordersLink}
+          >
+            <Text style={[styles.ordersLinkText, { color: colors.primary }]}>
+              Looking for order updates? View your orders
+            </Text>
+          </Pressable>
+        }
       />
-      <Pressable
-        accessibilityLabel="View your orders"
-        accessibilityRole="button"
-        onPress={() => router.push('/orders')}
-        style={styles.ordersLink}
-      >
-        <Text style={[styles.ordersLinkText, { color: colors.primary }]}>
-          Looking for order updates? View your orders
-        </Text>
-      </Pressable>
     </StorefrontScreenShell>
   );
 }

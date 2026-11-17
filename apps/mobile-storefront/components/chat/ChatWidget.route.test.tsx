@@ -79,7 +79,13 @@ jest.mock('@/stores/ui-store', () => ({
   ),
 }));
 jest.mock('./ChatModal', () => ({ ChatModal: jest.fn(() => null) }));
-jest.mock('./constants', () => ({ EDGE_MARGIN: 16, HIDDEN_ROUTES: ['/quiz'] }));
+// The real hidden-route list, so a route dropped from it fails here.
+jest.mock('./constants', () => ({
+  EDGE_MARGIN: 16,
+  HIDDEN_ROUTES:
+    jest.requireActual<typeof import('./constants')>('./constants')
+      .HIDDEN_ROUTES,
+}));
 jest.mock('./styles', () => ({
   styles: new Proxy({}, { get: () => ({}) }),
 }));
@@ -121,5 +127,21 @@ describe('ChatWidget route visibility', () => {
     const { toJSON } = render(<ChatWidget />);
 
     expect(toJSON()).toBeNull();
+  });
+
+  it('returns null on the Wallet PIN screen, where the PIN pad sits', () => {
+    mockUsePathname.mockReturnValue('/settings/wallet-pin');
+
+    const { toJSON } = render(<ChatWidget />);
+
+    expect(toJSON()).toBeNull();
+  });
+
+  it('still shows on the rest of Settings', () => {
+    mockUsePathname.mockReturnValue('/settings');
+
+    const { toJSON } = render(<ChatWidget />);
+
+    expect(toJSON()).not.toBeNull();
   });
 });

@@ -4,6 +4,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { useAuthStore } from '@/stores/auth-store';
+import { resetGoalSetupMemory } from './savings/goal-setup-memory';
 import type { PrimaryGoalGate } from './savings/use-primary-goal-gate';
 import { WalletSavingsFundingSection } from './WalletSavingsFundingSection';
 
@@ -25,7 +26,7 @@ jest.mock('./savings/use-savings-plan-funding', () => ({
   useSavingsPlanFunding: (...args: unknown[]) => mockPlanFunding(...args),
 }));
 const mockPoll = jest.fn((..._args: unknown[]) => ({
-  exhausted: false,
+  slow: false,
   checkAgain: jest.fn(),
 }));
 jest.mock('./savings/use-goal-wallet-setup-poll', () => ({
@@ -35,14 +36,16 @@ jest.mock('./savings/SavingsPlanStatusNote', () => ({
   SavingsPlanStatusNote: ({
     funding,
     onCheckAgain,
+    slow,
   }: {
     funding?: { planFundingPhase: string };
     onCheckAgain?: () => void;
+    slow?: boolean;
   }) => {
     const { Text } = require('react-native');
     return (
       <Text onPress={onCheckAgain}>
-        {`status-note:${funding?.planFundingPhase ?? 'own'}${onCheckAgain ? ':can-check-again' : ''}`}
+        {`status-note:${funding?.planFundingPhase ?? 'own'}${slow ? ':slow' : ''}`}
       </Text>
     );
   },
@@ -153,6 +156,7 @@ describe('manual goal on a ready primary wallet (plan funding off)', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    resetGoalSetupMemory();
     mockGate.mockReturnValue('ready');
     act(() => {
       useAuthStore.setState({ user: authUser, merchantId: 'merchant-1' });
@@ -180,16 +184,16 @@ describe('manual goal on a ready primary wallet (plan funding off)', () => {
     expect(screen.queryByText('wallet-contribution')).toBeNull();
   });
 
-  it('gives the note a Check again only once the poll is exhausted', () => {
+  it("passes the poll's slow flag and check-again to the note", () => {
     mockGate.mockReturnValue('ready');
     const checkAgain = jest.fn();
     mockPlanFunding.mockReturnValue({
       planFundingPhase: 'pending',
       fetchExistingPlanFunding: jest.fn(),
     });
-    mockPoll.mockReturnValueOnce({ exhausted: true, checkAgain });
+    mockPoll.mockReturnValueOnce({ slow: true, checkAgain });
     renderManual();
-    fireEvent.press(screen.getByText('status-note:pending:can-check-again'));
+    fireEvent.press(screen.getByText('status-note:pending:slow'));
     expect(checkAgain).toHaveBeenCalledTimes(1);
   });
 
@@ -252,7 +256,7 @@ describe('manual goal on a ready primary wallet (plan funding off)', () => {
     expect(screen.queryByText('wallet-contribution')).toBeNull();
   });
 
-  it('waits only for an unknown main wallet, never for goal-wallet loading', () => {
+  it('waits for an unknown main wallet, and for the goal wallet before the amount form', () => {
     mockGate.mockReturnValue('checking');
     const fundingProps = props('manual', { usesPlanFunding: false });
     const view = render(<WalletSavingsFundingSection {...fundingProps} />);
@@ -265,8 +269,9 @@ describe('manual goal on a ready primary wallet (plan funding off)', () => {
       <WalletSavingsFundingSection {...fundingProps} walletBalance={1} />
     );
     expect(screen.getByText('status-note:loading')).toBeOnTheScreen();
-    expect(screen.queryByText('Almost ready')).toBeNull();
-    expect(screen.getByText('wallet-contribution')).toBeOnTheScreen();
+    // A first read of the goal wallet: a quiet placeholder, no live form.
+    expect(screen.getByText('Almost ready')).toBeOnTheScreen();
+    expect(screen.queryByText('wallet-contribution')).toBeNull();
 
     mockPlanFunding.mockReturnValue(plan('ready'));
     view.rerender(

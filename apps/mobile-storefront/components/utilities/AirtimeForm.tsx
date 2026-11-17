@@ -1,5 +1,4 @@
 import {
-  ActivityIndicator,
   Image,
   Pressable,
   ScrollView,
@@ -13,8 +12,10 @@ import { airtimeFormStyles as styles } from './airtime-form.styles';
 import type { AirtimeFormProps } from './airtime-form.types';
 import { ProviderGrid } from './ProviderGrid';
 import { RecentUtilityRecipients } from './RecentUtilityRecipients';
+import { UtilityPayButton } from './UtilityPayButton';
 import { UtilityPaymentOptions } from './UtilityPaymentOptions';
 import { useAirtimeFormController } from './use-airtime-form-controller';
+import { useRetainsPiggyvest } from './use-retains-piggyvest';
 
 const QUICK_AMOUNTS = [100, 200, 500, 1000, 2000, 5000];
 
@@ -40,6 +41,8 @@ export function AirtimeForm(props: AirtimeFormProps) {
     numericAmount,
     payment,
     phoneNumber,
+    purchaseRequest,
+    retainedStoreCredit,
     scrollViewRef,
     selectedProvider,
     selectedProviderConfig,
@@ -48,6 +51,7 @@ export function AirtimeForm(props: AirtimeFormProps) {
     setIsNetworkPickerExpanded,
     walletReturnToHref,
   } = useAirtimeFormController(props);
+  const retainedPiggyvest = useRetainsPiggyvest(purchaseRequest);
 
   const matchingRecipients = recentRecipients.filter((recipient) => {
     if (!phoneNumber) return true;
@@ -248,6 +252,10 @@ export function AirtimeForm(props: AirtimeFormProps) {
             walletError={payment.walletError}
             walletIsLoading={payment.walletIsLoading}
             walletIsSettled={payment.isWalletSettled()}
+            walletIsStoreCredit={payment.walletIsStoreCredit}
+            walletPrimaryUnknown={payment.walletPrimaryUnknown}
+            retainedStoreCredit={retainedStoreCredit}
+            retainedPiggyvest={retainedPiggyvest}
           />
         </View>
       </ScrollView>
@@ -264,25 +272,14 @@ export function AirtimeForm(props: AirtimeFormProps) {
             },
           ]}
         >
-          <Pressable
-            style={[
-              styles.payButton,
-              {
-                backgroundColor: BRAND.primary,
-                opacity: isSubmitting ? 0.7 : 1,
-              },
-            ]}
+          <UtilityPayButton
+            amount={numericAmount}
+            buttonStyle={styles.payButton}
+            isBusy={isSubmitting}
+            label={`Pay ₦${numericAmount ? numericAmount.toLocaleString() : '0'}`}
             onPress={handlePurchase}
-            disabled={isSubmitting}
-          >
-            {isSubmitting ? (
-              <ActivityIndicator color={BRAND.onPrimary} />
-            ) : (
-              <Text style={styles.payButtonText}>
-                {`Pay ₦${numericAmount ? numericAmount.toLocaleString() : '0'}`}
-              </Text>
-            )}
-          </Pressable>
+            textStyle={styles.payButtonText}
+          />
         </View>
       )}
     </>

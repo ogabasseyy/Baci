@@ -41,9 +41,10 @@ describe('proof 6: fee bearer and restriction gaps', () => {
       expect(answer(result, id)).toBe('unknown');
       expect(result.findings.find((f) => f.id === id)?.detail).toBeTruthy();
     }
-    // The mock readback carries no restriction flags.
+    // The mock readback now carries both restriction flags, as the sandbox
+    // answers (wallet pay fails closed on a wallet missing them).
     expect(answer(result, 'wallet_readback_shows_restriction_flags')).toBe(
-      'no'
+      'yes'
     );
     expect(result.status).toBe('observed');
   });

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
@@ -6,13 +6,17 @@ import {
   isHostedStagingTestPaymentsEnabled,
   isHostedStagingWalletTopUpBlocked,
 } from '@/lib/is-hosted-staging-wallet-top-up-blocked';
-import { getDefaultContributionAmount } from './get-default-contribution-amount';
 import { getQuickAmountOptions } from './get-quick-amount-options';
 import { SavingsQuickAmounts } from './SavingsQuickAmounts';
 import { SavingsSheetTextInput } from './SavingsSheetTextInput';
 import { useWalletPrimaryReady } from './WalletPrimaryContext';
 import { WalletSavingsContributionButton } from './WalletSavingsContributionButton';
 import { walletSavingsProgressModalStyles as styles } from './wallet-savings-progress-modal.styles';
+
+/** Width for the big amount: about one 38pt bold digit per character. */
+function amountFieldWidth(shown: string) {
+  return Math.max(60, shown.length * 24 + 8);
+}
 
 type WalletSavingsContributionFlowProps = {
   addAmount: string;
@@ -39,23 +43,7 @@ export function WalletSavingsContributionFlow({
 }: WalletSavingsContributionFlowProps) {
   const primaryReady = useWalletPrimaryReady();
   const [isFundFocused, setIsFundFocused] = useState(false);
-  const [hasSeededAmount, setHasSeededAmount] = useState(false);
-  const defaultAmount = getDefaultContributionAmount({
-    available: walletBalance,
-    remaining: remainingAmount,
-  });
-  // Start from a sensible amount (never more than the wallet holds or the
-  // goal still needs). Only an empty field is filled, and only once, so
-  // nothing the customer typed or a returning top-up amount is overwritten.
-  useEffect(() => {
-    if (hasSeededAmount) return;
-    if (addAmount.trim().length > 0) {
-      setHasSeededAmount(true);
-    } else if (defaultAmount > 0) {
-      setHasSeededAmount(true);
-      onAddAmountChange(String(defaultAmount));
-    }
-  }, [addAmount, defaultAmount, hasSeededAmount, onAddAmountChange]);
+  // The amount starts empty: the customer types one or taps Max.
   const amount = Number(addAmount);
   const quickAmounts = getQuickAmountOptions({
     available: walletBalance,
@@ -81,7 +69,7 @@ export function WalletSavingsContributionFlow({
       : 'Enter an amount greater than zero.'
     : needsFunding
       ? primaryReady
-        ? 'Add money to your wallet to save this amount.'
+        ? 'Add money to your savings wallet to save this amount.'
         : usesPlanFunding
           ? 'Add money to your wallet to save this amount. This is a staging preview, so do not send real money.'
           : topUpBlocked
@@ -91,6 +79,9 @@ export function WalletSavingsContributionFlow({
         ? null
         : 'Enter an amount to move from your wallet into this plan.';
 
+  const shownAmount = addAmount
+    .replace(/\D/g, '')
+    .replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   return (
     <View style={styles.addSection}>
       {/* The amount is the hero: big and centred, with what the wallet holds. */}
@@ -99,29 +90,32 @@ export function WalletSavingsContributionFlow({
           <Text style={[styles.amountPrefix, { color: colors.text }]}>₦</Text>
           <SavingsSheetTextInput
             accessibilityLabel="Savings top-up amount"
-            value={addAmount
-              .replace(/\D/g, '')
-              .replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+            value={shownAmount}
             editable={!isBusy}
             onChangeText={(text) => {
-              setHasSeededAmount(true);
               onAddAmountChange(text.replace(/\D/g, ''));
             }}
             keyboardType="number-pad"
             placeholder="0"
             placeholderTextColor={colors.placeholder}
-            style={[styles.amountInputField, { color: colors.text }]}
+            // iOS doesn't widen a text field when a chip sets its value, so
+            // the width follows the shown digits (never clipped as "₦5,0…").
+            style={[
+              styles.amountInputField,
+              { color: colors.text, minWidth: amountFieldWidth(shownAmount) },
+            ]}
           />
         </View>
         <Text style={[styles.walletHint, { color: colors.textSecondary }]}>
-          {`${formatNgnCurrency(walletBalance)} available in wallet`}
+          {`${formatNgnCurrency(walletBalance)} available in ${
+            primaryReady ? 'savings wallet' : 'wallet'
+          }`}
         </Text>
       </View>
       <SavingsQuickAmounts
         colors={colors}
         disabled={isBusy}
         onSelect={(value) => {
-          setHasSeededAmount(true);
           onAddAmountChange(String(value));
         }}
         options={quickAmounts}

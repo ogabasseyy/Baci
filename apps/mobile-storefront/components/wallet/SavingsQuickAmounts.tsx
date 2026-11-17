@@ -38,16 +38,20 @@ export function SavingsQuickAmounts({
             style={[
               styles.chip,
               {
-                backgroundColor: selected ? colors.primary : colors.card,
+                backgroundColor: selected
+                  ? colors.primaryLowOpacity
+                  : colors.card,
                 borderColor: selected ? colors.primary : colors.border,
               },
+              // Dimmed with the rest of the form while an add is in flight.
+              disabled && styles.disabled,
             ]}
           >
             <Text
               numberOfLines={1}
               style={[
                 styles.text,
-                { color: selected ? colors.primaryForeground : colors.text },
+                { color: selected ? colors.primary : colors.text },
               ]}
             >
               {option.label}
@@ -60,6 +64,7 @@ export function SavingsQuickAmounts({
 }
 
 const styles = StyleSheet.create({
+  disabled: { opacity: 0.5 },
   row: { flexDirection: 'row', gap: SPACING.sm },
   chip: {
     alignItems: 'center',

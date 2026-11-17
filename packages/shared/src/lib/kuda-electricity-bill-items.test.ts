@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  isKudaElectricityMeterItemCode,
   type KudaBillItemLike,
   type KudaElectricityBillerLike,
   withKudaElectricityBillItems,
@@ -150,5 +151,17 @@ describe('withKudaElectricityBillItems', () => {
     ]);
     expect(result[1].billItems).toBeUndefined();
     expect(result[2].billItems).toBe(billItems);
+  });
+});
+
+describe('isKudaElectricityMeterItemCode', () => {
+  it('recognises the listed meter products in any case', () => {
+    expect(isKudaElectricityMeterItemCode('KUD-ELE-EKED-002')).toBe(true);
+    expect(isKudaElectricityMeterItemCode(' kud-ele-aedc-001 ')).toBe(true);
+  });
+
+  it('rejects codes that are not listed meter products', () => {
+    expect(isKudaElectricityMeterItemCode('KUD-ELE-NEW-FIXED')).toBe(false);
+    expect(isKudaElectricityMeterItemCode('KUD-CAB-STT-SUPER')).toBe(false);
   });
 });

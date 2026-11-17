@@ -1,4 +1,7 @@
-import { stripProviderNames } from '@baci/shared/lib';
+import {
+  isKudaElectricityMeterItemCode,
+  stripProviderNames,
+} from '@baci/shared/lib';
 import type { Biller } from './kuda';
 import {
   KUDA_BILL_PRICE_CHANGED_MESSAGE,
@@ -16,11 +19,10 @@ const PRICE_LIST_CACHE_TTL_MS = 60_000;
  */
 const PRICE_LIST_LAST_GOOD_MS = 24 * 60 * 60 * 1000;
 /**
- * Kuda's electricity meter products (KUD-ELE-…, the codes the electricity
- * list is built from) are priced by the customer, so a saved 100x price
- * cannot exist for them. Any other code fails closed without a list.
+ * A fixed price under ₦10 is implausible: the list's units are in doubt
+ * (e.g. Kuda switched a list to naira), so it cannot confirm a price.
  */
-const OPEN_AMOUNT_ELECTRICITY_CODE = /^KUD-ELE-/i;
+const IMPLAUSIBLE_FIXED_PRICE_NAIRA = 10;
 /** After a failed or empty fetch, wait this long before asking Kuda again. */
 const PRICE_LIST_RETRY_AFTER_MS = 30_000;
 
@@ -133,14 +135,15 @@ function priceMatches(item: BillItem, amount: number) {
  * today), whose saved lists could still hold the old 100x prices from before
  * Kuda's kobo amounts were converted.
  *
- * When the purchase names a biller that lists the item, the amount must
- * match that biller's listing; otherwise it must match at least one listing.
- * Either way a different price elsewhere never declines a valid purchase,
- * while a stale 100x amount (which matches none) is still caught.
- * Open-amount and unknown items pass. If no price list is available (Kuda
+ * The package must still be listed (under the named biller, when the
+ * purchase names one), and its amount must match one of those listings, so
+ * a different price at another biller never declines a valid purchase
+ * while a stale 100x amount (which matches none) is caught. Open-amount
+ * packages pass at any amount; an implausible fixed price (under ₦10) means
+ * the list can't confirm anything. If no price list is available (Kuda
  * down or empty, with no good list from the past day in this server
- * instance), every purchase fails closed except Kuda's customer-priced
- * electricity meter products.
+ * instance), every purchase fails closed except Kuda's listed electricity
+ * meter products.
  * After a failed fetch Kuda is not asked again for 30 seconds.
  */
 export async function assertKudaBillItemPriceCurrent({
@@ -156,11 +159,12 @@ export async function assertKudaBillItemPriceCurrent({
 }): Promise<void> {
   const billers = await loadPriceList(type);
   if (billers === null) {
-    // Open-amount electricity carries no saved price to go stale, so it
-    // continues; every other type fails closed until a list is available.
+    // Kuda's listed electricity meter products are always sold at the
+    // customer's own amount, so no saved price can go stale; every other
+    // purchase fails closed until a list is available.
     if (
       type === 'electricity' &&
-      OPEN_AMOUNT_ELECTRICITY_CODE.test(billItemIdentifier.trim())
+      isKudaElectricityMeterItemCode(billItemIdentifier)
     ) {
       return;
     }
@@ -174,18 +178,24 @@ export async function assertKudaBillItemPriceCurrent({
         biller.billItems,
         normalizeItemCode(billItemIdentifier),
         []
-      ).filter(hasFixedPrice),
+      ),
     }))
     .filter(({ items }) => items.length > 0);
-  if (listing.length === 0) return;
-
+  // The current list no longer offers this package (or not under the named
+  // biller): the app's saved choice, and its price, are out of date.
   const chosen = billerName
     ? listing.filter(({ biller }) => isChosenBiller(biller, billerName))
-    : [];
-  const isCurrent = (chosen.length > 0 ? chosen : listing).some(({ items }) =>
-    items.some((item) => priceMatches(item, amount))
-  );
-  if (!isCurrent) {
+    : listing;
+  if (chosen.length === 0) {
+    throw new Error(KUDA_BILL_PRICE_CHANGED_MESSAGE);
+  }
+
+  const fixed = chosen.flatMap(({ items }) => items).filter(hasFixedPrice);
+  if (fixed.length === 0) return; // sold at the customer's own amount
+  if (fixed.some((item) => item.amount < IMPLAUSIBLE_FIXED_PRICE_NAIRA)) {
+    throw new Error(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
+  }
+  if (!fixed.some((item) => priceMatches(item, amount))) {
     throw new Error(KUDA_BILL_PRICE_CHANGED_MESSAGE);
   }
 }

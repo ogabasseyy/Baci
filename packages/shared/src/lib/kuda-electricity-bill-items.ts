@@ -90,6 +90,20 @@ const ELECTRICITY_BILL_ITEMS_BY_PROVIDER: Record<
   YEDC: YEDC_ITEMS,
 };
 
+const ELECTRICITY_METER_ITEM_CODES = new Set(
+  Object.values(ELECTRICITY_BILL_ITEMS_BY_PROVIDER).flatMap((items) =>
+    items.map((item) => item.itemCode.toUpperCase())
+  )
+);
+
+/**
+ * Whether a code is one of Kuda's electricity meter products listed above,
+ * which are always sold at the customer's own amount.
+ */
+export function isKudaElectricityMeterItemCode(itemCode: string): boolean {
+  return ELECTRICITY_METER_ITEM_CODES.has(itemCode.trim().toUpperCase());
+}
+
 function normalizeElectricityBillerName(billerName: string) {
   return billerName
     .trim()

@@ -15,45 +15,14 @@ import {
   clearKudaBillItemPriceCacheForTests,
 } from './kuda-bill-item-price';
 import {
+  startimes,
+  startimesSuper,
+  superPackage,
+} from './kuda-bill-item-price.test-fixtures';
+import {
   KUDA_BILL_PRICE_CHANGED_MESSAGE,
   KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE,
 } from './kuda-bill-item-price-messages';
-
-const startimesSuper = {
-  amount: 9500,
-  isAmountFixed: true,
-  itemCode: 'KUD-CAB-STT-SUPER',
-  itemCurrencySymbol: 'NGN',
-  itemFee: 0,
-  itemName: 'DTT SUPER MONTHLY 9500NGN',
-};
-
-function startimes(overrides: Record<string, unknown> = {}) {
-  return {
-    billerId: 'startimes',
-    billerName: 'STARTIMES NG',
-    billerType: 'Cable',
-    categoryId: 'cable',
-    categoryName: 'CableTv',
-    billItems: [
-      {
-        ...startimesSuper,
-        amount: 0,
-        isAmountFixed: false,
-        itemCode: 'group',
-        itemName: 'Group',
-        billItems: [startimesSuper],
-      },
-    ],
-    ...overrides,
-  };
-}
-
-const superPackage = {
-  amount: 9500,
-  billItemIdentifier: 'KUD-CAB-STT-SUPER',
-  type: 'cable_tv',
-};
 
 describe('assertKudaBillItemPriceCurrent', () => {
   beforeEach(() => {
@@ -92,14 +61,33 @@ describe('assertKudaBillItemPriceCurrent', () => {
     ).resolves.toBeUndefined();
   });
 
-  it('leaves unknown items to the provider', async () => {
+  it('rejects a package the current list no longer offers', async () => {
     await expect(
       assertKudaBillItemPriceCurrent({
         ...superPackage,
         amount: 1234,
         billItemIdentifier: 'KUD-CAB-UNKNOWN',
       })
-    ).resolves.toBeUndefined();
+    ).rejects.toThrow(KUDA_BILL_PRICE_CHANGED_MESSAGE);
+  });
+
+  it('rejects a named biller that does not list the package', async () => {
+    await expect(
+      assertKudaBillItemPriceCurrent({
+        ...superPackage,
+        billerName: 'SOME OTHER BILLER',
+      })
+    ).rejects.toThrow(KUDA_BILL_PRICE_CHANGED_MESSAGE);
+  });
+
+  it('cannot confirm an implausibly low fixed price', async () => {
+    mockGetBillersByCategory.mockResolvedValue([
+      startimes({ billItems: [{ ...startimesSuper, amount: 5 }] }),
+    ]);
+
+    await expect(
+      assertKudaBillItemPriceCurrent({ ...superPackage, amount: 5 })
+    ).rejects.toThrow(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
   });
 
   it('lets open-amount items through at any amount', async () => {
@@ -197,112 +185,5 @@ describe('assertKudaBillItemPriceCurrent', () => {
     await assertKudaBillItemPriceCurrent(superPackage);
 
     expect(mockGetBillersByCategory).toHaveBeenCalledTimes(1);
-  });
-
-  describe('when Kuda fails or answers with an empty list', () => {
-    it.each([
-      [
-        'fails',
-        () =>
-          mockGetBillersByCategory.mockRejectedValue(new Error('Kuda down')),
-      ],
-      ['is empty', () => mockGetBillersByCategory.mockResolvedValue([])],
-    ])('keeps blocking stale prices with the last good list when Kuda %s', async (_label, breakKuda) => {
-      vi.useFakeTimers();
-      vi.setSystemTime(new Date('2026-11-17T10:00:00Z'));
-      await assertKudaBillItemPriceCurrent(superPackage);
-      vi.setSystemTime(new Date('2026-11-17T12:00:00Z'));
-      breakKuda();
-
-      await expect(
-        assertKudaBillItemPriceCurrent({ ...superPackage, amount: 950000 })
-      ).rejects.toThrow(KUDA_BILL_PRICE_CHANGED_MESSAGE);
-      await expect(
-        assertKudaBillItemPriceCurrent(superPackage)
-      ).resolves.toBeUndefined();
-      expect(mockLoggerWarn).toHaveBeenCalled();
-    });
-
-    it('fails a fixed-price cable package closed with no list from the past day', async () => {
-      mockGetBillersByCategory.mockRejectedValue(new Error('Kuda down'));
-
-      await expect(
-        assertKudaBillItemPriceCurrent(superPackage)
-      ).rejects.toThrow(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
-      expect(mockLoggerWarn).toHaveBeenCalledWith(
-        expect.objectContaining({ hasLastGoodList: false, type: 'cable_tv' })
-      );
-    });
-
-    it('fails an electricity code outside the meter products closed with no list', async () => {
-      mockGetBillersByCategory.mockResolvedValue([]);
-
-      await expect(
-        assertKudaBillItemPriceCurrent({
-          amount: 5000,
-          billItemIdentifier: 'SOME-FIXED-PLAN',
-          type: 'electricity',
-        })
-      ).rejects.toThrow(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
-    });
-
-    it('lets open-amount electricity continue with no list', async () => {
-      mockGetBillersByCategory.mockResolvedValue([]);
-
-      await expect(
-        assertKudaBillItemPriceCurrent({
-          amount: 5000,
-          billItemIdentifier: 'KUD-ELE-EKED-002',
-          type: 'electricity',
-        })
-      ).resolves.toBeUndefined();
-    });
-
-    it.each([
-      ['betting', 'KUD-BET-1'],
-      ['cable_tv', 'KUD-CAB-STT-SUPER'],
-    ])('fails %s closed with no list from the past day', async (type, code) => {
-      mockGetBillersByCategory.mockResolvedValue([]);
-
-      await expect(
-        assertKudaBillItemPriceCurrent({
-          amount: 1000,
-          billItemIdentifier: code,
-          type,
-        })
-      ).rejects.toThrow(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
-    });
-
-    it('waits 30 seconds before asking Kuda again after a failure', async () => {
-      vi.useFakeTimers();
-      vi.setSystemTime(new Date('2026-11-17T10:00:00Z'));
-      mockGetBillersByCategory.mockRejectedValue(new Error('Kuda down'));
-      await expect(
-        assertKudaBillItemPriceCurrent(superPackage)
-      ).rejects.toThrow();
-      await expect(
-        assertKudaBillItemPriceCurrent(superPackage)
-      ).rejects.toThrow();
-      expect(mockGetBillersByCategory).toHaveBeenCalledTimes(1);
-
-      vi.setSystemTime(new Date('2026-11-17T10:00:31Z'));
-      mockGetBillersByCategory.mockResolvedValue([startimes()]);
-      await expect(
-        assertKudaBillItemPriceCurrent(superPackage)
-      ).resolves.toBeUndefined();
-      expect(mockGetBillersByCategory).toHaveBeenCalledTimes(2);
-    });
-
-    it('ignores a last good list older than a day', async () => {
-      vi.useFakeTimers();
-      vi.setSystemTime(new Date('2026-11-17T10:00:00Z'));
-      await assertKudaBillItemPriceCurrent(superPackage);
-      vi.setSystemTime(new Date('2026-11-18T10:00:01Z'));
-      mockGetBillersByCategory.mockRejectedValue(new Error('Kuda down'));
-
-      await expect(
-        assertKudaBillItemPriceCurrent(superPackage)
-      ).rejects.toThrow(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
-    });
   });
 });

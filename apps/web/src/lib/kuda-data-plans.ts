@@ -26,6 +26,12 @@ export interface ResolvedKudaDataPlan {
 
 /** Same window as the bill price recheck: apps cache plan lists a day. */
 const DATA_PLAN_LAST_GOOD_MS = 24 * 60 * 60 * 1000;
+/** After a failed or unusable fetch, wait this long before asking Kuda again. */
+const DATA_PLAN_RETRY_AFTER_MS = 30_000;
+/** A fixed plan price under ₦10 means the list's units are in doubt. */
+const IMPLAUSIBLE_PLAN_PRICE_NAIRA = 10;
+
+let lastFailedDataPlanFetchAt: number | undefined;
 
 let dataProvidersCache:
   | {
@@ -37,6 +43,7 @@ let dataProvidersCache:
 
 export function clearKudaDataPlanCacheForTests() {
   dataProvidersCache = undefined;
+  lastFailedDataPlanFetchAt = undefined;
 }
 
 function normalizeComparable(value: string) {
@@ -108,7 +115,9 @@ function providerMatchesNetwork(
 
 /**
  * The current Kuda data plans, or the last good list from the past day when
- * Kuda fails or answers with an empty list. Null when neither exists: the
+ * Kuda fails or answers without any packages (which never replaces a good
+ * list). After such a fetch Kuda is not asked again for 30 seconds. Null
+ * when neither exists: the
  * caller must not trust the client's amount then, since apps may still hold
  * plan prices from before Kuda's kobo amounts were converted (100x).
  */
@@ -123,15 +132,25 @@ async function loadDataProviders(): Promise<Biller[] | null> {
       ? dataProvidersCache.providers
       : null;
 
+  if (
+    lastFailedDataPlanFetchAt !== undefined &&
+    now - lastFailedDataPlanFetchAt < DATA_PLAN_RETRY_AFTER_MS
+  ) {
+    return lastGood;
+  }
+
   let providers: Biller[];
   try {
     providers = await getDataProviders();
   } catch {
+    lastFailedDataPlanFetchAt = now;
     return lastGood;
   }
-  if (providers.length === 0) {
+  if (collectDataPlanCandidates(providers).length === 0) {
+    lastFailedDataPlanFetchAt = now;
     return lastGood;
   }
+  lastFailedDataPlanFetchAt = undefined;
   dataProvidersCache = {
     expiresAt: now + DATA_PLAN_CACHE_TTL_MS,
     loadedAt: now,
@@ -205,6 +224,13 @@ export async function resolveKudaDataPlanForPurchase({
     ({ item }) => normalizeComparable(item.itemCode) === normalizedCode
   );
   if (exactMatch) {
+    if (
+      exactMatch.item.isAmountFixed &&
+      exactMatch.item.amount > 0 &&
+      exactMatch.item.amount < IMPLAUSIBLE_PLAN_PRICE_NAIRA
+    ) {
+      throw new Error(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
+    }
     if (
       exactMatch.item.isAmountFixed &&
       exactMatch.item.amount > 0 &&

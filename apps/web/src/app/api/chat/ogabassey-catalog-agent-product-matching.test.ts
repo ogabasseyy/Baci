@@ -206,6 +206,22 @@ describe('ogabassey-catalog-agent-product-matching', () => {
         ])
       )
     ).toBe(false);
+
+    // Version-numbered standard features (Wi-Fi 6, Bluetooth 5.3) and disjunctive "or" recommendations pass
+    expect(
+      hasGroundedProductMentions(
+        'Apple iPhone 16 supports Wi-Fi 6 and Bluetooth 5.3.',
+        makeEvent([
+          { ...iphone16, description: 'Supports Wi-Fi 6 and Bluetooth 5.3' },
+        ])
+      )
+    ).toBe(true);
+    expect(
+      hasGroundedProductMentions(
+        'Apple iPhone 16 or Apple iPhone 15 Pro.',
+        makeEvent([iphone16, iphone15Pro])
+      )
+    ).toBe(true);
   });
 
   it('binds all products in a grouped comma-separated clause', () => {

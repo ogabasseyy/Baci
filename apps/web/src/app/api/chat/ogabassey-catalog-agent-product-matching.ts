@@ -4,6 +4,7 @@ import type {
 } from '@/schemas/storefront-agent-ui-contract';
 import {
   collectProductGroundingTokens,
+  isFeatureVersionPhrase,
   isNumericFeatureToken,
   type ProductGroundingTokenSet,
   tokenizeIdentityWords,
@@ -177,15 +178,32 @@ export function hasUnreturnedProductPhrase(
     (KNOWN_BRAND_OR_LINE_TOKENS.has(token) ||
       VARIANT_TIER_TOKENS.has(token) ||
       /\d/.test(token));
+  const extractWords = (raw: string) =>
+    (raw.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter(
+      (token) =>
+        (token.length >= 2 || /^\d$/.test(token)) &&
+        !CAPITALIZED_PHRASE_IGNORE.has(token)
+    );
+  const allowsDescriptionFeature = (words: string[]) =>
+    (words.some((token) => /\d/.test(token)) &&
+      words.filter((token) => /\d/.test(token)).every(isNumericFeatureToken)) ||
+    (isFeatureVersionPhrase(words) &&
+      !words.some(
+        (token) =>
+          KNOWN_BRAND_OR_LINE_TOKENS.has(token) ||
+          VARIANT_TIER_TOKENS.has(token)
+      ));
 
   const hasSingleProductMatch = (words: string[], allowDescription = false) =>
     perProductTokens.length > 0
       ? perProductTokens.some((productSet) =>
           allowDescription
             ? words.every((token) => productSet.features.has(token)) &&
-              words
-                .filter(isModelIdentityToken)
-                .every((token) => productSet.identity.has(token))
+              (allowsDescriptionFeature(words)
+                ? true
+                : words
+                    .filter(isModelIdentityToken)
+                    .every((token) => productSet.identity.has(token)))
             : words.every((token) => productSet.identity.has(token))
         )
       : words.every((token) => returnedTokens.has(token));
@@ -200,46 +218,20 @@ export function hasUnreturnedProductPhrase(
       return true;
     }
   }
-
   for (const match of clause.matchAll(FAMILY_VARIANT_PATTERN)) {
-    const phraseTokens = (
-      match[0].toLowerCase().match(/[a-z0-9]+/g) ?? []
-    ).filter((token) => token.length >= 2 || /^\d$/.test(token));
-    if (!hasSingleProductMatch(phraseTokens)) {
-      return true;
-    }
+    if (!hasSingleProductMatch(tokenizeIdentityWords(match[0]))) return true;
   }
-
   for (const match of clause.matchAll(CAPITALIZED_PHRASE_PATTERN)) {
-    const words = (match[0].toLowerCase().match(/[a-z0-9]+/g) ?? []).filter(
-      (token) =>
-        (token.length >= 2 || /^\d$/.test(token)) &&
-        !CAPITALIZED_PHRASE_IGNORE.has(token)
-    );
-    if (words.length >= 2 && !hasSingleProductMatch(words, true)) {
-      return true;
-    }
+    const words = extractWords(match[0]);
+    if (words.length >= 2 && !hasSingleProductMatch(words, true)) return true;
   }
-
   for (const match of clause.matchAll(LOWERCASE_MODEL_NUMBER_PATTERN)) {
-    const leadWord = match[1]?.toLowerCase() ?? '';
-    if (NON_PRODUCT_PREDECESSOR_WORDS.has(leadWord)) continue;
-    const words = (match[0].toLowerCase().match(/[a-z0-9]+/g) ?? []).filter(
-      (token) =>
-        (token.length >= 2 || /^\d$/.test(token)) &&
-        !CAPITALIZED_PHRASE_IGNORE.has(token)
-    );
-    const hasOnlyFeatureDigits =
-      words.length > 0 &&
-      words.filter((token) => /\d/.test(token)).every(isNumericFeatureToken);
-    if (
-      words.length > 0 &&
-      !hasSingleProductMatch(words, hasOnlyFeatureDigits)
-    ) {
-      return true;
-    }
+    if (NON_PRODUCT_PREDECESSOR_WORDS.has(match[1]?.toLowerCase() ?? ''))
+      continue;
+    const words = extractWords(match[0]);
+    const isDesc = allowsDescriptionFeature(words);
+    if (words.length > 0 && !hasSingleProductMatch(words, isDesc)) return true;
   }
-
   return false;
 }
 
@@ -254,10 +246,13 @@ export function hasGroundedProductMentions(
     .split(SEGMENT_SUB_SPLIT_PATTERN)
     .map((segment) => segment.trim())
     .filter(Boolean);
-  const matchesReturnedProduct = segments.some((segment) =>
-    products.some((product) => productMatchesSegment(product, segment) > 0)
-  );
-  if (!matchesReturnedProduct) return false;
+  if (
+    !segments.some((segment) =>
+      products.some((product) => productMatchesSegment(product, segment) > 0)
+    )
+  ) {
+    return false;
+  }
 
   const { returnedTokens, perProductTokens } =
     collectProductGroundingTokens(products);
@@ -274,13 +269,18 @@ export function hasGroundedProductMentions(
     searchCursor = clauseOffset + clause.length;
     if (NEGATION_OR_ABSENCE_CUE.test(clause)) continue;
 
-    const boundSet = new Set(findBoundProducts(text, clauseOffset, products));
-    const clauseProductTokens = perProductTokens.filter((entry) =>
+    const directMatches = clause
+      .split(/,\s+|\s+\bor\b\s+/i)
+      .flatMap((part) => matchCandidateProducts(part.trim(), products));
+    const boundSet = new Set(
+      directMatches.length > 0
+        ? directMatches
+        : findBoundProducts(text, clauseOffset, products)
+    );
+    const clauseTokens = perProductTokens.filter((entry) =>
       boundSet.has(entry.product)
     );
-    if (
-      hasUnreturnedProductPhrase(clause, returnedTokens, clauseProductTokens)
-    ) {
+    if (hasUnreturnedProductPhrase(clause, returnedTokens, clauseTokens)) {
       return false;
     }
     if (
@@ -290,9 +290,7 @@ export function hasGroundedProductMentions(
       const contentWords = (
         clause.toLowerCase().match(/[a-z]{3,}/g) ?? []
       ).filter((word) => !POSITIVE_AVAILABILITY_GENERIC_WORDS.has(word));
-      if (contentWords.some((word) => !returnedTokens.has(word))) {
-        return false;
-      }
+      if (contentWords.some((word) => !returnedTokens.has(word))) return false;
     }
   }
 

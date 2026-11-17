@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { StorefrontAgentUiProduct } from '@/schemas/storefront-agent-ui-contract';
 import {
   collectProductGroundingTokens,
+  isFeatureVersionPhrase,
   isNumericFeatureToken,
 } from './ogabassey-catalog-agent-grounding-tokens';
 
@@ -39,5 +40,8 @@ describe('ogabassey-catalog-agent-grounding-tokens', () => {
     expect(isNumericFeatureToken('5k')).toBe(true);
     expect(isNumericFeatureToken('120hz')).toBe(true);
     expect(isNumericFeatureToken('15')).toBe(false);
+    expect(isFeatureVersionPhrase(['wi', 'fi', '6'])).toBe(true);
+    expect(isFeatureVersionPhrase(['bluetooth', '5', '3'])).toBe(true);
+    expect(isFeatureVersionPhrase(['iphone', '15', 'pro'])).toBe(false);
   });
 });

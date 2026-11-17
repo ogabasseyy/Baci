@@ -14,6 +14,11 @@ describe('ogabassey-catalog-agent-spec-role', () => {
     expect(roleFor('8GB RAM with SSD storage', '8GB')).toBe('ram');
     expect(roleFor('RAM: 8GB and storage: 256GB', '8GB')).toBe('ram');
     expect(roleFor('RAM: 8GB and storage: 256GB', '256GB')).toBe('storage');
+    expect(roleFor('RAM 8GB Storage 256GB', '8GB')).toBe('ram');
+    expect(roleFor('RAM 8GB Storage 256GB', '256GB')).toBe('storage');
+    expect(roleFor('8GB RAM 256GB Storage', '8GB')).toBe('ram');
+    expect(roleFor('8GB RAM 256GB Storage', '256GB')).toBe('storage');
+    expect(roleFor('8GB RAM 256GB', '256GB')).toBeUndefined();
     expect(roleFor('8GB RAM and a 120Hz display', '120Hz')).toBeUndefined();
   });
 });

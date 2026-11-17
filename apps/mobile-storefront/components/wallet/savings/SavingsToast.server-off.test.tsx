@@ -49,4 +49,18 @@ describe('SavingsToast', () => {
     view.rerender(<SavingsToast />);
     expect(screen.queryByText('₦100 added to iPhone 15')).toBeNull();
   });
+
+  it('drops the toast when the wallet is left before it times out', () => {
+    useSavingsToastStore.setState({
+      toast: {
+        id: 3,
+        message: '₦100 added to iPhone 15',
+        scope: 'user-1:merchant-1',
+      },
+    });
+    const view = render(<SavingsToast />);
+    expect(screen.getByText('₦100 added to iPhone 15')).toBeOnTheScreen();
+    view.unmount();
+    expect(useSavingsToastStore.getState().toast).toBeNull();
+  });
 });

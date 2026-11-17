@@ -20,6 +20,9 @@ export function SavingsToast() {
   useEffect(() => {
     if (stale) clear();
   }, [stale, clear]);
+  // Leaving the wallet before the toast times out drops it too: the Toast's
+  // own timer is cancelled on unmount without calling onDismiss.
+  useEffect(() => clear, [clear]);
   if (!toast || stale) return null;
   return (
     <Toast

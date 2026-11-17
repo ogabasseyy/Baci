@@ -275,4 +275,16 @@ describe('bugfix: a clear in-progress state while the contribution moves', () =>
     rerender(<WalletSavingsContributionFlow {...props} isAdding={false} />);
     expect(screen.queryByTestId('savings-contribution-progress')).toBeNull();
   });
+  it('hides the covered controls from screen readers while adding', () => {
+    const props = {
+      ...createProps(),
+      addAmount: '100',
+      walletBalance: 500,
+      isAdding: true,
+    };
+    const { rerender } = render(<WalletSavingsContributionFlow {...props} />);
+    expect(screen.queryAllByRole('button')).toHaveLength(0);
+    rerender(<WalletSavingsContributionFlow {...props} isAdding={false} />);
+    expect(screen.queryAllByRole('button').length).toBeGreaterThan(0);
+  });
 });

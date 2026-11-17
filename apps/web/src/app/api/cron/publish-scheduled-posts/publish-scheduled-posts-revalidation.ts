@@ -84,7 +84,9 @@ export async function revalidateScheduledPostsByMerchant(
           nextRevalError instanceof Error
             ? nextRevalError.message
             : String(nextRevalError);
-        const isStaticGenStoreError = msg.includes('static generation store');
+        const isStaticGenStoreError =
+          msg.includes('static generation store') ||
+          (process.env.VPS_WORKER === '1' && msg.includes('Invariant:'));
         if (!isStaticGenStoreError) {
           throw nextRevalError;
         }

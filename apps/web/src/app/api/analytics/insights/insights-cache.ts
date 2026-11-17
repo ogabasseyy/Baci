@@ -13,6 +13,8 @@ export interface InsightsPayload {
 }
 
 const REDIS_CACHE_TIMEOUT_MS = 750;
+const REDIS_COOLDOWN_MS = 30_000;
+let redisCooldownUntil = 0;
 
 function parseCachedInsights(value: unknown): InsightsPayload | null {
   if (!value) return null;
@@ -42,7 +44,7 @@ async function withRedisTimeout<T>(operation: Promise<T>): Promise<T> {
 export async function readCachedInsights(
   cacheKey: string
 ): Promise<InsightsPayload | null> {
-  const redis = getRedis();
+  const redis = Date.now() < redisCooldownUntil ? null : getRedis();
   if (!redis) {
     return parseCachedInsights(cache.get<InsightsPayload>(cacheKey));
   }
@@ -53,6 +55,7 @@ export async function readCachedInsights(
       parseCachedInsights(cache.get<InsightsPayload>(cacheKey))
     );
   } catch (error) {
+    redisCooldownUntil = Date.now() + REDIS_COOLDOWN_MS;
     console.warn('[analytics/insights] Redis cache read failed', error);
     return parseCachedInsights(cache.get<InsightsPayload>(cacheKey));
   }
@@ -64,13 +67,14 @@ export async function writeCachedInsights(
   ttlSeconds: number
 ): Promise<void> {
   cache.set(cacheKey, payload, ttlSeconds);
-  const redis = getRedis();
+  const redis = Date.now() < redisCooldownUntil ? null : getRedis();
   if (!redis) {
     return;
   }
   try {
     await withRedisTimeout(redis.set(cacheKey, payload, { ex: ttlSeconds }));
   } catch (error) {
+    redisCooldownUntil = Date.now() + REDIS_COOLDOWN_MS;
     console.warn('[analytics/insights] Redis cache write failed', error);
   }
 }

@@ -18,10 +18,15 @@
 -- first read after publication sees every ranked row. The count is stored in
 -- the snapshot row with the time it was taken; reads within the next minute
 -- are one primary-key lookup, at the moment every phone loads the final
--- board. After a minute one request recounts (single flight through a
--- transaction advisory lock) while the others keep returning the stored
--- number. So a repair that re-ranks a published event, or a deleted account
--- whose row cascades away, shows within a minute with no manual step. If the
+-- board. The first count after publication is single flight too, through a
+-- transaction advisory lock: requests that find no stored number wait (at
+-- most this function's 2-second lock_timeout) for the one that is counting
+-- and use its result. After a minute one request recounts the same way while
+-- the others keep returning the stored number. Every request that takes the
+-- lock reads the stored number again first, so a request that saw it expired
+-- does not recount right after another refreshed it. So a repair that
+-- re-ranks a published event, or a deleted account whose row cascades away,
+-- shows within a minute with no manual step. If the
 -- event has no snapshot row yet (its live board was never built), the count
 -- is stored in a placeholder row whose computed_at is -infinity; the board
 -- function treats that as "no board yet" and builds a real one on its first
@@ -45,6 +50,7 @@ DECLARE
   v_count integer;
   v_customer_id uuid;
   v_event public.quiz_events%ROWTYPE;
+  v_lock_key bigint;
 BEGIN
   IF auth.uid() IS NULL THEN
     RAISE EXCEPTION 'not_authenticated' USING ERRCODE = '28000';
@@ -70,20 +76,42 @@ BEGIN
     INTO v_count, v_checked_at
     FROM public.quiz_live_leaderboard_snapshots_v2 AS snapshot
     WHERE snapshot.event_id = p_event_id;
+    IF v_count IS NOT NULL
+      AND v_checked_at >= pg_catalog.clock_timestamp() - interval '60 seconds' THEN
+      RETURN v_count;
+    END IF;
+    -- Nothing stored yet, or due for a recount: one request counts.
+    v_lock_key := pg_catalog.hashtextextended(
+      'quiz_published_participant_count_v2:' || p_event_id::text, 0
+    );
     IF v_count IS NOT NULL THEN
-      IF v_checked_at
-          >= pg_catalog.clock_timestamp() - interval '60 seconds' THEN
+      -- A number is on file, so the requests that lose the lock keep
+      -- returning it instead of all counting at once.
+      IF NOT pg_catalog.pg_try_advisory_xact_lock(v_lock_key) THEN
         RETURN v_count;
       END IF;
-      -- Due for a recount. One request does it; the others keep returning
-      -- the stored number instead of all counting at once.
-      IF NOT pg_catalog.pg_try_advisory_xact_lock(
-        pg_catalog.hashtextextended(
-          'quiz_published_participant_count_v2:' || p_event_id::text, 0
-        )
-      ) THEN
-        RETURN v_count;
-      END IF;
+    ELSE
+      -- No number on file: the first reads after publication, when every
+      -- phone loads the final board. Wait for the request that is counting
+      -- instead of all counting and writing the same row. The wait is
+      -- bounded by this function's lock_timeout; a request that times out
+      -- counts for itself rather than failing the read.
+      BEGIN
+        PERFORM pg_catalog.pg_advisory_xact_lock(v_lock_key);
+      EXCEPTION WHEN lock_not_available THEN
+        NULL;
+      END;
+    END IF;
+    -- Another request may have stored a count while this one waited, or
+    -- between the read above and the lock. Use it when it is current.
+    SELECT snapshot.published_participant_count,
+      snapshot.published_count_checked_at
+    INTO v_count, v_checked_at
+    FROM public.quiz_live_leaderboard_snapshots_v2 AS snapshot
+    WHERE snapshot.event_id = p_event_id;
+    IF v_count IS NOT NULL
+      AND v_checked_at >= pg_catalog.clock_timestamp() - interval '60 seconds' THEN
+      RETURN v_count;
     END IF;
     SELECT pg_catalog.count(*)::integer INTO v_count
     FROM public.quiz_event_results_v2 AS result

@@ -28,11 +28,14 @@ const ROW = {
 
 function mockSupabase({
   data = { current_player: null, entries: [ROW], status: 'published' },
+  dataByRpc = {},
   participantCount = 1,
   error = null,
   user = { id: USER_ID },
 }: {
   data?: unknown;
+  /** Per-RPC response data; any RPC not listed here returns `data`. */
+  dataByRpc?: Record<string, unknown>;
   participantCount?: number;
   error?: unknown;
   user?: { id: string } | null;
@@ -41,7 +44,7 @@ function mockSupabase({
     Promise.resolve(
       name === 'get_quiz_participant_count_public_v2'
         ? { data: participantCount, error: null }
-        : { data, error }
+        : { data: name in dataByRpc ? dataByRpc[name] : data, error }
     )
   );
   const supabase = {
@@ -149,34 +152,21 @@ describe('quiz leaderboard route', () => {
   });
 
   it('reuses the live board count instead of counting again before publication', async () => {
-    const rpc = vi.fn((name: string) =>
-      Promise.resolve({
-        data:
-          name === 'get_quiz_leaderboard_public_v2'
-            ? { current_player: null, entries: [], status: 'live_hidden' }
-            : {
-                current_player: null,
-                entries: [ROW],
-                participant_count: 640,
-                status: 'live',
-              },
-        error: null,
-      })
-    );
-    const supabase = {
-      auth: {
-        getUser: vi
-          .fn()
-          .mockResolvedValue({ data: { user: { id: USER_ID } }, error: null }),
+    const { rpc } = mockSupabase({
+      dataByRpc: {
+        get_quiz_leaderboard_public_v2: {
+          current_player: null,
+          entries: [],
+          status: 'live_hidden',
+        },
+        get_quiz_live_leaderboard_public_v2: {
+          current_player: null,
+          entries: [ROW],
+          participant_count: 640,
+          status: 'live',
+        },
       },
-      rpc,
-    };
-    vi.mocked(authenticateApiRequest).mockResolvedValue({
-      error: null,
-      supabase: supabase as never,
-      user: { id: USER_ID } as never,
     });
-    vi.mocked(createClient).mockResolvedValue(supabase as never);
     const { GET } = await import('./route');
     const body = await (await GET(request())).json();
 

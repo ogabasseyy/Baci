@@ -2,7 +2,7 @@ import { Pressable, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
 
 const CHECK_COPY = {
-  body: "Your contribution is awaiting confirmation. We'll keep checking for a few minutes, and again when you come back. You can also check now before starting another payment.",
+  body: "Your contribution is awaiting confirmation. We'll keep checking for about 5 minutes, and again when you come back to the app. You can tap to check any time before starting another payment.",
   action: 'Check contribution status',
   busy: 'Checking contribution…',
 };

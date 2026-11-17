@@ -4,6 +4,8 @@ import { order, seedCheckout } from './setup';
 test('switches card rails and retries provider initialization against the same order', async ({
   page,
 }) => {
+  // Keep smooth focus scrolling from racing the payment retry in WebKit.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   await seedCheckout(page);
   let created = 0;
   let reused = 0;

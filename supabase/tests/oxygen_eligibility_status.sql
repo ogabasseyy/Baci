@@ -26,6 +26,11 @@ SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub','efab0000-0000-4000-8000-000000000003',true);
 SELECT public.oxygen_runtime('finish','efab0000-0000-4000-8000-000000000051',
  '{"commandId":"efab0000-0000-4000-8000-000000000051","outcome":"succeeded","stage":"eligibility_required","state":{"eligibilityStatus":"failed","eligibilityFailureReason":"financial_details_mismatch","validated":true}}');
+DO $$ BEGIN
+ IF public.oxygen_runtime('worker_status','efab0000-0000-4000-8000-000000000041','{"includeEligibilityFailureReason":true}')->'state' ? 'eligibilityFailureReason' THEN
+  RAISE EXCEPTION 'Legacy worker state exposed the new reason';
+ END IF;
+END $$;
 DO $$
 DECLARE invalid jsonb;
 BEGIN
@@ -40,7 +45,7 @@ END $$;
 SELECT set_config('request.jwt.claim.sub','efab0000-0000-4000-8000-000000000002',true);
 DO $$ BEGIN
  BEGIN
-  PERFORM public.oxygen_runtime('status','efab0000-0000-4000-8000-000000000041');
+  PERFORM public.oxygen_runtime('status','efab0000-0000-4000-8000-000000000041','{"includeEligibilityFailureReason":true}');
   RAISE EXCEPTION 'Stranger could read eligibility reason';
  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
  BEGIN
@@ -50,13 +55,17 @@ DO $$ BEGIN
 END $$;
 SELECT set_config('request.jwt.claim.sub','efab0000-0000-4000-8000-000000000001',true);
 DO $$ BEGIN
- IF public.oxygen_runtime('status','efab0000-0000-4000-8000-000000000041')->'state'->>'eligibilityFailureReason' IS DISTINCT FROM 'financial_details_mismatch' THEN
+ IF public.oxygen_runtime('status','efab0000-0000-4000-8000-000000000041')->'state' ? 'eligibilityFailureReason' THEN
+  RAISE EXCEPTION 'Legacy customer state exposed the new reason';
+ END IF;
+ IF public.oxygen_runtime('status','efab0000-0000-4000-8000-000000000041','{"includeEligibilityFailureReason":true}')->'state'->>'eligibilityFailureReason' IS DISTINCT FROM 'financial_details_mismatch' THEN
   RAISE EXCEPTION 'Owner could not read saved eligibility reason';
  END IF;
 END $$;
 RESET ROLE;
 DO $$ BEGIN
  IF (SELECT state->>'eligibilityStatus' FROM oxygen_private.provider_states WHERE workflow_id='efab0000-0000-4000-8000-000000000041') IS DISTINCT FROM 'failed' THEN RAISE EXCEPTION 'Failure status not saved'; END IF;
- IF (SELECT state->>'eligibilityFailureReason' FROM oxygen_private.provider_states WHERE workflow_id='efab0000-0000-4000-8000-000000000041') IS DISTINCT FROM 'financial_details_mismatch' THEN RAISE EXCEPTION 'Failure reason not saved'; END IF;
+ IF (SELECT state ? 'eligibilityFailureReason' FROM oxygen_private.provider_states WHERE workflow_id='efab0000-0000-4000-8000-000000000041') THEN RAISE EXCEPTION 'Failure reason leaked into legacy state'; END IF;
+ IF (SELECT eligibility_failure_reason FROM oxygen_private.provider_states WHERE workflow_id='efab0000-0000-4000-8000-000000000041') IS DISTINCT FROM 'financial_details_mismatch' THEN RAISE EXCEPTION 'Failure reason not saved'; END IF;
 END $$;
 ROLLBACK;

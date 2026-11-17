@@ -13,19 +13,19 @@ const MONNIFY_VEND_EVIDENCE_FIELDS = new Set(
     'transactionReference',
     'vendReference',
     'paymentReference',
+    // A string status ("FAILED", "PENDING") is the vend's own status; a
+    // numeric one is just an HTTP code and is ignored (isEvidenceValue).
+    'status',
   ].map(normaliseKey)
 );
 
 /**
  * Below the top level (responseBody and anything nested in it) a plain
- * `status` string is the vend's own status (the classifier reads it as a
- * fallback for vendStatus) and a plain `reference` is Monnify's record. At
- * the top level they are often just an error body's HTTP status or an echo
- * of our request reference, so they are not read there.
+ * `reference` is Monnify's record. At the top level it is often just an echo
+ * of our request reference, so it is not read there.
  */
 const MONNIFY_RESPONSE_BODY_EVIDENCE_FIELDS = new Set([
   ...MONNIFY_VEND_EVIDENCE_FIELDS,
-  normaliseKey('status'),
   normaliseKey('reference'),
 ]);
 

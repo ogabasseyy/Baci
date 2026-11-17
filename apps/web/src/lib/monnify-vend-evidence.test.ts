@@ -15,6 +15,7 @@ describe('hasMonnifyVendEvidence', () => {
     { response_body: { vend_status: 'FAILED' } },
     { ResponseBody: { Status: 'PENDING' } },
     { responseBody: { reference: 'MFBP-1' } },
+    { status: 'FAILED', responseMessage: 'Insufficient wallet balance' },
     { responseBody: { data: { vendStatus: 'FAILED' } } },
     { responseBody: { items: [{ transactionReference: 'MFBP-2' }] } },
     { data: { vend: { reference: 'MFBP-3' } } },

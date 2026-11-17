@@ -57,7 +57,7 @@ function readMonnifyAnswer(text: string, body: string): MonnifyAnswerReading {
     mentionsVendOutcome: isMonnifyVendOutcomeText(text),
     reportsUnexpectedError: reportsMonnifyUnexpectedError(body),
     readsAsAuthRejection:
-      /unauthori[sz]ed|forbidden|access denied|invalid (?:access )?token|(?:expired|revoked) token|token (?:expired|revoked)|invalid credentials?|authenticat/i.test(
+      /unauthori[sz]ed|forbidden|access denied|invalid (?:access )?token|(?:expired|revoked) token|token (?:expired|revoked)|invalid credentials?|authenticat|authori[sz]ation (?:header )?(?:is )?(?:missing|required|invalid)|missing authori[sz]ation/i.test(
         body
       ),
     showsVendEvidence:

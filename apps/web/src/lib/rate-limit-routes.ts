@@ -21,6 +21,16 @@ const RATE_LIMITS: Record<string, RateLimitConfig> = {
   // Search assistance is an expensive public AI call — keep it at the same
   // per-IP budget as quiz generation instead of the generic 50/min default.
   '/api/search/assist': { maxRequests: 5, windowMs: 60_000 },
+  // Anonymous device check (swap): each call is a multimodal AI request and
+  // cookie-less callers (the mobile app) pass no CSRF gate, so this budget
+  // is the abuse bound.
+  // Fail closed without Redis: per-instance memory counters would not bound
+  // paid AI calls.
+  '/api/ai/grade-device': {
+    maxRequests: 5,
+    windowMs: 60_000,
+    failClosedWithoutRedis: true,
+  },
   // Migration preview validation polls the active job about once per second.
   // Keep this prefix above the default ceiling so the UI can stream progress
   // without tripping middleware rate limiting during normal use.

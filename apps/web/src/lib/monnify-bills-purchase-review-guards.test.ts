@@ -271,3 +271,28 @@ describe('bugfix: the business path reads code 99 and refusals across the whole 
     });
   });
 });
+
+describe('bugfix: plain-text vend references and transaction-failed wording stay off Kuda', () => {
+  it('keeps a plain-text 4xx naming a vend reference off Kuda', async () => {
+    mockHttpError(
+      400,
+      'Bad Request',
+      'Insufficient wallet balance; vendReference=MFBP-1'
+    );
+
+    await expect(vend()).resolves.toMatchObject({
+      providerDefiniteFailure: false,
+    });
+  });
+
+  it('keeps "Transaction failed: insufficient wallet balance" off Kuda', async () => {
+    mockBusinessFailure({
+      responseCode: '01',
+      responseMessage: 'Transaction failed: insufficient wallet balance',
+    });
+
+    await expect(vend()).resolves.toMatchObject({
+      providerDefiniteFailure: false,
+    });
+  });
+});

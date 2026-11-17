@@ -1,6 +1,7 @@
 import { isMonnifyDuplicateReferenceText } from './monnify-duplicate-reference';
 import { reportsMonnifyUnexpectedError } from './monnify-unexpected-error-text';
 import { hasMonnifyVendEvidence } from './monnify-vend-evidence';
+import { mentionsMonnifyVendEvidence } from './monnify-vend-evidence-text';
 import { isMonnifyVendOutcomeText } from './monnify-vend-outcome';
 import { isMonnifyKnownVendRefusalText } from './monnify-vend-refusal';
 
@@ -59,7 +60,9 @@ function readMonnifyAnswer(text: string, body: string): MonnifyAnswerReading {
       /unauthori[sz]ed|forbidden|access denied|invalid (?:access )?token|(?:expired|revoked) token|token (?:expired|revoked)|invalid credentials?|authenticat/i.test(
         body
       ),
-    showsVendEvidence: hasMonnifyVendEvidence(parseJsonOrNull(body)),
+    showsVendEvidence:
+      hasMonnifyVendEvidence(parseJsonOrNull(body)) ||
+      mentionsMonnifyVendEvidence(body),
   };
 }
 

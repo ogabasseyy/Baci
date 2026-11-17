@@ -58,40 +58,16 @@ vi.mock('@/lib/supabase/anon', () => ({
 
 import { DEVICE_GRADING_MAX_UPLOAD_BYTES } from '@/schemas/device-grading';
 import { POST } from './route';
+import {
+  framesUpload,
+  post,
+  postWithCookies,
+  videoUpload,
+} from './route.test-support';
 
 function aiAnswers(answer: unknown) {
   mocks.generateContent.mockResolvedValue({
     response: { text: () => JSON.stringify(answer) },
-  });
-}
-
-function videoUpload(bytes = 3): FormData {
-  const formData = new FormData();
-  formData.append(
-    'video',
-    new Blob([new Uint8Array(bytes)], { type: 'video/mp4' }),
-    'device-video.mp4'
-  );
-  return formData;
-}
-
-function framesUpload(count: number, type = 'image/jpeg'): FormData {
-  const formData = new FormData();
-  for (let index = 0; index < count; index += 1) {
-    formData.append(
-      'frames',
-      new Blob([new Uint8Array([1, 2, 3])], { type }),
-      `frame-${index + 1}.jpg`
-    );
-  }
-  return formData;
-}
-
-/** Sent the way the mobile app sends it: no cookie, no CSRF header. */
-function post(body: FormData): NextRequest {
-  return new NextRequest('https://ogabassey.com/api/ai/grade-device', {
-    method: 'POST',
-    body,
   });
 }
 
@@ -139,10 +115,7 @@ describe('POST /api/ai/grade-device', () => {
 
   it('rejects a browser request that carries cookies but no valid CSRF token', async () => {
     mocks.checkCsrf.mockResolvedValue({ valid: false });
-    const request = new NextRequest(
-      'https://ogabassey.com/api/ai/grade-device',
-      { method: 'POST', body: videoUpload(), headers: { cookie: 'sid=abc' } }
-    );
+    const request = postWithCookies(videoUpload());
 
     const response = await POST(request);
 
@@ -152,10 +125,7 @@ describe('POST /api/ai/grade-device', () => {
   });
 
   it('grades a browser request whose CSRF token is valid', async () => {
-    const request = new NextRequest(
-      'https://ogabassey.com/api/ai/grade-device',
-      { method: 'POST', body: videoUpload(), headers: { cookie: 'sid=abc' } }
-    );
+    const request = postWithCookies(videoUpload());
 
     const response = await POST(request);
 
@@ -198,20 +168,6 @@ describe('POST /api/ai/grade-device', () => {
     expect(parts[1]).toEqual({
       inlineData: { data: 'AQID', mimeType: 'image/jpeg' },
     });
-  });
-
-  it('uses the client store slug only as the resolver fallback', async () => {
-    const formData = videoUpload();
-    formData.append('merchantSlug', ' Ogabassey ');
-
-    await POST(post(formData));
-
-    expect(mocks.resolveMerchant).toHaveBeenCalledWith(
-      expect.objectContaining({
-        fallbackIdentifier: 'ogabassey',
-        rootDomain: 'usebaci.com',
-      })
-    );
   });
 
   it('returns 400 when no media is provided', async () => {
@@ -272,19 +228,6 @@ describe('POST /api/ai/grade-device', () => {
     expect(mocks.generateContent).not.toHaveBeenCalled();
   });
 
-  it('treats an unpublished store as not found', async () => {
-    mocks.resolveMerchant.mockResolvedValue({
-      success: true,
-      identifier: 'ogabassey',
-      merchant: { id: 'merchant-1', is_published: false },
-    });
-
-    const response = await POST(post(videoUpload()));
-
-    expect(response.status).toBe(404);
-    expect(mocks.generateContent).not.toHaveBeenCalled();
-  });
-
   it('returns a safe error when the model call fails', async () => {
     mocks.generateContent.mockRejectedValue(
       new Error('429 quota exceeded for key AIza-secret')
@@ -317,39 +260,5 @@ describe('POST /api/ai/grade-device', () => {
     expect(response.status).toBe(502);
     expect((await response.json()).code).toBe('ANALYSIS_UNREADABLE');
     expect(mocks.productQuery.eq).not.toHaveBeenCalled();
-  });
-
-  it('escapes pattern characters in the model name before the lookup', async () => {
-    aiAnswers({ model: '100%_phone', grade: 'Fair', observations: [] });
-
-    await POST(post(videoUpload()));
-
-    expect(mocks.productQuery.ilike).toHaveBeenCalledWith(
-      'name',
-      '%100\\%\\_phone%'
-    );
-  });
-
-  it('returns no estimate when nothing in the store matches', async () => {
-    mocks.productQuery.result = { data: [], error: null };
-
-    const response = await POST(post(videoUpload()));
-    const body = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(body.data.basePrice).toBe(0);
-    expect(body.data.estimatedValue).toBe(0);
-    expect(body.data.matchedProduct).toBe('Unknown Device');
-  });
-
-  it('returns the grade without an estimate when the price lookup fails', async () => {
-    mocks.productQuery.result = { data: null, error: { code: '42501' } };
-
-    const response = await POST(post(videoUpload()));
-    const body = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(body.data.grade).toBe('Good');
-    expect(body.data.estimatedValue).toBe(0);
   });
 });

@@ -1,8 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { type NextRequest, NextResponse } from 'next/server';
-import { getRootDomain } from '@/env';
 import { checkCsrfProtection } from '@/lib/csrf';
-import { resolveStorefrontMerchantFromRequest } from '@/lib/storefront-merchant';
 import { deviceGradingAiResultSchema } from '@/schemas/device-grading';
 import { estimateTradeInValue } from './estimate-trade-in-value';
 import {
@@ -10,6 +8,7 @@ import {
   encodeDeviceMedia,
   readDeviceMedia,
 } from './read-device-media';
+import { resolveDeviceCheckStorefront } from './resolve-device-check-storefront';
 
 export const maxDuration = 60;
 
@@ -93,24 +92,14 @@ export async function POST(request: NextRequest) {
     if (!media.ok) return errorResponse(media.error, media.status);
 
     // The price lookup must stay inside the store the request came from.
-    const merchantResolution = await resolveStorefrontMerchantFromRequest({
-      fallbackIdentifier: media.merchantSlug,
-      lookupError: 'Failed to validate storefront host',
-      notFoundError: 'Device check is only available on storefront hosts',
+    const storefront = await resolveDeviceCheckStorefront(
       request,
-      rootDomain: getRootDomain() || 'usebaci.com',
-    });
-    if (!merchantResolution.success) {
+      media.merchantSlug
+    );
+    if (!storefront.ok) {
       return errorResponse(
-        merchantResolution.error,
-        merchantResolution.status,
-        'STOREFRONT_NOT_FOUND'
-      );
-    }
-    if (!merchantResolution.merchant.is_published) {
-      return errorResponse(
-        'Device check is only available on storefront hosts',
-        404,
+        storefront.error,
+        storefront.status,
         'STOREFRONT_NOT_FOUND'
       );
     }
@@ -142,7 +131,7 @@ export async function POST(request: NextRequest) {
     }
 
     const estimate = await estimateTradeInValue(
-      String(merchantResolution.merchant.id),
+      storefront.merchantId,
       grading.data
     );
 

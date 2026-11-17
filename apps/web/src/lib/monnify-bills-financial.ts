@@ -211,6 +211,7 @@ export async function purchaseBill(
         providerDefiniteFailure:
           error.status !== 408 &&
           !error.isDuplicateReference &&
+          !error.reportsUnexpectedError &&
           (((error.status === 401 || error.status === 403) &&
             !error.mentionsVendOutcome) ||
             error.isKnownRefusal),

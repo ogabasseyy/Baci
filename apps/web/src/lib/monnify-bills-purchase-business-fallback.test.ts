@@ -1,0 +1,187 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const { mockCacheLife, mockCacheTag } = vi.hoisted(() => ({
+  mockCacheLife: vi.fn(),
+  mockCacheTag: vi.fn(),
+}));
+
+vi.mock('next/cache', () => ({
+  cacheLife: mockCacheLife,
+  cacheTag: mockCacheTag,
+}));
+
+vi.mock('@/lib/monnify', () => ({
+  getMonnifyToken: vi.fn().mockResolvedValue('mock-token'),
+}));
+
+vi.mock('@/lib/monnify-provider-config', () => ({
+  getMonnifyBaseUrl: () => 'https://sandbox.monnify.com',
+}));
+
+import { purchaseBill } from './monnify-bills';
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
+describe('Monnify business answers handed to Kuda', () => {
+  function vend() {
+    return purchaseBill(
+      'MTN',
+      '13',
+      '08012345678',
+      100,
+      'JANE DOE',
+      'BACI-REF-123'
+    );
+  }
+
+  it('scrubs customer numbers out of a FAILED vend message', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        requestSuccessful: true,
+        responseCode: '0',
+        responseMessage: 'Vend failed for 08012345678',
+        responseBody: { vendReference: 'MFBP-1', vendStatus: 'FAILED' },
+      }),
+    });
+
+    const result = await vend();
+    expect(result.message).not.toContain('08012345678');
+  });
+
+  it('spots a duplicate signalled only in the business response body', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        requestSuccessful: false,
+        responseCode: '01',
+        responseMessage: 'Insufficient wallet balance',
+        responseBody: { reason: 'Duplicate vendReference' },
+      }),
+    });
+
+    await expect(vend()).resolves.toMatchObject({
+      providerDefiniteFailure: false,
+    });
+  });
+
+  it('never marks code 99 as definite, even with refusal wording', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        requestSuccessful: false,
+        responseCode: '99',
+        responseMessage: 'Service unavailable',
+      }),
+    });
+
+    await expect(vend()).resolves.toMatchObject({
+      providerDefiniteFailure: false,
+    });
+  });
+
+  it('never marks a FAILED vend that reports a duplicate as definite', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        requestSuccessful: true,
+        responseCode: '0',
+        responseMessage: 'Duplicate vendReference',
+        responseBody: { vendReference: 'MFBP-1', vendStatus: 'FAILED' },
+      }),
+    });
+
+    const result = await vend();
+    expect(result.status).toBe('failed');
+    expect(result.providerDefiniteFailure).toBeUndefined();
+  });
+
+  it('never marks Monnify code 99 (unexpected error) as definite', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        requestSuccessful: false,
+        responseCode: '99',
+        responseMessage: 'An unexpected error occurred while processing',
+      }),
+    });
+
+    await expect(vend()).resolves.toMatchObject({
+      providerDefiniteFailure: false,
+      status: 'failed',
+    });
+  });
+
+  it('scrubs customer numbers out of a business rejection message', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        requestSuccessful: false,
+        responseCode: '01',
+        responseMessage: 'Insufficient balance for customer 08012345678',
+      }),
+    });
+
+    const result = await vend();
+    expect(result.message).not.toContain('08012345678');
+    expect(result.providerDefiniteFailure).toBe(true);
+  });
+
+  it('marks a business rejection as definite unless it reports a duplicate', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        requestSuccessful: false,
+        responseCode: '01',
+        responseMessage: 'Insufficient Balance',
+      }),
+    });
+    await expect(vend()).resolves.toMatchObject({
+      providerDefiniteFailure: true,
+    });
+
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        requestSuccessful: false,
+        responseCode: '99',
+        responseMessage: 'Duplicate transaction reference',
+      }),
+    });
+    await expect(vend()).resolves.toMatchObject({
+      providerDefiniteFailure: false,
+    });
+
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        requestSuccessful: false,
+        responseCode: 'DUPLICATE_REFERENCE',
+        responseMessage: 'Request failed',
+      }),
+    });
+    await expect(vend()).resolves.toMatchObject({
+      providerDefiniteFailure: false,
+    });
+  });
+
+  it('never marks a FAILED vend status as definite', async () => {
+    // FAILED can follow a hand-off to the network, so it is not proof
+    // that nothing was delivered.
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        requestSuccessful: true,
+        responseCode: '0',
+        responseMessage: 'success',
+        responseBody: { vendReference: 'MFBP-1', vendStatus: 'FAILED' },
+      }),
+    });
+
+    const result = await vend();
+    expect(result.status).toBe('failed');
+    expect(result.providerDefiniteFailure).toBeUndefined();
+  });
+});

@@ -3581,6 +3581,7 @@ describe('fulfillPendingVtuTransaction', () => {
       updatePayloads,
     });
 
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const result = await fulfillPendingVtuTransaction({
       supabase,
       transactionId: 'vtu-1',
@@ -3602,6 +3603,12 @@ describe('fulfillPendingVtuTransaction', () => {
         status: 'failed',
       })
     );
+    // The switch to Kuda was never recorded, so it must not be logged.
+    expect(warnSpy).not.toHaveBeenCalledWith(
+      'Monnify refused airtime; vending through Kuda backup:',
+      expect.anything()
+    );
+    warnSpy.mockRestore();
   });
 
   it('resolves the current row instead of failing it when the fallback marker loses its race', async () => {

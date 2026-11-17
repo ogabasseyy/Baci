@@ -62,14 +62,6 @@ export async function executeMonnifyAirtimeKudaFallback({
     provider: 'kuda',
     providerFallback: 'monnify_airtime_to_kuda',
   };
-  // Every fallback is logged so an outage on the Monnify side (expired
-  // credentials, rate limits, low float) shows up instead of hiding behind
-  // Kuda, which keeps airtime working meanwhile.
-  // A fixed label only: no provider text in logs. The scrubbed Monnify
-  // message is stored on the row as monnifyFallbackError.
-  console.warn('Monnify refused airtime; vending through Kuda backup:', {
-    transactionId: row.id,
-  });
   const fallbackMarkerQuery = supabase
     .from('vtu_transactions')
     .update({
@@ -107,6 +99,16 @@ export async function executeMonnifyAirtimeKudaFallback({
   }
   row.metadata = { ...(row.metadata ?? {}), ...kudaFallbackPatch };
 
+  // Logged only once the Kuda routing marker is stored, right before the
+  // Kuda call, so the log never claims a fallback that did not happen.
+  // Every fallback is logged so an outage on the Monnify side (expired
+  // credentials, rate limits, low float) shows up instead of hiding behind
+  // Kuda, which keeps airtime working meanwhile.
+  // A fixed label only: no provider text in logs. The scrubbed Monnify
+  // message is stored on the row as monnifyFallbackError.
+  console.warn('Monnify refused airtime; vending through Kuda backup:', {
+    transactionId: row.id,
+  });
   const kudaFallbackResult = await purchaseAirtime(
     row.phone_number,
     row.amount,

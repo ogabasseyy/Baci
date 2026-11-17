@@ -63,6 +63,14 @@ export class MonnifyHttpError extends Error {
     return isMonnifyKnownVendRefusalText(classificationText(this));
   }
 
+  /**
+   * The body carries Monnify's code 99 ("unexpected error, re-query"),
+   * whatever the HTTP status, so the outcome is unknown.
+   */
+  get reportsUnexpectedError() {
+    return /"responseCode"\s*:\s*"?99"?(?!\d)/.test(classificationText(this));
+  }
+
   /** The answer talks about a vend outcome or an unavailable service. */
   get mentionsVendOutcome() {
     return /unavailable|vend\w*\s+(?:request\s+)?fail|fail\w*\s+to\s+vend/i.test(

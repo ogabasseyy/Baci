@@ -17,9 +17,18 @@ describe('TRACKING_URL_INLINE_SANITIZER', () => {
     '/account/login?redirect=%2Freceipts%2Fclaim%2Fsecret&a=1',
     '/l?redirectTo=%2Fx&redirect_to=%2Fx&next=%2Fx&returnTo=%2Fx&return_to=%2Fx&callbackUrl=%2Fx&k=1',
     '/p?customer_email=a%40b.c&customer_name=Ada&customer_phone=080&payer_name=Bo&payerName=Bo',
+    '/receipts/claim/secret-token',
+    'https://shop.example/acme/receipts/claim/secret-token?a=1&email=a%40b.c#x',
+    '/Receipts/Claim/abc/extra?x=1',
     'not a url?token=abc',
     '',
   ])('behaves like sanitizeTrackingUrl for %s', (url) => {
     expect(inline(url)).toBe(sanitizeTrackingUrl(url));
+  });
+
+  it('redacts the receipt claim token in the path', () => {
+    expect(inline('https://s.test/a/receipts/claim/secret-token?a=1')).toBe(
+      'https://s.test/a/receipts/claim/[redacted]?a=1'
+    );
   });
 });

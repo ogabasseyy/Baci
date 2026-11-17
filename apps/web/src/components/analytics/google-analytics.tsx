@@ -59,8 +59,18 @@ export function GoogleAnalytics({ measurementId }: GoogleAnalyticsProps) {
     };
   }, []);
 
+  const isValidId = GA4_MEASUREMENT_ID_PATTERN.test(measurementId);
+  useEffect(() => {
+    // Silent for an unset id; a set but malformed id is a misconfiguration.
+    if (measurementId && !isValidId) {
+      console.warn(
+        'GoogleAnalytics: measurement id is not a GA4 id (expected G-XXXXXXXX); analytics is disabled.'
+      );
+    }
+  }, [measurementId, isValidId]);
+
   // Don't render scripts until consent mode is initialized
-  if (!GA4_MEASUREMENT_ID_PATTERN.test(measurementId) || !isInitialized) {
+  if (!isValidId || !isInitialized) {
     return null;
   }
 

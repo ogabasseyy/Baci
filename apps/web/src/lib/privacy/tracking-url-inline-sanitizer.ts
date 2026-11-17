@@ -1,4 +1,8 @@
-import { SENSITIVE_URL_PARAM_NAMES } from './sensitive-url-params';
+import {
+  PATH_TOKEN_PLACEHOLDER,
+  SENSITIVE_PATH_REGEX_SOURCE,
+  SENSITIVE_URL_PARAM_NAMES,
+} from './sensitive-url-params';
 
 /**
  * Self-contained browser-side twin of `sanitizeTrackingUrl`, for inline
@@ -12,7 +16,9 @@ function baciSanitizeUrl(u) {
   var sensitive = ${JSON.stringify(
     SENSITIVE_URL_PARAM_NAMES.map((name) => name.toLowerCase())
   )};
-  var s = String(u).split('#')[0];
+  var s = String(u).split('#')[0].replace(new RegExp(${JSON.stringify(
+    SENSITIVE_PATH_REGEX_SOURCE
+  )}, 'gi'), '$1' + ${JSON.stringify(PATH_TOKEN_PLACEHOLDER)});
   var i = s.indexOf('?');
   if (i < 0) return s;
   var base = s.slice(0, i);

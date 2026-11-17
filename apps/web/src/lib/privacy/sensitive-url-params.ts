@@ -21,6 +21,10 @@ export const SENSITIVE_URL_PARAM_NAMES = [
   'customerPhone',
   'customer_phone',
   'customer-phone',
+  // Bare `name` and `next` are broad on purpose: the hooked pages receive shopper
+  // names and post-login redirect targets under exactly these keys. A stripped
+  // value is restored from the per-tab stash on reload but is not kept when the
+  // link is shared or opened in another tab, which is intended for personal data.
   'name',
   'customerName',
   'customer_name',
@@ -43,6 +47,34 @@ export const SENSITIVE_URL_PARAM_NAMES = [
 const SENSITIVE_LOWERCASE = new Set(
   SENSITIVE_URL_PARAM_NAMES.map((name) => name.toLowerCase())
 );
+
+/**
+ * Path prefixes whose NEXT segment is a capability token (anyone holding the
+ * link can act on it). Shopper-facing routes only: today that is the receipt
+ * claim link `/receipts/claim/<token>`. The segment is replaced with
+ * `PATH_TOKEN_PLACEHOLDER` in every URL sent to a vendor; it works for bare
+ * paths and absolute URLs, with or without a storefront prefix.
+ */
+export const SENSITIVE_PATH_PREFIXES = ['/receipts/claim/'] as const;
+
+export const PATH_TOKEN_PLACEHOLDER = '[redacted]';
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** Source of the regex that matches a prefix and the token segment after it. */
+export const SENSITIVE_PATH_REGEX_SOURCE = `(${SENSITIVE_PATH_PREFIXES.map(
+  escapeRegExp
+).join('|')})[^/?#]+`;
+
+/** Replaces the token segment of any sensitive path prefix in `url`. */
+export function redactPathTokens(url: string): string {
+  return url.replace(
+    new RegExp(SENSITIVE_PATH_REGEX_SOURCE, 'gi'),
+    `$1${PATH_TOKEN_PLACEHOLDER}`
+  );
+}
 
 export type PrivateEntry = [name: string, value: string];
 

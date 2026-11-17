@@ -65,4 +65,26 @@ describe('sanitizeTrackingUrl', () => {
       );
     }
   });
+
+  describe('bugfix: path-embedded receipt claim tokens reached vendors', () => {
+    it.each([
+      ['/receipts/claim/secret-token', '/receipts/claim/[redacted]'],
+      [
+        'https://shop.example/acme/receipts/claim/secret-token?a=1&email=a%40b.c#x',
+        'https://shop.example/acme/receipts/claim/[redacted]?a=1',
+      ],
+      [
+        '/receipts/claim/secret-token/extra',
+        '/receipts/claim/[redacted]/extra',
+      ],
+    ])('redacts the token segment of %s', (input, expected) => {
+      expect(sanitizeTrackingUrl(input)).toBe(expected);
+    });
+
+    it('leaves other paths untouched', () => {
+      expect(sanitizeTrackingUrl('/receipts/list?a=1')).toBe(
+        '/receipts/list?a=1'
+      );
+    });
+  });
 });

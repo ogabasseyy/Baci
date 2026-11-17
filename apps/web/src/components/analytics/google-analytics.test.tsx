@@ -75,10 +75,17 @@ describe('bugfix: measurement id was interpolated into the inline script uncheck
     'UA-1234-5',
     '',
   ])('renders no script for the invalid id %j', async (id) => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const { container } = render(<GoogleAnalytics measurementId={id} />);
     await new Promise((resolve) => setTimeout(resolve, 20));
 
     expect(container.querySelector('script')).toBeNull();
+    if (id) {
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(String(warn.mock.calls[0]?.[0])).not.toContain(id);
+    } else {
+      expect(warn).not.toHaveBeenCalled();
+    }
   });
 
   it('still renders the config for a valid GA4 id', async () => {

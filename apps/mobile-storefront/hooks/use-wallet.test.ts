@@ -1028,6 +1028,33 @@ describe('useWallet', () => {
     queryClient.clear();
   });
 
+  it('bugfix: gives wallet hooks mounted in the same millisecond their own realtime channels', async () => {
+    // The utilities screen mounts useWallet twice at once. Supabase hands back
+    // the already-subscribed channel for a repeated name, and adding listeners
+    // to it throws, which crashed the airtime screen on open.
+    setupWalletTableMocks();
+    const queryClient = createTestClient();
+    const { supabase } = jest.requireMock<{
+      supabase: { channel: jest.Mock };
+    }>('@/lib/supabase');
+    supabase.channel.mockClear();
+    const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(1_794_935_225_811);
+
+    const { result, unmount } = renderHook(
+      () => ({ first: useWallet(), second: useWallet() }),
+      { wrapper: createWrapper(queryClient) }
+    );
+
+    await waitFor(() => expect(result.current.first.data).toBeDefined());
+    const names = supabase.channel.mock.calls.map((call) => call[0]);
+    expect(names.length).toBeGreaterThanOrEqual(2);
+    expect(new Set(names).size).toBe(names.length);
+
+    nowSpy.mockRestore();
+    unmount();
+    queryClient.clear();
+  });
+
   it('keeps display wallet cache fresh across quick wallet-screen returns', () => {
     const { tableCalls } = setupWalletTableMocks();
     const queryClient = createTestClient();

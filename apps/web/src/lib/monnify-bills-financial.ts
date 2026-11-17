@@ -21,6 +21,7 @@ import {
 import { classifyMonnifyBillStatus } from './monnify-bills-status';
 import { isMonnifyDuplicateReferenceText } from './monnify-duplicate-reference';
 import { isMonnifyUnexpectedErrorCode } from './monnify-unexpected-error';
+import { reportsMonnifyUnexpectedError } from './monnify-unexpected-error-text';
 import { hasMonnifyVendEvidence } from './monnify-vend-evidence';
 import { isMonnifyVendOutcomeText } from './monnify-vend-outcome';
 import { isMonnifyKnownVendRefusalText } from './monnify-vend-refusal';
@@ -127,6 +128,8 @@ export async function purchaseBill(
         responseCode: parsedEnvelope.responseCode,
         responseMessage: parsedEnvelope.responseMessage,
       });
+      const envelopeText = JSON.stringify(envelope);
+      const fullAnswer = `${parsedEnvelope.responseCode ?? ''} ${rawMessage} ${envelopeText}`;
       return {
         success: false,
         reference: requestReference,
@@ -136,24 +139,17 @@ export async function purchaseBill(
         message: sanitizeMonnifyErrorDetail(rawMessage),
         status: 'failed',
         amount,
-        // Code 99 is Monnify's "unexpected error, re-query" answer: never a
-        // refusal, whatever its message says.
+        // Every check reads the whole answer (code, message and body), so a
+        // signal nested anywhere in it counts. Code 99 ("unexpected error,
+        // re-query"), vend evidence, outcome wording and duplicates rule a
+        // refusal out; a known refusal anywhere rules it in.
         providerDefiniteFailure:
           !isMonnifyUnexpectedErrorCode(parsedEnvelope.responseCode) &&
-          // A body showing a vend status or reference may have reached the
-          // network: never a pre-vend refusal.
+          !reportsMonnifyUnexpectedError(envelopeText) &&
           !hasMonnifyVendEvidence(envelope) &&
-          isMonnifyKnownVendRefusalText(rawMessage) &&
-          // Outcome wording anywhere in the answer (e.g. a nested reason)
-          // rules it out, not just in the top-level message.
-          !isMonnifyVendOutcomeText(
-            `${rawMessage} ${JSON.stringify(envelope)}`
-          ) &&
-          // Read the whole answer (code, message and body), so a duplicate
-          // signalled anywhere in it is caught.
-          !isMonnifyDuplicateReferenceText(
-            `${parsedEnvelope.responseCode ?? ''} ${rawMessage} ${JSON.stringify(envelope)}`
-          ),
+          isMonnifyKnownVendRefusalText(fullAnswer) &&
+          !isMonnifyVendOutcomeText(fullAnswer) &&
+          !isMonnifyDuplicateReferenceText(fullAnswer),
       };
     }
 

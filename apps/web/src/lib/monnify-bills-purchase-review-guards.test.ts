@@ -245,3 +245,29 @@ describe('bugfix: nested vend outcome or status fields keep a business rejection
     });
   });
 });
+
+describe('bugfix: the business path reads code 99 and refusals across the whole envelope', () => {
+  it('keeps a refusal whose nested responseCode is 99 off Kuda', async () => {
+    mockBusinessFailure({
+      responseCode: '01',
+      responseMessage: 'Insufficient wallet balance',
+      responseBody: { responseCode: '99' },
+    });
+
+    await expect(vend()).resolves.toMatchObject({
+      providerDefiniteFailure: false,
+    });
+  });
+
+  it('hands a refusal given only in a nested reason to Kuda', async () => {
+    mockBusinessFailure({
+      responseCode: '01',
+      responseMessage: 'Request failed',
+      responseBody: { reason: 'Insufficient wallet balance' },
+    });
+
+    await expect(vend()).resolves.toMatchObject({
+      providerDefiniteFailure: true,
+    });
+  });
+});

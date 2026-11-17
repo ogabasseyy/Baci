@@ -10,6 +10,7 @@ import {
   groupPostsByMerchant,
   revalidateScheduledPostsByMerchant,
 } from './publish-scheduled-posts-revalidation';
+import { recoverMerchantBlogReleaseReservations } from './recover-abandoned-reservations';
 
 export async function publishScheduledPosts(supabase: SupabaseClient) {
   try {
@@ -68,6 +69,11 @@ export async function publishScheduledPosts(supabase: SupabaseClient) {
         { status: 500 }
       );
     }
+
+    const reservationRecovery = await recoverMerchantBlogReleaseReservations(
+      supabase,
+      scheduledMerchantIds
+    );
 
     const { eligiblePosts, skipped, warnings } = getEligibleScheduledPosts(
       merchantScheduledPosts as ScheduledPost[],
@@ -267,6 +273,7 @@ export async function publishScheduledPosts(supabase: SupabaseClient) {
       skipped,
       warnings,
       zohoCampaigns: campaignResults,
+      ...(reservationRecovery ? { reservationRecovery } : {}),
     });
   } catch (error) {
     console.error('Cron Job Failed:', error);

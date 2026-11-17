@@ -41,7 +41,7 @@ function readNullableString(value: unknown): string | null {
   return typeof value === 'string' ? value : null;
 }
 
-function readRpcMutationError(
+export function readRpcMutationError(
   error: {
     code?: string;
     details?: string;

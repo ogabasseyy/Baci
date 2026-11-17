@@ -86,7 +86,11 @@ export function BlogList({
           const isListingLcpImage = index === firstImageIndex;
 
           return (
-            <Link key={post.id} href={`${basePath}/blog/${post.slug}` as Route}>
+            <Link
+              key={post.id}
+              href={`${basePath}/blog/${post.slug}` as Route}
+              prefetch={false}
+            >
               <Card className="group h-full overflow-hidden transition-shadow hover:shadow-lg">
                 {post.featured_image_url && (
                   <div className="relative aspect-video overflow-hidden">

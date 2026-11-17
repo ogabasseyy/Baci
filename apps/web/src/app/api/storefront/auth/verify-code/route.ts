@@ -1,5 +1,9 @@
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
+import {
+  CUSTOMER_SESSION_HINT_COOKIE,
+  CUSTOMER_SESSION_HINT_MAX_AGE_SECONDS,
+} from '@/contexts/customer-session-hint';
 import { logger } from '@/lib/logger';
 import {
   checkStorefrontOtpVerifyLockout,
@@ -210,7 +214,7 @@ export async function POST(request: Request) {
             expires_at: baseSession?.expires_at,
           };
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       message: 'Login successful',
       user: {
@@ -224,6 +228,17 @@ export async function POST(request: Request) {
       },
       session,
     });
+
+    if (resolvedAudience !== 'native') {
+      response.cookies.set(CUSTOMER_SESSION_HINT_COOKIE, '1', {
+        path: '/',
+        maxAge: CUSTOMER_SESSION_HINT_MAX_AGE_SECONDS,
+        sameSite: 'lax',
+        secure: new URL(request.url).protocol === 'https:',
+      });
+    }
+
+    return response;
   } catch (error) {
     logger.error({
       message: 'Verify code internal error',

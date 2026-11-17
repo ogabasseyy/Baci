@@ -69,7 +69,7 @@ describe('estimateTradeInValue', () => {
       ['ilike', 'name', '%iPhone 13 Pro%'],
       ['gt', 'price', 0],
       ['order', 'price', { ascending: true }],
-      ['limit', 25],
+      ['limit', 100],
     ]);
   });
 
@@ -88,6 +88,23 @@ describe('estimateTradeInValue', () => {
 
     expect(estimate.matchedProduct).toBe('Apple iPhone 13 Pro 128GB');
     expect(estimate.estimatedValue).toBe(300000);
+  });
+
+  it('finds the device behind a long run of cheaper accessories', async () => {
+    query.result = {
+      data: [
+        ...Array.from({ length: 60 }, (_unused, index) => ({
+          name: `iPhone 13 Pro Case ${index + 1}`,
+          price: 2000 + index,
+        })),
+        { name: 'Apple iPhone 13 Pro 128GB', price: 500000 },
+      ],
+      error: null,
+    };
+
+    const estimate = await estimateTradeInValue('merchant-1', grading('Good'));
+
+    expect(estimate.matchedProduct).toBe('Apple iPhone 13 Pro 128GB');
   });
 
   it('gives no estimate when only accessories match', async () => {

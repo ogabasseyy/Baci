@@ -13,8 +13,12 @@ const GRADE_OFFER_PERCENT: Record<DeviceGradingAiResult['grade'], number> = {
   Poor: 30,
 };
 
-/** Listings fetched per check, so accessories can be skipped in code. */
-const MATCH_LIMIT = 25;
+/**
+ * Listings fetched per check (name and price only), so accessories can be
+ * skipped in code. Sized so a store's cheap accessories for one model cannot
+ * fill the whole window and hide the device listing behind them.
+ */
+const MATCH_LIMIT = 100;
 
 /**
  * A model name also appears in accessory listings ("iPhone 13 Pro case").

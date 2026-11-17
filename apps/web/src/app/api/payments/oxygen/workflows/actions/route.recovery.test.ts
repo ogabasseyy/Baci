@@ -78,7 +78,9 @@ it.each([
   m.auth.mockResolvedValue({ user: { id: 'customer' }, supabase: {} });
   m.read.mockResolvedValue(snapshot);
   m.connect.mockReturnValue(null);
-  const headers = version ? { 'x-oxygen-eligibility-reason': version } : {};
+  const headers: Record<string, string> = version
+    ? { 'x-oxygen-eligibility-reason': version }
+    : {};
   const response = await GET(
     new NextRequest(
       `http://localhost/api/payments/oxygen/workflows/actions?workflowId=${id}`,

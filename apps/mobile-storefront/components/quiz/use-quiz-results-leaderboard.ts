@@ -4,7 +4,7 @@ import { fetchQuizLeaderboard } from '@/services/quiz-leaderboard';
 import { fetchQuizLiveLeaderboard } from '@/services/quiz-live-leaderboard';
 import { type QuizLeaderboard, QuizServiceError } from '@/services/quiz-types';
 import type { QuizV2LifecycleStatus } from '@/stores/quiz-recovery-envelope';
-import { backoffDelay } from './quiz-retry-timing';
+import { backoffDelay } from './quiz-backoff-delay';
 
 const LIVE_REFRESH_INTERVAL_MS = 10_000;
 const FINAL_RETRY_INTERVAL_MS = 10_000;

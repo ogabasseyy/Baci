@@ -51,7 +51,7 @@ describe('useQuizWaitingRoom', () => {
       });
     };
 
-    it('delays the first boundary refresh by the per-mount random offset', async () => {
+    it('delays the first boundary refresh by a random offset', async () => {
       randomSpy.mockReturnValue(0.999);
       const refresh = jest
         .fn<() => Promise<QuizEvent[]>>()
@@ -66,7 +66,7 @@ describe('useQuizWaitingRoom', () => {
       expect(refresh).toHaveBeenCalledTimes(1);
     });
 
-    it('refreshes at once when the per-mount offset is zero', async () => {
+    it('refreshes at once when the random offset is zero', async () => {
       const refresh = jest
         .fn<() => Promise<QuizEvent[]>>()
         .mockResolvedValue([event({ serverNow: undefined })]);
@@ -131,8 +131,7 @@ describe('useQuizWaitingRoom', () => {
       expect(refresh).toHaveBeenCalledTimes(4);
     });
 
-    it('spreads the refresh again when a moved start brings the countdown back to zero', async () => {
-      randomSpy.mockReturnValue(0.999);
+    it('draws a fresh offset when a moved start brings the countdown back to zero', async () => {
       const refresh = jest
         .fn<() => Promise<QuizEvent[]>>()
         .mockResolvedValue([
@@ -140,11 +139,14 @@ describe('useQuizWaitingRoom', () => {
         ]);
       renderAtCountdownZero(refresh);
 
-      // First zero at 12:00:00, refreshed one offset later: start moved 30 s.
-      await advance(61_000);
+      // First zero at 12:00:00 with a zero offset: refreshed at once, and the
+      // start has moved 30 s.
+      await advance(60_000);
       expect(refresh).toHaveBeenCalledTimes(1);
-      // Second zero at 12:00:30: the offset applies again, not an instant call.
-      await advance(29_000 + 750);
+      // Second zero at 12:00:30 draws its own offset (about 1 s here), so it
+      // neither fires at once nor repeats the first one.
+      randomSpy.mockReturnValue(0.999);
+      await advance(30_000 + 750);
       expect(refresh).toHaveBeenCalledTimes(1);
       await advance(250);
       expect(refresh).toHaveBeenCalledTimes(2);

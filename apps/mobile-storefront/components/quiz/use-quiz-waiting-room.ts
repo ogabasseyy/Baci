@@ -2,11 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { isQuizRewardedFlowActive } from '@/lib/quiz-fullscreen-ownership';
 import type { QuizEvent } from '@/services/quiz-types';
-import {
-  randomDelay,
-  waitingRoomRetryDelay,
-  withSpread,
-} from './quiz-retry-timing';
+import { randomDelay } from './quiz-random-delay';
+import { waitingRoomRetryDelay } from './quiz-waiting-room-retry-delay';
+import { withSpread } from './quiz-with-spread';
 import { calculateQuizServerClockOffset } from './use-quiz-server-clock';
 import { useQuizStartHold } from './use-quiz-start-hold';
 import { useQuizStartInterstitialRequest } from './use-quiz-start-interstitial-request';
@@ -242,8 +240,6 @@ export function useQuizWaitingRoom({
 
   useEffect(() => {
     let mounted = true;
-    // Per-mount offset, re-armed while counting down, to spread phones at zero.
-    const firstRefreshOffsetMs = randomDelay(BOUNDARY_REFRESH_INTERVAL_MS);
     const tick = () => {
       if (
         !mounted ||
@@ -257,10 +253,13 @@ export function useQuizWaitingRoom({
         offsetRef.current
       );
       setRemainingSeconds(nextRemainingSeconds);
+      // While counting down, re-arm: each time the countdown reaches zero the
+      // first refresh waits a fresh random offset, to spread the phones.
       if (nextRemainingSeconds !== 0) nextBoundaryRefreshAtRef.current = 0;
       if (nextRemainingSeconds === 0) {
         const now = Date.now();
-        nextBoundaryRefreshAtRef.current ||= now + firstRefreshOffsetMs;
+        nextBoundaryRefreshAtRef.current ||=
+          now + randomDelay(BOUNDARY_REFRESH_INTERVAL_MS);
         if (now >= nextBoundaryRefreshAtRef.current) {
           nextBoundaryRefreshAtRef.current =
             now + withSpread(BOUNDARY_REFRESH_INTERVAL_MS);

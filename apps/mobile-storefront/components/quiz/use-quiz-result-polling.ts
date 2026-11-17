@@ -2,12 +2,10 @@ import { useEffect, useRef } from 'react';
 import { AppState } from 'react-native';
 import { fetchQuizResult } from '@/services/quiz-results';
 import type { QuizV2Result } from '@/services/quiz-types';
-import {
-  backoffDelay,
-  isOverloadError,
-  randomDelay,
-  withSpread,
-} from './quiz-retry-timing';
+import { backoffDelay } from './quiz-backoff-delay';
+import { isOverloadError } from './quiz-is-overload-error';
+import { randomDelay } from './quiz-random-delay';
+import { withSpread } from './quiz-with-spread';
 import { useQuizResultRealtimeWakeup } from './use-quiz-result-realtime-wakeup';
 
 export const QUIZ_RESULT_POLL_INTERVAL_MS = 5_000;

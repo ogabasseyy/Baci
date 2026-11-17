@@ -28,6 +28,7 @@ export function useSantaPolling(merchantId: string | undefined) {
     setPollError(null);
     let isStale = false;
     let inFlight = false;
+    let stalledTicks = 0;
     let latestRequestId = 0;
     let attempts = 0;
     let interval: ReturnType<typeof setInterval> | null = null;
@@ -40,7 +41,16 @@ export function useSantaPolling(merchantId: string | undefined) {
     }
 
     function fetchData() {
-      if (isStale || inFlight) return;
+      if (isStale) return;
+      if (inFlight) {
+        stalledTicks += 1;
+        if (stalledTicks >= 3) {
+          stopPolling();
+          setPollingPaused(true);
+          setPollError('Unable to refresh live campaign stats.');
+        }
+        return;
+      }
       if (
         typeof document !== 'undefined' &&
         document.visibilityState === 'hidden'
@@ -55,13 +65,24 @@ export function useSantaPolling(merchantId: string | undefined) {
 
       attempts += 1;
       inFlight = true;
+      stalledTicks = 0;
       const requestId = ++latestRequestId;
       let timeoutId: ReturnType<typeof setTimeout> | null = null;
+      const underlyingRequest = Promise.all([
+        getSantaStats(activeMerchantId),
+        getRecentInteractions(activeMerchantId),
+      ]);
+      // Keep inFlight true until the underlying server actions settle so a
+      // timed-out request cannot overlap with a new interval tick; consecutive
+      // in-flight ticks are bounded above by stalledTicks.
+      void underlyingRequest
+        .catch(() => undefined)
+        .finally(() => {
+          inFlight = false;
+          stalledTicks = 0;
+        });
       Promise.race([
-        Promise.all([
-          getSantaStats(activeMerchantId),
-          getRecentInteractions(activeMerchantId),
-        ]),
+        underlyingRequest,
         new Promise<never>((_, reject) => {
           timeoutId = setTimeout(
             () => reject(new Error('Santa poll request timed out')),
@@ -83,9 +104,6 @@ export function useSantaPolling(merchantId: string | undefined) {
         })
         .finally(() => {
           if (timeoutId !== null) clearTimeout(timeoutId);
-          if (requestId === latestRequestId) {
-            inFlight = false;
-          }
           if (isStale) return;
           setLoading(false);
           if (attempts >= MAX_SANTA_POLL_ATTEMPTS) {

@@ -141,7 +141,7 @@ export async function revalidateScheduledPostsByMerchant(
             purgeResult.reason ?? 'unknown'
           );
         }
-        edgePurgeOnly = true;
+        edgePurgeOnly = purgeResult.ok;
       };
 
       if (process.env.VPS_WORKER === '1') {

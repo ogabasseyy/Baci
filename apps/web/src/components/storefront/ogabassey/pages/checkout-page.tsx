@@ -5,6 +5,7 @@ import { useCart } from '@/hooks/cart';
 import { useCurrency } from '@/hooks/use-currency';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { usePrivateSearchParamsState } from '@/hooks/use-private-search-params';
+import { stashPrivateParamsForNavigation } from '@/lib/privacy/private-url-param-handoff';
 import { asRoute } from '@/lib/routes';
 import { hasStorefrontPriceNegotiation } from '@/lib/storefront-price-negotiation';
 import { checkoutHref } from './checkout/checkout-href';
@@ -57,6 +58,9 @@ export const CheckoutPage: React.FC<OxygenCheckoutSlots> = (oxygenSlots) => {
   const basePath = merchantContext?.basePath;
   const router = useRouter();
   const getHref = (path: string) => checkoutHref(basePath, path);
+  // In-app pushes carrying a token/email go off the URL (see the hand-off helper).
+  const handOff = (url: string) =>
+    stashPrivateParamsForNavigation(url, merchant?.slug);
   const { searchParams, isReady } = usePrivateSearchParamsState();
   const isHydrated = isCartHydrated && isReady;
   const user = useCheckoutUser();
@@ -85,7 +89,7 @@ export const CheckoutPage: React.FC<OxygenCheckoutSlots> = (oxygenSlots) => {
     navigation: {
       setCurrentStep,
       setCompletedSteps,
-      routerPush: (url) => router.push(asRoute(url)),
+      routerPush: (url) => router.push(asRoute(handOff(url))),
       getHref,
     },
     funnel: {
@@ -215,7 +219,7 @@ export const CheckoutPage: React.FC<OxygenCheckoutSlots> = (oxygenSlots) => {
       flow: checkoutFlow,
       pushSuccessRoute: (url) =>
         navigateCheckoutResult(
-          url,
+          handOff(url),
           (path) => router.push(asRoute(path)),
           (path) => window.location.assign(path)
         ),

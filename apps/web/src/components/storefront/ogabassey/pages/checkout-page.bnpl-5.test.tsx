@@ -114,10 +114,16 @@ it('records payment_completed before redirecting a paid wallet-funded transfer',
       })
     );
     expect(routerPush).toHaveBeenCalledWith(
-      expect.stringContaining(
-        '/order-success?orderId=order-wf-1&wallet=true&trackingToken=track-wf-1'
-      )
+      expect.stringContaining('/order-success?orderId=order-wf-1&wallet=true')
     );
+    expect(JSON.stringify(routerPush.mock.calls)).not.toContain('track-wf-1');
+
+    expect(
+      JSON.parse(
+        window.sessionStorage.getItem('baci:private-url-params-pending') ??
+          'null'
+      )?.entries
+    ).toEqual([['trackingToken', 'track-wf-1']]);
   } finally {
     fetchMock.mockRestore();
   }

@@ -3,6 +3,8 @@ import { useEffect, useSyncExternalStore } from 'react';
 import { hydrateRoot } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { stashPrivateParamsForNavigation } from '@/lib/privacy/private-url-param-handoff';
+import { currentPrivateParamsId } from '@/lib/privacy/private-url-param-stash';
 import {
   usePrivateSearchParams,
   usePrivateSearchParamsState,
@@ -114,5 +116,33 @@ describe('bugfix: reloaded scrubbed link hydrated with values the server never r
     });
 
     expect(seen.every(Boolean)).toBe(true);
+  });
+
+  it('reads and claims an off-URL hand-off after a full-page navigation hydrates server HTML', async () => {
+    visit('/track-order?orderId=1');
+    const cleaned = stashPrivateParamsForNavigation(
+      '/track-order?orderId=1&token=abc',
+      'shop'
+    );
+    // Full-page navigation: a new document at the cleaned URL, no history stash id.
+    visit(cleaned);
+    expect(currentPrivateParamsId()).toBeNull();
+    const log: ProbeLog = { renders: [], effects: [] };
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    container.innerHTML = renderToString(<Probe log={{ ...log }} />);
+    const onRecoverableError = vi.fn();
+
+    await act(async () => {
+      hydrateRoot(container, <Probe log={log} />, { onRecoverableError });
+    });
+
+    expect(onRecoverableError).not.toHaveBeenCalled();
+    expect(container.textContent).toBe('abc');
+    expect(log.effects).toEqual(['abc']);
+    expect(currentPrivateParamsId()).not.toBeNull();
+    expect(
+      window.sessionStorage.getItem('baci:private-url-params-pending')
+    ).toBeNull();
   });
 });

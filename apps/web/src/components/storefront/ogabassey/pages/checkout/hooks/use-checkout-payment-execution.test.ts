@@ -203,8 +203,14 @@ describe('useCheckoutPaymentExecution', () => {
     expect(mocks.clearIdempotencyKey).toHaveBeenCalledWith('fingerprint-1');
     expect(options.form.session.clear).toHaveBeenCalledOnce();
     expect(mocks.push).toHaveBeenCalledWith(
-      '/shop/order-success?orderId=order-paid-1&wallet=true&trackingToken=paid-track-1'
+      '/shop/order-success?orderId=order-paid-1&wallet=true'
     );
+    expect(
+      JSON.parse(
+        window.sessionStorage.getItem('baci:private-url-params-pending') ??
+          'null'
+      )?.entries
+    ).toEqual([['trackingToken', 'paid-track-1']]);
     act(() => vi.advanceTimersByTime(500));
     expect(options.cart.clearCart).toHaveBeenCalledOnce();
   });

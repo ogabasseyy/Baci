@@ -242,3 +242,48 @@ describe('slug-tolerant matching (custom domains drop the slug prefix)', () => {
     expect(window.sessionStorage.length).toBe(0);
   });
 });
+
+describe('bugfix: an expired hand-off kept its token in sessionStorage', () => {
+  const KEY = 'baci:private-url-params-pending';
+
+  beforeEach(() => {
+    window.sessionStorage.clear();
+    visit('/shop/checkout/bnpl?orderId=1');
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    visit('/');
+  });
+
+  it('deletes the record when it is read after expiry', () => {
+    vi.useFakeTimers();
+    stashPrivateParamsForNavigation(TARGET, SLUG);
+    expect(window.sessionStorage.getItem(KEY)).not.toBeNull();
+
+    vi.advanceTimersByTime(PENDING_HANDOFF_TTL_MS);
+    expect(
+      readPendingPrivateParams('/shop/order-success', 'orderId=1')
+    ).toEqual([]);
+
+    expect(window.sessionStorage.getItem(KEY)).toBeNull();
+  });
+
+  it('deletes a malformed record when it is read', () => {
+    window.sessionStorage.setItem(KEY, '{not json');
+
+    expect(
+      readPendingPrivateParams('/shop/order-success', 'orderId=1')
+    ).toEqual([]);
+
+    expect(window.sessionStorage.getItem(KEY)).toBeNull();
+  });
+
+  it('deletes a record with the wrong shape when it is read', () => {
+    window.sessionStorage.setItem(KEY, JSON.stringify({ entries: 'x' }));
+
+    readPendingPrivateParams('/shop/order-success', 'orderId=1');
+
+    expect(window.sessionStorage.getItem(KEY)).toBeNull();
+  });
+});

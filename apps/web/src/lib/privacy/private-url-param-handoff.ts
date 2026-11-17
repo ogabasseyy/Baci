@@ -34,32 +34,43 @@ function isEntryList(value: unknown): value is PrivateEntry[] {
   );
 }
 
-function readPending(): PendingHandoff | null {
-  try {
-    const raw = window.sessionStorage.getItem(PENDING_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<PendingHandoff> | null;
-    if (
-      !Array.isArray(parsed?.paths) ||
-      !parsed.paths.every((path) => typeof path === 'string') ||
-      typeof parsed.publicSearch !== 'string' ||
-      typeof parsed.expiresAt !== 'number' ||
-      !isEntryList(parsed.entries)
-    ) {
-      return null;
-    }
-    return parsed as PendingHandoff;
-  } catch {
-    return null;
-  }
-}
-
 function clearPending(): void {
   try {
     window.sessionStorage.removeItem(PENDING_KEY);
   } catch {
-    // Nothing more to clean up; the record expires on its own.
+    // Nothing more to clean up.
   }
+}
+
+/**
+ * The pending record, or null. An expired or malformed record is deleted as
+ * soon as it is read, so a token never lingers in sessionStorage.
+ */
+function readPending(): PendingHandoff | null {
+  let raw: string | null;
+  try {
+    raw = window.sessionStorage.getItem(PENDING_KEY);
+  } catch {
+    return null;
+  }
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<PendingHandoff> | null;
+    if (
+      Array.isArray(parsed?.paths) &&
+      parsed.paths.every((path) => typeof path === 'string') &&
+      typeof parsed.publicSearch === 'string' &&
+      typeof parsed.expiresAt === 'number' &&
+      isEntryList(parsed.entries) &&
+      parsed.expiresAt > Date.now()
+    ) {
+      return parsed as PendingHandoff;
+    }
+  } catch {
+    // Malformed: removed below.
+  }
+  clearPending();
+  return null;
 }
 
 /**
@@ -132,9 +143,7 @@ export function readPendingPrivateParams(
   if (typeof window === 'undefined') return [];
   const pending = readPending();
   if (
-    !pending ||
-    pending.expiresAt <= Date.now() ||
-    !pending.paths.includes(pathname) ||
+    !pending?.paths.includes(pathname) ||
     pending.publicSearch !== canonicalSearch(publicSearch)
   ) {
     return [];

@@ -121,8 +121,17 @@ it('hands resumed Credit Direct success to server verification before cleanup', 
       }
     );
     expect(routerPush).toHaveBeenCalledWith(
-      '/ogabassey/checkout/bnpl?orderId=ord-1&gateway=credit_direct&merchant_slug=ogabassey&creditDirectCompletion=cd-client-success-1&trackingToken=tok-123&email=ada%40example.com'
+      '/ogabassey/checkout/bnpl?orderId=ord-1&gateway=credit_direct&merchant_slug=ogabassey&creditDirectCompletion=cd-client-success-1'
     );
+    expect(
+      JSON.parse(
+        window.sessionStorage.getItem('baci:private-url-params-pending') ??
+          'null'
+      )?.entries
+    ).toEqual([
+      ['trackingToken', 'tok-123'],
+      ['email', 'ada@example.com'],
+    ]);
     expect(
       routerPush.mock.calls.some(([href]) =>
         String(href).includes('/order-success')

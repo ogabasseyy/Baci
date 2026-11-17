@@ -1,11 +1,11 @@
 #!/bin/sh
-# Emit missing colocated test paths for staged/untracked source files.
+# Emit missing colocated test paths for staged/unstaged/untracked source files.
 # Prints one "  - path (expected: test)" line per gap; empty stdout means none.
 set -eu
 
 MISSING_TESTS=""
 # shellcheck disable=SC2046
-for FILE in $(git diff --name-only --cached --diff-filter=ACM 2>/dev/null; git ls-files --others --exclude-standard 2>/dev/null); do
+for FILE in $(git diff --name-only --cached --diff-filter=ACM 2>/dev/null; git diff --name-only --diff-filter=ACM 2>/dev/null; git ls-files --others --exclude-standard 2>/dev/null); do
   FILE=$(echo "$FILE" | tr -d '\r' | xargs)
   [ -z "$FILE" ] && continue
   case "$FILE" in

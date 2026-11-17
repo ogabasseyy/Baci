@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 
 const mockReconcile = vi.fn();
+const mockRecoverWalletPaid = vi.fn().mockResolvedValue({
+  checked: 0,
+  recovered: 0,
+  errored: 0,
+  deferred: 0,
+});
 
 vi.mock('dotenv/config', () => ({}));
 vi.mock('@/lib/logger', () => ({
@@ -12,6 +18,10 @@ vi.mock('@/lib/supabase/admin', () => ({
 vi.mock('@/lib/vtu-processing-reconciliation', () => ({
   reconcileProcessingVtuTransactions: (...args: unknown[]) =>
     mockReconcile(...args),
+}));
+vi.mock('@/lib/vtu-wallet-pay/recover-wallet-paid-vtu-purchases', () => ({
+  recoverWalletPaidVtuPurchases: (...args: unknown[]) =>
+    mockRecoverWalletPaid(...args),
 }));
 
 import { runReconcileVtuProcessingCli } from './reconcile-vtu-processing';

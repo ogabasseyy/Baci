@@ -21,6 +21,10 @@ const manualDoc = 'apps/web/src/lib/send-manual-order-document.ts';
 const claimLinks =
   'apps/web/src/lib/import-notifications/receipt-claim-links.ts';
 const publishScript = 'apps/web/src/scripts/publish-scheduled-posts.ts';
+const publishWorkflow =
+  'apps/web/src/app/api/cron/publish-scheduled-posts/publish-scheduled-posts-workflow.ts';
+const publishReval =
+  'apps/web/src/app/api/cron/publish-scheduled-posts/publish-scheduled-posts-revalidation.ts';
 
 const vtuScript = 'apps/web/src/scripts/reconcile-vtu-processing.ts';
 const vtuReconcile = 'apps/web/src/lib/vtu-processing-reconciliation.ts';
@@ -79,6 +83,7 @@ export const vpsCronWorkerAuthority = {
     [notifyScript, outboxWorker, manualDoc, claimLinks, env],
     [notifyScript, outboxWorker, manualDoc, zepto, env],
     [notifyScript, outboxWorker, manualDoc, zepto, admin, env],
+    [publishScript, publishWorkflow, publishReval, env],
     [vtuScript, admin, env],
     [vtuScript, vtuReconcile, vtuFulfill, env],
     [vtuScript, vtuReconcile, vtuFulfill, expoPush, env],

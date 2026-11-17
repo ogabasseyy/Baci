@@ -13,6 +13,54 @@ import { logger } from '@/lib/logger';
 import { createServiceClient } from '@/lib/supabase/service';
 
 const DEFAULT_BATCH_SIZE = 5;
+const knownOutboxEventTypes =
+  claimedOrderNotificationOutboxRowSchema.shape.event_type;
+
+function isManualOutboxEventType(value: unknown): boolean {
+  return (
+    (value === 'manual_order_receipt' || value === 'manual_order_invoice') &&
+    knownOutboxEventTypes.safeParse(value).success
+  );
+}
+
+function hasUsableIdentity(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
+}
+
+async function deadLetterCorruptOutboxRow(
+  supabase: ReturnType<typeof createServiceClient>,
+  workerId: string,
+  row: unknown
+): Promise<boolean> {
+  if (typeof row !== 'object' || row === null) return false;
+  const raw = row as Record<string, unknown>;
+  if (!hasUsableIdentity(raw.id)) return false;
+  if (!isManualOutboxEventType(raw.event_type)) return false;
+  if (hasUsableIdentity(raw.merchant_id) && hasUsableIdentity(raw.order_id)) {
+    return false;
+  }
+  try {
+    const { data, error } = await supabase.rpc(
+      'dead_letter_corrupt_outbox_row',
+      { p_outbox_id: raw.id, p_worker_id: workerId }
+    );
+    if (error || data !== true) {
+      throw error ?? new Error('dead-letter claim was lost');
+    }
+    logger.error({
+      message: 'Dead-lettered unparseable outbox row',
+      rowId: raw.id,
+    });
+    return true;
+  } catch (error) {
+    logger.error({
+      message: 'Failed to dead-letter unparseable outbox row',
+      rowId: raw.id,
+      error,
+    });
+    return false;
+  }
+}
 const MAX_BATCH_SIZE = 10;
 
 function parseBatchSize(argv: string[]): number {
@@ -63,6 +111,10 @@ export async function runOrderNotificationsCli(
       continue;
     }
     summary.unparseable += 1;
+    if (await deadLetterCorruptOutboxRow(supabase, workerId, row)) {
+      summary.skipped += 1;
+      continue;
+    }
     logger.warn({
       message: 'Skipping unparseable claimed outbox row',
       rowId:

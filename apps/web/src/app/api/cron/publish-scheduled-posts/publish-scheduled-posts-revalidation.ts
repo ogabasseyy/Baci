@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { getInternalApiSecret } from '@/env';
 import { revalidateBlogPosts } from '@/lib/cache-revalidation';
 import { purgeCloudflareUrlsConfirmed } from '@/lib/cloudflare-purge';
 import {
@@ -67,27 +68,41 @@ export async function revalidateScheduledPostsByMerchant(
         merchantId
       );
       let edgePurgeOnly = false;
-      try {
-        revalidateBlogPosts({
-          merchantId,
-          identifiers: blogRevalidation.identifiers,
-          canonicalMerchantSlug: blogRevalidation.canonicalMerchantSlug,
-          listingCategories: Array.from(merchantPosts.categories),
-          listingPages: merchantPosts.listingPages,
-          postSlugs: merchantPosts.postSlugs,
-        });
-      } catch (nextRevalError) {
-        // Standalone VPS workers run outside Next.js's static generation store;
-        // still schedule the Cloudflare edge purge for the published blog URLs,
-        // while keeping unrelated revalidation errors fatal.
-        const msg =
-          nextRevalError instanceof Error
-            ? nextRevalError.message
-            : String(nextRevalError);
-        const isStaticGenStoreError = msg.includes('static generation store');
-        if (!isStaticGenStoreError) {
-          throw nextRevalError;
+      const runStandaloneRevalidation = async () => {
+        // Standalone VPS workers run outside Next.js's static generation store:
+        // trigger the authenticated /api/internal/revalidate-blog endpoint so
+        // Next.js 'use cache' entries revalidate, then purge Cloudflare edge URLs.
+        const internalSecret = getInternalApiSecret();
+        const appUrl =
+          process.env.NEXT_PUBLIC_APP_URL?.trim() || 'https://usebaci.com';
+        if (!internalSecret) {
+          throw new Error(
+            'INTERNAL_API_SECRET is required for standalone blog revalidation'
+          );
         }
+        const internalUrl = `${appUrl.replace(/\/$/, '')}/api/internal/revalidate-blog`;
+        const internalResponse = await fetch(internalUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${internalSecret}`,
+          },
+          body: JSON.stringify({
+            merchantId,
+            identifiers: blogRevalidation.identifiers,
+            canonicalMerchantSlug: blogRevalidation.canonicalMerchantSlug,
+            listingCategories: Array.from(merchantPosts.categories),
+            listingPages: merchantPosts.listingPages,
+            postSlugs: merchantPosts.postSlugs,
+          }),
+          signal: AbortSignal.timeout(15_000),
+        });
+        if (!internalResponse.ok) {
+          throw new Error(
+            `Internal blog revalidation failed with status ${internalResponse.status}`
+          );
+        }
+
         const purgeIdentifiers = Array.from(
           new Set(
             [
@@ -125,6 +140,30 @@ export async function revalidateScheduledPostsByMerchant(
           );
         }
         edgePurgeOnly = true;
+      };
+
+      if (process.env.VPS_WORKER === '1') {
+        await runStandaloneRevalidation();
+      } else {
+        try {
+          revalidateBlogPosts({
+            merchantId,
+            identifiers: blogRevalidation.identifiers,
+            canonicalMerchantSlug: blogRevalidation.canonicalMerchantSlug,
+            listingCategories: Array.from(merchantPosts.categories),
+            listingPages: merchantPosts.listingPages,
+            postSlugs: merchantPosts.postSlugs,
+          });
+        } catch (nextRevalError) {
+          const msg =
+            nextRevalError instanceof Error
+              ? nextRevalError.message
+              : String(nextRevalError);
+          if (!msg.includes('static generation store')) {
+            throw nextRevalError;
+          }
+          await runStandaloneRevalidation();
+        }
       }
       blogRevalidationByMerchant.set(merchantId, blogRevalidation);
       schedulePrewarmBlogImageTransforms(merchantPosts.featuredImageUrls);

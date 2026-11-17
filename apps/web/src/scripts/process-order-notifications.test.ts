@@ -12,7 +12,10 @@ vi.mock('@/lib/supabase/service', () => ({
 vi.mock(
   '@/app/api/cron/order-notifications/order-notification-outbox-worker',
   () => ({
-    claimedOrderNotificationOutboxRowSchema: { array: () => ({ safeParse: () => ({ success: true, data: [] }) }) },
+    claimedOrderNotificationOutboxRowSchema: {
+      array: () => ({ safeParse: () => ({ success: true, data: [] }) }),
+      shape: { event_type: { safeParse: () => ({ success: true }) } },
+    },
     createOrderNotificationCronSummary: () => ({
       claimed: 0,
       failed: 0,

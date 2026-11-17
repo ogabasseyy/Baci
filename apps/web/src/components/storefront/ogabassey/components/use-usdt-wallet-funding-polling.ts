@@ -8,21 +8,32 @@ const USDT_STATUS_REQUEST_TIMEOUT_MS = 15_000;
 async function statusWithTimeout(
   reference: string,
   merchantSlug: string,
-  timeoutMs: number
+  timeoutMs: number,
+  parentSignal?: AbortSignal
 ) {
+  const controller = new AbortController();
+  const onParentAbort = () => controller.abort();
+  if (parentSignal?.aborted) {
+    controller.abort();
+  } else {
+    parentSignal?.addEventListener('abort', onParentAbort, { once: true });
+  }
   let timer: ReturnType<typeof setTimeout> | null = null;
   try {
     return await Promise.race([
-      usdtWalletFundingApi.status(reference, merchantSlug),
+      usdtWalletFundingApi.status(reference, merchantSlug, {
+        signal: controller.signal,
+      }),
       new Promise<never>((_, reject) => {
-        timer = setTimeout(
-          () => reject(new Error('USDT status request timed out')),
-          timeoutMs
-        );
+        timer = setTimeout(() => {
+          controller.abort();
+          reject(new Error('USDT status request timed out'));
+        }, timeoutMs);
       }),
     ]);
   } finally {
     if (timer !== null) clearTimeout(timer);
+    parentSignal?.removeEventListener('abort', onParentAbort);
   }
 }
 
@@ -83,6 +94,7 @@ export function useUsdtWalletFundingPolling({
     }
 
     setPollingExhausted(false);
+    const unmountController = new AbortController();
     let cancelled = false;
     let inFlight = false;
     let attempts = 0;
@@ -116,7 +128,8 @@ export function useUsdtWalletFundingPolling({
         const result = await statusWithTimeout(
           reference,
           merchantSlug,
-          USDT_STATUS_REQUEST_TIMEOUT_MS
+          USDT_STATUS_REQUEST_TIMEOUT_MS,
+          unmountController.signal
         );
         if (cancelled || result.kind !== 'ready') return;
         if (result.amount !== null) {
@@ -176,6 +189,7 @@ export function useUsdtWalletFundingPolling({
     }
     return () => {
       cancelled = true;
+      unmountController.abort();
       stopPolling();
       if (typeof document !== 'undefined') {
         document.removeEventListener('visibilitychange', handleVisibilityChange);

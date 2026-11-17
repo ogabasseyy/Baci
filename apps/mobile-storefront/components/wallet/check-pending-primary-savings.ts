@@ -21,6 +21,8 @@ export async function checkPendingPrimarySavings(input: {
   clearAmount: () => void;
   refetchWallet: () => Promise<unknown>;
   setPending: (value: boolean) => void;
+  /** False once the screen that asked has gone: "still waiting" news is dropped. */
+  isLive?: () => boolean;
 }): Promise<PendingSavingsCheckOutcome> {
   // Captured before any await: a result never reaches another account.
   const notify = savingsNotifier();
@@ -65,11 +67,12 @@ export async function checkPendingPrimarySavings(input: {
       );
       return 'cancelled';
     }
-    notify(
-      'Contribution pending',
-      'Still waiting for confirmation. No new payment has been started.',
-      'info'
-    );
+    if (input.isLive?.() !== false)
+      notify(
+        'Contribution pending',
+        'Still waiting for confirmation. No new payment has been started.',
+        'info'
+      );
     return 'pending';
   } catch (error) {
     const code =
@@ -97,11 +100,12 @@ export async function checkPendingPrimarySavings(input: {
       return 'not-found';
     }
     // A timeout lands here too: the operation is kept and checked again.
-    notify(
-      'Status unavailable',
-      'Could not confirm this contribution. Refresh its status later before starting another payment.',
-      'warning'
-    );
+    if (input.isLive?.() !== false)
+      notify(
+        'Status unavailable',
+        'Could not confirm this contribution. Refresh its status later before starting another payment.',
+        'warning'
+      );
     return 'unavailable';
   } finally {
     input.setPending(false);

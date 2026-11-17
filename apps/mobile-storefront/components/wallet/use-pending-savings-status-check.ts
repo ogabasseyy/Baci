@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
 import { readPiggyvestCapabilityNow } from '@/lib/read-piggyvest-capability-now';
@@ -42,6 +42,18 @@ export function usePendingSavingsStatusCheck(input: {
   // One read at a time: a tap, the timer and a return to the app must not
   // race two reads on the same operation and notice.
   const inFlight = useRef(false);
+  // The operation already told "Still checking": a blocked rail warns once,
+  // not on every automatic tick.
+  const blockedNoticeFor = useRef<string | null>(null);
+  // A read still running when the wallet goes away drops its "still
+  // waiting" news instead of posting it after the screen is gone.
+  const live = useRef(true);
+  useEffect(() => {
+    live.current = true;
+    return () => {
+      live.current = false;
+    };
+  }, []);
   const checkStatus = async (): Promise<SavingsStatusCheckResult> => {
     const operationId = input.idempotencyKeyRef.current;
     if (!operationId || input.submittingRef?.current) return 'no-operation';
@@ -55,11 +67,14 @@ export function usePendingSavingsStatusCheck(input: {
       storedRail: input.operationRailRef.current,
     });
     if (plan.kind === 'blocked') {
-      savingsNotifier()(
-        'Still checking',
-        EARLIER_CONTRIBUTION_CHECKING_MESSAGE,
-        'warning'
-      );
+      if (blockedNoticeFor.current !== operationId) {
+        blockedNoticeFor.current = operationId;
+        savingsNotifier()(
+          'Still checking',
+          EARLIER_CONTRIBUTION_CHECKING_MESSAGE,
+          'warning'
+        );
+      }
       return 'blocked';
     }
     // A legacy id has no status read: only its own add retries it.
@@ -85,6 +100,7 @@ export function usePendingSavingsStatusCheck(input: {
         },
         refetchWallet: input.refetchWallet,
         setPending: setIsCheckingStatus,
+        isLive: () => live.current,
       });
     } finally {
       inFlight.current = false;

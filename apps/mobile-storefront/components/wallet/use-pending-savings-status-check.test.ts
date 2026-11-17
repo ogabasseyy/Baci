@@ -96,6 +96,38 @@ it('keeps a primary id whose rail is gone, without a read', async () => {
   expect(props.idempotencyKeyRef.current).toBe(OPERATION);
 });
 
+it('warns "Still checking" once per operation while the rail stays blocked', async () => {
+  mockVerdict = false;
+  const { view } = setup();
+  await act(async () => {
+    await view.result.current.checkStatus();
+    await view.result.current.checkStatus();
+    await view.result.current.checkStatus();
+  });
+  expect(mockNotify).toHaveBeenCalledTimes(1);
+  expect(mockNotify).toHaveBeenCalledWith(
+    'Still checking',
+    expect.any(String),
+    'warning'
+  );
+});
+
+it('drops "still waiting" news from a read that ends after the wallet left', async () => {
+  jest.useFakeTimers();
+  mockFetchJson.mockImplementation(() => new Promise(() => undefined));
+  const { view } = setup();
+  let check: Promise<unknown> = Promise.resolve();
+  await act(async () => {
+    check = view.result.current.checkStatus();
+  });
+  view.unmount();
+  await act(async () => {
+    await jest.advanceTimersByTimeAsync(15_000);
+  });
+  expect(await check).toBe('unavailable');
+  expect(mockNotify).not.toHaveBeenCalled();
+});
+
 it('runs one read at a time', async () => {
   let finish: (value: unknown) => void = () => undefined;
   mockFetchJson.mockImplementation(

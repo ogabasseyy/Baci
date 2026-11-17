@@ -1,89 +1,31 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { useContext, useState } from 'react';
+import { type ReactNode, useContext, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { ModalSheet } from '@/components/ui/ModalSheet';
 import type Colors from '@/constants/Colors';
-import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import { IdentityConfirmPanel } from '../identity/IdentityConfirmPanel';
 import { SavingsSheetContext } from '../SavingsSheetContext';
 import { useSavingsSheetLock } from '../SavingsSheetLock';
+import { withSavingsBrand } from '../savings-sheet-colors';
 import type { WalletPinSheetBinding } from './use-wallet-pin-prompt';
-import {
-  useWalletPinSheet,
-  WALLET_PIN_UNAVAILABLE,
-  type WalletPinStep,
-} from './use-wallet-pin-sheet';
+import { useWalletPinSheet } from './use-wallet-pin-sheet';
 import { WalletPinContextStrip } from './WalletPinContextStrip';
 import { WalletPinDots } from './WalletPinDots';
 import { EmbeddedPinStep } from './WalletPinEmbeddedStep';
 import { WalletPinPad } from './WalletPinPad';
 import { walletPinSheetStyles as styles } from './WalletPinSheet.styles';
 import { WalletPinSheetHeader } from './WalletPinSheetHeader';
+import { WalletPinWorkingStep } from './WalletPinWorkingStep';
+import {
+  approvingLine,
+  COPY,
+  contextLine,
+  ENTER_BODY,
+  PIN_TOO_SHORT,
+  requestKey,
+} from './wallet-pin-sheet-copy';
 
 type WalletColors = (typeof Colors)['light'];
-
-const COPY: Record<
-  WalletPinStep,
-  { title: string; body: string; action: string }
-> = {
-  loading: { title: 'Wallet PIN', body: 'Checking your PIN...', action: '' },
-  unavailable: {
-    title: 'Wallet PIN',
-    body: WALLET_PIN_UNAVAILABLE,
-    action: '',
-  },
-  // Drawn by IdentityConfirmPanel; listed so every step has copy.
-  confirm: { title: "Confirm it's you", body: '', action: '' },
-  set: {
-    title: 'Create your wallet PIN',
-    body: "You'll use it every time you save.",
-    action: 'Save PIN',
-  },
-  reset: {
-    title: 'Reset your wallet PIN',
-    body: 'Choose a new PIN to continue.',
-    action: 'Reset PIN',
-  },
-  enter: {
-    title: 'Enter your wallet PIN',
-    body: 'Confirm this contribution with your PIN.',
-    action: 'Confirm',
-  },
-};
-
-const ENTER_BODY = {
-  cancel: 'Enter your PIN to cancel this goal.',
-  complete: 'Enter your PIN to complete this goal.',
-} as const;
-
-const PIN_TOO_SHORT = 'Enter 4 to 6 digits.';
-
-/** What the PIN is for, in a short strip under the title. */
-function contextLine(request: WalletPinSheetBinding['request']) {
-  if (!request) return null;
-  if ('amountKobo' in request)
-    return `Adding ${formatNgnCurrency(request.amountKobo / 100)} to savings`;
-  const goal = request.goalTitle?.trim() || 'this goal';
-  return request.action === 'cancel'
-    ? `Cancelling ${goal}`
-    : `Completing ${goal}`;
-}
-
-/**
- * A new key per request (and on close) remounts the panel, so the two-step
- * choose/confirm state never carries over to the next request.
- */
-function requestKey(request: WalletPinSheetBinding['request']) {
-  if (!request) return 'closed';
-  const amount = 'amountKobo' in request ? request.amountKobo : '';
-  return [
-    request.operationId,
-    request.goalId,
-    request.merchantId ?? '',
-    request.action ?? 'fund',
-    amount,
-  ].join('|');
-}
 
 type WalletPinSheetProps = WalletPinSheetBinding & { colors: WalletColors };
 
@@ -93,11 +35,17 @@ type WalletPinSheetProps = WalletPinSheetBinding & { colors: WalletColors };
  */
 export function WalletPinSheet(props: WalletPinSheetProps) {
   const inSavingsSheet = useContext(SavingsSheetContext);
+  // The savings sheet's red accent on every site (the dark theme's own
+  // primary is amber), including "Confirm it's you" inside this step.
+  const colors = withSavingsBrand(props.colors);
   if (inSavingsSheet)
     return props.request ? (
-      <EmbeddedPinStep colors={props.colors} onParentClose={props.onCancel}>
-        <WalletPinPanel key={requestKey(props.request)} {...props} embedded />
-      </EmbeddedPinStep>
+      <WalletPinPanel
+        key={requestKey(props.request)}
+        {...props}
+        colors={colors}
+        embedded
+      />
     ) : null;
   return (
     <ModalSheet
@@ -106,7 +54,11 @@ export function WalletPinSheet(props: WalletPinSheetProps) {
       backdropStyle={styles.backdrop}
       onRequestClose={props.onCancel}
     >
-      <WalletPinPanel key={requestKey(props.request)} {...props} />
+      <WalletPinPanel
+        key={requestKey(props.request)}
+        {...props}
+        colors={colors}
+      />
     </ModalSheet>
   );
 }
@@ -173,24 +125,48 @@ function WalletPinPanel({
     embedded && styles.embedded,
     { backgroundColor: colors.background },
   ];
-  if (sheet.step === 'confirm')
-    return (
-      <View style={frame}>
-        <IdentityConfirmPanel
-          colors={colors}
-          expectedUserId={expectedUserId}
-          onConfirmed={() => {
-            setConfirming(false);
-            void sheet.identityConfirmed();
-          }}
-          onCancel={onCancel}
-          embedded={embedded}
-          context={context}
-        />
-      </View>
+  // Inside the savings sheet the step covers that sheet and sizes it; a
+  // waiting step keeps the current height so the sheet moves only once.
+  const wrap = (content: ReactNode) =>
+    embedded ? (
+      <EmbeddedPinStep
+        colors={colors}
+        holdHeight={sheet.step === 'loading' || sheet.step === 'approving'}
+        onParentClose={onCancel}
+      >
+        <View style={frame}>{content}</View>
+      </EmbeddedPinStep>
+    ) : (
+      <View style={frame}>{content}</View>
     );
-  return (
-    <View style={frame}>
+  if (sheet.step === 'confirm')
+    return wrap(
+      <IdentityConfirmPanel
+        colors={colors}
+        expectedUserId={expectedUserId}
+        onConfirmed={() => {
+          setConfirming(false);
+          void sheet.identityConfirmed();
+        }}
+        onCancel={onCancel}
+        embedded={embedded}
+        context={context}
+      />
+    );
+  if (sheet.step === 'loading' || sheet.step === 'approving')
+    return wrap(
+      <WalletPinWorkingStep
+        colors={colors}
+        title={copy.title}
+        message={
+          sheet.step === 'approving' ? approvingLine(request) : copy.body
+        }
+        embedded={embedded}
+        onClose={sheet.step === 'loading' ? onCancel : undefined}
+      />
+    );
+  return wrap(
+    <>
       <WalletPinSheetHeader
         colors={colors}
         title={copy.title}
@@ -211,9 +187,6 @@ function WalletPinPanel({
       </Text>
       {context && entering ? (
         <WalletPinContextStrip colors={colors} text={context} />
-      ) : null}
-      {sheet.step === 'loading' ? (
-        <ActivityIndicator color={colors.primary} />
       ) : null}
       {entering ? (
         <WalletPinDots
@@ -281,6 +254,6 @@ function WalletPinPanel({
           </View>
         </>
       ) : null}
-    </View>
+    </>
   );
 }

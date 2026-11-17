@@ -76,3 +76,26 @@ export function buildSavingsSuccessMessage({
     title: 'Savings updated',
   };
 }
+
+/**
+ * The brief wallet toast once a confirmed contribution closes the savings
+ * sheet: what was added and to which plan. Completion is celebrated only on
+ * the server's word (goalCompleted), like the full message above.
+ */
+export function buildSavingsToastMessage({
+  amount,
+  goalCompleted,
+  title,
+}: {
+  amount: number;
+  goalCompleted: boolean;
+  title: string;
+}) {
+  const added = formatNgnCurrency(amount);
+  const plan = title.trim();
+  if (goalCompleted)
+    return plan
+      ? `${added} added. You reached your ${plan} goal!`
+      : `${added} added. You reached your goal!`;
+  return `${added} added to ${plan || 'your plan'}`;
+}

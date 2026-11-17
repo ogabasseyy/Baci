@@ -1,3 +1,4 @@
+import { readPendingHandoffEntries } from '@/lib/privacy/pending-handoff.test-support';
 import {
   act,
   continueToPaymentAfterPickupCheck,
@@ -118,12 +119,9 @@ it('records payment_completed before redirecting a paid wallet-funded transfer',
     );
     expect(JSON.stringify(routerPush.mock.calls)).not.toContain('track-wf-1');
 
-    expect(
-      JSON.parse(
-        window.sessionStorage.getItem('baci:private-url-params-pending') ??
-          'null'
-      )?.entries
-    ).toEqual([['trackingToken', 'track-wf-1']]);
+    expect(readPendingHandoffEntries()).toEqual([
+      ['trackingToken', 'track-wf-1'],
+    ]);
   } finally {
     fetchMock.mockRestore();
   }

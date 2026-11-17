@@ -29,66 +29,13 @@ import { useMerchant } from '@/hooks/merchant';
 import { usePrivateSearchParamsState } from '@/hooks/use-private-search-params';
 import { formatCurrency as formatCurrencyByCountry } from '@/lib/currency';
 import { cn } from '@/lib/utils';
-import { OrderItemRow, type TrackOrderItem } from './order-item-row';
+import {
+  fetchOrderTracking,
+  type TrackingLookupParams,
+} from './fetch-order-tracking';
+import { OrderItemRow } from './order-item-row';
 import { resolveTrackOrderMerchantSlug } from './resolve-track-order-merchant-slug';
-
-interface TimelineEvent {
-  status: string;
-  title: string;
-  description: string;
-  timestamp: string;
-  icon:
-    | 'order'
-    | 'payment'
-    | 'processing'
-    | 'shipped'
-    | 'delivered'
-    | 'cancelled';
-}
-
-interface OrderData {
-  order: {
-    id: string;
-    order_number: string;
-    status: string;
-    payment_status: string;
-    created_at: string;
-    updated_at: string;
-    subtotal: number;
-    shipping_cost: number;
-    discount_amount: number;
-    total: number;
-    currency: string;
-  };
-  customer: {
-    name: string;
-    email: string;
-    phone: string;
-  };
-  shipping_address: {
-    address: string;
-    city: string;
-    state: string;
-    country: string;
-  };
-  items: TrackOrderItem[];
-  timeline: TimelineEvent[];
-  shipping_tracking: {
-    provider: string;
-    tracking_number: string;
-    tracking_url: string;
-  } | null;
-  estimated_delivery: {
-    min: string;
-    max: string;
-  } | null;
-  merchant: {
-    name: string;
-    logo?: string;
-    support_email?: string;
-    support_phone?: string;
-  };
-}
+import type { OrderData } from './track-order-types';
 
 const iconMap = {
   order: Package,
@@ -117,70 +64,6 @@ const getCountryCodeForCurrency = (currency?: string | null) =>
   (currency ? PREFERRED_COUNTRY_FOR_CURRENCY[currency] : null) ?? 'NG';
 
 const TERMINAL_STATUSES = new Set(['cancelled', 'failed']);
-
-interface TrackingLookupParams {
-  order_id?: string | null;
-  order_number?: string | null;
-  email?: string | null;
-  tracking_token?: string | null;
-}
-
-type TrackingLookupResult =
-  | { data: OrderData; error: null }
-  | { data: null; error: string };
-
-/**
- * Module-scope lookup keeps the try/finally and throw statements out of the
- * component body so React Compiler can memoize the page.
- */
-async function fetchOrderTracking(
-  merchantSlug: string | undefined,
-  trackingParams: TrackingLookupParams
-): Promise<TrackingLookupResult> {
-  try {
-    if (!merchantSlug) {
-      throw new Error('Store identifier is missing.');
-    }
-    // Token-based lookup doesn't need email; manual form does
-    if (!trackingParams.tracking_token && !trackingParams.email) {
-      throw new Error('Email is required to track an order.');
-    }
-
-    const queryParams = new URLSearchParams();
-    if (trackingParams.tracking_token) {
-      queryParams.set('token', trackingParams.tracking_token);
-    } else {
-      if (trackingParams.order_id)
-        queryParams.set('order_id', trackingParams.order_id);
-      if (trackingParams.order_number)
-        queryParams.set('order_number', trackingParams.order_number);
-      if (trackingParams.email) queryParams.set('email', trackingParams.email);
-    }
-    queryParams.set('merchant_slug', merchantSlug);
-
-    const response = await fetch(
-      `/api/storefront/orders/track-order?${queryParams}`
-    );
-    let data: OrderData | { error?: string };
-    try {
-      data = await response.json();
-    } catch {
-      throw new Error('Unexpected server response. Please try again later.');
-    }
-
-    if (!response.ok) {
-      const errorData = data as { error?: string };
-      throw new Error(errorData.error || 'Failed to find order');
-    }
-
-    return { data: data as OrderData, error: null };
-  } catch (err) {
-    return {
-      data: null,
-      error: err instanceof Error ? err.message : 'An error occurred',
-    };
-  }
-}
 
 function HorizontalProgressBar({
   status,

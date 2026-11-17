@@ -49,6 +49,7 @@ vi.mock('./use-wallet-funded-bank-transfer', () => ({
   useWalletFundedBankTransfer: mocks.useTransfer,
 }));
 
+import { readPendingHandoffEntries } from '@/lib/privacy/pending-handoff.test-support';
 import { useCheckoutCryptoSession } from './use-checkout-crypto-session';
 import { useCheckoutDvaSession } from './use-checkout-dva-session';
 import { useCheckoutOrderSubmission } from './use-checkout-order-submission';
@@ -205,12 +206,9 @@ describe('useCheckoutPaymentExecution', () => {
     expect(mocks.push).toHaveBeenCalledWith(
       '/shop/order-success?orderId=order-paid-1&wallet=true'
     );
-    expect(
-      JSON.parse(
-        window.sessionStorage.getItem('baci:private-url-params-pending') ??
-          'null'
-      )?.entries
-    ).toEqual([['trackingToken', 'paid-track-1']]);
+    expect(readPendingHandoffEntries()).toEqual([
+      ['trackingToken', 'paid-track-1'],
+    ]);
     act(() => vi.advanceTimersByTime(500));
     expect(options.cart.clearCart).toHaveBeenCalledOnce();
   });

@@ -13,6 +13,7 @@ vi.mock('../checkout-idempotency', () => ({
   clearCheckoutIdempotencyKey: clearKeyMock,
 }));
 
+import { readPendingHandoffEntries } from '@/lib/privacy/pending-handoff.test-support';
 import { useWalletFundedOrderCompletion } from './use-wallet-funded-order-completion';
 
 describe('useWalletFundedOrderCompletion', () => {
@@ -67,12 +68,9 @@ describe('useWalletFundedOrderCompletion', () => {
     expect(pushMock).toHaveBeenCalledWith(
       '/shop/order-success?orderId=order+%2F1&wallet=true'
     );
-    expect(
-      JSON.parse(
-        window.sessionStorage.getItem('baci:private-url-params-pending') ??
-          'null'
-      )?.entries
-    ).toEqual([['trackingToken', 'track /?&']]);
+    expect(readPendingHandoffEntries()).toEqual([
+      ['trackingToken', 'track /?&'],
+    ]);
     expect(events).toEqual([
       'capture',
       'pending',

@@ -15,6 +15,7 @@ import {
 } from './checkout/credit-direct-popup-return';
 import { CHECKOUT_IDEMPOTENCY_STORAGE_KEY } from './checkout/checkout-idempotency';
 import { CHECKOUT_PENDING_ORDER_STORAGE_KEY } from './checkout/pending-checkout-order';
+import { readPendingHandoffEntries } from '@/lib/privacy/pending-handoff.test-support';
 
 const mockClearCart = vi.hoisted(() => vi.fn());
 const mockPush = vi.fn();
@@ -1714,12 +1715,7 @@ describe('BnplLauncher', () => {
       '/order-success?orderId=order-1&reference=BAC-ABCD12345678&type=klump'
     );
     // The token travels off the URL, in the one-shot hand-off.
-    expect(
-      JSON.parse(
-        window.sessionStorage.getItem('baci:private-url-params-pending') ??
-          'null'
-      )?.entries
-    ).toEqual([['trackingToken', 'tok-123']]);
+    expect(readPendingHandoffEntries()).toEqual([['trackingToken', 'tok-123']]);
   });
 
   it.each([

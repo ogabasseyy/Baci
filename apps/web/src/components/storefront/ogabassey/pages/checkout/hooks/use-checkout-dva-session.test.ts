@@ -1,5 +1,6 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { readPendingHandoffEntries } from '@/lib/privacy/pending-handoff.test-support';
 import type { DvaModalData } from './use-checkout-dva-session';
 import { useCheckoutDvaSession } from './use-checkout-dva-session';
 
@@ -137,12 +138,9 @@ describe('useCheckoutDvaSession', () => {
       '/order-success?type=standard&orderId=order-123'
     );
     expect(String(mockPush.mock.calls[0]?.[0])).not.toContain('track-123');
-    expect(
-      JSON.parse(
-        window.sessionStorage.getItem('baci:private-url-params-pending') ??
-          'null'
-      )?.entries
-    ).toEqual([['trackingToken', 'track-123']]);
+    expect(readPendingHandoffEntries()).toEqual([
+      ['trackingToken', 'track-123'],
+    ]);
     expect(result.current.isVerifyingDva).toBe(false);
   });
 

@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { CryptoCheckoutPage } from './crypto-checkout';
+import { readPendingHandoffEntries } from '@/lib/privacy/pending-handoff.test-support';
 
 // Mock next/navigation
 const mockPush = vi.fn();
@@ -533,12 +534,7 @@ describe('CryptoCheckoutPage', () => {
         '/testmerchant/order-success?type=crypto&orderId=test-order-123&reference=REF-123456'
       );
       // The token travels off the URL, in the one-shot hand-off.
-      expect(
-        JSON.parse(
-          window.sessionStorage.getItem('baci:private-url-params-pending') ??
-            'null'
-        )?.entries
-      ).toEqual([['trackingToken', 'track-token-123']]);
+      expect(readPendingHandoffEntries()).toEqual([['trackingToken', 'track-token-123']]);
     } finally {
       vi.useRealTimers();
     }

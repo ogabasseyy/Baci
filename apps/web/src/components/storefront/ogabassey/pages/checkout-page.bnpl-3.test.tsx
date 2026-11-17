@@ -1,3 +1,4 @@
+import { readPendingHandoffEntries } from '@/lib/privacy/pending-handoff.test-support';
 import {
   act,
   continueToPaymentAfterPickupCheck,
@@ -167,12 +168,7 @@ it('hands fresh Credit Direct success to server verification before cleanup', as
     expect(routerPush).toHaveBeenCalledWith(
       '/ogabassey/checkout/bnpl?orderId=order-cd&gateway=credit_direct&merchant_slug=ogabassey&creditDirectCompletion=cd-client-success-2'
     );
-    expect(
-      JSON.parse(
-        window.sessionStorage.getItem('baci:private-url-params-pending') ??
-          'null'
-      )?.entries
-    ).toEqual([
+    expect(readPendingHandoffEntries()).toEqual([
       ['trackingToken', 'track-cd'],
       ['email', 'ada@example.com'],
     ]);

@@ -6,6 +6,7 @@ import { clearCheckoutIdempotencyKey } from '../checkout-idempotency';
 import { clearCreditDirectPopupMarker } from '../credit-direct-popup-return';
 import { CHECKOUT_PENDING_ORDER_STORAGE_KEY } from '../pending-checkout-order';
 import { useCreditDirectConfirmationRedirect } from './use-credit-direct-confirmation-redirect';
+import { readPendingHandoffEntries } from '@/lib/privacy/pending-handoff.test-support';
 
 vi.mock('../capture-bnpl-payment-completed', () => ({
   captureBnplPaymentCompleted: vi.fn(),
@@ -86,12 +87,7 @@ describe('useCreditDirectConfirmationRedirect', () => {
     expect(push).toHaveBeenCalledWith(
       '/test-store/order-success?orderId=order-1&reference=txn-1&type=credit_direct'
     );
-    expect(
-      JSON.parse(
-        window.sessionStorage.getItem('baci:private-url-params-pending') ??
-          'null'
-      )?.entries
-    ).toEqual([['trackingToken', 'track-1']]);
+    expect(readPendingHandoffEntries()).toEqual([['trackingToken', 'track-1']]);
   });
 
   it('passes the lookup email when no tracking token exists', () => {

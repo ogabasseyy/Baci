@@ -13,7 +13,9 @@ import {
     getUnmaskedValue,
     type BnplOrder,
 } from '@/lib/klump-utils';
-import { CHECKOUT_PENDING_ORDER_STORAGE_KEY } from './checkout/pending-checkout-order';
+import { buildLauncherScopedPath } from './checkout/build-launcher-scoped-path';
+import { getKlumpTransactionId } from './checkout/klump-transaction-id';
+import { readPendingOrderSnapshot } from './checkout/read-pending-order-snapshot';
 import {
     clearCreditDirectPopupMarker,
     type CreditDirectPopupMarker,
@@ -34,93 +36,9 @@ import type { BnplLaunchOrderContext } from './checkout/bnpl-launch-context';
 
 export { KLUMP_REDIRECT_URL_KEY } from './checkout/bnpl-launch-klump';
 
-const KLUMP_TRANSACTION_ID_KEYS = [
-    'klump_transaction_id',
-    'klumpTransactionId',
-    'checkout_transaction_id',
-    'checkoutTransactionId',
-    'transaction_id',
-    'transactionId',
-    'tx_ref',
-    'txRef',
-    'id',
-] as const;
-
-interface SearchParamReader {
-    get: (name: string) => string | null;
-}
-
 interface KlumpRecordResponse {
     success?: boolean;
     error?: string;
-}
-
-function readSearchParam(
-    searchParams: SearchParamReader,
-    keys: readonly string[]
-) {
-    for (const key of keys) {
-        const value = searchParams.get(key);
-        if (typeof value === 'string' && value.trim()) {
-            return value.trim();
-        }
-    }
-
-    return null;
-}
-
-function getKlumpTransactionId(searchParams: SearchParamReader) {
-    return readSearchParam(searchParams, KLUMP_TRANSACTION_ID_KEYS);
-}
-
-// Slug-prefixed storefront contexts (localhost, previews, the root domain)
-// serve the launcher at /{slug}/checkout/bnpl; an absolute /order-success
-// would escape the storefront there. Preserve whatever prefix the launcher
-// itself was served under.
-function buildLauncherScopedPath(target: string) {
-    if (typeof window === 'undefined') {
-        return target;
-    }
-    const { pathname } = window.location;
-    const anchorIndex = pathname.lastIndexOf('/checkout/bnpl');
-    if (anchorIndex <= 0) {
-        return target;
-    }
-    return `${pathname.slice(0, anchorIndex)}${target}`;
-}
-
-function readPendingOrderSnapshot(orderId: string | null) {
-    if (!orderId || typeof window === 'undefined') {
-        return null;
-    }
-
-    try {
-        const stored = window.sessionStorage.getItem(
-            CHECKOUT_PENDING_ORDER_STORAGE_KEY
-        );
-        if (!stored) {
-            return null;
-        }
-
-        const pendingOrder = JSON.parse(stored) as {
-            orderId?: string;
-            trackingToken?: string;
-            customerEmail?: string;
-            customerPhone?: string;
-        };
-
-        if (pendingOrder.orderId !== orderId) {
-            return null;
-        }
-
-        return {
-            trackingToken: pendingOrder.trackingToken || null,
-            customerEmail: pendingOrder.customerEmail?.trim() || null,
-            customerPhone: pendingOrder.customerPhone?.trim() || null,
-        };
-    } catch {
-        return null;
-    }
 }
 
 type BnplGateway = 'credit_direct' | 'credpal' | 'klump';

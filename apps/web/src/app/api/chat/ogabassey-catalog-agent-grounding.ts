@@ -49,10 +49,10 @@ const POSITIVE_STOCK_ASSERTION =
   /\b(?:in[\s-]+stock|currently\s+available|available\s+now)\b/gi;
 
 const FAMILY_VARIANT_PATTERN =
-  /\b(?:macbook|iphone|ipad|galaxy|pixel|xps|surface|watch)\s+(?:pro|ultra|max|mini|plus|air|studio|fold|flip|m[1-5])\b/gi;
+  /\b(?:macbook|iphone|ipad|imac|galaxy|pixel|xps|surface|watch|redmi|tecno|infinix|oneplus|playstation)\s+(?:(?:pro|ultra|max|mini|plus|air|studio|fold|flip|fe|se|lite|neo|edge|spark|camon|phantom|hot|note|nord|pixel)\b|[a-z]{0,2}\d{1,4}[a-z]?\b)(?:\s+(?:pro|ultra|max|mini|plus|air|studio|fold|flip|fe|se|lite|neo|[a-z]{0,2}\d{1,4}[a-z]?\b)){0,2}/gi;
 
 const CAPITALIZED_PHRASE_PATTERN =
-  /\b[A-Z][A-Za-z0-9-]{1,24}(?:\s+[A-Z0-9][A-Za-z0-9-]{0,24}){1,4}\b/g;
+  /\b(?:iPhone|iPad|iMac|[A-Z][A-Za-z0-9-]{1,24})(?:\s+(?:iPhone|iPad|iMac|[A-Z0-9][A-Za-z0-9-]{0,24})){1,4}\b/g;
 
 const CAPITALIZED_PHRASE_IGNORE = new Set([
   'ogabassey',
@@ -285,11 +285,23 @@ function productMatchesSegment(
   const brandTokens = new Set(tokenizeLowerWords(product.brand ?? ''));
   const nonBrandTokens = nameTokens.filter((token) => !brandTokens.has(token));
   const pool = nonBrandTokens.length > 0 ? nonBrandTokens : nameTokens;
+  if (pool.length === 0) return 0;
+
+  const modelVersionTokens = pool.filter((token) => /\d/.test(token));
+  if (
+    modelVersionTokens.length > 0 &&
+    !modelVersionTokens.every((token) => segmentTokens.has(token))
+  ) {
+    return 0;
+  }
+
   let score = 0;
   for (const token of pool) {
     if (segmentTokens.has(token)) score += 1;
   }
-  return score;
+  const requiredMatches =
+    pool.length <= 3 ? pool.length : Math.max(2, Math.ceil(pool.length * 0.6));
+  return score >= requiredMatches ? score : 0;
 }
 
 function findBoundProducts(

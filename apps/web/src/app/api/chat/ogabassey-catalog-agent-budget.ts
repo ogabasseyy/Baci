@@ -71,10 +71,8 @@ export function resolveConversationBudgetLimit(
     latestUser.content,
     currencyCode
   );
-  if (latestBudget.hasBudget) {
-    return !latestBudget.invalid && latestBudget.price
-      ? latestBudget.price
-      : undefined;
+  if (latestBudget.hasBudget && !latestBudget.invalid && latestBudget.price) {
+    return latestBudget.price;
   }
 
   if (BUDGET_OVERRIDE_CUE.test(latestUser.content)) {
@@ -90,14 +88,18 @@ export function resolveConversationBudgetLimit(
     const priorContent = userMessages[i].content;
     const budget = analyzeFastCatalogBudget(priorContent, currencyCode);
     if (!budget.hasBudget) continue;
-    if (budget.invalid || !budget.price) return undefined;
+    if (budget.invalid || !budget.price) continue;
 
     const priorGroup = detectProductTopicGroup(priorContent);
     if (latestGroup && priorGroup && latestGroup !== priorGroup) {
       return undefined;
     }
 
-    if (hasContinuationCue || (latestGroup && latestGroup === priorGroup)) {
+    if (
+      latestBudget.hasBudget ||
+      hasContinuationCue ||
+      (latestGroup && latestGroup === priorGroup)
+    ) {
       return budget.price;
     }
 

@@ -160,7 +160,7 @@ export async function runOgabasseyCatalogAgent(options: {
     : options.messages;
   if (!shouldAttemptCatalogAgent(conversationMessages)) return null;
 
-  const providers = getOgabasseyPreferredProviders({ includeDeepSeek: false });
+  const providers = getOgabasseyPreferredProviders({ includeDeepSeek: true });
   if (providers.length === 0 || options.timeoutMs <= 0) return null;
 
   const budgetLimit = resolveConversationBudgetLimit(

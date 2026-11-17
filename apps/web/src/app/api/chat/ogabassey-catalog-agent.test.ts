@@ -825,4 +825,76 @@ describe('runOgabasseyCatalogAgent', () => {
     });
     expect(result?.events[0]?.products[0]?.id).toBe('canon-r10');
   });
+
+  it('requires exact model identity, retains prior valid budgets over invalid follow-ups, and supports DeepSeek-only fallback', async () => {
+    const iphone16 = {
+      ...sampleProduct,
+      category: 'Phones',
+      description: 'Apple iPhone 16',
+      id: 'iphone-16',
+      name: 'Apple iPhone 16',
+      price: 1_200_000,
+      slug: 'apple-iphone-16',
+      stock: 3,
+    };
+    const overBudgetLaptop = {
+      ...sampleProduct,
+      id: 'mac-over',
+      name: 'Apple MacBook Pro M3',
+      price: 2_600_000,
+      slug: 'apple-macbook-pro-m3',
+    };
+
+    // Returned Apple iPhone 16 must not validate a fabricated "Apple iPhone 15" reply
+    vi.stubEnv('META_MODEL_API_KEY', 'test-meta-key');
+    mocks.generateText.mockImplementationOnce(async () => {
+      reportToolResult?.('searchProducts', {
+        products: [iphone16],
+        total: 1,
+      });
+      return { text: 'Apple iPhone 15 is ₦1,200,000.' };
+    });
+    expect(
+      await runOgabasseyCatalogAgent({
+        ...baseOptions(),
+        messages: [{ role: 'user', content: 'Show me iPhone options' }],
+      })
+    ).toBeNull();
+
+    // Invalid budget follow-up ("under $500") retains prior valid "below 2m" cap
+    mocks.generateText.mockImplementationOnce(async () => {
+      reportToolResult?.('searchProducts', {
+        products: [sampleProduct, overBudgetLaptop],
+        total: 2,
+      });
+      return { text: 'Apple MacBook Air M2 is ₦1,450,000.' };
+    });
+    const retainedBudgetResult = await runOgabasseyCatalogAgent({
+      ...baseOptions(),
+      messages: [
+        { role: 'user', content: 'Show me laptops below 2m' },
+        { role: 'assistant', content: 'Checking laptops under ₦2,000,000.' },
+        { role: 'user', content: 'Can I get one under $500?' },
+      ],
+    });
+    expect(retainedBudgetResult?.events[0]?.products.map((p) => p.id)).toEqual([
+      'mac-1',
+    ]);
+
+    // DeepSeek-only configuration uses deepseek:deepseek-flash for read-only search
+    vi.unstubAllEnvs();
+    vi.stubEnv('DEEPSEEK_API_KEY', 'test-deepseek-key');
+    mocks.generateText.mockImplementationOnce(async () => {
+      reportToolResult?.('searchProducts', {
+        products: [sampleProduct],
+        total: 1,
+      });
+      return { text: 'Apple MacBook Air M2 is ₦1,450,000.' };
+    });
+    const deepseekResult = await runOgabasseyCatalogAgent(baseOptions());
+    expect(deepseekResult?.text).toBe('Apple MacBook Air M2 is ₦1,450,000.');
+    expect(mocks.generateText.mock.calls.at(-1)?.[0]?.model).toMatchObject({
+      modelId: 'deepseek-flash',
+    });
+  });
 });

@@ -19,6 +19,23 @@ describe('useHeldWhileAdding', () => {
     expect(result.current).toBe(440);
   });
 
+  it('holds the first height measured after an add started unmeasured', () => {
+    const { result, rerender } = renderHook(
+      ({ adding, measured }: { adding: boolean; measured?: number }) =>
+        useHeldWhileAdding(adding, measured),
+      {
+        initialProps: {
+          adding: true,
+          measured: undefined as number | undefined,
+        },
+      }
+    );
+    expect(result.current).toBeUndefined();
+    rerender({ adding: true, measured: 500 });
+    rerender({ adding: true, measured: 440 });
+    expect(result.current).toBe(500);
+  });
+
   it('passes an unmeasured sheet through', () => {
     const { result } = renderHook(() => useHeldWhileAdding(true, undefined));
     expect(result.current).toBeUndefined();

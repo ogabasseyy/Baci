@@ -7,15 +7,15 @@ describe('SavingsContributionProgress', () => {
   it('says how much is moving, with a spinner', () => {
     render(<SavingsContributionProgress amount={100} colors={Colors.light} />);
     expect(
-      screen.getByLabelText('Moving ₦100 into your plan…')
+      screen.getByLabelText('Adding ₦100 to your plan…')
     ).toBeOnTheScreen();
-    expect(screen.getByText('Moving ₦100 into your plan…')).toBeOnTheScreen();
+    expect(screen.getByText('Adding ₦100 to your plan…')).toBeOnTheScreen();
   });
 
   it('still reads clearly without an amount', () => {
     render(<SavingsContributionProgress colors={Colors.dark} />);
     expect(
-      screen.getByText('Moving your money into your plan…')
+      screen.getByText('Adding your money to your plan…')
     ).toBeOnTheScreen();
   });
 });

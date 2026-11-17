@@ -16,6 +16,9 @@ export function useHeldWhileAdding(
   if (wasAdding !== isAdding) {
     setWasAdding(isAdding);
     setHeld(isAdding ? measured : undefined);
+  } else if (isAdding && held === undefined && measured !== undefined) {
+    // The add started before the sheet was measured: hold the first height.
+    setHeld(measured);
   }
   if (!isAdding || held === undefined || measured === undefined)
     return measured;

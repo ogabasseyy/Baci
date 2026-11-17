@@ -260,7 +260,7 @@ describe('WalletSavingsContributionFlow', () => {
 });
 
 describe('bugfix: a clear in-progress state while the contribution moves', () => {
-  it('covers the entry with "Moving ₦100 into your plan…" until the add settles', () => {
+  it('covers the entry with "Adding ₦100 to your plan…" until the add settles', () => {
     const props = {
       ...createProps(),
       addAmount: '100',
@@ -268,7 +268,7 @@ describe('bugfix: a clear in-progress state while the contribution moves', () =>
       isAdding: true,
     };
     const { rerender } = render(<WalletSavingsContributionFlow {...props} />);
-    expect(screen.getByText('Moving ₦100 into your plan…')).toBeOnTheScreen();
+    expect(screen.getByText('Adding ₦100 to your plan…')).toBeOnTheScreen();
     expect(
       screen.getByTestId('savings-contribution-progress')
     ).toBeOnTheScreen();

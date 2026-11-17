@@ -33,4 +33,20 @@ describe('SavingsToast', () => {
     view.rerender(<SavingsToast />);
     expect(screen.queryByText('₦100 added to iPhone 15')).toBeNull();
   });
+
+  it('drops a toast for another account so it never resurfaces on switching back', () => {
+    useSavingsToastStore.setState({
+      toast: {
+        id: 2,
+        message: '₦100 added to iPhone 15',
+        scope: 'user-1:merchant-1',
+      },
+    });
+    useAuthStore.setState({ user: { id: 'user-2' } as User });
+    const view = render(<SavingsToast />);
+    expect(useSavingsToastStore.getState().toast).toBeNull();
+    useAuthStore.setState({ user: { id: 'user-1' } as User });
+    view.rerender(<SavingsToast />);
+    expect(screen.queryByText('₦100 added to iPhone 15')).toBeNull();
+  });
 });

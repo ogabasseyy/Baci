@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Toast } from '@/components/ui/Toast';
 import { useAuthStore } from '@/stores/auth-store';
 import { useSavingsToastStore } from './savings-toast-store';
@@ -12,7 +13,14 @@ export function SavingsToast() {
   const clear = useSavingsToastStore((state) => state.clear);
   const userId = useAuthStore((state) => state.user?.id ?? '');
   const merchantId = useAuthStore((state) => state.merchantId ?? '');
-  if (!toast || toast.scope !== `${userId}:${merchantId}`) return null;
+  const scope = `${userId}:${merchantId}`;
+  const stale = toast !== null && toast.scope !== scope;
+  // A toast for another account or store is dropped, not just hidden, so it
+  // can never resurface after switching back.
+  useEffect(() => {
+    if (stale) clear();
+  }, [stale, clear]);
+  if (!toast || stale) return null;
   return (
     <Toast
       key={toast.id}

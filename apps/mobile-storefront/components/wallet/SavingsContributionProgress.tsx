@@ -5,7 +5,8 @@ import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 /**
  * Covers the amount entry while a contribution is moving, from the tap
  * through the PIN until the transfer is confirmed or fails: one clear
- * "moving" state instead of a greyed-out form. It lies over the entry
+ * "adding" state instead of a greyed-out form. The wording never claims the
+ * money is moving: the PIN may still be waiting for the customer. It lies over the entry
  * (absolutely positioned), so the sheet keeps its size.
  */
 export function SavingsContributionProgress({
@@ -17,8 +18,8 @@ export function SavingsContributionProgress({
 }) {
   const message =
     amount && amount > 0
-      ? `Moving ${formatNgnCurrency(amount)} into your plan…`
-      : 'Moving your money into your plan…';
+      ? `Adding ${formatNgnCurrency(amount)} to your plan…`
+      : 'Adding your money to your plan…';
   return (
     <View
       accessibilityLiveRegion="polite"
@@ -31,7 +32,7 @@ export function SavingsContributionProgress({
       <ActivityIndicator color={colors.primary} size="large" />
       <Text style={[styles.title, { color: colors.text }]}>{message}</Text>
       <Text style={[styles.hint, { color: colors.textSecondary }]}>
-        This usually takes a few seconds. Keep this open.
+        Keep this open. We’ll ask for your PIN if it’s needed.
       </Text>
     </View>
   );

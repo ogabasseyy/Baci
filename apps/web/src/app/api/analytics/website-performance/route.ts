@@ -160,13 +160,15 @@ export async function GET(request: NextRequest) {
   if (eventsError?.code === 'PGRST202') {
     const eventRows: Array<{ event_data: unknown; event_type: string }> = [];
     const pageSize = 1000;
-    for (let from = 0; from < MAX_FALLBACK_EVENT_ROWS; from += pageSize) {
+    let from = 0;
+    while (from < MAX_FALLBACK_EVENT_ROWS) {
       const remaining = MAX_FALLBACK_EVENT_ROWS - from;
-      const isFinalPage = remaining <= pageSize;
-      // Request one extra row on the final page to detect truncation cleanly.
-      const pageEnd = isFinalPage
-        ? MAX_FALLBACK_EVENT_ROWS
-        : from + pageSize - 1;
+      // Keep the final probe <= 501 rows (< PostgREST's 1,000-row cap) so
+      // `fetched.length > remaining` reliably detects >10,000 matching rows.
+      const chunkLimit =
+        remaining <= 500 ? remaining : Math.min(pageSize, remaining - 500);
+      const isFinalPage = remaining <= 500;
+      const pageEnd = isFinalPage ? from + remaining : from + chunkLimit - 1;
       const { data: page, error: pageError } = await supabase
         .from('analytics_events')
         .select('event_type, event_data')
@@ -189,7 +191,8 @@ export async function GET(request: NextRequest) {
         fallbackTruncated = true;
       }
       eventRows.push(...fetched.slice(0, remaining));
-      if (isFinalPage || fetched.length < pageSize) break;
+      if (isFinalPage || fetched.length < chunkLimit) break;
+      from += chunkLimit;
     }
     if (fallbackTruncated) {
       console.warn('[website-performance] Fallback event scan reached limit', {

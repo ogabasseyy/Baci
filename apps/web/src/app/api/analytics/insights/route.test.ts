@@ -38,6 +38,10 @@ const mockRedis = {
 };
 
 vi.mock('@/lib/cache', () => ({
+  cache: {
+    get: vi.fn(() => null),
+    set: vi.fn(),
+  },
   generateCacheKey: vi.fn(),
 }));
 

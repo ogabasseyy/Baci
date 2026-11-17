@@ -3,6 +3,28 @@ import { usdtWalletFundingApi } from './usdt-wallet-funding-api';
 
 export const USDT_POLL_INTERVAL_MS = 5_000;
 export const MAX_USDT_POLL_ATTEMPTS = 60;
+const USDT_STATUS_REQUEST_TIMEOUT_MS = 15_000;
+
+async function statusWithTimeout(
+  reference: string,
+  merchantSlug: string,
+  timeoutMs: number
+) {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      usdtWalletFundingApi.status(reference, merchantSlug),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error('USDT status request timed out')),
+          timeoutMs
+        );
+      }),
+    ]);
+  } finally {
+    if (timer !== null) clearTimeout(timer);
+  }
+}
 
 export interface UsdtFundingState {
   address: string | null;
@@ -40,12 +62,15 @@ export function useUsdtWalletFundingPolling({
     onFunded,
     onFundingChange,
   });
-  callbacksRef.current = {
-    onAmountChange,
-    onChainChange,
-    onFunded,
-    onFundingChange,
-  };
+
+  useEffect(() => {
+    callbacksRef.current = {
+      onAmountChange,
+      onChainChange,
+      onFunded,
+      onFundingChange,
+    };
+  }, [onAmountChange, onChainChange, onFunded, onFundingChange]);
 
   const reference = funding?.reference;
   const status = funding?.status;
@@ -87,9 +112,10 @@ export function useUsdtWalletFundingPolling({
       inFlight = true;
       if (!cancelled) setChecking(true);
       try {
-        const result = await usdtWalletFundingApi.status(
+        const result = await statusWithTimeout(
           reference,
-          merchantSlug
+          merchantSlug,
+          USDT_STATUS_REQUEST_TIMEOUT_MS
         );
         if (cancelled || result.kind !== 'ready') return;
         if (result.amount !== null) {

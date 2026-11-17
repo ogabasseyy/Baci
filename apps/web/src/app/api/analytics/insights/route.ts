@@ -70,7 +70,7 @@ async function generateInsights(
   // Generate cache key for AI insights (cached for 24h in Upstash Redis)
   const cacheKey = generateCacheKey('ai-insights', merchantId);
   const redis = getRedis();
-  const REDIS_CACHE_TIMEOUT_MS = 1_500;
+  const REDIS_CACHE_TIMEOUT_MS = 750;
 
   type InsightsPayload = {
     insights: Array<{
@@ -107,7 +107,7 @@ async function generateInsights(
       const cached = await withRedisTimeout(
         redis.get<InsightsPayload>(cacheKey)
       );
-      return cached ?? null;
+      return cached ?? cache.get<InsightsPayload>(cacheKey);
     } catch (error) {
       console.warn('[analytics/insights] Redis cache read failed', error);
       return cache.get<InsightsPayload>(cacheKey);

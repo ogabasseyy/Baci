@@ -33,7 +33,7 @@ function errorResponse(error: string, status: number, code?: string) {
   return NextResponse.json({ error, ...(code ? { code } : {}) }, { status });
 }
 
-async function gradeDevice(parts: DeviceMediaPart[]): Promise<unknown> {
+async function gradeDevice(parts: DeviceMediaPart[]): Promise<string> {
   const apiKey = process.env.GOOGLE_GENAI_API_KEY || process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error('Device grading is not configured');
 
@@ -44,11 +44,19 @@ async function gradeDevice(parts: DeviceMediaPart[]): Promise<unknown> {
     GRADING_PROMPT,
     ...parts.map((part) => ({ inlineData: part })),
   ]);
-  const text = result.response
+  return result.response
     .text()
     .replace(/```json|```/g, '')
     .trim();
-  return JSON.parse(text);
+}
+
+/** Malformed model output is `undefined`, which the schema then rejects. */
+function parseGrading(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -105,7 +113,7 @@ export async function POST(request: NextRequest) {
 
     let rawGrading: unknown;
     try {
-      rawGrading = await gradeDevice(media.parts);
+      rawGrading = parseGrading(await gradeDevice(media.parts));
     } catch (error) {
       console.error(
         '[grade-device] analysis failed:',

@@ -102,6 +102,26 @@ describe('TradeInModal', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
+  it('builds support links from the digits of the phone number only', async () => {
+    mocks.requestDeviceGrading.mockRejectedValue(new Error('Try again'));
+    render(
+      <TradeInModal
+        isOpen
+        onClose={vi.fn()}
+        supportPhone="+234 (800) 000-0000/../x"
+      />
+    );
+
+    await analyse();
+
+    expect(
+      await screen.findByRole('link', { name: /chat with support instead/i })
+    ).toHaveAttribute(
+      'href',
+      expect.stringMatching(/^https:\/\/wa\.me\/2348000000000\?text=/)
+    );
+  });
+
   it('leaves the estimate out of the chat message when no price matched', async () => {
     mocks.requestDeviceGrading.mockResolvedValue({
       ...graded,

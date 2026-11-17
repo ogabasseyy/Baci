@@ -27,9 +27,14 @@ export function TradeInModal({
 
   if (!isOpen) return null;
 
+  // Digits only: the number is interpolated into wa.me links below.
+  const supportDigits = supportPhone.replace(/\D/g, '');
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      // Local cap only: the clip stays on the device and still frames are
+      // uploaded, so this is not the (much smaller) server upload budget.
       if (file.size > 50 * 1024 * 1024) { // 50MB limit
         setError("Video is too large. Please keep it under 50MB and 15 seconds.");
         return;
@@ -69,7 +74,7 @@ export function TradeInModal({
       `I'd like to proceed with the swap.`
     );
 
-    window.open(`https://wa.me/${supportPhone}?text=${message}`, '_blank');
+    window.open(`https://wa.me/${supportDigits}?text=${message}`, '_blank');
     onClose();
   };
 
@@ -82,7 +87,7 @@ export function TradeInModal({
           <h3 className="font-bold text-lg flex items-center gap-2">
             <SparklesIcon className="text-red-600" /> AI Trade-in Valuator
           </h3>
-          <button type="button" onClick={onClose} className="p-1 hover:bg-gray-200 rounded-full transition-colors">
+          <button type="button" onClick={onClose} aria-label="Close" className="p-1 hover:bg-gray-200 rounded-full transition-colors">
             <X size={20} className="text-gray-500" />
           </button>
         </div>
@@ -135,7 +140,7 @@ export function TradeInModal({
                 <div className="text-sm text-red-600 bg-red-50 p-2 rounded-lg">
                   <p>{error}</p>
                   <a
-                    href={`https://wa.me/${supportPhone}?text=${encodeURIComponent("Hello! I'd like to swap my device.")}`}
+                    href={`https://wa.me/${supportDigits}?text=${encodeURIComponent("Hello! I'd like to swap my device.")}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="mt-1 inline-block font-semibold underline"

@@ -298,6 +298,17 @@ describe('POST /api/ai/grade-device', () => {
     expect(JSON.stringify(body)).not.toContain('AIza');
   });
 
+  it('reports malformed model output as unreadable, not as a transient failure', async () => {
+    mocks.generateContent.mockResolvedValue({
+      response: { text: () => 'Sorry, I cannot tell {' },
+    });
+
+    const response = await POST(post(videoUpload()));
+
+    expect(response.status).toBe(502);
+    expect((await response.json()).code).toBe('ANALYSIS_UNREADABLE');
+  });
+
   it('rejects a model answer outside the expected shape', async () => {
     aiAnswers({ model: 'iPhone 13 Pro', grade: 'Mint', observations: [] });
 

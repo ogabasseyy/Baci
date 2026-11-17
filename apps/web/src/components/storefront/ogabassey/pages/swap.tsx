@@ -25,12 +25,15 @@ export function OgabasseyV2Swap() {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24 md:pb-12 pt-4 md:pt-8 flex flex-col">
-      <TradeInModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        supportPhone={supportPhone}
-        merchantSlug={merchantContext?.merchant?.slug}
-      />
+      {/* Mounted only while open so each visit starts at a fresh upload step. */}
+      {isModalOpen && (
+        <TradeInModal
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          supportPhone={supportPhone}
+          merchantSlug={merchantContext?.merchant?.slug}
+        />
+      )}
 
       <div className="max-w-[1400px] mx-auto px-4 md:px-6 w-full flex-1 flex flex-col">
         <h1 className="text-2xl font-bold text-gray-900 mb-2 flex items-center gap-2">

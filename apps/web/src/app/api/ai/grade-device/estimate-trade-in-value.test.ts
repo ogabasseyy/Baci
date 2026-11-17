@@ -69,8 +69,48 @@ describe('estimateTradeInValue', () => {
       ['ilike', 'name', '%iPhone 13 Pro%'],
       ['gt', 'price', 0],
       ['order', 'price', { ascending: true }],
-      ['limit', 1],
+      ['limit', 25],
     ]);
+  });
+
+  it('skips cheaper accessory listings that contain the model name', async () => {
+    query.result = {
+      data: [
+        { name: 'iPhone 13 Pro Silicone Case', price: 5000 },
+        { name: 'Tempered Glass for iPhone 13 Pro', price: 3000 },
+        { name: 'Apple iPhone 13 Pro 128GB', price: 500000 },
+        { name: 'Apple iPhone 13 Pro 1TB', price: 800000 },
+      ],
+      error: null,
+    };
+
+    const estimate = await estimateTradeInValue('merchant-1', grading('Good'));
+
+    expect(estimate.matchedProduct).toBe('Apple iPhone 13 Pro 128GB');
+    expect(estimate.estimatedValue).toBe(300000);
+  });
+
+  it('gives no estimate when only accessories match', async () => {
+    query.result = {
+      data: [{ name: 'iPhone 13 Pro Charger', price: 8000 }],
+      error: null,
+    };
+
+    const estimate = await estimateTradeInValue('merchant-1', grading('Good'));
+
+    expect(estimate.estimatedValue).toBe(0);
+    expect(estimate.matchedProduct).toBe('Unknown Device');
+  });
+
+  it('does not treat a device whose name merely contains an accessory word as one', async () => {
+    query.result = {
+      data: [{ name: 'Samsung Galaxy Showcase Edition', price: 200000 }],
+      error: null,
+    };
+
+    const estimate = await estimateTradeInValue('merchant-1', grading('Good'));
+
+    expect(estimate.basePrice).toBe(200000);
   });
 
   it('escapes pattern characters in the model name', async () => {

@@ -129,6 +129,36 @@ describe('OgabasseyV2Swap', () => {
     expect((request.body as FormData).get('merchantSlug')).toBe('ogabassey');
   });
 
+  it('starts from a fresh upload step when the modal is reopened', async () => {
+    mocks.fetchWithCsrf.mockResolvedValue({
+      ok: false,
+      json: async () => ({ error: 'The video is too blurry' }),
+    });
+
+    render(<OgabasseyV2Swap />);
+
+    fireEvent.click(screen.getByRole('button', { name: /start ai trade-in/i }));
+    fireEvent.change(screen.getByLabelText(/upload a video/i), {
+      target: {
+        files: [new File(['video'], 'device.mp4', { type: 'video/mp4' })],
+      },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /analyze device/i }));
+    expect(
+      await screen.findByText('The video is too blurry')
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /close/i }));
+    fireEvent.click(screen.getByRole('button', { name: /start ai trade-in/i }));
+
+    expect(
+      screen.queryByText('The video is too blurry')
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /select video/i })
+    ).toBeInTheDocument();
+  });
+
   it('does not name the AI provider to customers', () => {
     render(<OgabasseyV2Swap />);
 

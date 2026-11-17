@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useColorScheme } from '@/components/useColorScheme';
-import Colors, { BRAND, SPACING } from '@/constants/Colors';
+import Colors, { BRAND, SPACING, withAlpha } from '@/constants/Colors';
 
 interface UtilityFormNoticeProps {
   /** Optional link under the message, such as "Add store credit". */
@@ -30,8 +30,8 @@ export function UtilityFormNotice({
         styles.notice,
         compact ? styles.compact : null,
         {
-          backgroundColor: `${BRAND.primary}10`,
-          borderColor: `${BRAND.primary}30`,
+          backgroundColor: withAlpha(BRAND.primary, 0.06),
+          borderColor: withAlpha(BRAND.primary, 0.19),
         },
       ]}
     >

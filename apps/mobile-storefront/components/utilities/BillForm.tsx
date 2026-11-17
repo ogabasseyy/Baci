@@ -9,9 +9,7 @@ import type { BillFormProps } from './bill-form.types';
 import { billFormStyles as styles } from './bill-form-styles';
 import { RecentUtilityRecipients } from './RecentUtilityRecipients';
 import { useBillFormController } from './use-bill-form-controller';
-import { useUtilityPayGate } from './use-utility-pay-gate';
-import { useUtilityRetainedAttempt } from './use-utility-retained-attempt';
-import { getFieldIssuePointer } from './utility-form-issue';
+import { useBillPayGate } from './use-bill-pay-gate';
 import { UTILITY_FOOTER_NOTICE_SPACE } from './utility-pay-readiness';
 
 export function BillForm(props: BillFormProps) {
@@ -56,21 +54,15 @@ export function BillForm(props: BillFormProps) {
     verify,
     walletReturnToHref,
   } = useBillFormController(props);
-  const retained = useUtilityRetainedAttempt(payment, purchaseRequest ?? null);
-  const payGate = useUtilityPayGate({
-    amount: numericAmount,
-    formIssue: amountIssue,
+  const payGate = useBillPayGate({
+    amountIssue,
+    formattedAmount,
+    numericAmount,
     payment,
-    retained,
+    purchaseRequest,
     returnToHref: walletReturnToHref,
   });
-  // An amount issue is shown under the amount field once something is typed.
-  const amountIssueInline = Boolean(amountIssue && formattedAmount);
-  const footerNotice = amountIssueInline
-    ? { action: null, message: getFieldIssuePointer('amount') }
-    : payGate.blockedReason
-      ? { action: payGate.action, message: payGate.blockedReason }
-      : null;
+  const footerNotice = payGate.notice;
 
   // Returning users repeat far more than they add new meters, so when there are
   // beneficiaries the full provider grid collapses behind an "Other providers"

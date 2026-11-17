@@ -1,3 +1,4 @@
+import { inspect } from 'node:util';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { mockCacheLife, mockCacheTag } = vi.hoisted(() => ({
@@ -49,6 +50,12 @@ describe('sanitizeMonnifyErrorDetail', () => {
     ).toBe('Insufficient wallet balance for [redacted] or [redacted]');
   });
 
+  it('keeps grouped references that are not phone-shaped', () => {
+    expect(sanitizeMonnifyErrorDetail('Ref 1234 5678 99 failed')).toBe(
+      'Ref 1234 5678 99 failed'
+    );
+  });
+
   it('keeps short numbers such as status codes and amounts', () => {
     expect(sanitizeMonnifyErrorDetail('400 Bad Request: amount 50,000')).toBe(
       '400 Bad Request: amount 50,000'
@@ -66,7 +73,9 @@ describe('sanitizeMonnifyErrorDetail', () => {
 
     expect(error.rawDetail).toBe('Balance low for 08012345678');
     expect(JSON.stringify(error)).not.toContain('08012345678');
-    expect(Object.keys(error)).not.toContain('rawDetail');
+    expect(inspect(error, { showHidden: true, depth: 5 })).not.toContain(
+      '08012345678'
+    );
   });
 
   it('truncates long messages to the configured detail cap', () => {

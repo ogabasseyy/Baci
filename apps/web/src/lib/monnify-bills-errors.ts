@@ -1,19 +1,20 @@
 import { isMonnifyDuplicateReferenceText } from './monnify-duplicate-reference';
 
 const SENSITIVE_DIGIT_SEQUENCE_PATTERN = /(?<!\d)\d{7,}(?!\d)/g;
-/** Numbers written in groups, e.g. "+234 801 234 5678" or "0801-234-5678". */
-const SENSITIVE_GROUPED_NUMBER_PATTERN =
-  /\+?(?<![\d])\d(?:[ -]?\d){6,}(?![\d])/g;
+/**
+ * Nigerian phone numbers written in groups, e.g. "+234 801 234 5678" or
+ * "0801-234-5678". Only phone-shaped groups: other long references stay
+ * readable (unbroken runs of 7+ digits are already redacted above).
+ */
+const SENSITIVE_GROUPED_PHONE_PATTERN =
+  /(?<!\d)(?:\+?234[ -]?|0)[789][01]\d(?:[ -]?\d){7}(?!\d)/g;
+/** Unscrubbed Monnify bodies, kept off the error object entirely. */
+const rawDetailByError = new WeakMap<MonnifyHttpError, string | null>();
 const MONNIFY_ERROR_DETAIL_MAX_LENGTH = 240;
 const MONNIFY_ERROR_DETAIL_REDACTION_LOOKAHEAD = 64;
 
 export class MonnifyHttpError extends Error {
   readonly detail: string | null;
-  /**
-   * Monnify's full, unscrubbed error body. Only for classifying the answer
-   * (duplicate, known refusal) before it is cut short; never log or store it.
-   */
-  declare readonly rawDetail: string | null;
   readonly status: number;
   readonly statusText: string;
 
@@ -34,14 +35,18 @@ export class MonnifyHttpError extends Error {
     Object.setPrototypeOf(this, MonnifyHttpError.prototype);
     this.name = 'MonnifyHttpError';
     this.detail = detail;
-    // Not enumerable, so logging or serialising the error never carries
-    // the unscrubbed body (it is read directly, for classification only).
-    Object.defineProperty(this, 'rawDetail', {
-      enumerable: false,
-      value: rawDetail,
-    });
+    rawDetailByError.set(this, rawDetail);
     this.status = status;
     this.statusText = statusText;
+  }
+
+  /**
+   * Monnify's full, unscrubbed error body, only for classifying the answer
+   * (duplicate, known refusal) before it is cut short. It lives outside the
+   * object, so logging, inspecting or serialising the error never shows it.
+   */
+  get rawDetail(): string | null {
+    return rawDetailByError.get(this) ?? null;
   }
 
   get isClientError() {
@@ -93,7 +98,7 @@ export function sanitizeMonnifyErrorDetail(value: string) {
 
   return boundedValue
     .replace(SENSITIVE_DIGIT_SEQUENCE_PATTERN, '[redacted]')
-    .replace(SENSITIVE_GROUPED_NUMBER_PATTERN, '[redacted]')
+    .replace(SENSITIVE_GROUPED_PHONE_PATTERN, '[redacted]')
     .slice(0, MONNIFY_ERROR_DETAIL_MAX_LENGTH)
     .trim();
 }

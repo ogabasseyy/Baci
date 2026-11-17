@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 export type SaveZohoRefreshTokenResult =
   | { ok: true }
-  | { ok: false; status: 403 | 500 };
+  | { ok: false; status: 400 | 403 | 500 };
 
 /**
  * Stores the Zoho refresh token through the permission-checked database function.
@@ -26,5 +26,8 @@ export async function saveZohoRefreshToken(
   });
   if (!error) return { ok: true };
   console.error('Zoho refresh token save failed:', error.code);
-  return { ok: false, status: error.code === '42501' ? 403 : 500 };
+  if (error.code === '42501') return { ok: false, status: 403 };
+  // 22023: the database rejected the value itself (for example over 4096 characters).
+  if (error.code === '22023') return { ok: false, status: 400 };
+  return { ok: false, status: 500 };
 }

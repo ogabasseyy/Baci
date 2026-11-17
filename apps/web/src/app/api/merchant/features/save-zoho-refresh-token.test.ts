@@ -48,6 +48,16 @@ describe('saveZohoRefreshToken', () => {
     spy.mockRestore();
   });
 
+  it('maps a rejected value (22023) to 400', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { client } = clientWith({ code: '22023', message: 'too long' });
+    expect(await saveZohoRefreshToken(client, 'm1', 'x'.repeat(5000))).toEqual({
+      ok: false,
+      status: 400,
+    });
+    spy.mockRestore();
+  });
+
   it('maps any other failure to 500', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const { client } = clientWith({ code: 'XX000', message: 'boom' });

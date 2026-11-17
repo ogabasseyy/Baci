@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockGetBillersByCategory = vi.fn();
 const mockLoggerWarn = vi.fn();
@@ -178,5 +178,67 @@ describe('assertKudaBillItemPriceCurrent', () => {
     expect(mockLoggerWarn).toHaveBeenCalledWith(
       expect.objectContaining({ error: 'Kuda down', type: 'cable_tv' })
     );
+  });
+  it('checks only the biller the purchase names when it lists the item', async () => {
+    mockGetBillersByCategory.mockResolvedValue([
+      cableBillers()[0],
+      {
+        ...cableBillers()[0],
+        billerId: 'startimes-2',
+        billerName: 'STARTIMES PLUS',
+        billItems: [{ ...startimesSuper, amount: 9000 }],
+      },
+    ]);
+
+    await expect(
+      assertKudaBillItemPriceCurrent({
+        amount: 9500,
+        billItemIdentifier: 'KUD-CAB-STT-SUPER',
+        billerName: 'STARTIMES NG - Group',
+        type: 'cable_tv',
+      })
+    ).resolves.toBeUndefined();
+  });
+
+  describe('when Kuda cannot be reached', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('keeps blocking stale prices with the last list that loaded', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-11-17T10:00:00Z'));
+      const input = {
+        amount: 9500,
+        billItemIdentifier: 'KUD-CAB-STT-SUPER',
+        type: 'cable_tv',
+      };
+      await assertKudaBillItemPriceCurrent(input);
+      vi.setSystemTime(new Date('2026-11-17T12:00:00Z'));
+      mockGetBillersByCategory.mockRejectedValue(new Error('Kuda down'));
+
+      await expect(
+        assertKudaBillItemPriceCurrent({ ...input, amount: 950000 })
+      ).rejects.toThrow('has changed');
+      expect(mockGetBillersByCategory).toHaveBeenCalledTimes(2);
+    });
+
+    it('lets the purchase continue once the last list is over a day old', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-11-17T10:00:00Z'));
+      const input = {
+        amount: 9500,
+        billItemIdentifier: 'KUD-CAB-STT-SUPER',
+        type: 'cable_tv',
+      };
+      await assertKudaBillItemPriceCurrent(input);
+      vi.setSystemTime(new Date('2026-11-18T10:00:01Z'));
+      mockGetBillersByCategory.mockRejectedValue(new Error('Kuda down'));
+
+      await expect(
+        assertKudaBillItemPriceCurrent({ ...input, amount: 950000 })
+      ).resolves.toBeUndefined();
+      expect(mockLoggerWarn).toHaveBeenCalled();
+    });
   });
 });

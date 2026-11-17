@@ -756,6 +756,7 @@ export async function preparePendingVtuTransaction({
     await assertKudaBillItemPriceCurrent({
       amount: purchaseAmount,
       billItemIdentifier: input.billItemIdentifier,
+      billerName: input.billerName,
       type: input.type,
     });
   }

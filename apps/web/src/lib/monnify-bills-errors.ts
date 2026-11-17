@@ -4,11 +4,12 @@ import { isMonnifyKnownVendRefusalText } from './monnify-vend-refusal';
 const SENSITIVE_DIGIT_SEQUENCE_PATTERN = /(?<!\d)\d{7,}(?!\d)/g;
 /**
  * Nigerian phone numbers written in groups, e.g. "+234 801 234 5678",
- * "0801-234-5678", "0801.234.5678" or "(0801) 234 5678". Only phone-shaped groups: other long references stay
+ * "0801-234-5678", "0801.234.5678", "(0801) 234 5678" or
+ * "+234 (801) 234 5678". Only phone-shaped groups: other long references stay
  * readable (unbroken runs of 7+ digits are already redacted above).
  */
 const SENSITIVE_GROUPED_PHONE_PATTERN =
-  /(?<!\d)\(?(?:\+?234[ .-]?|0)[789][01]\d\)?(?:[ .-]?\d){7}(?!\d)/g;
+  /(?<!\d)\(?(?:\+?234\)?[ .-]?\(?|0)[789][01]\d\)?(?:[ .-]?\d){7}(?!\d)/g;
 /**
  * Unscrubbed Monnify bodies, kept off the error object entirely and only
  * read inside this module to classify the answer: nothing outside it can
@@ -20,6 +21,7 @@ function classificationText(error: MonnifyHttpError) {
   return `${error.message} - ${rawDetailByError.get(error) ?? error.detail ?? ''}`;
 }
 const MONNIFY_ERROR_DETAIL_MAX_LENGTH = 240;
+const MONNIFY_RAW_DETAIL_MAX_LENGTH = 4096;
 const MONNIFY_ERROR_DETAIL_REDACTION_LOOKAHEAD = 64;
 
 export class MonnifyHttpError extends Error {
@@ -59,6 +61,13 @@ export class MonnifyHttpError extends Error {
    */
   get isKnownRefusal() {
     return isMonnifyKnownVendRefusalText(classificationText(this));
+  }
+
+  /** The answer talks about a vend outcome or an unavailable service. */
+  get mentionsVendOutcome() {
+    return /unavailable|vend\w*\s+(?:request\s+)?fail|fail\w*\s+to\s+vend/i.test(
+      classificationText(this)
+    );
   }
 
   /**
@@ -157,7 +166,11 @@ export async function createMonnifyHttpError(
   return new MonnifyHttpError({
     detail: getMonnifyHttpErrorDetail(responseText),
     prefix,
-    rawDetail: responseText?.trim() ? responseText : null,
+    // Capped: enough to classify (duplicate wording past the 240-character
+    // detail cut) without holding a whole HTML error page.
+    rawDetail: responseText?.trim()
+      ? responseText.slice(0, MONNIFY_RAW_DETAIL_MAX_LENGTH)
+      : null,
     status: response.status,
     statusText: response.statusText,
   });

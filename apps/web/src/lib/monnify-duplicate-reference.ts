@@ -7,7 +7,7 @@
  * not match.
  */
 const MONNIFY_DUPLICATE_REFERENCE_PATTERN =
-  /duplicate|idempoten|conflict|(?:reference|transaction)\s+(?:has\s+)?(?:already|exists?|(?:is\s+)?in\s+use|been\s+used)|already\s+(?:been\s+)?(?:used|processed|submitted|exists?)/i;
+  /duplicate|idempoten|conflict|(?:reference|transaction)\s+(?:has\s+)?(?:already|exists?|(?:is\s+)?in\s+use|been\s+used)|already\s+(?:been\s+)?(?:used|processed|submitted|exists?|vended|delivered|paid|dispatched|completed|fulfilled)/i;
 
 /** Whether a Monnify message says the vend reference was already used. */
 export function isMonnifyDuplicateReferenceText(

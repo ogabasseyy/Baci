@@ -123,10 +123,12 @@ describe('Monnify bill purchase errors', () => {
     });
 
     it.each([
-      [401, 'Unauthorized'],
-      [403, 'Forbidden'],
-    ])('never marks an authentication answer (%i) that reports a duplicate as definite', async (status, statusText) => {
-      mockHttpError(status, statusText, 'Duplicate vendReference');
+      [401, 'Unauthorized', 'Duplicate vendReference'],
+      [403, 'Forbidden', 'Reference already vended'],
+      [403, 'Forbidden', 'Service unavailable'],
+      [401, 'Unauthorized', 'Vend request failed'],
+    ])('never marks an authentication answer (%i, %s) that may follow a vend as definite', async (status, statusText, message) => {
+      mockHttpError(status, statusText, message);
 
       await expect(vend()).resolves.toMatchObject({
         providerDefiniteFailure: false,

@@ -11,11 +11,17 @@ import { gatherConsentBeforeTracking } from '@/services/consent-before-tracking'
 
 interface UseAppTrackingTransparencyOptions {
   enabled: boolean;
+  /** Show our explainer screen and wait for Continue before Apple's prompt. */
+  explainFirst?: boolean;
 }
 
 interface UseAppTrackingTransparencyResult {
   isTrackingAuthorizationSettled: boolean;
+  explainer: { visible: boolean; onContinue: () => void };
 }
+
+// Lets the native launch animation finish fading before the explainer shows.
+export const TRACKING_EXPLAINER_DELAY_MS = 1000;
 
 // iOS silently completes an ATT request with 'denied' WITHOUT recording a
 // decision when the request lands outside a fully-active UIKit state (e.g.
@@ -48,9 +54,12 @@ function recordAttLifecycleEvent(
 
 export function useAppTrackingTransparency({
   enabled,
+  explainFirst = false,
 }: UseAppTrackingTransparencyOptions): UseAppTrackingTransparencyResult {
   const [isTrackingAuthorizationSettled, setIsTrackingAuthorizationSettled] =
     useState(() => !canRequestTrackingTransparency());
+  const [explainerVisible, setExplainerVisible] = useState(false);
+  const continueRef = useRef<(() => void) | null>(null);
   const hasStartedRef = useRef(false);
 
   useEffect(() => {
@@ -71,6 +80,29 @@ export function useAppTrackingTransparency({
     let unrecordedDenialRetryTimeout: ReturnType<typeof setTimeout> | null =
       null;
     let unrecordedDenialRetries = 0;
+    let explainerTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    // Apple's prompt only follows the shopper's own tap on Continue: it never
+    // covers the launch animation, and iOS cannot discard a request made from
+    // a fully active, user-initiated moment.
+    const waitForContinue = () =>
+      new Promise<void>((resolve) => {
+        explainerTimeout = setTimeout(() => {
+          explainerTimeout = null;
+          if (cancelled) return;
+          continueRef.current = () => {
+            continueRef.current = null;
+            setExplainerVisible(false);
+            recordAttLifecycleEvent(
+              'ATT Explainer Continued',
+              'att:explainer_continued'
+            );
+            resolve();
+          };
+          setExplainerVisible(true);
+          recordAttLifecycleEvent('ATT Explainer Shown', 'att:explainer_shown');
+        }, TRACKING_EXPLAINER_DELAY_MS);
+      });
 
     const settle = () => {
       if (!cancelled) {
@@ -172,6 +204,11 @@ export function useAppTrackingTransparency({
           return;
         }
 
+        if (explainFirst) {
+          await waitForContinue();
+          if (cancelled) return;
+        }
+
         // Google's consent message carries the explainer for this prompt,
         // so it goes first. Only a shopper who has not decided yet waits on
         // it, and it never rejects or hangs: whatever the outcome, the
@@ -226,8 +263,17 @@ export function useAppTrackingTransparency({
       if (unrecordedDenialRetryTimeout) {
         clearTimeout(unrecordedDenialRetryTimeout);
       }
+      if (explainerTimeout) clearTimeout(explainerTimeout);
+      continueRef.current = null;
+      setExplainerVisible(false);
     };
-  }, [enabled, isTrackingAuthorizationSettled]);
+  }, [enabled, explainFirst, isTrackingAuthorizationSettled]);
 
-  return { isTrackingAuthorizationSettled };
+  return {
+    isTrackingAuthorizationSettled,
+    explainer: {
+      visible: explainerVisible,
+      onContinue: () => continueRef.current?.(),
+    },
+  };
 }

@@ -112,9 +112,11 @@ export default function RootLayout() {
     storageReady: isStorageReady,
     timedOut,
   });
-  const { isTrackingAuthorizationSettled } = useAppTrackingTransparency({
-    enabled: !showSplash && isInitialized && isStorageReady,
-  });
+  const { isTrackingAuthorizationSettled, explainer } =
+    useAppTrackingTransparency({
+      enabled: !showSplash && isInitialized && isStorageReady,
+      explainFirst: true,
+    });
   const isPushRegisteredForCurrentUser = Boolean(
     storeUser?.id && isPushRegistered && registeredUserId === storeUser.id
   );
@@ -292,6 +294,7 @@ export default function RootLayout() {
     <RootLayoutNav
       onFirstLayout={onFirstLayout}
       adTrackingReady={isStartupAdTrackingReady}
+      trackingExplainer={explainer}
       persistenceEnabled={!showSplash}
       shouldResumeNavigation={hasCompletedInitialBoot}
     />

@@ -3812,7 +3812,7 @@ describe('fulfillPendingVtuTransaction', () => {
   });
 
   it('restores an airtime Monnify unknown outcome to pending without calling Kuda', async () => {
-    const transientError = new Error('Transient vend outcome: 408 timeout');
+    const transientError = new Error('Transient vend outcome: timeout');
     transientError.name = 'MonnifyTransientVendError';
     mockMonnifyPurchaseBill.mockRejectedValue(transientError);
     const updatePayloads: unknown[] = [];

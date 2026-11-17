@@ -6,17 +6,24 @@ const MONNIFY_ERROR_DETAIL_REDACTION_LOOKAHEAD = 64;
 
 export class MonnifyHttpError extends Error {
   readonly detail: string | null;
+  /**
+   * Monnify's full, unscrubbed error body. Only for classifying the answer
+   * (duplicate, known refusal) before it is cut short; never log or store it.
+   */
+  readonly rawDetail: string | null;
   readonly status: number;
   readonly statusText: string;
 
   constructor({
     detail,
     prefix,
+    rawDetail = null,
     status,
     statusText,
   }: {
     detail: string | null;
     prefix: string;
+    rawDetail?: string | null;
     status: number;
     statusText: string;
   }) {
@@ -24,18 +31,18 @@ export class MonnifyHttpError extends Error {
     Object.setPrototypeOf(this, MonnifyHttpError.prototype);
     this.name = 'MonnifyHttpError';
     this.detail = detail;
+    this.rawDetail = rawDetail;
     this.status = status;
     this.statusText = statusText;
   }
 
-  /**
-   * A 4xx answer to the request. 408 (timed out) is excluded: the vend may
-   * have registered, so it stays an unknown outcome and is resubmitted under
-   * the same vend reference, which Monnify then accepts once or reports as
-   * a duplicate.
-   */
   get isClientError() {
-    return this.status >= 400 && this.status < 500 && this.status !== 408;
+    return this.status >= 400 && this.status < 500;
+  }
+
+  /** The full answer, for classification only (see rawDetail). */
+  get classificationText() {
+    return `${this.message} - ${this.rawDetail ?? this.detail ?? ''}`;
   }
 
   /**
@@ -46,7 +53,7 @@ export class MonnifyHttpError extends Error {
   get isDuplicateReference() {
     return (
       this.status === 409 ||
-      isMonnifyDuplicateReferenceText(this.diagnosticMessage)
+      isMonnifyDuplicateReferenceText(this.classificationText)
     );
   }
 
@@ -104,24 +111,19 @@ function getMonnifyErrorDetailFromBody(value: unknown): string | null {
   return null;
 }
 
-async function getMonnifyHttpErrorDetail(response: Response) {
-  try {
-    const responseText = await response.text();
-    if (!responseText.trim()) {
-      return null;
-    }
-
-    try {
-      const parsed = JSON.parse(responseText) as unknown;
-      return (
-        getMonnifyErrorDetailFromBody(parsed) ??
-        sanitizeMonnifyErrorDetail(responseText)
-      );
-    } catch {
-      return sanitizeMonnifyErrorDetail(responseText);
-    }
-  } catch {
+function getMonnifyHttpErrorDetail(responseText: string | null) {
+  if (!responseText?.trim()) {
     return null;
+  }
+
+  try {
+    const parsed = JSON.parse(responseText) as unknown;
+    return (
+      getMonnifyErrorDetailFromBody(parsed) ??
+      sanitizeMonnifyErrorDetail(responseText)
+    );
+  } catch {
+    return sanitizeMonnifyErrorDetail(responseText);
   }
 }
 
@@ -129,9 +131,16 @@ export async function createMonnifyHttpError(
   response: Response,
   prefix: string
 ) {
+  let responseText: string | null = null;
+  try {
+    responseText = await response.text();
+  } catch {
+    responseText = null;
+  }
   return new MonnifyHttpError({
-    detail: await getMonnifyHttpErrorDetail(response),
+    detail: getMonnifyHttpErrorDetail(responseText),
     prefix,
+    rawDetail: responseText?.trim() ? responseText : null,
     status: response.status,
     statusText: response.statusText,
   });

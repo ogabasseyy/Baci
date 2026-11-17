@@ -18,7 +18,7 @@ vi.mock('@/lib/monnify-provider-config', () => ({
   getMonnifyBaseUrl: () => 'https://sandbox.monnify.com',
 }));
 
-import { MonnifyTransientVendError, purchaseBill } from './monnify-bills';
+import { purchaseBill } from './monnify-bills';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -110,10 +110,60 @@ describe('Monnify bill purchase errors', () => {
       );
     }
 
-    it('treats HTTP 408 as an unknown outcome to resubmit', async () => {
-      mockHttpError(408, 'Request Timeout', 'Request timed out');
+    it('never hands a 408 timeout to Kuda', async () => {
+      mockHttpError(408, 'Request Timeout', 'Insufficient wallet balance');
 
-      await expect(vend()).rejects.toBeInstanceOf(MonnifyTransientVendError);
+      await expect(vend()).resolves.toMatchObject({
+        providerDefiniteFailure: false,
+        status: 'failed',
+      });
+    });
+
+    it.each([
+      [401, 'Unauthorized'],
+      [403, 'Forbidden'],
+    ])('marks an authentication rejection (%i) as definite', async (status, statusText) => {
+      mockHttpError(status, statusText, 'Access denied');
+
+      await expect(vend()).resolves.toMatchObject({
+        providerDefiniteFailure: true,
+        status: 'failed',
+      });
+    });
+
+    it('spots a duplicate mentioned after the first 240 characters', async () => {
+      const longTail = `Insufficient wallet balance. ${'x'.repeat(300)} Duplicate vendReference`;
+      mockHttpError(400, 'Bad Request', longTail);
+      await expect(vend()).resolves.toMatchObject({
+        providerDefiniteFailure: false,
+      });
+
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          requestSuccessful: false,
+          responseCode: '01',
+          responseMessage: longTail,
+        }),
+      });
+      await expect(vend()).resolves.toMatchObject({
+        providerDefiniteFailure: false,
+      });
+    });
+
+    it('scrubs customer numbers out of a FAILED vend message', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          requestSuccessful: true,
+          responseCode: '0',
+          responseMessage: 'Vend failed for 08012345678',
+          responseBody: { vendReference: 'MFBP-1', vendStatus: 'FAILED' },
+        }),
+      });
+
+      const result = await vend();
+      expect(result.message).not.toContain('08012345678');
     });
 
     it('does not mark a 4xx outside the known refusals as definite', async () => {

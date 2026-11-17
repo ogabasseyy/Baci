@@ -119,25 +119,24 @@ export async function purchaseBill(
     );
 
     if (!isMonnifyBusinessSuccess(parsedEnvelope)) {
-      // Scrubbed like HTTP error details: Monnify may echo the customer's
-      // number, and this text is persisted and logged.
-      const message = sanitizeMonnifyErrorDetail(
-        getMonnifyEnvelopeMessage({
-          fallback: 'Monnify business failure',
-          responseCode: parsedEnvelope.responseCode,
-          responseMessage: parsedEnvelope.responseMessage,
-        })
-      );
+      const rawMessage = getMonnifyEnvelopeMessage({
+        fallback: 'Monnify business failure',
+        responseCode: parsedEnvelope.responseCode,
+        responseMessage: parsedEnvelope.responseMessage,
+      });
       return {
         success: false,
         reference: requestReference,
-        message,
+        // Scrubbed like HTTP error details: Monnify may echo the customer's
+        // number, and this text is persisted and logged. Classification
+        // below reads the full text, before it is cut short.
+        message: sanitizeMonnifyErrorDetail(rawMessage),
         status: 'failed',
         amount,
         providerDefiniteFailure:
-          isMonnifyKnownVendRefusalText(message) &&
+          isMonnifyKnownVendRefusalText(rawMessage) &&
           !isMonnifyDuplicateReferenceText(
-            `${parsedEnvelope.responseCode ?? ''} ${message}`
+            `${parsedEnvelope.responseCode ?? ''} ${rawMessage}`
           ),
       };
     }
@@ -177,9 +176,10 @@ export async function purchaseBill(
       providerVendReference: vendReference,
       pin: body.metaData?.token || body.token || undefined,
       units: body.metaData?.unit || undefined,
-      message:
+      message: sanitizeMonnifyErrorDetail(
         parsedEnvelope.responseMessage ||
-        (isFailed ? 'Vend request failed' : 'Vend request completed'),
+          (isFailed ? 'Vend request failed' : 'Vend request completed')
+      ),
       status,
       amount,
       // Only an explicit FAILED status is a refusal; an unrecognised status
@@ -196,9 +196,15 @@ export async function purchaseBill(
         providerErrorDetail: error.diagnosticMessage,
         status: 'failed',
         amount,
+        // A refusal Monnify gave before vending: an authentication rejection
+        // (401/403, e.g. revoked credentials) or a known refusal. A timeout
+        // (408) or anything that may be a duplicate never qualifies.
         providerDefiniteFailure:
+          error.status !== 408 &&
           !error.isDuplicateReference &&
-          isMonnifyKnownVendRefusalText(error.diagnosticMessage),
+          (error.status === 401 ||
+            error.status === 403 ||
+            isMonnifyKnownVendRefusalText(error.classificationText)),
       };
     }
 

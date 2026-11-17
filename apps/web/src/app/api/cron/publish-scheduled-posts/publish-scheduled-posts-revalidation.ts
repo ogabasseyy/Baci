@@ -135,8 +135,10 @@ export async function revalidateScheduledPostsByMerchant(
           )
         );
         if (!purgeResult.ok) {
-          throw new Error(
-            `Cloudflare blog edge purge failed: ${purgeResult.reason ?? 'unknown'}`
+          console.warn(
+            'Cron Warning: Cloudflare blog edge purge did not complete for merchant %s: %s',
+            merchantId,
+            purgeResult.reason ?? 'unknown'
           );
         }
         edgePurgeOnly = true;

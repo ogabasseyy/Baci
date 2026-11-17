@@ -34,21 +34,30 @@ const MAX_UNLOCK_ORDERS_POLL_ATTEMPTS = 60;
 
 async function listWithTimeout(
   merchantSlug: string,
-  timeoutMs: number
+  timeoutMs: number,
+  outerSignal?: AbortSignal
 ): Promise<ImeiRemediationOrder[]> {
+  const controller = new AbortController();
+  const forwardAbort = () => controller.abort(outerSignal?.reason);
+  if (outerSignal?.aborted) {
+    controller.abort(outerSignal.reason);
+  } else if (outerSignal) {
+    outerSignal.addEventListener('abort', forwardAbort, { once: true });
+  }
   let timer: ReturnType<typeof setTimeout> | null = null;
   try {
     return await Promise.race([
-      imeiRemediationApi.list(merchantSlug),
+      imeiRemediationApi.list(merchantSlug, controller.signal),
       new Promise<never>((_, reject) => {
-        timer = setTimeout(
-          () => reject(new Error('Request timed out')),
-          timeoutMs
-        );
+        timer = setTimeout(() => {
+          controller.abort();
+          reject(new Error('Request timed out'));
+        }, timeoutMs);
       }),
     ]);
   } finally {
     if (timer !== null) clearTimeout(timer);
+    outerSignal?.removeEventListener('abort', forwardAbort);
   }
 }
 
@@ -72,6 +81,7 @@ export function OgabasseyUnlockOrders() {
     let attempts = 0;
     let latestRequestId = 0;
     let interval: ReturnType<typeof setInterval> | null = null;
+    const unmountController = new AbortController();
 
     const stopPolling = () => {
       if (interval !== null) {
@@ -102,7 +112,8 @@ export function OgabasseyUnlockOrders() {
       try {
         const result = await listWithTimeout(
           merchantSlug,
-          UNLOCK_ORDERS_REQUEST_TIMEOUT_MS
+          UNLOCK_ORDERS_REQUEST_TIMEOUT_MS,
+          unmountController.signal
         );
         if (!cancelled && requestId === latestRequestId) {
           setOrders(result);
@@ -139,6 +150,7 @@ export function OgabasseyUnlockOrders() {
     }
     return () => {
       cancelled = true;
+      unmountController.abort();
       stopPolling();
       if (typeof document !== 'undefined') {
         document.removeEventListener('visibilitychange', handleVisibilityChange);

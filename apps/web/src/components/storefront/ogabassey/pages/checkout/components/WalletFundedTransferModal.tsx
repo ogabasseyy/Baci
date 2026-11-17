@@ -189,8 +189,9 @@ export function WalletFundedTransferModal({
 
           {error && (
             <p className="text-center text-store-foreground/60 text-xs">
-              We could not reach the server to check this transfer. We will keep
-              trying — your money is not affected.
+              {pollingExhausted
+                ? 'We could not reach the server to check this transfer. Your money is not affected.'
+                : 'We could not reach the server to check this transfer. We will keep trying — your money is not affected.'}
             </p>
           )}
 

@@ -5,6 +5,7 @@
  * API Documentation: https://docs.kuda.com/
  */
 
+import { type BillItem, mapKudaBillItems } from '@/lib/kuda-bill-items';
 import { isKudaOutcomeUnknown } from '@/lib/kuda-transport-error';
 import {
   extractKudaTransactionId,
@@ -86,92 +87,6 @@ interface KudaRawBiller {
   BillItems?: unknown[];
 }
 
-interface KudaRawBillItem {
-  ItemCode?: string;
-  itemCode?: string;
-  KudaIdentifier?: string;
-  kudaIdentifier?: string;
-  ItemName?: string;
-  itemName?: string;
-  Name?: string;
-  name?: string;
-  Amount?: number | string;
-  amount?: number | string;
-  ItemCurrencySymbol?: string;
-  itemCurrencySymbol?: string;
-  IsAmountFixed?: boolean;
-  isAmountFixed?: boolean;
-  IsFixedPrice?: boolean;
-  isFixedPrice?: boolean;
-  ItemFee?: number | string;
-  itemFee?: number | string;
-  BillItems?: unknown[];
-  billItems?: unknown[];
-}
-
-function toNumber(value: number | string | undefined, fallback = 0) {
-  if (typeof value === 'number') {
-    return Number.isFinite(value) ? value : fallback;
-  }
-
-  if (typeof value === 'string') {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : fallback;
-  }
-
-  return fallback;
-}
-
-function mapBillItem(raw: unknown): BillItem | null {
-  if (!raw || typeof raw !== 'object') {
-    return null;
-  }
-
-  const item = raw as KudaRawBillItem;
-  const itemCode =
-    normalizeKudaString(item.ItemCode) ??
-    normalizeKudaString(item.itemCode) ??
-    normalizeKudaString(item.KudaIdentifier) ??
-    normalizeKudaString(item.kudaIdentifier);
-  const itemName =
-    normalizeKudaString(item.ItemName) ??
-    normalizeKudaString(item.itemName) ??
-    normalizeKudaString(item.Name) ??
-    normalizeKudaString(item.name);
-
-  if (!itemCode || !itemName) {
-    return null;
-  }
-
-  return {
-    itemCode,
-    itemName,
-    amount: toNumber(item.Amount ?? item.amount),
-    itemCurrencySymbol:
-      item.ItemCurrencySymbol ?? item.itemCurrencySymbol ?? 'NGN',
-    isAmountFixed:
-      item.IsAmountFixed ??
-      item.isAmountFixed ??
-      item.IsFixedPrice ??
-      item.isFixedPrice ??
-      false,
-    itemFee: toNumber(item.ItemFee ?? item.itemFee),
-    billItems: mapBillItems(item.BillItems ?? item.billItems),
-  };
-}
-
-function mapBillItems(rawItems: unknown[] | undefined): BillItem[] | undefined {
-  if (!rawItems || rawItems.length === 0) {
-    return undefined;
-  }
-
-  const billItems = rawItems
-    .map((rawItem) => mapBillItem(rawItem))
-    .filter((item): item is BillItem => item !== null);
-
-  return billItems.length > 0 ? billItems : undefined;
-}
-
 /**
  * Map a raw Kuda biller (PascalCase) to our normalized Biller interface.
  */
@@ -183,20 +98,11 @@ function mapKudaBiller(raw: KudaRawBiller, categoryName: string): Biller {
     categoryId: raw.BillTypeId,
     categoryName,
     billerIconUrl: raw.BillerIconUrl,
-    billItems: mapBillItems(raw.BillItems),
+    billItems: mapKudaBillItems(raw.BillItems),
   };
 }
 
-// Bill Item (specific product from a biller)
-export interface BillItem {
-  itemCode: string;
-  itemName: string;
-  amount: number;
-  itemCurrencySymbol: string;
-  isAmountFixed: boolean;
-  itemFee: number;
-  billItems?: BillItem[];
-}
+export type { BillItem } from './kuda-bill-items';
 
 // Purchase Result
 export interface PurchaseResult {
@@ -464,7 +370,7 @@ export async function getBillersByType(
       categoryId: raw.billTypeId,
       categoryName: billTypeName,
       billerIconUrl: raw.billerIconUrl,
-      billItems: mapBillItems(raw.billItems),
+      billItems: mapKudaBillItems(raw.billItems),
     }));
   }
 

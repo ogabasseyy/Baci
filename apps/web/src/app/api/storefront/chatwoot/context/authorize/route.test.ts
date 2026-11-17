@@ -46,6 +46,28 @@ const state = {
   principalId: '6df442af-4d21-4f4f-9f0b-607400000004',
   websiteToken: binding.websiteToken,
 };
+const cart = {
+  cartId: state.cartId,
+  merchantId: binding.merchantId,
+  state: 'active',
+  version: 12,
+  currency: 'NGN',
+  subtotalMinor: 250000,
+  totalMinor: 250000,
+  estimatedTotals: false,
+  expiresAt: '2026-11-08T12:00:00.000Z',
+  checkoutSessionId: 'must-not-leak',
+  lines: [
+    {
+      id: 'server-line-1',
+      item: { productId: 'server-product-1' },
+      quantity: 2,
+      unitPriceMinor: 125000,
+      lineTotalMinor: 250000,
+      voucherToken: 'must-not-leak-either',
+    },
+  ],
+};
 
 function request() {
   return new NextRequest(
@@ -65,6 +87,8 @@ describe('Chatwoot context authorization route', () => {
       ok: true,
       binding,
       state,
+      cart,
+      productNames: { 'server-product-1': 'Canonical Server Phone' },
     });
     mocks.readCartJsonBody.mockResolvedValue({
       ok: true,
@@ -88,6 +112,117 @@ describe('Chatwoot context authorization route', () => {
       binding,
       sessionToken: 'baci.signed.session.capability',
       state,
+    });
+    expect(mocks.loadChatwootCartContext).toHaveBeenCalledWith(
+      expect.any(NextRequest),
+      { includeProductNames: false }
+    );
+  });
+
+  it('returns only the canonical minimal cart projection when explicitly requested', async () => {
+    mocks.loadChatwootCartContext.mockResolvedValue({
+      ok: true,
+      binding,
+      state,
+      cart,
+      productNames: { 'server-product-1': 'Canonical Server Phone' },
+    });
+    mocks.readCartJsonBody.mockResolvedValue({
+      ok: true,
+      body: {
+        sessionToken: 'baci.signed.session.capability',
+        includeCartSnapshot: true,
+      },
+    });
+    mocks.verifyChatwootSessionCapability.mockResolvedValue({
+      conversationId: 905,
+      sessionExpiresAt: 1_799_000_000,
+    });
+
+    const response = await POST(request());
+    const body = await response.json();
+    expect(mocks.loadChatwootCartContext).toHaveBeenCalledWith(
+      expect.any(NextRequest),
+      { includeProductNames: true }
+    );
+    expect(body.cartSnapshot).toEqual({
+      cartVersion: 12,
+      currency: 'NGN',
+      estimatedTotals: false,
+      items: [
+        {
+          lineId: 'server-line-1',
+          name: 'Canonical Server Phone',
+          productId: 'server-product-1',
+          variantId: null,
+          condition: null,
+          quantity: 2,
+          unitPriceMinor: 125000,
+          lineTotalMinor: 250000,
+        },
+      ],
+      itemsSubtotalMinor: 250000,
+    });
+    expect(JSON.stringify(body)).not.toContain('must-not-leak');
+    expect(JSON.stringify(body)).not.toContain('voucherToken');
+  });
+
+  it('fails closed when an opted-in cart cannot be safely projected', async () => {
+    mocks.loadChatwootCartContext.mockResolvedValue({
+      ok: true,
+      binding,
+      state,
+      cart: { ...cart, subtotalMinor: 1 },
+      productNames: { 'server-product-1': 'Canonical Server Phone' },
+    });
+    mocks.readCartJsonBody.mockResolvedValue({
+      ok: true,
+      body: {
+        sessionToken: 'baci.signed.session.capability',
+        includeCartSnapshot: true,
+      },
+    });
+    mocks.verifyChatwootSessionCapability.mockResolvedValue({
+      conversationId: 905,
+      sessionExpiresAt: 1_799_000_000,
+    });
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'temporarily_unavailable',
+    });
+  });
+
+  it('returns an empty canonical snapshot for an empty cart', async () => {
+    mocks.loadChatwootCartContext.mockResolvedValue({
+      ok: true,
+      binding,
+      state,
+      cart: { ...cart, lines: [], subtotalMinor: 0, totalMinor: 0 },
+    });
+    mocks.readCartJsonBody.mockResolvedValue({
+      ok: true,
+      body: {
+        sessionToken: 'baci.signed.session.capability',
+        includeCartSnapshot: true,
+      },
+    });
+    mocks.verifyChatwootSessionCapability.mockResolvedValue({
+      conversationId: 905,
+      sessionExpiresAt: 1_799_000_000,
+    });
+
+    const response = await POST(request());
+    const body = await response.json();
+
+    expect(body.cartSnapshot).toEqual({
+      cartVersion: 12,
+      currency: 'NGN',
+      estimatedTotals: false,
+      items: [],
+      itemsSubtotalMinor: 0,
     });
   });
 

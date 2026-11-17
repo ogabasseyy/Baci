@@ -51,19 +51,19 @@ describe('toRecordInput', () => {
     expect(input.details).toMatchObject({ transaction_id: 'txn-1' });
   });
 
-  it('attributes a payout to the nested destination wallet, not the source', () => {
+  it('attributes a payout to the credited pvb_wallet, not the PVB-internal destination_wallet', () => {
     const input = toRecordInput(
       asEvent({
         ...base,
         eventType: 'interest-payout.success',
         eventCategory: 'interest-payout',
-        pvb_wallet: 'source-wallet',
+        pvb_wallet: 'credited-pvb-wallet',
         pvb_reference: 'ref-2',
-        pvb_accrued_interest_wallet: 'source-wallet',
+        pvb_accrued_interest_wallet: 'accrued-wallet',
         eventData: {
           id: 'payout-1',
           amount: 95000,
-          destination_wallet: 'destination-wallet',
+          destination_wallet: 'pvb-internal-wallet',
           reference: 'r',
           batch_id: 'b',
           timestamp: '2026-09-01T00:05:00.000Z',
@@ -76,7 +76,7 @@ describe('toRecordInput', () => {
       })
     );
     expect(input).toMatchObject({
-      walletId: 'destination-wallet',
+      walletId: 'credited-pvb-wallet',
       reference: 'ref-2',
       amountKobo: 95000,
     });

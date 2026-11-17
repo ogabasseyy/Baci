@@ -1,36 +1,19 @@
 #!/usr/bin/env node
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import {
+  buildCanaryUrls,
+  discoverPdpPath,
+  normalizePdpPath,
+} from './storefront-release-coherence-canary-urls.mjs';
+import {
+  describeCacheHeaders,
+  verifyWithHostPurgeFallback,
+} from './storefront-release-coherence-escalation.mjs';
 import { readReleaseConfig } from './storefront-release-config.mjs';
 import { buildReleaseProbeUrl, purgeSitemapBackedHtml } from './storefront-sitemap-purge.mjs';
 
-const RESERVED_ROUTE_ROOTS = new Set([
-  '_next',
-  'about',
-  'account',
-  'api',
-  'blog',
-  'cart',
-  'checkout',
-  'contact',
-  'faq',
-  'image',
-  'images',
-  'imei-check',
-  'media',
-  'privacy',
-  'product',
-  'products',
-  'repairs',
-  'returns',
-  'search',
-  'shipping',
-  'static',
-  'terms',
-  'track-order',
-  'wallet',
-  'wishlist',
-]);
+export { buildCanaryUrls, discoverPdpPath };
 
 export const RELEASE_USER_AGENTS = Object.freeze({
   browser:
@@ -38,6 +21,14 @@ export const RELEASE_USER_AGENTS = Object.freeze({
   googlebot:
     'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
 });
+
+export function resolveReleaseUserAgent(variant) {
+  // Object.hasOwn: a plain object also answers for inherited names such as "constructor".
+  if (!Object.hasOwn(RELEASE_USER_AGENTS, variant)) {
+    throw new Error(`unknown user-agent variant ${JSON.stringify(variant)}`);
+  }
+  return RELEASE_USER_AGENTS[variant];
+}
 
 export function extractDeploymentMarker(html, label = 'HTML response') {
   const markers = new Set();
@@ -58,54 +49,7 @@ export function extractDeploymentMarker(html, label = 'HTML response') {
   return markers.values().next().value;
 }
 
-function normalizePdpPath(value, baseUrl) {
-  if (!value.startsWith('/')) throw new Error('Storefront PDP path must start with /');
-  const url = new URL(value, baseUrl);
-  if (url.origin !== new URL(baseUrl).origin || url.search || url.hash) {
-    throw new Error('Storefront PDP path must be a same-origin path without query or hash');
-  }
-  const segments = url.pathname.split('/').filter(Boolean);
-  if (segments.length < 2 || RESERVED_ROUTE_ROOTS.has(segments[0])) {
-    throw new Error(`Storefront PDP path is not a product route: ${url.pathname}`);
-  }
-  return url.pathname;
-}
-
-export function discoverPdpPath(html, baseUrl) {
-  for (const match of String(html).matchAll(/href=(?:"([^"]+)"|'([^']+)')/g)) {
-    const href = (match[1] || match[2]).replaceAll('&amp;', '&');
-    let candidate;
-    try {
-      candidate = new URL(href, baseUrl);
-    } catch {
-      continue;
-    }
-    if (candidate.origin !== new URL(baseUrl).origin || candidate.search || candidate.hash) continue;
-    const segments = candidate.pathname.split('/').filter(Boolean);
-    if (
-      segments.length === 2 &&
-      !RESERVED_ROUTE_ROOTS.has(segments[0]) &&
-      segments[1] !== 'compare'
-    ) {
-      return candidate.pathname;
-    }
-  }
-  throw new Error('Could not discover a stable PDP path from the products page');
-}
-
-export function buildCanaryUrls(baseUrl, pdpPath) {
-  const origin = new URL(baseUrl).origin;
-  const normalizedPdpPath = normalizePdpPath(pdpPath, origin);
-  const urls = ['/', '/products', '/smartphones', normalizedPdpPath, '/blog'].map(
-    (path) => new URL(path, origin).href
-  );
-  if (new Set(urls).size !== 5 || urls.some((url) => new URL(url).hostname.startsWith('cdn.'))) {
-    throw new Error('Release coherence requires exactly five origin HTML canaries');
-  }
-  return urls;
-}
-
-async function fetchMarkedHtml({ fetchImpl, label, timeoutMs, url, userAgent }) {
+async function fetchMarkedHtml({ fetchImpl = fetch, label, timeoutMs, url, userAgent }) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -124,7 +68,11 @@ async function fetchMarkedHtml({ fetchImpl, label, timeoutMs, url, userAgent }) 
       throw new Error(`${label} returned non-HTML content: ${contentType || 'missing content-type'}`);
     }
     const html = await response.text();
-    return { html, marker: extractDeploymentMarker(html, label) };
+    return {
+      cache: describeCacheHeaders(response.headers),
+      html,
+      marker: extractDeploymentMarker(html, label),
+    };
   } finally {
     clearTimeout(timeout);
   }
@@ -183,7 +131,12 @@ export async function warmAndAssertCanaries({
             userAgent: target.userAgent,
           });
           if (response.marker !== expectedMarker) {
-            throw new Error(`expected ${expectedMarker}, received ${response.marker}`);
+            const mismatch = new Error(
+              `expected ${expectedMarker}, received ${response.marker}${response.cache}`
+            );
+            // A page purge can fix a stale copy; it cannot fix a 5xx, timeout or missing marker.
+            mismatch.stale = true;
+            throw mismatch;
           }
           return { ok: true, target };
         } catch (error) {
@@ -207,7 +160,14 @@ export async function warmAndAssertCanaries({
   const details = failures
     .map(({ error, target }) => `${target.variant} ${target.url}: ${error.message}`)
     .join('; ');
-  throw new Error(`Storefront release coherence failed: ${details}`);
+  const failure = new Error(`Storefront release coherence failed: ${details}`);
+  // A hostname purge is only a candidate fix when EVERY remaining failure is an old-release copy:
+  // a 5xx, timeout or missing marker on another page means a partial outage, where Cloudflare may
+  // be serving stale-if-error copies that a purge would delete.
+  failure.stale = failures.length > 0 && failures.every(({ error }) => error.stale === true);
+  // Keep the variant (user agent) with each URL: the origin renders them on different paths.
+  failure.staleTargets = failures.map(({ target }) => ({ url: target.url, variant: target.variant }));
+  throw failure;
 }
 
 export async function runReleaseCoherence(options = {}) {
@@ -235,14 +195,47 @@ export async function runReleaseCoherence(options = {}) {
     zoneId: config.zoneId,
   });
   if (purge.skipped) throw new Error(`Storefront HTML purge was skipped: ${purge.reason}`);
-  await warmAndAssertCanaries({
-    ...config,
-    ...options,
-    expectedMarker: config.expectedMarker,
+  const { escalated } = await verifyWithHostPurgeFallback({
+    baseUrl: config.baseUrl,
+    cloudflareFetchJson: options.cloudflareFetchJson,
+    config,
+    hostPurgeImpl: options.hostPurgeImpl,
     logger,
-    urls,
+    // Cache-busted copy of the same page with the failing variant's own user agent, so it reads
+    // the origin (Vercel) on the same render path, never a Cloudflare copy.
+    // Cache-key assumption (verified 2026-11-11): the zone's HTML cache rule only caches requests
+    // with an EMPTY query string, so the unique probe query always goes to the origin (Cloudflare
+    // logs show these probes as `dynamic` origin fetches). If a zone ever ignored query strings
+    // for HTML, a healthy origin would look stale here and the gate fails closed: no purge, red
+    // deploy. The raw deployment URL cannot stand in: it lacks the storefront's Host routing.
+    probeOrigin: async (target, index) =>
+      (
+        await fetchMarkedHtml({
+          fetchImpl: options.fetchImpl,
+          label: 'cache-busted origin probe',
+          timeoutMs: config.timeoutMs,
+          url: buildReleaseProbeUrl(
+            config.baseUrl,
+            new URL(target.url).pathname,
+            `${requestId}-origin-${index}`
+          ),
+          userAgent: resolveReleaseUserAgent(target.variant),
+        })
+      ).marker,
+    sleep: options.sleep,
+    verify: ({ attempts, retryDelayMs }) =>
+      warmAndAssertCanaries({
+        ...config,
+        ...options,
+        attempts,
+        expectedMarker: config.expectedMarker,
+        logger,
+        retryDelayMs,
+        urls,
+      }),
   });
   return {
+    escalated,
     marker: config.expectedMarker,
     pdpPath: probe.pdpPath,
     purgedUrls: purge.urls,

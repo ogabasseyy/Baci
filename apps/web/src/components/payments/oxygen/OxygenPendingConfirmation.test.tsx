@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { oxygenRuntimeSnapshotSchema } from '@/schemas/oxygen-runtime-view';
 import { OxygenPendingConfirmation } from './OxygenPendingConfirmation';
+import { oxygenBookedSnapshot } from './oxygen-booked-snapshot.test-support';
 
 const reference = '70000000-0000-4000-8000-000000000001';
 const workflowId = '60000000-0000-4000-8000-000000000001';
@@ -40,6 +41,42 @@ const common = {
   selfieConfirmed: false,
   setComparingPlans: vi.fn(),
 };
+
+it('continues a queued saved-plan offer refresh through the pending recovery action', () => {
+  const checkPending = vi.fn().mockResolvedValue(undefined);
+  const snapshot = oxygenRuntimeSnapshotSchema.parse({
+    ...oxygenBookedSnapshot,
+    stage: 'approval_required',
+    state: {
+      ...oxygenBookedSnapshot.state,
+      applicationReference: workflowId,
+      validated: true,
+      kyc: {
+        phone_status: 'DONE',
+        bvn_status: 'DONE',
+        selfie_status: 'DONE',
+        nin_status: 'DONE',
+        bank_status: 'DONE',
+        address_status: 'DONE',
+      },
+    },
+    pending: {
+      action: 'refresh_eligibility',
+      status: 'queued',
+      idempotencyKey: workflowId,
+    },
+  });
+  render(
+    <OxygenPendingConfirmation
+      {...common}
+      snapshot={snapshot}
+      refresh={vi.fn()}
+      checkPending={checkPending}
+    />
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Check for an update' }));
+  expect(checkPending).toHaveBeenCalledOnce();
+});
 
 it('keeps an indeterminate approval in saved status recovery without offering another code', () => {
   const refresh = vi.fn().mockResolvedValue(undefined);

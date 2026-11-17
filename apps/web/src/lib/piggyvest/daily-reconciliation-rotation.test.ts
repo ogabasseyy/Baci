@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { runPiggyvestDailyReconciliation } from './daily-reconciliation-runtime';
 import {
   env,
+  ledger,
   makeDeps,
+  NO_WALLET_PAY_WORK,
   snapshot,
 } from './daily-reconciliation-runtime.test-support';
 
@@ -24,7 +26,11 @@ function windowFor(slot: number) {
 }
 
 function rotatingExecutor() {
-  return vi.fn(async (_statement: string, params: unknown[]) => {
+  return vi.fn(async (statement: string, params: unknown[]) => {
+    if (statement.includes('read_credit_gap_ledger'))
+      return { rows: [{ result: ledger() }] };
+    if (statement.includes('read_wallet_pay_reconciliation'))
+      return { rows: [{ result: NO_WALLET_PAY_WORK }] };
     const slot = (JSON.parse(String(params[2])) as { rotationSlot: number })
       .rotationSlot;
     const wallets = windowFor(slot);

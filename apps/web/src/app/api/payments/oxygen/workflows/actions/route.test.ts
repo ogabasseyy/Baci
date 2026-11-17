@@ -172,6 +172,36 @@ it('returns only a static safe statement code for the known rejected booking', a
       'Oxygen needs a valid bank statement before it can prepare your payment plan. Please contact support to complete the bank statement step. Your application is saved.',
   });
 });
+it('returns safe email-link instructions for the observed eligibility response', async () => {
+  m.auth.mockResolvedValue({ user: { id: 'user' }, supabase: {} });
+  m.connect.mockReturnValue({
+    worker: vi.fn(),
+    provider: {},
+    partnerReference: 'partner',
+    hosts: new Set(),
+  });
+  m.perform.mockRejectedValue(
+    new OxygenProviderFailure('rejected', 'OXYGEN_STATEMENT_LINK_SENT')
+  );
+  const response = await POST(
+    new NextRequest('http://localhost/api/payments/oxygen/workflows/actions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        workflowId: '60000000-0000-4000-8000-000000000001',
+        version: 1,
+        idempotencyKey: '60000000-0000-4000-8000-000000000002',
+        command: { action: 'refresh_eligibility' },
+      }),
+    })
+  );
+  expect(response.status).toBe(409);
+  expect(await response.json()).toEqual({
+    code: 'OXYGEN_STATEMENT_LINK_SENT',
+    error:
+      'Oxygen sent bank-statement linking instructions to the applicant’s email. Check your email, then return here to check your payment options. Your application is saved.',
+  });
+});
 it('returns static invalid-code copy for the known rejected OTP without raw provider details', async () => {
   m.auth.mockResolvedValue({ user: { id: 'user' }, supabase: {} });
   m.connect.mockReturnValue({

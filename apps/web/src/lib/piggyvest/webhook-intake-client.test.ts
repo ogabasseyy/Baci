@@ -54,16 +54,8 @@ describe('intake client: table operations', () => {
 
   it.each([
     ['piggyvest_event_quarantine', 'quarantine_insert', 'body_digest'],
-    [
-      'piggyvest_inflow_credits',
-      'inflow_credit_insert',
-      'provider_transaction_id',
-    ],
-    [
-      'piggyvest_interest_payouts',
-      'interest_payout_insert',
-      'provider_payout_id',
-    ],
+    ['piggyvest_inflow_credits', 'inflow_credit_insert', 'pvb_reference'],
+    ['piggyvest_interest_payouts', 'interest_payout_insert', 'pvb_reference'],
   ])('maps %s upserts to %s', async (table, fn, key) => {
     const { client, execute } = setup([{ [key]: 'k' }]);
     const out = await client
@@ -75,20 +67,32 @@ describe('intake client: table operations', () => {
   });
 
   it.each([
+    ['piggyvest_inflow_credits', 'inflow_credit_read', 'pvb_reference'],
     [
       'piggyvest_inflow_credits',
       'inflow_credit_read',
       'provider_transaction_id',
     ],
+    ['piggyvest_interest_payouts', 'interest_payout_read', 'pvb_reference'],
     [
       'piggyvest_interest_payouts',
       'interest_payout_read',
       'provider_payout_id',
     ],
-  ])('maps %s reads to %s', async (table, fn, key) => {
+  ])('maps %s reads to %s by %s', async (table, fn, key) => {
     const { client, execute } = setup({ customer_id: 'c' });
     await client.from(table).select('customer_id').eq(key, 'k').maybeSingle();
     expect(execute).toHaveBeenCalledWith(fn, { [key]: 'k' });
+  });
+
+  it('refuses a credit upsert that selects the legacy internal key', async () => {
+    const { client, execute } = setup([]);
+    const out = await client
+      .from('piggyvest_inflow_credits')
+      .upsert({ provider_transaction_id: 'k' } as never)
+      .select('provider_transaction_id');
+    expect(execute).not.toHaveBeenCalled();
+    expect(out.error).toMatchObject({ code: 'PGRST_UNSUPPORTED' });
   });
 
   it('maps a plan wallet status flip', async () => {

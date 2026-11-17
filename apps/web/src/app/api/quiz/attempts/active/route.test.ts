@@ -62,6 +62,11 @@ describe('active v2 quiz attempt route', () => {
       response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
     } as never);
     expect((await GET(request('bad'))).status).toBe(401);
+    // Resume acts on the live attempt, so the session is re-checked (at most
+    // once a minute per token), not only the token signature.
+    expect(requireQuizUser).toHaveBeenCalledWith(expect.anything(), {
+      requireRecentSession: true,
+    });
   });
 
   it('calls only owner-safe resume and keeps the fingerprint out of query/RPC', async () => {

@@ -9,6 +9,11 @@ import {
 import type { Biller, BillItem } from '@/hooks/use-vtu-billers';
 import { BillForm } from './BillForm';
 
+// A merchant the server has ruled out of PiggyVest: today's wallet flows.
+jest.mock('@/lib/read-piggyvest-capability-now', () => ({
+  readPiggyvestCapabilityNow: () => false,
+}));
+
 const mockVerifyMutate = jest.fn();
 const mockVerifyReset = jest.fn();
 const mockUseUtilityPayment = jest.fn();
@@ -118,10 +123,15 @@ jest.mock('@/lib/vtu-checkout', () => {
   };
 });
 
-jest.mock('@/stores/auth-store', () => ({
-  useAuthStore: (selector: (state: { customer: null }) => unknown) =>
-    selector({ customer: null }),
-}));
+jest.mock('@/stores/auth-store', () => {
+  const useAuthStore = Object.assign(
+    (selector: (state: { customer: null }) => unknown) =>
+      selector({ customer: null }),
+    // The wallet pay hand-over reads the signed-in account directly.
+    { getState: () => ({ user: null }) }
+  );
+  return { useAuthStore };
+});
 
 jest.mock('@/hooks/use-vtu-verify', () => ({
   useVTUVerify: () => ({

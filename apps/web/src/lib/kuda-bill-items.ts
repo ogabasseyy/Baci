@@ -115,6 +115,11 @@ function mapBillItem(raw: unknown): BillItem | null {
     item.IsFixedPrice ??
     item.isFixedPrice ??
     false;
+  // A fixed price that cannot be read is dropped, so it is never listed as
+  // ₦0 or sold; the purchase check then treats the package as unlisted.
+  if (isAmountFixed && !Number.isFinite(toNumber(rawAmount, Number.NaN))) {
+    return null;
+  }
   warnIfUnitLooksWrong(toNumber(rawAmount), isAmountFixed, itemCode);
 
   return {

@@ -40,6 +40,13 @@ describe('assertKudaBillItemPriceCurrent when Kuda is unavailable', () => {
           mockGetBillersByCategory.mockRejectedValue(new Error('Kuda down')),
       ],
       ['is empty', () => mockGetBillersByCategory.mockResolvedValue([])],
+      [
+        'lists billers without packages',
+        () =>
+          mockGetBillersByCategory.mockResolvedValue([
+            startimes({ billItems: [] }),
+          ]),
+      ],
     ])('keeps blocking stale prices with the last good list when Kuda %s', async (_label, breakKuda) => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date('2026-11-17T10:00:00Z'));

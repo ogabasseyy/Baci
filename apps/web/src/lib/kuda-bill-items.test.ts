@@ -86,7 +86,15 @@ describe('mapKudaBillItems', () => {
     });
   });
 
-  it('treats unreadable prices as zero', () => {
+  it('drops a fixed-price item whose price cannot be read', () => {
+    expect(
+      mapKudaBillItems([
+        { itemCode: 'bad', itemName: 'Bad', amount: 'abc', isFixedPrice: true },
+      ])
+    ).toBeUndefined();
+  });
+
+  it('treats unreadable open-amount prices as zero', () => {
     const [item] =
       mapKudaBillItems([
         { itemCode: 'bad', itemName: 'Bad price', amount: 'abc' },

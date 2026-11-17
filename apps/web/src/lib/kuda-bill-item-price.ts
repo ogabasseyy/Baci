@@ -70,10 +70,12 @@ async function loadPriceList(type: string): Promise<Biller[] | null> {
     });
     return lastGood;
   }
-  if (billers.length === 0) {
+  // No biller with any package is a broken answer (every production biller
+  // lists packages), so it never replaces a good list.
+  if (!billers.some((biller) => biller.billItems?.length)) {
     lastFailedFetchAt.set(type, now);
     logger.warn({
-      message: 'Kuda price list came back empty',
+      message: 'Kuda price list came back without packages',
       hasLastGoodList: lastGood !== null,
       type,
     });

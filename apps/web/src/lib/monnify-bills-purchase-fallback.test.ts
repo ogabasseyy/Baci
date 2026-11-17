@@ -95,6 +95,30 @@ describe('Monnify vend failures handed to Kuda', () => {
       });
     });
 
+    it('never marks an answer mentioning a failed vend as definite, even with refusal wording', async () => {
+      mockHttpError(
+        403,
+        'Forbidden',
+        'Vend request failed. Insufficient wallet balance'
+      );
+
+      await expect(vend()).resolves.toMatchObject({
+        providerDefiniteFailure: false,
+      });
+    });
+
+    it('spots a duplicate far past the first 4 KB of the answer', async () => {
+      mockHttpError(
+        400,
+        'Bad Request',
+        `Insufficient wallet balance. ${'x'.repeat(6000)} Duplicate vendReference`
+      );
+
+      await expect(vend()).resolves.toMatchObject({
+        providerDefiniteFailure: false,
+      });
+    });
+
     it('never hands a 408 timeout to Kuda', async () => {
       mockHttpError(408, 'Request Timeout', 'Insufficient wallet balance');
 

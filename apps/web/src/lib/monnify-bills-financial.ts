@@ -205,15 +205,16 @@ export async function purchaseBill(
         // token login never gets this far (it throws a plain Error from
         // getMonnifyToken and stays an unknown outcome). A timeout
         // (408) or anything that may be a duplicate never qualifies.
-        // A 401/403 that talks about the service being unavailable or a
-        // failed vend may come from a gateway in front of a vend that ran,
-        // so it never qualifies.
+        // Any answer that talks about the service being unavailable or a
+        // failed vend may come after a vend that ran (e.g. from a gateway),
+        // so it never qualifies, whatever else it says.
         providerDefiniteFailure:
           error.status !== 408 &&
           !error.isDuplicateReference &&
           !error.reportsUnexpectedError &&
-          (((error.status === 401 || error.status === 403) &&
-            !error.mentionsVendOutcome) ||
+          !error.mentionsVendOutcome &&
+          (error.status === 401 ||
+            error.status === 403 ||
             error.isKnownRefusal),
       };
     }

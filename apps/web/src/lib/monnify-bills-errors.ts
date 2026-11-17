@@ -10,23 +10,37 @@ const SENSITIVE_DIGIT_SEQUENCE_PATTERN = /(?<!\d)\d{7,}(?!\d)/g;
  */
 const SENSITIVE_GROUPED_PHONE_PATTERN =
   /(?<!\d)\(?(?:\+?234\)?[ .-]?\(?|0)[789][01]\d\)?(?:[ .-]?\d){7}(?!\d)/g;
-/**
- * Unscrubbed Monnify bodies, kept off the error object entirely and only
- * read inside this module to classify the answer: nothing outside it can
- * log, store or serialise them.
- */
-const rawDetailByError = new WeakMap<MonnifyHttpError, string | null>();
-
-function classificationText(error: MonnifyHttpError) {
-  return `${error.message} - ${rawDetailByError.get(error) ?? error.detail ?? ''}`;
+/** How Monnify's full answer reads, worked out once from the unscrubbed text. */
+interface MonnifyAnswerReading {
+  isDuplicateReference: boolean;
+  isKnownRefusal: boolean;
+  mentionsVendOutcome: boolean;
+  reportsUnexpectedError: boolean;
 }
+
+function readMonnifyAnswer(text: string): MonnifyAnswerReading {
+  return {
+    isDuplicateReference: isMonnifyDuplicateReferenceText(text),
+    isKnownRefusal: isMonnifyKnownVendRefusalText(text),
+    mentionsVendOutcome:
+      /unavailable|vend\w*\s+(?:request\s+)?fail|fail\w*\s+to\s+vend/i.test(
+        text
+      ),
+    reportsUnexpectedError: /"responseCode"\s*:\s*"?99"?(?!\d)/.test(text),
+  };
+}
+
 const MONNIFY_ERROR_DETAIL_MAX_LENGTH = 240;
-const MONNIFY_RAW_DETAIL_MAX_LENGTH = 4096;
 const MONNIFY_ERROR_DETAIL_REDACTION_LOOKAHEAD = 64;
 
 export class MonnifyHttpError extends Error {
   readonly detail: string | null;
   readonly status: number;
+  /**
+   * Classified from Monnify's full, unscrubbed answer when the error is
+   * created; the raw text itself is never kept, so nothing can log it.
+   */
+  readonly #reading: MonnifyAnswerReading;
   readonly statusText: string;
 
   constructor({
@@ -46,7 +60,9 @@ export class MonnifyHttpError extends Error {
     Object.setPrototypeOf(this, MonnifyHttpError.prototype);
     this.name = 'MonnifyHttpError';
     this.detail = detail;
-    rawDetailByError.set(this, rawDetail);
+    this.#reading = readMonnifyAnswer(
+      `${this.message} - ${rawDetail ?? detail ?? ''}`
+    );
     this.status = status;
     this.statusText = statusText;
   }
@@ -55,39 +71,28 @@ export class MonnifyHttpError extends Error {
     return this.status >= 400 && this.status < 500;
   }
 
-  /**
-   * Monnify refused the vend with a known pre-vend reason (amount check,
-   * low float), judged on its full answer before that is cut short.
-   */
+  /** A known pre-vend refusal (amount check, low float). */
   get isKnownRefusal() {
-    return isMonnifyKnownVendRefusalText(classificationText(this));
+    return this.#reading.isKnownRefusal;
   }
 
-  /**
-   * The body carries Monnify's code 99 ("unexpected error, re-query"),
-   * whatever the HTTP status, so the outcome is unknown.
-   */
+  /** Monnify's code 99 ("unexpected error, re-query"): outcome unknown. */
   get reportsUnexpectedError() {
-    return /"responseCode"\s*:\s*"?99"?(?!\d)/.test(classificationText(this));
+    return this.#reading.reportsUnexpectedError;
   }
 
   /** The answer talks about a vend outcome or an unavailable service. */
   get mentionsVendOutcome() {
-    return /unavailable|vend\w*\s+(?:request\s+)?fail|fail\w*\s+to\s+vend/i.test(
-      classificationText(this)
-    );
+    return this.#reading.mentionsVendOutcome;
   }
 
   /**
-   * Monnify already holds a vend under this reference (409, or a 4xx whose
-   * detail says so). It may have been delivered, so this is never a refusal
+   * Monnify already holds a vend under this reference (409, or an answer
+   * that says so). It may have been delivered, so this is never a refusal
    * another provider may act on.
    */
   get isDuplicateReference() {
-    return (
-      this.status === 409 ||
-      isMonnifyDuplicateReferenceText(classificationText(this))
-    );
+    return this.status === 409 || this.#reading.isDuplicateReference;
   }
 
   get diagnosticMessage() {
@@ -174,11 +179,8 @@ export async function createMonnifyHttpError(
   return new MonnifyHttpError({
     detail: getMonnifyHttpErrorDetail(responseText),
     prefix,
-    // Capped: enough to classify (duplicate wording past the 240-character
-    // detail cut) without holding a whole HTML error page.
-    rawDetail: responseText?.trim()
-      ? responseText.slice(0, MONNIFY_RAW_DETAIL_MAX_LENGTH)
-      : null,
+    // Only classified inside the constructor, never stored.
+    rawDetail: responseText?.trim() ? responseText : null,
     status: response.status,
     statusText: response.statusText,
   });

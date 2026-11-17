@@ -57,56 +57,87 @@ describe('PATCH /api/merchant/features persistence', () => {
     expect(testState.updatePayload).not.toHaveProperty('klump_max_amount');
   });
 
-  it('preserves stored Zoho Campaigns secrets while redacting PATCH responses', async () => {
-    const { PATCH } = await import('./route');
-    testState.settingsData = {
-      merchant_id: MERCHANT_ID,
+  describe('bugfix R2: Zoho tokens never go into custom_settings', () => {
+    const zohoBody = {
       custom_settings: {
         zohoCampaigns: {
-          enabled: true,
-          listKey: 'list-key',
-          refreshToken: 'stored-refresh-token',
-        },
-      },
-    };
-    testState.updateData = {
-      id: 'settings-1',
-      merchant_id: MERCHANT_ID,
-      custom_settings: {
-        zohoCampaigns: {
+          accessToken: 'access',
+          clientSecret: 'client-secret',
           enabled: false,
-          listKey: 'list-key',
-          refreshToken: 'stored-refresh-token',
+          refreshToken: 'new-refresh-token',
         },
       },
     };
 
-    const res = await PATCH(
-      makeRequest('PATCH', {
-        custom_settings: { zohoCampaigns: { enabled: false } },
-      })
-    );
-    const json = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(testState.updatePayload).toMatchObject({
-      custom_settings: {
-        zohoCampaigns: {
-          enabled: false,
-          listKey: 'list-key',
-          refreshToken: 'stored-refresh-token',
+    it('saves the refresh token through the protected function and keeps it out of the write', async () => {
+      const { PATCH } = await import('./route');
+      testState.settingsData = {
+        merchant_id: MERCHANT_ID,
+        custom_settings: {
+          zohoCampaigns: { enabled: true, listKey: 'list-key' },
         },
-      },
+      };
+      testState.updateData = {
+        id: 'settings-1',
+        merchant_id: MERCHANT_ID,
+        custom_settings: {
+          zohoCampaigns: { enabled: false, listKey: 'list-key' },
+        },
+      };
+
+      const res = await PATCH(makeRequest('PATCH', zohoBody));
+      const json = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(testState.rpcCalls).toEqual([
+        {
+          name: 'set_merchant_zoho_refresh_token',
+          args: {
+            p_merchant_id: MERCHANT_ID,
+            p_refresh_token: 'new-refresh-token',
+          },
+        },
+      ]);
+      expect(testState.updatePayload).toMatchObject({
+        custom_settings: {
+          zohoCampaigns: { enabled: false, listKey: 'list-key' },
+        },
+      });
+      expect(JSON.stringify(testState.updatePayload)).not.toMatch(
+        /new-refresh-token|client-secret|access"/
+      );
+      expect(json.custom_settings).toEqual({
+        zohoCampaigns: { enabled: false, listKey: 'list-key' },
+      });
     });
-    expect(testState.selectFilter).toEqual({
-      column: 'merchant_id',
-      value: MERCHANT_ID,
+
+    it('PUT also routes the refresh token to the protected function', async () => {
+      const { PUT } = await import('./route');
+      testState.upsertData = { id: 'settings-1', merchant_id: MERCHANT_ID };
+
+      const res = await PUT(makeRequest('PUT', zohoBody));
+
+      expect(res.status).toBe(200);
+      expect(testState.rpcCalls).toHaveLength(1);
+      expect(testState.rpcCalls[0]).toMatchObject({
+        name: 'set_merchant_zoho_refresh_token',
+        args: { p_refresh_token: 'new-refresh-token' },
+      });
+      expect(JSON.stringify(testState.upsertPayload)).not.toMatch(
+        /new-refresh-token|client-secret/
+      );
     });
-    expect(json.custom_settings).toEqual({
-      zohoCampaigns: {
-        enabled: false,
-        listKey: 'list-key',
-      },
+
+    it('rejects the whole update with 403 when the caller may not manage integrations', async () => {
+      const { PATCH } = await import('./route');
+      testState.rpcError = { code: '42501', message: 'not authorized' };
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const res = await PATCH(makeRequest('PATCH', zohoBody));
+
+      expect(res.status).toBe(403);
+      expect(testState.updatePayload).toBeNull();
+      spy.mockRestore();
     });
   });
 

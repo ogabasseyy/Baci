@@ -8,9 +8,9 @@ import {
   vendResponseBodySchema,
 } from '@/schemas/monnify-bills-schema';
 import {
-  isMonnifyDuplicateReferenceText,
   MonnifyHttpError,
   MonnifyTransientVendError,
+  sanitizeMonnifyErrorDetail,
 } from './monnify-bills-errors';
 import { monnifyRequest } from './monnify-bills-request';
 import {
@@ -19,6 +19,8 @@ import {
   MONNIFY_FINANCIAL_TIMEOUT_MS,
 } from './monnify-bills-shared';
 import { classifyMonnifyBillStatus } from './monnify-bills-status';
+import { isMonnifyDuplicateReferenceText } from './monnify-duplicate-reference';
+import { isMonnifyKnownVendRefusalText } from './monnify-vend-refusal';
 
 export async function verifyBillCustomer(
   _billerCode: string,
@@ -117,19 +119,26 @@ export async function purchaseBill(
     );
 
     if (!isMonnifyBusinessSuccess(parsedEnvelope)) {
-      return {
-        success: false,
-        reference: requestReference,
-        message: getMonnifyEnvelopeMessage({
+      // Scrubbed like HTTP error details: Monnify may echo the customer's
+      // number, and this text is persisted and logged.
+      const message = sanitizeMonnifyErrorDetail(
+        getMonnifyEnvelopeMessage({
           fallback: 'Monnify business failure',
           responseCode: parsedEnvelope.responseCode,
           responseMessage: parsedEnvelope.responseMessage,
-        }),
+        })
+      );
+      return {
+        success: false,
+        reference: requestReference,
+        message,
         status: 'failed',
         amount,
-        providerDefiniteFailure: !isMonnifyDuplicateReferenceText(
-          `${parsedEnvelope.responseCode ?? ''} ${parsedEnvelope.responseMessage ?? ''}`
-        ),
+        providerDefiniteFailure:
+          isMonnifyKnownVendRefusalText(message) &&
+          !isMonnifyDuplicateReferenceText(
+            `${parsedEnvelope.responseCode ?? ''} ${message}`
+          ),
       };
     }
 
@@ -187,7 +196,9 @@ export async function purchaseBill(
         providerErrorDetail: error.diagnosticMessage,
         status: 'failed',
         amount,
-        providerDefiniteFailure: !error.isDuplicateReference,
+        providerDefiniteFailure:
+          !error.isDuplicateReference &&
+          isMonnifyKnownVendRefusalText(error.diagnosticMessage),
       };
     }
 

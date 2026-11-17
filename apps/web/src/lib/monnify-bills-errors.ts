@@ -1,3 +1,5 @@
+import { isMonnifyDuplicateReferenceText } from './monnify-duplicate-reference';
+
 const SENSITIVE_DIGIT_SEQUENCE_PATTERN = /(?<!\d)\d{7,}(?!\d)/g;
 const MONNIFY_ERROR_DETAIL_MAX_LENGTH = 240;
 const MONNIFY_ERROR_DETAIL_REDACTION_LOOKAHEAD = 64;
@@ -51,23 +53,6 @@ export class MonnifyHttpError extends Error {
   get diagnosticMessage() {
     return this.detail ? `${this.message} - ${this.detail}` : this.message;
   }
-}
-
-/**
- * Deliberately broad (fails closed): any answer that talks about the
- * reference, duplicates, something already existing or in use, or a
- * conflict is treated as "Monnify may already hold this vend", so it is
- * never handed to Kuda. A plain refusal such as low float or an invalid
- * customer id does not match.
- */
-const MONNIFY_DUPLICATE_REFERENCE_PATTERN =
-  /duplicate|reference|already|exist|in\s+use|conflict|idempoten/i;
-
-/** Whether a Monnify message may mean the vend reference was already used. */
-export function isMonnifyDuplicateReferenceText(
-  text: string | null | undefined
-): boolean {
-  return !!text && MONNIFY_DUPLICATE_REFERENCE_PATTERN.test(text);
 }
 
 export class MonnifyTransientVendError extends Error {

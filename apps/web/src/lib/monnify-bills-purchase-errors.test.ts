@@ -116,6 +116,46 @@ describe('Monnify bill purchase errors', () => {
       await expect(vend()).rejects.toBeInstanceOf(MonnifyTransientVendError);
     });
 
+    it('does not mark a 4xx outside the known refusals as definite', async () => {
+      mockHttpError(400, 'Bad Request', 'Invalid customer reference');
+
+      await expect(vend()).resolves.toMatchObject({
+        providerDefiniteFailure: false,
+        status: 'failed',
+      });
+    });
+
+    it('never marks Monnify code 99 (unexpected error) as definite', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          requestSuccessful: false,
+          responseCode: '99',
+          responseMessage: 'An unexpected error occurred while processing',
+        }),
+      });
+
+      await expect(vend()).resolves.toMatchObject({
+        providerDefiniteFailure: false,
+        status: 'failed',
+      });
+    });
+
+    it('scrubs customer numbers out of a business rejection message', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          requestSuccessful: false,
+          responseCode: '99',
+          responseMessage: 'Insufficient balance for customer 08012345678',
+        }),
+      });
+
+      const result = await vend();
+      expect(result.message).not.toContain('08012345678');
+      expect(result.providerDefiniteFailure).toBe(true);
+    });
+
     it('marks a plain 4xx refusal as definite', async () => {
       mockHttpError(400, 'Bad Request', 'Insufficient wallet balance');
 

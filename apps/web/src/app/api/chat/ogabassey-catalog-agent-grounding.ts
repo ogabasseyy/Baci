@@ -50,6 +50,53 @@ const STOCK_COUNT_PATTERN =
 const FAMILY_VARIANT_PATTERN =
   /\b(?:macbook|iphone|ipad|galaxy|pixel|xps|surface|watch)\s+(?:pro|ultra|max|mini|plus|air|studio|fold|flip|m[1-5])\b/gi;
 
+const CAPITALIZED_PHRASE_PATTERN =
+  /\b[A-Z][A-Za-z0-9-]{1,24}(?:\s+[A-Z0-9][A-Za-z0-9-]{0,24}){1,4}\b/g;
+
+const CAPITALIZED_PHRASE_IGNORE = new Set([
+  'ogabassey',
+  'naira',
+  'ngn',
+  'usd',
+  'eur',
+  'gbp',
+  'the',
+  'we',
+  'you',
+  'this',
+  'that',
+  'these',
+  'those',
+  'here',
+  'there',
+  'try',
+  'check',
+  'found',
+  'sorry',
+  'yes',
+  'no',
+  'for',
+  'our',
+  'your',
+  'it',
+  'if',
+  'only',
+  'option',
+  'options',
+  'step',
+  'laptop',
+  'laptops',
+  'phone',
+  'phones',
+  'smartphone',
+  'smartphones',
+  'tablet',
+  'tablets',
+  'nigeria',
+  'lagos',
+  'abuja',
+]);
+
 const GENERIC_PRODUCT_NAME_WORDS = new Set([
   'the',
   'and',
@@ -201,8 +248,10 @@ function collectReturnedProductTokens(
       ];
       for (const field of fields) {
         if (!field) continue;
-        for (const token of tokenizeLowerWords(field)) {
-          tokens.add(token);
+        for (const token of field.toLowerCase().match(/[a-z0-9]+/g) ?? []) {
+          if (token.length >= 2 || /^\d$/.test(token)) {
+            tokens.add(token);
+          }
         }
       }
     }
@@ -256,6 +305,18 @@ function hasGroundedProductMentions(
     for (const match of clause.matchAll(FAMILY_VARIANT_PATTERN)) {
       const phraseTokens = tokenizeLowerWords(match[0]);
       if (phraseTokens.some((token) => !returnedTokens.has(token))) {
+        return false;
+      }
+    }
+
+    for (const match of clause.matchAll(CAPITALIZED_PHRASE_PATTERN)) {
+      const words = (match[0].toLowerCase().match(/[a-z0-9]+/g) ?? []).filter(
+        (token) => !CAPITALIZED_PHRASE_IGNORE.has(token)
+      );
+      if (
+        words.length >= 2 &&
+        words.some((token) => !returnedTokens.has(token))
+      ) {
         return false;
       }
     }
@@ -374,7 +435,11 @@ export function filterSerializedSearchResultByBudget(
     const filtered = filterToolResultByBudget('searchProducts', parsed, budget);
     return JSON.stringify(filtered);
   } catch {
-    return rawJson;
+    return JSON.stringify({
+      products: [],
+      total: 0,
+      error: 'Unable to validate tool results against budget',
+    });
   }
 }
 
@@ -395,7 +460,9 @@ export function filterSerializedDetailsResultByBudget(
     }
     return rawJson;
   } catch {
-    return rawJson;
+    return JSON.stringify({
+      error: 'Unable to validate product against budget',
+    });
   }
 }
 

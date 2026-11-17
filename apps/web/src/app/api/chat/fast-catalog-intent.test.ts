@@ -252,7 +252,7 @@ describe('interpretFastCatalogIntent', () => {
     ).toMatchObject({
       kind: 'search',
       categoryId: 'laptops',
-      query: 'notebook',
+      query: 'Notebook',
       maxPrice: 800_000,
       exclusiveMaxPrice: true,
     });

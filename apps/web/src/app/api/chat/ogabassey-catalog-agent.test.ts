@@ -618,4 +618,75 @@ describe('runOgabasseyCatalogAgent', () => {
       text: "Sorry, I couldn't confirm any matching laptop within your budget.",
     });
   });
+
+  it('rejects unknown-brand multi-token fabrications and fails closed on malformed budget JSON', async () => {
+    vi.stubEnv('META_MODEL_API_KEY', 'test-meta-key');
+    mocks.generateText.mockImplementationOnce(async () => {
+      reportToolResult?.('searchProducts', {
+        products: [sampleProduct],
+        total: 1,
+      });
+      return {
+        text: 'Try the Apple MacBook Air M2 or Fairphone 5 for ₦1,450,000.',
+      };
+    });
+    expect(await runOgabasseyCatalogAgent(baseOptions())).toBeNull();
+
+    mocks.createTools.mockImplementationOnce(
+      (
+        _sessionId: string,
+        options: { onToolResult?: typeof reportToolResult } = {}
+      ) => {
+        reportToolResult = options.onToolResult;
+        return {
+          searchProducts: {
+            description: 'searchProducts',
+            execute: async () => 'not-valid-json',
+          },
+          getProductDetails: {
+            description: 'getProductDetails',
+            execute: async () => 'not-valid-json',
+          },
+        };
+      }
+    );
+
+    let searchSerialized: unknown;
+    let detailsSerialized: unknown;
+    mocks.generateText.mockImplementationOnce(
+      async (options: {
+        tools?: {
+          searchProducts?: {
+            execute?: (params: { query: string }) => Promise<string>;
+          };
+          getProductDetails?: {
+            execute?: (params: { productId: string }) => Promise<string>;
+          };
+        };
+      }) => {
+        searchSerialized = JSON.parse(
+          (await options.tools?.searchProducts?.execute?.({
+            query: 'MacBook',
+          })) ?? '{}'
+        );
+        detailsSerialized = JSON.parse(
+          (await options.tools?.getProductDetails?.execute?.({
+            productId: 'mac-1',
+          })) ?? '{}'
+        );
+        reportToolResult?.('searchProducts', { products: [], total: 0 });
+        return { text: "Sorry, I couldn't verify any products under budget." };
+      }
+    );
+
+    await runOgabasseyCatalogAgent(baseOptions());
+    expect(searchSerialized).toEqual({
+      products: [],
+      total: 0,
+      error: 'Unable to validate tool results against budget',
+    });
+    expect(detailsSerialized).toEqual({
+      error: 'Unable to validate product against budget',
+    });
+  });
 });

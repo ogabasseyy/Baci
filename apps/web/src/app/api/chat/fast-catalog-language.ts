@@ -28,7 +28,7 @@ export function normalizeCatalogSearchNouns(value: string): string {
     .replace(/\bpixels\b/gi, 'Pixel')
     .replace(/\bmacbooks\b/gi, 'MacBook')
     .replace(/\bipads\b/gi, 'iPad')
-    .replace(/\bnotebooks\b/gi, 'notebook');
+    .replace(/\bnotebooks\b/gi, 'Notebook');
 }
 
 export function resolveCatalogCategory<T extends { slug: string }>(

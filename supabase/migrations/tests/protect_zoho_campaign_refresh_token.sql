@@ -172,6 +172,38 @@ BEGIN
 END $$;
 RESET ROLE;
 
+-- End to end: seed a legacy row (token inside custom_settings), run the migration's real
+-- backfill function, and check the saved token and the cleaned settings. The CHECK is
+-- dropped only inside this rolled-back transaction so the legacy row can exist.
+SELECT set_config('request.jwt.claim.sub', '', true);
+SELECT set_config('request.jwt.claim.role', '', true);
+ALTER TABLE public.merchant_feature_settings
+  DROP CONSTRAINT merchant_feature_settings_no_zoho_secrets;
+INSERT INTO auth.users (id, email)
+VALUES ('bbbbbbbb-8888-4888-8888-bbbbbbbbbbbb', 'zoho-legacy@example.test');
+INSERT INTO public.merchants(id, user_id, email, business_name, slug)
+VALUES ('aaaaaaaa-8888-4888-8888-aaaaaaaaaaaa', 'bbbbbbbb-8888-4888-8888-bbbbbbbbbbbb',
+        'zoho-legacy@example.test', 'Zoho Legacy Store', 'zoho-legacy-store');
+INSERT INTO public.merchant_feature_settings(merchant_id, custom_settings)
+VALUES ('aaaaaaaa-8888-4888-8888-aaaaaaaaaaaa',
+  jsonb_build_object('zohoCampaigns', jsonb_build_object(
+    'enabled', true, 'listKey', 'L9', 'refreshToken', E' \t ',
+    'refresh_token', 'vLegacyv', 'accessToken', 'short-lived')))
+ON CONFLICT (merchant_id) DO UPDATE SET custom_settings = EXCLUDED.custom_settings;
+SELECT private.backfill_zoho_campaign_credentials_v1();
+DO $$
+BEGIN
+  IF (SELECT refresh_token FROM public.merchant_zoho_campaign_credentials
+      WHERE merchant_id = 'aaaaaaaa-8888-4888-8888-aaaaaaaaaaaa') IS DISTINCT FROM 'vLegacyv' THEN
+    RAISE EXCEPTION 'Zoho: backfill did not save the legacy token';
+  END IF;
+  IF (SELECT custom_settings FROM public.merchant_feature_settings
+      WHERE merchant_id = 'aaaaaaaa-8888-4888-8888-aaaaaaaaaaaa')
+     IS DISTINCT FROM '{"zohoCampaigns":{"enabled":true,"listKey":"L9"}}'::jsonb THEN
+    RAISE EXCEPTION 'Zoho: backfill did not clean the legacy settings';
+  END IF;
+END $$;
+
 -- Token changes leave canonical audit events that carry presence only, never the token.
 DO $$
 DECLARE v_actions text[]; v_text text;

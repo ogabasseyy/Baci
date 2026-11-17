@@ -102,23 +102,28 @@ REVOKE ALL ON FUNCTION private.zoho_refresh_token_from_custom_settings_v1(jsonb)
 REVOKE ALL ON FUNCTION private.strip_zoho_secrets_from_custom_settings_v1(jsonb)
   FROM PUBLIC, anon, authenticated;
 
-INSERT INTO public.merchant_zoho_campaign_credentials (merchant_id, refresh_token)
-SELECT src.merchant_id, src.token
-FROM (
-  SELECT
-    fs.merchant_id,
-    private.zoho_refresh_token_from_custom_settings_v1(fs.custom_settings) AS token
-  FROM public.merchant_feature_settings AS fs
-) AS src
-JOIN public.merchants AS m ON m.id = src.merchant_id
-WHERE src.token IS NOT NULL
-ON CONFLICT (merchant_id) DO NOTHING;
-
--- merchant_feature_settings changes are audited, and the audit writer rejects a database
--- session that has no actor. Attribute this one-time cleanup to a fixed system principal
--- (set in the same statement as the UPDATE so it holds even outside a wrapping transaction).
-DO $strip$
+-- The one-time backfill (copy the token, then strip the keys) is a function so the replay
+-- test can run the real statements against a seeded legacy row.
+CREATE OR REPLACE FUNCTION private.backfill_zoho_campaign_credentials_v1()
+RETURNS void
+LANGUAGE plpgsql
+SET search_path = ''
+AS $$
 BEGIN
+  INSERT INTO public.merchant_zoho_campaign_credentials (merchant_id, refresh_token)
+  SELECT src.merchant_id, src.token
+  FROM (
+    SELECT
+      fs.merchant_id,
+      private.zoho_refresh_token_from_custom_settings_v1(fs.custom_settings) AS token
+    FROM public.merchant_feature_settings AS fs
+  ) AS src
+  JOIN public.merchants AS m ON m.id = src.merchant_id
+  WHERE src.token IS NOT NULL
+  ON CONFLICT (merchant_id) DO NOTHING;
+
+  -- merchant_feature_settings changes are audited, and the audit writer rejects a database
+  -- session that has no actor. Attribute this one-time cleanup to a fixed system principal.
   PERFORM pg_catalog.set_config(
     'app.audit_actor_user_id', '00000000-0000-0000-0000-00000000a2e1', true
   );
@@ -132,8 +137,13 @@ BEGIN
       'accessToken', 'access_token', 'clientSecret', 'client_secret',
       'refreshToken', 'refresh_token'
     ];
-END
-$strip$;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION private.backfill_zoho_campaign_credentials_v1()
+  FROM PUBLIC, anon, authenticated;
+
+SELECT private.backfill_zoho_campaign_credentials_v1();
 
 -- Inline CHECK (no helper function): a CHECK function would need an explicit EXECUTE
 -- grant for every role that writes this table, and an expression needs none.

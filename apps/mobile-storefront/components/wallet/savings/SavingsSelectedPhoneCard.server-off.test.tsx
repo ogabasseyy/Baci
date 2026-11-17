@@ -66,5 +66,26 @@ describe('SavingsSelectedPhoneCard with PiggyVest off', () => {
       expect(tag.backgroundColor).toBe(BRAND.primary);
       expect(tag.color).toBe('#FFFFFF');
     });
+
+    it('draws Change as white text on solid brand red', () => {
+      render(
+        <SavingsSelectedPhoneCard
+          colors={Colors.dark}
+          product={product}
+          imageUri=""
+          loadingOptions={false}
+          onChange={jest.fn()}
+        />
+      );
+      const pill = screen.getByRole('button', {
+        name: 'Change savings device',
+      });
+      expect(StyleSheet.flatten(pill.props.style).backgroundColor).toBe(
+        BRAND.primary
+      );
+      expect(
+        StyleSheet.flatten(screen.getByText('Change').props.style).color
+      ).toBe('#FFFFFF');
+    });
   });
 });

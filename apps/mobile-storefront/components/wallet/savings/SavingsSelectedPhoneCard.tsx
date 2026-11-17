@@ -66,11 +66,7 @@ export function SavingsSelectedPhoneCard({
         onPress={onChange}
         style={styles.change}
       >
-        <Ionicons
-          name="swap-horizontal-outline"
-          size={14}
-          color={BRAND.primary}
-        />
+        <Ionicons name="swap-horizontal-outline" size={14} color="#FFFFFF" />
         <Text style={styles.changeText}>Change</Text>
       </Pressable>
     </View>
@@ -117,9 +113,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     borderRadius: 999,
-    backgroundColor: palette.red[50],
+    // Solid red with white text, like the plan sheet's Change pill.
+    backgroundColor: BRAND.primary,
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
-  changeText: { color: BRAND.primary, fontSize: 12, fontWeight: '600' },
+  changeText: { color: '#FFFFFF', fontSize: 12, fontWeight: '600' },
 });

@@ -32,6 +32,8 @@ interface SlugMissingOptions {
   rpcImpl?: StorefrontPreflightRpcImpl;
   /** Tight budget — a slow verdict must not delay navigations. */
   timeoutMs?: number;
+  /** Invoked only when the RPC positively confirms the product exists. */
+  onConfirmedLive?: () => void;
 }
 
 export type StorefrontProductSlugResolution =
@@ -170,6 +172,7 @@ export async function resolveStorefrontProductSlugResolution(
     }
   }
 
+  opts.onConfirmedLive?.();
   return { kind: 'present-or-unknown' };
 }
 

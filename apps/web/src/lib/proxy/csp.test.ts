@@ -177,6 +177,29 @@ it.each([
   ]);
 });
 
+it.each([
+  false,
+  true,
+])('lets storefronts play a video the shopper just picked (local=%s)', (isLocal) => {
+  // The swap device check reads still frames from the shopper's own clip
+  // through a blob: URL. An https: source does not cover blob:, so without it
+  // the browser refuses to load the clip and every normal-size video fails.
+  expect(directive(generateCSP('storefront', isLocal), 'media-src')).toEqual([
+    "'self'",
+    'blob:',
+    'https:',
+  ]);
+});
+
+it('keeps blob: media off admin and auth documents', () => {
+  for (const routeType of ['admin', 'auth'] as const) {
+    expect(directive(generateCSP(routeType, false), 'media-src')).toEqual([
+      "'self'",
+      'https:',
+    ]);
+  }
+});
+
 it('permits consent-gated social SDKs and collectors only on storefronts', () => {
   const policy = generateCSP('storefront', false);
   expect(directive(policy, 'script-src')).toEqual(

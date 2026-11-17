@@ -70,6 +70,9 @@ export function generateCSP(
       : routeType === 'storefront'
         ? {
             ...baseDirectives,
+            // blob: the swap device check reads still frames from the clip the
+            // shopper just picked. An https: source does not cover blob:.
+            'media-src': "'self' blob: https:",
             'script-src': `'self' 'unsafe-inline'${storefrontUnsafeEval} ${socialScripts} https://bzrcdn.openai.com https://vercel.live https://va.vercel-scripts.com https://static.cloudflareinsights.com https://*.myhuaweicloud.com https://js.useklump.com https://asset.useklump.com https://checkout.useklump.com https://checkout-v2.useklump.com https://directdebit.useklump.com https://checkout.creditdirect.ng https://app.creditdirect.ng https://cdl.test.lendastack.io https://securepubads.g.doubleclick.net https://www.googletagservices.com https://pagead2.googlesyndication.com https://www.google.com https://www.gstatic.com https://googleads.g.doubleclick.net https://td.doubleclick.net https://ad.doubleclick.net https://pubads.g.doubleclick.net https://tpc.googlesyndication.com https://cdn.ampproject.org https://*.adtrafficquality.google https://cm.g.doubleclick.net${chatwootOrigin ? ` ${chatwootOrigin}` : ''}`,
             'style-src': "'self' 'unsafe-inline' https://fonts.googleapis.com",
             // wss://*.supabase.co: the shared cart's private Realtime channel.

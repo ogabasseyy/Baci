@@ -37,13 +37,19 @@ describe('oxygenEligibilityReportSchema offers', () => {
       ).toBe(false);
     }
     expect(
-      oxygenEligibilityReportSchema.safeParse({ ...base, offers: [] }).success
-    ).toBe(false);
-    expect(
       oxygenEligibilityReportSchema.safeParse({
         ...base,
         offers: Array(13).fill({ loan_amount: 68000, tenor: 1 }),
       }).success
     ).toBe(false);
+  });
+  it.each([
+    'PENDING',
+    'COMPLETED',
+  ])('accepts an explicitly empty offer list when status is %s', (status) => {
+    expect(
+      oxygenEligibilityReportSchema.safeParse({ ...base, status, offers: [] })
+        .success
+    ).toBe(true);
   });
 });

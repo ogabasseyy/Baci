@@ -47,11 +47,13 @@ export async function commitCustomerAuthSession(
     setUser,
     setCustomer,
     setOtpState,
+    setIsLoading,
   }: {
     currentUserId?: string | null;
     setUser: (user: CustomerUser | null) => void;
     setCustomer: (customer: Customer | null) => void;
     setOtpState: (otp: OtpState | null) => void;
+    setIsLoading?: (loading: boolean) => void;
   }
 ): Promise<boolean> {
   invalidateCustomerSessionLifecycle(merchantSlug);
@@ -71,6 +73,7 @@ export async function commitCustomerAuthSession(
       setUser(null);
       setCustomer(null);
       publishCustomerIdentity(null, null, merchantSlug);
+      setIsLoading?.(false);
       return false;
     }
   }
@@ -81,6 +84,7 @@ export async function commitCustomerAuthSession(
   setCustomer(session.customer);
   publishCustomerIdentity(session.user, session.customer, merchantSlug);
   setOtpState(null);
+  setIsLoading?.(false);
   return true;
 }
 
@@ -90,7 +94,8 @@ export async function performCustomerLogout(
   setUser: (user: CustomerUser | null) => void,
   setCustomer: (customer: Customer | null) => void,
   setOtpState: (otp: OtpState | null) => void,
-  userId?: string | null
+  userId?: string | null,
+  setIsLoading?: (loading: boolean) => void
 ): Promise<void> {
   invalidateCustomerSessionLifecycle(merchantSlug);
   const previousUserId = getRememberedCustomerUserId(merchantSlug, userId);
@@ -165,6 +170,7 @@ export async function performCustomerLogout(
     else endDeferredCartLogout?.(merchantSlug);
     throw error;
   } finally {
+    setIsLoading?.(false);
     retirement.release();
   }
 }

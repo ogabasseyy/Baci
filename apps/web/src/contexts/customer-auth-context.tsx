@@ -217,6 +217,7 @@ export function CustomerAuthProvider({
         {
           currentUserId: user?.id,
           setCustomer,
+          setIsLoading,
           setOtpState,
           setUser,
         }
@@ -243,7 +244,8 @@ export function CustomerAuthProvider({
       setUser,
       setCustomer,
       setOtpState,
-      user?.id
+      user?.id,
+      setIsLoading
     );
 
   const signInWithGoogle = (returnTo?: string) =>

@@ -1,11 +1,17 @@
 import type { User } from '@supabase/supabase-js';
 import { useAuthStore } from '@/stores/auth-store';
-import { savingsToaster, useSavingsToastStore } from './savings-toast-store';
+import {
+  savingsToaster,
+  useSavingsToastStore,
+  walletHidden,
+  walletShown,
+} from './savings-toast-store';
 
 // Local state only: no server call, so it is the same with PiggyVest on or off.
 describe('savingsToaster', () => {
   beforeEach(() => {
     useSavingsToastStore.setState({ toast: null });
+    walletShown();
     useAuthStore.setState({
       user: { id: 'user-1' } as User,
       merchantId: 'merchant-1',
@@ -26,6 +32,14 @@ describe('savingsToaster', () => {
   it('drops the toast when another account signed in meanwhile', () => {
     const toast = savingsToaster();
     useAuthStore.setState({ user: { id: 'user-2' } as User });
+    expect(toast('₦100 added to iPhone 15')).toBe(false);
+    expect(useSavingsToastStore.getState().toast).toBeNull();
+  });
+
+  it('drops a result that settles after the wallet left', () => {
+    const toast = savingsToaster();
+    walletHidden();
+    walletShown();
     expect(toast('₦100 added to iPhone 15')).toBe(false);
     expect(useSavingsToastStore.getState().toast).toBeNull();
   });

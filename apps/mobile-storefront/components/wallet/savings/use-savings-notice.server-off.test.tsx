@@ -54,6 +54,19 @@ describe('server keeps PiggyVest off: useSavingsNotice', () => {
       expect(result.current.notice).toBeNull();
     });
 
+    it('keeps a success that asks to pull to refresh until it is closed', () => {
+      const { result } = renderHook(() => useSavingsNotice('goal-a'));
+      act(() =>
+        notifySavings(
+          'Savings updated',
+          'Nice! Pull to refresh your latest balance.',
+          'success'
+        )
+      );
+      act(() => jest.advanceTimersByTime(SUCCESS_NOTICE_MS * 4));
+      expect(result.current.notice?.title).toBe('Savings updated');
+    });
+
     it('keeps a pending or warning notice until it is closed', () => {
       const { result } = renderHook(() => useSavingsNotice('goal-a'));
       act(() => notifySavings('Contribution pending', 'Still waiting', 'info'));

@@ -194,6 +194,10 @@ export function useWalletPinSheet({
     value: string,
     isCurrent: () => boolean
   ) => {
+    // A working state from the moment the save starts, never the cleared
+    // keypad: the customer just typed the PIN twice. Every failure below
+    // puts back the right step.
+    setStep('approving');
     try {
       await submitWalletPin(kind, value, expectedUserId);
     } catch (failure) {
@@ -212,10 +216,7 @@ export function useWalletPinSheet({
       return;
     }
     if (!isCurrent()) return;
-    // A working state, never an empty "Enter your PIN" pad: the customer
-    // just typed the PIN twice and is not asked for it again unless this
-    // approval fails.
-    setStep('approving');
+    // Still working: the PIN is not asked for again unless approval fails.
     if (await approve(value, isCurrent)) return;
     if (!isCurrent()) return;
     // approve() may already have moved to set/reset; otherwise ask for the

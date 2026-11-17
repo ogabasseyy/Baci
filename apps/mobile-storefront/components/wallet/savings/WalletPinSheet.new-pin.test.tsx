@@ -156,6 +156,27 @@ describe('bugfix: no third, empty PIN pad after a new PIN', () => {
     await waitFor(() => expect(onProof).toHaveBeenCalledWith(proof));
   });
 
+  it('shows the working state while the new PIN is still saving', async () => {
+    jest
+      .mocked(fetchWalletPinStatus)
+      .mockResolvedValue(status({ hasPin: false }));
+    let saved: () => void = () => undefined;
+    jest.mocked(submitWalletPin).mockReturnValue(
+      new Promise<void>((resolve) => {
+        saved = resolve;
+      })
+    );
+    jest.mocked(verifyFundPin).mockResolvedValue(proof);
+    const { onProof } = renderSheet();
+    await screen.findByText('Create your wallet PIN');
+    chooseAndSave('Save PIN', '4821', '4821');
+    expect(await screen.findByTestId('wallet-pin-working')).toBeOnTheScreen();
+    expect(screen.queryByRole('button', { name: '1' })).toBeNull();
+    expect(verifyFundPin).not.toHaveBeenCalled();
+    saved();
+    await waitFor(() => expect(onProof).toHaveBeenCalledWith(proof));
+  });
+
   it('still asks for the saved PIN when approving with it fails', async () => {
     jest
       .mocked(fetchWalletPinStatus)

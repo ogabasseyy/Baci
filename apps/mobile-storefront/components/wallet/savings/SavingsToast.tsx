@@ -1,7 +1,11 @@
 import { useEffect } from 'react';
 import { Toast } from '@/components/ui/Toast';
 import { useAuthStore } from '@/stores/auth-store';
-import { useSavingsToastStore } from './savings-toast-store';
+import {
+  useSavingsToastStore,
+  walletHidden,
+  walletShown,
+} from './savings-toast-store';
 
 /**
  * The wallet's brief "₦100 added to …" acknowledgement once a contribution
@@ -20,9 +24,12 @@ export function SavingsToast() {
   useEffect(() => {
     if (stale) clear();
   }, [stale, clear]);
-  // Leaving the wallet before the toast times out drops it too: the Toast's
-  // own timer is cancelled on unmount without calling onDismiss.
-  useEffect(() => clear, [clear]);
+  // Shown with the wallet. Leaving drops the toast, and any result still on
+  // its way: the Toast's own timer is cancelled on unmount without onDismiss.
+  useEffect(() => {
+    walletShown();
+    return walletHidden;
+  }, []);
   if (!toast || stale) return null;
   return (
     <Toast

@@ -2,6 +2,11 @@ import { useEffect } from 'react';
 import { useAuthStore } from '@/stores/auth-store';
 import { useSavingsNoticeStore } from './savings-notice-store';
 
+/** A success notice that still asks the customer to do something. */
+function needsAction(message?: string) {
+  return /pull to refresh/i.test(message ?? '');
+}
+
 /** How long a success notice stays before it clears itself. */
 export const SUCCESS_NOTICE_MS = 5000;
 
@@ -29,7 +34,9 @@ export function useSavingsNotice(goalId?: string | null) {
   // 2026-11-17): a success notice clears itself. Warnings and pending notices
   // stay until the customer closes them.
   useEffect(() => {
-    if (visible?.tone !== 'success') return;
+    // Only pure good news expires: a success that also asks the customer to
+    // pull to refresh (the wallet refresh failed) stays until closed.
+    if (visible?.tone !== 'success' || needsAction(visible.message)) return;
     const timer = setTimeout(() => {
       // Only this notice: a newer one keeps its own full time.
       if (useSavingsNoticeStore.getState().notice === visible)

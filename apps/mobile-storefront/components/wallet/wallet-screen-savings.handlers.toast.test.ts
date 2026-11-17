@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { notifySavings } from './savings/savings-notice';
-import { useSavingsToastStore } from './savings/savings-toast-store';
+import {
+  useSavingsToastStore,
+  walletShown,
+} from './savings/savings-toast-store';
 import { addSavingsContributionToGoal } from './wallet-screen-savings.handlers';
 
 jest.mock('./savings/savings-notice', () => {
@@ -50,6 +53,7 @@ describe('a confirmed contribution returns to the wallet with a toast', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     useSavingsToastStore.setState({ toast: null });
+    walletShown();
   });
 
   it('closes the savings sheet and toasts instead of an in-sheet "Savings updated"', async () => {

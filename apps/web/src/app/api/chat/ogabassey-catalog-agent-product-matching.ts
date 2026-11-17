@@ -3,22 +3,18 @@ import type {
   StorefrontAgentUiProduct,
 } from '@/schemas/storefront-agent-ui-contract';
 import {
-  allowsDescriptionFeature,
   collectProductGroundingTokens,
-  isNumericFeatureToken,
-  type ProductGroundingTokenSet,
   tokenizeIdentityWords,
 } from './ogabassey-catalog-agent-grounding-tokens';
 import {
-  CAPITALIZED_PHRASE_IGNORE,
   GENERIC_PRODUCT_NAME_WORDS,
-  KNOWN_BRAND_OR_LINE_TOKENS,
   KNOWN_BRAND_TOKENS,
-  NON_PRODUCT_PREDECESSOR_WORDS,
   POSITIVE_AVAILABILITY_GENERIC_WORDS,
-  VARIANT_TIER_TOKENS,
 } from './ogabassey-catalog-agent-lexicon';
+import { hasUnreturnedProductPhrase } from './ogabassey-catalog-agent-phrase-grounding';
 import { collectModelAttachedTierTokens } from './ogabassey-catalog-agent-tier-parser';
+
+export { hasUnreturnedProductPhrase };
 
 export const POSITIVE_EMPTY_RESULT_CLAIM =
   /\b(?:in[\s-]+stock|available\s+now|available\s+for|we\s+(?:have|stock|carry|sell|offer)|(?:is|are)\s+available|available\s+in|comes?\s+in|you\s+can\s+(?:get|buy|order)|we\s+recommend|try\s+the|here\s+(?:is|are)|check\s+out)\b/i;
@@ -31,17 +27,6 @@ export const EMPTY_CLAUSE_SPLIT_CAPTURE =
 
 const SEGMENT_SUB_SPLIT_PATTERN =
   /[.!?\n;—–]+|\b(?:and|but|or|while|versus|vs)\b|,\s+/gi;
-
-const FAMILY_VARIANT_PATTERN =
-  /\b(?:macbook|iphone|ipad|imac|galaxy|pixel|xps|surface|watch|redmi|tecno|infinix|oneplus|playstation)\s+(?:(?:pro|ultra|max|mini|plus|air|studio|fold|flip|fe|se|lite|neo|edge|spark|camon|phantom|hot|note|nord|pixel)\b|[a-z]{0,2}\d{1,4}[a-z]?\b)(?:\s+(?:pro|ultra|max|mini|plus|air|studio|fold|flip|fe|se|lite|neo|[a-z]{0,2}\d{1,4}[a-z]?\b)){0,2}/gi;
-
-const CAPITALIZED_PHRASE_PATTERN =
-  /\b(?:iPhone|iPad|iMac|[A-Z][A-Za-z0-9-]{1,24})(?:\s+(?:iPhone|iPad|iMac|[A-Z0-9][A-Za-z0-9-]{0,24})){1,4}\b/g;
-
-// Catches lowercase or mixed-case "<model> <number/tier>" mentions so
-// unreturned products like "or fairphone 5" cannot sneak past capitalization.
-const LOWERCASE_MODEL_NUMBER_PATTERN =
-  /\b([a-z][a-z0-9-]{2,20})\s+(?:([a-z]{0,2}\d{1,4}[a-z]?)|(?:pro|ultra|max|mini|plus|air|studio|fold|flip|fe|se|lite|neo|spark|camon|phantom|xm\d))\b/gi;
 
 export function tokenizeLowerWords(value: string): string[] {
   return (value.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter(
@@ -168,76 +153,6 @@ export function findBoundProducts(
   return products;
 }
 
-export function hasUnreturnedProductPhrase(
-  clause: string,
-  returnedTokens: Set<string>,
-  perProductTokens: ProductGroundingTokenSet[] = []
-): boolean {
-  const isModelIdentityToken = (token: string) =>
-    !isNumericFeatureToken(token) &&
-    (KNOWN_BRAND_OR_LINE_TOKENS.has(token) ||
-      VARIANT_TIER_TOKENS.has(token) ||
-      /\d/.test(token));
-  const extractWords = (raw: string) =>
-    (raw.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter(
-      (token) =>
-        (token.length >= 2 || /^\d$/.test(token)) &&
-        !CAPITALIZED_PHRASE_IGNORE.has(token)
-    );
-  const hasSingleProductMatch = (
-    words: string[],
-    allowDescription = false,
-    precedingWords: string[] = []
-  ) =>
-    perProductTokens.length > 0
-      ? perProductTokens.some((productSet) =>
-          allowDescription
-            ? words.every((token) => productSet.features.has(token)) &&
-              (allowsDescriptionFeature(words, precedingWords)
-                ? true
-                : words
-                    .filter(isModelIdentityToken)
-                    .every((token) => productSet.identity.has(token)))
-            : words.every((token) => productSet.identity.has(token))
-        )
-      : words.every((token) => returnedTokens.has(token));
-
-  for (const token of tokenizeLowerWords(clause)) {
-    if (
-      KNOWN_BRAND_OR_LINE_TOKENS.has(token) &&
-      (perProductTokens.length > 0
-        ? !perProductTokens.some((productSet) => productSet.identity.has(token))
-        : !returnedTokens.has(token))
-    ) {
-      return true;
-    }
-  }
-  for (const match of clause.matchAll(FAMILY_VARIANT_PATTERN)) {
-    if (!hasSingleProductMatch(tokenizeIdentityWords(match[0]))) return true;
-  }
-  for (const match of clause.matchAll(CAPITALIZED_PHRASE_PATTERN)) {
-    const words = extractWords(match[0]);
-    if (words.length >= 2 && !hasSingleProductMatch(words, true)) return true;
-  }
-  for (const match of clause.matchAll(LOWERCASE_MODEL_NUMBER_PATTERN)) {
-    if (NON_PRODUCT_PREDECESSOR_WORDS.has(match[1]?.toLowerCase() ?? ''))
-      continue;
-    const before = clause
-      .slice(0, match.index ?? 0)
-      .split(/[.,;!?]/)
-      .pop();
-    const precedingWords = extractWords(before ?? '');
-    const words = extractWords(match[0]);
-    const isDesc = allowsDescriptionFeature(words, precedingWords);
-    if (
-      words.length > 0 &&
-      !hasSingleProductMatch(words, isDesc, precedingWords)
-    )
-      return true;
-  }
-  return false;
-}
-
 export function hasGroundedProductMentions(
   text: string,
   events: StorefrontAgentUiEvent[]
@@ -273,7 +188,7 @@ export function hasGroundedProductMentions(
     if (NEGATION_OR_ABSENCE_CUE.test(clause)) continue;
 
     const directMatches = clause
-      .split(/,\s+|\s+\bor\b\s+/i)
+      .split(/,\s+|\s+(?:or|versus|vs\.?)\s+/i)
       .flatMap((part) => matchCandidateProducts(part.trim(), products));
     const boundSet = new Set(
       directMatches.length > 0

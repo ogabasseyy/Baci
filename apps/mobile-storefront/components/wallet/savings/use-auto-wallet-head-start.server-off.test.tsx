@@ -109,6 +109,19 @@ describe('useAutoWalletHeadStart with PiggyVest off', () => {
     });
   });
 
+  describe('bugfix (Muse): a short wallet reset every typed amount to the head start', () => {
+    it('leaves the customer amount alone once the head start no longer fits', () => {
+      rememberWalletHeadStart('goal-8', 100);
+      const { onAddAmountChange } = setup('goal-8', {
+        ready: true,
+        addAmount: '50',
+        walletBalance: 40,
+      });
+      expect(onAddAmountChange).not.toHaveBeenCalled();
+      takeWalletHeadStart('goal-8');
+    });
+  });
+
   it('lets the customer choose a different amount instead', () => {
     rememberWalletHeadStart('goal-4', 100);
     const { onAddSavings, result } = setup('goal-4', {

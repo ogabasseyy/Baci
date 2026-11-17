@@ -43,11 +43,13 @@ export function useAutoWalletHeadStart({
   // refuses a transfer the wallet cannot cover; this keeps the button honest.
   const fits =
     waiting !== null && waiting <= walletBalance && waiting <= remainingAmount;
-  // Keep the sheet's amount on the head start the customer ticked.
+  // Keep the sheet's amount on the ticked head start only while the one-tap
+  // button is in use. When it no longer fits, the normal entry shows and the
+  // customer's own edits (a smaller amount) must stick.
   useEffect(() => {
-    if (ready && waiting !== null && Number(addAmount) !== waiting)
+    if (ready && fits && waiting !== null && Number(addAmount) !== waiting)
       onAddAmountChange(String(waiting));
-  }, [ready, waiting, addAmount, onAddAmountChange]);
+  }, [ready, fits, waiting, addAmount, onAddAmountChange]);
   return {
     /** The head start still waiting for the customer's tap, or null. */
     waiting,

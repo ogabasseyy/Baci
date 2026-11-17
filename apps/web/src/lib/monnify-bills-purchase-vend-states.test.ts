@@ -159,3 +159,32 @@ describe('bugfix: business rejection naming a vend reference in text stays off K
     });
   });
 });
+
+describe('bugfix: plain-text vend references in a business rejection', () => {
+  it('keeps a nested reason naming a vend reference off Kuda', async () => {
+    mockBusinessFailure({
+      responseCode: '01',
+      responseMessage: 'Insufficient wallet balance',
+      responseBody: { reason: 'transaction reference MFBP-2' },
+    });
+
+    await expect(vend()).resolves.toMatchObject({
+      providerDefiniteFailure: false,
+    });
+  });
+
+  it('still hands a refusal whose top-level reference only echoes ours to Kuda', async () => {
+    mockHttpError(
+      400,
+      'Bad Request',
+      JSON.stringify({
+        reference: 'BACI-REF-123',
+        responseMessage: 'Insufficient wallet balance',
+      })
+    );
+
+    await expect(vend()).resolves.toMatchObject({
+      providerDefiniteFailure: true,
+    });
+  });
+});

@@ -7,6 +7,7 @@ import {
   vendRequestSchema,
   vendResponseBodySchema,
 } from '@/schemas/monnify-bills-schema';
+import { joinMonnifyAnswerStrings } from './monnify-answer-strings';
 import {
   MonnifyHttpError,
   MonnifyTransientVendError,
@@ -148,7 +149,7 @@ export async function purchaseBill(
           !isMonnifyUnexpectedErrorCode(parsedEnvelope.responseCode) &&
           !reportsMonnifyUnexpectedError(envelopeText) &&
           !hasMonnifyVendEvidence(envelope) &&
-          !mentionsMonnifyVendEvidence(fullAnswer) &&
+          !mentionsMonnifyVendEvidence(joinMonnifyAnswerStrings(envelope)) &&
           isMonnifyKnownVendRefusalText(fullAnswer) &&
           !isMonnifyVendOutcomeText(fullAnswer) &&
           !isMonnifyDuplicateReferenceText(fullAnswer),

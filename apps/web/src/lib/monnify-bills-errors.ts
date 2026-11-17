@@ -1,3 +1,4 @@
+import { joinMonnifyAnswerStrings } from './monnify-answer-strings';
 import { isMonnifyDuplicateReferenceText } from './monnify-duplicate-reference';
 import { reportsMonnifyUnexpectedError } from './monnify-unexpected-error-text';
 import { hasMonnifyVendEvidence } from './monnify-vend-evidence';
@@ -37,6 +38,22 @@ interface MonnifyAnswerReading {
   showsVendEvidence: boolean;
 }
 
+/**
+ * A JSON body is read structurally, plus the text of its string values (not
+ * its keys, so a top-level reference echo does not count). Anything else is
+ * read as plain text.
+ */
+function showsVendEvidence(body: string): boolean {
+  const parsed = parseJsonOrNull(body);
+  if (parsed && typeof parsed === 'object') {
+    return (
+      hasMonnifyVendEvidence(parsed) ||
+      mentionsMonnifyVendEvidence(joinMonnifyAnswerStrings(parsed))
+    );
+  }
+  return mentionsMonnifyVendEvidence(body);
+}
+
 function parseJsonOrNull(text: string): unknown {
   try {
     return JSON.parse(text) as unknown;
@@ -60,9 +77,7 @@ function readMonnifyAnswer(text: string, body: string): MonnifyAnswerReading {
       /unauthori[sz]ed|forbidden|access denied|invalid (?:access |bearer )?token|(?:bearer|access) token (?:is )?(?:invalid|missing|required)|missing (?:bearer|access) token|(?:expired|revoked) token|token (?:(?:has|is) )?(?:been )?(?:expired|revoked)|invalid credentials?|authentication (?:failed|failure|required|error)|failed to authenticate|(?:not |un)authenticated|authori[sz]ation (?:header )?(?:is )?(?:missing|required|invalid)|missing authori[sz]ation/i.test(
         body
       ),
-    showsVendEvidence:
-      hasMonnifyVendEvidence(parseJsonOrNull(body)) ||
-      mentionsMonnifyVendEvidence(body),
+    showsVendEvidence: showsVendEvidence(body),
   };
 }
 

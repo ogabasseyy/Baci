@@ -8,6 +8,9 @@ describe('mentionsMonnifyVendEvidence', () => {
     'Transaction Reference: MFBP-2',
     'payment-reference = MNFY-PAY-1',
     '{"vendReference":"BACI-REF-123"}',
+    'Insufficient wallet balance vendReference MFBP-1',
+    'transaction reference MFBP-2',
+    'Insufficient balance; reference=MFBP-3',
   ])('sees vend evidence in %s', (text) => {
     expect(mentionsMonnifyVendEvidence(text)).toBe(true);
   });
@@ -16,7 +19,8 @@ describe('mentionsMonnifyVendEvidence', () => {
     'Insufficient wallet balance',
     'vendReference=',
     '{"vendReference":""}',
-    'reference=BACI-REF-123',
+    'Invalid customer reference',
+    'transaction reference not found',
     '',
     null,
   ])('sees no vend evidence in %s', (text) => {

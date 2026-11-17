@@ -1,4 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const mockLoggerWarn = vi.fn();
+vi.mock('./logger', () => ({
+  logger: { warn: (...args: unknown[]) => mockLoggerWarn(...args) },
+}));
+
 import { mapKudaBillItems } from './kuda-bill-items';
 
 describe('mapKudaBillItems', () => {
@@ -95,5 +101,35 @@ describe('mapKudaBillItems', () => {
     ).toBeUndefined();
     expect(mapKudaBillItems([])).toBeUndefined();
     expect(mapKudaBillItems(undefined)).toBeUndefined();
+  });
+
+  describe('unit guard', () => {
+    beforeEach(() => {
+      mockLoggerWarn.mockReset();
+    });
+
+    it('warns when a fixed price looks like naira rather than kobo', () => {
+      mapKudaBillItems([
+        {
+          itemCode: 'cheap',
+          itemName: 'Cheap',
+          amount: 500,
+          isFixedPrice: true,
+        },
+      ]);
+
+      expect(mockLoggerWarn).toHaveBeenCalledWith(
+        expect.objectContaining({ itemCode: 'cheap', rawAmount: 500 })
+      );
+    });
+
+    it('stays quiet for normal kobo prices and open amounts', () => {
+      mapKudaBillItems([
+        { itemCode: 'a', itemName: 'A', amount: 100000, isFixedPrice: true },
+        { itemCode: 'b', itemName: 'B', amount: 0, isFixedPrice: false },
+      ]);
+
+      expect(mockLoggerWarn).not.toHaveBeenCalled();
+    });
   });
 });

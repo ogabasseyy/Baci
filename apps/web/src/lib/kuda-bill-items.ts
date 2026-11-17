@@ -1,4 +1,12 @@
 import { normalizeKudaString } from './kuda-voucher-token';
+import { logger } from './logger';
+
+/**
+ * Below this many kobo (₦10) a fixed price is implausible; seeing one
+ * suggests Kuda has started sending naira, which this mapping would then
+ * show 100x too low.
+ */
+const IMPLAUSIBLE_FIXED_PRICE_KOBO = 1000;
 
 /** A Kuda bill item (specific product from a biller), priced in naira. */
 export interface BillItem {
@@ -60,6 +68,24 @@ function koboToNaira(value: number | string | undefined) {
   return Math.round(toNumber(value)) / 100;
 }
 
+function warnIfUnitLooksWrong(
+  rawAmount: number,
+  isAmountFixed: boolean,
+  itemCode: string
+) {
+  if (
+    isAmountFixed &&
+    rawAmount > 0 &&
+    rawAmount < IMPLAUSIBLE_FIXED_PRICE_KOBO
+  ) {
+    logger.warn({
+      message: 'Kuda bill item price looks like naira, not kobo',
+      itemCode,
+      rawAmount,
+    });
+  }
+}
+
 function mapBillItem(raw: unknown): BillItem | null {
   if (!raw || typeof raw !== 'object') {
     return null;
@@ -81,18 +107,22 @@ function mapBillItem(raw: unknown): BillItem | null {
     return null;
   }
 
+  const rawAmount = item.Amount ?? item.amount;
+  const isAmountFixed =
+    item.IsAmountFixed ??
+    item.isAmountFixed ??
+    item.IsFixedPrice ??
+    item.isFixedPrice ??
+    false;
+  warnIfUnitLooksWrong(toNumber(rawAmount), isAmountFixed, itemCode);
+
   return {
     itemCode,
     itemName,
-    amount: koboToNaira(item.Amount ?? item.amount),
+    amount: koboToNaira(rawAmount),
     itemCurrencySymbol:
       item.ItemCurrencySymbol ?? item.itemCurrencySymbol ?? 'NGN',
-    isAmountFixed:
-      item.IsAmountFixed ??
-      item.isAmountFixed ??
-      item.IsFixedPrice ??
-      item.isFixedPrice ??
-      false,
+    isAmountFixed,
     itemFee: koboToNaira(item.ItemFee ?? item.itemFee),
     billItems: mapKudaBillItems(item.BillItems ?? item.billItems),
   };

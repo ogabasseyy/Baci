@@ -157,6 +157,21 @@ describe('assertKudaBillItemPriceCurrent', () => {
       ).rejects.toThrow(KUDA_BILL_PRICE_CHANGED_MESSAGE);
     });
 
+    it('accepts the chosen biller when any of its listings matches', async () => {
+      mockGetBillersByCategory.mockResolvedValue([
+        startimes({
+          billItems: [startimesSuper, { ...startimesSuper, amount: 9900 }],
+        }),
+      ]);
+
+      await expect(
+        assertKudaBillItemPriceCurrent({
+          ...superPackage,
+          billerName: 'STARTIMES NG',
+        })
+      ).resolves.toBeUndefined();
+    });
+
     it('accepts any listed price when the biller is not identified', async () => {
       await expect(
         assertKudaBillItemPriceCurrent({ ...superPackage, amount: 9000 })
@@ -207,6 +222,18 @@ describe('assertKudaBillItemPriceCurrent', () => {
       expect(mockLoggerWarn).toHaveBeenCalledWith(
         expect.objectContaining({ hasLastGoodList: false, type: 'cable_tv' })
       );
+    });
+
+    it('fails closed for every bill type except open-amount electricity', async () => {
+      mockGetBillersByCategory.mockResolvedValue([]);
+
+      await expect(
+        assertKudaBillItemPriceCurrent({
+          amount: 1000,
+          billItemIdentifier: 'KUD-BET-1',
+          type: 'betting',
+        })
+      ).rejects.toThrow(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
     });
 
     it('lets open-amount bill types continue with no list', async () => {

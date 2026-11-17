@@ -9,10 +9,14 @@ import { getBillersByCategory } from './kuda-bills';
 import { logger } from './logger';
 
 const PRICE_LIST_CACHE_TTL_MS = 60_000;
-/** How long a list may stand in for an unreachable Kuda (apps cache a day). */
+/**
+ * How long a list may stand in for an unreachable Kuda (apps cache a day).
+ * The cache lives in this server instance's memory, so a freshly started
+ * instance has no last good list; it then fails closed below.
+ */
 const PRICE_LIST_LAST_GOOD_MS = 24 * 60 * 60 * 1000;
-/** Kuda bill types sold as fixed-price packages. */
-const FIXED_PRICE_BILL_TYPES = new Set(['cable_tv']);
+/** Kuda bill types whose customers type their own amount. */
+const OPEN_AMOUNT_BILL_TYPES = new Set(['electricity']);
 
 const priceListCache = new Map<
   string,
@@ -106,13 +110,14 @@ function priceMatches(item: BillItem, amount: number) {
  * today), whose saved lists could still hold the old 100x prices from before
  * Kuda's kobo amounts were converted.
  *
- * When the purchase names a biller that lists the item, that biller's price
- * must match. Otherwise the amount must match at least one listing, so a
- * different price at another biller never declines a valid purchase while a
- * stale 100x amount (which matches none) is still caught. Open-amount and
- * unknown items pass. If no price list is available (Kuda down or empty,
- * with no good list in the past day), fixed-price types fail closed and the
- * others continue, as the data check does.
+ * When the purchase names a biller that lists the item, the amount must
+ * match that biller's listing; otherwise it must match at least one listing.
+ * Either way a different price elsewhere never declines a valid purchase,
+ * while a stale 100x amount (which matches none) is still caught.
+ * Open-amount and unknown items pass. If no price list is available (Kuda
+ * down or empty, with no good list from the past day in this server
+ * instance), every bill type fails closed except open-amount electricity,
+ * which continues as the data check does.
  */
 export async function assertKudaBillItemPriceCurrent({
   amount,
@@ -127,7 +132,7 @@ export async function assertKudaBillItemPriceCurrent({
 }): Promise<void> {
   const billers = await loadPriceList(type);
   if (billers === null) {
-    if (FIXED_PRICE_BILL_TYPES.has(type)) {
+    if (!OPEN_AMOUNT_BILL_TYPES.has(type)) {
       throw new Error(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
     }
     return;
@@ -146,14 +151,9 @@ export async function assertKudaBillItemPriceCurrent({
   const chosen = billerName
     ? listing.filter(({ biller }) => isChosenBiller(biller, billerName))
     : [];
-  const isCurrent =
-    chosen.length > 0
-      ? chosen.every(({ items }) =>
-          items.every((item) => priceMatches(item, amount))
-        )
-      : listing.some(({ items }) =>
-          items.some((item) => priceMatches(item, amount))
-        );
+  const isCurrent = (chosen.length > 0 ? chosen : listing).some(({ items }) =>
+    items.some((item) => priceMatches(item, amount))
+  );
   if (!isCurrent) {
     throw new Error(KUDA_BILL_PRICE_CHANGED_MESSAGE);
   }

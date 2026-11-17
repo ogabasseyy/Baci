@@ -15,7 +15,11 @@ vi.mock('@/lib/redis', () => ({
   getRedis: () => mockGetRedis(),
 }));
 
-import { readCachedInsights, writeCachedInsights } from './insights-cache';
+import {
+  type InsightsPayload,
+  readCachedInsights,
+  writeCachedInsights,
+} from './insights-cache';
 
 describe('insights-cache', () => {
   beforeEach(() => {
@@ -23,7 +27,7 @@ describe('insights-cache', () => {
   });
 
   it('falls back to in-memory cache when Redis is null', async () => {
-    const payload = {
+    const payload: InsightsPayload = {
       insights: [
         { title: 'T', description: 'D', type: 'positive', priority: 'low' },
       ],
@@ -46,7 +50,7 @@ describe('insights-cache', () => {
   });
 
   it('writes both local cache and Redis when Redis is configured', async () => {
-    const payload = {
+    const payload: InsightsPayload = {
       insights: [
         { title: 'T', description: 'D', type: 'positive', priority: 'low' },
       ],

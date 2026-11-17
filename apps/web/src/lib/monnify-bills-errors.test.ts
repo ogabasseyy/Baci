@@ -193,3 +193,11 @@ describe('bugfix: 3-3-4 grouped numbers without a prefix', () => {
     );
   });
 });
+
+describe('bugfix: underscore-grouped phone numbers', () => {
+  it.each(['0801_234_5678', '+234_801_234_5678'])('redacts %s', (phone) => {
+    expect(sanitizeMonnifyErrorDetail(`Vend failed for ${phone}`)).toBe(
+      'Vend failed for [redacted]'
+    );
+  });
+});

@@ -17,27 +17,27 @@ const SENSITIVE_DIGIT_SEQUENCE_PATTERN = /(?<!\d)\d{7,}(?!\d)/g;
  * readable (unbroken runs of 7+ digits are already redacted above).
  */
 const SENSITIVE_GROUPED_PHONE_PATTERN =
-  /(?<!\d)\(?(?:\+?234\)?[\s./-]?\(?|0)?[789]\d\d\)?(?:[\s./-]*\d){7}(?!\d)/g;
+  /(?<!\d)\(?(?:\+?234\)?[\s./_-]?\(?|0)?[789]\d\d\)?(?:[\s./_-]*\d){7}(?!\d)/g;
 /**
  * Any other grouped number that starts like a phone number ("+" or a leading
  * 0) and runs to 10+ digits, e.g. foreign or unusual Nigerian ranges.
  */
 const SENSITIVE_GROUPED_DIALLED_NUMBER_PATTERN =
-  /(?<!\d)(?:\+\(?|\(?0)\d(?:\s*[./()-]{0,3}\s*\d){9,}(?!\d)/g;
+  /(?<!\d)(?:\+\(?|\(?0)\d(?:\s*[./()_-]{0,3}\s*\d){9,}(?!\d)/g;
 /**
  * Any grouped number of 11+ digits whatever its prefix, e.g. an international
  * number written without "+" ("44 20 7946 0958"). Shorter grouped references
  * stay readable.
  */
 const SENSITIVE_LONG_GROUPED_NUMBER_PATTERN =
-  /(?<!\d)\d(?:\s*[./()-]{0,3}\s*\d){10,}(?!\d)/g;
+  /(?<!\d)\d(?:\s*[./()_-]{0,3}\s*\d){10,}(?!\d)/g;
 /**
  * A 3-3-4 grouped local number with no prefix, e.g. "415 555 0132" or
  * "(415) 555-0132". Other grouped references (e.g. "1234 5678 99") stay
  * readable.
  */
 const SENSITIVE_THREE_THREE_FOUR_PATTERN =
-  /(?<!\d)\(?\d{3}\)?[\s./-]+\d{3}[\s./-]+\d{4}(?!\d)/g;
+  /(?<!\d)\(?\d{3}\)?[\s./_-]+\d{3}[\s./_-]+\d{4}(?!\d)/g;
 /** How Monnify's full answer reads, worked out once from the unscrubbed text. */
 interface MonnifyAnswerReading {
   isDuplicateReference: boolean;
@@ -45,6 +45,7 @@ interface MonnifyAnswerReading {
   mentionsVendOutcome: boolean;
   reportsUnexpectedError: boolean;
   readsAsAuthRejection: boolean;
+  readsAsSpecificAuthRejection: boolean;
   showsVendEvidence: boolean;
 }
 
@@ -99,6 +100,9 @@ function readMonnifyAnswer(
       reportsMonnifyUnexpectedError(body) ||
       hasMonnifyNonDefinitiveCode(parsed),
     readsAsAuthRejection: readsAsMonnifyAuthRejection(body),
+    readsAsSpecificAuthRejection: readsAsMonnifyAuthRejection(body, {
+      specificOnly: true,
+    }),
     showsVendEvidence: showsVendEvidence(body),
   };
 }
@@ -158,6 +162,11 @@ export class MonnifyHttpError extends Error {
     return this.#reading.readsAsAuthRejection;
   }
 
+  /** The body names a token, credential or header problem (not a bare deny). */
+  get readsAsSpecificAuthRejection() {
+    return this.#reading.readsAsSpecificAuthRejection;
+  }
+
   /** The JSON body carries a vend status or reference: a vend may exist. */
   get showsVendEvidence() {
     return this.#reading.showsVendEvidence;
@@ -202,7 +211,7 @@ export function sanitizeMonnifyErrorDetail(value: string) {
     /\d$/.test(boundedValue) &&
     /^\d/.test(value.slice(redactionBound, redactionBound + 1))
   ) {
-    boundedValue = boundedValue.replace(/[\d\s./()+-]+$/, '');
+    boundedValue = boundedValue.replace(/[\d\s./()_+-]+$/, '');
   }
 
   const redacted = boundedValue
@@ -219,9 +228,9 @@ export function sanitizeMonnifyErrorDetail(value: string) {
   const cut = redacted.slice(0, MONNIFY_ERROR_DETAIL_MAX_LENGTH);
   const rest = redacted.slice(MONNIFY_ERROR_DETAIL_MAX_LENGTH);
   const cutSplitANumber =
-    /\d[\s./()+-]?$/.test(cut) && /^[\s./()+-]?\d/.test(rest);
+    /\d[\s./()_+-]?$/.test(cut) && /^[\s./()_+-]?\d/.test(rest);
   return (
-    cutSplitANumber ? cut.replace(/[\d\s./()+-]*\d[\s./()+-]?$/, '') : cut
+    cutSplitANumber ? cut.replace(/[\d\s./()_+-]*\d[\s./()_+-]?$/, '') : cut
   ).trim();
 }
 

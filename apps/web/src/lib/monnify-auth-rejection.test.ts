@@ -25,3 +25,25 @@ describe('readsAsMonnifyAuthRejection', () => {
     expect(readsAsMonnifyAuthRejection(body)).toBe(false);
   });
 });
+
+describe('readsAsMonnifyAuthRejection with specificOnly', () => {
+  it.each([
+    JSON.stringify({ responseMessage: 'Access denied' }),
+    JSON.stringify({ responseMessage: 'Forbidden' }),
+  ])('does not read bare %s as specific', (body) => {
+    expect(readsAsMonnifyAuthRejection(body, { specificOnly: true })).toBe(
+      false
+    );
+  });
+
+  it('reads a named token problem as specific', () => {
+    expect(
+      readsAsMonnifyAuthRejection(
+        JSON.stringify({ responseMessage: 'Invalid bearer token' }),
+        {
+          specificOnly: true,
+        }
+      )
+    ).toBe(true);
+  });
+});

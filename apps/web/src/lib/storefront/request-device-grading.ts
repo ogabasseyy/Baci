@@ -1,6 +1,7 @@
 import { fetchWithCsrf } from '@/lib/api-client';
 import { extractVideoFrames } from '@/lib/storefront/extract-video-frames';
 import { resizeDevicePhoto } from '@/lib/storefront/resize-device-photo';
+import { selectDeviceMedia } from '@/lib/storefront/select-device-media';
 import { DEVICE_GRADING_MAX_UPLOAD_BYTES } from '@/schemas/device-grading';
 
 export interface DeviceGradingResult {
@@ -58,10 +59,16 @@ async function buildUpload(
   const formData = new FormData();
   if (merchantSlug) formData.append('merchantSlug', merchantSlug);
 
-  const [first] = media;
+  // Callers pass one video or a few photos. Re-check here so a mixed or
+  // unsupported set is refused instead of being graded from its first file.
+  const selection = selectDeviceMedia(media);
+  if (!selection.ok) throw new Error(selection.error);
+  const [first] = selection.files;
   if (!first) throw new Error(GENERIC_FAILURE_MESSAGE);
   const isVideo = first.type.startsWith('video/');
-  const stills = isVideo ? await videoStills(first) : await photoStills(media);
+  const stills = isVideo
+    ? await videoStills(first)
+    : await photoStills(selection.files);
 
   if (stills.length > 0) {
     stills.forEach((still, index) => {

@@ -149,6 +149,26 @@ describe('TradeInModal', () => {
     expect(screen.getByText('1 photo selected')).toBeInTheDocument();
   });
 
+  it('drops an earlier selection when a later pick is refused', () => {
+    renderModal();
+
+    chooseFiles([photo('front.jpg')]);
+    expect(screen.getByText('1 photo selected')).toBeInTheDocument();
+
+    chooseFiles([
+      photo('back.jpg'),
+      new File(['video'], 'device.mp4', { type: 'video/mp4' }),
+    ]);
+
+    expect(
+      screen.getByText(/either one video or up to 6 photos/i)
+    ).toBeInTheDocument();
+    expect(screen.queryByText('1 photo selected')).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /analyze device/i })
+    ).toBeDisabled();
+  });
+
   it('builds support links from the digits of the phone number only', async () => {
     mocks.requestDeviceGrading.mockRejectedValue(new Error('Try again'));
     render(

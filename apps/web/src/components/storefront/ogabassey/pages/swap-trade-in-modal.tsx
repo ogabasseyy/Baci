@@ -44,6 +44,9 @@ export function TradeInModal({
 
     const selection = selectDeviceMedia(picked);
     if (!selection.ok) {
+      // Drop any earlier selection too, so Analyze cannot grade files the
+      // shopper has just tried to replace.
+      setMedia(null);
       setError(selection.error);
       return;
     }

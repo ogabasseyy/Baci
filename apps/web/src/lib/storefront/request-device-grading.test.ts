@@ -129,6 +129,28 @@ describe('requestDeviceGrading', () => {
     expect(mocks.fetchWithCsrf).not.toHaveBeenCalled();
   });
 
+  it.each([
+    [
+      'a video mixed with a photo',
+      [
+        new File(['video'], 'device.mp4', { type: 'video/mp4' }),
+        new File(['front'], 'front.jpg', { type: 'image/jpeg' }),
+      ],
+      /either one video or up to 6 photos/i,
+    ],
+    [
+      'a file that is neither a photo nor a video',
+      [new File(['x'], 'notes.pdf', { type: 'application/pdf' })],
+      /choose photos or a video/i,
+    ],
+    ['nothing', [], /choose photos or a video/i],
+  ])('refuses %s without reading or uploading anything', async (_label, media, message) => {
+    await expect(requestDeviceGrading(media)).rejects.toThrow(message);
+    expect(mocks.extractVideoFrames).not.toHaveBeenCalled();
+    expect(mocks.resizeDevicePhoto).not.toHaveBeenCalled();
+    expect(mocks.fetchWithCsrf).not.toHaveBeenCalled();
+  });
+
   it('throws the API error when grading is rejected', async () => {
     mocks.extractVideoFrames.mockResolvedValue([new Blob(['a'])]);
     mocks.fetchWithCsrf.mockResolvedValue({

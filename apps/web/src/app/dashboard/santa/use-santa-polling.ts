@@ -22,6 +22,7 @@ export function useSantaPolling(merchantId: string | undefined) {
   // biome-ignore lint/correctness/useExhaustiveDependencies: pollGeneration intentionally restarts the live polling budget on user refresh.
   useEffect(() => {
     if (!merchantId) return;
+    const activeMerchantId = merchantId;
 
     setPollingPaused(false);
     setPollError(null);
@@ -58,8 +59,8 @@ export function useSantaPolling(merchantId: string | undefined) {
       let timeoutId: ReturnType<typeof setTimeout> | null = null;
       Promise.race([
         Promise.all([
-          getSantaStats(merchantId),
-          getRecentInteractions(merchantId),
+          getSantaStats(activeMerchantId),
+          getRecentInteractions(activeMerchantId),
         ]),
         new Promise<never>((_, reject) => {
           timeoutId = setTimeout(

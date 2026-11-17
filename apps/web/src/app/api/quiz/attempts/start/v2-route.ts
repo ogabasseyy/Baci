@@ -43,7 +43,7 @@ const START_ACTION = 'start_quiz_attempt_v2';
 const DEVICE_ACTION = 'start_quiz_attempt_with_device_v2';
 
 export async function postQuizStartV2(request: NextRequest) {
-  const auth = await requireQuizUser(request);
+  const auth = await requireQuizUser(request, { requireFreshSession: true });
   if (auth.response) return auth.response;
 
   const csrfResponse = await requireQuizCsrf(request);

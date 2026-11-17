@@ -17,7 +17,9 @@ import { resolveQuizDevice } from '@/lib/quiz/quiz-device-hash';
 import { quizActiveAttemptQuerySchema } from '@/schemas/quiz';
 
 export async function GET(request: NextRequest) {
-  const auth = await requireQuizUser(request);
+  // Resume acts on the live attempt (it can record a timed-out question), so
+  // like answers it re-checks the session at most once a minute per token.
+  const auth = await requireQuizUser(request, { requireRecentSession: true });
   if (auth.response) return auth.response;
 
   const contractResponse = requireQuizV2Contract(request);

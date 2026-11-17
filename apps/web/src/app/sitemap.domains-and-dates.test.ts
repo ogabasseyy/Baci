@@ -9,16 +9,17 @@ const mockNot = vi.fn();
 const mockOrder = vi.fn();
 const mockGetPlatformBlogSitemapPosts = vi.fn();
 
-vi.mock('next/headers', () => ({
-  cookies: () => mockCookies(),
-  headers: () => mockHeaders(),
+vi.mock('next/cache', () => ({
+  cacheLife: vi.fn(),
+  cacheTag: vi.fn(),
 }));
 
-vi.mock('@/lib/supabase/server', () => ({
-  createClient: (...args: unknown[]) => mockCreateClient(...args),
+vi.mock('@/lib/supabase/anon', () => ({
+  createAnonClient: (...args: unknown[]) => mockCreateClient(...args),
 }));
 
 vi.mock('@/lib/platform-blog', () => ({
+  PLATFORM_BLOG_SITEMAP_CACHE_TAG: 'platform-blog-sitemap',
   getPlatformBlogSitemapPosts: (...args: unknown[]) =>
     mockGetPlatformBlogSitemapPosts(...args),
 }));

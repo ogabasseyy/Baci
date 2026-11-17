@@ -25,35 +25,32 @@ const { getQuizAuthHeaders } =
 const { QuizServiceError } =
   require('./quiz-types') as typeof import('./quiz-types');
 
-const withSession = (token: string) => ({
-  data: { session: { access_token: token } },
+const withSession = (token: string, userId = 'user-1') => ({
+  data: { session: { access_token: token, user: { id: userId } } },
   error: null,
 });
 const withoutSession = { data: { session: null }, error: null };
-const withUser = (id: string) => ({ data: { user: { id } }, error: null });
 
 describe('getQuizAuthHeaders', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  it('returns bearer headers and the validated user id from a single session read', async () => {
-    mockGetSession.mockResolvedValue(withSession('tok-1'));
-    mockGetUser.mockResolvedValue(withUser('user-1'));
+  it('returns bearer headers and the user id from a single session read without a network getUser call', async () => {
+    mockGetSession.mockResolvedValue(withSession('tok-1', 'user-1'));
 
     await expect(getQuizAuthHeaders()).resolves.toEqual({
       headers: { Authorization: 'Bearer tok-1' },
       userId: 'user-1',
     });
-    // The user id is validated against the SAME token the header carries.
-    expect(mockGetUser).toHaveBeenCalledWith('tok-1');
+    // The server verifies the token; no Supabase Auth round trip per request.
+    expect(mockGetUser).not.toHaveBeenCalled();
   });
 
   it('retries once when the session has not hydrated yet, then succeeds', async () => {
     mockGetSession
       .mockResolvedValueOnce(withoutSession) // cold start: no token yet
-      .mockResolvedValueOnce(withSession('tok-2')); // hydrated on retry
-    mockGetUser.mockResolvedValue(withUser('user-2'));
+      .mockResolvedValueOnce(withSession('tok-2', 'user-2')); // hydrated on retry
 
     await expect(getQuizAuthHeaders()).resolves.toMatchObject({
       userId: 'user-2',
@@ -78,8 +75,7 @@ describe('getQuizAuthHeaders', () => {
         data: { session: null },
         error: { message: 'network blip' },
       })
-      .mockResolvedValueOnce(withSession('tok-3'));
-    mockGetUser.mockResolvedValue(withUser('user-3'));
+      .mockResolvedValueOnce(withSession('tok-3', 'user-3'));
 
     await expect(getQuizAuthHeaders()).resolves.toMatchObject({
       userId: 'user-3',
@@ -98,16 +94,32 @@ describe('getQuizAuthHeaders', () => {
     expect(mockGetSession).toHaveBeenCalledTimes(1);
   });
 
-  it('retries a transient getUser failure, then throws after the attempt cap', async () => {
-    mockGetSession.mockResolvedValue(withSession('tok-x'));
-    mockGetUser.mockResolvedValue({
-      data: { user: null },
-      error: { message: 'temporary' },
+  it('retries once when the session has a token but no user yet, then succeeds', async () => {
+    mockGetSession
+      .mockResolvedValueOnce({
+        data: { session: { access_token: 'tok-3' } }, // half-loaded storage
+        error: null,
+      })
+      .mockResolvedValueOnce(withSession('tok-3', 'user-3'));
+
+    await expect(getQuizAuthHeaders()).resolves.toEqual({
+      headers: { Authorization: 'Bearer tok-3' },
+      userId: 'user-3',
+    });
+    expect(mockGetSession).toHaveBeenCalledTimes(2);
+  });
+
+  it('throws QUIZ_AUTH_REQUIRED when the session still has a token but no user id after the retry', async () => {
+    mockGetSession.mockResolvedValue({
+      data: { session: { access_token: 'tok-x' } },
+      error: null,
     });
 
     await expect(getQuizAuthHeaders()).rejects.toMatchObject({
       code: 'QUIZ_AUTH_REQUIRED',
+      status: 401,
     });
-    expect(mockGetUser).toHaveBeenCalledTimes(2);
+    expect(mockGetSession).toHaveBeenCalledTimes(2);
+    expect(mockGetUser).not.toHaveBeenCalled();
   });
 });

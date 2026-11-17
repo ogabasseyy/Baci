@@ -249,6 +249,7 @@ deploy_scripts:
   - '.github/scripts/probe-gigl-hook-reload.test.mjs'
   - '.github/scripts/deploy-vps-readiness-checkout.test.mjs'
   - '.github/scripts/coordinate-production-release.mjs'
+  - '.github/scripts/coordinate-isolated-release.test.mjs'
   - '.github/scripts/coordinate-production-release.test.mjs'
   - '.github/scripts/coordinate-production-release.test-fixtures.mjs'
   - '.github/scripts/coordinate-publication.test.mjs'

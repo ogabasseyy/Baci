@@ -48,17 +48,25 @@ export function usePendingSavingsStatusPolling(
     // Each (re)start is a new run; a stale run's late answer schedules nothing.
     let run = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const checkThen = (ownRun: number, attempt: number, startedAt: number) => {
+    // Reads now, then (if still unsettled) schedules backoff step nextAttempt.
+    const checkThen = (
+      ownRun: number,
+      nextAttempt: number,
+      startedAt: number
+    ) => {
       const next = (outcome: SavingsStatusCheckResult) => {
         if (!active || ownRun !== run || !KEEP_POLLING.has(outcome)) return;
-        schedule(ownRun, attempt + 1, startedAt);
+        schedule(ownRun, nextAttempt, startedAt);
       };
       latestCheck.current().then(next, () => next('unavailable'));
     };
     const schedule = (ownRun: number, attempt: number, startedAt: number) => {
       const delay = statusPollDelay(attempt);
       if (Date.now() + delay - startedAt > STATUS_POLL_WINDOW_MS) return;
-      timer = setTimeout(() => checkThen(ownRun, attempt, startedAt), delay);
+      timer = setTimeout(
+        () => checkThen(ownRun, attempt + 1, startedAt),
+        delay
+      );
     };
     // Mounted in the background: wait for the app to come back.
     if (AppState.currentState !== 'background') schedule(run, 0, Date.now());
@@ -66,7 +74,8 @@ export function usePendingSavingsStatusPolling(
       // Any change ends the current run, so nothing is read in the background.
       clearTimeout(timer);
       run += 1;
-      if (state === 'active') checkThen(run, -1, Date.now());
+      // Back in the app: read at once, then restart the backoff from its start.
+      if (state === 'active') checkThen(run, 0, Date.now());
     });
     return () => {
       active = false;

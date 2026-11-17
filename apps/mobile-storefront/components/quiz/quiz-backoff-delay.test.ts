@@ -30,6 +30,13 @@ describe('backoffDelay', () => {
     );
   });
 
+  it('spreads upward from the floor instead of bunching on it', () => {
+    const overloaded = { ...input, failures: 1, floorMs: 15_000 };
+    expect(backoffDelay({ ...overloaded, random: () => 0 })).toBe(15_000);
+    expect(backoffDelay({ ...overloaded, random: () => 0.5 })).toBe(18_000);
+    expect(backoffDelay({ ...overloaded, random: () => 1 })).toBe(21_000);
+  });
+
   it('never returns less than the floor', () => {
     expect(
       backoffDelay({ ...input, failures: 1, random: () => 0, floorMs: 15_000 })

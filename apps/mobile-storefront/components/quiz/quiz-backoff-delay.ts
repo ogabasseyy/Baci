@@ -1,4 +1,8 @@
-import { type RandomSource, withSpread } from './quiz-with-spread';
+import {
+  DEFAULT_SPREAD_RATIO,
+  type RandomSource,
+  withSpread,
+} from './quiz-with-spread';
 
 interface BackoffInput {
   baseMs: number;
@@ -10,7 +14,11 @@ interface BackoffInput {
    * every capped phone back on the same instant.
    */
   capMs: number;
-  /** Never retry sooner than this (applied after spread). */
+  /**
+   * Never retry sooner than this. When the spread delay would fall below it,
+   * the delay starts at the floor and is spread upward only (up to 40% more),
+   * so phones told to back off do not all come back in the same instant.
+   */
   floorMs?: number;
   random?: RandomSource;
 }
@@ -29,5 +37,6 @@ export function backoffDelay({
   const exponent = Math.max(failures - 1, 0);
   const raw = Math.min(baseMs * 2 ** Math.min(exponent, 30), capMs);
   const spread = withSpread(failures > 0 ? raw : baseMs, random);
-  return Math.max(spread, floorMs);
+  if (spread >= floorMs) return spread;
+  return floorMs + Math.round(random() * floorMs * 2 * DEFAULT_SPREAD_RATIO);
 }

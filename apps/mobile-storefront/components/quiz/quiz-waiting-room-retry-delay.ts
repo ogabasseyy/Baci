@@ -6,8 +6,8 @@ const WAITING_ROOM_RETRY_BASE_MS = 1_000;
 const WAITING_ROOM_RETRY_CAP_MS = 5_000;
 
 /**
- * Waiting-room refresh retry: 1, 2, 4 then 5 s (with spread), and never
- * sooner than 5 s once the server has said it is rate limiting or overloaded.
+ * Waiting-room refresh retry: 1, 2, 4 then 5 s (with spread), and 5 to 7 s
+ * once the server has said it is rate limiting or overloaded.
  */
 export function waitingRoomRetryDelay(
   failures: number,

@@ -11,8 +11,9 @@ describe('waitingRoomRetryDelay', () => {
     expect(waitingRoomRetryDelay(4, offline, centred)).toBe(5_000);
   });
 
-  it('waits at least 5 s once the server says it is overloaded', () => {
+  it('waits 5 to 7 s once the server says it is overloaded', () => {
     expect(waitingRoomRetryDelay(1, { status: 503 }, () => 0)).toBe(5_000);
-    expect(waitingRoomRetryDelay(1, { status: 429 }, centred)).toBe(5_000);
+    expect(waitingRoomRetryDelay(1, { status: 429 }, centred)).toBe(6_000);
+    expect(waitingRoomRetryDelay(1, { status: 429 }, () => 1)).toBe(7_000);
   });
 });

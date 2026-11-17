@@ -138,7 +138,7 @@ describe('projectChatwootProductCard variants', () => {
       product: { slug: 'phone-15', currency: 'NGN' },
     });
   });
-  it('omits unknown option keys but rejects selections that become ambiguous', () => {
+  it('omits display-only option keys but rejects selections that become ambiguous', () => {
     const distinct = project(
       product({
         has_variants: true,
@@ -146,13 +146,13 @@ describe('projectChatwootProductCard variants', () => {
           {
             id: variantId,
             product_id: productId,
-            attributes: { storage: '128GB', merchant_note: 'first' },
+            attributes: { storage: '128GB', note: 'first' },
             stock_quantity: 2,
           },
           {
             id: '55555555-5555-4555-8555-555555555555',
             product_id: productId,
-            attributes: { storage: '256GB', merchant_note: 'second' },
+            attributes: { storage: '256GB', note: 'second' },
             stock_quantity: 2,
           },
         ],
@@ -175,13 +175,13 @@ describe('projectChatwootProductCard variants', () => {
           {
             id: variantId,
             product_id: productId,
-            attributes: { merchant_note: 'first' },
+            attributes: { note: 'first' },
             stock_quantity: 2,
           },
           {
             id: '55555555-5555-4555-8555-555555555555',
             product_id: productId,
-            attributes: { merchant_note: 'second' },
+            attributes: { note: 'second' },
             stock_quantity: 2,
           },
         ],

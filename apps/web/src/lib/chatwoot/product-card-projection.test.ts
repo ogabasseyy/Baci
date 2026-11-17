@@ -107,3 +107,28 @@ describe('bugfix: catalog-valid products are not rejected', () => {
     if (result.ok) expect(result.product.variants).toHaveLength(1);
   });
 });
+
+describe('bugfix: variants differing only by processor stay selectable', () => {
+  it('projects two variants that differ only by a processor axis', () => {
+    const result = project(
+      product({
+        has_variants: true,
+        product_variants: [
+          {
+            id: variantId,
+            product_id: productId,
+            attributes: { processor: 'Core i5' },
+            stock_quantity: 2,
+          },
+          {
+            id: '55555555-5555-4555-8555-555555555555',
+            product_id: productId,
+            attributes: { processor: 'Core i7' },
+            stock_quantity: 2,
+          },
+        ],
+      })
+    );
+    expect(result).toMatchObject({ ok: true });
+  });
+});

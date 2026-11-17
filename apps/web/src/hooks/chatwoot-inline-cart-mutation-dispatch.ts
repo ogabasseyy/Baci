@@ -42,7 +42,8 @@ export async function dispatchChatwootInlineCartMutation(
       buildChatwootInlineReviewResponse(
         requestId,
         shared.snapshot,
-        shared.sessionExpiresAt
+        // The review builder takes epoch seconds; the bridge tracks milliseconds.
+        Math.floor(shared.sessionExpiresAt / 1000)
       )
     );
   }

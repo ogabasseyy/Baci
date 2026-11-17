@@ -186,7 +186,7 @@ describe('projectChatwootProductCard pricing', () => {
           },
           {
             price: 300_000,
-            attributes: { storage: '128GB', 'sim type': 'Physical + eSIM' },
+            attributes: { storage: '128GB', sim_type: 'Physical + eSIM' },
             condition: 'new',
           },
         ],

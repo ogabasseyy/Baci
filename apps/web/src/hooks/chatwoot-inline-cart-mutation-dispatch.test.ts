@@ -33,7 +33,7 @@ function run(event: string) {
     message: { event },
     postRaw,
     requestId: 'req-12345',
-    sessionExpiresAt: 99,
+    sessionExpiresAt: 99_000,
     snapshot,
   } as unknown as Parameters<typeof dispatchChatwootInlineCartMutation>[0]);
   return { postRaw, promise, snapshot };

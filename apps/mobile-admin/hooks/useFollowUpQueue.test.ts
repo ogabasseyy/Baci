@@ -136,6 +136,34 @@ describe('useFollowUpQueue', () => {
     ]);
   });
 
+  it('orders follow-ups by time even when timestamps have different offsets', () => {
+    mocks.useMerchant.mockReturnValue({
+      error: null,
+      isLoading: false,
+      merchant: { id: 'merchant-1' },
+    });
+    mocks.useFailedOrders.mockReturnValue({
+      data: [{ id: 'newer', created_at: '2026-11-17T09:00:00Z' }],
+      isError: false,
+      isFetching: false,
+      isLoading: false,
+      refetch: mocks.refetchFailed,
+    });
+    mocks.useOxygenFollowUps.mockReturnValue({
+      data: [{ id: 'older', created_at: '2026-11-17T10:00:00+02:00' }],
+      isError: false,
+      isFetching: false,
+      isLoading: false,
+      refetch: mocks.refetchOxygen,
+    });
+
+    const { result } = renderHook(() => useFollowUpQueue());
+    expect(result.current.failedOrders?.map((item) => item.id)).toEqual([
+      'newer',
+      'older',
+    ]);
+  });
+
   it('keeps the Oxygen review label when an order appears in both sources', () => {
     mocks.useMerchant.mockReturnValue({
       error: null,

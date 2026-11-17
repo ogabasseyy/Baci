@@ -10,10 +10,15 @@ const OXYGEN_LABELS: Record<OxygenFollowUpStatus, string> = {
 
 const PAYMENT_LABELS: Record<string, string> = {
   bnpl_pending: 'BNPL Drop-off',
+  bnpl_approved: 'BNPL Approved',
   failed: 'Payment Failed',
   pending: 'Abandoned Transfer',
   expired: 'Payment Expired',
   unpaid: 'Checkout Drop-off',
+  paid: 'Paid',
+  refunded: 'Refunded',
+  cancelled: 'Cancelled',
+  unknown: 'Payment status unavailable',
 };
 
 export function getFollowUpStatusLabel(order: FailedOrder): string {
@@ -22,5 +27,5 @@ export function getFollowUpStatusLabel(order: FailedOrder): string {
   if (order.attempt_count > 1) return `${order.attempt_count} attempts`;
   const message = order.gateway_response?.message;
   if (typeof message === 'string' && message.trim()) return message;
-  return PAYMENT_LABELS[order.payment_status] ?? 'Payment Failed';
+  return PAYMENT_LABELS[order.payment_status] ?? 'Payment status unavailable';
 }

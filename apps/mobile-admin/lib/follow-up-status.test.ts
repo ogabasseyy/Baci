@@ -34,4 +34,16 @@ describe('follow-up status label', () => {
       })
     ).toBe('Declined by issuer');
   });
+
+  it.each([
+    ['bnpl_approved', 'BNPL Approved'],
+    ['paid', 'Paid'],
+    ['refunded', 'Refunded'],
+    ['cancelled', 'Cancelled'],
+    ['unknown', 'Payment status unavailable'],
+  ] as const)('does not call %s a failed payment', (status, label) => {
+    expect(getFollowUpStatusLabel({ ...order, payment_status: status })).toBe(
+      label
+    );
+  });
 });

@@ -40,8 +40,10 @@ export function useFollowUpQueue() {
   );
   const failedOrders =
     standardOrders || oxygenOrders
-      ? [...byOrderId.values()].sort((a, b) =>
-          getFollowUpActivityAt(b).localeCompare(getFollowUpActivityAt(a))
+      ? [...byOrderId.values()].sort(
+          (a, b) =>
+            Date.parse(getFollowUpActivityAt(b)) -
+            Date.parse(getFollowUpActivityAt(a))
         )
       : undefined;
   const isFailedOrdersError = isStandardError || isOxygenError;

@@ -38,5 +38,8 @@ export function backoffDelay({
   const raw = Math.min(baseMs * 2 ** Math.min(exponent, 30), capMs);
   const spread = withSpread(failures > 0 ? raw : baseMs, random);
   if (spread >= floorMs) return spread;
+  // A separate draw on purpose. This path is often reached only when the
+  // first draw was low; reusing it would bunch these phones just above the
+  // floor instead of across the whole range.
   return floorMs + Math.round(random() * floorMs * 2 * DEFAULT_SPREAD_RATIO);
 }

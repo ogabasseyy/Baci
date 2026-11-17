@@ -37,6 +37,26 @@ describe('backoffDelay', () => {
     expect(backoffDelay({ ...overloaded, random: () => 1 })).toBe(21_000);
   });
 
+  it('draws the spread above the floor separately from the first draw', () => {
+    const drawsInOrder = (values: number[]) => {
+      const remaining = [...values];
+      return () => remaining.shift() ?? 0.5;
+    };
+    const overloaded = { ...input, failures: 1, floorMs: 15_000 };
+    // First draw 0 puts the spread delay at 8 s, under the floor; the second
+    // draw alone decides how far above the floor the retry lands.
+    expect(backoffDelay({ ...overloaded, random: drawsInOrder([0, 1]) })).toBe(
+      21_000
+    );
+    expect(backoffDelay({ ...overloaded, random: drawsInOrder([0, 0]) })).toBe(
+      15_000
+    );
+    // First draw 1 gives 12 s, still under the floor.
+    expect(backoffDelay({ ...overloaded, random: drawsInOrder([1, 0]) })).toBe(
+      15_000
+    );
+  });
+
   it('never returns less than the floor', () => {
     expect(
       backoffDelay({ ...input, failures: 1, random: () => 0, floorMs: 15_000 })

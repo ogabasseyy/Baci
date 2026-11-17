@@ -5,6 +5,7 @@ import { fetchQuizLiveLeaderboard } from '@/services/quiz-live-leaderboard';
 import { type QuizLeaderboard, QuizServiceError } from '@/services/quiz-types';
 import type { QuizV2LifecycleStatus } from '@/stores/quiz-recovery-envelope';
 import { backoffDelay } from './quiz-backoff-delay';
+import { isOverloadError } from './quiz-is-overload-error';
 
 const LIVE_REFRESH_INTERVAL_MS = 10_000;
 const FINAL_RETRY_INTERVAL_MS = 10_000;
@@ -180,11 +181,7 @@ export function useQuizResultsLeaderboard({
             baseMs: baseIntervalMs,
             failures: loadFailures,
             capMs: FAILURE_BACKOFF_CAP_MS,
-            floorMs:
-              error instanceof QuizServiceError &&
-              (error.status === 429 || error.status === 503)
-                ? OVERLOAD_RETRY_FLOOR_MS
-                : 0,
+            floorMs: isOverloadError(error) ? OVERLOAD_RETRY_FLOOR_MS : 0,
           });
         }
         if (!hasLeaderboard.current) setLeaderboardError(true);

@@ -27,6 +27,7 @@ jobs:
     name: Muse comment review
     permissions:
       contents: read
+      issues: write
       pull-requests: write
     if: >-
       github.event.issue.pull_request != null &&
@@ -47,6 +48,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.issue.number }}
+          COMMENT_ID: ${{ github.event.comment.id }}
           COMMENT_BODY: ${{ github.event.comment.body }}
         run: |
           set -euo pipefail
@@ -76,6 +78,9 @@ jobs:
             echo "::notice::Skipping Muse review for fork PR #${PR_NUMBER}."
             exit 0
           fi
+
+          # Best-effort 👀 acknowledgement so the requester sees Muse picked up the comment.
+          gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${COMMENT_ID}/reactions" -f content=eyes >/dev/null 2>&1 || true
 
           echo "should_run=true" >> "${GITHUB_OUTPUT}"
           echo "head_sha=${head_sha}" >> "${GITHUB_OUTPUT}"

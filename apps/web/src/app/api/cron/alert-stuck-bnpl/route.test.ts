@@ -95,7 +95,8 @@ function stuckOrder(overrides: Record<string, unknown> = {}) {
     payment_method: 'credit_direct',
     payment_status: 'bnpl_pending',
     updated_at: '2026-07-01T00:00:00.000Z',
-    notes: '{"credit_directTransactionId":"txn-1"}',
+    notes:
+      '{"credit_directTransactionId":"txn-1","creditDirectClientCompletedAt":"2026-07-01T00:01:00.000Z"}',
     ...overrides,
   };
 }
@@ -131,10 +132,80 @@ describe('GET /api/cron/alert-stuck-bnpl', () => {
     expect(data).toEqual({
       success: true,
       stuckOrders: 0,
+      alertOrders: 0,
       merchants: 0,
       merchantsNotified: 0,
     });
     expect(mocks.notifyMerchant).not.toHaveBeenCalled();
+  });
+
+  it('does not page the merchant for orders that only opened a provider session', async () => {
+    mocks.limit.mockResolvedValue({
+      data: [
+        stuckOrder({
+          id: 'order-abandoned',
+          notes: '{"credit_directTransactionId":"txn-1"}',
+        }),
+      ],
+      error: null,
+    });
+
+    const response = await GET(createCronRequest());
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data).toEqual({
+      success: true,
+      stuckOrders: 1,
+      alertOrders: 0,
+      merchants: 0,
+      merchantsNotified: 0,
+    });
+    expect(mocks.reviewInsert).toHaveBeenCalledWith(
+      expect.objectContaining({ order_id: 'order-abandoned' })
+    );
+    expect(mocks.notifyMerchant).not.toHaveBeenCalled();
+  });
+
+  it('pages only for the orders with an approval or completion signal', async () => {
+    mocks.limit.mockResolvedValue({
+      data: [
+        stuckOrder({
+          id: 'order-abandoned',
+          total: 900000,
+          notes: '{"credit_directTransactionId":"txn-1"}',
+        }),
+        stuckOrder({
+          id: 'order-approved',
+          order_number: 'ORD-APPROVED',
+          total: 250000,
+          payment_status: 'bnpl_approved',
+          updated_at: '2020-01-01T00:00:00.000Z',
+          notes: '{"credit_directTransactionId":"txn-2"}',
+        }),
+      ],
+      error: null,
+    });
+
+    const response = await GET(createCronRequest());
+    const data = await response.json();
+
+    expect(data.stuckOrders).toBe(2);
+    expect(data.alertOrders).toBe(1);
+    expect(mocks.notifyMerchant).toHaveBeenCalledTimes(1);
+    expect(mocks.notifyMerchant).toHaveBeenCalledWith(
+      'merchant-1',
+      '⚠️ BNPL payment to confirm',
+      expect.stringMatching(
+        /^Order #ORD-APPROVED \(₦250,000\) went through Credit Direct checkout .* Check with Credit Direct before you fulfil it\.$/
+      ),
+      expect.objectContaining({
+        stuck_order_count: 1,
+        total_amount: 250000,
+        oldest_order_id: 'order-approved',
+      }),
+      'orders'
+    );
   });
 
   it('sends one aggregated alert per merchant with stuck orders', async () => {
@@ -145,7 +216,6 @@ describe('GET /api/cron/alert-stuck-bnpl', () => {
           id: 'order-2',
           order_number: 'ORD-2',
           total: 50000,
-          notes: null,
         }),
         stuckOrder({
           id: 'order-3',
@@ -164,6 +234,7 @@ describe('GET /api/cron/alert-stuck-bnpl', () => {
     expect(data).toEqual({
       success: true,
       stuckOrders: 3,
+      alertOrders: 3,
       merchants: 2,
       merchantsNotified: 2,
     });
@@ -171,21 +242,20 @@ describe('GET /api/cron/alert-stuck-bnpl', () => {
     expect(mocks.notifyMerchant).toHaveBeenCalledTimes(2);
     expect(mocks.notifyMerchant).toHaveBeenCalledWith(
       'merchant-1',
-      '⚠️ BNPL orders need attention',
-      expect.stringContaining('2 BNPL orders totalling ₦150,000'),
+      '⚠️ 2 BNPL payments to confirm',
+      expect.stringContaining('2 orders totalling ₦150,000'),
       expect.objectContaining({
         type: 'stuck_bnpl_alert',
         stuck_order_count: 2,
         total_amount: 150000,
-        with_provider_reference: 1,
         oldest_order_id: 'order-1',
       }),
       'orders'
     );
     expect(mocks.notifyMerchant).toHaveBeenCalledWith(
       'merchant-2',
-      '⚠️ BNPL orders need attention',
-      expect.stringContaining('1 BNPL order totalling ₦25,000'),
+      '⚠️ BNPL payment to confirm',
+      expect.stringContaining('(₦25,000) went through Credit Direct'),
       expect.objectContaining({ stuck_order_count: 1 }),
       'orders'
     );
@@ -194,7 +264,6 @@ describe('GET /api/cron/alert-stuck-bnpl', () => {
         message: 'BNPL orders stuck awaiting provider confirmation',
         merchantId: 'merchant-1',
         stuckOrderCount: 2,
-        withProviderReference: 1,
       })
     );
   });
@@ -517,13 +586,10 @@ describe('GET /api/cron/alert-stuck-bnpl', () => {
 
     expect(response.status).toBe(200);
     expect(data.stuckOrders).toBe(2);
-    expect(mocks.notifyMerchant).toHaveBeenCalledWith(
-      'merchant-1',
-      expect.any(String),
-      expect.stringContaining('2 BNPL orders'),
-      expect.objectContaining({ stuck_order_count: 2 }),
-      'orders'
-    );
+    // A bare provider reference keeps the order in the scan, but it is not
+    // enough on its own to page the merchant.
+    expect(data.alertOrders).toBe(0);
+    expect(mocks.notifyMerchant).not.toHaveBeenCalled();
   });
 
   it('reports merchants whose push delivery failed', async () => {
@@ -544,6 +610,7 @@ describe('GET /api/cron/alert-stuck-bnpl', () => {
     expect(data).toEqual({
       success: true,
       stuckOrders: 1,
+      alertOrders: 1,
       merchants: 1,
       merchantsNotified: 0,
       pushFailures: ['merchant-1'],
@@ -566,6 +633,7 @@ describe('GET /api/cron/alert-stuck-bnpl', () => {
     expect(data).toEqual({
       success: true,
       stuckOrders: 1,
+      alertOrders: 1,
       merchants: 1,
       merchantsNotified: 1,
       reviewFailures: ['order-1'],

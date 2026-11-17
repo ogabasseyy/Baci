@@ -59,6 +59,14 @@ describe('extractZohoCampaignSecrets', () => {
     expect(result.customSettings).toEqual({ zohoCampaigns: { enabled: true } });
   });
 
+  it('trims tabs and newlines like the database backfill does', () => {
+    const result = extractZohoCampaignSecrets({
+      zohoCampaigns: { refreshToken: '\t\n real \r' },
+    });
+
+    expect(result.refreshToken).toBe('real');
+  });
+
   it('leaves the stored token alone when the request does not mention it', () => {
     const result = extractZohoCampaignSecrets({
       zohoCampaigns: { enabled: false, listKey: 'L1' },
@@ -84,6 +92,6 @@ describe('extractZohoCampaignSecrets', () => {
       customSettings: undefined,
       refreshToken: undefined,
     });
-    expect(extractZohoCampaignSecrets('x').customSettings).toBe('x');
+    expect(extractZohoCampaignSecrets(null).customSettings).toBeNull();
   });
 });

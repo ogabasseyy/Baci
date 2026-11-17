@@ -20,9 +20,11 @@ function isRecord(value: unknown): value is JsonRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-export interface ExtractedZohoSecrets<T> {
+export type ZohoCustomSettings = Record<string, unknown> | null | undefined;
+
+export interface ExtractedZohoSecrets {
   /** custom_settings with every Zoho token key removed. */
-  customSettings: T;
+  customSettings: ZohoCustomSettings;
   /**
    * `string`: a new refresh token to save. `null`: the key was sent blank or null, which
    * clears the stored token. `undefined`: the request did not mention the token, so the
@@ -31,9 +33,9 @@ export interface ExtractedZohoSecrets<T> {
   refreshToken: string | null | undefined;
 }
 
-export function extractZohoCampaignSecrets<T>(
-  customSettings: T
-): ExtractedZohoSecrets<T> {
+export function extractZohoCampaignSecrets(
+  customSettings: ZohoCustomSettings
+): ExtractedZohoSecrets {
   if (!isRecord(customSettings))
     return { customSettings, refreshToken: undefined };
 
@@ -63,5 +65,5 @@ export function extractZohoCampaignSecrets<T>(
 
   if (refreshToken === undefined && sawBlankToken) refreshToken = null;
 
-  return { customSettings: cleaned as T, refreshToken };
+  return { customSettings: cleaned, refreshToken };
 }

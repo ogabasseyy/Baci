@@ -35,11 +35,28 @@ SELECT src.merchant_id, src.token
 FROM (
   SELECT
     fs.merchant_id,
-    COALESCE(
-      NULLIF(pg_catalog.btrim(fs.custom_settings -> 'zohoCampaigns' ->> 'refreshToken'), ''),
-      NULLIF(pg_catalog.btrim(fs.custom_settings -> 'zohoCampaigns' ->> 'refresh_token'), ''),
-      NULLIF(pg_catalog.btrim(fs.custom_settings -> 'zoho_campaigns' ->> 'refreshToken'), ''),
-      NULLIF(pg_catalog.btrim(fs.custom_settings -> 'zoho_campaigns' ->> 'refresh_token'), '')
+    -- First candidate that is a JSON string with non-whitespace content (spaces, tabs
+    -- and newlines trimmed). Non-string values are ignored, as in the API extractor.
+    (
+      SELECT x.token
+      FROM (VALUES
+        (1, fs.custom_settings -> 'zohoCampaigns' -> 'refreshToken'),
+        (2, fs.custom_settings -> 'zohoCampaigns' -> 'refresh_token'),
+        (3, fs.custom_settings -> 'zoho_campaigns' -> 'refreshToken'),
+        (4, fs.custom_settings -> 'zoho_campaigns' -> 'refresh_token')
+      ) AS cand (ord, val)
+      CROSS JOIN LATERAL (
+        SELECT NULLIF(
+          pg_catalog.btrim(
+            CASE WHEN pg_catalog.jsonb_typeof(cand.val) = 'string' THEN cand.val #>> '{}' END,
+            E' \t\r\n\f\v'
+          ),
+          ''
+        ) AS token
+      ) AS x
+      WHERE x.token IS NOT NULL
+      ORDER BY cand.ord
+      LIMIT 1
     ) AS token
   FROM public.merchant_feature_settings AS fs
 ) AS src

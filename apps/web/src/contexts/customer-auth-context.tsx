@@ -1,13 +1,6 @@
 'use client';
 
-import {
-  createContext,
-  type ReactNode,
-  use,
-  useEffect,
-  useLayoutEffect,
-  useState,
-} from 'react';
+import { createContext, type ReactNode, use, useState } from 'react';
 import { useCustomerProfileUpdate } from '@/hooks/use-customer-profile-update';
 import {
   signInWithApple as startAppleSignIn,
@@ -15,12 +8,11 @@ import {
 } from './customer-auth-oauth';
 import {
   commitCustomerAuthSession,
-  loadCustomerSession,
   performCustomerLogout,
 } from './customer-auth-session';
-import { publishCustomerIdentity } from './customer-live-identity';
 import { sendCustomerOtpRequest } from './customer-otp-send';
 import { requestCustomerOtpVerification } from './customer-otp-verification';
+import { useCustomerAuthLifecycle } from './use-customer-auth-lifecycle';
 
 export interface CustomerUser {
   id: string;
@@ -127,44 +119,13 @@ export function CustomerAuthProvider({
     setOtpState(null);
   }
 
-  // Check session on demand (e.g. refreshCustomer).
-  const checkSession = () =>
-    loadCustomerSession(
-      merchantSlug,
-      {
-        currentUserId: user?.id,
-        setUser,
-        setCustomer,
-        setIsLoading,
-      },
-      undefined,
-      { bypassSessionHint: true }
-    );
-
-  // Publish the storefront reset commit-synchronously (Codex R129
-  // P2, R133 P2): a layout effect leaves no post-commit window in
-  // which a settling promise continuation could read the previous
-  // storefront's identity and publish the old store's result into
-  // the newly committed view. Runs on mount and every committed
-  // merchantSlug change. The async session load stays in the
-  // passive effect below.
-  useLayoutEffect(() => {
-    publishCustomerIdentity(null, null, merchantSlug);
-  }, [merchantSlug]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    void loadCustomerSession(
-      merchantSlug,
-      { setUser, setCustomer, setIsLoading },
-      () => cancelled
-    );
-
-    return () => {
-      cancelled = true;
-    };
-  }, [merchantSlug]);
+  const { refreshCustomer } = useCustomerAuthLifecycle({
+    merchantSlug,
+    user,
+    setUser,
+    setCustomer,
+    setIsLoading,
+  });
 
   // Send OTP code
   const sendOtp = async (
@@ -252,12 +213,6 @@ export function CustomerAuthProvider({
     startGoogleSignIn(merchantSlug, returnTo);
   const signInWithApple = (returnTo?: string) =>
     startAppleSignIn(merchantSlug, returnTo);
-
-  // Refresh customer data
-  const refreshCustomer = async () => {
-    if (!user) return;
-    await checkSession();
-  };
 
   // Update customer data. The write-orchestration (identity snapshot, server
   // expected_user_id gate, guarded local merge) lives in a focused hook.

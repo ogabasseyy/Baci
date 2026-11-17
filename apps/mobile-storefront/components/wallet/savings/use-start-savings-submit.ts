@@ -11,7 +11,7 @@ import {
   PLAN_CREATED_OPEN_WALLET_MESSAGE,
   SIGN_IN_TO_START_SAVINGS_MESSAGE,
 } from './hand-off-to-wallet';
-import { rememberWalletHeadStart } from './pending-wallet-head-start';
+import { walletHeadStarts } from './pending-wallet-head-start';
 import { runBankTransferContribution } from './run-bank-transfer-contribution';
 import { runSavingsCardAuthorization } from './run-savings-card-authorization';
 import {
@@ -145,7 +145,7 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
     const continueInWallet = (goalId: string, amount: number) => {
       pendingPlansRef.current.delete(accountKey);
       if (options?.payHeadStartFromWallet)
-        rememberWalletHeadStart(goalId, wholeNairaHeadStart(amount));
+        walletHeadStarts.remember(goalId, wholeNairaHeadStart(amount));
       router.replace({
         pathname: '/wallet',
         params: {

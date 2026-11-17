@@ -1,8 +1,5 @@
 import { useEffect, useState } from 'react';
-import {
-  pendingWalletHeadStart,
-  takeWalletHeadStart,
-} from './pending-wallet-head-start';
+import { walletHeadStarts } from './pending-wallet-head-start';
 
 /**
  * A head start the customer ticked "pay now" for when creating the plan.
@@ -34,9 +31,9 @@ export function useAutoWalletHeadStart({
   onAddAmountChange: (value: string) => void;
   onAddSavings: () => void;
 }) {
-  const [waiting, setWaiting] = useState(() => pendingWalletHeadStart(goalId));
+  const [waiting, setWaiting] = useState(() => walletHeadStarts.lookup(goalId));
   useEffect(() => {
-    setWaiting(pendingWalletHeadStart(goalId));
+    setWaiting(walletHeadStarts.lookup(goalId));
   }, [goalId]);
   const matches = waiting !== null && Number(addAmount) === waiting;
   // Re-checked on every render and again at tap time. The server still
@@ -62,13 +59,13 @@ export function useAutoWalletHeadStart({
       if (!ready || !matches || !fits) return;
       // Only the tap that claims the entry starts the transfer: a second
       // press before the re-render finds it gone and does nothing.
-      const claimed = takeWalletHeadStart(goalId);
+      const claimed = walletHeadStarts.take(goalId);
       setWaiting(null);
       if (claimed !== null) onAddSavings();
     },
     /** The customer wants a different amount: show the normal entry. */
     dismiss: () => {
-      takeWalletHeadStart(goalId);
+      walletHeadStarts.take(goalId);
       setWaiting(null);
     },
   };

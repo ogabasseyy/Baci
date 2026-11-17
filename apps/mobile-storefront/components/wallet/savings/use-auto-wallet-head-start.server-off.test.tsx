@@ -1,9 +1,5 @@
 import { act, renderHook } from '@testing-library/react-native';
-import {
-  pendingWalletHeadStart,
-  rememberWalletHeadStart,
-  takeWalletHeadStart,
-} from './pending-wallet-head-start';
+import { walletHeadStarts } from './pending-wallet-head-start';
 import { useAutoWalletHeadStart } from './use-auto-wallet-head-start';
 
 type Props = {
@@ -32,7 +28,7 @@ function setup(goalId: string, initial: Props) {
 
 describe('useAutoWalletHeadStart with PiggyVest off', () => {
   it('offers the ticked head start and moves it only on the customer tap, once', () => {
-    rememberWalletHeadStart('goal-1', 100);
+    walletHeadStarts.remember('goal-1', 100);
     const { onAddSavings, result, rerender } = setup('goal-1', {
       ready: false,
       addAmount: '100',
@@ -51,17 +47,17 @@ describe('useAutoWalletHeadStart with PiggyVest off', () => {
 
   describe('bugfix (review): the head start was dropped before any transfer started', () => {
     it('keeps it across a remount while the plan is still getting ready', () => {
-      rememberWalletHeadStart('goal-2', 100);
+      walletHeadStarts.remember('goal-2', 100);
       const first = setup('goal-2', { ready: true, addAmount: '100' });
       first.unmount();
-      expect(pendingWalletHeadStart('goal-2')).toBe(100);
+      expect(walletHeadStarts.lookup('goal-2')).toBe(100);
       const again = setup('goal-2', { ready: true, addAmount: '100' });
       expect(again.result.current.waiting).toBe(100);
-      takeWalletHeadStart('goal-2');
+      walletHeadStarts.take('goal-2');
     });
 
     it('puts a changed amount back to the head start instead of dropping it', () => {
-      rememberWalletHeadStart('goal-3', 100);
+      walletHeadStarts.remember('goal-3', 100);
       const { onAddSavings, onAddAmountChange, result } = setup('goal-3', {
         ready: true,
         addAmount: '5000',
@@ -70,14 +66,14 @@ describe('useAutoWalletHeadStart with PiggyVest off', () => {
       expect(result.current.canMove).toBe(false);
       act(() => result.current.move());
       expect(onAddSavings).not.toHaveBeenCalled();
-      expect(pendingWalletHeadStart('goal-3')).toBe(100);
-      takeWalletHeadStart('goal-3');
+      expect(walletHeadStarts.lookup('goal-3')).toBe(100);
+      walletHeadStarts.take('goal-3');
     });
   });
 
   describe('bugfix (Muse): the tap did not re-check the wallet balance', () => {
     it('refuses the tap and keeps the head start when the wallet dropped below it', () => {
-      rememberWalletHeadStart('goal-6', 100);
+      walletHeadStarts.remember('goal-6', 100);
       const { onAddSavings, result, rerender } = setup('goal-6', {
         ready: true,
         addAmount: '100',
@@ -88,14 +84,14 @@ describe('useAutoWalletHeadStart with PiggyVest off', () => {
       expect(result.current.canMove).toBe(false);
       act(() => result.current.move());
       expect(onAddSavings).not.toHaveBeenCalled();
-      expect(pendingWalletHeadStart('goal-6')).toBe(100);
-      takeWalletHeadStart('goal-6');
+      expect(walletHeadStarts.lookup('goal-6')).toBe(100);
+      walletHeadStarts.take('goal-6');
     });
   });
 
   describe('bugfix (Muse): a fast double press could start the transfer twice', () => {
     it('starts it once when Move is pressed twice before re-rendering', () => {
-      rememberWalletHeadStart('goal-7', 100);
+      walletHeadStarts.remember('goal-7', 100);
       const { onAddSavings, result } = setup('goal-7', {
         ready: true,
         addAmount: '100',
@@ -111,26 +107,26 @@ describe('useAutoWalletHeadStart with PiggyVest off', () => {
 
   describe('bugfix (Muse): a short wallet reset every typed amount to the head start', () => {
     it('leaves the customer amount alone once the head start no longer fits', () => {
-      rememberWalletHeadStart('goal-8', 100);
+      walletHeadStarts.remember('goal-8', 100);
       const { onAddAmountChange } = setup('goal-8', {
         ready: true,
         addAmount: '50',
         walletBalance: 40,
       });
       expect(onAddAmountChange).not.toHaveBeenCalled();
-      takeWalletHeadStart('goal-8');
+      walletHeadStarts.take('goal-8');
     });
   });
 
   it('lets the customer choose a different amount instead', () => {
-    rememberWalletHeadStart('goal-4', 100);
+    walletHeadStarts.remember('goal-4', 100);
     const { onAddSavings, result } = setup('goal-4', {
       ready: true,
       addAmount: '100',
     });
     act(() => result.current.dismiss());
     expect(result.current.waiting).toBeNull();
-    expect(pendingWalletHeadStart('goal-4')).toBeNull();
+    expect(walletHeadStarts.lookup('goal-4')).toBeNull();
     expect(onAddSavings).not.toHaveBeenCalled();
   });
 

@@ -17,13 +17,13 @@ const MAX_PENDING_HEAD_STARTS = 16;
  */
 const pending = new Map<string, number>();
 
-export function rememberWalletHeadStart(goalId: string, amount: number) {
+function remember(goalId: string, amount: number) {
   if (!goalId || !Number.isSafeInteger(amount) || amount <= 0) return;
   boundedMapSet(pending, goalId, amount, MAX_PENDING_HEAD_STARTS);
 }
 
 /** The head start still waiting to move for this goal, or null. */
-export function pendingWalletHeadStart(goalId: string): number | null {
+function lookup(goalId: string): number | null {
   return pending.get(goalId) ?? null;
 }
 
@@ -31,8 +31,11 @@ export function pendingWalletHeadStart(goalId: string): number | null {
  * Removes and returns the waiting head start, so only one caller ever starts
  * the transfer for it.
  */
-export function takeWalletHeadStart(goalId: string): number | null {
+function take(goalId: string): number | null {
   const amount = pending.get(goalId) ?? null;
   pending.delete(goalId);
   return amount;
 }
+
+/** The one public boundary: remember, look up, or take a waiting head start. */
+export const walletHeadStarts = { remember, lookup, take };

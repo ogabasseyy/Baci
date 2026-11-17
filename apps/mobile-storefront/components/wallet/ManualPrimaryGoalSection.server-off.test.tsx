@@ -6,10 +6,7 @@ import {
   rememberGoalSetupPhase,
   resetGoalSetupMemory,
 } from './savings/goal-setup-memory';
-import {
-  rememberWalletHeadStart,
-  takeWalletHeadStart,
-} from './savings/pending-wallet-head-start';
+import { walletHeadStarts } from './savings/pending-wallet-head-start';
 import type { SavingsPlanFundingPhase } from './savings/use-savings-plan-funding';
 
 let mockPhase: SavingsPlanFundingPhase = 'loading';
@@ -152,7 +149,7 @@ describe('a head start ticked "pay now" when the plan was created', () => {
   }
 
   it('says it is waiting while the plan gets ready, and moves nothing', () => {
-    rememberWalletHeadStart('goal-a', 100);
+    walletHeadStarts.remember('goal-a', 100);
     mockPhase = 'pending';
     const onAddSavings = jest.fn();
     renderWith(onAddSavings);
@@ -160,23 +157,23 @@ describe('a head start ticked "pay now" when the plan was created', () => {
       screen.getByText(/Your ₦100 head start is ready to move/)
     ).toBeOnTheScreen();
     expect(onAddSavings).not.toHaveBeenCalled();
-    takeWalletHeadStart('goal-a');
+    walletHeadStarts.take('goal-a');
   });
 
   it('does not promise the head start will move when plan setup failed', () => {
-    rememberWalletHeadStart('goal-a', 100);
+    walletHeadStarts.remember('goal-a', 100);
     mockPhase = 'error';
     renderWith(jest.fn());
     expect(screen.queryByText(/head start is ready to move/)).toBeNull();
     expect(
       screen.getByText(/Your ₦100 head start is saved for this plan/)
     ).toBeOnTheScreen();
-    takeWalletHeadStart('goal-a');
+    walletHeadStarts.take('goal-a');
   });
 
   describe('bugfix (Muse): the Move button skipped the balance check at tap time', () => {
     it('shows the normal entry, which offers a top-up, when the wallet no longer covers it', () => {
-      rememberWalletHeadStart('goal-a', 100);
+      walletHeadStarts.remember('goal-a', 100);
       mockPhase = 'ready';
       const onAddSavings = jest.fn();
       renderWith(onAddSavings, 40);
@@ -185,12 +182,12 @@ describe('a head start ticked "pay now" when the plan was created', () => {
       ).toBeNull();
       expect(screen.getByText('contribution-actions')).toBeOnTheScreen();
       expect(onAddSavings).not.toHaveBeenCalled();
-      takeWalletHeadStart('goal-a');
+      walletHeadStarts.take('goal-a');
     });
   });
 
   it('offers one Move button instead of the amount entry once ready', () => {
-    rememberWalletHeadStart('goal-a', 100);
+    walletHeadStarts.remember('goal-a', 100);
     mockPhase = 'ready';
     const onAddSavings = jest.fn();
     renderWith(onAddSavings);

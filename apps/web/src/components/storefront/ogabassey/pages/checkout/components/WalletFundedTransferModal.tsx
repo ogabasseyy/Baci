@@ -32,6 +32,7 @@ interface WalletFundedTransferModalProps {
   onCheckNow: () => void;
   onClose: () => void;
   onCopy: (value: string) => void;
+  pollingExhausted?: boolean;
 }
 
 /**
@@ -49,6 +50,7 @@ export function WalletFundedTransferModal({
   onCheckNow,
   onClose,
   onCopy,
+  pollingExhausted = false,
 }: WalletFundedTransferModalProps) {
   const dialogRef = useNativeModalDialog(onClose);
   const remainingAmount =
@@ -171,14 +173,19 @@ export function WalletFundedTransferModal({
             )}
           </output>
 
-          {presentation.keepPolling && (
-            <div className="flex items-center justify-center gap-3 py-2 text-store-primary">
-              <Loader2 className="animate-spin" size={16} />
-              <span className="font-bold text-sm">
-                Waiting for your transfer…
-              </span>
-            </div>
-          )}
+          {presentation.keepPolling &&
+            (pollingExhausted ? (
+              <p className="py-2 text-center text-store-foreground/70 text-xs font-medium">
+                Auto-refresh paused — tap below to check transfer status.
+              </p>
+            ) : (
+              <div className="flex items-center justify-center gap-3 py-2 text-store-primary">
+                <Loader2 className="animate-spin" size={16} />
+                <span className="font-bold text-sm">
+                  Waiting for your transfer…
+                </span>
+              </div>
+            ))}
 
           {error && (
             <p className="text-center text-store-foreground/60 text-xs">

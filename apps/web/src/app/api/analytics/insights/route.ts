@@ -83,6 +83,8 @@ async function generateInsights(
   };
 
   async function withRedisTimeout<T>(operation: Promise<T>): Promise<T> {
+    // @upstash/redis commands do not accept an AbortSignal per call, so race
+    // against a bounded timer to keep Redis stalls from exhausting the route.
     let timer: ReturnType<typeof setTimeout> | null = null;
     try {
       return await Promise.race([

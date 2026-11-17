@@ -90,6 +90,9 @@ export async function revalidateScheduledPostsByMerchant(
           isStandaloneWorker ||
           msg.includes('static generation store') ||
           msg.includes('Invariant:');
+        if (!isOutsideRequestContext) {
+          throw nextRevalError;
+        }
         const purgeIdentifiers = Array.from(
           new Set(
             [
@@ -121,9 +124,6 @@ export async function revalidateScheduledPostsByMerchant(
             purgeCategorySlugs
           )
         );
-        if (!isOutsideRequestContext) {
-          throw nextRevalError;
-        }
         edgePurgeOnly = true;
       }
       schedulePrewarmBlogImageTransforms(merchantPosts.featuredImageUrls);

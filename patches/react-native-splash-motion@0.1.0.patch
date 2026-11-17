@@ -40,8 +40,29 @@ index 0000000..eebe7aa
 +    callbacks.forEach { it(value) }
 +  }
 +}
+diff --git a/android/src/main/java/com/margelo/nitro/splashmotion/SplashConfig.kt b/android/src/main/java/com/margelo/nitro/splashmotion/SplashConfig.kt
+index c1e41b5..602ba20 100644
+--- a/android/src/main/java/com/margelo/nitro/splashmotion/SplashConfig.kt
++++ b/android/src/main/java/com/margelo/nitro/splashmotion/SplashConfig.kt
+@@ -10,6 +10,8 @@ internal data class SplashConfig(
+   val height: Double,
+   val loop: Boolean,
+   val loopMarker: String?,
++  /** "cover" fills the screen (cropping the edges); anything else fits 90% of it. */
++  val fillsScreen: Boolean = false,
+ ) {
+   companion object {
+     private fun JSONObject.optStringOrNull(key: String): String? =
+@@ -24,6 +26,7 @@ internal data class SplashConfig(
+         height = json.optDouble("height", 160.0),
+         loop = json.optBoolean("loop", true),
+         loopMarker = json.optStringOrNull("loopMarker"),
++        fillsScreen = json.optStringOrNull("fit") == "cover",
+       )
+     } catch (e: Exception) {
+       null
 diff --git a/android/src/main/java/com/margelo/nitro/splashmotion/SplashMotionController.kt b/android/src/main/java/com/margelo/nitro/splashmotion/SplashMotionController.kt
-index 9ce48d6..3ef00be 100644
+index 9ce48d6..cb8bd2e 100644
 --- a/android/src/main/java/com/margelo/nitro/splashmotion/SplashMotionController.kt
 +++ b/android/src/main/java/com/margelo/nitro/splashmotion/SplashMotionController.kt
 @@ -21,6 +21,8 @@ import com.margelo.nitro.splashmotion.players.LottieSplashPlayer
@@ -53,7 +74,7 @@ index 9ce48d6..3ef00be 100644
    private val main = Handler(Looper.getMainLooper())
  
    @Volatile private var visible = false
-@@ -29,6 +30,8 @@ internal object SplashMotionController {
+@@ -29,6 +31,8 @@ internal object SplashMotionController {
  
    // Main-thread state
    private var installed = false
@@ -62,7 +83,7 @@ index 9ce48d6..3ef00be 100644
    private var overlay: SplashOverlay? = null
    private var player: SplashPlayer? = null
    private var window: Window? = null
-@@ -36,6 +39,17 @@ internal object SplashMotionController {
+@@ -36,6 +40,17 @@ internal object SplashMotionController {
    private var shownAt = 0L
    private var hiding = false
    private val pending = mutableListOf<() -> Unit>()
@@ -80,7 +101,7 @@ index 9ce48d6..3ef00be 100644
  
    fun isVisible() = visible
  
-@@ -70,6 +84,20 @@ internal object SplashMotionController {
+@@ -70,7 +85,21 @@ internal object SplashMotionController {
      // splash screen to switch to its post-splash theme; skipping it crashes
      // AppCompat ("You need to use a Theme.AppCompat theme").
      val splash = activity.installSplashScreen()
@@ -101,7 +122,8 @@ index 9ce48d6..3ef00be 100644
 +      }
        // A later Activity in the same process: reopened after Back (React Native is
        // already running, so no animation) or recreated while the splash is up.
-@@ -81,27 +109,23 @@ internal object SplashMotionController {
+       main.post { moveOverlay(activity) }
+@@ -81,27 +110,23 @@ internal object SplashMotionController {
      val config = preloadedConfig ?: SplashConfig.load(activity)
      if (config == null) {
        Log.w(TAG, "No config found. Run `npx splash-motion generate <file>` and rebuild.")
@@ -134,7 +156,16 @@ index 9ce48d6..3ef00be 100644
      val bytes = preloadedBytes ?: readAnimation(activity, config) ?: return abort()
      preloadedConfig = null
      preloadedBytes = null
-@@ -130,9 +149,15 @@ internal object SplashMotionController {
+@@ -116,7 +141,7 @@ internal object SplashMotionController {
+     activity.window.setBackgroundDrawable(ColorDrawable(background))
+ 
+     val density = activity.resources.displayMetrics.density
+-    val overlay = SplashOverlay(activity, (config.width * density).toFloat(), (config.height * density).toFloat()).apply {
++    val overlay = SplashOverlay(activity, (config.width * density).toFloat(), (config.height * density).toFloat(), config.fillsScreen).apply {
+       setBackgroundColor(background)
+       isClickable = true // swallow touches while visible
+       isFocusable = true
+@@ -130,9 +155,15 @@ internal object SplashMotionController {
  
      this.overlay = overlay
      this.player = player
@@ -153,7 +184,7 @@ index 9ce48d6..3ef00be 100644
      }
    }
  
-@@ -151,7 +176,9 @@ internal object SplashMotionController {
+@@ -151,7 +182,9 @@ internal object SplashMotionController {
  
    private fun abort() {
      overlayReady = true
@@ -164,7 +195,7 @@ index 9ce48d6..3ef00be 100644
    }
  
    // endregion
-@@ -167,10 +194,14 @@ internal object SplashMotionController {
+@@ -167,10 +200,14 @@ internal object SplashMotionController {
    ) {
      main.post {
        if (overlay == null) {
@@ -179,7 +210,7 @@ index 9ce48d6..3ef00be 100644
        pending += done
        if (hiding) return@post
        hiding = true
-@@ -184,8 +215,10 @@ internal object SplashMotionController {
+@@ -184,8 +221,10 @@ internal object SplashMotionController {
    }
  
    private fun runExit(fade: Long, waitForLoop: Boolean, outro: String?) {
@@ -190,7 +221,7 @@ index 9ce48d6..3ef00be 100644
        val playing = outro != null && player.playOutro(outro) { dismiss(fade) }
        if (!playing) dismiss(fade)
      }
-@@ -198,17 +231,7 @@ internal object SplashMotionController {
+@@ -198,17 +237,7 @@ internal object SplashMotionController {
  
    private fun dismiss(fade: Long) {
      val overlay = this.overlay ?: return flush()
@@ -209,7 +240,7 @@ index 9ce48d6..3ef00be 100644
      if (fade > 0) {
        overlay.animate().alpha(0f).setDuration(fade).withEndAction(finish).start()
      } else {
-@@ -216,6 +239,22 @@ internal object SplashMotionController {
+@@ -216,6 +245,22 @@ internal object SplashMotionController {
      }
    }
  
@@ -232,6 +263,33 @@ index 9ce48d6..3ef00be 100644
    private fun flush() {
      val callbacks = pending.toList()
      pending.clear()
+@@ -237,13 +282,22 @@ internal class SplashOverlay(
+   context: Context,
+   private val widthPx: Float,
+   private val heightPx: Float,
++  private val fillsScreen: Boolean = false,
+ ) : FrameLayout(context) {
+   override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+-    val maxWidth = MeasureSpec.getSize(widthMeasureSpec) * MAX_SCREEN_FRACTION
+-    val maxHeight = MeasureSpec.getSize(heightMeasureSpec) * MAX_SCREEN_FRACTION
++    val screenWidth = MeasureSpec.getSize(widthMeasureSpec).toFloat()
++    val screenHeight = MeasureSpec.getSize(heightMeasureSpec).toFloat()
+     var scale = 1f
+-    if (maxWidth > 0) scale = minOf(scale, maxWidth / widthPx)
+-    if (maxHeight > 0) scale = minOf(scale, maxHeight / heightPx)
++    if (fillsScreen && screenWidth > 0 && screenHeight > 0) {
++      // Cover: scale up or down until both sides reach the screen edges; the
++      // overlay clips whatever overflows.
++      scale = maxOf(screenWidth / widthPx, screenHeight / heightPx)
++    } else {
++      val maxWidth = screenWidth * MAX_SCREEN_FRACTION
++      val maxHeight = screenHeight * MAX_SCREEN_FRACTION
++      if (maxWidth > 0) scale = minOf(scale, maxWidth / widthPx)
++      if (maxHeight > 0) scale = minOf(scale, maxHeight / heightPx)
++    }
+     getChildAt(0)?.layoutParams?.let {
+       it.width = (widthPx * scale).toInt()
+       it.height = (heightPx * scale).toInt()
 diff --git a/android/src/main/java/com/margelo/nitro/splashmotion/SplashPlayer.kt b/android/src/main/java/com/margelo/nitro/splashmotion/SplashPlayer.kt
 index bf4aea7..b6370d7 100644
 --- a/android/src/main/java/com/margelo/nitro/splashmotion/SplashPlayer.kt
@@ -307,6 +365,26 @@ index bc9a02f..544faeb 100644
    }
  
    override fun remainingLoopMs(): Long {
+diff --git a/cli/core.js b/cli/core.js
+index 8488510..90c5adf 100644
+--- a/cli/core.js
++++ b/cli/core.js
+@@ -245,6 +245,7 @@ function resolveOptions(projectRoot, options) {
+     still,
+     loop: options.loop !== false,
+     loopMarker: options.loopMarker || null,
++    fit: options.fit === 'cover' ? 'cover' : 'contain',
+   };
+ }
+ 
+@@ -256,6 +257,7 @@ function runtimeConfig(o, file) {
+     background: o.background.hex,
+     loop: o.loop,
+     loopMarker: o.loopMarker,
++    fit: o.fit,
+   };
+ }
+ 
 diff --git a/ios/HybridSplashMotion.swift b/ios/HybridSplashMotion.swift
 index 35c24ea..fec3f91 100644
 --- a/ios/HybridSplashMotion.swift
@@ -383,8 +461,23 @@ index 2c16d08..6cb15ce 100644
      }
    }
  
+diff --git a/ios/SplashMotionConfig.swift b/ios/SplashMotionConfig.swift
+index 666fa23..61480b2 100644
+--- a/ios/SplashMotionConfig.swift
++++ b/ios/SplashMotionConfig.swift
+@@ -8,6 +8,10 @@ struct SplashMotionConfig: Decodable {
+   let background: String
+   let loop: Bool?
+   let loopMarker: String?
++  /// "cover" fills the screen (cropping the edges); anything else fits 90% of it.
++  let fit: String?
++
++  var fillsScreen: Bool { fit == "cover" }
+ 
+   static func load() -> SplashMotionConfig? {
+     guard let asset = NSDataAsset(name: "SplashMotionConfig") else { return nil }
 diff --git a/ios/SplashMotionController.swift b/ios/SplashMotionController.swift
-index 9665941..0e87e05 100644
+index 9665941..3e9231f 100644
 --- a/ios/SplashMotionController.swift
 +++ b/ios/SplashMotionController.swift
 @@ -6,17 +6,33 @@ final class SplashMotionController {
@@ -421,7 +514,7 @@ index 9665941..0e87e05 100644
  
    var isVisible: Bool {
      lock.lock(); defer { lock.unlock() }
-@@ -32,15 +47,17 @@ final class SplashMotionController {
+@@ -32,15 +48,17 @@ final class SplashMotionController {
    /// Returns `true` once the overlay is attached (or definitively skipped).
    @discardableResult
    func attach(to window: UIWindow) -> Bool {
@@ -440,7 +533,47 @@ index 9665941..0e87e05 100644
        return true
      }
  
-@@ -71,7 +88,13 @@ final class SplashMotionController {
+@@ -54,24 +72,42 @@ final class SplashMotionController {
+     let animationView = player.view
+     animationView.translatesAutoresizingMaskIntoConstraints = false
+     container.addSubview(animationView)
+-    // Configured size, scaled down (keeping the aspect ratio) to fit 90% of the screen.
+-    let preferredWidth = animationView.widthAnchor.constraint(equalToConstant: CGFloat(config.width))
+-    preferredWidth.priority = .defaultHigh
+-    NSLayoutConstraint.activate([
+-      animationView.centerXAnchor.constraint(equalTo: container.centerXAnchor),
+-      animationView.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+-      animationView.widthAnchor.constraint(equalTo: animationView.heightAnchor, multiplier: CGFloat(config.width / config.height)),
+-      animationView.widthAnchor.constraint(lessThanOrEqualTo: container.widthAnchor, multiplier: Self.maxScreenFraction),
+-      animationView.heightAnchor.constraint(lessThanOrEqualTo: container.heightAnchor, multiplier: Self.maxScreenFraction),
+-      preferredWidth,
+-    ])
++    if config.fillsScreen {
++      // Fill the whole screen, cropping the artwork's edges as needed.
++      container.clipsToBounds = true
++      animationView.contentMode = .scaleAspectFill
++      NSLayoutConstraint.activate([
++        animationView.topAnchor.constraint(equalTo: container.topAnchor),
++        animationView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
++        animationView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
++        animationView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
++      ])
++    } else {
++      // Configured size, scaled down (keeping the aspect ratio) to fit 90% of the screen.
++      let preferredWidth = animationView.widthAnchor.constraint(equalToConstant: CGFloat(config.width))
++      preferredWidth.priority = .defaultHigh
++      NSLayoutConstraint.activate([
++        animationView.centerXAnchor.constraint(equalTo: container.centerXAnchor),
++        animationView.centerYAnchor.constraint(equalTo: container.centerYAnchor),
++        animationView.widthAnchor.constraint(equalTo: animationView.heightAnchor, multiplier: CGFloat(config.width / config.height)),
++        animationView.widthAnchor.constraint(lessThanOrEqualTo: container.widthAnchor, multiplier: Self.maxScreenFraction),
++        animationView.heightAnchor.constraint(lessThanOrEqualTo: container.heightAnchor, multiplier: Self.maxScreenFraction),
++        preferredWidth,
++      ])
++    }
+ 
+     window.addSubview(container)
+     self.container = container
      self.player = player
      shownAt = Date()
      setVisible(true)
@@ -455,7 +588,7 @@ index 9665941..0e87e05 100644
      return true
    }
  
-@@ -86,9 +109,12 @@ final class SplashMotionController {
+@@ -86,9 +122,12 @@ final class SplashMotionController {
    ) {
      DispatchQueue.main.async {
        guard self.container != nil else {
@@ -468,7 +601,7 @@ index 9665941..0e87e05 100644
        self.pending.append(completion)
        if self.hiding { return }
        self.hiding = true
-@@ -102,12 +128,13 @@ final class SplashMotionController {
+@@ -102,12 +141,13 @@ final class SplashMotionController {
    }
  
    private func runExit(fade: Double, waitForLoop: Bool, outro: String?) {
@@ -483,7 +616,7 @@ index 9665941..0e87e05 100644
        if let outro,
           player.playOutro(outro, completion: { [weak self] in
             self?.dismiss(fade: fade)
-@@ -131,12 +158,7 @@ final class SplashMotionController {
+@@ -131,12 +171,7 @@ final class SplashMotionController {
      }
      let finish = { [weak self] in
        guard let self else { return }
@@ -497,7 +630,7 @@ index 9665941..0e87e05 100644
      }
      if fade > 0 {
        UIView.animate(withDuration: fade / 1000, delay: 0, options: [.curveEaseOut]) {
-@@ -149,6 +171,18 @@ final class SplashMotionController {
+@@ -149,6 +184,18 @@ final class SplashMotionController {
      }
    }
  

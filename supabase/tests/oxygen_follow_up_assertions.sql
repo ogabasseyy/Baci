@@ -31,6 +31,7 @@ DO $$ BEGIN
   EXCEPTION WHEN insufficient_privilege THEN NULL; END;
 END $$;
 RESET ROLE;
+
 DO $$ BEGIN
   IF has_function_privilege('anon', 'public.oxygen_follow_up_candidates(uuid)', 'EXECUTE') THEN
     RAISE EXCEPTION 'Anonymous role can execute Oxygen follow-up';
@@ -86,6 +87,31 @@ DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM public.oxygen_follow_up_candidates('20000000-0000-4000-8000-000000000001')
     WHERE order_id = '00000000-0000-4000-8000-000000000014' AND follow_up_status = 'needs_review') THEN
     RAISE EXCEPTION 'Older urgent review was crowded out by ordinary follow-ups';
+  END IF;
+END $$;
+RESET ROLE;
+
+-- A large urgent backlog must not consume every place in the bounded queue.
+INSERT INTO public.orders (id,merchant_id,customer_id,payment_method,payment_status,created_at)
+SELECT ('80000000-0000-4000-8000-' || lpad(n::text,12,'0'))::uuid,
+  '20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001',
+  'oxygen', 'unpaid', now()-interval '2 hours'
+FROM generate_series(1,260) n;
+INSERT INTO public.oxygen_workflows (id,order_id,merchant_id,customer_id,environment,stage,updated_at)
+SELECT ('90000000-0000-4000-8000-' || lpad(n::text,12,'0'))::uuid,
+  ('80000000-0000-4000-8000-' || lpad(n::text,12,'0'))::uuid,
+  '20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001',
+  'production', 'reconciliation_required', now()-interval '1 hour'
+FROM generate_series(1,260) n;
+SET ROLE authenticated;
+DO $$ BEGIN
+  IF (SELECT count(*) FROM public.oxygen_follow_up_candidates('20000000-0000-4000-8000-000000000001')
+    WHERE order_id::text LIKE '70000000-%' AND follow_up_status = 'customer_action') < 100 THEN
+    RAISE EXCEPTION 'Urgent backlog crowded routine follow-ups out of the queue';
+  END IF;
+  IF (SELECT count(*) FROM public.oxygen_follow_up_candidates('20000000-0000-4000-8000-000000000001')
+    WHERE order_id::text LIKE '80000000-%' AND follow_up_status = 'needs_review') < 100 THEN
+    RAISE EXCEPTION 'Urgent follow-ups were crowded out of the queue';
   END IF;
 END $$;
 RESET ROLE;

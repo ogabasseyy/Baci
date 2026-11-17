@@ -9,12 +9,20 @@ export const oxygenFollowUpStatusSchema = z.enum([
 ]);
 export type OxygenFollowUpStatus = z.infer<typeof oxygenFollowUpStatusSchema>;
 
+const candidateStatusSchema = z
+  .string()
+  .regex(/^[a-z][a-z0-9_]{0,63}$/)
+  .transform((status): OxygenFollowUpStatus => {
+    const result = oxygenFollowUpStatusSchema.safeParse(status);
+    return result.success ? result.data : 'needs_review';
+  });
+
 export const oxygenFollowUpCandidatesSchema = z
   .array(
     z
       .object({
         order_id: z.uuid(),
-        follow_up_status: oxygenFollowUpStatusSchema,
+        follow_up_status: candidateStatusSchema,
         last_activity_at: z.iso.datetime({ offset: true }),
       })
       .strict()

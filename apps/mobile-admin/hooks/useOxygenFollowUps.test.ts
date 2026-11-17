@@ -93,6 +93,31 @@ describe('Oxygen follow-up fetch', () => {
     expect(mocks.from).not.toHaveBeenCalled();
   });
 
+  it('keeps other results when a future category needs review', async () => {
+    const otherId = '00000000-0000-4000-8000-000000000002';
+    mocks.rpc.mockResolvedValue({
+      data: [
+        candidate,
+        {
+          ...candidate,
+          order_id: otherId,
+          follow_up_status: 'future_category',
+        },
+      ],
+      error: null,
+    });
+    mocks.in.mockResolvedValue({
+      data: [order, { ...order, id: otherId }],
+      error: null,
+    });
+
+    const result = await fetchOxygenFollowUps(merchantId);
+    expect(result.map((item) => item.oxygen_follow_up_status)).toEqual([
+      'oxygen_processing',
+      'needs_review',
+    ]);
+  });
+
   it('does not invent orders omitted by the authenticated order query', async () => {
     mocks.in.mockResolvedValue({ data: [], error: null });
     await expect(fetchOxygenFollowUps(merchantId)).resolves.toEqual([]);

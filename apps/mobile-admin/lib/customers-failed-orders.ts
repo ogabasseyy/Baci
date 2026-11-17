@@ -57,10 +57,16 @@ export function groupFailedOrdersByDate(
   stickyHeaderIndices: number[];
 } {
   const groups = new Map<string, FailedOrder[]>();
+  const oxygenReviews: FailedOrder[] = [];
 
   for (const order of orders) {
     const dateKey = getLocalDateKey(getFollowUpActivityAt(order));
     if (!dateKey) {
+      continue;
+    }
+
+    if (order.oxygen_follow_up_status === 'needs_review') {
+      oxygenReviews.push(order);
       continue;
     }
 
@@ -79,6 +85,24 @@ export function groupFailedOrdersByDate(
 
   const data: GroupedFailedOrderListItem[] = [];
   const stickyHeaderIndices: number[] = [];
+
+  if (oxygenReviews.length) {
+    stickyHeaderIndices.push(data.length);
+    data.push({
+      dateKey: 'oxygen-review',
+      key: 'failed-orders-header-oxygen-review',
+      title: 'Oxygen · Needs review',
+      type: 'header',
+    });
+    oxygenReviews.sort(
+      (a, b) =>
+        Date.parse(getFollowUpActivityAt(b)) -
+        Date.parse(getFollowUpActivityAt(a))
+    );
+    for (const order of oxygenReviews) {
+      data.push({ data: order, key: `failed-order-${order.id}`, type: 'item' });
+    }
+  }
 
   const sortedDateKeys = [...groups.keys()].sort((a, b) => b.localeCompare(a));
 

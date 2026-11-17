@@ -63,6 +63,26 @@ function getItems(data: GroupedFailedOrderListItem[]) {
 }
 
 describe('groupFailedOrdersByDate', () => {
+  it('shows older Oxygen reviews before newer ordinary follow-ups', () => {
+    const review = {
+      ...mockOrders[2],
+      id: 'oxygen-review',
+      oxygen_follow_up_status: 'needs_review' as const,
+    };
+    const { data, stickyHeaderIndices } = groupFailedOrdersByDate(
+      [mockOrders[0], review],
+      new Date('2026-06-28T20:00:00.000Z')
+    );
+    expect(getHeaders(data).map((header) => header.title)).toEqual([
+      'Oxygen · Needs review',
+      'Today',
+    ]);
+    expect(getItems(data).map((item) => item.data.id)).toEqual([
+      'oxygen-review',
+      '1',
+    ]);
+    expect(stickyHeaderIndices).toEqual([0, 2]);
+  });
   it('groups a resumed Oxygen application by its latest workflow activity', () => {
     const oxygen = {
       ...mockOrders[2],

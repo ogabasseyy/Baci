@@ -7,6 +7,17 @@ import { createAiSdkAgenticChatTools } from './chat-tool-runtime';
 import { createChatPresentationEventCollector } from './create-chat-presentation-event-collector';
 import { isBusinessFactRequest } from './fast-catalog-language';
 import {
+  type CatalogBudgetLimit,
+  type CatalogChatMessage,
+  constrainSearchParamsWithBudget,
+  filterSerializedDetailsResultByBudget,
+  filterSerializedSearchResultByBudget,
+  filterToolResultByBudget,
+  hasGroundedCatalogResultText,
+  hasGroundedEmptyCatalogText,
+  resolveConversationBudgetLimit,
+} from './ogabassey-catalog-agent-grounding';
+import {
   isIndependentTopic,
   resolveOgabasseyCommerceContext,
 } from './ogabassey-commerce-context';
@@ -35,184 +46,12 @@ const CATALOG_AGENT_CUE =
 const FOLLOW_UP_CUE =
   /\b(?:it|this|that|these|those|one|ones|cheaper|less|more|instead|around)\b|[₦$€£\d]/i;
 
-const UNGROUNDED_EMPTY_RESULT_CLAIM =
-  /[₦$€£]|\b(?:naira|in[\s-]+stock|available\s+now)\b/i;
-
-const PRICE_MENTION_PATTERN =
-  /(?:(₦|ngn\s*|[$€£]\s*)((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)(?:\s*(million|thousand|[km]))?|((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)(?:\s*(million|thousand|[km]))?\s*(?:naira|ngn|₦)|(\d{1,3}(?:,\d{3})+)(?:\.\d+)?)/giu;
-
-// Only treat explicit currency, scaled, or budget-cued numbers from user turns
-// as valid budget references so model numbers (e.g. "iPhone 16") never enter.
-const USER_BUDGET_MENTION_PATTERN =
-  /(?:(₦|ngn\s*|[$€£]\s*)((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)(?:\s*(million|thousand|[km]))?|((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)\s*(?:(million|thousand|[km])\b|(?=(?:\s*(?:naira|ngn|₦))))|(?:under|below|within|up\s+to|at\s+most|max(?:imum)?|budget(?:\s+(?:of|is))?)\s+((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)(?:\s*(million|thousand|[km]))?)/giu;
-
-const BARE_PRICE_CANDIDATE_PATTERN = /\b(\d{4,9})\b/gu;
-const NON_PRICE_SPEC_SUFFIX_PATTERN =
-  /^\s*(?:mah|hz|khz|mhz|ghz|nits|ppi|rpm|gb|tb|mb|kb|mp|mm|cm|w|p|x)\b/i;
-const MODEL_NUMBER_PREFIX_PATTERN =
-  /(?:rtx|gtx|rx|arc|ryzen|core|i\d-|snapdragon|dimensity|helio|exynos|tensor|model|gen)\s*$/i;
-const PRICE_CUE_PREFIX_PATTERN =
-  /(?:costs?|priced?\s+at|for|at|from|only|under|below|within|up\s+to|at\s+most|budget(?:\s+(?:of|is))?)\s*$/i;
-const BUDGET_FRAME_PREFIX_PATTERN =
-  /\b(?:under|below|within|up\s+to|at\s+most|max(?:imum)?|budget)\b[^.!?\n]{0,24}$/i;
-const BUDGET_FRAME_SUFFIX_PATTERN = /^[^.!?\n]{0,16}\b(?:budget|limit|cap)\b/i;
-
-const STOCK_COUNT_PATTERN =
-  /\b(\d+)\s+(?:in[\s-]+stock|units?\s+(?:left|available|remaining|in[\s-]+stock))\b/giu;
-
-function applyNumericScale(rawValue: string, unit?: string): number {
-  const numeric = Number(rawValue.replaceAll(',', ''));
-  if (!Number.isFinite(numeric)) return Number.NaN;
-  if (/^(?:m|million)$/i.test(unit ?? ''))
-    return Math.round(numeric * 1_000_000);
-  if (/^(?:k|thousand)$/i.test(unit ?? '')) return Math.round(numeric * 1_000);
-  return Math.round(numeric);
-}
-
-function extractUserPriceMentions(
-  messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>
-): Set<number> {
-  const values = new Set<number>();
-  for (const message of messages) {
-    if (message.role !== 'user') continue;
-    for (const match of message.content.matchAll(USER_BUDGET_MENTION_PATTERN)) {
-      const rawNumber = match[2] ?? match[4] ?? match[6];
-      const unit = match[3] ?? match[5] ?? match[7];
-      if (!rawNumber) continue;
-      const parsed = applyNumericScale(rawNumber, unit);
-      if (Number.isFinite(parsed) && parsed > 0) {
-        values.add(parsed);
-      }
-    }
-  }
-  return values;
-}
-
-function isBudgetRestatement(
-  text: string,
-  start: number,
-  end: number
-): boolean {
-  const before = text.slice(Math.max(0, start - 32), start);
-  const after = text.slice(end, Math.min(text.length, end + 24));
-  return (
-    BUDGET_FRAME_PREFIX_PATTERN.test(before) ||
-    BUDGET_FRAME_SUFFIX_PATTERN.test(after)
-  );
-}
-
-function isBareNonPriceSpec(
-  text: string,
-  start: number,
-  end: number,
-  amount: number
-): boolean {
-  const before = text.slice(Math.max(0, start - 24), start);
-  const after = text.slice(end, Math.min(text.length, end + 16));
-  if (NON_PRICE_SPEC_SUFFIX_PATTERN.test(after)) return true;
-  if (MODEL_NUMBER_PREFIX_PATTERN.test(before)) return true;
-  if (
-    amount >= 2010 &&
-    amount <= 2035 &&
-    !PRICE_CUE_PREFIX_PATTERN.test(before)
-  ) {
-    return true;
-  }
-  return false;
-}
-
-function hasGroundedCatalogResultText(
-  text: string,
-  events: StorefrontAgentUiEvent[],
-  userMessages: Array<{
-    role: 'user' | 'assistant' | 'system';
-    content: string;
-  }>,
-  currencyCode: string
-): boolean {
-  const allowedPrices = new Set(
-    events.flatMap((event) =>
-      event.products
-        .map((product) => Math.round(product.price))
-        .filter((price) => Number.isFinite(price) && price > 0)
-    )
-  );
-  const userAmounts = extractUserPriceMentions(userMessages);
-
-  if (
-    currencyCode.toUpperCase() === 'NGN' &&
-    /[$€£]/.test(text) &&
-    !userMessages.some(
-      (message) => message.role === 'user' && /[$€£]/.test(message.content)
-    )
-  ) {
-    return false;
-  }
-
-  const checkedSpans: Array<{ start: number; end: number }> = [];
-  for (const match of text.matchAll(PRICE_MENTION_PATTERN)) {
-    const rawNumber = match[2] ?? match[4] ?? match[6];
-    const unit = match[3] ?? match[5];
-    if (!rawNumber) continue;
-    const amount = applyNumericScale(rawNumber, unit);
-    if (!Number.isFinite(amount) || amount <= 0) return false;
-    const start = match.index ?? 0;
-    const end = start + match[0].length;
-    checkedSpans.push({ start, end });
-    const budgetRestatement = isBudgetRestatement(text, start, end);
-    if (
-      !allowedPrices.has(amount) &&
-      !(budgetRestatement && userAmounts.has(amount))
-    ) {
-      return false;
-    }
-  }
-
-  for (const match of text.matchAll(BARE_PRICE_CANDIDATE_PATTERN)) {
-    const start = match.index ?? 0;
-    const end = start + match[0].length;
-    if (checkedSpans.some((span) => start >= span.start && end <= span.end)) {
-      continue;
-    }
-    const amount = Number(match[1]);
-    if (isBareNonPriceSpec(text, start, end, amount)) continue;
-    const budgetRestatement = isBudgetRestatement(text, start, end);
-    if (
-      !allowedPrices.has(amount) &&
-      !(budgetRestatement && userAmounts.has(amount))
-    ) {
-      return false;
-    }
-  }
-
-  const allowedStockCounts = new Set(
-    events.flatMap((event) =>
-      event.products
-        .map((product) => product.stock)
-        .filter(
-          (stock): stock is number =>
-            typeof stock === 'number' && Number.isFinite(stock)
-        )
-    )
-  );
-  for (const match of text.matchAll(STOCK_COUNT_PATTERN)) {
-    const claimedStock = Number(match[1]);
-    if (!allowedStockCounts.has(claimedStock)) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
 export interface OgabasseyCatalogAgentResult {
   text: string;
   events: StorefrontAgentUiEvent[];
 }
 
-function shouldAttemptCatalogAgent(
-  messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>
-): boolean {
+function shouldAttemptCatalogAgent(messages: CatalogChatMessage[]): boolean {
   const userMessages = messages.filter((message) => message.role === 'user');
   const last = userMessages.at(-1);
   if (!last) return false;
@@ -225,14 +64,67 @@ function shouldAttemptCatalogAgent(
   );
 }
 
+function buildBudgetEnforcedReadOnlyTools(
+  sessionId: string,
+  budgetLimit: CatalogBudgetLimit | undefined,
+  onCapturedResult: (
+    toolName: string,
+    filteredResult: unknown,
+    context?: { quantity?: number }
+  ) => void
+) {
+  const readOnlyTools = createAiSdkAgenticChatTools(sessionId, {
+    agenticCheckoutEnabled: false,
+    onToolResult: (toolName, toolResult, context) => {
+      onCapturedResult(
+        toolName,
+        filterToolResultByBudget(toolName, toolResult, budgetLimit),
+        context
+      );
+    },
+  });
+
+  const baseSearchTool = readOnlyTools.searchProducts;
+  const searchProducts =
+    typeof baseSearchTool.execute === 'function'
+      ? {
+          ...baseSearchTool,
+          execute: async (
+            params: Parameters<typeof baseSearchTool.execute>[0]
+          ) => {
+            const rawJson = await baseSearchTool.execute(
+              constrainSearchParamsWithBudget(params, budgetLimit)
+            );
+            return filterSerializedSearchResultByBudget(rawJson, budgetLimit);
+          },
+        }
+      : baseSearchTool;
+
+  const baseDetailsTool = readOnlyTools.getProductDetails;
+  const getProductDetails =
+    typeof baseDetailsTool.execute === 'function'
+      ? {
+          ...baseDetailsTool,
+          execute: async (
+            params: Parameters<typeof baseDetailsTool.execute>[0]
+          ) => {
+            const rawJson = await baseDetailsTool.execute(params);
+            return filterSerializedDetailsResultByBudget(rawJson, budgetLimit);
+          },
+        }
+      : baseDetailsTool;
+
+  return { searchProducts, getProductDetails };
+}
+
 /**
  * Fallback read-only catalog search agent for Ogabassey queries that the
  * deterministic fast-catalog regex path did not recognize.
  *
  * Exposes only `searchProducts` and `getProductDetails` so natural-language
  * shopping requests (e.g. use-cases, typos, plurals) still run against live
- * catalog data while keeping all prices, product cards, and commerce actions
- * strictly server-owned.
+ * catalog data while keeping all prices, budgets, product cards, and commerce
+ * actions strictly server-owned.
  */
 export async function runOgabasseyCatalogAgent(options: {
   abortSignal: AbortSignal;
@@ -240,7 +132,7 @@ export async function runOgabasseyCatalogAgent(options: {
   currencyCode: string;
   merchantName: string;
   merchantSlug: string;
-  messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>;
+  messages: CatalogChatMessage[];
   timeoutMs: number;
 }): Promise<OgabasseyCatalogAgentResult | null> {
   if (options.merchantSlug !== 'ogabassey' || options.chatProvider !== 'auto') {
@@ -269,6 +161,11 @@ export async function runOgabasseyCatalogAgent(options: {
   const providers = getOgabasseyPreferredProviders({ includeDeepSeek: false });
   if (providers.length === 0 || options.timeoutMs <= 0) return null;
 
+  const budgetLimit = resolveConversationBudgetLimit(
+    conversationMessages,
+    options.currencyCode
+  );
+
   let presentationCollector = createChatPresentationEventCollector();
   let toolCallsInAttempt = 0;
 
@@ -277,18 +174,14 @@ export async function runOgabasseyCatalogAgent(options: {
     presentationCollector = collector;
     toolCallsInAttempt = 0;
 
-    const readOnlyTools = createAiSdkAgenticChatTools('catalog-readonly', {
-      agenticCheckoutEnabled: false,
-      onToolResult: (toolName, toolResult, context) => {
+    return buildBudgetEnforcedReadOnlyTools(
+      'catalog-readonly',
+      budgetLimit,
+      (toolName, filteredResult, context) => {
         toolCallsInAttempt += 1;
-        collector.capture(toolName, toolResult, context);
-      },
-    });
-
-    return {
-      searchProducts: readOnlyTools.searchProducts,
-      getProductDetails: readOnlyTools.getProductDetails,
-    };
+        collector.capture(toolName, filteredResult, context);
+      }
+    );
   };
 
   try {
@@ -323,7 +216,7 @@ export async function runOgabasseyCatalogAgent(options: {
         const events = presentationCollector.getEvents();
         if (events.length === 0) {
           return (
-            !UNGROUNDED_EMPTY_RESULT_CLAIM.test(text) &&
+            hasGroundedEmptyCatalogText(text) &&
             !OGABASSEY_UNVERIFIED_COMMERCE_ACTION.test(text) &&
             !OGABASSEY_UNVERIFIED_STORE_PURCHASE.test(text)
           );
@@ -332,7 +225,8 @@ export async function runOgabasseyCatalogAgent(options: {
           text,
           events,
           conversationMessages,
-          options.currencyCode
+          options.currencyCode,
+          budgetLimit
         );
       },
       onProviderError: (providerName, error) => {

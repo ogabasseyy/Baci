@@ -8,7 +8,7 @@ export const uncheckedOption =
   /\b(?:brand[\s-]*new|new|used|refurbished|second[\s-]*hand|pre[\s-]*owned|open[\s-]*box|\d+(?:\.\d+)?\s*(?:gb|tb)|\d+(?:[.,]\d+)?[\s-]*(?:m\s*a\s*h|mp|megapixels?)|black|blue|red|green|purple|pink|white|gold|silver|gray|grey|titanium|e-?sim|physical\s+sim|dual[\s-]*sim|low[\s-]*light|all[\s-]*day\s+battery|\d+\s*(?:hours?|hrs?|days?)\s+(?:of\s+)?battery|battery\s+(?:that\s+)?(?:lasts?|lasting)\s+(?:for\s+)?(?:all[\s-]*day|\d+\s*(?:hours?|days?)))\b/i;
 
 export const PHONE_SIGNAL =
-  /\b(?:smartphones?|phones?|iphones?|pixel|galaxy\s+(?:[samf]\s*\d+|z\s*(?:fold|flip)\s*\d+))\b/i;
+  /\b(?:smartphones?|phones?|iphones?|pixels?|galaxy\s+(?:[samf]\s*\d+|z\s*(?:fold|flip)\s*\d+))\b/i;
 export const LAPTOP_SIGNAL = /\b(?:laptops?|macbooks?|notebooks?)\b/i;
 export const TABLET_SIGNAL = /\b(?:tablets?|ipads?)\b/i;
 export const ACCESSORY_SIGNAL =
@@ -25,6 +25,7 @@ export function normalizeAccessoryNouns(value: string): string {
 export function normalizeCatalogSearchNouns(value: string): string {
   return normalizeAccessoryNouns(value)
     .replace(/\biphones\b/gi, 'iPhone')
+    .replace(/\bpixels\b/gi, 'Pixel')
     .replace(/\bmacbooks\b/gi, 'MacBook')
     .replace(/\bipads\b/gi, 'iPad')
     .replace(/\bnotebooks\b/gi, 'notebook');

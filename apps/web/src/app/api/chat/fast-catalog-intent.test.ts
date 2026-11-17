@@ -256,5 +256,25 @@ describe('interpretFastCatalogIntent', () => {
       maxPrice: 800_000,
       exclusiveMaxPrice: true,
     });
+
+    expect(
+      interpretFastCatalogIntent(['pixels below 1m'], [], 'NGN', {
+        categoriesLoaded: false,
+      })
+    ).toMatchObject({
+      kind: 'search',
+      query: 'Pixel',
+      maxPrice: 1_000_000,
+      exclusiveMaxPrice: true,
+    });
+
+    expect(
+      interpretFastCatalogIntent(['pixels below 1m'], categories, 'NGN')
+    ).toMatchObject({
+      kind: 'search',
+      query: 'Pixel',
+      maxPrice: 1_000_000,
+      exclusiveMaxPrice: true,
+    });
   });
 });

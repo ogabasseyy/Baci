@@ -310,4 +310,165 @@ describe('runOgabasseyCatalogAgent', () => {
       'Apple MacBook Air M2 (2025) with 1080p webcam is ₦1,450,000.'
     );
   });
+
+  it('rejects unreturned or fabricated product names and positive empty-result claims', async () => {
+    vi.stubEnv('META_MODEL_API_KEY', 'test-meta-key');
+
+    // Fabricated product name even with matching returned price
+    mocks.generateText.mockImplementationOnce(async () => {
+      reportToolResult?.('searchProducts', {
+        products: [sampleProduct],
+        total: 1,
+      });
+      return {
+        text: 'We recommend the Dell XPS 15 for ₦1,450,000.',
+      };
+    });
+    expect(await runOgabasseyCatalogAgent(baseOptions())).toBeNull();
+
+    // Mixed real + fabricated product recommendation
+    mocks.generateText.mockImplementationOnce(async () => {
+      reportToolResult?.('searchProducts', {
+        products: [sampleProduct],
+        total: 1,
+      });
+      return {
+        text: 'Try the Apple MacBook Air M2 or Dell XPS 15 for ₦1,450,000.',
+      };
+    });
+    expect(await runOgabasseyCatalogAgent(baseOptions())).toBeNull();
+
+    // Wrong tier/chip variant alongside returned family
+    mocks.generateText.mockImplementationOnce(async () => {
+      reportToolResult?.('searchProducts', {
+        products: [sampleProduct],
+        total: 1,
+      });
+      return {
+        text: 'Apple MacBook Pro M3 is available for ₦1,450,000.',
+      };
+    });
+    expect(await runOgabasseyCatalogAgent(baseOptions())).toBeNull();
+
+    // Empty-result positive attribute/availability hallucinations without currency
+    mocks.generateText.mockImplementationOnce(async () => {
+      reportToolResult?.('searchProducts', { products: [], total: 0 });
+      return { text: 'We have the MacBook Air M2 in blue.' };
+    });
+    expect(await runOgabasseyCatalogAgent(baseOptions())).toBeNull();
+
+    mocks.generateText.mockImplementationOnce(async () => {
+      reportToolResult?.('searchProducts', { products: [], total: 0 });
+      return { text: 'The Sony WH-1000XM5 is available in blue.' };
+    });
+    expect(await runOgabasseyCatalogAgent(baseOptions())).toBeNull();
+
+    // Honest negative empty-result response still succeeds with empty events
+    mocks.generateText.mockImplementationOnce(async () => {
+      reportToolResult?.('searchProducts', { products: [], total: 0 });
+      return { text: "Sorry, I couldn't find any matching laptops right now." };
+    });
+    expect(await runOgabasseyCatalogAgent(baseOptions())).toEqual({
+      events: [],
+      text: "Sorry, I couldn't find any matching laptops right now.",
+    });
+  });
+
+  it('enforces parsed user budget limits on searchProducts parameters and filters over-budget results', async () => {
+    vi.stubEnv('META_MODEL_API_KEY', 'test-meta-key');
+    const exactLimitProduct = {
+      ...sampleProduct,
+      id: 'mac-exact-2m',
+      name: 'Apple MacBook Pro M2',
+      price: 2_000_000,
+      slug: 'apple-macbook-pro-m2',
+    };
+    const overBudgetProduct = {
+      ...sampleProduct,
+      id: 'mac-over-budget',
+      name: 'Apple MacBook Pro M3 Max',
+      price: 2_500_000,
+      slug: 'apple-macbook-pro-m3-max',
+    };
+
+    const rawSearchExecute = vi.fn(
+      async (_params: { query: string; maxPrice?: number }) => {
+        const rawPayload = {
+          products: [sampleProduct, exactLimitProduct, overBudgetProduct],
+          total: 3,
+        };
+        reportToolResult?.('searchProducts', rawPayload);
+        return JSON.stringify(rawPayload);
+      }
+    );
+
+    mocks.createTools.mockImplementationOnce(
+      (
+        _sessionId: string,
+        options: { onToolResult?: typeof reportToolResult } = {}
+      ) => {
+        reportToolResult = options.onToolResult;
+        return {
+          searchProducts: {
+            description: 'searchProducts',
+            execute: rawSearchExecute,
+          },
+          getProductDetails: { description: 'getProductDetails' },
+        };
+      }
+    );
+
+    let toolReturnToModel: unknown;
+    mocks.generateText.mockImplementationOnce(
+      async (options: {
+        tools?: {
+          searchProducts?: {
+            execute?: (params: {
+              query: string;
+              maxPrice?: number;
+            }) => Promise<string>;
+          };
+        };
+      }) => {
+        const serialized = await options.tools?.searchProducts?.execute?.({
+          query: 'MacBook',
+          maxPrice: 3_000_000,
+        });
+        toolReturnToModel = serialized ? JSON.parse(serialized) : undefined;
+        return {
+          text: 'Apple MacBook Air M2 is ₦1,450,000.',
+        };
+      }
+    );
+
+    const exclusiveResult = await runOgabasseyCatalogAgent(baseOptions());
+    expect(rawSearchExecute).toHaveBeenCalledWith(
+      expect.objectContaining({ maxPrice: 2_000_000, query: 'MacBook' })
+    );
+    expect(toolReturnToModel).toEqual({
+      products: [sampleProduct],
+      total: 1,
+    });
+    expect(exclusiveResult?.events[0]?.products.map((p) => p.id)).toEqual([
+      'mac-1',
+    ]);
+
+    // Inclusive budget ("up to 2m") allows an item priced at exactly 2,000,000
+    mocks.generateText.mockImplementationOnce(async () => {
+      reportToolResult?.('searchProducts', {
+        products: [exactLimitProduct, overBudgetProduct],
+        total: 2,
+      });
+      return {
+        text: 'Apple MacBook Pro M2 is ₦2,000,000.',
+      };
+    });
+    const inclusiveResult = await runOgabasseyCatalogAgent({
+      ...baseOptions(),
+      messages: [{ role: 'user', content: 'Show me MacBooks up to 2m' }],
+    });
+    expect(inclusiveResult?.events[0]?.products.map((p) => p.id)).toEqual([
+      'mac-exact-2m',
+    ]);
+  });
 });

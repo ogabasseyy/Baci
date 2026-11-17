@@ -7,6 +7,7 @@ import {
   getMerchantForApiRequest,
   toUserAccess,
 } from '@/lib/get-merchant-for-api-request';
+import { fetchFallbackAnalyticsEvents } from './fallback-events';
 import { resolveWebsitePerformanceGemmaConfig } from './gemma-config';
 import { aggregateWebsitePerformance } from './website-performance-aggregation';
 
@@ -158,49 +159,21 @@ export async function GET(request: NextRequest) {
   let eventSummary: unknown = databaseEventSummary;
   let fallbackTruncated = false;
   if (eventsError?.code === 'PGRST202') {
-    const eventRows: Array<{ event_data: unknown; event_type: string }> = [];
-    const pageSize = 1000;
-    let from = 0;
-    while (from < MAX_FALLBACK_EVENT_ROWS) {
-      const remaining = MAX_FALLBACK_EVENT_ROWS - from;
-      // Keep the final probe <= 501 rows (< PostgREST's 1,000-row cap) so
-      // `fetched.length > remaining` reliably detects >10,000 matching rows.
-      const chunkLimit =
-        remaining <= 500 ? remaining : Math.min(pageSize, remaining - 500);
-      const isFinalPage = remaining <= 500;
-      const pageEnd = isFinalPage ? from + remaining : from + chunkLimit - 1;
-      const { data: page, error: pageError } = await supabase
-        .from('analytics_events')
-        .select('event_type, event_data')
-        .eq('merchant_id', merchantContext.merchantId)
-        .gte('event_timestamp', finalStartDate)
-        .lte('event_timestamp', finalEndDate)
-        .in('event_type', ['search', 'product_view', 'purchase', 'add_to_cart'])
-        .order('event_timestamp', { ascending: false })
-        .order('id', { ascending: false })
-        .range(from, pageEnd);
-
-      if (pageError) {
-        return NextResponse.json(
-          { error: 'Failed to aggregate events' },
-          { status: 500 }
-        );
-      }
-      const fetched = page ?? [];
-      if (isFinalPage && fetched.length > remaining) {
-        fallbackTruncated = true;
-      }
-      eventRows.push(...fetched.slice(0, remaining));
-      if (isFinalPage || fetched.length < chunkLimit) break;
-      from += chunkLimit;
+    const fallbackResult = await fetchFallbackAnalyticsEvents(
+      supabase,
+      merchantContext.merchantId,
+      finalStartDate,
+      finalEndDate,
+      MAX_FALLBACK_EVENT_ROWS
+    );
+    if ('error' in fallbackResult) {
+      return NextResponse.json(
+        { error: fallbackResult.error },
+        { status: 500 }
+      );
     }
-    if (fallbackTruncated) {
-      console.warn('[website-performance] Fallback event scan reached limit', {
-        maxRows: MAX_FALLBACK_EVENT_ROWS,
-        merchantId: merchantContext.merchantId,
-      });
-    }
-    eventSummary = eventRows;
+    fallbackTruncated = fallbackResult.truncated;
+    eventSummary = fallbackResult.rows;
   } else if (eventsError) {
     return NextResponse.json(
       { error: 'Failed to aggregate events' },

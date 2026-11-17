@@ -2,137 +2,23 @@
 
 import { formatDistanceToNow } from 'date-fns';
 import { MessageCircle, ShoppingBag, ThumbsDown, ThumbsUp } from 'lucide-react';
-import { useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { BagLoader } from '@/components/ui/bag-loader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useMerchant } from '@/hooks/use-merchant-client';
 import { formatMerchantCurrency } from '@/lib/resolve-merchant-currency';
-import {
-  getRecentInteractions,
-  getSantaStats,
-  type SantaInteraction,
-  type SantaStats,
-} from './actions';
-
-const SANTA_POLL_INTERVAL_MS = 30_000;
-const MAX_SANTA_POLL_ATTEMPTS = 120;
+import { useSantaPolling } from './use-santa-polling';
 
 export default function SantaClientPage() {
   const { merchant, loading: merchantLoading } = useMerchant();
-  const [stats, setStats] = useState<SantaStats | null>(null);
-  const [interactions, setInteractions] = useState<SantaInteraction[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [pollingPaused, setPollingPaused] = useState(false);
-  const [pollError, setPollError] = useState<string | null>(null);
-  const [pollGeneration, setPollGeneration] = useState(0);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: pollGeneration intentionally restarts the live polling budget on user refresh.
-  useEffect(() => {
-    if (!merchant?.id) return;
-
-    const merchantId = merchant.id; // Capture for closure
-    setPollingPaused(false);
-    setPollError(null);
-    let isStale = false;
-    let inFlight = false;
-    let latestRequestId = 0;
-    let attempts = 0;
-    let interval: ReturnType<typeof setInterval> | null = null;
-
-    function stopPolling() {
-      if (interval !== null) {
-        clearInterval(interval);
-        interval = null;
-      }
-    }
-
-    function fetchData() {
-      if (isStale || inFlight) return;
-      if (
-        typeof document !== 'undefined' &&
-        document.visibilityState === 'hidden'
-      ) {
-        return;
-      }
-      if (attempts >= MAX_SANTA_POLL_ATTEMPTS) {
-        stopPolling();
-        if (!isStale) setPollingPaused(true);
-        return;
-      }
-
-      attempts += 1;
-      inFlight = true;
-      const requestId = ++latestRequestId;
-      let timeoutId: ReturnType<typeof setTimeout> | null = null;
-      Promise.race([
-        Promise.all([
-          getSantaStats(merchantId),
-          getRecentInteractions(merchantId),
-        ]),
-        new Promise<never>((_, reject) => {
-          timeoutId = setTimeout(
-            () => reject(new Error('Santa poll request timed out')),
-            15_000
-          );
-        }),
-      ])
-        .then(([fetchedStats, fetchedInteractions]) => {
-          if (isStale || requestId !== latestRequestId) return;
-          setPollError(null);
-          setStats(fetchedStats);
-          setInteractions(fetchedInteractions);
-        })
-        .catch((error: unknown) => {
-          console.error('Failed to load Santa data', error);
-          if (!isStale && requestId === latestRequestId) {
-            setPollError('Unable to refresh live campaign stats.');
-          }
-        })
-        .finally(() => {
-          if (timeoutId !== null) clearTimeout(timeoutId);
-          if (requestId === latestRequestId) {
-            inFlight = false;
-          }
-          if (isStale) return;
-          setLoading(false);
-          if (attempts >= MAX_SANTA_POLL_ATTEMPTS) {
-            stopPolling();
-            setPollingPaused(true);
-          }
-        });
-    }
-
-    function handleVisibilityChange() {
-      if (document.visibilityState === 'visible') {
-        fetchData();
-      }
-    }
-
-    fetchData();
-
-    // Optional: Poll for updates every 30s for a "live" feel during the campaign
-    interval = setInterval(fetchData, SANTA_POLL_INTERVAL_MS);
-    if (typeof document !== 'undefined') {
-      document.addEventListener('visibilitychange', handleVisibilityChange);
-    }
-    return () => {
-      isStale = true;
-      stopPolling();
-      if (typeof document !== 'undefined') {
-        document.removeEventListener(
-          'visibilitychange',
-          handleVisibilityChange
-        );
-      }
-    };
-  }, [merchant?.id, pollGeneration]);
-
-  const restartPolling = () => {
-    setPollingPaused(false);
-    setPollError(null);
-    setPollGeneration((current) => current + 1);
-  };
+  const {
+    interactions,
+    loading,
+    pollError,
+    pollingPaused,
+    restartPolling,
+    stats,
+  } = useSantaPolling(merchant?.id);
 
   if (merchantLoading || loading) {
     return (

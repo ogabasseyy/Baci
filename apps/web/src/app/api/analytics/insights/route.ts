@@ -9,13 +9,13 @@ import {
   sanitizeAnalyticsInsightsContext,
 } from '@/lib/analytics/ollama-insights';
 import { authenticateApiRequest, hasPermission } from '@/lib/api-auth';
-import { cache, generateCacheKey } from '@/lib/cache';
+import { generateCacheKey } from '@/lib/cache';
 import {
   getMerchantForApiRequest,
   toUserAccess,
 } from '@/lib/get-merchant-for-api-request';
-import { getRedis } from '@/lib/redis';
 import { analyticsInsightsSchema } from '@/schemas/analytics-insights';
+import { readCachedInsights, writeCachedInsights } from './insights-cache';
 
 export const maxDuration = 30;
 
@@ -69,70 +69,9 @@ async function generateInsights(
 
   // Generate cache key for AI insights (cached for 24h in Upstash Redis)
   const cacheKey = generateCacheKey('ai-insights', merchantId);
-  const redis = getRedis();
-  const REDIS_CACHE_TIMEOUT_MS = 750;
-
-  type InsightsPayload = {
-    insights: Array<{
-      title: string;
-      description: string;
-      type: string;
-      priority: string;
-      action?: string;
-    }>;
-  };
-
-  async function withRedisTimeout<T>(operation: Promise<T>): Promise<T> {
-    // @upstash/redis commands do not accept an AbortSignal per call, so race
-    // against a bounded timer to keep Redis stalls from exhausting the route.
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    try {
-      return await Promise.race([
-        operation,
-        new Promise<never>((_, reject) => {
-          timer = setTimeout(
-            () => reject(new Error('Redis cache timeout')),
-            REDIS_CACHE_TIMEOUT_MS
-          );
-        }),
-      ]);
-    } finally {
-      if (timer !== null) clearTimeout(timer);
-    }
-  }
-
-  async function readCachedInsights(): Promise<InsightsPayload | null> {
-    if (!redis) {
-      return cache.get<InsightsPayload>(cacheKey);
-    }
-    try {
-      const cached = await withRedisTimeout(
-        redis.get<InsightsPayload>(cacheKey)
-      );
-      return cached ?? cache.get<InsightsPayload>(cacheKey);
-    } catch (error) {
-      console.warn('[analytics/insights] Redis cache read failed', error);
-      return cache.get<InsightsPayload>(cacheKey);
-    }
-  }
-
-  async function writeCachedInsights(
-    payload: InsightsPayload,
-    ttlSeconds: number
-  ): Promise<void> {
-    cache.set(cacheKey, payload, ttlSeconds);
-    if (!redis) {
-      return;
-    }
-    try {
-      await withRedisTimeout(redis.set(cacheKey, payload, { ex: ttlSeconds }));
-    } catch (error) {
-      console.warn('[analytics/insights] Redis cache write failed', error);
-    }
-  }
 
   // Try to get cached insights
-  const cachedInsights = await readCachedInsights();
+  const cachedInsights = await readCachedInsights(cacheKey);
   if (cachedInsights) {
     return { data: cachedInsights };
   }
@@ -213,7 +152,7 @@ Return JSON only, matching this exact shape: ${ANALYTICS_INSIGHTS_JSON_SHAPE}
       perProviderTimeoutMs: AI_INSIGHTS_PER_PROVIDER_TIMEOUT_MS,
       overallTimeoutMs: AI_INSIGHTS_CHAIN_BUDGET_MS,
     });
-    await writeCachedInsights(object, AI_INSIGHTS_CACHE_TTL_SECONDS);
+    await writeCachedInsights(cacheKey, object, AI_INSIGHTS_CACHE_TTL_SECONDS);
     return { data: object };
   } catch (chainError) {
     const chainErrorMessage =
@@ -224,7 +163,11 @@ Return JSON only, matching this exact shape: ${ANALYTICS_INSIGHTS_JSON_SHAPE}
         const object = await generateAnalyticsInsightsWithOllama(safeContext, {
           timeoutMs: AI_INSIGHTS_OLLAMA_TIMEOUT_MS,
         });
-        await writeCachedInsights(object, AI_INSIGHTS_CACHE_TTL_SECONDS);
+        await writeCachedInsights(
+          cacheKey,
+          object,
+          AI_INSIGHTS_CACHE_TTL_SECONDS
+        );
         return { data: object };
       } catch (ollamaError) {
         console.warn('AI insights generation unavailable; using fallback', {
@@ -236,6 +179,7 @@ Return JSON only, matching this exact shape: ${ANALYTICS_INSIGHTS_JSON_SHAPE}
               : String(ollamaError),
         });
         await writeCachedInsights(
+          cacheKey,
           FALLBACK_INSIGHTS,
           AI_INSIGHTS_FALLBACK_CACHE_TTL_SECONDS
         );
@@ -251,6 +195,7 @@ Return JSON only, matching this exact shape: ${ANALYTICS_INSIGHTS_JSON_SHAPE}
     // Short-cache fallback insights to avoid repeated upstream timeouts while
     // keeping recovery quick when the VPS/provider becomes responsive again.
     await writeCachedInsights(
+      cacheKey,
       FALLBACK_INSIGHTS,
       AI_INSIGHTS_FALLBACK_CACHE_TTL_SECONDS
     );

@@ -255,7 +255,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     if (error || !data || typeof data !== 'object') {
       const mapped = readRpcMutationError(
         error,
-        'Failed to reserve blog release slot'
+        'Failed to cancel blog release reservation'
       );
       return NextResponse.json(
         mapped.code

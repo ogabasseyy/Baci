@@ -141,4 +141,12 @@ describe('scheduled-post publishing cron workflow', () => {
     expect(mockRevalidateBlogPosts).not.toHaveBeenCalled();
     expect(mockDispatchZohoBlogCampaign).not.toHaveBeenCalled();
   });
+
+  it('pins the Next.js outside-request error wording used by the standalone VPS edge-purge fallback', async () => {
+    const actualNextCache =
+      await vi.importActual<typeof import('next/cache')>('next/cache');
+    expect(() => actualNextCache.revalidateTag('blog-posts', 'max')).toThrow(
+      /static generation store/
+    );
+  });
 });

@@ -57,14 +57,17 @@ describe('Oxygen follow-up fetch', () => {
     });
     expect(mocks.eq).toHaveBeenCalledWith('merchant_id', merchantId);
     expect(mocks.in).toHaveBeenCalledWith('id', [orderId]);
-    expect(result).toEqual([
-      expect.objectContaining({
-        id: orderId,
-        oxygen_follow_up_status: 'oxygen_processing',
-        follow_up_at: candidate.last_activity_at,
-        attempt_count: 1,
-      }),
-    ]);
+    expect(result).toEqual({
+      orders: [
+        expect.objectContaining({
+          id: orderId,
+          oxygen_follow_up_status: 'oxygen_processing',
+          follow_up_at: candidate.last_activity_at,
+          attempt_count: 1,
+        }),
+      ],
+      isIncomplete: false,
+    });
   });
 
   it('does not query orders when the provider status lookup fails', async () => {
@@ -93,7 +96,7 @@ describe('Oxygen follow-up fetch', () => {
       50, 50, 20,
     ]);
     expect(mocks.eq).toHaveBeenCalledTimes(3);
-    expect(result.map((item) => item.id)).toEqual(
+    expect(result.orders.map((item) => item.id)).toEqual(
       candidates.map((item) => item.order_id)
     );
   });
@@ -123,13 +126,40 @@ describe('Oxygen follow-up fetch', () => {
     await expect(fetchOxygenFollowUps(merchantId)).rejects.toThrow();
   });
 
-  it('rejects unrecognized provider status projections', async () => {
+  it('marks malformed provider projections incomplete without displaying them', async () => {
     mocks.rpc.mockResolvedValue({
       data: [{ ...candidate, follow_up_status: 'raw provider message' }],
       error: null,
     });
-    await expect(fetchOxygenFollowUps(merchantId)).rejects.toThrow();
+    await expect(fetchOxygenFollowUps(merchantId)).resolves.toEqual({
+      orders: [],
+      isIncomplete: true,
+    });
     expect(mocks.from).not.toHaveBeenCalled();
+  });
+
+  it('keeps valid candidates while marking malformed rows incomplete', async () => {
+    mocks.rpc.mockResolvedValue({
+      data: [candidate, { ...candidate, order_id: 'invalid' }],
+      error: null,
+    });
+    const result = await fetchOxygenFollowUps(merchantId);
+    expect(result).toEqual({
+      orders: [expect.objectContaining({ id: orderId })],
+      isIncomplete: true,
+    });
+  });
+
+  it('keeps valid orders while marking malformed order details incomplete', async () => {
+    mocks.in.mockResolvedValue({
+      data: [order, { ...order, unexpected_private_field: 'do not expose' }],
+      error: null,
+    });
+    const result = await fetchOxygenFollowUps(merchantId);
+    expect(result).toEqual({
+      orders: [expect.objectContaining({ id: orderId })],
+      isIncomplete: true,
+    });
   });
 
   it('keeps other results when a future category needs review', async () => {
@@ -151,7 +181,7 @@ describe('Oxygen follow-up fetch', () => {
     });
 
     const result = await fetchOxygenFollowUps(merchantId);
-    expect(result.map((item) => item.oxygen_follow_up_status)).toEqual([
+    expect(result.orders.map((item) => item.oxygen_follow_up_status)).toEqual([
       'oxygen_processing',
       'needs_review',
     ]);
@@ -159,12 +189,18 @@ describe('Oxygen follow-up fetch', () => {
 
   it('does not invent orders omitted by the authenticated order query', async () => {
     mocks.in.mockResolvedValue({ data: [], error: null });
-    await expect(fetchOxygenFollowUps(merchantId)).resolves.toEqual([]);
+    await expect(fetchOxygenFollowUps(merchantId)).resolves.toEqual({
+      orders: [],
+      isIncomplete: false,
+    });
   });
 
   it('does not read order details when no Oxygen follow-up is needed', async () => {
     mocks.rpc.mockResolvedValue({ data: [], error: null });
-    await expect(fetchOxygenFollowUps(merchantId)).resolves.toEqual([]);
+    await expect(fetchOxygenFollowUps(merchantId)).resolves.toEqual({
+      orders: [],
+      isIncomplete: false,
+    });
     expect(mocks.from).not.toHaveBeenCalled();
   });
 
@@ -177,12 +213,15 @@ describe('Oxygen follow-up fetch', () => {
       data: [{ ...order, payment_status: 'paid' }],
       error: null,
     });
-    await expect(fetchOxygenFollowUps(merchantId)).resolves.toEqual([
-      expect.objectContaining({
-        payment_status: 'paid',
-        oxygen_follow_up_status: 'needs_review',
-      }),
-    ]);
+    await expect(fetchOxygenFollowUps(merchantId)).resolves.toEqual({
+      orders: [
+        expect.objectContaining({
+          payment_status: 'paid',
+          oxygen_follow_up_status: 'needs_review',
+        }),
+      ],
+      isIncomplete: false,
+    });
   });
 
   it('flags conflicting approval evidence for review', async () => {
@@ -190,9 +229,29 @@ describe('Oxygen follow-up fetch', () => {
       data: [{ ...order, payment_status: 'bnpl_approved' }],
       error: null,
     });
-    await expect(fetchOxygenFollowUps(merchantId)).resolves.toEqual([
-      expect.objectContaining({ oxygen_follow_up_status: 'needs_review' }),
-    ]);
+    await expect(fetchOxygenFollowUps(merchantId)).resolves.toEqual({
+      orders: [
+        expect.objectContaining({ oxygen_follow_up_status: 'needs_review' }),
+      ],
+      isIncomplete: false,
+    });
+  });
+
+  it.each([
+    null,
+    '',
+    'not-a-number',
+  ])('does not invent a zero amount for %s', async (total) => {
+    mocks.in.mockResolvedValue({ data: [{ ...order, total }], error: null });
+    await expect(fetchOxygenFollowUps(merchantId)).resolves.toEqual({
+      orders: [
+        expect.objectContaining({
+          total: null,
+          oxygen_follow_up_status: 'needs_review',
+        }),
+      ],
+      isIncomplete: false,
+    });
   });
 
   it('rejects an invalid merchant identifier before any database call', async () => {

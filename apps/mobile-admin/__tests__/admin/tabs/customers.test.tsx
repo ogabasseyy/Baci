@@ -3,8 +3,8 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import type React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import CustomersScreen from '@/app/(admin)/(tabs)/customers';
+import { oxygenProcessingOrder } from '@/test/fixtures/oxygen-follow-up';
 
-// Mock FlashList
 vi.mock('@shopify/flash-list', async () => {
   const React = await import('react');
   return {
@@ -162,6 +162,26 @@ describe('CustomersScreen UI rendering', () => {
     const { getByText } = render(<CustomersScreen />);
     expect(getByText('Customers')).toBeTruthy();
   });
+  it('shows an unavailable amount rather than zero for Oxygen', () => {
+    customerHookMocks.useOxygenFollowUps.mockReturnValue({
+      data: [
+        {
+          ...oxygenProcessingOrder,
+          total: null,
+          oxygen_follow_up_status: 'needs_review',
+        },
+      ],
+      isError: false,
+      isLoading: false,
+      isFetching: false,
+      refetch: vi.fn(),
+    });
+    render(<CustomersScreen />);
+    expect(screen.getByText(/Amount unavailable/)).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: /Amount unavailable/ })
+    ).toBeTruthy();
+  });
 
   it('keeps the customer tab rail constrained to chip height', () => {
     render(<CustomersScreen />);
@@ -237,7 +257,6 @@ describe('CustomersScreen UI rendering', () => {
 
   it('renders empty states for failed orders and customer lists', () => {
     render(<CustomersScreen />);
-
     expect(screen.getByText('No issues')).toBeTruthy();
     expect(
       screen.getByText('No follow-ups need attention right now.')
@@ -262,7 +281,6 @@ describe('CustomersScreen UI rendering', () => {
 
     expect(screen.queryByText('No issues')).toBeNull();
   });
-
   it('suppresses the customer empty state while customers are loading', () => {
     customerHookMocks.useCustomers.mockReturnValue({
       data: { pages: [{ customers: [] }] },

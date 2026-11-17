@@ -6,11 +6,11 @@ BEGIN
   SELECT jsonb_object_agg(right(order_id::text, 3), follow_up_status)
     INTO result FROM public.oxygen_follow_up_candidates('20000000-0000-4000-8000-000000000001');
   FOR actual IN SELECT key FROM jsonb_each(result) LOOP
-    IF actual NOT IN ('001','002','003','004','005','006','011','012','013','014','017','018','019','021','022','023','025','026','027','028','029','030','031') THEN
+    IF actual NOT IN ('001','002','003','004','005','006','011','012','013','014','017','018','019','021','022','023','025','026','027','028','029','030','031','032','034','035','036','038','039','041','042','044','046') THEN
       RAISE EXCEPTION 'Unexpected follow-up order: %', actual;
     END IF;
   END LOOP;
-  IF result IS DISTINCT FROM '{"001":"customer_action","002":"oxygen_processing","003":"oxygen_processing","004":"approved_pending","005":"needs_review","006":"needs_review","011":"customer_action","012":"needs_review","013":"needs_review","014":"needs_review","017":"oxygen_processing","018":"needs_review","019":"needs_review","021":"needs_review","022":"needs_review","023":"customer_action","025":"needs_review","026":"needs_review","027":"needs_review","028":"needs_review","029":"needs_review","030":"needs_review","031":"needs_review"}'::jsonb THEN
+  IF result IS DISTINCT FROM '{"001":"customer_action","002":"oxygen_processing","003":"oxygen_processing","004":"approved_pending","005":"needs_review","006":"needs_review","011":"customer_action","012":"needs_review","013":"needs_review","014":"needs_review","017":"oxygen_processing","018":"needs_review","019":"needs_review","021":"needs_review","022":"needs_review","023":"customer_action","025":"needs_review","026":"needs_review","027":"needs_review","028":"needs_review","029":"needs_review","030":"needs_review","031":"needs_review","032":"needs_review","034":"needs_review","035":"needs_review","036":"needs_review","038":"needs_review","039":"needs_review","041":"needs_review","042":"approved_pending","044":"needs_review","046":"needs_review"}'::jsonb THEN
     RAISE EXCEPTION 'Incorrect Oxygen follow-up statuses: %', result;
   END IF;
   IF EXISTS (SELECT 1 FROM public.oxygen_follow_up_candidates('20000000-0000-4000-8000-000000000001') r

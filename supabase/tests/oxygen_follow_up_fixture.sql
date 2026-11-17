@@ -35,6 +35,16 @@ CREATE TABLE oxygen_private.commands (
 CREATE TABLE oxygen_private.provider_reference_history (
   command_id uuid PRIMARY KEY, workflow_id uuid NOT NULL, booking_reference uuid
 );
+CREATE TABLE oxygen_private.general_activations (
+  workflow_id uuid PRIMARY KEY, status text NOT NULL, created_at timestamptz NOT NULL
+);
+CREATE TABLE oxygen_private.general_activation_reconcile_conflicts (
+  workflow_id uuid PRIMARY KEY, resolved_at timestamptz
+);
+CREATE TABLE oxygen_private.payment_recovery (
+  workflow_id uuid NOT NULL, booking_reference uuid NOT NULL, action text NOT NULL,
+  status text NOT NULL, created_at timestamptz NOT NULL, started_at timestamptz
+);
 
 INSERT INTO public.orders (id, merchant_id, customer_id, payment_method, payment_status, created_at)
 SELECT ('00000000-0000-4000-8000-' || lpad(n::text, 12, '0'))::uuid,
@@ -86,9 +96,9 @@ SELECT ('00000000-0000-4000-8000-' || lpad(n::text,12,'0'))::uuid,
   '20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001',
   CASE WHEN n = 19 THEN 'paystack' ELSE 'oxygen' END,
   CASE WHEN n = 21 THEN 'canceled' ELSE 'unpaid' END,
-  now()-CASE WHEN n IN (29,30) THEN interval '91 days' ELSE interval '2 hours' END,
+  now()-CASE WHEN n IN (29,30,32) THEN interval '91 days' ELSE interval '2 hours' END,
   CASE WHEN n IN (20,31) THEN now()-interval '2 minutes' ELSE now()-interval '1 hour' END
-FROM generate_series(19,31) n;
+FROM generate_series(19,46) n;
 UPDATE public.orders SET payment_status='bnpl_approved' WHERE id='00000000-0000-4000-8000-000000000022';
 UPDATE public.orders SET payment_status='paid' WHERE id='00000000-0000-4000-8000-000000000024';
 UPDATE public.orders SET payment_status='cancelled', cancelled_at=now() WHERE id='00000000-0000-4000-8000-000000000025';
@@ -98,10 +108,17 @@ UPDATE public.orders SET payment_status='partially_paid' WHERE id='00000000-0000
 UPDATE public.orders SET payment_status='failed' WHERE id='00000000-0000-4000-8000-000000000029';
 UPDATE public.orders SET payment_status='expired' WHERE id='00000000-0000-4000-8000-000000000030';
 UPDATE public.orders SET payment_status='pending' WHERE id='00000000-0000-4000-8000-000000000031';
+UPDATE public.orders SET payment_status='paid' WHERE id IN ('00000000-0000-4000-8000-000000000036','00000000-0000-4000-8000-000000000037');
+UPDATE public.orders SET payment_method='paystack' WHERE id IN ('00000000-0000-4000-8000-000000000043','00000000-0000-4000-8000-000000000045');
 INSERT INTO public.oxygen_workflows (id,order_id,merchant_id,customer_id,environment,stage,updated_at)
 SELECT ('40000000-0000-4000-8000-' || lpad(n::text,12,'0'))::uuid, o.id, o.merchant_id, o.customer_id,
-  'production', CASE WHEN n = 20 THEN 'plan_required' WHEN n = 22 THEN 'eligibility_required' WHEN n IN (24,25,26) THEN 'activated' ELSE 'booked' END, now()-interval '1 hour'
-FROM generate_series(19,31) n JOIN public.orders o ON o.id=('00000000-0000-4000-8000-' || lpad(n::text,12,'0'))::uuid;
+  'production', CASE WHEN n = 20 THEN 'plan_required' WHEN n = 22 THEN 'eligibility_required'
+    WHEN n IN (24,25,26,36,37) THEN 'activated' WHEN n IN (32,33,34,35,39,40,41,42) THEN 'ready_for_activation'
+    WHEN n IN (43,45) THEN 'plan_required' WHEN n = 44 THEN 'application_required'
+    ELSE 'booked' END, now()-interval '1 hour'
+FROM generate_series(19,46) n JOIN public.orders o ON o.id=('00000000-0000-4000-8000-' || lpad(n::text,12,'0'))::uuid;
+UPDATE public.oxygen_workflows SET customer_id='30000000-0000-4000-8000-000000000002'
+WHERE id IN ('40000000-0000-4000-8000-000000000044','40000000-0000-4000-8000-000000000045','40000000-0000-4000-8000-000000000046');
 INSERT INTO oxygen_private.provider_states (workflow_id,state)
 SELECT id, '{"bookingReference":"50000000-0000-4000-8000-000000000001"}'::jsonb
 FROM public.oxygen_workflows WHERE id IN ('40000000-0000-4000-8000-000000000019','40000000-0000-4000-8000-000000000021');
@@ -120,3 +137,31 @@ INSERT INTO oxygen_private.commands VALUES
   ('60000000-0000-4000-8000-000000000027','40000000-0000-4000-8000-000000000027','succeeded','{"action":"book"}',now()-interval '1 hour');
 INSERT INTO oxygen_private.provider_reference_history VALUES
   ('60000000-0000-4000-8000-000000000027','40000000-0000-4000-8000-000000000027','50000000-0000-4000-8000-000000000003');
+INSERT INTO oxygen_private.provider_states (workflow_id,state)
+SELECT id, '{"bookingReference":"50000000-0000-4000-8000-000000000001","booking":{"status":"APPROVED"}}'::jsonb
+FROM public.oxygen_workflows WHERE id IN (
+  '40000000-0000-4000-8000-000000000032','40000000-0000-4000-8000-000000000033',
+  '40000000-0000-4000-8000-000000000034','40000000-0000-4000-8000-000000000035',
+  '40000000-0000-4000-8000-000000000039','40000000-0000-4000-8000-000000000040',
+  '40000000-0000-4000-8000-000000000041','40000000-0000-4000-8000-000000000042');
+INSERT INTO oxygen_private.general_activations VALUES
+  ('40000000-0000-4000-8000-000000000032','indeterminate',now()-interval '2 hours'),
+  ('40000000-0000-4000-8000-000000000033','executing',now()-interval '1 minute'),
+  ('40000000-0000-4000-8000-000000000034','executing',now()-interval '2 hours'),
+  ('40000000-0000-4000-8000-000000000035','activated',now()-interval '2 hours'),
+  ('40000000-0000-4000-8000-000000000036','activated',now()-interval '2 hours'),
+  ('40000000-0000-4000-8000-000000000037','activated',now()-interval '2 hours');
+INSERT INTO oxygen_private.general_activation_reconcile_conflicts VALUES
+  ('40000000-0000-4000-8000-000000000036',NULL),
+  ('40000000-0000-4000-8000-000000000037',now()-interval '1 hour');
+INSERT INTO oxygen_private.provider_states VALUES
+  ('40000000-0000-4000-8000-000000000038', '{"bookingReference":"50000000-0000-4000-8000-000000000004","kyc":{"address_status":"DONE"}}'::jsonb);
+INSERT INTO oxygen_private.commands VALUES
+  ('60000000-0000-4000-8000-000000000038','40000000-0000-4000-8000-000000000038','succeeded','{"action":"submit_address"}',now()-interval '1 hour');
+INSERT INTO oxygen_private.provider_reference_history VALUES
+  ('60000000-0000-4000-8000-000000000038','40000000-0000-4000-8000-000000000038','50000000-0000-4000-8000-000000000004');
+INSERT INTO oxygen_private.payment_recovery VALUES
+  ('40000000-0000-4000-8000-000000000039','50000000-0000-4000-8000-000000000001','resend_upfront','indeterminate',now()-interval '2 hours',now()-interval '2 hours'),
+  ('40000000-0000-4000-8000-000000000040','50000000-0000-4000-8000-000000000001','check_status','executing',now()-interval '2 hours',now()-interval '1 minute'),
+  ('40000000-0000-4000-8000-000000000041','50000000-0000-4000-8000-000000000001','check_status','executing',now()-interval '2 hours',now()-interval '1 hour'),
+  ('40000000-0000-4000-8000-000000000042','50000000-0000-4000-8000-000000000002','resend_upfront','indeterminate',now()-interval '2 hours',now()-interval '2 hours');

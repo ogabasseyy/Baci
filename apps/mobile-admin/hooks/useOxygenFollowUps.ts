@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
+import { z } from 'zod';
 import { supabase } from '@/lib/supabase';
 import {
-  oxygenFollowUpCandidatesSchema,
+  oxygenFollowUpCandidateSchema,
   oxygenFollowUpMerchantSchema,
-  oxygenFollowUpOrdersSchema,
+  oxygenFollowUpOrderSchema,
 } from '@/schemas/oxygen-follow-up';
 import type { FailedOrder } from './useFailedOrders';
 import { useMerchant } from './useMerchant';
@@ -31,14 +32,19 @@ const ORDER_LOOKUP_BATCH_SIZE = 50;
 /** The RPC returns categories only; order/contact data still goes through orders RLS. */
 export async function fetchOxygenFollowUps(
   merchantId: string
-): Promise<FailedOrder[]> {
+): Promise<{ orders: FailedOrder[]; isIncomplete: boolean }> {
   const validatedMerchantId = oxygenFollowUpMerchantSchema.parse(merchantId);
   const { data, error } = await supabase.rpc('oxygen_follow_up_candidates', {
     p_merchant_id: validatedMerchantId,
   });
   if (error) throw new Error('Could not load Oxygen follow-ups');
-  const candidates = oxygenFollowUpCandidatesSchema.parse(data);
-  if (candidates.length === 0) return [];
+  const rawCandidates = z.array(z.unknown()).max(250).parse(data);
+  const candidates = rawCandidates.flatMap((row) => {
+    const parsed = oxygenFollowUpCandidateSchema.safeParse(row);
+    return parsed.success ? [parsed.data] : [];
+  });
+  let isIncomplete = candidates.length !== rawCandidates.length;
+  if (candidates.length === 0) return { orders: [], isIncomplete };
 
   const ids = candidates.map((candidate) => candidate.order_id);
   const batches: string[][] = [];
@@ -58,10 +64,18 @@ export async function fetchOxygenFollowUps(
   );
   const orders = results.flatMap((result) => {
     if (result.error) throw new Error('Could not load Oxygen follow-up orders');
-    return oxygenFollowUpOrdersSchema.parse(result.data);
+    const rows = z
+      .array(z.unknown())
+      .max(ORDER_LOOKUP_BATCH_SIZE)
+      .parse(result.data);
+    return rows.flatMap((row) => {
+      const parsed = oxygenFollowUpOrderSchema.safeParse(row);
+      if (!parsed.success) isIncomplete = true;
+      return parsed.success ? [parsed.data] : [];
+    });
   });
   const byId = new Map(orders.map((order) => [order.id, order]));
-  return candidates.flatMap((candidate) => {
+  const followUps = candidates.flatMap((candidate) => {
     const order = byId.get(candidate.order_id);
     if (!order) return [];
     const paymentStatus = PAYMENT_STATUSES.has(
@@ -69,7 +83,12 @@ export async function fetchOxygenFollowUps(
     )
       ? (order.payment_status as FailedOrder['payment_status'])
       : 'unknown';
-    const total = Number(order.total ?? 0);
+    const amount =
+      order.total === null ||
+      (typeof order.total === 'string' && !order.total.trim())
+        ? null
+        : Number(order.total);
+    const total = amount !== null && Number.isFinite(amount) ? amount : null;
     return [
       {
         ...order,
@@ -79,10 +98,11 @@ export async function fetchOxygenFollowUps(
         customer_phone: order.customer_phone ?? '',
         payment_method: order.payment_method ?? '',
         payment_status: paymentStatus,
-        total: Number.isFinite(total) ? total : 0,
+        total,
         attempt_count: 1,
         follow_up_at: candidate.last_activity_at,
         oxygen_follow_up_status:
+          total === null ||
           TERMINAL_OR_UNKNOWN.has(paymentStatus) ||
           (paymentStatus === 'bnpl_approved' &&
             candidate.follow_up_status !== 'approved_pending') ||
@@ -92,11 +112,12 @@ export async function fetchOxygenFollowUps(
       },
     ];
   });
+  return { orders: followUps, isIncomplete };
 }
 
 export function useOxygenFollowUps() {
   const { merchant } = useMerchant();
-  return useQuery({
+  const query = useQuery({
     queryKey: ['oxygen-follow-ups', merchant?.id],
     queryFn: () => {
       if (!merchant?.id) throw new Error('Merchant ID is required');
@@ -106,4 +127,9 @@ export function useOxygenFollowUps() {
     staleTime: 1000 * 60 * 2,
     refetchOnWindowFocus: false,
   });
+  return {
+    ...query,
+    data: query.data?.orders,
+    isIncomplete: query.data?.isIncomplete ?? false,
+  };
 }

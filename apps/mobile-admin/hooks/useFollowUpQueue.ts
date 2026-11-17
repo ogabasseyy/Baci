@@ -28,6 +28,7 @@ export function useFollowUpQueue() {
   const {
     data: oxygenOrders,
     isError: isOxygenError,
+    isIncomplete: isOxygenIncomplete,
     isFetching: isFetchingOxygen,
     isLoading: isLoadingOxygen,
     refetch: refetchOxygen,
@@ -46,7 +47,8 @@ export function useFollowUpQueue() {
             Date.parse(getFollowUpActivityAt(a))
         )
       : undefined;
-  const isFailedOrdersError = isStandardError || isOxygenError;
+  const isFailedOrdersError =
+    isStandardError || isOxygenError || Boolean(isOxygenIncomplete);
 
   const viewState = getFollowUpViewState({
     followUpCount: failedOrders?.length ?? 0,

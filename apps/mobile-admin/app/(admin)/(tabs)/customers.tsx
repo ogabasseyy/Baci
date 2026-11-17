@@ -106,6 +106,10 @@ function FailedOrderItem({
 
   const displayName = item.customer_name || 'Guest';
   const customerPhone = item.customer_phone?.trim() || null;
+  const displayTotal =
+    item.total === null
+      ? 'Amount unavailable'
+      : formatCurrency(item.total, currencySymbol);
 
   return (
     <Pressable
@@ -116,7 +120,7 @@ function FailedOrderItem({
         pressed && { backgroundColor: colors.cardHover },
       ]}
       onPress={() => onPress(item)}
-      accessibilityLabel={`Follow up: ${displayName}, ${item.customer_email}, ${formatCurrency(item.total, currencySymbol)}, ${errorMessage}`}
+      accessibilityLabel={`Follow up: ${displayName}, ${item.customer_email}, ${displayTotal}, ${errorMessage}`}
       accessibilityRole="button"
       accessibilityHint="View customer or order details"
     >
@@ -156,7 +160,7 @@ function FailedOrderItem({
           ]}
           numberOfLines={item.oxygen_follow_up_status ? 2 : 1}
         >
-          {formatCurrency(item.total, currencySymbol)} • {errorMessage}
+          {displayTotal} • {errorMessage}
         </Text>
       </View>
 

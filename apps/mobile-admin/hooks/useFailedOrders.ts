@@ -19,7 +19,7 @@ export interface FailedOrder {
   customer_name: string;
   customer_email: string;
   customer_phone: string;
-  total: number;
+  total: number | null;
   payment_status:
     | 'bnpl_pending'
     | 'bnpl_approved'

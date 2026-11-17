@@ -21,8 +21,6 @@ vi.mock('@google/generative-ai', () => ({
   }),
 }));
 
-vi.mock('@/env', () => ({ getRootDomain: () => 'usebaci.com' }));
-
 vi.mock('@/lib/csrf', () => ({ verifyCsrfToken: mocks.verifyCsrf }));
 
 vi.mock('@/lib/storefront-merchant', () => ({

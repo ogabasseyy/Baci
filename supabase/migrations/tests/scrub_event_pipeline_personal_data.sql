@@ -51,12 +51,14 @@ BEGIN
   -- A ledger row still queued after the whole period, with no deliveries.
   INSERT INTO public.domain_event_ledger (
     domain_event_id, producer, trust_level, idempotency_key, event_name,
-    subject_type, subject_id, envelope, status, created_at
+    subject_type, subject_id, envelope, status, created_at, queue_message_id
   ) VALUES (
     v_old_queued, 'sql-retention', 'server', 'retention-' || v_old_queued::text,
     'analytics.add_to_cart.v1', 'event', v_old_queued::text, v_pii, 'queued',
-    now() - interval '100 days'
+    now() - interval '100 days', 9302001
   );
+  INSERT INTO pgmq.q_domain_events (msg_id, enqueued_at, vt, message)
+  VALUES (9302001, now() - interval '100 days', now(), v_pii);
 
   -- Failure first seen long ago but failing again recently: kept.
   INSERT INTO public.domain_event_failures (
@@ -114,6 +116,10 @@ BEGIN
   IF (SELECT envelope FROM public.domain_event_ledger WHERE domain_event_id = v_old_queued)
        #> '{data,delivery_user_data,ip}' IS NOT NULL THEN
     RAISE EXCEPTION 'old queued ledger row kept personal data';
+  END IF;
+  IF (SELECT message FROM pgmq.q_domain_events WHERE msg_id = 9302001)
+       #> '{data,delivery_user_data,ip}' IS NOT NULL THEN
+    RAISE EXCEPTION 'old queue message copy kept personal data';
   END IF;
   IF (SELECT envelope FROM public.domain_event_ledger WHERE domain_event_id = v_old_done)
        #> '{data,event_data,user_agent}' IS NOT NULL

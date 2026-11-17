@@ -162,6 +162,42 @@ describe('POST /api/analytics/conversion', () => {
       })
     );
   });
+  it("bugfix: stores only the requested destination's ids when targets are narrowed", async () => {
+    mocks.enqueueEnabled = true;
+    mocks.resolveContext.mockResolvedValue({
+      merchantId: '019bbd89-8f5f-7f8c-a4fd-42b5d7e7a235',
+      ok: true,
+      trustLevel: 'tenant_verified_client',
+      verified: true,
+    });
+    const response = await POST(
+      request({
+        targets: ['facebook'],
+        user_data: { em: 'a@example.com', fbp: 'fbp.1', ttp: 'ttp.1' },
+      })
+    );
+    expect(response.status).toBe(200);
+    const stored = mocks.record.mock.calls.at(-1)?.[1].deliveryData;
+    expect(stored).toHaveProperty('fbp', 'fbp.1');
+    expect(stored).not.toHaveProperty('ttp');
+  });
+  it('bugfix: stores no personal fields when the target list is empty', async () => {
+    mocks.enqueueEnabled = true;
+    mocks.resolveContext.mockResolvedValue({
+      merchantId: '019bbd89-8f5f-7f8c-a4fd-42b5d7e7a235',
+      ok: true,
+      trustLevel: 'tenant_verified_client',
+      verified: true,
+    });
+    const response = await POST(
+      request({ targets: [], user_data: { em: 'a@example.com' } })
+    );
+    expect(response.status).toBe(200);
+    expect(mocks.record.mock.calls.at(-1)?.[1].deliveryData).toEqual({
+      analytics_consent: true,
+      marketing_consent: true,
+    });
+  });
   it('accepts an empty pre-order checkout ID and persists requested targets', async () => {
     mocks.enqueueEnabled = true;
     mocks.resolveContext.mockResolvedValue({

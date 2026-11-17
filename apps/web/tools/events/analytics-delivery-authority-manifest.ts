@@ -9,7 +9,7 @@ export const analyticsDeliveryAuthorityManifest = {
     eventPipelineAuthorityCutover.queueOnlyDeliveryActivated,
   authorityClosureHashes: {
     'apps/web/src/app/api/analytics/conversion/route.ts':
-      '0c40df0c1406bd0766d47dd671af9148c34dbbc50df4602790fb3de3c1d6957a',
+      '0382cfd476b65bb5ce3020387db2bc35623da13878d73f98c392336c8e23e74e',
     'apps/web/src/app/api/events/route.ts':
       '10d065156d7ac4c801555c92e08b92f5f85c3ea3eb01cdf63d83cf745b84adc3',
     'apps/web/src/lib/analytics/fetch-analytics-platform-config.ts':

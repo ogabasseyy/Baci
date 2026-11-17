@@ -22,8 +22,7 @@
 --   The row, its status and the rest of the payload stay for reconciliation.
 -- * A ledger row still queued after the period is a dead message by policy
 --   (the queue archive itself is purged at 30 days); it is scrubbed like any
---   other row. A stuck live queue message older than the period would be an
---   operational alert in its own right, not a retention case.
+--   other row, and so is its copy in the live queue (pgmq.q_domain_events).
 
 -- Partial indexes hold only rows that still carry personal data (any key in
 -- delivery_user_data besides the two consent flags, or a stray user agent), so
@@ -142,6 +141,46 @@ BEGIN
     WHERE delivery.id = expired.id
       AND delivery.status IN
         ('delivered', 'skipped', 'shadowed', 'dead_letter', 'delivery_unknown');
+    GET DIAGNOSTICS v_batch = ROW_COUNT;
+    EXIT WHEN v_batch < 10000 OR clock_timestamp() > v_deadline;
+  END LOOP;
+
+  -- The live queue holds its own copy of each queued envelope; scrub the copy
+  -- of a ledger row that is past the period with no open delivery work.
+  v_deadline := clock_timestamp() + interval '6 seconds';
+  LOOP
+    WITH expired_queue AS (
+      SELECT queued.msg_id
+      FROM pgmq.q_domain_events AS queued
+      JOIN public.domain_event_ledger AS ledger
+        ON ledger.queue_message_id = queued.msg_id
+      WHERE queued.enqueued_at < now() - v_personal_data_retention
+        AND ledger.created_at < now() - v_personal_data_retention
+        AND ((jsonb_typeof(queued.message #> '{data,delivery_user_data}') = 'object'
+          AND (queued.message #> '{data,delivery_user_data}') - 'analytics_consent' - 'marketing_consent' <> '{}'::jsonb)
+        OR queued.message #> '{data,event_data,user_agent}' IS NOT NULL)
+        AND NOT EXISTS (
+          SELECT 1
+          FROM public.event_deliveries AS open_delivery
+          WHERE open_delivery.domain_event_id = ledger.domain_event_id
+            AND open_delivery.status IN ('pending', 'claimed', 'retry')
+        )
+      ORDER BY queued.enqueued_at
+      LIMIT 10000
+      FOR UPDATE OF queued SKIP LOCKED
+    )
+    UPDATE pgmq.q_domain_events AS queued
+    SET message = CASE WHEN queued.message #> '{data,delivery_user_data}' IS NULL
+        THEN queued.message #- '{data,event_data,user_agent}'
+        ELSE jsonb_set(
+          queued.message #- '{data,event_data,user_agent}',
+          '{data,delivery_user_data}',
+          jsonb_strip_nulls(jsonb_build_object(
+            'analytics_consent', coalesce(queued.message #> '{data,delivery_user_data,analytics_consent}', 'false'::jsonb),
+            'marketing_consent', coalesce(queued.message #> '{data,delivery_user_data,marketing_consent}', 'false'::jsonb)))
+        ) END
+    FROM expired_queue AS expired
+    WHERE queued.msg_id = expired.msg_id;
     GET DIAGNOSTICS v_batch = ROW_COUNT;
     EXIT WHEN v_batch < 10000 OR clock_timestamp() > v_deadline;
   END LOOP;

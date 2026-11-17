@@ -148,7 +148,8 @@ export async function POST(request: NextRequest) {
           deliveryData: minimizeDeliveryData(
             conversionEventPayload.deliveryData(input, request),
             eventType,
-            pipelineContext.trustLevel
+            pipelineContext.trustLevel,
+            conversionEventPayload.targets(input)
           ),
           eventData: conversionEventPayload.toStoredEventData(input),
           eventName,

@@ -123,4 +123,30 @@ describe('bugfix: shopper data stored regardless of consent', () => {
       minimizeDeliveryData(full(true, true), 'add_to_cart', 'anonymous_client')
     ).toEqual({ analytics_consent: true, marketing_consent: true });
   });
+
+  describe('bugfix: explicit conversion targets narrow what is stored', () => {
+    it('keeps only the Facebook ids when only facebook is targeted, even with both consents', () => {
+      const result = minimizeDeliveryData(
+        full(true, true),
+        'add_to_cart',
+        'tenant_verified_client',
+        ['facebook']
+      );
+      expect(result).toHaveProperty('fbp');
+      expect(result).toHaveProperty('email');
+      expect(result).not.toHaveProperty('ttp');
+      expect(result).not.toHaveProperty('sccid');
+    });
+
+    it('stores only the consent flags when the target list is empty', () => {
+      expect(
+        minimizeDeliveryData(
+          full(true, true),
+          'add_to_cart',
+          'tenant_verified_client',
+          []
+        )
+      ).toEqual({ analytics_consent: true, marketing_consent: true });
+    });
+  });
 });

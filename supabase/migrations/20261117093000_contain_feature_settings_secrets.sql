@@ -102,4 +102,4 @@ COMMENT ON FUNCTION public.get_merchant_integration_secret_presence(uuid) IS
 REVOKE ALL ON FUNCTION public.get_merchant_integration_secret_presence(uuid)
   FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.get_merchant_integration_secret_presence(uuid)
-  TO authenticated;
+  TO authenticated, service_role;

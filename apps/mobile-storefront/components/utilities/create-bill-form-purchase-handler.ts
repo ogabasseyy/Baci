@@ -85,16 +85,12 @@ export function createBillFormPurchaseHandler({
         );
         return;
       }
-      if (!amount) {
-        Alert.alert('Missing Amount', 'Please enter an amount.');
-        return;
-      }
-      const amountError = getBillPaymentAmountError(
-        numericAmount,
-        selectedBillItem
-      );
-      if (amountError) {
-        Alert.alert('Invalid Amount', amountError);
+      // Pay stays disabled with the amount issue shown in the form (inline
+      // notice), so these never reach here from a tap: no system alert.
+      if (
+        !amount ||
+        getBillPaymentAmountError(numericAmount, selectedBillItem)
+      ) {
         return;
       }
       const { customerName, customerAddress } = resolveBillCustomerOfRecord({

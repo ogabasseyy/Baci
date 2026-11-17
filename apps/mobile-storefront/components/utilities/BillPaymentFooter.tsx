@@ -1,3 +1,4 @@
+import type { ComponentProps } from 'react';
 import { View } from 'react-native';
 import { billFormStyles as styles } from '@/components/utilities/bill-form-styles';
 import type Colors from '@/constants/Colors';
@@ -13,21 +14,26 @@ const BILL_PAYMENT_AMOUNT_FORMATTER = new Intl.NumberFormat('en-NG', {
 });
 
 interface BillPaymentFooterProps {
+  /** Why Pay is disabled (amount issue or known shortfall), if anything. */
+  blockedReason?: string | null;
   colors: typeof Colors.light;
   footerBottomOffset: number;
   insetsBottom: number;
   isBusy: boolean;
   isKeyboardVisible: boolean;
+  notice?: ComponentProps<typeof UtilityPayButton>['notice'];
   numericAmount: number;
   onPurchase: () => void;
 }
 
 export function BillPaymentFooter({
+  blockedReason = null,
   colors,
   footerBottomOffset,
   insetsBottom,
   isBusy,
   isKeyboardVisible,
+  notice = null,
   numericAmount,
   onPurchase,
 }: BillPaymentFooterProps) {
@@ -49,9 +55,11 @@ export function BillPaymentFooter({
     >
       <UtilityPayButton
         amount={numericAmount}
+        blockedReason={blockedReason}
         buttonStyle={styles.payButton}
         isBusy={isBusy}
         label={paymentLabel}
+        notice={notice}
         onPress={onPurchase}
         textStyle={styles.payButtonText}
       />

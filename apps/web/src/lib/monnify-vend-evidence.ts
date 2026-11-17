@@ -6,28 +6,40 @@ function normaliseKey(key: string): string {
   return key.replace(/[_-]/g, '').toLowerCase();
 }
 
-/** Fields that show Monnify created or tracked a vend for this request. */
-const MONNIFY_VEND_EVIDENCE_FIELDS = new Set(
-  [
-    'vendStatus',
-    'transactionReference',
-    'vendReference',
-    'paymentReference',
-    // A string status ("FAILED", "PENDING") is the vend's own status; a
-    // numeric one is just an HTTP code and is ignored (isEvidenceValue).
-    'status',
-  ].map(normaliseKey)
-);
+/**
+ * Reference-like keys: any key ending in reference / ref / reference number,
+ * or a transaction, vend, order or txn id (transactionReference,
+ * vendReference, paymentReference, orderReference, referenceNumber,
+ * transactionId…). Matching the shape, not a fixed list, fails closed on new
+ * Monnify keys: an unknown reference blocks Kuda instead of being missed.
+ */
+const REFERENCE_LIKE_KEY =
+  /(?:reference(?:no|number|id)?|ref|(?:transaction|txn|vend|order)id)$/;
 
 /**
- * Below the top level (responseBody and anything nested in it) a plain
- * `reference` is Monnify's record. At the top level it is often just an echo
- * of our request reference, so it is not read there.
+ * At the top level a bare `reference` or `requestReference` is usually an echo
+ * of our own request, so only more specific references count there. Below
+ * the top level (responseBody and anything nested in it) every
+ * reference-like key counts.
  */
-const MONNIFY_RESPONSE_BODY_EVIDENCE_FIELDS = new Set([
-  ...MONNIFY_VEND_EVIDENCE_FIELDS,
-  normaliseKey('reference'),
-]);
+const TOP_LEVEL_ECHO_KEYS = new Set(['reference', 'requestreference']);
+
+function isVendStatusKey(key: string): boolean {
+  // A string status ("FAILED", "PENDING") is the vend's own status; a
+  // numeric one is just an HTTP code and is ignored (isEvidenceValue).
+  return key === 'vendstatus' || key === STATUS_KEY;
+}
+
+function isTopLevelEvidenceKey(key: string): boolean {
+  return (
+    isVendStatusKey(key) ||
+    (REFERENCE_LIKE_KEY.test(key) && !TOP_LEVEL_ECHO_KEYS.has(key))
+  );
+}
+
+function isNestedEvidenceKey(key: string): boolean {
+  return isVendStatusKey(key) || REFERENCE_LIKE_KEY.test(key);
+}
 
 const STATUS_KEY = normaliseKey('status');
 const VEND_STATUS_WORDS =
@@ -56,11 +68,11 @@ function isEvidenceValue(key: string, value: unknown): boolean {
 
 function carriesVendField(
   record: Record<string, unknown>,
-  fields: ReadonlySet<string>
+  isEvidenceKey: (key: string) => boolean
 ): boolean {
   return Object.entries(record).some(([rawKey, value]) => {
     const key = normaliseKey(rawKey);
-    return fields.has(key) && isEvidenceValue(key, value);
+    return isEvidenceKey(key) && isEvidenceValue(key, value);
   });
 }
 
@@ -76,7 +88,7 @@ function nestedCarriesVendField(value: unknown, depth: number): boolean {
       return nestedCarriesVendField(child, depth + 1);
     }
     return (
-      carriesVendField(record, MONNIFY_RESPONSE_BODY_EVIDENCE_FIELDS) ||
+      carriesVendField(record, isNestedEvidenceKey) ||
       Object.values(record).some((inner) =>
         nestedCarriesVendField(inner, depth + 1)
       )
@@ -97,7 +109,7 @@ export function hasMonnifyVendEvidence(answer: unknown): boolean {
     return false;
   }
   return (
-    carriesVendField(record, MONNIFY_VEND_EVIDENCE_FIELDS) ||
+    carriesVendField(record, isTopLevelEvidenceKey) ||
     Object.values(record).some((value) => nestedCarriesVendField(value, 1))
   );
 }

@@ -22,6 +22,8 @@ describe('reportsMonnifyUnexpectedError', () => {
     'Code 199',
     JSON.stringify({ responseCode: '01', responseBody: { productCode: '99' } }),
     'billerCode=99',
+    'product_code: "99"',
+    'biller-code=99',
     'Insufficient wallet balance',
     '',
     null,

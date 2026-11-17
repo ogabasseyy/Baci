@@ -219,7 +219,13 @@ export async function assertKudaBillItemPriceCurrent({
   if (fixed.some((item) => item.amount < IMPLAUSIBLE_FIXED_PRICE_NAIRA)) {
     throw new Error(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
   }
-  if (!fixed.some((item) => priceMatches(item, amount))) {
+  // Under a named biller one of its listings must match; with no biller
+  // named, every listing must agree, so the cheapest of two billers' prices
+  // can never pass for the other.
+  const isCurrent = billerName
+    ? fixed.some((item) => priceMatches(item, amount))
+    : fixed.every((item) => priceMatches(item, amount));
+  if (!isCurrent) {
     throw new Error(KUDA_BILL_PRICE_CHANGED_MESSAGE);
   }
 }

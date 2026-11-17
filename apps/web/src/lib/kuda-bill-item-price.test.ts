@@ -198,10 +198,10 @@ describe('assertKudaBillItemPriceCurrent', () => {
       ).resolves.toBeUndefined();
     });
 
-    it('accepts any listed price when the biller is not identified', async () => {
+    it('requires every listing to agree when no biller is named', async () => {
       await expect(
         assertKudaBillItemPriceCurrent({ ...superPackage, amount: 9000 })
-      ).resolves.toBeUndefined();
+      ).rejects.toThrow(KUDA_BILL_PRICE_CHANGED_MESSAGE);
       await expect(
         assertKudaBillItemPriceCurrent({ ...superPackage, amount: 950000 })
       ).rejects.toThrow(KUDA_BILL_PRICE_CHANGED_MESSAGE);

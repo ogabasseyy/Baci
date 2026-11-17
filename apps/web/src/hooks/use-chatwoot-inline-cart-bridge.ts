@@ -1,16 +1,18 @@
 'use client';
 
 import { useEffect, useLayoutEffect, useRef } from 'react';
-import { postChatwootBridgeJson } from '@/components/storefront/ogabassey/components/chat/chatwoot-bridge-request';
 import { isCurrentChatwootBridgeTarget } from '@/components/storefront/ogabassey/components/chat/chatwoot-bridge-target';
 import { readChatwootCommerceContextMessage } from '@/components/storefront/ogabassey/components/chat/chatwoot-commerce-context-message';
 import { readChatwootCommerceMessage } from '@/components/storefront/ogabassey/components/chat/chatwoot-commerce-message';
 import { postChatwootCanonicalCartView } from '@/components/storefront/ogabassey/components/chat/chatwoot-inline-cart-controls';
+import { handleChatwootInlineCartQuantity } from '@/components/storefront/ogabassey/components/chat/chatwoot-inline-cart-quantity';
 import { buildChatwootInlineReviewResponse } from '@/components/storefront/ogabassey/components/chat/chatwoot-inline-review-response';
 import { useCart } from '@/hooks/cart';
-import { requestChatwootCommerceContextChallenge } from './chatwoot-commerce-context-challenge';
 import { handleChatwootDeliveryOptionsAction } from './chatwoot-delivery-options-action';
-import { authorizeCurrentChatwootInlineAction } from './chatwoot-inline-action-authorization';
+import { authorizeChatwootInlineCartAction } from './chatwoot-inline-cart-action-authorization';
+import { postChatwootInlineCartActionFailure } from './chatwoot-inline-cart-action-failure';
+import { handleChatwootInlineContextHandshake } from './chatwoot-inline-cart-context-handshake';
+import { rememberChatwootSessionToken } from './chatwoot-session-token-aliases';
 
 type ActiveCartState = ReturnType<typeof useCart>;
 
@@ -28,21 +30,19 @@ export function useChatwootInlineCartBridge(
   useEffect(() => {
     let active = true;
     let latestActionGeneration = 0;
+    let latestRenewedGeneration = 0;
     let activeConversationId: number | null = null;
     let activeContextRequestId: string | null = null;
     let challengeToken: string | null = null;
     let challengeExpiresAt = 0;
     let authorizedSessionToken: string | null = null;
+    let initialSessionToken: string | null = null;
+    const sessionTokenAliases = new Set<string>();
     let sessionExpiresAt = 0;
     const lineTokens = new Map<string, string>();
     const post = (target: Window, prefix: string, value: unknown) => {
       target.postMessage(`${prefix}${JSON.stringify(value)}`, widgetOrigin);
     };
-    const postDeliveryUnavailable = (target: Window, requestId: string) =>
-      post(target, 'baci-delivery-options-result:', {
-        requestId,
-        status: 'unavailable',
-      });
     const isCurrentTarget = (
       frame: HTMLIFrameElement,
       target: Window,
@@ -77,86 +77,46 @@ export function useChatwootInlineCartBridge(
         widgetOrigin,
         target
       );
-      if (contextMessage?.event === 'baci-commerce-context-request') {
-        const { requestId, conversationId } = contextMessage.data;
-        activeConversationId = conversationId;
-        activeContextRequestId = requestId;
-        latestActionGeneration += 1;
-        challengeToken = null;
-        challengeExpiresAt = 0;
-        authorizedSessionToken = null;
-        sessionExpiresAt = 0;
-        lineTokens.clear();
-        const challenge = await requestChatwootCommerceContextChallenge({
-          data: contextMessage.data,
+      if (contextMessage) {
+        await handleChatwootInlineContextHandshake({
+          message: contextMessage,
           storeSlug,
           widgetOrigin,
-          isCurrent: () =>
+          post: (prefix, value) => post(target, prefix, value),
+          isCurrent: (conversationId, requestId) =>
             isCurrentTarget(frame, target, conversationId) &&
             activeContextRequestId === requestId,
-          post: (prefix, value) => post(target, prefix, value),
-        });
-        if (!challenge) return;
-        challengeToken = challenge.challengeToken;
-        challengeExpiresAt = challenge.expiresAt;
-        return;
-      }
-
-      if (contextMessage?.event === 'baci-commerce-context-ready') {
-        const { requestId, conversationId, contextToken, expiresAt } =
-          contextMessage.data;
-        if (
-          requestId !== activeContextRequestId ||
-          conversationId !== activeConversationId ||
-          !challengeToken ||
-          challengeExpiresAt <= Date.now() ||
-          expiresAt * 1000 <= Date.now()
-        ) {
-          post(target, 'baci-commerce-context-denied:', { requestId });
-          return;
-        }
-        const matchingChallenge = challengeToken;
-        let verified: Record<string, unknown> | null;
-        try {
-          verified = await postChatwootBridgeJson(
-            '/api/storefront/chatwoot/context/verify',
-            { challengeToken: matchingChallenge, contextToken },
-            storeSlug
-          );
-        } catch {
-          verified = null;
-        }
-        const contextStillCurrent =
-          isCurrentTarget(frame, target, conversationId) &&
-          activeContextRequestId === requestId &&
-          challengeToken === matchingChallenge;
-        if (
-          !contextStillCurrent ||
-          !verified ||
-          verified.authorized !== true ||
-          verified.requestId !== requestId ||
-          verified.conversationId !== conversationId ||
-          typeof verified.sessionToken !== 'string' ||
-          verified.sessionToken.length === 0 ||
-          verified.sessionToken.length > 12_000 ||
-          typeof verified.sessionExpiresAt !== 'number' ||
-          !Number.isSafeInteger(verified.sessionExpiresAt) ||
-          verified.sessionExpiresAt * 1000 <= Date.now()
-        ) {
-          if (contextStillCurrent) {
-            post(target, 'baci-commerce-context-denied:', { requestId });
-          }
-          return;
-        }
-        authorizedSessionToken = verified.sessionToken;
-        sessionExpiresAt = verified.sessionExpiresAt * 1000;
-        challengeToken = null;
-        challengeExpiresAt = 0;
-        post(target, 'baci-commerce-context-authorized:', {
-          requestId,
-          conversationId,
-          sessionToken: authorizedSessionToken,
-          sessionExpiresAt: verified.sessionExpiresAt,
+          begin: (conversationId, requestId) => {
+            activeConversationId = conversationId;
+            activeContextRequestId = requestId;
+            latestActionGeneration += 1;
+            challengeToken = null;
+            challengeExpiresAt = 0;
+            authorizedSessionToken = null;
+            initialSessionToken = null;
+            sessionTokenAliases.clear();
+            sessionExpiresAt = 0;
+            lineTokens.clear();
+          },
+          getChallenge: () => ({
+            token: challengeToken,
+            expiresAt: challengeExpiresAt,
+          }),
+          setChallenge: (token, expiresAt) => {
+            challengeToken = token;
+            challengeExpiresAt = expiresAt;
+          },
+          setAuthorized: (token, expiresAt) => {
+            authorizedSessionToken = token;
+            initialSessionToken = token;
+            sessionTokenAliases.clear();
+            rememberChatwootSessionToken(
+              sessionTokenAliases,
+              token,
+              initialSessionToken
+            );
+            sessionExpiresAt = expiresAt;
+          },
         });
         return;
       }
@@ -181,44 +141,42 @@ export function useChatwootInlineCartBridge(
       if (
         activeConversationId !== conversationId ||
         !authorizedSessionToken ||
-        authorizedSessionToken !== messageSessionToken ||
+        !sessionTokenAliases.has(messageSessionToken) ||
         sessionExpiresAt <= Date.now()
       ) {
-        if (message.event === 'baci-checkout-review-request') {
-          post(target, 'baci-checkout-review:', {
-            requestId,
-            status: 'unavailable',
-          });
-        } else if (message.event === 'baci-delivery-options-request') {
-          postDeliveryUnavailable(target, requestId);
-        }
-        return;
-      }
-      if (message.event === 'baci-cart-quantity') {
-        post(target, 'baci-cart-quantity-result:', {
+        postChatwootInlineCartActionFailure({
+          event: message.event,
           requestId,
-          accepted: false,
+          post: (prefix, value) => post(target, prefix, value),
         });
         return;
       }
-
       const actionTarget = target;
       const actionGeneration = ++latestActionGeneration;
       const requestedCartRef = latestState.current.sharedCartRef ?? null;
-      const { authorized, actionStillCurrent } =
-        await authorizeCurrentChatwootInlineAction({
-          sessionToken: messageSessionToken,
+      const requestedMerchantSlug = latestState.current.merchantSlug;
+      const { authorized, actionSessionToken, actionStillCurrent } =
+        await authorizeChatwootInlineCartAction({
+          isQuantityEdit: message.event === 'baci-cart-quantity',
+          sessionToken: authorizedSessionToken,
           storeSlug,
           actionGeneration,
           getLatestActionGeneration: () => latestActionGeneration,
+          isMessageTokenKnown: () =>
+            sessionTokenAliases.has(messageSessionToken),
+          tokenAliases: sessionTokenAliases,
+          initialSessionToken,
           requestedCartRef,
           getCurrentCartRef: () => latestState.current.sharedCartRef ?? null,
+          onSessionTokenRenewed: (token) => {
+            authorizedSessionToken = token;
+          },
         });
       if (
         !isCurrentTarget(frame, actionTarget, conversationId) ||
         !authorized ||
         authorized.conversationId !== conversationId ||
-        messageSessionToken !== authorizedSessionToken ||
+        !sessionTokenAliases.has(messageSessionToken) ||
         sessionExpiresAt <= Date.now() ||
         !actionStillCurrent
       ) {
@@ -226,20 +184,11 @@ export function useChatwootInlineCartBridge(
           isCurrentTarget(frame, actionTarget, conversationId) &&
           actionGeneration === latestActionGeneration
         ) {
-          if (message.event === 'baci-checkout-review-request') {
-            post(actionTarget, 'baci-checkout-review:', {
-              requestId,
-              status: 'unavailable',
-            });
-          } else if (message.event === 'baci-delivery-options-request') {
-            postDeliveryUnavailable(actionTarget, requestId);
-          } else if (message.event === 'baci-cart-request') {
-            post(actionTarget, 'baci-cart-view:', {
-              requestId,
-              ready: false,
-              items: [],
-            });
-          }
+          postChatwootInlineCartActionFailure({
+            event: message.event,
+            requestId,
+            post: (prefix, value) => post(actionTarget, prefix, value),
+          });
         }
         return;
       }
@@ -253,6 +202,78 @@ export function useChatwootInlineCartBridge(
         });
         return;
       }
+      if (message.event === 'baci-cart-quantity') {
+        await handleChatwootInlineCartQuantity({
+          conversationId,
+          getSessionToken: () => authorizedSessionToken ?? actionSessionToken,
+          isCurrentAction: () =>
+            isCurrentTarget(frame, actionTarget, conversationId) &&
+            actionGeneration === latestActionGeneration &&
+            sessionTokenAliases.has(messageSessionToken),
+          isCurrentCartContext: () => {
+            const currentCart = latestState.current.sharedCartRef;
+            return (
+              isCurrentTarget(frame, actionTarget, conversationId) &&
+              latestState.current.merchantSlug === requestedMerchantSlug &&
+              requestedCartRef !== null &&
+              currentCart?.cartId === requestedCartRef.cartId
+            );
+          },
+          isCurrentContext: () =>
+            isCurrentTarget(frame, actionTarget, conversationId) &&
+            sessionTokenAliases.has(messageSessionToken) &&
+            sessionExpiresAt > Date.now(),
+          lineTokens,
+          message,
+          onSessionTokenRenewed: (sessionToken) => {
+            // Renewal is context state, not reply state: a superseded action
+            // still rotated the browser proof, so a queued retry must see it.
+            // Only a renewal from a newer action replaces an already applied
+            // one, so a late older response cannot roll the token back.
+            if (
+              actionGeneration >= latestRenewedGeneration &&
+              sessionTokenAliases.has(messageSessionToken)
+            ) {
+              latestRenewedGeneration = actionGeneration;
+              rememberChatwootSessionToken(
+                sessionTokenAliases,
+                sessionToken,
+                initialSessionToken
+              );
+              authorizedSessionToken = sessionToken;
+            }
+          },
+          post: (value) =>
+            post(actionTarget, 'baci-cart-quantity-result:', value),
+          refreshSharedCart: latestState.current.refreshSharedCart,
+          sessionExpiresAt,
+          sessionToken: actionSessionToken,
+          snapshot: authorized.snapshot,
+          storeSlug,
+        });
+        return;
+      }
+      if (message.event === 'baci-delivery-options-request') {
+        await handleChatwootDeliveryOptionsAction({
+          requestId,
+          conversationId,
+          sessionToken: actionSessionToken,
+          state: message.data.state,
+          storeSlug,
+          snapshot: authorized.snapshot,
+          requestedCartRef,
+          getCurrentCartRef: () => latestState.current.sharedCartRef ?? null,
+          isCurrent: () =>
+            isCurrentTarget(frame, actionTarget, conversationId) &&
+            actionGeneration === latestActionGeneration &&
+            activeConversationId === conversationId &&
+            sessionTokenAliases.has(messageSessionToken) &&
+            sessionExpiresAt > Date.now(),
+          postResult: (result) =>
+            post(actionTarget, 'baci-delivery-options-result:', result),
+        });
+        return;
+      }
       if (message.event === 'baci-checkout-review-request') {
         post(
           actionTarget,
@@ -263,27 +284,6 @@ export function useChatwootInlineCartBridge(
             authorized.sessionExpiresAt
           )
         );
-        return;
-      }
-      if (message.event === 'baci-delivery-options-request') {
-        await handleChatwootDeliveryOptionsAction({
-          requestId,
-          conversationId,
-          sessionToken: messageSessionToken,
-          state: message.data.state,
-          storeSlug,
-          snapshot: authorized.snapshot,
-          requestedCartRef,
-          getCurrentCartRef: () => latestState.current.sharedCartRef ?? null,
-          isCurrent: () =>
-            isCurrentTarget(frame, actionTarget, conversationId) &&
-            actionGeneration === latestActionGeneration &&
-            activeConversationId === conversationId &&
-            authorizedSessionToken === messageSessionToken &&
-            sessionExpiresAt > Date.now(),
-          postResult: (result) =>
-            post(actionTarget, 'baci-delivery-options-result:', result),
-        });
         return;
       }
     }

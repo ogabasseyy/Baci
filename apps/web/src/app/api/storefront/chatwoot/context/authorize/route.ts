@@ -5,6 +5,7 @@ import { loadChatwootCartContext } from '@/lib/chatwoot/cart-context';
 import { projectChatwootCartReview } from '@/lib/chatwoot/cart-review-projection';
 import {
   ChatwootCommerceContextError,
+  rebindChatwootSessionCapability,
   verifyChatwootSessionCapability,
 } from '@/lib/chatwoot/commerce-context';
 import { checkCsrfProtection } from '@/lib/csrf';
@@ -40,16 +41,39 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const authorized = await verifyChatwootSessionCapability({
-      binding: cartContext.binding,
-      sessionToken: parsed.data.sessionToken,
-      state: cartContext.state,
-    });
-    // Keep cart identity in the same-origin host response, outside the snapshot
-    // that is projected to the untrusted Chatwoot widget.
+    let authorized: {
+      conversationId: number;
+      sessionExpiresAt: number;
+    };
+    let renewedSessionToken: string | undefined;
+    try {
+      authorized = await verifyChatwootSessionCapability({
+        binding: cartContext.binding,
+        sessionToken: parsed.data.sessionToken,
+        state: cartContext.state,
+      });
+    } catch (error) {
+      if (
+        !(error instanceof ChatwootCommerceContextError) ||
+        error.code !== 'invalid_context'
+      ) {
+        throw error;
+      }
+      const rebound = await rebindChatwootSessionCapability({
+        binding: cartContext.binding,
+        sessionToken: parsed.data.sessionToken,
+        state: cartContext.state,
+      });
+      authorized = rebound;
+      renewedSessionToken = rebound.sessionToken;
+    }
     const response = {
       authorized: true,
-      ...authorized,
+      conversationId: authorized.conversationId,
+      sessionExpiresAt: authorized.sessionExpiresAt,
+      ...(renewedSessionToken ? { sessionToken: renewedSessionToken } : {}),
+      // Keep cart identity in the same-origin host response, outside the
+      // snapshot that is projected to the untrusted Chatwoot widget.
       ...(includeCartSnapshot ? { cartId: cartContext.state.cartId } : {}),
     };
     if (includeCartSnapshot) {

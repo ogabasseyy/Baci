@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { eventPipelineChatwootCartCredentialPaths as paths } from './event-pipeline-chatwoot-cart-credential-paths';
 
-it('lists only the four context routes and their shared scoped-cart helper', () => {
+it('lists only the four context routes, the quantity route and their shared scoped-cart helper', () => {
   const helper = 'apps/web/src/lib/chatwoot/cart-context.ts';
   const tail = [
     'apps/web/src/lib/cart/scoped-client.ts',
@@ -27,6 +27,10 @@ it('lists only the four context routes and their shared scoped-cart helper', () 
     [
       'apps/web/src/app/api/storefront/chatwoot/context/delivery-options/route.ts',
       helper,
+      ...tail,
+    ],
+    [
+      'apps/web/src/app/api/storefront/chatwoot/cart/quantity/route.ts',
       ...tail,
     ],
     [helper, ...tail],

@@ -3,14 +3,28 @@ const MONNIFY_VEND_EVIDENCE_FIELDS = [
   'vendStatus',
   'transactionReference',
   'vendReference',
+  'paymentReference',
 ] as const;
 
-function carriesVendField(value: unknown): boolean {
+/**
+ * Inside responseBody a plain `status` is the vend's own status (the
+ * classifier reads it as a fallback for vendStatus). At the top level it is
+ * often just the HTTP status of an error body, so it is not read there.
+ */
+const MONNIFY_RESPONSE_BODY_EVIDENCE_FIELDS = [
+  ...MONNIFY_VEND_EVIDENCE_FIELDS,
+  'status',
+] as const;
+
+function carriesVendField(
+  value: unknown,
+  fields: readonly string[] = MONNIFY_VEND_EVIDENCE_FIELDS
+): boolean {
   if (!value || typeof value !== 'object') {
     return false;
   }
   const record = value as Record<string, unknown>;
-  return MONNIFY_VEND_EVIDENCE_FIELDS.some((field) => {
+  return fields.some((field) => {
     const value = record[field];
     return (
       (typeof value === 'string' && value.trim() !== '') ||
@@ -31,6 +45,9 @@ export function hasMonnifyVendEvidence(answer: unknown): boolean {
   }
   return (
     carriesVendField(answer) ||
-    carriesVendField((answer as Record<string, unknown>).responseBody)
+    carriesVendField(
+      (answer as Record<string, unknown>).responseBody,
+      MONNIFY_RESPONSE_BODY_EVIDENCE_FIELDS
+    )
   );
 }

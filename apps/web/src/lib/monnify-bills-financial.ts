@@ -144,7 +144,11 @@ export async function purchaseBill(
           // network: never a pre-vend refusal.
           !hasMonnifyVendEvidence(envelope) &&
           isMonnifyKnownVendRefusalText(rawMessage) &&
-          !isMonnifyVendOutcomeText(rawMessage) &&
+          // Outcome wording anywhere in the answer (e.g. a nested reason)
+          // rules it out, not just in the top-level message.
+          !isMonnifyVendOutcomeText(
+            `${rawMessage} ${JSON.stringify(envelope)}`
+          ) &&
           // Read the whole answer (code, message and body), so a duplicate
           // signalled anywhere in it is caught.
           !isMonnifyDuplicateReferenceText(

@@ -227,3 +227,21 @@ describe('bugfix: a 429 throttle never goes to Kuda', () => {
     });
   });
 });
+
+describe('bugfix: nested vend outcome or status fields keep a business rejection off Kuda', () => {
+  it.each([
+    { reason: 'Vend transaction failed' },
+    { status: 'FAILED' },
+    { paymentReference: 'MNFY-PAY-1' },
+  ])('keeps a refusal whose body has %j off Kuda', async (responseBody) => {
+    mockBusinessFailure({
+      responseCode: '01',
+      responseMessage: 'Insufficient wallet balance',
+      responseBody,
+    });
+
+    await expect(vend()).resolves.toMatchObject({
+      providerDefiniteFailure: false,
+    });
+  });
+});

@@ -8,6 +8,8 @@ describe('hasMonnifyVendEvidence', () => {
     { responseBody: { vendReference: 'BACI-REF-123' } },
     { responseBody: { transactionReference: 12345 } },
     { vendStatus: 'FAILED', responseMessage: 'Insufficient wallet balance' },
+    { responseBody: { status: 'FAILED' } },
+    { responseBody: { paymentReference: 'MNFY-PAY-1' } },
   ])('sees vend evidence in %j', (envelope) => {
     expect(hasMonnifyVendEvidence(envelope)).toBe(true);
   });
@@ -19,6 +21,7 @@ describe('hasMonnifyVendEvidence', () => {
     { responseBody: null },
     { responseBody: { reason: 'Low balance' } },
     { responseBody: { vendStatus: '  ', vendReference: null } },
+    { status: 400, error: 'Bad Request' },
   ])('sees no vend evidence in %j', (envelope) => {
     expect(hasMonnifyVendEvidence(envelope)).toBe(false);
   });

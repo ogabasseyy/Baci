@@ -218,6 +218,8 @@ async function readInventory(
     const rawProducts = (data ?? []) as unknown as RawDbProduct[];
     // Deterministic oversized pools resolve inside 'use cache' via the
     // maxProducts + 1 row probe (range(0, maxProducts)) without a COUNT(*) scan.
+    // Because budget.maxProducts (300) is below PostgREST's 1000-row cap and
+    // transient query errors throw above, any <= maxProducts result is complete.
     if (budget && rawProducts.length > budget.maxProducts) {
       return {
         ok: false as const,

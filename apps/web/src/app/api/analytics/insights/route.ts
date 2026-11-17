@@ -9,7 +9,7 @@ import {
   sanitizeAnalyticsInsightsContext,
 } from '@/lib/analytics/ollama-insights';
 import { authenticateApiRequest, hasPermission } from '@/lib/api-auth';
-import { generateCacheKey } from '@/lib/cache';
+import { cache, generateCacheKey } from '@/lib/cache';
 import {
   getMerchantForApiRequest,
   toUserAccess,
@@ -100,7 +100,9 @@ async function generateInsights(
   }
 
   async function readCachedInsights(): Promise<InsightsPayload | null> {
-    if (!redis) return null;
+    if (!redis) {
+      return cache.get<InsightsPayload>(cacheKey);
+    }
     try {
       const cached = await withRedisTimeout(
         redis.get<InsightsPayload>(cacheKey)
@@ -108,7 +110,7 @@ async function generateInsights(
       return cached ?? null;
     } catch (error) {
       console.warn('[analytics/insights] Redis cache read failed', error);
-      return null;
+      return cache.get<InsightsPayload>(cacheKey);
     }
   }
 
@@ -116,11 +118,15 @@ async function generateInsights(
     payload: InsightsPayload,
     ttlSeconds: number
   ): Promise<void> {
-    if (!redis) return;
+    if (!redis) {
+      cache.set(cacheKey, payload, ttlSeconds);
+      return;
+    }
     try {
       await withRedisTimeout(redis.set(cacheKey, payload, { ex: ttlSeconds }));
     } catch (error) {
       console.warn('[analytics/insights] Redis cache write failed', error);
+      cache.set(cacheKey, payload, ttlSeconds);
     }
   }
 

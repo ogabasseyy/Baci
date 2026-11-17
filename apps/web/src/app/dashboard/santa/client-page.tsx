@@ -60,9 +60,18 @@ export default function SantaClientPage() {
 
       attempts += 1;
       inFlight = true;
-      Promise.all([
-        getSantaStats(merchantId),
-        getRecentInteractions(merchantId),
+      let timeoutId: ReturnType<typeof setTimeout> | null = null;
+      Promise.race([
+        Promise.all([
+          getSantaStats(merchantId),
+          getRecentInteractions(merchantId),
+        ]),
+        new Promise<never>((_, reject) => {
+          timeoutId = setTimeout(
+            () => reject(new Error('Santa poll request timed out')),
+            15_000
+          );
+        }),
       ])
         .then(([fetchedStats, fetchedInteractions]) => {
           if (isStale) return;
@@ -73,6 +82,7 @@ export default function SantaClientPage() {
           console.error('Failed to load Santa data', error);
         })
         .finally(() => {
+          if (timeoutId !== null) clearTimeout(timeoutId);
           inFlight = false;
           if (isStale) return;
           setLoading(false);

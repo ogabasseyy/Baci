@@ -99,6 +99,7 @@ export function useWalletFundingPolling({
   const activeIntentIdRef = useRef(intentId);
   const [prevIntentId, setPrevIntentId] = useState(intentId);
   const [pollingExhausted, setPollingExhausted] = useState(false);
+  const [pollGeneration, setPollGeneration] = useState(0);
 
   // Render-phase reset so consumers never read the previous intent's status for
   // a frame after a new intent opens. React "adjusting state during render".
@@ -130,6 +131,7 @@ export function useWalletFundingPolling({
   const status = intent?.status;
   const stopped = status ? isTerminalWalletFundingIntentStatus(status) : false;
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: pollGeneration intentionally re-arms the 60-attempt interval on manual checkNow after exhaustion.
   useEffect(() => {
     if (!enabled || !intentId || stopped) {
       return;
@@ -209,7 +211,15 @@ export function useWalletFundingPolling({
         document.removeEventListener('visibilitychange', handleVisibilityChange);
       }
     };
-  }, [enabled, intentId, merchantId, merchantSlug, pollIntervalMs, stopped]);
+  }, [
+    enabled,
+    intentId,
+    merchantId,
+    merchantSlug,
+    pollGeneration,
+    pollIntervalMs,
+    stopped,
+  ]);
 
   const checkNow = () => {
     if (!(enabled && intentId) || stopped || inFlightRef.current) {
@@ -219,7 +229,11 @@ export function useWalletFundingPolling({
     // changes before the request resolves, the callback is dropped so a stale
     // `completed` can never be applied to a different transfer.
     const requestedIntentId = intentId;
-    setPollingExhausted(false);
+    if (pollingExhausted) {
+      setPollingExhausted(false);
+      setPollGeneration((current) => current + 1);
+      return;
+    }
     void runPollAttempt({
       completedRef,
       fetchArgs: { intentId, merchantId, merchantSlug },

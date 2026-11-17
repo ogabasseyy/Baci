@@ -106,7 +106,7 @@ export async function revalidateScheduledPostsByMerchant(
         const purgeSlugs = Array.from(
           new Set(
             merchantPosts.postSlugs
-              .map((slug) => slug?.trim().toLowerCase())
+              .map((slug) => slug?.trim())
               .filter((slug): slug is string => Boolean(slug))
           )
         );

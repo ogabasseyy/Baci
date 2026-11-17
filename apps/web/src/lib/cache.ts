@@ -24,7 +24,8 @@ class InMemoryCache {
 
   /**
    * Lazily evict expired entries on write without module-level timers.
-   * Size-triggered pruning is throttled and bounded to avoid full-map scans on every set().
+   * Expired entries are also evicted on read in get(), and set() enforces
+   * an O(1) bounded LRU cap of MAX_CACHE_ENTRIES (1000) for live entries.
    */
   private pruneExpired(now: number): void {
     const intervalElapsed = now - this.lastPruneAt >= LAZY_PRUNE_INTERVAL_MS;

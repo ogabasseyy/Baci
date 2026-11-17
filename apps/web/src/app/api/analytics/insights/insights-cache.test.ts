@@ -25,7 +25,7 @@ describe('insights-cache', () => {
   it('falls back to in-memory cache when Redis is null', async () => {
     const payload = {
       insights: [
-        { title: 'T', description: 'D', type: 'info', priority: 'low' },
+        { title: 'T', description: 'D', type: 'positive', priority: 'low' },
       ],
     };
     mockGetRedis.mockReturnValue(null);
@@ -36,10 +36,19 @@ describe('insights-cache', () => {
     expect(mockCacheSet).toHaveBeenCalledWith('k1', payload, 60);
   });
 
+  it('rejects malformed Redis payloads via schema validation', async () => {
+    mockGetRedis.mockReturnValue({
+      get: vi.fn().mockResolvedValue({ unexpected: true }),
+    });
+    mockCacheGet.mockReturnValue(null);
+
+    await expect(readCachedInsights('k-bad')).resolves.toBeNull();
+  });
+
   it('writes both local cache and Redis when Redis is configured', async () => {
     const payload = {
       insights: [
-        { title: 'T', description: 'D', type: 'info', priority: 'low' },
+        { title: 'T', description: 'D', type: 'positive', priority: 'low' },
       ],
     };
     const redisSet = vi.fn().mockResolvedValue('OK');

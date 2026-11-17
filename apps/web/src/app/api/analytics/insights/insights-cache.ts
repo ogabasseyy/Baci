@@ -1,5 +1,6 @@
 import { cache } from '@/lib/cache';
 import { getRedis } from '@/lib/redis';
+import { analyticsInsightsSchema } from '@/schemas/analytics-insights';
 
 export interface InsightsPayload {
   insights: Array<{
@@ -12,6 +13,12 @@ export interface InsightsPayload {
 }
 
 const REDIS_CACHE_TIMEOUT_MS = 750;
+
+function parseCachedInsights(value: unknown): InsightsPayload | null {
+  if (!value) return null;
+  const parsed = analyticsInsightsSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
 
 async function withRedisTimeout<T>(operation: Promise<T>): Promise<T> {
   // @upstash/redis commands do not accept an AbortSignal per call, so race
@@ -37,14 +44,17 @@ export async function readCachedInsights(
 ): Promise<InsightsPayload | null> {
   const redis = getRedis();
   if (!redis) {
-    return cache.get<InsightsPayload>(cacheKey);
+    return parseCachedInsights(cache.get<InsightsPayload>(cacheKey));
   }
   try {
     const cached = await withRedisTimeout(redis.get<InsightsPayload>(cacheKey));
-    return cached ?? cache.get<InsightsPayload>(cacheKey);
+    return (
+      parseCachedInsights(cached) ??
+      parseCachedInsights(cache.get<InsightsPayload>(cacheKey))
+    );
   } catch (error) {
     console.warn('[analytics/insights] Redis cache read failed', error);
-    return cache.get<InsightsPayload>(cacheKey);
+    return parseCachedInsights(cache.get<InsightsPayload>(cacheKey));
   }
 }
 

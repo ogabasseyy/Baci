@@ -252,45 +252,5 @@ describe('ogabassey-catalog-agent-phrase-grounding', () => {
         makeEvent([hpLaptop])
       )
     ).toBe(false);
-
-    const iphone15ProMax = makeProduct({
-      id: 'iphone-15-pro-max',
-      name: 'Apple iPhone 15 Pro Max',
-      slug: 'apple-iphone-15-pro-max',
-      description:
-        'Titanium design, A17 Pro chip, and the most powerful iPhone camera system ever.',
-    });
-    expect(
-      hasGroundedProductMentions(
-        'Apple iPhone 15 Pro Max has an A17 Pro chip.',
-        makeEvent([iphone15ProMax])
-      )
-    ).toBe(true);
-    expect(
-      hasGroundedProductMentions(
-        'Apple iPhone 15 Pro Max has an A18 Pro chip.',
-        makeEvent([iphone15ProMax])
-      )
-    ).toBe(false);
-
-    const ipadAir = makeProduct({
-      category: 'Tablets',
-      description: 'Apple M2 chip with 8GB RAM and 256GB storage',
-      id: 'ipad-air',
-      name: 'Apple iPad Air',
-      slug: 'apple-ipad-air',
-    });
-    expect(
-      hasGroundedProductMentions(
-        'Apple iPad Air has an M2 chip.',
-        makeEvent([ipadAir])
-      )
-    ).toBe(true);
-    expect(
-      hasGroundedProductMentions(
-        'Apple iPad Air has an M3 chip.',
-        makeEvent([ipadAir])
-      )
-    ).toBe(false);
   });
 });

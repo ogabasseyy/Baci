@@ -94,7 +94,7 @@ export function allowsDescriptionFeature(
 }
 
 const FEATURE_VERSION_PREFIXES = new Set(
-  'wifi bluetooth usb hdmi pcie thunderbolt displayport ufs lpddr ddr emmc nvme magsafe ios ipados macos watchos android windows ip snapdragon dimensity exynos helio kirin tensor ryzen radeon geforce rtx gtx'.split(
+  'wifi bluetooth usb hdmi pcie thunderbolt displayport ufs lpddr ddr emmc nvme magsafe ios ipados macos watchos android windows ip snapdragon dimensity exynos helio kirin tensor ryzen radeon geforce rtx gtx amoled oled ltpo qled'.split(
     ' '
   )
 );

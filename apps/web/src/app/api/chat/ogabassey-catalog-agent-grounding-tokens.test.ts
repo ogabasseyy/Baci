@@ -84,5 +84,7 @@ describe('ogabassey-catalog-agent-grounding-tokens', () => {
       isFeatureVersionPhrase(['gen', '3'], ['with', 'snapdragon', '8'])
     ).toBe(true);
     expect(isFeatureVersionPhrase(['android', 'tablet', '15'])).toBe(false);
+    expect(isFeatureVersionPhrase(['dynamic', 'amoled', '2x'])).toBe(true);
+    expect(isFeatureVersionPhrase(['amoled', '2x'], ['dynamic'])).toBe(true);
   });
 });

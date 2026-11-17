@@ -6,6 +6,7 @@ import {
 } from './ogabassey-catalog-agent-grounding-tokens';
 import {
   CAPITALIZED_PHRASE_IGNORE,
+  CONDITIONAL_PRODUCT_PREDECESSOR_WORDS,
   KNOWN_BRAND_OR_LINE_TOKENS,
   NON_PRODUCT_PREDECESSOR_WORDS,
   VARIANT_TIER_TOKENS,
@@ -117,8 +118,8 @@ export function hasUnreturnedProductPhrase(
     }
   }
   for (const match of clause.matchAll(LOWERCASE_MODEL_NUMBER_PATTERN)) {
-    if (NON_PRODUCT_PREDECESSOR_WORDS.has(match[1]?.toLowerCase() ?? ''))
-      continue;
+    const pred = match[1]?.toLowerCase() ?? '';
+    if (NON_PRODUCT_PREDECESSOR_WORDS.has(pred)) continue;
     const matchIndex = match.index ?? 0;
     const before = clause
       .slice(0, matchIndex)
@@ -127,6 +128,17 @@ export function hasUnreturnedProductPhrase(
     const matchEnd = matchIndex + match[0].length;
     const after = clause.slice(matchEnd).split(/[.,;!?]/)[0];
     const precedingWords = extractPhraseWords(before ?? '');
+    if (
+      CONDITIONAL_PRODUCT_PREDECESSOR_WORDS.has(pred) &&
+      !(
+        match[2] !== undefined &&
+        precedingWords
+          .slice(-2)
+          .some((token) => KNOWN_BRAND_OR_LINE_TOKENS.has(token))
+      )
+    ) {
+      continue;
+    }
     const followingWords = extractPhraseWords(after ?? '');
     const baseWords = extractPhraseWords(match[0]);
     const trailingVersion =

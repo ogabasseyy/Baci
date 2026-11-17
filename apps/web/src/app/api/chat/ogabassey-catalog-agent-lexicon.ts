@@ -1,5 +1,11 @@
 export const NON_PRODUCT_PREDECESSOR_WORDS = new Set(
-  'for at from with within under below over above around about costs cost only has have just option options step chapter item version generation gen year january february march april may june july august september october november december ngn naira usd eur gbp the and your our their its this that these those any some all fits fit full high good best more laptop laptops phone phones tablet tablets headphones headset earbuds speaker monitor camera max mini plus pro'.split(
+  'for at from with within under below over above around about costs cost only has have just option options step chapter item version generation gen year january february march april may june july august september october november december ngn naira usd eur gbp the and your our their its this that these those any some all fits fit full high good best more'.split(
+    ' '
+  )
+);
+
+export const CONDITIONAL_PRODUCT_PREDECESSOR_WORDS = new Set(
+  'laptop laptops phone phones tablet tablets headphones headset earbuds speaker monitor camera max mini plus pro'.split(
     ' '
   )
 );

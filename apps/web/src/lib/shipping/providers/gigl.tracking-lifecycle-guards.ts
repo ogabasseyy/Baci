@@ -2,11 +2,8 @@ import {
   GIGL_ARRIVED_IN_CITY_RAW_STATUS,
   GIGL_PICKUP_EN_ROUTE_RAW_STATUS,
 } from '@/lib/shipping/gigl-tracking-notification-policy-matrix';
-import {
-  type Guardable,
-  isMshc,
-  TERMINAL_STATUSES,
-} from './gigl.tracking-status-rank';
+import { isMshc } from './gigl.tracking-mshc';
+import { type Guardable, TERMINAL_STATUSES } from './gigl.tracking-status-rank';
 
 const PLACE_NOISE_WORDS = new Set(['FCT', 'STATE', 'CITY', 'THE', 'OF']);
 // Intentionally narrow: other in_transit scans at a destination-named centre

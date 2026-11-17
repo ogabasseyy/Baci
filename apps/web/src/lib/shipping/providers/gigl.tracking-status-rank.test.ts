@@ -34,4 +34,10 @@ describe('currentStatusRank', () => {
       currentStatusRank(scan('SDR', 'failed'))
     );
   });
+
+  it('does not rank a genuine pickup assignment below same-time shipment creation', () => {
+    expect(currentStatusRank(scan('MAPT', 'pickup_scheduled'))).toBe(
+      currentStatusRank(scan('MCRT', 'booked'))
+    );
+  });
 });

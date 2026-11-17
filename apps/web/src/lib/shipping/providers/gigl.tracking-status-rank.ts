@@ -1,4 +1,5 @@
 import type { TrackingEvent } from '../types';
+import { isMshc } from './gigl.tracking-mshc';
 
 export type Guardable = {
   event: TrackingEvent;
@@ -6,10 +7,6 @@ export type Guardable = {
   /** The provider's own status code, before notification-specific rewrites. */
   providerStatus: string;
 };
-
-export function isMshc(candidate: Guardable): number {
-  return candidate.providerStatus.trim().toUpperCase() === 'MSHC' ? 1 : 0;
-}
 
 export const TERMINAL_STATUSES: ReadonlySet<string> = new Set([
   'delivered',
@@ -30,7 +27,11 @@ export function currentStatusRank(candidate: Guardable): number {
   ) {
     return 3;
   }
-  // A demoted (pickup-run) MSHC must not outrank a completed pickup.
-  if (candidate.recognizedStatus === 'pickup_scheduled') return 0;
+  // Only a demoted (pickup-run) MSHC must not outrank a completed pickup; a
+  // genuine pickup assignment (MAPT) keeps the normal rank so it is not
+  // pushed below same-time events such as shipment creation.
+  if (candidate.recognizedStatus === 'pickup_scheduled' && isMshc(candidate)) {
+    return 0;
+  }
   return isMshc(candidate) ? 2 : 1;
 }

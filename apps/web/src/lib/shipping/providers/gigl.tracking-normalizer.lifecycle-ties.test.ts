@@ -149,3 +149,20 @@ describe('bugfix: a stale MSHC after delivery is not rewritten to pickup', () =>
     );
   });
 });
+
+describe('bugfix: same-time pickup assignment and shipment creation keep payload order', () => {
+  it('keeps pickup_scheduled when MAPT is listed before MCRT at the same time', () => {
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W29',
+        MobileShipmentTrackings: [
+          event('MAPT', '10:00:00'),
+          event('MCRT', '10:00:00'),
+        ],
+      },
+      'W29',
+      OBSERVED_AT
+    );
+    expect(result.status).toBe('pickup_scheduled');
+  });
+});

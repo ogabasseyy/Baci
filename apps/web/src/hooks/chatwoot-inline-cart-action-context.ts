@@ -6,14 +6,13 @@ type SharedCartRef = { cartId: string; version: number } | null | undefined;
  * stops once the frame, conversation, session or cart it started with is gone.
  */
 export function createChatwootInlineActionContext(input: {
-  actionGeneration: number;
-  getLatestGeneration: () => number;
   getCartState: () => {
     merchantSlug: string | null | undefined;
     sharedCartRef?: SharedCartRef;
   };
   getSessionExpiresAt: () => number;
   hasSessionAlias: () => boolean;
+  isCurrentGeneration: () => boolean;
   isCurrentTarget: () => boolean;
   onSessionTokenRenewed: (sessionToken: string) => void;
   requestedCartRef: SharedCartRef;
@@ -22,7 +21,7 @@ export function createChatwootInlineActionContext(input: {
   return {
     isCurrentAction: () =>
       input.isCurrentTarget() &&
-      input.actionGeneration === input.getLatestGeneration() &&
+      input.isCurrentGeneration() &&
       input.hasSessionAlias(),
     isCurrentCartContext: () => {
       const current = input.getCartState();
@@ -37,11 +36,15 @@ export function createChatwootInlineActionContext(input: {
       input.isCurrentTarget() &&
       input.hasSessionAlias() &&
       input.getSessionExpiresAt() > Date.now(),
+    /** A read-only product lookup: current while its own context is live. */
+    isCurrentLookup: () =>
+      input.isCurrentTarget() &&
+      input.isCurrentGeneration() &&
+      input.hasSessionAlias() &&
+      input.getSessionExpiresAt() > Date.now() &&
+      input.getCartState().merchantSlug === input.requestedMerchantSlug,
     onSessionTokenRenewed: (sessionToken: string) => {
-      if (
-        input.actionGeneration === input.getLatestGeneration() &&
-        input.hasSessionAlias()
-      ) {
+      if (input.isCurrentGeneration() && input.hasSessionAlias()) {
         input.onSessionTokenRenewed(sessionToken);
       }
     },

@@ -4,6 +4,7 @@ import type { CartSnapshot } from '@baci/shared/cart';
 import { reportCartCookieStorageFailure } from './cart-cookie-storage-failure';
 import { isCartCookieEpochCurrent } from './cart-cross-tab-lock';
 import { saveSharedCartImportReceipt } from './cart-storage';
+import { resolveUnsettledCartAdoption } from './shared-cart-adoption-wait';
 import { bootstrapSharedCart, createSharedCart } from './shared-cart-client';
 import type { EnsureCartResult } from './shared-cart-hook-support';
 import { createImportFinisher } from './shared-cart-import-finish';
@@ -17,9 +18,19 @@ import {
 } from './shared-cart-storage';
 import type { SharedCartRuntime } from './use-shared-cart-runtime';
 
+type EnsureCartFlight = {
+  generation: number;
+  merchantId: string;
+  merchantSlug: string | null;
+  promise: Promise<EnsureCartResult>;
+};
+
 export function createCartProvisioning(
   context: SharedCartRuntime & {
     hydrateMissing?: (snapshot: CartSnapshot) => Promise<void>;
+    ensureCartFlightRef?: {
+      current: EnsureCartFlight | null;
+    };
   }
 ) {
   const {
@@ -40,8 +51,9 @@ export function createCartProvisioning(
   const createSourceIdsRef = context.createSourceIdsRef ?? {
     current: [] as Array<{ cartItemId: string; quantity: number }>,
   };
+  const ensureCartFlightRef = context.ensureCartFlightRef ?? { current: null };
 
-  async function ensureCart(
+  async function ensureCartOnce(
     canProceed: () => boolean = () => true
   ): Promise<EnsureCartResult> {
     if (reportCartCookieStorageFailure(dispatch, generationRef.current))
@@ -98,14 +110,10 @@ export function createCartProvisioning(
       createRequestRef.current = null;
       importOpIdsRef.current = new Set();
     }
-    // Defensive: the sender only runs once linked, so adoption has
-    // settled by the time these paths are reachable.
-    const unsettled = {
-      code: 'temporarily_unavailable' as const,
-      ok: false as const,
-      retryable: true,
-    };
-    if (adoptOutcomeRef.current === 'unknown') return unsettled;
+    if (adoptOutcomeRef.current === 'unknown')
+      return resolveUnsettledCartAdoption(adoptOutcomeRef, live, () =>
+        ensureCartOnce(canProceed)
+      );
     if (
       adoptOutcomeRef.current === 'none' ||
       adoptOutcomeRef.current === 'expired'
@@ -204,7 +212,7 @@ export function createCartProvisioning(
           context,
           merchantSlug,
           fenced,
-          () => ensureCart(canProceed)
+          () => ensureCartOnce(canProceed)
         );
         if (adopted) return adopted;
         if (!fenced()) return null;
@@ -232,7 +240,7 @@ export function createCartProvisioning(
         // key with a different body would be an idempotency conflict.
         createOpRef.current = crypto.randomUUID();
         createRequestRef.current = { operationId: createOpRef.current };
-        return ensureCart(canProceed);
+        return ensureCartOnce(canProceed);
       }
       return { code: created.code, ok: false, retryable: created.retryable };
     }
@@ -255,6 +263,34 @@ export function createCartProvisioning(
       });
     }
     return { ok: true };
+  }
+
+  async function ensureCart(
+    canProceed: () => boolean = () => true
+  ): Promise<EnsureCartResult> {
+    const current = ensureCartFlightRef.current;
+    if (
+      current &&
+      current.generation === context.sessionGeneration &&
+      current.merchantId === context.merchantId &&
+      current.merchantSlug === context.merchantSlug
+    ) {
+      return current.promise;
+    }
+    const flight: EnsureCartFlight = {
+      generation: context.sessionGeneration,
+      merchantId: context.merchantId,
+      merchantSlug: context.merchantSlug,
+      promise: ensureCartOnce(canProceed),
+    };
+    ensureCartFlightRef.current = flight;
+    try {
+      return await flight.promise;
+    } finally {
+      if (ensureCartFlightRef.current === flight) {
+        ensureCartFlightRef.current = null;
+      }
+    }
   }
 
   const finishImportOp = createImportFinisher(context);

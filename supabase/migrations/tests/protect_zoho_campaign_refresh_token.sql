@@ -43,8 +43,9 @@ BEGIN
   END IF;
 END $$;
 
-INSERT INTO public.merchants(id, user_id)
-VALUES ('aaaaaaaa-5555-4555-8555-aaaaaaaaaaaa', 'bbbbbbbb-6666-4666-8666-bbbbbbbbbbbb');
+INSERT INTO public.merchants(id, user_id, email, business_name, slug)
+VALUES ('aaaaaaaa-5555-4555-8555-aaaaaaaaaaaa', 'bbbbbbbb-6666-4666-8666-bbbbbbbbbbbb',
+        'zoho-owner@example.test', 'Zoho Test Store', 'zoho-test-store');
 INSERT INTO public.merchant_feature_settings(merchant_id)
 VALUES ('aaaaaaaa-5555-4555-8555-aaaaaaaaaaaa')
 ON CONFLICT (merchant_id) DO NOTHING;

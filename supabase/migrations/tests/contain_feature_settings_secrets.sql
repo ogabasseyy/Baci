@@ -76,8 +76,9 @@ BEGIN
 END $$;
 
 -- Behaviour: owner sees booleans only; a stranger gets NULL; direct read denied.
-INSERT INTO public.merchants(id, user_id)
-VALUES ('aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa', 'bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb');
+INSERT INTO public.merchants(id, user_id, email, business_name, slug)
+VALUES ('aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa', 'bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb',
+        'r2-owner@example.test', 'R2 Test Store', 'r2-test-store');
 INSERT INTO public.merchant_feature_settings(merchant_id, facebook_capi_token, ga4_api_secret)
 VALUES ('aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa', 'synthetic-meta-token', '   ')
 ON CONFLICT (merchant_id) DO UPDATE
@@ -109,7 +110,7 @@ DO $$
 DECLARE v_ctx jsonb; v_fs jsonb;
 BEGIN
   v_ctx := public.get_user_merchant_context();
-  v_fs := v_ctx -> 'feature_settings';
+  v_fs := v_ctx -> 'merchant' -> 'feature_settings';
   IF v_fs IS NULL THEN
     RAISE EXCEPTION 'R2: context RPC returned no feature_settings for the owner';
   END IF;

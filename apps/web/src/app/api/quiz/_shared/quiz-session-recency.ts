@@ -94,14 +94,19 @@ export async function wasSessionCheckedRecently(
   const redis = getRedis();
   if (!redis) return false;
   try {
-    const stored = await withinDeadline(
-      redis.get<number>(`${SHARED_KEY_PREFIX}${keyFor(token)}`),
+    const raw = await withinDeadline(
+      redis.get<number | string>(`${SHARED_KEY_PREFIX}${keyFor(token)}`),
       SHARED_STORE_DEADLINE_MS
     );
-    if (stored === DEADLINE_PASSED) {
+    if (raw === DEADLINE_PASSED) {
       warnSharedStoreTrouble('read', now);
       return false;
     }
+    // The client hands numbers back as numbers; a digits-only string is
+    // accepted too, so a different wire encoding cannot silently disable
+    // the shared store.
+    const stored =
+      typeof raw === 'string' && /^\d+$/.test(raw) ? Number(raw) : raw;
     if (typeof stored !== 'number' || !Number.isFinite(stored)) return false;
     if (stored - now > MAX_CLOCK_SKEW_MS) return false;
     // Keep the time of the original check, never a later one, so the two

@@ -140,6 +140,13 @@ describe('quiz session recency shared store', () => {
     expect(await wasSessionCheckedRecently('token-far', 1_000)).toBe(false);
   });
 
+  it('accepts a check time that comes back as a digits-only string', async () => {
+    const store = useSharedStore();
+    store.get.mockResolvedValueOnce('1000');
+
+    expect(await wasSessionCheckedRecently('token-a', 2_000)).toBe(true);
+  });
+
   it('ignores a stored value that is not a time', async () => {
     const store = useSharedStore();
     store.get.mockResolvedValueOnce('yes');

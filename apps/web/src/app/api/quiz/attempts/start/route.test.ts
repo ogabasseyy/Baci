@@ -23,6 +23,16 @@ vi.mock('@/lib/api-auth', () => ({
     /^\s*bearer(?:\s|$)/i.test(request.headers.get('Authorization') ?? ''),
 }));
 
+// requireQuizUser verifies a bearer token locally before it asks Supabase
+// Auth. These tests use a placeholder token, so local verification is
+// stubbed as passing; the Supabase Auth lookup below still decides the user.
+vi.mock('@/lib/quiz/quiz-access-token', () => ({
+  verifyQuizAccessToken: async () => ({
+    status: 'verified',
+    userId: '00000000-0000-4000-8000-000000000001',
+  }),
+}));
+
 vi.mock('@/lib/supabase/anon', () => ({
   createAnonClient: vi.fn(),
 }));

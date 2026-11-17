@@ -5,6 +5,7 @@ import { verifyQuizAccessToken } from '@/lib/quiz/quiz-access-token';
 import { createAnonClient } from '@/lib/supabase/anon';
 import { createScopedClient } from '@/lib/supabase/scoped';
 import { createClient } from '@/lib/supabase/server';
+import { resetAuthFallbackBudgetForTesting } from './quiz-auth-fallback-budget';
 import { requireQuizUser } from './route-auth';
 
 // Bearer (mobile app) path of requireQuizUser. The cookie path and the static
@@ -65,10 +66,16 @@ describe('quiz route-auth bearer authentication', () => {
 
   beforeEach(() => {
     getUser.mockReset();
+    resetAuthFallbackBudgetForTesting();
     vi.mocked(createAnonClient).mockReturnValue({
       auth: { getUser },
     } as never);
     vi.mocked(createScopedClient).mockReturnValue(scoped as never);
+    // Every route verifies the token locally first; tests override this.
+    vi.mocked(verifyQuizAccessToken).mockResolvedValue({
+      status: 'verified',
+      userId: USER_UUID,
+    });
   });
 
   it('verifies locally without calling Supabase Auth', async () => {
@@ -193,7 +200,7 @@ describe('quiz route-auth bearer authentication', () => {
     expect(result.response?.headers.get('Retry-After')).toBe('5');
   });
 
-  it('requireFreshSession always uses the network and skips local verification', async () => {
+  it('requireFreshSession asks Supabase Auth even for a token it verified locally', async () => {
     getUser.mockResolvedValue({
       data: { user: { id: USER_UUID } },
       error: null,
@@ -203,7 +210,7 @@ describe('quiz route-auth bearer authentication', () => {
       requireFreshSession: true,
     });
 
-    expect(verifyQuizAccessToken).not.toHaveBeenCalled();
+    expect(verifyQuizAccessToken).toHaveBeenCalledWith('token-123');
     expect(getUser).toHaveBeenCalledWith('token-123');
     expect(result.user).toEqual({ id: USER_UUID });
   });

@@ -5,6 +5,7 @@ import { verifyQuizAccessToken } from '@/lib/quiz/quiz-access-token';
 import { createAnonClient } from '@/lib/supabase/anon';
 import { createScopedClient } from '@/lib/supabase/scoped';
 import { createClient } from '@/lib/supabase/server';
+import { takeAuthFallbackSlot } from './quiz-auth-fallback-budget';
 import {
   getSafeAuthErrorFields,
   isMissingAuthSession,
@@ -36,7 +37,12 @@ export type QuizAuthUser = { id: string };
 // - requireRecentSession (answers, resume): signature on every request,
 //   Supabase Auth at most once a minute per token.
 // - requireFreshSession (start, attestation, claims, awards): Supabase Auth on
-//   every request; these fail closed when Supabase Auth cannot answer.
+//   every request; these fail closed when Supabase Auth cannot answer, or
+//   does not within four seconds.
+// Whatever the option, the token is verified locally first. One that is
+// provably bad is refused without a Supabase Auth call, and one this process
+// cannot verify itself goes to Supabase Auth only within a per-instance
+// budget, so made-up tokens cannot be turned into a flood of Auth calls.
 // These options shape the app's bearer path only. A browser (cookie) session
 // is asked of Supabase Auth on every request whatever the option, because
 // that call also refreshes the cookie, and it fails closed with a 503. Live
@@ -103,6 +109,8 @@ function authUnavailableResult() {
 // token through. Auth normally answers in well under 100 ms; the wait comes
 // out of the player's time on the question.
 const RECENT_SESSION_AUTH_DEADLINE_MS = 1_000;
+// Longest a route that must fail closed waits before answering 503.
+const FRESH_SESSION_AUTH_DEADLINE_MS = 4_000;
 
 async function checkBearerWithSupabaseAuth(
   token: string,
@@ -166,42 +174,46 @@ export async function requireQuizUser(
   if (request && hasBearerScheme) {
     if (!bearerToken) return unauthorizedResult();
 
-    if (options.requireFreshSession) {
-      return checkBearerWithSupabaseAuth(bearerToken);
-    }
-
     const verified = await verifyQuizAccessToken(bearerToken);
-    if (verified.status === 'verified') {
-      if (
-        options.requireRecentSession &&
-        !(await wasSessionCheckedRecently(bearerToken))
-      ) {
-        // Not logged per request: during an Auth outage this runs for every
-        // answer, and the routes that must fail closed already log it.
-        const session = await checkBearerWithSupabaseAuth(bearerToken, {
-          deadlineMs: RECENT_SESSION_AUTH_DEADLINE_MS,
-          logOutage: false,
-        });
-        if (session.response === null || session.response.status === 401) {
-          return session;
-        }
-        // Supabase Auth could not answer, or not within a second. The
-        // signature is valid, so let the answer through instead of costing
-        // the player a question (see requireRecentSession for what this
-        // exposes); nothing is remembered, so the next request asks again.
-        noteSessionCheckSkipped();
-      }
-      return {
-        authMethod: 'bearer',
-        response: null,
-        supabase: createScopedClient(
-          bearerToken
-        ) as unknown as ServerSupabaseClient,
-        user: { id: verified.userId },
-      };
-    }
     if (verified.status === 'invalid') return unauthorizedResult();
-    return checkBearerWithSupabaseAuth(bearerToken);
+    if (verified.status === 'unverifiable') {
+      if (!takeAuthFallbackSlot()) return authUnavailableResult();
+      return checkBearerWithSupabaseAuth(bearerToken, {
+        deadlineMs: FRESH_SESSION_AUTH_DEADLINE_MS,
+      });
+    }
+    if (options.requireFreshSession) {
+      return checkBearerWithSupabaseAuth(bearerToken, {
+        deadlineMs: FRESH_SESSION_AUTH_DEADLINE_MS,
+      });
+    }
+    if (
+      options.requireRecentSession &&
+      !(await wasSessionCheckedRecently(bearerToken))
+    ) {
+      // Not logged per request: during an Auth outage this runs for every
+      // answer, and the routes that must fail closed already log it.
+      const session = await checkBearerWithSupabaseAuth(bearerToken, {
+        deadlineMs: RECENT_SESSION_AUTH_DEADLINE_MS,
+        logOutage: false,
+      });
+      if (session.response === null || session.response.status === 401) {
+        return session;
+      }
+      // Supabase Auth could not answer, or not within a second. The
+      // signature is valid, so let the answer through instead of costing
+      // the player a question (see requireRecentSession for what this
+      // exposes); nothing is remembered, so the next request asks again.
+      noteSessionCheckSkipped();
+    }
+    return {
+      authMethod: 'bearer',
+      response: null,
+      supabase: createScopedClient(
+        bearerToken
+      ) as unknown as ServerSupabaseClient,
+      user: { id: verified.userId },
+    };
   }
 
   const supabase = (await createClient()) as unknown as ServerSupabaseClient;

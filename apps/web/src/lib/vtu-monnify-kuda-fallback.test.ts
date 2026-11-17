@@ -1,9 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { VtuConcurrentUpdateError } from '@/lib/vtu-concurrent-update-error';
-import {
-  executeMonnifyAirtimeKudaFallback,
-  isMonnifyAirtimeKudaFallbackEligible,
-} from './vtu-monnify-kuda-fallback';
+import { executeMonnifyAirtimeKudaFallback } from './vtu-monnify-kuda-fallback';
 
 const mockPurchaseAirtime = vi.fn();
 vi.mock('@/lib/kuda', () => ({
@@ -183,73 +180,5 @@ describe('executeMonnifyAirtimeKudaFallback', () => {
     expect(mockPurchaseAirtime).not.toHaveBeenCalled();
     expect(row.metadata.provider).toBe('monnify');
     expect(row.updated_at).toBe('tok-1');
-  });
-});
-
-describe('isMonnifyAirtimeKudaFallbackEligible', () => {
-  const airtime = { amount: 500, type: 'airtime' };
-  const failed = {
-    amount: 500,
-    message: 'Monnify business failure',
-    reference: 'VTU-1',
-    status: 'failed' as const,
-    success: false,
-  };
-
-  it.each([
-    ['a business rejection', failed],
-    [
-      'a 4xx refusal such as low Monnify float',
-      {
-        ...failed,
-        providerErrorDetail:
-          'Monnify API error: 400 Bad Request - Insufficient wallet balance',
-      },
-    ],
-    [
-      'the original amount rejection',
-      {
-        ...failed,
-        providerErrorDetail:
-          'Monnify API error: 400 Bad Request - Amount must be greater than zero',
-      },
-    ],
-  ])('falls back on %s', (_label, result) => {
-    expect(isMonnifyAirtimeKudaFallbackEligible(airtime, result)).toBe(true);
-  });
-
-  it('never falls back while Monnify may still deliver', () => {
-    expect(
-      isMonnifyAirtimeKudaFallbackEligible(airtime, {
-        ...failed,
-        status: 'pending',
-        success: true,
-      })
-    ).toBe(false);
-  });
-
-  it('does not fall back after a Monnify success', () => {
-    expect(
-      isMonnifyAirtimeKudaFallbackEligible(airtime, {
-        ...failed,
-        status: 'successful',
-        success: true,
-      })
-    ).toBe(false);
-  });
-
-  it('only covers airtime with a positive amount', () => {
-    expect(
-      isMonnifyAirtimeKudaFallbackEligible(
-        { amount: 500, type: 'electricity' },
-        failed
-      )
-    ).toBe(false);
-    expect(
-      isMonnifyAirtimeKudaFallbackEligible(
-        { amount: 0, type: 'airtime' },
-        failed
-      )
-    ).toBe(false);
   });
 });

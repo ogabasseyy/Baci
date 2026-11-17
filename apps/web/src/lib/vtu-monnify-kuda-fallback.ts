@@ -18,29 +18,6 @@ export interface MonnifyAirtimeKudaFallbackRow {
 }
 
 /**
- * Whether a Monnify airtime vend should be retried through Kuda. Monnify
- * is the main airtime biller and Kuda the backup, so every DEFINITE
- * Monnify failure qualifies: a business rejection, a FAILED vend status or
- * a 4xx refusal (insufficient float, product or network trouble, ...).
- * These are the same outcomes that would otherwise fail and refund, so
- * Kuda vends only where the customer would have been refunded. Pending
- * results and unknown outcomes (timeouts, 5xx, 408/409, which throw
- * MonnifyTransientVendError) never qualify: they are requeried instead,
- * so a vend Monnify may still deliver is never doubled through Kuda.
- */
-export function isMonnifyAirtimeKudaFallbackEligible(
-  row: Pick<MonnifyAirtimeKudaFallbackRow, 'amount'> & { type: string },
-  monnifyResult: PurchaseResult
-): boolean {
-  return (
-    row.type === 'airtime' &&
-    row.amount > 0 &&
-    !monnifyResult.success &&
-    monnifyResult.status === 'failed'
-  );
-}
-
-/**
  * Runs the Monnify-airtime → Kuda fallback vend. Persists the Kuda
  * routing BEFORE the call so a result-persist crash still leaves a
  * Kuda-reconcilable row (TSQ by request_reference); without the

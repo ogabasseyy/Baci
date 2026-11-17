@@ -50,10 +50,8 @@ import {
   refreshSnapshotMoneyColumns,
 } from '@/lib/vtu-fallback-credit-correction';
 import { awardVtuAirtimeLoyaltyPoints } from '@/lib/vtu-loyalty-points-award';
-import {
-  executeMonnifyAirtimeKudaFallback,
-  isMonnifyAirtimeKudaFallbackEligible,
-} from '@/lib/vtu-monnify-kuda-fallback';
+import { executeMonnifyAirtimeKudaFallback } from '@/lib/vtu-monnify-kuda-fallback';
+import { isMonnifyAirtimeKudaFallbackEligible } from '@/lib/vtu-monnify-kuda-fallback-eligibility';
 import { getVtuProviderLabel, readPaymentSplit } from '@/lib/vtu-payment-split';
 import { VTU_TYPE_LABELS } from '@/lib/vtu-pending-transaction';
 import { restoreInterruptedPreVendVtuRow } from '@/lib/vtu-pre-vend-recovery';

@@ -213,6 +213,10 @@ export interface PurchaseResult {
   // Monnify-only: the provider's own vend reference, used to requery status
   // (Monnify resolves requery by this, not by transactionReference).
   providerVendReference?: string;
+  // Monnify-only: Monnify explicitly refused the vend (business rejection,
+  // FAILED vend status, or a 4xx refusal that is not a duplicate reference),
+  // so nothing was delivered and another provider may safely vend it.
+  providerDefiniteFailure?: boolean;
   // Units delivered for metered bills (e.g. prepaid electricity kWh).
   units?: string;
 }

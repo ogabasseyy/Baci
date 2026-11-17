@@ -3064,6 +3064,7 @@ describe('fulfillPendingVtuTransaction', () => {
         'Monnify rejected the bill payment request. Please verify the details and try again.',
       providerErrorDetail:
         'Monnify API error: 400 Bad Request - Amount must be greater than zero',
+      providerDefiniteFailure: true,
       amount: 1000,
       status: 'failed',
     });
@@ -3167,6 +3168,7 @@ describe('fulfillPendingVtuTransaction', () => {
         'Monnify rejected the bill payment request. Please verify the details and try again.',
       providerErrorDetail:
         'Monnify API error: 400 Bad Request - Amount must be greater than zero',
+      providerDefiniteFailure: true,
       amount: 100,
       status: 'failed',
     });
@@ -3318,6 +3320,7 @@ describe('fulfillPendingVtuTransaction', () => {
         'Monnify rejected the bill payment request. Please verify the details and try again.',
       providerErrorDetail:
         'Monnify API error: 400 Bad Request - Amount must be greater than zero',
+      providerDefiniteFailure: true,
       amount: 100,
       status: 'failed',
     });
@@ -3463,6 +3466,7 @@ describe('fulfillPendingVtuTransaction', () => {
       message: 'Monnify rejected the bill payment request.',
       providerErrorDetail:
         'Monnify API error: 400 Bad Request - Amount must be greater than zero',
+      providerDefiniteFailure: true,
       amount: 100,
       status: 'failed',
     });
@@ -3540,6 +3544,7 @@ describe('fulfillPendingVtuTransaction', () => {
       message: 'Monnify rejected the bill payment request.',
       providerErrorDetail:
         'Monnify API error: 400 Bad Request - Amount must be greater than zero',
+      providerDefiniteFailure: true,
       amount: 100,
       status: 'failed',
     });
@@ -3612,6 +3617,7 @@ describe('fulfillPendingVtuTransaction', () => {
       message: 'Monnify rejected the bill payment request.',
       providerErrorDetail:
         'Monnify API error: 400 Bad Request - Amount must be greater than zero',
+      providerDefiniteFailure: true,
       amount: 100,
       status: 'failed',
     });
@@ -3682,6 +3688,7 @@ describe('fulfillPendingVtuTransaction', () => {
       message: 'Monnify business failure',
       amount: 100,
       status: 'failed',
+      providerDefiniteFailure: true,
     });
     mockPurchaseAirtime.mockResolvedValue({
       success: true,
@@ -3751,6 +3758,102 @@ describe('fulfillPendingVtuTransaction', () => {
         status: 'successful',
         transaction_id: 'kuda-airtime-1',
       })
+    );
+  });
+
+  it('does not fall back to Kuda for a Monnify failure it did not explicitly refuse', async () => {
+    // e.g. an unrecognised vend status or a duplicate vend reference: Monnify
+    // may still deliver, so a Kuda vend could top the customer up twice.
+    mockMonnifyPurchaseBill.mockResolvedValue({
+      success: false,
+      reference: 'VTU-123',
+      message: 'Vend request failed',
+      amount: 100,
+      status: 'failed',
+      providerDefiniteFailure: false,
+    });
+    const updatePayloads: unknown[] = [];
+
+    const supabase = createPendingTransactionSupabaseMock({
+      transactionRow: {
+        id: 'vtu-1',
+        merchant_id: 'merchant-1',
+        customer_id: null,
+        type: 'airtime',
+        network_provider: 'MTN',
+        phone_number: '08012345678',
+        amount: 100,
+        request_reference: 'VTU-123',
+        transaction_id: null,
+        status: 'pending',
+        metadata: {
+          provider: 'monnify',
+          billerCode: 'MTN',
+          productCode: '13',
+          requireValidationRef: false,
+        },
+        error_message: null,
+        merchant_commission: 0,
+        customer_cashback: 0,
+        biller_name: null,
+        biller_item_code: null,
+        customer_identifier: '08012345678',
+      },
+      updatePayloads,
+    });
+
+    const result = await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(mockPurchaseAirtime).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ reference: 'VTU-123', status: 'failed' });
+  });
+
+  it('restores an airtime Monnify unknown outcome to pending without calling Kuda', async () => {
+    const transientError = new Error('Transient vend outcome: 408 timeout');
+    transientError.name = 'MonnifyTransientVendError';
+    mockMonnifyPurchaseBill.mockRejectedValue(transientError);
+    const updatePayloads: unknown[] = [];
+
+    const supabase = createPendingTransactionSupabaseMock({
+      transactionRow: {
+        id: 'vtu-1',
+        merchant_id: 'merchant-1',
+        customer_id: null,
+        type: 'airtime',
+        network_provider: 'MTN',
+        phone_number: '08012345678',
+        amount: 100,
+        request_reference: 'VTU-123',
+        transaction_id: null,
+        status: 'pending',
+        metadata: {
+          provider: 'monnify',
+          billerCode: 'MTN',
+          productCode: '13',
+          requireValidationRef: false,
+        },
+        error_message: null,
+        merchant_commission: 0,
+        customer_cashback: 0,
+        biller_name: null,
+        biller_item_code: null,
+        customer_identifier: '08012345678',
+      },
+      updatePayloads,
+    });
+
+    const result = await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(mockPurchaseAirtime).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ status: 'processing' });
+    expect(updatePayloads).toContainEqual(
+      expect.objectContaining({ status: 'pending', transaction_id: null })
     );
   });
 

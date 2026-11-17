@@ -83,32 +83,110 @@ describe('Monnify bill purchase errors', () => {
     expect(result.providerErrorDetail).not.toContain('08012345678');
   });
 
-  describe('bugfix: unclear 4xx vend outcomes were treated as definite failures', () => {
-    it.each([
-      [408, 'Request Timeout'],
-      [409, 'Conflict'],
-    ])('treats HTTP %i as an unknown outcome to requery, not a failure', async (status, statusText) => {
+  describe('bugfix: which Monnify vend failures may be handed to Kuda', () => {
+    function mockHttpError(
+      status: number,
+      statusText: string,
+      message: string
+    ) {
       global.fetch = vi.fn().mockResolvedValue({
         ok: false,
         status,
         statusText,
         text: vi
           .fn()
-          .mockResolvedValue(
-            JSON.stringify({ responseMessage: 'Duplicate vend reference' })
-          ),
+          .mockResolvedValue(JSON.stringify({ responseMessage: message })),
+      });
+    }
+
+    function vend() {
+      return purchaseBill(
+        'MTN',
+        '13',
+        '08012345678',
+        100,
+        'JANE DOE',
+        'BACI-REF-123'
+      );
+    }
+
+    it('treats HTTP 408 as an unknown outcome to resubmit', async () => {
+      mockHttpError(408, 'Request Timeout', 'Request timed out');
+
+      await expect(vend()).rejects.toBeInstanceOf(MonnifyTransientVendError);
+    });
+
+    it('marks a plain 4xx refusal as definite', async () => {
+      mockHttpError(400, 'Bad Request', 'Insufficient wallet balance');
+
+      await expect(vend()).resolves.toMatchObject({
+        providerDefiniteFailure: true,
+        status: 'failed',
+      });
+    });
+
+    it.each([
+      [409, 'Conflict', 'Request conflict'],
+      [400, 'Bad Request', 'Duplicate vendReference'],
+      [400, 'Bad Request', 'Reference has already been used'],
+    ])('never marks a duplicate reference (%i %s) as definite', async (status, statusText, message) => {
+      mockHttpError(status, statusText, message);
+
+      await expect(vend()).resolves.toMatchObject({
+        providerDefiniteFailure: false,
+        status: 'failed',
+      });
+    });
+
+    it('marks a business rejection as definite unless it reports a duplicate', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          requestSuccessful: false,
+          responseCode: '99',
+          responseMessage: 'Insufficient Balance',
+        }),
+      });
+      await expect(vend()).resolves.toMatchObject({
+        providerDefiniteFailure: true,
       });
 
-      await expect(
-        purchaseBill(
-          'MTN',
-          '13',
-          '08012345678',
-          100,
-          'JANE DOE',
-          'BACI-REF-123'
-        )
-      ).rejects.toBeInstanceOf(MonnifyTransientVendError);
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          requestSuccessful: false,
+          responseCode: '99',
+          responseMessage: 'Duplicate transaction reference',
+        }),
+      });
+      await expect(vend()).resolves.toMatchObject({
+        providerDefiniteFailure: false,
+      });
+    });
+
+    it('marks only an explicit FAILED vend status as definite', async () => {
+      function mockVendStatus(vendStatus: string) {
+        global.fetch = vi.fn().mockResolvedValue({
+          ok: true,
+          json: vi.fn().mockResolvedValue({
+            requestSuccessful: true,
+            responseCode: '0',
+            responseMessage: 'success',
+            responseBody: { vendReference: 'MFBP-1', vendStatus },
+          }),
+        });
+      }
+
+      mockVendStatus('FAILED');
+      await expect(vend()).resolves.toMatchObject({
+        providerDefiniteFailure: true,
+        status: 'failed',
+      });
+
+      mockVendStatus('SOMETHING_NEW');
+      const unknown = await vend();
+      expect(unknown.status).toBe('failed');
+      expect(unknown.providerDefiniteFailure).toBeUndefined();
     });
   });
 

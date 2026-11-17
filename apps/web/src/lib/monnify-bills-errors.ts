@@ -27,24 +27,40 @@ export class MonnifyHttpError extends Error {
   }
 
   /**
-   * A 4xx that means Monnify refused the request, so nothing was vended.
-   * 408 (timed out) and 409 (duplicate vend reference) can follow a vend
-   * that went through, so they stay unknown outcomes to requery: treating
-   * them as failures would refund, or vend again through Kuda, while the
-   * customer may already have their airtime.
+   * A 4xx answer to the request. 408 (timed out) is excluded: the vend may
+   * have registered, so it stays an unknown outcome and is resubmitted under
+   * the same vend reference, which Monnify then accepts once or reports as
+   * a duplicate.
    */
   get isClientError() {
+    return this.status >= 400 && this.status < 500 && this.status !== 408;
+  }
+
+  /**
+   * Monnify already holds a vend under this reference (409, or a 4xx whose
+   * detail says so). It may have been delivered, so this is never a refusal
+   * another provider may act on.
+   */
+  get isDuplicateReference() {
     return (
-      this.status >= 400 &&
-      this.status < 500 &&
-      this.status !== 408 &&
-      this.status !== 409
+      this.status === 409 ||
+      isMonnifyDuplicateReferenceText(this.diagnosticMessage)
     );
   }
 
   get diagnosticMessage() {
     return this.detail ? `${this.message} - ${this.detail}` : this.message;
   }
+}
+
+const MONNIFY_DUPLICATE_REFERENCE_PATTERN =
+  /duplicate|already\s+(?:been\s+)?(?:used|exists?|processed|submitted)/i;
+
+/** Whether a Monnify message says the vend reference was already used. */
+export function isMonnifyDuplicateReferenceText(
+  text: string | null | undefined
+): boolean {
+  return !!text && MONNIFY_DUPLICATE_REFERENCE_PATTERN.test(text);
 }
 
 export class MonnifyTransientVendError extends Error {

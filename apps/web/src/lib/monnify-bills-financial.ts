@@ -8,6 +8,7 @@ import {
   vendResponseBodySchema,
 } from '@/schemas/monnify-bills-schema';
 import {
+  isMonnifyDuplicateReferenceText,
   MonnifyHttpError,
   MonnifyTransientVendError,
 } from './monnify-bills-errors';
@@ -126,6 +127,9 @@ export async function purchaseBill(
         }),
         status: 'failed',
         amount,
+        providerDefiniteFailure: !isMonnifyDuplicateReferenceText(
+          parsedEnvelope.responseMessage
+        ),
       };
     }
 
@@ -169,6 +173,9 @@ export async function purchaseBill(
         (isFailed ? 'Vend request failed' : 'Vend request completed'),
       status,
       amount,
+      // Only an explicit FAILED status is a refusal; an unrecognised status
+      // still fails as before but is never handed to another provider.
+      ...(isFailed ? { providerDefiniteFailure: true } : {}),
     };
   } catch (error) {
     if (error instanceof MonnifyHttpError && error.isClientError) {
@@ -180,6 +187,7 @@ export async function purchaseBill(
         providerErrorDetail: error.diagnosticMessage,
         status: 'failed',
         amount,
+        providerDefiniteFailure: !error.isDuplicateReference,
       };
     }
 

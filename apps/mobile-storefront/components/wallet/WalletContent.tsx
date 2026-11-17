@@ -8,6 +8,7 @@ import { useWalletCreditWatch } from '@/hooks/use-wallet-credit-watch';
 import { isPrimaryWallet } from './is-primary-wallet';
 import { PiggyvestSlowdownNotice } from './PiggyvestSlowdownNotice';
 import { renderWalletSavingsSheetStep } from './render-wallet-savings-sheet-step';
+import { SavingsToast } from './savings/SavingsToast';
 import { useSavingsDeviceSwap } from './use-savings-device-swap';
 import { useWalletPrimaryUnknown } from './use-wallet-primary-unknown';
 import { WalletActionsRow } from './WalletActionsRow';
@@ -216,6 +217,7 @@ export function WalletContent(props: WalletContentProps) {
       />
       <WalletFundModal {...props} creditWatch={creditWatch} />
       {savingsSheetOpen ? null : props.pinPrompt}
+      <SavingsToast />
     </WalletPrimaryContext.Provider>
   );
 }

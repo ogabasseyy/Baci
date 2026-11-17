@@ -82,9 +82,9 @@ jest.mock('./ChatModal', () => ({ ChatModal: jest.fn(() => null) }));
 // The real hidden-route list, so a route dropped from it fails here.
 jest.mock('./constants', () => ({
   EDGE_MARGIN: 16,
-  HIDDEN_ROUTES:
+  isChatHiddenRoute:
     jest.requireActual<typeof import('./constants')>('./constants')
-      .HIDDEN_ROUTES,
+      .isChatHiddenRoute,
 }));
 jest.mock('./styles', () => ({
   styles: new Proxy({}, { get: () => ({}) }),

@@ -4,6 +4,7 @@ import {
   EDGE_MARGIN,
   FAB_SIZE,
   HIDDEN_ROUTES,
+  isChatHiddenRoute,
   NUDGE_HIDDEN_DURATION,
   NUDGE_INITIAL_DELAY,
   NUDGE_VISIBLE_DURATION,
@@ -50,7 +51,19 @@ describe('chat constants', () => {
     });
 
     it('hides the AI button on the whole wallet, savings setup included', () => {
-      expect(HIDDEN_ROUTES).toContain('/wallet');
+      expect(isChatHiddenRoute('/wallet')).toBe(true);
+      expect(isChatHiddenRoute('/wallet/savings/start')).toBe(true);
+      expect(isChatHiddenRoute('/wallet/manage-cards')).toBe(true);
+    });
+
+    it('never hides it on a sibling that only shares the wallet prefix', () => {
+      expect(isChatHiddenRoute('/wallet-promo')).toBe(false);
+      expect(isChatHiddenRoute('/wallets')).toBe(false);
+    });
+
+    it('keeps the existing prefix routes as they were', () => {
+      expect(isChatHiddenRoute('/cart-tab')).toBe(true);
+      expect(isChatHiddenRoute('/settings')).toBe(false);
     });
   });
 

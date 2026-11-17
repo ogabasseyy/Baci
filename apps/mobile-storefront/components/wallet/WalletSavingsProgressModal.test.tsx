@@ -70,6 +70,7 @@ const goal = {
 describe('WalletSavingsProgressModal', () => {
   it('checks a pending contribution even when the reserved funds leave a zero wallet balance', () => {
     const onAddSavings = jest.fn();
+    const onCheckContribution = jest.fn();
     const onFundWallet = jest.fn();
     render(
       <WalletSavingsProgressModal
@@ -81,6 +82,7 @@ describe('WalletSavingsProgressModal', () => {
         onAddAmountChange={jest.fn()}
         onAddSavings={onAddSavings}
         onChangeDevice={jest.fn()}
+        onCheckContribution={onCheckContribution}
         onClose={jest.fn()}
         onFundWallet={onFundWallet}
         visible
@@ -90,11 +92,36 @@ describe('WalletSavingsProgressModal', () => {
     fireEvent.press(
       screen.getByRole('button', { name: 'Check contribution status' })
     );
-    expect(onAddSavings).toHaveBeenCalledTimes(1);
+    // A status read only: never the add/submit path.
+    expect(onCheckContribution).toHaveBeenCalledTimes(1);
+    expect(onAddSavings).not.toHaveBeenCalled();
     expect(onFundWallet).not.toHaveBeenCalled();
     expect(
       screen.queryByRole('button', { name: 'Continue to payment' })
     ).toBeNull();
+  });
+  it('shows Checking, not the Adding cover, while a status read runs', () => {
+    render(
+      <WalletSavingsProgressModal
+        addAmount="500"
+        colors={Colors.light}
+        goal={goal}
+        isAdding={false}
+        isCheckingContribution
+        hasPendingContribution
+        onAddAmountChange={jest.fn()}
+        onAddSavings={jest.fn()}
+        onChangeDevice={jest.fn()}
+        onCheckContribution={jest.fn()}
+        onClose={jest.fn()}
+        onFundWallet={jest.fn()}
+        visible
+        walletBalance={500}
+      />
+    );
+    expect(screen.getByText('Checking contribution…')).toBeTruthy();
+    expect(screen.queryByText(/Adding your money/)).toBeNull();
+    expect(screen.queryByText(/ask for your PIN/)).toBeNull();
   });
   it('allows an unresolved auto-debit goal to choose its exact device', () => {
     const onChangeDevice = jest.fn();

@@ -176,6 +176,8 @@ describe('goalAwaitingSettlement', () => {
       hasPendingSavingsContribution:
         result.current.hasPendingSavingsContribution,
       goalAwaitingSettlement: true,
+      isCheckingSavingsContribution: false,
+      onCheckSavingsContribution: expect.any(Function),
       walletUpdatedAt: 42,
     });
   });
@@ -221,5 +223,46 @@ describe('bugfix: completed goal offered "Start another plan" while unreachable 
     expect(
       result.current.walletContentSavingsProps.goalAwaitingSettlement
     ).toBe(false);
+  });
+});
+
+describe('pending contribution status', () => {
+  it('gives the sheet a status-only check that never reaches the submit path', async () => {
+    mockReady = true;
+    const { result } = renderHook(() => useWalletSavingsController(input));
+    const props = result.current.walletContentSavingsProps;
+    expect(props.isCheckingSavingsContribution).toBe(false);
+    // No stored operation id: a no-op, and never the add handler.
+    await expect(props.onCheckSavingsContribution()).resolves.toBe(
+      'no-operation'
+    );
+    expect(mockSubmit).not.toHaveBeenCalled();
+    expect(input.setIsAddingSavingsContribution).not.toHaveBeenCalled();
+    expect(mockCreateActions).toHaveBeenLastCalledWith(
+      expect.objectContaining({ checkPendingStatus: expect.any(Function) })
+    );
+  });
+
+  it('does not show a legacy-rail id as awaiting confirmation', () => {
+    mockReady = true;
+    const idempotencyKeyRef: { current: string | null } = { current: null };
+    const operationRailRef: { current: 'primary' | 'legacy' | null } = {
+      current: null,
+    };
+    const { result, rerender } = renderHook(() =>
+      useWalletSavingsController({
+        ...input,
+        idempotencyKeyRef,
+        operationRailRef,
+      })
+    );
+    // Stored after the scope is bound (the first render drops stale ids).
+    idempotencyKeyRef.current = 'primary-op';
+    operationRailRef.current = 'primary';
+    rerender({});
+    expect(result.current.hasPendingSavingsContribution).toBe(true);
+    operationRailRef.current = 'legacy';
+    rerender({});
+    expect(result.current.hasPendingSavingsContribution).toBe(false);
   });
 });

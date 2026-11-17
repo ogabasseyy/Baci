@@ -3,6 +3,8 @@ import { isFundedUnsettledGoal } from './savings/goal-settlement';
 import { notifySavings } from './savings/savings-notice';
 import { usePrimaryGoalGate } from './savings/use-primary-goal-gate';
 import { useWalletPinPrompt } from './savings/use-wallet-pin-prompt';
+import { usePendingSavingsStatusCheck } from './use-pending-savings-status-check';
+import { usePendingSavingsStatusPolling } from './use-pending-savings-status-polling';
 import { usePrimarySavingsRecovery } from './use-primary-savings-recovery';
 import { createWalletSavingsActions } from './use-wallet-savings-actions';
 
@@ -43,8 +45,18 @@ export function useWalletSavingsController(
   const gate = usePrimaryGoalGate(input.walletUpdatedAt);
   const goalAwaitingSettlement =
     gate === 'ready' && isFundedUnsettledGoal(input.goal);
+  const status = usePendingSavingsStatusCheck({
+    goal: input.goal,
+    merchantId: input.activeMerchantId,
+    idempotencyKeyRef: input.idempotencyKeyRef,
+    operationRailRef: input.operationRailRef,
+    submittingRef: input.submittingRef,
+    refetchWallet: input.refetchWallet,
+    setSavingsContributionAmount: input.setSavingsContributionAmount,
+  });
   const actions = createWalletSavingsActions({
     ...input,
+    checkPendingStatus: status.checkStatus,
     goalAwaitingSettlement,
     goalSettlementChecking:
       (gate === 'checking' || gate === 'error') &&
@@ -59,8 +71,17 @@ export function useWalletSavingsController(
       'info'
     );
   };
+  // A legacy-rail id is retried by its own add (same id, same rail), never
+  // by a status read, so it does not show the "awaiting confirmation" card.
   const hasPendingSavingsContribution =
-    recovery.ready && actions.hasPendingSavingsContribution;
+    recovery.ready &&
+    actions.hasPendingSavingsContribution &&
+    input.operationRailRef.current !== 'legacy';
+  // Lives with the stored operation, not with the sheet or card on screen.
+  usePendingSavingsStatusPolling(
+    hasPendingSavingsContribution ? input.idempotencyKeyRef.current : null,
+    status.checkStatus
+  );
   return {
     ...actions,
     goalAwaitingSettlement,
@@ -69,6 +90,9 @@ export function useWalletSavingsController(
     /** What the wallet content needs to show the savings sheet correctly. */
     walletContentSavingsProps: {
       hasPendingSavingsContribution,
+      isCheckingSavingsContribution: status.isCheckingStatus,
+      // Status read only: never the submit path, a no-op without a stored id.
+      onCheckSavingsContribution: status.checkStatus,
       // The card keeps "Complete goal" while the check is running or the
       // server is unreachable (walk 11): the same funded goal never flips to
       // "Start another plan". The sheet still waits for 'ready' to act.

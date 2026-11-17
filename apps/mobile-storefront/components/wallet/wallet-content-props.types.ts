@@ -31,6 +31,10 @@ export interface WalletContentProps {
   fundReturnTo?: WalletReturnHref;
   isAddingSavingsContribution: boolean;
   hasPendingSavingsContribution?: boolean;
+  /** A status read for the pending contribution is running. */
+  isCheckingSavingsContribution?: boolean;
+  /** Reads the pending contribution's status; never starts a payment. */
+  onCheckSavingsContribution?: () => unknown;
   goalAwaitingSettlement?: boolean;
   /** The wallet query's last-updated time: re-reads the goal readiness gate. */
   walletUpdatedAt?: number;

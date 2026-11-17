@@ -35,10 +35,12 @@ export function WalletSavingsProgressModal({
   goal,
   isAdding,
   hasPendingContribution = false,
+  isCheckingContribution = false,
   isFundPending = false,
   onAddAmountChange,
   onAddSavings,
   onChangeDevice,
+  onCheckContribution,
   onClose,
   onFundWallet,
   onRefreshWallet,
@@ -252,8 +254,9 @@ export function WalletSavingsProgressModal({
             {hasPendingContribution ? (
               <WalletPendingSavingsContribution
                 colors={colors}
-                isChecking={isAdding}
-                onCheck={onAddSavings}
+                // Status read only: no "Adding…" cover, never a submit.
+                isChecking={isCheckingContribution}
+                onCheck={onCheckContribution}
               />
             ) : canAddToSavings ? (
               <WalletSavingsFundingSection

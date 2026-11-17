@@ -4,6 +4,14 @@ import { checkPiggyvestPrimarySavingsStatus } from '@/lib/piggyvest-primary-savi
 import { savingsNotifier } from './savings/savings-notice';
 import { walletRefreshWorked } from './wallet-refresh-worked';
 
+/** What one status read found; the operation is kept unless it settled. */
+export type PendingSavingsCheckOutcome =
+  | 'confirmed'
+  | 'cancelled'
+  | 'not-found'
+  | 'pending'
+  | 'unavailable';
+
 export async function checkPendingPrimarySavings(input: {
   /** The goal as it stood before this confirmation. */
   goal?: WalletActiveSavingsGoal | null;
@@ -13,7 +21,7 @@ export async function checkPendingPrimarySavings(input: {
   clearAmount: () => void;
   refetchWallet: () => Promise<unknown>;
   setPending: (value: boolean) => void;
-}) {
+}): Promise<PendingSavingsCheckOutcome> {
   // Captured before any await: a result never reaches another account.
   const notify = savingsNotifier();
   input.setPending(true);
@@ -45,7 +53,9 @@ export async function checkPendingPrimarySavings(input: {
           'Your contribution is confirmed. Your savings balance has been updated.',
           'success'
         );
-    } else if (result.status === 'cancelled') {
+      return 'confirmed';
+    }
+    if (result.status === 'cancelled') {
       input.clearOperation();
       await input.refetchWallet().catch(() => undefined);
       notify(
@@ -53,12 +63,14 @@ export async function checkPendingPrimarySavings(input: {
         'Nothing was taken from your wallet.',
         'info'
       );
-    } else
-      notify(
-        'Contribution pending',
-        'Still waiting for confirmation. No new payment has been started.',
-        'info'
-      );
+      return 'cancelled';
+    }
+    notify(
+      'Contribution pending',
+      'Still waiting for confirmation. No new payment has been started.',
+      'info'
+    );
+    return 'pending';
   } catch (error) {
     const code =
       typeof error === 'object' && error !== null && 'code' in error
@@ -82,13 +94,15 @@ export async function checkPendingPrimarySavings(input: {
         'We have no record of this contribution, so you can safely try again.',
         'info'
       );
-      return;
+      return 'not-found';
     }
+    // A timeout lands here too: the operation is kept and checked again.
     notify(
       'Status unavailable',
       'Could not confirm this contribution. Refresh its status later before starting another payment.',
       'warning'
     );
+    return 'unavailable';
   } finally {
     input.setPending(false);
   }

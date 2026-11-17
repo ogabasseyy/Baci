@@ -96,14 +96,18 @@ export function instrumentReset(resetDelayMs) {
     sessionStorage.setItem('__chatwootFixtureResetRequested', 'true');
     const beforeMatchesTenantA = matchesPreviousInbox();
     const result = originalReset();
-    target.__chatwootFixtureResetEvidence = {
-      beforeMatchesTenantA,
-      afterMatchesTenantA: matchesPreviousInbox(),
-    };
-    sessionStorage.setItem(
-      '__chatwootFixtureResetEvidence',
-      JSON.stringify(target.__chatwootFixtureResetEvidence)
-    );
+    // Only the first reset is evidence: a later reset legitimately runs after
+    // the first already cleared the cookie and before the iframe rewrote it.
+    if (!sessionStorage.getItem('__chatwootFixtureResetEvidence')) {
+      target.__chatwootFixtureResetEvidence = {
+        beforeMatchesTenantA,
+        afterMatchesTenantA: matchesPreviousInbox(),
+      };
+      sessionStorage.setItem(
+        '__chatwootFixtureResetEvidence',
+        JSON.stringify(target.__chatwootFixtureResetEvidence)
+      );
+    }
     if (resetDelayMs > 0) {
       const samples = [];
       const sampleCookie = () => {

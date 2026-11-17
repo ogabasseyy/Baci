@@ -61,6 +61,21 @@ export async function runTenantA(state, context) {
     page,
     tenantAWidgetFrame
   );
+  // Deterministic precondition: the switch must not start until tenant A's
+  // conversation cookie is present and still belongs to tenant A's inbox.
+  await page.waitForFunction(
+    ({ inboxId }) =>
+      sessionStorage.getItem('__chatwootPreviousInbox') === String(inboxId) &&
+      document.cookie.split('; ').some((c) => c.startsWith('cw_conversation=')),
+    { inboxId: tenantAClaims.inbox_id },
+    { timeout: 15_000 }
+  );
+  const settledClaims = await page.evaluate(cookieClaims);
+  assert.equal(
+    String(settledClaims?.inbox_id),
+    String(tenantAClaims.inbox_id),
+    'Tenant A conversation cookie was not present before the tenant switch'
+  );
   state.tenantACookieMetadata = await readChatwootCookieMetadata(context);
   await page.evaluate(instrumentReset, resetDelayMs);
 

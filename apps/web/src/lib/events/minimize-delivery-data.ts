@@ -65,10 +65,16 @@ export function minimizeDeliveryData(
   if (!canBeUsed) return minimal;
   const kept: PersonalDeliveryField[] = [];
   if (targets) {
-    // The caller narrowed the destinations: keep only what those platforms read
-    // (the targets are already consent-filtered by clientMarketingTargets).
-    if (targets.length > 0) kept.push(...SHARED_FIELDS);
-    for (const target of targets) kept.push(...PLATFORM_FIELDS[target]);
+    // The caller narrowed the destinations: keep only what those platforms read,
+    // and only for platforms whose consent was granted (facebook/google need
+    // analytics consent, tiktok/snapchat need marketing consent).
+    const allowed = targets.filter((target) =>
+      target === 'facebook' || target === 'google'
+        ? data.analytics_consent
+        : data.marketing_consent
+    );
+    if (allowed.length > 0) kept.push(...SHARED_FIELDS);
+    for (const target of allowed) kept.push(...PLATFORM_FIELDS[target]);
   } else {
     if (data.analytics_consent) kept.push(...ANALYTICS_FIELDS);
     if (data.marketing_consent) kept.push(...MARKETING_FIELDS);

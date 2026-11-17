@@ -180,7 +180,16 @@ BEGIN
             'marketing_consent', coalesce(queued.message #> '{data,delivery_user_data,marketing_consent}', 'false'::jsonb)))
         ) END
     FROM expired_queue AS expired
-    WHERE queued.msg_id = expired.msg_id;
+    WHERE queued.msg_id = expired.msg_id
+      AND queued.enqueued_at < now() - v_personal_data_retention
+      AND NOT EXISTS (
+        SELECT 1
+        FROM public.domain_event_ledger AS ledger
+        JOIN public.event_deliveries AS open_delivery
+          ON open_delivery.domain_event_id = ledger.domain_event_id
+        WHERE ledger.queue_message_id = queued.msg_id
+          AND open_delivery.status IN ('pending', 'claimed', 'retry')
+      );
     GET DIAGNOSTICS v_batch = ROW_COUNT;
     EXIT WHEN v_batch < 10000 OR clock_timestamp() > v_deadline;
   END LOOP;

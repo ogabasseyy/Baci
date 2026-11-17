@@ -148,5 +148,16 @@ describe('bugfix: shopper data stored regardless of consent', () => {
         )
       ).toEqual({ analytics_consent: true, marketing_consent: true });
     });
+
+    it('bugfix: ignores a requested target whose consent was not granted', () => {
+      const result = minimizeDeliveryData(
+        full(true, false),
+        'add_to_cart',
+        'tenant_verified_client',
+        ['facebook', 'tiktok']
+      );
+      expect(result).toHaveProperty('fbp');
+      expect(result).not.toHaveProperty('ttp');
+    });
   });
 });

@@ -6,6 +6,12 @@ import { DEVICE_GRADING_MAX_FRAMES } from '@/schemas/device-grading';
  */
 const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
 
+/**
+ * Local cap for one picked photo. Photos are shrunk before upload, but the
+ * browser decodes the original first, which is costly on a low-end phone.
+ */
+const MAX_PHOTO_BYTES = 25 * 1024 * 1024;
+
 export type DeviceMediaSelection =
   | { ok: true; files: File[]; label: string }
   | { ok: false; error: string };
@@ -34,6 +40,13 @@ export function selectDeviceMedia(picked: File[]): DeviceMediaSelection {
     return {
       ok: false,
       error: `Please choose up to ${DEVICE_GRADING_MAX_FRAMES} photos.`,
+    };
+  }
+
+  if (photos.some((photo) => photo.size > MAX_PHOTO_BYTES)) {
+    return {
+      ok: false,
+      error: 'One of your photos is too large. Please keep each under 25MB.',
     };
   }
 

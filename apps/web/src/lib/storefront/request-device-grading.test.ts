@@ -118,6 +118,48 @@ describe('requestDeviceGrading', () => {
     expect(mocks.extractVideoFrames).not.toHaveBeenCalled();
   });
 
+  it('shrinks photos one at a time, in order', async () => {
+    const order: string[] = [];
+    let active = 0;
+    mocks.resizeDevicePhoto.mockImplementation(async (photo: File) => {
+      active += 1;
+      expect(active).toBe(1);
+      await Promise.resolve();
+      order.push(photo.name);
+      active -= 1;
+      return new Blob(['small'], { type: 'image/jpeg' });
+    });
+    mocks.fetchWithCsrf.mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: result }),
+    });
+
+    await requestDeviceGrading([
+      new File(['a'], 'a.jpg', { type: 'image/jpeg' }),
+      new File(['b'], 'b.jpg', { type: 'image/jpeg' }),
+      new File(['c'], 'c.jpg', { type: 'image/jpeg' }),
+    ]);
+
+    expect(order).toEqual(['a.jpg', 'b.jpg', 'c.jpg']);
+  });
+
+  it('does not upload photos that are still too large together', async () => {
+    mocks.resizeDevicePhoto.mockImplementation(
+      async () =>
+        new Blob([new Uint8Array(DEVICE_GRADING_MAX_UPLOAD_BYTES / 2 + 1)], {
+          type: 'image/jpeg',
+        })
+    );
+
+    await expect(
+      requestDeviceGrading([
+        new File(['a'], 'a.jpg', { type: 'image/jpeg' }),
+        new File(['b'], 'b.jpg', { type: 'image/jpeg' }),
+      ])
+    ).rejects.toThrow(/photos are too large to send together/i);
+    expect(mocks.fetchWithCsrf).not.toHaveBeenCalled();
+  });
+
   it('stops without uploading when a photo cannot be read', async () => {
     mocks.resizeDevicePhoto.mockRejectedValue(new Error('unsupported'));
 

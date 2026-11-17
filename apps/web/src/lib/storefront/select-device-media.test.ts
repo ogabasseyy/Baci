@@ -73,6 +73,16 @@ describe('selectDeviceMedia', () => {
     });
   });
 
+  it('refuses a photo above 25MB', () => {
+    const huge = photo('huge.jpg');
+    Object.defineProperty(huge, 'size', { value: 25 * 1024 * 1024 + 1 });
+
+    expect(selectDeviceMedia([photo(), huge])).toEqual({
+      ok: false,
+      error: 'One of your photos is too large. Please keep each under 25MB.',
+    });
+  });
+
   it.each([
     ['nothing', []],
     [

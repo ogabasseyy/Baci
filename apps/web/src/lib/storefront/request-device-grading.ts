@@ -26,13 +26,24 @@ const UNREADABLE_PHOTO_MESSAGE =
 const GENERIC_FAILURE_MESSAGE =
   'We could not check this device right now. Please try again.';
 
-/** Photos are shrunk in the browser; one that cannot be read stops the check. */
+const STILLS_TOO_LARGE_MESSAGE =
+  'Your photos are too large to send together. Please try fewer photos.';
+
+/**
+ * Photos are shrunk in the browser, one at a time so a low-end phone never
+ * holds several full-size photos in memory. One that cannot be read stops
+ * the check.
+ */
 async function photoStills(photos: File[]): Promise<Blob[]> {
+  const stills: Blob[] = [];
   try {
-    return await Promise.all(photos.map(resizeDevicePhoto));
+    for (const photo of photos) {
+      stills.push(await resizeDevicePhoto(photo));
+    }
   } catch {
     throw new Error(UNREADABLE_PHOTO_MESSAGE);
   }
+  return stills;
 }
 
 /**
@@ -71,6 +82,11 @@ async function buildUpload(
     : await photoStills(selection.files);
 
   if (stills.length > 0) {
+    // The server would refuse this with a message written for videos.
+    const totalBytes = stills.reduce((sum, still) => sum + still.size, 0);
+    if (!isVideo && totalBytes > DEVICE_GRADING_MAX_UPLOAD_BYTES) {
+      throw new Error(STILLS_TOO_LARGE_MESSAGE);
+    }
     stills.forEach((still, index) => {
       formData.append('frames', still, `frame-${index + 1}.jpg`);
     });

@@ -5,6 +5,8 @@ describe('isMonnifyVendOutcomeText', () => {
   it.each([
     'Service unavailable',
     'Vend request failed',
+    'Vend transaction failed: insufficient wallet balance',
+    'Vend request has failed',
     'Failed to vend airtime',
     'Airtime delivered',
     'Request processed',

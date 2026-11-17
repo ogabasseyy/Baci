@@ -156,3 +156,30 @@ describe('bugfix: business rejection showing a vend never goes to Kuda', () => {
     });
   });
 });
+
+describe('bugfix: "vend transaction failed" wording never goes to Kuda', () => {
+  it('keeps a business rejection worded as a failed vend transaction off Kuda', async () => {
+    mockBusinessFailure({
+      responseCode: '01',
+      responseMessage: 'Vend transaction failed: insufficient wallet balance',
+    });
+
+    await expect(vend()).resolves.toMatchObject({
+      providerDefiniteFailure: false,
+    });
+  });
+
+  it('keeps a 4xx worded as a failed vend transaction off Kuda', async () => {
+    mockHttpError(
+      400,
+      'Bad Request',
+      JSON.stringify({
+        responseMessage: 'Vend transaction failed: insufficient wallet balance',
+      })
+    );
+
+    await expect(vend()).resolves.toMatchObject({
+      providerDefiniteFailure: false,
+    });
+  });
+});

@@ -6,7 +6,7 @@
  * "not delivered") says nothing happened, so it does not count.
  */
 const MONNIFY_VEND_OUTCOME_PATTERN =
-  /unavailable|vend\w*\s+(?:request\s+)?fail|fail\w*\s+to\s+vend|(?<!(?:\bnot|\bnever|\bcannot|n't)\s+(?:be\s+|been\s+)?)\b(?:delivered|processed|completed|successful|vended|dispatched)\b/i;
+  /unavailable|vend\w*(?:\s+\w+){0,2}?\s+fail|fail\w*\s+to\s+vend|(?<!(?:\bnot|\bnever|\bcannot|n't)\s+(?:be\s+|been\s+)?)\b(?:delivered|processed|completed|successful|vended|dispatched)\b/i;
 
 /** Whether a Monnify answer mentions a vend outcome or an unavailable service. */
 export function isMonnifyVendOutcomeText(

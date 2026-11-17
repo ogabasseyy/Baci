@@ -1,12 +1,17 @@
-import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   getBinding: vi.fn(),
   verify: vi.fn(),
   record: vi.fn(),
+  push: vi.fn(),
+  after: vi.fn(),
 }));
 
+vi.mock('next/server', async () => {
+  const actual: Record<string, unknown> = await vi.importActual('next/server');
+  return { ...actual, after: mocks.after };
+});
 vi.mock('@/lib/chatwoot/chat-webhook-config', () => ({
   getChatWebhookBinding: mocks.getBinding,
 }));
@@ -20,53 +25,13 @@ vi.mock('@/lib/chatwoot/chat-event-intake', () => ({
     (value ?? '').replace(/\s+/g, ' ').trim().slice(0, max),
   recordChatCustomerMessage: mocks.record,
 }));
+vi.mock('@/lib/chatwoot/chat-event-push', () => ({
+  sendChatEventPush: mocks.push,
+}));
 
-import { POST } from './route';
+import { binding, call, KEY, payload } from './route.test-support';
 
-const KEY = 'synthetic-webhook-key-aaaa';
-const binding = {
-  merchantId: '11111111-1111-4111-8111-111111111111',
-  accountId: 2,
-  inboxId: 20,
-  webhookKey: KEY,
-  webhookSecret: 'synthetic-webhook-signing-secret-0001',
-};
-
-function payload(overrides: Record<string, unknown> = {}) {
-  return {
-    event: 'message_created',
-    id: 128,
-    message_type: 'incoming',
-    private: false,
-    content: '  Do you have\nthe Demo Phone X?  ',
-    account: { id: 2, name: 'Synthetic' },
-    inbox: { id: 20 },
-    conversation: { id: 21, messages: [{ id: 1 }] },
-    sender: { name: ' Ada ', email: 'hidden@example.invalid' },
-    ...overrides,
-  };
-}
-
-function call(
-  body: unknown,
-  raw = false,
-  headers: Record<string, string> = {}
-) {
-  const text = raw ? String(body) : JSON.stringify(body);
-  return POST(
-    new NextRequest(`https://app.example.test/api/webhooks/chatwoot/${KEY}`, {
-      method: 'POST',
-      body: text,
-      headers: {
-        'content-type': 'application/json',
-        'x-chatwoot-signature': 'sha256=abc',
-        'x-chatwoot-timestamp': '1794730000',
-        ...headers,
-      },
-    }),
-    { params: Promise.resolve({ webhookKey: KEY }) }
-  );
-}
+const pending: Promise<void>[] = [];
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -77,6 +42,12 @@ beforeEach(() => {
     outcome: 'notified',
     duplicate: false,
   });
+  mocks.push.mockResolvedValue({ status: 'sent', sent: 1, failed: 0 });
+  // Run the deferred push the way the framework does once the response is out.
+  mocks.after.mockImplementation((work: () => Promise<void>) => {
+    pending.push(work());
+  });
+  pending.length = 0;
 });
 
 describe('POST /api/webhooks/chatwoot/[webhookKey]', () => {

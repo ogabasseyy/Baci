@@ -33,17 +33,24 @@ export async function publishScheduledPosts(supabase: SupabaseClient) {
       );
     }
 
-    if (!scheduledPosts || scheduledPosts.length === 0) {
+    const merchantScheduledPosts = (scheduledPosts ?? []).filter(
+      (post) =>
+        typeof post.merchant_id === 'string' && post.merchant_id.length > 0
+    );
+
+    if (merchantScheduledPosts.length === 0) {
       return NextResponse.json({
         success: true,
         message: 'No posts to publish',
       });
     }
 
-    console.log(`📦 Cron: Found ${scheduledPosts.length} posts to publish`);
+    console.log(
+      `📦 Cron: Found ${merchantScheduledPosts.length} posts to publish`
+    );
 
     const scheduledMerchantIds = Array.from(
-      new Set(scheduledPosts.map((post) => post.merchant_id))
+      new Set(merchantScheduledPosts.map((post) => post.merchant_id))
     );
     const { data: featureSettings, error: featureSettingsError } =
       await supabase
@@ -63,14 +70,14 @@ export async function publishScheduledPosts(supabase: SupabaseClient) {
     }
 
     const { eligiblePosts, skipped, warnings } = getEligibleScheduledPosts(
-      scheduledPosts as ScheduledPost[],
+      merchantScheduledPosts as ScheduledPost[],
       featureSettings ?? []
     );
 
     if (eligiblePosts.length === 0) {
       return NextResponse.json({
         success: true,
-        processed: scheduledPosts.length,
+        processed: merchantScheduledPosts.length,
         published: [],
         skipped,
         warnings,
@@ -121,12 +128,14 @@ export async function publishScheduledPosts(supabase: SupabaseClient) {
       );
     }
 
+    const claimNow = new Date().toISOString();
     const { data: claimedRows, error: updateError } = await supabase
       .from('blog_posts')
       .update({ status: 'published' })
       .in('id', postIds)
       .eq('status', 'scheduled')
-      .select('id');
+      .lte('published_at', claimNow)
+      .select('id, status');
 
     if (updateError) {
       console.error('Cron Error: Batch update failed:', updateError);
@@ -136,11 +145,77 @@ export async function publishScheduledPosts(supabase: SupabaseClient) {
       );
     }
 
-    const claimedPostIds = new Set(
-      (Array.isArray(claimedRows) ? claimedRows : eligiblePosts).map(
-        (post) => post.id
-      )
+    const eligiblePostsById = new Map(
+      eligiblePosts.map((post) => [post.id, post])
     );
+    const claimedPostIds = new Set<string>();
+
+    const seenClaimRowIds = new Set<string>();
+
+    if (Array.isArray(claimedRows)) {
+      for (const row of claimedRows as Array<{
+        id: string;
+        status?: string | null;
+      }>) {
+        seenClaimRowIds.add(row.id);
+        if (row.status === 'published') {
+          claimedPostIds.add(row.id);
+          continue;
+        }
+
+        const originalPost = eligiblePostsById.get(row.id);
+        const code =
+          row.status === 'scheduled'
+            ? 'BLOG_RELEASE_DEFERRED'
+            : row.status === 'draft'
+              ? 'BLOG_RELEASE_HELD_EXPIRED_NEWS'
+              : 'BLOG_RELEASE_NOT_PUBLISHED';
+        const reason =
+          row.status === 'scheduled'
+            ? 'Deferred by database release policy trigger'
+            : row.status === 'draft'
+              ? 'Held as draft because fast-track news expired before publication'
+              : 'Post remained non-published after database release trigger';
+
+        skipped.push({
+          id: row.id,
+          slug: originalPost?.slug ?? null,
+          code,
+          details: {
+            status: row.status ?? null,
+            reason,
+          },
+        });
+      }
+
+      for (const post of eligiblePosts) {
+        if (seenClaimRowIds.has(post.id)) {
+          continue;
+        }
+        skipped.push({
+          id: post.id,
+          slug: post.slug,
+          code: 'BLOG_RELEASE_RESCHEDULED_SKIPPED',
+          details: {
+            reason:
+              'Post was rescheduled or no longer due when the claim update ran',
+          },
+        });
+      }
+    } else {
+      for (const post of eligiblePosts) {
+        skipped.push({
+          id: post.id,
+          slug: post.slug,
+          code: 'BLOG_RELEASE_NOT_PUBLISHED',
+          details: {
+            status: null,
+            reason: 'Claim update did not return row status projection',
+          },
+        });
+      }
+    }
+
     const claimedPosts = eligiblePosts.filter((post) =>
       claimedPostIds.has(post.id)
     );

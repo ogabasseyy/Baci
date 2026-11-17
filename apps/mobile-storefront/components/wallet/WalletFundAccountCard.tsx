@@ -1,19 +1,24 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
+import Constants from 'expo-constants';
 import { Pressable, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
+import { formatFundingAccountName } from './format-funding-account-name';
 import { WalletProviderAttribution } from './WalletProviderAttribution';
 import type { WalletDisplayFundingAccount } from './wallet.types';
 import { styles } from './wallet-fund-panel.styles';
 
 const COPIED = 'Copied';
+const SANDBOX_WALLET_LABEL = 'Default Wallet';
 
 /**
  * The transfer account in Add money. PiggyVest (the PiggyVest merchant
  * only): a copy shows in place, a tick and "Copied" where the bank name
- * sits, like the wallet card, so the sheet never grows or jumps; and the
- * provider's internal wallet label ("Default Wallet") is not shown. Every
- * other store keeps today's card and its feedback line under the footer.
+ * sits, like the wallet card, so the sheet never grows or jumps. The account
+ * name shows under the number for every store (the sandbox's internal
+ * "Default Wallet" label excepted); PiggyVest's reads customer first, then
+ * the store's short name. Every other store keeps today's card and its
+ * feedback line under the footer.
  */
 export function WalletFundAccountCard({
   colors,
@@ -27,6 +32,11 @@ export function WalletFundAccountCard({
     piggyvest ? { successMessage: COPIED, timeoutMs: 2000 } : undefined
   );
   const copied = piggyvest && feedback === COPIED;
+  // PiggyVest's sandbox labels every account "Default Wallet"; that internal
+  // label is never a name to match against, so it stays hidden.
+  const showAccountName =
+    fundingAccount.accountName.trim() !== '' &&
+    !(piggyvest && fundingAccount.accountName.trim() === SANDBOX_WALLET_LABEL);
   return (
     <>
       <View
@@ -48,11 +58,21 @@ export function WalletFundAccountCard({
           <Text style={[styles.accountNumber, { color: colors.text }]}>
             {fundingAccount.accountNumber}
           </Text>
-          {piggyvest ? null : (
-            <Text style={[styles.accountName, { color: colors.textSecondary }]}>
-              {fundingAccount.accountName}
+          {showAccountName ? (
+            // PiggyVest's "<business>/<customer>" reads customer first, then
+            // the store's short name; two lines fit a long name.
+            <Text
+              numberOfLines={2}
+              style={[styles.accountName, { color: colors.textSecondary }]}
+            >
+              {piggyvest
+                ? formatFundingAccountName(
+                    fundingAccount.accountName,
+                    Constants.expoConfig?.name
+                  )
+                : fundingAccount.accountName}
             </Text>
-          )}
+          ) : null}
         </View>
         <Pressable
           accessibilityRole="button"

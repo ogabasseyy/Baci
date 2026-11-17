@@ -14,7 +14,7 @@ import { logger } from '@/lib/logger';
 import { claimQuizCashAwardSchema } from '@/schemas/quiz';
 
 export async function POST(request: NextRequest) {
-  const auth = await requireQuizUser(request);
+  const auth = await requireQuizUser(request, { requireFreshSession: true });
   if (auth.response) return auth.response;
 
   const csrfResponse = await requireQuizCsrf(request);

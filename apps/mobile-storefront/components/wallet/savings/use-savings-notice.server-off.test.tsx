@@ -2,7 +2,7 @@ import { act, renderHook } from '@testing-library/react-native';
 import { useAuthStore } from '@/stores/auth-store';
 import { notifySavings } from './notify-savings';
 import { useSavingsNoticeStore } from './savings-notice-store';
-import { useSavingsNotice } from './use-savings-notice';
+import { SUCCESS_NOTICE_MS, useSavingsNotice } from './use-savings-notice';
 
 describe('server keeps PiggyVest off: useSavingsNotice', () => {
   beforeEach(() => {
@@ -40,5 +40,38 @@ describe('server keeps PiggyVest off: useSavingsNotice', () => {
     act(() => notifySavings('Savings updated'));
     const { result } = renderHook(() => useSavingsNotice('goal-a'));
     expect(result.current.notice?.title).toBe('Savings updated');
+  });
+
+  describe('success notices are brief (owner, 2026-11-17)', () => {
+    beforeEach(() => jest.useFakeTimers());
+    afterEach(() => jest.useRealTimers());
+
+    it('clears "Savings updated" by itself after a few seconds', () => {
+      const { result } = renderHook(() => useSavingsNotice('goal-a'));
+      act(() => notifySavings('Savings updated', 'Nice!', 'success'));
+      expect(result.current.notice?.title).toBe('Savings updated');
+      act(() => jest.advanceTimersByTime(SUCCESS_NOTICE_MS));
+      expect(result.current.notice).toBeNull();
+    });
+
+    it('keeps a success that asks to pull to refresh until it is closed', () => {
+      const { result } = renderHook(() => useSavingsNotice('goal-a'));
+      act(() =>
+        notifySavings(
+          'Savings updated',
+          'Nice! Pull to refresh your latest balance.',
+          'success'
+        )
+      );
+      act(() => jest.advanceTimersByTime(SUCCESS_NOTICE_MS * 4));
+      expect(result.current.notice?.title).toBe('Savings updated');
+    });
+
+    it('keeps a pending or warning notice until it is closed', () => {
+      const { result } = renderHook(() => useSavingsNotice('goal-a'));
+      act(() => notifySavings('Contribution pending', 'Still waiting', 'info'));
+      act(() => jest.advanceTimersByTime(SUCCESS_NOTICE_MS * 4));
+      expect(result.current.notice?.title).toBe('Contribution pending');
+    });
   });
 });

@@ -52,13 +52,16 @@ describe('WalletSavingsContributionFlow: amount limits and pending states', () =
     };
     render(<WalletSavingsContributionFlow {...props} />);
 
-    const fund = screen.getByRole('button', {
-      name: 'Continue to payment',
+    // Covered and hidden from screen readers while adding, and still disabled.
+    const fund = screen.getByLabelText('Continue to payment', {
+      includeHiddenElements: true,
     });
     expect(fund).toHaveAccessibilityState({ disabled: true });
-    expect(screen.getByLabelText('Savings top-up amount').props.editable).toBe(
-      false
-    );
+    expect(
+      screen.getByLabelText('Savings top-up amount', {
+        includeHiddenElements: true,
+      }).props.editable
+    ).toBe(false);
     fireEvent.press(fund);
     expect(props.onFundWallet).not.toHaveBeenCalled();
   });

@@ -95,7 +95,10 @@ vi.mock('@/lib/storefront-path-prefix', () => ({
   getStorefrontPathPrefix: (...args: unknown[]) =>
     mockGetStorefrontPathPrefix(...args),
 }));
-vi.mock('@/lib/validation', () => ({ isValidMerchantIdentifier: () => true }));
+vi.mock('@/lib/validation', () => ({
+  isDomainIdentifier: (value: string) => value.includes('.'),
+  isValidMerchantIdentifier: () => true,
+}));
 
 const { ProductsPageContent } = await import('./products-page-content');
 
@@ -141,7 +144,7 @@ describe('ProductsPageContent accessibility & heading outline semantics', () => 
     mockGetStorefrontPathPrefix.mockReturnValue('');
 
     const page = await ProductsPageContent({
-      params: Promise.resolve({ slug: 'ogabassey' }),
+      params: Promise.resolve({ slug: 'ogabassey.com' }),
       searchParams: Promise.resolve({ page: '1' }),
     });
 

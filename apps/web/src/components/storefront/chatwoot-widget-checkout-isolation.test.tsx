@@ -223,4 +223,33 @@ describe('ChatwootWidget checkout tenant isolation', () => {
     expect(toggle).toHaveBeenLastCalledWith('hide');
     expect(screen.getByTestId('support-active')).toHaveTextContent('false');
   });
+
+  it('closes the conversation when the storefront wrapper unmounts', () => {
+    const reset = vi.fn();
+    const toggle = vi.fn();
+    const run = vi.fn(({ websiteToken, baseUrl }) => {
+      (window as Window & { $chatwoot?: Record<string, unknown> }).$chatwoot = {
+        reset,
+        toggleBubbleVisibility: toggle,
+        websiteToken,
+        baseUrl,
+      };
+    });
+    (window as Window & { chatwootSDK?: { run: typeof run } }).chatwootSDK = {
+      run,
+    };
+    const view = render(
+      <ChatwootWidget config={config}>
+        <SupportStatus />
+      </ChatwootWidget>
+    );
+    fireEvent.load(document.getElementById('baci-chatwoot-sdk') as HTMLElement);
+    fireEvent(window, new Event('chatwoot:ready'));
+
+    view.unmount();
+
+    expect(reset).toHaveBeenCalledTimes(1);
+    expect(toggle).toHaveBeenLastCalledWith('hide');
+    expect(mocks.reload).not.toHaveBeenCalled();
+  });
 });

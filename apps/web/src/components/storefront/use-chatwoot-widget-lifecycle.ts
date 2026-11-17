@@ -83,6 +83,14 @@ export function useChatwootWidgetLifecycle(
       : '';
   const widgetStarted = Boolean(configKey && activeWidgetKey === configKey);
 
+  // Runs only when the whole storefront wrapper unmounts (for example a
+  // navigation to an unpublished sibling store), where no replacement effect
+  // exists to contain the previous widget.
+  useEffect(
+    () => () => containPreviousChatwootTenant(window as ChatwootWidgetWindow),
+    []
+  );
+
   useEffect(() => {
     let active = true;
     const widgetWindow = window as ChatwootWidgetWindow;

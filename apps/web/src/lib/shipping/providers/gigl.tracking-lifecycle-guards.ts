@@ -115,6 +115,10 @@ export function applyLifecycleGuards(
         // Pickup already completed: do not regress the status to pickup, and
         // keep the raw code so no "rider en route" update is sent after it.
         event.status = 'picked_up';
+        // The normalizer may already have swapped in the pickup-en-route raw
+        // status (reason text); restore the provider code so raw policies do not
+        // enqueue a merchant pickup_en_route update after collection.
+        event.rawStatus = candidate.providerStatus;
         candidate.recognizedStatus = 'picked_up';
       } else {
         event.status = 'pickup_scheduled';

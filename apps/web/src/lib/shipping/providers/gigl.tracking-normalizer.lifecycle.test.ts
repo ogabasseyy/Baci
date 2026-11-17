@@ -188,3 +188,26 @@ describe('bugfix: a scan without a location does not prove the parcel left the d
     ).toBe(false);
   });
 });
+
+describe('bugfix: pickup-reason MSHC after completed pickup keeps the provider raw status', () => {
+  it('does not leave the pickup-en-route raw status on an MSHC that follows MPIK', () => {
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W28',
+        MobileShipmentTrackings: [
+          event('MPIK', '10:00:00'),
+          event('MSHC', '11:00:00', {
+            ScanStatusReason: 'RIDER EN ROUTE FOR PICKUP',
+          }),
+        ],
+      },
+      'W28',
+      OBSERVED_AT
+    );
+    const mshc = result.events.find((e) => e.rawStatus === 'MSHC');
+    expect(mshc?.status).toBe('picked_up');
+    expect(
+      result.events.some((e) => e.rawStatus === 'RIDER EN ROUTE FOR PICKUP')
+    ).toBe(false);
+  });
+});

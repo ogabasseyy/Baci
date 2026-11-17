@@ -14,11 +14,7 @@ import {
   assertKudaBillItemPriceCurrent,
   clearKudaBillItemPriceCacheForTests,
 } from './kuda-bill-item-price';
-import {
-  startimes,
-  startimesSuper,
-  superPackage,
-} from './kuda-bill-item-price.test-fixtures';
+import { startimes, superPackage } from './kuda-bill-item-price.test-fixtures';
 import {
   KUDA_BILL_PRICE_CHANGED_MESSAGE,
   KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE,

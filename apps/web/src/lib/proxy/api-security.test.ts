@@ -266,4 +266,30 @@ describe('API security stage', () => {
     expect(checkRateLimit).toHaveBeenCalledWith(request, '/api/orders');
     expect(response).toBeNull();
   });
+
+  it('preserves checkRateLimit on query-variant public GET requests', async () => {
+    const { checkRateLimit } = await import('@/lib/rate-limit');
+    vi.mocked(checkRateLimit).mockClear();
+    vi.mocked(checkRateLimit).mockResolvedValueOnce({
+      allowed: true,
+      limit: 60,
+      remaining: 59,
+      resetTime: Date.now() + 60_000,
+    });
+
+    const request = new NextRequest(
+      'https://usebaci.com/api/storefront/products?q=iphone&page=2',
+      { method: 'GET' }
+    );
+    const response = await runApiSecurityStage(
+      request,
+      getApiSecurityContext('/api/storefront/products', 'usebaci.com', 'GET')
+    );
+
+    expect(response).toBeNull();
+    expect(checkRateLimit).toHaveBeenCalledWith(
+      request,
+      '/api/storefront/products'
+    );
+  });
 });

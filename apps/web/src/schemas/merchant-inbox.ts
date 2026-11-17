@@ -34,12 +34,20 @@ export const providerInboxConversationSchema = z.object({
   last_non_activity_message: providerInboxMessageSchema.nullish(),
 });
 
+/**
+ * Most conversations one page can hold. The provider schema and Baci's own
+ * browser response share this limit so they cannot drift apart.
+ */
+export const MERCHANT_INBOX_MAX_CONVERSATIONS_PER_PAGE = 200;
+
 export const providerInboxConversationListSchema = z.object({
   data: z.object({
     meta: z
       .object({ all_count: z.number().int().nonnegative().safe().nullish() })
       .nullish(),
-    payload: z.array(z.unknown()).max(200),
+    payload: z
+      .array(z.unknown())
+      .max(MERCHANT_INBOX_MAX_CONVERSATIONS_PER_PAGE),
   }),
 });
 
@@ -88,3 +96,41 @@ export type MerchantInboxConversation = {
   lastActivityAt: string | null;
   lastMessage: MerchantInboxMessage | null;
 };
+
+/** Baci's own inbox responses, validated again in the browser. */
+export const merchantInboxMessageSchema = z.object({
+  id: providerId,
+  sender: z.enum(['customer', 'store', 'assistant', 'system']),
+  kind: z.enum(['text', 'product_card', 'other']),
+  text: z.string().max(4_000),
+  createdAt: z.string().min(1).max(40),
+}) satisfies z.ZodType<MerchantInboxMessage>;
+
+export const merchantInboxConversationSchema = z.object({
+  id: providerId,
+  status: z.enum(['open', 'resolved', 'pending', 'snoozed']),
+  unreadCount: z.number().int().nonnegative(),
+  customerName: z.string().min(1).max(80),
+  lastActivityAt: z.string().min(1).max(40).nullable(),
+  lastMessage: merchantInboxMessageSchema.nullable(),
+}) satisfies z.ZodType<MerchantInboxConversation>;
+
+export const merchantInboxConversationsResponseSchema = z.object({
+  conversations: z
+    .array(merchantInboxConversationSchema)
+    .max(MERCHANT_INBOX_MAX_CONVERSATIONS_PER_PAGE),
+  hasMore: z.boolean(),
+  page: z.number().int().positive(),
+});
+
+export const merchantInboxThreadResponseSchema = z.object({
+  conversation: merchantInboxConversationSchema,
+  messages: z.array(merchantInboxMessageSchema).max(200),
+});
+
+export const merchantInboxReplyResponseSchema = z.object({
+  message: merchantInboxMessageSchema,
+});
+
+/** The code of an error response from Baci's inbox API. */
+export const merchantInboxErrorPayloadSchema = z.object({ code: z.string() });

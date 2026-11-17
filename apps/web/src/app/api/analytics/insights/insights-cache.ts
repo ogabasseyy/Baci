@@ -1,16 +1,11 @@
 import { cache } from '@/lib/cache';
 import { getRedis } from '@/lib/redis';
-import { analyticsInsightsSchema } from '@/schemas/analytics-insights';
+import {
+  type AnalyticsInsights,
+  analyticsInsightsSchema,
+} from '@/schemas/analytics-insights';
 
-export interface InsightsPayload {
-  insights: Array<{
-    title: string;
-    description: string;
-    type: string;
-    priority: string;
-    action?: string;
-  }>;
-}
+export type InsightsPayload = AnalyticsInsights;
 
 const REDIS_CACHE_TIMEOUT_MS = 750;
 const REDIS_COOLDOWN_MS = 30_000;

@@ -57,19 +57,11 @@ export function useSantaPolling(merchantId: string | undefined) {
       inFlight = true;
       const requestId = ++latestRequestId;
       let timeoutId: ReturnType<typeof setTimeout> | null = null;
-      const underlyingRequest = Promise.all([
-        getSantaStats(activeMerchantId),
-        getRecentInteractions(activeMerchantId),
-      ]);
-      // Keep inFlight true until the underlying server actions settle so a
-      // timed-out request cannot overlap with a new interval tick.
-      void underlyingRequest
-        .catch(() => undefined)
-        .finally(() => {
-          inFlight = false;
-        });
       Promise.race([
-        underlyingRequest,
+        Promise.all([
+          getSantaStats(activeMerchantId),
+          getRecentInteractions(activeMerchantId),
+        ]),
         new Promise<never>((_, reject) => {
           timeoutId = setTimeout(
             () => reject(new Error('Santa poll request timed out')),
@@ -91,6 +83,9 @@ export function useSantaPolling(merchantId: string | undefined) {
         })
         .finally(() => {
           if (timeoutId !== null) clearTimeout(timeoutId);
+          if (requestId === latestRequestId) {
+            inFlight = false;
+          }
           if (isStale) return;
           setLoading(false);
           if (attempts >= MAX_SANTA_POLL_ATTEMPTS) {

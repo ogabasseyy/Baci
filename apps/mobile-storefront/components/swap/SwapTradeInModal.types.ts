@@ -10,12 +10,12 @@ export type SwapTradeInModalProps = {
   isAnalyzing: boolean;
   result: AIAnalysisResult | null;
   step: SwapModalStep;
-  videoUri: string | null;
+  mediaLabel: string | null;
   visible: boolean;
   onAcceptOffer: () => void;
   onClose: () => void;
-  onClearVideo: () => void;
-  onPickVideo: () => void;
+  onClearMedia: () => void;
+  onPickMedia: () => void;
   onRecordVideo: () => void;
   onReset: () => void;
   onStartAnalysis: () => void;
@@ -26,11 +26,11 @@ export type SwapUploadStepProps = Pick<
   | 'colors'
   | 'error'
   | 'isAnalyzing'
-  | 'onClearVideo'
-  | 'onPickVideo'
+  | 'onClearMedia'
+  | 'onPickMedia'
   | 'onRecordVideo'
   | 'onStartAnalysis'
-  | 'videoUri'
+  | 'mediaLabel'
 >;
 
 export type SwapResultStepProps = Pick<

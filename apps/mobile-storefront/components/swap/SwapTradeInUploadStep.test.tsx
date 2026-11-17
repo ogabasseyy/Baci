@@ -8,11 +8,11 @@ function renderUploadStep(overrides = {}) {
     colors: Colors.light,
     error: null,
     isAnalyzing: false,
-    onClearVideo: jest.fn(),
-    onPickVideo: jest.fn(),
+    onClearMedia: jest.fn(),
+    onPickMedia: jest.fn(),
     onRecordVideo: jest.fn(),
     onStartAnalysis: jest.fn(),
-    videoUri: null,
+    mediaLabel: null,
     ...overrides,
   };
 
@@ -25,22 +25,24 @@ describe('SwapTradeInUploadStep', () => {
   it('renders upload choices and forwards picker actions', () => {
     const props = renderUploadStep();
 
-    fireEvent.press(screen.getByText('Select Video'));
-    fireEvent.press(screen.getByText('Record Now'));
+    fireEvent.press(screen.getByText('Select Photos or Video'));
+    fireEvent.press(screen.getByText('Record Video'));
 
-    expect(screen.getByText('Upload a Video of Your Device')).toBeTruthy();
-    expect(props.onPickVideo).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByText('Upload Photos or a Video of Your Device')
+    ).toBeTruthy();
+    expect(props.onPickMedia).toHaveBeenCalledTimes(1);
     expect(props.onRecordVideo).toHaveBeenCalledTimes(1);
   });
 
-  it('renders selected video state and starts analysis', () => {
-    const props = renderUploadStep({ videoUri: 'file:///device.mov' });
+  it('renders the selected media and starts analysis', () => {
+    const props = renderUploadStep({ mediaLabel: '3 photos selected' });
 
     fireEvent.press(screen.getByText('Remove'));
     fireEvent.press(screen.getByText('Analyze Device'));
 
-    expect(screen.getByText('Video Selected')).toBeTruthy();
-    expect(props.onClearVideo).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('3 photos selected')).toBeTruthy();
+    expect(props.onClearMedia).toHaveBeenCalledTimes(1);
     expect(props.onStartAnalysis).toHaveBeenCalledTimes(1);
   });
 

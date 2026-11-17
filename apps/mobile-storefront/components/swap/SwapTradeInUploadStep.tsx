@@ -8,11 +8,11 @@ export function SwapTradeInUploadStep({
   colors,
   error,
   isAnalyzing,
-  onClearVideo,
-  onPickVideo,
+  onClearMedia,
+  onPickMedia,
   onRecordVideo,
   onStartAnalysis,
-  videoUri,
+  mediaLabel,
 }: SwapUploadStepProps) {
   return (
     <>
@@ -23,16 +23,16 @@ export function SwapTradeInUploadStep({
             { backgroundColor: colors.background },
           ]}
         >
-          <Ionicons name="videocam" size={32} color={BRAND.primary} />
+          <Ionicons name="camera" size={32} color={BRAND.primary} />
         </View>
         <Text style={[styles.uploadTitle, { color: colors.text }]}>
-          Upload a Video of Your Device
+          Upload Photos or a Video of Your Device
         </Text>
         <Text style={[styles.uploadDesc, { color: colors.textSecondary }]}>
-          Show the screen and back clearly. Keep it under 15 seconds.
+          Show the screen and back clearly. Up to 6 photos, or one short video.
         </Text>
 
-        {videoUri ? (
+        {mediaLabel ? (
           <View style={styles.videoSelected}>
             <View
               style={[
@@ -44,10 +44,10 @@ export function SwapTradeInUploadStep({
               <Text
                 style={[styles.videoSelectedText, { color: colors.success }]}
               >
-                Video Selected
+                {mediaLabel}
               </Text>
             </View>
-            <Pressable onPress={onClearVideo}>
+            <Pressable onPress={onClearMedia}>
               <Text style={[styles.removeVideoText, { color: colors.error }]}>
                 Remove
               </Text>
@@ -57,20 +57,20 @@ export function SwapTradeInUploadStep({
           <View style={styles.uploadButtons}>
             <Pressable
               style={[styles.uploadButton, { backgroundColor: BRAND.primary }]}
-              onPress={onPickVideo}
+              onPress={onPickMedia}
             >
               <Ionicons name="folder" size={18} color={colors.white} />
               <Text style={[styles.uploadButtonText, { color: colors.white }]}>
-                Select Video
+                Select Photos or Video
               </Text>
             </Pressable>
             <Pressable
               style={[styles.uploadButton, { backgroundColor: colors.text }]}
               onPress={onRecordVideo}
             >
-              <Ionicons name="camera" size={18} color={colors.white} />
+              <Ionicons name="videocam" size={18} color={colors.white} />
               <Text style={[styles.uploadButtonText, { color: colors.white }]}>
-                Record Now
+                Record Video
               </Text>
             </Pressable>
           </View>
@@ -91,10 +91,10 @@ export function SwapTradeInUploadStep({
         style={[
           styles.analyzeButton,
           { backgroundColor: BRAND.primary },
-          (!videoUri || isAnalyzing) && styles.analyzeButtonDisabled,
+          (!mediaLabel || isAnalyzing) && styles.analyzeButtonDisabled,
         ]}
         onPress={onStartAnalysis}
-        disabled={!videoUri || isAnalyzing}
+        disabled={!mediaLabel || isAnalyzing}
       >
         <Text style={[styles.analyzeButtonText, { color: colors.white }]}>
           Analyze Device

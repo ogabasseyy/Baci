@@ -666,6 +666,9 @@ importers:
       expo-image:
         specifier: ~58.0.17
         version: 58.0.17(expo@58.0.19)(react-native-web@0.21.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-native@0.88.0(patch_hash=3455dc815738c37de8c09a1fd7b7cbb6391ed0f2ac6664aa093bc3ba7b114048)(@babel/core@7.29.6(supports-color@10.2.2))(@react-native/metro-config@0.88.0(@babel/core@7.29.6(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.3.0)(react@19.3.0)(supports-color@10.2.2))(react@19.3.0)
+      expo-image-manipulator:
+        specifier: ~58.0.15
+        version: 58.0.16(expo@58.0.19)(react-native@0.88.0(patch_hash=3455dc815738c37de8c09a1fd7b7cbb6391ed0f2ac6664aa093bc3ba7b114048)(@babel/core@7.29.6(supports-color@10.2.2))(@react-native/metro-config@0.88.0(@babel/core@7.29.6(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.3.0)(react@19.3.0)(supports-color@10.2.2))(react@19.3.0)
       expo-image-picker:
         specifier: ~58.0.10
         version: 58.0.10(expo@58.0.19)
@@ -711,6 +714,9 @@ importers:
       expo-updates:
         specifier: ~58.0.18
         version: 58.0.18(expo-dev-client@58.0.15(expo@58.0.19)(react-native@0.88.0(patch_hash=3455dc815738c37de8c09a1fd7b7cbb6391ed0f2ac6664aa093bc3ba7b114048)(@babel/core@7.29.6(supports-color@10.2.2))(@react-native/metro-config@0.88.0(@babel/core@7.29.6(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.3.0)(react@19.3.0)(supports-color@10.2.2)))(expo@58.0.19)(react-native@0.88.0(patch_hash=3455dc815738c37de8c09a1fd7b7cbb6391ed0f2ac6664aa093bc3ba7b114048)(@babel/core@7.29.6(supports-color@10.2.2))(@react-native/metro-config@0.88.0(@babel/core@7.29.6(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.3.0)(react@19.3.0)(supports-color@10.2.2))(react@19.3.0)(supports-color@10.2.2)
+      expo-video-thumbnails:
+        specifier: ~58.0.2
+        version: 58.0.3(expo@58.0.19)
       expo-web-browser:
         specifier: ~58.0.6
         version: 58.0.6(expo@58.0.19)(react-native@0.88.0(patch_hash=3455dc815738c37de8c09a1fd7b7cbb6391ed0f2ac6664aa093bc3ba7b114048)(@babel/core@7.29.6(supports-color@10.2.2))(@react-native/metro-config@0.88.0(@babel/core@7.29.6(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.3.0)(react@19.3.0)(supports-color@10.2.2))
@@ -8396,6 +8402,13 @@ packages:
     peerDependencies:
       expo: '*'
 
+  expo-image-manipulator@58.0.16:
+    resolution: {integrity: sha512-KY4Y4GjyaPuvRrZWQ2qDDPC0+q4xOpz9rydrK8/jexU+zwCMHsQGalOPjFwZrC0QhvGxfvvG9H/Qwv6Yh9vlOg==}
+    peerDependencies:
+      expo: '*'
+      react: '*'
+      react-native: 0.88.0
+
   expo-image-picker@58.0.10:
     resolution: {integrity: sha512-yqQC9UYMWSUxk6U0jaS1vE1w+b9Ru0FJmQ3KjUf9Q9oVg5xBxmg8+Ts+usazMAuPoskNIXJ++VZ+uK6br9yUGQ==}
     peerDependencies:
@@ -8607,6 +8620,11 @@ packages:
     peerDependenciesMeta:
       expo-dev-client:
         optional: true
+
+  expo-video-thumbnails@58.0.3:
+    resolution: {integrity: sha512-gYWxxEyrRyXQpiUOmiffnBmnfNrbpY0M4djNaLft1ue4k0r8OgC4bQgJhYv+Y+XNsyaoVIlNT3bd61pJqr9pDA==}
+    peerDependencies:
+      expo: '*'
 
   expo-web-browser@58.0.6:
     resolution: {integrity: sha512-6/QtDqTOaTqM/ysYYdEZG4XDrWloOo1wVYCn4g3IgayF+1lZWTwMqa5j4kcn2TA1UBer8O7zbMQYLfSMppQ/zg==}
@@ -21665,6 +21683,13 @@ snapshots:
     dependencies:
       expo: 58.0.19(6453cad46d3af710dcb67047360e3f04)
 
+  expo-image-manipulator@58.0.16(expo@58.0.19)(react-native@0.88.0(patch_hash=3455dc815738c37de8c09a1fd7b7cbb6391ed0f2ac6664aa093bc3ba7b114048)(@babel/core@7.29.6(supports-color@10.2.2))(@react-native/metro-config@0.88.0(@babel/core@7.29.6(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.3.0)(react@19.3.0)(supports-color@10.2.2))(react@19.3.0):
+    dependencies:
+      expo: 58.0.19(6453cad46d3af710dcb67047360e3f04)
+      expo-image-loader: 58.0.3(expo@58.0.19)
+      react: 19.3.0
+      react-native: 0.88.0(patch_hash=3455dc815738c37de8c09a1fd7b7cbb6391ed0f2ac6664aa093bc3ba7b114048)(@babel/core@7.29.6(supports-color@10.2.2))(@react-native/metro-config@0.88.0(@babel/core@7.29.6(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.3.0)(react@19.3.0)(supports-color@10.2.2)
+
   expo-image-picker@58.0.10(expo@58.0.19):
     dependencies:
       expo: 58.0.19(6453cad46d3af710dcb67047360e3f04)
@@ -21921,6 +21946,10 @@ snapshots:
       expo-dev-client: 58.0.15(expo@58.0.19)(react-native@0.88.0(patch_hash=3455dc815738c37de8c09a1fd7b7cbb6391ed0f2ac6664aa093bc3ba7b114048)(@babel/core@7.29.6(supports-color@10.2.2))(@react-native/metro-config@0.88.0(@babel/core@7.29.6(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.3.0)(react@19.3.0)(supports-color@10.2.2))
     transitivePeerDependencies:
       - supports-color
+
+  expo-video-thumbnails@58.0.3(expo@58.0.19):
+    dependencies:
+      expo: 58.0.19(6453cad46d3af710dcb67047360e3f04)
 
   expo-web-browser@58.0.6(expo@58.0.19)(react-native@0.88.0(patch_hash=3455dc815738c37de8c09a1fd7b7cbb6391ed0f2ac6664aa093bc3ba7b114048)(@babel/core@7.29.6(supports-color@10.2.2))(@react-native/metro-config@0.88.0(@babel/core@7.29.6(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.3.0)(react@19.3.0)(supports-color@10.2.2)):
     dependencies:

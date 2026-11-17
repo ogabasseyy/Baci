@@ -138,8 +138,10 @@ export async function purchaseBill(
         providerDefiniteFailure:
           parsedEnvelope.responseCode?.trim() !== '99' &&
           isMonnifyKnownVendRefusalText(rawMessage) &&
+          // Read the whole answer (code, message and body), so a duplicate
+          // signalled anywhere in it is caught.
           !isMonnifyDuplicateReferenceText(
-            `${parsedEnvelope.responseCode ?? ''} ${rawMessage}`
+            `${parsedEnvelope.responseCode ?? ''} ${rawMessage} ${JSON.stringify(envelope)}`
           ),
       };
     }

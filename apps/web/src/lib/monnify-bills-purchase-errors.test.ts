@@ -186,6 +186,22 @@ describe('Monnify bill purchase errors', () => {
       });
     });
 
+    it('spots a duplicate signalled only in the business response body', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          requestSuccessful: false,
+          responseCode: '01',
+          responseMessage: 'Insufficient wallet balance',
+          responseBody: { reason: 'Duplicate vendReference' },
+        }),
+      });
+
+      await expect(vend()).resolves.toMatchObject({
+        providerDefiniteFailure: false,
+      });
+    });
+
     it('never marks code 99 as definite, even with refusal wording', async () => {
       global.fetch = vi.fn().mockResolvedValue({
         ok: true,

@@ -138,3 +138,15 @@ describe('bugfix: the length cut keeps whole trailing codes', () => {
     expect(sanitizeMonnifyErrorDetail(text)).not.toMatch(/\d$/);
   });
 });
+
+describe('bugfix: grouped national number without a trunk prefix', () => {
+  it.each([
+    '801 234 5678',
+    '(801) 234-5678',
+    '903.456.7890',
+  ])('redacts %s', (phone) => {
+    expect(sanitizeMonnifyErrorDetail(`Vend failed for ${phone}`)).toBe(
+      'Vend failed for [redacted]'
+    );
+  });
+});

@@ -8,11 +8,11 @@ const SENSITIVE_DIGIT_SEQUENCE_PATTERN = /(?<!\d)\d{7,}(?!\d)/g;
 /**
  * Nigerian phone numbers written in groups, e.g. "+234 801 234 5678",
  * "0801-234-5678", "0801.234.5678", "(0801) 234 5678" or
- * "+234 (801) 234 5678" or "0801/234/5678". Only phone-shaped groups: other long references stay
+ * "+234 (801) 234 5678", "0801/234/5678" or "801 234 5678" (no prefix). Only phone-shaped groups: other long references stay
  * readable (unbroken runs of 7+ digits are already redacted above).
  */
 const SENSITIVE_GROUPED_PHONE_PATTERN =
-  /(?<!\d)\(?(?:\+?234\)?[ ./-]?\(?|0)[789]\d\d\)?(?:[ ./-]?\d){7}(?!\d)/g;
+  /(?<!\d)\(?(?:\+?234\)?[ ./-]?\(?|0)?[789]\d\d\)?(?:[ ./-]?\d){7}(?!\d)/g;
 /**
  * Any other grouped number that starts like a phone number ("+" or a leading
  * 0) and runs to 9+ digits, e.g. foreign or unusual Nigerian ranges.

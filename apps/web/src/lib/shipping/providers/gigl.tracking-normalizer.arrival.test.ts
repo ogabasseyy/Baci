@@ -173,6 +173,7 @@ describe('review hardening: destination matching', () => {
     normalizeGiglTrackingShipment(
       {
         Waybill: 'W9',
+        Origin: 'LAGOS',
         Destination: destination,
         MobileShipmentTrackings: [
           event(code, '11:00:00', { Location: location }),

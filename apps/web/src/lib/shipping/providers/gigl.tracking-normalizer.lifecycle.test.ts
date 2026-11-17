@@ -241,3 +241,40 @@ describe('bugfix: equal-timestamp returned/cancelled scans outrank MSHC', () => 
     }
   });
 });
+
+describe('bugfix: unknown origin does not turn the first hub scan into arrival', () => {
+  it('does not flag a first destination-named scan when Origin is missing', () => {
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W24',
+        Destination: 'ABUJA',
+        MobileShipmentTrackings: [
+          event('MSVC', '10:00:00', { Location: 'WUSE ABUJA (Wuse)' }),
+        ],
+      },
+      'W24',
+      OBSERVED_AT
+    );
+    expect(
+      result.events.some((e) => e.rawStatus === GIGL_ARRIVED_IN_CITY_RAW_STATUS)
+    ).toBe(false);
+  });
+
+  it('still flags arrival when Origin is missing but the parcel moved away first', () => {
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W25',
+        Destination: 'ABUJA',
+        MobileShipmentTrackings: [
+          event('MSVC', '09:00:00', { Location: 'IKEJA LAGOS (Ikeja)' }),
+          event('MSVC', '11:00:00', { Location: 'WUSE ABUJA (Wuse)' }),
+        ],
+      },
+      'W25',
+      OBSERVED_AT
+    );
+    expect(
+      result.events.some((e) => e.rawStatus === GIGL_ARRIVED_IN_CITY_RAW_STATUS)
+    ).toBe(true);
+  });
+});

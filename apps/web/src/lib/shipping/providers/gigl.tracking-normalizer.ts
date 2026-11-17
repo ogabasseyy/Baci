@@ -69,7 +69,12 @@ function placeWords(value: string | undefined): string[] {
     .filter((word) => word.length > 0 && !PLACE_NOISE_WORDS.has(word));
 }
 
-/** Whole-word match: every destination word must appear as a word of the centre name. */
+/**
+ * Whole-word match: every destination word must appear as a word of the centre
+ * name. Known limitation: text after "(" is ignored and abbreviations (PHC for
+ * PORT HARCOURT) are not aliased, so such centres miss the name-match arrival
+ * (an explicit ARF still counts). Missing a notification beats a false one.
+ */
 function matchesDestination(
   location: string | undefined,
   destination: string | undefined
@@ -126,8 +131,11 @@ function applyLifecycleGuards(
   origin: string | undefined
 ): void {
   // A same-city shipment's origin centre also matches the destination, so a
-  // name match only counts once the parcel has moved through the network.
-  const sameCity = matchesDestination(origin, destination);
+  // name match only counts once the parcel has moved through the network. An
+  // unknown origin (the field is optional) is treated the same way: the first
+  // scan could be the origin centre, so require a scan away from the destination.
+  const sameCity =
+    placeWords(origin).length === 0 || matchesDestination(origin, destination);
   // Equal timestamps: process MSHC last so a contemporaneous arrival or
   // movement scan is seen first, whatever order the payload listed them in.
   const ordered = [...candidates].sort(

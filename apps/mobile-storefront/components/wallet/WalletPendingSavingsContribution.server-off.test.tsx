@@ -87,4 +87,17 @@ describe('pending contribution card with the server off', () => {
       getByRole('button', { name: 'Check contribution status' })
     ).toBeDisabled();
   });
+
+  it('says Retry, not Check, when the button sends the same request again', () => {
+    const { getByRole, getByText } = render(
+      <WalletPendingSavingsContribution
+        colors={Colors.light}
+        isChecking={false}
+        onCheck={jest.fn()}
+        retry
+      />
+    );
+    expect(getByRole('button', { name: 'Retry contribution' })).toBeTruthy();
+    expect(getByText(/won't be charged twice/)).toBeTruthy();
+  });
 });

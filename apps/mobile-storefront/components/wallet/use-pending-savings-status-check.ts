@@ -54,7 +54,11 @@ export function usePendingSavingsStatusCheck(input: {
       live.current = false;
     };
   }, []);
-  const checkStatus = async (): Promise<SavingsStatusCheckResult> => {
+  // automatic: a timer or foreground read. It posts only settled outcomes, so
+  // a dismissed "pending" or "unavailable" notice never reopens by itself.
+  const checkStatus = async (
+    options: { automatic?: boolean } = {}
+  ): Promise<SavingsStatusCheckResult> => {
     const operationId = input.idempotencyKeyRef.current;
     if (!operationId || input.submittingRef?.current) return 'no-operation';
     if (inFlight.current) return 'busy';
@@ -100,7 +104,7 @@ export function usePendingSavingsStatusCheck(input: {
         },
         refetchWallet: input.refetchWallet,
         setPending: setIsCheckingStatus,
-        isLive: () => live.current,
+        isLive: () => live.current && !options.automatic,
       });
     } finally {
       inFlight.current = false;

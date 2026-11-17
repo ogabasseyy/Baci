@@ -33,6 +33,8 @@ export interface WalletContentProps {
   hasPendingSavingsContribution?: boolean;
   /** A status read for the pending contribution is running. */
   isCheckingSavingsContribution?: boolean;
+  /** The pending contribution is retried (same request), not status-read. */
+  isSavingsContributionRetry?: boolean;
   /** Reads the pending contribution's status; never starts a payment. */
   onCheckSavingsContribution?: () => unknown;
   goalAwaitingSettlement?: boolean;

@@ -36,6 +36,7 @@ export function WalletSavingsProgressModal({
   isAdding,
   hasPendingContribution = false,
   isCheckingContribution = false,
+  isContributionRetry,
   isFundPending = false,
   onAddAmountChange,
   onAddSavings,
@@ -82,8 +83,7 @@ export function WalletSavingsProgressModal({
     // Sign in, then come back to this goal's savings sheet.
     const signIn = (dismiss: () => void) => {
       dismiss();
-      // Back through the goal link route: it re-checks the goal is still
-      // this (possibly different) account's before opening its sheet.
+      // Back via the goal link route, which re-checks the goal's account.
       const back = `/wallet/savings/goal-actions?goalId=${encodeURIComponent(cancelGoal.id)}`;
       router.push(`/auth/login?returnTo=${encodeURIComponent(back)}`);
     };
@@ -97,8 +97,7 @@ export function WalletSavingsProgressModal({
         overlay={<WalletPinSheet colors={colors} {...cancel.flow.sheetProps} />}
       >
         {(dismiss) => (
-          // Scrolls if large text or a small screen makes it taller than the
-          // sheet can grow, so the buttons always stay reachable.
+          // Scrolls when taller than the sheet: the buttons stay reachable.
           <BottomSheetScrollView
             showsVerticalScrollIndicator={false}
             onContentSizeChange={(_width, height) =>
@@ -254,6 +253,7 @@ export function WalletSavingsProgressModal({
                 colors={colors}
                 isChecking={isCheckingContribution || isAdding}
                 onCheck={onCheckContribution}
+                retry={isContributionRetry}
               />
             ) : canAddToSavings ? (
               <WalletSavingsFundingSection

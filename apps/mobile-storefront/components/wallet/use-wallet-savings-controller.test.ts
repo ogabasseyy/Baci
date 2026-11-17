@@ -177,6 +177,7 @@ describe('goalAwaitingSettlement', () => {
         result.current.hasPendingSavingsContribution,
       goalAwaitingSettlement: true,
       isCheckingSavingsContribution: false,
+      isSavingsContributionRetry: false,
       onCheckSavingsContribution: expect.any(Function),
       walletUpdatedAt: 42,
     });
@@ -254,8 +255,12 @@ describe('pending contribution status', () => {
     // Stored after the scope is bound (the first render drops stale ids).
     operationRailRef.current = 'legacy';
     rerender({});
-    // The card stays, so the amount can't be edited before the retry.
+    // The card stays, so the amount can't be edited before the retry, and it
+    // says Retry, not Check: this button may send the request again.
     expect(result.current.hasPendingSavingsContribution).toBe(true);
+    expect(
+      result.current.walletContentSavingsProps.isSavingsContributionRetry
+    ).toBe(true);
     await result.current.walletContentSavingsProps.onCheckSavingsContribution();
     // Same id, same rail, same amount: the original add, not a status read.
     expect(mockSubmit).toHaveBeenCalledTimes(1);

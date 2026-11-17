@@ -28,8 +28,10 @@ export function statusPollDelay(attempt: number): number {
  * 2026-11-17: the card's own timer died, and a transfer confirmed two
  * minutes later was never picked up). Status reads only: `check` never
  * starts a transfer. Stops when the operation settles or is dropped, on
- * unmount, or after STATUS_POLL_WINDOW_MS; a return to the foreground while
- * the operation is still stored checks at once (a read still in flight answers busy and the next tick reads again) and starts a fresh window.
+ * unmount, or after STATUS_POLL_WINDOW_MS. Nothing is read while the app is
+ * in the background: leaving pauses the run, and a return to the foreground
+ * with the operation still stored checks at once (a read still in flight
+ * answers busy and the next tick reads again) and starts a fresh window.
  */
 export function usePendingSavingsStatusPolling(
   operationId: string | null,
@@ -58,12 +60,13 @@ export function usePendingSavingsStatusPolling(
       if (Date.now() + delay - startedAt > STATUS_POLL_WINDOW_MS) return;
       timer = setTimeout(() => checkThen(ownRun, attempt, startedAt), delay);
     };
-    schedule(run, 0, Date.now());
+    // Mounted in the background: wait for the app to come back.
+    if (AppState.currentState !== 'background') schedule(run, 0, Date.now());
     const subscription = AppState.addEventListener('change', (state) => {
-      if (state !== 'active') return;
+      // Any change ends the current run, so nothing is read in the background.
       clearTimeout(timer);
       run += 1;
-      checkThen(run, -1, Date.now());
+      if (state === 'active') checkThen(run, -1, Date.now());
     });
     return () => {
       active = false;

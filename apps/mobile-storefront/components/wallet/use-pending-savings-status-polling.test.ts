@@ -160,6 +160,36 @@ it('checks at once on return to the app and starts a fresh window', async () => 
   expect(check).toHaveBeenCalledTimes(before + 2);
 });
 
+it('reads nothing while the app is in the background', async () => {
+  const check = jest.fn(
+    async (): Promise<SavingsStatusCheckResult> => 'pending'
+  );
+  poll(check);
+  await advance(3000);
+  await act(async () => appStateListener?.('background'));
+  await advance(STATUS_POLL_WINDOW_MS);
+  expect(check).not.toHaveBeenCalled();
+});
+
+it('waits for the foreground when it starts in the background', async () => {
+  // The test renderer's AppState stub is a plain writable property.
+  const state = AppState as { currentState: unknown };
+  const original = state.currentState;
+  state.currentState = 'background';
+  try {
+    const check = jest.fn(
+      async (): Promise<SavingsStatusCheckResult> => 'pending'
+    );
+    poll(check);
+    await advance(60_000);
+    expect(check).not.toHaveBeenCalled();
+    await act(async () => appStateListener?.('active'));
+    expect(check).toHaveBeenCalledTimes(1);
+  } finally {
+    state.currentState = original;
+  }
+});
+
 it('never schedules two chains when the app returns mid-wait', async () => {
   const check = jest.fn(
     async (): Promise<SavingsStatusCheckResult> => 'pending'

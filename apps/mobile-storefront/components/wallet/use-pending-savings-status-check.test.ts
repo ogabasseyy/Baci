@@ -128,6 +128,28 @@ it('drops "still waiting" news from a read that ends after the wallet left', asy
   expect(mockNotify).not.toHaveBeenCalled();
 });
 
+it('an automatic read posts no "still waiting" notice; a tap does', async () => {
+  mockFetchJson.mockResolvedValue({
+    status: 'pending',
+    operationId: OPERATION,
+  });
+  const { view } = setup();
+  await act(async () => {
+    expect(await view.result.current.checkStatus({ automatic: true })).toBe(
+      'pending'
+    );
+  });
+  expect(mockNotify).not.toHaveBeenCalled();
+  await act(async () => {
+    expect(await view.result.current.checkStatus()).toBe('pending');
+  });
+  expect(mockNotify).toHaveBeenCalledWith(
+    'Contribution pending',
+    expect.any(String),
+    'info'
+  );
+});
+
 it('runs one read at a time', async () => {
   let finish: (value: unknown) => void = () => undefined;
   mockFetchJson.mockImplementation(

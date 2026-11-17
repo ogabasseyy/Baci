@@ -81,7 +81,7 @@ export function useWalletSavingsController(
     hasPendingSavingsContribution && !legacyRetry
       ? input.idempotencyKeyRef.current
       : null,
-    status.checkStatus
+    () => status.checkStatus({ automatic: true })
   );
   return {
     ...actions,
@@ -92,6 +92,7 @@ export function useWalletSavingsController(
     walletContentSavingsProps: {
       hasPendingSavingsContribution,
       isCheckingSavingsContribution: status.isCheckingStatus,
+      isSavingsContributionRetry: legacyRetry,
       // Primary: a status read only, never the submit path. Legacy: replay.
       onCheckSavingsContribution: legacyRetry
         ? actions.handleAddSavingsContribution

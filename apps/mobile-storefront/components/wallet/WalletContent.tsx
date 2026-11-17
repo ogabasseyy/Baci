@@ -184,6 +184,7 @@ export function WalletContent(props: WalletContentProps) {
         isAdding={isAddingSavingsContribution}
         hasPendingContribution={props.hasPendingSavingsContribution}
         isCheckingContribution={props.isCheckingSavingsContribution}
+        isContributionRetry={props.isSavingsContributionRetry}
         onCheckContribution={props.onCheckSavingsContribution}
         walletUpdatedAt={props.walletUpdatedAt}
         isFundPending={isFundPending}

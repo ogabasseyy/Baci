@@ -10,7 +10,6 @@ import { SAVINGS_WALLET_CAN_PAY_UTILITIES } from '@/lib/savings-wallet-can-pay-u
 import { SavingsProviderPreview } from './SavingsProviderPreview';
 import { usePiggyvestAccountUnconfirmed } from './use-piggyvest-account-unconfirmed';
 import { WalletCreditCheckPanel } from './WalletCreditCheckPanel';
-import { WalletHeroAddMoneyButton } from './WalletHeroAddMoneyButton';
 import { WalletHeroCreateAccount } from './WalletHeroCreateAccount';
 import { WalletHeroFundingAccount } from './WalletHeroFundingAccount';
 import { WalletHeroLoyaltyPill } from './WalletHeroLoyaltyPill';
@@ -218,9 +217,9 @@ export function WalletHeroSection({
           Last known account. It may be out of date.
         </Text>
       ) : null}
-      {savingsView && fundingAccount ? (
-        <WalletHeroAddMoneyButton onPress={onOpenFundPanel} />
-      ) : null}
+      {/* No Add money button: the account number and its Copy button are
+          already on the card, and transfer is the only way in (owner,
+          2026-11-09 and 2026-11-17). */}
       {!fundingAccount &&
       !primaryUnknown &&
       createFundingAccountUnavailableMessage ? (

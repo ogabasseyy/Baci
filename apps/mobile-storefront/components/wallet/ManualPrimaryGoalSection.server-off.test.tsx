@@ -127,13 +127,17 @@ it('shows no amount entry for a plan still being set up', () => {
 });
 
 describe('a head start ticked "pay now" when the plan was created', () => {
-  function renderWith(onAddSavings: () => void, walletBalance = 220) {
+  function renderWith(
+    onAddSavings: () => void,
+    walletBalance = 220,
+    isAdding = false
+  ) {
     render(
       <ManualPrimaryGoalSection
         addAmount="100"
         colors={Colors.dark}
         goal={goal}
-        isAdding={false}
+        isAdding={isAdding}
         isFundPending={false}
         merchantId="merchant-a"
         onAddAmountChange={jest.fn()}
@@ -198,5 +202,14 @@ describe('a head start ticked "pay now" when the plan was created', () => {
     );
     expect(onAddSavings).toHaveBeenCalledTimes(1);
     expect(screen.getByText('contribution-actions')).toBeOnTheScreen();
+  });
+
+  it('hides the Move buttons from screen readers while the head start is adding', () => {
+    walletHeadStarts.remember('goal-a', 100);
+    mockPhase = 'ready';
+    renderWith(jest.fn(), 220, true);
+    expect(screen.queryAllByRole('button')).toHaveLength(0);
+    expect(screen.getByText('Adding ₦100 to your plan…')).toBeOnTheScreen();
+    walletHeadStarts.take('goal-a');
   });
 });

@@ -4,7 +4,7 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react-native';
-import Colors from '@/constants/Colors';
+import Colors, { BRAND } from '@/constants/Colors';
 import { fetchWalletPinStatus, verifyFundPin } from '@/lib/wallet-pin-api';
 import { SavingsSheetContext } from '../SavingsSheetContext';
 import { SavingsSheetLockContext } from '../SavingsSheetLockContext';
@@ -73,6 +73,52 @@ describe('PIN step inside the savings sheet', () => {
     view.rerender(inSheet(null));
     expect(screen.queryByText('Enter your wallet PIN')).toBeNull();
     expect(mockSetPinHeight).toHaveBeenLastCalledWith(0);
+  });
+
+  it('bugfix: keeps the sheet height while checking, so it moves once to the first real step', async () => {
+    let answer: (
+      value: Awaited<ReturnType<typeof fetchWalletPinStatus>>
+    ) => void = () => undefined;
+    jest.mocked(fetchWalletPinStatus).mockReturnValue(
+      new Promise((resolve) => {
+        answer = resolve;
+      })
+    );
+    renderInSavingsSheet(request);
+    expect(screen.getByTestId('wallet-pin-working')).toBeOnTheScreen();
+    fireEvent(screen.getByTestId('pin-step-content'), 'layout', {
+      nativeEvent: { layout: { height: 120 } },
+    });
+    expect(mockSetPinHeight).not.toHaveBeenCalledWith(120);
+    answer({
+      primary: true,
+      hasPin: true,
+      resetRequired: false,
+      available: true,
+    });
+    expect(await screen.findByText('Enter your wallet PIN')).toBeOnTheScreen();
+    fireEvent(screen.getByTestId('pin-step-content'), 'layout', {
+      nativeEvent: { layout: { height: 600 } },
+    });
+    expect(mockSetPinHeight.mock.calls).toEqual([[600]]);
+  });
+
+  it('uses the savings sheet red, not the dark theme amber', async () => {
+    render(
+      <SavingsSheetContext.Provider value={true}>
+        <WalletPinSheet
+          colors={Colors.dark}
+          request={request}
+          onProof={jest.fn()}
+          onCancel={jest.fn()}
+        />
+      </SavingsSheetContext.Provider>
+    );
+    await screen.findByText('Enter your wallet PIN');
+    expect(screen.getByText('Enter your wallet PIN')).toHaveStyle({
+      color: BRAND.primary,
+    });
+    expect(Colors.dark.primary).not.toBe(BRAND.primary);
   });
 
   it('renders nothing without a PIN request', () => {

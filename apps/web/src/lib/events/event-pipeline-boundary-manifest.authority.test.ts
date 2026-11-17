@@ -61,6 +61,7 @@ describe('event pipeline authority importer boundary', () => {
       'apps/web/src/lib/immediate-order/confirmation-email.ts',
       'apps/web/src/app/api/payments/credit-direct/webhook/customer-inventory-failure.ts',
       'apps/web/src/lib/send-manual-order-document.ts',
+      'apps/web/src/scripts/reconcile-vtu-processing.ts',
     ]);
     expect(manifest.authority.serviceImporters).toEqual([
       'apps/web/src/app/api/cron/drain-cache-invalidations/route.ts',
@@ -87,6 +88,9 @@ describe('event pipeline authority importer boundary', () => {
     ]);
     expect(manifest.authority.operationalServiceImporters).toEqual([
       'apps/web/src/scripts/reconcile-paystack-unmatched-partial.ts',
+      'apps/web/src/scripts/process-order-cancellation-side-effects.ts',
+      'apps/web/src/scripts/process-order-notifications.ts',
+      'apps/web/src/scripts/publish-scheduled-posts.ts',
     ]);
   });
 

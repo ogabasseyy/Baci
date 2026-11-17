@@ -47,6 +47,22 @@ function isContiguousPair(
   );
 }
 
+function isNumericFeatureTokenAt(
+  segment: string,
+  tokens: ParsedToken[],
+  lowerTokens: string[],
+  index: number
+): boolean {
+  const token = lowerTokens[index];
+  if (token === undefined) return false;
+  if (isNumericFeatureToken(token)) return true;
+  return (
+    /^\d+(?:\.\d+)?$/.test(token) &&
+    isContiguousPair(segment, tokens, index, index + 1) &&
+    isNumericFeatureToken(`${token}${lowerTokens[index + 1]}`)
+  );
+}
+
 function isModelAnchorToken(
   segment: string,
   tokens: ParsedToken[],
@@ -71,7 +87,9 @@ function isModelAnchorToken(
       )
     );
   }
-  if (isNumericFeatureToken(token)) return false;
+  if (isNumericFeatureTokenAt(segment, tokens, lowerTokens, index)) {
+    return false;
+  }
   if (/\d/.test(token) || KNOWN_BRAND_OR_LINE_TOKENS.has(token)) return true;
   return (
     productIdentityTokens.has(token) &&
@@ -135,7 +153,8 @@ export function collectModelAttachedTierTokens(
         raw === 'plus' &&
         isContiguousPair(segment, tokens, i, i + 1) &&
         (PROSE_PLUS_FOLLOWERS.test(tokens[i + 1].lower) ||
-          (!prevLinked && isNumericFeatureToken(tokens[i + 1].lower)))
+          (!prevLinked &&
+            isNumericFeatureTokenAt(segment, tokens, lowerTokens, i + 1)))
       ) {
         continue;
       }

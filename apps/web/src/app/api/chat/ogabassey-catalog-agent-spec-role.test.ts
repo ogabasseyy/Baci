@@ -36,6 +36,8 @@ describe('ogabassey-catalog-agent-spec-role', () => {
       'storage'
     );
     expect(roleFor('64GB RAM 16GB VRAM', '64GB')).toBe('ram');
+    expect(roleFor('64GB RAM 16GB VRAM', '16GB')).toBeUndefined();
+    expect(roleFor('VRAM: 16GB', '16GB')).toBeUndefined();
     expect(roleFor('64GB RAM 3200MHz', '64GB')).toBe('ram');
     expect(
       roleFor('Apple iPhone 16 256GB RAM 8GB LPDDR5 Storage 512GB', '256GB')

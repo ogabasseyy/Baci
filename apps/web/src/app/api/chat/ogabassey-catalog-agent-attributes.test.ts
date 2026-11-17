@@ -217,5 +217,14 @@ describe('ogabassey-catalog-agent-attributes', () => {
         },
       ])
     ).toBe(false);
+    expect(
+      hasGroundedSpecAndPolicyClaims('Laptop has 16GB RAM.', [
+        {
+          ...baseProduct,
+          description: '64GB RAM 16GB VRAM',
+          name: 'Laptop',
+        },
+      ])
+    ).toBe(false);
   });
 });

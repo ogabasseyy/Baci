@@ -234,6 +234,12 @@ export function extractCapacitySpecRole(
   const rawBefore = source.slice(beforeStart, start);
   const beforeParts = rawBefore.split(BEFORE_CONTEXT_STOP);
   const before = beforeParts.at(-1) ?? '';
+  if (
+    /^\s*(?:of\s+)?[:\-–]?\s*vram\b/i.test(after) ||
+    /\bvram\s*[:\-–]?\s*$/i.test(before)
+  ) {
+    return undefined;
+  }
   const beforeOffset = start - before.length;
 
   const afterCandidate = findRoleCandidate(

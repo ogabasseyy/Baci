@@ -215,15 +215,16 @@ export async function purchaseBill(
         // Any answer that talks about the service being unavailable or a
         // failed vend may come after a vend that ran (e.g. from a gateway),
         // so it never qualifies, whatever else it says, and nor does a body
-        // that carries a vend status or reference. A 429 means the request
-        // was not admitted at all, so it qualifies like a refusal.
+        // that carries a vend status or reference. A 429 qualifies only when
+        // Monnify's own body says it was rate limited (not admitted); a thin
+        // 429 from a gateway proves nothing and stays an unknown outcome.
         providerDefiniteFailure:
           error.status !== 408 &&
           !error.isDuplicateReference &&
           !error.reportsUnexpectedError &&
           !error.mentionsVendOutcome &&
           !error.showsVendEvidence &&
-          (error.status === 429 ||
+          ((error.status === 429 && error.readsAsRateLimit) ||
             ((error.status === 401 || error.status === 403) &&
               error.readsAsAuthRejection) ||
             error.isKnownRefusal),

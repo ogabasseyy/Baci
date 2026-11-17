@@ -111,3 +111,16 @@ describe('bugfix: slash-separated phone numbers', () => {
     );
   });
 });
+
+describe('bugfix: grouped numbers outside the 080x/090x/070x slice', () => {
+  it.each([
+    '0703 456 7890',
+    '0745 123 4567',
+    '+44 20 7946 0958',
+    '+1 (415) 555-0132',
+  ])('redacts %s', (phone) => {
+    expect(sanitizeMonnifyErrorDetail(`Vend failed for ${phone}`)).toBe(
+      'Vend failed for [redacted]'
+    );
+  });
+});

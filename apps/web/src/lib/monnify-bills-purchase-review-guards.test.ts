@@ -213,7 +213,18 @@ describe('bugfix: HTTP rejections showing a vend, or unsuccessful wording, stay 
   });
 });
 
-describe('bugfix: a 429 rate-limit rejection goes to Kuda', () => {
+describe('bugfix: a 429 goes to Kuda only when Monnify says it rate limited', () => {
+  it.each([
+    '',
+    JSON.stringify({ responseMessage: 'Request blocked' }),
+  ])('keeps a 429 whose body does not say rate limited off Kuda (%j)', async (body) => {
+    mockHttpError(429, 'Too Many Requests', body);
+
+    await expect(vend()).resolves.toMatchObject({
+      providerDefiniteFailure: false,
+    });
+  });
+
   it('hands a plain 429 to Kuda', async () => {
     mockHttpError(
       429,

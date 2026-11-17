@@ -12,7 +12,13 @@ const SENSITIVE_DIGIT_SEQUENCE_PATTERN = /(?<!\d)\d{7,}(?!\d)/g;
  * readable (unbroken runs of 7+ digits are already redacted above).
  */
 const SENSITIVE_GROUPED_PHONE_PATTERN =
-  /(?<!\d)\(?(?:\+?234\)?[ ./-]?\(?|0)[789][01]\d\)?(?:[ ./-]?\d){7}(?!\d)/g;
+  /(?<!\d)\(?(?:\+?234\)?[ ./-]?\(?|0)[789]\d\d\)?(?:[ ./-]?\d){7}(?!\d)/g;
+/**
+ * Any other grouped number that starts like a phone number ("+" or a leading
+ * 0) and runs to 9+ digits, e.g. foreign or unusual Nigerian ranges.
+ */
+const SENSITIVE_GROUPED_DIALLED_NUMBER_PATTERN =
+  /(?<!\d)(?:\+\(?|\(?0)\d(?:[ ./()-]{0,2}\d){8,}(?!\d)/g;
 /** How Monnify's full answer reads, worked out once from the unscrubbed text. */
 interface MonnifyAnswerReading {
   isDuplicateReference: boolean;
@@ -21,6 +27,7 @@ interface MonnifyAnswerReading {
   reportsUnexpectedError: boolean;
   readsAsAuthRejection: boolean;
   showsVendEvidence: boolean;
+  readsAsRateLimit: boolean;
 }
 
 function parseJsonOrNull(text: string): unknown {
@@ -47,6 +54,7 @@ function readMonnifyAnswer(text: string, body: string): MonnifyAnswerReading {
         body
       ),
     showsVendEvidence: hasMonnifyVendEvidence(parseJsonOrNull(body)),
+    readsAsRateLimit: /rate[\s_-]*limit|too many requests|throttl/i.test(body),
   };
 }
 
@@ -105,6 +113,11 @@ export class MonnifyHttpError extends Error {
     return this.#reading.readsAsAuthRejection;
   }
 
+  /** Monnify's own body says the request was rate limited. */
+  get readsAsRateLimit() {
+    return this.#reading.readsAsRateLimit;
+  }
+
   /** The JSON body carries a vend status or reference: a vend may exist. */
   get showsVendEvidence() {
     return this.#reading.showsVendEvidence;
@@ -154,7 +167,8 @@ export function sanitizeMonnifyErrorDetail(value: string) {
 
   const redacted = boundedValue
     .replace(SENSITIVE_DIGIT_SEQUENCE_PATTERN, '[redacted]')
-    .replace(SENSITIVE_GROUPED_PHONE_PATTERN, '[redacted]');
+    .replace(SENSITIVE_GROUPED_PHONE_PATTERN, '[redacted]')
+    .replace(SENSITIVE_GROUPED_DIALLED_NUMBER_PATTERN, '[redacted]');
   if (redacted.length <= MONNIFY_ERROR_DETAIL_MAX_LENGTH) {
     return redacted.trim();
   }

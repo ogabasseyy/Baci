@@ -9,9 +9,11 @@ import {
 import type { FetchImplementation } from '@/types/fetch';
 
 const mockFetch = jest.fn<FetchImplementation>();
-const mockGetSession = jest.fn(() =>
-  Promise.resolve({ data: { session: { access_token: 'token-123' } } })
-);
+// The service reads the user id from the stored session, not from getUser.
+const signedIn = {
+  data: { session: { access_token: 'token-123', user: { id: 'user-1' } } },
+};
+const mockGetSession = jest.fn(() => Promise.resolve(signedIn));
 const mockGetUser = jest.fn(() =>
   Promise.resolve({ data: { user: { id: 'user-1' } } })
 );
@@ -38,9 +40,7 @@ describe('quiz service attempt lifecycle', () => {
 
   beforeEach(() => {
     mockFetch.mockReset();
-    mockGetSession.mockResolvedValue({
-      data: { session: { access_token: 'token-123' } },
-    });
+    mockGetSession.mockResolvedValue(signedIn);
     mockGetUser.mockResolvedValue({
       data: { user: { id: 'user-1' } },
     });
@@ -270,7 +270,7 @@ describe('quiz service attempt lifecycle', () => {
     // No usable token on either attempt: cold-start retries once, then fails
     // closed (getQuizAuthHeaders now retries a not-yet-hydrated session).
     mockGetSession.mockResolvedValue({
-      data: { session: { access_token: '' } },
+      data: { session: { access_token: '', user: { id: 'user-1' } } },
     });
 
     const resultPromise = startQuizAttempt({

@@ -7,6 +7,7 @@ import { fetchDeviceSuggestions } from './fetch-imei-device-suggestions';
 import { OgabasseyImeiEntry } from './imei-checker-entry';
 import { OgabasseyImeiCheckerShell } from './imei-checker-shell';
 import type { ProductSuggestion } from './imei-checker-types';
+import { ImeiReportHistory } from './imei-report-history';
 import { OgabasseyImeiResults } from './imei-results';
 import { useImeiCheckRequest } from './use-imei-check-request';
 import { useImeiTierSelection } from './use-imei-tier-selection';
@@ -56,6 +57,7 @@ export const OgabasseyImeiChecker: React.FC<OgabasseyImeiCheckerProps> = ({
     resultTier,
     runCheck,
     reset,
+    openReport,
   } = useImeiCheckRequest(merchantSlug);
 
   // Device search autocomplete state
@@ -99,6 +101,11 @@ export const OgabasseyImeiChecker: React.FC<OgabasseyImeiCheckerProps> = ({
 
   const body = (
     <>
+      <ImeiReportHistory
+        merchantSlug={merchantSlug}
+        onOpen={openReport}
+        disabled={isLoading || pendingLookup.pending !== null}
+      />
       {!result && (
         <OgabasseyImeiEntry
           availabilityFailed={availabilityFailed}

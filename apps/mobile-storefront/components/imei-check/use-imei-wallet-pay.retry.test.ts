@@ -12,6 +12,9 @@ jest.mock('expo-crypto', () => ({
     `sha256(${value.length})`,
 }));
 jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
+jest.mock('./use-imei-wallet-payable-tiers', () => ({
+  useImeiWalletPayableTiers: jest.fn(() => null),
+}));
 jest.mock('@/stores/auth-store', () => {
   const state = { user: { id: 'user-1' }, merchantId: 'merchant-1' };
   const useAuthStore = (selector: (s: typeof state) => unknown) =>
@@ -228,7 +231,7 @@ describe('bugfix: a tier refused before payment kept its key forever (Codex P2)'
     );
   });
 
-  it('keeps a reused key: its earlier attempt may have paid before the tier changed', async () => {
+  it('bugfix: forgets a reused key too, since the server answers a key with a lookup instead of refusing it (walk H2)', async () => {
     start.mockResolvedValueOnce({
       httpStatus: 202,
       body: {
@@ -246,7 +249,7 @@ describe('bugfix: a tier refused before payment kept its key forever (Codex P2)'
     await openAndClose(hook);
     await openAndClose(hook);
     await expect(hook.result.current.retains('basic', IMEI)).resolves.toBe(
-      true
+      false
     );
   });
 });

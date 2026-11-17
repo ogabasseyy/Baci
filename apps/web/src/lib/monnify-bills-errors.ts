@@ -17,10 +17,10 @@ const SENSITIVE_GROUPED_PHONE_PATTERN =
   /(?<!\d)\(?(?:\+?234\)?[\s./-]?\(?|0)?[789]\d\d\)?(?:[\s./-]*\d){7}(?!\d)/g;
 /**
  * Any other grouped number that starts like a phone number ("+" or a leading
- * 0) and runs to 9+ digits, e.g. foreign or unusual Nigerian ranges.
+ * 0) and runs to 10+ digits, e.g. foreign or unusual Nigerian ranges.
  */
 const SENSITIVE_GROUPED_DIALLED_NUMBER_PATTERN =
-  /(?<!\d)(?:\+\(?|\(?0)\d(?:[\s./()-]{0,3}\d){8,}(?!\d)/g;
+  /(?<!\d)(?:\+\(?|\(?0)\d(?:[\s./()-]{0,3}\d){9,}(?!\d)/g;
 /**
  * Any grouped number of 11+ digits whatever its prefix, e.g. an international
  * number written without "+" ("44 20 7946 0958"). Shorter grouped references

@@ -11,6 +11,9 @@ describe('isMonnifyDuplicateReferenceText', () => {
     'Request conflict',
     'Conflict on vend reference',
     'transaction_conflict',
+    'REFERENCE_ALREADY_EXISTS',
+    'REFERENCE_HAS_BEEN_USED',
+    'TRANSACTION-ALREADY-PROCESSED',
     'Insufficient wallet balance; reference is already in use',
     'Idempotency key reused',
   ])('treats "%s" as a duplicate reference', (text) => {

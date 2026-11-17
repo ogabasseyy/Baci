@@ -6,7 +6,7 @@ import { isMonnifyUnexpectedErrorCode } from './monnify-unexpected-error';
  * never count.
  */
 const MONNIFY_UNEXPECTED_ERROR_TEXT =
-  /(?<![A-Za-z_-])(?:(?:response|error|result|status)[\s_-]*)?code["'\s:=]*"?0*99(?!\d)/i;
+  /(?<![A-Za-z_-])(?:(?:response|error|result|status)[\s_-]*)?code["'\s:=]*(?:(?:is|was)\s*[:=]?\s*)?"?0*99(?!\d)/i;
 
 /**
  * Whether a raw Monnify answer reports code 99: read as JSON where it parses,

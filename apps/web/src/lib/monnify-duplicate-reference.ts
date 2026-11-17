@@ -14,5 +14,10 @@ const MONNIFY_DUPLICATE_REFERENCE_PATTERN =
 export function isMonnifyDuplicateReferenceText(
   text: string | null | undefined
 ): boolean {
-  return !!text && MONNIFY_DUPLICATE_REFERENCE_PATTERN.test(text);
+  // "_" and "-" read as spaces, so machine-style states such as
+  // REFERENCE_ALREADY_EXISTS or TRANSACTION-ALREADY-PROCESSED match.
+  return (
+    !!text &&
+    MONNIFY_DUPLICATE_REFERENCE_PATTERN.test(text.replace(/[_-]+/g, ' '))
+  );
 }

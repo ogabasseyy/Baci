@@ -7,12 +7,14 @@
  * "not delivered") says nothing happened, so it does not count.
  */
 const MONNIFY_VEND_OUTCOME_PATTERN =
-  /unavailable|\bunsuccessful|(?:vend|transaction|purchase|airtime|payment|top[\s-]?up|recharge)\w*(?:\s+\w+){0,2}?\s+fail|fail\w*\s+to\s+vend|(?<!(?:\bnot|\bnever|\bcannot|n't)\s+(?:be\s+|been\s+)?)\b(?:delivered|processed|completed|successful|vended|dispatched|pending|processing|queued|in\s+progress)\b/i;
+  /unavailable|\bunsuccessful|\btime[ds]?\s*out\b|(?:vend|transaction|purchase|airtime|payment|top[\s-]?up|recharge)\w*(?:\s+\w+){0,2}?\s+fail|fail\w*\s+to\s+vend|(?<!(?:\bnot|\bnever|\bcannot|n't)\s+(?:be\s+|been\s+)?)\b(?:delivered|processed|completed|successful|vended|dispatched|pending|processing|queued|in\s+progress)\b/i;
 
 /**
  * Whether a Monnify answer mentions a vend outcome or an unavailable service.
- * Machine-style wording ("transaction_failed", "vend-in-progress") is read
- * with its "_" and "-" separators turned into spaces as well. camelCase is
+ * Text is read with "_" and "-" turned into spaces, so machine-style
+ * wording ("transaction_failed", "vend-in-progress") matches and hyphenated
+ * negations ("not-delivered") stay negated. A timeout ("timed out") is an
+ * unknown outcome and counts too. camelCase is
  * deliberately not split: envelope keys such as requestSuccessful would
  * then read as an outcome.
  */
@@ -22,8 +24,7 @@ export function isMonnifyVendOutcomeText(
   if (!text) {
     return false;
   }
-  return (
-    MONNIFY_VEND_OUTCOME_PATTERN.test(text) ||
-    MONNIFY_VEND_OUTCOME_PATTERN.test(text.replace(/[_-]+/g, ' '))
-  );
+  // One match on the normalised text only, so a hyphenated negation
+  // ("not-delivered") is read as negated, not as a bare "delivered".
+  return MONNIFY_VEND_OUTCOME_PATTERN.test(text.replace(/[_-]+/g, ' '));
 }

@@ -39,11 +39,15 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 }
 
 function isEvidenceValue(key: string, value: unknown): boolean {
+  // A numeric `status` (number or digit string such as "400") is an HTTP
+  // code, never a vend status.
+  if (key === STATUS_KEY) {
+    return typeof value === 'string' && /[^\d\s]/.test(value);
+  }
   if (typeof value === 'string') {
     return value.trim() !== '';
   }
-  // A numeric `status` is an HTTP code, never a vend status.
-  return typeof value === 'number' && key !== STATUS_KEY;
+  return typeof value === 'number';
 }
 
 function carriesVendField(

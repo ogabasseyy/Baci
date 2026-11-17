@@ -18,6 +18,9 @@ describe('isMonnifyVendOutcomeText', () => {
     'transaction_failed: insufficient wallet balance',
     'vend_in_progress: insufficient funds',
     'AIRTIME-PURCHASE-FAILED',
+    'Vend request timed out: insufficient wallet balance',
+    'Gateway timeout',
+    'time-out waiting for biller',
     'Vend transaction was unsuccessful: insufficient wallet balance',
     'Failed to vend airtime',
     'Airtime delivered',
@@ -39,6 +42,8 @@ describe('isMonnifyVendOutcomeText', () => {
     "Couldn't be completed",
     'Cannot be processed',
     'Has never been vended',
+    'request-could-not-be-processed: insufficient wallet balance',
+    'not-delivered',
     '',
     null,
   ])('does not flag "%s"', (text) => {

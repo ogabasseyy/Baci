@@ -32,6 +32,8 @@ describe('hasMonnifyVendEvidence', () => {
     { responseBody: { vendStatus: '  ', vendReference: null } },
     { status: 400, error: 'Bad Request' },
     { error: { status: 400, message: 'Bad Request' } },
+    { status: '400', responseMessage: 'Insufficient wallet balance' },
+    { responseBody: { status: ' 422 ' } },
     { responseBody: { status: 200 } },
     { reference: 'BACI-REF-123', responseMessage: 'Insufficient balance' },
   ])('sees no vend evidence in %j', (envelope) => {

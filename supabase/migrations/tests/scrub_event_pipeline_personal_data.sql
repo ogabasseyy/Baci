@@ -20,6 +20,7 @@ DECLARE
   v_recent uuid := '00000000-0000-4000-8000-00000000e103';
   v_old_queued uuid := '00000000-0000-4000-8000-00000000e104';
   v_late_routed uuid := '00000000-0000-4000-8000-00000000e1f1';
+  v_queued_open uuid := '00000000-0000-4000-8000-00000000e1f2';
   v_id uuid;
   v_status text;
   v_age interval;
@@ -41,6 +42,22 @@ BEGIN
       domain_event_id, destination, status, payload, created_at
     ) VALUES (v_id, 'facebook', v_status, v_pii, now() - v_age);
   END LOOP;
+
+  -- A 100 day old queued row that still has open delivery work: live work is
+  -- never scrubbed, in the ledger or in the queue copy.
+  INSERT INTO public.domain_event_ledger (
+    domain_event_id, producer, trust_level, idempotency_key, event_name,
+    subject_type, subject_id, envelope, status, created_at, queue_message_id
+  ) VALUES (
+    v_queued_open, 'sql-retention', 'server', 'retention-' || v_queued_open::text,
+    'analytics.add_to_cart.v1', 'event', v_queued_open::text, v_pii, 'queued',
+    now() - interval '100 days', 9302003
+  );
+  INSERT INTO pgmq.q_domain_events (msg_id, enqueued_at, vt, message)
+  VALUES (9302003, now() - interval '100 days', now(), v_pii);
+  INSERT INTO public.event_deliveries (
+    domain_event_id, destination, status, payload, created_at
+  ) VALUES (v_queued_open, 'facebook', 'pending', v_pii, now() - interval '100 days');
 
   -- A 100 day old event whose delivery was only created yesterday (replay).
   INSERT INTO public.domain_event_ledger (
@@ -170,6 +187,13 @@ BEGIN
   IF (SELECT payload FROM public.event_deliveries WHERE domain_event_id = v_late_routed)
        #> '{data,delivery_user_data,ip}' IS NOT NULL THEN
     RAISE EXCEPTION 'late-created delivery of an old event kept personal data';
+  END IF;
+
+  IF (SELECT envelope FROM public.domain_event_ledger WHERE domain_event_id = v_queued_open)
+       #> '{data,delivery_user_data,ip}' IS NULL
+     OR (SELECT message FROM pgmq.q_domain_events WHERE msg_id = 9302003)
+       #> '{data,delivery_user_data,ip}' IS NULL THEN
+    RAISE EXCEPTION 'queued row with open delivery work lost its personal data';
   END IF;
 
   -- Old but still retrying: untouched.

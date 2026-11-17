@@ -1,18 +1,12 @@
-import type { StorefrontAgentUiEvent } from '@/schemas/storefront-agent-ui-contract';
-import { analyzeFastCatalogBudget } from './fast-catalog-budget';
-
-export interface CatalogBudgetLimit {
-  amount: number;
-  exclusive: boolean;
-}
-
-export type CatalogChatMessage = {
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-};
-
-const BUDGET_OVERRIDE_CUE =
-  /\b(?:ignore\s+(?:the\s+|my\s+)?budget|no\s+budget|any\s+price|higher\s+budget|more\s+expensive|over\s+(?:my\s+|the\s+)?budget|above\s+(?:my\s+|the\s+)?budget|(?:over|above)\s+(?:₦|ngn\s*)?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?:\s*(?:million|thousand|[km]))?)\b/i;
+import type {
+  StorefrontAgentUiEvent,
+  StorefrontAgentUiProduct,
+} from '@/schemas/storefront-agent-ui-contract';
+import {
+  type CatalogBudgetLimit,
+  type CatalogChatMessage,
+  isProductWithinBudget,
+} from './ogabassey-catalog-agent-budget';
 
 export const UNGROUNDED_EMPTY_RESULT_CLAIM = /[₦$€£]|\b(?:naira|ngn)\b/i;
 
@@ -26,7 +20,7 @@ const CLAUSE_SPLIT_PATTERN =
   /[.!?\n;]+|\b(?:but|however|although)\b|,\s*(?=(?:we|here|try|you|the|check)\b)/i;
 
 const PRICE_MENTION_PATTERN =
-  /(?:(₦|ngn\s*|[$€£]\s*)((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)(?:\s*(million|thousand|[km]))?|((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)(?:\s*(million|thousand|[km]))?\s*(?:naira|ngn|₦)|(\d{1,3}(?:,\d{3})+)(?:\.\d+)?)/giu;
+  /(?:(₦|ngn\s*|[$€£]\s*)((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)(?:\s*(million|thousand|[km]))?|((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)(?:\s*(million|thousand|[km]))?\s*(?:naira|ngn|₦)|((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)\s*(million|thousand|[km])\b|(\d{1,3}(?:,\d{3})+)(?:\.\d+)?)/giu;
 
 // Only treat explicit currency, scaled, or budget-cued numbers from user turns
 // as valid budget references so model numbers (e.g. "iPhone 16") never enter.
@@ -36,6 +30,8 @@ const USER_BUDGET_MENTION_PATTERN =
 const BARE_PRICE_CANDIDATE_PATTERN = /\b(\d{4,9})\b/gu;
 const NON_PRICE_SPEC_SUFFIX_PATTERN =
   /^\s*(?:mah|hz|khz|mhz|ghz|nits|ppi|rpm|gb|tb|mb|kb|mp|mm|cm|w|p|x)\b/i;
+const RESOLUTION_SPEC_SUFFIX_PATTERN =
+  /^\s*(?:displays?|screens?|resolutions?|uhd|oled|amoled|qled|ips|lcd|video|tvs?|monitors?|webcams?|cameras?|streaming)\b/i;
 const MODEL_NUMBER_PREFIX_PATTERN =
   /(?:rtx|gtx|rx|arc|ryzen|core|i\d-|snapdragon|dimensity|helio|exynos|tensor|model|gen)\s*$/i;
 const PRICE_CUE_PREFIX_PATTERN =
@@ -45,7 +41,12 @@ const BUDGET_FRAME_PREFIX_PATTERN =
 const BUDGET_FRAME_SUFFIX_PATTERN = /^[^.!?\n]{0,16}\b(?:budget|limit|cap)\b/i;
 
 const STOCK_COUNT_PATTERN =
-  /\b(\d+)\s+(?:in[\s-]+stock|units?\s+(?:left|available|remaining|in[\s-]+stock))\b/giu;
+  /(?:\b(\d+)\s+(?:in[\s-]+stock|left(?:\s+in\s+stock)?|remaining|available(?:\s+now)?|units?\b)|\bonly\s+(\d+)\s+(?:left|remaining|available)\b)/giu;
+
+const OUT_OF_STOCK_ASSERTION =
+  /\b(?:out\s+of\s+stock|sold\s+out|currently\s+unavailable|no\s+stock)\b/gi;
+const POSITIVE_STOCK_ASSERTION =
+  /\b(?:in[\s-]+stock|currently\s+available|available\s+now)\b/gi;
 
 const FAMILY_VARIANT_PATTERN =
   /\b(?:macbook|iphone|ipad|galaxy|pixel|xps|surface|watch)\s+(?:pro|ultra|max|mini|plus|air|studio|fold|flip|m[1-5])\b/gi;
@@ -259,6 +260,81 @@ function collectReturnedProductTokens(
   return tokens;
 }
 
+function productMatchesSegment(
+  product: StorefrontAgentUiProduct,
+  segment: string
+): number {
+  const lowerSegment = segment.toLowerCase();
+  const fullName = product.name.trim().toLowerCase();
+  if (fullName && lowerSegment.includes(fullName)) {
+    return 100 + tokenizeLowerWords(fullName).length;
+  }
+
+  const segmentTokens = new Set(
+    lowerSegment
+      .match(/[a-z0-9]+/g)
+      ?.filter((t) => t.length >= 2 || /^\d$/.test(t)) ?? []
+  );
+  const nameTokens = (
+    product.name.toLowerCase().match(/[a-z0-9]+/g) ?? []
+  ).filter(
+    (token) =>
+      (token.length >= 2 || /^\d$/.test(token)) &&
+      !GENERIC_PRODUCT_NAME_WORDS.has(token)
+  );
+  const brandTokens = new Set(tokenizeLowerWords(product.brand ?? ''));
+  const nonBrandTokens = nameTokens.filter((token) => !brandTokens.has(token));
+  const pool = nonBrandTokens.length > 0 ? nonBrandTokens : nameTokens;
+  let score = 0;
+  for (const token of pool) {
+    if (segmentTokens.has(token)) score += 1;
+  }
+  return score;
+}
+
+function findBoundProducts(
+  text: string,
+  offset: number,
+  products: StorefrontAgentUiProduct[]
+): StorefrontAgentUiProduct[] {
+  const splitBoundaries = (regex: RegExp) => {
+    let start = 0;
+    let end = text.length;
+    for (const match of text.matchAll(regex)) {
+      const idx = match.index ?? 0;
+      const matchEnd = idx + match[0].length;
+      if (matchEnd <= offset) start = Math.max(start, matchEnd);
+      else if (idx >= offset && end === text.length) {
+        end = idx;
+        break;
+      }
+    }
+    return text.slice(start, end);
+  };
+
+  const localClause = splitBoundaries(
+    /[.!?\n;—–]+|\b(?:and|while|versus|vs)\b/gi
+  );
+  const sentence = splitBoundaries(/[.!?\n;]+/g);
+
+  for (const candidate of [localClause, sentence, text]) {
+    let bestScore = 0;
+    let best: StorefrontAgentUiProduct[] = [];
+    for (const product of products) {
+      const score = productMatchesSegment(product, candidate);
+      if (score > bestScore) {
+        bestScore = score;
+        best = [product];
+      } else if (score > 0 && score === bestScore) {
+        best.push(product);
+      }
+    }
+    if (bestScore > 0) return best;
+  }
+
+  return products;
+}
+
 function hasGroundedProductMentions(
   text: string,
   events: StorefrontAgentUiEvent[]
@@ -266,25 +342,9 @@ function hasGroundedProductMentions(
   const products = events.flatMap((event) => event.products);
   if (products.length === 0) return false;
 
-  const lowerText = text.toLowerCase();
-  const textTokenSet = new Set(tokenizeLowerWords(text));
-
-  const matchesReturnedProduct = products.some((product) => {
-    const productName = product.name.trim().toLowerCase();
-    if (productName && lowerText.includes(productName)) return true;
-
-    const brandTokens = new Set(tokenizeLowerWords(product.brand ?? ''));
-    const allNameTokens = tokenizeLowerWords(product.name).filter(
-      (token) => !GENERIC_PRODUCT_NAME_WORDS.has(token)
-    );
-    const nonBrandTokens = allNameTokens.filter(
-      (token) => !brandTokens.has(token)
-    );
-    const matchPool =
-      nonBrandTokens.length > 0 ? nonBrandTokens : allNameTokens;
-    return matchPool.some((token) => textTokenSet.has(token));
-  });
-
+  const matchesReturnedProduct = products.some(
+    (product) => productMatchesSegment(product, text) > 0
+  );
   if (!matchesReturnedProduct) return false;
 
   const returnedTokens = collectReturnedProductTokens(events);
@@ -323,147 +383,6 @@ function hasGroundedProductMentions(
   }
 
   return true;
-}
-
-export function resolveConversationBudgetLimit(
-  messages: CatalogChatMessage[],
-  currencyCode: string
-): CatalogBudgetLimit | undefined {
-  const userMessages = messages.filter((message) => message.role === 'user');
-  const latestUser = userMessages.at(-1);
-  if (!latestUser) return undefined;
-
-  const latestBudget = analyzeFastCatalogBudget(
-    latestUser.content,
-    currencyCode
-  );
-  if (latestBudget.hasBudget) {
-    return !latestBudget.invalid && latestBudget.price
-      ? latestBudget.price
-      : undefined;
-  }
-
-  if (BUDGET_OVERRIDE_CUE.test(latestUser.content)) {
-    return undefined;
-  }
-
-  for (let i = userMessages.length - 2; i >= 0; i -= 1) {
-    const budget = analyzeFastCatalogBudget(
-      userMessages[i].content,
-      currencyCode
-    );
-    if (budget.hasBudget) {
-      return !budget.invalid && budget.price ? budget.price : undefined;
-    }
-  }
-
-  return undefined;
-}
-
-export function isProductWithinBudget(
-  price: unknown,
-  budget: CatalogBudgetLimit | undefined
-): boolean {
-  if (!budget) return true;
-  if (typeof price !== 'number' || !Number.isFinite(price)) return false;
-  return budget.exclusive ? price < budget.amount : price <= budget.amount;
-}
-
-export function constrainSearchParamsWithBudget<
-  T extends { maxPrice?: number; minPrice?: number },
->(params: T, budget: CatalogBudgetLimit | undefined): T {
-  if (!budget) return params;
-  const maxPrice =
-    typeof params.maxPrice === 'number' && Number.isFinite(params.maxPrice)
-      ? Math.min(params.maxPrice, budget.amount)
-      : budget.amount;
-  const minPrice =
-    typeof params.minPrice === 'number' && params.minPrice > maxPrice
-      ? undefined
-      : params.minPrice;
-
-  return {
-    ...params,
-    maxPrice,
-    minPrice,
-  };
-}
-
-export function filterToolResultByBudget(
-  toolName: string,
-  result: unknown,
-  budget: CatalogBudgetLimit | undefined
-): unknown {
-  if (!budget || typeof result !== 'object' || result === null) {
-    return result;
-  }
-
-  if (toolName === 'searchProducts') {
-    const record = result as { products?: unknown; total?: unknown };
-    if (!Array.isArray(record.products)) return result;
-    const filteredProducts = record.products.filter((item) => {
-      if (typeof item !== 'object' || item === null) return false;
-      return isProductWithinBudget((item as { price?: unknown }).price, budget);
-    });
-    return {
-      ...record,
-      products: filteredProducts,
-      total: filteredProducts.length,
-    };
-  }
-
-  if (toolName === 'getProductDetails') {
-    const record = result as { error?: unknown; price?: unknown };
-    if (typeof record.error === 'string' && record.price === undefined) {
-      return result;
-    }
-    if (!isProductWithinBudget(record.price, budget)) {
-      return null;
-    }
-  }
-
-  return result;
-}
-
-export function filterSerializedSearchResultByBudget(
-  rawJson: string,
-  budget: CatalogBudgetLimit | undefined
-): string {
-  if (!budget) return rawJson;
-  try {
-    const parsed = JSON.parse(rawJson) as unknown;
-    const filtered = filterToolResultByBudget('searchProducts', parsed, budget);
-    return JSON.stringify(filtered);
-  } catch {
-    return JSON.stringify({
-      products: [],
-      total: 0,
-      error: 'Unable to validate tool results against budget',
-    });
-  }
-}
-
-export function filterSerializedDetailsResultByBudget(
-  rawJson: string,
-  budget: CatalogBudgetLimit | undefined
-): string {
-  if (!budget) return rawJson;
-  try {
-    const parsed = JSON.parse(rawJson) as unknown;
-    const filtered = filterToolResultByBudget(
-      'getProductDetails',
-      parsed,
-      budget
-    );
-    if (filtered === null) {
-      return JSON.stringify({ error: 'Product exceeds user budget' });
-    }
-    return rawJson;
-  } catch {
-    return JSON.stringify({
-      error: 'Unable to validate product against budget',
-    });
-  }
 }
 
 export function hasGroundedEmptyCatalogText(text: string): boolean {
@@ -552,56 +471,37 @@ function isBareNonPriceSpec(
   return false;
 }
 
-export function hasGroundedCatalogResultText(
+function hasGroundedPriceClaims(
   text: string,
-  events: StorefrontAgentUiEvent[],
-  userMessages: CatalogChatMessage[],
-  currencyCode: string,
-  budgetLimit?: CatalogBudgetLimit
+  products: StorefrontAgentUiProduct[],
+  userAmounts: Set<number>
 ): boolean {
-  const withinBudget = events.every((event) =>
-    event.products.every((product) =>
-      isProductWithinBudget(product.price, budgetLimit)
-    )
-  );
-  if (!withinBudget) return false;
-
-  if (!hasGroundedProductMentions(text, events)) return false;
-
-  const allowedPrices = new Set(
-    events.flatMap((event) =>
-      event.products
-        .map((product) => Math.round(product.price))
-        .filter((price) => Number.isFinite(price) && price > 0)
-    )
-  );
-  const userAmounts = extractUserPriceMentions(userMessages);
-
-  if (
-    currencyCode.toUpperCase() === 'NGN' &&
-    /[$€£]/.test(text) &&
-    !userMessages.some(
-      (message) => message.role === 'user' && /[$€£]/.test(message.content)
-    )
-  ) {
-    return false;
-  }
-
   const checkedSpans: Array<{ start: number; end: number }> = [];
+
   for (const match of text.matchAll(PRICE_MENTION_PATTERN)) {
-    const rawNumber = match[2] ?? match[4] ?? match[6];
-    const unit = match[3] ?? match[5];
+    const rawNumber = match[2] ?? match[4] ?? match[6] ?? match[8];
+    const unit = match[3] ?? match[5] ?? match[7];
     if (!rawNumber) continue;
-    const amount = applyNumericScale(rawNumber, unit);
-    if (!Number.isFinite(amount) || amount <= 0) return false;
+
     const start = match.index ?? 0;
     const end = start + match[0].length;
-    checkedSpans.push({ start, end });
-    const budgetRestatement = isBudgetRestatement(text, start, end);
     if (
-      !allowedPrices.has(amount) &&
-      !(budgetRestatement && userAmounts.has(amount))
+      match[6] !== undefined &&
+      unit?.toLowerCase() === 'k' &&
+      RESOLUTION_SPEC_SUFFIX_PATTERN.test(text.slice(end, end + 24))
     ) {
+      continue;
+    }
+
+    const amount = applyNumericScale(rawNumber, unit);
+    if (!Number.isFinite(amount) || amount <= 0) return false;
+    checkedSpans.push({ start, end });
+
+    if (isBudgetRestatement(text, start, end) && userAmounts.has(amount)) {
+      continue;
+    }
+    const bound = findBoundProducts(text, start, products);
+    if (!bound.some((product) => Math.round(product.price) === amount)) {
       return false;
     }
   }
@@ -614,31 +514,99 @@ export function hasGroundedCatalogResultText(
     }
     const amount = Number(match[1]);
     if (isBareNonPriceSpec(text, start, end, amount)) continue;
-    const budgetRestatement = isBudgetRestatement(text, start, end);
+    if (isBudgetRestatement(text, start, end) && userAmounts.has(amount)) {
+      continue;
+    }
+    const bound = findBoundProducts(text, start, products);
+    if (!bound.some((product) => Math.round(product.price) === amount)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function hasGroundedStockClaims(
+  text: string,
+  products: StorefrontAgentUiProduct[]
+): boolean {
+  for (const match of text.matchAll(STOCK_COUNT_PATTERN)) {
+    const rawCount = match[1] ?? match[2];
+    if (!rawCount) continue;
+    const claimedStock = Number(rawCount);
+    const offset = match.index ?? 0;
+    const bound = findBoundProducts(text, offset, products);
+    if (!bound.some((product) => product.stock === claimedStock)) {
+      return false;
+    }
+  }
+
+  for (const match of text.matchAll(OUT_OF_STOCK_ASSERTION)) {
+    const offset = match.index ?? 0;
+    const before = text.slice(Math.max(0, offset - 20), offset);
+    if (/\b(?:not|never)\s+$/i.test(before)) continue;
+    const bound = findBoundProducts(text, offset, products);
     if (
-      !allowedPrices.has(amount) &&
-      !(budgetRestatement && userAmounts.has(amount))
+      bound.every(
+        (product) =>
+          !product.manageStock ||
+          (typeof product.stock === 'number' && product.stock > 0)
+      )
     ) {
       return false;
     }
   }
 
-  const allowedStockCounts = new Set(
-    events.flatMap((event) =>
-      event.products
-        .map((product) => product.stock)
-        .filter(
-          (stock): stock is number =>
-            typeof stock === 'number' && Number.isFinite(stock)
-        )
-    )
-  );
-  for (const match of text.matchAll(STOCK_COUNT_PATTERN)) {
-    const claimedStock = Number(match[1]);
-    if (!allowedStockCounts.has(claimedStock)) {
+  for (const match of text.matchAll(POSITIVE_STOCK_ASSERTION)) {
+    const offset = match.index ?? 0;
+    const before = text.slice(Math.max(0, offset - 20), offset);
+    if (NEGATION_OR_ABSENCE_CUE.test(before)) continue;
+    const bound = findBoundProducts(text, offset, products);
+    if (
+      bound.every(
+        (product) =>
+          product.manageStock &&
+          (typeof product.stock !== 'number' || product.stock <= 0)
+      )
+    ) {
       return false;
     }
   }
+
+  return true;
+}
+
+export function hasGroundedCatalogResultText(
+  text: string,
+  events: StorefrontAgentUiEvent[],
+  userMessages: CatalogChatMessage[],
+  currencyCode: string,
+  budgetLimit?: CatalogBudgetLimit
+): boolean {
+  const products = events.flatMap((event) => event.products);
+  if (
+    !products.every((product) =>
+      isProductWithinBudget(product.price, budgetLimit)
+    )
+  ) {
+    return false;
+  }
+
+  if (!hasGroundedProductMentions(text, events)) return false;
+
+  if (
+    currencyCode.toUpperCase() === 'NGN' &&
+    /[$€£]/.test(text) &&
+    !userMessages.some(
+      (message) => message.role === 'user' && /[$€£]/.test(message.content)
+    )
+  ) {
+    return false;
+  }
+
+  const userAmounts = extractUserPriceMentions(userMessages);
+  if (!hasGroundedPriceClaims(text, products, userAmounts)) return false;
+  if (!hasGroundedStockClaims(text, products)) return false;
 
   return true;
 }

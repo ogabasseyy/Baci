@@ -182,6 +182,9 @@ describe('runOgabasseyCatalogAgent', () => {
     'Tell me a joke',
     'Tips for photo editing',
     'Why is my number 2 failing?',
+    'Can you recommend a restaurant?',
+    'Are you available to help?',
+    'What is the cost of living?',
     'What is your WhatsApp number?',
     'What is your last price for iPhone 16?',
     'Cancel my order',
@@ -688,5 +691,138 @@ describe('runOgabasseyCatalogAgent', () => {
     expect(detailsSerialized).toEqual({
       error: 'Unable to validate product against budget',
     });
+  });
+
+  it('validates currency-less scaled prices, abbreviated/qualitative stock claims, and product-price binding', async () => {
+    vi.stubEnv('META_MODEL_API_KEY', 'test-meta-key');
+    const iphone16 = {
+      ...sampleProduct,
+      category: 'Phones',
+      description: 'Apple iPhone 16',
+      id: 'iphone-16',
+      name: 'Apple iPhone 16',
+      price: 1_200_000,
+      slug: 'apple-iphone-16',
+      stock: 3,
+    };
+    const iphone15 = {
+      ...sampleProduct,
+      category: 'Phones',
+      description: 'Apple iPhone 15',
+      id: 'iphone-15',
+      name: 'Apple iPhone 15',
+      price: 900_000,
+      slug: 'apple-iphone-15',
+      stock: 5,
+    };
+
+    // Currency-less scaled fabrication ("1.9m" / "1.9 million")
+    for (const text of [
+      'Apple MacBook Air M2 costs 1.9m.',
+      'Apple MacBook Air M2 costs 1.9 million.',
+    ]) {
+      mocks.generateText.mockImplementationOnce(async () => {
+        reportToolResult?.('searchProducts', {
+          products: [sampleProduct],
+          total: 1,
+        });
+        return { text };
+      });
+      expect(await runOgabasseyCatalogAgent(baseOptions())).toBeNull();
+    }
+
+    // Display resolution ("4K display") is not flagged as a price
+    mocks.generateText.mockImplementationOnce(async () => {
+      reportToolResult?.('searchProducts', {
+        products: [sampleProduct],
+        total: 1,
+      });
+      return {
+        text: 'Apple MacBook Air M2 supports a 4K display at ₦1,450,000.',
+      };
+    });
+    expect((await runOgabasseyCatalogAgent(baseOptions()))?.text).toBe(
+      'Apple MacBook Air M2 supports a 4K display at ₦1,450,000.'
+    );
+
+    // Abbreviated and qualitative stock claims ("only 5 left" / "out of stock")
+    for (const text of [
+      'Apple MacBook Air M2 is ₦1,450,000—only 5 left.',
+      'Apple MacBook Air M2 is out of stock.',
+    ]) {
+      mocks.generateText.mockImplementationOnce(async () => {
+        reportToolResult?.('searchProducts', {
+          products: [sampleProduct],
+          total: 1,
+        });
+        return { text };
+      });
+      expect(await runOgabasseyCatalogAgent(baseOptions())).toBeNull();
+    }
+
+    // Swapped product-price pair between two returned products is rejected
+    mocks.generateText.mockImplementationOnce(async () => {
+      reportToolResult?.('searchProducts', {
+        products: [iphone16, iphone15],
+        total: 2,
+      });
+      return { text: 'Apple iPhone 16 is ₦900,000.' };
+    });
+    expect(
+      await runOgabasseyCatalogAgent({
+        ...baseOptions(),
+        messages: [{ role: 'user', content: 'Compare iPhone 16 and 15' }],
+      })
+    ).toBeNull();
+
+    // Matching per-product prices in one reply pass
+    mocks.generateText.mockImplementationOnce(async () => {
+      reportToolResult?.('searchProducts', {
+        products: [iphone16, iphone15],
+        total: 2,
+      });
+      return {
+        text: 'Apple iPhone 16 is ₦1,200,000 and Apple iPhone 15 is ₦900,000.',
+      };
+    });
+    const paired = await runOgabasseyCatalogAgent({
+      ...baseOptions(),
+      messages: [{ role: 'user', content: 'Compare iPhone 16 and 15' }],
+    });
+    expect(paired?.text).toBe(
+      'Apple iPhone 16 is ₦1,200,000 and Apple iPhone 15 is ₦900,000.'
+    );
+  });
+
+  it('does not carry prior product budgets into unrelated category searches', async () => {
+    vi.stubEnv('META_MODEL_API_KEY', 'test-meta-key');
+    const cameraProduct = {
+      ...sampleProduct,
+      brand: 'Canon',
+      category: 'Cameras',
+      description: 'Canon EOS R10 camera',
+      id: 'canon-r10',
+      name: 'Canon EOS R10',
+      price: 850_000,
+      slug: 'canon-eos-r10',
+    };
+
+    mocks.generateText.mockImplementationOnce(async () => {
+      reportToolResult?.('searchProducts', {
+        products: [cameraProduct],
+        total: 1,
+      });
+      return { text: 'Canon EOS R10 is ₦850,000.' };
+    });
+
+    const result = await runOgabasseyCatalogAgent({
+      ...baseOptions(),
+      messages: [
+        { role: 'user', content: 'Show phones under ₦300k' },
+        { role: 'assistant', content: 'Here are phones under ₦300,000.' },
+        { role: 'user', content: 'Recommend a camera' },
+      ],
+    });
+    expect(result?.events[0]?.products[0]?.id).toBe('canon-r10');
   });
 });

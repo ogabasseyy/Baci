@@ -13,9 +13,11 @@ import {
   filterSerializedDetailsResultByBudget,
   filterSerializedSearchResultByBudget,
   filterToolResultByBudget,
+  resolveConversationBudgetLimit,
+} from './ogabassey-catalog-agent-budget';
+import {
   hasGroundedCatalogResultText,
   hasGroundedEmptyCatalogText,
-  resolveConversationBudgetLimit,
 } from './ogabassey-catalog-agent-grounding';
 import {
   isIndependentTopic,
@@ -41,7 +43,7 @@ const COURTESY =
   /^(?:hi|hello|hey|thanks|thank\s+you|how\s+are\s+you)[\s.!?]*$/i;
 
 const CATALOG_AGENT_CUE =
-  /[₦$€£]|\b(?:recommend\w*|suggest\w*|looking\s+for|(?:buy|shop)(?:ping)?|gifts?|products?|devices?|phones?|smartphones?|iphone\w*|ipad\w*|pixel\w*|galaxy\w*|laptops?|macbooks?|notebooks?|tablets?|(?:smart)?watches?|cameras?|speakers?|consoles?|televisions?|monitors?|accessor(?:y|ies)|chargers?|cables?|adapters?|cases?|earbuds?|headphones?|airpods|power[\s-]*banks?|(?:gaming|video\s+editing|photo(?:graphy)?|editing)\s+(?:\w+\s+){0,2}(?:laptop\w*|pc|rig|setup|phone\w*|tablet\w*|camera\w*|monitor\w*|console\w*|headset\w*|gear|device\w*|spec\w*|option\w*)|for\s+(?:gaming|video\s+editing|photography)|(?:under|below|within|at\s+most|max(?:imum)?)\s+(?:₦|ngn\s*)?\d|(?:my\s+)?budget|(?:cheap\w*|affordable)\s+(?:phone\w*|laptop\w*|tablet\w*|device\w*|option\w*|item\w*|product\w*)|available|availability|(?:in\s+)?stock|price|cost|do\s+you\s+(?:have|stock|carry|sell)|have\s+you\s+got)\b/i;
+  /[₦$€£]\s*\d|\b(?:products?|devices?|phones?|smartphones?|iphone\w*|ipad\w*|pixel\w*|galaxy\w*|laptops?|macbooks?|notebooks?|tablets?|(?:smart)?watches?|cameras?|speakers?|consoles?|televisions?|monitors?|accessor(?:y|ies)|chargers?|cables?|adapters?|cases?|earbuds?|headphones?|airpods|power[\s-]*banks?|(?:gaming|video\s+editing|photo(?:graphy)?|editing)\s+(?:\w+\s+){0,2}(?:laptop\w*|pc|rig|setup|phone\w*|tablet\w*|camera\w*|monitor\w*|console\w*|headset\w*|gear|device\w*|spec\w*|option\w*)|(?:under|below|within|at\s+most|max(?:imum)?)\s+(?:₦|ngn\s*)?\d+(?:\.\d+)?\s*(?:m|k|million|thousand)|(?:my\s+|a\s+)?budget\s+(?:of|is|for|phone\w*|laptop\w*|device\w*)|(?:cheap\w*|affordable)\s+(?:phone\w*|laptop\w*|tablet\w*|device\w*|option\w*|item\w*|product\w*)|(?:do\s+you\s+(?:stock|carry|sell)|in\s+stock|out\s+of\s+stock))\b/i;
 
 const FOLLOW_UP_CUE =
   /[₦$€£]|\b(?:it|this|that|these|those|one|ones|cheaper|less|more|instead|around|over-ear|wireless)\b|(?:\b(?:under|below|within|up\s+to|at\s+most|around)\s+(?:₦|ngn\s*)?)?\d+(?:\.\d+)?\s*(?:m|k|million|thousand|naira|ngn)\b/i;

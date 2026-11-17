@@ -11,6 +11,9 @@ type AddMessage = Extract<
 
 export async function handleChatwootInlineCartAdd(input: {
   conversationId: number;
+  /** Latest capability; read inside the cookie-write lock so a queued add
+   * uses the proof an earlier overlapping mutation just renewed. */
+  getSessionToken?: () => string;
   isCurrentAction: () => boolean;
   isCurrentCartContext: () => boolean;
   isCurrentContext: () => boolean;
@@ -48,7 +51,7 @@ export async function handleChatwootInlineCartAdd(input: {
             conversationId: input.conversationId,
             productSlug: message.data.slug,
             requestId,
-            sessionToken: input.sessionToken,
+            sessionToken: input.getSessionToken?.() ?? input.sessionToken,
             ...(message.data.variantId
               ? { variantId: message.data.variantId }
               : null),

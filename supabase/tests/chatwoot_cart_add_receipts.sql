@@ -200,6 +200,29 @@ DO $$ DECLARE r jsonb; BEGIN
   IF r->>'code' IS DISTINCT FROM 'invalid_item' THEN RAISE EXCEPTION 'sku_matrix product with stale has_variants was added without a variant: %',r; END IF;
 END $$;
 
+-- bugfix: variant line identity matches the storefront: axis keys are
+-- canonicalized (Colour -> color, Storage Capacity -> storage), capacity
+-- tokens are normalized, and a variant without a condition inherits the parent's.
+RESET ROLE;
+INSERT INTO public.products(id,merchant_id,slug,has_variants,manage_stock,stock,stock_quantity,condition)
+VALUES ('16161616-1616-4616-8616-161616161616','11111111-1111-4111-8111-111111111111','variant-identity',true,true,4,4,'Used');
+INSERT INTO public.product_variants(id,product_id,merchant_id,inventory_tracking_policy,stock_quantity,attributes)
+VALUES ('17171717-1717-4717-8717-171717171717','16161616-1616-4616-8616-161616161616','11111111-1111-4111-8111-111111111111','inherit',3,
+  '{"Colour":" Blue ","Storage Capacity":"128 gb","sku":"X-1","specs_cpu":"fast"}');
+SET ROLE commerce_cart_shopper;
+BEGIN;
+DO $$ DECLARE r jsonb; BEGIN
+  r := public.commerce_cart_add_chatwoot('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','variant-identity-1',7,'variant-identity','17171717-1717-4717-8717-171717171717');
+  IF r->>'ok' <> 'true' THEN RAISE EXCEPTION 'variant identity add failed: %',r; END IF;
+  IF (SELECT canonical_command #> '{item,options}' FROM public.commerce_cart_operations WHERE operation_id='variant-identity-1') IS DISTINCT FROM '{"color":"Blue","storage":"128GB"}'::jsonb THEN
+    RAISE EXCEPTION 'variant options did not match storefront canonicalization: %',(SELECT canonical_command FROM public.commerce_cart_operations WHERE operation_id='variant-identity-1');
+  END IF;
+  IF (SELECT canonical_command #>> '{item,condition}' FROM public.commerce_cart_operations WHERE operation_id='variant-identity-1') IS DISTINCT FROM 'used' THEN
+    RAISE EXCEPTION 'variant did not inherit the parent condition';
+  END IF;
+END $$;
+ROLLBACK;
+
 -- A transaction rollback removes both the cart mutation and its add identity receipt.
 BEGIN;
 UPDATE public.products SET stock=2,stock_quantity=2 WHERE slug='simple';

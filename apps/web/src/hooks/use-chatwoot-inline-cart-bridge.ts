@@ -33,6 +33,9 @@ export function useChatwootInlineCartBridge(
   useEffect(() => {
     let active = true;
     const generations = createChatwootActionGenerations();
+    // Bumped whenever a mutation renews the browser proof, so a slower
+    // authorize response bound to the previous proof cannot overwrite it.
+    let credentialEpoch = 0;
     let activeConversationId: number | null = null;
     let activeContextRequestId: string | null = null;
     let challengeToken: string | null = null;
@@ -158,6 +161,7 @@ export function useChatwootInlineCartBridge(
       const isProductRequest = message.event === 'baci-product-request';
       const action = generations.startAction(isProductRequest);
       let actionSessionToken = authorizedSessionToken;
+      const epochAtAuthorize = credentialEpoch;
       const requestedCartRef = latestState.current.sharedCartRef ?? null;
       const requestedMerchantSlug = latestState.current.merchantSlug;
       const authorized = await authorizeChatwootBridgeSession(
@@ -167,7 +171,8 @@ export function useChatwootInlineCartBridge(
       if (
         authorized?.sessionToken &&
         sessionTokenAliases.has(messageSessionToken) &&
-        action.isCurrent()
+        action.isCurrent() &&
+        credentialEpoch === epochAtAuthorize
       ) {
         rememberChatwootSessionToken(
           sessionTokenAliases,
@@ -225,6 +230,7 @@ export function useChatwootInlineCartBridge(
         hasSessionAlias: () => sessionTokenAliases.has(messageSessionToken),
         isCurrentTarget: () => isCurrentTarget(frame, target, conversationId),
         onSessionTokenRenewed: (sessionToken) => {
+          credentialEpoch += 1;
           rememberChatwootSessionToken(
             sessionTokenAliases,
             sessionToken,

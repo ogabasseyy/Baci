@@ -1,3 +1,67 @@
+-- Mirrors the storefront's variant line identity (normalizeCriticalVariantAttributes
+-- in the PDP and canonicalizeCommerceVariantAxis / normalizeCommerceVariantOption
+-- in packages/shared) so a Chatwoot add increments the storefront's existing
+-- line instead of creating a separate one. Graphics values only get whitespace
+-- collapsing here; the storefront's richer GPU rewrite is not mirrored.
+CREATE OR REPLACE FUNCTION private.chatwoot_canonical_variant_options(p_attributes jsonb)
+RETURNS jsonb
+LANGUAGE plpgsql IMMUTABLE SET search_path = '' AS $$
+DECLARE
+  r record;
+  v_axis text;
+  v_value text;
+  v_match text[];
+  v_out jsonb := '{}'::jsonb;
+BEGIN
+  FOR r IN SELECT entry.key, entry.value FROM jsonb_each(coalesce(p_attributes, '{}'::jsonb)) entry LOOP
+    CONTINUE WHEN jsonb_typeof(r.value) IS DISTINCT FROM 'string';
+    v_axis := lower(regexp_replace(
+      regexp_replace(btrim(r.key), '([a-z0-9])([A-Z])', '\1_\2', 'g'),
+      '[\s.-]+', '_', 'g'));
+    v_axis := CASE v_axis
+      WHEN 'colour' THEN 'color'
+      WHEN 'gpu' THEN 'graphics'
+      WHEN 'ram_options' THEN 'ram'
+      WHEN 'storage_capacity' THEN 'storage'
+      WHEN 'colour_hex' THEN 'color_hex'
+      ELSE v_axis END;
+    CONTINUE WHEN v_axis = '';
+    v_value := btrim(r.value #>> '{}');
+    CONTINUE WHEN v_value = '';
+    IF v_axis <> 'color_hex' THEN
+      CONTINUE WHEN v_axis = 'specs' OR v_axis LIKE 'specs\_%' OR v_axis IN (
+        'availability','availability_note','camera','colorhex','colourhex',
+        'delivery_notice','disclaimer','disclaimers','display_size','display_type',
+        'id','image','images','keyboard','model','model_number','note','notes',
+        'notice','operating_system','price','product_id','screen_size','sku',
+        'slug','variant_id','variant_name','warranty_note','wireless');
+      IF v_axis = 'condition' THEN
+        v_value := discovery.canonical_product_condition(v_value);
+      ELSE
+        v_value := regexp_replace(v_value, '\s+', ' ', 'g');
+        IF v_axis = 'processor' THEN
+          v_value := regexp_replace(v_value, '\mIntel\s+Ultra\M', 'Intel Core Ultra', 'i');
+        ELSIF v_axis = 'ram' THEN
+          v_value := regexp_replace(v_value, '\s+RAM$', '', 'i');
+          v_match := regexp_match(v_value, '^(\d+(?:\.\d+)?)\s*(KB|MB|GB|TB)\M(.*)$', 'i');
+          IF v_match IS NOT NULL THEN v_value := v_match[1] || upper(v_match[2]) || v_match[3]; END IF;
+        ELSIF v_axis IN ('storage', 'capacity') THEN
+          v_match := regexp_match(v_value, '^(\d+(?:\.\d+)?)\s*(KB|MB|GB|TB)(?:\s+(SSD|HDD|NVMe|eMMC))?$', 'i');
+          IF v_match IS NOT NULL THEN
+            v_value := v_match[1] || upper(v_match[2])
+              || CASE WHEN v_match[3] IS NOT NULL THEN ' ' || upper(v_match[3]) ELSE '' END;
+          END IF;
+        END IF;
+      END IF;
+    END IF;
+    IF v_value IS NOT NULL AND v_value <> '' THEN
+      v_out := v_out || jsonb_build_object(v_axis, v_value);
+    END IF;
+  END LOOP;
+  RETURN v_out;
+END $$;
+REVOKE ALL ON FUNCTION private.chatwoot_canonical_variant_options(jsonb) FROM PUBLIC, anon, authenticated;
+
 -- product_variants has no active/status/deleted/archive columns. The live PDP
 -- snapshot returns tenant-owned variants (excluding inventory anchors), so the
 -- add RPC must bind to that snapshot and actual row ownership without querying
@@ -149,11 +213,12 @@ BEGIN
     IF v_manage_stock AND coalesce(v_stock, 0) < 1 THEN
       RETURN jsonb_build_object('ok', false, 'code', 'invalid_item', 'state', null, 'currentVersion', v_cart_version, 'replayed', false);
     END IF;
-    SELECT coalesce(jsonb_object_agg(entry.key, to_jsonb(btrim(entry.value #>> '{}'))), '{}'::jsonb)
-    INTO v_options
-    FROM jsonb_each(coalesce(v_variant_row.attributes, '{}'::jsonb)) entry
-    WHERE jsonb_typeof(entry.value) = 'string' AND btrim(entry.value #>> '{}') <> '';
-    v_condition := discovery.canonical_product_condition(v_variant_row.condition);
+    v_options := private.chatwoot_canonical_variant_options(v_variant_row.attributes);
+    -- A variant without its own condition inherits the parent's, exactly as
+    -- the storefront cart line does.
+    v_condition := coalesce(
+      discovery.canonical_product_condition(v_variant_row.condition),
+      discovery.canonical_product_condition(v_product->>'condition'));
     v_item := jsonb_build_object('productId', v_product->>'id', 'variantId', v_variant->>'id')
       || CASE WHEN v_condition IS NOT NULL THEN jsonb_build_object('condition', v_condition) ELSE '{}'::jsonb END
       || CASE WHEN v_options <> '{}'::jsonb THEN jsonb_build_object('options', v_options) ELSE '{}'::jsonb END;

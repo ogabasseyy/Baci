@@ -44,6 +44,9 @@ describe('isMonnifyVendOutcomeText', () => {
     'Has never been vended',
     'request-could-not-be-processed: insufficient wallet balance',
     'not-delivered',
+    'Request could not have been processed due to insufficient wallet balance',
+    'not yet delivered',
+    'did not get delivered',
     '',
     null,
   ])('does not flag "%s"', (text) => {

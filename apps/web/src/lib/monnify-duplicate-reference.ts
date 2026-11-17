@@ -8,7 +8,7 @@
  * not match.
  */
 const MONNIFY_DUPLICATE_REFERENCE_PATTERN =
-  /duplicate|idempoten|(?:reference|ref|request|transaction|vend)\w*[\s_-]+(?:\w+[\s_-]+)?conflict|conflict\w*[\s_-]+(?:\w+[\s_-]+){0,2}?(?:reference|ref|request|transaction|vend)|(?:reference|transaction)\s+(?:has\s+)?(?:already|exists?|(?:is\s+)?in\s+use|been\s+used)|already\s+(?:been\s+)?(?:used|processed|submitted|exists?|vended|delivered|paid|dispatched|completed|fulfilled)/i;
+  /duplicate|idempoten|(?:reference|ref|request|transaction|vend)\w*[\s_-]+(?:\w+[\s_-]+)?conflict|conflict\w*[\s_-]+(?:\w+[\s_-]+){0,2}?(?:reference|ref|request|transaction|vend)|(?:reference|transaction)\s+(?:(?:has|is)\s+)?(?:already|exists?|(?:is\s+)?in\s+use|been\s+used)|already\s+(?:been\s+)?(?:used|processed|submitted|exists?|vended|delivered|paid|dispatched|completed|fulfilled)/i;
 
 /** Whether a Monnify message says the vend reference was already used. */
 export function isMonnifyDuplicateReferenceText(

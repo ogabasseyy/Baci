@@ -11,6 +11,7 @@ describe('isMonnifyDuplicateReferenceText', () => {
     'Request conflict',
     'Conflict on vend reference',
     'transaction_conflict',
+    'Insufficient wallet balance; reference is already in use',
     'Idempotency key reused',
   ])('treats "%s" as a duplicate reference', (text) => {
     expect(isMonnifyDuplicateReferenceText(text)).toBe(true);

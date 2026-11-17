@@ -10,6 +10,8 @@ describe('hasMonnifyVendEvidence', () => {
     { vendStatus: 'FAILED', responseMessage: 'Insufficient wallet balance' },
     { responseBody: { status: 'FAILED' } },
     { status: 'In_Progress' },
+    { responseBody: { status: 'UNKNOWN' } },
+    { status: 'PENDING_CONFIRMATION' },
     { transactionId: 'MFBP-9' },
     { responseBody: { orderReference: 'ORD-1' } },
     { referenceNumber: '12345' },

@@ -120,3 +120,29 @@ describe('bugfix: authorization-header rejections read as auth rejections', () =
     });
   });
 });
+
+describe('bugfix: copular token-expiry wording and bare "authentication" text', () => {
+  it.each([
+    'Access token has expired',
+    'Access token is expired',
+    'Authentication failed',
+  ])('hands a 401 saying "%s" to Kuda', async (responseMessage) => {
+    mockHttpError(401, 'Unauthorized', JSON.stringify({ responseMessage }));
+
+    await expect(vend()).resolves.toMatchObject({
+      providerDefiniteFailure: true,
+    });
+  });
+
+  it('keeps a 401 that only mentions authentication in passing off Kuda', async () => {
+    mockHttpError(
+      401,
+      'Unauthorized',
+      JSON.stringify({ responseMessage: 'See authentication docs for help' })
+    );
+
+    await expect(vend()).resolves.toMatchObject({
+      providerDefiniteFailure: false,
+    });
+  });
+});

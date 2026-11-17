@@ -4,10 +4,12 @@
  * network (e.g. from a gateway), so it never counts as a pre-vend refusal,
  * whatever else it says. A vend still pending, processing, queued or in
  * progress counts too: it may yet complete. A negated outcome ("could not be processed",
- * "not delivered") says nothing happened, so it does not count.
+ * "not delivered", "not yet delivered", "could not have been processed",
+ * up to three words after the negator) says nothing happened, so it does
+ * not count.
  */
 const MONNIFY_VEND_OUTCOME_PATTERN =
-  /unavailable|\bunsuccessful|\btime[ds]?\s*out\b|(?:vend|transaction|purchase|airtime|payment|top[\s-]?up|recharge)\w*(?:\s+\w+){0,2}?\s+fail|fail\w*\s+to\s+vend|(?<!(?:\bnot|\bnever|\bcannot|n't)\s+(?:be\s+|been\s+)?)\b(?:delivered|processed|completed|successful|vended|dispatched|pending|processing|queued|in\s+progress)\b/i;
+  /unavailable|\bunsuccessful|\btime[ds]?\s*out\b|(?:vend|transaction|purchase|airtime|payment|top[\s-]?up|recharge)\w*(?:\s+\w+){0,2}?\s+fail|fail\w*\s+to\s+vend|(?<!(?:\bnot|\bnever|\bcannot|n't)(?:\s+\w+){0,3}?\s+)\b(?:delivered|processed|completed|successful|vended|dispatched|pending|processing|queued|in\s+progress)\b/i;
 
 /**
  * Whether a Monnify answer mentions a vend outcome or an unavailable service.

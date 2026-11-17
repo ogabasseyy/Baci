@@ -1,4 +1,3 @@
-import { getRootDomain } from '@/env';
 import { getConfiguredAgenticMerchantSlug } from '@/lib/agentic/agentic-merchant-slug';
 import { isVercelPreview } from '@/lib/proxy/host';
 import { getRequestHost } from '@/lib/storefront-host';
@@ -27,7 +26,10 @@ export async function resolveDeviceCheckStorefront(
   request: Request,
   merchantSlug: string | null
 ): Promise<DeviceCheckStorefront> {
-  const rootDomain = getRootDomain() || 'usebaci.com';
+  // Read directly: this anonymous storefront route must not import the
+  // credential-bearing `@/env` module (event-pipeline boundary contract).
+  const rootDomain =
+    process.env.NEXT_PUBLIC_ROOT_DOMAIN?.trim() || 'usebaci.com';
   const resolutionRequest = isVercelPreview(getRequestHost(request))
     ? new Request(`https://${rootDomain}/`)
     : request;

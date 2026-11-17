@@ -9,7 +9,6 @@ vi.mock('@/lib/agentic/agentic-merchant-slug', () => ({
   getConfiguredAgenticMerchantSlug: mocks.configuredSlug,
 }));
 
-vi.mock('@/env', () => ({ getRootDomain: () => 'usebaci.com' }));
 vi.mock('@/lib/storefront-merchant', () => ({
   resolveStorefrontMerchantFromRequest: mocks.resolveMerchant,
 }));
@@ -33,6 +32,7 @@ function resolvedHost(): string {
 
 describe('resolveDeviceCheckStorefront', () => {
   beforeEach(() => {
+    vi.stubEnv('NEXT_PUBLIC_ROOT_DOMAIN', 'usebaci.com');
     mocks.configuredSlug.mockReset().mockReturnValue('ogabassey');
     mocks.resolveMerchant.mockReset().mockResolvedValue({
       success: true,
@@ -114,6 +114,16 @@ describe('resolveDeviceCheckStorefront', () => {
 
     expect(mocks.resolveMerchant).toHaveBeenCalledWith(
       expect.objectContaining({ fallbackIdentifier: undefined })
+    );
+  });
+
+  it('defaults the root domain when the public setting is blank', async () => {
+    vi.stubEnv('NEXT_PUBLIC_ROOT_DOMAIN', '  ');
+
+    await resolveDeviceCheckStorefront(requestFor('ogabassey.com'), null);
+
+    expect(mocks.resolveMerchant).toHaveBeenCalledWith(
+      expect.objectContaining({ rootDomain: 'usebaci.com' })
     );
   });
 

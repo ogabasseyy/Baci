@@ -276,5 +276,13 @@ describe('interpretFastCatalogIntent', () => {
       maxPrice: 1_000_000,
       exclusiveMaxPrice: true,
     });
+
+    expect(
+      interpretFastCatalogIntent(
+        ['How many pixels are in a 4K image?'],
+        categories,
+        'NGN'
+      )
+    ).toBeNull();
   });
 });

@@ -4,7 +4,6 @@ import type {
 } from '@/schemas/storefront-agent-ui-contract';
 import {
   type CatalogBudgetLimit,
-  type CatalogChatMessage,
   isProductWithinBudget,
 } from './ogabassey-catalog-agent-budget';
 import {
@@ -18,11 +17,6 @@ export const UNGROUNDED_EMPTY_RESULT_CLAIM = /[₦$€£]|\b(?:naira|ngn)\b/i;
 
 const PRICE_MENTION_PATTERN =
   /(?:(₦|ngn\s*|[$€£]\s*)((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)(?:\s*(million|thousand|[km])\b)?|((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)(?:\s*(million|thousand|[km])\b)?\s*(?:naira|ngn|₦)|((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)\s*(million|thousand|[km])\b|(\d{1,3}(?:,\d{3})+)(?:\.\d+)?)/giu;
-
-// Only treat explicit currency, scaled, or budget-cued numbers from user turns
-// as valid budget references so model numbers (e.g. "iPhone 16") never enter.
-const USER_BUDGET_MENTION_PATTERN =
-  /(?:(₦|ngn\s*|[$€£]\s*)((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)(?:\s*(million|thousand|[km]))?|((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)\s*(?:(million|thousand|[km])\b|(?=(?:\s*(?:naira|ngn|₦))))|(?:under|below|within|up\s+to|at\s+most|max(?:imum)?|budget(?:\s+(?:of|is))?)\s+((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)(?:\s*(million|thousand|[km]))?)/giu;
 
 const BARE_PRICE_CANDIDATE_PATTERN = /\b(\d{4,9})\b/gu;
 const SHORT_CUED_PRICE_PATTERN =
@@ -58,21 +52,17 @@ function applyNumericScale(rawValue: string, unit?: string): number {
   return Math.round(numeric);
 }
 
-function extractUserPriceMentions(messages: CatalogChatMessage[]): Set<number> {
-  const values = new Set<number>();
-  for (const message of messages) {
-    if (message.role !== 'user') continue;
-    for (const match of message.content.matchAll(USER_BUDGET_MENTION_PATTERN)) {
-      const rawNumber = match[2] ?? match[4] ?? match[6];
-      const unit = match[3] ?? match[5] ?? match[7];
-      if (!rawNumber) continue;
-      const parsed = applyNumericScale(rawNumber, unit);
-      if (Number.isFinite(parsed) && parsed > 0) {
-        values.add(parsed);
-      }
-    }
-  }
-  return values;
+const FOREIGN_CURRENCY_PATTERNS: Record<string, RegExp> = {
+  NGN: /[$€£]/,
+  USD: /[₦€£]/,
+  EUR: /[₦$£]/,
+  GBP: /[₦$€]/,
+};
+
+function hasForeignCurrencySymbol(text: string, currencyCode: string): boolean {
+  return (
+    FOREIGN_CURRENCY_PATTERNS[currencyCode.toUpperCase()]?.test(text) ?? false
+  );
 }
 
 function isBudgetRestatement(
@@ -98,31 +88,25 @@ function isBareNonPriceSpec(
   const after = text.slice(end, Math.min(text.length, end + 16));
   if (NON_PRICE_SPEC_SUFFIX_PATTERN.test(after)) return true;
   if (MODEL_NUMBER_PREFIX_PATTERN.test(before)) return true;
-  if (
-    amount >= 2010 &&
-    amount <= 2035 &&
-    !PRICE_CUE_PREFIX_PATTERN.test(before)
-  ) {
-    return true;
-  }
-  return false;
-}
-
-function hasForeignCurrencySymbol(text: string, currencyCode: string): boolean {
-  const code = currencyCode.toUpperCase();
-  if (code === 'NGN') return /[$€£]/.test(text);
-  if (code === 'USD') return /[₦€£]/.test(text);
-  if (code === 'EUR') return /[₦$£]/.test(text);
-  if (code === 'GBP') return /[₦$€]/.test(text);
-  return false;
+  return (
+    amount >= 2010 && amount <= 2035 && !PRICE_CUE_PREFIX_PATTERN.test(before)
+  );
 }
 
 function validatePriceSpans(
   text: string,
-  userAmounts: Set<number>,
+  budgetLimit: CatalogBudgetLimit | undefined,
   onMatchedAmount: (start: number, amount: number) => boolean
 ): { valid: boolean; spans: Array<{ start: number; end: number }> } {
   const spans: Array<{ start: number; end: number }> = [];
+  const activeBudgetAmount =
+    budgetLimit && Number.isFinite(budgetLimit.amount)
+      ? Math.round(budgetLimit.amount)
+      : undefined;
+  const isAllowedBudgetEcho = (start: number, end: number, amount: number) =>
+    activeBudgetAmount !== undefined &&
+    amount === activeBudgetAmount &&
+    isBudgetRestatement(text, start, end);
 
   for (const match of text.matchAll(PRICE_MENTION_PATTERN)) {
     const rawNumber = match[2] ?? match[4] ?? match[6] ?? match[8];
@@ -145,7 +129,7 @@ function validatePriceSpans(
     }
     spans.push({ start, end });
 
-    if (isBudgetRestatement(text, start, end) && userAmounts.has(amount)) {
+    if (isAllowedBudgetEcho(start, end, amount)) {
       continue;
     }
     if (!onMatchedAmount(start, amount)) {
@@ -163,7 +147,7 @@ function validatePriceSpans(
     if (isBareNonPriceSpec(text, start, end, amount)) continue;
     spans.push({ start, end });
 
-    if (isBudgetRestatement(text, start, end) && userAmounts.has(amount)) {
+    if (isAllowedBudgetEcho(start, end, amount)) {
       continue;
     }
     if (!onMatchedAmount(start, amount)) {
@@ -185,7 +169,7 @@ function validatePriceSpans(
       return { valid: false, spans };
     }
     spans.push({ start, end });
-    if (isBudgetRestatement(text, start, end) && userAmounts.has(amount)) {
+    if (isAllowedBudgetEcho(start, end, amount)) {
       continue;
     }
     if (!onMatchedAmount(start, amount)) {
@@ -206,7 +190,7 @@ function hasGroundedStockClaims(
     const claimedStock = Number(rawCount);
     const offset = match.index ?? 0;
     const bound = findBoundProducts(text, offset, products);
-    if (!bound.some((product) => product.stock === claimedStock)) {
+    if (!bound.every((product) => product.stock === claimedStock)) {
       return false;
     }
   }
@@ -248,13 +232,12 @@ function hasGroundedStockClaims(
 
 export function hasGroundedEmptyCatalogText(
   text: string,
-  userMessages: CatalogChatMessage[] = [],
-  currencyCode = 'NGN'
+  currencyCode = 'NGN',
+  budgetLimit?: CatalogBudgetLimit
 ): boolean {
   if (hasForeignCurrencySymbol(text, currencyCode)) return false;
 
-  const userAmounts = extractUserPriceMentions(userMessages);
-  const priceCheck = validatePriceSpans(text, userAmounts, () => false);
+  const priceCheck = validatePriceSpans(text, budgetLimit, () => false);
   if (!priceCheck.valid) return false;
 
   let withoutBudgetRestatements = text;
@@ -277,7 +260,6 @@ export function hasGroundedEmptyCatalogText(
 export function hasGroundedCatalogResultText(
   text: string,
   events: StorefrontAgentUiEvent[],
-  userMessages: CatalogChatMessage[],
   currencyCode: string,
   budgetLimit?: CatalogBudgetLimit
 ): boolean {
@@ -293,10 +275,9 @@ export function hasGroundedCatalogResultText(
   if (!hasGroundedProductMentions(text, events)) return false;
   if (hasForeignCurrencySymbol(text, currencyCode)) return false;
 
-  const userAmounts = extractUserPriceMentions(userMessages);
-  const priceCheck = validatePriceSpans(text, userAmounts, (start, amount) => {
+  const priceCheck = validatePriceSpans(text, budgetLimit, (start, amount) => {
     const bound = findBoundProducts(text, start, products);
-    return bound.some((product) => Math.round(product.price) === amount);
+    return bound.every((product) => Math.round(product.price) === amount);
   });
   if (!priceCheck.valid) return false;
 

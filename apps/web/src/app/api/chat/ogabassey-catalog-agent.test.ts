@@ -1077,4 +1077,59 @@ describe('runOgabasseyCatalogAgent', () => {
       mocks.generateText.mock.calls.slice(-3).map(([c]) => c.model.modelId)
     ).toEqual(['gpt-6-luna', 'muse-ember-1.0', 'deepseek-flash']);
   });
+
+  it('rejects fabricated cart/order actions and cross-brand or grouped price mismatches in completions', async () => {
+    vi.stubEnv('META_MODEL_API_KEY', 'test-meta-key');
+    const iphone16 = {
+      ...sampleProduct,
+      brand: 'Apple',
+      category: 'Phones',
+      description: 'Apple iPhone 16',
+      id: 'iphone-16',
+      name: 'Apple iPhone 16',
+      price: 1_200_000,
+      slug: 'apple-iphone-16',
+    };
+    const iphone15 = {
+      ...sampleProduct,
+      brand: 'Apple',
+      category: 'Phones',
+      description: 'Apple iPhone 15',
+      id: 'iphone-15',
+      name: 'Apple iPhone 15',
+      price: 900_000,
+      slug: 'apple-iphone-15',
+    };
+
+    for (const actionClaim of [
+      "I've added the Apple MacBook Air M2 to your cart.",
+      'I ordered the Apple MacBook Air M2 for you.',
+    ]) {
+      mocks.generateText.mockImplementationOnce(async () => {
+        reportToolResult?.('searchProducts', {
+          products: [sampleProduct],
+          total: 1,
+        });
+        return { text: actionClaim };
+      });
+      expect(await runOgabasseyCatalogAgent(baseOptions())).toBeNull();
+    }
+
+    // Grouped multi-product price claim failing closed when prices differ
+    mocks.generateText.mockImplementationOnce(async () => {
+      reportToolResult?.('searchProducts', {
+        products: [iphone16, iphone15],
+        total: 2,
+      });
+      return {
+        text: 'Apple iPhone 16, Apple iPhone 15 are both ₦900,000.',
+      };
+    });
+    expect(
+      await runOgabasseyCatalogAgent({
+        ...baseOptions(),
+        messages: [{ role: 'user', content: 'Show me iPhone options' }],
+      })
+    ).toBeNull();
+  });
 });

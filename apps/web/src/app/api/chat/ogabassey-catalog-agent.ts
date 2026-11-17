@@ -49,6 +49,9 @@ const CATALOG_AGENT_CUE =
 const FOLLOW_UP_CUE =
   /[₦$€£]|\b(?:it|this|that|these|those|one|ones|cheaper|less|more|instead|around|over-ear|wireless)\b|(?:\b(?:under|below|within|up\s+to|at\s+most|around)\s+(?:₦|ngn\s*)?)?\d+(?:\.\d+)?\s*(?:m|k|million|thousand|naira|ngn)\b/i;
 
+const READ_ONLY_AGENT_ACTION_CLAIM =
+  /\b(?:(?:i|we)(?:['’](?:ve|ll|m|re)|\s+(?:have|had|will|just|already))?\s+(?:added|removed|updated|cleared|ordered|purchased|bought|reserved|booked|placed|checked\s+out)|(?:added|removed)\b[^.!?\n]{0,60}\b(?:to|from)\s+(?:your\s+|the\s+)?cart|item\s+has\s+been\s+(?:added|ordered|purchased)|order\s+(?:has\s+been\s+)?placed)\b/i;
+
 export interface OgabasseyCatalogAgentResult {
   text: string;
   events: StorefrontAgentUiEvent[];
@@ -218,7 +221,10 @@ export async function runOgabasseyCatalogAgent(options: {
         'Never claim to add items to cart, cancel orders, or generate bank accounts. Keep replies brief.',
       acceptResult: (text) => {
         if (toolCallsInAttempt === 0) return false;
-        if (OGABASSEY_UNVERIFIED_MUTATION_ACTION.test(text)) {
+        if (
+          OGABASSEY_UNVERIFIED_MUTATION_ACTION.test(text) ||
+          READ_ONLY_AGENT_ACTION_CLAIM.test(text)
+        ) {
           return false;
         }
         const events = presentationCollector.getEvents();
@@ -226,8 +232,8 @@ export async function runOgabasseyCatalogAgent(options: {
           return (
             hasGroundedEmptyCatalogText(
               text,
-              conversationMessages,
-              options.currencyCode
+              options.currencyCode,
+              budgetLimit
             ) &&
             !OGABASSEY_UNVERIFIED_COMMERCE_ACTION.test(text) &&
             !OGABASSEY_UNVERIFIED_STORE_PURCHASE.test(text)
@@ -236,7 +242,6 @@ export async function runOgabasseyCatalogAgent(options: {
         return hasGroundedCatalogResultText(
           text,
           events,
-          conversationMessages,
           options.currencyCode,
           budgetLimit
         );

@@ -135,7 +135,7 @@ export const GENERIC_PRODUCT_NAME_WORDS = new Set([
   'lte',
 ]);
 
-export const KNOWN_BRAND_OR_LINE_TOKENS = new Set([
+export const KNOWN_BRAND_TOKENS = new Set([
   'apple',
   'samsung',
   'dell',
@@ -184,6 +184,10 @@ export const KNOWN_BRAND_OR_LINE_TOKENS = new Set([
   'framework',
   'fairphone',
   'nothing',
+]);
+
+export const KNOWN_BRAND_OR_LINE_TOKENS = new Set([
+  ...KNOWN_BRAND_TOKENS,
   'macbook',
   'iphone',
   'ipad',

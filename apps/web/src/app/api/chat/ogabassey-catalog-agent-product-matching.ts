@@ -6,6 +6,7 @@ import {
   CAPITALIZED_PHRASE_IGNORE,
   GENERIC_PRODUCT_NAME_WORDS,
   KNOWN_BRAND_OR_LINE_TOKENS,
+  KNOWN_BRAND_TOKENS,
   NON_PRODUCT_PREDECESSOR_WORDS,
 } from './ogabassey-catalog-agent-lexicon';
 
@@ -23,6 +24,9 @@ export const EMPTY_CLAUSE_SPLIT_PATTERN =
 
 const CLAUSE_SPLIT_PATTERN =
   /[.!?\n;]+|\b(?:but|however|although)\b|,\s*(?=(?:we|here|try|you|the|check)\b)/i;
+
+const SEGMENT_SUB_SPLIT_PATTERN =
+  /[.!?\n;—–]+|\b(?:and|but|or|while|versus|vs)\b|,\s+/gi;
 
 const FAMILY_VARIANT_PATTERN =
   /\b(?:macbook|iphone|ipad|imac|galaxy|pixel|xps|surface|watch|redmi|tecno|infinix|oneplus|playstation)\s+(?:(?:pro|ultra|max|mini|plus|air|studio|fold|flip|fe|se|lite|neo|edge|spark|camon|phantom|hot|note|nord|pixel)\b|[a-z]{0,2}\d{1,4}[a-z]?\b)(?:\s+(?:pro|ultra|max|mini|plus|air|studio|fold|flip|fe|se|lite|neo|[a-z]{0,2}\d{1,4}[a-z]?\b)){0,2}/gi;
@@ -73,16 +77,29 @@ export function productMatchesSegment(
   segment: string
 ): number {
   const lowerSegment = segment.toLowerCase();
-  const fullName = product.name.trim().toLowerCase();
-  if (fullName && lowerSegment.includes(fullName)) {
-    return 100 + tokenizeLowerWords(fullName).length;
-  }
-
   const segmentTokens = new Set(
     lowerSegment
       .match(/[a-z0-9]+/g)
       ?.filter((token) => token.length >= 2 || /^\d$/.test(token)) ?? []
   );
+
+  // If the segment names any brand (e.g. "Apple" in "Apple Galaxy S25"), every
+  // named brand must belong to this product so cross-brand synthesis fails.
+  const productIdentityTokens = new Set([
+    ...tokenizeLowerWords(product.brand ?? ''),
+    ...tokenizeLowerWords(product.name),
+  ]);
+  for (const token of segmentTokens) {
+    if (KNOWN_BRAND_TOKENS.has(token) && !productIdentityTokens.has(token)) {
+      return 0;
+    }
+  }
+
+  const fullName = product.name.trim().toLowerCase();
+  if (fullName && lowerSegment.includes(fullName)) {
+    return 100 + tokenizeLowerWords(fullName).length;
+  }
+
   const nameTokens = (
     product.name.toLowerCase().match(/[a-z0-9]+/g) ?? []
   ).filter(
@@ -112,6 +129,36 @@ export function productMatchesSegment(
   return score >= requiredMatches ? score : 0;
 }
 
+function matchCandidateProducts(
+  candidate: string,
+  products: StorefrontAgentUiProduct[]
+): StorefrontAgentUiProduct[] {
+  const parts = candidate
+    .split(/,\s+/g)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const matchedSet = new Set<StorefrontAgentUiProduct>();
+
+  for (const part of parts) {
+    let bestScore = 0;
+    let bestForPart: StorefrontAgentUiProduct[] = [];
+    for (const product of products) {
+      const score = productMatchesSegment(product, part);
+      if (score > bestScore) {
+        bestScore = score;
+        bestForPart = [product];
+      } else if (score > 0 && score === bestScore) {
+        bestForPart.push(product);
+      }
+    }
+    for (const product of bestForPart) {
+      matchedSet.add(product);
+    }
+  }
+
+  return [...matchedSet];
+}
+
 export function findBoundProducts(
   text: string,
   offset: number,
@@ -138,18 +185,8 @@ export function findBoundProducts(
   const sentence = splitBoundaries(/[.!?\n;]+/g);
 
   for (const candidate of [localClause, sentence, text]) {
-    let bestScore = 0;
-    let best: StorefrontAgentUiProduct[] = [];
-    for (const product of products) {
-      const score = productMatchesSegment(product, candidate);
-      if (score > bestScore) {
-        bestScore = score;
-        best = [product];
-      } else if (score > 0 && score === bestScore) {
-        best.push(product);
-      }
-    }
-    if (bestScore > 0) return best;
+    const matched = matchCandidateProducts(candidate, products);
+    if (matched.length > 0) return matched;
   }
 
   return products;
@@ -205,8 +242,12 @@ export function hasGroundedProductMentions(
   const products = events.flatMap((event) => event.products);
   if (products.length === 0) return false;
 
-  const matchesReturnedProduct = products.some(
-    (product) => productMatchesSegment(product, text) > 0
+  const segments = text
+    .split(SEGMENT_SUB_SPLIT_PATTERN)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+  const matchesReturnedProduct = segments.some((segment) =>
+    products.some((product) => productMatchesSegment(product, segment) > 0)
   );
   if (!matchesReturnedProduct) return false;
 

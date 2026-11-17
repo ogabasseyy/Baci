@@ -5,7 +5,11 @@ import { checkCsrfProtection } from '@/lib/csrf';
 import { resolveStorefrontMerchantFromRequest } from '@/lib/storefront-merchant';
 import { deviceGradingAiResultSchema } from '@/schemas/device-grading';
 import { estimateTradeInValue } from './estimate-trade-in-value';
-import { type DeviceMediaPart, readDeviceMedia } from './read-device-media';
+import {
+  type DeviceMediaPart,
+  encodeDeviceMedia,
+  readDeviceMedia,
+} from './read-device-media';
 
 export const maxDuration = 60;
 
@@ -85,7 +89,7 @@ export async function POST(request: NextRequest) {
       return errorResponse('Invalid upload', 400, 'INVALID_UPLOAD');
     }
 
-    const media = await readDeviceMedia(formData);
+    const media = readDeviceMedia(formData);
     if (!media.ok) return errorResponse(media.error, media.status);
 
     // The price lookup must stay inside the store the request came from.
@@ -113,7 +117,9 @@ export async function POST(request: NextRequest) {
 
     let rawGrading: unknown;
     try {
-      rawGrading = parseGrading(await gradeDevice(media.parts));
+      rawGrading = parseGrading(
+        await gradeDevice(await encodeDeviceMedia(media.files))
+      );
     } catch (error) {
       console.error(
         '[grade-device] analysis failed:',

@@ -5,7 +5,7 @@ const STEP_TIMEOUT_MS = 8_000;
 
 function waitForEvent(
   video: HTMLVideoElement,
-  eventName: 'loadedmetadata' | 'seeked'
+  eventName: 'loadedmetadata' | 'loadeddata' | 'seeked'
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const cleanup = () => {
@@ -71,6 +71,18 @@ export async function extractVideoFrames(videoFile: File): Promise<Blob[]> {
     canvas.height = Math.round(videoHeight * scale);
     const context = canvas.getContext('2d');
     if (!context) throw new Error('Video could not be read');
+
+    // A clip with no usable duration (some screen recordings report 0 or
+    // Infinity) cannot be seeked through: every target would be the same
+    // position, and a seek to the current position may never report back.
+    // Take the one frame the browser has instead.
+    if (duration <= 0) {
+      if (video.readyState < video.HAVE_CURRENT_DATA) {
+        await waitForEvent(video, 'loadeddata');
+      }
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      return [await canvasToJpeg(canvas)];
+    }
 
     const frames: Blob[] = [];
     for (let index = 0; index < FRAME_COUNT; index += 1) {

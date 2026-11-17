@@ -5,6 +5,7 @@ import { extractVideoFrames } from './extract-video-frames';
 interface FakeVideoOptions {
   duration: number;
   fails?: boolean;
+  readyState?: number;
   height: number;
   width: number;
 }
@@ -46,6 +47,7 @@ function installFakeMedia(options: FakeVideoOptions) {
           queueMicrotask(() => video.dispatchEvent(new Event('seeked')));
         },
       },
+      readyState: { get: () => options.readyState ?? 4 },
       load: { value: () => {} },
     });
     return video;
@@ -79,6 +81,25 @@ describe('extractVideoFrames', () => {
     expect(canvas).toMatchObject({ width: 768, height: 432 });
     expect(drawImage).toHaveBeenCalledTimes(4);
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:device-video');
+  });
+
+  it.each([
+    ['zero', 0],
+    ['unknown (Infinity)', Number.POSITIVE_INFINITY],
+  ])('takes one frame without seeking when the duration is %s', async (_label, duration) => {
+    const { drawImage, seekTimes } = installFakeMedia({
+      duration,
+      width: 640,
+      height: 480,
+    });
+
+    const frames = await extractVideoFrames(
+      new File(['video'], 'recording.webm', { type: 'video/webm' })
+    );
+
+    expect(frames).toHaveLength(1);
+    expect(seekTimes).toEqual([]);
+    expect(drawImage).toHaveBeenCalledTimes(1);
   });
 
   it('rejects and releases the video when the browser cannot decode it', async () => {

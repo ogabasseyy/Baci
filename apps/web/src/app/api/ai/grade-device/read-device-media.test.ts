@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { DEVICE_GRADING_MAX_UPLOAD_BYTES } from '@/schemas/device-grading';
-import { readDeviceMedia } from './read-device-media';
+import { encodeDeviceMedia, readDeviceMedia } from './read-device-media';
 
 function file(bytes: number, type: string, name = 'media'): File {
   return new File([new Uint8Array(bytes).fill(1)], name, { type });
@@ -13,20 +13,19 @@ function upload(entries: [string, File | string][]): FormData {
 }
 
 describe('readDeviceMedia', () => {
-  it('reads a video as one base64 part', async () => {
-    const result = await readDeviceMedia(
-      upload([['video', file(3, 'video/mp4')]])
-    );
+  it('accepts a video without reading its bytes', () => {
+    const video = file(3, 'video/mp4');
+    const arrayBuffer = vi.spyOn(video, 'arrayBuffer');
 
-    expect(result).toEqual({
-      ok: true,
-      merchantSlug: null,
-      parts: [{ data: 'AQEB', mimeType: 'video/mp4' }],
-    });
+    const result = readDeviceMedia(upload([['video', video]]));
+
+    expect(result).toMatchObject({ ok: true, merchantSlug: null });
+    expect(result.ok && result.files).toHaveLength(1);
+    expect(arrayBuffer).not.toHaveBeenCalled();
   });
 
   it('prefers still frames over a video and keeps their order', async () => {
-    const result = await readDeviceMedia(
+    const result = readDeviceMedia(
       upload([
         ['video', file(3, 'video/mp4')],
         ['frames', file(1, 'image/jpeg')],
@@ -34,23 +33,29 @@ describe('readDeviceMedia', () => {
       ])
     );
 
-    expect(result).toMatchObject({
-      ok: true,
-      parts: [
-        { data: 'AQ==', mimeType: 'image/jpeg' },
-        { data: 'AQE=', mimeType: 'image/webp' },
-      ],
-    });
+    expect(result.ok && result.files.map((frame) => frame.type)).toEqual([
+      'image/jpeg',
+      'image/webp',
+    ]);
+  });
+
+  it('encodes validated files as base64 parts in order', async () => {
+    expect(
+      await encodeDeviceMedia([file(1, 'image/jpeg'), file(3, 'video/mp4')])
+    ).toEqual([
+      { data: 'AQ==', mimeType: 'image/jpeg' },
+      { data: 'AQEB', mimeType: 'video/mp4' },
+    ]);
   });
 
   it('normalises the store slug and ignores a blank one', async () => {
-    const named = await readDeviceMedia(
+    const named = readDeviceMedia(
       upload([
         ['video', file(3, 'video/mp4')],
         ['merchantSlug', '  OgaBassey '],
       ])
     );
-    const blank = await readDeviceMedia(
+    const blank = readDeviceMedia(
       upload([
         ['video', file(3, 'video/mp4')],
         ['merchantSlug', '   '],
@@ -67,19 +72,19 @@ describe('readDeviceMedia', () => {
     ['the video is empty', [['video', file(0, 'video/mp4')]]],
   ])('returns 400 when %s', async (_label, entries) => {
     expect(
-      await readDeviceMedia(upload(entries as [string, File | string][]))
+      readDeviceMedia(upload(entries as [string, File | string][]))
     ).toEqual({ ok: false, status: 400, error: 'No video file provided' });
   });
 
   it('rejects a video field that is not a video', async () => {
     expect(
-      await readDeviceMedia(upload([['video', file(3, 'application/pdf')]]))
+      readDeviceMedia(upload([['video', file(3, 'application/pdf')]]))
     ).toEqual({ ok: false, status: 400, error: 'Unsupported file type' });
   });
 
   it('rejects a frame that is not a supported image', async () => {
     expect(
-      await readDeviceMedia(
+      readDeviceMedia(
         upload([
           ['frames', file(3, 'image/jpeg')],
           ['frames', file(3, 'image/svg+xml')],
@@ -97,8 +102,8 @@ describe('readDeviceMedia', () => {
         ]) as [string, File][]
       );
 
-    expect((await readDeviceMedia(frames(6))).ok).toBe(true);
-    expect(await readDeviceMedia(frames(7))).toEqual({
+    expect(readDeviceMedia(frames(6)).ok).toBe(true);
+    expect(readDeviceMedia(frames(7))).toEqual({
       ok: false,
       status: 400,
       error: 'Too many images provided',
@@ -107,13 +112,13 @@ describe('readDeviceMedia', () => {
 
   it('applies the size budget to the total of all frames', async () => {
     const half = DEVICE_GRADING_MAX_UPLOAD_BYTES / 2;
-    const atLimit = await readDeviceMedia(
+    const atLimit = readDeviceMedia(
       upload([
         ['frames', file(half, 'image/jpeg')],
         ['frames', file(half, 'image/jpeg')],
       ])
     );
-    const overLimit = await readDeviceMedia(
+    const overLimit = readDeviceMedia(
       upload([
         ['frames', file(half, 'image/jpeg')],
         ['frames', file(half + 1, 'image/jpeg')],

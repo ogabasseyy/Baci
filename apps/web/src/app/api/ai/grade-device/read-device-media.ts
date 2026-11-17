@@ -10,7 +10,7 @@ export interface DeviceMediaPart {
 }
 
 export type DeviceMediaResult =
-  | { ok: true; merchantSlug: string | null; parts: DeviceMediaPart[] }
+  | { ok: true; merchantSlug: string | null; files: File[] }
   | { ok: false; error: string; status: 400 | 413 };
 
 const FRAME_TYPES = new Set<string>(DEVICE_GRADING_FRAME_TYPES);
@@ -19,20 +19,25 @@ function isFile(value: FormDataEntryValue | null): value is File {
   return typeof value === 'object' && value !== null && 'arrayBuffer' in value;
 }
 
-async function toPart(file: File): Promise<DeviceMediaPart> {
-  return {
-    data: Buffer.from(await file.arrayBuffer()).toString('base64'),
-    mimeType: file.type,
-  };
+/**
+ * Base64-encodes validated media for the model. Kept apart from validation so
+ * the route can reject an unknown storefront before paying for the encoding.
+ */
+export function encodeDeviceMedia(files: File[]): Promise<DeviceMediaPart[]> {
+  return Promise.all(
+    files.map(async (file) => ({
+      data: Buffer.from(await file.arrayBuffer()).toString('base64'),
+      mimeType: file.type,
+    }))
+  );
 }
 
 /**
- * Reads the device media from the upload: still frames (`frames`, sent by the
- * web storefront) or one short clip (`video`, sent by the mobile app).
+ * Validates the device media in the upload without reading its bytes:
+ * still frames (`frames`, sent by the web storefront) or one short clip
+ * (`video`, sent by the mobile app).
  */
-export async function readDeviceMedia(
-  formData: FormData
-): Promise<DeviceMediaResult> {
+export function readDeviceMedia(formData: FormData): DeviceMediaResult {
   const slugEntry = formData.get('merchantSlug');
   const merchantSlug =
     typeof slugEntry === 'string' && slugEntry.trim()
@@ -70,9 +75,5 @@ export async function readDeviceMedia(
     };
   }
 
-  return {
-    ok: true,
-    merchantSlug,
-    parts: await Promise.all(files.map(toPart)),
-  };
+  return { ok: true, merchantSlug, files };
 }

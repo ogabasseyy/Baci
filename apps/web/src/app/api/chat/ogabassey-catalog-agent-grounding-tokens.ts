@@ -48,7 +48,7 @@ export function isNumericFeatureToken(token: string): boolean {
 
 function collectCoveredVersionIndices(words: string[]): Set<number> {
   const isVersionToken = (token: string | undefined) =>
-    token !== undefined && /^\d+[a-z]?$/.test(token);
+    token !== undefined && /^\d+[a-z]{0,2}$/.test(token);
   const covered = new Set<number>();
   let hasPrefix = false;
 
@@ -60,6 +60,15 @@ function collectCoveredVersionIndices(words: string[]): Set<number> {
     }
     if (word === 'gen' && hasPrefix && isVersionToken(words[i + 1])) {
       covered.add(i + 1);
+    }
+    if (word === 'core') {
+      if (/^i[3579]$/i.test(words[i + 1] ?? '')) {
+        covered.add(i + 1);
+      } else if (words[i + 1] === 'ultra' && isVersionToken(words[i + 2])) {
+        covered.add(i + 2);
+      } else if (words[i - 1] === 'intel' && isVersionToken(words[i + 1])) {
+        covered.add(i + 1);
+      }
     }
     for (const prefix of MULTIWORD_FEATURE_VERSION_PREFIXES) {
       if (
@@ -127,9 +136,13 @@ export function allowsDescriptionFeature(
       words.filter((token) => /\d/.test(token)).every(isNumericFeatureToken)) ||
     (isFeatureVersionPhrase(words, precedingWords) &&
       !words.some(
-        (token) =>
+        (token, idx) =>
           KNOWN_BRAND_OR_LINE_TOKENS.has(token) ||
-          VARIANT_TIER_TOKENS.has(token)
+          (VARIANT_TIER_TOKENS.has(token) &&
+            !(
+              token === 'ultra' &&
+              (words[idx - 1] ?? precedingWords.at(-1)) === 'core'
+            ))
       ))
   );
 }

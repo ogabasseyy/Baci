@@ -114,6 +114,18 @@ describe('ogabassey-catalog-agent-phrase-grounding', () => {
     ).toBe(true);
     expect(
       hasGroundedProductMentions(
+        'Apple iPhone 16 (or Apple iPhone 15 Pro).',
+        makeEvent([iphone16, iphone15Pro])
+      )
+    ).toBe(true);
+    expect(
+      hasGroundedProductMentions(
+        'Apple iPhone 16 (vs Apple iPhone 15 Pro).',
+        makeEvent([iphone16, iphone15Pro])
+      )
+    ).toBe(true);
+    expect(
+      hasGroundedProductMentions(
         'Apple iPhone 16 offers 256GB plus 8GB RAM.',
         makeEvent([{ ...iphone16, description: '8GB RAM and 256GB storage' }])
       )
@@ -211,6 +223,33 @@ describe('ogabassey-catalog-agent-phrase-grounding', () => {
       hasGroundedProductMentions(
         'Kingston Fury DDR4 is available.',
         makeEvent([kingstonDdr5])
+      )
+    ).toBe(false);
+
+    const hpLaptop = makeProduct({
+      brand: 'HP',
+      category: 'Laptops',
+      description: 'Intel Core i7 processor and Intel Core Ultra 7 option',
+      id: 'hp-pavilion-15',
+      name: 'HP Pavilion 15',
+      slug: 'hp-pavilion-15',
+    });
+    expect(
+      hasGroundedProductMentions(
+        'HP Pavilion 15 has Intel Core i7 processor.',
+        makeEvent([hpLaptop])
+      )
+    ).toBe(true);
+    expect(
+      hasGroundedProductMentions(
+        'HP Pavilion 15 has Intel Core Ultra 7.',
+        makeEvent([hpLaptop])
+      )
+    ).toBe(true);
+    expect(
+      hasGroundedProductMentions(
+        'HP Pavilion 15 has Intel Core i9 processor.',
+        makeEvent([hpLaptop])
       )
     ).toBe(false);
   });

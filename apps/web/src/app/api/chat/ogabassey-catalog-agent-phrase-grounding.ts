@@ -89,7 +89,16 @@ export function hasUnreturnedProductPhrase(
       .split(/[.,;!?]/)
       .pop();
     const precedingWords = extractPhraseWords(before ?? '');
-    const words = extractPhraseWords(match[0]);
+    const baseWords = extractPhraseWords(match[0]);
+    const matchEnd = (match.index ?? 0) + match[0].length;
+    const trailingVersion =
+      baseWords[0] === 'core' && baseWords[1] === 'ultra'
+        ? clause
+            .slice(matchEnd)
+            .match(/^\s+(\d+[a-z]{0,2})\b/i)?.[1]
+            ?.toLowerCase()
+        : undefined;
+    const words = trailingVersion ? [...baseWords, trailingVersion] : baseWords;
     const isDesc = allowsDescriptionFeature(words, precedingWords);
     if (
       words.length > 0 &&

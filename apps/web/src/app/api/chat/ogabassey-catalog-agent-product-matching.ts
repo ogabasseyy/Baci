@@ -188,7 +188,8 @@ export function hasGroundedProductMentions(
     if (NEGATION_OR_ABSENCE_CUE.test(clause)) continue;
 
     const directMatches = clause
-      .split(/,\s+|\s+(?:or|versus|vs\.?)\s+/i)
+      .replace(/[()]/g, ' ')
+      .split(/,\s+|\s+\b(?:or|versus|vs\.?)\s+/i)
       .flatMap((part) => matchCandidateProducts(part.trim(), products));
     const boundSet = new Set(
       directMatches.length > 0

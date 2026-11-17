@@ -30,7 +30,7 @@ CREATE TABLE public.oxygen_workflows (
 CREATE TABLE oxygen_private.provider_states (workflow_id uuid PRIMARY KEY, state jsonb);
 CREATE TABLE oxygen_private.commands (
   id uuid PRIMARY KEY, workflow_id uuid NOT NULL, status text NOT NULL,
-  command jsonb NOT NULL, created_at timestamptz NOT NULL
+  command jsonb NOT NULL, created_at timestamptz NOT NULL, started_at timestamptz
 );
 CREATE TABLE oxygen_private.provider_reference_history (
   command_id uuid PRIMARY KEY, workflow_id uuid NOT NULL, booking_reference uuid
@@ -86,17 +86,22 @@ SELECT ('00000000-0000-4000-8000-' || lpad(n::text,12,'0'))::uuid,
   '20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001',
   CASE WHEN n = 19 THEN 'paystack' ELSE 'oxygen' END,
   CASE WHEN n = 21 THEN 'canceled' ELSE 'unpaid' END,
-  now()-interval '2 hours', CASE WHEN n = 20 THEN now()-interval '2 minutes' ELSE now()-interval '1 hour' END
-FROM generate_series(19,27) n;
+  now()-CASE WHEN n IN (29,30) THEN interval '91 days' ELSE interval '2 hours' END,
+  CASE WHEN n IN (20,31) THEN now()-interval '2 minutes' ELSE now()-interval '1 hour' END
+FROM generate_series(19,31) n;
 UPDATE public.orders SET payment_status='bnpl_approved' WHERE id='00000000-0000-4000-8000-000000000022';
 UPDATE public.orders SET payment_status='paid' WHERE id='00000000-0000-4000-8000-000000000024';
 UPDATE public.orders SET payment_status='cancelled', cancelled_at=now() WHERE id='00000000-0000-4000-8000-000000000025';
 UPDATE public.orders SET payment_status='cancelled', cancelled_at=now() WHERE id='00000000-0000-4000-8000-000000000026';
 UPDATE public.orders SET payment_status='cancelled', cancelled_at=now() WHERE id='00000000-0000-4000-8000-000000000027';
+UPDATE public.orders SET payment_status='partially_paid' WHERE id='00000000-0000-4000-8000-000000000028';
+UPDATE public.orders SET payment_status='failed' WHERE id='00000000-0000-4000-8000-000000000029';
+UPDATE public.orders SET payment_status='expired' WHERE id='00000000-0000-4000-8000-000000000030';
+UPDATE public.orders SET payment_status='pending' WHERE id='00000000-0000-4000-8000-000000000031';
 INSERT INTO public.oxygen_workflows (id,order_id,merchant_id,customer_id,environment,stage,updated_at)
 SELECT ('40000000-0000-4000-8000-' || lpad(n::text,12,'0'))::uuid, o.id, o.merchant_id, o.customer_id,
   'production', CASE WHEN n = 20 THEN 'plan_required' WHEN n = 22 THEN 'eligibility_required' WHEN n IN (24,25,26) THEN 'activated' ELSE 'booked' END, now()-interval '1 hour'
-FROM generate_series(19,27) n JOIN public.orders o ON o.id=('00000000-0000-4000-8000-' || lpad(n::text,12,'0'))::uuid;
+FROM generate_series(19,31) n JOIN public.orders o ON o.id=('00000000-0000-4000-8000-' || lpad(n::text,12,'0'))::uuid;
 INSERT INTO oxygen_private.provider_states (workflow_id,state)
 SELECT id, '{"bookingReference":"50000000-0000-4000-8000-000000000001"}'::jsonb
 FROM public.oxygen_workflows WHERE id IN ('40000000-0000-4000-8000-000000000019','40000000-0000-4000-8000-000000000021');

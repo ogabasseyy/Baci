@@ -6,11 +6,11 @@ BEGIN
   SELECT jsonb_object_agg(right(order_id::text, 3), follow_up_status)
     INTO result FROM public.oxygen_follow_up_candidates('20000000-0000-4000-8000-000000000001');
   FOR actual IN SELECT key FROM jsonb_each(result) LOOP
-    IF actual NOT IN ('001','002','003','004','005','006','011','012','013','014','017','018','019','021','022','023','025','026','027') THEN
+    IF actual NOT IN ('001','002','003','004','005','006','011','012','013','014','017','018','019','021','022','023','025','026','027','028','029','030','031') THEN
       RAISE EXCEPTION 'Unexpected follow-up order: %', actual;
     END IF;
   END LOOP;
-  IF result IS DISTINCT FROM '{"001":"customer_action","002":"oxygen_processing","003":"oxygen_processing","004":"approved_pending","005":"needs_review","006":"needs_review","011":"customer_action","012":"needs_review","013":"needs_review","014":"needs_review","017":"oxygen_processing","018":"needs_review","019":"needs_review","021":"needs_review","022":"needs_review","023":"customer_action","025":"needs_review","026":"needs_review","027":"needs_review"}'::jsonb THEN
+  IF result IS DISTINCT FROM '{"001":"customer_action","002":"oxygen_processing","003":"oxygen_processing","004":"approved_pending","005":"needs_review","006":"needs_review","011":"customer_action","012":"needs_review","013":"needs_review","014":"needs_review","017":"oxygen_processing","018":"needs_review","019":"needs_review","021":"needs_review","022":"needs_review","023":"customer_action","025":"needs_review","026":"needs_review","027":"needs_review","028":"needs_review","029":"needs_review","030":"needs_review","031":"needs_review"}'::jsonb THEN
     RAISE EXCEPTION 'Incorrect Oxygen follow-up statuses: %', result;
   END IF;
   IF EXISTS (SELECT 1 FROM public.oxygen_follow_up_candidates('20000000-0000-4000-8000-000000000001') r
@@ -48,14 +48,26 @@ DO $$ BEGIN
   END IF;
 END $$;
 
--- A stale workflow with a newly started command is still in progress.
+-- A command claimed after a long queue wait has just started and is still in progress.
 INSERT INTO oxygen_private.commands VALUES
-  ('60000000-0000-4000-8000-000000000001', '40000000-0000-4000-8000-000000000001', 'executing', '{"action":"refresh_eligibility"}', now()-interval '1 minute');
+  ('60000000-0000-4000-8000-000000000001', '40000000-0000-4000-8000-000000000001', 'executing', '{"action":"refresh_eligibility"}', now()-interval '2 hours', now()-interval '1 minute');
 SET ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000001', false);
 DO $$ BEGIN
   IF EXISTS (SELECT 1 FROM public.oxygen_follow_up_candidates('20000000-0000-4000-8000-000000000001') WHERE order_id = '00000000-0000-4000-8000-000000000001') THEN
     RAISE EXCEPTION 'Recently active workflow was marked for follow-up';
+  END IF;
+END $$;
+RESET ROLE;
+
+-- Legacy executing commands without a start timestamp fall back to queue time.
+UPDATE oxygen_private.commands SET started_at = NULL
+  WHERE id = '60000000-0000-4000-8000-000000000001';
+SET ROLE authenticated;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM public.oxygen_follow_up_candidates('20000000-0000-4000-8000-000000000001')
+    WHERE order_id = '00000000-0000-4000-8000-000000000001' AND follow_up_status = 'needs_review') THEN
+    RAISE EXCEPTION 'Stale executing command without a start time was not flagged';
   END IF;
 END $$;
 RESET ROLE;

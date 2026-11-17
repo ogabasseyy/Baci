@@ -190,12 +190,27 @@ it('waits for the foreground when it starts in the background', async () => {
   }
 });
 
+it("ignores iOS's brief inactive: the current run keeps its schedule", async () => {
+  const check = jest.fn(
+    async (): Promise<SavingsStatusCheckResult> => 'pending'
+  );
+  poll(check);
+  await advance(3000);
+  await act(async () => appStateListener?.('inactive'));
+  await act(async () => appStateListener?.('active'));
+  // No extra read and no reset: the original 5 s wait still fires once.
+  expect(check).not.toHaveBeenCalled();
+  await advance(2000);
+  expect(check).toHaveBeenCalledTimes(1);
+});
+
 it('never schedules two chains when the app returns mid-wait', async () => {
   const check = jest.fn(
     async (): Promise<SavingsStatusCheckResult> => 'pending'
   );
   poll(check);
   await advance(3000);
+  await act(async () => appStateListener?.('background'));
   await act(async () => appStateListener?.('active'));
   expect(check).toHaveBeenCalledTimes(1);
   // Only the new chain's 5 s wait remains; the old 5 s timer was cleared.

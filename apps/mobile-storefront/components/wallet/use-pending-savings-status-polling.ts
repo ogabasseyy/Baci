@@ -70,12 +70,21 @@ export function usePendingSavingsStatusPolling(
     };
     // Mounted in the background: wait for the app to come back.
     if (AppState.currentState !== 'background') schedule(run, 0, Date.now());
+    // Paused only by a real background; iOS's brief 'inactive' (Notification
+    // Center, an incoming call) leaves the current run alone.
+    let paused = AppState.currentState === 'background';
     const subscription = AppState.addEventListener('change', (state) => {
-      // Any change ends the current run, so nothing is read in the background.
-      clearTimeout(timer);
-      run += 1;
-      // Back in the app: read at once, then restart the backoff from its start.
-      if (state === 'active') checkThen(run, 0, Date.now());
+      if (state === 'background') {
+        // Ends the current run, so nothing is read in the background.
+        clearTimeout(timer);
+        run += 1;
+        paused = true;
+      } else if (state === 'active' && paused) {
+        // Back in the app: read at once, then restart the backoff.
+        paused = false;
+        run += 1;
+        checkThen(run, 0, Date.now());
+      }
     });
     return () => {
       active = false;

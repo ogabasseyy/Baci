@@ -251,8 +251,7 @@ export async function runGoalCancelOutflowReconciliation(input: {
     if (!match) continue;
     const outcome = await reconcilePrimaryWalletSavings(match.operationId, {
       ...store,
-      // The webhook can arrive seconds before the verify record turns
-      // terminal: re-ask briefly before leaving the delivery retryable.
+      // Re-asks briefly: the webhook can beat the verify record.
       queryProvider: withSavingsVerifyRetry(
         createSavingsVerifyQueryProvider({
           environment: configuration.environment,

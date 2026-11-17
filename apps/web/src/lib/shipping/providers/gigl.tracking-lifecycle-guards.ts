@@ -91,6 +91,7 @@ export function applyLifecycleGuards(
   );
   let arrived = false;
   let movedThroughNetwork = false;
+  let pickedUp = false;
   // Same-city shipments: only a scan away from the destination name proves
   // the parcel left the origin centre (repeat origin scans prove nothing).
   let leftDestinationCentre = false;
@@ -108,17 +109,29 @@ export function applyLifecycleGuards(
       arrived = true;
       event.rawStatus = GIGL_ARRIVED_IN_CITY_RAW_STATUS;
     } else if (raw === 'MSHC' && !arrived && !movedThroughNetwork) {
-      event.status = 'pickup_scheduled';
-      event.rawStatus = GIGL_PICKUP_EN_ROUTE_RAW_STATUS;
-      candidate.recognizedStatus = 'pickup_scheduled';
+      if (pickedUp) {
+        // Pickup already completed: do not regress the status to pickup, and
+        // keep the raw code so no "rider en route" update is sent after it.
+        event.status = 'picked_up';
+        candidate.recognizedStatus = 'picked_up';
+      } else {
+        event.status = 'pickup_scheduled';
+        event.rawStatus = GIGL_PICKUP_EN_ROUTE_RAW_STATUS;
+        candidate.recognizedStatus = 'pickup_scheduled';
+      }
     }
+    if (candidate.recognizedStatus === 'picked_up') pickedUp = true;
     if (
       candidate.recognizedStatus === 'in_transit' ||
       candidate.recognizedStatus === 'out_for_delivery' ||
       candidate.recognizedStatus === 'failed'
     ) {
       movedThroughNetwork = true;
-      if (!matchesDestination(event.location, destination)) {
+      // A scan without a location proves nothing about leaving the centre.
+      if (
+        placeWords(event.location).length > 0 &&
+        !matchesDestination(event.location, destination)
+      ) {
         leftDestinationCentre = true;
       }
     }

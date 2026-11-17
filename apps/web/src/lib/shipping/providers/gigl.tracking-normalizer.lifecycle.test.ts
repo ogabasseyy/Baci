@@ -121,9 +121,12 @@ describe('bugfix: pickup completion alone is not network movement', () => {
       'W17',
       OBSERVED_AT
     );
-    expect(result.status).not.toBe('out_for_delivery');
+    expect(result.status).toBe('picked_up');
     expect(result.events.some((e) => e.status === 'out_for_delivery')).toBe(
       false
+    );
+    expect(result.events.find((e) => e.rawStatus === 'MSHC')?.status).toBe(
+      'picked_up'
     );
   });
 });
@@ -276,5 +279,26 @@ describe('bugfix: unknown origin does not turn the first hub scan into arrival',
     expect(
       result.events.some((e) => e.rawStatus === GIGL_ARRIVED_IN_CITY_RAW_STATUS)
     ).toBe(true);
+  });
+});
+
+describe('bugfix: a scan without a location does not prove the parcel left the destination centre', () => {
+  it('does not flag arrival for a repeat origin scan after a location-less hub scan (same city)', () => {
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W26',
+        Origin: 'ABUJA',
+        Destination: 'ABUJA',
+        MobileShipmentTrackings: [
+          event('MSVC', '10:00:00'),
+          event('MSVC', '11:00:00', { Location: 'WUSE ABUJA (Wuse)' }),
+        ],
+      },
+      'W26',
+      OBSERVED_AT
+    );
+    expect(
+      result.events.some((e) => e.rawStatus === GIGL_ARRIVED_IN_CITY_RAW_STATUS)
+    ).toBe(false);
   });
 });

@@ -158,4 +158,51 @@ describe('delegateStorefrontEdgePurge', () => {
       fetchSpy.mockRestore();
     }
   });
+
+  it('rejects plain http for non-loopback hosts and allows loopback http origins', async () => {
+    mockGetProductBlogCacheRuntimeConfig.mockReturnValueOnce({
+      baseUrl: 'http://usebaci.com',
+      secret: 'internal-secret',
+    });
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+    try {
+      const blocked = await delegateStorefrontEdgePurge({
+        merchantId: 'merchant-1',
+        merchantSlug: 'ogabassey',
+        entries: [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
+        productSlugs: ['iphone-15'],
+        blogPostSlugs: [],
+        purgeWholeStorefront: false,
+      });
+
+      expect(blocked).toBe(false);
+      expect(fetchSpy).not.toHaveBeenCalled();
+
+      mockGetProductBlogCacheRuntimeConfig.mockReturnValueOnce({
+        baseUrl: 'http://127.0.0.1:3000',
+        secret: 'internal-secret',
+      });
+      fetchSpy.mockResolvedValueOnce(
+        new Response('{"ok":true,"edgePurged":true}', { status: 200 })
+      );
+
+      const allowed = await delegateStorefrontEdgePurge({
+        merchantId: 'merchant-1',
+        merchantSlug: 'ogabassey',
+        entries: [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
+        productSlugs: ['iphone-15'],
+        blogPostSlugs: [],
+        purgeWholeStorefront: false,
+      });
+
+      expect(allowed).toBe(true);
+      expect(fetchSpy).toHaveBeenCalledWith(
+        new URL('http://127.0.0.1:3000/api/internal/revalidate-products'),
+        expect.any(Object)
+      );
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
 });

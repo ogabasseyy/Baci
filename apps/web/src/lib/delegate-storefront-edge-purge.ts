@@ -8,6 +8,20 @@ import {
 } from '@/lib/storefront-product-purge-urls';
 
 const REMOTE_EDGE_PURGE_TIMEOUT_MS = 5_000;
+const LOOPBACK_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
+
+function isAllowedBaseOrigin(parsedBase: URL): boolean {
+  if (parsedBase.username || parsedBase.password) {
+    return false;
+  }
+  if (parsedBase.protocol === 'https:') {
+    return true;
+  }
+  return (
+    parsedBase.protocol === 'http:' &&
+    LOOPBACK_HOSTNAMES.has(parsedBase.hostname.toLowerCase())
+  );
+}
 
 export interface DelegateStorefrontEdgePurgeInput {
   merchantId: string;
@@ -55,11 +69,7 @@ export async function delegateStorefrontEdgePurge({
   let endpoint: URL;
   try {
     const parsedBase = new URL(baseUrl);
-    if (
-      (parsedBase.protocol !== 'https:' && parsedBase.protocol !== 'http:') ||
-      parsedBase.username ||
-      parsedBase.password
-    ) {
+    if (!isAllowedBaseOrigin(parsedBase)) {
       console.warn('Skipped delegated edge purge: invalid baseUrl', {
         merchantId,
       });

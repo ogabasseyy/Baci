@@ -1521,9 +1521,17 @@ export class QuizRoomEngine {
     await this.flushPendingBatches(persistedCloseAtMs);
 
     const summary = this.storage.transactionSync(() => {
-      const attemptCountRow = this.storage.exec<{ c: number }>(
-        `SELECT count(*) AS c FROM room_attempts`
-      ).rows[0];
+      const attemptRows = this.storage.exec<{
+        attempt_id: string;
+        status: string;
+        started_at_ms: number;
+        submitted_at_ms: number | null;
+        close_reason: string | null;
+        score: number;
+      }>(
+        `SELECT attempt_id, status, started_at_ms, submitted_at_ms, close_reason, score
+         FROM room_attempts ORDER BY attempt_id ASC`
+      ).rows;
       const answerCountRow = this.storage.exec<{ c: number }>(
         `SELECT count(*) AS c FROM room_answers`
       ).rows[0];
@@ -1531,9 +1539,17 @@ export class QuizRoomEngine {
         `SELECT batch_id FROM room_batches ORDER BY seq ASC`
       ).rows;
       return {
-        attemptCount: Number(attemptCountRow?.c ?? 0),
+        attemptCount: attemptRows.length,
         answerCount: Number(answerCountRow?.c ?? 0),
         batchIds: batchRows.map((b) => b.batch_id),
+        canonicalAttempts: attemptRows.map((r) => ({
+          attemptId: r.attempt_id,
+          status: r.status,
+          startedAtMs: r.started_at_ms,
+          submittedAtMs: r.submitted_at_ms,
+          closeReason: r.close_reason,
+          score: r.score,
+        })),
       };
     });
 
@@ -1549,7 +1565,7 @@ export class QuizRoomEngine {
         sealMode: mode,
         attemptCount: summary.attemptCount,
         answerCount: summary.answerCount,
-        batchIds: summary.batchIds,
+        canonicalAttempts: summary.canonicalAttempts,
       })
     );
 
@@ -1574,11 +1590,14 @@ export class QuizRoomEngine {
 
   /**
    * Single chained alarm handler (`MIN(next_scoreboard_tick, next_flush_tick, ends_at)`).
+   * At `nowMs >= config.endsAtMs`, stops answer intake and flushes completed bundles
+   * without sealing — ONLY the Coordinator supplies `persistedCloseAtMs` to `seal()`.
    */
   async onAlarm(nowMs = Date.now()): Promise<{
     flushedBatches: number;
     scoreboardTicked: boolean;
     sealed: boolean;
+    intakeStopped: boolean;
     deletedAll: boolean;
   }> {
     const config = this.readMetaSync<QuizEventConfig>('config');
@@ -1587,6 +1606,7 @@ export class QuizRoomEngine {
         flushedBatches: 0,
         scoreboardTicked: false,
         sealed: false,
+        intakeStopped: false,
         deletedAll: false,
       };
     }
@@ -1594,7 +1614,8 @@ export class QuizRoomEngine {
     const alarmState = this.getAlarmStateSync(config);
     let flushedBatches = 0;
     let scoreboardTicked = false;
-    let sealed = false;
+    const sealed = false;
+    let intakeStopped = false;
     let deletedAll = false;
 
     if (alarmState.sealed) {
@@ -1605,12 +1626,20 @@ export class QuizRoomEngine {
         this.deleteAllIfRetentionExpired(nowMs);
         deletedAll = true;
       }
-      return { flushedBatches, scoreboardTicked, sealed, deletedAll };
+      return {
+        flushedBatches,
+        scoreboardTicked,
+        sealed,
+        intakeStopped,
+        deletedAll,
+      };
     }
 
+    const shouldFlushOnEnd = nowMs >= config.endsAtMs;
     if (
-      alarmState.nextFlushTickMs !== null &&
-      nowMs >= alarmState.nextFlushTickMs
+      shouldFlushOnEnd ||
+      (alarmState.nextFlushTickMs !== null &&
+        nowMs >= alarmState.nextFlushTickMs)
     ) {
       const batches = await this.flushPendingBatches(nowMs);
       flushedBatches = batches.length;
@@ -1661,16 +1690,28 @@ export class QuizRoomEngine {
     }
 
     if (nowMs >= config.endsAtMs && !this.getAlarmStateSync(config).sealed) {
-      const closeMode: QuizRoomSealMode =
-        this.controlState.isEventCancelled(config.eventId) ||
-        config.status === 'cancelled'
-          ? 'cancelled'
-          : 'persisted_close';
-      await this.seal(config.endsAtMs, closeMode);
-      sealed = true;
+      intakeStopped = true;
+      this.storage.transactionSync(() => {
+        const latest = this.getAlarmStateSync(config);
+        if (!latest.sealed) {
+          const updated: RoomAlarmState = {
+            ...latest,
+            nextScoreboardTickMs: null,
+            nextFlushTickMs: null,
+          };
+          this.writeAlarmStateSync(updated);
+          this.storage.deleteAlarm();
+        }
+      });
     }
 
-    return { flushedBatches, scoreboardTicked, sealed, deletedAll };
+    return {
+      flushedBatches,
+      scoreboardTicked,
+      sealed,
+      intakeStopped,
+      deletedAll,
+    };
   }
 
   /**

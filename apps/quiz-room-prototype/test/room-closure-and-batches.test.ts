@@ -495,4 +495,144 @@ describe('BatchPacker (<64KB split/duplicate/underfilled) and Coordinator room c
     cancelStorage.close();
     cancelCoordStorage.close();
   });
+
+  it('produces identical ranks and checksums whether alarm fires before coordinator or coordinator sweeps before alarm', async () => {
+    const endsAtMs = 1_700_000_120_000;
+    const persistedCloseAtMs = endsAtMs + 1_250;
+    const config = await buildConfig(endsAtMs);
+    const controlState = new QuizControlStateStore(
+      createEmptyControlState(endsAtMs - 40_000, 1)
+    );
+
+    const runScenario = async (order: 'alarm-first' | 'coordinator-first') => {
+      const sRoom = new NodeSqliteAdapter(':memory:');
+      const sCoord = new NodeSqliteAdapter(':memory:');
+      const room = new QuizRoomEngine({
+        roomId: 'room-race',
+        storage: sRoom,
+        controlState,
+      });
+      room.initialize(config);
+
+      // 1 finished player + 1 partial 5/10 player
+      const t1 = {
+        userId: 'u-r1',
+        customerId: 'c-r1',
+        merchantId: config.merchantId,
+        eventId: config.eventId,
+        roomId: 'room-race',
+        deviceHash: '1'.repeat(64),
+        leaderboardUsername: 'FinisherR1',
+        expiresAtMs: endsAtMs + 60_000,
+      };
+      let st1 = room.startAttempt({
+        ticket: t1,
+        integrityTier: 'strong',
+        acceptedRulesVersion: 'live-v1',
+        termsAccepted: true,
+        startRequestId: 'req-r1',
+        appVersion: '2.0.0',
+        platform: 'ios',
+        nowMs: endsAtMs - 30_000,
+      });
+      for (let q = 0; q < 10; q += 1) {
+        st1 = await room.submitAnswer({
+          ticket: t1,
+          attemptId: st1.attemptId,
+          questionId: st1.question?.id ?? '',
+          answer: 'opt-a',
+          receivedAtMs: endsAtMs - 29_000 + q * 500,
+          nowMs: endsAtMs - 29_000 + q * 500,
+        });
+      }
+
+      const t2 = {
+        userId: 'u-r2',
+        customerId: 'c-r2',
+        merchantId: config.merchantId,
+        eventId: config.eventId,
+        roomId: 'room-race',
+        deviceHash: '2'.repeat(64),
+        leaderboardUsername: 'PartialR2',
+        expiresAtMs: endsAtMs + 60_000,
+      };
+      let st2 = room.startAttempt({
+        ticket: t2,
+        integrityTier: 'strong',
+        acceptedRulesVersion: 'live-v1',
+        termsAccepted: true,
+        startRequestId: 'req-r2',
+        appVersion: '2.0.0',
+        platform: 'android',
+        nowMs: endsAtMs - 20_000,
+      });
+      for (let q = 0; q < 5; q += 1) {
+        st2 = await room.submitAnswer({
+          ticket: t2,
+          attemptId: st2.attemptId,
+          questionId: st2.question?.id ?? '',
+          answer: 'opt-a',
+          receivedAtMs: endsAtMs - 19_000 + q * 500,
+          nowMs: endsAtMs - 19_000 + q * 500,
+        });
+      }
+
+      const coord = new EventCoordinatorEngine({
+        storage: sCoord,
+        roomClient: {
+          sealRoom: ({
+            eventId,
+            persistedCloseAtMs: cMs,
+            mode,
+            endsAtMs: eEnd,
+          }) => room.seal(cMs, mode, { eventId, endsAtMs: eEnd }),
+        },
+      });
+      coord.freezeExpectedRooms({
+        eventId: config.eventId,
+        endsAtMs,
+        expectedRoomIds: ['room-race'],
+      });
+
+      if (order === 'alarm-first') {
+        const alarmRes = await room.onAlarm(endsAtMs);
+        expect(alarmRes.sealed).toBe(false);
+        expect(alarmRes.intakeStopped).toBe(true);
+        await coord.sweepClose({
+          eventId: config.eventId,
+          nowMs: persistedCloseAtMs,
+        });
+      } else {
+        await coord.sweepClose({
+          eventId: config.eventId,
+          nowMs: persistedCloseAtMs,
+        });
+        await room.onAlarm(endsAtMs + 2_000);
+      }
+
+      const snap = await coord.getSnapshot(config.eventId);
+      const seal = room.getSealManifest();
+      const bundles = (seal?.batchIds ?? []).flatMap(
+        (id) => room.getJournalBatch(id)?.bundles ?? []
+      );
+      sRoom.close();
+      sCoord.close();
+      return { snap, seal, bundles };
+    };
+
+    const alarmFirst = await runScenario('alarm-first');
+    const coordFirst = await runScenario('coordinator-first');
+
+    expect(alarmFirst.seal?.roomChecksumSha256).toBe(
+      coordFirst.seal?.roomChecksumSha256
+    );
+    expect(alarmFirst.snap.manifestChecksumSha256).toBe(
+      coordFirst.snap.manifestChecksumSha256
+    );
+    expect(
+      alarmFirst.bundles.map((b) => [b.attemptId, b.score, b.submittedAtMs])
+    ).toEqual(
+      coordFirst.bundles.map((b) => [b.attemptId, b.score, b.submittedAtMs])
+    );
+  });
 });

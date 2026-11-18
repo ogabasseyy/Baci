@@ -59,6 +59,8 @@ export interface QuizVerifiedBearerUser {
   issuedAtMs?: number;
   email?: string;
   role?: string;
+  merchantId?: string;
+  customerId?: string;
 }
 
 export interface QuizQuestionOption {

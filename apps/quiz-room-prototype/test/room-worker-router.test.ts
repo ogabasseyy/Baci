@@ -44,17 +44,19 @@ function createStubNamespace(
 
 describe('Worker HTTP router (src/index.ts)', () => {
   it('routes play requests by signed ticket and post-event reads by bearer JWT + deterministic result shard', async () => {
-    const calls: { ns: string; id: string; path: string }[] = [];
+    const calls: { ns: string; id: string; path: string; body?: unknown }[] =
+      [];
     const env = {
       QUIZ_TICKET_SECRET: TICKET_SECRET,
       QUIZ_JWT_SECRET: JWT_SECRET,
+      QUIZ_INTERNAL_COORDINATOR_SECRET: 'coord-secret-123',
       RESULT_SHARD_COUNT: '16',
-      QUIZ_ROOM: createStubNamespace((id, path) => {
-        calls.push({ ns: 'QUIZ_ROOM', id, path });
+      QUIZ_ROOM: createStubNamespace((id, path, body) => {
+        calls.push({ ns: 'QUIZ_ROOM', id, path, body });
         return { ok: true, id, path };
       }),
-      LIVE_RANK_INDEX: createStubNamespace((id, path) => {
-        calls.push({ ns: 'LIVE_RANK_INDEX', id, path });
+      LIVE_RANK_INDEX: createStubNamespace((id, path, body) => {
+        calls.push({ ns: 'LIVE_RANK_INDEX', id, path, body });
         return {
           status: 'live',
           entries: [],
@@ -62,8 +64,8 @@ describe('Worker HTTP router (src/index.ts)', () => {
           participantCount: 0,
         };
       }),
-      RESULT_SHARD: createStubNamespace((id, path) => {
-        calls.push({ ns: 'RESULT_SHARD', id, path });
+      RESULT_SHARD: createStubNamespace((id, path, body) => {
+        calls.push({ ns: 'RESULT_SHARD', id, path, body });
         return {
           status: 'published',
           entries: [],
@@ -71,8 +73,12 @@ describe('Worker HTTP router (src/index.ts)', () => {
           participantCount: 1,
         };
       }),
-      EVENT_COORDINATOR: createStubNamespace((id, path) => {
-        calls.push({ ns: 'EVENT_COORDINATOR', id, path });
+      EVENT_COORDINATOR: createStubNamespace((id, path, body) => {
+        calls.push({ ns: 'EVENT_COORDINATOR', id, path, body });
+        return { ok: true };
+      }),
+      DEMO_STATE: createStubNamespace((id, path, body) => {
+        calls.push({ ns: 'DEMO_STATE', id, path, body });
         return { ok: true };
       }),
     };
@@ -90,6 +96,15 @@ describe('Worker HTTP router (src/index.ts)', () => {
     };
     const signedTicket = await signAdmissionTicket(ticket, TICKET_SECRET);
     const bearerJwt = await signBearerJwt(
+      {
+        sub: 'user-r1',
+        merchantId: 'merch-from-jwt',
+        customerId: 'cust-from-jwt',
+        exp: Math.floor((nowMs + 3_600_000) / 1000),
+      },
+      JWT_SECRET
+    );
+    const jwtMissingClaims = await signBearerJwt(
       { sub: 'user-r1', exp: Math.floor((nowMs + 3_600_000) / 1000) },
       JWT_SECRET
     );
@@ -113,7 +128,7 @@ describe('Worker HTTP router (src/index.ts)', () => {
       env as never
     );
     expect(startRes.status).toBe(200);
-    expect(calls[0]).toEqual({
+    expect(calls[0]).toMatchObject({
       ns: 'QUIZ_ROOM',
       id: 'room-42',
       path: '/internal/start',
@@ -131,7 +146,7 @@ describe('Worker HTTP router (src/index.ts)', () => {
       env as never
     );
     expect(ansRes.status).toBe(200);
-    expect(calls[1]).toEqual({
+    expect(calls[1]).toMatchObject({
       ns: 'QUIZ_ROOM',
       id: 'room-42',
       path: '/internal/answer',
@@ -145,7 +160,7 @@ describe('Worker HTTP router (src/index.ts)', () => {
       env as never
     );
     expect(activeRes.status).toBe(200);
-    expect(calls[2]).toEqual({
+    expect(calls[2]).toMatchObject({
       ns: 'QUIZ_ROOM',
       id: 'room-42',
       path: '/internal/resume',
@@ -172,7 +187,7 @@ describe('Worker HTTP router (src/index.ts)', () => {
       env as never
     );
     expect(resultRes.status).toBe(200);
-    expect(calls[3]).toEqual({
+    expect(calls[3]).toMatchObject({
       ns: 'RESULT_SHARD',
       id: `attempt-shard:${expectedAttemptShard}`,
       path: '/internal/result',
@@ -189,7 +204,7 @@ describe('Worker HTTP router (src/index.ts)', () => {
       env as never
     );
     expect(boardRes.status).toBe(200);
-    expect(calls[4]).toEqual({
+    expect(calls[4]).toMatchObject({
       ns: 'RESULT_SHARD',
       id: `evt-r1:shard:${expectedEventShard}`,
       path: '/internal/leaderboard',
@@ -197,7 +212,7 @@ describe('Worker HTTP router (src/index.ts)', () => {
 
     const liveRes = await worker.fetch(
       new Request(
-        'https://quiz.example.com/api/quiz/leaderboard/live?eventId=evt-r1&merchantId=merch-1',
+        'https://quiz.example.com/api/quiz/leaderboard/live?eventId=evt-r1&merchantId=spoofed&customerId=spoofed',
         {
           method: 'GET',
           headers: { Authorization: `Bearer ${bearerJwt}` },
@@ -210,6 +225,60 @@ describe('Worker HTTP router (src/index.ts)', () => {
       ns: 'LIVE_RANK_INDEX',
       id: 'evt-r1',
       path: '/internal/leaderboard',
+      body: {
+        eventId: 'evt-r1',
+        merchantId: 'merch-from-jwt',
+        callerCustomerId: 'cust-from-jwt',
+        callerUserId: 'user-r1',
+      },
+    });
+
+    // Live leaderboard rejects JWT missing merchantId/customerId claims
+    const liveMissingRes = await worker.fetch(
+      new Request(
+        'https://quiz.example.com/api/quiz/leaderboard/live?eventId=evt-r1',
+        {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${jwtMissingClaims}` },
+        }
+      ),
+      env as never
+    );
+    expect(liveMissingRes.status).toBe(403);
+
+    // Coordinator routes fail closed without QUIZ_INTERNAL_COORDINATOR_SECRET or bad Bearer
+    const badCoordRes = await worker.fetch(
+      new Request('https://quiz.example.com/api/quiz/coordinator/sweep', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer wrong-secret' },
+        body: JSON.stringify({ eventId: 'evt-r1' }),
+      }),
+      env as never
+    );
+    expect(badCoordRes.status).toBe(403);
+
+    const okCoordRes = await worker.fetch(
+      new Request('https://quiz.example.com/api/quiz/coordinator/sweep', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer coord-secret-123' },
+        body: JSON.stringify({ eventId: 'evt-r1' }),
+      }),
+      env as never
+    );
+    expect(okCoordRes.status).toBe(200);
+
+    // Unconfigured secrets fail closed with 503 QUIZ_CONFIG_MISSING
+    const unconfiguredRes = await worker.fetch(
+      new Request('https://quiz.example.com/api/quiz/events/evt-r1/start', {
+        method: 'POST',
+        headers: { 'X-Baci-Quiz-Ticket': signedTicket },
+        body: JSON.stringify({}),
+      }),
+      { ...env, QUIZ_TICKET_SECRET: '' } as never
+    );
+    expect(unconfiguredRes.status).toBe(503);
+    expect(await unconfiguredRes.json()).toMatchObject({
+      code: 'QUIZ_CONFIG_MISSING',
     });
 
     const statusRes = await worker.fetch(

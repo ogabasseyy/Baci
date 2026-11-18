@@ -6,7 +6,11 @@ import { createSplashAnimation } from './native-splash-animation.mjs';
 test('native splash embeds all artwork and preserves independent motion layers', () => {
   const animation = createSplashAnimation();
   assert.deepEqual([animation.w, animation.h, animation.fr, animation.op], [450, 876, 30, 180]);
-  assert.ok(animation.assets.every((asset) => asset.p.startsWith('data:image/png;base64,')));
+  const background = animation.assets.find((asset) => asset.id === 'background');
+  assert.ok(background.p.startsWith('data:image/jpeg;base64,'), 'opaque background ships as JPEG');
+  assert.deepEqual([background.w, background.h], [450, 876]);
+  assert.ok(animation.assets.filter((asset) => asset !== background).every((asset) => asset.p.startsWith('data:image/png;base64,')));
+  assert.ok(JSON.stringify(animation).length < 600_000, 'the launch animation stays small enough to decode quickly');
   const find = (name) => animation.layers.find((layer) => layer.nm === name);
   for (const name of ['phone-motion', 'leg-front', 'leg-back', 'torso', 'logo-mark', 'logo-wordmark', 'tagline', 'cloud-1', 'cloud-2', 'cloud-3', 'earbuds', 'watch', 'laptop', 'controller', 'loading-message']) assert.ok(find(name), `${name} missing`);
   assert.equal(find('orbit-trail'), undefined, 'gadgets no longer have a curved trail');

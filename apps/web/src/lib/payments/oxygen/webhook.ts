@@ -50,7 +50,7 @@ export function parseOxygenWebhook(input: unknown) {
       action: 'reconcile_kyc' as const,
     };
   }
-  if (event.webhook_type === undefined) {
+  if ('transaction_reference' in event) {
     return {
       kind: 'transaction' as const,
       bookedLoanReference: event.loan_request_reference,

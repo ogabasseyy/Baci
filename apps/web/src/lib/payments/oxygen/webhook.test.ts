@@ -50,6 +50,16 @@ describe('Oxygen webhook contract', () => {
       deduplicationKey: 'transaction:txn-example-001',
     });
   });
+  it.each([
+    'split_payment',
+    'repayment_setup',
+    'loan_repayment',
+    'transaction',
+  ])('routes the documented %s notification through transaction reconciliation', (webhook_type) => {
+    expect(parseOxygenWebhook({ ...transaction, webhook_type })).toEqual(
+      parseOxygenWebhook(transaction)
+    );
+  });
   it('uses the settlement payout rather than the unrelated partner-wide activation audit', () => {
     expect(parseOxygenWebhook(settlement)).toMatchObject({
       kind: 'settlement',

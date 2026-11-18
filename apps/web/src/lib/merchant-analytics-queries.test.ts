@@ -150,8 +150,11 @@ describe('fetchMerchantAnalyticsData', () => {
       expect(select).toEqual(
         expect.stringContaining('product_variants(cost_price)')
       );
+      expect(select).toEqual(expect.stringContaining('products(brand)'));
       expect(select).toEqual(
-        expect.stringContaining('products:merchant_products(brand, cost_price)')
+        expect.stringContaining(
+          'merchant_product_costs:merchant_analytics_product_costs(cost_price)'
+        )
       );
     }
   });

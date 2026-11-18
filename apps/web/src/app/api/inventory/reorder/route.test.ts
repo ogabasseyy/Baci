@@ -9,12 +9,26 @@ vi.mock('next/headers', () => ({
   }),
 }));
 
+const mockGetMerchantForApiRequest = vi.fn(() =>
+  Promise.resolve({
+    merchantId: 'merchant-123',
+    role: 'owner',
+    isOwner: true,
+    isStaff: false,
+    permissions: {},
+  })
+);
+
 vi.mock('@/lib/get-merchant-for-api-request', () => ({
-  getMerchantForApiRequest: vi.fn(() =>
-    Promise.resolve({
-      merchantId: 'merchant-123',
-    })
-  ),
+  getMerchantForApiRequest: (...args: unknown[]) =>
+    mockGetMerchantForApiRequest(...(args as [])),
+  toUserAccess: vi.fn((ctx: Record<string, unknown>) => ({
+    merchantId: ctx.merchantId ?? 'merchant-123',
+    role: ctx.role ?? 'owner',
+    isOwner: ctx.isOwner ?? false,
+    isStaff: ctx.isStaff ?? false,
+    permissions: ctx.permissions ?? {},
+  })),
 }));
 
 // Mock Supabase Query Builder to be "Thenable" without triggering 'noThenProperty'
@@ -80,6 +94,25 @@ describe('/api/inventory/reorder', () => {
       expect(selectArgs).not.toMatch(/^\*\s*,/);
       expect(selectArgs).toContain('id');
       expect(selectArgs).toContain('suggested_quantity');
+    });
+
+    it('returns 403 when caller lacks products:view permission', async () => {
+      mockGetMerchantForApiRequest.mockResolvedValueOnce({
+        merchantId: 'merchant-123',
+        role: 'staff',
+        isOwner: false,
+        isStaff: true,
+        permissions: { products: { view: false } },
+      });
+
+      const req = new NextRequest(
+        'http://localhost:3000/api/inventory/reorder',
+        { method: 'GET' }
+      );
+      const res = await GET(req);
+
+      expect(res.status).toBe(403);
+      expect(mockFrom).not.toHaveBeenCalled();
     });
   });
 

@@ -231,7 +231,7 @@ export async function getProducts(request: NextRequest) {
           );
         }
         const oosResult = await supabase
-          .from('products')
+          .from('merchant_products')
           .select('id', { count: 'exact', head: true })
           .eq('merchant_id', merchantId)
           .eq('stock_quantity', 0);

@@ -1,7 +1,11 @@
 import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
+import { hasPermission } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
-import { getMerchantForApiRequest } from '@/lib/get-merchant-for-api-request';
+import {
+  getMerchantForApiRequest,
+  toUserAccess,
+} from '@/lib/get-merchant-for-api-request';
 import { createClient } from '@/lib/supabase/server';
 import { reorderSuggestionActionSchema } from '@/schemas/inventory';
 
@@ -32,6 +36,9 @@ export async function GET(request: NextRequest) {
       );
     }
     const merchantId = merchantContext.merchantId;
+    if (!hasPermission(toUserAccess(merchantContext), 'products', 'view')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status') || 'pending';

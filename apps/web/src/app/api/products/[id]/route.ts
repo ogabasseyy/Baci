@@ -18,6 +18,7 @@ import {
 } from '@/lib/product-image';
 import {
   PRODUCT_COLUMNS,
+  PRODUCT_COLUMNS_PUBLIC,
   PRODUCT_VARIANT_COLUMNS,
 } from '@/lib/product-queries';
 import { getEffectiveStock } from '@/lib/product-stock';
@@ -265,9 +266,10 @@ export async function PUT(
     }
     const merchantId = merchantContext.merchantId;
 
-    // Verify both ownership and protected read access before any mutation.
+    // Verify ownership via safe non-cost columns so edit-only staff
+    // (`products:edit` without `products:view`) can still preflight and update.
     const { data: existingProduct, error: fetchError } = await supabase
-      .from('merchant_products')
+      .from('products')
       .select(
         // `category` (legacy text), the direct `category_id` join (including
         // `is_active`), and the `product_categories` junction projection are read
@@ -825,11 +827,12 @@ export async function PUT(
     }
 
     let refreshFailed = false;
+    const canViewProducts = hasPermission(access, 'products', 'view');
     {
       const { data: refreshedProduct, error: refreshedProductError } =
         await supabase
-          .from('merchant_products')
-          .select(PRODUCT_COLUMNS)
+          .from(canViewProducts ? 'merchant_products' : 'products')
+          .select(canViewProducts ? PRODUCT_COLUMNS : PRODUCT_COLUMNS_PUBLIC)
           .eq('id', id)
           .eq('merchant_id', merchantId)
           .single();
@@ -847,8 +850,8 @@ export async function PUT(
       }
     }
 
-    // Regenerate embedding if name or description changed
-    if (!refreshFailed && updatedProduct && (body.name || body.description)) {
+    // Regenerate embedding if name or description changed, even if post-write refresh failed.
+    if (updatedProduct && (body.name || body.description)) {
       const embeddingText = getProductEmbeddingText({
         name: updatedProduct.name,
         description: updatedProduct.description,

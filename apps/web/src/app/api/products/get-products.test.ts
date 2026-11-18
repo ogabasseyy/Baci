@@ -167,4 +167,46 @@ describe('getProducts', () => {
       'name.ilike.%PHONE-BLACK%,sku.ilike.%PHONE-BLACK%,variant_search.not.is.null'
     );
   });
+
+  it('queries merchant_products for out-of-stock stats when the stats RPC fails', async () => {
+    const tables: string[] = [];
+    const fallbackQuery = {
+      select: vi.fn(() => fallbackQuery),
+      eq: vi.fn(() => fallbackQuery),
+      order: vi.fn(() => fallbackQuery),
+      range: mocks.range,
+      count: 2,
+    };
+    const fallbackFrom = vi.fn((table: string) => {
+      tables.push(table);
+      return fallbackQuery;
+    });
+    mocks.rpc.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'rpc failed' },
+    });
+    mocks.getProductListContext.mockResolvedValue({
+      merchantId: 'merchant-1',
+      query: {
+        page: 1,
+        limit: 20,
+        search: undefined,
+        migration: 'All',
+        status: 'All',
+        stock: 'All',
+        ids: undefined,
+      },
+      supabase: {
+        from: fallbackFrom,
+        rpc: mocks.rpc,
+      },
+    });
+
+    const response = await getProducts(
+      new NextRequest('http://localhost:3000/api/products')
+    );
+
+    expect(response.status).toBe(200);
+    expect(tables).toEqual(['merchant_products', 'merchant_products']);
+  });
 });

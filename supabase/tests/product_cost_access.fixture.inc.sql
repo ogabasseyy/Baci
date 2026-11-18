@@ -5,7 +5,7 @@ INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password,
 SELECT ('ca570000-0000-4000-8000-' || lpad(n::text, 12, '0'))::uuid,
   '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated',
   'cost-fixture-' || n || '@example.invalid', 'test', now(), now(), now(), '{}', '{}'
-FROM generate_series(1, 6) AS n;
+FROM generate_series(1, 7) AS n;
 INSERT INTO public.merchants (id, user_id, email, business_name, slug, is_published)
 VALUES
  ('ca570000-0000-4000-8000-000000000101', 'ca570000-0000-4000-8000-000000000001',
@@ -22,7 +22,10 @@ VALUES
   '{"products":{"view":false,"edit":false,"all":false},"full_access":{"all":false}}', 'active'),
  ('ca570000-0000-4000-8000-000000000101', 'ca570000-0000-4000-8000-000000000005',
   'cost-fixture-5@example.invalid', 'Suspended staff', 'accountant',
-  '{"products":{"view":true}}', 'suspended');
+  '{"products":{"view":true}}', 'suspended'),
+ ('ca570000-0000-4000-8000-000000000101', 'ca570000-0000-4000-8000-000000000007',
+  'cost-fixture-7@example.invalid', 'Analytics-only staff', 'analyst',
+  '{"analytics":{"view":true},"products":{"view":false},"full_access":{"all":false}}', 'active');
 INSERT INTO public.products (id, merchant_id, name, slug, price, cost_price, status, manage_stock)
 VALUES
  ('ca570000-0000-4000-8000-000000000201','ca570000-0000-4000-8000-000000000101',

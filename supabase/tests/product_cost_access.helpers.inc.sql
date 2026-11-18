@@ -29,4 +29,24 @@ BEGIN
 END;
 $$;
 GRANT EXECUTE ON FUNCTION pg_temp.assert_cost_rows(integer,integer) TO authenticated;
+CREATE FUNCTION pg_temp.assert_analytics_cost_rows(p_user integer, p_expected integer)
+RETURNS void LANGUAGE plpgsql SET search_path = '' AS $$
+DECLARE actual integer;
+BEGIN
+  PERFORM set_config('request.jwt.claim.role', 'authenticated', true);
+  PERFORM set_config('request.jwt.claim.sub',
+    'ca570000-0000-4000-8000-' || lpad(p_user::text,12,'0'), true);
+  SELECT count(*) INTO actual FROM public.merchant_analytics_product_costs
+  WHERE merchant_id = 'ca570000-0000-4000-8000-000000000101'
+    AND cost_price = 8900;
+  IF actual <> p_expected THEN
+    RAISE EXCEPTION 'user % expected % analytics cost rows, got %', p_user, p_expected, actual;
+  END IF;
+  IF p_user <> 2 AND EXISTS (SELECT 1 FROM public.merchant_analytics_product_costs
+    WHERE merchant_id = 'ca570000-0000-4000-8000-000000000102') THEN
+    RAISE EXCEPTION 'foreign merchant analytics cost leaked to user %', p_user;
+  END IF;
+END;
+$$;
+GRANT EXECUTE ON FUNCTION pg_temp.assert_analytics_cost_rows(integer,integer) TO authenticated;
 GRANT EXECUTE ON FUNCTION pg_temp.assert_cost_query_denied(text) TO anon,authenticated;

@@ -176,3 +176,17 @@ describe('bugfix: boolean-like status strings are not vend evidence', () => {
     expect(hasMonnifyVendEvidence(answer)).toBe(false);
   });
 });
+
+describe('bugfix: attempted flags are vend evidence', () => {
+  it.each([
+    { vendAttempted: true },
+    { responseBody: { attempted: 'true' } },
+    { isTransactionProcessed: true },
+  ])('sees vend evidence in %j', (answer) => {
+    expect(hasMonnifyVendEvidence(answer)).toBe(true);
+  });
+
+  it('sees none in vendAttempted: false', () => {
+    expect(hasMonnifyVendEvidence({ vendAttempted: false })).toBe(false);
+  });
+});

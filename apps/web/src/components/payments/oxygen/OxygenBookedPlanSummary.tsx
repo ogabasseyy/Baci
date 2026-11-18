@@ -18,6 +18,15 @@ const date = (value: [number, number, number]) =>
     timeZone: 'UTC',
   }).format(new Date(Date.UTC(value[0], value[1] - 1, value[2])));
 
+const toSafeMinorUnits = (amount: number): number | null => {
+  if (!Number.isFinite(amount) || amount < 0) return null;
+  try {
+    return toOxygenMinorUnits(amount, 'NGN');
+  } catch {
+    return null;
+  }
+};
+
 export function OxygenBookedPlanSummary({
   state,
 }: {
@@ -28,11 +37,17 @@ export function OxygenBookedPlanSummary({
   const charges = booking?.total_charges ?? state.quotedCharges;
   if (!booking || !schedule?.length || charges == null)
     return <p role="status">Preparing your payment plan…</p>;
-  const upfront =
-    booking.total_upfront_payment ??
-    (toOxygenMinorUnits(booking.equity_amount, 'NGN') +
-      toOxygenMinorUnits(charges, 'NGN')) /
-      100;
+  const equityMinor = toSafeMinorUnits(booking.equity_amount);
+  const chargesMinor = toSafeMinorUnits(charges);
+  const computedUpfront =
+    equityMinor !== null && chargesMinor !== null
+      ? (equityMinor + chargesMinor) / 100
+      : booking.equity_amount + charges;
+  const upfront = booking.total_upfront_payment ?? computedUpfront;
+  const showsItemizedUpfront =
+    booking.total_upfront_payment == null ||
+    Math.abs(upfront - computedUpfront) < 0.005;
+  const singleRepayment = booking.loan_tenure === 1 || schedule.length === 1;
   const last = schedule.at(-1);
   return (
     <section aria-label="Plan summary" className={styles.summary}>
@@ -40,13 +55,19 @@ export function OxygenBookedPlanSummary({
         <div className={styles.upfront}>
           <p>Pay today</p>
           <strong>{money(upfront)}</strong>
-          <small>
-            {money(booking.equity_amount)} down payment
-            <br />+ {money(charges)} charges
-          </small>
+          {showsItemizedUpfront ? (
+            <small>
+              {money(booking.equity_amount)} down payment
+              <br />+ {money(charges)} charges
+            </small>
+          ) : (
+            <small>Confirmed provider upfront total</small>
+          )}
         </div>
         <div className={styles.monthly}>
-          <p>First monthly repayment</p>
+          <p>
+            {singleRepayment ? 'Monthly repayment' : 'First monthly repayment'}
+          </p>
           <strong>{money(schedule[0].amount)}</strong>
           <small>
             {booking.loan_tenure}{' '}
@@ -90,6 +111,11 @@ export function OxygenBookedPlanSummary({
         Amount financed: {money(booking.loan_amount)} · Product total:{' '}
         {money(booking.product_amount)}
       </p>
+      {state.bookingReference && (
+        <p className={styles.context}>
+          Plan reference: <span>{state.bookingReference}</span>
+        </p>
+      )}
     </section>
   );
 }

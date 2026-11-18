@@ -48,6 +48,9 @@ it('shows the provider amounts and every payment date without needing expansion'
   expect(screen.getByText('26 Dec 2026')).toBeVisible();
   expect(screen.getByText('26 Jan 2027')).toBeVisible();
   expect(screen.getAllByText('₦20,076.49').length).toBeGreaterThan(0);
+  expect(screen.getByText(/Plan reference:/)).toHaveTextContent(
+    'Plan reference: ref'
+  );
 });
 
 it('does not present unconfirmed or incomplete figures as a plan', () => {
@@ -56,7 +59,7 @@ it('does not present unconfirmed or incomplete figures as a plan', () => {
   expect(screen.getByRole('status')).toBeVisible();
 });
 
-it('uses the provider upfront total and quoted charges when supplied', () => {
+it('uses the provider upfront total and omits conflicting breakdown when total_upfront_payment overrides it', () => {
   render(
     <OxygenBookedPlanSummary
       state={{
@@ -71,10 +74,46 @@ it('uses the provider upfront total and quoted charges when supplied', () => {
     />
   );
   expect(screen.getByText('₦19,000.00')).toBeVisible();
-  expect(screen.getByText(/₦999.00 charges/)).toBeVisible();
+  expect(screen.getByText('Confirmed provider upfront total')).toBeVisible();
+  expect(screen.queryByText(/₦999\.00 charges/)).toBeNull();
 });
 
-it('uses singular labels for a single repayment', () => {
+it('shows the upfront component breakdown when total_upfront_payment matches equity plus charges', () => {
+  render(
+    <OxygenBookedPlanSummary
+      state={{
+        ...state,
+        quotedCharges: 999,
+        booking: {
+          ...state.booking,
+          total_charges: null,
+          total_upfront_payment: 18924.63,
+        },
+      }}
+    />
+  );
+  expect(screen.getByText('₦18,924.63')).toBeVisible();
+  expect(screen.getByText(/₦999\.00 charges/)).toBeVisible();
+});
+
+it('does not crash when provider figures contain more than 2 decimal places', () => {
+  render(
+    <OxygenBookedPlanSummary
+      state={{
+        ...state,
+        quotedCharges: 1062.095,
+        booking: {
+          ...state.booking,
+          total_charges: null,
+          equity_amount: 17925.635,
+        },
+      }}
+    />
+  );
+  expect(screen.getByText('₦18,987.73')).toBeVisible();
+});
+
+it('uses singular labels and Monthly repayment heading for a single repayment', () => {
   render(
     <OxygenBookedPlanSummary
       state={{
@@ -84,6 +123,8 @@ it('uses singular labels for a single repayment', () => {
       }}
     />
   );
+  expect(screen.getByText('Monthly repayment')).toBeVisible();
+  expect(screen.queryByText('First monthly repayment')).toBeNull();
   expect(screen.getByText('1 month')).toBeVisible();
   expect(screen.getByText('1 payment')).toBeVisible();
 });

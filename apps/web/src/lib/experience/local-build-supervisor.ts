@@ -117,7 +117,6 @@ export async function runExperienceBuild(
     const assets = manifest.assets.length
       ? await loadOfflineAssets(
           ctx,
-          execute,
           manifest.assets.map((a) => a.assetId)
         )
       : [];
@@ -163,6 +162,7 @@ export async function runExperienceBuild(
     const performance = deps.performanceMeasurement
       ? await deps.performanceMeasurement({
           ctx,
+          execute,
           manifest,
           candidate,
           renderer: prepared?.renderer ?? candidate,

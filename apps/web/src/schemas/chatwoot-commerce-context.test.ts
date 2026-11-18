@@ -11,7 +11,6 @@ const validChallenge = {
   visitorTokenSha256: 'a'.repeat(64),
   websiteToken: 'synthetic-widget-token-123456',
 };
-
 describe('Chatwoot commerce request schemas', () => {
   it('accepts valid challenge input and rejects additional tenant selectors', () => {
     expect(
@@ -76,6 +75,33 @@ describe('Chatwoot commerce request schemas', () => {
       chatwootCommerceContextVerifyRequestSchema.safeParse({
         challengeToken: 'challenge',
         contextToken: 'context',
+        merchantId: 'caller-selected',
+      }).success
+    ).toBe(false);
+  });
+
+  it('accepts only a boolean snapshot opt-in and rejects unknown authorize fields', () => {
+    expect(
+      chatwootCommerceSessionAuthorizeRequestSchema.safeParse({
+        sessionToken: 'valid-token',
+        includeCartSnapshot: true,
+      }).success
+    ).toBe(true);
+    expect(
+      chatwootCommerceSessionAuthorizeRequestSchema.safeParse({
+        sessionToken: 'valid-token',
+        includeCartSnapshot: false,
+      }).success
+    ).toBe(true);
+    expect(
+      chatwootCommerceSessionAuthorizeRequestSchema.safeParse({
+        sessionToken: 'valid-token',
+        includeCartSnapshot: 'true',
+      }).success
+    ).toBe(false);
+    expect(
+      chatwootCommerceSessionAuthorizeRequestSchema.safeParse({
+        sessionToken: 'valid-token',
         merchantId: 'caller-selected',
       }).success
     ).toBe(false);

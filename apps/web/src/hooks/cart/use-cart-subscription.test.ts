@@ -241,3 +241,44 @@ it('backs off pending hints to fifteen seconds and pauses retries while hidden',
   await act(async () => s.status(true));
   expect(refresh).toHaveBeenCalledTimes(before + 1);
 });
+it('skips the notice for an edit this tab is still sending, but not for others', async () => {
+  const s = setup();
+  const refresh = vi.fn().mockResolvedValue(undefined);
+  const sending = new Set(['mine']);
+  renderHook(() =>
+    useCartSubscription(
+      {
+        ...options,
+        onRefresh: refresh,
+        isOwnOperation: (operationId) => sending.has(operationId),
+      },
+      s.deps
+    )
+  );
+  await waitFor(() => expect(s.deps.connect).toHaveBeenCalledTimes(1));
+  await act(async () => s.status(true));
+  expect(refresh).toHaveBeenCalledTimes(1);
+  // The write-time notice reaches this tab before its command response.
+  // The response carries the authoritative snapshot, so a re-read would
+  // only hold the cart request lock ahead of other tabs and the next edit.
+  await act(async () => {
+    s.event({ merchantId: 'm', cartId: 'c', version: 3, operationId: 'mine' });
+  });
+  expect(refresh).toHaveBeenCalledTimes(1);
+  // Another device's edit still refreshes, even at the same version.
+  await act(async () => {
+    s.event({
+      merchantId: 'm',
+      cartId: 'c',
+      version: 3,
+      operationId: 'theirs',
+    });
+  });
+  expect(refresh).toHaveBeenCalledTimes(2);
+  // Once this tab is no longer sending it, the same id is an ordinary hint.
+  sending.clear();
+  await act(async () => {
+    s.event({ merchantId: 'm', cartId: 'c', version: 4, operationId: 'mine' });
+  });
+  expect(refresh).toHaveBeenCalledTimes(3);
+});

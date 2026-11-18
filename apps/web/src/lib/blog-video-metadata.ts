@@ -149,6 +149,7 @@ function findFirstYouTubeVideoId(content: unknown): string | null {
 
 export function buildBlogVideoMetadata(input: {
   authorName?: string | null;
+  authorType?: 'Person' | 'Organization';
   content: unknown;
   description?: string | null;
   postUrl: string;
@@ -189,7 +190,7 @@ export function buildBlogVideoMetadata(input: {
         url: watchUrl,
         ...(authorName && {
           author: {
-            '@type': 'Person',
+            '@type': input.authorType ?? 'Person',
             name: authorName,
           },
         }),

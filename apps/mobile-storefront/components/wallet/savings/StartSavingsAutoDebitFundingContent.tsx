@@ -15,6 +15,9 @@ export function StartSavingsAutoDebitFundingContent({
   colors,
   controller,
 }: Props) {
+  // Nothing here changes while the plan is being created or a card added:
+  // a change mid-creation would discard the created plan's result.
+  const busy = controller.isSubmitting || controller.isAuthorizingCard;
   return (
     <View style={styles.savedPaymentMethodList}>
       {controller.isLoadingPaymentMethods ? (
@@ -30,6 +33,7 @@ export function StartSavingsAutoDebitFundingContent({
             active={controller.selectedPaymentMethodId === method.id}
             colors={colors}
             method={method}
+            disabled={busy}
             onPress={() => {
               controller.setSelectedPaymentMethodId(method.id);
               controller.setPaymentMethodsError(null);
@@ -52,7 +56,7 @@ export function StartSavingsAutoDebitFundingContent({
         style={[
           styles.outlineButton,
           { borderColor: colors.border },
-          controller.isAuthorizingCard ? styles.buttonDisabled : null,
+          busy ? styles.buttonDisabled : null,
         ]}
         onPress={() => {
           controller.handleAuthorizeSavingsCard().catch((error) => {
@@ -64,7 +68,7 @@ export function StartSavingsAutoDebitFundingContent({
             });
           });
         }}
-        disabled={controller.isAuthorizingCard}
+        disabled={busy}
       >
         <Text style={[styles.outlineButtonText, { color: colors.text }]}>
           {controller.isAuthorizingCard

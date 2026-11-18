@@ -77,47 +77,57 @@ export async function POST(request: NextRequest) {
       });
 
     const originalPrice = Number(product.price);
-    // The database selects a fixed public-price tier using the private margin.
-    // Never expose a continuous cost-derived floor. Validate the fixed tier here
-    // as well so a stale migration fails closed instead of leaking exact costs.
-    const { data: costFloor, error: costFloorError } = await supabase.rpc(
-      'get_negotiation_cost_floor_price',
-      { p_product_id: product.id, p_merchant_id: product.merchant_id }
-    );
-    const costFloorPrice = Number(costFloor);
-    const publicPriceTiers = [
-      originalPrice,
-      ...Object.values(DISCOUNT_TIERS).map((rate) =>
-        Math.ceil((originalPrice * Math.round((1 - rate) * 1000)) / 1000)
-      ),
-    ];
-    if (
-      costFloorError ||
-      costFloor == null ||
-      !Number.isFinite(originalPrice) ||
-      originalPrice <= 0 ||
-      !Number.isFinite(costFloorPrice) ||
-      costFloorPrice > originalPrice ||
-      !publicPriceTiers.includes(costFloorPrice)
-    ) {
-      console.error('Negotiation cost floor lookup error:', costFloorError);
-      return NextResponse.json(
-        { error: 'Failed to process negotiation' },
-        { status: 500 }
-      );
-    }
-    const minAcceptablePrice = Math.max(
-      costFloorPrice,
-      originalPrice * (1 - MAX_AUTO_NEGOTIATION_DISCOUNT_RATE)
-    );
-
-    const attemptNumber = validatedData.attemptNumber;
-    const offeredPrice = validatedData.offeredPrice;
-
     const isNegotiable = isProductNegotiable({
       brand: product.brand,
       name: product.name,
     });
+
+    // The database selects a fixed public-price tier using the private margin.
+    // Never expose a continuous cost-derived floor. Validate the fixed tier here
+    // as well so a stale migration fails closed instead of leaking exact costs.
+    // Only negotiable products need the floor, so a missing RPC cannot break
+    // the non-negotiable 'best price' path.
+    let minAcceptablePrice = originalPrice;
+    if (isNegotiable) {
+      const publicPriceTiers = [
+        originalPrice,
+        ...Object.values(DISCOUNT_TIERS).map((rate) =>
+          Math.ceil((originalPrice * Math.round((1 - rate) * 1000)) / 1000)
+        ),
+      ];
+      const { data: costFloor, error: costFloorError } = await supabase.rpc(
+        'get_negotiation_cost_floor_price',
+        { p_product_id: product.id, p_merchant_id: product.merchant_id }
+      );
+      const costFloorPrice = Number(costFloor);
+      if (
+        costFloorError ||
+        costFloor == null ||
+        !Number.isFinite(originalPrice) ||
+        originalPrice <= 0 ||
+        !Number.isFinite(costFloorPrice) ||
+        costFloorPrice > originalPrice ||
+        !publicPriceTiers.includes(costFloorPrice)
+      ) {
+        console.error(
+          costFloorError
+            ? 'Negotiation cost floor lookup error:'
+            : 'Negotiation cost floor unavailable (product inactive or invalid tier)',
+          costFloorError ?? { productId: product.id }
+        );
+        return NextResponse.json(
+          { error: 'Failed to process negotiation' },
+          { status: 500 }
+        );
+      }
+      minAcceptablePrice = Math.max(
+        costFloorPrice,
+        originalPrice * (1 - MAX_AUTO_NEGOTIATION_DISCOUNT_RATE)
+      );
+    }
+
+    const attemptNumber = validatedData.attemptNumber;
+    const offeredPrice = validatedData.offeredPrice;
 
     let result: NegotiationResult;
 

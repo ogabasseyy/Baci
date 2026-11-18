@@ -8,6 +8,7 @@ describe('PrimaryWalletSetupPending', () => {
     checking: false,
     stillWaiting: false,
     checkFailed: false,
+    canCheckNow: true,
   };
 
   it('explains the wait and lets the customer check now', () => {
@@ -40,8 +41,22 @@ describe('PrimaryWalletSetupPending', () => {
     render(
       <PrimaryWalletSetupPending {...base} checkFailed onCheckNow={jest.fn()} />
     );
-    expect(screen.getByText(/couldn’t reach PiggyVest/)).toBeOnTheScreen();
+    expect(
+      screen.getByText(/couldn’t reach the wallet service/)
+    ).toBeOnTheScreen();
     // Automatic checks are bounded, so the copy must not promise more.
     expect(screen.queryByText(/keep trying/)).toBeNull();
+  });
+
+  it('offers no button while the automatic checks are still running', () => {
+    render(
+      <PrimaryWalletSetupPending
+        {...base}
+        canCheckNow={false}
+        onCheckNow={jest.fn()}
+      />
+    );
+    expect(screen.getByText(/you don’t need to do anything/)).toBeOnTheScreen();
+    expect(screen.queryByRole('button', { name: 'Check now' })).toBeNull();
   });
 });

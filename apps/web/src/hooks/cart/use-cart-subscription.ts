@@ -15,6 +15,13 @@ export interface CartSubscriptionOptions {
   version: number;
   generation: number;
   onRefresh: () => Promise<void>;
+  /**
+   * True while this tab is still sending the operation. Its notice is sent
+   * inside the write and usually arrives before the command response, which
+   * already carries the authoritative snapshot; re-reading would only hold
+   * the cart request lock ahead of other tabs and the shopper's next edit.
+   */
+  isOwnOperation?: (operationId: string) => boolean;
 }
 
 /** Notifications only request an authorized refetch; they never edit UI lines. */
@@ -130,6 +137,7 @@ export function useCartSubscription(
               )
             )
               return;
+            if (latest.current.isOwnOperation?.(event.operationId)) return;
             highestHint = event.version;
             void refresh();
           },

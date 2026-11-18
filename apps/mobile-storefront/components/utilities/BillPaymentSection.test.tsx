@@ -102,4 +102,42 @@ describe('BillPaymentSection', () => {
       false
     );
   });
+
+  it('shows the amount issue under the field once an amount is typed', () => {
+    render(
+      <BillPaymentSection
+        amountIssue="Amount must be between ₦50 and ₦500,000."
+        colors={Colors.light}
+        formattedAmount="20"
+        handlePaymentLayout={jest.fn()}
+        returnToHref={'/utilities/power' as WalletReturnHref}
+        isFixedAmount={false}
+        numericAmount={20}
+        payment={createPaymentState()}
+        setAmount={jest.fn()}
+      />
+    );
+
+    expect(
+      screen.getByText('Amount must be between ₦50 and ₦500,000.')
+    ).toBeOnTheScreen();
+  });
+
+  it('keeps the field quiet before anything is typed', () => {
+    render(
+      <BillPaymentSection
+        amountIssue="Enter an amount to pay."
+        colors={Colors.light}
+        formattedAmount=""
+        handlePaymentLayout={jest.fn()}
+        returnToHref={'/utilities/power' as WalletReturnHref}
+        isFixedAmount={false}
+        numericAmount={0}
+        payment={createPaymentState()}
+        setAmount={jest.fn()}
+      />
+    );
+
+    expect(screen.queryByText('Enter an amount to pay.')).toBeNull();
+  });
 });

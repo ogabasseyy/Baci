@@ -1,6 +1,7 @@
 import Constants from 'expo-constants';
 import * as Crypto from 'expo-crypto';
 import { resolveApiBaseUrl } from '@/lib/api-url';
+import { createLogger } from '@/lib/logger';
 import type {
   PlaceDetails,
   PlacePrediction,
@@ -9,6 +10,10 @@ import type {
 const API_BASE_URL = resolveApiBaseUrl(
   process.env.EXPO_PUBLIC_API_URL || Constants.expoConfig?.extra?.apiUrl
 );
+// Places failures are handled (no suggestions, manual entry still works), so
+// they log at info level. console.error/warn would raise a React Native LogBox
+// bar on every keystroke while the address is typed.
+const log = createLogger('AddressAutocomplete');
 const PREDICTION_CACHE_MAX_SIZE = 50;
 const predictionCache = new Map<string, PlacePrediction[]>();
 
@@ -73,7 +78,7 @@ export async function fetchAddressPredictions({
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.warn(`[Autocomplete] HTTP ${response.status}: ${errorText}`);
+      log.info(`Autocomplete HTTP ${response.status}: ${errorText}`);
       if (response.status === 403) {
         throw new Error('Google Places API requires billing to be enabled.');
       }
@@ -85,7 +90,7 @@ export async function fetchAddressPredictions({
     setCacheEntry(cacheKey, results);
     return results;
   } catch (error) {
-    console.error('Error fetching predictions:', error);
+    log.info('Address predictions unavailable', error);
     return [];
   }
 }
@@ -108,7 +113,7 @@ export async function fetchPlaceDetails({
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.warn(`[PlaceDetails] HTTP ${response.status}: ${errorText}`);
+      log.info(`Place details HTTP ${response.status}: ${errorText}`);
       throw new Error('Failed to fetch place details');
     }
 
@@ -136,7 +141,7 @@ export async function fetchPlaceDetails({
           : undefined,
     };
   } catch (error) {
-    console.error('Error fetching place details:', error);
+    log.info('Place details unavailable', error);
     return null;
   }
 }

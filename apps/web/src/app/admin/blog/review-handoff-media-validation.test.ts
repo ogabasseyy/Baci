@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { describe, expect, it } from 'vitest';
 import { hasBrokenMediaTag } from './review-handoff-media-validation';
 

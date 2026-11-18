@@ -1,7 +1,7 @@
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
 import {
   getPiggyvestPrimaryCapabilitySnapshot,
-  isPrimaryWalletNotReady,
+  rollbackObservedCapabilityOnNotReady,
 } from '@/lib/piggyvest-primary-capability';
 import { piggyvestPrimaryWalletApi } from '@/lib/piggyvest-primary-wallet';
 import { useAuthStore } from '@/stores/auth-store';
@@ -16,6 +16,9 @@ export type SettledPrimaryFundingAccount =
       account: PrimarySnapshot['account'];
       // Kobo; null when the snapshot is not ready (no account yet).
       balanceKobo: number | null;
+      // A remembered answer standing in for a fresh read that ran slow or
+      // failed: shown, but still re-checked.
+      recalled?: true;
     }
   // Primary definitively has no account for this customer (server
   // unconfigured, or enabled but never provisioned): the legacy
@@ -102,7 +105,10 @@ export async function readPrimaryFundingAccount(
     // Only an authoritative not-ready keeps the legacy projection;
     // transient failures surface unavailable instead of a DVA the
     // primary account may have superseded.
-    if (isPrimaryWalletNotReady(error)) return { status: 'not_ready' };
+    // The wallet read is authoritative too (Codex): a base not-ready rolls
+    // a stale cached positive verdict back, as a failed mutation does.
+    if (rollbackObservedCapabilityOnNotReady(merchantId, error))
+      return { status: 'not_ready' };
     return { status: 'unavailable' };
   }
 }

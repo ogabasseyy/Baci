@@ -20,7 +20,7 @@ INSERT INTO oxygen_private.runtime_bindings(merchant_id,worker_user_id,partner_r
 VALUES ('efac0000-0000-4000-8000-000000000011','efac0000-0000-4000-8000-000000000003','saved-plan-test-partner',true);
 UPDATE public.oxygen_workflows SET stage='approval_required' WHERE id='efac0000-0000-4000-8000-000000000041';
 DO $$ DECLARE state jsonb; variant jsonb; BEGIN
- state:=jsonb_build_object('bookingReference','efac0000-0000-4000-8000-000000000071','phone','private phone',
+ state:=jsonb_build_object('bookingReference','efac0000-0000-4000-8000-000000000071','phone','private phone','eligibleAmount',400000,'minimumAmount',10000,'maxTenure',3,'offers','[{"tenure":3,"loanAmount":400000}]'::jsonb,
   'booking',jsonb_build_object('loan_reference','efac0000-0000-4000-8000-000000000071','status','BOOKED','product_amount',400000,'equity_percentage',25,'equity_amount',100000,'loan_amount',300000,'loan_tenure',3),
   'quotedCharges',1000,'schedule','[{"period":1,"dueDate":[2026,11,27],"amount":110000,"principal":100000,"interest":10000},{"period":2,"dueDate":[2026,12,27],"amount":110000,"principal":100000,"interest":10000},{"period":3,"dueDate":[2027,1,27],"amount":110000,"principal":100000,"interest":10000}]'::jsonb);
  INSERT INTO oxygen_private.provider_states(workflow_id,state) VALUES('efac0000-0000-4000-8000-000000000041',state);
@@ -43,6 +43,15 @@ DO $$ BEGIN
  BEGIN PERFORM public.oxygen_accept_saved_plan('efac0000-0000-4000-8000-000000000041','efac0000-0000-4000-8000-000000000071',0); RAISE EXCEPTION 'Cross-owner accepted'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
 END $$;
 SELECT set_config('request.jwt.claim.sub','efac0000-0000-4000-8000-000000000001',true);
+RESET ROLE;
+UPDATE oxygen_private.provider_states SET state=jsonb_set(state,'{offers}','[{"tenure":3,"loanAmount":100000}]') WHERE workflow_id='efac0000-0000-4000-8000-000000000041';
+SET LOCAL ROLE authenticated;
+DO $$ BEGIN
+ BEGIN PERFORM public.oxygen_accept_saved_plan('efac0000-0000-4000-8000-000000000041','efac0000-0000-4000-8000-000000000071',0); RAISE EXCEPTION 'Plan exceeding offer was accepted'; EXCEPTION WHEN invalid_parameter_value THEN NULL; END;
+END $$;
+RESET ROLE;
+UPDATE oxygen_private.provider_states SET state=jsonb_set(state,'{offers}','[{"tenure":3,"loanAmount":400000}]') WHERE workflow_id='efac0000-0000-4000-8000-000000000041';
+SET LOCAL ROLE authenticated;
 DO $$ DECLARE result jsonb; BEGIN
  PERFORM public.oxygen_saved_plans('efac0000-0000-4000-8000-000000000041','efac0000-0000-4000-8000-000000000071');
  result:=public.oxygen_accept_saved_plan('efac0000-0000-4000-8000-000000000041','efac0000-0000-4000-8000-000000000071',0);

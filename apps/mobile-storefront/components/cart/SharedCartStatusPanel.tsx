@@ -44,6 +44,10 @@ export function SharedCartStatusPanel() {
     state.mergeConflicts.length === 0
   )
     return null;
+  // A settled cart with no server cart and no device items is simply
+  // an empty cart: there is nothing to sync, connect or retry.
+  if (state.status === 'ready' && !state.snapshot && items.length === 0)
+    return null;
   function run(operation: (() => Promise<void>) | null): void {
     if (!operation) return;
     markSharedCartIntent();
@@ -78,9 +82,9 @@ export function SharedCartStatusPanel() {
               ? 'Cart sync could not be completed. If an item did not appear, add it again later. Your last confirmed items are saved.'
               : 'Cart sync was interrupted. Your last confirmed items are saved.'
             : !state.snapshot
-              ? items.length
-                ? 'Connect these items to your shared cart before checkout.'
-                : 'Your shared cart will refresh before checkout.'
+              ? busy || items.length === 0
+                ? 'Syncing your cart…'
+                : 'Connect these items to your shared cart before checkout.'
               : 'Checking product details before checkout.'}
       </Text>
       {!busy && conflicts.length > 0 && state.chooseLegacy ? (

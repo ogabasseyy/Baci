@@ -13,8 +13,12 @@
 -- Disclosure: the function returns GREATEST(cost * 1.1, price * 0.98) for an
 -- active product. When the 2% auto-negotiation cap dominates (about 77% of
 -- costed products) the value is just price * 0.98 and carries no information
--- about cost. When cost dominates it equals what the route already told the
--- shopper as the "best price" counter offer, so nothing new is disclosed.
+-- about cost. When cost dominates it equals what the route already tells the
+-- shopper as the "best price" counter offer, but one direct call returns it
+-- exactly (the route needed several offers to find it), and the function has no
+-- brand/negotiability gate, so for non-negotiable products it also discloses a
+-- floor the route never would. Residual, tracked as a follow-up: an
+-- offer-evaluation RPC returning only accept/counter/final, plus rate limiting.
 -- The 1.1 margin and 0.98 cap are fixed here on purpose: taking them as
 -- parameters would let a caller solve for cost.
 -- ============================================================================

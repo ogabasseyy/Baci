@@ -11,7 +11,7 @@ import {
   withSpring,
 } from 'react-native-reanimated';
 import { useColorScheme } from '@/components/useColorScheme';
-import Colors, { SPRING_CONFIG } from '@/constants/Colors';
+import Colors, { BRAND, SPRING_CONFIG } from '@/constants/Colors';
 import { useHaptics } from '@/hooks/use-haptics';
 import { resolveCartItemImageUrl } from '@/lib/cart-display';
 import { createSafeBoundedImageSource } from '@/lib/safe-bounded-image-source';
@@ -37,6 +37,7 @@ export const BLURHASH_VARIANTS = {
 
 interface ProductCardProps {
   product: Product;
+  neutralPrice?: boolean;
   modernSearch?: boolean;
   footer?: ReactNode;
   variant?: 'grid' | 'editorial' | 'list';
@@ -48,6 +49,7 @@ interface ProductCardProps {
 
 export function ProductCard({
   product,
+  neutralPrice = false,
   modernSearch = false,
   footer,
   variant = 'grid',
@@ -73,6 +75,7 @@ export function ProductCard({
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const haptics = useHaptics();
+  const priceColor = neutralPrice ? colors.text : BRAND.primary;
 
   const cartItemCount = useCartStore(
     (state) => selectCartQuantities(state).get(String(product.id)) ?? 0
@@ -203,6 +206,7 @@ export function ProductCard({
     return (
       <EditorialProductCard
         product={displayProduct}
+        priceColor={priceColor}
         imageSource={imageSource}
         imageProps={imageProps}
         showLocalPlaceholder={showLocalPlaceholder}
@@ -225,6 +229,7 @@ export function ProductCard({
     return (
       <ListProductCard
         product={displayProduct}
+        priceColor={priceColor}
         imageSource={imageSource}
         imageProps={imageProps}
         showLocalPlaceholder={showLocalPlaceholder}
@@ -246,6 +251,7 @@ export function ProductCard({
   return (
     <GridCard
       footer={footer}
+      priceColor={priceColor}
       product={displayProduct}
       imageSource={imageSource}
       imageProps={imageProps}

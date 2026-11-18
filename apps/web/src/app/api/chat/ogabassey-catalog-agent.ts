@@ -3,7 +3,7 @@ import { generateTextWithChain } from '@/ai/generate-text-with-chain';
 import type { AiChatProvider } from '@/env';
 import { buildStorefrontDisplayData } from '@/lib/agentic/storefront-display-data';
 import type { StorefrontAgentUiEvent } from '@/schemas/storefront-agent-ui-contract';
-import { createAiSdkAgenticChatTools } from './chat-tool-runtime';
+import { createReadOnlyCatalogTools } from './chat-catalog-tools';
 import { createChatPresentationEventCollector } from './create-chat-presentation-event-collector';
 import { isBusinessFactRequest } from './fast-catalog-language';
 import {
@@ -62,8 +62,7 @@ function buildBudgetEnforcedReadOnlyTools(
   ) => void,
   onSearchParams?: (params: { query?: string; category?: string }) => void
 ) {
-  const readOnlyTools = createAiSdkAgenticChatTools(sessionId, {
-    agenticCheckoutEnabled: false,
+  const readOnlyTools = createReadOnlyCatalogTools(sessionId, {
     onToolResult: (toolName, toolResult, context) => {
       onCapturedResult(
         toolName,

@@ -118,10 +118,15 @@ export function QuizScreen({
     dismissRecovery,
     userId: authUserId,
   });
+  const pollingEventId = terminalContext?.eventId ?? v2Attempt?.eventId ?? null;
+  const pollingBackendMode =
+    events.find((e) => e.id === pollingEventId)?.backendMode ??
+    v2Attempt?.backendMode;
   useQuizResultPolling({
     attemptId: terminalContext?.attemptId ?? null,
+    backendMode: pollingBackendMode,
     enabled: status === 'result' && v2LifecycleStatus === 'pending_results',
-    eventId: terminalContext?.eventId ?? v2Attempt?.eventId ?? null,
+    eventId: pollingEventId,
     expectedUserId: authUserId,
     getCurrentUserId: () => useAuthStore.getState().user?.id ?? null,
     onResult: setV2Result,
@@ -138,9 +143,7 @@ export function QuizScreen({
       const loadPublicLobby = authUserId ? fetchQuizEvents : async () => [];
       loadEvents(loadPublicLobby).catch((error) => {
         log.warn('Failed to load quiz events', error);
-        if (mounted) {
-          setError(getQuizErrorMessage(error, 'Quiz action failed'));
-        }
+        if (mounted) setError(getQuizErrorMessage(error, 'Quiz action failed'));
       });
     }
     return () => {
@@ -212,9 +215,7 @@ export function QuizScreen({
         status={status}
         error={error}
         isDobGateVisible={dobGate.isGateVisible}
-        onRetry={() => {
-          void refreshEvents().then(retryRecovery);
-        }}
+        onRetry={() => void refreshEvents().then(retryRecovery)}
         primaryColor={colors.primary}
         styles={styles}
       />
@@ -243,9 +244,7 @@ export function QuizScreen({
             attempt={attempt}
             isSubmitting={status === 'submitting'}
             onSelectAnswer={selectAnswer}
-            onSubmit={() => {
-              void handleSubmit();
-            }}
+            onSubmit={() => void handleSubmit()}
             remainingSeconds={remainingSeconds}
             selectedOptionId={selectedOptionId}
             styles={styles}

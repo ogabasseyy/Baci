@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { AppState } from 'react-native';
 import { fetchQuizResult } from '@/services/quiz-results';
-import type { QuizV2Result } from '@/services/quiz-types';
+import type { QuizEventBackendMode, QuizV2Result } from '@/services/quiz-types';
 import { backoffDelay } from './quiz-backoff-delay';
 import { isOverloadError } from './quiz-is-overload-error';
 import { randomDelay } from './quiz-random-delay';
@@ -75,6 +75,7 @@ function getFailedPollDelayMs(
 
 export function useQuizResultPolling({
   attemptId,
+  backendMode = 'postgres',
   enabled,
   eventId,
   expectedUserId,
@@ -82,6 +83,7 @@ export function useQuizResultPolling({
   onResult,
 }: {
   attemptId: string | null;
+  backendMode?: QuizEventBackendMode;
   enabled: boolean;
   eventId: string | null;
   expectedUserId: string | null;
@@ -92,7 +94,10 @@ export function useQuizResultPolling({
   const pollNowRef = useRef<() => void>(() => undefined);
   currentUserIdRef.current = getCurrentUserId;
   useQuizResultRealtimeWakeup({
-    enabled: enabled && Boolean(attemptId && expectedUserId),
+    enabled:
+      enabled &&
+      backendMode !== 'edge_rooms' &&
+      Boolean(attemptId && expectedUserId),
     eventId,
     onWakeup: () => pollNowRef.current(),
   });

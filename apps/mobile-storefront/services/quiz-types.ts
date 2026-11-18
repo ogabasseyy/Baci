@@ -7,7 +7,10 @@ export type QuizEventStatus =
   | 'completed'
   | 'cancelled';
 
+export type QuizEventBackendMode = 'postgres' | 'edge_rooms';
+
 export interface QuizEvent {
+  backendMode?: QuizEventBackendMode;
   contractVersion?: 1 | 2;
   id: string;
   title: string;
@@ -70,6 +73,7 @@ export type QuizV2AttemptStatus =
 
 export interface QuizV2Attempt {
   attemptId: string;
+  backendMode?: QuizEventBackendMode;
   eventEndsAt: string;
   eventId: string;
   question?: QuizQuestion;

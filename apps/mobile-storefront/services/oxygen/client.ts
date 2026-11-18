@@ -18,7 +18,7 @@ import {
 import { z } from 'zod';
 import { assertOxygenActionFile } from './action-file';
 import { OxygenClientError } from './errors';
-import { appendOxygenFile } from './multipart';
+import { prepareOxygenMultipart } from './multipart';
 
 export interface OxygenClientProfile {
   apiOrigin: string;
@@ -84,14 +84,13 @@ export function createOxygenClient(options: {
       headers[oxygenEligibilityProgressHeader] = '1';
     }
     let payload: BodyInit | undefined;
+    let multipart: ReturnType<typeof prepareOxygenMultipart> | undefined;
     try {
       if (file) {
         if (!validateOxygenFile(file.bytes, file.type, file.name))
           throw new OxygenClientError('invalid');
-        const form = new FormData();
-        form.append('payload', JSON.stringify(body));
-        appendOxygenFile(form, file);
-        payload = form;
+        multipart = prepareOxygenMultipart(body, file);
+        payload = multipart.form;
       } else if (body !== undefined) {
         headers['Content-Type'] = 'application/json';
         payload = JSON.stringify(body);
@@ -99,9 +98,13 @@ export function createOxygenClient(options: {
     } catch {
       throw new OxygenClientError('invalid', undefined, 'not_dispatched');
     }
-    let response: Response;
+    let response: Pick<
+      Response,
+      'redirected' | 'url' | 'ok' | 'status' | 'json'
+    >;
     try {
-      response = await options.fetch(
+      const fetch = multipart?.fetch ?? options.fetch;
+      response = await fetch(
         `${profile.apiOrigin}/api/payments/oxygen/${path}`,
         {
           method,
@@ -113,6 +116,8 @@ export function createOxygenClient(options: {
       );
     } catch {
       throw new OxygenClientError('transport');
+    } finally {
+      multipart?.dispose?.();
     }
     if (
       response.redirected ||

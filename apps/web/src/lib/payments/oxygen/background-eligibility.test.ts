@@ -2,8 +2,10 @@ import { expect, it, vi } from 'vitest';
 import { runOxygenEligibilityBackground } from './background-eligibility';
 
 const { deliver } = vi.hoisted(() => ({ deliver: vi.fn() }));
+type OffersReadyNotification = typeof import('./offers-ready-notification');
+
 vi.mock('./offers-ready-notification', async (load) => ({
-  ...(await load<typeof import('./offers-ready-notification')>()),
+  ...(await load<OffersReadyNotification>()),
   sendOxygenOffersReady: deliver,
 }));
 

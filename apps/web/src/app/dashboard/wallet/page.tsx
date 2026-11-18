@@ -51,19 +51,20 @@ export default async function WalletPage() {
     pendingSettlements: PendingSettlement[];
   } | null;
   let transactions: Transaction[];
+  let spendable: Awaited<ReturnType<typeof readWalletSpendableBreakdown>>;
 
   try {
-    [walletData, transactions] = await Promise.all([
+    // The spendable read never throws (it fails closed to ok:false), so a
+    // failure there hides the cards without failing the wallet page.
+    [walletData, transactions, spendable] = await Promise.all([
       getWalletData(merchant.id),
       getTransactions(merchant.id),
+      readWalletSpendableBreakdown(supabase, merchant.id),
     ]);
   } catch (error) {
     console.error('Failed to fetch wallet data:', error);
     throw new Error('Failed to load wallet data');
   }
-
-  // Display-only: a failure here hides the cards, never the wallet page.
-  const spendable = await readWalletSpendableBreakdown(supabase, merchant.id);
 
   return (
     <WalletClient

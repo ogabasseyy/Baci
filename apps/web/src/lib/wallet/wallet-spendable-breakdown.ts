@@ -29,10 +29,12 @@ export async function readWalletSpendableBreakdown(
   const parsed = walletSpendableBreakdownRowsSchema.safeParse(data);
   if (!parsed.success) return { ok: false };
   const row = parsed.data[0];
+  // No wallet row (merchant_id is unique, so at most one): nothing to show.
+  if (!row) return { ok: false };
   return {
     ok: true,
-    spendableBalance: row?.spendable_balance ?? 0,
-    settledToBankTotal: row?.settled_to_bank_total ?? 0,
-    pendingReconciliationTotal: row?.pending_reconciliation_total ?? 0,
+    spendableBalance: row.spendable_balance,
+    settledToBankTotal: row.settled_to_bank_total,
+    pendingReconciliationTotal: row.pending_reconciliation_total,
   };
 }

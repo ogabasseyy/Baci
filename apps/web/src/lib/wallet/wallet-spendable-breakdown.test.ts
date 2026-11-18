@@ -34,18 +34,13 @@ describe('readWalletSpendableBreakdown', () => {
     );
   });
 
-  it('treats a merchant without a wallet row as zero and zero', async () => {
+  it('hides the figures for a merchant without a wallet row', async () => {
     await expect(
       readWalletSpendableBreakdown(
         client({ data: [], error: null }).supabase,
         'm'
       )
-    ).resolves.toEqual({
-      ok: true,
-      spendableBalance: 0,
-      settledToBankTotal: 0,
-      pendingReconciliationTotal: 0,
-    });
+    ).resolves.toEqual({ ok: false });
   });
 
   it('fails closed on RPC error or malformed data', async () => {

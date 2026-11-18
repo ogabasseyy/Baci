@@ -13,6 +13,10 @@ describe('mentionsMonnifyAuthWording', () => {
     'Invalid API key',
     'ApiKey is invalid',
     'Credentials expired',
+    'login failed',
+    'Sign-in failed',
+    'LOGIN_FAILED',
+    'failed to log in',
   ])('reads %s as login wording', (text) => {
     expect(mentionsMonnifyAuthWording(text)).toBe(true);
   });

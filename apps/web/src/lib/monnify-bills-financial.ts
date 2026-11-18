@@ -201,6 +201,9 @@ export async function purchaseBill(
         // unavailable or a vend outcome, or whose body carries a vend status or
         // reference, may come after a vend that ran, so it never qualifies.
         providerDefiniteFailure:
+          // Only reachable for 4xx (isClientError above); kept explicit so a
+          // future refactor can never let a 5xx (unknown outcome) through.
+          error.status < 500 &&
           error.status !== 401 &&
           error.status !== 403 &&
           error.status !== 408 &&

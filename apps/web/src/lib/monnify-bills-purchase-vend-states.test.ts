@@ -108,29 +108,21 @@ describe('bugfix: code 99 read only from response-code keys', () => {
   });
 });
 
-describe('bugfix: authorization-header rejections read as auth rejections', () => {
+describe('owner decision: a 401/403 login rejection never goes to Kuda', () => {
   it.each([
     'Authorization header missing',
     'Authorization required',
-  ])('hands a 401 saying "%s" to Kuda', async (responseMessage) => {
-    mockHttpError(401, 'Unauthorized', JSON.stringify({ responseMessage }));
-
-    await expect(vend()).resolves.toMatchObject({
-      providerDefiniteFailure: true,
-    });
-  });
-});
-
-describe('bugfix: copular token-expiry wording and bare "authentication" text', () => {
-  it.each([
     'Access token has expired',
     'Access token is expired',
     'Authentication failed',
-  ])('hands a 401 saying "%s" to Kuda', async (responseMessage) => {
+    'Invalid bearer token',
+    'Bearer token is invalid',
+    'Bearer token missing',
+  ])('keeps a 401 saying "%s" off Kuda', async (responseMessage) => {
     mockHttpError(401, 'Unauthorized', JSON.stringify({ responseMessage }));
 
     await expect(vend()).resolves.toMatchObject({
-      providerDefiniteFailure: true,
+      providerDefiniteFailure: false,
     });
   });
 

@@ -55,11 +55,12 @@ describe('Monnify vend failures handed to Kuda', () => {
     it.each([
       [401, 'Unauthorized', 'Token expired'],
       [403, 'Forbidden', 'Invalid access token'],
-    ])('marks an authentication rejection (%i) as definite', async (status, statusText, message) => {
+      [401, 'Unauthorized', 'Insufficient wallet balance'],
+    ])('never hands a login rejection (%i, %s) to Kuda', async (status, statusText, message) => {
       mockHttpError(status, statusText, message);
 
       await expect(vend()).resolves.toMatchObject({
-        providerDefiniteFailure: true,
+        providerDefiniteFailure: false,
         status: 'failed',
       });
     });

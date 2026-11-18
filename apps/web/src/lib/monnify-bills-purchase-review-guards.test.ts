@@ -75,7 +75,7 @@ describe('bugfix: 401/403 status line alone never reads as an auth rejection', (
     });
   });
 
-  it('still hands a 401 whose body says the token expired to Kuda', async () => {
+  it('keeps a 401 whose body says the token expired off Kuda too', async () => {
     mockHttpError(
       401,
       'Unauthorized',
@@ -83,7 +83,7 @@ describe('bugfix: 401/403 status line alone never reads as an auth rejection', (
     );
 
     await expect(vend()).resolves.toMatchObject({
-      providerDefiniteFailure: true,
+      providerDefiniteFailure: false,
     });
   });
 });

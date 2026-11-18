@@ -1,6 +1,5 @@
 import { parseMonnifyAnswer } from './monnify-answer-parse';
 import { joinMonnifyAnswerStrings } from './monnify-answer-strings';
-import { readsAsMonnifyAuthRejection } from './monnify-auth-rejection';
 import { redactMonnifyCredentials } from './monnify-credential-redaction';
 import { hasMonnifyDuplicateFlag } from './monnify-duplicate-flag';
 import { isMonnifyDuplicateReferenceText } from './monnify-duplicate-reference';
@@ -46,8 +45,6 @@ interface MonnifyAnswerReading {
   isKnownRefusal: boolean;
   mentionsVendOutcome: boolean;
   reportsUnexpectedError: boolean;
-  readsAsAuthRejection: boolean;
-  readsAsSpecificAuthRejection: boolean;
   showsVendEvidence: boolean;
 }
 
@@ -68,9 +65,7 @@ function showsVendEvidence(body: string): boolean {
 }
 
 /**
- * `text` is the status line plus the body; `body` is Monnify's answer alone.
- * Auth wording is read from the body only: every 401/403 status line says
- * "Unauthorized" or "Forbidden", which proves nothing about the reason.
+ * `statusLine` is the error's status line; `body` is Monnify's answer alone.
  */
 function readMonnifyAnswer(
   statusLine: string,
@@ -93,10 +88,6 @@ function readMonnifyAnswer(
     reportsUnexpectedError:
       reportsMonnifyUnexpectedError(body) ||
       hasMonnifyNonDefinitiveCode(parsed),
-    readsAsAuthRejection: readsAsMonnifyAuthRejection(body),
-    readsAsSpecificAuthRejection: readsAsMonnifyAuthRejection(body, {
-      specificOnly: true,
-    }),
     showsVendEvidence: showsVendEvidence(body),
   };
 }
@@ -149,16 +140,6 @@ export class MonnifyHttpError extends Error {
   /** Monnify's code 99 ("unexpected error, re-query"): outcome unknown. */
   get reportsUnexpectedError() {
     return this.#reading.reportsUnexpectedError;
-  }
-
-  /** The answer reads as an authentication rejection, not just its status. */
-  get readsAsAuthRejection() {
-    return this.#reading.readsAsAuthRejection;
-  }
-
-  /** The body names a token, credential or header problem (not a bare deny). */
-  get readsAsSpecificAuthRejection() {
-    return this.#reading.readsAsSpecificAuthRejection;
   }
 
   /** The JSON body carries a vend status or reference: a vend may exist. */

@@ -192,33 +192,24 @@ export async function purchaseBill(
         providerErrorDetail: error.diagnosticMessage,
         status: 'failed',
         amount,
-        // A refusal Monnify gave before vending: an authentication rejection
-        // (401/403, e.g. a cached token rejected) or a known refusal. A 401/403
-        // comes from the vend request's own bearer-token check, which runs
-        // before the request is processed, so nothing was vended; a failed
-        // token login never gets this far (it throws a plain Error from
-        // getMonnifyToken and stays an unknown outcome). A timeout
-        // (408) or anything that may be a duplicate never qualifies.
-        // Any answer that talks about the service being unavailable or a
-        // failed vend may come after a vend that ran (e.g. from a gateway),
-        // so it never qualifies, whatever else it says, and nor does a body
-        // that carries a vend status or reference. A 429 never qualifies: a
-        // throttle (possibly from a gateway) does not prove nothing was vended.
+        // A refusal Monnify gave before vending: a known refusal (the amount
+        // check, Baci's Monnify float too low). A 401/403 never qualifies
+        // (owner decision): Monnify does not document that its auth check runs
+        // before any vend, so a login rejection is refunded, not re-vended. A
+        // timeout (408), a throttle (429) or anything that may be a duplicate
+        // never qualifies. Any answer that talks about the service being
+        // unavailable or a vend outcome, or whose body carries a vend status or
+        // reference, may come after a vend that ran, so it never qualifies.
         providerDefiniteFailure:
+          error.status !== 401 &&
+          error.status !== 403 &&
           error.status !== 408 &&
+          error.status !== 429 &&
           !error.isDuplicateReference &&
           !error.reportsUnexpectedError &&
           !error.mentionsVendOutcome &&
-          error.status !== 429 &&
           !error.showsVendEvidence &&
-          // A 401/403 needs wording that names a token, credential or header:
-          // a bare "Unauthorized"/"Access denied"/"Forbidden" may come from a
-          // gateway rather than the vend request's own bearer check.
-          // Every 401/403 must name the credential; refusal wording alone
-          // (e.g. "Unauthorized request: insufficient balance") is not enough.
-          (error.status === 401 || error.status === 403
-            ? error.readsAsSpecificAuthRejection
-            : error.isKnownRefusal),
+          error.isKnownRefusal,
       };
     }
 

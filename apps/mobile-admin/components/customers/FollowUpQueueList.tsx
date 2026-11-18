@@ -64,11 +64,13 @@ export function FollowUpQueueList({
   const filteredFailedOrders = (() => {
     if (!failedOrders || !searchQuery.trim()) return failedOrders ?? [];
 
-    const query = searchQuery.toLowerCase();
+    const query = searchQuery.trim().toLowerCase();
     return failedOrders.filter(
       (order) =>
         (order.customer_name?.toLowerCase().includes(query) ?? false) ||
-        (order.customer_email ?? '').toLowerCase().includes(query)
+        (order.customer_email?.toLowerCase().includes(query) ?? false) ||
+        (order.order_number?.toLowerCase().includes(query) ?? false) ||
+        (order.customer_phone?.includes(query) ?? false)
     );
   })();
   const { data: groupedFailedOrders, stickyHeaderIndices } =

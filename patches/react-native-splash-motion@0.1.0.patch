@@ -1,5 +1,5 @@
 diff --git a/android/src/main/java/com/margelo/nitro/splashmotion/HybridSplashMotion.kt b/android/src/main/java/com/margelo/nitro/splashmotion/HybridSplashMotion.kt
-index c071a5e..0e925a6 100644
+index c071a5e16c7b63dc63d2f68385f790318fbed8bc..0e925a6106197351d024bcd6dbe5d631d0241d09 100644
 --- a/android/src/main/java/com/margelo/nitro/splashmotion/HybridSplashMotion.kt
 +++ b/android/src/main/java/com/margelo/nitro/splashmotion/HybridSplashMotion.kt
 @@ -17,5 +17,11 @@ class HybridSplashMotion : HybridSplashMotionModuleSpec() {
@@ -16,7 +16,7 @@ index c071a5e..0e925a6 100644
  }
 diff --git a/android/src/main/java/com/margelo/nitro/splashmotion/IntroLatch.kt b/android/src/main/java/com/margelo/nitro/splashmotion/IntroLatch.kt
 new file mode 100644
-index 0000000..eebe7aa
+index 0000000000000000000000000000000000000000..eebe7aa6cbf2f8b6de2a96673db1af083904e53f
 --- /dev/null
 +++ b/android/src/main/java/com/margelo/nitro/splashmotion/IntroLatch.kt
 @@ -0,0 +1,20 @@
@@ -41,7 +41,7 @@ index 0000000..eebe7aa
 +  }
 +}
 diff --git a/android/src/main/java/com/margelo/nitro/splashmotion/SplashConfig.kt b/android/src/main/java/com/margelo/nitro/splashmotion/SplashConfig.kt
-index c1e41b5..602ba20 100644
+index c1e41b506beb61a2882b0d8d0b2d580b6d148971..602ba200a77554b6b48ff2f44dc0fac78830e700 100644
 --- a/android/src/main/java/com/margelo/nitro/splashmotion/SplashConfig.kt
 +++ b/android/src/main/java/com/margelo/nitro/splashmotion/SplashConfig.kt
 @@ -10,6 +10,8 @@ internal data class SplashConfig(
@@ -62,7 +62,7 @@ index c1e41b5..602ba20 100644
      } catch (e: Exception) {
        null
 diff --git a/android/src/main/java/com/margelo/nitro/splashmotion/SplashMotionController.kt b/android/src/main/java/com/margelo/nitro/splashmotion/SplashMotionController.kt
-index 9ce48d6..cb8bd2e 100644
+index 9ce48d6547f2ecc85c7ec94c62d4b1284a661f2a..cb8bd2e28c030703a20c31914ba674b018e14f4f 100644
 --- a/android/src/main/java/com/margelo/nitro/splashmotion/SplashMotionController.kt
 +++ b/android/src/main/java/com/margelo/nitro/splashmotion/SplashMotionController.kt
 @@ -21,6 +21,8 @@ import com.margelo.nitro.splashmotion.players.LottieSplashPlayer
@@ -291,7 +291,7 @@ index 9ce48d6..cb8bd2e 100644
        it.width = (widthPx * scale).toInt()
        it.height = (heightPx * scale).toInt()
 diff --git a/android/src/main/java/com/margelo/nitro/splashmotion/SplashPlayer.kt b/android/src/main/java/com/margelo/nitro/splashmotion/SplashPlayer.kt
-index bf4aea7..b6370d7 100644
+index bf4aea75458eb06aa43e7332dd13809b0d7d0bdd..b6370d7758518588ce883e84172682c0b02ab417 100644
 --- a/android/src/main/java/com/margelo/nitro/splashmotion/SplashPlayer.kt
 +++ b/android/src/main/java/com/margelo/nitro/splashmotion/SplashPlayer.kt
 @@ -6,9 +6,9 @@ import android.view.View
@@ -307,7 +307,7 @@ index bf4aea7..b6370d7 100644
    fun remainingLoopMs(): Long
    /** Plays the outro marker. Returns `false` if this animation has no such marker. */
 diff --git a/android/src/main/java/com/margelo/nitro/splashmotion/players/LottieSplashPlayer.kt b/android/src/main/java/com/margelo/nitro/splashmotion/players/LottieSplashPlayer.kt
-index bc9a02f..544faeb 100644
+index bc9a02fd8c4ac4505af1f1db7ca9d487f4252e84..544faeb99740e5bf341ad1bda4d4f730d66f119a 100644
 --- a/android/src/main/java/com/margelo/nitro/splashmotion/players/LottieSplashPlayer.kt
 +++ b/android/src/main/java/com/margelo/nitro/splashmotion/players/LottieSplashPlayer.kt
 @@ -21,9 +21,12 @@ internal class LottieSplashPlayer(context: Context) : SplashPlayer {
@@ -366,18 +366,32 @@ index bc9a02f..544faeb 100644
  
    override fun remainingLoopMs(): Long {
 diff --git a/cli/core.js b/cli/core.js
-index 8488510..90c5adf 100644
+index 8488510fba00dcbcfe6e8b13fb66440de4245926..3d69af6dda1c9260d5655469fe0594fbc9a087ff 100644
 --- a/cli/core.js
 +++ b/cli/core.js
-@@ -245,6 +245,7 @@ function resolveOptions(projectRoot, options) {
+@@ -236,6 +236,13 @@ function resolveOptions(projectRoot, options) {
+     );
+   }
+ 
++  const fit = options.fit === undefined ? 'contain' : options.fit;
++  if (fit !== 'contain' && fit !== 'cover') {
++    throw new Error(
++      `${LOG} Invalid fit "${options.fit}". Use "contain" or "cover".`
++    );
++  }
++
+   return {
+     source,
+     data,
+@@ -245,6 +252,7 @@ function resolveOptions(projectRoot, options) {
      still,
      loop: options.loop !== false,
      loopMarker: options.loopMarker || null,
-+    fit: options.fit === 'cover' ? 'cover' : 'contain',
++    fit,
    };
  }
  
-@@ -256,6 +257,7 @@ function runtimeConfig(o, file) {
+@@ -256,6 +264,7 @@ function runtimeConfig(o, file) {
      background: o.background.hex,
      loop: o.loop,
      loopMarker: o.loopMarker,
@@ -386,7 +400,7 @@ index 8488510..90c5adf 100644
  }
  
 diff --git a/ios/HybridSplashMotion.swift b/ios/HybridSplashMotion.swift
-index 35c24ea..fec3f91 100644
+index 35c24eac6e8915d8941c5391f5d5b319e86825ee..fec3f91bd04ad008a80183d89b775a269448d2c7 100644
 --- a/ios/HybridSplashMotion.swift
 +++ b/ios/HybridSplashMotion.swift
 @@ -15,6 +15,12 @@ class HybridSplashMotion: HybridSplashMotionModuleSpec {
@@ -404,7 +418,7 @@ index 35c24ea..fec3f91 100644
    }
 diff --git a/ios/IntroLatch.swift b/ios/IntroLatch.swift
 new file mode 100644
-index 0000000..6a3c429
+index 0000000000000000000000000000000000000000..6a3c429767831478085e5536c611abf8d04a77c4
 --- /dev/null
 +++ b/ios/IntroLatch.swift
 @@ -0,0 +1,19 @@
@@ -428,7 +442,7 @@ index 0000000..6a3c429
 +  }
 +}
 diff --git a/ios/LottieSplashPlayer.swift b/ios/LottieSplashPlayer.swift
-index 2c16d08..6cb15ce 100644
+index 2c16d0814f1941b173e679a82df24de6ed137d86..6cb15cec0d9e3b18097b1f86f72de913904f70c8 100644
 --- a/ios/LottieSplashPlayer.swift
 +++ b/ios/LottieSplashPlayer.swift
 @@ -32,12 +32,25 @@ final class LottieSplashPlayer: SplashPlayer {
@@ -462,7 +476,7 @@ index 2c16d08..6cb15ce 100644
    }
  
 diff --git a/ios/SplashMotionConfig.swift b/ios/SplashMotionConfig.swift
-index 666fa23..61480b2 100644
+index 666fa232e0ac07b4090ec24fccb73a93895b260a..61480b2152ac88ae16005f30177d17aed9affc31 100644
 --- a/ios/SplashMotionConfig.swift
 +++ b/ios/SplashMotionConfig.swift
 @@ -8,6 +8,10 @@ struct SplashMotionConfig: Decodable {
@@ -477,7 +491,7 @@ index 666fa23..61480b2 100644
    static func load() -> SplashMotionConfig? {
      guard let asset = NSDataAsset(name: "SplashMotionConfig") else { return nil }
 diff --git a/ios/SplashMotionController.swift b/ios/SplashMotionController.swift
-index 9665941..3e9231f 100644
+index 96659418c0ce35044a43ff36d7100eabb0d77989..3e9231febf7e39c0eb04a65d1faceee92b60dab5 100644
 --- a/ios/SplashMotionController.swift
 +++ b/ios/SplashMotionController.swift
 @@ -6,17 +6,33 @@ final class SplashMotionController {
@@ -650,7 +664,7 @@ index 9665941..3e9231f 100644
      let callbacks = pending
      pending.removeAll()
 diff --git a/ios/SplashPlayer.swift b/ios/SplashPlayer.swift
-index aee4f71..0159fe3 100644
+index aee4f71eb8c9b2dee403a7706c539bf925887778..0159fe313d6bcbb07129bd4a7e337e00de58bc3c 100644
 --- a/ios/SplashPlayer.swift
 +++ b/ios/SplashPlayer.swift
 @@ -4,7 +4,7 @@ import UIKit
@@ -663,7 +677,7 @@ index aee4f71..0159fe3 100644
    func remainingLoopTime() -> TimeInterval
    /// Plays the outro marker. Returns `false` if this animation has no such marker.
 diff --git a/lib/module/index.js b/lib/module/index.js
-index 37c20a7..0dd3f01 100644
+index 37c20a77ef8772458a28af48ab770d5c2214d873..0dd3f012e488b9a1a2e37c346784840809cabdb9 100644
 --- a/lib/module/index.js
 +++ b/lib/module/index.js
 @@ -16,6 +16,10 @@ function hide(options = {}) {
@@ -691,7 +705,7 @@ index 37c20a7..0dd3f01 100644
  //# sourceMappingURL=index.js.map
 \ No newline at end of file
 diff --git a/lib/module/native.web.js b/lib/module/native.web.js
-index 5f9110a..3ce51f5 100644
+index 5f9110a0fa3f881b879e68e0ca374396cdfec076..3ce51f581c4c2a0ba9f75f924c8f1d94306623b8 100644
 --- a/lib/module/native.web.js
 +++ b/lib/module/native.web.js
 @@ -2,6 +2,7 @@
@@ -703,7 +717,7 @@ index 5f9110a..3ce51f5 100644
    isVisible: () => false
  };
 diff --git a/lib/typescript/src/SplashMotion.nitro.d.ts b/lib/typescript/src/SplashMotion.nitro.d.ts
-index a0c3fe3..28b36c8 100644
+index a0c3fe33a66bca3cb4e7a9d47dcdeddc262e45b2..28b36c8b957117114a5719ad6c29a685ea817ba4 100644
 --- a/lib/typescript/src/SplashMotion.nitro.d.ts
 +++ b/lib/typescript/src/SplashMotion.nitro.d.ts
 @@ -17,6 +17,7 @@ export interface SplashMotionModule extends HybridObject<{
@@ -715,7 +729,7 @@ index a0c3fe3..28b36c8 100644
      isVisible(): boolean;
  }
 diff --git a/lib/typescript/src/index.d.ts b/lib/typescript/src/index.d.ts
-index f9679d5..07bf9bc 100644
+index f9679d5be44213568df49be4e3db8127ae694ee7..07bf9bceb5f36fa3ee5b1ae109522565a7f8f819 100644
 --- a/lib/typescript/src/index.d.ts
 +++ b/lib/typescript/src/index.d.ts
 @@ -12,6 +12,7 @@ export type HideOptions = HideConfig;
@@ -738,7 +752,7 @@ index f9679d5..07bf9bc 100644
  //# sourceMappingURL=index.d.ts.map
 \ No newline at end of file
 diff --git a/lib/typescript/src/native.web.d.ts b/lib/typescript/src/native.web.d.ts
-index 4e730b1..f55c8a2 100644
+index 4e730b1e85e998e1e3e0574f25b8d639b657ad82..f55c8a2f13e234a4744c25dabe01080589e85d8b 100644
 --- a/lib/typescript/src/native.web.d.ts
 +++ b/lib/typescript/src/native.web.d.ts
 @@ -1,5 +1,6 @@
@@ -750,13 +764,13 @@ index 4e730b1..f55c8a2 100644
  };
 diff --git a/nitrogen/generated/.gitattributes b/nitrogen/generated/.gitattributes
 new file mode 100644
-index 0000000..fb7a0d5
+index 0000000000000000000000000000000000000000..fb7a0d5a3f6ce52605cdfee6a543ecc415f40798
 --- /dev/null
 +++ b/nitrogen/generated/.gitattributes
 @@ -0,0 +1 @@
 +** linguist-generated=true
 diff --git a/nitrogen/generated/android/c++/JHideConfig.hpp b/nitrogen/generated/android/c++/JHideConfig.hpp
-index 3a49ae9..877c987 100644
+index 3a49ae9a1a465570fabb53e348646f239a0333b5..877c987f26ac8c355f31ef17c10fb435a57a9188 100644
 --- a/nitrogen/generated/android/c++/JHideConfig.hpp
 +++ b/nitrogen/generated/android/c++/JHideConfig.hpp
 @@ -1,7 +1,7 @@
@@ -769,7 +783,7 @@ index 3a49ae9..877c987 100644
  ///
  
 diff --git a/nitrogen/generated/android/c++/JHybridSplashMotionModuleSpec.cpp b/nitrogen/generated/android/c++/JHybridSplashMotionModuleSpec.cpp
-index f113380..eea672f 100644
+index f113380a6afff82ad4dfd7d5ab28f946e560b004..eea672f1edd19c2f17e2772dc803bf6db3935e9f 100644
 --- a/nitrogen/generated/android/c++/JHybridSplashMotionModuleSpec.cpp
 +++ b/nitrogen/generated/android/c++/JHybridSplashMotionModuleSpec.cpp
 @@ -1,7 +1,7 @@
@@ -805,7 +819,7 @@ index f113380..eea672f 100644
      static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<JPromise::javaobject>(jni::alias_ref<JHideConfig> /* config */)>("hide");
      auto __result = method(_javaPart, JHideConfig::fromCpp(config));
 diff --git a/nitrogen/generated/android/c++/JHybridSplashMotionModuleSpec.hpp b/nitrogen/generated/android/c++/JHybridSplashMotionModuleSpec.hpp
-index 5955311..54fe937 100644
+index 5955311c21117aae5ffa512f7aea4995c606d6c5..54fe937c7f8c624e87a8a2cad8f8a64e45780a50 100644
 --- a/nitrogen/generated/android/c++/JHybridSplashMotionModuleSpec.hpp
 +++ b/nitrogen/generated/android/c++/JHybridSplashMotionModuleSpec.hpp
 @@ -1,7 +1,7 @@
@@ -826,7 +840,7 @@ index 5955311..54fe937 100644
      bool isVisible() override;
  
 diff --git a/nitrogen/generated/android/kotlin/com/margelo/nitro/splashmotion/HideConfig.kt b/nitrogen/generated/android/kotlin/com/margelo/nitro/splashmotion/HideConfig.kt
-index e2fd305..0e57e21 100644
+index e2fd30593ed50e9c692c09bcfa7ce910b82e5c24..0e57e2126f7318ee1eb79cd944b1aa9fe336ff15 100644
 --- a/nitrogen/generated/android/kotlin/com/margelo/nitro/splashmotion/HideConfig.kt
 +++ b/nitrogen/generated/android/kotlin/com/margelo/nitro/splashmotion/HideConfig.kt
 @@ -1,7 +1,7 @@
@@ -839,7 +853,7 @@ index e2fd305..0e57e21 100644
  ///
  
 diff --git a/nitrogen/generated/android/kotlin/com/margelo/nitro/splashmotion/HybridSplashMotionModuleSpec.kt b/nitrogen/generated/android/kotlin/com/margelo/nitro/splashmotion/HybridSplashMotionModuleSpec.kt
-index c9a0666..d1d220c 100644
+index c9a066654a0e0c47df6cf6551efe33d69ee1d659..d1d220c493fd2e1e1b45b295724c6b862e186125 100644
 --- a/nitrogen/generated/android/kotlin/com/margelo/nitro/splashmotion/HybridSplashMotionModuleSpec.kt
 +++ b/nitrogen/generated/android/kotlin/com/margelo/nitro/splashmotion/HybridSplashMotionModuleSpec.kt
 @@ -1,7 +1,7 @@
@@ -863,7 +877,7 @@ index c9a0666..d1d220c 100644
    @Keep
    abstract fun hide(config: HideConfig): Promise<Unit>
 diff --git a/nitrogen/generated/android/kotlin/com/margelo/nitro/splashmotion/splashmotionOnLoad.kt b/nitrogen/generated/android/kotlin/com/margelo/nitro/splashmotion/splashmotionOnLoad.kt
-index 17a5ac9..d8cda64 100644
+index 17a5ac97fef4d140f76326208f62bd43118916ab..d8cda6421e12cca5211642a229500f42746d4152 100644
 --- a/nitrogen/generated/android/kotlin/com/margelo/nitro/splashmotion/splashmotionOnLoad.kt
 +++ b/nitrogen/generated/android/kotlin/com/margelo/nitro/splashmotion/splashmotionOnLoad.kt
 @@ -1,7 +1,7 @@
@@ -876,7 +890,7 @@ index 17a5ac9..d8cda64 100644
  ///
  
 diff --git a/nitrogen/generated/android/splashmotion+autolinking.cmake b/nitrogen/generated/android/splashmotion+autolinking.cmake
-index 3076c6e..d730835 100644
+index 3076c6e4718502efa441685900a960efcebe49cb..d7308356b1965cd90454eb6230658dfd037e6956 100644
 --- a/nitrogen/generated/android/splashmotion+autolinking.cmake
 +++ b/nitrogen/generated/android/splashmotion+autolinking.cmake
 @@ -1,7 +1,7 @@
@@ -889,7 +903,7 @@ index 3076c6e..d730835 100644
  #
  
 diff --git a/nitrogen/generated/android/splashmotion+autolinking.gradle b/nitrogen/generated/android/splashmotion+autolinking.gradle
-index 2306875..ab4fd78 100644
+index 23068756ca3d0f606c6c8e42c10f5a0360282224..ab4fd78a75fd5414c7e933e68050c0e7f09d010f 100644
 --- a/nitrogen/generated/android/splashmotion+autolinking.gradle
 +++ b/nitrogen/generated/android/splashmotion+autolinking.gradle
 @@ -1,7 +1,7 @@
@@ -902,7 +916,7 @@ index 2306875..ab4fd78 100644
  ///
  
 diff --git a/nitrogen/generated/android/splashmotionOnLoad.cpp b/nitrogen/generated/android/splashmotionOnLoad.cpp
-index 44a286a..d9a06ff 100644
+index 44a286a3bbcc97e3e61620f8a0c6c6195d0be601..d9a06ff7320d95392be9301db3f2e560102ab488 100644
 --- a/nitrogen/generated/android/splashmotionOnLoad.cpp
 +++ b/nitrogen/generated/android/splashmotionOnLoad.cpp
 @@ -1,7 +1,7 @@
@@ -915,7 +929,7 @@ index 44a286a..d9a06ff 100644
  ///
  
 diff --git a/nitrogen/generated/android/splashmotionOnLoad.hpp b/nitrogen/generated/android/splashmotionOnLoad.hpp
-index 6759a7e..60d3874 100644
+index 6759a7e30a50a47a09179adfaf9e7297eb5082b0..60d387435145c9d384c5470943b673e7700c6bff 100644
 --- a/nitrogen/generated/android/splashmotionOnLoad.hpp
 +++ b/nitrogen/generated/android/splashmotionOnLoad.hpp
 @@ -1,7 +1,7 @@
@@ -928,7 +942,7 @@ index 6759a7e..60d3874 100644
  ///
  
 diff --git a/nitrogen/generated/ios/RNSplashMotion+autolinking.rb b/nitrogen/generated/ios/RNSplashMotion+autolinking.rb
-index e6e208b..5094166 100644
+index e6e208b459f83184617608350f0cc734bda1b345..5094166d36763d3267ba9f5625c2bd39273299ba 100644
 --- a/nitrogen/generated/ios/RNSplashMotion+autolinking.rb
 +++ b/nitrogen/generated/ios/RNSplashMotion+autolinking.rb
 @@ -1,7 +1,7 @@
@@ -941,7 +955,7 @@ index e6e208b..5094166 100644
  #
  
 diff --git a/nitrogen/generated/ios/RNSplashMotion-Swift-Cxx-Bridge.cpp b/nitrogen/generated/ios/RNSplashMotion-Swift-Cxx-Bridge.cpp
-index cd8b4bb..114b500 100644
+index cd8b4bb6fa4c539f50400035b0707e69957fa3ac..114b5004972f8dcd36872cf674e2c9152b792f91 100644
 --- a/nitrogen/generated/ios/RNSplashMotion-Swift-Cxx-Bridge.cpp
 +++ b/nitrogen/generated/ios/RNSplashMotion-Swift-Cxx-Bridge.cpp
 @@ -1,7 +1,7 @@
@@ -986,7 +1000,7 @@ index cd8b4bb..114b500 100644
    std::shared_ptr<HybridSplashMotionModuleSpec> create_std__shared_ptr_HybridSplashMotionModuleSpec_(void* NON_NULL swiftUnsafePointer) noexcept {
      RNSplashMotion::HybridSplashMotionModuleSpec_cxx swiftPart = RNSplashMotion::HybridSplashMotionModuleSpec_cxx::fromUnsafe(swiftUnsafePointer);
 diff --git a/nitrogen/generated/ios/RNSplashMotion-Swift-Cxx-Bridge.hpp b/nitrogen/generated/ios/RNSplashMotion-Swift-Cxx-Bridge.hpp
-index f2477c3..b902066 100644
+index f2477c39394859422bfcba1a039ee312cb8a43db..b902066be97b7fd7094041592c114d8d1f4da75d 100644
 --- a/nitrogen/generated/ios/RNSplashMotion-Swift-Cxx-Bridge.hpp
 +++ b/nitrogen/generated/ios/RNSplashMotion-Swift-Cxx-Bridge.hpp
 @@ -1,7 +1,7 @@
@@ -1114,7 +1128,7 @@ index f2477c3..b902066 100644
    using Result_std__shared_ptr_Promise_void___ = Result<std::shared_ptr<Promise<void>>>;
    inline Result_std__shared_ptr_Promise_void___ create_Result_std__shared_ptr_Promise_void___(const std::shared_ptr<Promise<void>>& value) noexcept {
 diff --git a/nitrogen/generated/ios/RNSplashMotion-Swift-Cxx-Umbrella.hpp b/nitrogen/generated/ios/RNSplashMotion-Swift-Cxx-Umbrella.hpp
-index 8598543..1ec1f89 100644
+index 8598543190aa4ef34137451a4e8c4351fe046433..1ec1f897646936d9a8476987c5b729810f1d8cf0 100644
 --- a/nitrogen/generated/ios/RNSplashMotion-Swift-Cxx-Umbrella.hpp
 +++ b/nitrogen/generated/ios/RNSplashMotion-Swift-Cxx-Umbrella.hpp
 @@ -1,7 +1,7 @@
@@ -1127,7 +1141,7 @@ index 8598543..1ec1f89 100644
  ///
  
 diff --git a/nitrogen/generated/ios/RNSplashMotionAutolinking.mm b/nitrogen/generated/ios/RNSplashMotionAutolinking.mm
-index 730bc95..78d6b4f 100644
+index 730bc95c52c8d91b92e0979bc514a62147ea1351..78d6b4faef263d99f0e38f04988c3ed6c240ce9e 100644
 --- a/nitrogen/generated/ios/RNSplashMotionAutolinking.mm
 +++ b/nitrogen/generated/ios/RNSplashMotionAutolinking.mm
 @@ -1,7 +1,7 @@
@@ -1140,7 +1154,7 @@ index 730bc95..78d6b4f 100644
  ///
  
 diff --git a/nitrogen/generated/ios/RNSplashMotionAutolinking.swift b/nitrogen/generated/ios/RNSplashMotionAutolinking.swift
-index ed66923..870ec6f 100644
+index ed669235f9ac340ff4e6eb071e7b625104f0e9ab..870ec6f6aca45775ae4ac92de451949a44c7ea2c 100644
 --- a/nitrogen/generated/ios/RNSplashMotionAutolinking.swift
 +++ b/nitrogen/generated/ios/RNSplashMotionAutolinking.swift
 @@ -1,7 +1,7 @@
@@ -1162,7 +1176,7 @@ index ed66923..870ec6f 100644
 -  }
  }
 diff --git a/nitrogen/generated/ios/c++/HybridSplashMotionModuleSpecSwift.cpp b/nitrogen/generated/ios/c++/HybridSplashMotionModuleSpecSwift.cpp
-index 47cc538..8ac98ac 100644
+index 47cc538cae0bb80fd66109d9c4bb179a39359014..8ac98ace47d704413c5968ecb92cff1048efc7bf 100644
 --- a/nitrogen/generated/ios/c++/HybridSplashMotionModuleSpecSwift.cpp
 +++ b/nitrogen/generated/ios/c++/HybridSplashMotionModuleSpecSwift.cpp
 @@ -1,7 +1,7 @@
@@ -1175,7 +1189,7 @@ index 47cc538..8ac98ac 100644
  ///
  
 diff --git a/nitrogen/generated/ios/c++/HybridSplashMotionModuleSpecSwift.hpp b/nitrogen/generated/ios/c++/HybridSplashMotionModuleSpecSwift.hpp
-index 023a018..c065c77 100644
+index 023a0186edd60a675ed43489e8dfe0abb5eef2f3..c065c77c7cee9a8b819787406b49daf1344d2580 100644
 --- a/nitrogen/generated/ios/c++/HybridSplashMotionModuleSpecSwift.hpp
 +++ b/nitrogen/generated/ios/c++/HybridSplashMotionModuleSpecSwift.hpp
 @@ -1,7 +1,7 @@
@@ -1203,7 +1217,7 @@ index 023a018..c065c77 100644
        auto __result = _swiftPart.hide(std::forward<decltype(config)>(config));
        if (__result.hasError()) [[unlikely]] {
 diff --git a/nitrogen/generated/ios/swift/Func_void.swift b/nitrogen/generated/ios/swift/Func_void.swift
-index a3cead4..22a86a9 100644
+index a3cead4e2464f5eb2e613a1418b6121774d48f86..22a86a9031bbec0b894a289c00ae37ce33b58406 100644
 --- a/nitrogen/generated/ios/swift/Func_void.swift
 +++ b/nitrogen/generated/ios/swift/Func_void.swift
 @@ -1,7 +1,7 @@
@@ -1217,7 +1231,7 @@ index a3cead4..22a86a9 100644
  
 diff --git a/nitrogen/generated/ios/swift/Func_void_bool.swift b/nitrogen/generated/ios/swift/Func_void_bool.swift
 new file mode 100644
-index 0000000..b317ab1
+index 0000000000000000000000000000000000000000..b317ab1002a2e523d5329fcc5c2122b91af43c22
 --- /dev/null
 +++ b/nitrogen/generated/ios/swift/Func_void_bool.swift
 @@ -0,0 +1,46 @@
@@ -1268,7 +1282,7 @@ index 0000000..b317ab1
 +  }
 +}
 diff --git a/nitrogen/generated/ios/swift/Func_void_std__exception_ptr.swift b/nitrogen/generated/ios/swift/Func_void_std__exception_ptr.swift
-index 094144b..a491c02 100644
+index 094144b4a9796dcd2aad6a9da4cd776d22013355..a491c02ce9f8096a588e3a04ebaf39d2b5621eca 100644
 --- a/nitrogen/generated/ios/swift/Func_void_std__exception_ptr.swift
 +++ b/nitrogen/generated/ios/swift/Func_void_std__exception_ptr.swift
 @@ -1,7 +1,7 @@
@@ -1281,7 +1295,7 @@ index 094144b..a491c02 100644
  ///
  
 diff --git a/nitrogen/generated/ios/swift/HideConfig.swift b/nitrogen/generated/ios/swift/HideConfig.swift
-index ddad8de..a402f25 100644
+index ddad8ded7e4e6694d201ff05eb07fa2ebd679950..a402f25b0a0302d76e8c44585bcad04137284b03 100644
 --- a/nitrogen/generated/ios/swift/HideConfig.swift
 +++ b/nitrogen/generated/ios/swift/HideConfig.swift
 @@ -1,7 +1,7 @@
@@ -1294,7 +1308,7 @@ index ddad8de..a402f25 100644
  ///
  
 diff --git a/nitrogen/generated/ios/swift/HybridSplashMotionModuleSpec.swift b/nitrogen/generated/ios/swift/HybridSplashMotionModuleSpec.swift
-index da8070c..e7c9762 100644
+index da8070c40137fff987580127f01a1c87682f8060..e7c976220472d1064cade2577633b7988a114895 100644
 --- a/nitrogen/generated/ios/swift/HybridSplashMotionModuleSpec.swift
 +++ b/nitrogen/generated/ios/swift/HybridSplashMotionModuleSpec.swift
 @@ -1,7 +1,7 @@
@@ -1315,7 +1329,7 @@ index da8070c..e7c9762 100644
    func isVisible() throws -> Bool
  }
 diff --git a/nitrogen/generated/ios/swift/HybridSplashMotionModuleSpec_cxx.swift b/nitrogen/generated/ios/swift/HybridSplashMotionModuleSpec_cxx.swift
-index 1071611..952963d 100644
+index 10716118db367043f82c019347752f76b67f4445..952963d8e1803ad128d0fb8f24fe54bd489cc8cd 100644
 --- a/nitrogen/generated/ios/swift/HybridSplashMotionModuleSpec_cxx.swift
 +++ b/nitrogen/generated/ios/swift/HybridSplashMotionModuleSpec_cxx.swift
 @@ -1,7 +1,7 @@
@@ -1372,7 +1386,7 @@ index 1071611..952963d 100644
    public final func hide(config: HideConfig) -> bridge.Result_std__shared_ptr_Promise_void___ {
      do {
 diff --git a/nitrogen/generated/shared/c++/HideConfig.hpp b/nitrogen/generated/shared/c++/HideConfig.hpp
-index dc97920..dc955ac 100644
+index dc979207a70ed275747cd9a8c72b974036e8058d..dc955ac2d36d329830fba237c33f02e0e132ea72 100644
 --- a/nitrogen/generated/shared/c++/HideConfig.hpp
 +++ b/nitrogen/generated/shared/c++/HideConfig.hpp
 @@ -1,7 +1,7 @@
@@ -1385,7 +1399,7 @@ index dc97920..dc955ac 100644
  ///
  
 diff --git a/nitrogen/generated/shared/c++/HybridSplashMotionModuleSpec.cpp b/nitrogen/generated/shared/c++/HybridSplashMotionModuleSpec.cpp
-index 706a0b7..ee21ad2 100644
+index 706a0b73a5d97643819c57c9bc6fcd9cd289fc4a..ee21ad2146ce4e23c2d6b8da3a575f493a925554 100644
 --- a/nitrogen/generated/shared/c++/HybridSplashMotionModuleSpec.cpp
 +++ b/nitrogen/generated/shared/c++/HybridSplashMotionModuleSpec.cpp
 @@ -1,7 +1,7 @@
@@ -1406,7 +1420,7 @@ index 706a0b7..ee21ad2 100644
        prototype.registerHybridMethod("isVisible", &HybridSplashMotionModuleSpec::isVisible);
      });
 diff --git a/nitrogen/generated/shared/c++/HybridSplashMotionModuleSpec.hpp b/nitrogen/generated/shared/c++/HybridSplashMotionModuleSpec.hpp
-index cb0fd8a..ca71fc6 100644
+index cb0fd8a2a78f40417d8e786fcaf1c0d72cdcee0a..ca71fc6fe56f35c8678fcea5092bfebf25afd1d1 100644
 --- a/nitrogen/generated/shared/c++/HybridSplashMotionModuleSpec.hpp
 +++ b/nitrogen/generated/shared/c++/HybridSplashMotionModuleSpec.hpp
 @@ -1,7 +1,7 @@
@@ -1427,7 +1441,7 @@ index cb0fd8a..ca71fc6 100644
        virtual bool isVisible() = 0;
  
 diff --git a/src/SplashMotion.nitro.ts b/src/SplashMotion.nitro.ts
-index 563d544..a01b574 100644
+index 563d544171c3356aa76034e67a9240ca3384ff14..a01b57463f846c5b354aa5799f5cd3ad18c11d27 100644
 --- a/src/SplashMotion.nitro.ts
 +++ b/src/SplashMotion.nitro.ts
 @@ -19,6 +19,8 @@ export interface SplashMotionModule extends HybridObject<{
@@ -1440,7 +1454,7 @@ index 563d544..a01b574 100644
    isVisible(): boolean;
  }
 diff --git a/src/index.tsx b/src/index.tsx
-index 33710c4..41322b6 100644
+index 33710c450032fff4310ab829a3fb835580d6270a..41322b6c1c387097bb5246e2a34666650e3670f1 100644
 --- a/src/index.tsx
 +++ b/src/index.tsx
 @@ -18,6 +18,11 @@ function hide(options: HideOptions = {}): Promise<void> {
@@ -1466,7 +1480,7 @@ index 33710c4..41322b6 100644
 +export { hide, isVisible, waitForIntro };
  export default SplashMotion;
 diff --git a/src/native.web.ts b/src/native.web.ts
-index dd78f45..292740d 100644
+index dd78f45c56d6beb5f22c097e683f3db6fe7fe0d4..292740d7f306d1b6e1d0d25c04a9bd65e0c2f80e 100644
 --- a/src/native.web.ts
 +++ b/src/native.web.ts
 @@ -2,6 +2,7 @@ import type { HideConfig } from './SplashMotion.nitro';

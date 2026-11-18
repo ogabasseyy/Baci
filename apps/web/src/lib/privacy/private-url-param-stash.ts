@@ -15,6 +15,14 @@ const MAX_STASH_RECORDS = 30;
  */
 export const PRIVATE_PARAMS_STATE_KEY = '__baciPrivateParams';
 
+/**
+ * Marks a history entry the hook has seen WITHOUT a stash, so it can never
+ * inherit one later (e.g. Back to an earlier tokenless entry that differs from
+ * an order entry only by its fragment). A browser-created fragment entry starts
+ * unmarked, which is what lets it inherit from the entry it was created on.
+ */
+const NO_STASH_STATE_KEY = '__baciNoPrivateParams';
+
 interface StashRecord {
   pathname: string;
   publicSearch: string;
@@ -62,6 +70,12 @@ function currentHistoryState(): Record<string, unknown> {
   return typeof state === 'object' && state !== null
     ? { ...(state as Record<string, unknown>) }
     : {};
+}
+
+/** The current history state with the stash id set and the no-stash marker removed. */
+function stateWithId(id: string): Record<string, unknown> {
+  const { [NO_STASH_STATE_KEY]: _marker, ...state } = currentHistoryState();
+  return { ...state, [PRIVATE_PARAMS_STATE_KEY]: id };
 }
 
 /** The stash id carried by the current history entry, if any. */
@@ -140,7 +154,7 @@ export function stashEntriesOnCurrentEntry(
   });
   try {
     window.history.replaceState(
-      { ...currentHistoryState(), [PRIVATE_PARAMS_STATE_KEY]: id },
+      stateWithId(id),
       '',
       // Fragments are deliberately left in place: the pages using this hook do
       // not receive tokens in fragments, and auth libraries may need them
@@ -177,11 +191,25 @@ export function scrubPrivateParamsFromAddressBar(): boolean {
 // can keep it. Page memory only: a new document never inherits anything.
 let lastOwner: { id: string; href: string } | null = null;
 
-/** Records the current entry as the stash owner (or clears it if it has none). */
+/**
+ * Records the current entry as the stash owner, or clears the owner and marks
+ * the entry as stash-less when it has none.
+ */
 export function rememberPrivateParamsOwner(): void {
   if (typeof window === 'undefined') return;
   const id = currentPrivateParamsId();
   lastOwner = id === null ? null : { id, href: window.location.href };
+  if (id !== null || currentHistoryState()[NO_STASH_STATE_KEY] === true) return;
+  try {
+    const { pathname, search, hash } = window.location;
+    window.history.replaceState(
+      { ...currentHistoryState(), [NO_STASH_STATE_KEY]: true },
+      '',
+      `${pathname}${search}${hash}`
+    );
+  } catch {
+    // Unmarked entries just stay eligible to inherit; nothing else depends on it.
+  }
 }
 
 /**
@@ -198,13 +226,14 @@ export function inheritPrivateParamsForFragmentNavigation(): boolean {
   const withoutHash = (url: string) => url.split('#', 1)[0];
   const isFragmentMove =
     currentPrivateParamsId() === null &&
+    currentHistoryState()[NO_STASH_STATE_KEY] !== true &&
     href !== owner.href &&
     withoutHash(href) === withoutHash(owner.href) &&
     loadRecord(owner.id) !== undefined;
   if (!isFragmentMove) return false;
   try {
     window.history.replaceState(
-      { ...currentHistoryState(), [PRIVATE_PARAMS_STATE_KEY]: owner.id },
+      stateWithId(owner.id),
       '',
       `${window.location.pathname}${window.location.search}${window.location.hash}`
     );

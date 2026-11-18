@@ -46,6 +46,17 @@ function clickFragmentLink(url: string) {
   });
 }
 
+/** A real session-history traversal; resolves once the browser fired popstate. */
+async function traverse(direction: 'back' | 'forward') {
+  await act(async () => {
+    const popped = new Promise((resolve) =>
+      window.addEventListener('popstate', resolve, { once: true })
+    );
+    window.history[direction]();
+    await popped;
+  });
+}
+
 function notifyNext() {
   for (const listener of nav.listeners) listener();
 }
@@ -109,5 +120,55 @@ describe('bugfix: a fragment link dropped the stashed order token', () => {
     clickFragmentLink('/track-order?orderId=2#main');
 
     expect(result.current.get('token')).toBeNull();
+  });
+
+  it('keeps working when going Back and Forward between the owner entry and its fragment entry', async () => {
+    visit('/track-order?token=A');
+    const { result } = renderHook(() => usePrivateSearchParams());
+    clickFragmentLink('/track-order#main');
+    expect(result.current.get('token')).toBe('A');
+
+    await traverse('back');
+    expect(result.current.get('token')).toBe('A');
+    await traverse('forward');
+    expect(result.current.get('token')).toBe('A');
+  });
+});
+
+describe('bugfix: Back to a tokenless entry inherited the next order token', () => {
+  async function openTokenlessThenOrderThenBack() {
+    // Tokenless manual-lookup entry, with the hook mounted on it.
+    visit('/track-order#main');
+    const first = renderHook(() => usePrivateSearchParams());
+    expect(first.result.current.get('token')).toBeNull();
+
+    // Open an order link in the same tab: Next pushes a new entry, scrubbed.
+    act(() => {
+      window.history.pushState({}, '', '/track-order?token=A');
+    });
+    first.rerender();
+    expect(first.result.current.get('token')).toBe('A');
+    expect(window.location.href).not.toContain('token');
+
+    await traverse('back');
+    return first;
+  }
+
+  it('does not give the token to the earlier tokenless entry, also after a reload', async () => {
+    const first = await openTokenlessThenOrderThenBack();
+
+    expect(window.location.hash).toBe('#main');
+    expect(first.result.current.get('token')).toBeNull();
+    first.unmount();
+    const reloaded = renderHook(() => usePrivateSearchParams());
+    expect(reloaded.result.current.get('token')).toBeNull();
+  });
+
+  it('still gives the token back to its own entry when going Forward', async () => {
+    const first = await openTokenlessThenOrderThenBack();
+
+    await traverse('forward');
+
+    expect(first.result.current.get('token')).toBe('A');
   });
 });

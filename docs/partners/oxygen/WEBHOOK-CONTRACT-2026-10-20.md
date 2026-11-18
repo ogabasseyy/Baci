@@ -4,6 +4,8 @@ These are synthetic examples from the current [official Support APIs](https://ox
 
 ## Transaction callback
 
+Oxygen documents four `webhook_type` values for this payload: `split_payment`, `repayment_setup`, `loan_repayment`, and `transaction`. Older deliveries can omit the field. Each value triggers the same provider confirmation read. The three specific types have separate deduplication keys so that two different notifications can share a transaction reference. The generic and legacy forms share the original key.
+
 ```json
 {
   "phone_number": "08000000000",

@@ -29,8 +29,11 @@ it.each([
   ['split_payment', true],
   ['split_payment', false],
   ['repayment_setup', true],
+  ['repayment_setup', false],
   ['loan_repayment', true],
+  ['loan_repayment', false],
   ['transaction', true],
+  ['transaction', false],
 ] as const)('accepts %s and activates only with completed repayment setup (%s)', async (webhookType, setup) => {
   vi.stubEnv('VERCEL_ENV', 'production');
   const config = {

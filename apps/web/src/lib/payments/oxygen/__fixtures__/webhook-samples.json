@@ -6,6 +6,14 @@
     "amount_sent": "28000.00",
     "loan_request_reference": "fe448e69-9e01-47b6-a1f9-f90ab6455ea8"
   },
+  "Upfront payment callback": {
+    "webhook_type": "split_payment",
+    "phone_number": "08000000000",
+    "transaction_reference": "txn-example-001",
+    "amount_deducted": "28000.00",
+    "amount_sent": "28000.00",
+    "loan_request_reference": "fe448e69-9e01-47b6-a1f9-f90ab6455ea8"
+  },
   "Address validation callback": {
     "webhook_type": "address_status_update",
     "phone_number": "08000000000",

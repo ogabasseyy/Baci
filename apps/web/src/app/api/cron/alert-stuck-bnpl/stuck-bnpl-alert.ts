@@ -1,12 +1,4 @@
-const ngnCurrencyFormatter = new Intl.NumberFormat('en-NG', {
-  style: 'currency',
-  currency: 'NGN',
-  minimumFractionDigits: 0,
-});
-
-function formatCurrency(amount: number): string {
-  return ngnCurrencyFormatter.format(amount);
-}
+import { formatCurrency } from '@/lib/expo-push';
 
 export interface StuckBnplOrderRow {
   id: string;

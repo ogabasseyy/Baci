@@ -90,9 +90,12 @@ describe('dispatchOrderCreationNotifications', () => {
     );
   });
 
-  it('regression: does not announce an unpaid Pay for Me request as a new order', async () => {
+  it.each([
+    'payforme',
+    'PayForMe',
+  ])('does not announce an unpaid %s request', async (paymentMethod) => {
     await dispatchOrderCreationNotifications(
-      input({ paymentMethod: 'payforme', paymentStatus: 'pending' })
+      input({ paymentMethod, paymentStatus: 'pending' })
     );
 
     expect(mockNotifyNewOrder).not.toHaveBeenCalled();
@@ -195,7 +198,7 @@ describe('dispatchOrderCreationNotifications', () => {
     await dispatchOrderCreationNotifications(
       input({
         paymentMethod: 'payforme',
-        paymentStatus: 'paid',
+        paymentStatus: 'Paid',
         isWalletFullyPaid: false,
       })
     );

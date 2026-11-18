@@ -60,12 +60,13 @@ BEGIN
       USING ERRCODE = 'S1003';
   END IF;
 
-  -- EXECUTE ONLY on the 3 narrow worker RPCs (and no other function in public/private)
+  -- EXECUTE ONLY on the 4 narrow worker RPCs (and no other function in public/private)
   WITH allowed_worker_rpcs(sig) AS (
     VALUES
       ('public.ingest_quiz_edge_attempt_batch_v2(uuid,text,text,text,integer,integer,jsonb,integer,integer)'),
       ('public.record_quiz_edge_room_seal_v2(uuid,text,timestamp with time zone,text,integer,integer,text[],integer,text)'),
-      ('public.get_quiz_edge_reconciliation_status_v2(uuid)')
+      ('public.get_quiz_edge_reconciliation_status_v2(uuid)'),
+      ('public.score_quiz_edge_staged_batches_incremental_v2(uuid,integer)')
   )
   SELECT pg_catalog.count(*)::integer
   INTO v_worker_funcs
@@ -74,7 +75,7 @@ BEGIN
     'quiz_edge_batch_worker', a.sig::pg_catalog.regprocedure, 'EXECUTE'
   );
 
-  IF v_worker_funcs <> 3 THEN
+  IF v_worker_funcs <> 4 THEN
     RAISE EXCEPTION 'quiz_edge_batch_worker missing EXECUTE on one or more allowed RPCs (got %)', v_worker_funcs
       USING ERRCODE = 'S1004';
   END IF;
@@ -83,7 +84,8 @@ BEGIN
     VALUES
       ('public.ingest_quiz_edge_attempt_batch_v2(uuid,text,text,text,integer,integer,jsonb,integer,integer)'),
       ('public.record_quiz_edge_room_seal_v2(uuid,text,timestamp with time zone,text,integer,integer,text[],integer,text)'),
-      ('public.get_quiz_edge_reconciliation_status_v2(uuid)')
+      ('public.get_quiz_edge_reconciliation_status_v2(uuid)'),
+      ('public.score_quiz_edge_staged_batches_incremental_v2(uuid,integer)')
   )
   SELECT pg_catalog.count(*)::integer
   INTO v_other_funcs
@@ -105,7 +107,9 @@ BEGIN
   IF EXISTS (
     SELECT 1
     FROM pg_catalog.unnest(ARRAY[
+      'private.score_quiz_edge_batches_core_v2(uuid,integer)',
       'private.score_and_materialize_edge_quiz_event_v2(uuid,uuid)',
+      'private.backfill_quiz_edge_canonical_answers_v2(uuid,integer)',
       'private.quiz_edge_reconciliation_snapshot_v2(uuid)',
       'private.quiz_edge_event_ready_for_publication_v2(uuid)',
       'private.materialize_quiz_event_results_v2(uuid)',
@@ -125,12 +129,13 @@ BEGIN
       USING ERRCODE = 'S1005';
   END IF;
 
-  -- anon, authenticated, service_role, PUBLIC must NOT execute the 3 worker RPCs
+  -- anon, authenticated, service_role, PUBLIC must NOT execute the 4 worker RPCs
   WITH allowed_worker_rpcs(sig) AS (
     VALUES
       ('public.ingest_quiz_edge_attempt_batch_v2(uuid,text,text,text,integer,integer,jsonb,integer,integer)'),
       ('public.record_quiz_edge_room_seal_v2(uuid,text,timestamp with time zone,text,integer,integer,text[],integer,text)'),
-      ('public.get_quiz_edge_reconciliation_status_v2(uuid)')
+      ('public.get_quiz_edge_reconciliation_status_v2(uuid)'),
+      ('public.score_quiz_edge_staged_batches_incremental_v2(uuid,integer)')
   )
   SELECT pg_catalog.count(*)::integer
   INTO v_public_acl_funcs
@@ -183,9 +188,10 @@ BEGIN
       USING ERRCODE = 'S1009';
   END IF;
 
-  -- Normalized-email index exists
-  IF pg_catalog.to_regclass('public.idx_customers_merchant_quiz_normalized_email') IS NULL THEN
-    RAISE EXCEPTION 'idx_customers_merchant_quiz_normalized_email missing'
+  -- Normalized-email indexes exist (active partial + unfiltered legacy trigger index)
+  IF pg_catalog.to_regclass('public.idx_customers_merchant_quiz_normalized_email') IS NULL
+    OR pg_catalog.to_regclass('public.idx_customers_merchant_quiz_normalized_email_all') IS NULL THEN
+    RAISE EXCEPTION 'normalized-email index missing'
       USING ERRCODE = 'S1010';
   END IF;
 
@@ -195,7 +201,8 @@ BEGIN
     v_hook_def := pg_catalog.pg_get_functiondef(v_hook_proc);
     IF pg_catalog.strpos(v_hook_def, '/rpc/ingest_quiz_edge_attempt_batch_v2') = 0
       OR pg_catalog.strpos(v_hook_def, '/rpc/record_quiz_edge_room_seal_v2') = 0
-      OR pg_catalog.strpos(v_hook_def, '/rpc/get_quiz_edge_reconciliation_status_v2') = 0 THEN
+      OR pg_catalog.strpos(v_hook_def, '/rpc/get_quiz_edge_reconciliation_status_v2') = 0
+      OR pg_catalog.strpos(v_hook_def, '/rpc/score_quiz_edge_staged_batches_incremental_v2') = 0 THEN
       RAISE EXCEPTION 'PostgREST request scope hook missing quiz_edge_batch_worker allowlist'
         USING ERRCODE = 'S1011';
     END IF;
@@ -758,16 +765,38 @@ BEGIN
   IF COALESCE((v_res ->> 'manifestReconciled')::boolean, true) IS NOT FALSE THEN
     RAISE EXCEPTION 'withheld seal should not reconcile: %', v_res;
   END IF;
+
+  -- Incremental pre-scoring AS quiz_edge_batch_worker BEFORE manifestReconciled:
+  -- scores 1 batch into private.quiz_edge_scored_attempts without publishing!
+  v_res := public.score_quiz_edge_staged_batches_incremental_v2(v_event_id, 1);
+  IF COALESCE((v_res ->> 'batchesScored')::integer, -1) <> 1
+    OR COALESCE((v_res ->> 'remainingUnscoredBatches')::integer, -1) <> 1 THEN
+    RAISE EXCEPTION 'unexpected incremental pre-score result: %', v_res;
+  END IF;
 END
 $$;
 RESET ROLE;
 
--- Verify deadline jobs & publication guard triggers BLOCK while room 1 seal is withheld
+-- Verify incremental pre-score did NOT touch canonical/live tables,
+-- canonical backfill blocks pre-scoring-run, and deadline/triggers still block!
 DO $$
 DECLARE
   v_deadlines jsonb;
   v_pub timestamptz;
 BEGIN
+  IF EXISTS (SELECT 1 FROM public.quiz_attempts WHERE event_id = '88000000-0000-4000-8000-000000000401')
+    OR EXISTS (SELECT 1 FROM public.quiz_event_results_v2 WHERE event_id = '88000000-0000-4000-8000-000000000401')
+    OR EXISTS (SELECT 1 FROM public.quiz_live_standings_v2 WHERE event_id = '88000000-0000-4000-8000-000000000401') THEN
+    RAISE EXCEPTION 'incremental pre-scoring leaked into canonical or live standings tables';
+  END IF;
+
+  BEGIN
+    PERFORM private.backfill_quiz_edge_canonical_answers_v2('88000000-0000-4000-8000-000000000401', 10);
+    RAISE EXCEPTION 'canonical backfill must block before scoring run completes';
+  EXCEPTION WHEN SQLSTATE 'QZ068' THEN
+    NULL;
+  END;
+
   BEGIN
     PERFORM private.score_and_materialize_edge_quiz_event_v2('88000000-0000-4000-8000-000000000401');
     RAISE EXCEPTION 'scoring must fail while room seal is withheld';
@@ -843,8 +872,18 @@ DECLARE
   v_award_customer uuid;
   v_live_standings_count integer;
   v_carol_submitted_at timestamptz;
+  v_bf1 jsonb;
+  v_bf2 jsonb;
+  v_bf3 jsonb;
+  v_q_count integer;
+  v_a_count integer;
 BEGIN
   v_run1 := private.score_and_materialize_edge_quiz_event_v2(v_event_id);
+  IF COALESCE((v_run1 ->> 'tailBatchesScored')::integer, -1) <> 1
+    OR COALESCE((v_run1 ->> 'questionsWritten')::integer, -1) <> 0
+    OR COALESCE((v_run1 ->> 'answersWritten')::integer, -1) <> 0 THEN
+    RAISE EXCEPTION 'expected 1 tail batch scored and deferred answer backfill, got %', v_run1;
+  END IF;
 
   -- Attach block signal flag to BlockedFive's attempt and re-score (simulating moderation before publication)
   INSERT INTO public.quiz_attempt_signal_flags (attempt_id, signal_key, severity)
@@ -895,6 +934,37 @@ BEGIN
   FROM public.quiz_awards WHERE event_id = v_event_id;
   IF v_awards_count <> 1 OR v_award_customer <> '88000000-0000-4000-8000-000000000313' THEN
     RAISE EXCEPTION 'expected 1 award for Bob (313), got count=%, customer=%', v_awards_count, v_award_customer;
+  END IF;
+
+  -- Post-publish idempotent canonical question/answer backfill in chunks of 2 attempts
+  v_bf1 := private.backfill_quiz_edge_canonical_answers_v2(v_event_id, 2);
+  v_bf2 := private.backfill_quiz_edge_canonical_answers_v2(v_event_id, 2);
+  v_bf3 := private.backfill_quiz_edge_canonical_answers_v2(v_event_id, 2);
+  IF COALESCE((v_bf1 ->> 'attemptsBackfilled')::integer, -1) <> 2
+    OR COALESCE((v_bf1 ->> 'remainingAttempts')::integer, -1) <> 2
+    OR COALESCE((v_bf2 ->> 'attemptsBackfilled')::integer, -1) <> 2
+    OR COALESCE((v_bf2 ->> 'remainingAttempts')::integer, -1) <> 0
+    OR COALESCE((v_bf3 ->> 'attemptsBackfilled')::integer, -1) <> 0
+    OR COALESCE((v_bf3 ->> 'questionsWritten')::integer, -1) <> 0
+    OR COALESCE((v_bf3 ->> 'answersWritten')::integer, -1) <> 0 THEN
+    RAISE EXCEPTION 'canonical answer backfill chunking/idempotency mismatch: %, %, %', v_bf1, v_bf2, v_bf3;
+  END IF;
+
+  SELECT pg_catalog.count(*)::integer
+  INTO v_q_count
+  FROM public.quiz_attempt_questions AS q
+  JOIN public.quiz_attempts AS a ON a.id = q.attempt_id
+  WHERE a.event_id = v_event_id;
+
+  SELECT pg_catalog.count(*)::integer
+  INTO v_a_count
+  FROM public.quiz_attempt_answers AS ans
+  JOIN public.quiz_attempt_questions AS q ON q.id = ans.attempt_question_id
+  JOIN public.quiz_attempts AS a ON a.id = q.attempt_id
+  WHERE a.event_id = v_event_id;
+
+  IF v_q_count <> 7 OR v_a_count <> 7 THEN
+    RAISE EXCEPTION 'expected 7 backfilled canonical questions & answers, got q=%, a=%', v_q_count, v_a_count;
   END IF;
 END
 $$;

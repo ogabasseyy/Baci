@@ -50,6 +50,11 @@ CREATE INDEX IF NOT EXISTS idx_customers_merchant_quiz_normalized_email
   ON public.customers (merchant_id, public.quiz_normalize_email(email))
   WHERE deleted_at IS NULL;
 
+-- Unfiltered index so legacy quiz_enforce_identity_attempt_cap (which omits
+-- deleted_at IS NULL) also uses an Index Scan instead of a Seq Scan.
+CREATE INDEX IF NOT EXISTS idx_customers_merchant_quiz_normalized_email_all
+  ON public.customers (merchant_id, public.quiz_normalize_email(email));
+
 -- ---------------------------------------------------------------------------
 -- 2. Admissions table & single atomic check-in RPC (no quiz_attempts insert)
 -- ---------------------------------------------------------------------------
@@ -703,12 +708,21 @@ CREATE TABLE IF NOT EXISTS private.quiz_edge_attempt_batches (
   attempt_count integer NOT NULL CHECK (attempt_count >= 0),
   answer_count integer NOT NULL CHECK (answer_count >= 0),
   received_at timestamptz NOT NULL DEFAULT pg_catalog.clock_timestamp(),
+  scored_at timestamptz,
+  scored_attempt_count integer CHECK (scored_attempt_count IS NULL OR scored_attempt_count >= 0),
   created_at timestamptz NOT NULL DEFAULT pg_catalog.clock_timestamp(),
   UNIQUE (event_id, room_id, batch_id, part_index)
 );
 
+ALTER TABLE private.quiz_edge_attempt_batches
+  ADD COLUMN IF NOT EXISTS scored_at timestamptz,
+  ADD COLUMN IF NOT EXISTS scored_attempt_count integer;
+
 CREATE INDEX IF NOT EXISTS idx_quiz_edge_attempt_batches_event_room
   ON private.quiz_edge_attempt_batches (event_id, room_id);
+CREATE INDEX IF NOT EXISTS idx_quiz_edge_attempt_batches_unscored
+  ON private.quiz_edge_attempt_batches (event_id, received_at, id)
+  WHERE scored_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS private.quiz_edge_attempt_staging (
   event_id uuid NOT NULL REFERENCES public.quiz_events(id) ON DELETE CASCADE,
@@ -739,6 +753,8 @@ CREATE TABLE IF NOT EXISTS private.quiz_edge_attempt_staging (
 
 CREATE INDEX IF NOT EXISTS idx_quiz_edge_attempt_staging_room
   ON private.quiz_edge_attempt_staging (event_id, room_id);
+CREATE INDEX IF NOT EXISTS idx_quiz_edge_attempt_staging_event_room_batch
+  ON private.quiz_edge_attempt_staging (event_id, room_id, batch_id);
 CREATE INDEX IF NOT EXISTS idx_quiz_edge_attempt_staging_admission
   ON private.quiz_edge_attempt_staging (admission_id)
   WHERE admission_id IS NOT NULL;
@@ -784,16 +800,48 @@ CREATE TABLE IF NOT EXISTS private.quiz_edge_scoring_runs (
 CREATE INDEX IF NOT EXISTS idx_quiz_edge_scoring_runs_event_status
   ON private.quiz_edge_scoring_runs (event_id, status, started_at DESC);
 
+CREATE TABLE IF NOT EXISTS private.quiz_edge_scored_attempts (
+  event_id uuid NOT NULL REFERENCES public.quiz_events(id) ON DELETE CASCADE,
+  attempt_id uuid NOT NULL,
+  room_id text NOT NULL,
+  batch_id text NOT NULL,
+  customer_id uuid NOT NULL REFERENCES public.customers(id) ON DELETE CASCADE,
+  attempt_number integer NOT NULL,
+  integrity_tier text NOT NULL,
+  leaderboard_username text,
+  rules_version text,
+  terms_accepted_at timestamptz,
+  app_version text,
+  platform text,
+  start_request_id uuid,
+  started_at timestamptz NOT NULL,
+  submitted_at timestamptz,
+  close_reason text NOT NULL,
+  score integer NOT NULL CHECK (score >= 0),
+  scored_status text NOT NULL,
+  canonical_answers_backfilled_at timestamptz,
+  scored_at timestamptz NOT NULL DEFAULT pg_catalog.clock_timestamp(),
+  PRIMARY KEY (event_id, attempt_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_quiz_edge_scored_attempts_event_batch
+  ON private.quiz_edge_scored_attempts (event_id, room_id, batch_id);
+CREATE INDEX IF NOT EXISTS idx_quiz_edge_scored_attempts_backfill
+  ON private.quiz_edge_scored_attempts (event_id, attempt_id)
+  WHERE canonical_answers_backfilled_at IS NULL;
+
 ALTER TABLE private.quiz_edge_attempt_batches ENABLE ROW LEVEL SECURITY;
 ALTER TABLE private.quiz_edge_attempt_staging ENABLE ROW LEVEL SECURITY;
 ALTER TABLE private.quiz_edge_room_seals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE private.quiz_edge_scoring_runs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE private.quiz_edge_scored_attempts ENABLE ROW LEVEL SECURITY;
 
 REVOKE ALL ON TABLE
   private.quiz_edge_attempt_batches,
   private.quiz_edge_attempt_staging,
   private.quiz_edge_room_seals,
-  private.quiz_edge_scoring_runs
+  private.quiz_edge_scoring_runs,
+  private.quiz_edge_scored_attempts
 FROM PUBLIC, anon, authenticated, service_role;
 
 -- ---------------------------------------------------------------------------
@@ -1285,6 +1333,14 @@ BEGIN
         EXCLUDED.submitted_at
       );
 
+      UPDATE private.quiz_edge_attempt_batches
+      SET scored_at = NULL,
+          scored_attempt_count = NULL
+      WHERE event_id = p_event_id
+        AND room_id = pg_catalog.btrim(p_room_id)
+        AND batch_id = pg_catalog.btrim(p_batch_id)
+        AND scored_at IS NOT NULL;
+
       v_attempts_inserted := v_attempts_inserted + 1;
     END LOOP;
   END IF;
@@ -1461,7 +1517,7 @@ BEGIN
     RETURN;
   END IF;
   v_definition := pg_catalog.pg_get_functiondef(v_hook_proc);
-  IF pg_catalog.strpos(v_definition, '''/rpc/ingest_quiz_edge_attempt_batch_v2''') > 0 THEN
+  IF pg_catalog.strpos(v_definition, '''/rpc/score_quiz_edge_staged_batches_incremental_v2''') > 0 THEN
     RETURN;
   END IF;
   IF pg_catalog.strpos(v_definition, 'request_role = ''mcp_guest_cart_worker''') > 0 THEN
@@ -1475,7 +1531,8 @@ BEGIN
       OR request_path NOT IN (
         ''/rpc/ingest_quiz_edge_attempt_batch_v2'',
         ''/rpc/record_quiz_edge_room_seal_v2'',
-        ''/rpc/get_quiz_edge_reconciliation_status_v2''
+        ''/rpc/get_quiz_edge_reconciliation_status_v2'',
+        ''/rpc/score_quiz_edge_staged_batches_incremental_v2''
       ) THEN
       RAISE EXCEPTION ''Quiz edge batch worker request is outside its capability scope''
         USING ERRCODE = ''42501'';
@@ -1486,8 +1543,296 @@ BEGIN
 END $guard$;
 
 -- ---------------------------------------------------------------------------
--- 8. Set-wise batch scorer & canonical materializer
+-- 8. Incremental batch pre-scorer, fast close materializer & answer backfill
 -- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION private.score_quiz_edge_batches_core_v2(
+  p_event_id uuid,
+  p_limit_batches integer DEFAULT NULL
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_attempts_scored integer := 0;
+  v_batches_scored integer := 0;
+  v_event public.quiz_events%ROWTYPE;
+  v_remaining_unscored integer := 0;
+BEGIN
+  IF p_event_id IS NULL
+    OR (p_limit_batches IS NOT NULL AND p_limit_batches < 1) THEN
+    RAISE EXCEPTION 'invalid_quiz_edge_scoring_batch_args' USING ERRCODE = '22023';
+  END IF;
+
+  SELECT event.*
+  INTO v_event
+  FROM public.quiz_events AS event
+  WHERE event.id = p_event_id
+  FOR SHARE;
+
+  IF v_event.id IS NULL OR v_event.contract_version <> 2 THEN
+    RAISE EXCEPTION 'quiz_event_not_found' USING ERRCODE = 'QZ003';
+  END IF;
+  IF v_event.backend_mode <> 'edge_rooms' THEN
+    RAISE EXCEPTION 'quiz_backend_mode_mismatch' USING ERRCODE = 'QZ062';
+  END IF;
+
+  DROP TABLE IF EXISTS pg_temp._edge_target_batches;
+  IF p_limit_batches IS NULL THEN
+    CREATE TEMP TABLE _edge_target_batches ON COMMIT DROP AS
+    SELECT b.room_id, b.batch_id
+    FROM private.quiz_edge_attempt_batches AS b
+    WHERE b.event_id = p_event_id
+      AND b.scored_at IS NULL
+      AND b.part_index = 0
+      AND (
+        b.total_parts = 1
+        OR (
+          SELECT pg_catalog.count(*)
+          FROM private.quiz_edge_attempt_batches AS b2
+          WHERE b2.event_id = p_event_id
+            AND b2.room_id = b.room_id
+            AND b2.batch_id = b.batch_id
+        ) = b.total_parts
+      )
+    ORDER BY b.received_at, b.id
+    FOR UPDATE OF b;
+  ELSE
+    CREATE TEMP TABLE _edge_target_batches ON COMMIT DROP AS
+    SELECT b.room_id, b.batch_id
+    FROM private.quiz_edge_attempt_batches AS b
+    WHERE b.event_id = p_event_id
+      AND b.scored_at IS NULL
+      AND b.part_index = 0
+      AND (
+        b.total_parts = 1
+        OR (
+          SELECT pg_catalog.count(*)
+          FROM private.quiz_edge_attempt_batches AS b2
+          WHERE b2.event_id = p_event_id
+            AND b2.room_id = b.room_id
+            AND b2.batch_id = b.batch_id
+        ) = b.total_parts
+      )
+    ORDER BY b.received_at, b.id
+    LIMIT p_limit_batches
+    FOR UPDATE OF b SKIP LOCKED;
+  END IF;
+
+  SELECT pg_catalog.count(*)::integer
+  INTO v_batches_scored
+  FROM _edge_target_batches;
+
+  IF v_batches_scored > 0 THEN
+    WITH staged_attempts AS (
+      SELECT
+        s.event_id,
+        s.attempt_id,
+        s.room_id,
+        s.batch_id,
+        s.customer_id,
+        s.attempt_number,
+        s.integrity_tier,
+        s.leaderboard_username,
+        s.rules_version,
+        s.terms_accepted_at,
+        s.app_version,
+        s.platform,
+        s.start_request_id,
+        s.started_at,
+        s.submitted_at,
+        s.close_reason,
+        s.answers
+      FROM _edge_target_batches AS tb
+      JOIN private.quiz_edge_attempt_staging AS s
+        ON s.event_id = p_event_id
+       AND s.room_id = tb.room_id
+       AND s.batch_id = tb.batch_id
+    ),
+    scored_deltas AS (
+      SELECT
+        sa.attempt_id,
+        pg_catalog.sum(
+          CASE
+            WHEN v_event.status = 'cancelled' THEN 0
+            WHEN COALESCE(ans.timeout, false) THEN 0
+            WHEN ans.issued_at IS NULL OR ans.received_at IS NULL THEN 0
+            WHEN ans.received_at >= LEAST(
+              v_event.ends_at,
+              ans.issued_at + pg_catalog.make_interval(
+                secs => GREATEST(v_event.time_per_question_seconds, 0)
+              )
+            ) THEN 0
+            WHEN variant.answer_key_hash ~ '^[0-9a-fA-F]{64}$'
+              AND (
+                CASE
+                  WHEN ans.raw_answer IS NOT NULL THEN
+                    pg_catalog.encode(
+                      extensions.digest(
+                        pg_catalog.lower(pg_catalog.btrim(ans.raw_answer)),
+                        'sha256'
+                      ),
+                      'hex'
+                    )
+                  WHEN ans.selected_answer_hash ~ '^[0-9a-fA-F]{64}$' THEN
+                    pg_catalog.lower(ans.selected_answer_hash)
+                  ELSE NULL
+                END
+              ) = pg_catalog.lower(variant.answer_key_hash)
+              THEN 1
+            ELSE 0
+          END
+        )::integer AS total_score
+      FROM staged_attempts AS sa
+      CROSS JOIN LATERAL pg_catalog.jsonb_to_recordset(sa.answers) AS ans(
+        slot_id uuid,
+        variant_id uuid,
+        position integer,
+        option_order jsonb,
+        issued_at timestamptz,
+        received_at timestamptz,
+        raw_answer text,
+        selected_answer_hash text,
+        timeout boolean
+      )
+      JOIN public.quiz_question_variants AS variant
+        ON variant.id = ans.variant_id
+      GROUP BY sa.attempt_id
+    )
+    INSERT INTO private.quiz_edge_scored_attempts (
+      event_id,
+      attempt_id,
+      room_id,
+      batch_id,
+      customer_id,
+      attempt_number,
+      integrity_tier,
+      leaderboard_username,
+      rules_version,
+      terms_accepted_at,
+      app_version,
+      platform,
+      start_request_id,
+      started_at,
+      submitted_at,
+      close_reason,
+      score,
+      scored_status,
+      scored_at
+    )
+    SELECT
+      sa.event_id,
+      sa.attempt_id,
+      sa.room_id,
+      sa.batch_id,
+      sa.customer_id,
+      sa.attempt_number,
+      sa.integrity_tier,
+      sa.leaderboard_username,
+      COALESCE(sa.rules_version, v_event.rules_version),
+      sa.terms_accepted_at,
+      sa.app_version,
+      sa.platform,
+      sa.start_request_id,
+      sa.started_at,
+      sa.submitted_at,
+      sa.close_reason,
+      COALESCE(sd.total_score, 0),
+      CASE
+        WHEN v_event.status = 'cancelled' THEN 'event_cancelled'
+        WHEN sa.close_reason = 'disqualified' THEN 'disqualified'
+        WHEN sa.close_reason = 'tester_revoked' THEN 'tester_revoked'
+        WHEN sa.close_reason = 'event_cancelled' THEN 'event_cancelled'
+        ELSE 'submitted'
+      END,
+      pg_catalog.clock_timestamp()
+    FROM staged_attempts AS sa
+    LEFT JOIN scored_deltas AS sd ON sd.attempt_id = sa.attempt_id
+    ORDER BY sa.attempt_id
+    ON CONFLICT (event_id, attempt_id) DO UPDATE
+    SET score = EXCLUDED.score,
+        scored_status = EXCLUDED.scored_status,
+        submitted_at = EXCLUDED.submitted_at,
+        close_reason = EXCLUDED.close_reason,
+        scored_at = pg_catalog.clock_timestamp();
+
+    GET DIAGNOSTICS v_attempts_scored = ROW_COUNT;
+
+    UPDATE private.quiz_edge_attempt_batches AS b
+    SET scored_at = pg_catalog.clock_timestamp(),
+        scored_attempt_count = COALESCE(
+          (
+            SELECT pg_catalog.count(*)::integer
+            FROM private.quiz_edge_attempt_staging AS s
+            WHERE s.event_id = p_event_id
+              AND s.room_id = b.room_id
+              AND s.batch_id = b.batch_id
+          ),
+          0
+        )
+    FROM _edge_target_batches AS tb
+    WHERE b.event_id = p_event_id
+      AND b.room_id = tb.room_id
+      AND b.batch_id = tb.batch_id
+      AND b.scored_at IS NULL;
+  END IF;
+
+  DROP TABLE IF EXISTS pg_temp._edge_target_batches;
+
+  SELECT pg_catalog.count(*)::integer
+  INTO v_remaining_unscored
+  FROM private.quiz_edge_attempt_batches AS b
+  WHERE b.event_id = p_event_id
+    AND b.scored_at IS NULL;
+
+  RETURN pg_catalog.jsonb_build_object(
+    'eventId', p_event_id,
+    'batchesScored', v_batches_scored,
+    'attemptsScored', v_attempts_scored,
+    'remainingUnscoredBatches', v_remaining_unscored
+  );
+END;
+$$;
+
+ALTER FUNCTION private.score_quiz_edge_batches_core_v2(uuid, integer)
+  OWNER TO postgres;
+REVOKE ALL ON FUNCTION private.score_quiz_edge_batches_core_v2(uuid, integer)
+  FROM PUBLIC, anon, authenticated, service_role;
+
+CREATE OR REPLACE FUNCTION public.score_quiz_edge_staged_batches_incremental_v2(
+  p_event_id uuid,
+  p_limit_batches integer DEFAULT 50
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_limit integer := COALESCE(p_limit_batches, 50);
+BEGIN
+  IF auth.role() IS DISTINCT FROM 'quiz_edge_batch_worker' THEN
+    RAISE EXCEPTION 'quiz edge batch worker capability required'
+      USING ERRCODE = '42501';
+  END IF;
+
+  IF p_event_id IS NULL OR v_limit < 1 OR v_limit > 500 THEN
+    RAISE EXCEPTION 'invalid_quiz_edge_incremental_score_args'
+      USING ERRCODE = '22023';
+  END IF;
+
+  RETURN private.score_quiz_edge_batches_core_v2(p_event_id, v_limit);
+END;
+$$;
+
+ALTER FUNCTION public.score_quiz_edge_staged_batches_incremental_v2(uuid, integer)
+  OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.score_quiz_edge_staged_batches_incremental_v2(uuid, integer)
+  FROM PUBLIC, anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.score_quiz_edge_staged_batches_incremental_v2(uuid, integer)
+  TO quiz_edge_batch_worker;
+
 CREATE OR REPLACE FUNCTION private.score_and_materialize_edge_quiz_event_v2(
   p_event_id uuid,
   p_scoring_run_id uuid DEFAULT NULL
@@ -1498,17 +1843,16 @@ SECURITY DEFINER
 SET search_path = ''
 AS $$
 DECLARE
-  v_answers_written integer := 0;
   v_attempts_written integer := 0;
   v_event public.quiz_events%ROWTYPE;
   v_existing_run private.quiz_edge_scoring_runs%ROWTYPE;
   v_manifest_checksum text;
   v_persisted_close_at timestamptz;
-  v_questions_written integer := 0;
   v_reconcile jsonb;
   v_results_written integer := 0;
   v_run_id uuid := COALESCE(p_scoring_run_id, gen_random_uuid());
   v_sealed_rooms integer;
+  v_tail_res jsonb;
   v_total_attempts integer;
   v_total_batches integer;
 BEGIN
@@ -1559,7 +1903,8 @@ BEGIN
         'attemptsWritten', v_existing_run.attempts_written,
         'questionsWritten', v_existing_run.questions_written,
         'answersWritten', v_existing_run.answers_written,
-        'resultsWritten', v_existing_run.results_written
+        'resultsWritten', v_existing_run.results_written,
+        'canonicalAnswersBackfillDeferred', true
       );
     END IF;
     UPDATE private.quiz_edge_scoring_runs
@@ -1606,108 +1951,9 @@ BEGIN
     AND id <> v_run_id
     AND status = 'running';
 
-  -- Unlogged temp table holds expanded question/answer rows for a single
-  -- set-wise pass without per-row WAL or trigger amplification.
-  DROP TABLE IF EXISTS pg_temp._edge_scored_answers;
-  CREATE TEMP TABLE _edge_scored_answers ON COMMIT DROP AS
-  WITH expanded AS (
-    SELECT
-      s.attempt_id,
-      ans.slot_id AS raw_slot_id,
-      ans.variant_id,
-      ans.position,
-      COALESCE(ans.option_order, '[]'::jsonb) AS option_order,
-      ans.issued_at,
-      ans.received_at,
-      ans.raw_answer,
-      ans.selected_answer_hash,
-      COALESCE(ans.timeout, false) AS is_timeout,
-      variant.slot_id AS variant_slot_id,
-      variant.answer_key_hash,
-      pg_catalog.md5(s.attempt_id::text || ':q:' || ans.position::text) AS q_hash,
-      CASE
-        WHEN ans.issued_at IS NULL THEN NULL
-        ELSE LEAST(
-          v_event.ends_at,
-          ans.issued_at + pg_catalog.make_interval(
-            secs => GREATEST(v_event.time_per_question_seconds, 0)
-          )
-        )
-      END AS question_deadline,
-      CASE
-        WHEN ans.raw_answer IS NOT NULL THEN
-          pg_catalog.encode(
-            extensions.digest(
-              pg_catalog.lower(pg_catalog.btrim(ans.raw_answer)),
-              'sha256'
-            ),
-            'hex'
-          )
-        WHEN ans.selected_answer_hash ~ '^[0-9a-fA-F]{64}$' THEN
-          pg_catalog.lower(ans.selected_answer_hash)
-        ELSE NULL
-      END AS computed_answer_hash
-    FROM private.quiz_edge_attempt_staging AS s
-    CROSS JOIN LATERAL pg_catalog.jsonb_to_recordset(s.answers) AS ans(
-      slot_id uuid,
-      variant_id uuid,
-      position integer,
-      option_order jsonb,
-      issued_at timestamptz,
-      received_at timestamptz,
-      raw_answer text,
-      selected_answer_hash text,
-      timeout boolean
-    )
-    JOIN public.quiz_question_variants AS variant
-      ON variant.id = ans.variant_id
-    WHERE s.event_id = p_event_id
-  )
-  SELECT
-    e.attempt_id,
-    (
-      pg_catalog.substr(e.q_hash, 1, 8) || '-' ||
-      pg_catalog.substr(e.q_hash, 9, 4) || '-4' ||
-      pg_catalog.substr(e.q_hash, 14, 3) || '-a' ||
-      pg_catalog.substr(e.q_hash, 18, 3) || '-' ||
-      pg_catalog.substr(e.q_hash, 21, 12)
-    )::uuid AS attempt_question_id,
-    COALESCE(e.raw_slot_id, e.variant_slot_id) AS slot_id,
-    e.variant_id,
-    e.position,
-    e.option_order,
-    e.issued_at,
-    v_event.time_per_question_seconds * 1000 AS time_limit_ms,
-    e.received_at,
-    e.is_timeout,
-    e.question_deadline,
-    e.computed_answer_hash,
-    (
-      e.is_timeout
-      OR (e.issued_at IS NOT NULL AND e.received_at IS NOT NULL AND e.received_at < v_event.ends_at)
-    ) AS emit_answer_row,
-    CASE
-      WHEN v_event.status = 'cancelled' THEN 0
-      WHEN e.is_timeout THEN 0
-      WHEN e.issued_at IS NULL OR e.received_at IS NULL THEN 0
-      WHEN e.received_at >= e.question_deadline THEN 0
-      WHEN e.answer_key_hash ~ '^[0-9a-fA-F]{64}$'
-        AND e.computed_answer_hash IS NOT NULL
-        AND e.computed_answer_hash = pg_catalog.lower(e.answer_key_hash)
-        THEN 1
-      ELSE 0
-    END AS score_delta
-  FROM expanded AS e;
+  -- Score only remaining unscored tail batches before materializing attempts/results.
+  v_tail_res := private.score_quiz_edge_batches_core_v2(p_event_id, NULL);
 
-  -- Compute score_delta matching submit_quiz_answer_v2 (20261116201703) and
-  -- quiz_attempt_state_v2 timeout handling (20261116201701).
-  WITH attempt_scores AS (
-    SELECT
-      sa.attempt_id,
-      COALESCE(pg_catalog.sum(sa.score_delta), 0)::integer AS total_score
-    FROM _edge_scored_answers AS sa
-    GROUP BY sa.attempt_id
-  )
   INSERT INTO public.quiz_attempts (
     id,
     event_id,
@@ -1727,35 +1973,35 @@ BEGIN
     backend_mode
   )
   SELECT
-    s.attempt_id,
-    s.event_id,
-    s.customer_id,
+    sa.attempt_id,
+    sa.event_id,
+    sa.customer_id,
     CASE
       WHEN v_event.status = 'cancelled' THEN 'event_cancelled'
-      WHEN s.close_reason = 'disqualified' THEN 'disqualified'
-      WHEN s.close_reason = 'tester_revoked' THEN 'tester_revoked'
-      WHEN s.close_reason = 'event_cancelled' THEN 'event_cancelled'
-      ELSE 'submitted'
+      ELSE sa.scored_status
     END,
-    s.attempt_number,
-    s.integrity_tier,
-    COALESCE(sc.total_score, 0),
-    s.started_at,
+    sa.attempt_number,
+    sa.integrity_tier,
     CASE
-      WHEN s.close_reason = 'completed' AND s.submitted_at IS NOT NULL
-        THEN s.submitted_at
-      ELSE COALESCE(s.submitted_at, v_persisted_close_at)
+      WHEN v_event.status = 'cancelled' THEN 0
+      ELSE sa.score
     END,
-    s.leaderboard_username,
-    COALESCE(s.rules_version, v_event.rules_version),
-    s.terms_accepted_at,
-    s.app_version,
-    s.platform,
-    s.start_request_id,
+    sa.started_at,
+    CASE
+      WHEN sa.close_reason = 'completed' AND sa.submitted_at IS NOT NULL
+        THEN sa.submitted_at
+      ELSE COALESCE(sa.submitted_at, v_persisted_close_at)
+    END,
+    sa.leaderboard_username,
+    COALESCE(sa.rules_version, v_event.rules_version),
+    sa.terms_accepted_at,
+    sa.app_version,
+    sa.platform,
+    sa.start_request_id,
     'edge_rooms'
-  FROM private.quiz_edge_attempt_staging AS s
-  LEFT JOIN attempt_scores AS sc ON sc.attempt_id = s.attempt_id
-  WHERE s.event_id = p_event_id
+  FROM private.quiz_edge_scored_attempts AS sa
+  WHERE sa.event_id = p_event_id
+  ORDER BY sa.attempt_id
   ON CONFLICT (id) DO UPDATE
   SET score = EXCLUDED.score,
       status = EXCLUDED.status,
@@ -1768,78 +2014,6 @@ BEGIN
 
   GET DIAGNOSTICS v_attempts_written = ROW_COUNT;
 
-  INSERT INTO public.quiz_attempt_questions (
-    id,
-    attempt_id,
-    slot_id,
-    variant_id,
-    position,
-    option_order,
-    issued_at,
-    time_limit_ms
-  )
-  SELECT
-    sa.attempt_question_id,
-    sa.attempt_id,
-    sa.slot_id,
-    sa.variant_id,
-    sa.position,
-    sa.option_order,
-    sa.issued_at,
-    sa.time_limit_ms
-  FROM _edge_scored_answers AS sa
-  ORDER BY sa.attempt_id, sa.position
-  ON CONFLICT (attempt_id, position) DO NOTHING;
-
-  GET DIAGNOSTICS v_questions_written = ROW_COUNT;
-
-  INSERT INTO public.quiz_attempt_answers (
-    attempt_question_id,
-    answer_payload,
-    answered_at,
-    answered_in_ms,
-    score_delta
-  )
-  SELECT
-    sa.attempt_question_id,
-    pg_catalog.jsonb_strip_nulls(
-      pg_catalog.jsonb_build_object(
-        'selected_answer_hash', sa.computed_answer_hash,
-        'late', CASE
-          WHEN sa.is_timeout THEN NULL
-          ELSE sa.received_at >= sa.question_deadline
-        END,
-        'timeout', CASE WHEN sa.is_timeout THEN true ELSE NULL END,
-        'v2', true,
-        'edge_room', true
-      )
-    ),
-    CASE
-      WHEN sa.is_timeout THEN sa.question_deadline
-      ELSE GREATEST(sa.received_at, sa.issued_at)
-    END,
-    CASE
-      WHEN sa.is_timeout THEN LEAST(v_event.time_per_question_seconds * 1000, 60000)
-      ELSE LEAST(
-        GREATEST(
-          0,
-          pg_catalog.floor(
-            EXTRACT(epoch FROM (sa.received_at - sa.issued_at)) * 1000
-          )::bigint
-        ),
-        60000
-      )::integer
-    END,
-    sa.score_delta
-  FROM _edge_scored_answers AS sa
-  WHERE sa.emit_answer_row
-  ORDER BY sa.attempt_question_id
-  ON CONFLICT (attempt_question_id) DO NOTHING;
-
-  GET DIAGNOSTICS v_answers_written = ROW_COUNT;
-
-  DROP TABLE IF EXISTS pg_temp._edge_scored_answers;
-
   IF v_event.status = 'cancelled' THEN
     DELETE FROM public.quiz_event_results_v2
     WHERE event_id = p_event_id;
@@ -1851,8 +2025,8 @@ BEGIN
   UPDATE private.quiz_edge_scoring_runs
   SET status = 'completed',
       attempts_written = v_attempts_written,
-      questions_written = v_questions_written,
-      answers_written = v_answers_written,
+      questions_written = 0,
+      answers_written = 0,
       results_written = v_results_written,
       completed_at = pg_catalog.clock_timestamp()
   WHERE id = v_run_id;
@@ -1873,10 +2047,13 @@ BEGIN
     'reused', false,
     'manifestChecksumSha256', v_manifest_checksum,
     'persistedCloseAt', v_persisted_close_at,
+    'tailBatchesScored', COALESCE((v_tail_res ->> 'batchesScored')::integer, 0),
+    'tailAttemptsScored', COALESCE((v_tail_res ->> 'attemptsScored')::integer, 0),
     'attemptsWritten', v_attempts_written,
-    'questionsWritten', v_questions_written,
-    'answersWritten', v_answers_written,
-    'resultsWritten', v_results_written
+    'questionsWritten', 0,
+    'answersWritten', 0,
+    'resultsWritten', v_results_written,
+    'canonicalAnswersBackfillDeferred', true
   );
 END;
 $$;
@@ -1884,6 +2061,254 @@ $$;
 ALTER FUNCTION private.score_and_materialize_edge_quiz_event_v2(uuid, uuid)
   OWNER TO postgres;
 REVOKE ALL ON FUNCTION private.score_and_materialize_edge_quiz_event_v2(uuid, uuid)
+  FROM PUBLIC, anon, authenticated, service_role;
+
+CREATE OR REPLACE FUNCTION private.backfill_quiz_edge_canonical_answers_v2(
+  p_event_id uuid,
+  p_limit_attempts integer DEFAULT 10000
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_answers_written integer := 0;
+  v_attempts_backfilled integer := 0;
+  v_event public.quiz_events%ROWTYPE;
+  v_limit integer := COALESCE(p_limit_attempts, 10000);
+  v_questions_written integer := 0;
+  v_remaining_attempts integer := 0;
+BEGIN
+  IF p_event_id IS NULL OR v_limit < 1 OR v_limit > 100000 THEN
+    RAISE EXCEPTION 'invalid_quiz_edge_backfill_args' USING ERRCODE = '22023';
+  END IF;
+
+  SELECT event.*
+  INTO v_event
+  FROM public.quiz_events AS event
+  WHERE event.id = p_event_id
+  FOR SHARE;
+
+  IF v_event.id IS NULL OR v_event.contract_version <> 2 THEN
+    RAISE EXCEPTION 'quiz_event_not_found' USING ERRCODE = 'QZ003';
+  END IF;
+  IF v_event.backend_mode <> 'edge_rooms' THEN
+    RAISE EXCEPTION 'quiz_backend_mode_mismatch' USING ERRCODE = 'QZ062';
+  END IF;
+  IF v_event.edge_completed_scoring_run_id IS NULL THEN
+    RAISE EXCEPTION 'quiz_edge_manifest_not_reconciled' USING ERRCODE = 'QZ068';
+  END IF;
+
+  DROP TABLE IF EXISTS pg_temp._edge_backfill_targets;
+  CREATE TEMP TABLE _edge_backfill_targets ON COMMIT DROP AS
+  SELECT sa.attempt_id
+  FROM private.quiz_edge_scored_attempts AS sa
+  WHERE sa.event_id = p_event_id
+    AND sa.canonical_answers_backfilled_at IS NULL
+  ORDER BY sa.attempt_id
+  LIMIT v_limit
+  FOR UPDATE OF sa SKIP LOCKED;
+
+  SELECT pg_catalog.count(*)::integer
+  INTO v_attempts_backfilled
+  FROM _edge_backfill_targets;
+
+  IF v_attempts_backfilled > 0 THEN
+    DROP TABLE IF EXISTS pg_temp._edge_scored_answers;
+    CREATE TEMP TABLE _edge_scored_answers ON COMMIT DROP AS
+    WITH expanded AS (
+      SELECT
+        s.attempt_id,
+        ans.slot_id AS raw_slot_id,
+        ans.variant_id,
+        ans.position,
+        COALESCE(ans.option_order, '[]'::jsonb) AS option_order,
+        ans.issued_at,
+        ans.received_at,
+        ans.raw_answer,
+        ans.selected_answer_hash,
+        COALESCE(ans.timeout, false) AS is_timeout,
+        variant.slot_id AS variant_slot_id,
+        variant.answer_key_hash,
+        pg_catalog.md5(s.attempt_id::text || ':q:' || ans.position::text) AS q_hash,
+        CASE
+          WHEN ans.issued_at IS NULL THEN NULL
+          ELSE LEAST(
+            v_event.ends_at,
+            ans.issued_at + pg_catalog.make_interval(
+              secs => GREATEST(v_event.time_per_question_seconds, 0)
+            )
+          )
+        END AS question_deadline,
+        CASE
+          WHEN ans.raw_answer IS NOT NULL THEN
+            pg_catalog.encode(
+              extensions.digest(
+                pg_catalog.lower(pg_catalog.btrim(ans.raw_answer)),
+                'sha256'
+              ),
+              'hex'
+            )
+          WHEN ans.selected_answer_hash ~ '^[0-9a-fA-F]{64}$' THEN
+            pg_catalog.lower(ans.selected_answer_hash)
+          ELSE NULL
+        END AS computed_answer_hash
+      FROM _edge_backfill_targets AS bt
+      JOIN private.quiz_edge_attempt_staging AS s
+        ON s.event_id = p_event_id
+       AND s.attempt_id = bt.attempt_id
+      CROSS JOIN LATERAL pg_catalog.jsonb_to_recordset(s.answers) AS ans(
+        slot_id uuid,
+        variant_id uuid,
+        position integer,
+        option_order jsonb,
+        issued_at timestamptz,
+        received_at timestamptz,
+        raw_answer text,
+        selected_answer_hash text,
+        timeout boolean
+      )
+      JOIN public.quiz_question_variants AS variant
+        ON variant.id = ans.variant_id
+    )
+    SELECT
+      e.attempt_id,
+      (
+        pg_catalog.substr(e.q_hash, 1, 8) || '-' ||
+        pg_catalog.substr(e.q_hash, 9, 4) || '-4' ||
+        pg_catalog.substr(e.q_hash, 14, 3) || '-a' ||
+        pg_catalog.substr(e.q_hash, 18, 3) || '-' ||
+        pg_catalog.substr(e.q_hash, 21, 12)
+      )::uuid AS attempt_question_id,
+      COALESCE(e.raw_slot_id, e.variant_slot_id) AS slot_id,
+      e.variant_id,
+      e.position,
+      e.option_order,
+      e.issued_at,
+      v_event.time_per_question_seconds * 1000 AS time_limit_ms,
+      e.received_at,
+      e.is_timeout,
+      e.question_deadline,
+      e.computed_answer_hash,
+      (
+        e.is_timeout
+        OR (e.issued_at IS NOT NULL AND e.received_at IS NOT NULL AND e.received_at < v_event.ends_at)
+      ) AS emit_answer_row,
+      CASE
+        WHEN v_event.status = 'cancelled' THEN 0
+        WHEN e.is_timeout THEN 0
+        WHEN e.issued_at IS NULL OR e.received_at IS NULL THEN 0
+        WHEN e.received_at >= e.question_deadline THEN 0
+        WHEN e.answer_key_hash ~ '^[0-9a-fA-F]{64}$'
+          AND e.computed_answer_hash IS NOT NULL
+          AND e.computed_answer_hash = pg_catalog.lower(e.answer_key_hash)
+          THEN 1
+        ELSE 0
+      END AS score_delta
+    FROM expanded AS e;
+
+    INSERT INTO public.quiz_attempt_questions (
+      id,
+      attempt_id,
+      slot_id,
+      variant_id,
+      position,
+      option_order,
+      issued_at,
+      time_limit_ms
+    )
+    SELECT
+      sa.attempt_question_id,
+      sa.attempt_id,
+      sa.slot_id,
+      sa.variant_id,
+      sa.position,
+      sa.option_order,
+      sa.issued_at,
+      sa.time_limit_ms
+    FROM _edge_scored_answers AS sa
+    ORDER BY sa.attempt_id, sa.position
+    ON CONFLICT (attempt_id, position) DO NOTHING;
+
+    GET DIAGNOSTICS v_questions_written = ROW_COUNT;
+
+    INSERT INTO public.quiz_attempt_answers (
+      attempt_question_id,
+      answer_payload,
+      answered_at,
+      answered_in_ms,
+      score_delta
+    )
+    SELECT
+      sa.attempt_question_id,
+      pg_catalog.jsonb_strip_nulls(
+        pg_catalog.jsonb_build_object(
+          'selected_answer_hash', sa.computed_answer_hash,
+          'late', CASE
+            WHEN sa.is_timeout THEN NULL
+            ELSE sa.received_at >= sa.question_deadline
+          END,
+          'timeout', CASE WHEN sa.is_timeout THEN true ELSE NULL END,
+          'v2', true,
+          'edge_room', true
+        )
+      ),
+      CASE
+        WHEN sa.is_timeout THEN sa.question_deadline
+        ELSE GREATEST(sa.received_at, sa.issued_at)
+      END,
+      CASE
+        WHEN sa.is_timeout THEN LEAST(v_event.time_per_question_seconds * 1000, 60000)
+        ELSE LEAST(
+          GREATEST(
+            0,
+            pg_catalog.floor(
+              EXTRACT(epoch FROM (sa.received_at - sa.issued_at)) * 1000
+            )::bigint
+          ),
+          60000
+        )::integer
+      END,
+      sa.score_delta
+    FROM _edge_scored_answers AS sa
+    WHERE sa.emit_answer_row
+    ORDER BY sa.attempt_question_id
+    ON CONFLICT (attempt_question_id) DO NOTHING;
+
+    GET DIAGNOSTICS v_answers_written = ROW_COUNT;
+
+    DROP TABLE IF EXISTS pg_temp._edge_scored_answers;
+
+    UPDATE private.quiz_edge_scored_attempts AS sa
+    SET canonical_answers_backfilled_at = pg_catalog.clock_timestamp()
+    FROM _edge_backfill_targets AS bt
+    WHERE sa.event_id = p_event_id
+      AND sa.attempt_id = bt.attempt_id
+      AND sa.canonical_answers_backfilled_at IS NULL;
+  END IF;
+
+  DROP TABLE IF EXISTS pg_temp._edge_backfill_targets;
+
+  SELECT pg_catalog.count(*)::integer
+  INTO v_remaining_attempts
+  FROM private.quiz_edge_scored_attempts AS sa
+  WHERE sa.event_id = p_event_id
+    AND sa.canonical_answers_backfilled_at IS NULL;
+
+  RETURN pg_catalog.jsonb_build_object(
+    'eventId', p_event_id,
+    'attemptsBackfilled', v_attempts_backfilled,
+    'questionsWritten', v_questions_written,
+    'answersWritten', v_answers_written,
+    'remainingAttempts', v_remaining_attempts
+  );
+END;
+$$;
+
+ALTER FUNCTION private.backfill_quiz_edge_canonical_answers_v2(uuid, integer)
+  OWNER TO postgres;
+REVOKE ALL ON FUNCTION private.backfill_quiz_edge_canonical_answers_v2(uuid, integer)
   FROM PUBLIC, anon, authenticated, service_role;
 
 -- ---------------------------------------------------------------------------

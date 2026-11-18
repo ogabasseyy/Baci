@@ -12,6 +12,10 @@ describe('isMonnifyKnownVendRefusalText', () => {
     'Account balance is too low',
     'INSUFFICIENT_WALLET_BALANCE',
     'AMOUNT_MUST_BE_GREATER_THAN_ZERO',
+    'Wallet balance too low',
+    'Low wallet balance',
+    'Available balance too low',
+    'Not enough funds',
   ])('treats "%s" as a refusal that delivered nothing', (text) => {
     expect(isMonnifyKnownVendRefusalText(text)).toBe(true);
   });

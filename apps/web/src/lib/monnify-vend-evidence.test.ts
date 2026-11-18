@@ -190,3 +190,17 @@ describe('bugfix: attempted flags are vend evidence', () => {
     expect(hasMonnifyVendEvidence({ vendAttempted: false })).toBe(false);
   });
 });
+
+describe('bugfix: credited flags count as vend evidence', () => {
+  it.each([
+    { airtimeCredited: true },
+    { credited: true },
+    { isRecharged: 'true' },
+  ])('reads %j as evidence', (answer) => {
+    expect(hasMonnifyVendEvidence(answer)).toBe(true);
+  });
+
+  it('ignores a false credited flag', () => {
+    expect(hasMonnifyVendEvidence({ credited: false })).toBe(false);
+  });
+});

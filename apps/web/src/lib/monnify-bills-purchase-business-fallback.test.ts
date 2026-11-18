@@ -200,3 +200,43 @@ describe('Monnify business answers handed to Kuda', () => {
     });
   });
 });
+
+describe('bugfix: Codex wording rounds through purchaseBill', () => {
+  function vendWith(envelope: Record<string, unknown>) {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi
+        .fn()
+        .mockResolvedValue({ requestSuccessful: false, ...envelope }),
+    });
+    return purchaseBill('MTN', '13', '08012345678', 100, 'JANE DOE', 'R-1');
+  }
+
+  it('keeps "Authorization failed: insufficient wallet balance" off Kuda', async () => {
+    await expect(
+      vendWith({
+        responseCode: '01',
+        responseMessage: 'Authorization failed: insufficient wallet balance',
+      })
+    ).resolves.toMatchObject({ providerDefiniteFailure: false });
+  });
+
+  it('keeps a low-balance refusal with airtimeCredited true off Kuda', async () => {
+    await expect(
+      vendWith({
+        responseCode: '01',
+        responseMessage: 'Insufficient wallet balance',
+        responseBody: { airtimeCredited: true },
+      })
+    ).resolves.toMatchObject({ providerDefiniteFailure: false });
+  });
+
+  it('hands "Wallet balance too low" to Kuda', async () => {
+    await expect(
+      vendWith({
+        responseCode: '01',
+        responseMessage: 'Wallet balance too low',
+      })
+    ).resolves.toMatchObject({ providerDefiniteFailure: true });
+  });
+});

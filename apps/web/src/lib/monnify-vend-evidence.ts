@@ -1,9 +1,9 @@
 /**
- * Keys are compared case-insensitively with "_" and "-" ignored, so
+ * Keys are compared case-insensitively with "_", "-" and spaces ignored, so
  * vend_reference, VendReference and vendReference all count.
  */
 function normaliseKey(key: string): string {
-  return key.replace(/[_-]/g, '').toLowerCase();
+  return key.replace(/[\s_-]/g, '').toLowerCase();
 }
 
 /**
@@ -27,10 +27,9 @@ const TOP_LEVEL_ECHO_KEYS = new Set(['reference', 'requestreference']);
 function isVendStatusKey(key: string): boolean {
   // A string status ("FAILED", "PENDING") is the vend's own status; a
   // numeric one is just an HTTP code and is ignored (isEvidenceValue).
-  return (
-    key === STATUS_KEY ||
-    /^(?:vend|transaction|txn|payment|order|purchase)status$/.test(key)
-  );
+  // Any key ending in "status" (finalStatus, transactionStatus, vendStatus…);
+  // HTTP labels and numeric codes are filtered out by value.
+  return key.endsWith(STATUS_KEY);
 }
 
 /**
@@ -99,7 +98,7 @@ function isEvidenceValue(key: string, value: unknown): boolean {
   // code, never a vend status.
   // A generic `status` counts unless it is an HTTP reason phrase or error
   // label ("error", "Bad Request"): those only label the error body.
-  if (key === STATUS_KEY) {
+  if (key.endsWith(STATUS_KEY)) {
     if (typeof value !== 'string') {
       return false;
     }

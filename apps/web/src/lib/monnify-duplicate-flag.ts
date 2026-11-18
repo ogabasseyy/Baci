@@ -28,7 +28,7 @@ export function hasMonnifyDuplicateFlag(answer: unknown, depth = 0): boolean {
     return answer.some((item) => hasMonnifyDuplicateFlag(item, depth + 1));
   }
   return Object.entries(answer).some(([key, value]) => {
-    const normalisedKey = key.replace(/[_-]/g, '').toLowerCase();
+    const normalisedKey = key.replace(/[\s_-]/g, '').toLowerCase();
     return (
       (DUPLICATE_KEY.test(normalisedKey) && isSetFlag(value)) ||
       hasMonnifyDuplicateFlag(value, depth + 1)

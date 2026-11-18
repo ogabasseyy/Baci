@@ -36,7 +36,7 @@ export function hasMonnifyNonDefinitiveCode(
     return answer.some((item) => hasMonnifyNonDefinitiveCode(item, depth + 1));
   }
   return Object.entries(answer).some(([key, value]) => {
-    const normalisedKey = key.replace(/[_-]/g, '').toLowerCase();
+    const normalisedKey = key.replace(/[\s_-]/g, '').toLowerCase();
     return (
       (RESPONSE_CODE_KEY.test(normalisedKey) && isNonDefinitiveValue(value)) ||
       hasMonnifyNonDefinitiveCode(value, depth + 1)

@@ -133,3 +133,20 @@ describe('bugfix: deep nesting and array-valued vend fields fail closed', () => 
     ).toBe(true);
   });
 });
+
+describe('bugfix: spaced and final-status keys are vend fields', () => {
+  it.each([
+    { 'transaction status': 'FAILED', message: 'Insufficient wallet balance' },
+    { finalStatus: 'FAILED', message: 'Insufficient wallet balance' },
+    { responseBody: { 'Vend Reference': 'MFBP-1' } },
+  ])('sees vend evidence in %j', (answer) => {
+    expect(hasMonnifyVendEvidence(answer)).toBe(true);
+  });
+
+  it.each([
+    { finalStatus: 'Bad Request' },
+    { responseStatus: 400 },
+  ])('sees none in %j', (answer) => {
+    expect(hasMonnifyVendEvidence(answer)).toBe(false);
+  });
+});

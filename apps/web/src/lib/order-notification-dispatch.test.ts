@@ -103,15 +103,30 @@ describe('dispatchOrderCreationNotifications', () => {
     expect(mockNotifyPaymentReceived).not.toHaveBeenCalled();
   });
 
-  it('announces a Pay for Me order with no outstanding balance', async () => {
+  it('announces a genuinely zero-value Pay for Me order', async () => {
     await dispatchOrderCreationNotifications(
       input({
         paymentMethod: 'payforme',
         paymentStatus: 'unpaid',
+        orderTotal: 0,
         invoiceBalanceDue: 0,
       })
     );
     expect(mockNotifyNewOrder).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not announce an unpaid positive-value Pay for Me order after failed wallet finalization', async () => {
+    await dispatchOrderCreationNotifications(
+      input({
+        paymentMethod: 'payforme',
+        paymentStatus: 'unpaid',
+        orderTotal: 15000,
+        invoiceBalanceDue: 0,
+        isWalletFullyPaid: false,
+      })
+    );
+    expect(mockNotifyNewOrder).not.toHaveBeenCalled();
+    expect(mockNotifyPaymentReceived).not.toHaveBeenCalled();
   });
 
   it('still announces a pay-on-delivery order at creation', async () => {

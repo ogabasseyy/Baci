@@ -38,9 +38,11 @@ export async function dispatchOrderCreationNotifications(
 ): Promise<void> {
   const paymentMethod = input.paymentMethod.trim().toLowerCase();
   const isInvoiceCreation = paymentMethod === 'invoice';
+  // Redeemed credit can leave a zero residual even when finalization failed.
+  // Only an actually zero-value order bypasses the unpaid-request suppression.
   const isUnpaidPayForMeRequest =
     paymentMethod === 'payforme' &&
-    input.invoiceBalanceDue > 0 &&
+    input.orderTotal > 0 &&
     !input.isWalletFullyPaid &&
     input.paymentStatus?.trim().toLowerCase() !== 'paid';
   if (isUnpaidPayForMeRequest) {

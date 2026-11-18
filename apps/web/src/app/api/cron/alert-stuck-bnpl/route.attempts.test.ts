@@ -201,18 +201,10 @@ describe('GET /api/cron/alert-stuck-bnpl', () => {
     const data = await response.json();
 
     expect(response.status).toBe(200);
-    expect(data.stuckOrders).toBe(1);
-    expect(data.reviewOnlyOrders).toBe(1);
-    // CredPal reports no checkout completion, so its provider reference still
-    // pages the merchant. The Credit Direct order without any signal does not.
-    expect(data.alertOrders).toBe(1);
-    expect(mocks.notifyMerchant).toHaveBeenCalledTimes(1);
-    expect(mocks.notifyMerchant).toHaveBeenCalledWith(
-      'merchant-1',
-      '⚠️ BNPL payment to confirm',
-      expect.stringContaining('Check with CredPal before you fulfil it.'),
-      expect.objectContaining({ order_id: 'order-2' }),
-      'orders'
-    );
+    expect(data.stuckOrders).toBe(0);
+    expect(data.reviewOnlyOrders).toBe(2);
+    // Provider-ID notes remain checkout context, not proof of progress.
+    expect(data.alertOrders).toBe(0);
+    expect(mocks.notifyMerchant).not.toHaveBeenCalled();
   });
 });

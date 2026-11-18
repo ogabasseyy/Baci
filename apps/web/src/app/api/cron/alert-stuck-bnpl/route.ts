@@ -23,6 +23,9 @@ import { STUCK_BNPL_CONFIG } from './stuck-bnpl-config';
 const STATUSES_REQUIRING_PROVIDER_EVIDENCE = new Set(['pending', 'unpaid']);
 
 // Alerts merchants and queues Credit Direct orders missing provider confirmation.
+// Response contract: stuckOrders/alertOrders count merchant alert candidates;
+// reviewOnlyOrders counts retained orders not selected for a merchant alert.
+// Only Credit Direct orders are durably filed in the recovery queue here.
 export async function GET(request: NextRequest) {
   try {
     const authHeader = request.headers.get('authorization');

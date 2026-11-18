@@ -65,13 +65,14 @@ describe('GET /api/cron/alert-stuck-bnpl', () => {
     expect(mocks.notifyMerchant).not.toHaveBeenCalled();
   });
 
-  it('keeps paging for a provider that reports no checkout completion', async () => {
+  it('keeps paging for an approved provider that reports no SDK completion', async () => {
     mocks.limit.mockResolvedValue({
       data: [
         stuckOrder({
           id: 'order-klump',
           order_number: 'ORD-KLUMP',
           payment_method: 'klump',
+          payment_status: 'bnpl_approved',
           notes: '{"klumpTransactionId":"txn-9"}',
         }),
       ],

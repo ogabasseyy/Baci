@@ -31,6 +31,19 @@ describe('getStuckBnplSignals', () => {
     ).toBe(hasCheckoutEvidence);
   });
 
+  it.each([
+    'klump',
+    'credpal',
+  ])('accepts authoritative approval for %s without notes', (payment_method) => {
+    expect(
+      getStuckBnplSignals({
+        payment_method,
+        payment_status: 'bnpl_approved',
+        notes: null,
+      }).shouldAlert
+    ).toBe(true);
+  });
+
   it('accepts provider approval or a matching completed session', () => {
     expect(
       getStuckBnplSignals({ ...order, payment_status: 'bnpl_approved' })
@@ -69,11 +82,11 @@ describe('getStuckBnplSignals', () => {
   });
 
   it.each([
-    [' Klump ', true],
-    ['CredPal', true],
+    [' Klump ', false],
+    ['CredPal', false],
     [null, false],
     ['unknown_bnpl', false],
-  ])('applies the prior evidence policy to %s', (payment_method, shouldAlert) => {
+  ])('never treats a provider reference alone as approval for %s', (payment_method, shouldAlert) => {
     expect(
       getStuckBnplSignals({
         ...order,

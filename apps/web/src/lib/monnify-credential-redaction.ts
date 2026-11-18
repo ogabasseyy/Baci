@@ -9,9 +9,12 @@ const AUTHORIZATION_HEADER_VALUE =
   /\b(authori[sz]ation["']?\s*[:=]\s*["']?)([A-Za-z][\w-]*)\s+(?!\[redacted\])[^\n&;]+/gi;
 /** A JWT (three base64url parts, header starting "eyJ"). */
 const JWT = /\beyJ[\w-]+\.[\w-]+(?:\.[\w-]+)?/g;
-/** A credential-named field followed by its value: "access token: abc…". */
+/**
+ * A credential-named field followed by its value: "access token: abc…",
+ * including compound names (secretKey, client_secret, apiSecret, x-api-key).
+ */
 const CREDENTIAL_FIELD_VALUE =
-  /\b((?:access[\s_-]*|bearer[\s_-]*|refresh[\s_-]*)?token|api[\s_-]*key|secret|password|authori[sz]ation|credentials?)(["']?\s*[:=]\s*["']?)(?!(?:bearer|basic|digest)\b|\[redacted\]|[A-Za-z][\w-]*\s+\[redacted\])[^\s"',;&]+/gi;
+  /\b([A-Za-z_-]*?(?:token|api[\s_-]*key|secret|passw(?:or)?d|authori[sz]ation|credentials?)[A-Za-z_-]*)(["']?\s*[:=]\s*["']?)(?!(?:bearer|basic|digest)\b|\[redacted\]|[A-Za-z][\w-]*\s+\[redacted\])[^\s"',;&]+/gi;
 /**
  * A credential label followed by its value with only whitespace between
  * ("API key sk_abc…", "Invalid token abc123"): any value with a digit, or

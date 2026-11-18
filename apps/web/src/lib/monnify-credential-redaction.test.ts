@@ -14,6 +14,9 @@ describe('redactMonnifyCredentials', () => {
       'Rejected [redacted]',
     ],
     ['api_key=XYZ987&amount=100', 'api_key=[redacted]&amount=100'],
+    ['secretKey: abc', 'secretKey: [redacted]'],
+    ['client_secret=xyz&amount=100', 'client_secret=[redacted]&amount=100'],
+    ['"apiSecret":"s1"', '"apiSecret":"[redacted]"'],
     [
       'Unauthorized: API key fixturevaluewithoutdigits',
       'Unauthorized: API key [redacted]',

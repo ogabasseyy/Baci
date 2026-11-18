@@ -20,6 +20,8 @@ describe('mentionsMonnifyAuthWording', () => {
     'Permission denied: insufficient wallet balance',
     'PERMISSION_DENIED',
     'Insufficient permissions',
+    'INVALID_AUTH_TOKEN',
+    'Invalid authentication token',
     'Authentication unsuccessful: insufficient wallet balance',
     'Login unsuccessful',
   ])('reads %s as login wording', (text) => {

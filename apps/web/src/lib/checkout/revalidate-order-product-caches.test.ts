@@ -114,6 +114,26 @@ describe('revalidateOrderProductCaches', () => {
     expect(loggerErrorMock).toHaveBeenCalledOnce();
   });
 
+  it('never throws even when fallback revalidateProducts throws in catch', async () => {
+    const supabase = {
+      from: vi.fn(() => {
+        throw new Error('network error');
+      }),
+    };
+    revalidateProductsMock.mockImplementationOnce(() => {
+      throw new Error('cache unavailable');
+    });
+    await expect(
+      revalidateOrderProductCaches({
+        merchantId: 'merchant-1',
+        orderId: 'order-1',
+        productIds: ['product-1'],
+        supabase: supabase as never,
+      })
+    ).resolves.toBeUndefined();
+    expect(loggerErrorMock).toHaveBeenCalledOnce();
+  });
+
   it('skips the slug lookup and falls back to full invalidation when no product ids remain', async () => {
     const supabase = mockSupabase([{ slug: 'galaxy-s24' }]);
     await revalidateOrderProductCaches({

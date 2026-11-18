@@ -87,7 +87,11 @@ export async function revalidateOrderProductCaches({
       merchantId,
     });
     if (!didRevalidateProducts) {
-      revalidateProducts(merchantId);
+      try {
+        revalidateProducts(merchantId);
+      } catch {
+        // Best-effort fallback: never fail order completion if cache revalidation throws.
+      }
     }
   }
 }

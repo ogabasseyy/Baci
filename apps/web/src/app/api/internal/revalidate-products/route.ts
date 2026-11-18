@@ -14,6 +14,7 @@ import { internalRevalidateProductsBodySchema } from '@/schemas/internal-revalid
 import { dispatchStorefrontHostnamePurge } from './dispatch-storefront-hostname-purge';
 import { dispatchStorefrontProductPurge } from './dispatch-storefront-purge';
 import { flushOriginCacheRevalidations } from './flush-origin-cache-revalidations';
+import { hasCompleteScopedProductSlugs } from './has-complete-scoped-product-slugs';
 import { resolveAuthoritativeMerchantSlug } from './resolve-authoritative-merchant-slug';
 
 /**
@@ -75,10 +76,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   } = parsed.data;
   let edgePurged = false;
 
-  const hasExplicitProductSlugs = Boolean(
-    productSlugs && productSlugs.length > 0
-  );
-  const hasProducts = Boolean(products && products.length > 0);
+  const hasExplicitProductSlugs = Boolean(productSlugs?.length);
+  const hasProducts = Boolean(products?.length);
   // Runs in a route context, so revalidateTag works here (unlike the CLI worker).
   if (shouldExpireProductBlogCache) {
     // Standalone workers use this narrow mode to refresh the related-product
@@ -87,6 +86,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     expireProductBlogCache(merchantId);
   } else if (!purgeWholeStorefront && !hasProducts && hasExplicitProductSlugs) {
     revalidateProducts(merchantId, undefined, {
+      expireImmediately: true,
       omitMerchantWidePdpDetails: true,
     });
   } else if (purgeWholeStorefront || !hasProducts) {
@@ -107,6 +107,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   );
   let supabase: ReturnType<typeof createPublicClient> | undefined;
   let authoritativeMerchantSlug: string | undefined;
+  let merchantSlugMismatch = false;
 
   if (needsPublicClient) {
     try {
@@ -121,15 +122,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           merchantSlug
         );
         if (slugResult.status === 'mismatch') {
-          return NextResponse.json(
-            {
-              error: 'Merchant slug does not match merchant ID',
-              code: 'MERCHANT_SLUG_MISMATCH',
-            },
-            { status: 400 }
-          );
-        }
-        if (slugResult.status === 'ok') {
+          merchantSlugMismatch = true;
+        } else if (slugResult.status === 'ok') {
           authoritativeMerchantSlug = slugResult.slug;
         }
       }
@@ -211,17 +205,19 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         } else {
           revalidateProductSlugs(merchantId, bustSlugs);
         }
-        const omitMerchantWidePdpDetails =
-          bustSlugs.length > 0 && !blogPostSlugsIncomplete;
+        const scopedOptions =
+          hasExplicitProductSlugs &&
+          !blogPostSlugsIncomplete &&
+          hasCompleteScopedProductSlugs(products, entries, resolvedSlugs)
+            ? { omitMerchantWidePdpDetails: true }
+            : undefined;
         if (authoritativeMerchantSlug && !purgeWholeStorefront) {
           // Related blog enrichment shares the merchant product tag. Expire it
           // before the edge purge can cause an article MISS to refill stale data.
           expireProductBlogCache(merchantId);
           revalidateProducts(merchantId, undefined, {
             expireImmediately: true,
-            ...(omitMerchantWidePdpDetails
-              ? { omitMerchantWidePdpDetails: true }
-              : {}),
+            ...scopedOptions,
           });
           revalidatedDeferredProducts = true;
           const mergedBlogPostSlugs = Array.from(
@@ -238,10 +234,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             confirmEdgeEviction: Boolean(confirmEdgeEviction),
           });
         } else if (!shouldExpireProductBlogCache) {
-          if (omitMerchantWidePdpDetails) {
-            revalidateProducts(merchantId, undefined, {
-              omitMerchantWidePdpDetails: true,
-            });
+          if (scopedOptions) {
+            revalidateProducts(merchantId, undefined, scopedOptions);
           } else {
             revalidateProducts(merchantId);
           }
@@ -261,6 +255,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         error: purgeError,
       });
     }
+  }
+
+  if (merchantSlugMismatch) {
+    return NextResponse.json(
+      {
+        error: 'Merchant slug does not match merchant ID',
+        code: 'MERCHANT_SLUG_MISMATCH',
+      },
+      { status: 400 }
+    );
   }
 
   // Category path changes are structural: the affected public documents cannot

@@ -101,6 +101,7 @@ describe('merchant-scoped product detail and redirect cache tag builders', () =>
     expect(lcpHintTags).toEqual([
       'product',
       'product-lcp-hint',
+      'product-details-merchant-123',
       'product-merchant-123-iphone-16-pro',
     ]);
     expect(lcpHintTags).not.toContain('products-merchant-123');

@@ -65,7 +65,7 @@ describe('POST /api/internal/revalidate-products slug chunks', () => {
     expect(mockRevalidateProducts).toHaveBeenCalledWith(
       MERCHANT_ID,
       undefined,
-      { omitMerchantWidePdpDetails: true }
+      { expireImmediately: true, omitMerchantWidePdpDetails: true }
     );
     // Hard-expired even without purge inputs: a later control-metadata
     // chunk may schedule an edge purge over these tags.

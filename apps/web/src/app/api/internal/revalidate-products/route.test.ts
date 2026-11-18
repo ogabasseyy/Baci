@@ -165,7 +165,7 @@ describe('POST /api/internal/revalidate-products', () => {
     expect(mockRevalidateProducts).toHaveBeenCalledWith(
       MERCHANT_ID,
       undefined,
-      { expireImmediately: true, omitMerchantWidePdpDetails: true }
+      { expireImmediately: true }
     );
     expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
       'ogabassey',
@@ -175,28 +175,6 @@ describe('POST /api/internal/revalidate-products', () => {
       mockScheduleStorefrontProductPurge.mock.invocationCallOrder[0]
     );
     expect(mockExpireProductBlogCache).toHaveBeenCalledWith(MERCHANT_ID);
-  });
-
-  it('rejects a mismatched merchantSlug before scheduling a product purge', async () => {
-    const res = await POST(
-      request(
-        {
-          merchantId: MERCHANT_ID,
-          merchantSlug: 'another-store',
-          products: [{ slug: 'iphone-15', category: 'Smartphones' }],
-        },
-        `Bearer ${SECRET}`
-      )
-    );
-
-    expect(res.status).toBe(400);
-    expect(await res.json()).toEqual({
-      error: 'Merchant slug does not match merchant ID',
-      code: 'MERCHANT_SLUG_MISMATCH',
-    });
-    expect(mockMerchantLookup).toHaveBeenCalledWith('id', MERCHANT_ID);
-    expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
-    expect(mockScheduleStorefrontHostnamePurge).not.toHaveBeenCalled();
   });
 
   it('resolves authoritative rows and busts per-slug Next caches BEFORE scheduling the purge (F1 + F3)', async () => {

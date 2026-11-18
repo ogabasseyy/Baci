@@ -96,6 +96,7 @@ export function buildProductLcpHintCacheTags(
   return [
     'product',
     'product-lcp-hint',
+    getProductDetailsCacheTag(merchantId),
     getProductScopedCacheTag('product', merchantId, productSlug),
   ];
 }

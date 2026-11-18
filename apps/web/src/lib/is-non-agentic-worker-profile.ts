@@ -1,6 +1,7 @@
 const NON_AGENTIC_WORKER_PROFILES = new Set([
   'agentic-commerce-health',
   'ai-storefront-jobs',
+  'cart-events',
   'cart-notice-health',
   'event-pipeline',
   'gigl-tracking',
@@ -12,6 +13,7 @@ const NON_AGENTIC_WORKER_PROFILES = new Set([
   'order-notifications',
   'oxygen-callback-reconciliation',
   'petrock-reconciliation',
+  'piggyvest-webhook-capture-drain',
   'quiz-finalization',
   'scheduled-post-publisher',
   'vtu-processing-reconciliation',

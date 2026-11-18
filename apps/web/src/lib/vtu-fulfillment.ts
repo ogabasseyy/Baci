@@ -51,6 +51,7 @@ import {
 } from '@/lib/vtu-fallback-credit-correction';
 import { awardVtuAirtimeLoyaltyPoints } from '@/lib/vtu-loyalty-points-award';
 import { executeMonnifyAirtimeKudaFallback } from '@/lib/vtu-monnify-kuda-fallback';
+import { isMonnifyAirtimeKudaFallbackEligible } from '@/lib/vtu-monnify-kuda-fallback-eligibility';
 import { getVtuProviderLabel, readPaymentSplit } from '@/lib/vtu-payment-split';
 import { VTU_TYPE_LABELS } from '@/lib/vtu-pending-transaction';
 import { restoreInterruptedPreVendVtuRow } from '@/lib/vtu-pre-vend-recovery';
@@ -1866,30 +1867,6 @@ type VtuPurchaseResult = PurchaseResult & {
   metadataPatch?: Record<string, unknown>;
 };
 
-function isMonnifyAirtimeKudaFallbackEligible(
-  row: VtuTransactionRow,
-  monnifyResult: PurchaseResult
-) {
-  if (
-    row.type !== 'airtime' ||
-    monnifyResult.success ||
-    monnifyResult.status !== 'failed' ||
-    row.amount <= 0
-  ) {
-    return false;
-  }
-
-  const providerErrorDetail = monnifyResult.providerErrorDetail?.trim();
-  if (!providerErrorDetail) {
-    return false;
-  }
-
-  return (
-    /\b400\b/i.test(providerErrorDetail) &&
-    /(?:vend\s*)?amount must be greater than zero/i.test(providerErrorDetail)
-  );
-}
-
 function normalizeVtuProviderOrError(
   row: VtuTransactionRow
 ): ProviderNormalizationResult {
@@ -1966,6 +1943,14 @@ async function executeVtuPurchase(
     );
 
     if (!isMonnifyAirtimeKudaFallbackEligible(row, monnifyResult)) {
+      if (row.type === 'airtime' && monnifyResult.status === 'failed') {
+        // A fixed label only (no provider text in logs); the scrubbed
+        // Monnify message is on the row, so new refusal wordings can be
+        // found there and added to the allow-list.
+        console.warn('Monnify airtime failure not handed to Kuda:', {
+          transactionId: row.id,
+        });
+      }
       return monnifyResult;
     }
 

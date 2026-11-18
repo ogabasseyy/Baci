@@ -1,4 +1,5 @@
 import { readPendingHandoffEntries } from '@/lib/privacy/pending-handoff.test-support';
+import { readPendingPrivateParams } from '@/lib/privacy/private-url-param-handoff';
 import {
   act,
   continueToPaymentAfterPickupCheck,
@@ -122,6 +123,16 @@ it('records payment_completed before redirecting a paid wallet-funded transfer',
     expect(readPendingHandoffEntries()).toEqual([
       ['trackingToken', 'track-wf-1'],
     ]);
+    const pushed = new URL(
+      String(routerPush.mock.calls[0]?.[0]),
+      'http://x.test'
+    );
+    expect(
+      readPendingPrivateParams(
+        pushed.pathname,
+        pushed.search.replace(/^\?/, '')
+      )
+    ).toEqual([['trackingToken', 'track-wf-1']]);
   } finally {
     fetchMock.mockRestore();
   }

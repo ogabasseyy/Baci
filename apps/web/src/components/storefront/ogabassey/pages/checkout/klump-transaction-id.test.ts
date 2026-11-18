@@ -5,7 +5,7 @@ describe('getKlumpTransactionId', () => {
   it('reads the first present transaction id key, trimmed', () => {
     const params = new URLSearchParams({
       transaction_id: '  txn-2 ',
-      klump_transaction_id: 'txn-1',
+      klump_transaction_id: ' txn-1 ',
     });
 
     expect(getKlumpTransactionId(params)).toBe('txn-1');

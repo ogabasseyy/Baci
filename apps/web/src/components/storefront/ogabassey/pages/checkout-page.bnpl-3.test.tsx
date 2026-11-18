@@ -1,4 +1,5 @@
 import { readPendingHandoffEntries } from '@/lib/privacy/pending-handoff.test-support';
+import { readPendingPrivateParams } from '@/lib/privacy/private-url-param-handoff';
 import {
   act,
   continueToPaymentAfterPickupCheck,
@@ -169,6 +170,20 @@ it('hands fresh Credit Direct success to server verification before cleanup', as
       '/ogabassey/checkout/bnpl?orderId=order-cd&gateway=credit_direct&merchant_slug=ogabassey&creditDirectCompletion=cd-client-success-2'
     );
     expect(readPendingHandoffEntries()).toEqual([
+      ['trackingToken', 'track-cd'],
+      ['email', 'ada@example.com'],
+    ]);
+    // ... and the launcher at the pushed URL can read it.
+    const pushed = new URL(
+      String(routerPush.mock.calls[0]?.[0]),
+      'http://x.test'
+    );
+    expect(
+      readPendingPrivateParams(
+        pushed.pathname,
+        pushed.search.replace(/^\?/, '')
+      )
+    ).toEqual([
       ['trackingToken', 'track-cd'],
       ['email', 'ada@example.com'],
     ]);

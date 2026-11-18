@@ -593,6 +593,9 @@ describe('CryptoCheckoutPage', () => {
       expect(mockPush).toHaveBeenCalledWith(
         '/testmerchant/order-success?type=crypto&orderId=test-order-123&reference=REF-123456'
       );
+      expect(readPendingHandoffEntries()).toEqual([
+        ['trackingToken', 'snake-track-token-123'],
+      ]);
     } finally {
       vi.useRealTimers();
     }

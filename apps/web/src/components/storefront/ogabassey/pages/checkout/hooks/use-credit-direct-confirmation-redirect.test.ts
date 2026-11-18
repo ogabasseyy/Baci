@@ -106,6 +106,9 @@ describe('useCreditDirectConfirmationRedirect', () => {
     expect(push).toHaveBeenCalledWith(
       '/test-store/order-success?orderId=order-1&reference=txn-1&type=credit_direct'
     );
+    expect(readPendingHandoffEntries()).toEqual([
+      ['email', 'guest@example.com'],
+    ]);
   });
 
   it('does nothing before the confirmed phase', () => {

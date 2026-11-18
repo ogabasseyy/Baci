@@ -137,6 +137,7 @@ describe('bugfix: reloaded scrubbed link hydrated with values the server never r
       '/track-order?orderId=1&token=abc',
       'shop'
     );
+    expect(cleaned).toBe('/track-order?orderId=1'); // off-URL, or this test proves nothing
     // Full-page navigation: a new document at the cleaned URL, no history stash id.
     visit(cleaned);
     expect(currentPrivateParamsId()).toBeNull();

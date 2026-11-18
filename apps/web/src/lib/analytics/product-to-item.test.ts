@@ -2,17 +2,20 @@ import { describe, expect, it } from 'vitest';
 import type { AnalyticsProduct } from './analytics-product';
 import { productToItem } from './product-to-item';
 
-const product = {
-  id: 'p-1',
-  name: 'Phone',
-  price: 100,
-  category: 'legacy-cat',
-  categories: { name: 'Phones' },
-} as unknown as AnalyticsProduct;
+function makeProduct(overrides: Partial<AnalyticsProduct> = {}) {
+  return {
+    id: 'p-1',
+    name: 'Phone',
+    price: 100,
+    category: 'legacy-cat',
+    categories: { name: 'Phones' },
+    ...overrides,
+  } satisfies AnalyticsProduct;
+}
 
 describe('productToItem', () => {
   it('prefers the joined category name and defaults quantity to 1', () => {
-    expect(productToItem(product)).toEqual({
+    expect(productToItem(makeProduct())).toEqual({
       item_id: 'p-1',
       item_name: 'Phone',
       item_category: 'Phones',
@@ -23,7 +26,7 @@ describe('productToItem', () => {
   });
 
   it('falls back to the legacy category and carries quantity and variant', () => {
-    const legacy = { ...product, categories: undefined } as AnalyticsProduct;
+    const legacy = makeProduct({ categories: undefined });
 
     expect(productToItem(legacy, 3, '128GB')).toMatchObject({
       item_category: 'legacy-cat',

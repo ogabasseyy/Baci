@@ -4,8 +4,16 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GoogleAnalytics } from './google-analytics';
 
 vi.mock('next/script', () => ({
-  default: ({ id, children }: { id?: string; children?: ReactNode }) => (
-    <script id={id} type="text/plain">
+  default: ({
+    id,
+    src,
+    children,
+  }: {
+    id?: string;
+    src?: string;
+    children?: ReactNode;
+  }) => (
+    <script id={id} data-src={src} type="text/plain">
       {children}
     </script>
   ),
@@ -26,12 +34,19 @@ async function runInlineConfigScript(): Promise<Record<string, unknown>> {
   await waitFor(() =>
     expect(container.querySelector('script#google-analytics')).not.toBeNull()
   );
-  const source = container.querySelector('script#google-analytics')
-    ?.textContent as string;
+  const source = container.querySelector(
+    'script#google-analytics'
+  )?.textContent;
+  if (!source) throw new Error('The inline GA config script has no text');
   new Function(source)();
-  const entries = (window.dataLayer ?? []) as ArrayLike<unknown>[];
-  const config = entries.find((entry) => entry[0] === 'config');
-  return config?.[2] as Record<string, unknown>;
+  const entries: unknown = window.dataLayer ?? [];
+  const config = Array.from(entries as ArrayLike<ArrayLike<unknown>>).find(
+    (entry) => entry[0] === 'config'
+  )?.[2];
+  if (typeof config !== 'object' || config === null) {
+    throw new Error('The GA script queued no config command');
+  }
+  return config as Record<string, unknown>;
 }
 
 describe('GoogleAnalytics inline config', () => {
@@ -108,11 +123,14 @@ describe('bugfix: measurement id was interpolated into the inline script uncheck
     expect(
       container.querySelector('script#google-analytics')?.textContent
     ).toContain(JSON.stringify(id));
+    expect(
+      container.querySelector('script[data-src]')?.getAttribute('data-src')
+    ).toBe(`https://www.googletagmanager.com/gtag/js?id=${id}`);
   });
 
   it('still renders the config for a valid GA4 id', async () => {
     const config = await runInlineConfigScript();
 
-    expect(config).toBeDefined();
+    expect(config).toHaveProperty('page_location');
   });
 });

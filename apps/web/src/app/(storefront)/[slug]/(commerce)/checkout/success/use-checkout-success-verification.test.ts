@@ -128,13 +128,18 @@ describe('useCheckoutSuccessVerification', () => {
       .mockImplementation(() => {
         throw new DOMException('denied', 'SecurityError');
       });
-    const { props } = setup();
+    try {
+      const { props } = setup();
 
-    const { result } = renderHook(() => useCheckoutSuccessVerification(props));
+      const { result } = renderHook(() =>
+        useCheckoutSuccessVerification(props)
+      );
 
-    await waitFor(() => expect(result.current.status).toBe('success'));
-    expect(removeItem).toHaveBeenCalled();
-    removeItem.mockRestore();
+      await waitFor(() => expect(result.current.status).toBe('success'));
+      expect(removeItem).toHaveBeenCalled();
+    } finally {
+      removeItem.mockRestore();
+    }
   });
 
   it('re-polls while pending and stops once terminal', async () => {

@@ -90,6 +90,17 @@ describe('buildStuckBnplAlert', () => {
     ).toBe(days);
   });
 
+  it('prefers a valid date when selecting the oldest order', () => {
+    const alert = buildStuckBnplAlert(
+      [
+        order({ id: 'invalid-date', updated_at: 'not-a-date' }),
+        order({ id: 'valid-date' }),
+      ],
+      NOW
+    );
+    expect(alert.oldest.id).toBe('valid-date');
+  });
+
   it('rejects an empty order list', () => {
     expect(() => buildStuckBnplAlert([], NOW)).toThrow(
       'buildStuckBnplAlert needs at least one order'

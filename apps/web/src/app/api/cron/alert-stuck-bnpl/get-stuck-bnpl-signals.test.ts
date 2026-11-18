@@ -19,6 +19,18 @@ describe('getStuckBnplSignals', () => {
     ).toBe(false);
   });
 
+  it.each([
+    ['merchant mentions transactionId in plain text', false],
+    ['{"paymentTransactionId":"not-klump"}', false],
+    ['{"creditDirectClientCompletedAt":"2026-07-03"}', false],
+    ['{"klumpTransactionId":"klump-1"}', true],
+  ])('accepts only known Klump checkout evidence in %s', (notes, hasCheckoutEvidence) => {
+    expect(
+      getStuckBnplSignals({ ...order, payment_method: 'klump', notes })
+        .hasCheckoutEvidence
+    ).toBe(hasCheckoutEvidence);
+  });
+
   it('accepts provider approval or a matching completed session', () => {
     expect(
       getStuckBnplSignals({ ...order, payment_status: 'bnpl_approved' })

@@ -27,6 +27,8 @@ interface ImeiCheckPagerProps {
   onPageSelected: (event: { nativeEvent: { position: number } }) => void;
   onVerify: (tier: ImeiServiceTierKey, imei: string) => void;
   onTopUpWallet: (amount: number) => void;
+  /** The customer edited the number field. */
+  onEditIdentifier?: () => void;
 }
 
 export function ImeiCheckPager({
@@ -45,6 +47,7 @@ export function ImeiCheckPager({
   onPageSelected,
   onVerify,
   onTopUpWallet,
+  onEditIdentifier,
 }: ImeiCheckPagerProps) {
   return (
     <PagerView
@@ -70,6 +73,7 @@ export function ImeiCheckPager({
               topUpCardOnly={topUpCardOnly}
               onVerify={onVerify}
               onTopUpWallet={onTopUpWallet}
+              onEditIdentifier={onEditIdentifier}
             />
           ) : null}
         </View>

@@ -69,6 +69,27 @@ describe('StartSavingsReviewContent for a PiggyVest wallet', () => {
     ).toBeOnTheScreen();
   });
 
+  it('offers to pay the head start now from the wallet, and untick to add it later', () => {
+    const controller = createPrimaryStartSavingsController({
+      effectiveInitialContribution: 100,
+      initialContributionEnabled: true,
+      interestChoice: true,
+      safeWalletBalance: 220,
+    });
+    render(
+      <StartSavingsReviewContent colors={Colors.dark} controller={controller} />
+    );
+    const tick = screen.getByRole('checkbox', {
+      name: 'Pay ₦100 head start now from my wallet',
+    });
+    expect(screen.getByText(/₦220 available/)).toBeOnTheScreen();
+    expect(screen.queryByText('Head start: ₦100')).toBeNull();
+    fireEvent.press(tick);
+    expect(controller.setSelectedFundingOption).toHaveBeenCalledWith(
+      'bank_transfer'
+    );
+  });
+
   it('says Savings only, with no interest note, when they chose No', () => {
     render(
       <StartSavingsReviewContent

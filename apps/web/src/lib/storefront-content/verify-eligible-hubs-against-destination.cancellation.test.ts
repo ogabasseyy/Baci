@@ -132,8 +132,10 @@ describe('article verification cancellation through the shared inventory reader'
   });
   it('does not verify or hydrate a partial oversized pool', async () => {
     query.range.mockResolvedValueOnce({
-      data: products,
-      count: 301,
+      data: Array.from({ length: 301 }, (_, i) => ({
+        ...products[0],
+        id: `p-${i}`,
+      })),
       error: null,
     });
     expect(await verify(args)).toEqual(empty);

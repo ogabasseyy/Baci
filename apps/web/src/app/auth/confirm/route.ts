@@ -1,6 +1,7 @@
 import { cookies, headers } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+import { CUSTOMER_SESSION_HINT_COOKIE } from '@/contexts/customer-session-hint';
 import { normalizeAuthNextTarget } from '@/lib/auth-redirect';
 import { createClient } from '@/lib/supabase/server';
 
@@ -91,7 +92,14 @@ export async function GET(request: Request) {
     );
   }
 
-  return NextResponse.redirect(
+  const response = NextResponse.redirect(
     next.startsWith('baciadmin://') ? next : `${url.origin}${next}`
   );
+  response.cookies.set(CUSTOMER_SESSION_HINT_COOKIE, '', {
+    path: '/',
+    maxAge: 0,
+    sameSite: 'lax',
+    secure: url.protocol === 'https:',
+  });
+  return response;
 }

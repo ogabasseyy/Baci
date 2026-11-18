@@ -93,10 +93,10 @@ export function MenuSection({
               >
                 {puzzle && idx > 0 && (
                   <View
-                    pointerEvents="none"
                     style={[
                       styles.notch,
                       {
+                        pointerEvents: 'none',
                         backgroundColor: colors.background,
                         borderColor: colors.border,
                       },

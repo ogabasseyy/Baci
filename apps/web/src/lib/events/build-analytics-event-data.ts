@@ -28,7 +28,6 @@ export function buildAnalyticsEventData(
       marketing: input.marketing_consent,
     });
   assignDefined(eventData, 'session_id', input.session_id);
-  assignDefined(eventData, 'user_agent', input.user_agent);
   assignDefined(
     eventData,
     'referrer',

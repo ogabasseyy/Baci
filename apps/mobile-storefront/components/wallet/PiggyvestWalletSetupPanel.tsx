@@ -19,10 +19,10 @@ import { useAuthStore } from '@/stores/auth-store';
 import { PiggyvestWalletSetupForm } from './PiggyvestWalletSetupForm';
 import { PrimaryWalletSetupPending } from './PrimaryWalletSetupPending';
 import { PrimaryWalletSetupReview } from './PrimaryWalletSetupReview';
-
-const AUTO_CHECK_INTERVAL_MS = 5000;
-const AUTO_CHECK_LIMIT = 12;
-
+import {
+  AUTO_CHECK_LIMIT,
+  autoCheckDelayMs,
+} from './piggyvest-setup-auto-check';
 import {
   WalletFundPhonePrompt,
   type WalletFundPhoneSubmitResult,
@@ -154,8 +154,8 @@ export function PiggyvestWalletSetupPanel({
     }
   }
 
-  // While PiggyVest finishes the account number, check by itself every few
-  // seconds (bounded) so the customer never has to keep tapping.
+  // While PiggyVest finishes the account number, check by itself on a
+  // bounded backoff (about five minutes) so the customer never has to tap.
   const runAutoCheck = useEffectEvent(() => {
     // A manual check may have started since the timer was set: skip without
     // spending one of the bounded automatic checks.
@@ -165,9 +165,9 @@ export function PiggyvestWalletSetupPanel({
   });
   useEffect(() => {
     // Wait while a check is in flight so every counted check really runs.
-    if (busy || !pending || reviewRequired || autoChecks >= AUTO_CHECK_LIMIT)
-      return;
-    const timer = setTimeout(runAutoCheck, AUTO_CHECK_INTERVAL_MS);
+    const delay = autoCheckDelayMs(autoChecks);
+    if (busy || !pending || reviewRequired || delay === null) return;
+    const timer = setTimeout(runAutoCheck, delay);
     return () => clearTimeout(timer);
   }, [busy, pending, reviewRequired, autoChecks]);
 
@@ -208,6 +208,7 @@ export function PiggyvestWalletSetupPanel({
             awaitingAccount && autoChecks >= AUTO_CHECK_LIMIT && !busy
           }
           checkFailed={error}
+          canCheckNow={error || autoChecks >= AUTO_CHECK_LIMIT}
           onCheckNow={refresh}
         />
       ) : (

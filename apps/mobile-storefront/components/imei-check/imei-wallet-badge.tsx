@@ -1,14 +1,15 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { Text, View } from 'react-native';
 import { formatServicePrice } from './format-service-price';
-import { styles } from './imei-check.styles';
 import type { ImeiCheckerColors } from './imei-check.types';
+import { footerStyles as styles } from './imei-check-footer.styles';
 import type { getImeiWalletCopy } from './imei-wallet-copy';
 
 /**
- * The footer's wallet badge. Unknown until the wallet loads (never a ₦0 that
- * reads as empty); with paying from PiggyVest on, the savings wallet it pays
- * from; otherwise the store credit balance as before.
+ * The footer's "Pays from" line under the pay button. Every balance reads the
+ * same way, "Pays from <source> · <amount>", so switching between store
+ * credit and PiggyVest savings never looks like two different badges.
+ * Unknown until the wallet loads (never a ₦0 that reads as empty).
  */
 export function ImeiWalletBadge({
   colors,
@@ -34,27 +35,31 @@ export function ImeiWalletBadge({
     : savings !== null
       ? `Savings wallet balance ${savings}`
       : walletCopy.balanceLabel(walletBalance);
-  const amount = !isWalletReady
-    ? '…'
+  const source = !isWalletReady
+    ? null
     : savings !== null
-      ? `Savings ${savings}`
-      : walletCopy.badgePrefix
-        ? `${walletCopy.badgePrefix} ${formatServicePrice(walletBalance)}`
-        : formatServicePrice(walletBalance);
+      ? `PiggyVest savings · ${savings}`
+      : `${walletCopy.badgePrefix ?? 'Wallet'} · ${formatServicePrice(walletBalance)}`;
+  const tone = needsTopUp ? colors.error : colors.textSecondary;
   return (
-    <View accessibilityLabel={label} style={styles.walletBadge}>
-      <Ionicons
-        name="wallet-outline"
-        size={20}
-        color={needsTopUp ? colors.error : colors.textSecondary}
-      />
-      <Text
-        style={[
-          styles.walletBadgeAmount,
-          { color: needsTopUp ? colors.error : colors.text },
-        ]}
-      >
-        {amount}
+    <View accessibilityLabel={label} style={styles.payFrom}>
+      <Ionicons name="wallet-outline" size={15} color={tone} />
+      <Text style={[styles.payFromText, { color: tone }]}>
+        {source === null ? (
+          '…'
+        ) : (
+          <>
+            {'Pays from '}
+            <Text
+              style={[
+                styles.payFromAmount,
+                { color: needsTopUp ? colors.error : colors.text },
+              ]}
+            >
+              {source}
+            </Text>
+          </>
+        )}
       </Text>
     </View>
   );

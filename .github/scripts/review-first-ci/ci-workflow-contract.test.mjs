@@ -142,6 +142,40 @@ describe('split speed jobs (2026-11-15) still gate the Quality Gate aggregate', 
   });
 });
 
+describe('background steps (2026-11-16)', () => {
+  for (const [jobId, startName, waitName] of [
+    ['quality-db-replay', 'Start pinned Supabase database image download', 'Prepare pinned Supabase database image'],
+  ]) {
+    it(`${jobId}: the wait step runs only when its start step succeeded, after failures too`, () => {
+      const steps = ci.jobs[jobId].steps;
+      const start = steps.find((step) => step.name === startName);
+      const wait = steps.find((step) => step.name === waitName);
+      assert.ok(start?.id, `${startName} needs an id`);
+      // The start step only spawns: a failure in other work there would skip the wait and cleanup
+      // while the background command keeps running.
+      assert.match(start.run, /^bash \.github\/scripts\/background-step\.sh start \S+( \S+)*$/);
+      // No chained or substituted shell: `&&`, `;`, `||`, pipes, backgrounding, redirects, subshells.
+      assert.doesNotMatch(start.run, /[;&|`<>()]|\$\(/);
+      assert.match(wait.run, /background-step\.sh wait /);
+      assert.ok(steps.indexOf(wait) > steps.indexOf(start));
+      assert.match(wait.if, /!cancelled\(\)/);
+      assert.ok(wait.if.includes(`steps.${start.id}.outcome == 'success'`), wait.if);
+    });
+  }
+});
+
+describe('cancelled DB replay jobs stop the image download', () => {
+  it('runs an always() stop step right after the wait', () => {
+    const steps = ci.jobs['quality-db-replay'].steps;
+    const wait = steps.findIndex((step) => step.name === 'Prepare pinned Supabase database image');
+    const stop = steps.findIndex((step) => step.name === 'Stop pinned Supabase database image download');
+    assert.equal(stop, wait + 1);
+    assert.match(steps[stop].if, /always\(\)/);
+    assert.match(steps[stop].if, /steps\.replay-image-start\.outcome == 'success'/);
+    assert.equal(steps[stop].run, 'bash .github/scripts/background-step.sh stop replay-image');
+  });
+});
+
 describe('the changes job (pinned by the capability-gate contract)', () => {
   const changes = ci.jobs.changes;
   const byId = (id) => changes.steps.find((step) => step.id === id);

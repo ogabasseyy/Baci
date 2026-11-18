@@ -1,6 +1,13 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ServerSupabaseClient } from '@/app/api/quiz/_shared/route-helpers-guards';
 import { enforceQuizStartGuards } from './v2-start-guards';
+
+vi.mock('@/lib/quiz/quiz-app-check', () => ({
+  verifyQuizAppCheckToken: vi.fn(),
+}));
+vi.mock('@/lib/quiz/quiz-attestation-challenge', () => ({
+  consumeQuizAttestationChallenge: vi.fn(),
+}));
 
 function client({
   context = {
@@ -33,6 +40,9 @@ function client({
   return { from, rpc } as unknown as ServerSupabaseClient;
 }
 
+beforeEach(() => {
+  vi.stubEnv('QUIZ_APP_ATTESTATION', 'off');
+});
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.useRealTimers();
@@ -48,7 +58,8 @@ describe('v2 start production gates', () => {
         client({ dateOfBirth: '2020-01-01' }),
         'event-1',
         'user-1',
-        'bearer'
+        'bearer',
+        null
       )
     ).rejects.toMatchObject({ code: 'quiz_age_restricted' });
   });
@@ -57,7 +68,7 @@ describe('v2 start production gates', () => {
     vi.stubEnv('QUIZ_PRODUCTION_APPROVED', 'true');
     const supabase = client();
     await expect(
-      enforceQuizStartGuards(supabase, 'event-1', 'user-1', 'bearer')
+      enforceQuizStartGuards(supabase, 'event-1', 'user-1', 'bearer', null)
     ).resolves.toBeUndefined();
     // RLS hides v2 event rows from players, so the guard must resolve
     // mode/merchant through the projection RPC and never read quiz_events.
@@ -82,7 +93,8 @@ describe('v2 start production gates', () => {
         }),
         'event-1',
         'user-1',
-        'bearer'
+        'bearer',
+        null
       )
     ).resolves.toBeUndefined();
   });
@@ -93,7 +105,8 @@ describe('v2 start production gates', () => {
         client({ contextError: new Error('offline') }),
         'event-1',
         'user-1',
-        'bearer'
+        'bearer',
+        null
       )
     ).rejects.toThrow('Quiz start eligibility could not be verified');
   });
@@ -105,7 +118,8 @@ describe('v2 start production gates', () => {
         client({ context: { found: false } }),
         'event-1',
         'user-1',
-        'bearer'
+        'bearer',
+        null
       )
     ).rejects.toThrow('Quiz start eligibility could not be verified');
     await expect(
@@ -120,7 +134,8 @@ describe('v2 start production gates', () => {
         }),
         'event-1',
         'user-1',
-        'bearer'
+        'bearer',
+        null
       )
     ).rejects.toThrow('Quiz start eligibility could not be verified');
   });
@@ -128,7 +143,7 @@ describe('v2 start production gates', () => {
     vi.stubEnv('QUIZ_PHASE', 'production');
     vi.stubEnv('QUIZ_PRODUCTION_APPROVED', 'false');
     await expect(
-      enforceQuizStartGuards(client(), 'event-1', 'user-1', 'bearer')
+      enforceQuizStartGuards(client(), 'event-1', 'user-1', 'bearer', null)
     ).rejects.toMatchObject({ code: 'quiz_production_not_approved' });
   });
   it('blocks a live launch with a negative compliance verdict', async () => {
@@ -146,7 +161,8 @@ describe('v2 start production gates', () => {
         }),
         'event-1',
         'user-1',
-        'bearer'
+        'bearer',
+        null
       )
     ).rejects.toMatchObject({ code: 'quiz_production_not_approved' });
   });
@@ -154,14 +170,14 @@ describe('v2 start production gates', () => {
     vi.stubEnv('QUIZ_PHASE', 'production');
     vi.stubEnv('QUIZ_PRODUCTION_APPROVED', 'true');
     await expect(
-      enforceQuizStartGuards(client(), 'event-1', 'user-1', 'cookie')
+      enforceQuizStartGuards(client(), 'event-1', 'user-1', 'cookie', null)
     ).rejects.toMatchObject({ code: 'QUIZ_APP_ONLY' });
   });
   it('lets an app (bearer) session start the same live quiz', async () => {
     vi.stubEnv('QUIZ_PHASE', 'production');
     vi.stubEnv('QUIZ_PRODUCTION_APPROVED', 'true');
     await expect(
-      enforceQuizStartGuards(client(), 'event-1', 'user-1', 'bearer')
+      enforceQuizStartGuards(client(), 'event-1', 'user-1', 'bearer', null)
     ).resolves.toBeUndefined();
   });
   it('still allows a browser-session start of a private test quiz', async () => {
@@ -178,7 +194,8 @@ describe('v2 start production gates', () => {
         }),
         'event-1',
         'user-1',
-        'cookie'
+        'cookie',
+        null
       )
     ).resolves.toBeUndefined();
   });

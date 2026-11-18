@@ -11,6 +11,8 @@ import type { billPurchaseRequest } from './bill-retains-store-credit';
 
 export interface BillFormController {
   amount: string;
+  /** What the amount still needs before Pay (shown in the form), or null. */
+  amountIssue: string | null;
   beneficiaries: UtilityBeneficiary[];
   billersQuery: ReturnType<typeof useVTUBillers>;
   billItemSelection: ReturnType<typeof resolveBillItemSelection>;

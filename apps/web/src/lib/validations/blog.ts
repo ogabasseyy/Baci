@@ -61,9 +61,7 @@ export const blogPostSchema = z.object({
   author_title: z.string().max(100).optional().nullable(),
   author_image_url: z.url().optional().nullable().or(z.literal('')),
   author_bio: z.string().max(500).optional().nullable(),
-  // Note: 'scheduled' exists in the DB enum but has no cron job to publish.
-  // Only accept statuses that are immediately actionable.
-  status: z.enum(['draft', 'published', 'archived']).optional(),
+  status: z.enum(['draft', 'scheduled', 'published', 'archived']).optional(),
   published_at: z.iso.datetime({ offset: true }).nullable().optional(),
   seo_title: z
     .string()
@@ -84,10 +82,24 @@ export const blogPostSchema = z.object({
 });
 
 /**
+ * Update schema enforcing scheduled publication timestamp invariant while
+ * keeping blogPostSchema unrefined for .partial() and .pick() callers.
+ */
+export const updateBlogPostSchema = blogPostSchema.superRefine((data, ctx) => {
+  if (data.status === 'scheduled' && data.published_at === null) {
+    ctx.addIssue({
+      code: 'custom',
+      message: 'published_at cannot be null when status is scheduled',
+      path: ['published_at'],
+    });
+  }
+});
+
+/**
  * Schema for creating a new post.
  * More strict than the general update schema.
  */
-export const createPostSchema = z.object({
+const createPostBaseSchema = z.object({
   title: z.string().min(1, 'Title is required').max(200),
   slug: z
     .string()
@@ -110,11 +122,46 @@ export const createPostSchema = z.object({
   author_title: z.string().max(100).optional(),
   author_image_url: z.url().optional().nullable(),
   author_bio: z.string().max(500).optional(),
-  status: z.enum(['draft', 'published', 'archived']).optional(),
+  // Manual dashboard scheduled posts without a reservation row are intentionally
+  // unmanaged by release caps until automated scheduling calls reserve RPC.
+  status: z.enum(['draft', 'published', 'scheduled', 'archived']).optional(),
+  published_at: z.iso.datetime({ offset: true }).nullable().optional(),
   seo_title: z.string().max(70).optional(),
   seo_description: z.string().max(160).optional(),
   focus_keyword: z.string().max(50).optional().nullable(),
   embedded_products: embeddedProductIdsSchema.optional(),
+});
+
+export const createPostSchema = createPostBaseSchema
+  // Partial PATCH payloads may omit published_at when editing an existing
+  // scheduled post; updateBlogPost enforces existingPost.published_at presence.
+  .superRefine((data, ctx) => {
+    if (data.status === 'scheduled' && data.published_at === null) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'published_at cannot be null when status is scheduled',
+        path: ['published_at'],
+      });
+    }
+    if (data.status === 'scheduled' && !data.published_at) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'published_at is required when status is scheduled',
+        path: ['published_at'],
+      });
+    }
+  });
+
+const platformBlogStatusSchema = z
+  .enum(['draft', 'published', 'archived'])
+  .optional();
+
+export const createPlatformPostSchema = createPostBaseSchema.extend({
+  status: platformBlogStatusSchema,
+});
+
+export const platformBlogPostUpdateSchema = blogPostSchema.partial().extend({
+  status: platformBlogStatusSchema,
 });
 
 export type BlogPostInput = z.infer<typeof blogPostSchema>;

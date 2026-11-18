@@ -13,6 +13,8 @@ export type GoalActionPinProofRequest = {
   merchantId: string;
   goalId: string;
   operationId: string;
+  /** Shown on the PIN sheet only; never sent to the server. */
+  goalTitle?: string;
 };
 
 export type PinProofRequest = FundPinProofRequest | GoalActionPinProofRequest;

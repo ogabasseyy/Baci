@@ -55,6 +55,9 @@ export async function initializeCheckoutDva({
 }: InitializeCheckoutDvaOptions): Promise<void> {
   setIsInitializingDva(true);
   const stampedCurrency = orderCurrency(order, currencyCode);
+  const validTrackingToken = order.tracking_token?.trim()
+    ? order.tracking_token
+    : null;
   await requestDva({
     merchantId,
     orderId: order.id,
@@ -63,7 +66,7 @@ export async function initializeCheckoutDva({
     customerPhone,
     billingAddress,
     orderCurrency: stampedCurrency,
-    trackingToken: order.tracking_token,
+    trackingToken: validTrackingToken,
   })
     .then((result) => {
       setDvaData({
@@ -73,7 +76,7 @@ export async function initializeCheckoutDva({
         reference: result.reference,
         orderId: order.id,
         orderNumber: order.order_number,
-        trackingToken: order.tracking_token,
+        trackingToken: validTrackingToken,
         checkoutFingerprint,
         orderCurrency: stampedCurrency,
       });

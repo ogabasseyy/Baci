@@ -27,7 +27,6 @@ export const oxygenEligibilityReportSchema = z.object({
         tenor: z.number().int().min(1).max(12),
       })
     )
-    .min(1)
     .max(12)
     .optional(),
   response_code: z.never().optional(),

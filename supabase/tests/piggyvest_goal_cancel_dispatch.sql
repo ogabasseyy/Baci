@@ -37,22 +37,25 @@ BEGIN
       'funding fence raised another error: ' || SQLERRM);
   END;
 
-  -- 10. Dispatch records the provider balance as the amount, exactly once.
+  -- 10. Dispatch records the principal as the amount, exactly once (the split
+  -- dispatch of 20261112190514; the provider balance equals the principal here).
   BEGIN
-    PERFORM piggyvest_primary.manage_goal_cancel(v_scope, v_op::uuid, 'dispatch', NULL);
-    RAISE EXCEPTION 'dispatch without an amount was accepted';
+    PERFORM piggyvest_primary.dispatch_goal_cancel_split(v_scope, v_op::uuid, NULL);
+    RAISE EXCEPTION 'dispatch without a balance was accepted';
   EXCEPTION WHEN SQLSTATE '22023' THEN NULL;
   END;
   BEGIN
-    PERFORM piggyvest_primary.manage_goal_cancel(v_scope, v_op::uuid, 'dispatch', 0);
-    RAISE EXCEPTION 'dispatch with a zero amount was accepted';
+    PERFORM piggyvest_primary.dispatch_goal_cancel_split(v_scope, v_op::uuid, 0);
+    RAISE EXCEPTION 'dispatch with a zero balance was accepted';
   EXCEPTION WHEN SQLSTATE '22023' THEN NULL;
   END;
   PERFORM pg_temp.gc_assert(NOT piggyvest_primary.manage_goal_cancel(v_scope, v_op::uuid, 'cancel_stale', NULL),
     'a fresh reservation was cancelled as stale');
-  PERFORM pg_temp.gc_assert(piggyvest_primary.manage_goal_cancel(v_scope, v_op::uuid, 'dispatch', 250000),
+  PERFORM pg_temp.gc_assert(
+    piggyvest_primary.dispatch_goal_cancel_split(v_scope, v_op::uuid, 250000) ->> 'status' = 'dispatched',
     'dispatch refused');
-  PERFORM pg_temp.gc_assert(NOT piggyvest_primary.manage_goal_cancel(v_scope, v_op::uuid, 'dispatch', 999),
+  PERFORM pg_temp.gc_assert(
+    piggyvest_primary.dispatch_goal_cancel_split(v_scope, v_op::uuid, 250000) ->> 'status' = 'not_claimed',
     'a second dispatch was accepted');
   PERFORM pg_temp.gc_assert(
     (SELECT amount_kobo FROM piggyvest_primary.goal_cancel_operations WHERE id = v_op::uuid) = 250000

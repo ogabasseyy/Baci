@@ -1,12 +1,13 @@
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { hasPermission } from '@/lib/api-auth';
-import { cache } from '@/lib/cache';
+import { cache, generateCacheKey } from '@/lib/cache';
 import {
   getMerchantForApiRequest,
   toUserAccess,
 } from '@/lib/get-merchant-for-api-request';
 import { createClient } from '@/lib/supabase/server';
+import { deleteCachedInsights } from '../insights/insights-cache';
 
 /**
  * DELETE /api/analytics/cache
@@ -43,10 +44,14 @@ export async function DELETE() {
     // Delete all cache entries for this merchant (using wildcards)
     cache.deletePattern(`analytics:${merchantId}*`);
     cache.deletePattern(`ai-insights:${merchantId}*`);
+    const redisInvalidated = await deleteCachedInsights(
+      generateCacheKey('ai-insights', merchantId)
+    );
 
     return NextResponse.json({
       message: 'Cache invalidated successfully',
       merchantId: merchantId,
+      redisInvalidated,
     });
   } catch (error) {
     console.error('Error invalidating cache:', error);

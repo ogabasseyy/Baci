@@ -215,4 +215,74 @@ describe('interpretFastCatalogIntent', () => {
       });
     }
   });
+
+  it('recognizes plural device names with budget limits in preflight and full search', () => {
+    expect(
+      interpretFastCatalogIntent(['macbooks below 2m'], [], 'NGN', {
+        categoriesLoaded: false,
+      })
+    ).toMatchObject({
+      kind: 'search',
+      query: 'MacBook',
+      maxPrice: 2_000_000,
+      exclusiveMaxPrice: true,
+    });
+
+    expect(
+      interpretFastCatalogIntent(['macbooks below 2m'], categories, 'NGN')
+    ).toMatchObject({
+      kind: 'search',
+      categoryId: 'laptops',
+      query: 'MacBook',
+      maxPrice: 2_000_000,
+      exclusiveMaxPrice: true,
+    });
+
+    expect(
+      interpretFastCatalogIntent(['ipads under 1m'], categories, 'NGN')
+    ).toMatchObject({
+      kind: 'search',
+      query: 'iPad',
+      maxPrice: 1_000_000,
+      exclusiveMaxPrice: true,
+    });
+
+    expect(
+      interpretFastCatalogIntent(['notebooks under 800k'], categories, 'NGN')
+    ).toMatchObject({
+      kind: 'search',
+      categoryId: 'laptops',
+      query: '',
+      maxPrice: 800_000,
+      exclusiveMaxPrice: true,
+    });
+
+    expect(
+      interpretFastCatalogIntent(['pixels below 1m'], [], 'NGN', {
+        categoriesLoaded: false,
+      })
+    ).toMatchObject({
+      kind: 'search',
+      query: 'Pixel',
+      maxPrice: 1_000_000,
+      exclusiveMaxPrice: true,
+    });
+
+    expect(
+      interpretFastCatalogIntent(['pixels below 1m'], categories, 'NGN')
+    ).toMatchObject({
+      kind: 'search',
+      query: 'Pixel',
+      maxPrice: 1_000_000,
+      exclusiveMaxPrice: true,
+    });
+
+    expect(
+      interpretFastCatalogIntent(
+        ['How many pixels are in a 4K image?'],
+        categories,
+        'NGN'
+      )
+    ).toBeNull();
+  });
 });

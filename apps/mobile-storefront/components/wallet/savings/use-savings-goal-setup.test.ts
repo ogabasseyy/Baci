@@ -64,7 +64,7 @@ describe('useSavingsGoalSetup', () => {
     );
     const { result } = render();
     act(() => result.current.setChoice(true));
-    let first: Promise<void> = Promise.resolve();
+    let first: Promise<unknown> = Promise.resolve();
     act(() => {
       first = result.current.submit();
     });
@@ -115,7 +115,7 @@ describe('useSavingsGoalSetup retry', () => {
       })
     );
     const { result } = render();
-    let first: Promise<void> = Promise.resolve();
+    let first: Promise<unknown> = Promise.resolve();
     act(() => {
       first = result.current.retry();
     });

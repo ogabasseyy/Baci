@@ -103,12 +103,20 @@ export function useIdentityConfirmation({
       if (!email || !userId) throw new Error(NO_EMAIL);
       if (code.length !== IDENTITY_CODE_LENGTH) return;
       const entered = code;
-      setCodeValue('');
-      await confirmIdentityCode({
-        email,
-        code: entered,
-        expectedUserId: userId,
-      });
+      // The dots stay filled while the code is checked: emptying them first
+      // flashed a blank code pad just before the next step appeared.
+      try {
+        await confirmIdentityCode({
+          email,
+          code: entered,
+          expectedUserId: userId,
+        });
+      } finally {
+        // Cleared in the same update as the next step (or the error), so
+        // the code never lingers and nothing flashes. Only for the account
+        // that sent it: a code typed for a newer account is left alone.
+        if (isCurrent()) setCodeValue('');
+      }
       if (isCurrent()) onConfirmed();
     });
 

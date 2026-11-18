@@ -8,6 +8,7 @@ import { useUtilityPayment } from '@/hooks/use-utility-payment';
 import { useAuthStore } from '@/stores/auth-store';
 import type { AirtimeFormProps } from './airtime-form.types';
 import {
+  nextPhoneDigits,
   resolveAirtimeProvider,
   sanitizeAirtimeAmountInput,
   sanitizePhoneDigits,
@@ -16,6 +17,7 @@ import {
 import { buildUtilityWalletReturnTo } from './build-utility-wallet-return-to';
 import { getUtilityFooterOffset } from './get-utility-footer-offset';
 import { useAirtimePurchaseHandler } from './use-airtime-purchase-handler';
+import { usePhoneTrimNotice } from './use-phone-trim-notice';
 import { formatUtilityAmountInput } from './utility-amount-format';
 
 const FOOTER_HEIGHT = 120;
@@ -36,10 +38,14 @@ export function useAirtimeFormController(props: AirtimeFormProps) {
   const prevIsRepeatPaymentReadyRef = useRef(isRepeatPaymentReady);
   const [selectedProvider, setSelectedProvider] = useState<string | null>(
     initialProvider ??
-      (initialPhoneNumber ? resolveAirtimeProvider(initialPhoneNumber) : null)
+      (initialPhoneNumber
+        ? resolveAirtimeProvider(sanitizePhoneDigits(initialPhoneNumber))
+        : null)
   );
   const [isBeneficiarySelected, setIsBeneficiarySelected] = useState(false);
-  const [phoneNumber, setPhoneNumber] = useState(initialPhoneNumber ?? '');
+  const [phoneNumber, setPhoneNumber] = useState(
+    sanitizePhoneDigits(initialPhoneNumber ?? '')
+  );
   const [amount, setAmount] = useState(initialAmount ?? '');
   const [isNetworkPickerExpanded, setIsNetworkPickerExpanded] = useState(false);
   const [shouldScrollToPayment, setShouldScrollToPayment] =
@@ -57,9 +63,12 @@ export function useAirtimeFormController(props: AirtimeFormProps) {
     prevIsRepeatPaymentReadyRef.current = isRepeatPaymentReady;
   }, [isRepeatPaymentReady]);
 
+  const noticeTrim = usePhoneTrimNotice();
   const handlePhoneChange = (text: string) => {
     setIsBeneficiarySelected(false);
-    const digits = sanitizePhoneDigits(text);
+    const change = nextPhoneDigits(phoneNumber, text);
+    noticeTrim(change);
+    const { digits } = change;
     setPhoneNumber(digits);
     setSelectedProvider(resolveAirtimeProvider(digits));
     setIsNetworkPickerExpanded(false);
@@ -99,6 +108,16 @@ export function useAirtimeFormController(props: AirtimeFormProps) {
     });
   };
 
+  const purchaseRequest =
+    numericAmount > 0
+      ? {
+          amount: numericAmount,
+          networkProvider: selectedProvider ?? undefined,
+          phoneNumber,
+          type: 'airtime' as const,
+          walletAmount: numericAmount,
+        }
+      : null;
   return {
     amount,
     footerBottomOffset: getUtilityFooterOffset({
@@ -123,6 +142,11 @@ export function useAirtimeFormController(props: AirtimeFormProps) {
     numericAmount,
     payment,
     phoneNumber,
+    // The same purchase the submit handler peeks at (its retry identity).
+    purchaseRequest,
+    retainedStoreCredit:
+      purchaseRequest !== null &&
+      payment.hasRetainedVtuAttempt?.(purchaseRequest) === true,
     scrollViewRef,
     selectedProvider,
     selectedProviderConfig,

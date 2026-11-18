@@ -73,6 +73,16 @@ export const PIGGYVEST_WEBHOOK_ALERT_CODES = [
   // database refused to settle it (for example a late success while a newer
   // attempt is live). Nothing is resent or released; a person resolves it.
   'PIGGYVEST_GOAL_CANCEL_NEEDS_REVIEW',
+  // The interest leg of an early goal cancel (forfeited to Ogabassey's
+  // interest wallet) cannot finish by itself: PiggyVest refused it three
+  // times, money was left in the goal wallet after it, or the database
+  // refused to settle it. The customer's principal is already back; a person
+  // resolves the interest.
+  'PIGGYVEST_GOAL_CANCEL_FORFEIT_NEEDS_REVIEW',
+  // An early cancel owes interest but no enabled interest wallet is
+  // configured (goal_interest_forfeit_wallets): the cancel was refused before
+  // anything moved. An operator configures the wallet.
+  'PIGGYVEST_GOAL_CANCEL_FORFEIT_UNAVAILABLE',
   // A goal complete that cannot finish by itself: the goal also holds legacy
   // contributions or order redemptions, or PiggyVest moved the balance but
   // the database refused to settle it (it stays held for a person).
@@ -85,6 +95,11 @@ export const PIGGYVEST_WEBHOOK_ALERT_CODES = [
   // differ. Deduped (never credited twice); paged so a reused pvb_reference
   // or provider bug is seen instead of silently acked.
   'PIGGYVEST_CREDIT_AUDIT_DRIFT',
+  // The degraded-health check (read-only, counts only) saw 3 or more savings
+  // transfers still unconfirmed after ten minutes, 3 or more goal-wallet
+  // setups not enrolled ten minutes after they started, or could not read
+  // either at all.
+  'PIGGYVEST_DEGRADED',
 ] as const;
 
 export type PiggyvestWebhookAlertCode =

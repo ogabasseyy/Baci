@@ -36,7 +36,7 @@ import {
   getPageConfigMerchantCacheTag,
   getPageConfigSlugCacheTag,
 } from '@/lib/tenant-cache-tags';
-import { isSlugShapedIdentifier } from '@/lib/validation';
+import { isDomainIdentifier, isSlugShapedIdentifier } from '@/lib/validation';
 
 export const revalidateMerchantFeed =
   productCacheRevalidation.revalidateMerchantFeed;
@@ -69,11 +69,7 @@ function schedulePurgeCloudflareUrls(urls: string[]): void {
  * use `revalidateMerchantPublication` because stale-while-revalidate is unsafe
  * for storefront availability state.
  */
-export function revalidateMerchant(
-  merchantId: string,
-  merchantSlug?: string,
-  customDomain?: string
-) {
+export function revalidateMerchant(merchantId: string, merchantSlug?: string) {
   const normalizedMerchantId = normalizeMerchantId(merchantId);
   if (!normalizedMerchantId) {
     console.warn(
@@ -91,12 +87,6 @@ export function revalidateMerchant(
     if (isSlugShapedIdentifier(normalizedSlug)) {
       revalidateTag(getMerchantSlugCacheTag(normalizedSlug), 'merchant');
     }
-  }
-
-  const normalizedCustomDomain = customDomain?.trim().toLowerCase();
-  if (normalizedCustomDomain) {
-    revalidateTag(`domain-${normalizedCustomDomain}`, 'merchant');
-    revalidateTag(`merchant-${normalizedCustomDomain}`, 'merchant');
   }
 
   // Dashboard stats may change
@@ -151,16 +141,22 @@ export function revalidateMerchantSlugLookup(slug?: string) {
     return;
   }
 
-  const normalizedSlug = slug.trim().toLowerCase();
-  if (!isSlugShapedIdentifier(normalizedSlug)) {
-    console.warn('Skipped merchant slug lookup revalidation for invalid slug', {
-      slug,
-    });
+  const normalizedIdentifier = slug.trim().toLowerCase();
+  if (isSlugShapedIdentifier(normalizedIdentifier)) {
+    revalidateTag(getMerchantSlugCacheTag(normalizedIdentifier), 'merchant');
+    revalidateTag(`merchant-${normalizedIdentifier}`, 'merchant');
     return;
   }
 
-  revalidateTag(getMerchantSlugCacheTag(normalizedSlug), 'merchant');
-  revalidateTag(`merchant-${normalizedSlug}`, 'merchant');
+  if (isDomainIdentifier(normalizedIdentifier)) {
+    revalidateTag(`domain-${normalizedIdentifier}`, 'merchant');
+    revalidateTag(`merchant-${normalizedIdentifier}`, 'merchant');
+    return;
+  }
+
+  console.warn('Skipped merchant slug lookup revalidation for invalid slug', {
+    slug,
+  });
 }
 
 /**
@@ -255,7 +251,10 @@ export function revalidateFeatures(merchantId: string) {
 
 /**
  * Revalidate page builder config cache for a single merchant.
- * Call after page config publish.
+ * Call after page config publish. Note: `apps/web/src` currently queries
+ * `page_configs` directly without `use cache` / `next.tags` readers, so
+ * tenant-scoped tags prevent cross-tenant global invalidation while remaining
+ * ready for any per-merchant `page-config-${merchantId}` reader.
  */
 export function revalidatePageConfig(merchantId: string, pageSlug?: string) {
   const normalizedMerchantId = normalizeMerchantId(merchantId);

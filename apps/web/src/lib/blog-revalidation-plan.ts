@@ -37,10 +37,10 @@ export function isSafeCanonicalMerchantSlug(slug: string): boolean {
 
 /**
  * Compute the exact Next.js cache tags, paths, and Cloudflare purge inputs
- * for a blog mutation. Emits tenant/identifier-scoped tags whenever a
- * merchant ID, storefront identifier, or canonical slug is provided, only
- * falling back to global `'blog-posts'` / `'blog-rss-feed'` tags when no
- * scope arguments were supplied at all.
+ * for a blog mutation. Emits only tenant/identifier-scoped tags when a valid
+ * `merchantId` is provided; keeps the global `'blog-posts'` / `'blog-rss-feed'`
+ * fallback only for legacy identifier-only callers without a `merchantId`, and
+ * treats empty `{}` input as a no-op.
  */
 export function buildBlogRevalidationPlan(
   identifierOrOptions: string | BlogRevalidationOptions,
@@ -50,8 +50,6 @@ export function buildBlogRevalidationPlan(
   const rawIdentifiers = isStringArg
     ? [identifierOrOptions]
     : (identifierOrOptions.identifiers ?? []);
-  const hasExplicitIdentifiers =
-    isStringArg || identifierOrOptions.identifiers !== undefined;
   const rawPostSlugs = isStringArg
     ? [postSlug]
     : (identifierOrOptions.postSlugs ?? []);
@@ -128,6 +126,11 @@ export function buildBlogRevalidationPlan(
       tags.add(getBlogContentLinksCacheTag(merchantId));
       tags.add(getBlogRssMerchantCacheTag(merchantId));
     } else {
+      // Legacy callers without a merchantId cannot compute merchant-ID-keyed
+      // tags (e.g. getCachedBlogPostEnrichment, getCachedFeedByMerchantId), so
+      // retain the broad fallback tags in that case only.
+      tags.add('blog-rss-feed');
+      tags.add('blog-posts');
       tags.add('blog-content-links');
     }
 
@@ -158,9 +161,6 @@ export function buildBlogRevalidationPlan(
         paths.add(`/${identifier}/blog/${slug}/opengraph-image`);
       }
     }
-  } else if (!hasExplicitIdentifiers && normalizedPostSlugs.length === 0) {
-    tags.add('blog-rss-feed');
-    tags.add('blog-posts');
   }
 
   const purgeIdentifiers = Array.from(

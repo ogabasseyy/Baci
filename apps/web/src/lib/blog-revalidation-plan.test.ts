@@ -51,10 +51,40 @@ describe('buildBlogRevalidationPlan', () => {
     expect(plan.paths).toEqual([]);
   });
 
-  it('falls back to global blog tags only when neither merchantId nor identifiers are provided', () => {
+  it('retains global fallback tags when identifiers are supplied without merchantId', () => {
+    const plan = buildBlogRevalidationPlan('Ogabassey', 'Best-Phone');
+
+    expect(plan.tags).toEqual(
+      expect.arrayContaining([
+        'blog-posts',
+        'blog-rss-feed',
+        'blog-content-links',
+        'blog-identifier-ogabassey',
+        'blog-rss-ogabassey',
+        'blog-list-ogabassey-all-1',
+        getBlogCacheTag('ogabassey', 'best-phone'),
+      ])
+    );
+  });
+
+  it('retains global fallback tags when an invalid canonical slug is supplied without merchantId', () => {
+    const plan = buildBlogRevalidationPlan({
+      canonicalMerchantSlug: '../evil',
+    });
+
+    expect(plan.invalidCanonicalMerchantSlug).toBe('../evil');
+    expect(plan.tags).toEqual([
+      'blog-rss-feed',
+      'blog-posts',
+      'blog-content-links',
+    ]);
+  });
+
+  it('treats empty options as a no-op without busting global tags', () => {
     const plan = buildBlogRevalidationPlan({});
 
-    expect(plan.tags).toEqual(['blog-rss-feed', 'blog-posts']);
+    expect(plan.tags).toEqual([]);
+    expect(plan.paths).toEqual([]);
   });
 
   it('returns an empty plan when explicit identifiers normalize to empty', () => {

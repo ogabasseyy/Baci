@@ -508,6 +508,7 @@ describe('cache-revalidation utilities', () => {
 
     it('revalidates blog posts cache', () => {
       revalidateBlogPosts({
+        merchantId: MERCHANT_ID,
         identifiers: ['test-merchant', 'OGABASSEY.COM', 'test-merchant'],
         canonicalMerchantSlug: 'test-merchant',
         listingCategories: ['Reviews'],

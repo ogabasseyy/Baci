@@ -52,15 +52,11 @@ describe('tenant-scoped cache revalidation', () => {
       expect(mockRevalidateTag).toHaveBeenCalledTimes(2);
     });
 
-    it('revalidates slug and custom domain tags when provided', () => {
-      revalidateMerchant(MERCHANT_ID, 'Test-Store', 'Shop.Example.COM');
+    it('revalidates slug tags when slug provided', () => {
+      revalidateMerchant(MERCHANT_ID, 'Test-Store');
 
       expect(mockRevalidateTag).not.toHaveBeenCalledWith(
         'merchants',
-        expect.anything()
-      );
-      expect(mockRevalidateTag).not.toHaveBeenCalledWith(
-        'domains',
         expect.anything()
       );
       expect(mockRevalidateTag).toHaveBeenCalledWith(
@@ -76,18 +72,10 @@ describe('tenant-scoped cache revalidation', () => {
         'merchant'
       );
       expect(mockRevalidateTag).toHaveBeenCalledWith(
-        'domain-shop.example.com',
-        'merchant'
-      );
-      expect(mockRevalidateTag).toHaveBeenCalledWith(
-        'merchant-shop.example.com',
-        'merchant'
-      );
-      expect(mockRevalidateTag).toHaveBeenCalledWith(
         `dashboard-${MERCHANT_ID}`,
         'merchant'
       );
-      expect(mockRevalidateTag).toHaveBeenCalledTimes(6);
+      expect(mockRevalidateTag).toHaveBeenCalledTimes(4);
     });
 
     it('skips invalid blank merchant IDs with warning', () => {
@@ -134,6 +122,28 @@ describe('tenant-scoped cache revalidation', () => {
       expect(mockRevalidateTag).toHaveBeenNthCalledWith(
         2,
         'merchant',
+        'merchant'
+      );
+      expect(mockRevalidateTag).toHaveBeenCalledTimes(2);
+    });
+
+    it('routes domain-shaped identifiers to domain and merchant tags', () => {
+      revalidateMerchantSlugLookup('Shop.Example.COM');
+
+      expect(mockRevalidateTag).not.toHaveBeenCalledWith(
+        'merchant',
+        expect.anything()
+      );
+      expect(mockRevalidateTag).not.toHaveBeenCalledWith(
+        'domains',
+        expect.anything()
+      );
+      expect(mockRevalidateTag).toHaveBeenCalledWith(
+        'domain-shop.example.com',
+        'merchant'
+      );
+      expect(mockRevalidateTag).toHaveBeenCalledWith(
+        'merchant-shop.example.com',
         'merchant'
       );
       expect(mockRevalidateTag).toHaveBeenCalledTimes(2);

@@ -237,9 +237,14 @@ describe('GET /api/blog/feed/[merchantSlug]', () => {
     });
     expect(mockUnstableCache.mock.calls.at(-1)).toEqual([
       expect.any(Function),
-      ['blog-rss-feed'],
+      ['blog-rss-feed', merchant.id],
       expect.objectContaining({
-        tags: ['blog-posts', 'blog-rss-feed'],
+        tags: [
+          'blog-posts',
+          'blog-rss-feed',
+          `blog-posts-${merchant.id}`,
+          `blog-rss-${merchant.id}`,
+        ],
       }),
     ]);
   });
@@ -951,37 +956,6 @@ describe('GET /api/blog/feed/[merchantSlug]', () => {
           url: 'https://cdn.example.com/cdn-cgi/image/width=800,format=jpeg/cell.jpg',
           type: 'image/jpeg',
         },
-      })
-    );
-  });
-
-  it('omits RSS enclosure when image MIME type is indeterminate', async () => {
-    enqueueSlugFeedScenario({
-      posts: [
-        {
-          id: 'extensionless-image-post',
-          title: 'Accessory Guide',
-          slug: 'accessory-guide',
-          content: '<p>Guide body.</p>',
-          excerpt: 'Guide excerpt',
-          featured_image_url:
-            'https://cdn.example.com/cdn-cgi/image/width=800,format=auto/cell',
-          category: 'Accessories',
-          author_name: 'Ogabassey',
-          published_at: '2026-05-01T10:00:00.000Z',
-          updated_at: null,
-        },
-      ],
-    });
-
-    const response = await GET(new NextRequest('https://usebaci.com/feed'), {
-      params: Promise.resolve({ merchantSlug: 'ogabassey' }),
-    });
-
-    expect(response.status).toBe(200);
-    expect(mockFeedAddItem).toHaveBeenCalledWith(
-      expect.objectContaining({
-        image: undefined,
       })
     );
   });

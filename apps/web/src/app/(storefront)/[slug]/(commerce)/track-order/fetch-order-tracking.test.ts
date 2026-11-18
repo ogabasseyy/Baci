@@ -1,6 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchOrderTracking } from './fetch-order-tracking';
 
+const validOrder = {
+  order: { id: 'o-1' },
+  customer: { name: 'Ada' },
+  items: [],
+  timeline: [],
+};
+
 describe('fetchOrderTracking', () => {
   const fetchMock = vi.fn();
 
@@ -14,7 +21,7 @@ describe('fetchOrderTracking', () => {
   });
 
   it('looks up by token and merchant slug', async () => {
-    fetchMock.mockResolvedValue(Response.json({ order: { id: 'o-1' } }));
+    fetchMock.mockResolvedValue(Response.json(validOrder));
 
     const result = await fetchOrderTracking('shop', { tracking_token: 'tok' });
 
@@ -26,7 +33,7 @@ describe('fetchOrderTracking', () => {
   });
 
   it('looks up by order id and email without a token', async () => {
-    fetchMock.mockResolvedValue(Response.json({ order: { id: 'o-1' } }));
+    fetchMock.mockResolvedValue(Response.json(validOrder));
 
     await fetchOrderTracking('shop', { order_id: 'o-1', email: 'a@b.c' });
 
@@ -68,5 +75,16 @@ describe('fetchOrderTracking', () => {
     expect(result.error).toBe(
       'Unexpected server response. Please try again later.'
     );
+  });
+
+  it('bugfix: rejects a success response that is missing the order details', async () => {
+    fetchMock.mockResolvedValue(Response.json({ order: { id: 'o-1' } }));
+
+    const result = await fetchOrderTracking('shop', { tracking_token: 't' });
+
+    expect(result).toEqual({
+      data: null,
+      error: 'Unexpected server response. Please try again later.',
+    });
   });
 });

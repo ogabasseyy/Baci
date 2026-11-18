@@ -11,6 +11,24 @@ type TrackingLookupResult =
   | { data: OrderData; error: null }
   | { data: null; error: string };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function errorMessageOf(data: unknown): string | null {
+  return isRecord(data) && typeof data.error === 'string' ? data.error : null;
+}
+
+/** The fields the page reads without further checks. */
+function isOrderData(data: unknown): data is OrderData {
+  return (
+    isRecord(data) &&
+    isRecord(data.order) &&
+    isRecord(data.customer) &&
+    Array.isArray(data.items)
+  );
+}
+
 /**
  * Module-scope lookup keeps the try/finally and throw statements out of the
  * component body so React Compiler can memoize the page.
@@ -43,7 +61,7 @@ export async function fetchOrderTracking(
     const response = await fetch(
       `/api/storefront/orders/track-order?${queryParams}`
     );
-    let data: OrderData | { error?: string };
+    let data: unknown;
     try {
       data = await response.json();
     } catch {
@@ -51,11 +69,13 @@ export async function fetchOrderTracking(
     }
 
     if (!response.ok) {
-      const errorData = data as { error?: string };
-      throw new Error(errorData.error || 'Failed to find order');
+      throw new Error(errorMessageOf(data) || 'Failed to find order');
+    }
+    if (!isOrderData(data)) {
+      throw new Error('Unexpected server response. Please try again later.');
     }
 
-    return { data: data as OrderData, error: null };
+    return { data, error: null };
   } catch (err) {
     return {
       data: null,

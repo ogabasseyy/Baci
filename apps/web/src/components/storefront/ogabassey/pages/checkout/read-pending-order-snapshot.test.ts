@@ -36,4 +36,22 @@ describe('readPendingOrderSnapshot', () => {
     window.sessionStorage.setItem(CHECKOUT_PENDING_ORDER_STORAGE_KEY, '{nope');
     expect(readPendingOrderSnapshot('order-1')).toBeNull();
   });
+
+  it('bugfix: ignores a non-string tracking token but keeps the lookup email', () => {
+    window.sessionStorage.setItem(
+      CHECKOUT_PENDING_ORDER_STORAGE_KEY,
+      JSON.stringify({
+        orderId: 'order-1',
+        trackingToken: { nested: true },
+        customerEmail: 'a@b.c',
+        customerPhone: 42,
+      })
+    );
+
+    expect(readPendingOrderSnapshot('order-1')).toEqual({
+      trackingToken: null,
+      customerEmail: 'a@b.c',
+      customerPhone: null,
+    });
+  });
 });

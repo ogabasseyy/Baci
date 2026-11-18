@@ -102,7 +102,7 @@ async function hydrateUpdatedProduct(
     .eq('merchant_id', merchantId)
     .single();
   if (publicReadError || !publicData) throw new Error(REFRESH_FAILED_ERROR);
-  return normalizeProductInventory(publicData);
+  return normalizeProductInventory({ ...publicData, cost_price: null });
 }
 
 export async function updateProductStock(

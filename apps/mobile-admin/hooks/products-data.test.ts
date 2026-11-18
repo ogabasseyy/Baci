@@ -248,7 +248,7 @@ describe('protected quick-action writes', () => {
       .mockReturnValueOnce(protectedRead)
       .mockReturnValueOnce(publicRead);
     const result = await run(action);
-    expect(result).toEqual(previous);
+    expect(result).toEqual({ ...previous, cost_price: null });
     expect(mocks.from.mock.calls.map(([table]) => table)).toEqual([
       'products',
       'products',

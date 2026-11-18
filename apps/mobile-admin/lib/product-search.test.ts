@@ -65,7 +65,7 @@ describe('admin product search helpers', () => {
       selectColumns: 'id, name',
     });
 
-    expect(mockFrom).toHaveBeenCalledWith('merchant_products');
+    expect(mockFrom).toHaveBeenCalledWith('products');
     expect(mockRpc).toHaveBeenCalledWith(
       'search_products_v2',
       expect.objectContaining({

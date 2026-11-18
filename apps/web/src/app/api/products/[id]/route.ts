@@ -837,12 +837,19 @@ export async function PUT(
     let refreshFailed = false;
     {
       const { data: refreshedProduct, error: refreshedProductError } =
-        await supabase
-          .from(canViewProducts ? 'merchant_products' : 'products')
-          .select(canViewProducts ? PRODUCT_COLUMNS : PRODUCT_COLUMNS_PUBLIC)
-          .eq('id', id)
-          .eq('merchant_id', merchantId)
-          .single();
+        canViewProducts
+          ? await supabase
+              .from('merchant_products')
+              .select(PRODUCT_COLUMNS)
+              .eq('id', id)
+              .eq('merchant_id', merchantId)
+              .single()
+          : await supabase
+              .from('products')
+              .select(PRODUCT_COLUMNS_PUBLIC)
+              .eq('id', id)
+              .eq('merchant_id', merchantId)
+              .single();
 
       if (refreshedProductError || !refreshedProduct) {
         console.error(

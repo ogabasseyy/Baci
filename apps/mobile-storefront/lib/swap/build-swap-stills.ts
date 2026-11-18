@@ -193,13 +193,6 @@ async function fitUploadBudget(
     throw new Error(unreadableMessage);
   }
 
-  while (
-    current.length > 1 &&
-    (await measureTotalBytes(current)) > SWAP_STILLS_MAX_BYTES
-  ) {
-    current = current.slice(0, -1);
-  }
-
   if ((await measureTotalBytes(current)) > SWAP_STILLS_MAX_BYTES) {
     throw new Error(UPLOAD_TOO_LARGE_MESSAGE);
   }

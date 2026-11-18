@@ -247,7 +247,7 @@ describe('buildSwapStills', () => {
     ).toBeLessThanOrEqual(SWAP_STILLS_MAX_BYTES);
   });
 
-  it('trims trailing frames if even the smallest quality tier exceeds the upload byte budget', async () => {
+  it('rejects when even the smallest quality tier exceeds the upload byte budget', async () => {
     mockGetFileSize.mockReturnValue(600_000);
 
     const photos = Array.from({ length: 5 }, (_, index) => ({
@@ -256,12 +256,9 @@ describe('buildSwapStills', () => {
       height: 3024,
     }));
 
-    const stills = await buildSwapStills({ kind: 'photos', photos });
-
-    expect(stills).toHaveLength(3);
-    expect(
-      stills.reduce((sum, uri) => sum + mockGetFileSize(uri), 0)
-    ).toBeLessThanOrEqual(SWAP_STILLS_MAX_BYTES);
+    await expect(buildSwapStills({ kind: 'photos', photos })).rejects.toThrow(
+      UPLOAD_TOO_LARGE_MESSAGE
+    );
   });
 
   it('rejects when even a single still exceeds the upload byte budget', async () => {

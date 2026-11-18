@@ -7,7 +7,7 @@ import { normaliseMonnifyWording } from './monnify-text-normalise';
  * status code, so any answer carrying this wording stays refund-only.
  */
 const AUTH_WORDING =
-  /unauthori[sz]ed|unauthenticated|forbidden|access denied|invalid (?:access |bearer )?token|(?:expired|revoked) token|token (?:(?:has|is) )?(?:been )?(?:expired|revoked|invalid|missing)|invalid credentials?|authentication (?:failed|failure|required|error)|failed to authenticate|authori[sz]ation (?:header )?(?:is )?(?:missing|required|invalid)/i;
+  /unauthori[sz]ed|unauthenticated|forbidden|access denied|invalid (?:access |bearer )?token|(?:expired|revoked) token|token (?:(?:has|is) )?(?:been )?(?:expired|revoked|invalid|missing)|invalid credentials?|authentication (?:failed|failure|required|error)|failed to authenticate|authori[sz]ation (?:header )?(?:is )?(?:missing|required|invalid)|auth(?:entication)? (?:is )?(?:failed|failure|invalid|error|denied)|not (?:authenticated|authori[sz]ed)|invalid (?:api|secret|client) ?key|(?:api|secret|client) ?key (?:is )?(?:invalid|missing|expired|revoked|required)|invalid (?:client )?(?:id|secret)|credentials? (?:are |is )?(?:invalid|expired|missing|required)/i;
 
 /** Whether a Monnify answer carries login/credential wording. */
 export function mentionsMonnifyAuthWording(

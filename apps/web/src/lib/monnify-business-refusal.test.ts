@@ -90,3 +90,19 @@ describe('bugfix: machine-style auth codes in a business envelope', () => {
     ).toBe(false);
   });
 });
+
+describe('bugfix: more auth phrasings in an HTTP-200 envelope', () => {
+  it.each([
+    'auth failed',
+    'Invalid API key',
+    'not authorized',
+  ])('rules out "%s"', (reason) => {
+    expect(
+      classify({
+        responseCode: '01',
+        responseMessage: 'Insufficient wallet balance',
+        responseBody: { reason },
+      })
+    ).toBe(false);
+  });
+});

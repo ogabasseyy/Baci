@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { vi } from 'vitest';
+import { createTransactionQueryMock } from './transaction-query.test-support';
 
 const mocks = vi.hoisted(() => ({
   createAdminClient: vi.fn(),
@@ -41,19 +42,14 @@ vi.mock('@/lib/supabase/admin', () => ({
     mocks.statusOr.mockReturnValue(ordersChain);
     ordersChain.order.mockReturnValue(ordersChain);
 
-    const transactionsChain = {
-      select: vi.fn(),
-      in: mocks.transactionsIn,
-    };
-    transactionsChain.select.mockReturnValue(transactionsChain);
-
     const reconciliationReviewChain = {
       insert: mocks.reviewInsert,
     };
 
     return {
       from: vi.fn((table: string) => {
-        if (table === 'transactions') return transactionsChain;
+        if (table === 'transactions')
+          return createTransactionQueryMock(mocks.transactionsIn);
         if (table === 'reconciliation_review') {
           return reconciliationReviewChain;
         }

@@ -59,7 +59,10 @@ describe('Klump and CredPal merchant alert evidence', () => {
       error: { message: 'unavailable' },
     });
     const response = await runCron(createCronRequest());
-    expect(await response.json()).toMatchObject({ alertOrders: 0 });
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      code: 'BNPL_EVIDENCE_INCOMPLETE',
+    });
     expect(mocks.notifyMerchant).not.toHaveBeenCalled();
   });
 

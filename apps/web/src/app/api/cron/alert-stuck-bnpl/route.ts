@@ -107,6 +107,19 @@ export async function GET(request: NextRequest) {
       referencesByOrderId: transactionEvidenceReferences,
       lookupFailed: transactionEvidenceLookupFailed,
     } = await loadBnplTransactionEvidence(supabase, signalsByOrderId);
+    if (transactionEvidenceLookupFailed) {
+      // Reject an incomplete read before recovery writes or pushes. Retrying
+      // this failure cannot resend a notification emitted by this attempt.
+      // Mixed scans also hold approved candidates; subsequent scheduled or
+      // manual invocations rescan all currently eligible orders.
+      return NextResponse.json(
+        {
+          error: 'Failed to complete BNPL evidence scan',
+          code: 'BNPL_EVIDENCE_INCOMPLETE',
+        },
+        { status: 503 }
+      );
+    }
 
     const orders = scannedOrders.filter(
       (order) =>

@@ -156,8 +156,8 @@ describe('GET /api/cron/alert-stuck-bnpl', () => {
     const response = await runCron(createCronRequest());
     const data = await response.json();
 
-    expect(response.status).toBe(200);
-    expect(data.stuckOrders).toBe(0);
+    expect(response.status).toBe(503);
+    expect(data.code).toBe('BNPL_EVIDENCE_INCOMPLETE');
     expect(mocks.notifyMerchant).not.toHaveBeenCalled();
     expect(mocks.loggerWarn).toHaveBeenCalledWith(
       expect.objectContaining({

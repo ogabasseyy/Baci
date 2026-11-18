@@ -20,6 +20,7 @@ describe('TRACKING_URL_INLINE_SANITIZER', () => {
     '/receipts/claim/secret-token',
     'https://shop.example/acme/receipts/claim/secret-token?a=1&email=a%40b.c#x',
     '/Receipts/Claim/abc/extra?x=1',
+    '/p??view=details&token=A',
     'not a url?token=abc',
     '',
   ])('behaves like sanitizeTrackingUrl for %s', (url) => {

@@ -29,6 +29,15 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+/** gtag() pushes its `arguments` object, which is array-like but not an array. */
+function isArrayLike(value: unknown): value is ArrayLike<unknown> {
+  return isRecord(value) && 'length' in value;
+}
+
 async function runInlineConfigScript(): Promise<Record<string, unknown>> {
   const { container } = render(<GoogleAnalytics measurementId="G-TEST123" />);
   await waitFor(() =>
@@ -39,14 +48,17 @@ async function runInlineConfigScript(): Promise<Record<string, unknown>> {
   )?.textContent;
   if (!source) throw new Error('The inline GA config script has no text');
   new Function(source)();
-  const entries: unknown = window.dataLayer ?? [];
-  const config = Array.from(entries as ArrayLike<ArrayLike<unknown>>).find(
-    (entry) => entry[0] === 'config'
-  )?.[2];
-  if (typeof config !== 'object' || config === null) {
+  const queue: unknown = window.dataLayer;
+  const entries: unknown[] = Array.isArray(queue) ? queue : [];
+  const command = entries.find(
+    (entry): entry is ArrayLike<unknown> =>
+      isArrayLike(entry) && entry[0] === 'config'
+  );
+  const config = command?.[2];
+  if (!isRecord(config)) {
     throw new Error('The GA script queued no config command');
   }
-  return config as Record<string, unknown>;
+  return config;
 }
 
 describe('GoogleAnalytics inline config', () => {

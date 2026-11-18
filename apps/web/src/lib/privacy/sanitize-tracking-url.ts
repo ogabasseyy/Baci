@@ -15,8 +15,10 @@ export function sanitizeTrackingUrl(url: string): string {
 
   const base = withoutHash.slice(0, queryStart);
   try {
+    // Keep the delimiter: URLSearchParams drops exactly one leading `?`, so
+    // `??a=1` keeps the parameter named `?a`.
     const { publicSearch } = partitionSensitiveSearch(
-      withoutHash.slice(queryStart + 1)
+      withoutHash.slice(queryStart)
     );
     return publicSearch ? `${base}?${publicSearch}` : base;
   } catch {

@@ -198,3 +198,19 @@ describe('bugfix: Back to an order entry while another order hand-off was pendin
     expect(result.current.get('token')).toBe('A');
   });
 });
+
+describe('bugfix: Back with no hook mounted left another order hand-off pending', () => {
+  it("returns the entry's own token when the hook mounts on it after the Back", async () => {
+    visit('/shop/track-order?token=A');
+    const first = renderHook(() => usePrivateSearchParams());
+    expect(first.result.current.get('token')).toBe('A');
+    first.unmount(); // the shopper is now on a page without the hook
+
+    originalPushState({}, '', '/shop/cart');
+    stashPrivateParamsForNavigation('/shop/track-order?token=B', 'shop');
+    await traverse('back'); // no hook instance is listening
+
+    const second = renderHook(() => usePrivateSearchParams());
+    expect(second.result.current.get('token')).toBe('A');
+  });
+});

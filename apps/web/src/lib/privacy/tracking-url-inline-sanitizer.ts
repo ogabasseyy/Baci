@@ -24,7 +24,7 @@ function baciSanitizeUrl(u) {
   var base = s.slice(0, i);
   try {
     var kept = new URLSearchParams();
-    new URLSearchParams(s.slice(i + 1)).forEach(function (v, k) {
+    new URLSearchParams(s.slice(i)).forEach(function (v, k) {
       if (sensitive.indexOf(k.toLowerCase()) < 0) kept.append(k, v);
     });
     var q = kept.toString();

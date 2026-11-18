@@ -87,4 +87,10 @@ describe('sanitizeTrackingUrl', () => {
       );
     });
   });
+
+  it('bugfix: keeps a public parameter whose name starts with a question mark', () => {
+    expect(sanitizeTrackingUrl('/p??view=details&token=A')).toBe(
+      '/p?%3Fview=details'
+    );
+  });
 });

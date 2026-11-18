@@ -42,8 +42,30 @@ function isPendingHandoff(value: unknown): value is PendingHandoff {
   );
 }
 
+// Installed while a hand-off is pending, independent of any mounted hook: if the
+// shopper goes through history instead of arriving (Back from a page that has
+// no hook, or between two mounts), the entry they land on must not read it.
+let traversalListenerInstalled = false;
+
+function onTraversal(): void {
+  clearPendingPrivateParams();
+}
+
+function installTraversalListener(): void {
+  if (traversalListenerInstalled) return;
+  traversalListenerInstalled = true;
+  window.addEventListener('popstate', onTraversal);
+}
+
+function removeTraversalListener(): void {
+  if (!traversalListenerInstalled) return;
+  traversalListenerInstalled = false;
+  window.removeEventListener('popstate', onTraversal);
+}
+
 /** Drops a pending hand-off: the shopper moved through history instead of arriving. */
 export function clearPendingPrivateParams(): void {
+  removeTraversalListener();
   try {
     window.sessionStorage.removeItem(PENDING_KEY);
   } catch {
@@ -129,6 +151,7 @@ export function stashPrivateParamsForNavigation(
   } catch {
     return targetHref;
   }
+  installTraversalListener();
   return `${url.pathname}${publicSearch ? `?${publicSearch}` : ''}${url.hash}`;
 }
 

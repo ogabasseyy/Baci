@@ -51,3 +51,13 @@ describe('bugfix: bracket-notation form keys read as their leaf key', () => {
     });
   });
 });
+
+describe('bugfix: percent-encoded bracket keys parse', () => {
+  it('parses "responseBody%5BvendStatus%5D=FAILED"', () => {
+    expect(
+      parseMonnifyAnswer(
+        'responseBody%5BvendStatus%5D=FAILED&message=Insufficient+wallet+balance'
+      )
+    ).toEqual({ vendStatus: 'FAILED', message: 'Insufficient wallet balance' });
+  });
+});

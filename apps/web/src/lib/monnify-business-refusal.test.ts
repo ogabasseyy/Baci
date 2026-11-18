@@ -52,7 +52,14 @@ describe('isMonnifyDefiniteBusinessRefusal', () => {
     ).toBe(true);
   });
 
-  it.each(['99', '408', '0', '00'])('rules out code %s', (responseCode) => {
+  it.each([
+    '99',
+    '408',
+    '0',
+    '00',
+    '401',
+    '403',
+  ])('rules out code %s', (responseCode) => {
     expect(
       classify({ responseCode, responseMessage: 'Insufficient wallet balance' })
     ).toBe(false);

@@ -51,11 +51,19 @@ export function parseMonnifyAnswer(body: string): unknown {
   }
   const entries: [string, string | boolean | null][] = [];
   for (const segment of segments) {
-    const match = KEY_VALUE_PAIR.exec(segment);
+    // Decode the key before checking its shape, so percent-encoded brackets
+    // ("responseBody%5BvendStatus%5D") still parse.
+    const separator = segment.search(/[=:]/);
+    const match =
+      separator > 0
+        ? KEY_VALUE_PAIR.exec(
+            `${decode(segment.slice(0, separator))}=${segment.slice(separator + 1)}`
+          )
+        : null;
     if (!match) {
       return null;
     }
-    entries.push([leafKey(decode(match[1])), coerce(decode(match[2]))]);
+    entries.push([leafKey(match[1]), coerce(decode(match[2]))]);
   }
   const keys = entries.map(([key]) => key);
   // A repeated key keeps every value: the body becomes a list of one-pair

@@ -13,6 +13,8 @@ describe('hasMonnifyNonDefinitiveCode', () => {
     { responseStatus: 503, message: 'Insufficient wallet balance' },
     { status: 202, message: 'Insufficient wallet balance' },
     { responseCode: '0', message: 'Insufficient wallet balance' },
+    { responseCode: '401', message: 'Insufficient wallet balance' },
+    { responseBody: { responseCode: 403 } },
     { responseBody: { responseCode: '500' } },
   ])('finds a non-definitive code in %j', (answer) => {
     expect(hasMonnifyNonDefinitiveCode(answer)).toBe(true);

@@ -1,8 +1,14 @@
 import type { CartLine, CartSnapshot } from '@baci/shared/cart';
 import { vi } from 'vitest';
 import type { Product } from '@/lib/products';
+import {
+  resetCartSessionHintForTests,
+  writeCartSessionHint,
+} from './cart-session-hint';
 import type { CartItem } from './cart-types';
 import { fetchSharedCartSnapshot } from './shared-cart-client';
+
+export { resetCartSessionHintForTests, writeCartSessionHint };
 
 export const MERCHANT_ID = '11111111-1111-4111-8111-111111111111';
 export const SLUG = 'ogabassey';
@@ -72,6 +78,7 @@ export function snapshot(
 }
 
 export function mockAdopted(version = 3, lines: CartLine[] = [cartLine()]) {
+  writeCartSessionHint(MERCHANT_ID, '1');
   vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({
     ok: true,
     snapshot: snapshot({ lines, version }),

@@ -8,9 +8,12 @@ import {
   getEdgeConfigDomainKey,
   getEdgeConfigSlugKey,
 } from '@/lib/edge-config-keys';
-import { createWarmPositiveCache } from './create-warm-positive-cache';
 import { fetchCustomDomain, fetchSlugForDomain } from './domain-cache-database';
 import { cacheableDomainResolution } from './domain-cache-resolution';
+import {
+  createWarmEdgeDomainReadCache,
+  readValidatedEdgeMapping,
+} from './edge-domain-read-cache';
 import { normalizeDomain, reverseDomainCache } from './reverse-domain-cache';
 import { SingleFlight } from './single-flight';
 
@@ -23,18 +26,21 @@ interface CacheEntry {
 const domainCache = new Map<string, CacheEntry>();
 const DB_CACHE_TTL = 300_000; // Existing 5-minute fallback behavior.
 const EDGE_POSITIVE_CACHE_TTL = 60_000;
+const EDGE_NEGATIVE_CACHE_TTL = 60_000;
 const MAX_CACHE_SIZE = 1000;
 const CANONICAL_HOSTNAME =
   /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/;
 const CANONICAL_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
-const edgeForwardCache = createWarmPositiveCache({
+const edgeForwardCache = createWarmEdgeDomainReadCache({
   maxEntries: MAX_CACHE_SIZE,
-  ttlMs: EDGE_POSITIVE_CACHE_TTL,
+  positiveTtlMs: EDGE_POSITIVE_CACHE_TTL,
+  negativeTtlMs: EDGE_NEGATIVE_CACHE_TTL,
 });
-const edgeReverseCache = createWarmPositiveCache({
+const edgeReverseCache = createWarmEdgeDomainReadCache({
   maxEntries: MAX_CACHE_SIZE,
-  ttlMs: EDGE_POSITIVE_CACHE_TTL,
+  positiveTtlMs: EDGE_POSITIVE_CACHE_TTL,
+  negativeTtlMs: EDGE_NEGATIVE_CACHE_TTL,
 });
 const edgeForwardGenerations = new Map<string, number>();
 const edgeReverseGenerations = new Map<string, number>();
@@ -88,30 +94,18 @@ export async function getCustomDomainForSlug(
 
 /** Read a domain mapping from Vercel Edge Config. */
 function readFromEdgeConfig(merchantSlug: string): Promise<string | undefined> {
-  const cached = edgeForwardCache.get(merchantSlug);
-  if (cached) return Promise.resolve(cached);
-
   const generation = edgeForwardGenerations.get(merchantSlug) ?? 0;
-  return edgeForwardReads.run(merchantSlug, async () => {
-    const refreshed = edgeForwardCache.get(merchantSlug);
-    if (refreshed) return refreshed;
-    try {
-      const { get } = await import('@vercel/edge-config');
-      const value = await get<string>(getEdgeConfigSlugKey(merchantSlug));
-      if (typeof value !== 'string') return undefined;
-      const normalizedValue = normalizeDomain(value);
-      if (!CANONICAL_HOSTNAME.test(normalizedValue)) {
-        return undefined;
-      }
-      if ((edgeForwardGenerations.get(merchantSlug) ?? 0) !== generation) {
-        return normalizedValue;
-      }
-      edgeForwardCache.set(merchantSlug, normalizedValue);
-      return normalizedValue;
-    } catch {
-      // Edge Config not configured or unavailable - fall through to DB
-      return undefined;
-    }
+  return readValidatedEdgeMapping({
+    cache: edgeForwardCache,
+    cacheKey: merchantSlug,
+    edgeConfigKey: getEdgeConfigSlugKey(merchantSlug),
+    isStaleBeforeWrite: () =>
+      (edgeForwardGenerations.get(merchantSlug) ?? 0) !== generation,
+    normalizeAndValidate: (raw) => {
+      const normalized = normalizeDomain(raw);
+      return CANONICAL_HOSTNAME.test(normalized) ? normalized : undefined;
+    },
+    singleFlight: edgeForwardReads,
   });
 }
 
@@ -189,6 +183,7 @@ export function invalidateReverseDomainCacheForSlug(slug: string): void {
     }
   }
   edgeReverseCache.deleteValue(normalizedSlug);
+  edgeReverseCache.clearNegativeEntries();
 }
 
 export function invalidateReverseDomainCacheForDomain(domain: string): void {
@@ -253,37 +248,24 @@ export async function getSlugForCustomDomain(
 }
 
 function readSlugFromEdgeConfig(domain: string): Promise<string | undefined> {
-  const cached = edgeReverseCache.get(domain);
-  if (cached) return Promise.resolve(cached);
-
   const generation = edgeReverseGenerations.get(domain) ?? 0;
   const invalidationEpoch = reverseInvalidationEpoch;
-  const readKey = getReverseReadKey(domain, invalidationEpoch);
-  return edgeReverseReads.run(readKey, async () => {
-    const refreshed = edgeReverseCache.get(domain);
-    if (refreshed) return refreshed;
-    try {
-      const { get } = await import('@vercel/edge-config');
-      const value = await get<string>(getEdgeConfigDomainKey(domain));
-      if (typeof value !== 'string' || value.length === 0) return undefined;
-      const normalizedSlug = normalizeSlug(value);
-      if (!CANONICAL_SLUG.test(normalizedSlug)) {
-        return undefined;
-      }
-      if ((edgeReverseGenerations.get(domain) ?? 0) !== generation) {
-        return normalizedSlug;
-      }
-      if (
-        reverseInvalidationEpoch > invalidationEpoch ||
-        (reverseSlugInvalidationEpochs.get(normalizedSlug) ?? 0) >
-          invalidationEpoch
-      ) {
-        return normalizedSlug;
-      }
-      edgeReverseCache.set(domain, normalizedSlug);
-      return normalizedSlug;
-    } catch {
-      return undefined;
-    }
+  return readValidatedEdgeMapping({
+    cache: edgeReverseCache,
+    cacheKey: domain,
+    edgeConfigKey: getEdgeConfigDomainKey(domain),
+    isStaleBeforeWrite: () =>
+      (edgeReverseGenerations.get(domain) ?? 0) !== generation ||
+      reverseInvalidationEpoch > invalidationEpoch,
+    isStalePositiveWrite: (normalizedSlug) =>
+      (reverseSlugInvalidationEpochs.get(normalizedSlug) ?? 0) >
+      invalidationEpoch,
+    normalizeAndValidate: (raw) => {
+      if (raw.length === 0) return undefined;
+      const normalized = normalizeSlug(raw);
+      return CANONICAL_SLUG.test(normalized) ? normalized : undefined;
+    },
+    readKey: getReverseReadKey(domain, invalidationEpoch),
+    singleFlight: edgeReverseReads,
   });
 }

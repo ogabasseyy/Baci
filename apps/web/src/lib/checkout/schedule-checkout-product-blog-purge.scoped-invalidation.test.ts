@@ -52,10 +52,16 @@ describe('scheduleCheckoutProductBlogPurge scoped invalidation', () => {
       supabase,
     });
 
-    expect(mocks.revalidateProductSlugs).toHaveBeenCalledWith('merchant-1', [
-      'managed-phone',
-    ]);
-    expect(mocks.revalidateProducts).toHaveBeenCalledWith('merchant-1');
+    expect(mocks.revalidateProductSlugs).toHaveBeenCalledWith(
+      'merchant-1',
+      ['managed-phone'],
+      { expireImmediately: true }
+    );
+    expect(mocks.revalidateProducts).toHaveBeenCalledWith(
+      'merchant-1',
+      undefined,
+      { expireImmediately: true }
+    );
   });
 
   it('falls back to full merchant-wide invalidation when revalidateProductSlugs returns false', async () => {
@@ -72,10 +78,16 @@ describe('scheduleCheckoutProductBlogPurge scoped invalidation', () => {
       supabase,
     });
 
-    expect(mocks.revalidateProductSlugs).toHaveBeenCalledWith('merchant-1', [
-      'managed-phone',
-    ]);
-    expect(mocks.revalidateProducts).toHaveBeenCalledWith('merchant-1');
+    expect(mocks.revalidateProductSlugs).toHaveBeenCalledWith(
+      'merchant-1',
+      ['managed-phone'],
+      { expireImmediately: true }
+    );
+    expect(mocks.revalidateProducts).toHaveBeenCalledWith(
+      'merchant-1',
+      undefined,
+      { expireImmediately: true }
+    );
   });
 
   it('falls back to full merchant-wide invalidation when orderItems have no product_id', async () => {
@@ -90,6 +102,10 @@ describe('scheduleCheckoutProductBlogPurge scoped invalidation', () => {
     });
 
     expect(mocks.revalidateProductSlugs).not.toHaveBeenCalled();
-    expect(mocks.revalidateProducts).toHaveBeenCalledWith('merchant-1');
+    expect(mocks.revalidateProducts).toHaveBeenCalledWith(
+      'merchant-1',
+      undefined,
+      { expireImmediately: true }
+    );
   });
 });

@@ -135,21 +135,19 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }) === true;
 
   // Runs in a route context, so revalidateTag works here (unlike the CLI worker).
-  if (shouldExpireProductBlogCache) {
-    // Standalone workers use this narrow mode to refresh related-product
-    // enrichment without churning every product/index/feed cache.
-    expireProductBlogCache(merchantId);
-  } else if (
+  const isScopedSlugOnly =
     !hasProducts &&
     !purgeWholeStorefront &&
     callerOmitMerchantWidePdpDetails === true &&
-    explicitSlugsRevalidated
-  ) {
+    explicitSlugsRevalidated;
+  if (isScopedSlugOnly) {
     expireProductBlogCache(merchantId);
     revalidateProducts(merchantId, undefined, {
       expireImmediately: true,
       omitMerchantWidePdpDetails: true,
     });
+  } else if (shouldExpireProductBlogCache) {
+    expireProductBlogCache(merchantId);
   } else if (!hasProducts || purgeWholeStorefront) {
     revalidateProducts(merchantId);
   }

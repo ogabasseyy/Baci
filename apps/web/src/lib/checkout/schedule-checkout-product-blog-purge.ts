@@ -46,7 +46,7 @@ export async function scheduleCheckoutProductBlogPurge({
     )
   );
   if (productIds.length === 0) {
-    revalidateProducts(merchantId);
+    revalidateProducts(merchantId, undefined, { expireImmediately: true });
     return;
   }
 
@@ -63,7 +63,7 @@ export async function scheduleCheckoutProductBlogPurge({
     }
     productRows = result.data;
   } catch (lookupError) {
-    revalidateProducts(merchantId);
+    revalidateProducts(merchantId, undefined, { expireImmediately: true });
     // A rejected products read must schedule the same known-ids fallback
     // as an `{ error }` result; otherwise the purge is skipped entirely.
     scheduleOrderProductBlogPurgeAfterResponse({
@@ -92,7 +92,8 @@ export async function scheduleCheckoutProductBlogPurge({
     resolvedSlugs.length > 0 &&
     revalidateProductSlugs(
       merchantId,
-      resolvedProductRows.map((row) => row.slug)
+      resolvedProductRows.map((row) => row.slug),
+      { expireImmediately: true }
     ) === true;
 
   if (
@@ -101,10 +102,11 @@ export async function scheduleCheckoutProductBlogPurge({
     resolvedSlugs.length === productIds.length
   ) {
     revalidateProducts(merchantId, undefined, {
+      expireImmediately: true,
       omitMerchantWidePdpDetails: true,
     });
   } else {
-    revalidateProducts(merchantId);
+    revalidateProducts(merchantId, undefined, { expireImmediately: true });
   }
   const productsNeedingVariantLookup = new Set(
     resolvedProductRows

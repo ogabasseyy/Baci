@@ -54,13 +54,15 @@ describe('revalidateOrderProductCaches', () => {
         supabase: supabase as never,
       })
     ).resolves.toBeUndefined();
-    expect(revalidateProductSlugsMock).toHaveBeenCalledWith('merchant-1', [
-      'galaxy-s24',
-    ]);
+    expect(revalidateProductSlugsMock).toHaveBeenCalledWith(
+      'merchant-1',
+      ['galaxy-s24'],
+      { expireImmediately: true }
+    );
     expect(revalidateProductsMock).toHaveBeenCalledWith(
       'merchant-1',
       undefined,
-      { omitMerchantWidePdpDetails: true }
+      { expireImmediately: true, omitMerchantWidePdpDetails: true }
     );
     expect(loggerErrorMock).not.toHaveBeenCalled();
   });
@@ -75,10 +77,16 @@ describe('revalidateOrderProductCaches', () => {
         supabase: supabase as never,
       })
     ).resolves.toBeUndefined();
-    expect(revalidateProductSlugsMock).toHaveBeenCalledWith('merchant-1', [
-      'galaxy-s24',
-    ]);
-    expect(revalidateProductsMock).toHaveBeenCalledWith('merchant-1');
+    expect(revalidateProductSlugsMock).toHaveBeenCalledWith(
+      'merchant-1',
+      ['galaxy-s24'],
+      { expireImmediately: true }
+    );
+    expect(revalidateProductsMock).toHaveBeenCalledWith(
+      'merchant-1',
+      undefined,
+      { expireImmediately: true }
+    );
     expect(loggerErrorMock).not.toHaveBeenCalled();
   });
 
@@ -93,10 +101,16 @@ describe('revalidateOrderProductCaches', () => {
         supabase: supabase as never,
       })
     ).resolves.toBeUndefined();
-    expect(revalidateProductSlugsMock).toHaveBeenCalledWith('merchant-1', [
-      'galaxy-s24',
-    ]);
-    expect(revalidateProductsMock).toHaveBeenCalledWith('merchant-1');
+    expect(revalidateProductSlugsMock).toHaveBeenCalledWith(
+      'merchant-1',
+      ['galaxy-s24'],
+      { expireImmediately: true }
+    );
+    expect(revalidateProductsMock).toHaveBeenCalledWith(
+      'merchant-1',
+      undefined,
+      { expireImmediately: true }
+    );
   });
 
   it('logs slug lookup failures and falls back to full merchant-wide invalidation', async () => {
@@ -109,7 +123,11 @@ describe('revalidateOrderProductCaches', () => {
         supabase: supabase as never,
       })
     ).resolves.toBeUndefined();
-    expect(revalidateProductsMock).toHaveBeenCalledWith('merchant-1');
+    expect(revalidateProductsMock).toHaveBeenCalledWith(
+      'merchant-1',
+      undefined,
+      { expireImmediately: true }
+    );
     expect(revalidateProductSlugsMock).not.toHaveBeenCalled();
     expect(loggerErrorMock).toHaveBeenCalledOnce();
   });
@@ -128,7 +146,11 @@ describe('revalidateOrderProductCaches', () => {
         supabase: supabase as never,
       })
     ).resolves.toBeUndefined();
-    expect(revalidateProductsMock).toHaveBeenCalledWith('merchant-1');
+    expect(revalidateProductsMock).toHaveBeenCalledWith(
+      'merchant-1',
+      undefined,
+      { expireImmediately: true }
+    );
     expect(loggerErrorMock).toHaveBeenCalledOnce();
   });
 
@@ -162,6 +184,10 @@ describe('revalidateOrderProductCaches', () => {
     });
     expect(supabase.from).not.toHaveBeenCalled();
     expect(revalidateProductSlugsMock).not.toHaveBeenCalled();
-    expect(revalidateProductsMock).toHaveBeenCalledWith('merchant-1');
+    expect(revalidateProductsMock).toHaveBeenCalledWith(
+      'merchant-1',
+      undefined,
+      { expireImmediately: true }
+    );
   });
 });

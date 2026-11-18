@@ -40,7 +40,7 @@ export async function revalidateOrderProductCaches({
       )
     );
     if (revalidateProductIds.length === 0) {
-      revalidateProducts(merchantId);
+      revalidateProducts(merchantId, undefined, { expireImmediately: true });
       didRevalidateProducts = true;
       return;
     }
@@ -59,7 +59,7 @@ export async function revalidateOrderProductCaches({
         orderId,
         merchantId,
       });
-      revalidateProducts(merchantId);
+      revalidateProducts(merchantId, undefined, { expireImmediately: true });
       didRevalidateProducts = true;
       return;
     }
@@ -69,17 +69,20 @@ export async function revalidateOrderProductCaches({
       .filter((slug): slug is string => Boolean(slug));
     const slugsRevalidated =
       resolvedSlugs.length > 0 &&
-      revalidateProductSlugs(merchantId, resolvedSlugs) === true;
+      revalidateProductSlugs(merchantId, resolvedSlugs, {
+        expireImmediately: true,
+      }) === true;
 
     if (
       slugsRevalidated &&
       resolvedSlugs.length === revalidateProductIds.length
     ) {
       revalidateProducts(merchantId, undefined, {
+        expireImmediately: true,
         omitMerchantWidePdpDetails: true,
       });
     } else {
-      revalidateProducts(merchantId);
+      revalidateProducts(merchantId, undefined, { expireImmediately: true });
     }
     didRevalidateProducts = true;
   } catch (revalidateError) {
@@ -91,7 +94,7 @@ export async function revalidateOrderProductCaches({
     });
     if (!didRevalidateProducts) {
       try {
-        revalidateProducts(merchantId);
+        revalidateProducts(merchantId, undefined, { expireImmediately: true });
       } catch {
         // Best-effort fallback: never fail order completion if cache revalidation throws.
       }

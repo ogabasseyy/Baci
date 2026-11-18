@@ -90,12 +90,13 @@ describe('scheduleCheckoutProductBlogPurge', () => {
     expect(mocks.revalidateProducts).toHaveBeenCalledWith(
       'merchant-1',
       undefined,
-      { omitMerchantWidePdpDetails: true }
+      { expireImmediately: true, omitMerchantWidePdpDetails: true }
     );
-    expect(mocks.revalidateProductSlugs).toHaveBeenCalledWith('merchant-1', [
-      'managed-phone',
-      'serialized-phone',
-    ]);
+    expect(mocks.revalidateProductSlugs).toHaveBeenCalledWith(
+      'merchant-1',
+      ['managed-phone', 'serialized-phone'],
+      { expireImmediately: true }
+    );
     expect(mocks.schedule).toHaveBeenCalledWith({
       merchantId: 'merchant-1',
       merchantSlug: 'ogabassey',
@@ -120,7 +121,11 @@ describe('scheduleCheckoutProductBlogPurge', () => {
       supabase,
     });
 
-    expect(mocks.revalidateProducts).toHaveBeenCalledWith('merchant-1');
+    expect(mocks.revalidateProducts).toHaveBeenCalledWith(
+      'merchant-1',
+      undefined,
+      { expireImmediately: true }
+    );
     expect(mocks.revalidateProductSlugs).not.toHaveBeenCalled();
     expect(mocks.schedule).toHaveBeenCalledWith({
       merchantId: 'merchant-1',

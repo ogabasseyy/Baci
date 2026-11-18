@@ -52,6 +52,7 @@ function request(body: unknown) {
 describe('internal product revalidation blog expiry', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockRevalidateProductSlugs.mockReturnValue(true);
   });
 
   it('hard-expires only the merchant blog tag in the request context', async () => {
@@ -91,5 +92,30 @@ describe('internal product revalidation blog expiry', () => {
       ['iphone-15'],
       { expireImmediately: true }
     );
+  });
+
+  it('hard-expires scoped listing tags alongside forwarded slugs when omitMerchantWidePdpDetails is set', async () => {
+    const merchantId = 'merchant-1';
+
+    const response = await POST(
+      request({
+        merchantId,
+        expireProductBlogCache: true,
+        productSlugs: ['iphone-15'],
+        omitMerchantWidePdpDetails: true,
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockExpireProductBlogCache).toHaveBeenCalledWith(merchantId);
+    expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
+      merchantId,
+      ['iphone-15'],
+      { expireImmediately: true }
+    );
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(merchantId, undefined, {
+      expireImmediately: true,
+      omitMerchantWidePdpDetails: true,
+    });
   });
 });

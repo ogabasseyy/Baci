@@ -12,11 +12,16 @@ function animate(points, linear = false) {
   return { a: 1, k: points.map(([t, s], index) => index === points.length - 1 ? { t, s } : { t, s, e: points[index + 1][1], ...(linear ? linearEasing : easing) }) };
 }
 export function createSplashAnimation() {
-  const files = ['background','cloud','mark','wordmark','torso','leg','device-0','device-1','device-2','device-3','loading-message'];
-  const assets = files.map((name) => {
+  // The opaque background ships as JPEG (about a tenth of the PNG's size) so
+  // the launch animation has less to decode; layers with transparency stay PNG.
+  const background = readFileSync(new URL('../assets/splash-scene/background.jpg', import.meta.url));
+  const backgroundSize = readFileSync(new URL('../assets/splash-scene/background.png', import.meta.url));
+  const assets = [{ id: 'background', w: backgroundSize.readUInt32BE(16), h: backgroundSize.readUInt32BE(20), u: '', p: `data:image/jpeg;base64,${background.toString('base64')}`, e: 1 }];
+  const files = ['cloud','mark','wordmark','torso','leg','device-0','device-1','device-2','device-3','loading-message'];
+  assets.push(...files.map((name) => {
     const data = readFileSync(new URL(`../assets/splash-scene/${name}.png`, import.meta.url));
     return { id: name, w: data.readUInt32BE(16), h: data.readUInt32BE(20), u: '', p: `data:image/png;base64,${data.toString('base64')}`, e: 1 };
-  });
+  }));
   const tagline = Buffer.from(TAGLINE, 'base64');
   assets.push({ id: 'tagline', w: tagline.readUInt32BE(16), h: tagline.readUInt32BE(20), u: '', p: `data:image/png;base64,${TAGLINE}`, e: 1 });
   let id = 0;

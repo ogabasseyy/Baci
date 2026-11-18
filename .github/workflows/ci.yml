@@ -75,6 +75,15 @@ jobs:
         run: node --test .github/scripts/muse-comment-review-concurrency.test.mjs
       - name: Test builder execution proxy
         run: node --test apps/builder-execution-proxy/worker.test.mjs
+      - name: Test builder execution HTTPS ingress
+        run: |
+          caddy_dir=$(mktemp -d "$RUNNER_TEMP/baci-caddy.XXXXXXXX")
+          curl --fail --silent --show-error --location --retry 2 --max-time 60 \
+            https://github.com/caddyserver/caddy/releases/download/v2.11.4/caddy_2.11.4_linux_amd64.tar.gz \
+            --output "$caddy_dir/caddy.tgz"
+          echo "527fbf917c39189a1e3b31d34fa955601680b2d5c8055d2a87b8b9588dec7bb9  $caddy_dir/caddy.tgz" | sha256sum --check
+          tar -xzf "$caddy_dir/caddy.tgz" -C "$caddy_dir" caddy
+          PATH="$caddy_dir:$PATH" python3 apps/builder-execution-proxy/ingress.test.py
       - name: Test loyalty replay binary discovery
         run: node --test tools/test/loyalty-postgres-bin.test.mjs
       - name: Test pnpm store action input hardening

@@ -41,8 +41,23 @@ interface CryptoInitHandlers {
 // here so the component body stays compilable by React Compiler.
 export async function initializeCryptoPayment(
   request: CryptoInitRequest,
-  { setStatus, setErrorMessage, setCryptoData }: CryptoInitHandlers,
+  {
+    setStatus: setStatusNow,
+    setErrorMessage: setErrorMessageNow,
+    setCryptoData: setCryptoDataNow,
+  }: CryptoInitHandlers,
+  // False once a newer request (another order or a retry) replaced this one.
+  isCurrent: () => boolean = () => true
 ) {
+  const setStatus = (status: CryptoStatus) => {
+    if (isCurrent()) setStatusNow(status);
+  };
+  const setErrorMessage = (message: string | null) => {
+    if (isCurrent()) setErrorMessageNow(message);
+  };
+  const setCryptoData = (data: CryptoPaymentData | null) => {
+    if (isCurrent()) setCryptoDataNow(data);
+  };
   try {
     setStatus('loading');
     setErrorMessage(null);
@@ -72,7 +87,7 @@ export async function initializeCryptoPayment(
 
     const result = await res.json();
 
-    if (result.success && result.crypto_payment) {
+    if (result.success && result.crypto_payment?.payment_id) {
       setCryptoData({
         address: result.crypto_payment.address,
         chain: result.crypto_payment.chain,
@@ -81,7 +96,7 @@ export async function initializeCryptoPayment(
         confirmation_time: result.crypto_payment.confirmation_time,
         orderId: request.orderId,
         reference: result.reference,
-        paymentId: result.crypto_payment.payment_id || '',
+        paymentId: result.crypto_payment.payment_id,
         qrcode: result.crypto_payment.qrcode,
         trackingToken: request.trackingToken,
       });

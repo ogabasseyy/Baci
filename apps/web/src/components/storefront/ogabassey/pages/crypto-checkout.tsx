@@ -16,13 +16,8 @@ import {
 } from 'lucide-react';
 import { useMerchant } from '@/hooks/use-merchant-client';
 
-const CHAIN_LABELS: Record<string, string> = {
-  TRX: 'Tron (TRC-20)',
-  ETH: 'Ethereum (ERC-20)',
-  MATIC: 'Polygon',
-  AVAXC: 'Avalanche C-Chain',
-};
-
+import { CHAIN_LABELS } from './crypto-chain-labels';
+import { writeTextToClipboard } from './write-text-to-clipboard';
 import {
   type CryptoPaymentData,
   type CryptoStatus,
@@ -51,6 +46,9 @@ export function CryptoCheckoutPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [cryptoData, setCryptoData] = useState<CryptoPaymentData | null>(null);
   const [copiedText, setCopiedText] = useState<string | null>(null);
+  // Bumped by "Try Again" so the initialization re-runs in place (a reload
+  // would lose customer details held only in page memory).
+  const [attempt, setAttempt] = useState(0);
 
   const pollingRef = useRef<{
     intervalId: ReturnType<typeof setInterval> | null;
@@ -58,21 +56,9 @@ export function CryptoCheckoutPage() {
   }>({ intervalId: null, attempts: 0 });
 
   const copyToClipboard = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopiedText(text);
-      setTimeout(() => setCopiedText(null), 2000);
-    } catch {
-      // Fallback for older browsers
-      const textarea = document.createElement('textarea');
-      textarea.value = text;
-      document.body.appendChild(textarea);
-      textarea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textarea);
-      setCopiedText(text);
-      setTimeout(() => setCopiedText(null), 2000);
-    }
+    await writeTextToClipboard(text);
+    setCopiedText(text);
+    setTimeout(() => setCopiedText(null), 2000);
   };
 
   // Initialize payment on mount; the missing-params error is derived during
@@ -81,6 +67,7 @@ export function CryptoCheckoutPage() {
     if (loading || !isReady) return;
     if (!orderId || !amount) return;
 
+    let current = true;
     initializeCryptoPayment(
       {
         merchantId: merchant?.id,
@@ -93,8 +80,12 @@ export function CryptoCheckoutPage() {
         cryptoCurrency,
         trackingToken,
       },
-      { setStatus, setErrorMessage, setCryptoData }
+      { setStatus, setErrorMessage, setCryptoData },
+      () => current
     );
+    return () => {
+      current = false;
+    };
   }, [
     orderId,
     amount,
@@ -109,6 +100,7 @@ export function CryptoCheckoutPage() {
     trackingToken,
     loading,
     isReady,
+    attempt,
   ]);
 
   const verifyCryptoPayment = async () => {
@@ -234,7 +226,7 @@ export function CryptoCheckoutPage() {
           </p>
           <button
             type="button"
-            onClick={() => window.location.reload()}
+            onClick={() => setAttempt((count) => count + 1)}
             className="w-full py-3 bg-gray-900 text-white rounded-lg font-medium hover:bg-gray-800 transition-colors"
           >
             Try Again

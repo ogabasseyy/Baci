@@ -1,5 +1,9 @@
 export interface CarrierReportRow {
+  verifiedNetwork: string;
   carrier: string;
+  selfReportedCarrier: string;
+  mismatchedSelfReportCount: number;
+  asns: readonly number[];
   count: number;
   p50Ms: number;
   p95Ms: number;
@@ -13,6 +17,7 @@ export interface CarrierReportRow {
 export interface DemoReportPayload {
   generatedAtIso: string;
   totalSamples: number;
+  mismatchedSelfReportCount: number;
   carriers: readonly CarrierReportRow[];
 }
 
@@ -25,14 +30,21 @@ function escapeHtml(raw: string): string {
     .replaceAll("'", '&#39;');
 }
 
+function formatVerifiedLabel(c: CarrierReportRow): string {
+  if (c.asns.length === 0 || c.verifiedNetwork.includes('(AS')) {
+    return c.verifiedNetwork;
+  }
+  return `${c.verifiedNetwork} (${c.asns.map((a) => `AS${a}`).join(', ')})`;
+}
+
 export function renderDemoReportHtml(report: DemoReportPayload): string {
   const rowsHtml =
     report.carriers.length === 0
-      ? '<tr><td colspan="8">No telemetry samples recorded yet.</td></tr>'
+      ? '<tr><td colspan="10">No telemetry samples recorded yet.</td></tr>'
       : report.carriers
           .map(
             (c) =>
-              `<tr><td>${escapeHtml(c.carrier)}</td><td>${c.count}</td><td>${c.p50Ms.toFixed(1)}</td><td>${c.p95Ms.toFixed(1)}</td><td>${c.p99Ms.toFixed(1)}</td><td>${c.under1sRatePct.toFixed(1)}%</td><td>${c.retries} / ${c.timeouts}</td><td>${escapeHtml(c.colos.join(', '))}</td></tr>`
+              `<tr><td>${escapeHtml(formatVerifiedLabel(c))}</td><td>${escapeHtml(c.selfReportedCarrier)}</td><td>${c.mismatchedSelfReportCount}</td><td>${c.count}</td><td>${c.p50Ms.toFixed(1)}</td><td>${c.p95Ms.toFixed(1)}</td><td>${c.p99Ms.toFixed(1)}</td><td>${c.under1sRatePct.toFixed(1)}%</td><td>${c.retries} / ${c.timeouts}</td><td>${escapeHtml(c.colos.join(', '))}</td></tr>`
           )
           .join('');
   return `<!doctype html>
@@ -51,11 +63,11 @@ export function renderDemoReportHtml(report: DemoReportPayload): string {
 </style>
 </head>
 <body>
-  <h1>Baci Quiz Edge — Carrier Telemetry Report</h1>
-  <p>Generated ${escapeHtml(report.generatedAtIso)} · Total samples: ${report.totalSamples}</p>
+  <h1>Baci Quiz Edge — Verified ISP / Carrier Telemetry Report</h1>
+  <p>Generated ${escapeHtml(report.generatedAtIso)} · Samples: ${report.totalSamples} · Mismatched self-reports: ${report.mismatchedSelfReportCount}</p>
   <table>
     <thead>
-      <tr><th>Carrier</th><th>Samples</th><th>p50 (ms)</th><th>p95 (ms)</th><th>p99 (ms)</th><th>&le;1s Rate</th><th>Retries / Timeouts</th><th>CF Colos</th></tr>
+      <tr><th>Verified Network (ASN)</th><th>Self-Reported</th><th>Mismatches</th><th>Samples</th><th>p50 (ms)</th><th>p95 (ms)</th><th>p99 (ms)</th><th>&le;1s Rate</th><th>Retries / Timeouts</th><th>CF Colos</th></tr>
     </thead>
     <tbody>${rowsHtml}</tbody>
   </table>
@@ -80,29 +92,33 @@ export function renderDemoPageHtml(): string {
   button { font-size: 0.95rem; font-weight: 600; padding: 12px 10px; border-radius: 10px; border: 1px solid #374151; background: #1f2937; color: #f9fafb; cursor: pointer; }
   button.active { background: #2563eb; border-color: #60a5fa; }
   button.primary { width: 100%; background: #16a34a; border-color: #22c55e; margin-top: 8px; }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
   button.opt { width: 100%; text-align: left; margin-bottom: 8px; }
   input { width: 100%; padding: 11px; border-radius: 10px; border: 1px solid #374151; background: #030712; color: #fff; font-size: 1rem; margin-bottom: 10px; }
   .stat { font-family: ui-monospace, monospace; font-size: 0.82rem; color: #34d399; margin-top: 8px; }
+  .warn { color: #fbbf24; }
   .hidden { display: none; }
 </style>
 </head>
 <body>
 <div class="card">
   <h1>Baci Quiz — Live Edge Probe</h1>
-  <p class="muted" id="sub">Select your network and enter a nickname to join.</p>
+  <p class="muted" id="sub">Tap your active network and enter a nickname to join.</p>
   <div id="checkin-view">
     <div class="grid" id="carriers">
-      <button type="button" data-c="MTN" class="active">MTN</button>
+      <button type="button" data-c="MTN">MTN</button>
       <button type="button" data-c="Airtel">Airtel</button>
       <button type="button" data-c="Glo">Glo</button>
       <button type="button" data-c="9mobile">9mobile</button>
       <button type="button" data-c="Wi-Fi">Wi-Fi</button>
     </div>
     <input id="nick" maxlength="24" placeholder="Nickname (e.g. LagosRunner)" />
-    <button type="button" class="primary" id="join-btn">Check In &amp; Enter Lobby</button>
+    <input id="invite-code" maxlength="64" placeholder="Invite code (or open link with ?code=...)" />
+    <button type="button" class="primary" id="join-btn" disabled>Select Network to Check In</button>
   </div>
   <div id="lobby-view" class="hidden">
     <p id="lobby-msg">Waiting for round start...</p>
+    <div class="stat" id="lobby-net"></div>
     <button type="button" class="primary hidden" id="start-btn">Start Quiz Now</button>
   </div>
   <div id="play-view" class="hidden">
@@ -118,17 +134,23 @@ export function renderDemoPageHtml(): string {
 </div>
 <script>
 (() => {
-  let carrier = 'MTN';
+  let carrier = null;
   let session = null;
   let attemptId = null;
   let currentQ = null;
   let lobbyTimer = null;
+  const joinBtn = document.getElementById('join-btn');
+  const inviteInput = document.getElementById('invite-code');
+  const urlCode = (new URLSearchParams(location.search).get('code') || '').trim();
+  if (urlCode) { inviteInput.value = urlCode; inviteInput.classList.add('hidden'); }
 
   document.querySelectorAll('#carriers button').forEach((btn) => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('#carriers button').forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
-      carrier = btn.dataset.c || 'MTN';
+      carrier = btn.dataset.c || null;
+      joinBtn.disabled = !carrier;
+      joinBtn.textContent = carrier ? 'Check In & Enter Lobby' : 'Select Network to Check In';
     });
   });
 
@@ -145,17 +167,24 @@ export function renderDemoPageHtml(): string {
     return data;
   }
 
-  document.getElementById('join-btn').addEventListener('click', async () => {
+  joinBtn.addEventListener('click', async () => {
+    if (!carrier) return;
     const nickname = (document.getElementById('nick').value || '').trim() || ('Player-' + Math.floor(Math.random() * 9000 + 1000));
+    const inviteCode = (inviteInput.value || '').trim();
     try {
       session = await apiJson('/api/demo/check-in', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ carrier, nickname })
+        body: JSON.stringify({ carrier, nickname, inviteCode })
       });
+      const netEl = document.getElementById('lobby-net');
+      const netInfo = 'ISP / ASN / colo: ' + (session.verifiedNetwork || 'Unknown') + ' · AS' + (session.asn || 0) + ' · ' + (session.colo || 'LOCAL') + (session.country ? ' (' + session.country + ')' : '');
+      netEl.className = session.networkMismatch ? 'stat warn' : 'stat';
+      netEl.textContent = session.networkMismatch ? netInfo + ' — Warning: differs from tapped ' + carrier + ' (check Wi-Fi/VPN!)' : netInfo;
       show('lobby-view');
       tickLobby();
     } catch (e) {
+      inviteInput.classList.remove('hidden');
       document.getElementById('sub').textContent = 'Check-in failed: ' + e.message;
     }
   });
@@ -179,12 +208,8 @@ export function renderDemoPageHtml(): string {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Baci-Quiz-Ticket': session.ticket },
         body: JSON.stringify({
-          integrityTier: 'basic',
-          acceptedRulesVersion: 'live-v1',
-          termsAccepted: true,
-          startRequestId: crypto.randomUUID(),
-          appVersion: 'demo-web-1',
-          platform: 'web'
+          integrityTier: 'basic', acceptedRulesVersion: 'live-v1', termsAccepted: true,
+          startRequestId: crypto.randomUUID(), appVersion: 'demo-web-1', platform: 'web'
         })
       });
       attemptId = startRes.attemptId;
@@ -195,11 +220,7 @@ export function renderDemoPageHtml(): string {
   });
 
   function renderAttempt(state) {
-    if (state.status !== 'in_progress' || !state.question) {
-      show('result-view');
-      pollFinalResult();
-      return;
-    }
+    if (state.status !== 'in_progress' || !state.question) { show('result-view'); pollFinalResult(); return; }
     show('play-view');
     currentQ = state.question;
     document.getElementById('q-meta').textContent = 'Question ' + currentQ.index + ' / ' + currentQ.total;
@@ -208,9 +229,7 @@ export function renderDemoPageHtml(): string {
     box.innerHTML = '';
     currentQ.options.forEach((opt) => {
       const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'opt';
-      b.textContent = opt.label;
+      b.type = 'button'; b.className = 'opt'; b.textContent = opt.label;
       b.addEventListener('click', () => submitAnswer(currentQ.id, currentQ.index, opt.id));
       box.appendChild(b);
     });
@@ -228,25 +247,16 @@ export function renderDemoPageHtml(): string {
           body: JSON.stringify({ questionId, answer })
         });
         break;
-      } catch {
-        retries += 1;
-      }
+      } catch { retries += 1; }
     }
-    const tapToAckMs = Math.round(performance.now() - t0);
-    document.getElementById('ack-stat').textContent = 'Last ACK: ' + tapToAckMs + ' ms (' + carrier + ', retries: ' + retries + ')';
+    const tapToAckMs = Math.max(1, Math.round(performance.now() - t0));
+    document.getElementById('ack-stat').textContent = 'Last ACK: ' + tapToAckMs + ' ms (' + (session.verifiedNetwork || carrier) + ', retries: ' + retries + ')';
     fetch('/api/demo/telemetry', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Baci-Quiz-Ticket': session.ticket },
       body: JSON.stringify({
-        eventId: session.eventId,
-        round: session.round,
-        carrier,
-        nickname: session.nickname,
-        attemptId,
-        questionIndex,
-        tapToAckMs,
-        retries,
-        timedOut: !resState
+        eventId: session.eventId, round: session.round, carrier, nickname: session.nickname,
+        attemptId, questionIndex, tapToAckMs, retries, timedOut: !resState
       })
     }).catch(() => {});
     if (resState) renderAttempt(resState);

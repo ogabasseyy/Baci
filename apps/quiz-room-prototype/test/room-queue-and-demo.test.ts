@@ -13,7 +13,17 @@ import {
   QuizControlStateStore,
 } from '../src/control-state';
 import { EventCoordinatorEngine } from '../src/coordinator';
+import { classifyVerifiedNetwork } from '../src/demo-isp';
 import { handleDemoWorkerRoute } from '../src/demo-routes';
+
+function withCf(
+  request: Request,
+  cf: { asn?: number; asOrganization?: string; colo?: string; country?: string }
+): Request {
+  Object.defineProperty(request, 'cf', { value: cf });
+  return request;
+}
+
 import { DemoStateEngine } from '../src/demo-state';
 import { NodeSqliteAdapter } from '../src/node-sqlite-adapter';
 import { handleQuizQueueBatch } from '../src/queue-consumer';
@@ -241,7 +251,63 @@ describe('Queue consumer and Demo UI / Telemetry routes', () => {
     );
   });
 
-  it('serves /demo, gates admin setup-round, mints check-in tokens, and aggregates /demo/report per carrier', async () => {
+  it('classifies Nigerian mobile ASNs/orgs and falls back cleanly on unknown ISPs', () => {
+    expect(
+      classifyVerifiedNetwork(
+        withCf(new Request('https://demo.test'), {
+          asn: 29465,
+          asOrganization: 'Other Org',
+          colo: 'LOS',
+          country: 'NG',
+        })
+      ).verifiedNetwork
+    ).toBe('MTN Nigeria');
+    expect(
+      classifyVerifiedNetwork(
+        withCf(new Request('https://demo.test'), {
+          asn: 36873,
+          asOrganization: 'Airtel Networks',
+          colo: 'LOS',
+          country: 'NG',
+        })
+      ).verifiedNetwork
+    ).toBe('Airtel Nigeria');
+    expect(
+      classifyVerifiedNetwork(
+        withCf(new Request('https://demo.test'), {
+          asn: 328309,
+          asOrganization: 'Globacom Limited',
+          colo: 'LOS',
+          country: 'NG',
+        })
+      ).verifiedNetwork
+    ).toBe('Glo Nigeria');
+    expect(
+      classifyVerifiedNetwork(
+        withCf(new Request('https://demo.test'), {
+          asn: 29571,
+          asOrganization: 'GLO',
+          colo: 'LOS',
+          country: 'NG',
+        })
+      ).verifiedNetwork
+    ).toBe('Glo Nigeria');
+    expect(
+      classifyVerifiedNetwork(
+        withCf(new Request('https://demo.test'), {
+          asn: 37076,
+          asOrganization: 'EMTS',
+          colo: 'LOS',
+          country: 'NG',
+        })
+      ).verifiedNetwork
+    ).toBe('9mobile Nigeria');
+    expect(
+      classifyVerifiedNetwork(new Request('https://demo.test')).verifiedNetwork
+    ).toBe('Unknown ISP (AS0)');
+  });
+
+  it('serves /demo without pre-selected carrier, gates invite code & telemetry, and aggregates verified ISP/mismatch report', async () => {
     const adapter = new NodeSqliteAdapter(':memory:');
     const demoState = new DemoStateEngine(adapter);
     const initializedRooms: string[] = [];
@@ -250,6 +316,7 @@ describe('Queue consumer and Demo UI / Telemetry routes', () => {
       QUIZ_TICKET_SECRET: 'demo-ticket-secret',
       QUIZ_JWT_SECRET: 'demo-jwt-secret',
       QUIZ_INTERNAL_COORDINATOR_SECRET: 'demo-admin-secret',
+      QUIZ_DEMO_INVITE_CODE: 'lagos-probe-2026',
       callDemoDo: (path: string, body?: unknown) => {
         if (path === '/internal/demo/setup-round') {
           demoState.setActiveRound(body as never);
@@ -264,8 +331,10 @@ describe('Queue consumer and Demo UI / Telemetry routes', () => {
           return Promise.resolve(new Response(JSON.stringify(alloc)));
         }
         if (path === '/internal/demo/telemetry') {
-          demoState.recordTelemetry(body as never);
-          return Promise.resolve(new Response(JSON.stringify({ ok: true })));
+          const res = demoState.recordTelemetry(body as never);
+          return Promise.resolve(
+            new Response(JSON.stringify({ ok: true, ...res }))
+          );
         }
         if (path === '/internal/demo/active') {
           return Promise.resolve(
@@ -301,7 +370,15 @@ describe('Queue consumer and Demo UI / Telemetry routes', () => {
       dispatchEnv
     );
     expect(pageRes?.status).toBe(200);
-    expect(await pageRes?.text()).toContain('Baci Quiz');
+    const pageHtml = (await pageRes?.text()) ?? '';
+    expect(pageHtml).toContain('Baci Quiz');
+    expect(pageHtml).toContain(
+      '<button type="button" data-c="MTN">MTN</button>'
+    );
+    expect(pageHtml).not.toContain('data-c="MTN" class="active"');
+    expect(pageHtml).toContain('id="join-btn" disabled');
+    expect(pageHtml).toContain('id="invite-code"');
+    expect(pageHtml).toContain('id="lobby-net"');
 
     // Admin setup-round fails closed without valid coordinator secret
     await expect(
@@ -326,19 +403,55 @@ describe('Queue consumer and Demo UI / Telemetry routes', () => {
     );
     expect(setupRes?.status).toBe(200);
     expect(initializedRooms).toHaveLength(13);
-    expect(initializedRooms[0]).toBe(
-      '11111111-1111-4111-8111-000000000003:room-0000'
-    );
+    const eventId = '11111111-1111-4111-8111-000000000003';
+    expect(initializedRooms[0]).toBe(`${eventId}:room-0000`);
 
-    const checkInRes = await handleDemoWorkerRoute(
-      new Request('https://demo.test/api/demo/check-in', {
-        method: 'POST',
-        body: JSON.stringify({
-          carrier: 'MTN',
-          nickname: 'AdaNG',
-          roomId: 'room-0000',
+    // Check-in fails closed when QUIZ_DEMO_INVITE_CODE is unset
+    await expect(
+      handleDemoWorkerRoute(
+        new Request('https://demo.test/api/demo/check-in', {
+          method: 'POST',
+          body: JSON.stringify({
+            carrier: 'MTN',
+            inviteCode: 'lagos-probe-2026',
+          }),
         }),
-      }),
+        new URL('https://demo.test/api/demo/check-in'),
+        { ...dispatchEnv, QUIZ_DEMO_INVITE_CODE: '' }
+      )
+    ).rejects.toMatchObject({ code: 'QUIZ_CONFIG_MISSING', status: 503 });
+
+    // Check-in fails with 403 on missing/wrong invite code
+    await expect(
+      handleDemoWorkerRoute(
+        new Request('https://demo.test/api/demo/check-in', {
+          method: 'POST',
+          body: JSON.stringify({ carrier: 'MTN', inviteCode: 'wrong-code' }),
+        }),
+        new URL('https://demo.test/api/demo/check-in'),
+        dispatchEnv
+      )
+    ).rejects.toMatchObject({ code: 'QUIZ_INVITE_REQUIRED', status: 403 });
+
+    // Valid check-in via body inviteCode + MTN AS29465 CF metadata
+    const checkInRes = await handleDemoWorkerRoute(
+      withCf(
+        new Request('https://demo.test/api/demo/check-in', {
+          method: 'POST',
+          body: JSON.stringify({
+            carrier: 'MTN',
+            nickname: 'AdaNG',
+            roomId: 'room-0000',
+            inviteCode: 'lagos-probe-2026',
+          }),
+        }),
+        {
+          asn: 29465,
+          asOrganization: 'MTN Nigeria Communication Limited',
+          colo: 'LOS',
+          country: 'NG',
+        }
+      ),
       new URL('https://demo.test/api/demo/check-in'),
       dispatchEnv
     );
@@ -347,26 +460,208 @@ describe('Queue consumer and Demo UI / Telemetry routes', () => {
       roomId: string;
       ticket: string;
       bearerToken: string;
+      verifiedNetwork: string;
+      asn: number;
+      colo: string;
+      networkMismatch: boolean;
     };
-    expect(checkInJson.roomId).toBe(
-      '11111111-1111-4111-8111-000000000003:room-0000'
-    );
+    expect(checkInJson.roomId).toBe(`${eventId}:room-0000`);
     expect(checkInJson.ticket.startsWith('bqt1.')).toBe(true);
+    expect(checkInJson.verifiedNetwork).toBe('MTN Nigeria');
+    expect(checkInJson.asn).toBe(29465);
+    expect(checkInJson.colo).toBe('LOS');
+    expect(checkInJson.networkMismatch).toBe(false);
 
-    for (const ms of [120, 240, 880, 1250]) {
-      await handleDemoWorkerRoute(
+    // Valid check-in via ?code= query param on SpaceX Starlink while claiming MTN -> networkMismatch: true
+    const mismatchCheckIn = await handleDemoWorkerRoute(
+      withCf(
+        new Request(
+          'https://demo.test/api/demo/check-in?code=lagos-probe-2026',
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              carrier: 'MTN',
+              nickname: 'WifiCheater',
+            }),
+          }
+        ),
+        {
+          asn: 14593,
+          asOrganization: 'SpaceX Starlink',
+          colo: 'LOS',
+          country: 'NG',
+        }
+      ),
+      new URL('https://demo.test/api/demo/check-in?code=lagos-probe-2026'),
+      dispatchEnv
+    );
+    const mismatchJson = (await mismatchCheckIn?.json()) as {
+      ticket: string;
+      verifiedNetwork: string;
+      networkMismatch: boolean;
+    };
+    expect(mismatchJson.verifiedNetwork).toBe('SpaceX Starlink (AS14593)');
+    expect(mismatchJson.networkMismatch).toBe(true);
+
+    // Unauthenticated telemetry -> 401
+    await expect(
+      handleDemoWorkerRoute(
         new Request('https://demo.test/api/demo/telemetry', {
           method: 'POST',
           body: JSON.stringify({
+            eventId,
+            attemptId: 'att-1',
+            questionIndex: 1,
             carrier: 'MTN',
-            tapToAckMs: ms,
-            retries: ms > 1000 ? 1 : 0,
+            tapToAckMs: 150,
           }),
         }),
         new URL('https://demo.test/api/demo/telemetry'),
         dispatchEnv
+      )
+    ).rejects.toMatchObject({ status: 401 });
+
+    // Mismatched eventId -> 403
+    await expect(
+      handleDemoWorkerRoute(
+        new Request('https://demo.test/api/demo/telemetry', {
+          method: 'POST',
+          headers: { 'X-Baci-Quiz-Ticket': checkInJson.ticket },
+          body: JSON.stringify({
+            eventId: 'other-event',
+            attemptId: 'att-1',
+            questionIndex: 1,
+            carrier: 'MTN',
+            tapToAckMs: 150,
+          }),
+        }),
+        new URL('https://demo.test/api/demo/telemetry'),
+        dispatchEnv
+      )
+    ).rejects.toMatchObject({ status: 403 });
+
+    // Out-of-bounds questionIndex & tapToAckMs -> 400
+    await expect(
+      handleDemoWorkerRoute(
+        new Request('https://demo.test/api/demo/telemetry', {
+          method: 'POST',
+          headers: { 'X-Baci-Quiz-Ticket': checkInJson.ticket },
+          body: JSON.stringify({
+            eventId,
+            attemptId: 'att-1',
+            questionIndex: 11,
+            carrier: 'MTN',
+            tapToAckMs: 150,
+          }),
+        }),
+        new URL('https://demo.test/api/demo/telemetry'),
+        dispatchEnv
+      )
+    ).rejects.toMatchObject({ code: 'QUIZ_INVALID_TELEMETRY', status: 400 });
+
+    await expect(
+      handleDemoWorkerRoute(
+        new Request('https://demo.test/api/demo/telemetry', {
+          method: 'POST',
+          headers: { 'X-Baci-Quiz-Ticket': checkInJson.ticket },
+          body: JSON.stringify({
+            eventId,
+            attemptId: 'att-1',
+            questionIndex: 1,
+            carrier: 'MTN',
+            tapToAckMs: 0,
+          }),
+        }),
+        new URL('https://demo.test/api/demo/telemetry'),
+        dispatchEnv
+      )
+    ).rejects.toMatchObject({ code: 'QUIZ_INVALID_TELEMETRY', status: 400 });
+
+    // Authenticated MTN telemetry + duplicate (attemptId, questionIndex) ignored by SQLite UNIQUE
+    const mtnLatencies = [120, 240, 880, 1250];
+    for (let i = 0; i < mtnLatencies.length; i += 1) {
+      const ms = mtnLatencies[i] ?? 100;
+      const tRes = await handleDemoWorkerRoute(
+        withCf(
+          new Request('https://demo.test/api/demo/telemetry', {
+            method: 'POST',
+            headers: { 'X-Baci-Quiz-Ticket': checkInJson.ticket },
+            body: JSON.stringify({
+              eventId,
+              attemptId: 'att-mtn-1',
+              questionIndex: i + 1,
+              carrier: 'MTN',
+              tapToAckMs: ms,
+              retries: ms > 1000 ? 1 : 0,
+            }),
+          }),
+          {
+            asn: 29465,
+            asOrganization: 'MTN Nigeria',
+            colo: 'LOS',
+            country: 'NG',
+          }
+        ),
+        new URL('https://demo.test/api/demo/telemetry'),
+        dispatchEnv
       );
+      expect(await tRes?.json()).toMatchObject({
+        ok: true,
+        deduplicated: false,
+      });
     }
+    const dupRes = await handleDemoWorkerRoute(
+      withCf(
+        new Request('https://demo.test/api/demo/telemetry', {
+          method: 'POST',
+          headers: { 'X-Baci-Quiz-Ticket': checkInJson.ticket },
+          body: JSON.stringify({
+            eventId,
+            attemptId: 'att-mtn-1',
+            questionIndex: 1,
+            carrier: 'MTN',
+            tapToAckMs: 9999,
+          }),
+        }),
+        {
+          asn: 29465,
+          asOrganization: 'MTN Nigeria',
+          colo: 'LOS',
+          country: 'NG',
+        }
+      ),
+      new URL('https://demo.test/api/demo/telemetry'),
+      dispatchEnv
+    );
+    expect(await dupRes?.json()).toMatchObject({
+      ok: true,
+      deduplicated: true,
+    });
+
+    // Record mismatched sample (tapped MTN while on SpaceX Starlink)
+    await handleDemoWorkerRoute(
+      withCf(
+        new Request('https://demo.test/api/demo/telemetry', {
+          method: 'POST',
+          headers: { 'X-Baci-Quiz-Ticket': mismatchJson.ticket },
+          body: JSON.stringify({
+            eventId,
+            attemptId: 'att-starlink-1',
+            questionIndex: 1,
+            carrier: 'MTN',
+            tapToAckMs: 310,
+          }),
+        }),
+        {
+          asn: 14593,
+          asOrganization: 'SpaceX Starlink',
+          colo: 'LOS',
+          country: 'NG',
+        }
+      ),
+      new URL('https://demo.test/api/demo/telemetry'),
+      dispatchEnv
+    );
 
     const reportJsonRes = await handleDemoWorkerRoute(
       new Request('https://demo.test/demo/report?format=json'),
@@ -375,19 +670,50 @@ describe('Queue consumer and Demo UI / Telemetry routes', () => {
     );
     const report = (await reportJsonRes?.json()) as {
       totalSamples: number;
-      carriers: { carrier: string; under1sRatePct: number; p95Ms: number }[];
+      mismatchedSelfReportCount: number;
+      carriers: {
+        verifiedNetwork: string;
+        selfReportedCarrier: string;
+        mismatchedSelfReportCount: number;
+        asns: number[];
+        under1sRatePct: number;
+        p95Ms: number;
+        colos: string[];
+      }[];
     };
-    expect(report.totalSamples).toBe(4);
-    expect(report.carriers[0]?.carrier).toBe('MTN');
-    expect(report.carriers[0]?.under1sRatePct).toBe(75);
-    expect(report.carriers[0]?.p95Ms).toBe(1250);
+    expect(report.totalSamples).toBe(5);
+    expect(report.mismatchedSelfReportCount).toBe(1);
+    const mtnRow = report.carriers.find(
+      (c) => c.verifiedNetwork === 'MTN Nigeria'
+    );
+    expect(mtnRow).toMatchObject({
+      verifiedNetwork: 'MTN Nigeria',
+      selfReportedCarrier: 'MTN',
+      mismatchedSelfReportCount: 0,
+      asns: [29465],
+      under1sRatePct: 75,
+      p95Ms: 1250,
+      colos: ['LOS'],
+    });
+    const starlinkRow = report.carriers.find(
+      (c) => c.verifiedNetwork === 'SpaceX Starlink (AS14593)'
+    );
+    expect(starlinkRow).toMatchObject({
+      verifiedNetwork: 'SpaceX Starlink (AS14593)',
+      selfReportedCarrier: 'MTN',
+      mismatchedSelfReportCount: 1,
+      asns: [14593],
+      colos: ['LOS'],
+    });
 
     const reportHtmlRes = await handleDemoWorkerRoute(
       new Request('https://demo.test/demo/report'),
       new URL('https://demo.test/demo/report'),
       dispatchEnv
     );
-    expect(await reportHtmlRes?.text()).toContain('MTN');
+    const reportHtml = (await reportHtmlRes?.text()) ?? '';
+    expect(reportHtml).toContain('MTN Nigeria (AS29465)');
+    expect(reportHtml).toContain('SpaceX Starlink (AS14593)');
     adapter.close();
   });
 
@@ -427,6 +753,7 @@ describe('Queue consumer and Demo UI / Telemetry routes', () => {
       QUIZ_TICKET_SECRET: 'reconcile-ticket-secret',
       QUIZ_JWT_SECRET: 'reconcile-jwt-secret',
       QUIZ_INTERNAL_COORDINATOR_SECRET: 'reconcile-admin-secret',
+      QUIZ_DEMO_INVITE_CODE: 'reconcile-invite-code',
       RESULT_SHARD_COUNT: '4',
       callDemoDo: (path: string, body?: unknown) => {
         if (path === '/internal/demo/setup-round') {
@@ -546,7 +873,11 @@ describe('Queue consumer and Demo UI / Telemetry routes', () => {
       const ciRes = await handleDemoWorkerRoute(
         new Request('https://demo.test/api/demo/check-in', {
           method: 'POST',
-          body: JSON.stringify({ carrier: 'MTN', nickname: nick }),
+          body: JSON.stringify({
+            carrier: 'MTN',
+            nickname: nick,
+            inviteCode: 'reconcile-invite-code',
+          }),
         }),
         new URL('https://demo.test/api/demo/check-in'),
         env

@@ -147,3 +147,28 @@ describe('bugfix: a 401/403 needs a named credential even with refusal wording',
     });
   });
 });
+
+describe('bugfix: form-encoded flags are read by value', () => {
+  it.each([
+    'isFailed=true&message=Insufficient wallet balance',
+    'timedOut=true&message=Insufficient wallet balance',
+  ])('keeps "%s" off Kuda', async (body) => {
+    mockHttpError(400, 'Bad Request', body);
+
+    await expect(vend()).resolves.toMatchObject({
+      providerDefiniteFailure: false,
+    });
+  });
+
+  it('hands "duplicate=false&message=Insufficient wallet balance" to Kuda', async () => {
+    mockHttpError(
+      400,
+      'Bad Request',
+      'duplicate=false&message=Insufficient wallet balance'
+    );
+
+    await expect(vend()).resolves.toMatchObject({
+      providerDefiniteFailure: true,
+    });
+  });
+});

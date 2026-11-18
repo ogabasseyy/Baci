@@ -1,3 +1,4 @@
+import { parseMonnifyAnswer } from './monnify-answer-parse';
 import { joinMonnifyAnswerStrings } from './monnify-answer-strings';
 import { readsAsMonnifyAuthRejection } from './monnify-auth-rejection';
 import { redactMonnifyCredentials } from './monnify-credential-redaction';
@@ -51,12 +52,12 @@ interface MonnifyAnswerReading {
 }
 
 /**
- * A JSON body is read structurally, plus the text of its string values (not
- * its keys, so a top-level reference echo does not count). Anything else is
- * read as plain text.
+ * A JSON or key=value body is read structurally, plus the text of its string
+ * values (not its keys, so a top-level reference echo does not count).
+ * Anything else is read as plain text.
  */
 function showsVendEvidence(body: string): boolean {
-  const parsed = parseJsonOrNull(body);
+  const parsed = parseMonnifyAnswer(body);
   if (parsed && typeof parsed === 'object') {
     return (
       hasMonnifyVendEvidence(parsed) ||
@@ -64,14 +65,6 @@ function showsVendEvidence(body: string): boolean {
     );
   }
   return mentionsMonnifyVendEvidence(body);
-}
-
-function parseJsonOrNull(text: string): unknown {
-  try {
-    return JSON.parse(text) as unknown;
-  } catch {
-    return null;
-  }
 }
 
 /**
@@ -84,7 +77,7 @@ function readMonnifyAnswer(
   body: string
 ): MonnifyAnswerReading {
   // A JSON body is read by its string values (not its keys) for wording.
-  const parsed = parseJsonOrNull(body);
+  const parsed = parseMonnifyAnswer(body);
   const bodyText =
     parsed && typeof parsed === 'object'
       ? joinMonnifyAnswerStrings(parsed)

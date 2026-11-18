@@ -17,6 +17,8 @@ describe('mentionsMonnifyAuthWording', () => {
     'Sign-in failed',
     'LOGIN_FAILED',
     'failed to log in',
+    'Authentication unsuccessful: insufficient wallet balance',
+    'Login unsuccessful',
   ])('reads %s as login wording', (text) => {
     expect(mentionsMonnifyAuthWording(text)).toBe(true);
   });

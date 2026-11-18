@@ -68,4 +68,41 @@ describe('GIG waybill not yet visible in batch tracking', () => {
     expect(summary.failed).toBe(1);
     expect(loggerError).toHaveBeenCalledTimes(1);
   });
+
+  it('records a failure instead of a quiet poll when batch tracking reports a per-waybill parsing error', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+
+    const summary = await processClaimedGiglTrackingMonitors(
+      { rpc } as never,
+      [monitor],
+      'worker-1',
+      async () => ({
+        results: new Map(),
+        failures: new Map([
+          [
+            monitor.tracking_number,
+            new Error('GIGL batch tracking returned schema-invalid shipment'),
+          ],
+        ]),
+      }),
+      async () => 'unavailable',
+      async () => 'unknown'
+    );
+
+    expect(summary).toEqual({
+      applied: 0,
+      claimed: 1,
+      failed: 1,
+      paused: 0,
+      success: true,
+    });
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledWith('record_gigl_tracking_failure', {
+      p_error: 'GIGL batch tracking returned schema-invalid shipment',
+      p_shipment_id: monitor.shipment_id,
+      p_tracking_epoch_id: monitor.tracking_epoch_id,
+      p_worker_id: 'worker-1',
+    });
+    expect(loggerError).toHaveBeenCalledTimes(1);
+  });
 });

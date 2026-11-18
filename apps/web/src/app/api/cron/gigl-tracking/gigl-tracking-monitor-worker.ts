@@ -3,14 +3,18 @@ import { z } from 'zod';
 import { logger } from '@/lib/logger';
 import { giglProvider } from '@/lib/shipping/providers/gigl';
 import type { GiglWaybillOwnership } from '@/lib/shipping/providers/gigl.preshipment-ownership';
+import type { GiglBatchTrackingOutcomes } from '@/lib/shipping/providers/gigl.tracking-batch';
 import type { TrackingResult } from '@/lib/shipping/types';
 import type { Database, Json } from '@/types/supabase';
+import { recordNotYetVisible } from './gigl-tracking-not-yet-visible';
 import {
   needsPreshipmentCancellationRead,
   type ReadWaybillCancellation,
   withPreshipmentCancellation,
 } from './gigl-tracking-preshipment-cancellation';
 import { nullableSupabaseRpcArgument } from './nullable-supabase-rpc-argument';
+
+export { GIGL_WAYBILL_NOT_YET_VISIBLE } from './gigl-tracking-not-yet-visible';
 
 const claimedMonitorSchema = z.object({
   // Repair-pickup monitors enroll with null order_id; identity is shipment/epoch.
@@ -35,23 +39,13 @@ export type GiglTrackingMonitorSummary = {
 type WorkerSupabase = Pick<SupabaseClient<Database>, 'rpc'>;
 type TrackShipments = (
   trackingNumbers: readonly string[]
-) => Promise<Map<string, TrackingResult>>;
+) => Promise<Map<string, TrackingResult> | GiglBatchTrackingOutcomes>;
 type AttestWaybillOwnership = (
   trackingNumber: string
 ) => Promise<GiglWaybillOwnership>;
 
 const UNRECOGNIZED_LIFECYCLE_ERROR =
   'GIGL tracking result has no recognized lifecycle event';
-
-// GIG's batch tracking returns nothing for a booked waybill until the rider
-// scans it at pickup. That is "not visible yet", not a failure: the database
-// recognises this exact marker on record_gigl_tracking_failure as a quiet
-// poll (no failure count, no error alert), and its back-off ladder then lets
-// the monitor go dormant until a GIG webhook or the safety check wakes it.
-// Reusing the existing lease-bound RPC keeps the worker's capability set
-// unchanged. Keep this text in sync with the migration
-// 20261115120000_gigl_tracking_trigger_driven_polling.sql.
-export const GIGL_WAYBILL_NOT_YET_VISIBLE = 'GIGL waybill not yet visible';
 
 // The database refunds a merchant-wallet GIGL charge on GIG's cancellation
 // only when this worker marks the cancellation events "account_attested":
@@ -127,22 +121,6 @@ async function recordFailure(
   if (rpcError) throw rpcError;
 }
 
-async function recordNotYetVisible(
-  supabase: WorkerSupabase,
-  monitor: ClaimedGiglTrackingMonitor,
-  workerId: string
-) {
-  const { error } = await supabase.rpc('record_gigl_tracking_failure', {
-    p_error: GIGL_WAYBILL_NOT_YET_VISIBLE,
-    p_shipment_id: monitor.shipment_id,
-    p_tracking_epoch_id: monitor.tracking_epoch_id,
-    p_worker_id: workerId,
-  });
-  if (error) {
-    throw new Error('Failed to record GIGL waybill as not yet visible');
-  }
-}
-
 async function applyResult(
   supabase: WorkerSupabase,
   monitor: ClaimedGiglTrackingMonitor,
@@ -200,7 +178,7 @@ export async function processClaimedGiglTrackingMonitors(
   monitors: ClaimedGiglTrackingMonitor[],
   workerId: string,
   trackShipments: TrackShipments = (trackingNumbers) =>
-    giglProvider.trackShipments(trackingNumbers),
+    giglProvider.trackShipmentOutcomes(trackingNumbers),
   attestWaybillOwnership: AttestWaybillOwnership = (trackingNumber) =>
     giglProvider.attestWaybillOwnership(trackingNumber),
   readWaybillCancellation: ReadWaybillCancellation = (trackingNumber) =>
@@ -216,11 +194,19 @@ export async function processClaimedGiglTrackingMonitors(
   if (monitors.length === 0) return summary;
 
   let results: Map<string, TrackingResult>;
+  let failures: ReadonlyMap<string, Error>;
   try {
     const trackingNumbers = [
       ...new Set(monitors.map((monitor) => monitor.tracking_number)),
     ];
-    results = await trackShipments(trackingNumbers);
+    const tracked = await trackShipments(trackingNumbers);
+    if (tracked instanceof Map) {
+      results = tracked;
+      failures = new Map();
+    } else {
+      results = tracked.results;
+      failures = tracked.failures;
+    }
   } catch (error) {
     await Promise.all(
       monitors.map(async (monitor) => {
@@ -247,7 +233,11 @@ export async function processClaimedGiglTrackingMonitors(
   await Promise.all(
     monitors.map(async (monitor) => {
       let result = results.get(monitor.tracking_number);
+      const trackingFailure = failures.get(monitor.tracking_number);
       try {
+        if (trackingFailure) {
+          throw trackingFailure;
+        }
         if (needsPreshipmentCancellationRead(result)) {
           const cancellation = await readCancellationOnce(
             monitor.tracking_number

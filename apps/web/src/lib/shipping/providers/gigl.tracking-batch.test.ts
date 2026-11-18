@@ -7,7 +7,10 @@ import {
   GIGL_TRACKING_WAYBILL_MAX_LENGTH,
   type GiglProviderIo,
 } from './gigl.constants';
-import { trackGiglShipmentBatch } from './gigl.tracking-batch';
+import {
+  trackGiglShipmentBatch,
+  trackGiglShipmentBatchOutcomes,
+} from './gigl.tracking-batch';
 
 const token = {
   token: 'token',
@@ -275,5 +278,39 @@ describe('trackGiglShipmentBatch', () => {
       expect.any(Function),
       { maxResponseBytes: GIGL_TRACKING_RESPONSE_MAX_BYTES }
     );
+  });
+
+  it('reports per-waybill schema and normalization failures separately from omitted waybills', async () => {
+    const { apiClient, io } = setupApi({
+      status: 200,
+      success: true,
+      data: [
+        { ...shipment('WB-SCHEMA-BAD'), Amount: undefined },
+        {
+          ...shipment('WB-EVENT-BAD'),
+          MobileShipmentTrackings: [
+            {
+              Status: 'UNPUBLISHED_CODE',
+              DateTimeUtc: 'not-a-date',
+            },
+          ],
+        },
+        shipment('WB-GOOD'),
+      ],
+    });
+
+    const outcomes = await trackGiglShipmentBatchOutcomes(apiClient, io, [
+      'WB-SCHEMA-BAD',
+      'WB-EVENT-BAD',
+      'WB-GOOD',
+      'WB-ABSENT',
+    ]);
+
+    expect([...outcomes.results.keys()]).toEqual(['WB-GOOD']);
+    expect([...outcomes.failures.keys()]).toEqual([
+      'WB-SCHEMA-BAD',
+      'WB-EVENT-BAD',
+    ]);
+    expect(outcomes.failures.get('WB-ABSENT')).toBeUndefined();
   });
 });

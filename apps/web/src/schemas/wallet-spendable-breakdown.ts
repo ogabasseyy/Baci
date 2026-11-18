@@ -7,7 +7,8 @@ const moneySchema = z.union([
   z
     .string()
     .regex(/^\d+(\.\d+)?$/)
-    .transform(Number),
+    .transform(Number)
+    .pipe(z.number().finite()),
 ]);
 
 /** Rows from public.get_merchant_wallet_spendable_breakdown (0 or 1 row). */

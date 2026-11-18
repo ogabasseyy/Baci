@@ -24,4 +24,10 @@ describe('walletSpendableBreakdownRowsSchema', () => {
     }
     expect(schema.safeParse([{ spendable_balance: 1 }]).success).toBe(false);
   });
+
+  it('rejects a digit string that overflows to Infinity', () => {
+    expect(
+      schema.safeParse([{ ...row, spendable_balance: '9'.repeat(400) }]).success
+    ).toBe(false);
+  });
 });

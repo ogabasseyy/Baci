@@ -204,14 +204,35 @@ export function defineArchiveRoutePurgeSuite({
 
   it('skips edge purge when both per-slug and broad hard expiry fail on archive', async () => {
     mocks.revalidateProductSlugs.mockReturnValueOnce(false);
-    mocks.revalidateProducts
-      .mockReturnValueOnce(true)
-      .mockReturnValueOnce(false);
+    mocks.revalidateProducts.mockReturnValueOnce(false);
 
     const response = await PATCH(makeRequest(), makeContext());
 
     expect(response.status).toBe(200);
     expect(mocks.scheduleStorefrontProductPurge).not.toHaveBeenCalled();
     expect(mocks.scheduleProductBlogPurgeAfterResponse).not.toHaveBeenCalled();
+  });
+
+  it('does not leak the category join/junction embeds in the response body', async () => {
+    mocks.archiveResult = {
+      id: '123e4567-e89b-42d3-a456-426614174000',
+      slug: 'phone-ultra',
+      status: 'archived',
+      name: 'Phone Ultra',
+      category: 'Smartphones',
+      categories: { slug: 'smartphones' },
+      product_categories: [{ categories: { slug: 'gadgets' } }],
+    };
+
+    const response = await PATCH(makeRequest(), makeContext());
+
+    await expect(response.json()).resolves.toEqual({
+      product: {
+        id: '123e4567-e89b-42d3-a456-426614174000',
+        slug: 'phone-ultra',
+        status: 'archived',
+      },
+      success: true,
+    });
   });
 }

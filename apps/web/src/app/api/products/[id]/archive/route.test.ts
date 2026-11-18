@@ -60,20 +60,10 @@ vi.mock('@/lib/expire-product-blog-cache', () => ({
 }));
 vi.mock('@/lib/get-merchant-for-api-request', () => ({
   getMerchantForApiRequest: mocks.getMerchantForApiRequest,
-  toUserAccess: (context: {
-    merchantId: string;
-    staffAccess: {
-      isOwner: boolean;
-      isStaff: boolean;
-      permissions: Record<string, Record<string, boolean>>;
-      role: string | null;
-    };
-  }) => ({
+  toUserAccess: (context: { merchantId: string; staffAccess: object }) => ({
     merchantId: context.merchantId,
-    isOwner: context.staffAccess.isOwner,
-    isStaff: context.staffAccess.isStaff,
-    permissions: context.staffAccess.permissions,
-    role: context.staffAccess.role ?? 'owner',
+    role: 'owner',
+    ...context.staffAccess,
   }),
 }));
 vi.mock('@/lib/storefront-product-purge', () => ({
@@ -225,9 +215,15 @@ describe('PATCH /api/products/[id]/archive', () => {
       '123e4567-e89b-42d3-a456-426614174000',
     ]);
     expect(mocks.filters).toContainEqual(['merchant_id', MERCHANT_ONE_ID]);
+    expect(mocks.revalidateProductSlugs).toHaveBeenCalledWith(
+      MERCHANT_ONE_ID,
+      ['phone-ultra'],
+      { expireImmediately: true }
+    );
     expect(mocks.revalidateProducts).toHaveBeenCalledWith(
       MERCHANT_ONE_ID,
-      'phone-ultra'
+      undefined,
+      { expireImmediately: true, omitMerchantWidePdpDetails: true }
     );
   });
 
@@ -256,31 +252,9 @@ describe('PATCH /api/products/[id]/archive', () => {
     expect(mocks.filters).toContainEqual(['merchant_id', MERCHANT_TWO_ID]);
     expect(mocks.revalidateProducts).toHaveBeenCalledWith(
       MERCHANT_TWO_ID,
-      'phone-ultra'
+      undefined,
+      { expireImmediately: true, omitMerchantWidePdpDetails: true }
     );
-  });
-
-  it('does not leak the category join/junction embeds in the response body', async () => {
-    mocks.archiveResult = {
-      id: '123e4567-e89b-42d3-a456-426614174000',
-      slug: 'phone-ultra',
-      status: 'archived',
-      name: 'Phone Ultra',
-      category: 'Smartphones',
-      categories: { slug: 'smartphones' },
-      product_categories: [{ categories: { slug: 'gadgets' } }],
-    };
-
-    const response = await PATCH(makeRequest(), makeContext());
-
-    await expect(response.json()).resolves.toEqual({
-      product: {
-        id: '123e4567-e89b-42d3-a456-426614174000',
-        slug: 'phone-ultra',
-        status: 'archived',
-      },
-      success: true,
-    });
   });
 
   defineArchiveRouteAuthorizationSuite({

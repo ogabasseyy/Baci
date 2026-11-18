@@ -109,8 +109,6 @@ export async function PATCH(
     return jsonError('Failed to archive product', 500);
   }
 
-  revalidateProducts(merchantContext.merchantId, product.slug ?? undefined);
-
   // Archiving removes the product from listings AND changes its PDP (the
   // storefront redirects archived slugs), yet nothing else evicts the raised
   // edge TTL — the CDN would keep serving the pre-archive listing/PDP. Evict the
@@ -182,6 +180,7 @@ export async function PATCH(
       });
     }
   } catch (purgeError) {
+    revalidateProducts(merchantContext.merchantId, product.slug ?? undefined);
     console.warn('Skipped Cloudflare product purge after archive', {
       purgeError,
     });

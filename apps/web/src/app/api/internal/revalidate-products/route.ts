@@ -239,13 +239,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         (!shouldExpireProductBlogCache ||
           callerOmitMerchantWidePdpDetails === true)
       ) {
-        revalidateProducts(
-          merchantId,
-          undefined,
-          callerOmitMerchantWidePdpDetails === true
-            ? { expireImmediately: true }
-            : undefined
-        );
+        revalidateProducts(merchantId, undefined, { expireImmediately: true });
       }
       logger.error({
         message: 'Skipped Cloudflare product purge in revalidate-products',

@@ -113,7 +113,23 @@ export async function delegateStorefrontEdgePurge({
     new Set(productIds.map((id) => id.trim()).filter((id) => id.length > 0))
   );
   const canOmitMerchantWidePdpDetails =
-    productSlugs.length > 0 && normalizedProductIds.length > 0;
+    productSlugs.length > 0 &&
+    normalizedProductIds.length > 0 &&
+    entries.length <= normalizedProductIds.length;
+  const toEntryPayload = (entry: StorefrontProductPurgeEntry) => ({
+    slug: entry.slug,
+    ...(entry.categorySegment ? { categorySlug: entry.categorySegment } : {}),
+  });
+  const delegatedProducts =
+    normalizedProductIds.length > 0
+      ? [
+          ...normalizedProductIds.map((id, index) => ({
+            id,
+            ...(entries[index] ? toEntryPayload(entries[index]) : {}),
+          })),
+          ...entries.slice(normalizedProductIds.length).map(toEntryPayload),
+        ]
+      : entries.map(toEntryPayload);
   try {
     const response = await fetch(endpoint, {
       method: 'POST',
@@ -137,15 +153,7 @@ export async function delegateStorefrontEdgePurge({
               ...(normalizedBlogPostSlugs.length > 0
                 ? { blogPostSlugs: normalizedBlogPostSlugs }
                 : {}),
-              products:
-                normalizedProductIds.length > 0
-                  ? normalizedProductIds.map((id) => ({ id }))
-                  : entries.map((entry) => ({
-                      slug: entry.slug,
-                      ...(entry.categorySegment
-                        ? { categorySlug: entry.categorySegment }
-                        : {}),
-                    })),
+              products: delegatedProducts,
             }),
       }),
       signal: AbortSignal.timeout(REMOTE_EDGE_PURGE_TIMEOUT_MS),

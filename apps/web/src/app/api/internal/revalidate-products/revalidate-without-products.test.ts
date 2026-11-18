@@ -75,6 +75,23 @@ describe('revalidateWithoutProducts', () => {
     });
 
     expect(failed).toBe(false);
+
+    mockRevalidateProducts.mockClear();
+    mockRevalidateProducts
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(false);
+
+    const slugChunkFailed = revalidateWithoutProducts({
+      merchantId: MERCHANT_ID,
+      hasProducts: false,
+      purgeWholeStorefront: false,
+      hasExplicitProductSlugs: true,
+      explicitSlugsRevalidated: true,
+      callerOmitMerchantWidePdpDetails: true,
+      shouldExpireProductBlogCache: false,
+    });
+
+    expect(slugChunkFailed).toBe(false);
   });
 
   it('returns false in blog mode when expireProductBlogCache fails or broad fallback fails', () => {

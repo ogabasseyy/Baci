@@ -192,7 +192,7 @@ export async function POST(request: NextRequest) {
           }
         }
       } catch (purgeError) {
-        revalidateProducts(merchantId);
+        revalidateProducts(merchantId, undefined, { expireImmediately: true });
         console.error('Skipped Cloudflare product purge in cache/revalidate:', {
           merchantId,
           purgeError,

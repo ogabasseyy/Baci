@@ -233,4 +233,29 @@ describe('POST /api/cache/revalidate scoped PDP hard-expiry', () => {
       { expireImmediately: true }
     );
   });
+
+  it('hard-expires broad product caches in the catch block when enrichment throws', async () => {
+    mockEnrich.mockRejectedValueOnce(new Error('lookup failed'));
+    const errorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+
+    try {
+      const response = await POST(
+        makeRequest({
+          targets: ['products'],
+          products: [{ id: 'prod-1' }],
+        })
+      );
+
+      expect(response.status).toBe(200);
+      expect(mockRevalidateProducts).toHaveBeenCalledWith(
+        MERCHANT_ID,
+        undefined,
+        { expireImmediately: true }
+      );
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
 });

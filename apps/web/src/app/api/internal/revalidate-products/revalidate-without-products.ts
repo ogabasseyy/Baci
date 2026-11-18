@@ -38,16 +38,12 @@ export function revalidateWithoutProducts({
       expireImmediately: true,
       omitMerchantWidePdpDetails: true,
     });
-    if (scopedExpired === false) {
-      const broadExpired = revalidateProducts(merchantId, undefined, {
-        expireImmediately: true,
-      });
-      if (
-        shouldExpireProductBlogCache &&
-        (blogExpired === false || broadExpired === false)
-      ) {
-        return false;
-      }
+    if (
+      scopedExpired === false &&
+      revalidateProducts(merchantId, undefined, { expireImmediately: true }) ===
+        false
+    ) {
+      return false;
     }
     return !(shouldExpireProductBlogCache && blogExpired === false);
   }

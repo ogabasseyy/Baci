@@ -598,6 +598,18 @@ describe('BatchPacker (<64KB split/duplicate/underfilled) and Coordinator room c
         const alarmRes = await room.onAlarm(endsAtMs);
         expect(alarmRes.sealed).toBe(false);
         expect(alarmRes.intakeStopped).toBe(true);
+        // Late submitAnswer arriving between endsAtMs and coordinator.sweepClose must
+        // NOT stamp nowMs; seal() must stamp persistedCloseAtMs uniformly!
+        const lateAns = await room.submitAnswer({
+          ticket: t2,
+          attemptId: st2.attemptId,
+          questionId: st2.question?.id ?? '',
+          answer: 'opt-a',
+          receivedAtMs: endsAtMs + 250,
+          nowMs: endsAtMs + 250,
+        });
+        expect(lateAns.status).toBe('submitted_pending_results');
+        expect(lateAns.submittedAt).toBeNull();
         await coord.sweepClose({
           eventId: config.eventId,
           nowMs: persistedCloseAtMs,

@@ -221,27 +221,29 @@ export async function handleQuizQueueBatch(
       continue;
     }
 
-    const isSplitPart =
-      packed.bundles.length === 1 &&
-      (packed.bundles[0]?.totalParts ?? 1) > 1 &&
-      reassembled.completedBundles.length === 0;
+    // Keep split metadata consistent across parts regardless of whether parts arrive
+    // in the same queue() batch or across separate invocations.
+    const firstSplit =
+      packed.bundles.length === 1 && (packed.bundles[0]?.totalParts ?? 1) > 1
+        ? packed.bundles[0]
+        : undefined;
+    const isSplitPart = firstSplit !== undefined;
 
-    const bundlesToSend =
-      reassembled.completedBundles.length > 0
+    const bundlesToSend = isSplitPart
+      ? packed.bundles
+      : reassembled.completedBundles.length > 0
         ? reassembled.completedBundles
         : packed.bundles;
 
-    const firstSplit = isSplitPart ? packed.bundles[0] : undefined;
-    const partIndex = firstSplit ? firstSplit.partIndex : 0;
-    const totalParts = firstSplit ? firstSplit.totalParts : 1;
+    const partIndex = isSplitPart ? firstSplit.partIndex : 0;
+    const totalParts = isSplitPart ? firstSplit.totalParts : 1;
     const answerCount = bundlesToSend.reduce(
       (sum, b) => sum + b.answers.length,
       0
     );
-    const batchChecksum =
-      totalParts === 1
-        ? await sha256Hex(JSON.stringify(bundlesToSend))
-        : (firstSplit?.bundleChecksumSha256 ?? packed.payloadSha256);
+    const batchChecksum = isSplitPart
+      ? firstSplit.bundleChecksumSha256
+      : await sha256Hex(JSON.stringify(bundlesToSend));
 
     try {
       const rpc = await postIngestRpc(
@@ -252,10 +254,9 @@ export async function handleQuizQueueBatch(
         {
           p_event_id: packed.eventId,
           p_room_id: packed.roomId,
-          p_batch_id:
-            totalParts > 1 && firstSplit
-              ? `${packed.eventId}:${packed.roomId}:split:${firstSplit.attemptId}`
-              : packed.batchId,
+          p_batch_id: isSplitPart
+            ? `${packed.eventId}:${packed.roomId}:split:${firstSplit.attemptId}`
+            : packed.batchId,
           p_batch_checksum_sha256: batchChecksum,
           p_attempt_count: bundlesToSend.length,
           p_answer_count: answerCount,

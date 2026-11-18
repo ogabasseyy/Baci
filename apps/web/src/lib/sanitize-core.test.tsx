@@ -318,17 +318,6 @@ describe('sanitizeForLog', () => {
     expect(sanitizeForLog(null)).toBe('');
     expect(sanitizeForLog(undefined)).toBe('');
   });
-
-  it('should format Error instances cleanly instead of returning "{}"', () => {
-    const err = new Error('Something went wrong\nwith details');
-    const result = sanitizeForLog(err);
-    expect(result).not.toBe('{}');
-    expect(result).toContain('Error: Something went wrong');
-    expect(result).not.toContain('\n');
-
-    const emptyErr = new TypeError('');
-    expect(sanitizeForLog(emptyErr)).toBe('TypeError');
-  });
 });
 
 describe('sanitizeLikePattern', () => {

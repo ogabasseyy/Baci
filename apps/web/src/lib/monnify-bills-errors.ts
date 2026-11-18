@@ -1,5 +1,6 @@
 import { joinMonnifyAnswerStrings } from './monnify-answer-strings';
 import { readsAsMonnifyAuthRejection } from './monnify-auth-rejection';
+import { redactMonnifyCredentials } from './monnify-credential-redaction';
 import { hasMonnifyDuplicateFlag } from './monnify-duplicate-flag';
 import { isMonnifyDuplicateReferenceText } from './monnify-duplicate-reference';
 import { hasMonnifyNonDefinitiveCode } from './monnify-non-definitive-code';
@@ -214,7 +215,7 @@ export function sanitizeMonnifyErrorDetail(value: string) {
     boundedValue = boundedValue.replace(/[\d\s./()_+-]+$/, '');
   }
 
-  const redacted = boundedValue
+  const redacted = redactMonnifyCredentials(boundedValue)
     .replace(SENSITIVE_DIGIT_SEQUENCE_PATTERN, '[redacted]')
     .replace(SENSITIVE_GROUPED_PHONE_PATTERN, '[redacted]')
     .replace(SENSITIVE_GROUPED_DIALLED_NUMBER_PATTERN, '[redacted]')

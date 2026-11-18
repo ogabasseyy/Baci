@@ -2,7 +2,7 @@ import { joinMonnifyAnswerStrings } from './monnify-answer-strings';
 
 /** Auth wording that names the reason: token, credentials, header, access. */
 const SPECIFIC_AUTH_REJECTION =
-  /invalid (?:access |bearer )?token|(?:bearer|access) token (?:is )?(?:invalid|missing|required)|missing (?:bearer|access) token|(?:expired|revoked) token|token (?:(?:has|is) )?(?:been )?(?:expired|revoked)|invalid credentials?|authentication (?:failed|failure|required|error)|failed to authenticate|(?:not |un)authenticated|authori[sz]ation (?:header )?(?:is )?(?:missing|required|invalid)|missing authori[sz]ation|(?:unauthori[sz]ed|forbidden)[\s:,-]+(?:request|access|token|credentials?|client|user|api[\s_-]?key)/i;
+  /invalid (?:access |bearer )?token|(?:bearer|access) token (?:is )?(?:invalid|missing|required)|missing (?:bearer|access) token|(?:expired|revoked) token|token (?:(?:has|is) )?(?:been )?(?:expired|revoked)|invalid credentials?|authentication (?:failed|failure|required|error)|failed to authenticate|(?:not |un)authenticated|authori[sz]ation (?:header )?(?:is )?(?:missing|required|invalid)|missing authori[sz]ation|(?:unauthori[sz]ed|forbidden)[\s:,-]+(?:(?:access|bearer)\s+)?(?:token|credentials?|api[\s_-]?key)/i;
 
 /** A message that is only "Unauthorized" / "Forbidden" (optional punctuation). */
 const BARE_AUTH_MESSAGE =

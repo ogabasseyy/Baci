@@ -9,7 +9,7 @@
  * as evidence fails closed (refund, no Kuda), never a double vend.
  */
 const KEY =
-  '(?:(?:vend|transaction|txn|payment|order|purchase)[\\s_-]*status|(?:(?:transaction|vend|payment|order)[\\s_-]*)?reference|(?:transaction|txn|vend|order)[\\s_-]*id)';
+  '(?:(?:vend|transaction|txn|payment|order|purchase)[\\s_-]*status|(?:(?:transaction|vend|payment|order)[\\s_-]*)?reference|(?:transaction|txn|vend|order)[\\s_-]*id|(?:receipt|invoice)(?:[\\s_-]*(?:number|no|id))?)';
 /**
  * A generic "status=FAILED" pair: any non-numeric value except HTTP reason
  * phrases and error labels ("error", "Bad Request"), like the JSON check.

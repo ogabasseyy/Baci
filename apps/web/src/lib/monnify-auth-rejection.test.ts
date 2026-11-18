@@ -8,7 +8,7 @@ describe('readsAsMonnifyAuthRejection', () => {
     'Unauthorized',
     JSON.stringify({ responseMessage: 'Access denied' }),
     JSON.stringify({ error: 'Forbidden: invalid credentials' }),
-    JSON.stringify({ message: 'Unauthorized request' }),
+    JSON.stringify({ message: 'Unauthorized: access token' }),
     'Token expired',
   ])('reads %s as an auth rejection', (body) => {
     expect(readsAsMonnifyAuthRejection(body)).toBe(true);
@@ -45,5 +45,22 @@ describe('readsAsMonnifyAuthRejection with specificOnly', () => {
         }
       )
     ).toBe(true);
+  });
+});
+
+describe('bugfix: generic denies are not specific auth rejections', () => {
+  it.each([
+    'Unauthorized request',
+    'Forbidden access',
+    'Unauthorized client',
+  ])('does not read "%s" as a specific auth rejection', (message) => {
+    expect(
+      readsAsMonnifyAuthRejection(
+        JSON.stringify({ responseMessage: message }),
+        {
+          specificOnly: true,
+        }
+      )
+    ).toBe(false);
   });
 });

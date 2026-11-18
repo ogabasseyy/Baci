@@ -1,0 +1,22 @@
+/** "Bearer <value>" in a message or echoed header. */
+const BEARER_VALUE = /\bbearer\s+[^\s"',;&]+/gi;
+/** A JWT (three base64url parts, header starting "eyJ"). */
+const JWT = /\beyJ[\w-]+\.[\w-]+(?:\.[\w-]+)?/g;
+/** A credential-named field followed by its value: "access token: abc…". */
+const CREDENTIAL_FIELD_VALUE =
+  /\b((?:access[\s_-]*|bearer[\s_-]*|refresh[\s_-]*)?token|api[\s_-]*key|secret|password|authori[sz]ation|credentials?)(["']?\s*[:=]\s*["']?)(?!bearer\b|\[redacted\])[^\s"',;&]+/gi;
+/** Any long opaque value (24+ token characters with a digit): keys, hashes. */
+const LONG_OPAQUE_VALUE =
+  /(?<![\w.+/=-])(?=[\w.+/=-]*\d)(?=[\w.+/=-]*[A-Za-z])[\w.+/=-]{24,}(?![\w.+/=-])/g;
+
+/**
+ * Hides credentials Monnify may echo back (bearer tokens, JWTs, API keys,
+ * secrets, long opaque values) before any text is stored or logged.
+ */
+export function redactMonnifyCredentials(text: string): string {
+  return text
+    .replace(BEARER_VALUE, 'Bearer [redacted]')
+    .replace(JWT, '[redacted]')
+    .replace(CREDENTIAL_FIELD_VALUE, '$1$2[redacted]')
+    .replace(LONG_OPAQUE_VALUE, '[redacted]');
+}

@@ -988,4 +988,16 @@ describe('GET /api/blog/feed/[merchantSlug]', () => {
       })
     );
   });
+
+  it('uses remote cache directive so RSS tag invalidations propagate across instances', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { dirname, join } = await import('node:path');
+    const { fileURLToPath } = await import('node:url');
+    const routeSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), 'route.ts'),
+      'utf8'
+    );
+
+    expect(routeSource).toContain("'use cache: remote';");
+  });
 });

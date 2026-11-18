@@ -259,9 +259,10 @@ async function fetchPublicFeedPosts(
 }
 
 // Cache RSS feed for 1 hour by canonical merchant id using module-scope
-// `'use cache'`, carrying both tenant-scoped tags and legacy global tags.
+// `'use cache: remote'` so tenant-tag invalidations propagate across instances,
+// carrying both tenant-scoped tags and legacy global tags.
 async function getCachedFeedByMerchantId(merchantId: string) {
-  'use cache';
+  'use cache: remote';
   cacheLife('blog');
   cacheTag(
     'blog-posts',

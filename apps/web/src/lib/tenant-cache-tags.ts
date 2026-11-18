@@ -1,6 +1,58 @@
+import { createHash } from 'node:crypto';
 import { getMerchantSlugCacheTag } from '@/lib/merchant-slug-cache-tag';
 import { normalizeMerchantId } from '@/lib/normalize-merchant-id';
 import { isSlugShapedIdentifier } from '@/lib/validation';
+
+const MAX_CACHE_TAG_BYTES = 256;
+const READABLE_OVERFLOW_PART_LENGTH = 48;
+const HASH_SUFFIX_LENGTH = 32;
+
+export const PLATFORM_SITEMAP_MERCHANTS_CACHE_TAG =
+  'platform-sitemap-merchants';
+
+function formatBoundedCacheTag(
+  prefix: string,
+  normalizedValue: string
+): string {
+  const rawTag = `${prefix}-${normalizedValue}`;
+  if (
+    rawTag.length <= MAX_CACHE_TAG_BYTES &&
+    Buffer.byteLength(rawTag, 'utf8') <= MAX_CACHE_TAG_BYTES
+  ) {
+    return rawTag;
+  }
+
+  const readable =
+    normalizedValue
+      .replace(/[^a-z0-9.-]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, READABLE_OVERFLOW_PART_LENGTH) || 'long';
+  const digest = createHash('sha256')
+    .update(normalizedValue)
+    .digest('hex')
+    .slice(0, HASH_SUFFIX_LENGTH);
+  return `${prefix}-${readable}-${digest}`;
+}
+
+export function getBoundedMerchantSlugCacheTag(slug: string): string {
+  const normalized = slug.trim().toLowerCase();
+  const slugTag = getMerchantSlugCacheTag(normalized);
+  if (
+    slugTag.length <= MAX_CACHE_TAG_BYTES &&
+    Buffer.byteLength(slugTag, 'utf8') <= MAX_CACHE_TAG_BYTES
+  ) {
+    return slugTag;
+  }
+  return formatBoundedCacheTag('merchant-slug', normalized);
+}
+
+export function getMerchantIdentifierCacheTag(identifier: string): string {
+  return formatBoundedCacheTag('merchant', identifier.trim().toLowerCase());
+}
+
+export function getDomainCacheTag(domain: string): string {
+  return formatBoundedCacheTag('domain', domain.trim().toLowerCase());
+}
 
 export interface ResolvedMerchantTagInput {
   id: string;
@@ -21,11 +73,11 @@ export function buildStorefrontMerchantLookupTags(
   }
 
   return [
-    `merchant-${normalized}`,
+    getMerchantIdentifierCacheTag(normalized),
     ...(isSlugShapedIdentifier(normalized)
-      ? [getMerchantSlugCacheTag(normalized)]
+      ? [getBoundedMerchantSlugCacheTag(normalized)]
       : []),
-    `domain-${normalized}`,
+    getDomainCacheTag(normalized),
   ];
 }
 
@@ -43,60 +95,75 @@ export function buildResolvedMerchantScopeTags({
   const tags = new Set<string>();
   const normalizedId = normalizeMerchantId(id);
   if (normalizedId) {
-    tags.add(`merchant-id-${normalizedId}`);
-    tags.add(`features-${normalizedId}`);
+    tags.add(formatBoundedCacheTag('merchant-id', normalizedId));
+    tags.add(formatBoundedCacheTag('features', normalizedId));
   }
 
   const normalizedSlug = slug.trim().toLowerCase();
   if (normalizedSlug) {
-    tags.add(`merchant-${normalizedSlug}`);
+    tags.add(getMerchantIdentifierCacheTag(normalizedSlug));
     if (isSlugShapedIdentifier(normalizedSlug)) {
-      tags.add(getMerchantSlugCacheTag(normalizedSlug));
+      tags.add(getBoundedMerchantSlugCacheTag(normalizedSlug));
     }
   }
 
   const normalizedDomain = custom_domain?.trim().toLowerCase();
   if (normalizedDomain) {
-    tags.add(`domain-${normalizedDomain}`);
-    tags.add(`merchant-${normalizedDomain}`);
+    tags.add(getDomainCacheTag(normalizedDomain));
+    tags.add(getMerchantIdentifierCacheTag(normalizedDomain));
   }
 
   return Array.from(tags);
 }
 
 export function getBlogPostsMerchantCacheTag(merchantId: string): string {
-  return `blog-posts-${merchantId.trim()}`;
+  return formatBoundedCacheTag('blog-posts', merchantId.trim());
 }
 
 export function getBlogCategoriesMerchantCacheTag(merchantId: string): string {
-  return `blog-categories-${merchantId.trim()}`;
+  return formatBoundedCacheTag('blog-categories', merchantId.trim());
 }
 
 export function getBlogIdentifierCacheTag(identifier: string): string {
-  return `blog-identifier-${identifier.trim().toLowerCase()}`;
+  return formatBoundedCacheTag(
+    'blog-identifier',
+    identifier.trim().toLowerCase()
+  );
 }
 
 export function getBlogRssMerchantCacheTag(
   identifierOrMerchantId: string
 ): string {
-  return `blog-rss-${identifierOrMerchantId.trim().toLowerCase()}`;
+  return formatBoundedCacheTag(
+    'blog-rss',
+    identifierOrMerchantId.trim().toLowerCase()
+  );
 }
 
 export function getBlogListingStatusCacheTag(identifier: string): string {
-  return `blog-listing-status-${identifier.trim().toLowerCase()}`;
+  return formatBoundedCacheTag(
+    'blog-listing-status',
+    identifier.trim().toLowerCase()
+  );
 }
 
 export function getBlogCategoryHubCacheTag(identifier: string): string {
-  return `blog-category-hub-${identifier.trim().toLowerCase()}`;
+  return formatBoundedCacheTag(
+    'blog-category-hub',
+    identifier.trim().toLowerCase()
+  );
 }
 
 export function getPageConfigMerchantCacheTag(merchantId: string): string {
-  return `page-config-${merchantId.trim()}`;
+  return formatBoundedCacheTag('page-config', merchantId.trim());
 }
 
 export function getPageConfigSlugCacheTag(
   merchantId: string,
   pageSlug: string
 ): string {
-  return `page-config-${merchantId.trim()}-${pageSlug.trim()}`;
+  return formatBoundedCacheTag(
+    'page-config',
+    `${merchantId.trim()}-${pageSlug.trim()}`
+  );
 }

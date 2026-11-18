@@ -25,6 +25,11 @@ import {
   revalidatePageConfig,
   revalidateRepairsCatalog,
 } from './cache-revalidation';
+import {
+  getDomainCacheTag,
+  getMerchantIdentifierCacheTag,
+  PLATFORM_SITEMAP_MERCHANTS_CACHE_TAG,
+} from './tenant-cache-tags';
 
 const MERCHANT_ID = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
 
@@ -92,11 +97,15 @@ describe('tenant-scoped cache revalidation', () => {
   });
 
   describe('revalidateMerchantSlugLookup', () => {
-    it('revalidates per-slug lookup tags without busting global merchant tag', () => {
+    it('revalidates per-slug lookup and platform-sitemap tags without busting global merchant/merchants tags', () => {
       revalidateMerchantSlugLookup('Ogabassey');
 
       expect(mockRevalidateTag).not.toHaveBeenCalledWith(
         'merchant',
+        expect.anything()
+      );
+      expect(mockRevalidateTag).not.toHaveBeenCalledWith(
+        'merchants',
         expect.anything()
       );
       expect(mockRevalidateTag).toHaveBeenCalledWith(
@@ -107,27 +116,28 @@ describe('tenant-scoped cache revalidation', () => {
         'merchant-ogabassey',
         'merchant'
       );
-      expect(mockRevalidateTag).toHaveBeenCalledTimes(2);
+      expect(mockRevalidateTag).toHaveBeenCalledWith(
+        PLATFORM_SITEMAP_MERCHANTS_CACHE_TAG,
+        'merchant'
+      );
+      expect(mockRevalidatePath).toHaveBeenCalledWith('/sitemap.xml');
+      expect(mockRevalidateTag).toHaveBeenCalledTimes(3);
     });
 
     it('falls back to global merchant tag only when slug is omitted or empty', () => {
       revalidateMerchantSlugLookup();
       revalidateMerchantSlugLookup('');
 
-      expect(mockRevalidateTag).toHaveBeenNthCalledWith(
-        1,
-        'merchant',
+      expect(mockRevalidateTag).toHaveBeenCalledWith('merchant', 'merchant');
+      expect(mockRevalidateTag).toHaveBeenCalledWith(
+        PLATFORM_SITEMAP_MERCHANTS_CACHE_TAG,
         'merchant'
       );
-      expect(mockRevalidateTag).toHaveBeenNthCalledWith(
-        2,
-        'merchant',
-        'merchant'
-      );
-      expect(mockRevalidateTag).toHaveBeenCalledTimes(2);
+      expect(mockRevalidatePath).toHaveBeenCalledWith('/sitemap.xml');
+      expect(mockRevalidateTag).toHaveBeenCalledTimes(4);
     });
 
-    it('routes domain-shaped identifiers to domain and merchant tags', () => {
+    it('routes domain-shaped identifiers to domain, merchant, and platform-sitemap tags', () => {
       revalidateMerchantSlugLookup('Shop.Example.COM');
 
       expect(mockRevalidateTag).not.toHaveBeenCalledWith(
@@ -146,7 +156,12 @@ describe('tenant-scoped cache revalidation', () => {
         'merchant-shop.example.com',
         'merchant'
       );
-      expect(mockRevalidateTag).toHaveBeenCalledTimes(2);
+      expect(mockRevalidateTag).toHaveBeenCalledWith(
+        PLATFORM_SITEMAP_MERCHANTS_CACHE_TAG,
+        'merchant'
+      );
+      expect(mockRevalidatePath).toHaveBeenCalledWith('/sitemap.xml');
+      expect(mockRevalidateTag).toHaveBeenCalledTimes(3);
     });
 
     it('skips invalid slug values with a warning', () => {
@@ -265,6 +280,23 @@ describe('tenant-scoped cache revalidation', () => {
         'merchant'
       );
       expect(mockRevalidateTag).toHaveBeenCalledTimes(2);
+    });
+
+    it('bounds long custom-domain tags to 256 bytes matching tenant-cache-tags helpers', () => {
+      const longDomain = `${'a'.repeat(240)}.example.com`;
+      revalidateDomains(longDomain);
+
+      expect(mockRevalidateTag).toHaveBeenCalledWith(
+        getDomainCacheTag(longDomain),
+        'merchant'
+      );
+      expect(mockRevalidateTag).toHaveBeenCalledWith(
+        getMerchantIdentifierCacheTag(longDomain),
+        'merchant'
+      );
+      for (const [tag] of mockRevalidateTag.mock.calls) {
+        expect(Buffer.byteLength(String(tag), 'utf8')).toBeLessThanOrEqual(256);
+      }
     });
   });
 });

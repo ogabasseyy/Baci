@@ -21,7 +21,6 @@ import {
 } from '@/lib/blog-revalidation-plan';
 import { purgeCloudflareUrls } from '@/lib/cloudflare-purge';
 import { buildMerchantPublicationDataCacheTags } from '@/lib/merchant-publication-data-cache-tags';
-import { getMerchantSlugCacheTag } from '@/lib/merchant-slug-cache-tag';
 import { normalizeMerchantId } from '@/lib/normalize-merchant-id';
 import {
   getPlatformBlogPostCacheTag,
@@ -33,8 +32,12 @@ import {
 import { productCacheRevalidation } from '@/lib/product-cache-revalidation';
 import { buildStorefrontBlogPurgeUrls } from '@/lib/storefront-purge-urls';
 import {
+  getBoundedMerchantSlugCacheTag,
+  getDomainCacheTag,
+  getMerchantIdentifierCacheTag,
   getPageConfigMerchantCacheTag,
   getPageConfigSlugCacheTag,
+  PLATFORM_SITEMAP_MERCHANTS_CACHE_TAG,
 } from '@/lib/tenant-cache-tags';
 import { isDomainIdentifier, isSlugShapedIdentifier } from '@/lib/validation';
 
@@ -83,9 +86,9 @@ export function revalidateMerchant(merchantId: string, merchantSlug?: string) {
 
   const normalizedSlug = merchantSlug?.trim().toLowerCase();
   if (normalizedSlug) {
-    revalidateTag(`merchant-${normalizedSlug}`, 'merchant');
+    revalidateTag(getMerchantIdentifierCacheTag(normalizedSlug), 'merchant');
     if (isSlugShapedIdentifier(normalizedSlug)) {
-      revalidateTag(getMerchantSlugCacheTag(normalizedSlug), 'merchant');
+      revalidateTag(getBoundedMerchantSlugCacheTag(normalizedSlug), 'merchant');
     }
   }
 
@@ -124,6 +127,8 @@ export function revalidateMerchantPublication({
   })) {
     revalidateTag(tag, immediateExpiry);
   }
+  revalidateTag(PLATFORM_SITEMAP_MERCHANTS_CACHE_TAG, immediateExpiry);
+  revalidatePath('/sitemap.xml');
   revalidateTag(`dashboard-${normalizedMerchantId}`, 'merchant');
 }
 
@@ -131,6 +136,7 @@ export function revalidateMerchantPublication({
  * Bust per-slug merchant caches for a specific slug:
  *   - `merchant-slug-${slug}` + 'merchant' — the /api/merchants/by-slug route
  *   - `merchant-${slug}` + 'merchant' — getCachedMerchant() in lib/cached-data.ts
+ *   - `platform-sitemap-merchants` + `/sitemap.xml` — root sitemap discovery
  * Call this for BOTH the old and the new slug after a rename so the retired slug
  * stops resolving to a live store and the new slug serves at once. Only falls
  * back to the global `'merchant'` tag when `slug` is omitted or empty.
@@ -138,19 +144,34 @@ export function revalidateMerchantPublication({
 export function revalidateMerchantSlugLookup(slug?: string) {
   if (slug == null || slug.trim() === '') {
     revalidateTag('merchant', 'merchant');
+    revalidateTag(PLATFORM_SITEMAP_MERCHANTS_CACHE_TAG, 'merchant');
+    revalidatePath('/sitemap.xml');
     return;
   }
 
   const normalizedIdentifier = slug.trim().toLowerCase();
   if (isSlugShapedIdentifier(normalizedIdentifier)) {
-    revalidateTag(getMerchantSlugCacheTag(normalizedIdentifier), 'merchant');
-    revalidateTag(`merchant-${normalizedIdentifier}`, 'merchant');
+    revalidateTag(
+      getBoundedMerchantSlugCacheTag(normalizedIdentifier),
+      'merchant'
+    );
+    revalidateTag(
+      getMerchantIdentifierCacheTag(normalizedIdentifier),
+      'merchant'
+    );
+    revalidateTag(PLATFORM_SITEMAP_MERCHANTS_CACHE_TAG, 'merchant');
+    revalidatePath('/sitemap.xml');
     return;
   }
 
   if (isDomainIdentifier(normalizedIdentifier)) {
-    revalidateTag(`domain-${normalizedIdentifier}`, 'merchant');
-    revalidateTag(`merchant-${normalizedIdentifier}`, 'merchant');
+    revalidateTag(getDomainCacheTag(normalizedIdentifier), 'merchant');
+    revalidateTag(
+      getMerchantIdentifierCacheTag(normalizedIdentifier),
+      'merchant'
+    );
+    revalidateTag(PLATFORM_SITEMAP_MERCHANTS_CACHE_TAG, 'merchant');
+    revalidatePath('/sitemap.xml');
     return;
   }
 
@@ -313,8 +334,8 @@ export function revalidateDomains(domain?: string) {
     return;
   }
 
-  revalidateTag(`domain-${normalizedDomain}`, 'merchant');
-  revalidateTag(`merchant-${normalizedDomain}`, 'merchant');
+  revalidateTag(getDomainCacheTag(normalizedDomain), 'merchant');
+  revalidateTag(getMerchantIdentifierCacheTag(normalizedDomain), 'merchant');
 }
 
 /**

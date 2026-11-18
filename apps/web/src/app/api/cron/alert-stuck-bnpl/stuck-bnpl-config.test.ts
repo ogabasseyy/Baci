@@ -8,6 +8,7 @@ describe('STUCK_BNPL_CONFIG', () => {
       minAgeHours: 24,
       notificationConcurrency: 5,
       orderScanLimit: 500,
+      transactionLookupBatchSize: 50,
       paymentMethods: ['credit_direct', 'klump', 'credpal'],
       paymentStatuses: ['bnpl_pending', 'bnpl_approved', 'pending', 'unpaid'],
     });

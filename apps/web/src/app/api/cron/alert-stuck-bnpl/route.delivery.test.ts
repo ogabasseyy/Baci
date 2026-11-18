@@ -1,11 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  createCronRequest,
-  mocks,
-  resetCronMocks,
-  runCron,
-  stuckOrder,
-} from './route.test-support';
+import { cronHarness } from './route.test-support';
+
+const { createCronRequest, mocks, resetCronMocks, runCron, stuckOrder } =
+  cronHarness;
 
 describe('GET /api/cron/alert-stuck-bnpl', () => {
   beforeEach(resetCronMocks);

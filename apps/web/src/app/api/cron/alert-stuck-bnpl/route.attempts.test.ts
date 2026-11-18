@@ -1,11 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import {
-  createCronRequest,
-  mocks,
-  resetCronMocks,
-  runCron,
-  stuckOrder,
-} from './route.test-support';
+import { cronHarness } from './route.test-support';
+
+const { createCronRequest, mocks, resetCronMocks, runCron, stuckOrder } =
+  cronHarness;
 
 describe('GET /api/cron/alert-stuck-bnpl', () => {
   beforeEach(resetCronMocks);
@@ -165,7 +162,7 @@ describe('GET /api/cron/alert-stuck-bnpl', () => {
     expect(mocks.loggerWarn).toHaveBeenCalledWith(
       expect.objectContaining({
         message:
-          'Stuck-BNPL scan could not check transaction evidence; pending/unpaid orders without notes evidence are skipped this run',
+          'Stuck-BNPL transaction evidence was unavailable for a batch; orders requiring that evidence may be omitted',
       })
     );
     expect(mocks.loggerWarn).not.toHaveBeenCalledWith(

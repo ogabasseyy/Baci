@@ -77,14 +77,14 @@ vi.mock('@/lib/logger', () => ({
   },
 }));
 
-export function createCronRequest(auth: string | null = 'Bearer cron-secret') {
+function createCronRequest(auth: string | null = 'Bearer cron-secret') {
   return new NextRequest('http://localhost:3000/api/cron/alert-stuck-bnpl', {
     headers: auth ? { authorization: auth } : {},
     method: 'GET',
   });
 }
 
-export function stuckOrder(overrides: Record<string, unknown> = {}) {
+function stuckOrder(overrides: Record<string, unknown> = {}) {
   return {
     id: 'order-1',
     order_number: 'ORD-1',
@@ -99,7 +99,7 @@ export function stuckOrder(overrides: Record<string, unknown> = {}) {
   };
 }
 
-export function resetCronMocks() {
+function resetCronMocks() {
   vi.clearAllMocks();
   mocks.getCronSecret.mockReturnValue('cron-secret');
   mocks.notifyMerchant.mockResolvedValue({ sent: 1, failed: 0, errors: [] });
@@ -108,9 +108,15 @@ export function resetCronMocks() {
   mocks.reviewInsert.mockResolvedValue({ error: null });
 }
 
-export async function runCron(request: NextRequest) {
+async function runCron(request: NextRequest) {
   const { GET } = await import('./route');
   return GET(request);
 }
 
-export { mocks };
+export const cronHarness = {
+  createCronRequest,
+  stuckOrder,
+  resetCronMocks,
+  runCron,
+  mocks,
+};

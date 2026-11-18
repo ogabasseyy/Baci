@@ -88,4 +88,99 @@ describe('loadBnplTransactionEvidence', () => {
       lookupFailed: true,
     });
   });
+
+  it('bounds lookup batches and preserves evidence from every batch', async () => {
+    const signals = new Map(
+      Array.from({ length: 101 }, (_, index) => [
+        `order-${index}`,
+        orderSignals(),
+      ])
+    );
+    const { supabase, inFilter } = transactionLookup([]);
+    inFilter.mockImplementation(async (_column: string, ids: string[]) => ({
+      data: ids.map((id) => ({
+        order_id: id,
+        status: 'processing',
+        gateway: 'credit_direct',
+        gateway_reference: 'active-txn',
+      })),
+      error: null,
+    }));
+    const result = await loadBnplTransactionEvidence(supabase, signals);
+    expect(inFilter.mock.calls.map((call) => call[1].length)).toEqual([
+      50, 50, 1,
+    ]);
+    expect(result.progressedOrderIds.size).toBe(101);
+    expect(result.referencesByOrderId.size).toBe(101);
+    expect(result.lookupFailed).toBe(false);
+  });
+
+  it('preserves evidence from successful batches when another batch fails', async () => {
+    const signals = new Map(
+      Array.from({ length: 51 }, (_, index) => [
+        `order-${index}`,
+        orderSignals(),
+      ])
+    );
+    const { supabase, inFilter } = transactionLookup([]);
+    inFilter
+      .mockResolvedValueOnce({
+        data: [
+          {
+            order_id: 'order-0',
+            status: 'processing',
+            gateway: 'credit_direct',
+            gateway_reference: 'active-txn',
+          },
+        ],
+        error: null,
+      })
+      .mockResolvedValueOnce({ data: null, error: { message: 'unavailable' } });
+    expect(await loadBnplTransactionEvidence(supabase, signals)).toEqual({
+      progressedOrderIds: new Set(['order-0']),
+      referencesByOrderId: new Map([['order-0', 'active-txn']]),
+      lookupFailed: true,
+    });
+  });
+
+  it.each([
+    'klump',
+    'credpal',
+  ])('requires a nonempty provider reference for %s progress', async (provider) => {
+    const signals = getStuckBnplSignals({
+      payment_method: provider,
+      payment_status: 'unpaid',
+      notes: null,
+    });
+    const { supabase } = transactionLookup([
+      {
+        order_id: 'missing',
+        status: 'processing',
+        gateway: provider,
+        gateway_reference: null,
+      },
+      {
+        order_id: 'blank',
+        status: 'completed',
+        gateway: provider,
+        gateway_reference: '  ',
+      },
+      {
+        order_id: 'valid',
+        status: 'processing',
+        gateway: provider,
+        gateway_reference: ' provider-ref ',
+      },
+    ]);
+    expect(
+      await loadBnplTransactionEvidence(
+        supabase,
+        new Map(['missing', 'blank', 'valid'].map((id) => [id, signals]))
+      )
+    ).toEqual({
+      progressedOrderIds: new Set(['valid']),
+      referencesByOrderId: new Map([['valid', 'provider-ref']]),
+      lookupFailed: false,
+    });
+  });
 });

@@ -1,11 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import {
-  createCronRequest,
-  mocks,
-  resetCronMocks,
-  runCron,
-  stuckOrder,
-} from './route.test-support';
+import { cronHarness } from './route.test-support';
+
+const { createCronRequest, mocks, resetCronMocks, runCron, stuckOrder } =
+  cronHarness;
 
 describe('GET /api/cron/alert-stuck-bnpl', () => {
   beforeEach(resetCronMocks);
@@ -156,7 +153,14 @@ describe('GET /api/cron/alert-stuck-bnpl', () => {
       error: null,
     });
     mocks.transactionsIn.mockResolvedValue({
-      data: [{ order_id: 'order-1', gateway: 'credpal', status: 'processing' }],
+      data: [
+        {
+          order_id: 'order-1',
+          gateway: 'credpal',
+          status: 'processing',
+          gateway_reference: 'credpal-1',
+        },
+      ],
       error: null,
     });
 

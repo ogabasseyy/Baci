@@ -40,14 +40,48 @@ export function rejectUnsupportedQuizContract(
   return NextResponse.json(UPDATE_REQUIRED, { status: 426 });
 }
 
+/**
+ * How long one web instance trusts a passing database readiness check.
+ * The answer is the same for every player and only changes when a migration
+ * ships, so asking the database on every request spent more than a third of
+ * all quiz database calls on it during a load test. Only a pass is remembered:
+ * a failed or wrong answer is asked again on the next request.
+ */
+const RUNTIME_READY_TTL_MS = 15_000;
+
+let runtimeReadyUntil = 0;
+let runtimeCheckInFlight: Promise<boolean> | null = null;
+
+async function checkQuizV2Runtime(
+  supabase: ServerSupabaseClient
+): Promise<boolean> {
+  try {
+    const { data, error } = await supabase.rpc('quiz_runtime_contract_version');
+    return !error && data === QUIZ_CONTRACT_VERSION;
+  } catch {
+    return false;
+  }
+}
+
 export async function requireQuizV2Runtime(
   supabase: ServerSupabaseClient
 ): Promise<NextResponse | null> {
-  const { data, error } = await supabase.rpc('quiz_runtime_contract_version');
-  if (error || data !== QUIZ_CONTRACT_VERSION) {
-    return NextResponse.json(RUNTIME_NOT_READY, { status: 503 });
-  }
+  if (Date.now() < runtimeReadyUntil) return null;
+  // Requests that arrive while a check is running share its answer instead of
+  // each sending their own.
+  runtimeCheckInFlight ??= checkQuizV2Runtime(supabase).finally(() => {
+    runtimeCheckInFlight = null;
+  });
+  const ready = await runtimeCheckInFlight;
+  if (!ready) return NextResponse.json(RUNTIME_NOT_READY, { status: 503 });
+  runtimeReadyUntil = Date.now() + RUNTIME_READY_TTL_MS;
   return null;
+}
+
+/** Test-only: forget the remembered readiness check. */
+export function resetQuizV2RuntimeCheckForTests(): void {
+  runtimeReadyUntil = 0;
+  runtimeCheckInFlight = null;
 }
 
 export function readQuizDeviceFingerprint(request: NextRequest): string | null {

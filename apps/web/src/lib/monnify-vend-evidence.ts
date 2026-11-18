@@ -93,7 +93,7 @@ function isEvidenceValue(key: string, value: unknown): boolean {
  * to true they say a vend happened or is under way; false says nothing.
  */
 const OUTCOME_FLAG_KEY =
-  /^(?:is|was|has)?(?:been)?(?:processed|delivered|completed|vended|successful|success|dispatched|pending|inprogress|queued|submitted|accepted|initiated)$/;
+  /^(?:is|was|has)?(?:been)?(?:processed|delivered|completed|vended|successful|success|dispatched|pending|inprogress|queued|submitted|accepted|initiated|failed|failure|rejected|cancell?ed|reversed|declined|timedout)$/;
 
 function isTrueFlag(value: unknown): boolean {
   return (

@@ -12,6 +12,8 @@ describe('isMonnifyDuplicateReferenceText', () => {
     'Conflict on vend reference',
     'transaction_conflict',
     'REFERENCE_ALREADY_EXISTS',
+    'Transaction reference has previously been used: insufficient wallet balance',
+    'Reference was previously used',
     'REFERENCE_HAS_BEEN_USED',
     'TRANSACTION-ALREADY-PROCESSED',
     'Insufficient wallet balance; reference is already in use',

@@ -82,7 +82,11 @@ export function createVerifierCaptureHandler(settings: {
       const user = await client.auth.getUser(parsed.data.accessToken);
       if (user.error || !user.data.user) return reply(403);
       request.signal.throwIfAborted();
-      const ctx = { supabase: client, merchantId: parsed.data.merchantId };
+      const ctx = {
+        supabase: client,
+        merchantId: parsed.data.merchantId,
+        signal: request.signal,
+      };
       const worker = await settings.resolveWorker(ctx, parsed.data.buildId);
       request.signal.throwIfAborted();
       const result = output.parse(

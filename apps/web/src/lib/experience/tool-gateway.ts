@@ -17,7 +17,8 @@ export function createExperienceGateway(deps: {
   execute(
     identity: BuilderIdentity,
     name: ExperienceToolName,
-    input: unknown
+    input: unknown,
+    signal: AbortSignal
   ): Promise<unknown>;
 }) {
   const limit = createBuilderThrottle({ perUser: 60, perConnection: 30 });
@@ -67,9 +68,11 @@ export function createExperienceGateway(deps: {
     const parsed = experienceToolInputs[name].safeParse(body.body);
     if (!parsed.success) return send(experienceError('INVALID_REQUEST'), 400);
     try {
+      request.signal.throwIfAborted();
       const result = experienceToolResult.safeParse(
-        await deps.execute(identity, name, parsed.data)
+        await deps.execute(identity, name, parsed.data, request.signal)
       );
+      request.signal.throwIfAborted();
       if (
         !result.success ||
         Buffer.byteLength(JSON.stringify(result.data)) > 98304

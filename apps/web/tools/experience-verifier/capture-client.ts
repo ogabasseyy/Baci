@@ -37,6 +37,7 @@ export function createVerifierCaptureClient(settings: {
   const key = Uint8Array.from(settings.key);
   const previewOrigin = productionOrigin(settings.previewOrigin);
   return async (inputCtx: OwnerRequestContext, input: unknown) => {
+    inputCtx.signal?.throwIfAborted();
     const selected = selection.parse(input);
     const ctx = await requireExperienceOwner(inputCtx);
     if (!ctx.identity) throw Error('VERIFIER_UNAVAILABLE');
@@ -61,6 +62,7 @@ export function createVerifierCaptureClient(settings: {
           port: settings.port,
           path: '/v1/capture',
           method: 'POST',
+          signal: inputCtx.signal,
           headers: {
             host: 'verifier.baci-internal.invalid',
             'content-type': 'application/json',

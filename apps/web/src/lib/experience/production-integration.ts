@@ -169,7 +169,10 @@ export function createProductionExperienceIntegration(settings: {
           record:
             settings.recordCapture ??
             (() => Promise.reject(Error('VERIFIER_NOT_CONFIGURED'))),
-          capture: (input) => captureExperience(input, execute),
+          capture: (input, signal) =>
+            captureExperience(input, (kind, payload) =>
+              execute.withSignal(kind, payload, signal)
+            ),
         });
       if (pipelines.size >= 32) {
         const oldest = pipelines.keys().next().value;
@@ -216,7 +219,10 @@ export function createProductionExperienceIntegration(settings: {
             ).pipeline.readPerformance(binding, trusted)
           : undefined,
       preview: async (ctx, input) =>
-        (await pipelineFor(ctx)).capture(ctx, input),
+        (await pipelineFor(ctx, 'storefront.write', ctx.signal)).capture(
+          ctx,
+          input
+        ),
       resolveUserClient: async (identity) => {
         if (!active) throw Error('PROFILE_DISABLED');
         const client = await settings.resolveUserClient(identity);

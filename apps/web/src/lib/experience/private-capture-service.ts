@@ -74,7 +74,7 @@ export function createPrivateExperienceCapture(deps: {
     }
   >();
   return async (
-    inputCtx: OwnerRequestContext & { signal?: AbortSignal },
+    inputCtx: OwnerRequestContext,
     input: { buildId: string; routeId: string; idempotencyKey: string }
   ) => {
     const signal = inputCtx.signal;

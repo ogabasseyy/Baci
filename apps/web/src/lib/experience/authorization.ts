@@ -4,6 +4,7 @@ export interface OwnerRequestContext {
   merchantId: string;
   supabase: SupabaseClient;
   identity?: BuilderContext['identity'];
+  signal?: AbortSignal;
 }
 export interface ExperienceContext extends OwnerRequestContext {
   actorUserId: string;

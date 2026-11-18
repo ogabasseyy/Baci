@@ -51,3 +51,21 @@ describe('mentionsMonnifyVendEvidence', () => {
     expect(mentionsMonnifyVendEvidence(text)).toBe(false);
   });
 });
+
+describe('bugfix: a bare upper-case vend state counts as evidence', () => {
+  it.each([
+    'Insufficient wallet balance\nFAILED',
+    'PENDING',
+    'state IN_PROGRESS',
+  ])('reads %j as evidence', (text) => {
+    expect(mentionsMonnifyVendEvidence(text)).toBe(true);
+  });
+
+  it.each([
+    'INSUFFICIENT_WALLET_BALANCE',
+    'Insufficient wallet balance',
+    'PAYMENT_FAILED_LOW_FLOAT',
+  ])('does not read %j as evidence', (text) => {
+    expect(mentionsMonnifyVendEvidence(text)).toBe(false);
+  });
+});

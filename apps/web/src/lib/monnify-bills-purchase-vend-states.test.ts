@@ -234,3 +234,33 @@ describe('bugfix: non-definitive business response codes stay off Kuda', () => {
     });
   });
 });
+
+describe('bugfix: bare plain-text vend states stay off Kuda', () => {
+  it.each([
+    'Insufficient wallet balance\nFAILED',
+    'Insufficient wallet balance - PENDING',
+  ])('keeps a plain-text 4xx body %j off Kuda', async (body) => {
+    mockHttpError(400, 'Bad Request', body);
+
+    await expect(vend()).resolves.toMatchObject({
+      providerDefiniteFailure: false,
+    });
+  });
+});
+
+describe('bugfix: auth wording in the HTTP reason phrase stays off Kuda', () => {
+  it.each([
+    'Unauthorized',
+    'Access Denied',
+  ])('keeps a 400 "%s" with a low-balance body off Kuda', async (reason) => {
+    mockHttpError(
+      400,
+      reason,
+      JSON.stringify({ responseMessage: 'Insufficient wallet balance' })
+    );
+
+    await expect(vend()).resolves.toMatchObject({
+      providerDefiniteFailure: false,
+    });
+  });
+});

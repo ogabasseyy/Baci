@@ -22,9 +22,19 @@ const MONNIFY_VEND_EVIDENCE_TEXT = new RegExp(
   'i'
 );
 
+/**
+ * A bare upper-case vend state on its own ("…balance\nFAILED"), as a
+ * plain-text gateway body may carry it with no status key.
+ */
+const BARE_VEND_STATE =
+  /(?<![A-Za-z0-9_])(?:FAILED|PENDING|SUCCESSFUL|SUCCESS|PROCESSING|IN[_\s-]?PROGRESS|COMPLETED|REVERSED)(?![A-Za-z0-9_])/;
+
 /** Whether raw (non-JSON) Monnify text names a vend status or reference. */
 export function mentionsMonnifyVendEvidence(
   text: string | null | undefined
 ): boolean {
-  return !!text && MONNIFY_VEND_EVIDENCE_TEXT.test(text);
+  return (
+    !!text &&
+    (MONNIFY_VEND_EVIDENCE_TEXT.test(text) || BARE_VEND_STATE.test(text))
+  );
 }

@@ -92,7 +92,9 @@ function readMonnifyAnswer(
       reportsMonnifyUnexpectedError(body) ||
       hasMonnifyNonDefinitiveCode(parsed),
     showsVendEvidence: showsVendEvidence(body),
-    mentionsAuthWording: mentionsMonnifyAuthWording(bodyText),
+    // Auth wording counts from the HTTP reason phrase too (a proxy may move
+    // "Unauthorized" there while keeping a 400 status).
+    mentionsAuthWording: mentionsMonnifyAuthWording(text),
   };
 }
 

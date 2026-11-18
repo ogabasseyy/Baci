@@ -129,7 +129,7 @@ describe('GET /api/cron/alert-stuck-bnpl', () => {
     expect(mocks.loggerWarn).toHaveBeenCalledWith(
       expect.objectContaining({
         message:
-          'Stuck-BNPL scan dropped pending/unpaid BNPL orders without provider evidence (possible stuck CredPal)',
+          'Stuck-BNPL scan dropped orders without provider checkout evidence',
         droppedCount: 1,
         orderIds: ['order-1'],
       })
@@ -168,7 +168,7 @@ describe('GET /api/cron/alert-stuck-bnpl', () => {
     expect(mocks.loggerWarn).not.toHaveBeenCalledWith(
       expect.objectContaining({
         message:
-          'Stuck-BNPL scan dropped pending/unpaid BNPL orders without provider evidence (possible stuck CredPal)',
+          'Stuck-BNPL scan dropped orders without provider checkout evidence',
       })
     );
   });
@@ -206,5 +206,23 @@ describe('GET /api/cron/alert-stuck-bnpl', () => {
     // Provider-ID notes remain checkout context, not proof of progress.
     expect(data.alertOrders).toBe(0);
     expect(mocks.notifyMerchant).not.toHaveBeenCalled();
+  });
+
+  it('logs missing Credit Direct evidence without attributing it to another provider', async () => {
+    mocks.limit.mockResolvedValue({
+      data: [stuckOrder({ payment_status: 'unpaid', notes: null })],
+      error: null,
+    });
+    const response = await runCron(createCronRequest());
+    expect(response.status).toBe(200);
+    expect(mocks.notifyMerchant).not.toHaveBeenCalled();
+    expect(mocks.loggerWarn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message:
+          'Stuck-BNPL scan dropped orders without provider checkout evidence',
+        droppedCount: 1,
+        orderIds: ['order-1'],
+      })
+    );
   });
 });

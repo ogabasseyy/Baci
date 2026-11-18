@@ -37,6 +37,7 @@ export async function dispatchOrderCreationNotifications(
   input: OrderCreationNotificationInput
 ): Promise<void> {
   const paymentMethod = input.paymentMethod.trim().toLowerCase();
+  const paymentStatus = input.paymentStatus?.trim().toLowerCase();
   const isInvoiceCreation = paymentMethod === 'invoice';
   // Redeemed credit can leave a zero residual even when finalization failed.
   // Only an actually zero-value order bypasses the unpaid-request suppression.
@@ -44,14 +45,14 @@ export async function dispatchOrderCreationNotifications(
     paymentMethod === 'payforme' &&
     input.orderTotal > 0 &&
     !input.isWalletFullyPaid &&
-    input.paymentStatus?.trim().toLowerCase() !== 'paid';
+    paymentStatus !== 'paid';
   if (isUnpaidPayForMeRequest) {
     return;
   }
 
   try {
     const invoiceNeedsFollowUp =
-      input.invoiceBalanceDue > 0 && input.paymentStatus !== 'paid';
+      input.invoiceBalanceDue > 0 && paymentStatus !== 'paid';
     const pushResult = isInvoiceCreation
       ? invoiceNeedsFollowUp
         ? await notifyNewInvoice(

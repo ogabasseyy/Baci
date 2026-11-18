@@ -148,7 +148,7 @@ export async function GET(request: NextRequest) {
     if (!transactionEvidenceLookupFailed && weakEvidenceDropped.length > 0) {
       logger.warn({
         message:
-          'Stuck-BNPL scan dropped pending/unpaid BNPL orders without provider evidence (possible stuck CredPal)',
+          'Stuck-BNPL scan dropped orders without provider checkout evidence',
         droppedCount: weakEvidenceDropped.length,
         orderIds: weakEvidenceDropped.slice(0, 10).map((order) => order.id),
       });

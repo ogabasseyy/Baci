@@ -66,6 +66,16 @@ describe('dispatchOrderCreationNotifications', () => {
     expect(mockNotifyNewOrder).not.toHaveBeenCalled();
   });
 
+  it.each([
+    'PAID',
+    ' paid ',
+    'Paid',
+  ])('does not create an invoice follow-up for normalized paid status %s', async (paymentStatus) => {
+    await dispatchOrderCreationNotifications(input({ paymentStatus }));
+    expect(mockNotifyNewInvoice).not.toHaveBeenCalled();
+    expect(mockNotifyNewOrder).not.toHaveBeenCalled();
+  });
+
   it('does not create a payment-collection alert when a discount leaves no balance', async () => {
     await dispatchOrderCreationNotifications(
       input({ orderTotal: 0, invoiceBalanceDue: 0 })

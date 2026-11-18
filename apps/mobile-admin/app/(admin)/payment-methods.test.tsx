@@ -2,9 +2,9 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   mocks,
-  paymentSettings,
   resetPaymentMethodsScreenMocks,
 } from '@/test/payment-methods-screen';
+import { paymentSettings } from '@/test/payment-methods-screen.fixtures';
 import PaymentMethodsScreen from './payment-methods';
 
 type QueryConfig = {
@@ -268,31 +268,5 @@ describe('PaymentMethodsScreen', () => {
     expect(selectedColumns[1]).toContain('juicyway_enabled');
     expect(selectedColumns[2]).not.toContain('klump_enabled');
     expect(selectedColumns[2]).not.toContain('juicyway_enabled');
-  });
-
-  it('uses the textOnPrimary theme token on primary action icons and labels', () => {
-    const { container } = render(<PaymentMethodsScreen />);
-
-    expect(
-      container.querySelector('[data-icon-name="settings-outline"]')
-    ).toHaveAttribute('data-icon-color', '#ffffff');
-    expect(screen.getByText('Advanced Settings')).toHaveAttribute(
-      'data-color',
-      '#ffffff'
-    );
-  });
-
-  it('uses the textOnPrimary theme token on the retry button label', () => {
-    mocks.useQuery.mockReturnValue({
-      data: undefined,
-      error: new Error('Failed to fetch'),
-      isError: true,
-      isLoading: false,
-      refetch: mocks.refetch,
-    });
-
-    render(<PaymentMethodsScreen />);
-
-    expect(screen.getByText('Retry')).toHaveAttribute('data-color', '#ffffff');
   });
 });

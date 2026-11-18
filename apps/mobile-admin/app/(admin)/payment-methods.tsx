@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { PaymentMethodsFooter } from '@/components/payment-methods/PaymentMethodsFooter';
 import { PaymentMethodsSection } from '@/components/payment-methods/PaymentMethodsSection';
 import {
   getRenderablePaymentMethods,
@@ -272,41 +273,10 @@ export default function PaymentMethodsScreen() {
             />
           ))}
 
-          {/* Info Notice */}
-          <View
-            style={[
-              styles.notice,
-              { backgroundColor: colors.infoLight || '#EFF6FF' },
-            ]}
-          >
-            <Ionicons
-              name="information-circle"
-              size={20}
-              color={colors.info || '#3B82F6'}
-            />
-            <Text
-              style={[styles.noticeText, { color: colors.info || '#3B82F6' }]}
-            >
-              API keys and webhook configuration available on web dashboard.
-            </Text>
-          </View>
-
-          {/* Manage Button */}
-          <Pressable
-            style={[styles.manageButton, { backgroundColor: colors.primary }]}
-            onPress={handleManagePayments}
-          >
-            <Ionicons
-              name="settings-outline"
-              size={20}
-              color={colors.textOnPrimary}
-            />
-            <Text
-              style={[styles.manageButtonText, { color: colors.textOnPrimary }]}
-            >
-              Advanced Settings
-            </Text>
-          </Pressable>
+          <PaymentMethodsFooter
+            colors={colors}
+            onManagePayments={handleManagePayments}
+          />
         </ScrollView>
       </SafeAreaView>
     </>

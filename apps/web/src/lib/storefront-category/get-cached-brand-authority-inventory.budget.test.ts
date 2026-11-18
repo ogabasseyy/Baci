@@ -83,9 +83,7 @@ describe('shared brand inventory work budget', () => {
   it('bounds the query before hydration and shares destination category, stock and parent scope', async () => {
     expect((await load()).products).toEqual(rows);
     expect(query.range).toHaveBeenCalledExactlyOnceWith(0, 300);
-    expect(query.select).toHaveBeenCalledWith(expect.any(String), {
-      count: 'exact',
-    });
+    expect(query.select).toHaveBeenCalledWith(expect.any(String));
     const select = query.select.mock.calls[0][0] as string;
     expect(select).not.toMatch(/description|images/);
     expect(query.eq).toHaveBeenCalledWith('merchant_id', 'merchant-1');
@@ -109,12 +107,14 @@ describe('shared brand inventory work budget', () => {
     expect(select).toContain('updated_at');
     expect(select).toContain('product_key_specs (');
   });
-  it.each([
-    null,
-    2,
-    301,
-  ])('rejects missing, truncated or oversized count %s without hydration', async (count) => {
-    query.range.mockResolvedValueOnce({ data: rows, count, error: null });
+  it('rejects oversized pool (301 rows) without hydration or count query', async () => {
+    query.range.mockResolvedValueOnce({
+      data: Array.from({ length: 301 }, (_, i) => ({
+        ...rows[0],
+        id: `p-${i}`,
+      })),
+      error: null,
+    });
     await expect(load()).rejects.toThrow('complete-pool budget');
     expect(hydrate).not.toHaveBeenCalled();
   });

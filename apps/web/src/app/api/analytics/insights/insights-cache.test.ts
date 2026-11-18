@@ -16,6 +16,7 @@ vi.mock('@/lib/redis', () => ({
 }));
 
 import {
+  deleteCachedInsights,
   type InsightsPayload,
   readCachedInsights,
   writeCachedInsights,
@@ -61,5 +62,32 @@ describe('insights-cache', () => {
     await writeCachedInsights('k2', payload, 120);
     expect(mockCacheSet).toHaveBeenCalledWith('k2', payload, 120);
     expect(redisSet).toHaveBeenCalledWith('k2', payload, { ex: 120 });
+  });
+
+  it('deletes Redis key when invalidating cached insights', async () => {
+    const redisDel = vi.fn().mockResolvedValue(1);
+    mockGetRedis.mockReturnValue({ del: redisDel });
+
+    await expect(deleteCachedInsights('ai-insights:m-1')).resolves.toBe(true);
+    expect(redisDel).toHaveBeenCalledWith('ai-insights:m-1');
+  });
+
+  it('returns true when Redis is null and false when redis.del fails', async () => {
+    mockGetRedis.mockReturnValue(null);
+    await expect(deleteCachedInsights('ai-insights:m-1')).resolves.toBe(true);
+
+    const warnSpy = vi
+      .spyOn(console, 'warn')
+      .mockImplementation(() => undefined);
+    try {
+      mockGetRedis.mockReturnValue({
+        del: vi.fn().mockRejectedValue(new Error('redis down')),
+      });
+      await expect(deleteCachedInsights('ai-insights:m-1')).resolves.toBe(
+        false
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 });

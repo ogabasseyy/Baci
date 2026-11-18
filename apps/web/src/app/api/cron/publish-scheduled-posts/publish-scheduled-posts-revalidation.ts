@@ -97,8 +97,10 @@ export async function revalidateScheduledPostsByMerchant(
         supabase,
         merchantId
       );
-      let edgePurgeOnly = false;
-      const runStandaloneRevalidation = async () => {
+      let standaloneStatus: 'none' | 'purged' | 'purge-failed' = 'none';
+      const runStandaloneRevalidation = async (): Promise<
+        'purged' | 'purge-failed'
+      > => {
         // Standalone VPS workers run outside Next.js's static generation store:
         // trigger the authenticated /api/internal/revalidate-blog endpoint so
         // Next.js 'use cache' entries revalidate, then purge Cloudflare edge URLs.
@@ -116,34 +118,39 @@ export async function revalidateScheduledPostsByMerchant(
         );
         const pageChunks = chunkArray(merchantPosts.listingPages, 50);
         const slugChunks = chunkArray(merchantPosts.postSlugs, 250);
-        const batchCount = Math.max(
-          1,
-          identifierChunks.length,
-          categoryChunks.length,
-          pageChunks.length,
-          slugChunks.length
-        );
-        for (let i = 0; i < batchCount; i++) {
-          const internalResponse = await fetch(internalUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${internalSecret}`,
-            },
-            body: JSON.stringify({
-              merchantId,
-              identifiers: identifierChunks[i] ?? identifierChunks[0],
-              canonicalMerchantSlug: blogRevalidation.canonicalMerchantSlug,
-              listingCategories: categoryChunks[i] ?? [],
-              listingPages: pageChunks[i] ?? [],
-              postSlugs: slugChunks[i] ?? slugChunks[0],
-            }),
-            signal: AbortSignal.timeout(15_000),
-          });
-          if (!internalResponse.ok) {
-            throw new Error(
-              `Internal blog revalidation failed with status ${internalResponse.status}`
-            );
+        if (identifierChunks.length > 0 && slugChunks.length > 0) {
+          const batchCount = Math.max(
+            identifierChunks.length,
+            categoryChunks.length,
+            pageChunks.length,
+            slugChunks.length
+          );
+          for (let i = 0; i < batchCount; i++) {
+            const listingCategories = categoryChunks[i];
+            const listingPages = pageChunks[i];
+            const internalResponse = await fetch(internalUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${internalSecret}`,
+              },
+              body: JSON.stringify({
+                merchantId,
+                identifiers: identifierChunks[i] ?? [
+                  blogRevalidation.identifiers[0],
+                ],
+                canonicalMerchantSlug: blogRevalidation.canonicalMerchantSlug,
+                ...(listingCategories?.length ? { listingCategories } : {}),
+                ...(listingPages?.length ? { listingPages } : {}),
+                postSlugs: slugChunks[i] ?? [merchantPosts.postSlugs[0]],
+              }),
+              signal: AbortSignal.timeout(15_000),
+            });
+            if (!internalResponse.ok) {
+              throw new Error(
+                `Internal blog revalidation failed with status ${internalResponse.status}`
+              );
+            }
           }
         }
 
@@ -185,11 +192,11 @@ export async function revalidateScheduledPostsByMerchant(
             purgeResult.reason ?? 'unknown'
           );
         }
-        edgePurgeOnly = purgeResult.ok;
+        return purgeResult.ok ? 'purged' : 'purge-failed';
       };
 
       if (process.env.VPS_WORKER === '1') {
-        await runStandaloneRevalidation();
+        standaloneStatus = await runStandaloneRevalidation();
       } else {
         try {
           revalidateBlogPosts({
@@ -208,15 +215,17 @@ export async function revalidateScheduledPostsByMerchant(
           if (!msg.includes('static generation store')) {
             throw nextRevalError;
           }
-          await runStandaloneRevalidation();
+          standaloneStatus = await runStandaloneRevalidation();
         }
       }
       blogRevalidationByMerchant.set(merchantId, blogRevalidation);
       schedulePrewarmBlogImageTransforms(merchantPosts.featuredImageUrls);
       console.log(
-        edgePurgeOnly
-          ? `🔄 Cron: Purged Cloudflare blog edge cache for merchant ${merchantId} across ${merchantPosts.postSlugs.length} posts (standalone worker)`
-          : `🔄 Cron: Revalidated blog cache for merchant ${merchantId} across ${merchantPosts.postSlugs.length} posts`
+        standaloneStatus === 'purged'
+          ? `🔄 Cron: Revalidated and purged Cloudflare blog edge cache for merchant ${merchantId} across ${merchantPosts.postSlugs.length} posts (standalone worker)`
+          : standaloneStatus === 'purge-failed'
+            ? `🔄 Cron: Revalidated blog cache for merchant ${merchantId} across ${merchantPosts.postSlugs.length} posts (standalone worker; Cloudflare edge purge failed)`
+            : `🔄 Cron: Revalidated blog cache for merchant ${merchantId} across ${merchantPosts.postSlugs.length} posts`
       );
     } catch (revalError) {
       console.error(

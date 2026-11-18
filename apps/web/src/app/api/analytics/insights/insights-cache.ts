@@ -74,3 +74,17 @@ export async function writeCachedInsights(
     console.warn('[analytics/insights] Redis cache write failed', error);
   }
 }
+
+export async function deleteCachedInsights(cacheKey: string): Promise<boolean> {
+  const redis = getRedis();
+  if (!redis) {
+    return true;
+  }
+  try {
+    await withRedisTimeout(redis.del(cacheKey));
+    return true;
+  } catch (error) {
+    console.warn('[analytics/insights] Redis cache delete failed', error);
+    return false;
+  }
+}

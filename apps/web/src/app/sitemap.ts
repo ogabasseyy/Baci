@@ -6,6 +6,7 @@ import {
   PLATFORM_BLOG_SITEMAP_CACHE_TAG,
 } from '@/lib/platform-blog';
 import { createAnonClient } from '@/lib/supabase/anon';
+import { PLATFORM_SITEMAP_MERCHANTS_CACHE_TAG } from '@/lib/tenant-cache-tags';
 
 interface SitemapDomain {
   domain: string | null;
@@ -72,7 +73,11 @@ async function getCachedSitemapEntries(
   'use cache';
 
   cacheLife('storefront-page');
-  cacheTag('merchants', PLATFORM_BLOG_SITEMAP_CACHE_TAG);
+  cacheTag(
+    'merchants',
+    PLATFORM_BLOG_SITEMAP_CACHE_TAG,
+    PLATFORM_SITEMAP_MERCHANTS_CACHE_TAG
+  );
 
   const sitemapEntries: MetadataRoute.Sitemap =
     buildStaticSitemapEntries(siteUrl);

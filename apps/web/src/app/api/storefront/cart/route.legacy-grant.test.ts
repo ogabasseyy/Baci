@@ -29,7 +29,9 @@ describe('bugfix: legacy proof upgrade failure turned a valid read into a 503', 
     });
 
     expect(response.status).toBe(200);
-    expect(response.headers.get('set-cookie')).toBeNull();
+    const setCookie = response.headers.get('set-cookie') ?? '';
+    expect(setCookie).not.toContain('baci-cart-11111111-');
+    expect(setCookie).toContain('baci-cart-hint-11111111-');
     expect((await response.json()).cart.cartId).toBe(CART_ID);
   });
 });

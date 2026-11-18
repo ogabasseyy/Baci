@@ -52,7 +52,9 @@ const vendorSettlement = z.object({
   vendor_name: reference,
 });
 const transaction = z.object({
-  webhook_type: z.never().optional(),
+  webhook_type: z
+    .enum(['split_payment', 'repayment_setup', 'loan_repayment', 'transaction'])
+    .optional(),
   phone_number: reference,
   transaction_reference: reference,
   amount_deducted: stringMoney,

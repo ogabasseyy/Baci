@@ -56,6 +56,12 @@ describe('stuck BNPL signals', () => {
     expect(
       shouldAlertMerchant(order({ payment_method: 'credpal' }), false)
     ).toBe(true);
+    expect(shouldAlertMerchant(order({ payment_method: null }), false)).toBe(
+      false
+    );
+    expect(
+      shouldAlertMerchant(order({ payment_method: 'unknown_bnpl' }), false)
+    ).toBe(false);
   });
 });
 

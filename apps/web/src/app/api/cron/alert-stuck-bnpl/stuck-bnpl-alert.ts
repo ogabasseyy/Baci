@@ -56,6 +56,8 @@ export function hasConfirmationSignal(order: StuckBnplOrderRow) {
 // orders can be told apart from real unconfirmed payments. Klump and CredPal
 // have no such marker: muting them would hide a lost webhook entirely, so
 // they keep paging on the scan's provider-evidence rule.
+const PROVIDERS_WITHOUT_COMPLETION_MARKER = new Set(['klump', 'credpal']);
+
 export function shouldAlertMerchant(
   order: StuckBnplOrderRow,
   hasProgressedTransaction: boolean
@@ -63,7 +65,8 @@ export function shouldAlertMerchant(
   return (
     hasConfirmationSignal(order) ||
     hasProgressedTransaction ||
-    order.payment_method !== 'credit_direct'
+    (order.payment_method !== null &&
+      PROVIDERS_WITHOUT_COMPLETION_MARKER.has(order.payment_method))
   );
 }
 

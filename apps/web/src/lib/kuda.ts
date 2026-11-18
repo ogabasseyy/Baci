@@ -220,6 +220,9 @@ export interface PurchaseResult {
   // 99, 408 timeouts, 429 throttles, bodies showing a vend status or
   // reference, or anything that may be a duplicate reference.
   providerDefiniteFailure?: boolean;
+  // Monnify-only: Monnify's own response code on a failure (e.g. "99"),
+  // code-shaped only, stored for diagnosis.
+  providerResponseCode?: string;
   // Units delivered for metered bills (e.g. prepaid electricity kWh).
   units?: string;
 }

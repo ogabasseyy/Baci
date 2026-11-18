@@ -48,16 +48,25 @@ function mockChain(returnValue: { data: unknown; error: unknown }) {
   return chain;
 }
 
-// Builds the PATCH update chain: .update().eq().is().select().maybeSingle().
+// Builds the PATCH update chain: .update().eq().eq().eq().is().select().maybeSingle().
 // `matched` is the live row the write returned (null => no live row matched, i.e.
-// the customer was soft-deleted between the lookup and the update).
+// the customer was soft-deleted between the lookup and the update or missed scope).
 function mockUpdateChain(matched: { id: string } | null) {
-  const chain: Record<string, unknown> = {};
-  chain.eq = vi.fn().mockReturnValue(chain);
-  chain.is = vi.fn().mockReturnValue(chain);
-  chain.select = vi.fn().mockReturnValue(chain);
-  chain.maybeSingle = vi.fn().mockResolvedValue({ data: matched, error: null });
-  return { update: vi.fn().mockReturnValue(chain) };
+  const eq = vi.fn();
+  const is = vi.fn();
+  const select = vi.fn();
+  const maybeSingle = vi.fn().mockResolvedValue({ data: matched, error: null });
+  const chain = { eq, is, select, maybeSingle };
+  eq.mockReturnValue(chain);
+  is.mockReturnValue(chain);
+  select.mockReturnValue(chain);
+  return {
+    update: vi.fn().mockReturnValue(chain),
+    eq,
+    is,
+    select,
+    maybeSingle,
+  };
 }
 
 // --- Tests ---
@@ -240,12 +249,18 @@ describe('PATCH /api/storefront/customer', () => {
       message: 'Profile updated successfully',
     });
 
-    // Verify DB update was called with saved_addresses
+    // Verify DB update was called with saved_addresses and full tenant/owner predicates
     expect(updateChain.update).toHaveBeenCalledWith(
       expect.objectContaining({
         saved_addresses: [validAddress],
       })
     );
+    expect(updateChain.eq.mock.calls).toEqual([
+      ['id', 'customer-1'],
+      ['merchant_id', 'merchant-1'],
+      ['user_id', 'user-123'],
+    ]);
+    expect(updateChain.is).toHaveBeenCalledWith('deleted_at', null);
   });
 
   it('[data integrity fix] rejects update if merchant or user ID is mismatched during read-modify-write', async () => {
@@ -286,6 +301,12 @@ describe('PATCH /api/storefront/customer', () => {
     // The endpoint should fail safely if the scoped update hits zero rows
     expect(response.status).toBe(404);
     expect(json.error).toBe('Customer not found');
+    expect(updateChain.eq.mock.calls).toEqual([
+      ['id', 'customer-1'],
+      ['merchant_id', 'merchant-1'],
+      ['user_id', 'user-123'],
+    ]);
+    expect(updateChain.is).toHaveBeenCalledWith('deleted_at', null);
   });
 
   it('returns 400 on malformed JSON body', async () => {

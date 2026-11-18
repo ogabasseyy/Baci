@@ -104,29 +104,6 @@ describe('initializeGatewayAndRoute', () => {
     });
   });
 
-  it('omits the DVA tracking token from card initialization', async () => {
-    mockInitResponse({
-      success: true,
-      reference: 'ref-card-1',
-      authorization_url: 'https://pay.example/authorize',
-    });
-
-    await initializeGatewayAndRoute(
-      createParams({ trackingToken: 'track-order-1' })
-    );
-
-    const fetchCalls = (global.fetch as jest.Mock).mock.calls as [
-      unknown,
-      { body?: unknown },
-    ][];
-    const requestBody = JSON.parse(
-      String(fetchCalls[0]?.[1]?.body ?? '{}')
-    ) as Record<string, unknown>;
-    expect(requestBody.gateway).toBe('paystack');
-    expect(requestBody.payment_type).toBeUndefined();
-    expect(requestBody.tracking_token).toBeUndefined();
-  });
-
   it('records the full order total when credit partially covers the order', async () => {
     mockInitResponse({
       success: true,
@@ -200,7 +177,6 @@ describe('initializeGatewayAndRoute', () => {
       String(fetchCalls[0]?.[1]?.body ?? '{}')
     ) as Record<string, unknown>;
     expect(requestBody.currency).toBe('KES');
-    expect(requestBody.tracking_token).toBeUndefined();
   });
 
   it('keeps the NGN default when the order carries no currency', async () => {
@@ -323,20 +299,8 @@ describe('initializeGatewayAndRoute', () => {
     });
 
     await initializeGatewayAndRoute(
-      createParams({
-        selectedPayment: 'bank_transfer',
-        trackingToken: 'track-order-1',
-      })
+      createParams({ selectedPayment: 'bank_transfer' })
     );
-
-    const fetchCalls = (global.fetch as jest.Mock).mock.calls as [
-      unknown,
-      { body?: unknown },
-    ][];
-    const requestBody = JSON.parse(
-      String(fetchCalls[0]?.[1]?.body ?? '{}')
-    ) as Record<string, unknown>;
-    expect(requestBody.tracking_token).toBe('track-order-1');
 
     expect(mockTrackCheckoutPaymentStarted).toHaveBeenCalledTimes(1);
     expect(mockRouterPush).toHaveBeenCalledWith({
@@ -348,91 +312,6 @@ describe('initializeGatewayAndRoute', () => {
         accountName: 'Ada Buyer',
       }),
     });
-  });
-
-  it('omits whitespace-only DVA tracking tokens without trimming opaque tokens', async () => {
-    mockInitResponse({
-      success: true,
-      reference: 'ref-dva-blank-token',
-      dva: {
-        bank_name: 'Test Bank',
-        account_number: '0123456789',
-        account_name: 'Ada Buyer',
-      },
-    });
-
-    await initializeGatewayAndRoute(
-      createParams({
-        selectedPayment: 'bank_transfer',
-        trackingToken: '  \t  ',
-      })
-    );
-
-    const fetchCalls = (global.fetch as jest.Mock).mock.calls as [
-      unknown,
-      { body?: unknown },
-    ][];
-    const requestBody = JSON.parse(
-      String(fetchCalls[0]?.[1]?.body ?? '{}')
-    ) as Record<string, unknown>;
-    expect(requestBody).not.toHaveProperty('tracking_token');
-    const pushedParams = (
-      mockRouterPush.mock.calls[0]?.[0] as { params?: Record<string, unknown> }
-    )?.params;
-    expect(pushedParams).not.toHaveProperty('trackingToken');
-  });
-
-  it('preserves nonblank DVA tracking token bytes', async () => {
-    mockInitResponse({
-      success: true,
-      reference: 'ref-dva-opaque-token',
-      dva: {
-        bank_name: 'Test Bank',
-        account_number: '0123456789',
-        account_name: 'Ada Buyer',
-      },
-    });
-
-    const opaqueToken = ' token-with-space ';
-    await initializeGatewayAndRoute(
-      createParams({
-        selectedPayment: 'bank_transfer',
-        trackingToken: opaqueToken,
-      })
-    );
-
-    const fetchCalls = (global.fetch as jest.Mock).mock.calls as [
-      unknown,
-      { body?: unknown },
-    ][];
-    const requestBody = JSON.parse(
-      String(fetchCalls[0]?.[1]?.body ?? '{}')
-    ) as Record<string, unknown>;
-    expect(requestBody.tracking_token).toBe(opaqueToken);
-  });
-
-  it('omits tracking_token on card initialization even when a tracking token is present', async () => {
-    mockInitResponse({
-      success: true,
-      reference: 'ref-card-token',
-      authorization_url: 'https://pay.example/authorize',
-    });
-
-    await initializeGatewayAndRoute(
-      createParams({
-        selectedPayment: 'paystack',
-        trackingToken: 'opaque-card-tracking-token',
-      })
-    );
-
-    const fetchCalls = (global.fetch as jest.Mock).mock.calls as [
-      unknown,
-      { body?: unknown },
-    ][];
-    const requestBody = JSON.parse(
-      String(fetchCalls[0]?.[1]?.body ?? '{}')
-    ) as Record<string, unknown>;
-    expect(requestBody).not.toHaveProperty('tracking_token');
   });
 
   it('carries the wallet-transfer fallback notice flag to the bank-transfer page', async () => {

@@ -81,6 +81,11 @@ export const internalRevalidateProductsBodySchema = z
       .optional(),
     purgeWholeStorefront: z.literal(true).optional(),
     expireProductBlogCache: z.literal(true).optional(),
+    blogPostSlugs: z
+      .array(z.string().trim().min(1).max(300))
+      .max(10_000)
+      .optional(),
+    confirmEdgeEviction: z.boolean().optional(),
   })
   .superRefine((value, context) => {
     if (value.purgeWholeStorefront && !value.merchantSlug) {

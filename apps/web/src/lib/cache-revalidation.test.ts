@@ -69,7 +69,7 @@ describe('cache-revalidation utilities', () => {
         'products'
       );
       expect(mockRevalidateTag).toHaveBeenCalledWith(
-        'product-details',
+        `product-details-${MERCHANT_ID}`,
         'products'
       );
       expect(mockRevalidateTag).toHaveBeenCalledWith(
@@ -85,15 +85,11 @@ describe('cache-revalidation utilities', () => {
         'products'
       );
       expect(mockRevalidateTag).toHaveBeenCalledWith(
-        'product-canonical-redirect',
+        `product-canonical-redirect-${MERCHANT_ID}`,
         'products'
       );
       expect(mockRevalidateTag).toHaveBeenCalledWith(
-        'product-legacy-redirect',
-        'products'
-      );
-      expect(mockRevalidateTag).toHaveBeenCalledWith(
-        'google-merchant-feed',
+        `product-legacy-redirect-${MERCHANT_ID}`,
         'products'
       );
       expect(mockRevalidateTag).toHaveBeenCalledWith(
@@ -101,10 +97,22 @@ describe('cache-revalidation utilities', () => {
         'products'
       );
       expect(mockRevalidateTag).toHaveBeenCalledWith(
+        `merchant-feed-review-signals-${MERCHANT_ID}`,
+        'products'
+      );
+      expect(mockRevalidateTag).toHaveBeenCalledWith(
         `dashboard-${MERCHANT_ID}`,
         'merchant'
       );
-      expect(mockRevalidateTag).toHaveBeenCalledTimes(14);
+      expect(mockRevalidateTag).not.toHaveBeenCalledWith(
+        'google-merchant-feed',
+        'products'
+      );
+      expect(mockRevalidateTag).not.toHaveBeenCalledWith(
+        'openai-product-feed',
+        'products'
+      );
+      expect(mockRevalidateTag).toHaveBeenCalledTimes(12);
     });
 
     it('revalidates specific product when slug provided', () => {
@@ -129,7 +137,7 @@ describe('cache-revalidation utilities', () => {
         'products'
       );
       expect(mockRevalidateTag).toHaveBeenCalledWith(
-        'product-details',
+        `product-details-${MERCHANT_ID}`,
         'products'
       );
       expect(mockRevalidateTag).toHaveBeenCalledWith(
@@ -145,15 +153,11 @@ describe('cache-revalidation utilities', () => {
         'products'
       );
       expect(mockRevalidateTag).toHaveBeenCalledWith(
-        'product-legacy-redirect',
+        `product-legacy-redirect-${MERCHANT_ID}`,
         'products'
       );
       expect(mockRevalidateTag).toHaveBeenCalledWith(
-        'product-canonical-redirect',
-        'products'
-      );
-      expect(mockRevalidateTag).toHaveBeenCalledWith(
-        'google-merchant-feed',
+        `product-canonical-redirect-${MERCHANT_ID}`,
         'products'
       );
       expect(mockRevalidateTag).toHaveBeenCalledWith(
@@ -161,10 +165,14 @@ describe('cache-revalidation utilities', () => {
         'products'
       );
       expect(mockRevalidateTag).toHaveBeenCalledWith(
+        `merchant-feed-review-signals-${MERCHANT_ID}`,
+        'products'
+      );
+      expect(mockRevalidateTag).toHaveBeenCalledWith(
         `dashboard-${MERCHANT_ID}`,
         'merchant'
       );
-      expect(mockRevalidateTag).toHaveBeenCalledTimes(15);
+      expect(mockRevalidateTag).toHaveBeenCalledTimes(13);
     });
 
     it('revalidates non-ASCII product slugs with ByteString-safe cache tags', () => {
@@ -180,7 +188,7 @@ describe('cache-revalidation utilities', () => {
       expect(mockRevalidateTag).toHaveBeenCalledWith(expectedTag, 'products');
       expect(expectedTag).not.toContain('–');
       expect(expectedTag).not.toContain('”');
-      expect(mockRevalidateTag).toHaveBeenCalledTimes(15);
+      expect(mockRevalidateTag).toHaveBeenCalledTimes(13);
     });
 
     it('handles empty slug gracefully', () => {
@@ -199,7 +207,7 @@ describe('cache-revalidation utilities', () => {
         `merchant-id-${MERCHANT_ID}`,
         'products'
       );
-      expect(mockRevalidateTag).toHaveBeenCalledTimes(14);
+      expect(mockRevalidateTag).toHaveBeenCalledTimes(12);
     });
   });
 
@@ -250,7 +258,7 @@ describe('cache-revalidation utilities', () => {
         'categories'
       );
       expect(mockRevalidateTag).toHaveBeenCalledWith(
-        'navigation-categories',
+        `navigation-categories-${MERCHANT_ID}`,
         'categories'
       );
       expect(mockRevalidateTag).toHaveBeenCalledWith(
@@ -258,11 +266,11 @@ describe('cache-revalidation utilities', () => {
         'storefront-page'
       );
       expect(mockRevalidateTag).toHaveBeenCalledWith(
-        'product-canonical-redirect',
+        `product-canonical-redirect-${MERCHANT_ID}`,
         'products'
       );
       expect(mockRevalidateTag).toHaveBeenCalledWith(
-        'product-legacy-redirect',
+        `product-legacy-redirect-${MERCHANT_ID}`,
         'products'
       );
       expect(mockRevalidateTag).toHaveBeenCalledTimes(5);
@@ -278,7 +286,7 @@ describe('cache-revalidation utilities', () => {
         'categories'
       );
       expect(mockRevalidateTag).toHaveBeenCalledWith(
-        'navigation-categories',
+        `navigation-categories-${MERCHANT_ID}`,
         'categories'
       );
       expect(mockRevalidateTag).toHaveBeenCalledWith(
@@ -290,11 +298,11 @@ describe('cache-revalidation utilities', () => {
         'storefront-page'
       );
       expect(mockRevalidateTag).toHaveBeenCalledWith(
-        'product-canonical-redirect',
+        `product-canonical-redirect-${MERCHANT_ID}`,
         'products'
       );
       expect(mockRevalidateTag).toHaveBeenCalledWith(
-        'product-legacy-redirect',
+        `product-legacy-redirect-${MERCHANT_ID}`,
         'products'
       );
       expect(mockRevalidateTag).toHaveBeenCalledTimes(6);
@@ -308,11 +316,11 @@ describe('cache-revalidation utilities', () => {
         'categories'
       );
       expect(mockRevalidateTag).toHaveBeenCalledWith(
-        'product-canonical-redirect',
+        `product-canonical-redirect-${MERCHANT_ID}`,
         'products'
       );
       expect(mockRevalidateTag).toHaveBeenCalledWith(
-        'product-legacy-redirect',
+        `product-legacy-redirect-${MERCHANT_ID}`,
         'products'
       );
       expect(mockRevalidateTag).toHaveBeenCalledTimes(5);
@@ -746,8 +754,22 @@ describe('cache-revalidation utilities', () => {
   });
 
   describe('revalidateMerchantFeed', () => {
-    it('revalidates global, merchant, and review-signal feed tags', () => {
+    it('revalidates merchant and review-signal feed tags by default without global tags', () => {
       revalidateMerchantFeed('ogabassey');
+
+      expect(mockRevalidateTag).toHaveBeenCalledWith(
+        'merchant-feed-ogabassey',
+        'products'
+      );
+      expect(mockRevalidateTag).toHaveBeenCalledWith(
+        'merchant-feed-review-signals-ogabassey',
+        'products'
+      );
+      expect(mockRevalidateTag).toHaveBeenCalledTimes(2);
+    });
+
+    it('revalidates global feed tags only when feedScope is explicitly all', () => {
+      revalidateMerchantFeed('ogabassey', { feedScope: 'all' });
 
       expect(mockRevalidateTag).toHaveBeenCalledWith(
         'google-merchant-feed',
@@ -772,14 +794,6 @@ describe('cache-revalidation utilities', () => {
       revalidateMerchantFeed(MERCHANT_ID);
 
       expect(mockRevalidateTag).toHaveBeenCalledWith(
-        'google-merchant-feed',
-        'products'
-      );
-      expect(mockRevalidateTag).toHaveBeenCalledWith(
-        'openai-product-feed',
-        'products'
-      );
-      expect(mockRevalidateTag).toHaveBeenCalledWith(
         `merchant-feed-${MERCHANT_ID}`,
         'products'
       );
@@ -787,7 +801,7 @@ describe('cache-revalidation utilities', () => {
         `merchant-feed-review-signals-${MERCHANT_ID}`,
         'products'
       );
-      expect(mockRevalidateTag).toHaveBeenCalledTimes(4);
+      expect(mockRevalidateTag).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -938,7 +952,7 @@ describe('cache-revalidation utilities', () => {
         }
       }).not.toThrow();
 
-      expect(mockRevalidateTag).toHaveBeenCalledTimes(1400); // 14 calls per invocation * 100
+      expect(mockRevalidateTag).toHaveBeenCalledTimes(1200); // 12 calls per invocation * 100
     });
 
     it('handles null/undefined merchant IDs gracefully', () => {

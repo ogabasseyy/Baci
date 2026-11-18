@@ -112,12 +112,8 @@ install_remediation_cron_transition
 ssh "$VPS" "install -d -m 700 $REMOTE_DIR/locks && touch $REMOTE_DIR/locks/error-remediator-global.lock && chmod 600 $REMOTE_DIR/locks/error-remediator-global.lock"
 
 install_worker_services
-
-echo "==> Installing durable event-pipeline user services"
-ssh "$VPS" "bash $REMOTE_DIR/install-event-pipeline-services.sh $REMOTE_DIR"
-
-echo "==> Installing durable quiz finalization user service"
-ssh "$VPS" "bash $REMOTE_DIR/install-quiz-finalization-service.sh $REMOTE_DIR"
+echo "==> Installing durable event-pipeline and quiz finalization user services"
+ssh "$VPS" "bash $REMOTE_DIR/install-event-pipeline-services.sh $REMOTE_DIR && bash $REMOTE_DIR/install-quiz-finalization-service.sh $REMOTE_DIR"
 
 echo "==> Installing crontab entries on VPS (idempotent)"
 CRON_BLOCK_START="# >>> baci-workers >>>"
@@ -172,6 +168,8 @@ $CRON_BLOCK_START
 * * * * * flock -n $REMOTE_DIR/locks/piggyvest-webhook-capture-drain.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=piggyvest-webhook-capture-drain && cd $REMOTE_DIR && timeout --verbose --signal=TERM --kill-after=10s 50s $REMOTE_DIR/bin/process-piggyvest-webhook-capture-drain.sh --once' >> $REMOTE_DIR/logs/piggyvest-webhook-capture-drain.log 2>&1
 * * * * * flock -n $REMOTE_DIR/locks/quiz-finalize.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=quiz-finalization && cd $REMOTE_DIR && timeout --signal=TERM --kill-after=5s 50s $REMOTE_DIR/bin/process-quiz-finalization.sh --once' >> $REMOTE_DIR/logs/quiz-finalize.log 2>&1
 15 4   * * * flock -n $REMOTE_DIR/locks/sync-gigl-service-centres.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/sync-gigl-service-centres.mjs' >> $REMOTE_DIR/logs/sync-gigl-service-centres.log 2>&1
+*/10 * * * * flock -n $REMOTE_DIR/locks/purge-jumia-self-authorization-discoveries.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=purge-jumia-self-authorization-discoveries && cd $REMOTE_DIR && timeout --signal=TERM --kill-after=30s 2m $REMOTE_DIR/bin/purge-jumia-self-authorization-discoveries.sh' >> $REMOTE_DIR/logs/purge-jumia-self-authorization-discoveries.log 2>&1
+11 *   * * * flock -n $REMOTE_DIR/locks/cleanup-checkout-shipping-recovery-previews.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=cleanup-checkout-shipping-recovery-previews && cd $REMOTE_DIR && timeout --signal=TERM --kill-after=30s 2m $REMOTE_DIR/bin/cleanup-checkout-shipping-recovery-previews.sh' >> $REMOTE_DIR/logs/cleanup-checkout-shipping-recovery-previews.log 2>&1
 $CRON_BLOCK_END
 EOF
 # shellcheck disable=SC2029 # The quoted values intentionally become remote argv.

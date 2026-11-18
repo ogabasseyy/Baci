@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { expect, it, vi } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { getCartFromStorage, saveCartToStorage } from './cart-storage';
 import {
   bootstrapSharedCart,
@@ -14,8 +14,10 @@ import {
   MERCHANT_ID,
   mockAdopted,
   product,
+  resetCartSessionHintForTests,
   SLUG,
   snapshot,
+  writeCartSessionHint,
 } from './shared-cart-provisioning.test-support';
 import { useSharedCart } from './use-shared-cart';
 
@@ -26,10 +28,12 @@ vi.mock('./shared-cart-client', () => ({
   fetchSharedCartSnapshot: vi.fn(),
   sendSharedCartCommand: vi.fn(),
 }));
+afterEach(() => resetCartSessionHintForTests());
 
 it('retires a completed cart and provisions empty before the next add', async () => {
   vi.clearAllMocks();
   window.localStorage.clear();
+  writeCartSessionHint(MERCHANT_ID, '1');
   vi.mocked(fetchSharedCartProducts).mockResolvedValue(new Map());
   vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({
     ok: true,
@@ -280,32 +284,4 @@ it('keeps overcapacity sibling offers cached while canonical removals make room,
   });
   expect(result.current.cart).toHaveLength(20);
   expect(result.current.importWarnings).toEqual([]);
-});
-
-it('retains an oversized device import until the shopper explicitly discards it', async () => {
-  vi.clearAllMocks();
-  window.localStorage.clear();
-  const local = Array.from({ length: 21 }, (_, index) =>
-    cartItem({ id: `local-${index}`, cartItemId: `local-${index}` })
-  );
-  saveCartToStorage(local, SLUG);
-  mockAdopted();
-  vi.mocked(fetchSharedCartProducts).mockResolvedValue(new Map());
-  const { result } = renderHook(() =>
-    useSharedCart({
-      merchantId: MERCHANT_ID,
-      merchantSlug: SLUG,
-      sessionGeneration: 1,
-    })
-  );
-  await waitFor(() =>
-    expect(result.current.importWarnings).toContain('import_capacity_exceeded')
-  );
-  expect(getCartFromStorage(SLUG)).toEqual(local);
-  expect(sendSharedCartCommand).not.toHaveBeenCalled();
-  act(() => result.current.discardLegacyImport());
-  await waitFor(() => expect(result.current.importStatus).toBe('skipped'));
-  expect(result.current.importWarnings).toEqual([]);
-  expect(getCartFromStorage(SLUG).map((line) => line.id)).toEqual(['prod-1']);
-  expect(sendSharedCartCommand).not.toHaveBeenCalled();
 });

@@ -78,6 +78,7 @@ export function useStartSavingsFormFlow({
     deferInitialContribution?: boolean;
     continueInWallet?: boolean;
     confirmPrimaryBalance?: boolean;
+    payHeadStartFromWallet?: boolean;
   }) => Promise<void>;
   targetValue: number;
 }) {
@@ -135,8 +136,8 @@ export function useStartSavingsFormFlow({
       return;
     }
 
-    // The funding choice only exists for a legacy head start (it is not
-    // shown for ₦0 or PiggyVest), so a hidden stale choice never applies.
+    // The legacy funding choice is not shown for ₦0 or PiggyVest (PiggyVest
+    // shows its own pay-now tick), so a hidden stale choice never applies.
     if (
       selectedFundingOption === 'bank_transfer' &&
       !primaryWallet &&
@@ -171,10 +172,15 @@ export function useStartSavingsFormFlow({
       }
       // The balance is confirmed fresh inside the guarded submission, so
       // a stand-in figure never refuses or allows the head start.
+      // Ticked "pay now": the plan sheet moves it with the wallet PIN as
+      // soon as the plan's savings wallet is ready. Unticked: the customer
+      // adds it later from the sheet, so no balance check is needed.
+      const payNow = selectedFundingOption === 'wallet';
       await submitSavingsGoal({
         deferInitialContribution: true,
         continueInWallet: true,
-        confirmPrimaryBalance: true,
+        confirmPrimaryBalance: payNow,
+        payHeadStartFromWallet: payNow,
       });
       return;
     }

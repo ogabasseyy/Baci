@@ -1,4 +1,11 @@
-import { afterEach, describe, expect, it, jest } from '@jest/globals';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  jest,
+} from '@jest/globals';
 import { act, renderHook } from '@testing-library/react-native';
 import { AppState } from 'react-native';
 import type { QuizEvent } from '@/services/quiz-types';
@@ -9,8 +16,20 @@ jest.mock('@/lib/quiz-start-interstitial', () => ({
   maybeShowQuizStartInterstitial: jest.fn(async () => 'skipped'),
 }));
 
+// The spy type is inferred from the call so it never has to be named.
+const spyOnRandom = () => jest.spyOn(Math, 'random');
+
 describe('useQuizWaitingRoom', () => {
+  let randomSpy: ReturnType<typeof spyOnRandom>;
+
+  beforeEach(() => {
+    // Zero offset keeps the boundary refresh immediate for the legacy cases;
+    // the timing cases below override it explicitly.
+    randomSpy = spyOnRandom().mockReturnValue(0);
+  });
+
   afterEach(() => {
+    randomSpy.mockRestore();
     jest.useRealTimers();
   });
 

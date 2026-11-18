@@ -1,6 +1,8 @@
-import { render, screen } from '@testing-library/react-native';
+import { render, screen, within } from '@testing-library/react-native';
+import type { ReactTestInstance } from 'react-test-renderer';
 import { WalletHeroSection } from './WalletHeroSection';
 import { WalletPrimaryContext } from './WalletPrimaryContext';
+import type { WalletDisplayFundingAccount } from './wallet.types';
 
 jest.mock('react-native-reanimated', () => {
   const { View } = jest.requireActual(
@@ -74,6 +76,44 @@ describe('bugfix: PiggyVest balance shown as a spendable total', () => {
     expect(screen.getByText('₦7,000')).toBeOnTheScreen();
     expect(screen.queryByText('Store credit')).toBeNull();
     expect(screen.queryByText('₦2,000')).toBeNull();
+  });
+});
+
+describe('bugfix: store credit wrapped onto three lines in the balance column', () => {
+  it('keeps store credit out of the balance-and-account row', () => {
+    const piggyvestAccount = {
+      accountName: 'Ogabassey Services Limited/Bassey John',
+      accountNumber: '9000002044',
+      bankName: 'POCKETAPP',
+      provider: 'piggyvest',
+    } satisfies WalletDisplayFundingAccount;
+    // PiggyVest not ready yet, so the savings view shows store credit.
+    render(
+      <WalletPrimaryContext.Provider value={false}>
+        <WalletHeroSection
+          {...baseProps}
+          fundingAccount={piggyvestAccount}
+          storeCreditBalance={1200}
+        />
+      </WalletPrimaryContext.Provider>
+    );
+    const storeCredit = 'Store credit ₦1,200. Use it on purchases.';
+    expect(screen.getByLabelText(storeCredit)).toBeOnTheScreen();
+
+    let balanceColumn: ReactTestInstance | null = screen.getByText(
+      'Savings wallet · NGN'
+    ).parent;
+    while (balanceColumn && String(balanceColumn.type) !== 'View') {
+      balanceColumn = balanceColumn.parent;
+    }
+    if (!balanceColumn) throw new Error('balance column not found');
+    expect(within(balanceColumn).queryByLabelText(storeCredit)).toBeNull();
+    // Outside the whole balance-and-account row too, so it can't sit in
+    // the account column either: it renders under the row, full width.
+    const row = balanceColumn.parent;
+    if (!row) throw new Error('balance and account row not found');
+    expect(within(row).queryByLabelText(storeCredit)).toBeNull();
+    expect(within(row).getByText('Savings wallet · NGN')).toBeOnTheScreen();
   });
 });
 

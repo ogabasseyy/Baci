@@ -10,6 +10,7 @@ const requestId = z
   .min(1)
   .max(80)
   .regex(/^[a-zA-Z0-9_-]+$/);
+const quantityRequestId = requestId.min(8);
 const sessionToken = z.string().min(1).max(12_000);
 const conversationId = z.number().int().positive().safe();
 
@@ -19,12 +20,13 @@ export const chatwootCommerceMessageSchema = z.discriminatedUnion('event', [
       event: z.literal('baci-cart-quantity'),
       data: z
         .object({
-          requestId,
+          requestId: quantityRequestId,
           conversationId,
           sessionToken,
           lineToken: requestId,
+          cartVersion: z.number().int().positive().safe(),
           expectedQuantity: z.number().int().min(1).max(1000),
-          quantity: z.number().int().min(0).max(1000),
+          quantity: z.number().int().min(0).max(10),
         })
         .strict(),
     })

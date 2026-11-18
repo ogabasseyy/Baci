@@ -22,56 +22,16 @@ vi.mock('@/lib/storefront-search', () => ({
 }));
 
 import {
+  createQueryMock,
+  OGABASSEY_MERCHANT_ID,
+} from '../../tests/ai/chat-tool-handlers.test-support';
+import {
   handleAddToCart,
   handleCheckPaymentStatus,
   handleGetProductDetails,
   handleGetRecommendations,
   handleSearchProducts,
 } from './chat-tool-handlers';
-
-const OGABASSEY_MERCHANT_ID = '3bc72679-c0f7-4db4-9054-6a4a4a95a498';
-
-type QueryResult = {
-  data: unknown;
-  error?: unknown;
-  count?: number | null;
-};
-
-function createQueryMock(result: QueryResult = { data: null, error: null }) {
-  const query = Object.assign(Promise.resolve(result), {
-    select: vi.fn<(...args: unknown[]) => unknown>(),
-    eq: vi.fn<(...args: unknown[]) => unknown>(),
-    or: vi.fn<(...args: unknown[]) => unknown>(),
-    ilike: vi.fn<(...args: unknown[]) => unknown>(),
-    neq: vi.fn<(...args: unknown[]) => unknown>(),
-    gt: vi.fn<(...args: unknown[]) => unknown>(),
-    gte: vi.fn<(...args: unknown[]) => unknown>(),
-    lt: vi.fn<(...args: unknown[]) => unknown>(),
-    lte: vi.fn<(...args: unknown[]) => unknown>(),
-    in: vi.fn<(...args: unknown[]) => unknown>(),
-    order: vi.fn<(...args: unknown[]) => unknown>(),
-    limit: vi.fn<(...args: unknown[]) => unknown>(),
-    single: vi.fn<() => Promise<QueryResult>>(),
-    maybeSingle: vi.fn<() => Promise<QueryResult>>(),
-  });
-
-  query.select.mockReturnValue(query);
-  query.eq.mockReturnValue(query);
-  query.or.mockReturnValue(query);
-  query.ilike.mockReturnValue(query);
-  query.neq.mockReturnValue(query);
-  query.gt.mockReturnValue(query);
-  query.gte.mockReturnValue(query);
-  query.lt.mockReturnValue(query);
-  query.lte.mockReturnValue(query);
-  query.in.mockReturnValue(query);
-  query.order.mockReturnValue(query);
-  query.limit.mockReturnValue(query);
-  query.single.mockResolvedValue(result);
-  query.maybeSingle.mockResolvedValue(result);
-
-  return query;
-}
 
 describe('chat tool handlers', () => {
   beforeEach(() => {
@@ -353,23 +313,6 @@ describe('chat tool handlers', () => {
     expect(result).toEqual({ products: [], total: 0 });
   });
 
-  it('uses a public RLS client for catalog search rather than minting a checkout JWT', async () => {
-    mocks.searchStorefrontProducts.mockResolvedValue({
-      count: 0,
-      didYouMean: null,
-      productIds: [],
-      query: 'phone',
-    });
-    const query = createQueryMock({ data: [], error: null });
-    mocks.createPublicClient.mockReturnValue({ from: vi.fn(() => query) });
-
-    await handleSearchProducts({ query: 'phone' });
-
-    expect(mocks.createPublicClient).toHaveBeenCalledWith({
-      clientInfo: 'baci-chat-catalog',
-    });
-  });
-
   it('surfaces ranked search failures instead of treating them as an empty catalog', async () => {
     mocks.searchStorefrontProducts.mockRejectedValueOnce(
       new Error('search rpc unavailable')
@@ -382,19 +325,6 @@ describe('chat tool handlers', () => {
     await expect(handleSearchProducts({ query: 'iphone' })).rejects.toThrow(
       'Catalog search temporarily unavailable'
     );
-  });
-
-  it('restricts product details to active Ogabassey products', async () => {
-    const query = createQueryMock();
-    mocks.createAgenticScopedSupabaseClient.mockReturnValue({
-      from: vi.fn(() => query),
-    });
-
-    await handleGetProductDetails({ productId: 'product-1' });
-
-    expect(query.eq).toHaveBeenCalledWith('id', 'product-1');
-    expect(query.eq).toHaveBeenCalledWith('merchant_id', OGABASSEY_MERCHANT_ID);
-    expect(query.eq).toHaveBeenCalledWith('status', 'active');
   });
 
   it('returns null when scoped product details are missing', async () => {
@@ -556,74 +486,6 @@ describe('chat tool handlers', () => {
     );
 
     expect(result).toEqual({ status: 'expired', orderId: 'order-1' });
-  });
-
-  it('restricts recommendations to active Ogabassey products', async () => {
-    const sourceQuery = createQueryMock({
-      data: {
-        id: 'source-product',
-        name: 'Galaxy S26',
-        price: 900_000,
-        category: 'Smartphones',
-        brand: 'Samsung',
-      },
-      error: null,
-    });
-    const recommendationQuery = createQueryMock({
-      data: [
-        {
-          id: 'recommended-product',
-          name: 'Galaxy S26 Ultra',
-          price: 1_100_000,
-          description: 'A larger Galaxy model',
-          brand: 'Samsung',
-          category: 'Smartphones',
-          images: [{ url: 'https://cdn.example.com/galaxy.jpg' }],
-          stock: 4,
-          status: 'active',
-        },
-      ],
-      error: null,
-    });
-    const from = vi
-      .fn()
-      .mockReturnValueOnce(sourceQuery)
-      .mockReturnValueOnce(recommendationQuery);
-    mocks.createAgenticScopedSupabaseClient.mockReturnValue({ from });
-
-    const result = await handleGetRecommendations({
-      productId: 'source-product',
-      type: 'upsell',
-    });
-
-    expect(sourceQuery.eq).toHaveBeenCalledWith('id', 'source-product');
-    expect(sourceQuery.eq).toHaveBeenCalledWith(
-      'merchant_id',
-      OGABASSEY_MERCHANT_ID
-    );
-    expect(sourceQuery.eq).toHaveBeenCalledWith('status', 'active');
-    expect(recommendationQuery.eq).toHaveBeenCalledWith(
-      'merchant_id',
-      OGABASSEY_MERCHANT_ID
-    );
-    expect(recommendationQuery.eq).toHaveBeenCalledWith('status', 'active');
-    expect(recommendationQuery.neq).toHaveBeenCalledWith(
-      'id',
-      'source-product'
-    );
-    expect(result).toEqual([
-      {
-        id: 'recommended-product',
-        name: 'Galaxy S26 Ultra',
-        price: 1_100_000,
-        description: 'A larger Galaxy model',
-        brand: 'Samsung',
-        category: 'Smartphones',
-        image_url: 'https://cdn.example.com/galaxy.jpg',
-        stock: 4,
-        status: 'active',
-      },
-    ]);
   });
 
   it('returns no recommendations when the scoped source product is missing', async () => {

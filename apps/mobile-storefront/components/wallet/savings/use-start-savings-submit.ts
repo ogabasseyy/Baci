@@ -11,6 +11,7 @@ import {
   PLAN_CREATED_OPEN_WALLET_MESSAGE,
   SIGN_IN_TO_START_SAVINGS_MESSAGE,
 } from './hand-off-to-wallet';
+import { walletHeadStarts } from './pending-wallet-head-start';
 import { runBankTransferContribution } from './run-bank-transfer-contribution';
 import { runSavingsCardAuthorization } from './run-savings-card-authorization';
 import {
@@ -80,6 +81,8 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
     continueInWallet?: boolean;
     /** Confirm a fresh PiggyVest balance covers the head start first. */
     confirmPrimaryBalance?: boolean;
+    /** Move the head start from the wallet as soon as the plan is ready. */
+    payHeadStartFromWallet?: boolean;
   }) => {
     if (submitInFlightRef.current) {
       return;
@@ -141,6 +144,8 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
     // savings sheet, prefilled with the amount the customer chose.
     const continueInWallet = (goalId: string, amount: number) => {
       pendingPlansRef.current.delete(accountKey);
+      if (options?.payHeadStartFromWallet)
+        walletHeadStarts.remember(goalId, wholeNairaHeadStart(amount));
       router.replace({
         pathname: '/wallet',
         params: {

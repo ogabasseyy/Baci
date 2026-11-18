@@ -112,3 +112,24 @@ describe('bugfix: a provider-issued top-level reference is evidence', () => {
     expect(hasMonnifyVendEvidence(answer)).toBe(true);
   });
 });
+
+describe('bugfix: deep nesting and array-valued vend fields fail closed', () => {
+  it('sees vend evidence in an array-valued status', () => {
+    expect(
+      hasMonnifyVendEvidence({
+        transactionStatus: ['FAILED'],
+        message: 'Insufficient wallet balance',
+      })
+    ).toBe(true);
+  });
+
+  it('treats nesting deeper than the scan limit as evidence', () => {
+    expect(
+      hasMonnifyVendEvidence({
+        a: {
+          b: { c: { d: { e: { f: { g: { transactionStatus: 'FAILED' } } } } } },
+        },
+      })
+    ).toBe(true);
+  });
+});

@@ -61,3 +61,11 @@ describe('bugfix: percent-encoded bracket keys parse', () => {
     ).toEqual({ vendStatus: 'FAILED', message: 'Insufficient wallet balance' });
   });
 });
+
+describe('bugfix: dotted form keys read as their leaf key', () => {
+  it('parses "responseBody.transactionStatus=FAILED"', () => {
+    expect(
+      parseMonnifyAnswer('responseBody.transactionStatus=FAILED&message=Low')
+    ).toEqual({ transactionStatus: 'FAILED', message: 'Low' });
+  });
+});

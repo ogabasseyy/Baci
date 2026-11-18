@@ -8,11 +8,16 @@ function decode(value: string): string {
   }
 }
 
-/** "responseBody[transactionStatus]" reads as its leaf key "transactionStatus". */
+/**
+ * "responseBody[transactionStatus]" and "responseBody.transactionStatus" read
+ * as their leaf key "transactionStatus".
+ */
 function leafKey(key: string): string {
   const brackets = [...key.matchAll(/\[([^\]]*)\]/g)];
   const leaf = brackets.at(-1)?.[1];
-  return leaf?.trim() ? leaf : key;
+  const base = leaf?.trim() ? leaf : key;
+  // Dotted nesting ("responseBody.transactionStatus") reads as its last part.
+  return base.split('.').filter(Boolean).at(-1) ?? base;
 }
 
 /** Form values "true"/"false"/"null" become real booleans/null, like JSON. */

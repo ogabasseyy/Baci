@@ -138,16 +138,24 @@ function carriesVendField(
   return Object.entries(record).some(([rawKey, value]) => {
     const key = normaliseKey(rawKey);
     return (
-      (isEvidenceKey(key) && isEvidenceValue(key, value)) ||
-      (OUTCOME_FLAG_KEY.test(key) && isTrueFlag(value))
+      // An array value ("transactionStatus": ["FAILED"]) is read item by item.
+      (Array.isArray(value) ? value : [value]).some(
+        (item) =>
+          (isEvidenceKey(key) && isEvidenceValue(key, item)) ||
+          (OUTCOME_FLAG_KEY.test(key) && isTrueFlag(item))
+      )
     );
   });
 }
 
 /** Searches every object nested below the top level (responseBody, data…). */
 function nestedCarriesVendField(value: unknown, depth: number): boolean {
-  if (depth > MAX_NESTED_DEPTH || !value || typeof value !== 'object') {
+  if (!value || typeof value !== 'object') {
     return false;
+  }
+  // Nesting deeper than we scan can't be cleared: fail closed.
+  if (depth > MAX_NESTED_DEPTH) {
+    return true;
   }
   const children = Array.isArray(value) ? value : [value];
   return children.some((child) => {

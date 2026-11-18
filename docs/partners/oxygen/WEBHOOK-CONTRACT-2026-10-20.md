@@ -9,6 +9,7 @@ The [Oxygen Support APIs transaction callback section](https://oxygenxfinance.gi
 Every transaction type can wake the existing provider confirmation check. This lets a later repayment notification recover a missed confirmation while the checkout is pending. An already activated checkout skips the provider read, and every new activation still needs fresh provider confirmation of both upfront payment and repayment setup.
 
 The three specific types have separate deduplication keys so that two different notifications can share a transaction reference. The generic and legacy forms share the original key.
+If Oxygen uses the same reference for all four forms, up to four inbox entries can trigger reconciliation. The worker enforces the per-invocation provider-read budget, and it skips the provider call when the checkout is already activated.
 
 ```json
 {

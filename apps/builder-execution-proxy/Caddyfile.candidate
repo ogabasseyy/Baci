@@ -15,7 +15,7 @@
 builder-output-origin.usebaci.com {
 	@delivery {
 		method GET
-		path /resource/* /published/*
+		path_regexp delivery `^/(resource/[a-f0-9]{64}|published/[a-z0-9][a-z0-9-]{0,99}/[a-f0-9]{64})/(index\.html|app\.(js|css)|assets/[a-z0-9-]{1,80})$`
 		expression `{env.BACI_EXECUTION_ORIGIN_KEY}.matches("^[A-Za-z0-9_-]{43}$") && {http.request.header.X-Baci-Execution-Origin-Key} == {env.BACI_EXECUTION_ORIGIN_KEY}`
 	}
 	handle @delivery {

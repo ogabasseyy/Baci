@@ -101,6 +101,12 @@ def smoke(root, backend_port, secret, dead=False):
             }
             assert request('/internal/owner/preview', '-H', f'{KEY_HEADER}: {KEY}')[-1] == '404'
             assert request(PATH, '-H', f'{KEY_HEADER}: {KEY}', '-X', 'POST')[-1] == '404'
+            for malformed in (
+                '/resource/invalid/index.html',
+                '/resource/' + 'b' * 64 + '/other.js',
+                '/published/example/invalid/app.js',
+            ):
+                assert request(malformed, '-H', f'{KEY_HEADER}: {KEY}')[-1] == '404'
         finally:
             process.terminate()
             process.wait(timeout=10)

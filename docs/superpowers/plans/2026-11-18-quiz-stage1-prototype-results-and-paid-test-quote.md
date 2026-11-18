@@ -1,6 +1,6 @@
 # Quiz Stage 1 Prototype Results, 100k/1M Cost Model & Pre-Execution Paid Cloud Load-Test Quote
 
-Date: 2026-11-18 · Base revision: `5141bd4d71` · Worker prototype commit: `73af771e3e5e2c296d34f54a4d1ef81896093448` · Target plan: [Quiz scale plan (Revision 12)](2026-11-18-quiz-100k-1m-scale-plan.md)
+Date: 2026-11-18 · Base revision: `5141bd4d71` · Worker prototype commit: `73af771e3e5e2c296d34f54a4d1ef81896093448` · DB reconciler commit: `144e4a0a337de45a328866218570c2378d65298b` · Target plan: [Quiz scale plan (Revision 12)](2026-11-18-quiz-100k-1m-scale-plan.md)
 
 > [!IMPORTANT]
 > **Zero Paid Cloud Spend Executed.** Every measurement in this report was executed locally on Node `v24.11.1` (`node:sqlite` + `workerd` local dev smoke test + Jest/Vitest) and local PostgreSQL `17.11` (`synchronous_commit = on`). No `wrangler deploy`, remote Cloudflare Workers/DO/Queues calls, remote Supabase staging branches, or paid load generators have been invoked. Section 3 is the itemized USD approval gate required before running any paid cloud qualification tests.
@@ -16,7 +16,7 @@ Date: 2026-11-18 · Base revision: `5141bd4d71` · Worker prototype commit: `73a
 | **Mobile Realtime suppression (Test 3)** | **PASSED (26/26 Jest tests)**: `0` `quiz-results` channel joins & `0` `supabase.realtime.setAuth()` calls across normal play, `pending_results`, resume, and `AppState` reconnect for `backendMode: 'edge_rooms'`; `postgres` retains wakeup | HTTP polling delivered published `final` results with Realtime unavailable | End-to-end release-equivalent mobile build against staging Worker |
 | **100k gameplay + 100k live-rank (80% tie cohort)** | `12,035 ans/s` (`uniform_10m`) & `12,167 ans/s` (`surge_30s_50pct`), `0` dropped iterations; LiveRank **1,452x write reduction** (`723` range rows vs `1,050,000` full rewrites across 20 ticks, `0` idle writes), exact SQL order down to `attemptId` | `ResultShardEngine.getPublishedLeaderboard` runs `100` `resolveDisplayName` awaits + `JSON.parse` per call (`0.775 ms` p50); caching pre-resolved `top100` per `controlState.version` in Stage 2 will cut leaderboard shard CPU ~10x | Live 100k HTTP fan-out through Cloudflare edge + admission burst on Supabase RLS |
 | **1M queue packing & 1M private-result + leaderboard lookups** | Queue: `15.15` bundles/msg, `61,537` bytes/msg (`max 62,931 < 64,000`), `3.0` ops/msg, oversized `99,119 B` bundle split into `2` parts (`max 59,972 B`) & reassembled; Shards (64 shards): **1,000,000 `getAttemptResult` (`p99 0.126 ms`) + 1,000,000 `getPublishedLeaderboard` (`p99 1.413 ms`)**, `0` non-winner origin calls, winner claim handoff verified | At `66,000` messages for 1M entrants, queue drains in **`13.2 s`** at CF's `5,000 msg/s` limit | Cold-cache edge TTL tuning & 11,000 req/s burst within 5-minute SLA |
-| **Postgres ingest, index & set-wise scoring (`@db-reconciler`)** | Normalized-email lookup: `62.38 ms` Seq Scan -> **`0.039 ms`** Index Scan (`1,550x` faster); 100k ingest `3.50 s` (`28,534 att/s`), scoring `50.23 s` (`1,991 att/s`), `0` legacy triggers, checkout p99 `9.73 ms` (`0` errors) | **1M Postgres run not yet executed locally (`scale1m: null`)**: extrapolating single-pass `1,991 att/s` to 1M yields `~502 s` (`8.4 min`) and `~14 GB` WAL, exceeding the 5-min window unless scoring streams incrementally pre-close and runs on 4XL | Run 1M staging ingest + incremental scoring on isolated Supabase `4XL` branch |
+| **Postgres ingest, index & set-wise scoring (`@db-reconciler`)** | Normalized-email lookup: `60.50–101.84 ms` Seq Scan -> **`0.036–0.043 ms`** Index Scan (`4` bufs); **100k** ingest `3.23 s` (`30,936 att/s`), scoring `37.99 s` (`2,632 att/s`), checkout p99 `11.12 ms`; **1M** (`2,000` rooms, `9.85M` answers) ingest `34.23 s` (`29,215 att/s`), seal `322.2 ms`, scoring `346.51 s` (`2,886 att/s`, `17.18 GB` total WAL), `0` legacy triggers, `28,987` concurrent checkouts p99 `12.00 ms` (`0` errors) | Single-pass 1M scoring (`346.5 s` / `5.78 min`) exceeds the 5-min post-close SLA if all 1M attempts wait until close; **continuous pre-close streaming ingest + incremental scoring** keeps only the final tail inside the post-close window | Run 1M staging ingest + incremental scoring on isolated Supabase `4XL` branch |
 
 ---
 
@@ -118,15 +118,17 @@ Executed Jest on `apps/mobile-storefront/components/quiz/use-quiz-result-polling
 | Oversized single transcript (`99,119 B`) | Split into `2` parts (`max 59,972 B < 64k`), SHA-256 reassembled | Deterministic |
 | Drain time at `5,000 msg/s` per-queue limit | 0.132 s | **13.2 s** |
 
-**B. Local PostgreSQL Admission Index, Legacy Trigger & Edge Reconciler (`@db-reconciler`, Postgres `17.11`):**
+**B. Local PostgreSQL Admission Index, Legacy Trigger & Edge Reconciler (`@db-reconciler` `144e4a0a33`, Postgres `17.11`, `synchronous_commit = on`):**
 
-- **Normalized-email admission check-in (`50,000` customers)**: `Seq Scan` `60.49–62.38 ms` (`940` buffers) -> `idx_customers_merchant_quiz_normalized_email` `Index Scan` **`0.036–0.039 ms`** (`4` buffers).
-- **Legacy per-row triggers (`500` attempts / `5,000` answers)**: `31.53 s` (`15.9 att/s`, `158.6 ans/s`), `6.31 MB` WAL (`13,237.7 B/att`), firing `500` identity-cap + `5,000` score-accum + `6,000` live-standing trigger calls.
+- **Normalized-email admission check-in (`50,000` customers)**: `Seq Scan` `60.50–101.84 ms` (`940` buffers) -> `idx_customers_merchant_quiz_normalized_email` `Index Scan` **`0.036–0.043 ms`** (`4` buffers).
+- **Legacy per-row triggers (`500` attempts / `5,000` answers)**: `30.27 s` (`16.5 att/s`, `165.2 ans/s`), `6.28 MB` WAL (`13,167.7 B/att`), firing `500` identity-cap + `5,000` score-accum + `6,000` live-standing trigger calls.
 - **Edge 100k staging ingest + set-wise scoring (`100,000` attempts / `985,000` answers, `200` rooms)**:
-  - Staging ingest: **`3.50 s`** (`28,533.8 att/s`, `281,057.6 ans/s`, `193.05 MB` WAL).
-  - Room manifest seal: **`83.3 ms`** (`200` rooms).
-  - Set-wise canonical scoring & materialization: **`50.23 s`** (`1,990.8 att/s`, `19,609.5 ans/s`, `1,208 MB` WAL), **`0` legacy trigger calls**, **`0` leaked live-standing rows**, idempotent double-import (`0` new rows), concurrent storefront checkout `p99 = 9.728 ms` (`0` errors across 209 txns).
-  - `supabase/tests/quiz_stage1_prototype.sql`: **PASSED** (including restricted-role catalog privilege & publication-gate checks).
+  - Staging ingest: **`3.23 s`** (`30,936.2 att/s`, `304,721.3 ans/s`, `193.08 MB` WAL); seal: **`78.2 ms`**.
+  - Set-wise canonical scoring & materialization: **`37.99 s`** (`2,632.2 att/s`, `25,927.6 ans/s`, `1,236.03 MB` WAL), **`0` legacy trigger calls**, **`0` leaked live-standing rows**, idempotent double-import (`0` new rows), `3,282` concurrent storefront checkouts `p99 = 11.115 ms` (`0` errors).
+- **Edge 1M staging ingest + set-wise scoring (`1,000,000` attempts / `9,850,000` answers, `2,000` rooms)**:
+  - Staging ingest: **`34.23 s`** (`29,215.4 att/s`, `287,771.6 ans/s`, `2,220.73 MB` WAL); seal: **`322.2 ms`**.
+  - Set-wise canonical scoring & materialization: **`346.51 s` (`5.78 min`)** (`2,885.9 att/s`, `28,426.6 ans/s`, `14,959.46 MB` WAL; **`17.18 GB`** combined WAL), **`0` legacy trigger calls**, **`0` leaked live-standing rows**, idempotent double-import (`duplicate=true`, `0` rescore writes), `28,987` concurrent storefront checkouts `p99 = 12.001 ms` (`0` errors). *(Because single-pass 1M scoring takes 5.78 min, live 1M events must stream completed attempt batches and score incrementally before close so only the post-close tail runs in the 5-min window.)*
+- `supabase/tests/quiz_stage1_prototype.sql`: **PASSED** (including restricted-role catalog privilege & publication-gate checks).
 
 ---
 

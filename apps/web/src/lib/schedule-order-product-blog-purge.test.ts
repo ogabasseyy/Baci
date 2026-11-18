@@ -56,8 +56,10 @@ function makeSupabase(options: {
 describe('scheduleOrderProductBlogPurge', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockRevalidateSlugs.mockReturnValue(true);
     mockEnrichProductPurgeEntries.mockResolvedValue({
       entries: [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
+      authoritativeSlugsById: new Map([['product-1', 'iphone-15']]),
       blogPostSlugs: ['iphone-guide'],
     });
   });
@@ -121,6 +123,7 @@ describe('scheduleOrderProductBlogPurge', () => {
   it('keeps the core purge when no published article is linked', async () => {
     mockEnrichProductPurgeEntries.mockResolvedValue({
       entries: [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
+      authoritativeSlugsById: new Map([['product-1', 'iphone-15']]),
       blogPostSlugs: [],
     });
     const { supabase } = makeSupabase({});
@@ -180,5 +183,45 @@ describe('scheduleOrderProductBlogPurge', () => {
     } finally {
       consoleSpy.mockRestore();
     }
+  });
+
+  it('hard-expires merchant-wide PDP details when enrichProductPurgeEntries omits an authoritative slug', async () => {
+    mockEnrichProductPurgeEntries.mockResolvedValueOnce({
+      entries: [{ slug: 'product-1', categorySegment: null }],
+      authoritativeSlugsById: new Map<string, string>(),
+      blogPostSlugs: [],
+    });
+    const { supabase } = makeSupabase({});
+
+    await scheduleOrderProductBlogPurge({
+      merchantId: 'merchant-1',
+      merchantSlug: 'ogabassey',
+      productIds: ['product-1'],
+      supabase: supabase as never,
+    });
+
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      'merchant-1',
+      undefined,
+      { expireImmediately: true }
+    );
+  });
+
+  it('hard-expires merchant-wide PDP details when revalidateProductSlugs returns false', async () => {
+    mockRevalidateSlugs.mockReturnValueOnce(false);
+    const { supabase } = makeSupabase({});
+
+    await scheduleOrderProductBlogPurge({
+      merchantId: 'merchant-1',
+      merchantSlug: 'ogabassey',
+      productIds: ['product-1'],
+      supabase: supabase as never,
+    });
+
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      'merchant-1',
+      undefined,
+      { expireImmediately: true }
+    );
   });
 });

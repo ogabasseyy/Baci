@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   prewarm: vi.fn(),
@@ -25,6 +25,11 @@ vi.mock('@/lib/storefront-product-purge-urls', () => ({
 import { scheduleNewProductCaches } from './schedule-new-product-caches';
 
 describe('scheduleNewProductCaches', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.revalidateSlugs.mockReturnValue(true);
+  });
+
   it('revalidates, purges the canonical PDP, and prewarms every new product image', () => {
     const images = [{ url: 'https://cdn.example/product.jpg' }];
 
@@ -38,15 +43,38 @@ describe('scheduleNewProductCaches', () => {
       images,
     });
 
+    expect(mocks.revalidateSlugs).toHaveBeenCalledWith(
+      'merchant-1',
+      ['new-product'],
+      { expireImmediately: true }
+    );
     expect(mocks.revalidate).toHaveBeenCalledWith('merchant-1', 'new-product', {
       expireImmediately: true,
       omitMerchantWidePdpDetails: true,
     });
-    expect(mocks.revalidateSlugs).not.toHaveBeenCalled();
     expect(mocks.purge).toHaveBeenCalledWith('merchant-store', [
       { slug: 'new-product', categorySegment: 'electronics' },
     ]);
     expect(mocks.prewarm).toHaveBeenCalledWith(images);
+  });
+
+  it('falls back to merchant-wide invalidation when scoped slug expiry fails', () => {
+    mocks.revalidateSlugs.mockReturnValueOnce(false);
+
+    scheduleNewProductCaches({
+      merchantId: 'merchant-1',
+      merchantSlug: 'merchant-store',
+      productId: 'product-1',
+      slug: ' ',
+      name: 'New Product',
+      category: null,
+      images: [],
+    });
+
+    expect(mocks.revalidate).toHaveBeenLastCalledWith('merchant-1', undefined, {
+      expireImmediately: true,
+      omitMerchantWidePdpDetails: false,
+    });
   });
 
   it('uses the created id when the generated slug is blank', () => {

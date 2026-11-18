@@ -25,7 +25,8 @@ interface RevalidateProductsInProcessArgs {
 
 /**
  * Execute Next cache revalidation and Cloudflare purge scheduling in-process.
- * Throws only when `revalidateProducts` has no Next request/store context.
+ * Throws when local Next tag revalidation or hard-expiry fails so the reliable
+ * caller falls back to the authenticated internal endpoint before edge purging.
  */
 export async function revalidateProductsInProcess({
   merchantId,
@@ -35,89 +36,130 @@ export async function revalidateProductsInProcess({
   supabase,
   purgeWholeStorefront,
 }: RevalidateProductsInProcessArgs): Promise<void> {
-  if (revalidateProducts(merchantId) === false) {
-    throw new Error('Product cache revalidation requires a request context');
-  }
-
+  const hasProducts = Boolean(products && products.length > 0);
   const shouldPurgeProducts = Boolean(
-    merchantSlug && !purgeWholeStorefront && products && products.length > 0
+    merchantSlug && !purgeWholeStorefront && hasProducts
   );
 
-  if ((products && products.length > 0) || nextProductSlugs.length > 0) {
-    let resolvedSlugs =
-      nextProductSlugs.length > 0
-        ? [...nextProductSlugs]
-        : products
-          ? collectResolvedProductSlugs(products)
-          : [];
-    let purgeEntries = buildInternalProductPurgeEntries(products ?? []);
-    let authoritativeSlugsById: ReadonlyMap<string, string> | undefined;
-    let blogPostSlugs: string[] = [];
-    let blogPostSlugsIncomplete = false;
-
-    if (supabase && products && products.length > 0 && !purgeWholeStorefront) {
-      try {
-        const enriched = await enrichProductPurgeEntries(
-          supabase,
-          merchantId,
-          products
-        );
-        resolvedSlugs = Array.from(
-          new Set([...resolvedSlugs, ...enriched.resolvedSlugs])
-        );
-        purgeEntries = enriched.entries;
-        authoritativeSlugsById = enriched.authoritativeSlugsById;
-        blogPostSlugs = enriched.blogPostSlugs;
-        blogPostSlugsIncomplete = enriched.blogPostSlugsIncomplete;
-      } catch (error) {
-        blogPostSlugsIncomplete = true;
-        console.warn(
-          'Failed to enrich in-process product purge (continuing with caller hints)',
-          { merchantId, error }
-        );
-      }
-    }
-
-    // Hard-expire per-slug caches when an edge purge follows in-process so SWR
-    // cannot re-seed Cloudflare from pre-mutation snapshots.
-    const slugsRevalidated =
-      (shouldPurgeProducts || purgeWholeStorefront) && merchantSlug
-        ? revalidateProductSlugs(merchantId, resolvedSlugs, {
-            expireImmediately: true,
-          }) === true
-        : revalidateProductSlugs(merchantId, resolvedSlugs) === true;
-
-    if (shouldPurgeProducts && merchantSlug) {
-      expireProductBlogCache(merchantId);
+  if (!hasProducts && nextProductSlugs.length === 0) {
+    if (purgeWholeStorefront && merchantSlug) {
       if (
-        !slugsRevalidated ||
-        blogPostSlugsIncomplete ||
-        (products &&
-          !hasCompleteScopedProductSlugs(
-            products,
-            purgeEntries,
-            resolvedSlugs,
-            authoritativeSlugsById
-          ))
+        revalidateProducts(merchantId, undefined, {
+          expireImmediately: true,
+        }) === false
       ) {
-        revalidateProducts(merchantId, undefined, { expireImmediately: true });
+        throw new Error('Merchant-wide product hard expiry failed');
       }
-      if (blogPostSlugs.length > 0) {
-        scheduleStorefrontProductPurge(merchantSlug, purgeEntries, {
-          blogPostSlugs,
-        });
-      } else {
-        scheduleStorefrontProductPurge(merchantSlug, purgeEntries);
-      }
-      if (blogPostSlugsIncomplete) {
-        scheduleStorefrontHostnamePurge(merchantSlug);
-      }
+      expireProductBlogCache(merchantId);
+      scheduleStorefrontHostnamePurge(merchantSlug);
+      return;
+    }
+    if (revalidateProducts(merchantId) === false) {
+      throw new Error('Product cache revalidation requires a request context');
+    }
+    return;
+  }
+
+  let resolvedSlugs =
+    nextProductSlugs.length > 0
+      ? [...nextProductSlugs]
+      : products
+        ? collectResolvedProductSlugs(products)
+        : [];
+  let purgeEntries = buildInternalProductPurgeEntries(products ?? []);
+  let authoritativeSlugsById: ReadonlyMap<string, string> | undefined;
+  let blogPostSlugs: string[] = [];
+  let blogPostSlugsIncomplete = false;
+
+  if (supabase && products && hasProducts && !purgeWholeStorefront) {
+    try {
+      const enriched = await enrichProductPurgeEntries(
+        supabase,
+        merchantId,
+        products
+      );
+      resolvedSlugs = Array.from(
+        new Set([...resolvedSlugs, ...enriched.resolvedSlugs])
+      );
+      purgeEntries = enriched.entries;
+      authoritativeSlugsById = enriched.authoritativeSlugsById;
+      blogPostSlugs = enriched.blogPostSlugs;
+      blogPostSlugsIncomplete = enriched.blogPostSlugsIncomplete;
+    } catch (error) {
+      blogPostSlugsIncomplete = true;
+      console.warn(
+        'Failed to enrich in-process product purge (continuing with caller hints)',
+        { merchantId, error }
+      );
     }
   }
 
   if (purgeWholeStorefront && merchantSlug) {
-    revalidateProducts(merchantId, undefined, { expireImmediately: true });
+    if (
+      revalidateProducts(merchantId, undefined, { expireImmediately: true }) ===
+      false
+    ) {
+      throw new Error('Merchant-wide product hard expiry failed');
+    }
+    revalidateProductSlugs(merchantId, resolvedSlugs, {
+      expireImmediately: true,
+    });
     expireProductBlogCache(merchantId);
     scheduleStorefrontHostnamePurge(merchantSlug);
+    return;
   }
+
+  if (shouldPurgeProducts && merchantSlug) {
+    // Hard-expire per-slug caches before edge purging so SWR cannot re-seed CF.
+    const slugsRevalidated =
+      revalidateProductSlugs(merchantId, resolvedSlugs, {
+        expireImmediately: true,
+      }) === true;
+    const scopedComplete =
+      slugsRevalidated &&
+      !blogPostSlugsIncomplete &&
+      Boolean(
+        products &&
+          hasCompleteScopedProductSlugs(
+            products,
+            purgeEntries,
+            resolvedSlugs,
+            authoritativeSlugsById
+          )
+      );
+    if (scopedComplete) {
+      if (
+        revalidateProducts(merchantId, undefined, {
+          omitMerchantWidePdpDetails: true,
+        }) === false
+      ) {
+        throw new Error(
+          'Product cache revalidation requires a request context'
+        );
+      }
+    } else if (
+      revalidateProducts(merchantId, undefined, { expireImmediately: true }) ===
+      false
+    ) {
+      throw new Error('Merchant-wide product hard expiry failed');
+    }
+
+    expireProductBlogCache(merchantId);
+    if (blogPostSlugs.length > 0) {
+      scheduleStorefrontProductPurge(merchantSlug, purgeEntries, {
+        blogPostSlugs,
+      });
+    } else {
+      scheduleStorefrontProductPurge(merchantSlug, purgeEntries);
+    }
+    if (blogPostSlugsIncomplete) {
+      scheduleStorefrontHostnamePurge(merchantSlug);
+    }
+    return;
+  }
+
+  if (revalidateProducts(merchantId) === false) {
+    throw new Error('Product cache revalidation requires a request context');
+  }
+  revalidateProductSlugs(merchantId, resolvedSlugs);
 }

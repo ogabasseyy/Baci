@@ -200,7 +200,11 @@ describe('POST /api/internal/revalidate-products scoped PDP invalidation', () =>
 
     expect(res.status).toBe(200);
     expect(mockRevalidateProducts).toHaveBeenCalledTimes(1);
-    expect(mockRevalidateProducts).toHaveBeenCalledWith(MERCHANT_ID);
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      MERCHANT_ID,
+      undefined,
+      { expireImmediately: true }
+    );
   });
 
   it('falls back to full merchant-wide PDP invalidation when revalidateProductSlugs returns false', async () => {
@@ -214,7 +218,11 @@ describe('POST /api/internal/revalidate-products scoped PDP invalidation', () =>
       })
     );
     expect(chunkRes.status).toBe(200);
-    expect(mockRevalidateProducts).toHaveBeenCalledWith(MERCHANT_ID);
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      MERCHANT_ID,
+      undefined,
+      { expireImmediately: true }
+    );
 
     mockRevalidateProducts.mockClear();
     mockRevalidateProductSlugs

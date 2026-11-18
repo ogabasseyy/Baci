@@ -1,9 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { after } from 'next/server';
 import {
   revalidateProductSlugs,
   revalidateProducts,
 } from './cache-revalidation';
 import { expireProductBlogCache } from './expire-product-blog-cache';
+import { expireProductBlogCacheReliable } from './expire-product-blog-cache-reliable';
 import { scheduleProductBlogPurgeAfterResponse } from './schedule-product-blog-purge-after-response';
 import { scheduleStorefrontProductPurge } from './storefront-product-purge';
 import { scheduleStorefrontHostnamePurge } from './storefront-product-purge-hostnames';
@@ -48,8 +50,38 @@ export function scheduleProductMutationPurge({
   );
   expireProductBlogCache(merchantId);
   if (purgeWholeStorefront) {
-    revalidateProducts(merchantId, undefined, { expireImmediately: true });
-    scheduleStorefrontHostnamePurge(merchantSlug);
+    if (
+      revalidateProducts(merchantId, undefined, { expireImmediately: true }) ===
+      true
+    ) {
+      scheduleStorefrontHostnamePurge(merchantSlug);
+      return;
+    }
+    const runFallback = async () => {
+      try {
+        const expired = await expireProductBlogCacheReliable(merchantId, {
+          expireWidePdpDetails: true,
+        });
+        if (expired) {
+          scheduleStorefrontHostnamePurge(merchantSlug);
+        } else {
+          console.warn(
+            'Skipped mutation hostname purge because PDP hard expiry failed',
+            { merchantId }
+          );
+        }
+      } catch (error) {
+        console.warn(
+          'Skipped mutation hostname purge after reliable expiry error',
+          { merchantId, error }
+        );
+      }
+    };
+    try {
+      after(runFallback);
+    } catch {
+      void runFallback();
+    }
     return;
   }
   scheduleStorefrontProductPurge(merchantSlug, entries);

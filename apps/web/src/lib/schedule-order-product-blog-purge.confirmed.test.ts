@@ -57,10 +57,13 @@ function makeSupabase() {
 describe('scheduleOrderProductBlogPurge confirmed edge eviction', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockRevalidateProducts.mockReturnValue(true);
+    mockRevalidateSlugs.mockReturnValue(true);
     mockGetCloudflarePurgeCredentials.mockReturnValue(undefined);
     mockDelegateStorefrontEdgePurge.mockResolvedValue(false);
     mockEnrichProductPurgeEntries.mockResolvedValue({
       entries: [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
+      authoritativeSlugsById: new Map([['product-1', 'iphone-15']]),
       blogPostSlugs: ['iphone-guide'],
     });
   });

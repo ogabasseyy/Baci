@@ -29,15 +29,15 @@ export function scheduleNewProductCaches({
 }: ScheduleNewProductCachesArgs) {
   const trimmedSlug = slug.trim();
   const purgeSlug = trimmedSlug || productId.trim();
+  const slugInvalidated = purgeSlug
+    ? revalidateProductSlugs(merchantId, [purgeSlug], {
+        expireImmediately: true,
+      }) === true
+    : false;
   revalidateProducts(merchantId, trimmedSlug || undefined, {
     expireImmediately: true,
-    omitMerchantWidePdpDetails: Boolean(purgeSlug),
+    omitMerchantWidePdpDetails: slugInvalidated,
   });
-  if (!trimmedSlug && purgeSlug) {
-    revalidateProductSlugs(merchantId, [purgeSlug], {
-      expireImmediately: true,
-    });
-  }
   try {
     const targetSlug = purgeSlug || productId;
     const purgeEntries = [

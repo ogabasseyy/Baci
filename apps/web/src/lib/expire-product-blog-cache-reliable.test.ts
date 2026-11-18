@@ -95,6 +95,30 @@ describe('expireProductBlogCacheReliable', () => {
     });
   });
 
+  it('forwards omitMerchantWidePdpDetails: false when expireWidePdpDetails is requested', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(new Response(null, { status: 204 }));
+
+    const result = await expireProductBlogCacheReliable('merchant-1', {
+      fetchImpl,
+      baseUrl: 'https://app.usebaci.com',
+      secret: 'internal-secret',
+      productSlugs: ['iphone-15'],
+      expireWidePdpDetails: true,
+    });
+
+    expect(result).toBe(true);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const [, request] = fetchImpl.mock.calls[0] ?? [];
+    expect(JSON.parse(request?.body as string)).toEqual({
+      merchantId: 'merchant-1',
+      expireProductBlogCache: true,
+      omitMerchantWidePdpDetails: false,
+      productSlugs: ['iphone-15'],
+    });
+  });
+
   it('fails open when the internal route is unavailable', async () => {
     // Arrange
     mockRevalidateTag.mockImplementationOnce(() => {

@@ -118,4 +118,43 @@ describe('internal product revalidation blog expiry', () => {
       omitMerchantWidePdpDetails: true,
     });
   });
+
+  it('hard-expires merchant-wide PDP details when omitMerchantWidePdpDetails is explicitly false', async () => {
+    const merchantId = 'merchant-1';
+
+    const response = await POST(
+      request({
+        merchantId,
+        expireProductBlogCache: true,
+        productSlugs: ['iphone-15'],
+        omitMerchantWidePdpDetails: false,
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockExpireProductBlogCache).toHaveBeenCalledWith(merchantId);
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(merchantId, undefined, {
+      expireImmediately: true,
+    });
+  });
+
+  it('falls back to immediate merchant-wide expiry when omitMerchantWidePdpDetails is true and slug expiry fails', async () => {
+    const merchantId = 'merchant-1';
+    mockRevalidateProductSlugs.mockReturnValueOnce(false);
+
+    const response = await POST(
+      request({
+        merchantId,
+        expireProductBlogCache: true,
+        productSlugs: ['iphone-15'],
+        omitMerchantWidePdpDetails: true,
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockExpireProductBlogCache).toHaveBeenCalledWith(merchantId);
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(merchantId, undefined, {
+      expireImmediately: true,
+    });
+  });
 });

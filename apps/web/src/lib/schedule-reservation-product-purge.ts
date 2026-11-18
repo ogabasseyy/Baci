@@ -1,5 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { after } from 'next/server';
+import { revalidateProducts } from './cache-revalidation';
+import { expireProductBlogCacheReliable } from './expire-product-blog-cache-reliable';
 import { scheduleOrderProductBlogPurge } from './schedule-order-product-blog-purge';
 import { scheduleStorefrontHostnamePurge } from './storefront-product-purge-hostnames';
 
@@ -31,18 +33,34 @@ export function scheduleReservationProductPurge({
           settings &&
           typeof settings === 'object' &&
           'prize_product_id' in settings &&
-          typeof settings.prize_product_id === 'string'
+          typeof settings.prize_product_id === 'string' &&
+          settings.prize_product_id.trim().length > 0
         ) {
-          productIds = [settings.prize_product_id];
+          productIds = [settings.prize_product_id.trim()];
         }
+      }
+      if (productIds.length === 0) {
+        throw new Error('Reservation target product unresolved');
       }
       await scheduleOrderProductBlogPurge({ merchantId, productIds, supabase });
     } catch {
-      // The prize-target read failed after the launch path already expired
-      // the Next enrichment: the affected product is unknown, so evict the
-      // merchant hostname (a superset) rather than leaving the Cloudflare
-      // PDP and related article advertising pre-reservation availability
-      // until TTL. There is no durable retry behind this path.
+      // Hard-expire merchant-wide PDP tags before the slug lookup or hostname
+      // purge so Next cannot refill the edge with pre-reservation availability
+      // even if the merchant slug read below fails.
+      const broadPdpExpired =
+        revalidateProducts(merchantId, undefined, {
+          expireImmediately: true,
+        }) === true ||
+        (await expireProductBlogCacheReliable(merchantId, {
+          expireWidePdpDetails: true,
+        }));
+      if (!broadPdpExpired) {
+        console.warn(
+          'Skipped reservation hostname purge because PDP hard expiry failed',
+          { merchantId, sourceId, source }
+        );
+        return;
+      }
       try {
         const { data: merchant, error: merchantError } = await supabase
           .from('merchants')

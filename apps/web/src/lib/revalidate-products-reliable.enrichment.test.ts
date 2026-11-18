@@ -39,6 +39,7 @@ describe('revalidateProductsReliable enrichment path', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRevalidateProducts.mockReturnValue(undefined);
+    mockRevalidateProductSlugs.mockReturnValue(true);
   });
 
   it('forwards linked blog slugs on the in-process import purge path', async () => {
@@ -47,6 +48,7 @@ describe('revalidateProductsReliable enrichment path', () => {
     mockEnrichProductPurgeEntries.mockResolvedValue({
       entries: [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
       resolvedSlugs: ['iphone-15'],
+      authoritativeSlugsById: new Map([['product-id', 'iphone-15']]),
       blogPostSlugs: ['iphone-15-buying-guide'],
     });
 

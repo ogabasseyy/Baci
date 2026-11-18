@@ -20,6 +20,12 @@ interface ReliableBlogCacheExpiryOptions {
    * route, where they are expired in a real request context.
    */
   productSlugs?: readonly (string | null | undefined)[];
+  /**
+   * Forward `omitMerchantWidePdpDetails: false` in the worker fallback so the
+   * internal route also hard-expires merchant-wide PDP details when local
+   * `revalidateProducts` has no request context.
+   */
+  expireWidePdpDetails?: boolean;
 }
 
 /**
@@ -35,7 +41,10 @@ export async function expireProductBlogCacheReliable(
   const normalizedMerchantId = normalizeMerchantId(merchantId);
   if (!normalizedMerchantId) return false;
 
-  if (expireProductBlogCache(normalizedMerchantId)) {
+  if (
+    !options.expireWidePdpDetails &&
+    expireProductBlogCache(normalizedMerchantId)
+  ) {
     return true;
   }
 
@@ -70,12 +79,19 @@ export async function expireProductBlogCacheReliable(
         body: JSON.stringify({
           merchantId: normalizedMerchantId,
           expireProductBlogCache: true,
-          ...(forwardedSlugs.length > 0
+          ...(options.expireWidePdpDetails
             ? {
-                productSlugs: forwardedSlugs,
-                omitMerchantWidePdpDetails: true,
+                omitMerchantWidePdpDetails: false,
+                ...(forwardedSlugs.length > 0
+                  ? { productSlugs: forwardedSlugs }
+                  : {}),
               }
-            : {}),
+            : forwardedSlugs.length > 0
+              ? {
+                  productSlugs: forwardedSlugs,
+                  omitMerchantWidePdpDetails: true,
+                }
+              : {}),
         }),
         signal: AbortSignal.timeout(
           options.timeoutMs ?? DEFAULT_REMOTE_EXPIRY_TIMEOUT_MS

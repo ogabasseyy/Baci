@@ -43,4 +43,24 @@ describe('hasCompleteScopedProductSlugs', () => {
       )
     ).toBe(false);
   });
+
+  it('requires an authoritative row when a product provides both id and slug', () => {
+    expect(
+      hasCompleteScopedProductSlugs(
+        [{ id: 'prod-1', slug: 'iphone-15' }],
+        [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
+        ['iphone-15', 'prod-1'],
+        new Map()
+      )
+    ).toBe(false);
+
+    expect(
+      hasCompleteScopedProductSlugs(
+        [{ id: 'prod-1', slug: 'iphone-15' }],
+        [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
+        ['iphone-15', 'prod-1'],
+        new Map([['prod-1', 'iphone-15']])
+      )
+    ).toBe(true);
+  });
 });

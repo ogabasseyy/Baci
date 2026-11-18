@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockLookup = vi.fn();
 const mockRevalidateProductSlugs = vi.fn();
+const mockRevalidateProducts = vi.fn();
 const mockSchedule = vi.fn();
 const mockHostnamePurge = vi.fn();
 const mockExpire = vi.fn().mockResolvedValue(true);
@@ -9,6 +10,7 @@ const mockExpire = vi.fn().mockResolvedValue(true);
 vi.mock('@/lib/cache-revalidation', () => ({
   revalidateProductSlugs: (...args: unknown[]) =>
     mockRevalidateProductSlugs(...args),
+  revalidateProducts: (...args: unknown[]) => mockRevalidateProducts(...args),
 }));
 vi.mock('@/lib/get-published-blog-post-slugs-for-products', () => ({
   getPublishedBlogPostSlugsForProducts: (...args: unknown[]) =>
@@ -33,6 +35,8 @@ const entries = [{ slug: 'pixel-11', categorySegment: 'smartphones' }];
 describe('scheduleProductBlogPurge lookup failure', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockRevalidateProductSlugs.mockReturnValue(true);
+    mockRevalidateProducts.mockReturnValue(true);
   });
 
   it('still expires and dispatches the entries purge when the slug lookup rejects', async () => {
@@ -54,7 +58,7 @@ describe('scheduleProductBlogPurge lookup failure', () => {
         ['pixel-11'],
         { expireImmediately: true }
       );
-      expect(mockExpire).toHaveBeenCalledWith('merchant-1');
+      expect(mockExpire).toHaveBeenCalledWith('merchant-1', {});
       expect(mockSchedule).toHaveBeenCalledTimes(1);
       expect(mockSchedule).toHaveBeenCalledWith('store', entries);
       expect(mockHostnamePurge).not.toHaveBeenCalled();

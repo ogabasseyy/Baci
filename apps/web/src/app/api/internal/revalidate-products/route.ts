@@ -148,20 +148,27 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     });
   } else if (shouldExpireProductBlogCache) {
     expireProductBlogCache(merchantId);
+    if (
+      callerOmitMerchantWidePdpDetails === false ||
+      (callerOmitMerchantWidePdpDetails === true &&
+        !hasProducts &&
+        !purgeWholeStorefront)
+    ) {
+      revalidateProducts(merchantId, undefined, { expireImmediately: true });
+    }
   } else if (!hasProducts || purgeWholeStorefront) {
-    revalidateProducts(merchantId);
+    if (callerOmitMerchantWidePdpDetails === true) {
+      revalidateProducts(merchantId, undefined, { expireImmediately: true });
+    } else {
+      revalidateProducts(merchantId);
+    }
   }
   if (hasProducts && products) {
     let revalidatedDeferredProducts = false;
     try {
       if (purgeWholeStorefront) {
-        // Whole-storefront purges ignore per-product entries and blog slugs
-        // (the route hostname-purges below), so skip the paginated article
-        // lookups — on a large catalog/blog they can exceed the worker's
-        // fallback timeout before the hostname purge is scheduled. The
-        // per-slug Next bust still runs from the caller-supplied hints
-        // (explicit productSlugs were busted above). Hard-expire when the
-        // hostname purge below will fire so it cannot refill from SWR.
+        // Whole-storefront purges skip article lookups and bust caller hints;
+        // hard-expire when a hostname purge follows so SWR cannot re-seed CF.
         const hintSlugs = collectResolvedProductSlugs(products);
         if (authoritativeMerchantSlug) {
           revalidateProductSlugs(merchantId, hintSlugs, {
@@ -171,14 +178,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           revalidateProductSlugs(merchantId, hintSlugs);
         }
       } else {
-        // Enrich from the product ROWS with the SAME resolution
-        // `/api/cache/revalidate` performs, so an {id}-only import/save entry
-        // purges the real slug/category URLs (not `/products/<uuid>`). Public
-        // client: this route intentionally uses no service-role credentials,
-        // and the anon policy exposes only ACTIVE rows, which is sufficient —
-        // draft/pending PDPs are never publicly cached, so an unresolved row
-        // simply falls back to the caller's hints + the always-purged
-        // fallback URLs. Fail-open lives inside the enrichment.
+        // Resolve authoritative active product rows under anon RLS (no service role).
         const purgeClient =
           supabase ??
           createPublicClient({
@@ -191,12 +191,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           blogPostSlugs,
           blogPostSlugsIncomplete,
         } = await enrichProductPurgeEntries(purgeClient, merchantId, products);
-        // Bust the per-slug Next product-detail caches for every resolved slug
-        // BEFORE scheduling the edge purge: the PDP snapshot is tagged per-slug
-        // and is NOT invalidated by the slug-less revalidateProducts above, so a
-        // Cloudflare MISS would otherwise refill from stale Next data until TTL.
-        // Hard-expire when the purge below will fire; SWR would serve the
-        // pre-mutation snapshot to the first post-purge request.
+        // Hard-expire per-slug PDP tags before edge purging so SWR cannot re-seed CF.
         const bustSlugs = Array.from(
           new Set([...(productSlugs ?? []), ...resolvedSlugs])
         );
@@ -256,7 +251,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         !purgeWholeStorefront &&
         !revalidatedDeferredProducts
       ) {
-        revalidateProducts(merchantId);
+        if (callerOmitMerchantWidePdpDetails === true) {
+          revalidateProducts(merchantId, undefined, {
+            expireImmediately: true,
+          });
+        } else {
+          revalidateProducts(merchantId);
+        }
       }
       logger.error({
         message: 'Skipped Cloudflare product purge in revalidate-products',

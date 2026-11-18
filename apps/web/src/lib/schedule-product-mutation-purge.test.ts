@@ -1,13 +1,22 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const mockAfter = vi.fn();
 const mockRevalidateProductSlugs = vi.fn();
 const mockRevalidateProducts = vi.fn();
 const mockScheduleStorefrontProductPurge = vi.fn();
 const mockScheduleProductBlogPurgeAfterResponse = vi.fn();
 const mockExpire = vi.fn();
+const mockExpireReliable = vi.fn();
 const mockHostnamePurge = vi.fn();
+vi.mock('next/server', () => ({
+  after: (...args: unknown[]) => mockAfter(...args),
+}));
 vi.mock('./expire-product-blog-cache', () => ({
   expireProductBlogCache: (...args: unknown[]) => mockExpire(...args),
+}));
+vi.mock('./expire-product-blog-cache-reliable', () => ({
+  expireProductBlogCacheReliable: (...args: unknown[]) =>
+    mockExpireReliable(...args),
 }));
 vi.mock('./storefront-product-purge-hostnames', () => ({
   scheduleStorefrontHostnamePurge: (...args: unknown[]) =>
@@ -31,6 +40,13 @@ vi.mock('./storefront-product-purge', () => ({
 import { scheduleProductMutationPurge } from './schedule-product-mutation-purge';
 
 describe('scheduleProductMutationPurge', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockRevalidateProducts.mockReturnValue(true);
+    mockRevalidateProductSlugs.mockReturnValue(true);
+    mockExpireReliable.mockResolvedValue(true);
+  });
+
   it('expires enrichment before a complete purge for incomplete delete snapshots', () => {
     scheduleProductMutationPurge({
       supabase: {} as never,
@@ -91,5 +107,51 @@ describe('scheduleProductMutationPurge', () => {
     expect(mockRevalidateProductSlugs.mock.invocationCallOrder[0]).toBeLessThan(
       mockScheduleStorefrontProductPurge.mock.invocationCallOrder[0]
     );
+  });
+
+  it('defers reliable PDP expiry before hostname purge when local broad expiry fails', async () => {
+    mockRevalidateProducts.mockReturnValueOnce(false);
+    scheduleProductMutationPurge({
+      supabase: {} as never,
+      merchantId: 'm1',
+      merchantSlug: 'store',
+      productIds: ['p1'],
+      entries: [],
+      purgeWholeStorefront: true,
+    });
+
+    expect(mockHostnamePurge).not.toHaveBeenCalled();
+    await mockAfter.mock.calls[0][0]();
+    expect(mockExpireReliable).toHaveBeenCalledWith('m1', {
+      expireWidePdpDetails: true,
+    });
+    expect(mockHostnamePurge).toHaveBeenCalledWith('store');
+  });
+
+  it('skips hostname purge when reliable broad PDP expiry also fails', async () => {
+    mockRevalidateProducts.mockReturnValueOnce(false);
+    mockExpireReliable.mockResolvedValueOnce(false);
+    const warnSpy = vi
+      .spyOn(console, 'warn')
+      .mockImplementation(() => undefined);
+    try {
+      scheduleProductMutationPurge({
+        supabase: {} as never,
+        merchantId: 'm1',
+        merchantSlug: 'store',
+        productIds: ['p1'],
+        entries: [],
+        purgeWholeStorefront: true,
+      });
+
+      await mockAfter.mock.calls[0][0]();
+      expect(mockHostnamePurge).not.toHaveBeenCalled();
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Skipped mutation hostname purge because PDP hard expiry failed',
+        expect.objectContaining({ merchantId: 'm1' })
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 });

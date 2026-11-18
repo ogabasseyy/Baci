@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockLookup = vi.fn();
 const mockRevalidateProductSlugs = vi.fn();
+const mockRevalidateProducts = vi.fn();
 const mockSchedule = vi.fn();
 const mockHostnamePurge = vi.fn();
 const mockExpire = vi.fn().mockResolvedValue(true);
@@ -9,6 +10,7 @@ const mockExpire = vi.fn().mockResolvedValue(true);
 vi.mock('@/lib/cache-revalidation', () => ({
   revalidateProductSlugs: (...args: unknown[]) =>
     mockRevalidateProductSlugs(...args),
+  revalidateProducts: (...args: unknown[]) => mockRevalidateProducts(...args),
 }));
 vi.mock('@/lib/get-published-blog-post-slugs-for-products', () => ({
   getPublishedBlogPostSlugsForProducts: (...args: unknown[]) =>
@@ -47,6 +49,8 @@ function makeBlogPostIdSupabase(rows: unknown[], error: unknown = null) {
 describe('scheduleProductBlogPurge', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockRevalidateProductSlugs.mockReturnValue(true);
+    mockRevalidateProducts.mockReturnValue(true);
     mockLookup.mockResolvedValue({ slugs: [], incomplete: false });
   });
 
@@ -82,7 +86,7 @@ describe('scheduleProductBlogPurge', () => {
     expect(mockSchedule).toHaveBeenCalledWith('store', entries, {
       blogPostSlugs: ['Pixel-Guide', 'pixel-guide'],
     });
-    expect(mockExpire).toHaveBeenCalledWith('merchant-1');
+    expect(mockExpire).toHaveBeenCalledWith('merchant-1', {});
   });
 
   it('uses a pre-delete snapshot without querying cascaded relationships', async () => {
@@ -193,7 +197,7 @@ describe('scheduleProductBlogPurge', () => {
     expect(mockSchedule).not.toHaveBeenCalled();
     expect(mockHostnamePurge).not.toHaveBeenCalled();
     expect(mockExpire).toHaveBeenCalledTimes(3);
-    expect(mockExpire).toHaveBeenCalledWith('merchant-1');
+    expect(mockExpire).toHaveBeenCalledWith('merchant-1', {});
   });
 
   it('can resolve linked posts after an immediate product purge without duplicating an empty purge', async () => {
@@ -206,7 +210,7 @@ describe('scheduleProductBlogPurge', () => {
       skipWhenNoLinkedPosts: true,
     });
 
-    expect(mockExpire).toHaveBeenCalledWith('merchant-1');
+    expect(mockExpire).toHaveBeenCalledWith('merchant-1', {});
     expect(mockSchedule).not.toHaveBeenCalled();
   });
 
@@ -297,5 +301,32 @@ describe('scheduleProductBlogPurge', () => {
     ).resolves.toBeUndefined();
 
     expect(mockSchedule).toHaveBeenCalledWith('store', entries);
+  });
+
+  it('falls back to broad PDP hard expiry and skips edge purge if both local and reliable expiry fail', async () => {
+    mockRevalidateProductSlugs.mockReturnValueOnce(false);
+    mockRevalidateProducts.mockReturnValueOnce(false);
+    mockExpire.mockResolvedValueOnce(false);
+
+    await scheduleProductBlogPurge({
+      supabase,
+      merchantId: 'merchant-1',
+      merchantSlug: 'store',
+      productIds: ['product-1'],
+      entries,
+    });
+
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      'merchant-1',
+      undefined,
+      {
+        expireImmediately: true,
+      }
+    );
+    expect(mockExpire).toHaveBeenCalledWith('merchant-1', {
+      productSlugs: ['pixel-11'],
+      expireWidePdpDetails: true,
+    });
+    expect(mockSchedule).not.toHaveBeenCalled();
   });
 });

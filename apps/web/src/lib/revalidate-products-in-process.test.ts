@@ -89,12 +89,50 @@ describe('revalidateProductsInProcess', () => {
     });
 
     expect(mockRevalidateProducts).toHaveBeenCalledTimes(1);
-    expect(mockRevalidateProducts).toHaveBeenCalledWith('merchant-1');
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      'merchant-1',
+      undefined,
+      { omitMerchantWidePdpDetails: true }
+    );
     expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
       'merchant-1',
       ['prod-1', 'iphone-15'],
       { expireImmediately: true }
     );
+  });
+
+  it('throws before edge purging when merchant-wide hard expiry returns false', async () => {
+    mockRevalidateProductSlugs.mockReturnValueOnce(false);
+    mockRevalidateProducts.mockReturnValueOnce(false);
+    mockEnrich.mockResolvedValue({
+      entries: [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
+      resolvedSlugs: ['iphone-15'],
+      authoritativeSlugsById: new Map([['prod-1', 'iphone-15']]),
+      blogPostSlugs: [],
+      blogPostSlugsIncomplete: false,
+    });
+
+    await expect(
+      revalidateProductsInProcess({
+        merchantId: 'merchant-1',
+        merchantSlug: 'ogabassey',
+        products: [{ id: 'prod-1' }],
+        nextProductSlugs: [],
+        supabase: {} as never,
+      })
+    ).rejects.toThrow('Merchant-wide product hard expiry failed');
+    expect(mockPurgeProduct).not.toHaveBeenCalled();
+
+    mockRevalidateProducts.mockReturnValueOnce(false);
+    await expect(
+      revalidateProductsInProcess({
+        merchantId: 'merchant-1',
+        merchantSlug: 'ogabassey',
+        nextProductSlugs: [],
+        purgeWholeStorefront: true,
+      })
+    ).rejects.toThrow('Merchant-wide product hard expiry failed');
+    expect(mockPurgeHostname).not.toHaveBeenCalled();
   });
 
   it('hard-expires merchant-wide PDP details when scoped slug revalidation returns false', async () => {

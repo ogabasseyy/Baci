@@ -32,6 +32,19 @@ export function hasCompleteScopedProductSlugs(
       if (!entrySlugSet.has(callerSlug) || !resolvedSet.has(callerSlug)) {
         return false;
       }
+      if (productId) {
+        const authoritativeSlug = authoritativeSlugsById
+          ?.get(productId)
+          ?.trim();
+        if (
+          !authoritativeSlug ||
+          authoritativeSlug === productId ||
+          !entrySlugSet.has(authoritativeSlug) ||
+          !resolvedSet.has(authoritativeSlug)
+        ) {
+          return false;
+        }
+      }
       continue;
     }
 

@@ -10,6 +10,12 @@ export type WalletSavingsProgressModalProps = {
   goal: WalletActiveSavingsGoal | null;
   isAdding: boolean;
   hasPendingContribution?: boolean;
+  /** A status read for the pending contribution is running. */
+  isCheckingContribution?: boolean;
+  /** The pending card retries the same request instead of reading status. */
+  isContributionRetry?: boolean;
+  /** Reads the pending contribution's status; never starts a payment. */
+  onCheckContribution?: () => unknown;
   isFundPending?: boolean;
   onAddAmountChange: (value: string) => void;
   onAddSavings: () => void;

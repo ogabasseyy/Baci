@@ -477,6 +477,8 @@ jobs:
         run: PATH="/usr/lib/postgresql/18/bin:$PATH" bash supabase/tests/oxygen_payment_rail_origin.sh
       - name: Test interrupted Oxygen eligibility status recovery
         run: PATH="/usr/lib/postgresql/18/bin:$PATH" bash supabase/tests/oxygen_interrupted_eligibility_read.sh
+      - name: Test Oxygen eligibility failure migration guard
+        run: PATH="/usr/lib/postgresql/18/bin:$PATH" bash supabase/tests/oxygen_eligibility_failure_reason_guard.sh
       # Every replay SQL suite is registered in
       # apps/web/tools/db/replay-registry/*/sql-checks.txt, one folder per
       # change, and --sql-check-registry expands them in sorted folder

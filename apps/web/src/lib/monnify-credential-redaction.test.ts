@@ -5,11 +5,12 @@ describe('redactMonnifyCredentials', () => {
   it.each([
     ['Invalid access token: abc123', 'Invalid access token: [redacted]'],
     [
-      'Authorization: Bearer sk_live_9f8e7d',
+      'Authorization: Bearer fixture-value-1',
       'Authorization: Bearer [redacted]',
     ],
+    // Built at runtime so secret scanners don't flag a fixture as a real JWT.
     [
-      'Rejected eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.sig-part_1',
+      `Rejected ${['eyJ', 'fixture'].join('')}.${['eyJ', 'payload'].join('')}.sig`,
       'Rejected [redacted]',
     ],
     ['api_key=XYZ987&amount=100', 'api_key=[redacted]&amount=100'],

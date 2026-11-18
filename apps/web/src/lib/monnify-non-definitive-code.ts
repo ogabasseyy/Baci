@@ -9,7 +9,7 @@ const NON_DEFINITIVE_CODE = /^0*(?:99|408|409|429|5\d\d)$/;
  * generic status / statusCode (a numeric 408 there is a timeout, not data).
  */
 const RESPONSE_CODE_KEY =
-  /^(?:(?:response|error|result|status|http)?code|(?:http)?status(?:code)?)$/;
+  /^(?:(?:response|error|result|status|http)?code|(?:http|response|result)?status(?:code)?)$/;
 const MAX_DEPTH = 6;
 
 function isNonDefinitiveValue(value: unknown): boolean {

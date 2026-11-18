@@ -19,6 +19,9 @@ describe('mentionsMonnifyVendEvidence', () => {
     'payment_status=FAILED',
     'receiptNumber=RCPT-1&message=Insufficient wallet balance',
     'invoice_id=INV-9',
+    'transactionRef=MFBP-1&message=Insufficient wallet balance',
+    'vendRef=MFBP-1',
+    'paymentRef: MFBP-1',
   ])('sees vend evidence in %s', (text) => {
     expect(mentionsMonnifyVendEvidence(text)).toBe(true);
   });

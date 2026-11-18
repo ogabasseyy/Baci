@@ -3,6 +3,9 @@ import { getCategoryPageDataCacheTag } from '@/lib/category-page-cache-tags';
 import { logger } from '@/lib/logger';
 import { normalizeMerchantId } from '@/lib/normalize-merchant-id';
 import {
+  getProductCanonicalRedirectCacheTag,
+  getProductDetailsCacheTag,
+  getProductLegacyRedirectCacheTag,
   getProductScopedCacheTag,
   getProductSlugSetCacheTag,
 } from '@/lib/product-cache-tags';
@@ -87,12 +90,19 @@ function getMerchantFeedTagEntries(
   options: ProductRevalidationOptions
 ): ProductTagEntry[] {
   const profile = resolveProfile('products', options);
-  return [
-    { profile, tag: 'google-merchant-feed' },
-    { profile, tag: 'openai-product-feed' },
+  const entries: ProductTagEntry[] = [
     { profile, tag: `merchant-feed-${normalizedMerchantId}` },
     { profile, tag: `merchant-feed-review-signals-${normalizedMerchantId}` },
   ];
+
+  if (options.feedScope === 'all') {
+    entries.push(
+      { profile, tag: 'google-merchant-feed' },
+      { profile, tag: 'openai-product-feed' }
+    );
+  }
+
+  return entries;
 }
 
 function revalidateMerchantFeed(
@@ -166,9 +176,11 @@ function revalidateProducts(
       ),
     });
   }
-
   entries.push(
-    { profile: productsProfile, tag: 'product-details' },
+    {
+      profile: productsProfile,
+      tag: getProductDetailsCacheTag(normalizedMerchantId),
+    },
     {
       profile: storefrontProfile,
       tag: getCategoryPageDataCacheTag(normalizedMerchantId),
@@ -181,20 +193,27 @@ function revalidateProducts(
       profile: productsProfile,
       tag: getProductSlugSetCacheTag(normalizedMerchantId),
     },
-    { profile: productsProfile, tag: 'product-canonical-redirect' },
-    { profile: productsProfile, tag: 'product-legacy-redirect' }
+    {
+      profile: productsProfile,
+      tag: getProductCanonicalRedirectCacheTag(normalizedMerchantId),
+    },
+    {
+      profile: productsProfile,
+      tag: getProductLegacyRedirectCacheTag(normalizedMerchantId),
+    }
   );
 
-  const feedScope = options.feedScope ?? 'all';
-  if (feedScope === 'all') {
-    entries.push(...getMerchantFeedTagEntries(normalizedMerchantId, options));
-  } else if (feedScope === 'merchant') {
-    // The merchant-scoped tag is sufficient to evict this merchant's Google
-    // and OpenAI feed entries without churning every merchant's feed cache.
-    entries.push({
-      profile: productsProfile,
-      tag: `merchant-feed-${normalizedMerchantId}`,
-    });
+  const feedScope = options.feedScope ?? 'merchant';
+  if (feedScope === 'all' || feedScope === 'merchant') {
+    // Merchant-scoped feed tags evict this merchant's Google and OpenAI feed
+    // entries (including review signals) without churning every other store;
+    // global feed tags are only included when feedScope is explicitly 'all'.
+    entries.push(
+      ...getMerchantFeedTagEntries(normalizedMerchantId, {
+        ...options,
+        feedScope,
+      })
+    );
   }
 
   entries.push({

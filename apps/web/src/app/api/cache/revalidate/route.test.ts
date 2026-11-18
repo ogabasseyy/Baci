@@ -573,7 +573,7 @@ describe('POST /api/cache/revalidate', () => {
         'products'
       );
       expect(mockRevalidateTag).toHaveBeenCalledWith(
-        'product-details',
+        `product-details-${MERCHANT_ID}`,
         'products'
       );
       expect(mockRevalidateTag).toHaveBeenCalledWith(
@@ -1165,7 +1165,7 @@ describe('POST /api/cache/revalidate', () => {
         'products'
       );
       expect(mockRevalidateTag).toHaveBeenCalledWith(
-        'product-details',
+        `product-details-${MERCHANT_ID}`,
         'products'
       );
       expect(mockRevalidateTag).toHaveBeenCalledWith(

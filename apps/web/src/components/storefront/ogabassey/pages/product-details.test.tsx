@@ -140,4 +140,34 @@ describe('OgabasseyV2ProductDetails', () => {
     expect(onSubmit).not.toHaveBeenCalled();
     expect(mocks.toggleSaved).toHaveBeenCalled();
   });
+
+  it('keeps the quantity input focused when Enter confirms IME composition', () => {
+    mocks.cart = [
+      {
+        id: 1,
+        quantity: 2,
+        variantAttributes: { color: 'Natural Titanium', storage: '256GB' },
+      },
+    ];
+    render(<OgabasseyV2ProductDetails productId="1" />);
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Select color Natural Titanium' })
+    );
+    fireEvent.click(screen.getByRole('button', { name: '256GB' }));
+
+    const input = screen.getByRole('textbox', { name: 'Quantity' });
+    input.focus();
+    expect(input).toHaveFocus();
+
+    expect(fireEvent.keyDown(input, { key: 'Enter', isComposing: true })).toBe(
+      false
+    );
+    expect(fireEvent.keyDown(input, { key: 'Enter', keyCode: 229 })).toBe(
+      false
+    );
+    expect(input).toHaveFocus();
+
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(input).not.toHaveFocus();
+  });
 });

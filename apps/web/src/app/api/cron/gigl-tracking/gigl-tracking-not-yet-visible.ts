@@ -8,7 +8,7 @@ import type { Database } from '@/types/supabase';
 // the monitor go dormant until a GIG webhook or the safety check wakes it.
 // Reusing the existing lease-bound RPC keeps the worker's capability set
 // unchanged. Keep this text in sync with the migration
-// 20261115120000_gigl_tracking_trigger_driven_polling.sql.
+// 20261118092500_gigl_tracking_trigger_driven_polling.sql.
 export const GIGL_WAYBILL_NOT_YET_VISIBLE = 'GIGL waybill not yet visible';
 
 type QuietPollMonitor = {

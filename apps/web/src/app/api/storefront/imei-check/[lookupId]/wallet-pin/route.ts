@@ -8,11 +8,11 @@ import { resolvePrimaryWalletIdentity } from '@/lib/piggyvest/primary-wallet-ide
 import { readWalletPayRuntime } from '@/lib/piggyvest/wallet-pay-runtime';
 import { walletPayScope } from '@/lib/piggyvest/wallet-pay-scope';
 import { readWalletPayPinBinding } from '@/lib/piggyvest/wallet-pay-service';
+import { walletPinVerificationResponse } from '@/lib/piggyvest/wallet-pin-response';
 import { checkRateLimit, createRateLimitResponse } from '@/lib/rate-limit';
 import { chargeWalletPinCustomerLimit } from '@/lib/wallet-pin/wallet-pin-customer-limit';
 import { imeiWalletPaySchemas } from '@/schemas/imei-wallet-pay';
 import { lookupPriceKobo } from '../../wallet-pay/deliver-paid-imei-lookup';
-import { walletPinVerificationResponse } from './wallet-pin-response';
 
 const NO_STORE = { 'Cache-Control': 'no-store' };
 

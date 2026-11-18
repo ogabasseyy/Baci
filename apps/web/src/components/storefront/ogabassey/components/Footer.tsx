@@ -142,6 +142,7 @@ export const Footer: React.FC<FooterProps> = ({ merchant, storeSlug }) => {
           <div className="space-y-4">
             <Link
               href={asRoute(basePath || '/')}
+              prefetch={false}
               className="flex items-center cursor-pointer select-none"
             >
               <Logo className="h-8 w-auto" />
@@ -197,12 +198,12 @@ export const Footer: React.FC<FooterProps> = ({ merchant, storeSlug }) => {
                 Menu
               </h3>
               <ul className="space-y-2 text-xs text-current/65">
-                <li><Link href={asRoute(`${basePath}/products`)} className={FOOTER_TEXT_LINK_CLASS}>All Products</Link></li>
-                <li><Link href={asRoute(`${basePath}/swap`)} className={FOOTER_TEXT_LINK_CLASS}>Swap / Trade-in</Link></li>
-                <li><Link href={asRoute(`${basePath}/imei-check`)} className={FOOTER_TEXT_LINK_CLASS}>IMEI Checker</Link></li>
-                <li><Link href={asRoute(`${basePath}/repairs`)} className={FOOTER_TEXT_LINK_CLASS}>Repairs</Link></li>
-                <li><Link href={asRoute(`${basePath}/blog`)} className={FOOTER_TEXT_LINK_CLASS}>Blog</Link></li>
-                <li><Link href={asRoute(`${basePath}/about`)} className={FOOTER_TEXT_LINK_CLASS}>About Us</Link></li>
+                <li><Link href={asRoute(`${basePath}/products`)} prefetch={false} className={FOOTER_TEXT_LINK_CLASS}>All Products</Link></li>
+                <li><Link href={asRoute(`${basePath}/swap`)} prefetch={false} className={FOOTER_TEXT_LINK_CLASS}>Swap / Trade-in</Link></li>
+                <li><Link href={asRoute(`${basePath}/imei-check`)} prefetch={false} className={FOOTER_TEXT_LINK_CLASS}>IMEI Checker</Link></li>
+                <li><Link href={asRoute(`${basePath}/repairs`)} prefetch={false} className={FOOTER_TEXT_LINK_CLASS}>Repairs</Link></li>
+                <li><Link href={asRoute(`${basePath}/blog`)} prefetch={false} className={FOOTER_TEXT_LINK_CLASS}>Blog</Link></li>
+                <li><Link href={asRoute(`${basePath}/about`)} prefetch={false} className={FOOTER_TEXT_LINK_CLASS}>About Us</Link></li>
               </ul>
             </div>
             <div>
@@ -210,14 +211,14 @@ export const Footer: React.FC<FooterProps> = ({ merchant, storeSlug }) => {
                 Support
               </h3>
               <ul className="space-y-2 text-xs text-current/65">
-                <li><Link href={asRoute(`${basePath}/track-order`)} className={FOOTER_TEXT_LINK_CLASS}>Track Order</Link></li>
-                <li><Link href={asRoute(`${basePath}/faq`)} className={FOOTER_TEXT_LINK_CLASS}>Help Center</Link></li>
-                <li><Link href={asRoute(`${basePath}/contact`)} className={FOOTER_TEXT_LINK_CLASS}>Contact Us</Link></li>
-                <li><Link href={asRoute(`${basePath}/terms`)} className={FOOTER_TEXT_LINK_CLASS}>Terms of Service</Link></li>
-                <li><Link href={asRoute(`${basePath}/privacy`)} className={FOOTER_TEXT_LINK_CLASS}>Privacy Policy</Link></li>
+                <li><Link href={asRoute(`${basePath}/track-order`)} prefetch={false} className={FOOTER_TEXT_LINK_CLASS}>Track Order</Link></li>
+                <li><Link href={asRoute(`${basePath}/faq`)} prefetch={false} className={FOOTER_TEXT_LINK_CLASS}>Help Center</Link></li>
+                <li><Link href={asRoute(`${basePath}/contact`)} prefetch={false} className={FOOTER_TEXT_LINK_CLASS}>Contact Us</Link></li>
+                <li><Link href={asRoute(`${basePath}/terms`)} prefetch={false} className={FOOTER_TEXT_LINK_CLASS}>Terms of Service</Link></li>
+                <li><Link href={asRoute(`${basePath}/privacy`)} prefetch={false} className={FOOTER_TEXT_LINK_CLASS}>Privacy Policy</Link></li>
                 {trustLinks.map((link) => (
                   <li key={link.label}>
-                    <Link href={link.href} className={FOOTER_TEXT_LINK_CLASS}>
+                    <Link href={link.href} prefetch={false} className={FOOTER_TEXT_LINK_CLASS}>
                       {link.label}
                     </Link>
                   </li>

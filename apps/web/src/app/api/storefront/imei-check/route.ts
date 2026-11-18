@@ -8,7 +8,7 @@ import {
   resolveInputIdentifier,
 } from '@baci/shared/imei';
 import type { NextRequest } from 'next/server';
-import { getImeiHashSalt, getRootDomain } from '@/env';
+import { getRootDomain } from '@/env';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
 import {
@@ -20,7 +20,10 @@ import { checkRateLimit, createRateLimitResponse } from '@/lib/rate-limit';
 import { resolveStorefrontMerchantFromRequest } from '@/lib/storefront-merchant';
 import { imeiCheckSchema } from '@/schemas/imei-check';
 import { createImeiCapabilitiesHandler } from './capabilities-handler';
-import { imeiProviderConfiguration } from './imei-provider-configuration';
+import {
+  getImeiHashSalt,
+  imeiProviderConfiguration,
+} from './imei-provider-configuration';
 import { prepareImeiProvider } from './prepare-imei-provider';
 import {
   errorBody,

@@ -1,8 +1,33 @@
 import type { MetadataRoute } from 'next';
+import { cacheLife, cacheTag } from 'next/cache';
 import { headers } from 'next/headers';
 import { getMerchantByIdentifier } from '@/lib/cached-data';
 import { isRepairsCatalogEnabled } from '@/lib/repairs/repairs-feature';
 import { resolveRouteIdentifier } from '@/lib/storefront-route-identifier';
+
+async function getCachedMerchantRobotsFlags(routeIdentifier: string): Promise<{
+  blogEnabled: boolean;
+  repairsEnabled: boolean;
+}> {
+  'use cache';
+
+  cacheLife('merchant');
+  cacheTag('merchants', `merchant-${routeIdentifier}`);
+
+  const merchant = await getMerchantByIdentifier(routeIdentifier);
+  if (!merchant?.id) {
+    return { blogEnabled: false, repairsEnabled: false };
+  }
+
+  cacheTag(`merchant-id-${merchant.id}`);
+  return {
+    blogEnabled: Boolean(merchant.feature_settings?.blog_enabled),
+    repairsEnabled: isRepairsCatalogEnabled({
+      businessType: merchant.business_type,
+      repairsCatalogEnabled: merchant.feature_settings?.repairs_catalog_enabled,
+    }),
+  };
+}
 
 export const STOREFRONT_DISALLOWED_PATHS = [
   '/api/',
@@ -99,15 +124,9 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
       const routeIdentifier =
         legacyBlogHostname ?? resolveRouteIdentifier(headersList);
       if (routeIdentifier) {
-        const merchant = await getMerchantByIdentifier(routeIdentifier);
-        if (merchant?.id) {
-          blogEnabled = Boolean(merchant.feature_settings?.blog_enabled);
-          repairsEnabled = isRepairsCatalogEnabled({
-            businessType: merchant.business_type,
-            repairsCatalogEnabled:
-              merchant.feature_settings?.repairs_catalog_enabled,
-          });
-        }
+        const flags = await getCachedMerchantRobotsFlags(routeIdentifier);
+        blogEnabled = flags.blogEnabled;
+        repairsEnabled = flags.repairsEnabled;
       }
     } catch (error) {
       console.warn('robots.ts: failed to resolve blog feature flag', { error });

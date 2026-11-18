@@ -31,31 +31,39 @@
  */
 
 import { createAnonClient } from '@/lib/supabase/anon';
+import { createBackgroundRefresher } from './background-refresh';
+import { SingleFlight } from './single-flight';
+import { invalidateSlugLiveness, isSlugLive } from './slug-liveness-cache';
 
 interface AliasMappingEntry {
   currentSlug: string | null;
   timestamp: number;
+  /** A failed lookup recorded as "not an alias": never served past its TTL. */
+  failed?: boolean;
 }
 
-interface LivenessEntry {
-  isLive: boolean;
-  timestamp: number;
-}
+/** A lenient lookup that could not reach or read the alias table. */
+const LOOKUP_FAILED = Symbol('alias lookup failed');
 
 // old_slug -> merchant's current slug (or null when not a retired alias).
 const aliasMappingCache = new Map<string, AliasMappingEntry>();
-// slug -> whether a live merchant currently owns it.
-const livenessCache = new Map<string, LivenessEntry>();
+let invalidationEpoch = 0;
+const refreshInBackground = createBackgroundRefresher('Slug Alias Cache');
+// Concurrent lenient misses for one slug share a read. The epoch is in the
+// key so a request arriving after a rename never joins a read from before it.
+const lenientLoads = new SingleFlight<string | null>();
 
 // Confirmed alias -> current slug is stable; cache it a while.
 const POSITIVE_TTL = 120_000; // 2 minutes
 // "Not an alias" must expire quickly so a fresh rename starts redirecting fast.
 const NEGATIVE_TTL = 30_000; // 30 seconds
-// Liveness can flip the instant a merchant renames BACK to a retired slug. This
-// is BOTH the redirect-loop residual bound (a rename-back can be served stale
-// for at most this long) AND the liveness DB-read-rate knob under bot floods.
-// Keep it small; raising it toward POSITIVE_TTL re-grows the loop window.
-const LIVENESS_TTL = 10_000; // 10 seconds
+// An expired "not an alias" answer is still served, while it is re-checked in
+// the background, until it is this old. Every live storefront request asks
+// this question, so without it one request per instance pays a database round
+// trip (56-122 ms measured) every NEGATIVE_TTL. The cost: after a rename, each
+// instance answers one more request from the old "not an alias" entry before
+// its redirect starts. Redirect targets (positives) are never served expired.
+const NEGATIVE_STALE_LIMIT = 300_000; // 5 minutes
 const MAX_CACHE_SIZE = 1000;
 
 /**
@@ -68,8 +76,11 @@ const MAX_CACHE_SIZE = 1000;
  * negative TTL).
  */
 export function invalidateAliasCacheForSlug(slug: string): void {
+  // An alias read already in flight predates this rename: its result must
+  // not be written back over the cleared entries.
+  invalidationEpoch += 1;
   aliasMappingCache.delete(slug);
-  livenessCache.delete(slug);
+  invalidateSlugLiveness(slug);
   // Also drop mapping entries whose cached CURRENT-slug value IS this slug. On a
   // repeat rename (X->Y then Y->Z), an older alias cached as `oldAlias -> Y` now
   // points at a retired slug; left stale it would fail the custom-domain
@@ -130,7 +141,7 @@ export async function getCurrentSlugForAliasStrict(
   return currentSlug;
 }
 
-async function resolveAliasMapping(
+function resolveAliasMapping(
   oldSlug: string,
   strict = false
 ): Promise<string | null> {
@@ -143,25 +154,65 @@ async function resolveAliasMapping(
   if (!strict) {
     const cached = aliasMappingCache.get(oldSlug);
     if (cached) {
+      const age = Date.now() - cached.timestamp;
       const ttl = cached.currentSlug === null ? NEGATIVE_TTL : POSITIVE_TTL;
-      if (Date.now() - cached.timestamp < ttl) {
-        return cached.currentSlug;
+      if (age < ttl) return Promise.resolve(cached.currentSlug);
+      if (
+        cached.currentSlug === null &&
+        !cached.failed &&
+        age < NEGATIVE_STALE_LIMIT
+      ) {
+        // Captured now, not when the refresh starts: a rename that lands
+        // in between must stop this refresh writing its answer back.
+        const epoch = invalidationEpoch;
+        // Keyed with the epoch, as lenientLoads is: after any rename the next
+        // request starts its own re-check instead of joining a discarded one.
+        refreshInBackground(`${oldSlug}:${epoch}`, () =>
+          // Already overtaken by a rename: skip the wasted database read.
+          epoch === invalidationEpoch
+            ? loadAliasMapping(oldSlug, false, epoch, true)
+            : Promise.resolve(null)
+        );
+        return Promise.resolve(null);
       }
     }
   }
+  const epoch = invalidationEpoch;
+  if (strict) return loadAliasMapping(oldSlug, true, epoch);
+  return lenientLoads.run(`${oldSlug}:${epoch}`, () =>
+    loadAliasMapping(oldSlug, false, epoch)
+  );
+}
 
+async function loadAliasMapping(
+  oldSlug: string,
+  strict: boolean,
+  epoch: number,
+  keepEntryOnFailure = false
+): Promise<string | null> {
   // Strict failures throw before reaching the cache write, so a
   // transient blip is never cached as a negative.
-  const currentSlug = await fetchAliasMapping(oldSlug, strict);
-  evictIfFull(aliasMappingCache);
-  aliasMappingCache.set(oldSlug, { currentSlug, timestamp: Date.now() });
+  const result = await fetchAliasMapping(oldSlug, strict);
+  const failed = result === LOOKUP_FAILED;
+  const currentSlug = result === LOOKUP_FAILED ? null : result;
+  // A background re-check that could not reach the database leaves the
+  // entry it was refreshing alone: that answer stays usable up to the stale
+  // limit and the next request retries, instead of every request waiting.
+  if (epoch === invalidationEpoch && !(failed && keepEntryOnFailure)) {
+    evictIfFull(aliasMappingCache);
+    aliasMappingCache.set(oldSlug, {
+      currentSlug,
+      timestamp: Date.now(),
+      ...(failed ? { failed } : {}),
+    });
+  }
   return currentSlug;
 }
 
 async function fetchAliasMapping(
   oldSlug: string,
   strict = false
-): Promise<string | null> {
+): Promise<string | null | typeof LOOKUP_FAILED> {
   let result: { data: unknown; error: unknown };
   try {
     const supabase = createAnonClient();
@@ -180,7 +231,7 @@ async function fetchAliasMapping(
     if (strict) {
       throw err;
     }
-    return null;
+    return LOOKUP_FAILED;
   }
 
   // Strict throws stay outside the try so the catch above doesn't log
@@ -210,7 +261,7 @@ function handleAliasMappingError(
   oldSlug: string,
   error: unknown,
   strict: boolean
-): null {
+): typeof LOOKUP_FAILED {
   console.error('[Slug Alias Cache] Failed to resolve alias', {
     oldSlug,
     error,
@@ -220,68 +271,7 @@ function handleAliasMappingError(
       `[Slug Alias Cache] alias lookup failed for slug: ${oldSlug}`
     );
   }
-  return null;
-}
-
-async function isSlugLive(slug: string, strict = false): Promise<boolean> {
-  // Strict callers bypass the cache read (same failure-negative
-  // reasoning as resolveAliasMapping: a cached live=true may be a
-  // fail-safe from a failed lenient liveness check).
-  if (!strict) {
-    const cached = livenessCache.get(slug);
-    if (cached && Date.now() - cached.timestamp < LIVENESS_TTL) {
-      return cached.isLive;
-    }
-  }
-
-  const isLive = await fetchSlugIsLive(slug, strict);
-  evictIfFull(livenessCache);
-  livenessCache.set(slug, { isLive, timestamp: Date.now() });
-  return isLive;
-}
-
-async function fetchSlugIsLive(slug: string, strict = false): Promise<boolean> {
-  let result: { data: unknown; error: unknown };
-  try {
-    const supabase = createAnonClient();
-
-    result = await supabase
-      .from('merchants')
-      .select('id')
-      .eq('slug', slug)
-      .limit(1)
-      .maybeSingle();
-  } catch (err) {
-    console.error('[Slug Alias Cache] Error in liveness check', {
-      slug,
-      error: err,
-    });
-    if (strict) {
-      throw err;
-    }
-    return true;
-  }
-
-  if (result.error) {
-    // Fail safe: if we can't confirm the slug is free, treat it as LIVE so we
-    // do NOT 301 away from a store that may still be live under this slug. A
-    // straggler 404 on the retired URL is far less harmful than redirecting a
-    // live store's traffic away. Strict callers throw instead: with a known
-    // alias mapping, unknown liveness is indeterminate (retryable), not live.
-    // The throw stays outside the try so the catch above doesn't double-log.
-    console.error('[Slug Alias Cache] Failed liveness check', {
-      slug,
-      error: result.error,
-    });
-    if (strict) {
-      throw new Error(
-        `[Slug Alias Cache] liveness lookup failed for slug: ${slug}`
-      );
-    }
-    return true;
-  }
-
-  return Boolean(result.data);
+  return LOOKUP_FAILED;
 }
 
 // Simple FIFO eviction, matching domain-cache-simple.ts.

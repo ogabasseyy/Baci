@@ -1,17 +1,29 @@
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { requireQuizUser } from '@/app/api/quiz/_shared/route-helpers';
-import { type AuthResult, authenticateApiRequest } from '@/lib/api-auth';
+import { verifyQuizAccessToken } from '@/lib/quiz/quiz-access-token';
+import { createScopedClient } from '@/lib/supabase/scoped';
 import { createClient } from '@/lib/supabase/server';
 
 vi.mock('@/lib/api-auth', () => ({
-  authenticateApiRequest: vi.fn(),
   getBearerTokenFromRequest: (request: Request) => {
     const header = request.headers.get('Authorization') ?? '';
     return header.match(/^\s*bearer\s+(.+?)\s*$/i)?.[1]?.trim() || null;
   },
   hasBearerAuthScheme: (request: Request) =>
     /^\s*bearer(?:\s|$)/i.test(request.headers.get('Authorization') ?? ''),
+}));
+
+vi.mock('@/lib/quiz/quiz-access-token', () => ({
+  verifyQuizAccessToken: vi.fn(),
+}));
+
+vi.mock('@/lib/supabase/anon', () => ({
+  createAnonClient: vi.fn(),
+}));
+
+vi.mock('@/lib/supabase/scoped', () => ({
+  createScopedClient: vi.fn(),
 }));
 
 vi.mock('@/lib/supabase/server', () => ({
@@ -31,44 +43,37 @@ describe('quiz route mobile auth contract', () => {
     vi.clearAllMocks();
   });
 
-  it('authenticates bearer-token mobile requests with the scoped API auth helper', async () => {
+  it('authenticates bearer-token mobile requests with a locally verified token and a scoped client', async () => {
     const request = new NextRequest('http://localhost/api/quiz/events', {
       headers: { Authorization: 'Bearer mobile-token' },
     });
-    const scopedSupabase = {
-      rpc: vi.fn(),
-    } as unknown as NonNullable<AuthResult['supabase']>;
-    vi.mocked(authenticateApiRequest).mockResolvedValue({
-      error: null,
-      supabase: scopedSupabase,
-      user: { id: USER_ID } as NonNullable<AuthResult['user']>,
+    const scopedSupabase = { rpc: vi.fn() };
+    vi.mocked(verifyQuizAccessToken).mockResolvedValue({
+      status: 'verified',
+      userId: USER_ID,
     });
+    vi.mocked(createScopedClient).mockReturnValue(scopedSupabase as never);
 
     const result = await requireQuizUser(request);
 
     expect(result.response).toBeNull();
     expect(result.user).toEqual({ id: USER_ID });
     expect(result.supabase).toBe(scopedSupabase);
-    expect(authenticateApiRequest).toHaveBeenCalledWith(request);
+    expect(createScopedClient).toHaveBeenCalledWith('mobile-token');
     expect(createClient).not.toHaveBeenCalled();
   });
 
-  it('rejects bearer-token mobile requests when scoped API auth fails', async () => {
+  it('rejects bearer-token mobile requests whose token fails local verification', async () => {
     const request = new NextRequest('http://localhost/api/quiz/events', {
       headers: { Authorization: 'Bearer invalid-token' },
     });
-    vi.mocked(authenticateApiRequest).mockResolvedValue({
-      error: 'Unauthorized',
-      supabase: null,
-      user: null,
-    });
+    vi.mocked(verifyQuizAccessToken).mockResolvedValue({ status: 'invalid' });
 
     const result = await requireQuizUser(request);
 
     expect(result.response?.status).toBe(401);
     expect(result.user).toBeNull();
     expect(result.supabase).toBeNull();
-    expect(authenticateApiRequest).toHaveBeenCalledWith(request);
     expect(createClient).not.toHaveBeenCalled();
   });
 

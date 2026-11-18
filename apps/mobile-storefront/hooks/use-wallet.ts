@@ -25,6 +25,8 @@ const WALLET_STRICT_STALE_TIME_MS = 30_000;
 const WALLET_STRICT_GC_TIME_MS = 5 * 60_000;
 const WALLET_DISPLAY_STALE_TIME_MS = 2 * 60_000;
 const WALLET_DISPLAY_GC_TIME_MS = 30 * 60_000;
+// Same-millisecond mounts must not share (and re-listen on) one channel.
+let walletChannelSequence = 0;
 
 interface UseWalletOptions {
   cachePolicy?: 'strict' | 'display';
@@ -122,7 +124,8 @@ export function useWallet(options: UseWalletOptions = {}) {
       channelRef.current = null;
     }
     let isMounted = true;
-    const channelName = `wallet-hook-${customer?.id ?? user?.id}-${Date.now()}`;
+    walletChannelSequence += 1;
+    const channelName = `wallet-hook-${customer?.id ?? user?.id}-${Date.now()}-${walletChannelSequence}`;
     const activeWalletQueryKey = walletKeys.data({
       merchantId: activeMerchantId,
       ownerId: walletOwnerId,

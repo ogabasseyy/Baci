@@ -1,3 +1,4 @@
+import { AuthSessionMissingError } from '@supabase/supabase-js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { mockFrom, mockGetUser, mockResolveStorefrontAuthMerchant, mockRpc } =
@@ -111,6 +112,39 @@ describe('GET /api/storefront/auth/session', () => {
       user: null,
       customer: null,
     });
+    expect(mockFrom).not.toHaveBeenCalled();
+  });
+
+  it('returns an anonymous session when getUser reports AuthSessionMissingError', async () => {
+    mockGetUser.mockResolvedValue({
+      data: { user: null },
+      error: new AuthSessionMissingError(),
+    });
+
+    const response = await GET(makeRequest());
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual({
+      authenticated: false,
+      user: null,
+      customer: null,
+    });
+    expect(mockFrom).not.toHaveBeenCalled();
+  });
+
+  it('returns 503 on transient auth lookup failures instead of authenticated: false', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockGetUser.mockResolvedValue({
+      data: { user: null },
+      error: { name: 'AuthRetryableFetchError', message: 'upstream timeout' },
+    });
+
+    const response = await GET(makeRequest());
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(body).toEqual({ error: 'Session lookup failed' });
     expect(mockFrom).not.toHaveBeenCalled();
   });
 

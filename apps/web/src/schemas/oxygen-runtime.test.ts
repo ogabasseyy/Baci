@@ -1,8 +1,42 @@
 import { expect, it } from 'vitest';
 import {
+  oxygenProviderStateSchema,
   oxygenRuntimeActionSchema,
   validateOxygenFile,
 } from './oxygen-runtime';
+
+it('allows only the supported eligibility failure reason', () => {
+  expect(
+    oxygenProviderStateSchema.safeParse({
+      eligibilityStatus: 'failed',
+      eligibilityFailureReason: 'financial_details_mismatch',
+    }).success
+  ).toBe(true);
+  expect(oxygenProviderStateSchema.safeParse({}).success).toBe(true);
+  for (const reason of ['private provider text', null, 42, {}, []]) {
+    expect(
+      oxygenProviderStateSchema.safeParse({
+        eligibilityStatus: 'failed',
+        eligibilityFailureReason: reason,
+      }).success
+    ).toBe(false);
+  }
+});
+
+it.each([
+  { eligibilityStatus: 'pending' },
+  { eligibilityStatus: 'completed' },
+  {},
+  { eligibilityStatus: 'failed', eligible: true },
+  { eligibilityStatus: 'failed', eligible: false },
+])('rejects a mismatch reason inconsistent with the eligibility result: %j', (state) => {
+  expect(
+    oxygenProviderStateSchema.safeParse({
+      ...state,
+      eligibilityFailureReason: 'financial_details_mismatch',
+    }).success
+  ).toBe(false);
+});
 
 it('accepts decimal equity within 25 to 90 and rejects out-of-contract plans', () => {
   expect(

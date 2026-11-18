@@ -17,6 +17,8 @@ export const WALLET_PAY_CUSTOMER_STATEMENTS = {
     'SELECT piggyvest_primary.read_wallet_payment_for_purchase($1::jsonb,$2::jsonb) AS result',
   attempted:
     'SELECT piggyvest_primary.wallet_payment_attempted($1::jsonb,$2::jsonb) AS result',
+  closeUnpaidVtu:
+    'SELECT piggyvest_primary.close_unpaid_vtu_wallet_purchase($1::jsonb,$2::jsonb) AS result',
 } as const;
 
 /** Authorizer login, first parameters = integration id and environment. */
@@ -34,6 +36,8 @@ export const WALLET_PAY_WORKER_STATEMENTS = {
     'SELECT piggyvest_primary.release_stale_wallet_payment($1::uuid,$2::text,$3::uuid) AS result',
   imeiDelivered:
     'SELECT piggyvest_primary.imei_wallet_payment_delivered($1::uuid,$2::text,$3::uuid) AS result',
+  vtuDeliveryState:
+    'SELECT piggyvest_primary.vtu_wallet_payment_delivery_state($1::uuid,$2::text,$3::uuid) AS result',
 } as const;
 
 /** Evidence login, (integration id, environment, one value). */

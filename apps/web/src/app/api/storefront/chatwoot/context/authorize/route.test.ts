@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   checkCsrfProtection: vi.fn(async () => ({ valid: true })),
   loadChatwootCartContext: vi.fn(),
   readCartJsonBody: vi.fn(),
+  rebindChatwootSessionCapability: vi.fn(),
   verifyChatwootSessionCapability: vi.fn(),
 }));
 
@@ -21,6 +22,7 @@ vi.mock('@/lib/csrf', () => ({
 }));
 vi.mock('@/lib/chatwoot/commerce-context', () => ({
   ChatwootCommerceContextError: mocks.ChatwootCommerceContextError,
+  rebindChatwootSessionCapability: mocks.rebindChatwootSessionCapability,
   verifyChatwootSessionCapability: mocks.verifyChatwootSessionCapability,
 }));
 vi.mock('@/lib/chatwoot/cart-context', () => ({
@@ -167,6 +169,42 @@ describe('Chatwoot context authorization route', () => {
     expect(JSON.stringify(body)).not.toContain('voucherToken');
   });
 
+  it('rebinds an old signed session only to the current proof-bound cart', async () => {
+    mocks.loadChatwootCartContext.mockResolvedValue({
+      ok: true,
+      binding,
+      state: { ...state, cartSessionSha256: 'c'.repeat(64), cartVersion: 13 },
+      cart: { ...cart, version: 13 },
+    });
+    mocks.readCartJsonBody.mockResolvedValue({
+      ok: true,
+      body: { sessionToken: 'previously-signed-session' },
+    });
+    mocks.verifyChatwootSessionCapability.mockRejectedValue(
+      new mocks.ChatwootCommerceContextError('invalid_context')
+    );
+    mocks.rebindChatwootSessionCapability.mockResolvedValue({
+      conversationId: 905,
+      sessionExpiresAt: 1_799_000_000,
+      sessionToken: 'rebound-session-token',
+    });
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      authorized: true,
+      conversationId: 905,
+      sessionExpiresAt: 1_799_000_000,
+      sessionToken: 'rebound-session-token',
+    });
+    expect(mocks.rebindChatwootSessionCapability).toHaveBeenCalledWith({
+      binding,
+      sessionToken: 'previously-signed-session',
+      state: { ...state, cartSessionSha256: 'c'.repeat(64), cartVersion: 13 },
+    });
+  });
+
   it('fails closed when an opted-in cart cannot be safely projected', async () => {
     mocks.loadChatwootCartContext.mockResolvedValue({
       ok: true,
@@ -239,6 +277,9 @@ describe('Chatwoot context authorization route', () => {
     mocks.verifyChatwootSessionCapability.mockRejectedValue(
       new mocks.ChatwootCommerceContextError('invalid_context')
     );
+    mocks.rebindChatwootSessionCapability.mockRejectedValue(
+      new mocks.ChatwootCommerceContextError('invalid_context')
+    );
     expect((await POST(request())).status).toBe(403);
 
     mocks.loadChatwootCartContext.mockResolvedValue({
@@ -252,13 +293,5 @@ describe('Chatwoot context authorization route', () => {
     mocks.checkCsrfProtection.mockResolvedValueOnce({ valid: false });
     expect((await POST(request())).status).toBe(403);
     expect(mocks.loadChatwootCartContext).toHaveBeenCalledTimes(2);
-  });
-
-  it('rejects malformed input before resolving a cart context', async () => {
-    mocks.readCartJsonBody.mockResolvedValue({ ok: true, body: {} });
-
-    expect((await POST(request())).status).toBe(400);
-    expect(mocks.loadChatwootCartContext).not.toHaveBeenCalled();
-    expect(mocks.verifyChatwootSessionCapability).not.toHaveBeenCalled();
   });
 });

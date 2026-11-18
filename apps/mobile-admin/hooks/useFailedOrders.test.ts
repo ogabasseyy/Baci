@@ -18,6 +18,9 @@ const DEFAULT_ROW: FakeOrderRow = {
 
 /** Holder so the hoisted mock factory can publish the fake back to the tests. */
 const holder = vi.hoisted(() => ({
+  queryFn: undefined as
+    | (() => Promise<{ orders: FailedOrder[]; isLimited: boolean }>)
+    | undefined,
   fake: null as ReturnType<
     typeof import('../test/mocks/supabase-order-query-fake').createSupabaseOrderQueryFake
   > | null,
@@ -36,7 +39,14 @@ vi.mock('./useMerchant', () => ({
 }));
 
 vi.mock('@tanstack/react-query', () => ({
-  useQuery: vi.fn((config) => config),
+  useQuery: vi.fn(
+    (config: {
+      queryFn: () => Promise<{ orders: FailedOrder[]; isLimited: boolean }>;
+    }) => {
+      holder.queryFn = config.queryFn;
+      return {};
+    }
+  ),
 }));
 
 import {
@@ -68,10 +78,9 @@ function daysBefore(days: number): string {
 
 async function runQuery(): Promise<FailedOrder[]> {
   // biome-ignore lint/correctness/useHookAtTopLevel: useQuery returns the mock config without React
-  const query = useFailedOrders() as unknown as {
-    queryFn: () => Promise<FailedOrder[]>;
-  };
-  return query.queryFn();
+  useFailedOrders();
+  if (!holder.queryFn) throw new Error('Missing captured query');
+  return (await holder.queryFn()).orders;
 }
 
 describe('useFailedOrders', () => {

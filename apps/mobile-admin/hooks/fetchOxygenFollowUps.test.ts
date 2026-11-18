@@ -63,6 +63,7 @@ describe('Oxygen follow-up fetch', () => {
         }),
       ],
       isIncomplete: false,
+      isLimited: false,
     });
   });
 
@@ -132,6 +133,7 @@ describe('Oxygen follow-up fetch', () => {
     await expect(fetchOxygenFollowUps(merchantId)).resolves.toEqual({
       orders: [],
       isIncomplete: true,
+      isLimited: false,
     });
     expect(mocks.from).not.toHaveBeenCalled();
   });
@@ -145,6 +147,7 @@ describe('Oxygen follow-up fetch', () => {
     expect(result).toEqual({
       orders: [expect.objectContaining({ id: orderId })],
       isIncomplete: true,
+      isLimited: false,
     });
   });
 
@@ -157,6 +160,7 @@ describe('Oxygen follow-up fetch', () => {
     expect(result).toEqual({
       orders: [expect.objectContaining({ id: orderId })],
       isIncomplete: true,
+      isLimited: false,
     });
   });
 
@@ -190,6 +194,7 @@ describe('Oxygen follow-up fetch', () => {
     await expect(fetchOxygenFollowUps(merchantId)).resolves.toEqual({
       orders: [],
       isIncomplete: true,
+      isLimited: false,
     });
   });
 
@@ -198,6 +203,7 @@ describe('Oxygen follow-up fetch', () => {
     await expect(fetchOxygenFollowUps(merchantId)).resolves.toEqual({
       orders: [],
       isIncomplete: false,
+      isLimited: false,
     });
     expect(mocks.from).not.toHaveBeenCalled();
   });
@@ -225,6 +231,7 @@ describe('Oxygen follow-up fetch', () => {
         }),
       ],
       isIncomplete: false,
+      isLimited: false,
     });
   });
 
@@ -261,6 +268,7 @@ describe('Oxygen follow-up fetch', () => {
         expect.objectContaining({ oxygen_follow_up_status: 'needs_review' }),
       ],
       isIncomplete: false,
+      isLimited: false,
     });
   });
 
@@ -278,6 +286,7 @@ describe('Oxygen follow-up fetch', () => {
         }),
       ],
       isIncomplete: false,
+      isLimited: false,
     });
   });
 

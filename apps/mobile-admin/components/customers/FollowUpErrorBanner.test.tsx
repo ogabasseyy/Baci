@@ -32,6 +32,38 @@ describe('FollowUpErrorBanner', () => {
     ).toBeTruthy();
   });
 
+  it('explains a limited result without offering a retry that repeats the cap', () => {
+    render(
+      <FollowUpErrorBanner
+        hasError={false}
+        isLimited
+        isRetrying={false}
+        onRetry={vi.fn()}
+      />
+    );
+    expect(screen.getByText(/This queue has reached its limit/)).toBeTruthy();
+    expect(
+      screen.queryByRole('button', { name: 'Retry loading follow-ups' })
+    ).toBeNull();
+    expect(screen.queryByText(/couldn't be loaded/)).toBeNull();
+  });
+
+  it('keeps error recovery available when results are also limited', () => {
+    render(
+      <FollowUpErrorBanner
+        hasError
+        isLimited
+        isRetrying={false}
+        onRetry={vi.fn()}
+      />
+    );
+    expect(screen.getByText(/This queue has reached its limit/)).toBeTruthy();
+    expect(screen.getByText(/couldn't be loaded/)).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: 'Retry loading follow-ups' })
+    ).toBeTruthy();
+  });
+
   it('calls onRetry when retry is pressed', () => {
     const onRetry = vi.fn();
     render(<FollowUpErrorBanner isRetrying={false} onRetry={onRetry} />);

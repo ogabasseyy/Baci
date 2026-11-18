@@ -90,8 +90,8 @@ export function useFailedOrders() {
   const { merchant } = useMerchant();
   const merchantId = merchant?.id;
 
-  return useQuery({
-    queryKey: ['failed-orders', merchantId],
+  const query = useQuery({
+    queryKey: ['failed-orders', merchantId, 'v2'],
     queryFn: async () => {
       const staleCutoff = new Date(
         Date.now() - STALE_PENDING_MINUTES * 60 * 1000
@@ -131,7 +131,7 @@ export function useFailedOrders() {
           `and(payment_status.in.(bnpl_pending,failed,expired),or(payment_method.is.null,payment_method.not.in.(oxygen))),and(payment_status.eq.pending,created_at.lt.${staleCutoff},payment_method.in.${ONLINE_CHECKOUT_PAYMENT_METHODS},${CUSTOMER_CHECKOUT_ORDER_FILTER}),and(payment_status.eq.unpaid,created_at.lt.${staleCutoff},payment_method.in.${ONLINE_CHECKOUT_PAYMENT_METHODS},${CUSTOMER_CHECKOUT_ORDER_FILTER})`
         )
         .order('created_at', { ascending: false })
-        .limit(FOLLOW_UP_QUERY_LIMIT);
+        .limit(FOLLOW_UP_QUERY_LIMIT + 1);
 
       if (error) throw error;
 
@@ -141,8 +141,9 @@ export function useFailedOrders() {
         FailedOrder & { attempt_count: number }
       > = {};
 
-      (data as FailedOrderRow[]).forEach((order) => {
-        // Oxygen is classified separately from its saved provider workflow.
+      const rows = (data ?? []) as FailedOrderRow[];
+      rows.slice(0, FOLLOW_UP_QUERY_LIMIT).forEach((order) => {
+        // Orders still marked Oxygen share the independent RPC budget.
         if (order.payment_method === 'oxygen') return;
         const email = order.customer_email?.trim() ?? '';
         const key = email ? `email:${email}` : `order:${order.id}`;
@@ -168,10 +169,18 @@ export function useFailedOrders() {
         }
       });
 
-      return Object.values(consolidated);
+      return {
+        orders: Object.values(consolidated),
+        isLimited: rows.length > FOLLOW_UP_QUERY_LIMIT,
+      };
     },
     enabled: !!merchantId,
     staleTime: 1000 * 60 * 2, // 2 minutes
     refetchOnWindowFocus: false,
   });
+  return {
+    ...query,
+    data: query.data?.orders,
+    isLimited: query.data?.isLimited ?? false,
+  };
 }

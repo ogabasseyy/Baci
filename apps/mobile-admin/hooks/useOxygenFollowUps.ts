@@ -5,7 +5,7 @@ import { useMerchant } from './useMerchant';
 export function useOxygenFollowUps() {
   const { merchant } = useMerchant();
   const query = useQuery({
-    queryKey: ['oxygen-follow-ups', merchant?.id],
+    queryKey: ['oxygen-follow-ups', merchant?.id, 'v2'],
     queryFn: () => {
       if (!merchant?.id) throw new Error('Merchant ID is required');
       return fetchOxygenFollowUps(merchant.id);
@@ -18,5 +18,6 @@ export function useOxygenFollowUps() {
     ...query,
     data: query.data?.orders,
     isIncomplete: query.data?.isIncomplete ?? false,
+    isLimited: query.data?.isLimited ?? false,
   };
 }

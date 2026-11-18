@@ -4,18 +4,14 @@ import type { FailedOrder } from '@/hooks/useFailedOrders';
 import { useFailedOrders } from '@/hooks/useFailedOrders';
 import { useMerchant } from '@/hooks/useMerchant';
 import { useOxygenFollowUps } from '@/hooks/useOxygenFollowUps';
+import { compareFollowUpDatesDesc } from '@/lib/compare-follow-up-dates-desc';
 import { getFollowUpActivityAt } from '@/lib/customers-failed-orders';
 
-function parseFollowUpActivityTime(order: FailedOrder): number {
-  const time = Date.parse(getFollowUpActivityAt(order));
-  return Number.isFinite(time) ? time : Number.NEGATIVE_INFINITY;
-}
-
 function compareFollowUpOrdersDesc(a: FailedOrder, b: FailedOrder): number {
-  const timeA = parseFollowUpActivityTime(a);
-  const timeB = parseFollowUpActivityTime(b);
-  if (timeA === timeB) return 0;
-  return timeB > timeA ? 1 : -1;
+  return compareFollowUpDatesDesc(
+    getFollowUpActivityAt(a),
+    getFollowUpActivityAt(b)
+  );
 }
 
 /**
@@ -34,6 +30,7 @@ export function useFollowUpQueue() {
   const {
     data: standardOrders,
     isError: isStandardError,
+    isLimited: isStandardLimited,
     isFetching: isFetchingFailed,
     isLoading: isLoadingFailed,
     refetch: refetchFailed,
@@ -42,6 +39,7 @@ export function useFollowUpQueue() {
     data: oxygenOrders,
     isError: isOxygenError,
     isIncomplete: isOxygenIncomplete,
+    isLimited: isOxygenLimited,
     isFetching: isFetchingOxygen,
     isLoading: isLoadingOxygen,
     refetch: refetchOxygen,
@@ -94,6 +92,7 @@ export function useFollowUpQueue() {
   return {
     failedOrders,
     isFailedOrdersError,
+    isFollowUpLimited: Boolean(isStandardLimited || isOxygenLimited),
     isRefreshing,
     merchant,
     refresh,

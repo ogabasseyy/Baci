@@ -31,7 +31,7 @@ describe('useOxygenFollowUps', () => {
     expect(mocks.useQuery).toHaveBeenCalledWith(
       expect.objectContaining({
         enabled: false,
-        queryKey: ['oxygen-follow-ups', undefined],
+        queryKey: ['oxygen-follow-ups', undefined, 'v2'],
       })
     );
     const options = mocks.useQuery.mock.calls[0][0];
@@ -41,7 +41,11 @@ describe('useOxygenFollowUps', () => {
   });
 
   it('keys the request to the merchant and preserves the incomplete flag', async () => {
-    const payload = { orders: [oxygenProcessingOrder], isIncomplete: true };
+    const payload = {
+      orders: [oxygenProcessingOrder],
+      isIncomplete: true,
+      isLimited: true,
+    };
     mocks.useMerchant.mockReturnValue({ merchant: { id: 'merchant-a' } });
     mocks.fetch.mockResolvedValue(payload);
     mocks.useQuery.mockReturnValue({ data: payload, isPending: false });
@@ -51,7 +55,7 @@ describe('useOxygenFollowUps', () => {
     expect(mocks.useQuery).toHaveBeenCalledWith(
       expect.objectContaining({
         enabled: true,
-        queryKey: ['oxygen-follow-ups', 'merchant-a'],
+        queryKey: ['oxygen-follow-ups', 'merchant-a', 'v2'],
         staleTime: 120_000,
         refetchOnWindowFocus: false,
       })
@@ -63,6 +67,7 @@ describe('useOxygenFollowUps', () => {
     expect(result.current).toMatchObject({
       data: payload.orders,
       isIncomplete: true,
+      isLimited: true,
     });
   });
 

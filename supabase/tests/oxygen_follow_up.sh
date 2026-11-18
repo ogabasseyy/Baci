@@ -25,7 +25,10 @@ psql -Xq -v ON_ERROR_STOP=1 -f "$root/supabase/migrations/20261117190200_oxygen_
 psql -Xq -v ON_ERROR_STOP=1 -f "$root/supabase/migrations/20261117190300_oxygen_follow_up_activation_state.sql"
 psql -Xq -v ON_ERROR_STOP=1 -f "$root/supabase/migrations/20261117190400_oxygen_follow_up_reconciled_approval.sql"
 psql -Xq -v ON_ERROR_STOP=1 -f "$root/supabase/migrations/20261117190500_oxygen_follow_up_terminal_outcomes.sql"
+psql -Xq -v ON_ERROR_STOP=1 -f "$root/supabase/migrations/20261118141000_oxygen_follow_up_failed_orphans.sql"
+psql -Xq -v ON_ERROR_STOP=1 -f "$root/supabase/tests/oxygen_follow_up_failed_orphans.sql"
 psql -Xq -v ON_ERROR_STOP=1 -f "$root/supabase/tests/oxygen_follow_up_assertions.sql"
+psql -Xq -v ON_ERROR_STOP=1 -f "$root/supabase/tests/oxygen_follow_up_capacity.sql"
 # A conflicting invalid index with the same name must never be dropped blindly.
 psql -Xq -v ON_ERROR_STOP=1 -c "DROP INDEX public.idx_orders_oxygen_follow_up_merchant_created; CREATE INDEX idx_orders_oxygen_follow_up_merchant_created ON public.orders (created_at)"
 psql -Xq -v ON_ERROR_STOP=1 -c "UPDATE pg_catalog.pg_index SET indisvalid = false WHERE indexrelid = 'public.idx_orders_oxygen_follow_up_merchant_created'::regclass"

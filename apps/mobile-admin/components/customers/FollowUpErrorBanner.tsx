@@ -4,12 +4,15 @@ import { RADIUS, SPACING, TYPOGRAPHY } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
 
 interface FollowUpErrorBannerProps {
+  hasError?: boolean;
+  isLimited?: boolean;
   isRetrying: boolean;
   onRetry: () => void;
 }
 
 /**
- * Shown when either source fails and some rows are still available.
+ * Shown when a source fails or is capped and usable rows remain.
+ * Cap-only notices explain the limit; Retry is reserved for partial loads.
  *
  * The empty state cannot cover this case — it only renders when the list is
  * empty — so without this banner a failed refresh leaves stale follow-ups on
@@ -18,8 +21,12 @@ interface FollowUpErrorBannerProps {
 export function FollowUpErrorBanner({
   isRetrying,
   onRetry,
+  hasError = true,
+  isLimited = false,
 }: FollowUpErrorBannerProps) {
   const { colors } = useTheme();
+
+  if (!hasError && !isLimited) return null;
 
   return (
     <View
@@ -28,25 +35,33 @@ export function FollowUpErrorBanner({
     >
       <Ionicons name="warning-outline" size={18} color={colors.warning} />
       <Text style={[styles.message, { color: colors.textSecondary }]}>
-        Some follow-ups couldn't be loaded or may be out of date.
+        {isLimited
+          ? 'This queue has reached its limit; more follow-ups may be available.'
+          : ''}
+        {isLimited && hasError ? ' ' : ''}
+        {hasError
+          ? "Some follow-ups couldn't be loaded or may be out of date."
+          : ''}
       </Text>
-      <Pressable
-        style={({ pressed }) => [
-          styles.retryButton,
-          isRetrying && styles.retryButtonDisabled,
-          pressed && !isRetrying && { opacity: 0.7 },
-        ]}
-        onPress={onRetry}
-        disabled={isRetrying}
-        accessibilityLabel="Retry loading follow-ups"
-        accessibilityRole="button"
-        accessibilityState={{ busy: isRetrying, disabled: isRetrying }}
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-      >
-        <Text style={[styles.retryLabel, { color: colors.primary }]}>
-          {isRetrying ? 'Retrying…' : 'Retry'}
-        </Text>
-      </Pressable>
+      {hasError ? (
+        <Pressable
+          style={({ pressed }) => [
+            styles.retryButton,
+            isRetrying && styles.retryButtonDisabled,
+            pressed && !isRetrying && { opacity: 0.7 },
+          ]}
+          onPress={onRetry}
+          disabled={isRetrying}
+          accessibilityLabel="Retry loading follow-ups"
+          accessibilityRole="button"
+          accessibilityState={{ busy: isRetrying, disabled: isRetrying }}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Text style={[styles.retryLabel, { color: colors.primary }]}>
+            {isRetrying ? 'Retrying…' : 'Retry'}
+          </Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }

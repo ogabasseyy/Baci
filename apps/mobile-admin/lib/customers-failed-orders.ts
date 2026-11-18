@@ -1,4 +1,5 @@
 import type { FailedOrder } from '@/hooks/useFailedOrders';
+import { compareFollowUpDatesDesc } from './compare-follow-up-dates-desc';
 
 export type GroupedFailedOrderListItem =
   | {
@@ -91,13 +92,12 @@ export function groupFailedOrdersByDate(
       title: 'Oxygen · Needs review',
       type: 'header',
     });
-    oxygenReviews.sort((a, b) => {
-      const timeA = Date.parse(getFollowUpActivityAt(a));
-      const timeB = Date.parse(getFollowUpActivityAt(b));
-      if (!Number.isFinite(timeA)) return Number.isFinite(timeB) ? 1 : 0;
-      if (!Number.isFinite(timeB)) return -1;
-      return timeB - timeA;
-    });
+    oxygenReviews.sort((a, b) =>
+      compareFollowUpDatesDesc(
+        getFollowUpActivityAt(a),
+        getFollowUpActivityAt(b)
+      )
+    );
     for (const order of oxygenReviews) {
       data.push({ data: order, key: `failed-order-${order.id}`, type: 'item' });
     }
@@ -120,10 +120,11 @@ export function groupFailedOrdersByDate(
       type: 'header',
     });
 
-    const groupOrders = [...(groups.get(dateKey) ?? [])].sort(
-      (a, b) =>
-        new Date(getFollowUpActivityAt(b)).getTime() -
-        new Date(getFollowUpActivityAt(a)).getTime()
+    const groupOrders = [...(groups.get(dateKey) ?? [])].sort((a, b) =>
+      compareFollowUpDatesDesc(
+        getFollowUpActivityAt(a),
+        getFollowUpActivityAt(b)
+      )
     );
 
     for (const order of groupOrders) {

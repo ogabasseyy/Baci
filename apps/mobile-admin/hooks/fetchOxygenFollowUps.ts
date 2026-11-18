@@ -23,9 +23,11 @@ const MAX_OXYGEN_FOLLOW_UP_CANDIDATES = 250;
 const ORDER_LOOKUP_BATCH_SIZE = 50;
 
 /** The RPC returns categories only; order/contact data still goes through orders RLS. */
-export async function fetchOxygenFollowUps(
-  merchantId: string
-): Promise<{ orders: FailedOrder[]; isIncomplete: boolean }> {
+export async function fetchOxygenFollowUps(merchantId: string): Promise<{
+  orders: FailedOrder[];
+  isIncomplete: boolean;
+  isLimited: boolean;
+}> {
   const validatedMerchantId = oxygenFollowUpMerchantSchema.parse(merchantId);
   const { data, error } = await supabase.rpc('oxygen_follow_up_candidates', {
     p_merchant_id: validatedMerchantId,
@@ -39,10 +41,13 @@ export async function fetchOxygenFollowUps(
     const parsed = oxygenFollowUpCandidateSchema.safeParse(row);
     return parsed.success ? [parsed.data] : [];
   });
+  // The RPC returns at most 250 rows; a full page may hide a larger backlog.
+  const isLimited =
+    candidatePayload.items.length >= MAX_OXYGEN_FOLLOW_UP_CANDIDATES;
   let isIncomplete =
     !candidatePayload.isBoundedValid ||
     candidates.length !== candidatePayload.items.length;
-  if (candidates.length === 0) return { orders: [], isIncomplete };
+  if (candidates.length === 0) return { orders: [], isIncomplete, isLimited };
 
   const ids = candidates.map((candidate) => candidate.order_id);
   const batches: string[][] = [];
@@ -129,5 +134,5 @@ export async function fetchOxygenFollowUps(
       },
     ];
   });
-  return { orders: followUps, isIncomplete };
+  return { orders: followUps, isIncomplete, isLimited };
 }

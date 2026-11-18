@@ -215,6 +215,7 @@ describe('Oxygen follow-up fetch', () => {
     await expect(fetchOxygenFollowUps(merchantId)).resolves.toEqual({
       orders: [],
       isIncomplete: true,
+      isLimited: false,
     });
     expect(mocks.from).not.toHaveBeenCalled();
 
@@ -231,6 +232,13 @@ describe('Oxygen follow-up fetch', () => {
     const cappedResult = await fetchOxygenFollowUps(merchantId);
     expect(cappedResult.isIncomplete).toBe(true);
     expect(cappedResult.orders).toHaveLength(250);
+    mocks.rpc.mockResolvedValue({
+      data: oversizedCandidates.slice(0, 250),
+      error: null,
+    });
+    const fullPage = await fetchOxygenFollowUps(merchantId);
+    expect(fullPage.isLimited).toBe(true);
+    expect(fullPage.isIncomplete).toBe(false);
 
     mocks.rpc.mockResolvedValue({ data: [candidate], error: null });
     mocks.in.mockResolvedValue({
@@ -247,6 +255,7 @@ describe('Oxygen follow-up fetch', () => {
     expect(oversizedBatch).toEqual({
       orders: [expect.objectContaining({ id: orderId })],
       isIncomplete: true,
+      isLimited: false,
     });
   });
 
@@ -268,6 +277,7 @@ describe('Oxygen follow-up fetch', () => {
         }),
       ],
       isIncomplete: false,
+      isLimited: false,
     });
   });
 });

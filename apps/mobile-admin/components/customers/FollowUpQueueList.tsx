@@ -51,6 +51,7 @@ export function FollowUpQueueList({
   const {
     failedOrders,
     isFailedOrdersError,
+    isFollowUpLimited,
     isRefreshing,
     refresh,
     viewState,
@@ -130,8 +131,14 @@ export function FollowUpQueueList({
         />
       }
       ListHeaderComponent={
-        isFailedOrdersError && (failedOrders?.length ?? 0) > 0 ? (
-          <FollowUpErrorBanner isRetrying={isRefreshing} onRetry={refresh} />
+        (isFailedOrdersError || isFollowUpLimited) &&
+        (failedOrders?.length ?? 0) > 0 ? (
+          <FollowUpErrorBanner
+            hasError={isFailedOrdersError}
+            isLimited={isFollowUpLimited}
+            isRetrying={isRefreshing}
+            onRetry={refresh}
+          />
         ) : null
       }
       ListEmptyComponent={

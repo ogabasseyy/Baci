@@ -207,6 +207,29 @@ describe('FollowUpQueueList', () => {
     }
   });
 
+  it('keeps the limit notice visible for a filtered-empty result without Retry', () => {
+    mocks.useFollowUpQueue.mockReturnValue({
+      failedOrders: [
+        {
+          id: 'order-1',
+          created_at: '2026-07-27T08:00:00Z',
+          customer_name: 'Ada',
+          customer_email: '',
+        },
+      ],
+      isFailedOrdersError: false,
+      isFollowUpLimited: true,
+      isRefreshing: false,
+      refresh: mocks.refresh,
+      viewState: { status: 'ready' },
+    });
+    render(<FollowUpQueueList {...defaultProps} searchQuery="no-match" />);
+    expect(screen.getByText(/This queue has reached its limit/)).toBeTruthy();
+    expect(
+      screen.queryByRole('button', { name: 'Retry loading follow-ups' })
+    ).toBeNull();
+  });
+
   it('keeps the partial-results warning visible when search filters out loaded rows', () => {
     mocks.useFollowUpQueue.mockReturnValue({
       failedOrders: [

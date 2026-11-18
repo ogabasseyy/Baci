@@ -18,6 +18,8 @@ describe('readMonnifyResponseCode', () => {
     {},
     { responseCode: null },
     { responseCode: true },
+    { responseCode: Number.NaN },
+    { responseCode: Number.POSITIVE_INFINITY },
     { responseCode: '' },
     { responseCode: '0803 123 4567' },
     { responseCode: '08031234567' },

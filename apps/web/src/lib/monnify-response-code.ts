@@ -16,7 +16,10 @@ export function readMonnifyResponseCode(answer: unknown): string | undefined {
     return undefined;
   }
   const value = (answer as Record<string, unknown>).responseCode;
-  if (typeof value !== 'string' && typeof value !== 'number') {
+  if (
+    typeof value !== 'string' &&
+    !(typeof value === 'number' && Number.isFinite(value))
+  ) {
     return undefined;
   }
   const code = String(value).trim();

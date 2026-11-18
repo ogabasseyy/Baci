@@ -10,7 +10,7 @@
  * not count.
  */
 const MONNIFY_VEND_OUTCOME_PATTERN =
-  /unavailable|\bunsuccessful|\btime[ds]?\s*out\b|(?:vend|transaction|purchase|airtime|payment|top[\s-]?up|recharge)\w*(?:\s+\w+){0,2}?\s+fail|fail\w*\s+to\s+vend|(?:vend|transaction|purchase|airtime|payment|top\s?up|recharge)\w*(?:\s+\w+){0,3}?\s+(?:submitted|accepted|declined|cancell?ed|rejected)\b|\bfail(?:ed|ure)(?:\s+\w+){0,2}?\s+(?:vend|transaction|purchase|airtime|payment|top\s?up|recharge)|(?<!(?:\bnot|\bnever|\bcannot|\bno|n't)(?:\s+\w+){0,3}?\s+)(?<!(?:validation|verification|lookup|login|authentication|customer)\s+)\b(?:delivered|processed|completed|successful|vended|dispatched|pending|processing|queued|in\s+progress|initiated|reversed)\b/i;
+  /unavailable|\bunsuccessful|\btime[ds]?\s*out\b|(?:vend|transaction|purchase|airtime|payment|top[\s-]?up|recharge)\w*(?:\s+\w+){0,2}?\s+fail|fail\w*\s+to\s+vend|(?:vend|transaction|purchase|airtime|payment|top\s?up|recharge)\w*(?:\s+\w+){0,3}?\s+(?:submitted|accepted|declined|cancell?ed|rejected)\b|\b(?:submitted|accepted|declined|cancell?ed|rejected)(?:\s+\w+){0,2}?\s+(?:vend|transaction|purchase|airtime|payment|top\s?up|recharge)|\bfail(?:ed|ure)(?:\s+\w+){0,2}?\s+(?:vend|transaction|purchase|airtime|payment|top\s?up|recharge)|(?<!(?:\bnot|\bnever|\bcannot|\bno|n't)(?:\s+\w+){0,3}?\s+)(?<!(?:validation|verification|lookup|login|authentication|customer)\s+)\b(?:delivered|processed|completed|successful|vended|dispatched|pending|processing|queued|in\s+progress|initiated|reversed)\b/i;
 
 /**
  * Whether a Monnify answer mentions a vend outcome or an unavailable service.

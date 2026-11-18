@@ -88,13 +88,31 @@ function isEvidenceValue(key: string, value: unknown): boolean {
   return typeof value === 'number';
 }
 
+/**
+ * Boolean outcome flags ("processed", "isDelivered", "inProgress"…): set
+ * to true they say a vend happened or is under way; false says nothing.
+ */
+const OUTCOME_FLAG_KEY =
+  /^(?:is|was|has)?(?:been)?(?:processed|delivered|completed|vended|successful|success|dispatched|pending|inprogress|queued|submitted|accepted|initiated)$/;
+
+function isTrueFlag(value: unknown): boolean {
+  return (
+    value === true ||
+    value === 1 ||
+    (typeof value === 'string' && /^(?:true|yes|y|1)$/i.test(value.trim()))
+  );
+}
+
 function carriesVendField(
   record: Record<string, unknown>,
   isEvidenceKey: (key: string) => boolean
 ): boolean {
   return Object.entries(record).some(([rawKey, value]) => {
     const key = normaliseKey(rawKey);
-    return isEvidenceKey(key) && isEvidenceValue(key, value);
+    return (
+      (isEvidenceKey(key) && isEvidenceValue(key, value)) ||
+      (OUTCOME_FLAG_KEY.test(key) && isTrueFlag(value))
+    );
   });
 }
 

@@ -74,3 +74,20 @@ describe('bugfix: top-level arrays are read item by item', () => {
     ).toBe(false);
   });
 });
+
+describe('bugfix: true outcome flags are vend evidence', () => {
+  it.each([
+    { responseBody: { processed: true } },
+    { isDelivered: 'true' },
+    { responseBody: { in_progress: 1 } },
+  ])('sees vend evidence in %j', (answer) => {
+    expect(hasMonnifyVendEvidence(answer)).toBe(true);
+  });
+
+  it.each([
+    { responseBody: { processed: false } },
+    { isDelivered: 'false' },
+  ])('sees none in %j', (answer) => {
+    expect(hasMonnifyVendEvidence(answer)).toBe(false);
+  });
+});

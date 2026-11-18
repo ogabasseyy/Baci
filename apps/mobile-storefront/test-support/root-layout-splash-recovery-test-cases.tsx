@@ -119,6 +119,7 @@ export function registerRootLayoutSplashRecoveryTests({
     });
     expect(useAppTrackingTransparency).toHaveBeenLastCalledWith({
       enabled: false,
+      explainFirst: true,
     });
     expect(usePushNotifications).toHaveBeenLastCalledWith({
       navigationReady: false,
@@ -131,6 +132,7 @@ export function registerRootLayoutSplashRecoveryTests({
     await waitFor(() =>
       expect(useAppTrackingTransparency).toHaveBeenLastCalledWith({
         enabled: true,
+        explainFirst: true,
       })
     );
     expect(screen.getByTestId('root-layout-nav')).toHaveTextContent(
@@ -166,6 +168,7 @@ export function registerRootLayoutSplashRecoveryTests({
     expect(screen.queryByTestId('root-layout-nav')).toBeNull();
     expect(useAppTrackingTransparency).toHaveBeenLastCalledWith({
       enabled: false,
+      explainFirst: true,
     });
   });
 
@@ -285,6 +288,7 @@ export function registerRootLayoutSplashRecoveryTests({
     await waitFor(() => {
       expect(useAppTrackingTransparency).toHaveBeenLastCalledWith({
         enabled: true,
+        explainFirst: true,
       });
     });
     expect(screen.getByTestId('root-layout-nav')).toHaveTextContent(

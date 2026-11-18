@@ -101,7 +101,7 @@ describe('Oxygen follow-up fetch', () => {
     );
   });
 
-  it('reports an error rather than hiding a failed batch', async () => {
+  it('retains valid orders and reports an incomplete queue when a batch fails', async () => {
     const candidates = Array.from({ length: 51 }, (_, index) => ({
       ...candidate,
       order_id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
@@ -113,8 +113,10 @@ describe('Oxygen follow-up fetch', () => {
         : { data: ids.map((id) => ({ ...order, id })), error: null }
     );
 
-    await expect(fetchOxygenFollowUps(merchantId)).rejects.toThrow(
-      'Could not load Oxygen follow-up orders'
+    const result = await fetchOxygenFollowUps(merchantId);
+    expect(result.isIncomplete).toBe(true);
+    expect(result.orders.map((item) => item.id)).toEqual(
+      candidates.slice(0, 50).map((item) => item.order_id)
     );
   });
 

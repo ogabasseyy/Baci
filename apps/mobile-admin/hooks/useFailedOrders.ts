@@ -53,7 +53,7 @@ const VALID_PAYMENT_STATUSES: ReadonlySet<FailedOrderPaymentStatus> = new Set([
 const toPaymentStatus = (status: string): FailedOrderPaymentStatus => {
   return VALID_PAYMENT_STATUSES.has(status as FailedOrderPaymentStatus)
     ? (status as FailedOrderPaymentStatus)
-    : 'failed';
+    : 'unknown';
 };
 
 /** Shape returned by the Supabase select on orders with joined transactions */

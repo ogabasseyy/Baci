@@ -51,7 +51,7 @@ export async function fetchOxygenFollowUps(
   for (let offset = 0; offset < ids.length; offset += ORDER_LOOKUP_BATCH_SIZE) {
     batches.push(ids.slice(offset, offset + ORDER_LOOKUP_BATCH_SIZE));
   }
-  const results = await Promise.all(
+  const results = await Promise.allSettled(
     batches.map((batch) =>
       supabase
         .from('orders')
@@ -62,12 +62,22 @@ export async function fetchOxygenFollowUps(
         .in('id', batch)
     )
   );
+  if (
+    results.every(
+      (result) => result.status === 'rejected' || result.value.error
+    )
+  ) {
+    throw new Error('Could not load Oxygen follow-up orders');
+  }
   const orders = results.flatMap((result) => {
-    if (result.error) throw new Error('Could not load Oxygen follow-up orders');
+    if (result.status === 'rejected' || result.value.error) {
+      isIncomplete = true;
+      return [];
+    }
     const rows = z
       .array(z.unknown())
       .max(ORDER_LOOKUP_BATCH_SIZE)
-      .parse(result.data);
+      .parse(result.value.data);
     return rows.flatMap((row) => {
       const parsed = oxygenFollowUpOrderSchema.safeParse(row);
       if (!parsed.success) isIncomplete = true;

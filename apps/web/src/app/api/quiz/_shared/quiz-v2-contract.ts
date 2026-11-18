@@ -66,7 +66,13 @@ async function checkQuizV2Runtime(
   try {
     const { data, error } = await supabase.rpc('quiz_runtime_contract_version');
     if (error) {
-      logRuntimeCheckFailure('rpc_error', error.code);
+      const code =
+        typeof error === 'object' &&
+        'code' in error &&
+        typeof error.code === 'string'
+          ? error.code
+          : undefined;
+      logRuntimeCheckFailure('rpc_error', code);
       return false;
     }
     if (data !== QUIZ_CONTRACT_VERSION) {

@@ -1,9 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createClient } from '@supabase/supabase-js';
 import { config } from 'dotenv';
-import { isEntrypoint } from '../lib/is-entrypoint.mjs';
 import {
   CACHE_INVALIDATION_DEAD_LETTER_CODE,
   runWebCron,
@@ -11,10 +9,6 @@ import {
 
 const PATH = '/api/cron/drain-cache-invalidations';
 const MIN_INTERVAL_MS = 2 * 60_000;
-const HEARTBEAT_INTERVAL_MS = 60 * 60_000;
-const PRECHECK_TIMEOUT_MS = 5_000;
-const STALE_CLAIM_AGE_MS = 2 * 60_000;
-const READY_CLOCK_SKEW_MS = 5_000;
 // Keep discovery bounded by the existing two-minute cron while no durable
 // queue wake signal is available. Backoff would strand newly enqueued work.
 
@@ -37,75 +31,6 @@ function parseState(raw) {
   return { nextAllowedAt: 0, intervalMs: MIN_INTERVAL_MS };
 }
 
-function resolveSupabaseConfig(env) {
-  const supabaseUrl =
-    env.SUPABASE_URL?.trim() || env.NEXT_PUBLIC_SUPABASE_URL?.trim() || '';
-  const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY?.trim() || '';
-  if (!supabaseUrl || !serviceRoleKey) {
-    return null;
-  }
-  return { supabaseUrl, serviceRoleKey };
-}
-
-function isHeartbeatDue(state, now) {
-  return (
-    !Number.isFinite(state.lastWebCronAt) ||
-    now < state.lastWebCronAt ||
-    now - state.lastWebCronAt >= HEARTBEAT_INTERVAL_MS
-  );
-}
-
-async function hasActionableOutboxWork({
-  supabaseConfig,
-  createSupabaseClient,
-  now,
-  logger,
-}) {
-  try {
-    const supabase = createSupabaseClient(
-      supabaseConfig.supabaseUrl,
-      supabaseConfig.serviceRoleKey,
-      { auth: { persistSession: false } }
-    );
-    const readyCutoffIso = new Date(now + READY_CLOCK_SKEW_MS).toISOString();
-    const staleClaimCutoffIso = new Date(
-      now - STALE_CLAIM_AGE_MS
-    ).toISOString();
-    const filter = [
-      `and(status.in.(pending,failed),next_attempt_at.lte.${readyCutoffIso})`,
-      `and(status.eq.claimed,claimed_at.lt.${staleClaimCutoffIso})`,
-      'status.eq.dead_letter',
-    ].join(',');
-    const query = supabase
-      .from('cache_invalidation_outbox')
-      .select('target_id')
-      .or(filter)
-      .limit(1);
-    const { data, error } = await (typeof query.abortSignal === 'function'
-      ? query.abortSignal(AbortSignal.timeout(PRECHECK_TIMEOUT_MS))
-      : query);
-    if (error) {
-      logger.warn?.(
-        `[drain-cache-invalidations] precheck query failed, failing open: ${error.message}`
-      );
-      return true;
-    }
-    if (!Array.isArray(data)) {
-      logger.warn?.(
-        '[drain-cache-invalidations] precheck returned unexpected payload, failing open'
-      );
-      return true;
-    }
-    return data.length > 0;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    logger.warn?.(
-      `[drain-cache-invalidations] precheck threw, failing open: ${message}`
-    );
-    return true;
-  }
-}
-
 async function persistState({ makeDirectory, move, state, stateFile, write }) {
   await makeDirectory(dirname(stateFile), { recursive: true });
   const temporaryFile = `${stateFile}.${process.pid}.tmp`;
@@ -117,7 +42,6 @@ export async function runCacheInvalidationCron({
   env = process.env,
   now = Date.now(),
   run = runWebCron,
-  createSupabaseClient = createClient,
   read = readFile,
   write = writeFile,
   move = rename,
@@ -128,41 +52,6 @@ export async function runCacheInvalidationCron({
     env.CACHE_INVALIDATION_STATE_FILE ||
     '/tmp/baci-cache-invalidations-state.json';
   const state = parseState(await read(stateFile, 'utf8').catch(() => ''));
-  const supabaseConfig = resolveSupabaseConfig(env);
-
-  if (supabaseConfig && !isHeartbeatDue(state, now)) {
-    const hasWork = await hasActionableOutboxWork({
-      supabaseConfig,
-      createSupabaseClient,
-      now,
-      logger,
-    });
-    if (!hasWork) {
-      const nextState = {
-        nextAllowedAt: now + MIN_INTERVAL_MS,
-        intervalMs: MIN_INTERVAL_MS,
-        deadLettersPresent: false,
-        lastWebCronAt: state.lastWebCronAt,
-      };
-      await persistState({
-        makeDirectory,
-        move,
-        state: nextState,
-        stateFile,
-        write,
-      });
-      logger.log?.(
-        '[drain-cache-invalidations] idle (0 actionable rows), skipped web cron'
-      );
-      return {
-        skipped: true,
-        claimed: 0,
-        intervalMs: MIN_INTERVAL_MS,
-        nextAllowedAt: nextState.nextAllowedAt,
-      };
-    }
-  }
-
   let result;
   try {
     result = await run({
@@ -178,9 +67,6 @@ export async function runCacheInvalidationCron({
       nextAllowedAt: now + retryMs,
       intervalMs: retryMs,
       deadLettersPresent: state.deadLettersPresent === true,
-      ...(supabaseConfig && Number.isFinite(state.lastWebCronAt)
-        ? { lastWebCronAt: state.lastWebCronAt }
-        : {}),
     };
     await persistState({
       makeDirectory,
@@ -205,7 +91,7 @@ export async function runCacheInvalidationCron({
     deadLettersPresent && state.deadLettersPresent !== true;
   if (newlyObservedDeadLetters) {
     const intervalMs = MIN_INTERVAL_MS;
-    logger.warn?.(
+    logger.warn(
       JSON.stringify({
         event: CACHE_INVALIDATION_DEAD_LETTER_CODE,
         intervalMs,
@@ -216,7 +102,6 @@ export async function runCacheInvalidationCron({
       nextAllowedAt: now + intervalMs,
       intervalMs,
       deadLettersPresent: true,
-      ...(supabaseConfig ? { lastWebCronAt: now } : {}),
     };
     await persistState({
       makeDirectory,
@@ -234,12 +119,8 @@ export async function runCacheInvalidationCron({
     };
   }
   const intervalMs = MIN_INTERVAL_MS;
-  const nextState = {
-    nextAllowedAt: now + intervalMs,
-    intervalMs,
-    deadLettersPresent,
-    ...(supabaseConfig ? { lastWebCronAt: now } : {}),
-  };
+  const nextState = { nextAllowedAt: now + intervalMs, intervalMs };
+  nextState.deadLettersPresent = deadLettersPresent;
   await persistState({
     makeDirectory,
     move,
@@ -255,7 +136,7 @@ export async function runCacheInvalidationCron({
   };
 }
 
-if (isEntrypoint(import.meta.url)) {
+if (process.argv[1]?.endsWith('run-cache-invalidation-cron.mjs')) {
   loadWorkerEnv();
   await runCacheInvalidationCron();
 }

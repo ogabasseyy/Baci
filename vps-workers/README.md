@@ -222,19 +222,16 @@ variables or the project's secret manager, keep it aligned between the VPS
 worker and web deployment, and rotate it through the normal secret-management
 process. No API keys, passwords, or tokens should be stored in repo files.
 
-The two-minute `drain-cache-invalidations` sweep checks `cache_invalidation_outbox`
-directly with a bounded (`limit(1)`) Supabase `service_role` precheck between
-hourly heartbeat runs and skips the `run-web-cron` HTTP call when zero
-claimable or dead-letter rows exist (failing open on missing env, query error,
-or timeout). The Next route claims transactional cache targets and enforces
-Next → Vercel → Cloudflare ordering using `BACI_WEB_BASE_URL` and
-`CRON_SECRET`. Its `flock` schedule retains a two-minute discovery bound until
-a durable queue wake signal exists. A known dead-letter state and the last
-web-cron timestamp are persisted in `state/cache-invalidations.json`, so
-repeated sweeps do not report the same condition as a new alert while newly
-enqueued work is still discovered within two minutes. The executable loads
-`vps-workers/.env` before running the precheck or invoking the web cron. This
-cache drainer never receives Cloudflare credentials.
+The two-minute `drain-cache-invalidations` sweep uses only the existing
+`BACI_WEB_BASE_URL` and `CRON_SECRET` web-cron boundary. The Next route claims
+transactional cache targets and enforces Next → Vercel → Cloudflare ordering.
+Its `flock` schedule retains a two-minute discovery bound until a durable queue
+wake signal exists. A known dead-letter state is persisted in
+`state/cache-invalidations.json`, so repeated sweeps do not report the same
+condition as a new alert while newly enqueued work is still discovered within
+two minutes. The executable loads `vps-workers/.env` before invoking the web
+cron. This cache drainer never receives Supabase service-role or Cloudflare
+credentials.
 
 `/api/ai-jobs/worker` is intentionally retained only for short legacy web-safe
 jobs such as price list processing. Long `storefront_layout_generation` jobs

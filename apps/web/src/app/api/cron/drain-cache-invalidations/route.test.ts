@@ -79,12 +79,16 @@ describe('GET /api/cron/drain-cache-invalidations', () => {
       p_batch_size: 5,
       p_worker_id: expect.stringMatching(/^next-cron-/),
     });
-    const finishArgs = rpc.mock.calls[1]?.[1];
+    const finishCallIndex = rpc.mock.calls.findIndex(
+      ([name]) => name === 'finish_cache_invalidation'
+    );
+    expect(finishCallIndex).toBeGreaterThan(-1);
+    const finishArgs = rpc.mock.calls[finishCallIndex]?.[1];
     expect(finishArgs).toMatchObject({ p_succeeded: true });
     expect(finishArgs).not.toHaveProperty('p_error_code');
     expect(finishArgs).not.toHaveProperty('p_retry_after_seconds');
     expect(mocks.drain.mock.invocationCallOrder[0]).toBeLessThan(
-      rpc.mock.invocationCallOrder[1]
+      rpc.mock.invocationCallOrder[finishCallIndex]
     );
   });
   it('rejects an invalid secret before constructing privileged authority', async () => {
@@ -109,15 +113,15 @@ describe('GET /api/cron/drain-cache-invalidations', () => {
       failed: 1,
       deadLettersPresent: false,
     });
-    expect(rpc).toHaveBeenNthCalledWith(
-      2,
-      'finish_cache_invalidation',
-      expect.objectContaining({
-        p_error_code: 'cloudflare_request_failed',
-        p_retry_after_seconds: 120,
-        p_succeeded: false,
-      })
+    const finishCalls = rpc.mock.calls.filter(
+      ([name]) => name === 'finish_cache_invalidation'
     );
+    expect(finishCalls).toHaveLength(1);
+    expect(finishCalls[0]?.[1]).toMatchObject({
+      p_error_code: 'cloudflare_request_failed',
+      p_retry_after_seconds: 120,
+      p_succeeded: false,
+    });
   });
 
   it('persists an unexpected drainer failure and continues the claimed batch', async () => {
@@ -146,23 +150,19 @@ describe('GET /api/cron/drain-cache-invalidations', () => {
       failed: 1,
       deadLettersPresent: false,
     });
-    expect(rpc).toHaveBeenNthCalledWith(
-      2,
-      'finish_cache_invalidation',
-      expect.objectContaining({
-        p_claim_token: firstClaim.claim_token,
-        p_error_code: 'drain_unexpected_failure',
-        p_succeeded: false,
-      })
+    const finishCalls = rpc.mock.calls.filter(
+      ([name]) => name === 'finish_cache_invalidation'
     );
-    expect(rpc).toHaveBeenNthCalledWith(
-      3,
-      'finish_cache_invalidation',
-      expect.objectContaining({
-        p_claim_token: secondClaim.claim_token,
-        p_succeeded: true,
-      })
-    );
+    expect(finishCalls).toHaveLength(2);
+    expect(finishCalls[0]?.[1]).toMatchObject({
+      p_claim_token: firstClaim.claim_token,
+      p_error_code: 'drain_unexpected_failure',
+      p_succeeded: false,
+    });
+    expect(finishCalls[1]?.[1]).toMatchObject({
+      p_claim_token: secondClaim.claim_token,
+      p_succeeded: true,
+    });
   });
 
   it('drains successive claim batches before reporting the invocation summary', async () => {

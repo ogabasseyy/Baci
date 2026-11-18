@@ -20,13 +20,13 @@
     "scope": "approved_pilot_hosts_and_complete_browser_automatic_traffic",
     "zeroDenominatorVerdict": "NOT_PROVEN"
   },
-  "originMainSha": "5cc4b275d99b252f56dcbef0a36610e83c16bae1",
+  "originMainSha": "8ca197049c859215b404c1a0046beaadd41a37f9",
   "pilotCandidateHostnameSha256": "6ecb417105cfa291c7286367f438872a3bf9e3d11bd6d32383aaf2a3e7c39705",
   "pilotCandidateHostnames": [
     "baci-edge-pilot.usebaci.com"
   ],
   "routeTreeSha256": "a3838382e53168205144ed7d4869e2b84798afbb7e59076f1e6ba5d876083547",
-  "routingProxyInputSha256": "da69a5366803a0d5a7dfecc0841414c3c094a7b7166c2d47d787d9491a1e4eec",
+  "routingProxyInputSha256": "80eccd00adef87ee91211ec0f659c7713349997dd568f0829059b6f33f62afe2",
   "rows": [
     {
       "decision": "origin_dynamic",
@@ -1332,6 +1332,18 @@
     },
     {
       "decision": "origin_dynamic",
+      "id": "api-route:storefront/chatwoot/cart/add/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/chatwoot/cart/add",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/chatwoot/cart/add/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
       "id": "api-route:storefront/chatwoot/cart/quantity/route.ts",
       "methods": [
         "OPTIONS",
@@ -1377,6 +1389,18 @@
       "routePattern": "/api/storefront/chatwoot/context/verify",
       "sourceKind": "api_route",
       "sourcePath": "apps/web/src/app/api/storefront/chatwoot/context/verify/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/chatwoot/products/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/chatwoot/products",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/chatwoot/products/route.ts"
     },
     {
       "decision": "origin_dynamic",
@@ -9434,5 +9458,5 @@
     }
   ],
   "schemaVersion": 6,
-  "inventorySha256": "a830b8ba610760ce2d213bc287d76f3718b62a4ebe6dcdf8c7defb4ffd5d1203"
+  "inventorySha256": "1041f11a97d44106345ffce1eee203e0646a18c44ba12f2095463ee711d5ea77"
 }

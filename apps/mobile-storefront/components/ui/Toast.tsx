@@ -108,7 +108,7 @@ export function Toast({
   // M35 fix: Use onDismissRef instead of onDismiss in deps to prevent infinite re-render
   // when onDismiss is an inline function that changes identity every render.
   useEffect(() => {
-    if (visible && duration > 0) {
+    if (visible && duration > 0 && message.trim()) {
       // Clear any existing timer
       if (timerRef.current) {
         clearTimeout(timerRef.current);
@@ -126,7 +126,7 @@ export function Toast({
         timerRef.current = null;
       }
     };
-  }, [visible, duration]);
+  }, [visible, duration, message]);
 
   // iOS VoiceOver ignores accessibilityLiveRegion, so announce imperatively
   // regardless of duration. Android relies on accessibilityLiveRegion below,

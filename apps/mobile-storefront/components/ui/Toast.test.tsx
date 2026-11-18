@@ -163,4 +163,37 @@ describe('Toast', () => {
     );
     expect(announceSpy).not.toHaveBeenCalled();
   });
+
+  it('restarts the dismissal timer when the toast message changes while visible', () => {
+    jest.useFakeTimers();
+    try {
+      const onDismiss = jest.fn();
+      const { rerender } = render(
+        <Toast
+          duration={3000}
+          message="First message"
+          onDismiss={onDismiss}
+          visible
+        />
+      );
+
+      jest.advanceTimersByTime(2900);
+      rerender(
+        <Toast
+          duration={3000}
+          message="Second message"
+          onDismiss={onDismiss}
+          visible
+        />
+      );
+
+      jest.advanceTimersByTime(100);
+      expect(onDismiss).not.toHaveBeenCalled();
+
+      jest.advanceTimersByTime(2900);
+      expect(onDismiss).toHaveBeenCalledTimes(1);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
 });

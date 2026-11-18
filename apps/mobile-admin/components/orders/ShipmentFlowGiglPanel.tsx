@@ -11,6 +11,7 @@ import type {
   OrderGiglSelectedPlace,
 } from '@/lib/order-gigl-shipping';
 import { CheckoutRecoveryAddressInput } from './CheckoutRecoveryAddressInput';
+import { getGiglWalletDetails } from './getGiglWalletDetails';
 import {
   ShipmentOptionCard,
   type ShipmentOptionDetail,
@@ -18,20 +19,6 @@ import {
 
 const formatPrice = (amount: number) =>
   formatMerchantPrice(amount, { payout_currency: 'NGN' });
-
-// The balance only matters when it cannot cover the delivery.
-function getWalletDetails(wallet: Props['wallet']): ShipmentOptionDetail[] {
-  if (!wallet) return [];
-  if (wallet.paidByBaci) return [{ text: 'Paid by Baci' }];
-  if (wallet.canBook) return [{ text: 'From your wallet' }];
-  return [
-    { text: `Wallet balance: ${formatPrice(wallet.availableBalance)}` },
-    {
-      text: `Top up ${formatPrice(wallet.shortfall)} to book`,
-      tone: 'warning',
-    },
-  ];
-}
 
 // One line: "GoStandard · 2 days · Abakaliki" (the state when no city).
 function getQuoteSummary(
@@ -140,7 +127,7 @@ export function ShipmentFlowGiglPanel({
       ? LOADING_PRICE
       : undefined;
   const details = quote
-    ? getWalletDetails(wallet)
+    ? getGiglWalletDetails(wallet)
     : loading
       ? LOADING_DETAILS
       : [];

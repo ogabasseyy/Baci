@@ -47,4 +47,18 @@ describe('applyProviderFailureDiagnostics', () => {
       providerErrorDetail: 'Monnify server error: 502',
     });
   });
+
+  it('never stores a response code that is not code-shaped', () => {
+    const metadata: Record<string, unknown> = {};
+
+    applyProviderFailureDiagnostics(metadata, {
+      providerErrorDetail: 'Monnify API error: 400',
+      providerResponseCode: '0803 123 4567',
+      success: false,
+    });
+
+    expect(metadata).toEqual({
+      providerErrorDetail: 'Monnify API error: 400',
+    });
+  });
 });

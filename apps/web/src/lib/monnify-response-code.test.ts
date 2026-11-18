@@ -22,6 +22,9 @@ describe('readMonnifyResponseCode', () => {
     { responseCode: '0803 123 4567' },
     { responseCode: '08031234567' },
     { responseCode: 8031234567 },
+    { responseCode: '801-234-5678' },
+    { responseCode: '415-555-0132' },
+    { responseCode: '12_34_5' },
     { responseCode: 'Bearer abcdefghijklmnopqrstuvwxyz' },
     { responseBody: { responseCode: '99' } },
   ])('returns undefined for %j', (answer) => {

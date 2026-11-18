@@ -1,4 +1,5 @@
 import type { PurchaseResult } from '@/lib/kuda';
+import { readMonnifyResponseCode } from './monnify-response-code';
 
 /**
  * Keeps the provider's scrubbed error text and response code on a failed
@@ -15,7 +16,11 @@ export function applyProviderFailureDiagnostics(
   const detail = result.success
     ? undefined
     : result.providerErrorDetail?.trim();
-  const code = result.success ? undefined : result.providerResponseCode;
+  // Re-checked here so only code-shaped values are ever stored, whatever
+  // produced the result.
+  const code = result.success
+    ? undefined
+    : readMonnifyResponseCode({ responseCode: result.providerResponseCode });
   if (detail) {
     metadata.providerErrorDetail = detail;
   } else {

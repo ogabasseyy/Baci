@@ -1,5 +1,6 @@
 import type { OxygenRuntimeSnapshot } from '@baci/shared/oxygen';
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -22,12 +23,14 @@ jest.mock('./OxygenSignatureStep', () => ({
     onSignature,
     onAccept,
     onContinue,
+    requestingCode,
   }: {
     nextPaymentDate?: string;
     termsKey: string;
     onSignature: (file: unknown, key: string) => void;
     onAccept: (value: boolean) => void;
     onContinue: () => void;
+    requestingCode?: boolean;
   }) => {
     const { Text } = require('react-native');
     return (
@@ -48,7 +51,9 @@ jest.mock('./OxygenSignatureStep', () => ({
         >
           Sign test
         </Text>
-        <Text onPress={onContinue}>Continue signature</Text>
+        <Text onPress={onContinue}>
+          {requestingCode ? 'Sending code…' : 'Continue signature'}
+        </Text>
       </>
     );
   },
@@ -87,30 +92,25 @@ it('provides the server-confirmed repayment date needed to accept the signature 
       schedule: [{ period: 1, dueDate: [2027, 1, 5], amount: 10000 }],
     },
   } as OxygenRuntimeSnapshot;
-  const client = {
-    approvalWindow: jest.fn().mockResolvedValue({ window: null }),
-  } as unknown as OxygenClient;
   render(
     <OxygenApprovalFlow
       snapshot={snapshot}
-      client={client}
+      client={{} as OxygenClient}
       controller={{} as OxygenWorkflowController}
       busy={false}
     />
   );
-  await waitFor(() => expect(client.approvalWindow).toHaveBeenCalled());
   fireEvent.press(screen.getByText('Accept breakdown'));
   expect(screen.getByText('Confirmed next payment 2027-1-5')).toBeTruthy();
 });
 
-it('shows code separately after signature and restores the saved signature when going back', async () => {
+it('keeps the signature until the code is ready and restores it when going back', async () => {
   const snapshot = {
     workflowId: 'workflow',
-    version: 2,
+    version: 26,
     stage: 'approval_required',
     executionEnabled: true,
     state: {
-      bookingReference: 'booking',
       booking: {
         loan_reference: 'booking',
         total_upfront_payment: 25000,
@@ -119,29 +119,49 @@ it('shows code separately after signature and restores the saved signature when 
       schedule: [{ period: 1, dueDate: [2027, 1, 5], amount: 10000 }],
     },
   } as OxygenRuntimeSnapshot;
+  const execute = jest.fn().mockResolvedValue(undefined);
   const now = Date.now();
-  const client = {
-    approvalWindow: jest.fn().mockResolvedValue({
-      window: {
-        bookingReference: 'booking',
-        sentAt: new Date(now).toISOString(),
-        expiresAt: new Date(now + 300000).toISOString(),
-      },
-    }),
-  } as unknown as OxygenClient;
+  const result = {
+    window: {
+      bookingReference: 'booking',
+      sentAt: new Date(now).toISOString(),
+      expiresAt: new Date(now + 300000).toISOString(),
+    },
+  };
+  let confirm: (value: typeof result) => void = () => undefined;
+  const approvalWindow = jest
+    .fn()
+    .mockResolvedValueOnce({ window: null })
+    .mockImplementationOnce(
+      () =>
+        new Promise<typeof result>((resolve) => {
+          confirm = resolve;
+        })
+    );
   render(
     <OxygenApprovalFlow
       snapshot={snapshot}
-      client={client}
-      controller={{} as OxygenWorkflowController}
+      client={{ approvalWindow } as unknown as OxygenClient}
+      controller={
+        {
+          execute,
+          getState: () => ({ snapshot, error: null }),
+        } as unknown as OxygenWorkflowController
+      }
       busy={false}
     />
   );
-  await waitFor(() => expect(client.approvalWindow).toHaveBeenCalled());
   fireEvent.press(screen.getByText('Accept breakdown'));
   fireEvent.press(screen.getByText('Sign test'));
   fireEvent.press(screen.getByText('Continue signature'));
-  await waitFor(() => expect(screen.getByText('OTP view')).toBeTruthy());
+  await waitFor(() => expect(execute).toHaveBeenCalledTimes(1));
+  expect(screen.getByText('Confirmed next payment 2027-1-5')).toBeTruthy();
+  expect(screen.getByText('Sending code…')).toBeTruthy();
+  expect(screen.queryByText('Preparing your verification code…')).toBeNull();
+  expect(screen.queryByText('OTP view')).toBeNull();
+
+  await act(async () => confirm(result));
+  expect(screen.getByText('OTP view')).toBeTruthy();
   expect(screen.queryByText('Confirmed next payment 2027-1-5')).toBeNull();
   fireEvent.press(screen.getByText('Back to signature'));
   expect(screen.getByText('Confirmed next payment 2027-1-5')).toBeTruthy();

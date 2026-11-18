@@ -100,31 +100,12 @@ function Approval({
   const [signature, setSignature] = useState<{
     file: OxygenTransientFile;
     key: string;
-    version: number;
   } | null>(null);
   const [window, setWindow] = useState<OxygenApprovalCodeWindow | null>(null);
   const [otp, setOtp] = useState('');
   const [windowError, setWindowError] = useState('');
-  // biome-ignore lint/correctness/useExhaustiveDependencies: refresh the server approval window after every canonical transition.
-  useEffect(() => {
-    let live = true;
-    setWindow(null);
-    setOtp('');
-    void client.approvalWindow(snapshot.workflowId).then(
-      (r) => {
-        if (live) setWindow(r.window);
-      },
-      () => {
-        if (live)
-          setWindowError(
-            'Your approval window could not be confirmed. Check for an update.'
-          );
-      }
-    );
-    return () => {
-      live = false;
-    };
-  }, [client, snapshot.workflowId, snapshot.version]);
+  const [requestingCode, setRequestingCode] = useState(false);
+  const codeRequestInFlight = useRef(false);
   const canApprove = canApproveOxygen({
     reference: terms.reference,
     termsKey,
@@ -139,22 +120,47 @@ function Approval({
   // final submission additionally captures the currently displayed canonical version.
   const disabled =
     busy || Boolean(snapshot.pending) || !snapshot.executionEnabled;
-  async function requestCode() {
-    if (disabled || !accepted || !signature) return;
-    if (window && Date.parse(window.expiresAt) > Date.now()) return;
-    await controller.execute({ action: 'trigger_approval_otp' });
+  async function readActiveCodeWindow() {
+    const { window } = await client.approvalWindow(snapshot.workflowId);
+    return window?.bookingReference === terms.reference &&
+      Date.parse(window.expiresAt) > Date.now()
+      ? window
+      : null;
   }
-  async function continueToCode() {
-    if (disabled || !accepted || !signature) return;
-    if (
-      !window ||
-      window.bookingReference !== terms.reference ||
-      Date.parse(window.expiresAt) <= Date.now()
-    ) {
-      await controller.execute({ action: 'trigger_approval_otp' });
-      if (controller.getState().error) return;
+  async function requestCode() {
+    if (disabled || codeRequestInFlight.current || !accepted || !signature)
+      return;
+    codeRequestInFlight.current = true;
+    setRequestingCode(true);
+    setWindowError('');
+    try {
+      // Recheck before sending so retrying a failed read can reuse a sent code.
+      let activeWindow = await readActiveCodeWindow();
+      if (!activeWindow) {
+        const current = controller.getState();
+        if (
+          current.busy ||
+          current.snapshot?.workflowId !== snapshot.workflowId ||
+          current.snapshot.version !== snapshot.version
+        )
+          return;
+        await controller.execute({ action: 'trigger_approval_otp' });
+        if (controller.getState().error) return;
+        activeWindow = await readActiveCodeWindow();
+      }
+      if (!activeWindow) {
+        setWindowError('We couldn’t confirm your code. Try again.');
+        return;
+      }
+      setWindow(activeWindow);
+      setOtp('');
+      setCodeStep(true);
+    } catch {
+      setWindowError('We couldn’t confirm your code. Try again.');
+    } finally {
+      setRequestingCode(false);
+      codeRequestInFlight.current = false;
     }
-    setCodeStep(true);
   }
   return (
     <View style={{ gap: 16 }}>
@@ -182,21 +188,17 @@ function Approval({
                 accepted={accepted}
                 capturedTermsKey={signature?.key ?? null}
                 disabled={disabled}
+                requestingCode={requestingCode}
                 onSignature={(file, key) =>
-                  setSignature(
-                    file ? { file, key, version: snapshot.version } : null
-                  )
+                  setSignature(file ? { file, key } : null)
                 }
                 onAccept={setAccepted}
-                onContinue={() => void continueToCode()}
+                onContinue={() => void requestCode()}
               />
             </View>
           </OxygenFooterVisibility>
           {windowError ? (
             <Text accessibilityRole="alert">{windowError}</Text>
-          ) : null}
-          {codeStep && !window ? (
-            <Text>Preparing your verification code…</Text>
           ) : null}
           {codeStep && window ? (
             <>
@@ -204,7 +206,7 @@ function Approval({
                 scopeKey={`${termsKey}:${window.sentAt}`}
                 value={otp}
                 onChange={setOtp}
-                pending={disabled}
+                pending={disabled || requestingCode}
                 confirmed={snapshot.stage === 'payment_required'}
                 sentAt={window.sentAt}
                 expiresAt={window.expiresAt}
@@ -225,7 +227,7 @@ function Approval({
               <OxygenAction
                 label="Back to signature"
                 secondary
-                disabled={disabled}
+                disabled={disabled || requestingCode}
                 onPress={() => setCodeStep(false)}
               />
             </>

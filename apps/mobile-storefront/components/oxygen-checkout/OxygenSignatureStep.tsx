@@ -23,6 +23,7 @@ export interface OxygenSignatureStepProps {
   capturedTermsKey: string | null;
   nextPaymentDate?: string;
   disabled?: boolean;
+  requestingCode?: boolean;
   onSignature: (
     file: OxygenTransientFile | undefined,
     termsKey: string
@@ -39,11 +40,13 @@ function SignatureCanvas({
   accepted,
   capturedTermsKey,
   nextPaymentDate,
-  disabled = false,
+  disabled: controlsDisabled = false,
+  requestingCode = false,
   onSignature,
   onAccept,
   onContinue,
 }: OxygenSignatureStepProps) {
+  const disabled = controlsDisabled || requestingCode;
   const { colors } = useTheme();
   const setDrawing = useOxygenDrawingControl();
   const drawing = useRef(false);
@@ -274,7 +277,13 @@ function SignatureCanvas({
       )}
       <OxygenActionFooter>
         <OxygenAction
-          label={saving ? 'Saving signature…' : 'Continue'}
+          label={
+            requestingCode
+              ? 'Sending code…'
+              : saving
+                ? 'Saving signature…'
+                : 'Continue'
+          }
           disabled={disabled || saving || !usable}
           onPress={onContinue}
         />

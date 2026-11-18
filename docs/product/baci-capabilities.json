@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-18T05:21:00+00:00",
-  "source_revision": "7f3cba94621777d942ece0abfb5155e049aeace1",
-  "evidence_digest": "4135de9c209cfd10b3eb6bba1353880c31fdd438232b82f7e3c79ec61f3c9078",
-  "claims_digest": "dbf898ef41c81ccd45fd40c6470efc41c52b20e583e730898ce675cf3f39f292",
-  "review_scope": "Source evidence only. Preserves current main’s OAuth, cart retention and notices, payment reconciliation, merchant protocols and Oxygen pilot boundaries. Full-code storefront MCP remains disabled by default. Owner approval, evidence and public-verification schemas retain their existing validation. Direct local admission, source adoption, rollback and simulated commerce tests cover authority boundaries. Hosted qualification and activation remain separate.",
+  "reviewed_at": "2026-11-18T08:46:20+00:00",
+  "source_revision": "ece71b35677b5d8ca8a58cd2d87db1e841e7f6ea",
+  "evidence_digest": "ab7d58299bdb20150622215d446b43ac0b9dc7a315ba9ef3c2a9a033e76ffbb1",
+  "claims_digest": "bdee96c3f6a9568fad756dd8d7ec4ef0da3722d8b4bac72488fb6a7b4d2928e1",
+  "review_scope": "Source evidence only. Preserves current main’s OAuth, cart retention and notices, payment reconciliation, merchant protocols and Oxygen pilot boundaries. Full-code storefront MCP remains disabled by default. Owner approval, evidence and public-verification schemas retain their existing validation. Direct local admission, source adoption, rollback and simulated commerce tests cover authority boundaries. Hosted qualification and activation remain separate. Reconciled the full-code builder integration, runner and preview delivery against current main. Source covers request cancellation, fixed runner admission and sandboxed output. Temporary Contabo qualification does not establish live OAuth, delivery or ChatGPT readiness.",
   "capabilities": [
     {
       "id": "payments",

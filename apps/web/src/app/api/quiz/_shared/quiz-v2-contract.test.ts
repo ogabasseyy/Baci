@@ -1,11 +1,12 @@
 import { NextRequest } from 'next/server';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   readQuizDeviceFingerprint,
   rejectUnsupportedQuizContract,
   requireQuizV2Contract,
   requireQuizV2Runtime,
   requiresQuizV2,
+  resetQuizV2RuntimeCheckForTests,
 } from './quiz-v2-contract';
 
 function request(headers?: HeadersInit) {
@@ -13,6 +14,14 @@ function request(headers?: HeadersInit) {
 }
 
 describe('quiz v2 route contract', () => {
+  beforeEach(() => {
+    resetQuizV2RuntimeCheckForTests();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('distinguishes legacy, supported, and unsupported contracts', () => {
     expect(requiresQuizV2(request())).toBe(false);
     expect(requireQuizV2Contract(request())?.status).toBe(426);
@@ -34,6 +43,89 @@ describe('quiz v2 route contract', () => {
 
     rpc.mockResolvedValue({ data: 2, error: null });
     expect(await requireQuizV2Runtime({ rpc } as never)).toBeNull();
+  });
+
+  it('asks the database once, then reuses a pass for 15 seconds', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-18T12:00:00Z'));
+    const rpc = vi.fn().mockResolvedValue({ data: 2, error: null });
+
+    expect(await requireQuizV2Runtime({ rpc } as never)).toBeNull();
+    expect(await requireQuizV2Runtime({ rpc } as never)).toBeNull();
+    expect(rpc).toHaveBeenCalledTimes(1);
+
+    vi.setSystemTime(new Date('2026-11-18T12:00:14Z'));
+    expect(await requireQuizV2Runtime({ rpc } as never)).toBeNull();
+    expect(rpc).toHaveBeenCalledTimes(1);
+
+    vi.setSystemTime(new Date('2026-11-18T12:00:16Z'));
+    rpc.mockResolvedValue({ data: 1, error: null });
+    expect((await requireQuizV2Runtime({ rpc } as never))?.status).toBe(503);
+    expect(rpc).toHaveBeenCalledTimes(2);
+  });
+
+  it('counts the 15 seconds from when a slow check was asked', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-18T12:00:00Z'));
+    let answer: (value: { data: number; error: null }) => void = () => {};
+    const rpc = vi.fn().mockReturnValueOnce(
+      new Promise((resolve) => {
+        answer = resolve;
+      })
+    );
+
+    const pending = requireQuizV2Runtime({ rpc } as never);
+    vi.setSystemTime(new Date('2026-11-18T12:00:20Z'));
+    answer({ data: 2, error: null });
+    expect(await pending).toBeNull();
+
+    rpc.mockResolvedValue({ data: 2, error: null });
+    expect(await requireQuizV2Runtime({ rpc } as never)).toBeNull();
+    expect(rpc).toHaveBeenCalledTimes(2);
+  });
+
+  it('stops joining a check that has stalled for two seconds', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-18T12:00:00Z'));
+    const rpc = vi
+      .fn()
+      .mockReturnValueOnce(new Promise(() => {}))
+      .mockResolvedValue({ data: 2, error: null });
+
+    void requireQuizV2Runtime({ rpc } as never);
+    vi.setSystemTime(new Date('2026-11-18T12:00:01Z'));
+    void requireQuizV2Runtime({ rpc } as never);
+    expect(rpc).toHaveBeenCalledTimes(1);
+
+    vi.setSystemTime(new Date('2026-11-18T12:00:02Z'));
+    expect(await requireQuizV2Runtime({ rpc } as never)).toBeNull();
+    expect(rpc).toHaveBeenCalledTimes(2);
+    expect(await requireQuizV2Runtime({ rpc } as never)).toBeNull();
+    expect(rpc).toHaveBeenCalledTimes(2);
+  });
+
+  it('never remembers a failed check', async () => {
+    const rpc = vi
+      .fn()
+      .mockResolvedValueOnce({ data: null, error: { message: 'down' } })
+      .mockRejectedValueOnce(new Error('network'))
+      .mockResolvedValue({ data: 2, error: null });
+
+    expect((await requireQuizV2Runtime({ rpc } as never))?.status).toBe(503);
+    expect((await requireQuizV2Runtime({ rpc } as never))?.status).toBe(503);
+    expect(await requireQuizV2Runtime({ rpc } as never)).toBeNull();
+    expect(rpc).toHaveBeenCalledTimes(3);
+  });
+
+  it('shares one database call between requests that arrive together', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: 2, error: null });
+
+    const results = await Promise.all(
+      Array.from({ length: 50 }, () => requireQuizV2Runtime({ rpc } as never))
+    );
+
+    expect(results.every((result) => result === null)).toBe(true);
+    expect(rpc).toHaveBeenCalledTimes(1);
   });
 
   it('reads only a valid fingerprint header', () => {

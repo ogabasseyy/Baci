@@ -77,8 +77,14 @@ function readAddress(raw: unknown, order: OrderLike): ShippingAddress {
   const a =
     raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
   return {
-    name: String(a.name ?? order.customer_name ?? ''),
-    phone: String(a.phone ?? order.customer_phone ?? ''),
+    name: readNonEmptyString(
+      a.name,
+      readNonEmptyString(order.customer_name, '')
+    ),
+    phone: readNonEmptyString(
+      a.phone,
+      readNonEmptyString(order.customer_phone, '')
+    ),
     email: String(a.email ?? order.customer_email ?? ''),
     address: String(a.address ?? a.street ?? ''),
     city: String(a.city ?? ''),

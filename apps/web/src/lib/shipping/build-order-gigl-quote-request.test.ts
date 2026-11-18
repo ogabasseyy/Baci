@@ -262,4 +262,60 @@ describe('buildOrderGiglQuoteRequest', () => {
       },
     });
   });
+
+  it('falls back to customer contact when shipping_address name or phone is blank whitespace', async () => {
+    const result = await buildOrderGiglQuoteRequest(
+      {
+        customer_name: 'Ada',
+        customer_phone: '08000000000',
+        shipping_address: {
+          name: '   ',
+          phone: ' ',
+          address: '12 Test Street',
+          city: 'Ikeja',
+          state: 'Lagos',
+        },
+        order_items: base.order_items,
+      },
+      sender
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      request: {
+        receiver: {
+          name: 'Ada',
+          phone: '08000000000',
+        },
+      },
+    });
+  });
+
+  it('prefers shipping_address name and phone over customer fields when both are present', async () => {
+    const result = await buildOrderGiglQuoteRequest(
+      {
+        customer_name: 'Other Person',
+        customer_phone: '09099999999',
+        shipping_address: {
+          name: 'Ada',
+          phone: '08000000000',
+          address: '12 Test Street',
+          city: 'Ikeja',
+          state: 'Lagos',
+        },
+        order_items: base.order_items,
+      },
+      sender
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      request: {
+        receiver: {
+          name: 'Ada',
+          phone: '08000000000',
+        },
+      },
+    });
+  });
 });

@@ -177,6 +177,24 @@ describe.skipIf(process.env.BACI_SHIPPING_QUOTE_POSTGRES !== '1')(
             ${actor(ownerId)} ${bind}`)
         ).toThrow(/stale_order_quote_inputs/);
       });
+
+      it('falls back to customer_name when shipping_address.name is blank whitespace', () => {
+        const out = run(`RESET ROLE;
+          UPDATE public.orders SET customer_name='Ada', customer_phone='08000000000',
+            shipping_address='{"name":"   ","address":"12 Test Street","city":"Ikeja","state":"Lagos"}'
+            WHERE id='${bindOrderId}';
+          ${actor(ownerId)} ${bind} ${bound}`);
+        expect(out.at(-1)).toBe('merchant_wallet');
+      });
+
+      it('prefers shipping_address name and phone over divergent customer fields', () => {
+        const out = run(`RESET ROLE;
+          UPDATE public.orders SET customer_name='Other', customer_phone='09099999999',
+            shipping_address='{"name":"Ada","phone":"08000000000","address":"12 Test Street","city":"Ikeja","state":"Lagos"}'
+            WHERE id='${bindOrderId}';
+          ${actor(ownerId)} ${bind} ${bound}`);
+        expect(out.at(-1)).toBe('merchant_wallet');
+      });
     });
 
     it('lets the owner and orders.fulfill + orders.edit staff bind the attested quote', () => {

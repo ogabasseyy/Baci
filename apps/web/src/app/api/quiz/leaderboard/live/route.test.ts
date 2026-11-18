@@ -76,7 +76,42 @@ describe('quiz live leaderboard route', () => {
     expect(rpc).not.toHaveBeenCalled();
   });
 
-  it('maps the live projection into the public response', async () => {
+  it('takes the participant count from the live projection in one database call', async () => {
+    const rpc = authenticate({
+      current_player: null,
+      entries: [ROW],
+      participant_count: 9120,
+      status: 'live',
+    });
+    const { GET } = await import('./route');
+    const body = await (await GET(request())).json();
+
+    expect(body.participantCount).toBe(9120);
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledWith('get_quiz_live_leaderboard_public_v2', {
+      p_event_id: EVENT_ID,
+    });
+  });
+
+  it('does not ask for a separate count when the projection reports none', async () => {
+    const rpc = authenticate(
+      {
+        current_player: null,
+        entries: [],
+        participant_count: null,
+        status: 'live',
+      },
+      null,
+      77
+    );
+    const { GET } = await import('./route');
+    const body = await (await GET(request())).json();
+
+    expect(body.participantCount).toBeNull();
+    expect(rpc).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to the count call for a projection without a count', async () => {
     const rpc = authenticate(
       {
         current_player: ROW,
@@ -90,6 +125,9 @@ describe('quiz live leaderboard route', () => {
     const response = await GET(request());
 
     expect(rpc).toHaveBeenCalledWith('get_quiz_live_leaderboard_public_v2', {
+      p_event_id: EVENT_ID,
+    });
+    expect(rpc).toHaveBeenCalledWith('get_quiz_participant_count_public_v2', {
       p_event_id: EVENT_ID,
     });
     expect(await response.json()).toEqual({

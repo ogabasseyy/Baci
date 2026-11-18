@@ -1,5 +1,6 @@
 import { Pressable, Text, View } from 'react-native';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
+import { PrimaryHeadStartChoice } from './PrimaryHeadStartChoice';
 import { StartSavingsAutoDebitFundingContent } from './StartSavingsAutoDebitFundingContent';
 import { StartSavingsManualFundingContent } from './StartSavingsManualFundingContent';
 import { StartSavingsReviewPlan } from './StartSavingsReviewPlan';
@@ -7,6 +8,7 @@ import { startSavingsStyles as styles } from './start-savings.styles';
 import type { StartSavingsColors } from './start-savings.types';
 import type { StartSavingsController } from './start-savings-controller.types';
 import { handleSavingsModalActionError } from './start-savings-modal-action-error';
+import { wholeNairaHeadStart } from './start-savings-wallet-balance';
 
 type Props = {
   colors: StartSavingsColors;
@@ -23,11 +25,16 @@ export function StartSavingsReviewContent({ colors, controller }: Props) {
     controller.sourceMode === 'auto_debit'
       ? 0
       : controller.effectiveInitialContribution;
-  // Never ask how to pay for nothing, and PiggyVest head starts move from
-  // the wallet after the plan exists.
+  // Never ask how to pay for nothing. PiggyVest head starts move from the
+  // wallet after the plan exists, so they get the pay-now tick below.
   const chooseHeadStartFunding =
     controller.sourceMode === 'manual' &&
     !controller.primaryWallet &&
+    headStart > 0;
+  // PiggyVest: a pay-now tick instead of the legacy funding choice.
+  const choosePrimaryHeadStart =
+    controller.sourceMode === 'manual' &&
+    controller.primaryWallet &&
     headStart > 0;
   const busy = controller.isSubmitting || controller.isAuthorizingCard;
   return (
@@ -37,7 +44,7 @@ export function StartSavingsReviewContent({ colors, controller }: Props) {
         Check your plan
       </Text>
       <StartSavingsReviewPlan colors={colors} controller={controller} />
-      {headStart > 0 ? (
+      {headStart > 0 && !choosePrimaryHeadStart ? (
         <Text style={[styles.subheading, { color: colors.textSecondary }]}>
           Head start: {formatNgnCurrency(headStart)}
         </Text>
@@ -52,6 +59,21 @@ export function StartSavingsReviewContent({ colors, controller }: Props) {
             controller={controller}
           />
         </>
+      ) : null}
+      {choosePrimaryHeadStart ? (
+        <PrimaryHeadStartChoice
+          colors={colors}
+          headStart={wholeNairaHeadStart(headStart)}
+          walletBalance={controller.safeWalletBalance}
+          fundingAccount={controller.fundingAccount}
+          payNow={controller.selectedFundingOption === 'wallet'}
+          disabled={busy}
+          onPayNowChange={(payNow) =>
+            controller.setSelectedFundingOption(
+              payNow ? 'wallet' : 'bank_transfer'
+            )
+          }
+        />
       ) : null}
       {controller.sourceMode === 'auto_debit' ? (
         <>

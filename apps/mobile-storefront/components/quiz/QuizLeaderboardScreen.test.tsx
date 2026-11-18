@@ -166,4 +166,97 @@ describe('QuizLeaderboardScreen', () => {
       })
     ).toBeTruthy();
   });
+
+  describe('medal podium', () => {
+    const pastEvent = {
+      endsAt: '2026-08-03T20:05:00Z',
+      id: 'event-1',
+      prizeName: 'Phone',
+      questionCount: 20,
+      startsAt: '2026-08-03T20:00:00Z',
+      status: 'completed' as const,
+      title: 'Tonight quiz',
+    };
+    const entry = (rank: number, displayName: string) => ({
+      displayName,
+      isCurrentCustomer: false,
+      rank,
+      score: 20 - rank,
+      status: 'ranked' as const,
+      submittedAt: null,
+      totalTimeSeconds: 100 + rank,
+    });
+    const openBoard = async (names: string[]) => {
+      jest.mocked(fetchQuizEvents).mockResolvedValue([pastEvent]);
+      jest.mocked(fetchQuizLeaderboard).mockResolvedValue({
+        currentPlayer: null,
+        entries: names.map((name, index) => entry(index + 1, name)),
+        participantCount: names.length,
+        status: 'published',
+      });
+      render(<QuizLeaderboardScreen />);
+      fireEvent.press(
+        await screen.findByRole('button', {
+          name: 'View leaderboard for Tonight quiz',
+        })
+      );
+      await screen.findByText('Final standings');
+    };
+
+    it('puts the top three on the podium and lists the rest below', async () => {
+      await openBoard(['Ada', 'Bola', 'Chidi', 'Dayo']);
+
+      expect(screen.getByTestId('quiz-standings-podium')).toBeTruthy();
+      expect(screen.getByLabelText('Rank 1, Ada, score 19')).toBeTruthy();
+      expect(screen.getByLabelText('Rank 3, Chidi, score 17')).toBeTruthy();
+      // Finish time is the tie-breaker, so podium players keep theirs.
+      expect(screen.getByText('1:41.00')).toBeTruthy();
+      // Podium players are not repeated as rows; rank 4 is the first row.
+      expect(screen.getAllByText('Ada')).toHaveLength(1);
+      expect(screen.getByText('#4')).toBeTruthy();
+      expect(screen.queryByText('#1')).toBeNull();
+    });
+
+    it('does not say standings are missing when all players are on the podium', async () => {
+      await openBoard(['Ada', 'Bola', 'Chidi']);
+
+      expect(screen.getByTestId('quiz-standings-podium')).toBeTruthy();
+      expect(screen.queryByText('No standings are available yet.')).toBeNull();
+    });
+
+    it('bugfix: keeps both rows when tied players share a name and rank', async () => {
+      const consoleError = jest
+        .spyOn(console, 'error')
+        .mockImplementation(() => undefined);
+      jest.mocked(fetchQuizEvents).mockResolvedValue([pastEvent]);
+      jest.mocked(fetchQuizLeaderboard).mockResolvedValue({
+        currentPlayer: null,
+        entries: [entry(1, 'Sam'), entry(1, 'Sam')],
+        participantCount: 2,
+        status: 'published',
+      });
+      render(<QuizLeaderboardScreen />);
+      fireEvent.press(
+        await screen.findByRole('button', {
+          name: 'View leaderboard for Tonight quiz',
+        })
+      );
+      await screen.findByText('Final standings');
+
+      expect(screen.getAllByText('Sam')).toHaveLength(2);
+      const duplicateKeyWarnings = consoleError.mock.calls.filter((call) =>
+        String(call[0]).includes('same key')
+      );
+      expect(duplicateKeyWarnings).toHaveLength(0);
+      consoleError.mockRestore();
+    });
+
+    it('keeps plain rows when fewer than three players took part', async () => {
+      await openBoard(['Ada', 'Bola']);
+
+      expect(screen.queryByTestId('quiz-standings-podium')).toBeNull();
+      expect(screen.getByText('#1')).toBeTruthy();
+      expect(screen.getByText('#2')).toBeTruthy();
+    });
+  });
 });

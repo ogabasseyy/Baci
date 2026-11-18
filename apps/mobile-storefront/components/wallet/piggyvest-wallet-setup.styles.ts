@@ -28,7 +28,7 @@ export const setupStyles = StyleSheet.create({
     paddingHorizontal: 14,
     minHeight: 52,
   },
-  input: { flex: 1, fontSize: 16, letterSpacing: 2, paddingVertical: 12 },
+  input: { flex: 1, fontSize: 16, paddingVertical: 12 },
   counter: { fontSize: 12, fontVariant: ['tabular-nums'] },
   hint: { fontSize: 12 },
   consentRow: {

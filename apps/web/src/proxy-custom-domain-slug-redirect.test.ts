@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getSlugForCustomDomain } from '@/lib/domain-cache-simple';
 import { getCurrentSlugForAlias } from '@/lib/slug-alias-cache';
+import { resolveStorefrontProductSlugResolution } from '@/lib/storefront-product-slug-membership';
 import { proxy } from './proxy';
 
 vi.mock('@/lib/supabase/middleware', () => ({
@@ -130,6 +131,9 @@ describe('proxy: custom-domain slug canonicalization and retired alias redirects
 
   it('redirects retired custom-domain slug prefixes to the canonical domain root', async () => {
     vi.mocked(getSlugForCustomDomain).mockResolvedValueOnce('zorvexa');
+    vi.mocked(resolveStorefrontProductSlugResolution).mockResolvedValueOnce({
+      kind: 'missing',
+    });
     vi.mocked(getCurrentSlugForAlias).mockImplementation(async (s: string) =>
       s === 'yodhashop' ? 'zorvexa' : null
     );
@@ -146,6 +150,9 @@ describe('proxy: custom-domain slug canonicalization and retired alias redirects
 
   it('strips a genuine retired-slug prefix (non-route) to the slugless custom-domain URL', async () => {
     vi.mocked(getSlugForCustomDomain).mockResolvedValueOnce('zorvexa');
+    vi.mocked(resolveStorefrontProductSlugResolution).mockResolvedValueOnce({
+      kind: 'missing',
+    });
     vi.mocked(getCurrentSlugForAlias).mockImplementation(async (s: string) =>
       s === 'yodhashop' ? 'zorvexa' : null
     );
@@ -162,6 +169,9 @@ describe('proxy: custom-domain slug canonicalization and retired alias redirects
 
   it('strips a GRANDFATHERED reserved-name retired-slug prefix on a custom domain', async () => {
     vi.mocked(getSlugForCustomDomain).mockResolvedValueOnce('zorvexa');
+    vi.mocked(resolveStorefrontProductSlugResolution).mockResolvedValueOnce({
+      kind: 'missing',
+    });
     vi.mocked(getCurrentSlugForAlias).mockImplementation(async (s: string) =>
       s === 'support' ? 'zorvexa' : null
     );

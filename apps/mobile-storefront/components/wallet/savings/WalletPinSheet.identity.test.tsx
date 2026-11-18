@@ -108,6 +108,11 @@ describe('bugfix: an old sign-in dead-ended PIN creation on "Please sign in agai
     await screen.findByText("Confirm it's you");
     await confirmWithCode();
     expect(await screen.findByText('Create your wallet PIN')).toBeOnTheScreen();
+    // Straight to an idle, ready pad: no busy spinner flashes on its button.
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled();
+    expect(
+      screen.getByLabelText('New PIN, 0 of 6 digits entered')
+    ).toBeOnTheScreen();
     expect(sendIdentityCode).toHaveBeenCalledWith('bassey@example.com');
     expect(confirmIdentityCode).toHaveBeenCalledWith({
       email: 'bassey@example.com',

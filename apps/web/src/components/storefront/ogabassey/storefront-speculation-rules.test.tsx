@@ -49,7 +49,7 @@ describe('StorefrontSpeculationRules', () => {
     expect(Array.isArray(json.prerender)).toBe(true);
     expect(Array.isArray(json.prefetch)).toBe(true);
     expect(json.prerender).toHaveLength(1);
-    expect(json.prefetch).toHaveLength(1);
+    expect(json.prefetch).toHaveLength(2);
   });
 
   it('serializes safely so the JSON cannot break out of the script element', () => {

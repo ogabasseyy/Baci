@@ -1,20 +1,62 @@
+import {
+  IMEI_IDENTIFIER_BY_DEVICE,
+  type ImeiDeviceCategory,
+  isValidDeviceIdentifier,
+  resolveInputIdentifier,
+} from '@baci/shared/imei';
 import { router } from 'expo-router';
-import { Alert } from 'react-native';
 import { readPiggyvestCapabilityNow } from '@/lib/read-piggyvest-capability-now';
 import { WALLET_TOP_UP_MIN_AMOUNT } from '@/lib/wallet-top-up-constants';
 
 const IMEI_CHECK_RETURN_HREF = '/imei-check';
 
 export const imeiCheckScreenActions = {
-  alertInvalidIdentifier(identifier: 'imei' | 'serial' | 'both') {
-    Alert.alert(
-      identifier === 'serial' ? 'Invalid serial' : 'Invalid number',
-      identifier === 'serial'
-        ? 'Please enter a valid device serial number.'
-        : identifier === 'imei'
-          ? 'Please enter a valid 15-digit IMEI number.'
-          : 'Please enter a valid IMEI or serial number.'
+  /** Shown inline above the number field: no iOS alert interrupts. */
+  invalidIdentifierMessage(
+    tierIdentifier: 'imei' | 'serial' | 'both',
+    device?: ImeiDeviceCategory
+  ) {
+    // Name what this device's field accepts: a "both" check on a phone tab
+    // asks for an IMEI, the same way the field itself does.
+    const identifier = device
+      ? resolveInputIdentifier(
+          tierIdentifier,
+          IMEI_IDENTIFIER_BY_DEVICE[device]
+        )
+      : tierIdentifier;
+    return identifier === 'serial'
+      ? 'Please enter a valid device serial number.'
+      : identifier === 'imei'
+        ? 'Please enter a valid 15-digit IMEI number.'
+        : 'Please enter a valid IMEI or serial number.';
+  },
+  /** Same rule as the field: the check's identifier as this tab takes it. */
+  isValidFor(
+    imei: string,
+    tier: { identifier: 'imei' | 'serial' | 'both' },
+    device: ImeiDeviceCategory
+  ) {
+    return isValidDeviceIdentifier(
+      imei,
+      resolveInputIdentifier(tier.identifier, IMEI_IDENTIFIER_BY_DEVICE[device])
     );
+  },
+  /** The invalid-number message for a check on this device tab. */
+  invalidFor(
+    tier: { identifier: 'imei' | 'serial' | 'both' },
+    device: ImeiDeviceCategory
+  ) {
+    return imeiCheckScreenActions.invalidIdentifierMessage(
+      tier.identifier,
+      device
+    );
+  },
+  /** Typing a new number drops only the invalid-number message. */
+  dropInvalidIdentifierError(error: string | null) {
+    const invalid: string[] = (['imei', 'serial', 'both'] as const).map((id) =>
+      imeiCheckScreenActions.invalidIdentifierMessage(id)
+    );
+    return error !== null && invalid.includes(error) ? null : error;
   },
   fundWallet(
     amount: number,

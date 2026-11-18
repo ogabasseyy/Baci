@@ -107,6 +107,29 @@ function formatBodyPreview(body) {
   return `${body.slice(0, RESPONSE_PREVIEW_LIMIT)}... [truncated]`;
 }
 
+function parseJsonObject(body) {
+  try {
+    const parsed = JSON.parse(body);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? parsed
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function isIdleCacheInvalidationResponse({ pathname, status, bodyPayload }) {
+  return (
+    pathname === '/api/cron/drain-cache-invalidations' &&
+    status === 200 &&
+    bodyPayload !== null &&
+    bodyPayload.claimed === 0 &&
+    bodyPayload.completed === 0 &&
+    bodyPayload.failed === 0 &&
+    bodyPayload.deadLettersPresent === false
+  );
+}
+
 function throwWebCronRequestError({ error, path, timeoutMs }) {
   if (error instanceof Error && /abort|timeout/i.test(error.name)) {
     throw new Error(`Web cron ${path} timed out after ${timeoutMs}ms`);
@@ -199,17 +222,14 @@ export async function runWebCron({
     throwWebCronRequestError({ error, path, timeoutMs });
   }
 
+  const pathname = new URL(url).pathname;
+  const bodyPayload = parseJsonObject(body);
+
   if (!response.ok) {
     const preview = formatBodyPreview(body);
-    let bodyPayload;
-    try {
-      bodyPayload = JSON.parse(body);
-    } catch {
-      bodyPayload = null;
-    }
     if (
       allowCacheDeadLetter &&
-      new URL(url).pathname === '/api/cron/drain-cache-invalidations' &&
+      pathname === '/api/cron/drain-cache-invalidations' &&
       response.status === 503 &&
       bodyPayload?.code === CACHE_INVALIDATION_DEAD_LETTER_CODE
     ) {
@@ -220,7 +240,18 @@ export async function runWebCron({
     );
   }
 
-  logger.log(`[run-web-cron] ${path} completed with HTTP ${response.status}`);
+  // run-cache-invalidation-cron.mjs atomically updates state/cache-invalidations.json
+  // (nextAllowedAt) on every 2-minute sweep, preserving scheduler liveness
+  // observability without writing 21,600 idle stdout lines/month.
+  if (
+    !isIdleCacheInvalidationResponse({
+      pathname,
+      status: response.status,
+      bodyPayload,
+    })
+  ) {
+    logger.log(`[run-web-cron] ${path} completed with HTTP ${response.status}`);
+  }
   return { status: response.status, body };
 }
 

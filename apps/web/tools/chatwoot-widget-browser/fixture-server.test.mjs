@@ -1,4 +1,4 @@
-import './test-env.mjs';
+import './test-env.test-setup.mjs';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import https from 'node:https';
 import { tmpdir } from 'node:os';

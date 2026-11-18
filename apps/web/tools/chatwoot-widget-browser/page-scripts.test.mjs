@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import './test-env.mjs';
+import './test-env.test-setup.mjs';
 import { afterEach, describe, expect, it } from 'vitest';
 import { cookieClaims } from './page-scripts.mjs';
 

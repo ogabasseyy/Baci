@@ -1,7 +1,7 @@
 // @vitest-environment-options {"url":"https://shop.example.com"}
 import { act, cleanup, fireEvent, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { config, resetChatwootGlobals } from './chatwoot-widget-test-support';
+import { config, resetChatwootGlobals } from './chatwoot-widget.test-support';
 import { useChatwootWidgetLifecycle } from './use-chatwoot-widget-lifecycle';
 
 vi.mock('next/navigation', () => ({ usePathname: () => '/shop' }));

@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatwootWidget } from './chatwoot-widget';
-import { config, resetChatwootGlobals } from './chatwoot-widget-test-support';
+import { config, resetChatwootGlobals } from './chatwoot-widget.test-support';
 
 const mocks = vi.hoisted(() => ({
   bridge: vi.fn((_props: { storeSlug: string; widgetOrigin: string }) => null),

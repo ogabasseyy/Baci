@@ -1,4 +1,4 @@
-import './test-env.mjs';
+import './test-env.test-setup.mjs';
 import { describe, expect, it } from 'vitest';
 import { readChatwootCookieMetadata } from './cookie-diagnostics.mjs';
 

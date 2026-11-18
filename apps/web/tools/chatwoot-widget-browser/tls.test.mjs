@@ -1,4 +1,4 @@
-import './test-env.mjs';
+import './test-env.test-setup.mjs';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import net from 'node:net';
 import { tmpdir } from 'node:os';

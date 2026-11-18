@@ -6,7 +6,7 @@ import {
   config,
   resetChatwootGlobals,
   SupportStatus,
-} from './chatwoot-widget-test-support';
+} from './chatwoot-widget.test-support';
 
 const mocks = vi.hoisted(() => ({
   bridge: vi.fn((_props: { storeSlug: string; widgetOrigin: string }) => null),

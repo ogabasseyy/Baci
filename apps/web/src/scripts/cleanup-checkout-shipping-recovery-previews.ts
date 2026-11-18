@@ -6,8 +6,8 @@ import { createAdminClient } from '@/lib/supabase/admin';
 export async function runCleanupCheckoutShippingRecoveryPreviewsCli(): Promise<number> {
   const supabase = createAdminClient();
   const { data, error } = await supabase.rpc(
-    'cleanup_customer_checkout_shipping_recovery_previews' as never,
-    { p_limit: 1000 } as never
+    'cleanup_customer_checkout_shipping_recovery_previews',
+    { p_limit: 1000 }
   );
 
   if (error) {

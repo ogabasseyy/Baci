@@ -37,6 +37,7 @@ export interface DelegateStorefrontEdgePurgeInput {
   merchantId: string;
   merchantSlug: string;
   entries: readonly StorefrontProductPurgeEntry[];
+  productIds?: readonly string[];
   productSlugs: readonly string[];
   blogPostSlugs: readonly string[];
   purgeWholeStorefront: boolean;
@@ -51,6 +52,7 @@ export async function delegateStorefrontEdgePurge({
   merchantId,
   merchantSlug,
   entries,
+  productIds = [],
   productSlugs,
   blogPostSlugs,
   purgeWholeStorefront,
@@ -107,6 +109,11 @@ export async function delegateStorefrontEdgePurge({
       entries,
       normalizedBlogPostSlugs
     ).length > PURGE_WHOLE_STOREFRONT_URL_THRESHOLD;
+  const normalizedProductIds = Array.from(
+    new Set(productIds.map((id) => id.trim()).filter((id) => id.length > 0))
+  );
+  const canOmitMerchantWidePdpDetails =
+    productSlugs.length > 0 && normalizedProductIds.length > 0;
   try {
     const response = await fetch(endpoint, {
       method: 'POST',
@@ -124,18 +131,21 @@ export async function delegateStorefrontEdgePurge({
         ...(useWholeStorefront
           ? { purgeWholeStorefront: true }
           : {
-              ...(productSlugs.length > 0
+              ...(canOmitMerchantWidePdpDetails
                 ? { omitMerchantWidePdpDetails: true }
                 : {}),
               ...(normalizedBlogPostSlugs.length > 0
                 ? { blogPostSlugs: normalizedBlogPostSlugs }
                 : {}),
-              products: entries.map((entry) => ({
-                slug: entry.slug,
-                ...(entry.categorySegment
-                  ? { categorySlug: entry.categorySegment }
-                  : {}),
-              })),
+              products:
+                normalizedProductIds.length > 0
+                  ? normalizedProductIds.map((id) => ({ id }))
+                  : entries.map((entry) => ({
+                      slug: entry.slug,
+                      ...(entry.categorySegment
+                        ? { categorySlug: entry.categorySegment }
+                        : {}),
+                    })),
             }),
       }),
       signal: AbortSignal.timeout(REMOTE_EDGE_PURGE_TIMEOUT_MS),

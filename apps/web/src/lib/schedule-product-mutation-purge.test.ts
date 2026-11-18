@@ -90,6 +90,11 @@ describe('scheduleProductMutationPurge', () => {
       ['new-phone', 'old-phone'],
       { expireImmediately: true }
     );
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      'merchant-1',
+      undefined,
+      { expireImmediately: true, omitMerchantWidePdpDetails: true }
+    );
     expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
       'test-store',
       entries

@@ -117,12 +117,18 @@ export async function POST(request: NextRequest) {
       // Bust every purged slug's Next product cache BEFORE the edge purge —
       // revalidateProducts(merchantId) above is slug-less and leaves the
       // per-slug scoped tags cached, so a CF MISS would refill stale.
-      const originHardExpired =
+      const slugsExpired =
         revalidateProductSlugs(
           merchantId,
           purgeEntries.map((entry) => entry.slug),
           { expireImmediately: true }
-        ) === true ||
+        ) === true;
+      const originHardExpired =
+        (slugsExpired &&
+          revalidateProducts(merchantId, undefined, {
+            expireImmediately: true,
+            omitMerchantWidePdpDetails: true,
+          }) === true) ||
         revalidateProducts(merchantId, undefined, {
           expireImmediately: true,
         }) === true;

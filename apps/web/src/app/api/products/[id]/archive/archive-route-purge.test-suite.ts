@@ -99,6 +99,11 @@ export function defineArchiveRoutePurgeSuite({
       ['phone-ultra'],
       { expireImmediately: true }
     );
+    expect(mocks.revalidateProducts).toHaveBeenCalledWith(
+      merchantId,
+      undefined,
+      { expireImmediately: true, omitMerchantWidePdpDetails: true }
+    );
     expect(mocks.expireProductBlogCache).toHaveBeenCalledWith(merchantId);
     expect(
       mocks.revalidateProductSlugs.mock.invocationCallOrder[0]

@@ -70,41 +70,48 @@ export function scheduleProductMutationPurge({
     });
   };
 
-  if (purgeWholeStorefront || !slugsExpired) {
-    if (
-      revalidateProducts(merchantId, undefined, { expireImmediately: true }) ===
-      true
-    ) {
-      scheduleEdgePurge();
-      return;
-    }
-    const runFallback = async () => {
-      try {
-        const expired = await expireProductBlogCacheReliable(merchantId, {
-          expireWidePdpDetails: true,
-        });
-        if (expired) {
-          scheduleEdgePurge();
-        } else {
-          console.warn(
-            'Skipped mutation hostname purge because PDP hard expiry failed',
-            { merchantId }
-          );
-        }
-      } catch (error) {
-        console.warn(
-          'Skipped mutation hostname purge after reliable expiry error',
-          { merchantId, error }
-        );
-      }
-    };
-    try {
-      after(runFallback);
-    } catch {
-      void runFallback();
-    }
+  const scopedListingsExpired =
+    !purgeWholeStorefront &&
+    slugsExpired &&
+    revalidateProducts(merchantId, undefined, {
+      expireImmediately: true,
+      omitMerchantWidePdpDetails: true,
+    }) === true;
+  if (scopedListingsExpired) {
+    scheduleEdgePurge();
     return;
   }
 
-  scheduleEdgePurge();
+  if (
+    revalidateProducts(merchantId, undefined, { expireImmediately: true }) ===
+    true
+  ) {
+    scheduleEdgePurge();
+    return;
+  }
+  const runFallback = async () => {
+    try {
+      const expired = await expireProductBlogCacheReliable(merchantId, {
+        expireWidePdpDetails: true,
+      });
+      if (expired) {
+        scheduleEdgePurge();
+      } else {
+        console.warn(
+          'Skipped mutation hostname purge because PDP hard expiry failed',
+          { merchantId }
+        );
+      }
+    } catch (error) {
+      console.warn(
+        'Skipped mutation hostname purge after reliable expiry error',
+        { merchantId, error }
+      );
+    }
+  };
+  try {
+    after(runFallback);
+  } catch {
+    void runFallback();
+  }
 }

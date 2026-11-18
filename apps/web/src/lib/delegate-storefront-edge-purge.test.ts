@@ -54,9 +54,46 @@ describe('delegateStorefrontEdgePurge', () => {
             expireProductBlogCache: true,
             confirmEdgeEviction: true,
             productSlugs: ['iphone-15'],
-            omitMerchantWidePdpDetails: true,
             blogPostSlugs: ['iphone-guide'],
             products: [{ slug: 'iphone-15', categorySlug: 'smartphones' }],
+          }),
+        })
+      );
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it('sends id-backed products and omitMerchantWidePdpDetails when productIds are supplied', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(
+        new Response('{"ok":true,"edgePurged":true}', { status: 200 })
+      );
+
+    try {
+      const ok = await delegateStorefrontEdgePurge({
+        merchantId: 'merchant-1',
+        merchantSlug: 'ogabassey',
+        entries: [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
+        productIds: ['prod-1', ' prod-1 '],
+        productSlugs: ['iphone-15'],
+        blogPostSlugs: [],
+        purgeWholeStorefront: false,
+      });
+
+      expect(ok).toBe(true);
+      expect(fetchSpy).toHaveBeenCalledWith(
+        new URL('https://usebaci.com/api/internal/revalidate-products'),
+        expect.objectContaining({
+          body: JSON.stringify({
+            merchantId: 'merchant-1',
+            merchantSlug: 'ogabassey',
+            expireProductBlogCache: true,
+            confirmEdgeEviction: true,
+            productSlugs: ['iphone-15'],
+            omitMerchantWidePdpDetails: true,
+            products: [{ id: 'prod-1' }],
           }),
         })
       );

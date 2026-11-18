@@ -222,6 +222,7 @@ export async function scheduleOrderProductBlogPurge({
         merchantId,
         merchantSlug,
         entries,
+        productIds: normalizedProductIds,
         productSlugs: slugs,
         blogPostSlugs,
         purgeWholeStorefront: blogPostSlugsIncomplete,

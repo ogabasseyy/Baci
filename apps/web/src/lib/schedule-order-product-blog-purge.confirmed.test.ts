@@ -117,6 +117,7 @@ describe('scheduleOrderProductBlogPurge confirmed edge eviction', () => {
       merchantId: 'merchant-1',
       merchantSlug: 'ogabassey',
       entries: [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
+      productIds: ['product-1'],
       productSlugs: ['iphone-15'],
       blogPostSlugs: ['iphone-guide'],
       purgeWholeStorefront: false,

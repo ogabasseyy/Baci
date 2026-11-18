@@ -230,12 +230,18 @@ export async function POST(request: NextRequest) {
       // An edge purge is always best-effort: its failure must never turn a
       // completed CSV import into an API error.
       try {
-        const originHardExpired =
+        const slugsExpired =
           revalidateProductSlugs(
             merchantId,
             publicPurgeEntries.map((entry) => entry.slug),
             { expireImmediately: true }
-          ) === true ||
+          ) === true;
+        const originHardExpired =
+          (slugsExpired &&
+            revalidateProducts(merchantId, undefined, {
+              expireImmediately: true,
+              omitMerchantWidePdpDetails: true,
+            }) === true) ||
           revalidateProducts(merchantId, undefined, {
             expireImmediately: true,
           }) === true;

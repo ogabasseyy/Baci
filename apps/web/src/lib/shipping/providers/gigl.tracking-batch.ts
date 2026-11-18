@@ -67,11 +67,34 @@ function parseObservedBatchTrackingEnvelope(
   };
 }
 
+export type GiglBatchTrackingOutcomes = {
+  results: Map<string, TrackingResult>;
+  failures: Map<string, Error>;
+};
+
 export async function trackGiglShipmentBatch(
   apiClient: GiglApiClient,
   io: GiglProviderIo,
   waybills: readonly string[]
 ): Promise<Map<string, TrackingResult>> {
+  const { results } = await trackGiglShipmentBatchOutcomes(
+    apiClient,
+    io,
+    waybills
+  );
+  return results;
+}
+
+/**
+ * Tracks a batch of GIGL waybills and returns both normalized tracking results
+ * and per-waybill parsing/normalization failures so callers can distinguish
+ * malformed entries from waybills simply omitted by GIGL.
+ */
+export async function trackGiglShipmentBatchOutcomes(
+  apiClient: GiglApiClient,
+  io: GiglProviderIo,
+  waybills: readonly string[]
+): Promise<GiglBatchTrackingOutcomes> {
   const normalizedWaybills = waybills.map((waybill) => waybill.trim());
   if (normalizedWaybills.some((waybill) => !waybill)) {
     throw new Error('At least one GIGL waybill is required');
@@ -132,6 +155,7 @@ export async function trackGiglShipmentBatch(
     const observedAt = new Date();
     const seenWaybills = new Set<string>();
     const requestedWaybills = new Set(normalizedWaybills);
+    const failures = new Map<string, Error>();
 
     for (const shipment of trackingData) {
       const waybill = shipment.Waybill?.trim();
@@ -147,7 +171,16 @@ export async function trackGiglShipmentBatch(
       seenWaybills.add(waybill);
     }
 
-    return new Map(
+    if (invalidCount > 0) {
+      collectSchemaInvalidWaybillFailures(
+        envelope,
+        requestedWaybills,
+        seenWaybills,
+        failures
+      );
+    }
+
+    const results = new Map(
       trackingData.flatMap((shipment) => {
         const waybill = shipment.Waybill?.trim();
         if (!waybill) return [];
@@ -160,6 +193,12 @@ export async function trackGiglShipmentBatch(
             ] as const,
           ];
         } catch (error) {
+          failures.set(
+            waybill,
+            error instanceof Error
+              ? error
+              : new Error('GIGL batch tracking omitted malformed shipment')
+          );
           io.log('warn', 'GIGL batch tracking omitted malformed shipment', {
             error: error instanceof Error ? error.message : 'unknown_error',
             waybill,
@@ -168,6 +207,7 @@ export async function trackGiglShipmentBatch(
         }
       })
     );
+    return { results, failures };
   } catch (error) {
     if (signal.aborted || isGiglAbortError(error)) {
       io.log('warn', 'GIGL batch tracking timed out', {
@@ -177,5 +217,39 @@ export async function trackGiglShipmentBatch(
     }
 
     throw error;
+  }
+}
+
+function collectSchemaInvalidWaybillFailures(
+  envelope: unknown,
+  requestedWaybills: ReadonlySet<string>,
+  seenWaybills: ReadonlySet<string>,
+  failures: Map<string, Error>
+): void {
+  const data =
+    envelope && typeof envelope === 'object' && 'data' in envelope
+      ? (envelope as { data?: unknown }).data
+      : undefined;
+  if (!Array.isArray(data)) return;
+
+  for (const entry of data) {
+    if (!entry || typeof entry !== 'object' || !('Waybill' in entry)) {
+      continue;
+    }
+    const rawWaybill = (entry as { Waybill?: unknown }).Waybill;
+    if (typeof rawWaybill !== 'string') continue;
+    const waybill = rawWaybill.trim();
+    if (
+      !waybill ||
+      !requestedWaybills.has(waybill) ||
+      seenWaybills.has(waybill) ||
+      failures.has(waybill)
+    ) {
+      continue;
+    }
+    failures.set(
+      waybill,
+      new Error('GIGL batch tracking returned schema-invalid shipment')
+    );
   }
 }

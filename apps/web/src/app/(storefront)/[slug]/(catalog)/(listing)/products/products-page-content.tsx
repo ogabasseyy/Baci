@@ -1,4 +1,3 @@
-import { headers } from 'next/headers';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
@@ -25,8 +24,10 @@ import {
   parseStorefrontPageParam,
   STOREFRONT_PRODUCTS_PER_PAGE,
 } from '@/lib/storefront-pagination';
-import { getStorefrontPathPrefix } from '@/lib/storefront-path-prefix';
-import { isValidMerchantIdentifier } from '@/lib/validation';
+import {
+  isDomainIdentifier,
+  isValidMerchantIdentifier,
+} from '@/lib/validation';
 import { ProductIndexCard } from './product-index-card';
 import { ProductsPageDeferredLinkModules } from './products-page-deferred-link-modules';
 
@@ -54,8 +55,6 @@ export async function ProductsPageContent({ params, searchParams }: PageProps) {
     notFound();
   }
 
-  const headersList = await headers();
-
   const showMaintainedLinkModules = merchant.id === OGABASSEY_MERCHANT_ID;
 
   const [categoryResult, currentProductIndex] = await Promise.all([
@@ -73,7 +72,7 @@ export async function ProductsPageContent({ params, searchParams }: PageProps) {
   }
 
   const baseUrl = buildStoreUrl(merchant);
-  const pathPrefix = getStorefrontPathPrefix(headersList, merchant);
+  const pathPrefix = isDomainIdentifier(slug) ? '' : `/${merchant.slug}`;
   const description =
     merchant.site_description ||
     `Browse all products available at ${merchant.business_name}.`;

@@ -48,3 +48,27 @@ describe('EmbeddedPinStep', () => {
     expect(mockSnapToPosition).not.toHaveBeenCalled();
   });
 });
+
+describe('EmbeddedPinStep while a step is waiting', () => {
+  it('keeps the sheet height until the next real step is measured', () => {
+    const setHeight = jest.fn();
+    const step = (holdHeight: boolean) => (
+      <SavingsSheetPinHeightContext.Provider value={setHeight}>
+        <EmbeddedPinStep colors={Colors.light} holdHeight={holdHeight}>
+          <Text>step</Text>
+        </EmbeddedPinStep>
+      </SavingsSheetPinHeightContext.Provider>
+    );
+    const view = render(step(true));
+    fireEvent(screen.getByTestId('pin-step-content'), 'layout', {
+      nativeEvent: { layout: { height: 120 } },
+    });
+    expect(setHeight).not.toHaveBeenCalled();
+    view.rerender(step(false));
+    expect(setHeight).not.toHaveBeenCalled();
+    fireEvent(screen.getByTestId('pin-step-content'), 'layout', {
+      nativeEvent: { layout: { height: 560 } },
+    });
+    expect(setHeight.mock.calls).toEqual([[560]]);
+  });
+});

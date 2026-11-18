@@ -16,7 +16,7 @@ export function ShortcutTileBackdrop({
   const fill = { backgroundColor: color };
 
   return (
-    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+    <View style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}>
       <View
         style={[styles.center, shortEdgesOnly && styles.flatCenter, fill]}
       />

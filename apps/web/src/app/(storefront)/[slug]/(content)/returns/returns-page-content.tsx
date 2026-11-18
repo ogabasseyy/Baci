@@ -10,7 +10,7 @@ interface PageProps {
 
 export async function ReturnsPageContent({ params }: PageProps) {
   const { slug } = await params;
-  const context = await getTrustRouteContext(slug, { requestScopedUrl: true });
+  const context = await getTrustRouteContext(slug);
 
   if (!context) {
     notFound();

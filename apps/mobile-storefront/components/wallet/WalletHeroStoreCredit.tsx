@@ -25,9 +25,15 @@ export function WalletHeroStoreCredit({ balance }: WalletHeroStoreCreditProps) {
       style={styles.row}
     >
       <Ionicons name="pricetag-outline" size={14} color="#F8B84C" />
-      <Text style={styles.label}>Store credit</Text>
-      <Text style={styles.amount}>{amount}</Text>
-      <Text style={styles.hint}>· use it on purchases</Text>
+      <Text style={styles.label} numberOfLines={1}>
+        Store credit
+      </Text>
+      <Text style={styles.amount} numberOfLines={1}>
+        {amount}
+      </Text>
+      <Text style={styles.hint} numberOfLines={1}>
+        · use it on purchases
+      </Text>
     </View>
   );
 }
@@ -51,9 +57,8 @@ const styles = StyleSheet.create({
   row: {
     alignItems: 'center',
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexWrap: 'nowrap',
     gap: 6,
-    marginLeft: 6,
     marginTop: 10,
   },
 });

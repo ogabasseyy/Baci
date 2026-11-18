@@ -7,22 +7,18 @@ import type {
 } from '@baci/shared/imei';
 import { isValidDeviceIdentifier } from '@baci/shared/imei';
 import Ionicons from '@react-native-vector-icons/ionicons';
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-} from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BRAND, SPACING } from '@/constants/Colors';
 import { useKeyboard } from '@/hooks/use-keyboard';
 import { ImeiBrandChips } from './ImeiBrandChips';
 import { styles } from './imei-check.styles';
 import type { ImeiCheckerColors } from './imei-check.types';
+import { footerStyles } from './imei-check-footer.styles';
 import { ImeiCheckInputSection } from './imei-check-input-section';
 import { ImeiCheckServiceSelector } from './imei-check-service-selector';
 import { imeiFindHint } from './imei-find-hint';
+import { ImeiPayButton } from './imei-pay-button';
 import { imeiVerifyButtonLabel } from './imei-verify-button-label';
 import { ImeiWalletBadge } from './imei-wallet-badge';
 import { getImeiWalletCopy } from './imei-wallet-copy';
@@ -135,7 +131,15 @@ export function ImeiCheckFormView({
     displayedTierKeys.includes(selectedTier) &&
     isValidDeviceIdentifier(imei, identifier) &&
     (needsTopUp || isWalletError);
-  const goesThroughVerify = canVerify || canRecover;
+  // A typed number that is not valid yet still reaches the verify tap, which
+  // says what is wrong inline instead of a dead button or a top-up first.
+  const typedInvalid =
+    selectedTier !== null &&
+    displayedTierKeys.includes(selectedTier) &&
+    imei.length > 0 &&
+    !isValidDeviceIdentifier(imei, identifier);
+  const goesThroughVerify = canVerify || canRecover || typedInvalid;
+  const payDisabled = isLoading || (!needsTopUp && !goesThroughVerify);
   const walletStatusText = isWalletLoading
     ? walletCopy.loading
     : isWalletError
@@ -217,7 +221,7 @@ export function ImeiCheckFormView({
         <View
           testID="imei-check-footer"
           style={[
-            styles.bottomAction,
+            footerStyles.footer,
             {
               backgroundColor: colors.card,
               borderTopColor: colors.border,
@@ -236,60 +240,49 @@ export function ImeiCheckFormView({
             onCheck={onCheck}
             onClearImei={onClearImei}
           />
-          {needsTopUp ? null : (
-            <Text style={[styles.footerHint, { color: colors.textSecondary }]}>
+          {needsTopUp ? (
+            <Text style={[footerStyles.hint, { color: colors.error }]}>
+              {walletCopy.shortfallHint(shortfall)}
+            </Text>
+          ) : imei.length > 0 ? null : (
+            <Text style={[footerStyles.hint, { color: colors.textSecondary }]}>
               {findHint}
             </Text>
           )}
-          <View style={styles.footerRow}>
-            <ImeiWalletBadge
-              colors={colors}
-              isWalletReady={isWalletReady}
-              needsTopUp={needsTopUp}
-              savingsKobo={savingsKobo}
-              statusText={walletStatusText}
-              walletBalance={walletBalance}
-              walletCopy={walletCopy}
-            />
-            <Pressable
-              style={[
-                styles.verifyButton,
-                { backgroundColor: BRAND.primary },
-                (isLoading || (!needsTopUp && !goesThroughVerify)) &&
-                  styles.verifyButtonDisabled,
-              ]}
-              onPress={
-                needsTopUp && !goesThroughVerify
-                  ? () => onTopUpWallet(shortfall)
-                  : onCheck
-              }
-              disabled={isLoading || (!needsTopUp && !goesThroughVerify)}
-            >
-              {isLoading ? (
-                <ActivityIndicator color={BRAND.onPrimary} />
-              ) : (
-                <>
-                  <Text style={styles.verifyButtonText}>
-                    {imeiVerifyButtonLabel({
-                      hasTier: selectedTier !== null,
-                      isWalletLoading,
-                      isWalletError,
-                      needsTopUp,
-                      paysFromPiggyvest,
-                      walletCopy,
-                      tier: currentTier,
-                    })}
-                  </Text>
-                  <Ionicons name="sparkles" size={18} color={BRAND.onPrimary} />
-                </>
-              )}
-            </Pressable>
-          </View>
-          {needsTopUp ? (
-            <Text style={[styles.footerHint, { color: colors.error }]}>
-              {walletCopy.shortfallHint(shortfall)}
-            </Text>
-          ) : null}
+          <ImeiPayButton
+            busy={isLoading}
+            disabled={payDisabled}
+            icon={
+              needsTopUp && !goesThroughVerify
+                ? 'add-circle-outline'
+                : selectedTier === null
+                  ? 'hand-left-outline'
+                  : 'shield-checkmark-outline'
+            }
+            label={imeiVerifyButtonLabel({
+              hasTier: selectedTier !== null,
+              isWalletLoading,
+              isWalletError,
+              needsTopUp,
+              paysFromPiggyvest,
+              walletCopy,
+              tier: currentTier,
+            })}
+            onPress={
+              needsTopUp && !goesThroughVerify
+                ? () => onTopUpWallet(shortfall)
+                : onCheck
+            }
+          />
+          <ImeiWalletBadge
+            colors={colors}
+            isWalletReady={isWalletReady}
+            needsTopUp={needsTopUp}
+            savingsKobo={savingsKobo}
+            statusText={walletStatusText}
+            walletBalance={walletBalance}
+            walletCopy={walletCopy}
+          />
         </View>
       </View>
     </View>

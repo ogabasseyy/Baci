@@ -93,3 +93,21 @@ describe('Change phone confirm, server off', () => {
     expect(onConfirm).not.toHaveBeenCalled();
   });
 });
+
+describe('Change phone confirm back arrow', () => {
+  it('bugfix: has a back arrow in the header that returns to the phone list', () => {
+    const onKeep = jest.fn();
+    render(
+      <SavingsPhoneSwapConfirm
+        colors={Colors.light}
+        goal={goal}
+        onConfirm={jest.fn()}
+        onKeep={onKeep}
+        pending={false}
+        row={row}
+      />
+    );
+    fireEvent.press(screen.getByLabelText('Back to phone list'));
+    expect(onKeep).toHaveBeenCalledTimes(1);
+  });
+});

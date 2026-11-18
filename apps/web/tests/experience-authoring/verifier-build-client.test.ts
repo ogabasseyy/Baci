@@ -77,7 +77,7 @@ it('revalidates owner access and sends only identifiers to the fixed verifier po
     const { promise: disconnected, resolve: disconnect } =
       Promise.withResolvers<void>();
     verify.mockImplementationOnce(async (_client, _receipt, signal) => {
-      signal?.addEventListener('abort', disconnect, { once: true });
+      signal?.addEventListener('abort', () => disconnect(), { once: true });
       enter();
       await disconnected;
     });

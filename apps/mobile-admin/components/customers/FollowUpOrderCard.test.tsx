@@ -127,6 +127,35 @@ describe('FollowUpOrderCard', () => {
     );
   });
 
+  it('encodes recipient delimiters instead of creating email headers', () => {
+    render(
+      <FollowUpOrderCard
+        item={{
+          ...oxygenProcessingOrder,
+          customer_email: 'buyer?bcc=other%40example.com&x=x@valid.com',
+        }}
+        displayTotal="₦10k"
+        initials="A"
+      />
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Email Ada' }));
+    expect(Linking.openURL).toHaveBeenCalledExactlyOnceWith(
+      'mailto:buyer%3Fbcc%3Dother%2540example.com%26x%3Dx@valid.com'
+    );
+    expect(mocks.push).not.toHaveBeenCalled();
+  });
+
+  it('hides the email action for malformed recipient text', () => {
+    render(
+      <FollowUpOrderCard
+        item={{ ...oxygenProcessingOrder, customer_email: 'not-an-email' }}
+        displayTotal="₦10k"
+        initials="A"
+      />
+    );
+    expect(screen.queryByRole('button', { name: 'Email Ada' })).toBeNull();
+  });
+
   it('opens the customer for ordinary follow-ups linked to a customer', () => {
     render(
       <FollowUpOrderCard

@@ -146,7 +146,9 @@ export function useFailedOrders() {
         // Orders still marked Oxygen share the independent RPC budget.
         if (order.payment_method === 'oxygen') return;
         const email = order.customer_email?.trim() ?? '';
-        const key = email ? `email:${email}` : `order:${order.id}`;
+        const key = email
+          ? `email:${email.toLowerCase()}`
+          : `order:${order.id}`;
         if (!consolidated[key]) {
           consolidated[key] = {
             id: order.id,

@@ -137,6 +137,30 @@ describe('standard follow-up coverage and completeness', () => {
       ).toBe(true);
     }
   });
+  it('consolidates case variants without changing the displayed latest email', async () => {
+    fake().setRows([
+      {
+        ...row,
+        id: 'newer',
+        customer_email: ' Ada@Example.com ',
+        created_at: '2026-06-01T02:00:00Z',
+      },
+      {
+        ...row,
+        id: 'older',
+        customer_email: 'ada@example.com',
+        created_at: '2026-06-01T01:00:00Z',
+      },
+    ]);
+    expect((await runResult()).orders).toEqual([
+      expect.objectContaining({
+        id: 'newer',
+        customer_email: 'Ada@Example.com',
+        attempt_count: 2,
+      }),
+    ]);
+  });
+
   it('detects overflow before email consolidation and keeps the row cap', async () => {
     fake().setRows(
       Array.from({ length: FOLLOW_UP_QUERY_LIMIT + 1 }, (_, i) => ({

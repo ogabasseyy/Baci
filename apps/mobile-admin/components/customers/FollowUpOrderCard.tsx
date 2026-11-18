@@ -1,4 +1,4 @@
-import { normalizeStoredE164Phone } from '@baci/shared';
+import { buildMailtoLink, normalizeStoredE164Phone } from '@baci/shared';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
@@ -24,6 +24,7 @@ export function FollowUpOrderCard({
   const errorMessage = getFollowUpStatusLabel(item);
 
   const displayName = item.customer_name || 'Guest';
+  const emailLink = buildMailtoLink(item.customer_email);
   const customerPhone = item.customer_phone?.trim() || null;
   const phoneDigits = customerPhone?.replace(/\D/g, '') || '';
   // Raw order phones have no guaranteed country code; preserve national calls.
@@ -149,7 +150,7 @@ export function FollowUpOrderCard({
             <Ionicons name="call" size={16} color={colors.textSecondary} />
           </Pressable>
         ) : null}
-        {item.customer_email ? (
+        {emailLink ? (
           <Pressable
             style={[
               styles.miniActionButton,
@@ -161,7 +162,7 @@ export function FollowUpOrderCard({
             ]}
             onPress={(e) => {
               e.stopPropagation();
-              void Linking.openURL(`mailto:${item.customer_email}`);
+              void Linking.openURL(emailLink);
             }}
             accessibilityLabel={`Email ${displayName}`}
             accessibilityRole="button"

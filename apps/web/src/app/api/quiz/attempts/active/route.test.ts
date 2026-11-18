@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { resetQuizV2RuntimeCheckForTests } from '@/app/api/quiz/_shared/quiz-v2-contract';
 import { requireQuizUser } from '@/app/api/quiz/_shared/route-auth';
 import { resolveQuizDevice } from '@/lib/quiz/quiz-device-hash';
 import { GET } from './route';
@@ -54,7 +55,10 @@ function authenticated(
   return rpc;
 }
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  resetQuizV2RuntimeCheckForTests();
+});
 
 describe('active v2 quiz attempt route', () => {
   it('authenticates before validation or resume', async () => {

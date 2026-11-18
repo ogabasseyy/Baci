@@ -68,6 +68,8 @@ interface CallStorefrontPreflightRpcOptions {
    * reporting a parse incident.
    */
   emptyResult?: 'unknown';
+  /** Skip reading the in-memory verdict memo (used before emitting a 308). */
+  bypassMemo?: boolean;
 }
 
 // A 2s budget recovers transport-tail events; memo and breaker bound its cost.
@@ -142,15 +144,17 @@ export async function callStorefrontPreflightRpc(
   }
 
   const key = storefrontPreflightRpcMemo.key(fn, argsSnapshot, emptyResult);
-  const memoized = storefrontPreflightRpcMemo.read(key);
-  if (
-    storefrontPreflightRpcMemo.isTimeout(memoized) ||
-    storefrontPreflightRpcMemo.isEmptyResult(memoized)
-  ) {
-    return null;
-  }
-  if (memoized !== undefined) {
-    return { data: memoized, attempt: null };
+  if (!options.bypassMemo) {
+    const memoized = storefrontPreflightRpcMemo.read(key);
+    if (
+      storefrontPreflightRpcMemo.isTimeout(memoized) ||
+      storefrontPreflightRpcMemo.isEmptyResult(memoized)
+    ) {
+      return null;
+    }
+    if (memoized !== undefined) {
+      return { data: memoized, attempt: null };
+    }
   }
 
   const rpcImpl = options.rpcImpl ?? defaultRpcImpl;

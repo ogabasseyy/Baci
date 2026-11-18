@@ -171,6 +171,8 @@ it.each([
 it.each<Record<string, string>>([
   { rsc: '1' },
   { 'next-router-prefetch': '1' },
+  { 'next-router-state-tree': '[]' },
+  { 'sec-fetch-dest': 'empty' },
 ])('skips PDP preflight RPCs for router/prefetch requests: %o', async (extraHeaders) => {
   vi.clearAllMocks();
   const request = new NextRequest('https://shop.example/phones/iphone-15', {

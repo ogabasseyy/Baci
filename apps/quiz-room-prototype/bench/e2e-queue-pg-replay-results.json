@@ -1,0 +1,65 @@
+{
+  "allRoomsSealed": true,
+  "ackCount": 3,
+  "retryCount": 0,
+  "firstIngest": {
+    "acked": 1,
+    "retried": 0,
+    "duplicates": 0,
+    "attemptsIngested": 12
+  },
+  "dupIngest": {
+    "acked": 1,
+    "retried": 0,
+    "duplicates": 1,
+    "attemptsIngested": 0
+  },
+  "droppedBatchId": "30000000-0000-4000-8000-000000000001:room-30000000-0000-4000-8000-000000000001-0000:b1",
+  "blockedBeforeJournalReplay": true,
+  "replayIngest": {
+    "acked": 1,
+    "retried": 0,
+    "duplicates": 0,
+    "attemptsIngested": 12
+  },
+  "incrementalScoringExecuted": true,
+  "finalScore": {
+    "reused": false,
+    "eventId": "30000000-0000-4000-8000-000000000001",
+    "scoringRunId": "c1cda5f5-8fd7-4fce-a4df-feb2796e84bd",
+    "answersWritten": 0,
+    "resultsWritten": 24,
+    "attemptsWritten": 24,
+    "persistedCloseAt": "2026-11-18T19:55:32.093+01:00",
+    "questionsWritten": 0,
+    "tailBatchesScored": 1,
+    "tailAttemptsScored": 12,
+    "manifestChecksumSha256": "c690f96eb155788d9bbce0011cadcd7e4345bf4ac31b8f580106e551d07e909e",
+    "canonicalAnswersBackfillDeferred": true
+  },
+  "deadlines": {
+    "failed": 0,
+    "awarded": 1,
+    "noWinner": 0,
+    "testClosed": 0,
+    "liveAwaitingGate": 0,
+    "liveTerminalized": 0,
+    "runtimeGateFresh": true,
+    "scheduledPromoted": 0,
+    "runtimeGateMatches": true,
+    "deadlineClockFailed": 0,
+    "liveZeroPlayerClosed": 0,
+    "testZeroPlayerClosed": 0,
+    "liveAwardRetryPending": 0,
+    "testPublicationFailed": 0,
+    "liveFinalizationFailed": 0,
+    "liveDeadlineClockFailed": 0,
+    "testDeadlineClockFailed": 0,
+    "scheduledPromotionFailed": 0,
+    "liveTerminalizationFailed": 0,
+    "testPublicationRetryPending": 0,
+    "liveTerminalizationRetryPending": 0
+  },
+  "canonicalAttemptCount": 24,
+  "awardCount": 1
+}

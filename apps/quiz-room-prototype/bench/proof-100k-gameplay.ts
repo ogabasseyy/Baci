@@ -85,6 +85,7 @@ async function runSampledGameplayProfile(options: {
   let sampleRowsWritten = 0;
   let sampleRowsRead = 0;
   let totalAnswers = 0;
+  let droppedIterations = 0;
 
   // Group entrants by deterministic room shard and execute each SQLite room
   // sequentially so peak RAM stays minimal on the shared Mac.
@@ -142,7 +143,9 @@ async function runSampledGameplayProfile(options: {
         platform: 'android',
         nowMs: startMs,
       });
-      serverLatenciesMs.push(performance.now() - tStart);
+      const startCommitMs = performance.now() - tStart;
+      serverLatenciesMs.push(startCommitMs);
+      if (startCommitMs > 1_000) droppedIterations += 1;
 
       let currentQ = started.question;
       let cursorMs = startMs;
@@ -156,7 +159,9 @@ async function runSampledGameplayProfile(options: {
           answer: rng() < 0.6 ? 'opt-a' : 'opt-b',
           receivedAtMs: Math.min(endsAtMs - 10, cursorMs),
         });
-        serverLatenciesMs.push(performance.now() - tAns);
+        const ansCommitMs = performance.now() - tAns;
+        serverLatenciesMs.push(ansCommitMs);
+        if (ansCommitMs > 1_000) droppedIterations += 1;
         totalAnswers += 1;
         currentQ = reply.question;
       }
@@ -190,7 +195,7 @@ async function runSampledGameplayProfile(options: {
         : (options.sampleEntrants * 0.5) / 30,
     sampleAnswersAchievedPerSec: totalAnswers / wallSec,
     projectedPeak100kAnswersPerSec,
-    droppedIterations: 0,
+    droppedIterations,
     serverCommitP50Ms: percentile(sorted, 0.5),
     serverCommitP99Ms: percentile(sorted, 0.99),
     sampleRowsWritten,

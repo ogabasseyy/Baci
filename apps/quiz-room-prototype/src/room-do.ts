@@ -124,6 +124,7 @@ export interface SubmitAnswerInput {
 
 export interface RoomScoreboardTickEvent {
   eventId: string;
+  merchantId: string;
   roomId: string;
   tickAtMs: number;
   submissions: readonly {
@@ -617,7 +618,15 @@ export class QuizRoomEngine {
       attempt.status !== 'started'
     ) {
       if (attempt.status === 'started') {
-        const closeAt = attempt.submitted_at_ms ?? nowMs;
+        // Leave `submitted_at_ms` NULL while unsealed so Coordinator's authoritative
+        // `persistedCloseAtMs` (or `endsAtMs` in `scheduled_ends_at` replay) is stamped
+        // uniformly on `seal()`. If already sealed, stamp with the sealed close timestamp.
+        const closeAt = alarmState.sealed
+          ? (attempt.submitted_at_ms ??
+            (alarmState.sealMode === 'scheduled_ends_at'
+              ? config.endsAtMs
+              : alarmState.persistedCloseAtMs))
+          : attempt.submitted_at_ms;
         this.storage.exec(
           `UPDATE room_attempts
            SET status = 'submitted', submitted_at_ms = ?, close_reason = 'event_closed', current_issued_at_ms = NULL
@@ -625,10 +634,12 @@ export class QuizRoomEngine {
           closeAt,
           attempt.attempt_id
         );
-        this.storage.exec(
-          `INSERT INTO room_outbox (attempt_id) VALUES (?) ON CONFLICT(attempt_id) DO NOTHING`,
-          attempt.attempt_id
-        );
+        if (alarmState.sealed) {
+          this.storage.exec(
+            `INSERT INTO room_outbox (attempt_id) VALUES (?) ON CONFLICT(attempt_id) DO NOTHING`,
+            attempt.attempt_id
+          );
+        }
         attempt = {
           ...attempt,
           status: 'submitted',
@@ -1469,7 +1480,9 @@ export class QuizRoomEngine {
         mode === 'cancelled' ? 'event_cancelled' : 'submitted';
 
       const openAttempts = this.storage.exec<AttemptRow>(
-        `SELECT * FROM room_attempts WHERE status = 'started'`
+        `SELECT * FROM room_attempts
+         WHERE status = 'started'
+            OR (close_reason = 'event_closed' AND submitted_at_ms IS NULL)`
       ).rows;
 
       for (const open of openAttempts) {
@@ -1656,6 +1669,7 @@ export class QuizRoomEngine {
         ).rows;
         await this.hooks.onScoreboardTick({
           eventId: config.eventId,
+          merchantId: config.merchantId,
           roomId: this.roomId,
           tickAtMs: nowMs,
           submissions: completed.map((a) => ({

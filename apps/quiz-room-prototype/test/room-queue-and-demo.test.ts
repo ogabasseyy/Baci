@@ -139,6 +139,91 @@ describe('Queue consumer and Demo UI / Telemetry routes', () => {
     expect(res2.acked).toBe(1);
     expect(res2.attemptsIngested).toBe(1);
     expect(rpcBodies).toHaveLength(2);
+
+    // Multi-part split bundle arriving in the SAME queue() batch must send consistent
+    // split batch IDs and part_index 0..1 / total_parts=2 on both parts.
+    const bigBase = await makeBundle('att-split-same-batch');
+    const bigAnswers = Array.from({ length: 10 }, (_, i) => ({
+      questionId: `q-${i + 1}`,
+      slotId: `s-${i + 1}`,
+      position: i + 1,
+      variantId: `v-${i + 1}`,
+      optionOrder: ['opt-a', 'opt-b'],
+      issuedAtMs: 1_700_000_000_000 + i * 1000,
+      receivedAtMs: 1_700_000_000_400 + i * 1000,
+      rawAnswer: `opt-a-${'z'.repeat(8_000)}`,
+      selectedAnswerHash: 'a'.repeat(64),
+      answeredInMs: 400,
+      timeout: false,
+      scoreDelta: 1,
+    }));
+    const bigBundle: QuizAttemptBundle = {
+      ...bigBase,
+      answers: bigAnswers,
+      bundleChecksumSha256: await computeAttemptBundleChecksumSha256({
+        ...bigBase,
+        answers: bigAnswers,
+      }),
+    };
+    const splitPacker = new QuizBatchPacker({
+      eventId: bigBundle.eventId,
+      roomId: bigBundle.roomId,
+    });
+    const splitMsgs = await splitPacker.addBundle(bigBundle);
+    expect(splitMsgs.length).toBe(2);
+
+    const splitRpcPayloads: {
+      p_batch_id: string;
+      p_part_index: number;
+      p_total_parts: number;
+    }[] = [];
+    const splitRes = await handleQuizQueueBatch(
+      {
+        queue: 'quiz-attempt-batches',
+        messages: splitMsgs.map((m, idx) => ({
+          id: `split-${idx}`,
+          body: m.message,
+          ack: () => undefined,
+          retry: () => undefined,
+        })),
+      },
+      {
+        SUPABASE_URL: 'https://example.supabase.co',
+        QUIZ_BATCH_WORKER_JWT: 'worker-jwt-secret',
+      },
+      async (_input, init) => {
+        splitRpcPayloads.push(
+          JSON.parse(String(init?.body ?? '{}')) as {
+            p_batch_id: string;
+            p_part_index: number;
+            p_total_parts: number;
+          }
+        );
+        return new Response(
+          JSON.stringify({
+            ingested: true,
+            duplicate: false,
+            attemptsInserted: 1,
+          }),
+          { status: 200 }
+        );
+      }
+    );
+    expect(splitRes.acked).toBe(2);
+    expect(splitRpcPayloads).toEqual(
+      [
+        {
+          p_batch_id: `${bigBundle.eventId}:${bigBundle.roomId}:split:${bigBundle.attemptId}`,
+          p_part_index: 0,
+          p_total_parts: 2,
+        },
+        {
+          p_batch_id: `${bigBundle.eventId}:${bigBundle.roomId}:split:${bigBundle.attemptId}`,
+          p_part_index: 1,
+          p_total_parts: 2,
+        },
+      ].map((e) => expect.objectContaining(e))
+    );
   });
 
   it('serves /demo, gates admin setup-round, mints check-in tokens, and aggregates /demo/report per carrier', async () => {

@@ -134,7 +134,7 @@ export class QuizRoomDO extends DurableObject<WorkerEnv> {
               method: 'POST',
               body: JSON.stringify({
                 eventId: tick.eventId,
-                merchantId: 'merch-ogabassey-demo',
+                merchantId: tick.merchantId,
                 attemptId: s.attemptId,
                 customerId: s.customerId,
                 userId: s.userId,

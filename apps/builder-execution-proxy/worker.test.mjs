@@ -75,13 +75,19 @@ test('forwards the original route parameter only for a published document', asyn
   const fetch = t.mock.method(
     globalThis,
     'fetch',
-    async () => new Response(null, { status: 404 })
+    async () =>
+      new Response('upstream diagnostic', {
+        status: 404,
+        headers: { 'X-Baci-Output-Digest': digest },
+      })
   );
   const path = `/published/example-store/${digest}/index.html?path=%2Fproducts%2Fsample`;
   const result = await worker.fetch(request(path), env);
   assert.equal(result.status, 404);
   assert.equal(String(fetch.mock.calls[0].arguments[0]), upstreamOrigin + path);
   assert.equal(result.headers.get('Cache-Control'), 'private, no-store');
+  assert.equal(result.headers.get('X-Baci-Output-Digest'), null);
+  assert.equal(await result.text(), '');
 });
 
 test('denies alternate hosts, routes, query shapes and methods before an upstream request', async (t) => {

@@ -172,6 +172,48 @@ export function scrubPrivateParamsFromAddressBar(): boolean {
   return stashEntriesOnCurrentEntry(privateEntries, pathname, publicSearch);
 }
 
+// The entry that owned a stash when the document last looked, so a fragment-only
+// navigation (a new entry that browsers create without our history.state key)
+// can keep it. Page memory only: a new document never inherits anything.
+let lastOwner: { id: string; href: string } | null = null;
+
+/** Records the current entry as the stash owner (or clears it if it has none). */
+export function rememberPrivateParamsOwner(): void {
+  if (typeof window === 'undefined') return;
+  const id = currentPrivateParamsId();
+  lastOwner = id === null ? null : { id, href: window.location.href };
+}
+
+/**
+ * Re-stamps the stash id onto the new entry when the user only moved to a
+ * fragment of the same page (e.g. the "Skip to main content" link): same path
+ * and query, different hash, new entry without an id. It does not apply to any
+ * other entry: not a same-URL `pushState`, not another query, not another
+ * path, and never across documents.
+ */
+export function inheritPrivateParamsForFragmentNavigation(): boolean {
+  if (typeof window === 'undefined' || lastOwner === null) return false;
+  const owner = lastOwner;
+  const { href } = window.location;
+  const withoutHash = (url: string) => url.split('#', 1)[0];
+  const isFragmentMove =
+    currentPrivateParamsId() === null &&
+    href !== owner.href &&
+    withoutHash(href) === withoutHash(owner.href) &&
+    loadRecord(owner.id) !== undefined;
+  if (!isFragmentMove) return false;
+  try {
+    window.history.replaceState(
+      { ...currentHistoryState(), [PRIVATE_PARAMS_STATE_KEY]: owner.id },
+      '',
+      `${window.location.pathname}${window.location.search}${window.location.hash}`
+    );
+  } catch {
+    return false;
+  }
+  return true;
+}
+
 /**
  * Returns the entries stashed for the CURRENT history entry, but only when
  * they were saved for the same path and the same remaining query. It never

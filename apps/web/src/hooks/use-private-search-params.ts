@@ -7,7 +7,9 @@ import {
   readPendingPrivateParams,
 } from '@/lib/privacy/private-url-param-handoff';
 import {
+  inheritPrivateParamsForFragmentNavigation,
   readStashedPrivateParams,
+  rememberPrivateParamsOwner,
   scrubPrivateParamsFromAddressBar,
 } from '@/lib/privacy/private-url-param-stash';
 import {
@@ -27,8 +29,19 @@ export interface PrivateSearchParamsState {
 }
 
 function subscribeToHistoryTraversal(onChange: () => void): () => void {
-  window.addEventListener('popstate', onChange);
-  return () => window.removeEventListener('popstate', onChange);
+  // Traversal and fragment-only navigation both move to an entry we may not
+  // have stamped: keep the stash for a fragment move before re-reading.
+  const onNavigate = () => {
+    inheritPrivateParamsForFragmentNavigation();
+    rememberPrivateParamsOwner();
+    onChange();
+  };
+  window.addEventListener('popstate', onNavigate);
+  window.addEventListener('hashchange', onNavigate);
+  return () => {
+    window.removeEventListener('popstate', onNavigate);
+    window.removeEventListener('hashchange', onNavigate);
+  };
 }
 
 function subscribeToNothing(): () => void {
@@ -118,6 +131,12 @@ export function usePrivateSearchParamsState(): PrivateSearchParamsState {
     scrubPrivateParamsFromAddressBar();
     claimPendingPrivateParams();
   }, [pathname, liveSearch]);
+
+  // After every commit, so a new entry without a stash (e.g. a same-URL
+  // `pushState`) stops being treated as the previous entry's owner.
+  useLayoutEffect(() => {
+    rememberPrivateParamsOwner();
+  });
 
   return { searchParams, isReady };
 }

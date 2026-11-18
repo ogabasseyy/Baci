@@ -51,6 +51,24 @@ describe('Oxygen follow-up fetch', () => {
     mocks.in.mockResolvedValue({ data: [order], error: null });
   });
 
+  it.each([
+    'failed',
+    'expired',
+    'pending',
+    'bnpl_approved',
+  ])('flags a changed payment status of %s during approved follow-up', async (payment_status) => {
+    mocks.rpc.mockResolvedValue({
+      data: [{ ...candidate, follow_up_status: 'approved_pending' }],
+      error: null,
+    });
+    mocks.in.mockResolvedValue({
+      data: [{ ...order, payment_status }],
+      error: null,
+    });
+    const result = await fetchOxygenFollowUps(merchantId);
+    expect(result.orders[0]?.oxygen_follow_up_status).toBe('needs_review');
+  });
+
   it('marks non-array and oversized payloads incomplete instead of throwing', async () => {
     mocks.rpc.mockResolvedValue({ data: { unexpected: true }, error: null });
     await expect(fetchOxygenFollowUps(merchantId)).resolves.toEqual({

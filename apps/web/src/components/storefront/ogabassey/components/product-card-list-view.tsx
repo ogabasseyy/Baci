@@ -1,4 +1,10 @@
-import { ArrowRightLeft, Heart, ShoppingCart, Star } from 'lucide-react';
+import {
+  ArrowRightLeft,
+  Check,
+  Heart,
+  ShoppingCart,
+  Star,
+} from 'lucide-react';
 import type { Route } from 'next';
 import Link from 'next/link';
 import type React from 'react';
@@ -11,6 +17,8 @@ export interface ProductCardListViewProps {
   descriptionPreview: string;
   handleCartClick: (e: React.MouseEvent) => void;
   imagePriority?: boolean;
+  /** True for a beat after a quick add, so the tap is visibly confirmed. */
+  isAdded?: boolean;
   isComparing: boolean;
   isLiked: boolean;
   linkAriaLabel: string;
@@ -33,6 +41,7 @@ export const ProductCardListView: React.FC<ProductCardListViewProps> = ({
   descriptionPreview,
   handleCartClick,
   imagePriority = false,
+  isAdded = false,
   isComparing,
   isLiked,
   linkAriaLabel,
@@ -123,6 +132,13 @@ export const ProductCardListView: React.FC<ProductCardListViewProps> = ({
             <ArrowRightLeft size={18} strokeWidth={2} />
           </button>
 
+          {/* Stable live region beside the button (never inside it), so
+              the confirmation is announced as well as shown. */}
+          <span role="status" className="sr-only">
+            {isAdded && !requiresSelection
+              ? `${product.name} added to cart`
+              : ''}
+          </span>
           {requiresSelection ? (
             <Link
               href={productHref}
@@ -136,15 +152,29 @@ export const ProductCardListView: React.FC<ProductCardListViewProps> = ({
             <button
               type="button"
               onClick={handleCartClick}
-              aria-label={`Add ${product.name} to cart`}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all active:scale-95 bg-gray-900 text-white md:hover:bg-primary relative overflow-visible"
+              aria-label={
+                isAdded
+                  ? `Added to cart. Add another ${product.name} to cart`
+                  : `Add ${product.name} to cart`
+              }
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all active:scale-95 text-white relative overflow-visible ${
+                isAdded ? 'bg-primary' : 'bg-gray-900 md:hover:bg-primary'
+              }`}
             >
               {showPlusOne && (
                 <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-primary font-bold text-lg animate-out fade-out slide-out-to-top-4 duration-1000 fill-mode-forwards z-30 pointer-events-none">
                   +1
                 </span>
               )}
-              Add to Cart <ShoppingCart size={16} />
+              {isAdded ? (
+                <>
+                  Added to cart <Check size={16} strokeWidth={3} />
+                </>
+              ) : (
+                <>
+                  Add to Cart <ShoppingCart size={16} />
+                </>
+              )}
             </button>
           )}
         </div>

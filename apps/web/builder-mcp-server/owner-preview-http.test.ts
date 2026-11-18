@@ -12,6 +12,20 @@ import {
   send,
 } from './owner-preview-http.test-support';
 
+function previewBody(nonce: string) {
+  return JSON.stringify({
+    version: 1,
+    nonce,
+    expiresAt: Date.now() + 30000,
+    accessToken: 'synthetic.token',
+    input: {
+      merchantId: '11111111-1111-4111-8111-111111111111',
+      buildId: '22222222-2222-4222-8222-222222222222',
+      routeId: 'home',
+    },
+  });
+}
+
 it('fails closed when a direct transport has no admission configured', async () => {
   const bridge = vi.fn(async () => Response.json({ ok: true }));
   const handler = createProductionOwnerPreviewHttpHandler(bridge);
@@ -63,10 +77,7 @@ it('rejects forged requests without consuming the authenticated work slots', asy
   await once(server, 'listening');
   const address = server.address();
   if (!address || typeof address === 'string') throw Error('fixture');
-  const body = JSON.stringify({
-    expiresAt: Date.now() + 30000,
-    nonce: 'd'.repeat(64),
-  });
+  const body = previewBody('d'.repeat(64));
   const signature = createHmac('sha256', key)
     .update(`owner-preview/v1\n${body}`)
     .digest('hex');
@@ -107,10 +118,7 @@ it('rejects concurrent signed replays while the original work is still active', 
   await once(server, 'listening');
   const address = server.address();
   if (!address || typeof address === 'string') throw Error('fixture');
-  const body = JSON.stringify({
-    expiresAt: Date.now() + 30000,
-    nonce: 'e'.repeat(64),
-  });
+  const body = previewBody('e'.repeat(64));
   const signature = createHmac('sha256', key)
     .update(`owner-preview/v1\n${body}`)
     .digest('hex');
@@ -165,10 +173,7 @@ it('does not consume a valid nonce when all work slots are full', async () => {
   const address = server.address();
   if (!address || typeof address === 'string') throw Error('fixture');
   const signed = (i: number) => {
-    const body = JSON.stringify({
-      expiresAt: Date.now() + 30000,
-      nonce: i.toString(16).padStart(64, '0'),
-    });
+    const body = previewBody(i.toString(16).padStart(64, '0'));
     return {
       body,
       signature: createHmac('sha256', key)

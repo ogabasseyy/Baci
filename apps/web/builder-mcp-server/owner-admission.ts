@@ -1,9 +1,10 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { experienceOwnerWireSchemas } from '../src/schemas/experience-owner-wire';
 
-/** Verify the exact signed wire body before reserving a long-lived work slot. */
+/** Validate the signed operation with the same schema used by the downstream handler. */
 export function createOwnerAdmission(
   key: Uint8Array,
-  domain: string,
+  domain: keyof typeof experienceOwnerWireSchemas,
   now = Date.now
 ) {
   if (key.length !== 32) throw Error('INVALID_OWNER_ADMISSION_KEY');
@@ -13,24 +14,17 @@ export function createOwnerAdmission(
   return (body: Uint8Array, signature: string): boolean => {
     if (!/^[a-f0-9]{64}$/.test(signature)) return false;
     try {
-      const payload: unknown = JSON.parse(Buffer.from(body).toString('utf8'));
-      if (!payload || typeof payload !== 'object' || Array.isArray(payload))
-        return false;
-      const expiresAt = (payload as { expiresAt?: unknown }).expiresAt;
-      const nonce = (payload as { nonce?: unknown }).nonce;
+      const text = new TextDecoder('utf-8', { fatal: true }).decode(body);
+      const parsed = experienceOwnerWireSchemas[domain].safeParse(
+        JSON.parse(text)
+      );
+      if (!parsed.success) return false;
+      const { expiresAt, nonce } = parsed.data;
       const current = now();
-      if (
-        typeof expiresAt !== 'number' ||
-        !Number.isSafeInteger(expiresAt) ||
-        expiresAt <= current ||
-        expiresAt > current + 60000 ||
-        typeof nonce !== 'string' ||
-        !/^[a-f0-9]{64}$/.test(nonce)
-      )
-        return false;
+      if (expiresAt <= current || expiresAt > current + 60000) return false;
       const expected = createHmac('sha256', secret)
         .update(`${domain}\n`)
-        .update(body)
+        .update(JSON.stringify(parsed.data))
         .digest();
       if (!timingSafeEqual(expected, Buffer.from(signature, 'hex')))
         return false;

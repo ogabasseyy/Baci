@@ -52,7 +52,13 @@ export async function runPublicObservationJob(
     await invoke('prepare');
   } catch {
     // The helper may have prepared the job before its caller timed out.
-    throw Error('PUBLIC_OBSERVATION_PREPARE_UNCERTAIN');
+    try {
+      await invoke('delete');
+    } catch {
+      console.error('Public observation job preparation unresolved', { jobId });
+      throw Error('PUBLIC_OBSERVATION_PREPARE_UNCERTAIN');
+    }
+    throw Error('PUBLIC_OBSERVATION_FAILED');
   }
   const started = performance.now();
   let failure: unknown;
@@ -114,6 +120,7 @@ export async function runPublicObservationJob(
   try {
     await invoke('delete');
   } catch {
+    console.error('Public observation job cleanup failed', { jobId });
     throw Error('PUBLIC_OBSERVATION_CLEANUP_FAILED');
   }
   if (failure || !output) throw failure ?? Error('PUBLIC_OBSERVATION_FAILED');

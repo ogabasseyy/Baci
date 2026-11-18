@@ -1,21 +1,10 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { z } from 'zod';
 import { readBoundedJsonBody } from '@/lib/events/read-bounded-json-body';
 import type { OwnerLifecycleVerification } from '@/lib/experience/owner-lifecycle-runtime';
+import { experienceOwnerWireSchemas } from '@/schemas/experience-owner-wire';
 
-const message = z.strictObject({
-  version: z.literal(1),
-  nonce: z.string().regex(/^[a-f0-9]{64}$/),
-  expiresAt: z.number().int().safe(),
-  accessToken: z
-    .string()
-    .min(1)
-    .max(8192)
-    .regex(/^[A-Za-z0-9_.-]+$/),
-  approvalId: z.uuid(),
-  kind: z.enum(['draft', 'lifecycle']),
-});
+const message = experienceOwnerWireSchemas['verifier-attest/v1'];
 
 /** Internal verifier only. The nonce callback must be durable and atomic. */
 export function createVerifierAttestationHandler(settings: {

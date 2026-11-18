@@ -102,6 +102,29 @@ it('does not start an oversized job or run a job after preparation failure', asy
   expect(start).not.toHaveBeenCalled();
 });
 
+it('reconciles the exact prepared observer job when its receipt is lost', async () => {
+  let prepared: string | undefined;
+  const command = vi.fn(async (_program: string, argv: string[]) => {
+    if (argv[2] === 'prepare') {
+      prepared = argv[4];
+      throw Error('lost preparation receipt');
+    }
+    expect(argv.slice(2)).toEqual(['delete', prepared]);
+    prepared = undefined;
+    return '';
+  });
+  const start = vi.fn();
+  await expect(
+    runPublicObservationJob(
+      { payload: {}, session: async () => ({ status: 200, body: '{}' }) },
+      { command, start }
+    )
+  ).rejects.toThrow('PUBLIC_OBSERVATION_FAILED');
+  expect(command).toHaveBeenCalledTimes(2);
+  expect(prepared).toBeUndefined();
+  expect(start).not.toHaveBeenCalled();
+});
+
 it('exchanges a start frame and real duplex requests with a separate worker process', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'baci-observation-fixture-'));
   try {

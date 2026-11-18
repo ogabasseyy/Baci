@@ -2,10 +2,34 @@ import { createHmac } from 'node:crypto';
 import { expect, it } from 'vitest';
 import { createOwnerAdmission } from './owner-admission';
 
+function attestation(nonce: string, expiresAt: number) {
+  return {
+    version: 1,
+    nonce,
+    expiresAt,
+    accessToken: 'synthetic.token',
+    approvalId: '11111111-1111-4111-8111-111111111111',
+    kind: 'draft',
+  };
+}
+
+it('admits schema-canonical signatures over reordered wire fields', () => {
+  const key = Buffer.alloc(32, 4);
+  const domain = 'verifier-attest/v1';
+  const canonical = attestation('a'.repeat(64), 1030000);
+  const { kind, ...rest } = canonical;
+  const wire = Buffer.from(JSON.stringify({ kind, ...rest }, null, 2));
+  const sign = (body: string | Buffer) =>
+    createHmac('sha256', key).update(`${domain}\n`).update(body).digest('hex');
+  const admit = createOwnerAdmission(key, domain, () => 1000000);
+  expect(admit(wire, sign(wire))).toBe(false);
+  expect(admit(wire, sign(JSON.stringify(canonical)))).toBe(true);
+});
+
 it('admits only a fresh body signed for the exact verifier operation', () => {
   const key = Buffer.alloc(32, 1);
   const body = Buffer.from(
-    JSON.stringify({ expiresAt: 1030000, nonce: 'a'.repeat(64) })
+    JSON.stringify(attestation('a'.repeat(64), 1030000))
   );
   const sign = (prefix: string, bytes = body) =>
     createHmac('sha256', key).update(`${prefix}\n`).update(bytes).digest('hex');
@@ -14,9 +38,13 @@ it('admits only a fresh body signed for the exact verifier operation', () => {
   expect(admit(body, sign('verifier-public/v1'))).toBe(false);
   expect(admit(Buffer.from('{}'), sign('verifier-attest/v1'))).toBe(false);
   expect(admit(body, 'a'.repeat(64))).toBe(false);
-  const expired = Buffer.from(JSON.stringify({ expiresAt: 999999 }));
+  const expired = Buffer.from(
+    JSON.stringify(attestation('a'.repeat(64), 999999))
+  );
   expect(admit(expired, sign('verifier-attest/v1', expired))).toBe(false);
-  const farFuture = Buffer.from(JSON.stringify({ expiresAt: 1060001 }));
+  const farFuture = Buffer.from(
+    JSON.stringify(attestation('a'.repeat(64), 1060001))
+  );
   expect(admit(farFuture, sign('verifier-attest/v1', farFuture))).toBe(false);
 });
 
@@ -24,7 +52,7 @@ it('does not admit the same valid signed nonce twice, but allows fresh nonces af
   const key = Buffer.alloc(32, 2);
   const admit = createOwnerAdmission(key, 'verifier-attest/v1', () => 1000000);
   const body = Buffer.from(
-    JSON.stringify({ expiresAt: 1030000, nonce: 'b'.repeat(64) })
+    JSON.stringify(attestation('b'.repeat(64), 1030000))
   );
   const signature = createHmac('sha256', key)
     .update('verifier-attest/v1\n')
@@ -34,7 +62,7 @@ it('does not admit the same valid signed nonce twice, but allows fresh nonces af
   expect(admit(body, signature)).toBe(true);
   expect(admit(body, signature)).toBe(false);
   const next = Buffer.from(
-    JSON.stringify({ expiresAt: 1030000, nonce: 'c'.repeat(64) })
+    JSON.stringify(attestation('c'.repeat(64), 1030000))
   );
   const nextSignature = createHmac('sha256', key)
     .update('verifier-attest/v1\n')
@@ -48,7 +76,7 @@ it('bounds the early replay filter and releases entries after expiry', () => {
   let now = 1000000;
   const admit = createOwnerAdmission(key, 'verifier-attest/v1', () => now);
   const signed = (nonce: string, expiresAt: number) => {
-    const body = Buffer.from(JSON.stringify({ nonce, expiresAt }));
+    const body = Buffer.from(JSON.stringify(attestation(nonce, expiresAt)));
     return [
       body,
       createHmac('sha256', key)

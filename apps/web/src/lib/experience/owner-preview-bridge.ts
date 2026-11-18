@@ -1,24 +1,13 @@
 import 'server-only';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { z } from 'zod';
 import { readBoundedJsonBody } from '@/lib/events/read-bounded-json-body';
-import { experiencePreviewInput } from '@/schemas/experience-preview';
+import { experienceOwnerWireSchemas } from '@/schemas/experience-owner-wire';
 import { requireExperienceOwner } from './authorization';
 import type { ExperienceOwnerRuntime } from './owner-runtime';
 import { productionOrigin } from './production-origins';
 
-const message = z.strictObject({
-  version: z.literal(1),
-  nonce: z.string().regex(/^[a-f0-9]{64}$/),
-  expiresAt: z.number().int().safe(),
-  accessToken: z
-    .string()
-    .min(1)
-    .max(8192)
-    .regex(/^[A-Za-z0-9_.-]+$/),
-  input: experiencePreviewInput,
-});
+const message = experienceOwnerWireSchemas['owner-preview/v1'];
 
 function hideOwnerDenial(error: unknown) {
   if (

@@ -11,7 +11,10 @@ Each port variable must match its corresponding configured loopback listener.
 
 The auth and public MCP hosts forward only their fixed paths. The owner host
 requires a client certificate trusted by a dedicated owner CA, and forwards only
-the three owner paths. The execution host serves only GET output paths. Caddy
+the three owner paths. The execution host serves only GET output paths.
+The owner vhost sends a fixed `mcp.usebaci.com` Host to the loopback listener.
+It is an internal protocol identifier. Owner HTTPS traffic dials the configured
+mutual TLS origin, and public MCP listens on `builder-mcp.usebaci.com`. Caddy
 overwrites forwarded IP information instead of trusting arbitrary client input.
 There is no access-log directive; deployment must independently confirm that
 the proxy and every upstream avoid logging bearer tokens, request bodies and

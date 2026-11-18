@@ -1,10 +1,11 @@
 import { once } from 'node:events';
 import { request } from 'node:http';
 import { expect, it, vi } from 'vitest';
+import { BUILDER_MCP_HOST } from '../src/lib/builder-connector/resource';
 import { createBuilderMcpNodeServer } from './node';
 import { createOwnerInternalNodeServer } from './owner-internal-node';
 
-async function post(port: number, path: string) {
+async function post(port: number, path: string, authority = 'mcp.usebaci.com') {
   return await new Promise<number>((resolve, reject) => {
     const req = request(
       {
@@ -13,7 +14,7 @@ async function post(port: number, path: string) {
         path,
         method: 'POST',
         headers: {
-          host: 'mcp.usebaci.com',
+          host: authority,
           'content-type': 'application/json',
           'x-baci-owner-signature': 'a'.repeat(64),
         },
@@ -43,7 +44,17 @@ it('separates owner routes when explicitly composed on distinct local listeners'
   if (!publicAddress || typeof publicAddress === 'string')
     throw Error('fixture');
   try {
-    expect(await post(publicAddress.port, '/internal/owner/preview')).toBe(404);
+    expect(await post(publicAddress.port, '/internal/owner/preview')).toBe(403);
+    expect(
+      await post(
+        publicAddress.port,
+        '/internal/owner/preview',
+        BUILDER_MCP_HOST
+      )
+    ).toBe(404);
+    expect(
+      await post(internalPort, '/internal/owner/preview', BUILDER_MCP_HOST)
+    ).toBe(404);
     expect(owner).not.toHaveBeenCalled();
     expect(await post(internalPort, '/builder/mcp')).toBe(404);
     expect(await post(internalPort, '/internal/owner/attest')).toBe(404);
@@ -69,7 +80,7 @@ it('routes signed public verification only through the owner listener', async ()
   if (!publicAddress || typeof publicAddress === 'string')
     throw Error('fixture');
   const port = await owner.listen(0);
-  const send = (target: number) =>
+  const send = (target: number, authority = 'mcp.usebaci.com') =>
     new Promise<number>((resolve, reject) => {
       const req = request(
         {
@@ -78,7 +89,7 @@ it('routes signed public verification only through the owner listener', async ()
           path: '/internal/owner/public',
           method: 'POST',
           headers: {
-            host: 'mcp.usebaci.com',
+            host: authority,
             'content-type': 'application/json',
             'x-baci-verifier-signature': 'a'.repeat(64),
           },
@@ -92,7 +103,7 @@ it('routes signed public verification only through the owner listener', async ()
       req.end('{}');
     });
   try {
-    expect(await send(publicAddress.port)).toBe(404);
+    expect(await send(publicAddress.port, BUILDER_MCP_HOST)).toBe(404);
     expect(await send(port)).toBe(204);
     expect(verify).toHaveBeenCalledOnce();
     expect(verify.mock.calls[0]?.[0].url).toBe(

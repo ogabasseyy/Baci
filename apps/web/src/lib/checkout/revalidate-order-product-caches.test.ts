@@ -42,6 +42,7 @@ function mockSupabase(
 describe('revalidateOrderProductCaches', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    revalidateProductSlugsMock.mockReturnValue(true);
   });
   it('busts scoped listings and per-slug PDP caches without throwing when all slugs resolve', async () => {
     const supabase = mockSupabase([{ slug: 'galaxy-s24' }]);
@@ -79,6 +80,23 @@ describe('revalidateOrderProductCaches', () => {
     ]);
     expect(revalidateProductsMock).toHaveBeenCalledWith('merchant-1');
     expect(loggerErrorMock).not.toHaveBeenCalled();
+  });
+
+  it('falls back to full merchant-wide PDP invalidation when revalidateProductSlugs returns false', async () => {
+    const supabase = mockSupabase([{ slug: 'galaxy-s24' }]);
+    revalidateProductSlugsMock.mockReturnValueOnce(false);
+    await expect(
+      revalidateOrderProductCaches({
+        merchantId: 'merchant-1',
+        orderId: 'order-1',
+        productIds: ['product-1'],
+        supabase: supabase as never,
+      })
+    ).resolves.toBeUndefined();
+    expect(revalidateProductSlugsMock).toHaveBeenCalledWith('merchant-1', [
+      'galaxy-s24',
+    ]);
+    expect(revalidateProductsMock).toHaveBeenCalledWith('merchant-1');
   });
 
   it('logs slug lookup failures and falls back to full merchant-wide invalidation', async () => {

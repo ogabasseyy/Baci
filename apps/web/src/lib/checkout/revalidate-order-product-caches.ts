@@ -67,11 +67,14 @@ export async function revalidateOrderProductCaches({
     const resolvedSlugs = (revalidateProductRows ?? [])
       .map((row) => row.slug?.trim())
       .filter((slug): slug is string => Boolean(slug));
-    if (resolvedSlugs.length > 0) {
-      revalidateProductSlugs(merchantId, resolvedSlugs);
-    }
+    const slugsRevalidated =
+      resolvedSlugs.length > 0 &&
+      revalidateProductSlugs(merchantId, resolvedSlugs) === true;
 
-    if (resolvedSlugs.length === revalidateProductIds.length) {
+    if (
+      slugsRevalidated &&
+      resolvedSlugs.length === revalidateProductIds.length
+    ) {
       revalidateProducts(merchantId, undefined, {
         omitMerchantWidePdpDetails: true,
       });

@@ -2,8 +2,8 @@ import type { StorefrontProductPurgeEntry } from '@/lib/storefront-product-purge
 import type { InternalRevalidateProductEntry } from '@/schemas/internal-revalidate-products-route';
 
 /**
- * Returns true only when every caller-supplied product entry resolved to a
- * non-ID product slug in `entries` + `resolvedSlugs`, so omitting
+ * Order-independently verifies that every caller-supplied product entry
+ * resolved to a non-ID product slug in `entries` + `resolvedSlugs`, so omitting
  * merchant-wide PDP detail and redirect tags cannot leave archived, deleted, or
  * unenumerated ID-only entries stale.
  */
@@ -12,28 +12,48 @@ export function hasCompleteScopedProductSlugs(
   entries: readonly StorefrontProductPurgeEntry[],
   resolvedSlugs: readonly string[]
 ): boolean {
-  if (entries.length < products.length) {
+  if (products.length === 0 || entries.length < products.length) {
     return false;
   }
 
+  const entrySlugSet = new Set(
+    entries.map((entry) => entry.slug.trim()).filter(Boolean)
+  );
   const resolvedSet = new Set(
     resolvedSlugs.map((slug) => slug.trim()).filter(Boolean)
   );
-  let resolvedCount = 0;
+  const callerSlugs = new Set<string>();
+  const idOnlyProductIds = new Set<string>();
 
-  for (const [index, product] of products.entries()) {
-    const entrySlug = entries[index]?.slug?.trim();
+  for (const product of products) {
     const callerSlug = product.slug?.trim();
     const productId = product.id?.trim();
 
-    if (!entrySlug || !resolvedSet.has(entrySlug)) {
+    if (callerSlug) {
+      if (!entrySlugSet.has(callerSlug) || !resolvedSet.has(callerSlug)) {
+        return false;
+      }
+      callerSlugs.add(callerSlug);
+    } else if (productId) {
+      if (entrySlugSet.has(productId)) {
+        return false;
+      }
+      idOnlyProductIds.add(productId);
+    } else {
       return false;
     }
-    if (!callerSlug && productId && entrySlug === productId) {
-      return false;
-    }
-    resolvedCount += 1;
   }
 
-  return resolvedCount === products.length;
+  if (idOnlyProductIds.size === 0) {
+    return true;
+  }
+
+  const resolvedAuthoritySlugs = Array.from(entrySlugSet).filter(
+    (slug) => !idOnlyProductIds.has(slug) && resolvedSet.has(slug)
+  );
+  const additionalResolvedCount = resolvedAuthoritySlugs.filter(
+    (slug) => !callerSlugs.has(slug)
+  ).length;
+
+  return additionalResolvedCount >= idOnlyProductIds.size;
 }

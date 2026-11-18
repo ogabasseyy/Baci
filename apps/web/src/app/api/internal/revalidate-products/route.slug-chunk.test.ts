@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockGetInternalApiSecret = vi.fn();
+const mockExpireProductBlogCache = vi.fn();
 const mockRevalidateProducts = vi.fn();
 const mockRevalidateProductSlugs = vi.fn();
 const mockScheduleStorefrontProductPurge = vi.fn();
@@ -19,7 +20,8 @@ vi.mock('@/lib/storefront-product-purge', () => ({
     mockScheduleStorefrontProductPurge(...args),
 }));
 vi.mock('@/lib/expire-product-blog-cache', () => ({
-  expireProductBlogCache: vi.fn(),
+  expireProductBlogCache: (...args: unknown[]) =>
+    mockExpireProductBlogCache(...args),
 }));
 vi.mock('@/lib/storefront-product-purge-hostnames', () => ({
   scheduleStorefrontHostnamePurge: vi.fn(),
@@ -52,6 +54,7 @@ describe('POST /api/internal/revalidate-products slug chunks', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetInternalApiSecret.mockReturnValue(SECRET);
+    mockRevalidateProductSlugs.mockReturnValue(true);
     mockCreatePublicClient.mockReturnValue({ from: vi.fn() });
   });
 
@@ -62,6 +65,7 @@ describe('POST /api/internal/revalidate-products slug chunks', () => {
     );
 
     expect(res.status).toBe(200);
+    expect(mockExpireProductBlogCache).toHaveBeenCalledWith(MERCHANT_ID);
     expect(mockRevalidateProducts).toHaveBeenCalledWith(
       MERCHANT_ID,
       undefined,

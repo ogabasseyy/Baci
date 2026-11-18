@@ -75,6 +75,14 @@ export function getProductLegacyRedirectCacheTag(merchantId: string): string {
   return `product-legacy-redirect-${merchantId}`;
 }
 
+/**
+ * Builds cache tags for `getCachedStorefrontPdpCore`.
+ *
+ * Intentionally omits `products-${merchantId}` so single-product and order
+ * mutations do not evict unrelated PDPs; sibling PDP related-product rails
+ * refresh within the ~300s `products` cacheLife window, while store-wide
+ * `revalidateProducts(merchantId)` still busts `product-details-${merchantId}`.
+ */
 export function buildStorefrontPdpCoreCacheTags(
   merchantId: string,
   productSlug: string

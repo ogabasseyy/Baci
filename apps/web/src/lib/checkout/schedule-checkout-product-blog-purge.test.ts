@@ -53,6 +53,7 @@ function createSupabase({
 describe('scheduleCheckoutProductBlogPurge', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.revalidateProductSlugs.mockReturnValue(true);
   });
 
   it('purges managed and serialized products after checkout stock changes', async () => {
@@ -86,7 +87,11 @@ describe('scheduleCheckoutProductBlogPurge', () => {
       supabase,
     });
 
-    expect(mocks.revalidateProducts).toHaveBeenCalledWith('merchant-1');
+    expect(mocks.revalidateProducts).toHaveBeenCalledWith(
+      'merchant-1',
+      undefined,
+      { omitMerchantWidePdpDetails: true }
+    );
     expect(mocks.revalidateProductSlugs).toHaveBeenCalledWith('merchant-1', [
       'managed-phone',
       'serialized-phone',

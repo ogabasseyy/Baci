@@ -78,36 +78,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const hasExplicitProductSlugs = Boolean(productSlugs?.length);
   const hasProducts = Boolean(products?.length);
-  // Runs in a route context, so revalidateTag works here (unlike the CLI worker).
-  if (shouldExpireProductBlogCache) {
-    // Standalone workers use this narrow mode to refresh the related-product
-    // enrichment without churning every product/index/feed cache for the
-    // merchant. The helper is intentionally called in this request context.
-    expireProductBlogCache(merchantId);
-  } else if (!purgeWholeStorefront && !hasProducts && hasExplicitProductSlugs) {
-    revalidateProducts(merchantId, undefined, {
-      expireImmediately: true,
-      omitMerchantWidePdpDetails: true,
-    });
-  } else if (purgeWholeStorefront || !hasProducts) {
-    revalidateProducts(merchantId);
-  }
 
   // The internal Bearer secret authorizes this endpoint, but `merchantSlug` is
-  // still only caller-supplied routing data. Resolve the canonical slug from
-  // the validated merchant id before it can reach either Cloudflare purge
-  // scheduler. The public client is intentional: this server-only route needs
-  // only the public `merchants.slug` projection and must not expand to a
-  // service-role client.
+  // still only caller-supplied routing data. Validate it BEFORE mutating any
+  // origin caches so a mismatched slug fails fast. The public client is
+  // intentional: this route needs only `merchants.slug` and never service-role.
   const needsStorefrontPurge = Boolean(
-    merchantSlug && (purgeWholeStorefront || (products && products.length > 0))
+    merchantSlug && (purgeWholeStorefront || hasProducts)
   );
-  const needsPublicClient = Boolean(
-    needsStorefrontPurge || (products && products.length > 0)
-  );
+  const needsPublicClient = Boolean(needsStorefrontPurge || hasProducts);
   let supabase: ReturnType<typeof createPublicClient> | undefined;
   let authoritativeMerchantSlug: string | undefined;
-  let merchantSlugMismatch = false;
 
   if (needsPublicClient) {
     try {
@@ -122,8 +103,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           merchantSlug
         );
         if (slugResult.status === 'mismatch') {
-          merchantSlugMismatch = true;
-        } else if (slugResult.status === 'ok') {
+          return NextResponse.json(
+            {
+              error: 'Merchant slug does not match merchant ID',
+              code: 'MERCHANT_SLUG_MISMATCH',
+            },
+            { status: 400 }
+          );
+        }
+        if (slugResult.status === 'ok') {
           authoritativeMerchantSlug = slugResult.slug;
         }
       }
@@ -136,19 +124,32 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
   }
 
-  // When the caller supplies product entries, resolve them against the DB and
-  // bust their per-slug Next caches. The per-slug bust needs only merchantId,
-  // so it remains independent of the merchant-slug-gated Cloudflare purge.
-  if (productSlugs && productSlugs.length > 0) {
-    // Every slug chunk is hard-expired: this request cannot know whether a
-    // later control-metadata chunk will schedule an edge purge, and SWR
-    // would serve the pre-mutation snapshot to the first post-purge request
-    // and re-seed the edge with stale stock. Standalone import chunks are
-    // no exception — an import that updates an existing product must not
-    // repopulate the edge with the old price or stock.
-    revalidateProductSlugs(merchantId, productSlugs, {
+  // Every slug chunk is hard-expired: this request cannot know whether a
+  // later control-metadata chunk will schedule an edge purge, and SWR would
+  // serve pre-mutation snapshots and re-seed the edge with stale stock.
+  const explicitSlugsRevalidated =
+    hasExplicitProductSlugs &&
+    revalidateProductSlugs(merchantId, productSlugs ?? [], {
       expireImmediately: true,
-    });
+    }) === true;
+
+  // Runs in a route context, so revalidateTag works here (unlike the CLI worker).
+  if (shouldExpireProductBlogCache) {
+    // Standalone workers use this narrow mode to refresh related-product
+    // enrichment without churning every product/index/feed cache.
+    expireProductBlogCache(merchantId);
+  } else if (!hasProducts) {
+    if (!purgeWholeStorefront && explicitSlugsRevalidated) {
+      expireProductBlogCache(merchantId);
+      revalidateProducts(merchantId, undefined, {
+        expireImmediately: true,
+        omitMerchantWidePdpDetails: true,
+      });
+    } else {
+      revalidateProducts(merchantId);
+    }
+  } else if (purgeWholeStorefront) {
+    revalidateProducts(merchantId);
   }
   if (products && products.length > 0) {
     let revalidatedDeferredProducts = false;
@@ -198,15 +199,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         const bustSlugs = Array.from(
           new Set([...(productSlugs ?? []), ...resolvedSlugs])
         );
-        if (authoritativeMerchantSlug) {
-          revalidateProductSlugs(merchantId, bustSlugs, {
-            expireImmediately: true,
-          });
-        } else {
-          revalidateProductSlugs(merchantId, bustSlugs);
-        }
+        const bustSlugsRevalidated =
+          (authoritativeMerchantSlug
+            ? revalidateProductSlugs(merchantId, bustSlugs, {
+                expireImmediately: true,
+              })
+            : revalidateProductSlugs(merchantId, bustSlugs)) === true;
         const scopedOptions =
-          hasExplicitProductSlugs &&
+          explicitSlugsRevalidated &&
+          bustSlugsRevalidated &&
           !blogPostSlugsIncomplete &&
           hasCompleteScopedProductSlugs(products, entries, resolvedSlugs)
             ? { omitMerchantWidePdpDetails: true }
@@ -255,16 +256,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         error: purgeError,
       });
     }
-  }
-
-  if (merchantSlugMismatch) {
-    return NextResponse.json(
-      {
-        error: 'Merchant slug does not match merchant ID',
-        code: 'MERCHANT_SLUG_MISMATCH',
-      },
-      { status: 400 }
-    );
   }
 
   // Category path changes are structural: the affected public documents cannot

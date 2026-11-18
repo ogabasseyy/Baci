@@ -29,6 +29,10 @@ export interface WalletTransaction {
    * apart from cashback/reversal credits.
    */
   source_type?: string | null;
+  /** An IMEI check charge whose check has not finished yet. */
+  pending?: boolean;
+  /** An IMEI check charge being refunded to the wallet. */
+  refunding?: boolean;
   type:
     | 'credit'
     | 'debit'
@@ -89,8 +93,7 @@ export function WalletTransactionHistory({
       style={[
         styles.historySection,
         { backgroundColor: colors.card },
-        // Aligned with the card edges above it (walk-through).
-        primaryReady && localStyles.alignedSection,
+        // The same inner inset as the Wallet activity card above it.
         primaryReady && walletListLayout.aligned,
       ]}
     >
@@ -153,7 +156,7 @@ export function WalletTransactionHistory({
             <View
               accessible
               accessibilityRole="text"
-              accessibilityLabel={`${accessibleType}. ${transaction.description}. ${amountPrefix}${formatNgnCurrency(Math.abs(transaction.amount))}. ${formatWalletDate(transaction.created_at)}.`}
+              accessibilityLabel={`${accessibleType}. ${transaction.description}.${transaction.pending ? ' Pending.' : transaction.refunding ? ' Refunding.' : ''} ${amountPrefix}${formatNgnCurrency(Math.abs(transaction.amount))}. ${formatWalletDate(transaction.created_at)}.`}
               key={transaction.id}
               style={[
                 styles.transactionItem,
@@ -182,6 +185,11 @@ export function WalletTransactionHistory({
                 </Text>
                 <Text style={[styles.txDate, { color: colors.textSecondary }]}>
                   {formatWalletDate(transaction.created_at)}
+                  {transaction.pending
+                    ? ' · Pending'
+                    : transaction.refunding
+                      ? ' · Refunding'
+                      : ''}
                 </Text>
               </View>
               <Text style={[styles.txAmount, { color: amountColor }]}>
@@ -197,6 +205,5 @@ export function WalletTransactionHistory({
 }
 
 const localStyles = StyleSheet.create({
-  alignedSection: { paddingHorizontal: 0 },
   scope: { fontSize: 12, lineHeight: 17, marginBottom: 8, marginTop: -8 },
 });

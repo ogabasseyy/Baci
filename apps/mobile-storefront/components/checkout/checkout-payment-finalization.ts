@@ -53,12 +53,17 @@ export async function finalizeCheckoutPayment({
   shouldCreateWalletFundedBankTransferOrder,
   walletTransferFallback,
 }: FinalizeCheckoutPaymentParams) {
-  if (selectedPayment === 'uba_redvault')
+  const { order } = orderResponse;
+  // An order the server already settled with nothing due (a quiz prize) has
+  // no payment to review, so it passes this guard and routes to success below.
+  const nothingDue =
+    order?.payment_status === 'paid' &&
+    Number(orderResponse.amountDueToGateway ?? 0) <= 0;
+  if (selectedPayment === 'uba_redvault' && !nothingDue)
     throw new OrderError(
       'Review the server UBA summary before payment',
       'REDVAULT_REVIEW_REQUIRED'
     );
-  const { order } = orderResponse;
   const fullyPaidStoreCreditPaymentMethod =
     getFullyPaidStoreCreditPaymentMethod(orderResponse);
 
@@ -85,10 +90,7 @@ export async function finalizeCheckoutPayment({
   // A quiz prize (voucher) order is pre-reserved and comes back already paid
   // with nothing due and no wallet/savings usage — so the store-credit check
   // above returns undefined. Route straight to success.
-  if (
-    order?.payment_status === 'paid' &&
-    Number(orderResponse.amountDueToGateway ?? 0) <= 0
-  ) {
+  if (nothingDue) {
     // routeFullyPaidPrizeSuccess reports the actual voucher method (not the
     // stale UI selection), so the success screen shows paid/completed copy.
     await routeFullyPaidPrizeSuccess({

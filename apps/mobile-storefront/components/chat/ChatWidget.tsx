@@ -12,7 +12,7 @@ import { getChatWidgetBottomOffset } from '@/constants/layout';
 import { getOptionalGestureHandlerRuntime } from '@/lib/optional-gesture-handler';
 import { useUIStore } from '@/stores/ui-store';
 import { ChatModal } from './ChatModal';
-import { EDGE_MARGIN, HIDDEN_ROUTES } from './constants';
+import { EDGE_MARGIN, isChatHiddenRoute } from './constants';
 import { styles } from './styles';
 import type { ChatWidgetProps } from './types';
 import { useChat } from './use-chat';
@@ -84,9 +84,7 @@ export function ChatWidget({
   const chat = useChat(santaMode);
 
   // Check if chat should be hidden on current screen or if dismissed by user
-  const shouldHide =
-    isChatDismissed ||
-    HIDDEN_ROUTES.some((route) => pathname?.startsWith(route));
+  const shouldHide = isChatDismissed || isChatHiddenRoute(pathname);
 
   const animatedFabStyle = useAnimatedStyle(() => {
     return {

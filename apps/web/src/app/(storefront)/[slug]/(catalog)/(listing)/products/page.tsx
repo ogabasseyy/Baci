@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { connection } from 'next/server';
 import { Suspense } from 'react';
 import { CatalogListingLoading } from '@/app/(storefront)/[slug]/storefront-loading-ui';
 import { getRequestScopedMerchant } from '@/lib/cached-data';
@@ -147,11 +146,7 @@ export async function generateMetadata({
   };
 }
 
-async function ProductsListingRuntime(props: PageProps) {
-  // Keep tenant/domain listing work request-bound while the page prerenders a
-  // Suspense fallback shell. Cache Components rejects route-level dynamic flags.
-  await connection();
-
+function ProductsListingRuntime(props: PageProps) {
   return <ProductsPageContent {...props} />;
 }
 

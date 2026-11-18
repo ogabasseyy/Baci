@@ -105,12 +105,41 @@ it('shows a recoverable service error and retries only eligibility once on click
   ).toBeVisible();
   expect(screen.queryByText(/under review/i)).toBeNull();
   expect(screen.queryByText(/No installment plan/)).toBeNull();
+  expect(screen.getByText(/Oxygen couldn’t complete the check/i)).toBeVisible();
+  expect(screen.getByText(/contact support for help/i)).toBeVisible();
   expect(submit).not.toHaveBeenCalled();
   const retry = screen.getByRole('button', { name: 'Try again' });
   retry.click();
   retry.click();
   await waitFor(() => expect(submit).toHaveBeenCalledTimes(1));
   expect(submit).toHaveBeenCalledWith({ action: 'refresh_eligibility' });
+});
+
+it('explains the financial-details mismatch and asks the customer to check with their bank', () => {
+  const submit = vi.fn();
+  render(
+    <OxygenGuidedVerification
+      snapshot={{
+        ...base,
+        state: {
+          validated: true,
+          kyc: { ...kyc, selfie_status: 'DONE' },
+          eligibilityStatus: 'failed',
+          eligibilityFailureReason: 'financial_details_mismatch',
+        },
+      }}
+      busy={false}
+      error=""
+      submit={submit}
+    />
+  );
+  expect(
+    screen.getByText(/Oxygen says your financial details do not match/i)
+  ).toBeVisible();
+  expect(screen.getByText(/contact your bank/i)).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Try again' })).toBeVisible();
+  expect(screen.queryByText(/taking longer than expected/i)).toBeNull();
+  expect(submit).not.toHaveBeenCalled();
 });
 
 it('shows identity loading after phone verification without claiming payment options are ready', () => {

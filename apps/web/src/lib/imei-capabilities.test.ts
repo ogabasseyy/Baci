@@ -1,6 +1,7 @@
-import { expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   getAvailableImeiTierKeys,
+  getWalletPayableImeiTierKeys,
   type ImeiCapabilitiesConfiguration,
 } from './imei-capabilities';
 
@@ -96,4 +97,41 @@ it('excludes disabled services and never emits credentials or provider identifie
   expect(keys).not.toContain('simLock');
   expect(keys).not.toContain('basic');
   expect(JSON.stringify(keys)).not.toMatch(/private-|provider.example|716/);
+});
+
+describe('bugfix: the savings wallet was offered for checks only Petrock runs', () => {
+  // Walk 2026-11-15: SIM Lock routed to Petrock was offered for the PiggyVest
+  // wallet, which only pays Sickw checks; the server refused after the PIN.
+  it('lists only the available checks that run on Sickw', () => {
+    const payable = getWalletPayableImeiTierKeys({
+      ...asyncRequest,
+      configuration,
+    });
+    expect(payable).toContain('basic');
+    expect(payable).not.toContain('simLock');
+    const available = getAvailableImeiTierKeys({
+      ...asyncRequest,
+      configuration,
+    });
+    expect(available).toContain('simLock');
+    expect(payable.every((key) => available.includes(key))).toBe(true);
+  });
+
+  it('pays for SIM Lock from the wallet again while Petrock is off', () => {
+    expect(
+      getWalletPayableImeiTierKeys({
+        ...asyncRequest,
+        configuration: { ...configuration, isPetrockEnabled: () => false },
+      })
+    ).toContain('simLock');
+  });
+
+  it('lists nothing when the server capability is off', () => {
+    expect(
+      getWalletPayableImeiTierKeys({
+        ...asyncRequest,
+        configuration: { ...configuration, getImeiHashSalt: () => undefined },
+      })
+    ).toEqual([]);
+  });
 });

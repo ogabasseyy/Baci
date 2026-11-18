@@ -70,6 +70,7 @@ describe('ProfileHeader', () => {
   it('shows the most recently unlocked SuperQuiz badge for the account', () => {
     render(<ProfileHeader customer={customer} />);
 
+    expect(screen.queryByText('Member')).toBeNull();
     expect(screen.getByText('SuperQuiz badge')).toBeTruthy();
     expect(screen.getByText('Today Quiz')).toBeTruthy();
     expect(mockGetMostRecentBadge).toHaveBeenCalledWith('auth-user');

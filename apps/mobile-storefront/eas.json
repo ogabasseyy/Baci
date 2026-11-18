@@ -18,6 +18,8 @@
         "buildType": "apk"
       },
       "env": {
+        "EXPO_PUBLIC_MOBILE_ADS_ENABLED": "true",
+        "EXPO_PUBLIC_QUIZ_ADS_ENABLED": "true",
         "EXPO_PUBLIC_ENV": "development",
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true"
       },
@@ -31,6 +33,8 @@
         "simulator": true
       },
       "env": {
+        "EXPO_PUBLIC_MOBILE_ADS_ENABLED": "true",
+        "EXPO_PUBLIC_QUIZ_ADS_ENABLED": "true",
         "EXPO_PUBLIC_ENV": "development",
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true"
       }

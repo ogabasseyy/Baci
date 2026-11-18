@@ -63,7 +63,7 @@ function expectedProject(file: string): string {
 // beforeAll. It is the only check that sees the real file-to-project assignment,
 // so it deliberately runs everywhere instead of being skipped locally.
 //
-// The CI shards (`vitest run --shard=N/6`) split the combined list of both
+// The CI shards (`vitest run --shard=N/10`) split the combined list of both
 // projects by file path, so they only cover every test exactly once if every
 // file belongs to exactly one project.
 describe('node/jsdom Vitest project partition', () => {

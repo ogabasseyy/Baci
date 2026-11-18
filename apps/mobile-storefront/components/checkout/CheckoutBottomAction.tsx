@@ -21,6 +21,8 @@ interface CheckoutBottomActionProps {
   itemCount: number;
   onContinue: () => void;
   onPlaceOrder: () => void;
+  /** A winner claiming a prize: nothing is charged. */
+  prizeCheckout?: boolean;
   prizeSimulation?: boolean;
   selectedPayment: PaymentMethodType | null;
   step: CheckoutStep;
@@ -37,6 +39,7 @@ export function CheckoutBottomAction({
   itemCount,
   onContinue,
   onPlaceOrder,
+  prizeCheckout = false,
   prizeSimulation = false,
   selectedPayment,
   step,
@@ -53,11 +56,13 @@ export function CheckoutBottomAction({
     : BRAND.onPrimary;
   const reviewLabel = prizeSimulation
     ? 'Complete test checkout'
-    : selectedPayment === 'invoice'
-      ? 'Get a Proforma Invoice'
-      : selectedPayment === 'payforme'
-        ? 'Pay for Me'
-        : 'Place Order';
+    : prizeCheckout
+      ? 'Claim Prize'
+      : selectedPayment === 'invoice'
+        ? 'Get a Proforma Invoice'
+        : selectedPayment === 'payforme'
+          ? 'Pay for Me'
+          : 'Place Order';
 
   return (
     <View
@@ -76,7 +81,7 @@ export function CheckoutBottomAction({
             Total
           </Text>
           <Text style={[styles.bottomValue, { color: colors.text }]}>
-            {formatPrice(displayTotal)}
+            {formatPrice(prizeCheckout ? 0 : displayTotal)}
           </Text>
           <Text style={[styles.bottomSubtle, { color: colors.textSecondary }]}>
             {itemCount} item{itemCount === 1 ? '' : 's'}
@@ -92,7 +97,9 @@ export function CheckoutBottomAction({
             isReview
               ? prizeSimulation
                 ? 'Complete test prize checkout'
-                : `${selectedPayment === 'invoice' ? 'Get a proforma invoice' : selectedPayment === 'payforme' ? 'Prepare pay for me order' : 'Place order'} for ${formatPrice(total)}`
+                : prizeCheckout
+                  ? 'Claim prize, nothing to pay'
+                  : `${selectedPayment === 'invoice' ? 'Get a proforma invoice' : selectedPayment === 'payforme' ? 'Prepare pay for me order' : 'Place order'} for ${formatPrice(total)}`
               : `Continue to ${step === 'address' ? 'payment' : 'review'}`
           }
           accessibilityState={{

@@ -12,7 +12,7 @@ import { orderDetailsOverviewStyles as styles } from './order-details-overview.s
 
 interface OrderDetailsStatusCardProps {
   colors: ThemeColors;
-  createdAtLabel: string;
+  placedOnLabel: string;
   recordedByName?: string | null;
   shippingColor: string;
   shippingConfig: { icon: string; label: string };
@@ -24,7 +24,7 @@ interface OrderDetailsStatusCardProps {
 
 export function OrderDetailsStatusCard({
   colors,
-  createdAtLabel,
+  placedOnLabel,
   recordedByName,
   shippingColor,
   shippingConfig,
@@ -56,7 +56,7 @@ export function OrderDetailsStatusCard({
       <View style={styles.statusHeader}>
         <View>
           <Text style={[styles.orderDate, { color: colors.textSecondary }]}>
-            Placed on {createdAtLabel}
+            Placed on {placedOnLabel}
           </Text>
           <View style={styles.sourceRow}>
             <Ionicons

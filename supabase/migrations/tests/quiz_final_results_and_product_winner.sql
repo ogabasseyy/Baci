@@ -32,6 +32,16 @@ BEGIN
     OR NOT has_function_privilege('authenticated', 'public.get_quiz_attempt_result_v2(uuid)', 'EXECUTE') THEN
     RAISE EXCEPTION 'owner result RPC grants invalid';
   END IF;
+  IF NOT has_table_privilege('service_role', 'public.quiz_prize_reservations', 'SELECT') THEN
+    RAISE EXCEPTION 'service_role SELECT grant on quiz_prize_reservations missing';
+  END IF;
+  IF has_table_privilege('service_role', 'public.quiz_prize_reservations', 'INSERT, UPDATE, DELETE') THEN
+    RAISE EXCEPTION 'service_role write privileges on quiz_prize_reservations should remain revoked';
+  END IF;
+  IF has_table_privilege('anon', 'public.quiz_prize_reservations', 'SELECT')
+    OR has_table_privilege('authenticated', 'public.quiz_prize_reservations', 'SELECT') THEN
+    RAISE EXCEPTION 'player roles must not have SELECT on quiz_prize_reservations';
+  END IF;
 
   IF pg_get_functiondef('public.finalize_due_quiz_events()'::regprocedure)
     NOT LIKE '%e.contract_version = 1%' THEN

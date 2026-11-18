@@ -10,13 +10,18 @@ export async function createRunnerSocket(settings: {
   handler(request: Request): Promise<Response>;
 }): Promise<{ close(): Promise<void> }> {
   await preparePrivateSocketPath(settings.socketPath);
+  const pending = new Set<Promise<void>>();
   const server = createServer((req, res) => {
     if (req.method !== 'POST' || req.url !== '/v1/execute') {
       req.resume();
       res.writeHead(404).end();
       return;
     }
-    void (async () => {
+    const controller = new AbortController();
+    res.once('close', () => {
+      if (!res.writableEnded) controller.abort();
+    });
+    const work = (async () => {
       const signature = req.headers['x-baci-runner-signature'];
       const request = new Request('https://runner.invalid/v1/execute', {
         method: 'POST',
@@ -26,14 +31,26 @@ export async function createRunnerSocket(settings: {
             : {},
         body: Readable.toWeb(req) as ReadableStream<Uint8Array>,
         duplex: 'half',
+        signal: controller.signal,
       } as RequestInit & { duplex: 'half' });
       const response = await settings.handler(request);
-      res.writeHead(response.status, Object.fromEntries(response.headers));
-      res.end(Buffer.from(await response.arrayBuffer()));
-    })().catch(() => {
-      if (!res.headersSent) res.writeHead(500).end();
-      else res.destroy();
-    });
+      if (controller.signal.aborted) {
+        await response.body?.cancel();
+        return;
+      }
+      const bytes = Buffer.from(await response.arrayBuffer());
+      if (!res.destroyed) {
+        res.writeHead(response.status, Object.fromEntries(response.headers));
+        res.end(bytes);
+      }
+    })()
+      .catch(() => {
+        if (res.destroyed) return;
+        if (!res.headersSent) res.writeHead(500).end();
+        else res.destroy();
+      })
+      .finally(() => pending.delete(work));
+    pending.add(work);
   });
   server.maxConnections = 32;
   server.requestTimeout = 15000;
@@ -48,10 +65,12 @@ export async function createRunnerSocket(settings: {
   }
   return {
     async close() {
-      server.closeAllConnections();
-      await new Promise<void>((resolve, reject) =>
+      const closed = new Promise<void>((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve()))
       );
+      server.closeAllConnections();
+      await closed;
+      await Promise.allSettled(pending);
     },
   };
 }

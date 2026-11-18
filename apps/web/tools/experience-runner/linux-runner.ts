@@ -16,14 +16,17 @@ export type LinuxRunnerCommand = (
   program: string,
   args: string[],
   input: string | undefined,
-  timeoutMs: number
+  timeoutMs: number,
+  signal?: AbortSignal
 ) => Promise<string>;
 export const runCommand: LinuxRunnerCommand = async (
   program,
   args,
   input,
-  timeoutMs
+  timeoutMs,
+  signal
 ) => {
+  signal?.throwIfAborted();
   const child = exec(program, args, {
     timeout: timeoutMs,
     maxBuffer: 16 * 1024 * 1024,
@@ -34,6 +37,13 @@ export const runCommand: LinuxRunnerCommand = async (
       NODE_ENV: 'production',
     },
   });
+  const closed = new Promise<void>((resolve) => {
+    child.child.once('close', () => resolve());
+  });
+  const terminate = () => {
+    child.child.kill('SIGTERM');
+  };
+  signal?.addEventListener('abort', terminate, { once: true });
   const exceeds = outputBudgetExceeded();
   let overflow = false;
   const account = (chunk: Buffer | string) => {
@@ -50,10 +60,15 @@ export const runCommand: LinuxRunnerCommand = async (
   child.child.stdin?.end(input);
   try {
     const result = await child;
+    signal?.throwIfAborted();
     if (overflow) throw Error('RUNNER_OUTPUT_BUDGET');
     return result.stdout;
   } catch {
+    // Keep the runner slot until the command closes and bundle cleanup can run.
+    await closed;
     throw Error(overflow ? 'RUNNER_OUTPUT_BUDGET' : 'RUNNER_EXECUTION_FAILED');
+  } finally {
+    signal?.removeEventListener('abort', terminate);
   }
 };
 

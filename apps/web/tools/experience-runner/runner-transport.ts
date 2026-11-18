@@ -169,7 +169,11 @@ export function createRunnerExecutor(config: {
 export function createRunnerHandler(config: {
   key: Uint8Array;
   toolchainDigest: string;
-  execute: (kind: QualificationKind, payload: unknown) => Promise<unknown>;
+  execute: (
+    kind: QualificationKind,
+    payload: unknown,
+    signal: AbortSignal
+  ) => Promise<unknown>;
   now?: () => number;
 }) {
   const key = Uint8Array.from(config.key);
@@ -197,7 +201,7 @@ export function createRunnerHandler(config: {
     let dispatched = false;
     let publicDispatch = false;
     try {
-      const text = await boundedText(request.body, INPUT_LIMIT);
+      const text = await boundedText(request.body, INPUT_LIMIT, request.signal);
       readers--;
       reading = false;
       if (
@@ -238,7 +242,13 @@ export function createRunnerHandler(config: {
       if (publicDispatch) publicActive++;
       consumed.set(input.nonce, { expiry: input.expiresAt, lane: input.lane });
       laneCounts.set(input.lane, (laneCounts.get(input.lane) ?? 0) + 1);
-      const output = await config.execute(input.kind, input.payload);
+      request.signal.throwIfAborted();
+      const output = await config.execute(
+        input.kind,
+        input.payload,
+        request.signal
+      );
+      request.signal.throwIfAborted();
       const body = JSON.stringify({ nonce: input.nonce, output });
       if (Buffer.byteLength(body) > OUTPUT_LIMIT)
         throw Error('RUNNER_MESSAGE_BUDGET');

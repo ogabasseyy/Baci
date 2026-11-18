@@ -85,6 +85,33 @@ it('stops admission after uncertain prepare and failed cleanup', async () => {
   expect(command).toHaveBeenCalledTimes(2);
 });
 
+it('cleans up the exact prepared bundle when the run is aborted', async () => {
+  const controller = new AbortController();
+  const command = vi.fn(
+    async (
+      _program: string,
+      args: string[],
+      _input: string | undefined,
+      _timeout: number,
+      signal?: AbortSignal
+    ) => {
+      if (args[2] === 'run') {
+        expect(signal).toBe(controller.signal);
+        controller.abort();
+        signal?.throwIfAborted();
+      }
+      expect(signal).toBeUndefined();
+      return '';
+    }
+  );
+  await expect(
+    createHelperQualificationExecutor(command)('compile', {}, controller.signal)
+  ).rejects.toThrow();
+  const [prepare, run, cleanup] = command.mock.calls;
+  expect(run[1][3]).toBe(prepare[1][4]);
+  expect(cleanup[1].slice(2)).toEqual(['delete', run[1][3]]);
+});
+
 it('reports cleanup failures following a successful run', async () => {
   const cleanupFails = vi.fn(async (_program: string, args: string[]) => {
     if (args[2] === 'delete') throw Error('DELETE_FAILED');

@@ -16,6 +16,66 @@ import { startRunnerService } from './runner-service';
 import { createRunnerSocket } from './runner-socket';
 import { createRunnerHandler } from './runner-transport';
 
+it('passes a disconnected socket signal to an admitted runner job', async () => {
+  const dir = await realpath(await mkdtemp(join(tmpdir(), 'runner-abort-')));
+  const socketPath = join(dir, 'runner.sock');
+  const key = new Uint8Array(32).fill(7);
+  const digest = 'a'.repeat(64);
+  const { promise: started, resolve: enter } = Promise.withResolvers<void>();
+  const { promise: settled, resolve: didAbort } =
+    Promise.withResolvers<boolean>();
+  const listener = await createRunnerSocket({
+    socketPath,
+    handler: createRunnerHandler({
+      key,
+      toolchainDigest: digest,
+      now: () => 100000,
+      execute: async (...args: unknown[]) => {
+        const signal = args[2];
+        enter();
+        if (!(signal instanceof AbortSignal)) {
+          didAbort(false);
+          return {};
+        }
+        await new Promise<void>((resolve) =>
+          signal.addEventListener('abort', () => resolve(), { once: true })
+        );
+        didAbort(signal.aborted);
+        throw signal.reason;
+      },
+    }),
+  });
+  const body = JSON.stringify({
+    version: 1,
+    nonce: 'b'.repeat(64),
+    expiresAt: 160000,
+    toolchainDigest: digest,
+    lane: 'owner',
+    kind: 'compile',
+    payload: {},
+  });
+  const req = request({
+    socketPath,
+    path: '/v1/execute',
+    method: 'POST',
+    headers: {
+      'x-baci-runner-signature': createHmac('sha256', key)
+        .update(`request\n${body}`)
+        .digest('hex'),
+    },
+  });
+  req.on('error', () => undefined);
+  req.end(body);
+  try {
+    await started;
+    req.destroy();
+    expect(await settled).toBe(true);
+  } finally {
+    await listener.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 it('serves only signed runner requests through a private socket', async () => {
   const dir = await realpath(await mkdtemp(join(tmpdir(), 'runner-socket-')));
   const socketPath = join(dir, 'runner.sock');

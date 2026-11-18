@@ -4,6 +4,7 @@ import { type CartSnapshot, cartLineIdentity } from '@baci/shared/cart';
 
 import type { Product } from '@/lib/products';
 
+import { readCartSessionHint } from './cart-session-hint';
 import {
   fetchSharedCartProducts,
   fetchSharedCartSnapshot,
@@ -90,6 +91,13 @@ export function createCartSnapshotActions(context: SharedCartRuntime) {
     // deferred adopt would double-fetch and dispatch a bare poll
     // snapshot before the link (import, hydration, send-ready) runs.
     if (adoptOutcomeRef.current === 'unknown') return;
+    if (
+      !force &&
+      stateRef.current.cartId === null &&
+      readCartSessionHint(optionsRef.current.merchantId) === '0'
+    ) {
+      return;
+    }
     if (!force && Date.now() - lastFetchRef.current < FETCH_COALESCE_MS) return;
     // Claim the coalescing window before the read starts. Returning to a
     // tab fires visibilitychange and focus together; marking the window

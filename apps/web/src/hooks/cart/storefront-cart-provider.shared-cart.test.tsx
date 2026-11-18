@@ -6,6 +6,10 @@ import type { Product } from '@/lib/products';
 import { useCart } from './cart-context';
 import { clearCartStorage } from './cart-persistence';
 import {
+  resetCartSessionHintForTests,
+  writeCartSessionHint,
+} from './cart-session-hint';
+import {
   bootstrapSharedCart,
   createSharedCart,
   fetchSharedCartProducts,
@@ -109,6 +113,7 @@ function snapshot(overrides: Record<string, unknown> = {}): CartSnapshot {
 }
 
 function mockAdopted(lines: CartLine[] = [cartLine()], version = 3) {
+  writeCartSessionHint(MERCHANT_ID, '1');
   vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({
     ok: true,
     snapshot: snapshot({ lines, version }),
@@ -142,6 +147,7 @@ function validateCalls(): string[] {
 describe('StorefrontCartProvider shared-cart delegation', () => {
   beforeEach(() => {
     localStorageMock.clear();
+    resetCartSessionHintForTests();
     vi.clearAllMocks();
     vi.mocked(fetchSharedCartProducts).mockResolvedValue(new Map());
     vi.mocked(global.fetch).mockResolvedValue(
@@ -150,6 +156,7 @@ describe('StorefrontCartProvider shared-cart delegation', () => {
   });
 
   afterEach(() => {
+    resetCartSessionHintForTests();
     vi.useRealTimers();
   });
 

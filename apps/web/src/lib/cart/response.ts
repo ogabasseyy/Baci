@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { checkoutReconciliationCookieName } from './checkout-reconciliation-proof';
 import { checkoutRecoveryCookieName } from './checkout-recovery-proof';
 import { safeCartErrorMessage } from './mutation-errors';
-import { cartSessionCookieName } from './principal';
+import { cartSessionCookieName, cartSessionHintCookieName } from './principal';
 
 /**
  * Cart responses are private per-guest state. They must never sit in a
@@ -109,6 +109,33 @@ export function cartErrorResponse(
  * one shared origin keep separate sessions. Native clients ignore the
  * cookie and carry the proof from the response body instead.
  */
+const CART_EMPTY_HINT_MAX_AGE_SECONDS = 60 * 60;
+const CART_ACTIVE_HINT_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
+
+/**
+ * Non-HttpOnly cart hint cookie (`'1'` | `'0'`), namespaced per merchant
+ * so the client knows whether a server cart session exists before firing
+ * `GET /api/storefront/cart`.
+ */
+export function setCartSessionHintCookie(
+  response: NextResponse,
+  merchantId: string,
+  value: '1' | '0',
+  maxAgeSeconds?: number
+): void {
+  const defaultMaxAge =
+    value === '0'
+      ? CART_EMPTY_HINT_MAX_AGE_SECONDS
+      : CART_ACTIVE_HINT_MAX_AGE_SECONDS;
+  response.cookies.set(cartSessionHintCookieName(merchantId), value, {
+    httpOnly: false,
+    maxAge: maxAgeSeconds ?? defaultMaxAge,
+    path: '/',
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+  });
+}
+
 export function setCartSessionCookie(
   response: NextResponse,
   merchantId: string,
@@ -122,6 +149,12 @@ export function setCartSessionCookie(
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',
   });
+  setCartSessionHintCookie(
+    response,
+    merchantId,
+    maxAgeSeconds > 0 ? '1' : '0',
+    maxAgeSeconds > 0 ? maxAgeSeconds : undefined
+  );
 }
 
 /** A checkout-only proof is host-only and cannot be read by browser scripts. */

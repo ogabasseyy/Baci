@@ -9,6 +9,7 @@ import {
   type AttemptPolicy,
 } from '@/lib/api-attempt-policy';
 import { fetchWithCsrf } from '@/lib/api-client';
+import { writeCartSessionHint } from './cart-session-hint';
 import {
   isCartSessionRetiring,
   runBoundedCartSessionWrite,
@@ -17,6 +18,7 @@ import { cartClientCredentialHeaders } from './client-credential';
 import {
   ensureCartDeviceRevocationCleared,
   isCartDeviceRevocationPending,
+  markCartDeviceSessionActive,
 } from './shared-cart-session-revoke-client';
 
 export * from './shared-cart-client-support';
@@ -143,10 +145,16 @@ async function requestCreateSharedCart(
   }
   const body = await readBody(response);
   if (response.ok && body && isSnapshot(body.cart)) {
+    const cart = body.cart as CartSnapshot;
+    writeCartSessionHint(
+      cart.merchantId,
+      cart.state === 'active' && cart.lines.length > 0 ? '1' : '0'
+    );
+    if (merchantSlug) markCartDeviceSessionActive(merchantSlug);
     return {
       ok: true,
       replayed: body.replayed === true,
-      snapshot: body.cart as CartSnapshot,
+      snapshot: cart,
       warnings: warningsOf(body),
     };
   }
@@ -218,10 +226,16 @@ async function requestSharedCartCommand(
   }
   const body = await readBody(response);
   if (response.ok && body && isSnapshot(body.cart)) {
+    const cart = body.cart as CartSnapshot;
+    writeCartSessionHint(
+      cart.merchantId,
+      cart.state === 'active' && cart.lines.length > 0 ? '1' : '0'
+    );
+    if (merchantSlug) markCartDeviceSessionActive(merchantSlug);
     return {
       ok: true,
       replayed: body.replayed === true,
-      snapshot: body.cart as CartSnapshot,
+      snapshot: cart,
       warnings: warningsOf(body),
     };
   }

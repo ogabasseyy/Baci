@@ -2,9 +2,14 @@ import type { CartLine, CartSnapshot } from '@baci/shared/cart';
 
 import { act, renderHook, waitFor } from '@testing-library/react';
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Product } from '@/lib/products';
+
+import {
+  resetCartSessionHintForTests,
+  writeCartSessionHint,
+} from './cart-session-hint';
 
 import {
   fetchSharedCartProducts,
@@ -92,8 +97,14 @@ describe('useSharedCart negotiation and totals', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     window.localStorage.clear();
+    resetCartSessionHintForTests();
+    writeCartSessionHint(MERCHANT_ID, '1');
     vi.mocked(fetchSharedCartProducts).mockResolvedValue(new Map());
     mockAdopted();
+  });
+
+  afterEach(() => {
+    resetCartSessionHintForTests();
   });
 
   async function linkedHook() {

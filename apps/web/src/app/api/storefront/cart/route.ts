@@ -17,6 +17,7 @@ import {
   cartJsonResponse,
   emptyCartProbeResponse,
   setCartSessionCookie,
+  setCartSessionHintCookie,
 } from '@/lib/cart/response';
 import { createCartScopedClient } from '@/lib/cart/scoped-client';
 import {
@@ -150,6 +151,11 @@ async function readCart(request: NextRequest, timer: CartServerTimer) {
     const cookieMaxAge = cartSessionCookieMaxAge(cookieExpiry);
     if (proof && cookieMaxAge > 0) {
       setCartSessionCookie(response, context.merchant.id, proof, cookieMaxAge);
+    }
+    if (result.cart.state !== 'active' || result.cart.lines.length === 0) {
+      setCartSessionHintCookie(response, context.merchant.id, '0');
+    } else if (!proof || cookieMaxAge <= 0) {
+      setCartSessionHintCookie(response, context.merchant.id, '1');
     }
     return response;
   } catch (error) {
@@ -289,6 +295,11 @@ export async function POST(request: NextRequest) {
     const cookieMaxAge = cartSessionCookieMaxAge(result.cart.expiresAt);
     if (proof && cookieMaxAge > 0) {
       setCartSessionCookie(response, context.merchant.id, proof, cookieMaxAge);
+    }
+    if (result.cart.state !== 'active' || result.cart.lines.length === 0) {
+      setCartSessionHintCookie(response, context.merchant.id, '0');
+    } else if (!proof || cookieMaxAge <= 0) {
+      setCartSessionHintCookie(response, context.merchant.id, '1');
     }
     return response;
   } catch (error) {

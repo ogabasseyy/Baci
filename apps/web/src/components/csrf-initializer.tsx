@@ -1,14 +1,20 @@
 'use client';
 
 import { useEffect } from 'react';
+import { getClientCsrfToken } from '@/lib/csrf';
 
 /**
  * Client component to initialize CSRF token on app load.
- * Retries once after a short delay if the initial fetch fails
+ * Skips the network request when a CSRF cookie is already readable,
+ * and retries once after a short delay if the initial fetch fails
  * (handles transient timing during dev server startup).
  */
 export function CsrfInitializer() {
   useEffect(() => {
+    if (getClientCsrfToken()) {
+      return;
+    }
+
     let cancelled = false;
     let retryTimeoutId: ReturnType<typeof setTimeout> | null = null;
 

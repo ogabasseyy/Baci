@@ -15,6 +15,7 @@ import {
   cartErrorResponse,
   cartJsonResponse,
   setCartSessionCookie,
+  setCartSessionHintCookie,
 } from '@/lib/cart/response';
 import { createCartScopedClient } from '@/lib/cart/scoped-client';
 import {
@@ -209,6 +210,11 @@ async function applyCommand(
     // renewed; omit the cookie instead and let the body proof govern.
     if (proof && maxAge > 0) {
       setCartSessionCookie(response, context.merchant.id, proof, maxAge);
+    }
+    if (result.cart.state !== 'active' || result.cart.lines.length === 0) {
+      setCartSessionHintCookie(response, context.merchant.id, '0');
+    } else if (!proof || maxAge <= 0) {
+      setCartSessionHintCookie(response, context.merchant.id, '1');
     }
     return response;
   } catch (error) {

@@ -146,4 +146,20 @@ describe('POST /api/products/bulk-publish purge ordering', () => {
       { expireImmediately: true }
     );
   });
+
+  it('skips edge purge when both per-slug and broad hard expiry fail on bulk publish', async () => {
+    mockRevalidateProductSlugs.mockReturnValueOnce(false);
+    mockRevalidateProducts.mockReturnValueOnce(true).mockReturnValueOnce(false);
+    const { POST } = await import('./route');
+
+    const response = await POST(
+      new Request('http://localhost/api/products/bulk-publish', {
+        method: 'POST',
+      }) as never
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
+    expect(mockScheduleProductBlogPurgeAfterResponse).not.toHaveBeenCalled();
+  });
 });

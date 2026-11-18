@@ -117,15 +117,15 @@ export async function POST(request: NextRequest) {
       // Bust every purged slug's Next product cache BEFORE the edge purge —
       // revalidateProducts(merchantId) above is slug-less and leaves the
       // per-slug scoped tags cached, so a CF MISS would refill stale.
-      if (
+      const originHardExpired =
         revalidateProductSlugs(
           merchantId,
           purgeEntries.map((entry) => entry.slug),
           { expireImmediately: true }
-        ) !== true
-      ) {
-        revalidateProducts(merchantId, undefined, { expireImmediately: true });
-      }
+        ) === true ||
+        revalidateProducts(merchantId, undefined, {
+          expireImmediately: true,
+        }) === true;
       const requestedProductIds = parseResult.data.changes
         .map((change) => change.productId?.trim())
         .filter(
@@ -142,19 +142,26 @@ export async function POST(request: NextRequest) {
       // Keep paginated article fallback reads out of the mutation response.
       // The after-response helper hard-expires the related-blog cache before
       // scheduling any linked article URLs.
-      scheduleStorefrontProductPurge(
-        merchantContext.merchantSlug,
-        purgeEntries
-      );
-      scheduleProductBlogPurgeAfterResponse({
-        supabase,
-        merchantId,
-        merchantSlug: merchantContext.merchantSlug,
-        productIds,
-        entries: purgeEntries,
-        categorySlugs: purgeEntries.map((entry) => entry.categorySegment),
-        skipProductPurge: true,
-      });
+      if (!originHardExpired) {
+        console.warn(
+          'Skipped Cloudflare product purge after bulk update because origin hard expiry failed',
+          { merchantId }
+        );
+      } else {
+        scheduleStorefrontProductPurge(
+          merchantContext.merchantSlug,
+          purgeEntries
+        );
+        scheduleProductBlogPurgeAfterResponse({
+          supabase,
+          merchantId,
+          merchantSlug: merchantContext.merchantSlug,
+          productIds,
+          entries: purgeEntries,
+          categorySlugs: purgeEntries.map((entry) => entry.categorySegment),
+          skipProductPurge: true,
+        });
+      }
     } catch (purgeError) {
       console.warn('Skipped Cloudflare product purge after bulk update', {
         purgeError,

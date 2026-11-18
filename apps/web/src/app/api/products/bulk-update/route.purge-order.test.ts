@@ -223,4 +223,31 @@ describe('bulk-update purge ordering', () => {
       { expireImmediately: true }
     );
   });
+
+  it('skips edge purge when both per-slug and broad hard expiry fail on bulk update', async () => {
+    mocks.revalidateSlugs.mockReturnValueOnce(false);
+    mocks.revalidateProducts
+      .mockReturnValueOnce(true)
+      .mockReturnValueOnce(false);
+    const request = makeRequest({
+      changes: [
+        {
+          type: 'update',
+          details: {
+            sku: 'SKU-PHONE',
+            name: 'SKU phone',
+            price: 150,
+            category: 'Smartphones',
+          },
+          newPrice: 150,
+        },
+      ],
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(200);
+    expect(mocks.schedule).not.toHaveBeenCalled();
+    expect(mocks.scheduleAfter).not.toHaveBeenCalled();
+  });
 });

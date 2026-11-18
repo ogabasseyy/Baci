@@ -78,6 +78,7 @@ describe('POST /api/cache/revalidate scoped PDP hard-expiry', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockCheckCsrf.mockResolvedValue({ valid: true, response: null });
+    mockRevalidateProducts.mockReturnValue(true);
     mockRevalidateProductSlugs.mockReturnValue(true);
     mockAccess.mockResolvedValue({
       merchantId: MERCHANT_ID,
@@ -153,7 +154,7 @@ describe('POST /api/cache/revalidate scoped PDP hard-expiry', () => {
     );
   });
 
-  it('skips immediate merchant-wide PDP expiry when scoped product and blog slugs are complete', async () => {
+  it('hard-expires scoped listing tags while omitting merchant-wide PDP details when scoped product and blog slugs are complete', async () => {
     mockEnrich.mockResolvedValue({
       entries: [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
       resolvedSlugs: ['iphone-15'],
@@ -170,13 +171,44 @@ describe('POST /api/cache/revalidate scoped PDP hard-expiry', () => {
     );
 
     expect(response.status).toBe(200);
-    expect(mockRevalidateProducts).toHaveBeenCalledTimes(1);
-    expect(mockRevalidateProducts).toHaveBeenCalledWith(MERCHANT_ID);
+    expect(mockRevalidateProducts).toHaveBeenCalledTimes(2);
+    expect(mockRevalidateProducts).toHaveBeenNthCalledWith(1, MERCHANT_ID);
+    expect(mockRevalidateProducts).toHaveBeenNthCalledWith(
+      2,
+      MERCHANT_ID,
+      undefined,
+      { expireImmediately: true, omitMerchantWidePdpDetails: true }
+    );
     expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
       MERCHANT_ID,
       ['iphone-15'],
       { expireImmediately: true }
     );
+    expect(mockPurgeProduct).toHaveBeenCalledWith('ogabassey', [
+      { slug: 'iphone-15', categorySegment: 'smartphones' },
+    ]);
+  });
+
+  it('skips Cloudflare edge purge when origin hard expiry returns false', async () => {
+    mockRevalidateProducts.mockReturnValueOnce(true).mockReturnValueOnce(false);
+    mockEnrich.mockResolvedValue({
+      entries: [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
+      resolvedSlugs: ['iphone-15'],
+      authoritativeSlugsById: new Map([['prod-1', 'iphone-15']]),
+      blogPostSlugs: [],
+      blogPostSlugsIncomplete: false,
+    });
+
+    const response = await POST(
+      makeRequest({
+        targets: ['products'],
+        products: [{ id: 'prod-1' }],
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockPurgeProduct).not.toHaveBeenCalled();
+    expect(mockPurgeHostname).not.toHaveBeenCalled();
   });
 
   it('hard-expires merchant-wide PDP details when scoped slug revalidation returns false', async () => {

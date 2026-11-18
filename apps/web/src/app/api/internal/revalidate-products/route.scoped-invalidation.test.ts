@@ -274,4 +274,54 @@ describe('POST /api/internal/revalidate-products scoped PDP invalidation', () =>
     expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
     expect(mockScheduleStorefrontHostnamePurge).not.toHaveBeenCalled();
   });
+
+  it('falls back to full merchant-wide PDP invalidation for slug-only products without ids', async () => {
+    mockEnrichProductPurgeEntries.mockResolvedValueOnce({
+      entries: [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
+      resolvedSlugs: ['iphone-15'],
+      authoritativeSlugsById: new Map(),
+      blogPostSlugs: [],
+      blogPostSlugsIncomplete: false,
+    });
+
+    const res = await POST(
+      makeRequest({
+        merchantId: MERCHANT_ID,
+        merchantSlug: 'ogabassey',
+        productSlugs: ['iphone-15'],
+        omitMerchantWidePdpDetails: true,
+        products: [{ slug: 'iphone-15', category: 'Smartphones' }],
+      })
+    );
+
+    expect(res.status).toBe(200);
+    expect(mockRevalidateProducts).toHaveBeenCalledTimes(1);
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      MERCHANT_ID,
+      undefined,
+      { expireImmediately: true }
+    );
+  });
+
+  it('hard-expires broad product caches in the catch block when enrichment throws in blog-cache mode with omitMerchantWidePdpDetails', async () => {
+    mockEnrichProductPurgeEntries.mockRejectedValueOnce(new Error('db failed'));
+
+    const res = await POST(
+      makeRequest({
+        merchantId: MERCHANT_ID,
+        merchantSlug: 'ogabassey',
+        expireProductBlogCache: true,
+        productSlugs: ['iphone-15'],
+        omitMerchantWidePdpDetails: true,
+        products: [{ id: 'prod-1' }],
+      })
+    );
+
+    expect(res.status).toBe(200);
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      MERCHANT_ID,
+      undefined,
+      { expireImmediately: true }
+    );
+  });
 });

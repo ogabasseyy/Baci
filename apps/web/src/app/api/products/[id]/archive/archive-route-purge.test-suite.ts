@@ -196,4 +196,17 @@ export function defineArchiveRoutePurgeSuite({
       { expireImmediately: true }
     );
   });
+
+  it('skips edge purge when both per-slug and broad hard expiry fail on archive', async () => {
+    mocks.revalidateProductSlugs.mockReturnValueOnce(false);
+    mocks.revalidateProducts
+      .mockReturnValueOnce(true)
+      .mockReturnValueOnce(false);
+
+    const response = await PATCH(makeRequest(), makeContext());
+
+    expect(response.status).toBe(200);
+    expect(mocks.scheduleStorefrontProductPurge).not.toHaveBeenCalled();
+    expect(mocks.scheduleProductBlogPurgeAfterResponse).not.toHaveBeenCalled();
+  });
 }

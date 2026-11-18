@@ -155,20 +155,20 @@ export async function POST(request: NextRequest) {
             expireImmediately: true,
           }) === true;
         expireProductBlogCache(merchantId);
-        if (
-          !slugsRevalidated ||
-          blogPostSlugsIncomplete ||
-          !hasCompleteScopedProductSlugs(
+        const completeScoped =
+          slugsRevalidated &&
+          !blogPostSlugsIncomplete &&
+          hasCompleteScopedProductSlugs(
             products,
             entries,
             resolvedSlugs,
             authoritativeSlugsById
-          )
-        ) {
+          );
+        const originHardExpired =
           revalidateProducts(merchantId, undefined, {
             expireImmediately: true,
-          });
-        }
+            ...(completeScoped ? { omitMerchantWidePdpDetails: true } : {}),
+          }) === true;
 
         // Resolve the merchant's public slug solely for Cloudflare routing.
         const { data: merchantRow, error: merchantLookupError } =
@@ -187,7 +187,7 @@ export async function POST(request: NextRequest) {
           );
         }
         const merchantSlug = merchantRow?.slug ?? null;
-        if (merchantSlug) {
+        if (merchantSlug && originHardExpired) {
           // The shared scheduler switches to a bounded hostname purge above its
           // distinct-entry threshold, so it still evicts every affected PDP.
           if (blogPostSlugsIncomplete) {

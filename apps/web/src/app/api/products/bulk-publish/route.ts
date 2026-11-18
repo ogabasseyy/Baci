@@ -118,17 +118,15 @@ export async function POST(request: NextRequest) {
       // Bust the per-slug Next entries before a Cloudflare MISS can repopulate
       // from them. The purge is best-effort and cannot change a publish result.
       try {
-        if (
+        const originHardExpired =
           revalidateProductSlugs(
             merchantId,
             publicPurgeEntries.map((entry) => entry.slug),
             { expireImmediately: true }
-          ) !== true
-        ) {
+          ) === true ||
           revalidateProducts(merchantId, undefined, {
             expireImmediately: true,
-          });
-        }
+          }) === true;
         // Relationship/category fallback reads can span many pages. Queue the
         // article enrichment after the response so publishing cannot time out
         // after the database update has already committed.
@@ -138,21 +136,28 @@ export async function POST(request: NextRequest) {
         // tag, but it runs in a separate task and therefore cannot protect the
         // purge scheduled immediately below.
         expireProductBlogCache(merchantId);
-        scheduleStorefrontProductPurge(
-          merchantContext.merchantSlug,
-          publicPurgeEntries
-        );
-        scheduleProductBlogPurgeAfterResponse({
-          supabase,
-          merchantId,
-          merchantSlug: merchantContext.merchantSlug,
-          productIds: (updatedProducts ?? []).map((product) => product.id),
-          entries: publicPurgeEntries,
-          categorySlugs: publicPurgeEntries.map(
-            (entry) => entry.categorySegment
-          ),
-          skipProductPurge: true,
-        });
+        if (!originHardExpired) {
+          console.warn(
+            'Skipped Cloudflare product purge after bulk publish because origin hard expiry failed',
+            { merchantId }
+          );
+        } else {
+          scheduleStorefrontProductPurge(
+            merchantContext.merchantSlug,
+            publicPurgeEntries
+          );
+          scheduleProductBlogPurgeAfterResponse({
+            supabase,
+            merchantId,
+            merchantSlug: merchantContext.merchantSlug,
+            productIds: (updatedProducts ?? []).map((product) => product.id),
+            entries: publicPurgeEntries,
+            categorySlugs: publicPurgeEntries.map(
+              (entry) => entry.categorySegment
+            ),
+            skipProductPurge: true,
+          });
+        }
       } catch (purgeError) {
         console.warn('Skipped Cloudflare product purge after bulk publish', {
           purgeError,

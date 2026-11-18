@@ -164,4 +164,21 @@ describe('bulk import purge ordering', () => {
       { expireImmediately: true }
     );
   });
+
+  it('skips edge purge when both per-slug and broad hard expiry fail on bulk import', async () => {
+    mocks.revalidateSlugs.mockReturnValueOnce(false);
+    mocks.revalidateProducts
+      .mockReturnValueOnce(true)
+      .mockReturnValueOnce(false);
+    const supabase = createSupabase();
+    mocks.auth.mockReturnValue(supabase);
+
+    const response = await POST(
+      makeRequest('name,price,category,status\nProduct 1,10,Electronics,active')
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.schedule).not.toHaveBeenCalled();
+    expect(mocks.scheduleAfter).not.toHaveBeenCalled();
+  });
 });

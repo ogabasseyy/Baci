@@ -27,28 +27,14 @@ export function hasCompleteScopedProductSlugs(
   for (const product of products) {
     const callerSlug = product.slug?.trim();
     const productId = product.id?.trim();
-
-    if (callerSlug) {
-      if (!entrySlugSet.has(callerSlug) || !resolvedSet.has(callerSlug)) {
-        return false;
-      }
-      if (productId) {
-        const authoritativeSlug = authoritativeSlugsById
-          ?.get(productId)
-          ?.trim();
-        if (
-          !authoritativeSlug ||
-          authoritativeSlug === productId ||
-          !entrySlugSet.has(authoritativeSlug) ||
-          !resolvedSet.has(authoritativeSlug)
-        ) {
-          return false;
-        }
-      }
-      continue;
+    if (!productId) {
+      return false;
     }
 
-    if (!productId) {
+    if (
+      callerSlug &&
+      (!entrySlugSet.has(callerSlug) || !resolvedSet.has(callerSlug))
+    ) {
       return false;
     }
 

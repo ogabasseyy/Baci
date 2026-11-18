@@ -24,8 +24,8 @@ vi.mock('@/lib/cache-revalidation', () => ({
   revalidateFeatures: vi.fn(),
   revalidateMerchant: vi.fn(),
   revalidatePageConfig: vi.fn(),
-  revalidateProductSlugs: vi.fn(),
-  revalidateProducts: vi.fn(),
+  revalidateProductSlugs: vi.fn(() => true),
+  revalidateProducts: vi.fn(() => true),
   revalidateReviews: vi.fn(),
 }));
 vi.mock('@/lib/expire-product-blog-cache', () => ({

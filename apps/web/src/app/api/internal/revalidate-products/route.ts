@@ -252,17 +252,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
     } catch (purgeError) {
       if (
-        !shouldExpireProductBlogCache &&
         !purgeWholeStorefront &&
-        !revalidatedDeferredProducts
+        !revalidatedDeferredProducts &&
+        (!shouldExpireProductBlogCache ||
+          callerOmitMerchantWidePdpDetails === true)
       ) {
-        if (callerOmitMerchantWidePdpDetails === true) {
-          revalidateProducts(merchantId, undefined, {
-            expireImmediately: true,
-          });
-        } else {
-          revalidateProducts(merchantId);
-        }
+        revalidateProducts(
+          merchantId,
+          undefined,
+          callerOmitMerchantWidePdpDetails === true
+            ? { expireImmediately: true }
+            : undefined
+        );
       }
       logger.error({
         message: 'Skipped Cloudflare product purge in revalidate-products',

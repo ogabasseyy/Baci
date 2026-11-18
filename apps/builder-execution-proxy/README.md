@@ -23,7 +23,8 @@ The preview delivery listener is the authoritative origin allowlist. It
 rejects origins outside its configured hosts and permits the opaque
 `Origin: null` used by sandboxed asset requests. The Worker admits private requests with no Origin or the sandbox Origin
 `null`, and only forwards an opaque CORS grant for an opaque request.
-Published assets are deliberately public. The
+Published assets are deliberately public. The edge accepts at most one
+canonical published route parameter of up to 1,024 characters. The
 published listener normalizes the decoded `path` through
 `normalizeExperiencePath` before rendering, rejecting malformed encoding,
 empty or dot segments, and characters outside its route grammar. It adds

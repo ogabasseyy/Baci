@@ -30,10 +30,15 @@ function isDeliveryPath(url) {
   const match = publishedPath.exec(url.pathname);
   if (!match) return false;
   if (!url.search) return true;
+  if (match[1] !== 'index.html' || url.searchParams.size !== 1) return false;
+  const path = url.searchParams.get('path');
+  if (!path || path.length > 1024 || !path.startsWith('/')) return false;
   return (
-    match[1] === 'index.html' &&
-    [...url.searchParams.keys()].length === 1 &&
-    url.searchParams.has('path')
+    path === '/' ||
+    path
+      .slice(1)
+      .split('/')
+      .every((segment) => /^[A-Za-z0-9_[\]-]+$/.test(segment))
   );
 }
 

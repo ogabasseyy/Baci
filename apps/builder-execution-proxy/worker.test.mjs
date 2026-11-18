@@ -103,6 +103,11 @@ test('denies alternate hosts, routes, query shapes and methods before an upstrea
     request(`${published}/app.js?path=%2F`),
     request(`${published}/index.html?path=%2F&path=%2Fx`),
     request(`${published}/index.html?target=https://example.invalid`),
+    request(`${published}/index.html?path=`),
+    request(`${published}/index.html?path=%2F..%2Fprivate`),
+    request(`${published}/index.html?path=%2F%2Fforeign.test`),
+    request(`${published}/index.html?path=%2Fencoded%252Fseparator`),
+    request(`${published}/index.html?path=%2F${'a'.repeat(1024)}`),
   ];
   for (const input of invalid) {
     assert.equal((await worker.fetch(input, env)).status, 404);

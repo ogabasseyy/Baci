@@ -107,7 +107,9 @@ export function forfeitDriverPorts(input: {
         ownerOk &&
         wallet.api_customer_id !== forfeit.providerCustomerId &&
         forfeit.destinationWalletId !== forfeit.sourceWalletId &&
-        wallet.type?.toLowerCase() !== 'settlement' &&
+        // Deny by default: a wallet without a type is never assumed safe.
+        wallet.type !== undefined &&
+        wallet.type.toLowerCase() !== 'settlement' &&
         wallet.currency === 'NGN' &&
         wallet.status === 'active';
       if (!ours) return false;

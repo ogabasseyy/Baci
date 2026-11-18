@@ -17,6 +17,10 @@ import {
 // host with only the interest-wallet ids set: a partial rollout pages as a
 // failed sweep instead of staying quiet, so a removed password can never
 // silently stop in-flight forfeits from settling (fail closed).
+// PIGGYVEST_PRIMARY_INTEREST_PAYOUT_WALLET_ID is left out on purpose: the
+// main-wallet onboarding runtime needs it too, so it is set on hosts without
+// savings, where the sweep must stay inert. A savings host missing it still
+// fails closed: verifyDestination refuses every business-wallet forfeit.
 function hasAnyPrimaryWalletSetting(env: NodeJS.ProcessEnv): boolean {
   return [
     env.PIGGYVEST_PRIMARY_AUTHORIZER_DB_PASSWORD,

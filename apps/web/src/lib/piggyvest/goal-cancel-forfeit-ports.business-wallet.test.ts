@@ -33,6 +33,7 @@ const businessWallet = {
   api_customer_id: undefined,
   currency: 'NGN',
   status: 'active',
+  type: 'savings',
 };
 const goalWallet = {
   id: 'goal-wallet',
@@ -185,4 +186,10 @@ it('fails closed at verifyDestination when PIGGYVEST_INTEREST_WALLET_OWNER_ID is
   expect(await ports(invalidOwner).verifyDestination(forfeit)).toBe(false);
   answer({ ...businessWallet, api_customer_id: 'ogabassey' });
   expect(await ports(invalidOwner).verifyDestination(forfeit)).toBe(false);
+});
+
+it('bugfix (Muse): refuses a destination PiggyVest reports without a type', async () => {
+  const { type: _type, ...untyped } = businessWallet;
+  answer(untyped);
+  expect(await ports(null).verifyDestination(forfeit)).toBe(false);
 });

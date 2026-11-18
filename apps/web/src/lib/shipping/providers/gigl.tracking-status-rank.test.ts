@@ -46,4 +46,12 @@ describe('currentStatusRank', () => {
     expect(demoted).toBeGreaterThan(currentStatusRank(scan('MCRT', 'booked')));
     expect(demoted).toBeLessThan(currentStatusRank(scan('MSVC', 'picked_up')));
   });
+
+  it('bugfix: ranks a pending scan below shipment creation and pickup so same-time lifecycle milestones win', () => {
+    const pending = currentStatusRank(scan('PENDING', 'pending'));
+    expect(pending).toBeLessThan(currentStatusRank(scan('MCRT', 'booked')));
+    expect(pending).toBeLessThan(
+      currentStatusRank(scan('MSHC', 'pickup_scheduled'))
+    );
+  });
 });

@@ -18,7 +18,7 @@ export const TERMINAL_STATUSES: ReadonlySet<string> = new Set([
  * Equal-timestamp precedence for the current status, highest first:
  * terminal (delivered/returned/cancelled) > MSHC (still out for delivery) >
  * any other progress (picked up, in transit...) > a demoted pickup-run MSHC >
- * pickup assignment (MAPT) > shipment creation (booked). The demoted MSHC
+ * pickup assignment (MAPT) > shipment creation (booked) > pending. The demoted MSHC
  * sits below completed pickup but above creation, so a same-time MCRT never
  * hides the pickup run. `failed` is deliberately not terminal: an MSHC at the
  * same time as a failed attempt is the retry, so the shipment stays out for
@@ -31,6 +31,9 @@ export function currentStatusRank(candidate: Guardable): number {
   }
   if (status === 'pickup_scheduled') {
     return isMshc(candidate) ? 3 : 2;
+  }
+  if (status === 'pending') {
+    return 0;
   }
   if (status === 'booked') {
     return 1;

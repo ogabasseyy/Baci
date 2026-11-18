@@ -115,5 +115,14 @@ export function applyLifecycleGuards(
         leftDestinationCentre = true;
       }
     }
+    // A located pickup away from the destination also proves the parcel left
+    // it, without counting as network movement for the MSHC guard above.
+    if (
+      candidate.recognizedStatus === 'picked_up' &&
+      placeWords(event.location).length > 0 &&
+      !matchesDestination(event.location, destination)
+    ) {
+      leftDestinationCentre = true;
+    }
   }
 }

@@ -226,4 +226,21 @@ describe('review hardening: destination matching', () => {
     );
     expect(result.status).toBe('pickup_scheduled');
   });
+  it('bugfix: a located pickup away from the destination proves the parcel left it when Origin is missing', () => {
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W12',
+        Destination: 'ABUJA',
+        MobileShipmentTrackings: [
+          event('MPIK', '10:00:00', { Location: 'IKEJA 2 (IKEJA)' }),
+          event('MSVC', '11:00:00', { Location: 'WUSE ABUJA (Wuse)' }),
+        ],
+      },
+      'W12',
+      OBSERVED_AT
+    );
+    expect(result.events.map((e) => e.rawStatus)).toContain(
+      GIGL_ARRIVED_IN_CITY_RAW_STATUS
+    );
+  });
 });

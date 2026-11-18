@@ -71,14 +71,7 @@ record_deploy_workflow_promote "$APP_SHA" pre
 
 promote_worker_release
 
-# Refresh the overlap record for the workflow's pre-publish overlap
-# check (the other half of the serialization): runs that appeared
-# during the promote must refuse to publish off their pre-promote
-# latch/SHA read. If this refresh fails, the promotion is ROLLED BACK
-# (no unrecorded tree may stay live) and the restore window is
-# recorded: runs that started during the stalled refresh read the
-# rolled-back candidate yet are absent from the pre-flip record, so
-# without this second write their pre-publish check would pass.
+# Refresh overlap record; on failure roll back promotion and record restore window.
 record_deploy_workflow_promote "$APP_SHA" || {
   echo "Post-flip overlap record failed; rolling back the promotion so no unrecorded worker tree stays live." >&2
   if rollback_worker_release; then
@@ -172,6 +165,8 @@ $CRON_BLOCK_START
 * * * * * flock -n $REMOTE_DIR/locks/piggyvest-webhook-capture-drain.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=piggyvest-webhook-capture-drain && cd $REMOTE_DIR && timeout --verbose --signal=TERM --kill-after=10s 50s $REMOTE_DIR/bin/process-piggyvest-webhook-capture-drain.sh --once' >> $REMOTE_DIR/logs/piggyvest-webhook-capture-drain.log 2>&1
 * * * * * flock -n $REMOTE_DIR/locks/quiz-finalize.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=quiz-finalization && cd $REMOTE_DIR && timeout --signal=TERM --kill-after=5s 50s $REMOTE_DIR/bin/process-quiz-finalization.sh --once' >> $REMOTE_DIR/logs/quiz-finalize.log 2>&1
 15 4   * * * flock -n $REMOTE_DIR/locks/sync-gigl-service-centres.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/sync-gigl-service-centres.mjs' >> $REMOTE_DIR/logs/sync-gigl-service-centres.log 2>&1
+*/10 * * * * flock -n $REMOTE_DIR/locks/purge-jumia-self-authorization-discoveries.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=purge-jumia-self-authorization-discoveries && cd $REMOTE_DIR && timeout --signal=TERM --kill-after=30s 2m $REMOTE_DIR/bin/purge-jumia-self-authorization-discoveries.sh' >> $REMOTE_DIR/logs/purge-jumia-self-authorization-discoveries.log 2>&1
+11 *   * * * flock -n $REMOTE_DIR/locks/cleanup-checkout-shipping-recovery-previews.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=cleanup-checkout-shipping-recovery-previews && cd $REMOTE_DIR && timeout --signal=TERM --kill-after=30s 2m $REMOTE_DIR/bin/cleanup-checkout-shipping-recovery-previews.sh' >> $REMOTE_DIR/logs/cleanup-checkout-shipping-recovery-previews.log 2>&1
 $CRON_BLOCK_END
 EOF
 # shellcheck disable=SC2029 # The quoted values intentionally become remote argv.

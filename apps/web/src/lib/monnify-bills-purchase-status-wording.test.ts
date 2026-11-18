@@ -214,3 +214,17 @@ describe('bugfix: a nested form reference is vend evidence, not an echo', () => 
     });
   });
 });
+
+describe('bugfix: refusal wording only counts from the body', () => {
+  it('keeps a 400 whose status line alone says "Insufficient Balance" off Kuda', async () => {
+    mockHttpError(
+      400,
+      'Insufficient Balance',
+      JSON.stringify({ responseMessage: 'Request rejected' })
+    );
+
+    await expect(vend()).resolves.toMatchObject({
+      providerDefiniteFailure: false,
+    });
+  });
+});

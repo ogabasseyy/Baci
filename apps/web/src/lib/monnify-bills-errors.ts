@@ -83,7 +83,8 @@ function readMonnifyAnswer(
     // when set (`duplicate: true`, not `duplicate: false`).
     isDuplicateReference:
       isMonnifyDuplicateReferenceText(text) || hasMonnifyDuplicateFlag(parsed),
-    isKnownRefusal: isMonnifyKnownVendRefusalText(text),
+    // A refusal must come from Monnify's body, never the HTTP status line.
+    isKnownRefusal: isMonnifyKnownVendRefusalText(bodyText),
     mentionsVendOutcome: isMonnifyVendOutcomeText(text),
     reportsUnexpectedError:
       reportsMonnifyUnexpectedError(body) ||

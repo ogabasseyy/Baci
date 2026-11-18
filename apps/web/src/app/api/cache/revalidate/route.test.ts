@@ -885,7 +885,10 @@ describe('POST /api/cache/revalidate', () => {
       expect(res.status).toBe(200);
       expect(json.revalidated).toContain('merchant');
 
-      expect(mockRevalidateTag).toHaveBeenCalledWith('merchants', 'merchant');
+      expect(mockRevalidateTag).not.toHaveBeenCalledWith(
+        'merchants',
+        'merchant'
+      );
       expect(mockRevalidateTag).toHaveBeenCalledWith(
         `merchant-id-${MERCHANT_ID}`,
         'merchant'
@@ -978,17 +981,7 @@ describe('POST /api/cache/revalidate', () => {
       mockGetMerchantBlogPostSlugs.mockResolvedValue([
         'apple-studio-display-review',
         'airpods-max-2-2026',
-        'post-3',
-        'post-4',
-        'post-5',
-        'post-6',
-        'post-7',
-        'post-8',
-        'post-9',
-        'post-10',
-        'post-11',
-        'post-12',
-        'post-13',
+        ...Array.from({ length: 11 }, (_, index) => `post-${index + 3}`),
       ]);
 
       const res = await POST(makeRequest({ targets: ['blog'] }));
@@ -1083,8 +1076,12 @@ describe('POST /api/cache/revalidate', () => {
       expect(res.status).toBe(200);
       expect(json.revalidated).toContain('pages');
 
-      expect(mockRevalidateTag).toHaveBeenCalledWith(
+      expect(mockRevalidateTag).not.toHaveBeenCalledWith(
         'page-config',
+        'storefront-page'
+      );
+      expect(mockRevalidateTag).toHaveBeenCalledWith(
+        `page-config-${MERCHANT_ID}`,
         'storefront-page'
       );
     });
@@ -1110,7 +1107,10 @@ describe('POST /api/cache/revalidate', () => {
         `products-${MERCHANT_ID}`,
         'products'
       );
-      expect(mockRevalidateTag).toHaveBeenCalledWith('merchants', 'merchant');
+      expect(mockRevalidateTag).toHaveBeenCalledWith(
+        `merchant-id-${MERCHANT_ID}`,
+        'merchant'
+      );
       expect(mockRevalidateTag).toHaveBeenCalledWith(
         `dashboard-${MERCHANT_ID}`,
         'merchant'
@@ -1176,7 +1176,6 @@ describe('POST /api/cache/revalidate', () => {
         getCategoryPageDataCacheTag(MERCHANT_ID),
         'storefront-page'
       );
-      expect(mockRevalidateTag).toHaveBeenCalledWith('merchants', 'merchant');
       expect(mockRevalidateTag).toHaveBeenCalledWith(
         `merchant-id-${MERCHANT_ID}`,
         'merchant'
@@ -1206,7 +1205,7 @@ describe('POST /api/cache/revalidate', () => {
         'merchant'
       );
       expect(mockRevalidateTag).toHaveBeenCalledWith(
-        'page-config',
+        `page-config-${MERCHANT_ID}`,
         'storefront-page'
       );
       expect(mockRevalidateTag).toHaveBeenCalledWith(
@@ -1230,7 +1229,7 @@ describe('POST /api/cache/revalidate', () => {
         'merchant'
       );
       expect(mockRevalidateTag).toHaveBeenCalledWith(
-        'page-config',
+        `page-config-${MERCHANT_ID}`,
         'storefront-page'
       );
     });

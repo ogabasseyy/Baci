@@ -111,7 +111,14 @@ describe('revalidateBlogPosts Cloudflare purge', () => {
       });
 
     expect(act).not.toThrow();
-    expect(mockRevalidateTag).toHaveBeenCalledWith('blog-posts', 'merchant');
+    expect(mockRevalidateTag).not.toHaveBeenCalledWith(
+      'blog-posts',
+      'merchant'
+    );
+    expect(mockRevalidateTag).toHaveBeenCalledWith(
+      'blog-identifier-ogabassey',
+      'merchant'
+    );
     expect(mockRevalidatePath).toHaveBeenCalledWith('/ogabassey/blog');
     expect(mockPurgeCloudflareUrls).not.toHaveBeenCalled();
     expect(warnSpy).toHaveBeenCalledWith(

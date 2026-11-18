@@ -45,6 +45,7 @@ import { isPiggyvestWalletPaid } from '@/lib/vtu-piggyvest-wallet-paid';
 
 export { VtuPersistenceError };
 
+import { readMonnifyResponseCode } from '@/lib/monnify-response-code';
 import {
   applyKudaFallbackCreditCorrection,
   refreshSnapshotMoneyColumns,
@@ -1765,6 +1766,11 @@ async function reconcileProcessingVtuTransaction({
       // Provider-authored text (below): drop any inherited safe flag
       // for the same reason as the fresh path.
       delete failedMetadata[VTU_CUSTOMER_SAFE_ERROR_MESSAGE_KEY];
+      // Monnify's requery code (shape-checked), kept like a vend failure's.
+      const requeryResponseCode = readMonnifyResponseCode(providerStatus);
+      if (requeryResponseCode) {
+        failedMetadata.providerResponseCode = requeryResponseCode;
+      }
       const failedMessage =
         providerStatus.message || 'Utility purchase failed with provider';
       const failedPersistError = await updateVtuPurchaseResultWithRetry({

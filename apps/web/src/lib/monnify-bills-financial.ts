@@ -235,7 +235,13 @@ export async function purchaseBill(
 
 export async function checkTransactionStatus(
   transactionReference: string
-): Promise<{ status: string; message: string; pin?: string; units?: string }> {
+): Promise<{
+  status: string;
+  message: string;
+  pin?: string;
+  responseCode?: string;
+  units?: string;
+}> {
   const envelope = await monnifyRequest(
     `/api/v1/vas/bills-payment/requery?reference=${encodeURIComponent(transactionReference)}`,
     { method: 'GET', timeoutMs: MONNIFY_FINANCIAL_TIMEOUT_MS }
@@ -265,6 +271,7 @@ export async function checkTransactionStatus(
 
   return {
     status: 'failed',
+    responseCode: readMonnifyResponseCode(parsed),
     message: getMonnifyEnvelopeMessage({
       fallback: 'failed',
       responseCode: parsed.responseCode,

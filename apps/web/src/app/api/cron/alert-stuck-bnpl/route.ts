@@ -5,6 +5,7 @@ import { notifyMerchant } from '@/lib/expo-push';
 import { logger } from '@/lib/logger';
 import { fileStuckCreditDirectReviews } from '@/lib/payments/file-stuck-credit-direct-review';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { readCreditDirectAttempt } from './credit-direct-attempt';
 import {
   buildStuckBnplAlert,
   hasConfirmationSignal,
@@ -97,9 +98,12 @@ export async function GET(request: NextRequest) {
       (order) => !hasConfirmationSignal(order)
     );
     if (transactionLookupOrders.length > 0) {
+      const ordersById = new Map(
+        transactionLookupOrders.map((order) => [order.id, order])
+      );
       const { data: transactionRows, error: transactionError } = await supabase
         .from('transactions')
-        .select('order_id, status, gateway_reference')
+        .select('order_id, status, gateway, gateway_reference')
         .in(
           'order_id',
           transactionLookupOrders.map((order) => order.id)
@@ -113,6 +117,7 @@ export async function GET(request: NextRequest) {
         });
       } else {
         for (const row of (transactionRows ?? []) as Array<{
+          gateway: string | null;
           gateway_reference: string | null;
           order_id: string;
           status: string | null;
@@ -120,8 +125,22 @@ export async function GET(request: NextRequest) {
           if (row.status !== 'processing' && row.status !== 'completed') {
             continue;
           }
-          orderIdsWithTransactionEvidence.add(row.order_id);
+          const order = ordersById.get(row.order_id);
+          if (!order || !row.gateway || row.gateway !== order.payment_method)
+            continue;
+
           const reference = row.gateway_reference?.trim();
+          if (order.payment_method === 'credit_direct') {
+            const attempt = readCreditDirectAttempt(order.notes);
+            if (
+              !reference ||
+              attempt.supersededReferences.includes(reference) ||
+              (attempt.reference !== null && reference !== attempt.reference)
+            )
+              continue;
+          }
+
+          orderIdsWithTransactionEvidence.add(row.order_id);
           if (reference && !transactionEvidenceReferences.has(row.order_id)) {
             transactionEvidenceReferences.set(row.order_id, reference);
           }

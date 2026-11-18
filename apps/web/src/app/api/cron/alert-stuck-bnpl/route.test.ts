@@ -96,7 +96,7 @@ function stuckOrder(overrides: Record<string, unknown> = {}) {
     payment_status: 'bnpl_pending',
     updated_at: '2026-07-01T00:00:00.000Z',
     notes:
-      '{"credit_directTransactionId":"txn-1","creditDirectClientCompletedAt":"2026-07-01T00:01:00.000Z"}',
+      '{"credit_directTransactionId":"txn-1","creditDirectClientCompletedTransactionId":"txn-1","creditDirectClientCompletedAt":"2026-07-01T00:01:00.000Z"}',
     ...overrides,
   };
 }
@@ -443,7 +443,7 @@ describe('GET /api/cron/alert-stuck-bnpl', () => {
       error: null,
     });
     mocks.transactionsIn.mockResolvedValue({
-      data: [{ order_id: 'order-1', status: 'processing' }],
+      data: [{ order_id: 'order-1', gateway: 'credpal', status: 'processing' }],
       error: null,
     });
 
@@ -470,6 +470,7 @@ describe('GET /api/cron/alert-stuck-bnpl', () => {
     mocks.transactionsIn.mockResolvedValue({
       data: [
         {
+          gateway: 'credit_direct',
           gateway_reference: 'credit-direct-reference-1',
           order_id: 'order-1',
           status: 'processing',
@@ -489,6 +490,39 @@ describe('GET /api/cron/alert-stuck-bnpl', () => {
     );
   });
 
+  it.each([
+    ['paystack', 'active-session', false],
+    ['credit_direct', 'old-txn', false],
+    ['credit_direct', 'active-session', true],
+  ])('checks progressed %s evidence for the active attempt (%s)', async (gateway, reference, matches) => {
+    mocks.limit.mockResolvedValue({
+      data: [
+        stuckOrder({
+          id: 'order-1',
+          notes: JSON.stringify({
+            creditDirectSessionId: 'active-session',
+            creditDirectSupersededReferences: ['old-txn'],
+          }),
+        }),
+      ],
+      error: null,
+    });
+    mocks.transactionsIn.mockResolvedValue({
+      data: [
+        {
+          order_id: 'order-1',
+          gateway,
+          gateway_reference: reference,
+          status: 'processing',
+        },
+      ],
+      error: null,
+    });
+    const response = await GET(createCronRequest());
+    expect(response.status).toBe(200);
+    expect(mocks.notifyMerchant).toHaveBeenCalledTimes(matches ? 1 : 0);
+  });
+
   it('keeps session-only SDK-success evidence in the pending-order scan', async () => {
     mocks.limit.mockResolvedValue({
       data: [
@@ -497,6 +531,7 @@ describe('GET /api/cron/alert-stuck-bnpl', () => {
           payment_status: 'pending',
           notes: JSON.stringify({
             creditDirectSessionId: 'session-1',
+            creditDirectClientCompletedSessionId: 'session-1',
             creditDirectClientCompletedAt: '2026-07-01T00:01:00.000Z',
           }),
         }),
@@ -529,7 +564,7 @@ describe('GET /api/cron/alert-stuck-bnpl', () => {
       error: null,
     });
     mocks.transactionsIn.mockResolvedValue({
-      data: [{ order_id: 'order-1', status: 'pending' }],
+      data: [{ order_id: 'order-1', gateway: 'credpal', status: 'pending' }],
       error: null,
     });
 

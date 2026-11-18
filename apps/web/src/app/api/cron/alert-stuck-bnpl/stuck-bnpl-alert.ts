@@ -1,4 +1,5 @@
 import { formatCurrency } from '@/lib/expo-push';
+import { readCreditDirectAttempt } from './credit-direct-attempt';
 
 export interface StuckBnplOrderRow {
   id: string;
@@ -21,13 +22,10 @@ export function hasProviderTransactionReference(notes: string | null) {
   return Boolean(notes && /transactionid/i.test(notes));
 }
 
-function hasClientCompletionMarker(notes: string | null) {
-  return Boolean(notes && /creditdirectclientcompletedat/i.test(notes));
-}
-
 export function hasProviderCheckoutEvidence(notes: string | null) {
   return (
-    hasProviderTransactionReference(notes) || hasClientCompletionMarker(notes)
+    hasProviderTransactionReference(notes) ||
+    readCreditDirectAttempt(notes).reference !== null
   );
 }
 
@@ -40,7 +38,8 @@ export function hasProviderCheckoutEvidence(notes: string | null) {
 export function hasConfirmationSignal(order: StuckBnplOrderRow) {
   return (
     order.payment_status === 'bnpl_approved' ||
-    hasClientCompletionMarker(order.notes)
+    (order.payment_method === 'credit_direct' &&
+      readCreditDirectAttempt(order.notes).hasCurrentCompletion)
   );
 }
 

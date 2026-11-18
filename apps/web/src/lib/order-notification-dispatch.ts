@@ -38,7 +38,8 @@ export async function dispatchOrderCreationNotifications(
 ): Promise<void> {
   const isInvoiceCreation = input.paymentMethod === 'invoice';
   const isUnpaidPayForMeRequest =
-    input.paymentMethod?.toLowerCase() === 'payforme' &&
+    input.paymentMethod.toLowerCase() === 'payforme' &&
+    input.invoiceBalanceDue > 0 &&
     !input.isWalletFullyPaid &&
     input.paymentStatus?.toLowerCase() !== 'paid';
   if (isUnpaidPayForMeRequest) {

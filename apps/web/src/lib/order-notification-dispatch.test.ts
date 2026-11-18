@@ -103,6 +103,17 @@ describe('dispatchOrderCreationNotifications', () => {
     expect(mockNotifyPaymentReceived).not.toHaveBeenCalled();
   });
 
+  it('announces a Pay for Me order with no outstanding balance', async () => {
+    await dispatchOrderCreationNotifications(
+      input({
+        paymentMethod: 'payforme',
+        paymentStatus: 'unpaid',
+        invoiceBalanceDue: 0,
+      })
+    );
+    expect(mockNotifyNewOrder).toHaveBeenCalledTimes(1);
+  });
+
   it('still announces a pay-on-delivery order at creation', async () => {
     await dispatchOrderCreationNotifications(
       input({ paymentMethod: 'pay_on_delivery', paymentStatus: 'pending' })

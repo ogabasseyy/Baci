@@ -39,9 +39,26 @@ describe('stuck BNPL signals', () => {
     ).toBe(true);
     expect(
       hasConfirmationSignal(
-        order({ notes: '{"creditDirectClientCompletedAt":"2026-07-03"}' })
+        order({
+          notes:
+            '{"creditDirectSessionId":"session-a","creditDirectClientCompletedSessionId":"session-a","creditDirectClientCompletedAt":"2026-07-03"}',
+        })
       )
     ).toBe(true);
+  });
+
+  it('ignores completion from a superseded Credit Direct session', () => {
+    expect(
+      hasConfirmationSignal(
+        order({
+          notes: JSON.stringify({
+            creditDirectSessionId: 'session-b',
+            creditDirectClientCompletedSessionId: 'session-a',
+            creditDirectClientCompletedAt: '2026-07-03',
+          }),
+        })
+      )
+    ).toBe(false);
   });
 
   it('mutes session-only Credit Direct orders unless a payment progressed', () => {

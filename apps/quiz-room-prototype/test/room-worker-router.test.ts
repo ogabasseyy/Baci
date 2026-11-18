@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { QuizAdmissionTicket } from '../src/contracts';
+import { quizAnswerKeyHash } from '../src/crypto';
+import { NodeSqliteAdapter } from '../src/node-sqlite-adapter';
+import { computeResultShardIndex } from '../src/result-shard';
+import { QuizRoomEngine } from '../src/room-do';
 import { signAdmissionTicket, signBearerJwt } from '../src/ticket';
 
 vi.mock('cloudflare:workers', () => ({
@@ -13,7 +17,7 @@ vi.mock('cloudflare:workers', () => ({
   },
 }));
 
-const { default: worker } = await import('../src/index');
+const { default: worker, QuizRoomDO } = await import('../src/index');
 
 const TICKET_SECRET = 'router-ticket-secret';
 const JWT_SECRET = 'router-jwt-secret';
@@ -148,20 +152,31 @@ describe('Worker HTTP router (src/index.ts)', () => {
     });
 
     // Returning player result & published leaderboard WITHOUT play ticket (bearer JWT only!)
+    // Attempt URL carries NO eventId; routes by hash(attemptId, userId) mod S.
+    const expectedAttemptShard = await computeResultShardIndex(
+      'att-1',
+      'user-r1',
+      16
+    );
+    const expectedEventShard = await computeResultShardIndex(
+      'evt-r1',
+      'user-r1',
+      16
+    );
+
     const resultRes = await worker.fetch(
-      new Request(
-        'https://quiz.example.com/api/quiz/attempts/att-1/result?eventId=evt-r1',
-        {
-          method: 'GET',
-          headers: { Authorization: `Bearer ${bearerJwt}` },
-        }
-      ),
+      new Request('https://quiz.example.com/api/quiz/attempts/att-1/result', {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${bearerJwt}` },
+      }),
       env as never
     );
     expect(resultRes.status).toBe(200);
-    expect(calls[3]?.ns).toBe('RESULT_SHARD');
-    expect(calls[3]?.id.startsWith('evt-r1:shard:')).toBe(true);
-    expect(calls[3]?.path).toBe('/internal/result');
+    expect(calls[3]).toEqual({
+      ns: 'RESULT_SHARD',
+      id: `attempt-shard:${expectedAttemptShard}`,
+      path: '/internal/result',
+    });
 
     const boardRes = await worker.fetch(
       new Request(
@@ -174,9 +189,11 @@ describe('Worker HTTP router (src/index.ts)', () => {
       env as never
     );
     expect(boardRes.status).toBe(200);
-    expect(calls[4]?.ns).toBe('RESULT_SHARD');
-    expect(calls[4]?.id).toBe(calls[3]?.id);
-    expect(calls[4]?.path).toBe('/internal/leaderboard');
+    expect(calls[4]).toEqual({
+      ns: 'RESULT_SHARD',
+      id: `evt-r1:shard:${expectedEventShard}`,
+      path: '/internal/leaderboard',
+    });
 
     const liveRes = await worker.fetch(
       new Request(
@@ -203,5 +220,172 @@ describe('Worker HTTP router (src/index.ts)', () => {
     );
     expect(statusRes.status).toBe(200);
     expect(statusRes.headers.get('Cache-Control')).toContain('max-age=');
+  });
+
+  it('initializes QuizRoomDO with ctx.id.name (not hex toString), fresh control state, and strictly synchronous transactionSync', async () => {
+    const adapter = new NodeSqliteAdapter(':memory:');
+    let syncViolation = false;
+    const strictSyncStorage = {
+      sql: {
+        exec: (query: string, ...bindings: unknown[]) => {
+          const res = adapter.exec(query, ...(bindings as never[]));
+          return {
+            toArray: () => res.rows,
+            rowsRead: res.rowsRead,
+            rowsWritten: res.rowsWritten,
+          };
+        },
+      },
+      transactionSync: <T>(fn: () => T): T => {
+        const result = adapter.transactionSync(fn);
+        if (
+          result &&
+          typeof result === 'object' &&
+          'then' in (result as Record<string, unknown>)
+        ) {
+          syncViolation = true;
+          throw new Error(
+            'transactionSync closure must be strictly synchronous!'
+          );
+        }
+        return result;
+      },
+      getAlarm: () => Promise.resolve(adapter.getAlarm()),
+      setAlarm: (ms: number | Date) => {
+        adapter.setAlarm(typeof ms === 'number' ? ms : ms.getTime());
+        return Promise.resolve();
+      },
+      deleteAlarm: () => {
+        adapter.deleteAlarm();
+        return Promise.resolve();
+      },
+      deleteAll: () => {
+        adapter.deleteAll();
+        return Promise.resolve();
+      },
+    };
+
+    const doInstance = new QuizRoomDO(
+      {
+        id: {
+          name: 'room-42',
+          toString: () => 'f'.repeat(64),
+        },
+        storage: strictSyncStorage,
+      } as never,
+      {} as never
+    );
+
+    const correctHash = await quizAnswerKeyHash('opt-a');
+    const nowMs = Date.now();
+    const config = {
+      eventId: 'evt-do-1',
+      merchantId: 'merch-1',
+      mode: 'live' as const,
+      contractVersion: 2 as const,
+      rulesVersion: 'live-v1',
+      questionCount: 1,
+      timePerQuestionSeconds: 10,
+      maxAttempts: 1,
+      startsAtMs: nowMs - 5_000,
+      endsAtMs: nowMs + 60_000,
+      status: 'active' as const,
+      slots: [
+        {
+          id: '00000000-0000-4000-8000-000000000001',
+          slotIndex: 1,
+          active: true,
+          variants: [
+            {
+              id: '10000000-0000-4000-8000-000000000001',
+              slotId: '00000000-0000-4000-8000-000000000001',
+              prompt: 'Q1?',
+              options: [
+                { id: 'opt-a', label: 'A' },
+                { id: 'opt-b', label: 'B' },
+              ],
+              answerKeyHash: correctHash,
+              active: true,
+            },
+          ],
+        },
+      ],
+    };
+
+    const initRes = await doInstance.fetch(
+      new Request('https://room.internal/internal/init', {
+        method: 'POST',
+        body: JSON.stringify(config),
+      })
+    );
+    expect(initRes.status).toBe(200);
+    expect(await initRes.json()).toEqual({ ok: true, roomId: 'room-42' });
+
+    const ticket: QuizAdmissionTicket = {
+      userId: 'user-do-1',
+      customerId: 'cust-do-1',
+      merchantId: 'merch-1',
+      eventId: 'evt-do-1',
+      roomId: 'room-42',
+      deviceHash: 'a'.repeat(64),
+      leaderboardUsername: 'DoPlayer',
+      expiresAtMs: nowMs + 120_000,
+    };
+
+    const startRes = await doInstance.fetch(
+      new Request('https://room.internal/internal/start', {
+        method: 'POST',
+        body: JSON.stringify({
+          ticket,
+          integrityTier: 'strong',
+          acceptedRulesVersion: 'live-v1',
+          termsAccepted: true,
+          startRequestId: 'req-do-1',
+          appVersion: '2.0.0',
+          platform: 'ios',
+        }),
+      })
+    );
+    expect(startRes.status).toBe(200);
+    const started = (await startRes.json()) as {
+      attemptId: string;
+      status: string;
+      question?: { id: string };
+    };
+    expect(started.status).toBe('in_progress');
+    expect(started.question?.id).toBeDefined();
+
+    // Answer Q1 and seal (exercises flushPendingBatches with strictly synchronous transactionSync)
+    const ansRes = await doInstance.fetch(
+      new Request('https://room.internal/internal/answer', {
+        method: 'POST',
+        body: JSON.stringify({
+          ticket,
+          attemptId: started.attemptId,
+          questionId: started.question?.id,
+          answer: 'opt-a',
+        }),
+      })
+    );
+    expect(ansRes.status).toBe(200);
+
+    const sealRes = await doInstance.fetch(
+      new Request('https://room.internal/internal/seal', {
+        method: 'POST',
+        body: JSON.stringify({
+          eventId: 'evt-do-1',
+          persistedCloseAtMs: nowMs + 60_500,
+          mode: 'persisted_close',
+          endsAtMs: nowMs + 60_000,
+        }),
+      })
+    );
+    expect(sealRes.status).toBe(200);
+    expect(syncViolation).toBe(false);
+
+    // Also verify QuizRoomEngine flushPendingBatches passes strict sync check directly
+    const engine = new QuizRoomEngine({ roomId: 'r-sync', storage: adapter });
+    expect(engine.getSealManifest()?.attemptCount).toBe(1);
+    adapter.close();
   });
 });

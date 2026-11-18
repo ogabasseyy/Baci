@@ -2,6 +2,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import type {
   QuizAdmissionTicket,
+  QuizControlStateSnapshot,
   QuizEventConfig,
   QuizIntegrityTier,
   QuizLiveRankSubmission,
@@ -10,11 +11,15 @@ import type {
   QuizRoomSealMode,
 } from './contracts';
 import { QuizRoomError } from './contracts';
-import { QuizControlStateStore } from './control-state';
+import {
+  createEmptyControlState,
+  QuizControlStateStore,
+} from './control-state';
 import { EventCoordinatorEngine } from './coordinator';
 import { LiveRankIndexEngine } from './live-rank';
 import {
   computeResultShardIndex,
+  type OriginWinnerAwardPayload,
   type PublishedShardEventMetadata,
   ResultShardEngine,
 } from './result-shard';
@@ -79,6 +84,7 @@ async function readJsonBody<T>(request: Request): Promise<T> {
 }
 
 export class QuizRoomDO extends DurableObject<WorkerEnv> {
+  private readonly controlState: QuizControlStateStore;
   private readonly engine: QuizRoomEngine;
 
   constructor(ctx: DurableObjectState, env: WorkerEnv) {
@@ -86,9 +92,13 @@ export class QuizRoomDO extends DurableObject<WorkerEnv> {
     const adapter = new CloudflareSqlStorageAdapter(
       ctx.storage as unknown as CloudflareDoStorageLike
     );
+    this.controlState = new QuizControlStateStore(
+      createEmptyControlState(Date.now(), 1)
+    );
     this.engine = new QuizRoomEngine({
-      roomId: ctx.id.toString(),
+      roomId: ctx.id.name ?? ctx.id.toString(),
       storage: adapter,
+      controlState: this.controlState,
     });
   }
 
@@ -102,7 +112,25 @@ export class QuizRoomDO extends DurableObject<WorkerEnv> {
       if (request.method === 'POST' && url.pathname === '/internal/init') {
         const config = await readJsonBody<QuizEventConfig>(request);
         this.engine.initialize(config);
-        return jsonResponse({ ok: true });
+        this.controlState.applySnapshot(
+          createEmptyControlState(
+            Date.now(),
+            this.controlState.getVersion() + 1
+          )
+        );
+        return jsonResponse({ ok: true, roomId: this.engine.roomId });
+      }
+      if (
+        request.method === 'POST' &&
+        url.pathname === '/internal/control-state'
+      ) {
+        const snapshot = await readJsonBody<QuizControlStateSnapshot>(request);
+        const applied = this.controlState.applySnapshot(snapshot);
+        return jsonResponse({
+          ok: true,
+          applied,
+          version: this.controlState.getVersion(),
+        });
       }
       if (request.method === 'POST' && url.pathname === '/internal/start') {
         const body = await readJsonBody<{
@@ -202,6 +230,7 @@ export class LiveRankIndexDO extends DurableObject<WorkerEnv> {
 }
 
 export class ResultShardDO extends DurableObject<WorkerEnv> {
+  private readonly controlState: QuizControlStateStore;
   private readonly engine: ResultShardEngine;
 
   constructor(ctx: DurableObjectState, env: WorkerEnv) {
@@ -209,15 +238,74 @@ export class ResultShardDO extends DurableObject<WorkerEnv> {
     const adapter = new CloudflareSqlStorageAdapter(
       ctx.storage as unknown as CloudflareDoStorageLike
     );
+    this.controlState = new QuizControlStateStore(
+      createEmptyControlState(Date.now(), 1)
+    );
     this.engine = new ResultShardEngine({
       shardIndex: 0,
       storage: adapter,
+      controlState: this.controlState,
+      hooks: {
+        fetchWinnerAwardFromOrigin: async ({
+          attemptId,
+          authorizationHeader,
+        }) => {
+          if (!env.ORIGIN_BASE_URL || !authorizationHeader) {
+            throw new QuizRoomError(
+              'QUIZ_WINNER_ORIGIN_REQUIRED',
+              'Winner award lookup requires ORIGIN_BASE_URL and Authorization',
+              503
+            );
+          }
+          const res = await fetch(
+            `${env.ORIGIN_BASE_URL.replace(/\/$/, '')}/api/quiz/attempts/${encodeURIComponent(attemptId)}/result`,
+            {
+              method: 'GET',
+              headers: {
+                Authorization: authorizationHeader,
+                'X-Baci-Quiz-Contract': '2',
+              },
+            }
+          );
+          if (!res.ok) {
+            throw new QuizRoomError(
+              'QUIZ_WINNER_ORIGIN_FAILED',
+              `Origin winner award lookup returned ${res.status}`,
+              res.status
+            );
+          }
+          const payload = (await res.json()) as {
+            claim?: OriginWinnerAwardPayload['claim'];
+            prizeClaim?: OriginWinnerAwardPayload['prizeClaim'];
+          };
+          if (!payload.claim || !payload.prizeClaim) {
+            throw new QuizRoomError(
+              'QUIZ_WINNER_ORIGIN_INCOMPLETE',
+              'Origin winner award lookup omitted claim metadata',
+              502
+            );
+          }
+          return { claim: payload.claim, prizeClaim: payload.prizeClaim };
+        },
+      },
     });
   }
 
   async fetch(request: Request): Promise<Response> {
     try {
       const url = new URL(request.url);
+      if (
+        request.method === 'POST' &&
+        url.pathname === '/internal/control-state'
+      ) {
+        const snapshot = await readJsonBody<QuizControlStateSnapshot>(request);
+        const applied = this.controlState.applySnapshot(snapshot);
+        return jsonResponse({
+          ok: true,
+          applied,
+          version: this.controlState.getVersion(),
+        });
+      }
       if (
         request.method === 'POST' &&
         url.pathname === '/internal/materialize'
@@ -436,14 +524,13 @@ export default {
           request.headers.get('Authorization'),
           { secret: getJwtSecret(env), nowMs: Date.now() }
         );
-        const eventId = url.searchParams.get('eventId') ?? 'default-event';
         const shardIdx = await computeResultShardIndex(
-          eventId,
+          attemptId,
           user.userId,
           getShardCount(env)
         );
         const shardStub = env.RESULT_SHARD.get(
-          env.RESULT_SHARD.idFromName(`${eventId}:shard:${shardIdx}`)
+          env.RESULT_SHARD.idFromName(`attempt-shard:${shardIdx}`)
         );
         return shardStub.fetch('https://shard.internal/internal/result', {
           method: 'POST',

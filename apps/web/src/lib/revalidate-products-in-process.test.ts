@@ -33,6 +33,7 @@ describe('revalidateProductsInProcess', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRevalidateProducts.mockReturnValue(true);
+    mockRevalidateProductSlugs.mockReturnValue(true);
   });
 
   it('throws when revalidateProducts signals no request context', async () => {
@@ -92,6 +93,31 @@ describe('revalidateProductsInProcess', () => {
     expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
       'merchant-1',
       ['prod-1', 'iphone-15'],
+      { expireImmediately: true }
+    );
+  });
+
+  it('hard-expires merchant-wide PDP details when scoped slug revalidation returns false', async () => {
+    mockRevalidateProductSlugs.mockReturnValueOnce(false);
+    mockEnrich.mockResolvedValue({
+      entries: [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
+      resolvedSlugs: ['iphone-15'],
+      authoritativeSlugsById: new Map([['prod-1', 'iphone-15']]),
+      blogPostSlugs: [],
+      blogPostSlugsIncomplete: false,
+    });
+
+    await revalidateProductsInProcess({
+      merchantId: 'merchant-1',
+      merchantSlug: 'ogabassey',
+      products: [{ id: 'prod-1' }],
+      nextProductSlugs: [],
+      supabase: {} as never,
+    });
+
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      'merchant-1',
+      undefined,
       { expireImmediately: true }
     );
   });

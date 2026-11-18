@@ -80,17 +80,17 @@ export async function revalidateProductsInProcess({
 
     // Hard-expire per-slug caches when an edge purge follows in-process so SWR
     // cannot re-seed Cloudflare from pre-mutation snapshots.
-    if ((shouldPurgeProducts || purgeWholeStorefront) && merchantSlug) {
-      revalidateProductSlugs(merchantId, resolvedSlugs, {
-        expireImmediately: true,
-      });
-    } else {
-      revalidateProductSlugs(merchantId, resolvedSlugs);
-    }
+    const slugsRevalidated =
+      (shouldPurgeProducts || purgeWholeStorefront) && merchantSlug
+        ? revalidateProductSlugs(merchantId, resolvedSlugs, {
+            expireImmediately: true,
+          }) === true
+        : revalidateProductSlugs(merchantId, resolvedSlugs) === true;
 
     if (shouldPurgeProducts && merchantSlug) {
       expireProductBlogCache(merchantId);
       if (
+        !slugsRevalidated ||
         blogPostSlugsIncomplete ||
         (products &&
           !hasCompleteScopedProductSlugs(

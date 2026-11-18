@@ -150,11 +150,13 @@ export async function POST(request: NextRequest) {
         );
         // Hard-expire per-slug PDP tags and merchant blog enrichment before
         // any Cloudflare MISS can refill from stale Next snapshots.
-        revalidateProductSlugs(merchantId, resolvedSlugs, {
-          expireImmediately: true,
-        });
+        const slugsRevalidated =
+          revalidateProductSlugs(merchantId, resolvedSlugs, {
+            expireImmediately: true,
+          }) === true;
         expireProductBlogCache(merchantId);
         if (
+          !slugsRevalidated ||
           blogPostSlugsIncomplete ||
           !hasCompleteScopedProductSlugs(
             products,

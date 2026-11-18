@@ -78,6 +78,7 @@ describe('POST /api/cache/revalidate scoped PDP hard-expiry', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockCheckCsrf.mockResolvedValue({ valid: true, response: null });
+    mockRevalidateProductSlugs.mockReturnValue(true);
     mockAccess.mockResolvedValue({
       merchantId: MERCHANT_ID,
       isOwner: true,
@@ -174,6 +175,31 @@ describe('POST /api/cache/revalidate scoped PDP hard-expiry', () => {
     expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
       MERCHANT_ID,
       ['iphone-15'],
+      { expireImmediately: true }
+    );
+  });
+
+  it('hard-expires merchant-wide PDP details when scoped slug revalidation returns false', async () => {
+    mockRevalidateProductSlugs.mockReturnValueOnce(false);
+    mockEnrich.mockResolvedValue({
+      entries: [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
+      resolvedSlugs: ['iphone-15'],
+      authoritativeSlugsById: new Map([['prod-1', 'iphone-15']]),
+      blogPostSlugs: [],
+      blogPostSlugsIncomplete: false,
+    });
+
+    const response = await POST(
+      makeRequest({
+        targets: ['products'],
+        products: [{ id: 'prod-1' }],
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      MERCHANT_ID,
+      undefined,
       { expireImmediately: true }
     );
   });

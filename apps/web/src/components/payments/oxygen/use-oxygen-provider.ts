@@ -1,6 +1,5 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { fetchWithCsrf } from '@/lib/api-client';
 import { trackOxygenJourney } from '@/lib/payments/oxygen/journey-events';
 import { OxygenPaymentOriginUnverifiedError } from '@/lib/payments/oxygen/payment-origin-error';
 import type { OxygenRuntimeAction } from '@/schemas/oxygen-runtime';
@@ -24,6 +23,7 @@ import {
 import { pendingReadRecovery } from './oxygen-read-recovery';
 import { retireLegacyQueuedApproval } from './oxygen-retire-legacy-approval';
 import { oxygenSubmitErrorMessage } from './oxygen-submit-error-message';
+import { sendOxygenWorkflowAction } from './oxygen-workflow-action-request';
 
 export { oxygenRateLimitMessage } from './oxygen-provider-response';
 
@@ -33,7 +33,6 @@ import {
 } from './oxygen-workflow-initialization';
 import { rememberPhoneOtpSend } from './phone-otp-window';
 
-const base = '/api/payments/oxygen/workflows';
 type LastKey = { action: string; version: number; key: string };
 export function useOxygenProvider(orderId: string) {
   const [snapshot, setSnapshot] = useState<OxygenRuntimeSnapshot | null>(null);
@@ -181,13 +180,7 @@ export function useOxygenProvider(orderId: string) {
         body = form;
       }
       const result = oxygenRuntimeSnapshotSchema.parse(
-        await decode(
-          await fetchWithCsrf(`${base}/actions`, {
-            method: 'POST',
-            body,
-            cache: 'no-store',
-          })
-        )
+        await decode(await sendOxygenWorkflowAction(body))
       );
       if (!alive.current || requestScope !== scope.current) return false;
       const confirmed =

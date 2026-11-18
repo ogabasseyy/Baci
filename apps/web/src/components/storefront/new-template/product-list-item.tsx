@@ -94,6 +94,7 @@ export const ProductListItem: React.FC<ProductListItemProps> = ({
     <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm md:hover:shadow-lg md:hover:border-red-100 active:scale-[0.99] transition-all duration-300 group flex flex-row gap-4 md:gap-6 relative">
       <Link
         href={asRoute(getStorefrontProductHref(product, basePath))}
+        prefetch={false}
         className="absolute inset-0 z-0"
       />
 

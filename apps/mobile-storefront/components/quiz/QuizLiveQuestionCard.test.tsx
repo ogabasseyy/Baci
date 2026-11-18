@@ -48,7 +48,77 @@ describe('QuizLiveQuestionCard', () => {
       />
     );
 
-    fireEvent.press(screen.getByRole('button', { name: 'Answer Lagos' }));
+    const answer = screen.getByRole('button', { name: 'Answer Lagos' });
+    let tile = answer;
+    while (tile.parent?.props.accessibilityLabel === 'Answer Lagos') {
+      tile = tile.parent;
+    }
+    expect(Array.isArray(tile.props.style)).toBe(true);
+
+    fireEvent(answer, 'pressIn');
+    expect(answer).toHaveStyle({ opacity: 0.85 });
+    fireEvent(answer, 'pressOut');
+    expect(answer).not.toHaveStyle({ opacity: 0.85 });
+
+    fireEvent.press(answer);
     expect(onAnswer).toHaveBeenCalledWith('o1');
+  });
+
+  function renderWithOptions(labels: string[]) {
+    const now = Date.now();
+    render(
+      <QuizLiveQuestionCard
+        attempt={{
+          attemptId: 'a1',
+          eventEndsAt: new Date(now + 30_000).toISOString(),
+          eventId: 'e1',
+          serverNow: new Date(now).toISOString(),
+          status: 'in_progress',
+          resultsAvailableAt: null,
+          question: {
+            deadlineAt: new Date(now + 10_000).toISOString(),
+            id: 'q1',
+            index: 1,
+            options: labels.map((label, index) => ({
+              id: `o${index + 1}`,
+              label,
+            })),
+            prompt: 'Capital?',
+            timeLimitSeconds: 10,
+            total: 20,
+          },
+        }}
+        lockedOptionId="o2"
+        onAnswer={jest.fn()}
+        styles={createQuizStyles(colors)}
+      />
+    );
+  }
+
+  it('lays four short answers out as a grid of lettered tiles', () => {
+    renderWithOptions(['Lagos', 'Abuja', 'Kano', 'Ibadan']);
+
+    expect(screen.getByTestId('quiz-answers-grid')).toBeTruthy();
+    // bugfix: a two-line cap could hide the end of an answer on Android.
+    expect(screen.getByText('Ibadan').props.numberOfLines).toBeUndefined();
+    for (const letter of ['A', 'B', 'C', 'D']) {
+      expect(screen.getByText(letter)).toBeTruthy();
+    }
+    expect(
+      screen.getByRole('button', { name: 'Answer Abuja' }).props
+        .accessibilityState
+    ).toEqual({ disabled: true, selected: true });
+  });
+
+  it('falls back to full-width rows when an answer is too long for a tile', () => {
+    renderWithOptions([
+      'Lagos',
+      'Abuja',
+      'Kano',
+      'The city that was the capital before the move to Abuja in 1991',
+    ]);
+
+    expect(screen.getByTestId('quiz-answers-list')).toBeTruthy();
+    expect(screen.queryByTestId('quiz-answers-grid')).toBeNull();
   });
 });

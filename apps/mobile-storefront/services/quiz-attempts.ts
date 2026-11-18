@@ -7,6 +7,7 @@ import {
   startQuizAttempt,
   submitQuizAnswer,
 } from './quiz';
+import { getQuizAttestationHeaders } from './quiz-app-attestation';
 import type {
   QuizV2Attempt,
   StartQuizAttemptV2Input,
@@ -45,9 +46,16 @@ export async function startQuizAttemptV2({
     );
   }
   const { appVersion, platform } = getQuizAppMetadata();
+  // Live prizes need proof this is the real app on a real device: a server
+  // challenge plus a fresh App Check token minted after it.
+  const attestationHeaders =
+    mode === 'live'
+      ? await getQuizAttestationHeaders(eventId, { baseUrl, expectedUserId })
+      : null;
   return await requestQuizV2(
     '/api/quiz/attempts/start',
     {
+      headers: attestationHeaders ?? undefined,
       body: JSON.stringify({
         acceptedRulesVersion,
         appVersion,

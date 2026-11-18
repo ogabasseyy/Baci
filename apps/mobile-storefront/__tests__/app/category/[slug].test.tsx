@@ -11,7 +11,9 @@ import {
   mockStorefrontInsetsModule,
   mockStorefrontScreenShell,
   mockStorefrontScreenShellModule,
+  mockUseCategories,
   mockUseLocalSearchParams,
+  mockUseProducts,
   setProductsState,
   setupCategoryMocks,
 } from './category.test-utils';
@@ -59,6 +61,72 @@ describe('CategoryScreen', () => {
     render(<CategoryScreen />);
 
     expect(screen.getByText('Invalid Category')).toBeTruthy();
+  });
+
+  it('keeps unfiltered catalog queries disabled for unknown category slugs', () => {
+    mockUseLocalSearchParams.mockReturnValue({ slug: 'missing-category' });
+    setProductsState({ products: [] });
+    render(<CategoryScreen />);
+    expect(mockUseProducts).toHaveBeenCalledWith(
+      expect.objectContaining({ enabled: false })
+    );
+    expect(screen.getByText('Invalid Category')).toBeTruthy();
+  });
+
+  it.each([
+    { slug: ' Phones ', catalogSlug: 'smartphones' },
+    { slug: 'SMARTPHONES', catalogSlug: 'phones' },
+    { slug: 'mobile-phones', catalogSlug: 'phones' },
+  ])('resolves $slug to catalog category $catalogSlug', ({
+    slug,
+    catalogSlug,
+  }) => {
+    mockUseLocalSearchParams.mockReturnValue({
+      slug,
+      sort: 'newest',
+    });
+    mockUseCategories.mockReturnValue({
+      data: [{ id: 'smartphone-category', slug: catalogSlug }],
+      isLoading: false,
+    });
+
+    render(<CategoryScreen />);
+
+    expect(mockUseProducts).toHaveBeenCalledWith(
+      expect.objectContaining({
+        category: 'smartphone-category',
+        enabled: true,
+        sortBy: 'newest',
+      })
+    );
+  });
+
+  it('prefers the canonical phone alias over the first catalog match', () => {
+    mockUseLocalSearchParams.mockReturnValue({ slug: 'mobile-phones' });
+    mockUseCategories.mockReturnValue({
+      data: [
+        { id: 'smartphones', slug: 'smartphones' },
+        { id: 'phones', slug: 'phones' },
+      ],
+      isLoading: false,
+    });
+
+    render(<CategoryScreen />);
+    expect(mockUseProducts).toHaveBeenCalledWith(
+      expect.objectContaining({ category: 'phones', enabled: true })
+    );
+  });
+
+  it.each([
+    { sort: 'price-asc', expected: 'price_asc' },
+    { sort: 'price-desc', expected: 'price_desc' },
+    { sort: 'unsupported', expected: undefined },
+  ])('normalizes catalog sort $sort', ({ sort, expected }) => {
+    mockUseLocalSearchParams.mockReturnValue({ slug: 'accessories', sort });
+    render(<CategoryScreen />);
+    expect(mockUseProducts).toHaveBeenCalledWith(
+      expect.objectContaining({ sortBy: expected })
+    );
   });
 
   it('renders the loading state while category products are being fetched', () => {

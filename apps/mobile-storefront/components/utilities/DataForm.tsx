@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ScrollViewInstance } from 'react-native';
-import { ScrollView, Text, TextInput, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors, { SPACING } from '@/constants/Colors';
@@ -13,8 +13,12 @@ import { BillerList } from './BillerList';
 import { createDataFormPurchaseHandler } from './create-data-form-purchase-handler';
 import { DataAmountInput } from './DataAmountInput';
 import { DataFormFooter } from './DataFormFooter';
+import { DataPaymentOptions } from './DataPaymentOptions';
+import { DataPhoneField } from './DataPhoneField';
 import { DataPlanSelectionSection } from './DataPlanSelectionSection';
 import {
+  getDataPlansErrorMessage,
+  handleDataPaymentLayout,
   inferProviderFromDataBillerName,
   scrollToDataPayment,
 } from './data-form.helpers';
@@ -27,10 +31,11 @@ import type { DataFormProps } from './data-form.types';
 import { findDataPlanByCode } from './data-plan-selection';
 import { getUtilityFooterOffset } from './get-utility-footer-offset';
 import { RecentUtilityRecipients } from './RecentUtilityRecipients';
-import { UtilityPaymentOptions } from './UtilityPaymentOptions';
 import { useDataBillerInitialization } from './use-data-biller-initialization';
 import { useDataFormBeneficiaryController } from './use-data-form-beneficiary-controller';
+import { useDataPayGate } from './use-data-pay-gate';
 import { useMountedRef } from './use-mounted-ref';
+import { UTILITY_FOOTER_NOTICE_SPACE } from './utility-pay-readiness';
 
 export function DataForm({
   initialAmount,
@@ -55,8 +60,6 @@ export function DataForm({
   } = useVTUBillers('data');
   const scrollViewRef = useRef<ScrollViewInstance>(null);
 
-  const parsedInitialAmount = Number(initialAmount ?? 0);
-
   const {
     phoneNumber,
     selectedProvider,
@@ -79,7 +82,7 @@ export function DataForm({
     initialPhoneNumber,
     initialProvider,
     initialPlan,
-    parsedInitialAmount,
+    parsedInitialAmount: Number(initialAmount ?? 0),
     dataPlans,
     recentRecipients,
     onSelectRecentRecipient,
@@ -102,11 +105,7 @@ export function DataForm({
     isKeyboardVisible,
     keyboardHeight,
   });
-  const plansErrorMessage = hasPlansError
-    ? plansError instanceof Error
-      ? plansError.message
-      : 'Could not load data bundles. Please try again.'
-    : undefined;
+  const plansErrorMessage = getDataPlansErrorMessage(hasPlansError, plansError);
   const selectedDataPlan = findDataPlanByCode(
     selectedDataBiller?.billItems,
     selectedPlan
@@ -157,6 +156,15 @@ export function DataForm({
     setPlanAmount(billItem.amount > 0 ? billItem.amount : 0);
   };
 
+  const payGate = useDataPayGate({
+    payment,
+    phoneNumber,
+    planAmount,
+    returnToHref: walletReturnToHref,
+    selectedPlan,
+    selectedProvider,
+  });
+
   const handlePurchase = createDataFormPurchaseHandler({
     customer,
     dismissKeyboard,
@@ -182,7 +190,11 @@ export function DataForm({
         style={dataFormStyles.scrollView}
         contentContainerStyle={[
           dataFormStyles.content,
-          { paddingBottom: footerSpacerHeight },
+          {
+            paddingBottom:
+              footerSpacerHeight +
+              (payGate.notice ? UTILITY_FOOTER_NOTICE_SPACE : 0),
+          },
         ]}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
@@ -190,22 +202,15 @@ export function DataForm({
         <Text style={[dataFormStyles.sectionTitle, { color: colors.text }]}>
           Phone Number
         </Text>
-        <TextInput
-          style={[
-            dataFormStyles.input,
-            {
-              backgroundColor: colors.muted,
-              color: colors.text,
-              borderColor: colors.border,
-              marginBottom: 16,
-            },
-          ]}
-          placeholder="08012345678"
-          placeholderTextColor={colors.placeholder}
-          keyboardType="phone-pad"
-          accessibilityLabel="Phone Number"
-          value={phoneNumber}
+        <DataPhoneField
+          colors={colors}
+          issue={
+            payGate.inlineIssue?.field === 'phone'
+              ? payGate.inlineIssue.message
+              : null
+          }
           onChangeText={handlePhoneChange}
+          value={phoneNumber}
         />
 
         {canShowBeneficiaries ? (
@@ -257,26 +262,23 @@ export function DataForm({
         ) : null}
 
         <View
-          onLayout={(event) => {
-            paymentYRef.current = event.nativeEvent.layout.y;
-            if (!shouldScrollToPaymentRef.current) {
-              return;
-            }
-
-            shouldScrollToPaymentRef.current = false;
-            scrollToDataPayment(paymentYRef.current, scrollViewRef.current);
-          }}
+          onLayout={(event) =>
+            handleDataPaymentLayout({
+              paymentY: event.nativeEvent.layout.y,
+              paymentYRef,
+              scrollView: scrollViewRef.current,
+              shouldScrollToPaymentRef,
+            })
+          }
         >
-          <UtilityPaymentOptions
-            amount={planAmount}
-            canFundByBankTransfer={payment.canFundByBankTransfer}
+          <DataPaymentOptions
+            payment={payment}
+            planAmount={planAmount}
+            selectedPlan={selectedPlan}
+            selectedProvider={selectedProvider}
+            phoneNumber={phoneNumber}
+            retained={payGate.retained}
             returnToHref={walletReturnToHref}
-            walletBalance={payment.getWalletBalance()}
-            walletError={payment.walletError}
-            walletIsLoading={payment.walletIsLoading}
-            walletIsSettled={payment.isWalletSettled()}
-            walletIsStoreCredit={payment.walletIsStoreCredit}
-            walletPrimaryUnknown={payment.walletPrimaryUnknown}
           />
         </View>
       </ScrollView>
@@ -287,6 +289,8 @@ export function DataForm({
         colors={colors}
         isKeyboardVisible={isKeyboardVisible}
         isSubmitting={isSubmitting}
+        blockedReason={payGate.blockedReason}
+        notice={payGate.notice}
         planAmount={planAmount}
         onPress={handlePurchase}
       />

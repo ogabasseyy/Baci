@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  getQuizAppAttestationModeEnv,
+  getQuizAppCheckConfigEnv,
   getQuizDeviceHashPepper,
   getQuizPhaseEnv,
   getQuizProductionApprovedEnv,
@@ -51,5 +53,34 @@ describe('quiz runtime environment', () => {
     expect(() => getQuizDeviceHashPepper()).toThrow(
       'must be at least 32 characters'
     );
+  });
+
+  it('defaults app attestation off and rejects unknown modes', () => {
+    vi.stubEnv('QUIZ_APP_ATTESTATION', '');
+    expect(getQuizAppAttestationModeEnv()).toBe('off');
+
+    vi.stubEnv('QUIZ_APP_ATTESTATION', ' Monitor '.trim().toLowerCase());
+    expect(getQuizAppAttestationModeEnv()).toBe('monitor');
+
+    vi.stubEnv('QUIZ_APP_ATTESTATION', 'on');
+    expect(() => getQuizAppAttestationModeEnv()).toThrow(
+      'must be off, monitor or enforce'
+    );
+  });
+
+  it('parses the App Check project number and trims the app id list', () => {
+    vi.stubEnv('QUIZ_APP_CHECK_PROJECT_NUMBER', ' 499767419832 ');
+    vi.stubEnv('QUIZ_APP_CHECK_APP_IDS', ' app-a , ,app-b ');
+    expect(getQuizAppCheckConfigEnv()).toEqual({
+      allowedAppIds: ['app-a', 'app-b'],
+      projectNumber: '499767419832',
+    });
+
+    vi.stubEnv('QUIZ_APP_CHECK_PROJECT_NUMBER', '');
+    vi.stubEnv('QUIZ_APP_CHECK_APP_IDS', '');
+    expect(getQuizAppCheckConfigEnv()).toEqual({
+      allowedAppIds: [],
+      projectNumber: '',
+    });
   });
 });

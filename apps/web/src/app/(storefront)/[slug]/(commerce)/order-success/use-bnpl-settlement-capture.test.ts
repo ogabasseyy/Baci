@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { CHECKOUT_FUNNEL_EVENTS } from '@baci/shared/contracts';
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

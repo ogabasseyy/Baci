@@ -1,0 +1,45 @@
+{
+  "desktop": {
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "cartCurrency": "NGN",
+    "bagSubtotal": 250,
+    "bagImageDecoded": true,
+    "shipping": "Synthetic local delivery",
+    "shippingAmount": 1500,
+    "total": 1750,
+    "paymentSelection": "Pay on Delivery",
+    "placeOrderClicked": false,
+    "paymentSubmitted": false,
+    "quantity": 1,
+    "placeOrderEnabled": true
+  },
+  "mobile": {
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "cartCurrency": "NGN",
+    "quantity": 2,
+    "cartContinuity": true,
+    "bagSubtotal": 500,
+    "bagImageDecoded": true,
+    "checkoutImageDecoded": true,
+    "shipping": "Synthetic local delivery",
+    "shippingAmount": 1500,
+    "total": 2000,
+    "paymentSelection": "Pay on Delivery",
+    "placeOrderEnabled": true,
+    "placeOrderClicked": false,
+    "paymentSubmitted": false,
+    "shippingRetryObserved": true,
+    "shippingRetryHttpStatus": 200,
+    "addressEditAutomaticRefresh": {
+      "shippingHttpStatus": 200,
+      "manualRetryNeeded": false,
+      "placesAutocomplete": "unconfigured-local-500; manual address used"
+    }
+  }
+}

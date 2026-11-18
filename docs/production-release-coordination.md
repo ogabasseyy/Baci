@@ -8,8 +8,9 @@ After this change is reviewed and merged, use a clean checkout of current main:
 node .github/scripts/release-production.mjs --approve-production --approve-prebuilt-fallback
 ```
 
-This replaces the manual worker-update, verification, dispatch, workflow-watch,
-and live-alias verification sequence. It does not activate REDVAULT or send payments.
+The coordinator dispatches the release workflow, which installs and verifies
+the exact revision's isolated workers before migrations or publication. It
+then checks the workflow and live alias. It does not activate REDVAULT or send payments.
 Production now builds on the approved VPS runner and publishes prebuilt output.
 The publication guard resolves an existing GitHub CLI from PATH or the runner
 user's `~/.local/bin`. It checks CLI/API/store access before the build and repeats
@@ -19,12 +20,12 @@ CLI contract; it does not change the runner or authorize a GitHub-hosted build.
 Any future emergency change to a GitHub-hosted builder requires explicit owner
 approval. Vercel cloud builds remain outside this flow.
 
-The coordinator requires authenticated GitHub and Vercel CLIs, working SSH access
-to the approved VPS, and the existing worker deployment prerequisites. The Vercel
+The coordinator requires authenticated GitHub and Vercel CLIs. The approved VPS
+runner must meet the isolated worker deployment prerequisites. The Vercel
 CLI must be >= 50.5.1, the first release shipping `vercel api` for live-alias
 verification; older CLIs are refused before dispatching. It refuses
-dirty or stale checkouts and concurrent deployments, rechecks main after worker
-preparation, verifies the dispatched SHA, rejects skipped publication, and checks
+dirty or stale checkouts and concurrent deployments, verifies the dispatched SHA,
+requires a successful isolated worker sync, rejects skipped publication, and checks
 the serving Vercel alias against the expected project, production state and SHA.
 It does not retry indeterminate dispatches or remove production overlap barriers.
 If it crashes or reports an indeterminate dispatch, reconcile the existing release before removing its local lock.
@@ -32,7 +33,7 @@ If it crashes or reports an indeterminate dispatch, reconcile the existing relea
 ## Unattended integration boundary
 
 This entry point is not an installed automatic-on-merge workflow. Do not invoke it
-inside deploy.yml: the worker script correctly rejects an in-flight publishing run.
+inside deploy.yml: it coordinates a separate workflow dispatch.
 Before unattended integration, move release initiation into one outer coordinator,
 disable competing push publication, and retain manual dispatch as a coordinated
 operator path. Until then the guarantees in this document (SHA pinning,
@@ -46,9 +47,9 @@ the extra publication. The coordinator identifiers correlate a
 coordinator run with its dispatch; they are not authorization —
 anyone with workflow_dispatch permission and the right SHA passes
 the gate, so keep dispatch permission tightly scoped. Do not
-double-run the entry point for an already-released commit: republication
-is content-identical and passes verification, at the cost of a wasted
-deploy cycle — reconcile instead. Never run two coordinators concurrently
+double-run the entry point for an already-released commit without a reason:
+republication wastes a deploy cycle unless runtime configuration has changed.
+Never run two coordinators concurrently
 (even on different machines): the lock is local-only and the sibling
 abort is best-effort, so concurrent runs are procedurally forbidden,
 not just detected. Freeze main pushes for the duration of a coordinated
@@ -57,11 +58,8 @@ after the fact by live-alias verification.
 Provision restricted runner authentication and trusted VPS access
 without copying personal SSH keys or introducing a broad permanent token.
 
-The current VPS cannot SSH to its own deployment endpoint and has no gh CLI on its
-normal PATH. Those prerequisites must be deliberately provisioned before choosing
-it as the unattended coordinator runner. No dedicated deployment SSH credential
-was found in repository Actions secret names; the iOS signing key is not a release
-credential and must not be repurposed.
+An unattended coordinator still needs deliberately provisioned GitHub and Vercel
+CLI access. Do not repurpose the iOS signing key as a release credential.
 
 The behind-base hook now validates ops/gigl-promote-record as an operational tree
 instead of comparing its separate history with main. It permits only one valid
@@ -99,6 +97,18 @@ which retains every non-test source and all strict compiler settings but
 omits test roots. The normal `pnpm turbo typecheck` still uses the complete
 application-and-test configuration. The scope regression test enforces this
 separation and the explicit `ignoreBuildErrors: false` setting.
+`next build` regenerates `.next/types/link.d.ts` immediately before its own
+type check, so the typed-route preparation that `pnpm typecheck` applies in
+place cannot survive there. The `build` script therefore runs `next typegen`
+and writes the prepared declaration to `.typed-navigation/link.d.ts`;
+`tsconfig.build.json` lists that copy under `files` and excludes the
+regenerated file, so a build that skipped the preparation fails with TS6053
+instead of silently dropping typed-route checks.
+On a fresh checkout, run `next typegen && node tools/prepare-typed-navigation.mjs --output .typed-navigation/link.d.ts` in `apps/web` (or `pnpm typecheck:build`, which also type checks) before a bare `tsc -p tsconfig.build.json`, which otherwise fails with TS6053.
+`typecheck:build` passes `--incremental false` because a stale `.next/cache/tsconfig.build.tsbuildinfo` let an unprepared declaration pass without being re-checked; do not trust an incremental result when verifying this path by hand.
+`build:ci` compiles without type checking, so only a production build
+exercises this path: a TS2589 in a deploy with green PR checks means the two
+have drifted.
 The production build also supplies `GOMEMLIMIT=6GiB` to the native Go
 compiler. This is a soft garbage-collection budget, not a hard memory cap;
 `NODE_OPTIONS` only budgets Node.js. The host has 24 GiB swap after adding

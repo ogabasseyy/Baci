@@ -69,28 +69,22 @@ export async function getQuizAuthHeaders(): Promise<{
         break;
       }
 
-      const { data: userData, error: userError } =
-        await supabase.auth.getUser(accessToken);
-
-      if (!userError && userData.user) {
-        // Return the validated user's id from the SAME session read so callers
-        // can bind a request to a specific shopper without a second (racy)
-        // lookup.
+      // The server verifies the bearer token on every request, so the user id
+      // comes from the session we already hold. Avoiding a per-request
+      // Supabase Auth round trip keeps load off auth during a live quiz.
+      const userId = data.session?.user?.id;
+      if (userId) {
         return {
           headers: { Authorization: `Bearer ${accessToken}` },
-          userId: userData.user.id,
+          userId,
         };
       }
-
-      if (userError) {
-        log.warn('Unable to validate quiz auth session', {
-          attempt,
-          message: getSafeErrorMessage(userError),
-        });
-        if (canRetry && !isDefinitiveAuthError(userError)) {
-          await waitForQuizAuthRetry();
-          continue;
-        }
+      // A token without its user is storage that has only half loaded. Give
+      // it the same single retry as a missing token before failing.
+      log.warn('Quiz auth session has a token but no user yet', { attempt });
+      if (canRetry) {
+        await waitForQuizAuthRetry();
+        continue;
       }
       break;
     } catch (error) {

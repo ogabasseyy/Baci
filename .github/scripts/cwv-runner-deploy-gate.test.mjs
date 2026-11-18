@@ -50,7 +50,8 @@ test('runs CWV contracts and production deployment for runner-only main changes'
     /'\.github\/scripts\/pnpm-install-with-retry\.sh'/,
   );
   assert.doesNotMatch(filterPaths(ciFilters, 'web'), /'infra\/cwv-runner\/\*\*'/);
-  assert.equal(ciGate.if, "needs.changes.outputs.cwv_runner == 'true'");
+  // Review-first CI: the CI copy also waits for the full stage; deploy.yml has no stage.
+  assert.equal(ciGate.if, "needs.changes.outputs.cwv_runner == 'true' && needs.changes.outputs.stage == 'full'");
 
   assert.equal(
     deployChanges.outputs.cwv_runner,

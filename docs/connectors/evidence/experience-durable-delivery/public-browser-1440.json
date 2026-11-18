@@ -1,0 +1,23 @@
+{
+  "format": "durable-public-browser/v1",
+  "width": 1440,
+  "buildDigest": "b8d104bbee1d291d8c98795022c345927b04d5d4399aaf91eb6c21ef87fd35e3",
+  "sourceDigest": "33713d9bc14e2568e511b118729729a8b5d26744c35b6d3335a6a542aebb240a",
+  "noJsContent": true,
+  "images": [
+    {
+      "width": 240,
+      "complete": true
+    },
+    {
+      "width": 240,
+      "complete": true
+    }
+  ],
+  "hydration": "ready",
+  "customInteraction": "Ink",
+  "errors": [],
+  "cwvQualified": false,
+  "jobId": "baci-experience-6b63e6cc-6151-4a31-a7ee-7385b5701b13",
+  "wallMs": 1683
+}

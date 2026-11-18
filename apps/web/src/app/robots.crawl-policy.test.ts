@@ -5,6 +5,11 @@ let mockBlogEnabled = true;
 let mockRepairsEnabled = false;
 let mockBusinessType: string | null = 'electronics';
 
+vi.mock('next/cache', () => ({
+  cacheLife: vi.fn(),
+  cacheTag: vi.fn(),
+}));
+
 vi.mock('next/headers', () => ({
   headers: vi.fn(() =>
     Promise.resolve({

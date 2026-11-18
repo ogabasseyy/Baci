@@ -144,6 +144,7 @@ async function applyEvent(
     event.eventData as Record<string, unknown>
   );
   if (references.length === 0) {
+    await reconcileSavingsOutflowReferences([], deps, event);
     return;
   }
   await applyOutflowTerminal(supabase, {
@@ -153,7 +154,7 @@ async function applyEvent(
         ? 'failed'
         : 'succeeded',
   });
-  await reconcileSavingsOutflowReferences(references, deps);
+  await reconcileSavingsOutflowReferences(references, deps, event);
 }
 
 function poisonReason(error: unknown): string | null {

@@ -1,13 +1,24 @@
+import { QUIZ_AGE_RESTRICTED_MESSAGE } from '@/schemas/quiz-age-gate-message';
+
 type QuizRpcClientError = {
   code: string;
   error: string;
   status: number;
+  /** Sent as Retry-After for conditions that clear on their own. */
+  retryAfterSeconds?: number;
 };
 
 const ATTEMPT_LIMIT_ERROR: QuizRpcClientError = {
   code: 'QUIZ_ATTEMPT_LIMIT_REACHED',
   error: "You've reached the maximum number of attempts for this quiz.",
   status: 409,
+};
+
+const QUIZ_BUSY_ERROR: QuizRpcClientError = {
+  code: 'QUIZ_BUSY',
+  error: 'The quiz is busy. Please try again.',
+  retryAfterSeconds: 2,
+  status: 503,
 };
 
 const QUIZ_RPC_CLIENT_ERRORS: Record<string, QuizRpcClientError> = {
@@ -45,6 +56,13 @@ const QUIZ_RPC_CLIENT_ERRORS: Record<string, QuizRpcClientError> = {
     code: 'QUIZ_DATE_OF_BIRTH_REQUIRED',
     error: 'Add your date of birth before starting the quiz',
     status: 409,
+  },
+  QZ014: {
+    // Lowercase on purpose: the mobile start flow reopens the DOB gate on
+    // exactly this code (same as the web route guard's QuizAgeGateError).
+    code: 'quiz_age_restricted',
+    error: QUIZ_AGE_RESTRICTED_MESSAGE,
+    status: 403,
   },
   QZ020: {
     code: 'QUIZ_PRIZE_FINALIZATION_NOT_APPROVED',
@@ -121,7 +139,21 @@ const QUIZ_RPC_CLIENT_ERRORS: Record<string, QuizRpcClientError> = {
     error: 'This private test quiz is not available to this account.',
     status: 403,
   },
+  // PostgreSQL lock_not_available (lock timeout): the database is overloaded,
+  // not the request invalid.
+  '55P03': QUIZ_BUSY_ERROR,
 };
+
+// query_canceled (57014) is only "busy" when the statement timeout caused it.
+// An operator cancelling or terminating a query uses the same code and must
+// not be advertised as retryable.
+function isStatementTimeout(value: object): boolean {
+  return (
+    'message' in value &&
+    typeof value.message === 'string' &&
+    /statement timeout/i.test(value.message)
+  );
+}
 
 export function mapQuizRpcClientError(
   value: unknown
@@ -129,5 +161,8 @@ export function mapQuizRpcClientError(
   if (!value || typeof value !== 'object') return null;
   const code =
     'code' in value && typeof value.code === 'string' ? value.code : null;
+  if (code === '57014') {
+    return isStatementTimeout(value) ? QUIZ_BUSY_ERROR : null;
+  }
   return code ? (QUIZ_RPC_CLIENT_ERRORS[code] ?? null) : null;
 }

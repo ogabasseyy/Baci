@@ -1,3 +1,4 @@
+import { attachCancellationRefundMode } from '@/lib/orders/attach-cancellation-refund-mode';
 import { maskRefundWorkerText } from '@/lib/orders/mask-refund-worker-text';
 import type { RefundSummary } from '@/lib/orders/refund-summary';
 import { createClient } from '@/lib/supabase/server';
@@ -12,7 +13,8 @@ import { createClient } from '@/lib/supabase/server';
 // client-side exactly as before, so a status outage degrades to a
 // spinner instead of breaking the order page.
 export async function getInitialRefundSummary(
-  orderId: string
+  orderId: string,
+  merchantId: string
 ): Promise<RefundSummary | null> {
   try {
     const supabase = await createClient();
@@ -21,9 +23,10 @@ export async function getInitialRefundSummary(
       p_order_id: orderId,
     });
     if (error || !data || typeof data !== 'object') return null;
-    return maskRefundWorkerText(
-      data as Record<string, unknown>
-    ) as unknown as RefundSummary;
+    return (await attachCancellationRefundMode(
+      maskRefundWorkerText(data as Record<string, unknown>),
+      { merchantId, orderId, supabase }
+    )) as unknown as RefundSummary;
   } catch {
     return null;
   }

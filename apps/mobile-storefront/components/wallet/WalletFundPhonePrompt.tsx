@@ -143,10 +143,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 46,
   },
-  title: { fontSize: 17, fontWeight: '700' },
-  description: { fontSize: 14, lineHeight: 21, marginBottom: 24 },
+  title: { fontSize: 15, fontWeight: '700' },
+  description: { fontSize: 13, lineHeight: 21, marginBottom: 24 },
   label: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
     letterSpacing: 1,
     marginBottom: 10,
@@ -154,12 +154,12 @@ const styles = StyleSheet.create({
   input: {
     borderRadius: 16,
     borderWidth: 1,
-    fontSize: 18,
-    minHeight: 64,
+    fontSize: 16,
+    minHeight: 55,
     paddingHorizontal: 18,
   },
   error: {
-    fontSize: 12,
+    fontSize: 11,
     marginTop: 8,
   },
   submit: {
@@ -167,10 +167,10 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     justifyContent: 'center',
     marginTop: 24,
-    minHeight: 56,
+    minHeight: 48,
   },
   submitText: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
   },
 });

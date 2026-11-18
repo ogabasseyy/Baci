@@ -3,6 +3,7 @@ import type {
   BuilderContext,
   PreviewInput,
 } from '@/lib/builder-connector/types';
+import { readExperienceAuthoringMode } from '@/lib/experience/authoring-mode';
 import { hasSafeBuilderPreviewAssets } from '@/schemas/builder-preview-assets';
 import { portableHomeSchema } from '@/schemas/portable-storefront';
 import {
@@ -21,6 +22,11 @@ export async function previewStorefront(
     throw new DraftServiceError('UNSUPPORTED_PAGE');
   if (input.storefrontId !== ctx.merchantId)
     throw new DraftServiceError('NOT_FOUND');
+  if (
+    (await readExperienceAuthoringMode(ctx.supabase, ctx.merchantId)) !==
+    'legacy'
+  )
+    throw new DraftServiceError('UNSUPPORTED_TEMPLATE');
   const read = async () => {
     const [row] = await readBuilderStorefronts(
       ctx.supabase,

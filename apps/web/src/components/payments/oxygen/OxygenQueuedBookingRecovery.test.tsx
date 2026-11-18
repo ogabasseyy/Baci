@@ -29,6 +29,10 @@ it.each([
       applicationReference: workflowId,
       validated: true,
       eligible: true,
+      eligibleAmount: 400000,
+      minimumAmount: 10000,
+      maxTenure: 6,
+      offers: [{ tenure: 6, loanAmount: 400000 }],
       kyc: {
         address_status: 'NOT_DONE',
         bvn_status: 'DONE',

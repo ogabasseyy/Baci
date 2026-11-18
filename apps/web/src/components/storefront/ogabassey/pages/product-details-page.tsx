@@ -10,6 +10,7 @@ import { ProductDetailsPurchaseSection } from './product-details-page/product-pu
 import { useProductDetailsState } from './product-details-page/use-product-details-state';
 import { DeferredProductDetailsSectionsLoader } from './product-details-page/deferred-product-details-sections-loader';
 import deferredLayoutStyles from './product-details-page/deferred-product-details-layout.module.css';
+import { DeferredAdUnit } from '../components/deferred-ad-unit';
 import { AdUnit } from './product-details-page/product-details-lazy-ad-unit';
 import { ProductDetailsBannerSection } from './product-details-page/product-details-banner-section';
 import { ProductDetailsPageOverlays } from './product-details-page/product-details-page-overlays';
@@ -119,11 +120,24 @@ export function ProductDetailsPage(props: ProductDetailsPageProps) {
   });
 
   const isCommerceMode = mode === 'commerce';
+  // Phones never see the desktop sidebar ad, so they get its 300x250 size
+  // after the description. DeferredAdUnit reserves the box up front (no
+  // shift); from 768px up it is hidden, and a hidden slot never requests.
+  const phoneAd = (
+    <div className="md:hidden" data-testid="product-mobile-ad">
+      <DeferredAdUnit
+        placementKey="SIDEBAR_HALF_PAGE"
+        slotInstance="mobile"
+        timeoutMs={1}
+      />
+    </div>
+  );
 
   if (mode === 'belowFold') {
     return (
       <div className={deferredLayoutStyles.container}>
         {semanticSections}
+        {phoneAd}
         <DeferredProductDetailsSectionsLoader
           activeTab={activeTab}
           normalizedReviewRatingWidth={normalizedReviewRatingWidth}
@@ -226,6 +240,8 @@ export function ProductDetailsPage(props: ProductDetailsPageProps) {
         </div>
 
         {isCommerceMode ? null : semanticSections}
+
+        {isCommerceMode ? null : phoneAd}
 
         {isCommerceMode ? null : (
           <DeferredProductDetailsSectionsLoader

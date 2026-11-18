@@ -146,7 +146,7 @@ describe('WalletSavingsPlanCard', () => {
     );
     expect(
       screen.getByRole('button', {
-        name: 'Move your savings for iPhone 15 Pro',
+        name: 'Complete goal for iPhone 15 Pro',
       })
     ).toBeOnTheScreen();
     expect(screen.queryByText('Start another plan')).toBeNull();
@@ -231,5 +231,74 @@ describe('WalletSavingsPlanCard', () => {
     );
     fireEvent.press(button);
     expect(onOpen).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('bugfix: the card invited a first contribution while the plan was being set up', () => {
+  it('shows the setup state and a View plan action while the plan is getting ready', () => {
+    render(
+      <WalletSavingsPlanCard
+        colors={Colors.light}
+        goal={goal}
+        onOpen={jest.fn()}
+        setupState="getting_ready"
+      />
+    );
+    expect(screen.getByText('Getting your plan ready')).toBeOnTheScreen();
+    expect(screen.queryByText('Start with your first contribution')).toBeNull();
+    expect(
+      screen.getByRole('button', { name: 'View plan for iPhone 15 Pro' })
+    ).toBeOnTheScreen();
+    expect(screen.UNSAFE_queryByType(LinearGradient)).toBeNull();
+  });
+
+  it('asks to finish setup when it never started', () => {
+    render(
+      <WalletSavingsPlanCard
+        colors={Colors.light}
+        goal={goal}
+        onOpen={jest.fn()}
+        setupState="needs_setup"
+      />
+    );
+    expect(screen.getByText('Finish setting up your plan')).toBeOnTheScreen();
+  });
+
+  it('still invites the first contribution once the plan is ready', () => {
+    render(
+      <WalletSavingsPlanCard
+        colors={Colors.light}
+        goal={goal}
+        onOpen={jest.fn()}
+      />
+    );
+    expect(
+      screen.getByText('Start with your first contribution')
+    ).toBeOnTheScreen();
+  });
+});
+
+describe('bugfix: after completing a funded plan the card looked like the savings vanished', () => {
+  it('shows the purchase request calmly, with no ₦0 progress or contribution prompt', () => {
+    render(
+      <WalletSavingsPlanCard
+        colors={Colors.light}
+        goal={{ ...goal, status: 'completed', current_amount: 0 }}
+        onOpen={jest.fn()}
+      />
+    );
+    expect(screen.getByText('Purchase requested')).toBeOnTheScreen();
+    expect(
+      screen.getByText('Our team will contact you to finish your order')
+    ).toBeOnTheScreen();
+    expect(screen.queryByText('Your next upgrade')).toBeNull();
+    expect(screen.queryByText('Start with your first contribution')).toBeNull();
+    expect(screen.queryByLabelText('Savings plan progress')).toBeNull();
+    expect(screen.queryByText(/^Ends /)).toBeNull();
+    expect(
+      screen.getByRole('button', {
+        name: 'Start another plan for iPhone 15 Pro',
+      })
+    ).toBeOnTheScreen();
   });
 });

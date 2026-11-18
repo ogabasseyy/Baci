@@ -1,5 +1,6 @@
 import { router } from 'expo-router';
 import type { PaymentMethodType } from '@/components/checkout/PaymentMethodSelector';
+import type { WalletTransferFallback } from '@/components/checkout/wallet-transfer-fallback';
 import { trackCheckoutPaymentStarted } from '@/services/analytics';
 import { OrderError, type OrderResponse } from '@/services/orders';
 import {
@@ -27,6 +28,8 @@ export interface InitializeGatewayAndRouteParams {
   selectedPayment: PaymentMethodType;
   setIsProcessing: (value: boolean) => void;
   trackingToken?: string | null;
+  /** Shows the bank-transfer page's "wallet transfer unavailable" notice. */
+  walletTransferFallback?: WalletTransferFallback;
 }
 
 // Initializes the provider (card gateways and legacy DVA bank transfer)
@@ -42,6 +45,7 @@ export async function initializeGatewayAndRoute({
   selectedPayment,
   setIsProcessing,
   trackingToken,
+  walletTransferFallback,
 }: InitializeGatewayAndRouteParams): Promise<void> {
   const isBankTransfer = selectedPayment === 'bank_transfer';
   const gateway = isBankTransfer ? 'paystack' : selectedPayment;
@@ -172,6 +176,7 @@ export async function initializeGatewayAndRoute({
         accountNumber,
         accountName,
         ...(trackingToken && { trackingToken }),
+        ...(walletTransferFallback && { walletTransferFallback }),
       },
     });
     return;

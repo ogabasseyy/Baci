@@ -8,6 +8,7 @@ import {
 } from '@jest/globals';
 import { act, renderHook } from '@testing-library/react-native';
 import {
+  MODAL_DISMISS_FALLBACK_MS,
   TRACKING_EXPLAINER_DELAY_MS,
   useAppTrackingTransparency,
 } from './use-app-tracking-transparency';
@@ -91,8 +92,36 @@ describe('bugfix: Apple tracking prompt covered the launch animation', () => {
     await flushPromises();
 
     expect(result.current.explainer.visible).toBe(false);
+    expect(mockTrackEvent).toHaveBeenCalledWith(
+      'ATT Explainer Continued',
+      undefined
+    );
+    expect(mockRequestTrackingPermission).not.toHaveBeenCalled();
+
+    await act(async () => {
+      result.current.explainer.onDismiss();
+    });
+    await flushPromises();
+
     expect(mockRequestTrackingPermission).toHaveBeenCalledTimes(1);
     expect(result.current.isTrackingAuthorizationSettled).toBe(true);
+  });
+
+  it('settles via fallback timer after Continue when native onDismiss does not fire', async () => {
+    const { result } = renderHook(() =>
+      useAppTrackingTransparency({ enabled: true, explainFirst: true })
+    );
+    await flushPromises();
+    await advance(TRACKING_EXPLAINER_DELAY_MS);
+
+    await act(async () => {
+      result.current.explainer.onContinue();
+    });
+    await flushPromises();
+    expect(mockRequestTrackingPermission).not.toHaveBeenCalled();
+
+    await advance(MODAL_DISMISS_FALLBACK_MS);
+    expect(mockRequestTrackingPermission).toHaveBeenCalledTimes(1);
   });
 
   it('never shows the explainer when the shopper already decided', async () => {

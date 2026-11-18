@@ -64,7 +64,11 @@ interface RootLayoutNavProps {
   adTrackingReady?: boolean;
   persistenceEnabled?: boolean;
   shouldResumeNavigation?: boolean;
-  trackingExplainer?: { visible: boolean; onContinue: () => void };
+  trackingExplainer?: {
+    visible: boolean;
+    onContinue: () => void;
+    onDismiss?: () => void;
+  };
 }
 
 export function RootLayoutNav({

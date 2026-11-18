@@ -1,5 +1,13 @@
 import { Image } from 'expo-image';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import {
+  Modal,
+  Pressable,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BRAND, palette, withAlpha } from '@/constants/Colors';
 import mascotImage from '../assets/splash-scene/torso.png';
@@ -10,7 +18,7 @@ import mascotImage from '../assets/splash-scene/torso.png';
 // Apple's own question (no way to decline here and skip that question).
 export const TRACKING_EXPLAINER_COPY = {
   title: 'A quick question from your phone',
-  lead: 'Next, your iPhone will ask if Ogabassey can use your activity from other apps and websites.',
+  lead: 'Next, your device will ask if Ogabassey can use your activity from other apps and websites.',
   purpose:
     'This helps us show you offers that are relevant to you, and see which of our ads are working.',
   choice:
@@ -21,24 +29,47 @@ export const TRACKING_EXPLAINER_COPY = {
 interface TrackingExplainerProps {
   visible: boolean;
   onContinue: () => void;
+  onDismiss?: () => void;
+}
+
+function ignoreHardwareBackPress() {
+  // Intentionally do not advance or skip ATT on Android hardware back.
 }
 
 export function TrackingExplainer({
   visible,
   onContinue,
+  onDismiss,
 }: TrackingExplainerProps) {
-  if (!visible) return null;
+  // Keep the Modal mounted after becoming visible so iOS emits onDismiss when
+  // the fade-out animation completes before Apple's prompt is presented.
+  const [rendered, setRendered] = useState(visible);
+  if (visible && !rendered) {
+    setRendered(true);
+  }
+  if (!visible && !rendered) {
+    return null;
+  }
 
   return (
     <Modal
       animationType="fade"
-      onRequestClose={onContinue}
+      onDismiss={() => {
+        setRendered(false);
+        onDismiss?.();
+      }}
+      onRequestClose={ignoreHardwareBackPress}
       presentationStyle="fullScreen"
       statusBarTranslucent
-      visible
+      visible={visible}
     >
+      {visible ? <StatusBar barStyle="light-content" /> : null}
       <SafeAreaView style={styles.screen}>
-        <View style={styles.content}>
+        <ScrollView
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+          style={styles.scroll}
+        >
           <Image
             accessibilityIgnoresInvertColors
             accessible={false}
@@ -52,7 +83,7 @@ export function TrackingExplainer({
           <Text style={styles.body}>{TRACKING_EXPLAINER_COPY.lead}</Text>
           <Text style={styles.body}>{TRACKING_EXPLAINER_COPY.purpose}</Text>
           <Text style={styles.muted}>{TRACKING_EXPLAINER_COPY.choice}</Text>
-        </View>
+        </ScrollView>
         <Pressable
           accessibilityRole="button"
           onPress={onContinue}
@@ -76,10 +107,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: 24,
   },
-  content: {
+  scroll: {
     flex: 1,
+  },
+  content: {
+    flexGrow: 1,
     justifyContent: 'center',
     gap: 14,
+    paddingVertical: 16,
   },
   mascot: {
     width: 140,

@@ -23,14 +23,20 @@ export function registerRootLayoutSplashRemountTests({
       expect(screen.getByTestId('root-layout-nav')).toHaveTextContent(
         'adTracking:true;persistence:false;resume:false'
       );
+      expect(screen.getByTestId('root-layout-startup')).toHaveTextContent(
+        'false'
+      );
     });
     await finishNativeSplash();
 
-    await waitFor(() =>
+    await waitFor(() => {
       expect(screen.getByTestId('root-layout-nav')).toHaveTextContent(
         'adTracking:true;persistence:true;resume:true'
-      )
-    );
+      );
+      expect(screen.getByTestId('root-layout-startup')).toHaveTextContent(
+        'true'
+      );
+    });
 
     firstRender.unmount();
     render(<RootLayout />);

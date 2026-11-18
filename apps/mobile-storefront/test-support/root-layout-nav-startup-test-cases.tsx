@@ -10,10 +10,17 @@ import type React from 'react';
 export function registerRootLayoutNavStartupTests(input: {
   RootLayoutNav: React.ComponentType<{
     persistenceEnabled?: boolean;
+    startupReady?: boolean;
     onFirstLayout?: () => void;
   }>;
+  queryProvider: jest.Mock<
+    (props: {
+      children?: React.ReactNode;
+      persistenceEnabled?: boolean;
+    }) => React.JSX.Element
+  >;
 }) {
-  const { RootLayoutNav } = input;
+  const { RootLayoutNav, queryProvider } = input;
 
   it('reports a layout from the app shell after router readiness', async () => {
     const onFirstLayout = jest.fn();
@@ -36,5 +43,30 @@ export function registerRootLayoutNavStartupTests(input: {
 
     view.rerender(<RootLayoutNav persistenceEnabled />);
     expect(screen.getByText('startup-motion:on')).toBeTruthy();
+  });
+
+  it('passes persistence settings through to the query provider', () => {
+    render(<RootLayoutNav persistenceEnabled={false} />);
+
+    expect(queryProvider).toHaveBeenCalledWith(
+      expect.objectContaining({ persistenceEnabled: false })
+    );
+  });
+
+  it('passes keyboard startup readiness independently of persistence', () => {
+    render(<RootLayoutNav persistenceEnabled={false} startupReady />);
+
+    expect(screen.getByText('keyboard-startup:true')).toBeTruthy();
+    expect(queryProvider).toHaveBeenCalledWith(
+      expect.objectContaining({ persistenceEnabled: false })
+    );
+  });
+
+  it('surfaces provider failures deterministically', () => {
+    queryProvider.mockImplementation(() => {
+      throw new Error('query provider failed');
+    });
+
+    expect(() => render(<RootLayoutNav />)).toThrow('query provider failed');
   });
 }

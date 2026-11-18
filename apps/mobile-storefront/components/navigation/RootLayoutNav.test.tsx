@@ -207,7 +207,10 @@ describe('RootLayoutNav', () => {
     setPlatformOS(originalPlatformOS);
   });
 
-  registerRootLayoutNavStartupTests({ RootLayoutNav });
+  registerRootLayoutNavStartupTests({
+    RootLayoutNav,
+    queryProvider: mockQueryProvider,
+  });
 
   it('waits for router readiness after the shell lays out before reporting startup layout', async () => {
     mockRootNavigationState = undefined;
@@ -260,23 +263,6 @@ describe('RootLayoutNav', () => {
     expect(screen.getByText('connectivity-banner')).toBeTruthy();
   });
 
-  it('passes persistence settings through to the query provider', () => {
-    render(<RootLayoutNav persistenceEnabled={false} />);
-
-    expect(mockQueryProvider).toHaveBeenCalledWith(
-      expect.objectContaining({ persistenceEnabled: false })
-    );
-  });
-
-  it('passes keyboard startup readiness independently of persistence', () => {
-    render(<RootLayoutNav persistenceEnabled={false} startupReady />);
-
-    expect(screen.getByText('keyboard-startup:true')).toBeTruthy();
-    expect(mockQueryProvider).toHaveBeenCalledWith(
-      expect.objectContaining({ persistenceEnabled: false })
-    );
-  });
-
   it('applies the root Android navigation bar style', async () => {
     setPlatformOS('android');
 
@@ -285,14 +271,6 @@ describe('RootLayoutNav', () => {
     await waitFor(() => {
       expect(mockSetNavigationBarStyle).toHaveBeenLastCalledWith('dark');
     });
-  });
-
-  it('surfaces provider failures deterministically', () => {
-    mockQueryProvider.mockImplementation(() => {
-      throw new Error('query provider failed');
-    });
-
-    expect(() => render(<RootLayoutNav />)).toThrow('query provider failed');
   });
 
   it('does not render ConnectivityBanner when the template sets connectivityBanner to false', () => {

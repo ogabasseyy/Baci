@@ -5,12 +5,36 @@ import AppKeyboardProvider from './AppKeyboardProvider';
 
 const originalRequestIdleCallback = global.requestIdleCallback;
 const originalCancelIdleCallback = global.cancelIdleCallback;
+const originalRequestAnimationFrame = global.requestAnimationFrame;
+const originalCancelAnimationFrame = global.cancelAnimationFrame;
 let pendingIdleCallback: (() => void) | undefined;
+let nextFrameId = 0;
+let pendingFrames = new Map<number, FrameRequestCallback>();
 const cancelIdleCallbackMock = jest.fn();
+
+function flushAnimationFrames() {
+  while (pendingFrames.size > 0) {
+    const batch = [...pendingFrames.entries()];
+    pendingFrames.clear();
+    for (const [, callback] of batch) {
+      callback(0);
+    }
+  }
+}
 
 beforeEach(() => {
   jest.clearAllMocks();
   pendingIdleCallback = undefined;
+  nextFrameId = 0;
+  pendingFrames = new Map();
+  global.requestAnimationFrame = jest.fn((callback) => {
+    const id = ++nextFrameId;
+    pendingFrames.set(id, callback);
+    return id;
+  });
+  global.cancelAnimationFrame = jest.fn((id) => {
+    if (typeof id === 'number') pendingFrames.delete(id);
+  });
   global.requestIdleCallback = jest.fn((callback) => {
     pendingIdleCallback = () =>
       callback({ didTimeout: false, timeRemaining: () => 50 });
@@ -23,6 +47,8 @@ afterEach(() => {
   jest.useRealTimers();
   global.requestIdleCallback = originalRequestIdleCallback;
   global.cancelIdleCallback = originalCancelIdleCallback;
+  global.requestAnimationFrame = originalRequestAnimationFrame;
+  global.cancelAnimationFrame = originalCancelAnimationFrame;
 });
 
 describe('AppKeyboardProvider', () => {
@@ -57,6 +83,7 @@ describe('AppKeyboardProvider', () => {
         <Text>Storefront app</Text>
       </AppKeyboardProvider>
     );
+    act(() => flushAnimationFrames());
 
     expect(global.requestIdleCallback).toHaveBeenCalledWith(
       expect.any(Function),
@@ -74,6 +101,7 @@ describe('AppKeyboardProvider', () => {
         <Text>Storefront app</Text>
       </AppKeyboardProvider>
     );
+    act(() => flushAnimationFrames());
     const lateCallback = pendingIdleCallback;
 
     view.unmount();
@@ -94,6 +122,7 @@ describe('AppKeyboardProvider', () => {
         <Text>Storefront app</Text>
       </AppKeyboardProvider>
     );
+    act(() => flushAnimationFrames());
 
     expect(KeyboardController.preload).not.toHaveBeenCalled();
     act(() => jest.advanceTimersByTime(249));
@@ -135,6 +164,7 @@ describe('AppKeyboardProvider', () => {
           <Text>Storefront app</Text>
         </AppKeyboardProvider>
       );
+      act(() => flushAnimationFrames());
       const lateCallback = pendingIdleCallback;
 
       act(() => {

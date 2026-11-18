@@ -190,4 +190,36 @@ describe('dispatchOrderCreationNotifications', () => {
       'order-1'
     );
   });
+
+  it('still notifies the merchant when a Pay for Me order is created already paid or wallet-settled', async () => {
+    await dispatchOrderCreationNotifications(
+      input({
+        paymentMethod: 'payforme',
+        paymentStatus: 'paid',
+        isWalletFullyPaid: false,
+      })
+    );
+
+    expect(mockNotifyNewOrder).toHaveBeenCalledTimes(1);
+    expect(mockNotifyPaymentReceived).not.toHaveBeenCalled();
+
+    vi.clearAllMocks();
+
+    await dispatchOrderCreationNotifications(
+      input({
+        paymentMethod: 'payforme',
+        paymentStatus: 'pending',
+        isWalletFullyPaid: true,
+      })
+    );
+
+    expect(mockNotifyNewOrder).toHaveBeenCalledTimes(1);
+    expect(mockNotifyPaymentReceived).toHaveBeenCalledWith(
+      'merchant-1',
+      15000,
+      'NGN',
+      'ORD-001',
+      'order-1'
+    );
+  });
 });

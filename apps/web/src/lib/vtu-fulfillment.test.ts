@@ -3499,6 +3499,49 @@ describe('fulfillPendingVtuTransaction', () => {
     );
   });
 
+  it('clears stale failure diagnostics when reconciling a processing row to successful', async () => {
+    mockCheckTransactionStatus.mockResolvedValueOnce({
+      message: 'Request successful',
+      status: 'successful',
+    });
+    const updatePayloads: unknown[] = [];
+    const supabase = createPendingTransactionSupabaseMock({
+      transactionRow: {
+        id: 'vtu-1',
+        merchant_id: 'merchant-1',
+        customer_id: 'customer-1',
+        type: 'electricity',
+        network_provider: '',
+        phone_number: '08146978921',
+        amount: 1000,
+        request_reference: 'VTU-123',
+        transaction_id: 'kuda-bill-1',
+        status: 'processing',
+        metadata: {
+          providerErrorDetail: 'stale detail',
+          providerResponseCode: '99',
+        },
+        error_message: 'Request successful',
+        merchant_commission: 0,
+        customer_cashback: 0,
+        biller_name: 'EKEDC NG - EKEDC PREPAID',
+        biller_item_code: 'KUD-ELE-EKED-002',
+        customer_identifier: '43901766923',
+        source: 'checkout',
+      },
+      updatePayloads,
+    });
+
+    await fulfillPendingVtuTransaction({ supabase, transactionId: 'vtu-1' });
+
+    const successPayload = updatePayloads.find(
+      (payload) => (payload as { status?: string }).status === 'successful'
+    ) as { metadata: Record<string, unknown> } | undefined;
+    expect(successPayload?.metadata).toBeDefined();
+    expect(successPayload?.metadata).not.toHaveProperty('providerResponseCode');
+    expect(successPayload?.metadata).not.toHaveProperty('providerErrorDetail');
+  });
+
   it('keeps the requery response code when reconciling a processing row to failed', async () => {
     mockCheckTransactionStatus.mockResolvedValueOnce({
       message: 'Vend failed',

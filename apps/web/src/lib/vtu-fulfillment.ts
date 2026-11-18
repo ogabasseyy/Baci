@@ -1705,6 +1705,8 @@ async function reconcileProcessingVtuTransaction({
 
     if (reconciledStatus === 'successful') {
       const successMetadata = { ...(currentRow.metadata ?? {}) };
+      // A success clears stale failure diagnostics, as on the fresh path.
+      applyProviderFailureDiagnostics(successMetadata, { success: true });
       const voucherPin = normalizeVoucherPin(providerStatus.pin);
       if (voucherPin) {
         successMetadata.voucherPin = voucherPin;

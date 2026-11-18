@@ -57,7 +57,11 @@ describe('hasMonnifyVendEvidence', () => {
     { status: 'Internal Server Error' },
     { responseBody: { status: ' 422 ' } },
     { responseBody: { status: 200 } },
-    { reference: 'BACI-REF-123', responseMessage: 'Insufficient balance' },
+    {
+      reference: '0123456789abcdef01234567',
+      responseMessage: 'Insufficient balance',
+    },
+    { status: 'Payment Required', message: 'Insufficient wallet balance' },
   ])('sees no vend evidence in %j', (envelope) => {
     expect(hasMonnifyVendEvidence(envelope)).toBe(false);
   });
@@ -96,5 +100,14 @@ describe('bugfix: true outcome flags are vend evidence', () => {
     { isDelivered: 'false' },
   ])('sees none in %j', (answer) => {
     expect(hasMonnifyVendEvidence(answer)).toBe(false);
+  });
+});
+
+describe('bugfix: a provider-issued top-level reference is evidence', () => {
+  it.each([
+    { reference: 'MFBP-1', message: 'Insufficient wallet balance' },
+    { reference: 12345 },
+  ])('sees vend evidence in %j', (answer) => {
+    expect(hasMonnifyVendEvidence(answer)).toBe(true);
   });
 });

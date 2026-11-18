@@ -31,6 +31,9 @@ export function isMonnifyDefiniteBusinessRefusal({
   const wording = `${rawMessage} ${joinMonnifyAnswerStrings(envelope)}`;
   return (
     !isMonnifyUnexpectedErrorCode(responseCode) &&
+    // Monnify's success code "0" on a rejected envelope is contradictory, so
+    // the outcome is ambiguous: never a definite refusal.
+    !/^\s*0+\s*$/.test(responseCode ?? '') &&
     !hasMonnifyNonDefinitiveCode(envelope) &&
     !reportsMonnifyUnexpectedError(JSON.stringify(envelope)) &&
     !hasMonnifyVendEvidence(envelope) &&

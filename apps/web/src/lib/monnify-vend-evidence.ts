@@ -43,6 +43,30 @@ function isVendReferenceKey(key: string): boolean {
   return REFERENCE_LIKE_KEY.test(key) && !ECHO_REFERENCE_PREFIX.test(key);
 }
 
+/**
+ * Baci's own request references are 24 lowercase hex characters
+ * (generateRequestRef). A top-level bare `reference` in that shape is our
+ * echo; any other value (e.g. "MFBP-1") is a provider-issued reference and
+ * fails closed.
+ */
+const OWN_REQUEST_REFERENCE = /^[0-9a-f]{24}$/i;
+
+function hasProviderTopLevelReference(
+  record: Record<string, unknown>
+): boolean {
+  return Object.entries(record).some(([rawKey, value]) => {
+    if (normaliseKey(rawKey) !== 'reference') {
+      return false;
+    }
+    return (
+      (typeof value === 'string' &&
+        value.trim() !== '' &&
+        !OWN_REQUEST_REFERENCE.test(value.trim())) ||
+      typeof value === 'number'
+    );
+  });
+}
+
 function isTopLevelEvidenceKey(key: string): boolean {
   return (
     isVendStatusKey(key) ||
@@ -61,7 +85,7 @@ const STATUS_KEY = normaliseKey('status');
  * DECLINED, UNKNOWN…) is read as the vend's own state and fails closed.
  */
 const HTTP_STATUS_LABEL =
-  /^(?:errors?|ok|bad request|unauthori[sz]ed|forbidden|not found|method not allowed|not acceptable|request timeout|conflict|unprocessable entity|too many requests|internal server error|bad gateway|service unavailable|gateway timeout|invalid request|validation error)$/i;
+  /^(?:errors?|ok|bad request|payment required|unauthori[sz]ed|forbidden|not found|method not allowed|not acceptable|request timeout|conflict|unprocessable entity|too many requests|internal server error|bad gateway|service unavailable|gateway timeout|invalid request|validation error)$/i;
 const MAX_NESTED_DEPTH = 6;
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -155,6 +179,7 @@ export function hasMonnifyVendEvidence(answer: unknown): boolean {
   }
   return (
     carriesVendField(record, isTopLevelEvidenceKey) ||
+    hasProviderTopLevelReference(record) ||
     Object.values(record).some((value) => nestedCarriesVendField(value, 1))
   );
 }

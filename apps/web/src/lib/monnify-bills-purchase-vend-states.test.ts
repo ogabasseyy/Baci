@@ -178,7 +178,7 @@ describe('bugfix: plain-text vend references in a business rejection', () => {
       400,
       'Bad Request',
       JSON.stringify({
-        reference: 'BACI-REF-123',
+        reference: '0123456789abcdef01234567',
         responseMessage: 'Insufficient wallet balance',
       })
     );

@@ -7,11 +7,11 @@ const CREDENTIAL_FIELD_VALUE =
   /\b((?:access[\s_-]*|bearer[\s_-]*|refresh[\s_-]*)?token|api[\s_-]*key|secret|password|authori[sz]ation|credentials?)(["']?\s*[:=]\s*["']?)(?!bearer\b|\[redacted\])[^\s"',;&]+/gi;
 /**
  * A credential label followed by its value with only whitespace between
- * ("API key sk_abc…", "Invalid token abcdef…"): 12+ token characters that are
- * not a status word.
+ * ("API key sk_abc…", "Invalid token abc123"): any value with a digit, or
+ * 12+ token characters, that is not a status word.
  */
 const CREDENTIAL_LABEL_VALUE =
-  /\b(api[\s_-]*key|(?:(?:access|bearer|refresh)[\s_-]*)?token|secret|password)(\s+)(?!(?:is|has|was|expired|revoked|invalid|missing|required)\b|\[redacted\])[\w.+/=-]{12,}/gi;
+  /\b(api[\s_-]*key|(?:(?:access|bearer|refresh)[\s_-]*)?token|secret|password)(\s+)(?!(?:is|has|was|expired|revoked|invalid|missing|required)\b|\[redacted\])(?:(?=[\w.+/=-]*\d)[\w.+/=-]{3,}|[\w.+/=-]{12,})/gi;
 /** Any long opaque value (24+ token characters with a digit): keys, hashes. */
 const LONG_OPAQUE_VALUE =
   /(?<![\w.+/=-])(?=[\w.+/=-]*\d)(?=[\w.+/=-]*[A-Za-z])[\w.+/=-]{24,}(?![\w.+/=-])/g;

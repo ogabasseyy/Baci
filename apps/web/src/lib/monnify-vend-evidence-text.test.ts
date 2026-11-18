@@ -39,6 +39,7 @@ describe('mentionsMonnifyVendEvidence', () => {
     'status=400',
     'status=Bad_Request&responseMessage=Insufficient wallet balance',
     'status=Internal-Server-Error',
+    'status=Payment_Required&message=Insufficient wallet balance',
     '',
     null,
   ])('sees no vend evidence in %s', (text) => {

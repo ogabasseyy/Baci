@@ -15,6 +15,8 @@ describe('mentionsMonnifyVendEvidence', () => {
     'order_id: 12345',
     'status=FAILED&responseMessage=Insufficient wallet balance',
     'status: pending',
+    'finalStatus=FAILED',
+    'Insufficient wallet balance; final_status: FAILED',
     'transactionStatus=FAILED&message=Insufficient wallet balance',
     'payment_status=FAILED',
     'receiptNumber=RCPT-1&message=Insufficient wallet balance',

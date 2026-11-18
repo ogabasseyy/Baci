@@ -38,7 +38,8 @@ export function hasMonnifyNonDefinitiveCode(
   return Object.entries(answer).some(([key, value]) => {
     const normalisedKey = key.replace(/[\s_-]/g, '').toLowerCase();
     return (
-      (RESPONSE_CODE_KEY.test(normalisedKey) && isNonDefinitiveValue(value)) ||
+      (RESPONSE_CODE_KEY.test(normalisedKey) &&
+        (Array.isArray(value) ? value : [value]).some(isNonDefinitiveValue)) ||
       hasMonnifyNonDefinitiveCode(value, depth + 1)
     );
   });

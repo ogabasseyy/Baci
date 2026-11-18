@@ -1,10 +1,16 @@
 /** "Bearer|Basic|Digest <value>" in a message or echoed header. */
 const AUTH_SCHEME_VALUE = /\b(bearer|basic|digest)\s+[^\s"',;&]+/gi;
+/**
+ * An echoed Authorization header with any scheme ("Authorization: Token abc",
+ * "Authorization: ApiKey …"): the value after the scheme is hidden.
+ */
+const AUTHORIZATION_HEADER_VALUE =
+  /\b(authori[sz]ation["']?\s*[:=]\s*["']?)([A-Za-z][\w-]*)\s+(?!\[redacted\])[^\s"',;&]+/gi;
 /** A JWT (three base64url parts, header starting "eyJ"). */
 const JWT = /\beyJ[\w-]+\.[\w-]+(?:\.[\w-]+)?/g;
 /** A credential-named field followed by its value: "access token: abc…". */
 const CREDENTIAL_FIELD_VALUE =
-  /\b((?:access[\s_-]*|bearer[\s_-]*|refresh[\s_-]*)?token|api[\s_-]*key|secret|password|authori[sz]ation|credentials?)(["']?\s*[:=]\s*["']?)(?!(?:bearer|basic|digest)\b|\[redacted\])[^\s"',;&]+/gi;
+  /\b((?:access[\s_-]*|bearer[\s_-]*|refresh[\s_-]*)?token|api[\s_-]*key|secret|password|authori[sz]ation|credentials?)(["']?\s*[:=]\s*["']?)(?!(?:bearer|basic|digest)\b|\[redacted\]|[A-Za-z][\w-]*\s+\[redacted\])[^\s"',;&]+/gi;
 /**
  * A credential label followed by its value with only whitespace between
  * ("API key sk_abc…", "Invalid token abc123"): any value with a digit, or
@@ -26,6 +32,7 @@ const LONG_OPAQUE_VALUE =
 export function redactMonnifyCredentials(text: string): string {
   return text
     .replace(AUTH_SCHEME_VALUE, '$1 [redacted]')
+    .replace(AUTHORIZATION_HEADER_VALUE, '$1$2 [redacted]')
     .replace(JWT, '[redacted]')
     .replace(CREDENTIAL_FIELD_VALUE, '$1$2[redacted]')
     .replace(CREDENTIAL_LABEL_VALUE, '$1$2[redacted]')

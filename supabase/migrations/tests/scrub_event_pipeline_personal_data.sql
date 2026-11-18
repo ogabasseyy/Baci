@@ -21,6 +21,9 @@ DECLARE
   v_old_queued uuid := '00000000-0000-4000-8000-00000000e104';
   v_late_routed uuid := '00000000-0000-4000-8000-00000000e1f1';
   v_queued_open uuid := '00000000-0000-4000-8000-00000000e1f2';
+  v_msg_queued_open bigint;
+  v_msg_old_queued bigint;
+  v_msg_archived bigint;
   v_id uuid;
   v_status text;
   v_age interval;
@@ -45,16 +48,19 @@ BEGIN
 
   -- A 100 day old queued row that still has open delivery work: live work is
   -- never scrubbed, in the ledger or in the queue copy.
+  SELECT sent.msg_id INTO v_msg_queued_open
+  FROM pgmq.send('domain_events', v_pii) AS sent(msg_id);
+  UPDATE pgmq.q_domain_events
+  SET enqueued_at = now() - interval '100 days'
+  WHERE msg_id = v_msg_queued_open;
   INSERT INTO public.domain_event_ledger (
     domain_event_id, producer, trust_level, idempotency_key, event_name,
     subject_type, subject_id, envelope, status, created_at, queue_message_id
   ) VALUES (
     v_queued_open, 'sql-retention', 'server', 'retention-' || v_queued_open::text,
     'analytics.add_to_cart.v1', 'event', v_queued_open::text, v_pii, 'queued',
-    now() - interval '100 days', 9302003
+    now() - interval '100 days', v_msg_queued_open
   );
-  INSERT INTO pgmq.q_domain_events (msg_id, enqueued_at, vt, message)
-  VALUES (9302003, now() - interval '100 days', now(), v_pii);
   INSERT INTO public.event_deliveries (
     domain_event_id, destination, status, payload, created_at
   ) VALUES (v_queued_open, 'facebook', 'pending', v_pii, now() - interval '100 days');
@@ -80,19 +86,27 @@ BEGIN
     (9301002, v_pii, 'bad', 'recent failure', now() - interval '5 days', now() - interval '5 days');
 
   -- A ledger row still queued after the whole period, with no deliveries.
+  SELECT sent.msg_id INTO v_msg_old_queued
+  FROM pgmq.send('domain_events', v_pii) AS sent(msg_id);
+  UPDATE pgmq.q_domain_events
+  SET enqueued_at = now() - interval '100 days'
+  WHERE msg_id = v_msg_old_queued;
   INSERT INTO public.domain_event_ledger (
     domain_event_id, producer, trust_level, idempotency_key, event_name,
     subject_type, subject_id, envelope, status, created_at, queue_message_id
   ) VALUES (
     v_old_queued, 'sql-retention', 'server', 'retention-' || v_old_queued::text,
     'analytics.add_to_cart.v1', 'event', v_old_queued::text, v_pii, 'queued',
-    now() - interval '100 days', 9302001
+    now() - interval '100 days', v_msg_old_queued
   );
-  INSERT INTO pgmq.q_domain_events (msg_id, enqueued_at, vt, message)
-  VALUES (9302001, now() - interval '100 days', now(), v_pii);
   -- Archived late (recent archived_at) but the event itself is 100 days old.
-  INSERT INTO pgmq.a_domain_events (msg_id, enqueued_at, archived_at, message)
-  VALUES (9302002, now() - interval '100 days', now() - interval '1 day', v_pii);
+  SELECT sent.msg_id INTO v_msg_archived
+  FROM pgmq.send('domain_events', v_pii) AS sent(msg_id);
+  PERFORM pgmq.archive('domain_events', v_msg_archived);
+  UPDATE pgmq.a_domain_events
+  SET enqueued_at = now() - interval '100 days',
+      archived_at = now() - interval '1 day'
+  WHERE msg_id = v_msg_archived;
 
   -- Failure first seen long ago but failing again recently: kept.
   INSERT INTO public.domain_event_failures (
@@ -151,11 +165,11 @@ BEGIN
        #> '{data,delivery_user_data,ip}' IS NOT NULL THEN
     RAISE EXCEPTION 'old queued ledger row kept personal data';
   END IF;
-  IF (SELECT message FROM pgmq.q_domain_events WHERE msg_id = 9302001)
+  IF (SELECT message FROM pgmq.q_domain_events WHERE msg_id = v_msg_old_queued)
        #> '{data,delivery_user_data,ip}' IS NOT NULL THEN
     RAISE EXCEPTION 'old queue message copy kept personal data';
   END IF;
-  IF (SELECT message FROM pgmq.a_domain_events WHERE msg_id = 9302002)
+  IF (SELECT message FROM pgmq.a_domain_events WHERE msg_id = v_msg_archived)
        #> '{data,delivery_user_data,ip}' IS NOT NULL THEN
     RAISE EXCEPTION 'late-archived envelope kept personal data';
   END IF;
@@ -191,7 +205,7 @@ BEGIN
 
   IF (SELECT envelope FROM public.domain_event_ledger WHERE domain_event_id = v_queued_open)
        #> '{data,delivery_user_data,ip}' IS NULL
-     OR (SELECT message FROM pgmq.q_domain_events WHERE msg_id = 9302003)
+     OR (SELECT message FROM pgmq.q_domain_events WHERE msg_id = v_msg_queued_open)
        #> '{data,delivery_user_data,ip}' IS NULL THEN
     RAISE EXCEPTION 'queued row with open delivery work lost its personal data';
   END IF;

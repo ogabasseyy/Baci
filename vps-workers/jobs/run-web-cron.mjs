@@ -124,7 +124,9 @@ function isIdleCacheInvalidationResponse({ pathname, status, bodyPayload }) {
     status === 200 &&
     bodyPayload !== null &&
     bodyPayload.claimed === 0 &&
-    !bodyPayload.deadLettersPresent
+    bodyPayload.completed === 0 &&
+    bodyPayload.failed === 0 &&
+    bodyPayload.deadLettersPresent === false
   );
 }
 
@@ -238,6 +240,9 @@ export async function runWebCron({
     );
   }
 
+  // run-cache-invalidation-cron.mjs atomically updates state/cache-invalidations.json
+  // (nextAllowedAt) on every 2-minute sweep, preserving scheduler liveness
+  // observability without writing 21,600 idle stdout lines/month.
   if (
     !isIdleCacheInvalidationResponse({
       pathname,

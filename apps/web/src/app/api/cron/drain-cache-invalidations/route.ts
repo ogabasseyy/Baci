@@ -27,26 +27,11 @@ export async function GET(request: Request): Promise<NextResponse> {
   // covers every outbox row that shares that causal identity. Later claim
   // batches must finish siblings without repeating provider work.
   const completedCausalKeys = new Set<string>();
-  const readDeadLetters = () =>
-    supabase.rpc('has_cache_invalidation_dead_letters');
-  let initialDeadLetterResult:
-    | Awaited<ReturnType<typeof readDeadLetters>>
-    | undefined;
   while (claimed < TARGET_BUDGET && Date.now() - startedAt < CLAIM_CUTOFF_MS) {
-    const claimCall = supabase.rpc('claim_cache_invalidations', {
+    const { data, error } = await supabase.rpc('claim_cache_invalidations', {
       p_batch_size: Math.min(BATCH_SIZE, TARGET_BUDGET - claimed),
       p_worker_id: workerId,
     });
-    const { data, error } = initialDeadLetterResult
-      ? await claimCall
-      : await (async () => {
-          const [claimResult, deadLetterSnapshot] = await Promise.all([
-            claimCall,
-            readDeadLetters(),
-          ]);
-          initialDeadLetterResult = deadLetterSnapshot;
-          return claimResult;
-        })();
     if (error) {
       return NextResponse.json(
         { error: 'Failed to claim invalidations' },
@@ -115,12 +100,9 @@ export async function GET(request: Request): Promise<NextResponse> {
     }
   }
 
-  // Only a failed finish_cache_invalidation call in this invocation can move a
-  // row to dead_letter after the initial concurrent snapshot.
-  const deadLetterResult =
-    failed > 0 || !initialDeadLetterResult
-      ? await readDeadLetters()
-      : initialDeadLetterResult;
+  const deadLetterResult = await supabase.rpc(
+    'has_cache_invalidation_dead_letters'
+  );
   const deadLetters =
     cacheInvalidationDrainCronResponseSchemas.deadLetters.safeParse(
       deadLetterResult.data

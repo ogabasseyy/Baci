@@ -91,6 +91,7 @@ export default function runPlayerFlow() {
       nickname: `bot_${playerSeq}`,
       carrier,
       roomId,
+      inviteCode: k6Env.DEMO_INVITE_CODE || '',
       isBot: true,
     }),
     { headers: { 'Content-Type': 'application/json' } }
@@ -166,14 +167,21 @@ export default function runPlayerFlow() {
     http.post(
       `${BASE_URL}/api/demo/telemetry`,
       JSON.stringify({
-        eventId: EVENT_ID,
+        eventId: activeEventId,
+        attemptId: attempt.attemptId,
+        questionIndex: question.index,
         carrier,
-        tapToAckMs: ackMs,
+        tapToAckMs: Math.max(1, ackMs),
         retries: ROUND === 3 && (playerSeq + question.index) % 67 === 0 ? 1 : 0,
         timedOut: !ok,
         isBot: true,
       }),
-      { headers: { 'Content-Type': 'application/json' } }
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Baci-Quiz-Ticket': ticket,
+        },
+      }
     );
 
     attempt = ansRes.json();

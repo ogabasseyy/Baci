@@ -252,4 +252,68 @@ describe('getStorefrontProductCanonicalRedirectResult', () => {
       redirectPath: '/smartphones/google-pixel-6-pro',
     });
   });
+
+  it('re-verifies with a fresh RPC before emitting 308 when a memoized row mismatches the requested category', async () => {
+    const rpcImpl = vi
+      .fn()
+      .mockResolvedValueOnce({
+        data: [
+          makeStorefrontPdpPreflightRow({
+            match_kind: 'active',
+            product_id: 'prod-1',
+            product_name: 'iPhone 15',
+            product_slug: 'iphone-15',
+            category_slug: 'smartphones',
+          }),
+        ],
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: [
+          makeStorefrontPdpPreflightRow({
+            match_kind: 'active',
+            product_id: 'prod-1',
+            product_name: 'iPhone 15',
+            product_slug: 'iphone-15',
+            category_slug: 'mobile-phones',
+          }),
+        ],
+        error: null,
+      });
+
+    // Prime the 60s memo with /smartphones/iphone-15.
+    await expect(
+      getStorefrontProductCanonicalRedirectResult({
+        ...BASE,
+        identifier: 'ogabassey.com',
+        category: 'smartphones',
+        productSlug: 'iphone-15',
+        rpcImpl,
+      })
+    ).resolves.toEqual({ kind: 'checked-no-redirect' });
+
+    // Repeat hit on /smartphones/iphone-15 uses the memo (no second RPC).
+    await expect(
+      getStorefrontProductCanonicalRedirectResult({
+        ...BASE,
+        identifier: 'ogabassey.com',
+        category: 'smartphones',
+        productSlug: 'iphone-15',
+        rpcImpl,
+      })
+    ).resolves.toEqual({ kind: 'checked-no-redirect' });
+    expect(rpcImpl).toHaveBeenCalledTimes(1);
+
+    // Product moved to /mobile-phones/iphone-15: must NOT emit stale 308 to /smartphones/iphone-15.
+    await expect(
+      getStorefrontProductCanonicalRedirectResult({
+        ...BASE,
+        identifier: 'ogabassey.com',
+        category: 'mobile-phones',
+        productSlug: 'iphone-15',
+        rpcImpl,
+      })
+    ).resolves.toEqual({ kind: 'checked-no-redirect' });
+    expect(rpcImpl).toHaveBeenCalledTimes(2);
+  });
 });

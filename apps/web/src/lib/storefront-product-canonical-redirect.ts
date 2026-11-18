@@ -100,7 +100,7 @@ export async function getStorefrontProductCanonicalRedirectResult(
     return { kind: 'unknown' };
   }
 
-  const result = await callStorefrontPreflightRpc(
+  let result = await callStorefrontPreflightRpc(
     STOREFRONT_PDP_PREFLIGHT_RPC,
     { p_identifier: opts.identifier, p_product_slug: opts.productSlug },
     {
@@ -113,6 +113,69 @@ export async function getStorefrontProductCanonicalRedirectResult(
     return { kind: 'unknown' };
   }
 
+  let verdict = parseCanonicalVerdict(result, failOpenContext);
+  if (!verdict) {
+    return { kind: 'unknown' };
+  }
+
+  let targetPath = buildCanonicalTargetPath(verdict);
+  const requestedPath = `/${opts.category}/${opts.productSlug}`;
+  if (
+    normalizeStorefrontPdpPathForCompare(targetPath) ===
+    normalizeStorefrontPdpPathForCompare(requestedPath)
+  ) {
+    return { kind: 'checked-no-redirect' };
+  }
+
+  // Never emit a permanent 308 from a cached memo entry: if the product's
+  // category changed within the memo TTL, re-verify with a fresh RPC first.
+  if (result.attempt === null) {
+    result = await callStorefrontPreflightRpc(
+      STOREFRONT_PDP_PREFLIGHT_RPC,
+      { p_identifier: opts.identifier, p_product_slug: opts.productSlug },
+      {
+        failOpenContext,
+        rpcImpl: opts.rpcImpl,
+        timeoutMs: opts.timeoutMs ?? PRODUCT_CANONICAL_DEFAULT_TIMEOUT_MS,
+        bypassMemo: true,
+      }
+    );
+    if (result === null) {
+      return { kind: 'unknown' };
+    }
+    verdict = parseCanonicalVerdict(result, failOpenContext);
+    if (!verdict) {
+      return { kind: 'unknown' };
+    }
+    targetPath = buildCanonicalTargetPath(verdict);
+    if (
+      normalizeStorefrontPdpPathForCompare(targetPath) ===
+      normalizeStorefrontPdpPathForCompare(requestedPath)
+    ) {
+      return { kind: 'checked-no-redirect' };
+    }
+  }
+
+  const redirectPath = toSafeInternalRedirectPath(targetPath);
+  if (!redirectPath) {
+    storefrontInternalPreflight.warnFailOpen({
+      ...failOpenContext,
+      reason: 'unsafe-redirect',
+    });
+    return { kind: 'unknown' };
+  }
+
+  return { kind: 'redirect', redirectPath };
+}
+
+function parseCanonicalVerdict(
+  result: NonNullable<Awaited<ReturnType<typeof callStorefrontPreflightRpc>>>,
+  failOpenContext: {
+    surface: 'product-canonical';
+    identifier: string;
+    slug: string;
+  }
+) {
   const parsed = storefrontPdpPreflightRowSchema.safeParse(result.data);
   if (!parsed.success) {
     if (result.attempt) {
@@ -127,7 +190,7 @@ export async function getStorefrontProductCanonicalRedirectResult(
         reason: 'parse',
       });
     }
-    return { kind: 'unknown' };
+    return null;
   }
   const verdict = parsed.data;
 
@@ -138,7 +201,7 @@ export async function getStorefrontProductCanonicalRedirectResult(
       result.attempt
     )
   ) {
-    return { kind: 'unknown' };
+    return null;
   }
 
   // No active product or live alias matched this slug: NOT a hard-404 verdict
@@ -149,12 +212,18 @@ export async function getStorefrontProductCanonicalRedirectResult(
     !verdict.product_id ||
     !verdict.product_name
   ) {
-    return { kind: 'unknown' };
+    return null;
   }
 
-  const targetPath = buildStorefrontPdpCanonicalPath({
-    id: verdict.product_id,
-    name: verdict.product_name,
+  return verdict;
+}
+
+function buildCanonicalTargetPath(
+  verdict: NonNullable<ReturnType<typeof parseCanonicalVerdict>>
+): string {
+  return buildStorefrontPdpCanonicalPath({
+    id: verdict.product_id as string,
+    name: verdict.product_name as string,
     slug: verdict.product_slug,
     category: verdict.product_category,
     categories: verdict.category_slug
@@ -164,25 +233,6 @@ export async function getStorefrontProductCanonicalRedirectResult(
         }
       : null,
   });
-
-  const requestedPath = `/${opts.category}/${opts.productSlug}`;
-  if (
-    normalizeStorefrontPdpPathForCompare(targetPath) ===
-    normalizeStorefrontPdpPathForCompare(requestedPath)
-  ) {
-    return { kind: 'checked-no-redirect' };
-  }
-
-  const redirectPath = toSafeInternalRedirectPath(targetPath);
-  if (!redirectPath) {
-    storefrontInternalPreflight.warnFailOpen({
-      ...failOpenContext,
-      reason: 'unsafe-redirect',
-    });
-    return { kind: 'unknown' };
-  }
-
-  return { kind: 'redirect', redirectPath };
 }
 
 /**

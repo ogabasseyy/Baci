@@ -34,7 +34,7 @@ import type { Product } from '../types';
 import { getDeliveryEstimate as formatDeliveryEstimate } from './product-details-page/product-delivery-estimate';
 import { getProductSuggestionRank } from './product-details-page/get-product-suggestion-rank';
 import { useDeliveryToday } from './product-details-page/use-delivery-today';
-import { isImeComposing } from '@/lib/is-ime-composing';
+import { runOnEnter } from '@/lib/run-on-enter';
 
 // Fallback Mock data if product is not found
 const FALLBACK_PRODUCT = {
@@ -330,14 +330,7 @@ export const OgabasseyV2ProductDetails: React.FC<
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      if (isImeComposing(e)) {
-        // Cancel the composing Enter so a surrounding form cannot submit.
-        e.preventDefault();
-        return;
-      }
-      (e.target as HTMLInputElement).blur();
-    }
+    runOnEnter(e, () => (e.target as HTMLInputElement).blur());
   };
 
   const handleColorSelection = (idx: number) => {

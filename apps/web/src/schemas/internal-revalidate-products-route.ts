@@ -43,6 +43,10 @@ export const internalRevalidateProductEntrySchema = z
       blankAsNull,
       z.string().trim().max(255).nullable().optional()
     ),
+    previousSlug: z.preprocess(
+      blankAsNull,
+      z.string().trim().min(1).max(300).nullable().optional()
+    ),
   })
   .refine((value) => Boolean(value.slug || value.id), {
     message: 'Each product requires a slug or id',

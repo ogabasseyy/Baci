@@ -26,6 +26,7 @@ export function hasCompleteScopedProductSlugs(
 
   for (const product of products) {
     const callerSlug = product.slug?.trim();
+    const previousSlug = product.previousSlug?.trim();
     const productId = product.id?.trim();
     if (!productId) {
       return false;
@@ -35,6 +36,10 @@ export function hasCompleteScopedProductSlugs(
       callerSlug &&
       (!entrySlugSet.has(callerSlug) || !resolvedSet.has(callerSlug))
     ) {
+      return false;
+    }
+
+    if (previousSlug && !resolvedSet.has(previousSlug)) {
       return false;
     }
 

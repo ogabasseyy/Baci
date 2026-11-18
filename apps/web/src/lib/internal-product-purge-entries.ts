@@ -90,6 +90,10 @@ export function collectResolvedProductSlugs(
     if (callerSlug) {
       slugs.add(callerSlug);
     }
+    const previousSlug = product.previousSlug?.trim();
+    if (previousSlug) {
+      slugs.add(previousSlug);
+    }
     if (id) {
       slugs.add(id);
     }

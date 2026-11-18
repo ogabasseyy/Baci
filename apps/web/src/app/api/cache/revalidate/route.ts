@@ -124,19 +124,15 @@ export async function POST(request: NextRequest) {
     targets.includes('all') || targets.includes(target as (typeof targets)[0]);
 
   if (shouldRevalidate('products')) {
-    revalidateProducts(merchantId);
     revalidated.push('products');
 
-    // Also evict the affected products' public URLs from Cloudflare when the
-    // caller supplies them. The merchant slug is resolved server-side from the
-    // authenticated merchant (never trusted from the client), so a caller can
-    // only purge its own storefront. Fire-and-forget: a purge is always
-    // survivable, so it never fails the revalidation.
+    // Evict affected products' public URLs from Cloudflare when supplied.
+    // Merchant slug is resolved server-side (never trusted from the client).
+    // Fire-and-forget: a purge failure never fails the revalidation.
     if (products && products.length > 0) {
       try {
         // Resolve authoritative purge entries and per-slug tags before
-        // scheduling the Cloudflare purge. Only the edge purge depends on the
-        // merchant slug lookup below.
+        // scheduling the Cloudflare purge.
         const {
           entries,
           resolvedSlugs,
@@ -178,9 +174,6 @@ export async function POST(request: NextRequest) {
             .eq('id', merchantId)
             .maybeSingle();
         if (merchantLookupError) {
-          // Fail-open: log for observability but continue with whatever data
-          // came back — a stale storefront cache self-heals on its TTL, so a
-          // failed purge must never fail the revalidation.
           console.error(
             'Failed to resolve merchant slug for Cloudflare product purge (continuing with available data):',
             { merchantId, error: merchantLookupError }
@@ -188,13 +181,7 @@ export async function POST(request: NextRequest) {
         }
         const merchantSlug = merchantRow?.slug ?? null;
         if (merchantSlug && originHardExpired) {
-          // The shared scheduler switches to a bounded hostname purge above its
-          // distinct-entry threshold, so it still evicts every affected PDP.
           if (blogPostSlugsIncomplete) {
-            // The article set may be incomplete (lookup failed, partially
-            // failed, or ran without authoritative inputs): evict the
-            // hostname (a superset of the product purge) rather than
-            // leaving linked rails stale until TTL.
             scheduleStorefrontHostnamePurge(merchantSlug);
           } else if (blogPostSlugs.length > 0) {
             scheduleStorefrontProductPurge(merchantSlug, entries, {
@@ -205,11 +192,14 @@ export async function POST(request: NextRequest) {
           }
         }
       } catch (purgeError) {
+        revalidateProducts(merchantId);
         console.error('Skipped Cloudflare product purge in cache/revalidate:', {
           merchantId,
           purgeError,
         });
       }
+    } else {
+      revalidateProducts(merchantId);
     }
   }
 

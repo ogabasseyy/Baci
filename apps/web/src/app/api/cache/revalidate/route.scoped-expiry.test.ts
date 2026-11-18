@@ -171,10 +171,8 @@ describe('POST /api/cache/revalidate scoped PDP hard-expiry', () => {
     );
 
     expect(response.status).toBe(200);
-    expect(mockRevalidateProducts).toHaveBeenCalledTimes(2);
-    expect(mockRevalidateProducts).toHaveBeenNthCalledWith(1, MERCHANT_ID);
-    expect(mockRevalidateProducts).toHaveBeenNthCalledWith(
-      2,
+    expect(mockRevalidateProducts).toHaveBeenCalledTimes(1);
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
       MERCHANT_ID,
       undefined,
       { expireImmediately: true, omitMerchantWidePdpDetails: true }
@@ -190,7 +188,7 @@ describe('POST /api/cache/revalidate scoped PDP hard-expiry', () => {
   });
 
   it('skips Cloudflare edge purge when origin hard expiry returns false', async () => {
-    mockRevalidateProducts.mockReturnValueOnce(true).mockReturnValueOnce(false);
+    mockRevalidateProducts.mockReturnValueOnce(false);
     mockEnrich.mockResolvedValue({
       entries: [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
       resolvedSlugs: ['iphone-15'],

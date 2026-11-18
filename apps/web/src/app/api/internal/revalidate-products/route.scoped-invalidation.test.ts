@@ -206,4 +206,36 @@ describe('POST /api/internal/revalidate-products scoped PDP invalidation', () =>
       { expireImmediately: true }
     );
   });
+
+  it('falls back to broad invalidation on legacy renames (caller slug != authoritative slug) while busting both slugs', async () => {
+    mockEnrichProductPurgeEntries.mockResolvedValueOnce({
+      entries: [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
+      resolvedSlugs: ['iphone-16', 'iphone-15', 'prod-1'],
+      authoritativeSlugsById: new Map([['prod-1', 'iphone-16']]),
+      blogPostSlugs: [],
+      blogPostSlugsIncomplete: false,
+    });
+
+    const res = await POST(
+      makeRequest({
+        merchantId: MERCHANT_ID,
+        merchantSlug: 'ogabassey',
+        productSlugs: ['iphone-16'],
+        omitMerchantWidePdpDetails: true,
+        products: [{ id: 'prod-1', slug: 'iphone-15' }],
+      })
+    );
+
+    expect(res.status).toBe(200);
+    expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
+      MERCHANT_ID,
+      ['iphone-16', 'iphone-15', 'prod-1'],
+      { expireImmediately: true }
+    );
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      MERCHANT_ID,
+      undefined,
+      { expireImmediately: true }
+    );
+  });
 });

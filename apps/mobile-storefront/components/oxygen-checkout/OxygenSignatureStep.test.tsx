@@ -54,8 +54,14 @@ describe('signature consent binding', () => {
         onContinue={jest.fn()}
       />
     );
-    fireEvent.press(view.getByRole('button', { name: 'Expand signature' }));
-    fireEvent.press(view.getByRole('button', { name: 'Collapse signature' }));
+    const expand = view.getByRole('button', { name: 'Expand signature' });
+    expect(expand).toHaveStyle({ position: 'absolute', top: 6, right: 6 });
+    expect(view.queryByText('Expand signature')).toBeNull();
+    expect(expand).toHaveAccessibilityState({ expanded: false });
+    fireEvent.press(expand);
+    const collapse = view.getByRole('button', { name: 'Collapse signature' });
+    expect(collapse).toHaveAccessibilityState({ expanded: true });
+    fireEvent.press(collapse);
     expect(onSignature).not.toHaveBeenCalled();
   });
   it('captures PNG consent once after actual strokes and ignores capture after changed terms', () => {

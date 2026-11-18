@@ -160,48 +160,70 @@ function SignatureCanvas({
       <Text style={{ color: colors.textSecondary, lineHeight: 21 }}>
         Sign in the box, then confirm the payment plan to continue.
       </Text>
-      <View
-        accessibilityLabel="Draw your signature"
-        style={{
-          height: expanded ? 300 : 150,
-          borderColor: colors.border,
-          borderWidth: 1,
-          borderRadius: 12,
-          overflow: 'hidden',
-        }}
-        onLayout={(event) => {
-          const { width, height } = event.nativeEvent.layout;
-          if (width > 0 && height > 0) layout.current = { width, height };
-        }}
-        {...responder.panHandlers}
-      >
-        <Svg
-          ref={svg}
-          width="100%"
-          height="100%"
-          viewBox="0 0 300 150"
-          preserveAspectRatio="none"
+      <View>
+        <View
+          accessibilityLabel="Draw your signature"
+          style={{
+            height: expanded ? 300 : 150,
+            borderColor: colors.border,
+            borderWidth: 1,
+            borderRadius: 12,
+            overflow: 'hidden',
+          }}
+          onLayout={(event) => {
+            const { width, height } = event.nativeEvent.layout;
+            if (width > 0 && height > 0) layout.current = { width, height };
+          }}
+          {...responder.panHandlers}
         >
-          <Rect width={300} height={150} fill={colors.card} />
-          {paths.map(({ path, id }) => (
-            <Path
-              key={id}
-              d={path}
-              stroke={colors.text}
-              strokeWidth={2}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              fill="none"
-            />
-          ))}
-        </Svg>
+          <Svg
+            ref={svg}
+            width="100%"
+            height="100%"
+            viewBox="0 0 300 150"
+            preserveAspectRatio="none"
+          >
+            <Rect width={300} height={150} fill={colors.card} />
+            {paths.map(({ path, id }) => (
+              <Path
+                key={id}
+                d={path}
+                stroke={colors.text}
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                fill="none"
+              />
+            ))}
+          </Svg>
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={
+            expanded ? 'Collapse signature' : 'Expand signature'
+          }
+          accessibilityState={{ expanded, disabled: disabled || saving }}
+          disabled={disabled || saving}
+          onPress={() => setExpanded((wasExpanded) => !wasExpanded)}
+          style={{
+            position: 'absolute',
+            top: 6,
+            right: 6,
+            width: 44,
+            height: 44,
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: 10,
+            backgroundColor: colors.card,
+          }}
+        >
+          <Ionicons
+            name={expanded ? 'contract-outline' : 'expand-outline'}
+            size={20}
+            color={colors.textSecondary}
+          />
+        </Pressable>
       </View>
-      <OxygenAction
-        secondary
-        label={expanded ? 'Collapse signature' : 'Expand signature'}
-        disabled={disabled || saving}
-        onPress={() => setExpanded(!expanded)}
-      />
       <OxygenAction
         secondary
         label="Clear signature"

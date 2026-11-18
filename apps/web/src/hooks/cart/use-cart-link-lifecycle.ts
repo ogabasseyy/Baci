@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import {
   shouldSkipEmptyGuestCartFetch,
   stampSkippedEmptyGuestCartHint,
@@ -64,6 +64,7 @@ export function useCartLinkLifecycle(
     hydrateMissing,
     refreshNow,
   } = context;
+  const previousSessionGenerationRef = useRef(sessionGeneration);
 
   // Seed the cache, then adopt under a fenced session generation.
   // biome-ignore lint/correctness/useExhaustiveDependencies: hydrateMissing closes over refs and stable dispatch only; listing it would relink every render.
@@ -78,6 +79,9 @@ export function useCartLinkLifecycle(
       setLinkPhase('ready');
       return;
     }
+    const sessionTransitioned =
+      previousSessionGenerationRef.current !== sessionGeneration;
+    previousSessionGenerationRef.current = sessionGeneration;
     const generation = sessionGeneration;
     let cancelled = false;
     let adoptRun = 0;
@@ -157,6 +161,7 @@ export function useCartLinkLifecycle(
         return;
       }
       if (
+        !sessionTransitioned &&
         shouldSkipEmptyGuestCartFetch({
           merchantId,
           merchantSlug,

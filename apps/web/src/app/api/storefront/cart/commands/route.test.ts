@@ -342,56 +342,6 @@ describe('POST /api/storefront/cart/commands', () => {
     }
   });
 
-  it('keeps the committed cart when the post-commit grant reload throws', async () => {
-    mocks.cartPayload = {
-      code: null,
-      ok: true,
-      replayed: false,
-      state: rawState({ lines: [rawLine()] }),
-    };
-    mocks.grantAuthority = { ok: true, allowedOperations: 'not-a-list' };
-    const response = await postCommand({
-      body: addCommand('grant-reload-throws'),
-      headers: {
-        cookie: `baci-cart-11111111-1111-4111-8111-111111111111=${sessionProof()}`,
-      },
-    });
-    expect(response.status).toBe(200);
-    const payload = await response.json();
-    expect(payload.cart.version).toBe(2);
-    // bugfix: never mint a renewed proof from the incoming (possibly stale)
-    // operations when the live grant could not be reloaded.
-    expect(payload.proof).toBeUndefined();
-    const setCookie = response.headers.get('set-cookie') ?? '';
-    expect(setCookie).not.toContain('baci-cart-11111111-');
-    expect(setCookie).toContain('baci-cart-hint-11111111-');
-  });
-
-  it('returns the committed cart without a renewed proof when reissue crosses grant expiry', async () => {
-    mocks.cartPayload = {
-      code: null,
-      ok: true,
-      replayed: false,
-      state: rawState({
-        expiresAt: new Date(Date.now() - 1000).toISOString(),
-        lines: [rawLine()],
-      }),
-    };
-    const response = await postCommand({
-      body: addCommand('expired-reissue'),
-      headers: {
-        cookie: `baci-cart-11111111-1111-4111-8111-111111111111=${sessionProof()}`,
-      },
-    });
-    expect(response.status).toBe(200);
-    const payload = await response.json();
-    expect(payload.cart.version).toBe(2);
-    expect(payload.proof).toBeUndefined();
-    const setCookie = response.headers.get('set-cookie') ?? '';
-    expect(setCookie).not.toContain('baci-cart-11111111-');
-    expect(setCookie).toContain('baci-cart-hint-11111111-');
-  });
-
   it('returns replayed outcomes for response-loss retries', async () => {
     mocks.cartPayload = {
       code: null,

@@ -9,16 +9,17 @@ const mockNot = vi.fn();
 const mockOrder = vi.fn();
 const mockGetPlatformBlogSitemapPosts = vi.fn();
 
-vi.mock('next/headers', () => ({
-  cookies: () => mockCookies(),
-  headers: () => mockHeaders(),
+vi.mock('next/cache', () => ({
+  cacheLife: vi.fn(),
+  cacheTag: vi.fn(),
 }));
 
-vi.mock('@/lib/supabase/server', () => ({
-  createClient: (...args: unknown[]) => mockCreateClient(...args),
+vi.mock('@/lib/supabase/anon', () => ({
+  createAnonClient: (...args: unknown[]) => mockCreateClient(...args),
 }));
 
 vi.mock('@/lib/platform-blog', () => ({
+  PLATFORM_BLOG_SITEMAP_CACHE_TAG: 'platform-blog-sitemap',
   getPlatformBlogSitemapPosts: (...args: unknown[]) =>
     mockGetPlatformBlogSitemapPosts(...args),
 }));
@@ -147,6 +148,45 @@ describe('root sitemap', () => {
       expect(urls).not.toContain('https://usebaci.com/ogabassey');
       expect(urls).not.toContain('https://usebaci.com/blog/launch-faster');
       expect(errorSpy).toHaveBeenCalled();
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it('preserves merchant entries when blog sitemap lookup fails', async () => {
+    const errorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    try {
+      mockGetPlatformBlogSitemapPosts.mockRejectedValueOnce(
+        new Error('blog failure')
+      );
+
+      const { default: sitemap } = await import('./sitemap');
+      const urls = (await sitemap()).map((entry) => entry.url);
+
+      expect(urls).toContain('https://usebaci.com/ogabassey');
+      expect(urls).not.toContain('https://usebaci.com/blog/launch-faster');
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it('preserves blog entries when merchant sitemap lookup fails', async () => {
+    const errorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    try {
+      mockOrder.mockResolvedValue({
+        data: [],
+        error: new Error('db failure'),
+      });
+
+      const { default: sitemap } = await import('./sitemap');
+      const urls = (await sitemap()).map((entry) => entry.url);
+
+      expect(urls).toContain('https://usebaci.com/blog/launch-faster');
+      expect(urls).not.toContain('https://usebaci.com/ogabassey');
     } finally {
       errorSpy.mockRestore();
     }

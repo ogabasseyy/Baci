@@ -47,6 +47,25 @@ describe('runBankTransferContribution', () => {
     mockAddSavings.mockResolvedValue({ goalStatus: 'active' });
   });
 
+  describe('bugfix: a legacy-wallet customer at a PiggyVest merchant was sent to the primary rail', () => {
+    it('starts a fresh payment on legacy when the customer has a legacy wallet', async () => {
+      mockIsPrimary.mockReturnValue(true);
+      const input = await run({ primaryRail: false });
+      expect(mockAddSavings).toHaveBeenCalled();
+      expect(mockAddPrimary).not.toHaveBeenCalled();
+      expect(input.setInitialContributionRail).toHaveBeenCalledWith(
+        'fresh-op',
+        'legacy'
+      );
+    });
+
+    it('still lets the merchant decide while the verdict is unknown', async () => {
+      mockIsPrimary.mockReturnValue(true);
+      await run();
+      expect(mockAddPrimary).toHaveBeenCalled();
+    });
+  });
+
   it('records the rail with a freshly minted id', async () => {
     const input = await run();
     expect(input.setInitialContributionIdempotencyKey).toHaveBeenCalledWith(

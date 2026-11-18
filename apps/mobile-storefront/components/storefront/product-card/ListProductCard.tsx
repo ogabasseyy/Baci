@@ -12,6 +12,7 @@ const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 export default function ListProductCard({
   product,
+  priceColor = BRAND.primary,
   imageSource,
   imageProps,
   showLocalPlaceholder,
@@ -97,7 +98,7 @@ export default function ListProductCard({
         )}
 
         <View style={styles.listFooter}>
-          <Text style={[styles.listPrice, { color: BRAND.primary }]}>
+          <Text style={[styles.listPrice, { color: priceColor }]}>
             {formatSearchCardPrice(product)}
           </Text>
           <Pressable

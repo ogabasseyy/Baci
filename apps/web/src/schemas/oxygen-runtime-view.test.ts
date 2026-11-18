@@ -42,3 +42,20 @@ it('rejects identity secrets, activation or settlement claims and invalid state'
     oxygenRuntimeSnapshotSchema.safeParse({ ...snapshot, version: -1 }).success
   ).toBe(false);
 });
+
+it('rejects a public mismatch reason alongside a pending or declined result', () => {
+  for (const state of [
+    { eligibilityStatus: 'pending' },
+    { eligibilityStatus: 'failed', eligible: false },
+  ]) {
+    expect(
+      oxygenRuntimeSnapshotSchema.safeParse({
+        ...snapshot,
+        state: {
+          ...state,
+          eligibilityFailureReason: 'financial_details_mismatch',
+        },
+      }).success
+    ).toBe(false);
+  }
+});

@@ -32,5 +32,8 @@ export const chatwootCommerceContextVerifyRequestSchema = z
   .strict();
 
 export const chatwootCommerceSessionAuthorizeRequestSchema = z
-  .object({ sessionToken: z.string().min(1).max(12_000) })
+  .object({
+    sessionToken: z.string().min(1).max(12_000),
+    includeCartSnapshot: z.boolean().optional(),
+  })
   .strict();

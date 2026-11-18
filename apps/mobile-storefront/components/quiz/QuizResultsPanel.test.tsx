@@ -93,6 +93,7 @@ describe('QuizResultsPanel', () => {
         legacyResult={null}
         lifecycle="pending_results"
         serverNow={new Date(0).toISOString()}
+        submittedAt={new Date(0).toISOString()}
         styles={createQuizStyles(colors)}
         v2Result={{
           attemptId: 'a1',
@@ -102,14 +103,10 @@ describe('QuizResultsPanel', () => {
       />
     );
     expect(screen.getByText("You're all done!")).toBeTruthy();
-    expect(screen.getByText('You finished at')).toBeTruthy();
+    expect(screen.getByText(/You finished at/)).toBeTruthy();
     expect(screen.getByText(/:\d{2}:\d{2}/)).toBeTruthy();
-    expect(
-      screen.getByText('Ties consider the finish time of your best attempt')
-    ).toBeTruthy();
-    expect(
-      screen.getByText('The leaderboard will appear when the quiz ends in')
-    ).toBeTruthy();
+    expect(screen.getByText(/Ties go to the faster finish/)).toBeTruthy();
+    expect(screen.getByText('Quiz ends in')).toBeTruthy();
     expect(screen.getByRole('timer').props.children).toBe('0:30');
     jest.useRealTimers();
   });
@@ -154,8 +151,12 @@ describe('QuizResultsPanel', () => {
       />
     );
     expect(await screen.findByText('Provisional best score')).toBeTruthy();
-    expect(screen.getByText(format(currentSubmission))).toBeTruthy();
-    expect(screen.queryByText(format(bestSubmission))).toBeNull();
+    expect(
+      screen.getByText(format(currentSubmission), { exact: false })
+    ).toBeTruthy();
+    expect(
+      screen.queryByText(format(bestSubmission), { exact: false })
+    ).toBeNull();
   });
 
   it('offers a simulated checkout for a final test prize', () => {

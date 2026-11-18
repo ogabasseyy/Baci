@@ -43,17 +43,25 @@ export function buildInternalProductPurgeEntries(
       continue;
     }
     const authoritative = id ? authoritativeSegmentsById?.get(id) : undefined;
+    const resolveCategorySegment = (targetSlug: string) =>
+      authoritative !== undefined
+        ? authoritative
+        : resolveProductPurgeCategorySegment({
+            slug: targetSlug,
+            category: product.category ?? null,
+            category_slug: product.categorySlug ?? null,
+          });
     entries.push({
       slug,
-      categorySegment:
-        authoritative !== undefined
-          ? authoritative
-          : resolveProductPurgeCategorySegment({
-              slug,
-              category: product.category ?? null,
-              category_slug: product.categorySlug ?? null,
-            }),
+      categorySegment: resolveCategorySegment(slug),
     });
+    const previousSlug = product.previousSlug?.trim();
+    if (previousSlug && previousSlug !== slug) {
+      entries.push({
+        slug: previousSlug,
+        categorySegment: resolveCategorySegment(previousSlug),
+      });
+    }
   }
   return entries;
 }

@@ -78,7 +78,19 @@ describe('hasCompleteScopedProductSlugs', () => {
     ).toBe(true);
   });
 
-  it('checks optional previousSlug in resolvedSlugs and falls back when legacy caller slug differs from authoritative slug', () => {
+  it('checks optional previousSlug in entries and resolvedSlugs and falls back when legacy caller slug differs from authoritative slug', () => {
+    expect(
+      hasCompleteScopedProductSlugs(
+        [{ id: 'prod-1', slug: 'iphone-16', previousSlug: 'iphone-15' }],
+        [
+          { slug: 'iphone-16', categorySegment: 'smartphones' },
+          { slug: 'iphone-15', categorySegment: 'smartphones' },
+        ],
+        ['iphone-16', 'iphone-15', 'prod-1'],
+        new Map([['prod-1', 'iphone-16']])
+      )
+    ).toBe(true);
+
     expect(
       hasCompleteScopedProductSlugs(
         [{ id: 'prod-1', slug: 'iphone-16', previousSlug: 'iphone-15' }],
@@ -86,7 +98,7 @@ describe('hasCompleteScopedProductSlugs', () => {
         ['iphone-16', 'iphone-15', 'prod-1'],
         new Map([['prod-1', 'iphone-16']])
       )
-    ).toBe(true);
+    ).toBe(false);
 
     expect(
       hasCompleteScopedProductSlugs(

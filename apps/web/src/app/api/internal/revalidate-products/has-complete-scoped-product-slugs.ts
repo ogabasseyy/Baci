@@ -39,7 +39,10 @@ export function hasCompleteScopedProductSlugs(
       return false;
     }
 
-    if (previousSlug && !resolvedSet.has(previousSlug)) {
+    if (
+      previousSlug &&
+      (!entrySlugSet.has(previousSlug) || !resolvedSet.has(previousSlug))
+    ) {
       return false;
     }
 

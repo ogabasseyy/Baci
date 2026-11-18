@@ -153,10 +153,16 @@ export async function scheduleOrderProductBlogPurge({
           expireImmediately: true,
         }) !== true;
     } else {
-      revalidateProducts(merchantId, undefined, {
+      const scopedRevalidated = revalidateProducts(merchantId, undefined, {
         expireImmediately: true,
         omitMerchantWidePdpDetails: true,
       });
+      if (scopedRevalidated !== true) {
+        needsBroadPdpExpiry =
+          revalidateProducts(merchantId, undefined, {
+            expireImmediately: true,
+          }) !== true;
+      }
     }
   }
   const blogCacheExpired = await expireProductBlogCacheReliable(merchantId, {

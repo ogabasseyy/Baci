@@ -1,5 +1,7 @@
 import { beforeEach, expect, it, jest } from '@jest/globals';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { act, renderHook } from '@testing-library/react-native';
+import { walletPayPurchaseKeys } from '@/components/wallet-pay/wallet-pay-purchase-keys';
 
 let mockUserId = 'user-a';
 let mockBalance = 5000;
@@ -55,7 +57,9 @@ jest.mock('./use-imei-wallet-pay', () => ({
     open: (...args: unknown[]) => mockWalletPayOpen(...args),
   }),
 }));
+// The real stand-in's hashing (saved key names), with these tests' UUIDs.
 jest.mock('expo-crypto', () => ({
+  ...(jest.requireActual('expo-crypto') as object),
   randomUUID: () => mockUuid(),
 }));
 jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
@@ -69,8 +73,11 @@ import { report } from './use-imei-check-flow.test-fixture';
 
 const listedFor = () => `merchant:customer:${mockUserId}`;
 
-beforeEach(() => {
+beforeEach(async () => {
   jest.clearAllMocks();
+  // A fresh phone: no saved key from an earlier test is replayed.
+  await AsyncStorage.clear();
+  walletPayPurchaseKeys.resetMemory();
   mockUserId = 'user-a';
   mockBalance = 5000;
   mockPiggyvestCovers = false;

@@ -110,4 +110,29 @@ describe('createBlogPost', () => {
     });
     expect(mockSupabase.rpc).toHaveBeenCalledOnce();
   });
+
+  it('persists published_at when creating a scheduled post', async () => {
+    const scheduledAt = '2026-11-16T10:00:00.000Z';
+    const response = await createBlogPost(
+      makeRequest('/api/merchant/blog/posts', {
+        body: {
+          ...validPostData,
+          published_at: scheduledAt,
+          status: 'scheduled',
+        },
+      })
+    );
+
+    expect(response.status).toBe(201);
+    expect(mockSupabase.rpc).toHaveBeenCalledWith(
+      'mutate_merchant_blog_post_with_product_links',
+      expect.objectContaining({
+        p_post_data: expect.objectContaining({
+          published_at: scheduledAt,
+          requested_publish_at: scheduledAt,
+          status: 'scheduled',
+        }),
+      })
+    );
+  });
 });

@@ -8,9 +8,9 @@ export const uncheckedOption =
   /\b(?:brand[\s-]*new|new|used|refurbished|second[\s-]*hand|pre[\s-]*owned|open[\s-]*box|\d+(?:\.\d+)?\s*(?:gb|tb)|\d+(?:[.,]\d+)?[\s-]*(?:m\s*a\s*h|mp|megapixels?)|black|blue|red|green|purple|pink|white|gold|silver|gray|grey|titanium|e-?sim|physical\s+sim|dual[\s-]*sim|low[\s-]*light|all[\s-]*day\s+battery|\d+\s*(?:hours?|hrs?|days?)\s+(?:of\s+)?battery|battery\s+(?:that\s+)?(?:lasts?|lasting)\s+(?:for\s+)?(?:all[\s-]*day|\d+\s*(?:hours?|days?)))\b/i;
 
 export const PHONE_SIGNAL =
-  /\b(?:smartphones?|phones?|iphones?|pixel|galaxy\s+(?:[samf]\s*\d+|z\s*(?:fold|flip)\s*\d+))\b/i;
-export const LAPTOP_SIGNAL = /\b(?:laptops?|macbook|notebook)\b/i;
-export const TABLET_SIGNAL = /\b(?:tablets?|ipad)\b/i;
+  /^\s*pixels\s*[?!.]*\s*$|\b(?:smartphones?|phones?|iphones?|google\s+pixels?|pixel(?!\s+(?:density|resolution|count|size|dimensions?|pitch|ratio|per\s+inch|ppi|art|shader)\b)(?:\s*(?:\d+[a-z]?|pro|fold|tablet|phones?|smartphones?|devices?|models?))?|(?:show|find|recommend|suggest|buy|shop|sell|carry|have|stock|cheap\w*|affordable)\s+(?:\w+\s+){0,2}pixels(?!\s+(?:density|resolution|count|size|dimensions?|pitch|ratio|per\s+inch|ppi|art|shader)\b)|pixels\s+(?:under|below|within|less\s+than|up\s+to|at\s+most|for|at|around|from|in\s+stock|available)|galaxy\s+(?:[samf]\s*\d+|z\s*(?:fold|flip)\s*\d+))\b/i;
+export const LAPTOP_SIGNAL = /\b(?:laptops?|macbooks?|notebooks?)\b/i;
+export const TABLET_SIGNAL = /\b(?:tablets?|ipads?)\b/i;
 export const ACCESSORY_SIGNAL =
   /\b(?:airpods|earbuds?|headphones?|headsets?|earphones?|chargers?|cables?|adapters?|power[\s-]*banks?|cases?|screen[\s-]*protectors?|speakers?)\b/i;
 
@@ -19,6 +19,15 @@ export function normalizeAccessoryNouns(value: string): string {
     /\b(?:chargers|cables|adapters|cases|headphones|headsets|earphones|earbuds|speakers|banks|protectors)\b/gi,
     (word) => word.slice(0, -1)
   );
+}
+
+/** Singularize plural device and accessory nouns for search and token matching. */
+export function normalizeCatalogSearchNouns(value: string): string {
+  return normalizeAccessoryNouns(value)
+    .replace(/\biphones\b/gi, 'iPhone')
+    .replace(/\bpixels\b/gi, 'Pixel')
+    .replace(/\bmacbooks\b/gi, 'MacBook')
+    .replace(/\bipads\b/gi, 'iPad');
 }
 
 export function resolveCatalogCategory<T extends { slug: string }>(
@@ -126,7 +135,7 @@ export function stripCatalogAvailabilityPhrases(text: string): string {
       ' '
     )
     .replace(
-      /\b(iphones?|smartphones?|phones?|laptops?|tablets?|ipads?) models\b/gi,
+      /\b(iphones?|smartphones?|phones?|laptops?|notebooks?|macbooks?|tablets?|ipads?) models\b/gi,
       '$1'
     );
 }

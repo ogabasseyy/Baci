@@ -17,7 +17,11 @@ vi.mock('cloudflare:workers', () => ({
   },
 }));
 
-const { default: worker, QuizRoomDO } = await import('../src/index');
+const {
+  default: worker,
+  QuizRoomDO,
+  EventCoordinatorDO,
+} = await import('../src/index');
 
 const TICKET_SECRET = 'router-ticket-secret';
 const JWT_SECRET = 'router-jwt-secret';
@@ -456,5 +460,209 @@ describe('Worker HTTP router (src/index.ts)', () => {
     const engine = new QuizRoomEngine({ roomId: 'r-sync', storage: adapter });
     expect(engine.getSealManifest()?.attemptCount).toBe(1);
     adapter.close();
+  });
+
+  it('pulls fresh control state from EventCoordinatorDO when QuizRoomDO restarts or goes stale, and fails closed when coordinator is also stale', async () => {
+    const roomAdapter = new NodeSqliteAdapter(':memory:');
+    const coordAdapter = new NodeSqliteAdapter(':memory:');
+
+    const wrapAdapter = (ad: NodeSqliteAdapter) => ({
+      sql: {
+        exec: (query: string, ...bindings: unknown[]) => {
+          const res = ad.exec(query, ...(bindings as never[]));
+          return {
+            toArray: () => res.rows,
+            rowsRead: res.rowsRead,
+            rowsWritten: res.rowsWritten,
+          };
+        },
+      },
+      transactionSync: <T>(fn: () => T): T => ad.transactionSync(fn),
+      getAlarm: () => Promise.resolve(ad.getAlarm()),
+      setAlarm: (ms: number | Date) => {
+        ad.setAlarm(typeof ms === 'number' ? ms : ms.getTime());
+        return Promise.resolve();
+      },
+      deleteAlarm: () => {
+        ad.deleteAlarm();
+        return Promise.resolve();
+      },
+      deleteAll: () => {
+        ad.deleteAll();
+        return Promise.resolve();
+      },
+    });
+
+    const coordDo = new EventCoordinatorDO(
+      {
+        id: { name: 'evt-cs-1', toString: () => 'c'.repeat(64) },
+        storage: wrapAdapter(coordAdapter),
+      } as never,
+      {} as never
+    );
+
+    const workerEnv = {
+      QUIZ_INTERNAL_COORDINATOR_SECRET: 'coord-secret-cs',
+      EVENT_COORDINATOR: {
+        idFromName: (name: string) => name,
+        get: () => ({
+          fetch: (input: string, init?: RequestInit) =>
+            coordDo.fetch(new Request(input, init)),
+        }),
+      },
+    };
+
+    const nowMs = Date.now();
+    const correctHash = await quizAnswerKeyHash('opt-a');
+    const config = {
+      eventId: 'evt-cs-1',
+      merchantId: 'merch-1',
+      mode: 'live' as const,
+      contractVersion: 2 as const,
+      rulesVersion: 'live-v1',
+      questionCount: 1,
+      timePerQuestionSeconds: 10,
+      maxAttempts: 1,
+      startsAtMs: nowMs - 5_000,
+      endsAtMs: nowMs + 60_000,
+      status: 'active' as const,
+      slots: [
+        {
+          id: '00000000-0000-4000-8000-000000000001',
+          slotIndex: 1,
+          active: true,
+          variants: [
+            {
+              id: '10000000-0000-4000-8000-000000000001',
+              slotId: '00000000-0000-4000-8000-000000000001',
+              prompt: 'Q1?',
+              options: [
+                { id: 'opt-a', label: 'A' },
+                { id: 'opt-b', label: 'B' },
+              ],
+              answerKeyHash: correctHash,
+              active: true,
+            },
+          ],
+        },
+      ],
+    };
+
+    // Init room on instance 1
+    const room1 = new QuizRoomDO(
+      {
+        id: { name: 'room-cs-1', toString: () => 'a'.repeat(64) },
+        storage: wrapAdapter(roomAdapter),
+      } as never,
+      workerEnv as never
+    );
+    await room1.fetch(
+      new Request('https://room.internal/internal/init', {
+        method: 'POST',
+        body: JSON.stringify(config),
+      })
+    );
+
+    // Push STALE snapshot (120s old) to EventCoordinatorDO via authenticated admin route
+    const stalePush = await worker.fetch(
+      new Request('https://quiz.example.com/api/quiz/admin/control-state', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer coord-secret-cs' },
+        body: JSON.stringify({
+          eventId: 'evt-cs-1',
+          snapshot: {
+            version: 1,
+            updatedAtMs: nowMs - 120_000,
+            cancelledEvents: {},
+            blockedAttemptIds: [],
+            blockedCustomerKeys: [],
+            revokedTesterKeys: [],
+            disqualifiedAttemptIds: [],
+            suppressedAttemptIds: [],
+            deletedCustomerIds: [],
+            publishedEvents: {},
+          },
+        }),
+      }),
+      workerEnv as never
+    );
+    expect(stalePush.status).toBe(200);
+
+    // Simulate QuizRoomDO restart/hibernation (fresh in-memory controlState at updatedAtMs=0)
+    const restartedRoom = new QuizRoomDO(
+      {
+        id: { name: 'room-cs-1', toString: () => 'a'.repeat(64) },
+        storage: wrapAdapter(roomAdapter),
+      } as never,
+      workerEnv as never
+    );
+
+    const startBody = {
+      ticket: {
+        userId: 'user-cs-1',
+        customerId: 'cust-cs-1',
+        merchantId: 'merch-1',
+        eventId: 'evt-cs-1',
+        roomId: 'room-cs-1',
+        deviceHash: 'b'.repeat(64),
+        leaderboardUsername: 'CsPlayer',
+        expiresAtMs: nowMs + 120_000,
+      },
+      integrityTier: 'strong',
+      acceptedRulesVersion: 'live-v1',
+      termsAccepted: true,
+      startRequestId: 'req-cs-1',
+      appVersion: '2.0.0',
+      platform: 'ios',
+    };
+
+    // Coordinator snapshot is ALSO stale -> MUST fail closed with 503 QUIZ_CONTROL_STATE_STALE
+    const failRes = await restartedRoom.fetch(
+      new Request('https://room.internal/internal/start', {
+        method: 'POST',
+        body: JSON.stringify(startBody),
+      })
+    );
+    expect(failRes.status).toBe(503);
+    expect(await failRes.json()).toMatchObject({
+      code: 'QUIZ_CONTROL_STATE_STALE',
+    });
+
+    // Push FRESH snapshot (version 2, updatedAtMs = nowMs) -> restartedRoom pulls & succeeds!
+    const freshPush = await worker.fetch(
+      new Request('https://quiz.example.com/api/quiz/admin/control-state', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer coord-secret-cs' },
+        body: JSON.stringify({
+          eventId: 'evt-cs-1',
+          snapshot: {
+            version: 2,
+            updatedAtMs: Date.now(),
+            cancelledEvents: {},
+            blockedAttemptIds: [],
+            blockedCustomerKeys: [],
+            revokedTesterKeys: [],
+            disqualifiedAttemptIds: [],
+            suppressedAttemptIds: [],
+            deletedCustomerIds: [],
+            publishedEvents: {},
+          },
+        }),
+      }),
+      workerEnv as never
+    );
+    expect(freshPush.status).toBe(200);
+
+    const okRes = await restartedRoom.fetch(
+      new Request('https://room.internal/internal/start', {
+        method: 'POST',
+        body: JSON.stringify(startBody),
+      })
+    );
+    expect(okRes.status).toBe(200);
+    expect(await okRes.json()).toMatchObject({ status: 'in_progress' });
+
+    roomAdapter.close();
+    coordAdapter.close();
   });
 });

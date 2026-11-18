@@ -73,6 +73,7 @@ export interface DemoDispatchEnv {
     endsAtMs: number;
     expectedRoomIds: readonly string[];
   }): Promise<void>;
+  refreshControlState(eventId: string, nowMs: number): Promise<void>;
 }
 
 function buildRoundRoomIds(round: 1 | 2 | 3, overrideCount?: number): string[] {
@@ -147,6 +148,7 @@ export async function handleDemoWorkerRoute(
       endsAtMs,
       expectedRoomIds: roomIds,
     });
+    await env.refreshControlState(eventId, nowMs);
     const roundState: DemoRoundState = {
       round,
       eventId,
@@ -182,6 +184,7 @@ export async function handleDemoWorkerRoute(
       roomId: string;
       playerSeq: number;
     };
+    await env.refreshControlState(alloc.round.eventId, Date.now());
     const userId = `demo-u-${alloc.round.round}-${alloc.playerSeq}`;
     const customerId = `demo-c-${alloc.round.round}-${alloc.playerSeq}`;
     const deviceHash = String(alloc.playerSeq).padStart(64, '0');

@@ -8,6 +8,21 @@ function decode(value: string): string {
   }
 }
 
+/** Form values "true"/"false"/"null" become real booleans/null, like JSON. */
+function coerce(value: string): string | boolean | null {
+  const lowered = value.trim().toLowerCase();
+  if (lowered === 'true') {
+    return true;
+  }
+  if (lowered === 'false') {
+    return false;
+  }
+  if (lowered === 'null') {
+    return null;
+  }
+  return value;
+}
+
 /**
  * Parses a Monnify error body into an object so structured checks (flags by
  * value, codes, vend evidence) apply to every shape: JSON first, then a
@@ -27,13 +42,13 @@ export function parseMonnifyAnswer(body: string): unknown {
   if (segments.length === 0) {
     return null;
   }
-  const pairs: Record<string, string> = {};
+  const pairs: Record<string, string | boolean | null> = {};
   for (const segment of segments) {
     const match = KEY_VALUE_PAIR.exec(segment);
     if (!match) {
       return null;
     }
-    pairs[decode(match[1])] = decode(match[2]);
+    pairs[decode(match[1])] = coerce(decode(match[2]));
   }
   return pairs;
 }

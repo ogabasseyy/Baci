@@ -172,3 +172,17 @@ describe('bugfix: form-encoded flags are read by value', () => {
     });
   });
 });
+
+describe('bugfix: form-encoded status=false is not a vend state', () => {
+  it('hands "status=false&message=Insufficient wallet balance" to Kuda', async () => {
+    mockHttpError(
+      400,
+      'Bad Request',
+      'status=false&message=Insufficient wallet balance'
+    );
+
+    await expect(vend()).resolves.toMatchObject({
+      providerDefiniteFailure: true,
+    });
+  });
+});

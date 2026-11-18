@@ -11,12 +11,12 @@ describe('parseMonnifyAnswer', () => {
   it('parses a form-encoded body', () => {
     expect(
       parseMonnifyAnswer('isFailed=true&message=Insufficient+wallet%20balance')
-    ).toEqual({ isFailed: 'true', message: 'Insufficient wallet balance' });
+    ).toEqual({ isFailed: true, message: 'Insufficient wallet balance' });
   });
 
   it('parses "key: value; key=value" pairs', () => {
     expect(parseMonnifyAnswer('duplicate: false; message=Low')).toEqual({
-      duplicate: 'false',
+      duplicate: false,
       message: 'Low',
     });
   });

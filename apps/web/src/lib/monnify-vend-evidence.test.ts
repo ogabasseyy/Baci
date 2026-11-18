@@ -17,6 +17,8 @@ describe('hasMonnifyVendEvidence', () => {
     { invoice_id: 'INV-9' },
     { responseBody: { paymentId: 'PAY-1' } },
     { purchase_id: 'PUR-1' },
+    { responseBody: { transactionNumber: 'MFBP-1' } },
+    { transaction_no: 'MFBP-2' },
     { responseBody: { payment_status: 'PENDING' } },
     { responseBody: { status: 'UNKNOWN' } },
     { status: 'PENDING_CONFIRMATION' },

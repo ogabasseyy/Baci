@@ -23,6 +23,7 @@ describe('isMonnifyVendOutcomeText', () => {
     'Vend rejected due to insufficient funds',
     'Accepted airtime request: insufficient wallet balance',
     'Rejected transaction: insufficient funds',
+    'Airtime request fulfilled: insufficient wallet balance',
     'Airtime request accepted: insufficient wallet balance',
     'Airtime request has been accepted: insufficient wallet balance',
     'Vend request has been submitted',

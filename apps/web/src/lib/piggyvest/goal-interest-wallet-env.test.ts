@@ -28,3 +28,19 @@ it('reads the interest wallet owner id, unset meaning none', () => {
     readGoalInterestWalletOwnerId({} as unknown as NodeJS.ProcessEnv)
   ).toBeNull();
 });
+
+it('treats a blank owner id as unset (business-owned interest wallet)', () => {
+  expect(
+    readGoalInterestWalletOwnerId({
+      PIGGYVEST_INTEREST_WALLET_OWNER_ID: '   ',
+    } as unknown as NodeJS.ProcessEnv)
+  ).toBeNull();
+});
+
+it('never reads a set but invalid owner id as unset', () => {
+  const owner = readGoalInterestWalletOwnerId({
+    PIGGYVEST_INTEREST_WALLET_OWNER_ID: 'bad\0id',
+  } as unknown as NodeJS.ProcessEnv);
+  expect(owner).not.toBeNull();
+  expect(owner).not.toBe('bad\0id');
+});

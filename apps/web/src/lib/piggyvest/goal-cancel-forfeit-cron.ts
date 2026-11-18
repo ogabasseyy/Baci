@@ -9,8 +9,9 @@ import {
 } from './primary-wallet-savings-runtime';
 
 // Settings only a primary-savings installation has (other PiggyVest
-// subsystems never set them; the interest wallet ids are required before any
-// forfeit is sent). Any one present means savings were installed,
+// subsystems never set them; the interest wallet id is required before any
+// forfeit is sent, its owner id only for a customer-owned interest wallet).
+// Any one present means savings were installed,
 // so a missing or broken other setting (even the savings authorizer password
 // itself) is a failure, never "not configured". On purpose this includes a
 // host with only the interest-wallet ids set: a partial rollout pages as a

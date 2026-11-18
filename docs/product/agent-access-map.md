@@ -1,7 +1,7 @@
 # Baci capabilities and agent access
 
 Reviewed 18 November 2026 against source revision
-`0000000000000000000000000000000000000000`. The mobile-admin follow-up queue no longer treats
+`c6da9e2b3df312f1006660eb40053529ce948e6a`. The mobile-admin follow-up queue no longer treats
 stale unpaid staff-created orders as abandoned checkouts; their failed or BNPL payments still enter it. The source also categorizes Oxygen follow-ups, places reviews first and includes them in the customer badge; it does not automatically contact customers. Agentic checkout session quotes now include
 registered-merchant VAT using an exclusive basis; this is source evidence, not deployment or live-flow
 proof. Guest OAuth consent and renewable authorization were re-reviewed and tested. Upstream payment

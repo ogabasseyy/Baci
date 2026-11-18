@@ -21,6 +21,10 @@ import {
   lookupGiglExternalWaybill,
 } from './gigl.external-waybill';
 import {
+  type GiglWaybillCancellation,
+  readGiglWaybillCancellation,
+} from './gigl.preshipment-cancellation';
+import {
   attestGiglWaybillOwnership,
   type GiglWaybillOwnership,
 } from './gigl.preshipment-ownership';
@@ -96,6 +100,17 @@ export class GiglProvider extends BaseShippingProvider {
     trackingNumber: string
   ): Promise<GiglWaybillOwnership> {
     return attestGiglWaybillOwnership(
+      this.apiClient,
+      this.providerIo,
+      trackingNumber
+    );
+  }
+
+  /** Whether GIG's preshipment record says the waybill was cancelled. */
+  readWaybillCancellation(
+    trackingNumber: string
+  ): Promise<GiglWaybillCancellation> {
+    return readGiglWaybillCancellation(
       this.apiClient,
       this.providerIo,
       trackingNumber

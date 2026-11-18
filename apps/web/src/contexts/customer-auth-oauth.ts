@@ -1,5 +1,7 @@
 'use client';
 
+import { writeCustomerSessionHint } from './customer-session-hint';
+
 interface OAuthRedirectResponse {
   url?: string;
   error?: string;
@@ -85,6 +87,7 @@ async function signInWithOAuth(
       };
     }
 
+    writeCustomerSessionHint(merchantSlug, null);
     window.location.href = data.url;
     return { success: true };
   } catch (error) {

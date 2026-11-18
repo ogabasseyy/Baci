@@ -8,8 +8,8 @@ import test from 'node:test';
 test('CI runs the X token SQL contract with explicit server prerequisites', () => {
  const workflow=readFileSync(new URL('../workflows/ci.yml',import.meta.url),'utf8');
  const lane=workflow.split('  quality-disposable-sql:')[1]?.split('  quality-misc:')[0] ?? '';
- assert.match(lane,/apt-get install -y postgresql-client postgresql-16/);
- assert.match(lane,/PG_BIN: \/usr\/lib\/postgresql\/16\/bin/);
+ assert.match(lane,/bash \.github\/scripts\/install-postgresql-hosted\.sh/);
+ assert.match(lane,/PG_BIN: \/usr\/lib\/postgresql\/18\/bin/);
  assert.match(lane,/for binary in initdb pg_ctl psql/);
  assert.match(lane,/test -x "\$PG_BIN\/\$binary"/);
  assert.match(lane,/node --test \.github\/scripts\/x-pixel-token-authentication\.sql\.test\.mjs/);

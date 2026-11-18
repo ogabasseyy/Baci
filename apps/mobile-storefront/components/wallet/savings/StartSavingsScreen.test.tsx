@@ -115,8 +115,12 @@ jest.mock('@/lib/customer-savings', () => ({
 }));
 
 jest.mock('@/stores/auth-store', () => ({
-  useAuthStore: (selector: (state: { merchantId: string | null }) => unknown) =>
-    selector({ merchantId: 'merchant-1' }),
+  useAuthStore: (
+    selector: (state: {
+      merchantId: string | null;
+      user: { id: string } | null;
+    }) => unknown
+  ) => selector({ merchantId: 'merchant-1', user: { id: 'user-1' } }),
 }));
 
 jest.mock('@/lib/clipboard', () => ({
@@ -217,8 +221,30 @@ describe('StartSavingsScreen', () => {
     fireEvent.press(getSavingsButton('Continue savings setup'));
 
     expect(
-      screen.getByText('You must accept the non-withdrawable savings terms.')
+      screen.getByText(
+        'Tick the box to agree that this money stays saved until your goal is done.'
+      )
     ).toBeOnTheScreen();
+  });
+
+  it('clears the tick-the-box message once the terms are ticked', () => {
+    render(<StartSavingsScreen />);
+    selectSavingsProduct();
+    setContributionAmount();
+    fireEvent.press(getSavingsButton('Continue savings setup'));
+    expect(
+      screen.getByText(
+        'Tick the box to agree that this money stays saved until your goal is done.'
+      )
+    ).toBeOnTheScreen();
+
+    acceptSavingsTerms();
+
+    expect(
+      screen.queryByText(
+        'Tick the box to agree that this money stays saved until your goal is done.'
+      )
+    ).toBeNull();
   });
 
   it('creates a manual savings goal via wallet balance', async () => {
@@ -229,10 +255,9 @@ describe('StartSavingsScreen', () => {
     acceptSavingsTerms();
     fireEvent.press(getSavingsButton('Continue savings setup'));
 
-    expect(screen.getByText('Your savings plan')).toBeOnTheScreen();
+    expect(screen.getByText('Check your plan')).toBeOnTheScreen();
 
-    fireEvent.press(getSavingsButton('Choose savings funding option'));
-    fireEvent.press(getSavingsButton('Continue funding option'));
+    fireEvent.press(getSavingsButton('Create my plan'));
 
     await waitFor(() => expect(mockCreateSavingsGoal).toHaveBeenCalledTimes(1));
     expect(mockCreateSavingsGoal).toHaveBeenCalledWith(
@@ -245,9 +270,7 @@ describe('StartSavingsScreen', () => {
       })
     );
     await waitFor(() =>
-      expect(
-        screen.getByText('Savings plan created successfully')
-      ).toBeOnTheScreen()
+      expect(screen.getByText('Your plan is set')).toBeOnTheScreen()
     );
   });
 });

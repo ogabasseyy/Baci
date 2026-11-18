@@ -28,11 +28,14 @@ const ROW = {
 
 function mockSupabase({
   data = { current_player: null, entries: [ROW], status: 'published' },
+  dataByRpc = {},
   participantCount = 1,
   error = null,
   user = { id: USER_ID },
 }: {
   data?: unknown;
+  /** Per-RPC response data; any RPC not listed here returns `data`. */
+  dataByRpc?: Record<string, unknown>;
   participantCount?: number;
   error?: unknown;
   user?: { id: string } | null;
@@ -41,7 +44,7 @@ function mockSupabase({
     Promise.resolve(
       name === 'get_quiz_participant_count_public_v2'
         ? { data: participantCount, error: null }
-        : { data, error }
+        : { data: name in dataByRpc ? dataByRpc[name] : data, error }
     )
   );
   const supabase = {
@@ -146,6 +149,33 @@ describe('quiz leaderboard route', () => {
     expect(rpc).toHaveBeenCalledWith('get_quiz_live_leaderboard_public_v2', {
       p_event_id: EVENT_ID,
     });
+  });
+
+  it('reuses the live board count instead of counting again before publication', async () => {
+    const { rpc } = mockSupabase({
+      dataByRpc: {
+        get_quiz_leaderboard_public_v2: {
+          current_player: null,
+          entries: [],
+          status: 'live_hidden',
+        },
+        get_quiz_live_leaderboard_public_v2: {
+          current_player: null,
+          entries: [ROW],
+          participant_count: 640,
+          status: 'live',
+        },
+      },
+    });
+    const { GET } = await import('./route');
+    const body = await (await GET(request())).json();
+
+    expect(body.participantCount).toBe(640);
+    expect(body.status).toBe('live');
+    expect(rpc).not.toHaveBeenCalledWith(
+      'get_quiz_participant_count_public_v2',
+      expect.anything()
+    );
   });
 
   it('maps authorization failure and hides malformed or failed projections', async () => {

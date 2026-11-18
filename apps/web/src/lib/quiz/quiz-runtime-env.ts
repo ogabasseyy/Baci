@@ -29,6 +29,37 @@ export function getQuizProductionApprovedEnv(): boolean {
   );
 }
 
+export type QuizAppAttestationMode = 'enforce' | 'monitor' | 'off';
+
+/**
+ * Rollout switch for requiring app attestation on live prize starts.
+ * off (default): not checked. monitor: checked and logged, never blocks.
+ * enforce: a live bearer start without a valid attestation is refused.
+ */
+export function getQuizAppAttestationModeEnv(): QuizAppAttestationMode {
+  assertServerRuntime('QUIZ_APP_ATTESTATION');
+  const mode = trimmedRuntimeValue(process.env.QUIZ_APP_ATTESTATION) ?? 'off';
+  if (mode === 'off' || mode === 'monitor' || mode === 'enforce') return mode;
+  throw new Error('QUIZ_APP_ATTESTATION must be off, monitor or enforce');
+}
+
+export function getQuizAppCheckConfigEnv(): {
+  allowedAppIds: string[];
+  projectNumber: string;
+} {
+  assertServerRuntime('QUIZ_APP_CHECK_PROJECT_NUMBER');
+  return {
+    allowedAppIds: (
+      trimmedRuntimeValue(process.env.QUIZ_APP_CHECK_APP_IDS) ?? ''
+    )
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean),
+    projectNumber:
+      trimmedRuntimeValue(process.env.QUIZ_APP_CHECK_PROJECT_NUMBER) ?? '',
+  };
+}
+
 export function getQuizRpcServerSecret(): string | undefined {
   assertServerRuntime('QUIZ_RPC_SERVER_SECRET');
   return trimmedRuntimeValue(process.env.QUIZ_RPC_SERVER_SECRET);

@@ -1,5 +1,5 @@
 import './page.test-support';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { Suspense } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CATEGORY_HUB_DEFAULTS } from '@/config/category-hub-defaults';
@@ -149,10 +149,10 @@ describe('category page route', () => {
     ).toBeInTheDocument();
     expect(screen.queryByText('Route loader fallback')).not.toBeInTheDocument();
     expect(screen.queryByText('Category page content')).not.toBeInTheDocument();
-    expect(mockConnection).toHaveBeenCalledOnce();
+    expect(mockConnection).not.toHaveBeenCalled();
   });
 
-  it('keeps category listings request-bound behind a static-shell fallback', async () => {
+  it('renders category listings without calling connection()', () => {
     const ui = CategoryPageRoute({
       params: Promise.resolve({
         slug: 'test-store',
@@ -163,10 +163,8 @@ describe('category page route', () => {
 
     render(ui);
 
-    expect(
-      screen.getByRole('status', { name: 'Loading product listing' })
-    ).toBeInTheDocument();
-    await waitFor(() => expect(mockConnection).toHaveBeenCalledOnce());
+    expect(screen.getByText('Category page content')).toBeInTheDocument();
+    expect(mockConnection).not.toHaveBeenCalled();
   });
 
   it('renders curated smartphone hub content when merchant-authored SEO is absent', async () => {
@@ -378,14 +376,7 @@ describe('category page route', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('uses the request-scoped storefront host for category hub links', async () => {
-    mockHeaders.mockResolvedValue(
-      new Headers([['host', 'preview-ogabassey.vercel.app']])
-    );
-    mockBuildRequestScopedStoreUrl.mockReturnValue(
-      'https://preview-ogabassey.vercel.app'
-    );
-
+  it('uses the canonical storefront host for category hub links without reading headers', async () => {
     const ui = await actualCategoryPageContentModule.CategoryPageContent({
       params: Promise.resolve({ slug: 'test-store', category: 'smartphones' }),
       searchParams: Promise.resolve({ page: '1' }),
@@ -396,19 +387,19 @@ describe('category page route', () => {
     const hubContent = getLastHubContent();
 
     expect(hubContent?.bestForCards[0]?.href).toContain(
-      'https://preview-ogabassey.vercel.app/'
+      'https://test-store.usebaci.com/'
     );
     expect(hubContent?.brandCards[0]?.href).toContain(
-      'https://preview-ogabassey.vercel.app/'
+      'https://test-store.usebaci.com/'
     );
     expect(hubContent?.priceBandCards[0]?.href).toContain(
-      'https://preview-ogabassey.vercel.app/'
+      'https://test-store.usebaci.com/'
     );
     expect(hubContent?.comparisonLinks[0]?.href).toContain(
-      'https://preview-ogabassey.vercel.app/'
+      'https://test-store.usebaci.com/'
     );
     expect(hubContent?.guideLinks[0]?.href).toContain(
-      'https://preview-ogabassey.vercel.app/'
+      'https://test-store.usebaci.com/'
     );
   });
 

@@ -27,7 +27,7 @@ describe('server keeps PiggyVest off', () => {
         operationRailRef,
         refetchWallet: async () => undefined,
         savingsContributionAmount: '',
-        spendableBalance: 0,
+        walletBalance: 0,
         setIsAddingSavingsContribution: jest.fn(),
         setShowSavingsProgressModal: jest.fn(),
         setSavingsContributionAmount: jest.fn(),

@@ -1,0 +1,288 @@
+{
+  "format": "baci.historical-evidence-archive/v1",
+  "qualification": "historical-not-current-release-proof",
+  "archive": "historical-generated-evidence.tar.gz",
+  "archiveSha256": "5bb40d35ccba6eb79b0935e7b9af6308e4dd7bff17afb002c627a2ce3545aaff",
+  "files": [
+    {
+      "path": "docs/connectors/evidence/experience-checkpoint-d/compiled/app.css",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-checkpoint-d/compiled/app.js",
+      "bytes": 198909,
+      "sha256": "1aae82dec55eb878cd242fe40273c24a454278f728fda821dd5d75b428548c7d"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-checkpoint-d/mcp-native-preview.png",
+      "bytes": 9343,
+      "sha256": "77c8fafd4098f2140332ce6c042487c61b0feccd9f5016ce88aef0920f4d45e1"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-checkpoint-d/rollback/current/app.css",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-checkpoint-d/rollback/current/app.js",
+      "bytes": 199248,
+      "sha256": "b5fd0cf1d534eb32f37762317cba3787ab3ea4cab496cbeec1d47f55852f9ce0"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-checkpoint-d/rollback/current/collection.png",
+      "bytes": 16874,
+      "sha256": "75910f3e385ce4b7b0a0ba0df16645f10423c36efa7902178edf0f9a99b998cf"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-checkpoint-d/rollback/current/editorial.png",
+      "bytes": 17091,
+      "sha256": "77cc817720e249cb556ecf933a3d00ae16a77f70910a2ed65efbbc70430fe88c"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-checkpoint-d/rollback/current/home.png",
+      "bytes": 15896,
+      "sha256": "15e76631c7526812465050228d347a70af15b07db9462246f5c6f61ce051181c"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-checkpoint-d/rollback/current/product.png",
+      "bytes": 17271,
+      "sha256": "d254fe15adcb0dea970e2cefbe5f5eeb5a28ece392211887f7bbad794f440a53"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-checkpoint-d/rollback/previous/app.css",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-checkpoint-d/rollback/previous/app.js",
+      "bytes": 199249,
+      "sha256": "8a8a9a5add3526a7ed4a0d51165ab8466136e9e66b92b57a5dbdede3cfd02215"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-checkpoint-d/rollback/previous/collection.png",
+      "bytes": 17389,
+      "sha256": "2f8f457fe1fafc4dcdd28eef2c238da85194e635b10faea9562a9553a9f6cc91"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-checkpoint-d/rollback/previous/editorial.png",
+      "bytes": 17606,
+      "sha256": "1f1de7b79ff333e380c243144e06ffc1a2f998b7ff2112977d8c336c56843da3"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-checkpoint-d/rollback/previous/home.png",
+      "bytes": 16412,
+      "sha256": "f0bcb61c26bac0378ec346f561a5684affa7d28ba652e779172e00a9aeef1c77"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-checkpoint-d/rollback/previous/product.png",
+      "bytes": 17782,
+      "sha256": "12a5c7c835373fb18c9ecb868c23a89ba66ca019392cf1b4bd207e4c50ea3e96"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-cwv-production/filmstrip-mobile-0800.png",
+      "bytes": 41493,
+      "sha256": "29c8a10f25305daea67e95c8bca99cc9f2addb8b9b37789bfaa044cd632a9a52"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-cwv-production/filmstrip-mobile-4000.png",
+      "bytes": 91070,
+      "sha256": "5d87c37cdb92c49d3064b204a901d1d735615981ebf7fb48aa47d1373f818e91"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-cwv-production/orbit-production-mobile.png",
+      "bytes": 160319,
+      "sha256": "103f07c0ae02f23f7cda48eaf8d44174655b75761e0b9f19346928b8627da502"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-cwv-stage-1/no-js-1440.png",
+      "bytes": 113963,
+      "sha256": "6d432c669bba25fdb2a8393fa25957972af5b709956ad04b1867dbe8d51967c7"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-cwv-stage-1/no-js-390.png",
+      "bytes": 65108,
+      "sha256": "1de0b2c050f96a4c5d21fdcb2146f68d28aeb7cc74e5414ecfbd6ec84a71e80d"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-cwv-stage-2/lab-prerender-1440.png",
+      "bytes": 135511,
+      "sha256": "d778da779314d6e9f056f6c224d3a9960dca844f08d92353f0ddf6cf2e5c70a5"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-cwv-stage-2/lab-prerender-390.png",
+      "bytes": 69674,
+      "sha256": "9ce2779b4c7f873bf20bb8cfc22b628010c012b056c1acb5a5c23546db780f1f"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-durable-delivery/public-1440.png",
+      "bytes": 126433,
+      "sha256": "1f7352bac9f5cf5336140b5d0611f4ea36fa72704e84419f4c26ad993093f1b9"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-durable-delivery/public-390.png",
+      "bytes": 66640,
+      "sha256": "35ecf43003f728f54920a60f5f0dd269c0e2176316bcb01a43bc9af92832db91"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-durable-delivery/public-no-js-1440.png",
+      "bytes": 83891,
+      "sha256": "5f8497de01c54a98b0fb5e25f6b2d3e0b86ad9a2d4e3b1467b16b332a5dbdfcb"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-durable-delivery/public-no-js-390.png",
+      "bytes": 43992,
+      "sha256": "354ecbec9321c1cf316fc8507fdfe0be0936ac119e32dc05d8f80f813e69b7c2"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/coderabbit-partial.ndjson",
+      "bytes": 8357,
+      "sha256": "f6a877fecb78b91b2b6dc5c0d353c64b9f72944e84cf9166613b2d0034f7f54c"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/free-review-cart-2026-10-26.ndjson",
+      "bytes": 5430,
+      "sha256": "0877621cfaac2e4efef984d597a981dcc59e9febe5b4a3cd5809c2d3a527118e"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/free-review-fixes-completed.ndjson",
+      "bytes": 2588,
+      "sha256": "ac55e53f6e955955b9957130a37ec09ec3785f36dffa6c8c20e6a98c9073e0ff"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/free-review-gate-2026-10-26.ndjson",
+      "bytes": 1083,
+      "sha256": "3f5fa2ffd00d8de1b5a1b9cdb23b1185086ec021bd048b1862d5e664be43135f"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/free-review-gate-completed-2026-10-26.ndjson",
+      "bytes": 6387,
+      "sha256": "f537c04830eb71e9b7e0f8fe8cc7440469f5441213df6fab69655d6db5bb02cd"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/free-review-runner-2026-10-26.ndjson",
+      "bytes": 7444,
+      "sha256": "92a788ea131c4e5c8c036258bc9a4d3e210ab84fd1377109116f670a1888bc67"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/free-review-test-only-limit.ndjson",
+      "bytes": 1080,
+      "sha256": "60261e6ca06299cf0408877bba1b3e6111d32ccbb43b79a4324577be88a737b6"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/orbit-rebuild-desktop-checkout-final-review.png",
+      "bytes": 82741,
+      "sha256": "6034e96ed442c45682d4edc071f90993164ad19bb64bc22e10fc06204af7a67f"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/orbit-rebuild-desktop-checkout-handoff.png",
+      "bytes": 125085,
+      "sha256": "aa08c8656ad90f9a61a85de08be4ef5fd530ce451827af7095931b96ed5b2189"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/orbit-rebuild-desktop-storefront-home.png",
+      "bytes": 139031,
+      "sha256": "ddb7267864d3ef5c2e7b8b0b049c5e544fced24f8a365997bc518b66db82dd2f"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/orbit-rebuild-free-review.ndjson",
+      "bytes": 1066,
+      "sha256": "d67f9d18760f78cb7727b8916bcca8ed58bfccdbf7d4a4ba9c581c0b2670b034"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/orbit-rebuild-mobile-checkout-final-review.png",
+      "bytes": 171165,
+      "sha256": "528b34cc182055a12bc1c47fe8f0407c9736d19e20d89bfc590d67d21d42ec24"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/orbit-rebuild-mobile-checkout-handoff.png",
+      "bytes": 103013,
+      "sha256": "8bb72e91cfe9da43dda412ab119235e3986def8fc612844c1683d69cb5734c4b"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/orbit-rebuild-mobile-storefront-home.png",
+      "bytes": 220896,
+      "sha256": "2569e95c05d850678c3970adc49eefffcd3c8b7ad24234e33b0ae5d3f3cd89b1"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/orbit.png",
+      "bytes": 185524,
+      "sha256": "d307554679fb53a68472026a36437f3832e529da639c85192d59aaa3bbdb3d67"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/shared-root-free-review.ndjson",
+      "bytes": 994,
+      "sha256": "b2e09f3adaf22ff0496d9dcd7c9c6994cc515be13cb7db670198ff546e781c86"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/shared-root-monorepo-typecheck.log",
+      "bytes": 7204,
+      "sha256": "34b3cbad53d6e69e00612be7109956f3732ed9a80c6e8314d729c769fe6e2505"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/test-only-rereview-latest.ndjson",
+      "bytes": 1031,
+      "sha256": "5376b4e246eb61c071a919555232edf91d72bf82a994c440d5971e500c3bbfea"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-prerender-mcp/private-1440.png",
+      "bytes": 16155,
+      "sha256": "c2e4f90b14c1053db25ebba81152d75dc821167e79f3db6afdd1cdcc7a182da4"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-prerender-mcp/private-390.png",
+      "bytes": 12699,
+      "sha256": "3b69cf9c2b5c17342a294b87ae64ec6cbf6372ad88cd8634a51f10d54b272805"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-prerender-mcp/private-no-js-1440.png",
+      "bytes": 12255,
+      "sha256": "e95470cdc4ef76cfedcca03c07bfdc7e16df9ccd865d2be6078f03017b1b5c6e"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-prerender-mcp/private-no-js-390.png",
+      "bytes": 9009,
+      "sha256": "0167dc93263d516e95b6088ad5e5bdabacf69af1614615a7fe14f559127ce236"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-release-candidate-20261028/orbit-checkout/desktop/checkout-final-review.png",
+      "bytes": 83419,
+      "sha256": "ed0689aa3b0bd0dfb5f9c3327ed914400e63b7f03236b30decd5ec4ebf1283b9"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-release-candidate-20261028/orbit-checkout/desktop/storefront-home.png",
+      "bytes": 137617,
+      "sha256": "96410373066b5a49a452342d5e4ce54f7dabab0b9de7353b00c149f81e02db3a"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-release-candidate-20261028/orbit-checkout/mobile/checkout-final-review.png",
+      "bytes": 171049,
+      "sha256": "edef3b287a46821f3b3d77507b04de6048b883bbdbdb25f452d9dedeef331e0d"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-release-candidate-20261028/orbit-checkout/mobile/storefront-home.png",
+      "bytes": 258497,
+      "sha256": "cf268873f1eb792eb94329d81f33bdb33e82faa336829bc4e39c3b572968d279"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-sandbox-checkout-cwv-20261103/desktop-final-review.jpg",
+      "bytes": 65726,
+      "sha256": "3372625c060feb15a02c3ed1a1645b3768ffe989b793c13ed7269bbe0e522436"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-sandbox-checkout-cwv-20261103/desktop-storefront.jpg",
+      "bytes": 70743,
+      "sha256": "123b85de349eaf51fa3eb985081f1cbcbe71bca67e315333cd0d350cd3175624"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-sandbox-checkout-cwv-20261103/mobile-final-review.jpg",
+      "bytes": 46894,
+      "sha256": "2ef49e5b93edf611681505a4cff9fc87a582440280fe10e8f0ad91680f85e0de"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-sandbox-checkout-cwv-20261103/mobile-storefront.jpg",
+      "bytes": 36440,
+      "sha256": "5c4dd504219329b065453ba017ed61b07e57b1b875015a98b926bc5145c43308"
+    }
+  ]
+}

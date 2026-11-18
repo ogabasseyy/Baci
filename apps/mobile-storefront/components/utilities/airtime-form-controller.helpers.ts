@@ -6,8 +6,59 @@ import { detectNetwork } from '@/lib/network-utils';
 const MIN_AIRTIME_AMOUNT = 50;
 const MAX_AIRTIME_AMOUNT = 50_000;
 
+/** A Nigerian mobile number in local form: 0 and ten digits. */
+export const LOCAL_PHONE_DIGITS = 11;
+
+/**
+ * The digits of a typed or pasted phone number. A number written with the
+ * +234 country code becomes its local 0 form whatever its length, so cutting
+ * it to 11 digits later never leaves a 234-prefixed number that looks local
+ * (Muse).
+ */
 export function sanitizePhoneDigits(text: string): string {
-  return text.replace(/\D/g, '');
+  const digits = text.replace(/\D/g, '');
+  return digits.startsWith('234') && digits.length > LOCAL_PHONE_DIGITS
+    ? `0${digits.slice(3)}`
+    : digits;
+}
+
+/** What the customer is told when digits beyond one number were dropped. */
+export const PHONE_TRIMMED_NOTICE = {
+  title: 'Check the phone number',
+  message:
+    'We kept the first 11 digits. Please check the number before you pay.',
+};
+
+/**
+ * The field's next value: never more than one 11-digit number, however fast
+ * the text arrives (Fable walks 13 and 14: bursts of late text held 12 or
+ * 13 digits). One keystroke past a full number is simply ignored, like a
+ * maximum length; a paste or a burst that loses digits is `trimmed`, so the
+ * customer is told and checks the number instead of it being cut silently
+ * (Muse).
+ */
+export function nextPhoneDigits(previous: string, text: string) {
+  const all = sanitizePhoneDigits(text);
+  return {
+    digits: all.slice(0, LOCAL_PHONE_DIGITS),
+    trimmed:
+      all.length > LOCAL_PHONE_DIGITS &&
+      !(
+        previous.length === LOCAL_PHONE_DIGITS &&
+        all.length === LOCAL_PHONE_DIGITS + 1
+      ),
+  };
+}
+
+/** The refusal for a number that is not one 11-digit local number. */
+export function phoneLengthError(phoneNumber: string) {
+  // One local number: 0 and ten digits, nothing else (Muse).
+  return /^0\d{10}$/.test(phoneNumber.replace(/\D/g, ''))
+    ? null
+    : {
+        title: 'Check the phone number',
+        message: 'Enter an 11-digit phone number, like 08012345678.',
+      };
 }
 
 export function resolveAirtimeProvider(phoneNumber: string): string | null {
@@ -37,6 +88,8 @@ export function validateAirtimePurchaseInput({
       message: 'Please fill in all fields.',
     };
   }
+  const phoneError = phoneLengthError(phoneNumber);
+  if (phoneError) return phoneError;
 
   if (
     numericAmount < MIN_AIRTIME_AMOUNT ||

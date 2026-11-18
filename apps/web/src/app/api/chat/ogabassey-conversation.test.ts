@@ -240,4 +240,25 @@ describe('Ogabassey conversational providers', () => {
     );
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+
+  it('uses Meta Muse Ember as failover when META_MODEL_API_KEY is configured', async () => {
+    vi.stubEnv('META_MODEL_API_KEY', 'test-meta-key');
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('Luna unavailable'))
+      .mockResolvedValueOnce(
+        completion('Hello from Muse Ember!', 'muse-ember-1.0')
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await runOgabasseyConversation(options());
+
+    expect(await response?.text()).toBe('Hello from Muse Ember!');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const [secondUrl, secondInit] = fetchMock.mock.calls[1];
+    expect(String(secondUrl)).toBe('https://api.meta.ai/v1/chat/completions');
+    const secondBody = JSON.parse(String(secondInit.body));
+    expect(secondBody.model).toBe('muse-ember-1.0');
+    expect(secondBody.reasoning_effort).toBe('minimal');
+  });
 });

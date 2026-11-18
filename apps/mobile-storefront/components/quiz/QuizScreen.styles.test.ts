@@ -36,7 +36,7 @@ describe('createQuizStyles', () => {
       mockColors.primaryLowOpacity
     );
     expect(styles.progressFill.backgroundColor).toBe(mockColors.primary);
-    expect(styles.resultTitle.color).toBe(mockColors.success);
+    expect(styles.resultTitle.color).toBe(mockColors.text);
   });
 
   it('does not invent fallback colors when runtime color slots are missing', () => {

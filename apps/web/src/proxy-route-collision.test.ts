@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getSlugForCustomDomain } from '@/lib/domain-cache-simple';
 import { getCurrentSlugForAlias } from '@/lib/slug-alias-cache';
 import { resolveStorefrontProductSlugResolution } from '@/lib/storefront-product-slug-membership';
+import { storefrontRouteSegments } from './config/storefront-route-segments';
 import { proxy } from './proxy';
 
 // Self-contained mocks. This lives in its OWN file rather than proxy.test.ts so
@@ -69,6 +70,8 @@ function collectLiveFirstSegments(
   return found;
 }
 
+const EXACT_LIVE_PAGE_SEGMENTS = new Set(['black-friday', 'unlock-orders']);
+
 describe('bugfix: retired-slug prefix strip shadowed a live storefront route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -94,8 +97,10 @@ describe('bugfix: retired-slug prefix strip shadowed a live storefront route', (
       // the alias lookup would resolve to them — the live route must still win.
       vi.mocked(getSlugForCustomDomain).mockResolvedValue(MERCHANT_SLUG);
       vi.mocked(getCurrentSlugForAlias).mockResolvedValue(MERCHANT_SLUG);
-      const livePath =
-        segment === 'unlock-orders' ? `/${segment}` : `/${segment}/my-post`;
+      // Exact-path pages own only `/<segment>`; deeper paths are PDPs.
+      // Hardcoded (not read from the implementation set) so a wrong set fails.
+      const isExactPage = EXACT_LIVE_PAGE_SEGMENTS.has(segment);
+      const livePath = isExactPage ? `/${segment}` : `/${segment}/my-post`;
       const request = new NextRequest(`https://${CUSTOM_DOMAIN}${livePath}`);
       request.headers.set('host', CUSTOM_DOMAIN);
 
@@ -105,8 +110,7 @@ describe('bugfix: retired-slug prefix strip shadowed a live storefront route', (
       // Assert (collected, so a failure names every offending segment at once)
       const location = response.headers.get('location');
       const strippedPath = location ? new URL(location).pathname : null;
-      const unexpectedRedirectPath =
-        segment === 'unlock-orders' ? '/' : '/my-post';
+      const unexpectedRedirectPath = isExactPage ? '/' : '/my-post';
       if (strippedPath === unexpectedRedirectPath) {
         stripped.push(segment);
       }
@@ -152,6 +156,34 @@ describe('bugfix: retired-slug prefix strip shadowed a live storefront route', (
     expect(response.status).toBe(301);
     expect(response.headers.get('location')).toBe(
       `https://${CUSTOM_DOMAIN}/summer-sale`
+    );
+  });
+
+  it("keeps the sweep's exact-page list in sync with the implementation", () => {
+    // A new exact page added only to the implementation would otherwise be
+    // probed at `/<segment>/my-post` instead of its own exact path.
+    expect(
+      [
+        ...storefrontRouteSegments.RETIRED_SLUG_STRIP_EXACT_LIVE_PAGE_SEGMENTS,
+      ].sort()
+    ).toEqual([...EXACT_LIVE_PAGE_SEGMENTS].sort());
+  });
+
+  it('still strips a suffixed retired black-friday alias', async () => {
+    vi.mocked(getSlugForCustomDomain).mockResolvedValue(MERCHANT_SLUG);
+    vi.mocked(getCurrentSlugForAlias).mockImplementation(
+      async (slug: string) => (slug === 'black-friday' ? MERCHANT_SLUG : null)
+    );
+    const request = new NextRequest(
+      `https://${CUSTOM_DOMAIN}/black-friday/iphone-17`
+    );
+    request.headers.set('host', CUSTOM_DOMAIN);
+
+    const response = await proxy(request);
+
+    expect(response.status).toBe(301);
+    expect(response.headers.get('location')).toBe(
+      `https://${CUSTOM_DOMAIN}/iphone-17`
     );
   });
 });

@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { asRoute } from '@/lib/routes';
 import { cn } from '@/lib/utils';
+import styles from './cookie-consent.module.css';
 import { useCookieConsentController } from './use-cookie-consent-controller';
 
 export { isCookieAllowed } from './is-cookie-allowed';
@@ -33,6 +34,7 @@ export function CookieConsent() {
   return (
     <div
       className={cn(
+        styles.banner,
         isClosing
           ? 'animate-out fade-out slide-out-to-bottom-4 duration-200'
           : 'animate-in slide-in-from-bottom-4 duration-500',
@@ -42,14 +44,15 @@ export function CookieConsent() {
         // Keep the delayed prompt out of document flow even before route CSS.
         position: 'fixed',
         bottom: '1rem',
-        left: 'max(1rem, calc((100% - 64rem) / 2))',
-        right: 'max(1rem, calc((100% - 64rem) / 2))',
+        left: 'max(1rem, calc((100% - 32rem) / 2))',
+        right: 'max(1rem, calc((100% - 32rem) / 2))',
         width: 'auto',
         // Below the cart drawer (z-60), above the mobile footer (z-40):
         // an open drawer must not be covered by the consent prompt.
         zIndex: 50,
         contain: 'layout style paint',
       }}
+      data-storefront-cookie-consent
       role="dialog"
       aria-label="Cookie consent"
     >
@@ -65,6 +68,7 @@ export function CookieConsent() {
           padding: '1rem',
         }}
         className={cn(
+          styles.panel,
           'bg-background/95 backdrop-blur-xl border border-border/50 shadow-2xl rounded-2xl p-4',
           'transition-[opacity,transform] duration-300 ease-in-out'
         )}
@@ -76,9 +80,11 @@ export function CookieConsent() {
           </p>
         )}
         {!showDetails ? (
-          // Simple View - Horizontal Floating Bar
-          <div className="flex flex-col md:flex-row items-center gap-4 md:gap-6">
-            <div className="flex items-center gap-4 flex-1 w-full md:w-auto">
+          // Compact prompt
+          <div
+            className={cn(styles.content, 'flex flex-col items-start gap-3')}
+          >
+            <div className="flex w-full items-start gap-3">
               <div className="hidden sm:flex items-center justify-center size-10 rounded-full bg-primary/10 shrink-0">
                 <Cookie className="size-5 text-primary" />
               </div>
@@ -88,7 +94,7 @@ export function CookieConsent() {
                 <div className="space-y-1 text-sm text-muted-foreground leading-snug">
                   <p>We use cookies to improve your experience.</p>
                   <p>
-                    By using our store, you agree to our{' '}
+                    Optional cookies are up to you.{' '}
                     <Link
                       href={asRoute(`${basePath}/privacy`)}
                       prefetch={false}
@@ -101,7 +107,7 @@ export function CookieConsent() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2 w-full md:w-auto justify-end flex-wrap">
+            <div className="flex w-full flex-wrap items-center justify-end gap-2">
               <Button
                 variant="ghost"
                 size="sm"

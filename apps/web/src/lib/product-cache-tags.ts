@@ -60,3 +60,99 @@ export function getProductScopedCacheTag(
 export function getProductSlugSetCacheTag(merchantId: string): string {
   return `product-slug-set-${merchantId}`;
 }
+
+export function getProductDetailsCacheTag(merchantId: string): string {
+  return `product-details-${merchantId}`;
+}
+
+export function getProductCanonicalRedirectCacheTag(
+  merchantId: string
+): string {
+  return `product-canonical-redirect-${merchantId}`;
+}
+
+export function getProductLegacyRedirectCacheTag(merchantId: string): string {
+  return `product-legacy-redirect-${merchantId}`;
+}
+
+export function buildStorefrontPdpCoreCacheTags(
+  merchantId: string,
+  productSlug: string
+): string[] {
+  return [
+    'product',
+    'product-details',
+    getProductDetailsCacheTag(merchantId),
+    'product-lcp-hint',
+    `products-${merchantId}`,
+    `categories-${merchantId}`,
+    getProductScopedCacheTag('product', merchantId, productSlug),
+  ];
+}
+
+export function buildProductLcpHintCacheTags(
+  merchantId: string,
+  productSlug: string
+): string[] {
+  return [
+    'product',
+    'product-lcp-hint',
+    `products-${merchantId}`,
+    getProductScopedCacheTag('product', merchantId, productSlug),
+  ];
+}
+
+export function buildProductDetailsCacheTags(
+  merchantId: string,
+  productSlug: string
+): string[] {
+  return [
+    'product',
+    'product-details',
+    getProductDetailsCacheTag(merchantId),
+    getProductScopedCacheTag('product', merchantId, productSlug),
+  ];
+}
+
+export function buildProductCanonicalRedirectCacheTags(
+  merchantId: string,
+  productSlug: string
+): string[] {
+  return [
+    'product',
+    'product-canonical-redirect',
+    getProductCanonicalRedirectCacheTag(merchantId),
+    getProductScopedCacheTag('product', merchantId, productSlug),
+    getProductScopedCacheTag(
+      'product-canonical-redirect',
+      merchantId,
+      productSlug
+    ),
+  ];
+}
+
+export function buildProductLegacyRedirectCacheTags(
+  merchantId: string,
+  productSlug: string
+): string[] {
+  return [
+    'product',
+    'product-legacy-redirect',
+    getProductLegacyRedirectCacheTag(merchantId),
+    getProductScopedCacheTag(
+      'product-legacy-redirect',
+      merchantId,
+      productSlug
+    ),
+  ];
+}
+
+export function buildProductCanonicalPreflightCacheTagHeader(
+  merchantId: string
+): string {
+  return `${getProductSlugSetCacheTag(
+    merchantId
+  )},product-canonical-redirect,${getProductCanonicalRedirectCacheTag(
+    merchantId
+  )}`;
+}

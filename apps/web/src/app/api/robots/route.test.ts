@@ -56,6 +56,39 @@ describe('GET /api/robots', () => {
     expectStandardsOnlyRobots(body);
     expect(body).toContain('Disallow: /api/');
     expect(body).toContain('Sitemap: https://ogabassey.com/sitemap/static.xml');
+
+    const defaultBlock = body.split('\n\n')[0] ?? '';
+    expect(defaultBlock).toContain('User-Agent: *');
+    expect(defaultBlock).not.toContain('Disallow: /compare');
+    expect(defaultBlock).not.toContain('Disallow: /*/compare');
+
+    for (const bot of [
+      'Bytespider',
+      'ClaudeBot',
+      'GPTBot',
+      'CCBot',
+      'PetalBot',
+      'SemrushBot',
+      'AhrefsBot',
+      'MJ12bot',
+      'DotBot',
+      'Google-Extended',
+      'anthropic-ai',
+      'cohere-ai',
+      'FacebookBot',
+    ]) {
+      const botBlock = body
+        .split('\n\n')
+        .find((block) => block.startsWith(`User-Agent: ${bot}\n`));
+      expect(botBlock).toBeDefined();
+      expect(botBlock).toContain('Allow: /');
+      expect(botBlock).toContain('Disallow: /compare$\n');
+      expect(botBlock).toContain('Disallow: /compare/\n');
+      expect(botBlock).toContain('Disallow: /compare?\n');
+      expect(botBlock).toContain('Disallow: /*/compare$\n');
+      expect(botBlock).toContain('Disallow: /*/compare/\n');
+      expect(botBlock).toContain('Disallow: /*/compare?');
+    }
   });
 
   it('returns a safe fallback when the robots provider fails', async () => {

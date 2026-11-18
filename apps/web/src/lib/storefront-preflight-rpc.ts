@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { storefrontPreflightRpcMemo } from '@/lib/storefront-preflight-rpc-memo';
+import { getStorefrontPreflightMemoWriteDecision } from '@/lib/storefront-preflight-rpc-memo-policy';
 import { createPublicClient } from '@/lib/supabase/public';
 import { createAbortSignalTimeout } from './abort-signal-timeout';
 import type { StorefrontInternalPreflightSurface } from './storefront-internal-preflight';
@@ -64,6 +65,8 @@ interface CallStorefrontPreflightRpcOptions {
    * reporting a parse incident.
    */
   emptyResult?: 'unknown';
+  /** Skip reading the in-memory verdict memo (used before emitting a 308). */
+  bypassMemo?: boolean;
 }
 
 // A 2s budget recovers transport-tail events; memo and breaker bound its cost.
@@ -118,15 +121,17 @@ export async function callStorefrontPreflightRpc(
   }
 
   const key = storefrontPreflightRpcMemo.key(fn, argsSnapshot, emptyResult);
-  const memoized = storefrontPreflightRpcMemo.read(key);
-  if (
-    storefrontPreflightRpcMemo.isTimeout(memoized) ||
-    storefrontPreflightRpcMemo.isEmptyResult(memoized)
-  ) {
-    return null;
-  }
-  if (memoized !== undefined) {
-    return { data: memoized, attempt: null };
+  if (!options.bypassMemo) {
+    const memoized = storefrontPreflightRpcMemo.read(key);
+    if (
+      storefrontPreflightRpcMemo.isTimeout(memoized) ||
+      storefrontPreflightRpcMemo.isEmptyResult(memoized)
+    ) {
+      return null;
+    }
+    if (memoized !== undefined) {
+      return { data: memoized, attempt: null };
+    }
   }
 
   const rpcImpl = options.rpcImpl ?? defaultRpcImpl;
@@ -231,7 +236,10 @@ async function runStorefrontPreflightRpcAttempt(
     return null;
   }
 
-  storefrontPreflightRpcMemo.write(key, row);
+  const memoDecision = getStorefrontPreflightMemoWriteDecision(fn, row);
+  if (memoDecision.shouldMemoize) {
+    storefrontPreflightRpcMemo.write(key, row, memoDecision.ttlMs);
+  }
   const attempt = recordAttempt('success');
   return { data: row, attempt };
 }

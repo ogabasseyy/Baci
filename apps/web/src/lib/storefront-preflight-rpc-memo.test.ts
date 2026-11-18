@@ -47,31 +47,31 @@ describe('storefront preflight RPC memo', () => {
     expect(isEmptyResult(read(timeoutKey))).toBe(false);
   });
 
-  it('respects custom TTLs for positive and negative verdicts', () => {
+  it('respects custom TTLs for published-active and default verdicts', () => {
     vi.useFakeTimers();
-    const posKey = key(
+    const activeKey = key(
       'get_storefront_pdp_preflight',
       { p_slug: 'a' },
       undefined
     );
-    const negKey = key(
+    const defaultKey = key(
       'get_storefront_pdp_preflight',
       { p_slug: 'b' },
       undefined
     );
 
-    write(posKey, { present: true }, 60_000);
-    write(negKey, { present: false }, 15_000);
+    write(activeKey, { present: true }, 60_000);
+    write(defaultKey, { present: false });
 
-    vi.advanceTimersByTime(14_999);
-    expect(read(posKey)).toEqual({ present: true });
-    expect(read(negKey)).toEqual({ present: false });
+    vi.advanceTimersByTime(2_999);
+    expect(read(activeKey)).toEqual({ present: true });
+    expect(read(defaultKey)).toEqual({ present: false });
 
     vi.advanceTimersByTime(2);
-    expect(read(negKey)).toBeUndefined();
-    expect(read(posKey)).toEqual({ present: true });
+    expect(read(defaultKey)).toBeUndefined();
+    expect(read(activeKey)).toEqual({ present: true });
 
-    vi.advanceTimersByTime(45_000);
-    expect(read(posKey)).toBeUndefined();
+    vi.advanceTimersByTime(57_000);
+    expect(read(activeKey)).toBeUndefined();
   });
 });

@@ -120,6 +120,9 @@ export async function getStorefrontProductCanonicalRedirectResult(
 
   let targetPath = buildCanonicalTargetPath(verdict);
   const requestedPath = `/${opts.category}/${opts.productSlug}`;
+  // Matching paths return directly from the 60s published-active memo to bound
+  // repeated PDP preflight RPCs; Next.js cache-tag invalidation governs PDP
+  // page data freshness, while the 60s window bounds edge unpublish/delete lag.
   if (
     normalizeStorefrontPdpPathForCompare(targetPath) ===
     normalizeStorefrontPdpPathForCompare(requestedPath)

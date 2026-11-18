@@ -11,6 +11,20 @@ import {
 
 let consoleWarnSpy: ReturnType<typeof vi.spyOn>;
 
+const VALID_PDP_ROW = {
+  storefront_status: 'published',
+  catalog_nonempty: true,
+  present: true,
+  match_kind: 'active',
+  product_id: null,
+  product_name: null,
+  product_slug: null,
+  product_category: null,
+  category_id: null,
+  category_name: null,
+  category_slug: null,
+};
+
 describe('storefront preflight RPC telemetry', () => {
   beforeEach(() => {
     resetStorefrontPreflightRpcForTests();
@@ -31,7 +45,7 @@ describe('storefront preflight RPC telemetry', () => {
       .mockImplementation(() => undefined);
     const rpcImpl = vi
       .fn()
-      .mockResolvedValue({ data: [{ ok: true }], error: null });
+      .mockResolvedValue({ data: [VALID_PDP_ROW], error: null });
     const options = {
       failOpenContext: context({ surface: 'product-canonical' }),
       rpcImpl,
@@ -128,7 +142,7 @@ describe('storefront preflight RPC telemetry', () => {
       .mockImplementation(() => undefined);
     const rpcImpl = vi
       .fn()
-      .mockResolvedValue({ data: [{ ok: true }], error: null });
+      .mockResolvedValue({ data: [VALID_PDP_ROW], error: null });
     const options = {
       failOpenContext: context({ surface: 'product-canonical' }),
       rpcImpl,
@@ -147,7 +161,7 @@ describe('storefront preflight RPC telemetry', () => {
       options
     );
 
-    expect(fresh?.data).toEqual({ ok: true });
+    expect(fresh?.data).toEqual(VALID_PDP_ROW);
     expect(fresh?.attempt).toEqual(
       expect.objectContaining({
         outcome: 'success',
@@ -159,7 +173,7 @@ describe('storefront preflight RPC telemetry', () => {
       Record<string, unknown>,
     ];
     expect(fresh?.attempt?.attemptId).toBe(attemptProperties.attempt_id);
-    expect(memoized).toEqual({ data: { ok: true }, attempt: null });
+    expect(memoized).toEqual({ data: VALID_PDP_ROW, attempt: null });
   });
 
   it('classifies and records a Postgres statement-timeout separately', async () => {
@@ -258,5 +272,29 @@ describe('storefront preflight RPC telemetry', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('does not memoize schema-invalid get_storefront_pdp_preflight rows', async () => {
+    vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    const rpcImpl = vi
+      .fn()
+      .mockResolvedValueOnce({ data: [{ invalid: true }], error: null })
+      .mockResolvedValueOnce({ data: [VALID_PDP_ROW], error: null });
+
+    const first = await callStorefrontPreflightRpc(
+      'get_storefront_pdp_preflight',
+      { p_identifier: 'ogabassey.com', p_product_slug: 'phone' },
+      { failOpenContext: context(), rpcImpl }
+    );
+    const second = await callStorefrontPreflightRpc(
+      'get_storefront_pdp_preflight',
+      { p_identifier: 'ogabassey.com', p_product_slug: 'phone' },
+      { failOpenContext: context(), rpcImpl }
+    );
+
+    expect(first?.data).toEqual({ invalid: true });
+    expect(second?.data).toEqual(VALID_PDP_ROW);
+    expect(second?.attempt).not.toBeNull();
+    expect(rpcImpl).toHaveBeenCalledTimes(2);
   });
 });

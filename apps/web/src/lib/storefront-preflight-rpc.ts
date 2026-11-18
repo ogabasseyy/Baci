@@ -78,22 +78,25 @@ const PDP_PUBLISHED_ACTIVE_TTL_MS = 60_000;
 // One navigation's helpers call within ~100ms; this short memo absorbs repeats.
 const breaker = createStorefrontPreflightCircuitBreaker();
 
-function getMemoTtlMs(fn: string, row: unknown): number | undefined {
+function getMemoWriteDecision(
+  fn: string,
+  row: unknown
+): { shouldMemoize: boolean; ttlMs?: number } {
   if (fn !== STOREFRONT_PDP_PREFLIGHT_RPC) {
-    return undefined;
+    return { shouldMemoize: true };
   }
   const parsed = storefrontPdpPreflightRowSchema.safeParse(row);
   if (!parsed.success) {
-    return undefined;
+    return { shouldMemoize: false };
   }
   if (
     parsed.data.present &&
     parsed.data.storefront_status === 'published' &&
     parsed.data.match_kind === 'active'
   ) {
-    return PDP_PUBLISHED_ACTIVE_TTL_MS;
+    return { shouldMemoize: true, ttlMs: PDP_PUBLISHED_ACTIVE_TTL_MS };
   }
-  return undefined;
+  return { shouldMemoize: true };
 }
 
 let client: SupabaseClient | null = null;
@@ -258,7 +261,10 @@ async function runStorefrontPreflightRpcAttempt(
     return null;
   }
 
-  storefrontPreflightRpcMemo.write(key, row, getMemoTtlMs(fn, row));
+  const memoDecision = getMemoWriteDecision(fn, row);
+  if (memoDecision.shouldMemoize) {
+    storefrontPreflightRpcMemo.write(key, row, memoDecision.ttlMs);
+  }
   const attempt = recordAttempt('success');
   return { data: row, attempt };
 }

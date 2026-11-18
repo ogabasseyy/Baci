@@ -204,6 +204,16 @@ BEGIN
        IS DISTINCT FROM 'processing'
      OR (SELECT shipment_id FROM public.orders WHERE id = pg_temp.fixture_id(2, 7))
        IS NOT NULL
+     OR (SELECT tracking_number FROM public.orders WHERE id = pg_temp.fixture_id(2, 7))
+       IS NOT NULL
+     OR (SELECT selected_quote_id FROM public.orders WHERE id = pg_temp.fixture_id(2, 7))
+       IS DISTINCT FROM pg_temp.fixture_id(3, 7)
+     OR (SELECT shipping_funding_source FROM public.orders WHERE id = pg_temp.fixture_id(2, 7))
+       IS DISTINCT FROM 'customer_checkout'
+     OR (SELECT shipping_platform_retained_amount FROM public.orders WHERE id = pg_temp.fixture_id(2, 7))
+       IS DISTINCT FROM 48500.40
+     OR (SELECT cancelled_at FROM public.orders WHERE id = pg_temp.fixture_id(2, 7))
+       IS NOT NULL
      OR (SELECT status FROM public.shipments WHERE id = pg_temp.fixture_id(4, 7))
        IS DISTINCT FROM 'cancelled'
      OR (SELECT state FROM public.shipment_tracking_monitors

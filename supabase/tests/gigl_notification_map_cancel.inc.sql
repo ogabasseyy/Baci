@@ -52,14 +52,14 @@ BEGIN
   INSERT INTO public.shipment_tracking_notification_outbox (
     shipment_id, tracking_epoch_id, order_id, merchant_id, tracking_event_id,
     audience, notification_kind
-  ) VALUES (
-    f.shipment_id, f.epoch_id, f.order_id, f.merchant_id, f.event_id,
-    'customer', 'cancelled'
-  );
-  IF (SELECT skip_reason FROM public.shipment_tracking_notification_outbox
-      WHERE shipment_id = f.shipment_id AND audience = 'customer'
-        AND notification_kind = 'cancelled') IS DISTINCT FROM 'superseded_by_newer_shipment' THEN
-    RAISE EXCEPTION 'cancellation must be dropped when a newer live shipment exists';
+  ) VALUES
+    (f.shipment_id, f.epoch_id, f.order_id, f.merchant_id, f.event_id, 'customer', 'cancelled'),
+    (f.shipment_id, f.epoch_id, f.order_id, f.merchant_id, f.event_id, 'merchant', 'cancelled');
+  IF (SELECT count(*) FROM public.shipment_tracking_notification_outbox
+      WHERE shipment_id = f.shipment_id
+        AND notification_kind = 'cancelled'
+        AND skip_reason = 'superseded_by_newer_shipment') <> 2 THEN
+    RAISE EXCEPTION 'cancellation must be dropped for both customer and merchant when a newer live shipment exists';
   END IF;
   IF (SELECT count(*) FROM public.shipment_tracking_notification_outbox
       WHERE shipment_id = v_new_shipment

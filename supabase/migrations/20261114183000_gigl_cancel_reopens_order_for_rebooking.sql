@@ -5,12 +5,14 @@
 -- 1. private.sync_gigl_tracking_order_status (latest: 20260802000400) keeps
 --    every other mapping, but a 'cancelled' shipment now moves its order back
 --    to 'processing' and clears the order's active shipment link
---    (shipment_id, tracking_number, selected_quote_id and, through
---    private.stamp_gigl_order_economics, the wallet funding source) so the
---    merchant can rebook. Only the shipment the order points at (or an order
---    with no link) is reopened; a cancelled, delivered, completed or returned
---    order is left alone. The order is cancelled only by an order
---    cancellation.
+--    (shipment_id, tracking_number and, for non-customer_checkout orders such
+--    as merchant_wallet, selected_quote_id and shipping_funding_source) so the
+--    merchant can rebook. Paid customer_checkout orders keep selected_quote_id,
+--    shipping_funding_source and stamped economics intact (needed for station
+--    deliveries and settled checkouts). Only the shipment the order points at
+--    (or a NULL-linked order with no other non-cancelled shipment) is
+--    reopened; a cancelled, delivered, completed, returned or failed order is
+--    left alone. The order is cancelled only by an order cancellation.
 --    The merchant-wallet refund stays with the attested provider-cancellation
 --    path (20261102053310/20261102053320), which runs inside
 --    apply_gigl_tracking_result before the shipments update. When a booked or
@@ -52,10 +54,23 @@ BEGIN
           AND newer_shipment.tracking_timeline_generation
             > NEW.tracking_timeline_generation
       )
-      AND (orders.shipment_id = NEW.id OR orders.shipment_id IS NULL)
+      AND (
+        orders.shipment_id = NEW.id
+        OR (
+          orders.shipment_id IS NULL
+          AND NOT EXISTS (
+            SELECT 1
+            FROM public.shipments AS other_shipment
+            WHERE other_shipment.order_id = NEW.order_id
+              AND other_shipment.merchant_id = NEW.merchant_id
+              AND other_shipment.id <> NEW.id
+              AND other_shipment.status <> 'cancelled'
+          )
+        )
+      )
       AND orders.cancelled_at IS NULL
       AND coalesce(orders.shipping_status, '') NOT IN (
-        'delivered', 'completed', 'cancelled', 'canceled', 'returned'
+        'delivered', 'completed', 'cancelled', 'canceled', 'returned', 'failed'
       )
     FOR UPDATE;
     IF NOT FOUND THEN
@@ -75,8 +90,16 @@ BEGIN
     SET shipping_status = 'processing',
         shipment_id = NULL,
         tracking_number = NULL,
-        selected_quote_id = NULL,
-        shipping_funding_source = NULL,
+        selected_quote_id = CASE
+          WHEN orders.shipping_funding_source = 'customer_checkout'
+            THEN orders.selected_quote_id
+          ELSE NULL
+        END,
+        shipping_funding_source = CASE
+          WHEN orders.shipping_funding_source = 'customer_checkout'
+            THEN orders.shipping_funding_source
+          ELSE NULL
+        END,
         updated_at = now()
     WHERE orders.id = v_order_id;
     RETURN NEW;
@@ -142,7 +165,7 @@ BEGIN
     NEW.status := 'skipped';
     NEW.skipped_at := now();
     NEW.skip_reason := 'merchant_preference_off';
-  ELSIF NEW.audience = 'customer' AND NEW.notification_kind = 'cancelled'
+  ELSIF NEW.notification_kind = 'cancelled'
     AND private.gigl_cancellation_superseded(NEW.shipment_id)
   THEN
     NEW.status := 'skipped';

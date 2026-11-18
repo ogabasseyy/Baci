@@ -1,9 +1,11 @@
 import { afterEach, expect, it, vi } from 'vitest';
 
+type NextServerModule = typeof import('next/server');
+
 const mocks = vi.hoisted(() => ({ after: vi.fn(), rpc: vi.fn() }));
 vi.mock('server-only', () => ({}));
 vi.mock('next/server', async (load) => ({
-  ...(await load<typeof import('next/server')>()),
+  ...(await load<NextServerModule>()),
   after: mocks.after,
 }));
 vi.mock('@/lib/payments/oxygen/runtime-worker-client', () => ({

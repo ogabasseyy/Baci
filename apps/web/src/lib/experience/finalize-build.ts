@@ -59,6 +59,7 @@ export async function finalizeExperienceBuild(
       digest: digestBytes(c.css),
     },
   ];
+  inputCtx.signal?.throwIfAborted();
   const r = await ctx.supabase.rpc('experience_finalize_build', {
     ...ownerRpcArgs(ctx),
     p_job: v.jobId,

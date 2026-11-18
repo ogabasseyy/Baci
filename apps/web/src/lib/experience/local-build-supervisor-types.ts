@@ -17,6 +17,14 @@ export interface VerifierReceipt {
   hostOrigin: string;
 }
 
+export type ExperienceBuildExecutor = typeof runLocalQualification & {
+  withSignal?(
+    kind: Parameters<typeof runLocalQualification>[0],
+    payload: unknown,
+    signal: AbortSignal
+  ): ReturnType<typeof runLocalQualification>;
+};
+
 export type ExperienceBuildDependencies = {
   profile?: 'production';
   previewOrigin?: string;
@@ -35,5 +43,5 @@ export type ExperienceBuildDependencies = {
         ctx: OwnerRequestContext,
         manifest: ExperienceManifest
       ) => Promise<PublicBootstrap>);
-  execute?: typeof runLocalQualification;
+  execute?: ExperienceBuildExecutor;
 } & BuildPerformanceDependencies;

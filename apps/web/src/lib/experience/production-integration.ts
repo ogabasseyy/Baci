@@ -211,7 +211,9 @@ export function createProductionExperienceIntegration(settings: {
     dispatcher: {
       rendering: 'prerender-private',
       finalizeBuild: async (ctx, input) =>
-        (await pipelineFor(ctx)).pipeline.finalizeBuild(ctx, input),
+        (
+          await pipelineFor(ctx, 'storefront.write', ctx.signal)
+        ).pipeline.finalizeBuild(ctx, input),
       readPerformance: async (binding, trusted) =>
         trusted
           ? (

@@ -23,7 +23,9 @@ it('revalidates owner access and sends only identifiers to the fixed verifier po
     },
     rpc: vi.fn(async () => ({ data: true, error: null })),
   };
-  const verify = vi.fn(async () => {});
+  const verify = vi.fn<
+    Parameters<typeof createVerifierBuildHandler>[0]['verify']
+  >(async () => {});
   const handler = createVerifierBuildHandler({
     key,
     consumeNonce: async () => true,
@@ -69,6 +71,22 @@ it('revalidates owner access and sends only identifiers to the fixed verifier po
       )
     ).rejects.toThrow();
     expect(verify).toHaveBeenCalledOnce();
+
+    const controller = new AbortController();
+    const { promise: entered, resolve: enter } = Promise.withResolvers<void>();
+    const { promise: disconnected, resolve: disconnect } =
+      Promise.withResolvers<void>();
+    verify.mockImplementationOnce(async (_client, _receipt, signal) => {
+      signal?.addEventListener('abort', disconnect, { once: true });
+      enter();
+      await disconnected;
+    });
+    const pending = client(receipt, { ...ctx, signal: controller.signal });
+    const denied = expect(pending).rejects.toThrow('VERIFIER_UNAVAILABLE');
+    await entered;
+    controller.abort();
+    await denied;
+    await disconnected;
   } finally {
     await listener.close();
   }

@@ -6,7 +6,6 @@ import type {
 import { sourceDigest } from '@baci/shared/experience';
 import { experiencePerformanceReport } from '@/schemas/experience-performance';
 import { createDurablePrerenderArtifacts } from '../../../tools/experience-runner/durable-prerender-artifacts';
-import { runLocalQualification } from '../../../tools/experience-runner/local-oci-executor';
 import { createLocalPrerenderArtifacts } from '../../../tools/experience-runner/prerender-artifacts';
 import {
   type OwnerRequestContext,
@@ -148,6 +147,7 @@ function createPrerenderPipeline(
           ),
         performanceMeasurement: ({
           ctx: owner,
+          execute,
           manifest,
           candidate,
           renderer,
@@ -156,7 +156,7 @@ function createPrerenderPipeline(
           sourceDigest,
         }) =>
           measureCandidatePerformance({
-            execute: settings.build.execute ?? runLocalQualification,
+            execute,
             manifest,
             bootstrap: async (view) => {
               await requireExperienceOwner(owner);

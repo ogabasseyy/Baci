@@ -1,7 +1,6 @@
 import type { ExperienceManifest } from '@baci/shared/experience';
 import { sourceDigest } from '@baci/shared/experience';
 import { parseExperienceManifest } from '@/schemas/experience-manifest';
-import { runLocalQualification } from '../../../tools/experience-runner/local-oci-executor';
 import {
   acceptJobOutput,
   signJobTicket,
@@ -15,7 +14,7 @@ import {
   ownerRpcArgs,
   requireExperienceOwner,
 } from './authorization';
-import { startBuildLeaseHeartbeat } from './build-lease-heartbeat';
+import { bindBuildExecutor, startLinkedBuildLease } from './build-execution';
 import { retainBuildPerformanceReport } from './build-performance-retention';
 import { verifyCompiledCandidate } from './build-service';
 import { assertCandidatePerformanceBudget } from './candidate-performance-budget';
@@ -33,6 +32,8 @@ export async function runExperienceBuild(
   input: { jobId: string; idempotencyKey: string },
   deps: ExperienceBuildDependencies
 ) {
+  const signal = inputCtx.signal;
+  signal?.throwIfAborted();
   if (deps.previewOrigin && deps.profile !== 'production')
     throw Error('INVALID_PREVIEW_ORIGIN');
   if (
@@ -49,13 +50,15 @@ export async function runExperienceBuild(
   const ctx = await requireExperienceOwner(inputCtx);
   const repo = createExperienceRepository(ctx);
   const job = await repo.loadOwnedJob(input.jobId);
+  signal?.throwIfAborted();
+  const execute = bindBuildExecutor(deps.execute, signal);
   if (job.status === 'finalized')
     return recoverFinalizedBuild(ctx, job, {
       hostOrigin,
       previewOrigin: deps.previewOrigin,
       profile: deps.profile,
       artifacts: deps.prerenderArtifacts,
-      execute: deps.execute,
+      execute,
     });
   if (job.status !== 'queued' || Date.parse(job.expires_at) <= Date.now())
     throw Error('BUILD_FAILED');
@@ -65,16 +68,7 @@ export async function runExperienceBuild(
     p_attempt: job.attempt_nonce,
   });
   if (claim.error) throw Error('BUILD_FAILED');
-  const lease = ctx.identity
-    ? startBuildLeaseHeartbeat(async () => {
-        const renewal = await ctx.supabase.rpc('experience_renew_build_lease', {
-          ...ownerRpcArgs(ctx),
-          p_job: job.id,
-          p_attempt: job.attempt_nonce,
-        });
-        return !renewal.error && renewal.data === true;
-      })
-    : undefined;
+  const lease = startLinkedBuildLease(ctx, job);
   let transientId: string | undefined;
   try {
     const source = await ctx.supabase
@@ -94,7 +88,6 @@ export async function runExperienceBuild(
         ? await deps.bootstrap(ctx, manifest)
         : deps.bootstrap;
     await requireExperienceOwner(ctx);
-    const execute = deps.execute ?? runLocalQualification;
     const ticket = signJobTicket(
       {
         jobId: job.id,
@@ -124,6 +117,7 @@ export async function runExperienceBuild(
     const assets = manifest.assets.length
       ? await loadOfflineAssets(
           ctx,
+          execute,
           manifest.assets.map((a) => a.assetId)
         )
       : [];
@@ -231,6 +225,7 @@ export async function runExperienceBuild(
       })
     );
     await lease?.assertHeld();
+    signal?.throwIfAborted();
     await deps.recordVerifiedEvidence(
       {
         merchantId: ctx.merchantId,
@@ -243,6 +238,7 @@ export async function runExperienceBuild(
       ctx
     );
     await lease?.assertHeld();
+    signal?.throwIfAborted();
     const result = await finalizeExperienceBuild(ctx, input, {
       jobId: job.id,
       attemptNonce: job.attempt_nonce,
@@ -281,6 +277,7 @@ export async function runExperienceBuild(
       },
     };
   } catch (error) {
+    await lease?.stop();
     await ctx.supabase.rpc('experience_fail_build', {
       ...ownerRpcArgs(ctx),
       p_job: job.id,

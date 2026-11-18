@@ -4,6 +4,23 @@ import { startBuildLeaseHeartbeat } from './build-lease-heartbeat';
 
 afterEach(() => vi.useRealTimers());
 
+it('stops renewing and rejects finalization after a caller disconnects', async () => {
+  vi.useFakeTimers();
+  const controller = new AbortController();
+  const renew = vi.fn(async () => true);
+  const lease = startBuildLeaseHeartbeat(renew, 1000, 100, controller.signal);
+  try {
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(renew).toHaveBeenCalledOnce();
+    controller.abort();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(renew).toHaveBeenCalledOnce();
+    await expect(lease.assertHeld()).rejects.toThrow('BUILD_LEASE_LOST');
+  } finally {
+    await lease.stop();
+  }
+});
+
 it('renews without overlapping, fails closed after a lost lease, and stops', async () => {
   vi.useFakeTimers();
   const renew = vi

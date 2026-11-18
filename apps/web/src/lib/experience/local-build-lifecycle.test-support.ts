@@ -9,6 +9,69 @@ export function registerBuildLifecycleCases(
 ) {
   const { f, context, deps, hostOrigin, validCandidate, runExperienceBuild } =
     fixture;
+  it('aborts a disconnected synchronous build and stops renewing its lease', async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    const { promise: entered, resolve: enter } = Promise.withResolvers<void>();
+    const { promise: output, resolve: finish } =
+      Promise.withResolvers<unknown>();
+    const run = vi.fn(() => {
+      enter();
+      return output;
+    });
+    const withSignal = vi.fn(
+      (_kind: string, _payload: unknown, signal: AbortSignal) => {
+        signal.addEventListener(
+          'abort',
+          () => finish({ output: validCandidate() }),
+          { once: true }
+        );
+        return run();
+      }
+    );
+    const original = context as unknown as {
+      supabase: object;
+      merchantId: string;
+    };
+    const rpc = vi.fn(async () => ({ data: true, error: null }));
+    const linked = {
+      ...original,
+      signal: controller.signal,
+      identity: { connectionId: 'connection', grantVersion: 1 },
+      supabase: { ...original.supabase, rpc },
+    };
+    const input = deps(Object.assign(run, { withSignal }));
+    const build = runExperienceBuild(
+      linked as never,
+      { jobId: 'j', idempotencyKey: 'i' },
+      input
+    );
+    const failed = expect(build).rejects.toThrow();
+    try {
+      await entered;
+      await vi.advanceTimersByTimeAsync(120000);
+      controller.abort();
+      await failed;
+      await vi.advanceTimersByTimeAsync(120000);
+      expect(withSignal).toHaveBeenCalledOnce();
+      expect(withSignal.mock.calls[0]?.[2]).toBe(controller.signal);
+      expect(rpc.mock.calls.flat()).toEqual([
+        'experience_claim_build',
+        expect.any(Object),
+        'experience_renew_build_lease',
+        expect.any(Object),
+        'experience_fail_build',
+        expect.any(Object),
+      ]);
+      expect(input.recordVerifiedEvidence).not.toHaveBeenCalled();
+      expect(f.finalize).not.toHaveBeenCalled();
+    } finally {
+      controller.abort();
+      finish({ output: validCandidate() });
+      vi.useRealTimers();
+    }
+  });
+
   it('does not record evidence or finalize when the linked build lease is lost', async () => {
     const candidate = validCandidate();
     const execute = vi.fn(async (kind: string) => ({

@@ -33,11 +33,13 @@ export function createVerifierBuildClient(settings: {
     throw Error('INVALID_VERIFIER_CONFIG');
   const key = Uint8Array.from(settings.key);
   return async (receipt: VerifierReceipt, ctx: ExperienceContext) => {
+    ctx.signal?.throwIfAborted();
     const value = receiptSchema.parse(receipt);
     if (!ctx.identity || value.merchantId !== ctx.merchantId)
       throw Error('VERIFIER_UNAVAILABLE');
     await requireExperienceOwner(ctx);
     const token = await settings.resolveLinkedAccessToken(ctx.identity);
+    ctx.signal?.throwIfAborted();
     if (!token || token.length > 8192 || !/^[A-Za-z0-9_.-]+$/.test(token))
       throw Error('VERIFIER_UNAVAILABLE');
     const body = JSON.stringify({
@@ -53,7 +55,10 @@ export function createVerifierBuildClient(settings: {
     const status = await new Promise<number>((resolve, reject) => {
       const req = request(
         {
-          signal: AbortSignal.timeout(BUILD_VERIFIER_CALL_TIMEOUT_MS),
+          signal: AbortSignal.any([
+            AbortSignal.timeout(BUILD_VERIFIER_CALL_TIMEOUT_MS),
+            ...(ctx.signal ? [ctx.signal] : []),
+          ]),
           host: '127.0.0.1',
           port: settings.port,
           path: '/v1/build',

@@ -1,5 +1,8 @@
 import { expect, it, vi } from 'vitest';
-import { runHelperQualification } from './helper-executor';
+import {
+  createHelperQualificationExecutor,
+  runHelperQualification,
+} from './helper-executor';
 
 it('uses only the fixed privileged helper and cleans up the matching job', async () => {
   const calls: Array<{ program: string; args: string[]; input?: string }> = [];
@@ -49,14 +52,40 @@ it('refuses unknown jobs and preserves a run failure if cleanup fails', async ()
   expect(command).toHaveBeenCalledTimes(3);
 });
 
-it('does not run a job if preparation fails and reports cleanup failures', async () => {
-  const prepareFails = vi.fn(async () => {
-    throw Error('PREPARE_FAILED');
+it('reconciles the same job if preparation loses its response', async () => {
+  let bundle: string | undefined;
+  const command = vi.fn(async (_program: string, args: string[]) => {
+    if (args[2] === 'prepare') {
+      bundle = args[4];
+      throw Error('PREPARE_FAILED');
+    }
+    expect(args[2]).toBe('delete');
+    expect(args[3]).toBe(bundle);
+    bundle = undefined;
+    return '';
   });
-  await expect(
-    runHelperQualification('compile', {}, prepareFails)
-  ).rejects.toThrow('PREPARE_FAILED');
-  expect(prepareFails).toHaveBeenCalledTimes(1);
+  await expect(runHelperQualification('compile', {}, command)).rejects.toThrow(
+    'PREPARE_FAILED'
+  );
+  expect(command).toHaveBeenCalledTimes(2);
+  expect(bundle).toBeUndefined();
+});
+
+it('stops admission after uncertain prepare and failed cleanup', async () => {
+  const command = vi.fn(async (_program: string, args: string[]) => {
+    if (args[2] === 'prepare') throw Error('PREPARE_FAILED');
+    expect(args[2]).toBe('delete');
+    throw Error('DELETE_FAILED');
+  });
+  const execute = createHelperQualificationExecutor(command);
+  await expect(execute('compile', {})).rejects.toThrow('PREPARE_FAILED');
+  await expect(execute('capture', {})).rejects.toThrow(
+    'RUNNER_JOB_RECONCILIATION_REQUIRED'
+  );
+  expect(command).toHaveBeenCalledTimes(2);
+});
+
+it('reports cleanup failures following a successful run', async () => {
   const cleanupFails = vi.fn(async (_program: string, args: string[]) => {
     if (args[2] === 'delete') throw Error('DELETE_FAILED');
     return args[2] === 'run' ? '{}' : '';

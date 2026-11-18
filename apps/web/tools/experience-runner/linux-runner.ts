@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { runHelperQualification } from './helper-executor';
+import { createHelperQualificationExecutor } from './helper-executor';
 import {
   type LocalTransport,
   outputBudgetExceeded,
@@ -145,7 +145,6 @@ export async function createHelperLinuxRunner(config: {
   return createRunnerHandler({
     key: config.key,
     toolchainDigest: config.toolchainDigest,
-    execute: (kind, payload) =>
-      runHelperQualification(kind, payload, runCommand),
+    execute: createHelperQualificationExecutor(runCommand),
   });
 }

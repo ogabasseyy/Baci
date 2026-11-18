@@ -1229,15 +1229,22 @@ export class QuizRoomEngine {
     });
   }
 
-  private async buildBundleForAttemptSync(
-    attempt: AttemptRow,
-    config: QuizEventConfig
-  ): Promise<QuizAttemptBundle> {
+  private readAttemptAndAnswersSync(attempt: AttemptRow): {
+    attempt: AttemptRow;
+    answerRows: AnswerRow[];
+  } {
     const answerRows = this.storage.exec<AnswerRow>(
       `SELECT * FROM room_answers WHERE attempt_id = ? ORDER BY position ASC`,
       attempt.attempt_id
     ).rows;
+    return { attempt, answerRows };
+  }
 
+  private async finalizeBundleChecksum(
+    attempt: AttemptRow,
+    answerRows: readonly AnswerRow[],
+    config: QuizEventConfig
+  ): Promise<QuizAttemptBundle> {
     const answers: QuizAttemptAnswerTranscript[] = answerRows.map((ans) => ({
       questionId: ans.question_id,
       slotId: ans.slot_id,
@@ -1292,10 +1299,14 @@ export class QuizRoomEngine {
   async flushPendingBatches(
     nowMs = Date.now()
   ): Promise<PackedMessageWithMetrics[]> {
-    const pendingBundles = await this.storage.transactionSync(async () => {
+    const pendingRaw = this.storage.transactionSync(() => {
       const config = this.readMetaSync<QuizEventConfig>('config');
       if (!config)
-        return { config: null, bundles: [] as QuizAttemptBundle[], nextSeq: 1 };
+        return {
+          config: null,
+          items: [] as { attempt: AttemptRow; answerRows: AnswerRow[] }[],
+          nextSeq: 1,
+        };
       const alarmState = this.getAlarmStateSync(config);
       const outboxRows = this.storage.exec<{ attempt_id: string }>(
         `SELECT attempt_id FROM room_outbox`
@@ -1303,33 +1314,44 @@ export class QuizRoomEngine {
       if (outboxRows.length === 0) {
         return {
           config,
-          bundles: [] as QuizAttemptBundle[],
+          items: [] as { attempt: AttemptRow; answerRows: AnswerRow[] }[],
           nextSeq: alarmState.nextBatchSeq,
         };
       }
-      const bundles: QuizAttemptBundle[] = [];
+      const items: { attempt: AttemptRow; answerRows: AnswerRow[] }[] = [];
       for (const item of outboxRows) {
         const attempt = this.storage.exec<AttemptRow>(
           `SELECT * FROM room_attempts WHERE attempt_id = ?`,
           item.attempt_id
         ).rows[0];
         if (!attempt || attempt.exported_batch_id !== null) continue;
-        bundles.push(await this.buildBundleForAttemptSync(attempt, config));
+        items.push(this.readAttemptAndAnswersSync(attempt));
       }
-      return { config, bundles, nextSeq: alarmState.nextBatchSeq };
+      return { config, items, nextSeq: alarmState.nextBatchSeq };
     });
 
-    if (!pendingBundles.config || pendingBundles.bundles.length === 0) {
+    if (!pendingRaw.config || pendingRaw.items.length === 0) {
       return [];
     }
 
+    const bundles: QuizAttemptBundle[] = [];
+    for (const item of pendingRaw.items) {
+      bundles.push(
+        await this.finalizeBundleChecksum(
+          item.attempt,
+          item.answerRows,
+          pendingRaw.config
+        )
+      );
+    }
+
     const packer = new QuizBatchPacker({
-      eventId: pendingBundles.config.eventId,
+      eventId: pendingRaw.config.eventId,
       roomId: this.roomId,
-      initialSeq: pendingBundles.nextSeq,
+      initialSeq: pendingRaw.nextSeq,
     });
     const packedMessages: PackedMessageWithMetrics[] = [];
-    for (const bundle of pendingBundles.bundles) {
+    for (const bundle of bundles) {
       packedMessages.push(...(await packer.addBundle(bundle, nowMs)));
     }
     const tail = await packer.flush(nowMs);

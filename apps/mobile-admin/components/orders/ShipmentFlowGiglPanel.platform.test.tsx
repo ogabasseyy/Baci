@@ -36,6 +36,7 @@ const base = {
   error: null,
   fundingAccount: null,
   missingFields: [],
+  providerName: 'GIG',
   quote: {
     id: 'quote-1',
     provider: 'GIGL' as const,

@@ -3,6 +3,9 @@ import { getCategoryPageDataCacheTag } from '@/lib/category-page-cache-tags';
 import { logger } from '@/lib/logger';
 import { normalizeMerchantId } from '@/lib/normalize-merchant-id';
 import {
+  getProductCanonicalRedirectCacheTag,
+  getProductDetailsCacheTag,
+  getProductLegacyRedirectCacheTag,
   getProductScopedCacheTag,
   getProductSlugSetCacheTag,
 } from '@/lib/product-cache-tags';
@@ -174,7 +177,10 @@ function revalidateProducts(
     });
   }
   entries.push(
-    { profile: productsProfile, tag: `product-details-${normalizedMerchantId}` },
+    {
+      profile: productsProfile,
+      tag: getProductDetailsCacheTag(normalizedMerchantId),
+    },
     {
       profile: storefrontProfile,
       tag: getCategoryPageDataCacheTag(normalizedMerchantId),
@@ -189,11 +195,11 @@ function revalidateProducts(
     },
     {
       profile: productsProfile,
-      tag: `product-canonical-redirect-${normalizedMerchantId}`,
+      tag: getProductCanonicalRedirectCacheTag(normalizedMerchantId),
     },
     {
       profile: productsProfile,
-      tag: `product-legacy-redirect-${normalizedMerchantId}`,
+      tag: getProductLegacyRedirectCacheTag(normalizedMerchantId),
     }
   );
 

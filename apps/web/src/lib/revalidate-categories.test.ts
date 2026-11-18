@@ -63,18 +63,24 @@ describe('revalidateCategories', () => {
     );
   });
 
-  it('warns and skips revalidation when merchantId is blank', () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {
+  it('warns and skips revalidation when merchantId is blank', async () => {
+    const { logger } = await import('@/lib/logger');
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {
       // Expected in this runtime-guard test.
     });
 
-    revalidateCategories('   ');
+    try {
+      revalidateCategories('   ');
 
-    expect(mocks.revalidateTag).not.toHaveBeenCalled();
-    expect(warnSpy).toHaveBeenCalledWith(
-      '[revalidateCategories] Skipped category cache revalidation for invalid merchant ID'
-    );
-    warnSpy.mockRestore();
+      expect(mocks.revalidateTag).not.toHaveBeenCalled();
+      expect(warnSpy).toHaveBeenCalledWith({
+        message:
+          '[revalidateCategories] Skipped category cache revalidation for invalid merchant ID',
+        merchantId: '   ',
+      });
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 
   it('stays free of credential-reaching imports', async () => {
@@ -91,7 +97,10 @@ describe('revalidateCategories', () => {
     expect(imports).toEqual([
       "import { revalidateTag } from 'next/cache';",
       "import { getCategoryPageDataCacheTag } from '@/lib/category-page-cache-tags';",
+      "import { logger } from '@/lib/logger';",
       "import { normalizeMerchantId } from '@/lib/normalize-merchant-id';",
+      'import {',
+      "import { sanitizeForLog } from '@/lib/sanitize-core';",
     ]);
   });
 });

@@ -27,7 +27,13 @@ import { merchantFeatureSettingsDefaults } from '@/lib/merchant-feature-settings
 import { normalizeStorefrontCategoryValue } from '@/lib/normalize-storefront-category-value';
 import { getOrderedBlogPostProductLinks } from '@/lib/ordered-blog-post-product-links';
 import { extractPlatformSubdomainSlug } from '@/lib/platform-subdomain';
-import { getProductScopedCacheTag } from '@/lib/product-cache-tags';
+import {
+  buildProductCanonicalRedirectCacheTags,
+  buildProductDetailsCacheTags,
+  buildProductLcpHintCacheTags,
+  buildProductLegacyRedirectCacheTags,
+  buildStorefrontPdpCoreCacheTags,
+} from '@/lib/product-cache-tags';
 import type { Product } from '@/lib/products';
 import {
   filterPublicBlogCategories,
@@ -1180,15 +1186,7 @@ async function getCachedStorefrontPdpCore(
 ): Promise<CachedStorefrontPdpSnapshot | null> {
   'use cache';
   cacheLife('products');
-  cacheTag(
-    'product',
-    'product-details',
-    `product-details-${merchantId}`,
-    'product-lcp-hint',
-    `products-${merchantId}`,
-    `categories-${merchantId}`,
-    getProductScopedCacheTag('product', merchantId, productSlug)
-  );
+  cacheTag(...buildStorefrontPdpCoreCacheTags(merchantId, productSlug));
 
   const snapshot = unwrapStorefrontReadResultForCache(
     await readStorefrontPdpCoreSnapshot(getStorefrontSnapshotSupabaseClient(), {
@@ -1232,12 +1230,7 @@ export async function getCachedProductLcpHint(
 ): Promise<CachedProductLcpHint | null> {
   'use cache';
   cacheLife('products');
-  cacheTag(
-    'product',
-    'product-lcp-hint',
-    `products-${merchantId}`,
-    getProductScopedCacheTag('product', merchantId, productSlug)
-  );
+  cacheTag(...buildProductLcpHintCacheTags(merchantId, productSlug));
 
   const snapshot = await getCachedStorefrontPdpCore(merchantId, productSlug);
   if (snapshot?.kind !== 'product') return null;
@@ -1263,12 +1256,7 @@ export async function getCachedProductWithDetails(
 ) {
   'use cache';
   cacheLife('products');
-  cacheTag(
-    'product',
-    'product-details',
-    `product-details-${merchantId}`,
-    getProductScopedCacheTag('product', merchantId, productSlug)
-  );
+  cacheTag(...buildProductDetailsCacheTags(merchantId, productSlug));
 
   const snapshot = await getCachedStorefrontPdpCore(merchantId, productSlug);
   return snapshot?.kind === 'product' ? snapshot.product : null;
@@ -1319,17 +1307,7 @@ export async function getCachedProductCanonicalRedirectTarget(
   // slug, so a per-instance local cache is behaviourally identical.
   'use cache';
   cacheLife('products');
-  cacheTag(
-    'product',
-    'product-canonical-redirect',
-    `product-canonical-redirect-${merchantId}`,
-    getProductScopedCacheTag('product', merchantId, productSlug),
-    getProductScopedCacheTag(
-      'product-canonical-redirect',
-      merchantId,
-      productSlug
-    )
-  );
+  cacheTag(...buildProductCanonicalRedirectCacheTags(merchantId, productSlug));
 
   const supabase = getPublicSupabaseClient();
   const isUuid =
@@ -1377,12 +1355,7 @@ export async function getCachedLegacyProductRedirectTarget(
 ): Promise<CachedLegacyProductRedirectTarget | null> {
   'use cache';
   cacheLife('products');
-  cacheTag(
-    'product',
-    'product-legacy-redirect',
-    `product-legacy-redirect-${merchantId}`,
-    getProductScopedCacheTag('product-legacy-redirect', merchantId, productSlug)
-  );
+  cacheTag(...buildProductLegacyRedirectCacheTags(merchantId, productSlug));
 
   const snapshot = await getCachedStorefrontPdpCore(merchantId, productSlug);
   return snapshot?.kind === 'redirect' ? snapshot.target : null;

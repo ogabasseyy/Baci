@@ -1,6 +1,12 @@
 import { revalidateTag } from 'next/cache';
 import { getCategoryPageDataCacheTag } from '@/lib/category-page-cache-tags';
+import { logger } from '@/lib/logger';
 import { normalizeMerchantId } from '@/lib/normalize-merchant-id';
+import {
+  getProductCanonicalRedirectCacheTag,
+  getProductLegacyRedirectCacheTag,
+} from '@/lib/product-cache-tags';
+import { sanitizeForLog } from '@/lib/sanitize-core';
 
 /**
  * Revalidate the cached category surfaces for a merchant.
@@ -20,9 +26,11 @@ export function revalidateCategories(
 ) {
   const normalizedMerchantId = normalizeMerchantId(merchantId);
   if (!normalizedMerchantId) {
-    console.warn(
-      '[revalidateCategories] Skipped category cache revalidation for invalid merchant ID'
-    );
+    logger.warn({
+      message:
+        '[revalidateCategories] Skipped category cache revalidation for invalid merchant ID',
+      merchantId: sanitizeForLog(merchantId),
+    });
     return;
   }
 
@@ -43,11 +51,11 @@ export function revalidateCategories(
     storefrontProfile
   );
   revalidateTag(
-    `product-canonical-redirect-${normalizedMerchantId}`,
+    getProductCanonicalRedirectCacheTag(normalizedMerchantId),
     productProfile
   );
   revalidateTag(
-    `product-legacy-redirect-${normalizedMerchantId}`,
+    getProductLegacyRedirectCacheTag(normalizedMerchantId),
     productProfile
   );
 

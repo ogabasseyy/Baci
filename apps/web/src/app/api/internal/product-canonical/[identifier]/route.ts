@@ -10,7 +10,7 @@ import {
   getValidatedInternalAuthMethod,
   INTERNAL_AUTH_HEADER,
 } from '@/lib/internal-auth-header';
-import { getProductSlugSetCacheTag } from '@/lib/product-cache-tags';
+import { buildProductCanonicalPreflightCacheTagHeader } from '@/lib/product-cache-tags';
 import { UNKNOWN_STOREFRONT_FAIL_OPEN_REASON } from '@/lib/storefront-internal-preflight';
 import {
   buildStorefrontPdpCanonicalPath,
@@ -87,9 +87,8 @@ function toVerdictResponse(
           // `product-canonical-redirect-${merchantId}` tag (kept alongside the
           // legacy `product-canonical-redirect` tag) that the underlying
           // 'use cache' lookup carries and revalidateCategories invalidates.
-          'Vercel-Cache-Tag': `${getProductSlugSetCacheTag(
-            cacheTagMerchantId
-          )},product-canonical-redirect,product-canonical-redirect-${cacheTagMerchantId}`,
+          'Vercel-Cache-Tag':
+            buildProductCanonicalPreflightCacheTagHeader(cacheTagMerchantId),
         }
       : NO_STORE,
   });

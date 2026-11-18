@@ -150,3 +150,20 @@ describe('bugfix: spaced and final-status keys are vend fields', () => {
     expect(hasMonnifyVendEvidence(answer)).toBe(false);
   });
 });
+
+describe('bugfix: numeric vend-specific statuses are evidence', () => {
+  it.each([
+    { transactionStatus: 2 },
+    { vendStatus: '2' },
+  ])('sees vend evidence in %j', (answer) => {
+    expect(hasMonnifyVendEvidence(answer)).toBe(true);
+  });
+
+  it.each([
+    { status: 400 },
+    { responseStatus: '503' },
+    { httpStatus: 400 },
+  ])('sees none in %j', (answer) => {
+    expect(hasMonnifyVendEvidence(answer)).toBe(false);
+  });
+});

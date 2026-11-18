@@ -200,3 +200,17 @@ describe('bugfix: a repeated form field cannot erase a vend state', () => {
     });
   });
 });
+
+describe('bugfix: a nested form reference is vend evidence, not an echo', () => {
+  it('keeps responseBody[reference]=<24 hex>&… off Kuda', async () => {
+    mockHttpError(
+      400,
+      'Bad Request',
+      'responseBody[reference]=0123456789abcdef01234567&message=Insufficient+wallet+balance'
+    );
+
+    await expect(vend()).resolves.toMatchObject({
+      providerDefiniteFailure: false,
+    });
+  });
+});

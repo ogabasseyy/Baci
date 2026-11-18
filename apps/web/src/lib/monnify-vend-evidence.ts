@@ -78,6 +78,7 @@ function isNestedEvidenceKey(key: string): boolean {
 }
 
 const STATUS_KEY = normaliseKey('status');
+const GENERIC_STATUS_KEY = /^(?:http|response|result)?status(?:code)?$/;
 /**
  * HTTP reason phrases and generic error labels that error bodies put in a
  * `status` field. Any other non-numeric status (FAILED, PENDING, CANCELLED,
@@ -99,8 +100,17 @@ function isEvidenceValue(key: string, value: unknown): boolean {
   // A generic `status` counts unless it is an HTTP reason phrase or error
   // label ("error", "Bad Request"): those only label the error body.
   if (key.endsWith(STATUS_KEY)) {
+    // A numeric generic status (status, httpStatus, responseStatus…) is an
+    // HTTP code; a numeric vend-specific one (transactionStatus: 2) is a
+    // vend state.
+    if (typeof value === 'number') {
+      return !GENERIC_STATUS_KEY.test(key);
+    }
     if (typeof value !== 'string') {
       return false;
+    }
+    if (/^\s*\d+\s*$/.test(value)) {
+      return !GENERIC_STATUS_KEY.test(key);
     }
     // "400 Bad Request" reads as its reason phrase.
     const label = value

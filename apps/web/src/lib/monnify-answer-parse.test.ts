@@ -39,16 +39,16 @@ describe('bugfix: repeated form fields keep every value', () => {
   });
 });
 
-describe('bugfix: bracket-notation form keys read as their leaf key', () => {
+describe('bugfix: bracket-notation form keys keep their nesting', () => {
   it('parses "responseBody[transactionStatus]=FAILED"', () => {
     expect(
       parseMonnifyAnswer(
         'responseBody[transactionStatus]=FAILED&message=Insufficient+wallet+balance'
       )
-    ).toEqual({
-      transactionStatus: 'FAILED',
-      message: 'Insufficient wallet balance',
-    });
+    ).toEqual([
+      { responseBody: { transactionStatus: 'FAILED' } },
+      { message: 'Insufficient wallet balance' },
+    ]);
   });
 });
 
@@ -58,14 +58,33 @@ describe('bugfix: percent-encoded bracket keys parse', () => {
       parseMonnifyAnswer(
         'responseBody%5BvendStatus%5D=FAILED&message=Insufficient+wallet+balance'
       )
-    ).toEqual({ vendStatus: 'FAILED', message: 'Insufficient wallet balance' });
+    ).toEqual([
+      { responseBody: { vendStatus: 'FAILED' } },
+      { message: 'Insufficient wallet balance' },
+    ]);
   });
 });
 
-describe('bugfix: dotted form keys read as their leaf key', () => {
+describe('bugfix: dotted form keys keep their nesting', () => {
   it('parses "responseBody.transactionStatus=FAILED"', () => {
     expect(
       parseMonnifyAnswer('responseBody.transactionStatus=FAILED&message=Low')
-    ).toEqual({ transactionStatus: 'FAILED', message: 'Low' });
+    ).toEqual([
+      { responseBody: { transactionStatus: 'FAILED' } },
+      { message: 'Low' },
+    ]);
+  });
+});
+
+describe('bugfix: nested form references keep their nesting', () => {
+  it('keeps responseBody[reference] nested so it counts as vend evidence', () => {
+    expect(
+      parseMonnifyAnswer(
+        'responseBody[reference]=0123456789abcdef01234567&message=Low'
+      )
+    ).toEqual([
+      { responseBody: { reference: '0123456789abcdef01234567' } },
+      { message: 'Low' },
+    ]);
   });
 });

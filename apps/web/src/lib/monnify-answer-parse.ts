@@ -9,15 +9,28 @@ function decode(value: string): string {
 }
 
 /**
- * "responseBody[transactionStatus]" and "responseBody.transactionStatus" read
- * as their leaf key "transactionStatus".
+ * "responseBody[transactionStatus]" and "responseBody.transactionStatus" split
+ * into their path ["responseBody", "transactionStatus"], so nesting is kept:
+ * a nested reference is classified like the JSON equivalent, not like a
+ * top-level echo.
  */
-function leafKey(key: string): string {
-  const brackets = [...key.matchAll(/\[([^\]]*)\]/g)];
-  const leaf = brackets.at(-1)?.[1];
-  const base = leaf?.trim() ? leaf : key;
-  // Dotted nesting ("responseBody.transactionStatus") reads as its last part.
-  return base.split('.').filter(Boolean).at(-1) ?? base;
+function keyPath(key: string): string[] {
+  return key
+    .replace(/\[([^\]]*)\]/g, '.$1')
+    .split('.')
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+type FormValue = string | boolean | null;
+
+/** Builds { a: { b: value } } from a path ["a", "b"]. */
+function nest(path: string[], value: FormValue): Record<string, unknown> {
+  return path.reduceRight<Record<string, unknown>>(
+    (inner, part, index) =>
+      index === path.length - 1 ? { [part]: value } : { [part]: inner },
+    {}
+  );
 }
 
 /** Form values "true"/"false"/"null" become real booleans/null, like JSON. */
@@ -54,7 +67,7 @@ export function parseMonnifyAnswer(body: string): unknown {
   if (segments.length === 0) {
     return null;
   }
-  const entries: [string, string | boolean | null][] = [];
+  const entries: [string[], FormValue][] = [];
   for (const segment of segments) {
     // Decode the key before checking its shape, so percent-encoded brackets
     // ("responseBody%5BvendStatus%5D") still parse.
@@ -68,14 +81,20 @@ export function parseMonnifyAnswer(body: string): unknown {
     if (!match) {
       return null;
     }
-    entries.push([leafKey(match[1]), coerce(decode(match[2]))]);
+    const path = keyPath(match[1]);
+    if (path.length === 0) {
+      return null;
+    }
+    entries.push([path, coerce(decode(match[2]))]);
   }
-  const keys = entries.map(([key]) => key);
-  // A repeated key keeps every value: the body becomes a list of one-pair
-  // objects, each classified on its own, so a later value never erases an
-  // earlier fail-closed one ("status=FAILED&status=false").
-  if (new Set(keys).size !== keys.length) {
-    return entries.map(([key, value]) => ({ [key]: value }));
+  // Flat bodies stay one object. A repeated key or any nesting becomes a
+  // list of one-pair (possibly nested) objects, each classified on its own,
+  // so a later value never erases an earlier fail-closed one
+  // ("status=FAILED&status=false") and nesting is never merged away.
+  const keys = entries.map(([path]) => path.join('.'));
+  const flat = entries.every(([path]) => path.length === 1);
+  if (flat && new Set(keys).size === keys.length) {
+    return Object.fromEntries(entries.map(([path, value]) => [path[0], value]));
   }
-  return Object.fromEntries(entries);
+  return entries.map(([path, value]) => nest(path, value));
 }

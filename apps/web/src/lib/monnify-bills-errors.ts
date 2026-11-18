@@ -243,7 +243,17 @@ function getMonnifyHttpErrorDetail(responseText: string | null) {
       sanitizeMonnifyErrorDetail(responseText)
     );
   } catch {
-    return sanitizeMonnifyErrorDetail(responseText);
+    // A form-encoded body is decoded first, so "Invalid+token+abc123" is
+    // redacted like the plain text it stands for.
+    return sanitizeMonnifyErrorDetail(decodeFormText(responseText));
+  }
+}
+
+function decodeFormText(text: string): string {
+  try {
+    return decodeURIComponent(text.replace(/\+/g, ' '));
+  } catch {
+    return text.replace(/\+/g, ' ');
   }
 }
 

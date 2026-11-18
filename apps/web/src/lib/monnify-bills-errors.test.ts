@@ -201,3 +201,22 @@ describe('bugfix: underscore-grouped phone numbers', () => {
     );
   });
 });
+
+describe('bugfix: form-encoded credentials are redacted', () => {
+  it.each([
+    'message=Invalid+token+abc123',
+    'message=Invalid%20token%20abc123',
+  ])('hides the token in %s', async (body) => {
+    const { createMonnifyHttpError } = await import('./monnify-bills-errors');
+    const error = await createMonnifyHttpError(
+      {
+        status: 401,
+        statusText: 'Unauthorized',
+        text: async () => body,
+      } as Response,
+      'Monnify API error'
+    );
+
+    expect(error.diagnosticMessage).not.toContain('abc123');
+  });
+});

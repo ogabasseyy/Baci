@@ -166,7 +166,7 @@ export function useChatwootWidgetLifecycle(
       widgetWindow.$chatwoot &&
       widgetWindow.__baciChatwootConfigKey !== configKey
     ) {
-      widgetWindow.$chatwoot.toggleBubbleVisibility?.('hide');
+      safeHide();
       setActiveWidgetKey(null);
       return;
     }
@@ -197,7 +197,7 @@ export function useChatwootWidgetLifecycle(
       }
       const unownedWidget = getCurrentWidget();
       if (unownedWidget) {
-        unownedWidget.toggleBubbleVisibility?.('hide');
+        safeHide();
         setActiveWidgetKey(null);
         return;
       }

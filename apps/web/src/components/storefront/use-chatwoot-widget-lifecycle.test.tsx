@@ -44,4 +44,41 @@ describe('useChatwootWidgetLifecycle', () => {
 
     expect(result.current).toBe(true);
   });
+
+  it('ignores a pre-existing unowned widget even when toggleBubbleVisibility throws', () => {
+    const toggleBubbleVisibility = vi.fn(() => {
+      throw new Error('bubble holder missing');
+    });
+    (
+      window as Window & {
+        $chatwoot?: { toggleBubbleVisibility?: (v: 'show' | 'hide') => void };
+      }
+    ).$chatwoot = { toggleBubbleVisibility };
+
+    const { result } = renderHook(() => useChatwootWidgetLifecycle(config));
+
+    expect(toggleBubbleVisibility).toHaveBeenCalledWith('hide');
+    expect(result.current).toBe(false);
+    expect(document.getElementById('baci-chatwoot-sdk')).toBeNull();
+  });
+
+  it('ignores an unowned widget appearing before SDK run even when hide throws', () => {
+    const toggleBubbleVisibility = vi.fn(() => {
+      throw new Error('bubble holder missing');
+    });
+    const run = vi.fn();
+    const w = window as Window & {
+      chatwootSDK?: { run: (o: Record<string, string>) => void };
+      $chatwoot?: { toggleBubbleVisibility?: (v: 'show' | 'hide') => void };
+    };
+    w.chatwootSDK = { run };
+
+    const { result } = renderHook(() => useChatwootWidgetLifecycle(config));
+    w.$chatwoot = { toggleBubbleVisibility };
+    fireEvent.load(document.getElementById('baci-chatwoot-sdk') as HTMLElement);
+
+    expect(toggleBubbleVisibility).toHaveBeenCalledWith('hide');
+    expect(run).not.toHaveBeenCalled();
+    expect(result.current).toBe(false);
+  });
 });

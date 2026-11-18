@@ -24,7 +24,27 @@ export function createProductionBuilderLocalForward(
         throw Error('Invalid local gateway request');
       const gateway = getGateway();
       if (!gateway) throw Error('Builder gateway unavailable');
-      return await gateway(request, match[1]);
+      const { signal } = request;
+      const aborted = Promise.withResolvers<never>();
+      const rejectOnAbort = () => {
+        aborted.reject(signal.reason);
+      };
+      signal.addEventListener('abort', rejectOnAbort, { once: true });
+      try {
+        const work = Promise.resolve()
+          .then(() => {
+            signal.throwIfAborted();
+            return gateway(request, match[1]);
+          })
+          .then(async (response) => {
+            if (signal.aborted) await response.body?.cancel();
+            signal.throwIfAborted();
+            return response;
+          });
+        return await Promise.race([aborted.promise, work]);
+      } finally {
+        signal.removeEventListener('abort', rejectOnAbort);
+      }
     },
   });
 }

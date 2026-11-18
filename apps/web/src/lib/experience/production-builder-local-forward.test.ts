@@ -41,3 +41,30 @@ it('propagates an already-aborted request without calling the gateway', async ()
   ).rejects.toThrow();
   expect(gateway).not.toHaveBeenCalled();
 });
+
+it('releases the caller on disconnect and disposes the late response', async () => {
+  const controller = new AbortController();
+  const { promise: entered, resolve: enter } = Promise.withResolvers<void>();
+  const { promise: work, resolve: finish } = Promise.withResolvers<Response>();
+  const { promise: cancelled, resolve: cancel } = Promise.withResolvers<void>();
+  const gateway = vi.fn(() => {
+    enter();
+    return work;
+  });
+  const execute = createProductionBuilderLocalForward(() => gateway);
+  const result = execute(
+    'synthetic.token',
+    'list_storefronts',
+    {},
+    controller.signal
+  );
+  const rejected = expect(result).rejects.toThrow();
+  await entered;
+  controller.abort();
+  try {
+    await rejected;
+  } finally {
+    finish(new Response(new ReadableStream({ cancel })));
+  }
+  await cancelled;
+});

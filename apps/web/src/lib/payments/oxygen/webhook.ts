@@ -51,13 +51,15 @@ export function parseOxygenWebhook(input: unknown) {
     };
   }
   if ('transaction_reference' in event) {
+    const type = event.webhook_type ?? 'transaction';
+    const keyPrefix = type === 'transaction' ? type : `transaction-${type}`;
     return {
       kind: 'transaction' as const,
       bookedLoanReference: event.loan_request_reference,
       transactionReference: event.transaction_reference,
       providerAmountDeducted: event.amount_deducted,
       providerAmountSent: event.amount_sent,
-      deduplicationKey: `transaction:${event.transaction_reference}`,
+      deduplicationKey: `${keyPrefix}:${event.transaction_reference}`,
       action: 'reconcile_payment_setup' as const,
     };
   }

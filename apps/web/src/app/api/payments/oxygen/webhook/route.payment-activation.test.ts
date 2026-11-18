@@ -26,9 +26,12 @@ afterEach(() => {
 });
 
 it.each([
-  true,
-  false,
-])('accepts a callback and activates only with completed repayment setup (%s)', async (setup) => {
+  ['split_payment', true],
+  ['split_payment', false],
+  ['repayment_setup', true],
+  ['loan_repayment', true],
+  ['transaction', true],
+] as const)('accepts %s and activates only with completed repayment setup (%s)', async (webhookType, setup) => {
   vi.stubEnv('VERCEL_ENV', 'production');
   const config = {
     RUNTIME_ENABLED: 'true',
@@ -130,7 +133,7 @@ it.each([
         api_secret: 'synthetic-secret',
       },
       body: JSON.stringify({
-        webhook_type: 'split_payment',
+        webhook_type: webhookType,
         phone_number: '08000000000',
         transaction_reference: 'synthetic-transaction',
         amount_deducted: '100.00',

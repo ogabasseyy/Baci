@@ -83,6 +83,25 @@ describe('groupFailedOrdersByDate', () => {
     ]);
     expect(stickyHeaderIndices).toEqual([0, 2]);
   });
+  it('sorts dated Oxygen reviews newest first and keeps undated reviews last', () => {
+    const review = {
+      ...mockOrders[0],
+      oxygen_follow_up_status: 'needs_review' as const,
+    };
+    const { data } = groupFailedOrdersByDate([
+      { ...review, id: 'undated-first', follow_up_at: 'invalid' },
+      { ...review, id: 'older', follow_up_at: '2026-06-27T12:00:00Z' },
+      { ...review, id: 'undated-middle', follow_up_at: 'invalid' },
+      { ...review, id: 'newer', follow_up_at: '2026-06-28T12:00:00Z' },
+    ]);
+    expect(getItems(data).map((item) => item.data.id)).toEqual([
+      'newer',
+      'older',
+      'undated-first',
+      'undated-middle',
+    ]);
+  });
+
   it('groups a resumed Oxygen application by its latest workflow activity', () => {
     const oxygen = {
       ...mockOrders[2],

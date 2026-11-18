@@ -91,11 +91,13 @@ export function groupFailedOrdersByDate(
       title: 'Oxygen · Needs review',
       type: 'header',
     });
-    oxygenReviews.sort(
-      (a, b) =>
-        Date.parse(getFollowUpActivityAt(b)) -
-        Date.parse(getFollowUpActivityAt(a))
-    );
+    oxygenReviews.sort((a, b) => {
+      const timeA = Date.parse(getFollowUpActivityAt(a));
+      const timeB = Date.parse(getFollowUpActivityAt(b));
+      if (!Number.isFinite(timeA)) return Number.isFinite(timeB) ? 1 : 0;
+      if (!Number.isFinite(timeB)) return -1;
+      return timeB - timeA;
+    });
     for (const order of oxygenReviews) {
       data.push({ data: order, key: `failed-order-${order.id}`, type: 'item' });
     }

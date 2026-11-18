@@ -24,6 +24,7 @@ export function FollowUpOrderCard({
 
   const displayName = item.customer_name || 'Guest';
   const customerPhone = item.customer_phone?.trim() || null;
+  const phoneDigits = customerPhone?.replace(/\D/g, '') || null;
   const customerId = item.oxygen_follow_up_status ? null : item.customer_id;
   const handlePress = () => {
     if (customerId) {
@@ -92,7 +93,7 @@ export function FollowUpOrderCard({
       </View>
 
       <View style={styles.actionRow}>
-        {customerPhone ? (
+        {phoneDigits ? (
           <>
             <Pressable
               style={[
@@ -105,9 +106,7 @@ export function FollowUpOrderCard({
               ]}
               onPress={(e) => {
                 e.stopPropagation();
-                void Linking.openURL(
-                  `https://wa.me/${customerPhone.replace(/\D/g, '')}`
-                );
+                void Linking.openURL(`https://wa.me/${phoneDigits}`);
               }}
               accessibilityLabel={`Message ${displayName} on WhatsApp`}
               accessibilityRole="button"
@@ -127,7 +126,7 @@ export function FollowUpOrderCard({
               onPress={(e) => {
                 e.stopPropagation();
                 void Linking.openURL(
-                  `tel:${customerPhone.replace(/[^\d+]/g, '')}`
+                  `tel:${customerPhone?.startsWith('+') ? '+' : ''}${phoneDigits}`
                 );
               }}
               accessibilityLabel={`Call ${displayName}`}

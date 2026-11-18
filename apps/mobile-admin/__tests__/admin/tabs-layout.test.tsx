@@ -4,8 +4,16 @@ import type React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  failedOrders: [] as Array<{ id: string; created_at: string }>,
-  oxygenOrders: [] as Array<{ id: string; created_at: string }>,
+  failedOrders: [] as Array<{
+    id: string;
+    created_at: string;
+    customer_email?: string;
+  }>,
+  oxygenOrders: [] as Array<{
+    id: string;
+    created_at: string;
+    customer_email?: string;
+  }>,
   screens: [] as Array<{
     name: string;
     options?: Record<string, unknown>;
@@ -189,6 +197,28 @@ describe('TabLayout', () => {
     mocks.oxygenOrders = [
       { id: 'same', created_at: '2026-11-17T09:00:00Z' },
       { id: 'oxygen', created_at: '2026-11-17T08:00:00Z' },
+    ];
+    render(<TabLayout />);
+    expect(
+      mocks.screens.find((screen) => screen.name === 'customers')?.options
+        ?.tabBarBadge
+    ).toBe(2);
+  });
+
+  it('counts distinct follow-up orders for the same email as separate queue entries', () => {
+    mocks.failedOrders = [
+      {
+        id: 'standard',
+        created_at: '2026-11-17T09:00:00Z',
+        customer_email: 'ada@example.com',
+      },
+    ];
+    mocks.oxygenOrders = [
+      {
+        id: 'oxygen',
+        created_at: '2026-11-17T08:00:00Z',
+        customer_email: 'ada@example.com',
+      },
     ];
     render(<TabLayout />);
     expect(

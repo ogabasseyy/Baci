@@ -1,5 +1,6 @@
 import '@testing-library/jest-dom/vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
+import * as Linking from 'expo-linking';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { oxygenProcessingOrder } from '@/test/fixtures/oxygen-follow-up';
 import { FollowUpOrderCard } from './FollowUpOrderCard';
@@ -32,6 +33,51 @@ describe('FollowUpOrderCard', () => {
       pathname: '/(admin)/order/[id]',
       params: { id: oxygenProcessingOrder.id },
     });
+  });
+
+  it.each([
+    '+---',
+    '   ',
+    '',
+  ])('hides phone actions without digits: %s', (phone) => {
+    render(
+      <FollowUpOrderCard
+        item={{ ...oxygenProcessingOrder, customer_phone: phone }}
+        displayTotal="₦10k"
+        initials="A"
+      />
+    );
+
+    expect(
+      screen.queryByRole('button', { name: 'Message Ada on WhatsApp' })
+    ).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Call Ada' })).toBeNull();
+  });
+
+  it('opens formatted phone contacts with digits and preserves the international prefix for calls', () => {
+    render(
+      <FollowUpOrderCard
+        item={{
+          ...oxygenProcessingOrder,
+          customer_phone: ' +234 (803) 123-4567 ',
+        }}
+        displayTotal="₦10k"
+        initials="A"
+      />
+    );
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Message Ada on WhatsApp' })
+    );
+    expect(Linking.openURL).toHaveBeenCalledTimes(1);
+    expect(Linking.openURL).toHaveBeenNthCalledWith(
+      1,
+      'https://wa.me/2348031234567'
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Call Ada' }));
+    expect(Linking.openURL).toHaveBeenCalledTimes(2);
+    expect(Linking.openURL).toHaveBeenNthCalledWith(2, 'tel:+2348031234567');
+    expect(mocks.push).not.toHaveBeenCalled();
   });
 
   it('opens the customer for ordinary follow-ups linked to a customer', () => {

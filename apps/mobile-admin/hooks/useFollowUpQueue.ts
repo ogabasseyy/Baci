@@ -46,6 +46,8 @@ export function useFollowUpQueue() {
     isLoading: isLoadingOxygen,
     refetch: refetchOxygen,
   } = useOxygenFollowUps();
+  // The badge counts queue entries, not unique customers. Keep distinct Oxygen
+  // orders visible even when another source has the same customer email.
   const byOrderId = new Map(
     [...(standardOrders ?? []), ...(oxygenOrders ?? [])].map((order) => [
       order.id,

@@ -1,13 +1,10 @@
 'use client';
 
 import { Clock3, LockKeyhole, RefreshCw } from 'lucide-react';
-import { useEffect, useState } from 'react';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { resolveStorefrontPathHref } from '@/lib/storefront-path-prefix';
-import {
-  type ImeiRemediationOrder,
-  imeiRemediationApi,
-} from './imei-remediation-api';
+import type { ImeiRemediationOrder } from './imei-remediation-api';
+import { useUnlockOrdersPolling } from './use-unlock-orders-polling';
 
 const NGN_FORMATTER = new Intl.NumberFormat('en-NG', {
   currency: 'NGN',
@@ -32,26 +29,8 @@ export function OgabasseyUnlockOrders() {
   const merchantContext = useMerchantSafe();
   const basePath = merchantContext?.basePath ?? '';
   const merchantSlug = merchantContext?.merchant?.slug;
-  const [loading, setLoading] = useState(true);
-  const [orders, setOrders] = useState<ImeiRemediationOrder[]>([]);
-
-  useEffect(() => {
-    if (!merchantSlug) return;
-    let cancelled = false;
-    const refresh = async () => {
-      const result = await imeiRemediationApi.list(merchantSlug);
-      if (!cancelled) {
-        setOrders(result);
-        setLoading(false);
-      }
-    };
-    void refresh();
-    const interval = setInterval(refresh, 30_000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [merchantSlug]);
+  const { error, loading, orders, pollingPaused, restartPolling } =
+    useUnlockOrdersPolling(merchantSlug);
 
   return (
     <main className="min-h-screen bg-[var(--store-background,#f9fafb)] px-4 py-8 md:px-6">
@@ -76,6 +55,21 @@ export function OgabasseyUnlockOrders() {
             New check
           </a>
         </div>
+
+        {error || pollingPaused ? (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--store-border,#e5e7eb)] bg-[var(--ogabassey-surface)] px-4 py-3 text-sm">
+            <span className="text-store-background-text/80">
+              {error ?? 'Auto-refresh paused after checking for updates.'}
+            </span>
+            <button
+              className="font-bold text-[var(--store-primary,#dc2626)] underline"
+              onClick={restartPolling}
+              type="button"
+            >
+              Retry
+            </button>
+          </div>
+        ) : null}
 
         {loading ? (
           <div

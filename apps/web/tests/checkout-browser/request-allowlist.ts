@@ -4,6 +4,7 @@ interface FixtureRequest {
   resourceType: string;
   rsc?: string;
 }
+
 export function isFixtureAssetRequest(request: FixtureRequest): boolean {
   const url = new URL(request.url);
   const configuredPort = process.env.CHECKOUT_BROWSER_PORT?.trim();

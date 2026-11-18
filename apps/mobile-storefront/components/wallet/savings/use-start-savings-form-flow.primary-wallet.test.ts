@@ -41,13 +41,14 @@ function createFlow(overrides: Partial<FlowInput> = {}) {
 }
 
 describe('start savings with a PiggyVest wallet', () => {
-  it('creates the plan first and moves a wallet head start through PiggyVest', async () => {
+  it('creates the plan first and moves a ticked pay-now head start through PiggyVest', async () => {
     const { flow, submitSavingsGoal } = createFlow({ primaryWallet: true });
     await flow.handleFundingContinue();
     expect(submitSavingsGoal).toHaveBeenCalledWith({
       deferInitialContribution: true,
       continueInWallet: true,
       confirmPrimaryBalance: true,
+      payHeadStartFromWallet: true,
     });
   });
 
@@ -92,7 +93,7 @@ describe('start savings with a PiggyVest wallet', () => {
     expect(submitSavingsGoal).toHaveBeenCalledWith();
   });
 
-  it('keeps bank transfer on the transfer sheet', async () => {
+  it('leaves an unticked head start for the customer to add later, without a balance check', async () => {
     const { flow, submitSavingsGoal } = createFlow({
       primaryWallet: true,
       selectedFundingOption: 'bank_transfer',
@@ -100,6 +101,9 @@ describe('start savings with a PiggyVest wallet', () => {
     await flow.handleFundingContinue();
     expect(submitSavingsGoal).toHaveBeenCalledWith({
       deferInitialContribution: true,
+      continueInWallet: true,
+      confirmPrimaryBalance: false,
+      payHeadStartFromWallet: false,
     });
   });
 });

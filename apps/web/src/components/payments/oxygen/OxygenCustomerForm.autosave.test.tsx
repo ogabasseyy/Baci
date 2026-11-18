@@ -64,12 +64,12 @@ it('restores form fields masked, requires bank reverification, and never restore
   expect(screen.getByLabelText('Account number')).toHaveValue('0123456789');
   expect(screen.getByLabelText('Account name')).toHaveValue('');
   expect(screen.getByRole('checkbox', { hidden: true })).not.toBeChecked();
-  fireEvent.click(
-    screen.getByRole('button', { name: 'Continue to income details' })
-  );
-  expect(
-    screen.getByText('Verify your bank account before continuing.')
-  ).toBeVisible();
+  const continueButton = screen.getByRole('button', {
+    name: 'Continue to income details',
+  });
+  expect(continueButton).toBeDisabled();
+  fireEvent.click(continueButton);
+  expect(onProgress).not.toHaveBeenCalledWith('income', 'bank');
   fireEvent.change(screen.getByLabelText('Account number'), {
     target: { value: '0123456780' },
   });

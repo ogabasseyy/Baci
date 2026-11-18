@@ -15,6 +15,7 @@ import {
 import { selectBlogCatalogProducts } from '@/lib/select-blog-catalog-products';
 import { STOREFRONT_BLOG_POST_SELECT } from '@/lib/storefront-blog-post-select';
 import { createPublicClient } from '@/lib/supabase/anon';
+import { createClient } from '@/lib/supabase/server';
 
 const RELATED_BLOG_POSTS_LIMIT = 3;
 const RELATED_BLOG_POSTS_FETCH_LIMIT = 12;
@@ -41,7 +42,10 @@ export async function getLiveBlogPost(
     timeoutMs: 10000,
   });
 
-  let query = supabase
+  // Draft mode is not authorization. Use the editor's session and database RLS
+  // only for the requested post; keep related content on the public client.
+  const postClient = includeDrafts ? await createClient() : supabase;
+  let query = postClient
     .from('blog_posts')
     .select(STOREFRONT_BLOG_POST_SELECT)
     .eq('merchant_id', merchant.id)

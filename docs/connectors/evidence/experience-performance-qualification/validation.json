@@ -85,15 +85,12 @@
   "browserMatrix": {
     "samples": 24,
     "routes": 4,
-    "viewports": [
-      390,
-      1440
-    ],
+    "viewports": [390, 1440],
     "coldSamplesPerCell": 3,
     "status": "completed-diagnostic-only",
     "allSamplesContaminated": true,
     "frameClsMax": 0,
-    "hostClsMax": 4.62962962962963e-05,
+    "hostClsMax": 4.62962962962963e-5,
     "report": "local-matrix-2026-10-26.md"
   },
   "currentMainCheckout": {

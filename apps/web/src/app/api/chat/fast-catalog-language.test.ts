@@ -9,6 +9,7 @@ import {
   isCatalogBoundary,
   isRelativePriceRequest,
   normalizeUseCasePhrases,
+  PHONE_SIGNAL,
   resolveWifiOnly,
   stripRelativePricePhrases,
 } from './fast-catalog-language';
@@ -98,5 +99,19 @@ describe('catalog conversation language', () => {
     expect(normalizeUseCasePhrases('battery charger')).toBe('battery charger');
     expect(catalogPreferenceText('battery charger')).toMatch(/charger/);
     expect(catalogPreferenceText('battery charger')).not.toMatch(/battery/);
+  });
+
+  it('matches bare plural pixels as a phone signal while rejecting camera-resolution phrases', () => {
+    expect(PHONE_SIGNAL.test('pixels')).toBe(true);
+    expect(PHONE_SIGNAL.test('pixels?')).toBe(true);
+    expect(PHONE_SIGNAL.test('Pixels.')).toBe(true);
+    expect(PHONE_SIGNAL.test('how many pixels does the camera have')).toBe(
+      false
+    );
+    expect(PHONE_SIGNAL.test('What is the pixel density of the screen?')).toBe(
+      false
+    );
+    expect(PHONE_SIGNAL.test('show pixels per inch')).toBe(false);
+    expect(PHONE_SIGNAL.test('pixels density')).toBe(false);
   });
 });

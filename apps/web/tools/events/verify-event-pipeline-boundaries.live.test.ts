@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { verifyEventPipelineBoundaries } from './verify-event-pipeline-boundaries';
 
-// The whole-repository scan finishes in ~3 min on a web test shard but takes
-// ~26 min in the shared "Quality Gate - Test" job (parallel workers on a
-// 2-vCPU runner), where an 8-min limit failed every run before it could
-// report. Stay inside that job's 45-min timeout-minutes.
-const LIVE_REPOSITORY_SCAN_TIMEOUT_MS = 35 * 60_000;
+// The whole-repository scan finishes in ~3 min with every blob checked out.
+// CI runs it in "Quality Gate - Repository Scans" (vitest.repository-scans.ts);
+// in the old blob:none test job lazy blob fetches pushed it past 35 min. Keep
+// headroom for a slow runner, but fail well inside that job's 20-min limit.
+const LIVE_REPOSITORY_SCAN_TIMEOUT_MS = 12 * 60_000;
 
 describe('live event pipeline boundary', () => {
   it(

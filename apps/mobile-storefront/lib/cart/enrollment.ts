@@ -37,3 +37,16 @@ export function nativeCartAccountsEnabled(
       hasCartFeature(merchant?.premium_features, 'shared_cart_accounts')
   );
 }
+
+/** Realtime push is a separate grant (the same flag the web storefront honours). */
+export function nativeCartRealtimeEnabled(
+  merchant:
+    | { id: string; slug: string; premium_features?: string[] | null }
+    | undefined,
+  config: { merchantId: string; merchantSlug: string }
+): boolean {
+  return Boolean(
+    nativeCartEnabled(merchant, config) &&
+      hasCartFeature(merchant?.premium_features, 'shared_cart_realtime')
+  );
+}

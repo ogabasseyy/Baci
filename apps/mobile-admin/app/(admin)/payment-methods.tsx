@@ -230,7 +230,14 @@ export default function PaymentMethodsScreen() {
               accessibilityRole="button"
               accessibilityLabel="Retry loading payment methods"
             >
-              <Text style={styles.retryButtonText}>Retry</Text>
+              <Text
+                style={[
+                  styles.retryButtonText,
+                  { color: colors.textOnPrimary },
+                ]}
+              >
+                Retry
+              </Text>
             </Pressable>
           </View>
         </SafeAreaView>
@@ -294,7 +301,11 @@ export default function PaymentMethodsScreen() {
               size={20}
               color={colors.textOnPrimary}
             />
-            <Text style={styles.manageButtonText}>Advanced Settings</Text>
+            <Text
+              style={[styles.manageButtonText, { color: colors.textOnPrimary }]}
+            >
+              Advanced Settings
+            </Text>
           </Pressable>
         </ScrollView>
       </SafeAreaView>

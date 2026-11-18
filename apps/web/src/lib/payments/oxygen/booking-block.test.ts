@@ -18,6 +18,7 @@ const snapshot = {
     applicationReference: id,
     validated: true,
     eligible: true,
+    offers: [{ tenure: 3, loanAmount: 400000 }],
     kyc: {
       bvn_status: 'DONE',
       nin_status: 'DONE',

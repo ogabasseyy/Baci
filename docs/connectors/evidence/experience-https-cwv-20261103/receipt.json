@@ -1,0 +1,42 @@
+{
+  "createdAt": "2026-11-03T16:23:23.282178+00:00",
+  "base": "7a2f3cc9b1f610d33b5c6da49147166f814e2404",
+  "scope": "offline functional HTTPS transport; synthetic data",
+  "hostLoadPrecheck": "explicitly bypassed for functional matrix; no clean-host claim",
+  "sampleCount": 6,
+  "widths": [390, 1440],
+  "frameLcpMs": {
+    "min": 112.599853515625,
+    "max": 221.5
+  },
+  "tlsConnectionsPerSample": [4, 4, 4, 4, 4, 4],
+  "consoleErrors": 0,
+  "cwvQualified": false,
+  "releaseQualified": false,
+  "checks": {
+    "harnessWorkerOriginsTunnel": 20,
+    "measurementQualificationOwnerReads": 32,
+    "liveHttpsMatrix": 1,
+    "runnerTypecheck": "passed",
+    "commerceTypecheck": "passed",
+    "biome": "18 files passed",
+    "originalRegression": "HTTPS rejected with Invalid local preview host; now passes"
+  },
+  "boundaries": {
+    "published": false,
+    "deployed": false,
+    "ordersCreated": false,
+    "payments": false,
+    "extraAiCosts": false,
+    "normalAuthRls": "unchanged; no database operations in harness"
+  },
+  "previewHttpStatus": 200,
+  "review": {
+    "status": "completed",
+    "minorIssues": 2,
+    "duplicateIssues": true,
+    "resolved": true,
+    "criticalHigh": 0,
+    "fixValidation": "9 installed worker hashes match; sampled worker bytes unchanged"
+  }
+}

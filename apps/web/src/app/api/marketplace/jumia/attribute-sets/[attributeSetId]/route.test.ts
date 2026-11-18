@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { waitFor } from '@testing-library/react';
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';

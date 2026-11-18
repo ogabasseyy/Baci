@@ -77,6 +77,40 @@ describe('vtu-fulfillment-recovery', () => {
     );
   });
 
+  it('bugfix: restores a PiggyVest-paid strand that never submitted, with no store credit ledger (Codex P1)', async () => {
+    const paid = {
+      id: 'vtu-pv',
+      metadata: { paymentSource: 'piggyvest_wallet' },
+    } as unknown as VtuTransactionRow;
+    mocks.isStrandedPreVendVtuRow.mockReturnValue(true);
+    mocks.isUnsubmittedPreparedVtuRow.mockReturnValue(true);
+    mocks.hasExistingVtuDebitLedger.mockResolvedValue(false);
+
+    await expect(
+      recoverStrandedPreVendVtuRow({ row: paid, supabase })
+    ).resolves.toBe('continue');
+
+    expect(mocks.restoreInterruptedPreVendVtuRow).toHaveBeenCalledTimes(1);
+  });
+
+  it('bugfix: never restores a PiggyVest-paid strand that may have been submitted (Codex P1)', async () => {
+    const submitted = {
+      id: 'vtu-pv2',
+      metadata: {
+        paymentSource: 'piggyvest_wallet',
+        providerSubmissionStartedAt: '2026-11-15T10:00:00Z',
+      },
+    } as unknown as VtuTransactionRow;
+    mocks.isStrandedPreVendVtuRow.mockReturnValue(true);
+    // A submission marker fails the marker-absence proof.
+    mocks.isUnsubmittedPreparedVtuRow.mockReturnValue(false);
+    mocks.hasExistingVtuDebitLedger.mockResolvedValue(false);
+
+    await recoverStrandedPreVendVtuRow({ row: submitted, supabase });
+
+    expect(mocks.restoreInterruptedPreVendVtuRow).not.toHaveBeenCalled();
+  });
+
   it('leaves never-debited strands for support (fail closed)', async () => {
     mocks.isStrandedPreVendVtuRow.mockReturnValue(true);
     mocks.hasExistingVtuDebitLedger.mockResolvedValue(false);

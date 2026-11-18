@@ -281,4 +281,27 @@ describe('readStorefrontMerchantSnapshot', () => {
       }),
     });
   });
+
+  it('normalizes platform and localhost subdomains to merchant slugs before calling RPC', async () => {
+    const { client, rpc } = createClient({
+      data: [
+        {
+          resolution_status: 'not_found',
+          merchant_data: null,
+          custom_domain: null,
+          feature_settings: null,
+        },
+      ],
+      error: null,
+      status: 200,
+    });
+
+    await readStorefrontMerchantSnapshot(client, 'shop.localhost');
+
+    expect(rpc).toHaveBeenCalledWith(
+      'resolve_storefront_public_snapshot_v2',
+      { p_identifier: 'shop' },
+      { get: true }
+    );
+  });
 });

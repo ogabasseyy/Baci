@@ -57,6 +57,13 @@ export async function applyPrimaryWalletSignedPaidInterest(input: {
   } catch {
     throw new Error('Primary paid-interest receipt invalid');
   }
+  // Selection keys are a fixed SQL contract (paid_interest_event_involved /
+  // read_paid_interest_crosswalk). Despite its name, sourceWalletId carries
+  // pvb_wallet: per PiggyVest (2026-11-11) that is the PVB wallet the payout
+  // credited, while eventData.destination_wallet (destinationWalletId) is
+  // PVB's internal wallet. The crosswalk pins all five values exactly and
+  // credits crosswalk.apiWalletId, so operators must provision apiWalletId
+  // as the API id of the pvb_wallet, never of destination_wallet.
   const selection = schemas.selection.parse({
     webhookCustomerId: event.customer_id,
     sourceWalletId: event.pvb_wallet,

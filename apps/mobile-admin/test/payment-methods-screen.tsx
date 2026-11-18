@@ -134,6 +134,7 @@ vi.mock('@/hooks/useTheme', () => ({
       successLight: '#dcfce7',
       text: '#0f172a',
       textMuted: '#64748b',
+      textOnPrimary: '#ffffff',
       textSecondary: '#334155',
     },
     isDark: false,
@@ -217,13 +218,32 @@ vi.mock('react-native', () => ({
       type="checkbox"
     />
   ),
-  Text: ({ children }: { children?: ReactNode }) => <span>{children}</span>,
+  Text: ({
+    children,
+    style,
+  }: {
+    children?: ReactNode;
+    style?: Record<string, unknown> | Array<Record<string, unknown> | false>;
+  }) => {
+    const resolvedStyle = Array.isArray(style)
+      ? Object.assign({}, ...style.filter(Boolean))
+      : style;
+    const color =
+      typeof resolvedStyle?.color === 'string'
+        ? resolvedStyle.color
+        : undefined;
+    return <span data-color={color}>{children}</span>;
+  },
   View: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
 }));
 
 vi.mock('@react-native-vector-icons/ionicons', async () => {
   const { Text } = await import('react-native');
-  const MockIonicon = () => <Text>icon</Text>;
+  const MockIonicon = ({ color, name }: { color?: string; name?: string }) => (
+    <span data-icon-color={color} data-icon-name={name}>
+      <Text>icon</Text>
+    </span>
+  );
   return {
     Ionicons: MockIonicon,
     default: MockIonicon,

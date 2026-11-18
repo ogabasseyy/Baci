@@ -88,17 +88,19 @@ jest.mock('@/components/navigation/RootLayoutNav', () => ({
     }, []);
 
     return (
-      <Text
-        onLayout={onFirstLayout}
-        accessibilityLabel="Store navigation"
-        accessibilityRole="text"
-        testID="root-layout-nav"
-      >
-        adTracking:{String(adTrackingReady)};startup:{String(startupReady)}
-        ;persistence:
-        {String(persistenceEnabled)};resume:
-        {String(shouldResumeNavigation)}
-      </Text>
+      <>
+        <Text
+          onLayout={onFirstLayout}
+          accessibilityLabel="Store navigation"
+          accessibilityRole="text"
+          testID="root-layout-nav"
+        >
+          adTracking:{String(adTrackingReady)};persistence:
+          {String(persistenceEnabled)};resume:
+          {String(shouldResumeNavigation)}
+        </Text>
+        <Text testID="root-layout-startup">{String(startupReady)}</Text>
+      </>
     );
   },
 }));

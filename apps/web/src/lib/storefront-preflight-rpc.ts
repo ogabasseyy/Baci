@@ -1,10 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { storefrontPreflightRpcMemo } from '@/lib/storefront-preflight-rpc-memo';
+import { getStorefrontPreflightMemoWriteDecision } from '@/lib/storefront-preflight-rpc-memo-policy';
 import { createPublicClient } from '@/lib/supabase/public';
-import {
-  STOREFRONT_PDP_PREFLIGHT_RPC,
-  storefrontPdpPreflightRowSchema,
-} from '@/schemas/storefront-preflight-rpc';
 import { createAbortSignalTimeout } from './abort-signal-timeout';
 import type { StorefrontInternalPreflightSurface } from './storefront-internal-preflight';
 import { storefrontInternalPreflight } from './storefront-internal-preflight';
@@ -74,30 +71,8 @@ interface CallStorefrontPreflightRpcOptions {
 
 // A 2s budget recovers transport-tail events; memo and breaker bound its cost.
 const DEFAULT_TIMEOUT_MS = 2_000;
-const PDP_PUBLISHED_ACTIVE_TTL_MS = 60_000;
 // One navigation's helpers call within ~100ms; this short memo absorbs repeats.
 const breaker = createStorefrontPreflightCircuitBreaker();
-
-function getMemoWriteDecision(
-  fn: string,
-  row: unknown
-): { shouldMemoize: boolean; ttlMs?: number } {
-  if (fn !== STOREFRONT_PDP_PREFLIGHT_RPC) {
-    return { shouldMemoize: true };
-  }
-  const parsed = storefrontPdpPreflightRowSchema.safeParse(row);
-  if (!parsed.success) {
-    return { shouldMemoize: false };
-  }
-  if (
-    parsed.data.present &&
-    parsed.data.storefront_status === 'published' &&
-    parsed.data.match_kind === 'active'
-  ) {
-    return { shouldMemoize: true, ttlMs: PDP_PUBLISHED_ACTIVE_TTL_MS };
-  }
-  return { shouldMemoize: true };
-}
 
 let client: SupabaseClient | null = null;
 
@@ -261,7 +236,7 @@ async function runStorefrontPreflightRpcAttempt(
     return null;
   }
 
-  const memoDecision = getMemoWriteDecision(fn, row);
+  const memoDecision = getStorefrontPreflightMemoWriteDecision(fn, row);
   if (memoDecision.shouldMemoize) {
     storefrontPreflightRpcMemo.write(key, row, memoDecision.ttlMs);
   }

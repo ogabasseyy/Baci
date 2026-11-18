@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
-import { z } from 'zod';
 import { supabase } from '@/lib/supabase';
 import {
+  extractBoundedArray,
   oxygenFollowUpCandidateSchema,
   oxygenFollowUpMerchantSchema,
   oxygenFollowUpOrderSchema,
@@ -29,20 +29,6 @@ const TERMINAL_OR_UNKNOWN = new Set([
 ]);
 const MAX_OXYGEN_FOLLOW_UP_CANDIDATES = 250;
 const ORDER_LOOKUP_BATCH_SIZE = 50;
-
-function extractBoundedArray(
-  payload: unknown,
-  maxItems: number
-): { items: unknown[]; isBoundedValid: boolean } {
-  const parsed = z.array(z.unknown()).max(maxItems).safeParse(payload);
-  if (parsed.success) {
-    return { items: parsed.data, isBoundedValid: true };
-  }
-  return {
-    items: Array.isArray(payload) ? payload.slice(0, maxItems) : [],
-    isBoundedValid: false,
-  };
-}
 
 /** The RPC returns categories only; order/contact data still goes through orders RLS. */
 export async function fetchOxygenFollowUps(
@@ -108,7 +94,10 @@ export async function fetchOxygenFollowUps(
   const byId = new Map(orders.map((order) => [order.id, order]));
   const followUps = candidates.flatMap((candidate) => {
     const order = byId.get(candidate.order_id);
-    if (!order) return [];
+    if (!order) {
+      isIncomplete = true;
+      return [];
+    }
     const paymentStatus = PAYMENT_STATUSES.has(
       order.payment_status as FailedOrder['payment_status']
     )

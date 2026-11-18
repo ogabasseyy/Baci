@@ -109,4 +109,52 @@ describe('bugfix: savings sheet left empty space below short content', () => {
     expect(renderSheet()).toEqual(['64%', '92%']);
     expect(renderSheet(0)).toEqual(['64%', '92%']);
   });
+
+  // Simulator 2026-11-17: tapping "Cancel goal" swapped in the cancel review
+  // before it was measured, so the sheet jumped to the tall default and then
+  // shrank to fit, and a tap at the button landed on empty space.
+  it('keeps the height on screen while swapped-in content is unmeasured', () => {
+    const sheetAt = (contentHeight: number) => (
+      <SavingsBottomSheet
+        colors={Colors.light}
+        contentHeight={contentHeight}
+        onClose={jest.fn()}
+        snapPoints={['64%', '92%']}
+        visible
+      >
+        <Text>content</Text>
+      </SavingsBottomSheet>
+    );
+    mockSnapPoints.length = 0;
+    mockSnapToIndex.mockClear();
+    const { rerender } = render(sheetAt(500));
+    const afterOpen = mockSnapToIndex.mock.calls.length;
+    rerender(sheetAt(0));
+    expect(mockSnapPoints).not.toContainEqual(['64%', '92%']);
+    expect(mockSnapPoints.at(-1)).toEqual([566]);
+    expect(mockSnapToIndex.mock.calls.length).toBe(afterOpen);
+    rerender(sheetAt(260));
+    expect(mockSnapPoints).not.toContainEqual(['64%', '92%']);
+    expect(mockSnapPoints.at(-1)).toEqual([326]);
+    expect(mockSnapToIndex.mock.calls.length).toBe(afterOpen + 1);
+  });
+
+  it('starts fresh after the sheet hides', () => {
+    const sheetAt = (contentHeight: number, visible: boolean) => (
+      <SavingsBottomSheet
+        colors={Colors.light}
+        contentHeight={contentHeight}
+        onClose={jest.fn()}
+        snapPoints={['64%', '92%']}
+        visible={visible}
+      >
+        <Text>content</Text>
+      </SavingsBottomSheet>
+    );
+    mockSnapPoints.length = 0;
+    const { rerender } = render(sheetAt(500, true));
+    rerender(sheetAt(0, false));
+    rerender(sheetAt(0, true));
+    expect(mockSnapPoints.at(-1)).toEqual(['64%', '92%']);
+  });
 });

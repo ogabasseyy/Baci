@@ -63,3 +63,40 @@ it('propagates standard finalization failure instead of claiming success', async
   await expect(completeSubmittedOrder(params)).rejects.toBe(error);
   expect(runCheckoutFinalization).toHaveBeenCalledTimes(1);
 });
+it('bugfix: a settled quiz prize skips the REDVAULT review and finalizes', async () => {
+  const prizeParams = {
+    ...params,
+    itemsSnapshot: [
+      {
+        id: 'prize-1',
+        name: 'iPhone XR',
+        price: 0,
+        product_id: 'product-1',
+        quantity: 1,
+        slug: 'iphone-xr',
+        voucher_award_id: 'award-1',
+        voucher_token: 'token-1',
+      },
+    ],
+    order: { id: 'prize-order', payment_status: 'paid', total: 3500 },
+    orderResponse: {
+      amountDueToGateway: 0,
+      order: { id: 'prize-order', payment_status: 'paid', total: 3500 },
+    },
+  } as unknown as Parameters<typeof completeSubmittedOrder>[0];
+
+  expect(await completeSubmittedOrder(prizeParams)).toBe(false);
+  expect(runRedvaultPostOrderBranch).not.toHaveBeenCalled();
+  expect(runCheckoutFinalization).toHaveBeenCalledWith(prizeParams);
+});
+it('still sends an unpaid prize-cart order through REDVAULT handling', async () => {
+  jest.mocked(runRedvaultPostOrderBranch).mockResolvedValue(true);
+  const unpaid = {
+    ...params,
+    itemsSnapshot: [{ voucher_award_id: 'award-1', voucher_token: 'token-1' }],
+    order: { id: 'prize-order', payment_status: 'pending', total: 3500 },
+  } as unknown as Parameters<typeof completeSubmittedOrder>[0];
+
+  expect(await completeSubmittedOrder(unpaid)).toBe(true);
+  expect(runRedvaultPostOrderBranch).toHaveBeenCalledTimes(1);
+});

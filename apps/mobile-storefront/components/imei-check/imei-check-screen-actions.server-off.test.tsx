@@ -31,17 +31,51 @@ describe('imeiCheckScreenActions', () => {
   });
 });
 
-describe('imeiCheckScreenActions.alertInvalidIdentifier', () => {
+describe('imeiCheckScreenActions.invalidIdentifierMessage', () => {
   it('names the serial number for serial-only checks', () => {
-    const { Alert } =
-      jest.requireActual<typeof import('react-native')>('react-native');
-    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
-
-    imeiCheckScreenActions.alertInvalidIdentifier('serial');
-
-    expect(alert).toHaveBeenCalledWith(
-      'Invalid serial',
+    expect(imeiCheckScreenActions.invalidIdentifierMessage('serial')).toBe(
       'Please enter a valid device serial number.'
+    );
+  });
+
+  it('drops only the invalid-number message when the number is edited', () => {
+    const invalid = imeiCheckScreenActions.invalidIdentifierMessage('imei');
+    expect(imeiCheckScreenActions.dropInvalidIdentifierError(invalid)).toBe(
+      null
+    );
+    expect(
+      imeiCheckScreenActions.dropInvalidIdentifierError('Refund on its way.')
+    ).toBe('Refund on its way.');
+    expect(imeiCheckScreenActions.dropInvalidIdentifierError(null)).toBe(null);
+  });
+
+  it('names what the device field accepts for an IMEI-or-serial check (Muse)', () => {
+    // Phones take an IMEI or (iPhone) a serial, so both are named.
+    expect(
+      imeiCheckScreenActions.invalidIdentifierMessage('both', 'smartphone')
+    ).toBe('Please enter a valid IMEI or serial number.');
+    expect(
+      imeiCheckScreenActions.invalidIdentifierMessage('both', 'laptop')
+    ).toBe('Please enter a valid device serial number.');
+    expect(
+      imeiCheckScreenActions.invalidFor({ identifier: 'both' }, 'watch')
+    ).toBe('Please enter a valid device serial number.');
+  });
+
+  it('validates on submit with the same rule as the field (Muse)', () => {
+    const both = { identifier: 'both' as const };
+    // A valid 15-digit IMEI: fine on a phone, not on a serial-only Mac tab.
+    expect(
+      imeiCheckScreenActions.isValidFor('490154203237518', both, 'smartphone')
+    ).toBe(true);
+    expect(
+      imeiCheckScreenActions.isValidFor('490154203237518', both, 'laptop')
+    ).toBe(false);
+  });
+
+  it('asks for the 15-digit IMEI for IMEI-only checks', () => {
+    expect(imeiCheckScreenActions.invalidIdentifierMessage('imei')).toBe(
+      'Please enter a valid 15-digit IMEI number.'
     );
   });
 });

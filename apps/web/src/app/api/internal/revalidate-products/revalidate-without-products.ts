@@ -56,8 +56,8 @@ export function revalidateWithoutProducts({
     const needsBroadFallbackInBlogMode =
       callerOmitMerchantWidePdpDetails === false ||
       (!hasProducts &&
-        !purgeWholeStorefront &&
-        (callerOmitMerchantWidePdpDetails === true ||
+        (purgeWholeStorefront ||
+          callerOmitMerchantWidePdpDetails === true ||
           (hasExplicitProductSlugs && !explicitSlugsRevalidated)));
     if (
       needsBroadFallbackInBlogMode &&
@@ -71,7 +71,11 @@ export function revalidateWithoutProducts({
 
   if (!hasProducts || purgeWholeStorefront) {
     if (callerOmitMerchantWidePdpDetails === true) {
-      revalidateProducts(merchantId, undefined, { expireImmediately: true });
+      return (
+        revalidateProducts(merchantId, undefined, {
+          expireImmediately: true,
+        }) !== false
+      );
     } else {
       revalidateProducts(merchantId);
     }

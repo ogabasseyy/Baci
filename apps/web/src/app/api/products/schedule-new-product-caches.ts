@@ -34,10 +34,25 @@ export function scheduleNewProductCaches({
         expireImmediately: true,
       }) === true
     : false;
-  revalidateProducts(merchantId, trimmedSlug || undefined, {
-    expireImmediately: true,
-    omitMerchantWidePdpDetails: slugInvalidated,
-  });
+  const scopedExpired =
+    revalidateProducts(merchantId, trimmedSlug || undefined, {
+      expireImmediately: true,
+      omitMerchantWidePdpDetails: slugInvalidated,
+    }) !== false;
+  const originExpired =
+    scopedExpired ||
+    (slugInvalidated &&
+      revalidateProducts(merchantId, trimmedSlug || undefined, {
+        expireImmediately: true,
+      }) !== false);
+  if (!originExpired) {
+    console.warn(
+      'Skipped Cloudflare product purge after create because origin expiry failed',
+      { merchantId }
+    );
+    scheduleProductImageTransformsPrewarm(images);
+    return;
+  }
   try {
     const targetSlug = purgeSlug || productId;
     const purgeEntries = [

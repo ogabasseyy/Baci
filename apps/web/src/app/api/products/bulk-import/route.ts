@@ -219,8 +219,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Invalidate product caches after bulk import
-    if (successCount > 0) {
+    // Invalidate draft-only imports cleanly; active imports run scoped immediate
+    // expiry below without wiping unrelated merchant PDPs.
+    if (successCount > 0 && publicPurgeEntries.length === 0) {
       revalidateProducts(merchantId);
     }
 

@@ -275,20 +275,6 @@ describe('POST /api/products/bulk-import', () => {
     expect(json.error).toBe('No valid rows found in CSV');
   });
 
-  it('imports valid products and calls revalidateProducts', async () => {
-    const { POST } = await import('./route');
-
-    const csv =
-      'name,price,description\nProduct A,100,A desc\nProduct B,200,B desc';
-    const res = await POST(makeImportRequest(csv));
-    const json = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(json.success).toBe(2);
-    expect(json.failed).toBe(0);
-    expect(mockRevalidateProducts).toHaveBeenCalledWith(MERCHANT_ID);
-  });
-
   it('does not call revalidateProducts when all rows fail', async () => {
     const { POST } = await import('./route');
 

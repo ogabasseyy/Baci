@@ -1,3 +1,4 @@
+import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
@@ -134,9 +135,9 @@ describe('POST /api/products/bulk-publish purge ordering', () => {
     const { POST } = await import('./route');
 
     const response = await POST(
-      new Request('http://localhost/api/products/bulk-publish', {
+      new NextRequest('http://localhost/api/products/bulk-publish', {
         method: 'POST',
-      }) as never
+      })
     );
 
     expect(response.status).toBe(200);
@@ -153,9 +154,9 @@ describe('POST /api/products/bulk-publish purge ordering', () => {
     const { POST } = await import('./route');
 
     const response = await POST(
-      new Request('http://localhost/api/products/bulk-publish', {
+      new NextRequest('http://localhost/api/products/bulk-publish', {
         method: 'POST',
-      }) as never
+      })
     );
 
     expect(response.status).toBe(200);

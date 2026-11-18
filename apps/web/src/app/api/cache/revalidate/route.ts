@@ -1,13 +1,11 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { hasCompleteScopedProductSlugs } from '@/app/api/internal/revalidate-products/has-complete-scoped-product-slugs';
 import {
   authenticateApiRequest,
   getUserAccess,
   hasPermission,
   type UserAccess,
 } from '@/lib/api-auth';
-import { enrichProductPurgeEntries } from '@/lib/authoritative-product-purge-enrichment';
 import { BLOG_LISTING_PAGE_SIZE } from '@/lib/blog-listing-page-size';
 import {
   revalidateBlogPosts,
@@ -15,12 +13,9 @@ import {
   revalidateFeatures,
   revalidateMerchant,
   revalidatePageConfig,
-  revalidateProductSlugs,
-  revalidateProducts,
   revalidateReviews,
 } from '@/lib/cache-revalidation';
 import { checkCsrfProtection } from '@/lib/csrf';
-import { expireProductBlogCache } from '@/lib/expire-product-blog-cache';
 import { getMerchantBlogRevalidationContext } from '@/lib/get-merchant-blog-cache-identifiers';
 import { getMerchantBlogPostCategories } from '@/lib/get-merchant-blog-post-categories';
 import { getMerchantBlogPostSlugs } from '@/lib/get-merchant-blog-post-slugs';
@@ -28,9 +23,8 @@ import {
   getMerchantForApiRequest,
   toUserAccess,
 } from '@/lib/get-merchant-for-api-request';
-import { scheduleStorefrontProductPurge } from '@/lib/storefront-product-purge';
-import { scheduleStorefrontHostnamePurge } from '@/lib/storefront-product-purge-hostnames';
 import { cacheRevalidateRequestSchema } from '@/schemas/cache-revalidate-route';
+import { revalidateProductsTarget } from './revalidate-products-target';
 
 /**
  * Cache Revalidation API
@@ -124,82 +118,15 @@ export async function POST(request: NextRequest) {
     targets.includes('all') || targets.includes(target as (typeof targets)[0]);
 
   if (shouldRevalidate('products')) {
-    revalidated.push('products');
-
-    // Evict affected products' public URLs from Cloudflare when supplied.
-    // Merchant slug is resolved server-side (never trusted from the client).
-    // Fire-and-forget: a purge failure never fails the revalidation.
-    if (products && products.length > 0) {
-      try {
-        // Resolve authoritative purge entries and per-slug tags before
-        // scheduling the Cloudflare purge.
-        const {
-          entries,
-          resolvedSlugs,
-          authoritativeSlugsById,
-          blogPostSlugs,
-          blogPostSlugsIncomplete,
-        } = await enrichProductPurgeEntries(
-          auth.supabase,
-          merchantId,
-          products
-        );
-        // Hard-expire per-slug PDP tags and merchant blog enrichment before
-        // any Cloudflare MISS can refill from stale Next snapshots.
-        const slugsRevalidated =
-          revalidateProductSlugs(merchantId, resolvedSlugs, {
-            expireImmediately: true,
-          }) === true;
-        expireProductBlogCache(merchantId);
-        const completeScoped =
-          slugsRevalidated &&
-          !blogPostSlugsIncomplete &&
-          hasCompleteScopedProductSlugs(
-            products,
-            entries,
-            resolvedSlugs,
-            authoritativeSlugsById
-          );
-        const originHardExpired =
-          revalidateProducts(merchantId, undefined, {
-            expireImmediately: true,
-            ...(completeScoped ? { omitMerchantWidePdpDetails: true } : {}),
-          }) === true;
-
-        // Resolve the merchant's public slug solely for Cloudflare routing.
-        const { data: merchantRow, error: merchantLookupError } =
-          await auth.supabase
-            .from('merchants')
-            .select('slug')
-            .eq('id', merchantId)
-            .maybeSingle();
-        if (merchantLookupError) {
-          console.error(
-            'Failed to resolve merchant slug for Cloudflare product purge (continuing with available data):',
-            { merchantId, error: merchantLookupError }
-          );
-        }
-        const merchantSlug = merchantRow?.slug ?? null;
-        if (merchantSlug && originHardExpired) {
-          if (blogPostSlugsIncomplete) {
-            scheduleStorefrontHostnamePurge(merchantSlug);
-          } else if (blogPostSlugs.length > 0) {
-            scheduleStorefrontProductPurge(merchantSlug, entries, {
-              blogPostSlugs,
-            });
-          } else {
-            scheduleStorefrontProductPurge(merchantSlug, entries);
-          }
-        }
-      } catch (purgeError) {
-        revalidateProducts(merchantId, undefined, { expireImmediately: true });
-        console.error('Skipped Cloudflare product purge in cache/revalidate:', {
-          merchantId,
-          purgeError,
-        });
-      }
+    const productsExpired = await revalidateProductsTarget({
+      supabase: auth.supabase,
+      merchantId,
+      products,
+    });
+    if (productsExpired) {
+      revalidated.push('products');
     } else {
-      revalidateProducts(merchantId);
+      failedTargets.push('products');
     }
   }
 

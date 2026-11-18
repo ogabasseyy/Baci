@@ -122,5 +122,19 @@ describe('revalidateWithoutProducts', () => {
         shouldExpireProductBlogCache: true,
       })
     ).toBe(false);
+
+    mockRevalidateProducts.mockReturnValueOnce(false);
+
+    expect(
+      revalidateWithoutProducts({
+        merchantId: MERCHANT_ID,
+        hasProducts: false,
+        purgeWholeStorefront: true,
+        hasExplicitProductSlugs: false,
+        explicitSlugsRevalidated: false,
+        callerOmitMerchantWidePdpDetails: true,
+        shouldExpireProductBlogCache: false,
+      })
+    ).toBe(false);
   });
 });

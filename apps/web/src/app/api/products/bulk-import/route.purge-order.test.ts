@@ -167,9 +167,7 @@ describe('bulk import purge ordering', () => {
 
   it('skips edge purge when both per-slug and broad hard expiry fail on bulk import', async () => {
     mocks.revalidateSlugs.mockReturnValueOnce(false);
-    mocks.revalidateProducts
-      .mockReturnValueOnce(true)
-      .mockReturnValueOnce(false);
+    mocks.revalidateProducts.mockReturnValueOnce(false);
     const supabase = createSupabase();
     mocks.auth.mockReturnValue(supabase);
 

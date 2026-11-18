@@ -149,7 +149,12 @@ describe('POST /api/products/bulk-import storefront purge', () => {
 
     expect(res.status).toBe(200);
     expect(json).toMatchObject({ success: 2, failed: 1 });
-    expect(mockRevalidateProducts).toHaveBeenCalledWith(MERCHANT_ID);
+    expect(mockRevalidateProducts).not.toHaveBeenCalledWith(MERCHANT_ID);
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      MERCHANT_ID,
+      undefined,
+      { expireImmediately: true, omitMerchantWidePdpDetails: true }
+    );
     expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
       MERCHANT_ID,
       ['product-a'],

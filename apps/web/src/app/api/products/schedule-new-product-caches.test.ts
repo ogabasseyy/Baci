@@ -138,4 +138,32 @@ describe('scheduleNewProductCaches', () => {
       })
     ).not.toThrow();
   });
+
+  it('skips edge purge when origin expiry and broad fallback both fail', () => {
+    const warnSpy = vi
+      .spyOn(console, 'warn')
+      .mockImplementation(() => undefined);
+    try {
+      mocks.revalidate.mockReturnValue(false);
+
+      scheduleNewProductCaches({
+        merchantId: 'merchant-1',
+        merchantSlug: 'merchant-store',
+        productId: 'product-1',
+        slug: 'new-product',
+        name: 'New Product',
+        category: 'Electronics',
+        images: [],
+      });
+
+      expect(mocks.revalidate).toHaveBeenCalledWith(
+        'merchant-1',
+        'new-product',
+        { expireImmediately: true }
+      );
+      expect(mocks.purge).not.toHaveBeenCalled();
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
 });

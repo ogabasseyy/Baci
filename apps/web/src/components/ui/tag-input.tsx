@@ -5,6 +5,7 @@ import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { isImeComposing } from '@/lib/is-ime-composing';
 import { cn } from '@/lib/utils';
 
 interface TagInputProps {
@@ -39,6 +40,10 @@ export function TagInput({
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (isImeComposing(e)) {
+      if (e.key === 'Enter') e.preventDefault();
+      return;
+    }
     if (e.key === 'Enter') {
       e.preventDefault();
       addTag();

@@ -26,6 +26,7 @@ import { isPostgrestNoRowsError } from '@/lib/is-postgrest-no-rows-error';
 import { merchantFeatureSettingsDefaults } from '@/lib/merchant-feature-settings-defaults';
 import { normalizeStorefrontCategoryValue } from '@/lib/normalize-storefront-category-value';
 import { getOrderedBlogPostProductLinks } from '@/lib/ordered-blog-post-product-links';
+import { extractPlatformSubdomainSlug } from '@/lib/platform-subdomain';
 import { getProductScopedCacheTag } from '@/lib/product-cache-tags';
 import type { Product } from '@/lib/products';
 import {
@@ -646,6 +647,10 @@ export async function getCachedMerchantByDomain(
   'use cache';
   cacheLife('merchant');
   const normalizedDomain = domain.toLowerCase();
+  const subdomainSlug = extractPlatformSubdomainSlug(normalizedDomain);
+  if (subdomainSlug) {
+    return await getCachedMerchant(subdomainSlug);
+  }
   const safeDomain = sanitizeLookupLogValue(normalizedDomain);
   cacheTag('merchants', 'domains', `domain-${normalizedDomain}`);
 
@@ -685,10 +690,16 @@ export async function getMerchantByIdentifier(
 ): Promise<CachedMerchant | null> {
   if (!isValidMerchantIdentifier(identifier)) return null;
 
-  if (isDomainIdentifier(identifier)) {
-    return await getCachedMerchantByDomain(identifier.toLowerCase());
+  const normalized = identifier.toLowerCase();
+  const subdomainSlug = extractPlatformSubdomainSlug(normalized);
+  if (subdomainSlug) {
+    return await getCachedMerchant(subdomainSlug);
   }
-  return await getCachedMerchant(identifier.toLowerCase());
+
+  if (isDomainIdentifier(normalized)) {
+    return await getCachedMerchantByDomain(normalized);
+  }
+  return await getCachedMerchant(normalized);
 }
 
 /**

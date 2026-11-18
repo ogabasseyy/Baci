@@ -2,59 +2,23 @@
 
 import { formatDistanceToNow } from 'date-fns';
 import { MessageCircle, ShoppingBag, ThumbsDown, ThumbsUp } from 'lucide-react';
-import { useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { BagLoader } from '@/components/ui/bag-loader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useMerchant } from '@/hooks/use-merchant-client';
 import { formatMerchantCurrency } from '@/lib/resolve-merchant-currency';
-import {
-  getRecentInteractions,
-  getSantaStats,
-  type SantaInteraction,
-  type SantaStats,
-} from './actions';
+import { useSantaPolling } from './use-santa-polling';
 
 export default function SantaClientPage() {
   const { merchant, loading: merchantLoading } = useMerchant();
-  const [stats, setStats] = useState<SantaStats | null>(null);
-  const [interactions, setInteractions] = useState<SantaInteraction[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (!merchant?.id) return;
-
-    const merchantId = merchant.id; // Capture for closure
-    let isStale = false;
-
-    function fetchData() {
-      Promise.all([
-        getSantaStats(merchantId),
-        getRecentInteractions(merchantId),
-      ])
-        .then(([fetchedStats, fetchedInteractions]) => {
-          if (isStale) return;
-          setStats(fetchedStats);
-          setInteractions(fetchedInteractions);
-        })
-        .catch((error: unknown) => {
-          console.error('Failed to load Santa data', error);
-        })
-        .finally(() => {
-          if (isStale) return;
-          setLoading(false);
-        });
-    }
-
-    fetchData();
-
-    // Optional: Poll for updates every 30s for a "live" feel during the campaign
-    const interval = setInterval(fetchData, 30000);
-    return () => {
-      isStale = true;
-      clearInterval(interval);
-    };
-  }, [merchant?.id]);
+  const {
+    interactions,
+    loading,
+    pollError,
+    pollingPaused,
+    restartPolling,
+    stats,
+  } = useSantaPolling(merchant?.id);
 
   if (merchantLoading || loading) {
     return (
@@ -83,6 +47,18 @@ export default function SantaClientPage() {
             Real-time insights from the North Pole AI agent.
           </p>
         </div>
+        {pollingPaused || pollError ? (
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            <span>{pollError ?? 'Live updates paused'}</span>
+            <button
+              className="rounded-md border px-2.5 py-1 font-medium text-foreground hover:bg-muted"
+              onClick={restartPolling}
+              type="button"
+            >
+              Refresh
+            </button>
+          </div>
+        ) : null}
       </div>
 
       {/* Stats Grid */}

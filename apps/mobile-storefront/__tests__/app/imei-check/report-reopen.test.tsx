@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { Alert } from 'react-native';
 import { cleanResult } from '@/components/imei-check/imei-result.test-fixture';
+import { walletPayPurchaseKeys } from '@/components/wallet-pay/wallet-pay-purchase-keys';
 
 // Capture the latest usePreventRemove(preventRemove, callback) args so the
 // back-swipe intercept can be asserted and fired without a nav container.
@@ -30,6 +31,7 @@ beforeEach(async () => {
   mockPreventRemoveState.prevent = false;
   mockPreventRemoveState.callback = null;
   await AsyncStorage.clear();
+  walletPayPurchaseKeys.resetMemory();
 });
 
 jest.mock('expo-router/react-navigation', () => ({
@@ -46,7 +48,9 @@ jest.mock('@react-native-vector-icons/ionicons', () => ({
   __esModule: true,
 }));
 
+// The real stand-in's hashing names the saved key; the UUID stays fixed.
 jest.mock('expo-crypto', () => ({
+  ...(jest.requireActual('expo-crypto') as object),
   randomUUID: jest.fn(() => '11111111-1111-4111-8111-111111111111'),
 }));
 

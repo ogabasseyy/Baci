@@ -76,12 +76,13 @@ describe('bugfix: one ₦50,000 shown under three names on the wallet card', () 
 });
 
 describe('bugfix: no Add money entry and no copy feedback on the wallet card', () => {
-  it('opens the transfer instructions from a visible Add money button', () => {
-    const onOpenFundPanel = renderHero(true);
+  it('shows no Add money button: the account number and Copy are already on the card', () => {
+    renderHero(true);
 
-    fireEvent.press(screen.getByRole('button', { name: 'Add money' }));
-
-    expect(onOpenFundPanel).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('button', { name: 'Add money' })).toBeNull();
+    expect(
+      screen.getByRole('button', { name: 'Copy savings account number' })
+    ).toBeOnTheScreen();
   });
 
   it('says "Copied" after the account number is copied', async () => {

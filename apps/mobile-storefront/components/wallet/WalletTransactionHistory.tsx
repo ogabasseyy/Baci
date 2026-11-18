@@ -93,8 +93,7 @@ export function WalletTransactionHistory({
       style={[
         styles.historySection,
         { backgroundColor: colors.card },
-        // Aligned with the card edges above it (walk-through).
-        primaryReady && localStyles.alignedSection,
+        // The same inner inset as the Wallet activity card above it.
         primaryReady && walletListLayout.aligned,
       ]}
     >
@@ -206,6 +205,5 @@ export function WalletTransactionHistory({
 }
 
 const localStyles = StyleSheet.create({
-  alignedSection: { paddingHorizontal: 0 },
   scope: { fontSize: 12, lineHeight: 17, marginBottom: 8, marginTop: -8 },
 });

@@ -6,11 +6,20 @@ const mockPurgeStorefrontProductConfirmed = vi.fn().mockResolvedValue(true);
 const mockScheduleStorefrontHostnamePurge = vi.fn();
 const mockPurgeStorefrontHostnameConfirmed = vi.fn().mockResolvedValue(true);
 const mockExpireProductBlogCacheReliable = vi.fn().mockResolvedValue(true);
+const mockGetCloudflarePurgeCredentials = vi.fn();
+const mockGetProductBlogCacheRuntimeConfig = vi.fn();
 const mockRevalidateSlugs = vi.fn();
 const mockRevalidateProducts = vi.fn();
 vi.mock('@/lib/cache-revalidation', () => ({
   revalidateProductSlugs: (...args: unknown[]) => mockRevalidateSlugs(...args),
   revalidateProducts: (...args: unknown[]) => mockRevalidateProducts(...args),
+}));
+vi.mock('@/lib/cloudflare-purge-credentials', () => ({
+  getCloudflarePurgeCredentials: () => mockGetCloudflarePurgeCredentials(),
+}));
+vi.mock('@/lib/product-blog-cache-runtime-config', () => ({
+  getProductBlogCacheRuntimeConfig: () =>
+    mockGetProductBlogCacheRuntimeConfig(),
 }));
 
 vi.mock('@/lib/authoritative-product-purge-enrichment', () => ({
@@ -60,6 +69,11 @@ function makeSupabase(options: {
 describe('scheduleOrderProductBlogPurge', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetCloudflarePurgeCredentials.mockReturnValue(undefined);
+    mockGetProductBlogCacheRuntimeConfig.mockReturnValue({
+      baseUrl: 'http://localhost:3000',
+      secret: undefined,
+    });
     mockEnrichProductPurgeEntries.mockResolvedValue({
       entries: [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
       blogPostSlugs: ['iphone-guide'],
@@ -348,5 +362,149 @@ describe('scheduleOrderProductBlogPurge', () => {
     expect(mockPurgeStorefrontHostnameConfirmed).toHaveBeenCalledWith(
       'ogabassey'
     );
+  });
+
+  it('delegates confirmed edge eviction to /api/internal/revalidate-products when local Cloudflare credentials are missing', async () => {
+    const { supabase } = makeSupabase({});
+    mockPurgeStorefrontProductConfirmed.mockResolvedValueOnce(false);
+    mockGetCloudflarePurgeCredentials.mockReturnValue(undefined);
+    mockGetProductBlogCacheRuntimeConfig.mockReturnValue({
+      baseUrl: 'https://usebaci.com',
+      secret: 'internal-secret',
+    });
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response('{"ok":true}', { status: 200 }));
+
+    try {
+      const ok = await scheduleOrderProductBlogPurge({
+        merchantId: 'merchant-1',
+        merchantSlug: 'ogabassey',
+        productIds: ['product-1'],
+        supabase: supabase as never,
+        confirmEdgeEviction: true,
+      });
+
+      expect(ok).toBe(true);
+      expect(fetchSpy).toHaveBeenCalledWith(
+        new URL('https://usebaci.com/api/internal/revalidate-products'),
+        expect.objectContaining({
+          method: 'POST',
+          headers: {
+            Authorization: 'Bearer internal-secret',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            merchantId: 'merchant-1',
+            merchantSlug: 'ogabassey',
+            expireProductBlogCache: true,
+            productSlugs: ['iphone-15'],
+            products: [
+              {
+                slug: 'iphone-15',
+                categorySlug: 'smartphones',
+              },
+            ],
+          }),
+        })
+      );
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it('delegates with purgeWholeStorefront when sweep is incomplete and local Cloudflare credentials are missing', async () => {
+    const { supabase } = makeSupabase({});
+    mockPurgeStorefrontHostnameConfirmed.mockResolvedValueOnce(false);
+    mockGetCloudflarePurgeCredentials.mockReturnValue(undefined);
+    mockGetProductBlogCacheRuntimeConfig.mockReturnValue({
+      baseUrl: 'https://usebaci.com',
+      secret: 'internal-secret',
+    });
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response('{"ok":true}', { status: 200 }));
+
+    try {
+      const ok = await scheduleOrderProductBlogPurge({
+        merchantId: 'merchant-1',
+        merchantSlug: 'ogabassey',
+        productIds: ['product-1'],
+        supabase: supabase as never,
+        targetSweepIncomplete: true,
+        confirmEdgeEviction: true,
+      });
+
+      expect(ok).toBe(true);
+      expect(fetchSpy).toHaveBeenCalledWith(
+        new URL('https://usebaci.com/api/internal/revalidate-products'),
+        expect.objectContaining({
+          body: JSON.stringify({
+            merchantId: 'merchant-1',
+            merchantSlug: 'ogabassey',
+            expireProductBlogCache: true,
+            productSlugs: ['iphone-15'],
+            purgeWholeStorefront: true,
+          }),
+        })
+      );
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it('does not delegate when local Cloudflare credentials are configured and confirmation fails', async () => {
+    const { supabase } = makeSupabase({});
+    mockPurgeStorefrontProductConfirmed.mockResolvedValueOnce(false);
+    mockGetCloudflarePurgeCredentials.mockReturnValue({
+      token: 'cf-token',
+      zoneId: 'cf-zone',
+    });
+    mockGetProductBlogCacheRuntimeConfig.mockReturnValue({
+      baseUrl: 'https://usebaci.com',
+      secret: 'internal-secret',
+    });
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+    try {
+      const ok = await scheduleOrderProductBlogPurge({
+        merchantId: 'merchant-1',
+        merchantSlug: 'ogabassey',
+        productIds: ['product-1'],
+        supabase: supabase as never,
+        confirmEdgeEviction: true,
+      });
+
+      expect(ok).toBe(false);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it('rejects non-HTTP(S) or credentialed baseUrl before delegating edge purge', async () => {
+    const { supabase } = makeSupabase({});
+    mockPurgeStorefrontProductConfirmed.mockResolvedValueOnce(false);
+    mockGetCloudflarePurgeCredentials.mockReturnValue(undefined);
+    mockGetProductBlogCacheRuntimeConfig.mockReturnValue({
+      baseUrl: 'https://user:pass@usebaci.com',
+      secret: 'internal-secret',
+    });
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+    try {
+      const ok = await scheduleOrderProductBlogPurge({
+        merchantId: 'merchant-1',
+        merchantSlug: 'ogabassey',
+        productIds: ['product-1'],
+        supabase: supabase as never,
+        confirmEdgeEviction: true,
+      });
+
+      expect(ok).toBe(false);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      fetchSpy.mockRestore();
+    }
   });
 });

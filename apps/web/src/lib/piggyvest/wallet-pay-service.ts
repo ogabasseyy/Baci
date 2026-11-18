@@ -56,9 +56,14 @@ export async function readWalletPayPinBinding(input: {
     .readIssued(schemas.operationId.parse(input.operationId));
   if (!issued) return null;
   return {
-    purpose: 'wallet_pay' as const,
-    amountKobo: issued.amountKobo,
-    idempotencyKeySha256: issued.pinKeySha256,
+    binding: {
+      purpose: 'wallet_pay' as const,
+      amountKobo: issued.amountKobo,
+      idempotencyKeySha256: issued.pinKeySha256,
+    },
+    // What the payment is for, so a route can refuse a proof for another
+    // purchase than the one in its URL.
+    purchase: { purpose: issued.purpose, purchaseRef: issued.purchaseRef },
   };
 }
 
@@ -199,6 +204,33 @@ export async function findWalletPaymentForPurchase(input: {
     .readForPurchase(input.purpose, input.purchaseRef);
 }
 
+/** Whether this customer's wallet flow ever issued a payment for one purchase. */
+export async function walletPaymentAttemptedForPurchase(input: {
+  runtime: WalletPayRuntime;
+  scope: unknown;
+  purpose: 'imei_check' | 'vtu';
+  purchaseRef: string;
+}) {
+  const ports = createWalletPayPorts(input.runtime);
+  return await ports
+    .customerStore(input.scope)
+    .wasAttempted(input.purpose, input.purchaseRef);
+}
+
+/** Closes a PiggyVest-paid VTU purchase whose payment ended unpaid. */
+export async function closeUnpaidVtuWalletPurchase(input: {
+  runtime: WalletPayRuntime;
+  scope: unknown;
+  transactionId: string;
+  /** Releases this one issued operation first (the sheet closed pre-PIN). */
+  cancelOperationId?: string;
+}) {
+  const ports = createWalletPayPorts(input.runtime);
+  return await ports
+    .customerStore(input.scope)
+    .closeUnpaidVtu(input.transactionId, input.cancelOperationId);
+}
+
 /** Delivery claim and outcome for confirmed payments (worker side). */
 export function walletPayDelivery(runtime: WalletPayRuntime) {
   const { worker } = createWalletPayPorts(runtime);
@@ -209,5 +241,9 @@ export function walletPayDelivery(runtime: WalletPayRuntime) {
       outcome: 'fulfilled' | 'failed',
       claimToken: string
     ) => worker.finish(operationId, outcome, claimToken),
+    isImeiDelivered: (operationId: string) =>
+      worker.isImeiDelivered(operationId),
+    vtuDeliveryState: (operationId: string) =>
+      worker.vtuDeliveryState(operationId),
   };
 }

@@ -3,6 +3,11 @@ import { render, screen } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
 import { WalletFundAccountCard } from './WalletFundAccountCard';
 
+jest.mock('expo-constants', () => ({
+  __esModule: true,
+  default: { expoConfig: { name: 'Ogabassey' } },
+}));
+
 let mockFeedback: string | null = null;
 const mockCopy = jest.fn();
 const mockHookOptions = jest.fn();
@@ -73,5 +78,35 @@ describe('bugfix: PiggyVest copy line made the Add money sheet jump', () => {
 
     expect(screen.queryByText('Default Wallet')).toBeNull();
     expect(screen.getByText('9000002044')).toBeOnTheScreen();
+  });
+});
+
+describe('bugfix: PiggyVest account name was hidden in Add money', () => {
+  beforeEach(() => {
+    mockFeedback = null;
+    jest.clearAllMocks();
+  });
+
+  it('shows the live account name customer first, on up to two lines', () => {
+    render(
+      <WalletFundAccountCard
+        colors={Colors.light}
+        fundingAccount={{
+          accountName: 'Ogabassey Services Limited/Bassey John',
+          accountNumber: '9000002044',
+          bankName: 'POCKETAPP',
+          provider: 'piggyvest',
+        }}
+      />
+    );
+
+    const name = screen.getByText('Bassey John / Ogabassey');
+    expect(name).toBeOnTheScreen();
+    expect(name).toHaveProp('numberOfLines', 2);
+    expect(
+      screen.queryByText('Ogabassey Services Limited/Bassey John')
+    ).toBeNull();
+    expect(screen.getByText('9000002044')).toBeOnTheScreen();
+    expect(screen.getByText('POCKETAPP')).toBeOnTheScreen();
   });
 });

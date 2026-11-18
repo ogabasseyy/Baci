@@ -393,5 +393,43 @@ describe('POST /api/storefront/auth/verify-code', () => {
       expires_at: 1_900_000_000,
     });
     expect(body.session.refresh_token).toBeUndefined();
+    const setCookieHeader = response.headers.get('set-cookie');
+    expect(setCookieHeader).toContain('baci_customer_session_hint=1');
+    expect(setCookieHeader).toContain('Path=/');
+    expect(setCookieHeader).toContain('Max-Age=2592000');
+    expect(setCookieHeader).toContain('SameSite=lax');
+    expect(setCookieHeader).toContain('Secure');
+  });
+
+  it('does not set baci_customer_session_hint cookie for native audience', async () => {
+    mockVerifyOtp.mockResolvedValue({
+      data: {
+        session: {
+          access_token: 'access-token',
+          expires_at: 1_900_000_000,
+          expires_in: 3600,
+          refresh_token: 'refresh-token',
+          token_type: 'bearer',
+        },
+        user: {
+          id: 'user-1',
+          email: 'customer@example.com',
+          user_metadata: { role: 'customer' },
+        },
+      },
+      error: null,
+    });
+
+    const response = await POST(
+      makeRequest({
+        audience: 'native',
+        email: 'customer@example.com',
+        token: '123456',
+        merchantSlug: 'ogabassey',
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('set-cookie')).toBeNull();
   });
 });

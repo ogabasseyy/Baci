@@ -57,6 +57,7 @@ const parameterCounts = new Map<string, number>([
   [walletPay.manage, 3],
   [walletPay.status, 2],
   [walletPay.forPurchase, 2],
+  [walletPay.attempted, 2],
 ]);
 // Wallet pay worker statements: no customer scope; the first two parameters
 // are the configured integration id and environment.
@@ -67,6 +68,7 @@ const workerParameterCounts = new Map<string, number>([
   [walletPayWorker.manageRefund, 4],
   [walletPayWorker.work, 3],
   [walletPayWorker.releaseStale, 3],
+  [walletPayWorker.imeiDelivered, 3],
 ]);
 // The goal cancel forfeit sweep (integration id, environment, selection).
 const workerStatements = new Set<string>([

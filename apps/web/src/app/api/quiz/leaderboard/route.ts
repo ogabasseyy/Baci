@@ -94,30 +94,35 @@ export async function GET(request: NextRequest) {
     ? (mapQuizLeaderboardRows([projection.data.current_player])[0] ?? null)
     : null;
 
-  const participantCount = await auth.supabase.rpc(
-    'get_quiz_participant_count_public_v2',
-    { p_event_id: parsed.data.eventId }
-  );
-  if (participantCount.error) {
-    logger.warn({
-      error: participantCount.error,
-      event: 'get_quiz_participant_count',
-      eventId: parsed.data.eventId,
-      message:
-        'participant count unavailable; returning leaderboard without it',
-      userId: auth.user.id,
-    });
+  // The live projection already carries the count from its shared snapshot.
+  let participantCount = projection.data.participant_count;
+  if (participantCount === undefined) {
+    const countResponse = await auth.supabase.rpc(
+      'get_quiz_participant_count_public_v2',
+      { p_event_id: parsed.data.eventId }
+    );
+    if (countResponse.error) {
+      logger.warn({
+        error: countResponse.error,
+        event: 'get_quiz_participant_count',
+        eventId: parsed.data.eventId,
+        message:
+          'participant count unavailable; returning leaderboard without it',
+        userId: auth.user.id,
+      });
+    }
+    participantCount =
+      typeof countResponse.data === 'number' &&
+      Number.isInteger(countResponse.data) &&
+      countResponse.data >= 0
+        ? countResponse.data
+        : null;
   }
 
   return NextResponse.json({
     currentPlayer,
     entries: mapQuizLeaderboardRows(projection.data.entries),
-    participantCount:
-      typeof participantCount.data === 'number' &&
-      Number.isInteger(participantCount.data) &&
-      participantCount.data >= 0
-        ? participantCount.data
-        : null,
+    participantCount,
     status: projection.data.status,
   });
 }

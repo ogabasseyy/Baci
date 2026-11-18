@@ -8,14 +8,42 @@ interface CacheEntry<T> {
   expiresAt: number;
 }
 
+const MAX_CACHE_ENTRIES = 1000;
+const LAZY_PRUNE_INTERVAL_MS = 60 * 1000;
+const MIN_SIZE_PRUNE_COOLDOWN_MS = 1_000;
+const PRUNE_BATCH_SIZE = 100;
+
 class InMemoryCache {
   private cache: Map<string, CacheEntry<unknown>>;
-  private cleanupInterval: NodeJS.Timeout | null;
+  private lastPruneAt: number;
 
   constructor() {
     this.cache = new Map();
-    this.cleanupInterval = null;
-    this.startCleanup();
+    this.lastPruneAt = Date.now();
+  }
+
+  /**
+   * Lazily evict expired entries on write without module-level timers.
+   * Expired entries are also evicted on read in get(), and set() enforces
+   * an O(1) bounded LRU cap of MAX_CACHE_ENTRIES (1000) for live entries.
+   */
+  private pruneExpired(now: number): void {
+    const intervalElapsed = now - this.lastPruneAt >= LAZY_PRUNE_INTERVAL_MS;
+    const sizeExceeded =
+      this.cache.size >= MAX_CACHE_ENTRIES &&
+      now - this.lastPruneAt >= MIN_SIZE_PRUNE_COOLDOWN_MS;
+    if (!intervalElapsed && !sizeExceeded) {
+      return;
+    }
+    this.lastPruneAt = now;
+    let pruned = 0;
+    for (const [key, entry] of this.cache.entries()) {
+      if (now > entry.expiresAt) {
+        this.cache.delete(key);
+        pruned++;
+        if (!intervalElapsed && pruned >= PRUNE_BATCH_SIZE) break;
+      }
+    }
   }
 
   /**
@@ -33,6 +61,10 @@ class InMemoryCache {
       return null;
     }
 
+    // Refresh LRU recency on read so hot keys stay in cache.
+    this.cache.delete(key);
+    this.cache.set(key, entry);
+
     return entry.data;
   }
 
@@ -40,7 +72,17 @@ class InMemoryCache {
    * Set data in cache with TTL in seconds
    */
   set<T>(key: string, data: T, ttlSeconds: number): void {
-    const expiresAt = Date.now() + ttlSeconds * 1000;
+    const now = Date.now();
+    this.pruneExpired(now);
+    if (this.cache.has(key)) {
+      this.cache.delete(key);
+    } else if (this.cache.size >= MAX_CACHE_ENTRIES) {
+      const oldestKey = this.cache.keys().next().value;
+      if (oldestKey !== undefined) {
+        this.cache.delete(oldestKey);
+      }
+    }
+    const expiresAt = now + ttlSeconds * 1000;
     this.cache.set(key, { data, expiresAt });
   }
 
@@ -91,28 +133,10 @@ class InMemoryCache {
   }
 
   /**
-   * Start periodic cleanup of expired entries
-   */
-  private startCleanup(): void {
-    // Run cleanup every minute
-    this.cleanupInterval = setInterval(() => {
-      const now = Date.now();
-      for (const [key, entry] of this.cache.entries()) {
-        if (now > entry.expiresAt) {
-          this.cache.delete(key);
-        }
-      }
-    }, 60 * 1000);
-  }
-
-  /**
-   * Stop cleanup interval (for cleanup/testing)
+   * Stop cleanup interval (no-op: eviction is now lazy on get/set)
    */
   stopCleanup(): void {
-    if (this.cleanupInterval) {
-      clearInterval(this.cleanupInterval);
-      this.cleanupInterval = null;
-    }
+    // No-op: eviction is performed lazily on get/set without background timers.
   }
 }
 

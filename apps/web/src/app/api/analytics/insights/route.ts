@@ -9,12 +9,13 @@ import {
   sanitizeAnalyticsInsightsContext,
 } from '@/lib/analytics/ollama-insights';
 import { authenticateApiRequest, hasPermission } from '@/lib/api-auth';
-import { cache, generateCacheKey } from '@/lib/cache';
+import { generateCacheKey } from '@/lib/cache';
 import {
   getMerchantForApiRequest,
   toUserAccess,
 } from '@/lib/get-merchant-for-api-request';
 import { analyticsInsightsSchema } from '@/schemas/analytics-insights';
+import { readCachedInsights, writeCachedInsights } from './insights-cache';
 
 export const maxDuration = 30;
 
@@ -66,19 +67,11 @@ async function generateInsights(
     };
   }
 
-  // Generate cache key for AI insights (cached for 1 hour)
+  // Generate cache key for AI insights (cached for 24h in Upstash Redis)
   const cacheKey = generateCacheKey('ai-insights', merchantId);
 
   // Try to get cached insights
-  const cachedInsights = cache.get<{
-    insights: Array<{
-      title: string;
-      description: string;
-      type: string;
-      priority: string;
-      action?: string;
-    }>;
-  }>(cacheKey);
+  const cachedInsights = await readCachedInsights(cacheKey);
   if (cachedInsights) {
     return { data: cachedInsights };
   }
@@ -159,7 +152,7 @@ Return JSON only, matching this exact shape: ${ANALYTICS_INSIGHTS_JSON_SHAPE}
       perProviderTimeoutMs: AI_INSIGHTS_PER_PROVIDER_TIMEOUT_MS,
       overallTimeoutMs: AI_INSIGHTS_CHAIN_BUDGET_MS,
     });
-    cache.set(cacheKey, object, AI_INSIGHTS_CACHE_TTL_SECONDS);
+    await writeCachedInsights(cacheKey, object, AI_INSIGHTS_CACHE_TTL_SECONDS);
     return { data: object };
   } catch (chainError) {
     const chainErrorMessage =
@@ -170,7 +163,11 @@ Return JSON only, matching this exact shape: ${ANALYTICS_INSIGHTS_JSON_SHAPE}
         const object = await generateAnalyticsInsightsWithOllama(safeContext, {
           timeoutMs: AI_INSIGHTS_OLLAMA_TIMEOUT_MS,
         });
-        cache.set(cacheKey, object, AI_INSIGHTS_CACHE_TTL_SECONDS);
+        await writeCachedInsights(
+          cacheKey,
+          object,
+          AI_INSIGHTS_CACHE_TTL_SECONDS
+        );
         return { data: object };
       } catch (ollamaError) {
         console.warn('AI insights generation unavailable; using fallback', {
@@ -181,7 +178,7 @@ Return JSON only, matching this exact shape: ${ANALYTICS_INSIGHTS_JSON_SHAPE}
               ? ollamaError.message
               : String(ollamaError),
         });
-        cache.set(
+        await writeCachedInsights(
           cacheKey,
           FALLBACK_INSIGHTS,
           AI_INSIGHTS_FALLBACK_CACHE_TTL_SECONDS
@@ -197,7 +194,7 @@ Return JSON only, matching this exact shape: ${ANALYTICS_INSIGHTS_JSON_SHAPE}
     });
     // Short-cache fallback insights to avoid repeated upstream timeouts while
     // keeping recovery quick when the VPS/provider becomes responsive again.
-    cache.set(
+    await writeCachedInsights(
       cacheKey,
       FALLBACK_INSIGHTS,
       AI_INSIGHTS_FALLBACK_CACHE_TTL_SECONDS

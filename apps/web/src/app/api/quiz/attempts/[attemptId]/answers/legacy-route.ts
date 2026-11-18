@@ -29,7 +29,9 @@ export async function postLegacyQuizAnswer(
   request: NextRequest,
   context: { params: Promise<{ attemptId: string }> }
 ) {
-  const auth = await requireQuizUser(request);
+  // Answers change state: the session is re-checked with Supabase Auth at
+  // most once a minute per token, not on every answer.
+  const auth = await requireQuizUser(request, { requireRecentSession: true });
   if (auth.response) return auth.response;
 
   const csrfResponse = await requireQuizCsrf(request);

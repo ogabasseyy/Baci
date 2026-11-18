@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from '@jest/globals';
 import {
   mockFetch,
-  mockGetUser,
+  mockGetSession,
   quizService,
   resetQuizServiceMocks,
   restoreQuizServiceGlobals,
@@ -57,7 +57,9 @@ describe('legacy quiz attempt service', () => {
   });
 
   it('refuses to start when the session user differs from the expected shopper', async () => {
-    mockGetUser.mockResolvedValue({ data: { user: { id: 'user-2' } } });
+    mockGetSession.mockResolvedValue({
+      data: { session: { access_token: 'token-123', user: { id: 'user-2' } } },
+    });
 
     await expect(
       startQuizAttempt({

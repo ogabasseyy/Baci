@@ -48,7 +48,16 @@ test('only self-hosted shards receive the four-worker limit', () => {
       env: { ...process.env, RUNNER_ENVIRONMENT: environment, VITEST_SHARD: '3' },
     });
     assert.equal(result.status, 0, result.stderr);
-    assert.match(result.stdout, /--shard=3\/6/);
+    assert.match(result.stdout, /--shard=3\/10/);
     assert.equal(result.stdout.includes('--maxWorkers=4'), environment === 'self-hosted');
   }
+});
+
+test('the shard matrix and the script split the suite into the same number of shards', async () => {
+  const script = await readFile('.github/scripts/run-ci-web-shard.sh', 'utf8');
+  const totals = [...script.matchAll(/--shard="\$\{VITEST_SHARD\}\/(\d+)"/g)].map((match) => Number(match[1]));
+  const matrix = job.strategy.matrix.shard;
+  assert.equal(totals.length, 2);
+  for (const total of totals) assert.equal(total, matrix.length);
+  assert.deepEqual(matrix, Array.from({ length: matrix.length }, (_, index) => index + 1));
 });

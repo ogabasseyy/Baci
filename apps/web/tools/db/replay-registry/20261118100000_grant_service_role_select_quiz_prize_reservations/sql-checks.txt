@@ -1,0 +1,1 @@
+supabase/migrations/tests/quiz_prize_reservations_service_role_select.sql

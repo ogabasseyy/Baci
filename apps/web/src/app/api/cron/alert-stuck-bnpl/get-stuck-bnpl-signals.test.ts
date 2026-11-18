@@ -61,14 +61,28 @@ describe('getStuckBnplSignals', () => {
     ).toBe(false);
   });
 
+  it('does not page an unconfirmed Klump order with no checkout evidence', () => {
+    expect(
+      getStuckBnplSignals({ ...order, payment_method: 'klump', notes: null })
+        .shouldAlert
+    ).toBe(false);
+  });
+
   it.each([
     [' Klump ', true],
     ['CredPal', true],
     [null, false],
     ['unknown_bnpl', false],
   ])('applies the prior evidence policy to %s', (payment_method, shouldAlert) => {
-    expect(getStuckBnplSignals({ ...order, payment_method }).shouldAlert).toBe(
-      shouldAlert
-    );
+    expect(
+      getStuckBnplSignals({
+        ...order,
+        payment_method,
+        notes: JSON.stringify({
+          klumpTransactionId: 'klump-1',
+          credpalTransactionId: 'credpal-1',
+        }),
+      }).shouldAlert
+    ).toBe(shouldAlert);
   });
 });

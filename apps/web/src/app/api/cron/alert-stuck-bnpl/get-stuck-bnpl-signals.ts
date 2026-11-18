@@ -34,10 +34,11 @@ export function getStuckBnplSignals(
     order.payment_status === 'bnpl_approved' ||
     (provider === 'credit_direct' && attempt.hasCurrentCompletion);
 
-  // Klump and CredPal do not report SDK completion. Keep their existing
-  // alert behavior after the scan's checkout-evidence filter.
+  // Klump and CredPal do not report SDK completion. Their checkout
+  // reference can stand in for an SDK completion signal.
   const shouldAlert =
-    hasConfirmation || provider === 'klump' || provider === 'credpal';
+    hasConfirmation ||
+    ((provider === 'klump' || provider === 'credpal') && hasCheckoutEvidence);
 
   return {
     provider,

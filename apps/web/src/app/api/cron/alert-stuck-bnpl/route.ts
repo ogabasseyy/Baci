@@ -85,10 +85,16 @@ export async function GET(request: NextRequest) {
     const signalsByOrderId = new Map(
       scannedOrders.map((order) => [order.id, getStuckBnplSignals(order)])
     );
-    const evidenceCandidates = scannedOrders.filter(
-      (order) =>
-        STATUSES_REQUIRING_PROVIDER_EVIDENCE.has(order.payment_status || '') &&
-        !signalsByOrderId.get(order.id)?.hasCheckoutEvidence
+    const evidenceCandidates = scannedOrders.filter((order) => {
+      const signals = signalsByOrderId.get(order.id);
+      const requiresEvidence =
+        STATUSES_REQUIRING_PROVIDER_EVIDENCE.has(order.payment_status || '') ||
+        (order.payment_status === 'bnpl_pending' &&
+          signals?.provider !== 'credit_direct');
+      return requiresEvidence && !signals?.hasCheckoutEvidence;
+    });
+    const ordersWithoutCheckoutEvidence = new Set(
+      evidenceCandidates.map((order) => order.id)
     );
     const {
       progressedOrderIds: orderIdsWithTransactionEvidence,
@@ -98,8 +104,7 @@ export async function GET(request: NextRequest) {
 
     const orders = scannedOrders.filter(
       (order) =>
-        !STATUSES_REQUIRING_PROVIDER_EVIDENCE.has(order.payment_status || '') ||
-        signalsByOrderId.get(order.id)?.hasCheckoutEvidence ||
+        !ordersWithoutCheckoutEvidence.has(order.id) ||
         orderIdsWithTransactionEvidence.has(order.id)
     );
 

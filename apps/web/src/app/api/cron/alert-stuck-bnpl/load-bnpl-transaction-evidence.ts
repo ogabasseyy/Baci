@@ -40,6 +40,7 @@ export async function loadBnplTransactionEvidence(
   }
 
   let unknownGatewayCount = 0;
+  const ambiguousReferenceOrders = new Set<string>();
   for (const row of (data ?? []) as TransactionRow[]) {
     if (
       !row.order_id ||
@@ -69,7 +70,12 @@ export async function loadBnplTransactionEvidence(
     }
 
     progressedOrderIds.add(row.order_id);
-    if (reference && !referencesByOrderId.has(row.order_id)) {
+    if (!reference || ambiguousReferenceOrders.has(row.order_id)) continue;
+    const previousReference = referencesByOrderId.get(row.order_id);
+    if (previousReference && previousReference !== reference) {
+      referencesByOrderId.delete(row.order_id);
+      ambiguousReferenceOrders.add(row.order_id);
+    } else {
       referencesByOrderId.set(row.order_id, reference);
     }
   }

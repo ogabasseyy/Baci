@@ -51,6 +51,30 @@ describe('loadBnplTransactionEvidence', () => {
     });
   });
 
+  it('reports progress without selecting an arbitrary reference when legacy attempts disagree', async () => {
+    const row = {
+      order_id: 'order-a',
+      status: 'processing',
+      gateway: 'credit_direct',
+    };
+    const { supabase } = transactionLookup([
+      { ...row, gateway_reference: 'reference-a' },
+      { ...row, gateway_reference: 'reference-b' },
+    ]);
+    const signals = getStuckBnplSignals({
+      payment_method: 'credit_direct',
+      payment_status: 'unpaid',
+      notes: null,
+    });
+
+    const result = await loadBnplTransactionEvidence(
+      supabase,
+      new Map([['order-a', signals]])
+    );
+    expect(result.progressedOrderIds.has('order-a')).toBe(true);
+    expect(result.referencesByOrderId.has('order-a')).toBe(false);
+  });
+
   it('reports a lookup failure without fabricating transaction evidence', async () => {
     const { supabase } = transactionLookup([], { message: 'unavailable' });
     expect(

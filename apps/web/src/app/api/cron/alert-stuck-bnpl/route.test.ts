@@ -96,6 +96,19 @@ describe('GET /api/cron/alert-stuck-bnpl', () => {
     );
   });
 
+  it('does not page for a Klump BNPL-pending order without provider evidence', async () => {
+    mocks.limit.mockResolvedValue({
+      data: [stuckOrder({ payment_method: 'klump', notes: null })],
+      error: null,
+    });
+    const response = await runCron(createCronRequest());
+    expect(await response.json()).toMatchObject({
+      stuckOrders: 0,
+      reviewOnlyOrders: 0,
+    });
+    expect(mocks.notifyMerchant).not.toHaveBeenCalled();
+  });
+
   it('pages only for the orders with an approval or completion signal', async () => {
     mocks.limit.mockResolvedValue({
       data: [

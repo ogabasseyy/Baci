@@ -228,4 +228,23 @@ BEGIN
     'PUBLIC can refresh an onboarding intent');
 END $$;
 
+-- 10: identity-change fence persists across subsequent retries and blocks stale-none same-fingerprint refreshes.
+DO $$
+DECLARE refreshed jsonb; retried jsonb;
+BEGIN
+  -- Customer 9 is 'unknown' under repeat('a', 64); refresh to repeat('b', 64), fail back to 'unknown', then retry 'b'.
+  refreshed := piggyvest_primary.refresh_unknown_onboarding(pg_temp.scope(9), repeat('b', 64));
+  PERFORM pg_temp.check(refreshed->>'status' = 'claimed' AND refreshed->>'reclaimed' = 'false',
+    'slot 9 initial refresh failed');
+  PERFORM pg_temp.check(piggyvest_primary.record_onboarding(pg_temp.scope(9),
+    (refreshed->>'intentId')::uuid, (refreshed->>'claimToken')::uuid, NULL, NULL),
+    'slot 9 transition back to unknown failed');
+  -- Same-fingerprint stale refresh must conflict even though state returned to unknown.
+  PERFORM pg_temp.refused(9, pg_temp.scope(9), 'stale same-fingerprint refresh after transition');
+  -- Normal retry with the refreshed fingerprint re-claims cleanly, keeping reclaimed = false.
+  retried := piggyvest_primary.claim_onboarding(pg_temp.scope(9), repeat('b', 64));
+  PERFORM pg_temp.check(retried->>'status' = 'claimed' AND retried->>'reclaimed' = 'false',
+    'post-refresh retry leaked reclaimed=true across identity change');
+END $$;
+
 ROLLBACK;

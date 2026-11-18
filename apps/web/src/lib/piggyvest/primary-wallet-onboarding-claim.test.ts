@@ -1,4 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type {
+  PrimaryWalletIntentScope,
+  PrimaryWalletOnboardingStorage,
+} from './primary-wallet-onboarding.types';
 import { claimPrimaryWalletOnboarding } from './primary-wallet-onboarding-claim';
 
 vi.mock('server-only', () => ({}));
@@ -11,9 +15,13 @@ vi.mock('./primary-wallet-customer-lookup', () => ({
   lookupPrimaryWalletCustomer: mocks.lookupPrimaryWalletCustomer,
 }));
 
-const scope = {
+const scope: PrimaryWalletIntentScope = {
   customerId: '00000000-0000-4000-8000-000000000001',
   merchantId: '00000000-0000-4000-8000-000000000002',
+  userId: '00000000-0000-4000-8000-000000000003',
+  integrationId: '00000000-0000-4000-8000-000000000004',
+  businessId: 'biz_test_01',
+  environment: 'staging',
 };
 
 const fingerprints = {
@@ -22,15 +30,18 @@ const fingerprints = {
 };
 
 function makeStorage() {
-  return {
+  const storage = {
     claim: vi.fn(),
     refreshUnknown: vi.fn(),
     recordAccepted: vi.fn(),
-    recordPending: vi.fn(),
+    recordUncertain: vi.fn(),
     recordRoutingPending: vi.fn(),
-    recordFailed: vi.fn(),
-    recordComplete: vi.fn(),
-  };
+    recordReview: vi.fn(),
+    recordRejected: vi.fn(),
+    recordOwnershipHold: vi.fn(),
+    releaseIntent: vi.fn(),
+  } satisfies PrimaryWalletOnboardingStorage;
+  return storage;
 }
 
 describe('claimPrimaryWalletOnboarding', () => {
@@ -48,7 +59,7 @@ describe('claimPrimaryWalletOnboarding', () => {
     });
 
     const result = await claimPrimaryWalletOnboarding({
-      storage: storage as never,
+      storage,
       scope,
       fingerprints,
       thirdPartyIdentifier: 'cust@example.com',
@@ -84,7 +95,7 @@ describe('claimPrimaryWalletOnboarding', () => {
       });
 
     const result = await claimPrimaryWalletOnboarding({
-      storage: storage as never,
+      storage,
       scope,
       fingerprints,
       thirdPartyIdentifier: 'cust@example.com',
@@ -120,7 +131,7 @@ describe('claimPrimaryWalletOnboarding', () => {
 
     const findCustomers = vi.fn();
     const result = await claimPrimaryWalletOnboarding({
-      storage: storage as never,
+      storage,
       scope,
       fingerprints,
       thirdPartyIdentifier: 'cust@example.com',
@@ -156,7 +167,7 @@ describe('claimPrimaryWalletOnboarding', () => {
     });
 
     const result = await claimPrimaryWalletOnboarding({
-      storage: storage as never,
+      storage,
       scope,
       fingerprints,
       thirdPartyIdentifier: 'cust@example.com',

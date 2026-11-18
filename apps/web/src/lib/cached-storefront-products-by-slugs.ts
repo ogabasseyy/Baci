@@ -1,5 +1,7 @@
 import { cacheLife, cacheTag } from 'next/cache';
+import { projectAdvertisedPhonePrices } from '@/lib/advertised-phone-price-projection';
 import {
+  getPublicProductVariantsByProductIds,
   getPublicSupabaseClient,
   hydrateAndSanitizeProducts,
   type StorefrontHomeProduct,
@@ -15,15 +17,22 @@ import {
  */
 const PRODUCTS_BY_SLUG_SELECT = `
       id, name, slug, description, price, compare_at_price, created_at,
-      images, category, brand, condition, has_condition_offers, stock, stock_quantity,
+      images, category, brand, condition, has_condition_offers, has_variants, variant_model, stock, stock_quantity,
       manage_stock, low_stock_threshold,
       categories:category_id(id, name, slug, parent_id),
       product_categories(categories(name, slug))
     `;
 
+type StorefrontProductBySlug = StorefrontHomeProduct & {
+  product_key_specs?: unknown;
+};
+
+const PRODUCT_FILTER_SPECS_SELECT =
+  'product_key_specs(ram_gb, storage_gb, gpu, available_colors, sim_type, display_type, screen_size_inches)';
+
 interface StorefrontProductsBySlugsQuery
   extends PromiseLike<{
-    data: StorefrontHomeProduct[] | null;
+    data: StorefrontProductBySlug[] | null;
     error: unknown;
   }> {
   eq(column: string, value: unknown): StorefrontProductsBySlugsQuery;
@@ -46,8 +55,9 @@ interface StorefrontProductsBySlugsTable {
  */
 export async function getCachedStorefrontProductsBySlugs(
   merchantId: string,
-  slugs: readonly string[]
-): Promise<StorefrontHomeProduct[]> {
+  slugs: readonly string[],
+  includeFilterSpecs = false
+): Promise<StorefrontProductBySlug[]> {
   // PR4b review (Codex, PR #3108): stays `'use cache: remote'`. This reader
   // feeds the pinned launch carousel, and its freshness contract depends on
   // revalidateProducts() tag busting reaching EVERY instance — local
@@ -72,7 +82,11 @@ export async function getCachedStorefrontProductsBySlugs(
     'products'
   ) as unknown as StorefrontProductsBySlugsTable;
   const { data, error } = await productsTable
-    .select(PRODUCTS_BY_SLUG_SELECT)
+    .select(
+      includeFilterSpecs
+        ? `${PRODUCTS_BY_SLUG_SELECT}, ${PRODUCT_FILTER_SPECS_SELECT}`
+        : PRODUCTS_BY_SLUG_SELECT
+    )
     .eq('merchant_id', merchantId)
     .eq('status', 'active')
     .in('slug', slugs);
@@ -85,5 +99,9 @@ export async function getCachedStorefrontProductsBySlugs(
     throw error;
   }
 
-  return hydrateAndSanitizeProducts(supabase, merchantId, data ?? []);
+  return projectAdvertisedPhonePrices(
+    merchantId,
+    await hydrateAndSanitizeProducts(supabase, merchantId, data ?? []),
+    getPublicProductVariantsByProductIds
+  );
 }

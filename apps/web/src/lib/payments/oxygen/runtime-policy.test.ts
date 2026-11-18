@@ -68,6 +68,12 @@ it('rejects booking admission when the selected tenure has no offer', () => {
       action
     )
   ).toBe(false);
+  expect(
+    oxygenActionAllowed(
+      { ...context, state: { ...context.state, offers: [] } },
+      action
+    )
+  ).toBe(false);
 });
 it('does not start or submit approval for a booked plan without a matching offer', () => {
   const legacy = { ...context, state: { ...context.state, offers: undefined } };

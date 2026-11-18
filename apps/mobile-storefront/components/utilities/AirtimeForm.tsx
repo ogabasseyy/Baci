@@ -1,5 +1,4 @@
 import {
-  ActivityIndicator,
   Image,
   Pressable,
   ScrollView,
@@ -9,12 +8,25 @@ import {
 } from 'react-native';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors, { BRAND, SPACING } from '@/constants/Colors';
+import { AirtimeQuickAmounts } from './AirtimeQuickAmounts';
 import { airtimeFormStyles as styles } from './airtime-form.styles';
 import type { AirtimeFormProps } from './airtime-form.types';
 import { ProviderGrid } from './ProviderGrid';
 import { RecentUtilityRecipients } from './RecentUtilityRecipients';
+import { UtilityFormNotice } from './UtilityFormNotice';
+import { UtilityPayButton } from './UtilityPayButton';
 import { UtilityPaymentOptions } from './UtilityPaymentOptions';
 import { useAirtimeFormController } from './use-airtime-form-controller';
+import { useUtilityPayGate } from './use-utility-pay-gate';
+import {
+  isRetainedForPay,
+  useUtilityRetainedAttempt,
+} from './use-utility-retained-attempt';
+import {
+  getAirtimeFormIssue,
+  getFieldIssuePointer,
+} from './utility-form-issue';
+import { UTILITY_FOOTER_NOTICE_SPACE } from './utility-pay-readiness';
 
 const QUICK_AMOUNTS = [100, 200, 500, 1000, 2000, 5000];
 
@@ -40,6 +52,7 @@ export function AirtimeForm(props: AirtimeFormProps) {
     numericAmount,
     payment,
     phoneNumber,
+    purchaseRequest,
     scrollViewRef,
     selectedProvider,
     selectedProviderConfig,
@@ -48,6 +61,26 @@ export function AirtimeForm(props: AirtimeFormProps) {
     setIsNetworkPickerExpanded,
     walletReturnToHref,
   } = useAirtimeFormController(props);
+  const formIssue = getAirtimeFormIssue({
+    numericAmount,
+    phoneNumber,
+    selectedProvider,
+  });
+  // One kept-attempt lookup for both the payment section and the Pay gate.
+  const retained = useUtilityRetainedAttempt(payment, purchaseRequest);
+  const payGate = useUtilityPayGate({
+    amount: numericAmount,
+    formIssue: formIssue?.message ?? null,
+    payment,
+    retained: isRetainedForPay(retained),
+    returnToHref: walletReturnToHref,
+  });
+  const inlineIssue = formIssue?.inline ? formIssue : null;
+  const footerNotice = inlineIssue
+    ? { action: null, message: getFieldIssuePointer(inlineIssue.field) }
+    : payGate.blockedReason
+      ? { action: payGate.action, message: payGate.blockedReason }
+      : null;
 
   const matchingRecipients = recentRecipients.filter((recipient) => {
     if (!phoneNumber) return true;
@@ -95,7 +128,11 @@ export function AirtimeForm(props: AirtimeFormProps) {
         style={styles.scrollView}
         contentContainerStyle={[
           styles.content,
-          { paddingBottom: footerSpacerHeight },
+          {
+            paddingBottom:
+              footerSpacerHeight +
+              (footerNotice ? UTILITY_FOOTER_NOTICE_SPACE : 0),
+          },
         ]}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
@@ -120,6 +157,11 @@ export function AirtimeForm(props: AirtimeFormProps) {
           value={phoneNumber}
           onChangeText={handlePhoneChange}
         />
+        {inlineIssue?.field === 'phone' ? (
+          <View style={styles.fieldNotice}>
+            <UtilityFormNotice compact message={inlineIssue.message} />
+          </View>
+        ) : null}
 
         {canShowBeneficiaries ? (
           <RecentUtilityRecipients
@@ -201,42 +243,15 @@ export function AirtimeForm(props: AirtimeFormProps) {
             value={formattedAmount}
             onChangeText={(text) => setAmount(text.replace(/\D/g, ''))}
           />
-          <View style={styles.quickAmounts}>
-            {QUICK_AMOUNTS.map((amount) => {
-              const isSelectedAmount = numericAmount === amount;
-
-              return (
-                <Pressable
-                  key={amount}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: isSelectedAmount }}
-                  style={[
-                    styles.quickChip,
-                    {
-                      backgroundColor: isSelectedAmount
-                        ? BRAND.primary
-                        : colors.background,
-                      borderColor: isSelectedAmount
-                        ? BRAND.primary
-                        : colors.border,
-                    },
-                  ]}
-                  onPress={() => setAmount(String(amount))}
-                >
-                  <Text
-                    style={[
-                      styles.quickChipText,
-                      {
-                        color: isSelectedAmount ? BRAND.onPrimary : colors.text,
-                      },
-                    ]}
-                  >
-                    ₦{amount.toLocaleString()}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+          {inlineIssue?.field === 'amount' ? (
+            <UtilityFormNotice compact message={inlineIssue.message} />
+          ) : null}
+          <AirtimeQuickAmounts
+            amounts={QUICK_AMOUNTS}
+            colors={colors}
+            onSelect={(amount) => setAmount(String(amount))}
+            selectedAmount={numericAmount}
+          />
         </View>
 
         <View onLayout={handlePaymentLayout}>
@@ -250,6 +265,8 @@ export function AirtimeForm(props: AirtimeFormProps) {
             walletIsSettled={payment.isWalletSettled()}
             walletIsStoreCredit={payment.walletIsStoreCredit}
             walletPrimaryUnknown={payment.walletPrimaryUnknown}
+            retainedStoreCredit={retained.retainedStoreCredit}
+            retainedPiggyvest={retained.retainedPiggyvest}
           />
         </View>
       </ScrollView>
@@ -266,25 +283,16 @@ export function AirtimeForm(props: AirtimeFormProps) {
             },
           ]}
         >
-          <Pressable
-            style={[
-              styles.payButton,
-              {
-                backgroundColor: BRAND.primary,
-                opacity: isSubmitting ? 0.7 : 1,
-              },
-            ]}
+          <UtilityPayButton
+            amount={numericAmount}
+            blockedReason={payGate.blockedReason}
+            buttonStyle={styles.payButton}
+            isBusy={isSubmitting}
+            label={`Pay ₦${numericAmount ? numericAmount.toLocaleString() : '0'}`}
+            notice={footerNotice}
             onPress={handlePurchase}
-            disabled={isSubmitting}
-          >
-            {isSubmitting ? (
-              <ActivityIndicator color={BRAND.onPrimary} />
-            ) : (
-              <Text style={styles.payButtonText}>
-                {`Pay ₦${numericAmount ? numericAmount.toLocaleString() : '0'}`}
-              </Text>
-            )}
-          </Pressable>
+            textStyle={styles.payButtonText}
+          />
         </View>
       )}
     </>

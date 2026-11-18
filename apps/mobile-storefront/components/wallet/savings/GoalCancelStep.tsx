@@ -9,6 +9,7 @@ import { GoalCancelButton } from './GoalCancelStepParts';
 import { goalCancelBreakdown } from './goal-cancel-breakdown';
 import { styles } from './goal-cancel-step.styles';
 import { GOAL_CANCEL_STEP_COPY as COPY } from './goal-cancel-step-copy';
+import { GOAL_ACTION_BUSY_STEPS } from './goal-lifecycle-outcomes';
 import type { useGoalLifecycle } from './use-goal-lifecycle';
 
 type WalletColors = (typeof Colors)['light'];
@@ -49,9 +50,7 @@ export function GoalCancelStep({
   // dismissed into a PIN prompt it no longer shows.
   useSavingsSheetLock(flow.step === 'issuing' || flow.step === 'submitting');
   const done = flow.step === 'done';
-  const working = ['issuing', 'pin', 'submitting', 'polling'].includes(
-    flow.step
-  );
+  const working = GOAL_ACTION_BUSY_STEPS.has(flow.step);
 
   let body: string | null = empty
     ? COPY.emptyBody
@@ -141,6 +140,17 @@ export function GoalCancelStep({
   }
 
   const showBreakdown = known && !empty && !done;
+  // The split is known and none of it is interest: the notes above stay
+  // silent, so say that any interest is not refunded. Only while reviewing:
+  // a pending, cancelled-PIN, failed or done step shows its own message.
+  const reviewing = ![
+    'done',
+    'timed_out',
+    'pin_cancelled',
+    'failed',
+    'needs_review',
+  ].includes(flow.step);
+  const showInterestNote = known && !empty && forfeited <= 0 && reviewing;
   // Without the split, still show the goal's balance: a figure, not just a
   // sentence, and never presented as the refund.
   const showSaved = !known && !empty && !done;
@@ -171,6 +181,11 @@ export function GoalCancelStep({
       {body ? (
         <Text style={[styles.body, { color: colors.textSecondary }]}>
           {body}
+        </Text>
+      ) : null}
+      {showInterestNote ? (
+        <Text style={[styles.body, { color: colors.textSecondary }]}>
+          {COPY.interestNote}
         </Text>
       ) : null}
       {showSaved ? (

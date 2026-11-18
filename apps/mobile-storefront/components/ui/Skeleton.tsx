@@ -88,14 +88,28 @@ export function Skeleton({
 /**
  * Product Card Skeleton
  */
-export function ProductCardSkeleton() {
+export function ProductCardSkeleton({
+  fullWidth = false,
+}: {
+  fullWidth?: boolean;
+} = {}) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
 
   return (
-    <View style={[styles.productCard, { backgroundColor: colors.card }]}>
-      <Skeleton width="100%" height={160} borderRadius={12} />
-      <View style={styles.productContent}>
+    <View
+      style={[
+        styles.productCard,
+        fullWidth && styles.productRow,
+        { backgroundColor: colors.card },
+      ]}
+    >
+      <Skeleton
+        width={fullWidth ? 100 : '100%'}
+        height={fullWidth ? 100 : 160}
+        borderRadius={12}
+      />
+      <View style={[styles.productContent, fullWidth && styles.rowContent]}>
         <Skeleton width="80%" height={16} style={styles.mb8} />
         <Skeleton width="50%" height={14} style={styles.mb8} />
         <Skeleton width="40%" height={18} />
@@ -107,7 +121,13 @@ export function ProductCardSkeleton() {
 /**
  * Product Grid Skeleton (2 columns)
  */
-export function ProductGridSkeleton({ count = 4 }: { count?: number }) {
+export function ProductGridSkeleton({
+  count = 4,
+  fullWidth = false,
+}: {
+  count?: number;
+  fullWidth?: boolean;
+}) {
   // Static decorative placeholders: positional ids are stable keys
   // because the list never reorders (only its length varies).
   const items = Array.from({ length: count }, (_, position) => position);
@@ -117,11 +137,15 @@ export function ProductGridSkeleton({ count = 4 }: { count?: number }) {
         <View
           key={`grid-skeleton-item-${position}`}
           style={[
-            styles.gridItem,
-            position % 2 === 0 ? styles.gridLeft : styles.gridRight,
+            fullWidth
+              ? styles.fullWidthItem
+              : [
+                  styles.gridItem,
+                  position % 2 === 0 ? styles.gridLeft : styles.gridRight,
+                ],
           ]}
         >
-          <ProductCardSkeleton />
+          <ProductCardSkeleton fullWidth={fullWidth} />
         </View>
       ))}
     </View>
@@ -215,6 +239,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  productRow: { flexDirection: 'row', alignItems: 'center' },
+  rowContent: { flex: 1 },
+  fullWidthItem: { width: '100%', marginBottom: 12 },
   productCard: {
     borderRadius: 12,
     overflow: 'hidden',

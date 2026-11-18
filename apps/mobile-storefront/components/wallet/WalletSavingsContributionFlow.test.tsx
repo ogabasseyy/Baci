@@ -258,3 +258,33 @@ describe('WalletSavingsContributionFlow', () => {
     ).toBeNull();
   });
 });
+
+describe('bugfix: a clear in-progress state while the contribution moves', () => {
+  it('covers the entry with "Adding ₦100 to your plan…" until the add settles', () => {
+    const props = {
+      ...createProps(),
+      addAmount: '100',
+      walletBalance: 500,
+      isAdding: true,
+    };
+    const { rerender } = render(<WalletSavingsContributionFlow {...props} />);
+    expect(screen.getByText('Adding ₦100 to your plan…')).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('savings-contribution-progress')
+    ).toBeOnTheScreen();
+    rerender(<WalletSavingsContributionFlow {...props} isAdding={false} />);
+    expect(screen.queryByTestId('savings-contribution-progress')).toBeNull();
+  });
+  it('hides the covered controls from screen readers while adding', () => {
+    const props = {
+      ...createProps(),
+      addAmount: '100',
+      walletBalance: 500,
+      isAdding: true,
+    };
+    const { rerender } = render(<WalletSavingsContributionFlow {...props} />);
+    expect(screen.queryAllByRole('button')).toHaveLength(0);
+    rerender(<WalletSavingsContributionFlow {...props} isAdding={false} />);
+    expect(screen.queryAllByRole('button').length).toBeGreaterThan(0);
+  });
+});

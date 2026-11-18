@@ -9,6 +9,10 @@ import { createPrimaryWalletEvidenceExecutor } from './primary-wallet-evidence-e
 import { reconcilePrimaryWalletSavings } from './primary-wallet-savings-reconciliation';
 import { createSavingsVerifyQueryProvider } from './primary-wallet-savings-reconciliation-runtime';
 import { createPrimaryWalletSavingsReconciliationStore } from './primary-wallet-savings-reconciliation-store';
+import {
+  type SavingsVerifyRetryOptions,
+  withSavingsVerifyRetry,
+} from './primary-wallet-savings-verify-retry';
 
 const GOAL_TRANSFER_KINDS = [
   {
@@ -42,6 +46,7 @@ export async function runPrimaryWalletSavingsOutflowReconciliation(input: {
   providerToken: unknown;
   references: readonly string[];
   fetchImplementation?: typeof fetch;
+  verifyRetry?: SavingsVerifyRetryOptions;
 }): Promise<'confirmed' | 'cancelled' | 'pending' | 'unmatched'> {
   const configuration = piggyvestPrimaryInflowRuntimeSchema.parse(
     input.configuration
@@ -56,11 +61,16 @@ export async function runPrimaryWalletSavingsOutflowReconciliation(input: {
   });
   const ports = {
     ...store,
-    queryProvider: createSavingsVerifyQueryProvider({
-      environment: configuration.environment,
-      token,
-      fetchImplementation: input.fetchImplementation,
-    }),
+    // The webhook can arrive seconds before the provider's verify record
+    // turns terminal: re-ask briefly before leaving the delivery retryable.
+    queryProvider: withSavingsVerifyRetry(
+      createSavingsVerifyQueryProvider({
+        environment: configuration.environment,
+        token,
+        fetchImplementation: input.fetchImplementation,
+      }),
+      input.verifyRetry
+    ),
   };
   for (const reference of input.references) {
     if (!schemas.reserved.shape.reference.safeParse(reference).success)

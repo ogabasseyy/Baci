@@ -19,14 +19,6 @@ const PAYMENT_STATUSES = new Set<FailedOrder['payment_status']>([
   'cancelled',
   'unknown',
 ]);
-const TERMINAL_OR_UNKNOWN = new Set([
-  'paid',
-  'refunded',
-  'cancelled',
-  'unknown',
-  'failed',
-  'expired',
-]);
 const MAX_OXYGEN_FOLLOW_UP_CANDIDATES = 250;
 const ORDER_LOOKUP_BATCH_SIZE = 50;
 
@@ -124,13 +116,9 @@ export async function fetchOxygenFollowUps(
         oxygen_follow_up_status:
           total === null ||
           order.cancelled_at !== null ||
-          TERMINAL_OR_UNKNOWN.has(paymentStatus) ||
+          paymentStatus !== 'unpaid' ||
           (candidate.follow_up_status === 'customer_action' &&
-            (paymentStatus !== 'unpaid' ||
-              candidate.order_customer_id !== order.customer_id)) ||
-          (candidate.follow_up_status === 'approved_pending' &&
-            paymentStatus !== 'unpaid') ||
-          paymentStatus === 'bnpl_approved' ||
+            candidate.order_customer_id !== order.customer_id) ||
           order.payment_method !== 'oxygen'
             ? ('needs_review' as const)
             : candidate.follow_up_status,

@@ -227,6 +227,29 @@ describe('Oxygen follow-up fetch', () => {
     });
   });
 
+  it.each([
+    'pending',
+    'bnpl_pending',
+    'bnpl_approved',
+    'paid',
+    'refunded',
+    'cancelled',
+    'failed',
+    'expired',
+    'future_status',
+    null,
+  ])('escalates processing when execution is disabled by payment status %s', async (payment_status) => {
+    mocks.in.mockResolvedValue({
+      data: [{ ...order, payment_status }],
+      error: null,
+    });
+    const result = await fetchOxygenFollowUps(merchantId);
+    expect(result.orders).toEqual([
+      expect.objectContaining({ oxygen_follow_up_status: 'needs_review' }),
+    ]);
+    expect(result.isIncomplete).toBe(false);
+  });
+
   it('flags conflicting approval evidence for review', async () => {
     mocks.in.mockResolvedValue({
       data: [{ ...order, payment_status: 'bnpl_approved' }],

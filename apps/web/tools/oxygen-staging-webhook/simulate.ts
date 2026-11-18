@@ -77,6 +77,7 @@ export async function simulateStagingCallbacks(directory: string) {
     }
     for (const name of [
       'Transaction callback',
+      'Upfront payment callback',
       'Vendor settlement callback',
       'Direct partner settlement callback',
     ] as const) {
@@ -104,7 +105,7 @@ export async function simulateStagingCallbacks(directory: string) {
   const expectedSummary = [
     { kind: 'address', count: 1 },
     { kind: 'settlement', count: 2 },
-    { kind: 'transaction', count: 1 },
+    { kind: 'transaction', count: 2 },
   ];
   if (JSON.stringify(afterRestart) !== JSON.stringify(expectedSummary))
     throw new Error('Simulation persistence mismatch');

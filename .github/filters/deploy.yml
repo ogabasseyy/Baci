@@ -119,6 +119,7 @@ tracking:
   - 'apps/web/src/app/api/cron/gigl-tracking/run-gigl-tracking-monitor-batch.ts'
   - 'apps/web/src/app/api/cron/gigl-tracking/gigl-tracking-monitor-worker.ts'
   - 'apps/web/src/app/api/cron/gigl-tracking/gigl-tracking-not-yet-visible.ts'
+  - 'apps/web/src/app/api/cron/gigl-tracking/gigl-tracking-not-yet-visible.constants.ts'
   - 'apps/web/src/app/api/cron/gigl-tracking/nullable-supabase-rpc-argument.ts'
   - 'apps/web/src/app/api/cron/gigl-tracking/gigl-tracking-preshipment-cancellation.ts'
   - 'apps/web/src/lib/gigl-tracking-worker-client.ts'

@@ -209,16 +209,45 @@ SELECT is(
   'the woken monitor is due now and gets a short follow-up before dormancy'
 );
 
--- 6. New events on a poll restart the normal 15-minute cadence.
-UPDATE public.shipment_tracking_monitors
-SET state = 'active', unchanged_poll_count = 0,
-  next_poll_at = now() + interval '15 minutes'
-WHERE tracking_number = '8800000006';
+-- 6. Claiming a woken dormant monitor and applying a new event restores the active 15-minute cadence.
+SET LOCAL ROLE service_role;
+SELECT set_config('request.jwt.claim.role', 'service_role', true);
 SELECT is(
-  (SELECT state || ':' || (next_poll_at = now() + interval '15 minutes')::text
+  (SELECT count(*)::integer
+   FROM public.claim_due_gigl_tracking_monitors(100, 'w6') AS claimed
+   WHERE claimed.tracking_number = '8800000006'),
+  1,
+  'the woken dormant monitor is claimed by the next poll'
+);
+SELECT ok(
+  public.apply_gigl_tracking_result(
+    (SELECT shipment_id FROM public.shipment_tracking_monitors WHERE tracking_number = '8800000006'),
+    (SELECT tracking_epoch_id FROM public.shipment_tracking_monitors WHERE tracking_number = '8800000006'),
+    'w6',
+    'in_transit',
+    'Lagos Hub',
+    NULL,
+    jsonb_build_array(
+      jsonb_build_object(
+        'raw_status', 'MCRT',
+        'normalized_status', 'in_transit',
+        'description', 'Arrived at Lagos Hub',
+        'location', 'Lagos Hub',
+        'occurred_at', now(),
+        'provider_event_id', 'evt-6',
+        'provider_event_key', 'evt-6'
+      )
+    )
+  ),
+  'applying a new nonterminal tracking event succeeds'
+);
+RESET ROLE;
+SELECT is(
+  (SELECT state || ':' || unchanged_poll_count::text || ':'
+     || (next_poll_at = now() + interval '15 minutes')::text
    FROM public.shipment_tracking_monitors WHERE tracking_number = '8800000006'),
-  'active:true',
-  'a poll that found new events keeps the 15-minute cadence'
+  'active:0:true',
+  'a poll that found new events restores active state and the 15-minute cadence'
 );
 
 SELECT * FROM finish();

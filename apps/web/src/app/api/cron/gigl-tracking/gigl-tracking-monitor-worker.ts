@@ -14,8 +14,6 @@ import {
 } from './gigl-tracking-preshipment-cancellation';
 import { nullableSupabaseRpcArgument } from './nullable-supabase-rpc-argument';
 
-export { GIGL_WAYBILL_NOT_YET_VISIBLE } from './gigl-tracking-not-yet-visible';
-
 const claimedMonitorSchema = z.object({
   // Repair-pickup monitors enroll with null order_id; identity is shipment/epoch.
   order_id: z.string().uuid().nullable(),
@@ -235,9 +233,6 @@ export async function processClaimedGiglTrackingMonitors(
       let result = results.get(monitor.tracking_number);
       const trackingFailure = failures.get(monitor.tracking_number);
       try {
-        if (trackingFailure) {
-          throw trackingFailure;
-        }
         if (needsPreshipmentCancellationRead(result)) {
           const cancellation = await readCancellationOnce(
             monitor.tracking_number
@@ -249,6 +244,9 @@ export async function processClaimedGiglTrackingMonitors(
               new Date()
             );
           }
+        }
+        if (!result && trackingFailure) {
+          throw trackingFailure;
         }
         if (!result) {
           await recordNotYetVisible(supabase, monitor, workerId);

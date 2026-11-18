@@ -5,10 +5,8 @@ vi.mock('@/lib/logger', () => ({
   logger: { error: loggerError, info: vi.fn(), warn: vi.fn() },
 }));
 
-import {
-  GIGL_WAYBILL_NOT_YET_VISIBLE,
-  processClaimedGiglTrackingMonitors,
-} from './gigl-tracking-monitor-worker';
+import { processClaimedGiglTrackingMonitors } from './gigl-tracking-monitor-worker';
+import { GIGL_WAYBILL_NOT_YET_VISIBLE } from './gigl-tracking-not-yet-visible.constants';
 
 const monitor = {
   order_id: '00000000-0000-4000-8000-000000000001',
@@ -104,5 +102,43 @@ describe('GIG waybill not yet visible in batch tracking', () => {
       p_worker_id: 'worker-1',
     });
     expect(loggerError).toHaveBeenCalledTimes(1);
+  });
+
+  it('applies preshipment cancellation even when batch tracking reported a per-waybill parsing error', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+
+    const summary = await processClaimedGiglTrackingMonitors(
+      { rpc } as never,
+      [monitor],
+      'worker-1',
+      async () => ({
+        results: new Map(),
+        failures: new Map([
+          [
+            monitor.tracking_number,
+            new Error('GIGL batch tracking returned schema-invalid shipment'),
+          ],
+        ]),
+      }),
+      async () => 'unavailable',
+      async () => 'cancelled'
+    );
+
+    expect(summary).toEqual({
+      applied: 1,
+      claimed: 1,
+      failed: 0,
+      paused: 0,
+      success: true,
+    });
+    expect(rpc).toHaveBeenCalledWith(
+      'apply_gigl_tracking_result',
+      expect.objectContaining({
+        p_shipment_id: monitor.shipment_id,
+        p_tracking_epoch_id: monitor.tracking_epoch_id,
+        p_worker_id: 'worker-1',
+      })
+    );
+    expect(loggerError).not.toHaveBeenCalled();
   });
 });

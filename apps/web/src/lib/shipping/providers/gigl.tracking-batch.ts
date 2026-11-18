@@ -67,11 +67,34 @@ function parseObservedBatchTrackingEnvelope(
   };
 }
 
+export type GiglBatchTrackingOutcomes = {
+  results: Map<string, TrackingResult>;
+  failures: Map<string, Error>;
+};
+
 export async function trackGiglShipmentBatch(
   apiClient: GiglApiClient,
   io: GiglProviderIo,
   waybills: readonly string[]
 ): Promise<Map<string, TrackingResult>> {
+  const { results } = await trackGiglShipmentBatchOutcomes(
+    apiClient,
+    io,
+    waybills
+  );
+  return results;
+}
+
+/**
+ * Tracks a batch of GIGL waybills and returns both normalized tracking results
+ * and per-waybill parsing/normalization failures so callers can distinguish
+ * malformed entries from waybills simply omitted by GIGL.
+ */
+export async function trackGiglShipmentBatchOutcomes(
+  apiClient: GiglApiClient,
+  io: GiglProviderIo,
+  waybills: readonly string[]
+): Promise<GiglBatchTrackingOutcomes> {
   const normalizedWaybills = waybills.map((waybill) => waybill.trim());
   if (normalizedWaybills.some((waybill) => !waybill)) {
     throw new Error('At least one GIGL waybill is required');
@@ -184,8 +207,7 @@ export async function trackGiglShipmentBatch(
         }
       })
     );
-    batchFailuresByResult.set(results, failures);
-    return results;
+    return { results, failures };
   } catch (error) {
     if (signal.aborted || isGiglAbortError(error)) {
       io.log('warn', 'GIGL batch tracking timed out', {
@@ -197,16 +219,6 @@ export async function trackGiglShipmentBatch(
     throw error;
   }
 }
-
-export type GiglBatchTrackingOutcomes = {
-  results: Map<string, TrackingResult>;
-  failures: Map<string, Error>;
-};
-
-const batchFailuresByResult = new WeakMap<
-  Map<string, TrackingResult>,
-  Map<string, Error>
->();
 
 function collectSchemaInvalidWaybillFailures(
   envelope: unknown,
@@ -240,21 +252,4 @@ function collectSchemaInvalidWaybillFailures(
       new Error('GIGL batch tracking returned schema-invalid shipment')
     );
   }
-}
-
-/**
- * Tracks a batch of GIGL waybills and returns both normalized tracking results
- * and per-waybill parsing/normalization failures so callers can distinguish
- * malformed entries from waybills simply omitted by GIGL.
- */
-export async function trackGiglShipmentBatchOutcomes(
-  apiClient: GiglApiClient,
-  io: GiglProviderIo,
-  trackingNumbers: readonly string[]
-): Promise<GiglBatchTrackingOutcomes> {
-  const results = await trackGiglShipmentBatch(apiClient, io, trackingNumbers);
-  return {
-    results,
-    failures: batchFailuresByResult.get(results) ?? new Map<string, Error>(),
-  };
 }

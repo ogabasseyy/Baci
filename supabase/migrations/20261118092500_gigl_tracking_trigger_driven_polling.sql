@@ -75,7 +75,10 @@ BEGIN
     RAISE EXCEPTION 'GIGL tracking failure recording requires service role' USING ERRCODE = '42501';
   END IF;
 
-  IF p_error = 'GIGL waybill not yet visible' THEN
+  IF p_error IN (
+    'GIGL waybill not yet visible',
+    'GIGL batch tracking omitted claimed waybill'
+  ) THEN
     -- A paused (dormant) monitor is set active for the ladder trigger, which
     -- puts it straight back to dormant when the count reaches 9 again.
     UPDATE public.shipment_tracking_monitors AS monitor
@@ -239,7 +242,7 @@ BEGIN
     FOR UPDATE OF monitor
   ), expedited AS (
     UPDATE public.shipment_tracking_monitors AS monitor
-    SET next_poll_at = candidates.due_at,
+    SET next_poll_at = LEAST(monitor.next_poll_at, candidates.due_at),
       -- A dormant monitor sits at 9 unchanged polls; 6 gives the wake poll
       -- plus two hourly re-checks before it goes dormant again.
       unchanged_poll_count = CASE WHEN monitor.state = 'paused'
@@ -249,7 +252,10 @@ BEGIN
     FROM candidates
     WHERE monitor.shipment_id = candidates.shipment_id
       AND monitor.consecutive_failures = 0
-      AND monitor.next_poll_at > candidates.due_at
+      AND (
+        monitor.next_poll_at > candidates.due_at
+        OR (monitor.state = 'paused' AND monitor.next_poll_at <= now())
+      )
     RETURNING monitor.shipment_id
   )
   SELECT

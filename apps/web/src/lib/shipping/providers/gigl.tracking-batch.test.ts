@@ -1,55 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import fixture from './fixtures/gigl-batch-tracking-success.contract.json';
-import { GiglApiClient } from './gigl.auth';
 import {
   GIGL_TRACKING_MAX_EVENTS_PER_SHIPMENT,
   GIGL_TRACKING_RESPONSE_MAX_BYTES,
   GIGL_TRACKING_WAYBILL_MAX_LENGTH,
-  type GiglProviderIo,
 } from './gigl.constants';
-import {
-  trackGiglShipmentBatch,
-  trackGiglShipmentBatchOutcomes,
-} from './gigl.tracking-batch';
-
-const token = {
-  token: 'token',
-  userChannelCode: 'channel',
-  customerType: 1,
-  expiresAt: Date.now() + 60_000,
-};
-
-function response(data: unknown, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  });
-}
-
-function setupApi(envelope: unknown, status = 200) {
-  const safeFetch = vi.fn().mockResolvedValue(response(envelope, status));
-  const io: GiglProviderIo = {
-    safeFetch,
-    log: vi.fn(),
-  };
-  const apiClient = new GiglApiClient(io);
-  vi.spyOn(apiClient, 'getApiToken').mockResolvedValue(token);
-  return { apiClient, io, safeFetch };
-}
-
-function shipment(waybill: string, eventCount = 1) {
-  return {
-    Amount: 1_200,
-    Waybill: waybill,
-    WaybillLabel: 'https://example.invalid/label',
-    MobileShipmentTrackings: Array.from({ length: eventCount }, (_, index) => ({
-      Status: 'Shipment delivered',
-      ScanStatusReason: 'Delivered',
-      DateTimeUtc: `2026-07-30T09:${String(index % 60).padStart(2, '0')}:00.000Z`,
-      ShipmentTrackingId: index + 1,
-    })),
-  };
-}
+import { trackGiglShipmentBatch } from './gigl.tracking-batch';
+import { setupApi, shipment, token } from './gigl.tracking-batch.test-fixtures';
 
 describe('trackGiglShipmentBatch', () => {
   beforeEach(() => {
@@ -278,39 +235,5 @@ describe('trackGiglShipmentBatch', () => {
       expect.any(Function),
       { maxResponseBytes: GIGL_TRACKING_RESPONSE_MAX_BYTES }
     );
-  });
-
-  it('reports per-waybill schema and normalization failures separately from omitted waybills', async () => {
-    const { apiClient, io } = setupApi({
-      status: 200,
-      success: true,
-      data: [
-        { ...shipment('WB-SCHEMA-BAD'), Amount: undefined },
-        {
-          ...shipment('WB-EVENT-BAD'),
-          MobileShipmentTrackings: [
-            {
-              Status: 'UNPUBLISHED_CODE',
-              DateTimeUtc: 'not-a-date',
-            },
-          ],
-        },
-        shipment('WB-GOOD'),
-      ],
-    });
-
-    const outcomes = await trackGiglShipmentBatchOutcomes(apiClient, io, [
-      'WB-SCHEMA-BAD',
-      'WB-EVENT-BAD',
-      'WB-GOOD',
-      'WB-ABSENT',
-    ]);
-
-    expect([...outcomes.results.keys()]).toEqual(['WB-GOOD']);
-    expect([...outcomes.failures.keys()]).toEqual([
-      'WB-SCHEMA-BAD',
-      'WB-EVENT-BAD',
-    ]);
-    expect(outcomes.failures.get('WB-ABSENT')).toBeUndefined();
   });
 });

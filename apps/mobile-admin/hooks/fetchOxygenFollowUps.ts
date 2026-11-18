@@ -126,7 +126,8 @@ export async function fetchOxygenFollowUps(
           order.cancelled_at !== null ||
           TERMINAL_OR_UNKNOWN.has(paymentStatus) ||
           (candidate.follow_up_status === 'customer_action' &&
-            candidate.order_customer_id !== order.customer_id) ||
+            (paymentStatus !== 'unpaid' ||
+              candidate.order_customer_id !== order.customer_id)) ||
           (candidate.follow_up_status === 'approved_pending' &&
             paymentStatus !== 'unpaid') ||
           paymentStatus === 'bnpl_approved' ||

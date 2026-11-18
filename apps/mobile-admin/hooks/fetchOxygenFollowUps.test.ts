@@ -99,6 +99,28 @@ describe('Oxygen follow-up fetch', () => {
     expect(result.orders[0]?.oxygen_follow_up_status).toBe('customer_action');
   });
 
+  it.each([
+    'pending',
+    'bnpl_pending',
+  ])('does not ask the customer to continue when payment status is %s', async (payment_status) => {
+    mocks.rpc.mockResolvedValue({
+      data: [
+        {
+          ...candidate,
+          follow_up_status: 'customer_action',
+          order_customer_id: null,
+        },
+      ],
+      error: null,
+    });
+    mocks.in.mockResolvedValue({
+      data: [{ ...order, payment_status }],
+      error: null,
+    });
+    const result = await fetchOxygenFollowUps(merchantId);
+    expect(result.orders[0]?.oxygen_follow_up_status).toBe('needs_review');
+  });
+
   it('does not query orders when the provider status lookup fails', async () => {
     mocks.rpc.mockResolvedValue({
       data: null,

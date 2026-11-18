@@ -14,6 +14,40 @@ assert.ok(
 
 const expectedHeading = process.argv[3]?.trim() || 'Discount Codes';
 
+function extractH1Texts(html) {
+  return [...html.matchAll(/<h1\b[^>]*>([\s\S]*?)<\/h1>/gi)].map(([, inner]) =>
+    inner
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+  );
+}
+
+function extractScriptTagAttributes(html) {
+  const attributesList = [];
+  const openTagPattern = /<script\b/gi;
+  let match = openTagPattern.exec(html);
+  while (match !== null) {
+    let cursor = match.index + match[0].length;
+    let quote = null;
+    while (cursor < html.length) {
+      const char = html[cursor];
+      if (quote) {
+        if (char === quote) quote = null;
+      } else if (char === '"' || char === "'") {
+        quote = char;
+      } else if (char === '>') {
+        attributesList.push(html.slice(match.index + match[0].length, cursor));
+        break;
+      }
+      cursor += 1;
+    }
+    openTagPattern.lastIndex = cursor + 1;
+    match = openTagPattern.exec(html);
+  }
+  return attributesList;
+}
+
 async function checkDocument() {
   const response = await fetch(url, {
     headers: process.env.BACI_LOCAL_DASHBOARD_COOKIE
@@ -34,17 +68,15 @@ async function checkDocument() {
   assert.ok(nonce, 'The response must send a CSP nonce');
 
   const html = await response.text();
-  const headings = [...html.matchAll(/<h1\b[^>]*>([^<]*)<\/h1>/gi)];
+  const headings = extractH1Texts(html);
   assert.ok(
-    headings.some(([, heading]) => {
-      const text = heading.trim();
-      return text === expectedHeading || text.startsWith(`${expectedHeading} `);
-    }),
+    headings.some(
+      (text) =>
+        text === expectedHeading || text.startsWith(`${expectedHeading} `)
+    ),
     `Expected the ${expectedHeading} dashboard heading in the HTML response`
   );
-  const scriptTags = [...html.matchAll(/<script\b([^>]*)>/gi)].map(
-    ([, attributes]) => attributes
-  );
+  const scriptTags = extractScriptTagAttributes(html);
   const bootstrap = scriptTags.filter(
     (attributes) =>
       !/\bsrc\s*=|\btype\s*=\s*["']application\/(?:json|ld\+json)["\x27]/i.test(

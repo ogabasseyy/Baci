@@ -13,8 +13,18 @@ describe('dashboard document rendering', () => {
   it('waits for the request before generating a nonce-bearing document', async () => {
     const layout = await import('./layout');
     expect(layout).toHaveProperty('instant', false);
-    const { documentViewport } = await import('../document-viewport');
-    await expect(layout.generateViewport()).resolves.toEqual(documentViewport);
+    await expect(layout.generateViewport()).resolves.toEqual({
+      width: 'device-width',
+      initialScale: 1,
+      maximumScale: 5,
+      userScalable: true,
+      viewportFit: 'cover',
+      themeColor: [
+        { media: '(prefers-color-scheme: light)', color: '#ffffff' },
+        { media: '(prefers-color-scheme: dark)', color: '#0F0F0F' },
+      ],
+      colorScheme: 'light dark',
+    });
     expect(connection).toHaveBeenCalledOnce();
   });
 });

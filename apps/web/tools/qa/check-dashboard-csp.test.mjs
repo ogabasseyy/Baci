@@ -57,3 +57,32 @@ test('rejects a non-dashboard document even with valid nonces', async () => {
 test('accepts a different dashboard heading when explicitly requested', async () => {
   assert.equal((await runCheck(true, 'Orders', 'Orders')).code, 0);
 });
+
+test('accepts nested heading markup and > characters inside quoted script attributes', async () => {
+  let request = 0;
+  const server = createServer((_req, res) => {
+    const nonce = `test-${++request}`;
+    res.setHeader('Content-Security-Policy', `script-src 'nonce-${nonce}'`);
+    res.end(
+      `<h1><span>Discount</span> <span>Codes</span></h1><script data-expr="a>b" nonce="${nonce}">0</script>`
+    );
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const result = await new Promise((resolve, reject) => {
+      const child = spawn(process.execPath, [
+        new URL('./check-dashboard-csp.mjs', import.meta.url).pathname,
+        `http://127.0.0.1:${server.address().port}`,
+      ]);
+      let stderr = '';
+      child.stderr.on('data', (chunk) => {
+        stderr += chunk;
+      });
+      child.on('error', reject);
+      child.on('close', (code) => resolve({ code, stderr }));
+    });
+    assert.equal(result.code, 0, result.stderr);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});

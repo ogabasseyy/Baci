@@ -52,7 +52,7 @@ describe('OgabasseyUnlockOrders', () => {
       screen.getByText('The carrier is processing your request.')
     ).toBeInTheDocument();
     expect(screen.queryByText(/provider order/i)).toBeNull();
-    expect(mocks.list).toHaveBeenCalledWith('ogabassey');
+    expect(mocks.list).toHaveBeenCalledWith('ogabassey', expect.any(AbortSignal));
     expect(screen.getByRole('link', { name: /new check/i })).toHaveAttribute(
       'href',
       '/ogabassey/imei-check'

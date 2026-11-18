@@ -15,6 +15,10 @@ import { GoalCompleteStep } from './savings/GoalCompleteStep';
 import { GoalLifecycleEntry } from './savings/GoalLifecycleEntry';
 import { isFundedUnsettledGoal } from './savings/goal-settlement';
 import { SavingsNoticeCard } from './savings/SavingsNoticeCard';
+import {
+  useGoalCancelSheetHeight,
+  useStepSheetHeight,
+} from './savings/use-goal-cancel-sheet-height';
 import { useInSheetGoalCancel } from './savings/use-in-sheet-goal-cancel';
 import { usePlanStillSettingUp } from './savings/use-plan-still-setting-up';
 import { WalletPinSheet } from './savings/WalletPinSheet';
@@ -35,10 +39,13 @@ export function WalletSavingsProgressModal({
   goal,
   isAdding,
   hasPendingContribution = false,
+  isCheckingContribution = false,
+  isContributionRetry,
   isFundPending = false,
   onAddAmountChange,
   onAddSavings,
   onChangeDevice,
+  onCheckContribution,
   onClose,
   onFundWallet,
   onRefreshWallet,
@@ -53,21 +60,19 @@ export function WalletSavingsProgressModal({
   // Matches the wallet card: "View plan" there means not "Add to savings" here.
   const settingUp = usePlanStillSettingUp(goal);
   const cancel = useInSheetGoalCancel(goal, onRefreshWallet, visible);
-  // Every close, by the customer or by leaving the wallet, drops an unsent
-  // cancel/complete review, declines a funding question still waiting in this
-  // sheet (otherwise its funding never settles) and lets the parent reset.
+  // Every close drops an unsent cancel/complete review, declines a waiting
+  // funding question (else its funding never settles) and resets the parent.
   const closeSheet = () => {
     cancel.closed();
     answerWalletFundPrompt(false);
     onClose();
   };
   // The sheet is sized to what it shows, so it never ends in empty space.
-  const [cancelHeight, setCancelHeight] = useState(0);
-  const [swapHeight, setSwapHeight] = useState(0);
+  const cancelSheet = useGoalCancelSheetHeight(cancel);
+  const swapSheet = useStepSheetHeight(phoneSwapStep ? 'swap' : null, false);
   const [headerHeight, setHeaderHeight] = useState(0);
   const [bodyHeight, setBodyHeight] = useState(0);
-  // An add in flight hides a few links (Change phone, Cancel/Complete); the
-  // sheet keeps its height meanwhile instead of shrinking under the PIN step.
+  // An add in flight hides a few links: keep the height under the PIN step.
   const mainHeight = useHeldWhileAdding(
     isAdding,
     headerHeight > 0 && bodyHeight > 0
@@ -82,8 +87,7 @@ export function WalletSavingsProgressModal({
     // Sign in, then come back to this goal's savings sheet.
     const signIn = (dismiss: () => void) => {
       dismiss();
-      // Back through the goal link route: it re-checks the goal is still
-      // this (possibly different) account's before opening its sheet.
+      // Back via the goal link route, which re-checks the goal's account.
       const back = `/wallet/savings/goal-actions?goalId=${encodeURIComponent(cancelGoal.id)}`;
       router.push(`/auth/login?returnTo=${encodeURIComponent(back)}`);
     };
@@ -92,18 +96,15 @@ export function WalletSavingsProgressModal({
         visible={visible}
         colors={colors}
         snapPoints={COMPACT_SNAP_POINTS}
-        contentHeight={cancelHeight}
+        contentHeight={cancelSheet.height}
         onClose={closeSheet}
         overlay={<WalletPinSheet colors={colors} {...cancel.flow.sheetProps} />}
       >
         {(dismiss) => (
-          // Scrolls if large text or a small screen makes it taller than the
-          // sheet can grow, so the buttons always stay reachable.
+          // Scrolls when taller than the sheet: the buttons stay reachable.
           <BottomSheetScrollView
             showsVerticalScrollIndicator={false}
-            onContentSizeChange={(_width, height) =>
-              setCancelHeight(Math.ceil(height))
-            }
+            onContentSizeChange={cancelSheet.measure}
           >
             {cancel.kind === 'complete' ? (
               <GoalCompleteStep
@@ -136,16 +137,14 @@ export function WalletSavingsProgressModal({
         visible={visible}
         colors={colors}
         snapPoints={COMPACT_SNAP_POINTS}
-        contentHeight={swapHeight}
+        contentHeight={swapSheet.height}
         onClose={closeSheet}
       >
         <BottomSheetScrollView
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
-          onContentSizeChange={(_width, height) =>
-            setSwapHeight(Math.ceil(height))
-          }
+          onContentSizeChange={swapSheet.measure}
         >
           <SavingsNoticeCard colors={colors} goalId={goal?.id} inSheet />
           {phoneSwapStep}
@@ -252,8 +251,9 @@ export function WalletSavingsProgressModal({
             {hasPendingContribution ? (
               <WalletPendingSavingsContribution
                 colors={colors}
-                isChecking={isAdding}
-                onCheck={onAddSavings}
+                isChecking={isCheckingContribution || isAdding}
+                onCheck={onCheckContribution}
+                retry={isContributionRetry}
               />
             ) : canAddToSavings ? (
               <WalletSavingsFundingSection

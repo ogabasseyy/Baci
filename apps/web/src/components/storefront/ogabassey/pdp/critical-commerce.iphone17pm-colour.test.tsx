@@ -60,13 +60,16 @@ describe('iPhone 17 Pro Max critical purchase flow', () => {
         />
       </OgabasseyPdpCriticalCommerceProvider>
     );
-    expect(screen.getByRole('button', { name: /^Add to cart$/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^Add to cart$/ })).toHaveAttribute(
+      'aria-disabled',
+      'true'
+    );
     expect(screen.getByRole('button', { name: 'Select Silver color' })).toHaveAttribute('aria-pressed', 'false');
     fireEvent.click(
       screen.getByRole('button', { name: 'Select Silver color' })
     );
     const add = screen.getByRole('button', { name: /^Add to cart$/ });
-    expect(add).toBeEnabled();
+    expect(add).not.toHaveAttribute('aria-disabled');
     fireEvent.click(add);
     expect(cart.addToCart).toHaveBeenCalledWith(
       expect.objectContaining({ manage_stock: false, price: 2343000 }),

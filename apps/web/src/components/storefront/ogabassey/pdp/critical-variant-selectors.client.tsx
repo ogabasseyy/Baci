@@ -42,7 +42,11 @@ export function OgabasseyPdpCriticalVariantSelectors({
               : `Select ${label.toLowerCase()}`;
 
             return (
-              <div data-ogabassey-pdp-commerce-variant-axis key={axis}>
+              <div
+                data-axis={axis}
+                data-ogabassey-pdp-commerce-variant-axis
+                key={axis}
+              >
                 <p data-ogabassey-pdp-commerce-variant-label>
                   {label}:{' '}
                   <strong>{selectedOptionLabel}</strong>

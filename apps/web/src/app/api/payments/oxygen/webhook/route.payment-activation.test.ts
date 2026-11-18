@@ -26,15 +26,20 @@ afterEach(() => {
 });
 
 it.each([
-  ['split_payment', true],
-  ['split_payment', false],
-  ['repayment_setup', true],
-  ['repayment_setup', false],
-  ['loan_repayment', true],
-  ['loan_repayment', false],
-  ['transaction', true],
-  ['transaction', false],
-] as const)('accepts %s and activates only with completed repayment setup (%s)', async (webhookType, setup) => {
+  ['split_payment', 'ready'],
+  ['split_payment', 'pending'],
+  ['split_payment', 'activated'],
+  ['repayment_setup', 'ready'],
+  ['repayment_setup', 'pending'],
+  ['repayment_setup', 'activated'],
+  ['loan_repayment', 'ready'],
+  ['loan_repayment', 'pending'],
+  ['loan_repayment', 'activated'],
+  ['transaction', 'ready'],
+  ['transaction', 'pending'],
+  ['transaction', 'activated'],
+  ['transaction', 'batch'],
+] as const)('handles a %s notification for a %s workflow', async (webhookType, scenario) => {
   vi.stubEnv('VERCEL_ENV', 'production');
   const config = {
     RUNTIME_ENABLED: 'true',
@@ -52,7 +57,20 @@ it.each([
     vi.stubEnv(`OXYGEN_PRODUCTION_${key}`, value);
 
   const operations: string[] = [];
-  let activated = false;
+  const setup = scenario !== 'pending';
+  let activated = scenario === 'activated';
+  const queuedCallbacks = Array.from(
+    { length: scenario === 'batch' ? 4 : 1 },
+    (_, index) => {
+      const callbackId = `70000000-0000-4000-8000-00000000000${index}`;
+      return {
+        id: callbackId,
+        kind: 'transaction',
+        workflowIds: [id],
+        retryKey: callbackId,
+      };
+    }
+  );
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string, init: RequestInit) => {
@@ -79,10 +97,7 @@ it.each([
       switch (name) {
         case 'oxygen_callback':
           if (operation === 'accept') return response({ result: 'accepted' });
-          if (operation === 'pending')
-            return response([
-              { id, kind: 'transaction', workflowIds: [id], retryKey: id },
-            ]);
+          if (operation === 'pending') return response(queuedCallbacks);
           operations.push(String(operation));
           return response(null);
         case 'oxygen_runtime':
@@ -150,16 +165,20 @@ it.each([
   expect(mocks.after).toHaveBeenCalledOnce();
   await mocks.after.mock.calls[0][0]();
   expect(activated).toBe(setup);
-  expect(operations).toEqual(
-    setup
-      ? [
-          'provider-status',
-          'activation-claim',
-          'provider-activate',
-          'activation-finish',
-          'activation-reconcile',
-          'complete',
-        ]
-      : ['provider-status', 'defer']
-  );
+  const activation = [
+    'provider-status',
+    'activation-claim',
+    'provider-activate',
+    'activation-finish',
+    'activation-reconcile',
+    'complete',
+  ];
+  const expected = {
+    ready: activation,
+    pending: ['provider-status', 'defer'],
+    activated: ['complete'],
+    // Leave the other two jobs queued for the next invocation and activate once.
+    batch: [...activation, 'complete'],
+  };
+  expect(operations).toEqual(expected[scenario]);
 });

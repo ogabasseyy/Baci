@@ -22,6 +22,7 @@ import type {
 } from '@/lib/category-configs';
 import { getCountryByCode } from '@/lib/countries';
 import type { ProductVariant } from '@/lib/products';
+import { runOnEnter } from '@/lib/run-on-enter';
 
 interface VariantBuilderProps {
   categoryConfig: CategoryConfig;
@@ -770,8 +771,7 @@ export function VariantBuilder({
                           }))
                         }
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
+                          runOnEnter(e, () => {
                             const value = textInputs[attr.key];
                             if (value) {
                               handleAttributeAdd(attr.key, value);
@@ -780,7 +780,7 @@ export function VariantBuilder({
                                 [attr.key]: '',
                               }));
                             }
-                          }
+                          });
                         }}
                         className="w-full"
                       />

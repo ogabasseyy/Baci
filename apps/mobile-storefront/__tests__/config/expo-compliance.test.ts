@@ -223,6 +223,7 @@ describe('Expo compliance', () => {
     expect(splashPlugin?.[1]).toMatchObject({
       source: './assets/splash-scene/native-splash.json',
       background: '#20000b',
+      fit: 'cover',
       loop: false,
     });
     expect(

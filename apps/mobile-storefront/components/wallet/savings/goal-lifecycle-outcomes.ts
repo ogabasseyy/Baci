@@ -110,6 +110,14 @@ export type GoalLifecycleStep =
   | 'failed'
   | 'needs_review';
 
+/** Steps where a request is out and a spinner replaces the buttons. */
+export const GOAL_ACTION_BUSY_STEPS: ReadonlySet<GoalLifecycleStep> = new Set([
+  'issuing',
+  'pin',
+  'submitting',
+  'polling',
+]);
+
 export type Outcome = {
   step: GoalLifecycleStep;
   message: string | null;

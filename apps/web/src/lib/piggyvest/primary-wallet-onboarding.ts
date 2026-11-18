@@ -156,7 +156,11 @@ export async function onboardPiggyvestPrimaryWallet(
     // (judgeCreatedCustomer); an explicit existing-customer answer that is
     // not is an ownership verdict, so it is terminally rejected and a retry
     // can never adopt it behind the reviewer's back.
-    const verdict = judgeCreatedCustomer({ lookup, created: result.data });
+    const verdict = judgeCreatedCustomer({
+      lookup,
+      created: result.data,
+      identityRefreshed: claim.identityRefreshed === true,
+    });
     if (verdict === 'foreign') {
       await input.storage.recordRejected(claimedScope);
       return { status: 'conflict', code: 'OWNERSHIP_REVIEW_REQUIRED' };

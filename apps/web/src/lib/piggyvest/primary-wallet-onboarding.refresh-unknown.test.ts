@@ -127,4 +127,53 @@ describe('primary wallet onboarding: retry with new details after an unresolved 
     expect(input.findCustomers).not.toHaveBeenCalled();
     expect(input.storage.refreshUnknown).not.toHaveBeenCalled();
   });
+
+  it('never adopts an existing customer on a post-refresh reclaimed retry', async () => {
+    const input = onboardingFixture();
+    input.storage.claim.mockResolvedValue({
+      status: 'claimed',
+      intentId: 'intent-fixture',
+      claimToken: 'claim-fixture',
+      reclaimed: true,
+      identityRefreshed: true,
+    });
+    input.findCustomers.mockResolvedValue(
+      customerListing(['customer-fixture'])
+    );
+    input.createCustomer.mockResolvedValue({
+      customer_id: 'customer-fixture',
+      wallet_id: 'wallet-fixture',
+      new_customer: false,
+    });
+
+    expect(await onboardPiggyvestPrimaryWallet(input)).toEqual({
+      status: 'conflict',
+      code: 'OWNERSHIP_REVIEW_REQUIRED',
+    });
+    expect(input.storage.recordRejected).toHaveBeenCalledOnce();
+    expect(input.storage.recordAccepted).not.toHaveBeenCalled();
+  });
+
+  it('keeps custody on a not-sent error during a post-refresh reclaimed retry', async () => {
+    const { PiggyvestApiError } = await import('./client');
+    const input = onboardingFixture();
+    input.storage.claim.mockResolvedValue({
+      status: 'claimed',
+      intentId: 'intent-fixture',
+      claimToken: 'claim-fixture',
+      reclaimed: true,
+      identityRefreshed: true,
+    });
+    input.findCustomers.mockResolvedValue(customerListing([]));
+    input.createCustomer.mockRejectedValue(
+      new PiggyvestApiError('PIGGYVEST_AUTH_ERROR', 'unauthorized', 401)
+    );
+
+    expect(await onboardPiggyvestPrimaryWallet(input)).toEqual({
+      status: 'unavailable',
+      code: 'PROVIDER_UNAVAILABLE',
+    });
+    expect(input.storage.recordUncertain).toHaveBeenCalledOnce();
+    expect(input.storage.releaseIntent).not.toHaveBeenCalled();
+  });
 });

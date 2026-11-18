@@ -33,8 +33,10 @@ export type CreatedCustomerVerdict =
 export function judgeCreatedCustomer(input: {
   lookup: PrimaryWalletCustomerLookup | null;
   created: { customer_id: string; new_customer: boolean };
+  identityRefreshed?: boolean;
 }): CreatedCustomerVerdict {
-  const { lookup, created } = input;
+  const { lookup, created, identityRefreshed } = input;
+  if (identityRefreshed && !created.new_customer) return 'foreign';
   if (lookup === null) return created.new_customer ? 'adopt' : 'foreign';
   if (lookup.kind === 'none')
     return created.new_customer ? 'adopt' : 'unproven';

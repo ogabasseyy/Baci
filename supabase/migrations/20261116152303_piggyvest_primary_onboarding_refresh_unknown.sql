@@ -47,7 +47,8 @@ BEGIN
       'status','claimed',
       'intentId',intent.id,
       'claimToken',intent.claim_token,
-      'reclaimed', NOT intent.identity_refreshed
+      'reclaimed', true,
+      'identityRefreshed', intent.identity_refreshed
     );
   END IF;
   RETURN jsonb_build_object('status', CASE WHEN intent.state = 'verified' THEN 'ready' WHEN intent.state = 'rejected' THEN 'conflict' ELSE 'pending' END);
@@ -83,7 +84,7 @@ BEGIN
     claim_token = pg_catalog.gen_random_uuid(), updated_at = pg_catalog.clock_timestamp()
   WHERE id = intent.id RETURNING * INTO intent;
   RETURN jsonb_build_object('status', 'claimed', 'intentId', intent.id,
-    'claimToken', intent.claim_token, 'reclaimed', false);
+    'claimToken', intent.claim_token, 'reclaimed', false, 'identityRefreshed', true);
 END $$;
 REVOKE ALL ON FUNCTION piggyvest_primary.claim_onboarding(jsonb, text)
   FROM PUBLIC, anon, authenticated, service_role;

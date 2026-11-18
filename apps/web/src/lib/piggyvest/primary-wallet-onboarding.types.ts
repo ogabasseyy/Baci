@@ -13,6 +13,7 @@ export type PrimaryWalletClaim =
       intentId: string;
       claimToken: string;
       reclaimed?: boolean;
+      identityRefreshed?: boolean;
     }
   | { status: 'pending' | 'ready' | 'conflict' };
 

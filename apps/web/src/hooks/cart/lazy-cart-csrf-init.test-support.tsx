@@ -1,16 +1,41 @@
+import type { CartSnapshot } from '@baci/shared/cart';
 import type { ReactNode } from 'react';
 import { resetCustomerSessionHintForTests } from '@/contexts/customer-session-hint';
 import type { Product } from '@/lib/products';
 import { resetCartSessionHintForTests } from './cart-session-hint';
 import { StorefrontCartProvider } from './storefront-cart-provider';
 
-export const MERCHANT_A_ID = '11111111-1111-4111-8111-111111111111';
-export const MERCHANT_A_SLUG = 'store-a';
-export const MERCHANT_B_ID = '22222222-2222-4222-8222-222222222222';
-export const MERCHANT_B_SLUG = 'store-b';
-export const CART_ID = '33333333-3333-4333-8333-333333333333';
+const MERCHANT_A_ID = '11111111-1111-4111-8111-111111111111';
+const MERCHANT_A_SLUG = 'store-a';
+const MERCHANT_B_ID = '22222222-2222-4222-8222-222222222222';
+const MERCHANT_B_SLUG = 'store-b';
+const CART_ID = '33333333-3333-4333-8333-333333333333';
 
-export function makeProduct(overrides: Partial<Product> = {}): Product {
+type MockLockCallback<T> = (lock: Lock | null) => Promise<T> | T;
+
+function mockLockRequest<T>(
+  name: string,
+  callback: MockLockCallback<T>
+): Promise<T>;
+function mockLockRequest<T>(
+  name: string,
+  options: LockOptions,
+  callback: MockLockCallback<T>
+): Promise<T>;
+function mockLockRequest<T>(
+  _name: string,
+  optionsOrCallback: LockOptions | MockLockCallback<T>,
+  maybeCallback?: MockLockCallback<T>
+): Promise<T> {
+  const callback =
+    typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
+  if (typeof callback !== 'function') {
+    throw new TypeError('navigator.locks.request requires a callback');
+  }
+  return Promise.resolve(callback(null));
+}
+
+function makeProduct(overrides: Partial<Product> = {}): Product {
   return {
     brand: 'Brand',
     description: '',
@@ -28,10 +53,10 @@ export function makeProduct(overrides: Partial<Product> = {}): Product {
     status: 'active',
     stock: 10,
     ...overrides,
-  } as Product;
+  };
 }
 
-export function makeSnapshot(overrides: Record<string, unknown> = {}) {
+function makeSnapshot(overrides: Partial<CartSnapshot> = {}): CartSnapshot {
   return {
     cartId: CART_ID,
     currency: 'NGN',
@@ -55,30 +80,21 @@ export function makeSnapshot(overrides: Record<string, unknown> = {}) {
   };
 }
 
-export function clearAllCookies() {
+function clearAllCookies() {
   document.cookie = 'csrf-token=; Path=/; Max-Age=0';
   document.cookie = '__Host-csrf-token=; Path=/; Max-Age=0';
   resetCartSessionHintForTests();
   resetCustomerSessionHintForTests();
 }
 
-export function stubNavigatorLocks() {
+function stubNavigatorLocks() {
   Object.defineProperty(navigator, 'locks', {
     configurable: true,
-    value: {
-      request: (
-        _name: string,
-        optionsOrCb: unknown,
-        maybeCb?: (lock: unknown) => Promise<unknown>
-      ) => {
-        const cb = typeof optionsOrCb === 'function' ? optionsOrCb : maybeCb;
-        return (cb as (lock: unknown) => Promise<unknown>)({});
-      },
-    },
+    value: { request: mockLockRequest },
   });
 }
 
-export function createWrapper(
+function createWrapper(
   merchantId = MERCHANT_A_ID,
   merchantSlug = MERCHANT_A_SLUG
 ) {
@@ -94,3 +110,16 @@ export function createWrapper(
     );
   };
 }
+
+export const lazyCartCsrfHarness = {
+  CART_ID,
+  MERCHANT_A_ID,
+  MERCHANT_A_SLUG,
+  MERCHANT_B_ID,
+  MERCHANT_B_SLUG,
+  clearAllCookies,
+  createWrapper,
+  makeProduct,
+  makeSnapshot,
+  stubNavigatorLocks,
+} as const;

@@ -1,4 +1,5 @@
 import type { NextRequest } from 'next/server';
+import { applyCartSnapshotCookies } from '@/lib/cart/apply-cart-snapshot-cookies';
 import { getCartProofEnvironment } from '@/lib/cart/cart-runtime-env';
 import {
   loadLiveGrantOperations,
@@ -11,11 +12,7 @@ import {
   requestUsesDeviceProof,
   resolveCartRequestContext,
 } from '@/lib/cart/request-context';
-import {
-  applyCartSnapshotCookies,
-  cartErrorResponse,
-  cartJsonResponse,
-} from '@/lib/cart/response';
+import { cartErrorResponse, cartJsonResponse } from '@/lib/cart/response';
 import { createCartScopedClient } from '@/lib/cart/scoped-client';
 import {
   type CartServerTimer,

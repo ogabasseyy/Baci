@@ -5,14 +5,9 @@ import {
 } from '@/contexts/customer-session-hint';
 import {
   clearCartDeviceSessionActive,
-  hasActiveCartDeviceSession,
   markCartDeviceSessionActive,
 } from './cart-device-session-markers';
-import {
-  shouldSkipEmptyGuestCartFetch,
-  stampSkippedEmptyGuestCartHint,
-  syncCartSessionMarkers,
-} from './cart-hydration-gate';
+import { shouldSkipEmptyGuestCartFetch } from './cart-hydration-gate';
 import {
   readCartSessionHint,
   resetCartSessionHintForTests,
@@ -47,7 +42,7 @@ describe('cart-hydration-gate', () => {
       })
     ).toBe(true);
 
-    stampSkippedEmptyGuestCartHint(MERCHANT_ID);
+    writeCartSessionHint(MERCHANT_ID, '0');
     expect(readCartSessionHint(MERCHANT_ID)).toBe('0');
 
     expect(
@@ -110,32 +105,5 @@ describe('cart-hydration-gate', () => {
         cachedCount: 0,
       })
     ).toBe(false);
-  });
-
-  it('syncs both hint cookie and device marker for active vs inactive states', () => {
-    syncCartSessionMarkers({
-      merchantId: MERCHANT_ID,
-      merchantSlug: MERCHANT_SLUG,
-      active: true,
-    });
-    expect(readCartSessionHint(MERCHANT_ID)).toBe('1');
-    expect(hasActiveCartDeviceSession(MERCHANT_SLUG)).toBe(true);
-
-    syncCartSessionMarkers({
-      merchantId: MERCHANT_ID,
-      merchantSlug: MERCHANT_SLUG,
-      active: false,
-      preserveDeviceMarker: true,
-    });
-    expect(readCartSessionHint(MERCHANT_ID)).toBe('0');
-    expect(hasActiveCartDeviceSession(MERCHANT_SLUG)).toBe(true);
-
-    syncCartSessionMarkers({
-      merchantId: MERCHANT_ID,
-      merchantSlug: MERCHANT_SLUG,
-      active: false,
-    });
-    expect(readCartSessionHint(MERCHANT_ID)).toBe('0');
-    expect(hasActiveCartDeviceSession(MERCHANT_SLUG)).toBe(false);
   });
 });

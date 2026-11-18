@@ -1,5 +1,6 @@
 import { CART_FULL_SESSION_OPERATIONS } from '@baci/shared/cart';
 import type { NextRequest } from 'next/server';
+import { applyCartSnapshotCookies } from '@/lib/cart/apply-cart-snapshot-cookies';
 import { getCartProofEnvironment } from '@/lib/cart/cart-runtime-env';
 import { createCartRouteContextDeps } from '@/lib/cart/default-context-deps';
 import { upgradeLegacySessionPrincipal } from '@/lib/cart/grant-operations';
@@ -12,7 +13,6 @@ import {
 } from '@/lib/cart/request-context';
 import { createCartQuotaRequestContext } from '@/lib/cart/request-quota-context';
 import {
-  applyCartSnapshotCookies,
   cartErrorResponse,
   cartJsonResponse,
   emptyCartProbeResponse,

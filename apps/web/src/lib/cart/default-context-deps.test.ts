@@ -31,13 +31,12 @@ vi.mock('./session-proof', () => ({
 }));
 
 import { createCartRouteContextDeps } from './default-context-deps';
-import type { CartServerTimer } from './server-timing';
+import { createCartServerTimer } from './server-timing';
 
 describe('createCartRouteContextDeps', () => {
   it('wires merchant lookups, timer measurement, and session proof verification', async () => {
-    const timer = {
-      measure: vi.fn((_name: string, fn: () => Promise<unknown>) => fn()),
-    } as unknown as CartServerTimer;
+    const timer = createCartServerTimer();
+    const measureSpy = vi.spyOn(timer, 'measure');
 
     const deps = createCartRouteContextDeps('session', 'not_found', timer);
     expect(deps.requireScope).toBe('session');
@@ -46,7 +45,7 @@ describe('createCartRouteContextDeps', () => {
     expect(deps.merchant.rpcClient).toBe(mocks.cachedRpcClient);
 
     await deps.merchant.loadMerchantFeatures?.('merchant-1');
-    expect(timer.measure).toHaveBeenCalledWith(
+    expect(measureSpy).toHaveBeenCalledWith(
       'auth-features',
       expect.any(Function)
     );

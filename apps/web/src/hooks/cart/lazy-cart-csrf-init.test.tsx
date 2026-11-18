@@ -7,7 +7,9 @@ import {
   markCartDeviceSessionActive,
 } from './cart-device-session-markers';
 import { readCartSessionHint, writeCartSessionHint } from './cart-session-hint';
-import {
+import { lazyCartCsrfHarness } from './lazy-cart-csrf-init.test-support';
+
+const {
   clearAllCookies,
   createWrapper,
   MERCHANT_A_ID,
@@ -17,7 +19,7 @@ import {
   makeProduct,
   makeSnapshot,
   stubNavigatorLocks,
-} from './lazy-cart-csrf-init.test-support';
+} = lazyCartCsrfHarness;
 
 describe('Lazy storefront cart & CSRF initialization', () => {
   beforeEach(() => {

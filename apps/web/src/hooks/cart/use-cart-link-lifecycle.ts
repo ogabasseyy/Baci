@@ -1,11 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import {
-  shouldSkipEmptyGuestCartFetch,
-  stampSkippedEmptyGuestCartHint,
-  syncCartSessionMarkers,
-} from './cart-hydration-gate';
+import { shouldSkipEmptyGuestCartFetch } from './cart-hydration-gate';
 import { getCartFromStorage, getSharedCartImportReceipt } from './cart-storage';
 import { createCartVisibilityWaiter } from './cart-visibility-waiter';
 import { fetchSharedCartSnapshot } from './shared-cart-client';
@@ -27,6 +23,8 @@ import {
 } from './shared-cart-session-revoke-client';
 import type { createCartSnapshotActions } from './shared-cart-snapshots';
 import { adoptTerminalSnapshotCache } from './shared-cart-terminal-adoption';
+import { stampSkippedEmptyGuestCartHint } from './stamp-skipped-empty-guest-cart-hint';
+import { syncCartSessionMarkers } from './sync-cart-session-markers';
 import { useCartLinkPolling } from './use-cart-link-polling';
 import type { SharedCartRuntime } from './use-shared-cart-runtime';
 
@@ -160,6 +158,8 @@ export function useCartLinkLifecycle(
         retryAdopt(attempt, run);
         return;
       }
+      if (cancelled || generationRef.current !== generation || run !== adoptRun)
+        return;
       if (
         !sessionTransitioned &&
         shouldSkipEmptyGuestCartFetch({

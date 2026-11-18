@@ -3,7 +3,8 @@ import { NextResponse } from 'next/server';
 import { checkoutReconciliationCookieName } from './checkout-reconciliation-proof';
 import { checkoutRecoveryCookieName } from './checkout-recovery-proof';
 import { safeCartErrorMessage } from './mutation-errors';
-import { cartSessionCookieName, cartSessionHintCookieName } from './principal';
+import { cartSessionCookieName } from './principal';
+import { setCartSessionHintCookie } from './set-cart-session-hint-cookie';
 
 /**
  * Cart responses are private per-guest state. They must never sit in a
@@ -104,38 +105,6 @@ export function cartErrorResponse(
   );
 }
 
-/**
- * Host-only session cookie, namespaced per merchant so two stores on
- * one shared origin keep separate sessions. Native clients ignore the
- * cookie and carry the proof from the response body instead.
- */
-const CART_EMPTY_HINT_MAX_AGE_SECONDS = 60 * 60;
-const CART_ACTIVE_HINT_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
-
-/**
- * Non-HttpOnly cart hint cookie (`'1'` | `'0'`), namespaced per merchant
- * so the client knows whether a server cart session exists before firing
- * `GET /api/storefront/cart`.
- */
-export function setCartSessionHintCookie(
-  response: NextResponse,
-  merchantId: string,
-  value: '1' | '0',
-  maxAgeSeconds?: number
-): void {
-  const defaultMaxAge =
-    value === '0'
-      ? CART_EMPTY_HINT_MAX_AGE_SECONDS
-      : CART_ACTIVE_HINT_MAX_AGE_SECONDS;
-  response.cookies.set(cartSessionHintCookieName(merchantId), value, {
-    httpOnly: false,
-    maxAge: maxAgeSeconds ?? defaultMaxAge,
-    path: '/',
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
-  });
-}
-
 export function setCartSessionCookie(
   response: NextResponse,
   merchantId: string,
@@ -154,34 +123,6 @@ export function setCartSessionCookie(
     // Use the documented hint TTL defaults (30d for '1', 1h for '0') rather
     // than coupling to the proof's Max-Age so server and client TTLs match.
     setCartSessionHintCookie(response, merchantId, hintValue);
-  }
-}
-
-/**
- * Attaches the session-proof cookie (when a proof with positive lifetime was
- * issued) and the matching `'1'`/`'0'` cart hint cookie for a cart snapshot.
- */
-export function applyCartSnapshotCookies(
-  response: NextResponse,
-  params: {
-    merchantId: string;
-    cart: { state: string; lines: readonly unknown[] };
-    proof: string | null;
-    cookieMaxAge: number;
-  }
-): void {
-  const hintValue: '1' | '0' =
-    params.cart.state === 'active' && params.cart.lines.length > 0 ? '1' : '0';
-  if (params.proof && params.cookieMaxAge > 0) {
-    setCartSessionCookie(
-      response,
-      params.merchantId,
-      params.proof,
-      params.cookieMaxAge,
-      hintValue
-    );
-  } else {
-    setCartSessionHintCookie(response, params.merchantId, hintValue);
   }
 }
 

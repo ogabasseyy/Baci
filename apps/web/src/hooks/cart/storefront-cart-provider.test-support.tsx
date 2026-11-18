@@ -30,9 +30,7 @@ export function createLocalStorageMock() {
   };
 }
 
-export function makeProviderProduct(
-  overrides: Record<string, unknown> = {}
-): Product {
+export function makeProviderProduct(overrides: Partial<Product> = {}): Product {
   return {
     brand: 'Brand',
     description: '',
@@ -50,11 +48,11 @@ export function makeProviderProduct(
     status: 'active',
     stock: 10,
     ...overrides,
-  } as Product;
+  };
 }
 
 export function makeProviderCartLine(
-  overrides: Record<string, unknown> = {}
+  overrides: Partial<CartLine> = {}
 ): CartLine {
   return {
     id: 'line-1',
@@ -63,15 +61,13 @@ export function makeProviderCartLine(
     quantity: 1,
     unitPriceMinor: 10000,
     ...overrides,
-  } as CartLine;
+  };
 }
 
 export function makeProviderSnapshot(
-  overrides: Record<string, unknown> = {}
+  overrides: Partial<CartSnapshot> = {}
 ): CartSnapshot {
-  const lines = (overrides.lines as CartLine[] | undefined) ?? [
-    makeProviderCartLine(),
-  ];
+  const lines = overrides.lines ?? [makeProviderCartLine()];
   const subtotalMinor = lines.reduce(
     (sum, line) => sum + line.lineTotalMinor,
     0
@@ -88,7 +84,7 @@ export function makeProviderSnapshot(
     totalMinor: subtotalMinor,
     version: 3,
     ...overrides,
-  } as CartSnapshot;
+  };
 }
 
 export function mockAdoptedProviderCart(

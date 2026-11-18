@@ -1,7 +1,6 @@
-import { cartSessionHintCookieName } from '@/lib/cart/principal';
+import { CART_SESSION_HINT_TTL_SECONDS } from '@/lib/cart/cart-session-hint-constants';
+import { cartSessionHintCookieName } from '@/lib/cart/cart-session-hint-cookie-name';
 
-export const CART_SESSION_HINT_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
-const CART_EMPTY_HINT_MAX_AGE_SECONDS = 60 * 60;
 const trackedHintNames = new Set<string>();
 
 export type CartSessionHint = '1' | '0' | null;
@@ -62,8 +61,8 @@ export function writeCartSessionHint(
 
   const maxAgeSeconds =
     value === '0'
-      ? CART_EMPTY_HINT_MAX_AGE_SECONDS
-      : CART_SESSION_HINT_MAX_AGE_SECONDS;
+      ? CART_SESSION_HINT_TTL_SECONDS.empty
+      : CART_SESSION_HINT_TTL_SECONDS.active;
   document.cookie = `${cookieName}=${value}; Path=/; Max-Age=${maxAgeSeconds}; SameSite=Lax${secureAttribute}`;
 }
 

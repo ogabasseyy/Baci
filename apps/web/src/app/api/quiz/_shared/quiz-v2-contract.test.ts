@@ -84,6 +84,26 @@ describe('quiz v2 route contract', () => {
     expect(rpc).toHaveBeenCalledTimes(2);
   });
 
+  it('stops joining a check that has stalled for two seconds', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-18T12:00:00Z'));
+    const rpc = vi
+      .fn()
+      .mockReturnValueOnce(new Promise(() => {}))
+      .mockResolvedValue({ data: 2, error: null });
+
+    void requireQuizV2Runtime({ rpc } as never);
+    vi.setSystemTime(new Date('2026-11-18T12:00:01Z'));
+    void requireQuizV2Runtime({ rpc } as never);
+    expect(rpc).toHaveBeenCalledTimes(1);
+
+    vi.setSystemTime(new Date('2026-11-18T12:00:02Z'));
+    expect(await requireQuizV2Runtime({ rpc } as never)).toBeNull();
+    expect(rpc).toHaveBeenCalledTimes(2);
+    expect(await requireQuizV2Runtime({ rpc } as never)).toBeNull();
+    expect(rpc).toHaveBeenCalledTimes(2);
+  });
+
   it('never remembers a failed check', async () => {
     const rpc = vi
       .fn()

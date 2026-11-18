@@ -50,6 +50,9 @@ export function rejectUnsupportedQuizContract(
  */
 const RUNTIME_READY_TTL_MS = 15_000;
 
+/** How long later requests may join a check that is still running. */
+const RUNTIME_CHECK_SHARE_MS = 2_000;
+
 let runtimeReadyUntil = 0;
 function logRuntimeCheckFailure(reason: string, code?: string): void {
   logger.warn({
@@ -96,7 +99,13 @@ export async function requireQuizV2Runtime(
   if (Date.now() < runtimeReadyUntil) return null;
   // Requests that arrive while a check is running share its answer instead of
   // each sending their own.
-  if (!runtimeCheckInFlight) {
+  // A check that has not answered within the share window is no longer joined:
+  // the next request starts a fresh one, so a single stalled call cannot hold
+  // every later request on this instance.
+  if (
+    !runtimeCheckInFlight ||
+    Date.now() - runtimeCheckInFlight.startedAt >= RUNTIME_CHECK_SHARE_MS
+  ) {
     const check: RuntimeCheck = {
       ready: checkQuizV2Runtime(supabase).finally(() => {
         if (runtimeCheckInFlight === check) runtimeCheckInFlight = null;

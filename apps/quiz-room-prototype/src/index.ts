@@ -16,7 +16,17 @@ import {
   QuizControlStateStore,
 } from './control-state';
 import { EventCoordinatorEngine } from './coordinator';
+import { handleDemoWorkerRoute } from './demo-routes';
+import {
+  type DemoRoundState,
+  DemoStateEngine,
+  type DemoTelemetryInput,
+} from './demo-state';
 import { LiveRankIndexEngine } from './live-rank';
+import {
+  handleQuizQueueBatch,
+  type QuizQueueBatchLike,
+} from './queue-consumer';
 import {
   computeResultShardIndex,
   type OriginWinnerAwardPayload,
@@ -28,13 +38,22 @@ import {
   type CloudflareDoStorageLike,
   CloudflareSqlStorageAdapter,
 } from './sqlite-adapter';
-import { verifyAdmissionTicket, verifyBearerJwt } from './ticket';
+import {
+  requireConfiguredSecret,
+  verifyAdmissionTicket,
+  verifyBearerJwt,
+  verifyInternalCoordinatorAuth,
+} from './ticket';
 
 export type * from './batch-packer';
 export type * from './contracts';
 export type * from './control-state';
 export type * from './coordinator';
+export type * from './demo-routes';
+export type * from './demo-state';
+export type * from './demo-ui';
 export type * from './live-rank';
+export type * from './queue-consumer';
 export type * from './result-shard';
 export type * from './room-do';
 export type * from './sqlite-adapter';
@@ -45,8 +64,13 @@ interface WorkerEnv {
   LIVE_RANK_INDEX: DurableObjectNamespace<LiveRankIndexDO>;
   RESULT_SHARD: DurableObjectNamespace<ResultShardDO>;
   EVENT_COORDINATOR: DurableObjectNamespace<EventCoordinatorDO>;
+  DEMO_STATE: DurableObjectNamespace<DemoStateDO>;
   QUIZ_TICKET_SECRET?: string;
   QUIZ_JWT_SECRET?: string;
+  QUIZ_INTERNAL_COORDINATOR_SECRET?: string;
+  QUIZ_BATCH_WORKER_JWT?: string;
+  SUPABASE_URL?: string;
+  SUPABASE_ANON_KEY?: string;
   RESULT_SHARD_COUNT?: string;
   ORIGIN_BASE_URL?: string;
 }
@@ -99,6 +123,35 @@ export class QuizRoomDO extends DurableObject<WorkerEnv> {
       roomId: ctx.id.name ?? ctx.id.toString(),
       storage: adapter,
       controlState: this.controlState,
+      hooks: {
+        onScoreboardTick: async (tick) => {
+          if (!env.LIVE_RANK_INDEX || tick.submissions.length === 0) return;
+          const rankStub = env.LIVE_RANK_INDEX.get(
+            env.LIVE_RANK_INDEX.idFromName(tick.eventId)
+          );
+          for (const s of tick.submissions) {
+            await rankStub.fetch('https://rank.internal/internal/submit', {
+              method: 'POST',
+              body: JSON.stringify({
+                eventId: tick.eventId,
+                merchantId: 'merch-ogabassey-demo',
+                attemptId: s.attemptId,
+                customerId: s.customerId,
+                userId: s.userId,
+                leaderboardUsername: s.leaderboardUsername,
+                score: s.score,
+                elapsedMs: s.elapsedMs,
+                submittedAtMs: s.submittedAtMs,
+                attemptStatus: 'submitted',
+              } satisfies QuizLiveRankSubmission),
+            });
+          }
+          await rankStub.fetch('https://rank.internal/internal/publish', {
+            method: 'POST',
+            body: JSON.stringify({ eventId: tick.eventId }),
+          });
+        },
+      },
     });
   }
 
@@ -426,12 +479,42 @@ export class EventCoordinatorDO extends DurableObject<WorkerEnv> {
   }
 }
 
-function getTicketSecret(env: WorkerEnv): string {
-  return env.QUIZ_TICKET_SECRET ?? 'dev-quiz-ticket-secret-placeholder';
-}
+export class DemoStateDO extends DurableObject<WorkerEnv> {
+  private readonly engine: DemoStateEngine;
 
-function getJwtSecret(env: WorkerEnv): string {
-  return env.QUIZ_JWT_SECRET ?? 'dev-quiz-jwt-secret-placeholder';
+  constructor(ctx: DurableObjectState, env: WorkerEnv) {
+    super(ctx, env);
+    const adapter = new CloudflareSqlStorageAdapter(
+      ctx.storage as unknown as CloudflareDoStorageLike
+    );
+    this.engine = new DemoStateEngine(adapter);
+  }
+
+  async fetch(request: Request): Promise<Response> {
+    try {
+      const url = new URL(request.url);
+      if (url.pathname === '/internal/demo/setup-round') {
+        const state = await readJsonBody<DemoRoundState>(request);
+        this.engine.setActiveRound(state);
+        return jsonResponse({ ok: true, ...state });
+      }
+      if (url.pathname === '/internal/demo/check-in') {
+        const body = await readJsonBody<{ roomId?: string }>(request);
+        return jsonResponse(this.engine.allocateCheckIn(body.roomId));
+      }
+      if (url.pathname === '/internal/demo/telemetry') {
+        const body = await readJsonBody<DemoTelemetryInput>(request);
+        this.engine.recordTelemetry(body, Date.now());
+        return jsonResponse({ ok: true });
+      }
+      if (url.pathname === '/internal/demo/report') {
+        return jsonResponse(this.engine.buildReport(Date.now()));
+      }
+      return jsonResponse({ error: 'Not found', code: 'NOT_FOUND' }, 404);
+    } catch (error) {
+      return errorResponse(error);
+    }
+  }
 }
 
 function getShardCount(env: WorkerEnv): number {
@@ -447,12 +530,106 @@ export default {
       const url = new URL(request.url);
       const path = url.pathname;
 
+      const demoRes = await handleDemoWorkerRoute(request, url, {
+        QUIZ_TICKET_SECRET: env.QUIZ_TICKET_SECRET,
+        QUIZ_JWT_SECRET: env.QUIZ_JWT_SECRET,
+        QUIZ_INTERNAL_COORDINATOR_SECRET: env.QUIZ_INTERNAL_COORDINATOR_SECRET,
+        callDemoDo: (internalPath, body) => {
+          const stub = env.DEMO_STATE.get(
+            env.DEMO_STATE.idFromName('demo-global')
+          );
+          return stub.fetch(`https://demo.internal${internalPath}`, {
+            method: 'POST',
+            ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+          });
+        },
+        initRoom: async (roomId, config) => {
+          const stub = env.QUIZ_ROOM.get(env.QUIZ_ROOM.idFromName(roomId));
+          const res = await stub.fetch('https://room.internal/internal/init', {
+            method: 'POST',
+            body: JSON.stringify(config),
+          });
+          if (!res.ok) {
+            throw new QuizRoomError(
+              'QUIZ_ROOM_INIT_FAILED',
+              `Failed to init room ${roomId}`,
+              res.status
+            );
+          }
+        },
+        freezeCoordinator: async (params) => {
+          const stub = env.EVENT_COORDINATOR.get(
+            env.EVENT_COORDINATOR.idFromName(params.eventId)
+          );
+          const res = await stub.fetch(
+            'https://coord.internal/internal/freeze',
+            {
+              method: 'POST',
+              body: JSON.stringify(params),
+            }
+          );
+          if (!res.ok) {
+            throw new QuizRoomError(
+              'QUIZ_COORDINATOR_FREEZE_FAILED',
+              `Failed to freeze coordinator for ${params.eventId}`,
+              res.status
+            );
+          }
+        },
+      });
+      if (demoRes) return demoRes;
+
+      if (request.method === 'POST' && path === '/api/quiz/coordinator/sweep') {
+        verifyInternalCoordinatorAuth(
+          request.headers.get('Authorization'),
+          env.QUIZ_INTERNAL_COORDINATOR_SECRET
+        );
+        const body = await readJsonBody<{
+          eventId: string;
+          mode?: QuizRoomSealMode;
+          maxRoomsPerSweep?: number;
+        }>(request);
+        const coordStub = env.EVENT_COORDINATOR.get(
+          env.EVENT_COORDINATOR.idFromName(body.eventId)
+        );
+        return coordStub.fetch('https://coord.internal/internal/sweep', {
+          method: 'POST',
+          body: JSON.stringify(body),
+        });
+      }
+
+      if (
+        request.method === 'POST' &&
+        path === '/api/quiz/coordinator/freeze'
+      ) {
+        verifyInternalCoordinatorAuth(
+          request.headers.get('Authorization'),
+          env.QUIZ_INTERNAL_COORDINATOR_SECRET
+        );
+        const body = await readJsonBody<{
+          eventId: string;
+          endsAtMs: number;
+          expectedRoomIds: readonly string[];
+        }>(request);
+        const coordStub = env.EVENT_COORDINATOR.get(
+          env.EVENT_COORDINATOR.idFromName(body.eventId)
+        );
+        return coordStub.fetch('https://coord.internal/internal/freeze', {
+          method: 'POST',
+          body: JSON.stringify(body),
+        });
+      }
+
       const startMatch = /^\/api\/quiz\/events\/([^/]+)\/start$/.exec(path);
       if (request.method === 'POST' && startMatch?.[1]) {
         const eventId = startMatch[1];
+        const ticketSecret = requireConfiguredSecret(
+          env.QUIZ_TICKET_SECRET,
+          'QUIZ_TICKET_SECRET'
+        );
         const ticketHeader = request.headers.get('X-Baci-Quiz-Ticket') ?? '';
         const ticket = await verifyAdmissionTicket(ticketHeader, {
-          secret: getTicketSecret(env),
+          secret: ticketSecret,
           expectedEventId: eventId,
           nowMs: Date.now(),
         });
@@ -478,9 +655,13 @@ export default {
       );
       if (request.method === 'POST' && answerMatch?.[1]) {
         const attemptId = answerMatch[1];
+        const ticketSecret = requireConfiguredSecret(
+          env.QUIZ_TICKET_SECRET,
+          'QUIZ_TICKET_SECRET'
+        );
         const ticketHeader = request.headers.get('X-Baci-Quiz-Ticket') ?? '';
         const ticket = await verifyAdmissionTicket(ticketHeader, {
-          secret: getTicketSecret(env),
+          secret: ticketSecret,
           nowMs: Date.now(),
         });
         const body = await readJsonBody<{
@@ -503,9 +684,13 @@ export default {
 
       const activeMatch = /^\/api\/quiz\/attempts\/([^/]+)\/active$/.exec(path);
       if (request.method === 'GET' && activeMatch?.[1]) {
+        const ticketSecret = requireConfiguredSecret(
+          env.QUIZ_TICKET_SECRET,
+          'QUIZ_TICKET_SECRET'
+        );
         const ticketHeader = request.headers.get('X-Baci-Quiz-Ticket') ?? '';
         const ticket = await verifyAdmissionTicket(ticketHeader, {
-          secret: getTicketSecret(env),
+          secret: ticketSecret,
           nowMs: Date.now(),
         });
         const roomStub = env.QUIZ_ROOM.get(
@@ -520,9 +705,13 @@ export default {
       const resultMatch = /^\/api\/quiz\/attempts\/([^/]+)\/result$/.exec(path);
       if (request.method === 'GET' && resultMatch?.[1]) {
         const attemptId = resultMatch[1];
+        const jwtSecret = requireConfiguredSecret(
+          env.QUIZ_JWT_SECRET,
+          'QUIZ_JWT_SECRET'
+        );
         const user = await verifyBearerJwt(
           request.headers.get('Authorization'),
-          { secret: getJwtSecret(env), nowMs: Date.now() }
+          { secret: jwtSecret, nowMs: Date.now() }
         );
         const shardIdx = await computeResultShardIndex(
           attemptId,
@@ -552,9 +741,13 @@ export default {
             400
           );
         }
+        const jwtSecret = requireConfiguredSecret(
+          env.QUIZ_JWT_SECRET,
+          'QUIZ_JWT_SECRET'
+        );
         const user = await verifyBearerJwt(
           request.headers.get('Authorization'),
-          { secret: getJwtSecret(env), nowMs: Date.now() }
+          { secret: jwtSecret, nowMs: Date.now() }
         );
         const shardIdx = await computeResultShardIndex(
           eventId,
@@ -575,8 +768,6 @@ export default {
 
       if (request.method === 'GET' && path === '/api/quiz/leaderboard/live') {
         const eventId = url.searchParams.get('eventId');
-        const merchantId = url.searchParams.get('merchantId') ?? 'unknown';
-        const customerId = url.searchParams.get('customerId') ?? '';
         if (!eventId) {
           throw new QuizRoomError(
             'QUIZ_INVALID_INPUT',
@@ -584,10 +775,21 @@ export default {
             400
           );
         }
+        const jwtSecret = requireConfiguredSecret(
+          env.QUIZ_JWT_SECRET,
+          'QUIZ_JWT_SECRET'
+        );
         const user = await verifyBearerJwt(
           request.headers.get('Authorization'),
-          { secret: getJwtSecret(env), nowMs: Date.now() }
+          { secret: jwtSecret, nowMs: Date.now() }
         );
+        if (!user.merchantId || !user.customerId) {
+          throw new QuizRoomError(
+            'QUIZ_JWT_CLAIMS_MISSING',
+            'Bearer JWT missing required merchantId or customerId claims',
+            403
+          );
+        }
         const rankStub = env.LIVE_RANK_INDEX.get(
           env.LIVE_RANK_INDEX.idFromName(eventId)
         );
@@ -595,8 +797,8 @@ export default {
           method: 'POST',
           body: JSON.stringify({
             eventId,
-            merchantId,
-            callerCustomerId: customerId || user.userId,
+            merchantId: user.merchantId,
+            callerCustomerId: user.customerId,
             callerUserId: user.userId,
           }),
         });
@@ -624,5 +826,9 @@ export default {
     } catch (error) {
       return errorResponse(error);
     }
+  },
+
+  async queue(batch: MessageBatch<unknown>, env: WorkerEnv): Promise<void> {
+    await handleQuizQueueBatch(batch as QuizQueueBatchLike, env);
   },
 };

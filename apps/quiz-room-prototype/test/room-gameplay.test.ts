@@ -503,13 +503,20 @@ describe('QuizRoomEngine gameplay, deadlines, restarts, and SQLite counters', ()
       expect(b2.submittedAtMs - b1.submittedAtMs).toBe(1);
     }
 
-    // Fire alarm at endsAtMs -> seals room and chains retention alarm
+    // Fire alarm at endsAtMs -> stops intake & flushes, does NOT seal (only Coordinator seals!)
     const alarm2 = await room.onAlarm(endsAtMs);
-    expect(alarm2.sealed).toBe(true);
-    expect(room.getNextAlarmMs()).toBe(endsAtMs + 30_000);
+    expect(alarm2.sealed).toBe(false);
+    expect(alarm2.intakeStopped).toBe(true);
+    expect(room.getSealManifest()).toBeNull();
+
+    // Coordinator supplies persistedCloseAtMs to seal() and chains retention alarm
+    const persistedCloseAtMs = endsAtMs + 420;
+    const manifest = await room.seal(persistedCloseAtMs, 'persisted_close');
+    expect(manifest.persistedCloseAtMs).toBe(persistedCloseAtMs);
+    expect(room.getNextAlarmMs()).toBe(persistedCloseAtMs + 30_000);
 
     // Fire alarm after retention expires -> executes deleteAll()
-    const alarm3 = await room.onAlarm(endsAtMs + 30_000);
+    const alarm3 = await room.onAlarm(persistedCloseAtMs + 30_000);
     expect(alarm3.deletedAll).toBe(true);
     storage.close();
   });

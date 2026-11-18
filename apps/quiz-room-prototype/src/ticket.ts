@@ -7,6 +7,7 @@ import {
 import {
   base64UrlDecodeString,
   base64UrlEncodeJson,
+  constantTimeEqualStrings,
   hmacSha256Base64Url,
   verifyHmacSha256Base64Url,
 } from './crypto';
@@ -15,6 +16,45 @@ const TICKET_PREFIX = 'bqt1';
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
+}
+
+export function requireConfiguredSecret(
+  value: string | undefined,
+  name: string
+): string {
+  if (!isNonEmptyString(value)) {
+    throw new QuizRoomError(
+      'QUIZ_CONFIG_MISSING',
+      `Required secret ${name} is not configured`,
+      503
+    );
+  }
+  return value;
+}
+
+export function verifyInternalCoordinatorAuth(
+  authorizationHeader: string | null | undefined,
+  configuredSecret: string | undefined
+): void {
+  const secret = requireConfiguredSecret(
+    configuredSecret,
+    'QUIZ_INTERNAL_COORDINATOR_SECRET'
+  );
+  if (!authorizationHeader) {
+    throw new QuizRoomError(
+      'QUIZ_AUTH_REQUIRED',
+      'Missing Authorization header',
+      401
+    );
+  }
+  const match = /^Bearer\s+(.+)$/i.exec(authorizationHeader.trim());
+  if (!match?.[1] || !constantTimeEqualStrings(match[1].trim(), secret)) {
+    throw new QuizRoomError(
+      'QUIZ_FORBIDDEN',
+      'Invalid coordinator authorization',
+      403
+    );
+  }
 }
 
 function isQuizMode(value: unknown): value is QuizMode {
@@ -179,6 +219,10 @@ export interface BearerJwtClaims {
   aud?: string | readonly string[];
   email?: string;
   role?: string;
+  merchantId?: string;
+  merchant_id?: string;
+  customerId?: string;
+  customer_id?: string;
 }
 
 export async function signBearerJwt(
@@ -305,6 +349,17 @@ export async function verifyBearerJwt(
     }
   }
 
+  const merchantClaim = isNonEmptyString(claims.merchantId)
+    ? claims.merchantId
+    : isNonEmptyString(claims.merchant_id)
+      ? claims.merchant_id
+      : undefined;
+  const customerClaim = isNonEmptyString(claims.customerId)
+    ? claims.customerId
+    : isNonEmptyString(claims.customer_id)
+      ? claims.customer_id
+      : undefined;
+
   return {
     userId: claims.sub,
     expiresAtMs: claims.exp * 1000,
@@ -313,5 +368,7 @@ export async function verifyBearerJwt(
       : {}),
     ...(typeof claims.email === 'string' ? { email: claims.email } : {}),
     ...(typeof claims.role === 'string' ? { role: claims.role } : {}),
+    ...(merchantClaim ? { merchantId: merchantClaim } : {}),
+    ...(customerClaim ? { customerId: customerClaim } : {}),
   };
 }

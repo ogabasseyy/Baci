@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   MOBILE_ADMIN_PRODUCT_COLUMNS,
+  MOBILE_ADMIN_PRODUCT_COLUMNS_PUBLIC,
   MOBILE_ADMIN_PRODUCT_WITH_RELATIONS_QUERY,
   WEB_PRODUCT_COLUMNS,
   WEB_PRODUCT_VARIANT_COLUMNS,
@@ -37,6 +38,7 @@ describe('product column constants', () => {
   it('no constant contains select(*)', () => {
     const allConstants = [
       MOBILE_ADMIN_PRODUCT_COLUMNS,
+      MOBILE_ADMIN_PRODUCT_COLUMNS_PUBLIC,
       MOBILE_ADMIN_PRODUCT_WITH_RELATIONS_QUERY,
       WEB_PRODUCT_COLUMNS,
       WEB_PRODUCT_VARIANT_COLUMNS,
@@ -45,6 +47,9 @@ describe('product column constants', () => {
     for (const col of allConstants) {
       expect(col).not.toContain('*');
     }
+    expect(tokenizeColumns(MOBILE_ADMIN_PRODUCT_COLUMNS_PUBLIC)).not.toContain(
+      'cost_price'
+    );
   });
 
   it('MOBILE_ADMIN_PRODUCT_WITH_RELATIONS_QUERY includes base columns and relations', () => {

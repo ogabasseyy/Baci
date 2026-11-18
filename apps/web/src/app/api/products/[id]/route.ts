@@ -264,6 +264,14 @@ export async function PUT(
     if (!hasPermission(access, 'products', 'edit')) {
       return NextResponse.json({ error: 'Permission denied' }, { status: 403 });
     }
+    const canViewProducts = hasPermission(access, 'products', 'view');
+    const hasCostPayload =
+      body.cost_price !== undefined ||
+      (body.variants?.some((variant) => Object.hasOwn(variant, 'cost_price')) ??
+        false);
+    if (hasCostPayload && !canViewProducts) {
+      return NextResponse.json({ error: 'Permission denied' }, { status: 403 });
+    }
     const merchantId = merchantContext.merchantId;
 
     // Verify ownership via safe non-cost columns so edit-only staff
@@ -827,7 +835,6 @@ export async function PUT(
     }
 
     let refreshFailed = false;
-    const canViewProducts = hasPermission(access, 'products', 'view');
     {
       const { data: refreshedProduct, error: refreshedProductError } =
         await supabase

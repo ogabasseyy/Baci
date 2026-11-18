@@ -199,5 +199,30 @@ describe('/api/inventory/reorder', () => {
         })
       );
     });
+
+    it('returns 403 when caller lacks products:edit permission', async () => {
+      mockGetMerchantForApiRequest.mockResolvedValueOnce({
+        merchantId: 'merchant-123',
+        role: 'staff',
+        isOwner: false,
+        isStaff: true,
+        permissions: { products: { view: true, edit: false } },
+      });
+
+      const req = new NextRequest(
+        'http://localhost:3000/api/inventory/reorder',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            suggestionId: '123e4567-e89b-12d3-a456-426614174000',
+            action: 'accept',
+          }),
+        }
+      );
+      const res = await POST(req);
+
+      expect(res.status).toBe(403);
+      expect(mockFrom).not.toHaveBeenCalled();
+    });
   });
 });

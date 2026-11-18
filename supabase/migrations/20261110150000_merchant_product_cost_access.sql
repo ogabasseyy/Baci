@@ -43,12 +43,13 @@ WITH (security_barrier = true, security_invoker = false) AS
 SELECT p.id, p.merchant_id, p.cost_price
 FROM public.products AS p
 WHERE public.check_staff_permission((SELECT auth.uid()), p.merchant_id, 'products', 'view')
-   OR public.check_staff_permission((SELECT auth.uid()), p.merchant_id, 'analytics', 'view');
+   OR public.check_staff_permission((SELECT auth.uid()), p.merchant_id, 'analytics', 'view')
+   OR public.check_staff_permission((SELECT auth.uid()), p.merchant_id, 'orders', 'edit');
 
 REVOKE ALL ON TABLE public.merchant_analytics_product_costs FROM PUBLIC, anon, authenticated;
 GRANT SELECT ON TABLE public.merchant_analytics_product_costs TO authenticated;
 COMMENT ON VIEW public.merchant_analytics_product_costs IS
-  'Read-only product cost projection for the owner or active staff with products:view or analytics:view. Excludes catalog fields; never use for public storefront reads.';
+  'Read-only product cost projection for the owner or active staff with products:view, analytics:view, or orders:edit. Excludes catalog fields; never use for public storefront reads.';
 
 NOTIFY pgrst, 'reload schema';
 COMMIT;

@@ -137,6 +137,9 @@ export async function POST(request: NextRequest) {
       );
     }
     const merchantId = merchantContext.merchantId;
+    if (!hasPermission(toUserAccess(merchantContext), 'products', 'edit')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     const body = await request.json();
 

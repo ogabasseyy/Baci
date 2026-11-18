@@ -1,4 +1,4 @@
-import { MOBILE_ADMIN_PRODUCT_COLUMNS } from '@baci/shared';
+import { MOBILE_ADMIN_PRODUCT_COLUMNS_PUBLIC } from '@baci/shared';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import type { CustomItemDraft } from '@/components/orders/new-order.types';
 import { useDebounce } from '@/hooks/useDebounce';
@@ -9,7 +9,7 @@ import type { ProductPickerVariantParent } from '@/lib/product-picker-variant-ro
 import { fetchAdminProductSearchRows } from '@/lib/product-search';
 import { findQuickAddProductMatches } from '@/lib/quick-add-product-matches';
 
-const QUICK_ADD_PRODUCT_COLUMNS = `${MOBILE_ADMIN_PRODUCT_COLUMNS}, parent_product_id`;
+const QUICK_ADD_PRODUCT_COLUMNS = `${MOBILE_ADMIN_PRODUCT_COLUMNS_PUBLIC}, parent_product_id`;
 
 export function useQuickAddProductMatches(customItem: CustomItemDraft) {
   const { merchant } = useMerchant();

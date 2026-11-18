@@ -159,4 +159,35 @@ describe('admin product search suggestion helpers', () => {
       })
     ).rejects.toThrow('suggestion rows failed');
   });
+
+  it('uses public products table when selectColumns omits cost_price and merchant_products when cost_price is requested', async () => {
+    mockRpc.mockResolvedValue({
+      data: [{ product_id: 'prod-1', relevance: 9.5, total_count: 1 }],
+      error: null,
+    });
+    mockFrom.mockImplementation(() =>
+      createQueryChain({
+        data: [{ id: 'prod-1' }],
+        error: null,
+      })
+    );
+
+    await fetchAdminProductSearchRows({
+      cursor: 0,
+      filters: { search: 'iphone' },
+      merchantId: 'merchant-1',
+      pageSize: 20,
+      selectColumns: 'id, name, price',
+    });
+    expect(mockFrom).toHaveBeenLastCalledWith('products');
+
+    await fetchAdminProductSearchRows({
+      cursor: 0,
+      filters: { search: 'iphone' },
+      merchantId: 'merchant-1',
+      pageSize: 20,
+      selectColumns: 'id, name, cost_price',
+    });
+    expect(mockFrom).toHaveBeenLastCalledWith('merchant_products');
+  });
 });

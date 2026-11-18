@@ -1,6 +1,9 @@
 export const MOBILE_ADMIN_PRODUCT_COLUMNS =
   'id, name, description, price, compare_at_price, cost_price, stock_quantity, stock, sku, slug, images, status, category, category_id, brand, brand_id, fulfillment_details, color, condition, variant_attributes, has_variants, manage_stock, low_stock_threshold, variant_model, migration_status, default_variant_id, available_conditions, min_variant_price, max_variant_price, inventory_tracking_policy, created_at, updated_at';
 
+export const MOBILE_ADMIN_PRODUCT_COLUMNS_PUBLIC =
+  'id, name, description, price, compare_at_price, stock_quantity, stock, sku, slug, images, status, category, category_id, brand, brand_id, fulfillment_details, color, condition, variant_attributes, has_variants, manage_stock, low_stock_threshold, variant_model, migration_status, default_variant_id, available_conditions, min_variant_price, max_variant_price, inventory_tracking_policy, created_at, updated_at';
+
 export const MOBILE_ADMIN_PRODUCT_WITH_RELATIONS_QUERY = `${MOBILE_ADMIN_PRODUCT_COLUMNS}, categories(name), brands(name)`;
 
 export const WEB_PRODUCT_COLUMNS =

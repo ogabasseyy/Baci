@@ -2173,4 +2173,22 @@ describe('PUT protected product read boundary', () => {
       )
     ).toBe(true);
   });
+
+  it('rejects cost_price updates from edit-only staff without products:view', async () => {
+    mockHasPermission.mockImplementation(
+      (_access: unknown, resource: string, action: string) =>
+        resource === 'products' && action === 'edit'
+    );
+
+    const res = await PUT(
+      makePutRequest(PRODUCT_ID, { price: 6000, cost_price: 4000 }),
+      {
+        params: Promise.resolve({ id: PRODUCT_ID }),
+      }
+    );
+
+    expect(res.status).toBe(403);
+    expect(productUpdatePayloads).toHaveLength(0);
+    expect(productQueriedTables).toHaveLength(0);
+  });
 });

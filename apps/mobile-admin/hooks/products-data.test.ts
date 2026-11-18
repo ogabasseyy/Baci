@@ -217,20 +217,47 @@ describe('protected quick-action writes', () => {
       .mockReturnValueOnce(read);
     await run(action);
     expect(mocks.from.mock.calls.map(([table]) => table)).toEqual([
-      'merchant_products',
+      'products',
       'products',
       'merchant_products',
     ]);
     expect(preflight.maybeSingle).toHaveBeenCalledOnce();
     expect(preflight.single).not.toHaveBeenCalled();
     expect(write.single).toHaveBeenCalledOnce();
-    expect(read.single).toHaveBeenCalledOnce();
+    expect(read.maybeSingle).toHaveBeenCalledOnce();
+    expect(read.single).not.toHaveBeenCalled();
     expect(write.select).toHaveBeenCalledWith('id');
     expect(preflight.eq).toHaveBeenCalledWith('merchant_id', 'm');
     expect(read.eq).toHaveBeenCalledWith('merchant_id', 'm');
     expect(mocks.revalidateStorefrontProducts).toHaveBeenCalledWith(
       [previous],
       'm'
+    );
+  });
+  it.each([
+    'stock',
+    'status',
+  ])('falls back to public columns for %s when merchant_products hides the row', async (action) => {
+    const preflight = createUpdateQuery({ data: previous, error: null });
+    const write = createUpdateQuery({ data: { id: 'p' }, error: null });
+    const protectedRead = createUpdateQuery({ data: null, error: null });
+    const publicRead = createUpdateQuery({ data: previous, error: null });
+    mocks.from
+      .mockReturnValueOnce(preflight)
+      .mockReturnValueOnce(write)
+      .mockReturnValueOnce(protectedRead)
+      .mockReturnValueOnce(publicRead);
+    const result = await run(action);
+    expect(result).toEqual(previous);
+    expect(mocks.from.mock.calls.map(([table]) => table)).toEqual([
+      'products',
+      'products',
+      'merchant_products',
+      'products',
+    ]);
+    expect(publicRead.single).toHaveBeenCalledOnce();
+    expect(publicRead.select).toHaveBeenCalledWith(
+      expect.not.stringContaining('cost_price')
     );
   });
   it.each([
@@ -298,6 +325,7 @@ describe('protected quick-action writes', () => {
       .mockReturnValueOnce(
         createUpdateQuery({ data: { id: 'p' }, error: null })
       )
+      .mockReturnValueOnce(createUpdateQuery({ data: null, error: null }))
       .mockReturnValueOnce(createUpdateQuery({ data: null, error: null }));
     await expect(run('stock')).rejects.toThrow('Product saved');
     expect(mocks.revalidateStorefrontProducts).toHaveBeenCalledWith(

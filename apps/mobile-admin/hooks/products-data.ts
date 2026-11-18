@@ -1,4 +1,7 @@
-import { MOBILE_ADMIN_PRODUCT_COLUMNS as PRODUCT_COLUMNS } from '@baci/shared';
+import {
+  MOBILE_ADMIN_PRODUCT_COLUMNS as PRODUCT_COLUMNS,
+  MOBILE_ADMIN_PRODUCT_COLUMNS_PUBLIC as PRODUCT_COLUMNS_PUBLIC,
+} from '@baci/shared';
 import { normalizeProductInventory } from '@/lib/product-inventory';
 import type {
   AdminProductSearchFilters,
@@ -61,14 +64,12 @@ export async function fetchProducts(
   };
 }
 
-export async function updateProductStock(
-  productId: string,
-  stock: number,
-  merchantId: string
-): Promise<Product> {
-  // Verify the protected read boundary before making a change we must hydrate.
+const REFRESH_FAILED_ERROR =
+  'Product saved, but refreshing it failed. Reload before making another change.';
+
+async function preflightEditableProduct(productId: string, merchantId: string) {
   const { data: previousProduct, error: accessError } = await supabase
-    .from('merchant_products')
+    .from('products')
     .select('id, slug, category')
     .eq('id', productId)
     .eq('merchant_id', merchantId)
@@ -76,6 +77,40 @@ export async function updateProductStock(
   if (accessError || !previousProduct) {
     throw new Error(accessError?.message ?? 'Product is not accessible');
   }
+  return previousProduct;
+}
+
+async function hydrateUpdatedProduct(
+  productId: string,
+  merchantId: string
+): Promise<Product> {
+  const { data, error: readError } = await supabase
+    .from('merchant_products')
+    .select(PRODUCT_COLUMNS)
+    .eq('id', productId)
+    .eq('merchant_id', merchantId)
+    .maybeSingle();
+  if (readError) throw new Error(REFRESH_FAILED_ERROR);
+  if (data) return normalizeProductInventory(data);
+
+  // Edit-only staff (products:edit without products:view) are excluded from
+  // merchant_products; fall back to public non-cost columns on products.
+  const { data: publicData, error: publicReadError } = await supabase
+    .from('products')
+    .select(PRODUCT_COLUMNS_PUBLIC)
+    .eq('id', productId)
+    .eq('merchant_id', merchantId)
+    .single();
+  if (publicReadError || !publicData) throw new Error(REFRESH_FAILED_ERROR);
+  return normalizeProductInventory(publicData);
+}
+
+export async function updateProductStock(
+  productId: string,
+  stock: number,
+  merchantId: string
+): Promise<Product> {
+  const previousProduct = await preflightEditableProduct(productId, merchantId);
   const { error } = await supabase
     .from('products')
     .update({
@@ -100,19 +135,7 @@ export async function updateProductStock(
     ],
     merchantId
   );
-  const { data, error: readError } = await supabase
-    .from('merchant_products')
-    .select(PRODUCT_COLUMNS)
-    .eq('id', productId)
-    .eq('merchant_id', merchantId)
-    .single();
-  if (readError || !data)
-    throw new Error(
-      'Product saved, but refreshing it failed. Reload before making another change.'
-    );
-  const product = normalizeProductInventory(data);
-
-  return product;
+  return hydrateUpdatedProduct(productId, merchantId);
 }
 
 export async function updateProductStatus(
@@ -120,16 +143,7 @@ export async function updateProductStatus(
   status: ProductStatus,
   merchantId: string
 ): Promise<Product> {
-  // Verify the protected read boundary before making a change we must hydrate.
-  const { data: previousProduct, error: accessError } = await supabase
-    .from('merchant_products')
-    .select('id, slug, category')
-    .eq('id', productId)
-    .eq('merchant_id', merchantId)
-    .maybeSingle();
-  if (accessError || !previousProduct) {
-    throw new Error(accessError?.message ?? 'Product is not accessible');
-  }
+  const previousProduct = await preflightEditableProduct(productId, merchantId);
   const { error } = await supabase
     .from('products')
     .update({ status, updated_at: new Date().toISOString() })
@@ -150,19 +164,7 @@ export async function updateProductStatus(
     ],
     merchantId
   );
-  const { data, error: readError } = await supabase
-    .from('merchant_products')
-    .select(PRODUCT_COLUMNS)
-    .eq('id', productId)
-    .eq('merchant_id', merchantId)
-    .single();
-  if (readError || !data)
-    throw new Error(
-      'Product saved, but refreshing it failed. Reload before making another change.'
-    );
-  const product = normalizeProductInventory(data);
-
-  return product;
+  return hydrateUpdatedProduct(productId, merchantId);
 }
 
 export type { AdminProductStockFilter };

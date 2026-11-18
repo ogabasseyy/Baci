@@ -1,8 +1,12 @@
 export interface TransactionReviewProductRow {
-  cost_price: number | null;
+  cost_price?: number | null;
   fulfillment_details: unknown;
   metadata: Record<string, unknown> | null;
   sku: string | null;
+}
+
+export interface TransactionReviewProductCostRow {
+  cost_price: number | null;
 }
 
 export interface TransactionReviewVariantRow {
@@ -61,6 +65,10 @@ export interface TransactionReviewOrderRow {
     products:
       | TransactionReviewProductRow
       | TransactionReviewProductRow[]
+      | null;
+    merchant_product_costs?:
+      | TransactionReviewProductCostRow
+      | TransactionReviewProductCostRow[]
       | null;
     quantity: number | null;
     supplier_name?: string | null;

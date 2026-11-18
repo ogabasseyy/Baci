@@ -4,8 +4,10 @@ import { TRANSACTION_REVIEW_SELECTORS } from './transaction-review-selectors';
 describe('transaction review selectors', () => {
   it('uses authorized product costs in every fallback projection', () => {
     for (const selector of Object.values(TRANSACTION_REVIEW_SELECTORS)) {
-      expect(selector).toContain('products:merchant_products(cost_price');
-      expect(selector).not.toMatch(/(?:^|[,\s])products\(cost_price/);
+      expect(selector).toContain(
+        'products(metadata, sku, fulfillment_details), merchant_product_costs:merchant_analytics_product_costs(cost_price)'
+      );
+      expect(selector).not.toMatch(/(?:^|[,\s])products\([^)]*cost_price/);
     }
   });
   it('retains discount and tax provenance in the base discount projection', () => {

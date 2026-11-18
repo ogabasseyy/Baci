@@ -117,8 +117,14 @@ export async function fetchAdminProductSearchRows<
     };
   }
 
+  // Only requests explicitly projecting cost_price require the restricted view;
+  // order-creation and reconciliation workflows stay on public product columns.
+  const sourceTable = /\bcost_price\b/.test(args.selectColumns)
+    ? 'merchant_products'
+    : 'products';
+
   let rowsQuery = supabase
-    .from('merchant_products')
+    .from(sourceTable)
     .select(args.selectColumns)
     .eq('merchant_id', args.merchantId)
     .is('parent_product_id', null)
@@ -211,8 +217,12 @@ export async function fetchAdminProductSuggestionCandidates<
     return [];
   }
 
+  const sourceTable = /\bcost_price\b/.test(args.selectColumns)
+    ? 'merchant_products'
+    : 'products';
+
   const { data, error } = await supabase
-    .from('merchant_products')
+    .from(sourceTable)
     .select(args.selectColumns)
     .eq('merchant_id', args.merchantId)
     .is('parent_product_id', null)

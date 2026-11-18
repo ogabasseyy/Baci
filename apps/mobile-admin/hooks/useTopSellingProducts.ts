@@ -1,4 +1,4 @@
-import { MOBILE_ADMIN_PRODUCT_COLUMNS as PRODUCT_COLUMNS } from '@baci/shared';
+import { MOBILE_ADMIN_PRODUCT_COLUMNS_PUBLIC as PRODUCT_COLUMNS_PUBLIC } from '@baci/shared';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useMerchant } from '@/hooks/useMerchant';
 import type { Product } from '@/hooks/useProducts';
@@ -54,16 +54,36 @@ export function useTopSellingProducts(
       if (!rpcData?.length) return [];
 
       const productIds = rpcData.map((item) => item.id);
-      const { data: productsData, error: productsError } = await supabase
-        .from('merchant_products')
-        .select(PRODUCT_COLUMNS)
-        .in('id', productIds)
-        .eq('merchant_id', merchantId);
+      const [productsResult, costsResult] = await Promise.all([
+        supabase
+          .from('products')
+          .select(PRODUCT_COLUMNS_PUBLIC)
+          .in('id', productIds)
+          .eq('merchant_id', merchantId),
+        supabase
+          .from('merchant_analytics_product_costs')
+          .select('id, cost_price')
+          .in('id', productIds)
+          .eq('merchant_id', merchantId),
+      ]);
 
-      if (productsError) throw productsError;
+      if (productsResult.error) throw productsResult.error;
+
+      const costById = new Map<string, number | null>();
+      if (!costsResult.error && Array.isArray(costsResult.data)) {
+        for (const costRow of costsResult.data) {
+          costById.set(costRow.id, costRow.cost_price ?? null);
+        }
+      }
 
       const productsMap = new Map(
-        productsData?.map((product) => [product.id, product])
+        productsResult.data?.map((product) => [
+          product.id,
+          {
+            ...product,
+            cost_price: costById.get(product.id) ?? null,
+          },
+        ])
       );
 
       return rpcData

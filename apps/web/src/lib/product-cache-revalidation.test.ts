@@ -17,7 +17,7 @@ describe('productCacheRevalidation', () => {
     revalidateTag.mockReset();
   });
 
-  it('revalidates merchant-wide, feed, dashboard, and product-slug tags', () => {
+  it('revalidates merchant-wide, feed, dashboard, and product-slug tags without global tags', () => {
     productCacheRevalidation.revalidateProducts('merchant-1', ' phone ');
 
     expect(revalidateTag).toHaveBeenCalledWith(
@@ -25,11 +25,23 @@ describe('productCacheRevalidation', () => {
       'products'
     );
     expect(revalidateTag).toHaveBeenCalledWith(
+      'product-details-merchant-1',
+      'products'
+    );
+    expect(revalidateTag).toHaveBeenCalledWith(
+      'product-canonical-redirect-merchant-1',
+      'products'
+    );
+    expect(revalidateTag).toHaveBeenCalledWith(
+      'product-legacy-redirect-merchant-1',
+      'products'
+    );
+    expect(revalidateTag).toHaveBeenCalledWith(
       'merchant-feed-merchant-1',
       'products'
     );
     expect(revalidateTag).toHaveBeenCalledWith(
-      'openai-product-feed',
+      'merchant-feed-review-signals-merchant-1',
       'products'
     );
     expect(revalidateTag).toHaveBeenCalledWith(
@@ -40,6 +52,13 @@ describe('productCacheRevalidation', () => {
       'product-merchant-1-phone',
       'products'
     );
+
+    const calledTags = revalidateTag.mock.calls.map(([tag]) => tag);
+    expect(calledTags).not.toContain('product-details');
+    expect(calledTags).not.toContain('product-canonical-redirect');
+    expect(calledTags).not.toContain('product-legacy-redirect');
+    expect(calledTags).not.toContain('google-merchant-feed');
+    expect(calledTags).not.toContain('openai-product-feed');
   });
 
   it('limits tracked-inventory sales to the affected merchant feed', () => {
@@ -51,6 +70,10 @@ describe('productCacheRevalidation', () => {
       'merchant-feed-merchant-1',
       'products'
     );
+    expect(revalidateTag).toHaveBeenCalledWith(
+      'merchant-feed-review-signals-merchant-1',
+      'products'
+    );
     expect(revalidateTag).not.toHaveBeenCalledWith(
       'google-merchant-feed',
       'products'
@@ -59,10 +82,38 @@ describe('productCacheRevalidation', () => {
       'openai-product-feed',
       'products'
     );
-    expect(revalidateTag).not.toHaveBeenCalledWith(
+  });
+
+  it('invalidates global feed tags only when feedScope is explicitly all', () => {
+    productCacheRevalidation.revalidateProducts('merchant-1', undefined, {
+      feedScope: 'all',
+    });
+
+    expect(revalidateTag).toHaveBeenCalledWith(
+      'google-merchant-feed',
+      'products'
+    );
+    expect(revalidateTag).toHaveBeenCalledWith(
+      'openai-product-feed',
+      'products'
+    );
+    expect(revalidateTag).toHaveBeenCalledWith(
+      'merchant-feed-merchant-1',
+      'products'
+    );
+    expect(revalidateTag).toHaveBeenCalledWith(
       'merchant-feed-review-signals-merchant-1',
       'products'
     );
+  });
+
+  it('invalidates only merchant-a feed and review-signal tags by default on revalidateMerchantFeed', () => {
+    productCacheRevalidation.revalidateMerchantFeed('merchant-a');
+
+    expect(revalidateTag.mock.calls).toEqual([
+      ['merchant-feed-merchant-a', 'products'],
+      ['merchant-feed-review-signals-merchant-a', 'products'],
+    ]);
   });
 
   it('hard-expires product-derived category data before an outer CDN eviction', () => {

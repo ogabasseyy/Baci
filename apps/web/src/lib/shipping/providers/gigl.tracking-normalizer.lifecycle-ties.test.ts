@@ -165,4 +165,19 @@ describe('bugfix: same-time pickup assignment and shipment creation keep payload
     );
     expect(result.status).toBe('pickup_scheduled');
   });
+
+  it.each([
+    ['MSHC before MCRT', ['MSHC', 'MCRT']],
+    ['MCRT before MSHC', ['MCRT', 'MSHC']],
+  ])('bugfix: pickup-run MSHC beats a same-time MCRT creation scan (%s)', (_label, order) => {
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W30',
+        MobileShipmentTrackings: order.map((code) => event(code, '10:00:00')),
+      },
+      'W30',
+      OBSERVED_AT
+    );
+    expect(result.status).toBe('pickup_scheduled');
+  });
 });

@@ -15,23 +15,25 @@ export const TERMINAL_STATUSES: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Equal-timestamp precedence for the current status: terminal
- * (delivered/returned/cancelled) > MSHC (still out for delivery) > rest.
- * `failed` is deliberately not terminal: an MSHC at the same time as a failed
- * attempt is the retry, so the shipment stays out for delivery.
+ * Equal-timestamp precedence for the current status, highest first:
+ * terminal (delivered/returned/cancelled) > MSHC (still out for delivery) >
+ * any other progress (picked up, in transit...) > a demoted pickup-run MSHC >
+ * pickup assignment (MAPT) > shipment creation (booked). The demoted MSHC
+ * sits below completed pickup but above creation, so a same-time MCRT never
+ * hides the pickup run. `failed` is deliberately not terminal: an MSHC at the
+ * same time as a failed attempt is the retry, so the shipment stays out for
+ * delivery.
  */
 export function currentStatusRank(candidate: Guardable): number {
-  if (
-    candidate.recognizedStatus !== null &&
-    TERMINAL_STATUSES.has(candidate.recognizedStatus)
-  ) {
-    return 3;
+  const status = candidate.recognizedStatus;
+  if (status !== null && TERMINAL_STATUSES.has(status)) {
+    return 6;
   }
-  // Only a demoted (pickup-run) MSHC must not outrank a completed pickup; a
-  // genuine pickup assignment (MAPT) keeps the normal rank so it is not
-  // pushed below same-time events such as shipment creation.
-  if (candidate.recognizedStatus === 'pickup_scheduled' && isMshc(candidate)) {
-    return 0;
+  if (status === 'pickup_scheduled') {
+    return isMshc(candidate) ? 3 : 2;
   }
-  return isMshc(candidate) ? 2 : 1;
+  if (status === 'booked') {
+    return 1;
+  }
+  return isMshc(candidate) ? 5 : 4;
 }

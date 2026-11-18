@@ -36,8 +36,14 @@ describe('currentStatusRank', () => {
   });
 
   it('does not rank a genuine pickup assignment below same-time shipment creation', () => {
-    expect(currentStatusRank(scan('MAPT', 'pickup_scheduled'))).toBe(
+    expect(currentStatusRank(scan('MAPT', 'pickup_scheduled'))).toBeGreaterThan(
       currentStatusRank(scan('MCRT', 'booked'))
     );
+  });
+
+  it('keeps a demoted pickup-run MSHC above same-time shipment creation but below completed pickup', () => {
+    const demoted = currentStatusRank(scan('MSHC', 'pickup_scheduled'));
+    expect(demoted).toBeGreaterThan(currentStatusRank(scan('MCRT', 'booked')));
+    expect(demoted).toBeLessThan(currentStatusRank(scan('MSVC', 'picked_up')));
   });
 });

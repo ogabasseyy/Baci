@@ -52,6 +52,12 @@ export const airtimeFormStyles = StyleSheet.create({
     marginBottom: AIRTIME_FORM_TOKENS.space.sm,
   },
   inputGroup: { marginBottom: AIRTIME_FORM_TOKENS.space.sm },
+  // Pulls a field notice up under the phone input (which keeps its own
+  // bottom margin) so it reads as part of the field.
+  fieldNotice: {
+    marginBottom: AIRTIME_FORM_TOKENS.space.md,
+    marginTop: -AIRTIME_FORM_TOKENS.space.md,
+  },
   label: {
     fontSize: AIRTIME_FORM_TOKENS.fontSize.md,
     marginBottom: AIRTIME_FORM_TOKENS.space.sm,

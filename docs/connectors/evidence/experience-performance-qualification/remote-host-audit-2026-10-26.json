@@ -1,0 +1,28 @@
+{
+  "scope": "read-only assessment of existing production VPS",
+  "host": "82.29.190.219",
+  "cpuCount": 4,
+  "memoryTotalKiB": 16370700,
+  "memoryAvailableKiBAtInitialCheck": 5045872,
+  "diskFreeBytes": 36614524928,
+  "node": "v24.22.1",
+  "pnpm": "12.14.0",
+  "dockerRuntimes": ["io.containerd.runc.v2", "runc"],
+  "runscBinaryPresent": false,
+  "pinnedNodeRootfsPresent": false,
+  "pinnedBrowserRootfsPresent": false,
+  "rootlessNamespaceProbe": {
+    "exit": 1,
+    "error": "Operation not permitted"
+  },
+  "unprivilegedUserNamespacesEnabled": true,
+  "apparmorUnprivilegedUserNamespaceRestriction": true,
+  "noninteractiveSudoAvailable": false,
+  "registeredCwvRunner": false,
+  "existingRunnerLabels": ["baci-android", "baci-deploy"],
+  "remoteChanges": false,
+  "softwareInstalled": false,
+  "productionServicesChanged": false,
+  "privateBenchmarkExecuted": false,
+  "decision": "No qualified isolated target identified under the no-production-changes constraint; another existing non-production Linux host is required."
+}

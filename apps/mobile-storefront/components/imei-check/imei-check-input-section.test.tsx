@@ -1,6 +1,6 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
-import Colors from '@/constants/Colors';
+import Colors, { BRAND } from '@/constants/Colors';
 import { ImeiCheckInputSection } from './imei-check-input-section';
 
 jest.mock('@react-native-vector-icons/ionicons', () => ({
@@ -96,5 +96,20 @@ describe('ImeiCheckInputSection', () => {
     expect(screen.getByPlaceholderText('Enter IMEI or serial')).toBeTruthy();
     expect(screen.getByText('8')).toBeTruthy();
     expect(screen.getByLabelText('IMEI or serial number')).toBeTruthy();
+  });
+
+  it('looks like the sign-in field and outlines red while typing', () => {
+    render(<ImeiCheckInputSection {...baseProps} />);
+    const input = screen.getByLabelText('IMEI number');
+    const box = screen.getByTestId('imei-input-field');
+
+    expect(box).toHaveStyle({
+      backgroundColor: Colors.light.muted,
+      borderColor: Colors.light.border,
+    });
+    fireEvent(input, 'focus');
+    expect(box).toHaveStyle({ borderColor: BRAND.primary });
+    fireEvent(input, 'blur');
+    expect(box).toHaveStyle({ borderColor: Colors.light.border });
   });
 });

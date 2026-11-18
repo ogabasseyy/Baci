@@ -30,7 +30,9 @@ export function isSupabaseAuthCookieName(cookieName: string): boolean {
   return (
     normalizedName === 'supabase-auth-token' ||
     normalizedName.startsWith('supabase-auth-token.') ||
-    (normalizedName.startsWith('sb-') && normalizedName.includes('auth-token'))
+    (normalizedName.startsWith('sb-') &&
+      normalizedName.includes('auth-token') &&
+      !normalizedName.endsWith('-code-verifier'))
   );
 }
 

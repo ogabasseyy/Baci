@@ -9,6 +9,7 @@ export function OxygenAddressProgress({
   busy = false,
   onCheck,
   onReplace,
+  onRefreshOffers,
 }: {
   submitted: boolean;
   delayed?: boolean;
@@ -18,6 +19,7 @@ export function OxygenAddressProgress({
   busy?: boolean;
   onCheck?: () => Promise<void>;
   onReplace?: () => void;
+  onRefreshOffers?: () => Promise<boolean>;
 }) {
   return (
     <div
@@ -65,6 +67,16 @@ export function OxygenAddressProgress({
           onClick={() => void onCheck()}
         >
           {busy ? 'Checking…' : 'Check for an update'}
+        </button>
+      )}
+      {onRefreshOffers && (
+        <button
+          type="button"
+          className="min-h-11 font-semibold text-store-primary underline"
+          disabled={busy}
+          onClick={() => void onRefreshOffers()}
+        >
+          Update payment options
         </button>
       )}
       <p className="text-xs text-gray-400">

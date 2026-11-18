@@ -1,11 +1,21 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import * as Haptics from 'expo-haptics';
-import { Alert } from 'react-native';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
-import { buildSavingsSuccessMessage } from './savings-contribution-success';
+import { notifySavings } from './savings/savings-notice';
+import {
+  buildSavingsSuccessMessage,
+  buildSavingsToastMessage,
+} from './savings-contribution-success';
 import { addSavingsContributionToGoal } from './wallet-screen-savings.handlers';
 
-jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+jest.mock('./savings/savings-notice', () => {
+  const notifySavings = jest.fn();
+  return {
+    clearSavingsNotice: jest.fn(),
+    notifySavings,
+    savingsNotifier: () => notifySavings,
+  };
+});
 
 const goal: WalletActiveSavingsGoal = {
   contribution_amount: 1000,
@@ -45,6 +55,29 @@ describe('buildSavingsSuccessMessage', () => {
         "Nice! ₦1,000 added. You're 30% of the way to your iPhone 13. Keep it going!",
       title: 'Savings updated',
     });
+  });
+
+  it('celebrates when the confirmed balance reaches the target', () => {
+    const result = buildSavingsSuccessMessage({
+      amount: 4500,
+      goal,
+      goalCompleted: false,
+      refreshFailed: false,
+      savedAfter: 5000,
+    });
+    expect(result.title).toBe('Goal reached! 🎉');
+  });
+
+  it('never says keep it going when the top-up may have finished the goal', () => {
+    const result = buildSavingsSuccessMessage({
+      amount: 4500,
+      goal,
+      goalCompleted: false,
+      mayHaveCompleted: true,
+      refreshFailed: false,
+    });
+    expect(result.message).toBe('Nice! ₦4,500 added to your iPhone 13.');
+    expect(result.message).not.toContain('Keep it going');
   });
 
   it('celebrates a completed goal', () => {
@@ -141,9 +174,10 @@ describe('success feedback is bound to confirmed contributions', () => {
       goal: { ...goal, current_amount: 1500 },
       rawAmount: '1000',
     });
-    expect(Alert.alert).toHaveBeenCalledWith(
+    expect(notifySavings).toHaveBeenCalledWith(
       'Savings updated',
-      "Nice! ₦1,000 added. You're 30% of the way to your iPhone 13. Keep it going!"
+      "Nice! ₦1,000 added. You're 30% of the way to your iPhone 13. Keep it going!",
+      'success'
     );
   });
 
@@ -161,9 +195,10 @@ describe('success feedback is bound to confirmed contributions', () => {
       goal: { ...goal, current_amount: 1500, target_amount: 2500 },
       rawAmount: '1000',
     });
-    expect(Alert.alert).toHaveBeenCalledWith(
+    expect(notifySavings).toHaveBeenCalledWith(
       'Savings updated',
-      "Nice! ₦1,000 added. You're 60% of the way to your iPhone 13. Keep it going!"
+      "Nice! ₦1,000 added. You're 60% of the way to your iPhone 13. Keep it going!",
+      'success'
     );
     // The reminder stays: the server says the goal is still active.
     expect(cancelSavingsReminder).not.toHaveBeenCalled();
@@ -191,9 +226,10 @@ describe('success feedback is bound to confirmed contributions', () => {
       rawAmount: '500',
     });
     expect(Haptics.notificationAsync).not.toHaveBeenCalled();
-    expect(Alert.alert).not.toHaveBeenCalledWith(
+    expect(notifySavings).not.toHaveBeenCalledWith(
       'Savings updated',
-      expect.any(String)
+      expect.any(String),
+      expect.anything()
     );
   });
 
@@ -206,5 +242,27 @@ describe('success feedback is bound to confirmed contributions', () => {
       rawAmount: '500',
     });
     expect(Haptics.notificationAsync).not.toHaveBeenCalled();
+  });
+});
+
+describe('buildSavingsToastMessage', () => {
+  it('names the amount and the plan', () => {
+    expect(
+      buildSavingsToastMessage({
+        amount: 100,
+        goalCompleted: false,
+        title: 'iPhone 13',
+      })
+    ).toBe('₦100 added to iPhone 13');
+  });
+
+  it('celebrates a reached goal and falls back when the plan has no title', () => {
+    expect(
+      buildSavingsToastMessage({
+        amount: 5000,
+        goalCompleted: true,
+        title: ' ',
+      })
+    ).toBe('₦5,000 added. You reached your goal!');
   });
 });

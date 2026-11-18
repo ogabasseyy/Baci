@@ -32,9 +32,9 @@ const legacyAccount = {
   provider: 'paystack',
 };
 
-function setupTables() {
+function setupTables(customers: unknown = [{ id: 'c1', loyalty_points: 10 }]) {
   const results: Record<string, { data: unknown; error: unknown }> = {
-    customers: { data: [{ id: 'c1', loyalty_points: 10 }], error: null },
+    customers: { data: customers, error: null },
     customer_wallets: {
       data: { id: 'w1', available_balance: '5000' },
       error: null,
@@ -91,5 +91,31 @@ describe('wallet data with the server off', () => {
     expect(wallet.balance).toBe(0);
     expect(mockFrom).not.toHaveBeenCalled();
     expect(mockReadPrimarySoon).not.toHaveBeenCalled();
+  });
+});
+
+describe('bugfix: wallet owner without a customer row read as a settled legacy wallet', () => {
+  it('marks the empty wallet owner-unresolved when the user has no customer row', async () => {
+    // Arrange: signed in, but no customer row for this merchant yet.
+    setupTables([]);
+
+    // Act
+    const { wallet } = await fetchWalletDataUnbounded(null, 'm1', 'u1');
+
+    // Assert: purchase screens can hold bank transfers until it resolves.
+    expect(wallet.balance).toBe(0);
+    expect(wallet.owner_unresolved).toBe(true);
+  });
+
+  it('marks it owner-unresolved when the user matches more than one row', async () => {
+    setupTables([{ id: 'c1' }, { id: 'c2' }]);
+    const { wallet } = await fetchWalletDataUnbounded(null, 'm1', 'u1');
+    expect(wallet.owner_unresolved).toBe(true);
+  });
+
+  it('leaves a resolved customer wallet without the flag', async () => {
+    mockReadPrimarySoon.mockResolvedValue({ status: 'not_ready' });
+    const { wallet } = await fetchWalletDataUnbounded('c1', 'm1', 'u1');
+    expect('owner_unresolved' in wallet).toBe(false);
   });
 });

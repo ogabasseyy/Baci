@@ -1,0 +1,283 @@
+import {
+  IMEI_SERVICE_TIERS,
+  type ImeiDeviceCategory,
+  type ImeiServiceTierKey,
+} from '@baci/shared/imei';
+import * as Crypto from 'expo-crypto';
+import { router } from 'expo-router';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
+import {
+  type PayingWallet,
+  piggyvestPayingBalanceKobo,
+  piggyvestWalletCovers,
+} from '@/components/wallet-pay/piggyvest-wallet-covers';
+import { startWithReplayCaution } from '@/components/wallet-pay/replay-start-caution';
+import { useWalletPaySheet } from '@/components/wallet-pay/use-wallet-pay-sheet';
+import type { WalletPayAdapter } from '@/components/wallet-pay/wallet-pay.types';
+import {
+  trackWalletPayPurchase,
+  walletPayPurchaseKeys,
+} from '@/components/wallet-pay/wallet-pay-purchase-keys';
+import { useRefreshWalletActivity } from '@/hooks/use-refresh-wallet-activity';
+import { SAVINGS_WALLET_CAN_PAY } from '@/lib/savings-wallet-can-pay';
+import { useAuthStore } from '@/stores/auth-store';
+import { imeiPurchaseName } from './imei-purchase-name';
+import {
+  createImeiWalletPayAdapter,
+  type ImeiWalletPayResult,
+} from './imei-wallet-pay-adapter';
+import { normalizeImeiIdentifier } from './normalize-imei-identifier';
+import { useImeiWalletPayableTiers } from './use-imei-wallet-payable-tiers';
+
+/**
+ * True when this check should be paid from the PiggyVest wallet: paying from
+ * it is switched on, the tier is one the server can bill to it, the customer
+ * is PiggyVest-ready with a fresh balance, store credit can't cover the check
+ * and the PiggyVest wallet can. Store credit still pays first whenever it
+ * covers the price, exactly as before.
+ */
+export function imeiWalletPayCovers(input: {
+  canPay: boolean;
+  wallet: PayingWallet | null | undefined;
+  tier: ImeiServiceTierKey;
+  refusedTiers?: readonly ImeiServiceTierKey[];
+  /** The server's wallet-payable checks; null = unknown, 'loading' = wait. */
+  payableTiers?: readonly ImeiServiceTierKey[] | null | 'loading';
+}) {
+  const { tier } = input;
+  // Only Sickw-backed checks can be paid this way (server rule).
+  if (IMEI_SERVICE_TIERS[tier].providerServiceId === 'petrock-only')
+    return false;
+  if (input.refusedTiers?.includes(tier)) return false;
+  // A check the server routes to Petrock today is never offered (walk
+  // 2026-11-15, M1), even when its tier can also run on Sickw.
+  if (input.payableTiers === 'loading') return false;
+  if (input.payableTiers && !input.payableTiers.includes(tier)) return false;
+  return piggyvestWalletCovers({
+    canPay: input.canPay,
+    wallet: input.wallet,
+    price: IMEI_SERVICE_TIERS[tier].price,
+  });
+}
+
+/**
+ * IMEI check paid from the PiggyVest wallet (dark until
+ * SAVINGS_WALLET_CAN_PAY). The screen asks `covers` first and, when true,
+ * opens the sheet instead of the store credit top-up.
+ */
+export function useImeiWalletPay({
+  apiBaseUrl,
+  device,
+  walletQuery,
+  onDelivered,
+  canPay = SAVINGS_WALLET_CAN_PAY,
+}: {
+  apiBaseUrl: string;
+  device: ImeiDeviceCategory;
+  walletQuery: {
+    data?: { wallet?: PayingWallet | null };
+    refetch?: () => unknown;
+    isRefetching?: boolean;
+  };
+  onDelivered: (result: ImeiWalletPayResult) => void;
+  /** Tests pass true to preview the switch-on. */
+  canPay?: boolean;
+}) {
+  const sheet = useWalletPaySheet<ImeiWalletPayResult>({ onDelivered });
+  const refreshActivity = useRefreshWalletActivity();
+  const wallet = walletQuery.data?.wallet;
+  // A sheet opened for one account never stays open for another.
+  const userId = useAuthStore((state) => state.user?.id ?? null);
+  // Even mid-payment: closing drops this sheet's answers (the request
+  // itself settles on the server and the key stays with account A).
+  const closeForSwitch = useEffectEvent(() => {
+    if (sheet.step !== 'closed') sheet.close();
+  });
+  const seenUser = useRef(userId);
+  useEffect(() => {
+    if (seenUser.current === userId) return;
+    seenUser.current = userId;
+    closeForSwitch();
+  }, [userId]);
+  const [refusedTiers, setRefusedTiers] = useState<ImeiServiceTierKey[]>([]);
+  const payableTiers = useImeiWalletPayableTiers({
+    apiBaseUrl,
+    canPay,
+    device,
+  });
+  const checkingKept = useRef(false);
+  const leaveTo = (href: '/wallet' | '/auth/login?returnTo=/imei-check') => {
+    sheet.close();
+    router.push(href);
+  };
+  // A stale balance during a refresh never chooses PiggyVest, so the badge,
+  // the amount shown and the verify gate always agree (Muse).
+  const refreshing = walletQuery.isRefetching === true;
+  const covers = (tier: ImeiServiceTierKey) =>
+    !refreshing &&
+    imeiWalletPayCovers({
+      canPay,
+      wallet,
+      tier,
+      refusedTiers,
+      payableTiers,
+    });
+  const openWallet = () => leaveTo('/wallet');
+  const signIn = () => leaveTo('/auth/login?returnTo=/imei-check');
+  return {
+    sheet,
+    /** Verify waits while the wallet or payable checks reload (Codex P2). */
+    waitsForWallet:
+      canPay &&
+      (walletQuery.isRefetching === true || payableTiers === 'loading'),
+    /** Everything WalletPaySheet needs besides colors. */
+    sheetProps: {
+      purchase: 'IMEI check',
+      sheet,
+      onOpenWallet: openWallet,
+      onSignIn: signIn,
+    },
+    covers,
+    /** What the form shows and asks about paying from PiggyVest. */
+    view: {
+      covers,
+      savingsKobo: refreshing
+        ? null
+        : piggyvestPayingBalanceKobo({ canPay, wallet }),
+    },
+    /**
+     * Whether an earlier PiggyVest attempt for this check is kept (its answer
+     * was lost): it replays there, whatever the balances say now (Codex P1).
+     * A key store that can not be read counts as kept (fails closed). Asked
+     * even while paying from PiggyVest is switched off: switching off stops
+     * new payments, never the recovery of one already started (Codex P1).
+     * A check already in flight answers null (that tap is still running, so
+     * this one is ignored).
+     */
+    retains: async (tier: ImeiServiceTierKey, imei: string) => {
+      if (checkingKept.current) return null;
+      const userId = useAuthStore.getState().user?.id;
+      if (!userId) return false;
+      checkingKept.current = true;
+      try {
+        return await imeiPurchaseName('imei', userId, device, tier, imei)
+          .then((purchase) => walletPayPurchaseKeys.has(purchase))
+          // Unreadable: while paying from PiggyVest is on it counts as kept
+          // (the sheet opens and says "Try again"; no other rail is chosen
+          // on a guess, Codex P1). Switched off, no PiggyVest attempt can
+          // be started, so a corrupt key store must not also withhold the
+          // store credit and top-up rails (Muse): it counts as none kept.
+          .catch(() => canPay);
+      } finally {
+        checkingKept.current = false;
+      }
+    },
+    open: async (tier: ImeiServiceTierKey, typed: string) => {
+      // The key and every request body use one form of the IMEI, so a
+      // replay never sends a different typing under the same key (Muse).
+      const imei = normalizeImeiIdentifier(typed);
+      // The build's merchant, never the hydrated one: that can still be
+      // null at startup, and the key must match after a restart.
+      const { user } = useAuthStore.getState();
+      let purchase: string | null = null;
+      let usedKey: string | null = null;
+      let inner: WalletPayAdapter<ImeiWalletPayResult> | null = null;
+      // The key is read inside the start, so a phone that can't read its
+      // saved keys shows "Try again" instead of paying with a new key.
+      const lazy: WalletPayAdapter<ImeiWalletPayResult> = {
+        async start() {
+          // Signed out: nothing to resume, so no shared key is ever saved.
+          if (!user?.id)
+            return { kind: 'outcome', outcome: { kind: 'sign_in' } } as const;
+          // One key per purchase (per account) until it settles, kept across
+          // restarts. The IMEI is hashed so the saved purchase doesn't show
+          // it in plain text. The hash is an identifier, not a secret (an
+          // IMEI can be brute-forced); the app's own storage is the boundary.
+          purchase = await imeiPurchaseName(
+            'imei',
+            user.id,
+            device,
+            tier,
+            imei
+          );
+          // Minted now = a new purchase; reused = a replay of an earlier
+          // attempt whose payment may already have gone through.
+          let minted = false;
+          const idempotencyKey = await walletPayPurchaseKeys.keyFor(
+            purchase,
+            () => {
+              minted = true;
+              return Crypto.randomUUID();
+            }
+          );
+          usedKey = idempotencyKey;
+          // The account may have changed during the awaits above: never send
+          // the new account's token with the old account's key.
+          if (useAuthStore.getState().user?.id !== user.id)
+            return { kind: 'outcome', outcome: { kind: 'sign_in' } } as const;
+          let tierRefused = false;
+          inner = createImeiWalletPayAdapter({
+            // The live token on every call: a refresh while the sheet is
+            // open must not leave PIN checks and re-checks on an old one.
+            connection: {
+              apiBaseUrl,
+              // Fails closed: no live session sends no token (Muse).
+              accessToken: () => useAuthStore.getState().session?.access_token,
+            },
+            device,
+            tier,
+            imei,
+            idempotencyKey,
+            onTierRefused: () => {
+              tierRefused = true;
+              setRefusedTiers((tiers) =>
+                tiers.includes(tier) ? tiers : [...tiers, tier]
+              );
+            },
+          });
+          const started = inner;
+          const answer = await startWithReplayCaution(!minted, () =>
+            started.start()
+          );
+          // A tier refusal means no lookup exists for this key (the server
+          // replays an earlier one instead), so it is forgotten (walk H2).
+          if (tierRefused && purchase)
+            await walletPayPurchaseKeys
+              .forget(purchase, idempotencyKey)
+              .catch(() => undefined);
+          return answer;
+        },
+        verifyPin: async (operationId, pin) => {
+          if (!inner) throw new Error('Wallet payment not started');
+          return await inner.verifyPin(operationId, pin);
+        },
+        pay: async (operationId, proof) => {
+          if (!inner) throw new Error('Wallet payment not started');
+          // A payment still pending, or one whose request failed (the sheet
+          // then reads it as pending), may already be a listed spend.
+          const answer = await inner.pay(operationId, proof).catch((error) => {
+            refreshActivity();
+            throw error;
+          });
+          if (answer.kind === 'outcome' && answer.outcome.kind === 'pending')
+            refreshActivity();
+          return answer;
+        },
+      };
+      // Settled purchases may have moved money: show the new balance. The
+      // whole payment is bound to the account that opened it.
+      await sheet.open(
+        trackWalletPayPurchase(lazy, () => purchase, {
+          onSettled: () => {
+            void walletQuery.refetch?.();
+            // The new spend must show in the wallet activity at once (Codex P2).
+            refreshActivity();
+          },
+          stillOwner: () => useAuthStore.getState().user?.id === user?.id,
+          stillWanted: sheet.nextSession(),
+          key: () => usedKey,
+        })
+      );
+    },
+  };
+}

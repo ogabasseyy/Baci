@@ -195,6 +195,8 @@ vi.mock('@/env', () => ({
   getSupabaseUrl: () => 'https://test.supabase.co',
 }));
 
+// No longer importing getImageMimeType here; tested in get-blog-feed-image-mime-type.test.ts
+
 const { GET } = await import('./route');
 
 describe('GET /api/blog/feed/[merchantSlug]', () => {
@@ -872,8 +874,145 @@ describe('GET /api/blog/feed/[merchantSlug]', () => {
     expect(mockFeedAddItem).toHaveBeenCalledWith(
       expect.objectContaining({
         title: 'Best Android Phones',
-        image: 'https://cdn.example.com/landscape.jpg',
+        image: {
+          url: 'https://cdn.example.com/landscape.jpg',
+          type: 'image/jpeg',
+        },
         category: [{ name: 'Smartphones' }],
+      })
+    );
+  });
+
+  it('transforms titled images into semantic figure captions and cleans AI prompt instructions in feed content', async () => {
+    enqueueSlugFeedScenario({
+      posts: [
+        {
+          id: 'caption-post',
+          title: 'Audio Guide',
+          slug: 'audio-guide',
+          content:
+            '<p><img src="https://cdn.example.com/buds.jpg" title="Editorial illustration: compare models. Use approved hardware references, blank screens and no text or logos." /></p>',
+          excerpt: 'Excerpt',
+          featured_image_url: 'https://cdn.example.com/buds-hero.webp',
+          category: 'Smartphones',
+          author_name: 'Ogabassey',
+          published_at: '2026-05-01T10:00:00.000Z',
+          updated_at: null,
+        },
+      ],
+    });
+
+    const response = await GET(new NextRequest('https://usebaci.com/feed'), {
+      params: Promise.resolve({ merchantSlug: 'ogabassey' }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(mockFeedAddItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content:
+          '<figure><img src="https://cdn.example.com/buds.jpg" /><figcaption>Compare models.</figcaption></figure>',
+        image: {
+          url: 'https://cdn.example.com/buds-hero.webp',
+          type: 'image/webp',
+        },
+      })
+    );
+  });
+
+  it('sanitizes leaked figcaption prompts before deriving fallback excerpt when excerpt is null', async () => {
+    enqueueSlugFeedScenario({
+      posts: [
+        {
+          id: 'null-excerpt-post',
+          title: 'Battery Guide',
+          slug: 'battery-guide',
+          content:
+            '<figure><img src="https://cdn.example.com/cell.jpg" /><figcaption>Editorial illustration: compare battery wear. No text or logos.</figcaption></figure><p>Charging tips follow.</p>',
+          excerpt: null,
+          featured_image_url:
+            'https://cdn.example.com/cdn-cgi/image/width=800,format=auto/cell.jpg',
+          category: 'Smartphones',
+          author_name: 'Ogabassey',
+          published_at: '2026-05-01T10:00:00.000Z',
+          updated_at: null,
+        },
+      ],
+    });
+
+    const response = await GET(new NextRequest('https://usebaci.com/feed'), {
+      params: Promise.resolve({ merchantSlug: 'ogabassey' }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(mockFeedAddItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        description: 'Compare battery wear. Charging tips follow.',
+        image: {
+          url: 'https://cdn.example.com/cdn-cgi/image/width=800,format=jpeg/cell.jpg',
+          type: 'image/jpeg',
+        },
+      })
+    );
+  });
+
+  it('omits RSS enclosure when image MIME type is indeterminate', async () => {
+    enqueueSlugFeedScenario({
+      posts: [
+        {
+          id: 'extensionless-image-post',
+          title: 'Accessory Guide',
+          slug: 'accessory-guide',
+          content: '<p>Guide body.</p>',
+          excerpt: 'Guide excerpt',
+          featured_image_url:
+            'https://cdn.example.com/cdn-cgi/image/width=800,format=auto/cell',
+          category: 'Accessories',
+          author_name: 'Ogabassey',
+          published_at: '2026-05-01T10:00:00.000Z',
+          updated_at: null,
+        },
+      ],
+    });
+
+    const response = await GET(new NextRequest('https://usebaci.com/feed'), {
+      params: Promise.resolve({ merchantSlug: 'ogabassey' }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(mockFeedAddItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        image: undefined,
+      })
+    );
+  });
+
+  it('decodes HTML entities in fallback excerpts derived from captioned content', async () => {
+    enqueueSlugFeedScenario({
+      posts: [
+        {
+          id: 'entity-caption-post',
+          title: 'Carrier Guide',
+          slug: 'carrier-guide',
+          content:
+            '<img src="https://cdn.example.com/att.jpg" title="AT&amp;T 5G" /><p>Coverage notes.</p>',
+          excerpt: null,
+          featured_image_url: 'https://cdn.example.com/att.jpg',
+          category: 'Guides',
+          author_name: 'Ogabassey',
+          published_at: '2026-05-01T10:00:00.000Z',
+          updated_at: null,
+        },
+      ],
+    });
+
+    const response = await GET(new NextRequest('https://usebaci.com/feed'), {
+      params: Promise.resolve({ merchantSlug: 'ogabassey' }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(mockFeedAddItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        description: 'AT&T 5G Coverage notes.',
       })
     );
   });

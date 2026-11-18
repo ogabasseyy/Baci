@@ -7358,3 +7358,216 @@ describe('isInsufficientWalletBalanceError', () => {
     expect(isInsufficientWalletBalanceError(undefined)).toBe(false);
   });
 });
+
+describe('PiggyVest-paid VTU rows (pay from the PiggyVest wallet, dark)', () => {
+  const PIGGYVEST_ROW = {
+    id: 'vtu-1',
+    merchant_id: 'merchant-1',
+    customer_id: 'customer-1',
+    type: 'airtime',
+    network_provider: 'MTN',
+    phone_number: '08012345678',
+    amount: 1000,
+    request_reference: 'VTU-123',
+    transaction_id: null,
+    status: 'pending',
+    metadata: {
+      paymentSource: 'piggyvest_wallet',
+      paymentSplit: { card: 0, wallet: 1000 },
+    },
+    error_message: null,
+    merchant_commission: 0,
+    customer_cashback: 0,
+    biller_name: null,
+    biller_item_code: null,
+    customer_identifier: null,
+    source: 'checkout',
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('never vends a PiggyVest-paid row without the payment delivery claim', async () => {
+    const rpcImpl = vi.fn(() => Promise.resolve({ data: null, error: null }));
+    const updatePayloads: unknown[] = [];
+    const supabase = createPendingTransactionSupabaseMock({
+      transactionRow: PIGGYVEST_ROW,
+      rpcImpl,
+      updatePayloads,
+    });
+
+    const result = await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(result).toEqual({
+      amount: 1000,
+      reference: 'VTU-123',
+      status: 'processing',
+    });
+    expect(mockPurchaseAirtime).not.toHaveBeenCalled();
+    expect(rpcImpl).not.toHaveBeenCalled();
+    expect(updatePayloads).toEqual([]);
+  });
+
+  it('vends a claimed PiggyVest-paid row without debiting store credit', async () => {
+    mockPurchaseAirtime.mockResolvedValue({
+      success: true,
+      message: 'ok',
+      transactionId: 'kuda-pv-1',
+      amount: 1000,
+      status: 'successful',
+    });
+    const rpcImpl = vi.fn(() => Promise.resolve({ data: null, error: null }));
+    const supabase = createPendingTransactionSupabaseMock({
+      transactionRow: PIGGYVEST_ROW,
+      rpcImpl,
+    });
+
+    const result = await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+      walletPayClaimed: true,
+    });
+
+    expect(result).toMatchObject({ status: 'successful' });
+    expect(mockPurchaseAirtime).toHaveBeenCalledTimes(1);
+    expect(rpcImpl).not.toHaveBeenCalledWith(
+      'redeem_vtu_wallet_payment',
+      expect.anything()
+    );
+  });
+
+  it('owes a failed vend to the PiggyVest wallet and never credits store credit', async () => {
+    mockPurchaseAirtime.mockResolvedValue({
+      success: false,
+      message: 'Insufficient Balance',
+      status: 'failed',
+    });
+    const rpcImpl = vi.fn(() => Promise.resolve({ data: null, error: null }));
+    const updatePayloads: unknown[] = [];
+    const supabase = createPendingTransactionSupabaseMock({
+      transactionRow: PIGGYVEST_ROW,
+      rpcImpl,
+      updatePayloads,
+    });
+
+    const result = await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+      walletPayClaimed: true,
+    });
+
+    expect(result).toMatchObject({ status: 'failed' });
+    for (const name of [
+      'redeem_vtu_wallet_payment',
+      'reverse_vtu_wallet_payment',
+      'refund_customer_wallet_for_vtu',
+    ])
+      expect(rpcImpl).not.toHaveBeenCalledWith(name, expect.anything());
+    expect(JSON.stringify(updatePayloads)).toContain(
+      '"refundDestination":"piggyvest_wallet"'
+    );
+  });
+
+  it('bugfix: the reconciler settles a processing PiggyVest-paid row without the claim (Codex P1)', async () => {
+    mockMonnifyCheckTransactionStatus.mockResolvedValue({
+      status: 'successful',
+      message: 'success',
+      pin: 'token-1234',
+    });
+    const supabase = createPendingTransactionSupabaseMock({
+      transactionRow: {
+        ...PIGGYVEST_ROW,
+        type: 'electricity',
+        transaction_id: 'monnify-bill-1',
+        status: 'processing',
+        metadata: {
+          ...PIGGYVEST_ROW.metadata,
+          provider: 'monnify',
+          billerCode: 'biller1',
+          productCode: 'product1',
+          monnifyVendReference: 'monnify-vend-1',
+        },
+        biller_name: 'EKEDC',
+        customer_identifier: '43901766923',
+      },
+    });
+
+    const result = await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(mockMonnifyCheckTransactionStatus).toHaveBeenCalledWith(
+      'monnify-vend-1'
+    );
+    expect(result).toMatchObject({ status: 'successful' });
+  });
+
+  it('still holds a plain pending PiggyVest-paid row (never vended) without the claim', async () => {
+    const supabase = createPendingTransactionSupabaseMock({
+      transactionRow: PIGGYVEST_ROW,
+    });
+    const result = await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+    expect(result).toMatchObject({ status: 'processing' });
+    expect(mockPurchaseAirtime).not.toHaveBeenCalled();
+  });
+
+  it('bugfix: a failed PiggyVest-paid row without the claim writes no refund bookkeeping (Muse)', async () => {
+    const rpcImpl = vi.fn(() => Promise.resolve({ data: null, error: null }));
+    const updatePayloads: unknown[] = [];
+    const supabase = createPendingTransactionSupabaseMock({
+      transactionRow: {
+        ...PIGGYVEST_ROW,
+        status: 'failed',
+        error_message: 'This purchase was not paid.',
+      },
+      rpcImpl,
+      updatePayloads,
+    });
+
+    const result = await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(result).toMatchObject({ status: 'failed' });
+    expect(result).not.toHaveProperty('refundedToWallet');
+    expect(updatePayloads).toEqual([]);
+    expect(rpcImpl).not.toHaveBeenCalled();
+  });
+
+  it('never re-vends a failed PiggyVest-paid row on a retry', async () => {
+    const rpcImpl = vi.fn(() => Promise.resolve({ data: null, error: null }));
+    const supabase = createPendingTransactionSupabaseMock({
+      transactionRow: {
+        ...PIGGYVEST_ROW,
+        status: 'failed',
+        error_message: 'Vend failed',
+        metadata: {
+          ...PIGGYVEST_ROW.metadata,
+          refundIssued: true,
+          refundAmount: 1000,
+          refundDestination: 'piggyvest_wallet',
+        },
+      },
+      rpcImpl,
+    });
+
+    const result = await fulfillPendingVtuTransaction({
+      retryFailed: true,
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(result).toMatchObject({ status: 'failed' });
+    expect(mockPurchaseAirtime).not.toHaveBeenCalled();
+    expect(rpcImpl).not.toHaveBeenCalled();
+  });
+});

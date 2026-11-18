@@ -1,3 +1,4 @@
+import { OGABASSEY_WARRANTY_DETAILS } from '@baci/shared/storefront/ogabassey-care';
 import { describe, expect, it } from 'vitest';
 import { buildMerchantTrustProfile } from './build-merchant-trust-profile';
 
@@ -25,23 +26,37 @@ describe('owner-approved Ogabassey policies', () => {
       'https://ogabassey.com'
     );
     expect(profile.returnPolicy?.windowDays).toBe(14);
-    expect(profile.returnPolicy?.summary).toContain('defects');
+    // Approved copy rewritten in #4252 (shared ogabassey-care.ts).
+    expect(profile.returnPolicy?.summary).toContain(
+      'undisclosed technical defect within 14 days of delivery'
+    );
     expect(profile.returnPolicy?.summary).not.toContain('Unused');
     expect(profile.returnPolicy?.returnMethod).toBeUndefined();
     expect(profile.returnPolicy?.returnFees).toBeUndefined();
-    expect(profile.warrantyPolicy?.summary).toContain('one-year');
-    for (const exclusion of [
-      'power surges',
-      'screen damage',
-      'liquid damage',
-    ]) {
-      expect(profile.warrantyPolicy?.summary).toContain(exclusion);
-    }
+    expect(profile.warrantyPolicy?.summary).toContain(
+      'one-year Ogabassey store warranty'
+    );
+    expect(profile.warrantyPolicy?.summary).toContain('manufacturer warranty');
+    expect(profile.warrantyPolicy?.summary).not.toBe(
+      stalePolicy.warranty_policy.summary
+    );
     expect(profile.derivedLinks.warranty).toBe(
       'https://ogabassey.com/warranty'
     );
     expect(profile.shippingPolicy?.regions).toEqual(['Nigeria']);
     expect(profile.shippingPolicy?.shippingFeeType).toBe('calculated');
+  });
+
+  it('keeps the screen, liquid and power-surge exclusions in the warranty details copy', () => {
+    // #4252 moved the exclusions out of the summary into the details copy
+    // shown on the warranty pages; they must not disappear altogether.
+    for (const exclusion of [
+      'screen',
+      'liquid damage',
+      'damage caused by a power surge',
+    ]) {
+      expect(OGABASSEY_WARRANTY_DETAILS).toContain(exclusion);
+    }
   });
 
   it('does not apply Ogabassey business promises to a tenant using the same template or base URL', () => {

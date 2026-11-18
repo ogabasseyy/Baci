@@ -3,11 +3,14 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 import YAML from 'yaml';
+import { evaluateExpression } from './review-first-ci/expression.mjs';
 
 test('gives the bounded storefront build enough time to finish page-data collection', async () => {
   const workflow = YAML.parse(await readFile('.github/workflows/ci.yml', 'utf8'));
 
-  assert.equal(workflow.jobs.build.name, 'Build');
+  // The name is an expression (review-first CI defers it under another name for
+  // same-repository pull requests); every normal run keeps the required name.
+  assert.equal(evaluateExpression(workflow.jobs.build.name, { 'github.event_name': 'push' }), 'Build');
   assert.match(workflow.jobs.build['timeout-minutes'], /&& 75 \|\| 45/);
 });
 

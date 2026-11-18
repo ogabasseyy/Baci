@@ -1,0 +1,41 @@
+{
+  "manifest": {
+    "format": "baci.experience/v2",
+    "runtime": "react-browser-sandbox/v1",
+    "sdkVersion": "commerce-bridge/v1",
+    "entry": "app.tsx",
+    "files": [
+      {
+        "path": "app.tsx",
+        "content": ""
+      }
+    ],
+    "packages": [
+      {
+        "name": "react",
+        "versionRef": "platform-pinned"
+      }
+    ],
+    "routes": [
+      {
+        "path": "/",
+        "view": "home"
+      }
+    ],
+    "assets": [],
+    "capabilities": ["catalog.read", "navigation"]
+  },
+  "sourceDigest": "6a51eaad6432864abc9b9d1807659d1a9f6bcc84aa87aaaacc2ad116389f1f97",
+  "buildDigest": "8345b16ba65286462950977fddf6d42179a0056053a7a7086fa59427323d75a1",
+  "toolchain": "341def06a35cd1eddad8079191afe82439a6826e75074fa0bfc8a0c1dd3947af",
+  "outputs": [
+    {
+      "path": "app.js",
+      "digest": "1aae82dec55eb878cd242fe40273c24a454278f728fda821dd5d75b428548c7d"
+    },
+    {
+      "path": "app.css",
+      "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ]
+}

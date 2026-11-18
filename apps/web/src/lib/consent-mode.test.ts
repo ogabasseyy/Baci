@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   applyStoredConsent,
@@ -35,6 +37,9 @@ describe('stored Google consent', () => {
     expect(defaults[2]).toMatchObject({
       analytics_storage: 'denied',
       ad_storage: 'denied',
+      functionality_storage: 'denied',
+      personalization_storage: 'denied',
+      security_storage: 'granted',
     });
     const gtag = vi.spyOn(window, 'gtag');
     applyStoredConsent();

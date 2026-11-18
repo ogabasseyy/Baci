@@ -1,7 +1,7 @@
 import type { CSSProperties, ReactNode, Ref } from 'react';
 
 export interface AdSlotShellProps {
-  /** Human-readable placement name shown in the placeholder. */
+  /** Ad unit name. Kept for callers and debugging; never shown to shoppers. */
   name: string;
   /** Desktop creative dimensions (applied at >= 768px). */
   width: number;
@@ -9,7 +9,7 @@ export interface AdSlotShellProps {
   /** Mobile creative dimensions (applied at < 768px). */
   mobileWidth?: number;
   mobileHeight?: number;
-  /** Render the "Ad Space" placeholder pattern (hide once a real ad paints). */
+  /** Render the quiet placeholder (hide once a real ad paints). */
   showPlaceholder?: boolean;
   /** Hide the whole shell from the a11y tree (used for the reserved fallback). */
   ariaHidden?: boolean;
@@ -73,22 +73,17 @@ export function AdSlotShell({
         >
           {children}
           {showPlaceholder && (
+            // Shoppers see this whenever no ad has filled the slot, which
+            // is most of the time, so it stays quiet: no stripes and no
+            // internal unit name or size. Same box, so nothing shifts.
             <div
               aria-hidden="true"
-              className="absolute inset-0 w-full h-full flex flex-col items-center justify-center p-4 z-0"
-              style={{
-                backgroundImage:
-                  'repeating-linear-gradient(45deg, #e5e7eb 0, #e5e7eb 1px, transparent 1px, transparent 10px)',
-              }}
+              className="absolute inset-0 w-full h-full flex items-center justify-center p-4 z-0"
+              data-ad-unit={name}
+              data-testid="ad-slot-placeholder"
             >
-              <span className="ogabassey-ad-placeholder-text text-xs font-bold uppercase tracking-widest mb-1">
-                Ad Space
-              </span>
-              <span className="ogabassey-ad-placeholder-text text-[10px] font-medium">
-                {name}
-              </span>
-              <span className="ogabassey-ad-placeholder-text text-[9px] mt-1">
-                {width}x{height}
+              <span className="ogabassey-ad-placeholder-text text-[10px] font-medium uppercase tracking-widest">
+                Advertisement
               </span>
             </div>
           )}

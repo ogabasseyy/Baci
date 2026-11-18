@@ -20,6 +20,13 @@ const {
   mockLoadProductsPageLinkModules: vi.fn(),
 }));
 
+vi.mock(
+  '@/components/storefront/experience/experience-server-boundary',
+  () => ({
+    ExperienceServerBoundary: ({ fallback }: { fallback: React.ReactNode }) =>
+      fallback,
+  })
+);
 vi.mock('next/headers', () => ({ headers: () => mockHeaders() }));
 vi.mock('next/link', () => ({
   default: ({
@@ -60,7 +67,10 @@ vi.mock('@/lib/seo-utils', () => ({
 vi.mock('@/lib/store-url', () => ({
   buildStoreUrl: () => 'https://ogabassey.com',
 }));
-vi.mock('@/lib/validation', () => ({ isValidMerchantIdentifier: () => true }));
+vi.mock('@/lib/validation', () => ({
+  isDomainIdentifier: (value: string) => value.includes('.'),
+  isValidMerchantIdentifier: () => true,
+}));
 vi.mock('./product-index-card', () => ({
   ProductIndexCard: () => <article />,
 }));
@@ -162,7 +172,7 @@ describe('ProductsPageContent discovery pagination & category link deduplication
     mockHeaders.mockResolvedValue(headersList);
 
     const result = await ProductsPageContent({
-      params: Promise.resolve({ slug: 'ogabassey' }),
+      params: Promise.resolve({ slug: 'ogabassey.com' }),
       searchParams: Promise.resolve({}),
     });
 

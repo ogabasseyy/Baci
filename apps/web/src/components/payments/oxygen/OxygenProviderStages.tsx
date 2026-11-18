@@ -12,13 +12,14 @@ import { OxygenGuidedVerification } from './OxygenGuidedVerification';
 import { OxygenLoanSummary } from './OxygenLoanSummary';
 import { OxygenPaymentReady } from './OxygenPaymentReady';
 import { OxygenPaymentRecovery } from './OxygenPaymentRecovery';
-import { OxygenPlanForm } from './OxygenPlanForm';
+import { OxygenPlanRequired } from './OxygenPlanRequired';
 import {
   type OxygenCheckoutProduct,
   OxygenProductSummary,
 } from './OxygenProductSummary';
 import { OxygenSavedPlans } from './OxygenSavedPlans';
 import { OxygenVerificationForms } from './OxygenVerificationForms';
+import { canRefreshSavedOxygenOffers } from './oxygen-offer-refresh';
 import type { submitOxygenVerificationForm } from './submit-oxygen-verification-form';
 import type { useOxygenApprovedPayment } from './use-oxygen-approved-payment';
 import type { useOxygenBookingProgress } from './use-oxygen-booking-progress';
@@ -137,13 +138,10 @@ export function OxygenProviderStages({
         submit={submit}
       />
       {snapshot.stage === 'plan_required' && !activeLoanError && (
-        <OxygenPlanForm
-          key={`${productAmount}:${s?.eligibleAmount}:${s?.minimumAmount}:${s?.maxTenure}`}
-          busy={disabled}
-          maxTenure={s?.maxTenure}
+        <OxygenPlanRequired
+          state={s}
           productAmount={productAmount}
-          eligibleAmount={s?.eligibleAmount}
-          minimumAmount={s?.minimumAmount}
+          disabled={disabled}
           submit={submit}
         />
       )}
@@ -170,6 +168,13 @@ export function OxygenProviderStages({
             }
             approvePlan={approval.approvePlan}
             approvalBusy={disabled}
+            approvalCodeStarted={snapshot.approvalOtpReady}
+            cancelUnavailablePlan={() => submit({ action: 'cancel_booking' })}
+            refreshOffers={
+              canRefreshSavedOxygenOffers(snapshot)
+                ? () => submit({ action: 'refresh_eligibility' })
+                : undefined
+            }
             resumeQueuedApproval={
               snapshot.pending?.action === 'approve_booking' &&
               snapshot.pending.status === 'queued'
@@ -192,6 +197,11 @@ export function OxygenProviderStages({
             busy={disabled || Boolean(snapshot.pending)}
             onReplace={() => setReplacingAddress(true)}
             onCheck={bookingProgress.checkAddress}
+            onRefreshOffers={
+              canRefreshSavedOxygenOffers(snapshot)
+                ? () => submit({ action: 'refresh_eligibility' })
+                : undefined
+            }
           />
         )}
       {snapshot.stage === 'booked' && replacingAddress && (

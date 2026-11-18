@@ -9,7 +9,13 @@ const { mockFeedAddItem, mockFeedConstructor, mockFrom, mockUnstableCache } =
     mockFeedAddItem: vi.fn(),
     mockFeedConstructor: vi.fn(),
     mockFrom: vi.fn(),
-    mockUnstableCache: vi.fn((fn: (...args: unknown[]) => unknown) => fn),
+    mockUnstableCache: vi.fn(
+      (
+        fn: (...args: unknown[]) => unknown,
+        _keyParts?: string[],
+        _options?: unknown
+      ) => fn
+    ),
   }));
 
 type QueryResult<T> = { data: T | null; error: { message: string } | null };
@@ -1029,7 +1035,7 @@ describe('GET /api/blog/feed/[merchantSlug]', () => {
   it('returns 404 via thrown FeedMerchantNotFoundError when the cached merchant lookup misses', async () => {
     enqueueTable(
       'merchants',
-      createMerchantQuery({ data: { id: merchant.id }, error: null })
+      createMerchantQuery({ data: merchant, error: null })
     );
     enqueueTable('merchants', createMerchantQuery({ data: null, error: null }));
 

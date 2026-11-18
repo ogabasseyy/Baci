@@ -15,6 +15,7 @@ const candidateStatusSchema = z
 export const oxygenFollowUpCandidateSchema = z
   .object({
     order_id: z.uuid(),
+    order_customer_id: z.uuid().nullable().optional(),
     follow_up_status: candidateStatusSchema,
     last_activity_at: z.iso.datetime({ offset: true }),
   })

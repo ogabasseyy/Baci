@@ -65,6 +65,40 @@ describe('Oxygen follow-up fetch', () => {
     });
   });
 
+  it('downgrades customer action when the order was reassigned during lookup', async () => {
+    mocks.rpc.mockResolvedValue({
+      data: [
+        {
+          ...candidate,
+          follow_up_status: 'customer_action',
+          order_customer_id: null,
+        },
+      ],
+      error: null,
+    });
+    mocks.in.mockResolvedValue({
+      data: [{ ...order, customer_id: '30000000-0000-4000-8000-000000000002' }],
+      error: null,
+    });
+    const result = await fetchOxygenFollowUps(merchantId);
+    expect(result.orders[0]?.oxygen_follow_up_status).toBe('needs_review');
+  });
+
+  it('keeps customer action when the order binding still matches', async () => {
+    mocks.rpc.mockResolvedValue({
+      data: [
+        {
+          ...candidate,
+          follow_up_status: 'customer_action',
+          order_customer_id: null,
+        },
+      ],
+      error: null,
+    });
+    const result = await fetchOxygenFollowUps(merchantId);
+    expect(result.orders[0]?.oxygen_follow_up_status).toBe('customer_action');
+  });
+
   it('does not query orders when the provider status lookup fails', async () => {
     mocks.rpc.mockResolvedValue({
       data: null,
@@ -203,7 +237,13 @@ describe('Oxygen follow-up fetch', () => {
 
   it('does not tell staff to contact a customer if the order became paid', async () => {
     mocks.rpc.mockResolvedValue({
-      data: [{ ...candidate, follow_up_status: 'customer_action' }],
+      data: [
+        {
+          ...candidate,
+          follow_up_status: 'customer_action',
+          order_customer_id: null,
+        },
+      ],
       error: null,
     });
     mocks.in.mockResolvedValue({

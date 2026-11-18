@@ -39,7 +39,7 @@ CREATE TABLE oxygen_private.general_activations (
   workflow_id uuid PRIMARY KEY, status text NOT NULL, created_at timestamptz NOT NULL, finished_at timestamptz
 );
 CREATE TABLE oxygen_private.general_activation_reconcile_conflicts (
-  workflow_id uuid PRIMARY KEY, resolved_at timestamptz
+  workflow_id uuid PRIMARY KEY, resolved_at timestamptz, observed_at timestamptz NOT NULL
 );
 CREATE TABLE oxygen_private.payment_recovery (
   workflow_id uuid NOT NULL, booking_reference uuid NOT NULL, action text NOT NULL,
@@ -153,8 +153,8 @@ INSERT INTO oxygen_private.general_activations (workflow_id, status, created_at,
   ('40000000-0000-4000-8000-000000000036','activated',now()-interval '2 hours',now()-interval '2 hours'),
   ('40000000-0000-4000-8000-000000000037','activated',now()-interval '2 hours',now()-interval '2 hours');
 INSERT INTO oxygen_private.general_activation_reconcile_conflicts VALUES
-  ('40000000-0000-4000-8000-000000000036',NULL),
-  ('40000000-0000-4000-8000-000000000037',now()-interval '1 hour');
+  ('40000000-0000-4000-8000-000000000036',NULL,now()-interval '1 minute'),
+  ('40000000-0000-4000-8000-000000000037',now()-interval '1 hour',now()-interval '2 hours');
 INSERT INTO oxygen_private.provider_states VALUES
   ('40000000-0000-4000-8000-000000000038', '{"bookingReference":"50000000-0000-4000-8000-000000000004","kyc":{"address_status":"DONE"}}'::jsonb);
 INSERT INTO oxygen_private.commands VALUES

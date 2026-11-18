@@ -53,3 +53,8 @@
 **Learning:** Hardcoded `#FFF` for primary button text and `#F3F4F6` for placeholder image backgrounds were used in the Stylesheet instead of utilizing the `BRAND.onPrimary` and `colors.muted` tokens respectively.
 **Action:** Pass dynamic `BRAND.onPrimary` and `colors.muted` tokens inline and remove static color declarations.
 **Source:** `apps/mobile-storefront/constants/Colors.ts`
+
+## 2024-05-24 — [Replace Hardcoded White with textOnPrimary]
+**Learning:** Hardcoded `#FFFFFF` on primary backgrounds may lack explicit semantic meaning or adaptability compared to standard tokens.
+**Action:** Always use `colors.textOnPrimary` for text/icons on primary colored buttons to ensure consistency and readability in both themes.
+**Source:** `apps/mobile-admin/constants/theme.ts`

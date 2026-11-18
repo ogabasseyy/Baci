@@ -121,6 +121,7 @@ export const piggyvestGoalCancelForfeitSchemas = {
       .transform((value) => value ?? null),
     currency: z.string(),
     status: z.string(),
+    type: z.string().optional(),
     balance: z.int().nonnegative().optional(),
   }),
   // Cancels held before anything was sent, for the sweep to page.

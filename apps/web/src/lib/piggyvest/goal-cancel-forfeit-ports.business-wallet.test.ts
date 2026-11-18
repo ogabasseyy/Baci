@@ -1,5 +1,6 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import { forfeitDriverPorts } from './goal-cancel-forfeit-ports';
+import { readGoalInterestWalletOwnerId } from './goal-interest-wallet-env';
 
 // Owner decision 2026-11-18: forfeited goal interest goes to Ogabassey's
 // business-owned interest payout wallet, which PiggyVest reports with no API
@@ -44,7 +45,8 @@ const goalWallet = {
 
 function ports(
   owner: string | null,
-  walletId: string | null = 'interest-wallet'
+  walletId: string | null = 'interest-wallet',
+  payoutWalletId: string | null = 'interest-wallet'
 ) {
   return forfeitDriverPorts({
     claim: vi.fn(),
@@ -57,6 +59,7 @@ function ports(
     operationId: '66666666-6666-4666-8666-666666666666',
     expectedDestinationWalletId: walletId,
     expectedDestinationOwnerId: owner,
+    expectedPrimaryInterestPayoutWalletId: payoutWalletId,
   });
 }
 
@@ -100,7 +103,7 @@ it('refuses when the database wallet differs from the deployment setting', async
   );
   answer({ ...businessWallet, id: 'another-wallet' });
   expect(
-    await ports(null, 'another-wallet').verifyDestination({
+    await ports(null, 'another-wallet', 'another-wallet').verifyDestination({
       ...forfeit,
       destinationWalletId: 'another-wallet',
     })
@@ -147,4 +150,39 @@ it('still checks the goal wallet the interest comes from', async () => {
   expect(await ports(null).verifyDestination(forfeit)).toBe(
     'source_unavailable'
   );
+});
+
+it('requires business-wallet forfeits to match the configured primary interest payout wallet', async () => {
+  answer(businessWallet);
+  expect(
+    await ports(null, 'interest-wallet', null).verifyDestination(forfeit)
+  ).toBe(false);
+  expect(
+    await ports(
+      null,
+      'interest-wallet',
+      'other-payout-wallet'
+    ).verifyDestination(forfeit)
+  ).toBe(false);
+});
+
+it('refuses a settlement wallet even when id and business match', async () => {
+  answer({ ...businessWallet, type: 'settlement' });
+  expect(await ports(null).verifyDestination(forfeit)).toBe(false);
+  answer({
+    ...businessWallet,
+    api_customer_id: 'ogabassey',
+    type: 'settlement',
+  });
+  expect(await ports('ogabassey').verifyDestination(forfeit)).toBe(false);
+});
+
+it('fails closed at verifyDestination when PIGGYVEST_INTEREST_WALLET_OWNER_ID is set but invalid', async () => {
+  const invalidOwner = readGoalInterestWalletOwnerId({
+    PIGGYVEST_INTEREST_WALLET_OWNER_ID: 'bad\0owner',
+  } as unknown as NodeJS.ProcessEnv);
+  answer(businessWallet);
+  expect(await ports(invalidOwner).verifyDestination(forfeit)).toBe(false);
+  answer({ ...businessWallet, api_customer_id: 'ogabassey' });
+  expect(await ports(invalidOwner).verifyDestination(forfeit)).toBe(false);
 });

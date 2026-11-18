@@ -1,8 +1,9 @@
+import { piggyvestInterestPayoutWalletIdSchema } from '@/schemas/piggyvest-primary-wallet-onboarding';
 import { piggyvestProviderIdSchema } from '@/schemas/piggyvest-provider-id';
 
-// Contains NUL, which piggyvestProviderIdSchema rejects, so it never equals
-// a parsed wallet's api_customer_id.
-const UNMATCHABLE_OWNER_ID = '\0invalid-interest-wallet-owner';
+// Exceeds the 512-char limit in piggyvestProviderIdSchema without control
+// bytes, so it can never equal a parsed wallet's api_customer_id.
+const UNMATCHABLE_OWNER_ID = 'invalid-interest-wallet-owner-'.repeat(20);
 
 /**
  * PIGGYVEST_INTEREST_WALLET_ID: Ogabassey's PiggyVest wallet for forfeited
@@ -39,4 +40,13 @@ export function readGoalInterestWalletOwnerId(
   if (raw === undefined || raw === '') return null;
   const parsed = piggyvestProviderIdSchema.safeParse(raw);
   return parsed.success ? parsed.data : UNMATCHABLE_OWNER_ID;
+}
+
+export function readPrimaryInterestPayoutWalletId(
+  env: NodeJS.ProcessEnv = process.env
+): string | null {
+  const parsed = piggyvestInterestPayoutWalletIdSchema.safeParse(
+    env.PIGGYVEST_PRIMARY_INTEREST_PAYOUT_WALLET_ID
+  );
+  return parsed.success ? parsed.data : null;
 }

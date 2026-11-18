@@ -24,10 +24,18 @@ export type SwapMediaSelection =
 type MediaKind = 'photo' | 'video' | 'other';
 
 function kindOf(asset: SwapPickedAsset): MediaKind {
-  if (asset.type === 'video' || asset.mimeType?.startsWith('video/')) {
+  if (
+    asset.type === 'video' ||
+    asset.type === 'pairedVideo' ||
+    asset.mimeType?.startsWith('video/')
+  ) {
     return 'video';
   }
-  if (asset.type === 'image' || asset.mimeType?.startsWith('image/')) {
+  if (
+    asset.type === 'image' ||
+    asset.type === 'livePhoto' ||
+    asset.mimeType?.startsWith('image/')
+  ) {
     return 'photo';
   }
   return 'other';

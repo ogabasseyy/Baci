@@ -63,6 +63,29 @@ describe('selectSwapMedia', () => {
     });
   });
 
+  it('treats livePhoto and pairedVideo assets as photos and videos even without a MIME type', () => {
+    expect(
+      selectSwapMedia([{ uri: 'file:///live.heic', type: 'livePhoto' }])
+    ).toMatchObject({
+      ok: true,
+      media: { kind: 'photos', photos: [{ uri: 'file:///live.heic' }] },
+      label: '1 photo selected',
+    });
+    expect(
+      selectSwapMedia([
+        { uri: 'file:///paired.mov', type: 'pairedVideo', duration: 3000 },
+      ])
+    ).toMatchObject({
+      ok: true,
+      media: {
+        kind: 'video',
+        uri: 'file:///paired.mov',
+        durationMs: 3000,
+      },
+      label: 'Video selected',
+    });
+  });
+
   it('refuses more than six photos', () => {
     const photos = Array.from({ length: 7 }, (_, i) => photo(`p${i}`));
 

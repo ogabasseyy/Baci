@@ -1,55 +1,97 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import {
   buildSwapStills,
+  SWAP_STILLS_MAX_BYTES,
   UNREADABLE_PHOTO_MESSAGE,
   UNREADABLE_VIDEO_MESSAGE,
+  UPLOAD_TOO_LARGE_MESSAGE,
 } from './build-swap-stills';
 
-type Resize = { resize: { width?: number; height?: number } };
+type SaveOptions = { compress: number; format: string };
+type SavedImage = { uri: string; width: number; height: number };
 
-const mockManipulateAsync =
+const mockResize =
+  jest.fn<(size: { width?: number; height?: number }) => void>();
+const mockSaveAsync =
+  jest.fn<(source: unknown, options: SaveOptions) => Promise<SavedImage>>();
+const mockContextRelease = jest.fn<() => void>();
+const mockRenderRelease = jest.fn<() => void>();
+const mockManipulate = jest.fn<(source: unknown) => void>();
+
+const mockCreateVideoPlayer = jest.fn<(uri: string) => void>();
+const mockGenerateThumbnailsAsync =
   jest.fn<
     (
       uri: string,
-      actions: Resize[],
-      options: { compress: number; format: string }
-    ) => Promise<{ uri: string }>
+      timeSec: number
+    ) => Promise<Array<{ width: number; height: number; release?: () => void }>>
   >();
-const mockGetThumbnailAsync =
-  jest.fn<
-    (
-      uri: string,
-      options: { time: number; quality: number }
-    ) => Promise<{ uri: string; width: number; height: number }>
-  >();
+const mockPlayerRelease = jest.fn<() => void>();
+const mockThumbnailRelease = jest.fn<() => void>();
+const mockGetFileSize = jest.fn<(uri: string) => number>();
 
 jest.mock('expo-image-manipulator', () => ({
-  manipulateAsync: (
-    uri: string,
-    actions: Resize[],
-    options: { compress: number; format: string }
-  ) => mockManipulateAsync(uri, actions, options),
+  ImageManipulator: {
+    manipulate: (source: unknown) => {
+      mockManipulate(source);
+      const context = {
+        resize: (size: { width?: number; height?: number }) => {
+          mockResize(size);
+          return context;
+        },
+        renderAsync: async () => ({
+          saveAsync: (options: SaveOptions) => mockSaveAsync(source, options),
+          release: () => mockRenderRelease(),
+        }),
+        release: () => mockContextRelease(),
+      };
+      return context;
+    },
+  },
   SaveFormat: { JPEG: 'jpeg' },
 }));
 
-jest.mock('expo-video-thumbnails', () => ({
-  getThumbnailAsync: (
-    uri: string,
-    options: { time: number; quality: number }
-  ) => mockGetThumbnailAsync(uri, options),
+jest.mock('expo-video', () => ({
+  createVideoPlayer: (uri: string) => {
+    mockCreateVideoPlayer(uri);
+    return {
+      generateThumbnailsAsync: (timeSec: number) =>
+        mockGenerateThumbnailsAsync(uri, timeSec),
+      release: () => mockPlayerRelease(),
+    };
+  },
+}));
+
+jest.mock('expo-file-system', () => ({
+  File: class MockFile {
+    readonly size: number;
+    constructor(uri: string) {
+      this.size = mockGetFileSize(uri);
+    }
+  },
 }));
 
 describe('buildSwapStills', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockManipulateAsync.mockImplementation(async (uri) => ({
-      uri: `${uri}.small.jpg`,
-    }));
-    mockGetThumbnailAsync.mockImplementation(async (_uri, { time }) => ({
-      uri: `file:///frame-${time}.jpg`,
-      width: 1920,
-      height: 1080,
-    }));
+    mockGetFileSize.mockReturnValue(100_000);
+    mockSaveAsync.mockImplementation(async (source, options) => {
+      const label =
+        typeof source === 'string'
+          ? source
+          : `file:///thumb-${(source as { timeSec: number }).timeSec}.jpg`;
+      return {
+        uri: `${label}.q${options.compress}.jpg`,
+        width: 768,
+        height: 576,
+      };
+    });
+    mockGenerateThumbnailsAsync.mockImplementation(async (_uri, timeSec) => [
+      Object.assign(
+        { width: 1920, height: 1080, release: () => mockThumbnailRelease() },
+        { timeSec }
+      ),
+    ]);
   });
 
   it('shrinks each photo to a small JPEG, in the order picked', async () => {
@@ -62,21 +104,19 @@ describe('buildSwapStills', () => {
     });
 
     expect(stills).toEqual([
-      'file:///wide.jpg.small.jpg',
-      'file:///tall.jpg.small.jpg',
+      'file:///wide.jpg.q0.8.jpg',
+      'file:///tall.jpg.q0.8.jpg',
     ]);
-    expect(mockManipulateAsync).toHaveBeenNthCalledWith(
-      1,
-      'file:///wide.jpg',
-      [{ resize: { width: 768 } }],
-      { compress: 0.8, format: 'jpeg' }
-    );
-    expect(mockManipulateAsync).toHaveBeenNthCalledWith(
-      2,
-      'file:///tall.jpg',
-      [{ resize: { height: 768 } }],
-      { compress: 0.8, format: 'jpeg' }
-    );
+    expect(mockManipulate).toHaveBeenNthCalledWith(1, 'file:///wide.jpg');
+    expect(mockResize).toHaveBeenNthCalledWith(1, { width: 768 });
+    expect(mockManipulate).toHaveBeenNthCalledWith(2, 'file:///tall.jpg');
+    expect(mockResize).toHaveBeenNthCalledWith(2, { height: 768 });
+    expect(mockSaveAsync).toHaveBeenCalledWith('file:///wide.jpg', {
+      compress: 0.8,
+      format: 'jpeg',
+    });
+    expect(mockContextRelease).toHaveBeenCalledTimes(2);
+    expect(mockRenderRelease).toHaveBeenCalledTimes(2);
   });
 
   it('never enlarges a photo that is already small', async () => {
@@ -85,7 +125,7 @@ describe('buildSwapStills', () => {
       photos: [{ uri: 'file:///small.jpg', width: 400, height: 300 }],
     });
 
-    expect(mockManipulateAsync.mock.calls[0]?.[1]).toEqual([]);
+    expect(mockResize).not.toHaveBeenCalled();
   });
 
   it('still shrinks a photo whose size the picker did not report', async () => {
@@ -94,13 +134,11 @@ describe('buildSwapStills', () => {
       photos: [{ uri: 'file:///unknown.jpg', width: 0, height: 0 }],
     });
 
-    expect(mockManipulateAsync.mock.calls[0]?.[1]).toEqual([
-      { resize: { width: 768 } },
-    ]);
+    expect(mockResize).toHaveBeenCalledWith({ width: 768 });
   });
 
   it('reports a photo the phone cannot read', async () => {
-    mockManipulateAsync.mockRejectedValueOnce(new Error('decode failed'));
+    mockSaveAsync.mockRejectedValueOnce(new Error('decode failed'));
 
     await expect(
       buildSwapStills({
@@ -110,33 +148,37 @@ describe('buildSwapStills', () => {
     ).rejects.toThrow(UNREADABLE_PHOTO_MESSAGE);
   });
 
-  it('takes four stills spread across the video and shrinks them', async () => {
+  it('takes four stills spread across the video in seconds, shrinks them, and releases resources', async () => {
     const stills = await buildSwapStills({
       kind: 'video',
       uri: 'file:///device.mov',
       durationMs: 8000,
     });
 
+    expect(mockCreateVideoPlayer).toHaveBeenCalledWith('file:///device.mov');
     expect(
-      mockGetThumbnailAsync.mock.calls.map((call) => call[1].time)
-    ).toEqual([1000, 3000, 5000, 7000]);
+      mockGenerateThumbnailsAsync.mock.calls.map((call) => call[1])
+    ).toEqual([1, 3, 5, 7]);
     expect(stills).toEqual([
-      'file:///frame-1000.jpg.small.jpg',
-      'file:///frame-3000.jpg.small.jpg',
-      'file:///frame-5000.jpg.small.jpg',
-      'file:///frame-7000.jpg.small.jpg',
+      'file:///thumb-1.jpg.q0.8.jpg',
+      'file:///thumb-3.jpg.q0.8.jpg',
+      'file:///thumb-5.jpg.q0.8.jpg',
+      'file:///thumb-7.jpg.q0.8.jpg',
     ]);
-    expect(mockManipulateAsync).toHaveBeenCalledWith(
-      'file:///frame-1000.jpg',
-      [{ resize: { width: 768 } }],
-      { compress: 0.8, format: 'jpeg' }
-    );
+    expect(mockResize).toHaveBeenCalledWith({ width: 768 });
+    expect(mockThumbnailRelease).toHaveBeenCalledTimes(4);
+    expect(mockPlayerRelease).toHaveBeenCalledTimes(1);
   });
 
   it('keeps the stills it could take when the clip length is unknown', async () => {
-    mockGetThumbnailAsync.mockImplementation(async (_uri, { time }) => {
-      if (time > 1500) throw new Error('past the end');
-      return { uri: `file:///frame-${time}.jpg`, width: 640, height: 360 };
+    mockGenerateThumbnailsAsync.mockImplementation(async (_uri, timeSec) => {
+      if (timeSec > 1.5) throw new Error('past the end');
+      return [
+        Object.assign(
+          { width: 640, height: 360, release: () => mockThumbnailRelease() },
+          { timeSec }
+        ),
+      ];
     });
 
     const stills = await buildSwapStills({
@@ -146,13 +188,34 @@ describe('buildSwapStills', () => {
     });
 
     expect(stills).toEqual([
-      'file:///frame-0.jpg.small.jpg',
-      'file:///frame-1500.jpg.small.jpg',
+      'file:///thumb-0.jpg.q0.8.jpg',
+      'file:///thumb-1.5.jpg.q0.8.jpg',
     ]);
+    expect(mockPlayerRelease).toHaveBeenCalledTimes(1);
+  });
+
+  it('surfaces shrink failures during video still generation instead of returning partial frames', async () => {
+    mockSaveAsync
+      .mockResolvedValueOnce({
+        uri: 'file:///thumb-1.jpg.q0.8.jpg',
+        width: 768,
+        height: 432,
+      })
+      .mockRejectedValueOnce(new Error('out of memory'));
+
+    await expect(
+      buildSwapStills({
+        kind: 'video',
+        uri: 'file:///device.mov',
+        durationMs: 8000,
+      })
+    ).rejects.toThrow(UNREADABLE_VIDEO_MESSAGE);
+    expect(mockThumbnailRelease).toHaveBeenCalledTimes(2);
+    expect(mockPlayerRelease).toHaveBeenCalledTimes(1);
   });
 
   it('reports a video no still could be taken from', async () => {
-    mockGetThumbnailAsync.mockRejectedValue(new Error('unsupported'));
+    mockGenerateThumbnailsAsync.mockRejectedValue(new Error('unsupported'));
 
     await expect(
       buildSwapStills({
@@ -161,5 +224,54 @@ describe('buildSwapStills', () => {
         durationMs: 5000,
       })
     ).rejects.toThrow(UNREADABLE_VIDEO_MESSAGE);
+    expect(mockPlayerRelease).toHaveBeenCalledTimes(1);
+  });
+
+  it('downscales stills when the initial batch exceeds the upload byte budget', async () => {
+    mockGetFileSize.mockImplementation((uri) =>
+      uri.endsWith('.q0.8.jpg') ? 400_000 : 250_000
+    );
+
+    const photos = Array.from({ length: 6 }, (_, index) => ({
+      uri: `file:///p${index}.jpg`,
+      width: 4032,
+      height: 3024,
+    }));
+
+    const stills = await buildSwapStills({ kind: 'photos', photos });
+
+    expect(stills).toHaveLength(6);
+    expect(stills.every((uri) => uri.endsWith('.q0.65.jpg'))).toBe(true);
+    expect(
+      stills.reduce((sum, uri) => sum + mockGetFileSize(uri), 0)
+    ).toBeLessThanOrEqual(SWAP_STILLS_MAX_BYTES);
+  });
+
+  it('trims trailing frames if even the smallest quality tier exceeds the upload byte budget', async () => {
+    mockGetFileSize.mockReturnValue(600_000);
+
+    const photos = Array.from({ length: 5 }, (_, index) => ({
+      uri: `file:///p${index}.jpg`,
+      width: 4032,
+      height: 3024,
+    }));
+
+    const stills = await buildSwapStills({ kind: 'photos', photos });
+
+    expect(stills).toHaveLength(3);
+    expect(
+      stills.reduce((sum, uri) => sum + mockGetFileSize(uri), 0)
+    ).toBeLessThanOrEqual(SWAP_STILLS_MAX_BYTES);
+  });
+
+  it('rejects when even a single still exceeds the upload byte budget', async () => {
+    mockGetFileSize.mockReturnValue(SWAP_STILLS_MAX_BYTES + 1);
+
+    await expect(
+      buildSwapStills({
+        kind: 'photos',
+        photos: [{ uri: 'file:///huge.jpg', width: 4032, height: 3024 }],
+      })
+    ).rejects.toThrow(UPLOAD_TOO_LARGE_MESSAGE);
   });
 });

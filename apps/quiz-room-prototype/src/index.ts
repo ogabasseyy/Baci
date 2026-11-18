@@ -50,7 +50,10 @@ export type * from './batch-packer';
 export type * from './contracts';
 export type * from './control-state';
 export type * from './coordinator';
+export type * from './demo-config';
 export type * from './demo-finalizer';
+export type * from './demo-isp';
+export type * from './demo-player-routes';
 export type * from './demo-routes';
 export type * from './demo-state';
 export type * from './demo-ui';
@@ -70,6 +73,7 @@ interface WorkerEnv {
   QUIZ_TICKET_SECRET?: string;
   QUIZ_JWT_SECRET?: string;
   QUIZ_INTERNAL_COORDINATOR_SECRET?: string;
+  QUIZ_DEMO_INVITE_CODE?: string;
   QUIZ_BATCH_WORKER_JWT?: string;
   SUPABASE_URL?: string;
   SUPABASE_ANON_KEY?: string;
@@ -592,8 +596,8 @@ export class DemoStateDO extends DurableObject<WorkerEnv> {
       }
       if (url.pathname === '/internal/demo/telemetry') {
         const body = await readJsonBody<DemoTelemetryInput>(request);
-        this.engine.recordTelemetry(body, Date.now());
-        return jsonResponse({ ok: true });
+        const result = this.engine.recordTelemetry(body, Date.now());
+        return jsonResponse({ ok: true, ...result });
       }
       if (url.pathname === '/internal/demo/report') {
         return jsonResponse(this.engine.buildReport(Date.now()));
@@ -622,6 +626,7 @@ export default {
         QUIZ_TICKET_SECRET: env.QUIZ_TICKET_SECRET,
         QUIZ_JWT_SECRET: env.QUIZ_JWT_SECRET,
         QUIZ_INTERNAL_COORDINATOR_SECRET: env.QUIZ_INTERNAL_COORDINATOR_SECRET,
+        QUIZ_DEMO_INVITE_CODE: env.QUIZ_DEMO_INVITE_CODE,
         RESULT_SHARD_COUNT: env.RESULT_SHARD_COUNT,
         callDemoDo: (internalPath, body) => {
           const stub = getWeurStub(env.DEMO_STATE, DEMO_STATE_DO_NAME);

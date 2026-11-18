@@ -54,6 +54,40 @@ export const STOREFRONT_DISALLOWED_PATHS = [
   '/*?*add-to-cart=*',
 ] as const;
 
+export const COMPARE_DISALLOWED_PATHS = [
+  '/compare$',
+  '/compare/',
+  '/compare?',
+  '/*/compare$',
+  '/*/compare/',
+  '/*/compare?',
+] as const;
+
+const STANDARD_BOT_USER_AGENTS = [
+  '*',
+  'OAI-SearchBot',
+  'ChatGPT-User',
+  'Claude-User',
+  'Claude-SearchBot',
+  'PerplexityBot',
+] as const;
+
+const COMPARE_RESTRICTED_BOT_USER_AGENTS = [
+  'Bytespider',
+  'ClaudeBot',
+  'GPTBot',
+  'CCBot',
+  'PetalBot',
+  'SemrushBot',
+  'AhrefsBot',
+  'MJ12bot',
+  'DotBot',
+  'Google-Extended',
+  'anthropic-ai',
+  'cohere-ai',
+  'FacebookBot',
+] as const;
+
 function parseHostHeader(hostHeader: string) {
   try {
     const parsedHost = new URL(`http://${hostHeader}`);
@@ -150,86 +184,23 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
           : []),
       ];
 
+  const compareBotDisallowedPaths = [
+    ...disallowedPaths,
+    ...COMPARE_DISALLOWED_PATHS,
+  ];
+
   return {
     rules: [
-      // Default rules for all crawlers
-      {
-        userAgent: '*',
+      ...STANDARD_BOT_USER_AGENTS.map((userAgent) => ({
+        userAgent,
         allow: '/',
         disallow: disallowedPaths,
-      },
-      // OpenAI ChatGPT Search Bot - allow for AI search visibility
-      {
-        userAgent: 'OAI-SearchBot',
+      })),
+      ...COMPARE_RESTRICTED_BOT_USER_AGENTS.map((userAgent) => ({
+        userAgent,
         allow: '/',
-        disallow: disallowedPaths,
-      },
-      // OpenAI ChatGPT User Agent - allow for real-time queries
-      {
-        userAgent: 'ChatGPT-User',
-        allow: '/',
-        disallow: disallowedPaths,
-      },
-      // OpenAI GPTBot - allow for training (opt-in)
-      {
-        userAgent: 'GPTBot',
-        allow: '/',
-        disallow: disallowedPaths,
-      },
-      // Anthropic Claude Bot
-      {
-        userAgent: 'ClaudeBot',
-        allow: '/',
-        disallow: disallowedPaths,
-      },
-      // Anthropic Claude user-requested browsing
-      {
-        userAgent: 'Claude-User',
-        allow: '/',
-        disallow: disallowedPaths,
-      },
-      // Anthropic Claude search indexing
-      {
-        userAgent: 'Claude-SearchBot',
-        allow: '/',
-        disallow: disallowedPaths,
-      },
-      // Anthropic Claude Web
-      {
-        userAgent: 'anthropic-ai',
-        allow: '/',
-        disallow: disallowedPaths,
-      },
-      // Google Gemini / Bard
-      {
-        userAgent: 'Google-Extended',
-        allow: '/',
-        disallow: disallowedPaths,
-      },
-      // Perplexity AI
-      {
-        userAgent: 'PerplexityBot',
-        allow: '/',
-        disallow: disallowedPaths,
-      },
-      // Cohere AI
-      {
-        userAgent: 'cohere-ai',
-        allow: '/',
-        disallow: disallowedPaths,
-      },
-      // Meta AI
-      {
-        userAgent: 'FacebookBot',
-        allow: '/',
-        disallow: disallowedPaths,
-      },
-      // Common AI research crawlers
-      {
-        userAgent: 'CCBot',
-        allow: '/',
-        disallow: disallowedPaths,
-      },
+        disallow: compareBotDisallowedPaths,
+      })),
     ],
     sitemap,
   };

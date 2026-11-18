@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-18T15:38:34+00:00",
-  "source_revision": "ef44dc0affb739c269e2ba9afaf410c889e7faea",
-  "evidence_digest": "6e7f2ffc88e9dc0541cf12c0dae1c54db300a688ac5dce5aff912f012c524162",
-  "claims_digest": "0a64c91e75438c3ea688cb492cad69b447e90892af7ccf67326ec2a1cc74e499",
-  "review_scope": "Source evidence only. Preserves current main’s OAuth, cart retention and notices, payment reconciliation, merchant protocols and Oxygen pilot boundaries. Full-code storefront MCP remains disabled by default. Owner approval, evidence and public-verification schemas retain their existing validation. Direct local admission, source adoption, rollback and simulated commerce tests cover authority boundaries. Hosted qualification and activation remain separate. Re-reviewed the builder production integration, fixed runner admission, sandboxed preview delivery, and runner qualification after syncing main. Contabo component qualification does not establish activation or a live ChatGPT flow.",
+  "reviewed_at": "2026-11-18T16:15:38+00:00",
+  "source_revision": "62b8f66db9a69661d3f4acb0625cd4d15a908411",
+  "evidence_digest": "6ece38f854e82958ab05bc30d7df27d588331b6e2f418ffeff3e77b5dff64112",
+  "claims_digest": "69ceff1973bedc1343283e54c88b2b92ec4b649d803dcbd4db49a5d4a118deb2",
+  "review_scope": "Source evidence only. Preserves current main’s OAuth, cart retention and notices, payment reconciliation, merchant protocols and Oxygen pilot boundaries. Full-code storefront MCP remains disabled by default. Owner approval, evidence and public-verification schemas retain their existing validation. Direct local admission, source adoption, rollback and simulated commerce tests cover authority boundaries. Hosted qualification and activation remain separate.",
   "capabilities": [
     {
       "id": "payments",
@@ -148,12 +148,29 @@
       "id": "followups",
       "title": "Customer follow-up workflows",
       "status": "code_evidenced",
-      "claim": "Baci mobile-admin implements a customer follow-up queue for failed and stale unpaid checkouts and related order follow-up actions.",
-      "limitations": "This is an operational queue, not evidence of customer groups, full CRM segmentation or guaranteed recovery. Query bounds and contact permissions apply.",
+      "claim": "Baci mobile-admin implements a customer follow-up queue for failed and stale unpaid checkouts, including categorized Oxygen applications, with related order follow-up actions.",
+      "limitations": "This is an operational queue, not automatic customer outreach or evidence of full CRM segmentation or guaranteed recovery. Query bounds and contact permissions apply; Oxygen availability and rollout remain separately controlled.",
       "source_refs": [
         "apps/mobile-admin/components/customers/FollowUpQueueList.tsx",
         "apps/mobile-admin/hooks/useFollowUpQueue.ts",
-        "apps/mobile-admin/hooks/useFailedOrders.ts"
+        "apps/mobile-admin/hooks/useFailedOrders.ts",
+        "apps/mobile-admin/hooks/useOxygenFollowUps.ts",
+        "apps/mobile-admin/hooks/fetchOxygenFollowUps.ts",
+        "apps/mobile-admin/components/customers/FollowUpOrderCard.tsx",
+        "apps/mobile-admin/lib/follow-up-status.ts",
+        "apps/mobile-admin/app/(admin)/(tabs)/customers.tsx",
+        "supabase/migrations/20261117190000_oxygen_follow_up.sql",
+        "supabase/migrations/20261117190100_oxygen_follow_up_recovery_guards.sql",
+        "supabase/migrations/20261117190200_oxygen_follow_up_fair_queue.sql",
+        "supabase/migrations/20261117185800_oxygen_follow_up_index_retry.sql",
+        "supabase/migrations/20261117190300_oxygen_follow_up_activation_state.sql",
+        "supabase/migrations/20261117190400_oxygen_follow_up_reconciled_approval.sql",
+        "supabase/migrations/20261117190500_oxygen_follow_up_terminal_outcomes.sql",
+        "supabase/migrations/20261118141000_oxygen_follow_up_failed_orphans.sql",
+        "supabase/migrations/20261118154500_oxygen_follow_up_eligibility_capacity.sql",
+        "apps/mobile-admin/schemas/oxygen-follow-up.ts",
+        "apps/mobile-admin/lib/customers-failed-orders.ts",
+        "apps/mobile-admin/app/(admin)/(tabs)/_layout.tsx"
       ]
     },
     {

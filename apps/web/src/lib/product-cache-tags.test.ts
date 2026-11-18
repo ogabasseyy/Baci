@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildProductCanonicalPreflightCacheTagHeader,
+  buildProductCanonicalRedirectCacheTags,
+  buildProductDetailsCacheTags,
+  buildProductLcpHintCacheTags,
+  buildProductLegacyRedirectCacheTags,
+  buildStorefrontPdpCoreCacheTags,
+  getProductCanonicalRedirectCacheTag,
+  getProductDetailsCacheTag,
+  getProductLegacyRedirectCacheTag,
   getProductScopedCacheTag,
   getProductSlugSetCacheTag,
 } from '@/lib/product-cache-tags';
@@ -54,5 +63,69 @@ describe('getProductSlugSetCacheTag', () => {
 
     expect(tag).not.toContain(',');
     expect(tag.length).toBeLessThanOrEqual(256);
+  });
+});
+
+describe('merchant-scoped product detail and redirect cache tag builders', () => {
+  it('builds consistent merchant-scoped tag names', () => {
+    expect(getProductDetailsCacheTag('merchant-123')).toBe(
+      'product-details-merchant-123'
+    );
+    expect(getProductCanonicalRedirectCacheTag('merchant-123')).toBe(
+      'product-canonical-redirect-merchant-123'
+    );
+    expect(getProductLegacyRedirectCacheTag('merchant-123')).toBe(
+      'product-legacy-redirect-merchant-123'
+    );
+  });
+
+  it('builds shared cache tag arrays for PDP, LCP, canonical, and legacy redirect lookups', () => {
+    expect(
+      buildStorefrontPdpCoreCacheTags('merchant-123', 'iphone-16-pro')
+    ).toEqual([
+      'product',
+      'product-details',
+      'product-details-merchant-123',
+      'product-lcp-hint',
+      'products-merchant-123',
+      'categories-merchant-123',
+      'product-merchant-123-iphone-16-pro',
+    ]);
+    expect(
+      buildProductLcpHintCacheTags('merchant-123', 'iphone-16-pro')
+    ).toEqual([
+      'product',
+      'product-lcp-hint',
+      'products-merchant-123',
+      'product-merchant-123-iphone-16-pro',
+    ]);
+    expect(
+      buildProductDetailsCacheTags('merchant-123', 'iphone-16-pro')
+    ).toEqual([
+      'product',
+      'product-details',
+      'product-details-merchant-123',
+      'product-merchant-123-iphone-16-pro',
+    ]);
+    expect(
+      buildProductCanonicalRedirectCacheTags('merchant-123', 'iphone-16-pro')
+    ).toEqual([
+      'product',
+      'product-canonical-redirect',
+      'product-canonical-redirect-merchant-123',
+      'product-merchant-123-iphone-16-pro',
+      'product-canonical-redirect-merchant-123-iphone-16-pro',
+    ]);
+    expect(
+      buildProductLegacyRedirectCacheTags('merchant-123', 'iphone-16-pro')
+    ).toEqual([
+      'product',
+      'product-legacy-redirect',
+      'product-legacy-redirect-merchant-123',
+      'product-legacy-redirect-merchant-123-iphone-16-pro',
+    ]);
+    expect(buildProductCanonicalPreflightCacheTagHeader('merchant-123')).toBe(
+      'product-slug-set-merchant-123,product-canonical-redirect,product-canonical-redirect-merchant-123'
+    );
   });
 });

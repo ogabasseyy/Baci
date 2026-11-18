@@ -1,3 +1,5 @@
+import { normaliseMonnifyWording } from './monnify-text-normalise';
+
 /**
  * Wording that talks about what happened to a vend, or about the service
  * being unavailable: such an answer may come after a vend was handed to the
@@ -29,5 +31,8 @@ export function isMonnifyVendOutcomeText(
   }
   // One match on the normalised text only, so a hyphenated negation
   // ("not-delivered") is read as negated, not as a bare "delivered".
-  return MONNIFY_VEND_OUTCOME_PATTERN.test(text.replace(/[_-]+/g, ' '));
+  return MONNIFY_VEND_OUTCOME_PATTERN.test(
+    // JSON keys ("requestSuccessful":) are labels, not outcome wording.
+    normaliseMonnifyWording(text.replace(/"[^"]*"\s*:/g, ' '))
+  );
 }

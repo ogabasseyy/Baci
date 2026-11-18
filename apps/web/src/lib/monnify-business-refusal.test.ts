@@ -74,3 +74,19 @@ describe('bugfix: login wording in a business envelope never goes to Kuda', () =
     expect(classify({ responseCode: '01', responseMessage })).toBe(false);
   });
 });
+
+describe('bugfix: machine-style auth codes in a business envelope', () => {
+  it.each([
+    'INVALID_TOKEN',
+    'AUTHENTICATION_FAILED',
+    'invalidToken',
+  ])('rules out %s', (reason) => {
+    expect(
+      classify({
+        responseCode: '01',
+        responseMessage: 'INSUFFICIENT_WALLET_BALANCE',
+        responseBody: { reason },
+      })
+    ).toBe(false);
+  });
+});

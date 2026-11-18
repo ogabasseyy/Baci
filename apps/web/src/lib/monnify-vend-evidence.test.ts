@@ -167,3 +167,12 @@ describe('bugfix: numeric vend-specific statuses are evidence', () => {
     expect(hasMonnifyVendEvidence(answer)).toBe(false);
   });
 });
+
+describe('bugfix: boolean-like status strings are not vend evidence', () => {
+  it.each([
+    { responseBody: { status: 'false' } },
+    { status: 'null' },
+  ])('sees none in %j', (answer) => {
+    expect(hasMonnifyVendEvidence(answer)).toBe(false);
+  });
+});

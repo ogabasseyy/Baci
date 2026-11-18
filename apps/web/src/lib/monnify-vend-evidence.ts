@@ -109,6 +109,10 @@ function isEvidenceValue(key: string, value: unknown): boolean {
     if (typeof value !== 'string') {
       return false;
     }
+    // A boolean-like string ("false", "null", "no") says nothing about a vend.
+    if (/^\s*(?:false|null|no|n)\s*$/i.test(value)) {
+      return false;
+    }
     if (/^\s*\d+\s*$/.test(value)) {
       return !GENERIC_STATUS_KEY.test(key);
     }

@@ -76,3 +76,11 @@ describe('isMonnifyVendOutcomeText', () => {
     expect(isMonnifyVendOutcomeText(text)).toBe(false);
   });
 });
+
+describe('bugfix: camel-case outcome tokens', () => {
+  it('flags "vendInProgress: insufficient wallet balance"', () => {
+    expect(
+      isMonnifyVendOutcomeText('vendInProgress: insufficient wallet balance')
+    ).toBe(true);
+  });
+});

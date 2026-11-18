@@ -35,3 +35,11 @@ describe('isMonnifyDuplicateReferenceText', () => {
     expect(isMonnifyDuplicateReferenceText(text)).toBe(false);
   });
 });
+
+describe('bugfix: camel-case duplicate codes', () => {
+  it('flags "referenceAlreadyExists"', () => {
+    expect(isMonnifyDuplicateReferenceText('referenceAlreadyExists')).toBe(
+      true
+    );
+  });
+});

@@ -2,6 +2,7 @@ import { joinMonnifyAnswerStrings } from './monnify-answer-strings';
 import { hasMonnifyDuplicateFlag } from './monnify-duplicate-flag';
 import { isMonnifyDuplicateReferenceText } from './monnify-duplicate-reference';
 import { hasMonnifyNonDefinitiveCode } from './monnify-non-definitive-code';
+import { normaliseMonnifyWording } from './monnify-text-normalise';
 import { isMonnifyUnexpectedErrorCode } from './monnify-unexpected-error';
 import { reportsMonnifyUnexpectedError } from './monnify-unexpected-error-text';
 import { hasMonnifyVendEvidence } from './monnify-vend-evidence';
@@ -48,7 +49,7 @@ export function isMonnifyDefiniteBusinessRefusal({
     !hasMonnifyDuplicateFlag(envelope) &&
     !isMonnifyDuplicateReferenceText(wording) &&
     !isMonnifyVendOutcomeText(wording) &&
-    !AUTH_WORDING.test(wording) &&
+    !AUTH_WORDING.test(normaliseMonnifyWording(wording)) &&
     isMonnifyKnownVendRefusalText(wording)
   );
 }

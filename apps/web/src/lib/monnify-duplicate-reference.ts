@@ -1,3 +1,5 @@
+import { normaliseMonnifyWording } from './monnify-text-normalise';
+
 /**
  * Duplicate-specific Monnify wording: a duplicate, a reference or vend
  * reference already used / existing / in use, an idempotency clash, or a
@@ -18,6 +20,6 @@ export function isMonnifyDuplicateReferenceText(
   // REFERENCE_ALREADY_EXISTS or TRANSACTION-ALREADY-PROCESSED match.
   return (
     !!text &&
-    MONNIFY_DUPLICATE_REFERENCE_PATTERN.test(text.replace(/[_-]+/g, ' '))
+    MONNIFY_DUPLICATE_REFERENCE_PATTERN.test(normaliseMonnifyWording(text))
   );
 }

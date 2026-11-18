@@ -1,3 +1,5 @@
+import { normaliseMonnifyWording } from './monnify-text-normalise';
+
 /**
  * Monnify answers that can only come before a vend is attempted: the
  * request's amount check (the production error behind #2612) and Baci's
@@ -15,6 +17,6 @@ export function isMonnifyKnownVendRefusalText(
 ): boolean {
   // "_" and "-" read as spaces, so INSUFFICIENT_WALLET_BALANCE matches.
   return (
-    !!text && MONNIFY_KNOWN_REFUSAL_PATTERN.test(text.replace(/[_-]+/g, ' '))
+    !!text && MONNIFY_KNOWN_REFUSAL_PATTERN.test(normaliseMonnifyWording(text))
   );
 }

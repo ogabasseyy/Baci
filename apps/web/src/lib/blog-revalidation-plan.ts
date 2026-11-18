@@ -9,6 +9,7 @@ import {
   getBlogListingStatusCacheTag,
   getBlogPostsMerchantCacheTag,
   getBlogRssMerchantCacheTag,
+  getBlogRssMerchantIdCacheTag,
 } from '@/lib/tenant-cache-tags';
 
 export interface BlogRevalidationOptions {
@@ -126,10 +127,11 @@ export function buildBlogRevalidationPlan(
 
   if (hasScope) {
     if (merchantId) {
-      tags.add(getBlogPostsMerchantCacheTag(merchantId));
-      tags.add(getBlogCategoriesMerchantCacheTag(merchantId));
-      tags.add(getBlogContentLinksCacheTag(merchantId));
-      tags.add(getBlogRssMerchantCacheTag(merchantId));
+      const normalizedMerchantIdLower = merchantId.toLowerCase();
+      tags.add(getBlogPostsMerchantCacheTag(normalizedMerchantIdLower));
+      tags.add(getBlogCategoriesMerchantCacheTag(normalizedMerchantIdLower));
+      tags.add(getBlogContentLinksCacheTag(normalizedMerchantIdLower));
+      tags.add(getBlogRssMerchantIdCacheTag(normalizedMerchantIdLower));
     } else {
       // Legacy callers without a merchantId cannot compute merchant-ID-keyed
       // tags (e.g. getCachedBlogPostEnrichment, getCachedFeedByMerchantId), so

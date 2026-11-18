@@ -558,7 +558,7 @@ describe('cache-revalidation utilities', () => {
         '/api/blog/feed/test-merchant'
       );
       expect(mockRevalidateTag).toHaveBeenCalledWith(
-        'blog-rss-test-merchant',
+        'blog-rss-slug-test-merchant',
         'merchant'
       );
       expect(mockRevalidateTag).toHaveBeenCalledWith(

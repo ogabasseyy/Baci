@@ -117,11 +117,14 @@ export function buildResolvedMerchantScopeTags({
 }
 
 export function getBlogPostsMerchantCacheTag(merchantId: string): string {
-  return formatBoundedCacheTag('blog-posts', merchantId.trim());
+  return formatBoundedCacheTag('blog-posts', merchantId.trim().toLowerCase());
 }
 
 export function getBlogCategoriesMerchantCacheTag(merchantId: string): string {
-  return formatBoundedCacheTag('blog-categories', merchantId.trim());
+  return formatBoundedCacheTag(
+    'blog-categories',
+    merchantId.trim().toLowerCase()
+  );
 }
 
 export function getBlogIdentifierCacheTag(identifier: string): string {
@@ -131,12 +134,14 @@ export function getBlogIdentifierCacheTag(identifier: string): string {
   );
 }
 
-export function getBlogRssMerchantCacheTag(
-  identifierOrMerchantId: string
-): string {
+export function getBlogRssMerchantIdCacheTag(merchantId: string): string {
+  return formatBoundedCacheTag('blog-rss-id', merchantId.trim().toLowerCase());
+}
+
+export function getBlogRssMerchantCacheTag(identifier: string): string {
   return formatBoundedCacheTag(
-    'blog-rss',
-    identifierOrMerchantId.trim().toLowerCase()
+    'blog-rss-slug',
+    identifier.trim().toLowerCase()
   );
 }
 
@@ -155,7 +160,7 @@ export function getBlogCategoryHubCacheTag(identifier: string): string {
 }
 
 export function getPageConfigMerchantCacheTag(merchantId: string): string {
-  return formatBoundedCacheTag('page-config', merchantId.trim());
+  return formatBoundedCacheTag('page-config', merchantId.trim().toLowerCase());
 }
 
 export function getPageConfigSlugCacheTag(
@@ -164,6 +169,6 @@ export function getPageConfigSlugCacheTag(
 ): string {
   return formatBoundedCacheTag(
     'page-config',
-    `${merchantId.trim()}-${pageSlug.trim()}`
+    `${merchantId.trim().toLowerCase()}-${pageSlug.trim()}`
   );
 }

@@ -4,19 +4,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co';
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'test-anon-key';
 
-const {
-  mockCacheLife,
-  mockCacheTag,
-  mockFeedAddItem,
-  mockFeedConstructor,
-  mockFrom,
-} = vi.hoisted(() => ({
-  mockCacheLife: vi.fn(),
-  mockCacheTag: vi.fn(),
-  mockFeedAddItem: vi.fn(),
-  mockFeedConstructor: vi.fn(),
-  mockFrom: vi.fn(),
-}));
+const { mockFeedAddItem, mockFeedConstructor, mockFrom, mockUnstableCache } =
+  vi.hoisted(() => ({
+    mockFeedAddItem: vi.fn(),
+    mockFeedConstructor: vi.fn(),
+    mockFrom: vi.fn(),
+    mockUnstableCache: vi.fn((fn: (...args: unknown[]) => unknown) => fn),
+  }));
 
 type QueryResult<T> = { data: T | null; error: { message: string } | null };
 type MerchantRow = {
@@ -188,8 +182,11 @@ vi.mock('feed', () => ({
 }));
 
 vi.mock('next/cache', () => ({
-  cacheLife: (...args: unknown[]) => mockCacheLife(...args),
-  cacheTag: (...args: unknown[]) => mockCacheTag(...args),
+  unstable_cache: (
+    fn: (...args: unknown[]) => unknown,
+    keyParts?: string[],
+    options?: unknown
+  ) => mockUnstableCache(fn, keyParts, options),
 }));
 
 vi.mock('@/env', () => ({
@@ -238,12 +235,27 @@ describe('GET /api/blog/feed/[merchantSlug]', () => {
     expect(postQuery.order).toHaveBeenNthCalledWith(2, 'id', {
       ascending: false,
     });
-    expect(mockCacheLife).toHaveBeenCalledWith('blog');
-    expect(mockCacheTag).toHaveBeenCalledWith(
-      'blog-posts',
-      'blog-rss-feed',
-      `blog-posts-${merchant.id}`,
-      `blog-rss-${merchant.id}`
+    expect(mockUnstableCache).toHaveBeenCalledWith(
+      expect.any(Function),
+      ['blog-feed-by-merchant-id', merchant.id],
+      {
+        revalidate: 3600,
+        tags: [
+          'blog-posts',
+          'blog-rss-feed',
+          `blog-posts-${merchant.id}`,
+          `blog-rss-id-${merchant.id}`,
+        ],
+      }
+    );
+    expect(response.headers.get('Vercel-Cache-Tag')).toBe(
+      [
+        'blog-posts',
+        'blog-rss-feed',
+        `blog-posts-${merchant.id}`,
+        `blog-rss-id-${merchant.id}`,
+        'blog-rss-slug-ogabassey',
+      ].join(',')
     );
   });
 
@@ -989,15 +1001,43 @@ describe('GET /api/blog/feed/[merchantSlug]', () => {
     );
   });
 
-  it('uses remote cache directive so RSS tag invalidations propagate across instances', async () => {
-    const { readFileSync } = await import('node:fs');
-    const { dirname, join } = await import('node:path');
-    const { fileURLToPath } = await import('node:url');
-    const routeSource = readFileSync(
-      join(dirname(fileURLToPath(import.meta.url)), 'route.ts'),
-      'utf8'
+  it('memoizes unstable_cache wrappers per merchant id and emits identifier-scoped Vercel-Cache-Tag for custom domains', async () => {
+    mockUnstableCache.mockClear();
+    enqueueCustomDomainFeedScenario();
+
+    const response = await GET(
+      new NextRequest(
+        'https://shop.example.com/api/blog/feed/Shop.Example.COM'
+      ),
+      { params: Promise.resolve({ merchantSlug: 'Shop.Example.COM' }) }
     );
 
-    expect(routeSource).toContain("'use cache: remote';");
+    expect(response.status).toBe(200);
+    // Reuse the memoized wrapper created for merchant-1 instead of reallocating per request.
+    expect(mockUnstableCache).not.toHaveBeenCalled();
+    expect(response.headers.get('Vercel-Cache-Tag')).toBe(
+      [
+        'blog-posts',
+        'blog-rss-feed',
+        `blog-posts-${merchant.id}`,
+        `blog-rss-id-${merchant.id}`,
+        'blog-rss-slug-shop.example.com',
+      ].join(',')
+    );
+  });
+
+  it('returns 404 via thrown FeedMerchantNotFoundError when the cached merchant lookup misses', async () => {
+    enqueueTable(
+      'merchants',
+      createMerchantQuery({ data: { id: merchant.id }, error: null })
+    );
+    enqueueTable('merchants', createMerchantQuery({ data: null, error: null }));
+
+    const response = await GET(new NextRequest('https://usebaci.com/feed'), {
+      params: Promise.resolve({ merchantSlug: 'ogabassey' }),
+    });
+
+    expect(response.status).toBe(404);
+    expect(await response.text()).toBe('Blog feed not found');
   });
 });

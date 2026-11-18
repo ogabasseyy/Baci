@@ -8,6 +8,7 @@ import {
   getBlogListingStatusCacheTag,
   getBlogPostsMerchantCacheTag,
   getBlogRssMerchantCacheTag,
+  getBlogRssMerchantIdCacheTag,
   getPageConfigMerchantCacheTag,
   getPageConfigSlugCacheTag,
 } from './tenant-cache-tags';
@@ -57,14 +58,21 @@ describe('tenant-cache-tags', () => {
     expect(getBlogIdentifierCacheTag('Shop.Example.COM')).toBe(
       'blog-identifier-shop.example.com'
     );
-    expect(getBlogRssMerchantCacheTag('Ogabassey')).toBe('blog-rss-ogabassey');
+    expect(getBlogRssMerchantCacheTag('Ogabassey')).toBe(
+      'blog-rss-slug-ogabassey'
+    );
+    expect(getBlogRssMerchantIdCacheTag('M-1')).toBe('blog-rss-id-m-1');
+    expect(getBlogPostsMerchantCacheTag('M-1')).toBe('blog-posts-m-1');
+    expect(getBlogCategoriesMerchantCacheTag('M-1')).toBe(
+      'blog-categories-m-1'
+    );
     expect(getBlogListingStatusCacheTag('Ogabassey')).toBe(
       'blog-listing-status-ogabassey'
     );
     expect(getBlogCategoryHubCacheTag('Ogabassey')).toBe(
       'blog-category-hub-ogabassey'
     );
-    expect(getPageConfigMerchantCacheTag('m-1')).toBe('page-config-m-1');
+    expect(getPageConfigMerchantCacheTag('M-1')).toBe('page-config-m-1');
     expect(getPageConfigSlugCacheTag('m-1', 'about-us')).toBe(
       'page-config-m-1-about-us'
     );

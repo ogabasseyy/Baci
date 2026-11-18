@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { cacheLife, cacheTag } from 'next/cache';
+import { unstable_cache } from 'next/cache';
 import { type NextRequest, NextResponse } from 'next/server';
 import { getAppUrl, getSupabaseAnonKey, getSupabaseUrl } from '@/env';
 import { normalizeBlogFeedPostForFilter } from '@/lib/blog-feed-normalize';
@@ -8,6 +8,7 @@ import { getCurrentSlugForAlias } from '@/lib/slug-alias-cache';
 import {
   getBlogPostsMerchantCacheTag,
   getBlogRssMerchantCacheTag,
+  getBlogRssMerchantIdCacheTag,
 } from '@/lib/tenant-cache-tags';
 import {
   type BlogFeedMerchant,
@@ -258,34 +259,77 @@ async function fetchPublicFeedPosts(
   return publicPosts.slice(0, RSS_PUBLIC_POST_LIMIT);
 }
 
-// Cache RSS feed for 1 hour by canonical merchant id using module-scope
-// `'use cache: remote'` so tenant-tag invalidations propagate across instances,
-// carrying both tenant-scoped tags and legacy global tags.
-async function getCachedFeedByMerchantId(merchantId: string) {
-  'use cache: remote';
-  cacheLife('blog');
-  cacheTag(
-    'blog-posts',
-    'blog-rss-feed',
-    getBlogPostsMerchantCacheTag(merchantId),
-    getBlogRssMerchantCacheTag(merchantId)
+class FeedMerchantNotFoundError extends Error {}
+
+interface CachedMerchantFeedData {
+  merchant: BlogFeedMerchant;
+  posts: BlogFeedPost[];
+}
+
+const MAX_CACHED_FEED_WRAPPERS = 256;
+const cachedFeedFetchers = new Map<
+  string,
+  () => Promise<CachedMerchantFeedData>
+>();
+
+// Memoize `unstable_cache` wrappers per merchant ID in a bounded LRU map:
+// - uses Vercel's shared Data Cache (propagating `revalidateTag` across
+//   instances without hitting the 1 MiB remote-cache-handler item limit),
+// - bounds module-scope wrapper allocation to `MAX_CACHED_FEED_WRAPPERS`,
+// - throws `FeedMerchantNotFoundError` when missing so 404s are never cached.
+function getCachedFeedByMerchantId(
+  merchantId: string
+): Promise<CachedMerchantFeedData> {
+  const normalizedMerchantId = merchantId.trim().toLowerCase();
+  const existing = cachedFeedFetchers.get(normalizedMerchantId);
+  if (existing) {
+    cachedFeedFetchers.delete(normalizedMerchantId);
+    cachedFeedFetchers.set(normalizedMerchantId, existing);
+    return existing();
+  }
+
+  const fetcher = unstable_cache(
+    async () => {
+      const supabase = getPublicClient();
+      if (!supabase) {
+        throw new Error('Supabase not configured');
+      }
+
+      const merchant = await getMerchantByColumn(
+        supabase,
+        'id',
+        normalizedMerchantId
+      );
+
+      if (!merchant) {
+        throw new FeedMerchantNotFoundError('Blog feed merchant not found');
+      }
+
+      return {
+        merchant,
+        posts: await fetchPublicFeedPosts(supabase, merchant.id),
+      };
+    },
+    ['blog-feed-by-merchant-id', normalizedMerchantId],
+    {
+      revalidate: 3600,
+      tags: [
+        'blog-posts',
+        'blog-rss-feed',
+        getBlogPostsMerchantCacheTag(normalizedMerchantId),
+        getBlogRssMerchantIdCacheTag(normalizedMerchantId),
+      ],
+    }
   );
 
-  const supabase = getPublicClient();
-  if (!supabase) {
-    throw new Error('Supabase not configured');
+  if (cachedFeedFetchers.size >= MAX_CACHED_FEED_WRAPPERS) {
+    const oldestKey = cachedFeedFetchers.keys().next().value;
+    if (oldestKey !== undefined) {
+      cachedFeedFetchers.delete(oldestKey);
+    }
   }
-
-  const merchant = await getMerchantByColumn(supabase, 'id', merchantId);
-
-  if (!merchant) {
-    return null;
-  }
-
-  return {
-    merchant,
-    posts: await fetchPublicFeedPosts(supabase, merchant.id),
-  };
+  cachedFeedFetchers.set(normalizedMerchantId, fetcher);
+  return fetcher();
 }
 
 export async function GET(_request: NextRequest, { params }: RouteParams) {
@@ -306,10 +350,14 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       return new NextResponse('Blog feed not found', { status: 404 });
     }
 
-    const data = await getCachedFeedByMerchantId(resolvedMerchant.id);
-
-    if (!data) {
-      return new NextResponse('Blog feed not found', { status: 404 });
+    let data: CachedMerchantFeedData;
+    try {
+      data = await getCachedFeedByMerchantId(resolvedMerchant.id);
+    } catch (error) {
+      if (error instanceof FeedMerchantNotFoundError) {
+        return new NextResponse('Blog feed not found', { status: 404 });
+      }
+      throw error;
     }
 
     const rss = buildBlogRssFeedXml({
@@ -318,10 +366,21 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       posts: data.posts,
     });
 
+    const edgeCacheTags = Array.from(
+      new Set([
+        'blog-posts',
+        'blog-rss-feed',
+        getBlogPostsMerchantCacheTag(resolvedMerchant.id),
+        getBlogRssMerchantIdCacheTag(resolvedMerchant.id),
+        getBlogRssMerchantCacheTag(merchantSlug),
+      ])
+    );
+
     return new NextResponse(rss, {
       headers: {
         'Content-Type': 'application/rss+xml; charset=utf-8',
         'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=7200',
+        'Vercel-Cache-Tag': edgeCacheTags.join(','),
         'X-Content-Type-Options': 'nosniff',
       },
     });

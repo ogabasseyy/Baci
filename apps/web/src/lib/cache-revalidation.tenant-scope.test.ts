@@ -251,17 +251,10 @@ describe('tenant-scoped cache revalidation', () => {
       revalidateDomains();
       revalidateDomains('');
 
-      expect(mockRevalidateTag).toHaveBeenNthCalledWith(
-        1,
-        'domains',
-        'merchant'
-      );
-      expect(mockRevalidateTag).toHaveBeenNthCalledWith(
-        2,
-        'domains',
-        'merchant'
-      );
-      expect(mockRevalidateTag).toHaveBeenCalledTimes(2);
+      expect(mockRevalidateTag.mock.calls).toEqual([
+        ['domains', 'merchant'],
+        ['domains', 'merchant'],
+      ]);
     });
 
     it('revalidates domain and merchant domain tags without busting global domains', () => {

@@ -22,9 +22,9 @@ describe('buildBlogRevalidationPlan', () => {
         'blog-posts-merchant-1',
         'blog-categories-merchant-1',
         getBlogContentLinksCacheTag('merchant-1'),
-        'blog-rss-merchant-1',
-        'blog-rss-ogabassey',
-        'blog-rss-ogabassey.com',
+        'blog-rss-id-merchant-1',
+        'blog-rss-slug-ogabassey',
+        'blog-rss-slug-ogabassey.com',
         'blog-identifier-ogabassey',
         'blog-identifier-ogabassey.com',
         'blog-listing-status-ogabassey',
@@ -46,9 +46,21 @@ describe('buildBlogRevalidationPlan', () => {
       'blog-posts-merchant-1',
       'blog-categories-merchant-1',
       getBlogContentLinksCacheTag('merchant-1'),
-      'blog-rss-merchant-1',
+      'blog-rss-id-merchant-1',
     ]);
     expect(plan.paths).toEqual([]);
+  });
+
+  it('namespaces merchant-id RSS tags separately from slug tags and lowercases merchantId', () => {
+    const plan = buildBlogRevalidationPlan({
+      merchantId: 'Ogabassey',
+      identifiers: ['other-store'],
+    });
+
+    expect(plan.tags).toContain('blog-posts-ogabassey');
+    expect(plan.tags).toContain('blog-categories-ogabassey');
+    expect(plan.tags).toContain('blog-rss-id-ogabassey');
+    expect(plan.tags).not.toContain('blog-rss-slug-ogabassey');
   });
 
   it('retains global fallback tags when identifiers are supplied without merchantId', () => {
@@ -60,7 +72,7 @@ describe('buildBlogRevalidationPlan', () => {
         'blog-rss-feed',
         'blog-content-links',
         'blog-identifier-ogabassey',
-        'blog-rss-ogabassey',
+        'blog-rss-slug-ogabassey',
         'blog-list-ogabassey-all-1',
         getBlogCacheTag('ogabassey', 'best-phone'),
       ])

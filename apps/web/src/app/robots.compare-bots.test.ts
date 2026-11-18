@@ -83,9 +83,12 @@ describe('robots() compare path bot restrictions', () => {
     const blockedPaths = [
       '/compare',
       '/compare/',
+      '/compare?sort=price',
       '/phones/compare',
+      '/phones/compare?sort=x',
       '/phones/compare/iphone-vs-samsung',
       '/ogabassey/phones/compare',
+      '/ogabassey/phones/compare?ref=x',
       '/ogabassey/phones/compare/iphone-vs-samsung',
     ];
     const allowedSiblingPaths = [

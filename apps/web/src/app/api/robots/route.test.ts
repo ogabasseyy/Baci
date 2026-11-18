@@ -84,8 +84,10 @@ describe('GET /api/robots', () => {
       expect(botBlock).toContain('Allow: /');
       expect(botBlock).toContain('Disallow: /compare$\n');
       expect(botBlock).toContain('Disallow: /compare/\n');
+      expect(botBlock).toContain('Disallow: /compare?\n');
       expect(botBlock).toContain('Disallow: /*/compare$\n');
-      expect(botBlock).toContain('Disallow: /*/compare/');
+      expect(botBlock).toContain('Disallow: /*/compare/\n');
+      expect(botBlock).toContain('Disallow: /*/compare?');
     }
   });
 

@@ -57,8 +57,10 @@ export const STOREFRONT_DISALLOWED_PATHS = [
 export const COMPARE_DISALLOWED_PATHS = [
   '/compare$',
   '/compare/',
+  '/compare?',
   '/*/compare$',
   '/*/compare/',
+  '/*/compare?',
 ] as const;
 
 const STANDARD_BOT_USER_AGENTS = [

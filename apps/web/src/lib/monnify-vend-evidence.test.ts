@@ -15,6 +15,8 @@ describe('hasMonnifyVendEvidence', () => {
     { transactionStatus: 'FAILED', message: 'Insufficient wallet balance' },
     { responseBody: { receiptNumber: 'RCPT-1' } },
     { invoice_id: 'INV-9' },
+    { responseBody: { paymentId: 'PAY-1' } },
+    { purchase_id: 'PUR-1' },
     { responseBody: { payment_status: 'PENDING' } },
     { responseBody: { status: 'UNKNOWN' } },
     { status: 'PENDING_CONFIRMATION' },

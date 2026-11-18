@@ -14,7 +14,7 @@ function normaliseKey(key: string): string {
  * Monnify keys: an unknown reference blocks Kuda instead of being missed.
  */
 const REFERENCE_LIKE_KEY =
-  /(?:reference(?:no|number|id)?|ref|(?:transaction|txn|vend|order)id|(?:receipt|invoice)(?:no|number|id)?)$/;
+  /(?:reference(?:no|number|id)?|ref|(?:transaction|txn|vend|order|payment|purchase)id|(?:receipt|invoice)(?:no|number|id)?)$/;
 
 /**
  * At the top level a bare `reference` or `requestReference` is usually an echo

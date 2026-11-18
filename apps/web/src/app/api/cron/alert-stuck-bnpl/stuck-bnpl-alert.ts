@@ -1,4 +1,4 @@
-import { formatCurrency } from '@/lib/expo-push';
+import { formatCurrency } from '@/lib/currency';
 
 export interface StuckBnplOrderRow {
   id: string;
@@ -54,6 +54,9 @@ export function buildStuckBnplAlert(
     (sum, order) => sum + (Number(order.total) || 0),
     0
   );
+  const formattedAmount = formatCurrency(totalAmount, 'NG', {
+    minimumFractionDigits: 0,
+  });
   const oldest = merchantOrders.reduce((earliest, order) => {
     const candidateTime = Date.parse(order.updated_at);
     const earliestTime = Date.parse(earliest.updated_at);
@@ -71,8 +74,8 @@ export function buildStuckBnplAlert(
     ? '⚠️ BNPL payment to confirm'
     : `⚠️ ${orderCount} BNPL payments to confirm`;
   const body = single
-    ? `Order ${orderLabel(oldest)} (${formatCurrency(totalAmount)}) went through ${provider} checkout ${describeAge(oldestAgeDays)} ago, but the payment is not confirmed yet. Check with ${provider} before you fulfil it.`
-    : `${orderCount} orders totalling ${formatCurrency(totalAmount)} went through ${provider} checkout, but the payments are not confirmed yet. Oldest: ${orderLabel(oldest)} (${describeAge(oldestAgeDays)}). Check with ${provider} before you fulfil them.`;
+    ? `Order ${orderLabel(oldest)} (${formattedAmount}) went through ${provider} checkout ${describeAge(oldestAgeDays)} ago, but the payment is not confirmed yet. Check with ${provider} before you fulfil it.`
+    : `${orderCount} orders totalling ${formattedAmount} went through ${provider} checkout, but the payments are not confirmed yet. Oldest: ${orderLabel(oldest)} (${describeAge(oldestAgeDays)}). Check with ${provider} before you fulfil them.`;
 
   return {
     title,

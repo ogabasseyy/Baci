@@ -1,8 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   buildStuckBnplAlert,
   type StuckBnplOrderRow,
 } from './stuck-bnpl-alert';
+
+// Formatting the alert must not load credential-bearing delivery modules.
+vi.mock('@/lib/expo-push', () => {
+  throw new Error('Pure BNPL alert formatting imported push delivery');
+});
 
 const NOW = new Date('2026-07-04T08:00:00.000Z');
 

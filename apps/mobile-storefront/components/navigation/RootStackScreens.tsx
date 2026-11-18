@@ -67,6 +67,12 @@ export function renderRootStackScreens({
       }}
     />,
     <Stack.Screen
+      key="oxygen-checkout"
+      name="oxygen-checkout"
+      // iOS can recognize a signature stroke as a back swipe before JS handles it.
+      options={{ gestureEnabled: false }}
+    />,
+    <Stack.Screen
       key="quiz/prize-checkout-simulation"
       name="quiz/prize-checkout-simulation"
       options={{

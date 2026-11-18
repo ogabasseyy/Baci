@@ -103,7 +103,11 @@ function isEvidenceValue(key: string, value: unknown): boolean {
     if (typeof value !== 'string') {
       return false;
     }
-    const label = value.replace(/[_-]+/g, ' ').trim();
+    // "400 Bad Request" reads as its reason phrase.
+    const label = value
+      .replace(/[_-]+/g, ' ')
+      .trim()
+      .replace(/^\d{3}\s+(?=\D)/, '');
     return /\D/.test(label) && !HTTP_STATUS_LABEL.test(label);
   }
   if (typeof value === 'string') {

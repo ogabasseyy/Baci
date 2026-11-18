@@ -63,6 +63,7 @@ describe('isMonnifyVendOutcomeText', () => {
     'not-delivered',
     'Customer validation successful',
     'Login successful',
+    'Authentication unsuccessful: invalid credentials',
     'Request accepted',
     'No airtime was delivered due to insufficient wallet balance',
     'Request could not have been processed due to insufficient wallet balance',

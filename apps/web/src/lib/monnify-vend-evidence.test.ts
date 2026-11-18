@@ -62,6 +62,7 @@ describe('hasMonnifyVendEvidence', () => {
       responseMessage: 'Insufficient balance',
     },
     { status: 'Payment Required', message: 'Insufficient wallet balance' },
+    { status: '400 Bad Request', message: 'Insufficient wallet balance' },
   ])('sees no vend evidence in %j', (envelope) => {
     expect(hasMonnifyVendEvidence(envelope)).toBe(false);
   });

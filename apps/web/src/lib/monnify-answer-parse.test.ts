@@ -38,3 +38,16 @@ describe('bugfix: repeated form fields keep every value', () => {
     ).toEqual([{ status: 'FAILED' }, { status: false }, { message: 'Low' }]);
   });
 });
+
+describe('bugfix: bracket-notation form keys read as their leaf key', () => {
+  it('parses "responseBody[transactionStatus]=FAILED"', () => {
+    expect(
+      parseMonnifyAnswer(
+        'responseBody[transactionStatus]=FAILED&message=Insufficient+wallet+balance'
+      )
+    ).toEqual({
+      transactionStatus: 'FAILED',
+      message: 'Insufficient wallet balance',
+    });
+  });
+});

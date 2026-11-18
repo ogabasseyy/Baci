@@ -1,4 +1,4 @@
-const KEY_VALUE_PAIR = /^\s*([A-Za-z_][\w.-]*)\s*[=:]\s*(.*?)\s*$/;
+const KEY_VALUE_PAIR = /^\s*([A-Za-z_][\w.[\]-]*)\s*[=:]\s*(.*?)\s*$/;
 
 function decode(value: string): string {
   try {
@@ -6,6 +6,13 @@ function decode(value: string): string {
   } catch {
     return value;
   }
+}
+
+/** "responseBody[transactionStatus]" reads as its leaf key "transactionStatus". */
+function leafKey(key: string): string {
+  const brackets = [...key.matchAll(/\[([^\]]*)\]/g)];
+  const leaf = brackets.at(-1)?.[1];
+  return leaf?.trim() ? leaf : key;
 }
 
 /** Form values "true"/"false"/"null" become real booleans/null, like JSON. */
@@ -48,7 +55,7 @@ export function parseMonnifyAnswer(body: string): unknown {
     if (!match) {
       return null;
     }
-    entries.push([decode(match[1]), coerce(decode(match[2]))]);
+    entries.push([leafKey(decode(match[1])), coerce(decode(match[2]))]);
   }
   const keys = entries.map(([key]) => key);
   // A repeated key keeps every value: the body becomes a list of one-pair

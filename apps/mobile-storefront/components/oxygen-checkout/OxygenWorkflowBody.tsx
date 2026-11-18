@@ -24,6 +24,7 @@ import {
   oxygenUnfinishedPayment,
 } from './oxygen-checkout-presentation';
 import type { OxygenFields } from './oxygen-form-utils';
+import { decideOxygenHostedNavigation } from './oxygen-hosted-navigation';
 import { defaultOxygenEquity } from './oxygen-plan';
 import { OxygenAction } from './oxygen-presentation';
 import { useOxygenEligibilityProgress } from './use-oxygen-eligibility-progress';
@@ -78,6 +79,17 @@ export function OxygenWorkflowBody({
     equity ?? defaultOxygenEquity(limits, selectedTenure) ?? 25;
   const disabled =
     !focused || busy || !snapshot.executionEnabled || Boolean(snapshot.pending);
+  const unfinishedPayment = oxygenUnfinishedPayment(snapshot);
+  const paymentUrl =
+    unfinishedPayment &&
+    capabilities &&
+    decideOxygenHostedNavigation(
+      unfinishedPayment.url,
+      'payment',
+      capabilities
+    ) === 'allow'
+      ? unfinishedPayment.url
+      : undefined;
   const {
     hosted,
     requesting,
@@ -85,12 +97,15 @@ export function OxygenWorkflowBody({
     open: setHosted,
     refresh,
     close,
+    openApprovedPayment,
+    paymentOpened,
   } = useOxygenHostedStep({
     snapshot,
     client,
     controller,
     disabled,
     ready: Boolean(capabilities),
+    paymentUrl,
   });
   const eligibilityProgress = useOxygenEligibilityProgress(
     snapshot,
@@ -99,9 +114,8 @@ export function OxygenWorkflowBody({
   );
   const initialNinRunning = useOxygenInitialNin(snapshot, controller, disabled);
   const selfieRequired = oxygenSelfieRequired(snapshot);
-  const unfinishedPayment = oxygenUnfinishedPayment(snapshot);
   const recoveryMode = oxygenRecoveryMode(snapshot);
-  const url = hosted === 'selfie' ? s.selfieUrl : unfinishedPayment?.url;
+  const url = hosted === 'selfie' ? s.selfieUrl : paymentUrl;
   const command = async (
     action:
       | 'refresh_kyc'
@@ -202,6 +216,7 @@ export function OxygenWorkflowBody({
           client={client}
           controller={controller}
           busy={busy}
+          onApproved={openApprovedPayment}
         />
       ) : null}
       {snapshot.stage === 'payment_required' ||
@@ -213,12 +228,12 @@ export function OxygenWorkflowBody({
               ? 'checkpoint'
               : snapshot.pending
                 ? 'confirming'
-                : unfinishedPayment && capabilities
+                : paymentUrl
                   ? 'ready'
                   : 'unavailable'
           }
           busy={disabled}
-          showRefresh={!snapshot.pending}
+          showRefresh={!snapshot.pending && (paymentOpened || !paymentUrl)}
           paymentComplete={s.paymentComplete}
           upfrontAmount={s.booking?.total_upfront_payment ?? undefined}
           onContinue={() => setHosted('payment')}

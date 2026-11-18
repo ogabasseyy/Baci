@@ -17,6 +17,12 @@ it('shows the confirmed upfront amount before opening Oxygen', () => {
   );
   expect(screen.getByText('Pay your upfront amount')).toBeTruthy();
   expect(screen.getByText(/52,432\.88/)).toBeTruthy();
+  expect(
+    screen.queryByRole('button', { name: 'Check payment status' })
+  ).toBeNull();
+  expect(
+    screen.queryByRole('button', { name: 'Check for an update' })
+  ).toBeNull();
   fireEvent.press(screen.getByRole('button', { name: 'Continue payment' }));
   expect(onContinue).toHaveBeenCalledTimes(1);
 });
@@ -51,6 +57,6 @@ it('shows status recovery when the hosted action is unavailable', () => {
   expect(
     screen.queryByRole('button', { name: 'Complete repayment setup' })
   ).toBeNull();
-  fireEvent.press(screen.getByRole('button', { name: 'Check for an update' }));
+  fireEvent.press(screen.getByRole('button', { name: 'Check payment status' }));
   expect(onRefresh).toHaveBeenCalledTimes(1);
 });

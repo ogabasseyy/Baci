@@ -20,16 +20,23 @@ import {
 } from './oxygen-plan';
 import { OxygenAction } from './oxygen-presentation';
 
+type OnApproved = (approval: {
+  workflowId: string;
+  bookingReference: string;
+}) => void;
+
 export function OxygenApprovalFlow({
   snapshot,
   client,
   controller,
   busy,
+  onApproved,
 }: {
   snapshot: OxygenRuntimeSnapshot;
   client: OxygenClient;
   controller: OxygenWorkflowController;
   busy: boolean;
+  onApproved?: OnApproved;
 }) {
   const terms = confirmedOxygenTerms(snapshot);
   const attempted = useRef(new Set<string>());
@@ -60,6 +67,7 @@ export function OxygenApprovalFlow({
       client={client}
       controller={controller}
       busy={busy}
+      onApproved={onApproved}
     />
   ) : (
     <View style={{ gap: 12 }}>
@@ -85,12 +93,14 @@ function Approval({
   client,
   controller,
   busy,
+  onApproved,
 }: {
   snapshot: OxygenRuntimeSnapshot;
   terms: OxygenConfirmedTerms;
   client: OxygenClient;
   controller: OxygenWorkflowController;
   busy: boolean;
+  onApproved?: OnApproved;
 }) {
   const termsKey = oxygenTermsKey(terms);
   const [reviewed, setReviewed] = useState(false);
@@ -162,6 +172,29 @@ function Approval({
       codeRequestInFlight.current = false;
     }
   }
+  async function approve(code: string) {
+    if (!canApprove || !signature) return;
+    await controller.execute(
+      { action: 'approve_booking', otp: code, accepted: true },
+      signature.file,
+      { version: snapshot.version, bookingReference: terms.reference }
+    );
+    const { snapshot: confirmed, error } = controller.getState();
+    if (
+      !error &&
+      confirmed?.workflowId === snapshot.workflowId &&
+      confirmed.version > snapshot.version &&
+      !confirmed.pending &&
+      confirmed.stage === 'payment_required' &&
+      confirmed.state.booking?.status === 'APPROVED' &&
+      confirmed.state.bookingReference === terms.reference
+    ) {
+      onApproved?.({
+        workflowId: confirmed.workflowId,
+        bookingReference: terms.reference,
+      });
+    }
+  }
   return (
     <View style={{ gap: 16 }}>
       {!reviewed ? (
@@ -210,17 +243,7 @@ function Approval({
                 confirmed={snapshot.stage === 'payment_required'}
                 sentAt={window.sentAt}
                 expiresAt={window.expiresAt}
-                onComplete={(code) => {
-                  if (canApprove && signature)
-                    void controller.execute(
-                      { action: 'approve_booking', otp: code, accepted: true },
-                      signature.file,
-                      {
-                        version: snapshot.version,
-                        bookingReference: terms.reference,
-                      }
-                    );
-                }}
+                onComplete={(code) => void approve(code)}
                 onResend={requestCode}
                 label="Approve your payment breakdown"
               />

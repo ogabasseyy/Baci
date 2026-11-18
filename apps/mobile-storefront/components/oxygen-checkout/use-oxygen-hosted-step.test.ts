@@ -119,6 +119,45 @@ it('preserves the OTP success hold before opening an existing selfie link', () =
   expect(execute).not.toHaveBeenCalled();
 });
 
+it('opens payment once after the current approval and checks its status on return', () => {
+  const { options, execute } = setup(false);
+  const bookingReference = '33333333-3333-4333-8333-333333333333';
+  const paymentUrl = 'https://payment.example/upfront';
+  const approved = {
+    ...options,
+    paymentUrl,
+    snapshot: {
+      ...snapshot,
+      stage: 'payment_required' as const,
+      state: { bookingReference },
+    },
+  };
+  const { result, rerender } = renderHook(
+    (props: Parameters<typeof useOxygenHostedStep>[0]) =>
+      useOxygenHostedStep(props),
+    { initialProps: { ...approved, disabled: true } }
+  );
+  expect(result.current.hosted).toBeNull();
+  act(() =>
+    result.current.openApprovedPayment({
+      workflowId: snapshot.workflowId,
+      bookingReference,
+    })
+  );
+  expect(result.current.hosted).toBeNull();
+  rerender(approved);
+  expect(result.current.hosted).toBe('payment');
+  expect(result.current.paymentOpened).toBe(true);
+  expect(execute).not.toHaveBeenCalled();
+
+  act(() => result.current.close());
+  expect(result.current.hosted).toBeNull();
+  expect(execute).toHaveBeenCalledWith({ action: 'refresh_payment_setup' });
+  rerender({ ...approved });
+  expect(result.current.hosted).toBeNull();
+  expect(execute).toHaveBeenCalledTimes(1);
+});
+
 it('records confirmed and pending status distinctly without logging provider payloads', async () => {
   jest.mocked(recordOxygenSelfieDiagnostic).mockClear();
   const { options, selfieStatus } = setup(false);

@@ -10,7 +10,7 @@ import {
 export function OxygenPaymentStep({
   state,
   busy = false,
-  showRefresh = true,
+  showRefresh = state !== 'ready',
   onContinue,
   paymentComplete = false,
   upfrontAmount,
@@ -43,7 +43,7 @@ export function OxygenPaymentStep({
         : state === 'expired'
           ? 'Check your saved progress to recover the payment link.'
           : state === 'unavailable'
-            ? 'Your saved payment progress is available. Check for an update to continue.'
+            ? 'Your payment link is unavailable. Check your payment status to continue.'
             : paymentComplete
               ? 'Oxygen has confirmed your upfront payment. Set up how Oxygen will collect your monthly repayments.'
               : 'Continue to Oxygen’s secure page to make your upfront payment.';
@@ -90,7 +90,7 @@ export function OxygenPaymentStep({
       {state !== 'checkpoint' && showRefresh && (
         <OxygenAction
           secondary
-          label="Check for an update"
+          label="Check payment status"
           disabled={busy}
           onPress={onRefresh}
         />

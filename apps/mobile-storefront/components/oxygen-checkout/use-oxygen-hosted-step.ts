@@ -7,25 +7,57 @@ import type { OxygenHostedKind } from './oxygen-hosted-navigation';
 import { recordOxygenSelfieDiagnostic } from './oxygen-selfie-diagnostics';
 import { useOxygenSelfieRenewal } from './use-oxygen-selfie-renewal';
 
+type ApprovedPayment = { workflowId: string; bookingReference: string };
+
 export function useOxygenHostedStep({
   snapshot,
   client,
   controller,
   disabled,
   ready,
+  paymentUrl,
 }: {
   snapshot: OxygenRuntimeSnapshot;
   client: OxygenClient;
   controller: OxygenWorkflowController;
   disabled: boolean;
   ready: boolean;
+  paymentUrl?: string;
 }) {
   const [hosted, setHosted] = useState<OxygenHostedKind | null>(null);
+  const [approvedPayment, openApprovedPayment] =
+    useState<ApprovedPayment | null>(null);
+  const [paymentOpened, setPaymentOpened] = useState(false);
   const [requesting, setRequesting] = useState(false);
   const requested = useRef(false);
   const opened = useRef<string | null>(null);
   const lastStatus = useRef<string | null>(null);
   const state = snapshot.state;
+  useEffect(() => {
+    if (
+      !approvedPayment ||
+      disabled ||
+      !ready ||
+      !paymentUrl ||
+      snapshot.stage !== 'payment_required' ||
+      state.paymentComplete ||
+      approvedPayment.workflowId !== snapshot.workflowId ||
+      approvedPayment.bookingReference !== state.bookingReference
+    )
+      return;
+    openApprovedPayment(null);
+    setPaymentOpened(true);
+    setHosted('payment');
+  }, [
+    approvedPayment,
+    disabled,
+    ready,
+    paymentUrl,
+    snapshot.stage,
+    snapshot.workflowId,
+    state.bookingReference,
+    state.paymentComplete,
+  ]);
   const renewal = useOxygenSelfieRenewal({
     url: state.selfieUrl,
     enabled:
@@ -118,7 +150,16 @@ export function useOxygenHostedStep({
   }
   function close() {
     setHosted(null);
-    void controller.refresh();
+    if (
+      hosted === 'payment' &&
+      snapshot.executionEnabled &&
+      !snapshot.pending &&
+      snapshot.stage === 'payment_required'
+    ) {
+      void controller.execute({ action: 'refresh_payment_setup' });
+    } else {
+      void controller.refresh();
+    }
   }
   // Native header/swipe Back must dismiss the selfie, not pop the checkout
   // route. The separate native Modal also routes Android system Back here.
@@ -127,7 +168,15 @@ export function useOxygenHostedStep({
     hosted,
     requesting,
     renewal,
-    open: setHosted,
+    open: (kind: OxygenHostedKind) => {
+      if (kind === 'payment') {
+        openApprovedPayment(null);
+        setPaymentOpened(true);
+      }
+      setHosted(kind);
+    },
+    openApprovedPayment,
+    paymentOpened,
     refresh,
     close,
   };

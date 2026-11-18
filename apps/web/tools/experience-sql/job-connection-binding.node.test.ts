@@ -31,6 +31,29 @@ test('jobs: a build job cannot be replayed or claimed through a different connec
           'utf8'
         )
       );
+    // Replacing the same signatures must preserve their restricted ACLs.
+    for (const signature of [
+      'public.experience_finalize_build(uuid,uuid,bigint,uuid,uuid,text,text,text,uuid,jsonb,text)',
+      'public.experience_list_due_builds(uuid,uuid,bigint)',
+      'public.experience_prepare_background_build(uuid,uuid,bigint,uuid)',
+    ]) {
+      for (const role of [
+        'authenticated',
+        'anon',
+        'service_role',
+        'baci_builder_auth_storage',
+      ]) {
+        const { rows } = await f.pool.query<{ allowed: boolean }>(
+          'SELECT has_function_privilege($1,$2,$3) AS allowed',
+          [role, signature, 'EXECUTE']
+        );
+        assert.equal(
+          rows[0].allowed,
+          role === 'authenticated',
+          `${role}: ${signature}`
+        );
+      }
+    }
     const [actor, merchant, artifact, first, second, retry] = Array.from(
       { length: 6 },
       () => randomUUID()

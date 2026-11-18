@@ -188,13 +188,6 @@ export async function checkConnectionRecovery(input: {
     'failed'
   );
   assert.deepEqual((await due(first)).rows[0].ids, []);
-  for (const role of ['anon', 'service_role', 'baci_builder_auth_storage']) {
-    const grants = await f.pool.query(
-      'SELECT has_function_privilege($1,$2,$3) allowed',
-      [role, 'public.experience_list_due_builds(uuid,uuid,bigint)', 'EXECUTE']
-    );
-    assert.equal(grants.rows[0].allowed, false);
-  }
   await asActor(client, actor, () =>
     client.query('SELECT public.disconnect_builder_connection($1)', [first])
   );

@@ -125,22 +125,24 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
   }
 
-  // Every slug chunk is hard-expired: this request cannot know whether a
-  // later control-metadata chunk will schedule an edge purge, and SWR would
-  // serve pre-mutation snapshots and re-seed the edge with stale stock.
+  // Hard-expire every slug chunk immediately so SWR cannot re-seed the edge.
   const explicitSlugsRevalidated =
     hasExplicitProductSlugs &&
     revalidateProductSlugs(merchantId, productSlugs ?? [], {
       expireImmediately: true,
     }) === true;
 
-  // Runs in a route context, so revalidateTag works here (unlike the CLI worker).
   // Trusted internal callers (INTERNAL_API_SECRET) pass pre-validated slug chunks here.
   const isScopedSlugOnly =
     !hasProducts &&
     !purgeWholeStorefront &&
     callerOmitMerchantWidePdpDetails === true &&
     explicitSlugsRevalidated;
+  const needsBroadFallbackInBlogMode =
+    callerOmitMerchantWidePdpDetails === false ||
+    (callerOmitMerchantWidePdpDetails === true &&
+      !hasProducts &&
+      !purgeWholeStorefront);
   if (isScopedSlugOnly) {
     expireProductBlogCache(merchantId);
     revalidateProducts(merchantId, undefined, {
@@ -150,12 +152,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   } else if (shouldExpireProductBlogCache) {
     expireProductBlogCache(merchantId);
     if (
-      callerOmitMerchantWidePdpDetails === false ||
-      (callerOmitMerchantWidePdpDetails === true &&
-        !hasProducts &&
-        !purgeWholeStorefront)
+      needsBroadFallbackInBlogMode &&
+      revalidateProducts(merchantId, undefined, { expireImmediately: true }) ===
+        false
     ) {
-      revalidateProducts(merchantId, undefined, { expireImmediately: true });
+      return NextResponse.json(
+        { error: 'Failed to expire merchant-wide product caches' },
+        { status: 500 }
+      );
     }
   } else if (!hasProducts || purgeWholeStorefront) {
     if (callerOmitMerchantWidePdpDetails === true) {
@@ -267,14 +271,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
   }
 
-  // Category path changes are structural: the affected public documents cannot
-  // be enumerated safely from a category mutation, so use the bounded hostname
-  // purge rather than a partial URL list. The hostname comes only from the
-  // merchant-id lookup above, never directly from the request body.
+  // Structural purges evict the authoritative merchant hostname via bounded purge.
   if (purgeWholeStorefront && authoritativeMerchantSlug) {
     try {
-      // Expire the merchant-scoped article enrichment before the hostname purge
-      // can trigger a MISS and refill Cloudflare with stale product data.
       expireProductBlogCache(merchantId);
       revalidateProducts(merchantId, undefined, { expireImmediately: true });
       if (confirmEdgeEviction) {

@@ -157,4 +157,22 @@ describe('internal product revalidation blog expiry', () => {
       expireImmediately: true,
     });
   });
+
+  it('returns 500 when broad merchant-wide PDP expiry fails in blog-cache fallback mode', async () => {
+    const merchantId = 'merchant-1';
+    mockRevalidateProducts.mockReturnValueOnce(false);
+
+    const response = await POST(
+      request({
+        merchantId,
+        expireProductBlogCache: true,
+        omitMerchantWidePdpDetails: false,
+      })
+    );
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({
+      error: 'Failed to expire merchant-wide product caches',
+    });
+  });
 });

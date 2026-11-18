@@ -154,6 +154,15 @@ export async function revalidateProductsReliable(
               ...(productSlugChunk && productSlugChunk.length > 0
                 ? { productSlugs: productSlugChunk }
                 : {}),
+              ...(chunkCarriesControlMetadata &&
+              !purgeWholeStorefront &&
+              merchantSlug &&
+              products &&
+              products.length > 0 &&
+              productSlugChunk &&
+              productSlugChunk.length > 0
+                ? { omitMerchantWidePdpDetails: true }
+                : {}),
               ...(chunkCarriesControlMetadata && purgeWholeStorefront
                 ? { purgeWholeStorefront: true }
                 : {}),

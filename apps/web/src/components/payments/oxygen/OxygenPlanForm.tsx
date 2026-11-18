@@ -16,6 +16,7 @@ export function OxygenPlanForm({
   productAmount,
   eligibleAmount,
   minimumAmount,
+  offers,
   submit,
 }: {
   busy: boolean;
@@ -23,6 +24,7 @@ export function OxygenPlanForm({
   productAmount?: number;
   eligibleAmount?: number;
   minimumAmount?: number;
+  offers?: { tenure: number; loanAmount: number }[];
   submit: SubmitOxygenForm;
 }) {
   const [booking, setBooking] = useState(false);
@@ -30,26 +32,69 @@ export function OxygenPlanForm({
   const bookingLock = useRef(false);
   const limits = oxygenPlanLimits(productAmount, eligibleAmount, minimumAmount);
   const tenureAvailable = Number.isInteger(maxTenure) && (maxTenure ?? 0) > 0;
-  const [equity, setEquity] = useState(
-    String(limits.kind === 'available' ? limits.min : 25)
+  const availableOffers = offers?.filter(
+    (offer) => offer.tenure <= (maxTenure ?? 0)
   );
-  const [tenure, setTenure] = useState(Math.min(3, maxTenure ?? 1));
+  const displayedMaxTenure = availableOffers?.length
+    ? Math.max(...availableOffers.map((offer) => offer.tenure))
+    : maxTenure;
+  const preferred = Math.min(3, maxTenure ?? 1);
+  const initialTenure =
+    availableOffers?.find((item) => item.tenure === preferred)?.tenure ??
+    (availableOffers?.length
+      ? Math.max(...availableOffers.map((item) => item.tenure))
+      : undefined) ??
+    preferred;
+  const initialOffer = offers?.find((item) => item.tenure === initialTenure);
+  const initialLimits = oxygenPlanLimits(
+    productAmount,
+    initialOffer && eligibleAmount !== undefined
+      ? Math.min(initialOffer.loanAmount, eligibleAmount)
+      : eligibleAmount,
+    minimumAmount
+  );
+  const [equity, setEquity] = useState(
+    String(
+      initialLimits.kind === 'available'
+        ? initialLimits.min
+        : limits.kind === 'available'
+          ? limits.min
+          : 25
+    )
+  );
+  const [tenure, setTenure] = useState(initialTenure);
   const percentage = Number(equity);
-  const valid =
+  const offer = offers?.find((item) => item.tenure === tenure);
+  const offerLimits = oxygenPlanLimits(
+    productAmount,
+    offer && eligibleAmount !== undefined
+      ? Math.min(offer.loanAmount, eligibleAmount)
+      : offer?.loanAmount,
+    minimumAmount
+  );
+  const amountValid =
     limits.kind === 'available' &&
     equity !== '' &&
     percentage >= limits.min &&
     percentage <= limits.max;
+  const valid =
+    amountValid &&
+    (offers === undefined ||
+      (offerLimits.kind === 'available' &&
+        percentage >= offerLimits.min &&
+        percentage <= offerLimits.max));
   if (booking) return <OxygenBookingActivity />;
   if (
     limits.kind === 'unknown' ||
     !tenureAvailable ||
+    (availableOffers !== undefined && availableOffers.length === 0) ||
     productAmount === undefined ||
     maxTenure === undefined
   ) {
     return (
       <p role="status">
-        We couldn’t load your payment options. Please check for an update.
+        We couldn’t load your payment options. Please try again later or contact
+        support.
       </p>
     );
   }
@@ -108,7 +153,8 @@ export function OxygenPlanForm({
           <span>
             You’re eligible to spread your payment for up to{' '}
             <strong>
-              {maxTenure} {maxTenure === 1 ? 'month' : 'months'}
+              {displayedMaxTenure}{' '}
+              {displayedMaxTenure === 1 ? 'month' : 'months'}
             </strong>
             .
           </span>
@@ -117,16 +163,32 @@ export function OxygenPlanForm({
       <fieldset disabled={busy} className={styles.controls}>
         <OxygenDownPayment
           productAmount={productAmount}
-          percentage={valid ? percentage : null}
+          percentage={amountValid ? percentage : null}
           minPercentage={limits.min}
           maxPercentage={limits.max}
           onChange={(value) => setEquity(value === null ? '' : String(value))}
         />
         <OxygenTenurePicker
-          months={Array.from({ length: maxTenure }, (_, i) => i + 1)}
+          months={
+            availableOffers?.map((item) => item.tenure).sort((a, b) => a - b) ??
+            Array.from({ length: maxTenure }, (_, i) => i + 1)
+          }
           value={tenure}
           onChange={setTenure}
         />
+        {!valid &&
+          offerLimits.kind === 'available' &&
+          percentage < offerLimits.min && (
+            <p role="status">
+              Increase your down payment to at least {offerLimits.min}% for this
+              repayment period.
+            </p>
+          )}
+        {offers && offerLimits.kind === 'unavailable' && (
+          <p role="status">
+            This repayment period is not available for this order.
+          </p>
+        )}
         <p className="px-1 text-center text-xs leading-relaxed text-store-text-muted">
           You’ll see monthly payments, charges and payment dates next.
         </p>

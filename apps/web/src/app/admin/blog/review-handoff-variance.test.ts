@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { describe, expect, it } from 'vitest';
 import { validateImportedContent } from './review-handoff-content';
 import { hasUnrepresentableVariance } from './review-handoff-variance';

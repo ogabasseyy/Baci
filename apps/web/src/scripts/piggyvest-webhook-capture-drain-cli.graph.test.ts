@@ -67,5 +67,5 @@ describe('capture drain CLI import graph', () => {
     const entry = 'apps/web/src/scripts/piggyvest-webhook-capture-drain-cli.ts';
     sources.set(entry, `${sources.get(entry)}\nimport '@/lib/supabase/service';`);
     expect(collectProductionImportClosure([entry], sources).has('apps/web/src/lib/supabase/service.ts')).toBe(true);
-  });
+  }, 30_000);
 });

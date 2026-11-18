@@ -1,0 +1,17 @@
+{
+  "host": "http://localhost:43178",
+  "gateway": "http://127.0.0.1:43179",
+  "apiPort": 65527,
+  "synthetic": true,
+  "preparedRenders": 4,
+  "buildDigest": "5be46b50ba0b6b3fd14cc16de08ce34ec480cc5a522263820a2d3dfbb3fcb183",
+  "sourceDigest": "33713d9bc14e2568e511b118729729a8b5d26744c35b6d3335a6a542aebb240a",
+  "main": "225f6a0a69dc0299fd9323c699302da59d75075a",
+  "nextBuildId": "Fu5o0F4CXwGIfhATGeVT0",
+  "phase": "final-post-review-full-build",
+  "ordersCreated": 0,
+  "paymentsSubmitted": 0,
+  "published": false,
+  "localOnly": true,
+  "sourceScope": "Production build includes core/app review fixes and precedes the final in-memory runner cache-isolation fix; custom Orbit source/bundle unchanged. Candidate remains uncommitted and not fully reviewed."
+}

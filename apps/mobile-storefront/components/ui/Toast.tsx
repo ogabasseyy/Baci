@@ -4,7 +4,6 @@ import Ionicons, {
 import { useEffect, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
-  Platform,
   StyleSheet,
   Text,
   useColorScheme,
@@ -51,7 +50,9 @@ function getVariantColors(
       return {
         iconColor: theme.error,
         backgroundColor: theme.foreground,
-        textColor: theme.destructiveForeground,
+        // destructiveForeground matches foreground in dark mode, which made
+        // the message invisible. background always contrasts with foreground.
+        textColor: theme.background,
       };
     case 'warning':
       return {
@@ -117,8 +118,8 @@ export function Toast({
         timerRef.current = null;
       }, duration);
 
-      // M35 fix: iOS requires manual announcement, Android handles live region
-      if (Platform.OS === 'ios') {
+      // Announce to screen readers for accessibility
+      if (message.trim()) {
         AccessibilityInfo.announceForAccessibility(message);
       }
     }
@@ -131,7 +132,8 @@ export function Toast({
     };
   }, [visible, duration, message]);
 
-  if (!visible) return null;
+  // Never show an icon-only bar: a toast without text tells the user nothing.
+  if (!visible || !message.trim()) return null;
 
   const positionStyle =
     position === 'top'
@@ -153,7 +155,7 @@ export function Toast({
       ]}
       accessible={true}
       accessibilityRole="alert"
-      accessibilityLiveRegion="assertive"
+      accessibilityLiveRegion="polite"
       accessibilityLabel={message}
     >
       <Ionicons name={icon} size={20} color={config.iconColor} />

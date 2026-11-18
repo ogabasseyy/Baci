@@ -84,10 +84,10 @@ export function SavingsCardContributionStatus({
 }
 
 const styles = StyleSheet.create({
-  body: { fontSize: 14, lineHeight: 21 },
-  label: { fontSize: 15, fontWeight: '600' },
+  body: { fontSize: 13, lineHeight: 21 },
+  label: { fontSize: 14, fontWeight: '600' },
   secondary: {
-    minHeight: 48,
+    minHeight: 44,
     borderWidth: 1,
     borderRadius: 14,
     alignItems: 'center',

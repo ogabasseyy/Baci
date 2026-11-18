@@ -12,14 +12,12 @@ vi.mock('@supabase/supabase-js', () => ({
 }));
 
 vi.mock('next/cache', () => ({
+  cacheLife: vi.fn(),
+  cacheTag: vi.fn(),
   unstable_cache:
     <T extends (...args: never[]) => Promise<unknown>>(fn: T) =>
     (...args: Parameters<T>) =>
       fn(...args),
-}));
-
-vi.mock('next/headers', () => ({
-  cookies: vi.fn(),
 }));
 
 vi.mock('@/env', () => ({
@@ -27,8 +25,8 @@ vi.mock('@/env', () => ({
   getSupabaseUrl: vi.fn(() => 'https://example.supabase.co'),
 }));
 
-vi.mock('@/lib/supabase/server', () => ({
-  createClient: storefrontProductsRouteTestHarness.mockCreateServerClient,
+vi.mock('@/lib/supabase/anon', () => ({
+  createAnonClient: storefrontProductsRouteTestHarness.mockCreateServerClient,
 }));
 
 import { GET } from './route';

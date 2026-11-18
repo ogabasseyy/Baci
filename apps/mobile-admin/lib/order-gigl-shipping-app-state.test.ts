@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { AppState } from 'react-native';
 import { describe, expect, it, vi } from 'vitest';
 import { bindOrderGiglShippingAppState } from './order-gigl-shipping-app-state';

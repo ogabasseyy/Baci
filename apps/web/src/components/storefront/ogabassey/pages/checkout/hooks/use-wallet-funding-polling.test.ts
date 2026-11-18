@@ -246,4 +246,49 @@ describe('useWalletFundingPolling', () => {
     expect(view.result.current.intent).toBeNull();
     expect(onCompleted).not.toHaveBeenCalled();
   });
+
+  it('pauses polling while hidden and stops after maxAttempts', async () => {
+    vi.useFakeTimers();
+    getIntentMock.mockResolvedValue(BASE_INTENT);
+
+    let visibility: DocumentVisibilityState = 'hidden';
+    const originalDescriptor = Object.getOwnPropertyDescriptor(
+      document,
+      'visibilityState'
+    );
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => visibility,
+    });
+
+    try {
+      renderHook(() =>
+        useWalletFundingPolling({
+          enabled: true,
+          intentId: 'intent-1',
+          merchantId: 'merchant-1',
+          merchantSlug: 'test-store',
+          onCompleted: vi.fn(),
+          pollIntervalMs: 1000,
+        })
+      );
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5000);
+      });
+      expect(getIntentMock).not.toHaveBeenCalled();
+
+      visibility = 'visible';
+      await act(async () => {
+        document.dispatchEvent(new Event('visibilitychange'));
+        await vi.advanceTimersByTimeAsync(100_000);
+      });
+      expect(getIntentMock).toHaveBeenCalledTimes(60);
+    } finally {
+      if (originalDescriptor) {
+        Object.defineProperty(document, 'visibilityState', originalDescriptor);
+      }
+      vi.useRealTimers();
+    }
+  });
 });

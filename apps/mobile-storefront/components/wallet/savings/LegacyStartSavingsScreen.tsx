@@ -4,6 +4,7 @@ import { KeyboardController } from 'react-native-keyboard-controller';
 import AppKeyboardAwareScrollView from '@/components/ui/AppKeyboardAwareScrollView';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors, { BRAND } from '@/constants/Colors';
+import { PiggyvestSlowdownNotice } from '../PiggyvestSlowdownNotice';
 import { StartSavingsForm } from './StartSavingsForm';
 import { StartSavingsModals } from './StartSavingsModals';
 import { startSavingsStyles as styles } from './start-savings.styles';
@@ -62,6 +63,7 @@ export function LegacyStartSavingsScreen() {
           />
         }
       >
+        <PiggyvestSlowdownNotice />
         <StartSavingsForm
           onSearchFocusChange={setSearchFocused}
           colors={colors}

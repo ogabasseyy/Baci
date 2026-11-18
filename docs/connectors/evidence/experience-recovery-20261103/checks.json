@@ -1,0 +1,181 @@
+{
+  "base": "a22bf2cceeac3de81919f011bbb85c691e69e7e7",
+  "releaseQualified": false,
+  "candidateCommit": null,
+  "checks": {
+    "focusedWeb": {
+      "status": "passed-before-last-main-refresh",
+      "files": 261,
+      "tests": 1159,
+      "log": "/tmp/experience-recovery-focused-tests.log"
+    },
+    "finalMainFocusedWeb": {
+      "status": "passed",
+      "files": 262,
+      "tests": 1164,
+      "log": "/tmp/experience-recovery-final-main-focused-tests.log"
+    },
+    "finalComponents": {
+      "status": "passed",
+      "files": 29,
+      "tests": 72,
+      "log": "/tmp/experience-recovery-final-race-components.log",
+      "scope": "After final instance-renewal isolation fix; focused 1164-test run preceded this final scoped fix."
+    },
+    "sharedExperience": {
+      "status": "passed",
+      "files": 2,
+      "tests": 9
+    },
+    "sdk": {
+      "status": "passed",
+      "files": 4,
+      "tests": 10,
+      "build": "passed; 10.3 KiB ESM bundle"
+    },
+    "runnerUnits": {
+      "status": "passed",
+      "files": 37,
+      "tests": 114
+    },
+    "sqlAuth": {
+      "status": "passed",
+      "nodeTests": 7,
+      "normalAuthDataApiTests": 1,
+      "log": "/tmp/experience-recovery-sql-fixed.log"
+    },
+    "paymentCallerAudit": {
+      "status": "passed",
+      "files": 2,
+      "tests": 22,
+      "allowlists": "current-main assertions unchanged"
+    },
+    "negativeAndRlsLifecycle": {
+      "status": "passed",
+      "files": 2,
+      "tests": 4
+    },
+    "ciContracts": {
+      "status": "passed",
+      "tests": 20
+    },
+    "nextConfig": {
+      "status": "passed",
+      "tests": 12
+    },
+    "sourceLint": {
+      "status": "passed",
+      "files": 648,
+      "warnings": 6,
+      "errors": 0,
+      "log": "/tmp/experience-recovery-lint.log",
+      "note": "Touched review-fix files linted separately after final edits."
+    },
+    "typechecks": {
+      "status": "passed",
+      "scope": [
+        "shared package",
+        "SDK",
+        "experience authoring/runner/commerce",
+        "full web package including tools/MCP/builder publication"
+      ],
+      "note": "Full web passed on d8c5282fce; final experience/SDK checks include subsequent review fixes. The last main refresh added only disjoint proof tooling."
+    },
+    "lockfile": {
+      "status": "passed",
+      "mode": "frozen offline; main resolved graph retained; SDK closure adds 145 lines with zero removed"
+    },
+    "privateAuthoringIntegration": {
+      "status": "passed-followup",
+      "files": 3,
+      "tests": 4,
+      "log": "/tmp/experience-sandbox-live-checks-20261103.log",
+      "priorRecoveryState": {
+        "status": "blocked",
+        "passedTests": 3,
+        "failedTests": 1,
+        "reason": "Missing ignored toolchain receipt; default Colima VM stopped. No fabricated toolchain digest or unsafe host compilation used."
+      }
+    },
+    "fullWebSuite": {
+      "status": "not-run",
+      "reason": "Recovery validation scoped to affected behavior on shared Mac; final release gate remains pending."
+    },
+    "browserCheckoutCwv": {
+      "status": "checkout-passed-cwv-unqualified",
+      "evidence": "../experience-sandbox-checkout-cwv-20261103/receipt.json",
+      "desktop": "final review, no submission",
+      "mobile": "final review, no submission",
+      "benchmarkSamples": 24,
+      "contaminatedSamples": 24,
+      "releaseQualified": false
+    },
+    "finalCommerceTypecheck": {
+      "status": "passed",
+      "log": "/tmp/experience-recovery-final-commerce-types.log"
+    },
+    "themeToken": {
+      "status": "passed",
+      "tests": 1,
+      "log": "/tmp/experience-recovery-theme-token.log"
+    }
+  },
+  "review": {
+    "provider": "CodeRabbit",
+    "billing": "included free only; credits never enabled",
+    "completedScope": "55 storefront component files",
+    "issues": [
+      {
+        "severity": "trivial",
+        "file": "apps/web/src/components/storefront/experience/ExperienceEngineFallback.test.tsx",
+        "title": "Test the failure that `fetchSharedCartProducts` can actually produce.",
+        "disposition": "fixed and covered by tests"
+      },
+      {
+        "severity": "major",
+        "file": "apps/web/src/components/storefront/experience/experience-host-runtime.ts",
+        "title": "Short-circuit `navigate` when the destination is already the current route.",
+        "disposition": "fixed and covered by tests"
+      },
+      {
+        "severity": "minor",
+        "file": "apps/web/src/components/storefront/experience/ExperienceEngineFallback.tsx",
+        "title": "Check the `addToCart` outcome before reporting success.",
+        "disposition": "fixed and covered by tests"
+      },
+      {
+        "severity": "trivial",
+        "file": "apps/web/src/components/storefront/experience/ExperienceEngineFallback.test.tsx",
+        "title": "Cover the empty-result path that `fetchSharedCartProducts` can return.",
+        "disposition": "fixed and covered by tests"
+      }
+    ],
+    "followup": {
+      "status": "completed",
+      "reviewedFiles": 56,
+      "issues": [
+        {
+          "severity": "minor",
+          "file": "apps/web/src/components/storefront/experience/ExperienceRouteBoundary.module.css",
+          "title": "Remove the hardcoded text color and the nonexistent `--store-background-text` token.",
+          "disposition": "declined: current-main curated theme projection defines --store-background-text from colors.foreground; its dark-theme token regression passes"
+        },
+        {
+          "severity": "minor",
+          "file": "apps/web/src/components/storefront/experience/experience-host-runtime.ts",
+          "title": "Key the in-flight launch renewal by instance ID.",
+          "disposition": "fixed: per-instance renewal promise and stale-check withdrawal fence, failing-before regression; final 72 component tests pass"
+        },
+        {
+          "severity": "minor",
+          "file": "apps/web/src/components/storefront/experience/experience-host-runtime.ts",
+          "title": "Key renewals by instance and guard stale completions.",
+          "disposition": "fixed: per-instance renewal promise and stale-check withdrawal fence, failing-before regression; final 72 component tests pass"
+        }
+      ],
+      "log": "/tmp/experience-recovery-free-review-retry.ndjson",
+      "scopeNote": "The instance-renewal fix followed this review snapshot and is independently tested; whole-candidate review and release qualification remain pending."
+    },
+    "wholeCandidateAllClear": false
+  }
+}

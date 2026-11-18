@@ -19,6 +19,13 @@ const {
   mockStorefrontPagination: vi.fn((_props: Record<string, unknown>) => null),
 }));
 
+vi.mock(
+  '@/components/storefront/experience/experience-server-boundary',
+  () => ({
+    ExperienceServerBoundary: ({ fallback }: { fallback: React.ReactNode }) =>
+      fallback,
+  })
+);
 vi.mock('next/headers', () => ({ headers: () => mockHeaders() }));
 vi.mock('next/link', () => ({
   default: ({
@@ -61,7 +68,10 @@ vi.mock('@/lib/seo-utils', () => ({
 vi.mock('@/lib/store-url', () => ({
   buildStoreUrl: () => 'https://ogabassey.com',
 }));
-vi.mock('@/lib/validation', () => ({ isValidMerchantIdentifier: () => true }));
+vi.mock('@/lib/validation', () => ({
+  isDomainIdentifier: (value: string) => value.includes('.'),
+  isValidMerchantIdentifier: () => true,
+}));
 vi.mock('./product-index-card', () => ({
   ProductIndexCard: () => <article />,
 }));

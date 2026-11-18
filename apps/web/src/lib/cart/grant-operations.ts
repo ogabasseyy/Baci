@@ -31,18 +31,27 @@ export async function loadLiveGrantOperations(
   if (principal.scope !== 'session' || !principal.cartId || !principal.grantId)
     return null;
   const response = await client.rpc('commerce_cart_grant_operations');
-  if (response.error || !isRecord(response.data)) return null;
+  if (response.error) {
+    throw new Error('Could not verify the cart grant operations');
+  }
+  if (!isRecord(response.data)) {
+    throw new Error('Malformed cart grant operations reply');
+  }
   const data = response.data;
-  if (data.ok !== true || !Array.isArray(data.allowedOperations)) return null;
+  if (data.ok === false && data.code === 'unauthorized') return null;
+  if (data.ok !== true || !Array.isArray(data.allowedOperations)) {
+    throw new Error('Invalid cart grant operations reply');
+  }
   if (
     typeof data.grantExpiresAt !== 'string' ||
     !Number.isFinite(Date.parse(data.grantExpiresAt))
   )
-    return null;
+    throw new Error('Invalid cart grant expiry');
   const operations: CartCommand['type'][] = [];
   for (const operation of data.allowedOperations) {
-    if (typeof operation !== 'string' || !KNOWN_OPERATIONS.has(operation))
-      return null;
+    if (typeof operation !== 'string' || !KNOWN_OPERATIONS.has(operation)) {
+      throw new Error('Invalid cart grant operation');
+    }
     operations.push(operation as CartCommand['type']);
   }
   return { allowedOperations: operations, grantExpiresAt: data.grantExpiresAt };

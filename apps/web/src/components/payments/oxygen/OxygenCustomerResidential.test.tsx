@@ -1,15 +1,18 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { expect, it, vi } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
+
+const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
+afterEach(() => {
+  HTMLElement.prototype.scrollIntoView = originalScrollIntoView;
+});
+
 import { CustomerFormFields } from './OxygenCustomerFormFields';
 
-vi.mock('./OxygenBankFields', () => ({
-  OxygenBankFields: () => (
-    <>
-      <input name="account_name" value="Test Customer" readOnly />
-      <input name="bank_name" value="Test bank" readOnly />
-      <input name="bank_code" value="058" readOnly />
-      <input name="account_number" value="0000000000" readOnly />
-    </>
+vi.mock('@/lib/api-client', () => ({
+  fetchWithCsrf: vi.fn(async (_url: string, options: RequestInit) =>
+    JSON.parse(String(options.body)).action === 'banks'
+      ? Response.json({ banks: [{ code: '058', name: 'Test bank' }] })
+      : Response.json({ accountName: 'Test Customer' })
   ),
 }));
 vi.mock('@/components/address-autocomplete', () => ({
@@ -22,10 +25,12 @@ it('collects the checkout address and proof beside income, without sending them 
   const submit = vi.fn().mockResolvedValue(true);
   const prepare = vi.fn();
   const save = vi.fn();
+  const flush = vi.fn().mockResolvedValue(true);
   render(
     <CustomerFormFields
       busy={false}
       phone="08000000001"
+      workflowId="60000000-0000-4000-8000-000000000001"
       submit={submit}
       checkoutAddress={{
         street: 'Example Road',
@@ -46,6 +51,8 @@ it('collects the checkout address and proof beside income, without sending them 
           nin: '12345678901',
           date_of_birth: '1990-01-01',
           birth_date_entry: '01/01/1990',
+          bank_code: '058',
+          account_number: '0000000000',
           salary_amount: '500000',
           salary_date: '25',
           name_of_employer: 'Example',
@@ -53,10 +60,11 @@ it('collects the checkout address and proof beside income, without sending them 
         },
       }}
       saveDraft={save}
-      flushDraft={async () => true}
+      flushDraft={flush}
       saveBlocked={false}
     />
   );
+  await screen.findByText('Account verified');
   fireEvent.click(
     screen.getByRole('button', { name: 'Continue to income details' })
   );
@@ -73,6 +81,14 @@ it('collects the checkout address and proof beside income, without sending them 
     )
   );
   fireEvent.click(screen.getByRole('checkbox', { name: /I agree to share/ }));
+  flush.mockResolvedValueOnce(false);
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Continue verification' })
+  );
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'We could not save your details. Check the message above before continuing.'
+  );
+  expect(submit).not.toHaveBeenCalled();
   fireEvent.click(
     screen.getByRole('button', { name: 'Continue verification' })
   );
@@ -94,4 +110,41 @@ it('collects the checkout address and proof beside income, without sending them 
   expect(JSON.stringify(submit.mock.calls)).not.toContain('Example Road');
   expect(save.mock.calls.at(-1)?.[0].fields.home_street).toBe('Example Road');
   expect(JSON.stringify(save.mock.calls)).not.toContain('bill.pdf');
+});
+
+it('focuses and highlights the missing payday instead of the error banner', async () => {
+  HTMLElement.prototype.scrollIntoView = vi.fn();
+  render(
+    <CustomerFormFields
+      busy={false}
+      phone="08000000001"
+      workflowId="60000000-0000-4000-8000-000000000001"
+      submit={vi.fn()}
+      initialDraft={{
+        step: 2,
+        fields: {
+          bank_code: '058',
+          account_number: '0000000000',
+          salary_amount: '500000',
+          salary_date: '',
+        },
+      }}
+      saveDraft={vi.fn()}
+      flushDraft={async () => true}
+      saveBlocked={false}
+    />
+  );
+  await screen.findByText('Account verified');
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Continue to income details' })
+  );
+  const payday = screen.getByLabelText('When are you paid?');
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Continue verification' })
+  );
+  await waitFor(() => expect(payday).toHaveFocus());
+  expect(payday).toHaveAttribute('aria-invalid', 'true');
+  expect(payday.scrollIntoView).toHaveBeenCalled();
+  fireEvent.change(payday, { target: { value: '25' } });
+  expect(payday).not.toHaveAttribute('aria-invalid');
 });

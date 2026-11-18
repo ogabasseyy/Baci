@@ -5,6 +5,11 @@ import { giglProvider } from '@/lib/shipping/providers/gigl';
 import type { GiglWaybillOwnership } from '@/lib/shipping/providers/gigl.preshipment-ownership';
 import type { TrackingResult } from '@/lib/shipping/types';
 import type { Database, Json } from '@/types/supabase';
+import {
+  needsPreshipmentCancellationRead,
+  type ReadWaybillCancellation,
+  withPreshipmentCancellation,
+} from './gigl-tracking-preshipment-cancellation';
 import { nullableSupabaseRpcArgument } from './nullable-supabase-rpc-argument';
 
 const claimedMonitorSchema = z.object({
@@ -171,7 +176,9 @@ export async function processClaimedGiglTrackingMonitors(
   trackShipments: TrackShipments = (trackingNumbers) =>
     giglProvider.trackShipments(trackingNumbers),
   attestWaybillOwnership: AttestWaybillOwnership = (trackingNumber) =>
-    giglProvider.attestWaybillOwnership(trackingNumber)
+    giglProvider.attestWaybillOwnership(trackingNumber),
+  readWaybillCancellation: ReadWaybillCancellation = (trackingNumber) =>
+    giglProvider.readWaybillCancellation(trackingNumber)
 ): Promise<GiglTrackingMonitorSummary> {
   const summary: GiglTrackingMonitorSummary = {
     applied: 0,
@@ -199,10 +206,34 @@ export async function processClaimedGiglTrackingMonitors(
   }
 
   const attestCancellation = createCancellationAttestor(attestWaybillOwnership);
+  const cancellationReads = new Map<
+    string,
+    ReturnType<ReadWaybillCancellation>
+  >();
+  const readCancellationOnce: ReadWaybillCancellation = (trackingNumber) => {
+    let read = cancellationReads.get(trackingNumber);
+    if (!read) {
+      read = readWaybillCancellation(trackingNumber);
+      cancellationReads.set(trackingNumber, read);
+    }
+    return read;
+  };
   await Promise.all(
     monitors.map(async (monitor) => {
-      const result = results.get(monitor.tracking_number);
+      let result = results.get(monitor.tracking_number);
       try {
+        if (needsPreshipmentCancellationRead(result)) {
+          const cancellation = await readCancellationOnce(
+            monitor.tracking_number
+          ).catch(() => 'unknown' as const);
+          if (cancellation === 'cancelled') {
+            result = withPreshipmentCancellation(
+              result,
+              monitor.tracking_number,
+              new Date()
+            );
+          }
+        }
         if (!result)
           throw new Error('GIGL batch tracking omitted claimed waybill');
         if (result.hasRecognizedLifecycleEvent === false) {

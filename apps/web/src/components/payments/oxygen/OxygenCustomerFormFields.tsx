@@ -1,29 +1,36 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { OxygenCustomerPrefill } from '@/schemas/oxygen-customer-prefill';
-import {
-  OXYGEN_DRAFT_FIELDS,
-  type OxygenFormDraft,
-} from '@/schemas/oxygen-form-draft';
+import type { OxygenFormDraft } from '@/schemas/oxygen-form-draft';
 import { OxygenBankFields } from './OxygenBankFields';
 import { OxygenBirthDateField } from './OxygenBirthDateField';
 import { OxygenContactFields } from './OxygenContactFields';
 import styles from './OxygenCustomerFormFields.module.css';
+import { OxygenCustomerFormNavigation } from './OxygenCustomerFormNavigation';
 import { OxygenEmploymentAndAddress } from './OxygenEmploymentAndAddress';
+import { OxygenFormError } from './OxygenFormError';
 import { OxygenFormProgress } from './OxygenFormProgress';
 import { OxygenIdentityField } from './OxygenIdentityField';
-import { OxygenLoadingButton } from './OxygenLoadingButton';
 import { OxygenStepHeading } from './OxygenStepHeading';
 import type { SubmitOxygenForm } from './OxygenVerificationForms';
 import { OxygenVerificationTrust } from './OxygenVerificationTrust';
+import { oxygenCustomerDraft } from './oxygen-customer-form-draft';
 import { parseOxygenCustomerForm } from './oxygen-customer-form-payload';
 import { getOxygenFormCorrection } from './oxygen-form-correction';
+import {
+  clearOxygenControlError,
+  clearOxygenFormErrors,
+  firstInvalidOxygenControl,
+  highlightOxygenControl,
+  oxygenInvalidControlMessage,
+} from './oxygen-form-invalid-field';
 import {
   type ResidentialProof,
   residentialAddress,
   residentialKeys,
 } from './oxygen-residential-address';
-
+import { OXYGEN_SAVE_ERROR, useOxygenFormError } from './use-oxygen-form-error';
+import { useOxygenFormErrorFocus } from './use-oxygen-form-error-focus';
 export type CustomerFormProps = {
   prefill?: OxygenCustomerPrefill;
   workflowId?: string;
@@ -51,15 +58,18 @@ export function CustomerFormFields({
   saveDraft,
   flushDraft,
   saveBlocked,
+  saveStatus,
 }: CustomerFormProps & {
   initialDraft: OxygenFormDraft | null;
   saveDraft: (draft: OxygenFormDraft) => void;
   flushDraft: () => Promise<boolean>;
   saveBlocked: boolean;
+  saveStatus?: string;
 }) {
   const defaults = initialDraft?.fields ?? {};
-  // Restored bank details must be resolved again before continuing to income.
   const [step, setStep] = useState(Math.min(initialDraft?.step ?? 0, 1));
+  // OxygenCustomerForm keys this entire form by workflow ID, resetting verification.
+  const [bankVerified, setBankVerified] = useState(false);
   const [residentialFile, setResidentialFile] = useState<File | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const reportedResume = useRef(false);
@@ -70,33 +80,27 @@ export function CustomerFormFields({
   }, [onProgress, step]);
   function capture(nextStep = step) {
     if (!formRef.current) return;
-    const data = new FormData(formRef.current);
-    saveDraft({
-      step: nextStep as 0 | 1 | 2,
-      fields: Object.fromEntries(
-        OXYGEN_DRAFT_FIELDS.map((name) => [name, String(data.get(name) ?? '')])
-      ),
-    });
+    saveDraft(oxygenCustomerDraft(formRef.current, nextStep));
   }
-  const [formError, setFormError] = useState('');
+  const { formError, setFormError } = useOxygenFormError(saveStatus);
+  const formErrorId = useId();
+  const focusInvalidField = useRef(false);
   const [continuing, setContinuing] = useState<'saving' | 'starting' | null>(
     null
   );
   const continuingRef = useRef(false);
-  useEffect(() => {
-    if (formError)
-      formRef.current?.querySelector<HTMLElement>('[role=alert]')?.focus();
-  }, [formError]);
+  useOxygenFormErrorFocus(formRef, formError, focusInvalidField);
+  function highlightField(input: HTMLElement) {
+    focusInvalidField.current = true;
+    highlightOxygenControl(input, formErrorId);
+  }
   function validateSection(form: HTMLFormElement): boolean {
-    const controls = form.querySelectorAll<
-      HTMLInputElement | HTMLSelectElement
-    >(`[data-step="${step}"] input, [data-step="${step}"] select`);
-    for (const input of controls) {
-      if (!input.checkValidity()) {
-        setFormError('Please complete the required fields in this step.');
-        input.reportValidity();
-        return false;
-      }
+    focusInvalidField.current = false;
+    const invalid = firstInvalidOxygenControl(form, step);
+    if (invalid) {
+      highlightField(invalid);
+      setFormError(oxygenInvalidControlMessage(invalid));
+      return false;
     }
     if (step === 1 && !String(new FormData(form).get('account_name') ?? '')) {
       setFormError('Verify your bank account before continuing.');
@@ -108,12 +112,13 @@ export function CustomerFormFields({
   return (
     <form
       ref={formRef}
-      onChange={() => requestAnimationFrame(() => capture())}
+      onChange={(event) => {
+        clearOxygenControlError(event.target);
+        requestAnimationFrame(() => capture());
+      }}
       onBlur={(event) => {
         capture();
-        // Focus moves between inputs and Continue are covered by the debounce.
-        // Flush only when focus leaves the entire form, avoiding a second save
-        // immediately before the next-step snapshot is queued.
+        // Flush only when focus leaves the form to avoid a duplicate save.
         if (!event.currentTarget.contains(event.relatedTarget))
           void flushDraft();
       }}
@@ -133,15 +138,17 @@ export function CustomerFormFields({
             step === 0 ? 'identity' : 'bank'
           );
           setStep(step + 1);
-          // Local navigation never submits to Oxygen. The final submit below
-          // still requires durable save acknowledgement and rejects conflicts.
+          // Only the final submit requires durable save acknowledgement.
           void flushDraft();
           return;
         }
         continuingRef.current = true;
         setContinuing('saving');
         try {
-          if (workflowId && !(await flushDraft())) return;
+          if (workflowId && !(await flushDraft())) {
+            setFormError(OXYGEN_SAVE_ERROR);
+            return;
+          }
           if (data.get('consent') !== 'on') return;
           const customer = parseOxygenCustomerForm(data, phone);
           if (!customer.success) {
@@ -158,6 +165,10 @@ export function CustomerFormFields({
           }
           if (onResidentialReady) {
             if (!residentialFile) {
+              const upload = form.querySelector<HTMLInputElement>(
+                'input[type="file"][aria-label="Proof of address"]'
+              );
+              if (upload) highlightField(upload);
               setFormError(
                 'Attach a utility bill or proof of your home address.'
               );
@@ -196,15 +207,7 @@ export function CustomerFormFields({
         <OxygenStepHeading
           step={(['identity', 'bank', 'income'] as const)[step] ?? 'identity'}
         />
-        {formError && (
-          <p
-            role="alert"
-            tabIndex={-1}
-            className="rounded-xl bg-red-50 p-3 text-sm text-red-700"
-          >
-            {formError}
-          </p>
-        )}
+        <OxygenFormError id={formErrorId} error={formError} />
         <div
           data-step="0"
           hidden={step !== 0}
@@ -236,6 +239,7 @@ export function CustomerFormFields({
         >
           <OxygenBankFields
             active={step === 1}
+            onVerifiedChange={setBankVerified}
             workflowId={workflowId}
             busy={busy}
             defaults={defaults}
@@ -256,42 +260,21 @@ export function CustomerFormFields({
           />
         </div>
         <OxygenVerificationTrust />
-        <div className="flex items-center justify-between gap-3 pt-1">
-          {step > 0 ? (
-            <button
-              type="button"
-              disabled={busy || Boolean(continuing)}
-              className="min-h-11 rounded-xl border border-gray-200 px-5 text-sm font-semibold text-gray-600"
-              onClick={() => {
-                setFormError('');
-                capture(step - 1);
-                setStep(step - 1);
-                onProgress?.(step === 2 ? 'bank' : 'identity');
-              }}
-            >
-              Back
-            </button>
-          ) : (
-            <span className="hidden sm:block" />
-          )}
-          <OxygenLoadingButton
-            className="flex-1 sm:flex-none"
-            loading={Boolean(continuing)}
-            pendingLabel={
-              continuing === 'saving'
-                ? 'Saving details…'
-                : 'Starting verification…'
-            }
-            disabled={busy || !phone || saveBlocked}
-            type="submit"
-          >
-            {step === 0
-              ? 'Continue to bank details'
-              : step === 1
-                ? 'Continue to income details'
-                : 'Continue verification'}
-          </OxygenLoadingButton>
-        </div>
+        <OxygenCustomerFormNavigation
+          step={step}
+          busy={busy}
+          continuing={continuing}
+          disabled={
+            busy || !phone || saveBlocked || (step === 1 && !bankVerified)
+          }
+          onBack={() => {
+            clearOxygenFormErrors(formRef.current, formErrorId);
+            setFormError('');
+            capture(step - 1);
+            setStep(step - 1);
+            onProgress?.(step === 2 ? 'bank' : 'identity');
+          }}
+        />
       </fieldset>
     </form>
   );

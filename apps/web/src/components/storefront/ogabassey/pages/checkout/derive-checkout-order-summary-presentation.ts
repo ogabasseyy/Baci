@@ -83,6 +83,15 @@ export function deriveCheckoutOrderSummaryPresentation({
     deliveryMethod: amounts.summaryDeliveryMethod,
     giftWrappingCost: amounts.summaryGiftWrappingCost,
     walletBalance: wallet.balance,
+    showWalletControl:
+      hasUser &&
+      wallet.redemptionAllowed &&
+      wallet.currencySupported &&
+      !wallet.loading &&
+      wallet.balance > 0 &&
+      paymentMethod !== 'uba_redvault',
+    walletSelected: wallet.payWithWallet,
+    setPayWithWallet: wallet.setPayWithWallet,
     payWithWallet: wallet.checkoutPayWithWallet,
     walletAmountUsed: wallet.amountUsed,
     remainingAmount: wallet.remainingAmount,

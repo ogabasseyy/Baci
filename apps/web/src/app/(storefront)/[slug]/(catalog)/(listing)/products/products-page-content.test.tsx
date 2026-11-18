@@ -70,7 +70,10 @@ vi.mock('@/lib/seo-utils', () => ({
 vi.mock('@/lib/store-url', () => ({
   buildStoreUrl: () => 'https://store.example.com',
 }));
-vi.mock('@/lib/validation', () => ({ isValidMerchantIdentifier: () => true }));
+vi.mock('@/lib/validation', () => ({
+  isDomainIdentifier: (value: string) => value.includes('.'),
+  isValidMerchantIdentifier: () => true,
+}));
 vi.mock('./product-index-card', () => ({
   ProductIndexCard: ({
     formattedPrice,
@@ -287,3 +290,11 @@ describe('ProductsPageContent', () => {
     );
   });
 });
+
+vi.mock(
+  '@/components/storefront/experience/experience-server-boundary',
+  () => ({
+    ExperienceServerBoundary: ({ fallback }: { fallback: React.ReactNode }) =>
+      fallback,
+  })
+);

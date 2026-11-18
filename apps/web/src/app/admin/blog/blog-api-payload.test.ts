@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { expect, it, vi } from 'vitest';
 import { updatePlatformBlogPost } from './blog-api';
 import { toApiPayload } from './blog-api-payload';

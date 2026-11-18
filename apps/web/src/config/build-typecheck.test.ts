@@ -107,6 +107,12 @@ describe('production build type checking', () => {
       );
       const project = join(dir, 'tsconfig.build.json');
       writeFileSync(project, readFileSync(buildConfigPath));
+      // The build config lists the prepared typed-route copy as a required file.
+      mkdirSync(join(dir, '.typed-navigation'));
+      writeFileSync(
+        join(dir, '.typed-navigation', 'link.d.ts'),
+        'export {};\n'
+      );
       const trace = join(dir, 'trace');
       const valid = compile(project, ['--generateTrace', trace, '--listFiles']);
       expect(valid.status, valid.stdout + valid.stderr).toBe(0);
@@ -120,6 +126,13 @@ describe('production build type checking', () => {
       expect(invalid.status).toBe(1);
       expect(invalid.stdout + invalid.stderr).toContain('TS2322');
       expect(invalid.stdout + invalid.stderr).toContain('fixture-7.ts');
+
+      // Without the prepared copy the check fails closed instead of skipping typed routes.
+      writeFileSync(files[7], "export const value7: string = 'valid';\n");
+      rmSync(join(dir, '.typed-navigation'), { recursive: true });
+      const missing = compile(project);
+      expect(missing.status).not.toBe(0);
+      expect(missing.stdout + missing.stderr).toContain('TS6053');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

@@ -1,11 +1,23 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react-native';
 import { SearchDropdown } from './SearchDropdown';
+
+const mockDismissKeyboardForNavigation = jest.fn<Promise<void>, []>();
+
+jest.mock('@/components/ui/dismiss-keyboard-for-navigation', () => ({
+  dismissKeyboardForNavigation: () => mockDismissKeyboardForNavigation(),
+}));
 
 const mockPush = jest.fn();
 const mockUseProducts = jest.fn();
 const mockUseCategories = jest.fn();
 
 jest.mock('expo-router', () => ({
+  useNavigation: () => ({ isFocused: () => true, addListener: () => () => {} }),
   useRouter: () => ({ push: mockPush }),
 }));
 
@@ -34,6 +46,7 @@ jest.mock('@/components/ui/SafeImage', () => ({
 describe('SearchDropdown', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockDismissKeyboardForNavigation.mockResolvedValue(undefined);
     mockUseProducts.mockReturnValue({ isLoading: false, products: [] });
     mockUseCategories.mockReturnValue({ data: [] });
   });
@@ -195,7 +208,7 @@ describe('SearchDropdown', () => {
     expect(screen.queryByLabelText(/see all results/i)).toBeNull();
   });
 
-  it('keeps product taps as direct-product shortcuts', () => {
+  it('keeps product taps as direct-product shortcuts', async () => {
     const onClose = jest.fn();
     mockUseProducts.mockReturnValue({
       isLoading: false,
@@ -224,8 +237,43 @@ describe('SearchDropdown', () => {
     );
 
     fireEvent.press(screen.getByLabelText(/iPhone 16/));
-    expect(mockPush).toHaveBeenCalledWith('/product/iphone-16');
+    await waitFor(() =>
+      expect(mockPush).toHaveBeenCalledWith('/product/iphone-16')
+    );
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it('dismisses the keyboard before navigating from a category result', async () => {
+    const onClose = jest.fn();
+    let finishDismissal = () => {};
+    mockDismissKeyboardForNavigation.mockReturnValue(
+      new Promise<void>((resolve) => {
+        finishDismissal = resolve;
+      })
+    );
+    mockUseCategories.mockReturnValue({
+      data: [{ id: 'category-1', name: 'Audio', slug: 'audio' }],
+    });
+
+    render(
+      <SearchDropdown isVisible onClose={onClose} topOffset={72} hideInput />
+    );
+
+    fireEvent.press(screen.getByLabelText('Browse Audio'));
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+    finishDismissal();
+    await waitFor(() =>
+      expect(mockPush).toHaveBeenCalledWith({
+        pathname: '/category/[slug]',
+        params: { slug: 'audio' },
+      })
+    );
+
+    expect(mockDismissKeyboardForNavigation).toHaveBeenCalledTimes(1);
+    expect(
+      mockDismissKeyboardForNavigation.mock.invocationCallOrder[0]
+    ).toBeLessThan(onClose.mock.invocationCallOrder[0]);
   });
 
   it('routes standalone input submit to the submit handler', () => {

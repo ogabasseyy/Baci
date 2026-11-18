@@ -24,6 +24,22 @@ describe('vtuWalletOnlyChargeSchema', () => {
     expectedUserId: '11111111-2222-4333-8444-555555555555',
   };
 
+  it('bugfix: refuses a bare cancel that names no payment (Muse)', () => {
+    const cancel = {
+      ...baseAirtime,
+      walletAmount: 1000,
+      paymentMethod: 'piggyvest_wallet' as const,
+      walletPayCancel: true as const,
+    };
+    expect(vtuWalletOnlyChargeSchema.safeParse(cancel).success).toBe(false);
+    expect(
+      vtuWalletOnlyChargeSchema.safeParse({
+        ...cancel,
+        walletPayOperationId: '11111111-1111-4111-8111-111111111111',
+      }).success
+    ).toBe(true);
+  });
+
   it('accepts walletAmount === amount (the full-coverage happy path)', () => {
     const result = vtuWalletOnlyChargeSchema.safeParse({
       ...baseAirtime,
@@ -130,5 +146,41 @@ describe('vtuWalletOnlyChargeSchema', () => {
     if (result.success) {
       expect('customerId' in result.data).toBe(false);
     }
+  });
+
+  describe('paying from the PiggyVest wallet (dark)', () => {
+    it('defaults to store credit, exactly as before', () => {
+      const result = vtuWalletOnlyChargeSchema.parse({
+        ...baseAirtime,
+        walletAmount: 1000,
+      });
+      expect(result.paymentMethod).toBe('store_credit');
+    });
+
+    it('accepts the PiggyVest method with an operation id and a PIN proof', () => {
+      const result = vtuWalletOnlyChargeSchema.safeParse({
+        ...baseAirtime,
+        walletAmount: 1000,
+        paymentMethod: 'piggyvest_wallet',
+        walletPayOperationId: '22222222-2222-4222-8222-222222222222',
+        walletPayPinProof: 'a'.repeat(64),
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects an unknown method or a malformed proof', () => {
+      for (const extra of [
+        { paymentMethod: 'card' },
+        { walletPayPinProof: 'not-a-proof' },
+        { walletPayOperationId: 'not-a-uuid' },
+      ])
+        expect(
+          vtuWalletOnlyChargeSchema.safeParse({
+            ...baseAirtime,
+            walletAmount: 1000,
+            ...extra,
+          }).success
+        ).toBe(false);
+    });
   });
 });

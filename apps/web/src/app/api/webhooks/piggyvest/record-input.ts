@@ -25,12 +25,13 @@ export function toRecordInput(
     case 'interest-payout.success':
       return {
         ...base,
-        // The credited plan wallet is the nested destination_wallet; the
-        // envelope pvb_wallet is the source accrued-interest wallet.
-        // Persist exactly the attribution the ledger acts on so a
-        // redelivery reusing the event id with a different destination
-        // surfaces as a conflict instead of a duplicate.
-        walletId: event.eventData.destination_wallet,
+        // The credited plan wallet is the envelope pvb_wallet; the nested
+        // destination_wallet is PVB's internal wallet id (confirmed by
+        // PiggyVest 2026-11-11). Persist exactly the attribution the
+        // ledger acts on so a redelivery reusing the event id with a
+        // different credited wallet surfaces as a conflict instead of a
+        // duplicate.
+        walletId: event.pvb_wallet,
         reference: event.pvb_reference,
         amountKobo: event.eventData.amount,
       };

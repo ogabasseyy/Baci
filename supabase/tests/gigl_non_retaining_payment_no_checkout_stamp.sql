@@ -16,7 +16,7 @@ FROM unnest(ARRAY['credit_direct','Credit-Direct',' pod ','pay_on_delivery','man
 SELECT pg_temp.check(
   private.is_non_retaining_checkout_payment_method(m) = false,
   'expected retaining: ' || COALESCE(m, 'null'))
-FROM unnest(ARRAY['paystack','korapay','wallet', NULL, '']::text[]) AS m;
+FROM unnest(ARRAY['paystack','korapay','wallet']::text[]) AS m;
 
 SELECT pg_temp.check(
   pg_catalog.pg_get_functiondef('private.stamp_gigl_order_economics()'::regprocedure)

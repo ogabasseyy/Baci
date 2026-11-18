@@ -35,7 +35,7 @@ describe('FollowUpEmptyState', () => {
 
     expect(screen.getByText('No issues')).toBeTruthy();
     expect(
-      screen.getByText('All recent transactions are successful!')
+      screen.getByText('No follow-ups need attention right now.')
     ).toBeTruthy();
     expect(screen.queryByRole('button')).toBeNull();
   });
@@ -57,7 +57,7 @@ describe('FollowUpEmptyState', () => {
     expect(screen.getByText("Couldn't load follow-ups")).toBeTruthy();
     expect(screen.getByText(/does not mean\s+there are none/)).toBeTruthy();
     expect(
-      screen.queryByText('All recent transactions are successful!')
+      screen.queryByText('No follow-ups need attention right now.')
     ).toBeNull();
   });
 

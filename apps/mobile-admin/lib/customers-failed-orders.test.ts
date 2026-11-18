@@ -63,6 +63,60 @@ function getItems(data: GroupedFailedOrderListItem[]) {
 }
 
 describe('groupFailedOrdersByDate', () => {
+  it('shows older Oxygen reviews before newer ordinary follow-ups', () => {
+    const review = {
+      ...mockOrders[2],
+      id: 'oxygen-review',
+      oxygen_follow_up_status: 'needs_review' as const,
+    };
+    const { data, stickyHeaderIndices } = groupFailedOrdersByDate(
+      [mockOrders[0], review],
+      new Date('2026-06-28T20:00:00.000Z')
+    );
+    expect(getHeaders(data).map((header) => header.title)).toEqual([
+      'Oxygen · Needs review',
+      'Today',
+    ]);
+    expect(getItems(data).map((item) => item.data.id)).toEqual([
+      'oxygen-review',
+      '1',
+    ]);
+    expect(stickyHeaderIndices).toEqual([0, 2]);
+  });
+  it('sorts dated Oxygen reviews newest first and keeps undated reviews last', () => {
+    const review = {
+      ...mockOrders[0],
+      oxygen_follow_up_status: 'needs_review' as const,
+    };
+    const { data } = groupFailedOrdersByDate([
+      { ...review, id: 'undated-first', follow_up_at: 'invalid' },
+      { ...review, id: 'older', follow_up_at: '2026-06-27T12:00:00Z' },
+      { ...review, id: 'undated-middle', follow_up_at: 'invalid' },
+      { ...review, id: 'newer', follow_up_at: '2026-06-28T12:00:00Z' },
+    ]);
+    expect(getItems(data).map((item) => item.data.id)).toEqual([
+      'newer',
+      'older',
+      'undated-first',
+      'undated-middle',
+    ]);
+  });
+
+  it('groups a resumed Oxygen application by its latest workflow activity', () => {
+    const oxygen = {
+      ...mockOrders[2],
+      id: 'oxygen',
+      follow_up_at: '2026-06-28T18:00:00.000Z',
+      oxygen_follow_up_status: 'oxygen_processing' as const,
+    };
+    const { data } = groupFailedOrdersByDate(
+      [mockOrders[0], oxygen],
+      new Date('2026-06-28T20:00:00.000Z')
+    );
+    expect(getHeaders(data).map((item) => item.title)).toEqual(['Today']);
+    expect(getItems(data).map((item) => item.data.id)).toEqual(['oxygen', '1']);
+  });
+
   it('groups failed orders by local date with sticky headers', () => {
     const now = new Date('2026-06-28T20:00:00.000Z');
     const { data, stickyHeaderIndices } = groupFailedOrdersByDate(
@@ -126,7 +180,7 @@ describe('groupFailedOrdersByDate', () => {
     ]);
   });
 
-  it('skips invalid created_at values without crashing', () => {
+  it('keeps invalid created_at values visible under Date unavailable', () => {
     const invalidOrders: FailedOrder[] = [
       {
         ...mockOrders[0],
@@ -136,7 +190,10 @@ describe('groupFailedOrdersByDate', () => {
 
     expect(
       groupFailedOrdersByDate(invalidOrders, new Date('2026-06-28')).data
-    ).toEqual([]);
+    ).toEqual([
+      expect.objectContaining({ type: 'header', title: 'Date unavailable' }),
+      expect.objectContaining({ type: 'item', data: invalidOrders[0] }),
+    ]);
   });
 
   it('uses non-colliding keys and local date keys', () => {

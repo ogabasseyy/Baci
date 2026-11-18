@@ -74,7 +74,7 @@ export function FollowUpEmptyState({
       />
       <Text style={[styles.title, { color: colors.text }]}>No issues</Text>
       <Text style={[styles.body, { color: colors.textSecondary }]}>
-        All recent transactions are successful!
+        No follow-ups need attention right now.
       </Text>
     </View>
   );

@@ -1,5 +1,4 @@
-const CANONICAL_TECNO_SPONSORED_BLOG_URL =
-  'https://ogabassey.com/blog/tecno-camon-slim-iphone-instant-transfer-sponsored';
+import { TECNO_SPONSORED_BLOG_URL } from './tecno-sponsored-blog-url';
 
 /**
  * Gates TECNO sponsored-post CTA tracking to Ogabassey's canonical custom-domain
@@ -12,7 +11,7 @@ export function isTecnoSponsoredBlogUrl(rawUrl: string): boolean {
     const normalizedPath = parsed.pathname.replace(/\/+$/, '') || '/';
     return (
       `${parsed.origin.toLowerCase()}${normalizedPath}` ===
-      CANONICAL_TECNO_SPONSORED_BLOG_URL
+      TECNO_SPONSORED_BLOG_URL
     );
   } catch {
     return false;

@@ -1,4 +1,5 @@
 import { StyleSheet } from 'react-native';
+import { QUIZ_TILE } from './quiz-stage-colors';
 import type { QuizThemeColors } from './quiz-theme';
 
 export function createQuizWaitingRoomStyles(colors: QuizThemeColors) {
@@ -15,23 +16,49 @@ export function createQuizWaitingRoomStyles(colors: QuizThemeColors) {
       padding: 22,
     },
     eyebrow: {
-      color: colors.primary,
+      color: colors.warning,
       fontSize: 13,
       fontWeight: '900',
       letterSpacing: 1.1,
       textTransform: 'uppercase',
     },
     title: { color: colors.text, fontSize: 28, fontWeight: '900' },
-    prize: { color: colors.textSecondary, fontSize: 17, fontWeight: '700' },
+    prize: { color: QUIZ_TILE.text, fontSize: 18, fontWeight: '900' },
+    prizeTicket: {
+      alignItems: 'center',
+      flexDirection: 'row',
+      gap: 10,
+      minHeight: 64,
+      paddingHorizontal: 20,
+      paddingVertical: 14,
+    },
+    prizeTicketCopy: { flex: 1 },
+    prizeTicketLabel: {
+      color: QUIZ_TILE.textSecondary,
+      fontSize: 11,
+      fontWeight: '800',
+      letterSpacing: 1.1,
+      textTransform: 'uppercase',
+    },
+    adNotice: {
+      color: colors.textSecondary,
+      fontSize: 13,
+      fontWeight: '600',
+      textAlign: 'center',
+    },
     countdownLabel: {
       color: colors.textSecondary,
-      fontSize: 14,
-      fontWeight: '700',
+      fontSize: 13,
+      fontWeight: '800',
+      letterSpacing: 1.4,
       textAlign: 'center',
+      textTransform: 'uppercase',
     },
     countdown: {
       color: colors.warning,
-      fontSize: 52,
+      fontSize: 76,
+      letterSpacing: -2,
+      lineHeight: 84,
       fontVariant: ['tabular-nums'],
       fontWeight: '900',
       textAlign: 'center',

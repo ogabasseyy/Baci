@@ -16,6 +16,7 @@ export function createDelegatedCartActions(
   shared: Pick<
     ReturnType<typeof useSharedCart>,
     | 'cart'
+    | 'ownCart'
     | 'repriceLine'
     | 'removeFromCart'
     | 'updateQuantity'
@@ -26,6 +27,9 @@ export function createDelegatedCartActions(
   cartWideNegotiationActiveRef: RefObject<boolean>,
   setCartWideNegotiationActive: (active: boolean) => void
 ) {
+  // Every decision here issues commands, so it reads this tab's own lines
+  // and never a sibling tab's display-only preview.
+  const commandCart = shared.ownCart ?? shared.cart;
   // Group-deal voiding for delegated edits (see planGroupDealVoid):
   // reprices every negotiated server line except the edit's own target.
   const voidDelegatedGroupDeal = (
@@ -34,7 +38,7 @@ export function createDelegatedCartActions(
   ) => {
     if (!cartWideNegotiationActiveRef.current) return;
     for (const line of planGroupDealVoid(
-      shared.cart,
+      commandCart,
       exceptCartItemId,
       quantityOverrides
     )) {
@@ -47,7 +51,7 @@ export function createDelegatedCartActions(
     cartItemIdOrProductId: string,
     variantId?: string
   ): SharedCartDisplayItem | null =>
-    delegatedLineTarget(shared.cart, cartItemIdOrProductId, variantId);
+    delegatedLineTarget(commandCart, cartItemIdOrProductId, variantId);
 
   const removeFromCart = (
     cartItemIdOrProductId: string,
@@ -92,7 +96,7 @@ export function createDelegatedCartActions(
     return;
   };
   const applyNegotiatedPrice = (cartItemId: string, newPrice: number) => {
-    const target = shared.cart.find((line) => line.cartItemId === cartItemId);
+    const target = commandCart.find((line) => line.cartItemId === cartItemId);
     const wasGroupActive = cartWideNegotiationActiveRef.current;
     // Individual-line negotiation — not a group deal.
     setCartWideNegotiationActive(false);
@@ -100,7 +104,7 @@ export function createDelegatedCartActions(
     // A previously active group deal clears from the other lines first so
     // only this line keeps a negotiation, mirroring the legacy reset.
     if (wasGroupActive) {
-      for (const line of shared.cart) {
+      for (const line of commandCart) {
         if (line.cartItemId === cartItemId) continue;
         if (
           line.negotiatedPrice === undefined &&
@@ -115,7 +119,7 @@ export function createDelegatedCartActions(
     return;
   };
   const clearNegotiatedPrice = (cartItemId: string) => {
-    const target = shared.cart.find((line) => line.cartItemId === cartItemId);
+    const target = commandCart.find((line) => line.cartItemId === cartItemId);
     setCartWideNegotiationActive(false);
     if (target) shared.repriceLine(target);
     return;
@@ -124,13 +128,13 @@ export function createDelegatedCartActions(
     // The server has no group-deal operation, so the provider distributes
     // the agreed total proportionally as per-line server reprices — the
     // same ratio math as the legacy path, confirmed line by line.
-    const currentTotal = shared.cart.reduce((sum, item) => {
+    const currentTotal = commandCart.reduce((sum, item) => {
       const price = item.negotiatedPrice ?? item.price;
       return sum + price * item.quantity;
     }, 0);
     if (currentTotal <= 0) return;
     const ratio = newTotal / currentTotal;
-    for (const line of shared.cart) {
+    for (const line of commandCart) {
       shared.repriceLine(line, (line.negotiatedPrice ?? line.price) * ratio);
     }
     setCartWideNegotiationActive(true);
@@ -155,7 +159,7 @@ export function createDelegatedCartActions(
       // the shared hook; it must not void the group deal on its way
       // out, and the provider must not announce it as added.
       const sendQuantity = planDelegatedAddQuantity(
-        shared.cart,
+        commandCart,
         product,
         quantity,
         options,

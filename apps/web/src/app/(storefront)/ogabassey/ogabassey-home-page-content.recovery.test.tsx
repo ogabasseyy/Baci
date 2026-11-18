@@ -129,22 +129,18 @@ it('resolves the canonical custom-domain shell without awaiting connection() or 
   expect(headers).not.toHaveBeenCalled();
 });
 
-it('still consults headers() when omitDocumentHeading and empty pathPrefix are passed without canonicalDomain', async () => {
-  vi.mocked(headers).mockResolvedValueOnce(
-    new Headers([['x-merchant-slug', 'other-merchant']])
-  );
-
+it('resolves non-canonical home shells from pathPrefix without awaiting connection() or headers()', async () => {
   render(
     await OgabasseyHomePageContent({
       omitDocumentHeading: true,
-      pathPrefix: '',
+      pathPrefix: '/other-merchant',
       shellMerchantId: null,
       shellSlides: null,
     })
   );
 
-  expect(connection).toHaveBeenCalledOnce();
-  expect(headers).toHaveBeenCalledOnce();
+  expect(connection).not.toHaveBeenCalled();
+  expect(headers).not.toHaveBeenCalled();
   expect(getRequestScopedMerchant).toHaveBeenCalledWith('other-merchant');
 });
 

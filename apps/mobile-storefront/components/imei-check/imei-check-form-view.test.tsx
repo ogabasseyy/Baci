@@ -77,30 +77,46 @@ describe('ImeiCheckFormView', () => {
     expect(screen.getByText('Verify Now - ₦1,000')).toBeTruthy();
   });
 
-  it('disables the verify button when the IMEI is shorter than 15 digits', () => {
+  it('keeps the verify button disabled until a number is typed', () => {
     const onCheck = jest.fn();
-    render(<ImeiCheckFormView {...baseProps} imei="12345" onCheck={onCheck} />);
-
-    const button = screen.getByText('Verify Now - ₦1,000').parent;
-    expect(button).toBeTruthy();
-    fireEvent.press(button as NonNullable<typeof button>);
-
-    expect(onCheck).not.toHaveBeenCalled();
-  });
-
-  it('keeps the verify button disabled when the IMEI checksum is invalid', () => {
-    const onCheck = jest.fn();
-    render(
-      <ImeiCheckFormView
-        {...baseProps}
-        imei="123456789012345"
-        onCheck={onCheck}
-      />
-    );
+    render(<ImeiCheckFormView {...baseProps} imei="" onCheck={onCheck} />);
 
     fireEvent.press(screen.getByText('Verify Now - ₦1,000'));
 
     expect(onCheck).not.toHaveBeenCalled();
+  });
+
+  it('bugfix: a short or wrong IMEI still reaches the verify tap, which says what is wrong (Muse)', () => {
+    for (const imei of ['12345', '123456789012345']) {
+      const onCheck = jest.fn();
+      const { unmount } = render(
+        <ImeiCheckFormView {...baseProps} imei={imei} onCheck={onCheck} />
+      );
+
+      fireEvent.press(screen.getByText('Verify Now - ₦1,000'));
+
+      expect(onCheck).toHaveBeenCalledTimes(1);
+      unmount();
+    }
+  });
+
+  it('bugfix: a wrong IMEI with a short balance is checked before any top-up (Muse)', () => {
+    const onCheck = jest.fn();
+    const onTopUpWallet = jest.fn();
+    render(
+      <ImeiCheckFormView
+        {...baseProps}
+        imei="12345"
+        walletBalance={500}
+        onCheck={onCheck}
+        onTopUpWallet={onTopUpWallet}
+      />
+    );
+
+    fireEvent.press(screen.getByText('Top up to unlock'));
+
+    expect(onCheck).toHaveBeenCalledTimes(1);
+    expect(onTopUpWallet).not.toHaveBeenCalled();
   });
 
   it('invokes onCheck when verify is pressed with a valid IMEI', () => {
@@ -126,13 +142,13 @@ describe('ImeiCheckFormView', () => {
     expect(screen.queryByText('Verify Now - ₦1,000')).toBeNull();
   });
 
-  it('turns the button into a top-up action when wallet balance is short', () => {
+  it('turns the button into a top-up action when wallet balance is short and no IMEI is typed', () => {
     const onCheck = jest.fn();
     const onTopUpWallet = jest.fn();
     render(
       <ImeiCheckFormView
         {...baseProps}
-        imei="490154203237518"
+        imei=""
         walletBalance={500}
         onCheck={onCheck}
         onTopUpWallet={onTopUpWallet}
@@ -145,6 +161,25 @@ describe('ImeiCheckFormView', () => {
     expect(onTopUpWallet).toHaveBeenCalledTimes(1);
     expect(onTopUpWallet).toHaveBeenCalledWith(500);
     expect(onCheck).not.toHaveBeenCalled();
+  });
+
+  it('bugfix: a typed IMEI with a short balance still reaches the verify tap, which recovers a paid check before any top-up (Codex P2)', () => {
+    const onCheck = jest.fn();
+    const onTopUpWallet = jest.fn();
+    render(
+      <ImeiCheckFormView
+        {...baseProps}
+        imei="490154203237518"
+        walletBalance={500}
+        onCheck={onCheck}
+        onTopUpWallet={onTopUpWallet}
+      />
+    );
+
+    fireEvent.press(screen.getByText('Top up to unlock'));
+
+    expect(onCheck).toHaveBeenCalledTimes(1);
+    expect(onTopUpWallet).not.toHaveBeenCalled();
   });
 
   it('disables verify while the wallet balance is loading', () => {
@@ -164,12 +199,12 @@ describe('ImeiCheckFormView', () => {
     expect(onCheck).not.toHaveBeenCalled();
   });
 
-  it('disables verify when the wallet balance cannot be loaded', () => {
+  it('disables verify when the wallet balance cannot be loaded and no IMEI is typed', () => {
     const onCheck = jest.fn();
     render(
       <ImeiCheckFormView
         {...baseProps}
-        imei="490154203237518"
+        imei=""
         isWalletError
         onCheck={onCheck}
       />
@@ -183,6 +218,22 @@ describe('ImeiCheckFormView', () => {
     fireEvent.press(screen.getByText('Wallet unavailable'));
 
     expect(onCheck).not.toHaveBeenCalled();
+  });
+
+  it('bugfix: a typed IMEI still reaches the verify tap when the wallet can not be read, so a paid check recovers (Codex P2)', () => {
+    const onCheck = jest.fn();
+    render(
+      <ImeiCheckFormView
+        {...baseProps}
+        imei="490154203237518"
+        isWalletError
+        onCheck={onCheck}
+      />
+    );
+
+    fireEvent.press(screen.getByText('Wallet unavailable'));
+
+    expect(onCheck).toHaveBeenCalledTimes(1);
   });
 
   describe('footer safe-area inset vs keyboard', () => {

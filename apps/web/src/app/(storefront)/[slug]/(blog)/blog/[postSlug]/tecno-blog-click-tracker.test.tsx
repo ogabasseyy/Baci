@@ -47,3 +47,22 @@ it('ignores a click prevented on the link', () => {
   expect(fireEvent.click(screen.getByRole('link'))).toBe(false);
   expect(capture).not.toHaveBeenCalled();
 });
+
+it('tracks middle-click auxclick activations and ignores non-middle auxclick buttons', () => {
+  render(
+    <>
+      <TecnoBlogClickTracker />
+      <a href="https://ng-store.tecno.com/">
+        <span>Order Here</span>
+      </a>
+    </>
+  );
+  const link = screen.getByRole('link');
+  link.dispatchEvent(new MouseEvent('auxclick', { bubbles: true, button: 2 }));
+  expect(capture).not.toHaveBeenCalled();
+
+  link.dispatchEvent(new MouseEvent('auxclick', { bubbles: true, button: 1 }));
+  expect(capture).toHaveBeenCalledExactlyOnceWith(
+    'https://ng-store.tecno.com/'
+  );
+});

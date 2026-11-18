@@ -12,6 +12,10 @@ import {
   OxygenPaymentOriginUnverifiedError,
   oxygenPaymentOriginCode,
 } from '@/lib/payments/oxygen/payment-origin-error';
+import {
+  oxygenStatementLinkSentCode,
+  oxygenStatementLinkSentMessage,
+} from '@/lib/payments/oxygen/statement-linking';
 
 export class SignInRequired extends Error {}
 export class OxygenRateLimitError extends Error {}
@@ -54,6 +58,13 @@ export async function decodeOxygenResponse(
       body.code === oxygenStatementRequiredCode
     )
       throw new Error(oxygenStatementRequiredMessage);
+    if (
+      typeof body === 'object' &&
+      body !== null &&
+      'code' in body &&
+      body.code === oxygenStatementLinkSentCode
+    )
+      throw new Error(oxygenStatementLinkSentMessage);
   }
   if (!response.ok)
     throw new Error(

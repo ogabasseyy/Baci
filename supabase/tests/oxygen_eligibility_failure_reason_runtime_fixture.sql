@@ -1,6 +1,7 @@
 -- Minimal dependencies for exercising the real Oxygen runtime function.
 CREATE ROLE anon;
 CREATE ROLE authenticated;
+CREATE ROLE service_role;
 CREATE SCHEMA auth;
 CREATE SCHEMA oxygen_private;
 GRANT USAGE ON SCHEMA auth, oxygen_private TO authenticated;
@@ -26,8 +27,8 @@ CREATE TABLE public.oxygen_workflows (
  created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now()
 );
 CREATE TABLE oxygen_private.commands (
- id uuid PRIMARY KEY, workflow_id uuid, idempotency_key uuid, expected_version integer,
- channel text, command jsonb, status text, created_at timestamptz DEFAULT now(),
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(), workflow_id uuid, idempotency_key uuid, expected_version integer,
+ channel text, command jsonb, status text DEFAULT 'queued', created_at timestamptz DEFAULT now(),
  started_at timestamptz, completed_at timestamptz
 );
 CREATE FUNCTION oxygen_private.record_command(p_id uuid,p_outcome text,p_stage text)
@@ -37,3 +38,13 @@ BEGIN
  UPDATE public.oxygen_workflows SET stage=p_stage,version=version+1
   WHERE id=(SELECT workflow_id FROM oxygen_private.commands WHERE id=p_id);
 END $$;
+CREATE FUNCTION oxygen_private.claim_command(p_id uuid)
+RETURNS jsonb LANGUAGE plpgsql AS $$
+DECLARE result jsonb;
+BEGIN
+ UPDATE oxygen_private.commands SET status='executing',started_at=now()
+ WHERE id=p_id AND status='queued' RETURNING command INTO result;
+ RETURN result;
+END $$;
+CREATE UNIQUE INDEX fixture_one_pending_command ON oxygen_private.commands(workflow_id)
+ WHERE status IN ('queued','executing','indeterminate');

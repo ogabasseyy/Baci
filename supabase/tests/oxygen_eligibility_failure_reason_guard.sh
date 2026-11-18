@@ -183,7 +183,9 @@ for source in \
   supabase/migrations/20261111143604_oxygen_offer_amount_precision.sql \
   supabase/migrations/20261116191630_oxygen_eligibility_failure_reason.sql \
   supabase/migrations/20261118192000_oxygen_eligibility_progress.sql \
-  supabase/tests/oxygen_eligibility_status.sql; do
+  supabase/migrations/20261118203000_oxygen_eligibility_background.sql \
+  supabase/tests/oxygen_eligibility_status.sql \
+  supabase/tests/oxygen_eligibility_background.sql; do
   psql -Xq -v ON_ERROR_STOP=1 -f "$check_root/$source" >"$check_dir/runtime.log"
 done
 echo 'Real runtime owner, worker and rollback projections passed'

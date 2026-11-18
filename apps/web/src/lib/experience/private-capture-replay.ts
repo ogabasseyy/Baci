@@ -15,7 +15,7 @@ export function captureReplayState(input: CaptureInput) {
   return `preview:${input.idempotencyKey}:${fingerprint}`;
 }
 
-/** Owner RLS read only. A previously used key cannot silently change its binding. */
+/** Owner RLS read. Callers validate the retry key as a UUID before using this prefix. */
 export async function loadCaptureReplay(
   client: SupabaseClient,
   merchantId: string,

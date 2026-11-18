@@ -4,6 +4,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { performancePublicBootstrap } from '@/schemas/experience-performance-worker';
 import { experiencePreviewInput } from '@/schemas/experience-preview';
+import { OWNER_PREVIEW_CALL_TIMEOUT_MS } from './owner-preview-deadline';
 import {
   productionDeliveryOrigins,
   productionOrigin,
@@ -110,7 +111,7 @@ export function createOwnerPreviewBridgeClient(settings: {
         redirect: 'error',
         cache: 'no-store',
         credentials: 'omit',
-        signal: AbortSignal.timeout(30000),
+        signal: AbortSignal.timeout(OWNER_PREVIEW_CALL_TIMEOUT_MS),
       }
     );
     if (response.status !== 200) {

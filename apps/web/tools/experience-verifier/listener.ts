@@ -1,4 +1,5 @@
 import { createServer, type IncomingMessage } from 'node:http';
+import { BUILD_VERIFIER_WORK_TIMEOUT_MS } from './build-deadline';
 
 async function readBody(
   req: IncomingMessage,
@@ -46,7 +47,7 @@ export async function startVerifierListener(
   buildHandler?: (request: Request) => Promise<Response>,
   captureHandler?: (request: Request) => Promise<Response>,
   publicHandler?: (request: Request) => Promise<Response>,
-  deadlineMs = 550000
+  deadlineMs?: number
 ) {
   if (!Number.isInteger(port) || port < 0 || port > 65535)
     throw Error('INVALID_VERIFIER_PORT');
@@ -84,10 +85,13 @@ export async function startVerifierListener(
     }
     const controller = new AbortController();
     active.add(controller);
+    const workTimeout =
+      deadlineMs ??
+      (req.url === '/v1/build' ? BUILD_VERIFIER_WORK_TIMEOUT_MS : 550000);
     const deadline = setTimeout(() => {
       controller.abort(Error('VERIFIER_DEADLINE'));
       reply(503);
-    }, deadlineMs);
+    }, workTimeout);
     const onClose = () => {
       if (!res.writableEnded) controller.abort();
     };

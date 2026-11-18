@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { OWNER_PREVIEW_WORK_TIMEOUT_MS } from '../src/lib/experience/owner-preview-deadline';
 
 type Admission = (body: Uint8Array, signature: string) => boolean;
 
@@ -7,8 +8,12 @@ export function createOwnerPreviewHttpHandler(
   bridge: (request: Request) => Promise<Response>,
   options: { timeoutMs?: number; admit?: Admission } = {}
 ) {
-  const timeoutMs = options.timeoutMs ?? 30000;
-  if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 30000)
+  const timeoutMs = options.timeoutMs ?? OWNER_PREVIEW_WORK_TIMEOUT_MS;
+  if (
+    !Number.isInteger(timeoutMs) ||
+    timeoutMs < 1 ||
+    timeoutMs > OWNER_PREVIEW_WORK_TIMEOUT_MS
+  )
     throw Error('INVALID_OWNER_TIMEOUT');
   return createOwnerHttpHandler(bridge, {
     path: '/internal/owner/preview',

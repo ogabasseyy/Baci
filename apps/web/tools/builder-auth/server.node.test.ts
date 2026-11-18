@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import { mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { request as httpRequest } from 'node:http';
@@ -7,9 +6,13 @@ import { createServer } from 'node:https';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { exportJWK, generateKeyPair, jwtVerify } from 'jose';
+import { exportJWK, generateKeyPair } from 'jose';
 import { startAuthQualification } from '../builder-production/auth-qualification.ts';
 import { listenPrivateAuth } from './auth-listener.ts';
+import {
+  checkBrokerRefresh,
+  createBrokerTestCertificate,
+} from './broker-refresh-test-support.ts';
 import { createBuilderProvider } from './provider.ts';
 import { createBuilderAuthHandler } from './server.ts';
 import { createTestBrowser, requireString } from './test-browser.ts';
@@ -29,27 +32,7 @@ for (const viaBridge of [false, true])
     const observed: string[] = [];
     try {
       await db.pool.query('INSERT INTO auth.users VALUES($1)', [actor]);
-      execFileSync(
-        'openssl',
-        [
-          'req',
-          '-x509',
-          '-newkey',
-          'ec',
-          '-pkeyopt',
-          'ec_paramgen_curve:P-256',
-          '-nodes',
-          '-keyout',
-          join(dir, 'key.pem'),
-          '-out',
-          join(dir, 'cert.pem'),
-          '-days',
-          '1',
-          '-subj',
-          '/CN=localhost',
-        ],
-        { stdio: 'ignore' }
-      );
+      createBrokerTestCertificate(dir);
       let handle: ReturnType<typeof createBuilderAuthHandler>;
       server = createServer(
         {
@@ -284,70 +267,16 @@ for (const viaBridge of [false, true])
         );
         return tokens as { access_token: string; refresh_token: string };
       }
-      const tokens = await authorize();
-      const verified = await jwtVerify(tokens.access_token, key.publicKey, {
+      await checkBrokerRefresh({
+        authorize,
+        browser: { send, jar },
+        authPath,
+        key,
+        db,
+        actor,
         issuer,
-        audience: resource,
-        algorithms: ['ES256'],
-        typ: 'at+jwt',
-      });
-      const id = String(verified.payload.connectionId);
-      assert.equal(verified.payload.sub, actor);
-      assert.equal(verified.payload.grantVersion, 1);
-      assert.equal(
-        (await db.storage.readConnection(id))?.allowCreateStore,
-        true
-      );
-      const refreshed = await send('/token', {
-        client_id: 'new-builder-client',
-        grant_type: 'refresh_token',
-        refresh_token: tokens.refresh_token,
         resource,
       });
-      assert.equal(refreshed.status, 200);
-      const next = JSON.parse(refreshed.text) as { refresh_token: string };
-      assert.notEqual(next.refresh_token, tokens.refresh_token);
-      const second = await authorize();
-      const secondClaims = await jwtVerify(second.access_token, key.publicKey, {
-        issuer,
-        audience: resource,
-      });
-      const secondId = String(secondClaims.payload.connectionId);
-      assert.notEqual(secondId, id);
-      const reused = await send('/token', {
-        client_id: 'new-builder-client',
-        grant_type: 'refresh_token',
-        refresh_token: tokens.refresh_token,
-        resource,
-      });
-      assert.notEqual(reused.status, 200);
-      assert.equal((await db.storage.readConnection(id))?.status, 'revoked');
-      assert.equal(
-        (await db.storage.readConnection(secondId))?.status,
-        'active'
-      );
-      const noResource = await send('/token', {
-        client_id: 'new-builder-client',
-        grant_type: 'refresh_token',
-        refresh_token: second.refresh_token,
-      });
-      assert.notEqual(noResource.status, 200);
-      await db.storage.revoke(secondId);
-      assert.equal(
-        (await db.storage.readConnection(secondId))?.status,
-        'revoked'
-      );
-      await assert.rejects(authorize(true), /Consent target changed/);
-      // An invalid callback clears the host-only cookie; a fresh request can restart.
-      const bad = await send('/upstream/callback?state=invalid');
-      assert.equal(bad.status, 400);
-      assert(!jar.has('__Host-baci-builder-link'));
-      const start = await send(authPath);
-      const login = await send(requireString(start.location));
-      assert.equal(
-        new URL(requireString(login.location)).origin,
-        'https://upstream.invalid'
-      );
     } finally {
       if (server) await new Promise<void>((r) => server?.close(() => r()));
       await bridge?.close();

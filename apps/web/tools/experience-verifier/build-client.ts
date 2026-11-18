@@ -7,6 +7,7 @@ import {
   requireExperienceOwner,
 } from '@/lib/experience/authorization';
 import type { VerifierReceipt } from '@/lib/experience/local-build-supervisor-types';
+import { BUILD_VERIFIER_CALL_TIMEOUT_MS } from './build-deadline';
 
 const receiptSchema = z.strictObject({
   merchantId: z.uuid(),
@@ -52,6 +53,7 @@ export function createVerifierBuildClient(settings: {
     const status = await new Promise<number>((resolve, reject) => {
       const req = request(
         {
+          signal: AbortSignal.timeout(BUILD_VERIFIER_CALL_TIMEOUT_MS),
           host: '127.0.0.1',
           port: settings.port,
           path: '/v1/build',
@@ -69,7 +71,6 @@ export function createVerifierBuildClient(settings: {
         }
       );
       req.once('error', reject);
-      req.setTimeout(600000, () => req.destroy(Error('VERIFIER_TIMEOUT')));
       req.end(body);
     }).catch(() => 503);
     if (status !== 204) throw Error('VERIFIER_UNAVAILABLE');

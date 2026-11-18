@@ -80,3 +80,24 @@ runner work; the runner retains its own slot and process limits until completion
 The actual ChatGPT synthetic merchant build/preview and final-checkout test
 remain pending. Do not label the app submission-ready or submit it on the
 basis of source tests or metadata discovery alone.
+
+
+## 18 November follow-up
+
+The owner preview work deadline is 90 seconds and its client allows 100
+seconds. Signed admission still has its original freshness window. This
+gives the 75-second runner request time to complete while keeping request
+cancellation and slot accounting in place.
+
+Private build verification has a separate 1,200-second server deadline and
+a 1,250-second caller deadline. Its maximum sequential matrix includes two
+compiles, one prerender, and twelve captures, each with a 75-second runner
+budget. Public verification, capture and attestation retain the 550-second
+server deadline. Live full-stack timing and shutdown remain rollout checks.
+
+The generic transport challenge advertises protected-resource metadata
+without assuming a tool scope. The auth fixture uses the current builder
+issuer and explicitly tests rejection of the former issuer. Both capture
+entry points validate the idempotency key as a UUID before replay lookup.
+Background lease renewal and recovery apply to connection-bound builds.
+Native owner finalization remains outside that worker lease contract.

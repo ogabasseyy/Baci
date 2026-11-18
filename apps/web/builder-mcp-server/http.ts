@@ -7,8 +7,8 @@ import {
   BUILDER_MCP_HOST,
   BUILDER_MCP_ORIGIN,
   BUILDER_MCP_PATH,
+  BUILDER_METADATA_URL,
 } from '../src/lib/builder-connector/resource';
-import { builderAuthChallenge } from '../src/lib/builder-connector/tool-policy';
 import {
   createRateLimiter,
   resolveClientIp,
@@ -55,9 +55,7 @@ export function createBuilderMcpHttpHandler(
   const challenge = (res: ServerResponse) => {
     res.setHeader(
       'www-authenticate',
-      builderAuthChallenge('CONNECTION_REVOKED', 'list_storefronts')._meta[
-        'mcp/www_authenticate'
-      ][0]
+      `Bearer resource_metadata="${BUILDER_METADATA_URL}", error="invalid_token"`
     );
     reply(res, 401, 'Reconnect Baci to continue.');
   };

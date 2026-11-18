@@ -151,7 +151,7 @@ describe('CheckoutScreen', () => {
         'step:review'
       );
       expect(screen.getByText('Review Order')).toBeOnTheScreen();
-      expect(screen.getByText('Card Payment (Paystack)')).toBeOnTheScreen();
+      expect(screen.getAllByText('Pay with Card').length).toBeGreaterThan(0);
     });
   });
 

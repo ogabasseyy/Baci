@@ -181,6 +181,8 @@ describe('OgabasseyHomePageContent', () => {
     );
 
     const result = await OgabasseyHomePageContent({
+      canonicalDomain: true,
+      omitDocumentHeading: true,
       pathPrefix: '',
       shellMerchantId: 'merchant-1',
       shellSlides: [],
@@ -203,7 +205,7 @@ describe('OgabasseyHomePageContent', () => {
     );
 
     const result = await OgabasseyHomePageContent({
-      pathPrefix: '/ogabassey',
+      pathPrefix: '',
       shellMerchantId: 'merchant-1',
       shellSlides: [SHELL_SLIDE],
     });
@@ -240,7 +242,7 @@ describe('OgabasseyHomePageContent', () => {
     });
 
     const result = await OgabasseyHomePageContent({
-      pathPrefix: '/ogabassey',
+      pathPrefix: '',
       shellMerchantId: 'merchant-1',
       shellSlides: [SHELL_SLIDE],
     });

@@ -63,6 +63,55 @@ describe('TrustPolicyPageClient', () => {
     );
   });
 
+  it('uses the curated Ogabassey return policy even when merchant facts are stale', () => {
+    render(
+      <TrustPolicyPageClient
+        kind="returns"
+        merchantName="Ogabassey"
+        ogabasseyCare
+        trustProfile={{
+          returnPolicy: {
+            summary: 'Legacy policy',
+            windowDays: 7,
+            localRoute: '/returns',
+          },
+          socialLinks: {},
+          derivedLinks: {},
+        }}
+      />
+    );
+    expect(
+      screen.getByText(/Report an undisclosed technical defect within 14 days/)
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Legacy policy')).not.toBeInTheDocument();
+    expect(screen.queryByText('7 days')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: /device coverage|read the warranty/i })
+    ).not.toBeInTheDocument();
+  });
+
+  it('offers one device coverage link when warranty coverage is published', () => {
+    render(
+      <TrustPolicyPageClient
+        kind="returns"
+        merchantName="Ogabassey"
+        ogabasseyCare
+        trustProfile={{
+          warrantyPolicy: {
+            summary: 'Manufacturer warranty applies.',
+            localRoute: '/warranty',
+          },
+          socialLinks: {},
+          derivedLinks: {},
+        }}
+      />
+    );
+
+    expect(
+      screen.getByRole('link', { name: /device coverage|read the warranty/i })
+    ).toHaveAttribute('href', './warranty');
+  });
+
   it('renders the shipping trust policy facts', () => {
     render(
       <TrustPolicyPageClient

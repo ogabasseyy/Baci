@@ -13,10 +13,17 @@ type WalletColors = (typeof Colors)['light'];
 export function EmbeddedPinStep({
   children,
   colors,
+  holdHeight = false,
   onParentClose,
 }: {
   children: ReactNode;
   colors: WalletColors;
+  /**
+   * A short waiting step (checking the PIN status, approving a new PIN):
+   * the sheet keeps the height it has instead of shrinking to the spinner
+   * and growing again, so it moves once, to the next real step.
+   */
+  holdHeight?: boolean;
   /** Called when the savings sheet itself is closed under this step. */
   onParentClose?: () => void;
 }) {
@@ -41,9 +48,12 @@ export function EmbeddedPinStep({
     >
       <View
         testID="pin-step-content"
-        onLayout={(event) =>
-          setHeight(Math.ceil(event.nativeEvent.layout.height))
-        }
+        onLayout={(event) => {
+          // A waiting step's size is never kept: reporting it later, when the
+          // hold ends, would move the sheet to a stale height first.
+          if (!holdHeight)
+            setHeight(Math.ceil(event.nativeEvent.layout.height));
+        }}
       >
         {children}
       </View>

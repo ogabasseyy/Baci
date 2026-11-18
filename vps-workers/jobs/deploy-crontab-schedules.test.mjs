@@ -13,7 +13,7 @@ function readDeployScript() {
 }
 
 describe('deploy crontab schedules', () => {
-  it('schedules the gated Oxygen callback drain every five minutes', () => {
+  it('schedules the gated Oxygen callback drain every five minutes via direct worker', () => {
     const script = readDeployScript();
     assert.match(
       script,
@@ -21,7 +21,7 @@ describe('deploy crontab schedules', () => {
     );
     assert.match(
       script,
-      /run-web-cron\.mjs \/api\/cron\/oxygen-callback-reconciliation/
+      /\$REMOTE_DIR\/bin\/oxygen-callback-reconciliation\.sh/
     );
   });
   it('schedules the gateway paid-order reconcile drain hourly through run-web-cron', () => {
@@ -70,6 +70,19 @@ describe('deploy crontab schedules', () => {
     );
   });
 
+  it('schedules the PiggyVest wallet pay drain every five minutes through run-web-cron', () => {
+    const deployScript = readDeployScript();
+    const lines = deployScript
+      .split('\n')
+      .filter((line) => line.includes('piggyvest-wallet-pay-drain'));
+
+    assert.equal(lines.length, 1);
+    assert.match(
+      lines[0],
+      /^\*\/5 \* {2}\* \* \* flock -n \$REMOTE_DIR\/locks\/piggyvest-wallet-pay-drain\.lock bash -lc 'cd \$REMOTE_DIR && \$NODE_BIN \$REMOTE_DIR\/jobs\/run-web-cron\.mjs \/api\/cron\/piggyvest-wallet-pay-drain' >> \$REMOTE_DIR\/logs\/piggyvest-wallet-pay-drain\.log 2>&1$/
+    );
+  });
+
   // Regression: the line is rendered through an unquoted heredoc, so a shell
   // variable in it ($s, $?) was filled in at deploy time and broke the entry.
   // Render it the same way and run it: both jobs always run, and the line
@@ -107,7 +120,7 @@ describe('deploy crontab schedules', () => {
     }
   });
 
-  it('schedules the order notification outbox cron through run-web-cron', () => {
+  it('schedules the order notification outbox cron via direct worker', () => {
     const deployScript = readDeployScript();
 
     assert.match(
@@ -116,7 +129,7 @@ describe('deploy crontab schedules', () => {
     );
     assert.match(
       deployScript,
-      /\$NODE_BIN \$REMOTE_DIR\/jobs\/run-web-cron\.mjs \/api\/cron\/order-notifications\?batchSize=5/
+      /\$REMOTE_DIR\/bin\/process-order-notifications\.sh --batch-size=5/
     );
     assert.match(
       deployScript,
@@ -139,7 +152,7 @@ describe('deploy crontab schedules', () => {
     assert.doesNotMatch(deployScript, /process-storefront-purge-outbox/);
   });
 
-  it('schedules the agentic commerce health cron through run-web-cron', () => {
+  it('schedules the agentic commerce health cron via direct worker', () => {
     const deployScript = readDeployScript();
 
     assert.match(
@@ -148,7 +161,7 @@ describe('deploy crontab schedules', () => {
     );
     assert.match(
       deployScript,
-      /\$NODE_BIN \$REMOTE_DIR\/jobs\/run-web-cron\.mjs \/api\/cron\/agentic-commerce-health/
+      /\$REMOTE_DIR\/bin\/agentic-commerce-health\.sh/
     );
     assert.match(
       deployScript,
@@ -156,34 +169,28 @@ describe('deploy crontab schedules', () => {
     );
   });
 
-  it('schedules the merchant signup policy health check every five minutes', () => {
+  it('schedules the merchant signup policy health check every five minutes via direct worker', () => {
     const deployScript = readDeployScript();
 
     assert.match(
       deployScript,
       /\*\/5 \*\s+\* \* \* flock -n \$REMOTE_DIR\/locks\/merchant-signup-health\.lock/
     );
-    assert.match(
-      deployScript,
-      /\$NODE_BIN \$REMOTE_DIR\/jobs\/run-web-cron\.mjs \/api\/cron\/merchant-signup-health/
-    );
+    assert.match(deployScript, /\$REMOTE_DIR\/bin\/merchant-signup-health\.sh/);
     assert.match(
       deployScript,
       />> \$REMOTE_DIR\/logs\/merchant-signup-health\.log 2>&1/
     );
   });
 
-  it('schedules the shared-cart notice delivery alarm every five minutes', () => {
+  it('schedules the shared-cart notice delivery alarm every five minutes via direct worker', () => {
     const deployScript = readDeployScript();
 
     assert.match(
       deployScript,
       /\*\/5 \*\s+\* \* \* flock -n \$REMOTE_DIR\/locks\/cart-notice-health\.lock/
     );
-    assert.match(
-      deployScript,
-      /\$NODE_BIN \$REMOTE_DIR\/jobs\/run-web-cron\.mjs \/api\/cron\/cart-notice-health/
-    );
+    assert.match(deployScript, /\$REMOTE_DIR\/bin\/cart-notice-health\.sh/);
     assert.match(
       deployScript,
       />> \$REMOTE_DIR\/logs\/cart-notice-health\.log 2>&1/

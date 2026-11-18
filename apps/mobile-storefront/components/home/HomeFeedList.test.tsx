@@ -13,6 +13,27 @@ import {
   setupHomeFeedMocks,
 } from './HomeFeedList-test-harness';
 
+let mockCampaignData: { id: string }[] = [];
+let mockCampaignLoading = false;
+let mockMerchantSlug = 'another-store';
+
+jest.mock('@/hooks/use-black-friday', () => ({
+  useBlackFriday: () => ({
+    data: mockCampaignData,
+    isLoading: mockCampaignLoading,
+  }),
+}));
+
+jest.mock('@/lib/config', () => ({
+  CONFIG: {
+    BUSINESS_TYPE: 'electronics',
+    TEMPLATE_ID: 'ogabassey',
+    get MERCHANT_SLUG() {
+      return mockMerchantSlug;
+    },
+  },
+}));
+
 jest.mock('@shopify/flash-list', () => mockFlashListModule());
 
 jest.mock('./use-home-product-feed', () => ({
@@ -20,7 +41,7 @@ jest.mock('./use-home-product-feed', () => ({
 }));
 
 jest.mock('@/hooks/useTheme', () => ({
-  useTheme: () => ({ colors: { text: '#000000' } }),
+  useTheme: () => ({ colors: { card: '#FFFFFF', text: '#000000' } }),
 }));
 
 jest.mock('@/components/storefront/BlockRenderer', () =>
@@ -95,9 +116,48 @@ import { HomeFeedList } from './HomeFeedList';
 
 beforeEach(() => {
   setupHomeFeedMocks();
+  mockCampaignData = [];
+  mockCampaignLoading = false;
+  mockMerchantSlug = 'another-store';
 });
 
 describe('HomeFeedList', () => {
+  it.each([
+    'ogabassey',
+    'another-store',
+  ])('only elects the Black Friday hero for Ogabassey with cached products (%s)', (merchantSlug) => {
+    mockMerchantSlug = merchantSlug;
+    mockCampaignData = [{ id: 'cached-offer' }];
+    const hero = {
+      type: 'HeroCarousel',
+      props: { id: 'campaign-hero', slides: [] },
+    } satisfies Block;
+    renderList({ blocks: [hero, ...GRID_BLOCKS], primaryProductGridIndex: 2 });
+
+    expect(mockBlockRenderer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        blackFridayHeroBlockId:
+          merchantSlug === 'ogabassey' ? hero.props.id : undefined,
+      })
+    );
+  });
+
+  it('reserves the campaign carousel while its lineup is loading', () => {
+    mockMerchantSlug = 'ogabassey';
+    mockCampaignLoading = true;
+    const hero = {
+      type: 'HeroCarousel',
+      props: { id: 'campaign-hero', slides: [] },
+    } satisfies Block;
+    renderList({ blocks: [hero, ...GRID_BLOCKS], primaryProductGridIndex: 2 });
+    expect(mockBlockRenderer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pendingBlackFridayHeroBlockId: hero.props.id,
+        blackFridayHeroBlockId: undefined,
+      })
+    );
+  });
+
   it('pauses carousel autoplay in both feed slices while search is open', () => {
     mockBlockRenderer.mockClear();
     renderList({ isSearchOpen: true });
@@ -113,6 +173,19 @@ describe('HomeFeedList', () => {
     expect(screen.getByTestId('filter-bar')).toBeTruthy();
     expect(screen.getByText('Shop the collection')).toBeTruthy();
     expect(screen.getAllByTestId('product-card')).toHaveLength(2);
+  });
+
+  // Elite paints a fixed black backdrop behind the transparent list header;
+  // the dark heading must sit on the same card surface as the FilterBar.
+  it('renders the section title on the card surface, never the bare backdrop', () => {
+    renderList();
+
+    expect(screen.getByTestId('home-feed-section-title')).toHaveStyle({
+      backgroundColor: '#FFFFFF',
+    });
+    expect(
+      screen.getByRole('header', { name: 'Shop the collection' })
+    ).toHaveStyle({ color: '#000000' });
   });
 
   it('renders products for a single-column (list) variant', () => {

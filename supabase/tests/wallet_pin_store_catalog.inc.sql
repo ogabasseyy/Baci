@@ -165,12 +165,14 @@ BEGIN
   END LOOP;
 
   -- The purpose domain: the three spend surfaces plus the goal funding,
-  -- cancel and complete purposes added by 20261103044600.
+  -- cancel and complete purposes added by 20261103044600, and the PiggyVest
+  -- wallet payment purpose added by 20261112161500.
   PERFORM pg_temp.wp_assert(
     (SELECT pg_catalog.array_agg(purpose ORDER BY purpose)
        FROM wallet_pin_private.proof_purposes)
-      = ARRAY['checkout', 'goal_cancel', 'goal_complete', 'goal_fund', 'imei', 'vtu'],
-    'proof purposes are checkout, goal_cancel, goal_complete, goal_fund, imei and vtu'
+      = ARRAY['checkout', 'goal_cancel', 'goal_complete', 'goal_fund', 'imei', 'vtu',
+              'wallet_pay'],
+    'proof purposes are checkout, goal_cancel, goal_complete, goal_fund, imei, vtu and wallet_pay'
   );
 
   -- A PIN row records the account that set it, as a foreign key with an

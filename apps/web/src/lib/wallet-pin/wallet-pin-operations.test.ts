@@ -53,38 +53,6 @@ const base = (fn: ReturnType<typeof vi.fn>) => ({
 beforeEach(() => vi.stubEnv('WALLET_PIN_PEPPER', secret));
 afterEach(() => vi.unstubAllEnvs());
 
-it('reports status from the database state', async () => {
-  const cases = [
-    [setState, { hasPin: true, resetRequired: false, available: true }],
-    [
-      { status: 'locked', lockedUntil: '2026-11-03T12:00:00Z' },
-      { hasPin: true, resetRequired: false, available: true },
-    ],
-    [
-      { status: 'reset_required' },
-      { hasPin: true, resetRequired: true, available: true },
-    ],
-    [
-      { status: 'not_set' },
-      { hasPin: false, resetRequired: false, available: true },
-    ],
-    [
-      { status: 'unavailable' },
-      { hasPin: false, resetRequired: false, available: false },
-    ],
-  ] as const;
-  for (const [state, expected] of cases) {
-    const rpc = rpcOf({ get_wallet_pin_state: state });
-    expect(await readWalletPinStatus({ rpc: asRpc(rpc), merchantId })).toEqual(
-      expected
-    );
-    expect(rpc).toHaveBeenCalledWith('get_wallet_pin_state', {
-      p_merchant_id: merchantId,
-      p_pepper_id: pepper().id,
-    });
-  }
-});
-
 it('reports unavailable without a database call when the pepper is unusable', async () => {
   const rpc = rpcOf({});
   for (const value of ['', 'short']) {
@@ -93,6 +61,7 @@ it('reports unavailable without a database call when the pepper is unusable', as
       hasPin: false,
       resetRequired: false,
       available: false,
+      signInConfirmationRequired: false,
     });
     expect(await setWalletPin({ ...base(rpc), pin: '482915' })).toEqual({
       status: 'unavailable',

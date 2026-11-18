@@ -1,12 +1,12 @@
 import { z } from 'zod';
-import { oxygenProviderStateSchema } from './oxygen-runtime';
+import { oxygenProviderStateFieldsSchema } from './oxygen-runtime';
 export const oxygenSavedPlanQuerySchema = z
   .object({ workflowId: z.uuid() })
   .strict();
 export const oxygenSavedPlanSelectionSchema = oxygenSavedPlanQuerySchema
   .extend({ bookingReference: z.uuid() })
   .strict();
-const state = oxygenProviderStateSchema.pick({
+const state = oxygenProviderStateFieldsSchema.pick({
   bookingReference: true,
   booking: true,
   schedule: true,

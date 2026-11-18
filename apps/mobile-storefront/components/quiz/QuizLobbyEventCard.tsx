@@ -4,16 +4,17 @@ import { Image } from 'expo-image';
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import coinsImage from '@/assets/quiz/png/Coins.png';
-import { useTheme } from '@/hooks/useTheme';
 import { createSafeBoundedImageSource } from '@/lib/safe-bounded-image-source';
 import type { QuizEvent } from '@/services/quiz-types';
 import type { createQuizLobbyStyles } from './QuizLobby.styles';
 import {
-  formatQuizClock,
+  formatQuizClockWithDay,
   formatRemainingTime,
   getEventStartButtonText,
   getPrizeMomentLabel,
 } from './QuizScreen.utils';
+import { QuizTicketBackdrop } from './QuizTicketBackdrop';
+import { QUIZ_STAGE_COLORS, QUIZ_TILE } from './quiz-stage-colors';
 import { useQuizEventTimer } from './use-quiz-event-timer';
 import { useQuizServerClock } from './use-quiz-server-clock';
 
@@ -48,7 +49,7 @@ export function QuizLobbyEventCard({
   serverNow,
   styles,
 }: QuizLobbyEventCardProps) {
-  const { colors } = useTheme();
+  const colors = QUIZ_STAGE_COLORS;
   const [imageFailed, setImageFailed] = useState(false);
   const serverClock = useQuizServerClock(
     serverNow ?? null,
@@ -111,9 +112,12 @@ export function QuizLobbyEventCard({
       </View>
 
       <View style={styles.prizeStage}>
+        <QuizTicketBackdrop color={QUIZ_TILE.background} />
         <View style={styles.prizeCopy}>
           <Text style={styles.eventTitle}>{event.title}</Text>
-          <Text style={styles.eventPrize}>Win {event.prizeName}</Text>
+          <Text numberOfLines={3} style={styles.eventPrize}>
+            Win {event.prizeName}
+          </Text>
           {condition ? (
             <Text style={styles.prizeCondition}>{condition}</Text>
           ) : null}
@@ -160,7 +164,12 @@ export function QuizLobbyEventCard({
         <Text style={styles.timingDot}>•</Text>
         <Text style={styles.timingFact}>
           {isClosed ? 'Closed' : 'Closes'}{' '}
-          {formatQuizClock(event.endsAt, locale, event.timeZone)}
+          {formatQuizClockWithDay(
+            event.endsAt,
+            locale,
+            event.timeZone,
+            serverClock.serverNowMs
+          )}
         </Text>
       </View>
 

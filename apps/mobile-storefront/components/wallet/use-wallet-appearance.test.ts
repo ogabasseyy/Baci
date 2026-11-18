@@ -2,9 +2,14 @@ import { describe, expect, it, jest } from '@jest/globals';
 import { renderHook } from '@testing-library/react-native';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors, { SPACING } from '@/constants/Colors';
+import {
+  CHAT_WIDGET_DEFAULT_BOTTOM_OFFSET,
+  CHAT_WIDGET_FAB_SIZE,
+  CONTENT_OVERLAY_GAP,
+  getHomeContentBottomPadding,
+} from '@/constants/layout';
 import { useStorefrontInsets } from '@/hooks/use-storefront-insets';
 import { useWalletAppearance } from './use-wallet-appearance';
-import { WALLET_TAB_SCROLL_PADDING_BOTTOM } from './wallet-tab.constants';
 
 jest.mock('@/components/useColorScheme', () => ({
   useColorScheme: jest.fn(),
@@ -25,7 +30,7 @@ describe('useWalletAppearance', () => {
           ReturnType<typeof useStorefrontInsets>['getListContentStyle']
         >(),
       getScrollContentStyle,
-      insets: { top: 0, right: 0, bottom: 0, left: 0 },
+      insets: { top: 0, right: 0, bottom: 34, left: 0 },
     });
 
     const { result } = renderHook(() => useWalletAppearance('tab'));
@@ -33,9 +38,32 @@ describe('useWalletAppearance', () => {
     expect(result.current.colors).toBe(Colors.dark);
     expect(result.current.scrollContentStyle).toBe(scrollContentStyle);
     expect(getScrollContentStyle).toHaveBeenCalledWith({
-      includeBottomInset: true,
-      paddingBottom: WALLET_TAB_SCROLL_PADDING_BOTTOM,
+      includeBottomInset: false,
+      paddingBottom: getHomeContentBottomPadding(34, true),
     });
+  });
+
+  it('bugfix: clears the floating tab bar, the chat button and the home indicator as a tab', () => {
+    const getScrollContentStyle = jest.fn(() => ({}));
+    jest.mocked(useColorScheme).mockReturnValue('light');
+    jest.mocked(useStorefrontInsets).mockReturnValue({
+      getListContentStyle:
+        jest.fn<
+          ReturnType<typeof useStorefrontInsets>['getListContentStyle']
+        >(),
+      getScrollContentStyle,
+      insets: { top: 0, right: 0, bottom: 34, left: 0 },
+    });
+
+    renderHook(() => useWalletAppearance('tab'));
+
+    const [options] = getScrollContentStyle.mock.calls[0] as unknown as [
+      { paddingBottom: number },
+    ];
+    // Floating bar: 64 tall, 24 up, plus the 34 home indicator = 122; the
+    // old 100 + 34 = 134 left the last rows under the chat button above it.
+    expect(options.paddingBottom).toBeGreaterThan(64 + 24 + 34);
+    expect(options.paddingBottom).toBe(getHomeContentBottomPadding(34, true));
   });
 
   it('preserves light colors and stack scroll padding', () => {
@@ -55,9 +83,42 @@ describe('useWalletAppearance', () => {
 
     expect(result.current.colors).toBe(Colors.light);
     expect(result.current.scrollContentStyle).toBe(scrollContentStyle);
+    // Walk 18: the chat button also floats over pushed wallet screens, so the
+    // card's buttons must be able to scroll clear of it.
     expect(getScrollContentStyle).toHaveBeenCalledWith({
       includeBottomInset: false,
-      paddingBottom: SPACING.xl,
+      paddingBottom: Math.max(
+        SPACING.xl,
+        CHAT_WIDGET_DEFAULT_BOTTOM_OFFSET +
+          CHAT_WIDGET_FAB_SIZE +
+          CONTENT_OVERLAY_GAP
+      ),
+    });
+  });
+
+  it('bugfix: a pushed wallet adds the bottom safe area to the chat clearance', () => {
+    const getScrollContentStyle = jest.fn(() => ({}));
+    jest.mocked(useColorScheme).mockReturnValue('light');
+    jest.mocked(useStorefrontInsets).mockReturnValue({
+      getListContentStyle:
+        jest.fn<
+          ReturnType<typeof useStorefrontInsets>['getListContentStyle']
+        >(),
+      getScrollContentStyle,
+      insets: { top: 0, right: 0, bottom: 34, left: 0 },
+    });
+
+    renderHook(() => useWalletAppearance('stack'));
+
+    // The chat button sits 34pt higher on a home-indicator device, so the
+    // clearance must grow by the same 34pt (Muse, #4250).
+    expect(getScrollContentStyle).toHaveBeenCalledWith({
+      includeBottomInset: false,
+      paddingBottom:
+        CHAT_WIDGET_DEFAULT_BOTTOM_OFFSET +
+        34 +
+        CHAT_WIDGET_FAB_SIZE +
+        CONTENT_OVERLAY_GAP,
     });
   });
 });

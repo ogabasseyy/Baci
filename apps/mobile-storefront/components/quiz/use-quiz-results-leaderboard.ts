@@ -4,9 +4,15 @@ import { fetchQuizLeaderboard } from '@/services/quiz-leaderboard';
 import { fetchQuizLiveLeaderboard } from '@/services/quiz-live-leaderboard';
 import { type QuizLeaderboard, QuizServiceError } from '@/services/quiz-types';
 import type { QuizV2LifecycleStatus } from '@/stores/quiz-recovery-envelope';
+import { backoffDelay } from './quiz-backoff-delay';
+import { isOverloadError } from './quiz-is-overload-error';
 
-const LIVE_REFRESH_INTERVAL_MS = 5_000;
-const FINAL_RETRY_INTERVAL_MS = 5_000;
+const LIVE_REFRESH_INTERVAL_MS = 10_000;
+const FINAL_RETRY_INTERVAL_MS = 10_000;
+const FAILURE_BACKOFF_CAP_MS = 60_000;
+const OVERLOAD_RETRY_FLOOR_MS = 15_000;
+const AUTH_BACKOFF_BASE_MS = 5_000;
+const AUTH_BACKOFF_CAP_MS = 30_000;
 
 interface UseQuizResultsLeaderboardInput {
   enabled: boolean;
@@ -30,6 +36,7 @@ export function useQuizResultsLeaderboard({
   const [leaderboard, setLeaderboard] = useState<QuizLeaderboard | null>(null);
   const [leaderboardError, setLeaderboardError] = useState(false);
   const [participantCount, setParticipantCount] = useState<number | null>(null);
+  const [liveBoardHidden, setLiveBoardHidden] = useState(false);
   const currentUserIdRef = useRef(getCurrentUserId);
   useLayoutEffect(() => {
     currentUserIdRef.current = getCurrentUserId;
@@ -58,6 +65,7 @@ export function useQuizResultsLeaderboard({
       boardStatus.current = null;
     }
     setLeaderboardError(false);
+    setLiveBoardHidden(false);
     if (!enabled || !eventId || !expectedUserId) {
       setLeaderboard(null);
       setParticipantCount(null);
@@ -72,6 +80,7 @@ export function useQuizResultsLeaderboard({
       AppState.currentState !== 'inactive';
     let loadInFlight = false;
     let authFailures = 0;
+    let loadFailures = 0;
     let retryId: ReturnType<typeof setTimeout> | undefined;
     const schedule = (delayMs: number) => {
       if (!active || !appIsActive) return;
@@ -87,9 +96,15 @@ export function useQuizResultsLeaderboard({
       // A transient finalization failure must not strand the result screen.
       // Keep a bounded retry loop until the immutable published board arrives;
       // once it succeeds the success path disables further polling.
-      let retryDelayMs: number | null = isLive
+      const baseIntervalMs = isLive
         ? LIVE_REFRESH_INTERVAL_MS
         : FINAL_RETRY_INTERVAL_MS;
+      // Spread every schedule so phones drift apart instead of polling in sync.
+      let retryDelayMs: number | null = backoffDelay({
+        baseMs: baseIntervalMs,
+        failures: loadFailures,
+        capMs: FAILURE_BACKOFF_CAP_MS,
+      });
       try {
         const result = isLive
           ? await fetchQuizLiveLeaderboard({ eventId, expectedUserId })
@@ -101,6 +116,12 @@ export function useQuizResultsLeaderboard({
         )
           return;
         authFailures = 0;
+        loadFailures = 0;
+        retryDelayMs = backoffDelay({
+          baseMs: baseIntervalMs,
+          failures: 0,
+          capMs: FAILURE_BACKOFF_CAP_MS,
+        });
         if (result.participantCount !== null) {
           setParticipantCount(result.participantCount);
         }
@@ -110,23 +131,23 @@ export function useQuizResultsLeaderboard({
         ) {
           setLeaderboard(null);
           setParticipantCount(null);
+          setLiveBoardHidden(true);
           hasLeaderboard.current = false;
           boardStatus.current = null;
         }
         if (result.status === 'published' || result.status === 'live') {
+          setLiveBoardHidden(false);
           setLeaderboard(result);
           boardStatus.current = result.status;
           hasLeaderboard.current = true;
           setLeaderboardError(false);
-          if (result.status === 'live') {
-            retryDelayMs = LIVE_REFRESH_INTERVAL_MS;
-          } else {
-            retryDelayMs = null;
-          }
+          if (result.status !== 'live') retryDelayMs = null;
           return;
         }
       } catch (error) {
         if (!active) return;
+        // Access errors and ordinary failures back off on separate ladders: a
+        // burst of 401s must not make the next server error wait longer.
         if (
           error instanceof QuizServiceError &&
           (error.status === 401 ||
@@ -144,13 +165,24 @@ export function useQuizResultsLeaderboard({
               currentUserIdRef.current() === expectedUserId)
           ) {
             authFailures += 1;
-            retryDelayMs = Math.min(
-              LIVE_REFRESH_INTERVAL_MS * 2 ** Math.min(authFailures - 1, 3),
-              30_000
-            );
+            // Spread like every other retry here: phones whose sessions
+            // were rejected together must not all retry in the same instant.
+            retryDelayMs = backoffDelay({
+              baseMs: AUTH_BACKOFF_BASE_MS,
+              failures: authFailures,
+              capMs: AUTH_BACKOFF_CAP_MS,
+            });
           } else {
             retryDelayMs = null;
           }
+        } else {
+          loadFailures += 1;
+          retryDelayMs = backoffDelay({
+            baseMs: baseIntervalMs,
+            failures: loadFailures,
+            capMs: FAILURE_BACKOFF_CAP_MS,
+            floorMs: isOverloadError(error) ? OVERLOAD_RETRY_FLOOR_MS : 0,
+          });
         }
         if (!hasLeaderboard.current) setLeaderboardError(true);
       } finally {
@@ -180,6 +212,7 @@ export function useQuizResultsLeaderboard({
   return {
     leaderboard: showBoard ? leaderboard : null,
     leaderboardError: visible && leaderboardError,
+    liveBoardHidden: visible && liveBoardHidden,
     participantCount: showBoard ? participantCount : null,
   };
 }

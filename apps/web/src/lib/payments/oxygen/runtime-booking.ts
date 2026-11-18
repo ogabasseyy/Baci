@@ -19,10 +19,13 @@ export async function bookOxygenPlan(
       10000n
   );
   const principal = amount - equity;
+  const offer = s.offers?.find((item) => item.tenure === a.tenure);
   if (
     principal < toOxygenMinorUnits(requireValue(s.minimumAmount), 'NGN') ||
     principal > toOxygenMinorUnits(requireValue(s.eligibleAmount), 'NGN') ||
     a.tenure > requireValue(s.maxTenure) ||
+    !offer ||
+    principal > toOxygenMinorUnits(offer.loanAmount, 'NGN') ||
     !c.address.trim()
   )
     throw new Error('Plan exceeds eligible terms or checkout address missing');

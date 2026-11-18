@@ -109,3 +109,46 @@ it.each([0, 20000])('consults the server reservation before switching when the U
   })).rejects.toThrow('Failed to reopen pending checkout order');
   expect(fetchImpl.mock.calls[1]?.[0]).toBe('/api/orders/reuse');
 });
+
+it('fences an unresolved wallet Credit Direct order even when customerEmail changes', async () => {
+  const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(
+    Response.json({
+      id: 'order-1',
+      payment_status: 'bnpl_pending',
+      total: 50000,
+    })
+  );
+  await expect(
+    resolvePendingCheckoutOrder({
+      ...input,
+      checkoutFingerprint: 'before-debit',
+      customerEmail: 'other-buyer@example.com',
+      fetchImpl,
+    })
+  ).rejects.toThrow(/Credit Direct payment may still be active/);
+  expect(fetchImpl).toHaveBeenCalledTimes(1);
+});
+
+it('routes a paid wallet Credit Direct order using stored identity when customerEmail changes', async () => {
+  const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(
+    Response.json({
+      id: 'order-1',
+      payment_status: 'paid',
+      total: 50000,
+    })
+  );
+  await expect(
+    resolvePendingCheckoutOrder({
+      ...input,
+      checkoutFingerprint: 'before-debit',
+      customerEmail: 'other-buyer@example.com',
+      fetchImpl,
+    })
+  ).resolves.toMatchObject({
+    clearStoredOrder: true,
+    paidOrder: {
+      orderId: 'order-1',
+      customerEmail: 'buyer@example.com',
+    },
+  });
+});

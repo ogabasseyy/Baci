@@ -207,6 +207,13 @@ jest.mock('@/hooks/use-wallet', () => ({
         balance: 0,
       },
     },
+    // Live readers the real hook always provides (submit-time re-check).
+    getWalletError: () => null,
+    getWalletVerdict: () => ({
+      walletIsStoreCredit: false,
+      walletPrimaryUnknown: false,
+    }),
+    isFetchingNow: () => false,
   }),
 }));
 

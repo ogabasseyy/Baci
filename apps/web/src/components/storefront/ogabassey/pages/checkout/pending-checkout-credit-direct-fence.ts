@@ -20,9 +20,7 @@ export function hasWalletCreditDirectOrder(
     pending?.paymentMethod === 'credit_direct' &&
     Number.isFinite(pending.walletAmountUsed) &&
     (pending.walletAmountUsed ?? 0) > 0 &&
-    pending.merchantId === input.merchantId &&
-    pending.customerEmail.trim().toLowerCase() ===
-      input.customerEmail.trim().toLowerCase()
+    pending.merchantId === input.merchantId
   );
 }
 
@@ -37,6 +35,8 @@ export async function resolveWalletCreditDirectFence(
   // when the wallet selection was cleared after a confirmed debit.
   if (
     pendingOrder.trackingToken &&
+    pendingOrder.customerEmail.trim().toLowerCase() ===
+      input.customerEmail.trim().toLowerCase() &&
     checkoutFingerprintsMatch(
       pendingOrder.checkoutFingerprint,
       input.checkoutFingerprint,

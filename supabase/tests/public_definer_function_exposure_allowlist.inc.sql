@@ -64,6 +64,8 @@ SELECT * FROM (VALUES
    'public storefront/feed read; anon-safe projection'),
   ('public.get_merchant_signup_policy_health()',
    'cron health probe via anon client; booleans only'),
+  ('public.get_negotiation_cost_floor_price(uuid,uuid)',
+   'public negotiation read; returns only the derived floor (never products.cost_price), but the floor equals cost*1.1 when cost dominates, so it is a known residual oracle (follow-up: offer-evaluation RPC + rate limit)'),
   ('public.get_order_condition_prices(uuid,uuid[])',
    'public storefront/feed read; anon-safe projection'),
   ('public.get_order_inventory_proof(uuid,text,text)',
@@ -215,6 +217,18 @@ SELECT * FROM (VALUES
   ('public.unsubscribe_merchant_onboarding_emails(uuid)',
    'guest or bearer flow; token/secret verified in the body'),
   ('public.unsubscribe_newsletter(text,uuid)',
-   'FOLLOW-UP: anon can unsubscribe any email (no token) and probe membership')
+   'FOLLOW-UP: anon can unsubscribe any email (no token) and probe membership'),
+  ('public.record_chat_customer_message(text,bigint,uuid,text,bigint,text,text)',
+   'signed chat webhook flow; short-lived HMAC proof verified in the body, no service role'),
+  ('public.chat_event_claim_push(text,bigint,uuid,text,uuid)',
+   'signed chat push flow; action-bound HMAC proof verified in the body, no service role'),
+  ('public.chat_event_push_tokens(text,bigint,uuid,text,uuid)',
+   'signed chat push flow; action-bound HMAC proof verified in the body, no service role'),
+  ('public.chat_event_store_push_tickets(text,bigint,uuid,text,uuid,jsonb)',
+   'signed chat push flow; action-bound HMAC proof verified in the body, no service role'),
+  ('public.chat_event_deactivate_push_tokens(text,bigint,uuid,text,uuid,text,text[])',
+   'signed chat push flow; action-bound HMAC proof verified in the body, no service role'),
+  ('public.chat_event_record_push_attempt(text,bigint,uuid,text,uuid,jsonb)',
+   'signed chat push flow; action-bound HMAC proof verified in the body, no service role')
 ) AS allowlist(signature, reason);
 ALTER TABLE definer_exposure_allowlist ADD PRIMARY KEY (signature);

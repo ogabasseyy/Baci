@@ -9,10 +9,10 @@ const shadowStyles = getFilterBarShadowStyles(
   Platform.OS === 'web' ? 'web' : 'native'
 );
 
-// Theme-aware factory so the filter bar surfaces (the panel, category pills,
-// price fields, toggles, popover) follow light/dark instead of a hardcoded
-// white band. Layout is unchanged; only colors are driven from the theme.
-export const getFilterBarStyles = (colors: ThemeColors) =>
+export const getFilterBarStyles = (
+  colors: ThemeColors,
+  accent = colors.primary
+) =>
   StyleSheet.create({
     container: {
       backgroundColor: colors.card,
@@ -86,7 +86,7 @@ export const getFilterBarStyles = (colors: ThemeColors) =>
     filterLabel: {
       fontSize: 12,
       fontWeight: '800',
-      color: colors.primary,
+      color: accent,
       fontFamily: 'serif',
     },
     chevron: {
@@ -123,7 +123,7 @@ export const getFilterBarStyles = (colors: ThemeColors) =>
       fontFamily: 'serif',
     },
     popoverTextActive: {
-      color: colors.primary,
+      color: accent,
       fontWeight: '800',
     },
     checkIcon: {

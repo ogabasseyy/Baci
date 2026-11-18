@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { describe, expect, it } from 'vitest';
 import { RADIUS, SPACING } from '@/constants/theme';
 import { styles } from './new-order.styles';

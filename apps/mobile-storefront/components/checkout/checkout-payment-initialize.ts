@@ -1,5 +1,6 @@
 import { router } from 'expo-router';
 import type { PaymentMethodType } from '@/components/checkout/PaymentMethodSelector';
+import type { WalletTransferFallback } from '@/components/checkout/wallet-transfer-fallback';
 import { trackCheckoutPaymentStarted } from '@/services/analytics';
 import { OrderError, type OrderResponse } from '@/services/orders';
 import {
@@ -27,6 +28,8 @@ export interface InitializeGatewayAndRouteParams {
   selectedPayment: PaymentMethodType;
   setIsProcessing: (value: boolean) => void;
   trackingToken?: string | null;
+  /** Shows the bank-transfer page's "wallet transfer unavailable" notice. */
+  walletTransferFallback?: WalletTransferFallback;
 }
 
 // Initializes the provider (card gateways and legacy DVA bank transfer)
@@ -42,8 +45,10 @@ export async function initializeGatewayAndRoute({
   selectedPayment,
   setIsProcessing,
   trackingToken,
+  walletTransferFallback,
 }: InitializeGatewayAndRouteParams): Promise<void> {
   const isBankTransfer = selectedPayment === 'bank_transfer';
+  const validTrackingToken = trackingToken?.trim() ? trackingToken : undefined;
   const gateway = isBankTransfer ? 'paystack' : selectedPayment;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), PAYMENT_INIT_TIMEOUT_MS);
@@ -72,6 +77,9 @@ export async function initializeGatewayAndRoute({
           gateway,
           billing_address: { country: 'NG' },
           ...(isBankTransfer && { payment_type: 'dva' }),
+          ...(isBankTransfer && validTrackingToken
+            ? { tracking_token: validTrackingToken }
+            : {}),
         }),
       }
     );
@@ -171,7 +179,8 @@ export async function initializeGatewayAndRoute({
         bankName,
         accountNumber,
         accountName,
-        ...(trackingToken && { trackingToken }),
+        ...(validTrackingToken && { trackingToken: validTrackingToken }),
+        ...(walletTransferFallback && { walletTransferFallback }),
       },
     });
     return;
@@ -189,7 +198,7 @@ export async function initializeGatewayAndRoute({
       // Canonical order total for revenue-accurate purchase reporting; the
       // gateway `amount` above is only the residual due after credits.
       orderTotal: String(orderResponse.order.total),
-      ...(trackingToken && { trackingToken }),
+      ...(validTrackingToken && { trackingToken: validTrackingToken }),
     },
   });
 }

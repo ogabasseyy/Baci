@@ -67,7 +67,6 @@ function input(
   overrides: Partial<ProductCartSubmissionInput> = {}
 ): ProductCartSubmissionInput {
   return {
-    currencyCode: 'NGN',
     currentPrice: 500_000,
     currentVariantSelection: null,
     effectiveVariantAttributes: {},
@@ -85,7 +84,7 @@ describe('useProductCartSubmission', () => {
     vi.clearAllMocks();
   });
 
-  it('adds a simple product with the merchant slug, tracking, and confirmation', () => {
+  it('adds a simple product with the merchant slug and confirmation without tracking it twice', () => {
     const { result } = renderHook(() => useProductCartSubmission(input()));
 
     act(() => {
@@ -95,12 +94,9 @@ describe('useProductCartSubmission', () => {
     const product = simpleProduct();
     expect(mockSetMerchantSlug).toHaveBeenCalledWith('ogabassey');
     expect(mockAddToCart).toHaveBeenCalledWith(product, 1, undefined);
-    expect(mockTrackAddToCart).toHaveBeenCalledWith(
-      'merchant-1',
-      product,
-      1,
-      'NGN'
-    );
+    // Regression: the shared cart action reports add_to_cart; tracking here
+    // as well double-counted every default-template PDP add.
+    expect(mockTrackAddToCart).not.toHaveBeenCalled();
     expect(mockToast).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'Added to cart!' })
     );

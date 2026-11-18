@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -6,6 +7,8 @@ import { configDefaults, defineConfig } from 'vitest/config';
 import { escapeGlob } from './vitest.escape-glob';
 import { JSDOM_HOLDOUT_FILES } from './vitest.jsdom-holdouts';
 import { NODE_PROJECT_FOLDERS } from './vitest.node-folders';
+import { repositoryScanExcludes } from './vitest.repository-scans';
+import { SlowFilesFirstSequencer } from './vitest.sequencer';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -37,6 +40,19 @@ const reactDomPath = appRequire.resolve('react-dom');
 const reactDomClientPath = appRequire.resolve('react-dom/client');
 const reactDomTestUtilsPath = appRequire.resolve('react-dom/test-utils');
 const reactDomServerPath = appRequire.resolve('react-dom/server');
+// `vitest --changed` follows imports only. This provider also selects the tests
+// that read a changed data file (SQL, docs, workflows) through fs. It lives in
+// .github/scripts together with the path classes it imports; a sparse checkout
+// may leave them out, and Vitest then falls back to its own git provider
+// instead of failing to start (it loads the provider on every run).
+const changedFilesProvider = path.resolve(
+  __dirname,
+  '../../.github/scripts/vitest-changed-files-provider.mjs'
+);
+const changedFilesPaths = path.resolve(
+  __dirname,
+  '../../.github/scripts/resolve-ci-test-plan-paths.mjs'
+);
 const sharedPackagePath = path.resolve(__dirname, '../../packages/shared/src');
 const sharedAliases = [
   {
@@ -139,14 +155,24 @@ export default defineConfig({
       'tests/experience-browser/**/*.test.ts',
       // These node:test suites run in the dedicated synthetic handoff workflow.
       'tools/chatwoot-handoff-ci/*.test.mjs',
+      // Whole-repository scans: CI runs them in their own job (vitest.repository-scans.ts).
+      ...repositoryScanExcludes(),
     ],
     globals: true,
     testTimeout: 10_000,
+    ...(existsSync(changedFilesProvider) && existsSync(changedFilesPaths)
+      ? { experimental: { vcsProvider: changedFilesProvider } }
+      : {}),
     // Cap worker parallelism when running locally (e.g. the pre-push hook) to
     // avoid OOM/SIGTERM under memory pressure — each jsdom worker is heavy and
     // the full suite spawns one per core. CI (process.env.CI) keeps full
     // parallelism for speed.
     ...(process.env.CI ? {} : { maxWorkers: '50%', minWorkers: 1 }),
+    // Start the few multi-minute tests first (vitest.slow-test-files.ts). Only
+    // the order inside a run or CI shard changes; the `--shard` split does not.
+    // Vitest sequences all projects together and a project cannot set its own
+    // sequencer, so this one root setting covers node, jsdom and holdouts.
+    sequence: { sequencer: SlowFilesFirstSequencer },
     alias: {
       '@/app/(platform)/onboarding/actions': path.resolve(
         __dirname,

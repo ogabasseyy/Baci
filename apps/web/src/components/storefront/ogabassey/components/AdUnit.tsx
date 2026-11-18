@@ -6,6 +6,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { runWhenPageActivated } from '@/lib/dom/run-when-page-activated';
 import { AD_CONFIG } from '../config/ads';
 import { AdSlotShell } from './ad-slot-shell';
+import { defineGptAdSlot } from './define-gpt-ad-slot';
 import {
   registerPubAdsSlotRenderListener,
   type GoogleSlotRenderEndedEvent,
@@ -14,6 +15,7 @@ import {
   ensureGoogleAdManagerBoot,
   ensureGoogleTag,
 } from './google-ad-bootstrap';
+import { resolveAdSlotId } from './resolve-ad-slot-id';
 
 // GPT teardown must run before React removes the slot element, but this client
 // component is also pre-rendered by Next.js. Keep the ordering guarantee in
@@ -23,6 +25,8 @@ const useIsomorphicLayoutEffect =
 
 export interface AdUnitProps {
   placementKey: keyof typeof AD_CONFIG;
+  /** Distinguishes repeats of one placement on a page (see resolveAdSlotId). */
+  slotInstance?: string | number;
   className?: string;
   refreshKey?: string | number;
   isActive?: boolean;
@@ -38,6 +42,7 @@ const definedSlots = new Set<string>();
 
 export const AdUnit: React.FC<AdUnitProps> = ({
   placementKey,
+  slotInstance,
   className = '',
   refreshKey,
   isActive = true,
@@ -45,7 +50,7 @@ export const AdUnit: React.FC<AdUnitProps> = ({
   bootDelayMs = 0,
 }) => {
   const config = AD_CONFIG[placementKey];
-  const configId = config?.id;
+  const configId = resolveAdSlotId(config, slotInstance);
   const containerRef = useRef<HTMLDivElement>(null);
   const adRef = useRef<HTMLDivElement>(null);
   const slotRef = useRef<googletag.Slot | null>(null);
@@ -135,9 +140,16 @@ export const AdUnit: React.FC<AdUnitProps> = ({
   }, [config, isActive, loadStrategy, shouldLoadSlot]);
 
   useEffect(() => {
-    if (!config || !isActive || !shouldLoadSlot || !hasBootDelayElapsed) return;
+    if (
+      !config ||
+      !configId ||
+      !isActive ||
+      !shouldLoadSlot ||
+      !hasBootDelayElapsed
+    )
+      return;
 
-    const { id, width, height, mobileWidth, mobileHeight } = config;
+    const id = configId;
     const slotPath = `${NETWORK_CODE}/${config.name.replace(/\s+/g, '_')}`; // Construct ad unit path
     const lifecycle = slotLifecycleRef.current;
     let isDisposed = false;
@@ -171,25 +183,7 @@ export const AdUnit: React.FC<AdUnitProps> = ({
               return;
             }
 
-            // Define the slot
-            // We implement basic size mapping for responsiveness if mobile dims exist
-            let slot;
-
-            if (mobileWidth && mobileHeight) {
-              const mapping = googletag.sizeMapping()
-                .addSize([768, 0], [width, height]) // Desktop
-                .addSize([0, 0], [mobileWidth, mobileHeight]) // Mobile
-                .build();
-
-              slot = googletag
-                .defineSlot(slotPath, [width, height], id)
-                ?.defineSizeMapping(mapping)
-                .addService(googletag.pubads());
-            } else {
-              slot = googletag
-                .defineSlot(slotPath, [width, height], id)
-                ?.addService(googletag.pubads());
-            }
+            const slot = defineGptAdSlot(googletag, slotPath, id, config);
 
             if (slot) {
               // Track this slot as defined
@@ -223,10 +217,17 @@ export const AdUnit: React.FC<AdUnitProps> = ({
       isDisposed = true;
       cancelActivationGate();
     };
-  }, [config, hasBootDelayElapsed, isActive, shouldLoadSlot, slotRestoreNonce]);
+  }, [
+    config,
+    configId,
+    hasBootDelayElapsed,
+    isActive,
+    shouldLoadSlot,
+    slotRestoreNonce,
+  ]);
 
   useIsomorphicLayoutEffect(() => {
-    if (!config) return;
+    if (!config || !configId) return;
 
     if (slotRestoreNeededRef.current) {
       slotRestoreNeededRef.current = false;
@@ -234,7 +235,7 @@ export const AdUnit: React.FC<AdUnitProps> = ({
       setSlotRestoreNonce((nonce) => nonce + 1);
     }
 
-    const slotId = config.id;
+    const slotId = configId;
 
     return () => {
       slotLifecycleRef.current += 1;
@@ -256,7 +257,7 @@ export const AdUnit: React.FC<AdUnitProps> = ({
         });
       }
     };
-  }, [config]);
+  }, [config, configId]);
 
   // Effect to handle manual refresh triggers
   useEffect(() => {
@@ -274,7 +275,7 @@ export const AdUnit: React.FC<AdUnitProps> = ({
     }
   }, [refreshKey, config, isActive]);
 
-  if (!config) return null;
+  if (!config || !configId) return null;
 
   // The reserved box is rendered by the shared AdSlotShell so the loaded ad and
   // the deferred fallback occupy an identical, height-locked box -> no CLS on
@@ -292,7 +293,7 @@ export const AdUnit: React.FC<AdUnitProps> = ({
       width={config.width}
     >
       {/* THE ACTUAL GOOGLE AD SLOT */}
-      <div className="z-10" id={config.id} ref={adRef} />
+      <div className="z-10" id={configId} ref={adRef} />
     </AdSlotShell>
   );
 };

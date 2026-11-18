@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { OrderItem } from '@/components/orders/new-order.types';

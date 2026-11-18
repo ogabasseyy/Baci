@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateCSP, generateCspNonce } from '@/lib/proxy/csp';
 import { isLocalhost } from '@/lib/proxy/host';
-import { sanitizeProxyRedirectPath } from '@/lib/proxy/request-classification';
+import {
+  hasStorefrontAuthSessionHint,
+  sanitizeProxyRedirectPath,
+} from '@/lib/proxy/request-classification';
 import { buildProxyRequestHeaders } from '@/lib/proxy/request-headers';
 import { applySecurityHeaders } from '@/lib/proxy/response-headers';
 import { getRouteType } from '@/lib/proxy/routing-policy';
@@ -51,6 +54,20 @@ export async function runSessionRoutingStage(
   const initialResponse = NextResponse.next({
     request: { headers: requestHeaders },
   });
+
+  if (isAuthRoute && !hasStorefrontAuthSessionHint(request)) {
+    return applySecurityHeaders(
+      initialResponse,
+      pathname,
+      userAgent,
+      routeType,
+      isLocal,
+      nonce,
+      undefined,
+      hostname
+    );
+  }
+
   const { supabaseResponse, user } = await updateSession(
     modifiedRequest,
     initialResponse

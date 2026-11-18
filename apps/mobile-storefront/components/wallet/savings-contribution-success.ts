@@ -8,6 +8,8 @@ interface SavingsSuccessInput {
     'current_amount' | 'target_amount' | 'title'
   >;
   goalCompleted: boolean;
+  /** The app's own guess says this top-up may have finished the goal. */
+  mayHaveCompleted?: boolean;
   refreshFailed: boolean;
   /**
    * The goal balance the server reported after this contribution. Preferred
@@ -27,12 +29,20 @@ export function buildSavingsSuccessMessage({
   amount,
   goal,
   goalCompleted,
+  mayHaveCompleted = false,
   refreshFailed,
   savedAfter,
 }: SavingsSuccessInput): { message: string; title: string } {
   const added = formatNgnCurrency(amount);
   const hint = refreshFailed ? REFRESH_HINT : '';
-  if (goalCompleted) {
+  // The server's own post-contribution balance reaching the target counts as
+  // completed too, so a goal-reaching top-up never says "keep it going".
+  const reachedTarget =
+    savedAfter !== undefined &&
+    Number.isFinite(savedAfter) &&
+    goal.target_amount > 0 &&
+    savedAfter >= goal.target_amount;
+  if (goalCompleted || reachedTarget) {
     return {
       message: `You added ${added} and reached your ${goal.title} goal. Amazing work!${hint}`,
       title: 'Goal reached! 🎉',
@@ -49,6 +59,14 @@ export function buildSavingsSuccessMessage({
           Math.max(1, Math.floor((confirmedSaved / goal.target_amount) * 100))
         )
       : null;
+  // Without the server's balance, a top-up that may have finished the goal
+  // gets plain wording instead of "keep it going".
+  if (percent === null && mayHaveCompleted) {
+    return {
+      message: `Nice! ${added} added to your ${goal.title}.${hint}`,
+      title: 'Savings updated',
+    };
+  }
   const progress =
     percent === null
       ? `Every naira gets you closer to your ${goal.title}. Keep it going!`
@@ -57,4 +75,27 @@ export function buildSavingsSuccessMessage({
     message: `Nice! ${added} added. ${progress}${hint}`,
     title: 'Savings updated',
   };
+}
+
+/**
+ * The brief wallet toast once a confirmed contribution closes the savings
+ * sheet: what was added and to which plan. Completion is celebrated only on
+ * the server's word (goalCompleted), like the full message above.
+ */
+export function buildSavingsToastMessage({
+  amount,
+  goalCompleted,
+  title,
+}: {
+  amount: number;
+  goalCompleted: boolean;
+  title: string;
+}) {
+  const added = formatNgnCurrency(amount);
+  const plan = title.trim();
+  if (goalCompleted)
+    return plan
+      ? `${added} added. You reached your ${plan} goal!`
+      : `${added} added. You reached your goal!`;
+  return `${added} added to ${plan || 'your plan'}`;
 }

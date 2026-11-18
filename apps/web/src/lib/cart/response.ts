@@ -151,12 +151,9 @@ export function setCartSessionCookie(
     secure: process.env.NODE_ENV === 'production',
   });
   if (hintValue !== null) {
-    setCartSessionHintCookie(
-      response,
-      merchantId,
-      hintValue,
-      maxAgeSeconds > 0 ? maxAgeSeconds : undefined
-    );
+    // Use the documented hint TTL defaults (30d for '1', 1h for '0') rather
+    // than coupling to the proof's Max-Age so server and client TTLs match.
+    setCartSessionHintCookie(response, merchantId, hintValue);
   }
 }
 

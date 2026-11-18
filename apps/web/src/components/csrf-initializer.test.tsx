@@ -33,6 +33,11 @@ describe('CsrfInitializer', () => {
 
     render(<CsrfInitializer />);
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/csrf'));
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith('/api/csrf', {
+        credentials: 'include',
+        cache: 'no-store',
+      })
+    );
   });
 });

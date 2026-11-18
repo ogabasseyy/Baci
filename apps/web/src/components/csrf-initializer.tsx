@@ -25,7 +25,10 @@ export function CsrfInitializer() {
 
     async function initCsrf(retries = 1) {
       try {
-        const response = await fetch('/api/csrf');
+        const response = await fetch('/api/csrf', {
+          credentials: 'include',
+          cache: 'no-store',
+        });
         if (!response.ok && retries > 0 && !cancelled) {
           await waitForRetry();
           if (!cancelled) return initCsrf(retries - 1);

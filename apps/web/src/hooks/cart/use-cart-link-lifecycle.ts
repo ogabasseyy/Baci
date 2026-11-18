@@ -1,8 +1,11 @@
 'use client';
 
 import { useEffect } from 'react';
-import { readCustomerSessionHint } from '@/contexts/customer-session-hint';
-import { readCartSessionHint, writeCartSessionHint } from './cart-session-hint';
+import {
+  shouldSkipEmptyGuestCartFetch,
+  stampSkippedEmptyGuestCartHint,
+  syncCartSessionMarkers,
+} from './cart-hydration-gate';
 import { getCartFromStorage, getSharedCartImportReceipt } from './cart-storage';
 import { createCartVisibilityWaiter } from './cart-visibility-waiter';
 import { fetchSharedCartSnapshot } from './shared-cart-client';
@@ -18,11 +21,8 @@ import type { createCartProvisioning } from './shared-cart-provisioning';
 import { isTerminalCart } from './shared-cart-queue';
 import { planLegacyImport } from './shared-cart-reducer';
 import {
-  clearCartDeviceSessionActive,
   ensureCartDeviceRevocationCleared,
-  hasActiveCartDeviceSession,
   isCartDeviceRevocationPending,
-  markCartDeviceSessionActive,
   retireDeEnrolledCartDeviceSession,
 } from './shared-cart-session-revoke-client';
 import type { createCartSnapshotActions } from './shared-cart-snapshots';
@@ -156,34 +156,17 @@ export function useCartLinkLifecycle(
         retryAdopt(attempt, run);
         return;
       }
-      const cartHint = readCartSessionHint(merchantId);
-      const hasActiveDeviceSession = Boolean(
-        hasActiveCartDeviceSession?.(merchantSlug)
-      );
-      const hasLegacyOrSessionSignal =
-        readCustomerSessionHint() === '1' ||
-        hasActiveDeviceSession ||
-        getSharedCartImportReceipt(merchantSlug) !== null ||
-        cached.length > 0;
-      const shouldSkipInitialFetch =
-        cached.length === 0 &&
-        readCustomerSessionHint() !== '1' &&
-        !hasActiveDeviceSession &&
-        (cartHint === '0' || (cartHint === null && !hasLegacyOrSessionSignal));
-
-      if (shouldSkipInitialFetch) {
-        if (cartHint === null) {
-          writeCartSessionHint(merchantId, '0');
-        }
+      if (
+        shouldSkipEmptyGuestCartFetch({
+          merchantId,
+          merchantSlug,
+          cachedCount: cached.length,
+        })
+      ) {
+        stampSkippedEmptyGuestCartHint(merchantId);
         adoptOutcomeRef.current = 'none';
-        if (cached.length === 0) {
-          dispatch({ generation, status: 'skipped', type: 'import/resolved' });
-          setLinkPhase('ready');
-        } else if (planLegacyImport(cached, null, null).kind === 'blocked') {
-          dispatch({ generation, type: 'import/capacity_exceeded' });
-        } else {
-          await provision(attempt, run);
-        }
+        dispatch({ generation, status: 'skipped', type: 'import/resolved' });
+        setLinkPhase('ready');
         return;
       }
 
@@ -208,22 +191,17 @@ export function useCartLinkLifecycle(
           await provision(attempt, run);
           return;
         }
-        writeCartSessionHint(merchantId, '0');
-        if (merchantSlug) clearCartDeviceSessionActive?.(merchantSlug);
+        syncCartSessionMarkers({ merchantId, merchantSlug, active: false });
       }
       if (result.ok) {
         adoptOutcomeRef.current = 'session';
         lastFetchRef.current = Date.now();
         if (!isTerminalCart(result.snapshot)) {
-          const isActive = result.snapshot.lines.length > 0;
-          writeCartSessionHint(merchantId, isActive ? '1' : '0');
-          if (merchantSlug) {
-            if (isActive) {
-              markCartDeviceSessionActive?.(merchantSlug);
-            } else {
-              clearCartDeviceSessionActive?.(merchantSlug);
-            }
-          }
+          syncCartSessionMarkers({
+            merchantId,
+            merchantSlug,
+            active: result.snapshot.lines.length > 0,
+          });
         }
         dispatch({
           generation,
@@ -246,10 +224,12 @@ export function useCartLinkLifecycle(
         retryAdopt(attempt, run);
         return;
       }
-      writeCartSessionHint(merchantId, '0');
-      if (cached.length === 0 && merchantSlug) {
-        clearCartDeviceSessionActive?.(merchantSlug);
-      }
+      syncCartSessionMarkers({
+        merchantId,
+        merchantSlug,
+        active: false,
+        preserveDeviceMarker: cached.length > 0,
+      });
       adoptOutcomeRef.current =
         result.code === 'not_found' ? 'bootstrap' : 'none';
       if (cached.length === 0) {

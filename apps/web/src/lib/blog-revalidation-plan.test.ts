@@ -1,4 +1,7 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
+
 import { getBlogCacheTag } from '@/lib/blog-cache-tags';
 import { getBlogContentLinksCacheTag } from '@/lib/blog-content-link-cache-tags';
 import { buildBlogRevalidationPlan } from './blog-revalidation-plan';
@@ -107,5 +110,74 @@ describe('buildBlogRevalidationPlan', () => {
 
     expect(plan.tags).toEqual([]);
     expect(plan.paths).toEqual([]);
+  });
+
+  it('guards against merchantId-only production callers of revalidateBlogPosts', () => {
+    const srcRoot = join(process.cwd(), 'src');
+    const sourceFiles: string[] = [];
+
+    function walk(dir: string) {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const fullPath = join(dir, entry.name);
+        if (entry.isDirectory()) {
+          walk(fullPath);
+          continue;
+        }
+        if (
+          /\.(ts|tsx)$/.test(entry.name) &&
+          !/\.(test|spec|test-support)\.(ts|tsx)$/.test(entry.name) &&
+          entry.name !== 'cache-revalidation.ts'
+        ) {
+          sourceFiles.push(fullPath);
+        }
+      }
+    }
+
+    walk(srcRoot);
+
+    const callers: string[] = [];
+    for (const filePath of sourceFiles) {
+      const rawContent = readFileSync(filePath, 'utf8');
+      if (!rawContent.includes('revalidateBlogPosts(')) {
+        continue;
+      }
+
+      // Strip line and block comments so JSDoc examples do not match.
+      const code = rawContent
+        .replace(/\/\*[\s\S]*?\*\//g, ' ')
+        .replace(/\/\/[^\n]*/g, ' ');
+
+      const pattern = /\brevalidateBlogPosts\s*\(/g;
+      for (const match of code.matchAll(pattern)) {
+        let index = (match.index ?? 0) + match[0].length;
+        let depth = 1;
+        while (index < code.length && depth > 0) {
+          const ch = code[index];
+          if (ch === '(') depth += 1;
+          else if (ch === ')') depth -= 1;
+          index += 1;
+        }
+        const argsBody = code
+          .slice((match.index ?? 0) + match[0].length, index - 1)
+          .trim();
+        const relPath = relative(srcRoot, filePath);
+
+        expect(
+          argsBody.startsWith('{'),
+          `${relPath} must pass an options object to revalidateBlogPosts`
+        ).toBe(true);
+        expect(
+          /\bidentifiers(?:\s*:|\s*[,}])/.test(argsBody),
+          `${relPath} must pass identifiers to revalidateBlogPosts`
+        ).toBe(true);
+        expect(
+          /\bcanonicalMerchantSlug(?:\s*:|\s*[,}])/.test(argsBody),
+          `${relPath} must pass canonicalMerchantSlug to revalidateBlogPosts`
+        ).toBe(true);
+        callers.push(relPath);
+      }
+    }
+
+    expect(callers.length).toBeGreaterThanOrEqual(7);
   });
 });

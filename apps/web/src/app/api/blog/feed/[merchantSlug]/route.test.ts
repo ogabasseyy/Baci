@@ -243,7 +243,7 @@ describe('GET /api/blog/feed/[merchantSlug]', () => {
     });
     expect(mockUnstableCache).toHaveBeenCalledWith(
       expect.any(Function),
-      ['blog-feed-by-merchant-id', merchant.id],
+      ['blog-feed-by-merchant-id', merchant.id, 'ogabassey'],
       {
         revalidate: 3600,
         tags: [
@@ -251,6 +251,7 @@ describe('GET /api/blog/feed/[merchantSlug]', () => {
           'blog-rss-feed',
           `blog-posts-${merchant.id}`,
           `blog-rss-id-${merchant.id}`,
+          'blog-rss-slug-ogabassey',
         ],
       }
     );
@@ -1074,5 +1075,49 @@ describe('GET /api/blog/feed/[merchantSlug]', () => {
 
     expect(response.status).toBe(404);
     expect(await response.text()).toBe('Blog feed not found');
+  });
+
+  it('keys and tags the feed Data Cache entry by merchant slug so slug renames invalidate stale payloads', async () => {
+    mockUnstableCache.mockClear();
+    const renamedMerchant = { ...merchant, slug: 'ogabassey-new' };
+    enqueueTable(
+      'merchants',
+      createMerchantQuery({ data: renamedMerchant, error: null })
+    );
+    enqueueTable(
+      'merchants',
+      createMerchantQuery({ data: renamedMerchant, error: null })
+    );
+    enqueueTable('blog_posts', createPostQuery({ data: [], error: null }));
+
+    const response = await GET(
+      new NextRequest('https://usebaci.com/api/blog/feed/ogabassey-new'),
+      { params: Promise.resolve({ merchantSlug: 'ogabassey-new' }) }
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockUnstableCache).toHaveBeenCalledWith(
+      expect.any(Function),
+      ['blog-feed-by-merchant-id', merchant.id, 'ogabassey-new'],
+      {
+        revalidate: 3600,
+        tags: [
+          'blog-posts',
+          'blog-rss-feed',
+          `blog-posts-${merchant.id}`,
+          `blog-rss-id-${merchant.id}`,
+          'blog-rss-slug-ogabassey-new',
+        ],
+      }
+    );
+    expect(response.headers.get('Vercel-Cache-Tag')).toBe(
+      [
+        'blog-posts',
+        'blog-rss-feed',
+        `blog-posts-${merchant.id}`,
+        `blog-rss-id-${merchant.id}`,
+        'blog-rss-slug-ogabassey-new',
+      ].join(',')
+    );
   });
 });

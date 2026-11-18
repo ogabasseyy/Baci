@@ -278,13 +278,16 @@ const cachedFeedFetchers = new Map<
 // - bounds module-scope wrapper allocation to `MAX_CACHED_FEED_WRAPPERS`,
 // - throws `FeedMerchantNotFoundError` when missing so 404s are never cached.
 function getCachedFeedByMerchantId(
-  merchantId: string
+  merchantId: string,
+  merchantSlug: string
 ): Promise<CachedMerchantFeedData> {
   const normalizedMerchantId = merchantId.trim().toLowerCase();
-  const existing = cachedFeedFetchers.get(normalizedMerchantId);
+  const normalizedMerchantSlug = merchantSlug.trim().toLowerCase();
+  const cacheKey = `${normalizedMerchantId}:${normalizedMerchantSlug}`;
+  const existing = cachedFeedFetchers.get(cacheKey);
   if (existing) {
-    cachedFeedFetchers.delete(normalizedMerchantId);
-    cachedFeedFetchers.set(normalizedMerchantId, existing);
+    cachedFeedFetchers.delete(cacheKey);
+    cachedFeedFetchers.set(cacheKey, existing);
     return existing();
   }
 
@@ -310,7 +313,7 @@ function getCachedFeedByMerchantId(
         posts: await fetchPublicFeedPosts(supabase, merchant.id),
       };
     },
-    ['blog-feed-by-merchant-id', normalizedMerchantId],
+    ['blog-feed-by-merchant-id', normalizedMerchantId, normalizedMerchantSlug],
     {
       revalidate: 3600,
       tags: [
@@ -318,6 +321,9 @@ function getCachedFeedByMerchantId(
         'blog-rss-feed',
         getBlogPostsMerchantCacheTag(normalizedMerchantId),
         getBlogRssMerchantIdCacheTag(normalizedMerchantId),
+        ...(normalizedMerchantSlug
+          ? [getBlogRssMerchantCacheTag(normalizedMerchantSlug)]
+          : []),
       ],
     }
   );
@@ -328,7 +334,7 @@ function getCachedFeedByMerchantId(
       cachedFeedFetchers.delete(oldestKey);
     }
   }
-  cachedFeedFetchers.set(normalizedMerchantId, fetcher);
+  cachedFeedFetchers.set(cacheKey, fetcher);
   return fetcher();
 }
 
@@ -352,7 +358,10 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
 
     let data: CachedMerchantFeedData;
     try {
-      data = await getCachedFeedByMerchantId(resolvedMerchant.id);
+      data = await getCachedFeedByMerchantId(
+        resolvedMerchant.id,
+        resolvedMerchant.slug
+      );
     } catch (error) {
       if (error instanceof FeedMerchantNotFoundError) {
         return new NextResponse('Blog feed not found', { status: 404 });

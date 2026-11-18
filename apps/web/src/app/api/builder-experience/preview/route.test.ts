@@ -30,7 +30,10 @@ vi.mock('@/lib/csrf', () => ({
   checkCsrfProtection: async () => ({ valid: merchant.csrf }),
 }));
 
-import { installRemoteOwnerPreview } from '@/lib/experience/owner-preview-remote-runtime';
+import {
+  installRemoteOwnerPreview,
+  RemoteOwnerPreviewDenied,
+} from '@/lib/experience/owner-preview-remote-runtime';
 import { installExperienceOwnerRuntime } from '@/lib/experience/owner-runtime';
 import { GET, POST } from './route';
 
@@ -59,6 +62,17 @@ it('uses an explicitly installed remote preview only after auth, CSRF and owner 
     merchant.user = false;
     expect((await POST(request())).status).toBe(401);
     expect(remote).toHaveBeenCalledOnce();
+    merchant.user = true;
+    remote.mockRejectedValueOnce(
+      new DOMException('Synthetic timeout', 'TimeoutError')
+    );
+    const outage = await POST(request());
+    expect(outage.status).toBe(503);
+    expect(await outage.json()).toEqual({
+      error: 'Preview temporarily unavailable.',
+    });
+    remote.mockRejectedValueOnce(new RemoteOwnerPreviewDenied());
+    expect((await POST(request())).status).toBe(403);
   } finally {
     merchant.csrf = true;
     merchant.owner = true;

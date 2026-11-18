@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { Pool } from 'pg';
@@ -31,17 +32,36 @@ test('bounded broker cleanup removes only expired temporary records', async () =
              ('AccessToken','expired-2','{}',now()-interval '1 minute'),
              ('AccessToken','live','{}',now()+interval '1 hour');
     `);
+    const [actor, expired, revoked, live] = Array.from({ length: 4 }, () =>
+      randomUUID()
+    );
+    await fixture.pool.query('INSERT INTO auth.users VALUES($1)', [actor]);
+    await fixture.pool.query(
+      `INSERT INTO builder_authorization.connections
+        (id, actor_user_id, provider_grant_id, scopes, status, expires_at, revoked_at)
+      VALUES ($2, $1, 'expire', ARRAY['storefront.read'], 'active', now()-interval '1 hour', NULL),
+             ($3, $1, 'revoked', ARRAY['storefront.read'], 'revoked', now()+interval '1 hour', now()),
+             ($4, $1, 'live', ARRAY['storefront.read'], 'active', now()+interval '1 hour', NULL)`,
+      [actor, expired, revoked, live]
+    );
+    await fixture.pool.query(
+      'INSERT INTO builder_authorization.sessions(connection_id,sealed) SELECT unnest($1::uuid[]), $2::jsonb',
+      [[expired, revoked, live], '{}']
+    );
     assert.deepEqual(await deleteExpiredAuthRecords(pool, 1), {
       transactions: 1,
       providerRecords: 1,
+      sessions: 1,
     });
     assert.deepEqual(await deleteExpiredAuthRecords(pool, 1), {
       transactions: 1,
       providerRecords: 1,
+      sessions: 1,
     });
     assert.deepEqual(await deleteExpiredAuthRecords(pool, 1), {
       transactions: 0,
       providerRecords: 0,
+      sessions: 0,
     });
     assert.deepEqual(
       (
@@ -58,6 +78,22 @@ test('bounded broker cleanup removes only expired temporary records', async () =
         )
       ).rows,
       [{ id: 'live' }]
+    );
+    assert.deepEqual(
+      (
+        await fixture.pool.query(
+          'SELECT connection_id FROM builder_authorization.sessions'
+        )
+      ).rows,
+      [{ connection_id: live }]
+    );
+    assert.equal(
+      (
+        await fixture.pool.query(
+          'SELECT count(*) FROM builder_authorization.connections'
+        )
+      ).rows[0].count,
+      '3'
     );
     await assert.rejects(deleteExpiredAuthRecords(pool, 0), /invalid/i);
     await assert.rejects(deleteExpiredAuthRecords(pool, 1001), /invalid/i);

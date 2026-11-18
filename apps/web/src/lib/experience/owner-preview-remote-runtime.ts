@@ -1,6 +1,12 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+export class RemoteOwnerPreviewDenied extends Error {
+  constructor() {
+    super('OWNER_PREVIEW_DENIED');
+  }
+}
+
 type RemoteOwnerPreview = (
   client: SupabaseClient,
   input: unknown

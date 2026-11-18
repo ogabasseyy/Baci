@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { performancePublicBootstrap } from '@/schemas/experience-performance-worker';
 import { experiencePreviewInput } from '@/schemas/experience-preview';
 import { OWNER_PREVIEW_CALL_TIMEOUT_MS } from './owner-preview-deadline';
+import { RemoteOwnerPreviewDenied } from './owner-preview-remote-runtime';
 import {
   productionDeliveryOrigins,
   productionOrigin,
@@ -116,6 +117,7 @@ export function createOwnerPreviewBridgeClient(settings: {
     );
     if (response.status !== 200) {
       await response.body?.cancel().catch(() => undefined);
+      if (response.status === 404) throw new RemoteOwnerPreviewDenied();
       throw Error('OWNER_PREVIEW_UNAVAILABLE');
     }
     const launch = launchSchema.parse(await boundedJson(response));

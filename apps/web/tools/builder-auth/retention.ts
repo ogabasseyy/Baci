@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 
-/** Removes only expired short-lived OAuth records, using the existing broker role. */
+/** Bounded cleanup using the existing broker role. Retains connection audit rows. */
 export async function deleteExpiredAuthRecords(pool: Pool, limit: number) {
   if (!Number.isInteger(limit) || limit < 1 || limit > 1000)
     throw Error('Invalid cleanup limit');
@@ -20,9 +20,20 @@ export async function deleteExpiredAuthRecords(pool: Pool, limit: number) {
      )`,
     [limit]
   );
+  const sessions = await pool.query(
+    `DELETE FROM builder_authorization.sessions WHERE connection_id IN (
+       SELECT s.connection_id FROM builder_authorization.sessions s
+       JOIN builder_authorization.connections c ON c.id = s.connection_id
+       WHERE c.status IN ('revoked', 'expired') OR c.expires_at <= statement_timestamp()
+       ORDER BY c.expires_at, s.connection_id LIMIT $1
+       FOR UPDATE OF s, c SKIP LOCKED
+     )`,
+    [limit]
+  );
   return {
     transactions: transactions.rowCount ?? 0,
     providerRecords: providerRecords.rowCount ?? 0,
+    sessions: sessions.rowCount ?? 0,
   };
 }
 

@@ -167,3 +167,33 @@ it.each([
   expect(result.response).toBeNull();
   expect(getStorefrontProductCanonicalRedirectResult).not.toHaveBeenCalled();
 });
+
+it.each<Record<string, string>>([
+  { rsc: '1' },
+  { 'next-router-prefetch': '1' },
+])('skips PDP preflight RPCs for router/prefetch requests: %o', async (extraHeaders) => {
+  vi.clearAllMocks();
+  const request = new NextRequest('https://shop.example/phones/iphone-15', {
+    headers: { accept: 'text/html', ...extraHeaders },
+  });
+
+  await expect(
+    resolveStorefrontPdpCanonicalRedirect(
+      request,
+      '/phones/iphone-15',
+      'shop.example',
+      'shop'
+    )
+  ).resolves.toEqual({ response: null, skipHardNotFound: false });
+  await expect(
+    resolveStorefrontPdpHardNotFound(
+      request,
+      '/phones/iphone-15',
+      'shop.example',
+      'Mozilla',
+      'shop'
+    )
+  ).resolves.toBeNull();
+  expect(getStorefrontProductCanonicalRedirectResult).not.toHaveBeenCalled();
+  expect(resolveStorefrontProductSlugResolution).not.toHaveBeenCalled();
+});

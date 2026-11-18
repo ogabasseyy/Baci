@@ -1,6 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { storefrontPreflightRpcMemo } from '@/lib/storefront-preflight-rpc-memo';
 import { createPublicClient } from '@/lib/supabase/public';
+import {
+  STOREFRONT_PDP_PREFLIGHT_RPC,
+  storefrontPdpPreflightRowSchema,
+} from '@/schemas/storefront-preflight-rpc';
 import { createAbortSignalTimeout } from './abort-signal-timeout';
 import type { StorefrontInternalPreflightSurface } from './storefront-internal-preflight';
 import { storefrontInternalPreflight } from './storefront-internal-preflight';
@@ -68,8 +72,28 @@ interface CallStorefrontPreflightRpcOptions {
 
 // A 2s budget recovers transport-tail events; memo and breaker bound its cost.
 const DEFAULT_TIMEOUT_MS = 2_000;
+const PDP_PREFLIGHT_POSITIVE_TTL_MS = 60_000;
+const PDP_PREFLIGHT_NEGATIVE_TTL_MS = 15_000;
 // One navigation's helpers call within ~100ms; this short memo absorbs repeats.
 const breaker = createStorefrontPreflightCircuitBreaker();
+
+function getMemoTtlMs(fn: string, row: unknown): number | undefined {
+  if (fn !== STOREFRONT_PDP_PREFLIGHT_RPC) {
+    return undefined;
+  }
+  const parsed = storefrontPdpPreflightRowSchema.safeParse(row);
+  if (!parsed.success) {
+    return undefined;
+  }
+  if (
+    parsed.data.present &&
+    parsed.data.storefront_status === 'published' &&
+    parsed.data.match_kind === 'active'
+  ) {
+    return PDP_PREFLIGHT_POSITIVE_TTL_MS;
+  }
+  return PDP_PREFLIGHT_NEGATIVE_TTL_MS;
+}
 
 let client: SupabaseClient | null = null;
 
@@ -231,7 +255,7 @@ async function runStorefrontPreflightRpcAttempt(
     return null;
   }
 
-  storefrontPreflightRpcMemo.write(key, row);
+  storefrontPreflightRpcMemo.write(key, row, getMemoTtlMs(fn, row));
   const attempt = recordAttempt('success');
   return { data: row, attempt };
 }

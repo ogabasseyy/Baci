@@ -17,6 +17,9 @@ import { STUCK_BNPL_CONFIG } from './stuck-bnpl-config';
 // require provider-session evidence (a persisted transaction/session
 // reference in notes) so plain abandoned carts — which cleanup-orders
 // reclassifies at 72h — don't page merchants at 24h.
+// Credit Direct bnpl_pending is deliberately retained for the existing ops
+// recovery queue even if legacy notes were lost. This is not proof of provider
+// contact and never qualifies an order for a merchant push by itself.
 const STATUSES_REQUIRING_PROVIDER_EVIDENCE = new Set(['pending', 'unpaid']);
 
 // Alerts merchants and queues Credit Direct orders missing provider confirmation.
@@ -120,6 +123,9 @@ export async function GET(request: NextRequest) {
     // launcher flow writes no notes reference, so a stuck CredPal order is
     // indistinguishable from an abandoned cart. Surface the dropped set to
     // ops logs instead of paging merchants with unavoidable false positives.
+    // Recovering that indistinguishable set requires authoritative CredPal
+    // status reconciliation, a separate provider integration; do not manufacture
+    // confirmation from pending rows in this notification scan.
     const weakEvidenceDropped = evidenceCandidates.filter(
       (order) => !orderIdsWithTransactionEvidence.has(order.id)
     );

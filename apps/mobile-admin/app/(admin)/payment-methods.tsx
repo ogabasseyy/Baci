@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { PaymentMethodsFooter } from '@/components/payment-methods/PaymentMethodsFooter';
 import { PaymentMethodsSection } from '@/components/payment-methods/PaymentMethodsSection';
 import {
   getRenderablePaymentMethods,
@@ -230,7 +231,14 @@ export default function PaymentMethodsScreen() {
               accessibilityRole="button"
               accessibilityLabel="Retry loading payment methods"
             >
-              <Text style={styles.retryButtonText}>Retry</Text>
+              <Text
+                style={[
+                  styles.retryButtonText,
+                  { color: colors.textOnPrimary },
+                ]}
+              >
+                Retry
+              </Text>
             </Pressable>
           </View>
         </SafeAreaView>
@@ -265,33 +273,10 @@ export default function PaymentMethodsScreen() {
             />
           ))}
 
-          {/* Info Notice */}
-          <View
-            style={[
-              styles.notice,
-              { backgroundColor: colors.infoLight || '#EFF6FF' },
-            ]}
-          >
-            <Ionicons
-              name="information-circle"
-              size={20}
-              color={colors.info || '#3B82F6'}
-            />
-            <Text
-              style={[styles.noticeText, { color: colors.info || '#3B82F6' }]}
-            >
-              API keys and webhook configuration available on web dashboard.
-            </Text>
-          </View>
-
-          {/* Manage Button */}
-          <Pressable
-            style={[styles.manageButton, { backgroundColor: colors.primary }]}
-            onPress={handleManagePayments}
-          >
-            <Ionicons name="settings-outline" size={20} color="#FFFFFF" />
-            <Text style={styles.manageButtonText}>Advanced Settings</Text>
-          </Pressable>
+          <PaymentMethodsFooter
+            colors={colors}
+            onManagePayments={handleManagePayments}
+          />
         </ScrollView>
       </SafeAreaView>
     </>

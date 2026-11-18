@@ -179,6 +179,7 @@ describe('FollowUpQueueList', () => {
   it.each([
     ' ord-002 ',
     '8012345678',
+    '+234 (801) 234-5678',
   ])('finds a guest follow-up by %s', (searchQuery) => {
     const order = {
       id: 'order-2',

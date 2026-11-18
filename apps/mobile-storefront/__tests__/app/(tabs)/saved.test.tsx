@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import type React from 'react';
 import { View, type ViewProps } from 'react-native';
 import SavedTabScreen from '@/app/(tabs)/saved';
-import { SPACING } from '@/constants/Colors';
+import Colors, { BRAND, SPACING } from '@/constants/Colors';
 import { SAVED_LIST_BOTTOM_PADDING } from '@/constants/saved-list-layout';
 import type { SavedItem } from '@/stores/saved-store';
 
@@ -66,10 +66,12 @@ jest.mock('expo-image', () => {
     Image: ({
       autoplay,
       accessibilityLabel,
+      style,
       testID,
     }: {
       autoplay?: boolean;
       accessibilityLabel?: string;
+      style?: ViewProps['style'];
       testID?: string;
     }) => {
       const viewProps = {
@@ -77,6 +79,7 @@ jest.mock('expo-image', () => {
         accessibilityLabel: accessibilityLabel ?? 'saved tab product image',
         accessibilityRole: 'image' as const,
         autoplay,
+        style,
       } as unknown as React.ComponentProps<typeof View>;
       return <View {...viewProps} />;
     },
@@ -344,5 +347,37 @@ describe('SavedTabScreen', () => {
 
     fireEvent.press(screen.getByLabelText('Retry connection'));
     expect(mockRefresh).toHaveBeenCalled();
+  });
+
+  describe('bugfix: theme token wiring on saved tab', () => {
+    it('uses BRAND.onPrimary on the empty-state browse button label', () => {
+      mockSavedStore.mockReturnValue([]);
+
+      render(<SavedTabScreen />);
+
+      expect(screen.getByText('Browse Products').props.style).toEqual(
+        expect.arrayContaining([{ color: BRAND.onPrimary }])
+      );
+    });
+
+    it('uses colors.muted as the product thumbnail background token', () => {
+      mockSavedStore.mockReturnValue([
+        {
+          id: 'saved-1',
+          image: 'https://example.com/image.png',
+          name: 'Test Product',
+          price: 2500,
+          product_id: 'product-1',
+          slug: 'test-product',
+          savedAt: Date.now(),
+        },
+      ]);
+
+      render(<SavedTabScreen />);
+
+      expect(screen.getByTestId('saved-tab-product-image').props.style).toEqual(
+        expect.arrayContaining([{ backgroundColor: Colors.light.muted }])
+      );
+    });
   });
 });

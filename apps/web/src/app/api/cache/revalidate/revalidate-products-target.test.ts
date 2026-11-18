@@ -94,4 +94,19 @@ describe('revalidateProductsTarget', () => {
     expect(mockPurgeProduct).not.toHaveBeenCalled();
     expect(mockPurgeHostname).not.toHaveBeenCalled();
   });
+
+  it('returns false and withholds edge purge when blog cache expiry returns false', async () => {
+    mockExpireBlog.mockReturnValueOnce(false);
+
+    await expect(
+      revalidateProductsTarget({
+        supabase,
+        merchantId: 'merchant-1',
+        products: [{ id: 'prod-1' }],
+      })
+    ).resolves.toBe(false);
+
+    expect(mockPurgeProduct).not.toHaveBeenCalled();
+    expect(mockPurgeHostname).not.toHaveBeenCalled();
+  });
 });

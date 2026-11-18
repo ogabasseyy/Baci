@@ -44,7 +44,7 @@ export async function revalidateProductsTarget({
       revalidateProductSlugs(merchantId, resolvedSlugs, {
         expireImmediately: true,
       }) === true;
-    expireProductBlogCache(merchantId);
+    const blogExpired = expireProductBlogCache(merchantId) !== false;
 
     const completeScoped =
       slugsRevalidated &&
@@ -56,13 +56,13 @@ export async function revalidateProductsTarget({
         authoritativeSlugsById
       );
 
-    let originHardExpired =
+    let productsExpired =
       revalidateProducts(merchantId, undefined, {
         expireImmediately: true,
         ...(completeScoped ? { omitMerchantWidePdpDetails: true } : {}),
       }) === true;
-    if (!originHardExpired && completeScoped) {
-      originHardExpired =
+    if (!productsExpired && completeScoped) {
+      productsExpired =
         revalidateProducts(merchantId, undefined, {
           expireImmediately: true,
         }) === true;
@@ -80,6 +80,7 @@ export async function revalidateProductsTarget({
       );
     }
 
+    const originHardExpired = productsExpired && blogExpired;
     const merchantSlug = merchantRow?.slug ?? null;
     if (merchantSlug && originHardExpired) {
       if (blogPostSlugsIncomplete) {

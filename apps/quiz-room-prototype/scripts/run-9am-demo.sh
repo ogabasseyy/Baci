@@ -43,7 +43,7 @@ for cmd in supabase wrangler k6 curl node; do
   require_cmd "${cmd}"
 done
 
-for var in SUPABASE_PROJECT_REF QUIZ_TICKET_SECRET QUIZ_JWT_SECRET QUIZ_INTERNAL_COORDINATOR_SECRET QUIZ_BATCH_WORKER_JWT; do
+for var in SUPABASE_PROJECT_REF QUIZ_TICKET_SECRET QUIZ_JWT_SECRET QUIZ_INTERNAL_COORDINATOR_SECRET QUIZ_BATCH_WORKER_JWT QUIZ_DEMO_INVITE_CODE; do
   require_env "${var}"
 done
 
@@ -68,6 +68,7 @@ printf '%s' "${QUIZ_TICKET_SECRET}" | wrangler secret put QUIZ_TICKET_SECRET
 printf '%s' "${QUIZ_JWT_SECRET}" | wrangler secret put QUIZ_JWT_SECRET
 printf '%s' "${QUIZ_INTERNAL_COORDINATOR_SECRET}" | wrangler secret put QUIZ_INTERNAL_COORDINATOR_SECRET
 printf '%s' "${QUIZ_BATCH_WORKER_JWT}" | wrangler secret put QUIZ_BATCH_WORKER_JWT
+printf '%s' "${QUIZ_DEMO_INVITE_CODE}" | wrangler secret put QUIZ_DEMO_INVITE_CODE
 printf '%s' "${BRANCH_API_URL}" | wrangler secret put SUPABASE_URL
 DEPLOY_OUT="$(wrangler deploy)"
 echo "${DEPLOY_OUT}"
@@ -88,25 +89,27 @@ setup_round() {
   echo "${event_id}"
 }
 
+ENCODED_INVITE_CODE="$(node -e "process.stdout.write(encodeURIComponent(process.argv[1] || ''))" "${QUIZ_DEMO_INVITE_CODE}")"
+
 echo ""
 echo "=== ROUND 1 (10 Human Testers Baseline) ==="
 R1_EVENT="$(setup_round 1)"
-echo "Share URL with 10 human phones: ${WORKER_URL}/demo?eventId=${R1_EVENT}"
+echo "Share URL with 10 human phones: ${WORKER_URL}/demo?eventId=${R1_EVENT}&code=${ENCODED_INVITE_CODE}"
 read -r -p "Press ENTER after the 10 testers finish Round 1..."
 
 echo ""
 echo "=== ROUND 2 (10 Humans + 490 k6 Bots in room-0000 = 500/room) ==="
 R2_EVENT="$(setup_round 2)"
-echo "Share URL with 10 human phones: ${WORKER_URL}/demo?eventId=${R2_EVENT}"
+echo "Share URL with 10 human phones: ${WORKER_URL}/demo?eventId=${R2_EVENT}&code=${ENCODED_INVITE_CODE}"
 read -r -p "Press ENTER when testers are in lobby to launch 490 k6 bots..."
-BASE_URL="${WORKER_URL}" ROUND=2 EVENT_ID="${R2_EVENT}" k6 run "${PROTO_DIR}/bench/k6-9am-demo-rounds.js"
+BASE_URL="${WORKER_URL}" ROUND=2 EVENT_ID="${R2_EVENT}" DEMO_INVITE_CODE="${QUIZ_DEMO_INVITE_CODE}" k6 run "${PROTO_DIR}/bench/k6-9am-demo-rounds.js"
 
 echo ""
 echo "=== ROUND 3 (10 Humans + 4,990 k6 Bots across 13 rooms w/ chaos) ==="
 R3_EVENT="$(setup_round 3)"
-echo "Share URL with 10 human phones: ${WORKER_URL}/demo?eventId=${R3_EVENT}"
+echo "Share URL with 10 human phones: ${WORKER_URL}/demo?eventId=${R3_EVENT}&code=${ENCODED_INVITE_CODE}"
 read -r -p "Press ENTER when testers are in lobby to launch 4,990 k6 bots..."
-BASE_URL="${WORKER_URL}" ROUND=3 EVENT_ID="${R3_EVENT}" k6 run "${PROTO_DIR}/bench/k6-9am-demo-rounds.js"
+BASE_URL="${WORKER_URL}" ROUND=3 EVENT_ID="${R3_EVENT}" DEMO_INVITE_CODE="${QUIZ_DEMO_INVITE_CODE}" k6 run "${PROTO_DIR}/bench/k6-9am-demo-rounds.js"
 
 REPORT_OUT="${REPORT_DIR}/demo-9am-report-$(date +%Y%m%d-%H%M%S).json"
 curl -fsS "${WORKER_URL}/demo/report?format=json" -o "${REPORT_OUT}"

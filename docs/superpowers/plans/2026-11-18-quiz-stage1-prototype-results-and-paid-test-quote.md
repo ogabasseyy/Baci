@@ -3,7 +3,7 @@
 Date: 2026-11-18 · Stage 1 merged base: `4747328b67` · Phase B Worker commit: `ae6607ed4c` · Phase B DB reconciler commit: `111cecd65a` · Target plan: [Quiz scale plan (Revision 12)](2026-11-18-quiz-100k-1m-scale-plan.md)
 
 > [!IMPORTANT]
-> **Zero Paid Cloud Spend Executed.** Every Stage 1 and Phase B measurement in this report was executed locally on Node `v24.11.1` (`node:sqlite` + `wrangler dev --local` `workerd` HTTP server + Jest/Vitest) and local PostgreSQL `17.11` (`synchronous_commit = on`). No `wrangler deploy`, remote Cloudflare Workers/DO/Queues calls, remote Supabase staging branches, or paid load generators have been invoked. Section 3 is the itemized USD approval gate required before running any paid cloud qualification tests.
+> **Cloud Execution Status & Spend Gate (`$0.00` Incremental Spend To Date).** All Stage 1 and Phase B benchmark measurements in Sections 1.1–1.7 were executed locally on Node `v24.11.1` (`node:sqlite` + `wrangler dev --local` `workerd` HTTP server + Jest/Vitest) and local PostgreSQL `17.11` (`synchronous_commit = on`). With explicit user approval (`proced`) in chat on 2026-11-18, the isolated prototype Worker (`baci-quiz-room-prototype.ogabassey-ai.workers.dev`) was deployed to the existing Cloudflare Workers Paid account (`$0.00` incremental spend, zero production routes, **zero Supabase preview branches created yet**). Section 3 defines the **two-step paid-test approval gate**: Step 1 (`$0.00` infra) runs the 10-player real Nigerian carrier `/demo` test first; Step 2 only provisions the `~$0.30–$0.60` 1-hour XL Supabase branch and paid cloud rehearsals if Step 1 carrier latency passes.
 
 ---
 
@@ -201,10 +201,13 @@ Published list prices verified 2026-11-18:
 
 ---
 
-## Section 3: Itemized Pre-Execution Paid Cloud Load-Test Cost Quote (User Approval Gate)
+## Section 3: Itemized Pre-Execution Paid Cloud Load-Test Cost Quote (Two-Step Approval Gate)
 
 > [!CAUTION]
-> **Approval Required Before Any Cloud Spend.** No cloud deployments, Supabase preview branches, or remote load tests will run until you approve a Part A or Full Stage 1 spend ceiling below.
+> **Two-Step Cloud Spend Gate (Zero Supabase Preview Branches Created Yet).**
+> - **Step 1 (`$0.00` incremental infra — Approved Prototype Worker Active):** Run the 10-player real Nigerian carrier baseline on the isolated prototype Worker (`baci-quiz-room-prototype.ogabassey-ai.workers.dev/demo`, `locationHint: 'weur'`, server-verified `request.cf` ASN/ISP classification, `QUIZ_DEMO_INVITE_CODE` check-in gate, and ticket-authenticated deduplicated telemetry).
+> - **Step 2 (Explicit Approval Gate Before Creating Any Supabase Branch or Paid Load VMs):** Only create the temporary **1-hour XL Supabase branch (`~$0.30–$0.60`)** and run the remaining paid cloud load rehearsals below **after Step 1 Nigerian carrier latency passes** (`p99 <= 1 s`).
+> - **Stage 2 Product & Audit Sign-Off Note:** `score_and_materialize_edge_quiz_event_v2` fast close defers expanding `quiz_attempt_questions` and `quiz_attempt_answers` (`canonicalAnswersBackfillDeferred: true`) to async post-publish chunks via `backfill_quiz_edge_canonical_answers_v2`. Stage 2 production rollout requires explicit product/audit sign-off confirming post-publish async backfill satisfies contest dispute/audit SLAs.
 
 ### 3.1 Itemized Cloud Rehearsal Breakdown
 

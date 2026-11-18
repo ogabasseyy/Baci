@@ -4,13 +4,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co';
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'test-anon-key';
 
-const { mockFeedAddItem, mockFeedConstructor, mockFrom, mockUnstableCache } =
-  vi.hoisted(() => ({
-    mockFeedAddItem: vi.fn(),
-    mockFeedConstructor: vi.fn(),
-    mockFrom: vi.fn(),
-    mockUnstableCache: vi.fn(),
-  }));
+const {
+  mockCacheLife,
+  mockCacheTag,
+  mockFeedAddItem,
+  mockFeedConstructor,
+  mockFrom,
+} = vi.hoisted(() => ({
+  mockCacheLife: vi.fn(),
+  mockCacheTag: vi.fn(),
+  mockFeedAddItem: vi.fn(),
+  mockFeedConstructor: vi.fn(),
+  mockFrom: vi.fn(),
+}));
 
 type QueryResult<T> = { data: T | null; error: { message: string } | null };
 type MerchantRow = {
@@ -182,11 +188,8 @@ vi.mock('feed', () => ({
 }));
 
 vi.mock('next/cache', () => ({
-  unstable_cache: (fn: unknown, keyParts: string[], options: unknown) => {
-    mockUnstableCache(fn, keyParts, options);
-    return (...args: unknown[]) =>
-      (fn as (...args: unknown[]) => unknown)(...args);
-  },
+  cacheLife: (...args: unknown[]) => mockCacheLife(...args),
+  cacheTag: (...args: unknown[]) => mockCacheTag(...args),
 }));
 
 vi.mock('@/env', () => ({
@@ -235,18 +238,13 @@ describe('GET /api/blog/feed/[merchantSlug]', () => {
     expect(postQuery.order).toHaveBeenNthCalledWith(2, 'id', {
       ascending: false,
     });
-    expect(mockUnstableCache.mock.calls.at(-1)).toEqual([
-      expect.any(Function),
-      ['blog-rss-feed', merchant.id],
-      expect.objectContaining({
-        tags: [
-          'blog-posts',
-          'blog-rss-feed',
-          `blog-posts-${merchant.id}`,
-          `blog-rss-${merchant.id}`,
-        ],
-      }),
-    ]);
+    expect(mockCacheLife).toHaveBeenCalledWith('blog');
+    expect(mockCacheTag).toHaveBeenCalledWith(
+      'blog-posts',
+      'blog-rss-feed',
+      `blog-posts-${merchant.id}`,
+      `blog-rss-${merchant.id}`
+    );
   });
 
   it('removes XML 1.0 control characters from feed metadata and article fields', async () => {

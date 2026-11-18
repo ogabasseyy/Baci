@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { unstable_cache } from 'next/cache';
+import { cacheLife, cacheTag } from 'next/cache';
 import { type NextRequest, NextResponse } from 'next/server';
 import { getAppUrl, getSupabaseAnonKey, getSupabaseUrl } from '@/env';
 import { normalizeBlogFeedPostForFilter } from '@/lib/blog-feed-normalize';
@@ -258,38 +258,33 @@ async function fetchPublicFeedPosts(
   return publicPosts.slice(0, RSS_PUBLIC_POST_LIMIT);
 }
 
-// Cache RSS feed for 1 hour by canonical merchant id, carrying both
-// tenant-scoped tags (invalidated by revalidateBlogPosts) and legacy global tags.
-function createCachedFeedByMerchantId(merchantId: string) {
-  return unstable_cache(
-    async () => {
-      const supabase = getPublicClient();
-      if (!supabase) {
-        throw new Error('Supabase not configured');
-      }
-
-      const merchant = await getMerchantByColumn(supabase, 'id', merchantId);
-
-      if (!merchant) {
-        return null;
-      }
-
-      return {
-        merchant,
-        posts: await fetchPublicFeedPosts(supabase, merchant.id),
-      };
-    },
-    ['blog-rss-feed', merchantId],
-    {
-      revalidate: 3600, // 1 hour
-      tags: [
-        'blog-posts',
-        'blog-rss-feed',
-        getBlogPostsMerchantCacheTag(merchantId),
-        getBlogRssMerchantCacheTag(merchantId),
-      ],
-    }
+// Cache RSS feed for 1 hour by canonical merchant id using module-scope
+// `'use cache'`, carrying both tenant-scoped tags and legacy global tags.
+async function getCachedFeedByMerchantId(merchantId: string) {
+  'use cache';
+  cacheLife('blog');
+  cacheTag(
+    'blog-posts',
+    'blog-rss-feed',
+    getBlogPostsMerchantCacheTag(merchantId),
+    getBlogRssMerchantCacheTag(merchantId)
   );
+
+  const supabase = getPublicClient();
+  if (!supabase) {
+    throw new Error('Supabase not configured');
+  }
+
+  const merchant = await getMerchantByColumn(supabase, 'id', merchantId);
+
+  if (!merchant) {
+    return null;
+  }
+
+  return {
+    merchant,
+    posts: await fetchPublicFeedPosts(supabase, merchant.id),
+  };
 }
 
 export async function GET(_request: NextRequest, { params }: RouteParams) {
@@ -310,7 +305,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       return new NextResponse('Blog feed not found', { status: 404 });
     }
 
-    const data = await createCachedFeedByMerchantId(resolvedMerchant.id)();
+    const data = await getCachedFeedByMerchantId(resolvedMerchant.id);
 
     if (!data) {
       return new NextResponse('Blog feed not found', { status: 404 });

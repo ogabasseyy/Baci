@@ -41,6 +41,11 @@ export function isSafeCanonicalMerchantSlug(slug: string): boolean {
  * `merchantId` is provided; keeps the global `'blog-posts'` / `'blog-rss-feed'`
  * fallback only for legacy identifier-only callers without a `merchantId`, and
  * treats empty `{}` input as a no-op.
+ *
+ * Note: `merchantId`-only calls (with empty `identifiers` and no
+ * `canonicalMerchantSlug`) intentionally perform Next.js origin tag
+ * invalidation only (`purgeIdentifiers: []`, no Cloudflare URL purge), because
+ * edge URL hostname resolution requires storefront identifiers.
  */
 export function buildBlogRevalidationPlan(
   identifierOrOptions: string | BlogRevalidationOptions,

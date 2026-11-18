@@ -166,3 +166,11 @@ INSERT INTO oxygen_private.payment_recovery (workflow_id, booking_reference, act
   ('40000000-0000-4000-8000-000000000040','50000000-0000-4000-8000-000000000001','check_status','executing',now()-interval '2 hours',now()-interval '1 minute',NULL),
   ('40000000-0000-4000-8000-000000000041','50000000-0000-4000-8000-000000000001','check_status','executing',now()-interval '2 hours',now()-interval '1 hour',NULL),
   ('40000000-0000-4000-8000-000000000042','50000000-0000-4000-8000-000000000002','resend_upfront','indeterminate',now()-interval '2 hours',now()-interval '2 hours',now()-interval '2 hours');
+
+ALTER TABLE oxygen_private.general_activations ADD COLUMN booking_reference uuid;
+UPDATE oxygen_private.general_activations SET booking_reference='50000000-0000-4000-8000-000000000005'
+WHERE workflow_id='40000000-0000-4000-8000-000000000037';
+INSERT INTO oxygen_private.provider_states VALUES
+ ('40000000-0000-4000-8000-000000000037','{"bookingReference":"50000000-0000-4000-8000-000000000005","booking":{"status":"ACTIVATED","loan_reference":"50000000-0000-4000-8000-000000000005"}}');
+INSERT INTO oxygen_private.commands VALUES
+ ('60000000-0000-4000-8000-000000000037','40000000-0000-4000-8000-000000000037','indeterminate','{"action":"approve_booking"}',now()-interval '3 hours');

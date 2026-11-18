@@ -44,7 +44,7 @@ export function scheduleProductMutationPurge({
   const slugsExpired =
     revalidateProductSlugs(
       merchantId,
-      entries.map((entry) => entry.slug),
+      [...entries.map((entry) => entry.slug), ...productIds],
       {
         expireImmediately: true,
       }

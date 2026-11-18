@@ -167,7 +167,7 @@ describe('DELETE /api/products/[id] storefront purge paths', () => {
     );
     expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
       MERCHANT_ID,
-      ['iphone-15'],
+      ['iphone-15', PRODUCT_ID],
       { expireImmediately: true }
     );
     expect(mockRevalidateProductSlugs.mock.invocationCallOrder[0]).toBeLessThan(

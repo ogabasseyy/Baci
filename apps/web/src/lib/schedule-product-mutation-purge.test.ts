@@ -87,7 +87,7 @@ describe('scheduleProductMutationPurge', () => {
 
     expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
       'merchant-1',
-      ['new-phone', 'old-phone'],
+      ['new-phone', 'old-phone', 'product-1'],
       { expireImmediately: true }
     );
     expect(mockRevalidateProducts).toHaveBeenCalledWith(

@@ -71,6 +71,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     products,
     purgeWholeStorefront,
     expireProductBlogCache: shouldExpireProductBlogCache,
+    omitMerchantWidePdpDetails: callerOmitMerchantWidePdpDetails,
     blogPostSlugs: callerBlogPostSlugs,
     confirmEdgeEviction,
   } = parsed.data;
@@ -138,20 +139,21 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // Standalone workers use this narrow mode to refresh related-product
     // enrichment without churning every product/index/feed cache.
     expireProductBlogCache(merchantId);
-  } else if (!hasProducts) {
-    if (!purgeWholeStorefront && explicitSlugsRevalidated) {
-      expireProductBlogCache(merchantId);
-      revalidateProducts(merchantId, undefined, {
-        expireImmediately: true,
-        omitMerchantWidePdpDetails: true,
-      });
-    } else {
-      revalidateProducts(merchantId);
-    }
-  } else if (purgeWholeStorefront) {
+  } else if (
+    !hasProducts &&
+    !purgeWholeStorefront &&
+    callerOmitMerchantWidePdpDetails === true &&
+    explicitSlugsRevalidated
+  ) {
+    expireProductBlogCache(merchantId);
+    revalidateProducts(merchantId, undefined, {
+      expireImmediately: true,
+      omitMerchantWidePdpDetails: true,
+    });
+  } else if (!hasProducts || purgeWholeStorefront) {
     revalidateProducts(merchantId);
   }
-  if (products && products.length > 0) {
+  if (hasProducts && products) {
     let revalidatedDeferredProducts = false;
     try {
       if (purgeWholeStorefront) {
@@ -187,6 +189,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         const {
           entries,
           resolvedSlugs,
+          authoritativeSlugsById,
           blogPostSlugs,
           blogPostSlugsIncomplete,
         } = await enrichProductPurgeEntries(purgeClient, merchantId, products);
@@ -206,10 +209,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
               })
             : revalidateProductSlugs(merchantId, bustSlugs)) === true;
         const scopedOptions =
+          callerOmitMerchantWidePdpDetails === true &&
           explicitSlugsRevalidated &&
           bustSlugsRevalidated &&
           !blogPostSlugsIncomplete &&
-          hasCompleteScopedProductSlugs(products, entries, resolvedSlugs)
+          hasCompleteScopedProductSlugs(
+            products,
+            entries,
+            resolvedSlugs,
+            authoritativeSlugsById
+          )
             ? { omitMerchantWidePdpDetails: true }
             : undefined;
         if (authoritativeMerchantSlug && !purgeWholeStorefront) {

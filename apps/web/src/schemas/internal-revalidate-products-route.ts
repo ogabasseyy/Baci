@@ -81,6 +81,7 @@ export const internalRevalidateProductsBodySchema = z
       .optional(),
     purgeWholeStorefront: z.literal(true).optional(),
     expireProductBlogCache: z.literal(true).optional(),
+    omitMerchantWidePdpDetails: z.boolean().optional(),
     blogPostSlugs: z
       .array(z.string().trim().min(1).max(300))
       .max(10_000)

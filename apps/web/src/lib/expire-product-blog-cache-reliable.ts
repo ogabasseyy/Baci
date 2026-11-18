@@ -71,7 +71,10 @@ export async function expireProductBlogCacheReliable(
           merchantId: normalizedMerchantId,
           expireProductBlogCache: true,
           ...(forwardedSlugs.length > 0
-            ? { productSlugs: forwardedSlugs }
+            ? {
+                productSlugs: forwardedSlugs,
+                omitMerchantWidePdpDetails: true,
+              }
             : {}),
         }),
         signal: AbortSignal.timeout(

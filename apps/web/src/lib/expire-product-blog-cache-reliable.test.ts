@@ -91,6 +91,7 @@ describe('expireProductBlogCacheReliable', () => {
       merchantId: 'merchant-1',
       expireProductBlogCache: true,
       productSlugs: ['iphone-15'],
+      omitMerchantWidePdpDetails: true,
     });
   });
 

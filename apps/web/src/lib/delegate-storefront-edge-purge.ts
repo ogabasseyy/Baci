@@ -124,6 +124,9 @@ export async function delegateStorefrontEdgePurge({
         ...(useWholeStorefront
           ? { purgeWholeStorefront: true }
           : {
+              ...(productSlugs.length > 0
+                ? { omitMerchantWidePdpDetails: true }
+                : {}),
               ...(normalizedBlogPostSlugs.length > 0
                 ? { blogPostSlugs: normalizedBlogPostSlugs }
                 : {}),

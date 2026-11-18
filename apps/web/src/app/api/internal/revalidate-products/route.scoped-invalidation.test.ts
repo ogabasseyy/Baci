@@ -75,10 +75,39 @@ describe('POST /api/internal/revalidate-products scoped PDP invalidation', () =>
     });
   });
 
-  it('omits merchant-wide PDP details when explicit productSlugs and complete products resolve', async () => {
+  it('omits merchant-wide PDP details only when caller opts in and all products resolve', async () => {
     mockEnrichProductPurgeEntries.mockResolvedValueOnce({
       entries: [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
       resolvedSlugs: ['iphone-15', 'prod-1'],
+      authoritativeSlugsById: new Map([['prod-1', 'iphone-15']]),
+      blogPostSlugs: [],
+      blogPostSlugsIncomplete: false,
+    });
+
+    const res = await POST(
+      makeRequest({
+        merchantId: MERCHANT_ID,
+        merchantSlug: 'ogabassey',
+        productSlugs: ['iphone-15'],
+        omitMerchantWidePdpDetails: true,
+        products: [{ id: 'prod-1' }],
+      })
+    );
+
+    expect(res.status).toBe(200);
+    expect(mockRevalidateProducts).toHaveBeenCalledTimes(1);
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      MERCHANT_ID,
+      undefined,
+      { expireImmediately: true, omitMerchantWidePdpDetails: true }
+    );
+  });
+
+  it('keeps full merchant-wide PDP invalidation when omitMerchantWidePdpDetails is omitted', async () => {
+    mockEnrichProductPurgeEntries.mockResolvedValueOnce({
+      entries: [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
+      resolvedSlugs: ['iphone-15', 'prod-1'],
+      authoritativeSlugsById: new Map([['prod-1', 'iphone-15']]),
       blogPostSlugs: [],
       blogPostSlugsIncomplete: false,
     });
@@ -97,34 +126,15 @@ describe('POST /api/internal/revalidate-products scoped PDP invalidation', () =>
     expect(mockRevalidateProducts).toHaveBeenCalledWith(
       MERCHANT_ID,
       undefined,
-      { expireImmediately: true, omitMerchantWidePdpDetails: true }
+      { expireImmediately: true }
     );
-  });
-
-  it('keeps full merchant-wide PDP invalidation when products omit explicit productSlugs', async () => {
-    mockEnrichProductPurgeEntries.mockResolvedValueOnce({
-      entries: [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
-      resolvedSlugs: ['iphone-15', 'prod-1'],
-      blogPostSlugs: [],
-      blogPostSlugsIncomplete: false,
-    });
-
-    const res = await POST(
-      makeRequest({
-        merchantId: MERCHANT_ID,
-        products: [{ id: 'prod-1' }],
-      })
-    );
-
-    expect(res.status).toBe(200);
-    expect(mockRevalidateProducts).toHaveBeenCalledTimes(1);
-    expect(mockRevalidateProducts).toHaveBeenCalledWith(MERCHANT_ID);
   });
 
   it('keeps full merchant-wide PDP invalidation when an id-only product fails authoritative slug lookup', async () => {
     mockEnrichProductPurgeEntries.mockResolvedValueOnce({
       entries: [{ slug: 'prod-archived', categorySegment: null }],
       resolvedSlugs: ['prod-archived'],
+      authoritativeSlugsById: new Map(),
       blogPostSlugs: [],
       blogPostSlugsIncomplete: false,
     });
@@ -134,6 +144,7 @@ describe('POST /api/internal/revalidate-products scoped PDP invalidation', () =>
         merchantId: MERCHANT_ID,
         merchantSlug: 'ogabassey',
         productSlugs: ['iphone-15'],
+        omitMerchantWidePdpDetails: true,
         products: [{ id: 'prod-archived' }],
       })
     );
@@ -160,33 +171,8 @@ describe('POST /api/internal/revalidate-products scoped PDP invalidation', () =>
         merchantId: MERCHANT_ID,
         merchantSlug: 'ogabassey',
         productSlugs: ['iphone-15'],
+        omitMerchantWidePdpDetails: true,
         products: [{ slug: 'iphone-15' }],
-      })
-    );
-
-    expect(res.status).toBe(200);
-    expect(mockRevalidateProducts).toHaveBeenCalledTimes(1);
-    expect(mockRevalidateProducts).toHaveBeenCalledWith(
-      MERCHANT_ID,
-      undefined,
-      { expireImmediately: true }
-    );
-  });
-
-  it('keeps full merchant-wide PDP invalidation when no product slugs resolve', async () => {
-    mockEnrichProductPurgeEntries.mockResolvedValueOnce({
-      entries: [],
-      resolvedSlugs: [],
-      blogPostSlugs: [],
-      blogPostSlugsIncomplete: false,
-    });
-
-    const res = await POST(
-      makeRequest({
-        merchantId: MERCHANT_ID,
-        merchantSlug: 'ogabassey',
-        productSlugs: ['iphone-15'],
-        products: [{ id: 'prod-1' }],
       })
     );
 
@@ -207,6 +193,7 @@ describe('POST /api/internal/revalidate-products scoped PDP invalidation', () =>
         merchantId: MERCHANT_ID,
         merchantSlug: 'ogabassey',
         productSlugs: ['iphone-15'],
+        omitMerchantWidePdpDetails: true,
         products: [{ id: 'prod-1' }],
       })
     );
@@ -216,13 +203,14 @@ describe('POST /api/internal/revalidate-products scoped PDP invalidation', () =>
     expect(mockRevalidateProducts).toHaveBeenCalledWith(MERCHANT_ID);
   });
 
-  it('falls back to full merchant-wide PDP invalidation when revalidateProductSlugs returns false on slug-chunk or product paths', async () => {
+  it('falls back to full merchant-wide PDP invalidation when revalidateProductSlugs returns false', async () => {
     mockRevalidateProductSlugs.mockReturnValueOnce(false);
 
     const chunkRes = await POST(
       makeRequest({
         merchantId: MERCHANT_ID,
         productSlugs: ['iphone-15'],
+        omitMerchantWidePdpDetails: true,
       })
     );
     expect(chunkRes.status).toBe(200);
@@ -235,6 +223,7 @@ describe('POST /api/internal/revalidate-products scoped PDP invalidation', () =>
     mockEnrichProductPurgeEntries.mockResolvedValueOnce({
       entries: [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
       resolvedSlugs: ['iphone-15', 'prod-1'],
+      authoritativeSlugsById: new Map([['prod-1', 'iphone-15']]),
       blogPostSlugs: [],
       blogPostSlugsIncomplete: false,
     });
@@ -244,6 +233,7 @@ describe('POST /api/internal/revalidate-products scoped PDP invalidation', () =>
         merchantId: MERCHANT_ID,
         merchantSlug: 'ogabassey',
         productSlugs: ['iphone-15'],
+        omitMerchantWidePdpDetails: true,
         products: [{ id: 'prod-1' }],
       })
     );
@@ -261,6 +251,7 @@ describe('POST /api/internal/revalidate-products scoped PDP invalidation', () =>
         merchantId: MERCHANT_ID,
         merchantSlug: 'another-store',
         productSlugs: ['iphone-15'],
+        omitMerchantWidePdpDetails: true,
         products: [{ slug: 'iphone-15', category: 'Smartphones' }],
       })
     );

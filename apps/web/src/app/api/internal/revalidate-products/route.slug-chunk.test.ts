@@ -58,10 +58,35 @@ describe('POST /api/internal/revalidate-products slug chunks', () => {
     mockCreatePublicClient.mockReturnValue({ from: vi.fn() });
   });
 
-  it('busts a separately supplied complete per-slug set without an edge purge', async () => {
+  it('busts a separately supplied complete per-slug set without omitting merchant-wide PDP tags by default', async () => {
     const productSlugs = ['phone-1', 'phone-2', 'phone-3'];
     const res = await POST(
       request({ merchantId: MERCHANT_ID, productSlugs }, `Bearer ${SECRET}`)
+    );
+
+    expect(res.status).toBe(200);
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(MERCHANT_ID);
+    // Hard-expired even without purge inputs: a later control-metadata
+    // chunk may schedule an edge purge over these tags.
+    expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
+      MERCHANT_ID,
+      productSlugs,
+      { expireImmediately: true }
+    );
+    expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
+  });
+
+  it('omits merchant-wide PDP details only when caller opts in with omitMerchantWidePdpDetails', async () => {
+    const productSlugs = ['phone-1', 'phone-2'];
+    const res = await POST(
+      request(
+        {
+          merchantId: MERCHANT_ID,
+          productSlugs,
+          omitMerchantWidePdpDetails: true,
+        },
+        `Bearer ${SECRET}`
+      )
     );
 
     expect(res.status).toBe(200);
@@ -71,13 +96,5 @@ describe('POST /api/internal/revalidate-products slug chunks', () => {
       undefined,
       { expireImmediately: true, omitMerchantWidePdpDetails: true }
     );
-    // Hard-expired even without purge inputs: a later control-metadata
-    // chunk may schedule an edge purge over these tags.
-    expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
-      MERCHANT_ID,
-      productSlugs,
-      { expireImmediately: true }
-    );
-    expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
   });
 });

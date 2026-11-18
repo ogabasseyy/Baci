@@ -54,6 +54,7 @@ describe('delegateStorefrontEdgePurge', () => {
             expireProductBlogCache: true,
             confirmEdgeEviction: true,
             productSlugs: ['iphone-15'],
+            omitMerchantWidePdpDetails: true,
             blogPostSlugs: ['iphone-guide'],
             products: [{ slug: 'iphone-15', categorySlug: 'smartphones' }],
           }),

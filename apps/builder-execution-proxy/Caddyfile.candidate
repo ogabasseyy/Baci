@@ -16,7 +16,7 @@ builder-output-origin.usebaci.com {
 	@delivery {
 		method GET
 		path /resource/* /published/*
-		expression `"{$BACI_EXECUTION_ORIGIN_KEY}".matches("^[A-Za-z0-9_-]{43}$") && {http.request.header.X-Baci-Execution-Origin-Key} == "{$BACI_EXECUTION_ORIGIN_KEY}"`
+		expression `{env.BACI_EXECUTION_ORIGIN_KEY}.matches("^[A-Za-z0-9_-]{43}$") && {http.request.header.X-Baci-Execution-Origin-Key} == {env.BACI_EXECUTION_ORIGIN_KEY}`
 	}
 	handle @delivery {
 		header Cache-Control "private, no-store"

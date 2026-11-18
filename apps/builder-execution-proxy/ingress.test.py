@@ -47,6 +47,12 @@ def smoke(root, backend_port, secret, dead=False):
     env = dict(os.environ, XDG_CONFIG_HOME=str(root), XDG_DATA_HOME=str(root),
                BACI_DELIVERY_PORT=str(backend_port), BACI_EXECUTION_ORIGIN_KEY=secret)
 
+    adapted = subprocess.run(
+        ['caddy', 'adapt', '--config', str(config), '--adapter', 'caddyfile'],
+        env=env, capture_output=True, text=True, check=True,
+    )
+    assert KEY not in adapted.stdout and KEY not in adapted.stderr
+
     def request(path, *args):
         return subprocess.run([
             'curl', '-ksS', '--noproxy', '*', '--max-time', '2',

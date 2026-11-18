@@ -51,6 +51,12 @@ export default {
     ) {
       return unavailable(404);
     }
+    const isPrivate = privatePath.test(url.pathname);
+    const browserOrigin = request.headers.get('Origin');
+    // Private assets are read by the opaque sandbox. Document navigation
+    // has no Origin header and remains subject to the delivery CSP.
+    if (isPrivate && browserOrigin !== null && browserOrigin !== 'null')
+      return unavailable(404);
     if (
       typeof env.EXECUTION_ORIGIN_KEY !== 'string' ||
       !/^[A-Za-z0-9_-]{43}$/.test(env.EXECUTION_ORIGIN_KEY)
@@ -64,7 +70,6 @@ export default {
       const headers = new Headers({
         'X-Baci-Execution-Origin-Key': env.EXECUTION_ORIGIN_KEY,
       });
-      const browserOrigin = request.headers.get('Origin');
       if (browserOrigin) headers.set('Origin', browserOrigin);
       const response = await fetch(upstream, {
         method: 'GET',
@@ -80,6 +85,9 @@ export default {
       const output = new Headers({ 'Cache-Control': 'private, no-store' });
       for (const name of deliveryHeaders) {
         const value = response.headers.get(name);
+        if (name === 'access-control-allow-origin' && isPrivate) {
+          if (browserOrigin !== 'null' || value !== 'null') continue;
+        }
         if (value !== null) output.set(name, value);
       }
       return new Response(response.body, {

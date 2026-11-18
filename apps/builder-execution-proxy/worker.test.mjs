@@ -139,3 +139,33 @@ test('fails closed on upstream redirects and transport errors', async (t) => {
   assert.equal(failed.status, 502);
   assert.equal(await failed.text(), '');
 });
+
+test('keeps private output CORS scoped to the opaque sandbox', async (t) => {
+  const fetch = t.mock.method(
+    globalThis,
+    'fetch',
+    async () =>
+      new Response('synthetic', {
+        headers: { 'Access-Control-Allow-Origin': '*' },
+      })
+  );
+  const file = `/resource/${ticket}/app.js`;
+  const foreign = request(file, {
+    headers: { Origin: 'https://foreign.test' },
+  });
+  assert.equal((await worker.fetch(foreign, env)).status, 404);
+  assert.equal(fetch.mock.callCount(), 0);
+  for (const init of [undefined, { headers: { Origin: 'null' } }]) {
+    const privateOutput = await worker.fetch(request(file, init), env);
+    assert.equal(privateOutput.status, 200);
+    assert.equal(
+      privateOutput.headers.get('Access-Control-Allow-Origin'),
+      null
+    );
+  }
+  const publicAsset = await worker.fetch(
+    request(`/published/example/${digest}/app.js`),
+    env
+  );
+  assert.equal(publicAsset.headers.get('Access-Control-Allow-Origin'), '*');
+});

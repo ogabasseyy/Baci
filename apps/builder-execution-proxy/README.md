@@ -21,8 +21,9 @@ origin authentication secret.
 
 The preview delivery listener is the authoritative origin allowlist. It
 rejects origins outside its configured hosts and permits the opaque
-`Origin: null` used by sandboxed asset requests. The Worker forwards Origin
-as input to that check. Published assets are deliberately public. The
+`Origin: null` used by sandboxed asset requests. The Worker admits private requests with no Origin or the sandbox Origin
+`null`, and only forwards an opaque CORS grant for an opaque request.
+Published assets are deliberately public. The
 published listener normalizes the decoded `path` through
 `normalizeExperiencePath` before rendering, rejecting malformed encoding,
 empty or dot segments, and characters outside its route grammar. It adds
@@ -36,8 +37,8 @@ requires the secret before forwarding, strips credentials, and fixes the
 upstream Host to the browser execution host. Set the builder service
 execution origin to the same canonical Worker URL. This arrangement requires
 a valid certificate and DNS-only record for the fixed upstream hostname so
-the Worker no-store subrequest reaches Contabo directly. Treat adapted
-Caddy JSON as secret material because it contains the expanded key.
+the Worker no-store subrequest reaches Contabo directly. The runtime environment placeholder keeps the origin key out of adapted
+Caddy JSON. Protect the service environment and keep the log filter enabled.
 
 Wrangler disables Worker caching, invocation logs, traces, Logpush, and
 version preview URLs. Both layers return `Cache-Control: private, no-store`.

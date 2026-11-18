@@ -64,6 +64,26 @@ describe('quiz v2 route contract', () => {
     expect(rpc).toHaveBeenCalledTimes(2);
   });
 
+  it('counts the 15 seconds from when a slow check was asked', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-18T12:00:00Z'));
+    let answer: (value: { data: number; error: null }) => void = () => {};
+    const rpc = vi.fn().mockReturnValueOnce(
+      new Promise((resolve) => {
+        answer = resolve;
+      })
+    );
+
+    const pending = requireQuizV2Runtime({ rpc } as never);
+    vi.setSystemTime(new Date('2026-11-18T12:00:20Z'));
+    answer({ data: 2, error: null });
+    expect(await pending).toBeNull();
+
+    rpc.mockResolvedValue({ data: 2, error: null });
+    expect(await requireQuizV2Runtime({ rpc } as never)).toBeNull();
+    expect(rpc).toHaveBeenCalledTimes(2);
+  });
+
   it('never remembers a failed check', async () => {
     const rpc = vi
       .fn()

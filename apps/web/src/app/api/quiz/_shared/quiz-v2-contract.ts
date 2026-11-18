@@ -3,6 +3,7 @@ import {
   QUIZ_CONTRACT_VERSION,
 } from '@baci/shared/constants';
 import { type NextRequest, NextResponse } from 'next/server';
+import { logger } from '@/lib/logger';
 import type { ServerSupabaseClient } from './route-helpers-guards';
 
 const UPDATE_REQUIRED = {
@@ -50,18 +51,38 @@ export function rejectUnsupportedQuizContract(
 const RUNTIME_READY_TTL_MS = 15_000;
 
 let runtimeReadyUntil = 0;
-let runtimeCheckInFlight: Promise<boolean> | null = null;
+function logRuntimeCheckFailure(reason: string, code?: string): void {
+  logger.warn({
+    code,
+    event: 'quiz_runtime_contract_check',
+    message: 'Quiz runtime contract check did not pass',
+    reason,
+  });
+}
 
 async function checkQuizV2Runtime(
   supabase: ServerSupabaseClient
 ): Promise<boolean> {
   try {
     const { data, error } = await supabase.rpc('quiz_runtime_contract_version');
-    return !error && data === QUIZ_CONTRACT_VERSION;
+    if (error) {
+      logRuntimeCheckFailure('rpc_error', error.code);
+      return false;
+    }
+    if (data !== QUIZ_CONTRACT_VERSION) {
+      logRuntimeCheckFailure('version_mismatch');
+      return false;
+    }
+    return true;
   } catch {
+    logRuntimeCheckFailure('request_failed');
     return false;
   }
 }
+
+type RuntimeCheck = { ready: Promise<boolean>; startedAt: number };
+
+let runtimeCheckInFlight: RuntimeCheck | null = null;
 
 export async function requireQuizV2Runtime(
   supabase: ServerSupabaseClient
@@ -69,12 +90,25 @@ export async function requireQuizV2Runtime(
   if (Date.now() < runtimeReadyUntil) return null;
   // Requests that arrive while a check is running share its answer instead of
   // each sending their own.
-  runtimeCheckInFlight ??= checkQuizV2Runtime(supabase).finally(() => {
-    runtimeCheckInFlight = null;
-  });
-  const ready = await runtimeCheckInFlight;
-  if (!ready) return NextResponse.json(RUNTIME_NOT_READY, { status: 503 });
-  runtimeReadyUntil = Date.now() + RUNTIME_READY_TTL_MS;
+  if (!runtimeCheckInFlight) {
+    const check: RuntimeCheck = {
+      ready: checkQuizV2Runtime(supabase).finally(() => {
+        if (runtimeCheckInFlight === check) runtimeCheckInFlight = null;
+      }),
+      startedAt: Date.now(),
+    };
+    runtimeCheckInFlight = check;
+  }
+  const { ready, startedAt } = runtimeCheckInFlight;
+  if (!(await ready)) {
+    return NextResponse.json(RUNTIME_NOT_READY, { status: 503 });
+  }
+  // Count the window from when the question was asked, so a slow database
+  // answer cannot stretch how long a pass is trusted.
+  runtimeReadyUntil = Math.max(
+    runtimeReadyUntil,
+    startedAt + RUNTIME_READY_TTL_MS
+  );
   return null;
 }
 

@@ -39,6 +39,8 @@ AS $$
 DECLARE
   v_shipping_status text;
   v_order_id uuid;
+  v_order_shipment_id uuid;
+  v_has_newer_shipment boolean;
 BEGIN
   IF NEW.provider IS DISTINCT FROM 'GIGL'
     OR NEW.order_id IS NULL
@@ -47,32 +49,11 @@ BEGIN
   END IF;
 
   IF NEW.status = 'cancelled' THEN
-    SELECT orders.id INTO v_order_id
+    SELECT orders.id, orders.shipment_id
+    INTO v_order_id, v_order_shipment_id
     FROM public.orders AS orders
     WHERE orders.id = NEW.order_id
       AND orders.merchant_id = NEW.merchant_id
-      AND NOT EXISTS (
-        SELECT 1
-        FROM public.shipments AS newer_shipment
-        WHERE newer_shipment.order_id = NEW.order_id
-          AND newer_shipment.merchant_id = NEW.merchant_id
-          AND newer_shipment.tracking_timeline_generation
-            > NEW.tracking_timeline_generation
-      )
-      AND (
-        orders.shipment_id = NEW.id
-        OR (
-          orders.shipment_id IS NULL
-          AND NOT EXISTS (
-            SELECT 1
-            FROM public.shipments AS other_shipment
-            WHERE other_shipment.order_id = NEW.order_id
-              AND other_shipment.merchant_id = NEW.merchant_id
-              AND other_shipment.id <> NEW.id
-              AND other_shipment.status <> 'cancelled'
-          )
-        )
-      )
       AND orders.cancelled_at IS NULL
       AND coalesce(orders.shipping_status, '') NOT IN (
         'delivered', 'completed', 'cancelled', 'canceled', 'returned', 'failed'
@@ -82,6 +63,18 @@ BEGIN
       RETURN NEW;
     END IF;
 
+    v_has_newer_shipment := EXISTS (
+      SELECT 1
+      FROM public.shipments AS newer_shipment
+      WHERE newer_shipment.order_id = NEW.order_id
+        AND newer_shipment.merchant_id = NEW.merchant_id
+        AND newer_shipment.tracking_timeline_generation
+          > NEW.tracking_timeline_generation
+    );
+
+    -- Refuse an unrefunded cancellation when an active wallet charge still
+    -- belongs to this shipment or to the current non-superseded order timeline
+    -- (covers recovered decoy shipments before orders.shipment_id moves).
     IF EXISTS (
       SELECT 1
       FROM public.merchant_shipping_charges AS charge
@@ -89,8 +82,30 @@ BEGIN
         AND charge.status IN (
           'reserved', 'provider_submitting', 'booked', 'needs_reconciliation'
         )
+        AND (
+          charge.shipment_id = NEW.id
+          OR NOT v_has_newer_shipment
+        )
     ) THEN
       RAISE EXCEPTION 'active_merchant_shipping_charge' USING ERRCODE = '55P03';
+    END IF;
+
+    IF v_has_newer_shipment
+      OR (
+        v_order_shipment_id IS DISTINCT FROM NEW.id
+        AND (
+          v_order_shipment_id IS NOT NULL
+          OR EXISTS (
+            SELECT 1
+            FROM public.shipments AS other_shipment
+            WHERE other_shipment.order_id = NEW.order_id
+              AND other_shipment.merchant_id = NEW.merchant_id
+              AND other_shipment.id <> NEW.id
+              AND other_shipment.status <> 'cancelled'
+          )
+        )
+      ) THEN
+      RETURN NEW;
     END IF;
 
     UPDATE public.orders AS orders

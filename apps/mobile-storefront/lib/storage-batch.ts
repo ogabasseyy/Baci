@@ -1,4 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  getOxygenStagingProfile,
+  oxygenStagingStorageKey,
+} from './oxygen-staging-profile';
 
 /**
  * AsyncStorage v3 batch helpers with compatibility fallback for older builds.
@@ -18,6 +22,16 @@ export async function getAsyncStorageEntries(
   keys: readonly string[]
 ): Promise<[string, string | null][]> {
   if (keys.length === 0) return [];
+  if (getOxygenStagingProfile())
+    return Promise.all(
+      keys.map(
+        async (key) =>
+          [key, await AsyncStorage.getItem(oxygenStagingStorageKey(key))] as [
+            string,
+            string | null,
+          ]
+      )
+    );
 
   if (typeof batchStorage.getMany === 'function') {
     const record = await batchStorage.getMany([...keys]);
@@ -43,6 +57,12 @@ export async function removeAsyncStorageItems(
   keys: readonly string[]
 ): Promise<void> {
   if (keys.length === 0) return;
+  if (getOxygenStagingProfile()) {
+    await Promise.all(
+      keys.map((key) => AsyncStorage.removeItem(oxygenStagingStorageKey(key)))
+    );
+    return;
+  }
 
   if (typeof batchStorage.removeMany === 'function') {
     await batchStorage.removeMany([...keys]);

@@ -157,3 +157,11 @@ describe('ChatWidget route visibility', () => {
     expect(toJSON()).not.toBeNull();
   });
 });
+
+it.each([
+  '/oxygen-checkout',
+  '/oxygen-checkout/selfie',
+])('hides the assistant throughout Oxygen checkout: %s', (path) => {
+  mockUsePathname.mockReturnValue(path);
+  expect(render(<ChatWidget />).toJSON()).toBeNull();
+});

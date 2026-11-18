@@ -1,0 +1,189 @@
+import * as Crypto from 'expo-crypto';
+import { useEffect, useRef, useState } from 'react';
+import { AppState } from 'react-native';
+import type { OxygenClient } from '@/services/oxygen/client';
+import { restoreCheckoutHomeAddress } from './oxygen-draft-home-prefill';
+import type { OxygenFields } from './oxygen-form-utils';
+export function useOxygenApplicationDraft(
+  client: OxygenClient,
+  workflowId: string,
+  scopeKey: string,
+  editing: boolean,
+  prefill: OxygenFields = {}
+) {
+  const [fields, setFields] = useState<OxygenFields>({});
+  const [step, setStep] = useState<0 | 1 | 2>(0);
+  const [error, setError] = useState<string | null>(null);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  const version = useRef(0);
+  const saveLock = useRef(false);
+  const saveCompletion = useRef<Promise<void>>(Promise.resolve());
+  const currentStep = useRef(step);
+  currentStep.current = step;
+  const generation = useRef(0);
+  const fingerprint = useRef('');
+  const scope = useRef(scopeKey);
+  scope.current = scopeKey;
+  const mounted = useRef(true);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: scope changes and explicit retry reload the encrypted draft.
+  useEffect(() => {
+    let live = true;
+    generation.current++;
+    saveLock.current = false;
+    setSaving(false);
+    mounted.current = true;
+    setLoaded(false);
+    setFields({});
+    setStep(0);
+    setError(null);
+    setRestoreError(null);
+    version.current = 0;
+    fingerprint.current = JSON.stringify({ step: 0, fields: {} });
+    // Submitted identity drafts may be minimized. OTP does not need to reread PII.
+    if (!editing) {
+      setLoaded(true);
+      return () => {
+        live = false;
+        mounted.current = false;
+      };
+    }
+    void client.draft.read(workflowId).then(
+      (result) => {
+        if (!live) return;
+        version.current = result.version;
+        if (result.draft) {
+          setFields(restoreCheckoutHomeAddress(result.draft.fields, prefill));
+          setStep(result.draft.step);
+          fingerprint.current = JSON.stringify(result.draft);
+        } else {
+          // Existing drafts, including deliberately cleared values, always win.
+          setFields(prefill);
+          fingerprint.current = JSON.stringify({ step: 0, fields: prefill });
+        }
+        setLoaded(true);
+      },
+      () => {
+        if (live)
+          setRestoreError(
+            'Could not restore your saved application. Try again before continuing.'
+          );
+      }
+    );
+    return () => {
+      live = false;
+      mounted.current = false;
+    };
+  }, [client, workflowId, scopeKey, attempt]);
+  async function save(nextStep: 0 | 1 | 2, nextFields = fields) {
+    if (!loaded || !editing) return false;
+    const startedScope = scopeKey;
+    const startedGeneration = generation.current;
+    // Step navigation is local. Persistence stays serialized, including a blur
+    // save that may have started just before the user pressed Continue.
+    currentStep.current = nextStep;
+    setStep(nextStep);
+    while (saveLock.current) await saveCompletion.current;
+    if (
+      !mounted.current ||
+      scope.current !== startedScope ||
+      generation.current !== startedGeneration
+    )
+      return false;
+    saveLock.current = true;
+    let release: () => void = () => undefined;
+    saveCompletion.current = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    setSaving(true);
+    const savedFingerprint = JSON.stringify({
+      step: nextStep,
+      fields: nextFields,
+    });
+    try {
+      const result = await client.draft.write({
+        workflowId,
+        version: version.current,
+        idempotencyKey: Crypto.randomUUID(),
+        draft: { step: nextStep, fields: nextFields },
+      });
+      if (
+        !mounted.current ||
+        scope.current !== startedScope ||
+        generation.current !== startedGeneration
+      )
+        return false;
+      version.current = result.version;
+      fingerprint.current = savedFingerprint;
+      setError(null);
+      return true;
+    } catch {
+      if (
+        mounted.current &&
+        scope.current === startedScope &&
+        generation.current === startedGeneration
+      )
+        setError('Could not save your application. Try again.');
+      return false;
+    } finally {
+      release();
+      if (generation.current === startedGeneration) saveLock.current = false;
+      if (
+        mounted.current &&
+        scope.current === startedScope &&
+        generation.current === startedGeneration
+      )
+        setSaving(false);
+    }
+  }
+  const latestSave = useRef(save);
+  latestSave.current = save;
+  async function flush() {
+    if (!loaded || !editing) return false;
+    const startedScope = scopeKey;
+    const startedGeneration = generation.current;
+    const snapshotFields = fields;
+    const snapshotStep = step;
+    while (saveLock.current) await saveCompletion.current;
+    if (
+      scope.current !== startedScope ||
+      generation.current !== startedGeneration ||
+      currentStep.current !== snapshotStep
+    )
+      return false;
+    if (
+      fingerprint.current ===
+      JSON.stringify({ step: snapshotStep, fields: snapshotFields })
+    )
+      return true;
+    return latestSave.current(snapshotStep, snapshotFields);
+  }
+  const latestFlush = useRef(flush);
+  latestFlush.current = flush;
+  // No typing timer: field blur, app background and navigation persist explicitly.
+  useEffect(() => {
+    const capturedScope = scopeKey;
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') void latestFlush.current();
+    });
+    return () => {
+      subscription.remove();
+      if (scope.current === capturedScope) void latestFlush.current();
+    };
+  }, [scopeKey]);
+  return {
+    fields,
+    setFields,
+    step,
+    save,
+    error,
+    restoreError,
+    setError,
+    loaded,
+    saving,
+    flush,
+    reload: () => setAttempt((current) => current + 1),
+  };
+}

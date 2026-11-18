@@ -9,6 +9,10 @@ import { Platform } from 'react-native';
 import { createMMKV } from 'react-native-mmkv';
 import { createLogger } from './logger';
 import {
+  getOxygenStagingProfile,
+  oxygenStagingStorageKey,
+} from './oxygen-staging-profile';
+import {
   getAsyncStorageEntries,
   removeAsyncStorageItems,
 } from './storage-batch';
@@ -20,7 +24,7 @@ let mmkvStorage: ReturnType<typeof createMMKV> | null = null;
 try {
   if (Platform.OS !== 'web' && process.env.NODE_ENV !== 'test') {
     mmkvStorage = createMMKV({
-      id: 'baci-storefront-storage',
+      id: getOxygenStagingProfile()?.storagePrefix ?? 'baci-storefront-storage',
     });
   }
 } catch (error) {
@@ -37,7 +41,10 @@ export async function getStorageEntries(
   if (keys.length === 0) return [];
 
   if (mmkvStorage) {
-    return keys.map((key) => [key, mmkvStorage?.getString(key) ?? null]);
+    return keys.map((key) => [
+      key,
+      mmkvStorage?.getString(oxygenStagingStorageKey(key)) ?? null,
+    ]);
   }
 
   return getAsyncStorageEntries(keys);
@@ -50,7 +57,7 @@ export async function removeStorageItems(
 
   if (mmkvStorage) {
     for (const key of keys) {
-      mmkvStorage.remove(key);
+      mmkvStorage.remove(oxygenStagingStorageKey(key));
     }
     await removeAsyncStorageItems(keys);
     return;
@@ -64,7 +71,8 @@ export async function removeStorageItems(
  * Fully fallback-safe for Expo Go / Web SSR contexts
  */
 export const asyncStorage = {
-  getItem: async (name: string): Promise<string | null> => {
+  getItem: async (inputName: string): Promise<string | null> => {
+    const name = oxygenStagingStorageKey(inputName);
     try {
       if (mmkvStorage) {
         const value = mmkvStorage.getString(name) ?? null;
@@ -85,7 +93,8 @@ export const asyncStorage = {
       return null;
     }
   },
-  setItem: async (name: string, value: string): Promise<void> => {
+  setItem: async (inputName: string, value: string): Promise<void> => {
+    const name = oxygenStagingStorageKey(inputName);
     try {
       if (mmkvStorage) {
         mmkvStorage.set(name, value);
@@ -96,7 +105,8 @@ export const asyncStorage = {
       log.warn('Failed to set item:', name, error);
     }
   },
-  removeItem: async (name: string): Promise<void> => {
+  removeItem: async (inputName: string): Promise<void> => {
+    const name = oxygenStagingStorageKey(inputName);
     try {
       if (mmkvStorage) {
         mmkvStorage.remove(name);
@@ -128,7 +138,10 @@ export const asyncStorage = {
       log.warn('Failed to get legacy AsyncStorage keys:', error);
     }
 
-    return Array.from(new Set(keys));
+    const prefix = getOxygenStagingProfile()?.storagePrefix;
+    return Array.from(
+      new Set(prefix ? keys.filter((key) => key.startsWith(prefix)) : keys)
+    );
   },
 };
 
@@ -151,7 +164,8 @@ function isServerWebRender(): boolean {
 }
 
 export const syncStorage = {
-  getItem: (name: string): string | null => {
+  getItem: (inputName: string): string | null => {
+    const name = oxygenStagingStorageKey(inputName);
     if (mmkvStorage) {
       return mmkvStorage.getString(name) ?? null;
     }
@@ -168,7 +182,8 @@ export const syncStorage = {
     }
     return memoryCache[name] ?? null;
   },
-  setItem: (name: string, value: string): void => {
+  setItem: (inputName: string, value: string): void => {
+    const name = oxygenStagingStorageKey(inputName);
     if (mmkvStorage) {
       mmkvStorage.set(name, value);
       return;
@@ -179,7 +194,8 @@ export const syncStorage = {
       log.warn('Failed to persist item:', name, error)
     );
   },
-  removeItem: (name: string): void => {
+  removeItem: (inputName: string): void => {
+    const name = oxygenStagingStorageKey(inputName);
     if (mmkvStorage) {
       mmkvStorage.remove(name);
       AsyncStorage.removeItem(name).catch((error) =>
@@ -239,14 +255,15 @@ export function initializeStorage(keys: readonly string[]): Promise<void> {
       for (const [key, value] of pairs) {
         if (value !== null) {
           if (mmkvStorage) {
-            const existingValue = mmkvStorage.getString(key) ?? null;
+            const existingValue =
+              mmkvStorage.getString(oxygenStagingStorageKey(key)) ?? null;
             if (existingValue === null) {
-              mmkvStorage.set(key, value);
+              mmkvStorage.set(oxygenStagingStorageKey(key), value);
               log.debug(`Migrated "${key}" from AsyncStorage to MMKV`);
             }
             migratedKeys.push(key);
           } else {
-            memoryCache[key] = value;
+            memoryCache[oxygenStagingStorageKey(key)] = value;
             log.debug(`Loaded "${key}" from AsyncStorage`);
           }
         }

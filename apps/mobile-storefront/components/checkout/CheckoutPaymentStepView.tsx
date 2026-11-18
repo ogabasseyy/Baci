@@ -30,6 +30,7 @@ interface CheckoutPaymentStepViewProps {
   isDark: boolean;
   isLoadingCheckoutSavings: boolean;
   klumpDisabledReason: string | undefined;
+  oxygenDisabledReason?: string;
   onRetrySavings: () => void;
   onSavingsToggle: NonNullable<PaymentMethodSelectorProps['onSavingsToggle']>;
   onSelectPayment: PaymentMethodSelectorProps['onSelectMethod'];
@@ -59,6 +60,7 @@ export function CheckoutPaymentStepView({
   isDark,
   isLoadingCheckoutSavings,
   klumpDisabledReason,
+  oxygenDisabledReason,
   onRetrySavings,
   onSavingsToggle,
   onSelectPayment,
@@ -140,9 +142,10 @@ export function CheckoutPaymentStepView({
         savingsGoalTitle={checkoutSavingsGoal?.title}
         savingsSelection={savingsSelection}
         onSavingsToggle={onSavingsToggle}
-        methodDisabledReasons={
-          klumpDisabledReason ? { klump: klumpDisabledReason } : undefined
-        }
+        methodDisabledReasons={{
+          ...(klumpDisabledReason ? { klump: klumpDisabledReason } : {}),
+          ...(oxygenDisabledReason ? { oxygen: oxygenDisabledReason } : {}),
+        }}
         walletFundedBankTransferMode={
           walletFundedBankTransferOptionEnabled &&
           selectedPayment === 'bank_transfer'

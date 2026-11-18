@@ -1,6 +1,8 @@
 import { act, renderHook } from '@testing-library/react-native';
 
 let mockParams: Record<string, string> = {};
+let mockStaging = false;
+let mockReviewProductId: string | undefined;
 const mockReplace = jest.fn();
 jest.mock('expo-router', () => ({
   router: { replace: (...args: unknown[]) => mockReplace(...args) },
@@ -10,7 +12,13 @@ jest.mock('@/hooks/use-network-state', () => ({
   useNetworkState: () => ({ isOnline: true }),
 }));
 jest.mock('@/hooks/use-reviews', () => ({
-  useReviews: () => ({}),
+  useReviews: ({ productId }: { productId: string }) => {
+    mockReviewProductId = productId;
+    return {};
+  },
+}));
+jest.mock('@/lib/oxygen-staging-profile', () => ({
+  getOxygenStagingProfile: () => (mockStaging ? {} : null),
 }));
 let mockCapturedRouteCondition: unknown;
 jest.mock('./use-product-detail-selection', () => {
@@ -62,6 +70,8 @@ function setup(params: Record<string, string>) {
 beforeEach(() => {
   jest.clearAllMocks();
   mockCapturedRouteCondition = undefined;
+  mockStaging = false;
+  mockReviewProductId = undefined;
 });
 
 it('derives the route condition from the live offer on ID-only links', () => {
@@ -430,4 +440,13 @@ it('preserves the saved selection when canonicalizing a legacy slug', () => {
       match_base: '1',
     },
   });
+});
+
+it('skips unsupported reviews only in the isolated Oxygen staging profile', () => {
+  mockStaging = true;
+  setup({ slug: 'phone' });
+  expect(mockReviewProductId).toBe('');
+  mockStaging = false;
+  setup({ slug: 'phone' });
+  expect(mockReviewProductId).toBe('p1');
 });

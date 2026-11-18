@@ -2,9 +2,18 @@ import { jest } from '@jest/globals';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook } from '@testing-library/react-native';
 import { createElement, type ReactNode } from 'react';
-import { usePrefetchBillers, vtuBillerKeys } from '@/hooks/use-vtu-billers';
+import {
+  usePrefetchBillers,
+  useVTUBillers,
+  vtuBillerKeys,
+} from '@/hooks/use-vtu-billers';
 import { fetchWithRetry } from '@/lib/api';
 import { logger } from '@/lib/logger';
+import { getOxygenStagingProfile } from '@/lib/oxygen-staging-profile';
+
+jest.mock('@/lib/oxygen-staging-profile', () => ({
+  getOxygenStagingProfile: jest.fn(() => null),
+}));
 
 jest.mock('@/lib/api', () => ({
   fetchWithRetry: jest.fn(),
@@ -64,6 +73,7 @@ function flushFrames(frameCallbacks: FrameRequestCallback[]) {
 describe('usePrefetchBillers', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.mocked(getOxygenStagingProfile).mockReturnValue(null);
     jest.useFakeTimers();
     mockFetchWithRetry.mockResolvedValue({
       ok: true,
@@ -73,6 +83,47 @@ describe('usePrefetchBillers', () => {
 
   afterEach(() => {
     jest.useRealTimers();
+  });
+
+  it('does not schedule unsupported biller prefetches in isolated Oxygen staging', () => {
+    jest
+      .mocked(getOxygenStagingProfile)
+      .mockReturnValue(
+        {} as NonNullable<ReturnType<typeof getOxygenStagingProfile>>
+      );
+    const { frameCallbacks, requestFrameSpy, cancelFrameSpy } =
+      mockFrameScheduler();
+    const queryClient = createQueryClient();
+    const { unmount } = renderHook(() => usePrefetchBillers(), {
+      wrapper: createWrapper(queryClient),
+    });
+    flushFrames(frameCallbacks);
+    jest.advanceTimersByTime(1450);
+    expect(requestFrameSpy).not.toHaveBeenCalled();
+    expect(mockFetchWithRetry).not.toHaveBeenCalled();
+    expect(mockLogger.error).not.toHaveBeenCalled();
+    unmount();
+    queryClient.clear();
+    requestFrameSpy.mockRestore();
+    cancelFrameSpy.mockRestore();
+  });
+
+  it('does not request data billers from the mounted home widget in isolated Oxygen staging', () => {
+    jest
+      .mocked(getOxygenStagingProfile)
+      .mockReturnValue(
+        {} as NonNullable<ReturnType<typeof getOxygenStagingProfile>>
+      );
+    const queryClient = createQueryClient();
+    const { result, unmount } = renderHook(() => useVTUBillers('data'), {
+      wrapper: createWrapper(queryClient),
+    });
+    jest.advanceTimersByTime(2000);
+    expect(result.current.fetchStatus).toBe('idle');
+    expect(mockFetchWithRetry).not.toHaveBeenCalled();
+    expect(mockLogger.error).not.toHaveBeenCalled();
+    unmount();
+    queryClient.clear();
   });
 
   it('defers and staggers utility biller prefetches after initial frames', () => {

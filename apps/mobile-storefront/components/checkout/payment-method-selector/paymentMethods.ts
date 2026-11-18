@@ -3,6 +3,13 @@ import type { PaymentMethod } from './types';
 
 export const PAYMENT_METHODS: PaymentMethod[] = [
   {
+    id: 'oxygen',
+    label: 'Oxygen',
+    description: 'Continue your application in this staging app',
+    icon: 'wallet-outline',
+    tab: 'installments',
+  },
+  {
     id: 'paystack',
     label: 'Pay with Card',
     description: 'Visa, Mastercard, Verve',

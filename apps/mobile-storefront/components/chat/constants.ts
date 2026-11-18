@@ -17,6 +17,8 @@ import { resolveApiBaseUrl } from '@/lib/api-url';
 export const HIDDEN_ROUTES = [
   '/checkout',
   '/bnpl-checkout',
+  '/oxygen-checkout',
+  '/oxygen-visual-qa',
   '/payment-gateway',
   '/bank-transfer',
   '/crypto-payment',

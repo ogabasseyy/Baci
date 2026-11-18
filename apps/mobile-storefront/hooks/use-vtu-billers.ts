@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { EXPO_PUBLIC_API_URL } from '@/env';
 import { fetchWithRetry } from '@/lib/api';
 import { logger } from '@/lib/logger';
+import { getOxygenStagingProfile } from '@/lib/oxygen-staging-profile';
 import { BILLER_GC_TIME, BILLER_STALE_TIME } from '@/lib/vtu-constants';
 import {
   type Biller,
@@ -178,7 +179,7 @@ export function useVTUBillers(type: BillType, enabled = true) {
     select: (billers) => withBillItemsForType(type, billers),
     staleTime: BILLER_STALE_TIME,
     gcTime: BILLER_GC_TIME,
-    enabled,
+    enabled: enabled && !getOxygenStagingProfile(),
   });
 }
 
@@ -188,8 +189,10 @@ export function useVTUBillers(type: BillType, enabled = true) {
  */
 export function usePrefetchBillers() {
   const queryClient = useQueryClient();
+  const enabled = !getOxygenStagingProfile();
 
   useEffect(() => {
+    if (!enabled) return;
     const cancelPrefetchTasks = PREFETCH_TYPES.map((type, index) =>
       scheduleDeferredBillerPrefetch(() => {
         queryClient.prefetchQuery({
@@ -206,5 +209,5 @@ export function usePrefetchBillers() {
         cancelPrefetchTask();
       });
     };
-  }, [queryClient]);
+  }, [queryClient, enabled]);
 }

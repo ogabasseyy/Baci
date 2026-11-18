@@ -5,6 +5,7 @@ import { PLACEHOLDER_IMAGE_URL } from '@/constants/Images';
 import type { useProduct } from '@/hooks';
 import { useNetworkState } from '@/hooks/use-network-state';
 import { useReviews } from '@/hooks/use-reviews';
+import { getOxygenStagingProfile } from '@/lib/oxygen-staging-profile';
 import { normalizeRouteCondition } from '@/lib/product-route/normalize-route-condition';
 import { resolveProductVariantMetadata } from '@/lib/product-variant-metadata';
 import { getFirstRouteParamValue } from '../product-detail-route-params';
@@ -36,7 +37,9 @@ export function useProductDetailRouteData({
     slug && typeof slug === 'string' && slug.length > 0
   );
   const { isOnline } = useNetworkState();
-  const reviewsState = useReviews({ productId: product?.id || '' });
+  const reviewsState = useReviews({
+    productId: getOxygenStagingProfile() ? '' : product?.id || '',
+  });
   const usesVariantRouteSelection = Boolean(
     product?.has_variants && product.variants && product.variants.length > 0
   );

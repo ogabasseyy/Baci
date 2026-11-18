@@ -4,6 +4,7 @@ const path = require('node:path');
 const { getDefaultConfig } = require('expo/metro-config');
 const { getPostHogExpoConfig } = require('posthog-react-native/metro');
 const { getSentryExpoConfig } = require('@sentry/react-native/metro');
+const { resolveOxygenStagingModule } = require('./config/oxygen-staging-metro');
 const shouldEnableWorkletsBundleMode = require('./config/shouldEnableWorkletsBundleMode');
 
 /**
@@ -92,6 +93,10 @@ config.resolver = {
   // same way in Metro as they do in the rest of the monorepo.
   unstable_enablePackageExports: true,
   resolveRequest: (context, moduleName, platform) => {
+    const stagingModule = resolveOxygenStagingModule(moduleName, process.env);
+    if (stagingModule) {
+      return { filePath: stagingModule, type: 'sourceFile' };
+    }
     const reactResolution = resolveMobileReact(
       context,
       moduleName,

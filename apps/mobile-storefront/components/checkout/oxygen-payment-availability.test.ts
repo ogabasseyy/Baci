@@ -1,0 +1,44 @@
+import { getOxygenStagingProfile } from '@/lib/oxygen-staging-profile';
+import { isBnplPayment } from './is-bnpl-payment';
+import { usePaymentMethodAvailability } from './payment-method-selector/usePaymentMethodAvailability';
+
+jest.mock('@/lib/oxygen-staging-profile', () => ({
+  getOxygenStagingProfile: jest.fn(),
+}));
+jest.mock('@/stores/cart-store', () => ({
+  formatPrice: (amount: number) => String(amount),
+}));
+describe('isolated Oxygen payment selector', () => {
+  const input = {
+    enabledMethods: ['oxygen' as const],
+    methodDisabledReasons: {},
+    orderTotal: 50000,
+    selectedMethod: null,
+    selectedTab: 'installments' as const,
+  };
+  it('hides Oxygen even if merchant settings name it outside the staging profile', () => {
+    jest.mocked(getOxygenStagingProfile).mockReturnValue(null);
+    expect(
+      usePaymentMethodAvailability(input).availableMethodIds
+    ).not.toContain('oxygen');
+  });
+  it('shows the native staging path and keeps it out of the generic BNPL initializer', () => {
+    jest
+      .mocked(getOxygenStagingProfile)
+      .mockReturnValue({} as ReturnType<typeof getOxygenStagingProfile>);
+    expect(usePaymentMethodAvailability(input).availableMethodIds).toContain(
+      'oxygen'
+    );
+    expect(isBnplPayment('oxygen')).toBe(false);
+  });
+  it.each([
+    { walletSelection: { use: true, amount: 10 } },
+    { savingsSelection: { use: true, amount: 10, goalId: 'goal' } },
+  ])('disables unsupported local credit combinations', (selection) => {
+    jest
+      .mocked(getOxygenStagingProfile)
+      .mockReturnValue({} as ReturnType<typeof getOxygenStagingProfile>);
+    const result = usePaymentMethodAvailability({ ...input, ...selection });
+    expect(result.filteredMethods[0].disabled).toBe(true);
+  });
+});

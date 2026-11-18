@@ -130,9 +130,9 @@ export function getNativePushRegistration(): NativePushRegistration | null {
       isRecord(eas) && typeof eas.projectId === 'string'
         ? eas.projectId
         : undefined;
-    return {
-      projectId,
-    };
+    // No Expo project means push is unavailable, not a failed registration.
+    // Do not request permissions or an Expo token on isolated local builds.
+    return projectId ? { projectId } : null;
   }
   if (Platform.OS !== 'android' && Platform.OS !== 'ios') return null;
   return resolveHostedStagingPushCapability(Constants.expoConfig, Platform.OS, {

@@ -3,7 +3,6 @@ import { useMerchant } from '@/hooks/use-merchant';
 import type { ShippingAddressInput } from '@/lib/validation';
 import { getFullyPaidStoreCreditPaymentMethod } from '@/lib/wallet-payment-helpers';
 import { trackCheckoutStep } from '@/services/analytics';
-import { createOrder } from '@/services/orders';
 import { useCartStore } from '@/stores/cart-store';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
 import { abortIfCartPricesStale } from './abort-if-cart-prices-stale';
@@ -18,10 +17,10 @@ import { CHECKOUT_MERCHANT_ID } from './checkout-screen.constants';
 import { resolveCheckoutStoreCreditSelections } from './checkout-store-credit';
 import { handleCheckoutSubmitError } from './checkout-submit-error';
 import { createSubmittedOrderIdentity } from './checkout-submit-order-identity';
-import { buildCheckoutSubmitOrderRequest } from './checkout-submit-order-request';
 import { tryCaptureCheckoutSubmitRollbackState } from './checkout-submit-rollback-state';
 import { validateCheckoutSubmission } from './checkout-submit-validation';
 import { completeSubmittedOrder } from './complete-submitted-order';
+import { createSubmittedCheckoutOrder } from './create-submitted-checkout-order';
 import { isBnplPayment } from './is-bnpl-payment';
 import { resolveSharedCartCheckoutBinding } from './resolve-shared-cart-checkout-binding';
 import { restoreEmptiedCheckoutCart } from './restore-emptied-checkout-cart';
@@ -100,11 +99,8 @@ export function useCheckoutSubmit({
     ) {
       return;
     }
-    // REDVAULT fence preamble (extracted): validates a possibly-stale
-    // fenced order before any new order is created below. The acquire
-    // helper holds the in-flight latch across the fence await and owns
-    // its release on decline; the main flow below reuses the held latch
-    // through its own try/finally.
+    // Validate the REDVAULT fence before creation; retain its in-flight
+    // latch until the finally below, releasing on decline in the helper.
     const submitFence = await acquireCheckoutSubmitFence({
       accountPassword,
       address,
@@ -122,8 +118,7 @@ export function useCheckoutSubmit({
       return;
     }
     const { customerEmail, customerName, customerPhone } = submitFence;
-    // The in-flight latch is already held (acquired before the fence
-    // await above) and releases in the finally below.
+    // The acquired latch releases in finally.
     setIsProcessing(true);
     const orderIdentity = createSubmittedOrderIdentity();
     // Hoisted for the rollback path, which re-freezes these on cart restore.
@@ -166,12 +161,13 @@ export function useCheckoutSubmit({
           walletSelection,
         });
       trackCheckoutStep('review');
-      // Pay-for-me keeps its own persisted identity: collapsing it to
-      // 'invoice' would misclassify its documents as proforma and skip
-      // the server payforme dispatch branch.
-      const paymentMethodForOrder = isVoucherOnlyCart
-        ? 'card'
-        : selectedPayment;
+      // Preserve Pay-for-me identity for its documents and server dispatch.
+      const paymentMethodForOrder =
+        selectedPayment === 'oxygen'
+          ? 'oxygen'
+          : isVoucherOnlyCart
+            ? 'card'
+            : selectedPayment;
       const isBNPL = isBnplPayment(selectedPayment);
       if (isBNPL && !isVoucherOnlyCart) {
         await submitBnplCheckout({
@@ -199,25 +195,35 @@ export function useCheckoutSubmit({
         });
         return;
       }
-      const { creditFields, orderRequest } = buildCheckoutSubmitOrderRequest({
-        address,
-        appliedDiscountCode,
-        customerEmail,
-        customerName,
-        customerPhone,
-        deliveryMethod,
-        itemsSnapshot: boundItemsSnapshot,
-        liveSavingsSelection,
-        liveWalletSelection,
-        paymentMethodForOrder,
-        selectedQuote,
-        shippingProvider: getShippingProvider(),
-        snapshot,
-        sharedCartBinding,
-      });
-      const orderResponse = await createOrder(orderRequest, {
-        checkoutGeneration: checkoutGenerationSnapshot,
-      });
+      const { creditFields, orderResponse } =
+        await createSubmittedCheckoutOrder(
+          {
+            address,
+            appliedDiscountCode,
+            customerEmail,
+            customerName,
+            customerPhone,
+            deliveryMethod,
+            itemsSnapshot: boundItemsSnapshot,
+            liveSavingsSelection,
+            liveWalletSelection,
+            paymentMethodForOrder,
+            selectedQuote,
+            shippingProvider: getShippingProvider(),
+            snapshot,
+            sharedCartBinding,
+          },
+          {
+            checkoutGeneration: checkoutGenerationSnapshot,
+            isAuthenticated,
+            hasVoucher: isVoucherOnlyCart,
+            hasCredits:
+              walletSelection?.use === true ||
+              liveSavingsSelection?.use === true,
+            onOrderCreated: orderIdentity.captureCreatedOrder,
+          }
+        );
+      if (!orderResponse) return;
       orderIdentity.captureCreatedOrder(orderResponse.order.id);
       submittedGeneration.track(orderResponse);
       const rollbackCapture = await tryCaptureCheckoutSubmitRollbackState(
@@ -225,9 +231,7 @@ export function useCheckoutSubmit({
         creditFields
       );
       if (!rollbackCapture.ok) {
-        // Fail closed before finalization: without a conclusive sort
-        // mode, a failed finalize would empty the cart with no rollback
-        // path. The created order stands; the cart stays intact for retry.
+        // Preserve the order and cart when rollback metadata is inconclusive.
         rollbackCaptureInconclusive = true;
         throw new Error(
           'Checkout verification timed out; your cart is unchanged.'

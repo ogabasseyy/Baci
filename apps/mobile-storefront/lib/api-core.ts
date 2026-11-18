@@ -8,6 +8,7 @@ import {
   TimeoutError,
 } from './fetch-with-timeout';
 import { createLogger } from './logger';
+import { getOxygenStagingProfile } from './oxygen-staging-profile';
 
 const log = createLogger('API');
 
@@ -87,6 +88,18 @@ export function calculateBackoffDelay(
 
 export async function checkNetworkConnectivity(): Promise<boolean> {
   const state = await NetInfo.fetch();
+  const profile =
+    typeof __DEV__ !== 'undefined' && __DEV__
+      ? getOxygenStagingProfile()
+      : null;
+  if (
+    profile &&
+    /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/.test(
+      profile.apiOrigin
+    )
+  ) {
+    return state.isConnected === true;
+  }
   return state.isConnected === true && state.isInternetReachable !== false;
 }
 

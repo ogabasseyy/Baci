@@ -1,10 +1,12 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import {
+  Dimensions,
   Keyboard,
   type KeyboardEvent,
   Pressable,
   StyleSheet,
   Text,
+  View,
 } from 'react-native';
 import Colors from '@/constants/Colors';
 import {
@@ -100,8 +102,10 @@ describe('AddressSuggestionsProvider', () => {
 
     const dropdown = screen.getByLabelText('Address suggestions');
     const style = StyleSheet.flatten(dropdown.props.style);
-    expect(style.top).toBeLessThan(620);
-    expect(style.top + style.maxHeight).toBeLessThanOrEqual(592);
+    expect(Dimensions.get('window').height - style.bottom).toBeLessThan(620);
+    expect(Dimensions.get('window').height - style.bottom).toBeLessThanOrEqual(
+      592
+    );
   });
 
   it('positions suggestions above when the space below is unusably short', () => {
@@ -118,7 +122,7 @@ describe('AddressSuggestionsProvider', () => {
     const style = StyleSheet.flatten(
       screen.getByLabelText('Address suggestions').props.style
     );
-    expect(style.top).toBeLessThan(530);
+    expect(Dimensions.get('window').height - style.bottom).toBe(526);
     expect(style.maxHeight).toBe(280);
   });
 
@@ -150,4 +154,27 @@ describe('AddressSuggestionsProvider', () => {
 
     expect(screen.queryByLabelText('Address suggestions')).toBeNull();
   });
+});
+
+it('keeps the dropdown attached when its host starts below a navigation header', () => {
+  type Measure = (
+    callback: (x: number, y: number, width: number, height: number) => void
+  ) => void;
+  jest
+    .spyOn(
+      View.prototype as unknown as { measureInWindow: Measure },
+      'measureInWindow'
+    )
+    .mockImplementation((cb) => cb(10, 100, 380, 700));
+  render(
+    <AddressSuggestionsProvider>
+      <Harness anchorY={200} />
+    </AddressSuggestionsProvider>
+  );
+  fireEvent(screen.getByTestId('address-suggestions-layer'), 'layout', {});
+  fireEvent.press(screen.getByRole('button', { name: 'Show' }));
+  expect(
+    StyleSheet.flatten(screen.getByLabelText('Address suggestions').props.style)
+  ).toMatchObject({ top: 156, left: 6 });
+  jest.restoreAllMocks();
 });

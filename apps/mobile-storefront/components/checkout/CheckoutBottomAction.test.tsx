@@ -17,6 +17,13 @@ const commonProps = {
 };
 
 describe('CheckoutBottomAction', () => {
+  it('begins the instalment application instead of implying the order is confirmed', () => {
+    render(<CheckoutBottomAction {...commonProps} selectedPayment="oxygen" />);
+
+    expect(screen.getByRole('button', { name: 'Begin process' })).toBeTruthy();
+    expect(screen.getByText('Begin process')).toBeTruthy();
+    expect(screen.queryByText('Place Order')).toBeNull();
+  });
   it('enables the simulated completion action without a payment selection', () => {
     render(
       <CheckoutBottomAction

@@ -1,3 +1,4 @@
+import { getOxygenStagingProfile } from '@/lib/oxygen-staging-profile';
 import { isStoreCreditCompatiblePayment } from '@/lib/store-credit-compatible-payment';
 import { formatPrice } from '@/stores/cart-store';
 import { PAYMENT_METHODS } from './paymentMethods';
@@ -54,7 +55,9 @@ export function usePaymentMethodAvailability(
     orderTotal <= BNPL_MAX_AMOUNT;
 
   const enabledCandidates = PAYMENT_METHODS.filter(
-    (method) => !enabledMethods || enabledMethods.includes(method.id)
+    (method) =>
+      (method.id !== 'oxygen' || Boolean(getOxygenStagingProfile())) &&
+      (!enabledMethods || enabledMethods.includes(method.id))
   ).filter((method) => !hiddenMethods.includes(method.id));
 
   // Paystack and Korapay are both "Pay with Card" gateways — never render two
@@ -76,6 +79,16 @@ export function usePaymentMethodAvailability(
   const filteredMethods = candidateMethods
     .filter((method) => method.tab === selectedTab)
     .map((method) => {
+      if (
+        method.id === 'oxygen' &&
+        (walletSelection?.use || savingsSelection?.use)
+      )
+        return {
+          ...method,
+          disabled: true,
+          disabledReason:
+            'Oxygen cannot be combined with wallet credit or device savings',
+        };
       const walletDisablesKlump =
         method.id === 'klump' &&
         walletSelection?.use === true &&

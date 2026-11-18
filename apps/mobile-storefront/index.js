@@ -14,13 +14,19 @@ if (typeof global.crypto === 'undefined') {
   };
 }
 
+if (process.env.EXPO_PUBLIC_OXYGEN_STAGING === '1') {
+  require('./lib/oxygen-staging-startup').startOxygenStagingRuntime();
+}
+
 if (process.env.EXPO_PUBLIC_LOCAL_STOREFRONT === '1') {
   require('./lib/install-local-storefront-runtime').installLocalStorefrontRuntime();
 }
 
 const { initializeErrorMonitoring } = require('./services/error-monitoring');
 
-initializeErrorMonitoring();
+if (process.env.EXPO_PUBLIC_OXYGEN_STAGING !== '1') {
+  initializeErrorMonitoring();
+}
 markStartupTiming('error_monitoring_complete');
 
 require('expo-router/entry');

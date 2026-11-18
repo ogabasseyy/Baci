@@ -28,6 +28,7 @@ import type { useCartStore } from '@/stores/cart-store';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
 import { isEligibleForWalletFundedBankTransfer } from './is-eligible-for-wallet-funded-bank-transfer';
 import { submitWalletTransferChecks } from './is-submit-wallet-transfer-held';
+import { useOxygenCheckoutAvailability } from './use-oxygen-checkout-availability';
 import { useRedvaultAvailability } from './use-redvault-availability';
 import { useTransferModeAtSelection } from './use-transfer-mode-at-selection';
 
@@ -61,6 +62,7 @@ export function useCheckoutPaymentController({
   userId,
 }: UseCheckoutPaymentControllerParams) {
   const { data: paymentSettings } = useMerchantPaymentSettings();
+  const oxygenAvailability = useOxygenCheckoutAvailability(items);
   const enabledPaymentMethods = getEnabledPaymentMethods(paymentSettings);
   const walletOrderAutoDebitEnabled = Boolean(
     paymentSettings?.paystack_enabled &&
@@ -83,6 +85,7 @@ export function useCheckoutPaymentController({
   const availablePaymentMethods: PaymentMethodType[] = Array.from(
     new Set<PaymentMethodType>([
       ...enabledPaymentMethods,
+      ...(oxygenAvailability.visible ? ['oxygen' as const] : []),
       ...(redvaultAvailable ? ['uba_redvault' as const] : []),
       'invoice',
       'payforme',
@@ -262,6 +265,7 @@ export function useCheckoutPaymentController({
       liveWalletSelectionForKlumpGate,
       liveSavingsSelectionForKlumpGate
     ),
+    oxygenDisabledReason: oxygenAvailability.disabledReason,
     orderTotals,
     paymentSettings,
     paymentTab,

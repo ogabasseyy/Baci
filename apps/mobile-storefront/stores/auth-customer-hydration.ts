@@ -155,6 +155,7 @@ export async function hydrateCustomer({
 
   return {
     id: validatedCustomer.data.id,
+    merchant_id: validatedCustomer.data.merchant_id,
     user_id: validatedCustomer.data.user_id,
     email: validatedCustomer.data.email,
     first_name: validatedCustomer.data.first_name ?? undefined,

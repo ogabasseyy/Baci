@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { fetchWalletData } from './wallet-data';
+import {
+  STORE_CREDIT_ROW_LIMIT,
+  WALLET_TRANSACTION_FETCH_LIMIT,
+} from './wallet-transaction-limits';
 
 type QueryResult = {
   data: unknown;
@@ -58,6 +62,7 @@ function setupSupabaseTables(
   };
   const tableCalls: string[] = [];
   const selectCalls: Record<string, string[]> = {};
+  const limitCalls: Record<string, number> = {};
 
   // Interest RPC fails by default so tests pin the explicit unavailable
   // marker; success-path tests override per case.
@@ -94,7 +99,10 @@ function setupSupabaseTables(
     const query = {
       eq: jest.fn(() => query),
       in: jest.fn(() => query),
-      limit: jest.fn(async () => tableResults[table]),
+      limit: jest.fn(async (count?: number) => {
+        if (typeof count === 'number') limitCalls[table] = count;
+        return tableResults[table];
+      }),
       maybeSingle: jest.fn(async () => tableResults[table]),
       order: jest.fn(() =>
         table === 'customer_savings_goals'
@@ -111,7 +119,7 @@ function setupSupabaseTables(
     return query;
   });
 
-  return { selectCalls, tableCalls };
+  return { limitCalls, selectCalls, tableCalls };
 }
 
 describe('fetchWalletData', () => {
@@ -216,6 +224,67 @@ describe('fetchWalletData', () => {
     expect(result.transactions).toEqual([]);
   });
 
+  it('bugfix: reads more ledger rows than the list shows, so hidden mirrored rows cannot starve it', async () => {
+    const { limitCalls } = setupSupabaseTables();
+
+    await fetchWalletData('customer-1', 'merchant-1', 'user-1');
+
+    expect(limitCalls.customer_wallet_transactions).toBe(
+      WALLET_TRANSACTION_FETCH_LIMIT
+    );
+    expect(WALLET_TRANSACTION_FETCH_LIMIT).toBeGreaterThan(
+      STORE_CREDIT_ROW_LIMIT
+    );
+  });
+
+  it('bugfix: marks a held IMEI charge as pending, scoped to the merchant (walk M3)', async () => {
+    const { selectCalls } = setupSupabaseTables({
+      customer_wallet_transactions: createResult([
+        {
+          amount: '-500',
+          created_at: '2026-11-15T10:00:00.000Z',
+          description: 'IMEI check',
+          id: 'tx-imei',
+          source_type: 'imei_wallet_payment',
+          source_id: 'lookup-1',
+          type: 'redemption',
+        },
+      ]),
+      imei_lookups: createResult([
+        { id: 'lookup-1', status: 'pending_provider' },
+      ]),
+    });
+
+    const result = await fetchWalletData('customer-1', 'merchant-1', 'user-1');
+
+    expect(selectCalls.customer_wallet_transactions[0]).toContain('source_id');
+    expect(selectCalls.imei_lookups).toEqual(['id, status']);
+    expect(result.transactions[0]?.pending).toBe(true);
+  });
+
+  it('bugfix: marks a held IMEI charge when the wallet is found through the user, not a customer id (Muse)', async () => {
+    setupSupabaseTables({
+      customer_wallet_transactions: createResult([
+        {
+          amount: '-500',
+          created_at: '2026-11-15T10:00:00.000Z',
+          description: 'IMEI check',
+          id: 'tx-imei',
+          source_type: 'imei_wallet_payment',
+          source_id: 'lookup-1',
+          type: 'redemption',
+        },
+      ]),
+      imei_lookups: createResult([
+        { id: 'lookup-1', status: 'pending_provider' },
+      ]),
+    });
+
+    const result = await fetchWalletData(null, 'merchant-1', 'user-1');
+
+    expect(result.transactions[0]?.pending).toBe(true);
+  });
+
   it('selects and preserves the ledger source_type that identifies wallet top-ups', async () => {
     const { selectCalls } = setupSupabaseTables({
       customer_wallet_transactions: createResult([
@@ -247,7 +316,7 @@ describe('fetchWalletData', () => {
       {
         amount: 2500,
         created_at: '2026-07-13T10:00:00.000Z',
-        description: 'Wallet top-up via paystack',
+        description: 'Wallet top-up', // the provider is never shown
         id: 'tx-topup',
         source_type: 'wallet_topup',
         type: 'credit',
@@ -424,7 +493,7 @@ describe('fetchWalletData', () => {
       {
         amount: 2500,
         created_at: '2026-05-21T10:00:00.000Z',
-        description: '',
+        description: 'Transaction',
         id: 'tx-1',
         type: 'credit',
       },

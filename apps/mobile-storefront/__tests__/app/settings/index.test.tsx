@@ -135,6 +135,14 @@ describe('SettingsScreen', () => {
     expect(screen.getByText('NOTIFICATIONS')).toBeOnTheScreen();
   });
 
+  it('spaces the version footer away from the last settings card', () => {
+    render(<SettingsScreen />);
+
+    expect(screen.getByText(/v2\.4\.1$/)).toHaveStyle({
+      marginTop: SPACING.lg,
+    });
+  });
+
   it('updates the appearance mode when a segment is pressed', () => {
     render(<SettingsScreen />);
 

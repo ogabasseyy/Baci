@@ -5,6 +5,7 @@ import type { CheckoutStep } from '@/components/checkout/CheckoutStepper';
 import type Colors from '@/constants/Colors';
 import { getMerchantTaxRate } from '@/hooks/useMerchantPaymentSettings';
 import type { CartItem } from '@/stores/cart-store';
+import { isPrizeOnlyCheckout } from './checkout-prize-display';
 import type { MerchantPickupLocation } from './merchant-pickup-location';
 import type { CheckoutAddressState } from './use-checkout-address-state';
 import type { CheckoutPaymentController } from './use-checkout-payment-controller';
@@ -177,6 +178,7 @@ export function CheckoutStepContent({
       merchantPickupLocation={merchantPickupLocation}
       onEditAddress={() => setStep('address')}
       onEditPayment={() => setStep('payment')}
+      prizeCheckout={!prizeSimulation && isPrizeOnlyCheckout(items)}
       prizeSimulation={prizeSimulation}
       selectedPayment={paymentController.selectedPayment}
       selectedQuote={addressState.shipping.selectedQuote}

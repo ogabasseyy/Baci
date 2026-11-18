@@ -5,8 +5,12 @@ import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import type { Product } from '@/types/product';
 import { readConfirmedContribution } from './read-confirmed-contribution';
 import { clearSavingsNotice, savingsNotifier } from './savings/savings-notice';
+import { savingsToaster } from './savings/savings-toast-store';
 import { toSelectedProductChoice } from './savings/start-savings-controller.utils';
-import { buildSavingsSuccessMessage } from './savings-contribution-success';
+import {
+  buildSavingsSuccessMessage,
+  buildSavingsToastMessage,
+} from './savings-contribution-success';
 import { reportContributionError } from './wallet-contribution-error';
 import { walletRefreshWorked } from './wallet-refresh-worked';
 
@@ -22,6 +26,12 @@ interface AddSavingsContributionParams {
   }) => Promise<unknown>;
   clearSavingsContributionAmount: () => void;
   clearIdempotencyKey?: () => void;
+  /**
+   * Given, a confirmed contribution closes the savings sheet and says so in a
+   * brief wallet toast instead of an in-sheet notice. Pending, cancelled and
+   * failed outcomes keep their in-sheet notices.
+   */
+  closeOnConfirmed?: () => void;
   createIdempotencyKey: () => string;
   cancelSavingsReminder?: (goalId: string) => Promise<unknown>;
   goal: WalletActiveSavingsGoal | null;
@@ -46,6 +56,7 @@ export async function addSavingsContributionToGoal({
   addSavingsContribution,
   clearSavingsContributionAmount,
   clearIdempotencyKey,
+  closeOnConfirmed,
   createIdempotencyKey,
   cancelSavingsReminder,
   goal,
@@ -56,6 +67,7 @@ export async function addSavingsContributionToGoal({
 }: AddSavingsContributionParams): Promise<void> {
   // Captured before any await: a result never reaches another account.
   const notify = savingsNotifier();
+  const toast = savingsToaster();
   if (!goal) {
     notify('No active savings goal', 'Start a savings goal first.', 'warning');
     return;
@@ -106,7 +118,7 @@ export async function addSavingsContributionToGoal({
       await refetchWallet().catch(() => undefined);
       notify(
         'Contribution pending',
-        'Your savings will update once PiggyVest confirms the transfer.',
+        'Your savings will update once the transfer is confirmed.',
         'info'
       );
       return;
@@ -125,7 +137,7 @@ export async function addSavingsContributionToGoal({
       await refetchWallet().catch(() => undefined);
       notify(
         'Contribution cancelled',
-        'The transfer was cancelled before submission and your reserved wallet funds were released.',
+        'Nothing was taken from your wallet.',
         'info'
       );
       return;
@@ -152,19 +164,35 @@ export async function addSavingsContributionToGoal({
     // Cleared after the refresh (it never throws), in the same tick as the
     // result: clearing first showed NGN 0 while the wallet re-read.
     clearSavingsContributionAmount();
+    // Celebrate completion only on the server's word; the client guess
+    // above still drives best-effort reminder cleanup.
+    const celebrated =
+      confirmed.goalCompleted ??
+      (confirmed.savedAfter !== undefined &&
+        confirmed.savedAfter >= goal.target_amount);
     const success = buildSavingsSuccessMessage({
       amount,
       goal,
-      // Celebrate completion only on the server's word; the client guess
-      // above still drives best-effort reminder cleanup.
-      goalCompleted:
-        confirmed.goalCompleted ??
-        (confirmed.savedAfter !== undefined &&
-          confirmed.savedAfter >= goal.target_amount),
+      goalCompleted: celebrated,
       mayHaveCompleted: goalCompleted,
       refreshFailed,
       savedAfter: confirmed.savedAfter,
     });
+    if (
+      closeOnConfirmed &&
+      toast(
+        buildSavingsToastMessage({
+          amount,
+          goalCompleted: celebrated,
+          title: goal.title,
+        })
+      )
+    ) {
+      closeOnConfirmed();
+      // A failed refresh keeps its "pull to refresh" note on the wallet.
+      if (refreshFailed) notify(success.title, success.message, 'success');
+      return;
+    }
     notify(success.title, success.message, 'success');
   } catch (error) {
     reportContributionError(error, clearIdempotencyKey, notify);

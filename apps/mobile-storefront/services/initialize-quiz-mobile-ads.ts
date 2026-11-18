@@ -75,8 +75,27 @@ function initialize(
 }
 
 type QuizMobileAdsConsent = {
-  gatherConsent: () => Promise<unknown>;
+  requestInfoUpdate: () => Promise<unknown>;
+  loadAndShowConsentFormIfRequired: () => Promise<unknown>;
 };
+
+/**
+ * Where the shared consent request is. `updating` is a network call with
+ * nothing on screen; `form` means Google's message may be showing and a
+ * person may be reading it.
+ */
+export type QuizMobileAdsConsentStage =
+  | 'idle'
+  | 'updating'
+  | 'form'
+  | 'done'
+  | 'failed';
+
+let consentStage: QuizMobileAdsConsentStage = 'idle';
+
+export function getQuizMobileAdsConsentStage(): QuizMobileAdsConsentStage {
+  return consentStage;
+}
 
 export function prepareQuizMobileAdsConsent(
   consent?: QuizMobileAdsConsent
@@ -90,8 +109,18 @@ export function prepareQuizMobileAdsConsent(
             require('react-native-google-mobile-ads') as typeof import('react-native-google-mobile-ads')
           ).AdsConsent;
         try {
-          await adsConsent.gatherConsent();
+          // The library's gatherConsent() is exactly these two calls; they
+          // are split so callers can tell a stalled network update from a
+          // form a person is still reading.
+          consentStage = 'updating';
+          await adsConsent.requestInfoUpdate();
+          consentStage = 'form';
+          await adsConsent.loadAndShowConsentFormIfRequired();
+          consentStage = 'done';
         } catch {
+          // 'failed' still resolves the promise (the previous consent state
+          // is used) but lets callers tell it apart from a completed refresh.
+          consentStage = 'failed';
           log.warn(
             'Consent refresh unavailable; checking the previous consent state.'
           );
@@ -99,6 +128,7 @@ export function prepareQuizMobileAdsConsent(
       })
       .catch((error) => {
         consentPromise = null;
+        consentStage = 'idle';
         throw error;
       });
   }

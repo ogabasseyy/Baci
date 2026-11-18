@@ -12,26 +12,32 @@ type Props = {
   stillWaiting: boolean;
   /** The last check failed to reach the server. */
   checkFailed: boolean;
+  /**
+   * Offer "Check now": only after the automatic checks run out or a check
+   * fails, so the customer normally never has to tap anything.
+   */
+  canCheckNow: boolean;
   onCheckNow: () => void;
 };
 
 /**
  * Shown after the BVN is accepted while PiggyVest finishes creating the
- * account number. The parent checks automatically; this only explains the
- * wait and offers a manual check.
+ * account number. The parent checks automatically; this explains the wait
+ * and, once those checks run out or one fails, offers a manual check.
  */
 export function PrimaryWalletSetupPending({
   colors,
   checking,
   stillWaiting,
   checkFailed,
+  canCheckNow,
   onCheckNow,
 }: Props) {
   const message = checkFailed
-    ? 'We couldn’t reach PiggyVest just now. Tap Check now to try again, or close this and come back later.'
+    ? 'We couldn’t reach the wallet service just now. Tap Check now to try again, or close this and come back later.'
     : stillWaiting
-      ? 'This is taking longer than usual. Tap Check now to try again. If you close this and setup asks for your BVN again, re-enter the same number. You won’t get a second wallet.'
-      : 'We’ve sent your details to PiggyVest and are confirming your bank transfer account. This can take a few minutes.';
+      ? 'Your account number is taking longer than usual. Tap Check now when you’re ready, or close this and come back later. If setup asks for your BVN again, re-enter the same number. You won’t get a second wallet.'
+      : 'We’ve sent your details and are confirming your bank transfer account. This can take a few minutes. We’ll keep checking, so you don’t need to do anything.';
 
   return (
     <View style={setupStyles.form} accessibilityLiveRegion="polite">
@@ -75,7 +81,7 @@ export function PrimaryWalletSetupPending({
             color={colors.success}
           />
           <Text style={[setupStyles.benefitText, { color: colors.text }]}>
-            Details sent to PiggyVest
+            Details sent for checking
           </Text>
         </View>
         <View style={setupStyles.benefitRow}>
@@ -91,25 +97,27 @@ export function PrimaryWalletSetupPending({
           </Text>
         </View>
       </View>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Check now"
-        accessibilityState={{ disabled: checking, busy: checking }}
-        disabled={checking}
-        onPress={onCheckNow}
-        style={[
-          setupStyles.submit,
-          { backgroundColor: BRAND.primary, opacity: checking ? 0.6 : 1 },
-        ]}
-      >
-        {checking ? (
-          <ActivityIndicator color={BRAND.onPrimary} />
-        ) : (
-          <Text style={[setupStyles.submitText, { color: BRAND.onPrimary }]}>
-            Check now
-          </Text>
-        )}
-      </Pressable>
+      {canCheckNow ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Check now"
+          accessibilityState={{ disabled: checking, busy: checking }}
+          disabled={checking}
+          onPress={onCheckNow}
+          style={[
+            setupStyles.submit,
+            { backgroundColor: BRAND.primary, opacity: checking ? 0.6 : 1 },
+          ]}
+        >
+          {checking ? (
+            <ActivityIndicator color={BRAND.onPrimary} />
+          ) : (
+            <Text style={[setupStyles.submitText, { color: BRAND.onPrimary }]}>
+              Check now
+            </Text>
+          )}
+        </Pressable>
+      ) : null}
     </View>
   );
 }

@@ -1,5 +1,5 @@
 import { jest } from '@jest/globals';
-import { renderHook } from '@testing-library/react-native';
+import { renderHook, waitFor } from '@testing-library/react-native';
 import { Alert } from 'react-native';
 import type { useUtilityPayment } from '@/hooks/use-utility-payment';
 import { HttpError } from '@/lib/fetch-with-timeout';
@@ -24,6 +24,10 @@ type PaymentState = ReturnType<typeof useUtilityPayment>;
 
 const mockChargeWalletForVtu =
   jest.fn<(...args: unknown[]) => Promise<unknown>>();
+
+// Live until the charge is in flight, then off screen; before it the customer is still
+// here (a check after the retained-key lookup must not stop the purchase).
+const liveUntilCharge = () => mockChargeWalletForVtu.mock.calls.length === 0;
 
 jest.mock('@/lib/vtu-checkout', () => {
   const actual =
@@ -473,7 +477,7 @@ describe('airtime stale success replay', () => {
       onSuccess,
       resetWalletIdempotencyKey,
       refetchWallet,
-      getIsActive: () => false,
+      getIsActive: liveUntilCharge,
     });
     await result.current.handlePurchase();
 
@@ -538,6 +542,9 @@ describe('airtime stale success replay', () => {
       refetchWallet,
     });
     const purchase = result.current.handlePurchase();
+    // Unmount once the charge is in flight (before it, the purchase now stops
+    // at the screen check after the retained-key lookup: Codex P2).
+    await waitFor(() => expect(mockChargeWalletForVtu).toHaveBeenCalled());
     unmount();
     resolveCharge({
       status: 'successful',
@@ -575,7 +582,7 @@ describe('airtime stale success replay', () => {
     const { result } = renderHandler({
       resetWalletIdempotencyKey,
       refetchWallet,
-      getIsActive: () => false,
+      getIsActive: liveUntilCharge,
     });
     await result.current.handlePurchase();
 
@@ -593,7 +600,7 @@ describe('airtime stale success replay', () => {
     const { result } = renderHandler({
       resetWalletIdempotencyKey,
       refetchWallet,
-      getIsActive: () => false,
+      getIsActive: liveUntilCharge,
     });
     await result.current.handlePurchase();
 
@@ -618,7 +625,7 @@ describe('airtime stale success replay', () => {
     );
     const { result } = renderHandler({
       refetchWallet,
-      getIsActive: () => false,
+      getIsActive: liveUntilCharge,
     });
     await result.current.handlePurchase();
 
@@ -641,8 +648,9 @@ describe('airtime stale success replay', () => {
       onSuccess,
       resetWalletIdempotencyKey,
       invalidateWallets,
-      isSubmittingOwnerCurrent: () => false,
-      getIsActive: () => false,
+      // Still the submitting owner until the charge is in flight.
+      isSubmittingOwnerCurrent: liveUntilCharge,
+      getIsActive: liveUntilCharge,
     });
     await result.current.handlePurchase();
 

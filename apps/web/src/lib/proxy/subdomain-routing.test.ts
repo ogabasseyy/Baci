@@ -51,7 +51,7 @@ describe('subdomain routing', () => {
       'shop'
     );
     expect(response?.headers.get('x-middleware-rewrite')).toBe(
-      'https://shop.usebaci.com/shop/products/phone?__baci_metadata_cache_bucket=streaming'
+      'https://shop.usebaci.com/shop.usebaci.com/products/phone?__baci_metadata_cache_bucket=streaming'
     );
     expect(getCustomDomainForSlug).not.toHaveBeenCalled();
   });
@@ -96,6 +96,21 @@ describe('subdomain routing', () => {
     expect(getRequestSubdomain('shop.localhost')).toBe('shop');
     expect(getRequestSubdomain('shop.usebaci.com')).toBe('shop');
     expect(getRequestSubdomain('deep.shop.usebaci.com')).toBeNull();
+  });
+
+  it('strips port from localhost subdomain hostnames before rewriting', async () => {
+    const response = await runSubdomainRouting(
+      new NextRequest('http://shop.localhost:3000/products', {
+        method: 'POST',
+      }),
+      '/products',
+      'shop.localhost:3000',
+      'Mozilla',
+      'shop'
+    );
+    expect(response?.headers.get('x-middleware-rewrite')).toBe(
+      'http://shop.localhost:3000/shop.localhost/products?__baci_metadata_cache_bucket=streaming'
+    );
   });
 
   it('does not claim requests without a subdomain', async () => {

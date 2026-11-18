@@ -63,7 +63,7 @@ test('production build checks the prepared typed-route declaration, not the one 
   assert.doesNotMatch(manifest.scripts['build:ci'], /typegen/);
 });
 
-test('CI runs the production build type-check path after the normal typecheck', () => {
+test('CI runs the production build type-check path in its own job, next to the normal typecheck', () => {
   const manifest = JSON.parse(readFileSync(`${web}package.json`, 'utf8'));
   // Same three steps as `build` before `next build`; build:ci skips type checking, so CI needs this.
   assert.equal(
@@ -76,11 +76,17 @@ test('CI runs the production build type-check path after the normal typecheck', 
   assert.ok(manifest.scripts['typecheck:build'].endsWith(prefix));
   assert.ok(manifest.scripts.build.startsWith(`${manifest.scripts['typecheck:build'].slice(0, -prefix.length)} && `));
   const workflow = YAML.parse(readFileSync(new URL('../workflows/ci.yml', import.meta.url), 'utf8'));
-  const steps = workflow.jobs['quality-typecheck'].steps;
-  const normal = steps.findIndex(step => step.name === 'Run Typecheck');
+  // The two compiler passes run in parallel jobs (split 2026-11-15 to shorten the quick stage).
+  // The production job must run whenever the normal typecheck runs, and the aggregate must wait for it.
+  const job = workflow.jobs['quality-typecheck-build'];
+  assert.equal(job.if, workflow.jobs['quality-typecheck'].if, 'production typecheck must run exactly when the normal typecheck runs');
+  assert.ok(workflow.jobs.quality.needs.includes('quality-typecheck-build'), 'the Quality Gate aggregate must wait for the production typecheck');
+  assert.equal(workflow.jobs['quality-typecheck'].steps.some(step => step.name === 'Run production build typecheck'), false, 'run the production pass once');
+  assert.ok(workflow.jobs['quality-typecheck'].steps.some(step => step.name === 'Run Typecheck'));
+  const steps = job.steps;
   const scope = steps.findIndex(step => step.name === 'Decide production build typecheck');
   const prod = steps.findIndex(step => step.name === 'Run production build typecheck');
-  assert.ok(normal >= 0 && scope > normal && prod > scope, 'production build typecheck must follow the normal typecheck');
+  assert.ok(scope >= 0 && prod > scope, 'production build typecheck must follow its scope decision');
   assert.equal(steps[scope].id, 'production-typecheck-scope');
   assert.equal(steps[scope].run, 'node .github/scripts/production-build-typecheck-scope.mjs');
   assert.equal(steps[scope].env.BASE_SHA, '${{ github.event.pull_request.base.sha }}');

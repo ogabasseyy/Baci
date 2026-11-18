@@ -1,6 +1,7 @@
 import { resetPendingCartDeviceRevocationsForTests } from '@/hooks/cart/shared-cart-session-revoke-client';
 import { fetchCustomerAuthMutation } from './customer-auth-mutation';
 import { getLiveCustomerIdentity } from './customer-live-identity';
+import { resetCustomerSessionHintForTests } from './customer-session-hint';
 
 const CUSTOMER_AUTH_USER_KEY_PREFIX = 'baci-customer-auth-user';
 const CUSTOMER_AUTH_ROLLBACK_KEY_PREFIX = 'baci-customer-auth-rollback';
@@ -127,6 +128,7 @@ export function resetRememberedCustomerSessionsForTests(): void {
   rememberedCustomerUserByMerchant.clear();
   pendingCustomerRollbackByMerchant.clear();
   resetPendingCartDeviceRevocationsForTests?.();
+  resetCustomerSessionHintForTests();
   if (typeof window === 'undefined') return;
   try {
     for (const key of Object.keys(window.localStorage)) {

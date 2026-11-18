@@ -1,16 +1,20 @@
-import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { generateTextWithChain } from '@/ai/generate-text-with-chain';
-import type { TextProvider } from '@/ai/text-provider-chain';
 import type { AiChatProvider } from '@/env';
 import { buildStorefrontDisplayData } from '@/lib/agentic/storefront-display-data';
 import { isBusinessFactRequest } from './fast-catalog-language';
 import { resolveOgabasseyCommerceContext } from './ogabassey-commerce-context';
+import {
+  getOgabasseyPreferredProviders,
+  OGABASSEY_MODEL_PROVIDER_OPTIONS,
+  OGABASSEY_NEGOTIATION,
+  OGABASSEY_UNVERIFIED_COMMERCE_ACTION,
+  OGABASSEY_UNVERIFIED_STORE_PURCHASE,
+  resolveChainPerProviderTimeoutMs,
+} from './ogabassey-model-providers';
 import { createStaticChatFallbackResponse } from './route-helpers';
 
 const PER_PROVIDER_TIMEOUT_MS = 6_000;
 const MAX_CHAIN_TIMEOUT_MS = 12_000;
-const NEGOTIATION =
-  /\b(?:negotiat\w*|discount\w*|haggl\w*|(?:last|final)\s+price|(?:reduce|lower)\s+(?:the\s+|your\s+)?(?:price|cost)|bargain|deal)\b/i;
 const CATALOG_FACT_REQUEST =
   /\b(?:recommend\w*|suggest\w*|products?|devices?|phones?|smartphones?|iphone\w*|ipad\w*|laptops?|macbooks?|tablets?|cameras?|watches|smartwatches?|speakers?|consoles?|televisions?|monitors?|galaxy\w*|apple|samsung|sony|nokia|oppo|vivo|huawei|tecno|infinix|xiaomi|redmi|pixel|itel|oraimo|anker|accessor(?:y|ies)|chargers?|cables?|adapters?|cases?|screen[\s-]*protectors?|earbuds?|headphones?|airpods|price|prices|cost|budget|cheap\w*|available|availability|stock|compatib\w*|storage|colour|color|black|white|blue|red|green)\b/i;
 const GENERAL_AVAILABILITY_REQUEST =
@@ -21,14 +25,10 @@ const SHOPPING_ADVICE_REQUEST =
   /\b(?:gifts?|shopping|(?:a|the|birthday|christmas)\s+present)\b/i;
 const UNGROUNDED_REPLY =
   /[\p{N}₦$€£]|\b(?:naira|iphone|ipad|macbook|airpods|apple|samsung|galaxy|sony|nokia|oppo|vivo|huawei|tecno|infinix|xiaomi|redmi|pixel|itel|oraimo|anker|shipping|delivery|warranty|refund|returns?|exchang\w*|in\s+(?:your|the)\s+cart|(?:added|removed)\s+(?:it|this|that|the\s+item)|in[\s-]+stock|out[\s-]+of[\s-]+stock|(?:is|are)\s+available|available\s+now|guaranteed|(?:is|are|works|fits)\s+compatible)\b/iu;
-const UNVERIFIED_COMMERCE_ACTION =
-  /\b(?:cancel(?:l)?ed|refunded|charged|shipped|delivered|arrived|paid)\b|\b(?:we|i|our store)\s+(?:sell|stock|carry|offer)\b|\b(?:we|i|our store)\s+have\s+(?!no\b|not\b|never\b)|\b(?:order|payment|purchase|transfer|account|transaction|receipt|checkout|cart)\b[^.!?\n]{0,80}\b(?:confirmed|processed|completed|successful|received|placed|created|generated|issued|ready|activated|settled|approved|sent)\b|\b(?:confirmed|processed|completed|placed|created|generated|issued|opened|sent)\b[^.!?\n]{0,80}\b(?:order|payment|purchase|transfer|account|transaction|receipt|checkout|cart)\b|\b(?:i|we)(?:['’](?:ve|ll)|\s+(?:have|will|just))?\s+(?:did|done|handled|completed|processed|created|issued|sent)\s+(?:it|that|this)\b/i;
 const UNVERIFIED_RECOMMENDATION =
   /\b(?:(?:i|we)\s+(?:(?:would|do)\s+)?(?:recommend|suggest)\s+(?:a|an|the|buying|getting)|you\s+(?:should|could)\s+(?:buy|get|choose|consider))\b/i;
 const UNVERIFIED_PRODUCT_RECOMMENDATION =
   /\b(?:recommend|suggest)\b[^.!?\n]{0,60}\b(?:phones?|smartphones?|laptops?|tablets?|cameras?|watches|smartwatches?|speakers?|consoles?|televisions?|monitors?|accessor(?:y|ies)|chargers?|cables?|adapters?|cases?|screen[\s-]*protectors?|earbuds?|headphones?|headsets?|earphones?|power[\s-]*banks?)\b/i;
-const UNVERIFIED_STORE_PURCHASE =
-  /\b(?:buy|purchase|order|get)\b[^.!?\n]{0,100}\b(?:from|at)\s+(?:us|our\s+(?:store|shop))\b|\b(?:ready|available)\s+(?:to|for)\s+(?:buy|purchase|order|sale)\b/i;
 const UNCONFIRMED_STOCK_STATEMENT =
   /\b(?:can(?:not|['’]t)|unable\s+to)\s+(?:confirm|verify|check)\s+what(?:['’]s|\s+is)\s+in[\s-]+stock\b/gi;
 
@@ -36,40 +36,6 @@ type ConversationMessage = {
   role: 'user' | 'assistant' | 'system';
   content: string;
 };
-
-function getOgabasseyConversationProviders(): TextProvider[] {
-  const providers: TextProvider[] = [];
-  const openaiKey = process.env.OPENAI_API_KEY?.trim();
-  const deepseekKey = process.env.DEEPSEEK_API_KEY?.trim();
-
-  if (openaiKey) {
-    providers.push({
-      name: 'openai:gpt-6-luna',
-      model: createOpenAICompatible({
-        name: 'openai',
-        baseURL: 'https://api.openai.com/v1',
-        apiKey: openaiKey,
-        transformRequestBody: ({ max_tokens, ...body }) => ({
-          ...body,
-          ...(max_tokens === undefined
-            ? {}
-            : { max_completion_tokens: max_tokens }),
-        }),
-      }).chatModel('gpt-6-luna'),
-    });
-  }
-  if (deepseekKey) {
-    providers.push({
-      name: 'deepseek:deepseek-flash',
-      model: createOpenAICompatible({
-        name: 'deepseek',
-        baseURL: 'https://api.deepseek.com',
-        apiKey: deepseekKey,
-      }).chatModel('deepseek-flash'),
-    });
-  }
-  return providers;
-}
 
 /**
  * Handles only general conversation after the authoritative catalog fast path.
@@ -105,10 +71,10 @@ export async function runOgabasseyConversation(options: {
       ? [last]
       : options.messages;
 
-  const providers = getOgabasseyConversationProviders();
+  const providers = getOgabasseyPreferredProviders({ includeDeepSeek: true });
   if (providers.length === 0) return null;
 
-  if (NEGOTIATION.test(last.content)) {
+  if (OGABASSEY_NEGOTIATION.test(last.content)) {
     return new Response(
       'I can’t promise a discount here. Please contact the store about current offers.',
       { headers: { 'Content-Type': 'text/plain; charset=utf-8' } }
@@ -168,16 +134,13 @@ export async function runOgabasseyConversation(options: {
         'Do not claim to have performed an action. For current details or offers, direct ' +
         'the customer to the storefront or store support.',
       maxOutputTokens: 256,
-      perProviderTimeoutMs: PER_PROVIDER_TIMEOUT_MS,
+      perProviderTimeoutMs: resolveChainPerProviderTimeoutMs(
+        Math.min(options.timeoutMs, MAX_CHAIN_TIMEOUT_MS),
+        providers.length,
+        PER_PROVIDER_TIMEOUT_MS
+      ),
       overallTimeoutMs: Math.min(options.timeoutMs, MAX_CHAIN_TIMEOUT_MS),
-      providerOptions: {
-        openai: {
-          reasoningEffort: 'none',
-          store: false,
-          service_tier: 'default',
-        },
-        deepseek: { thinking: { type: 'disabled' } },
-      },
+      providerOptions: OGABASSEY_MODEL_PROVIDER_OPTIONS,
       acceptResult: (text) => {
         const claimCheckText = text.replace(
           UNCONFIRMED_STOCK_STATEMENT,
@@ -185,10 +148,10 @@ export async function runOgabasseyConversation(options: {
         );
         return (
           !UNGROUNDED_REPLY.test(claimCheckText) &&
-          !UNVERIFIED_COMMERCE_ACTION.test(text) &&
+          !OGABASSEY_UNVERIFIED_COMMERCE_ACTION.test(text) &&
           !UNVERIFIED_RECOMMENDATION.test(text) &&
           !UNVERIFIED_PRODUCT_RECOMMENDATION.test(text) &&
-          !UNVERIFIED_STORE_PURCHASE.test(text)
+          !OGABASSEY_UNVERIFIED_STORE_PURCHASE.test(text)
         );
       },
       onProviderError: (providerName, error) => {

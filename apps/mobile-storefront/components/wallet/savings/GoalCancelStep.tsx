@@ -9,6 +9,7 @@ import { GoalCancelButton } from './GoalCancelStepParts';
 import { goalCancelBreakdown } from './goal-cancel-breakdown';
 import { styles } from './goal-cancel-step.styles';
 import { GOAL_CANCEL_STEP_COPY as COPY } from './goal-cancel-step-copy';
+import { GOAL_ACTION_BUSY_STEPS } from './goal-lifecycle-outcomes';
 import type { useGoalLifecycle } from './use-goal-lifecycle';
 
 type WalletColors = (typeof Colors)['light'];
@@ -49,9 +50,7 @@ export function GoalCancelStep({
   // dismissed into a PIN prompt it no longer shows.
   useSavingsSheetLock(flow.step === 'issuing' || flow.step === 'submitting');
   const done = flow.step === 'done';
-  const working = ['issuing', 'pin', 'submitting', 'polling'].includes(
-    flow.step
-  );
+  const working = GOAL_ACTION_BUSY_STEPS.has(flow.step);
 
   let body: string | null = empty
     ? COPY.emptyBody

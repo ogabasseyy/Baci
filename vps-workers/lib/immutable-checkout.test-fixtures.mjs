@@ -14,12 +14,28 @@ const TS_ENTRYPOINTS = [
   'apps/web/src/scripts/process-gigl-tracking.ts',
   'apps/web/src/scripts/process-petrock-reconciliation.ts',
   'apps/web/src/scripts/process-quiz-finalization.ts',
+  'apps/web/src/scripts/process-order-cancellation-side-effects.ts',
+  'apps/web/src/scripts/reconcile-vtu-processing.ts',
+  'apps/web/src/scripts/oxygen-callback-reconciliation.ts',
+  'apps/web/src/scripts/merchant-signup-health.ts',
+  'apps/web/src/scripts/cart-notice-health.ts',
+  'apps/web/src/scripts/process-order-notifications.ts',
+  'apps/web/src/scripts/publish-scheduled-posts.ts',
+  'apps/web/src/scripts/agentic-commerce-health.ts',
 ];
 const WRAPPERS = [
   'process-gigl-tracking.sh',
   'verify-gigl-tracking-worker-capability.sh',
   'process-petrock-reconciliation.sh',
   'process-quiz-finalization.sh',
+  'process-order-cancellation-side-effects.sh',
+  'reconcile-vtu-processing.sh',
+  'oxygen-callback-reconciliation.sh',
+  'merchant-signup-health.sh',
+  'cart-notice-health.sh',
+  'process-order-notifications.sh',
+  'publish-scheduled-posts.sh',
+  'agentic-commerce-health.sh',
 ];
 const TSX_STUB = '#!/usr/bin/env bash\necho "tsx-stub"\n';
 

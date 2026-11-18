@@ -291,3 +291,16 @@ describe('createWalletSavingsActions', () => {
     });
   });
 });
+
+describe('bugfix: a confirmed contribution returns to the wallet', () => {
+  it('closes the savings sheet through the confirmed-contribution hook', async () => {
+    const input = createInput();
+    await createWalletSavingsActions(input).handleAddSavingsContribution();
+    const params = jest
+      .mocked(addSavingsContributionToGoal)
+      .mock.calls.at(-1)?.[0];
+    expect(input.setShowSavingsProgressModal).not.toHaveBeenCalled();
+    params?.closeOnConfirmed?.();
+    expect(input.setShowSavingsProgressModal).toHaveBeenCalledWith(false);
+  });
+});

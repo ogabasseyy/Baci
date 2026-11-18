@@ -1,11 +1,17 @@
 const KEY_VALUE_PAIR = /^\s*([A-Za-z_][\w.[\]-]*)\s*[=:]\s*(.*?)\s*$/;
 
+/**
+ * Tolerant form decoding: each valid %XX run is decoded on its own, so one
+ * stray "%" never leaves the rest of the value encoded.
+ */
 function decode(value: string): string {
-  try {
-    return decodeURIComponent(value.replace(/\+/g, ' '));
-  } catch {
-    return value;
-  }
+  return value.replace(/\+/g, ' ').replace(/(?:%[0-9A-Fa-f]{2})+/g, (run) => {
+    try {
+      return decodeURIComponent(run);
+    } catch {
+      return run;
+    }
+  });
 }
 
 /**
@@ -15,11 +21,15 @@ function decode(value: string): string {
  * top-level echo.
  */
 function keyPath(key: string): string[] {
-  return key
-    .replace(/\[([^\]]*)\]/g, '.$1')
-    .split('.')
-    .map((part) => part.trim())
-    .filter(Boolean);
+  return (
+    key
+      .replace(/\[([^\]]*)\]/g, '.$1')
+      .split('.')
+      .map((part) => part.trim())
+      // Indexed arrays ("responseCode[0]") keep their parent key: the index
+      // is dropped, and a repeated key is kept as separate entries.
+      .filter((part) => part !== '' && !/^\d+$/.test(part))
+  );
 }
 
 type FormValue = string | boolean | null;

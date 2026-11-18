@@ -2,10 +2,11 @@
 const AUTH_SCHEME_VALUE = /\b(bearer|basic|digest)\s+[^\s"',;&]+/gi;
 /**
  * An echoed Authorization header with any scheme ("Authorization: Token abc",
- * "Authorization: ApiKey …"): the value after the scheme is hidden.
+ * "Authorization: ApiKey …"): the whole value after the scheme is hidden, to
+ * the end of the field, so Digest's comma-separated parameters go too.
  */
 const AUTHORIZATION_HEADER_VALUE =
-  /\b(authori[sz]ation["']?\s*[:=]\s*["']?)([A-Za-z][\w-]*)\s+(?!\[redacted\])[^\s"',;&]+/gi;
+  /\b(authori[sz]ation["']?\s*[:=]\s*["']?)([A-Za-z][\w-]*)\s+(?!\[redacted\])[^\n&;]+/gi;
 /** A JWT (three base64url parts, header starting "eyJ"). */
 const JWT = /\beyJ[\w-]+\.[\w-]+(?:\.[\w-]+)?/g;
 /** A credential-named field followed by its value: "access token: abc…". */
@@ -31,8 +32,8 @@ const LONG_OPAQUE_VALUE =
  */
 export function redactMonnifyCredentials(text: string): string {
   return text
-    .replace(AUTH_SCHEME_VALUE, '$1 [redacted]')
     .replace(AUTHORIZATION_HEADER_VALUE, '$1$2 [redacted]')
+    .replace(AUTH_SCHEME_VALUE, '$1 [redacted]')
     .replace(JWT, '[redacted]')
     .replace(CREDENTIAL_FIELD_VALUE, '$1$2[redacted]')
     .replace(CREDENTIAL_LABEL_VALUE, '$1$2[redacted]')

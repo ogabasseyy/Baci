@@ -22,6 +22,10 @@ describe('redactMonnifyCredentials', () => {
     ['Invalid token abc123', 'Invalid token [redacted]'],
     ['Authorization: Basic dXNlcjpwYXNz', 'Authorization: Basic [redacted]'],
     ['Authorization: Token abc123', 'Authorization: Token [redacted]'],
+    [
+      'Authorization: Digest username="merchant", realm="monnify", nonce="n1", response="r1"',
+      'Authorization: Digest [redacted]',
+    ],
     ['Authorization: ApiKey fixture-key-1', 'Authorization: ApiKey [redacted]'],
     ['hash 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b', 'hash [redacted]'],
   ])('redacts %s', (input, expected) => {

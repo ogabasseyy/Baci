@@ -88,3 +88,23 @@ describe('bugfix: nested form references keep their nesting', () => {
     ]);
   });
 });
+
+describe('bugfix: indexed form arrays and stray percent signs', () => {
+  it('reads responseCode[0]=99 under responseCode', () => {
+    expect(parseMonnifyAnswer('responseCode[0]=99&message=Low')).toEqual({
+      responseCode: '99',
+      message: 'Low',
+    });
+  });
+
+  it('decodes valid escapes despite a stray %', () => {
+    expect(
+      parseMonnifyAnswer(
+        'error=transactionStatus%3DFAILED%&message=Insufficient+wallet+balance'
+      )
+    ).toEqual({
+      error: 'transactionStatus=FAILED%',
+      message: 'Insufficient wallet balance',
+    });
+  });
+});

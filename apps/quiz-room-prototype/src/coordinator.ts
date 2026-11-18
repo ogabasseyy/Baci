@@ -1,10 +1,12 @@
 import {
   type BillingCounters,
   createEmptyBillingCounters,
+  type QuizControlStateSnapshot,
   QuizRoomError,
   type QuizRoomSealManifest,
   type QuizRoomSealMode,
 } from './contracts';
+import { createEmptyControlState } from './control-state';
 import { sha256Hex } from './crypto';
 import type { RoomStorageBackend, SqlRow } from './sqlite-adapter';
 
@@ -91,8 +93,75 @@ export class EventCoordinatorEngine {
         attempts INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY (event_id, room_id)
       ) WITHOUT ROWID;
+
+      CREATE TABLE IF NOT EXISTS coordinator_control_state (
+        event_id TEXT PRIMARY KEY,
+        snapshot_json TEXT NOT NULL
+      ) WITHOUT ROWID;
     `);
     this.schemaInitialized = true;
+  }
+
+  getControlState(eventId: string): QuizControlStateSnapshot | null {
+    this.ensureSchemaSync();
+    const row = this.storage.exec<{ snapshot_json: string }>(
+      `SELECT snapshot_json FROM coordinator_control_state WHERE event_id = ?`,
+      eventId
+    ).rows[0];
+    return row
+      ? (JSON.parse(row.snapshot_json) as QuizControlStateSnapshot)
+      : null;
+  }
+
+  setControlState(
+    eventId: string,
+    next: QuizControlStateSnapshot
+  ): { applied: boolean; snapshot: QuizControlStateSnapshot } {
+    return this.storage.transactionSync(() => {
+      const current = this.getControlState(eventId);
+      if (current) {
+        if (next.version < current.version) {
+          return { applied: false, snapshot: current };
+        }
+        if (
+          next.version === current.version &&
+          next.updatedAtMs <= current.updatedAtMs
+        ) {
+          return { applied: false, snapshot: current };
+        }
+      }
+      this.storage.exec(
+        `INSERT INTO coordinator_control_state (event_id, snapshot_json)
+         VALUES (?, ?)
+         ON CONFLICT(event_id) DO UPDATE SET snapshot_json = excluded.snapshot_json`,
+        eventId,
+        JSON.stringify(next)
+      );
+      return { applied: true, snapshot: next };
+    });
+  }
+
+  refreshControlStateFreshness(
+    eventId: string,
+    updatedAtMs: number
+  ): QuizControlStateSnapshot {
+    return this.storage.transactionSync(() => {
+      const current = this.getControlState(eventId);
+      const next: QuizControlStateSnapshot = current
+        ? {
+            ...current,
+            updatedAtMs: Math.max(current.updatedAtMs, updatedAtMs),
+          }
+        : createEmptyControlState(updatedAtMs, 1);
+      this.storage.exec(
+        `INSERT INTO coordinator_control_state (event_id, snapshot_json)
+         VALUES (?, ?)
+         ON CONFLICT(event_id) DO UPDATE SET snapshot_json = excluded.snapshot_json`,
+        eventId,
+        JSON.stringify(next)
+      );
+      return next;
+    });
   }
 
   getBillingCounters(): BillingCounters {

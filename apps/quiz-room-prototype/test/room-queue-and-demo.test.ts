@@ -264,6 +264,7 @@ describe('Queue consumer and Demo UI / Telemetry routes', () => {
         return Promise.resolve();
       },
       freezeCoordinator: () => Promise.resolve(),
+      refreshControlState: () => Promise.resolve(),
     };
 
     const pageRes = await handleDemoWorkerRoute(

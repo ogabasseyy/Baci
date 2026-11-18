@@ -116,9 +116,7 @@ export class QuizRoomDO extends DurableObject<WorkerEnv> {
     const adapter = new CloudflareSqlStorageAdapter(
       ctx.storage as unknown as CloudflareDoStorageLike
     );
-    this.controlState = new QuizControlStateStore(
-      createEmptyControlState(Date.now(), 1)
-    );
+    this.controlState = new QuizControlStateStore();
     this.engine = new QuizRoomEngine({
       roomId: ctx.id.name ?? ctx.id.toString(),
       storage: adapter,
@@ -195,7 +193,20 @@ export class QuizRoomDO extends DurableObject<WorkerEnv> {
           appVersion: string;
           platform: QuizPlatform;
         }>(request);
-        return jsonResponse(this.engine.startAttempt(body));
+        const nowMs = Date.now();
+        if (!this.controlState.isFresh(nowMs) && this.env.EVENT_COORDINATOR) {
+          const coordStub = this.env.EVENT_COORDINATOR.get(
+            this.env.EVENT_COORDINATOR.idFromName(body.ticket.eventId)
+          );
+          const csRes = await coordStub.fetch(
+            `https://coord.internal/internal/control-state?eventId=${encodeURIComponent(body.ticket.eventId)}`
+          );
+          if (csRes.ok) {
+            const snapshot = (await csRes.json()) as QuizControlStateSnapshot;
+            this.controlState.applySnapshot(snapshot);
+          }
+        }
+        return jsonResponse(this.engine.startAttempt({ ...body, nowMs }));
       }
       if (request.method === 'POST' && url.pathname === '/internal/answer') {
         const body = await readJsonBody<{
@@ -291,9 +302,7 @@ export class ResultShardDO extends DurableObject<WorkerEnv> {
     const adapter = new CloudflareSqlStorageAdapter(
       ctx.storage as unknown as CloudflareDoStorageLike
     );
-    this.controlState = new QuizControlStateStore(
-      createEmptyControlState(Date.now(), 1)
-    );
+    this.controlState = new QuizControlStateStore();
     this.engine = new ResultShardEngine({
       shardIndex: 0,
       storage: adapter,
@@ -472,6 +481,54 @@ export class EventCoordinatorDO extends DurableObject<WorkerEnv> {
           })
         );
       }
+      if (
+        request.method === 'GET' &&
+        url.pathname === '/internal/control-state'
+      ) {
+        const eventId = url.searchParams.get('eventId');
+        if (!eventId) {
+          throw new QuizRoomError(
+            'QUIZ_INVALID_INPUT',
+            'eventId query parameter is required',
+            400
+          );
+        }
+        const snapshot = this.engine.getControlState(eventId);
+        if (!snapshot) {
+          return jsonResponse(
+            { error: 'Control state not initialized', code: 'NOT_FOUND' },
+            404
+          );
+        }
+        return jsonResponse(snapshot);
+      }
+      if (
+        request.method === 'POST' &&
+        url.pathname === '/internal/control-state'
+      ) {
+        const body = await readJsonBody<{
+          eventId: string;
+          snapshot: QuizControlStateSnapshot;
+        }>(request);
+        return jsonResponse(
+          this.engine.setControlState(body.eventId, body.snapshot)
+        );
+      }
+      if (
+        request.method === 'POST' &&
+        url.pathname === '/internal/control-state/refresh'
+      ) {
+        const body = await readJsonBody<{
+          eventId: string;
+          updatedAtMs?: number;
+        }>(request);
+        return jsonResponse(
+          this.engine.refreshControlStateFreshness(
+            body.eventId,
+            body.updatedAtMs ?? Date.now()
+          )
+        );
+      }
       return jsonResponse({ error: 'Not found', code: 'NOT_FOUND' }, 404);
     } catch (error) {
       return errorResponse(error);
@@ -576,8 +633,51 @@ export default {
             );
           }
         },
+        refreshControlState: async (eventId, updatedAtMs) => {
+          const stub = env.EVENT_COORDINATOR.get(
+            env.EVENT_COORDINATOR.idFromName(eventId)
+          );
+          const res = await stub.fetch(
+            'https://coord.internal/internal/control-state/refresh',
+            {
+              method: 'POST',
+              body: JSON.stringify({ eventId, updatedAtMs }),
+            }
+          );
+          if (!res.ok) {
+            throw new QuizRoomError(
+              'QUIZ_COORDINATOR_CS_FAILED',
+              `Failed to refresh control state for ${eventId}`,
+              res.status
+            );
+          }
+        },
       });
       if (demoRes) return demoRes;
+
+      if (
+        request.method === 'POST' &&
+        path === '/api/quiz/admin/control-state'
+      ) {
+        verifyInternalCoordinatorAuth(
+          request.headers.get('Authorization'),
+          env.QUIZ_INTERNAL_COORDINATOR_SECRET
+        );
+        const body = await readJsonBody<{
+          eventId: string;
+          snapshot: QuizControlStateSnapshot;
+        }>(request);
+        const coordStub = env.EVENT_COORDINATOR.get(
+          env.EVENT_COORDINATOR.idFromName(body.eventId)
+        );
+        return coordStub.fetch(
+          'https://coord.internal/internal/control-state',
+          {
+            method: 'POST',
+            body: JSON.stringify(body),
+          }
+        );
+      }
 
       if (request.method === 'POST' && path === '/api/quiz/coordinator/sweep') {
         verifyInternalCoordinatorAuth(

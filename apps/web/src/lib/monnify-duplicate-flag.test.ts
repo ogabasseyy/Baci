@@ -5,6 +5,8 @@ describe('hasMonnifyDuplicateFlag', () => {
   it.each([
     { duplicate: true },
     { duplicate: [true], message: 'Insufficient wallet balance' },
+    { alreadyDelivered: true },
+    { responseBody: { already_vended: 'yes' } },
     { responseBody: { is_duplicate: 'true' } },
     { responseBody: { idempotencyReplay: 1 } },
     { REFERENCE_ALREADY_EXISTS: 'Y' },

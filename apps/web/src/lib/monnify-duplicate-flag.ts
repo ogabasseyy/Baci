@@ -1,4 +1,5 @@
-const DUPLICATE_KEY = /duplicate|idempoten|already(?:exists|used|processed)/;
+const DUPLICATE_KEY =
+  /duplicate|idempoten|already(?:exists|used|processed|delivered|vended|completed|fulfilled|paid|submitted|dispatched)/;
 const FALSE_VALUES = new Set(['', 'false', 'no', 'n', '0']);
 const MAX_DEPTH = 6;
 

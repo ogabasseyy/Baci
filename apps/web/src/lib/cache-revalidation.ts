@@ -32,6 +32,7 @@ import {
 import { productCacheRevalidation } from '@/lib/product-cache-revalidation';
 import { buildStorefrontBlogPurgeUrls } from '@/lib/storefront-purge-urls';
 import {
+  getBlogRssMerchantCacheTag,
   getBoundedMerchantSlugCacheTag,
   getDomainCacheTag,
   getMerchantIdentifierCacheTag,
@@ -150,27 +151,21 @@ export function revalidateMerchantSlugLookup(slug?: string) {
   }
 
   const normalizedIdentifier = slug.trim().toLowerCase();
-  if (isSlugShapedIdentifier(normalizedIdentifier)) {
-    revalidateTag(
-      getBoundedMerchantSlugCacheTag(normalizedIdentifier),
-      'merchant'
-    );
-    revalidateTag(
-      getMerchantIdentifierCacheTag(normalizedIdentifier),
-      'merchant'
-    );
-    revalidateTag(PLATFORM_SITEMAP_MERCHANTS_CACHE_TAG, 'merchant');
-    revalidatePath('/sitemap.xml');
-    return;
-  }
+  const lookupTag = isSlugShapedIdentifier(normalizedIdentifier)
+    ? getBoundedMerchantSlugCacheTag(normalizedIdentifier)
+    : isDomainIdentifier(normalizedIdentifier)
+      ? getDomainCacheTag(normalizedIdentifier)
+      : null;
 
-  if (isDomainIdentifier(normalizedIdentifier)) {
-    revalidateTag(getDomainCacheTag(normalizedIdentifier), 'merchant');
+  if (lookupTag) {
+    revalidateTag(lookupTag, 'merchant');
     revalidateTag(
       getMerchantIdentifierCacheTag(normalizedIdentifier),
       'merchant'
     );
+    revalidateTag(getBlogRssMerchantCacheTag(normalizedIdentifier), 'merchant');
     revalidateTag(PLATFORM_SITEMAP_MERCHANTS_CACHE_TAG, 'merchant');
+    revalidatePath(`/api/blog/feed/${normalizedIdentifier}`);
     revalidatePath('/sitemap.xml');
     return;
   }
@@ -196,8 +191,9 @@ export function revalidateBlogFeed() {
 }
 
 /**
- * Revalidate blog post cache.
- * Call after blog post create/update/delete/publish.
+ * Revalidate blog post cache. Callers on storefront blog mutations (create,
+ * update, publish, delete, reservation release) MUST pass `identifiers` and
+ * `canonicalMerchantSlug`; `merchantId`-only invalidates origin tags only.
  */
 export function revalidateBlogPosts(
   identifierOrOptions: string | BlogRevalidationOptions,

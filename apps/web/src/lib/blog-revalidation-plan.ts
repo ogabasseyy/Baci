@@ -13,7 +13,9 @@ import {
 } from '@/lib/tenant-cache-tags';
 
 export interface BlogRevalidationOptions {
+  /** Storefront slug and active custom domains; required alongside `canonicalMerchantSlug` for Next path revalidation and Cloudflare edge purges. */
   identifiers?: Array<string | null | undefined>;
+  /** Merchant canonical slug used to compute `/api/blog/feed/<slug>` path and `blog-rss-slug-*` edge tag invalidation. */
   canonicalMerchantSlug?: string | null | undefined;
   listingCategories?: Array<string | null | undefined>;
   listingPages?: Array<number | null | undefined>;
@@ -37,16 +39,17 @@ export function isSafeCanonicalMerchantSlug(slug: string): boolean {
 }
 
 /**
- * Compute the exact Next.js cache tags, paths, and Cloudflare purge inputs
- * for a blog mutation. Emits only tenant/identifier-scoped tags when a valid
- * `merchantId` is provided; keeps the global `'blog-posts'` / `'blog-rss-feed'`
- * fallback only for legacy identifier-only callers without a `merchantId`, and
- * treats empty `{}` input as a no-op.
+ * Compute Next.js cache tags, paths, and Cloudflare purge inputs for a blog
+ * mutation. Emits only tenant/identifier-scoped tags when `merchantId` is set,
+ * falling back to global `'blog-posts'` / `'blog-rss-feed'` only for legacy
+ * identifier-only callers; `{}` is a no-op.
  *
- * Note: `merchantId`-only calls (with empty `identifiers` and no
- * `canonicalMerchantSlug`) intentionally perform Next.js origin tag
- * invalidation only (`purgeIdentifiers: []`, no Cloudflare URL purge), because
- * edge URL hostname resolution requires storefront identifiers.
+ * `merchantId`-only calls bust origin `'use cache'` tags (`blog-posts-*`,
+ * `blog-categories-*`, `blog-content-links-*`, `blog-rss-id-*`) and skip
+ * `revalidatePath`, `blog-listing-status-*`, and Cloudflare URL purges.
+ * Mutations that must also evict CDN/rendered blog URLs — post create, update,
+ * publish/unpublish, scheduled publish, delete, reservation release, and blog
+ * cache APIs — MUST pass `identifiers` and `canonicalMerchantSlug`.
  */
 export function buildBlogRevalidationPlan(
   identifierOrOptions: string | BlogRevalidationOptions,

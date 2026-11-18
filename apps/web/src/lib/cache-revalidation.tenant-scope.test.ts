@@ -117,11 +117,18 @@ describe('tenant-scoped cache revalidation', () => {
         'merchant'
       );
       expect(mockRevalidateTag).toHaveBeenCalledWith(
+        'blog-rss-slug-ogabassey',
+        'merchant'
+      );
+      expect(mockRevalidateTag).toHaveBeenCalledWith(
         PLATFORM_SITEMAP_MERCHANTS_CACHE_TAG,
         'merchant'
       );
+      expect(mockRevalidatePath).toHaveBeenCalledWith(
+        '/api/blog/feed/ogabassey'
+      );
       expect(mockRevalidatePath).toHaveBeenCalledWith('/sitemap.xml');
-      expect(mockRevalidateTag).toHaveBeenCalledTimes(3);
+      expect(mockRevalidateTag).toHaveBeenCalledTimes(4);
     });
 
     it('falls back to global merchant tag only when slug is omitted or empty', () => {
@@ -157,11 +164,18 @@ describe('tenant-scoped cache revalidation', () => {
         'merchant'
       );
       expect(mockRevalidateTag).toHaveBeenCalledWith(
+        'blog-rss-slug-shop.example.com',
+        'merchant'
+      );
+      expect(mockRevalidateTag).toHaveBeenCalledWith(
         PLATFORM_SITEMAP_MERCHANTS_CACHE_TAG,
         'merchant'
       );
+      expect(mockRevalidatePath).toHaveBeenCalledWith(
+        '/api/blog/feed/shop.example.com'
+      );
       expect(mockRevalidatePath).toHaveBeenCalledWith('/sitemap.xml');
-      expect(mockRevalidateTag).toHaveBeenCalledTimes(3);
+      expect(mockRevalidateTag).toHaveBeenCalledTimes(4);
     });
 
     it('skips invalid slug values with a warning', () => {

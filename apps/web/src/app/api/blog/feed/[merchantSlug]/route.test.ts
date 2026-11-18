@@ -1028,6 +1028,35 @@ describe('GET /api/blog/feed/[merchantSlug]', () => {
         `blog-posts-${merchant.id}`,
         `blog-rss-id-${merchant.id}`,
         'blog-rss-slug-shop.example.com',
+        'blog-rss-slug-ogabassey',
+      ].join(',')
+    );
+  });
+
+  it('normalizes mixed-case and encoded path params when emitting Vercel-Cache-Tag', async () => {
+    enqueueTable(
+      'merchants',
+      createMerchantQuery({ data: merchant, error: null })
+    );
+    enqueueTable(
+      'merchants',
+      createMerchantQuery({ data: merchant, error: null })
+    );
+    enqueueTable('blog_posts', createPostQuery({ data: [], error: null }));
+
+    const response = await GET(
+      new NextRequest('https://usebaci.com/api/blog/feed/%20Ogabassey%20'),
+      { params: Promise.resolve({ merchantSlug: '%20Ogabassey%20' }) }
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Vercel-Cache-Tag')).toBe(
+      [
+        'blog-posts',
+        'blog-rss-feed',
+        `blog-posts-${merchant.id}`,
+        `blog-rss-id-${merchant.id}`,
+        'blog-rss-slug-ogabassey',
       ].join(',')
     );
   });

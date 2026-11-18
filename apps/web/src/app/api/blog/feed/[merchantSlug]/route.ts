@@ -366,13 +366,20 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       posts: data.posts,
     });
 
+    const normalizedRequestIdentifier =
+      normalizeMerchantIdentifier(merchantSlug);
     const edgeCacheTags = Array.from(
       new Set([
         'blog-posts',
         'blog-rss-feed',
         getBlogPostsMerchantCacheTag(resolvedMerchant.id),
         getBlogRssMerchantIdCacheTag(resolvedMerchant.id),
-        getBlogRssMerchantCacheTag(merchantSlug),
+        ...(normalizedRequestIdentifier
+          ? [getBlogRssMerchantCacheTag(normalizedRequestIdentifier)]
+          : []),
+        ...(data.merchant.slug
+          ? [getBlogRssMerchantCacheTag(data.merchant.slug)]
+          : []),
       ])
     );
 

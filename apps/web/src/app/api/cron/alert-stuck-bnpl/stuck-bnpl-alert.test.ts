@@ -90,8 +90,8 @@ describe('buildStuckBnplAlert', () => {
   it('summarises several orders and leaves out the single-order link', () => {
     const alert = buildStuckBnplAlert(
       [
+        order({ id: 'order-2', order_number: 'ORD-2', total: '50000.5' }),
         order({ updated_at: '2026-07-01T00:00:00.000Z' }),
-        order({ id: 'order-2', total: '50000.5' }),
       ],
       NOW
     );

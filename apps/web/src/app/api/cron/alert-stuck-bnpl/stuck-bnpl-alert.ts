@@ -94,7 +94,11 @@ export function buildStuckBnplAlert(
     (sum, order) => sum + (Number(order.total) || 0),
     0
   );
-  const oldest = merchantOrders[0];
+  const oldest = merchantOrders.reduce((earliest, order) =>
+    Date.parse(order.updated_at) < Date.parse(earliest.updated_at)
+      ? order
+      : earliest
+  );
   const oldestAgeDays = getStuckAgeDays(oldest.updated_at, now);
   const orderCount = merchantOrders.length;
   const provider = describeProvider(merchantOrders);

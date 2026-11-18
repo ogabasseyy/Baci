@@ -177,6 +177,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         success: true,
         stuckOrders: orders.length,
+        // stuckOrders includes review-only rows. alertOrders counts push candidates.
         alertOrders: 0,
         merchants: 0,
         merchantsNotified: 0,

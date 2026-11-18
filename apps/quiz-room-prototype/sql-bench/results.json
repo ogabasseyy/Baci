@@ -1,0 +1,270 @@
+{
+  "generatedAt": "2026-11-18T16:55:25.727Z",
+  "environment": {
+    "postgresVersion": "17.11 (Homebrew)",
+    "cpuCores": 12,
+    "totalMemoryGb": 96,
+    "synchronousCommit": "on"
+  },
+  "stage1PrototypeSqlTest": "PASSED",
+  "partA_normalizedEmailIndexAndLegacyTriggers": {
+    "indexComparison": [
+      {
+        "eventAttempts": 1000,
+        "totalCustomers": 50000,
+        "checkInNormalizedEmailLookup": {
+          "withoutIndex": {
+            "withIndex": false,
+            "executionTimeMs": 101.842,
+            "planningTimeMs": 0.369,
+            "sharedHitBlocks": 940,
+            "sharedReadBlocks": 0,
+            "nodeType": "Seq Scan",
+            "indexName": null
+          },
+          "withIndex": {
+            "withIndex": true,
+            "executionTimeMs": 0.036,
+            "planningTimeMs": 0.378,
+            "sharedHitBlocks": 1,
+            "sharedReadBlocks": 3,
+            "nodeType": "Index Scan",
+            "indexName": "idx_customers_merchant_quiz_normalized_email"
+          }
+        },
+        "legacyIdentityCapTriggerQuery": {
+          "withoutIndex": {
+            "withIndex": false,
+            "executionTimeMs": 64.225,
+            "planningTimeMs": 2.266,
+            "sharedHitBlocks": 40826,
+            "sharedReadBlocks": 0,
+            "nodeType": "Aggregate",
+            "planSummary": "{\"Node Type\":\"Aggregate\",\"Strategy\":\"Plain\",\"Partial Mode\":\"Simple\",\"Parallel Aware\":false,\"Async Capable\":false,\"Startup Cost\":340.06,\"Total Cost\":340.07,\"Plan Rows\":1,\"Plan Width\":4,\"Actual Startup Time\":64.153,\"Actual Total Time\":64.153,\"Actual Rows\":1,\"Actual Loops\":1,\"Shared Hit Blocks\":40826,\"Shared Read Blocks\":0,\"Shared Dirtied Blocks\":0,\"Shared Written Blocks\":0,\"Local Hit Blocks\":0,\"Loca"
+          },
+          "withIndex": {
+            "withIndex": true,
+            "executionTimeMs": 60.823,
+            "planningTimeMs": 0.859,
+            "sharedHitBlocks": 40824,
+            "sharedReadBlocks": 0,
+            "nodeType": "Aggregate",
+            "planSummary": "{\"Node Type\":\"Aggregate\",\"Strategy\":\"Plain\",\"Partial Mode\":\"Simple\",\"Parallel Aware\":false,\"Async Capable\":false,\"Startup Cost\":340.06,\"Total Cost\":340.07,\"Plan Rows\":1,\"Plan Width\":4,\"Actual Startup Time\":60.79,\"Actual Total Time\":60.791,\"Actual Rows\":1,\"Actual Loops\":1,\"Shared Hit Blocks\":40824,\"Shared Read Blocks\":0,\"Shared Dirtied Blocks\":0,\"Shared Written Blocks\":0,\"Local Hit Blocks\":0,\"Local"
+          }
+        }
+      },
+      {
+        "eventAttempts": 10000,
+        "totalCustomers": 50000,
+        "checkInNormalizedEmailLookup": {
+          "withoutIndex": {
+            "withIndex": false,
+            "executionTimeMs": 60.805,
+            "planningTimeMs": 0.321,
+            "sharedHitBlocks": 940,
+            "sharedReadBlocks": 0,
+            "nodeType": "Seq Scan",
+            "indexName": null
+          },
+          "withIndex": {
+            "withIndex": true,
+            "executionTimeMs": 0.041,
+            "planningTimeMs": 0.419,
+            "sharedHitBlocks": 1,
+            "sharedReadBlocks": 3,
+            "nodeType": "Index Scan",
+            "indexName": "idx_customers_merchant_quiz_normalized_email"
+          }
+        },
+        "legacyIdentityCapTriggerQuery": {
+          "withoutIndex": {
+            "withIndex": false,
+            "executionTimeMs": 60.95,
+            "planningTimeMs": 0.778,
+            "sharedHitBlocks": 40885,
+            "sharedReadBlocks": 0,
+            "nodeType": "Aggregate",
+            "planSummary": "{\"Node Type\":\"Aggregate\",\"Strategy\":\"Plain\",\"Partial Mode\":\"Simple\",\"Parallel Aware\":false,\"Async Capable\":false,\"Startup Cost\":4141.98,\"Total Cost\":4142,\"Plan Rows\":1,\"Plan Width\":4,\"Actual Startup Time\":60.863,\"Actual Total Time\":60.864,\"Actual Rows\":1,\"Actual Loops\":1,\"Shared Hit Blocks\":40885,\"Shared Read Blocks\":0,\"Shared Dirtied Blocks\":0,\"Shared Written Blocks\":0,\"Local Hit Blocks\":0,\"Local"
+          },
+          "withIndex": {
+            "withIndex": true,
+            "executionTimeMs": 60.23,
+            "planningTimeMs": 0.87,
+            "sharedHitBlocks": 40885,
+            "sharedReadBlocks": 0,
+            "nodeType": "Aggregate",
+            "planSummary": "{\"Node Type\":\"Aggregate\",\"Strategy\":\"Plain\",\"Partial Mode\":\"Simple\",\"Parallel Aware\":false,\"Async Capable\":false,\"Startup Cost\":4141.96,\"Total Cost\":4141.97,\"Plan Rows\":1,\"Plan Width\":4,\"Actual Startup Time\":60.187,\"Actual Total Time\":60.187,\"Actual Rows\":1,\"Actual Loops\":1,\"Shared Hit Blocks\":40885,\"Shared Read Blocks\":0,\"Shared Dirtied Blocks\":0,\"Shared Written Blocks\":0,\"Local Hit Blocks\":0,\"Lo"
+          }
+        }
+      },
+      {
+        "eventAttempts": 50000,
+        "totalCustomers": 50000,
+        "checkInNormalizedEmailLookup": {
+          "withoutIndex": {
+            "withIndex": false,
+            "executionTimeMs": 60.5,
+            "planningTimeMs": 0.323,
+            "sharedHitBlocks": 940,
+            "sharedReadBlocks": 0,
+            "nodeType": "Seq Scan",
+            "indexName": null
+          },
+          "withIndex": {
+            "withIndex": true,
+            "executionTimeMs": 0.043,
+            "planningTimeMs": 0.46,
+            "sharedHitBlocks": 1,
+            "sharedReadBlocks": 3,
+            "nodeType": "Index Scan",
+            "indexName": "idx_customers_merchant_quiz_normalized_email"
+          }
+        },
+        "legacyIdentityCapTriggerQuery": {
+          "withoutIndex": {
+            "withIndex": false,
+            "executionTimeMs": 59.107,
+            "planningTimeMs": 0.747,
+            "sharedHitBlocks": 938,
+            "sharedReadBlocks": 0,
+            "nodeType": "Aggregate",
+            "planSummary": "{\"Node Type\":\"Aggregate\",\"Strategy\":\"Plain\",\"Partial Mode\":\"Simple\",\"Parallel Aware\":false,\"Async Capable\":false,\"Startup Cost\":14963.88,\"Total Cost\":14963.89,\"Plan Rows\":1,\"Plan Width\":4,\"Actual Startup Time\":59.074,\"Actual Total Time\":59.075,\"Actual Rows\":1,\"Actual Loops\":1,\"Shared Hit Blocks\":938,\"Shared Read Blocks\":0,\"Shared Dirtied Blocks\":0,\"Shared Written Blocks\":0,\"Local Hit Blocks\":0,\"Lo"
+          },
+          "withIndex": {
+            "withIndex": true,
+            "executionTimeMs": 59.709,
+            "planningTimeMs": 0.862,
+            "sharedHitBlocks": 938,
+            "sharedReadBlocks": 0,
+            "nodeType": "Aggregate",
+            "planSummary": "{\"Node Type\":\"Aggregate\",\"Strategy\":\"Plain\",\"Partial Mode\":\"Simple\",\"Parallel Aware\":false,\"Async Capable\":false,\"Startup Cost\":14963.88,\"Total Cost\":14963.89,\"Plan Rows\":1,\"Plan Width\":4,\"Actual Startup Time\":59.675,\"Actual Total Time\":59.676,\"Actual Rows\":1,\"Actual Loops\":1,\"Shared Hit Blocks\":938,\"Shared Read Blocks\":0,\"Shared Dirtied Blocks\":0,\"Shared Written Blocks\":0,\"Local Hit Blocks\":0,\"Lo"
+          }
+        }
+      }
+    ],
+    "legacyPerRowTriggerRun": {
+      "attempts": 500,
+      "answers": 5000,
+      "elapsedMs": 30268.2,
+      "attemptsPerSec": 16.5,
+      "answersPerSec": 165.2,
+      "walBytes": 6583872,
+      "walBytesPerAttempt": 13167.7,
+      "triggerCalls": {
+        "quizEnforceIdentityAttemptCap": 500,
+        "accumulateQuizAttemptScoreV2": 5000,
+        "refreshQuizLiveStandingV2": 6000
+      }
+    }
+  },
+  "partB_edgeStagingAndSetWiseScoring": {
+    "scale100k": {
+      "label": "100k",
+      "totalAttempts": 100000,
+      "roomCount": 200,
+      "batchSize": 500,
+      "ingest": {
+        "elapsedMs": 3232.5,
+        "attemptsPerSec": 30936.2,
+        "answersPerSec": 304721.3,
+        "walBytes": 202460080,
+        "walMb": 193.08
+      },
+      "seal": {
+        "elapsedMs": 78.2,
+        "roomsSealed": 200
+      },
+      "scoring": {
+        "elapsedMs": 37990.4,
+        "attemptsPerSec": 2632.2,
+        "answersPerSec": 25927.6,
+        "walBytes": 1296072872,
+        "walMb": 1236.03,
+        "attemptsWritten": 100000,
+        "questionsWritten": 985000,
+        "answersWritten": 985000,
+        "resultsWritten": 100000
+      },
+      "doubleImportCheck": {
+        "duplicateBatchReturnedDuplicateFlag": true,
+        "rescoreAttemptsWritten": 0,
+        "rescoreQuestionsWritten": 0,
+        "rescoreAnswersWritten": 0
+      },
+      "triggerIsolation": {
+        "quizEnforceIdentityAttemptCapCalls": 0,
+        "accumulateQuizAttemptScoreV2Calls": 0,
+        "refreshQuizLiveStandingV2Calls": 0,
+        "liveStandingsRowsLeaked": 0
+      },
+      "canonicalCounts": {
+        "attempts": 100000,
+        "questions": 985000,
+        "answers": 985000,
+        "results": 100000
+      },
+      "concurrentCheckout": {
+        "completed": 3282,
+        "errorCount": 0,
+        "p50Ms": 0.703,
+        "p95Ms": 3.493,
+        "p99Ms": 11.115,
+        "maxMs": 47.562
+      }
+    },
+    "scale1m": {
+      "label": "1m",
+      "totalAttempts": 1000000,
+      "roomCount": 2000,
+      "batchSize": 500,
+      "ingest": {
+        "elapsedMs": 34228.5,
+        "attemptsPerSec": 29215.4,
+        "answersPerSec": 287771.6,
+        "walBytes": 2328599240,
+        "walMb": 2220.73
+      },
+      "seal": {
+        "elapsedMs": 322.2,
+        "roomsSealed": 2000
+      },
+      "scoring": {
+        "elapsedMs": 346506.4,
+        "attemptsPerSec": 2885.9,
+        "answersPerSec": 28426.6,
+        "walBytes": 15686127768,
+        "walMb": 14959.46,
+        "attemptsWritten": 1000000,
+        "questionsWritten": 9850000,
+        "answersWritten": 9850000,
+        "resultsWritten": 1000000
+      },
+      "doubleImportCheck": {
+        "duplicateBatchReturnedDuplicateFlag": true,
+        "rescoreAttemptsWritten": 0,
+        "rescoreQuestionsWritten": 0,
+        "rescoreAnswersWritten": 0
+      },
+      "triggerIsolation": {
+        "quizEnforceIdentityAttemptCapCalls": 0,
+        "accumulateQuizAttemptScoreV2Calls": 0,
+        "refreshQuizLiveStandingV2Calls": 0,
+        "liveStandingsRowsLeaked": 0
+      },
+      "canonicalCounts": {
+        "attempts": 1000000,
+        "questions": 9850000,
+        "answers": 9850000,
+        "results": 1000000
+      },
+      "concurrentCheckout": {
+        "completed": 28987,
+        "errorCount": 0,
+        "p50Ms": 0.835,
+        "p95Ms": 3.51,
+        "p99Ms": 12.001,
+        "maxMs": 290.747
+      }
+    }
+  }
+}

@@ -1,3 +1,4 @@
+import { oxygenEligibilityProgressHeader } from '@baci/shared/oxygen';
 import { z } from 'zod';
 import { fetchWithCsrf } from '@/lib/api-client';
 import { oxygenEligibilityReasonHeader } from '@/lib/payments/oxygen/eligibility-reason-contract';
@@ -28,7 +29,10 @@ export async function fetchOxygenSnapshot(
         `/api/payments/oxygen/workflows/actions?workflowId=${id}`,
         {
           cache: 'no-store',
-          headers: { [oxygenEligibilityReasonHeader]: '1' },
+          headers: {
+            [oxygenEligibilityReasonHeader]: '1',
+            [oxygenEligibilityProgressHeader]: '1',
+          },
         }
       )
     )

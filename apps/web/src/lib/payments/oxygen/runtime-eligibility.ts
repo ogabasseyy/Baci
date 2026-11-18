@@ -1,4 +1,5 @@
 import 'server-only';
+import type { OxygenEligibilityProgress } from '@baci/shared/oxygen';
 import { oxygenEligibilityReportSchema } from '@/schemas/oxygen-eligibility-report';
 import type {
   OxygenProviderContext,
@@ -11,6 +12,22 @@ import { requireValue } from './runtime-policy';
 
 // Owner-confirmed Oxygen minimum in naira (2026-10-31); omitted fields only.
 const OXYGEN_MINIMUM_LOAN_AMOUNT_NAIRA = 10_000;
+
+function classifyProgress(
+  message: string
+): OxygenEligibilityProgress | undefined {
+  const text = message.trim();
+  if (
+    /\b(?:reviewing|fetching|retrieving|checking|processing) your bank statement\b/i.test(
+      text
+    )
+  )
+    return 'bank_statement';
+  if (/\b(?:retrieving|checking|fetching) your credit score\b/i.test(text))
+    return 'credit_score';
+  if (/\breviewing your eligibility\b/i.test(text)) return 'eligibility_review';
+  return undefined;
+}
 
 export async function refreshOxygenEligibility(
   context: OxygenProviderContext,
@@ -36,6 +53,12 @@ export async function refreshOxygenEligibility(
       : response.status === 'FAILED'
         ? 'failed'
         : 'pending';
+  const progress =
+    state.eligibilityStatus === 'pending'
+      ? classifyProgress(response.message)
+      : undefined;
+  if (progress) state.eligibilityProgress = progress;
+  else delete state.eligibilityProgress;
   // Match only the observed Oxygen prefix; unknown failures use the generic
   // message. Never retain the provider's raw message.
   if (

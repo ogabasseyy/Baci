@@ -6,6 +6,7 @@ import {
   oxygenBankRequestSchema,
   oxygenDraftResponseSchema,
   oxygenDraftWriteSchema,
+  oxygenEligibilityProgressHeader,
   oxygenMobileCapabilitiesSchema,
   oxygenResidentialContextSchema,
   oxygenRuntimeSnapshotSchema,
@@ -78,8 +79,10 @@ export function createOxygenClient(options: {
       Accept: 'application/json',
       'Cache-Control': 'no-store',
     };
-    if (path === 'workflows/actions' || path.startsWith('workflows/actions?'))
+    if (path === 'workflows/actions' || path.startsWith('workflows/actions?')) {
       headers['x-oxygen-eligibility-reason'] = '1';
+      headers[oxygenEligibilityProgressHeader] = '1';
+    }
     let payload: BodyInit | undefined;
     try {
       if (file) {

@@ -44,3 +44,17 @@ it('keeps a legacy snapshot without a reason intact for either client', () => {
   expect(oxygenSnapshotForClient(legacy, false)).toEqual(legacy);
   expect(oxygenSnapshotForClient(legacy, true)).toEqual(legacy);
 });
+
+it('exposes the pending stage only to clients that support progress', () => {
+  const pending: OxygenRuntimeSnapshot = {
+    ...snapshot,
+    state: {
+      eligibilityStatus: 'pending',
+      eligibilityProgress: 'bank_statement',
+    },
+  };
+  expect(oxygenSnapshotForClient(pending, true).state).toEqual({
+    eligibilityStatus: 'pending',
+  });
+  expect(oxygenSnapshotForClient(pending, true, true)).toBe(pending);
+});

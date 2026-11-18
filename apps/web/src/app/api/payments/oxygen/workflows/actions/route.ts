@@ -1,3 +1,4 @@
+import { oxygenEligibilityProgressHeader } from '@baci/shared/oxygen';
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { authenticateApiRequest } from '@/lib/api-auth';
@@ -86,7 +87,8 @@ export async function GET(request: NextRequest) {
       {
         ...oxygenSnapshotForClient(
           snapshot,
-          request.headers.get(oxygenEligibilityReasonHeader) === '1'
+          request.headers.get(oxygenEligibilityReasonHeader) === '1',
+          request.headers.get(oxygenEligibilityProgressHeader) === '1'
         ),
         pending,
         ninAttemptStatus: await readOxygenNinRetryStatus(
@@ -196,7 +198,8 @@ export async function POST(request: NextRequest) {
       {
         ...oxygenSnapshotForClient(
           snapshot,
-          request.headers.get(oxygenEligibilityReasonHeader) === '1'
+          request.headers.get(oxygenEligibilityReasonHeader) === '1',
+          request.headers.get(oxygenEligibilityProgressHeader) === '1'
         ),
         ninAttemptStatus: await readOxygenNinRetryStatus(userClient, snapshot),
       },

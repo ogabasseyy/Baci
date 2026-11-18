@@ -10,15 +10,17 @@ const labels = {
 };
 export function OxygenVerificationProgress({
   operation,
+  title,
 }: {
   operation: keyof typeof labels;
+  title?: string;
 }) {
   const { colors } = useTheme();
   return (
     <View style={styles.section} accessibilityLiveRegion="polite">
       <ActivityIndicator color={colors.primary} />
       <Text style={[styles.title, { color: colors.text }]}>
-        {labels[operation]}
+        {title ?? labels[operation]}
       </Text>
       <Text style={{ color: colors.text }}>
         Your progress is saved while Oxygen confirms this step.

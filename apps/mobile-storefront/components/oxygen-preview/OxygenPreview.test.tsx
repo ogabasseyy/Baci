@@ -96,7 +96,9 @@ it('walks through the prefilled application and checks the mock eligibility', as
   fireEvent.press(
     await screen.findByRole('button', { name: 'Complete mock selfie' })
   );
-  fireEvent.press(await screen.findByRole('button', { name: 'Try again' }));
+  fireEvent.press(
+    await screen.findByRole('button', { name: 'Check for an update' })
+  );
   expect(
     await screen.findByRole('button', { name: 'See payment breakdown' })
   ).toBeTruthy();

@@ -77,3 +77,15 @@ it.each([
   expect(worker).not.toHaveBeenCalled();
   expect(report).not.toHaveBeenCalled();
 });
+
+it('preserves a saved pending assessment after an older attempt failed', async () => {
+  report.mockResolvedValue([failure]);
+  const current: OxygenRuntimeSnapshot = {
+    ...snapshot,
+    state: { ...snapshot.state, eligibilityStatus: 'pending' },
+  };
+  expect(await restoreOxygenEligibilityRecovery(current, vi.fn())).toBe(
+    current
+  );
+  expect(report).not.toHaveBeenCalled();
+});

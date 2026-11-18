@@ -1,3 +1,4 @@
+import { oxygenEligibilityProgressSchema } from '@baci/shared/oxygen';
 import { z } from 'zod';
 import { oxygenProbeCustomerSchema } from './oxygen-probe';
 
@@ -106,6 +107,7 @@ export const oxygenProviderStateFieldsSchema = z
     validated: z.boolean().optional(),
     eligible: z.boolean().optional(),
     eligibilityStatus: z.enum(['pending', 'failed', 'completed']).optional(),
+    eligibilityProgress: oxygenEligibilityProgressSchema.optional(),
     eligibilityFailureReason: z
       .literal('financial_details_mismatch')
       .optional(),
@@ -157,18 +159,29 @@ const consistentEligibilityFailure = (state: {
 }) =>
   state.eligibilityFailureReason === undefined ||
   (state.eligibilityStatus === 'failed' && state.eligible === undefined);
+const consistentEligibilityProgress = (state: {
+  eligibilityProgress?: string;
+  eligibilityStatus?: string;
+  eligible?: boolean;
+}) =>
+  state.eligibilityProgress === undefined ||
+  (state.eligibilityStatus === 'pending' && state.eligible === undefined);
+const eligibilityProgressValidation = {
+  message: 'Eligibility progress requires a pending assessment',
+  path: ['eligibilityProgress'],
+};
 const eligibilityFailureValidation = {
   message: 'Eligibility failure reason requires a failed, undecided result',
   path: ['eligibilityFailureReason'],
 };
-export const oxygenProviderStateSchema = oxygenProviderStateFieldsSchema.refine(
-  consistentEligibilityFailure,
-  eligibilityFailureValidation
-);
+export const oxygenProviderStateSchema = oxygenProviderStateFieldsSchema
+  .refine(consistentEligibilityFailure, eligibilityFailureValidation)
+  .refine(consistentEligibilityProgress, eligibilityProgressValidation);
 export const oxygenCustomerProviderStateSchema = oxygenProviderStateFieldsSchema
   .omit({ newUserToken: true, activityToken: true, phone: true })
   .strict()
-  .refine(consistentEligibilityFailure, eligibilityFailureValidation);
+  .refine(consistentEligibilityFailure, eligibilityFailureValidation)
+  .refine(consistentEligibilityProgress, eligibilityProgressValidation);
 export type OxygenProviderState = z.infer<typeof oxygenProviderStateSchema>;
 export const oxygenProviderContextSchema = z
   .object({

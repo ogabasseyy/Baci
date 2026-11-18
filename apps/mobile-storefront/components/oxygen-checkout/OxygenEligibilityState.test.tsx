@@ -37,7 +37,9 @@ it('shows saved progress instead of an endless spinner when Oxygen is taking lon
   );
   expect(screen.getByText(/taking longer/i)).toBeTruthy();
   expect(screen.queryByText('Checking your payment options')).toBeNull();
-  expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
+  expect(
+    screen.getByRole('button', { name: 'Check for an update' })
+  ).toBeTruthy();
 });
 
 it('explains a completed ineligible decision instead of showing a blank screen', () => {
@@ -57,4 +59,22 @@ it('explains a completed ineligible decision instead of showing a blank screen',
   expect(screen.getByText(/another payment method/i)).toBeTruthy();
   fireEvent.press(screen.getByRole('button', { name: 'View my orders' }));
   expect(viewOrders).toHaveBeenCalledTimes(1);
+});
+
+it('shows the provider-reported stage and lets the customer check for an update', () => {
+  const check = jest.fn();
+  render(
+    <OxygenEligibilityState
+      status="pending"
+      progress="credit_score"
+      delayed
+      disabled={false}
+      hasError={false}
+      onRetry={check}
+      onViewOrders={jest.fn()}
+    />
+  );
+  expect(screen.getByText('Oxygen is checking your credit score')).toBeTruthy();
+  fireEvent.press(screen.getByRole('button', { name: 'Check for an update' }));
+  expect(check).toHaveBeenCalledTimes(1);
 });

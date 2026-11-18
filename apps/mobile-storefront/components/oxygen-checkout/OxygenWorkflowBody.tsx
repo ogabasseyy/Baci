@@ -139,6 +139,7 @@ export function OxygenWorkflowBody({
           status={s.eligibilityStatus}
           eligible={s.eligible}
           failureReason={s.eligibilityFailureReason}
+          progress={s.eligibilityProgress}
           delayed={eligibilityProgress.delayed}
           disabled={disabled}
           hasError={Boolean(controller.getState().error)}

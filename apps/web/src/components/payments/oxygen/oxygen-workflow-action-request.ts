@@ -1,3 +1,4 @@
+import { oxygenEligibilityProgressHeader } from '@baci/shared/oxygen';
 import { fetchWithCsrf } from '@/lib/api-client';
 import { oxygenEligibilityReasonHeader } from '@/lib/payments/oxygen/eligibility-reason-contract';
 
@@ -6,6 +7,9 @@ export function sendOxygenWorkflowAction(body: string | FormData) {
     method: 'POST',
     body,
     cache: 'no-store',
-    headers: { [oxygenEligibilityReasonHeader]: '1' },
+    headers: {
+      [oxygenEligibilityReasonHeader]: '1',
+      [oxygenEligibilityProgressHeader]: '1',
+    },
   });
 }

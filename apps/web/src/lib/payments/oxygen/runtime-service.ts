@@ -60,6 +60,7 @@ export async function readOxygenSnapshot(
   return oxygenRuntimeSnapshotSchema.parse(
     await oxygenRuntimeRpc(client, 'status', id, {
       includeEligibilityFailureReason: true,
+      includeEligibilityProgress: true,
     })
   );
 }

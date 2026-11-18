@@ -1,4 +1,7 @@
-import type { OxygenRuntimeSnapshot } from '@baci/shared/oxygen';
+import {
+  type OxygenRuntimeSnapshot,
+  oxygenEligibilityProgressLabels,
+} from '@baci/shared/oxygen';
 import { View } from 'react-native';
 import { OxygenStatusCard } from './OxygenStatusCard';
 import { OxygenVerificationProgress } from './OxygenVerificationProgress';
@@ -8,6 +11,7 @@ export function OxygenEligibilityState({
   status,
   eligible,
   failureReason,
+  progress,
   delayed,
   disabled,
   hasError,
@@ -17,14 +21,19 @@ export function OxygenEligibilityState({
   status?: OxygenRuntimeSnapshot['state']['eligibilityStatus'];
   eligible?: boolean;
   failureReason?: OxygenRuntimeSnapshot['state']['eligibilityFailureReason'];
+  progress?: OxygenRuntimeSnapshot['state']['eligibilityProgress'];
   delayed: boolean;
   disabled: boolean;
   hasError: boolean;
   onRetry: () => void;
   onViewOrders: () => void;
 }) {
+  const title =
+    status === 'pending' && progress
+      ? oxygenEligibilityProgressLabels[progress]
+      : undefined;
   if (disabled || (status === 'pending' && !delayed))
-    return <OxygenVerificationProgress operation="eligibility" />;
+    return <OxygenVerificationProgress operation="eligibility" title={title} />;
   const declined = status === 'completed' && eligible === false;
   if (!hasError && status !== 'failed' && !delayed && !declined) return null;
 
@@ -40,7 +49,7 @@ export function OxygenEligibilityState({
             ? 'Oxygen couldn’t offer a payment plan'
             : failed
               ? 'We couldn’t complete the check'
-              : 'Oxygen is taking longer'
+              : (title ?? 'Oxygen is taking longer')
         }
         description={
           declined
@@ -53,7 +62,13 @@ export function OxygenEligibilityState({
         }
       />
       <OxygenAction
-        label={declined ? 'View my orders' : 'Try again'}
+        label={
+          declined
+            ? 'View my orders'
+            : failed
+              ? 'Try again'
+              : 'Check for an update'
+        }
         onPress={declined ? onViewOrders : onRetry}
       />
     </View>

@@ -203,6 +203,7 @@ export async function getCachedContentLinkRewrites(
     getBlogContentLinksCacheTag(merchantId),
     'blog-content-links',
     'product-legacy-redirect',
+    `product-legacy-redirect-${merchantId}`,
     `products-${merchantId}`,
     `categories-${merchantId}`
   );

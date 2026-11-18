@@ -1183,6 +1183,7 @@ async function getCachedStorefrontPdpCore(
   cacheTag(
     'product',
     'product-details',
+    `product-details-${merchantId}`,
     'product-lcp-hint',
     `products-${merchantId}`,
     `categories-${merchantId}`,
@@ -1265,6 +1266,7 @@ export async function getCachedProductWithDetails(
   cacheTag(
     'product',
     'product-details',
+    `product-details-${merchantId}`,
     getProductScopedCacheTag('product', merchantId, productSlug)
   );
 
@@ -1320,6 +1322,7 @@ export async function getCachedProductCanonicalRedirectTarget(
   cacheTag(
     'product',
     'product-canonical-redirect',
+    `product-canonical-redirect-${merchantId}`,
     getProductScopedCacheTag('product', merchantId, productSlug),
     getProductScopedCacheTag(
       'product-canonical-redirect',
@@ -1377,6 +1380,7 @@ export async function getCachedLegacyProductRedirectTarget(
   cacheTag(
     'product',
     'product-legacy-redirect',
+    `product-legacy-redirect-${merchantId}`,
     getProductScopedCacheTag('product-legacy-redirect', merchantId, productSlug)
   );
 

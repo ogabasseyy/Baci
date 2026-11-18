@@ -83,12 +83,13 @@ function toVerdictResponse(
           // Two purge paths (comma = tag separator): product mutations purge
           // `product-slug-set-${merchantId}` via revalidateProducts, and
           // CATEGORY slug changes — which move a product's canonical path
-          // without any slug-set mutation — purge the same global
-          // `product-canonical-redirect` tag the underlying 'use cache'
-          // lookup carries and revalidateCategories invalidates.
+          // without any slug-set mutation — purge the merchant-scoped
+          // `product-canonical-redirect-${merchantId}` tag (kept alongside the
+          // legacy `product-canonical-redirect` tag) that the underlying
+          // 'use cache' lookup carries and revalidateCategories invalidates.
           'Vercel-Cache-Tag': `${getProductSlugSetCacheTag(
             cacheTagMerchantId
-          )},product-canonical-redirect`,
+          )},product-canonical-redirect,product-canonical-redirect-${cacheTagMerchantId}`,
         }
       : NO_STORE,
   });

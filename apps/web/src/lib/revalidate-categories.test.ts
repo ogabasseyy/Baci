@@ -13,17 +13,20 @@ describe('revalidateCategories', () => {
     vi.clearAllMocks();
   });
 
-  it('evicts the merchant, navigation and page tags', () => {
+  it('evicts only merchant-scoped navigation, category, and redirect tags', () => {
     revalidateCategories(MERCHANT_ID);
 
     const tags = mocks.revalidateTag.mock.calls.map(([tag]) => tag);
     expect(tags).toEqual([
       `categories-${MERCHANT_ID}`,
-      'navigation-categories',
+      `navigation-categories-${MERCHANT_ID}`,
       getCategoryPageDataCacheTag(MERCHANT_ID),
-      'product-canonical-redirect',
-      'product-legacy-redirect',
+      `product-canonical-redirect-${MERCHANT_ID}`,
+      `product-legacy-redirect-${MERCHANT_ID}`,
     ]);
+    expect(tags).not.toContain('navigation-categories');
+    expect(tags).not.toContain('product-canonical-redirect');
+    expect(tags).not.toContain('product-legacy-redirect');
   });
 
   it('adds the slug-scoped tag when a slug is given', () => {
@@ -60,6 +63,20 @@ describe('revalidateCategories', () => {
     );
   });
 
+  it('warns and skips revalidation when merchantId is blank', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {
+      // Expected in this runtime-guard test.
+    });
+
+    revalidateCategories('   ');
+
+    expect(mocks.revalidateTag).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[revalidateCategories] Skipped category cache revalidation for invalid merchant ID'
+    );
+    warnSpy.mockRestore();
+  });
+
   it('stays free of credential-reaching imports', async () => {
     // The whole point of this module: category API routes import it instead of
     // cache-revalidation, which pulls cloudflare-purge -> getCloudflareApiToken.
@@ -74,6 +91,7 @@ describe('revalidateCategories', () => {
     expect(imports).toEqual([
       "import { revalidateTag } from 'next/cache';",
       "import { getCategoryPageDataCacheTag } from '@/lib/category-page-cache-tags';",
+      "import { normalizeMerchantId } from '@/lib/normalize-merchant-id';",
     ]);
   });
 });

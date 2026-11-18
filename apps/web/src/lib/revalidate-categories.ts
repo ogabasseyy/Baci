@@ -1,5 +1,6 @@
 import { revalidateTag } from 'next/cache';
 import { getCategoryPageDataCacheTag } from '@/lib/category-page-cache-tags';
+import { normalizeMerchantId } from '@/lib/normalize-merchant-id';
 
 /**
  * Revalidate the cached category surfaces for a merchant.
@@ -17,6 +18,14 @@ export function revalidateCategories(
   categorySlug?: string,
   options: { expireImmediately?: boolean } = {}
 ) {
+  const normalizedMerchantId = normalizeMerchantId(merchantId);
+  if (!normalizedMerchantId) {
+    console.warn(
+      '[revalidateCategories] Skipped category cache revalidation for invalid merchant ID'
+    );
+    return;
+  }
+
   const profile = options.expireImmediately
     ? ({ expire: 0 } as const)
     : 'categories';
@@ -27,13 +36,22 @@ export function revalidateCategories(
     ? ({ expire: 0 } as const)
     : 'products';
 
-  revalidateTag(`categories-${merchantId}`, profile);
-  revalidateTag('navigation-categories', profile);
-  revalidateTag(getCategoryPageDataCacheTag(merchantId), storefrontProfile);
-  revalidateTag('product-canonical-redirect', productProfile);
-  revalidateTag('product-legacy-redirect', productProfile);
+  revalidateTag(`categories-${normalizedMerchantId}`, profile);
+  revalidateTag(`navigation-categories-${normalizedMerchantId}`, profile);
+  revalidateTag(
+    getCategoryPageDataCacheTag(normalizedMerchantId),
+    storefrontProfile
+  );
+  revalidateTag(
+    `product-canonical-redirect-${normalizedMerchantId}`,
+    productProfile
+  );
+  revalidateTag(
+    `product-legacy-redirect-${normalizedMerchantId}`,
+    productProfile
+  );
 
   if (categorySlug) {
-    revalidateTag(`category-${merchantId}-${categorySlug}`, profile);
+    revalidateTag(`category-${normalizedMerchantId}-${categorySlug}`, profile);
   }
 }

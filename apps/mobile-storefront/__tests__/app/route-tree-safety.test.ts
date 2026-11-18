@@ -35,13 +35,16 @@ const EXPLICIT_STATIC_ROUTES = new Set([
   'auth/callback.tsx',
   'cart.tsx',
   'auth/login.tsx',
+  'black-friday.tsx',
   'checkout.tsx',
+  'device-protection.tsx',
   'notifications.tsx',
   'order-success.tsx',
   'profile/delete-account.tsx',
   'profile/edit.tsx',
   'quiz/prize-checkout-simulation.tsx',
   'repairs/status.tsx',
+  'returns.tsx',
   'savings/funding.tsx',
   'search.tsx',
   'settings/wallet-pin.tsx',
@@ -50,6 +53,7 @@ const EXPLICIT_STATIC_ROUTES = new Set([
   'wallet/savings/goal-actions.tsx',
   'wallet/savings/start.tsx',
   'wallet/usdt.tsx',
+  'warranty.tsx',
 ]);
 
 function collectModuleFiles(currentPath: string): string[] {

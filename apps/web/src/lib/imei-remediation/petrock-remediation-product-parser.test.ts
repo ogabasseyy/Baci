@@ -158,3 +158,25 @@ it.each([
   expect(result.isActive).toBe(false);
   expect(result.reviewStatus).toBe('pending');
 });
+
+describe('bugfix: a $0 Petrock product broke the whole catalogue sync', () => {
+  // Live catalogue 2026-11-15: product 658 is listed at 0.0000 USD, and
+  // petrock_remediation_products.cost_usd only allows NULL or > 0, so the
+  // sync's upsert failed on every run.
+  it.each([
+    0, -1,
+  ])('stores no cost for a %s USD price and never offers it', (priceUsd) => {
+    const result = parsePetrockRemediationProduct({
+      categoryId: 'C162',
+      categoryName: 'Tecno | Itel | Infinix',
+      name: 'Tecno | Itel | Infinix | MDM & Tecno ID Refund Request',
+      fields: [{ name: 'IMEI' }],
+      priceUsd,
+      productId: '658',
+      turnaround: '1-24 Hours',
+    });
+    expect(result.costUsd).toBeNull();
+    expect(result.excludedReason).toBe('invalid_product_contract');
+    expect(result.isActive).toBe(false);
+  });
+});

@@ -20,6 +20,8 @@ export interface OxygenObservedResponse {
   capture: 'parsed' | 'non_json' | 'oversized' | 'unavailable';
   durationMs: number;
   body?: unknown;
+  /** Sensitive bytes are used only for encrypted eligibility evidence. */
+  eligibilityRawBytes?: Uint8Array;
   failure?: {
     providerMessage: string | null;
     providerCode: string | null;
@@ -202,8 +204,27 @@ export function createOxygenResponseRecorder(
   let sequence = 0;
   return async (response: OxygenObservedResponse) => {
     ++sequence;
+    const projected = projectOxygenResponse(response, hosts);
+    const bytes = response.eligibilityRawBytes;
+    const withRaw =
+      response.operation === 'eligibility'
+        ? {
+            ...projected,
+            eligibilityRaw:
+              bytes && bytes.byteLength <= 12000
+                ? {
+                    capture: 'complete',
+                    bodyBase64: Buffer.from(bytes).toString('base64'),
+                  }
+                : { capture: bytes ? 'oversized' : response.capture },
+          }
+        : projected;
+    const payload =
+      Buffer.byteLength(JSON.stringify(withRaw)) <= 24000
+        ? withRaw
+        : { ...projected, eligibilityRaw: { capture: 'oversized' } };
     const ciphertext = encryptOxygenResponse(
-      projectOxygenResponse(response, hosts),
+      payload,
       secret,
       workflowId,
       commandId,

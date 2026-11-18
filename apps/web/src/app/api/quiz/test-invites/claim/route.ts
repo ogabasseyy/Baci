@@ -14,7 +14,7 @@ const INVITE_UNAVAILABLE = {
 } as const;
 
 export async function POST(request: NextRequest) {
-  const auth = await requireQuizUser(request);
+  const auth = await requireQuizUser(request, { requireFreshSession: true });
   if (auth.response) return auth.response;
 
   const csrfResponse = await requireQuizCsrf(request);

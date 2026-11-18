@@ -9,6 +9,7 @@ import { GoalCancelButton as Button } from './GoalCancelStepParts';
 import { styles } from './goal-cancel-step.styles';
 import { goalCompleteBreakdown } from './goal-complete-breakdown';
 import { GOAL_COMPLETE_STEP_COPY as COPY } from './goal-complete-step-copy';
+import { GOAL_ACTION_BUSY_STEPS } from './goal-lifecycle-outcomes';
 import type { useGoalLifecycle } from './use-goal-lifecycle';
 
 type WalletColors = (typeof Colors)['light'];
@@ -57,9 +58,7 @@ export function GoalCompleteStep({
     goal.principal_amount !== undefined &&
     goal.principal_amount !== null &&
     goal.principal_amount >= goal.target_amount;
-  const working = ['issuing', 'pin', 'submitting', 'polling'].includes(
-    flow.step
-  );
+  const working = GOAL_ACTION_BUSY_STEPS.has(flow.step);
   const green = colors.success;
 
   let actions = (

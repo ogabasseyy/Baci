@@ -21,6 +21,8 @@ describe('feature flag registry', () => {
         'prefunded_card_checkout_mutations',
         'prefunded_card_contributions',
         'wallet',
+        'wallet_pay',
+        'wallet_pay_utilities',
       ].sort()
     );
   });

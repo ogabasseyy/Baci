@@ -27,30 +27,37 @@ function hrefMatchesStrings(where: unknown): string[] {
 }
 
 describe('buildStorefrontSpeculationRules', () => {
-  it('prerenders two-segment PDP links at moderate eagerness', () => {
+  it('prerenders two-segment PDP links at conservative eagerness', () => {
     // Arrange & Act
     const rules = buildStorefrontSpeculationRules('');
 
     // Assert
     expect(rules.prerender).toHaveLength(1);
     const [rule] = rules.prerender;
-    expect(rule.eagerness).toBe('moderate');
+    expect(rule.eagerness).toBe('conservative');
     const include = (rule.where as { and: Array<{ href_matches?: string }> })
       .and[0];
     expect(include.href_matches).toBe('/:category/:product');
   });
 
-  it('prefetches one-segment category links at moderate eagerness', () => {
+  it('prefetches one-segment category links and two-segment PDP links at moderate eagerness', () => {
     // Arrange & Act
     const rules = buildStorefrontSpeculationRules('');
 
     // Assert
-    expect(rules.prefetch).toHaveLength(1);
-    const [rule] = rules.prefetch;
-    expect(rule.eagerness).toBe('moderate');
-    const include = (rule.where as { and: Array<{ href_matches?: string }> })
-      .and[0];
-    expect(include.href_matches).toBe('/:category');
+    expect(rules.prefetch).toHaveLength(2);
+    const [categoryRule, pdpRule] = rules.prefetch;
+    expect(categoryRule.eagerness).toBe('moderate');
+    const categoryInclude = (
+      categoryRule.where as { and: Array<{ href_matches?: string }> }
+    ).and[0];
+    expect(categoryInclude.href_matches).toBe('/:category');
+
+    expect(pdpRule.eagerness).toBe('moderate');
+    const pdpInclude = (
+      pdpRule.where as { and: Array<{ href_matches?: string }> }
+    ).and[0];
+    expect(pdpInclude.href_matches).toBe('/:category/:product');
   });
 
   it('excludes per-user, state-changing, and non-product routes from prerender', () => {
@@ -70,6 +77,12 @@ describe('buildStorefrontSpeculationRules', () => {
       'wishlist',
       'track-order',
       'blog',
+      'swap',
+      'about',
+      'contact',
+      'faq',
+      'terms',
+      'privacy',
       'api',
     ]) {
       expect(reserved).toContain(segment);

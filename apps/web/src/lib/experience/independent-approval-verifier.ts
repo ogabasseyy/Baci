@@ -17,7 +17,8 @@ export interface IndependentApprovalDependencies {
       kind: 'draft' | 'lifecycle';
       buildId?: string;
       effectDigest: string;
-    }
+    },
+    signal?: AbortSignal
   ): Promise<unknown>;
   /** Restricted verifier connection; no business/source client or service-role factory. */
   record(input: {
@@ -36,7 +37,8 @@ export function createIndependentApprovalVerifier(
   deps: IndependentApprovalDependencies
 ): OwnerLifecycleVerification {
   return {
-    attest: async (client, approvalId, kind) => {
+    attest: async (client, approvalId, kind, signal) => {
+      signal?.throwIfAborted();
       const approval =
         kind === 'draft'
           ? await loadDraftApproval(client, approvalId)
@@ -50,9 +52,15 @@ export function createIndependentApprovalVerifier(
         .parse(approval.expiresAt);
       const buildId =
         typeof approval.buildId === 'string' ? approval.buildId : undefined;
+      signal?.throwIfAborted();
       const evidence = experienceCapturedEvidence.parse(
-        await deps.capture(client, { approvalId, kind, buildId, effectDigest })
+        await deps.capture(
+          client,
+          { approvalId, kind, buildId, effectDigest },
+          signal
+        )
       );
+      signal?.throwIfAborted();
       if (
         evidence.effectDigest !== effectDigest ||
         (buildId && evidence.buildId !== buildId)
@@ -70,6 +78,7 @@ export function createIndependentApprovalVerifier(
         if (build.error || build.data?.build_digest !== evidence.buildDigest)
           throw Error('APPROVAL_MISMATCH');
       }
+      signal?.throwIfAborted();
       const current =
         kind === 'draft'
           ? await loadDraftApproval(client, approvalId)
@@ -82,6 +91,7 @@ export function createIndependentApprovalVerifier(
         (buildId && current.buildId !== buildId)
       )
         throw Error('APPROVAL_MISMATCH');
+      signal?.throwIfAborted();
       await deps.record({
         approvalId,
         kind,

@@ -2,6 +2,7 @@ import 'server-only';
 import { createHmac, randomBytes } from 'node:crypto';
 import { experienceApprovalId } from '@/schemas/experience-publication';
 import type { OwnerLifecycleVerification } from './owner-lifecycle-runtime';
+import { VerifierTemporarilyUnavailable } from './verifier-availability';
 
 /** Baci server only. The verifier endpoint is fixed and accepts no browser token. */
 export function createVerifierAttestationClient(settings: {
@@ -39,9 +40,8 @@ export function createVerifierAttestationClient(settings: {
     const signature = createHmac('sha256', key)
       .update(`verifier-attest/v1\n${body}`)
       .digest('hex');
-    const response = await settings.fetch(
-      'https://mcp.usebaci.com/internal/owner/attest',
-      {
+    const response = await settings
+      .fetch('https://mcp.usebaci.com/internal/owner/attest', {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
@@ -52,9 +52,13 @@ export function createVerifierAttestationClient(settings: {
         cache: 'no-store',
         credentials: 'omit',
         signal: AbortSignal.timeout(600000),
-      }
-    );
+      })
+      .catch(() => {
+        throw new VerifierTemporarilyUnavailable();
+      });
     await response.body?.cancel().catch(() => undefined);
+    if (response.status === 429 || response.status >= 500)
+      throw new VerifierTemporarilyUnavailable();
     if (response.status !== 204) throw Error('VERIFIER_UNAVAILABLE');
   };
 }

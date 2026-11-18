@@ -62,7 +62,8 @@ export async function startVerifierService(settings: {
   const verifier = createIndependentApprovalVerifier({
     record,
     verifyPublic: () => Promise.reject(Error('PUBLIC_VERIFIER_NOT_INSTALLED')),
-    capture: async (client, binding) => {
+    capture: async (client, binding, signal) => {
+      signal?.throwIfAborted();
       const approval =
         binding.kind === 'draft'
           ? await loadDraftApproval(client, binding.approvalId)
@@ -76,11 +77,12 @@ export async function startVerifierService(settings: {
         approval.buildId !== binding.buildId
       )
         throw Error('APPROVAL_MISMATCH');
+      signal?.throwIfAborted();
       const worker = await workers.resolve(
         { supabase: client, merchantId: approval.merchantId },
         approval.buildId
       );
-      return createApprovalCapture(worker)(client, binding);
+      return createApprovalCapture(worker)(client, binding, signal);
     },
   });
   const handler = createVerifierAttestationHandler({

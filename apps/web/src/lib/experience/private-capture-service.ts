@@ -41,7 +41,10 @@ export function createPrivateExperienceCapture(deps: {
     routeId: string
   ): Promise<PublicBootstrap>;
   record(capture: RecordedPrivateCapture): Promise<void>;
-  capture?: typeof captureExperience;
+  capture?(
+    input: Parameters<typeof captureExperience>[0],
+    signal?: AbortSignal
+  ): ReturnType<typeof captureExperience>;
   maxPendingCaptures?: number;
 }) {
   const capacity = deps.maxPendingCaptures ?? 32;
@@ -74,6 +77,8 @@ export function createPrivateExperienceCapture(deps: {
     inputCtx: OwnerRequestContext,
     input: { buildId: string; routeId: string; idempotencyKey: string }
   ) => {
+    const signal = inputCtx.signal;
+    signal?.throwIfAborted();
     experienceId.parse(input.buildId);
     experienceId.parse(input.idempotencyKey);
     const ctx = await requireExperienceOwner(inputCtx);
@@ -196,16 +201,22 @@ export function createPrivateExperienceCapture(deps: {
         await requireExperienceOwner(ctx);
         return result(priorEvidence);
       }
-      const captured = await (deps.capture ?? captureExperience)({
-        manifest,
-        hostOrigin: deps.hostOrigin,
-        bundle: { javascript, css, digest: build.data.build_digest },
-        bootstrap,
-        assets,
-        engine: 'chromium',
-        width: 390,
-        assetsDigest,
-      });
+      signal?.throwIfAborted();
+      const capture = deps.capture ?? ((input) => captureExperience(input));
+      const captured = await capture(
+        {
+          manifest,
+          hostOrigin: deps.hostOrigin,
+          bundle: { javascript, css, digest: build.data.build_digest },
+          bootstrap,
+          assets,
+          engine: 'chromium',
+          width: 390,
+          assetsDigest,
+        },
+        signal
+      );
+      signal?.throwIfAborted();
       const snapshot = {
         ...captured.snapshot,
         key: {
@@ -218,6 +229,7 @@ export function createPrivateExperienceCapture(deps: {
       await requireExperienceOwner(ctx);
       if (snapshotKeyDigest(snapshot.key) !== expectedKey)
         throw Error('BUILD_FAILED');
+      signal?.throwIfAborted();
       try {
         await deps.record({
           id,

@@ -126,3 +126,23 @@ it('reconciled receipt does not request or write fresh evidence', async () => {
   expect(f.deps.capture).not.toHaveBeenCalled();
   expect(f.deps.record).not.toHaveBeenCalled();
 });
+
+it('passes the request signal into capture and suppresses recording after cancellation', async () => {
+  const f = setup();
+  const controller = new AbortController();
+  const evidence = await f.deps.capture();
+  f.deps.capture.mockImplementationOnce(() => {
+    controller.abort(Error('synthetic abort'));
+    return Promise.resolve(evidence);
+  });
+  const client = ownerClient();
+  await expect(
+    f.verifier.attest(client as never, id, 'draft', controller.signal)
+  ).rejects.toThrow('synthetic abort');
+  expect(f.deps.capture).toHaveBeenLastCalledWith(
+    client,
+    expect.objectContaining({ approvalId: id }),
+    controller.signal
+  );
+  expect(f.deps.record).not.toHaveBeenCalled();
+});

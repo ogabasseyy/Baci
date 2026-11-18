@@ -67,7 +67,7 @@ it('verifies a signed owner request and rejects durable nonce replay', async () 
   );
   expect(response.status).toBe(204);
   expect(f.user.auth.getUser).toHaveBeenCalledWith('synthetic.token');
-  expect(f.attest).toHaveBeenCalledWith(f.user, id, 'draft');
+  expect(f.attest).toHaveBeenCalledWith(f.user, id, 'draft', input.signal);
   expect((await f.handler(f.request())).status).toBe(409);
   expect(f.attest).toHaveBeenCalledOnce();
 });

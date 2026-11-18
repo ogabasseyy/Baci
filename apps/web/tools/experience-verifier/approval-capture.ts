@@ -12,7 +12,8 @@ type Worker = Awaited<ReturnType<typeof createVerifierCaptureWorker>>;
 export function createApprovalCapture(
   worker: Worker
 ): IndependentApprovalDependencies['capture'] {
-  return async (client, binding) => {
+  return async (client, binding, signal) => {
+    signal?.throwIfAborted();
     const approval =
       binding.kind === 'draft'
         ? await loadDraftApproval(client, binding.approvalId)
@@ -67,14 +68,16 @@ export function createApprovalCapture(
       throw Error('APPROVAL_MISMATCH');
     const proofs = [];
     for (const route of manifest.routes) {
+      signal?.throwIfAborted();
       const captured = await worker(
-        { supabase: client, merchantId },
+        { supabase: client, merchantId, signal },
         {
           buildId: approval.buildId,
           routeId: route.path,
           idempotencyKey: randomUUID(),
         }
       );
+      signal?.throwIfAborted();
       const snapshot = await client
         .from('experience_snapshots')
         .select('build_id,build_digest,evidence_digest')

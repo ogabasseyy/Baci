@@ -4,6 +4,7 @@ import {
   experienceApprovalId,
   experienceApprovalPost,
 } from '@/schemas/experience-publication';
+import { VerifierTemporarilyUnavailable } from './verifier-availability';
 export interface OwnerApprovalDependencies {
   ownerClient(request: Request): Promise<SupabaseClient | null>;
   checkMutation(request: Request): Promise<Response | null>;
@@ -63,8 +64,10 @@ export function createOwnerApprovalHandler(deps: OwnerApprovalDependencies) {
             : deps.confirmModeExit;
       if (!confirm) return respond({ error: 'Approval unavailable.' }, 503);
       return respond(await confirm(owner, parsed.data.approvalId));
-    } catch {
-      return respond({ error: 'Approval unavailable.' }, 403);
+    } catch (error) {
+      const status =
+        error instanceof VerifierTemporarilyUnavailable ? 503 : 403;
+      return respond({ error: 'Approval unavailable.' }, status);
     }
   };
 }

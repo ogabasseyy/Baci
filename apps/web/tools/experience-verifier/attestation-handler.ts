@@ -74,7 +74,12 @@ export function createVerifierAttestationHandler(settings: {
       const user = await client.auth.getUser(parsed.data.accessToken);
       if (user.error || !user.data.user) return reply(403);
       request.signal.throwIfAborted();
-      await settings.attest(client, parsed.data.approvalId, parsed.data.kind);
+      await settings.attest(
+        client,
+        parsed.data.approvalId,
+        parsed.data.kind,
+        request.signal
+      );
       request.signal.throwIfAborted();
       return reply(204);
     } catch {

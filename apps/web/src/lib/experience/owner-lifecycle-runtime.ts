@@ -11,7 +11,8 @@ export interface OwnerLifecycleVerification {
   attest(
     client: SupabaseClient,
     approvalId: string,
-    kind: 'draft' | 'lifecycle'
+    kind: 'draft' | 'lifecycle',
+    signal?: AbortSignal
   ): Promise<void>;
   verifyCommitted(
     client: SupabaseClient,

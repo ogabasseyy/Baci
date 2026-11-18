@@ -24,6 +24,9 @@ export async function createVerifierCaptureWorker(settings: {
     bootstrap: settings.bootstrap,
     record,
     maxPendingCaptures: 128,
-    capture: (input) => captureExperience(input, execute),
+    capture: (input, signal) =>
+      captureExperience(input, (kind, payload) =>
+        execute.withSignal(kind, payload, signal)
+      ),
   });
 }

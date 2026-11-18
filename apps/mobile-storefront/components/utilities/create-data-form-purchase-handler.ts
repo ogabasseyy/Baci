@@ -18,29 +18,19 @@ import {
   creditedVtuCashback,
   shouldRotateWalletIdempotencyKeyForError,
 } from '@/lib/vtu-checkout';
+import { phoneLengthError } from './airtime-form-controller.helpers';
+import type {
+  DataCustomer,
+  DataFormSuccessResult,
+} from './create-data-form-purchase-handler.types';
 import {
   awaitUtilitySettlementGate,
   refreshWalletAfterSuppressedVtuResult,
   shouldDiscardVtuResultForAccountSwitch,
 } from './vtu-account-switch';
+import { payFromPiggyvest } from './vtu-wallet-pay-store';
 
 type PaymentState = ReturnType<typeof useUtilityPayment>;
-
-interface DataCustomer {
-  first_name?: string | null;
-  last_name?: string | null;
-  email?: string | null;
-  phone?: string | null;
-}
-
-interface DataFormSuccessResult {
-  reference: string;
-  amount: number;
-  customerIdentifier?: string;
-  status?: 'processing' | 'successful';
-  voucherPin?: string;
-  cashback?: { amount: number; newBalance: number };
-}
 
 interface CreateDataFormPurchaseHandlerInput {
   customer: DataCustomer | null | undefined;
@@ -78,19 +68,15 @@ export function createDataFormPurchaseHandler({
       return;
     }
 
-    if (!selectedProvider || !phoneNumber || !selectedPlan) {
-      Alert.alert(
-        'Missing Information',
-        'Please enter a phone number and choose a data bundle.'
-      );
-      return;
-    }
-    // Bug #64: Prevent submission when planAmount is 0 or not set
-    if (planAmount <= 0) {
-      Alert.alert(
-        'Invalid Amount',
-        'Please enter a valid amount before proceeding.'
-      );
+    // Pay stays disabled with the reason shown in the form (inline notice),
+    // so these never reach here from a tap: refuse quietly, no system alert.
+    if (
+      !selectedProvider ||
+      !selectedPlan ||
+      phoneLengthError(phoneNumber) ||
+      // Bug #64: Prevent submission when planAmount is 0 or not set
+      planAmount <= 0
+    ) {
       return;
     }
     const customerName =
@@ -119,10 +105,18 @@ export function createDataFormPurchaseHandler({
       setIsSubmitting(false);
       return;
     }
-    // Retained-replay peek (R65 6ru4mK): the SAME request the submit
-    // signs with — a charged-but-unanswered retry must bypass the
-    // balance gate instead of stranding behind top-up.
     const isRetainedReplay = payment.hasRetainedVtuAttempt(request);
+    const handedOver = await payFromPiggyvest(
+      request,
+      onSuccess,
+      phoneNumber,
+      isRetainedReplay,
+      getIsActive
+    );
+    // Left the screen during the retained-key lookup: charge nothing (Codex P2).
+    if (handedOver || (getIsActive && !getIsActive()))
+      return void setIsSubmitting(false);
+    // Retained-replay peek (R65): a charged retry bypasses the gate.
     if (
       !ensureUtilityWalletReady({
         amount: planAmount,

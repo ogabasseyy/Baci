@@ -13,7 +13,7 @@ const defaultPreferences: CookiePreferences = {
   necessary: true,
   analytics: false,
   marketing: false,
-  functional: true,
+  functional: false,
 };
 
 /** Owns consent persistence, prompt timing and preference actions. */

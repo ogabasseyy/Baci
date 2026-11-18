@@ -108,7 +108,8 @@ describe('UsdtWalletFundingPanel', () => {
     expect(await screen.findByText('TResumedAddress')).toBeInTheDocument();
     expect(mocks.status).toHaveBeenCalledWith(
       'wusdt_ref_123456',
-      'ogabassey'
+      'ogabassey',
+      { signal: expect.any(AbortSignal) }
     );
     expect(mocks.initialize).not.toHaveBeenCalled();
   });

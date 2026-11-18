@@ -1,4 +1,4 @@
-import { getBlogAuthorSameAs } from '@/lib/blog-authors';
+import { getBlogAuthorSameAs, hasBlogAuthorPage } from '@/lib/blog-authors';
 import {
   extractBlogFaqItems,
   generateFaqPageSchema,
@@ -23,6 +23,7 @@ import { getBlogPostTextPreview } from './blog-post-content';
 type BlogPostStructuredDataInput = {
   catalogPrices?: Parameters<typeof resolveBlogCatalogPrices>[1];
   author: {
+    type?: 'Person' | 'Organization';
     id?: string;
     image?: string;
     name: string;
@@ -65,6 +66,27 @@ type BlogPostStructuredDataInput = {
   postUrl: string;
 };
 
+export function isOrganizationBlogAuthor({
+  authorName,
+  hasAuthorHub,
+  merchantBusinessName,
+  postAuthorName,
+}: {
+  authorName: string;
+  hasAuthorHub: boolean;
+  merchantBusinessName: string;
+  postAuthorName?: string | null;
+}): boolean {
+  if (!postAuthorName?.trim()) {
+    return true;
+  }
+  return (
+    !hasAuthorHub &&
+    authorName.trim().toLowerCase() ===
+      merchantBusinessName.trim().toLowerCase()
+  );
+}
+
 export function buildBlogPostStructuredData({
   catalogPrices,
   author,
@@ -96,8 +118,21 @@ export function buildBlogPostStructuredData({
     post.seo_description || post.excerpt || getBlogPostTextPreview(post.content)
   );
   const title = post.seo_title || post.title;
+  const hasAuthorHub = Boolean(
+    post.author_name?.trim() &&
+      hasBlogAuthorPage(post.author_name, merchant.slug)
+  );
+  const isOrganizationAuthor = author.type
+    ? author.type === 'Organization'
+    : isOrganizationBlogAuthor({
+        authorName: author.name,
+        hasAuthorHub,
+        merchantBusinessName: merchant.business_name,
+        postAuthorName: post.author_name,
+      });
   const videoMetadata = buildBlogVideoMetadata({
     authorName: author.name,
+    authorType: isOrganizationAuthor ? 'Organization' : 'Person',
     content,
     description: schemaDescription,
     postUrl,
@@ -115,14 +150,18 @@ export function buildBlogPostStructuredData({
     datePublished: post.published_at,
     dateModified: post.updated_at ?? undefined,
     author: {
+      type: isOrganizationAuthor ? 'Organization' : 'Person',
       name: author.name,
-      id: author.id,
+      id: isOrganizationAuthor ? organizationId : author.id,
       url: author.url,
-      jobTitle: post.author_title ?? undefined,
+      jobTitle: isOrganizationAuthor
+        ? undefined
+        : (post.author_title ?? undefined),
       description: post.author_bio ?? undefined,
-      sameAs: post.author_name
-        ? getBlogAuthorSameAs(post.author_name, merchant.slug)
-        : [],
+      sameAs:
+        !isOrganizationAuthor && post.author_name
+          ? getBlogAuthorSameAs(post.author_name, merchant.slug)
+          : [],
       image: author.image,
     },
     publisher: {

@@ -205,4 +205,22 @@ describe('productCacheRevalidation', () => {
     expect(logger.error).not.toHaveBeenCalled();
     expect(dashboardRevalidated).toBe(false);
   });
+
+  it('logs errors mentioning incrementalCache when they are not missing-context errors', () => {
+    revalidateTag.mockImplementationOnce(() => {
+      throw new Error('incrementalCache adapter write failed');
+    });
+
+    const revalidated =
+      productCacheRevalidation.revalidateDashboard('merchant-1');
+
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error: 'Error: incrementalCache adapter write failed',
+        message: 'Failed to revalidate product cache tag',
+        tag: 'dashboard-merchant-1',
+      })
+    );
+    expect(revalidated).toBe(false);
+  });
 });

@@ -39,7 +39,9 @@ function isMissingNextCacheContextError(error: unknown): boolean {
         : '';
   return (
     message.includes('static generation store missing') ||
-    message.includes('incrementalCache') ||
+    message.includes('incrementalCache missing') ||
+    message.includes('store.incrementalCache') ||
+    message.includes("reading 'incrementalCache'") ||
     message.includes('missing Next request context')
   );
 }

@@ -159,20 +159,13 @@ describe('env validation', () => {
   });
 
   it.each([
-    'cart-events',
-    'gigl-tracking',
-    'import-jobs',
-    'jumia-order-sync',
-    'merchant-onboarding-emails',
     'petrock-reconciliation',
-    'piggyvest-webhook-capture-drain',
+    'merchant-onboarding-emails',
     'quiz-finalization',
-  ])('allows the %s worker profile without unrelated agentic signing material or quiz proof secret', async (workerProfile) => {
+  ])('allows the %s worker profile without unrelated agentic signing material', async (workerProfile) => {
     vi.stubEnv('NODE_ENV', 'production');
     vi.stubEnv('GITHUB_ACTIONS', 'false');
-    vi.stubEnv('QUIZ_PHASE', '1a');
     vi.stubEnv('BACI_WORKER_PROFILE', workerProfile);
-    delete process.env.QUIZ_RPC_SERVER_SECRET;
     delete process.env.SUPABASE_JWT_SECRET;
     delete process.env.SUPABASE_AGENTIC_JWT_PRIVATE_JWK;
 

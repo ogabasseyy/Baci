@@ -112,12 +112,8 @@ install_remediation_cron_transition
 ssh "$VPS" "install -d -m 700 $REMOTE_DIR/locks && touch $REMOTE_DIR/locks/error-remediator-global.lock && chmod 600 $REMOTE_DIR/locks/error-remediator-global.lock"
 
 install_worker_services
-
-echo "==> Installing durable event-pipeline user services"
-ssh "$VPS" "bash $REMOTE_DIR/install-event-pipeline-services.sh $REMOTE_DIR"
-
-echo "==> Installing durable quiz finalization user service"
-ssh "$VPS" "bash $REMOTE_DIR/install-quiz-finalization-service.sh $REMOTE_DIR"
+echo "==> Installing durable event-pipeline and quiz finalization user services"
+ssh "$VPS" "bash $REMOTE_DIR/install-event-pipeline-services.sh $REMOTE_DIR && bash $REMOTE_DIR/install-quiz-finalization-service.sh $REMOTE_DIR"
 
 echo "==> Installing crontab entries on VPS (idempotent)"
 CRON_BLOCK_START="# >>> baci-workers >>>"

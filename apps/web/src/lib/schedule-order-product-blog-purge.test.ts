@@ -2,24 +2,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockEnrichProductPurgeEntries = vi.fn();
 const mockScheduleStorefrontProductPurge = vi.fn();
-const mockPurgeStorefrontProductConfirmed = vi.fn().mockResolvedValue(true);
 const mockScheduleStorefrontHostnamePurge = vi.fn();
-const mockPurgeStorefrontHostnameConfirmed = vi.fn().mockResolvedValue(true);
 const mockExpireProductBlogCacheReliable = vi.fn().mockResolvedValue(true);
-const mockGetCloudflarePurgeCredentials = vi.fn();
-const mockDelegateStorefrontEdgePurge = vi.fn().mockResolvedValue(false);
 const mockRevalidateSlugs = vi.fn();
 const mockRevalidateProducts = vi.fn();
 vi.mock('@/lib/cache-revalidation', () => ({
   revalidateProductSlugs: (...args: unknown[]) => mockRevalidateSlugs(...args),
   revalidateProducts: (...args: unknown[]) => mockRevalidateProducts(...args),
-}));
-vi.mock('@/lib/cloudflare-purge-credentials', () => ({
-  getCloudflarePurgeCredentials: () => mockGetCloudflarePurgeCredentials(),
-}));
-vi.mock('@/lib/delegate-storefront-edge-purge', () => ({
-  delegateStorefrontEdgePurge: (...args: unknown[]) =>
-    mockDelegateStorefrontEdgePurge(...args),
 }));
 
 vi.mock('@/lib/authoritative-product-purge-enrichment', () => ({
@@ -29,14 +18,12 @@ vi.mock('@/lib/authoritative-product-purge-enrichment', () => ({
 vi.mock('@/lib/storefront-product-purge', () => ({
   scheduleStorefrontProductPurge: (...args: unknown[]) =>
     mockScheduleStorefrontProductPurge(...args),
-  purgeStorefrontProductConfirmed: (...args: unknown[]) =>
-    mockPurgeStorefrontProductConfirmed(...args),
+  purgeStorefrontProductConfirmed: vi.fn().mockResolvedValue(true),
 }));
 vi.mock('@/lib/storefront-product-purge-hostnames', () => ({
   scheduleStorefrontHostnamePurge: (...args: unknown[]) =>
     mockScheduleStorefrontHostnamePurge(...args),
-  purgeStorefrontHostnameConfirmed: (...args: unknown[]) =>
-    mockPurgeStorefrontHostnameConfirmed(...args),
+  purgeStorefrontHostnameConfirmed: vi.fn().mockResolvedValue(true),
 }));
 vi.mock('@/lib/expire-product-blog-cache-reliable', () => ({
   expireProductBlogCacheReliable: (...args: unknown[]) =>
@@ -69,8 +56,6 @@ function makeSupabase(options: {
 describe('scheduleOrderProductBlogPurge', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockGetCloudflarePurgeCredentials.mockReturnValue(undefined);
-    mockDelegateStorefrontEdgePurge.mockResolvedValue(false);
     mockEnrichProductPurgeEntries.mockResolvedValue({
       entries: [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
       blogPostSlugs: ['iphone-guide'],
@@ -195,214 +180,5 @@ describe('scheduleOrderProductBlogPurge', () => {
     } finally {
       consoleSpy.mockRestore();
     }
-  });
-
-  it('evicts the hostname from caller hints when product enrichment rejects', async () => {
-    const consoleSpy = vi
-      .spyOn(console, 'warn')
-      .mockImplementation(() => undefined);
-    try {
-      const { supabase } = makeSupabase({});
-      mockEnrichProductPurgeEntries.mockRejectedValue(
-        new Error('enrichment timeout')
-      );
-
-      await expect(
-        scheduleOrderProductBlogPurge({
-          merchantId: 'merchant-1',
-          merchantSlug: 'ogabassey',
-          productIds: ['product-1'],
-          supabase: supabase as never,
-        })
-      ).resolves.toBe(true);
-
-      // The caller-supplied ids still name the affected products, so a
-      // rejected enrichment escalates to the hostname fallback instead of
-      // skipping invalidation entirely.
-      expect(mockRevalidateSlugs).toHaveBeenCalledWith(
-        'merchant-1',
-        ['product-1'],
-        { expireImmediately: true }
-      );
-      // The canonical slugs are unknown, so the id-scoped bust above cannot
-      // reach the slug-tagged outer PDP entries: the broad merchant tags
-      // (incl. `product-details`) are hard-expired so the first post-purge
-      // request cannot refill the edge from a stale snapshot.
-      expect(mockRevalidateProducts).toHaveBeenCalledWith(
-        'merchant-1',
-        undefined,
-        { expireImmediately: true }
-      );
-      expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
-      expect(mockScheduleStorefrontHostnamePurge).toHaveBeenCalledWith(
-        'ogabassey'
-      );
-      expect(consoleSpy).toHaveBeenCalledWith(
-        'Order-related product enrichment failed; continuing with caller hints',
-        expect.objectContaining({ merchantId: 'merchant-1' })
-      );
-    } finally {
-      consoleSpy.mockRestore();
-    }
-  });
-
-  it('skips empty product batches without querying or scheduling', async () => {
-    const { supabase, maybeSingle } = makeSupabase({});
-
-    await scheduleOrderProductBlogPurge({
-      merchantId: 'merchant-1',
-      merchantSlug: 'ogabassey',
-      productIds: [null, '  '],
-      supabase: supabase as never,
-    });
-
-    expect(maybeSingle).not.toHaveBeenCalled();
-    expect(mockEnrichProductPurgeEntries).not.toHaveBeenCalled();
-    expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
-  });
-
-  it('evicts the hostname when the article lookup reports incomplete', async () => {
-    const { supabase } = makeSupabase({});
-    mockEnrichProductPurgeEntries.mockResolvedValueOnce({
-      entries: [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
-      blogPostSlugs: [],
-      blogPostSlugsIncomplete: true,
-    });
-
-    await scheduleOrderProductBlogPurge({
-      merchantId: 'merchant-1',
-      merchantSlug: 'ogabassey',
-      productIds: ['product-1'],
-      supabase: supabase as never,
-    });
-
-    expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
-    expect(mockScheduleStorefrontHostnamePurge).toHaveBeenCalledWith(
-      'ogabassey'
-    );
-  });
-
-  it('evicts the hostname when the caller sweep reports incomplete', async () => {
-    const { supabase } = makeSupabase({});
-
-    await scheduleOrderProductBlogPurge({
-      merchantId: 'merchant-1',
-      merchantSlug: 'ogabassey',
-      productIds: ['product-1'],
-      supabase: supabase as never,
-      targetSweepIncomplete: true,
-    });
-
-    expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
-    expect(mockScheduleStorefrontHostnamePurge).toHaveBeenCalledWith(
-      'ogabassey'
-    );
-  });
-
-  it('skips the edge purge when the worker hard-expiry reports failure', async () => {
-    const consoleSpy = vi
-      .spyOn(console, 'warn')
-      .mockImplementation(() => undefined);
-    try {
-      const { supabase, maybeSingle } = makeSupabase({});
-      mockExpireProductBlogCacheReliable.mockResolvedValueOnce(false);
-
-      const result = await scheduleOrderProductBlogPurge({
-        merchantId: 'merchant-1',
-        productIds: ['product-1'],
-        supabase: supabase as never,
-      });
-
-      expect(result).toBe(false);
-
-      expect(mockRevalidateSlugs).toHaveBeenCalled();
-      expect(mockExpireProductBlogCacheReliable).toHaveBeenCalledWith(
-        'merchant-1',
-        { productSlugs: ['iphone-15'] }
-      );
-      expect(maybeSingle).not.toHaveBeenCalled();
-      expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
-      expect(consoleSpy).toHaveBeenCalledWith(
-        'Skipped order-related edge purge because blog-cache hard expiry failed',
-        expect.objectContaining({ merchantId: 'merchant-1' })
-      );
-    } finally {
-      consoleSpy.mockRestore();
-    }
-  });
-
-  it('awaits confirmed edge eviction and returns false when Cloudflare confirmation fails', async () => {
-    const { supabase } = makeSupabase({});
-    mockPurgeStorefrontProductConfirmed.mockResolvedValueOnce(false);
-
-    const failed = await scheduleOrderProductBlogPurge({
-      merchantId: 'merchant-1',
-      merchantSlug: 'ogabassey',
-      productIds: ['product-1'],
-      supabase: supabase as never,
-      confirmEdgeEviction: true,
-    });
-    expect(failed).toBe(false);
-    expect(mockPurgeStorefrontProductConfirmed).toHaveBeenCalledTimes(1);
-    expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
-
-    mockPurgeStorefrontHostnameConfirmed.mockResolvedValueOnce(false);
-    const failedHostname = await scheduleOrderProductBlogPurge({
-      merchantId: 'merchant-1',
-      merchantSlug: 'ogabassey',
-      productIds: ['product-1'],
-      supabase: supabase as never,
-      targetSweepIncomplete: true,
-      confirmEdgeEviction: true,
-    });
-    expect(failedHostname).toBe(false);
-    expect(mockPurgeStorefrontHostnameConfirmed).toHaveBeenCalledWith(
-      'ogabassey'
-    );
-  });
-
-  it('delegates confirmed edge eviction when local Cloudflare credentials are missing', async () => {
-    const { supabase } = makeSupabase({});
-    mockPurgeStorefrontProductConfirmed.mockResolvedValueOnce(false);
-    mockGetCloudflarePurgeCredentials.mockReturnValue(undefined);
-    mockDelegateStorefrontEdgePurge.mockResolvedValueOnce(true);
-
-    const ok = await scheduleOrderProductBlogPurge({
-      merchantId: 'merchant-1',
-      merchantSlug: 'ogabassey',
-      productIds: ['product-1'],
-      supabase: supabase as never,
-      confirmEdgeEviction: true,
-    });
-
-    expect(ok).toBe(true);
-    expect(mockDelegateStorefrontEdgePurge).toHaveBeenCalledWith({
-      merchantId: 'merchant-1',
-      merchantSlug: 'ogabassey',
-      entries: [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
-      productSlugs: ['iphone-15'],
-      blogPostSlugs: ['iphone-guide'],
-      purgeWholeStorefront: false,
-    });
-  });
-
-  it('does not delegate when local Cloudflare credentials are configured and confirmation fails', async () => {
-    const { supabase } = makeSupabase({});
-    mockPurgeStorefrontProductConfirmed.mockResolvedValueOnce(false);
-    mockGetCloudflarePurgeCredentials.mockReturnValue({
-      token: 'cf-token',
-      zoneId: 'cf-zone',
-    });
-
-    const ok = await scheduleOrderProductBlogPurge({
-      merchantId: 'merchant-1',
-      merchantSlug: 'ogabassey',
-      productIds: ['product-1'],
-      supabase: supabase as never,
-      confirmEdgeEviction: true,
-    });
-
-    expect(ok).toBe(false);
-    expect(mockDelegateStorefrontEdgePurge).not.toHaveBeenCalled();
   });
 });

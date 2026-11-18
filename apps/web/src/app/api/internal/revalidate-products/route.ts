@@ -11,10 +11,9 @@ import { collectResolvedProductSlugs } from '@/lib/internal-product-purge-entrie
 import { logger } from '@/lib/logger';
 import { createPublicClient } from '@/lib/supabase/public';
 import { internalRevalidateProductsBodySchema } from '@/schemas/internal-revalidate-products-route';
-import {
-  dispatchStorefrontHostnamePurge,
-  dispatchStorefrontProductPurge,
-} from './dispatch-storefront-purge';
+import { dispatchStorefrontHostnamePurge } from './dispatch-storefront-hostname-purge';
+import { dispatchStorefrontProductPurge } from './dispatch-storefront-purge';
+import { flushOriginCacheRevalidations } from './flush-origin-cache-revalidations';
 
 function normalizeMerchantSlug(value: string): string {
   return value.trim().toLowerCase();
@@ -240,6 +239,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           const mergedBlogPostSlugs = Array.from(
             new Set([...(callerBlogPostSlugs ?? []), ...blogPostSlugs])
           );
+          if (confirmEdgeEviction) {
+            await flushOriginCacheRevalidations();
+          }
           edgePurged = await dispatchStorefrontProductPurge({
             merchantSlug: authoritativeMerchantSlug,
             entries,
@@ -262,14 +264,24 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // purge rather than a partial URL list. The hostname comes only from the
   // merchant-id lookup above, never directly from the request body.
   if (purgeWholeStorefront && authoritativeMerchantSlug) {
-    // Expire the merchant-scoped article enrichment before the hostname purge
-    // can trigger a MISS and refill Cloudflare with stale product data.
-    expireProductBlogCache(merchantId);
-    revalidateProducts(merchantId, undefined, { expireImmediately: true });
-    edgePurged = await dispatchStorefrontHostnamePurge(
-      authoritativeMerchantSlug,
-      Boolean(confirmEdgeEviction)
-    );
+    try {
+      // Expire the merchant-scoped article enrichment before the hostname purge
+      // can trigger a MISS and refill Cloudflare with stale product data.
+      expireProductBlogCache(merchantId);
+      revalidateProducts(merchantId, undefined, { expireImmediately: true });
+      if (confirmEdgeEviction) {
+        await flushOriginCacheRevalidations();
+      }
+      edgePurged = await dispatchStorefrontHostnamePurge(
+        authoritativeMerchantSlug,
+        Boolean(confirmEdgeEviction)
+      );
+    } catch (purgeError) {
+      logger.error({
+        message: 'Skipped Cloudflare hostname purge in revalidate-products',
+        error: purgeError,
+      });
+    }
   }
 
   return NextResponse.json(

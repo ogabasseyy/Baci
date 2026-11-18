@@ -47,6 +47,7 @@ describe('delegateStorefrontEdgePurge', () => {
         new URL('https://usebaci.com/api/internal/revalidate-products'),
         expect.objectContaining({
           method: 'POST',
+          redirect: 'error',
           body: JSON.stringify({
             merchantId: 'merchant-1',
             merchantSlug: 'ogabassey',
@@ -90,11 +91,12 @@ describe('delegateStorefrontEdgePurge', () => {
     }
   });
 
-  it('escalates to purgeWholeStorefront when URL count exceeds the canonical URL threshold', async () => {
+  it('escalates to purgeWholeStorefront and omits blogPostSlugs when URL count exceeds the canonical URL threshold', async () => {
     const blogPostSlugs = Array.from(
       { length: 80 },
       (_, index) => `iphone-guide-${index}`
     );
+    const timeoutSpy = vi.spyOn(AbortSignal, 'timeout');
     const fetchSpy = vi
       .spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(
@@ -112,21 +114,23 @@ describe('delegateStorefrontEdgePurge', () => {
       });
 
       expect(ok).toBe(true);
+      expect(timeoutSpy).toHaveBeenCalledWith(55_000);
       expect(fetchSpy).toHaveBeenCalledWith(
         new URL('https://usebaci.com/api/internal/revalidate-products'),
         expect.objectContaining({
+          redirect: 'error',
           body: JSON.stringify({
             merchantId: 'merchant-1',
             merchantSlug: 'ogabassey',
             expireProductBlogCache: true,
             confirmEdgeEviction: true,
             productSlugs: ['iphone-15'],
-            blogPostSlugs,
             purgeWholeStorefront: true,
           }),
         })
       );
     } finally {
+      timeoutSpy.mockRestore();
       fetchSpy.mockRestore();
     }
   });

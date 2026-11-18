@@ -19,45 +19,9 @@ vi.mock('@/lib/storefront-product-purge-hostnames', () => ({
     mockScheduleStorefrontHostnamePurge(...args),
 }));
 
-import {
-  dispatchStorefrontHostnamePurge,
-  dispatchStorefrontProductPurge,
-} from './dispatch-storefront-purge';
+import { dispatchStorefrontProductPurge } from './dispatch-storefront-purge';
 
 const ENTRIES = [{ slug: 'iphone-15', categorySegment: 'smartphones' }];
-
-describe('dispatchStorefrontHostnamePurge', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('awaits confirmed hostname purge when confirmEdgeEviction is true', async () => {
-    mockPurgeStorefrontHostnameConfirmed
-      .mockResolvedValueOnce(true)
-      .mockResolvedValueOnce(false);
-
-    await expect(
-      dispatchStorefrontHostnamePurge('ogabassey', true)
-    ).resolves.toBe(true);
-    await expect(
-      dispatchStorefrontHostnamePurge('ogabassey', true)
-    ).resolves.toBe(false);
-
-    expect(mockPurgeStorefrontHostnameConfirmed).toHaveBeenCalledTimes(2);
-    expect(mockScheduleStorefrontHostnamePurge).not.toHaveBeenCalled();
-  });
-
-  it('schedules fire-and-forget hostname purge when confirmEdgeEviction is false', async () => {
-    await expect(
-      dispatchStorefrontHostnamePurge('ogabassey', false)
-    ).resolves.toBe(false);
-
-    expect(mockScheduleStorefrontHostnamePurge).toHaveBeenCalledWith(
-      'ogabassey'
-    );
-    expect(mockPurgeStorefrontHostnameConfirmed).not.toHaveBeenCalled();
-  });
-});
 
 describe('dispatchStorefrontProductPurge', () => {
   beforeEach(() => {

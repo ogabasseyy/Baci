@@ -2,23 +2,13 @@ import {
   purgeStorefrontProductConfirmed,
   scheduleStorefrontProductPurge,
 } from '@/lib/storefront-product-purge';
-import {
-  purgeStorefrontHostnameConfirmed,
-  scheduleStorefrontHostnamePurge,
-} from '@/lib/storefront-product-purge-hostnames';
 import type { StorefrontProductPurgeEntry } from '@/lib/storefront-product-purge-urls';
+import { dispatchStorefrontHostnamePurge } from './dispatch-storefront-hostname-purge';
 
-export async function dispatchStorefrontHostnamePurge(
-  merchantSlug: string,
-  confirmEdgeEviction: boolean
-): Promise<boolean> {
-  if (confirmEdgeEviction) {
-    return await purgeStorefrontHostnameConfirmed(merchantSlug);
-  }
-  scheduleStorefrontHostnamePurge(merchantSlug);
-  return false;
-}
-
+/**
+ * Dispatches either a confirmed or fire-and-forget Cloudflare product purge,
+ * escalating to a hostname purge when blog-post slug lookup is incomplete.
+ */
 export async function dispatchStorefrontProductPurge({
   merchantSlug,
   entries,

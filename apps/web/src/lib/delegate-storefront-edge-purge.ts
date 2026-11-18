@@ -1,3 +1,7 @@
+import {
+  CLOUDFLARE_PURGE_DEFAULT_TIMEOUT_MS,
+  CLOUDFLARE_PURGE_MAX_URLS_PER_BATCH,
+} from '@/lib/cloudflare-purge';
 import { getProductBlogCacheRuntimeConfig } from '@/lib/product-blog-cache-runtime-config';
 import {
   buildStorefrontProductPurgeUrls,
@@ -7,7 +11,13 @@ import {
   type StorefrontProductPurgeEntry,
 } from '@/lib/storefront-product-purge-urls';
 
-const REMOTE_EDGE_PURGE_TIMEOUT_MS = 5_000;
+const MAX_CONFIRMED_PURGE_BATCHES = Math.ceil(
+  PURGE_WHOLE_STOREFRONT_URL_THRESHOLD / CLOUDFLARE_PURGE_MAX_URLS_PER_BATCH
+);
+const REMOTE_EDGE_PURGE_OVERHEAD_MS = 5_000;
+const REMOTE_EDGE_PURGE_TIMEOUT_MS =
+  MAX_CONFIRMED_PURGE_BATCHES * CLOUDFLARE_PURGE_DEFAULT_TIMEOUT_MS +
+  REMOTE_EDGE_PURGE_OVERHEAD_MS;
 const LOOPBACK_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
 
 function isAllowedBaseOrigin(parsedBase: URL): boolean {
@@ -100,6 +110,7 @@ export async function delegateStorefrontEdgePurge({
   try {
     const response = await fetch(endpoint, {
       method: 'POST',
+      redirect: 'error',
       headers: {
         Authorization: `Bearer ${secret}`,
         'Content-Type': 'application/json',
@@ -110,12 +121,12 @@ export async function delegateStorefrontEdgePurge({
         expireProductBlogCache: true,
         confirmEdgeEviction: true,
         ...(productSlugs.length > 0 ? { productSlugs } : {}),
-        ...(normalizedBlogPostSlugs.length > 0
-          ? { blogPostSlugs: normalizedBlogPostSlugs }
-          : {}),
         ...(useWholeStorefront
           ? { purgeWholeStorefront: true }
           : {
+              ...(normalizedBlogPostSlugs.length > 0
+                ? { blogPostSlugs: normalizedBlogPostSlugs }
+                : {}),
               products: entries.map((entry) => ({
                 slug: entry.slug,
                 ...(entry.categorySegment
@@ -133,10 +144,13 @@ export async function delegateStorefrontEdgePurge({
       });
       return false;
     }
-    const payload = (await response.json().catch(() => null)) as {
-      edgePurged?: unknown;
-    } | null;
-    if (payload?.edgePurged !== true) {
+    const payload: unknown = await response.json().catch(() => null);
+    if (
+      typeof payload !== 'object' ||
+      payload === null ||
+      !('edgePurged' in payload) ||
+      payload.edgePurged !== true
+    ) {
       console.warn('Delegated edge purge was not confirmed by web route', {
         merchantId,
       });

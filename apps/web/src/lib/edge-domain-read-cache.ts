@@ -110,7 +110,9 @@ export interface ReadValidatedEdgeMappingOptions {
 /**
  * Reads, validates, and caches an Edge Config domain/slug mapping while
  * coalescing concurrent reads and preserving generation/epoch fences.
- * Thrown Edge Config errors remain uncached so fallback recovery is immediate.
+ * Only genuine absent keys (`undefined`/`null`) are negative-cached for 60s;
+ * thrown errors, non-string payloads, and malformed strings stay uncached so
+ * transient provider failures or corruption retry immediately (accepting repeat reads if malformed data persists).
  */
 export function readValidatedEdgeMapping(
   options: ReadValidatedEdgeMappingOptions

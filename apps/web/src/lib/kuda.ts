@@ -213,6 +213,13 @@ export interface PurchaseResult {
   // Monnify-only: the provider's own vend reference, used to requery status
   // (Monnify resolves requery by this, not by transactionReference).
   providerVendReference?: string;
+  // Monnify-only: Monnify refused the vend before attempting it (the amount
+  // check, or Baci's Monnify float too low), so nothing was delivered and
+  // another provider may safely vend it. Never set for 401/403 login
+  // rejections, FAILED or other vend statuses, "unavailable" answers, code
+  // 99, 408 timeouts, 429 throttles, bodies showing a vend status or
+  // reference, or anything that may be a duplicate reference.
+  providerDefiniteFailure?: boolean;
   // Units delivered for metered bills (e.g. prepaid electricity kWh).
   units?: string;
 }

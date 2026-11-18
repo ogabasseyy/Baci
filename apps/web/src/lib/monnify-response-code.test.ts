@@ -33,7 +33,24 @@ describe('readMonnifyResponseCode', () => {
     { responseCode: 'DUPLICATE_REFERENCE_12345' },
     { responseCode: `A_${'B'.repeat(40)}` },
     { responseBody: { responseCode: '99' } },
+    { responseCode: '-' },
+    { responseCode: '_' },
+    { responseCode: 'aB3dE5gH7jK' },
+    { responseCode: 'John_Doe123' },
+    { responseCode: 'd02' },
+    [{ responseCode: '99' }, { responseCode: '01' }],
   ])('returns undefined for %j', (answer) => {
     expect(readMonnifyResponseCode(answer)).toBeUndefined();
+  });
+});
+
+describe('bugfix: form-encoded answers with nested fields keep the code', () => {
+  it('reads the single top-level code from the array form', () => {
+    expect(
+      readMonnifyResponseCode([
+        { responseCode: '99' },
+        { responseBody: { transactionStatus: 'FAILED' } },
+      ])
+    ).toBe('99');
   });
 });

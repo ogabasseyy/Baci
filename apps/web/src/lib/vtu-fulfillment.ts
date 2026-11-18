@@ -1770,6 +1770,8 @@ async function reconcileProcessingVtuTransaction({
       const requeryResponseCode = readMonnifyResponseCode(providerStatus);
       if (requeryResponseCode) {
         failedMetadata.providerResponseCode = requeryResponseCode;
+      } else {
+        delete failedMetadata.providerResponseCode;
       }
       const failedMessage =
         providerStatus.message || 'Utility purchase failed with provider';

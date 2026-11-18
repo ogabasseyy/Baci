@@ -106,4 +106,17 @@ describe('bugfix: Monnify response code is kept on failed vends', () => {
 
     expect(result.providerResponseCode).toBeUndefined();
   });
+
+  it('keeps the code from a form-encoded body with nested fields', async () => {
+    mockHttpError(
+      400,
+      'Bad Request',
+      'responseCode=99&responseBody[transactionStatus]=FAILED&responseMessage=Insufficient+funds'
+    );
+
+    const result = await vend();
+
+    expect(result.providerResponseCode).toBe('99');
+    expect(result.providerDefiniteFailure).toBe(false);
+  });
 });

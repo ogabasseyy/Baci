@@ -1,25 +1,45 @@
 /**
- * A Monnify response code is code-shaped, with at most 4 digits in all:
- * either short (up to 12 characters, e.g. "99", "D02", "MP_001") or an
- * upper-case snake-case name up to 40 characters (e.g.
+ * A Monnify response code is code-shaped, with no lower-case letters and at
+ * most 4 digits in all: 1-4 digits ("0", "99"), a short upper-case code
+ * with at least one letter (up to 12 characters, e.g. "D02", "MP_001"), or
+ * an upper-case snake-case name up to 40 characters (e.g.
  * "DUPLICATE_REFERENCE"). Anything else is dropped so free text, a phone
- * number (grouped or not) or a mixed-case token can never be stored as a
- * "code".
+ * number (grouped or not), a name or a mixed-case token can never be
+ * stored as a "code".
  */
 const MONNIFY_RESPONSE_CODE_SHAPE =
-  /^(?!(?:\D*\d){5})(?:[A-Za-z0-9_-]{1,12}|[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)$/;
+  /^(?!(?:\D*\d){5})(?:\d{1,4}|(?=[A-Z0-9_-]*[A-Z])[A-Z0-9_-]{1,12}|[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)$/;
 const MONNIFY_RESPONSE_CODE_MAX_LENGTH = 40;
 
 /**
- * Monnify's own response code from an answer's top-level `responseCode`
- * (string or number), kept on failed rows so a refusal can be diagnosed
- * (for example, whether "Insufficient funds" came with code 99).
+ * The top-level `responseCode` value. A form-encoded answer with nested
+ * fields parses into an array of one-pair objects; there the code counts
+ * only when exactly one entry carries it.
  */
-export function readMonnifyResponseCode(answer: unknown): string | undefined {
-  if (!answer || typeof answer !== 'object' || Array.isArray(answer)) {
+function topLevelResponseCode(answer: unknown): unknown {
+  if (Array.isArray(answer)) {
+    const entries = answer.filter(
+      (entry): entry is Record<string, unknown> =>
+        !!entry &&
+        typeof entry === 'object' &&
+        !Array.isArray(entry) &&
+        Object.hasOwn(entry, 'responseCode')
+    );
+    return entries.length === 1 ? entries[0].responseCode : undefined;
+  }
+  if (!answer || typeof answer !== 'object') {
     return undefined;
   }
-  const value = (answer as Record<string, unknown>).responseCode;
+  return (answer as Record<string, unknown>).responseCode;
+}
+
+/**
+ * Monnify's own response code from an answer's top-level `responseCode`
+ * (string or finite number), kept on failed rows so a refusal can be
+ * diagnosed (for example, whether "Insufficient funds" came with code 99).
+ */
+export function readMonnifyResponseCode(answer: unknown): string | undefined {
+  const value = topLevelResponseCode(answer);
   if (
     typeof value !== 'string' &&
     !(typeof value === 'number' && Number.isFinite(value))

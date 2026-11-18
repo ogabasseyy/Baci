@@ -183,6 +183,9 @@ export function invalidateReverseDomainCacheForSlug(slug: string): void {
     }
   }
   edgeReverseCache.deleteValue(normalizedSlug);
+  // Reverse negatives are keyed only by unmapped domain without slug provenance,
+  // so rare merchant slug renames clear reverse negatives as an accepted tradeoff
+  // while normal unmapped-domain miss bursts never evict positive entries.
   edgeReverseCache.clearNegativeEntries();
 }
 

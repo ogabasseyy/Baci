@@ -26,7 +26,7 @@ vi.mock('@/lib/storefront-route-identifier', () => ({
   resolveRouteIdentifier: vi.fn(() => 'ogabassey'),
 }));
 
-const SCRAPER_BOTS = [
+const SCRAPER_AND_TRAINING_BOTS = [
   'Bytespider',
   'ClaudeBot',
   'GPTBot',
@@ -36,6 +36,10 @@ const SCRAPER_BOTS = [
   'AhrefsBot',
   'MJ12bot',
   'DotBot',
+  'Google-Extended',
+  'anthropic-ai',
+  'cohere-ai',
+  'FacebookBot',
 ] as const;
 
 const SEARCH_AND_ASSISTANT_BOTS = [
@@ -47,6 +51,18 @@ const SEARCH_AND_ASSISTANT_BOTS = [
   'PerplexityBot',
 ] as const;
 
+/** Minimal RFC 9309 prefix/wildcard/end-anchor matcher for Disallow patterns. */
+function matchesRobotsPattern(pattern: string, path: string): boolean {
+  const anchored = pattern.endsWith('$');
+  const rawPattern = anchored ? pattern.slice(0, -1) : pattern;
+  const escaped = rawPattern
+    .split('*')
+    .map((part) => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&'))
+    .join('.*');
+  const regex = new RegExp(`^${escaped}${anchored ? '$' : ''}`);
+  return regex.test(path);
+}
+
 describe('robots() compare path bot restrictions', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -54,7 +70,7 @@ describe('robots() compare path bot restrictions', () => {
     process.env.NEXT_PUBLIC_ROOT_DOMAIN = 'usebaci.com';
   });
 
-  it('disallows /compare/ and /*/compare* paths for scraper and AI training bots on storefronts', async () => {
+  it('disallows exact and nested /compare paths for scraper and AI training bots without overblocking siblings', async () => {
     const {
       default: robots,
       COMPARE_DISALLOWED_PATHS,
@@ -64,7 +80,21 @@ describe('robots() compare path bot restrictions', () => {
     const result = await robots();
     const rules = Array.isArray(result.rules) ? result.rules : [result.rules];
 
-    for (const bot of SCRAPER_BOTS) {
+    const blockedPaths = [
+      '/compare',
+      '/compare/',
+      '/phones/compare',
+      '/phones/compare/iphone-vs-samsung',
+      '/ogabassey/phones/compare',
+      '/ogabassey/phones/compare/iphone-vs-samsung',
+    ];
+    const allowedSiblingPaths = [
+      '/compare-phones',
+      '/phones/compare-case',
+      '/merchant/compare-cameras',
+    ];
+
+    for (const bot of SCRAPER_AND_TRAINING_BOTS) {
       const rule = rules.find((entry) => entry.userAgent === bot);
       expect(rule).toBeDefined();
       expect(rule?.allow).toBe('/');
@@ -72,9 +102,16 @@ describe('robots() compare path bot restrictions', () => {
         ...STOREFRONT_DISALLOWED_PATHS,
         ...COMPARE_DISALLOWED_PATHS,
       ]);
-      expect(rule?.disallow).toContain('/compare/');
-      expect(rule?.disallow).toContain('/*/compare');
-      expect(rule?.disallow).toContain('/*/compare/*');
+
+      const disallows = rule?.disallow as string[];
+      for (const path of blockedPaths) {
+        expect(disallows.some((p) => matchesRobotsPattern(p, path))).toBe(true);
+      }
+      for (const path of allowedSiblingPaths) {
+        expect(disallows.some((p) => matchesRobotsPattern(p, path))).toBe(
+          false
+        );
+      }
     }
   });
 
@@ -98,7 +135,7 @@ describe('robots() compare path bot restrictions', () => {
     }
   });
 
-  it('applies compare disallows to scraper bots on custom domains and platform domains alike', async () => {
+  it('applies compare disallows to scraper and AI training bots on custom domains and platform domains alike', async () => {
     const { default: robots, COMPARE_DISALLOWED_PATHS } = await import(
       './robots'
     );
@@ -113,7 +150,7 @@ describe('robots() compare path bot restrictions', () => {
         expect(defaultRule?.disallow).not.toContain(path);
       }
 
-      for (const bot of SCRAPER_BOTS) {
+      for (const bot of SCRAPER_AND_TRAINING_BOTS) {
         const rule = rules.find((entry) => entry.userAgent === bot);
         for (const path of COMPARE_DISALLOWED_PATHS) {
           expect(rule?.disallow).toContain(path);

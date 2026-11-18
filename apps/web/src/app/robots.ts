@@ -55,9 +55,10 @@ export const STOREFRONT_DISALLOWED_PATHS = [
 ] as const;
 
 export const COMPARE_DISALLOWED_PATHS = [
+  '/compare$',
   '/compare/',
-  '/*/compare',
-  '/*/compare/*',
+  '/*/compare$',
+  '/*/compare/',
 ] as const;
 
 const STANDARD_BOT_USER_AGENTS = [
@@ -66,11 +67,7 @@ const STANDARD_BOT_USER_AGENTS = [
   'ChatGPT-User',
   'Claude-User',
   'Claude-SearchBot',
-  'anthropic-ai',
-  'Google-Extended',
   'PerplexityBot',
-  'cohere-ai',
-  'FacebookBot',
 ] as const;
 
 const COMPARE_RESTRICTED_BOT_USER_AGENTS = [
@@ -83,6 +80,10 @@ const COMPARE_RESTRICTED_BOT_USER_AGENTS = [
   'AhrefsBot',
   'MJ12bot',
   'DotBot',
+  'Google-Extended',
+  'anthropic-ai',
+  'cohere-ai',
+  'FacebookBot',
 ] as const;
 
 function parseHostHeader(hostHeader: string) {

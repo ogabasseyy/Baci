@@ -126,17 +126,19 @@ export function readValidatedEdgeMapping(
       const { get } = await import('@vercel/edge-config');
       const value = await get<string>(options.edgeConfigKey);
       const staleBeforeWrite = options.isStaleBeforeWrite();
-      if (typeof value !== 'string') {
+      if (value === undefined || value === null) {
         if (!staleBeforeWrite) {
           options.cache.setNegative(options.cacheKey);
         }
         return undefined;
       }
+      if (typeof value !== 'string') {
+        // Leave non-string provider payloads uncached so transient corruption retries immediately.
+        return undefined;
+      }
       const normalized = options.normalizeAndValidate(value);
       if (normalized === undefined) {
-        if (!staleBeforeWrite) {
-          options.cache.setNegative(options.cacheKey);
-        }
+        // Leave malformed/non-canonical strings uncached so transient corruption retries immediately.
         return undefined;
       }
       if (staleBeforeWrite || options.isStalePositiveWrite?.(normalized)) {

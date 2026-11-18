@@ -78,11 +78,40 @@ describe('domain cache Edge Config negative caching', () => {
     expect(mockEdgeGet).toHaveBeenCalledTimes(2);
   });
 
-  it('negative-caches malformed or non-string forward and reverse Edge Config values for 60s', async () => {
+  it('caches null Edge Config misses for 60s just like undefined misses', async () => {
+    mockEdgeGet
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce('recovered-after-null.test')
+      .mockResolvedValueOnce('recovered-reverse-slug');
+
+    await expect(getCustomDomainForSlug('null-forward')).resolves.toBeNull();
+    await expect(getCustomDomainForSlug('null-forward')).resolves.toBeNull();
+    await expect(
+      getSlugForCustomDomain('null-reverse.test')
+    ).resolves.toBeNull();
+    await expect(
+      getSlugForCustomDomain('null-reverse.test')
+    ).resolves.toBeNull();
+    expect(mockEdgeGet).toHaveBeenCalledTimes(2);
+
+    vi.advanceTimersByTime(60_001);
+    await expect(getCustomDomainForSlug('null-forward')).resolves.toBe(
+      'recovered-after-null.test'
+    );
+    await expect(getSlugForCustomDomain('null-reverse.test')).resolves.toBe(
+      'recovered-reverse-slug'
+    );
+    expect(mockEdgeGet).toHaveBeenCalledTimes(4);
+  });
+
+  it('does not negative-cache malformed or non-string Edge Config values so corruption retries immediately', async () => {
     mockEdgeGet
       .mockResolvedValueOnce('https://not-a-host.test/path')
-      .mockResolvedValueOnce('merchant/path')
       .mockResolvedValueOnce('valid-forward.test')
+      .mockResolvedValueOnce({ unexpected: true })
+      .mockResolvedValueOnce('valid-after-object.test')
+      .mockResolvedValueOnce('merchant/path')
       .mockResolvedValueOnce('valid-reverse');
 
     await expect(
@@ -90,25 +119,22 @@ describe('domain cache Edge Config negative caching', () => {
     ).resolves.toBeNull();
     await expect(
       getCustomDomainForSlug('malformed-forward-edge')
-    ).resolves.toBeNull();
-    expect(mockEdgeGet).toHaveBeenCalledTimes(1);
-
-    await expect(
-      getSlugForCustomDomain('malformed-reverse-edge.test')
-    ).resolves.toBeNull();
-    await expect(
-      getSlugForCustomDomain('malformed-reverse-edge.test')
-    ).resolves.toBeNull();
-    expect(mockEdgeGet).toHaveBeenCalledTimes(2);
-
-    vi.advanceTimersByTime(60_001);
-    await expect(
-      getCustomDomainForSlug('malformed-forward-edge')
     ).resolves.toBe('valid-forward.test');
+
+    await expect(
+      getCustomDomainForSlug('nonstring-forward-edge')
+    ).resolves.toBeNull();
+    await expect(
+      getCustomDomainForSlug('nonstring-forward-edge')
+    ).resolves.toBe('valid-after-object.test');
+
+    await expect(
+      getSlugForCustomDomain('malformed-reverse-edge.test')
+    ).resolves.toBeNull();
     await expect(
       getSlugForCustomDomain('malformed-reverse-edge.test')
     ).resolves.toBe('valid-reverse');
-    expect(mockEdgeGet).toHaveBeenCalledTimes(4);
+    expect(mockEdgeGet).toHaveBeenCalledTimes(6);
   });
 
   it('never negative-caches thrown Edge Config errors for forward or reverse reads', async () => {

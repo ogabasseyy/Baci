@@ -25,7 +25,6 @@ export const styles = StyleSheet.create({
     borderRadius: RADIUS.md,
   },
   retryButtonText: {
-    color: '#FFFFFF',
     fontSize: TYPOGRAPHY.size.sm,
     fontFamily: TYPOGRAPHY.fontFamily.semiBold,
   },
@@ -52,7 +51,6 @@ export const styles = StyleSheet.create({
     borderRadius: RADIUS.lg,
   },
   manageButtonText: {
-    color: '#FFFFFF',
     fontSize: TYPOGRAPHY.size.md,
     fontFamily: TYPOGRAPHY.fontFamily.semiBold,
   },

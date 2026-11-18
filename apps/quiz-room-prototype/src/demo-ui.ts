@@ -254,17 +254,28 @@ export function renderDemoPageHtml(): string {
 
   async function pollFinalResult() {
     try {
-      const live = await apiJson('/api/quiz/leaderboard/live?eventId=' + encodeURIComponent(session.eventId), {
-        headers: { Authorization: 'Bearer ' + session.bearerToken }
-      });
+      if (session.soloInstantResult || Date.now() >= session.endsAtMs) {
+        await fetch('/api/demo/reconcile', { method: 'POST' });
+      }
       const res = await apiJson('/api/quiz/attempts/' + encodeURIComponent(attemptId) + '/result', {
         headers: { Authorization: 'Bearer ' + session.bearerToken }
       });
       if (res.availability === 'final') {
         document.getElementById('res-title').textContent = 'Final Rank #' + res.rank + ' (Score ' + res.score + '/' + res.totalQuestions + ')';
-        document.getElementById('res-body').textContent = 'Published participants: ' + (live.participantCount ?? '-');
+        let boardText = 'Published';
+        try {
+          const lb = await apiJson('/api/quiz/leaderboard?eventId=' + encodeURIComponent(session.eventId), {
+            headers: { Authorization: 'Bearer ' + session.bearerToken }
+          });
+          const top = (lb.entries || []).slice(0, 5).map((e) => '#' + e.rank + ' ' + e.displayName + ' (' + e.score + ')').join(' | ');
+          boardText = 'Participants: ' + (lb.participantCount ?? '-') + (top ? ' · Top: ' + top : '');
+        } catch {}
+        document.getElementById('res-body').textContent = boardText;
         return;
       }
+      const live = await apiJson('/api/quiz/leaderboard/live?eventId=' + encodeURIComponent(session.eventId), {
+        headers: { Authorization: 'Bearer ' + session.bearerToken }
+      });
       document.getElementById('res-body').textContent = 'Live participants: ' + (live.participantCount ?? 0) + ' · Waiting for final reconciliation...';
     } catch {}
     setTimeout(pollFinalResult, 2000);

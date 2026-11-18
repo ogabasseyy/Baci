@@ -10,6 +10,8 @@ export interface DemoRoundState {
   startsAtMs: number;
   endsAtMs: number;
   nextAssignSeq: number;
+  soloInstantResult?: boolean;
+  reconciledAtMs?: number | null;
 }
 
 export interface DemoTelemetryInput {
@@ -112,16 +114,34 @@ export class DemoStateEngine {
         );
       }
       const seq = round.nextAssignSeq;
+      const prefixedRequest = requestedRoomId
+        ? `${round.eventId}:${requestedRoomId}`
+        : undefined;
       const roomId =
         requestedRoomId && round.roomIds.includes(requestedRoomId)
           ? requestedRoomId
-          : (round.roomIds[seq % round.roomIds.length] ?? 'room-0000');
+          : prefixedRequest && round.roomIds.includes(prefixedRequest)
+            ? prefixedRequest
+            : (round.roomIds[seq % round.roomIds.length] ??
+              `${round.eventId}:room-0000`);
       this.storage.exec(
         `INSERT INTO demo_meta (key, value_json) VALUES ('active_round', ?)
          ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json`,
         JSON.stringify({ ...round, nextAssignSeq: seq + 1 })
       );
       return { round, roomId, playerSeq: seq };
+    });
+  }
+
+  markRoundReconciled(publishedAtMs: number): void {
+    this.storage.transactionSync(() => {
+      const round = this.getActiveRound();
+      if (!round) return;
+      this.storage.exec(
+        `INSERT INTO demo_meta (key, value_json) VALUES ('active_round', ?)
+         ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json`,
+        JSON.stringify({ ...round, reconciledAtMs: publishedAtMs })
+      );
     });
   }
 

@@ -3,11 +3,26 @@ import {
   computeAttemptBundleChecksumSha256,
   QuizBatchPacker,
 } from '../src/batch-packer';
-import type { QuizAttemptBundle } from '../src/contracts';
+import type {
+  QuizAttemptBundle,
+  QuizEventConfig,
+  QuizPrivateResultRecord,
+} from '../src/contracts';
+import {
+  createEmptyControlState,
+  QuizControlStateStore,
+} from '../src/control-state';
+import { EventCoordinatorEngine } from '../src/coordinator';
 import { handleDemoWorkerRoute } from '../src/demo-routes';
 import { DemoStateEngine } from '../src/demo-state';
 import { NodeSqliteAdapter } from '../src/node-sqlite-adapter';
 import { handleQuizQueueBatch } from '../src/queue-consumer';
+import {
+  type PublishedShardEventMetadata,
+  ResultShardEngine,
+} from '../src/result-shard';
+import { QuizRoomEngine } from '../src/room-do';
+import { verifyAdmissionTicket } from '../src/ticket';
 
 async function makeBundle(attemptId: string): Promise<QuizAttemptBundle> {
   const base: Omit<
@@ -252,6 +267,11 @@ describe('Queue consumer and Demo UI / Telemetry routes', () => {
           demoState.recordTelemetry(body as never);
           return Promise.resolve(new Response(JSON.stringify({ ok: true })));
         }
+        if (path === '/internal/demo/active') {
+          return Promise.resolve(
+            new Response(JSON.stringify(demoState.getActiveRound()))
+          );
+        }
         if (path === '/internal/demo/report') {
           return Promise.resolve(
             new Response(JSON.stringify(demoState.buildReport()))
@@ -265,6 +285,14 @@ describe('Queue consumer and Demo UI / Telemetry routes', () => {
       },
       freezeCoordinator: () => Promise.resolve(),
       refreshControlState: () => Promise.resolve(),
+      freezeAndSweepCoordinator: () =>
+        Promise.resolve({ persistedCloseAtMs: Date.now() }),
+      fetchRoomBundles: () => Promise.resolve([]),
+      materializeShard: () => Promise.resolve(),
+      markRoundReconciled: (ms: number) => {
+        demoState.markRoundReconciled(ms);
+        return Promise.resolve();
+      },
     };
 
     const pageRes = await handleDemoWorkerRoute(
@@ -298,11 +326,18 @@ describe('Queue consumer and Demo UI / Telemetry routes', () => {
     );
     expect(setupRes?.status).toBe(200);
     expect(initializedRooms).toHaveLength(13);
+    expect(initializedRooms[0]).toBe(
+      '11111111-1111-4111-8111-000000000003:room-0000'
+    );
 
     const checkInRes = await handleDemoWorkerRoute(
       new Request('https://demo.test/api/demo/check-in', {
         method: 'POST',
-        body: JSON.stringify({ carrier: 'MTN', nickname: 'AdaNG' }),
+        body: JSON.stringify({
+          carrier: 'MTN',
+          nickname: 'AdaNG',
+          roomId: 'room-0000',
+        }),
       }),
       new URL('https://demo.test/api/demo/check-in'),
       dispatchEnv
@@ -313,7 +348,9 @@ describe('Queue consumer and Demo UI / Telemetry routes', () => {
       ticket: string;
       bearerToken: string;
     };
-    expect(checkInJson.roomId).toBe('room-0000');
+    expect(checkInJson.roomId).toBe(
+      '11111111-1111-4111-8111-000000000003:room-0000'
+    );
     expect(checkInJson.ticket.startsWith('bqt1.')).toBe(true);
 
     for (const ms of [120, 240, 880, 1250]) {
@@ -352,5 +389,286 @@ describe('Queue consumer and Demo UI / Telemetry routes', () => {
     );
     expect(await reportHtmlRes?.text()).toContain('MTN');
     adapter.close();
+  });
+
+  it('auto-reconciles soloInstantResult without sealing rooms and auto-reconciles group rounds once endsAtMs passes', async () => {
+    const demoAdapter = new NodeSqliteAdapter(':memory:');
+    const demoState = new DemoStateEngine(demoAdapter);
+    const rooms = new Map<
+      string,
+      { engine: QuizRoomEngine; adapter: NodeSqliteAdapter }
+    >();
+    const shards = new Map<
+      string,
+      { engine: ResultShardEngine; adapter: NodeSqliteAdapter }
+    >();
+    const coordAdapter = new NodeSqliteAdapter(':memory:');
+    const coordinator = new EventCoordinatorEngine({
+      storage: coordAdapter,
+      roomClient: {
+        sealRoom: async ({
+          eventId,
+          roomId,
+          persistedCloseAtMs,
+          mode,
+          endsAtMs,
+        }) => {
+          const r = rooms.get(roomId);
+          if (!r) throw new Error(`Missing room ${roomId}`);
+          return r.engine.seal(persistedCloseAtMs, mode, { eventId, endsAtMs });
+        },
+      },
+    });
+    const controlState = new QuizControlStateStore(
+      createEmptyControlState(Date.now(), 1)
+    );
+
+    const env = {
+      QUIZ_TICKET_SECRET: 'reconcile-ticket-secret',
+      QUIZ_JWT_SECRET: 'reconcile-jwt-secret',
+      QUIZ_INTERNAL_COORDINATOR_SECRET: 'reconcile-admin-secret',
+      RESULT_SHARD_COUNT: '4',
+      callDemoDo: (path: string, body?: unknown) => {
+        if (path === '/internal/demo/setup-round') {
+          demoState.setActiveRound(body as never);
+          return Promise.resolve(
+            new Response(JSON.stringify({ ok: true, ...(body as object) }))
+          );
+        }
+        if (path === '/internal/demo/active') {
+          return Promise.resolve(
+            new Response(JSON.stringify(demoState.getActiveRound()))
+          );
+        }
+        if (path === '/internal/demo/check-in') {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify(
+                demoState.allocateCheckIn((body as { roomId?: string })?.roomId)
+              )
+            )
+          );
+        }
+        return Promise.resolve(new Response('not found', { status: 404 }));
+      },
+      initRoom: (roomId: string, config: QuizEventConfig) => {
+        const a = new NodeSqliteAdapter(':memory:');
+        const engine = new QuizRoomEngine({
+          roomId,
+          storage: a,
+          controlState,
+        });
+        engine.initialize(config);
+        rooms.set(roomId, { engine, adapter: a });
+        return Promise.resolve();
+      },
+      freezeCoordinator: (params: {
+        eventId: string;
+        endsAtMs: number;
+        expectedRoomIds: readonly string[];
+      }) => {
+        coordinator.freezeExpectedRooms(params);
+        return Promise.resolve();
+      },
+      refreshControlState: (_eventId: string, nowMs: number) => {
+        controlState.applySnapshot(
+          createEmptyControlState(nowMs, controlState.getVersion() + 1)
+        );
+        return Promise.resolve();
+      },
+      freezeAndSweepCoordinator: async (params: {
+        eventId: string;
+        endsAtMs: number;
+        roomIds: readonly string[];
+        nowMs: number;
+      }) => {
+        coordinator.freezeExpectedRooms({
+          eventId: params.eventId,
+          endsAtMs: params.endsAtMs,
+          expectedRoomIds: params.roomIds,
+        });
+        const snap = await coordinator.sweepClose({
+          eventId: params.eventId,
+          nowMs: params.nowMs,
+        });
+        return { persistedCloseAtMs: snap.persistedCloseAtMs };
+      },
+      fetchRoomBundles: async (roomId: string) => {
+        const r = rooms.get(roomId);
+        return r ? r.engine.exportCompletedBundles() : [];
+      },
+      materializeShard: (
+        shardName: string,
+        eventMeta: PublishedShardEventMetadata,
+        records: readonly QuizPrivateResultRecord[]
+      ) => {
+        let entry = shards.get(shardName);
+        if (!entry) {
+          const sa = new NodeSqliteAdapter(':memory:');
+          entry = {
+            adapter: sa,
+            engine: new ResultShardEngine({
+              shardIndex: 0,
+              storage: sa,
+              controlState,
+            }),
+          };
+          shards.set(shardName, entry);
+        }
+        entry.engine.materializeResultsBatch(eventMeta, records);
+        return Promise.resolve();
+      },
+      markRoundReconciled: (ms: number) => {
+        demoState.markRoundReconciled(ms);
+        return Promise.resolve();
+      },
+    };
+
+    // 1) Solo warmup mode (`soloInstantResult: true`) reconciles immediately WITHOUT sealing rooms
+    const soloSetup = await handleDemoWorkerRoute(
+      new Request('https://demo.test/api/demo/admin/setup-round', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer reconcile-admin-secret' },
+        body: JSON.stringify({
+          round: 1,
+          eventId: 'evt-solo-1',
+          soloInstantResult: true,
+        }),
+      }),
+      new URL('https://demo.test/api/demo/admin/setup-round'),
+      env
+    );
+    expect(soloSetup?.status).toBe(200);
+    const soloRoom = rooms.get('evt-solo-1:room-0000')?.engine;
+    if (!soloRoom) throw new Error('Expected soloRoom');
+
+    const playPlayer = async (nick: string, correctCount: number) => {
+      const ciRes = await handleDemoWorkerRoute(
+        new Request('https://demo.test/api/demo/check-in', {
+          method: 'POST',
+          body: JSON.stringify({ carrier: 'MTN', nickname: nick }),
+        }),
+        new URL('https://demo.test/api/demo/check-in'),
+        env
+      );
+      const ci = (await ciRes?.json()) as {
+        ticket: string;
+        roomId: string;
+        soloInstantResult: boolean;
+      };
+      expect(ci.soloInstantResult).toBe(true);
+      const ticket = await verifyAdmissionTicket(ci.ticket, {
+        secret: 'reconcile-ticket-secret',
+      });
+      const r = rooms.get(ci.roomId)?.engine;
+      if (!r) throw new Error('Missing room');
+      let st = r.startAttempt({
+        ticket,
+        integrityTier: 'basic',
+        acceptedRulesVersion: 'live-v1',
+        termsAccepted: true,
+        startRequestId: `req-${nick}`,
+        appVersion: 'demo-1',
+        platform: 'web',
+      });
+      for (let q = 0; q < 10; q += 1) {
+        st = await r.submitAnswer({
+          ticket,
+          attemptId: st.attemptId,
+          questionId: st.question?.id ?? '',
+          answer: q < correctCount ? 'opt-a' : 'opt-b',
+        });
+      }
+      return { attemptId: st.attemptId, userId: ticket.userId };
+    };
+
+    const p1 = await playPlayer('SoloOne', 9);
+    const rec1 = await handleDemoWorkerRoute(
+      new Request('https://demo.test/api/demo/reconcile', { method: 'POST' }),
+      new URL('https://demo.test/api/demo/reconcile'),
+      env
+    );
+    expect(rec1?.status).toBe(200);
+    expect(await rec1?.json()).toMatchObject({
+      reconciled: true,
+      mode: 'solo_instant',
+      participantCount: 1,
+    });
+    // Room MUST still be unsealed so a second solo tester can play!
+    expect(soloRoom.getSealManifest()).toBeNull();
+
+    const p2 = await playPlayer('SoloTwo', 10);
+    await handleDemoWorkerRoute(
+      new Request('https://demo.test/api/demo/reconcile', { method: 'POST' }),
+      new URL('https://demo.test/api/demo/reconcile'),
+      env
+    );
+    // Verify p2 placed #1 (score 10) and p1 is #2 (score 9) in shard
+    const shardResults = Array.from(shards.values());
+    expect(shardResults.length).toBeGreaterThanOrEqual(1);
+    let foundP2Rank = 0;
+    for (const s of shardResults) {
+      const r = await s.engine.getAttemptResult({
+        attemptId: p2.attemptId,
+        callerUserId: p2.userId,
+      });
+      if (r.availability === 'final') foundP2Rank = r.rank;
+    }
+    expect(foundP2Rank).toBe(1);
+    expect(p1.attemptId).not.toBe(p2.attemptId);
+
+    // 2) Group timed mode (`soloInstantResult: false`): pending before endsAtMs, seals on admin finalize-round override
+    await handleDemoWorkerRoute(
+      new Request('https://demo.test/api/demo/admin/setup-round', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer reconcile-admin-secret' },
+        body: JSON.stringify({
+          round: 2,
+          eventId: 'evt-group-2',
+          durationMs: 60_000,
+          soloInstantResult: false,
+        }),
+      }),
+      new URL('https://demo.test/api/demo/admin/setup-round'),
+      env
+    );
+
+    const pendingRes = await handleDemoWorkerRoute(
+      new Request('https://demo.test/api/demo/reconcile', { method: 'POST' }),
+      new URL('https://demo.test/api/demo/reconcile'),
+      env
+    );
+    expect(pendingRes?.status).toBe(202);
+    expect(await pendingRes?.json()).toMatchObject({
+      reconciled: false,
+      mode: 'pending',
+    });
+
+    // Admin finalize-round with explicit { eventId, roomIds } override seals & reconciles immediately
+    const finRes = await handleDemoWorkerRoute(
+      new Request('https://demo.test/api/demo/admin/finalize-round', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer reconcile-admin-secret' },
+        body: JSON.stringify({
+          eventId: 'evt-group-2',
+          roomIds: ['evt-group-2:room-0000'],
+        }),
+      }),
+      new URL('https://demo.test/api/demo/admin/finalize-round'),
+      env
+    );
+    expect(finRes?.status).toBe(200);
+    expect(await finRes?.json()).toMatchObject({
+      reconciled: true,
+      mode: 'group_sealed',
+    });
+    expect(
+      rooms.get('evt-group-2:room-0000')?.engine.getSealManifest()
+    ).not.toBeNull();
+
+    for (const r of rooms.values()) r.adapter.close();
+    for (const s of shards.values()) s.adapter.close();
+    coordAdapter.close();
+    demoAdapter.close();
   });
 });

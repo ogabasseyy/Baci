@@ -1602,6 +1602,44 @@ export class QuizRoomEngine {
   }
 
   /**
+   * Exports all terminalized attempt bundles currently stored in this room
+   * (completed attempts during solo warmup, or all sealed attempts after close).
+   */
+  async exportCompletedBundles(): Promise<QuizAttemptBundle[]> {
+    const raw = this.storage.transactionSync(() => {
+      this.ensureSchemaSync();
+      const config = this.readMetaSync<QuizEventConfig>('config');
+      if (!config) return { config: null, items: [] };
+      const rows = this.storage.exec<AttemptRow>(
+        `SELECT * FROM room_attempts
+         WHERE status IN ('submitted', 'scored', 'event_cancelled')
+           AND submitted_at_ms IS NOT NULL
+         ORDER BY attempt_id ASC`
+      ).rows;
+      const items = rows.map((attempt) =>
+        this.readAttemptAndAnswersSync(attempt)
+      );
+      return { config, items };
+    });
+
+    if (!raw.config || raw.items.length === 0) {
+      return [];
+    }
+
+    const bundles: QuizAttemptBundle[] = [];
+    for (const item of raw.items) {
+      bundles.push(
+        await this.finalizeBundleChecksum(
+          item.attempt,
+          item.answerRows,
+          raw.config
+        )
+      );
+    }
+    return bundles;
+  }
+
+  /**
    * Single chained alarm handler (`MIN(next_scoreboard_tick, next_flush_tick, ends_at)`).
    * At `nowMs >= config.endsAtMs`, stops answer intake and flushes completed bundles
    * without sealing — ONLY the Coordinator supplies `persistedCloseAtMs` to `seal()`.

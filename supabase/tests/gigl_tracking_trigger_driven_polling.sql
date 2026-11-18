@@ -2,7 +2,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 \ir pgtap_public_execute.sql
 SET search_path = public, extensions;
-SELECT plan(18);
+SELECT plan(20);
 GRANT USAGE ON SCHEMA extensions TO gigl_tracking_worker;
 
 -- GIG tracking polls only when something triggers it: a booking starts a

@@ -16,6 +16,7 @@ import { dispatchStorefrontProductPurge } from './dispatch-storefront-purge';
 import { flushOriginCacheRevalidations } from './flush-origin-cache-revalidations';
 import { hasCompleteScopedProductSlugs } from './has-complete-scoped-product-slugs';
 import { resolveAuthoritativeMerchantSlug } from './resolve-authoritative-merchant-slug';
+import { revalidateWithoutProducts } from './revalidate-without-products';
 
 /**
  * Internal product-cache revalidation endpoint.
@@ -133,40 +134,21 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }) === true;
 
   // Trusted internal callers (INTERNAL_API_SECRET) pass pre-validated slug chunks here.
-  const isScopedSlugOnly =
-    !hasProducts &&
-    !purgeWholeStorefront &&
-    callerOmitMerchantWidePdpDetails === true &&
-    explicitSlugsRevalidated;
-  const needsBroadFallbackInBlogMode =
-    callerOmitMerchantWidePdpDetails === false ||
-    (callerOmitMerchantWidePdpDetails === true &&
-      !hasProducts &&
-      !purgeWholeStorefront);
-  if (isScopedSlugOnly) {
-    expireProductBlogCache(merchantId);
-    revalidateProducts(merchantId, undefined, {
-      expireImmediately: true,
-      omitMerchantWidePdpDetails: true,
-    });
-  } else if (shouldExpireProductBlogCache) {
-    expireProductBlogCache(merchantId);
-    if (
-      needsBroadFallbackInBlogMode &&
-      revalidateProducts(merchantId, undefined, { expireImmediately: true }) ===
-        false
-    ) {
-      return NextResponse.json(
-        { error: 'Failed to expire merchant-wide product caches' },
-        { status: 500 }
-      );
-    }
-  } else if (!hasProducts || purgeWholeStorefront) {
-    if (callerOmitMerchantWidePdpDetails === true) {
-      revalidateProducts(merchantId, undefined, { expireImmediately: true });
-    } else {
-      revalidateProducts(merchantId);
-    }
+  if (
+    !revalidateWithoutProducts({
+      merchantId,
+      hasProducts,
+      purgeWholeStorefront,
+      hasExplicitProductSlugs,
+      explicitSlugsRevalidated,
+      callerOmitMerchantWidePdpDetails,
+      shouldExpireProductBlogCache,
+    })
+  ) {
+    return NextResponse.json(
+      { error: 'Failed to expire merchant-wide product caches' },
+      { status: 500 }
+    );
   }
   if (hasProducts && products) {
     let revalidatedDeferredProducts = false;

@@ -175,4 +175,25 @@ describe('internal product revalidation blog expiry', () => {
       error: 'Failed to expire merchant-wide product caches',
     });
   });
+
+  it('returns 500 when scoped worker hard expiry fails in blog-cache mode', async () => {
+    const merchantId = 'merchant-1';
+    mockRevalidateProducts
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(false);
+
+    const response = await POST(
+      request({
+        merchantId,
+        expireProductBlogCache: true,
+        productSlugs: ['iphone-15'],
+        omitMerchantWidePdpDetails: true,
+      })
+    );
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({
+      error: 'Failed to expire merchant-wide product caches',
+    });
+  });
 });

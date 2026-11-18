@@ -33,7 +33,9 @@ function fixture() {
   });
   const fetchImpl = vi.fn(
     async (url: RequestInfo | URL, init?: RequestInit) => {
-      expect(url).toBe('https://mcp.usebaci.com/internal/owner/attest');
+      expect(url).toBe(
+        'https://owner.baci-internal.invalid/internal/owner/attest'
+      );
       return handler(
         new Request('https://verifier.baci-internal.invalid/v1/attest', init)
       );

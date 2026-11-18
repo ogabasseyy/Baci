@@ -101,7 +101,7 @@ export function createOwnerPreviewBridgeClient(settings: {
       .update(`owner-preview/v1\n${body}`)
       .digest('hex');
     const response = await settings.fetch(
-      'https://mcp.usebaci.com/internal/owner/preview',
+      'https://owner.baci-internal.invalid/internal/owner/preview',
       {
         method: 'POST',
         headers: {

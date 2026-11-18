@@ -35,7 +35,7 @@ it('sends only the authenticated owner and approval id under a dedicated signatu
     receiptId: 'must-not-be-trusted',
   });
   const [url, init] = fetch.mock.calls[0] as unknown as [string, RequestInit];
-  expect(url).toBe('https://mcp.usebaci.com/internal/owner/public');
+  expect(url).toBe('https://owner.baci-internal.invalid/internal/owner/public');
   const body = JSON.parse(String(init.body));
   expect(body).toMatchObject({
     approvalId,

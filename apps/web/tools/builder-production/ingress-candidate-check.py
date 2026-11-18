@@ -95,7 +95,7 @@ def main():
             confused = curl('auth.localhost', '/internal/owner/preview', '-H', 'Host: owner.localhost')
             assert not confused.stdout.startswith('OWNER|'), 'Owner route bypassed client-certificate authentication'
             owner = curl('owner.localhost', '/internal/owner/preview', '--cert', str(client), '--key', str(client_key))
-            assert owner.stdout.startswith('OWNER|mcp.usebaci.com|127.0.0.1\n200'), owner.stderr
+            assert owner.stdout.startswith('OWNER|owner.baci-internal.invalid|127.0.0.1\n200'), owner.stderr
             assert curl('owner.localhost', '/builder/mcp', '--cert', str(client), '--key', str(client_key)).stdout.endswith('\n404')
             for server in (servers[0], servers[3]):
                 server.shutdown()

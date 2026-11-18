@@ -34,7 +34,7 @@ export async function send(
         method: options.method ?? 'POST',
         signal: options.signal,
         headers: {
-          host: options.host ?? 'mcp.usebaci.com',
+          host: options.host ?? 'owner.baci-internal.invalid',
           'content-type': 'application/json',
           'content-length': Buffer.byteLength(options.body ?? '{}'),
           ...(options.signature === null

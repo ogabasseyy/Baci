@@ -86,14 +86,17 @@ it('uses normal authenticated RLS for owner preview handoff and denies another u
         .update(`owner-preview/v1\n${body}`)
         .digest('hex');
       return bridge(
-        new Request('https://mcp.usebaci.com/internal/owner/preview', {
-          method: 'POST',
-          headers: {
-            'content-type': 'application/json',
-            'x-baci-owner-signature': signature,
-          },
-          body,
-        })
+        new Request(
+          'https://owner.baci-internal.invalid/internal/owner/preview',
+          {
+            method: 'POST',
+            headers: {
+              'content-type': 'application/json',
+              'x-baci-owner-signature': signature,
+            },
+            body,
+          }
+        )
       );
     };
     const nonce = 'f'.repeat(64);

@@ -88,7 +88,7 @@ it('forwards a verified user session over the fixed signed boundary and returns 
   expect(f.owner.auth.getUser).toHaveBeenCalledWith(token);
   expect(f.fetchImpl).toHaveBeenCalledOnce();
   expect(f.fetchImpl.mock.calls[0][0]).toBe(
-    'https://mcp.usebaci.com/internal/owner/preview'
+    'https://owner.baci-internal.invalid/internal/owner/preview'
   );
   expect(f.fetchImpl.mock.calls[0][1]).toMatchObject({
     redirect: 'error',

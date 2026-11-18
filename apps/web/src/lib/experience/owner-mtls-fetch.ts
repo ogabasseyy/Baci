@@ -3,13 +3,16 @@ import { request } from 'node:https';
 import { createSecureContext } from 'node:tls';
 
 const paths = new Map([
-  ['https://mcp.usebaci.com/internal/owner/preview', 'x-baci-owner-signature'],
   [
-    'https://mcp.usebaci.com/internal/owner/attest',
+    'https://owner.baci-internal.invalid/internal/owner/preview',
+    'x-baci-owner-signature',
+  ],
+  [
+    'https://owner.baci-internal.invalid/internal/owner/attest',
     'x-baci-verifier-signature',
   ],
   [
-    'https://mcp.usebaci.com/internal/owner/public',
+    'https://owner.baci-internal.invalid/internal/owner/public',
     'x-baci-verifier-signature',
   ],
 ]);

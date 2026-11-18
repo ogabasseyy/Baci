@@ -41,7 +41,7 @@ export function createVerifierAttestationClient(settings: {
       .update(`verifier-attest/v1\n${body}`)
       .digest('hex');
     const response = await settings
-      .fetch('https://mcp.usebaci.com/internal/owner/attest', {
+      .fetch('https://owner.baci-internal.invalid/internal/owner/attest', {
         method: 'POST',
         headers: {
           'content-type': 'application/json',

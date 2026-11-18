@@ -120,7 +120,7 @@ it('uses a verified client certificate for fixed owner routes and rejects other 
       ca: readFileSync(file('ca.pem'), 'utf8'),
     });
     const response = await fetch(
-      'https://mcp.usebaci.com/internal/owner/preview',
+      'https://owner.baci-internal.invalid/internal/owner/preview',
       {
         method: 'POST',
         headers: {
@@ -147,7 +147,10 @@ it('uses a verified client certificate for fixed owner routes and rejects other 
       ca: readFileSync(file('ca.pem'), 'utf8'),
     });
     await expect(
-      untrustedClient('https://mcp.usebaci.com/internal/owner/preview', init)
+      untrustedClient(
+        'https://owner.baci-internal.invalid/internal/owner/preview',
+        init
+      )
     ).rejects.toThrow();
     const untrustedServer = createOwnerMtlsFetch({
       origin: `https://localhost:${address.port}`,
@@ -156,20 +159,23 @@ it('uses a verified client certificate for fixed owner routes and rejects other 
       ca: readFileSync(file('rogue.pem'), 'utf8'),
     });
     await expect(
-      untrustedServer('https://mcp.usebaci.com/internal/owner/preview', init)
+      untrustedServer(
+        'https://owner.baci-internal.invalid/internal/owner/preview',
+        init
+      )
     ).rejects.toThrow();
     expect(accepted).toBe(1);
     mode = 'redirect';
     await expect(
-      fetch('https://mcp.usebaci.com/internal/owner/preview', init)
+      fetch('https://owner.baci-internal.invalid/internal/owner/preview', init)
     ).rejects.toThrow('OWNER_MTLS_REDIRECT');
     mode = 'oversized';
     await expect(
-      fetch('https://mcp.usebaci.com/internal/owner/preview', init)
+      fetch('https://owner.baci-internal.invalid/internal/owner/preview', init)
     ).rejects.toThrow('OWNER_MTLS_RESPONSE_TOO_LARGE');
     mode = 'pending';
     await expect(
-      fetch('https://mcp.usebaci.com/internal/owner/preview', {
+      fetch('https://owner.baci-internal.invalid/internal/owner/preview', {
         ...init,
         signal: AbortSignal.timeout(100),
       })

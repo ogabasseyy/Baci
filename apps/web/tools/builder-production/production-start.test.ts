@@ -91,7 +91,7 @@ it('wires restricted nonce admission, independent verifier and fixed artifact st
   const fetch = f.attest.mock.calls.at(-1)?.[0]?.fetch;
   if (!fetch) throw Error('MISSING_LOCAL_VERIFIER_FETCH');
   const response = await fetch(
-    'https://mcp.usebaci.com/internal/owner/attest',
+    'https://owner.baci-internal.invalid/internal/owner/attest',
     { method: 'POST', body: '{}' }
   );
   expect(response.status).toBe(204);

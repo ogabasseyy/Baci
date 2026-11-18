@@ -71,7 +71,10 @@ export async function startProductionBuilder(input: unknown) {
           createVerifierAttestationClient({
             key: config.verifierKey,
             fetch: async (input, init) => {
-              if (input !== 'https://mcp.usebaci.com/internal/owner/attest')
+              if (
+                input !==
+                'https://owner.baci-internal.invalid/internal/owner/attest'
+              )
                 throw Error('INVALID_VERIFIER_TARGET');
               return await forwardAttestation(
                 new Request(

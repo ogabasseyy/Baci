@@ -74,12 +74,13 @@ export async function launchThroughOwnerBridge(input: {
       executionOrigin: input.prerender.executionOrigin,
       fetch: (url, init) => {
         if (
-          url !== 'https://mcp.usebaci.com/internal/owner/preview' ||
+          url !==
+            'https://owner.baci-internal.invalid/internal/owner/preview' ||
           typeof init?.body !== 'string'
         )
           throw Error('INVALID_FIXTURE_REQUEST');
         const headers = new Headers(init.headers);
-        headers.set('host', 'mcp.usebaci.com');
+        headers.set('host', 'owner.baci-internal.invalid');
         return new Promise<Response>((resolve, reject) => {
           const req = nodeRequest(
             {

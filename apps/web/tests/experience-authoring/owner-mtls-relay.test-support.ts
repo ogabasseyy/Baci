@@ -73,7 +73,10 @@ export async function startSyntheticOwnerMtlsRelay(ownerPort: number) {
             port: ownerPort,
             path: incoming.url,
             method: incoming.method,
-            headers: { ...incoming.headers, host: 'mcp.usebaci.com' },
+            headers: {
+              ...incoming.headers,
+              host: 'owner.baci-internal.invalid',
+            },
           },
           (response) => {
             outgoing.writeHead(response.statusCode ?? 502, response.headers);

@@ -5,7 +5,11 @@ import { BUILDER_MCP_HOST } from '../src/lib/builder-connector/resource';
 import { createBuilderMcpNodeServer } from './node';
 import { createOwnerInternalNodeServer } from './owner-internal-node';
 
-async function post(port: number, path: string, authority = 'mcp.usebaci.com') {
+async function post(
+  port: number,
+  path: string,
+  authority = 'owner.baci-internal.invalid'
+) {
   return await new Promise<number>((resolve, reject) => {
     const req = request(
       {
@@ -55,6 +59,9 @@ it('separates owner routes when explicitly composed on distinct local listeners'
     expect(
       await post(internalPort, '/internal/owner/preview', BUILDER_MCP_HOST)
     ).toBe(404);
+    expect(
+      await post(internalPort, '/internal/owner/preview', 'mcp.usebaci.com')
+    ).toBe(404);
     expect(owner).not.toHaveBeenCalled();
     expect(await post(internalPort, '/builder/mcp')).toBe(404);
     expect(await post(internalPort, '/internal/owner/attest')).toBe(404);
@@ -80,7 +87,7 @@ it('routes signed public verification only through the owner listener', async ()
   if (!publicAddress || typeof publicAddress === 'string')
     throw Error('fixture');
   const port = await owner.listen(0);
-  const send = (target: number, authority = 'mcp.usebaci.com') =>
+  const send = (target: number, authority = 'owner.baci-internal.invalid') =>
     new Promise<number>((resolve, reject) => {
       const req = request(
         {
@@ -169,7 +176,7 @@ it('waits for admitted owner work to settle during shutdown', async () => {
           path: '/internal/owner/preview',
           method: 'POST',
           headers: {
-            host: 'mcp.usebaci.com',
+            host: 'owner.baci-internal.invalid',
             'content-type': 'application/json',
             'x-baci-owner-signature': 'a'.repeat(64),
           },

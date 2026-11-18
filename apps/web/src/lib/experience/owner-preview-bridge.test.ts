@@ -20,18 +20,21 @@ const body = () => ({
 });
 function request(input: unknown, signature?: string) {
   const text = JSON.stringify(input);
-  return new Request('https://mcp.usebaci.com/internal/owner/preview', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-baci-owner-signature':
-        signature ??
-        createHmac('sha256', key)
-          .update(`owner-preview/v1\n${text}`)
-          .digest('hex'),
-    },
-    body: text,
-  });
+  return new Request(
+    'https://owner.baci-internal.invalid/internal/owner/preview',
+    {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-baci-owner-signature':
+          signature ??
+          createHmac('sha256', key)
+            .update(`owner-preview/v1\n${text}`)
+            .digest('hex'),
+      },
+      body: text,
+    }
+  );
 }
 function fixture() {
   const seen = new Set<string>();

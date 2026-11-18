@@ -70,7 +70,7 @@ it('forwards a signed public-verification request over loopback and reauthentica
               method: 'POST',
               headers: {
                 ...(init?.headers as Record<string, string>),
-                host: 'mcp.usebaci.com',
+                host: 'owner.baci-internal.invalid',
               },
             },
             (res) => {

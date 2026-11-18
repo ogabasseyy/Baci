@@ -37,7 +37,7 @@ export function createVerifierPublicClient(settings: {
       .update(`verifier-public/v1\n${body}`)
       .digest('hex');
     const response = await settings.fetch(
-      'https://mcp.usebaci.com/internal/owner/public',
+      'https://owner.baci-internal.invalid/internal/owner/public',
       {
         method: 'POST',
         headers: {

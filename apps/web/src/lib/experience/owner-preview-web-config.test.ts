@@ -36,6 +36,8 @@ describe('owner preview web configuration', () => {
     { previewOrigin: undefined },
     { ownerOrigin: undefined },
     { ownerOrigin: 'https://mcp.usebaci.com' },
+    { ownerOrigin: 'https://builder-mcp.usebaci.com' },
+    { ownerOrigin: 'https://owner.baci-internal.invalid' },
     { ownerCert: undefined },
     { ownerKey: undefined },
   ])('fails closed on invalid configuration: %j', (invalid) => {

@@ -53,7 +53,7 @@ builder-mcp.usebaci.com {
 	@owner path /internal/owner/preview /internal/owner/attest /internal/owner/public
 	handle @owner {
 		reverse_proxy 127.0.0.1:{$BACI_OWNER_PORT} {
-			header_up Host mcp.usebaci.com
+			header_up Host owner.baci-internal.invalid
 			header_up X-Forwarded-For {remote_host}
 		}
 	}

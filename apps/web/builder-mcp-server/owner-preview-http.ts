@@ -17,7 +17,7 @@ export function createOwnerPreviewHttpHandler(
     throw Error('INVALID_OWNER_TIMEOUT');
   return createOwnerHttpHandler(bridge, {
     path: '/internal/owner/preview',
-    target: 'https://mcp.usebaci.com/internal/owner/preview',
+    target: 'https://owner.baci-internal.invalid/internal/owner/preview',
     signature: 'x-baci-owner-signature',
     timeoutMs,
     admit: options.admit,
@@ -78,7 +78,7 @@ function createOwnerHttpHandler(
     if (
       req.method !== 'POST' ||
       req.url !== binding.path ||
-      req.headers.host !== 'mcp.usebaci.com' ||
+      req.headers.host !== 'owner.baci-internal.invalid' ||
       req.rawHeaders.filter(
         (_, i) => i % 2 === 0 && req.rawHeaders[i].toLowerCase() === 'host'
       ).length !== 1 ||

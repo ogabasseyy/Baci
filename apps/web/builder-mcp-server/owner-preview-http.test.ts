@@ -198,7 +198,9 @@ it('does not consume a valid nonce when all work slots are full', async () => {
 
 it('forwards only the fixed owner preview path, signed body and no browser cookies', async () => {
   const bridge = vi.fn(async (r: Request) => {
-    expect(r.url).toBe('https://mcp.usebaci.com/internal/owner/preview');
+    expect(r.url).toBe(
+      'https://owner.baci-internal.invalid/internal/owner/preview'
+    );
     expect(r.headers.get('x-baci-owner-signature')).toBe('a'.repeat(64));
     expect(r.headers.get('cookie')).toBeNull();
     expect(await r.text()).toBe('{}');

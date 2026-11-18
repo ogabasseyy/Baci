@@ -40,12 +40,12 @@ export async function confirmSyntheticDraft(input: {
       key: input.key,
       fetch: (url, init) => {
         if (
-          url !== 'https://mcp.usebaci.com/internal/owner/attest' ||
+          url !== 'https://owner.baci-internal.invalid/internal/owner/attest' ||
           typeof init?.body !== 'string'
         )
           throw Error('INVALID_FIXTURE_REQUEST');
         const headers = new Headers(init.headers);
-        headers.set('host', 'mcp.usebaci.com');
+        headers.set('host', 'owner.baci-internal.invalid');
         return new Promise<Response>((resolve, reject) => {
           const req = request(
             {

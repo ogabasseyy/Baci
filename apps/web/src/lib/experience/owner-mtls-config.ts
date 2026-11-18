@@ -17,6 +17,7 @@ export function configuredOwnerMtlsFetch(settings: {
       !/^[a-z0-9-]+\.usebaci\.com$/.test(host) ||
       [
         'mcp.usebaci.com',
+        'builder-mcp.usebaci.com',
         'auth.usebaci.com',
         'builder-auth.usebaci.com',
       ].includes(host)

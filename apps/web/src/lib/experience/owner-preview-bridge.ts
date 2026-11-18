@@ -60,7 +60,7 @@ export function createOwnerPreviewBridge(settings: {
       const url = new URL(request.url);
       if (
         request.method !== 'POST' ||
-        url.origin !== 'https://mcp.usebaci.com' ||
+        url.origin !== 'https://owner.baci-internal.invalid' ||
         url.pathname !== '/internal/owner/preview' ||
         url.search ||
         url.hash

@@ -28,7 +28,7 @@ export async function sendVerifierTwice(
             path: '/internal/owner/attest',
             method: 'POST',
             headers: {
-              host: 'mcp.usebaci.com',
+              host: 'owner.baci-internal.invalid',
               'content-type': 'application/json',
               'x-baci-verifier-signature': signature,
             },

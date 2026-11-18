@@ -151,7 +151,7 @@ it('routes the internal owner preview only when explicitly installed', async () 
           path: '/internal/owner/preview',
           method: 'POST',
           headers: {
-            host: 'mcp.usebaci.com',
+            host: 'owner.baci-internal.invalid',
             'content-type': 'application/json',
             'x-baci-owner-signature': 'a'.repeat(64),
           },
@@ -192,7 +192,7 @@ it('routes signed attestation only when explicitly installed', async () => {
           path: '/internal/owner/attest',
           method: 'POST',
           headers: {
-            host: 'mcp.usebaci.com',
+            host: 'owner.baci-internal.invalid',
             'content-type': 'application/json',
             'x-baci-verifier-signature': 'a'.repeat(64),
             cookie: 'secret=never-forward',
@@ -246,7 +246,7 @@ it('does not treat the request-body timeout as a completed attestation response 
           path: '/internal/owner/attest',
           method: 'POST',
           headers: {
-            host: 'mcp.usebaci.com',
+            host: 'owner.baci-internal.invalid',
             'content-type': 'application/json',
             'x-baci-verifier-signature': 'a'.repeat(64),
           },

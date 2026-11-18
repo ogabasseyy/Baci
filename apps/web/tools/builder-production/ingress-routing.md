@@ -4,8 +4,8 @@ The builder resource is `https://builder-mcp.usebaci.com/builder/mcp`. The publi
 MCP and OAuth protected-resource URLs terminate HTTPS at Contabo Caddy and
 forward to the dedicated loopback MCP listener. The resource metadata advertises
 `https://builder-auth.usebaci.com` as the authorization server. The commerce
-connector continues to use `mcp.usebaci.com`. The owner bridge retains its
-`mcp.usebaci.com` logical Host through the separate owner mTLS vhost.
+connector continues to use `mcp.usebaci.com`. The owner bridge retains the
+`owner.baci-internal.invalid` logical Host through the separate owner mTLS vhost.
 
 `Caddyfile.candidate` routes only these two paths on the public MCP host:
 

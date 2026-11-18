@@ -462,6 +462,59 @@ async function runEdgeScaleBenchmark({
       `SELECT pg_wal_lsn_diff('${walAfterIngest}'::pg_lsn, '${walBeforeIngest}'::pg_lsn)::bigint;`
     )
   );
+  const totalAnswersStaged = Number(
+    await psqlQueryAsync(
+      `SELECT COALESCE(sum(answer_count), 0)::bigint FROM private.quiz_edge_attempt_batches WHERE event_id = '${eventId}'::uuid;`
+    )
+  );
+
+  // Streaming incremental pre-score BEFORE seal (95% of batches, leaving 5% close tail)
+  const preScoreTargetBatches = Math.max(1, Math.floor(totalBatches * 0.95));
+  let preScoredBatches = 0;
+  let preScoredAttempts = 0;
+  const walBeforePreScore = await psqlQueryAsync(
+    `SELECT pg_current_wal_lsn()::text;`
+  );
+  const preScoreStart = performance.now();
+  while (preScoredBatches < preScoreTargetBatches) {
+    const chunk = Math.min(200, preScoreTargetBatches - preScoredBatches);
+    const incRaw = (
+      await psqlQueryAsync(`
+        BEGIN;
+        SET LOCAL ROLE quiz_edge_batch_worker;
+        SELECT pg_catalog.set_config('request.jwt.claim.role', 'quiz_edge_batch_worker', true);
+        SELECT public.score_quiz_edge_staged_batches_incremental_v2('${eventId}'::uuid, ${chunk})::text;
+        COMMIT;
+      `)
+    )
+      .split('\n')
+      .filter((l) => l.startsWith('{'))
+      .pop();
+    const inc = JSON.parse(incRaw);
+    if (!inc.batchesScored) break;
+    preScoredBatches += inc.batchesScored;
+    preScoredAttempts += inc.attemptsScored;
+  }
+  const preScoreElapsedMs = performance.now() - preScoreStart;
+  const walAfterPreScore = await psqlQueryAsync(
+    `SELECT pg_current_wal_lsn()::text;`
+  );
+  const preScoreWalBytes = Number(
+    await psqlQueryAsync(
+      `SELECT pg_wal_lsn_diff('${walAfterPreScore}'::pg_lsn, '${walBeforePreScore}'::pg_lsn)::bigint;`
+    )
+  );
+
+  const preScoreLeakedAttempts = Number(
+    await psqlQueryAsync(
+      `SELECT count(*) FROM public.quiz_attempts WHERE event_id = '${eventId}'::uuid;`
+    )
+  );
+  if (preScoreLeakedAttempts !== 0) {
+    throw new Error(
+      `Pre-score leaked ${preScoreLeakedAttempts} rows into public.quiz_attempts`
+    );
+  }
 
   // Seal all rooms
   const sealStart = performance.now();
@@ -500,7 +553,7 @@ async function runEdgeScaleBenchmark({
   );
   const sealElapsedMs = performance.now() - sealStart;
 
-  // Run set-wise scoring & canonical materialization
+  // Run post-close tail score + canonical attempts/results materialization (<60s SLA)
   const walBeforeScore = await psqlQueryAsync(
     `SELECT pg_current_wal_lsn()::text;`
   );
@@ -518,6 +571,15 @@ async function runEdgeScaleBenchmark({
     )
   );
   const scoreRes = JSON.parse(scoreResJson);
+
+  // Measure post-publish idempotent canonical question/answer backfill (10k-attempt chunk)
+  const backfillStart = performance.now();
+  const backfillRes = JSON.parse(
+    await psqlQueryAsync(
+      `SELECT private.backfill_quiz_edge_canonical_answers_v2('${eventId}'::uuid, 10000)::text;`
+    )
+  );
+  const backfillElapsedMs = performance.now() - backfillStart;
 
   // Double-import idempotency check (re-ingest batch-0 + re-run scoring)
   const batch0Cnt = Math.min(batchSize, totalAttempts);
@@ -599,6 +661,7 @@ async function runEdgeScaleBenchmark({
   return {
     label,
     totalAttempts,
+    totalAnswersStaged,
     roomCount,
     batchSize,
     ingest: {
@@ -607,13 +670,20 @@ async function runEdgeScaleBenchmark({
         (totalAttempts / (ingestElapsedMs / 1000)).toFixed(1)
       ),
       answersPerSec: Number(
-        (
-          (scoreRes.answersWritten || totalAttempts * 10) /
-          (ingestElapsedMs / 1000)
-        ).toFixed(1)
+        (totalAnswersStaged / (ingestElapsedMs / 1000)).toFixed(1)
       ),
       walBytes: ingestWalBytes,
       walMb: Number((ingestWalBytes / (1024 * 1024)).toFixed(2)),
+    },
+    preScore: {
+      elapsedMs: Number(preScoreElapsedMs.toFixed(1)),
+      batchesScored: preScoredBatches,
+      attemptsScored: preScoredAttempts,
+      attemptsPerSec: Number(
+        (preScoredAttempts / (preScoreElapsedMs / 1000)).toFixed(1)
+      ),
+      walBytes: preScoreWalBytes,
+      walMb: Number((preScoreWalBytes / (1024 * 1024)).toFixed(2)),
     },
     seal: {
       elapsedMs: Number(sealElapsedMs.toFixed(1)),
@@ -624,15 +694,24 @@ async function runEdgeScaleBenchmark({
       attemptsPerSec: Number(
         (totalAttempts / (scoreElapsedMs / 1000)).toFixed(1)
       ),
-      answersPerSec: Number(
-        (scoreRes.answersWritten / (scoreElapsedMs / 1000)).toFixed(1)
-      ),
       walBytes: scoreWalBytes,
       walMb: Number((scoreWalBytes / (1024 * 1024)).toFixed(2)),
+      tailBatchesScored: scoreRes.tailBatchesScored,
+      tailAttemptsScored: scoreRes.tailAttemptsScored,
       attemptsWritten: scoreRes.attemptsWritten,
       questionsWritten: scoreRes.questionsWritten,
       answersWritten: scoreRes.answersWritten,
       resultsWritten: scoreRes.resultsWritten,
+    },
+    backfillSample: {
+      elapsedMs: Number(backfillElapsedMs.toFixed(1)),
+      attemptsBackfilled: backfillRes.attemptsBackfilled,
+      questionsWritten: backfillRes.questionsWritten,
+      answersWritten: backfillRes.answersWritten,
+      answersPerSec: Number(
+        (backfillRes.answersWritten / (backfillElapsedMs / 1000)).toFixed(1)
+      ),
+      remainingAttempts: backfillRes.remainingAttempts,
     },
     doubleImportCheck: {
       duplicateBatchReturnedDuplicateFlag: Boolean(doubleImportRes.duplicate),
@@ -794,6 +873,21 @@ async function main() {
         };
       };
 
+      const findCustomerScan = (node) => {
+        if (!node) return null;
+        if (node['Relation Name'] === 'customers') {
+          return {
+            nodeType: node['Node Type'],
+            indexName: node['Index Name'] ?? null,
+          };
+        }
+        for (const child of node.Plans ?? []) {
+          const found = findCustomerScan(child);
+          if (found) return found;
+        }
+        return null;
+      };
+
       const explainLegacyCap = (withIndex) => {
         const raw = psqlQuery(`
           EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)
@@ -805,6 +899,7 @@ async function main() {
             AND public.quiz_normalize_email(c.email) = 'targetalias@gmail.com';
         `);
         const plan = JSON.parse(raw)[0];
+        const custScan = findCustomerScan(plan.Plan);
         return {
           withIndex,
           executionTimeMs: plan['Execution Time'],
@@ -812,22 +907,27 @@ async function main() {
           sharedHitBlocks: plan.Plan['Shared Hit Blocks'],
           sharedReadBlocks: plan.Plan['Shared Read Blocks'],
           nodeType: plan.Plan['Node Type'],
+          customersScanNodeType: custScan?.nodeType ?? null,
+          customersIndexName: custScan?.indexName ?? null,
           planSummary: JSON.stringify(plan.Plan).slice(0, 400),
         };
       };
 
-      // Measure WITHOUT index
-      psqlQuery(
-        `DROP INDEX IF EXISTS public.idx_customers_merchant_quiz_normalized_email;`
-      );
+      // Measure WITHOUT indexes
+      psqlQuery(`
+        DROP INDEX IF EXISTS public.idx_customers_merchant_quiz_normalized_email;
+        DROP INDEX IF EXISTS public.idx_customers_merchant_quiz_normalized_email_all;
+      `);
       const checkinWithout = explainCheckin(false);
       const legacyCapWithout = explainLegacyCap(false);
 
-      // Measure WITH candidate partial expression index
+      // Measure WITH partial + unfiltered normalized-email expression indexes
       psqlQuery(`
         CREATE INDEX idx_customers_merchant_quiz_normalized_email
           ON public.customers (merchant_id, public.quiz_normalize_email(email))
           WHERE deleted_at IS NULL;
+        CREATE INDEX idx_customers_merchant_quiz_normalized_email_all
+          ON public.customers (merchant_id, public.quiz_normalize_email(email));
         ANALYZE public.customers;
       `);
       const checkinWith = explainCheckin(true);
@@ -1007,25 +1107,25 @@ async function main() {
       '',
       '## 1. Normalized-Email Index Comparison (`EXPLAIN (ANALYZE, BUFFERS)`)',
       '',
-      '| Customers | Event Attempts | Check-In Lookup (No Index) | Check-In Lookup (With `idx_customers_merchant_quiz_normalized_email`) | Legacy Trigger Query (No Index / With Partial Index) |',
+      '| Customers | Event Attempts | Check-In Lookup (No Index) | Check-In Lookup (With `idx_customers_merchant_quiz_normalized_email`) | Legacy Trigger Query (No Index / With `idx_customers_merchant_quiz_normalized_email_all`) |',
       '|---:|---:|---|---|---|',
       ...indexPlans.map((p) => {
         const w0 = p.checkInNormalizedEmailLookup.withoutIndex;
         const w1 = p.checkInNormalizedEmailLookup.withIndex;
         const l0 = p.legacyIdentityCapTriggerQuery.withoutIndex;
         const l1 = p.legacyIdentityCapTriggerQuery.withIndex;
-        return `| ${p.totalCustomers.toLocaleString()} | ${p.eventAttempts.toLocaleString()} | ${w0.nodeType}: ${w0.executionTimeMs.toFixed(2)} ms (${w0.sharedHitBlocks + w0.sharedReadBlocks} bufs) | ${w1.nodeType} (${w1.indexName}): ${w1.executionTimeMs.toFixed(3)} ms (${w1.sharedHitBlocks + w1.sharedReadBlocks} bufs) | ${l0.executionTimeMs.toFixed(2)} ms / ${l1.executionTimeMs.toFixed(2)} ms |`;
+        return `| ${p.totalCustomers.toLocaleString()} | ${p.eventAttempts.toLocaleString()} | ${w0.nodeType}: ${w0.executionTimeMs.toFixed(2)} ms (${w0.sharedHitBlocks + w0.sharedReadBlocks} bufs) | ${w1.nodeType} (${w1.indexName}): ${w1.executionTimeMs.toFixed(3)} ms (${w1.sharedHitBlocks + w1.sharedReadBlocks} bufs) | ${l0.executionTimeMs.toFixed(2)} ms (${l0.customersScanNodeType}) / ${l1.executionTimeMs.toFixed(3)} ms (${l1.customersScanNodeType}) |`;
       }),
       '',
-      '## 2. Legacy Per-Row Triggers vs Edge Staging + Set-Wise Scoring',
+      '## 2. Legacy Per-Row Triggers vs Edge Staging + Streaming Pre-Score + Fast Close Finalize',
       '',
-      '| Workload | Attempts | Answers | Ingest Time | Scoring Time | Total WAL | `quiz_enforce_identity_attempt_cap` Calls | `accumulate_quiz_attempt_score_v2` Calls | `refresh_quiz_live_standing_v2` Calls | Checkout p99 |',
+      '| Workload | Attempts | Staged Answers | Ingest Time | Pre-Score (95% Pre-Close) | Post-Close Finalize (5% Tail + Attempts + Results) | Post-Publish Backfill (10k Chunk) | Total WAL | Trigger Calls (Cap / Score / Live) | Checkout p99 |',
       '|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|',
-      `| Legacy per-row triggers | ${legacyTriggerBench.attempts.toLocaleString()} | ${legacyTriggerBench.answers.toLocaleString()} | ${legacyTriggerBench.elapsedMs} ms (${legacyTriggerBench.attemptsPerSec} att/s) | inline | ${(legacyTriggerBench.walBytes / (1024 * 1024)).toFixed(2)} MB (${legacyTriggerBench.walBytesPerAttempt} B/att) | ${legacyTriggerBench.triggerCalls.quizEnforceIdentityAttemptCap} | ${legacyTriggerBench.triggerCalls.accumulateQuizAttemptScoreV2} | ${legacyTriggerBench.triggerCalls.refreshQuizLiveStandingV2} | n/a |`,
-      `| Edge 100k (200 rooms) | ${bench100k.totalAttempts.toLocaleString()} | ${bench100k.canonicalCounts.answers.toLocaleString()} | ${bench100k.ingest.elapsedMs} ms (${bench100k.ingest.attemptsPerSec} att/s) | ${bench100k.scoring.elapsedMs} ms (${bench100k.scoring.attemptsPerSec} att/s, ${bench100k.scoring.answersPerSec} ans/s) | ${(bench100k.ingest.walMb + bench100k.scoring.walMb).toFixed(2)} MB | ${bench100k.triggerIsolation.quizEnforceIdentityAttemptCapCalls} | ${bench100k.triggerIsolation.accumulateQuizAttemptScoreV2Calls} | ${bench100k.triggerIsolation.refreshQuizLiveStandingV2Calls} | ${bench100k.concurrentCheckout.p99Ms} ms (0 err) |`,
+      `| Legacy per-row triggers | ${legacyTriggerBench.attempts.toLocaleString()} | ${legacyTriggerBench.answers.toLocaleString()} | ${legacyTriggerBench.elapsedMs} ms (${legacyTriggerBench.attemptsPerSec} att/s) | inline | inline | inline | ${(legacyTriggerBench.walBytes / (1024 * 1024)).toFixed(2)} MB (${legacyTriggerBench.walBytesPerAttempt} B/att) | ${legacyTriggerBench.triggerCalls.quizEnforceIdentityAttemptCap} / ${legacyTriggerBench.triggerCalls.accumulateQuizAttemptScoreV2} / ${legacyTriggerBench.triggerCalls.refreshQuizLiveStandingV2} | n/a |`,
+      `| Edge 100k (200 rooms) | ${bench100k.totalAttempts.toLocaleString()} | ${bench100k.totalAnswersStaged.toLocaleString()} | ${bench100k.ingest.elapsedMs} ms (${bench100k.ingest.attemptsPerSec} att/s) | ${bench100k.preScore.elapsedMs} ms (${bench100k.preScore.attemptsScored.toLocaleString()} att) | ${bench100k.scoring.elapsedMs} ms (${bench100k.scoring.attemptsPerSec} att/s) | ${bench100k.backfillSample.elapsedMs} ms (${bench100k.backfillSample.answersPerSec} ans/s) | ${(bench100k.ingest.walMb + bench100k.preScore.walMb + bench100k.scoring.walMb).toFixed(2)} MB | ${bench100k.triggerIsolation.quizEnforceIdentityAttemptCapCalls} / ${bench100k.triggerIsolation.accumulateQuizAttemptScoreV2Calls} / ${bench100k.triggerIsolation.refreshQuizLiveStandingV2Calls} | ${bench100k.concurrentCheckout.p99Ms} ms (0 err) |`,
       ...(bench1m
         ? [
-            `| Edge 1M (2,000 rooms) | ${bench1m.totalAttempts.toLocaleString()} | ${bench1m.canonicalCounts.answers.toLocaleString()} | ${bench1m.ingest.elapsedMs} ms (${bench1m.ingest.attemptsPerSec} att/s) | ${bench1m.scoring.elapsedMs} ms (${bench1m.scoring.attemptsPerSec} att/s, ${bench1m.scoring.answersPerSec} ans/s) | ${(bench1m.ingest.walMb + bench1m.scoring.walMb).toFixed(2)} MB | ${bench1m.triggerIsolation.quizEnforceIdentityAttemptCapCalls} | ${bench1m.triggerIsolation.accumulateQuizAttemptScoreV2Calls} | ${bench1m.triggerIsolation.refreshQuizLiveStandingV2Calls} | ${bench1m.concurrentCheckout.p99Ms} ms (0 err) |`,
+            `| Edge 1M (2,000 rooms) | ${bench1m.totalAttempts.toLocaleString()} | ${bench1m.totalAnswersStaged.toLocaleString()} | ${bench1m.ingest.elapsedMs} ms (${bench1m.ingest.attemptsPerSec} att/s) | ${bench1m.preScore.elapsedMs} ms (${bench1m.preScore.attemptsScored.toLocaleString()} att) | ${bench1m.scoring.elapsedMs} ms (${bench1m.scoring.attemptsPerSec} att/s) | ${bench1m.backfillSample.elapsedMs} ms (${bench1m.backfillSample.answersPerSec} ans/s) | ${(bench1m.ingest.walMb + bench1m.preScore.walMb + bench1m.scoring.walMb).toFixed(2)} MB | ${bench1m.triggerIsolation.quizEnforceIdentityAttemptCapCalls} / ${bench1m.triggerIsolation.accumulateQuizAttemptScoreV2Calls} / ${bench1m.triggerIsolation.refreshQuizLiveStandingV2Calls} | ${bench1m.concurrentCheckout.p99Ms} ms (0 err) |`,
           ]
         : []),
       '',

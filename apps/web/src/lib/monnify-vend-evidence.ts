@@ -126,6 +126,11 @@ function nestedCarriesVendField(value: unknown, depth: number): boolean {
  * counts as a pre-vend refusal.
  */
 export function hasMonnifyVendEvidence(answer: unknown): boolean {
+  // A top-level array (e.g. a list of error objects) is read item by item,
+  // each as a top-level answer.
+  if (Array.isArray(answer)) {
+    return answer.some((item) => hasMonnifyVendEvidence(item));
+  }
   const record = asRecord(answer);
   if (!record) {
     return false;

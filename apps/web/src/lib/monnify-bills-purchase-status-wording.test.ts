@@ -134,3 +134,16 @@ describe('bugfix guard: a 5xx is never a refusal, whatever its body says', () =>
     await expect(vend()).rejects.toThrow('Transient vend outcome');
   });
 });
+
+describe('bugfix: a 401/403 needs a named credential even with refusal wording', () => {
+  it.each([
+    [401, 'Unauthorized request: insufficient wallet balance'],
+    [403, 'Forbidden: insufficient wallet balance'],
+  ])('keeps a %i saying "%s" off Kuda', async (status, responseMessage) => {
+    mockHttpError(status, 'Denied', JSON.stringify({ responseMessage }));
+
+    await expect(vend()).resolves.toMatchObject({
+      providerDefiniteFailure: false,
+    });
+  });
+});

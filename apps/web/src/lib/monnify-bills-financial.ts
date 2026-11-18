@@ -214,9 +214,11 @@ export async function purchaseBill(
           // A 401/403 needs wording that names a token, credential or header:
           // a bare "Unauthorized"/"Access denied"/"Forbidden" may come from a
           // gateway rather than the vend request's own bearer check.
-          (((error.status === 401 || error.status === 403) &&
-            error.readsAsSpecificAuthRejection) ||
-            error.isKnownRefusal),
+          // Every 401/403 must name the credential; refusal wording alone
+          // (e.g. "Unauthorized request: insufficient balance") is not enough.
+          (error.status === 401 || error.status === 403
+            ? error.readsAsSpecificAuthRejection
+            : error.isKnownRefusal),
       };
     }
 

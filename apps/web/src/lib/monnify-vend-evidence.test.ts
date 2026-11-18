@@ -58,3 +58,19 @@ describe('hasMonnifyVendEvidence', () => {
     expect(hasMonnifyVendEvidence(envelope)).toBe(false);
   });
 });
+
+describe('bugfix: top-level arrays are read item by item', () => {
+  it('sees vend evidence in a top-level array of error objects', () => {
+    expect(
+      hasMonnifyVendEvidence([
+        { transactionStatus: 'FAILED', message: 'Insufficient wallet balance' },
+      ])
+    ).toBe(true);
+  });
+
+  it('sees none in an array without vend fields', () => {
+    expect(
+      hasMonnifyVendEvidence([{ message: 'Insufficient wallet balance' }])
+    ).toBe(false);
+  });
+});

@@ -19,6 +19,16 @@ delivery listener still checks preview tickets and liveness, published
 build binding, browser Origin and normal RLS. The Worker holds only the
 origin authentication secret.
 
+The preview delivery listener is the authoritative origin allowlist. It
+rejects origins outside its configured hosts and permits the opaque
+`Origin: null` used by sandboxed asset requests. The Worker forwards Origin
+as input to that check. Published assets are deliberately public. The
+published listener normalizes the decoded `path` through
+`normalizeExperiencePath` before rendering, rejecting malformed encoding,
+empty or dot segments, and characters outside its route grammar. It adds
+the sandbox policy to document responses. Keep the Worker paired with that
+listener and verify these behaviors during the live rollout checks.
+
 Configure a dedicated 32-byte random base64url origin secret in the Worker
 `EXECUTION_ORIGIN_KEY` binding and the Caddy service environment
 `BACI_EXECUTION_ORIGIN_KEY`. Use the output-only Caddy vhost candidate. It

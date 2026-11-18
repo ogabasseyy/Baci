@@ -74,8 +74,7 @@ interface CallStorefrontPreflightRpcOptions {
 
 // A 2s budget recovers transport-tail events; memo and breaker bound its cost.
 const DEFAULT_TIMEOUT_MS = 2_000;
-const PDP_PREFLIGHT_POSITIVE_TTL_MS = 60_000;
-const PDP_PREFLIGHT_NEGATIVE_TTL_MS = 15_000;
+const PDP_PUBLISHED_ACTIVE_TTL_MS = 60_000;
 // One navigation's helpers call within ~100ms; this short memo absorbs repeats.
 const breaker = createStorefrontPreflightCircuitBreaker();
 
@@ -92,9 +91,9 @@ function getMemoTtlMs(fn: string, row: unknown): number | undefined {
     parsed.data.storefront_status === 'published' &&
     parsed.data.match_kind === 'active'
   ) {
-    return PDP_PREFLIGHT_POSITIVE_TTL_MS;
+    return PDP_PUBLISHED_ACTIVE_TTL_MS;
   }
-  return PDP_PREFLIGHT_NEGATIVE_TTL_MS;
+  return undefined;
 }
 
 let client: SupabaseClient | null = null;

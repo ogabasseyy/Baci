@@ -184,7 +184,7 @@ describe('storefront preflight RPC telemetry', () => {
     );
   });
 
-  it('caches get_storefront_pdp_preflight positive verdicts for 60s and negative verdicts for 15s', async () => {
+  it('caches get_storefront_pdp_preflight active published verdicts for 60s and non-active verdicts for 3s', async () => {
     vi.useFakeTimers();
     const baseRow = {
       storefront_status: 'published',
@@ -220,7 +220,7 @@ describe('storefront preflight RPC telemetry', () => {
       expect(posRpc).toHaveBeenCalledTimes(1);
       expect(negRpc).toHaveBeenCalledTimes(1);
 
-      vi.advanceTimersByTime(14_000);
+      vi.advanceTimersByTime(2_000);
       await callStorefrontPreflightRpc(
         'get_storefront_pdp_preflight',
         { p_identifier: 'ogabassey.com', p_product_slug: 'live-phone' },
@@ -234,7 +234,7 @@ describe('storefront preflight RPC telemetry', () => {
       expect(posRpc).toHaveBeenCalledTimes(1);
       expect(negRpc).toHaveBeenCalledTimes(1);
 
-      vi.advanceTimersByTime(2_000); // 16s total -> negative expired, positive still cached
+      vi.advanceTimersByTime(2_000); // 4s total -> negative expired (3s), active still cached (60s)
       await callStorefrontPreflightRpc(
         'get_storefront_pdp_preflight',
         { p_identifier: 'ogabassey.com', p_product_slug: 'live-phone' },
@@ -248,7 +248,7 @@ describe('storefront preflight RPC telemetry', () => {
       expect(posRpc).toHaveBeenCalledTimes(1);
       expect(negRpc).toHaveBeenCalledTimes(2);
 
-      vi.advanceTimersByTime(45_000); // 61s total -> positive expired
+      vi.advanceTimersByTime(57_000); // 61s total -> active expired
       await callStorefrontPreflightRpc(
         'get_storefront_pdp_preflight',
         { p_identifier: 'ogabassey.com', p_product_slug: 'live-phone' },

@@ -4,11 +4,13 @@ const mocks = vi.hoisted(() => ({
   prewarm: vi.fn(),
   purge: vi.fn(),
   revalidate: vi.fn(),
+  revalidateSlugs: vi.fn(),
   resolveCategory: vi.fn(() => 'electronics'),
 }));
 
 vi.mock('@/lib/cache-revalidation', () => ({
   revalidateProducts: mocks.revalidate,
+  revalidateProductSlugs: mocks.revalidateSlugs,
 }));
 vi.mock('@/lib/schedule-product-image-prewarm', () => ({
   scheduleProductImageTransformsPrewarm: mocks.prewarm,
@@ -36,7 +38,11 @@ describe('scheduleNewProductCaches', () => {
       images,
     });
 
-    expect(mocks.revalidate).toHaveBeenCalledWith('merchant-1', 'new-product');
+    expect(mocks.revalidate).toHaveBeenCalledWith('merchant-1', 'new-product', {
+      expireImmediately: true,
+      omitMerchantWidePdpDetails: true,
+    });
+    expect(mocks.revalidateSlugs).not.toHaveBeenCalled();
     expect(mocks.purge).toHaveBeenCalledWith('merchant-store', [
       { slug: 'new-product', categorySegment: 'electronics' },
     ]);
@@ -54,6 +60,15 @@ describe('scheduleNewProductCaches', () => {
       images: [],
     });
 
+    expect(mocks.revalidate).toHaveBeenLastCalledWith('merchant-1', undefined, {
+      expireImmediately: true,
+      omitMerchantWidePdpDetails: true,
+    });
+    expect(mocks.revalidateSlugs).toHaveBeenCalledWith(
+      'merchant-1',
+      ['product-1'],
+      { expireImmediately: true }
+    );
     expect(mocks.purge).toHaveBeenLastCalledWith(undefined, [
       { slug: 'product-1', categorySegment: 'electronics' },
     ]);

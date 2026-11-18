@@ -134,6 +134,11 @@ describe('revalidateProductsReliable enrichment path', () => {
     expect(mockScheduleStorefrontHostnamePurge).toHaveBeenCalledWith(
       'ogabassey'
     );
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      'merchant-1',
+      undefined,
+      { expireImmediately: true }
+    );
   });
 
   it('skips product and article enrichment for hostname-wide purges', async () => {
@@ -152,6 +157,11 @@ describe('revalidateProductsReliable enrichment path', () => {
     expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
       'merchant-1',
       ['iphone-15', 'product-id'],
+      { expireImmediately: true }
+    );
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      'merchant-1',
+      undefined,
       { expireImmediately: true }
     );
     expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();

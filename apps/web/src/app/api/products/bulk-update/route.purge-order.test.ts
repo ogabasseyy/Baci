@@ -145,6 +145,11 @@ describe('bulk-update purge ordering', () => {
 
     // Assert
     expect(response.status).toBe(200);
+    expect(mocks.revalidateSlugs).toHaveBeenCalledWith(
+      MERCHANT_ID,
+      ['updated-product'],
+      { expireImmediately: true }
+    );
     expect(mocks.expire).toHaveBeenCalledWith(MERCHANT_ID);
     expect(mocks.schedule).toHaveBeenCalledWith(MERCHANT_SLUG, [
       { slug: 'updated-product', categorySegment: 'electronics' },

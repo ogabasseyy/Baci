@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => ({
   } | null,
   authenticateApiRequest: vi.fn(),
   checkCsrfProtection: vi.fn(),
+  expireProductBlogCache: vi.fn(),
   filters: [] as [string, unknown][],
   getMerchantForApiRequest: vi.fn(),
   hasPermission: vi.fn(),
@@ -53,6 +54,9 @@ vi.mock('@/lib/cache-revalidation', () => ({
 }));
 vi.mock('@/lib/csrf', () => ({
   checkCsrfProtection: mocks.checkCsrfProtection,
+}));
+vi.mock('@/lib/expire-product-blog-cache', () => ({
+  expireProductBlogCache: mocks.expireProductBlogCache,
 }));
 vi.mock('@/lib/get-merchant-for-api-request', () => ({
   getMerchantForApiRequest: mocks.getMerchantForApiRequest,

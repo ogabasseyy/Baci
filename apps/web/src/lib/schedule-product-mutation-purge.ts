@@ -1,5 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { revalidateProductSlugs } from './cache-revalidation';
+import {
+  revalidateProductSlugs,
+  revalidateProducts,
+} from './cache-revalidation';
 import { expireProductBlogCache } from './expire-product-blog-cache';
 import { scheduleProductBlogPurgeAfterResponse } from './schedule-product-blog-purge-after-response';
 import { scheduleStorefrontProductPurge } from './storefront-product-purge';
@@ -45,6 +48,7 @@ export function scheduleProductMutationPurge({
   );
   expireProductBlogCache(merchantId);
   if (purgeWholeStorefront) {
+    revalidateProducts(merchantId, undefined, { expireImmediately: true });
     scheduleStorefrontHostnamePurge(merchantSlug);
     return;
   }

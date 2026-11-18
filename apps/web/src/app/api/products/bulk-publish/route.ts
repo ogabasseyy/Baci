@@ -120,7 +120,8 @@ export async function POST(request: NextRequest) {
       try {
         revalidateProductSlugs(
           merchantId,
-          publicPurgeEntries.map((entry) => entry.slug)
+          publicPurgeEntries.map((entry) => entry.slug),
+          { expireImmediately: true }
         );
         // Relationship/category fallback reads can span many pages. Queue the
         // article enrichment after the response so publishing cannot time out

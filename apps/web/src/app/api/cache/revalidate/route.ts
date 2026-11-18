@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import { hasCompleteScopedProductSlugs } from '@/app/api/internal/revalidate-products/has-complete-scoped-product-slugs';
 import {
   authenticateApiRequest,
   getUserAccess,
@@ -133,18 +134,13 @@ export async function POST(request: NextRequest) {
     // survivable, so it never fails the revalidation.
     if (products && products.length > 0) {
       try {
-        // Resolve authoritative purge entries (real slug/category URLs for
-        // {id}-only or join-categorized products, plus old-category moves) from
-        // the product ROWS via the shared enrichment used by the internal route
-        // too, and bust the per-slug Next product-detail caches for every
-        // resolved slug. This only needs `merchantId` — NOT the merchant's
-        // Cloudflare-facing slug below — so it must run for EVERY
-        // products-carrying request, independent of whether that slug lookup
-        // succeeds. Fail-open lives inside enrichProductPurgeEntries: any lookup
-        // problem falls back to the caller's flat hints.
+        // Resolve authoritative purge entries and per-slug tags before
+        // scheduling the Cloudflare purge. Only the edge purge depends on the
+        // merchant slug lookup below.
         const {
           entries,
           resolvedSlugs,
+          authoritativeSlugsById,
           blogPostSlugs,
           blogPostSlugsIncomplete,
         } = await enrichProductPurgeEntries(
@@ -152,23 +148,27 @@ export async function POST(request: NextRequest) {
           merchantId,
           products
         );
-        // Bust the per-slug Next product-detail caches for every resolved slug
-        // BEFORE scheduling the edge purge below: without this, a Cloudflare
-        // MISS after the purge refills the edge from the still-tagged Next
-        // entry (the PDP snapshot is tagged per-slug, unaffected by the
-        // slug-less revalidateProducts above) until its cacheLife TTL,
-        // defeating it.
-        revalidateProductSlugs(merchantId, resolvedSlugs);
-
-        // The related-product rail is cached under the merchant product tag.
-        // Hard-expire it before a Cloudflare MISS can refill an article from a
-        // stale enrichment snapshot.
+        // Hard-expire per-slug PDP tags and merchant blog enrichment before
+        // any Cloudflare MISS can refill from stale Next snapshots.
+        revalidateProductSlugs(merchantId, resolvedSlugs, {
+          expireImmediately: true,
+        });
         expireProductBlogCache(merchantId);
+        if (
+          blogPostSlugsIncomplete ||
+          !hasCompleteScopedProductSlugs(
+            products,
+            entries,
+            resolvedSlugs,
+            authoritativeSlugsById
+          )
+        ) {
+          revalidateProducts(merchantId, undefined, {
+            expireImmediately: true,
+          });
+        }
 
-        // The Cloudflare edge purge additionally needs the merchant's public
-        // storefront slug (to build the hostnames to purge) — resolve it here
-        // and gate ONLY `scheduleStorefrontProductPurge` on it. A failed/missing
-        // lookup must never skip the Next-layer busting above.
+        // Resolve the merchant's public slug solely for Cloudflare routing.
         const { data: merchantRow, error: merchantLookupError } =
           await auth.supabase
             .from('merchants')

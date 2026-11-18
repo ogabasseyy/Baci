@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 const mockRevalidateProductSlugs = vi.fn();
+const mockRevalidateProducts = vi.fn();
 const mockScheduleStorefrontProductPurge = vi.fn();
 const mockScheduleProductBlogPurgeAfterResponse = vi.fn();
 const mockExpire = vi.fn();
@@ -16,6 +17,7 @@ vi.mock('./storefront-product-purge-hostnames', () => ({
 vi.mock('./cache-revalidation', () => ({
   revalidateProductSlugs: (...args: unknown[]) =>
     mockRevalidateProductSlugs(...args),
+  revalidateProducts: (...args: unknown[]) => mockRevalidateProducts(...args),
 }));
 vi.mock('./schedule-product-blog-purge-after-response', () => ({
   scheduleProductBlogPurgeAfterResponse: (...args: unknown[]) =>
@@ -38,8 +40,14 @@ describe('scheduleProductMutationPurge', () => {
       entries: [],
       purgeWholeStorefront: true,
     });
+    expect(mockRevalidateProducts).toHaveBeenCalledWith('m1', undefined, {
+      expireImmediately: true,
+    });
     expect(mockHostnamePurge).toHaveBeenCalledWith('store');
     expect(mockExpire.mock.invocationCallOrder[0]).toBeLessThan(
+      mockHostnamePurge.mock.invocationCallOrder[0]
+    );
+    expect(mockRevalidateProducts.mock.invocationCallOrder[0]).toBeLessThan(
       mockHostnamePurge.mock.invocationCallOrder[0]
     );
   });

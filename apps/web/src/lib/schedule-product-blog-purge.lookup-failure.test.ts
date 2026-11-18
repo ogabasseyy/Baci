@@ -1,10 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockLookup = vi.fn();
+const mockRevalidateProductSlugs = vi.fn();
 const mockSchedule = vi.fn();
 const mockHostnamePurge = vi.fn();
 const mockExpire = vi.fn().mockResolvedValue(true);
 
+vi.mock('@/lib/cache-revalidation', () => ({
+  revalidateProductSlugs: (...args: unknown[]) =>
+    mockRevalidateProductSlugs(...args),
+}));
 vi.mock('@/lib/get-published-blog-post-slugs-for-products', () => ({
   getPublishedBlogPostSlugsForProducts: (...args: unknown[]) =>
     mockLookup(...args),
@@ -44,6 +49,11 @@ describe('scheduleProductBlogPurge lookup failure', () => {
         entries,
       });
 
+      expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
+        'merchant-1',
+        ['pixel-11'],
+        { expireImmediately: true }
+      );
       expect(mockExpire).toHaveBeenCalledWith('merchant-1');
       expect(mockSchedule).toHaveBeenCalledTimes(1);
       expect(mockSchedule).toHaveBeenCalledWith('store', entries);

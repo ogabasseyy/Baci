@@ -1,10 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockLookup = vi.fn();
+const mockRevalidateProductSlugs = vi.fn();
 const mockSchedule = vi.fn();
 const mockHostnamePurge = vi.fn();
 const mockExpire = vi.fn().mockResolvedValue(true);
 
+vi.mock('@/lib/cache-revalidation', () => ({
+  revalidateProductSlugs: (...args: unknown[]) =>
+    mockRevalidateProductSlugs(...args),
+}));
 vi.mock('@/lib/get-published-blog-post-slugs-for-products', () => ({
   getPublishedBlogPostSlugsForProducts: (...args: unknown[]) =>
     mockLookup(...args),
@@ -65,6 +70,14 @@ describe('scheduleProductBlogPurge', () => {
       'merchant-1',
       ['product-1'],
       ['smartphones']
+    );
+    expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
+      'merchant-1',
+      ['pixel-11'],
+      { expireImmediately: true }
+    );
+    expect(mockRevalidateProductSlugs.mock.invocationCallOrder[0]).toBeLessThan(
+      mockSchedule.mock.invocationCallOrder[0]
     );
     expect(mockSchedule).toHaveBeenCalledWith('store', entries, {
       blogPostSlugs: ['Pixel-Guide', 'pixel-guide'],
@@ -209,6 +222,7 @@ describe('scheduleProductBlogPurge', () => {
       skipProductPurge: true,
     });
 
+    expect(mockRevalidateProductSlugs).not.toHaveBeenCalled();
     expect(mockSchedule).toHaveBeenCalledWith('store', entries, {
       blogPostSlugs: ['pixel-guide'],
       blogPostsOnly: true,

@@ -300,9 +300,11 @@ describe('POST /api/products/bulk-import', () => {
     expect(res.status).toBe(200);
     expect(json).toMatchObject({ success: 2, failed: 1 });
     expect(mockRevalidateProducts).toHaveBeenCalledWith(MERCHANT_ID);
-    expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(MERCHANT_ID, [
-      'product-a',
-    ]);
+    expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
+      MERCHANT_ID,
+      ['product-a'],
+      { expireImmediately: true }
+    );
     expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
       'test-store',
       [{ slug: 'product-a', categorySegment: 'electronics' }]
@@ -334,9 +336,11 @@ describe('POST /api/products/bulk-import', () => {
     );
 
     expect(response.status).toBe(200);
-    expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(MERCHANT_ID, [
-      'created-product-1',
-    ]);
+    expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
+      MERCHANT_ID,
+      ['created-product-1'],
+      { expireImmediately: true }
+    );
     expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
       'test-store',
       [{ slug: 'created-product-1', categorySegment: null }]

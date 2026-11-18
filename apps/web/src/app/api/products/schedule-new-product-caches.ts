@@ -1,4 +1,7 @@
-import { revalidateProducts } from '@/lib/cache-revalidation';
+import {
+  revalidateProductSlugs,
+  revalidateProducts,
+} from '@/lib/cache-revalidation';
 import { scheduleProductImageTransformsPrewarm } from '@/lib/schedule-product-image-prewarm';
 import { scheduleStorefrontProductPurge } from '@/lib/storefront-product-purge';
 import { resolveProductPurgeCategorySegment } from '@/lib/storefront-product-purge-urls';
@@ -24,14 +27,24 @@ export function scheduleNewProductCaches({
   images,
   blogPostSlugs = [],
 }: ScheduleNewProductCachesArgs) {
-  revalidateProducts(merchantId, slug);
+  const trimmedSlug = slug.trim();
+  const purgeSlug = trimmedSlug || productId.trim();
+  revalidateProducts(merchantId, trimmedSlug || undefined, {
+    expireImmediately: true,
+    omitMerchantWidePdpDetails: Boolean(purgeSlug),
+  });
+  if (!trimmedSlug && purgeSlug) {
+    revalidateProductSlugs(merchantId, [purgeSlug], {
+      expireImmediately: true,
+    });
+  }
   try {
-    const purgeSlug = slug.trim() || productId;
+    const targetSlug = purgeSlug || productId;
     const purgeEntries = [
       {
-        slug: purgeSlug,
+        slug: targetSlug,
         categorySegment: resolveProductPurgeCategorySegment({
-          slug: purgeSlug,
+          slug: targetSlug,
           name,
           category,
         }),

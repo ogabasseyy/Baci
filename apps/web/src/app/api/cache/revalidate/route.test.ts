@@ -634,7 +634,7 @@ describe('POST /api/cache/revalidate', () => {
         MERCHANT_ID,
         'iphone-15'
       );
-      expect(mockRevalidateTag).toHaveBeenCalledWith(scopedTag, 'products');
+      expect(mockRevalidateTag).toHaveBeenCalledWith(scopedTag, { expire: 0 });
 
       // Ordering: the per-slug tag is busted before the edge purge is scheduled.
       const scopedCallIndex = mockRevalidateTag.mock.calls.findIndex(
@@ -663,7 +663,7 @@ describe('POST /api/cache/revalidate', () => {
       // slug, so it must still run even though the Cloudflare purge is skipped.
       expect(mockRevalidateTag).toHaveBeenCalledWith(
         getProductScopedCacheTag('product', MERCHANT_ID, 'iphone-15'),
-        'products'
+        { expire: 0 }
       );
     });
 
@@ -843,7 +843,7 @@ describe('POST /api/cache/revalidate', () => {
         // and must still run when the slug lookup fails.
         expect(mockRevalidateTag).toHaveBeenCalledWith(
           getProductScopedCacheTag('product', MERCHANT_ID, 'iphone-15'),
-          'products'
+          { expire: 0 }
         );
         expect(consoleErrorSpy).toHaveBeenCalledWith(
           expect.stringContaining('Failed to resolve merchant slug'),

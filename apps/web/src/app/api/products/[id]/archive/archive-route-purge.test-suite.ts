@@ -13,6 +13,7 @@ type PurgeSuiteOptions = {
   merchantId: string;
   mocks: {
     archiveResult: unknown;
+    expireProductBlogCache: Mock;
     merchantSlugRow: unknown;
     merchantThrows: boolean;
     revalidateProductSlugs: Mock;
@@ -92,11 +93,19 @@ export function defineArchiveRoutePurgeSuite({
   it('busts the per-slug Next cache before scheduling the edge purge', async () => {
     await PATCH(makeRequest(), makeContext());
 
-    expect(mocks.revalidateProductSlugs).toHaveBeenCalledWith(merchantId, [
-      'phone-ultra',
-    ]);
+    expect(mocks.revalidateProductSlugs).toHaveBeenCalledWith(
+      merchantId,
+      ['phone-ultra'],
+      { expireImmediately: true }
+    );
+    expect(mocks.expireProductBlogCache).toHaveBeenCalledWith(merchantId);
     expect(
       mocks.revalidateProductSlugs.mock.invocationCallOrder[0]
+    ).toBeLessThan(
+      mocks.scheduleStorefrontProductPurge.mock.invocationCallOrder[0]
+    );
+    expect(
+      mocks.expireProductBlogCache.mock.invocationCallOrder[0]
     ).toBeLessThan(
       mocks.scheduleStorefrontProductPurge.mock.invocationCallOrder[0]
     );
@@ -115,9 +124,11 @@ export function defineArchiveRoutePurgeSuite({
 
     await PATCH(makeRequest(), makeContext());
 
-    expect(mocks.revalidateProductSlugs).toHaveBeenCalledWith(merchantId, [
-      '123e4567-e89b-42d3-a456-426614174000',
-    ]);
+    expect(mocks.revalidateProductSlugs).toHaveBeenCalledWith(
+      merchantId,
+      ['123e4567-e89b-42d3-a456-426614174000'],
+      { expireImmediately: true }
+    );
     expect(mocks.scheduleStorefrontProductPurge).toHaveBeenCalledWith(
       'test-store',
       [
@@ -150,9 +161,11 @@ export function defineArchiveRoutePurgeSuite({
       const response = await PATCH(makeRequest(), makeContext());
 
       expect(response.status).toBe(200);
-      expect(mocks.revalidateProductSlugs).toHaveBeenCalledWith(merchantId, [
-        'phone-ultra',
-      ]);
+      expect(mocks.revalidateProductSlugs).toHaveBeenCalledWith(
+        merchantId,
+        ['phone-ultra'],
+        { expireImmediately: true }
+      );
       expect(mocks.scheduleStorefrontProductPurge).not.toHaveBeenCalled();
     } finally {
       consoleWarnSpy.mockRestore();

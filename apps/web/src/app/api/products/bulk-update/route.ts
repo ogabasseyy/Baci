@@ -119,7 +119,8 @@ export async function POST(request: NextRequest) {
       // per-slug scoped tags cached, so a CF MISS would refill stale.
       revalidateProductSlugs(
         merchantId,
-        purgeEntries.map((entry) => entry.slug)
+        purgeEntries.map((entry) => entry.slug),
+        { expireImmediately: true }
       );
       const requestedProductIds = parseResult.data.changes
         .map((change) => change.productId?.trim())

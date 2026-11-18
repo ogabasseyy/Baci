@@ -128,6 +128,11 @@ describe('bulk import purge ordering', () => {
     );
 
     expect(response.status).toBe(200);
+    expect(mocks.revalidateSlugs).toHaveBeenCalledWith(
+      'merchant-1',
+      expect.arrayContaining(['product-1', 'product-51']),
+      { expireImmediately: true }
+    );
     expect(mocks.expire).toHaveBeenCalledWith('merchant-1');
     expect(mocks.schedule).toHaveBeenCalledOnce();
     expect(mocks.expire.mock.invocationCallOrder[0]).toBeLessThan(

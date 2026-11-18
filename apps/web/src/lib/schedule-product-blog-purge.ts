@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { revalidateProductSlugs } from '@/lib/cache-revalidation';
 import { expireProductBlogCacheReliable } from '@/lib/expire-product-blog-cache-reliable';
 import { getPublishedBlogPostSlugsForProducts } from '@/lib/get-published-blog-post-slugs-for-products';
 import { isValidUuid } from '@/lib/sanitize-core';
@@ -111,6 +112,13 @@ export async function scheduleProductBlogPurge({
     // merchant id: a failed post-write merchant read (the archive route queues
     // `merchantRow?.slug`) must not leave linked articles stale until TTL.
     // Only Cloudflare scheduling is gated on the slug below.
+    if (!skipProductPurge && entries.length > 0) {
+      revalidateProductSlugs(
+        merchantId,
+        entries.map((entry) => entry.slug),
+        { expireImmediately: true }
+      );
+    }
     await expireProductBlogCacheReliable(merchantId);
 
     const normalizedMerchantSlug = merchantSlug?.trim();

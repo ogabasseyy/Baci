@@ -21,7 +21,7 @@ jest.mock('@/stores/auth-store', () => ({
 }));
 
 const reviewCopy =
-  'Your PiggyVest wallet setup needs review. Please contact support before trying again.';
+  'Your wallet setup needs review. Please contact support before trying again.';
 const pending = {
   provisioningStatus: 'pending' as const,
   requiresConsent: false,
@@ -66,27 +66,35 @@ it.each([
 });
 
 it('shows safe support guidance when a pending refresh returns terminal review', async () => {
-  jest
-    .mocked(piggyvestPrimaryWalletApi.read)
-    .mockResolvedValueOnce(pending)
-    .mockRejectedValueOnce(reviewError('INTEREST_ROUTING_REVIEW_REQUIRED'));
-  jest.mocked(piggyvestPrimaryWalletApi.create).mockResolvedValue(pending);
-  renderPanel();
-  fireEvent.changeText(screen.getByLabelText('BVN'), '12345678901');
-  fireEvent.press(screen.getByRole('checkbox'));
-  fireEvent.press(
-    screen.getByRole('button', { name: 'Create account number' })
-  );
-  const refresh = await screen.findByRole('button', {
-    name: 'Check now',
-  });
-  fireEvent.press(refresh);
+  jest.useFakeTimers();
+  try {
+    jest
+      .mocked(piggyvestPrimaryWalletApi.read)
+      .mockResolvedValueOnce(pending)
+      .mockRejectedValueOnce(reviewError('INTEREST_ROUTING_REVIEW_REQUIRED'));
+    jest.mocked(piggyvestPrimaryWalletApi.create).mockResolvedValue(pending);
+    renderPanel();
+    fireEvent.changeText(screen.getByLabelText('BVN'), '12345678901');
+    fireEvent.press(screen.getByRole('checkbox'));
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Create account number' })
+    );
+    await screen.findByText('Setting up your account number');
+    // The first automatic check gets the review answer.
+    await act(async () => {
+      jest.advanceTimersByTime(3000);
+    });
 
-  expect(await screen.findByRole('alert')).toHaveTextContent(reviewCopy);
-  expect(
-    screen.queryByText('Could not check your account. Please try again later.')
-  ).toBeNull();
-  expect(screen.queryByRole('button', { name: 'Check now' })).toBeNull();
+    expect(await screen.findByRole('alert')).toHaveTextContent(reviewCopy);
+    expect(
+      screen.queryByText(
+        'Could not check your account. Please try again later.'
+      )
+    ).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Check now' })).toBeNull();
+  } finally {
+    jest.useRealTimers();
+  }
 });
 
 it('shows support guidance when create returns terminal review', async () => {

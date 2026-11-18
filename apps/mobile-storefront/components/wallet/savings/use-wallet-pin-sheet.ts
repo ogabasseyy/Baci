@@ -19,7 +19,9 @@ export type WalletPinStep =
   | 'confirm'
   | 'set'
   | 'reset'
-  | 'enter';
+  | 'enter'
+  /** A new PIN was saved and is approving this request: a working state. */
+  | 'approving';
 
 type NewPinStep = 'set' | 'reset';
 
@@ -192,6 +194,10 @@ export function useWalletPinSheet({
     value: string,
     isCurrent: () => boolean
   ) => {
+    // A working state from the moment the save starts, never the cleared
+    // keypad: the customer just typed the PIN twice. Every failure below
+    // puts back the right step.
+    setStep('approving');
     try {
       await submitWalletPin(kind, value, expectedUserId);
     } catch (failure) {
@@ -202,13 +208,21 @@ export function useWalletPinSheet({
         return newPinStep(kind, true);
       }
       if (code === 'PIN_ALREADY_SET') setStep('enter');
-      else setError(failureText(failure));
+      else {
+        // Back to choosing (the save may have started from the working state).
+        setStep(kind);
+        setError(failureText(failure));
+      }
       return;
     }
     if (!isCurrent()) return;
-    setStep('enter');
+    // Still working: the PIN is not asked for again unless approval fails.
     if (await approve(value, isCurrent)) return;
-    if (isCurrent()) setNotice(isFund ? PIN_SAVED : PIN_SAVED_SHORT);
+    if (!isCurrent()) return;
+    // approve() may already have moved to set/reset; otherwise ask for the
+    // saved PIN.
+    setStep((current) => (current === 'approving' ? 'enter' : current));
+    setNotice(isFund ? PIN_SAVED : PIN_SAVED_SHORT);
   };
 
   const submitNewPin = (kind: NewPinStep) =>
@@ -232,14 +246,22 @@ export function useWalletPinSheet({
     });
 
   /** "Confirm it's you" succeeded: carry on where the customer was. */
-  const identityConfirmed = () =>
-    guarded(async (isCurrent) => {
-      const kind = resumeStep.current;
-      const value = pendingPin.current;
+  const identityConfirmed = () => {
+    const kind = resumeStep.current;
+    const value = pendingPin.current;
+    // Straight to choosing a PIN: no busy round trip, so the new step never
+    // flashes a spinner on its button first.
+    if (!value) {
+      setStep(kind);
+      return Promise.resolve();
+    }
+    return guarded(async (isCurrent) => {
       pendingPin.current = null;
-      if (!value) return setStep(kind);
+      // The PIN was already chosen: show the working state while it saves.
+      setStep('approving');
       await saveAndApprove(kind, value, isCurrent);
     });
+  };
 
   return {
     step,
@@ -248,9 +270,16 @@ export function useWalletPinSheet({
     error,
     notice,
     busy,
-    setPin: (value: string) => setPin(value.replace(/[^0-9]/g, '').slice(0, 6)),
-    setConfirmPin: (value: string) =>
-      setConfirmPin(value.replace(/[^0-9]/g, '').slice(0, 6)),
+    // Typing again answers "Enter 4 to 6 digits."; other errors (tries
+    // left, unavailable) stay until the next submit replaces them.
+    setPin: (value: string) => {
+      if (error === PIN_FORMAT) setError(null);
+      setPin(value.replace(/[^0-9]/g, '').slice(0, 6));
+    },
+    setConfirmPin: (value: string) => {
+      if (error === PIN_FORMAT) setError(null);
+      setConfirmPin(value.replace(/[^0-9]/g, '').slice(0, 6));
+    },
     submit: () => {
       if (step === 'enter') return submitEntry();
       if (step === 'set' || step === 'reset') return submitNewPin(step);

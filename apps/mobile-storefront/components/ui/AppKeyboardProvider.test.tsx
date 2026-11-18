@@ -1,5 +1,5 @@
 import { act, render, screen } from '@testing-library/react-native';
-import { Text } from 'react-native';
+import { Keyboard, Text } from 'react-native';
 import { KeyboardController } from 'react-native-keyboard-controller';
 import AppKeyboardProvider from './AppKeyboardProvider';
 
@@ -118,5 +118,52 @@ describe('AppKeyboardProvider', () => {
     act(() => jest.advanceTimersByTime(250));
 
     expect(KeyboardController.preload).not.toHaveBeenCalled();
+  });
+
+  it('cancels the deferred preload when the keyboard opens for an active input', async () => {
+    const handlers = new Map<string, () => void>();
+    const addListenerSpy = jest
+      .spyOn(Keyboard, 'addListener')
+      .mockImplementation(((event: string, cb: () => void) => {
+        handlers.set(event, cb);
+        return { remove: jest.fn() };
+      }) as typeof Keyboard.addListener);
+
+    try {
+      render(
+        <AppKeyboardProvider startupReady>
+          <Text>Storefront app</Text>
+        </AppKeyboardProvider>
+      );
+      const lateCallback = pendingIdleCallback;
+
+      act(() => {
+        handlers.get('keyboardWillShow')?.();
+      });
+      expect(cancelIdleCallbackMock).toHaveBeenCalledWith(1);
+
+      await act(async () => lateCallback?.());
+      expect(KeyboardController.preload).not.toHaveBeenCalled();
+    } finally {
+      addListenerSpy.mockRestore();
+    }
+  });
+
+  it('skips scheduling preload when the keyboard is already visible', () => {
+    const isVisibleMock = KeyboardController.isVisible as jest.Mock;
+    isVisibleMock.mockReturnValue(true);
+
+    try {
+      render(
+        <AppKeyboardProvider startupReady>
+          <Text>Storefront app</Text>
+        </AppKeyboardProvider>
+      );
+
+      expect(global.requestIdleCallback).not.toHaveBeenCalled();
+      expect(KeyboardController.preload).not.toHaveBeenCalled();
+    } finally {
+      isVisibleMock.mockReturnValue(false);
+    }
   });
 });

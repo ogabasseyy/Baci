@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
-import { palette } from '@/constants/Colors';
+import { BRAND, palette } from '@/constants/Colors';
+import { SavingsChoiceCards } from './SavingsChoiceCards';
 
 type Props = {
   colors: (typeof Colors)['light'];
@@ -14,14 +15,23 @@ type Props = {
 };
 
 const OPTIONS = [
-  { value: true, label: 'Yes, earn interest' },
-  { value: false, label: 'No, do not earn interest' },
+  {
+    value: true,
+    label: 'Yes',
+    accessibilityLabel: 'Yes, earn interest',
+  },
+  {
+    value: false,
+    label: 'No',
+    accessibilityLabel: 'No, do not earn interest',
+  },
 ] as const;
 
 /**
- * The explicit interest question for a goal that was never set up. Neither
- * answer is preselected, and "Set up this goal" stays disabled until the
- * status read has finished and the customer has chosen.
+ * The interest question for a plan that was never set up (older plans; new
+ * plans answer it on the form). Neither answer is preselected, and "Finish
+ * setting up" stays disabled until the status read has finished and the
+ * customer has chosen.
  */
 export function SavingsGoalSetupPrompt({
   colors,
@@ -36,52 +46,35 @@ export function SavingsGoalSetupPrompt({
   return (
     <View style={styles.section}>
       <Text style={[styles.question, { color: colors.text }]}>
-        Earn interest on this goal?
+        Earn interest on this plan?
       </Text>
       <Text style={[styles.body, { color: colors.textSecondary }]}>
-        This goal has not been set up yet. Your answer is saved for this goal.
+        One last thing before you can add money. You can only choose once.
       </Text>
-      <View accessibilityRole="radiogroup" style={styles.options}>
-        {OPTIONS.map((option) => (
-          <Pressable
-            key={option.label}
-            accessibilityRole="radio"
-            accessibilityLabel={option.label}
-            accessibilityState={{
-              checked: choice === option.value,
-              disabled: submitting,
-            }}
-            disabled={submitting}
-            onPress={() => onChoose(option.value)}
-            style={[
-              styles.option,
-              {
-                borderColor:
-                  choice === option.value ? colors.primary : colors.border,
-              },
-            ]}
-          >
-            <Text style={{ color: colors.text }}>{option.label}</Text>
-          </Pressable>
-        ))}
-      </View>
+      <SavingsChoiceCards
+        accessibilityLabel="Earn interest on this plan"
+        colors={colors}
+        disabled={submitting}
+        options={OPTIONS}
+        selected={choice}
+        onSelect={onChoose}
+      />
       {error ? (
         <Text style={[styles.body, { color: colors.error }]}>{error}</Text>
       ) : null}
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Set up this goal"
+        accessibilityLabel="Finish setting up"
         accessibilityState={{ disabled }}
         disabled={disabled}
         onPress={onSubmit}
         style={[
           styles.submit,
-          { backgroundColor: colors.primary },
-          disabled ? styles.disabled : null,
+          { backgroundColor: disabled ? palette.gray[300] : BRAND.primary },
         ]}
       >
         <Text style={styles.submitText}>
-          {submitting ? 'Setting up…' : 'Set up this goal'}
+          {submitting ? 'Setting up…' : 'Finish setting up'}
         </Text>
       </Pressable>
     </View>
@@ -92,20 +85,11 @@ const styles = StyleSheet.create({
   section: { gap: 10 },
   question: { fontSize: 14, fontWeight: '600' },
   body: { fontSize: 13, lineHeight: 21 },
-  options: { gap: 8 },
-  option: {
-    minHeight: 44,
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-  },
   submit: {
     minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 8,
+    borderRadius: 999,
   },
   submitText: { color: palette.white, fontWeight: '600' },
-  disabled: { opacity: 0.5 },
 });

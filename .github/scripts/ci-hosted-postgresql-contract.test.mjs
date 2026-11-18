@@ -125,3 +125,27 @@ test('the shared PostgreSQL installer refuses to run before any privileged comma
   assert.ok(guard < firstCommand, 'the hosted-runner check must come before the first command that installs or downloads');
   assert.match(lines.slice(guard, guard + 4).join('\n'), /exit 1/);
 });
+
+test('the --no-install-recommends audit matches the package metadata recorded for the pinned build', async () => {
+  const installer = await readFile(INSTALLER, 'utf8');
+  const build = /^PG_BUILD='([^']+)'$/m.exec(installer)?.[1];
+  assert.ok(build, 'the installer must define PG_BUILD');
+  // The metadata is copied from the package index, so a pin bump has to refresh it and the audit is a diff in review.
+  const field = (line) => [line.slice(0, line.indexOf(': ')), line.slice(line.indexOf(': ') + 2)];
+  const stanzas = Object.fromEntries(
+    (await readFile('.github/scripts/install-postgresql-hosted.package-metadata.txt', 'utf8'))
+      .split('\n\n')
+      .map((block) => block.split('\n').filter((line) => /^[A-Za-z-]+: /.test(line)))
+      .filter((lines) => lines.length > 0)
+      .map((lines) => Object.fromEntries(lines.map(field)))
+      .map((fields) => [fields.Package, fields])
+  );
+  for (const name of ['postgresql-18', 'postgresql-client-18']) {
+    assert.equal(stanzas[name]?.Version, build, `${name} metadata must be recorded for ${build}`);
+  }
+  // What the installer says about the skipped extras must be what the metadata says.
+  assert.equal(stanzas['postgresql-18'].Recommends, 'postgresql-18-jit, sysstat');
+  assert.equal(stanzas['postgresql-client-18'].Recommends, undefined);
+  assert.match(stanzas['postgresql-18'].Provides, /\bpostgresql-contrib-18\b/);
+  assert.ok(installer.includes(`package index for ${build}:`), `the --no-install-recommends comment must name ${build}`);
+});

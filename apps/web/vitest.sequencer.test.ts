@@ -13,7 +13,7 @@ import { SLOW_TEST_FILES_FIRST } from './vitest.slow-test-files';
 // The fakes below use their own root: the sequencer must work from the root
 // Vitest reports, not from this checkout.
 const ROOT = '/repo/apps/web';
-const SHARD_COUNT = 6;
+const SHARD_COUNT = 10;
 
 type Shard = { index: number; count: number };
 
@@ -166,7 +166,7 @@ describe('SlowFilesFirstSequencer', () => {
   });
 
   describe('sharding', () => {
-    // The CI shards (`vitest run --shard=N/6`) must keep holding exactly the
+    // The CI shards (`vitest run --shard=N/10`) must keep holding exactly the
     // files they held before the sequencer existed.
     const { specs: mixed } = mixedSpecs();
     const generated = Array.from({ length: 600 }, (_, index) =>
@@ -189,7 +189,7 @@ describe('SlowFilesFirstSequencer', () => {
 
     it.each(
       shards
-    )('puts the same files in shard %i/6 as the default sequencer', async (index) => {
+    )('puts the same files in shard %i/10 as the default sequencer', async (index) => {
       const context = fakeContext(new Map(), { index, count: SHARD_COUNT });
 
       const ours = await new SlowFilesFirstSequencer(context).shard([

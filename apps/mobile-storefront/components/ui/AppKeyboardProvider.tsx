@@ -1,4 +1,5 @@
 import { type ReactNode, useEffect } from 'react';
+import { Keyboard } from 'react-native';
 import {
   KeyboardController,
   KeyboardProvider,
@@ -14,27 +15,42 @@ export default function AppKeyboardProvider({
   startupReady = false,
 }: AppKeyboardProviderProps) {
   useEffect(() => {
-    if (!startupReady) return;
+    if (!startupReady || KeyboardController.isVisible?.()) return;
 
     let active = true;
-    const preload = () => {
-      if (active) KeyboardController.preload();
+    let idleCallbackId: number | null = null;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    const cancelPreload = () => {
+      active = false;
+      if (idleCallbackId !== null && typeof cancelIdleCallback === 'function') {
+        cancelIdleCallback(idleCallbackId);
+        idleCallbackId = null;
+      }
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
     };
 
+    const preload = () => {
+      if (!active || KeyboardController.isVisible?.()) return;
+      KeyboardController.preload();
+    };
+
+    const willShowSub = Keyboard.addListener('keyboardWillShow', cancelPreload);
+    const didShowSub = Keyboard.addListener('keyboardDidShow', cancelPreload);
+
     if (typeof requestIdleCallback === 'function') {
-      const idleCallbackId = requestIdleCallback(preload, { timeout: 1200 });
-      return () => {
-        active = false;
-        if (typeof cancelIdleCallback === 'function') {
-          cancelIdleCallback(idleCallbackId);
-        }
-      };
+      idleCallbackId = requestIdleCallback(preload, { timeout: 1200 });
+    } else {
+      timeoutId = setTimeout(preload, 250);
     }
 
-    const timeoutId = setTimeout(preload, 250);
     return () => {
-      active = false;
-      clearTimeout(timeoutId);
+      cancelPreload();
+      willShowSub.remove();
+      didShowSub.remove();
     };
   }, [startupReady]);
 

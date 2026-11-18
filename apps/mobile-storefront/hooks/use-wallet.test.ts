@@ -545,6 +545,7 @@ describe('useWallet', () => {
       status: 'available',
       creditedInterestKobo: 125050,
       goalInterestKobo: [],
+      goalInterestKnown: true,
     } as Awaited<
       ReturnType<typeof walletSavingsInterest.fetchWalletSavingsInterest>
     >);

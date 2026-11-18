@@ -1,5 +1,7 @@
 import type React from 'react';
 import { type StyleProp, View, type ViewStyle } from 'react-native';
+import { homeCampaignSlides } from '@/components/home/home-campaign-slides';
+import { HeroSkeleton } from '@/components/ui/Skeleton';
 import { useCategories } from '@/hooks';
 import { CONFIG } from '@/lib/config';
 import { getTemplateConfig } from '@/lib/templates';
@@ -24,6 +26,9 @@ interface Category {
 
 interface BlockRendererProps {
   blocks: Block[];
+  blackFridayHeroBlockId?: string;
+  pendingBlackFridayHeroBlockId?: string;
+  nextDropHeroBlockId?: string;
   selectedCategoryId: string | null;
   onCategorySelect: (id: string | null) => void;
   blockWrapperStyle?: StyleProp<ViewStyle>;
@@ -33,6 +38,7 @@ interface BlockRendererProps {
    * placements are withheld so no invisible delivery is requested.
    */
   suppressAds?: boolean;
+  autoplayPaused?: boolean;
   /**
    * Page-level HOME_STRIP owner elected across all feed slices. The feed
    * renders one BlockRenderer per slice, so a slice-local election would
@@ -51,11 +57,15 @@ interface BlockRendererProps {
 
 export const BlockRenderer: React.FC<BlockRendererProps> = ({
   blocks,
+  blackFridayHeroBlockId,
+  pendingBlackFridayHeroBlockId,
+  nextDropHeroBlockId,
   selectedCategoryId,
   onCategorySelect,
   blockWrapperStyle,
   renderAfterBlock,
   suppressAds = false,
+  autoplayPaused = false,
   heroAdOwnerBlockId,
   launchAdOwnerBlockId,
 }) => {
@@ -104,18 +114,42 @@ export const BlockRenderer: React.FC<BlockRendererProps> = ({
         const renderedBlock = (() => {
           switch (block.type) {
             case 'HeroCarousel': {
+              if (block.props.id === pendingBlackFridayHeroBlockId) {
+                return <HeroSkeleton />;
+              }
+
               const heroBlock = block as HeroCarouselBlock;
               const configuredSlides = Array.isArray(heroBlock.props.slides)
                 ? heroBlock.props.slides
                 : [];
 
-              const slides: HeroSlide[] = configuredSlides.map((slide) => ({
-                title: slide.title,
-                subtitle: slide.subtitle,
-                image: slide.image,
-                ctaText: slide.ctaText,
-                ctaLink: slide.ctaLink as HeroSlide['ctaLink'],
-              }));
+              const useCampaignStyle =
+                nextDropHeroBlockId === heroBlock.props.id;
+
+              const slides: HeroSlide[] = [
+                ...(useCampaignStyle ? homeCampaignSlides : []),
+                ...configuredSlides.map((slide) => ({
+                  title: slide.title,
+                  subtitle: slide.subtitle,
+                  image: slide.image,
+                  ctaText: slide.ctaText,
+                  ctaLink: slide.ctaLink as HeroSlide['ctaLink'],
+                })),
+              ];
+
+              if (
+                blackFridayHeroBlockId &&
+                heroBlock.props.id === blackFridayHeroBlockId
+              ) {
+                slides.unshift({
+                  campaign: 'black-friday',
+                  title: 'Black Friday',
+                  subtitle: '',
+                  image: '',
+                  ctaText: 'Shop the lineup',
+                  ctaLink: '/black-friday',
+                });
+              }
 
               if (slides.length === 0) {
                 return null;
@@ -125,6 +159,7 @@ export const BlockRenderer: React.FC<BlockRendererProps> = ({
                 <Hero
                   slides={slides}
                   autoplayDelay={heroBlock.props.autoplayDelay}
+                  autoplayPaused={autoplayPaused}
                   trailingAdPlacement={
                     !suppressAds &&
                     pageOwnerBlockId !== null &&
@@ -153,6 +188,7 @@ export const BlockRenderer: React.FC<BlockRendererProps> = ({
             case 'CategoryRail':
               return (
                 <UtilityPanel
+                  autoplayPaused={autoplayPaused}
                   variant={template.categoryStyle}
                   selectedCategoryId={selectedCategoryId}
                   onCategorySelect={onCategorySelect}

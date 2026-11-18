@@ -108,7 +108,7 @@ async function readCart(request: NextRequest, timer: CartServerTimer) {
     }
     let proof: string | null = null;
     const upgraded = await timer.measure('grant', () =>
-      upgradeLegacySessionPrincipal(client, context.principal)
+      upgradeLegacySessionPrincipal(client, context.principal).catch(() => null)
     );
     if (upgraded && upgraded !== context.principal) {
       try {

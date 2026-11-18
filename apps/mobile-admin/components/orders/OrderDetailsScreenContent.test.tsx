@@ -3,8 +3,9 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { router } from 'expo-router';
 import type React from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import type { useOrderDetailsController } from '@/hooks/useOrderDetailsController';
 import { OrderDetailsScreenContent } from './OrderDetailsScreenContent';
+import { createController } from './OrderDetailsScreenContent.test-support';
+import { formatOrderDetailsDate } from './order-details.formatters';
 
 const auditTrailCardMock = vi.hoisted(() => vi.fn());
 
@@ -31,7 +32,7 @@ vi.mock('@react-native-vector-icons/ionicons', () => ({
 // OrderDetailsScreenContent reads the merchant for VAT-breakdown display.
 // Mock it so the real hook's native import graph never loads under vitest.
 vi.mock('@/hooks/useMerchant', () => ({
-  useMerchant: () => ({ merchant: null }),
+  useMerchant: () => ({ merchant: { country: 'NG' } }),
 }));
 
 vi.mock('react-native', async () =>
@@ -72,7 +73,18 @@ vi.mock('./OrderDetailsItemsAndPaymentSection', () => ({
   OrderDetailsItemsAndPaymentSection: () => null,
 }));
 vi.mock('./OrderDetailsOverviewSection', () => ({
-  OrderDetailsOverviewSection: () => null,
+  OrderDetailsOverviewSection: ({
+    placedOnLabel,
+    updatedAtLabel,
+  }: {
+    placedOnLabel: string;
+    updatedAtLabel: string;
+  }) => (
+    <div>
+      <span>Placed on {placedOnLabel}</span>
+      <span>Latest update: {updatedAtLabel}</span>
+    </div>
+  ),
 }));
 vi.mock('./OrderDetailsShippingSection', () => ({
   OrderDetailsShippingSection: () => null,
@@ -83,123 +95,6 @@ vi.mock('./OrderAuditTrailCard', () => ({
     return <div>audit-card</div>;
   },
 }));
-
-function createController(
-  overrides: Partial<ReturnType<typeof useOrderDetailsController>> = {}
-) {
-  return {
-    closeShipmentFlow: vi.fn(),
-    colors: {
-      background: '#ffffff',
-      border: '#e2e8f0',
-      card: '#ffffff',
-      primary: '#2563eb',
-      text: '#0f172a',
-      textMuted: '#94a3b8',
-      textSecondary: '#64748b',
-    },
-    creditNotes: '',
-    currencySymbol: '₦',
-    formatAddress: vi.fn(() => 'Address'),
-    formatDate: vi.fn(() => 'Today'),
-    formatPrice: vi.fn((amount: number) => `₦${amount}`),
-    fulfillmentDetails: { imei: '', items: [], serialNumber: '' },
-    fulfillmentItemIndex: 0,
-    handleCall: vi.fn(),
-    handleEmail: vi.fn(),
-    handlePaymentAmountChange: vi.fn(),
-    handleRecordPayment: vi.fn(),
-    handleSendOrderDetailsToRider: vi.fn(),
-    handleSendReceipt: vi.fn(),
-    handleSendReminder: vi.fn(),
-    handleSendRiderToCustomer: vi.fn(),
-    handleShare: vi.fn(),
-    handleShareReceiptPdf: vi.fn(),
-    handleShipOnCredit: vi.fn(),
-    handleShipmentFlowBack: vi.fn(),
-    handleStatusUpdate: vi.fn(),
-    handleSubmitSelfFulfillment: vi.fn(),
-    handleWhatsApp: vi.fn(),
-    isGeneratingReceipt: false,
-    isAuditEventsError: false,
-    isAuditEventsLoading: false,
-    isShipmentSubmitting: false,
-    order: {
-      amount_paid: 0,
-      balance: 10000,
-      created_at: '2024-01-01T00:00:00.000Z',
-      customer_email: 'customer@example.com',
-      customer_name: 'Ada',
-      customer_phone: '08030000000',
-      discount_amount: 0,
-      id: 'order-1',
-      items: [],
-      order_number: 'ORD-1',
-      payment_status: 'pending',
-      shipping_address: null,
-      shipping_status: 'pending',
-      total: 10000,
-      updated_at: '2024-01-01T00:00:00.000Z',
-    },
-    auditEvents: [],
-    paymentAmount: '',
-    paymentColor: '#ca8a04',
-    paymentConfig: { label: 'Awaiting Payment' },
-    paymentMethod: '',
-    paymentNotes: '',
-    pendingShipmentMode: 'self_fulfillment',
-    proceedFromFulfillmentDetails: vi.fn(),
-    proceedFromShipmentMethod: vi.fn(),
-    providerBookingAvailable: false,
-    providerLabel: null,
-    receiptHtml: '',
-    recordPaymentMutation: { isPending: false },
-    requiresShipmentDetails: false,
-    riderPhone: '',
-    savedRiders: [],
-    selectedOrderItem: null,
-    setCreditNotes: vi.fn(),
-    setFulfillmentDetails: vi.fn(),
-    setFulfillmentItemIndex: vi.fn(),
-    updateFulfillmentDetails: vi.fn(),
-    setPaymentAmount: vi.fn(),
-    setPaymentMethod: vi.fn(),
-    setPaymentNotes: vi.fn(),
-    setPendingShipmentMode: vi.fn(),
-    setRiderPhone: vi.fn(),
-    setSelectedOrderItem: vi.fn(),
-    setShipmentFlowStep: vi.fn(),
-    setShowCreditModal: vi.fn(),
-    setShowPaymentOptionModal: vi.fn(),
-    setShowReceiptPreview: vi.fn(),
-    setShowRecordPaymentModal: vi.fn(),
-    setShowShipmentFlow: vi.fn(),
-    setShowStatusModal: vi.fn(),
-    setSuccessModal: vi.fn(),
-    shipmentFlowStep: 'details',
-    shipOnCreditMutation: { isPending: false },
-    shippingColor: '#2563eb',
-    shippingConfig: { icon: 'receipt-outline', label: 'Unfulfilled' },
-    showCreditModal: false,
-    showPaymentOptionModal: false,
-    showPostShipmentActions: false,
-    showReceiptPreview: false,
-    showRecordPaymentModal: false,
-    showShipmentFlow: false,
-    showStatusModal: false,
-    sourceInfo: { color: '#2563eb', label: 'Manual', name: 'manual' },
-    successModal: {
-      actionLabel: '',
-      actionVariant: 'default',
-      message: '',
-      showAction: false,
-      subMessage: '',
-      title: '',
-      visible: false,
-    },
-    ...overrides,
-  } as unknown as ReturnType<typeof useOrderDetailsController>;
-}
 
 describe('OrderDetailsScreenContent', () => {
   it('navigates to order edit and renders header share plus audit actions', () => {
@@ -267,5 +162,41 @@ describe('OrderDetailsScreenContent', () => {
       'data-important-for-accessibility',
       'auto'
     );
+  });
+  it('shows the historical sale date in Lagos instead of the recording date', () => {
+    const controller = createController({ formatDate: formatOrderDetailsDate });
+    if (!controller.order) throw new Error('Missing order fixture');
+    controller.order.transaction_date = '2023-03-13T23:00:00.000Z';
+    controller.order.created_at = '2026-11-12T10:00:00.000Z';
+    controller.order.updated_at = '2026-11-13T10:00:00.000Z';
+    const originalOrder = structuredClone(controller.order);
+
+    render(<OrderDetailsScreenContent controller={controller} />);
+
+    expect(
+      screen.getByText('Placed on 14 Mar 2023, 00:00')
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        `Latest update: ${formatOrderDetailsDate(controller.order.updated_at)}`
+      )
+    ).toBeInTheDocument();
+    expect(controller.order).toEqual(originalOrder);
+    expect(auditTrailCardMock).toHaveBeenCalledWith(
+      expect.objectContaining({ formatDate: formatOrderDetailsDate })
+    );
+  });
+
+  it('falls back to the recording date when the sale date is missing', () => {
+    const controller = createController();
+    if (!controller.order) throw new Error('Missing order fixture');
+    controller.order.transaction_date = null;
+    controller.order.created_at = '2026-11-12T23:30:00.000Z';
+
+    render(<OrderDetailsScreenContent controller={controller} />);
+
+    expect(
+      screen.getByText('Placed on 13 Nov 2026, 00:30')
+    ).toBeInTheDocument();
   });
 });

@@ -174,14 +174,12 @@ export const config = {
   matcher: [
     '/agent-commerce.json',
     '/agent-trust.json',
-    // Next statically analyzes matcher values. Keep this literal in sync with
-    // DEFAULT_POSTHOG_RELAY_PATH so relay static assets do not bypass header
-    // stripping just because they end in .js/.css/.json.
+    // Explicitly match `/baci-relay/:path*` so `buildPostHogRelayPassThroughResponse`
+    // strips sensitive request headers (cookie, authorization, referer, etc.)
+    // in-repo for both capture and asset requests.
     '/baci-relay/:path*',
-    // Custom relay paths are runtime-configurable, while matcher values are
-    // statically analyzed. Catch custom `/relay/static/*.js` and
-    // `/relay/array/*.js` assets, but keep Next's own static chunks out of
-    // middleware so critical JS/CSS does not pay proxy overhead on every page.
+    // Match custom relay `/static/*.js` and `/array/*.js` assets while keeping
+    // Next's own static chunks out of middleware.
     '/((?!_next/static(?:/|$))(?:.+/)?(?:static|array)/.*)',
     /*
      * Match all request paths except for the ones starting with:

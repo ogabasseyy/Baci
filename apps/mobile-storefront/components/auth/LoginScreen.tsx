@@ -22,6 +22,7 @@ export function LoginScreen() {
     handleGoogleSignIn,
     handlePasswordSignIn,
     handleResendOtp,
+    handleToggleAuthMethod,
     isAppleLoading,
     isGoogleLoading,
     isLoading,
@@ -83,6 +84,7 @@ export function LoginScreen() {
             handleGoogleSignIn={handleGoogleSignIn}
             handlePasswordSignIn={handlePasswordSignIn}
             handleResendOtp={handleResendOtp}
+            handleToggleAuthMethod={handleToggleAuthMethod}
             isAppleLoading={isAppleLoading}
             isGoogleLoading={isGoogleLoading}
             isLoading={isLoading}

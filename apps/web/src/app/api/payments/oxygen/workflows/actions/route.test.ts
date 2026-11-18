@@ -47,6 +47,44 @@ it('does not touch runtime credentials for unauthenticated callers', async () =>
   expect(result.status).toBe(401);
   expect(m.connect).not.toHaveBeenCalled();
 });
+it.each([
+  [undefined, false],
+  ['1', true],
+])('only returns the new reason to supporting action clients (%s)', async (version, expected) => {
+  m.auth.mockResolvedValue({ user: { id: 'user' }, supabase: {} });
+  m.connect.mockReturnValue({
+    worker: vi.fn(),
+    provider: {},
+    hosts: new Set(),
+  });
+  m.perform.mockResolvedValue({
+    workflowId: '60000000-0000-4000-8000-000000000001',
+    state: {
+      eligibilityStatus: 'failed',
+      eligibilityFailureReason: 'financial_details_mismatch',
+    },
+  });
+  const response = await POST(
+    new NextRequest('http://localhost/api/payments/oxygen/workflows/actions', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        ...(version ? { 'x-oxygen-eligibility-reason': version } : {}),
+      },
+      body: JSON.stringify({
+        workflowId: '60000000-0000-4000-8000-000000000001',
+        idempotencyKey: '60000000-0000-4000-8000-000000000002',
+        version: 1,
+        command: { action: 'refresh_eligibility' },
+      }),
+    })
+  );
+  expect(response.status).toBe(200);
+  const result = await response.json();
+  expect(result.state.eligibilityFailureReason).toBe(
+    expected ? 'financial_details_mismatch' : undefined
+  );
+});
 it('explains a fenced existing payment without exposing database details', async () => {
   m.auth.mockResolvedValue({ user: { id: 'user' }, supabase: {} });
   m.connect.mockReturnValue({
@@ -170,6 +208,36 @@ it('returns only a static safe statement code for the known rejected booking', a
     code: 'OXYGEN_STATEMENT_REQUIRED',
     error:
       'Oxygen needs a valid bank statement before it can prepare your payment plan. Please contact support to complete the bank statement step. Your application is saved.',
+  });
+});
+it('returns safe email-link instructions for the observed eligibility response', async () => {
+  m.auth.mockResolvedValue({ user: { id: 'user' }, supabase: {} });
+  m.connect.mockReturnValue({
+    worker: vi.fn(),
+    provider: {},
+    partnerReference: 'partner',
+    hosts: new Set(),
+  });
+  m.perform.mockRejectedValue(
+    new OxygenProviderFailure('rejected', 'OXYGEN_STATEMENT_LINK_SENT')
+  );
+  const response = await POST(
+    new NextRequest('http://localhost/api/payments/oxygen/workflows/actions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        workflowId: '60000000-0000-4000-8000-000000000001',
+        version: 1,
+        idempotencyKey: '60000000-0000-4000-8000-000000000002',
+        command: { action: 'refresh_eligibility' },
+      }),
+    })
+  );
+  expect(response.status).toBe(409);
+  expect(await response.json()).toEqual({
+    code: 'OXYGEN_STATEMENT_LINK_SENT',
+    error:
+      'Oxygen sent bank-statement linking instructions to the applicant’s email. Check your email, then return here to check your payment options. Your application is saved.',
   });
 });
 it('returns static invalid-code copy for the known rejected OTP without raw provider details', async () => {

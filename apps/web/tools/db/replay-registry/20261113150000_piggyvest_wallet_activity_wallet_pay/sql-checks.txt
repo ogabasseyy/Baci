@@ -1,0 +1,1 @@
+supabase/tests/piggyvest_wallet_activity_wallet_pay.sql

@@ -9,7 +9,6 @@
 
 import {
   IsRestoringProvider,
-  type Query,
   QueryClientProvider,
 } from '@tanstack/react-query';
 import {
@@ -20,6 +19,10 @@ import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { createLogger } from './logger';
 import { queryClient, queryPersister } from './query-client';
+import {
+  shouldPersistQuery,
+  withoutNeverPersistedQueries,
+} from './should-persist-query';
 
 const log = createLogger('QueryProvider');
 
@@ -36,13 +39,10 @@ const PERSIST_MAX_AGE_MS = 1000 * 60 * 60 * 24;
 
 const persistOptions = {
   queryClient,
-  persister: queryPersister,
+  persister: withoutNeverPersistedQueries(queryPersister),
   maxAge: PERSIST_MAX_AGE_MS,
   dehydrateOptions: {
-    shouldDehydrateQuery: (query: Query) => {
-      // Don't persist failed or pending queries
-      return query.state.status === 'success';
-    },
+    shouldDehydrateQuery: shouldPersistQuery,
   },
 };
 

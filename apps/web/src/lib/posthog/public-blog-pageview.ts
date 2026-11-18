@@ -269,7 +269,9 @@ export function capturePublicBlogInteraction(
     env,
     currentUrl,
     event,
-    getPublicBlogAttribution(new URL(currentUrl))
+    getPublicBlogAttribution(
+      new URL(currentUrl, getBrowserOrigin() ?? DEFAULT_PUBLIC_BLOG_URL_BASE)
+    )
   );
 }
 

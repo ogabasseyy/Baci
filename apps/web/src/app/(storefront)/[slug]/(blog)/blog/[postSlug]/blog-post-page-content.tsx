@@ -8,6 +8,7 @@ import { InformationalClusterPanel } from '@/components/storefront/ogabassey/seo
 import { Button } from '@/components/ui/button';
 import { hasBlogAuthorPage } from '@/lib/blog-authors';
 import { getBlogPostRedirect } from '@/lib/blog-post-redirects';
+import { TECNO_SPONSORED_BLOG_URL } from '@/lib/posthog/tecno-sponsored-blog-url';
 import { getRequestLocale } from '@/lib/request-locale';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { asRoute } from '@/lib/routes';
@@ -198,11 +199,9 @@ async function renderBlogPostContent({
 
   const body = (
     <>
-      {!isDraftMode &&
-        postUrl ===
-          'https://ogabassey.com/blog/tecno-camon-slim-iphone-instant-transfer-sponsored' && (
-          <TecnoBlogClickTracker />
-        )}
+      {!isDraftMode && postUrl === TECNO_SPONSORED_BLOG_URL && (
+        <TecnoBlogClickTracker />
+      )}
       <Suspense fallback={<BlogPostBodyFallback />}>
         <BlogPostBody
           basePath={basePath}

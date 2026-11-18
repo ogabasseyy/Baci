@@ -1,6 +1,7 @@
 import { redactUrlQuery } from './boot-free-capture';
 import type { PostHogEnv } from './config';
 import { capturePublicBlogInteraction } from './public-blog-pageview';
+import { TECNO_SPONSORED_BLOG_URL } from './tecno-sponsored-blog-url';
 
 export function captureTecnoBlogClick(
   href: string,
@@ -10,11 +11,7 @@ export function captureTecnoBlogClick(
   if (!currentUrl) return;
   try {
     const page = new URL(redactUrlQuery(currentUrl));
-    if (
-      page.href !==
-      'https://ogabassey.com/blog/tecno-camon-slim-iphone-instant-transfer-sponsored'
-    )
-      return;
+    if (page.href !== TECNO_SPONSORED_BLOG_URL) return;
 
     const destination = new URL(href);
     const tag = destination.searchParams.get('utm_content');

@@ -17,6 +17,7 @@ import { StartupRecoveryScreen } from '@/components/navigation/StartupRecoverySc
 import { useAppTrackingTransparency } from '@/hooks/use-app-tracking-transparency';
 import { useNativeSplashHandoff } from '@/hooks/use-native-splash-handoff';
 import { usePushNotifications } from '@/hooks/use-push-notifications';
+import { usePushRegistrationRetry } from '@/hooks/use-push-registration-retry';
 import { useSavingsReminderActivation } from '@/hooks/use-savings-reminder-activation';
 import { useStartupAdTrackingInitialization } from '@/hooks/use-startup-ad-tracking-initialization';
 import { useStartupTelemetryVerification } from '@/hooks/use-startup-telemetry-verification';
@@ -75,10 +76,6 @@ export default function RootLayout() {
   const storeUser = useAuthStore((state) => state.user);
   const storeMerchantId = useAuthStore((state) => state.merchantId);
   const initPromiseRef = useRef<Promise<void> | null>(null);
-  const pushAttemptsRef = useRef<{ userId: string | null; count: number }>({
-    userId: null,
-    count: 0,
-  });
   const [hasCompletedInitialBoot, setHasCompletedInitialBoot] = useState(
     () => bootstrapState.hasCompletedInitialBoot
   );
@@ -112,12 +109,11 @@ export default function RootLayout() {
     storageReady: isStorageReady,
     timedOut,
   });
-  const { isTrackingAuthorizationSettled } = useAppTrackingTransparency({
-    enabled: !showSplash && isInitialized && isStorageReady,
-  });
-  const isPushRegisteredForCurrentUser = Boolean(
-    storeUser?.id && isPushRegistered && registeredUserId === storeUser.id
-  );
+  const { isTrackingAuthorizationSettled, explainer } =
+    useAppTrackingTransparency({
+      enabled: !showSplash && isInitialized && isStorageReady,
+      explainFirst: true,
+    });
 
   useEffect(() => {
     markStartupTiming('root_mounted');
@@ -217,51 +213,16 @@ export default function RootLayout() {
     }
   }, [hasCompletedInitialBoot]);
 
-  // Clear attempt tracking on logout so the same account can re-register
-  // after signing out and back in.
-  useEffect(() => {
-    if (!storeUser?.id) {
-      pushAttemptsRef.current = { userId: null, count: 0 };
-    }
-  }, [storeUser?.id]);
-
-  // Register for push only after auth is fully initialized and user is logged in.
-  // merchantId is optional for storefront (single-merchant app).
-  // Allows up to 3 attempts per userId to handle cases where permissions are
-  // granted after the first attempt. Stops retrying after success or max attempts.
-  useEffect(() => {
-    const maxAttempts = 3;
-    const ref = pushAttemptsRef.current;
-    const isNewUser = ref.userId !== storeUser?.id;
-    const attemptsLeft = isNewUser || ref.count < maxAttempts;
-
-    if (
-      isInitialized &&
-      isTrackingAuthorizationSettled &&
-      storeUser?.id &&
-      !isPushRegisteredForCurrentUser &&
-      !isPushLoading &&
-      attemptsLeft
-    ) {
-      if (isNewUser) {
-        pushAttemptsRef.current = { userId: storeUser.id, count: 1 };
-      } else {
-        pushAttemptsRef.current.count += 1;
-      }
-      void registerPushNotifications(
-        storeUser.id,
-        storeMerchantId ?? undefined
-      );
-    }
-  }, [
+  usePushRegistrationRetry({
     isInitialized,
-    isPushRegisteredForCurrentUser,
-    isPushLoading,
     isTrackingAuthorizationSettled,
-    registerPushNotifications,
-    storeUser?.id,
+    storeUserId: storeUser?.id,
     storeMerchantId,
-  ]);
+    isPushRegistered,
+    registeredUserId,
+    isPushLoading,
+    registerPushNotifications,
+  });
 
   useEffect(() => {
     if (error) throw error;
@@ -292,6 +253,7 @@ export default function RootLayout() {
     <RootLayoutNav
       onFirstLayout={onFirstLayout}
       adTrackingReady={isStartupAdTrackingReady}
+      trackingExplainer={explainer}
       persistenceEnabled={!showSplash}
       startupReady={!showSplash && loaded && isInitialized && isStorageReady}
       shouldResumeNavigation={hasCompletedInitialBoot}

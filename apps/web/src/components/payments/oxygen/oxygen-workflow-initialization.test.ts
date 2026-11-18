@@ -53,7 +53,10 @@ it('fetches and validates an uncached snapshot', async () => {
   ).resolves.toMatchObject(snapshot);
   expect(fetchWithCsrf).toHaveBeenCalledWith(
     `/api/payments/oxygen/workflows/actions?workflowId=${id}`,
-    { cache: 'no-store' }
+    {
+      cache: 'no-store',
+      headers: { 'x-oxygen-eligibility-reason': '1' },
+    }
   );
   await expect(
     fetchOxygenSnapshot(id, async () => ({

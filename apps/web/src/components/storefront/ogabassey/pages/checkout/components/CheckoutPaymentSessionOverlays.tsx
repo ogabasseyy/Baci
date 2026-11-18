@@ -32,6 +32,7 @@ export type WalletFundedTransferOverlaySession = Pick<
   | 'error'
   | 'intent'
   | 'isChecking'
+  | 'pollingExhausted'
 >;
 
 interface CheckoutPaymentSessionOverlaysProps {
@@ -99,6 +100,7 @@ export function CheckoutPaymentSessionOverlays({
                 isChecking: walletFundedTransfer.isChecking,
                 onCheckNow: walletFundedTransfer.checkNow,
                 onClose: walletFundedTransfer.close,
+                pollingExhausted: walletFundedTransfer.pollingExhausted,
               }
             : undefined,
       }}

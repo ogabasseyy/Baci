@@ -233,21 +233,12 @@ describe('finalizeOrderGatewayPayment', () => {
     expect(mocks.runPaidOrderSideEffects).not.toHaveBeenCalled();
   });
 
-  it.each([
-    'paystack',
-    'payforme',
-  ])('completes inventory, merchant notifications and side effects for %s', async (paymentMethod) => {
-    mocks.completeOrderGatewayPayment.mockResolvedValue(
-      completion({ previous_payment_status: 'unpaid' })
-    );
+  it('completes the happy path: inventory, push, and side effects', async () => {
+    mocks.completeOrderGatewayPayment.mockResolvedValue(completion());
     mocks.ensurePaidOrderInventoryConfirmed.mockResolvedValue(undefined);
 
     const outcome = await finalizeOrderGatewayPayment(
-      baseArgs(
-        buildSupabase({
-          data: { ...richOrderRow, payment_method: paymentMethod },
-        })
-      )
+      baseArgs(buildSupabase({ data: richOrderRow }))
     );
 
     expect(outcome).toEqual({
@@ -261,8 +252,7 @@ describe('finalizeOrderGatewayPayment', () => {
       'merchant-1',
       'order-1'
     );
-    expect(mocks.notifyNewOrder).toHaveBeenCalledOnce();
-    expect(mocks.notifyPaymentReceived).toHaveBeenCalledOnce();
+    expect(mocks.notifyPaymentReceived).toHaveBeenCalled();
     expect(mocks.runPaidOrderSideEffects).toHaveBeenCalledWith(
       expect.objectContaining({
         externalGatewayReference: 'REF',

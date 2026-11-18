@@ -6,6 +6,7 @@ import { logger } from '@/lib/logger';
 import { fileStuckCreditDirectReviews } from '@/lib/payments/file-stuck-credit-direct-review';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getStuckBnplSignals } from './get-stuck-bnpl-signals';
+import { loadBnplTransactionEvidence } from './load-bnpl-transaction-evidence';
 import {
   buildStuckBnplAlert,
   type StuckBnplOrderRow,
@@ -89,73 +90,11 @@ export async function GET(request: NextRequest) {
         STATUSES_REQUIRING_PROVIDER_EVIDENCE.has(order.payment_status || '') &&
         !signalsByOrderId.get(order.id)?.hasCheckoutEvidence
     );
-    const orderIdsWithTransactionEvidence = new Set<string>();
-    const transactionEvidenceReferences = new Map<string, string>();
-    let transactionEvidenceLookupFailed = false;
-    // Orders with no approval/completion signal get one more chance to show
-    // progress through a transactions row that moved past 'pending'.
-    const transactionLookupOrders = scannedOrders.filter(
-      (order) => !signalsByOrderId.get(order.id)?.hasConfirmation
-    );
-    if (transactionLookupOrders.length > 0) {
-      const { data: transactionRows, error: transactionError } = await supabase
-        .from('transactions')
-        .select('order_id, status, gateway, gateway_reference')
-        .in(
-          'order_id',
-          transactionLookupOrders.map((order) => order.id)
-        );
-      if (transactionError) {
-        transactionEvidenceLookupFailed = true;
-        logger.warn({
-          message:
-            'Stuck-BNPL scan could not check transaction evidence; pending/unpaid orders without notes evidence are skipped this run',
-          error: transactionError,
-        });
-      } else {
-        let unknownGatewayCount = 0;
-        for (const row of (transactionRows ?? []) as Array<{
-          gateway: string | null;
-          gateway_reference: string | null;
-          order_id: string;
-          status: string | null;
-        }>) {
-          if (row.status !== 'processing' && row.status !== 'completed') {
-            continue;
-          }
-          const signals = signalsByOrderId.get(row.order_id);
-          const gateway = row.gateway?.trim().toLowerCase();
-          if (!gateway) {
-            unknownGatewayCount++;
-            continue;
-          }
-          if (!signals || gateway !== signals.provider) continue;
-
-          const reference = row.gateway_reference?.trim();
-          const { attempt } = signals;
-          if (
-            gateway === 'credit_direct' &&
-            (!reference ||
-              attempt.supersededReferences.includes(reference) ||
-              (attempt.reference !== null && reference !== attempt.reference))
-          ) {
-            continue;
-          }
-
-          orderIdsWithTransactionEvidence.add(row.order_id);
-          if (reference && !transactionEvidenceReferences.has(row.order_id)) {
-            transactionEvidenceReferences.set(row.order_id, reference);
-          }
-        }
-        if (unknownGatewayCount > 0) {
-          logger.warn({
-            message:
-              'Stuck-BNPL scan ignored progressed transactions without a gateway',
-            unknownGatewayCount,
-          });
-        }
-      }
-    }
+    const {
+      progressedOrderIds: orderIdsWithTransactionEvidence,
+      referencesByOrderId: transactionEvidenceReferences,
+      lookupFailed: transactionEvidenceLookupFailed,
+    } = await loadBnplTransactionEvidence(supabase, signalsByOrderId);
 
     const orders = scannedOrders.filter(
       (order) =>

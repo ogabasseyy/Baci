@@ -1,0 +1,84 @@
+import { logger } from '@/lib/logger';
+import type { createAdminClient } from '@/lib/supabase/admin';
+import type { getStuckBnplSignals } from './get-stuck-bnpl-signals';
+
+type TransactionReader = Pick<ReturnType<typeof createAdminClient>, 'from'>;
+type OrderSignals = ReturnType<typeof getStuckBnplSignals>;
+
+interface TransactionRow {
+  gateway: string | null;
+  gateway_reference: string | null;
+  order_id: string | null;
+  status: string | null;
+}
+
+export async function loadBnplTransactionEvidence(
+  supabase: TransactionReader,
+  signalsByOrderId: ReadonlyMap<string, OrderSignals>
+) {
+  const progressedOrderIds = new Set<string>();
+  const referencesByOrderId = new Map<string, string>();
+  const orderIds = Array.from(signalsByOrderId)
+    .filter(([, signals]) => !signals.hasConfirmation)
+    .map(([id]) => id);
+
+  if (orderIds.length === 0) {
+    return { progressedOrderIds, referencesByOrderId, lookupFailed: false };
+  }
+
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('order_id, status, gateway, gateway_reference')
+    .in('order_id', orderIds);
+  if (error) {
+    logger.warn({
+      message:
+        'Stuck-BNPL scan could not check transaction evidence; pending/unpaid orders without notes evidence are skipped this run',
+      error,
+    });
+    return { progressedOrderIds, referencesByOrderId, lookupFailed: true };
+  }
+
+  let unknownGatewayCount = 0;
+  for (const row of (data ?? []) as TransactionRow[]) {
+    if (
+      !row.order_id ||
+      (row.status !== 'processing' && row.status !== 'completed')
+    )
+      continue;
+
+    const signals = signalsByOrderId.get(row.order_id);
+    if (!signals || signals.hasConfirmation) continue;
+
+    const gateway = row.gateway?.trim().toLowerCase();
+    if (!gateway) {
+      unknownGatewayCount++;
+      continue;
+    }
+    if (gateway !== signals.provider) continue;
+
+    const reference = row.gateway_reference?.trim();
+    const { attempt } = signals;
+    if (
+      gateway === 'credit_direct' &&
+      (!reference ||
+        attempt.supersededReferences.includes(reference) ||
+        (attempt.reference !== null && reference !== attempt.reference))
+    ) {
+      continue;
+    }
+
+    progressedOrderIds.add(row.order_id);
+    if (reference && !referencesByOrderId.has(row.order_id)) {
+      referencesByOrderId.set(row.order_id, reference);
+    }
+  }
+  if (unknownGatewayCount > 0) {
+    logger.warn({
+      message:
+        'Stuck-BNPL scan ignored progressed transactions without a gateway',
+      unknownGatewayCount,
+    });
+  }
+  return { progressedOrderIds, referencesByOrderId, lookupFailed: false };
+}

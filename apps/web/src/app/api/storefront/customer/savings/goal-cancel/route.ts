@@ -1,6 +1,9 @@
-import { type NextRequest, NextResponse } from 'next/server';
+import type { NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
+import { deferGoalCancelForfeit } from '@/lib/piggyvest/defer-goal-cancel-forfeit';
+import { goalCancelAmountFields } from '@/lib/piggyvest/goal-cancel-amount-fields';
+import { goalCancelForfeitTransfersAllowed } from '@/lib/piggyvest/goal-cancel-forfeit-cron';
 import {
   checkPrimaryWalletGoalCancelStatus,
   issuePrimaryWalletGoalCancel,
@@ -11,22 +14,23 @@ import { isCancellableOwnGoal } from '@/lib/piggyvest/goal-pin-fund-eligibility'
 import { resolvePrimaryWalletIdentity } from '@/lib/piggyvest/primary-wallet-identity';
 import { readPrimaryWalletSavingsRecoveryRuntime } from '@/lib/piggyvest/primary-wallet-savings-runtime';
 import { piggyvestGoalCancelSchemas as schemas } from '@/schemas/piggyvest-goal-cancel';
-
-const NO_STORE = { 'Cache-Control': 'no-store' };
-
-function respond(body: Record<string, unknown>, status: number) {
-  return NextResponse.json(body, { status, headers: NO_STORE });
-}
-function refuse(error: string, code: string, status: number) {
-  return respond({ error, code }, status);
-}
+import {
+  goalCancelSubmitResponse,
+  NEEDS_REVIEW,
+  PUBLIC_STATUSES,
+  REJECTED,
+  refuse,
+  respond,
+  UNAVAILABLE,
+} from './goal-cancel-responses';
 
 /**
- * Cancel a goal and refund the whole balance, interest included, to the main
- * wallet. The recovery runtime carries the credentials and ignores the flags
- * and the master kill switch, so a customer is never trapped in a goal: this
- * only returns the customer's own money from their goal wallet to their own
- * main wallet, behind a PIN proof bound to a server-issued operation id. The
+ * Cancel a goal early: the saved principal goes back to the main wallet and
+ * the goal's interest is forfeited to Ogabassey (owner decision 2026-11-12);
+ * answers carry principalKobo / forfeitedInterestKobo from the server once the
+ * attempt is dispatched. The recovery runtime carries the credentials and
+ * ignores the flags and the master kill switch, so a customer is never trapped
+ * in a goal, behind a PIN proof bound to a server-issued operation id. The
  * single exception is the cancel-only off switch (PIGGYVEST_GOAL_CANCEL_DISABLED),
  * which refuses NEW issue/submit steps while status checks keep settling.
  */
@@ -89,35 +93,6 @@ async function resolve(caller: Caller, merchantId: string) {
   };
 }
 
-const UNAVAILABLE = (): NextResponse =>
-  refuse(
-    'Could not confirm this cancellation. Please check its status before trying again.',
-    'CANCEL_UNAVAILABLE',
-    503
-  );
-
-const NEEDS_REVIEW = (): NextResponse =>
-  refuse(
-    'This cancellation needs a quick review by our team before it can finish. Your savings are safe. Please do not try again.',
-    'GOAL_NEEDS_REVIEW',
-    409
-  );
-
-// The only attempt states a status check may show a customer.
-const PUBLIC_STATUSES: ReadonlySet<string> = new Set([
-  'pending',
-  'confirmed',
-  'needs_review',
-  'not_started',
-]);
-
-const REJECTED = (): NextResponse =>
-  refuse(
-    'PiggyVest did not accept the refund. Your savings are unchanged.',
-    'CANCEL_REJECTED',
-    409
-  );
-
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const guarded = await guard(request);
   if ('error' in guarded) return guarded.error;
@@ -132,6 +107,19 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       'Goal cancellation is temporarily unavailable.',
       'SAVINGS_UNAVAILABLE',
       503
+    );
+  // An app that never showed the interest forfeit (older builds say the
+  // whole balance, interest included, comes back) can not move money: it is
+  // asked to update, at the start (issue) as well as at submit, so it never
+  // starts an attempt it can not finish. Nothing is issued or reserved.
+  // This is a disclosure control (the client attests it showed the copy), not
+  // an authorization or money-safety control: the split is always sized by
+  // the database, whatever the client sends.
+  if (input.interestForfeitAcknowledged !== true)
+    return refuse(
+      'Please update the app to cancel this goal.',
+      'APP_UPDATE_REQUIRED',
+      409
     );
   try {
     const resolved = await resolve(guarded.caller, input.merchantId);
@@ -162,6 +150,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           409
         );
       if (issued.status === 'needs_review') return NEEDS_REVIEW();
+      if (issued.status === 'not_set_up')
+        return refuse(
+          "This plan is still being set up, so there's nothing to cancel yet.",
+          'GOAL_NOT_SET_UP',
+          409
+        );
       // 'pending' means an attempt is already live: its id is for polling the
       // PATCH status check, not for a PIN (the PIN route only accepts ids in
       // the issued state).
@@ -181,75 +175,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       goalId: input.goalId,
       operationId: input.operationId,
       pinProof: input.pinProof,
+      allowForfeitTransfers: goalCancelForfeitTransfersAllowed(),
+      deferForfeit: deferGoalCancelForfeit,
     });
-    switch (result.status) {
-      case 'pin_refused':
-        return refuse(
-          result.reason === 'missing'
-            ? 'Please confirm your PIN to continue.'
-            : 'Please confirm your PIN again to continue.',
-          result.reason === 'missing'
-            ? 'PIN_PROOF_REQUIRED'
-            : 'PIN_PROOF_REFUSED',
-          result.reason === 'missing' ? 400 : 403
-        );
-      case 'confirmed':
-        return respond(
-          { status: 'confirmed', operationId: input.operationId },
-          200
-        );
-      case 'pending':
-        return respond(
-          { status: 'pending', operationId: input.operationId },
-          202
-        );
-      case 'released':
-        return REJECTED();
-      case 'empty':
-        return refuse(
-          'This goal has no balance to refund.',
-          'NOTHING_TO_REFUND',
-          409
-        );
-      case 'too_large':
-        return refuse(
-          'This goal balance is above the automatic refund limit. Please contact support.',
-          'AMOUNT_TOO_LARGE',
-          409
-        );
-      case 'expired':
-        return refuse(
-          'This cancellation expired. Please start again.',
-          'CANCEL_EXPIRED',
-          409
-        );
-      case 'needs_review':
-        return NEEDS_REVIEW();
-      case 'busy':
-        return refuse(
-          'A contribution is still processing. Please try again shortly.',
-          'CANCEL_BUSY',
-          409
-        );
-      case 'unavailable':
-        return refuse(
-          'Could not confirm the wallet details. Please try again later.',
-          'WALLET_UNAVAILABLE',
-          503
-        );
-      default:
-        return refuse(
-          'This cancellation could not be matched. Please refresh your savings.',
-          'CANCEL_CONFLICT',
-          409
-        );
-    }
+    return goalCancelSubmitResponse(result, input.operationId);
   } catch {
     return UNAVAILABLE();
   }
 }
 
-/** Status check: the only thing a retry does. It never sends money. */
+/**
+ * Status check: the only thing a retry does. It never sends the customer's
+ * money; once the cancel is confirmed it may start Ogabassey's interest
+ * transfer after answering (the forfeit the customer agreed to).
+ */
 export async function PATCH(request: NextRequest): Promise<NextResponse> {
   const guarded = await guard(request);
   if ('error' in guarded) return guarded.error;
@@ -268,6 +207,8 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
       providerToken: runtime.providerToken,
       scope,
       operationId: body.data.operationId,
+      allowForfeitTransfers: goalCancelForfeitTransfersAllowed(),
+      deferForfeit: deferGoalCancelForfeit,
     });
     if (result.status === 'not_found')
       return refuse('Cancellation not found.', 'CANCEL_NOT_FOUND', 404);
@@ -276,7 +217,11 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     if (result.status === 'released') return REJECTED();
     if (!PUBLIC_STATUSES.has(result.status)) return UNAVAILABLE();
     return respond(
-      { status: result.status, operationId: body.data.operationId },
+      {
+        status: result.status,
+        operationId: body.data.operationId,
+        ...goalCancelAmountFields(result),
+      },
       200
     );
   } catch {

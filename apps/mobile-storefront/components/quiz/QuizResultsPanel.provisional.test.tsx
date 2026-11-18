@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { render, screen } from '@testing-library/react-native';
+import { Text } from 'react-native';
 import { QuizResultsPanel } from './QuizResultsPanel';
 import { createQuizStyles } from './QuizScreen.styles';
 import { useQuizResultsLeaderboard } from './use-quiz-results-leaderboard';
@@ -60,6 +61,7 @@ describe('provisional quiz score', () => {
         status: 'live',
       },
       leaderboardError: false,
+      liveBoardHidden: false,
       participantCount: 2,
     });
   });
@@ -82,6 +84,7 @@ describe('provisional quiz score', () => {
         status: 'live',
       },
       leaderboardError: false,
+      liveBoardHidden: false,
       participantCount: 1,
     });
     const view = render(<QuizResultsPanel {...props} />);
@@ -94,6 +97,7 @@ describe('provisional quiz score', () => {
         status: 'live',
       },
       leaderboardError: false,
+      liveBoardHidden: false,
       participantCount: 1,
     });
     view.rerender(
@@ -137,9 +141,85 @@ describe('provisional quiz score', () => {
         status: 'live',
       },
       leaderboardError: false,
+      liveBoardHidden: false,
       participantCount: 1,
     });
     render(<QuizResultsPanel {...props} />);
     expect(screen.queryByText('Provisional best score')).toBeNull();
+  });
+
+  it('shows the live standings and the waiting ad as soon as the player finishes', () => {
+    const rival = (rank: number) => ({
+      ...currentPlayer,
+      displayName: `Rival ${rank}`,
+      isCurrentCustomer: false,
+      rank,
+      score: 10 - rank,
+    });
+    jest.mocked(useQuizResultsLeaderboard).mockReturnValue({
+      leaderboard: {
+        currentPlayer: { ...currentPlayer, rank: 4 },
+        entries: [rival(1), rival(2), rival(3), { ...currentPlayer, rank: 4 }],
+        participantCount: 4,
+        status: 'live',
+      },
+      leaderboardError: false,
+      liveBoardHidden: false,
+      participantCount: 4,
+    });
+    render(
+      <QuizResultsPanel
+        {...props}
+        adSlot={<Text>Waiting ad</Text>}
+        eventEndsAt={new Date(Date.now() + 60_000).toISOString()}
+        serverNow={new Date().toISOString()}
+      />
+    );
+
+    expect(screen.getByText('Live standings')).toBeTruthy();
+    expect(screen.getByTestId('quiz-standings-podium')).toBeTruthy();
+    expect(screen.getByText('Rival 1')).toBeTruthy();
+    expect(screen.getByText(/Me\s+\(You\)/)).toBeTruthy();
+    expect(screen.getByTestId('quiz-results-countdown')).toBeTruthy();
+    expect(screen.getByText('Waiting ad')).toBeTruthy();
+  });
+
+  it('says standings open at the end when the server holds the live board back', () => {
+    jest.mocked(useQuizResultsLeaderboard).mockReturnValue({
+      leaderboard: null,
+      leaderboardError: false,
+      liveBoardHidden: true,
+      participantCount: null,
+    });
+    render(<QuizResultsPanel {...props} />);
+
+    expect(screen.getByText('Standings open when the quiz ends.')).toBeTruthy();
+    expect(screen.queryByLabelText('Loading standings')).toBeNull();
+  });
+
+  it('bugfix: the waiting ad showed under the "result unavailable" error', () => {
+    render(
+      <QuizResultsPanel
+        {...props}
+        adSlot={<Text>Waiting ad</Text>}
+        v2Result={{
+          attemptId: 'attempt-1',
+          availability: 'unavailable',
+          reason: 'tester_revoked',
+        }}
+      />
+    );
+
+    expect(screen.getByText('Quiz access ended')).toBeTruthy();
+    expect(screen.queryByText('Waiting ad')).toBeNull();
+  });
+
+  it('bugfix: live standings waited for the first result poll before loading', () => {
+    render(<QuizResultsPanel {...props} v2Result={null} />);
+
+    expect(
+      jest.mocked(useQuizResultsLeaderboard).mock.lastCall?.[0].enabled
+    ).toBe(true);
+    expect(screen.getByText('Live standings')).toBeTruthy();
   });
 });

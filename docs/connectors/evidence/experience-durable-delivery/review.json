@@ -1,0 +1,30 @@
+{
+  "type": "complete",
+  "status": "review_completed",
+  "findings": 0,
+  "reviewedFiles": [
+    "apps/web/src/lib/experience/local-prerender-pipeline.ts",
+    "apps/web/src/lib/experience/local-prerender-storefront.ts",
+    "apps/web/src/lib/experience/private-prerender-document.ts",
+    "apps/web/src/lib/experience/public-output-reader.ts",
+    "apps/web/src/lib/experience/public-runtime.ts",
+    "apps/web/tests/experience-durable/fixture.ts",
+    "apps/web/tests/experience-durable/public-browser-worker.ts",
+    "apps/web/tests/experience-durable/public-browser.test.ts",
+    "apps/web/tests/experience-durable/storefront.integration.test.ts",
+    "apps/web/tests/experience-lifecycle/prerender-mcp.test.ts",
+    "apps/web/tools/experience-runner/durable-prerender-artifacts.test.ts",
+    "apps/web/tools/experience-runner/durable-prerender-artifacts.ts",
+    "apps/web/tools/experience-runner/local-oci-executor.test.ts",
+    "apps/web/tools/experience-runner/local-oci-executor.ts",
+    "apps/web/tools/experience-runner/published-gateway.ts",
+    "apps/web/tools/experience-runner/published-prerender.test.ts",
+    "apps/web/tsconfig.experience-durable.json",
+    "apps/web/vitest.config.ts",
+    "apps/web/vitest.experience-durable-browser.config.ts",
+    "apps/web/vitest.experience-durable.config.ts",
+    "supabase/migrations/20261025220000_experience_public_prerender_binding.sql"
+  ],
+  "outcome": "completed",
+  "message": "Review completed"
+}

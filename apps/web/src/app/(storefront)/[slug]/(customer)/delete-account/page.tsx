@@ -19,7 +19,7 @@ export async function generateMetadata({
   }
 
   return {
-    title: `Delete Account | ${merchant.business_name}`,
+    title: 'Delete Account',
     description: `Request deletion of your ${merchant.business_name} account and associated data.`,
     robots: {
       index: false,

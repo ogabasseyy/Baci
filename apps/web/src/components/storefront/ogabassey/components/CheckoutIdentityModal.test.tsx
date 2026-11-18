@@ -70,13 +70,15 @@ describe('CheckoutIdentityModal', () => {
   });
 
   it('navigates to checkout on guest click and calls onClose', () => {
-    render(<CheckoutIdentityModal {...defaultProps} />);
+    const onProceed = vi.fn();
+    render(<CheckoutIdentityModal {...defaultProps} onProceed={onProceed} />);
 
     fireEvent.click(
       screen.getByRole('button', { name: /continue as guest/i })
     );
 
     expect(mockPush).toHaveBeenCalledWith('/checkout');
+    expect(onProceed).toHaveBeenCalledOnce();
     expect(defaultProps.onClose).toHaveBeenCalled();
   });
 

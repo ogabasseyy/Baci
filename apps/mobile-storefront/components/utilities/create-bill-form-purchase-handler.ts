@@ -19,14 +19,15 @@ import {
 import { IDENTIFIER_LABELS } from './bill-form.constants';
 import type { CreateBillFormPurchaseHandlerInput } from './bill-form-purchase.types';
 import { getBillPaymentAmountError } from './bill-payment-amount-validation';
+import { buildBillPurchaseRequest } from './build-bill-purchase-request';
 import { resolveBillCustomerOfRecord } from './resolve-bill-customer-of-record';
-import { resolveBillFulfillment } from './resolve-bill-fulfillment';
 import {
   awaitUtilitySettlementGate,
   preserveSuppressedVtuSuccess,
   refreshWalletAfterSuppressedVtuResult,
   shouldDiscardVtuResultForAccountSwitch,
 } from './vtu-account-switch';
+import { payFromPiggyvest } from './vtu-wallet-pay-store';
 
 const GENERIC_PAYMENT_ERROR_MESSAGE = 'Payment failed. Please try again.';
 
@@ -84,16 +85,12 @@ export function createBillFormPurchaseHandler({
         );
         return;
       }
-      if (!amount) {
-        Alert.alert('Missing Amount', 'Please enter an amount.');
-        return;
-      }
-      const amountError = getBillPaymentAmountError(
-        numericAmount,
-        selectedBillItem
-      );
-      if (amountError) {
-        Alert.alert('Invalid Amount', amountError);
+      // Pay stays disabled with the amount issue shown in the form (inline
+      // notice), so these never reach here from a tap: no system alert.
+      if (
+        !amount ||
+        getBillPaymentAmountError(numericAmount, selectedBillItem)
+      ) {
         return;
       }
       const { customerName, customerAddress } = resolveBillCustomerOfRecord({
@@ -101,35 +98,20 @@ export function createBillFormPurchaseHandler({
         verifiedCustomerName,
         verifiedCustomerAddress,
       });
-      // Kuda-display + Monnify-fulfillment routing (folded items vend via Monnify).
-      const {
-        provider: selectedProvider,
-        billerCode: selectedBillerCode,
-        productCode: selectedProductCode,
-      } = resolveBillFulfillment(
-        selectedBillItem,
-        selectedBiller,
-        selectedBillItemIdentifier ?? undefined
-      );
-
-      const request = {
+      const request = buildBillPurchaseRequest({
         amount: numericAmount,
-        billItemIdentifier: selectedBillItemIdentifier ?? undefined,
-        billerCode: selectedBillerCode,
-        billerName: selectedBillItemPathLabel
-          ? `${selectedBiller.billerName} - ${selectedBillItemPathLabel}`
-          : selectedBiller.billerName,
+        billItem: selectedBillItem,
+        biller: selectedBiller,
+        billItemIdentifier: selectedBillItemIdentifier,
+        billItemPathLabel: selectedBillItemPathLabel,
         customerIdentifier: customerId,
         customerName,
-        ...(customerAddress ? { customerAddress } : {}),
-        customerPhone: customer?.phone || undefined,
-        productCode: selectedProductCode,
-        provider: selectedProvider,
-        ...(requireValidationRef !== undefined ? { requireValidationRef } : {}),
+        customerAddress,
+        customerPhone: customer?.phone,
+        requireValidationRef,
         type: billType,
-        ...(validationReference ? { validationReference } : {}),
-        walletAmount: numericAmount,
-      };
+        validationReference,
+      });
       // Submitting flips synchronously, so taps during the wait hit the
       // guard; validation above never reaches this (no flash).
       // Settle-await BEFORE the peek (R66): peeking first bypasses the
@@ -142,10 +124,19 @@ export function createBillFormPurchaseHandler({
         setIsSubmitting(false);
         return;
       }
-      // Retained-replay peek (R65 6ru4mK): the SAME request the submit
-      // signs with — a charged-but-unanswered retry must bypass the
-      // balance gate instead of stranding behind top-up.
       const isRetainedReplay = payment.hasRetainedVtuAttempt(request);
+      // The finally below also resets it; explicit like the other forms.
+      const handedOver = await payFromPiggyvest(
+        request,
+        onSuccess,
+        customerId,
+        isRetainedReplay,
+        getIsActive
+      );
+      // Left the screen during the retained-key lookup: charge nothing (Codex P2).
+      if (handedOver || (getIsActive && !getIsActive()))
+        return void setIsSubmitting(false);
+      // Retained-replay peek (R65): a charged retry bypasses the gate.
       if (
         !ensureUtilityWalletReady({
           amount: numericAmount,

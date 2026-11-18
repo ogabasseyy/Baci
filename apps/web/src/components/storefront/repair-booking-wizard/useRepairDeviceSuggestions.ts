@@ -91,6 +91,10 @@ export function useRepairDeviceSuggestions({
                   ) {
                     const response = await apiGet<{
                       count?: number;
+                      pagination?: {
+                        hasMore?: boolean;
+                        totalCount?: number;
+                      };
                       products: StorefrontProductDeviceCandidate[];
                     }>(
                       `/api/storefront/products?merchant_id=${encodeURIComponent(merchantId)}&q=${encodeURIComponent(query)}&limit=${PRODUCT_SEARCH_PAGE_SIZE}&offset=${offset}&compact=true`,
@@ -106,10 +110,20 @@ export function useRepairDeviceSuggestions({
                       );
                     products.push(...pageSuggestions);
                     totalCount =
-                      typeof response.count === 'number'
-                        ? response.count
-                        : offset + pageProducts.length;
-                    if (pageProducts.length < PRODUCT_SEARCH_PAGE_SIZE) break;
+                      typeof response.pagination?.totalCount === 'number'
+                        ? response.pagination.totalCount
+                        : typeof response.count === 'number'
+                          ? response.count
+                          : offset + pageProducts.length;
+
+                    const hasMore =
+                      typeof response.pagination?.hasMore === 'boolean'
+                        ? response.pagination.hasMore
+                        : typeof response.count === 'number'
+                          ? offset + PRODUCT_SEARCH_PAGE_SIZE < totalCount
+                          : pageProducts.length === PRODUCT_SEARCH_PAGE_SIZE;
+
+                    if (!hasMore) break;
                     offset += PRODUCT_SEARCH_PAGE_SIZE;
                   }
                   return { failed: false, products };

@@ -4,6 +4,7 @@ import { cacheLife, cacheTag } from 'next/cache';
 import { cache } from 'react';
 import { OGABASSEY_MERCHANT_ID } from '@/config/ogabassey';
 import { RELATED_BLOG_POST_LIMITS } from '@/config/related-blog-post-limits';
+import { projectAdvertisedPhonePrices } from '@/lib/advertised-phone-price-projection';
 import { getBlogCacheTag } from '@/lib/blog-cache-tags';
 import { BLOG_LISTING_PAGE_SIZE } from '@/lib/blog-listing-page-size';
 import type {
@@ -25,6 +26,7 @@ import { isPostgrestNoRowsError } from '@/lib/is-postgrest-no-rows-error';
 import { merchantFeatureSettingsDefaults } from '@/lib/merchant-feature-settings-defaults';
 import { normalizeStorefrontCategoryValue } from '@/lib/normalize-storefront-category-value';
 import { getOrderedBlogPostProductLinks } from '@/lib/ordered-blog-post-product-links';
+import { extractPlatformSubdomainSlug } from '@/lib/platform-subdomain';
 import { getProductScopedCacheTag } from '@/lib/product-cache-tags';
 import type { Product } from '@/lib/products';
 import {
@@ -34,6 +36,7 @@ import {
 } from '@/lib/public-blog-content-quality';
 import { applyPublicBlogSqlFilters } from '@/lib/public-blog-sql-filters';
 import { getPublicSupabaseClient } from '@/lib/public-supabase-client';
+import { readPublicListingProductRows } from '@/lib/read-public-listing-product-rows';
 import {
   normalizeRelatedBlogProductLinks,
   normalizeRelatedBlogProducts,
@@ -280,7 +283,7 @@ async function getCachedPublicProductVariantsByProductIds(
   return variantsByProductId;
 }
 
-async function getPublicProductVariantsByProductIds(
+export async function getPublicProductVariantsByProductIds(
   merchantId: string,
   productIds: string[]
 ) {
@@ -628,11 +631,6 @@ export async function getCachedMerchant(
     return null;
   }
 
-  console.log(
-    'Successfully fetched merchant:',
-    sanitizeLookupLogValue(slug),
-    merchant.id
-  );
   cacheTag(`features-${merchant.id}`);
   return merchant;
 }
@@ -649,6 +647,10 @@ export async function getCachedMerchantByDomain(
   'use cache';
   cacheLife('merchant');
   const normalizedDomain = domain.toLowerCase();
+  const subdomainSlug = extractPlatformSubdomainSlug(normalizedDomain);
+  if (subdomainSlug) {
+    return await getCachedMerchant(subdomainSlug);
+  }
   const safeDomain = sanitizeLookupLogValue(normalizedDomain);
   cacheTag('merchants', 'domains', `domain-${normalizedDomain}`);
 
@@ -669,12 +671,6 @@ export async function getCachedMerchantByDomain(
     return null;
   }
 
-  console.log('Successfully fetched merchant by domain', {
-    domain: safeDomain,
-    slug: resolvedMerchant.slug,
-    merchantId: resolvedMerchant.id,
-  });
-
   cacheTag(`features-${resolvedMerchant.id}`);
   return resolvedMerchant;
 }
@@ -694,10 +690,16 @@ export async function getMerchantByIdentifier(
 ): Promise<CachedMerchant | null> {
   if (!isValidMerchantIdentifier(identifier)) return null;
 
-  if (isDomainIdentifier(identifier)) {
-    return await getCachedMerchantByDomain(identifier.toLowerCase());
+  const normalized = identifier.toLowerCase();
+  const subdomainSlug = extractPlatformSubdomainSlug(normalized);
+  if (subdomainSlug) {
+    return await getCachedMerchant(subdomainSlug);
   }
-  return await getCachedMerchant(identifier.toLowerCase());
+
+  if (isDomainIdentifier(normalized)) {
+    return await getCachedMerchantByDomain(normalized);
+  }
+  return await getCachedMerchant(normalized);
 }
 
 /**
@@ -1714,11 +1716,14 @@ async function getCachedCategoryPageProductDetailsChunk({
     throw error;
   }
 
+  const sourceProducts = readPublicListingProductRows(data ?? []);
+  const advertisedProducts = await projectAdvertisedPhonePrices(
+    merchantId,
+    sourceProducts,
+    getPublicProductVariantsByProductIds
+  );
   const productsById = new Map(
-    ((data || []) as Array<{ id?: string | null }>).map((product) => [
-      product.id,
-      product,
-    ])
+    advertisedProducts.map((product) => [product.id, product])
   );
 
   const productSlots = productIds.map(
@@ -1726,11 +1731,9 @@ async function getCachedCategoryPageProductDetailsChunk({
   );
 
   return {
-    missingProductCount: productSlots.filter((product) => product === null)
+    missingProductCount: productIds.filter((id) => !productsById.has(id))
       .length,
-    productSlots: productSlots.filter(
-      (product): product is { id?: string | null } => product !== null
-    ),
+    productSlots: productSlots.filter((product) => product !== null),
     productsQueryFailed: false,
   };
 }
@@ -2966,6 +2969,12 @@ export interface StorefrontHomeProduct {
   brand?: string | null;
   condition?: string | null;
   has_condition_offers?: boolean | null;
+  has_variants?: boolean | null;
+  variant_model?: string | null;
+  advertised_price?: number;
+  advertised_condition?: string | null;
+  advertised_compare_at_price?: number | null;
+  advertised_image?: string;
   stock?: number | null;
   stock_quantity?: number | null;
   manage_stock?: boolean | null;
@@ -3125,27 +3134,27 @@ const STOREFRONT_HOME_PRODUCT_LIMIT = 50;
 const STOREFRONT_HOME_PRIORITY_PRODUCT_LIMIT = 24;
 const STOREFRONT_HOME_PRODUCT_SELECT = `
     id, name, slug, description, price, compare_at_price, created_at,
-    images, category, brand, condition, has_condition_offers, stock, stock_quantity,
+    images, category, brand, condition, has_condition_offers, has_variants, variant_model, stock, stock_quantity,
     manage_stock, low_stock_threshold,
     product_categories(categories(name, slug))
   `;
 const STOREFRONT_HOME_PRODUCT_RECENT_SELECT = `
     id, name, slug, description, price, compare_at_price, created_at, updated_at,
-    images, category, brand, condition, has_condition_offers, stock, stock_quantity,
+    images, category, brand, condition, has_condition_offers, has_variants, variant_model, stock, stock_quantity,
     manage_stock, low_stock_threshold,
     categories:category_id(id, name, slug, parent_id),
     product_categories(categories(name, slug))
   `;
 const STOREFRONT_HOME_PRODUCT_DIRECT_CATEGORY_SELECT = `
     id, name, slug, description, price, compare_at_price, created_at, updated_at,
-    images, category, brand, condition, has_condition_offers, stock, stock_quantity,
+    images, category, brand, condition, has_condition_offers, has_variants, variant_model, stock, stock_quantity,
     manage_stock, low_stock_threshold,
     categories:category_id!inner(id, name, slug, parent_id),
     product_categories(categories(name, slug))
   `;
 const STOREFRONT_HOME_PRODUCT_RELATION_CATEGORY_SELECT = `
     id, name, slug, description, price, compare_at_price, created_at, updated_at,
-    images, category, brand, condition, has_condition_offers, stock, stock_quantity,
+    images, category, brand, condition, has_condition_offers, has_variants, variant_model, stock, stock_quantity,
     manage_stock, low_stock_threshold,
     categories:category_id(id, name, slug, parent_id),
     product_categories!inner(categories!inner(name, slug))
@@ -3186,7 +3195,11 @@ export async function getCachedStorefrontLaunchProducts(
     throw error;
   }
 
-  return hydrateAndSanitizeProducts(supabase, merchantId, data ?? []);
+  return projectAdvertisedPhonePrices(
+    merchantId,
+    await hydrateAndSanitizeProducts(supabase, merchantId, data ?? []),
+    getPublicProductVariantsByProductIds
+  );
 }
 
 /**
@@ -3348,7 +3361,11 @@ export async function getCachedStorefrontHomeProducts(
       })
       .slice(0, STOREFRONT_HOME_PRODUCT_LIMIT);
 
-    return hydrateAndSanitizeProducts(supabase, merchantId, combinedProducts);
+    return projectAdvertisedPhonePrices(
+      merchantId,
+      await hydrateAndSanitizeProducts(supabase, merchantId, combinedProducts),
+      getPublicProductVariantsByProductIds
+    );
   }
 
   // 'price' (the default for all other storefronts) keeps the original
@@ -3368,5 +3385,9 @@ export async function getCachedStorefrontHomeProducts(
     throw error;
   }
 
-  return hydrateAndSanitizeProducts(supabase, merchantId, data ?? []);
+  return projectAdvertisedPhonePrices(
+    merchantId,
+    await hydrateAndSanitizeProducts(supabase, merchantId, data ?? []),
+    getPublicProductVariantsByProductIds
+  );
 }

@@ -96,6 +96,12 @@ export function normalizeCategoryPageProducts(
       category: normalized.category,
       brand: normalized.brand ?? undefined,
       condition: CONDITION_MAP[normalized.condition] || 'New',
+      ...(typeof normalized.has_variants === 'boolean'
+        ? { has_variants: normalized.has_variants }
+        : {}),
+      ...(normalized.variant_model
+        ? { variant_model: normalized.variant_model }
+        : {}),
       stock: normalized.stock,
       manage_stock: normalized.manage_stock,
       has_condition_offers: Boolean(normalized.has_condition_offers),

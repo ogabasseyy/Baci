@@ -15,7 +15,9 @@ import {
 
 /**
  * Provider delivery contract (17 Sep 2026; durable capture, R5):
- * - At-least-once: up to 10 automatic retries, plus manual resends.
+ * - At-least-once: up to 10 automatic retries with exponential backoff.
+ *   PiggyVest confirmed on 2026-11-11 there is no resend endpoint: once
+ *   retries run out, only the capture drain can replay a stored event.
  * - Signature is hex(HMAC-SHA512(secret, raw_body)) in
  *   `x-pvb-signature`, verified over the exact wire bytes.
  * - Capture is always on. Any request that verifies under a CURRENT key is

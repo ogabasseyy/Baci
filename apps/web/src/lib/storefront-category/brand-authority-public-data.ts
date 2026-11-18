@@ -18,10 +18,11 @@ export interface BrandAuthorityCategory {
   name: string;
 }
 
-function getClient() {
+function getClient(signal?: AbortSignal) {
   return createPublicClient({
     clientInfo: 'baci-web-brand-authority',
     timeoutMs: 10_000,
+    signal,
   });
 }
 
@@ -84,8 +85,15 @@ async function getCategory(
   'use cache';
   cacheLife('storefront-page');
   cacheTag('categories', `categories-${merchantId}`);
+  return await readCategory(merchantId, categorySlug);
+}
 
-  const { data, error } = await getClient()
+async function readCategory(
+  merchantId: string,
+  categorySlug: string,
+  signal?: AbortSignal
+): Promise<BrandAuthorityCategory | null> {
+  const { data, error } = await getClient(signal)
     .from('categories')
     .select('id, name, is_active')
     .eq('merchant_id', merchantId)
@@ -103,5 +111,6 @@ async function getCategory(
 export const brandAuthorityPublicData = {
   createClient: getClient,
   getCategory,
+  readCategory,
   getMerchant,
 } as const;

@@ -4,6 +4,8 @@ import { captureOrHoldRedvaultPayment } from '@/lib/payments/redvault-capture-ho
 function buildRpcClient(
   captureData: unknown,
   captureError: unknown = null,
+  // null = the classification RPC returns no row (order missing or owned by
+  // another merchant). A row with a NULL method is mocked directly below.
   paymentMethod: string | null = 'uba_redvault'
 ) {
   const rpc = vi
@@ -146,6 +148,33 @@ describe('captureOrHoldRedvaultPayment', () => {
       })
     ).resolves.toEqual({ kind: 'not_redvault' });
     expect(rpcClient.rpc).toHaveBeenCalledTimes(1);
+  });
+
+  it('treats an order with no payment method as not REDVAULT instead of failing', async () => {
+    // Regression: a staff-created in-store invoice has payment_method NULL.
+    // When the customer paid by bank transfer, this threw "order not found",
+    // the gateway completion became capture_hold_failed, and the order stayed
+    // "awaiting payment" even though the money was received.
+    const rpc = vi
+      .fn()
+      .mockResolvedValueOnce({ data: [{ payment_method: null }], error: null });
+
+    await expect(
+      captureOrHoldRedvaultPayment({ ...input, rpcClient: { rpc } as never })
+    ).resolves.toEqual({ kind: 'not_redvault' });
+    expect(rpc).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails closed on an unexpected classification response shape', async () => {
+    const rpc = vi.fn().mockResolvedValueOnce({
+      data: { payment_method: 'paystack' },
+      error: null,
+    });
+
+    await expect(
+      captureOrHoldRedvaultPayment({ ...input, rpcClient: { rpc } as never })
+    ).rejects.toThrow('redvault_capture_hold_classification_invalid');
+    expect(rpc).toHaveBeenCalledTimes(1);
   });
 
   it('fails closed when the order is missing or merchant-mismatched', async () => {

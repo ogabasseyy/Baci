@@ -1,8 +1,11 @@
+// @vitest-environment jsdom
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   capturePublicBlogPageview,
   resetPublicBlogPageviewDedupe,
   resetPublicBlogPageviewDedupeForTests,
+  resolvePublicBlogPageviewAttribution,
 } from './public-blog-pageview';
 
 function parseFetchBody(fetch: ReturnType<typeof vi.fn>, index = 0) {
@@ -11,10 +14,23 @@ function parseFetchBody(fetch: ReturnType<typeof vi.fn>, index = 0) {
 }
 
 function stubStorage(initialEntries: Record<string, string> = {}) {
-  const storage = new Map(Object.entries(initialEntries));
+  const fullConsent = JSON.stringify({
+    necessary: true,
+    analytics: true,
+    marketing: false,
+    functional: false,
+  });
+  const storage = new Map(
+    Object.entries({
+      'baci-cookie-consent': fullConsent,
+      ...initialEntries,
+    })
+  );
   vi.stubGlobal('localStorage', {
     getItem: (key: string) => storage.get(key) ?? null,
     setItem: (key: string, value: string) => storage.set(key, value),
+    removeItem: (key: string) => storage.delete(key),
+    clear: () => storage.clear(),
   });
   return storage;
 }
@@ -145,6 +161,7 @@ describe('capturePublicBlogPageview transport', () => {
   });
 
   it('does not send likely bot pageviews through the direct capture path', () => {
+    stubStorage();
     const sendBeacon = vi.fn<typeof navigator.sendBeacon>(() => true);
 
     vi.stubGlobal('navigator', {
@@ -227,6 +244,83 @@ describe('capturePublicBlogPageview transport', () => {
         $host: 'usebaci.com',
         $pathname: '/ogabassey/blog',
       },
+    });
+  });
+
+  it('handles missing or undefined document cookie without throwing', () => {
+    stubStorage();
+    vi.stubGlobal('navigator', { userAgent: 'Mozilla/5.0' });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(null))
+    );
+    vi.stubGlobal('document', {
+      cookie: undefined,
+      referrer: '',
+    });
+    vi.stubGlobal('location', { origin: 'https://ogabassey.com' });
+
+    expect(() =>
+      capturePublicBlogPageview(
+        { NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN: 'ph_public' },
+        'https://ogabassey.com/blog'
+      )
+    ).not.toThrow();
+  });
+});
+
+describe('resolvePublicBlogPageviewAttribution', () => {
+  it('returns null when consent is declined, project token is missing, or bot UA is detected', () => {
+    stubStorage({
+      'baci-cookie-consent': JSON.stringify({
+        necessary: true,
+        analytics: false,
+      }),
+    });
+    vi.stubGlobal('navigator', { userAgent: 'Mozilla/5.0' });
+    vi.stubGlobal('location', { origin: 'https://ogabassey.com' });
+
+    expect(
+      resolvePublicBlogPageviewAttribution(
+        { NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN: 'ph_public' },
+        'https://ogabassey.com/blog'
+      )
+    ).toBeNull();
+
+    stubStorage();
+    expect(
+      resolvePublicBlogPageviewAttribution({}, 'https://ogabassey.com/blog')
+    ).toBeNull();
+
+    vi.stubGlobal('navigator', {
+      userAgent: 'Mozilla/5.0 Googlebot/2.1 (+http://www.google.com/bot.html)',
+    });
+    expect(
+      resolvePublicBlogPageviewAttribution(
+        { NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN: 'ph_public' },
+        'https://ogabassey.com/blog'
+      )
+    ).toBeNull();
+  });
+
+  it('resolves attribution properties when analytics is allowed', () => {
+    stubStorage();
+    vi.stubGlobal('navigator', { userAgent: 'Mozilla/5.0' });
+    vi.stubGlobal('location', { origin: 'https://ogabassey.com' });
+    vi.stubGlobal('document', {
+      referrer: 'https://www.google.com/search?q=phones',
+    });
+
+    const attribution = resolvePublicBlogPageviewAttribution(
+      { NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN: 'ph_public' },
+      'https://ogabassey.com/blog?utm_source=google&utm_medium=cpc'
+    );
+
+    expect(attribution).toMatchObject({
+      $referrer: 'https://www.google.com',
+      $referring_domain: 'www.google.com',
+      utm_source: 'google',
+      utm_medium: 'cpc',
     });
   });
 });

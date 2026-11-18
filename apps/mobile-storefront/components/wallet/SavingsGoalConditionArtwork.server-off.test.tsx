@@ -39,3 +39,32 @@ it('omits the condition badge when a legacy goal has no condition', () => {
 
   expect(screen.queryByLabelText(/^Device condition:/)).toBeNull();
 });
+
+describe('bugfix: the New badge covered the phone icon on small artwork', () => {
+  it('puts the badge under small artwork instead of over it', () => {
+    render(
+      <SavingsGoalConditionArtwork
+        colors={Colors.light}
+        goal={goal('new')}
+        imageRequestSize={128}
+        size={52}
+      />
+    );
+    const badge = screen.getByLabelText('Device condition: New');
+    expect(badge).not.toHaveStyle({ position: 'absolute' });
+  });
+
+  it('keeps the corner badge on large artwork', () => {
+    render(
+      <SavingsGoalConditionArtwork
+        colors={Colors.light}
+        goal={goal('new')}
+        imageRequestSize={160}
+        size={120}
+      />
+    );
+    expect(screen.getByLabelText('Device condition: New')).toHaveStyle({
+      position: 'absolute',
+    });
+  });
+});

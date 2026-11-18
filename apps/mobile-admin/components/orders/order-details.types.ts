@@ -1,4 +1,8 @@
-import type { OrderFulfillmentDetails, VariantAttributes } from '@baci/shared';
+import type {
+  CancelRefundPlan,
+  OrderFulfillmentDetails,
+  VariantAttributes,
+} from '@baci/shared';
 import type { PaymentStatus, ShippingStatus } from '@/hooks/useOrders';
 
 export interface OrderDetailsItem {
@@ -28,6 +32,7 @@ export interface OrderDetailsItem {
 export interface OrderDetailsRecord {
   amount_paid: number;
   balance: number;
+  cancel_refund_plan?: CancelRefundPlan;
   cancelled_at?: string | null;
   created_at: string;
   currency?: string | null;

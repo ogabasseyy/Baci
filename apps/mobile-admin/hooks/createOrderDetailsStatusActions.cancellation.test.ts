@@ -53,7 +53,7 @@ describe('createOrderDetailsStatusActions paid cancellation', () => {
     await actions.handleStatusUpdate('cancelled');
     const confirmation = vi.mocked(Alert.alert).mock.calls[0]?.[2];
     const cancelOrder = confirmation?.find(
-      (button) => button.text === 'Cancel Order'
+      (button) => button.text === 'Cancel and refund to original payment method'
     );
     cancelOrder?.onPress?.();
     await vi.waitFor(() => {
@@ -61,6 +61,7 @@ describe('createOrderDetailsStatusActions paid cancellation', () => {
     });
     expect(updateStatus).toHaveBeenCalledWith({
       orderId: 'order-paid',
+      refund: 'automatic',
       status: 'cancelled',
     });
   });
@@ -78,9 +79,31 @@ describe('createOrderDetailsStatusActions paid cancellation', () => {
     await actions.handleStatusUpdate('cancelled');
     const confirmation = vi.mocked(Alert.alert).mock.calls[0]?.[2];
     const cancelOrder = confirmation?.find(
-      (button) => button.text === 'Cancel Order'
+      (button) => button.text === 'Cancel and refund to original payment method'
     );
     cancelOrder?.onPress?.();
+    await vi.waitFor(() => {
+      expect(Alert.alert).toHaveBeenCalledWith('Error', message);
+    });
+  });
+
+  it('explains the refund-permission refusal for a cancel-only attempt', async () => {
+    const message =
+      'Only the store owner or staff with refund permission can cancel an order without an automatic refund.';
+    const { actions } = createPaidOrderStatusActions({
+      updateStatus: vi
+        .fn()
+        .mockRejectedValue(
+          new OrderStatusUpdateError(message, 'CANCEL_REFUND_FORBIDDEN')
+        ),
+    });
+
+    await actions.handleStatusUpdate('cancelled');
+    const confirmation = vi.mocked(Alert.alert).mock.calls[0]?.[2];
+    const cancelOnly = confirmation?.find(
+      (button) => button.text === 'Cancel only (I will refund them)'
+    );
+    cancelOnly?.onPress?.();
     await vi.waitFor(() => {
       expect(Alert.alert).toHaveBeenCalledWith('Error', message);
     });
@@ -101,7 +124,7 @@ describe('createOrderDetailsStatusActions paid cancellation', () => {
     await actions.handleStatusUpdate('cancelled');
     const confirmation = vi.mocked(Alert.alert).mock.calls[0]?.[2];
     const cancelOrder = confirmation?.find(
-      (button) => button.text === 'Cancel Order'
+      (button) => button.text === 'Cancel and refund to original payment method'
     );
     cancelOrder?.onPress?.();
     await vi.waitFor(() => {
@@ -122,7 +145,7 @@ describe('createOrderDetailsStatusActions paid cancellation', () => {
     await actions.handleStatusUpdate('cancelled');
     const confirmation = vi.mocked(Alert.alert).mock.calls[0]?.[2];
     const cancelOrder = confirmation?.find(
-      (button) => button.text === 'Cancel Order'
+      (button) => button.text === 'Cancel and refund to original payment method'
     );
     cancelOrder?.onPress?.();
     await vi.waitFor(() => {
@@ -143,7 +166,7 @@ describe('createOrderDetailsStatusActions paid cancellation', () => {
     await actions.handleStatusUpdate('cancelled');
     const confirmation = vi.mocked(Alert.alert).mock.calls[0]?.[2];
     const cancelOrder = confirmation?.find(
-      (button) => button.text === 'Cancel Order'
+      (button) => button.text === 'Cancel and refund to original payment method'
     );
     cancelOrder?.onPress?.();
     await vi.waitFor(() => {

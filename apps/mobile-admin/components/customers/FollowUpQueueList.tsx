@@ -68,7 +68,7 @@ export function FollowUpQueueList({
     return failedOrders.filter(
       (order) =>
         (order.customer_name?.toLowerCase().includes(query) ?? false) ||
-        order.customer_email.toLowerCase().includes(query)
+        (order.customer_email ?? '').toLowerCase().includes(query)
     );
   })();
   const { data: groupedFailedOrders, stickyHeaderIndices } =

@@ -11,14 +11,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/supabase', () => ({
   supabase: { rpc: mocks.rpc, from: mocks.from },
 }));
-vi.mock('./useMerchant', () => ({
-  useMerchant: () => ({ merchant: { id: 'merchant' } }),
-}));
-vi.mock('@tanstack/react-query', () => ({
-  useQuery: vi.fn((config) => config),
-}));
 
-import { fetchOxygenFollowUps } from './useOxygenFollowUps';
+import { fetchOxygenFollowUps } from './fetchOxygenFollowUps';
 
 const orderId = '00000000-0000-4000-8000-000000000001';
 const merchantId = '20000000-0000-4000-8000-000000000001';

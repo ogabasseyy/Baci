@@ -161,7 +161,7 @@ describe('groupFailedOrdersByDate', () => {
     ]);
   });
 
-  it('skips invalid created_at values without crashing', () => {
+  it('keeps invalid created_at values visible under Date unavailable', () => {
     const invalidOrders: FailedOrder[] = [
       {
         ...mockOrders[0],
@@ -171,7 +171,10 @@ describe('groupFailedOrdersByDate', () => {
 
     expect(
       groupFailedOrdersByDate(invalidOrders, new Date('2026-06-28')).data
-    ).toEqual([]);
+    ).toEqual([
+      expect.objectContaining({ type: 'header', title: 'Date unavailable' }),
+      expect.objectContaining({ type: 'item', data: invalidOrders[0] }),
+    ]);
   });
 
   it('uses non-colliding keys and local date keys', () => {

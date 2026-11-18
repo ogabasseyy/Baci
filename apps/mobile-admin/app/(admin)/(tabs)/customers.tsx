@@ -137,12 +137,14 @@ function FailedOrderItem({
         >
           {displayName}
         </Text>
-        <Text
-          style={[styles.customerEmail, { color: colors.textSecondary }]}
-          numberOfLines={1}
-        >
-          {item.customer_email}
-        </Text>
+        {item.customer_email ? (
+          <Text
+            style={[styles.customerEmail, { color: colors.textSecondary }]}
+            numberOfLines={1}
+          >
+            {item.customer_email}
+          </Text>
+        ) : null}
 
         <Text
           style={[

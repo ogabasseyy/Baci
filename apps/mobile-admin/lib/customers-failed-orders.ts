@@ -60,10 +60,7 @@ export function groupFailedOrdersByDate(
   const oxygenReviews: FailedOrder[] = [];
 
   for (const order of orders) {
-    const dateKey = getLocalDateKey(getFollowUpActivityAt(order));
-    if (!dateKey) {
-      continue;
-    }
+    const dateKey = getLocalDateKey(getFollowUpActivityAt(order)) ?? 'undated';
 
     if (order.oxygen_follow_up_status === 'needs_review') {
       oxygenReviews.push(order);
@@ -104,7 +101,9 @@ export function groupFailedOrdersByDate(
     }
   }
 
-  const sortedDateKeys = [...groups.keys()].sort((a, b) => b.localeCompare(a));
+  const sortedDateKeys = [...groups.keys()].sort((a, b) =>
+    a === 'undated' ? 1 : b === 'undated' ? -1 : b.localeCompare(a)
+  );
 
   for (const dateKey of sortedDateKeys) {
     stickyHeaderIndices.push(data.length);
@@ -112,7 +111,10 @@ export function groupFailedOrdersByDate(
     data.push({
       dateKey,
       key: `failed-orders-header-${dateKey}`,
-      title: getDateGroupTitle(dateKey, todayKey, yesterdayKey),
+      title:
+        dateKey === 'undated'
+          ? 'Date unavailable'
+          : getDateGroupTitle(dateKey, todayKey, yesterdayKey),
       type: 'header',
     });
 

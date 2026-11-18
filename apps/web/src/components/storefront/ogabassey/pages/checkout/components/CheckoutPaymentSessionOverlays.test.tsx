@@ -45,6 +45,7 @@ function createWalletTransferSession(
     error: null,
     intent: null,
     isChecking: false,
+    pollingExhausted: false,
     ...overrides,
   };
 }

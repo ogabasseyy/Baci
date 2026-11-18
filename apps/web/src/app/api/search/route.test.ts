@@ -2,7 +2,9 @@ import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GET } from './route';
 
-const mockRpc = vi.fn();
+const { mockRpc } = vi.hoisted(() => ({
+  mockRpc: vi.fn(),
+}));
 
 vi.mock('@/lib/supabase/server', () => ({
   createClient: vi.fn(() => ({
@@ -11,7 +13,10 @@ vi.mock('@/lib/supabase/server', () => ({
 }));
 
 vi.mock('next/headers', () => ({
-  cookies: vi.fn().mockResolvedValue({}),
+  cookies: vi.fn().mockResolvedValue({
+    get: vi.fn(),
+    set: vi.fn(),
+  }),
 }));
 
 const MERCHANT_UUID = '11111111-1111-4111-8111-111111111111';
@@ -72,14 +77,14 @@ describe('Search API', () => {
     );
   });
 
-  it('forwards an explicit limit query parameter and falls back to 20 when non-numeric', async () => {
-    const explicitReq = new NextRequest(
+  it('forwards an explicit limit query parameter', async () => {
+    const req = new NextRequest(
       `http://localhost/api/search?q=phone&merchant_id=${MERCHANT_UUID}&limit=5`
     );
-    const explicitRes = await GET(explicitReq);
+    const res = await GET(req);
 
-    expect(explicitRes.status).toBe(200);
-    expect(await explicitRes.json()).toEqual({
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
       count: 0,
       didYouMean: null,
       productIds: [],
@@ -91,17 +96,16 @@ describe('Search API', () => {
         result_limit: 5,
       })
     );
+  });
 
-    vi.clearAllMocks();
-    mockRpc.mockResolvedValue({ data: [], error: null });
-
-    const invalidLimitReq = new NextRequest(
+  it('falls back to 20 when limit is non-numeric', async () => {
+    const req = new NextRequest(
       `http://localhost/api/search?q=phone&merchant_id=${MERCHANT_UUID}&limit=abc`
     );
-    const invalidLimitRes = await GET(invalidLimitReq);
+    const res = await GET(req);
 
-    expect(invalidLimitRes.status).toBe(200);
-    expect(await invalidLimitRes.json()).toEqual({
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
       count: 0,
       didYouMean: null,
       productIds: [],
@@ -111,6 +115,21 @@ describe('Search API', () => {
       'search_products_v2',
       expect.objectContaining({
         result_limit: 20,
+      })
+    );
+  });
+
+  it('clamps excessive limit query parameters to 100', async () => {
+    const req = new NextRequest(
+      `http://localhost/api/search?q=phone&merchant_id=${MERCHANT_UUID}&limit=500`
+    );
+    const res = await GET(req);
+
+    expect(res.status).toBe(200);
+    expect(mockRpc).toHaveBeenCalledWith(
+      'search_products_v2',
+      expect.objectContaining({
+        result_limit: 100,
       })
     );
   });

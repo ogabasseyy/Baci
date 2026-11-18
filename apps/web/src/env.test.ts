@@ -161,12 +161,12 @@ describe('env validation', () => {
   it.each([
     'cart-events',
     'gigl-tracking',
-    'petrock-reconciliation',
+    'import-jobs',
+    'jumia-order-sync',
     'merchant-onboarding-emails',
+    'petrock-reconciliation',
     'piggyvest-webhook-capture-drain',
-    'process-import-jobs',
     'quiz-finalization',
-    'sync-jumia-orders',
   ])('allows the %s worker profile without unrelated agentic signing material or quiz proof secret', async (workerProfile) => {
     vi.stubEnv('NODE_ENV', 'production');
     vi.stubEnv('GITHUB_ACTIONS', 'false');

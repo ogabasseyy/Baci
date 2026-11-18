@@ -187,8 +187,8 @@ describe('process-import-jobs production env validation', () => {
     vi.resetModules();
   });
 
-  it('succeeds in production phase 1a without QUIZ_RPC_SERVER_SECRET when BACI_WORKER_PROFILE is process-import-jobs', async () => {
-    vi.stubEnv('BACI_WORKER_PROFILE', 'process-import-jobs');
+  it('succeeds in production phase 1a without QUIZ_RPC_SERVER_SECRET when BACI_WORKER_PROFILE is import-jobs', async () => {
+    vi.stubEnv('BACI_WORKER_PROFILE', 'import-jobs');
     vi.doUnmock('@/env');
     vi.doMock('@/lib/supabase/service', () => ({
       createServiceClient: vi.fn(() => ({ service: true })),

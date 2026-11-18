@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  MERCHANT_INBOX_MAX_CONVERSATIONS_PER_PAGE,
   merchantInboxConversationIdSchema,
   merchantInboxListQuerySchema,
   merchantInboxMessagesQuerySchema,
+  providerInboxConversationListSchema,
 } from './merchant-inbox';
 
 describe('merchantInboxListQuerySchema', () => {
@@ -62,5 +64,21 @@ describe('merchantInboxConversationIdSchema', () => {
         false
       );
     }
+  });
+});
+
+describe('providerInboxConversationListSchema', () => {
+  const page = (count: number) => ({
+    data: { payload: Array.from({ length: count }, () => ({})) },
+  });
+
+  it('accepts a full provider page and rejects one row over it', () => {
+    expect(MERCHANT_INBOX_MAX_CONVERSATIONS_PER_PAGE).toBe(200);
+    expect(
+      providerInboxConversationListSchema.safeParse(page(200)).success
+    ).toBe(true);
+    expect(
+      providerInboxConversationListSchema.safeParse(page(201)).success
+    ).toBe(false);
   });
 });

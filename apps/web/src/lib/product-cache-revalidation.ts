@@ -111,17 +111,20 @@ function revalidateMerchantFeed(
   );
 }
 
-function revalidateDashboard(merchantId: string): void {
+function revalidateDashboard(merchantId: string): boolean {
   const normalizedMerchantId = normalizeMerchantId(merchantId);
   if (!normalizedMerchantId) {
     logger.warn({
       merchantId: sanitizeForLog(merchantId),
       message: 'Skipped dashboard cache revalidation for invalid merchant ID',
     });
-    return;
+    return false;
   }
 
-  revalidateProductTag(`dashboard-${normalizedMerchantId}`, 'merchant');
+  return (
+    revalidateProductTag(`dashboard-${normalizedMerchantId}`, 'merchant') ===
+    'ok'
+  );
 }
 
 function revalidateProducts(
@@ -204,14 +207,14 @@ function revalidateProductSlugs(
   merchantId: string,
   slugs: readonly (string | null | undefined)[],
   options: ProductRevalidationOptions = {}
-): void {
+): boolean {
   const normalizedMerchantId = normalizeMerchantId(merchantId);
   if (!normalizedMerchantId) {
     logger.warn({
       merchantId: sanitizeForLog(merchantId),
       message: 'Skipped product slug revalidation for invalid merchant ID',
     });
-    return;
+    return false;
   }
 
   // Callers that evict the Cloudflare edge immediately after this returns
@@ -231,7 +234,7 @@ function revalidateProductSlugs(
     });
   }
 
-  revalidateProductTagBatch(entries);
+  return revalidateProductTagBatch(entries);
 }
 
 export const productCacheRevalidation = {

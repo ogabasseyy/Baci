@@ -213,7 +213,9 @@ describe('OgabasseyPdpCriticalCommerceClient variant routing', () => {
       />
     );
 
-    expect(screen.getByRole('button', { name: /add to cart/i })).toBeDisabled();
+    expect(
+      screen.getByRole('button', { name: /add to cart/i })
+    ).toHaveAttribute('aria-disabled', 'true');
     unmount();
 
     render(

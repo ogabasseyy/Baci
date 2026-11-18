@@ -166,8 +166,8 @@ describe('sync-jumia-orders production env validation', () => {
     vi.resetModules();
   });
 
-  it('succeeds in production phase 1a without QUIZ_RPC_SERVER_SECRET when BACI_WORKER_PROFILE is sync-jumia-orders', async () => {
-    vi.stubEnv('BACI_WORKER_PROFILE', 'sync-jumia-orders');
+  it('succeeds in production phase 1a without QUIZ_RPC_SERVER_SECRET when BACI_WORKER_PROFILE is jumia-order-sync', async () => {
+    vi.stubEnv('BACI_WORKER_PROFILE', 'jumia-order-sync');
     vi.doUnmock('../lib/supabase/service');
     vi.doUnmock('../lib/jumia/server-credential-client');
     vi.doMock('@supabase/supabase-js', () => ({

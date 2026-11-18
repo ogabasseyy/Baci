@@ -84,7 +84,9 @@ describe('productCacheRevalidation', () => {
   });
 
   it('can invalidate dashboard order metrics without churning product caches', () => {
-    productCacheRevalidation.revalidateDashboard('merchant-1');
+    expect(productCacheRevalidation.revalidateDashboard('merchant-1')).toBe(
+      true
+    );
 
     expect(revalidateTag).toHaveBeenCalledExactlyOnceWith(
       'dashboard-merchant-1',
@@ -93,12 +95,14 @@ describe('productCacheRevalidation', () => {
   });
 
   it('deduplicates product slugs and ignores blank values', () => {
-    productCacheRevalidation.revalidateProductSlugs('merchant-1', [
-      'phone',
-      ' phone ',
-      '',
-      null,
-    ]);
+    expect(
+      productCacheRevalidation.revalidateProductSlugs('merchant-1', [
+        'phone',
+        ' phone ',
+        '',
+        null,
+      ])
+    ).toBe(true);
 
     expect(revalidateTag).toHaveBeenCalledTimes(1);
     expect(revalidateTag).toHaveBeenCalledWith(
@@ -179,12 +183,13 @@ describe('productCacheRevalidation', () => {
       throw new Error('incrementalCache missing');
     });
 
-    productCacheRevalidation.revalidateProductSlugs('merchant-1', [
-      'slug-1',
-      'slug-2',
-    ]);
+    const slugsRevalidated = productCacheRevalidation.revalidateProductSlugs(
+      'merchant-1',
+      ['slug-1', 'slug-2']
+    );
     expect(revalidateTag).toHaveBeenCalledTimes(1);
     expect(logger.error).not.toHaveBeenCalled();
+    expect(slugsRevalidated).toBe(false);
 
     revalidateTag.mockClear();
     const feedRevalidated =
@@ -194,8 +199,10 @@ describe('productCacheRevalidation', () => {
     expect(feedRevalidated).toBe(false);
 
     revalidateTag.mockClear();
-    productCacheRevalidation.revalidateDashboard('merchant-1');
+    const dashboardRevalidated =
+      productCacheRevalidation.revalidateDashboard('merchant-1');
     expect(revalidateTag).toHaveBeenCalledTimes(1);
     expect(logger.error).not.toHaveBeenCalled();
+    expect(dashboardRevalidated).toBe(false);
   });
 });

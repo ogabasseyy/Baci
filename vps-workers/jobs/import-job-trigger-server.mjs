@@ -110,7 +110,7 @@ export function spawnImportJobWorker({
         ...process.env,
         ...env,
         ...buildTriggerMetadataEnv(payload),
-        BACI_WORKER_PROFILE: 'process-import-jobs',
+        BACI_WORKER_PROFILE: 'import-jobs',
         NODE_ENV: 'production',
       },
       stdio: 'ignore',

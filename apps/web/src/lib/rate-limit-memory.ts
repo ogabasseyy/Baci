@@ -7,15 +7,19 @@ import type { RateLimitConfig, RateLimitResult } from './rate-limit';
 const memoryStore = new Map<string, { count: number; resetTime: number }>();
 const MAX_STORE_SIZE = 10_000;
 const PRUNE_BATCH_SIZE = 100;
+const LAZY_CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
+let lastCleanupAt = Date.now();
 
 function pruneStore(now: number): void {
-  if (memoryStore.size < MAX_STORE_SIZE) return;
+  const intervalElapsed = now - lastCleanupAt >= LAZY_CLEANUP_INTERVAL_MS;
+  if (memoryStore.size < MAX_STORE_SIZE && !intervalElapsed) return;
+  lastCleanupAt = now;
   let pruned = 0;
   for (const [key, entry] of memoryStore) {
     if (now > entry.resetTime) {
       memoryStore.delete(key);
       pruned++;
-      if (pruned >= PRUNE_BATCH_SIZE) break;
+      if (!intervalElapsed && pruned >= PRUNE_BATCH_SIZE) break;
     }
   }
 }
@@ -30,6 +34,16 @@ export function checkMemoryRateLimit(
   pruneStore(now);
 
   let entry = memoryStore.get(key);
+  if (!entry && memoryStore.size >= MAX_STORE_SIZE) {
+    // Fail closed for new keys when the fallback map is saturated with live
+    // entries rather than evicting active rate-limit counters.
+    return {
+      allowed: false,
+      limit: config.maxRequests,
+      remaining: 0,
+      resetTime: now + config.windowMs,
+    };
+  }
   if (!entry || now > entry.resetTime) {
     entry = { count: 0, resetTime: now + config.windowMs };
   }
@@ -54,6 +68,7 @@ export function checkMemoryRateLimit(
 
 export function cleanupRateLimitStore(): void {
   const now = Date.now();
+  lastCleanupAt = now;
   for (const [key, entry] of memoryStore.entries()) {
     if (now > entry.resetTime) {
       memoryStore.delete(key);
@@ -61,10 +76,7 @@ export function cleanupRateLimitStore(): void {
   }
 }
 
-if (typeof setInterval !== 'undefined') {
-  setInterval(cleanupRateLimitStore, 5 * 60 * 1000);
-}
-
 export function resetMemoryRateLimitStore(): void {
   memoryStore.clear();
+  lastCleanupAt = Date.now();
 }

@@ -13,7 +13,7 @@ function readDeployScript() {
 }
 
 describe('deploy crontab schedules', () => {
-  it('schedules the gated Oxygen callback drain every five minutes', () => {
+  it('schedules the gated Oxygen callback drain every five minutes via direct worker', () => {
     const script = readDeployScript();
     assert.match(
       script,
@@ -21,7 +21,7 @@ describe('deploy crontab schedules', () => {
     );
     assert.match(
       script,
-      /run-web-cron\.mjs \/api\/cron\/oxygen-callback-reconciliation/
+      /\$REMOTE_DIR\/bin\/oxygen-callback-reconciliation\.sh/
     );
   });
   it('schedules the gateway paid-order reconcile drain hourly through run-web-cron', () => {
@@ -120,7 +120,7 @@ describe('deploy crontab schedules', () => {
     }
   });
 
-  it('schedules the order notification outbox cron through run-web-cron', () => {
+  it('schedules the order notification outbox cron via direct worker', () => {
     const deployScript = readDeployScript();
 
     assert.match(
@@ -129,7 +129,7 @@ describe('deploy crontab schedules', () => {
     );
     assert.match(
       deployScript,
-      /\$NODE_BIN \$REMOTE_DIR\/jobs\/run-web-cron\.mjs \/api\/cron\/order-notifications\?batchSize=5/
+      /\$REMOTE_DIR\/bin\/process-order-notifications\.sh --batch-size=5/
     );
     assert.match(
       deployScript,
@@ -152,7 +152,7 @@ describe('deploy crontab schedules', () => {
     assert.doesNotMatch(deployScript, /process-storefront-purge-outbox/);
   });
 
-  it('schedules the agentic commerce health cron through run-web-cron', () => {
+  it('schedules the agentic commerce health cron via direct worker', () => {
     const deployScript = readDeployScript();
 
     assert.match(
@@ -161,7 +161,7 @@ describe('deploy crontab schedules', () => {
     );
     assert.match(
       deployScript,
-      /\$NODE_BIN \$REMOTE_DIR\/jobs\/run-web-cron\.mjs \/api\/cron\/agentic-commerce-health/
+      /\$REMOTE_DIR\/bin\/agentic-commerce-health\.sh/
     );
     assert.match(
       deployScript,
@@ -169,34 +169,28 @@ describe('deploy crontab schedules', () => {
     );
   });
 
-  it('schedules the merchant signup policy health check every five minutes', () => {
+  it('schedules the merchant signup policy health check every five minutes via direct worker', () => {
     const deployScript = readDeployScript();
 
     assert.match(
       deployScript,
       /\*\/5 \*\s+\* \* \* flock -n \$REMOTE_DIR\/locks\/merchant-signup-health\.lock/
     );
-    assert.match(
-      deployScript,
-      /\$NODE_BIN \$REMOTE_DIR\/jobs\/run-web-cron\.mjs \/api\/cron\/merchant-signup-health/
-    );
+    assert.match(deployScript, /\$REMOTE_DIR\/bin\/merchant-signup-health\.sh/);
     assert.match(
       deployScript,
       />> \$REMOTE_DIR\/logs\/merchant-signup-health\.log 2>&1/
     );
   });
 
-  it('schedules the shared-cart notice delivery alarm every five minutes', () => {
+  it('schedules the shared-cart notice delivery alarm every five minutes via direct worker', () => {
     const deployScript = readDeployScript();
 
     assert.match(
       deployScript,
       /\*\/5 \*\s+\* \* \* flock -n \$REMOTE_DIR\/locks\/cart-notice-health\.lock/
     );
-    assert.match(
-      deployScript,
-      /\$NODE_BIN \$REMOTE_DIR\/jobs\/run-web-cron\.mjs \/api\/cron\/cart-notice-health/
-    );
+    assert.match(deployScript, /\$REMOTE_DIR\/bin\/cart-notice-health\.sh/);
     assert.match(
       deployScript,
       />> \$REMOTE_DIR\/logs\/cart-notice-health\.log 2>&1/
@@ -316,11 +310,11 @@ describe('deploy crontab schedules', () => {
 
     assert.match(
       deployScript,
-      /export BACI_WORKER_PROFILE=sync-jumia-orders && cd \$REMOTE_DIR && \$REMOTE_DIR\/bin\/sync-jumia-orders\.sh/
+      /export BACI_WORKER_PROFILE=jumia-order-sync && cd \$REMOTE_DIR && \$REMOTE_DIR\/bin\/sync-jumia-orders\.sh/
     );
     assert.match(
       deployScript,
-      /export BACI_WORKER_PROFILE=process-import-jobs && cd \$REMOTE_DIR && \$REMOTE_DIR\/bin\/process-import-jobs\.sh/
+      /export BACI_WORKER_PROFILE=import-jobs && cd \$REMOTE_DIR && \$REMOTE_DIR\/bin\/process-import-jobs\.sh/
     );
   });
 });

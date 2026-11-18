@@ -6,7 +6,6 @@ import {
   revalidateProducts,
 } from '@/lib/cache-revalidation';
 import { constantTimeEqual } from '@/lib/constant-time-equal';
-import { expireProductBlogCache } from '@/lib/expire-product-blog-cache';
 import { collectResolvedProductSlugs } from '@/lib/internal-product-purge-entries';
 import { logger } from '@/lib/logger';
 import { createPublicClient } from '@/lib/supabase/public';
@@ -14,6 +13,7 @@ import { internalRevalidateProductsBodySchema } from '@/schemas/internal-revalid
 import { dispatchStorefrontHostnamePurge } from './dispatch-storefront-hostname-purge';
 import { dispatchStorefrontProductPurge } from './dispatch-storefront-purge';
 import { flushOriginCacheRevalidations } from './flush-origin-cache-revalidations';
+import { hardExpireOriginCaches } from './hard-expire-origin-caches';
 import { hasCompleteScopedProductSlugs } from './has-complete-scoped-product-slugs';
 import { resolveAuthoritativeMerchantSlug } from './resolve-authoritative-merchant-slug';
 import { revalidateWithoutProducts } from './revalidate-without-products';
@@ -202,13 +202,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             ? { omitMerchantWidePdpDetails: true }
             : undefined;
         if (authoritativeMerchantSlug && !purgeWholeStorefront) {
-          // Related blog enrichment shares the merchant product tag. Expire it
-          // before the edge purge can cause an article MISS to refill stale data.
-          expireProductBlogCache(merchantId);
-          revalidateProducts(merchantId, undefined, {
-            expireImmediately: true,
-            ...scopedOptions,
-          });
+          if (
+            !hardExpireOriginCaches({
+              merchantId,
+              scopedOptions,
+              edgePurgeTarget: 'product',
+            })
+          ) {
+            return NextResponse.json(
+              { error: 'Failed to expire merchant-wide product caches' },
+              { status: 500 }
+            );
+          }
           revalidatedDeferredProducts = true;
           const mergedBlogPostSlugs = Array.from(
             new Set([...(callerBlogPostSlugs ?? []), ...blogPostSlugs])
@@ -251,8 +256,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // Structural purges evict the authoritative merchant hostname via bounded purge.
   if (purgeWholeStorefront && authoritativeMerchantSlug) {
     try {
-      expireProductBlogCache(merchantId);
-      revalidateProducts(merchantId, undefined, { expireImmediately: true });
+      if (
+        !hardExpireOriginCaches({
+          merchantId,
+          edgePurgeTarget: 'hostname',
+        })
+      ) {
+        return NextResponse.json(
+          { error: 'Failed to expire merchant-wide product caches' },
+          { status: 500 }
+        );
+      }
       if (confirmEdgeEviction) {
         await flushOriginCacheRevalidations();
       }

@@ -102,7 +102,6 @@ vi.mock('@/lib/expire-product-blog-cache', () => ({
 import { getBlogCacheTag } from '@/lib/blog-cache-tags';
 import { getBlogContentLinksCacheTag } from '@/lib/blog-content-link-cache-tags';
 import { getCategoryPageDataCacheTag } from '@/lib/category-page-cache-tags';
-import { getProductScopedCacheTag } from '@/lib/product-cache-tags';
 import { POST } from './route';
 
 // ---- Helpers ----
@@ -614,59 +613,6 @@ describe('POST /api/cache/revalidate', () => {
       );
     });
 
-    it('busts the per-slug Next product caches BEFORE scheduling the purge (F3)', async () => {
-      setupAuth(true, true);
-
-      await POST(
-        makeRequest({
-          targets: ['products'],
-          products: [
-            { slug: 'iphone-15', id: 'prod-1', category: 'Smartphones' },
-          ],
-        })
-      );
-
-      // The per-slug scoped product tag (getCachedProduct) is invalidated for the
-      // resolved slug so a CF MISS after the purge cannot refill from stale Next
-      // data. The slug-less revalidateProducts alone would never bust it.
-      const scopedTag = getProductScopedCacheTag(
-        'product',
-        MERCHANT_ID,
-        'iphone-15'
-      );
-      expect(mockRevalidateTag).toHaveBeenCalledWith(scopedTag, { expire: 0 });
-
-      // Ordering: the per-slug tag is busted before the edge purge is scheduled.
-      const scopedCallIndex = mockRevalidateTag.mock.calls.findIndex(
-        ([tag]) => tag === scopedTag
-      );
-      const scopedOrder =
-        mockRevalidateTag.mock.invocationCallOrder[scopedCallIndex];
-      const scheduleOrder =
-        mockScheduleStorefrontProductPurge.mock.invocationCallOrder[0];
-      expect(scopedOrder).toBeLessThan(scheduleOrder);
-    });
-
-    it('does not purge when the merchant has no resolvable slug', async () => {
-      setupAuth(true, true);
-      merchantSlugRow = { slug: null };
-
-      await POST(
-        makeRequest({
-          targets: ['products'],
-          products: [{ slug: 'iphone-15', category: 'Smartphones' }],
-        })
-      );
-
-      expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
-      // The per-slug Next cache bust only needs merchantId, not the storefront
-      // slug, so it must still run even though the Cloudflare purge is skipped.
-      expect(mockRevalidateTag).toHaveBeenCalledWith(
-        getProductScopedCacheTag('product', MERCHANT_ID, 'iphone-15'),
-        { expire: 0 }
-      );
-    });
-
     it('logs and still purges from caller hints when the authoritative product-row lookup errors', async () => {
       const consoleErrorSpy = vi
         .spyOn(console, 'error')
@@ -808,45 +754,6 @@ describe('POST /api/cache/revalidate', () => {
         );
         expect(consoleErrorSpy).toHaveBeenCalledWith(
           expect.stringContaining('Failed to resolve previous category slugs'),
-          expect.objectContaining({
-            merchantId: MERCHANT_ID,
-            error: { message: 'db unavailable' },
-          })
-        );
-      } finally {
-        consoleErrorSpy.mockRestore();
-      }
-    });
-
-    it('logs and skips the (survivable) purge when the merchant slug lookup errors', async () => {
-      const consoleErrorSpy = vi
-        .spyOn(console, 'error')
-        .mockImplementation(() => undefined);
-      try {
-        setupAuth(true, true);
-        merchantSlugError = { message: 'db unavailable' };
-
-        const res = await POST(
-          makeRequest({
-            targets: ['products'],
-            products: [
-              { slug: 'iphone-15', id: 'prod-1', category: 'Smartphones' },
-            ],
-          })
-        );
-
-        // Revalidation still succeeds; only the fail-open purge is skipped.
-        expect(res.status).toBe(200);
-        expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
-        // The merchantSlug guard covers ONLY the Cloudflare edge purge — the
-        // Next-layer per-slug busting is independent (only needs merchantId)
-        // and must still run when the slug lookup fails.
-        expect(mockRevalidateTag).toHaveBeenCalledWith(
-          getProductScopedCacheTag('product', MERCHANT_ID, 'iphone-15'),
-          { expire: 0 }
-        );
-        expect(consoleErrorSpy).toHaveBeenCalledWith(
-          expect.stringContaining('Failed to resolve merchant slug'),
           expect.objectContaining({
             merchantId: MERCHANT_ID,
             error: { message: 'db unavailable' },

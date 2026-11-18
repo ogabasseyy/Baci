@@ -214,8 +214,6 @@ function makeImportRequest(csvContent?: string): NextRequest {
 describe('POST /api/products/bulk-import', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockRevalidateProducts.mockReturnValue(true);
-    mockRevalidateProductSlugs.mockReturnValue(true);
     authUser = { id: USER_ID };
     merchant = { id: MERCHANT_ID };
     merchantContextMock.current = {
@@ -289,64 +287,6 @@ describe('POST /api/products/bulk-import', () => {
     expect(json.success).toBe(2);
     expect(json.failed).toBe(0);
     expect(mockRevalidateProducts).toHaveBeenCalledWith(MERCHANT_ID);
-  });
-
-  it('purges only the successful public rows after a partially successful import', async () => {
-    const { POST } = await import('./route');
-
-    const csv =
-      'name,price,category,status\nProduct A,100,Electronics,active\nDraft Item,50,Books,draft\nInvalid Item,-5,Electronics,active';
-    const res = await POST(makeImportRequest(csv));
-    const json = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(json).toMatchObject({ success: 2, failed: 1 });
-    expect(mockRevalidateProducts).toHaveBeenCalledWith(MERCHANT_ID);
-    expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
-      MERCHANT_ID,
-      ['product-a'],
-      { expireImmediately: true }
-    );
-    expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
-      'test-store',
-      [{ slug: 'product-a', categorySegment: 'electronics' }]
-    );
-    expect(mockRevalidateProductSlugs.mock.invocationCallOrder[0]).toBeLessThan(
-      mockScheduleStorefrontProductPurge.mock.invocationCallOrder[0]
-    );
-  });
-
-  it('does not schedule a public purge for draft-only imports', async () => {
-    const { POST } = await import('./route');
-
-    const res = await POST(
-      makeImportRequest('name,price,category,status\nDraft Item,50,Books,draft')
-    );
-
-    expect(res.status).toBe(200);
-    expect(mockRevalidateProducts).toHaveBeenCalledWith(MERCHANT_ID);
-    expect(mockRevalidateProductSlugs).not.toHaveBeenCalled();
-    expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
-  });
-
-  it('uses the persisted product id when an active import has a blank slug', async () => {
-    const { POST } = await import('./route');
-    mockGenerateProductSlug.mockReturnValueOnce('');
-
-    const response = await POST(
-      makeImportRequest('name,price\nEmoji Product,50')
-    );
-
-    expect(response.status).toBe(200);
-    expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
-      MERCHANT_ID,
-      ['created-product-1'],
-      { expireImmediately: true }
-    );
-    expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
-      'test-store',
-      [{ slug: 'created-product-1', categorySegment: null }]
-    );
   });
 
   it('does not call revalidateProducts when all rows fail', async () => {

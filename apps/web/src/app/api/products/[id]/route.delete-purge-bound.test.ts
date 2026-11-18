@@ -235,8 +235,55 @@ describe('DELETE /api/products/[id] purge snapshot', () => {
         'Product purge pre-read failed after delete; scheduling complete fallback purge',
         expect.objectContaining({ id: PRODUCT_ID })
       );
+      expect(mocks.revalidateProducts).not.toHaveBeenCalled();
     } finally {
       consoleWarnSpy.mockRestore();
+    }
+  });
+
+  it('skips broad revalidateProducts on normal delete and falls back to it only when purge scheduling throws', async () => {
+    const warnSpy = vi
+      .spyOn(console, 'warn')
+      .mockImplementation(() => undefined);
+    try {
+      const { supabase } = createSupabase({
+        preRead: {
+          data: {
+            id: PRODUCT_ID,
+            slug: 'deleted-phone',
+            name: 'Deleted Phone',
+            category: 'Smartphones',
+            categories: null,
+            product_categories: [],
+          },
+          error: null,
+        },
+      });
+      vi.mocked(
+        (await import('@/lib/supabase/server')).createClient
+      ).mockReturnValue(supabase as never);
+
+      const okRes = await DELETE(makeRequest(), {
+        params: Promise.resolve({ id: PRODUCT_ID }),
+      });
+      expect(okRes.status).toBe(200);
+      expect(mocks.purgeMutation).toHaveBeenCalledOnce();
+      expect(mocks.revalidateProducts).not.toHaveBeenCalled();
+
+      mocks.purgeMutation.mockImplementationOnce(() => {
+        throw new Error('purge failed');
+      });
+      const fallbackRes = await DELETE(makeRequest(), {
+        params: Promise.resolve({ id: PRODUCT_ID }),
+      });
+      expect(fallbackRes.status).toBe(200);
+      expect(mocks.revalidateProducts).toHaveBeenCalledWith(
+        'merchant-1',
+        undefined,
+        { expireImmediately: true }
+      );
+    } finally {
+      warnSpy.mockRestore();
     }
   });
 });

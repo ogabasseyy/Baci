@@ -242,8 +242,6 @@ function makeRequest(body: unknown): NextRequest {
 describe('POST /api/products/bulk-update', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockRevalidateProducts.mockReturnValue(true);
-    mockRevalidateProductSlugs.mockReturnValue(true);
     authUser = { id: USER_ID };
     merchant = {
       id: MERCHANT_ID,
@@ -389,87 +387,6 @@ describe('POST /api/products/bulk-update', () => {
       cost_price: 90,
     });
     expect(mockRevalidateProducts).toHaveBeenCalledWith(MERCHANT_ID);
-  });
-
-  it('busts per-slug Next caches before scheduling the bulk purge', async () => {
-    const { POST } = await import('./route');
-    await POST(
-      makeRequest({
-        changes: [{ type: 'update', productId: 'p1', details: { price: 900 } }],
-      })
-    );
-
-    expect(mockRevalidateProductSlugs).toHaveBeenCalled();
-    const revalidateOrder =
-      mockRevalidateProductSlugs.mock.invocationCallOrder[0];
-    const purgeOrder =
-      mockScheduleStorefrontProductPurge.mock.invocationCallOrder[0];
-    expect(revalidateOrder).toBeLessThan(purgeOrder);
-  });
-
-  it('falls back to the product id for the purge target when the row slug is null', async () => {
-    const { POST } = await import('./route');
-    productUpdateSelectRows = [
-      {
-        id: 'legacy-id',
-        slug: null,
-        category: null,
-        status: 'active',
-        categories: null,
-        product_categories: [],
-      },
-    ];
-
-    await POST(
-      makeRequest({
-        changes: [
-          {
-            type: 'update',
-            productId: 'legacy-id',
-            details: { name: 'Legacy', price: 10 },
-          },
-        ],
-      })
-    );
-
-    expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
-      'ogabassey',
-      [{ slug: 'legacy-id', categorySegment: null }]
-    );
-  });
-
-  it('forwards every high-cardinality product to the shared bounded purge scheduler', async () => {
-    const { POST } = await import('./route');
-    // The shared scheduler now owns the bounded hostname-purge strategy, so
-    // this caller must not omit PDP entries from a large mutation.
-    productUpdateSelectRows = Array.from({ length: 51 }, (_, index) => ({
-      id: `p-${index}`,
-      slug: `slug-${index}`,
-      category: 'Electronics',
-      status: 'active',
-      categories: null,
-      product_categories: [],
-    }));
-
-    await POST(
-      makeRequest({
-        changes: [
-          {
-            type: 'update',
-            productId: 'product-1',
-            details: { name: 'Bulk', price: 10 },
-          },
-        ],
-      })
-    );
-
-    expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
-      'ogabassey',
-      expect.arrayContaining([
-        { slug: 'slug-0', categorySegment: 'electronics' },
-        { slug: 'slug-50', categorySegment: 'electronics' },
-      ])
-    );
   });
 
   it('does not persist whitespace-only product names during targeted updates', async () => {

@@ -6,23 +6,28 @@
 --    every other mapping, but a 'cancelled' shipment now moves its order back
 --    to 'processing' and clears the order's active shipment link
 --    (shipment_id, tracking_number and, for non-customer_checkout orders such
---    as merchant_wallet, selected_quote_id and shipping_funding_source) so the
---    merchant can rebook. Paid customer_checkout orders keep selected_quote_id,
---    shipping_funding_source and stamped economics intact (needed for station
---    deliveries and settled checkouts). Only the shipment the order points at
+--    as merchant_wallet, selected_quote_id and shipping_funding_source) and
+--    rotates fulfillment_notification_cycle_id so replacement-shipment emails
+--    are not deduplicated against the cancelled shipment. Paid
+--    customer_checkout orders keep selected_quote_id, shipping_funding_source
+--    and stamped economics intact (needed for station deliveries and settled
+--    checkouts). Only the shipment the order points at
 --    (or a NULL-linked order with no other non-cancelled shipment) is
 --    reopened; a cancelled, delivered, completed, returned or failed order is
 --    left alone. The order is cancelled only by an order cancellation.
 --    The merchant-wallet refund stays with the attested provider-cancellation
 --    path (20261102053310/20261102053320), which runs inside
---    apply_gigl_tracking_result before the shipments update. When a booked or
---    needs_reconciliation charge is still on the order, the reopen raises the
---    same 55P03 'active_merchant_shipping_charge' that
---    private.prevent_active_gigl_shipping_cancellation used to raise, so an
---    unverified cancellation still stops for manual handling and refunds
---    nothing.
+--    apply_gigl_tracking_result before the shipments update. When a reserved,
+--    provider_submitting, booked or needs_reconciliation charge is still on
+--    the order, the reopen raises the same 55P03 'active_merchant_shipping_charge'
+--    that private.prevent_active_gigl_shipping_cancellation used to raise, so an
+--    unverified cancellation or active reservation/submission stops for manual
+--    handling and refunds nothing.
 -- 2. private.gate_gigl_tracking_notification skips the customer 'cancelled'
---    alert unless the order itself is cancelled (shipment-only cancellation).
+--    alert unless the order itself is cancelled (shipment-only cancellation),
+--    and skips superseded 'cancelled' notifications (for both customer and
+--    merchant) once a newer live shipment exists so stale cancelled shipments
+--    do not trigger misleading rebooking alerts.
 --    The merchant alert copy says the shipment needs rebooking (app code).
 
 CREATE OR REPLACE FUNCTION private.sync_gigl_tracking_order_status()
@@ -81,7 +86,9 @@ BEGIN
       SELECT 1
       FROM public.merchant_shipping_charges AS charge
       WHERE charge.order_id = v_order_id
-        AND charge.status IN ('booked', 'needs_reconciliation')
+        AND charge.status IN (
+          'reserved', 'provider_submitting', 'booked', 'needs_reconciliation'
+        )
     ) THEN
       RAISE EXCEPTION 'active_merchant_shipping_charge' USING ERRCODE = '55P03';
     END IF;
@@ -90,6 +97,7 @@ BEGIN
     SET shipping_status = 'processing',
         shipment_id = NULL,
         tracking_number = NULL,
+        fulfillment_notification_cycle_id = pg_catalog.gen_random_uuid(),
         selected_quote_id = CASE
           WHEN orders.shipping_funding_source = 'customer_checkout'
             THEN orders.selected_quote_id

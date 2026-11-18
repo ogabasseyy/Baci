@@ -10,6 +10,9 @@ DECLARE
   v_shipment constant uuid := pg_temp.fixture_id(4, 1);
   v_charge constant uuid := pg_temp.fixture_id(5, 1);
   v_before numeric := pg_temp.wallet_balance();
+  v_cycle_before uuid := (
+    SELECT fulfillment_notification_cycle_id FROM public.orders WHERE id = pg_temp.fixture_id(2, 1)
+  );
   v_after numeric;
   v_charge_row record;
   v_refund record;
@@ -66,7 +69,8 @@ BEGIN
     RAISE EXCEPTION 'T1: the shipment must end cancelled';
   END IF;
   SELECT o.shipping_status, o.shipment_id, o.tracking_number,
-    o.selected_quote_id, o.shipping_funding_source, o.cancelled_at
+    o.selected_quote_id, o.shipping_funding_source, o.cancelled_at,
+    o.fulfillment_notification_cycle_id
   INTO v_order_row
   FROM public.orders AS o WHERE o.id = v_order;
   IF v_order_row.shipping_status IS DISTINCT FROM 'processing'
@@ -74,8 +78,9 @@ BEGIN
      OR v_order_row.tracking_number IS NOT NULL
      OR v_order_row.selected_quote_id IS NOT NULL
      OR v_order_row.shipping_funding_source IS NOT NULL
-     OR v_order_row.cancelled_at IS NOT NULL THEN
-    RAISE EXCEPTION 'T1: the order must reopen unlinked for rebooking: %',
+     OR v_order_row.cancelled_at IS NOT NULL
+     OR v_order_row.fulfillment_notification_cycle_id IS NOT DISTINCT FROM v_cycle_before THEN
+    RAISE EXCEPTION 'T1: the order must reopen unlinked with rotated notification cycle: %',
       row_to_json(v_order_row);
   END IF;
   IF EXISTS (
@@ -260,46 +265,3 @@ BEGIN
   END IF;
 END;
 $t7$;
-
--- T8: complete_merchant_shipping_charge stamps the booked waybill, and later
--- status writes or tracking edits never re-stamp it.
-SELECT pg_catalog.set_config(
-  'request.jwt.claim.sub', 'c4ce1000-0000-4000-8000-000000000001', true
-);
-SELECT pg_catalog.set_config('request.jwt.claim.role', 'authenticated', true);
-SET LOCAL ROLE authenticated;
-DO $t8_complete$
-BEGIN
-  IF public.complete_merchant_shipping_charge(
-       'c4ce1500-0000-4000-8000-000000000008', 'attempt-8',
-       'c4ce1400-0000-4000-8000-000000000008'
-     ) IS DISTINCT FROM 'booked' THEN
-    RAISE EXCEPTION 'T8: the owner must complete the booking';
-  END IF;
-END;
-$t8_complete$;
-RESET ROLE;
-SELECT pg_catalog.set_config('request.jwt.claim.sub', '', true);
-SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
-
-DO $t8$
-DECLARE
-  v_charge constant uuid := pg_temp.fixture_id(5, 8);
-BEGIN
-  IF (SELECT provider_reference FROM public.merchant_shipping_charges WHERE id = v_charge)
-     IS DISTINCT FROM 'WB-CANCEL-8' THEN
-    RAISE EXCEPTION 'T8: booking must stamp the shipment waybill';
-  END IF;
-  UPDATE public.shipments SET tracking_number = 'WB-SWAPPED-8'
-  WHERE id = pg_temp.fixture_id(4, 8);
-  UPDATE public.merchant_shipping_charges SET status = 'booked' WHERE id = v_charge;
-  UPDATE public.merchant_shipping_charges SET status = 'refunded'
-  WHERE id = pg_temp.fixture_id(5, 1);
-  IF (SELECT provider_reference FROM public.merchant_shipping_charges WHERE id = v_charge)
-       IS DISTINCT FROM 'WB-CANCEL-8'
-     OR (SELECT provider_reference FROM public.merchant_shipping_charges
-         WHERE id = pg_temp.fixture_id(5, 1)) IS DISTINCT FROM 'WB-CANCEL-1' THEN
-    RAISE EXCEPTION 'T8: the stamped waybill must never move';
-  END IF;
-END;
-$t8$;

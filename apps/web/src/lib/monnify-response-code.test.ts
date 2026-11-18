@@ -38,6 +38,10 @@ describe('readMonnifyResponseCode', () => {
     { responseCode: 'aB3dE5gH7jK' },
     { responseCode: 'John_Doe123' },
     { responseCode: 'd02' },
+    { responseCode: 'ALICE' },
+    { responseCode: 'JOHN_DOE' },
+    { responseCode: 'JANE-DOE' },
+    { responseCode: 'UNKNOWN_TEXT_CODE' },
     [{ responseCode: '99' }, { responseCode: '01' }],
   ])('returns undefined for %j', (answer) => {
     expect(readMonnifyResponseCode(answer)).toBeUndefined();

@@ -1,15 +1,14 @@
 /**
- * A Monnify response code is code-shaped, with no lower-case letters and at
- * most 4 digits in all: 1-4 digits ("0", "99"), a short upper-case code
- * with at least one letter (up to 12 characters, e.g. "D02", "MP_001"), or
- * an upper-case snake-case name up to 40 characters (e.g.
- * "DUPLICATE_REFERENCE"). Anything else is dropped so free text, a phone
- * number (grouped or not), a name or a mixed-case token can never be
- * stored as a "code".
+ * A Monnify response code is stored only when it is code-shaped: 1-4 digits
+ * ("0", "99"), or up to 12 upper-case letters, digits, "_" or "-" that
+ * start with a letter and hold 1-4 digits ("D02", "MP_001"). Textual codes
+ * with no digit are stored only when known (`DUPLICATE_REFERENCE`). Anything
+ * else is dropped so free text, a phone number (grouped or not), a name
+ * (e.g. "JOHN_DOE") or a token can never be stored as a "code".
  */
 const MONNIFY_RESPONSE_CODE_SHAPE =
-  /^(?!(?:\D*\d){5})(?:\d{1,4}|(?=[A-Z0-9_-]*[A-Z])[A-Z0-9_-]{1,12}|[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)$/;
-const MONNIFY_RESPONSE_CODE_MAX_LENGTH = 40;
+  /^(?!(?:\D*\d){5})(?:\d{1,4}|(?=[A-Z0-9_-]*\d)[A-Z][A-Z0-9_-]{1,11})$/;
+const KNOWN_MONNIFY_TEXT_CODES = new Set(['DUPLICATE_REFERENCE']);
 
 /**
  * The top-level `responseCode` value. A form-encoded answer with nested
@@ -47,7 +46,7 @@ export function readMonnifyResponseCode(answer: unknown): string | undefined {
     return undefined;
   }
   const code = String(value).trim();
-  return code.length <= MONNIFY_RESPONSE_CODE_MAX_LENGTH &&
+  return KNOWN_MONNIFY_TEXT_CODES.has(code) ||
     MONNIFY_RESPONSE_CODE_SHAPE.test(code)
     ? code
     : undefined;

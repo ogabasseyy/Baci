@@ -68,17 +68,51 @@ describe('TECNO sponsored CTA capture', () => {
     });
   });
 
+  it('normalizes trailing slashes and utm_content casing on canonical visits', () => {
+    stubStorage();
+    vi.stubGlobal('navigator', { userAgent: 'Mozilla/5.0' });
+    const fetch = vi.fn(async () => new Response(null));
+    vi.stubGlobal('fetch', fetch);
+
+    captureTecnoBlogClick(
+      'https://www.tecno-mobile.com/nga/phones/product-detail/product/camon-slim?utm_content=LEARN_MORE',
+      env,
+      `${page}/`
+    );
+    captureTecnoBlogClick(
+      'HTTPS://NG-STORE.TECNO.COM?utm_content=Order_Here',
+      env,
+      page
+    );
+    captureTecnoBlogClick(
+      'https://ng-store.tecno.com/?utm_content=order_here',
+      env,
+      'https://ogabassey.usebaci.com/blog/tecno-camon-slim-iphone-instant-transfer-sponsored'
+    );
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(parseFetchBody(fetch, 0)).toMatchObject({
+      event: 'tecno_camon_slim_learn_more_clicked',
+    });
+    expect(parseFetchBody(fetch, 1)).toMatchObject({
+      event: 'tecno_camon_slim_order_here_clicked',
+    });
+  });
+
   it('does not send clicks without analytics consent', () => {
     stubStorage({
       'baci-cookie-consent': JSON.stringify({ analytics: false }),
     });
     const sendBeacon = vi.fn(() => true);
+    const fetch = vi.fn(async () => new Response(null));
     vi.stubGlobal('navigator', { sendBeacon, userAgent: 'Mozilla/5.0' });
+    vi.stubGlobal('fetch', fetch);
     captureTecnoBlogClick(
       'https://ng-store.tecno.com/?utm_content=order_here',
       env,
       page
     );
     expect(sendBeacon).not.toHaveBeenCalled();
+    expect(fetch).not.toHaveBeenCalled();
   });
 });

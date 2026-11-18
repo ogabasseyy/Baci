@@ -37,9 +37,11 @@ describe('FollowUpOrderCard', () => {
 
   it.each([
     '+---',
+    '+1',
+    '123',
     '   ',
     '',
-  ])('hides phone actions without digits: %s', (phone) => {
+  ])('hides phone actions for unusable phone values: %s', (phone) => {
     render(
       <FollowUpOrderCard
         item={{ ...oxygenProcessingOrder, customer_phone: phone }}

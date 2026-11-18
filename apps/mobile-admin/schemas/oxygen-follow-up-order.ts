@@ -15,6 +15,3 @@ export const oxygenFollowUpOrderSchema = z
     cancelled_at: z.iso.datetime({ offset: true }).nullable(),
   })
   .strict();
-export const oxygenFollowUpOrdersSchema = z
-  .array(oxygenFollowUpOrderSchema)
-  .max(250);

@@ -24,7 +24,8 @@ export function FollowUpOrderCard({
 
   const displayName = item.customer_name || 'Guest';
   const customerPhone = item.customer_phone?.trim() || null;
-  const phoneDigits = customerPhone?.replace(/\D/g, '') || null;
+  const phoneDigits = customerPhone?.replace(/\D/g, '') || '';
+  const hasContactPhone = phoneDigits.length >= 4;
   const customerId = item.oxygen_follow_up_status ? null : item.customer_id;
   const handlePress = () => {
     if (customerId) {
@@ -93,7 +94,7 @@ export function FollowUpOrderCard({
       </View>
 
       <View style={styles.actionRow}>
-        {phoneDigits ? (
+        {hasContactPhone ? (
           <>
             <Pressable
               style={[

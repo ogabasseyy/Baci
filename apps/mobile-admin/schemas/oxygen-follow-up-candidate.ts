@@ -20,6 +20,3 @@ export const oxygenFollowUpCandidateSchema = z
     last_activity_at: z.iso.datetime({ offset: true }),
   })
   .strict();
-export const oxygenFollowUpCandidatesSchema = z
-  .array(oxygenFollowUpCandidateSchema)
-  .max(250);

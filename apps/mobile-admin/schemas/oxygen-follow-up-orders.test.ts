@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { oxygenFollowUpOrdersSchema } from './oxygen-follow-up-order';
+import { oxygenFollowUpOrdersSchema } from './oxygen-follow-up-orders';
 
 const id = '20000000-0000-4000-8000-000000000001';
 const order = {

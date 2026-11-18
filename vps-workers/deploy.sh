@@ -71,7 +71,14 @@ record_deploy_workflow_promote "$APP_SHA" pre
 
 promote_worker_release
 
-# Refresh overlap record; on failure roll back promotion and record restore window (see cutover runbook for exit-42 / stale-barrier recovery).
+# Refresh the overlap record for the workflow's pre-publish overlap
+# check (the other half of the serialization): runs that appeared
+# during the promote must refuse to publish off their pre-promote
+# latch/SHA read. If this refresh fails, the promotion is ROLLED BACK
+# (no unrecorded tree may stay live) and the restore window is
+# recorded: runs that started during the stalled refresh read the
+# rolled-back candidate yet are absent from the pre-flip record, so
+# without this second write their pre-publish check would pass.
 record_deploy_workflow_promote "$APP_SHA" || {
   echo "Post-flip overlap record failed; rolling back the promotion so no unrecorded worker tree stays live." >&2
   if rollback_worker_release; then

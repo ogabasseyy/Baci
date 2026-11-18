@@ -97,6 +97,8 @@ INSERT INTO public.customers(id, merchant_id, user_id, email)
 SELECT ('a3900000-0000-4000-8000-00000000001' || n)::uuid, 'a3900000-0000-4000-8000-000000000002',
   ('a3900000-0000-4000-8000-00000000002' || n)::uuid, 'refresh-' || n || '@example.test'
 FROM pg_catalog.generate_series(1, 9) n;
+UPDATE piggyvest_primary.integrations SET executor_login = 'retired-' || id::text
+  WHERE executor_login = session_user;
 INSERT INTO piggyvest_primary.integrations(id, merchant_id, business_id, environment, executor_login, enabled)
   VALUES ('a3900000-0000-4000-8000-000000000005', 'a3900000-0000-4000-8000-000000000002',
     'refresh-unknown-business', 'staging', session_user, true);

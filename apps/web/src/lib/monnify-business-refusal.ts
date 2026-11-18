@@ -19,6 +19,13 @@ import { isMonnifyKnownVendRefusalText } from './monnify-vend-refusal';
  * fields by value at any depth: code 99/408/409/429, a vend status or
  * reference, or a set duplicate flag all rule a refusal out.
  */
+/**
+ * Login/credential wording in a business envelope: 401/403-style rejections
+ * never go to Kuda (owner decision 2026-11-18), whatever the HTTP status.
+ */
+const AUTH_WORDING =
+  /unauthori[sz]ed|unauthenticated|forbidden|access denied|invalid (?:access |bearer )?token|(?:expired|revoked) token|token (?:(?:has|is) )?(?:been )?(?:expired|revoked|invalid|missing)|invalid credentials?|authentication (?:failed|failure|required|error)|failed to authenticate|authori[sz]ation (?:header )?(?:is )?(?:missing|required|invalid)/i;
+
 export function isMonnifyDefiniteBusinessRefusal({
   envelope,
   rawMessage,
@@ -41,6 +48,7 @@ export function isMonnifyDefiniteBusinessRefusal({
     !hasMonnifyDuplicateFlag(envelope) &&
     !isMonnifyDuplicateReferenceText(wording) &&
     !isMonnifyVendOutcomeText(wording) &&
+    !AUTH_WORDING.test(wording) &&
     isMonnifyKnownVendRefusalText(wording)
   );
 }

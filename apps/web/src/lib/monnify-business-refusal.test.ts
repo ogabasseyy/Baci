@@ -65,3 +65,12 @@ describe('isMonnifyDefiniteBusinessRefusal', () => {
     ).toBe(false);
   });
 });
+
+describe('bugfix: login wording in a business envelope never goes to Kuda', () => {
+  it.each([
+    'Invalid token: insufficient wallet balance',
+    'Unauthorized: insufficient funds',
+  ])('rules out "%s"', (responseMessage) => {
+    expect(classify({ responseCode: '01', responseMessage })).toBe(false);
+  });
+});

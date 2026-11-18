@@ -32,3 +32,15 @@ describe('hasMonnifyNonDefinitiveCode', () => {
     expect(hasMonnifyNonDefinitiveCode(answer)).toBe(false);
   });
 });
+
+describe('bugfix: nesting past the scan depth fails closed', () => {
+  it('treats an over-deep answer as non-definitive', () => {
+    expect(
+      hasMonnifyNonDefinitiveCode({
+        a: {
+          b: { c: { d: { e: { f: { g: { h: { responseCode: '01' } } } } } } },
+        },
+      })
+    ).toBe(true);
+  });
+});

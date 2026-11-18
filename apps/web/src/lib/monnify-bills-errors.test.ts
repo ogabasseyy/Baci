@@ -220,3 +220,20 @@ describe('bugfix: form-encoded credentials are redacted', () => {
     expect(error.diagnosticMessage).not.toContain('abc123');
   });
 });
+
+describe('bugfix: the HTTP reason phrase is scrubbed', () => {
+  it('hides a phone number in statusText', async () => {
+    const { createMonnifyHttpError } = await import('./monnify-bills-errors');
+    const error = await createMonnifyHttpError(
+      {
+        status: 400,
+        statusText: 'Bad Request for 08012345678',
+        text: async () => '',
+      } as Response,
+      'Monnify API error'
+    );
+
+    expect(error.diagnosticMessage).not.toContain('08012345678');
+    expect(error.statusText).not.toContain('08012345678');
+  });
+});

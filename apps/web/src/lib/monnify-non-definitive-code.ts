@@ -29,8 +29,12 @@ export function hasMonnifyNonDefinitiveCode(
   answer: unknown,
   depth = 0
 ): boolean {
-  if (depth > MAX_DEPTH || !answer || typeof answer !== 'object') {
+  if (!answer || typeof answer !== 'object') {
     return false;
+  }
+  // Nesting deeper than we scan can't be cleared: fail closed.
+  if (depth > MAX_DEPTH) {
+    return true;
   }
   if (Array.isArray(answer)) {
     return answer.some((item) => hasMonnifyNonDefinitiveCode(item, depth + 1));

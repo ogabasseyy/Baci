@@ -119,14 +119,17 @@ export class MonnifyHttpError extends Error {
     status: number;
     statusText: string;
   }) {
-    super(`${prefix}: ${status} ${statusText}`.trim());
+    // The reason phrase is scrubbed like the body: a proxy may echo a phone
+    // number or token there, and the message is persisted.
+    const safeStatusText = sanitizeMonnifyErrorDetail(statusText);
+    super(`${prefix}: ${status} ${safeStatusText}`.trim());
     Object.setPrototypeOf(this, MonnifyHttpError.prototype);
     this.name = 'MonnifyHttpError';
     this.detail = detail;
     const body = rawDetail ?? detail ?? '';
     this.#reading = readMonnifyAnswer(this.message, body);
     this.status = status;
-    this.statusText = statusText;
+    this.statusText = safeStatusText;
   }
 
   get isClientError() {

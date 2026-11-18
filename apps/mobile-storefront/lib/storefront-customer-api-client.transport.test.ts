@@ -64,6 +64,35 @@ describe('storefront customer API client', () => {
     }
   });
 
+  it('bugfix: a caller timeout also covers a stalled CSRF token body', async () => {
+    jest.useFakeTimers();
+    try {
+      mockFetchWithTimeout.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => new Promise(() => undefined),
+      });
+      const client = createStorefrontCustomerApiClient();
+      const pending = client.fetchJson({
+        path: '/api/x',
+        method: 'PATCH',
+        includeCsrf: true,
+        timeoutMs: 15_000,
+      });
+      const outcome = expect(pending).rejects.toThrow('timed out after 15000');
+      await jest.advanceTimersByTimeAsync(0);
+      const csrf = mockFetchWithTimeout.mock.calls[0];
+      expect(csrf[0]).toContain('/api/csrf');
+      await jest.advanceTimersByTimeAsync(15_000);
+      await outcome;
+      // The token read is cancelled, and the mutation is never sent.
+      expect((csrf[1] as { signal: AbortSignal }).signal.aborted).toBe(true);
+      expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('sends authenticated PATCH JSON with the requested CSRF token', async () => {
     mockFetchWithTimeout
       .mockResolvedValueOnce({

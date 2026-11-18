@@ -210,17 +210,19 @@ export function createStorefrontCustomerApiClient() {
     const accessToken = await getAccessToken(expectedUserId);
     let csrfToken: string | undefined;
     if (includeCsrf) {
-      const csrfResponse = await fetchWithTimeout(
-        `${EXPO_PUBLIC_API_URL}/api/csrf`,
-        {
+      const sendCsrf = (requestSignal?: AbortSignal) =>
+        fetchWithTimeout(`${EXPO_PUBLIC_API_URL}/api/csrf`, {
           headers: { Authorization: `Bearer ${accessToken}` },
           method: 'GET',
-          signal,
-          timeout: DEFAULT_TIMEOUT,
-        }
-      );
+          signal: requestSignal,
+          timeout: timeoutMs ?? DEFAULT_TIMEOUT,
+        });
+      // With a caller deadline the CSRF body read is bounded (and aborted)
+      // too, so a stalled token read cannot outlive the request.
       csrfToken = StorefrontCsrfTokenSchema.parse(
-        await parseJsonResponse(csrfResponse)
+        timeoutMs
+          ? await fetchJsonWithinDeadline(sendCsrf, timeoutMs, signal)
+          : await sendCsrf(signal).then(parseJsonResponse)
       ).token;
     }
     const queryString = query ? buildQueryString(query) : '';

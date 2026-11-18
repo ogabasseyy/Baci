@@ -224,7 +224,7 @@ export function useAirtimePurchaseHandler({
       selectedProvider,
     });
     if (validationError) {
-      Alert.alert(validationError.title, validationError.message);
+      // Pay is disabled with the reason shown in-page: no system alert.
       isSubmittingRef.current = false;
       return;
     }

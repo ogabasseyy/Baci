@@ -10,6 +10,7 @@ import {
 import { createPrimaryWalletEvidenceExecutor } from './primary-wallet-evidence-executor';
 import { reconcilePrimaryWalletSavings } from './primary-wallet-savings-reconciliation';
 import { createSavingsVerifyQueryProvider } from './primary-wallet-savings-reconciliation-runtime';
+import { withSavingsVerifyRetry } from './primary-wallet-savings-verify-retry';
 
 type EvidenceInput = {
   configuration: unknown;
@@ -69,9 +70,11 @@ export async function runGoalCancelForfeitOutflowReconciliation(
     if (!schemas.reference.safeParse(reference).success) continue;
     const match = await store.findByReference(reference);
     if (!match) continue;
+    // The webhook can arrive seconds before the verify record turns
+    // terminal: re-ask briefly before leaving the delivery retryable.
     const outcome = await reconcilePrimaryWalletSavings(match.operationId, {
       ...store,
-      queryProvider,
+      queryProvider: withSavingsVerifyRetry(queryProvider),
     });
     return outcome.status;
   }

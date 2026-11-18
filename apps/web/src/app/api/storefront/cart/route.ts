@@ -1,11 +1,10 @@
 import { CART_FULL_SESSION_OPERATIONS } from '@baci/shared/cart';
 import type { NextRequest } from 'next/server';
 import { getCartProofEnvironment } from '@/lib/cart/cart-runtime-env';
+import { createCartRouteContextDeps } from '@/lib/cart/default-context-deps';
 import { upgradeLegacySessionPrincipal } from '@/lib/cart/grant-operations';
 import { checkAnonymousCartQuota } from '@/lib/cart/quota-identity';
 import {
-  type CartRequestContextDeps,
-  cachedCartMerchantLookups,
   checkCartQuota,
   readCartJsonBody,
   requestUsesDeviceProof,
@@ -13,11 +12,10 @@ import {
 } from '@/lib/cart/request-context';
 import { createCartQuotaRequestContext } from '@/lib/cart/request-quota-context';
 import {
+  applyCartSnapshotCookies,
   cartErrorResponse,
   cartJsonResponse,
   emptyCartProbeResponse,
-  setCartSessionCookie,
-  setCartSessionHintCookie,
 } from '@/lib/cart/response';
 import { createCartScopedClient } from '@/lib/cart/scoped-client';
 import {
@@ -28,34 +26,10 @@ import { createCart, getCart } from '@/lib/cart/service';
 import {
   cartSessionCookieMaxAge,
   issueCartSessionProof,
-  verifyCartSessionProof,
 } from '@/lib/cart/session-proof';
 import { voucherAttachmentsValid } from '@/lib/cart/voucher-attachments';
 import { checkCsrfProtection } from '@/lib/csrf';
-import { getCurrentSlugForAlias } from '@/lib/slug-alias-cache';
-import { createAnonClient } from '@/lib/supabase/anon';
 import { createCartRequestSchema } from '@/schemas/cart';
-
-function contextDeps(
-  requireScope: CartRequestContextDeps['requireScope'],
-  wrongScopeError: CartRequestContextDeps['wrongScopeError'],
-  timer?: CartServerTimer
-): CartRequestContextDeps {
-  const cached = cachedCartMerchantLookups(createAnonClient());
-  return {
-    merchant: {
-      resolveAlias: getCurrentSlugForAlias,
-      rpcClient: cached.rpcClient,
-      loadMerchantFeatures: timer
-        ? (id) => timer.measure('auth-features', () => cached.features(id))
-        : cached.features,
-    },
-    requireScope,
-    verify: (proof) =>
-      verifyCartSessionProof(proof, { environment: getCartProofEnvironment() }),
-    wrongScopeError,
-  };
-}
 
 /**
  * GET /api/storefront/cart
@@ -74,7 +48,7 @@ export async function GET(request: NextRequest) {
 
 async function readCart(request: NextRequest, timer: CartServerTimer) {
   try {
-    const deps = contextDeps('session', 'not_found', timer);
+    const deps = createCartRouteContextDeps('session', 'not_found', timer);
     const context = await timer.measure('auth', () =>
       resolveCartRequestContext(request, deps)
     );
@@ -149,21 +123,12 @@ async function readCart(request: NextRequest, timer: CartServerTimer) {
         ? upgraded.liveGrantExpiresAt
         : result.cart.expiresAt;
     const cookieMaxAge = cartSessionCookieMaxAge(cookieExpiry);
-    const hintValue: '1' | '0' =
-      result.cart.state === 'active' && result.cart.lines.length > 0
-        ? '1'
-        : '0';
-    if (proof && cookieMaxAge > 0) {
-      setCartSessionCookie(
-        response,
-        context.merchant.id,
-        proof,
-        cookieMaxAge,
-        hintValue
-      );
-    } else {
-      setCartSessionHintCookie(response, context.merchant.id, hintValue);
-    }
+    applyCartSnapshotCookies(response, {
+      merchantId: context.merchant.id,
+      cart: result.cart,
+      proof,
+      cookieMaxAge,
+    });
     return response;
   } catch (error) {
     console.error('Unexpected error in GET /api/storefront/cart:', {
@@ -194,7 +159,7 @@ export async function POST(request: NextRequest) {
     const context = await resolveCartRequestContext(
       request,
       // Keep scope rejection distinct from the CSRF forbidden response.
-      contextDeps('bootstrap', 'unauthorized')
+      createCartRouteContextDeps('bootstrap', 'unauthorized')
     );
     if (!context.ok) {
       return cartErrorResponse(context.error);
@@ -300,21 +265,12 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     );
     const cookieMaxAge = cartSessionCookieMaxAge(result.cart.expiresAt);
-    const hintValue: '1' | '0' =
-      result.cart.state === 'active' && result.cart.lines.length > 0
-        ? '1'
-        : '0';
-    if (proof && cookieMaxAge > 0) {
-      setCartSessionCookie(
-        response,
-        context.merchant.id,
-        proof,
-        cookieMaxAge,
-        hintValue
-      );
-    } else {
-      setCartSessionHintCookie(response, context.merchant.id, hintValue);
-    }
+    applyCartSnapshotCookies(response, {
+      merchantId: context.merchant.id,
+      cart: result.cart,
+      proof,
+      cookieMaxAge,
+    });
     return response;
   } catch (error) {
     console.error('Unexpected error in POST /api/storefront/cart:', {

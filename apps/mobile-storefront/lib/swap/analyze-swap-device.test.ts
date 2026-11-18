@@ -1,6 +1,40 @@
-import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  jest,
+} from '@jest/globals';
 import { analyzeSwapDevice } from './analyze-swap-device';
 import type { SwapMedia } from './select-swap-media';
+
+// Isolate from global FormData.prototype.append mutations leaked by expo/winter across Jest workers.
+class TestFormData {
+  append(_name: string, _value: unknown, _filename?: string): void {}
+}
+
+let originalFormData: typeof FormData | undefined;
+let appendSpy: ReturnType<typeof jest.spyOn> | undefined;
+
+beforeAll(() => {
+  originalFormData = globalThis.FormData;
+  Object.defineProperty(globalThis, 'FormData', {
+    configurable: true,
+    writable: true,
+    value: TestFormData,
+  });
+});
+
+afterAll(() => {
+  Object.defineProperty(globalThis, 'FormData', {
+    configurable: true,
+    writable: true,
+    value: originalFormData,
+  });
+});
 
 const mockBuildSwapStills = jest.fn<(media: SwapMedia) => Promise<string[]>>();
 const mockFetchWithTimeout =
@@ -49,8 +83,13 @@ describe('analyzeSwapDevice', () => {
     ]);
   });
 
+  afterEach(() => {
+    appendSpy?.mockRestore();
+    appendSpy = undefined;
+  });
+
   it('uploads the stills as frames and returns the offer', async () => {
-    const append = jest.spyOn(FormData.prototype, 'append');
+    appendSpy = jest.spyOn(FormData.prototype, 'append');
     mockFetchWithTimeout.mockResolvedValue(
       jsonResponse(200, { success: true, data: analysis })
     );
@@ -59,7 +98,7 @@ describe('analyzeSwapDevice', () => {
 
     expect(outcome).toMatchObject({ ok: true, data: { model: 'iPhone 13' } });
     expect(mockBuildSwapStills).toHaveBeenCalledWith(photos);
-    expect(append.mock.calls).toEqual([
+    expect(appendSpy.mock.calls).toEqual([
       [
         'frames',
         { uri: 'file:///still-1.jpg', type: 'image/jpeg', name: 'frame-1.jpg' },
@@ -72,7 +111,6 @@ describe('analyzeSwapDevice', () => {
     const [url, init] = mockFetchWithTimeout.mock.calls[0] ?? [];
     expect(url).toMatch(/\/api\/ai\/grade-device$/);
     expect(init?.method).toBe('POST');
-    append.mockRestore();
   });
 
   it('passes on the plain message from a refused check', async () => {

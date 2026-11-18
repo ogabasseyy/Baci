@@ -36,12 +36,13 @@ export interface OrderCreationNotificationInput {
 export async function dispatchOrderCreationNotifications(
   input: OrderCreationNotificationInput
 ): Promise<void> {
-  const isInvoiceCreation = input.paymentMethod === 'invoice';
+  const paymentMethod = input.paymentMethod.trim().toLowerCase();
+  const isInvoiceCreation = paymentMethod === 'invoice';
   const isUnpaidPayForMeRequest =
-    input.paymentMethod.toLowerCase() === 'payforme' &&
+    paymentMethod === 'payforme' &&
     input.invoiceBalanceDue > 0 &&
     !input.isWalletFullyPaid &&
-    input.paymentStatus?.toLowerCase() !== 'paid';
+    input.paymentStatus?.trim().toLowerCase() !== 'paid';
   if (isUnpaidPayForMeRequest) {
     return;
   }

@@ -29,7 +29,9 @@ function describeAge(days: number) {
 }
 
 function describeProvider(orders: StuckBnplOrderRow[]) {
-  const methods = new Set(orders.map((order) => order.payment_method));
+  const methods = new Set(
+    orders.map((order) => order.payment_method?.trim().toLowerCase())
+  );
   const [onlyMethod] = methods;
   return methods.size === 1 && onlyMethod && PROVIDER_LABELS[onlyMethod]
     ? PROVIDER_LABELS[onlyMethod]

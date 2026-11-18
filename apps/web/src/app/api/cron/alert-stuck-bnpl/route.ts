@@ -208,9 +208,9 @@ export async function GET(request: NextRequest) {
     if (alertOrders.length === 0) {
       return NextResponse.json({
         success: true,
-        stuckOrders: orders.length,
-        // stuckOrders includes review-only rows. alertOrders counts push candidates.
+        stuckOrders: 0,
         alertOrders: 0,
+        reviewOnlyOrders: sessionOnlyOrders,
         merchants: 0,
         merchantsNotified: 0,
         ...(reviewFailures.length > 0 && { reviewFailures }),
@@ -290,8 +290,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      stuckOrders: orders.length,
+      stuckOrders: alertOrders.length,
       alertOrders: alertOrders.length,
+      reviewOnlyOrders: sessionOnlyOrders,
       merchants: ordersByMerchant.size,
       merchantsNotified,
       ...(reviewFailures.length > 0 && { reviewFailures }),

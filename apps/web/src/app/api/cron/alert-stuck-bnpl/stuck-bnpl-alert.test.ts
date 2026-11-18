@@ -37,6 +37,14 @@ describe('buildStuckBnplAlert', () => {
     });
   });
 
+  it('labels canonical provider names regardless of stored formatting', () => {
+    const alert = buildStuckBnplAlert(
+      [order({ payment_method: ' Credit_Direct ' })],
+      NOW
+    );
+    expect(alert.body).toContain('Check with Credit Direct');
+  });
+
   it('summarises several orders and leaves out the single-order link', () => {
     const alert = buildStuckBnplAlert(
       [

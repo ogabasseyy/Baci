@@ -41,20 +41,41 @@ export function scheduleProductMutationPurge({
   // stale-while-revalidate would serve the pre-mutation snapshot to the
   // first post-purge request and re-seed Cloudflare with the old price,
   // stock, or deleted product.
-  revalidateProductSlugs(
-    merchantId,
-    entries.map((entry) => entry.slug),
-    {
-      expireImmediately: true,
-    }
-  );
+  const slugsExpired =
+    revalidateProductSlugs(
+      merchantId,
+      entries.map((entry) => entry.slug),
+      {
+        expireImmediately: true,
+      }
+    ) === true;
   expireProductBlogCache(merchantId);
-  if (purgeWholeStorefront) {
+
+  const scheduleEdgePurge = () => {
+    if (purgeWholeStorefront) {
+      scheduleStorefrontHostnamePurge(merchantSlug);
+      return;
+    }
+    scheduleStorefrontProductPurge(merchantSlug, entries);
+    scheduleProductBlogPurgeAfterResponse({
+      supabase,
+      merchantId,
+      merchantSlug,
+      productIds,
+      entries,
+      blogPostSlugs,
+      blogPostIds,
+      categorySlugs: entries.map((entry) => entry.categorySegment),
+      skipProductPurge: true,
+    });
+  };
+
+  if (purgeWholeStorefront || !slugsExpired) {
     if (
       revalidateProducts(merchantId, undefined, { expireImmediately: true }) ===
       true
     ) {
-      scheduleStorefrontHostnamePurge(merchantSlug);
+      scheduleEdgePurge();
       return;
     }
     const runFallback = async () => {
@@ -63,7 +84,7 @@ export function scheduleProductMutationPurge({
           expireWidePdpDetails: true,
         });
         if (expired) {
-          scheduleStorefrontHostnamePurge(merchantSlug);
+          scheduleEdgePurge();
         } else {
           console.warn(
             'Skipped mutation hostname purge because PDP hard expiry failed',
@@ -84,16 +105,6 @@ export function scheduleProductMutationPurge({
     }
     return;
   }
-  scheduleStorefrontProductPurge(merchantSlug, entries);
-  scheduleProductBlogPurgeAfterResponse({
-    supabase,
-    merchantId,
-    merchantSlug,
-    productIds,
-    entries,
-    blogPostSlugs,
-    blogPostIds,
-    categorySlugs: entries.map((entry) => entry.categorySegment),
-    skipProductPurge: true,
-  });
+
+  scheduleEdgePurge();
 }

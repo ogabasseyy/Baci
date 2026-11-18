@@ -144,6 +144,8 @@ describe('POST /api/products/bulk-publish', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockRevalidateProducts.mockReturnValue(true);
+    mockRevalidateProductSlugs.mockReturnValue(true);
     authUser = { id: USER_ID };
     merchantContext = {
       merchantId: MERCHANT_ID,

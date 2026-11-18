@@ -93,6 +93,8 @@ function makeSupabase() {
 describe('bulk-update purge ordering', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.revalidateProducts.mockReturnValue(true);
+    mocks.revalidateSlugs.mockReturnValue(true);
     mocks.csrf.mockResolvedValue({ valid: true, response: null });
     mocks.merchant.mockResolvedValue({
       merchantId: MERCHANT_ID,
@@ -192,6 +194,33 @@ describe('bulk-update purge ordering', () => {
       expect.objectContaining({
         productIds: ['123e4567-e89b-42d3-a456-426614174000'],
       })
+    );
+  });
+
+  it('falls back to broad hard expiry when per-slug expiry fails on bulk update', async () => {
+    mocks.revalidateSlugs.mockReturnValueOnce(false);
+    const request = makeRequest({
+      changes: [
+        {
+          type: 'update',
+          details: {
+            sku: 'SKU-PHONE',
+            name: 'SKU phone',
+            price: 150,
+            category: 'Smartphones',
+          },
+          newPrice: 150,
+        },
+      ],
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(200);
+    expect(mocks.revalidateProducts).toHaveBeenCalledWith(
+      MERCHANT_ID,
+      undefined,
+      { expireImmediately: true }
     );
   });
 });

@@ -16,6 +16,7 @@ type PurgeSuiteOptions = {
     expireProductBlogCache: Mock;
     merchantSlugRow: unknown;
     merchantThrows: boolean;
+    revalidateProducts: Mock;
     revalidateProductSlugs: Mock;
     scheduleProductBlogPurgeAfterResponse: Mock;
     scheduleStorefrontProductPurge: Mock;
@@ -181,5 +182,18 @@ export function defineArchiveRoutePurgeSuite({
     expect(mocks.scheduleStorefrontProductPurge).toHaveBeenCalledWith(null, [
       { slug: 'phone-ultra', categorySegment: 'smartphones' },
     ]);
+  });
+
+  it('falls back to broad hard expiry when per-slug expiry fails on archive', async () => {
+    mocks.revalidateProductSlugs.mockReturnValueOnce(false);
+
+    const response = await PATCH(makeRequest(), makeContext());
+
+    expect(response.status).toBe(200);
+    expect(mocks.revalidateProducts).toHaveBeenCalledWith(
+      merchantId,
+      undefined,
+      { expireImmediately: true }
+    );
   });
 }

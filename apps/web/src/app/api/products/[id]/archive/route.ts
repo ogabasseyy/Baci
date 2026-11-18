@@ -125,9 +125,15 @@ export async function PATCH(
     // post-purge MISS cannot refill a stale "product still listed" page. Runs
     // first (needs only the merchant id) so a failed merchant-slug read below
     // cannot skip it.
-    revalidateProductSlugs(merchantContext.merchantId, [purgeSlug], {
-      expireImmediately: true,
-    });
+    if (
+      revalidateProductSlugs(merchantContext.merchantId, [purgeSlug], {
+        expireImmediately: true,
+      }) !== true
+    ) {
+      revalidateProducts(merchantContext.merchantId, undefined, {
+        expireImmediately: true,
+      });
+    }
     expireProductBlogCache(merchantContext.merchantId);
     // scheduleStorefrontProductPurge needs the merchant slug (the resolved
     // merchant context only yields its id). Resolve it here; a miss makes the

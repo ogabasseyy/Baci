@@ -75,6 +75,8 @@ function makeQuery(data: unknown[], error: unknown = null) {
 describe('POST /api/products/bulk-publish purge ordering', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockRevalidateProducts.mockReturnValue(true);
+    mockRevalidateProductSlugs.mockReturnValue(true);
     mockCheckCsrfProtection.mockResolvedValue({ valid: true, response: null });
     mockHasPermission.mockReturnValue(true);
     mockGetMerchantForApiRequest.mockResolvedValue({
@@ -124,6 +126,24 @@ describe('POST /api/products/bulk-publish purge ordering', () => {
     );
     expect(mockExpireProductBlogCache.mock.invocationCallOrder[0]).toBeLessThan(
       mockScheduleStorefrontProductPurge.mock.invocationCallOrder[0]
+    );
+  });
+
+  it('falls back to broad hard expiry when per-slug expiry fails on bulk publish', async () => {
+    mockRevalidateProductSlugs.mockReturnValueOnce(false);
+    const { POST } = await import('./route');
+
+    const response = await POST(
+      new Request('http://localhost/api/products/bulk-publish', {
+        method: 'POST',
+      }) as never
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      'merchant-1',
+      undefined,
+      { expireImmediately: true }
     );
   });
 });

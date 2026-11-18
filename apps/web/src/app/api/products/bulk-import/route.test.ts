@@ -214,6 +214,8 @@ function makeImportRequest(csvContent?: string): NextRequest {
 describe('POST /api/products/bulk-import', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockRevalidateProducts.mockReturnValue(true);
+    mockRevalidateProductSlugs.mockReturnValue(true);
     authUser = { id: USER_ID };
     merchant = { id: MERCHANT_ID };
     merchantContextMock.current = {

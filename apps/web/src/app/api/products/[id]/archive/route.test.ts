@@ -202,6 +202,8 @@ describe('PATCH /api/products/[id]/archive', () => {
       },
     });
     mocks.hasPermission.mockReturnValue(true);
+    mocks.revalidateProducts.mockReturnValue(true);
+    mocks.revalidateProductSlugs.mockReturnValue(true);
   });
 
   it('archives a merchant product when the user has edit permission', async () => {

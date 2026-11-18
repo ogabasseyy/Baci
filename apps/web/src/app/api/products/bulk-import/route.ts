@@ -230,11 +230,17 @@ export async function POST(request: NextRequest) {
       // An edge purge is always best-effort: its failure must never turn a
       // completed CSV import into an API error.
       try {
-        revalidateProductSlugs(
-          merchantId,
-          publicPurgeEntries.map((entry) => entry.slug),
-          { expireImmediately: true }
-        );
+        if (
+          revalidateProductSlugs(
+            merchantId,
+            publicPurgeEntries.map((entry) => entry.slug),
+            { expireImmediately: true }
+          ) !== true
+        ) {
+          revalidateProducts(merchantId, undefined, {
+            expireImmediately: true,
+          });
+        }
         // Expire the merchant-scoped related-blog data before an edge MISS can
         // refill a stale article while the deferred lookup is still queued.
         expireProductBlogCache(merchantId);

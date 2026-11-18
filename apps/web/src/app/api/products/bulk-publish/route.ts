@@ -118,11 +118,17 @@ export async function POST(request: NextRequest) {
       // Bust the per-slug Next entries before a Cloudflare MISS can repopulate
       // from them. The purge is best-effort and cannot change a publish result.
       try {
-        revalidateProductSlugs(
-          merchantId,
-          publicPurgeEntries.map((entry) => entry.slug),
-          { expireImmediately: true }
-        );
+        if (
+          revalidateProductSlugs(
+            merchantId,
+            publicPurgeEntries.map((entry) => entry.slug),
+            { expireImmediately: true }
+          ) !== true
+        ) {
+          revalidateProducts(merchantId, undefined, {
+            expireImmediately: true,
+          });
+        }
         // Relationship/category fallback reads can span many pages. Queue the
         // article enrichment after the response so publishing cannot time out
         // after the database update has already committed.

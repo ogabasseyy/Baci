@@ -242,6 +242,8 @@ function makeRequest(body: unknown): NextRequest {
 describe('POST /api/products/bulk-update', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockRevalidateProducts.mockReturnValue(true);
+    mockRevalidateProductSlugs.mockReturnValue(true);
     authUser = { id: USER_ID };
     merchant = {
       id: MERCHANT_ID,

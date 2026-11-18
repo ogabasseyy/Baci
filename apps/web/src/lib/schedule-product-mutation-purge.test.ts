@@ -154,4 +154,64 @@ describe('scheduleProductMutationPurge', () => {
       warnSpy.mockRestore();
     }
   });
+
+  it('falls back to broad hard expiry when per-slug expiry fails on a scoped mutation', () => {
+    mockRevalidateProductSlugs.mockReturnValueOnce(false);
+    const entries = [{ slug: 'new-phone', categorySegment: 'smartphones' }];
+
+    scheduleProductMutationPurge({
+      supabase: {} as never,
+      merchantId: 'merchant-1',
+      merchantSlug: 'test-store',
+      productIds: ['product-1'],
+      entries,
+    });
+
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      'merchant-1',
+      undefined,
+      { expireImmediately: true }
+    );
+    expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
+      'test-store',
+      entries
+    );
+    expect(mockAfter).not.toHaveBeenCalled();
+  });
+
+  it('defers reliable PDP expiry before edge purges when both per-slug and broad hard expiry fail', async () => {
+    mockRevalidateProductSlugs.mockReturnValueOnce(false);
+    mockRevalidateProducts.mockReturnValueOnce(false);
+    const entries = [{ slug: 'new-phone', categorySegment: 'smartphones' }];
+
+    scheduleProductMutationPurge({
+      supabase: {} as never,
+      merchantId: 'merchant-1',
+      merchantSlug: 'test-store',
+      productIds: ['product-1'],
+      entries,
+      blogPostSlugs: ['old-article'],
+    });
+
+    expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
+    expect(mockScheduleProductBlogPurgeAfterResponse).not.toHaveBeenCalled();
+    await mockAfter.mock.calls[0][0]();
+    expect(mockExpireReliable).toHaveBeenCalledWith('merchant-1', {
+      expireWidePdpDetails: true,
+    });
+    expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
+      'test-store',
+      entries
+    );
+    expect(mockScheduleProductBlogPurgeAfterResponse).toHaveBeenCalledWith({
+      supabase: expect.anything(),
+      merchantId: 'merchant-1',
+      merchantSlug: 'test-store',
+      productIds: ['product-1'],
+      entries,
+      blogPostSlugs: ['old-article'],
+      categorySlugs: ['smartphones'],
+      skipProductPurge: true,
+    });
+  });
 });

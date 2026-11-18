@@ -4,6 +4,7 @@ import { acceptsAgentUi } from './accepts-agent-ui';
 import { withChatTenantHeader } from './chat-tenant';
 import { tryFastCatalogResponse } from './fast-catalog-response';
 import { negotiateChatAgentUiResponse } from './negotiate-chat-agent-ui-response';
+import { runOgabasseyCatalogAgent } from './ogabassey-catalog-agent';
 import { resolveOgabasseyCommerceContext } from './ogabassey-commerce-context';
 import { runOgabasseyConversation } from './ogabassey-conversation';
 import { buildOgabasseyOrderAction } from './ogabassey-order-action';
@@ -130,6 +131,37 @@ export async function tryOgabasseyPreferredResponse(
             },
           }
         )
+      ),
+      tenant.merchantSlug
+    );
+  }
+
+  const catalogAgent = await runOgabasseyCatalogAgent({
+    abortSignal: request.signal,
+    chatProvider: provider,
+    currencyCode: tenant.currencyCode,
+    merchantName: tenant.businessName,
+    merchantSlug: tenant.merchantSlug,
+    messages,
+    timeoutMs: remainingRouteMs(),
+  });
+  if (catalogAgent) {
+    if (request.signal.aborted) {
+      return withChatTenantHeader(
+        createClientClosedRequestResponse(),
+        tenant.merchantSlug
+      );
+    }
+    return withChatTenantHeader(
+      await negotiateChatAgentUiResponse(
+        request,
+        new Response(catalogAgent.text, {
+          headers: {
+            'Content-Type': 'text/plain; charset=utf-8',
+            'Cache-Control': 'no-store',
+          },
+        }),
+        catalogAgent.events
       ),
       tenant.merchantSlug
     );

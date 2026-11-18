@@ -218,7 +218,11 @@ export function DrawerMenu() {
           the slide starts, so mounting on it would request and attribute
           impressions while the drawer is still off-screen. */}
           {isFullyOpen ? (
-            <AdSlot placement="FOOTER_ANCHOR" visibleWhileDrawerOpen />
+            <AdSlot
+              clearance="wide"
+              placement="FOOTER_ANCHOR"
+              visibleWhileDrawerOpen
+            />
           ) : null}
 
           {/* Footer */}

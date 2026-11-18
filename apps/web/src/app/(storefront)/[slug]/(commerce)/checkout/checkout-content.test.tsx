@@ -2,7 +2,14 @@ import { render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ merchant: vi.fn(), domain: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  merchant: vi.fn(),
+  domain: vi.fn(),
+  head: vi.fn(),
+}));
+vi.mock('@/lib/experience/published-manifest', () => ({
+  loadPublishedExperience: mocks.head,
+}));
 vi.mock('next/navigation', () => ({
   notFound: () => {
     throw new Error('not found');
@@ -53,6 +60,8 @@ vi.mock('@/components/storefront/ogabassey/pages/checkout-page', () => ({
 import { CheckoutContent } from './checkout-content';
 
 beforeEach(() => {
+  mocks.head.mockReset();
+  mocks.head.mockResolvedValue(null);
   vi.clearAllMocks();
   mocks.merchant.mockResolvedValue({ id: 'merchant-1', slug: 'shop' });
   mocks.domain.mockResolvedValue({
@@ -121,4 +130,32 @@ it.each([
   ).toHaveTextContent(`Oxygen checkout for ${merchantId}`);
   expect(screen.queryByText('New checkout')).toBeNull();
   expect(screen.queryByText('Default checkout')).toBeNull();
+});
+
+it('keeps custom stores on the commerce engine while preserving an existing Oxygen resume before head reads', async () => {
+  mocks.merchant.mockResolvedValue({
+    id: 'merchant-1',
+    slug: 'shop',
+    template_id: 'new-template',
+  });
+  mocks.head.mockResolvedValue({ buildDigest: 'current' });
+  const { unmount } = render(
+    await CheckoutContent({ params: Promise.resolve({ slug: 'shop' }) })
+  );
+  expect(screen.getByText('Default checkout')).toBeVisible();
+  expect(screen.queryByText('New checkout')).toBeNull();
+  unmount();
+  mocks.head.mockClear();
+  mocks.head.mockRejectedValue(Error('MANIFEST_UNAVAILABLE'));
+  const id = '60000000-0000-4000-8000-000000000001';
+  render(
+    await CheckoutContent({
+      params: Promise.resolve({ slug: 'shop' }),
+      searchParams: Promise.resolve({ oxygenOrderId: id }),
+    })
+  );
+  expect(
+    screen.getByRole('region', { name: `confirmation ${id}` })
+  ).toBeVisible();
+  expect(mocks.head).not.toHaveBeenCalled();
 });

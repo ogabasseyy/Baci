@@ -34,3 +34,15 @@ it('nulls the cart ref for a terminal cart', () => {
   } as never);
   expect(value.sharedCartRef).toBeNull();
 });
+
+it('keeps the experience command port alongside saved-cart recovery fields', () => {
+  const port = { submit: vi.fn() };
+  const value = delegatedCartValue(true, {
+    ...(shared as object),
+    experienceCommandPort: port,
+    isTerminal: true,
+  } as never);
+  expect(value.experienceCommandPort).toBe(port);
+  expect(value.sharedCartRef).toBeNull();
+  expect(value.importStatus).toBe('done');
+});

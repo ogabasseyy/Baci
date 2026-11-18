@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { QuizAppAttestationError } from '@/app/api/quiz/_shared/quiz-app-attestation-error';
+import { QuizAppOnlyError } from '@/app/api/quiz/_shared/quiz-app-only-error';
+import { resetQuizV2RuntimeCheckForTests } from '@/app/api/quiz/_shared/quiz-v2-contract';
 import {
   createRouteProof,
   requireQuizCsrf,
@@ -77,7 +80,7 @@ function request(body: Record<string, unknown>, headers = {}) {
   });
 }
 
-function authenticated() {
+function authenticated(authMethod: 'bearer' | 'cookie' = 'bearer') {
   const rpc = vi.fn((name: string) =>
     Promise.resolve(
       name === 'quiz_runtime_contract_version'
@@ -86,7 +89,7 @@ function authenticated() {
     )
   );
   vi.mocked(requireQuizUser).mockResolvedValue({
-    authMethod: 'bearer',
+    authMethod,
     response: null,
     supabase: { rpc },
     user: { id: USER_ID },
@@ -95,6 +98,7 @@ function authenticated() {
 }
 
 beforeEach(() => {
+  resetQuizV2RuntimeCheckForTests();
   vi.clearAllMocks();
   vi.mocked(requireQuizCsrf).mockResolvedValue(null);
   vi.mocked(createRouteProof).mockReturnValue({
@@ -114,6 +118,78 @@ describe('v2 quiz start route', () => {
     expect(response.status).toBe(403);
     expect(await response.json()).toMatchObject({
       code: 'quiz_age_restricted',
+    });
+    expect(rpc).not.toHaveBeenCalledWith(
+      expect.stringMatching(/^start_quiz_attempt/),
+      expect.anything()
+    );
+  });
+  it('refuses a live prize start from a browser session without starting', async () => {
+    const rpc = authenticated('cookie');
+    vi.mocked(enforceQuizStartGuards).mockRejectedValueOnce(
+      new QuizAppOnlyError()
+    );
+    const response = await postQuizStartV2(request({}));
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({
+      code: 'QUIZ_APP_ONLY',
+      error: 'Prize quizzes are played in the Ogabassey app.',
+    });
+    expect(enforceQuizStartGuards).toHaveBeenCalledWith(
+      expect.anything(),
+      EVENT_ID,
+      USER_ID,
+      'cookie',
+      null,
+      null
+    );
+    expect(rpc).not.toHaveBeenCalledWith(
+      expect.stringMatching(/^start_quiz_attempt/),
+      expect.anything()
+    );
+  });
+  it('passes the caller auth method to the start guards', async () => {
+    authenticated();
+    await postQuizStartV2(request({}));
+    expect(enforceQuizStartGuards).toHaveBeenCalledWith(
+      expect.anything(),
+      EVENT_ID,
+      USER_ID,
+      'bearer',
+      null,
+      null
+    );
+  });
+  it('forwards the App Check token and challenge nonce to the start guards', async () => {
+    authenticated();
+    await postQuizStartV2(
+      request(
+        {},
+        {
+          'X-Baci-Quiz-Attestation-Nonce': 'nonce-1',
+          'X-Firebase-AppCheck': ' token-1 ',
+        }
+      )
+    );
+    expect(enforceQuizStartGuards).toHaveBeenCalledWith(
+      expect.anything(),
+      EVENT_ID,
+      USER_ID,
+      'bearer',
+      'token-1',
+      'nonce-1'
+    );
+  });
+  it('refuses a live start that lacks app attestation without starting', async () => {
+    const rpc = authenticated();
+    vi.mocked(enforceQuizStartGuards).mockRejectedValueOnce(
+      new QuizAppAttestationError()
+    );
+    const response = await postQuizStartV2(request({}));
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({
+      code: 'QUIZ_APP_ATTESTATION_REQUIRED',
+      error: 'Open the Ogabassey app to play prize quizzes.',
     });
     expect(rpc).not.toHaveBeenCalledWith(
       expect.stringMatching(/^start_quiz_attempt/),

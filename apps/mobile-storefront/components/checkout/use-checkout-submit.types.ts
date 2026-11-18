@@ -15,6 +15,7 @@ import type {
 import type { CartItem } from '@/stores/cart-store';
 import type { submitBnplCheckout } from './checkout-bnpl-submit';
 import type { PendingCryptoOrder } from './checkout-screen.constants';
+import type { WalletTransferFallback } from './wallet-transfer-fallback';
 
 interface CheckoutCustomer {
   email?: string | null;
@@ -65,5 +66,9 @@ export interface UseCheckoutSubmitParams {
   user: CheckoutUser | null | undefined;
   walletBalance: number;
   walletFundedBankTransferOptionEnabled: boolean;
+  /** Live re-check at finalization; true stops the wallet-funded transfer. */
+  isWalletFundedBankTransferHeld?: () => boolean;
+  /** Why a held transfer fell back, judged from the same live reads. */
+  walletTransferFallbackReason?: () => WalletTransferFallback;
   walletSelection: WalletSelection | undefined;
 }

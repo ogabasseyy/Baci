@@ -359,3 +359,55 @@ describe('buildVtuSubmissionMarkerEraMetadata', () => {
     });
   });
 });
+
+describe('bugfix: PiggyVest-funded rows carry funding proof without walletDebited (Codex P1)', () => {
+  const staleAt = new Date(
+    Date.now() - STRANDED_PRE_VEND_STALE_MS - 1000
+  ).toISOString();
+  const row = {
+    created_at: new Date(Date.now() - 1000).toISOString(),
+    error_message: null,
+    id: 'vtu-pv',
+    request_reference: 'VTU-REQ-PV',
+    status: 'processing' as const,
+    transaction_id: null,
+    updated_at: staleAt,
+  };
+  const piggyvest = { paymentSource: 'piggyvest_wallet' };
+
+  it('flags a post-vend reference-less PiggyVest row for provider-truth settlement', () => {
+    expect(
+      isFlaggedReferenceLessVtuRow({ ...row, metadata: { ...piggyvest } })
+    ).toBe(true);
+  });
+
+  it('recovers a stale marked Monnify PiggyVest row with no response reference', () => {
+    expect(
+      isMarkedUnsubmittedMonnifyVtuRow({
+        ...row,
+        metadata: {
+          ...piggyvest,
+          provider: 'monnify',
+          [VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY]: new Date().toISOString(),
+        },
+      })
+    ).toBe(true);
+  });
+
+  it('still declines an unfunded row (no flag, not PiggyVest-paid)', () => {
+    expect(isFlaggedReferenceLessVtuRow({ ...row, metadata: {} })).toBe(false);
+  });
+
+  it('keeps a PiggyVest row with a submission marker out of the unsubmitted proof', () => {
+    expect(
+      isUnsubmittedPreparedVtuRow({
+        ...row,
+        metadata: {
+          ...piggyvest,
+          [VTU_SUBMISSION_MARKER_ERA_KEY]: true,
+          [VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY]: new Date().toISOString(),
+        },
+      })
+    ).toBe(false);
+  });
+});

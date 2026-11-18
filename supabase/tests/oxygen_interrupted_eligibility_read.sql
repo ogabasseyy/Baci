@@ -55,4 +55,34 @@ DO $$ DECLARE original jsonb; mode text; BEGIN
  END;
  IF (SELECT version FROM public.oxygen_workflows WHERE id='e1110000-0000-4000-8000-000000000041')<>3 THEN RAISE EXCEPTION 'Late completion advanced generation'; END IF;
 END $$;
+-- Existing bookings may recover the same read, never a financial mutation.
+UPDATE public.oxygen_workflows SET stage='booked' WHERE id='e1110000-0000-4000-8000-000000000041';
+UPDATE oxygen_private.provider_states SET state=state||'{"bookingReference":"e1110000-0000-4000-8000-000000000099","booking":{"loan_reference":"e1110000-0000-4000-8000-000000000099","status":"BOOKED"}}'::jsonb WHERE workflow_id='e1110000-0000-4000-8000-000000000041';
+UPDATE oxygen_private.provider_reference_history SET booking_reference='e1110000-0000-4000-8000-000000000099' WHERE command_id='e1110000-0000-4000-8000-000000000004';
+UPDATE oxygen_private.commands SET status='executing',completed_at=NULL,command='{"action":"refresh_eligibility"}',started_at=now()-interval '5 minutes' WHERE id='e1110000-0000-4000-8000-000000000005';
+DO $$ BEGIN
+ PERFORM oxygen_private.retire_stale_executing_eligibility('e1110000-0000-4000-8000-000000000041');
+ IF NOT EXISTS(SELECT 1 FROM oxygen_private.commands WHERE id='e1110000-0000-4000-8000-000000000005' AND status='failed') THEN RAISE EXCEPTION 'Interrupted booked offer read not released'; END IF;
+ BEGIN
+  PERFORM oxygen_private.record_command('e1110000-0000-4000-8000-000000000005','succeeded','booked');
+  RAISE EXCEPTION 'Late booked read accepted';
+ EXCEPTION WHEN raise_exception THEN
+  IF SQLERRM<>'Command is not executing' THEN RAISE; END IF;
+ END;
+END $$;
+DO $$ DECLARE mode text; BEGIN
+ FOREACH mode IN ARRAY ARRAY['fresh','mutation','uncertain','paid','setup','wrong_booking','wrong_application'] LOOP
+  UPDATE oxygen_private.commands SET status='executing',expected_version=3,completed_at=NULL,started_at=now()-interval '5 minutes',command='{"action":"refresh_eligibility"}' WHERE id='e1110000-0000-4000-8000-000000000005';
+  UPDATE oxygen_private.provider_states SET state='{"applicationReference":"e1110000-0000-4000-8000-000000000071","bookingReference":"e1110000-0000-4000-8000-000000000099","booking":{"loan_reference":"e1110000-0000-4000-8000-000000000099","status":"BOOKED"}}' WHERE workflow_id='e1110000-0000-4000-8000-000000000041';
+  IF mode='fresh' THEN UPDATE oxygen_private.commands SET started_at=now() WHERE id='e1110000-0000-4000-8000-000000000005'; END IF;
+  IF mode='mutation' THEN UPDATE oxygen_private.commands SET command='{"action":"book"}' WHERE id='e1110000-0000-4000-8000-000000000005'; END IF;
+  IF mode='uncertain' THEN UPDATE oxygen_private.commands SET status='indeterminate' WHERE id='e1110000-0000-4000-8000-000000000005'; END IF;
+  IF mode='paid' THEN UPDATE oxygen_private.provider_states SET state=state||'{"paymentComplete":true}' WHERE workflow_id='e1110000-0000-4000-8000-000000000041'; END IF;
+  IF mode='setup' THEN UPDATE oxygen_private.provider_states SET state=state||'{"setupComplete":true}' WHERE workflow_id='e1110000-0000-4000-8000-000000000041'; END IF;
+  IF mode='wrong_booking' THEN UPDATE oxygen_private.provider_states SET state=jsonb_set(state,'{booking,loan_reference}','"e1110000-0000-4000-8000-000000000098"') WHERE workflow_id='e1110000-0000-4000-8000-000000000041'; END IF;
+  IF mode='wrong_application' THEN UPDATE oxygen_private.provider_states SET state=jsonb_set(state,'{applicationReference}','"e1110000-0000-4000-8000-000000000098"') WHERE workflow_id='e1110000-0000-4000-8000-000000000041'; END IF;
+  PERFORM oxygen_private.retire_stale_executing_eligibility('e1110000-0000-4000-8000-000000000041');
+  IF EXISTS(SELECT 1 FROM oxygen_private.commands WHERE id='e1110000-0000-4000-8000-000000000005' AND status='failed') THEN RAISE EXCEPTION 'Unsafe booked recovery: %',mode; END IF;
+ END LOOP;
+END $$;
 ROLLBACK;

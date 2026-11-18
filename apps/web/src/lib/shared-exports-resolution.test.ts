@@ -46,7 +46,8 @@ const subpaths = [
       (key) =>
         key.startsWith('./test-fixtures/') ||
         key === './vtu' ||
-        key === './money'
+        key === './money' ||
+        key === './experience'
     )
     .map((key) => `@baci/shared${key.slice(1)}`),
 ];
@@ -54,6 +55,7 @@ const subpaths = [
 // Hard-coded expectations for the subpaths this PR adds: deriving the
 // list from package.json alone would be tautological for these.
 const expectedSubpaths = [
+  '@baci/shared/experience',
   '@baci/shared/vtu',
   '@baci/shared/test-fixtures/builder-ai-edit',
   '@baci/shared/test-fixtures/piggyvest-purchase',
@@ -81,6 +83,7 @@ describe('@baci/shared exports resolution (no test aliases)', () => {
 
   it('resolves every pinned new subpath (expectedSubpaths) through the exports map to its exact file; future non-fixture domain subpaths must be added to expectedSubpaths to be pinned', () => {
     const expectedTargets: Record<string, string> = {
+      '@baci/shared/experience': 'src/experience/index.ts',
       '@baci/shared/vtu': 'src/vtu/index.ts',
       '@baci/shared/test-fixtures/builder-ai-edit':
         'src/test-fixtures/builder-ai-edit.ts',
@@ -137,6 +140,10 @@ describe('@baci/shared exports resolution (no test aliases)', () => {
     expect(typeof vtu.buildPendingVtuScopeTag).toBe('function');
     // Load (not just resolve) the money subpath through the exports map
     // and exercise it the way a consumer would.
+    const experience = await import(
+      pathToFileURL(appRequire.resolve('@baci/shared/experience')).href
+    );
+    expect(typeof experience.advanceRoute).toBe('function');
     const money = (await import(
       pathToFileURL(appRequire.resolve('@baci/shared/money')).href
     )) as {

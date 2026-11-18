@@ -54,7 +54,13 @@ it('resumes an unclaimed approval with its original key and no second OTP reques
     version: 8,
     environment: 'staging',
     executionEnabled: true,
-    state: plan(ref25, 25).state,
+    state: {
+      ...plan(ref25, 25).state,
+      eligibleAmount: 400000,
+      minimumAmount: 10000,
+      maxTenure: 3,
+      offers: [{ tenure: 3, loanAmount: 400000 }],
+    },
     approvalOtpReady: true,
     pending: {
       action: 'approve_booking',

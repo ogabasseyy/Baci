@@ -1,17 +1,12 @@
 import { Pressable, Text, TextInput, View } from 'react-native';
-import { SafeImage } from '@/components/ui/SafeImage';
 import { BRAND, palette } from '@/constants/Colors';
-import { formatNgnCurrency } from '@/lib/format-ngn-currency';
+import { SavingsSelectedPhoneCard } from './SavingsSelectedPhoneCard';
 import { StartSavingsProductSuggestions } from './StartSavingsProductSuggestions';
 import { StartSavingsVariantOptions } from './StartSavingsVariantOptions';
-import { savingsCardAccent } from './savings-card-accent';
 import { savingsProductImage } from './savings-product-image';
 import { themedInputStyle } from './start-savings.helpers';
 import { startSavingsStyles as styles } from './start-savings.styles';
-import type {
-  SavingsProductChoice,
-  StartSavingsColors,
-} from './start-savings.types';
+import type { StartSavingsColors } from './start-savings.types';
 import type {
   StartSavingsController,
   StartSavingsProductController,
@@ -35,21 +30,19 @@ export function StartSavingsProductFields(
       }
 ) {
   return (
-    <View style={[styles.setupCard, savingsCardAccent(props.colors)]}>
-      <ProductSearchSection
-        onSearchFocusChange={props.onSearchFocusChange}
-        colors={props.colors}
-        controller={props.controller}
-        variantPicker={
-          props.mode !== 'draft'
-            ? {
-                groups: props.controller.variantOptionGroups,
-                onSelect: props.controller.selectVariantOption,
-              }
-            : null
-        }
-      />
-    </View>
+    <ProductSearchSection
+      onSearchFocusChange={props.onSearchFocusChange}
+      colors={props.colors}
+      controller={props.controller}
+      variantPicker={
+        props.mode !== 'draft'
+          ? {
+              groups: props.controller.variantOptionGroups,
+              onSelect: props.controller.selectVariantOption,
+            }
+          : null
+      }
+    />
   );
 }
 
@@ -69,112 +62,36 @@ function ProductSearchSection({
 }) {
   return (
     <View style={styles.section}>
-      <Text style={[styles.sectionLabel, { color: colors.text }]}>
-        01 · Pick your next upgrade
-      </Text>
       {!controller.selectedProduct ? (
         <TextInput
           accessibilityRole="search"
           accessibilityLabel="Savings product search"
+          autoCapitalize="none"
+          autoCorrect={false}
           onFocus={() => onSearchFocusChange?.(true)}
           onBlur={() => onSearchFocusChange?.(false)}
           value={controller.searchValue}
           onChangeText={controller.setSearchValue}
-          placeholder="Find your phone, laptop, wish-list fave…"
+          placeholder="Search for a phone, laptop or gadget"
           placeholderTextColor={colors.placeholder}
           style={[styles.input, themedInputStyle(colors)]}
         />
       ) : null}
       {controller.selectedProduct ? (
-        <View
-          style={[
-            styles.selectedProductCard,
-            { borderColor: colors.border, backgroundColor: colors.card },
-          ]}
-        >
-          <Text
-            style={[
-              styles.selectedProductLabel,
-              { color: colors.textSecondary },
-            ]}
-          >
-            THE ONE YOU’RE SAVING FOR
-          </Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text
-                style={[styles.selectedProductName, { color: colors.text }]}
-              >
-                {controller.selectedProduct.name}
-              </Text>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Change savings device"
-                onPress={() => controller.setSearchValue('')}
-                style={{
-                  minHeight: 44,
-                  justifyContent: 'center',
-                  paddingVertical: 10,
-                  alignSelf: 'flex-start',
-                }}
-              >
-                <Text
-                  style={{
-                    color: colors.primary,
-                    fontSize: 11,
-                    textDecorationLine: 'underline',
-                  }}
-                >
-                  Change device
-                </Text>
-              </Pressable>
-            </View>
-            <View style={{ alignItems: 'center', gap: 8, maxWidth: '45%' }}>
-              <SafeImage
-                source={{
-                  uri: savingsProductImage(
-                    controller.selectedCatalogProduct,
-                    variantPicker?.groups ?? [],
-                    controller.selectedProduct.image
-                  ),
-                }}
-                style={{ width: 76, height: 76, flexShrink: 0 }}
-                contentFit="contain"
-              />
-              {!controller.selectedProduct.requiresVariantSelection &&
-              controller.selectedProduct.price > 0 ? (
-                <Text
-                  style={[
-                    styles.selectedProductPrice,
-                    { color: colors.primary, textAlign: 'center' },
-                  ]}
-                >
-                  {formatNgnCurrency(controller.selectedProduct.price)}
-                </Text>
-              ) : null}
-            </View>
-          </View>
-          {controller.selectedProduct.requiresVariantSelection ? (
-            <Text
-              style={[styles.selectedProductPrice, { color: colors.primary }]}
-            >
-              {controller.selectedCatalogProduct?.searchPreview
-                ? 'Loading current options…'
-                : controller.selectedProduct.requiresVariantSelection
-                  ? 'Make it yours — choose your options'
-                  : formatNgnCurrency(controller.selectedProduct.price)}
-            </Text>
-          ) : null}
-          {!controller.selectedProduct.requiresVariantSelection &&
-          controller.selectedProduct.price > 0 ? (
-            <Text
-              accessibilityLiveRegion="polite"
-              style={{ color: colors.textSecondary }}
-            >
-              ✓ Your goal is set
-            </Text>
-          ) : null}
-          <ProductMeta colors={colors} product={controller.selectedProduct} />
+        <>
+          <SavingsSelectedPhoneCard
+            colors={colors}
+            product={controller.selectedProduct}
+            imageUri={savingsProductImage(
+              controller.selectedCatalogProduct,
+              variantPicker?.groups ?? [],
+              controller.selectedProduct.image
+            )}
+            loadingOptions={Boolean(
+              controller.selectedCatalogProduct?.searchPreview
+            )}
+            onChange={() => controller.setSearchValue('')}
+          />
           {variantPicker ? (
             <VariantOptions
               colors={colors}
@@ -182,7 +99,7 @@ function ProductSearchSection({
               onSelect={variantPicker.onSelect}
             />
           ) : null}
-        </View>
+        </>
       ) : null}
       {controller.selectedProduct && !variantPicker?.groups.length ? (
         <StartSavingsVariantOptions colors={colors} controller={controller} />
@@ -266,28 +183,5 @@ function VariantOptions({
         </View>
       ))}
     </View>
-  );
-}
-
-function ProductMeta({
-  colors,
-  product,
-}: {
-  onSearchFocusChange?: (focused: boolean) => void;
-  colors: StartSavingsColors;
-  product: SavingsProductChoice;
-}) {
-  const meta = [product.conditionLabel, product.variantLabel].filter(
-    (value): value is string => Boolean(value)
-  );
-
-  if (meta.length === 0) {
-    return null;
-  }
-
-  return (
-    <Text style={[styles.productMetaText, { color: colors.textSecondary }]}>
-      {meta.join(' · ')}
-    </Text>
   );
 }

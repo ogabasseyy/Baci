@@ -4,8 +4,10 @@
     "checkers": 1,
     "tsBuildInfoFile": ".next/cache/tsconfig.build.tsbuildinfo"
   },
+  "files": [".typed-navigation/link.d.ts"],
   "exclude": [
     "node_modules",
+    ".next/types/link.d.ts",
     "supabase",
     "supabase/**/*",
     "scripts",

@@ -10,7 +10,12 @@ export type GoalPinBindingInput =
   | { action: 'cancel'; goalId: string; operationId: string }
   | { action: 'complete'; goalId: string; operationId: string };
 
-export type GoalPinPurpose = 'goal_fund' | 'goal_cancel' | 'goal_complete';
+// wallet_pay: a PiggyVest wallet payment (binding built by wallet-pay-service).
+export type GoalPinPurpose =
+  | 'goal_fund'
+  | 'goal_cancel'
+  | 'goal_complete'
+  | 'wallet_pay';
 
 export type GoalPinBinding = {
   purpose: GoalPinPurpose;

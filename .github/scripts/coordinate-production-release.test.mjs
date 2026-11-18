@@ -57,11 +57,11 @@ test('release lock resolves relative and absolute shared Git directories', () =>
   assert.equal(releaseLockPath('/repo/linked', '../.git'), '/repo/.git/baci-production-release.lock');
 });
 
-test('updates and verifies workers before dispatching the matching release', async () => {
+test('dispatches and verifies the matching isolated-worker release', async () => {
   const setup = fixture();
   assert.deepEqual(await coordinateRelease(setup.operations, coordinationId), { commit, runId: 42 });
   assert.deepEqual(setup.calls, [
-    'verifyCheckout', 'readMain', 'listRuns', 'updateWorkers', 'verifyWorkers',
+    'verifyCheckout', 'readMain', 'listRuns',
     'readMain', 'listRuns', 'readMain', 'dispatch', 'findRun', 'listCoordinatedRuns', 'watchRun', 'readJobs', 'verifyLive', 'readMain',
   ]);
 });
@@ -123,27 +123,21 @@ test('a completed sibling is an earlier release, not a racer', async () => {
   assert.ok(!setup.calls.includes('cancelRun'));
 });
 
-test('refuses an older checkout before changing workers', async () => {
+test('refuses an older checkout before dispatch', async () => {
   const setup = fixture({ readMain: async () => 'c'.repeat(40) });
   await assert.rejects(coordinateRelease(setup.operations, coordinationId), /main changed/);
-  assert.ok(!setup.calls.includes('updateWorkers'));
-});
-
-test('refuses a concurrent deployment before changing workers', async () => {
-  for (const runs of [[{ status: 'in_progress' }], [{ status: 'completed', conclusion: 'action_required' }]]) {
-    const setup = fixture({ listRuns: async () => runs });
-    await assert.rejects(coordinateRelease(setup.operations, coordinationId), /in flight/);
-    assert.ok(!setup.calls.includes('updateWorkers'));
-  }
-});
-
-test('never dispatches after failed worker verification', async () => {
-  const setup = fixture({ verifyWorkers: async () => { throw new Error('worker failure'); } });
-  await assert.rejects(coordinateRelease(setup.operations, coordinationId), /worker failure/);
   assert.ok(!setup.calls.includes('dispatch'));
 });
 
-test('refuses main advancing during worker preparation', async () => {
+test('refuses a concurrent deployment before dispatch', async () => {
+  for (const runs of [[{ status: 'in_progress' }], [{ status: 'completed', conclusion: 'action_required' }]]) {
+    const setup = fixture({ listRuns: async () => runs });
+    await assert.rejects(coordinateRelease(setup.operations, coordinationId), /in flight/);
+    assert.ok(!setup.calls.includes('dispatch'));
+  }
+});
+
+test('refuses main advancing during preflight', async () => {
   let reads = 0;
   const setup = fixture({ readMain: async () => ++reads === 1 ? commit : 'c'.repeat(40) });
   await assert.rejects(coordinateRelease(setup.operations, coordinationId), /main changed/);

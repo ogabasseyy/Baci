@@ -6,6 +6,7 @@ import { isTerminalWalletFundingIntentStatus } from '@/lib/order-wallet-funding-
 import type { WalletOrderFundingIntent } from '@/schemas/order-wallet-funding-intent';
 
 export const WALLET_FUNDING_POLL_INTERVAL_MS = 5000;
+const WALLET_FUNDING_REQUEST_TIMEOUT_MS = 15_000;
 
 interface UseWalletFundingPollingArgs {
   enabled: boolean;
@@ -43,8 +44,17 @@ async function runPollAttempt({
 }: PollAttemptContext) {
   inFlightRef.current = true;
   setIsChecking(true);
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
   try {
-    const nextIntent = await getOrderWalletFundingIntent(fetchArgs);
+    const nextIntent = await Promise.race([
+      getOrderWalletFundingIntent(fetchArgs),
+      new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(
+          () => reject(new Error('Wallet funding status request timed out')),
+          WALLET_FUNDING_REQUEST_TIMEOUT_MS
+        );
+      }),
+    ]);
     if (!isActive()) {
       return;
     }
@@ -63,6 +73,7 @@ async function runPollAttempt({
       );
     }
   } finally {
+    if (timeoutId !== null) clearTimeout(timeoutId);
     inFlightRef.current = false;
     if (isActive()) {
       setIsChecking(false);
@@ -98,6 +109,8 @@ export function useWalletFundingPolling({
   // transfer B and falsely mark B as paid.
   const activeIntentIdRef = useRef(intentId);
   const [prevIntentId, setPrevIntentId] = useState(intentId);
+  const [pollingExhausted, setPollingExhausted] = useState(false);
+  const [pollGeneration, setPollGeneration] = useState(0);
 
   // Render-phase reset so consumers never read the previous intent's status for
   // a frame after a new intent opens. React "adjusting state during render".
@@ -105,6 +118,7 @@ export function useWalletFundingPolling({
     setPrevIntentId(intentId);
     setIntent(null);
     setError(null);
+    setPollingExhausted(false);
   }
 
   useEffect(() => {
@@ -128,12 +142,22 @@ export function useWalletFundingPolling({
   const status = intent?.status;
   const stopped = status ? isTerminalWalletFundingIntentStatus(status) : false;
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: pollGeneration intentionally re-arms the 60-attempt interval on manual checkNow after exhaustion.
   useEffect(() => {
     if (!enabled || !intentId || stopped) {
       return;
     }
 
     let cancelled = false;
+    let attempts = 0;
+    const maxAttempts = 60;
+    let interval: ReturnType<typeof setInterval> | null = null;
+    const stopPolling = () => {
+      if (interval !== null) {
+        clearInterval(interval);
+        interval = null;
+      }
+    };
     // Bind every request this effect dispatches (initial + each interval tick)
     // to the intent that was active when it subscribed. Mirrors the `checkNow`
     // guard so both the manual and scheduled paths share one rule: a late
@@ -149,6 +173,18 @@ export function useWalletFundingPolling({
       if (cancelled || inFlightRef.current || !mountedRef.current) {
         return;
       }
+      if (
+        typeof document !== 'undefined' &&
+        document.visibilityState === 'hidden'
+      ) {
+        return;
+      }
+      if (attempts >= maxAttempts) {
+        stopPolling();
+        setPollingExhausted(true);
+        return;
+      }
+      attempts += 1;
       void runPollAttempt({
         completedRef,
         fetchArgs: { intentId, merchantId, merchantSlug },
@@ -158,16 +194,43 @@ export function useWalletFundingPolling({
         setError,
         setIntent,
         setIsChecking,
+      }).finally(() => {
+        if (!cancelled && attempts >= maxAttempts) {
+          stopPolling();
+          if (isActive() && !completedRef.current) {
+            setPollingExhausted(true);
+          }
+        }
       });
     };
 
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        poll();
+      }
+    };
+
     poll();
-    const interval = setInterval(poll, pollIntervalMs);
+    interval = setInterval(poll, pollIntervalMs);
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+    }
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      stopPolling();
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      }
     };
-  }, [enabled, intentId, merchantId, merchantSlug, pollIntervalMs, stopped]);
+  }, [
+    enabled,
+    intentId,
+    merchantId,
+    merchantSlug,
+    pollGeneration,
+    pollIntervalMs,
+    stopped,
+  ]);
 
   const checkNow = () => {
     if (!(enabled && intentId) || stopped || inFlightRef.current) {
@@ -177,6 +240,13 @@ export function useWalletFundingPolling({
     // changes before the request resolves, the callback is dropped so a stale
     // `completed` can never be applied to a different transfer.
     const requestedIntentId = intentId;
+    if (pollingExhausted) {
+      // Bumping pollGeneration re-runs the polling effect on commit, which
+      // immediately invokes poll() and starts a fresh interval.
+      setPollingExhausted(false);
+      setPollGeneration((current) => current + 1);
+      return;
+    }
     void runPollAttempt({
       completedRef,
       fetchArgs: { intentId, merchantId, merchantSlug },
@@ -190,5 +260,5 @@ export function useWalletFundingPolling({
     });
   };
 
-  return { checkNow, error, intent, isChecking };
+  return { checkNow, error, intent, isChecking, pollingExhausted };
 }

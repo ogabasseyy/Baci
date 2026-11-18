@@ -21,10 +21,15 @@ jest.mock('@/hooks/use-utility-payment', () => ({
   }),
 }));
 
-jest.mock('@/stores/auth-store', () => ({
-  useAuthStore: (selector: (state: { customer: null }) => unknown) =>
-    selector({ customer: null }),
-}));
+jest.mock('@/stores/auth-store', () => {
+  const useAuthStore = Object.assign(
+    (selector: (state: { customer: null }) => unknown) =>
+      selector({ customer: null }),
+    // The wallet pay hand-over reads the signed-in account directly.
+    { getState: () => ({ user: null }) }
+  );
+  return { useAuthStore };
+});
 
 jest.mock('./use-airtime-purchase-handler', () => ({
   useAirtimePurchaseHandler: () => ({

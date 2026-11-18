@@ -8,6 +8,10 @@ import {
   oxygenStatementRequiredCode,
   oxygenStatementRequiredMessage,
 } from '@/lib/payments/oxygen/booking-rejection';
+import {
+  oxygenEligibilityReasonHeader,
+  oxygenSnapshotForClient,
+} from '@/lib/payments/oxygen/eligibility-reason-contract';
 import { readOxygenNinRetryStatus } from '@/lib/payments/oxygen/nin-retry-status';
 import {
   oxygenInvalidOtpCode,
@@ -80,7 +84,10 @@ export async function GET(request: NextRequest) {
     }
     return NextResponse.json(
       {
-        ...snapshot,
+        ...oxygenSnapshotForClient(
+          snapshot,
+          request.headers.get(oxygenEligibilityReasonHeader) === '1'
+        ),
         pending,
         ninAttemptStatus: await readOxygenNinRetryStatus(
           auth.supabase,
@@ -187,7 +194,10 @@ export async function POST(request: NextRequest) {
     }
     return NextResponse.json(
       {
-        ...snapshot,
+        ...oxygenSnapshotForClient(
+          snapshot,
+          request.headers.get(oxygenEligibilityReasonHeader) === '1'
+        ),
         ninAttemptStatus: await readOxygenNinRetryStatus(userClient, snapshot),
       },
       { headers }

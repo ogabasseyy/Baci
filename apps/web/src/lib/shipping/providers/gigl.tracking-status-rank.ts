@@ -1,18 +1,15 @@
 import type { TrackingEvent } from '../types';
 import { isMshc } from './gigl.tracking-mshc';
+import { TERMINAL_STATUSES } from './gigl.tracking-terminal-statuses';
 
 export type Guardable = {
   event: TrackingEvent;
   recognizedStatus: TrackingEvent['status'] | null;
   /** The provider's own status code, before notification-specific rewrites. */
   providerStatus: string;
+  /** Reason and incident text together; either may carry a departure marker. */
+  scanText?: string;
 };
-
-export const TERMINAL_STATUSES: ReadonlySet<string> = new Set([
-  'delivered',
-  'returned',
-  'cancelled',
-]);
 
 /**
  * Equal-timestamp precedence for the current status, highest first:

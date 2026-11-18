@@ -243,4 +243,50 @@ describe('review hardening: destination matching', () => {
       GIGL_ARRIVED_IN_CITY_RAW_STATUS
     );
   });
+  it.each([
+    ['destination scan first', ['dest', 'away']],
+    ['away scan first', ['away', 'dest']],
+  ])('bugfix: equal-time arrival detection is payload-order independent (%s)', (_label, order) => {
+    const scans = {
+      dest: event('MSVC', '11:00:00', { Location: 'WUSE ABUJA (Wuse)' }),
+      away: event('DPC', '11:00:00', { Location: 'IKEJA 2 (IKEJA)' }),
+    };
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W13',
+        Destination: 'ABUJA',
+        MobileShipmentTrackings: order.map(
+          (key) => scans[key as 'dest' | 'away']
+        ),
+      },
+      'W13',
+      OBSERVED_AT
+    );
+    expect(result.events.map((e) => e.rawStatus)).toContain(
+      GIGL_ARRIVED_IN_CITY_RAW_STATUS
+    );
+  });
+
+  it('bugfix: a departure noted only in the incident text is not an arrival', () => {
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W14',
+        Origin: 'LAGOS',
+        Destination: 'ABUJA',
+        MobileShipmentTrackings: [
+          event('DPC', '10:00:00', { Location: 'IKEJA 2 (IKEJA)' }),
+          event('MSVC', '11:00:00', {
+            Location: 'WUSE ABUJA (Wuse)',
+            ScanStatusReason: 'SHIPMENT SCANNED',
+            ScanStatusIncident: 'SHIPMENT DEPARTED SERVICE CENTRE',
+          }),
+        ],
+      },
+      'W14',
+      OBSERVED_AT
+    );
+    expect(result.events.map((e) => e.rawStatus)).not.toContain(
+      GIGL_ARRIVED_IN_CITY_RAW_STATUS
+    );
+  });
 });

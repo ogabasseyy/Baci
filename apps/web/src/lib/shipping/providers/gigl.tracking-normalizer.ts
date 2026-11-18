@@ -145,6 +145,9 @@ export function normalizeGiglTrackingShipment(
             } satisfies TrackingEvent,
             recognizedStatus,
             providerStatus: rawStatus,
+            scanText: [scanStatusReason, scanStatusIncident]
+              .filter(Boolean)
+              .join(' '),
           },
         ];
       } catch {

@@ -3,7 +3,8 @@ import {
   GIGL_PICKUP_EN_ROUTE_RAW_STATUS,
 } from '@/lib/shipping/gigl-tracking-notification-policy-matrix';
 import { isMshc } from './gigl.tracking-mshc';
-import { type Guardable, TERMINAL_STATUSES } from './gigl.tracking-status-rank';
+import type { Guardable } from './gigl.tracking-status-rank';
+import { TERMINAL_STATUSES } from './gigl.tracking-terminal-statuses';
 
 const PLACE_NOISE_WORDS = new Set(['FCT', 'STATE', 'CITY', 'THE', 'OF']);
 // Intentionally narrow: other in_transit scans at a destination-named centre
@@ -35,6 +36,17 @@ function matchesDestination(
   );
 }
 
+function awayFromDestination(
+  candidate: Guardable,
+  destination: string | undefined
+): number {
+  const { location } = candidate.event;
+  return placeWords(location).length > 0 &&
+    !matchesDestination(location, destination)
+    ? 1
+    : 0;
+}
+
 /**
  * GIG fires the generic "SHIPMENT ENROUTE DELIVERY" (MSHC) during the pickup
  * run, and an arrival scan also marks the parcel reaching its destination.
@@ -60,7 +72,10 @@ export function applyLifecycleGuards(
   const ordered = [...candidates].sort(
     (a, b) =>
       a.event.timestamp.getTime() - b.event.timestamp.getTime() ||
-      isMshc(a) - isMshc(b)
+      isMshc(a) - isMshc(b) ||
+      // Tied scans: movement away from the destination first, so the result
+      // does not depend on payload order.
+      awayFromDestination(b, destination) - awayFromDestination(a, destination)
   );
   let arrived = false;
   let movedThroughNetwork = false;
@@ -75,7 +90,7 @@ export function applyLifecycleGuards(
       raw === 'ARF' ||
       (candidate.recognizedStatus === 'in_transit' &&
         !DEPARTURE_CODES.has(raw) &&
-        !/DEPART/i.test(event.description) &&
+        !/DEPART/i.test(candidate.scanText ?? event.description) &&
         (!sameCity || leftDestinationCentre) &&
         matchesDestination(event.location, destination));
     if (isArrival) {

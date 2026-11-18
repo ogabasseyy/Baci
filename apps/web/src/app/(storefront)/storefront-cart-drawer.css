@@ -15,4 +15,4 @@
 @source "../../components/storefront/ogabassey/components/NegotiationModal.tsx";
 @source "../../components/storefront/ogabassey/components/NegotiationModalStatusContent.tsx";
 @source "../../components/storefront/ogabassey/components/NegotiationUploadForm.tsx";
-@source "../../components/ui/otp-verification";
+@source "../../components/ui/otp-verification/OtpVerificationFooter.tsx";

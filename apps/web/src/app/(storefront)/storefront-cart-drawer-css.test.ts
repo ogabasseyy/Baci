@@ -42,6 +42,7 @@ it('keeps cart styles in the persistent storefront route layout', async () => {
     '.max-h-\\[90dvh\\]',
     '.bg-\\[var\\(--store-surface\\,var\\(--store-background\\)\\)\\]',
     '.file\\:mr-4',
+    '.size-12',
     '.tabular-nums',
   ]) {
     const rules: string[] = [];

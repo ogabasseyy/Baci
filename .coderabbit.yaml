@@ -97,7 +97,9 @@ reviews:
     - **Supabase clients:** Use `@/lib/supabase/server` (SSR) and
       `@/lib/supabase/client` (browser) under RLS. Never use service-role/admin
       clients for user-facing operations (all legacy exceptions in
-      `docs/agent-guidance/service-role-exceptions.md` are expired).
+      `docs/agent-guidance/service-role-exceptions.md` are expired; any renewal
+      requires explicit owner approval recorded there with exact scope and a new
+      expiry).
     - **Scoped queries:** Scope business-data queries to the resolved
       `merchantId` — never `select('*')`, always explicit columns.
     - **No `any`.** Use `unknown` or explicit interfaces/Zod schemas.

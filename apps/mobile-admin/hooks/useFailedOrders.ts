@@ -62,7 +62,7 @@ interface FailedOrderRow {
   order_number: string;
   customer_id: string | null;
   customer_name: string;
-  customer_email: string;
+  customer_email: string | null;
   customer_phone: string;
   total: number;
   payment_status: string;
@@ -135,7 +135,7 @@ export function useFailedOrders() {
 
       if (error) throw error;
 
-      // Consolidate failed orders by customer email
+      // Keep guest orders distinct when there is no email to consolidate.
       const consolidated: Record<
         string,
         FailedOrder & { attempt_count: number }
@@ -144,14 +144,15 @@ export function useFailedOrders() {
       (data as FailedOrderRow[]).forEach((order) => {
         // Oxygen is classified separately from its saved provider workflow.
         if (order.payment_method === 'oxygen') return;
-        const email = order.customer_email;
-        if (!consolidated[email]) {
-          consolidated[email] = {
+        const email = order.customer_email?.trim() ?? '';
+        const key = email ? `email:${email}` : `order:${order.id}`;
+        if (!consolidated[key]) {
+          consolidated[key] = {
             id: order.id,
             order_number: order.order_number,
             customer_id: order.customer_id,
             customer_name: order.customer_name,
-            customer_email: order.customer_email,
+            customer_email: email,
             customer_phone: order.customer_phone,
             total: order.total,
             payment_status: toPaymentStatus(order.payment_status),
@@ -163,7 +164,7 @@ export function useFailedOrders() {
           };
         } else {
           // Track attempt count but keep most recent order's total (data is already ordered DESC)
-          consolidated[email].attempt_count += 1;
+          consolidated[key].attempt_count += 1;
         }
       });
 

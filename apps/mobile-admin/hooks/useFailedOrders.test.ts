@@ -47,7 +47,7 @@ import {
   CUSTOMER_CHECKOUT_ORDER_FILTER,
   ONLINE_CHECKOUT_PAYMENT_METHODS,
 } from './orders/order-list-visibility';
-import { useFailedOrders } from './useFailedOrders';
+import { type FailedOrder, useFailedOrders } from './useFailedOrders';
 
 const NOW = '2026-06-02T02:00:00.000Z';
 
@@ -66,24 +66,10 @@ function daysBefore(days: number): string {
   return new Date(new Date(NOW).getTime() - days * 86_400_000).toISOString();
 }
 
-async function runQuery(): Promise<
-  Array<{
-    attempt_count: number;
-    customer_email: string;
-    gateway?: string;
-    payment_status: string;
-  }>
-> {
-  // biome-ignore lint/correctness/useHookAtTopLevel: useQuery is mocked to return its config object, so this is a plain call — no React runtime, no hook order to preserve
+async function runQuery(): Promise<FailedOrder[]> {
+  // biome-ignore lint/correctness/useHookAtTopLevel: useQuery returns the mock config without React
   const query = useFailedOrders() as unknown as {
-    queryFn: () => Promise<
-      Array<{
-        attempt_count: number;
-        customer_email: string;
-        gateway?: string;
-        payment_status: string;
-      }>
-    >;
+    queryFn: () => Promise<FailedOrder[]>;
   };
   return query.queryFn();
 }
@@ -94,6 +80,19 @@ describe('useFailedOrders', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(NOW));
     fake().reset([DEFAULT_ROW]);
+  });
+
+  it('keeps distinct guest orders when their email is absent', async () => {
+    fake().setRows([
+      ...['', ' '].map((customer_email, i) =>
+        makeRow({ id: `guest-${i + 1}`, customer_email })
+      ),
+    ]);
+
+    expect(await runQuery()).toMatchObject([
+      { id: 'guest-1', customer_email: '', attempt_count: 1 },
+      { id: 'guest-2', customer_email: '', attempt_count: 1 },
+    ]);
   });
 
   it('does not label Oxygen applications as generic failed payments', async () => {

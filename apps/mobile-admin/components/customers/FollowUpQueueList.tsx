@@ -73,7 +73,7 @@ export function FollowUpQueueList({
         (order.customer_name?.toLowerCase().includes(query) ?? false) ||
         (order.customer_email?.toLowerCase().includes(query) ?? false) ||
         (order.order_number?.toLowerCase().includes(query) ?? false) ||
-        (phoneQuery !== '' &&
+        (phoneQuery.length >= 4 &&
           (order.customer_phone?.replace(/\D/g, '').includes(phoneQuery) ??
             false))
     );

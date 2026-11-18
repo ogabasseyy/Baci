@@ -177,10 +177,11 @@ describe('FollowUpQueueList', () => {
   });
 
   it.each([
-    ' ord-002 ',
-    '8012345678',
-    '+234 (801) 234-5678',
-  ])('finds a guest follow-up by %s', (searchQuery) => {
+    [' ord-002 ', true],
+    ['8012345678', true],
+    ['+234 (801) 234-5678', true],
+    ['234', false],
+  ])('matches a guest follow-up search for %s (%s)', (searchQuery, matched) => {
     const order = {
       id: 'order-2',
       created_at: '2026-07-27T08:00:00Z',
@@ -199,7 +200,11 @@ describe('FollowUpQueueList', () => {
 
     render(<FollowUpQueueList {...defaultProps} searchQuery={searchQuery} />);
 
-    expect(defaultProps.renderOrder).toHaveBeenCalledWith(order, '₦');
+    if (matched) {
+      expect(defaultProps.renderOrder).toHaveBeenCalledWith(order, '₦');
+    } else {
+      expect(defaultProps.renderOrder).not.toHaveBeenCalled();
+    }
   });
 
   it('keeps the partial-results warning visible when search filters out loaded rows', () => {

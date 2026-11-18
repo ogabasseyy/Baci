@@ -164,8 +164,14 @@ test('keeps private output CORS scoped to the opaque sandbox', async (t) => {
     );
   }
   const publicAsset = await worker.fetch(
-    request(`/published/example/${digest}/app.js`),
+    request(`/published/example/${digest}/app.js`, {
+      headers: { Origin: 'https://foreign.test' },
+    }),
     env
+  );
+  assert.equal(
+    fetch.mock.calls.at(-1).arguments[1].headers.get('Origin'),
+    null
   );
   assert.equal(publicAsset.headers.get('Access-Control-Allow-Origin'), '*');
 });

@@ -70,7 +70,7 @@ export default {
       const headers = new Headers({
         'X-Baci-Execution-Origin-Key': env.EXECUTION_ORIGIN_KEY,
       });
-      if (browserOrigin) headers.set('Origin', browserOrigin);
+      if (isPrivate && browserOrigin === 'null') headers.set('Origin', 'null');
       const response = await fetch(upstream, {
         method: 'GET',
         headers,

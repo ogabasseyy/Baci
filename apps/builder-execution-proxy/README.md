@@ -13,8 +13,8 @@ messages still work while shared-domain cookie writes are blocked.
 
 The Worker accepts only GET requests for the existing preview resource and
 published output contracts. It streams output from the fixed HTTPS Contabo
-origin `builder-output-origin.usebaci.com`, preserves the browser Origin and
-the delivery security response headers, and refuses redirects. The Contabo
+origin `builder-output-origin.usebaci.com`, preserves the delivery security
+response headers, and refuses redirects. It omits Origin for published output. The Contabo
 delivery listener still checks preview tickets and liveness, published
 build binding, browser Origin and normal RLS. The Worker holds only the
 origin authentication secret.

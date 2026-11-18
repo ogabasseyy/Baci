@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-18T10:11:29+00:00",
-  "source_revision": "10a81cab4515da09c86f5984cff6b1f21fcc51b0",
-  "evidence_digest": "5f12a2ed955d2839ce634a963b11306f4953c548443b2b4859280d0658becaef",
-  "claims_digest": "7a2bfcdf15e53a7b9669587a852fb81492c32c20b9f90795e45f111b4ab6ba6a",
-  "review_scope": "Source evidence only. Preserves current main’s OAuth, cart retention and notices, payment reconciliation, merchant protocols and Oxygen pilot boundaries. Full-code storefront MCP remains disabled by default. Owner approval, evidence and public-verification schemas retain their existing validation. Direct local admission, source adoption, rollback and simulated commerce tests cover authority boundaries. Hosted qualification and activation remain separate.",
+  "reviewed_at": "2026-11-18T11:23:58+00:00",
+  "source_revision": "3eeb2e479897c106eced709d6fa4ec13a4ab14eb",
+  "evidence_digest": "9858fcf2e49e00e480167521c7e284eebc2230b2c3f92d1298fc74f24caf5877",
+  "claims_digest": "129fe11a370c6a20867d7764cbf96768ef63d52f9e04c1bb9457699ddce962f2",
+  "review_scope": "Source evidence only. Preserves current main’s OAuth, cart retention and notices, payment reconciliation, merchant protocols and Oxygen pilot boundaries. Full-code storefront MCP remains disabled by default. Owner approval, evidence and public-verification schemas retain their existing validation. Direct local admission, source adoption, rollback and simulated commerce tests cover authority boundaries. Hosted qualification and activation remain separate. Re-reviewed the builder production integration, fixed runner admission, sandboxed preview delivery, and runner qualification after syncing main. Contabo component qualification does not establish activation or a live ChatGPT flow.",
   "capabilities": [
     {
       "id": "payments",

@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-18T13:28:37+00:00",
-  "source_revision": "968c630c1c2d6d5b783a0324ffc47e1c5e99bbf8",
-  "evidence_digest": "2e1a5181e7d4149da91449068b5adc2dc31c8cbbf2ba265e3d668a5497433b9f",
-  "claims_digest": "c906c75669021bafde92b2bef8be512f47efe9cbd626ad25cc90bc7983a2ce58",
+  "reviewed_at": "2026-11-18T14:53:38+00:00",
+  "source_revision": "026024020014f4117e03a8b194ae576abf585c61",
+  "evidence_digest": "0878c1eac3bf115858415122749782725d554742b199c41af42eca12281a7ab0",
+  "claims_digest": "06e2169840ae38666cdd93c25515304acfd5e9a40937831030a0b7607e71331a",
   "review_scope": "Source evidence only. Preserves current main’s OAuth, cart retention and notices, payment reconciliation, merchant protocols and Oxygen pilot boundaries. Full-code storefront MCP remains disabled by default. Owner approval, evidence and public-verification schemas retain their existing validation. Direct local admission, source adoption, rollback and simulated commerce tests cover authority boundaries. Hosted qualification and activation remain separate.",
   "capabilities": [
     {
@@ -166,6 +166,7 @@
         "supabase/migrations/20261117190300_oxygen_follow_up_activation_state.sql",
         "supabase/migrations/20261117190400_oxygen_follow_up_reconciled_approval.sql",
         "supabase/migrations/20261117190500_oxygen_follow_up_terminal_outcomes.sql",
+        "supabase/migrations/20261118141000_oxygen_follow_up_failed_orphans.sql",
         "apps/mobile-admin/schemas/oxygen-follow-up.ts",
         "apps/mobile-admin/lib/customers-failed-orders.ts",
         "apps/mobile-admin/app/(admin)/(tabs)/_layout.tsx"

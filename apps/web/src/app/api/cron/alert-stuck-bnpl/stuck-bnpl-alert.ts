@@ -23,9 +23,11 @@ export function hasProviderTransactionReference(notes: string | null) {
 }
 
 export function hasProviderCheckoutEvidence(notes: string | null) {
+  const attempt = readCreditDirectAttempt(notes);
   return (
     hasProviderTransactionReference(notes) ||
-    readCreditDirectAttempt(notes).reference !== null
+    attempt.reference !== null ||
+    attempt.hasCompletionTimestamp
   );
 }
 

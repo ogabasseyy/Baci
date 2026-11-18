@@ -126,7 +126,11 @@ export async function GET(request: NextRequest) {
             continue;
           }
           const order = ordersById.get(row.order_id);
-          if (!order || !row.gateway || row.gateway !== order.payment_method)
+          if (
+            !order ||
+            !row.gateway ||
+            row.gateway.trim().toLowerCase() !== order.payment_method
+          )
             continue;
 
           const reference = row.gateway_reference?.trim();

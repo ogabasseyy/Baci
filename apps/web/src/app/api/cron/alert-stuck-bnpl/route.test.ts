@@ -494,6 +494,7 @@ describe('GET /api/cron/alert-stuck-bnpl', () => {
     ['paystack', 'active-session', false],
     ['credit_direct', 'old-txn', false],
     ['credit_direct', 'active-session', true],
+    [' Credit_Direct ', 'active-session', true],
   ])('checks progressed %s evidence for the active attempt (%s)', async (gateway, reference, matches) => {
     mocks.limit.mockResolvedValue({
       data: [
@@ -521,6 +522,32 @@ describe('GET /api/cron/alert-stuck-bnpl', () => {
     const response = await GET(createCronRequest());
     expect(response.status).toBe(200);
     expect(mocks.notifyMerchant).toHaveBeenCalledTimes(matches ? 1 : 0);
+  });
+
+  it('keeps an unbound legacy completion in operator review without alerting', async () => {
+    mocks.limit.mockResolvedValue({
+      data: [
+        stuckOrder({
+          id: 'legacy-order',
+          payment_status: 'unpaid',
+          notes: '{"creditDirectClientCompletedAt":"2026-07-01T00:01:00.000Z"}',
+        }),
+      ],
+      error: null,
+    });
+
+    const response = await GET(createCronRequest());
+    expect(await response.json()).toMatchObject({
+      stuckOrders: 1,
+      alertOrders: 0,
+    });
+    expect(mocks.reviewInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        order_id: 'legacy-order',
+        paystack_ref: null,
+      })
+    );
+    expect(mocks.notifyMerchant).not.toHaveBeenCalled();
   });
 
   it('keeps session-only SDK-success evidence in the pending-order scan', async () => {

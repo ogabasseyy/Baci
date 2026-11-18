@@ -26,13 +26,18 @@ export function readCreditDirectAttempt(notes: string | null) {
     parsed.creditDirectClientCompletedTransactionId
   );
   const reference = transaction ?? session;
-  const supersededReferences: unknown[] = Array.isArray(
+  const supersededReferences = Array.isArray(
     parsed.creditDirectSupersededReferences
   )
     ? parsed.creditDirectSupersededReferences
+        .map(readNoteString)
+        .filter((value) => value !== null)
     : [];
+  const completedAt = readNoteString(parsed.creditDirectClientCompletedAt);
+  const hasCompletionTimestamp =
+    completedAt !== null && Number.isFinite(Date.parse(completedAt));
   const hasCurrentCompletion =
-    Boolean(readNoteString(parsed.creditDirectClientCompletedAt)) &&
+    hasCompletionTimestamp &&
     (session === null || completedSession === session) &&
     (completedTransaction === null ||
       transaction === null ||
@@ -40,5 +45,10 @@ export function readCreditDirectAttempt(notes: string | null) {
     ((session !== null && completedSession === session) ||
       (transaction !== null && completedTransaction === transaction));
 
-  return { reference, supersededReferences, hasCurrentCompletion };
+  return {
+    reference,
+    supersededReferences,
+    hasCompletionTimestamp,
+    hasCurrentCompletion,
+  };
 }

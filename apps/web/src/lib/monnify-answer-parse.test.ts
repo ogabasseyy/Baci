@@ -30,3 +30,11 @@ describe('parseMonnifyAnswer', () => {
     expect(parseMonnifyAnswer(body)).toBeNull();
   });
 });
+
+describe('bugfix: repeated form fields keep every value', () => {
+  it('returns one-pair objects when a key repeats', () => {
+    expect(
+      parseMonnifyAnswer('status=FAILED&status=false&message=Low')
+    ).toEqual([{ status: 'FAILED' }, { status: false }, { message: 'Low' }]);
+  });
+});

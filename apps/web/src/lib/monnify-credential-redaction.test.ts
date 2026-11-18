@@ -14,6 +14,11 @@ describe('redactMonnifyCredentials', () => {
       'Rejected [redacted]',
     ],
     ['api_key=XYZ987&amount=100', 'api_key=[redacted]&amount=100'],
+    [
+      'Unauthorized: API key fixturevaluewithoutdigits',
+      'Unauthorized: API key [redacted]',
+    ],
+    ['Invalid token abcdefghijklmnopqrstuvwxyz', 'Invalid token [redacted]'],
     ['hash 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b', 'hash [redacted]'],
   ])('redacts %s', (input, expected) => {
     expect(redactMonnifyCredentials(input)).toBe(expected);

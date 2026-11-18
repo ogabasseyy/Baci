@@ -186,3 +186,17 @@ describe('bugfix: form-encoded status=false is not a vend state', () => {
     });
   });
 });
+
+describe('bugfix: a repeated form field cannot erase a vend state', () => {
+  it('keeps "status=FAILED&status=false&…" off Kuda', async () => {
+    mockHttpError(
+      400,
+      'Bad Request',
+      'status=FAILED&status=false&message=Insufficient wallet balance'
+    );
+
+    await expect(vend()).resolves.toMatchObject({
+      providerDefiniteFailure: false,
+    });
+  });
+});

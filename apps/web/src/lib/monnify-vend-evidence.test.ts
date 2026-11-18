@@ -85,6 +85,7 @@ describe('bugfix: true outcome flags are vend evidence', () => {
     { isDelivered: 'true' },
     { responseBody: { in_progress: 1 } },
     { responseBody: { isFailed: true } },
+    { responseBody: { fulfilled: true } },
     { is_reversed: 'yes' },
   ])('sees vend evidence in %j', (answer) => {
     expect(hasMonnifyVendEvidence(answer)).toBe(true);

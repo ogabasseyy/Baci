@@ -42,13 +42,20 @@ export function parseMonnifyAnswer(body: string): unknown {
   if (segments.length === 0) {
     return null;
   }
-  const pairs: Record<string, string | boolean | null> = {};
+  const entries: [string, string | boolean | null][] = [];
   for (const segment of segments) {
     const match = KEY_VALUE_PAIR.exec(segment);
     if (!match) {
       return null;
     }
-    pairs[decode(match[1])] = coerce(decode(match[2]));
+    entries.push([decode(match[1]), coerce(decode(match[2]))]);
   }
-  return pairs;
+  const keys = entries.map(([key]) => key);
+  // A repeated key keeps every value: the body becomes a list of one-pair
+  // objects, each classified on its own, so a later value never erases an
+  // earlier fail-closed one ("status=FAILED&status=false").
+  if (new Set(keys).size !== keys.length) {
+    return entries.map(([key, value]) => ({ [key]: value }));
+  }
+  return Object.fromEntries(entries);
 }

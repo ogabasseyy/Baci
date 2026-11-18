@@ -1,9 +1,14 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
 import { WalletPendingSavingsContribution } from './WalletPendingSavingsContribution';
 
 describe('WalletPendingSavingsContribution', () => {
-  it('checks the existing contribution rather than offering another payment', () => {
+  it('checks the existing contribution rather than offering another payment', async () => {
     const onCheck = jest.fn();
     render(
       <WalletPendingSavingsContribution
@@ -15,7 +20,7 @@ describe('WalletPendingSavingsContribution', () => {
     fireEvent.press(
       screen.getByRole('button', { name: 'Check contribution status' })
     );
-    expect(onCheck).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(onCheck).toHaveBeenCalledTimes(1));
     expect(screen.queryByText('Continue to payment')).toBeNull();
   });
 

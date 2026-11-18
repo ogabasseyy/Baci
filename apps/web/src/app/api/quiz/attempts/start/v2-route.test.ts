@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { QuizAppAttestationError } from '@/app/api/quiz/_shared/quiz-app-attestation-error';
 import { QuizAppOnlyError } from '@/app/api/quiz/_shared/quiz-app-only-error';
+import { resetQuizV2RuntimeCheckForTests } from '@/app/api/quiz/_shared/quiz-v2-contract';
 import {
   createRouteProof,
   requireQuizCsrf,
@@ -97,6 +98,7 @@ function authenticated(authMethod: 'bearer' | 'cookie' = 'bearer') {
 }
 
 beforeEach(() => {
+  resetQuizV2RuntimeCheckForTests();
   vi.clearAllMocks();
   vi.mocked(requireQuizCsrf).mockResolvedValue(null);
   vi.mocked(createRouteProof).mockReturnValue({

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { resetQuizV2RuntimeCheckForTests } from '@/app/api/quiz/_shared/quiz-v2-contract';
 import { requireQuizUser } from '@/app/api/quiz/_shared/route-auth';
 import { getQuizEventsV2 } from './v2-route';
 
@@ -84,7 +85,10 @@ function authenticated(
   return rpc;
 }
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  resetQuizV2RuntimeCheckForTests();
+});
 
 describe('v2 quiz events route', () => {
   it('authenticates before reading query or tenant data', async () => {

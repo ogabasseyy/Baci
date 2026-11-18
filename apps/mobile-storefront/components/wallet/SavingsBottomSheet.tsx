@@ -81,15 +81,21 @@ export function SavingsBottomSheet({
   // through the same real snap point (never snapToPosition).
   const [pinHeight, setPinHeight] = useState(0);
   const sheetHeight = pinHeight > 0 ? pinHeight : contentHeight;
-  const fitted =
+  const measuredFit =
     sheetHeight && sheetHeight > 0
-      ? [
-          Math.min(
-            sheetHeight + HANDLE_AND_TOP + bottomPadding,
-            Math.round((windowHeight - insets.top) * 0.96)
-          ),
-        ]
+      ? Math.min(
+          sheetHeight + HANDLE_AND_TOP + bottomPadding,
+          Math.round((windowHeight - insets.top) * 0.96)
+        )
       : null;
+  // A step that replaces the content (Add to savings → Cancel review) renders
+  // before its new content is measured. Keep the height already on screen
+  // until it is, instead of jumping to the tall default and shrinking back.
+  // Reset when the sheet hides, so the next opening starts fresh.
+  const [heldFit, setHeldFit] = useState<number | null>(null);
+  const shownFit = visible ? (measuredFit ?? heldFit) : null;
+  if (shownFit !== heldFit) setHeldFit(shownFit);
+  const fitted = shownFit === null ? null : [shownFit];
   const sheet = useRef<BottomSheet>(null);
   // The embedded PIN step's cancel, if one is showing: closing this sheet
   // cancels it first so the PIN request never outlives the sheet.

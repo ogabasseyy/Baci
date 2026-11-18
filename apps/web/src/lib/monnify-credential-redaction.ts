@@ -12,9 +12,12 @@ const CREDENTIAL_FIELD_VALUE =
  */
 const CREDENTIAL_LABEL_VALUE =
   /\b(api[\s_-]*key|(?:(?:access|bearer|refresh)[\s_-]*)?token|secret|password)(\s+)(?!(?:is|has|was|expired|revoked|invalid|missing|required)\b|\[redacted\])(?:(?=[\w.+/=-]*\d)[\w.+/=-]{3,}|[\w.+/=-]{12,})/gi;
-/** Any long opaque value (24+ token characters with a digit): keys, hashes. */
+/**
+ * Any long opaque value (24+ token characters with a digit): keys, hashes.
+ * Baci's own 24-hex request references are kept readable for reconciliation.
+ */
 const LONG_OPAQUE_VALUE =
-  /(?<![\w.+/=-])(?=[\w.+/=-]*\d)(?=[\w.+/=-]*[A-Za-z])[\w.+/=-]{24,}(?![\w.+/=-])/g;
+  /(?<![\w.+/=-])(?![0-9a-f]{24}(?![\w.+/=-]))(?=[\w.+/=-]*\d)(?=[\w.+/=-]*[A-Za-z])[\w.+/=-]{24,}(?![\w.+/=-])/g;
 
 /**
  * Hides credentials Monnify may echo back (bearer tokens, JWTs, API keys,

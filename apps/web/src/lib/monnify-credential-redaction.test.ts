@@ -30,6 +30,7 @@ describe('redactMonnifyCredentials', () => {
     'vendReference=MFBP-1',
     'Token expired',
     'amount 50,000',
+    'reference 0123456789abcdef01234567 rejected',
   ])('leaves %s alone', (input) => {
     expect(redactMonnifyCredentials(input)).toBe(input);
   });

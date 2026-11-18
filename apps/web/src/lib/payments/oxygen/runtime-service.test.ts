@@ -3,9 +3,43 @@ import { expect, it, vi } from 'vitest';
 vi.mock('server-only', () => ({}));
 
 import { OxygenPaymentOriginUnverifiedError } from './payment-origin-error';
-import { oxygenRuntimeRpc, performOxygenAction } from './runtime-service';
+import {
+  oxygenRuntimeRpc,
+  performOxygenAction,
+  readOxygenSnapshot,
+} from './runtime-service';
 
 const id = '60000000-0000-4000-8000-000000000001';
+it('requests the versioned eligibility reason on customer snapshot reads', async () => {
+  const client = {
+    rpc: async (_name: string, args: Record<string, unknown>) => ({
+      data: {
+        workflowId: id,
+        stage: 'eligibility_required',
+        version: 1,
+        environment: 'staging',
+        executionEnabled: true,
+        state:
+          (args.p_payload as { includeEligibilityFailureReason?: boolean })
+            .includeEligibilityFailureReason === true
+            ? {
+                eligibilityStatus: 'failed',
+                eligibilityFailureReason: 'financial_details_mismatch',
+              }
+            : { eligibilityStatus: 'failed' },
+        approvalOtpReady: false,
+        activationEnabled: false,
+        settlementEnabled: false,
+      },
+      error: null,
+    }),
+  };
+
+  const snapshot = await readOxygenSnapshot(client, id);
+  expect(snapshot.state.eligibilityFailureReason).toBe(
+    'financial_details_mismatch'
+  );
+});
 it('maps only the exact payment-origin database guard to a safe recovery error', async () => {
   const client = {
     rpc: vi.fn().mockResolvedValue({

@@ -10,7 +10,6 @@ import {
 } from '@/test-support/piggyvest-server-off.test-support';
 import { GoalLifecycleEntry } from './GoalLifecycleEntry';
 
-jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
 jest.mock('@/lib/piggyvest-primary-wallet');
 jest.mock('@/lib/is-piggyvest-primary-merchant');
 
@@ -30,6 +29,8 @@ function renderEntry() {
       colors={Colors.light}
       goal={goal}
       hasPendingContribution={false}
+      onCancel={jest.fn()}
+      onComplete={jest.fn()}
     />
   );
 }

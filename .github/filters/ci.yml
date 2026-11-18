@@ -37,6 +37,8 @@ mobile_storefront:
   - '.github/scripts/check-mobile-gem-floors.test.sh'
   - '.github/scripts/android-storefront-release.sh'
   - '.github/scripts/android-storefront-release.test.sh'
+  - '.github/scripts/android-native-library-check.mjs'
+  - '.github/scripts/android-native-library-check.test.mjs'
   - '.github/scripts/ios-storefront-release.sh'
   - '.github/scripts/ios-storefront-release.test.sh'
   - '.github/scripts/verify-ios-expo-jsi-symbols.mjs'
@@ -137,6 +139,9 @@ quiz_db:
   - '.github/scripts/split-sql-statements.test.mjs'
   - '.github/scripts/check-migration-versions.sh'
   - '.github/scripts/check-migration-versions.test.sh'
+  - '.github/scripts/background-step.sh'
+  - '.github/scripts/background-step.test.mjs'
+  - '.github/scripts/prepare-supabase-replay-image.sh'
 cwv_runner:
   - 'infra/cwv-runner/**'
   - '.github/actions/pnpm-install-cached/**'
@@ -244,6 +249,7 @@ deploy_scripts:
   - '.github/scripts/probe-gigl-hook-reload.test.mjs'
   - '.github/scripts/deploy-vps-readiness-checkout.test.mjs'
   - '.github/scripts/coordinate-production-release.mjs'
+  - '.github/scripts/coordinate-isolated-release.test.mjs'
   - '.github/scripts/coordinate-production-release.test.mjs'
   - '.github/scripts/coordinate-production-release.test-fixtures.mjs'
   - '.github/scripts/coordinate-publication.test.mjs'
@@ -289,6 +295,8 @@ deploy_scripts:
 # sources are listed here. Keep this group free of interior comments: the CI
 # workflow tests parse it as one unbroken run of list items.
 web:
+  - '.github/scripts/background-step.sh'
+  - '.github/scripts/background-step.test.mjs'
   - 'public/guides/**'
   - 'supabase/functions/_shared/scheduled-notification*'
   - 'supabase/functions/process-scheduled-notifications/**'

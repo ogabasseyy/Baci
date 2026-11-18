@@ -152,13 +152,13 @@ describe('StartSavingsScreen funding flows', () => {
     );
     acceptSavingsTerms();
     openFundingOptions();
-    fireEvent.press(getSavingsButton('Continue funding option'));
+    fireEvent.press(getSavingsButton('Create my plan'));
 
     await waitFor(() => expect(mockCreateSavingsGoal).toHaveBeenCalledTimes(1));
     await waitFor(() =>
-      expect(getSavingsButton('Continue funding option')).not.toBeDisabled()
+      expect(getSavingsButton('Create my plan')).not.toBeDisabled()
     );
-    fireEvent.press(getSavingsButton('Continue funding option'));
+    fireEvent.press(getSavingsButton('Create my plan'));
 
     await waitFor(() => expect(mockCreateSavingsGoal).toHaveBeenCalledTimes(2));
     const firstCall = mockCreateSavingsGoal.mock.calls[0]?.[0] as {
@@ -176,7 +176,7 @@ describe('StartSavingsScreen funding flows', () => {
     expect(mockRandomUUID).toHaveBeenCalledTimes(2);
   });
 
-  it('creates the plan then asks for wallet funding without showing the plan account', async () => {
+  it('creates the plan then asks for wallet funding without showing the plan account, for a bank-transfer head start', async () => {
     mockFetchSavingsPlanFunding.mockResolvedValue({
       status: 'ready',
       accounts: [
@@ -191,11 +191,16 @@ describe('StartSavingsScreen funding flows', () => {
 
     selectSavingsProduct();
     setContributionAmount();
+    fireEvent.press(getSavingsRadio('Initial contribution Yes'));
+    fireEvent.changeText(
+      getSavingsInput('Initial contribution amount'),
+      '20000'
+    );
     acceptSavingsTerms();
     openFundingOptions();
 
     fireEvent.press(getSavingsButton('Pay with bank transfer'));
-    fireEvent.press(getSavingsButton('Continue funding option'));
+    fireEvent.press(getSavingsButton('Create my plan'));
 
     await waitFor(() => expect(mockCreateSavingsGoal).toHaveBeenCalledTimes(1));
     expect(mockCreateSavingsGoal).toHaveBeenCalledWith(
@@ -242,7 +247,7 @@ describe('StartSavingsScreen funding flows', () => {
       expect(screen.getByText('Access Bank ending 1234')).toBeOnTheScreen()
     );
     fireEvent.press(getSavingsButton('Select Access Bank ending 1234'));
-    fireEvent.press(getSavingsButton('Continue funding option'));
+    fireEvent.press(getSavingsButton('Create my plan'));
 
     await waitFor(() => expect(mockCreateSavingsGoal).toHaveBeenCalledTimes(1));
     expect(mockCreateSavingsGoal).toHaveBeenCalledWith(

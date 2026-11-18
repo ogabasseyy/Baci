@@ -151,3 +151,33 @@ it('routes clearing to canonical state and clears the local group flag', () => {
   expect(s.shared.clearCart).toHaveBeenCalledOnce();
   expect(s.active.current).toBe(false);
 });
+
+it('refuses an add that only a sibling tab’s preview has room for', () => {
+  const s = setup();
+  s.active.current = false;
+  const capped = {
+    ...s.shared.cart[0],
+    id: 'capped',
+    cartItemId: 'c',
+    quantity: 10,
+    negotiatedPrice: undefined,
+    negotiationStatus: undefined,
+  } as SharedCartDisplayItem;
+  // The shopper sees the sibling's unconfirmed reduction to one unit, but
+  // this tab's own line is still at the cap.
+  const actions = createDelegatedCartActions(
+    {
+      ...s.shared,
+      cart: [{ ...capped, quantity: 1 }],
+      ownCart: [capped],
+    },
+    s.active,
+    s.setActive
+  );
+  const accepted = actions.addToCart(
+    { id: 'capped', manage_stock: false, stock: 10 } as never,
+    1
+  );
+  expect(accepted).toBe(0);
+  expect(s.shared.addToCart).not.toHaveBeenCalled();
+});

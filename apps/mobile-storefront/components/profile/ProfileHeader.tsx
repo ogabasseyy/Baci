@@ -2,41 +2,34 @@ import Ionicons from '@react-native-vector-icons/ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 import type { Href } from 'expo-router';
 import { router } from 'expo-router';
+import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   FadeIn,
   FadeInDown,
   FadeInRight,
 } from 'react-native-reanimated';
-import { BRAND, palette, RADIUS, SPACING } from '@/constants/Colors';
+import { BRAND, RADIUS, SPACING } from '@/constants/Colors';
 import type { Customer } from '@/stores/auth-store';
 import { useQuizBadgeStore } from '@/stores/quiz-badge-store';
 import { ProfileQuizBadge } from './ProfileQuizBadge';
+import { ProfileRewardsCard } from './ProfileRewardsCard';
 
 interface ProfileHeaderProps {
   customer: Customer;
   loyaltyPoints?: number;
+  branded?: boolean;
 }
 
-function getTierInfo(tier?: string) {
-  switch (tier?.toLowerCase()) {
-    case 'gold':
-      return { label: 'Gold', color: '#D4AF37', bg: '#D4AF3720' };
-    case 'silver':
-      return { label: 'Silver', color: '#A8A9AD', bg: '#A8A9AD20' };
-    case 'platinum':
-      return { label: 'Platinum', color: '#E5E4E2', bg: '#E5E4E218' };
-    default:
-      return {
-        label: 'Member',
-        color: palette.amber[500],
-        bg: `${palette.amber[500]}18`,
-      };
-  }
-}
-
-export function ProfileHeader({ customer, loyaltyPoints }: ProfileHeaderProps) {
-  const tier = getTierInfo();
+export function ProfileHeader({
+  customer,
+  loyaltyPoints,
+  branded = false,
+}: ProfileHeaderProps) {
+  // NativeWind's css-interop drops Pressable style callbacks on device, which
+  // left pills unstyled on the red card. Track pressed state ourselves and
+  // pass a plain style array instead.
+  const [isEditPressed, setIsEditPressed] = useState(false);
   const latestQuizBadge = useQuizBadgeStore((state) =>
     state.getMostRecentBadge(customer.user_id ?? customer.id)
   );
@@ -52,97 +45,75 @@ export function ProfileHeader({ customer, loyaltyPoints }: ProfileHeaderProps) {
       : 'Store Member';
 
   return (
-    <Animated.View entering={FadeIn.duration(500)} style={styles.container}>
+    <Animated.View
+      entering={FadeIn.duration(500)}
+      style={[styles.container, branded && styles.brandedContainer]}
+    >
       <LinearGradient
-        colors={[BRAND.primary, BRAND.primaryDark, '#1a0505']}
+        colors={
+          branded
+            ? ['#200d16', '#3e1624', '#1a0c13']
+            : [BRAND.primary, BRAND.primaryDark, '#1a0505']
+        }
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFill}
       />
 
-      {/* Edit button */}
-      <Animated.View
-        entering={FadeInRight.delay(300).duration(400)}
-        style={styles.editWrap}
-      >
-        <Pressable
-          style={({ pressed }) => [
-            styles.editBtn,
-            pressed && { backgroundColor: 'rgba(255,255,255,0.25)' },
-          ]}
-          onPress={() => router.push('/profile/edit' as Href)}
-          accessibilityRole="button"
-          accessibilityLabel="Edit profile"
+      <View style={branded ? styles.identityRow : undefined}>
+        {/* Edit button */}
+        <Animated.View
+          entering={FadeInRight.delay(300).duration(400)}
+          style={[styles.editWrap, branded && styles.inlineEdit]}
         >
-          <Ionicons name="create-outline" size={18} color="#FFFFFF" />
-        </Pressable>
-      </Animated.View>
+          <Pressable
+            style={[
+              styles.editBtn,
+              isEditPressed && { backgroundColor: 'rgba(255,255,255,0.25)' },
+            ]}
+            onPressIn={() => setIsEditPressed(true)}
+            onPressOut={() => setIsEditPressed(false)}
+            onBlur={() => setIsEditPressed(false)}
+            onPress={() => {
+              setIsEditPressed(false);
+              router.push('/profile/edit' as Href);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Edit profile"
+          >
+            <Ionicons name="create-outline" size={18} color="#FFFFFF" />
+          </Pressable>
+        </Animated.View>
 
-      {/* Avatar + Name */}
-      <Animated.View
-        entering={FadeInDown.delay(150).duration(500)}
-        style={styles.row}
-      >
-        <View style={styles.avatarFallback}>
-          <Text style={styles.initials}>{initials}</Text>
-        </View>
-
-        <View style={styles.info}>
-          <Text style={styles.name} numberOfLines={1}>
-            {displayName}
-          </Text>
-          <Text style={styles.email} numberOfLines={1}>
-            {customer.email}
-          </Text>
-          <View style={[styles.tierBadge, { backgroundColor: tier.bg }]}>
-            <Ionicons name="star" size={10} color={tier.color} />
-            <Text style={[styles.tierLabel, { color: tier.color }]}>
-              {tier.label}
-            </Text>
+        {/* Avatar + Name */}
+        <Animated.View
+          entering={FadeInDown.delay(150).duration(500)}
+          style={[styles.row, branded && styles.identityContent]}
+        >
+          <View style={styles.avatarFallback}>
+            <Text style={styles.initials}>{initials}</Text>
           </View>
-          {latestQuizBadge ? (
-            <ProfileQuizBadge
-              eventTitle={latestQuizBadge.eventTitle}
-              label={latestQuizBadge.label}
-            />
-          ) : null}
-        </View>
-      </Animated.View>
+
+          <View style={styles.info}>
+            <Text style={styles.name} numberOfLines={1}>
+              {displayName}
+            </Text>
+            <Text style={styles.email} numberOfLines={1}>
+              {customer.email}
+            </Text>
+            {latestQuizBadge ? (
+              <ProfileQuizBadge
+                eventTitle={latestQuizBadge.eventTitle}
+                label={latestQuizBadge.label}
+              />
+            ) : null}
+          </View>
+        </Animated.View>
+      </View>
 
       {/* Loyalty points card */}
       {loyaltyPoints !== undefined && (
-        <Animated.View
-          entering={FadeInDown.delay(350).duration(500)}
-          style={styles.pointsCard}
-        >
-          <View style={styles.pointsLeft}>
-            <View style={styles.sparkle}>
-              <Ionicons name="sparkles" size={18} color={palette.amber[400]} />
-            </View>
-            <View>
-              <Text style={styles.pointsLabel}>Reward Points</Text>
-              <Text style={styles.pointsValue}>
-                {loyaltyPoints.toLocaleString()}
-              </Text>
-            </View>
-          </View>
-          <Pressable
-            style={({ pressed }) => [
-              styles.redeemBtn,
-              pressed && { opacity: 0.8 },
-            ]}
-            onPress={() => router.push('/wallet' as Href)}
-            accessibilityRole="button"
-            accessibilityLabel="View wallet and redeem points"
-          >
-            <Text style={styles.redeemText}>Redeem</Text>
-            <Ionicons
-              name="arrow-forward"
-              size={14}
-              color={palette.amber[900]}
-            />
-          </Pressable>
-        </Animated.View>
+        <ProfileRewardsCard loyaltyPoints={loyaltyPoints} />
       )}
     </Animated.View>
   );
@@ -157,6 +128,10 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.lg,
     paddingHorizontal: SPACING.lg,
   },
+  brandedContainer: { borderRadius: 20, paddingTop: 16 },
+  identityRow: { flexDirection: 'row-reverse', alignItems: 'flex-start' },
+  identityContent: { flex: 1, paddingRight: 8 },
+  inlineEdit: { position: 'relative', top: 0, right: 0 },
   editWrap: {
     position: 'absolute',
     top: SPACING.md,
@@ -215,71 +190,5 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: 'rgba(255,255,255,0.65)',
     marginBottom: SPACING.sm,
-  },
-  tierBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: RADIUS.full,
-  },
-  tierLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
-  },
-  pointsCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: RADIUS['2xl'],
-    paddingVertical: 14,
-    paddingHorizontal: SPACING.md,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-  },
-  pointsLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  sparkle: {
-    width: 36,
-    height: 36,
-    borderRadius: RADIUS.lg,
-    backgroundColor: `${palette.amber[500]}25`,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  pointsLabel: {
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.6)',
-    fontWeight: '500',
-    letterSpacing: 0.3,
-    textTransform: 'uppercase',
-  },
-  pointsValue: {
-    fontSize: 20,
-    fontWeight: '900',
-    color: '#FFFFFF',
-    letterSpacing: -0.5,
-  },
-  redeemBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: palette.amber[400],
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: RADIUS.full,
-  },
-  redeemText: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: palette.amber[900],
   },
 });

@@ -44,8 +44,20 @@ const merchantId = '11111111-1111-4111-8111-111111111111';
 const goalId = '22222222-2222-4222-8222-222222222222';
 const operationId = '33333333-3333-4333-8333-333333333333';
 const pinProof = createHash('sha256').update('s6-route-proof').digest('hex');
-const issue = { step: 'issue', merchantId, goalId };
-const submit = { step: 'submit', merchantId, goalId, operationId, pinProof };
+const issue = {
+  step: 'issue',
+  merchantId,
+  goalId,
+  interestForfeitAcknowledged: true,
+};
+const submit = {
+  step: 'submit',
+  merchantId,
+  goalId,
+  operationId,
+  pinProof,
+  interestForfeitAcknowledged: true,
+};
 const url = 'https://example.com/api/storefront/customer/savings/goal-cancel';
 const post = (body: unknown) =>
   POST(new NextRequest(url, { method: 'POST', body: JSON.stringify(body) }));
@@ -91,6 +103,7 @@ it.each([
   { ...submit, pinProof: undefined },
   { step: 'submit', merchantId, goalId, pinProof },
   { step: 'refund', merchantId, goalId },
+  { ...submit, interestForfeitAcknowledged: 'yes' },
 ])('rejects malformed input %j', async (body) => {
   expect((await post(body)).status).toBe(400);
   expect(mocks.issue).not.toHaveBeenCalled();

@@ -1,14 +1,9 @@
-import { reconcileOrphanedDeferredCartLogout } from '@/hooks/cart/cart-deferred-logout';
 import { beginCartSessionRetirement } from '@/hooks/cart/cart-session-write-fence';
-// Session load/logout orchestration for the storefront customer auth provider.
+// Session commit/logout orchestration for the storefront customer auth provider.
 //
 // Extracted from `customer-auth-context.tsx` so the provider stays focused on
-// React state while this module owns the session fetch, the setter fan-out,
-// the live-identity publish, and the cart clear. The try/catch/finally control
-// flow stays at module scope so the provider remains React-Compiler friendly.
-//
-// The type imports below are type-only (erased at compile time); there is no
-// runtime cycle back into the context module.
+// React state while this module owns session commit, live-identity publish,
+// and cart clear. Session loading lives in `customer-auth-session-loader.ts`.
 import { eraseRetiredCartCache } from '@/hooks/cart/retired-cart-cache';
 import {
   beginDeferredCartLogout,
@@ -24,10 +19,14 @@ import { clearCartStorage } from '@/hooks/use-cart';
 import type { Customer, CustomerUser, OtpState } from './customer-auth-context';
 import { postCustomerAuthLogout } from './customer-auth-mutation';
 import { retirePreviousAccountCartAuthority } from './customer-auth-retirement';
+import type { CustomerSession } from './customer-auth-session-loader';
+import {
+  invalidateCustomerSessionLifecycle,
+  loadCustomerSession,
+} from './customer-auth-session-loader';
 import {
   clearCustomerAuthRollbackPending,
   getRememberedCustomerUserId,
-  isCustomerAuthRollbackPending,
   resetRememberedCustomerSessionsForTests,
   rollbackCustomerAuthSession,
   setRememberedCustomerUserId,
@@ -36,140 +35,9 @@ import {
   invalidateCustomerIdentityObservers,
   publishCustomerIdentity,
 } from './customer-live-identity';
+import { writeCustomerSessionHint } from './customer-session-hint';
 
-export { resetRememberedCustomerSessionsForTests };
-
-interface CustomerSession {
-  customer: Customer;
-  user: CustomerUser;
-}
-
-type CustomerSessionFetchResult =
-  | { status: 'authenticated'; session: CustomerSession }
-  | { status: 'unauthenticated' }
-  | { status: 'lookup_failed'; userId: string | null };
-
-async function fetchCustomerSession(
-  merchantSlug: string
-): Promise<CustomerSessionFetchResult> {
-  const response = await fetch(
-    `/api/storefront/auth/session?merchantSlug=${encodeURIComponent(merchantSlug)}`
-  );
-  if (response.ok === false) {
-    return { status: 'lookup_failed', userId: null };
-  }
-  const data = (await response.json()) as {
-    authenticated?: boolean;
-    customer?: Customer;
-    user?: CustomerUser;
-  };
-
-  if (data.authenticated === false) {
-    return { status: 'unauthenticated' };
-  }
-  if (!data.authenticated || !data.user || !data.customer) {
-    return { status: 'lookup_failed', userId: data.user?.id ?? null };
-  }
-
-  return {
-    status: 'authenticated',
-    session: {
-      customer: data.customer,
-      user: data.user,
-    },
-  };
-}
-
-interface SessionSetters {
-  currentUserId?: string | null;
-  setUser: (user: CustomerUser | null) => void;
-  setCustomer: (customer: Customer | null) => void;
-  setIsLoading: (loading: boolean) => void;
-}
-
-// Module-scope helper so the try/catch/finally control flow lives outside the
-// component body, keeping the provider compilable by the React Compiler.
-export async function loadCustomerSession(
-  merchantSlug: string,
-  { currentUserId, setUser, setCustomer, setIsLoading }: SessionSetters,
-  isCancelled: () => boolean = () => false
-): Promise<void> {
-  // Bootstrap can follow an OAuth redirect that changed a shared cookie.
-  // Invalidate conservatively until the new session is known.
-  invalidateCustomerIdentityObservers(merchantSlug);
-  const previousUserId = getRememberedCustomerUserId(
-    merchantSlug,
-    currentUserId
-  );
-  // A page that closed mid-logout leaves a deferred marker behind;
-  // drop it once its lease expires so it cannot fence this load.
-  reconcileOrphanedDeferredCartLogout(merchantSlug);
-  try {
-    if (isCustomerAuthRollbackPending(merchantSlug)) {
-      if (previousUserId) {
-        await retirePreviousAccountCartAuthority(merchantSlug, previousUserId);
-        if (isCancelled()) return;
-      }
-      await rollbackCustomerAuthSession(merchantSlug);
-      if (isCancelled()) return;
-      setUser(null);
-      setCustomer(null);
-      publishCustomerIdentity(null, null, merchantSlug);
-      return;
-    }
-
-    const result = await fetchCustomerSession(merchantSlug);
-    if (isCancelled()) return;
-
-    if (result.status === 'authenticated') {
-      const { session } = result;
-      if (previousUserId && previousUserId !== session.user.id) {
-        const retired = await retirePreviousAccountCartAuthority(
-          merchantSlug,
-          previousUserId
-        );
-        if (isCancelled()) return;
-        if (!retired) {
-          // Mirror commitCustomerAuthSession: clearing React state
-          // is not enough, because the browser already holds the new
-          // account's auth cookie. Roll the auth session back so a
-          // later session-aware page cannot authenticate the new
-          // customer while the old cart authority is unretired.
-          await rollbackCustomerAuthSession(merchantSlug);
-          if (isCancelled()) return;
-          setUser(null);
-          setCustomer(null);
-          publishCustomerIdentity(null, null, merchantSlug);
-          return;
-        }
-      }
-      setRememberedCustomerUserId(merchantSlug, session.user.id);
-      setUser(session.user);
-      setCustomer(session.customer);
-      publishCustomerIdentity(session.user, session.customer, merchantSlug);
-    } else {
-      if (
-        previousUserId &&
-        (result.status === 'unauthenticated' ||
-          (result.userId !== null && result.userId !== previousUserId))
-      ) {
-        await retirePreviousAccountCartAuthority(merchantSlug, previousUserId);
-        if (isCancelled()) return;
-      }
-      setUser(null);
-      setCustomer(null);
-      publishCustomerIdentity(null, null, merchantSlug);
-    }
-  } catch (error) {
-    if (isCancelled()) return;
-    console.error('Session check error:', error);
-    setUser(null);
-    setCustomer(null);
-    publishCustomerIdentity(null, null, merchantSlug);
-  } finally {
-    if (!isCancelled()) setIsLoading(false);
-  }
-}
+export { loadCustomerSession, resetRememberedCustomerSessionsForTests };
 
 export async function commitCustomerAuthSession(
   merchantSlug: string,
@@ -179,13 +47,16 @@ export async function commitCustomerAuthSession(
     setUser,
     setCustomer,
     setOtpState,
+    setIsLoading,
   }: {
     currentUserId?: string | null;
     setUser: (user: CustomerUser | null) => void;
     setCustomer: (customer: Customer | null) => void;
     setOtpState: (otp: OtpState | null) => void;
+    setIsLoading?: (loading: boolean) => void;
   }
 ): Promise<boolean> {
+  invalidateCustomerSessionLifecycle(merchantSlug);
   invalidateCustomerIdentityObservers(merchantSlug);
   const previousUserId = getRememberedCustomerUserId(
     merchantSlug,
@@ -198,18 +69,22 @@ export async function commitCustomerAuthSession(
     );
     if (!retired) {
       await rollbackCustomerAuthSession(merchantSlug);
+      writeCustomerSessionHint(merchantSlug, '0');
       setUser(null);
       setCustomer(null);
       publishCustomerIdentity(null, null, merchantSlug);
+      setIsLoading?.(false);
       return false;
     }
   }
   clearCustomerAuthRollbackPending(merchantSlug);
   setRememberedCustomerUserId(merchantSlug, session.user.id);
+  writeCustomerSessionHint(merchantSlug, '1');
   setUser(session.user);
   setCustomer(session.customer);
   publishCustomerIdentity(session.user, session.customer, merchantSlug);
   setOtpState(null);
+  setIsLoading?.(false);
   return true;
 }
 
@@ -219,8 +94,10 @@ export async function performCustomerLogout(
   setUser: (user: CustomerUser | null) => void,
   setCustomer: (customer: Customer | null) => void,
   setOtpState: (otp: OtpState | null) => void,
-  userId?: string | null
+  userId?: string | null,
+  setIsLoading?: (loading: boolean) => void
 ): Promise<void> {
+  invalidateCustomerSessionLifecycle(merchantSlug);
   const previousUserId = getRememberedCustomerUserId(merchantSlug, userId);
   const retirement = beginCartSessionRetirement(merchantSlug);
   markCartDeviceRevocationPending?.(merchantSlug);
@@ -280,6 +157,7 @@ export async function performCustomerLogout(
     // the only record of which user the parked cache belongs to, and
     // the retained revocation fence needs it for the retry cleanup.
     if (erased) setRememberedCustomerUserId(merchantSlug, null);
+    writeCustomerSessionHint(merchantSlug, '0');
     setUser(null);
     setCustomer(null);
     publishCustomerIdentity(null, null, merchantSlug);
@@ -292,6 +170,7 @@ export async function performCustomerLogout(
     else endDeferredCartLogout?.(merchantSlug);
     throw error;
   } finally {
+    setIsLoading?.(false);
     retirement.release();
   }
 }

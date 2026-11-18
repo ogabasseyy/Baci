@@ -1,4 +1,3 @@
-import { headers } from 'next/headers';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import type { BreadcrumbList } from 'schema-dts';
@@ -11,8 +10,10 @@ import {
 import { asRoute } from '@/lib/routes';
 import { generateBreadcrumbSchema } from '@/lib/seo-utils';
 import { buildStoreUrl } from '@/lib/store-url';
-import { getStorefrontPathPrefix } from '@/lib/storefront-path-prefix';
-import { isValidMerchantIdentifier } from '@/lib/validation';
+import {
+  isDomainIdentifier,
+  isValidMerchantIdentifier,
+} from '@/lib/validation';
 import { CompareHubIntro } from './compare-hub-intro';
 import {
   buildCompareIndexSections,
@@ -44,12 +45,11 @@ export async function ComparePageContent({
     notFound();
   }
 
-  const headersList = await headers();
   const { categories, queryFailed } = await getStorefrontCategories(
     merchant.id
   );
   const storeUrl = buildStoreUrl(merchant);
-  const pathPrefix = getStorefrontPathPrefix(headersList, merchant);
+  const pathPrefix = isDomainIdentifier(slug) ? '' : `/${merchant.slug}`;
   const storefrontName = merchant.business_name?.trim();
   const sections = await buildCompareIndexSections({
     categories,

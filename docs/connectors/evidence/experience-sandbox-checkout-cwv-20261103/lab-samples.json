@@ -12,11 +12,7 @@
         "interactionDurationMs": 16,
         "lastShift": 0,
         "lcpMs": 1312,
-        "observed": [
-          "largest-contentful-paint",
-          "layout-shift",
-          "event"
-        ],
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
         "overflow": false,
         "postPaintCls": 0,
         "rawShifts": [],
@@ -35,11 +31,7 @@
         "interactionDurationMs": 16,
         "lastShift": 0,
         "lcpMs": 752,
-        "observed": [
-          "largest-contentful-paint",
-          "layout-shift",
-          "event"
-        ],
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
         "overflow": false,
         "postPaintCls": 0,
         "rawShifts": [],
@@ -64,30 +56,16 @@
         "first": {
           "at": "2026-11-03T13:04:43.821Z",
           "cpuCount": 12,
-          "loadAverage": [
-            57.88818359375,
-            66.939453125,
-            66.880859375
-          ],
+          "loadAverage": [57.88818359375, 66.939453125, 66.880859375],
           "loadPerCpu": [
-            4.824015299479167,
-            5.578287760416667,
-            5.573404947916667
+            4.824015299479167, 5.578287760416667, 5.573404947916667
           ]
         },
         "last": {
           "at": "2026-11-03T13:05:27.877Z",
           "cpuCount": 12,
-          "loadAverage": [
-            68.57958984375,
-            69.068359375,
-            67.70166015625
-          ],
-          "loadPerCpu": [
-            5.7149658203125,
-            5.755696614583333,
-            5.641805013020833
-          ]
+          "loadAverage": [68.57958984375, 69.068359375, 67.70166015625],
+          "loadPerCpu": [5.7149658203125, 5.755696614583333, 5.641805013020833]
         },
         "maxLoadPerCpu": 6.216959635416667
       }
@@ -103,11 +81,7 @@
         "interactionDurationMs": 16,
         "lastShift": 0,
         "lcpMs": 1416,
-        "observed": [
-          "largest-contentful-paint",
-          "layout-shift",
-          "event"
-        ],
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
         "overflow": false,
         "postPaintCls": 0,
         "rawShifts": [],
@@ -126,11 +100,7 @@
         "interactionDurationMs": 16,
         "lastShift": 0,
         "lcpMs": 888,
-        "observed": [
-          "largest-contentful-paint",
-          "layout-shift",
-          "event"
-        ],
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
         "overflow": false,
         "postPaintCls": 0,
         "rawShifts": [],
@@ -155,30 +125,16 @@
         "first": {
           "at": "2026-11-03T13:04:43.821Z",
           "cpuCount": 12,
-          "loadAverage": [
-            57.88818359375,
-            66.939453125,
-            66.880859375
-          ],
+          "loadAverage": [57.88818359375, 66.939453125, 66.880859375],
           "loadPerCpu": [
-            4.824015299479167,
-            5.578287760416667,
-            5.573404947916667
+            4.824015299479167, 5.578287760416667, 5.573404947916667
           ]
         },
         "last": {
           "at": "2026-11-03T13:05:27.877Z",
           "cpuCount": 12,
-          "loadAverage": [
-            68.57958984375,
-            69.068359375,
-            67.70166015625
-          ],
-          "loadPerCpu": [
-            5.7149658203125,
-            5.755696614583333,
-            5.641805013020833
-          ]
+          "loadAverage": [68.57958984375, 69.068359375, 67.70166015625],
+          "loadPerCpu": [5.7149658203125, 5.755696614583333, 5.641805013020833]
         },
         "maxLoadPerCpu": 6.216959635416667
       }
@@ -194,11 +150,7 @@
         "interactionDurationMs": null,
         "lastShift": 0,
         "lcpMs": 1820,
-        "observed": [
-          "largest-contentful-paint",
-          "layout-shift",
-          "event"
-        ],
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
         "overflow": false,
         "postPaintCls": 0,
         "rawShifts": [],
@@ -217,11 +169,7 @@
         "interactionDurationMs": null,
         "lastShift": 0,
         "lcpMs": 1076,
-        "observed": [
-          "largest-contentful-paint",
-          "layout-shift",
-          "event"
-        ],
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
         "overflow": false,
         "postPaintCls": 0,
         "rawShifts": [],
@@ -246,30 +194,16 @@
         "first": {
           "at": "2026-11-03T13:04:43.821Z",
           "cpuCount": 12,
-          "loadAverage": [
-            57.88818359375,
-            66.939453125,
-            66.880859375
-          ],
+          "loadAverage": [57.88818359375, 66.939453125, 66.880859375],
           "loadPerCpu": [
-            4.824015299479167,
-            5.578287760416667,
-            5.573404947916667
+            4.824015299479167, 5.578287760416667, 5.573404947916667
           ]
         },
         "last": {
           "at": "2026-11-03T13:05:27.877Z",
           "cpuCount": 12,
-          "loadAverage": [
-            68.57958984375,
-            69.068359375,
-            67.70166015625
-          ],
-          "loadPerCpu": [
-            5.7149658203125,
-            5.755696614583333,
-            5.641805013020833
-          ]
+          "loadAverage": [68.57958984375, 69.068359375, 67.70166015625],
+          "loadPerCpu": [5.7149658203125, 5.755696614583333, 5.641805013020833]
         },
         "maxLoadPerCpu": 6.216959635416667
       }
@@ -285,11 +219,7 @@
         "interactionDurationMs": 16,
         "lastShift": 0,
         "lcpMs": 1716,
-        "observed": [
-          "largest-contentful-paint",
-          "layout-shift",
-          "event"
-        ],
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
         "overflow": false,
         "postPaintCls": 0,
         "rawShifts": [],
@@ -308,11 +238,7 @@
         "interactionDurationMs": 16,
         "lastShift": 0,
         "lcpMs": 988,
-        "observed": [
-          "largest-contentful-paint",
-          "layout-shift",
-          "event"
-        ],
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
         "overflow": false,
         "postPaintCls": 0,
         "rawShifts": [],
@@ -337,30 +263,14 @@
         "first": {
           "at": "2026-11-03T13:05:28.085Z",
           "cpuCount": 12,
-          "loadAverage": [
-            68.57958984375,
-            69.068359375,
-            67.70166015625
-          ],
-          "loadPerCpu": [
-            5.7149658203125,
-            5.755696614583333,
-            5.641805013020833
-          ]
+          "loadAverage": [68.57958984375, 69.068359375, 67.70166015625],
+          "loadPerCpu": [5.7149658203125, 5.755696614583333, 5.641805013020833]
         },
         "last": {
           "at": "2026-11-03T13:06:16.172Z",
           "cpuCount": 12,
-          "loadAverage": [
-            92.9443359375,
-            74.828125,
-            69.86083984375
-          ],
-          "loadPerCpu": [
-            7.745361328125,
-            6.235677083333333,
-            5.821736653645833
-          ]
+          "loadAverage": [92.9443359375, 74.828125, 69.86083984375],
+          "loadPerCpu": [7.745361328125, 6.235677083333333, 5.821736653645833]
         },
         "maxLoadPerCpu": 7.745361328125
       }
@@ -376,11 +286,7 @@
         "interactionDurationMs": 16,
         "lastShift": 0,
         "lcpMs": 1716,
-        "observed": [
-          "largest-contentful-paint",
-          "layout-shift",
-          "event"
-        ],
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
         "overflow": false,
         "postPaintCls": 0,
         "rawShifts": [],
@@ -399,11 +305,7 @@
         "interactionDurationMs": 16,
         "lastShift": 0,
         "lcpMs": 1168,
-        "observed": [
-          "largest-contentful-paint",
-          "layout-shift",
-          "event"
-        ],
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
         "overflow": false,
         "postPaintCls": 0,
         "rawShifts": [],
@@ -428,30 +330,14 @@
         "first": {
           "at": "2026-11-03T13:05:28.085Z",
           "cpuCount": 12,
-          "loadAverage": [
-            68.57958984375,
-            69.068359375,
-            67.70166015625
-          ],
-          "loadPerCpu": [
-            5.7149658203125,
-            5.755696614583333,
-            5.641805013020833
-          ]
+          "loadAverage": [68.57958984375, 69.068359375, 67.70166015625],
+          "loadPerCpu": [5.7149658203125, 5.755696614583333, 5.641805013020833]
         },
         "last": {
           "at": "2026-11-03T13:06:16.172Z",
           "cpuCount": 12,
-          "loadAverage": [
-            92.9443359375,
-            74.828125,
-            69.86083984375
-          ],
-          "loadPerCpu": [
-            7.745361328125,
-            6.235677083333333,
-            5.821736653645833
-          ]
+          "loadAverage": [92.9443359375, 74.828125, 69.86083984375],
+          "loadPerCpu": [7.745361328125, 6.235677083333333, 5.821736653645833]
         },
         "maxLoadPerCpu": 7.745361328125
       }
@@ -467,11 +353,7 @@
         "interactionDurationMs": 16,
         "lastShift": 0,
         "lcpMs": 2068,
-        "observed": [
-          "largest-contentful-paint",
-          "layout-shift",
-          "event"
-        ],
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
         "overflow": false,
         "postPaintCls": 0,
         "rawShifts": [],
@@ -490,11 +372,7 @@
         "interactionDurationMs": 24,
         "lastShift": 0,
         "lcpMs": 2136,
-        "observed": [
-          "largest-contentful-paint",
-          "layout-shift",
-          "event"
-        ],
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
         "overflow": false,
         "postPaintCls": 0,
         "rawShifts": [],
@@ -519,30 +397,14 @@
         "first": {
           "at": "2026-11-03T13:05:28.085Z",
           "cpuCount": 12,
-          "loadAverage": [
-            68.57958984375,
-            69.068359375,
-            67.70166015625
-          ],
-          "loadPerCpu": [
-            5.7149658203125,
-            5.755696614583333,
-            5.641805013020833
-          ]
+          "loadAverage": [68.57958984375, 69.068359375, 67.70166015625],
+          "loadPerCpu": [5.7149658203125, 5.755696614583333, 5.641805013020833]
         },
         "last": {
           "at": "2026-11-03T13:06:16.172Z",
           "cpuCount": 12,
-          "loadAverage": [
-            92.9443359375,
-            74.828125,
-            69.86083984375
-          ],
-          "loadPerCpu": [
-            7.745361328125,
-            6.235677083333333,
-            5.821736653645833
-          ]
+          "loadAverage": [92.9443359375, 74.828125, 69.86083984375],
+          "loadPerCpu": [7.745361328125, 6.235677083333333, 5.821736653645833]
         },
         "maxLoadPerCpu": 7.745361328125
       }
@@ -558,11 +420,7 @@
         "interactionDurationMs": 16,
         "lastShift": 0,
         "lcpMs": 2468,
-        "observed": [
-          "largest-contentful-paint",
-          "layout-shift",
-          "event"
-        ],
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
         "overflow": false,
         "postPaintCls": 0,
         "rawShifts": [],
@@ -581,11 +439,7 @@
         "interactionDurationMs": 16,
         "lastShift": 0,
         "lcpMs": 1644,
-        "observed": [
-          "largest-contentful-paint",
-          "layout-shift",
-          "event"
-        ],
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
         "overflow": false,
         "postPaintCls": 0,
         "rawShifts": [],
@@ -610,30 +464,14 @@
         "first": {
           "at": "2026-11-03T13:06:16.852Z",
           "cpuCount": 12,
-          "loadAverage": [
-            92.9443359375,
-            74.828125,
-            69.86083984375
-          ],
-          "loadPerCpu": [
-            7.745361328125,
-            6.235677083333333,
-            5.821736653645833
-          ]
+          "loadAverage": [92.9443359375, 74.828125, 69.86083984375],
+          "loadPerCpu": [7.745361328125, 6.235677083333333, 5.821736653645833]
         },
         "last": {
           "at": "2026-11-03T13:07:11.941Z",
           "cpuCount": 12,
-          "loadAverage": [
-            107.455078125,
-            82.724609375,
-            73.1572265625
-          ],
-          "loadPerCpu": [
-            8.95458984375,
-            6.893717447916667,
-            6.096435546875
-          ]
+          "loadAverage": [107.455078125, 82.724609375, 73.1572265625],
+          "loadPerCpu": [8.95458984375, 6.893717447916667, 6.096435546875]
         },
         "maxLoadPerCpu": 9.260538736979166
       }
@@ -649,11 +487,7 @@
         "interactionDurationMs": 32,
         "lastShift": 0,
         "lcpMs": 6452,
-        "observed": [
-          "largest-contentful-paint",
-          "layout-shift",
-          "event"
-        ],
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
         "overflow": false,
         "postPaintCls": 0,
         "rawShifts": [],
@@ -672,11 +506,7 @@
         "interactionDurationMs": 32,
         "lastShift": 0,
         "lcpMs": 2548,
-        "observed": [
-          "largest-contentful-paint",
-          "layout-shift",
-          "event"
-        ],
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
         "overflow": false,
         "postPaintCls": 0,
         "rawShifts": [],
@@ -701,30 +531,14 @@
         "first": {
           "at": "2026-11-03T13:06:16.852Z",
           "cpuCount": 12,
-          "loadAverage": [
-            92.9443359375,
-            74.828125,
-            69.86083984375
-          ],
-          "loadPerCpu": [
-            7.745361328125,
-            6.235677083333333,
-            5.821736653645833
-          ]
+          "loadAverage": [92.9443359375, 74.828125, 69.86083984375],
+          "loadPerCpu": [7.745361328125, 6.235677083333333, 5.821736653645833]
         },
         "last": {
           "at": "2026-11-03T13:07:11.941Z",
           "cpuCount": 12,
-          "loadAverage": [
-            107.455078125,
-            82.724609375,
-            73.1572265625
-          ],
-          "loadPerCpu": [
-            8.95458984375,
-            6.893717447916667,
-            6.096435546875
-          ]
+          "loadAverage": [107.455078125, 82.724609375, 73.1572265625],
+          "loadPerCpu": [8.95458984375, 6.893717447916667, 6.096435546875]
         },
         "maxLoadPerCpu": 9.260538736979166
       }
@@ -740,11 +554,7 @@
         "interactionDurationMs": 16,
         "lastShift": 0,
         "lcpMs": 1748,
-        "observed": [
-          "largest-contentful-paint",
-          "layout-shift",
-          "event"
-        ],
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
         "overflow": false,
         "postPaintCls": 0,
         "rawShifts": [],
@@ -763,11 +573,7 @@
         "interactionDurationMs": 16,
         "lastShift": 0,
         "lcpMs": 1472,
-        "observed": [
-          "largest-contentful-paint",
-          "layout-shift",
-          "event"
-        ],
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
         "overflow": false,
         "postPaintCls": 0,
         "rawShifts": [],
@@ -792,30 +598,14 @@
         "first": {
           "at": "2026-11-03T13:06:16.852Z",
           "cpuCount": 12,
-          "loadAverage": [
-            92.9443359375,
-            74.828125,
-            69.86083984375
-          ],
-          "loadPerCpu": [
-            7.745361328125,
-            6.235677083333333,
-            5.821736653645833
-          ]
+          "loadAverage": [92.9443359375, 74.828125, 69.86083984375],
+          "loadPerCpu": [7.745361328125, 6.235677083333333, 5.821736653645833]
         },
         "last": {
           "at": "2026-11-03T13:07:11.941Z",
           "cpuCount": 12,
-          "loadAverage": [
-            107.455078125,
-            82.724609375,
-            73.1572265625
-          ],
-          "loadPerCpu": [
-            8.95458984375,
-            6.893717447916667,
-            6.096435546875
-          ]
+          "loadAverage": [107.455078125, 82.724609375, 73.1572265625],
+          "loadPerCpu": [8.95458984375, 6.893717447916667, 6.096435546875]
         },
         "maxLoadPerCpu": 9.260538736979166
       }
@@ -831,11 +621,7 @@
         "interactionDurationMs": null,
         "lastShift": 0,
         "lcpMs": 1820,
-        "observed": [
-          "largest-contentful-paint",
-          "layout-shift",
-          "event"
-        ],
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
         "overflow": false,
         "postPaintCls": 0,
         "rawShifts": [],
@@ -854,11 +640,7 @@
         "interactionDurationMs": 24,
         "lastShift": 0,
         "lcpMs": 668,
-        "observed": [
-          "largest-contentful-paint",
-          "layout-shift",
-          "event"
-        ],
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
         "overflow": false,
         "postPaintCls": 0,
         "rawShifts": [],
@@ -883,30 +665,14 @@
         "first": {
           "at": "2026-11-03T13:07:12.027Z",
           "cpuCount": 12,
-          "loadAverage": [
-            107.455078125,
-            82.724609375,
-            73.1572265625
-          ],
-          "loadPerCpu": [
-            8.95458984375,
-            6.893717447916667,
-            6.096435546875
-          ]
+          "loadAverage": [107.455078125, 82.724609375, 73.1572265625],
+          "loadPerCpu": [8.95458984375, 6.893717447916667, 6.096435546875]
         },
         "last": {
           "at": "2026-11-03T13:07:56.111Z",
           "cpuCount": 12,
-          "loadAverage": [
-            91.43359375,
-            81.587890625,
-            73.212890625
-          ],
-          "loadPerCpu": [
-            7.619466145833333,
-            6.798990885416667,
-            6.10107421875
-          ]
+          "loadAverage": [91.43359375, 81.587890625, 73.212890625],
+          "loadPerCpu": [7.619466145833333, 6.798990885416667, 6.10107421875]
         },
         "maxLoadPerCpu": 9.0316162109375
       }
@@ -922,18 +688,14 @@
         "interactionDurationMs": null,
         "lastShift": 0,
         "lcpMs": 1472,
-        "observed": [
-          "largest-contentful-paint",
-          "layout-shift",
-          "event"
-        ],
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
         "overflow": false,
         "postPaintCls": 0,
         "rawShifts": [
           {
             "hadRecentInput": true,
             "startTime": 132.40000000037253,
-            "value": 8.422991397318119e-05
+            "value": 8.422991397318119e-5
           }
         ],
         "sessionStart": 0,
@@ -951,11 +713,7 @@
         "interactionDurationMs": null,
         "lastShift": 0,
         "lcpMs": 1120,
-        "observed": [
-          "largest-contentful-paint",
-          "layout-shift",
-          "event"
-        ],
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
         "overflow": false,
         "postPaintCls": 0,
         "rawShifts": [],
@@ -980,30 +738,14 @@
         "first": {
           "at": "2026-11-03T13:07:12.027Z",
           "cpuCount": 12,
-          "loadAverage": [
-            107.455078125,
-            82.724609375,
-            73.1572265625
-          ],
-          "loadPerCpu": [
-            8.95458984375,
-            6.893717447916667,
-            6.096435546875
-          ]
+          "loadAverage": [107.455078125, 82.724609375, 73.1572265625],
+          "loadPerCpu": [8.95458984375, 6.893717447916667, 6.096435546875]
         },
         "last": {
           "at": "2026-11-03T13:07:56.111Z",
           "cpuCount": 12,
-          "loadAverage": [
-            91.43359375,
-            81.587890625,
-            73.212890625
-          ],
-          "loadPerCpu": [
-            7.619466145833333,
-            6.798990885416667,
-            6.10107421875
-          ]
+          "loadAverage": [91.43359375, 81.587890625, 73.212890625],
+          "loadPerCpu": [7.619466145833333, 6.798990885416667, 6.10107421875]
         },
         "maxLoadPerCpu": 9.0316162109375
       }
@@ -1019,11 +761,7 @@
         "interactionDurationMs": 16,
         "lastShift": 0,
         "lcpMs": 1392,
-        "observed": [
-          "largest-contentful-paint",
-          "layout-shift",
-          "event"
-        ],
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
         "overflow": false,
         "postPaintCls": 0,
         "rawShifts": [],
@@ -1042,11 +780,7 @@
         "interactionDurationMs": 16,
         "lastShift": 0,
         "lcpMs": 1176,
-        "observed": [
-          "largest-contentful-paint",
-          "layout-shift",
-          "event"
-        ],
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
         "overflow": false,
         "postPaintCls": 0,
         "rawShifts": [],
@@ -1071,30 +805,14 @@
         "first": {
           "at": "2026-11-03T13:07:12.027Z",
           "cpuCount": 12,
-          "loadAverage": [
-            107.455078125,
-            82.724609375,
-            73.1572265625
-          ],
-          "loadPerCpu": [
-            8.95458984375,
-            6.893717447916667,
-            6.096435546875
-          ]
+          "loadAverage": [107.455078125, 82.724609375, 73.1572265625],
+          "loadPerCpu": [8.95458984375, 6.893717447916667, 6.096435546875]
         },
         "last": {
           "at": "2026-11-03T13:07:56.111Z",
           "cpuCount": 12,
-          "loadAverage": [
-            91.43359375,
-            81.587890625,
-            73.212890625
-          ],
-          "loadPerCpu": [
-            7.619466145833333,
-            6.798990885416667,
-            6.10107421875
-          ]
+          "loadAverage": [91.43359375, 81.587890625, 73.212890625],
+          "loadPerCpu": [7.619466145833333, 6.798990885416667, 6.10107421875]
         },
         "maxLoadPerCpu": 9.0316162109375
       }
@@ -1110,11 +828,7 @@
         "interactionDurationMs": 72,
         "lastShift": 0,
         "lcpMs": 2396,
-        "observed": [
-          "largest-contentful-paint",
-          "layout-shift",
-          "event"
-        ],
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
         "overflow": false,
         "postPaintCls": 0,
         "rawShifts": [],
@@ -1133,11 +847,7 @@
         "interactionDurationMs": 72,
         "lastShift": 0,
         "lcpMs": 1556,
-        "observed": [
-          "largest-contentful-paint",
-          "layout-shift",
-          "event"
-        ],
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
         "overflow": false,
         "postPaintCls": 0,
         "rawShifts": [],
@@ -1162,29 +872,15 @@
         "first": {
           "at": "2026-11-03T13:07:56.787Z",
           "cpuCount": 12,
-          "loadAverage": [
-            91.43359375,
-            81.587890625,
-            73.212890625
-          ],
-          "loadPerCpu": [
-            7.619466145833333,
-            6.798990885416667,
-            6.10107421875
-          ]
+          "loadAverage": [91.43359375, 81.587890625, 73.212890625],
+          "loadPerCpu": [7.619466145833333, 6.798990885416667, 6.10107421875]
         },
         "last": {
           "at": "2026-11-03T13:08:48.866Z",
           "cpuCount": 12,
-          "loadAverage": [
-            136.1611328125,
-            94.630859375,
-            78.4765625
-          ],
+          "loadAverage": [136.1611328125, 94.630859375, 78.4765625],
           "loadPerCpu": [
-            11.346761067708334,
-            7.885904947916667,
-            6.539713541666667
+            11.346761067708334, 7.885904947916667, 6.539713541666667
           ]
         },
         "maxLoadPerCpu": 11.346761067708334
@@ -1201,11 +897,7 @@
         "interactionDurationMs": null,
         "lastShift": 0,
         "lcpMs": 2640,
-        "observed": [
-          "largest-contentful-paint",
-          "layout-shift",
-          "event"
-        ],
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
         "overflow": false,
         "postPaintCls": 0,
         "rawShifts": [],
@@ -1224,11 +916,7 @@
         "interactionDurationMs": 24,
         "lastShift": 0,
         "lcpMs": 1844,
-        "observed": [
-          "largest-contentful-paint",
-          "layout-shift",
-          "event"
-        ],
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
         "overflow": false,
         "postPaintCls": 0,
         "rawShifts": [],
@@ -1253,29 +941,15 @@
         "first": {
           "at": "2026-11-03T13:07:56.787Z",
           "cpuCount": 12,
-          "loadAverage": [
-            91.43359375,
-            81.587890625,
-            73.212890625
-          ],
-          "loadPerCpu": [
-            7.619466145833333,
-            6.798990885416667,
-            6.10107421875
-          ]
+          "loadAverage": [91.43359375, 81.587890625, 73.212890625],
+          "loadPerCpu": [7.619466145833333, 6.798990885416667, 6.10107421875]
         },
         "last": {
           "at": "2026-11-03T13:08:48.866Z",
           "cpuCount": 12,
-          "loadAverage": [
-            136.1611328125,
-            94.630859375,
-            78.4765625
-          ],
+          "loadAverage": [136.1611328125, 94.630859375, 78.4765625],
           "loadPerCpu": [
-            11.346761067708334,
-            7.885904947916667,
-            6.539713541666667
+            11.346761067708334, 7.885904947916667, 6.539713541666667
           ]
         },
         "maxLoadPerCpu": 11.346761067708334
@@ -1292,11 +966,7 @@
         "interactionDurationMs": 40,
         "lastShift": 0,
         "lcpMs": 2020,
-        "observed": [
-          "largest-contentful-paint",
-          "layout-shift",
-          "event"
-        ],
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
         "overflow": false,
         "postPaintCls": 0,
         "rawShifts": [],
@@ -1315,11 +985,7 @@
         "interactionDurationMs": 40,
         "lastShift": 0,
         "lcpMs": 1224,
-        "observed": [
-          "largest-contentful-paint",
-          "layout-shift",
-          "event"
-        ],
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
         "overflow": false,
         "postPaintCls": 0,
         "rawShifts": [],
@@ -1344,29 +1010,15 @@
         "first": {
           "at": "2026-11-03T13:07:56.787Z",
           "cpuCount": 12,
-          "loadAverage": [
-            91.43359375,
-            81.587890625,
-            73.212890625
-          ],
-          "loadPerCpu": [
-            7.619466145833333,
-            6.798990885416667,
-            6.10107421875
-          ]
+          "loadAverage": [91.43359375, 81.587890625, 73.212890625],
+          "loadPerCpu": [7.619466145833333, 6.798990885416667, 6.10107421875]
         },
         "last": {
           "at": "2026-11-03T13:08:48.866Z",
           "cpuCount": 12,
-          "loadAverage": [
-            136.1611328125,
-            94.630859375,
-            78.4765625
-          ],
+          "loadAverage": [136.1611328125, 94.630859375, 78.4765625],
           "loadPerCpu": [
-            11.346761067708334,
-            7.885904947916667,
-            6.539713541666667
+            11.346761067708334, 7.885904947916667, 6.539713541666667
           ]
         },
         "maxLoadPerCpu": 11.346761067708334
@@ -1383,11 +1035,7 @@
         "interactionDurationMs": 32,
         "lastShift": 0,
         "lcpMs": 1640,
-        "observed": [
-          "largest-contentful-paint",
-          "layout-shift",
-          "event"
-        ],
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
         "overflow": false,
         "postPaintCls": 0,
         "rawShifts": [],
@@ -1406,11 +1054,7 @@
         "interactionDurationMs": 32,
         "lastShift": 0,
         "lcpMs": 1144,
-        "observed": [
-          "largest-contentful-paint",
-          "layout-shift",
-          "event"
-        ],
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
         "overflow": false,
         "postPaintCls": 0,
         "rawShifts": [],
@@ -1435,30 +1079,16 @@
         "first": {
           "at": "2026-11-03T13:08:49.723Z",
           "cpuCount": 12,
-          "loadAverage": [
-            141.75341796875,
-            96.4794921875,
-            79.2236328125
-          ],
+          "loadAverage": [141.75341796875, 96.4794921875, 79.2236328125],
           "loadPerCpu": [
-            11.812784830729166,
-            8.039957682291666,
-            6.601969401041667
+            11.812784830729166, 8.039957682291666, 6.601969401041667
           ]
         },
         "last": {
           "at": "2026-11-03T13:09:32.768Z",
           "cpuCount": 12,
-          "loadAverage": [
-            121.90869140625,
-            98.27490234375,
-            80.74462890625
-          ],
-          "loadPerCpu": [
-            10.1590576171875,
-            8.1895751953125,
-            6.728719075520833
-          ]
+          "loadAverage": [121.90869140625, 98.27490234375, 80.74462890625],
+          "loadPerCpu": [10.1590576171875, 8.1895751953125, 6.728719075520833]
         },
         "maxLoadPerCpu": 12.715983072916666
       }
@@ -1474,11 +1104,7 @@
         "interactionDurationMs": null,
         "lastShift": 0,
         "lcpMs": 1356,
-        "observed": [
-          "largest-contentful-paint",
-          "layout-shift",
-          "event"
-        ],
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
         "overflow": false,
         "postPaintCls": 0,
         "rawShifts": [],
@@ -1497,11 +1123,7 @@
         "interactionDurationMs": 16,
         "lastShift": 0,
         "lcpMs": 940,
-        "observed": [
-          "largest-contentful-paint",
-          "layout-shift",
-          "event"
-        ],
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
         "overflow": false,
         "postPaintCls": 0,
         "rawShifts": [],
@@ -1526,30 +1148,16 @@
         "first": {
           "at": "2026-11-03T13:08:49.723Z",
           "cpuCount": 12,
-          "loadAverage": [
-            141.75341796875,
-            96.4794921875,
-            79.2236328125
-          ],
+          "loadAverage": [141.75341796875, 96.4794921875, 79.2236328125],
           "loadPerCpu": [
-            11.812784830729166,
-            8.039957682291666,
-            6.601969401041667
+            11.812784830729166, 8.039957682291666, 6.601969401041667
           ]
         },
         "last": {
           "at": "2026-11-03T13:09:32.768Z",
           "cpuCount": 12,
-          "loadAverage": [
-            121.90869140625,
-            98.27490234375,
-            80.74462890625
-          ],
-          "loadPerCpu": [
-            10.1590576171875,
-            8.1895751953125,
-            6.728719075520833
-          ]
+          "loadAverage": [121.90869140625, 98.27490234375, 80.74462890625],
+          "loadPerCpu": [10.1590576171875, 8.1895751953125, 6.728719075520833]
         },
         "maxLoadPerCpu": 12.715983072916666
       }
@@ -1565,11 +1173,7 @@
         "interactionDurationMs": 24,
         "lastShift": 0,
         "lcpMs": 2024,
-        "observed": [
-          "largest-contentful-paint",
-          "layout-shift",
-          "event"
-        ],
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
         "overflow": false,
         "postPaintCls": 0,
         "rawShifts": [],
@@ -1588,11 +1192,7 @@
         "interactionDurationMs": 24,
         "lastShift": 0,
         "lcpMs": 1284,
-        "observed": [
-          "largest-contentful-paint",
-          "layout-shift",
-          "event"
-        ],
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
         "overflow": false,
         "postPaintCls": 0,
         "rawShifts": [],
@@ -1617,30 +1217,16 @@
         "first": {
           "at": "2026-11-03T13:08:49.723Z",
           "cpuCount": 12,
-          "loadAverage": [
-            141.75341796875,
-            96.4794921875,
-            79.2236328125
-          ],
+          "loadAverage": [141.75341796875, 96.4794921875, 79.2236328125],
           "loadPerCpu": [
-            11.812784830729166,
-            8.039957682291666,
-            6.601969401041667
+            11.812784830729166, 8.039957682291666, 6.601969401041667
           ]
         },
         "last": {
           "at": "2026-11-03T13:09:32.768Z",
           "cpuCount": 12,
-          "loadAverage": [
-            121.90869140625,
-            98.27490234375,
-            80.74462890625
-          ],
-          "loadPerCpu": [
-            10.1590576171875,
-            8.1895751953125,
-            6.728719075520833
-          ]
+          "loadAverage": [121.90869140625, 98.27490234375, 80.74462890625],
+          "loadPerCpu": [10.1590576171875, 8.1895751953125, 6.728719075520833]
         },
         "maxLoadPerCpu": 12.715983072916666
       }
@@ -1656,11 +1242,7 @@
         "interactionDurationMs": 16,
         "lastShift": 0,
         "lcpMs": 1288,
-        "observed": [
-          "largest-contentful-paint",
-          "layout-shift",
-          "event"
-        ],
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
         "overflow": false,
         "postPaintCls": 0,
         "rawShifts": [],
@@ -1679,11 +1261,7 @@
         "interactionDurationMs": 16,
         "lastShift": 0,
         "lcpMs": 620,
-        "observed": [
-          "largest-contentful-paint",
-          "layout-shift",
-          "event"
-        ],
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
         "overflow": false,
         "postPaintCls": 0,
         "rawShifts": [],
@@ -1708,30 +1286,14 @@
         "first": {
           "at": "2026-11-03T13:09:33.042Z",
           "cpuCount": 12,
-          "loadAverage": [
-            121.90869140625,
-            98.27490234375,
-            80.74462890625
-          ],
-          "loadPerCpu": [
-            10.1590576171875,
-            8.1895751953125,
-            6.728719075520833
-          ]
+          "loadAverage": [121.90869140625, 98.27490234375, 80.74462890625],
+          "loadPerCpu": [10.1590576171875, 8.1895751953125, 6.728719075520833]
         },
         "last": {
           "at": "2026-11-03T13:10:12.080Z",
           "cpuCount": 12,
-          "loadAverage": [
-            78.908203125,
-            89.931640625,
-            78.47802734375
-          ],
-          "loadPerCpu": [
-            6.57568359375,
-            7.494303385416667,
-            6.539835611979167
-          ]
+          "loadAverage": [78.908203125, 89.931640625, 78.47802734375],
+          "loadPerCpu": [6.57568359375, 7.494303385416667, 6.539835611979167]
         },
         "maxLoadPerCpu": 10.1590576171875
       }
@@ -1747,11 +1309,7 @@
         "interactionDurationMs": 16,
         "lastShift": 0,
         "lcpMs": 1256,
-        "observed": [
-          "largest-contentful-paint",
-          "layout-shift",
-          "event"
-        ],
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
         "overflow": false,
         "postPaintCls": 0,
         "rawShifts": [],
@@ -1770,11 +1328,7 @@
         "interactionDurationMs": 16,
         "lastShift": 0,
         "lcpMs": 532,
-        "observed": [
-          "largest-contentful-paint",
-          "layout-shift",
-          "event"
-        ],
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
         "overflow": false,
         "postPaintCls": 0,
         "rawShifts": [],
@@ -1799,30 +1353,14 @@
         "first": {
           "at": "2026-11-03T13:09:33.042Z",
           "cpuCount": 12,
-          "loadAverage": [
-            121.90869140625,
-            98.27490234375,
-            80.74462890625
-          ],
-          "loadPerCpu": [
-            10.1590576171875,
-            8.1895751953125,
-            6.728719075520833
-          ]
+          "loadAverage": [121.90869140625, 98.27490234375, 80.74462890625],
+          "loadPerCpu": [10.1590576171875, 8.1895751953125, 6.728719075520833]
         },
         "last": {
           "at": "2026-11-03T13:10:12.080Z",
           "cpuCount": 12,
-          "loadAverage": [
-            78.908203125,
-            89.931640625,
-            78.47802734375
-          ],
-          "loadPerCpu": [
-            6.57568359375,
-            7.494303385416667,
-            6.539835611979167
-          ]
+          "loadAverage": [78.908203125, 89.931640625, 78.47802734375],
+          "loadPerCpu": [6.57568359375, 7.494303385416667, 6.539835611979167]
         },
         "maxLoadPerCpu": 10.1590576171875
       }
@@ -1838,11 +1376,7 @@
         "interactionDurationMs": 16,
         "lastShift": 0,
         "lcpMs": 1256,
-        "observed": [
-          "largest-contentful-paint",
-          "layout-shift",
-          "event"
-        ],
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
         "overflow": false,
         "postPaintCls": 0,
         "rawShifts": [],
@@ -1861,11 +1395,7 @@
         "interactionDurationMs": 16,
         "lastShift": 0,
         "lcpMs": 716,
-        "observed": [
-          "largest-contentful-paint",
-          "layout-shift",
-          "event"
-        ],
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
         "overflow": false,
         "postPaintCls": 0,
         "rawShifts": [],
@@ -1890,30 +1420,14 @@
         "first": {
           "at": "2026-11-03T13:09:33.042Z",
           "cpuCount": 12,
-          "loadAverage": [
-            121.90869140625,
-            98.27490234375,
-            80.74462890625
-          ],
-          "loadPerCpu": [
-            10.1590576171875,
-            8.1895751953125,
-            6.728719075520833
-          ]
+          "loadAverage": [121.90869140625, 98.27490234375, 80.74462890625],
+          "loadPerCpu": [10.1590576171875, 8.1895751953125, 6.728719075520833]
         },
         "last": {
           "at": "2026-11-03T13:10:12.080Z",
           "cpuCount": 12,
-          "loadAverage": [
-            78.908203125,
-            89.931640625,
-            78.47802734375
-          ],
-          "loadPerCpu": [
-            6.57568359375,
-            7.494303385416667,
-            6.539835611979167
-          ]
+          "loadAverage": [78.908203125, 89.931640625, 78.47802734375],
+          "loadPerCpu": [6.57568359375, 7.494303385416667, 6.539835611979167]
         },
         "maxLoadPerCpu": 10.1590576171875
       }
@@ -1923,28 +1437,24 @@
       "width": 1440,
       "height": 900,
       "host": {
-        "cls": 4.62962962962963e-05,
+        "cls": 4.62962962962963e-5,
         "firstPaintMs": 112,
         "imagesDecoded": false,
         "interactionDurationMs": null,
         "lastShift": 151.10000000009313,
         "lcpMs": 2168,
-        "observed": [
-          "largest-contentful-paint",
-          "layout-shift",
-          "event"
-        ],
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
         "overflow": false,
-        "postPaintCls": 4.62962962962963e-05,
+        "postPaintCls": 4.62962962962963e-5,
         "rawShifts": [
           {
             "hadRecentInput": false,
             "startTime": 151.10000000009313,
-            "value": 4.62962962962963e-05
+            "value": 4.62962962962963e-5
           }
         ],
         "sessionStart": 151.10000000009313,
-        "sessionValue": 4.62962962962963e-05,
+        "sessionValue": 4.62962962962963e-5,
         "timeOrigin": 1793711413738,
         "viewport": {
           "height": 900,
@@ -1958,11 +1468,7 @@
         "interactionDurationMs": 40,
         "lastShift": 0,
         "lcpMs": 792,
-        "observed": [
-          "largest-contentful-paint",
-          "layout-shift",
-          "event"
-        ],
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
         "overflow": false,
         "postPaintCls": 0,
         "rawShifts": [],
@@ -1987,30 +1493,14 @@
         "first": {
           "at": "2026-11-03T13:10:12.100Z",
           "cpuCount": 12,
-          "loadAverage": [
-            78.908203125,
-            89.931640625,
-            78.47802734375
-          ],
-          "loadPerCpu": [
-            6.57568359375,
-            7.494303385416667,
-            6.539835611979167
-          ]
+          "loadAverage": [78.908203125, 89.931640625, 78.47802734375],
+          "loadPerCpu": [6.57568359375, 7.494303385416667, 6.539835611979167]
         },
         "last": {
           "at": "2026-11-03T13:10:50.143Z",
           "cpuCount": 12,
-          "loadAverage": [
-            74.69287109375,
-            87.69921875,
-            78.19921875
-          ],
-          "loadPerCpu": [
-            6.224405924479167,
-            7.308268229166667,
-            6.5166015625
-          ]
+          "loadAverage": [74.69287109375, 87.69921875, 78.19921875],
+          "loadPerCpu": [6.224405924479167, 7.308268229166667, 6.5166015625]
         },
         "maxLoadPerCpu": 7.508219401041667
       }
@@ -2026,11 +1516,7 @@
         "interactionDurationMs": 16,
         "lastShift": 0,
         "lcpMs": 1244,
-        "observed": [
-          "largest-contentful-paint",
-          "layout-shift",
-          "event"
-        ],
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
         "overflow": false,
         "postPaintCls": 0,
         "rawShifts": [],
@@ -2049,11 +1535,7 @@
         "interactionDurationMs": 16,
         "lastShift": 0,
         "lcpMs": 536,
-        "observed": [
-          "largest-contentful-paint",
-          "layout-shift",
-          "event"
-        ],
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
         "overflow": false,
         "postPaintCls": 0,
         "rawShifts": [],
@@ -2078,30 +1560,14 @@
         "first": {
           "at": "2026-11-03T13:10:12.100Z",
           "cpuCount": 12,
-          "loadAverage": [
-            78.908203125,
-            89.931640625,
-            78.47802734375
-          ],
-          "loadPerCpu": [
-            6.57568359375,
-            7.494303385416667,
-            6.539835611979167
-          ]
+          "loadAverage": [78.908203125, 89.931640625, 78.47802734375],
+          "loadPerCpu": [6.57568359375, 7.494303385416667, 6.539835611979167]
         },
         "last": {
           "at": "2026-11-03T13:10:50.143Z",
           "cpuCount": 12,
-          "loadAverage": [
-            74.69287109375,
-            87.69921875,
-            78.19921875
-          ],
-          "loadPerCpu": [
-            6.224405924479167,
-            7.308268229166667,
-            6.5166015625
-          ]
+          "loadAverage": [74.69287109375, 87.69921875, 78.19921875],
+          "loadPerCpu": [6.224405924479167, 7.308268229166667, 6.5166015625]
         },
         "maxLoadPerCpu": 7.508219401041667
       }
@@ -2117,11 +1583,7 @@
         "interactionDurationMs": 16,
         "lastShift": 0,
         "lcpMs": 1832,
-        "observed": [
-          "largest-contentful-paint",
-          "layout-shift",
-          "event"
-        ],
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
         "overflow": false,
         "postPaintCls": 0,
         "rawShifts": [],
@@ -2140,11 +1602,7 @@
         "interactionDurationMs": 16,
         "lastShift": 0,
         "lcpMs": 588,
-        "observed": [
-          "largest-contentful-paint",
-          "layout-shift",
-          "event"
-        ],
+        "observed": ["largest-contentful-paint", "layout-shift", "event"],
         "overflow": false,
         "postPaintCls": 0,
         "rawShifts": [],
@@ -2169,30 +1627,14 @@
         "first": {
           "at": "2026-11-03T13:10:12.100Z",
           "cpuCount": 12,
-          "loadAverage": [
-            78.908203125,
-            89.931640625,
-            78.47802734375
-          ],
-          "loadPerCpu": [
-            6.57568359375,
-            7.494303385416667,
-            6.539835611979167
-          ]
+          "loadAverage": [78.908203125, 89.931640625, 78.47802734375],
+          "loadPerCpu": [6.57568359375, 7.494303385416667, 6.539835611979167]
         },
         "last": {
           "at": "2026-11-03T13:10:50.143Z",
           "cpuCount": 12,
-          "loadAverage": [
-            74.69287109375,
-            87.69921875,
-            78.19921875
-          ],
-          "loadPerCpu": [
-            6.224405924479167,
-            7.308268229166667,
-            6.5166015625
-          ]
+          "loadAverage": [74.69287109375, 87.69921875, 78.19921875],
+          "loadPerCpu": [6.224405924479167, 7.308268229166667, 6.5166015625]
         },
         "maxLoadPerCpu": 7.508219401041667
       }
@@ -2275,8 +1717,8 @@
       "samples": 3,
       "medianCompositeLcpMs": 1832,
       "nearestRankP75CompositeLcpMs": 2169.2,
-      "maxRawCls": 4.62962962962963e-05,
-      "maxPostPaintCls": 4.62962962962963e-05,
+      "maxRawCls": 4.62962962962963e-5,
+      "maxPostPaintCls": 4.62962962962963e-5,
       "allContaminated": true
     }
   ],

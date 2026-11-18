@@ -45,27 +45,6 @@ function run(binary, args, cwd, capture, timeoutMs, trim = true) {
   return capture ? (trim ? result.stdout.trim() : result.stdout) : '';
 }
 
-// deploy.sh exits 42 only when the live worker tree may be changed
-// but unrecorded (rollback failed, or the rollback landed with
-// unrecorded readers and a stuck barrier): the coordinator must hold
-// the release lock for reconciliation instead of auto-releasing it
-// for a clean retry.
-export const WORKER_UNRECONCILED_EXIT = 42;
-
-export function runWorkerDeploy(invoke) {
-  try {
-    return invoke();
-  } catch (error) {
-    // A signal death carries no position: the child may have died
-    // mid-flip, so hold even though a pre-flip kill is also caught
-    // (rare, and the operator confirms clean state before removing).
-    if (error && typeof error === 'object' && (error.status === WORKER_UNRECONCILED_EXIT || error.signal != null)) {
-      error.indeterminateDispatch = true;
-    }
-    throw error;
-  }
-}
-
 // Bind the subprocess helpers to a working directory (the release
 // entry point passes the repo root so git children resolve).
 export function createRunner(cwd) {

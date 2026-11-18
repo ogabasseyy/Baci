@@ -20,13 +20,13 @@
     "scope": "approved_pilot_hosts_and_complete_browser_automatic_traffic",
     "zeroDenominatorVerdict": "NOT_PROVEN"
   },
-  "originMainSha": "afa75c1fd0c739c11523039625e463781e15cbfa",
+  "originMainSha": "a3748a5acadc3f9418b8edaae8778e408877095f",
   "pilotCandidateHostnameSha256": "6ecb417105cfa291c7286367f438872a3bf9e3d11bd6d32383aaf2a3e7c39705",
   "pilotCandidateHostnames": [
     "baci-edge-pilot.usebaci.com"
   ],
-  "routeTreeSha256": "d64602eb1d41899946e4e661241b50f82fb2aa97327ed61870d0ce5bb6e9f2f3",
-  "routingProxyInputSha256": "58ec6ac89bffe8d4026e8d2d4c156910da86712859e56eba2918331f752577a4",
+  "routeTreeSha256": "a3838382e53168205144ed7d4869e2b84798afbb7e59076f1e6ba5d876083547",
+  "routingProxyInputSha256": "737ecfabb8d3c3e5736c6d921955f1492f3625aed4fee4dc360913e7dfe062e6",
   "rows": [
     {
       "decision": "origin_dynamic",
@@ -1167,6 +1167,19 @@
     },
     {
       "decision": "origin_dynamic",
+      "id": "api-route:storefront/black-friday/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/black-friday",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/black-friday/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
       "id": "api-route:storefront/cart/route.ts",
       "methods": [
         "GET",
@@ -1316,6 +1329,18 @@
       "routePattern": "/api/storefront/cart/session/revoke",
       "sourceKind": "api_route",
       "sourcePath": "apps/web/src/app/api/storefront/cart/session/revoke/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/chatwoot/cart/quantity/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/chatwoot/cart/quantity",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/chatwoot/cart/quantity/route.ts"
     },
     {
       "decision": "origin_dynamic",
@@ -1741,6 +1766,19 @@
     },
     {
       "decision": "origin_dynamic",
+      "id": "api-route:storefront/customer/wallet/piggyvest-activity/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/customer/wallet/piggyvest-activity",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/customer/wallet/piggyvest-activity/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
       "id": "api-route:storefront/customer/wallet/piggyvest-plan/route.ts",
       "methods": [
         "GET",
@@ -1968,6 +2006,19 @@
     },
     {
       "decision": "origin_dynamic",
+      "id": "api-route:storefront/imei-check/reports/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/imei-check/reports",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/imei-check/reports/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
       "id": "api-route:storefront/imei-check/[lookupId]/route.ts",
       "methods": [
         "GET",
@@ -1978,6 +2029,30 @@
       "routePattern": "/api/storefront/imei-check/{lookupId}",
       "sourceKind": "api_route",
       "sourcePath": "apps/web/src/app/api/storefront/imei-check/[lookupId]/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/imei-check/[lookupId]/wallet-pay/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/imei-check/{lookupId}/wallet-pay",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/imei-check/[lookupId]/wallet-pay/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/imei-check/[lookupId]/wallet-pin/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/imei-check/{lookupId}/wallet-pin",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/imei-check/[lookupId]/wallet-pin/route.ts"
     },
     {
       "decision": "origin_dynamic",
@@ -7202,6 +7277,18 @@
       "sourcePath": "apps/web/src/app/(storefront)/[slug]/(utility)/unlock-orders/page.tsx"
     },
     {
+      "decision": "origin_dynamic",
+      "reason": "request_state_or_origin_action_required",
+      "id": "storefront:black-friday/page.tsx",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "routePattern": "/black-friday",
+      "sourceKind": "storefront_entrypoint",
+      "sourcePath": "apps/web/src/app/(storefront)/[slug]/black-friday/page.tsx"
+    },
+    {
       "decision": "edge_redirect",
       "reason": "redirect_only_storefront_entrypoint",
       "id": "storefront:favicon.ico/route.ts",
@@ -8702,6 +8789,22 @@
     },
     {
       "decision": "origin_dynamic",
+      "reason": "request_state_or_origin_action_required",
+      "id": "storefront:black-friday/page.tsx:slug-prefixed",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "routePattern": "/{storefrontIdentifier}/black-friday",
+      "sourceKind": "storefront_entrypoint",
+      "sourcePath": "apps/web/src/app/(storefront)/[slug]/black-friday/page.tsx",
+      "hostCondition": {
+        "hostKind": "platform_root_domain",
+        "precedence": "before_path_decision"
+      }
+    },
+    {
+      "decision": "origin_dynamic",
       "id": "storefront:favicon.ico/route.ts:options:slug-prefixed",
       "methods": [
         "OPTIONS"
@@ -9331,5 +9434,5 @@
     }
   ],
   "schemaVersion": 6,
-  "inventorySha256": "33e96ab020869669d2f94c3ff81203f4a7618021fc6571279278355cbf2fa664"
+  "inventorySha256": "e70ef3478932002d72a027d07d155792cdffe99cb702fdd7d87b8b1398d865c6"
 }

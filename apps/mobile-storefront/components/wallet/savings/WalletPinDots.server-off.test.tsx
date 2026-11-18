@@ -42,4 +42,28 @@ describe('WalletPinDots', () => {
     expect(box).toMatchObject({ flexShrink: 1, maxWidth: 44 });
     expect(box.width).toBeUndefined();
   });
+
+  it('shows four boxes up to four digits, with no empty extra box', () => {
+    for (const digits of [0, 4]) {
+      const view = render(
+        <WalletPinDots colors={Colors.light} label="PIN" length={digits} />
+      );
+      expect(
+        screen.getByLabelText(`PIN, ${digits} of 6 digits entered`).children
+      ).toHaveLength(4);
+      view.unmount();
+    }
+  });
+
+  it('grows only as a fifth or sixth digit is typed', () => {
+    for (const digits of [5, 6]) {
+      const view = render(
+        <WalletPinDots colors={Colors.light} label="PIN" length={digits} />
+      );
+      expect(
+        screen.getByLabelText(`PIN, ${digits} of 6 digits entered`).children
+      ).toHaveLength(digits);
+      view.unmount();
+    }
+  });
 });

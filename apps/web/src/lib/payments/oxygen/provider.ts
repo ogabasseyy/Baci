@@ -15,6 +15,7 @@ import {
   oxygenProviderOrigins,
 } from './runtime-configuration';
 import type { OxygenRuntimeRpc } from './runtime-service';
+import { oxygenStatementLinkSentCode } from './statement-linking';
 import { OxygenTransportError } from './transport';
 
 const paths = {
@@ -46,6 +47,7 @@ export class OxygenProviderFailure extends Error {
     public readonly code?:
       | typeof oxygenActiveLoanCode
       | typeof oxygenStatementRequiredCode
+      | typeof oxygenStatementLinkSentCode
       | typeof oxygenInvalidOtpCode,
     public readonly diagnostic?: OxygenProviderDiagnostic
   ) {
@@ -133,7 +135,8 @@ export function createOxygenProvider(deps: {
         const observe = (
           capture: OxygenObservedResponse['capture'],
           body?: unknown,
-          failure?: OxygenObservedResponse['failure']
+          failure?: OxygenObservedResponse['failure'],
+          eligibilityRawBytes?: Uint8Array
         ) => {
           lastResponse = {
             operation,
@@ -147,11 +150,15 @@ export function createOxygenProvider(deps: {
           return deps.observe?.({
             ...lastResponse,
             body,
+            ...(operation === 'eligibility' && eligibilityRawBytes
+              ? { eligibilityRawBytes }
+              : {}),
             ...(failure ? { failure } : {}),
           });
         };
         if (!response.ok) {
           let details: string[] = [];
+          let eligibilityRawBytes: Uint8Array | undefined;
           const diagnostic = await readOxygenFailureDiagnostic(
             response,
             operation,
@@ -160,6 +167,9 @@ export function createOxygenProvider(deps: {
             startedAt,
             (captured) => {
               details = captured;
+            },
+            (captured) => {
+              if (operation === 'eligibility') eligibilityRawBytes = captured;
             }
           );
           await observe(
@@ -175,7 +185,8 @@ export function createOxygenProvider(deps: {
               providerMessage: diagnostic.providerMessage,
               providerCode: diagnostic.providerCode,
               details,
-            }
+            },
+            eligibilityRawBytes
           );
           const statementRequired =
             operation === 'book' &&
@@ -183,6 +194,16 @@ export function createOxygenProvider(deps: {
             diagnostic.outcome === 'rejected' &&
             diagnostic.providerMessage ===
               'User does not have a valid statement and user has option to add another bank';
+          const statementLinkSent =
+            operation === 'eligibility' &&
+            diagnostic.httpStatus === 400 &&
+            diagnostic.outcome === 'rejected' &&
+            diagnostic.providerMessage
+              ?.trim()
+              .replace(/\s+/g, ' ')
+              .replace(/[.!?]+$/, '')
+              .toLowerCase() ===
+              'we have sent the account linking details to link your account to your email';
           const activeLoan =
             operation === 'book' &&
             diagnostic.httpStatus === 400 &&
@@ -201,9 +222,11 @@ export function createOxygenProvider(deps: {
               ? oxygenActiveLoanCode
               : statementRequired
                 ? oxygenStatementRequiredCode
-                : invalidOtp
-                  ? oxygenInvalidOtpCode
-                  : undefined,
+                : statementLinkSent
+                  ? oxygenStatementLinkSentCode
+                  : invalidOtp
+                    ? oxygenInvalidOtpCode
+                    : undefined,
             diagnostic
           );
         }
@@ -231,14 +254,15 @@ export function createOxygenProvider(deps: {
           }
           chunks.push(next.value);
         }
+        const bytes = Buffer.concat(chunks);
         let raw: unknown;
         try {
-          raw = JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
+          raw = JSON.parse(bytes.toString('utf8')) as unknown;
         } catch {
-          await observe('non_json');
+          await observe('non_json', undefined, undefined, bytes);
           throw new Error('Invalid response');
         }
-        await observe('parsed', raw);
+        await observe('parsed', raw, undefined, bytes);
         return raw;
       } catch (error) {
         if (error instanceof OxygenProviderFailure) throw error;

@@ -23,10 +23,7 @@
       }
     ],
     "assets": [],
-    "capabilities": [
-      "catalog.read",
-      "navigation"
-    ]
+    "capabilities": ["catalog.read", "navigation"]
   },
   "sourceDigest": "6a51eaad6432864abc9b9d1807659d1a9f6bcc84aa87aaaacc2ad116389f1f97",
   "buildDigest": "8345b16ba65286462950977fddf6d42179a0056053a7a7086fa59427323d75a1",

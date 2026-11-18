@@ -37,6 +37,29 @@ const snapshot: OxygenRuntimeSnapshot = {
   settlementEnabled: false,
 };
 
+it('explains that Oxygen emailed bank-statement linking instructions', () => {
+  render(
+    <OxygenWorkflowError
+      snapshot={snapshot}
+      action="refresh_eligibility"
+      activeLoan={false}
+      error="Oxygen sent bank-statement linking instructions to the applicant’s email. Check your email, then return here to check your payment options. Your application is saved."
+      busy={false}
+      submit={vi.fn()}
+      refresh={vi.fn()}
+    />
+  );
+  expect(
+    screen.getByRole('heading', { name: 'Check your email from Oxygen' })
+  ).toBeVisible();
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    'bank-statement linking instructions'
+  );
+  expect(
+    screen.getByRole('button', { name: 'Check payment options again' })
+  ).toBeEnabled();
+});
+
 it('retries a failed saved-plan offer refresh without changing the booking', () => {
   const submit = vi.fn().mockResolvedValue(false);
   render(

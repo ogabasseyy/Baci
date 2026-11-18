@@ -18,7 +18,7 @@ $$;
 CREATE TABLE public.orders (
   id uuid PRIMARY KEY, merchant_id uuid NOT NULL, customer_id uuid,
   payment_method text, payment_status text, created_at timestamptz NOT NULL,
-  updated_at timestamptz,
+  updated_at timestamptz, total numeric DEFAULT 10000, currency text DEFAULT 'NGN',
   cancelled_at timestamptz, source text, recorded_by_user_id uuid,
   external_source text, import_job_id uuid
 );

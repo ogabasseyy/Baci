@@ -12,7 +12,7 @@ categories, activity times, and customer binding only for customer-action rows.
 Contact and order details are fetched separately through orders RLS with an
 explicit merchant filter.
 
-The ninth migration admits failed or expired Oxygen orders regardless of
+The ninth and tenth migrations admit failed, expired or BNPL-pending Oxygen orders regardless of
 provenance, including staff-created and imported orders without a workflow.
 They remain `needs_review`, with no exposed customer binding. The existing
 merchant, cancellation and 90-day guards still apply. Unpaid manual orders
@@ -21,7 +21,10 @@ without a workflow remain excluded.
 Orders currently marked Oxygen retain their own RPC capacity budget. The
 standard source excludes that payment method so Oxygen failures cannot displace
 standard follow-ups. The RPC can also surface booked-loan conflicts after a
-payment-method change; overlapping rows are deduplicated by order ID. Ordinary standard-source orders retain email consolidation, with
+payment-method change. For an overlapping order ID, the complete Oxygen row
+wins: its review classification and order-detail navigation take precedence over
+generic gateway text and aggregated customer attempts, which do not establish
+the loan state. Ordinary standard-source orders retain email consolidation, with
 guests kept by order. The merge deduplicates by order ID and keeps distinct
 Oxygen orders even when customer email matches. The badge counts displayed
 queue entries, not unique customers.
@@ -30,7 +33,12 @@ Visible order conflicts downgrade active categories to `needs_review`: missing
 or nonpositive amount, non-NGN currency, missing customer, non-unpaid or
 cancelled state, or changed payment method. Customer-action rows additionally
 require the candidate customer binding to match the current order. Runtime
-checks remain authoritative when a customer resumes.
+checks remain authoritative when a customer resumes. The tenth migration
+applies the same order eligibility rules before assigning active/review capacity;
+client checks also remain necessary for changes between the two reads.
+BNPL-pending, failed and expired payment outcomes retain immediate review
+coverage across provenance; pending/unpaid manual orders without a workflow
+remain excluded.
 
 ## Capacity and display ordering
 
@@ -59,9 +67,9 @@ receive an array through each hook's `data` property.
 
 ## Rollout and contacts
 
-Apply all nine follow-up migrations in timestamp order, starting with
+Apply all ten follow-up migrations in timestamp order, starting with
 `20261117185800_oxygen_follow_up_index_retry.sql` and ending with
-`20261118141000_oxygen_follow_up_failed_orphans.sql`, before shipping the app.
+`20261118154500_oxygen_follow_up_eligibility_capacity.sql`, before shipping the app.
 An older RPC without customer binding fails safely to review-only rather than
 treating an unknown binding as permission to recommend customer continuation.
 

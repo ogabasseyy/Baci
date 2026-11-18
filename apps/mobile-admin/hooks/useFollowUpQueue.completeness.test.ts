@@ -2,6 +2,7 @@
 import { renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { oxygenProcessingOrder } from '@/test/fixtures/oxygen-follow-up';
+import type { FailedOrder } from './useFailedOrders';
 import { useFollowUpQueue } from './useFollowUpQueue';
 
 const mocks = vi.hoisted(() => ({ standard: vi.fn(), oxygen: vi.fn() }));
@@ -53,11 +54,24 @@ describe('merged follow-up completeness', () => {
     expect(queue.current.failedOrders).toEqual([fallback]);
     expect(queue.current.isFailedOrdersError).toBe(true);
   });
-  it('lets the provider projection refine an overlapping standard order without duplicates', () => {
+  it('keeps the Oxygen review row authoritative over generic gateway context', () => {
+    mocks.standard.mockReturnValue({
+      ...result,
+      data: [
+        {
+          ...fallback,
+          attempt_count: 3,
+          gateway_response: { message: 'Declined by ordinary gateway' },
+        } satisfies FailedOrder,
+      ],
+    });
     const reviewed = {
-      ...fallback,
+      ...oxygenProcessingOrder,
+      payment_method: 'card',
+      payment_status: 'failed' as const,
+      attempt_count: 1,
       oxygen_follow_up_status: 'needs_review' as const,
-    };
+    } satisfies FailedOrder;
     mocks.oxygen.mockReturnValue({ ...result, data: [reviewed] });
     const { result: queue } = renderHook(() => useFollowUpQueue());
     expect(queue.current.failedOrders).toEqual([reviewed]);

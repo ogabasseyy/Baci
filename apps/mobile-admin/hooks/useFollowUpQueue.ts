@@ -46,6 +46,8 @@ export function useFollowUpQueue() {
   } = useOxygenFollowUps();
   // The badge counts queue entries, not unique customers. Keep distinct Oxygen
   // orders visible even when another source has the same customer email.
+  // Oxygen replaces the entire overlapping row: booked-loan conflicts need
+  // order review, not generic gateway text or aggregated customer attempts.
   const byOrderId = new Map(
     [...(standardOrders ?? []), ...(oxygenOrders ?? [])].map((order) => [
       order.id,

@@ -5,6 +5,12 @@ SELECT ('71000000-0000-4000-8000-' || lpad(n::text,12,'0'))::uuid,
   '20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001',
   'oxygen', 'failed', 'manual', now()-interval '1 minute'
 FROM generate_series(1,260) n;
+-- Newer but ineligible checkout rows must use review-only capacity.
+INSERT INTO public.orders (id, merchant_id, customer_id, payment_method, payment_status, total, currency, created_at)
+SELECT ('72000000-0000-4000-8000-' || lpad(n::text,12,'0'))::uuid,
+  '20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001',
+  'oxygen', 'unpaid', 0, 'NGN', now()-interval '40 minutes'
+FROM generate_series(1,260) n;
 SET ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub','10000000-0000-4000-8000-000000000001',true);
 DO $$ BEGIN

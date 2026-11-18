@@ -36,7 +36,8 @@ const SENSITIVE_LONG_GROUPED_NUMBER_PATTERN =
 /**
  * A 3-3-4 grouped local number with no prefix, e.g. "415 555 0132" or
  * "(415) 555-0132". Other grouped references (e.g. "1234 5678 99") stay
- * readable.
+ * readable. Trade-off: a non-phone reference shaped 3-3-4 is hidden too;
+ * losing a debug detail is accepted over persisting a customer number.
  */
 const SENSITIVE_THREE_THREE_FOUR_PATTERN =
   /(?<!\d)\(?\d{3}\)?[\s./_-]+\d{3}[\s./_-]+\d{4}(?!\d)/g;

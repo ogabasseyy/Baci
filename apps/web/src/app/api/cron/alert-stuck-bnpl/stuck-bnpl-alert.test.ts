@@ -1,11 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildStuckBnplAlert,
-  getStuckAgeDays,
-  hasConfirmationSignal,
-  hasProviderCheckoutEvidence,
   type StuckBnplOrderRow,
-  shouldAlertMerchant,
 } from './stuck-bnpl-alert';
 
 const NOW = new Date('2026-07-04T08:00:00.000Z');
@@ -23,75 +19,6 @@ function order(overrides: Partial<StuckBnplOrderRow> = {}): StuckBnplOrderRow {
     ...overrides,
   };
 }
-
-describe('stuck BNPL signals', () => {
-  it('treats a session reference as checkout evidence but not confirmation', () => {
-    const sessionOnly = order();
-
-    expect(hasProviderCheckoutEvidence(sessionOnly.notes)).toBe(true);
-    expect(hasConfirmationSignal(sessionOnly)).toBe(false);
-    expect(hasProviderCheckoutEvidence(null)).toBe(false);
-  });
-
-  it('treats provider approval or reported completion as confirmation', () => {
-    expect(
-      hasConfirmationSignal(order({ payment_status: 'bnpl_approved' }))
-    ).toBe(true);
-    expect(
-      hasConfirmationSignal(
-        order({
-          notes:
-            '{"creditDirectSessionId":"session-a","creditDirectClientCompletedSessionId":"session-a","creditDirectClientCompletedAt":"2026-07-03"}',
-        })
-      )
-    ).toBe(true);
-  });
-
-  it('ignores completion from a superseded Credit Direct session', () => {
-    expect(
-      hasConfirmationSignal(
-        order({
-          notes: JSON.stringify({
-            creditDirectSessionId: 'session-b',
-            creditDirectClientCompletedSessionId: 'session-a',
-            creditDirectClientCompletedAt: '2026-07-03',
-          }),
-        })
-      )
-    ).toBe(false);
-  });
-
-  it('mutes session-only Credit Direct orders unless a payment progressed', () => {
-    expect(shouldAlertMerchant(order(), false)).toBe(false);
-    expect(shouldAlertMerchant(order(), true)).toBe(true);
-  });
-
-  it('keeps alerting for providers without a completion marker', () => {
-    expect(shouldAlertMerchant(order({ payment_method: 'klump' }), false)).toBe(
-      true
-    );
-    expect(
-      shouldAlertMerchant(order({ payment_method: 'credpal' }), false)
-    ).toBe(true);
-    expect(shouldAlertMerchant(order({ payment_method: null }), false)).toBe(
-      false
-    );
-    expect(
-      shouldAlertMerchant(order({ payment_method: 'unknown_bnpl' }), false)
-    ).toBe(false);
-  });
-});
-
-describe('getStuckAgeDays', () => {
-  it('counts whole days and never goes negative', () => {
-    expect(getStuckAgeDays('2026-07-01T07:00:00.000Z', NOW)).toBe(3);
-    expect(getStuckAgeDays('2026-07-05T00:00:00.000Z', NOW)).toBe(0);
-  });
-
-  it('returns 0 for an invalid timestamp', () => {
-    expect(getStuckAgeDays('not-a-date', NOW)).toBe(0);
-  });
-});
 
 describe('buildStuckBnplAlert', () => {
   it('names the order, provider and action for a single order', () => {
@@ -143,6 +70,16 @@ describe('buildStuckBnplAlert', () => {
     const alert = buildStuckBnplAlert([order({ order_number: null })], NOW);
 
     expect(alert.body).toContain('Order #order-1-');
+  });
+
+  it.each([
+    ['2026-07-01T07:00:00.000Z', 3],
+    ['2026-07-05T00:00:00.000Z', 0],
+    ['not-a-date', 0],
+  ])('reports the age of %s as %s days', (updated_at, days) => {
+    expect(
+      buildStuckBnplAlert([order({ updated_at })], NOW).oldestAgeDays
+    ).toBe(days);
   });
 
   it('rejects an empty order list', () => {

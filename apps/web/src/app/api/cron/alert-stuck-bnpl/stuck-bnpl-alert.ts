@@ -1,5 +1,4 @@
 import { formatCurrency } from '@/lib/expo-push';
-import { readCreditDirectAttempt } from './credit-direct-attempt';
 
 export interface StuckBnplOrderRow {
   id: string;
@@ -18,52 +17,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   klump: 'Klump',
 };
 
-export function hasProviderTransactionReference(notes: string | null) {
-  return Boolean(notes && /transactionid/i.test(notes));
-}
-
-export function hasProviderCheckoutEvidence(notes: string | null) {
-  const attempt = readCreditDirectAttempt(notes);
-  return (
-    hasProviderTransactionReference(notes) ||
-    attempt.reference !== null ||
-    attempt.hasCompletionTimestamp
-  );
-}
-
-// A session/transaction reference only proves the customer OPENED the
-// provider's application. In production ~99% of those are abandoned and are
-// cancelled by cleanup-orders at 72h, so they must not page the merchant.
-// These are the signals that the customer actually got through the provider:
-// the provider approved the loan, or the checkout reported completion.
-// (A progressed transactions row is the third signal; the route checks it.)
-export function hasConfirmationSignal(order: StuckBnplOrderRow) {
-  return (
-    order.payment_status === 'bnpl_approved' ||
-    (order.payment_method === 'credit_direct' &&
-      readCreditDirectAttempt(order.notes).hasCurrentCompletion)
-  );
-}
-
-// Only Credit Direct reports checkout completion, so only its session-only
-// orders can be told apart from real unconfirmed payments. Klump and CredPal
-// have no such marker: muting them would hide a lost webhook entirely, so
-// they keep paging on the scan's provider-evidence rule.
-const PROVIDERS_WITHOUT_COMPLETION_MARKER = new Set(['klump', 'credpal']);
-
-export function shouldAlertMerchant(
-  order: StuckBnplOrderRow,
-  hasProgressedTransaction: boolean
-) {
-  return (
-    hasConfirmationSignal(order) ||
-    hasProgressedTransaction ||
-    (order.payment_method !== null &&
-      PROVIDERS_WITHOUT_COMPLETION_MARKER.has(order.payment_method))
-  );
-}
-
-export function getStuckAgeDays(lastMovementAt: string, now: Date) {
+function getStuckAgeDays(lastMovementAt: string, now: Date) {
   const lastMovement = new Date(lastMovementAt).getTime();
   if (!Number.isFinite(lastMovement)) return 0;
   return Math.max(0, Math.floor((now.getTime() - lastMovement) / 86_400_000));

@@ -5,13 +5,10 @@ import { notifyMerchant } from '@/lib/expo-push';
 import { logger } from '@/lib/logger';
 import { fileStuckCreditDirectReviews } from '@/lib/payments/file-stuck-credit-direct-review';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { readCreditDirectAttempt } from './credit-direct-attempt';
+import { getStuckBnplSignals } from './get-stuck-bnpl-signals';
 import {
   buildStuckBnplAlert,
-  hasConfirmationSignal,
-  hasProviderCheckoutEvidence,
   type StuckBnplOrderRow,
-  shouldAlertMerchant,
 } from './stuck-bnpl-alert';
 import { STUCK_BNPL_CONFIG } from './stuck-bnpl-config';
 
@@ -84,10 +81,13 @@ export async function GET(request: NextRequest) {
     // pending transaction row before the customer even opens the provider
     // popup, so treating those as evidence would re-admit plain abandoned
     // carts.
+    const signalsByOrderId = new Map(
+      scannedOrders.map((order) => [order.id, getStuckBnplSignals(order)])
+    );
     const evidenceCandidates = scannedOrders.filter(
       (order) =>
         STATUSES_REQUIRING_PROVIDER_EVIDENCE.has(order.payment_status || '') &&
-        !hasProviderCheckoutEvidence(order.notes)
+        !signalsByOrderId.get(order.id)?.hasCheckoutEvidence
     );
     const orderIdsWithTransactionEvidence = new Set<string>();
     const transactionEvidenceReferences = new Map<string, string>();
@@ -95,12 +95,9 @@ export async function GET(request: NextRequest) {
     // Orders with no approval/completion signal get one more chance to show
     // progress through a transactions row that moved past 'pending'.
     const transactionLookupOrders = scannedOrders.filter(
-      (order) => !hasConfirmationSignal(order)
+      (order) => !signalsByOrderId.get(order.id)?.hasConfirmation
     );
     if (transactionLookupOrders.length > 0) {
-      const ordersById = new Map(
-        transactionLookupOrders.map((order) => [order.id, order])
-      );
       const { data: transactionRows, error: transactionError } = await supabase
         .from('transactions')
         .select('order_id, status, gateway, gateway_reference')
@@ -116,6 +113,7 @@ export async function GET(request: NextRequest) {
           error: transactionError,
         });
       } else {
+        let unknownGatewayCount = 0;
         for (const row of (transactionRows ?? []) as Array<{
           gateway: string | null;
           gateway_reference: string | null;
@@ -125,23 +123,23 @@ export async function GET(request: NextRequest) {
           if (row.status !== 'processing' && row.status !== 'completed') {
             continue;
           }
-          const order = ordersById.get(row.order_id);
-          if (
-            !order ||
-            !row.gateway ||
-            row.gateway.trim().toLowerCase() !== order.payment_method
-          )
+          const signals = signalsByOrderId.get(row.order_id);
+          const gateway = row.gateway?.trim().toLowerCase();
+          if (!gateway) {
+            unknownGatewayCount++;
             continue;
+          }
+          if (!signals || gateway !== signals.provider) continue;
 
           const reference = row.gateway_reference?.trim();
-          if (order.payment_method === 'credit_direct') {
-            const attempt = readCreditDirectAttempt(order.notes);
-            if (
-              !reference ||
+          const { attempt } = signals;
+          if (
+            gateway === 'credit_direct' &&
+            (!reference ||
               attempt.supersededReferences.includes(reference) ||
-              (attempt.reference !== null && reference !== attempt.reference)
-            )
-              continue;
+              (attempt.reference !== null && reference !== attempt.reference))
+          ) {
+            continue;
           }
 
           orderIdsWithTransactionEvidence.add(row.order_id);
@@ -149,19 +147,28 @@ export async function GET(request: NextRequest) {
             transactionEvidenceReferences.set(row.order_id, reference);
           }
         }
+        if (unknownGatewayCount > 0) {
+          logger.warn({
+            message:
+              'Stuck-BNPL scan ignored progressed transactions without a gateway',
+            unknownGatewayCount,
+          });
+        }
       }
     }
 
     const orders = scannedOrders.filter(
       (order) =>
         !STATUSES_REQUIRING_PROVIDER_EVIDENCE.has(order.payment_status || '') ||
-        hasProviderCheckoutEvidence(order.notes) ||
+        signalsByOrderId.get(order.id)?.hasCheckoutEvidence ||
         orderIdsWithTransactionEvidence.has(order.id)
     );
 
     const reviewFailures = await fileStuckCreditDirectReviews(
       supabase,
-      orders.filter((order) => order.payment_method === 'credit_direct'),
+      orders.filter(
+        (order) => signalsByOrderId.get(order.id)?.provider === 'credit_direct'
+      ),
       transactionEvidenceReferences
     );
 
@@ -184,8 +191,10 @@ export async function GET(request: NextRequest) {
     // Page merchants only for orders that show the customer got through the
     // provider. Session-only Credit Direct orders stay in the ops review
     // queue above but are overwhelmingly abandoned applications.
-    const alertOrders = orders.filter((order) =>
-      shouldAlertMerchant(order, orderIdsWithTransactionEvidence.has(order.id))
+    const alertOrders = orders.filter(
+      (order) =>
+        signalsByOrderId.get(order.id)?.shouldAlert ||
+        orderIdsWithTransactionEvidence.has(order.id)
     );
     const sessionOnlyOrders = orders.length - alertOrders.length;
     if (sessionOnlyOrders > 0) {

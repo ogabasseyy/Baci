@@ -495,11 +495,13 @@ describe('GET /api/cron/alert-stuck-bnpl', () => {
     ['credit_direct', 'old-txn', false],
     ['credit_direct', 'active-session', true],
     [' Credit_Direct ', 'active-session', true],
+    [null, 'active-session', false],
   ])('checks progressed %s evidence for the active attempt (%s)', async (gateway, reference, matches) => {
     mocks.limit.mockResolvedValue({
       data: [
         stuckOrder({
           id: 'order-1',
+          payment_method: ' Credit_Direct ',
           notes: JSON.stringify({
             creditDirectSessionId: 'active-session',
             creditDirectSupersededReferences: ['old-txn'],
@@ -522,6 +524,11 @@ describe('GET /api/cron/alert-stuck-bnpl', () => {
     const response = await GET(createCronRequest());
     expect(response.status).toBe(200);
     expect(mocks.notifyMerchant).toHaveBeenCalledTimes(matches ? 1 : 0);
+    if (gateway === null) {
+      expect(mocks.loggerWarn).toHaveBeenCalledWith(
+        expect.objectContaining({ unknownGatewayCount: 1 })
+      );
+    }
   });
 
   it('keeps an unbound legacy completion in operator review without alerting', async () => {

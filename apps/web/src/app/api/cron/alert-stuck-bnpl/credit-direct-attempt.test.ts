@@ -14,6 +14,27 @@ describe('readCreditDirectAttempt', () => {
     expect(attempt.supersededReferences).toEqual(['Txn-A']);
   });
 
+  it.each(['{broken', 'null', '[]'])('ignores non-object notes %s', (notes) => {
+    expect(readCreditDirectAttempt(notes)).toEqual({
+      reference: null,
+      supersededReferences: [],
+      hasCompletionTimestamp: false,
+      hasCurrentCompletion: false,
+    });
+  });
+
+  it('reads the legacy transaction key and matches its completed reference', () => {
+    expect(
+      readCreditDirectAttempt(
+        JSON.stringify({
+          credit_directTransactionId: ' Legacy-Txn ',
+          creditDirectClientCompletedTransactionId: 'Legacy-Txn',
+          creditDirectClientCompletedAt: '2026-07-01T00:01:00.000Z',
+        })
+      )
+    ).toMatchObject({ reference: 'Legacy-Txn', hasCurrentCompletion: true });
+  });
+
   it('retains a valid legacy timestamp without confirming an active attempt', () => {
     const attempt = readCreditDirectAttempt(
       JSON.stringify({

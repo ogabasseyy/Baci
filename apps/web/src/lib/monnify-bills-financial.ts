@@ -20,6 +20,7 @@ import {
 } from './monnify-bills-shared';
 import { classifyMonnifyBillStatus } from './monnify-bills-status';
 import { isMonnifyDefiniteBusinessRefusal } from './monnify-business-refusal';
+import { readMonnifyResponseCode } from './monnify-response-code';
 
 export async function verifyBillCustomer(
   _billerCode: string,
@@ -137,6 +138,7 @@ export async function purchaseBill(
           rawMessage,
           responseCode: parsedEnvelope.responseCode,
         }),
+        providerResponseCode: readMonnifyResponseCode(parsedEnvelope),
       };
     }
 
@@ -190,6 +192,7 @@ export async function purchaseBill(
         message:
           'Monnify rejected the bill payment request. Please verify the details and try again.',
         providerErrorDetail: error.diagnosticMessage,
+        providerResponseCode: error.responseCode,
         status: 'failed',
         amount,
         // A refusal Monnify gave before vending: a known refusal (the amount

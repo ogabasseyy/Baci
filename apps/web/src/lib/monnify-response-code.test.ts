@@ -1,0 +1,30 @@
+import { describe, expect, it } from 'vitest';
+import { readMonnifyResponseCode } from './monnify-response-code';
+
+describe('readMonnifyResponseCode', () => {
+  it.each([
+    [{ responseCode: '99' }, '99'],
+    [{ responseCode: 99 }, '99'],
+    [{ responseCode: ' D02 ' }, 'D02'],
+    [{ responseCode: 'MP_001' }, 'MP_001'],
+  ])('reads the code from %j', (answer, expected) => {
+    expect(readMonnifyResponseCode(answer)).toBe(expected);
+  });
+
+  it.each([
+    null,
+    'Insufficient funds',
+    [],
+    {},
+    { responseCode: null },
+    { responseCode: true },
+    { responseCode: '' },
+    { responseCode: '0803 123 4567' },
+    { responseCode: '08031234567' },
+    { responseCode: 8031234567 },
+    { responseCode: 'Bearer abcdefghijklmnopqrstuvwxyz' },
+    { responseBody: { responseCode: '99' } },
+  ])('returns undefined for %j', (answer) => {
+    expect(readMonnifyResponseCode(answer)).toBeUndefined();
+  });
+});

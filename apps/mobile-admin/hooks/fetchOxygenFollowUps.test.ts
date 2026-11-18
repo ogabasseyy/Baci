@@ -24,10 +24,11 @@ const candidate = {
 const order = {
   id: orderId,
   order_number: 'ORD-1',
-  customer_id: null,
+  customer_id: '30000000-0000-4000-8000-000000000001',
   customer_name: 'Ada',
   customer_email: 'ada@example.com',
   customer_phone: null,
+  currency: 'NGN',
   total: 10000,
   payment_status: 'unpaid',
   payment_method: 'oxygen',
@@ -207,7 +208,7 @@ describe('Oxygen follow-up fetch', () => {
         {
           ...candidate,
           follow_up_status: 'customer_action',
-          order_customer_id: null,
+          order_customer_id: order.customer_id,
         },
       ],
       error: null,

@@ -1,3 +1,4 @@
+import { normalizeStoredE164Phone } from '@baci/shared';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
@@ -25,7 +26,19 @@ export function FollowUpOrderCard({
   const displayName = item.customer_name || 'Guest';
   const customerPhone = item.customer_phone?.trim() || null;
   const phoneDigits = customerPhone?.replace(/\D/g, '') || '';
-  const hasContactPhone = phoneDigits.length >= 4;
+  // Raw order phones have no guaranteed country code; preserve national calls.
+  const hasInternationalPrefix =
+    customerPhone?.startsWith('+') || customerPhone?.startsWith('00');
+  const whatsAppPhone = hasInternationalPrefix
+    ? normalizeStoredE164Phone(
+        phoneDigits.startsWith('00') ? phoneDigits.slice(2) : phoneDigits
+      )
+    : null;
+  const callPhone = hasInternationalPrefix
+    ? whatsAppPhone && `+${whatsAppPhone}`
+    : /^(?!0+$)\d{8,15}$/.test(phoneDigits)
+      ? phoneDigits
+      : null;
   const customerId = item.oxygen_follow_up_status ? null : item.customer_id;
   const handlePress = () => {
     if (customerId) {
@@ -94,49 +107,47 @@ export function FollowUpOrderCard({
       </View>
 
       <View style={styles.actionRow}>
-        {hasContactPhone ? (
-          <>
-            <Pressable
-              style={[
-                styles.miniActionButton,
-                {
-                  backgroundColor: colors.successLight,
-                  minWidth: 44,
-                  minHeight: 44,
-                },
-              ]}
-              onPress={(e) => {
-                e.stopPropagation();
-                void Linking.openURL(`https://wa.me/${phoneDigits}`);
-              }}
-              accessibilityLabel={`Message ${displayName} on WhatsApp`}
-              accessibilityRole="button"
-              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-            >
-              <Ionicons name="logo-whatsapp" size={16} color={colors.success} />
-            </Pressable>
-            <Pressable
-              style={[
-                styles.miniActionButton,
-                {
-                  backgroundColor: colors.backgroundLight,
-                  minWidth: 44,
-                  minHeight: 44,
-                },
-              ]}
-              onPress={(e) => {
-                e.stopPropagation();
-                void Linking.openURL(
-                  `tel:${customerPhone?.startsWith('+') ? '+' : ''}${phoneDigits}`
-                );
-              }}
-              accessibilityLabel={`Call ${displayName}`}
-              accessibilityRole="button"
-              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-            >
-              <Ionicons name="call" size={16} color={colors.textSecondary} />
-            </Pressable>
-          </>
+        {whatsAppPhone ? (
+          <Pressable
+            style={[
+              styles.miniActionButton,
+              {
+                backgroundColor: colors.successLight,
+                minWidth: 44,
+                minHeight: 44,
+              },
+            ]}
+            onPress={(e) => {
+              e.stopPropagation();
+              void Linking.openURL(`https://wa.me/${whatsAppPhone}`);
+            }}
+            accessibilityLabel={`Message ${displayName} on WhatsApp`}
+            accessibilityRole="button"
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+          >
+            <Ionicons name="logo-whatsapp" size={16} color={colors.success} />
+          </Pressable>
+        ) : null}
+        {callPhone ? (
+          <Pressable
+            style={[
+              styles.miniActionButton,
+              {
+                backgroundColor: colors.backgroundLight,
+                minWidth: 44,
+                minHeight: 44,
+              },
+            ]}
+            onPress={(e) => {
+              e.stopPropagation();
+              void Linking.openURL(`tel:${callPhone}`);
+            }}
+            accessibilityLabel={`Call ${displayName}`}
+            accessibilityRole="button"
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+          >
+            <Ionicons name="call" size={16} color={colors.textSecondary} />
+          </Pressable>
         ) : null}
         {item.customer_email ? (
           <Pressable

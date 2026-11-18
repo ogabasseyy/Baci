@@ -54,7 +54,7 @@ export async function fetchOxygenFollowUps(
       supabase
         .from('orders')
         .select(
-          'id,order_number,customer_id,customer_name,customer_email,customer_phone,total,payment_status,payment_method,created_at,cancelled_at'
+          'id,order_number,customer_id,customer_name,customer_email,customer_phone,total,currency,payment_status,payment_method,created_at,cancelled_at'
         )
         .eq('merchant_id', validatedMerchantId)
         .in('id', batch)
@@ -115,8 +115,12 @@ export async function fetchOxygenFollowUps(
         follow_up_at: candidate.last_activity_at,
         oxygen_follow_up_status:
           total === null ||
+          total <= 0 ||
+          order.currency !== 'NGN' ||
+          order.customer_id === null ||
           order.cancelled_at !== null ||
           paymentStatus !== 'unpaid' ||
+          // Missing binding from an older RPC stays review-only; migrate first.
           (candidate.follow_up_status === 'customer_action' &&
             candidate.order_customer_id !== order.customer_id) ||
           order.payment_method !== 'oxygen'

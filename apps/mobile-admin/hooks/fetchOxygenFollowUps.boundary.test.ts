@@ -24,10 +24,11 @@ const candidate = {
 const order = {
   id: orderId,
   order_number: 'ORD-1',
-  customer_id: null,
+  customer_id: '30000000-0000-4000-8000-000000000001',
   customer_name: 'Ada',
   customer_email: 'ada@example.com',
   customer_phone: null,
+  currency: 'NGN',
   total: 10000,
   payment_status: 'unpaid',
   payment_method: 'oxygen',
@@ -51,7 +52,7 @@ describe('Oxygen follow-up fetch', () => {
         {
           ...candidate,
           follow_up_status: 'customer_action',
-          order_customer_id: null,
+          order_customer_id: order.customer_id,
         },
       ],
       error: null,
@@ -70,7 +71,7 @@ describe('Oxygen follow-up fetch', () => {
         {
           ...candidate,
           follow_up_status: 'customer_action',
-          order_customer_id: null,
+          order_customer_id: order.customer_id,
         },
       ],
       error: null,
@@ -88,7 +89,7 @@ describe('Oxygen follow-up fetch', () => {
         {
           ...candidate,
           follow_up_status: 'customer_action',
-          order_customer_id: null,
+          order_customer_id: order.customer_id,
         },
       ],
       error: null,
@@ -117,6 +118,96 @@ describe('Oxygen follow-up fetch', () => {
     });
     const result = await fetchOxygenFollowUps(merchantId);
     expect(result.orders[0]?.oxygen_follow_up_status).toBe('needs_review');
+  });
+
+  it.each([
+    0, -100,
+  ])('escalates nonpositive customer-action amount %s', async (total) => {
+    mocks.rpc.mockResolvedValue({
+      data: [
+        {
+          ...candidate,
+          follow_up_status: 'customer_action',
+          order_customer_id: order.customer_id,
+        },
+      ],
+      error: null,
+    });
+    mocks.in.mockResolvedValue({ data: [{ ...order, total }], error: null });
+    const result = await fetchOxygenFollowUps(merchantId);
+    expect(result.orders[0]?.oxygen_follow_up_status).toBe('needs_review');
+  });
+
+  it.each([
+    'USD',
+    null,
+    '',
+  ])('keeps non-NGN customer action review-only: %s', async (currency) => {
+    mocks.rpc.mockResolvedValue({
+      data: [
+        {
+          ...candidate,
+          follow_up_status: 'customer_action',
+          order_customer_id: order.customer_id,
+        },
+      ],
+      error: null,
+    });
+    mocks.in.mockResolvedValue({ data: [{ ...order, currency }], error: null });
+    const result = await fetchOxygenFollowUps(merchantId);
+    expect(result.orders[0]?.oxygen_follow_up_status).toBe('needs_review');
+    expect(mocks.select).toHaveBeenCalledWith(
+      expect.stringContaining('currency')
+    );
+  });
+
+  it.each([
+    'customer_action',
+    'oxygen_processing',
+    'approved_pending',
+  ])('keeps conflicting %s orders review-only', async (follow_up_status) => {
+    mocks.rpc.mockResolvedValue({
+      data: [
+        {
+          ...candidate,
+          follow_up_status,
+          order_customer_id: order.customer_id,
+        },
+      ],
+      error: null,
+    });
+    expect(
+      (await fetchOxygenFollowUps(merchantId)).orders[0]
+        ?.oxygen_follow_up_status
+    ).toBe(follow_up_status);
+    for (const fields of [
+      { customer_id: null },
+      { currency: 'USD' },
+      { total: 0 },
+      { total: -1 },
+    ]) {
+      mocks.rpc.mockResolvedValue({
+        data: [
+          {
+            ...candidate,
+            follow_up_status,
+            order_customer_id:
+              'customer_id' in fields && fields.customer_id === null
+                ? null
+                : order.customer_id,
+          },
+        ],
+        error: null,
+      });
+      mocks.in.mockResolvedValue({
+        data: [{ ...order, ...fields }],
+        error: null,
+      });
+      expect(
+        (await fetchOxygenFollowUps(merchantId)).orders[0]
+          ?.oxygen_follow_up_status
+      ).toBe('needs_review');
+    }
   });
 
   it('marks non-array and oversized payloads incomplete instead of throwing', async () => {

@@ -9,6 +9,7 @@ const order = {
   customer_name: null,
   customer_email: null,
   customer_phone: null,
+  currency: 'NGN',
   total: null,
   payment_status: null,
   payment_method: null,

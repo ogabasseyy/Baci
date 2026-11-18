@@ -39,6 +39,8 @@ describe('FollowUpOrderCard', () => {
     '+---',
     '+1',
     '123',
+    '1234',
+    '+1234567890123456',
     '   ',
     '',
   ])('hides phone actions for unusable phone values: %s', (phone) => {
@@ -80,6 +82,49 @@ describe('FollowUpOrderCard', () => {
     expect(Linking.openURL).toHaveBeenCalledTimes(2);
     expect(Linking.openURL).toHaveBeenNthCalledWith(2, 'tel:+2348031234567');
     expect(mocks.push).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    '+882169876543210',
+    '00882169876543210',
+  ])('opens equivalent international prefixes for %s', (phone) => {
+    render(
+      <FollowUpOrderCard
+        item={{ ...oxygenProcessingOrder, customer_phone: phone }}
+        displayTotal="₦10k"
+        initials="A"
+      />
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Message Ada on WhatsApp' })
+    );
+    expect(Linking.openURL).toHaveBeenNthCalledWith(
+      1,
+      'https://wa.me/882169876543210'
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Call Ada' }));
+    expect(Linking.openURL).toHaveBeenNthCalledWith(2, 'tel:+882169876543210');
+  });
+
+  it.each([
+    '0803 123 4567',
+    '803 123 4567',
+    '2348031234567',
+  ])('keeps national or unqualified calls without assuming a WhatsApp country code: %s', (phone) => {
+    render(
+      <FollowUpOrderCard
+        item={{ ...oxygenProcessingOrder, customer_phone: phone }}
+        displayTotal="₦10k"
+        initials="A"
+      />
+    );
+    expect(
+      screen.queryByRole('button', { name: 'Message Ada on WhatsApp' })
+    ).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Call Ada' }));
+    expect(Linking.openURL).toHaveBeenCalledExactlyOnceWith(
+      `tel:${phone.replace(/\D/g, '')}`
+    );
   });
 
   it('opens the customer for ordinary follow-ups linked to a customer', () => {

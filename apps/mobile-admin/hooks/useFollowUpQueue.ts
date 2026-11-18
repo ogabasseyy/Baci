@@ -54,6 +54,8 @@ export function useFollowUpQueue() {
       order,
     ])
   );
+  // SQL fair sharing controls admission to its bounded result. Display order is
+  // activity-based here; the list groups Needs review entries first.
   const failedOrders =
     standardOrders || oxygenOrders
       ? [...byOrderId.values()].sort(compareFollowUpOrdersDesc)

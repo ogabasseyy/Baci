@@ -8,6 +8,7 @@ export const oxygenFollowUpOrderSchema = z
     customer_name: z.string().nullable(),
     customer_email: z.string().nullable(),
     customer_phone: z.string().nullable(),
+    currency: z.string().nullable(),
     total: z.union([z.number(), z.string()]).nullable(),
     payment_status: z.string().nullable(),
     payment_method: z.string().nullable(),

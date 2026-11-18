@@ -48,6 +48,7 @@ export async function initializeGatewayAndRoute({
   walletTransferFallback,
 }: InitializeGatewayAndRouteParams): Promise<void> {
   const isBankTransfer = selectedPayment === 'bank_transfer';
+  const validTrackingToken = trackingToken?.trim() ? trackingToken : undefined;
   const gateway = isBankTransfer ? 'paystack' : selectedPayment;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), PAYMENT_INIT_TIMEOUT_MS);
@@ -76,6 +77,9 @@ export async function initializeGatewayAndRoute({
           gateway,
           billing_address: { country: 'NG' },
           ...(isBankTransfer && { payment_type: 'dva' }),
+          ...(isBankTransfer && validTrackingToken
+            ? { tracking_token: validTrackingToken }
+            : {}),
         }),
       }
     );
@@ -175,7 +179,7 @@ export async function initializeGatewayAndRoute({
         bankName,
         accountNumber,
         accountName,
-        ...(trackingToken && { trackingToken }),
+        ...(validTrackingToken && { trackingToken: validTrackingToken }),
         ...(walletTransferFallback && { walletTransferFallback }),
       },
     });
@@ -194,7 +198,7 @@ export async function initializeGatewayAndRoute({
       // Canonical order total for revenue-accurate purchase reporting; the
       // gateway `amount` above is only the residual due after credits.
       orderTotal: String(orderResponse.order.total),
-      ...(trackingToken && { trackingToken }),
+      ...(validTrackingToken && { trackingToken: validTrackingToken }),
     },
   });
 }

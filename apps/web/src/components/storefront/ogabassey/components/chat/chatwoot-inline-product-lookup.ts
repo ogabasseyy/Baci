@@ -1,4 +1,4 @@
-import { chatwootProductLookupResponseSchema } from '@/schemas/chatwoot-product-card';
+import { chatwootProductLookupResponseSchema } from '@/schemas/chatwoot-product-lookup-response';
 import { postChatwootBridgeJson } from './chatwoot-bridge-request';
 
 const RESPONSE_EVENT = 'baci-product-response:';

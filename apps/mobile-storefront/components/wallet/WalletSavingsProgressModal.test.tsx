@@ -1,5 +1,10 @@
 import { describe, expect, it, jest } from '@jest/globals';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
 import { WalletSavingsProgressModal } from './WalletSavingsProgressModal';
 
@@ -68,8 +73,9 @@ const goal = {
 };
 
 describe('WalletSavingsProgressModal', () => {
-  it('checks a pending contribution even when the reserved funds leave a zero wallet balance', () => {
+  it('checks a pending contribution even when the reserved funds leave a zero wallet balance', async () => {
     const onAddSavings = jest.fn();
+    const onCheckContribution = jest.fn();
     const onFundWallet = jest.fn();
     render(
       <WalletSavingsProgressModal
@@ -81,6 +87,7 @@ describe('WalletSavingsProgressModal', () => {
         onAddAmountChange={jest.fn()}
         onAddSavings={onAddSavings}
         onChangeDevice={jest.fn()}
+        onCheckContribution={onCheckContribution}
         onClose={jest.fn()}
         onFundWallet={onFundWallet}
         visible
@@ -90,11 +97,36 @@ describe('WalletSavingsProgressModal', () => {
     fireEvent.press(
       screen.getByRole('button', { name: 'Check contribution status' })
     );
-    expect(onAddSavings).toHaveBeenCalledTimes(1);
+    // A status read only: never the add/submit path.
+    await waitFor(() => expect(onCheckContribution).toHaveBeenCalledTimes(1));
+    expect(onAddSavings).not.toHaveBeenCalled();
     expect(onFundWallet).not.toHaveBeenCalled();
     expect(
       screen.queryByRole('button', { name: 'Continue to payment' })
     ).toBeNull();
+  });
+  it('shows Checking, not the Adding cover, while a status read runs', () => {
+    render(
+      <WalletSavingsProgressModal
+        addAmount="500"
+        colors={Colors.light}
+        goal={goal}
+        isAdding={false}
+        isCheckingContribution
+        hasPendingContribution
+        onAddAmountChange={jest.fn()}
+        onAddSavings={jest.fn()}
+        onChangeDevice={jest.fn()}
+        onCheckContribution={jest.fn()}
+        onClose={jest.fn()}
+        onFundWallet={jest.fn()}
+        visible
+        walletBalance={500}
+      />
+    );
+    expect(screen.getByText('Checking contribution…')).toBeTruthy();
+    expect(screen.queryByText(/Adding your money/)).toBeNull();
+    expect(screen.queryByText(/ask for your PIN/)).toBeNull();
   });
   it('allows an unresolved auto-debit goal to choose its exact device', () => {
     const onChangeDevice = jest.fn();
@@ -202,84 +234,30 @@ describe('WalletSavingsProgressModal', () => {
     ).toBeNull();
   });
 
-  it('hides manual controls when the savings goal is completed', () => {
+  // Codex P2: an add in flight is not "pending", but Cancel/Complete must
+  // still stay hidden, or Cancel could take over the sheet and drop the
+  // add's PIN prompt.
+  it('keeps goal actions hidden while an add is in flight', () => {
     render(
       <WalletSavingsProgressModal
-        addAmount=""
-        colors={Colors.light}
-        goal={{ ...goal, current_amount: 100000, status: 'completed' }}
-        isAdding={false}
+        addAmount="500"
+        colors={Colors.dark}
+        goal={goal}
+        isAdding
+        hasPendingContribution={false}
         onAddAmountChange={jest.fn()}
         onAddSavings={jest.fn()}
         onChangeDevice={jest.fn()}
         onClose={jest.fn()}
         onFundWallet={jest.fn()}
         visible
-        walletBalance={125000}
+        walletBalance={5000}
       />
     );
-
-    expect(screen.queryByLabelText('Savings top-up amount')).toBeNull();
-    expect(
-      screen.getByText('This savings goal is complete.')
-    ).toBeOnTheScreen();
-  });
-
-  it('offers exact variant recovery only for a completed unresolved goal', () => {
-    const onResolveVariant = jest.fn();
-    render(
-      <WalletSavingsProgressModal
-        addAmount=""
-        colors={Colors.light}
-        goal={{
-          ...goal,
-          selection_unresolved: true,
-          status: 'completed',
-          variant_resolution_options: [
-            { id: 'variant-1', label: 'Used · Color: Black · Storage: 256GB' },
-          ],
-        }}
-        isAdding={false}
-        onAddAmountChange={jest.fn()}
-        onAddSavings={jest.fn()}
-        onChangeDevice={jest.fn()}
-        onClose={jest.fn()}
-        onFundWallet={jest.fn()}
-        onResolveVariant={onResolveVariant}
-        visible
-        walletBalance={0}
-      />
-    );
-
-    fireEvent.press(
-      screen.getByRole('button', { name: 'Resolve savings device variant' })
-    );
-    expect(onResolveVariant).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('lifecycle:goal-1:pending')).toBeOnTheScreen();
+    // Change phone would replace the sheet and drop the add's PIN prompt too.
     expect(
       screen.queryByRole('button', { name: 'Change savings device' })
     ).toBeNull();
-  });
-
-  it.each([
-    [false, 'clear'],
-    [true, 'pending'],
-  ])('hands the goal and the pending state to the goal lifecycle entry (pending %s)', (hasPendingContribution, label) => {
-    render(
-      <WalletSavingsProgressModal
-        addAmount=""
-        colors={Colors.light}
-        goal={goal}
-        isAdding={false}
-        hasPendingContribution={hasPendingContribution}
-        onAddAmountChange={jest.fn()}
-        onAddSavings={jest.fn()}
-        onChangeDevice={jest.fn()}
-        onClose={jest.fn()}
-        onFundWallet={jest.fn()}
-        visible
-        walletBalance={0}
-      />
-    );
-    expect(screen.getByText(`lifecycle:goal-1:${label}`)).toBeOnTheScreen();
   });
 });

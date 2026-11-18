@@ -15,8 +15,8 @@ test('CI runs the PiggyVest stuck-funds runbook fixture suite on PostgreSQL 15+'
   assert.doesNotMatch(step, /^\s+if:/m);
   const gate = read('../workflows/ci.yml').split('  changes:')[1]?.split(/\n {2}[a-z-]+:\n/)[0] ?? '';
   assert.match(gate, /node --test \.github\/scripts\/piggyvest-stuck-funds-runbook-ci\.test\.mjs/);
-  assert.match(text, /postgresql-16/);
-  assert.match(step, /PG_BIN: \/usr\/lib\/postgresql\/16\/bin/);
+  assert.match(text, /bash \.github\/scripts\/install-postgresql-hosted\.sh/);
+  assert.match(step, /PG_BIN: \/usr\/lib\/postgresql\/18\/bin/);
   assert.match(step, /python3 -I supabase\/tests\/run_piggyvest_stuck_funds_runbook\.py/);
   assert.doesNotMatch(step, /continue-on-error|\|\| true/);
 });

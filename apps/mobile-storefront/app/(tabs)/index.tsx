@@ -37,10 +37,11 @@ export default function HomeScreen() {
   const lastHomeStateBreadcrumbRef = useRef<string | null>(null);
 
   const template = getTemplateConfig(CONFIG.BUSINESS_TYPE, CONFIG.TEMPLATE_ID);
+  const utilitiesInWallet = CONFIG.MERCHANT_SLUG === 'ogabassey';
   const isChatWidgetEnabled = template.features?.chatWidget ?? true;
 
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(
-    template.headerStyle === 'elite' ? 'u-airtime' : null
+    template.headerStyle === 'elite' && !utilitiesInWallet ? 'u-airtime' : null
   );
 
   const queryClient = useQueryClient();
@@ -57,6 +58,7 @@ export default function HomeScreen() {
   } = usePageConfig('home');
 
   const [refreshing, setRefreshing] = useState(false);
+  const headerHeightShared = useSharedValue(150);
   const [headerHeight, setHeaderHeight] = useState(150); // Initial estimate for spacer
   const [isScrolled, setIsScrolled] = useState(false);
 
@@ -122,6 +124,7 @@ export default function HomeScreen() {
   }) => {
     const nextHeight = nativeEvent.layout.height;
     if (nextHeight > 0 && Math.abs(nextHeight - headerHeight) > 1) {
+      headerHeightShared.set(nextHeight);
       setHeaderHeight(nextHeight);
     }
   };
@@ -150,8 +153,8 @@ export default function HomeScreen() {
         runOnJS(setIsScrolledJS)(nextScrolled);
       }
 
-      // Sliding header collapse transitions
-      if (currentOffsetY <= 0) {
+      // Keep the header visible while its list spacer is still on screen.
+      if (normalizedOffsetY < headerHeightShared.get()) {
         setHeaderVisibilityTarget(1);
       } else if (currentOffsetY > prevOffsetY) {
         setHeaderVisibilityTarget(0);
@@ -176,7 +179,8 @@ export default function HomeScreen() {
   const blocks = resolveHomeBlocks(
     pageConfig?.content,
     template.headerStyle === 'elite',
-    isConfigLoading && !pageConfig
+    isConfigLoading && !pageConfig,
+    utilitiesInWallet
   );
   const { primaryProductGridIndex, productGridBlockCount } =
     getHomeProductGridSummary(blocks);

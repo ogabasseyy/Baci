@@ -15,11 +15,22 @@ interface RateLimitMatch {
 }
 
 const RATE_LIMITS: Record<string, RateLimitConfig> = {
+  '/api/storefront/experience': { maxRequests: 240, windowMs: 60_000 },
   // Submission writes have their own budget; typing and result reads do not consume it.
   '/api/search/submissions': { maxRequests: 20, windowMs: 60_000 },
   // Search assistance is an expensive public AI call — keep it at the same
   // per-IP budget as quiz generation instead of the generic 50/min default.
   '/api/search/assist': { maxRequests: 5, windowMs: 60_000 },
+  // Anonymous device check (swap): each call is a multimodal AI request and
+  // cookie-less callers (the mobile app) pass no CSRF gate, so this budget
+  // is the abuse bound.
+  // Fail closed without Redis: per-instance memory counters would not bound
+  // paid AI calls.
+  '/api/ai/grade-device': {
+    maxRequests: 5,
+    windowMs: 60_000,
+    failClosedWithoutRedis: true,
+  },
   // Migration preview validation polls the active job about once per second.
   // Keep this prefix above the default ceiling so the UI can stream progress
   // without tripping middleware rate limiting during normal use.
@@ -55,8 +66,12 @@ const RATE_LIMITS: Record<string, RateLimitConfig> = {
     windowMs: 60_000,
   },
   '/api/storefront/imei-check': { maxRequests: 10, windowMs: 60_000 },
-  '/api/storefront/auth/send-code': { maxRequests: 3, windowMs: 60_000 },
-  '/api/storefront/auth/verify-code': { maxRequests: 5, windowMs: 60_000 },
+  // Sign-in codes are also limited per email address inside the route (4 a
+  // minute, with a lockout after repeated wrong codes). The per-address
+  // budget only bounds one address spraying many inboxes, and has to leave
+  // room for shoppers who share a mobile carrier address.
+  '/api/storefront/auth/send-code': { maxRequests: 20, windowMs: 60_000 },
+  '/api/storefront/auth/verify-code': { maxRequests: 30, windowMs: 60_000 },
   // Product-request intake writes to the merchant inbox. The DB also caps
   // each merchant at 50/hour, so bound one IP to 10/hour: a single caller
   // can no longer exhaust the merchant-wide budget, while genuine
@@ -103,7 +118,16 @@ const RATE_LIMITS: Record<string, RateLimitConfig> = {
   // with the generation bucket — an admin can generate several drafts, then
   // review and open one without being throttled by the AI-call limit.
   '/api/merchant/quiz/activate': { maxRequests: 20, windowMs: 60_000 },
+  // App requests under /api/quiz are charged per signed-in player (see
+  // quiz-player-rate-limit.ts); these budgets apply per address only to
+  // browser sessions.
   '/api/quiz/attempts/start': { maxRequests: 20, windowMs: 60_000 },
+  // Recovery, the event list and the attestation challenge each get their own
+  // budget so they cannot use up the generic bucket (or each other's) in the
+  // seconds around a quiz start.
+  '/api/quiz/attempts/active': { maxRequests: 60, windowMs: 60_000 },
+  '/api/quiz/events': { maxRequests: 60, windowMs: 60_000 },
+  '/api/quiz/attestation': { maxRequests: 30, windowMs: 60_000 },
   // A player refreshes live standings on a bounded timer. Keep this bucket
   // separate from unrelated API traffic so players behind one carrier NAT do
   // not exhaust the generic per-IP budget.
@@ -118,6 +142,14 @@ const DYNAMIC_RATE_LIMITS: ReadonlyArray<{
   pattern: string;
   pathname: RegExp;
 }> = [
+  {
+    // One answer per question, a few seconds apart, plus retries. Kept apart
+    // from the generic bucket so other API traffic can never cost a player a
+    // question.
+    config: { maxRequests: 120, windowMs: 60_000 },
+    pattern: '/api/quiz/attempts/:attemptId/answers',
+    pathname: /^\/api\/quiz\/attempts\/[^/]+\/answers\/?$/,
+  },
   {
     config: { maxRequests: 120, windowMs: 60_000 },
     pattern: '/api/quiz/attempts/:attemptId/result',

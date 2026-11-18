@@ -2,7 +2,6 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 // --- Mocks ---
-
 vi.mock('next/image', () => ({
   default: (props: Record<string, unknown>) => (
     // biome-ignore lint/performance/noImgElement: Test mock for next/image intentionally uses <img>
@@ -122,6 +121,7 @@ vi.mock('lucide-react', () => ({
   Share2: () => <span />,
   Truck: () => <span />,
   Undo2: () => <span />,
+  X: () => <span />,
   XCircle: () => <span />,
 }));
 

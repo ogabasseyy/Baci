@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { connection } from 'next/server';
 import { Suspense } from 'react';
 import { getOgabasseyStaticParams } from '@/app/(storefront)/[slug]/ogabassey-static-params';
 import { STOREFRONT_METADATA_CACHE_BUCKET_QUERY_PARAM } from '@/config/storefront-metadata-cache-bots';
@@ -182,7 +181,6 @@ export async function generateMetadata({
 }
 
 export async function CompareIndexRuntime(props: CompareIndexPageProps) {
-  await connection();
   const { slug } = await props.params;
 
   if (!isValidMerchantIdentifier(slug)) {

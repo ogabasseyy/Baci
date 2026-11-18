@@ -48,27 +48,53 @@ const getCategoryTitle = (slug: string): string => {
   );
 };
 
+const PHONE_CATEGORY_SLUGS = ['phones', 'smartphones', 'mobile-phones'];
+
 export default function CategoryScreen() {
-  const { slug } = useLocalSearchParams<{ slug: string }>();
+  const { slug: slugParam, sort } = useLocalSearchParams<{
+    slug: string;
+    sort?: string;
+  }>();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const { getListContentStyle } = useStorefrontInsets();
 
-  // BUG-2-004 FIX: Validate slug is non-empty before use
-  const isValidSlug = Boolean(
-    slug && typeof slug === 'string' && slug.length > 0
-  );
+  const slug =
+    typeof slugParam === 'string' ? slugParam.trim().toLowerCase() : '';
+  const isValidSlug = Boolean(slug);
 
   // H10 FIX: Resolve category slug to UUID since Supabase query uses category_id
   const { data: categories = [], isLoading: categoriesLoading } =
     useCategories();
-  const categoryId = categories.find((c) => c.slug === slug)?.id;
+  // Prefer the exact slug, then the catalog preference in PHONE_CATEGORY_SLUGS.
+  const categoryId =
+    categories.find((category) => category.slug === slug)?.id ??
+    (PHONE_CATEGORY_SLUGS.includes(slug)
+      ? PHONE_CATEGORY_SLUGS.map(
+          (alias) => categories.find((category) => category.slug === alias)?.id
+        ).find(Boolean)
+      : undefined);
+  const isCategoryResolved = slug === 'all' || Boolean(categoryId);
+  // Accept web price-sort aliases while keeping the catalog's RPC keys.
+  const normalizedSort =
+    sort === 'price-asc'
+      ? 'price_asc'
+      : sort === 'price-desc'
+        ? 'price_desc'
+        : sort;
+  const sortBy =
+    normalizedSort === 'price_asc' ||
+    normalizedSort === 'price_desc' ||
+    normalizedSort === 'newest'
+      ? normalizedSort
+      : undefined;
 
   const { products, isLoading, error, hasMore, refetch, loadMore } =
     useProducts({
       category: isValidSlug ? categoryId : undefined,
       limit: 20,
-      enabled: !categoriesLoading,
+      sortBy,
+      enabled: isValidSlug && !categoriesLoading && isCategoryResolved,
     });
 
   const [refreshing, setRefreshing] = React.useState(false);
@@ -104,7 +130,6 @@ export default function CategoryScreen() {
   // message. The supported 'all' slug intentionally resolves no category
   // ID (the catalog fetch is unfiltered), so it counts as resolved;
   // unknown slugs stay withheld.
-  const isCategoryResolved = slug === 'all' || Boolean(categoryId);
   const canShowCategoryMpu =
     isValidSlug &&
     !categoriesLoading &&
@@ -133,7 +158,7 @@ export default function CategoryScreen() {
 
   const renderEmpty = () => {
     // BUG-2-004 FIX: Show error for invalid slug
-    if (!isValidSlug) {
+    if (!isValidSlug || (!categoriesLoading && !isCategoryResolved)) {
       return (
         <View style={styles.emptyContainer}>
           <Ionicons
@@ -152,7 +177,7 @@ export default function CategoryScreen() {
       );
     }
 
-    if (isLoading) {
+    if (categoriesLoading || isLoading) {
       return (
         <View style={styles.emptyContainer}>
           <ActivityIndicator size="large" color={BRAND.primary} />

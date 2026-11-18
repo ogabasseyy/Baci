@@ -57,20 +57,14 @@ export function CartSidebarFooter({
         )}
       </button>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="text-center">
         <Link
           href={cartHref}
           onClick={onClose}
-          className="w-full bg-white hover:bg-gray-50 text-gray-900 font-bold py-3.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-colors border border-gray-200 active:bg-gray-50 text-sm"
+          className="inline-flex min-h-11 items-center justify-center px-4 text-sm font-semibold text-gray-600 underline-offset-4 hover:underline"
         >
           View Full Cart
         </Link>
-        <button type="button"
-          onClick={onClose}
-          className="w-full text-center text-gray-500 hover:text-gray-900 text-sm font-medium py-3.5 px-4 rounded-xl hover:bg-gray-50 transition-colors"
-        >
-          Continue Shopping
-        </button>
       </div>
     </div>
   );

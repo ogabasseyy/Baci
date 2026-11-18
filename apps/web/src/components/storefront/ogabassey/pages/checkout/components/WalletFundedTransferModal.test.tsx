@@ -127,5 +127,16 @@ describe('WalletFundedTransferModal', () => {
     renderModal({}, { error: 'offline' });
 
     expect(screen.getByText(/your money is not affected/i)).toBeDefined();
+    expect(screen.getByText(/we will keep trying/i)).toBeDefined();
+  });
+
+  it('does not promise automatic retries when polling is exhausted', () => {
+    renderModal({}, { error: 'offline', pollingExhausted: true });
+
+    expect(
+      screen.getByText(/Auto-refresh paused — tap below to check transfer status\./i)
+    ).toBeDefined();
+    expect(screen.getByText(/your money is not affected/i)).toBeDefined();
+    expect(screen.queryByText(/we will keep trying/i)).toBeNull();
   });
 });

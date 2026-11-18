@@ -3,6 +3,7 @@ import {
   type CartItemIdentity,
   cartLineIdentity,
 } from '@baci/shared/cart';
+import { withoutAssuranceOverlay } from './shared-cart-assurance-overlay';
 import { intentIdentity, MAX_CONFLICT_ATTEMPTS } from './shared-cart-display';
 import {
   adoptSnapshot,
@@ -18,45 +19,6 @@ import {
   type SharedCartPendingEntry,
   type SharedCartState,
 } from './shared-cart-state';
-
-/**
- * Drops the optimistic assurance overlay for a line whose
- * set_assurance command reached a terminal outcome: on success the
- * adopted server snapshot is authoritative, and on definitive failure
- * the display must roll back to that same server value instead of
- * masking it (including later changes from other linked devices).
- */
-function withoutAssuranceOverlay(
-  state: SharedCartState,
-  entry: SharedCartPendingEntry | undefined
-): Record<string, boolean> {
-  if (entry?.intent.kind !== 'set_assurance') return state.assuranceOverlays;
-  const target = entry.intent.target;
-  let key: string | null = null;
-  if (target.kind === 'identity') {
-    key = target.key;
-  } else if (target.kind === 'lineId') {
-    const line = state.confirmed?.lines.find(
-      (candidate) => candidate.id === target.lineId
-    );
-    key = line ? cartLineIdentity(line.item) : null;
-  } else {
-    const addEntry = state.queue.find(
-      (candidate) =>
-        candidate.intent.kind === 'add' &&
-        candidate.intent.tempId === target.tempId
-    );
-    if (addEntry) {
-      key = cartLineIdentity(
-        intentIdentity(addEntry.intent) as CartItemIdentity
-      );
-    }
-  }
-  if (!key || !(key in state.assuranceOverlays)) return state.assuranceOverlays;
-  const next = { ...state.assuranceOverlays };
-  delete next[key];
-  return next;
-}
 
 export function sharedCartReducer(
   state: SharedCartState,
@@ -93,6 +55,16 @@ export function sharedCartReducer(
     case 'snapshot/polled': {
       return withDisplay(adoptSnapshot(state, action.snapshot));
     }
+    case 'command/cancel':
+      return withDisplay({
+        ...state,
+        assuranceOverlays: withoutAssuranceOverlay(
+          state,
+          state.queue.find((entry) => entry.operationId === action.operationId)
+        ),
+        queue: dropEntriesAndCascade(state.queue, new Set([action.operationId]))
+          .queue,
+      });
     case 'command/enqueue': {
       const blockedOnTempId = targetTempId(action.entry.intent);
       const entry: SharedCartPendingEntry = {

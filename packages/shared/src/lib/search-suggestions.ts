@@ -24,7 +24,6 @@ function formatBudgetAmount(value: number, currency: string): string {
   try {
     return formatMoney(value, currency, {
       minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
     });
   } catch {
     return `${currency} ${value.toLocaleString('en')}`;

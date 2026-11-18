@@ -55,6 +55,8 @@ jest.mock('expo-video', () => ({
   createVideoPlayer: (uri: string) => {
     mockCreateVideoPlayer(uri);
     return {
+      status: 'readyToPlay',
+      addListener: () => ({ remove: jest.fn() }),
       generateThumbnailsAsync: (timeSec: number) =>
         mockGenerateThumbnailsAsync(uri, timeSec),
       release: () => mockPlayerRelease(),

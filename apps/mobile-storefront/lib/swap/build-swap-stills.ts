@@ -1,4 +1,4 @@
-import type { VideoThumbnail } from 'expo-video';
+import type { VideoPlayer, VideoThumbnail } from 'expo-video';
 import type { SwapMedia, SwapPhoto } from './select-swap-media';
 
 /** Longest edge & compression tiers; starts at the size the website sends. */
@@ -9,6 +9,7 @@ const STILL_TIERS = [
   { maxEdge: 384, quality: 0.4 },
 ] as const;
 const VIDEO_STILL_COUNT = 4;
+const VIDEO_LOAD_TIMEOUT_MS = 10_000;
 /** Used when the picker does not report how long the clip is (seconds). */
 const FALLBACK_STILL_TIMES_SEC = [0, 1.5, 3, 4.5];
 /** Leaves headroom under the server's 1,900,000-byte grading limit + multipart overhead. */
@@ -72,6 +73,37 @@ function videoStillTimesSec(durationMs: number | null): number[] {
   );
 }
 
+async function waitForVideoPlayerReady(player: VideoPlayer): Promise<void> {
+  if (player.status === 'readyToPlay') return;
+  if (player.status === 'error') {
+    throw new Error(UNREADABLE_VIDEO_MESSAGE);
+  }
+  await new Promise<void>((resolve, reject) => {
+    let settled = false;
+    let subscription: { remove: () => void } | undefined;
+    const finish = (error?: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      subscription?.remove();
+      if (error) reject(error);
+      else resolve();
+    };
+    const timer = setTimeout(() => {
+      finish(new Error(UNREADABLE_VIDEO_MESSAGE));
+    }, VIDEO_LOAD_TIMEOUT_MS);
+    subscription = player.addListener?.('statusChange', ({ status }) => {
+      if (status === 'readyToPlay') finish();
+      else if (status === 'error') finish(new Error(UNREADABLE_VIDEO_MESSAGE));
+    });
+    // Check after attaching the listener in case status changed synchronously.
+    if (player.status === 'readyToPlay') finish();
+    else if (player.status === 'error') {
+      finish(new Error(UNREADABLE_VIDEO_MESSAGE));
+    }
+  });
+}
+
 async function videoStills(
   uri: string,
   durationMs: number | null
@@ -79,13 +111,15 @@ async function videoStills(
   const stills: ShrunkStill[] = [];
   const manipulator = await import('expo-image-manipulator');
   const { createVideoPlayer } = await import('expo-video');
-  let player: ReturnType<typeof createVideoPlayer> | null = null;
+  let player: VideoPlayer | null = null;
   try {
     try {
       player = createVideoPlayer(uri);
     } catch {
       throw new Error(UNREADABLE_VIDEO_MESSAGE);
     }
+
+    await waitForVideoPlayerReady(player);
 
     const initialTier = STILL_TIERS[0];
     for (const timeSec of videoStillTimesSec(durationMs)) {

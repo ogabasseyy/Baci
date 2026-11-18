@@ -4,13 +4,17 @@ import type Colors from '@/constants/Colors';
 import type { useUtilityPayment } from '@/hooks/use-utility-payment';
 import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
 import type { VtuWalletPayRequest } from '@/lib/wallet-pay/vtu-wallet-pay-api';
+import { UtilityFormNotice } from './UtilityFormNotice';
 import { UtilityPaymentOptions } from './UtilityPaymentOptions';
 import { useRetainsPiggyvest } from './use-retains-piggyvest';
+import type { UtilityRetainedAttempt } from './use-utility-retained-attempt';
 import { sanitizeAmountInput } from './utility-amount-sanitize';
 
 type PaymentState = ReturnType<typeof useUtilityPayment>;
 
 interface BillPaymentSectionProps {
+  /** Shown under the amount field once something is typed. */
+  amountIssue?: string | null;
   colors: typeof Colors.light;
   formattedAmount: string;
   handlePaymentLayout: (event: LayoutChangeEvent) => void;
@@ -21,10 +25,13 @@ interface BillPaymentSectionProps {
   returnToHref: WalletReturnHref;
   /** The exact request the submit builds (its retry identity), or null. */
   purchaseRequest?: VtuWalletPayRequest | null;
+  /** The form's shared kept-attempt answer, when it has one. */
+  retained?: UtilityRetainedAttempt;
   setAmount: (value: string) => void;
 }
 
 export function BillPaymentSection({
+  amountIssue = null,
   colors,
   formattedAmount,
   handlePaymentLayout,
@@ -33,14 +40,20 @@ export function BillPaymentSection({
   payment,
   returnToHref,
   purchaseRequest = null,
+  retained,
   setAmount,
 }: BillPaymentSectionProps) {
   // A kept attempt replays on its own rail: store credit first, else
   // PiggyVest (the submit decides the same way).
-  const retainedStoreCredit =
-    purchaseRequest !== null &&
-    payment.hasRetainedVtuAttempt?.({ ...purchaseRequest }) === true;
-  const retainedPiggyvest = useRetainsPiggyvest(purchaseRequest);
+  // The form's shared lookup when given (the Pay gate reads the same one).
+  const ownPiggyvest = useRetainsPiggyvest(retained ? null : purchaseRequest);
+  const retainedStoreCredit = retained
+    ? retained.retainedStoreCredit
+    : purchaseRequest !== null &&
+      payment.hasRetainedVtuAttempt?.({ ...purchaseRequest }) === true;
+  const retainedPiggyvest = retained
+    ? retained.retainedPiggyvest
+    : ownPiggyvest;
   return (
     <View onLayout={handlePaymentLayout}>
       <View style={styles.amountSection}>
@@ -70,6 +83,9 @@ export function BillPaymentSection({
           maxLength={10}
           onChangeText={(text) => setAmount(sanitizeAmountInput(text))}
         />
+        {amountIssue && formattedAmount ? (
+          <UtilityFormNotice compact message={amountIssue} />
+        ) : null}
       </View>
 
       <UtilityPaymentOptions

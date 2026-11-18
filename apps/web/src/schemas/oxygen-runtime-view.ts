@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { oxygenPlanQuoteSchema } from './oxygen-plan-quote';
-import { oxygenProviderStateSchema } from './oxygen-runtime';
+import { oxygenCustomerProviderStateSchema } from './oxygen-runtime';
 import { oxygenWorkflowStageSchema } from './oxygen-workflow';
 export const oxygenRuntimeSnapshotSchema = z
   .object({
@@ -13,9 +13,7 @@ export const oxygenRuntimeSnapshotSchema = z
       .enum(['first_attempt', 'safe_retry', 'blocked', 'unavailable'])
       .optional(),
     bookingBlock: z.literal('active_loan').nullable().optional(),
-    state: oxygenProviderStateSchema
-      .omit({ newUserToken: true, activityToken: true, phone: true })
-      .strict(),
+    state: oxygenCustomerProviderStateSchema,
     approvalOtpReady: z.boolean(),
     checkoutPhone: z.string().default(''),
     checkoutAddress: z.record(z.string(), z.string()).default({}),

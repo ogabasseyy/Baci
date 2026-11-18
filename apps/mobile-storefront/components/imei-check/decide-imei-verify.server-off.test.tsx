@@ -1,7 +1,7 @@
 import { decideImeiVerify } from './decide-imei-verify';
 
 const base = {
-  retainedStoreCredit: false,
+  retainsStoreCredit: async () => false,
   retainsPiggyvest: async () => false as boolean | null,
   ownerAtTap: 'user-1' as string | null,
   currentOwner: () => 'user-1' as string | null,
@@ -49,7 +49,7 @@ describe('decideImeiVerify', () => {
     await expect(
       decideImeiVerify({
         ...base,
-        retainedStoreCredit: true,
+        retainsStoreCredit: async () => true,
         retainsPiggyvest: async () => true,
         walletBalance: 1000,
       })
@@ -70,6 +70,20 @@ describe('decideImeiVerify', () => {
     await expect(decision).resolves.toEqual({ kind: 'ignore' });
   });
 
+  it('bugfix: stops the tap when the account changed while the store credit key was read (Codex P2)', async () => {
+    let owner = 'user-1';
+    const decision = decideImeiVerify({
+      ...base,
+      walletBalance: 1000,
+      currentOwner: () => owner,
+      retainsStoreCredit: async () => {
+        owner = 'user-2';
+        return false;
+      },
+    });
+    await expect(decision).resolves.toEqual({ kind: 'ignore' });
+  });
+
   it('ignores a tap while another is still checking the saved keys', async () => {
     await expect(
       decideImeiVerify({ ...base, retainsPiggyvest: async () => null })
@@ -79,7 +93,7 @@ describe('decideImeiVerify', () => {
 
 describe('bugfix: a kept store credit request waited for the wallet read (Muse)', () => {
   it('replays a kept store credit request even while the wallet loads or failed', async () => {
-    const kept = { ...base, retainedStoreCredit: true };
+    const kept = { ...base, retainsStoreCredit: async () => true };
     await expect(
       decideImeiVerify({ ...kept, walletLoading: true })
     ).resolves.toEqual({ kind: 'pay', rail: 'store_credit' });

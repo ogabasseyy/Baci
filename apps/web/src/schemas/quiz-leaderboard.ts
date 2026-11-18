@@ -51,5 +51,8 @@ export type QuizLeaderboardRow = z.infer<typeof quizLeaderboardRowSchema>;
 export const quizLeaderboardProjectionSchema = z.object({
   current_player: quizLeaderboardRowSchema.nullable(),
   entries: z.array(quizLeaderboardRowSchema).max(100),
+  // Present on the live projection since the shared-snapshot migration; absent
+  // from the published projection and from a database that predates it.
+  participant_count: z.number().int().nonnegative().nullable().optional(),
   status: quizLeaderboardStatusSchema,
 });

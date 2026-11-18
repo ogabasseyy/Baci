@@ -20,4 +20,14 @@ describe('store credit line', () => {
       screen.getByLabelText('Store credit ₦2,500. Use it on purchases.')
     ).toBeOnTheScreen();
   });
+
+  it('bugfix: stays on one straight line instead of wrapping onto three', () => {
+    render(<WalletHeroStoreCredit balance={2500} />);
+    expect(
+      screen.getByLabelText('Store credit ₦2,500. Use it on purchases.')
+    ).toHaveStyle({ flexWrap: 'nowrap' });
+    for (const text of ['Store credit', '₦2,500', '· use it on purchases']) {
+      expect(screen.getByText(text)).toHaveProp('numberOfLines', 1);
+    }
+  });
 });

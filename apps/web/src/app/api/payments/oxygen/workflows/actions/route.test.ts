@@ -47,6 +47,44 @@ it('does not touch runtime credentials for unauthenticated callers', async () =>
   expect(result.status).toBe(401);
   expect(m.connect).not.toHaveBeenCalled();
 });
+it.each([
+  [undefined, false],
+  ['1', true],
+])('only returns the new reason to supporting action clients (%s)', async (version, expected) => {
+  m.auth.mockResolvedValue({ user: { id: 'user' }, supabase: {} });
+  m.connect.mockReturnValue({
+    worker: vi.fn(),
+    provider: {},
+    hosts: new Set(),
+  });
+  m.perform.mockResolvedValue({
+    workflowId: '60000000-0000-4000-8000-000000000001',
+    state: {
+      eligibilityStatus: 'failed',
+      eligibilityFailureReason: 'financial_details_mismatch',
+    },
+  });
+  const response = await POST(
+    new NextRequest('http://localhost/api/payments/oxygen/workflows/actions', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        ...(version ? { 'x-oxygen-eligibility-reason': version } : {}),
+      },
+      body: JSON.stringify({
+        workflowId: '60000000-0000-4000-8000-000000000001',
+        idempotencyKey: '60000000-0000-4000-8000-000000000002',
+        version: 1,
+        command: { action: 'refresh_eligibility' },
+      }),
+    })
+  );
+  expect(response.status).toBe(200);
+  const result = await response.json();
+  expect(result.state.eligibilityFailureReason).toBe(
+    expected ? 'financial_details_mismatch' : undefined
+  );
+});
 it('explains a fenced existing payment without exposing database details', async () => {
   m.auth.mockResolvedValue({ user: { id: 'user' }, supabase: {} });
   m.connect.mockReturnValue({

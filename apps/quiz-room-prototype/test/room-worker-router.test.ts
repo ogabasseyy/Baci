@@ -27,16 +27,26 @@ const TICKET_SECRET = 'router-ticket-secret';
 const JWT_SECRET = 'router-jwt-secret';
 
 function createStubNamespace(
-  handler: (idName: string, path: string, body: unknown) => unknown
+  handler: (
+    idName: string,
+    path: string,
+    body: unknown,
+    opts?: { locationHint?: string }
+  ) => unknown
 ) {
   return {
     idFromName: (name: string) => name,
-    get: (id: string) => ({
+    get: (id: string, opts?: { locationHint?: string }) => ({
       fetch: async (input: string, init?: RequestInit) => {
+        if (opts?.locationHint !== 'weur') {
+          throw new Error(
+            `Expected locationHint='weur', got ${JSON.stringify(opts)}`
+          );
+        }
         const url = new URL(input);
         const body =
           typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
-        const result = handler(id, url.pathname, body);
+        const result = handler(id, url.pathname, body, opts);
         return new Response(JSON.stringify(result), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },

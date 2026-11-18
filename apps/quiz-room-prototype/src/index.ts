@@ -2,6 +2,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import type {
   QuizAdmissionTicket,
+  QuizAttemptBundle,
   QuizControlStateSnapshot,
   QuizEventConfig,
   QuizIntegrityTier,
@@ -49,6 +50,7 @@ export type * from './batch-packer';
 export type * from './contracts';
 export type * from './control-state';
 export type * from './coordinator';
+export type * from './demo-finalizer';
 export type * from './demo-routes';
 export type * from './demo-state';
 export type * from './demo-ui';
@@ -74,6 +76,21 @@ interface WorkerEnv {
   RESULT_SHARD_COUNT?: string;
   ORIGIN_BASE_URL?: string;
 }
+
+const WEUR_LOCATION_HINT = { locationHint: 'weur' } as const;
+
+function getWeurStub<
+  T extends {
+    idFromName(name: string): unknown;
+    get(id: never, options?: { locationHint?: 'weur' }): unknown;
+  },
+>(ns: T, name: string): ReturnType<T['get']> {
+  return ns.get(ns.idFromName(name) as never, WEUR_LOCATION_HINT) as ReturnType<
+    T['get']
+  >;
+}
+
+const DEMO_STATE_DO_NAME = 'demo-state-weur-v2';
 
 function jsonResponse(
   body: unknown,
@@ -124,9 +141,7 @@ export class QuizRoomDO extends DurableObject<WorkerEnv> {
       hooks: {
         onScoreboardTick: async (tick) => {
           if (!env.LIVE_RANK_INDEX || tick.submissions.length === 0) return;
-          const rankStub = env.LIVE_RANK_INDEX.get(
-            env.LIVE_RANK_INDEX.idFromName(tick.eventId)
-          );
+          const rankStub = getWeurStub(env.LIVE_RANK_INDEX, tick.eventId);
           for (const s of tick.submissions) {
             await rankStub.fetch('https://rank.internal/internal/submit', {
               method: 'POST',
@@ -195,8 +210,9 @@ export class QuizRoomDO extends DurableObject<WorkerEnv> {
         }>(request);
         const nowMs = Date.now();
         if (!this.controlState.isFresh(nowMs) && this.env.EVENT_COORDINATOR) {
-          const coordStub = this.env.EVENT_COORDINATOR.get(
-            this.env.EVENT_COORDINATOR.idFromName(body.ticket.eventId)
+          const coordStub = getWeurStub(
+            this.env.EVENT_COORDINATOR,
+            body.ticket.eventId
           );
           const csRes = await coordStub.fetch(
             `https://coord.internal/internal/control-state?eventId=${encodeURIComponent(body.ticket.eventId)}`
@@ -241,6 +257,13 @@ export class QuizRoomDO extends DurableObject<WorkerEnv> {
             endsAtMs: body.endsAtMs,
           })
         );
+      }
+      if (
+        url.pathname === '/internal/batches' ||
+        url.pathname === '/internal/bundles'
+      ) {
+        const bundles = await this.engine.exportCompletedBundles();
+        return jsonResponse({ bundles });
       }
       return jsonResponse({ error: 'Not found', code: 'NOT_FOUND' }, 404);
     } catch (error) {
@@ -429,7 +452,7 @@ export class EventCoordinatorDO extends DurableObject<WorkerEnv> {
           mode,
           endsAtMs,
         }) => {
-          const stub = env.QUIZ_ROOM.get(env.QUIZ_ROOM.idFromName(roomId));
+          const stub = getWeurStub(env.QUIZ_ROOM, roomId);
           const res = await stub.fetch('https://room.internal/internal/seal', {
             method: 'POST',
             body: JSON.stringify({
@@ -555,6 +578,14 @@ export class DemoStateDO extends DurableObject<WorkerEnv> {
         this.engine.setActiveRound(state);
         return jsonResponse({ ok: true, ...state });
       }
+      if (url.pathname === '/internal/demo/active') {
+        return jsonResponse(this.engine.getActiveRound());
+      }
+      if (url.pathname === '/internal/demo/reconciled') {
+        const body = await readJsonBody<{ publishedAtMs: number }>(request);
+        this.engine.markRoundReconciled(body.publishedAtMs);
+        return jsonResponse({ ok: true });
+      }
       if (url.pathname === '/internal/demo/check-in') {
         const body = await readJsonBody<{ roomId?: string }>(request);
         return jsonResponse(this.engine.allocateCheckIn(body.roomId));
@@ -591,17 +622,16 @@ export default {
         QUIZ_TICKET_SECRET: env.QUIZ_TICKET_SECRET,
         QUIZ_JWT_SECRET: env.QUIZ_JWT_SECRET,
         QUIZ_INTERNAL_COORDINATOR_SECRET: env.QUIZ_INTERNAL_COORDINATOR_SECRET,
+        RESULT_SHARD_COUNT: env.RESULT_SHARD_COUNT,
         callDemoDo: (internalPath, body) => {
-          const stub = env.DEMO_STATE.get(
-            env.DEMO_STATE.idFromName('demo-global')
-          );
+          const stub = getWeurStub(env.DEMO_STATE, DEMO_STATE_DO_NAME);
           return stub.fetch(`https://demo.internal${internalPath}`, {
             method: 'POST',
             ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
           });
         },
         initRoom: async (roomId, config) => {
-          const stub = env.QUIZ_ROOM.get(env.QUIZ_ROOM.idFromName(roomId));
+          const stub = getWeurStub(env.QUIZ_ROOM, roomId);
           const res = await stub.fetch('https://room.internal/internal/init', {
             method: 'POST',
             body: JSON.stringify(config),
@@ -615,9 +645,7 @@ export default {
           }
         },
         freezeCoordinator: async (params) => {
-          const stub = env.EVENT_COORDINATOR.get(
-            env.EVENT_COORDINATOR.idFromName(params.eventId)
-          );
+          const stub = getWeurStub(env.EVENT_COORDINATOR, params.eventId);
           const res = await stub.fetch(
             'https://coord.internal/internal/freeze',
             {
@@ -634,9 +662,7 @@ export default {
           }
         },
         refreshControlState: async (eventId, updatedAtMs) => {
-          const stub = env.EVENT_COORDINATOR.get(
-            env.EVENT_COORDINATOR.idFromName(eventId)
-          );
+          const stub = getWeurStub(env.EVENT_COORDINATOR, eventId);
           const res = await stub.fetch(
             'https://coord.internal/internal/control-state/refresh',
             {
@@ -651,6 +677,86 @@ export default {
               res.status
             );
           }
+        },
+        freezeAndSweepCoordinator: async ({ eventId, endsAtMs, roomIds }) => {
+          const stub = getWeurStub(env.EVENT_COORDINATOR, eventId);
+          const freezeRes = await stub.fetch(
+            'https://coord.internal/internal/freeze',
+            {
+              method: 'POST',
+              body: JSON.stringify({
+                eventId,
+                endsAtMs,
+                expectedRoomIds: roomIds,
+              }),
+            }
+          );
+          if (!freezeRes.ok) {
+            throw new QuizRoomError(
+              'QUIZ_COORDINATOR_FREEZE_FAILED',
+              `Failed to freeze coordinator for ${eventId}`,
+              freezeRes.status
+            );
+          }
+          const sweepRes = await stub.fetch(
+            'https://coord.internal/internal/sweep',
+            {
+              method: 'POST',
+              body: JSON.stringify({ eventId }),
+            }
+          );
+          if (!sweepRes.ok) {
+            throw new QuizRoomError(
+              'QUIZ_COORDINATOR_SWEEP_FAILED',
+              `Failed to sweep coordinator for ${eventId}`,
+              sweepRes.status
+            );
+          }
+          return (await sweepRes.json()) as {
+            persistedCloseAtMs: number | null;
+          };
+        },
+        fetchRoomBundles: async (roomId) => {
+          const stub = getWeurStub(env.QUIZ_ROOM, roomId);
+          const res = await stub.fetch(
+            'https://room.internal/internal/batches',
+            {
+              method: 'POST',
+            }
+          );
+          if (!res.ok) {
+            throw new QuizRoomError(
+              'QUIZ_ROOM_BUNDLES_FAILED',
+              `Failed to read bundles for room ${roomId}`,
+              res.status
+            );
+          }
+          const data = (await res.json()) as { bundles?: QuizAttemptBundle[] };
+          return data.bundles ?? [];
+        },
+        materializeShard: async (shardName, eventMeta, records) => {
+          const stub = getWeurStub(env.RESULT_SHARD, shardName);
+          const res = await stub.fetch(
+            'https://shard.internal/internal/materialize',
+            {
+              method: 'POST',
+              body: JSON.stringify({ eventMeta, records }),
+            }
+          );
+          if (!res.ok) {
+            throw new QuizRoomError(
+              'QUIZ_SHARD_MATERIALIZE_FAILED',
+              `Failed to materialize shard ${shardName}`,
+              res.status
+            );
+          }
+        },
+        markRoundReconciled: async (publishedAtMs) => {
+          const stub = getWeurStub(env.DEMO_STATE, DEMO_STATE_DO_NAME);
+          await stub.fetch('https://demo.internal/internal/demo/reconciled', {
+            method: 'POST',
+            body: JSON.stringify({ publishedAtMs }),
+          });
         },
       });
       if (demoRes) return demoRes;
@@ -667,9 +773,7 @@ export default {
           eventId: string;
           snapshot: QuizControlStateSnapshot;
         }>(request);
-        const coordStub = env.EVENT_COORDINATOR.get(
-          env.EVENT_COORDINATOR.idFromName(body.eventId)
-        );
+        const coordStub = getWeurStub(env.EVENT_COORDINATOR, body.eventId);
         return coordStub.fetch(
           'https://coord.internal/internal/control-state',
           {
@@ -689,9 +793,7 @@ export default {
           mode?: QuizRoomSealMode;
           maxRoomsPerSweep?: number;
         }>(request);
-        const coordStub = env.EVENT_COORDINATOR.get(
-          env.EVENT_COORDINATOR.idFromName(body.eventId)
-        );
+        const coordStub = getWeurStub(env.EVENT_COORDINATOR, body.eventId);
         return coordStub.fetch('https://coord.internal/internal/sweep', {
           method: 'POST',
           body: JSON.stringify(body),
@@ -711,9 +813,7 @@ export default {
           endsAtMs: number;
           expectedRoomIds: readonly string[];
         }>(request);
-        const coordStub = env.EVENT_COORDINATOR.get(
-          env.EVENT_COORDINATOR.idFromName(body.eventId)
-        );
+        const coordStub = getWeurStub(env.EVENT_COORDINATOR, body.eventId);
         return coordStub.fetch('https://coord.internal/internal/freeze', {
           method: 'POST',
           body: JSON.stringify(body),
@@ -741,9 +841,7 @@ export default {
           appVersion: string;
           platform: QuizPlatform;
         }>(request);
-        const roomStub = env.QUIZ_ROOM.get(
-          env.QUIZ_ROOM.idFromName(ticket.roomId)
-        );
+        const roomStub = getWeurStub(env.QUIZ_ROOM, ticket.roomId);
         return roomStub.fetch('https://room.internal/internal/start', {
           method: 'POST',
           body: JSON.stringify({ ...body, ticket }),
@@ -768,9 +866,7 @@ export default {
           questionId: string;
           answer: string;
         }>(request);
-        const roomStub = env.QUIZ_ROOM.get(
-          env.QUIZ_ROOM.idFromName(ticket.roomId)
-        );
+        const roomStub = getWeurStub(env.QUIZ_ROOM, ticket.roomId);
         return roomStub.fetch('https://room.internal/internal/answer', {
           method: 'POST',
           body: JSON.stringify({
@@ -793,9 +889,7 @@ export default {
           secret: ticketSecret,
           nowMs: Date.now(),
         });
-        const roomStub = env.QUIZ_ROOM.get(
-          env.QUIZ_ROOM.idFromName(ticket.roomId)
-        );
+        const roomStub = getWeurStub(env.QUIZ_ROOM, ticket.roomId);
         return roomStub.fetch('https://room.internal/internal/resume', {
           method: 'POST',
           body: JSON.stringify({ ticket }),
@@ -818,8 +912,9 @@ export default {
           user.userId,
           getShardCount(env)
         );
-        const shardStub = env.RESULT_SHARD.get(
-          env.RESULT_SHARD.idFromName(`attempt-shard:${shardIdx}`)
+        const shardStub = getWeurStub(
+          env.RESULT_SHARD,
+          `attempt-shard:${shardIdx}`
         );
         return shardStub.fetch('https://shard.internal/internal/result', {
           method: 'POST',
@@ -854,8 +949,9 @@ export default {
           user.userId,
           getShardCount(env)
         );
-        const shardStub = env.RESULT_SHARD.get(
-          env.RESULT_SHARD.idFromName(`${eventId}:shard:${shardIdx}`)
+        const shardStub = getWeurStub(
+          env.RESULT_SHARD,
+          `${eventId}:shard:${shardIdx}`
         );
         return shardStub.fetch('https://shard.internal/internal/leaderboard', {
           method: 'POST',
@@ -890,9 +986,7 @@ export default {
             403
           );
         }
-        const rankStub = env.LIVE_RANK_INDEX.get(
-          env.LIVE_RANK_INDEX.idFromName(eventId)
-        );
+        const rankStub = getWeurStub(env.LIVE_RANK_INDEX, eventId);
         return rankStub.fetch('https://rank.internal/internal/leaderboard', {
           method: 'POST',
           body: JSON.stringify({

@@ -4,6 +4,7 @@ import type {
   QuizQuestionSlot,
 } from './contracts';
 import { quizAnswerKeyHash } from './crypto';
+import { type DemoFinalizerEnv, reconcileDemoRound } from './demo-finalizer';
 import type { DemoRoundState, DemoTelemetryInput } from './demo-state';
 import {
   type DemoReportPayload,
@@ -62,7 +63,7 @@ export async function buildDemoEventConfig(params: {
   };
 }
 
-export interface DemoDispatchEnv {
+export interface DemoDispatchEnv extends DemoFinalizerEnv {
   QUIZ_TICKET_SECRET?: string;
   QUIZ_JWT_SECRET?: string;
   QUIZ_INTERNAL_COORDINATOR_SECRET?: string;
@@ -76,12 +77,16 @@ export interface DemoDispatchEnv {
   refreshControlState(eventId: string, nowMs: number): Promise<void>;
 }
 
-function buildRoundRoomIds(round: 1 | 2 | 3, overrideCount?: number): string[] {
+function buildRoundRoomIds(
+  eventId: string,
+  round: 1 | 2 | 3,
+  overrideCount?: number
+): string[] {
   const defaultCount = round === 3 ? 13 : 1;
   const count = Math.max(1, Math.min(64, overrideCount ?? defaultCount));
   return Array.from(
     { length: count },
-    (_, i) => `room-${String(i).padStart(4, '0')}`
+    (_, i) => `${eventId}:room-${String(i).padStart(4, '0')}`
   );
 }
 
@@ -125,17 +130,20 @@ export async function handleDemoWorkerRoute(
       durationMs?: number;
       roomCount?: number;
       eventId?: string;
+      soloInstantResult?: boolean;
     };
     const round: 1 | 2 | 3 =
       body.round === 2 || body.round === 3 ? body.round : 1;
+    const soloInstantResult = Boolean(body.soloInstantResult);
     const nowMs = Date.now();
     const startsAtMs = nowMs + (body.startsInMs ?? 0);
-    const endsAtMs = startsAtMs + (body.durationMs ?? 120_000);
+    const defaultDurationMs = soloInstantResult ? 43_200_000 : 120_000;
+    const endsAtMs = startsAtMs + (body.durationMs ?? defaultDurationMs);
     const eventId =
       body.eventId ??
       `11111111-1111-4111-8111-${String(round).padStart(12, '0')}`;
     const merchantId = 'merch-ogabassey-demo';
-    const roomIds = buildRoundRoomIds(round, body.roomCount);
+    const roomIds = buildRoundRoomIds(eventId, round, body.roomCount);
     const config = await buildDemoEventConfig({
       eventId,
       merchantId,
@@ -157,8 +165,55 @@ export async function handleDemoWorkerRoute(
       startsAtMs,
       endsAtMs,
       nextAssignSeq: 0,
+      soloInstantResult,
+      reconciledAtMs: null,
     };
     return env.callDemoDo('/internal/demo/setup-round', roundState);
+  }
+
+  if (request.method === 'POST' && path === '/api/demo/admin/finalize-round') {
+    verifyInternalCoordinatorAuth(
+      request.headers.get('Authorization'),
+      env.QUIZ_INTERNAL_COORDINATOR_SECRET
+    );
+    const rawBody = await request.text();
+    const body = (rawBody.trim() ? JSON.parse(rawBody) : {}) as {
+      eventId?: string;
+      roomIds?: readonly string[];
+      endsAtMs?: number;
+    };
+    const roundRes = await env.callDemoDo('/internal/demo/active');
+    const round = roundRes.ok
+      ? ((await roundRes.json()) as DemoRoundState | null)
+      : null;
+    const override =
+      body.eventId && Array.isArray(body.roomIds) && body.roomIds.length > 0
+        ? {
+            eventId: body.eventId,
+            roomIds: body.roomIds,
+            endsAtMs: body.endsAtMs,
+          }
+        : undefined;
+    const res = await reconcileDemoRound(
+      { round, override, forceAdmin: true, nowMs: Date.now() },
+      env
+    );
+    return new Response(JSON.stringify(res), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+    });
+  }
+
+  if (request.method === 'POST' && path === '/api/demo/reconcile') {
+    const roundRes = await env.callDemoDo('/internal/demo/active');
+    const round = roundRes.ok
+      ? ((await roundRes.json()) as DemoRoundState | null)
+      : null;
+    const res = await reconcileDemoRound({ round, nowMs: Date.now() }, env);
+    return new Response(JSON.stringify(res), {
+      status: res.reconciled ? 200 : 202,
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+    });
   }
 
   if (request.method === 'POST' && path === '/api/demo/check-in') {
@@ -219,6 +274,7 @@ export async function handleDemoWorkerRoute(
         roomId: alloc.roomId,
         startsAtMs: alloc.round.startsAtMs,
         endsAtMs: alloc.round.endsAtMs,
+        soloInstantResult: Boolean(alloc.round.soloInstantResult),
         nickname,
         carrier: body.carrier ?? 'MTN',
         ticket: signedTicket,

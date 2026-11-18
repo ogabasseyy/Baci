@@ -9,10 +9,12 @@ import { constantTimeEqual } from '@/lib/constant-time-equal';
 import { expireProductBlogCache } from '@/lib/expire-product-blog-cache';
 import { collectResolvedProductSlugs } from '@/lib/internal-product-purge-entries';
 import { logger } from '@/lib/logger';
-import { scheduleStorefrontProductPurge } from '@/lib/storefront-product-purge';
-import { scheduleStorefrontHostnamePurge } from '@/lib/storefront-product-purge-hostnames';
 import { createPublicClient } from '@/lib/supabase/public';
 import { internalRevalidateProductsBodySchema } from '@/schemas/internal-revalidate-products-route';
+import {
+  dispatchStorefrontHostnamePurge,
+  dispatchStorefrontProductPurge,
+} from './dispatch-storefront-purge';
 
 function normalizeMerchantSlug(value: string): string {
   return value.trim().toLowerCase();
@@ -72,7 +74,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     products,
     purgeWholeStorefront,
     expireProductBlogCache: shouldExpireProductBlogCache,
+    blogPostSlugs: callerBlogPostSlugs,
+    confirmEdgeEviction,
   } = parsed.data;
+  let edgePurged = false;
 
   // Runs in a route context, so revalidateTag works here (unlike the CLI worker).
   if (shouldExpireProductBlogCache) {
@@ -232,18 +237,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           revalidateProducts(merchantId, undefined, {
             expireImmediately: true,
           });
-          if (blogPostSlugsIncomplete) {
-            // The article lookup totally failed: the affected article URLs
-            // are unknown, so evict the hostname (a superset of the product
-            // purge) rather than leaving linked rails stale until TTL.
-            scheduleStorefrontHostnamePurge(authoritativeMerchantSlug);
-          } else if (blogPostSlugs.length > 0) {
-            scheduleStorefrontProductPurge(authoritativeMerchantSlug, entries, {
-              blogPostSlugs,
-            });
-          } else {
-            scheduleStorefrontProductPurge(authoritativeMerchantSlug, entries);
-          }
+          const mergedBlogPostSlugs = Array.from(
+            new Set([...(callerBlogPostSlugs ?? []), ...blogPostSlugs])
+          );
+          edgePurged = await dispatchStorefrontProductPurge({
+            merchantSlug: authoritativeMerchantSlug,
+            entries,
+            blogPostSlugs: mergedBlogPostSlugs,
+            blogPostSlugsIncomplete,
+            confirmEdgeEviction: Boolean(confirmEdgeEviction),
+          });
         }
       }
     } catch (purgeError) {
@@ -263,8 +266,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // can trigger a MISS and refill Cloudflare with stale product data.
     expireProductBlogCache(merchantId);
     revalidateProducts(merchantId, undefined, { expireImmediately: true });
-    scheduleStorefrontHostnamePurge(authoritativeMerchantSlug);
+    edgePurged = await dispatchStorefrontHostnamePurge(
+      authoritativeMerchantSlug,
+      Boolean(confirmEdgeEviction)
+    );
   }
 
-  return NextResponse.json({ ok: true }, { status: 200 });
+  return NextResponse.json(
+    confirmEdgeEviction ? { ok: true, edgePurged } : { ok: true },
+    { status: 200 }
+  );
 }

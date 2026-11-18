@@ -5,12 +5,12 @@ import {
   revalidateProducts,
 } from '@/lib/cache-revalidation';
 import { getCloudflarePurgeCredentials } from '@/lib/cloudflare-purge-credentials';
+import { delegateStorefrontEdgePurge } from '@/lib/delegate-storefront-edge-purge';
 import { expireProductBlogCacheReliable } from '@/lib/expire-product-blog-cache-reliable';
 import {
   buildInternalProductPurgeEntries,
   collectResolvedProductSlugs,
 } from '@/lib/internal-product-purge-entries';
-import { getProductBlogCacheRuntimeConfig } from '@/lib/product-blog-cache-runtime-config';
 import {
   purgeStorefrontProductConfirmed,
   scheduleStorefrontProductPurge,
@@ -19,86 +19,6 @@ import {
   purgeStorefrontHostnameConfirmed,
   scheduleStorefrontHostnamePurge,
 } from '@/lib/storefront-product-purge-hostnames';
-import {
-  PURGE_WHOLE_STOREFRONT_THRESHOLD,
-  type StorefrontProductPurgeEntry,
-} from '@/lib/storefront-product-purge-urls';
-
-const REMOTE_EDGE_PURGE_TIMEOUT_MS = 5_000;
-
-async function delegateStorefrontEdgePurge({
-  merchantId,
-  merchantSlug,
-  entries,
-  productSlugs,
-  purgeWholeStorefront,
-}: {
-  merchantId: string;
-  merchantSlug: string;
-  entries: readonly StorefrontProductPurgeEntry[];
-  productSlugs: readonly string[];
-  purgeWholeStorefront: boolean;
-}): Promise<boolean> {
-  let secret: string | undefined;
-  let baseUrl: string | undefined;
-  try {
-    const runtimeConfig = getProductBlogCacheRuntimeConfig();
-    secret = runtimeConfig.secret;
-    baseUrl = runtimeConfig.baseUrl;
-  } catch {
-    return false;
-  }
-  if (!secret || !baseUrl) {
-    return false;
-  }
-
-  let endpoint: URL;
-  try {
-    const parsedBase = new URL(baseUrl);
-    if (
-      (parsedBase.protocol !== 'https:' && parsedBase.protocol !== 'http:') ||
-      parsedBase.username ||
-      parsedBase.password
-    ) {
-      return false;
-    }
-    endpoint = new URL('/api/internal/revalidate-products', parsedBase.origin);
-  } catch {
-    return false;
-  }
-
-  const useWholeStorefront =
-    purgeWholeStorefront || entries.length > PURGE_WHOLE_STOREFRONT_THRESHOLD;
-  try {
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${secret}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        merchantId,
-        merchantSlug,
-        expireProductBlogCache: true,
-        ...(productSlugs.length > 0 ? { productSlugs } : {}),
-        ...(useWholeStorefront
-          ? { purgeWholeStorefront: true }
-          : {
-              products: entries.map((entry) => ({
-                slug: entry.slug,
-                ...(entry.categorySegment
-                  ? { categorySlug: entry.categorySegment }
-                  : {}),
-              })),
-            }),
-      }),
-      signal: AbortSignal.timeout(REMOTE_EDGE_PURGE_TIMEOUT_MS),
-    });
-    return response.ok;
-  } catch {
-    return false;
-  }
-}
 
 interface ScheduleOrderProductBlogPurgeInput {
   merchantId: string;
@@ -261,6 +181,7 @@ export async function scheduleOrderProductBlogPurge({
         merchantSlug,
         entries,
         productSlugs: slugs,
+        blogPostSlugs,
         purgeWholeStorefront: blogPostSlugsIncomplete,
       });
     }

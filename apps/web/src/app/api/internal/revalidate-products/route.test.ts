@@ -161,17 +161,17 @@ describe('POST /api/internal/revalidate-products', () => {
     );
 
     expect(res.status).toBe(200);
-    expect(mockRevalidateProducts).toHaveBeenCalledWith(MERCHANT_ID);
+    expect(mockRevalidateProducts).toHaveBeenCalledTimes(1);
     expect(mockRevalidateProducts).toHaveBeenCalledWith(
       MERCHANT_ID,
       undefined,
-      { expireImmediately: true }
+      { expireImmediately: true, omitMerchantWidePdpDetails: true }
     );
     expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
       'ogabassey',
       [{ slug: 'iphone-15', categorySegment: 'smartphones' }]
     );
-    expect(mockRevalidateProducts.mock.invocationCallOrder[1]).toBeLessThan(
+    expect(mockRevalidateProducts.mock.invocationCallOrder[0]).toBeLessThan(
       mockScheduleStorefrontProductPurge.mock.invocationCallOrder[0]
     );
     expect(mockExpireProductBlogCache).toHaveBeenCalledWith(MERCHANT_ID);

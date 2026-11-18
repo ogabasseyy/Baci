@@ -166,7 +166,6 @@ describe('cached-data product query projections', () => {
     expect(cacheTag).toHaveBeenCalledWith(
       'product',
       'product-lcp-hint',
-      'products-merchant-123',
       getProductScopedCacheTag('product', 'merchant-123', 'iphone-16')
     );
     expect(cacheTag).toHaveBeenCalledWith(
@@ -174,7 +173,6 @@ describe('cached-data product query projections', () => {
       'product-details',
       'product-details-merchant-123',
       'product-lcp-hint',
-      'products-merchant-123',
       'categories-merchant-123',
       getProductScopedCacheTag('product', 'merchant-123', 'iphone-16')
     );

@@ -209,7 +209,7 @@ describe('cache-revalidation utilities', () => {
   });
 
   describe('revalidateProductSlugs', () => {
-    it('invalidates the per-slug scoped product tag for each slug', () => {
+    it('invalidates the per-slug scoped product and redirect tags for each slug', () => {
       revalidateProductSlugs(MERCHANT_ID, ['iphone-15', 'galaxy-s25']);
 
       expect(mockRevalidateTag).toHaveBeenCalledWith(
@@ -217,10 +217,42 @@ describe('cache-revalidation utilities', () => {
         'products'
       );
       expect(mockRevalidateTag).toHaveBeenCalledWith(
+        getProductScopedCacheTag(
+          'product-canonical-redirect',
+          MERCHANT_ID,
+          'iphone-15'
+        ),
+        'products'
+      );
+      expect(mockRevalidateTag).toHaveBeenCalledWith(
+        getProductScopedCacheTag(
+          'product-legacy-redirect',
+          MERCHANT_ID,
+          'iphone-15'
+        ),
+        'products'
+      );
+      expect(mockRevalidateTag).toHaveBeenCalledWith(
         getProductScopedCacheTag('product', MERCHANT_ID, 'galaxy-s25'),
         'products'
       );
-      expect(mockRevalidateTag).toHaveBeenCalledTimes(2);
+      expect(mockRevalidateTag).toHaveBeenCalledWith(
+        getProductScopedCacheTag(
+          'product-canonical-redirect',
+          MERCHANT_ID,
+          'galaxy-s25'
+        ),
+        'products'
+      );
+      expect(mockRevalidateTag).toHaveBeenCalledWith(
+        getProductScopedCacheTag(
+          'product-legacy-redirect',
+          MERCHANT_ID,
+          'galaxy-s25'
+        ),
+        'products'
+      );
+      expect(mockRevalidateTag).toHaveBeenCalledTimes(6);
     });
 
     it('deduplicates and skips blank/nullish slugs', () => {
@@ -232,9 +264,25 @@ describe('cache-revalidation utilities', () => {
         undefined,
       ]);
 
-      expect(mockRevalidateTag).toHaveBeenCalledTimes(1);
+      expect(mockRevalidateTag).toHaveBeenCalledTimes(3);
       expect(mockRevalidateTag).toHaveBeenCalledWith(
         getProductScopedCacheTag('product', MERCHANT_ID, 'iphone-15'),
+        'products'
+      );
+      expect(mockRevalidateTag).toHaveBeenCalledWith(
+        getProductScopedCacheTag(
+          'product-canonical-redirect',
+          MERCHANT_ID,
+          'iphone-15'
+        ),
+        'products'
+      );
+      expect(mockRevalidateTag).toHaveBeenCalledWith(
+        getProductScopedCacheTag(
+          'product-legacy-redirect',
+          MERCHANT_ID,
+          'iphone-15'
+        ),
         'products'
       );
     });

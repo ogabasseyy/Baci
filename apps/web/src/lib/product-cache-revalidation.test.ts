@@ -145,7 +145,7 @@ describe('productCacheRevalidation', () => {
     );
   });
 
-  it('deduplicates product slugs and ignores blank values', () => {
+  it('deduplicates product slugs, ignores blank values, and busts per-slug redirect tags', () => {
     expect(
       productCacheRevalidation.revalidateProductSlugs('merchant-1', [
         'phone',
@@ -155,11 +155,53 @@ describe('productCacheRevalidation', () => {
       ])
     ).toBe(true);
 
-    expect(revalidateTag).toHaveBeenCalledTimes(1);
+    expect(revalidateTag).toHaveBeenCalledTimes(3);
     expect(revalidateTag).toHaveBeenCalledWith(
       'product-merchant-1-phone',
       'products'
     );
+    expect(revalidateTag).toHaveBeenCalledWith(
+      'product-canonical-redirect-merchant-1-phone',
+      'products'
+    );
+    expect(revalidateTag).toHaveBeenCalledWith(
+      'product-legacy-redirect-merchant-1-phone',
+      'products'
+    );
+  });
+
+  it('skips merchant-wide PDP detail and redirect tags when omitMerchantWidePdpDetails is true', () => {
+    expect(
+      productCacheRevalidation.revalidateProducts('merchant-1', undefined, {
+        expireImmediately: true,
+        omitMerchantWidePdpDetails: true,
+      })
+    ).toBe(true);
+
+    expect(revalidateTag).toHaveBeenCalledWith('products-merchant-1', {
+      expire: 0,
+    });
+    expect(revalidateTag).toHaveBeenCalledWith('product-slug-set-merchant-1', {
+      expire: 0,
+    });
+    expect(revalidateTag).toHaveBeenCalledWith('product-index-merchant-1', {
+      expire: 0,
+    });
+    expect(revalidateTag).toHaveBeenCalledWith(
+      getCategoryPageDataCacheTag('merchant-1'),
+      { expire: 0 }
+    );
+    expect(revalidateTag).toHaveBeenCalledWith('merchant-feed-merchant-1', {
+      expire: 0,
+    });
+    expect(revalidateTag).toHaveBeenCalledWith('dashboard-merchant-1', {
+      expire: 0,
+    });
+
+    const calledTags = revalidateTag.mock.calls.map(([tag]) => tag);
+    expect(calledTags).not.toContain('product-details-merchant-1');
+    expect(calledTags).not.toContain('product-canonical-redirect-merchant-1');
+    expect(calledTags).not.toContain('product-legacy-redirect-merchant-1');
   });
 
   it('does not revalidate product tags for a blank merchant id', () => {

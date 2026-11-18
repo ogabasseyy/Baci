@@ -15,6 +15,11 @@ import { buildStorefrontProductsCacheTags } from '@/lib/storefront-products-cach
 export interface ProductRevalidationOptions {
   expireImmediately?: boolean;
   feedScope?: 'all' | 'merchant' | 'none';
+  /**
+   * Skip merchant-wide PDP detail and redirect tags when the caller has
+   * already busted the exact affected product slugs via `revalidateProductSlugs`.
+   */
+  omitMerchantWidePdpDetails?: boolean;
 }
 
 type ProductCacheProfile = string | { readonly expire: 0 };
@@ -178,10 +183,6 @@ function revalidateProducts(
   }
   entries.push(
     {
-      profile: productsProfile,
-      tag: getProductDetailsCacheTag(normalizedMerchantId),
-    },
-    {
       profile: storefrontProfile,
       tag: getCategoryPageDataCacheTag(normalizedMerchantId),
     },
@@ -192,16 +193,25 @@ function revalidateProducts(
     {
       profile: productsProfile,
       tag: getProductSlugSetCacheTag(normalizedMerchantId),
-    },
-    {
-      profile: productsProfile,
-      tag: getProductCanonicalRedirectCacheTag(normalizedMerchantId),
-    },
-    {
-      profile: productsProfile,
-      tag: getProductLegacyRedirectCacheTag(normalizedMerchantId),
     }
   );
+
+  if (!options.omitMerchantWidePdpDetails) {
+    entries.push(
+      {
+        profile: productsProfile,
+        tag: getProductDetailsCacheTag(normalizedMerchantId),
+      },
+      {
+        profile: productsProfile,
+        tag: getProductCanonicalRedirectCacheTag(normalizedMerchantId),
+      },
+      {
+        profile: productsProfile,
+        tag: getProductLegacyRedirectCacheTag(normalizedMerchantId),
+      }
+    );
+  }
 
   const feedScope = options.feedScope ?? 'merchant';
   if (feedScope === 'all' || feedScope === 'merchant') {
@@ -249,10 +259,28 @@ function revalidateProductSlugs(
     const slug = rawSlug?.trim();
     if (!slug || seen.has(slug)) continue;
     seen.add(slug);
-    entries.push({
-      profile,
-      tag: getProductScopedCacheTag('product', normalizedMerchantId, slug),
-    });
+    entries.push(
+      {
+        profile,
+        tag: getProductScopedCacheTag('product', normalizedMerchantId, slug),
+      },
+      {
+        profile,
+        tag: getProductScopedCacheTag(
+          'product-canonical-redirect',
+          normalizedMerchantId,
+          slug
+        ),
+      },
+      {
+        profile,
+        tag: getProductScopedCacheTag(
+          'product-legacy-redirect',
+          normalizedMerchantId,
+          slug
+        ),
+      }
+    );
   }
 
   return revalidateProductTagBatch(entries);

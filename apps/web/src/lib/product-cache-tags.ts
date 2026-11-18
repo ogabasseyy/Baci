@@ -84,7 +84,6 @@ export function buildStorefrontPdpCoreCacheTags(
     'product-details',
     getProductDetailsCacheTag(merchantId),
     'product-lcp-hint',
-    `products-${merchantId}`,
     `categories-${merchantId}`,
     getProductScopedCacheTag('product', merchantId, productSlug),
   ];
@@ -97,7 +96,6 @@ export function buildProductLcpHintCacheTags(
   return [
     'product',
     'product-lcp-hint',
-    `products-${merchantId}`,
     getProductScopedCacheTag('product', merchantId, productSlug),
   ];
 }

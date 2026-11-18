@@ -14,10 +14,7 @@ import { internalRevalidateProductsBodySchema } from '@/schemas/internal-revalid
 import { dispatchStorefrontHostnamePurge } from './dispatch-storefront-hostname-purge';
 import { dispatchStorefrontProductPurge } from './dispatch-storefront-purge';
 import { flushOriginCacheRevalidations } from './flush-origin-cache-revalidations';
-
-function normalizeMerchantSlug(value: string): string {
-  return value.trim().toLowerCase();
-}
+import { resolveAuthoritativeMerchantSlug } from './resolve-authoritative-merchant-slug';
 
 /**
  * Internal product-cache revalidation endpoint.
@@ -78,13 +75,21 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   } = parsed.data;
   let edgePurged = false;
 
+  const hasExplicitProductSlugs = Boolean(
+    productSlugs && productSlugs.length > 0
+  );
+  const hasProducts = Boolean(products && products.length > 0);
   // Runs in a route context, so revalidateTag works here (unlike the CLI worker).
   if (shouldExpireProductBlogCache) {
     // Standalone workers use this narrow mode to refresh the related-product
     // enrichment without churning every product/index/feed cache for the
     // merchant. The helper is intentionally called in this request context.
     expireProductBlogCache(merchantId);
-  } else {
+  } else if (!purgeWholeStorefront && !hasProducts && hasExplicitProductSlugs) {
+    revalidateProducts(merchantId, undefined, {
+      omitMerchantWidePdpDetails: true,
+    });
+  } else if (purgeWholeStorefront || !hasProducts) {
     revalidateProducts(merchantId);
   }
 
@@ -110,46 +115,22 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       });
 
       if (needsStorefrontPurge && merchantSlug) {
-        const { data: merchantRow, error: merchantLookupError } = await supabase
-          .from('merchants')
-          .select('slug')
-          .eq('id', merchantId)
-          .maybeSingle<{ slug: string | null }>();
-
-        if (merchantLookupError) {
-          logger.error({
-            message:
-              'Skipped Cloudflare storefront purge after merchant slug lookup failed',
-            error: merchantLookupError,
-            merchantId,
-          });
-        } else {
-          const resolvedSlug = merchantRow?.slug?.trim();
-          if (!resolvedSlug) {
-            logger.error({
-              message:
-                'Skipped Cloudflare storefront purge because the merchant has no slug',
-              merchantId,
-            });
-          } else if (
-            normalizeMerchantSlug(resolvedSlug) !==
-            normalizeMerchantSlug(merchantSlug)
-          ) {
-            logger.warn({
-              message:
-                'Rejected internal storefront purge with a mismatched merchant slug',
-              merchantId,
-            });
-            return NextResponse.json(
-              {
-                error: 'Merchant slug does not match merchant ID',
-                code: 'MERCHANT_SLUG_MISMATCH',
-              },
-              { status: 400 }
-            );
-          } else {
-            authoritativeMerchantSlug = resolvedSlug;
-          }
+        const slugResult = await resolveAuthoritativeMerchantSlug(
+          supabase,
+          merchantId,
+          merchantSlug
+        );
+        if (slugResult.status === 'mismatch') {
+          return NextResponse.json(
+            {
+              error: 'Merchant slug does not match merchant ID',
+              code: 'MERCHANT_SLUG_MISMATCH',
+            },
+            { status: 400 }
+          );
+        }
+        if (slugResult.status === 'ok') {
+          authoritativeMerchantSlug = slugResult.slug;
         }
       }
     } catch (purgeClientError) {
@@ -176,6 +157,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     });
   }
   if (products && products.length > 0) {
+    let revalidatedDeferredProducts = false;
     try {
       if (purgeWholeStorefront) {
         // Whole-storefront purges ignore per-product entries and blog slugs
@@ -229,13 +211,19 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         } else {
           revalidateProductSlugs(merchantId, bustSlugs);
         }
+        const omitMerchantWidePdpDetails =
+          bustSlugs.length > 0 && !blogPostSlugsIncomplete;
         if (authoritativeMerchantSlug && !purgeWholeStorefront) {
           // Related blog enrichment shares the merchant product tag. Expire it
           // before the edge purge can cause an article MISS to refill stale data.
           expireProductBlogCache(merchantId);
           revalidateProducts(merchantId, undefined, {
             expireImmediately: true,
+            ...(omitMerchantWidePdpDetails
+              ? { omitMerchantWidePdpDetails: true }
+              : {}),
           });
+          revalidatedDeferredProducts = true;
           const mergedBlogPostSlugs = Array.from(
             new Set([...(callerBlogPostSlugs ?? []), ...blogPostSlugs])
           );
@@ -249,9 +237,25 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             blogPostSlugsIncomplete,
             confirmEdgeEviction: Boolean(confirmEdgeEviction),
           });
+        } else if (!shouldExpireProductBlogCache) {
+          if (omitMerchantWidePdpDetails) {
+            revalidateProducts(merchantId, undefined, {
+              omitMerchantWidePdpDetails: true,
+            });
+          } else {
+            revalidateProducts(merchantId);
+          }
+          revalidatedDeferredProducts = true;
         }
       }
     } catch (purgeError) {
+      if (
+        !shouldExpireProductBlogCache &&
+        !purgeWholeStorefront &&
+        !revalidatedDeferredProducts
+      ) {
+        revalidateProducts(merchantId);
+      }
       logger.error({
         message: 'Skipped Cloudflare product purge in revalidate-products',
         error: purgeError,

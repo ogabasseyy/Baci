@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockGetInternalApiSecret = vi.fn();
+const mockRevalidateProducts = vi.fn();
 const mockRevalidateProductSlugs = vi.fn();
 const mockScheduleStorefrontProductPurge = vi.fn();
 const mockCreatePublicClient = vi.fn();
@@ -9,7 +10,7 @@ vi.mock('@/env', () => ({
   getInternalApiSecret: () => mockGetInternalApiSecret(),
 }));
 vi.mock('@/lib/cache-revalidation', () => ({
-  revalidateProducts: vi.fn(),
+  revalidateProducts: (...args: unknown[]) => mockRevalidateProducts(...args),
   revalidateProductSlugs: (...args: unknown[]) =>
     mockRevalidateProductSlugs(...args),
 }));
@@ -61,6 +62,11 @@ describe('POST /api/internal/revalidate-products slug chunks', () => {
     );
 
     expect(res.status).toBe(200);
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      MERCHANT_ID,
+      undefined,
+      { omitMerchantWidePdpDetails: true }
+    );
     // Hard-expired even without purge inputs: a later control-metadata
     // chunk may schedule an edge purge over these tags.
     expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(

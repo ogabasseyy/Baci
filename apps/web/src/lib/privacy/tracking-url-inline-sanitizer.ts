@@ -1,8 +1,8 @@
+import { SENSITIVE_URL_PARAM_NAMES } from './sensitive-url-params';
 import {
   PATH_TOKEN_PLACEHOLDER,
   SENSITIVE_PATH_REGEX_SOURCE,
-  SENSITIVE_URL_PARAM_NAMES,
-} from './sensitive-url-params';
+} from './sensitive-url-paths';
 
 /**
  * Self-contained browser-side twin of `sanitizeTrackingUrl`, for inline

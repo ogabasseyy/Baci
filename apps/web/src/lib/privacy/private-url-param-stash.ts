@@ -1,12 +1,15 @@
+import { isEntryList } from './is-entry-list';
+import {
+  loadRecord,
+  pruneRecords,
+  removeRecord,
+  saveRecord,
+} from './private-url-param-records';
 import {
   canonicalSearch,
-  isEntryList,
   type PrivateEntry,
   partitionSensitiveSearch,
 } from './sensitive-url-params';
-
-const STASH_KEY_PREFIX = 'baci:private-url-params:';
-const MAX_STASH_RECORDS = 30;
 
 /**
  * Key of the custom `history.state` property that links one history entry to
@@ -23,29 +26,12 @@ export const PRIVATE_PARAMS_STATE_KEY = '__baciPrivateParams';
  */
 const NO_STASH_STATE_KEY = '__baciNoPrivateParams';
 
-interface StashRecord {
-  pathname: string;
-  publicSearch: string;
-  entries: PrivateEntry[];
-  savedAt: number;
-}
-
-// Fallback when sessionStorage is unavailable (blocked, full, strict privacy
-// modes): the values then live in this page's memory, so they survive in-page
-// navigation but NOT a reload. Scrubbing the address bar still happens: a
-// token that is lost on reload is better than a token left in the address.
-const memoryRecords = new Map<string, StashRecord>();
-
 let lastSavedAt = 0;
 
 /** Strictly increasing, so records saved in the same millisecond keep their order. */
 function nextSavedAt(): number {
   lastSavedAt = Math.max(Date.now(), lastSavedAt + 1);
   return lastSavedAt;
-}
-
-function stashKey(id: string): string {
-  return `${STASH_KEY_PREFIX}${id}`;
 }
 
 /** Not a secret: it only links a history entry to its record. */
@@ -72,9 +58,26 @@ function currentHistoryState(): Record<string, unknown> {
     : {};
 }
 
-/** The current history state with the stash id set and the no-stash marker removed. */
+/**
+ * Next.js's own history keys. Its patched `replaceState` skips the router
+ * update (so `useSearchParams` keeps the old address) for any state carrying
+ * `__NA`/`_N`, and re-adds `__NA` and the tree from the current entry itself.
+ */
+const NEXT_INTERNAL_STATE_KEYS = [
+  '__NA',
+  '_N',
+  '__PRIVATE_NEXTJS_INTERNALS_TREE',
+];
+
+/**
+ * The current history state with the stash id set, the no-stash marker removed
+ * and Next.js's internal keys left out, so Next.js syncs its router state with
+ * the rewritten address.
+ */
 function stateWithId(id: string): Record<string, unknown> {
-  const { [NO_STASH_STATE_KEY]: _marker, ...state } = currentHistoryState();
+  const state = currentHistoryState();
+  delete state[NO_STASH_STATE_KEY];
+  for (const key of NEXT_INTERNAL_STATE_KEYS) delete state[key];
   return { ...state, [PRIVATE_PARAMS_STATE_KEY]: id };
 }
 
@@ -83,56 +86,6 @@ export function currentPrivateParamsId(): string | null {
   if (typeof window === 'undefined') return null;
   const id = currentHistoryState()[PRIVATE_PARAMS_STATE_KEY];
   return typeof id === 'string' && id !== '' ? id : null;
-}
-
-function pruneOldRecords(storage: Storage): void {
-  const records: { key: string; savedAt: number }[] = [];
-  for (let i = 0; i < storage.length; i++) {
-    const key = storage.key(i);
-    if (!key?.startsWith(STASH_KEY_PREFIX)) continue;
-    let savedAt = 0;
-    try {
-      const parsed: unknown = JSON.parse(storage.getItem(key) ?? '');
-      const value = (parsed as { savedAt?: unknown } | null)?.savedAt;
-      if (typeof value === 'number') savedAt = value;
-    } catch {
-      // Unreadable records sort oldest and are removed first.
-    }
-    records.push({ key, savedAt });
-  }
-  if (records.length <= MAX_STASH_RECORDS) return;
-  records.sort((a, b) => a.savedAt - b.savedAt);
-  for (const { key } of records.slice(0, records.length - MAX_STASH_RECORDS)) {
-    storage.removeItem(key);
-  }
-}
-
-function saveRecord(id: string, record: StashRecord): void {
-  try {
-    window.sessionStorage.setItem(stashKey(id), JSON.stringify(record));
-    pruneOldRecords(window.sessionStorage);
-  } catch {
-    memoryRecords.set(id, record);
-  }
-}
-
-function removeRecord(id: string): void {
-  memoryRecords.delete(id);
-  try {
-    window.sessionStorage.removeItem(stashKey(id));
-  } catch {
-    // Nothing more to clean up.
-  }
-}
-
-function loadRecord(id: string): unknown {
-  try {
-    const raw = window.sessionStorage.getItem(stashKey(id));
-    if (raw) return JSON.parse(raw);
-  } catch {
-    // Unreadable or blocked storage: look in memory.
-  }
-  return memoryRecords.get(id);
 }
 
 /**
@@ -166,6 +119,9 @@ export function stashEntriesOnCurrentEntry(
     removeRecord(id);
     return false;
   }
+  // Only now: pruning before the rewrite could delete an older entry's record
+  // that a failed rewrite then cannot restore.
+  pruneRecords();
   return true;
 }
 

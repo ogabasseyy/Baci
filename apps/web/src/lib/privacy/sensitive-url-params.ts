@@ -48,49 +48,7 @@ const SENSITIVE_LOWERCASE = new Set(
   SENSITIVE_URL_PARAM_NAMES.map((name) => name.toLowerCase())
 );
 
-/**
- * Path prefixes whose NEXT segment is a capability token (anyone holding the
- * link can act on it). Shopper-facing routes only: today that is the receipt
- * claim link `/receipts/claim/<token>`. The segment is replaced with
- * `PATH_TOKEN_PLACEHOLDER` in every URL sent to a vendor; it works for bare
- * paths and absolute URLs, with or without a storefront prefix.
- */
-export const SENSITIVE_PATH_PREFIXES = ['/receipts/claim/'] as const;
-
-export const PATH_TOKEN_PLACEHOLDER = '[redacted]';
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-/** Source of the regex that matches a prefix and the token segment after it. */
-export const SENSITIVE_PATH_REGEX_SOURCE = `(${SENSITIVE_PATH_PREFIXES.map(
-  escapeRegExp
-).join('|')})[^/?#]+`;
-
-/** Replaces the token segment of any sensitive path prefix in `url`. */
-export function redactPathTokens(url: string): string {
-  return url.replace(
-    new RegExp(SENSITIVE_PATH_REGEX_SOURCE, 'gi'),
-    `$1${PATH_TOKEN_PLACEHOLDER}`
-  );
-}
-
 export type PrivateEntry = [name: string, value: string];
-
-/** Validates untrusted (storage) JSON as a list of name/value pairs. */
-export function isEntryList(value: unknown): value is PrivateEntry[] {
-  return (
-    Array.isArray(value) &&
-    value.every(
-      (entry) =>
-        Array.isArray(entry) &&
-        entry.length === 2 &&
-        typeof entry[0] === 'string' &&
-        typeof entry[1] === 'string'
-    )
-  );
-}
 
 export function isSensitiveUrlParam(name: string): boolean {
   return SENSITIVE_LOWERCASE.has(name.toLowerCase());
@@ -104,9 +62,9 @@ export function partitionSensitiveSearch(search: string): {
   privateEntries: PrivateEntry[];
   publicSearch: string;
 } {
-  const params = new URLSearchParams(
-    search.startsWith('?') ? search.slice(1) : search
-  );
+  // URLSearchParams drops one leading `?` itself; stripping another would eat
+  // a `?` that belongs to a public parameter name (`??view=a`).
+  const params = new URLSearchParams(search);
   const privateEntries: PrivateEntry[] = [];
   const publicParams = new URLSearchParams();
   for (const [name, value] of params) {
@@ -121,13 +79,7 @@ export function partitionSensitiveSearch(search: string): {
 
 /** Order-independent form of a query string, for equality checks. */
 export function canonicalSearch(search: string | URLSearchParams): string {
-  const params = new URLSearchParams(
-    typeof search === 'string'
-      ? search.startsWith('?')
-        ? search.slice(1)
-        : search
-      : search
-  );
+  const params = new URLSearchParams(search);
   params.sort();
   return params.toString();
 }

@@ -1,6 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { useSyncExternalStore } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { stashPrivateParamsForNavigation } from '@/lib/privacy/private-url-param-handoff';
 import { usePrivateSearchParams } from './use-private-search-params';
 
 const nav = vi.hoisted(() => ({ listeners: new Set<() => void>() }));
@@ -60,6 +61,9 @@ async function traverse(direction: 'back' | 'forward') {
 function notifyNext() {
   for (const listener of nav.listeners) listener();
 }
+
+// Next.js re-renders its hooks when the session history moves.
+window.addEventListener('popstate', notifyNext);
 
 beforeEach(() => {
   window.sessionStorage.clear();
@@ -170,5 +174,27 @@ describe('bugfix: Back to a tokenless entry inherited the next order token', () 
     await traverse('forward');
 
     expect(first.result.current.get('token')).toBe('A');
+  });
+});
+
+describe('bugfix: Back to an order entry while another order hand-off was pending', () => {
+  it("returns that entry's own token, not the pending one", async () => {
+    visit('/shop/track-order?token=A');
+    const { result, rerender } = renderHook(() => usePrivateSearchParams());
+    expect(result.current.get('token')).toBe('A');
+    expect(window.location.search).toBe('');
+
+    // Leave for another page, which starts a hand-off to the same clean URL
+    // for order B (the navigation is still pending) ...
+    act(() => {
+      window.history.pushState({}, '', '/shop/cart');
+    });
+    rerender();
+    stashPrivateParamsForNavigation('/shop/track-order?token=B', 'shop');
+
+    // ... and the shopper goes Back to order A's entry instead.
+    await traverse('back');
+
+    expect(result.current.get('token')).toBe('A');
   });
 });

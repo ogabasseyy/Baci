@@ -1,18 +1,23 @@
+import { isEntryList } from './is-entry-list';
 import {
   currentPrivateParamsId,
   stashEntriesOnCurrentEntry,
 } from './private-url-param-stash';
 import {
   canonicalSearch,
-  isEntryList,
   type PrivateEntry,
   partitionSensitiveSearch,
 } from './sensitive-url-params';
 
 const PENDING_KEY = 'baci:private-url-params-pending';
 
-/** How long a hand-off may wait for the destination page to claim it. */
-export const PENDING_HANDOFF_TTL_MS = 60_000;
+/**
+ * How long a hand-off may wait for the destination page to claim it. Long
+ * enough for a slow connection or a cold route, short enough that an unclaimed
+ * token does not linger: it is also dropped when the shopper navigates the
+ * history instead (see clearPendingPrivateParams) and when read after expiry.
+ */
+export const PENDING_HANDOFF_TTL_MS = 300_000;
 
 interface PendingHandoff {
   /** Every pathname the destination may be shown under (see acceptedPaths). */
@@ -37,7 +42,8 @@ function isPendingHandoff(value: unknown): value is PendingHandoff {
   );
 }
 
-function clearPending(): void {
+/** Drops a pending hand-off: the shopper moved through history instead of arriving. */
+export function clearPendingPrivateParams(): void {
   try {
     window.sessionStorage.removeItem(PENDING_KEY);
   } catch {
@@ -65,7 +71,7 @@ function readPending(): PendingHandoff | null {
   } catch {
     // Malformed: removed below.
   }
-  clearPending();
+  clearPendingPrivateParams();
   return null;
 }
 
@@ -164,6 +170,6 @@ export function claimPendingPrivateParams(): boolean {
   if (!stashEntriesOnCurrentEntry(entries, pathname, publicSearch)) {
     return false;
   }
-  clearPending();
+  clearPendingPrivateParams();
   return true;
 }

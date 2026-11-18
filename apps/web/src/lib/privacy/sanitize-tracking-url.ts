@@ -1,7 +1,5 @@
-import {
-  partitionSensitiveSearch,
-  redactPathTokens,
-} from './sensitive-url-params';
+import { partitionSensitiveSearch } from './sensitive-url-params';
+import { redactPathTokens } from './sensitive-url-paths';
 
 /**
  * Removes sensitive and redirect-style query params, path-embedded capability

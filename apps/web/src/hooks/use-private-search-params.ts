@@ -4,6 +4,7 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import { useLayoutEffect, useState, useSyncExternalStore } from 'react';
 import {
   claimPendingPrivateParams,
+  clearPendingPrivateParams,
   readPendingPrivateParams,
 } from '@/lib/privacy/private-url-param-handoff';
 import {
@@ -32,6 +33,9 @@ function subscribeToHistoryTraversal(onChange: () => void): () => void {
   // Traversal and fragment-only navigation both move to an entry we may not
   // have stamped: keep the stash for a fragment move before re-reading.
   const onNavigate = () => {
+    // A history move supersedes a hand-off still waiting for its destination:
+    // the entry we land on must read its own stash, not another order's token.
+    clearPendingPrivateParams();
     inheritPrivateParamsForFragmentNavigation();
     rememberPrivateParamsOwner();
     onChange();

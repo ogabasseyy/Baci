@@ -96,9 +96,14 @@ describe('scheduleOrderProductBlogPurge', () => {
       'merchant-1',
       { productSlugs: ['iphone-15'] }
     );
-    // Resolved slugs get exact scoped busts; the broad hard-expire is
-    // reserved for the unknown-slug rejection path.
-    expect(mockRevalidateProducts).not.toHaveBeenCalled();
+    // Resolved slugs get exact scoped PDP + listing busts without touching
+    // unrelated merchant-wide PDP details.
+    expect(mockRevalidateProducts).toHaveBeenCalledTimes(1);
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      'merchant-1',
+      undefined,
+      { expireImmediately: true, omitMerchantWidePdpDetails: true }
+    );
   });
 
   it('resolves the merchant slug before purging when the caller has no slug', async () => {

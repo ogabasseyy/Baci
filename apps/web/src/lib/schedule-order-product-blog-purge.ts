@@ -137,20 +137,27 @@ export async function scheduleOrderProductBlogPurge({
   const slugsRevalidated =
     revalidateProductSlugs(merchantId, slugs, { expireImmediately: true }) ===
     true;
-  if (
-    !enrichmentFailed &&
-    (!slugsRevalidated ||
+  if (!enrichmentFailed) {
+    if (
+      !slugsRevalidated ||
       blogPostSlugsIncomplete ||
       !hasCompleteScopedProductSlugs(
         products,
         entries,
         slugs,
         authoritativeSlugsById
-      ))
-  ) {
-    needsBroadPdpExpiry =
-      revalidateProducts(merchantId, undefined, { expireImmediately: true }) !==
-      true;
+      )
+    ) {
+      needsBroadPdpExpiry =
+        revalidateProducts(merchantId, undefined, {
+          expireImmediately: true,
+        }) !== true;
+    } else {
+      revalidateProducts(merchantId, undefined, {
+        expireImmediately: true,
+        omitMerchantWidePdpDetails: true,
+      });
+    }
   }
   const blogCacheExpired = await expireProductBlogCacheReliable(merchantId, {
     productSlugs: slugs,

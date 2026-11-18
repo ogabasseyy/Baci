@@ -130,6 +130,7 @@ export async function revalidateProductsInProcess({
     if (scopedComplete) {
       if (
         revalidateProducts(merchantId, undefined, {
+          expireImmediately: true,
           omitMerchantWidePdpDetails: true,
         }) === false
       ) {

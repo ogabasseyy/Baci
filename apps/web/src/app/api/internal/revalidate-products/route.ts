@@ -135,6 +135,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }) === true;
 
   // Runs in a route context, so revalidateTag works here (unlike the CLI worker).
+  // Trusted internal callers (INTERNAL_API_SECRET) pass pre-validated slug chunks here.
   const isScopedSlugOnly =
     !hasProducts &&
     !purgeWholeStorefront &&

@@ -92,7 +92,7 @@ describe('revalidateProductsInProcess', () => {
     expect(mockRevalidateProducts).toHaveBeenCalledWith(
       'merchant-1',
       undefined,
-      { omitMerchantWidePdpDetails: true }
+      { expireImmediately: true, omitMerchantWidePdpDetails: true }
     );
     expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
       'merchant-1',

@@ -209,6 +209,7 @@ export async function purchaseBill(
           !error.reportsUnexpectedError &&
           !error.mentionsVendOutcome &&
           !error.showsVendEvidence &&
+          !error.mentionsAuthWording &&
           error.isKnownRefusal,
       };
     }

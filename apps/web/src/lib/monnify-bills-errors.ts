@@ -1,5 +1,6 @@
 import { parseMonnifyAnswer } from './monnify-answer-parse';
 import { joinMonnifyAnswerStrings } from './monnify-answer-strings';
+import { mentionsMonnifyAuthWording } from './monnify-auth-wording';
 import { redactMonnifyCredentials } from './monnify-credential-redaction';
 import { hasMonnifyDuplicateFlag } from './monnify-duplicate-flag';
 import { isMonnifyDuplicateReferenceText } from './monnify-duplicate-reference';
@@ -46,6 +47,7 @@ interface MonnifyAnswerReading {
   mentionsVendOutcome: boolean;
   reportsUnexpectedError: boolean;
   showsVendEvidence: boolean;
+  mentionsAuthWording: boolean;
 }
 
 /**
@@ -90,6 +92,7 @@ function readMonnifyAnswer(
       reportsMonnifyUnexpectedError(body) ||
       hasMonnifyNonDefinitiveCode(parsed),
     showsVendEvidence: showsVendEvidence(body),
+    mentionsAuthWording: mentionsMonnifyAuthWording(bodyText),
   };
 }
 
@@ -147,6 +150,11 @@ export class MonnifyHttpError extends Error {
   }
 
   /** The JSON body carries a vend status or reference: a vend may exist. */
+  /** The body carries login/credential wording (never goes to Kuda). */
+  get mentionsAuthWording() {
+    return this.#reading.mentionsAuthWording;
+  }
+
   get showsVendEvidence() {
     return this.#reading.showsVendEvidence;
   }

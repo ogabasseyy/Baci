@@ -228,3 +228,19 @@ describe('bugfix: refusal wording only counts from the body', () => {
     });
   });
 });
+
+describe('bugfix: login wording on any HTTP status never goes to Kuda', () => {
+  it('keeps a 400 saying "Invalid token: insufficient wallet balance" off Kuda', async () => {
+    mockHttpError(
+      400,
+      'Bad Request',
+      JSON.stringify({
+        responseMessage: 'Invalid token: insufficient wallet balance',
+      })
+    );
+
+    await expect(vend()).resolves.toMatchObject({
+      providerDefiniteFailure: false,
+    });
+  });
+});

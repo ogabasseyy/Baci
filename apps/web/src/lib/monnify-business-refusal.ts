@@ -1,8 +1,8 @@
 import { joinMonnifyAnswerStrings } from './monnify-answer-strings';
+import { mentionsMonnifyAuthWording } from './monnify-auth-wording';
 import { hasMonnifyDuplicateFlag } from './monnify-duplicate-flag';
 import { isMonnifyDuplicateReferenceText } from './monnify-duplicate-reference';
 import { hasMonnifyNonDefinitiveCode } from './monnify-non-definitive-code';
-import { normaliseMonnifyWording } from './monnify-text-normalise';
 import { isMonnifyUnexpectedErrorCode } from './monnify-unexpected-error';
 import { reportsMonnifyUnexpectedError } from './monnify-unexpected-error-text';
 import { hasMonnifyVendEvidence } from './monnify-vend-evidence';
@@ -20,12 +20,6 @@ import { isMonnifyKnownVendRefusalText } from './monnify-vend-refusal';
  * fields by value at any depth: code 99/408/409/429, a vend status or
  * reference, or a set duplicate flag all rule a refusal out.
  */
-/**
- * Login/credential wording in a business envelope: 401/403-style rejections
- * never go to Kuda (owner decision 2026-11-18), whatever the HTTP status.
- */
-const AUTH_WORDING =
-  /unauthori[sz]ed|unauthenticated|forbidden|access denied|invalid (?:access |bearer )?token|(?:expired|revoked) token|token (?:(?:has|is) )?(?:been )?(?:expired|revoked|invalid|missing)|invalid credentials?|authentication (?:failed|failure|required|error)|failed to authenticate|authori[sz]ation (?:header )?(?:is )?(?:missing|required|invalid)/i;
 
 export function isMonnifyDefiniteBusinessRefusal({
   envelope,
@@ -49,7 +43,7 @@ export function isMonnifyDefiniteBusinessRefusal({
     !hasMonnifyDuplicateFlag(envelope) &&
     !isMonnifyDuplicateReferenceText(wording) &&
     !isMonnifyVendOutcomeText(wording) &&
-    !AUTH_WORDING.test(normaliseMonnifyWording(wording)) &&
+    !mentionsMonnifyAuthWording(wording) &&
     isMonnifyKnownVendRefusalText(wording)
   );
 }

@@ -38,7 +38,7 @@ async function read(
   const snapshot = schemas.snapshot.safeParse(data);
   if (!snapshot.success)
     throw new Error(
-      'Could not confirm your PiggyVest account. Please refresh later.'
+      'Could not confirm your wallet account. Please refresh later.'
     );
   const parsed = snapshot.data;
   return {

@@ -20,7 +20,7 @@ INSERT INTO oxygen_private.runtime_bindings(merchant_id,worker_user_id,partner_r
 VALUES ('efac0000-0000-4000-8000-000000000011','efac0000-0000-4000-8000-000000000003','saved-plan-test-partner',true);
 UPDATE public.oxygen_workflows SET stage='approval_required' WHERE id='efac0000-0000-4000-8000-000000000041';
 DO $$ DECLARE state jsonb; variant jsonb; BEGIN
- state:=jsonb_build_object('bookingReference','efac0000-0000-4000-8000-000000000071','phone','private phone',
+ state:=jsonb_build_object('bookingReference','efac0000-0000-4000-8000-000000000071','phone','private phone','eligibleAmount',400000,'minimumAmount',10000,'maxTenure',3,'offers','[{"tenure":3,"loanAmount":400000}]'::jsonb,
   'booking',jsonb_build_object('loan_reference','efac0000-0000-4000-8000-000000000071','status','BOOKED','product_amount',400000,'equity_percentage',25,'equity_amount',100000,'loan_amount',300000,'loan_tenure',3),
   'quotedCharges',1000,'schedule','[{"period":1,"dueDate":[2026,11,27],"amount":110000,"principal":100000,"interest":10000},{"period":2,"dueDate":[2026,12,27],"amount":110000,"principal":100000,"interest":10000},{"period":3,"dueDate":[2027,1,27],"amount":110000,"principal":100000,"interest":10000}]'::jsonb);
  INSERT INTO oxygen_private.provider_states(workflow_id,state) VALUES('efac0000-0000-4000-8000-000000000041',state);
@@ -41,9 +41,17 @@ DO $$ BEGIN
 END $$;
 DELETE FROM oxygen_private.history WHERE command_id='efac0000-0000-4000-8000-000000000091';
 DELETE FROM oxygen_private.commands WHERE id='efac0000-0000-4000-8000-000000000091';
-UPDATE public.oxygen_workflows SET stage='approval_required',version=0 WHERE id='efac0000-0000-4000-8000-000000000041';
+INSERT INTO oxygen_private.commands(id,workflow_id,idempotency_key,expected_version,channel,command,status,completed_at)
+VALUES('efac0000-0000-4000-8000-000000000093','efac0000-0000-4000-8000-000000000041','efac0000-0000-4000-8000-000000000083',0,'web','{"action":"trigger_approval_otp"}','succeeded',now());
+UPDATE public.oxygen_workflows SET stage='approval_required',version=1 WHERE id='efac0000-0000-4000-8000-000000000041';
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub','efac0000-0000-4000-8000-000000000001',true);
+DO $$ BEGIN
+ BEGIN PERFORM public.oxygen_accept_saved_plan('efac0000-0000-4000-8000-000000000041','efac0000-0000-4000-8000-000000000071',1); RAISE EXCEPTION 'Approval fence bypassed before cancellation'; EXCEPTION WHEN serialization_failure THEN NULL; END;
+END $$;
+RESET ROLE;
 INSERT INTO oxygen_private.commands(id,workflow_id,idempotency_key,expected_version,channel,command,status)
-VALUES('efac0000-0000-4000-8000-000000000092','efac0000-0000-4000-8000-000000000041','efac0000-0000-4000-8000-000000000082',0,'web','{"action":"cancel_booking"}','queued');
+VALUES('efac0000-0000-4000-8000-000000000092','efac0000-0000-4000-8000-000000000041','efac0000-0000-4000-8000-000000000082',1,'web','{"action":"cancel_booking"}','queued');
 SELECT oxygen_private.claim_command('efac0000-0000-4000-8000-000000000092');
 UPDATE oxygen_private.provider_states SET state=state-ARRAY['bookingReference','booking','schedule','quotedCharges'] WHERE workflow_id='efac0000-0000-4000-8000-000000000041';
 SELECT oxygen_private.record_command('efac0000-0000-4000-8000-000000000092','succeeded','plan_required');
@@ -59,14 +67,23 @@ DO $$ DECLARE a jsonb; b jsonb; BEGIN
  b:=jsonb_set(jsonb_set(jsonb_set(a,'{bookingReference}','"efac0000-0000-4000-8000-000000000072"'),'{booking,loan_reference}','"efac0000-0000-4000-8000-000000000072"'),'{booking,equity_percentage}','25');
  UPDATE oxygen_private.provider_states SET state=b WHERE workflow_id='efac0000-0000-4000-8000-000000000041';
 END $$;
-UPDATE public.oxygen_workflows SET stage='approval_required',version=0 WHERE id='efac0000-0000-4000-8000-000000000041';
+UPDATE public.oxygen_workflows SET stage='approval_required',version=2 WHERE id='efac0000-0000-4000-8000-000000000041';
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub','efac0000-0000-4000-8000-000000000001',true);
 DO $$ DECLARE result jsonb; BEGIN
  result:=public.oxygen_saved_plans('efac0000-0000-4000-8000-000000000041');
  IF jsonb_array_length(result->'plans')<>1 OR result->>'selectedReference'<>'efac0000-0000-4000-8000-000000000072' THEN RAISE EXCEPTION 'Cancelled plan listed or new plan missing'; END IF;
  BEGIN PERFORM public.oxygen_saved_plans('efac0000-0000-4000-8000-000000000041','efac0000-0000-4000-8000-000000000071'); RAISE EXCEPTION 'Cancelled plan selectable'; EXCEPTION WHEN invalid_parameter_value THEN NULL; END;
- BEGIN PERFORM public.oxygen_accept_saved_plan('efac0000-0000-4000-8000-000000000041','efac0000-0000-4000-8000-000000000071',0); RAISE EXCEPTION 'Cancelled plan accepted'; EXCEPTION WHEN invalid_parameter_value THEN NULL; END;
+ BEGIN PERFORM public.oxygen_accept_saved_plan('efac0000-0000-4000-8000-000000000041','efac0000-0000-4000-8000-000000000071',2); RAISE EXCEPTION 'Cancelled plan accepted'; EXCEPTION WHEN invalid_parameter_value THEN NULL; END;
+ result:=public.oxygen_accept_saved_plan('efac0000-0000-4000-8000-000000000041','efac0000-0000-4000-8000-000000000072',2);
+ IF result->>'bookingReference' IS DISTINCT FROM 'efac0000-0000-4000-8000-000000000072' THEN RAISE EXCEPTION 'Replacement plan not accepted'; END IF;
+END $$;
+RESET ROLE;
+INSERT INTO oxygen_private.commands(id,workflow_id,idempotency_key,expected_version,channel,command,status,completed_at)
+VALUES('efac0000-0000-4000-8000-000000000094','efac0000-0000-4000-8000-000000000041','efac0000-0000-4000-8000-000000000084',2,'web','{"action":"trigger_approval_otp"}','succeeded',now());
+SET LOCAL ROLE authenticated;
+DO $$ BEGIN
+ BEGIN PERFORM public.oxygen_accept_saved_plan('efac0000-0000-4000-8000-000000000041','efac0000-0000-4000-8000-000000000072',2); RAISE EXCEPTION 'New approval fence bypassed'; EXCEPTION WHEN serialization_failure THEN NULL; END;
 END $$;
 RESET ROLE;
 ROLLBACK;

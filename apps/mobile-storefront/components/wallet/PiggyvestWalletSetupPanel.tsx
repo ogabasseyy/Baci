@@ -1,17 +1,28 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 // useEffectEvent is stable React since 19.2; this app pins react 19.3.0.
-import { useEffect, useEffectEvent, useRef, useState } from 'react';
+import {
+  type ReactNode,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+} from 'react';
 import { Pressable, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
+import {
+  beginPrimaryRead,
+  rememberPrimaryFundingAccount,
+} from '@/hooks/primary-funding-account-memory';
 import { isPrimaryWalletReviewRequired } from '@/lib/piggyvest-primary-capability';
 import { piggyvestPrimaryWalletApi } from '@/lib/piggyvest-primary-wallet';
 import { useAuthStore } from '@/stores/auth-store';
 import { PiggyvestWalletSetupForm } from './PiggyvestWalletSetupForm';
 import { PrimaryWalletSetupPending } from './PrimaryWalletSetupPending';
-
-const AUTO_CHECK_INTERVAL_MS = 5000;
-const AUTO_CHECK_LIMIT = 12;
-
+import { PrimaryWalletSetupReview } from './PrimaryWalletSetupReview';
+import {
+  AUTO_CHECK_LIMIT,
+  autoCheckDelayMs,
+} from './piggyvest-setup-auto-check';
 import {
   WalletFundPhonePrompt,
   type WalletFundPhoneSubmitResult,
@@ -24,6 +35,8 @@ interface Props {
   onSubmitPhone: (phone: string) => Promise<WalletFundPhoneSubmitResult>;
   onRefresh: () => void;
   onClose: () => void;
+  /** Inline notices shown under the close button, inside the sheet. */
+  notices?: ReactNode;
 }
 
 export function PiggyvestWalletSetupPanel({
@@ -33,6 +46,7 @@ export function PiggyvestWalletSetupPanel({
   onSubmitPhone,
   onRefresh,
   onClose,
+  notices,
 }: Props) {
   const [pending, setPending] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -91,14 +105,43 @@ export function PiggyvestWalletSetupPanel({
     setBusy(true);
     setError(false);
     setAwaitingAccount(false);
+    // Numbered as it starts, so a wallet read started later still wins.
+    const sequence = requestUserId
+      ? beginPrimaryRead(merchantId, requestUserId)
+      : 0;
     try {
       const result = await piggyvestPrimaryWalletApi.read(
         merchantId,
         requestUserId ?? undefined
       );
       if (authUserIdRef.current !== requestUserId) return;
-      if (result.account) onRefresh();
-      else setAwaitingAccount(true);
+      if (result.account) {
+        // Hand this confirmed read to the wallet reload below, so the sheet
+        // closes even when that reload's own PiggyVest read runs slow.
+        // Only a full read (account and balance) is handed over: one
+        // without a balance would show the account but not the money.
+        const balanceKobo = result.balanceKobo;
+        if (
+          requestUserId &&
+          typeof balanceKobo === 'number' &&
+          Number.isSafeInteger(balanceKobo) &&
+          balanceKobo >= 0
+        )
+          rememberPrimaryFundingAccount(
+            merchantId,
+            requestUserId,
+            {
+              status: 'ready',
+              account: result.account,
+              balanceKobo,
+            },
+            sequence
+          );
+        // Reload even when a newer read already answered (the handover is
+        // then ignored): that newer answer is what the reload recalls, and
+        // the reload is what closes this sheet.
+        onRefresh();
+      } else setAwaitingAccount(true);
     } catch (error) {
       if (authUserIdRef.current !== requestUserId) return;
       if (requestUserId && isPrimaryWalletReviewRequired(error)) {
@@ -111,8 +154,8 @@ export function PiggyvestWalletSetupPanel({
     }
   }
 
-  // While PiggyVest finishes the account number, check by itself every few
-  // seconds (bounded) so the customer never has to keep tapping.
+  // While PiggyVest finishes the account number, check by itself on a
+  // bounded backoff (about five minutes) so the customer never has to tap.
   const runAutoCheck = useEffectEvent(() => {
     // A manual check may have started since the timer was set: skip without
     // spending one of the bounded automatic checks.
@@ -122,9 +165,9 @@ export function PiggyvestWalletSetupPanel({
   });
   useEffect(() => {
     // Wait while a check is in flight so every counted check really runs.
-    if (busy || !pending || reviewRequired || autoChecks >= AUTO_CHECK_LIMIT)
-      return;
-    const timer = setTimeout(runAutoCheck, AUTO_CHECK_INTERVAL_MS);
+    const delay = autoCheckDelayMs(autoChecks);
+    if (busy || !pending || reviewRequired || delay === null) return;
+    const timer = setTimeout(runAutoCheck, delay);
     return () => clearTimeout(timer);
   }, [busy, pending, reviewRequired, autoChecks]);
 
@@ -148,11 +191,9 @@ export function PiggyvestWalletSetupPanel({
       >
         <Ionicons name="close" size={18} color={colors.text} />
       </Pressable>
+      {notices}
       {reviewRequired ? (
-        <Text accessibilityRole="alert" style={{ color: colors.text }}>
-          Your PiggyVest wallet setup needs review. Please contact support
-          before trying again.
-        </Text>
+        <PrimaryWalletSetupReview colors={colors} />
       ) : needsPhone ? (
         <WalletFundPhonePrompt
           key={authUserId ?? 'signed-out'}
@@ -167,6 +208,7 @@ export function PiggyvestWalletSetupPanel({
             awaitingAccount && autoChecks >= AUTO_CHECK_LIMIT && !busy
           }
           checkFailed={error}
+          canCheckNow={error || autoChecks >= AUTO_CHECK_LIMIT}
           onCheckNow={refresh}
         />
       ) : (

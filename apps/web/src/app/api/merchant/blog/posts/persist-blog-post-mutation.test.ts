@@ -95,4 +95,34 @@ describe('persistBlogPostMutation', () => {
       status: null,
     });
   });
+
+  it.each([
+    ['P0001', 'active_reservation_already_exists', 409],
+    ['P0001', 'cannot_reschedule_published_blog_post', 409],
+    ['P0001', 'article_identity_conflict', 409],
+    ['P0001', 'reservation_request_payload_mismatch', 409],
+    ['42501', 'blog_post_article_identity_immutable', 409],
+    ['P0001', 'evergreen_reserve_required', 409],
+    ['P0001', 'min_spacing_conflict', 409],
+    ['P0001', 'low_demand_game_software_cap_exceeded', 409],
+    ['22023', 'fast_track_outside_lagos_window', 400],
+  ] as const)('maps %s (%s) to HTTP %d', async (code, message, expectedStatus) => {
+    const { supabase } = createSupabase({
+      rpc: { data: null, error: { code, message } },
+    });
+
+    await expect(
+      persistBlogPostMutation({
+        embeddedProductIds: undefined,
+        merchantId,
+        postData,
+        postId: 'post-1',
+        reschedulePublishAt: '2026-11-16T10:00:00.000Z',
+        supabase: supabase as never,
+      })
+    ).resolves.toMatchObject({
+      post: null,
+      status: expectedStatus,
+    });
+  });
 });

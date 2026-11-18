@@ -5,8 +5,8 @@ import { upgradeLegacySessionPrincipal } from '@/lib/cart/grant-operations';
 import { checkAnonymousCartQuota } from '@/lib/cart/quota-identity';
 import {
   type CartRequestContextDeps,
+  cachedCartMerchantLookups,
   checkCartQuota,
-  createAnonMerchantFeatureLookup,
   readCartJsonBody,
   requestUsesDeviceProof,
   resolveCartRequestContext,
@@ -40,14 +40,14 @@ function contextDeps(
   wrongScopeError: CartRequestContextDeps['wrongScopeError'],
   timer?: CartServerTimer
 ): CartRequestContextDeps {
-  const loadFeatures = createAnonMerchantFeatureLookup(createAnonClient());
+  const cached = cachedCartMerchantLookups(createAnonClient());
   return {
     merchant: {
       resolveAlias: getCurrentSlugForAlias,
-      rpcClient: createAnonClient(),
+      rpcClient: cached.rpcClient,
       loadMerchantFeatures: timer
-        ? (id) => timer.measure('auth-features', () => loadFeatures(id))
-        : loadFeatures,
+        ? (id) => timer.measure('auth-features', () => cached.features(id))
+        : cached.features,
     },
     requireScope,
     verify: (proof) =>
@@ -108,7 +108,7 @@ async function readCart(request: NextRequest, timer: CartServerTimer) {
     }
     let proof: string | null = null;
     const upgraded = await timer.measure('grant', () =>
-      upgradeLegacySessionPrincipal(client, context.principal)
+      upgradeLegacySessionPrincipal(client, context.principal).catch(() => null)
     );
     if (upgraded && upgraded !== context.principal) {
       try {

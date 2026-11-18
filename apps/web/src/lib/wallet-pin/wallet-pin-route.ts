@@ -20,6 +20,7 @@ type WalletPinContext = {
   readonly rpc: (
     name:
       | 'get_wallet_pin_state'
+      | 'has_recent_wallet_pin_sign_in'
       | 'set_wallet_pin'
       | 'change_wallet_pin'
       | 'reset_wallet_pin',
@@ -140,6 +141,7 @@ export async function handleWalletPinStatus(
           hasPin: false,
           resetRequired: false,
           available: false,
+          signInConfirmationRequired: false,
         },
         { headers: NO_STORE }
       );

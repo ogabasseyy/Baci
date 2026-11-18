@@ -1,7 +1,10 @@
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CartPrincipal } from '@/lib/cart/principal';
-import { __resetCartQuotaStoreForTesting } from '@/lib/cart/request-context';
+import {
+  __resetCartMerchantLookupCacheForTesting,
+  __resetCartQuotaStoreForTesting,
+} from '@/lib/cart/request-context';
 import * as sessionProofModule from '@/lib/cart/session-proof';
 import {
   CartSessionConfigError,
@@ -134,6 +137,7 @@ const savedSecret = process.env.CART_SESSION_SECRET;
 beforeEach(() => {
   vi.clearAllMocks();
   __resetCartQuotaStoreForTesting();
+  __resetCartMerchantLookupCacheForTesting();
   mocks.alias = null;
   mocks.capturedPrincipal = null;
   mocks.cartError = null;
@@ -228,6 +232,11 @@ describe('POST /api/storefront/cart/commands', () => {
 
   it('renews the session proof after an authorized mutation', async () => {
     const expiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    mocks.grantAuthority = {
+      ok: true,
+      allowedOperations: ['add'],
+      grantExpiresAt: expiry,
+    };
     mocks.cartPayload = {
       code: null,
       ok: true,
@@ -331,6 +340,29 @@ describe('POST /api/storefront/cart/commands', () => {
     } finally {
       spy.mockRestore();
     }
+  });
+
+  it('keeps the committed cart when the post-commit grant reload throws', async () => {
+    mocks.cartPayload = {
+      code: null,
+      ok: true,
+      replayed: false,
+      state: rawState({ lines: [rawLine()] }),
+    };
+    mocks.grantAuthority = { ok: true, allowedOperations: 'not-a-list' };
+    const response = await postCommand({
+      body: addCommand('grant-reload-throws'),
+      headers: {
+        cookie: `baci-cart-11111111-1111-4111-8111-111111111111=${sessionProof()}`,
+      },
+    });
+    expect(response.status).toBe(200);
+    const payload = await response.json();
+    expect(payload.cart.version).toBe(2);
+    // bugfix: never mint a renewed proof from the incoming (possibly stale)
+    // operations when the live grant could not be reloaded.
+    expect(payload.proof).toBeUndefined();
+    expect(response.headers.get('set-cookie')).toBeNull();
   });
 
   it('returns the committed cart without a renewed proof when reissue crosses grant expiry', async () => {

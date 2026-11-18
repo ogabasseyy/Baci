@@ -371,10 +371,12 @@ describe('useStartSavingsController', () => {
     expect(mockSubmitSavingsGoal).not.toHaveBeenCalled();
   });
 
-  it('creates the plan before opening plan funding for manual bank transfer', async () => {
+  it('creates the plan before opening plan funding for manual bank transfer with a head start', async () => {
     const { result } = renderHook(() => useStartSavingsController());
 
     act(() => {
+      result.current.setInitialContributionEnabled(true);
+      result.current.setInitialContributionAmount('50000');
       result.current.setSelectedFundingOption('bank_transfer');
       result.current.setShowFundingModal(true);
     });

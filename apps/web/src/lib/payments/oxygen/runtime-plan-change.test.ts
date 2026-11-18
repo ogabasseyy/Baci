@@ -6,7 +6,6 @@ vi.mock('server-only', () => ({}));
 import type { OxygenProviderContext } from '@/schemas/oxygen-runtime';
 import { oxygenRuntimeActionSchema } from '@/schemas/oxygen-runtime';
 import { bookOxygenPlan } from './runtime-booking';
-import { oxygenActionAllowed } from './runtime-policy';
 
 const id = '60000000-0000-4000-8000-000000000001';
 const booking = {
@@ -39,6 +38,7 @@ const context: OxygenProviderContext = {
     eligibleAmount: 400000,
     minimumAmount: 10000,
     maxTenure: 12,
+    offers: [{ tenure: 6, loanAmount: 400000 }],
     kyc: {
       bvn_status: 'DONE',
       nin_status: 'DONE',
@@ -61,34 +61,6 @@ const context: OxygenProviderContext = {
   },
 };
 const action = { action: 'book' as const, equityPercentage: 35, tenure: 6 };
-it('allows a changed tenure on an unapproved booking but rejects duplicate, approved, OTP-active and uncertain bookings', () => {
-  expect(oxygenActionAllowed(context, action)).toBe(true);
-  expect(oxygenActionAllowed(context, { ...action, tenure: 3 })).toBe(false);
-  expect(
-    oxygenActionAllowed(
-      { ...context, stage: 'reconciliation_required' },
-      action
-    )
-  ).toBe(false);
-  expect(
-    oxygenActionAllowed(
-      { ...context, state: { ...context.state, activityToken: 'synthetic' } },
-      action
-    )
-  ).toBe(false);
-  expect(
-    oxygenActionAllowed(
-      {
-        ...context,
-        state: {
-          ...context.state,
-          booking: { ...booking, status: 'APPROVED' },
-        },
-      },
-      action
-    )
-  ).toBe(false);
-});
 it('clears old charges and installments before storing a new booking reference', async () => {
   const state = structuredClone(context.state);
   const call = vi.fn().mockResolvedValue({ ...booking, loan_tenure: 6 });

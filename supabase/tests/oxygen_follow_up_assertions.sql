@@ -17,6 +17,18 @@ BEGIN
     WHERE (to_jsonb(r) - ARRAY['order_id','follow_up_status','last_activity_at']) <> '{}'::jsonb) THEN
     RAISE EXCEPTION 'Follow-up projection leaked provider data';
   END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.oxygen_follow_up_candidates('20000000-0000-4000-8000-000000000001') r
+    WHERE r.order_id = '00000000-0000-4000-8000-000000000032'
+      AND r.follow_up_status = 'needs_review'
+      AND r.last_activity_at >= now() - interval '2 minutes') THEN
+    RAISE EXCEPTION 'Indeterminate activation finished_at did not update last_activity_at';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.oxygen_follow_up_candidates('20000000-0000-4000-8000-000000000001') r
+    WHERE r.order_id = '00000000-0000-4000-8000-000000000039'
+      AND r.follow_up_status = 'needs_review'
+      AND r.last_activity_at >= now() - interval '2 minutes') THEN
+    RAISE EXCEPTION 'Indeterminate payment recovery completed_at did not update last_activity_at';
+  END IF;
   BEGIN
     PERFORM public.oxygen_follow_up_candidates('20000000-0000-4000-8000-000000000002');
     RAISE EXCEPTION 'Foreign merchant access was allowed';

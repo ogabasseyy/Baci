@@ -296,4 +296,41 @@ describe('useFollowUpQueue', () => {
     await expect(result.current.refresh()).resolves.toBeUndefined();
     expect(mocks.refetchFailed).toHaveBeenCalledTimes(1);
   });
+
+  it('keeps deterministic descending order even when an entry has an invalid timestamp', () => {
+    mocks.useMerchant.mockReturnValue({
+      error: null,
+      isLoading: false,
+      merchant: { id: 'merchant-1' },
+    });
+    mocks.useFailedOrders.mockReturnValue({
+      data: [
+        { id: 'older', created_at: '2026-11-17T08:00:00Z' },
+        { id: 'broken-a', created_at: 'not-a-date' },
+      ],
+      isError: false,
+      isFetching: false,
+      isLoading: false,
+      refetch: mocks.refetchFailed,
+    });
+    mocks.useOxygenFollowUps.mockReturnValue({
+      data: [
+        { id: 'broken-b', created_at: 'also-invalid' },
+        { id: 'newer', created_at: '2026-11-17T10:00:00Z' },
+      ],
+      isError: false,
+      isFetching: false,
+      isLoading: false,
+      refetch: mocks.refetchOxygen,
+    });
+
+    const { result } = renderHook(() => useFollowUpQueue());
+
+    expect(result.current.failedOrders?.map((order) => order.id)).toEqual([
+      'newer',
+      'older',
+      'broken-a',
+      'broken-b',
+    ]);
+  });
 });

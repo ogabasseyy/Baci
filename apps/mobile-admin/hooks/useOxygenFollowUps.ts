@@ -27,7 +27,22 @@ const TERMINAL_OR_UNKNOWN = new Set([
   'cancelled',
   'unknown',
 ]);
+const MAX_OXYGEN_FOLLOW_UP_CANDIDATES = 250;
 const ORDER_LOOKUP_BATCH_SIZE = 50;
+
+function extractBoundedArray(
+  payload: unknown,
+  maxItems: number
+): { items: unknown[]; isBoundedValid: boolean } {
+  const parsed = z.array(z.unknown()).max(maxItems).safeParse(payload);
+  if (parsed.success) {
+    return { items: parsed.data, isBoundedValid: true };
+  }
+  return {
+    items: Array.isArray(payload) ? payload.slice(0, maxItems) : [],
+    isBoundedValid: false,
+  };
+}
 
 /** The RPC returns categories only; order/contact data still goes through orders RLS. */
 export async function fetchOxygenFollowUps(
@@ -38,12 +53,17 @@ export async function fetchOxygenFollowUps(
     p_merchant_id: validatedMerchantId,
   });
   if (error) throw new Error('Could not load Oxygen follow-ups');
-  const rawCandidates = z.array(z.unknown()).max(250).parse(data);
-  const candidates = rawCandidates.flatMap((row) => {
+  const candidatePayload = extractBoundedArray(
+    data,
+    MAX_OXYGEN_FOLLOW_UP_CANDIDATES
+  );
+  const candidates = candidatePayload.items.flatMap((row) => {
     const parsed = oxygenFollowUpCandidateSchema.safeParse(row);
     return parsed.success ? [parsed.data] : [];
   });
-  let isIncomplete = candidates.length !== rawCandidates.length;
+  let isIncomplete =
+    !candidatePayload.isBoundedValid ||
+    candidates.length !== candidatePayload.items.length;
   if (candidates.length === 0) return { orders: [], isIncomplete };
 
   const ids = candidates.map((candidate) => candidate.order_id);
@@ -56,7 +76,7 @@ export async function fetchOxygenFollowUps(
       supabase
         .from('orders')
         .select(
-          'id,order_number,customer_id,customer_name,customer_email,customer_phone,total,payment_status,payment_method,created_at'
+          'id,order_number,customer_id,customer_name,customer_email,customer_phone,total,payment_status,payment_method,created_at,cancelled_at'
         )
         .eq('merchant_id', validatedMerchantId)
         .in('id', batch)
@@ -74,11 +94,12 @@ export async function fetchOxygenFollowUps(
       isIncomplete = true;
       return [];
     }
-    const rows = z
-      .array(z.unknown())
-      .max(ORDER_LOOKUP_BATCH_SIZE)
-      .parse(result.value.data);
-    return rows.flatMap((row) => {
+    const batchPayload = extractBoundedArray(
+      result.value.data,
+      ORDER_LOOKUP_BATCH_SIZE
+    );
+    if (!batchPayload.isBoundedValid) isIncomplete = true;
+    return batchPayload.items.flatMap((row) => {
       const parsed = oxygenFollowUpOrderSchema.safeParse(row);
       if (!parsed.success) isIncomplete = true;
       return parsed.success ? [parsed.data] : [];
@@ -113,6 +134,7 @@ export async function fetchOxygenFollowUps(
         follow_up_at: candidate.last_activity_at,
         oxygen_follow_up_status:
           total === null ||
+          order.cancelled_at !== null ||
           TERMINAL_OR_UNKNOWN.has(paymentStatus) ||
           (paymentStatus === 'bnpl_approved' &&
             candidate.follow_up_status !== 'approved_pending') ||

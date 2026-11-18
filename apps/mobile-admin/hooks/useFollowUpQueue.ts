@@ -1,9 +1,22 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { getFollowUpViewState } from '@/components/customers/follow-up-view-state';
+import type { FailedOrder } from '@/hooks/useFailedOrders';
 import { useFailedOrders } from '@/hooks/useFailedOrders';
 import { useMerchant } from '@/hooks/useMerchant';
 import { useOxygenFollowUps } from '@/hooks/useOxygenFollowUps';
 import { getFollowUpActivityAt } from '@/lib/customers-failed-orders';
+
+function parseFollowUpActivityTime(order: FailedOrder): number {
+  const time = Date.parse(getFollowUpActivityAt(order));
+  return Number.isFinite(time) ? time : Number.NEGATIVE_INFINITY;
+}
+
+function compareFollowUpOrdersDesc(a: FailedOrder, b: FailedOrder): number {
+  const timeA = parseFollowUpActivityTime(a);
+  const timeB = parseFollowUpActivityTime(b);
+  if (timeA === timeB) return 0;
+  return timeB > timeA ? 1 : -1;
+}
 
 /**
  * Coordinates the Customers > Follow Up merchant context and queue query.
@@ -41,11 +54,7 @@ export function useFollowUpQueue() {
   );
   const failedOrders =
     standardOrders || oxygenOrders
-      ? [...byOrderId.values()].sort(
-          (a, b) =>
-            Date.parse(getFollowUpActivityAt(b)) -
-            Date.parse(getFollowUpActivityAt(a))
-        )
+      ? [...byOrderId.values()].sort(compareFollowUpOrdersDesc)
       : undefined;
   const isFailedOrdersError =
     isStandardError || isOxygenError || Boolean(isOxygenIncomplete);

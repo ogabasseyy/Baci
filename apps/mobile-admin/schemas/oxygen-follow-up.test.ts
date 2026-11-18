@@ -22,6 +22,7 @@ const order = {
   payment_status: null,
   payment_method: null,
   created_at: '2026-11-17T09:00:00Z',
+  cancelled_at: null,
 };
 
 describe('Oxygen follow-up schemas', () => {

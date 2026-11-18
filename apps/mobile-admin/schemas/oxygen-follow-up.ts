@@ -40,6 +40,7 @@ export const oxygenFollowUpOrderSchema = z
     payment_status: z.string().nullable(),
     payment_method: z.string().nullable(),
     created_at: z.iso.datetime({ offset: true }),
+    cancelled_at: z.iso.datetime({ offset: true }).nullable(),
   })
   .strict();
 export const oxygenFollowUpOrdersSchema = z

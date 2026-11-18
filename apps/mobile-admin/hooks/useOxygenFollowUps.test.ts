@@ -38,6 +38,7 @@ const order = {
   payment_status: 'unpaid',
   payment_method: 'oxygen',
   created_at: '2026-11-17T07:00:00Z',
+  cancelled_at: null,
 };
 
 describe('Oxygen follow-up fetch', () => {
@@ -259,5 +260,66 @@ describe('Oxygen follow-up fetch', () => {
   it('rejects an invalid merchant identifier before any database call', async () => {
     await expect(fetchOxygenFollowUps('not-a-uuid')).rejects.toThrow();
     expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
+  it('marks non-array and oversized payloads incomplete instead of throwing', async () => {
+    mocks.rpc.mockResolvedValue({ data: { unexpected: true }, error: null });
+    await expect(fetchOxygenFollowUps(merchantId)).resolves.toEqual({
+      orders: [],
+      isIncomplete: true,
+    });
+    expect(mocks.from).not.toHaveBeenCalled();
+
+    const oversizedCandidates = Array.from({ length: 251 }, (_, index) => ({
+      ...candidate,
+      order_id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+    }));
+    mocks.rpc.mockResolvedValue({ data: oversizedCandidates, error: null });
+    mocks.in.mockImplementation((_column: string, ids: string[]) => ({
+      data: ids.map((id) => ({ ...order, id })),
+      error: null,
+    }));
+
+    const cappedResult = await fetchOxygenFollowUps(merchantId);
+    expect(cappedResult.isIncomplete).toBe(true);
+    expect(cappedResult.orders).toHaveLength(250);
+
+    mocks.rpc.mockResolvedValue({ data: [candidate], error: null });
+    mocks.in.mockResolvedValue({
+      data: Array.from({ length: 51 }, (_, index) => ({
+        ...order,
+        id:
+          index === 0
+            ? orderId
+            : `00000000-0000-4000-8000-${String(index + 100).padStart(12, '0')}`,
+      })),
+      error: null,
+    });
+    const oversizedBatch = await fetchOxygenFollowUps(merchantId);
+    expect(oversizedBatch).toEqual({
+      orders: [expect.objectContaining({ id: orderId })],
+      isIncomplete: true,
+    });
+  });
+
+  it('escalates to needs_review when an order is cancelled after candidate lookup', async () => {
+    mocks.rpc.mockResolvedValue({
+      data: [{ ...candidate, follow_up_status: 'approved_pending' }],
+      error: null,
+    });
+    mocks.in.mockResolvedValue({
+      data: [{ ...order, cancelled_at: '2026-11-17T08:05:00Z' }],
+      error: null,
+    });
+
+    await expect(fetchOxygenFollowUps(merchantId)).resolves.toEqual({
+      orders: [
+        expect.objectContaining({
+          id: orderId,
+          oxygen_follow_up_status: 'needs_review',
+        }),
+      ],
+      isIncomplete: false,
+    });
   });
 });

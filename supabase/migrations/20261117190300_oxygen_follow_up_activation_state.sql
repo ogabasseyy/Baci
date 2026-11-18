@@ -25,7 +25,7 @@ BEGIN
     SELECT o.id, o.created_at, o.payment_status, o.payment_method, o.cancelled_at,
       w.id AS workflow_id, w.stage, coalesce(s.state, '{}'::jsonb) AS state,
       (w.id IS NOT NULL AND w.customer_id IS DISTINCT FROM o.customer_id) AS binding_mismatch,
-      greatest(coalesce(w.updated_at, o.created_at), coalesce(o.updated_at, o.created_at), pending.last_started_at, activation.created_at, recovery.last_started_at) AS activity_at,
+      greatest(coalesce(w.updated_at, o.created_at), coalesce(o.updated_at, o.created_at), pending.last_started_at, activation.created_at, activation.finished_at, recovery.last_activity_at) AS activity_at,
       coalesce(pending.indeterminate, false) AS indeterminate,
       coalesce(pending.in_flight, false) AS in_flight,
       coalesce(recovery.indeterminate, false) AS recovery_indeterminate,
@@ -61,8 +61,12 @@ BEGIN
     LEFT JOIN LATERAL (
       SELECT bool_or(r.status = 'indeterminate' AND r.action IN ('resend_upfront','resend_repayment')) AS indeterminate,
         bool_or(r.status IN ('queued','executing')) AS in_flight,
-        max(CASE WHEN r.status = 'executing' THEN coalesce(r.started_at, r.created_at)
-          ELSE r.created_at END) FILTER (WHERE r.status IN ('queued','executing')) AS last_started_at
+        max(CASE
+          WHEN r.status = 'indeterminate' THEN coalesce(r.completed_at, r.started_at, r.created_at)
+          WHEN r.status = 'executing' THEN coalesce(r.started_at, r.created_at)
+          ELSE r.created_at
+        END) FILTER (WHERE r.status IN ('queued','executing')
+          OR (r.status = 'indeterminate' AND r.action IN ('resend_upfront','resend_repayment'))) AS last_activity_at
       FROM oxygen_private.payment_recovery r
       WHERE r.workflow_id = w.id AND w.stage IS DISTINCT FROM 'activated'
         AND (s.state->>'bookingReference' IS NULL OR r.booking_reference::text = s.state->>'bookingReference')

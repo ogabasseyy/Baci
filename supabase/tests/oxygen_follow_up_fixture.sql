@@ -36,14 +36,15 @@ CREATE TABLE oxygen_private.provider_reference_history (
   command_id uuid PRIMARY KEY, workflow_id uuid NOT NULL, booking_reference uuid
 );
 CREATE TABLE oxygen_private.general_activations (
-  workflow_id uuid PRIMARY KEY, status text NOT NULL, created_at timestamptz NOT NULL
+  workflow_id uuid PRIMARY KEY, status text NOT NULL, created_at timestamptz NOT NULL, finished_at timestamptz
 );
 CREATE TABLE oxygen_private.general_activation_reconcile_conflicts (
   workflow_id uuid PRIMARY KEY, resolved_at timestamptz
 );
 CREATE TABLE oxygen_private.payment_recovery (
   workflow_id uuid NOT NULL, booking_reference uuid NOT NULL, action text NOT NULL,
-  status text NOT NULL, created_at timestamptz NOT NULL, started_at timestamptz
+  status text NOT NULL, created_at timestamptz NOT NULL, started_at timestamptz,
+  completed_at timestamptz
 );
 
 INSERT INTO public.orders (id, merchant_id, customer_id, payment_method, payment_status, created_at)
@@ -144,13 +145,13 @@ FROM public.oxygen_workflows WHERE id IN (
   '40000000-0000-4000-8000-000000000034','40000000-0000-4000-8000-000000000035',
   '40000000-0000-4000-8000-000000000039','40000000-0000-4000-8000-000000000040',
   '40000000-0000-4000-8000-000000000041','40000000-0000-4000-8000-000000000042');
-INSERT INTO oxygen_private.general_activations VALUES
-  ('40000000-0000-4000-8000-000000000032','indeterminate',now()-interval '2 hours'),
-  ('40000000-0000-4000-8000-000000000033','executing',now()-interval '1 minute'),
-  ('40000000-0000-4000-8000-000000000034','executing',now()-interval '2 hours'),
-  ('40000000-0000-4000-8000-000000000035','activated',now()-interval '2 hours'),
-  ('40000000-0000-4000-8000-000000000036','activated',now()-interval '2 hours'),
-  ('40000000-0000-4000-8000-000000000037','activated',now()-interval '2 hours');
+INSERT INTO oxygen_private.general_activations (workflow_id, status, created_at, finished_at) VALUES
+  ('40000000-0000-4000-8000-000000000032','indeterminate',now()-interval '2 hours',now()-interval '1 minute'),
+  ('40000000-0000-4000-8000-000000000033','executing',now()-interval '1 minute',NULL),
+  ('40000000-0000-4000-8000-000000000034','executing',now()-interval '2 hours',NULL),
+  ('40000000-0000-4000-8000-000000000035','activated',now()-interval '2 hours',now()-interval '2 hours'),
+  ('40000000-0000-4000-8000-000000000036','activated',now()-interval '2 hours',now()-interval '2 hours'),
+  ('40000000-0000-4000-8000-000000000037','activated',now()-interval '2 hours',now()-interval '2 hours');
 INSERT INTO oxygen_private.general_activation_reconcile_conflicts VALUES
   ('40000000-0000-4000-8000-000000000036',NULL),
   ('40000000-0000-4000-8000-000000000037',now()-interval '1 hour');
@@ -160,8 +161,8 @@ INSERT INTO oxygen_private.commands VALUES
   ('60000000-0000-4000-8000-000000000038','40000000-0000-4000-8000-000000000038','succeeded','{"action":"submit_address"}',now()-interval '1 hour');
 INSERT INTO oxygen_private.provider_reference_history VALUES
   ('60000000-0000-4000-8000-000000000038','40000000-0000-4000-8000-000000000038','50000000-0000-4000-8000-000000000004');
-INSERT INTO oxygen_private.payment_recovery VALUES
-  ('40000000-0000-4000-8000-000000000039','50000000-0000-4000-8000-000000000001','resend_upfront','indeterminate',now()-interval '2 hours',now()-interval '2 hours'),
-  ('40000000-0000-4000-8000-000000000040','50000000-0000-4000-8000-000000000001','check_status','executing',now()-interval '2 hours',now()-interval '1 minute'),
-  ('40000000-0000-4000-8000-000000000041','50000000-0000-4000-8000-000000000001','check_status','executing',now()-interval '2 hours',now()-interval '1 hour'),
-  ('40000000-0000-4000-8000-000000000042','50000000-0000-4000-8000-000000000002','resend_upfront','indeterminate',now()-interval '2 hours',now()-interval '2 hours');
+INSERT INTO oxygen_private.payment_recovery (workflow_id, booking_reference, action, status, created_at, started_at, completed_at) VALUES
+  ('40000000-0000-4000-8000-000000000039','50000000-0000-4000-8000-000000000001','resend_upfront','indeterminate',now()-interval '2 hours',now()-interval '2 hours',now()-interval '1 minute'),
+  ('40000000-0000-4000-8000-000000000040','50000000-0000-4000-8000-000000000001','check_status','executing',now()-interval '2 hours',now()-interval '1 minute',NULL),
+  ('40000000-0000-4000-8000-000000000041','50000000-0000-4000-8000-000000000001','check_status','executing',now()-interval '2 hours',now()-interval '1 hour',NULL),
+  ('40000000-0000-4000-8000-000000000042','50000000-0000-4000-8000-000000000002','resend_upfront','indeterminate',now()-interval '2 hours',now()-interval '2 hours',now()-interval '2 hours');

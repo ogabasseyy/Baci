@@ -608,7 +608,7 @@ describe('agentic checkout order dispatch', () => {
 
     expect(logger.error).toHaveBeenCalledWith(
       expect.objectContaining({
-        error: '{}',
+        error: 'Error: webhook offline',
         message: 'Webhook trigger failed',
         sessionId: 'agentic_session_1',
       })

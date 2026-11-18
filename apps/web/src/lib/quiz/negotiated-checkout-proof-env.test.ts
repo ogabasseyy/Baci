@@ -45,12 +45,12 @@ describe('negotiated checkout proof environment validation', () => {
       'cart-events',
       'event-pipeline',
       'gigl-tracking',
+      'import-jobs',
+      'jumia-order-sync',
       'merchant-onboarding-emails',
       'petrock-reconciliation',
       'piggyvest-webhook-capture-drain',
-      'process-import-jobs',
       'quiz-finalization',
-      'sync-jumia-orders',
     ]) {
       expect(
         isNegotiatedCheckoutProofSecretMissing(productionPhaseOneA, {

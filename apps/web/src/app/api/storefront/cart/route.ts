@@ -149,13 +149,20 @@ async function readCart(request: NextRequest, timer: CartServerTimer) {
         ? upgraded.liveGrantExpiresAt
         : result.cart.expiresAt;
     const cookieMaxAge = cartSessionCookieMaxAge(cookieExpiry);
+    const hintValue: '1' | '0' =
+      result.cart.state === 'active' && result.cart.lines.length > 0
+        ? '1'
+        : '0';
     if (proof && cookieMaxAge > 0) {
-      setCartSessionCookie(response, context.merchant.id, proof, cookieMaxAge);
-    }
-    if (result.cart.state !== 'active' || result.cart.lines.length === 0) {
-      setCartSessionHintCookie(response, context.merchant.id, '0');
-    } else if (!proof || cookieMaxAge <= 0) {
-      setCartSessionHintCookie(response, context.merchant.id, '1');
+      setCartSessionCookie(
+        response,
+        context.merchant.id,
+        proof,
+        cookieMaxAge,
+        hintValue
+      );
+    } else {
+      setCartSessionHintCookie(response, context.merchant.id, hintValue);
     }
     return response;
   } catch (error) {
@@ -293,13 +300,20 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     );
     const cookieMaxAge = cartSessionCookieMaxAge(result.cart.expiresAt);
+    const hintValue: '1' | '0' =
+      result.cart.state === 'active' && result.cart.lines.length > 0
+        ? '1'
+        : '0';
     if (proof && cookieMaxAge > 0) {
-      setCartSessionCookie(response, context.merchant.id, proof, cookieMaxAge);
-    }
-    if (result.cart.state !== 'active' || result.cart.lines.length === 0) {
-      setCartSessionHintCookie(response, context.merchant.id, '0');
-    } else if (!proof || cookieMaxAge <= 0) {
-      setCartSessionHintCookie(response, context.merchant.id, '1');
+      setCartSessionCookie(
+        response,
+        context.merchant.id,
+        proof,
+        cookieMaxAge,
+        hintValue
+      );
+    } else {
+      setCartSessionHintCookie(response, context.merchant.id, hintValue);
     }
     return response;
   } catch (error) {

@@ -208,13 +208,20 @@ async function applyCommand(
     const maxAge = cartSessionCookieMaxAge(cookieExpiry);
     // A non-positive lifetime would delete the cookie the body proof just
     // renewed; omit the cookie instead and let the body proof govern.
+    const hintValue: '1' | '0' =
+      result.cart.state === 'active' && result.cart.lines.length > 0
+        ? '1'
+        : '0';
     if (proof && maxAge > 0) {
-      setCartSessionCookie(response, context.merchant.id, proof, maxAge);
-    }
-    if (result.cart.state !== 'active' || result.cart.lines.length === 0) {
-      setCartSessionHintCookie(response, context.merchant.id, '0');
-    } else if (!proof || maxAge <= 0) {
-      setCartSessionHintCookie(response, context.merchant.id, '1');
+      setCartSessionCookie(
+        response,
+        context.merchant.id,
+        proof,
+        maxAge,
+        hintValue
+      );
+    } else {
+      setCartSessionHintCookie(response, context.merchant.id, hintValue);
     }
     return response;
   } catch (error) {

@@ -6,6 +6,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Product } from '@/lib/products';
 
+import {
+  resetCartSessionHintForTests,
+  writeCartSessionHint,
+} from './cart-session-hint';
 import { saveCartToStorage } from './cart-storage';
 
 import type { CartItem } from './cart-types';
@@ -105,12 +109,15 @@ function mockAdopted(version = 3, lines: CartLine[] = [cartLine()]) {
 
 describe('useSharedCart link', () => {
   afterEach(() => {
+    resetCartSessionHintForTests();
     vi.useRealTimers();
     vi.restoreAllMocks();
   });
   beforeEach(() => {
     vi.clearAllMocks();
     window.localStorage.clear();
+    resetCartSessionHintForTests();
+    writeCartSessionHint(MERCHANT_ID, '1');
     vi.mocked(fetchSharedCartProducts).mockResolvedValue(new Map());
   });
 

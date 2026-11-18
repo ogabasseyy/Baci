@@ -140,7 +140,8 @@ export function setCartSessionCookie(
   response: NextResponse,
   merchantId: string,
   proof: string,
-  maxAgeSeconds: number
+  maxAgeSeconds: number,
+  hintValue: '1' | '0' | null = maxAgeSeconds > 0 ? '1' : '0'
 ): void {
   response.cookies.set(cartSessionCookieName(merchantId), proof, {
     httpOnly: true,
@@ -149,12 +150,14 @@ export function setCartSessionCookie(
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',
   });
-  setCartSessionHintCookie(
-    response,
-    merchantId,
-    maxAgeSeconds > 0 ? '1' : '0',
-    maxAgeSeconds > 0 ? maxAgeSeconds : undefined
-  );
+  if (hintValue !== null) {
+    setCartSessionHintCookie(
+      response,
+      merchantId,
+      hintValue,
+      maxAgeSeconds > 0 ? maxAgeSeconds : undefined
+    );
+  }
 }
 
 /** A checkout-only proof is host-only and cannot be read by browser scripts. */

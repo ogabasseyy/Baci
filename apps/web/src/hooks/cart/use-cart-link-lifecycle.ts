@@ -157,14 +157,18 @@ export function useCartLinkLifecycle(
         return;
       }
       const cartHint = readCartSessionHint(merchantId);
+      const hasActiveDeviceSession = Boolean(
+        hasActiveCartDeviceSession?.(merchantSlug)
+      );
       const hasLegacyOrSessionSignal =
         readCustomerSessionHint() === '1' ||
-        Boolean(hasActiveCartDeviceSession?.(merchantSlug)) ||
+        hasActiveDeviceSession ||
         getSharedCartImportReceipt(merchantSlug) !== null ||
         cached.length > 0;
       const shouldSkipInitialFetch =
         cached.length === 0 &&
         readCustomerSessionHint() !== '1' &&
+        !hasActiveDeviceSession &&
         (cartHint === '0' || (cartHint === null && !hasLegacyOrSessionSignal));
 
       if (shouldSkipInitialFetch) {
@@ -210,11 +214,17 @@ export function useCartLinkLifecycle(
       if (result.ok) {
         adoptOutcomeRef.current = 'session';
         lastFetchRef.current = Date.now();
-        writeCartSessionHint(
-          merchantId,
-          result.snapshot.lines.length > 0 ? '1' : '0'
-        );
-        if (merchantSlug) markCartDeviceSessionActive?.(merchantSlug);
+        if (!isTerminalCart(result.snapshot)) {
+          const isActive = result.snapshot.lines.length > 0;
+          writeCartSessionHint(merchantId, isActive ? '1' : '0');
+          if (merchantSlug) {
+            if (isActive) {
+              markCartDeviceSessionActive?.(merchantSlug);
+            } else {
+              clearCartDeviceSessionActive?.(merchantSlug);
+            }
+          }
+        }
         dispatch({
           generation,
           snapshot: result.snapshot,

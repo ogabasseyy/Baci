@@ -362,7 +362,9 @@ describe('POST /api/storefront/cart/commands', () => {
     // bugfix: never mint a renewed proof from the incoming (possibly stale)
     // operations when the live grant could not be reloaded.
     expect(payload.proof).toBeUndefined();
-    expect(response.headers.get('set-cookie')).toBeNull();
+    const setCookie = response.headers.get('set-cookie') ?? '';
+    expect(setCookie).not.toContain('baci-cart-11111111-');
+    expect(setCookie).toContain('baci-cart-hint-11111111-');
   });
 
   it('returns the committed cart without a renewed proof when reissue crosses grant expiry', async () => {
@@ -385,7 +387,9 @@ describe('POST /api/storefront/cart/commands', () => {
     const payload = await response.json();
     expect(payload.cart.version).toBe(2);
     expect(payload.proof).toBeUndefined();
-    expect(response.headers.get('set-cookie')).toBeNull();
+    const setCookie = response.headers.get('set-cookie') ?? '';
+    expect(setCookie).not.toContain('baci-cart-11111111-');
+    expect(setCookie).toContain('baci-cart-hint-11111111-');
   });
 
   it('returns replayed outcomes for response-loss retries', async () => {

@@ -16,6 +16,7 @@ import {
 } from './cart-session-write-fence';
 import { cartClientCredentialHeaders } from './client-credential';
 import {
+  clearCartDeviceSessionActive,
   ensureCartDeviceRevocationCleared,
   isCartDeviceRevocationPending,
   markCartDeviceSessionActive,
@@ -146,11 +147,15 @@ async function requestCreateSharedCart(
   const body = await readBody(response);
   if (response.ok && body && isSnapshot(body.cart)) {
     const cart = body.cart as CartSnapshot;
-    writeCartSessionHint(
-      cart.merchantId,
-      cart.state === 'active' && cart.lines.length > 0 ? '1' : '0'
-    );
-    if (merchantSlug) markCartDeviceSessionActive(merchantSlug);
+    const isActive = cart.state === 'active' && cart.lines.length > 0;
+    writeCartSessionHint(cart.merchantId, isActive ? '1' : '0');
+    if (merchantSlug) {
+      if (isActive) {
+        markCartDeviceSessionActive(merchantSlug);
+      } else {
+        clearCartDeviceSessionActive(merchantSlug);
+      }
+    }
     return {
       ok: true,
       replayed: body.replayed === true,
@@ -227,11 +232,15 @@ async function requestSharedCartCommand(
   const body = await readBody(response);
   if (response.ok && body && isSnapshot(body.cart)) {
     const cart = body.cart as CartSnapshot;
-    writeCartSessionHint(
-      cart.merchantId,
-      cart.state === 'active' && cart.lines.length > 0 ? '1' : '0'
-    );
-    if (merchantSlug) markCartDeviceSessionActive(merchantSlug);
+    const isActive = cart.state === 'active' && cart.lines.length > 0;
+    writeCartSessionHint(cart.merchantId, isActive ? '1' : '0');
+    if (merchantSlug) {
+      if (isActive) {
+        markCartDeviceSessionActive(merchantSlug);
+      } else {
+        clearCartDeviceSessionActive(merchantSlug);
+      }
+    }
     return {
       ok: true,
       replayed: body.replayed === true,

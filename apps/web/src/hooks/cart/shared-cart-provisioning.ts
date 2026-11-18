@@ -3,7 +3,6 @@
 import type { CartSnapshot } from '@baci/shared/cart';
 import { reportCartCookieStorageFailure } from './cart-cookie-storage-failure';
 import { isCartCookieEpochCurrent } from './cart-cross-tab-lock';
-import { writeCartSessionHint } from './cart-session-hint';
 import { saveSharedCartImportReceipt } from './cart-storage';
 import { bootstrapSharedCart, createSharedCart } from './shared-cart-client';
 import type { EnsureCartResult } from './shared-cart-hook-support';
@@ -132,7 +131,6 @@ export function createCartProvisioning(
           };
         }
         adoptOutcomeRef.current = 'bootstrap';
-        writeCartSessionHint(context.merchantId, '1');
         if (merchantSlug) markCartDeviceSessionActive?.(merchantSlug);
       } finally {
         if (

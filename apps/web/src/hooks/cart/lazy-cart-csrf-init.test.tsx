@@ -1,4 +1,4 @@
-import { act, renderHook, waitFor } from '@testing-library/react';
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -114,6 +114,8 @@ describe('Lazy storefront cart & CSRF initialization', () => {
   });
 
   afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
     clearAllCookies();
     clearCartDeviceSessionActive(MERCHANT_A_SLUG);
     clearCartDeviceSessionActive(MERCHANT_B_SLUG);
@@ -122,6 +124,7 @@ describe('Lazy storefront cart & CSRF initialization', () => {
   });
 
   it('(a) anonymous cold visit makes 0 /api/storefront/cart and 0 /api/csrf requests on mount', async () => {
+    vi.useFakeTimers();
     const fetchMock = vi
       .fn()
       .mockResolvedValue(new Response(null, { status: 204 }));
@@ -131,15 +134,19 @@ describe('Lazy storefront cart & CSRF initialization', () => {
       wrapper: createWrapper(),
     });
 
-    await waitFor(() => expect(result.current.isHydrated).toBe(true));
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(20);
+    });
 
+    expect(result.current.isHydrated).toBe(true);
     expect(fetchMock).not.toHaveBeenCalled();
     expect(readCartSessionHint(MERCHANT_A_ID)).toBe('0');
 
     // Tab focus / visibilitychange on cold visit also makes 0 requests.
-    window.dispatchEvent(new Event('focus'));
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await act(async () => {
+      window.dispatchEvent(new Event('focus'));
+      await vi.advanceTimersByTimeAsync(20);
+    });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -193,10 +200,9 @@ describe('Lazy storefront cart & CSRF initialization', () => {
 
     await waitFor(() => expect(result.current.isHydrated).toBe(true));
     await waitFor(() => expect(readCartSessionHint(MERCHANT_B_ID)).toBe('0'));
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(String(fetchMock.mock.calls[0]?.[0])).toContain(
-      `merchantSlug=${MERCHANT_B_SLUG}`
-    );
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
+      `/api/storefront/cart?merchantSlug=${MERCHANT_B_SLUG}`,
+    ]);
     // Merchant A's hint remains untouched.
     expect(readCartSessionHint(MERCHANT_A_ID)).toBe('1');
   });
@@ -208,12 +214,15 @@ describe('Lazy storefront cart & CSRF initialization', () => {
       .mockResolvedValue(new Response(null, { status: 204 }));
     vi.stubGlobal('fetch', fetchMock);
 
-    renderHook(() => useCart(), {
+    const { result } = renderHook(() => useCart(), {
       wrapper: createWrapper(MERCHANT_B_ID, MERCHANT_B_SLUG),
     });
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    expect(readCartSessionHint(MERCHANT_B_ID)).toBe('0');
+    await waitFor(() => expect(result.current.isHydrated).toBe(true));
+    await waitFor(() => expect(readCartSessionHint(MERCHANT_B_ID)).toBe('0'));
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
+      `/api/storefront/cart?merchantSlug=${MERCHANT_B_SLUG}`,
+    ]);
   });
 
   it('(b4) guest with cartHint 0 who signs in (customerSessionHint=1) still hydrates server cart and flips cartHint to 1', async () => {

@@ -1,54 +1,14 @@
-export const NON_PRODUCT_PREDECESSOR_WORDS = new Set([
-  'for',
-  'at',
-  'from',
-  'with',
-  'within',
-  'under',
-  'below',
-  'over',
-  'above',
-  'around',
-  'about',
-  'costs',
-  'cost',
-  'only',
-  'has',
-  'have',
-  'just',
-  'option',
-  'options',
-  'step',
-  'chapter',
-  'item',
-  'version',
-  'generation',
-  'gen',
-  'year',
-  'january',
-  'february',
-  'march',
-  'april',
-  'may',
-  'june',
-  'july',
-  'august',
-  'september',
-  'october',
-  'november',
-  'december',
-  'ngn',
-  'naira',
-  'usd',
-  'eur',
-  'gbp',
-  'the',
-  'and',
-  'max',
-  'mini',
-  'plus',
-  'pro',
-]);
+export const NON_PRODUCT_PREDECESSOR_WORDS = new Set(
+  'for at from with within under below over above around about costs cost only has have just option options step chapter item version generation gen year january february march april may june july august september october november december ngn naira usd eur gbp the and your our their its this that these those any some all fits fit full high good best more'.split(
+    ' '
+  )
+);
+
+export const CONDITIONAL_PRODUCT_PREDECESSOR_WORDS = new Set(
+  'laptop laptops phone phones tablet tablets headphones headset earbuds speaker monitor camera max mini plus pro'.split(
+    ' '
+  )
+);
 
 export const CAPITALIZED_PHRASE_IGNORE = new Set([
   'ogabassey',
@@ -231,6 +191,12 @@ export const KNOWN_BRAND_OR_LINE_TOKENS = new Set([
   'pixelbook',
   'steamdeck',
 ]);
+
+export const VARIANT_TIER_TOKENS = new Set(
+  'pro ultra max mini plus air studio fold flip fe se lite neo edge m1 m2 m3 m4 m5'.split(
+    ' '
+  )
+);
 
 export const POSITIVE_AVAILABILITY_GENERIC_WORDS = new Set(
   'it this that these those they them both one ones all each every either we you our your is are was were have has had can will get buy order try check out here there now too also currently available stock for and with without under below from the option options item items unit units left remaining budget price prices offer carry sell recommend find matching product products device devices model models laptop laptops phone phones tablet tablets camera cameras watch watches'.split(

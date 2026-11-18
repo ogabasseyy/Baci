@@ -34,6 +34,7 @@ export function createOwnerMtlsFetch(settings: {
     !settings.key
   )
     throw Error('INVALID_OWNER_MTLS_CONFIG');
+  // Parse TLS material at startup so malformed credentials fail before use.
   createSecureContext({
     cert: settings.cert,
     key: settings.key,

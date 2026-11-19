@@ -4,7 +4,10 @@ import { AppState, type AppStateStatus } from 'react-native';
 import { maybeShowQuizStartInterstitial } from '@/lib/quiz-start-interstitial';
 import type { QuizEvent } from '@/services/quiz-types';
 import { useQuizWaitingRoom } from './use-quiz-waiting-room';
-import { event } from './use-quiz-waiting-room-test-harness';
+import {
+  event,
+  pinKickoffOffsetToZero,
+} from './use-quiz-waiting-room-test-harness';
 
 jest.mock('@/lib/quiz-start-interstitial', () => ({
   maybeShowQuizStartInterstitial: jest.fn(async () => 'skipped'),
@@ -15,6 +18,8 @@ const mockMaybeShowQuizStartInterstitial = jest.mocked(
 );
 
 describe('useQuizWaitingRoom interstitial request', () => {
+  pinKickoffOffsetToZero();
+
   afterEach(() => {
     jest.useRealTimers();
   });

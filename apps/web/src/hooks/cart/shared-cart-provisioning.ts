@@ -11,7 +11,10 @@ import { createImportFinisher } from './shared-cart-import-finish';
 import { adoptPreservedFallback } from './shared-cart-preserved-fallback';
 import { planProvisioningImport } from './shared-cart-provisioning-plan';
 import { isTerminalCart } from './shared-cart-queue';
-import { revokeCartDeviceSession } from './shared-cart-session-revoke-client';
+import {
+  markCartDeviceSessionActive,
+  revokeCartDeviceSession,
+} from './shared-cart-session-revoke-client';
 import {
   consumedReceiptFields,
   getCartSessionGeneration,
@@ -136,6 +139,7 @@ export function createCartProvisioning(
           };
         }
         adoptOutcomeRef.current = 'bootstrap';
+        if (merchantSlug) markCartDeviceSessionActive?.(merchantSlug);
       } finally {
         if (
           linkRunRef.current === linkRun &&

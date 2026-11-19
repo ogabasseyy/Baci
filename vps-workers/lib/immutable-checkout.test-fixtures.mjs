@@ -22,6 +22,8 @@ const TS_ENTRYPOINTS = [
   'apps/web/src/scripts/process-order-notifications.ts',
   'apps/web/src/scripts/publish-scheduled-posts.ts',
   'apps/web/src/scripts/agentic-commerce-health.ts',
+  'apps/web/src/scripts/purge-jumia-self-authorization-discoveries.ts',
+  'apps/web/src/scripts/cleanup-checkout-shipping-recovery-previews.ts',
 ];
 const WRAPPERS = [
   'process-gigl-tracking.sh',
@@ -36,6 +38,8 @@ const WRAPPERS = [
   'process-order-notifications.sh',
   'publish-scheduled-posts.sh',
   'agentic-commerce-health.sh',
+  'purge-jumia-self-authorization-discoveries.sh',
+  'cleanup-checkout-shipping-recovery-previews.sh',
 ];
 const TSX_STUB = '#!/usr/bin/env bash\necho "tsx-stub"\n';
 

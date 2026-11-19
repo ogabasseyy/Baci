@@ -77,25 +77,35 @@ export async function retryOrderStoreCreditProjection({
   });
   const savingsAmountUsed = sumNumericAmounts(activeSavingsRows);
 
-  if (walletAmountUsed + savingsAmountUsed > 0) {
-    const projectionFailure = await recordPreGatewayRedemption(
-      orderId,
-      orderTotal,
-      savingsAmountUsed,
-      walletAmountUsed,
-      supabase
-    );
-    if (projectionFailure) {
-      return {
-        response: NextResponse.json(
-          {
-            error: projectionFailure.message,
-            code: projectionFailure.code,
-          },
-          { status: projectionFailure.status }
-        ),
-      };
-    }
+  if (walletAmountUsed + savingsAmountUsed <= 0) {
+    return {
+      response: NextResponse.json(
+        {
+          error: 'Store credit requires payment review.',
+          code: 'STORE_CREDIT_REVIEW_REQUIRED',
+        },
+        { status: 409 }
+      ),
+    };
+  }
+
+  const projectionFailure = await recordPreGatewayRedemption(
+    orderId,
+    orderTotal,
+    savingsAmountUsed,
+    walletAmountUsed,
+    supabase
+  );
+  if (projectionFailure) {
+    return {
+      response: NextResponse.json(
+        {
+          error: projectionFailure.message,
+          code: projectionFailure.code,
+        },
+        { status: projectionFailure.status }
+      ),
+    };
   }
 
   return {

@@ -342,7 +342,17 @@ describe('bank card offer payment handlers', () => {
     vi.stubEnv('PAYSTACK_SECRET_KEY', secret);
     const { refundInsert } = setup('035', 'Wema Bank', { data: null, error });
     const response = await webhook(
-      request('webhook', { event: 'charge.success', data: { reference } }, true)
+      request(
+        'webhook',
+        {
+          event: 'charge.success',
+          data: {
+            reference,
+            metadata: { merchant_id: merchantId, order_id: orderId },
+          },
+        },
+        true
+      )
     );
     expect(response.status).toBe(status);
     if (error) {
@@ -351,12 +361,13 @@ describe('bank card offer payment handlers', () => {
       await expect(response.json()).resolves.toMatchObject({
         code: 'PAYSTACK_PAYMENT_MATCH_ZERO_CANDIDATES',
       });
-      expect(refundInsert).toHaveBeenCalledWith(
-        expect.objectContaining({
-          issue_type: 'payment_match_zero_candidates',
-          paystack_ref: reference,
-        })
-      );
+      expect(refundInsert).toHaveBeenCalledWith({
+        issue_type: 'payment_match_zero_candidates',
+        paystack_ref: reference,
+        reason:
+          'Signed bank-offer charge webhook did not match a saved payment attempt',
+        metadata: { source: 'bank_card_offer_webhook' },
+      });
     }
     expect(mocks.verify).not.toHaveBeenCalled();
   });

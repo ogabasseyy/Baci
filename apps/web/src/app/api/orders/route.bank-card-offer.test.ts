@@ -36,10 +36,28 @@ it.each([
   { quantity: 10_001, expectedTotal: 95, status: 409 },
   { quantity: 1, expectedTotal: undefined, status: 409 },
   { quantity: 1, expectedTotal: 100, status: 409 },
+  {
+    quantity: 1,
+    expectedTotal: 95.02,
+    shipping: 0.005,
+    gift: 0.01,
+    status: 409,
+    errorCode: 'BANK_CARD_OFFER_AMOUNT_INVALID',
+  },
+  {
+    quantity: 1,
+    expectedTotal: 95.03,
+    shipping: 0.01,
+    gift: 0.02,
+    status: 201,
+  },
 ])('handles bank-offer checkout with quantity $quantity and expected total $expectedTotal', async ({
   quantity,
   expectedTotal,
   status,
+  shipping = 0,
+  gift = 0,
+  errorCode,
 }) => {
   primeAdminOrderCurrencyRead();
   vi.stubEnv('QUIZ_RPC_SERVER_SECRET', 'synthetic-order-test-proof');
@@ -61,7 +79,7 @@ it.each([
     supabase.rpc.mockImplementation(async (...args: unknown[]) => ({
       data:
         args[0] === 'create_storefront_bank_card_offer_order'
-          ? ({ total: 95, idempotency_replayed: false } as never)
+          ? ({ total: expectedTotal, idempotency_replayed: false } as never)
           : null,
       error: null,
     }));
@@ -76,6 +94,8 @@ it.each([
             { product_id: productId, quantity, price: 100, name: 'Widget' },
           ],
           subtotal: 100 * quantity,
+          shipping_fee: shipping,
+          gift_wrapping_fee: gift,
           expected_total: expectedTotal,
           payment_method: 'bank_card_offer',
           bank_card_offer_id: 'black-friday',
@@ -86,9 +106,10 @@ it.each([
     expect(res.status, JSON.stringify(response)).toBe(status);
     if (status === 409) {
       expect(response.code).toBe(
-        expectedTotal === undefined || expectedTotal === 100
-          ? 'BANK_CARD_OFFER_TOTAL_MISMATCH'
-          : 'BANK_CARD_OFFER_UNAVAILABLE'
+        errorCode ??
+          (expectedTotal === undefined || expectedTotal === 100
+            ? 'BANK_CARD_OFFER_TOTAL_MISMATCH'
+            : 'BANK_CARD_OFFER_UNAVAILABLE')
       );
       expect(supabase.rpc).not.toHaveBeenCalledWith(
         'create_storefront_bank_card_offer_order',
@@ -99,7 +120,11 @@ it.each([
     expect(supabase.rpc).toHaveBeenCalledWith(
       'create_storefront_bank_card_offer_order',
       expect.objectContaining({
-        p_order: expect.objectContaining({ expected_total: 95 }),
+        p_order: expect.objectContaining({
+          expected_total: expectedTotal,
+          shipping_fee: shipping,
+          gift_wrapping_fee: gift,
+        }),
         p_quote: expect.objectContaining({ discountKobo: 500 }),
       })
     );

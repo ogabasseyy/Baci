@@ -2367,9 +2367,18 @@ export async function POST(request: NextRequest) {
     });
     if (bankCardOfferRequested && bankCardOffer && resolvedUserId) {
       const expectedTotal = body.expected_total;
+      const feeAmounts = [
+        effectiveShippingFee,
+        orderTaxAmount,
+        giftWrappingFeeValue,
+        ...orderItemsRpcPayload.map((item) => item.assurance_fee),
+      ];
       if (
         orderItemsRpcPayload.some(
           (item) => !isMajorAmountRepresentable(item.price, 'NGN')
+        ) ||
+        feeAmounts.some(
+          (amount) => !isMajorAmountRepresentable(amount, 'NGN')
         ) ||
         (typeof expectedTotal === 'number' &&
           !isMajorAmountRepresentable(expectedTotal, 'NGN'))
@@ -2421,9 +2430,7 @@ export async function POST(request: NextRequest) {
       const payableKobo =
         quote.productSubtotalKobo -
         quote.discountKobo +
-        Math.round(
-          (effectiveShippingFee + orderTaxAmount + giftWrappingFeeValue) * 100
-        );
+        feeAmounts.reduce((kobo, amount) => kobo + Math.round(amount * 100), 0);
       if (
         typeof expectedTotal !== 'number' ||
         !Number.isSafeInteger(payableKobo) ||

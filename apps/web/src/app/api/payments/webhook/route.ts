@@ -783,6 +783,9 @@ export async function POST(request: NextRequest) {
         );
       }
       if (!row.data) {
+        // The saved attempt is the authority for tenant and order identity.
+        // Without a match, operations reconcile this reference in the
+        // platform queue. Paystack metadata cannot assign it to a tenant.
         const { error } = await supabase.from('reconciliation_review').insert({
           issue_type: 'payment_match_zero_candidates',
           paystack_ref: reference,

@@ -11,6 +11,7 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # environment can never certify one project/token while cron runs another.
 export GIGL_ENV_FILE_AUTHORITATIVE=1
 gigl_tracking_scope_env
+export BACI_WORKER_PROFILE="${BACI_WORKER_PROFILE:-gigl-tracking}"
 # The helper execs run-web-script.sh under a constructed allowlist
 # environment (env -i): caller-exported secrets never reach the child.
 gigl_tracking_exec_scoped "$SCRIPT_DIR/run-web-script.sh" gigl-capability src/scripts/verify-gigl-tracking-worker-capability.ts

@@ -31,6 +31,20 @@ vi.mock('react-native-safe-area-context', () => ({
   ),
 }));
 
+vi.mock('@/components/ui/AppKeyboardContainer', () => ({
+  AppKeyboardContainer: ({
+    children,
+    offsetPreset,
+  }: {
+    children: React.ReactNode;
+    offsetPreset?: string;
+  }) => (
+    <section aria-label={`keyboard container ${offsetPreset}`}>
+      {children}
+    </section>
+  ),
+}));
+
 vi.mock('@/hooks/useTheme', () => ({
   useTheme: () => ({ colors: { background: '#000', text: '#fff' } }),
 }));
@@ -106,5 +120,15 @@ describe('SendFeedbackScreen', () => {
     expect(mockBack).not.toHaveBeenCalled();
     buttons?.[0]?.onPress?.();
     expect(mockBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('hosts the form in the shared keyboard container', () => {
+    render(<SendFeedbackScreen />);
+
+    expect(
+      screen.getByRole('region', {
+        name: 'keyboard container compactHeader',
+      })
+    ).toHaveTextContent('form for /send-feedback');
   });
 });

@@ -1,8 +1,9 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { Stack, useRouter } from 'expo-router';
-import { Alert, Pressable, ScrollView, StyleSheet } from 'react-native';
+import { Alert, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FeedbackForm } from '@/components/feedback/FeedbackForm';
+import { AppKeyboardContainer } from '@/components/ui/AppKeyboardContainer';
 import { SPACING } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
 
@@ -38,9 +39,11 @@ export default function SendFeedbackScreen() {
         edges={['bottom']}
         style={[styles.container, { backgroundColor: colors.background }]}
       >
-        <ScrollView
+        {/* The form autofocuses its message box; keep Send above the keyboard. */}
+        <AppKeyboardContainer
+          align="start"
           contentContainerStyle={styles.content}
-          keyboardShouldPersistTaps="handled"
+          offsetPreset="compactHeader"
         >
           <FeedbackForm
             onCancel={() => router.back()}
@@ -48,7 +51,7 @@ export default function SendFeedbackScreen() {
             screen="/send-feedback"
             showTitle={false}
           />
-        </ScrollView>
+        </AppKeyboardContainer>
       </SafeAreaView>
     </>
   );

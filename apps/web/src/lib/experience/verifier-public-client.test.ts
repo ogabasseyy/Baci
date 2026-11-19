@@ -68,3 +68,29 @@ it('fails closed for invalid identifiers, unverified users and non-success respo
   expect(fetch).not.toHaveBeenCalled();
   await expect(verify(client as never, { approvalId })).rejects.toThrow();
 });
+
+it('cancels public verification when the owner disconnects after committing', async () => {
+  const abort = new AbortController();
+  const started = Promise.withResolvers<AbortSignal>();
+  const fetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+    const signal = init?.signal;
+    if (!signal) throw Error('missing signal');
+    started.resolve(signal);
+    return await new Promise<Response>((resolve, reject) => {
+      abort.signal.addEventListener(
+        'abort',
+        () => {
+          if (signal.aborted) reject(signal.reason);
+          else resolve(new Response(null, { status: 204 }));
+        },
+        { once: true }
+      );
+    });
+  });
+  const verify = createVerifierPublicClient({ key, fetch });
+  const pending = verify(client as never, { approvalId }, abort.signal);
+  const signal = await started.promise;
+  abort.abort();
+  expect(signal.aborted).toBe(true);
+  await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+});

@@ -16,7 +16,8 @@ export interface OwnerLifecycleVerification {
   ): Promise<void>;
   verifyCommitted(
     client: SupabaseClient,
-    receipt: Record<string, unknown>
+    receipt: Record<string, unknown>,
+    signal?: AbortSignal
   ): Promise<void>;
 }
 export function createOwnerLifecycleRuntime(
@@ -43,10 +44,14 @@ export function createOwnerLifecycleRuntime(
         const receipt = await confirmExperiencePublication(client, id);
         if (receipt.status === 'verifying') {
           try {
-            await verifier.verifyCommitted(client, {
-              ...receipt,
-              approvalId: id,
-            });
+            await verifier.verifyCommitted(
+              client,
+              {
+                ...receipt,
+                approvalId: id,
+              },
+              signal
+            );
           } catch {
             return receipt;
           }

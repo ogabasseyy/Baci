@@ -30,7 +30,8 @@ export interface IndependentApprovalDependencies {
   }): Promise<void>;
   verifyPublic(
     client: SupabaseClient,
-    receipt: Record<string, unknown>
+    receipt: Record<string, unknown>,
+    signal?: AbortSignal
   ): Promise<void>;
 }
 export function createIndependentApprovalVerifier(

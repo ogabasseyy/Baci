@@ -52,10 +52,16 @@ it('failed delivery remains verifying; replay verifies same receipt without fres
     status: 'verifying',
     receiptId: id,
   });
+  const { signal } = new AbortController();
   f.verifier.verifyCommitted.mockRejectedValueOnce(Error('browser offline'));
   await expect(
-    f.approval?.confirmPublication?.({} as never, id)
+    f.approval?.confirmPublication?.({} as never, id, signal)
   ).resolves.toEqual({ status: 'verifying', receiptId: id });
+  expect(f.verifier.verifyCommitted).toHaveBeenCalledWith(
+    {},
+    { status: 'verifying', receiptId: id, approvalId: id },
+    signal
+  );
   expect(f.verifier.attest).not.toHaveBeenCalled();
   vi.mocked(loadLifecycleApproval)
     .mockResolvedValueOnce({ status: 'verifying' })

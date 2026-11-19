@@ -12,7 +12,8 @@ export function createVerifierPublicClient(settings: {
   if (settings.key.length !== 32 || typeof settings.fetch !== 'function')
     throw Error('INVALID_VERIFIER_CONFIG');
   const key = Uint8Array.from(settings.key);
-  return async (client, receipt) => {
+  return async (client, receipt, signal) => {
+    signal?.throwIfAborted();
     const approvalId = experienceApprovalId.parse(receipt.approvalId);
     const session = await client.auth.getSession();
     const token = session.data.session?.access_token;
@@ -36,6 +37,8 @@ export function createVerifierPublicClient(settings: {
     const signature = createHmac('sha256', key)
       .update(`verifier-public/v1\n${body}`)
       .digest('hex');
+    signal?.throwIfAborted();
+    const deadline = AbortSignal.timeout(600000);
     const response = await settings.fetch(
       'https://owner.baci-internal.invalid/internal/owner/public',
       {
@@ -48,7 +51,7 @@ export function createVerifierPublicClient(settings: {
         redirect: 'error',
         cache: 'no-store',
         credentials: 'omit',
-        signal: AbortSignal.timeout(600000),
+        signal: signal ? AbortSignal.any([signal, deadline]) : deadline,
       }
     );
     await response.body?.cancel().catch(() => undefined);

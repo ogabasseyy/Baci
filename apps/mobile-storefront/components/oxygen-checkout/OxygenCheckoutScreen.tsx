@@ -65,6 +65,8 @@ function CheckoutSession({
     session: NativeSession;
     capabilities: OxygenMobileCapabilities | null;
     total: number;
+    orderNumber?: string;
+    orderPaymentStatus: string;
     prefill?: OxygenFields;
   } | null>(null);
   const [error, setError] = useState('');
@@ -98,6 +100,8 @@ function CheckoutSession({
           session,
           capabilities,
           total: order.total,
+          orderNumber: order.order_number ?? undefined,
+          orderPaymentStatus: order.payment_status,
           prefill: oxygenLinkedCustomerPrefill(
             useAuthStore.getState().customer,
             {

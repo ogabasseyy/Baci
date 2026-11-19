@@ -4,6 +4,7 @@ import { oxygenOrderPrefill } from './order-prefill';
 
 const orderSchema = z.object({
   id: z.uuid(),
+  order_number: z.string().nullish(),
   total: z.coerce.number().positive(),
   payment_method: z.string(),
   payment_status: z.string(),
@@ -23,7 +24,7 @@ export async function readOwnedOxygenOrder(
   const { data, error } = await supabase
     .from('orders')
     .select(
-      'id,total,payment_method,payment_status,shipping_status,customer_email,shipping_address,delivery_method'
+      'id,order_number,total,payment_method,payment_status,shipping_status,customer_email,shipping_address,delivery_method'
     )
     .eq('id', orderId)
     .eq('customer_id', customerId)

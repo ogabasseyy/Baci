@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 import type { oxygenNativeSession } from '@/services/oxygen/native-session';
 import { OxygenFooterVisibility } from './OxygenActionFooter';
+import { OxygenActivatedOrderStep } from './OxygenActivatedOrderStep';
 import { OxygenApplicationLoading } from './OxygenApplicationLoading';
 import { OxygenOtp } from './OxygenOtp';
 import { OxygenWorkflowBody } from './OxygenWorkflowBody';
@@ -24,6 +25,8 @@ export function OxygenCheckoutWorkflow({
     session: NativeSession;
     capabilities: OxygenMobileCapabilities | null;
     total: number;
+    orderNumber?: string;
+    orderPaymentStatus: string;
     prefill?: OxygenFields;
   };
 }) {
@@ -36,6 +39,10 @@ export function OxygenCheckoutWorkflow({
   );
   const showRecovery = Boolean(workflow.error) || refreshing === 'recovery';
   const [capabilities, setCapabilities] = useState(context.capabilities);
+  const activated = workflow.snapshot?.stage === 'activated';
+  const orderPaymentConfirmed = ['paid', 'bnpl_approved'].includes(
+    context.orderPaymentStatus
+  );
   const refresh = async () => {
     if (refreshing || workflow.busy) return;
     setRefreshing(workflow.error ? 'recovery' : 'progress');
@@ -49,14 +56,25 @@ export function OxygenCheckoutWorkflow({
     }
   };
   useEffect(() => {
-    if (workflow.snapshot?.stage === 'activated' && !routed.current) {
+    if (activated && orderPaymentConfirmed && !routed.current) {
       routed.current = true;
       router.replace({
         pathname: '/order-success',
-        params: { orderId, paymentMethod: 'oxygen' },
+        params: {
+          orderId,
+          orderNumber: context.orderNumber,
+          paymentMethod: 'oxygen',
+        },
       });
     }
-  }, [workflow.snapshot?.stage, orderId]);
+  }, [activated, orderPaymentConfirmed, orderId, context.orderNumber]);
+  if (activated && !orderPaymentConfirmed)
+    return (
+      <OxygenActivatedOrderStep
+        orderId={orderId}
+        orderNumber={context.orderNumber}
+      />
+    );
   return (
     <OxygenFooterVisibility value={!completion}>
       <View

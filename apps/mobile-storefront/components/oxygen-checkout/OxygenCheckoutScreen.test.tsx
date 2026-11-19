@@ -103,6 +103,7 @@ describe('saved native Oxygen checkout', () => {
     jest.mocked(readOwnedOxygenOrder).mockResolvedValue({
       id: 'order',
       total: 100,
+      order_number: 'ORD-STAGING-1',
       payment_method: 'oxygen',
       payment_status: 'pending',
       shipping_status: 'pending',
@@ -267,7 +268,19 @@ describe('saved native Oxygen checkout', () => {
     );
     expect(router.replace).not.toHaveBeenCalled();
   });
-  it('routes exactly once only for canonical activated snapshot', async () => {
+  it.each([
+    'unpaid',
+    'bnpl_approved',
+  ])('uses the owned order state after activation (%s)', async (paymentStatus) => {
+    jest.mocked(readOwnedOxygenOrder).mockResolvedValueOnce({
+      id: 'order',
+      total: 100,
+      order_number: 'ORD-STAGING-1',
+      payment_method: 'oxygen',
+      payment_status: paymentStatus,
+      shipping_status: 'pending',
+      prefill: {},
+    });
     jest.mocked(useOxygenWorkflow).mockReturnValue({
       snapshot: { stage: 'activated' },
       controller: {},
@@ -276,7 +289,23 @@ describe('saved native Oxygen checkout', () => {
       refresh,
     } as unknown as ReturnType<typeof useOxygenWorkflow>);
     const result = render(<OxygenCheckoutScreen orderId="order" />);
+    if (paymentStatus === 'unpaid') {
+      expect(
+        await screen.findByText('Your payment plan is active')
+      ).toBeTruthy();
+      expect(screen.getByText('ORD-STAGING-1')).toBeTruthy();
+      expect(router.replace).not.toHaveBeenCalled();
+      return;
+    }
     await waitFor(() => expect(router.replace).toHaveBeenCalledTimes(1));
+    expect(router.replace).toHaveBeenCalledWith({
+      pathname: '/order-success',
+      params: {
+        orderId: 'order',
+        orderNumber: 'ORD-STAGING-1',
+        paymentMethod: 'oxygen',
+      },
+    });
     result.rerender(<OxygenCheckoutScreen orderId="order" />);
     expect(router.replace).toHaveBeenCalledTimes(1);
   });

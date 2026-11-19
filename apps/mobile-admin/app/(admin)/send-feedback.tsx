@@ -1,5 +1,6 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { Stack, useRouter } from 'expo-router';
+import { useEffect, useRef } from 'react';
 import { Alert, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FeedbackForm } from '@/components/feedback/FeedbackForm';
@@ -11,8 +12,18 @@ import { useTheme } from '@/hooks/useTheme';
 export default function SendFeedbackScreen() {
   const { colors } = useTheme();
   const router = useRouter();
+  // A send that finishes after the merchant left must not alert over another
+  // screen or pop a second route.
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   const handleSent = () => {
+    if (!isMountedRef.current) return;
     Alert.alert('Thanks for the feedback', 'The Baci team will look into it.', [
       { text: 'OK', onPress: () => router.back() },
     ]);

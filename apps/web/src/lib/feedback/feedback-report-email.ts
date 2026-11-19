@@ -1,4 +1,5 @@
 import { escapeHtmlText } from '@/lib/sanitize';
+import { isValidEmail } from '@/lib/zeptomail-email-address';
 
 /** Baci's support inbox; every in-app feedback report is emailed here. */
 export const FEEDBACK_INBOX_EMAIL = 'support@usebaci.com';
@@ -73,6 +74,11 @@ export function buildFeedbackReportEmail(
   input: FeedbackReportEmailInput
 ): FeedbackReportEmail {
   const rows = detailRows(input);
+  // The sender drops an invalid address as Reply-To, so only promise a direct
+  // reply when one can reach the merchant.
+  const canReplyToSender = Boolean(
+    input.senderEmail && isValidEmail(input.senderEmail)
+  );
   const storeName = toSubjectText(input.businessName ?? '') || 'a merchant';
   const subject = `Feedback from ${storeName}: ${subjectPreview(input.report.message)}`;
 
@@ -90,7 +96,7 @@ export function buildFeedbackReportEmail(
 <h2 style="margin:0 0 16px;">New in-app feedback</h2>
 <div style="white-space:pre-wrap;background:#f6f6f9;border-radius:8px;padding:16px;margin:0 0 20px;">${escapeHtmlText(input.report.message)}</div>
 <table style="border-collapse:collapse;font-size:14px;">${htmlRows}</table>
-${input.senderEmail ? '<p style="font-size:12px;color:#686878;margin-top:24px;">Reply to this email to answer the sender directly.</p>' : ''}
+${canReplyToSender ? '<p style="font-size:12px;color:#686878;margin-top:24px;">Reply to this email to answer the sender directly.</p>' : ''}
 </body>
 </html>`;
 

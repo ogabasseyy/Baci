@@ -106,4 +106,11 @@ describe('buildFeedbackReportEmail', () => {
       buildFeedbackReportEmail(input({ senderEmail: null })).htmlContent
     ).not.toContain('Reply to this email');
   });
+
+  it('omits reply instructions when the sender email is not a valid address', () => {
+    expect(
+      buildFeedbackReportEmail(input({ senderEmail: 'not an email' }))
+        .htmlContent
+    ).not.toContain('Reply to this email');
+  });
 });

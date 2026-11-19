@@ -49,6 +49,10 @@ vi.mock('@/hooks/useTheme', () => ({
   useTheme: () => ({ colors: { background: '#000', text: '#fff' } }),
 }));
 
+const { sentCallbacks } = vi.hoisted(() => ({
+  sentCallbacks: [] as Array<() => void>,
+}));
+
 vi.mock('@/components/feedback/FeedbackForm', () => ({
   FeedbackForm: ({
     screen: reportedScreen,
@@ -60,26 +64,32 @@ vi.mock('@/components/feedback/FeedbackForm', () => ({
     showTitle?: boolean;
     onCancel: () => void;
     onSent: () => void;
-  }) => (
-    <div>
-      <span>
-        form for {reportedScreen} title {String(showTitle)}
-      </span>
-      <button onClick={onCancel} type="button">
-        cancel form
-      </button>
-      <button onClick={onSent} type="button">
-        finish form
-      </button>
-    </div>
-  ),
+  }) => {
+    sentCallbacks.push(onSent);
+    return (
+      <div>
+        <span>
+          form for {reportedScreen} title {String(showTitle)}
+        </span>
+        <button onClick={onCancel} type="button">
+          cancel form
+        </button>
+        <button onClick={onSent} type="button">
+          finish form
+        </button>
+      </div>
+    );
+  },
 }));
 
 import SendFeedbackScreen from './send-feedback';
 
 beforeEach(() => {
   mockBack.mockReset();
-  vi.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+  sentCallbacks.length = 0;
+  vi.spyOn(Alert, 'alert')
+    .mockClear()
+    .mockImplementation(() => undefined);
 });
 
 describe('SendFeedbackScreen', () => {
@@ -130,5 +140,16 @@ describe('SendFeedbackScreen', () => {
         name: 'keyboard container compactHeader',
       })
     ).toHaveTextContent('form for /send-feedback');
+  });
+
+  it('ignores a send that finishes after the merchant left the screen', () => {
+    const { unmount } = render(<SendFeedbackScreen />);
+    const lateOnSent = sentCallbacks.at(-1);
+    unmount();
+
+    lateOnSent?.();
+
+    expect(Alert.alert).not.toHaveBeenCalled();
+    expect(mockBack).not.toHaveBeenCalled();
   });
 });

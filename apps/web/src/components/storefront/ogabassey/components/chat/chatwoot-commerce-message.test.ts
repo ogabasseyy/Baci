@@ -25,9 +25,9 @@ describe('Chatwoot commerce messages', () => {
         event: 'baci-cart-add',
         data: {
           slug: 'iphone_13-pro',
-          variantId: 'variant-1',
+          variantId: '44444444-4444-4444-8444-444444444444',
           displayedPrice: 100,
-          requestId: 'r2',
+          requestId: 'add-request-02',
           ...context,
         },
       },

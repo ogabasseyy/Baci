@@ -88,4 +88,22 @@ describe('admin notification navigation edge cases', () => {
       getAdminNotificationNavigationTarget({ type: 'jumia_order' })
     ).toEqual({ screen: 'orders' });
   });
+
+  it('opens the order for a single unconfirmed BNPL payment alert', () => {
+    expect(
+      getAdminNotificationNavigationTarget({
+        type: 'stuck_bnpl_alert',
+        order_id: 'order-7',
+      })
+    ).toEqual({ screen: 'order', params: { id: 'order-7' } });
+  });
+
+  it('opens the orders list when the BNPL alert covers several orders', () => {
+    expect(
+      getAdminNotificationNavigationTarget({
+        type: 'stuck_bnpl_alert',
+        stuck_order_count: 3,
+      })
+    ).toEqual({ screen: 'orders' });
+  });
 });

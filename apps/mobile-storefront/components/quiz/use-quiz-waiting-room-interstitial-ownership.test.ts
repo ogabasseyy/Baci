@@ -3,7 +3,11 @@ import { act, renderHook } from '@testing-library/react-native';
 import { AppState, type AppStateStatus } from 'react-native';
 import { maybeShowQuizStartInterstitial } from '@/lib/quiz-start-interstitial';
 import { useQuizWaitingRoom } from './use-quiz-waiting-room';
-import { createDeferred, event } from './use-quiz-waiting-room-test-harness';
+import {
+  createDeferred,
+  event,
+  pinKickoffOffsetToZero,
+} from './use-quiz-waiting-room-test-harness';
 
 jest.mock('@/lib/quiz-start-interstitial', () => ({
   maybeShowQuizStartInterstitial: jest.fn(async () => 'skipped'),
@@ -14,6 +18,8 @@ const mockMaybeShowQuizStartInterstitial = jest.mocked(
 );
 
 describe('useQuizWaitingRoom interstitial ownership', () => {
+  pinKickoffOffsetToZero();
+
   afterEach(() => {
     jest.useRealTimers();
   });

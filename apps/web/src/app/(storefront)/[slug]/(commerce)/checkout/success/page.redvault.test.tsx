@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('next/navigation', () => ({
+  usePathname: () => '/checkout/success',
   useRouter: () => mocks.router,
   useSearchParams: () => mocks.params,
 }));

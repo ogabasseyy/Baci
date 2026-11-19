@@ -1,5 +1,6 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { readPendingHandoffEntries } from '@/lib/privacy/pending-handoff.test-support';
 import type { DvaModalData } from './use-checkout-dva-session';
 import { useCheckoutDvaSession } from './use-checkout-dva-session';
 
@@ -111,6 +112,7 @@ describe('useCheckoutDvaSession', () => {
   it('records the paid conversion with the stamped total and routes to success', async () => {
     mockPaidTrackOrder();
     const deps = baseDeps();
+    deps.getHref = (path: string) => `/demo${path}`;
     const { result } = renderSession(deps);
 
     await confirmAndFlush(result.current.handleDvaConfirmTransfer);
@@ -135,6 +137,10 @@ describe('useCheckoutDvaSession', () => {
     expect(String(mockPush.mock.calls[0]?.[0])).toContain(
       '/order-success?type=standard&orderId=order-123'
     );
+    expect(String(mockPush.mock.calls[0]?.[0])).not.toContain('track-123');
+    expect(readPendingHandoffEntries()).toEqual([
+      ['trackingToken', 'track-123'],
+    ]);
     expect(result.current.isVerifyingDva).toBe(false);
   });
 

@@ -8,10 +8,11 @@ const mockEq = vi.fn();
 const mockNot = vi.fn();
 const mockOrder = vi.fn();
 const mockGetPlatformBlogSitemapPosts = vi.fn();
+const mockCacheTag = vi.fn();
 
 vi.mock('next/cache', () => ({
   cacheLife: vi.fn(),
-  cacheTag: vi.fn(),
+  cacheTag: (...args: unknown[]) => mockCacheTag(...args),
 }));
 
 vi.mock('@/lib/supabase/anon', () => ({
@@ -109,6 +110,11 @@ describe('root sitemap', () => {
 
     expect(mockSelect).toHaveBeenCalledWith(
       'slug, updated_at, domains(domain, status, domain_type, is_primary)'
+    );
+    expect(mockCacheTag).toHaveBeenCalledWith(
+      'merchants',
+      'platform-blog-sitemap',
+      'platform-sitemap-merchants'
     );
     expect(mockEq).toHaveBeenCalledWith('is_published', true);
     expect(mockNot).toHaveBeenCalledWith('slug', 'is', null);

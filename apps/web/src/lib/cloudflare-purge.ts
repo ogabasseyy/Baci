@@ -17,8 +17,10 @@ import { getCloudflarePurgeCredentials } from '@/lib/cloudflare-purge-credential
 const CLOUDFLARE_PURGE_API_BASE = 'https://api.cloudflare.com/client/v4/zones';
 // Cloudflare's single-file purge endpoint accepts at most 30 URLs per request
 // on non-Enterprise plans; larger lists are chunked into sequential requests.
-const MAX_URLS_PER_BATCH = 30;
-const DEFAULT_PURGE_TIMEOUT_MS = 5000;
+export const CLOUDFLARE_PURGE_MAX_URLS_PER_BATCH = 30;
+export const CLOUDFLARE_PURGE_DEFAULT_TIMEOUT_MS = 5000;
+const MAX_URLS_PER_BATCH = CLOUDFLARE_PURGE_MAX_URLS_PER_BATCH;
+const DEFAULT_PURGE_TIMEOUT_MS = CLOUDFLARE_PURGE_DEFAULT_TIMEOUT_MS;
 
 let hasWarnedMissingConfig = false;
 

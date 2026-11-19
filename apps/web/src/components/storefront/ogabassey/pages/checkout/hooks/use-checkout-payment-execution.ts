@@ -110,6 +110,7 @@ export function useCheckoutPaymentExecution({
     clearCheckoutSession: form.session.clear,
     clearPendingCheckoutOrder: attempt.clearPendingCheckoutOrder,
     getHref: navigation.getHref,
+    merchantSlug: identity.merchantSlug,
     paymentMethod: payment.session.method,
   });
   const walletFundedTransfer = useWalletFundedBankTransfer({

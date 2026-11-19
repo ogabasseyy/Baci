@@ -51,7 +51,49 @@ draft columns, or reversing the migration is not a safe recovery plan.
 
 Disposable PostgreSQL 17 tests cover a committed cutover's private draft RLS,
 owner/staff access, anonymous denial and public projection, as well as rollback
-of an **uncommitted** cutover. They do not exercise an independently built
-recovery web/worker release, a full production schema, real ingress drain, a
-committed-cutover recovery drill or a verified backup restore. The newer
-reconciliation guard is local, unreviewed and undeployed.
+of an **uncommitted** cutover. These earlier checks did not include the full schema or live process drain.
+The disposable rehearsal below adds a full-schema database receipt. The
+coordinated production migration remains pending.
+
+## Disposable database rehearsal
+
+Run the following command from the isolated candidate checkout. The replay
+creates and owns a fresh local Supabase project. The SQL check refuses a
+database that already has merchants and commits the contraction in that
+disposable project. Run it separately from other SQL checks because the
+legacy columns are intentionally absent after the rehearsal.
+
+```sh
+pnpm --filter @baci/web db:replay:chronological \
+  --sql-check supabase/tests/builder_private_cutover_recovery.sql
+```
+
+The rehearsal seeds an old processing job and confirms the contraction is
+blocked. It marks that synthetic job stopped, commits the contraction, then
+reconnects to verify migrated draft access, an owner write, a staff write,
+foreign and anonymous access restrictions, and the existing public page.
+A further reconnect checks the committed edits and applies a synthetic native
+worker result. This exercises the native SQL adapters. The production web
+and worker artifact, actual process drain and backup restore require separate
+rehearsals.
+
+On 19 November 2026, the rehearsal passed against the full chronological
+replay for candidate `8b7f9a6eb67ca7115353e92115f8e30fa1941b34`. The pinned
+Supabase CLI was 2.111.0 and the database was PostgreSQL 17.6. The replay
+matched the baseline effect digest
+`71cba5629959c75352726e26cafcbfec8de99b1b52d10e6ad70fd85f07e4d253`
+before applying the current-tree migration set and running the SQL check.
+No production database was used. A separate isolated Next.js CI compile
+of that source passed with private storage enabled and ChatGPT linking,
+owner preview and owner approval disabled. A compile does not qualify a
+runnable prebuilt release or its compatibility with the deployed worker.
+
+The VPS layout job has two entry points. The event path uses the
+`baci-ai-storefront-trigger.service` user service and the scheduled fallback
+runs every ten minutes. Both take `ollama-workload.lock` followed by
+`ai-storefront-jobs.lock`. The worker operator needs to suspend both sources
+on each host, account for detached child processes, and observe the worker
+lock and job lease state before declaring it drained. The web operator also
+needs a demonstrated gate for editor saves, native provisioning, layout
+enqueue/apply and publication on every serving artifact. Closing the VPS
+entry points alone leaves those web paths active.

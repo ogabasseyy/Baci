@@ -1,10 +1,12 @@
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { readOxygenRuntimeConfiguration } from '@/lib/payments/oxygen/runtime-configuration';
 import { connectOxygenRuntime } from '@/lib/payments/oxygen/runtime-connection';
-import { readOrRefreshSupportedBanks } from '@/lib/payments/oxygen/supported-bank-cache';
+import { readOrRefreshSupportedBanks } from '@/lib/payments/oxygen/supported-bank-read-or-refresh';
 import { checkOxygenProviderRateLimit } from '@/lib/rate-limit';
 import { getRedis } from '@/lib/redis';
 
+// A cold cache runs a partner login plus a bank request (30s timeout each).
+export const maxDuration = 120;
 const headers = { 'Cache-Control': 'no-store' };
 /** Cache-first read: only a cold cache reaches the provider, and then once. */
 export async function GET(request: Request) {

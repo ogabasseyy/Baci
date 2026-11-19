@@ -19,11 +19,11 @@ vi.mock('@/lib/redis', () => ({ getRedis: mocks.redis }));
 vi.mock('@/lib/payments/oxygen/runtime-connection', () => ({
   connectOxygenRuntime: mocks.connect,
 }));
-vi.mock('@/lib/payments/oxygen/supported-bank-cache', () => ({
+vi.mock('@/lib/payments/oxygen/supported-bank-read-or-refresh', () => ({
   readOrRefreshSupportedBanks: mocks.readOrRefresh,
 }));
 
-import { GET } from './route';
+import { GET, maxDuration } from './route';
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -100,4 +100,10 @@ it('includes a retry interval on rate-limited requests', async () => {
   expect(response.headers.get('X-Oxygen-Rate-Limit-User')).toBe('user');
   expect(Number(response.headers.get('Retry-After'))).toBeGreaterThan(0);
   expect(mocks.readOrRefresh).not.toHaveBeenCalled();
+});
+
+it('allows time for a cold partner login plus a bank-list request', () => {
+  // Each provider call may need its own 30s; keep the sibling routes' headroom.
+  const providerBudgetSeconds = 2 * 30;
+  expect(maxDuration).toBeGreaterThanOrEqual(providerBudgetSeconds + 60);
 });

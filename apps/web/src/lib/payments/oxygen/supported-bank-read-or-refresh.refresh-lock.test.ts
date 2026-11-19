@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 const logger = vi.hoisted(() => ({ error: vi.fn() }));
 vi.mock('@/lib/logger', () => ({ logger }));
 
-import { readOrRefreshSupportedBanks } from './supported-bank-cache';
+import { readOrRefreshSupportedBanks } from './supported-bank-read-or-refresh';
 import { bankRefreshLockKey } from './supported-bank-refresh-lock';
 
 const bank = { name: 'Example Bank', code: '001' };

@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createBrilStashPageProof } from '@/lib/brilstash/page-proof';
+import { createBrilStashPageCorrelation } from '@/lib/brilstash/page-correlation';
 import { GET } from './route';
 
 const dependencies = vi.hoisted(() => {
@@ -129,7 +129,7 @@ describe('BrilStash feed GET', () => {
     expect(response.headers.get('cache-control')).toBe('no-store');
     const requestId = response.headers.get('x-request-id');
     expect(requestId).toBeTruthy();
-    expect(response.headers.get('x-baci-catalogue-proof')).toBeNull();
+    expect(response.headers.get('x-baci-catalogue-correlation')).toBeNull();
     expect(await response.json()).toEqual(products);
     expect(dependencies.rpc).toHaveBeenCalledWith('read_brilstash_page', {
       p_bearer: bearer,
@@ -151,8 +151,8 @@ describe('BrilStash feed GET', () => {
     const response = await GET(request('?page=1&limit=100&min_price=0'));
     const requestId = response.headers.get('x-request-id');
     expect(response.status).toBe(200);
-    expect(response.headers.get('x-baci-catalogue-proof')).toBe(
-      createBrilStashPageProof(requestId ?? '', result)
+    expect(response.headers.get('x-baci-catalogue-correlation')).toBe(
+      createBrilStashPageCorrelation(requestId ?? '', result)
     );
     expect(dependencies.info).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -203,7 +203,7 @@ describe('BrilStash feed GET', () => {
     const response = await GET(request('?page=1&limit=7'));
     expect(response.status).toBe(503);
     expect(response.headers.has('x-total-count')).toBe(false);
-    expect(response.headers.has('x-baci-catalogue-proof')).toBe(false);
+    expect(response.headers.has('x-baci-catalogue-correlation')).toBe(false);
   });
 
   it('fails closed on a database project mismatch and on live configuration in preview', async () => {

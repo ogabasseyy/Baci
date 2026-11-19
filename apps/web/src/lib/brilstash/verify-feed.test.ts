@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { digestBrilStashPayload } from './catalogue-snapshot';
-import { createBrilStashPageProof } from './page-proof';
+import { createBrilStashPageCorrelation } from './page-correlation';
 import { verifyBrilStashFeed } from './verify-feed';
 
 const payload = [
@@ -55,10 +55,13 @@ function fixture(
       {
         headers: {
           'X-Request-Id': requestId,
-          'X-Baci-Catalogue-Proof': createBrilStashPageProof(requestId, {
-            ...state,
-            credentialId: options.credentialId ?? state.credentialId,
-          }),
+          'X-Baci-Catalogue-Correlation': createBrilStashPageCorrelation(
+            requestId,
+            {
+              ...state,
+              credentialId: options.credentialId ?? state.credentialId,
+            }
+          ),
           'X-Total-Count': options.total ?? '1',
           'X-Total-Pages': '1',
         },

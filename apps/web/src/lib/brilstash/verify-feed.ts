@@ -9,7 +9,7 @@ import {
   brilStashProbeStateSchema,
 } from '../../schemas/brilstash-probe-state';
 import { digestBrilStashPayload } from './catalogue-snapshot';
-import { createBrilStashPageProof } from './page-proof';
+import { createBrilStashPageCorrelation } from './page-correlation';
 
 const failure = 'BrilStash feed verification failed';
 
@@ -60,8 +60,8 @@ export async function verifyBrilStashFeed(
       expectedPages !== 1 ||
       response.headers.get('X-Total-Pages') !== String(expectedPages) ||
       response.headers.get('X-Total-Count') !== String(before.totalCount) ||
-      response.headers.get('X-Baci-Catalogue-Proof') !==
-        createBrilStashPageProof(requestId, before)
+      response.headers.get('X-Baci-Catalogue-Correlation') !==
+        createBrilStashPageCorrelation(requestId, before)
     ) {
       await response.body?.cancel();
       throw new Error(failure);

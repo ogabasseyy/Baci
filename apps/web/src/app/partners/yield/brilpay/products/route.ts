@@ -4,7 +4,7 @@ import {
   BRILSTASH_FULL_FEED_QUERY,
   BRILSTASH_PILOT_LISTING_LIMIT,
 } from '@/config/brilstash-feed';
-import { createBrilStashPageProof } from '@/lib/brilstash/page-proof';
+import { createBrilStashPageCorrelation } from '@/lib/brilstash/page-correlation';
 import { parseBrilStashBearer } from '@/lib/brilstash/parse-bearer';
 import { readBrilStashPage } from '@/lib/brilstash/read-page';
 import { resolveBrilStashFeedDeployment } from '@/lib/brilstash/resolve-feed-deployment';
@@ -122,8 +122,8 @@ export async function GET(request: NextRequest): Promise<Response> {
         // The unsigned hash correlates this response with the server log.
         // Auth and payload verification are handled separately.
         headers.set(
-          'X-Baci-Catalogue-Proof',
-          createBrilStashPageProof(requestId, page)
+          'X-Baci-Catalogue-Correlation',
+          createBrilStashPageCorrelation(requestId, page)
         );
       }
       logger.info({

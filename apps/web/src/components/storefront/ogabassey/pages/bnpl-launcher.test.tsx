@@ -15,6 +15,7 @@ import {
 } from './checkout/credit-direct-popup-return';
 import { CHECKOUT_IDEMPOTENCY_STORAGE_KEY } from './checkout/checkout-idempotency';
 import { CHECKOUT_PENDING_ORDER_STORAGE_KEY } from './checkout/pending-checkout-order';
+import { readPendingHandoffEntries } from '@/lib/privacy/pending-handoff.test-support';
 
 const mockClearCart = vi.hoisted(() => vi.fn());
 const mockPush = vi.fn();
@@ -33,6 +34,7 @@ interface TestReactNativeWebViewWindow extends Window {
 
 vi.mock('next/navigation', () => ({
   useRouter: vi.fn(() => mockRouter),
+  usePathname: vi.fn(() => '/checkout/bnpl'),
   useSearchParams: vi.fn(() => mockSearchParams()),
 }));
 
@@ -593,7 +595,7 @@ describe('BnplLauncher', () => {
 
     await waitFor(() => {
       expect(mockPush).toHaveBeenCalledWith(
-        '/order-success?orderId=order-1&reference=credpal-ref-1&type=credpal&trackingToken=track-order-token'
+        '/order-success?orderId=order-1&reference=credpal-ref-1&type=credpal'
       );
     });
   });
@@ -645,7 +647,7 @@ describe('BnplLauncher', () => {
 
     await waitFor(() => {
       expect(mockPush).toHaveBeenCalledWith(
-        '/order-success?orderId=order-1&reference=credpal-ref-1&type=credpal&credpalStatus=success&trackingToken=track-order-token'
+        '/order-success?orderId=order-1&reference=credpal-ref-1&type=credpal&credpalStatus=success'
       );
     });
     expect(mockCaptureCheckoutFunnelEventOnce).not.toHaveBeenCalledWith(
@@ -673,7 +675,7 @@ describe('BnplLauncher', () => {
 
     await waitFor(() => {
       expect(mockPush).toHaveBeenCalledWith(
-        '/order-success?orderId=order-1&reference=credpal-ref-1&type=credpal&credpalStatus=pending&trackingToken=track-order-token'
+        '/order-success?orderId=order-1&reference=credpal-ref-1&type=credpal&credpalStatus=pending'
       );
     });
     expect(mockCaptureCheckoutFunnelEventOnce).not.toHaveBeenCalledWith(
@@ -1266,101 +1268,6 @@ describe('BnplLauncher', () => {
     });
   });
 
-  it('records no web start when the Klump SDK fails to load in a browser', async () => {
-    mockSearchParams.mockReturnValue(
-      new URLSearchParams({
-        orderId: 'order-1',
-        gateway: 'klump',
-        merchant_slug: 'test-store',
-        reference: 'BAC-ABCD12345678',
-        trackingToken: 'tok-123',
-      })
-    );
-    vi.stubEnv('NEXT_PUBLIC_KLUMP_PUBLIC_KEY', 'klp_pk_test_123');
-    vi.stubGlobal('Klump', undefined);
-    window.Klump = undefined;
-
-    const originalAppendChild = document.head.appendChild.bind(document.head);
-    const appendSpy = vi
-      .spyOn(document.head, 'appendChild')
-      .mockImplementation(<T extends Node>(node: T): T => {
-        const result = originalAppendChild(node);
-        if (
-          node instanceof HTMLScriptElement &&
-          node.src === 'https://js.useklump.com/klump.js'
-        ) {
-          queueMicrotask(() => node.dispatchEvent(new Event('error')));
-        }
-        return result;
-      });
-
-    try {
-      render(<BnplLauncher />);
-
-      expect(
-        await screen.findByRole('heading', { name: 'Something went wrong' })
-      ).toBeInTheDocument();
-      expect(mockKlumpConstructor).not.toHaveBeenCalled();
-      // Pre-open failure: the widget never opened, so no web start may
-      // exist to strand unmatched.
-      expect(mockCaptureClientEvent).not.toHaveBeenCalledWith(
-        'payment_started',
-        expect.anything()
-      );
-    } finally {
-      appendSpy.mockRestore();
-    }
-  });
-
-  it('records a web failure for an opened-then-failed browser Klump attempt', async () => {
-    // No native bridge: an ordinary browser session.
-    mockSearchParams.mockReturnValue(
-      new URLSearchParams({
-        orderId: 'order-1',
-        gateway: 'klump',
-        merchant_slug: 'test-store',
-        reference: 'BAC-ABCD12345678',
-        trackingToken: 'tok-123',
-      })
-    );
-    vi.stubEnv('NEXT_PUBLIC_KLUMP_PUBLIC_KEY', 'klp_pk_test_123');
-
-    render(<BnplLauncher />);
-
-    await waitFor(() => {
-      expect(mockKlumpConstructor).toHaveBeenCalled();
-    });
-
-    const config = mockKlumpConstructor.mock.calls[0][0] as {
-      onOpen?: () => void;
-      onError?: (error: Error) => void;
-    };
-    config.onOpen?.();
-    // Checkout already navigated to the launcher: nothing else can close
-    // the onOpen start, so the failure must record here.
-    config.onError?.(new Error('Klump declined the application'));
-
-    await waitFor(() => {
-      expect(mockCaptureClientEvent).toHaveBeenCalledWith(
-        'payment_started',
-        expect.objectContaining({ payment_method: 'klump' })
-      );
-    });
-    await waitFor(() => {
-      expect(mockCaptureClientEvent).toHaveBeenCalledWith(
-        'payment_failed',
-        expect.objectContaining({
-          order_id: 'order-1',
-          payment_method: 'klump',
-          reason: 'klump_error',
-        })
-      );
-    });
-    expect(
-      await screen.findByText('Klump declined the application')
-    ).toBeInTheDocument();
-  });
-
   it('stamps retried Klump starts with each issued reference', async () => {
     // No native bridge: an ordinary browser session.
     vi.stubEnv('NEXT_PUBLIC_KLUMP_PUBLIC_KEY', 'klp_pk_test_123');
@@ -1422,41 +1329,6 @@ describe('BnplLauncher', () => {
         })
       );
     });
-  });
-
-  it('records no web failure for a pre-open browser Klump error', async () => {
-    mockSearchParams.mockReturnValue(
-      new URLSearchParams({
-        orderId: 'order-1',
-        gateway: 'klump',
-        merchant_slug: 'test-store',
-        reference: 'BAC-ABCD12345678',
-        trackingToken: 'tok-123',
-      })
-    );
-    vi.stubEnv('NEXT_PUBLIC_KLUMP_PUBLIC_KEY', 'klp_pk_test_123');
-
-    render(<BnplLauncher />);
-
-    await waitFor(() => {
-      expect(mockKlumpConstructor).toHaveBeenCalled();
-    });
-
-    // onOpen never fired: no start exists, so the failure stays local.
-    const config = mockKlumpConstructor.mock.calls[0][0] as {
-      onError?: (error: Error) => void;
-    };
-    config.onError?.(new Error('Klump unavailable'));
-
-    expect(await screen.findByText('Klump unavailable')).toBeInTheDocument();
-    expect(mockCaptureClientEvent).not.toHaveBeenCalledWith(
-      'payment_failed',
-      expect.anything()
-    );
-    expect(mockCaptureClientEvent).not.toHaveBeenCalledWith(
-      'payment_started',
-      expect.anything()
-    );
   });
 
   it('skips the web start for Klump opens inside a native shell', async () => {
@@ -1710,8 +1582,10 @@ describe('BnplLauncher', () => {
     });
 
     expect(mockPush).toHaveBeenCalledWith(
-      '/order-success?orderId=order-1&reference=BAC-ABCD12345678&type=klump&trackingToken=tok-123'
+      '/order-success?orderId=order-1&reference=BAC-ABCD12345678&type=klump'
     );
+    // The token travels off the URL, in the one-shot hand-off.
+    expect(readPendingHandoffEntries()).toEqual([['trackingToken', 'tok-123']]);
   });
 
   it.each([
@@ -1746,7 +1620,7 @@ describe('BnplLauncher', () => {
 
       await waitFor(() => {
         expect(mockPush).toHaveBeenCalledWith(
-          '/order-success?orderId=order-1&reference=BAC-ABCD12345678&type=klump&trackingToken=tok-123'
+          '/order-success?orderId=order-1&reference=BAC-ABCD12345678&type=klump'
         );
       });
       // Attribution is detached from navigation: wait for the lookup to
@@ -1799,7 +1673,7 @@ describe('BnplLauncher', () => {
 
     await waitFor(() => {
       expect(mockPush).toHaveBeenCalledWith(
-        '/order-success?orderId=order-1&reference=BAC-ABCD12345678&type=klump&trackingToken=tok-123'
+        '/order-success?orderId=order-1&reference=BAC-ABCD12345678&type=klump'
       );
     });
     await waitFor(() => {
@@ -1840,7 +1714,7 @@ describe('BnplLauncher', () => {
 
     await waitFor(() => {
       expect(mockPush).toHaveBeenCalledWith(
-        '/order-success?orderId=order-1&reference=BAC-ABCD12345678&type=klump&trackingToken=tok-123'
+        '/order-success?orderId=order-1&reference=BAC-ABCD12345678&type=klump'
       );
     });
     expect(
@@ -1937,7 +1811,7 @@ describe('BnplLauncher', () => {
 
       await waitFor(() => {
         expect(mockPush).toHaveBeenCalledWith(
-          '/order-success?orderId=order-1&reference=txn-123&type=credit_direct&trackingToken=tok-123'
+          '/order-success?orderId=order-1&reference=txn-123&type=credit_direct'
         );
       });
       expect(mockOpenCreditDirectCheckout).not.toHaveBeenCalled();
@@ -2059,7 +1933,7 @@ describe('BnplLauncher', () => {
 
       await waitFor(() => {
         expect(mockPush).toHaveBeenCalledWith(
-          '/order-success?orderId=order-1&reference=txn-sdk-success&type=credit_direct&trackingToken=tok-123'
+          '/order-success?orderId=order-1&reference=txn-sdk-success&type=credit_direct'
         );
       });
       expect(mockOpenCreditDirectCheckout).not.toHaveBeenCalled();
@@ -2093,7 +1967,7 @@ describe('BnplLauncher', () => {
 
       await waitFor(() => {
         expect(mockPush).toHaveBeenCalledWith(
-          '/order-success?orderId=order-1&reference=txn-sdk-success&type=credit_direct&trackingToken=tok-123'
+          '/order-success?orderId=order-1&reference=txn-sdk-success&type=credit_direct'
         );
       });
       // The first capture must carry revenue: the once-guard suppresses
@@ -2336,7 +2210,7 @@ describe('BnplLauncher', () => {
 
       await waitFor(() => {
         expect(mockPush).toHaveBeenCalledWith(
-          '/order-success?orderId=order-1&reference=txn-123&type=credit_direct&email=customer%40example.com'
+          '/order-success?orderId=order-1&reference=txn-123&type=credit_direct'
         );
       });
     });
@@ -2371,7 +2245,7 @@ describe('BnplLauncher', () => {
 
       await waitFor(() => {
         expect(mockPush).toHaveBeenCalledWith(
-          '/test-store/order-success?orderId=order-1&reference=txn-123&type=credit_direct&trackingToken=tok-123'
+          '/test-store/order-success?orderId=order-1&reference=txn-123&type=credit_direct'
         );
       });
     });

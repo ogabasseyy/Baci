@@ -7,4 +7,5 @@ if [ "$#" -gt 1 ] || { [ "$#" -eq 1 ] && [ "$1" != "--once" ] && [ "$1" != "--lo
   exit 1
 fi
 
+export BACI_WORKER_PROFILE="${BACI_WORKER_PROFILE:-quiz-finalization}"
 exec "$SCRIPT_DIR/run-web-script.sh" quiz-finalization src/scripts/process-quiz-finalization.ts "$@"

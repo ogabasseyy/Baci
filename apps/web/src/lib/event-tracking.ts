@@ -10,6 +10,7 @@ import type {
   PurchaseEvent,
   SearchEvent,
 } from '@/lib/analytics/tracked-event-types';
+import { sanitizeTrackingUrl } from '@/lib/privacy/sanitize-tracking-url';
 
 export type { EventType } from '@/lib/analytics/tracked-event-types';
 
@@ -218,7 +219,7 @@ export const trackEvent = {
     sendTrackedEvent({
       event_type: 'page_view',
       merchant_id: merchantId,
-      page_url: pageUrl,
+      page_url: sanitizeTrackingUrl(pageUrl),
     } satisfies PageViewEvent);
 
     analytics.pageView(pageUrl, pageTitle);

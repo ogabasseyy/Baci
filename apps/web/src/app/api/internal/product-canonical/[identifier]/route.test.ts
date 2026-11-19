@@ -36,7 +36,7 @@ const PREFLIGHT_CACHE_CONTROL = 's-maxage=300, stale-while-revalidate=3600';
 // Product mutations purge the slug-set tag; category slug changes (which move
 // canonical paths without a slug-set mutation) purge the global
 // canonical-redirect tag. Comma = Vercel tag separator.
-const PREFLIGHT_CACHE_TAG = `product-slug-set-${MERCHANT_ID},product-canonical-redirect`;
+const PREFLIGHT_CACHE_TAG = `product-slug-set-${MERCHANT_ID},product-canonical-redirect,product-canonical-redirect-${MERCHANT_ID}`;
 
 // Default to the custom cacheable auth path (what the proxy sends in
 // production); the legacy Authorization path is exercised by dedicated

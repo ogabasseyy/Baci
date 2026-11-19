@@ -14,9 +14,12 @@ import {
 } from '@/lib/product-cache-tags';
 
 describe('getProductScopedCacheTag', () => {
-  it('preserves existing ASCII cache tag format for safe product slugs', () => {
+  it('preserves existing ASCII cache tag format and normalizes casing for safe product slugs', () => {
     expect(
       getProductScopedCacheTag('product', 'merchant-123', 'iphone-16-pro')
+    ).toBe('product-merchant-123-iphone-16-pro');
+    expect(
+      getProductScopedCacheTag('product', 'Merchant-123', ' IPhone-16-Pro ')
     ).toBe('product-merchant-123-iphone-16-pro');
   });
 
@@ -80,25 +83,31 @@ describe('merchant-scoped product detail and redirect cache tag builders', () =>
   });
 
   it('builds shared cache tag arrays for PDP, LCP, canonical, and legacy redirect lookups', () => {
-    expect(
-      buildStorefrontPdpCoreCacheTags('merchant-123', 'iphone-16-pro')
-    ).toEqual([
+    const pdpCoreTags = buildStorefrontPdpCoreCacheTags(
+      'merchant-123',
+      'iphone-16-pro'
+    );
+    expect(pdpCoreTags).toEqual([
       'product',
       'product-details',
       'product-details-merchant-123',
       'product-lcp-hint',
-      'products-merchant-123',
       'categories-merchant-123',
       'product-merchant-123-iphone-16-pro',
     ]);
-    expect(
-      buildProductLcpHintCacheTags('merchant-123', 'iphone-16-pro')
-    ).toEqual([
+    expect(pdpCoreTags).not.toContain('products-merchant-123');
+
+    const lcpHintTags = buildProductLcpHintCacheTags(
+      'merchant-123',
+      'iphone-16-pro'
+    );
+    expect(lcpHintTags).toEqual([
       'product',
       'product-lcp-hint',
-      'products-merchant-123',
+      'product-details-merchant-123',
       'product-merchant-123-iphone-16-pro',
     ]);
+    expect(lcpHintTags).not.toContain('products-merchant-123');
     expect(
       buildProductDetailsCacheTags('merchant-123', 'iphone-16-pro')
     ).toEqual([

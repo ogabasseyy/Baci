@@ -56,8 +56,11 @@ function makeSupabase(options: {
 describe('scheduleOrderProductBlogPurge', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockRevalidateProducts.mockReturnValue(true);
+    mockRevalidateSlugs.mockReturnValue(true);
     mockEnrichProductPurgeEntries.mockResolvedValue({
       entries: [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
+      authoritativeSlugsById: new Map([['product-1', 'iphone-15']]),
       blogPostSlugs: ['iphone-guide'],
     });
   });
@@ -79,7 +82,7 @@ describe('scheduleOrderProductBlogPurge', () => {
     );
     expect(mockRevalidateSlugs).toHaveBeenCalledWith(
       'merchant-1',
-      ['iphone-15'],
+      ['iphone-15', 'product-1'],
       { expireImmediately: true }
     );
     expect(mockRevalidateSlugs.mock.invocationCallOrder[0]).toBeLessThan(
@@ -92,11 +95,20 @@ describe('scheduleOrderProductBlogPurge', () => {
     );
     expect(mockExpireProductBlogCacheReliable).toHaveBeenCalledWith(
       'merchant-1',
-      { productSlugs: ['iphone-15'] }
+      {
+        productSlugs: ['iphone-15'],
+        products: [{ id: 'product-1' }],
+        slugsUnchanged: true,
+      }
     );
-    // Resolved slugs get exact scoped busts; the broad hard-expire is
-    // reserved for the unknown-slug rejection path.
-    expect(mockRevalidateProducts).not.toHaveBeenCalled();
+    // Resolved slugs get exact scoped PDP + listing busts without touching
+    // unrelated merchant-wide PDP details.
+    expect(mockRevalidateProducts).toHaveBeenCalledTimes(1);
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      'merchant-1',
+      undefined,
+      { expireImmediately: true, omitMerchantWidePdpDetails: true }
+    );
   });
 
   it('resolves the merchant slug before purging when the caller has no slug', async () => {
@@ -121,6 +133,7 @@ describe('scheduleOrderProductBlogPurge', () => {
   it('keeps the core purge when no published article is linked', async () => {
     mockEnrichProductPurgeEntries.mockResolvedValue({
       entries: [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
+      authoritativeSlugsById: new Map([['product-1', 'iphone-15']]),
       blogPostSlugs: [],
     });
     const { supabase } = makeSupabase({});
@@ -134,11 +147,46 @@ describe('scheduleOrderProductBlogPurge', () => {
 
     expect(mockExpireProductBlogCacheReliable).toHaveBeenCalledWith(
       'merchant-1',
-      { productSlugs: ['iphone-15'] }
+      {
+        productSlugs: ['iphone-15'],
+        products: [{ id: 'product-1' }],
+        slugsUnchanged: true,
+      }
     );
     expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
       'ogabassey',
       [{ slug: 'iphone-15', categorySegment: 'smartphones' }]
+    );
+  });
+
+  it('falls back to broad hard expiry and reliable wide PDP expiry when scoped listing expiry returns false', async () => {
+    mockRevalidateProducts
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(false);
+    const { supabase } = makeSupabase({});
+
+    await scheduleOrderProductBlogPurge({
+      merchantId: 'merchant-1',
+      merchantSlug: 'ogabassey',
+      productIds: ['product-1'],
+      supabase: supabase as never,
+    });
+
+    expect(mockRevalidateProducts).toHaveBeenNthCalledWith(
+      1,
+      'merchant-1',
+      undefined,
+      { expireImmediately: true, omitMerchantWidePdpDetails: true }
+    );
+    expect(mockRevalidateProducts).toHaveBeenNthCalledWith(
+      2,
+      'merchant-1',
+      undefined,
+      { expireImmediately: true }
+    );
+    expect(mockExpireProductBlogCacheReliable).toHaveBeenCalledWith(
+      'merchant-1',
+      { productSlugs: ['iphone-15'], expireWidePdpDetails: true }
     );
   });
 
@@ -165,12 +213,16 @@ describe('scheduleOrderProductBlogPurge', () => {
       expect(mockEnrichProductPurgeEntries).toHaveBeenCalled();
       expect(mockRevalidateSlugs).toHaveBeenCalledWith(
         'merchant-1',
-        ['iphone-15'],
+        ['iphone-15', 'product-1'],
         { expireImmediately: true }
       );
       expect(mockExpireProductBlogCacheReliable).toHaveBeenCalledWith(
         'merchant-1',
-        { productSlugs: ['iphone-15'] }
+        {
+          productSlugs: ['iphone-15'],
+          products: [{ id: 'product-1' }],
+          slugsUnchanged: true,
+        }
       );
       expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
       expect(consoleSpy).toHaveBeenCalledWith(
@@ -180,5 +232,45 @@ describe('scheduleOrderProductBlogPurge', () => {
     } finally {
       consoleSpy.mockRestore();
     }
+  });
+
+  it('hard-expires merchant-wide PDP details when enrichProductPurgeEntries omits an authoritative slug', async () => {
+    mockEnrichProductPurgeEntries.mockResolvedValueOnce({
+      entries: [{ slug: 'product-1', categorySegment: null }],
+      authoritativeSlugsById: new Map<string, string>(),
+      blogPostSlugs: [],
+    });
+    const { supabase } = makeSupabase({});
+
+    await scheduleOrderProductBlogPurge({
+      merchantId: 'merchant-1',
+      merchantSlug: 'ogabassey',
+      productIds: ['product-1'],
+      supabase: supabase as never,
+    });
+
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      'merchant-1',
+      undefined,
+      { expireImmediately: true }
+    );
+  });
+
+  it('hard-expires merchant-wide PDP details when revalidateProductSlugs returns false', async () => {
+    mockRevalidateSlugs.mockReturnValueOnce(false);
+    const { supabase } = makeSupabase({});
+
+    await scheduleOrderProductBlogPurge({
+      merchantId: 'merchant-1',
+      merchantSlug: 'ogabassey',
+      productIds: ['product-1'],
+      supabase: supabase as never,
+    });
+
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      'merchant-1',
+      undefined,
+      { expireImmediately: true }
+    );
   });
 });

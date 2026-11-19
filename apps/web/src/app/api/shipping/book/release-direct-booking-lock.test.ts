@@ -40,4 +40,20 @@ describe('releaseDirectBookingLock', () => {
     );
     expect(clearOrderShipmentBookingLock).not.toHaveBeenCalled();
   });
+
+  it('reports whether the lock was actually released', async () => {
+    vi.mocked(clearOrderShipmentBookingLock).mockResolvedValueOnce(undefined);
+    expect(
+      await releaseDirectBookingLock({} as never, 'm', 'o', 'lock-1', false)
+    ).toBe(true);
+    vi.mocked(clearOrderShipmentBookingLock).mockRejectedValueOnce(
+      new Error('db down')
+    );
+    expect(
+      await releaseDirectBookingLock({} as never, 'm', 'o', 'lock-1', false)
+    ).toBe(false);
+    expect(
+      await releaseDirectBookingLock({} as never, 'm', 'o', 'lock-1', true)
+    ).toBe(false);
+  });
 });

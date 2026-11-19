@@ -411,4 +411,25 @@ describe('useCheckoutPaymentSession', () => {
     expect(result.current.checkoutValues.discountCode).toBeNull();
     expect(result.current.wallet.amountUsed).toBe(0);
   });
+
+  it('preserves a funding-unresolved checkpoint when switching to Redvault', () => {
+    const clearPendingCheckoutOrder = vi.fn();
+    const input = options({
+      clearPendingCheckoutOrder,
+      pendingCheckoutOrder: {
+        paymentMethod: 'paystack',
+        walletAmountUsed: 5000,
+        fundingUnresolved: true,
+      },
+    });
+    const { result } = renderHook(() =>
+      useCheckoutPaymentSession(input as never)
+    );
+
+    act(() => {
+      result.current.selectMethod('uba_redvault');
+    });
+
+    expect(clearPendingCheckoutOrder).not.toHaveBeenCalled();
+  });
 });

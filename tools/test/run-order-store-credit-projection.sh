@@ -9,7 +9,7 @@ export PGHOST="$fixture_dir" PGPORT=55597 PGDATABASE=postgres
 psql -Xq -v ON_ERROR_STOP=1 -f supabase/tests/order_store_credit_projection_fixture.sql
 if [[ "${1:-}" != '--baseline' ]]; then
  psql -Xq -v ON_ERROR_STOP=1 -f supabase/migrations/20261107160000_record_order_store_credit.sql
- psql -Xq -v ON_ERROR_STOP=1 -f supabase/migrations/20261111190000_distinguish_store_credit_reconciliation.sql
+ psql -Xq -v ON_ERROR_STOP=1 -f supabase/migrations/20261111191000_distinguish_store_credit_reconciliation.sql
  psql -Xq -v ON_ERROR_STOP=1 -f supabase/migrations/20261111200000_fence_store_credit_replay_after_gateway.sql
 fi
 psql -Xq -v ON_ERROR_STOP=1 -f supabase/tests/order_store_credit_projection.sql

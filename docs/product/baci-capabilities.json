@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-18T16:15:38+00:00",
-  "source_revision": "62b8f66db9a69661d3f4acb0625cd4d15a908411",
-  "evidence_digest": "6ece38f854e82958ab05bc30d7df27d588331b6e2f418ffeff3e77b5dff64112",
-  "claims_digest": "69ceff1973bedc1343283e54c88b2b92ec4b649d803dcbd4db49a5d4a118deb2",
-  "review_scope": "Source evidence only. Preserves current main’s OAuth, cart retention and notices, payment reconciliation, merchant protocols and Oxygen pilot boundaries. Full-code storefront MCP remains disabled by default. Owner approval, evidence and public-verification schemas retain their existing validation. Direct local admission, source adoption, rollback and simulated commerce tests cover authority boundaries. Hosted qualification and activation remain separate.",
+  "reviewed_at": "2026-11-19T01:23:30+00:00",
+  "source_revision": "79ee9b1423c3f1ceac0bd118169ce7dc6f6d69c6",
+  "evidence_digest": "eff8278e85d761309b4f7bb121a7faf1aa1c7b484646b97f493d80c26199f28d",
+  "claims_digest": "d534bce817e3cdb17e6b107f9c0cbf48155a12c4a2d84a96da9c69aaabf07c83",
+  "review_scope": "Source evidence only. Preserves current main\u2019s OAuth, cart retention and notices, payment reconciliation, merchant protocols and Oxygen pilot boundaries. Full-code storefront MCP remains disabled by default. Owner approval, evidence and public-verification schemas retain their existing validation. Direct local admission, source adoption, rollback and simulated commerce tests cover authority boundaries. Hosted qualification and activation remain separate.",
   "capabilities": [
     {
       "id": "payments",

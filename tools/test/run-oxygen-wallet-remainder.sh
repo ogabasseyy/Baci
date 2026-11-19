@@ -18,7 +18,7 @@ done
 psql -Xq -v ON_ERROR_STOP=1 -f supabase/migrations/20261107160000_record_order_store_credit.sql
 if [[ "${1:-}" != '--baseline' ]]; then
  psql -Xq -v ON_ERROR_STOP=1 -f supabase/migrations/20261107161000_oxygen_wallet_remainder_funding.sql
- psql -Xq -v ON_ERROR_STOP=1 -f supabase/migrations/20261111180000_preserve_oxygen_order_settlement_paths.sql
+ psql -Xq -v ON_ERROR_STOP=1 -f supabase/migrations/20261111181000_preserve_oxygen_order_settlement_paths.sql
 fi
 psql -Xq -v ON_ERROR_STOP=1 -f supabase/tests/oxygen_wallet_remainder.sql
 # Match the live credit-writer lock without waiting or deadlocking admission.

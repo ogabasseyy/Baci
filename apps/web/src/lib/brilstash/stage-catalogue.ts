@@ -35,7 +35,24 @@ export async function stageBrilStashSnapshot(
   );
   const snapshot = prepareBrilStashSnapshot(catalogue.products, sources);
   if (!snapshot.ok) {
-    throw new Error(`BrilStash candidate rejected: ${snapshot.code}`);
+    const message = `BrilStash candidate rejected: ${snapshot.code}`;
+    if (
+      snapshot.code === 'incomplete_assortment' ||
+      snapshot.code === 'unapproved_removal'
+    ) {
+      const present = new Set(
+        catalogue.products.map(({ external_id }) => external_id)
+      );
+      const missing = sources.approvedExternalIds.filter(
+        (id) => !present.has(id)
+      );
+      if (missing.length > 0) {
+        throw new Error(
+          `${message}. Missing approved listings: ${JSON.stringify(missing)}`
+        );
+      }
+    }
+    throw new Error(message);
   }
 
   const { data, error } = await client.rpc(

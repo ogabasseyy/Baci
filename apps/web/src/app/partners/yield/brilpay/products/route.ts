@@ -99,6 +99,12 @@ export async function GET(request: NextRequest): Promise<Response> {
     case 'unavailable':
       return fail(503, 'Catalogue unavailable', 'FEED_UNAVAILABLE');
     case 'ok':
+      if (
+        deployment.singlePageOnly &&
+        (page.totalPages !== 1 || page.products.length !== page.totalCount)
+      ) {
+        return fail(503, 'Catalogue unavailable', 'FEED_UNAVAILABLE');
+      }
       headers.set('X-Total-Count', String(page.totalCount));
       headers.set('X-Total-Pages', String(page.totalPages));
       if (

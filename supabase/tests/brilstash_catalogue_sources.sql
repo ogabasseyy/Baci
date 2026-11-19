@@ -12,7 +12,8 @@ CREATE SCHEMA auth;
 CREATE TABLE auth.users(id uuid PRIMARY KEY);
 CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE
 AS $$ SELECT nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
-CREATE TABLE public.merchants(id uuid PRIMARY KEY, is_published boolean, payout_currency text, user_id uuid);
+CREATE TABLE public.merchants(id uuid PRIMARY KEY, is_published boolean, payout_currency text, user_id uuid, slug text);
+CREATE TABLE public.domains (merchant_id uuid, domain text, status text);
 CREATE FUNCTION public.check_staff_permission(uuid, uuid, text, text)
 RETURNS boolean LANGUAGE sql STABLE AS $$ SELECT false $$;
 CREATE TABLE public.products(
@@ -70,10 +71,16 @@ $$;
 \ir ../migrations/20261119022000_brilstash_activation_stock_guards.sql
 \ir ../migrations/20261119023000_brilstash_generation_and_binding_guards.sql
 \ir ../migrations/20261119023100_brilstash_require_ingress_proof.sql
+\ir ../migrations/20261119121800_brilstash_bind_payload_display.sql
 \ir brilstash_catalogue_privileges.sql
 \ir brilstash_catalogue_digest.sql
 CREATE SCHEMA fixture;
-GRANT USAGE ON SCHEMA fixture, extensions TO anon;
+GRANT USAGE ON SCHEMA fixture TO anon, authenticated;
+GRANT USAGE ON SCHEMA extensions TO anon;
+CREATE FUNCTION fixture.brilstash_digest(payload jsonb)
+RETURNS text LANGUAGE sql SECURITY DEFINER SET search_path = '' AS $$
+  SELECT encode(sha256(convert_to(private.brilstash_canonical_json(payload), 'UTF8')), 'hex')
+$$;
 CREATE FUNCTION fixture.read_brilstash_page(bearer text, page integer, page_size integer, min_price numeric,
   proof_bearer text DEFAULT NULL, proof_age_seconds integer DEFAULT 0
 )
@@ -97,8 +104,11 @@ END;
 $$;
 
 INSERT INTO auth.users VALUES ('10000000-0000-4000-8000-000000000001'), ('10000000-0000-4000-8000-000000000002');
-INSERT INTO public.merchants VALUES ('20000000-0000-4000-8000-000000000001', true, 'NGN', '10000000-0000-4000-8000-000000000002'),
-  ('20000000-0000-4000-8000-000000000002', true, 'NGN', NULL);
+INSERT INTO public.merchants VALUES ('20000000-0000-4000-8000-000000000001', true, 'NGN', '10000000-0000-4000-8000-000000000002', 'fixture-shop'),
+  ('20000000-0000-4000-8000-000000000002', true, 'NGN', NULL, 'other-shop');
+INSERT INTO public.domains VALUES
+  ('20000000-0000-4000-8000-000000000001', 'shop.example.invalid', 'active'),
+  ('20000000-0000-4000-8000-000000000002', 'other.example.invalid', 'active');
 INSERT INTO private.brilstash_installations (id, merchant_id, partner_identity)
 VALUES ('30000000-0000-4000-8000-000000000001', '20000000-0000-4000-8000-000000000001', 'fixture-one'),
   ('30000000-0000-4000-8000-000000000002', '20000000-0000-4000-8000-000000000002', 'fixture-two');

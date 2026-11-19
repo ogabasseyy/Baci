@@ -1,6 +1,12 @@
 -- Remove the deliberately ineligible approval so staging can succeed.
 DO $$
 BEGIN
+  IF private.brilstash_storefront_slug_segment('caf%C3%A9%2Bphone')
+      IS DISTINCT FROM 'caf%C3%A9%2Bphone'
+    OR private.brilstash_storefront_slug_segment('café+phone') IS DISTINCT FROM 'caf%C3%A9%2Bphone'
+    OR private.brilstash_storefront_slug_segment('%2e%2e') IS NOT NULL
+    OR private.brilstash_storefront_slug_segment('two%2Fsegments') IS NOT NULL
+  THEN RAISE EXCEPTION 'BrilStash storefront slug serialization diverged'; END IF;
   IF private.brilstash_payload_has_wire_shape(
     '[{"external_id":"invalid-url","product_url":"https://","title":"Phone","description":"Phone","category":"Phones","price_naira":365000,"stock_quantity":0,"images":[{"url":"https://media.example.invalid/approved"}]}]'::jsonb
   ) THEN RAISE EXCEPTION 'scheme without a host was accepted'; END IF;
@@ -24,6 +30,8 @@ DECLARE
   source_time timestamptz := LEAST((read_result->>'sourceReadAt')::timestamptz,
     ((statement_timestamp() AT TIME ZONE 'Africa/Lagos')::date + time '22:00') AT TIME ZONE 'Africa/Lagos');
   payload jsonb := '[{"external_id":"fixture-one","product_url":"https://shop.example.invalid/products/fixture-phone?variantId=40000000-0000-4000-8000-000000000011&condition=new","title":"Fixture phone","description":"Condition: New. Specifications: 128GB. Box contents: Phone only. Warranty: 30 days.","category":"Phones","price_naira":365000,"stock_quantity":0,"images":[{"url":"https://media.example.invalid/approved"}]}]';
+  forged jsonb;
+  field record;
   digest text := '13ea9aa70df68497c794f66598d55c82db152b709139363889d492109b69ff73';
 BEGIN
   IF public.stage_brilstash_catalogue_snapshot(
@@ -38,6 +46,38 @@ BEGIN
   ) IS DISTINCT FROM candidate THEN
     RAISE EXCEPTION 'identical staging retry did not return the recorded candidate';
   END IF;
+  FOR field IN SELECT key, value FROM jsonb_each('{
+    "title":"Unreviewed title",
+    "description":"Unreviewed warranty",
+    "brand":"Unreviewed brand",
+    "model_number":"Unreviewed model",
+    "product_url":"https://unrelated.example.invalid/products/fixture-phone?variantId=40000000-0000-4000-8000-000000000011&condition=new"
+  }'::jsonb) LOOP
+    forged := jsonb_set(payload, ARRAY['0', field.key], field.value);
+    BEGIN
+      PERFORM public.stage_brilstash_catalogue_snapshot(
+        installation, gen_random_uuid(), (read_result->>'catalogueRevision')::bigint, NULL,
+        source_time, read_result->'rows', forged,
+        fixture.brilstash_digest(forged)
+      );
+      RAISE EXCEPTION 'staging accepted unapproved display field %', field.key;
+    EXCEPTION WHEN check_violation THEN NULL;
+    END;
+  END LOOP;
+  FOREACH forged IN ARRAY ARRAY[
+    jsonb_set(payload, '{0,product_url}', to_jsonb(replace(payload->0->>'product_url', 'fixture-phone', 'wrong-listing'))),
+    jsonb_set(payload, '{0,product_url}', to_jsonb(replace(payload->0->>'product_url', 'condition=new', 'condition=used'))),
+    jsonb_set(payload, '{0,product_url}', to_jsonb(replace(payload->0->>'product_url', 'shop.example.invalid', 'other.example.invalid')))
+  ] LOOP
+    BEGIN
+      PERFORM public.stage_brilstash_catalogue_snapshot(
+        installation, gen_random_uuid(), (read_result->>'catalogueRevision')::bigint, NULL,
+        source_time, read_result->'rows', forged, fixture.brilstash_digest(forged)
+      );
+      RAISE EXCEPTION 'staging accepted an unapproved URL path, selection, or foreign merchant domain';
+    EXCEPTION WHEN check_violation THEN NULL;
+    END;
+  END LOOP;
   BEGIN
     PERFORM public.stage_brilstash_catalogue_snapshot(
       installation, gen_random_uuid(), (read_result->>'catalogueRevision')::bigint, NULL,

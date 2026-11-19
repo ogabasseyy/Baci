@@ -196,6 +196,20 @@ describe('BrilStash feed GET', () => {
     expect(dependencies.rpc).toHaveBeenCalledTimes(status === 200 ? 1 : 0);
   });
 
+  it('rejects an empty live result even with internally consistent totals', async () => {
+    vi.stubEnv('BRILSTASH_FEED_ENV', 'live');
+    vi.stubEnv('VERCEL_ENV', 'production');
+    dependencies.abortSignal.mockResolvedValueOnce({
+      data: { ...result, products: [], totalCount: 0, totalPages: 0 },
+      error: null,
+    });
+
+    const response = await GET(request('?page=1&limit=7'));
+    expect(response.status).toBe(503);
+    expect(response.headers.has('x-total-count')).toBe(false);
+    expect(response.headers.has('x-baci-catalogue-proof')).toBe(false);
+  });
+
   it('fails closed on a database project mismatch and on live configuration in preview', async () => {
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://liveproject.supabase.co');
     const response = await GET(request());

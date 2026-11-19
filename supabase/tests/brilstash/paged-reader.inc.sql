@@ -62,7 +62,7 @@ BEGIN
   SELECT jsonb_agg(jsonb_build_object(
     'external_id', item->>'externalId', 'title', item->>'name',
     'product_url', 'https://shop.example.invalid/products/' || (item->>'slug'),
-    'description', 'Condition New. Phone only. Warranty 30 days.', 'category', item->>'partnerCategory',
+    'description', 'Condition: New. Specifications: Fixture specification. Box contents: Phone only. Warranty: 30 days.', 'category', item->>'partnerCategory',
     'price_naira', item->'priceNaira', 'stock_quantity', item->'inventory'->'units',
     'images', jsonb_build_array(jsonb_build_object('url', 'https://media.example.invalid/approved'))
   ) ORDER BY item->>'externalId') INTO payload

@@ -108,6 +108,8 @@ function resolveImages(verifiedImages: SourceFacts['verifiedImages']) {
   for (const value of verifiedImages) {
     if (!value) continue;
     const url = parseBrilStashHttpsUrl(value);
+    // Staging checks each exported URL against the exact verified manifest.
+    // Fragmented inputs must be corrected and re-verified at their source.
     if (!url || url.hash || urls.has(url.href)) continue;
     urls.set(url.href, value);
     if (urls.size === 10) break;

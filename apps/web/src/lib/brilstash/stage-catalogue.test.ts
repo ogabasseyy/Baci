@@ -82,7 +82,9 @@ describe('stageBrilStashSnapshot', () => {
     const rpc = vi.fn();
     await expect(
       stageBrilStashSnapshot({ rpc }, context, candidateId)
-    ).rejects.toThrow('incomplete_assortment');
+    ).rejects.toThrow(
+      'BrilStash candidate rejected: incomplete_assortment. Missing approved listings: ["missing"]'
+    );
     expect(rpc).not.toHaveBeenCalled();
   });
 });

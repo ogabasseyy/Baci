@@ -114,4 +114,13 @@ describe('resolveAggregate', () => {
     // Already the newest scan, so no reorder is needed.
     expect(result.lead).toBeUndefined();
   });
+
+  it('lets a terminal scan tied with the SDR win', () => {
+    const shd = scan('SHD', 'delivered', 10);
+    const result = resolveAggregate(
+      newestFirst(scan('SDR', 'failed', 10), shd)
+    );
+    expect(result.status).toBe('delivered');
+    expect(result.lead).toBeDefined();
+  });
 });

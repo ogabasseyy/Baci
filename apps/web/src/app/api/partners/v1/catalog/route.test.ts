@@ -1,13 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GET } from './route';
 
-const { after, captureServerEvent, loadCrossRemCatalog } = vi.hoisted(() => ({
-  after: vi.fn<(callback: () => Promise<unknown>) => void>(),
-  captureServerEvent: vi.fn(),
-  loadCrossRemCatalog: vi.fn(),
-}));
+const { after, captureServerEvent, loadCrossRemCatalog, warn } = vi.hoisted(
+  () => ({
+    after: vi.fn<(callback: () => Promise<unknown>) => void>(),
+    captureServerEvent: vi.fn(),
+    loadCrossRemCatalog: vi.fn(),
+    warn: vi.fn(),
+  })
+);
 
 vi.mock('next/server', () => ({ after }));
+vi.mock('@/lib/logger', () => ({ logger: { warn } }));
 vi.mock('@/lib/posthog/server', () => ({ captureServerEvent }));
 vi.mock('./catalog-service', () => ({ loadCrossRemCatalog }));
 
@@ -27,8 +31,22 @@ describe('CrossRem catalog', () => {
     vi.stubEnv('CROSSREM_CATALOG_TOKEN', token);
     vi.stubEnv('VERCEL_ENV', 'preview');
     after.mockClear();
+    warn.mockClear();
     captureServerEvent.mockReset().mockResolvedValue(true);
     loadCrossRemCatalog.mockReset().mockResolvedValue(snapshot);
+  });
+
+  it('warns internally when a partner request reaches an unconfigured token', async () => {
+    vi.stubEnv('CROSSREM_CATALOG_TOKEN', 'short-placeholder');
+    const response = await GET(request(`Bearer ${token}`));
+
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: 'Unauthorized' });
+    expect(warn).toHaveBeenCalledExactlyOnceWith({
+      message: 'CrossRem catalog credential is unconfigured',
+    });
+    expect(loadCrossRemCatalog).not.toHaveBeenCalled();
+    expect(after).not.toHaveBeenCalled();
   });
 
   afterEach(() => vi.unstubAllEnvs());
@@ -59,6 +77,7 @@ describe('CrossRem catalog', () => {
     }
 
     expect(loadCrossRemCatalog).not.toHaveBeenCalled();
+    expect(warn).not.toHaveBeenCalled();
   });
 
   it('returns a complete JSON snapshot and supports conditional reads', async () => {

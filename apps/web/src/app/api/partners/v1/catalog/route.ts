@@ -1,5 +1,6 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { after } from 'next/server';
+import { logger } from '@/lib/logger';
 import { captureServerEvent } from '@/lib/posthog/server';
 import { loadCrossRemCatalog } from './catalog-service';
 
@@ -25,25 +26,31 @@ function unavailable() {
   );
 }
 
+function unauthorized() {
+  return Response.json(
+    { error: 'Unauthorized' },
+    {
+      status: 401,
+      headers: { ...privateHeaders, 'WWW-Authenticate': 'Bearer' },
+    }
+  );
+}
+
 export async function GET(request: Request) {
   const token = process.env.CROSSREM_CATALOG_TOKEN;
 
   const credential = /^Bearer +(.+)$/i.exec(
     request.headers.get('authorization') ?? ''
   )?.[1];
-  if (
-    !token ||
-    !bearerTokenPattern.test(token) ||
-    !credential ||
-    !timingSafeEqual(digest(credential), digest(token))
-  ) {
-    return Response.json(
-      { error: 'Unauthorized' },
-      {
-        status: 401,
-        headers: { ...privateHeaders, 'WWW-Authenticate': 'Bearer' },
-      }
-    );
+  if (!credential || !bearerTokenPattern.test(credential)) {
+    return unauthorized();
+  }
+  if (!token || !bearerTokenPattern.test(token)) {
+    logger.warn({ message: 'CrossRem catalog credential is unconfigured' });
+    return unauthorized();
+  }
+  if (!timingSafeEqual(digest(credential), digest(token))) {
+    return unauthorized();
   }
 
   try {

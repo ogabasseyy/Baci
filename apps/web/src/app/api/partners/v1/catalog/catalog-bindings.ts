@@ -5,5 +5,7 @@ import ogabasseyBindings from './ogabassey-listing-bindings.json';
 // reserved by marking the old binding retired.
 export const crossRemCatalogConfig = {
   merchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
-  bindings: crossRemListingBindingsSchema.parse(ogabasseyBindings),
+  // Treat invalid data as unconfigured so the route can emit its 503 alert.
+  bindings:
+    crossRemListingBindingsSchema.safeParse(ogabasseyBindings).data ?? [],
 } as const;

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { crossRemCatalogConfig } from './catalog-bindings';
 import { sellableIdentityKey } from './sellable-identity-key';
 
@@ -19,5 +19,21 @@ describe('CrossRem catalog configuration', () => {
       bindings.length
     );
     expect(new Set(active.map(sellableIdentityKey)).size).toBe(active.length);
+  });
+
+  it('uses an empty baseline if validation fails so the route can return 503', async () => {
+    vi.doMock('./ogabassey-listing-bindings.json', () => ({
+      default: [{ listingId: 'invalid' }],
+    }));
+    vi.resetModules();
+    try {
+      const { crossRemCatalogConfig: invalidConfig } = await import(
+        './catalog-bindings'
+      );
+      expect(invalidConfig.bindings).toEqual([]);
+    } finally {
+      vi.doUnmock('./ogabassey-listing-bindings.json');
+      vi.resetModules();
+    }
   });
 });

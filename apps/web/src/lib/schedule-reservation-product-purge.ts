@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { after } from 'next/server';
 import { revalidateProducts } from './cache-revalidation';
+import { expireProductBlogCache } from './expire-product-blog-cache';
 import { expireProductBlogCacheReliable } from './expire-product-blog-cache-reliable';
 import { scheduleOrderProductBlogPurge } from './schedule-order-product-blog-purge';
 import { scheduleStorefrontHostnamePurge } from './storefront-product-purge-hostnames';
@@ -48,9 +49,10 @@ export function scheduleReservationProductPurge({
       // purge so Next cannot refill the edge with pre-reservation availability
       // even if the merchant slug read below fails.
       const broadPdpExpired =
-        revalidateProducts(merchantId, undefined, {
-          expireImmediately: true,
-        }) === true ||
+        (expireProductBlogCache(merchantId) === true &&
+          revalidateProducts(merchantId, undefined, {
+            expireImmediately: true,
+          }) === true) ||
         (await expireProductBlogCacheReliable(merchantId, {
           expireWidePdpDetails: true,
         }));

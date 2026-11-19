@@ -120,10 +120,10 @@ vi.mock('@/lib/supabase/server', () => ({
       }
       if (table === 'products') {
         return {
-          select: vi.fn(() =>
+          select: vi.fn((cols?: string) =>
             createBulkUpdateRouteQueryBuilder(
               () => null,
-              () => productUpdateSelectRows
+              () => (cols === 'id, slug' ? [] : productUpdateSelectRows)
             )
           ),
           update: vi.fn(() =>

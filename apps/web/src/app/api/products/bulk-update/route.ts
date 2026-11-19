@@ -12,9 +12,11 @@ import {
   getMerchantForApiRequest,
   toUserAccess,
 } from '@/lib/get-merchant-for-api-request';
+import { resolveDependentLegacyProductIdentifiers } from '@/lib/resolve-dependent-legacy-product-identifiers';
 import { isValidUuid } from '@/lib/sanitize-core';
 import { scheduleProductBlogPurgeAfterResponse } from '@/lib/schedule-product-blog-purge-after-response';
 import { scheduleStorefrontProductPurge } from '@/lib/storefront-product-purge';
+import { scheduleStorefrontHostnamePurge } from '@/lib/storefront-product-purge-hostnames';
 import type { StorefrontProductPurgeEntry } from '@/lib/storefront-product-purge-urls';
 import { createClient } from '@/lib/supabase/server';
 import { BulkUpdateChangesSchema } from '@/schemas/dashboard-product-import-actions';
@@ -121,17 +123,27 @@ export async function POST(request: NextRequest) {
         const productIds = Array.from(
           new Set([...requestedProductIds, ...resolvedProductIds])
         ).filter(isValidUuid);
-        const slugIdentifiers = Array.from(
-          new Set([...purgeEntries.map((entry) => entry.slug), ...productIds])
+        const dependentAliases = await resolveDependentLegacyProductIdentifiers(
+          supabase,
+          merchantId,
+          productIds
         );
-        // Bust every purged slug and product UUID cache BEFORE the edge purge
-        // so a CF MISS cannot refill from stale Next.js entries.
+        const slugIdentifiers = Array.from(
+          new Set([
+            ...purgeEntries.map((entry) => entry.slug),
+            ...productIds,
+            ...dependentAliases.identifiers,
+          ])
+        );
+        // Bust every purged slug, product UUID, and dependent child cache
+        // BEFORE the edge purge so a CF MISS cannot refill from stale entries.
         const slugsExpired =
           revalidateProductSlugs(merchantId, slugIdentifiers, {
             expireImmediately: true,
           }) === true;
         const originHardExpired =
           (slugsExpired &&
+            !dependentAliases.incomplete &&
             revalidateProducts(merchantId, undefined, {
               expireImmediately: true,
               omitMerchantWidePdpDetails: true,
@@ -151,17 +163,37 @@ export async function POST(request: NextRequest) {
             'Skipped Cloudflare product purge after bulk update because origin hard expiry failed',
             { merchantId }
           );
+        } else if (dependentAliases.incomplete) {
+          scheduleStorefrontHostnamePurge(merchantContext.merchantSlug);
         } else {
+          const seenEdgeSlugs = new Set(
+            purgeEntries
+              .map((entry) => entry.slug.trim().toLowerCase())
+              .filter(Boolean)
+          );
+          const aliasEdgeEntries: StorefrontProductPurgeEntry[] = [
+            ...productIds,
+            ...dependentAliases.identifiers,
+          ]
+            .map((identifier) => identifier.trim())
+            .filter((identifier) => {
+              const key = identifier.toLowerCase();
+              if (!key || seenEdgeSlugs.has(key)) return false;
+              seenEdgeSlugs.add(key);
+              return true;
+            })
+            .map((identifier) => ({ slug: identifier, categorySegment: null }));
+          const edgeEntries = [...purgeEntries, ...aliasEdgeEntries];
           scheduleStorefrontProductPurge(
             merchantContext.merchantSlug,
-            purgeEntries
+            edgeEntries
           );
           scheduleProductBlogPurgeAfterResponse({
             supabase,
             merchantId,
             merchantSlug: merchantContext.merchantSlug,
             productIds,
-            entries: purgeEntries,
+            entries: edgeEntries,
             categorySlugs: purgeEntries.map((entry) => entry.categorySegment),
             skipProductPurge: true,
           });

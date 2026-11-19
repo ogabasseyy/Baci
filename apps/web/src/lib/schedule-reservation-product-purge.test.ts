@@ -4,12 +4,16 @@ const mocks = vi.hoisted(() => ({
   after: vi.fn(),
   purge: vi.fn(),
   hostnamePurge: vi.fn(),
+  expireBlog: vi.fn(),
   revalidateProducts: vi.fn(),
   expireReliable: vi.fn(),
 }));
 vi.mock('next/server', () => ({ after: mocks.after }));
 vi.mock('./cache-revalidation', () => ({
   revalidateProducts: mocks.revalidateProducts,
+}));
+vi.mock('./expire-product-blog-cache', () => ({
+  expireProductBlogCache: mocks.expireBlog,
 }));
 vi.mock('./expire-product-blog-cache-reliable', () => ({
   expireProductBlogCacheReliable: mocks.expireReliable,
@@ -26,6 +30,7 @@ import { scheduleReservationProductPurge } from './schedule-reservation-product-
 describe('scheduleReservationProductPurge', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.expireBlog.mockReturnValue(true);
     mocks.revalidateProducts.mockReturnValue(true);
     mocks.expireReliable.mockResolvedValue(true);
   });
@@ -211,5 +216,26 @@ describe('scheduleReservationProductPurge', () => {
     } finally {
       warnSpy.mockRestore();
     }
+  });
+
+  it('requires reliable expiry before hostname purge when blog cache expiry fails even if revalidateProducts succeeds', async () => {
+    mocks.expireBlog.mockReturnValueOnce(false);
+    mocks.expireReliable.mockResolvedValueOnce(false);
+    const supabase = {
+      from: vi.fn(() => {
+        throw new Error('quiz_events unavailable');
+      }),
+    };
+    scheduleReservationProductPurge({
+      source: 'quiz',
+      sourceId: 'q1',
+      merchantId: 'm1',
+      supabase: supabase as never,
+    });
+    await mocks.after.mock.calls[0][0]();
+    expect(mocks.expireReliable).toHaveBeenCalledWith('m1', {
+      expireWidePdpDetails: true,
+    });
+    expect(mocks.hostnamePurge).not.toHaveBeenCalled();
   });
 });

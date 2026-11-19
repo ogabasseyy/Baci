@@ -95,6 +95,10 @@ describe('TradeInModal', () => {
     await analyse();
 
     expect(await screen.findByText('₦240,000')).toBeInTheDocument();
+    expect(
+      screen.getByText('Based on market price: ₦400,000')
+    ).toBeInTheDocument();
+    expect(screen.queryByText('₦240,000.00')).not.toBeInTheDocument();
     expect(mocks.requestDeviceGrading).toHaveBeenCalledWith(
       [expect.any(File)],
       'ogabassey'
@@ -120,6 +124,10 @@ describe('TradeInModal', () => {
     fireEvent.click(screen.getByRole('button', { name: /analyze device/i }));
 
     expect(await screen.findByText('₦240,000')).toBeInTheDocument();
+    expect(
+      screen.getByText('Based on market price: ₦400,000')
+    ).toBeInTheDocument();
+    expect(screen.queryByText('₦240,000.00')).not.toBeInTheDocument();
     expect(mocks.requestDeviceGrading).toHaveBeenCalledWith(
       photos,
       'ogabassey'

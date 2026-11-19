@@ -24,7 +24,7 @@ import {
   oxygenUnfinishedPayment,
 } from './oxygen-checkout-presentation';
 import type { OxygenFields } from './oxygen-form-utils';
-import { decideOxygenHostedNavigation } from './oxygen-hosted-navigation';
+import { canOpenOxygenHostedUrl } from './oxygen-hosted-navigation';
 import { defaultOxygenEquity } from './oxygen-plan';
 import { OxygenAction } from './oxygen-presentation';
 import { useOxygenEligibilityProgress } from './use-oxygen-eligibility-progress';
@@ -85,11 +85,7 @@ export function OxygenWorkflowBody({
   const paymentUrl =
     unfinishedPayment &&
     capabilities &&
-    decideOxygenHostedNavigation(
-      unfinishedPayment.url,
-      'payment',
-      capabilities
-    ) === 'allow'
+    canOpenOxygenHostedUrl(unfinishedPayment.url, 'payment', capabilities)
       ? unfinishedPayment.url
       : undefined;
   const {

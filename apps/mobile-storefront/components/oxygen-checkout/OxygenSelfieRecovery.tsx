@@ -25,7 +25,7 @@ export function OxygenSelfieRecovery({
         style={{ color: colors.textSecondary, fontSize: 16, lineHeight: 24 }}
       >
         {renewing
-          ? 'Your camera will reopen shortly. Your progress is saved.'
+          ? 'We’re getting a new link. Your progress is saved.'
           : 'Your progress is saved. Try again to continue your selfie.'}
       </Text>
       {!!error && (

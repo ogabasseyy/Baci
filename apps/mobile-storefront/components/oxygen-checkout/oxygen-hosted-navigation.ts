@@ -4,12 +4,11 @@ type HostedOrigins = Pick<
   OxygenMobileCapabilities,
   'hostedOrigins' | 'selfieOrigins'
 >;
-export function decideOxygenHostedNavigation(
+export function canOpenOxygenHostedUrl(
   url: string,
   kind: OxygenHostedKind,
-  capabilities: HostedOrigins,
-  popup = false
-): 'allow' | 'block' | 'external' {
+  capabilities: HostedOrigins
+): boolean {
   try {
     const target = new URL(url);
     if (
@@ -20,15 +19,14 @@ export function decideOxygenHostedNavigation(
         (character) => character.charCodeAt(0) <= 32 || character === '\\'
       )
     )
-      return 'block';
+      return false;
     const origins =
       kind === 'selfie'
         ? capabilities.selfieOrigins
         : capabilities.hostedOrigins;
-    if (!origins.includes(target.origin)) return 'block';
-    return popup ? (kind === 'payment' ? 'external' : 'block') : 'allow';
+    return origins.includes(target.origin);
   } catch {
-    return 'block';
+    return false;
   }
 }
 /** Event text is deliberately absent: every event can only request a bounded authoritative read. */

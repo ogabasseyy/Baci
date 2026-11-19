@@ -1,14 +1,8 @@
 import { act, fireEvent, render } from '@testing-library/react-native';
-import { Camera } from 'expo-camera';
+import * as WebBrowser from 'expo-web-browser';
 import { OxygenHostedSurface } from './OxygenHostedSurface';
 
-jest.mock('react-native-webview', () => ({ WebView: 'ProviderWebView' }));
-jest.mock('expo-camera', () => ({
-  Camera: {
-    getCameraPermissionsAsync: jest.fn(),
-    requestCameraPermissionsAsync: jest.fn(),
-  },
-}));
+jest.mock('expo-web-browser', () => ({ openBrowserAsync: jest.fn() }));
 jest.mock('./oxygen-selfie-diagnostics', () => ({
   recordOxygenSelfieDiagnostic: jest.fn(),
 }));
@@ -23,14 +17,14 @@ const props = {
   onRefresh: jest.fn(),
   onExit: jest.fn(),
 };
-it('removes an expired camera session and offers retry without asking permission again', () => {
+it('blocks an expired link and offers selfie renewal', () => {
   const onRenew = jest.fn();
   const view = render(
     <OxygenHostedSurface {...props} sessionExpired onRenew={onRenew} />
   );
-  expect(view.queryByTestId('oxygen-hosted')).toBeNull();
+  expect(view.queryByRole('button', { name: 'Continue to Oxygen' })).toBeNull();
   expect(view.getByText('Your verification session expired')).toBeTruthy();
-  expect(Camera.requestCameraPermissionsAsync).not.toHaveBeenCalled();
+  expect(WebBrowser.openBrowserAsync).not.toHaveBeenCalled();
   fireEvent.press(view.getByRole('button', { name: 'Try again' }));
   expect(onRenew).toHaveBeenCalledTimes(1);
 });
@@ -41,7 +35,9 @@ it('shows bounded renewal loading with no stale preview or competing polling', a
     const view = render(
       <OxygenHostedSurface {...props} renewing onRenew={onRenew} />
     );
-    expect(view.queryByTestId('oxygen-hosted')).toBeNull();
+    expect(
+      view.queryByRole('button', { name: 'Continue to Oxygen' })
+    ).toBeNull();
     expect(
       view.getByText('Refreshing your verification session…')
     ).toBeTruthy();

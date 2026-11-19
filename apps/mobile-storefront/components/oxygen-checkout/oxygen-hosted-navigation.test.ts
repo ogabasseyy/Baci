@@ -1,6 +1,6 @@
 import {
+  canOpenOxygenHostedUrl,
   createOxygenStatusRefresher,
-  decideOxygenHostedNavigation,
 } from './oxygen-hosted-navigation';
 
 const caps = {
@@ -10,8 +10,8 @@ const caps = {
 describe('Oxygen hosted navigation', () => {
   it('pins exact secure origins and rejects credential/port/lookalike URLs', () => {
     expect(
-      decideOxygenHostedNavigation('https://pay.example/pay', 'payment', caps)
-    ).toBe('allow');
+      canOpenOxygenHostedUrl('https://pay.example/pay', 'payment', caps)
+    ).toBe(true);
     for (const url of [
       'https://pay.example.evil/pay',
       'https://pay.example:444/pay',
@@ -20,36 +20,10 @@ describe('Oxygen hosted navigation', () => {
       'http://pay.example/pay',
       'https://pay.example./pay',
     ])
-      expect(decideOxygenHostedNavigation(url, 'payment', caps)).toBe('block');
+      expect(canOpenOxygenHostedUrl(url, 'payment', caps)).toBe(false);
     expect(
-      decideOxygenHostedNavigation('https://pay.example/pay', 'selfie', caps)
-    ).toBe('block');
-  });
-  it('only authorizes external fallback for an already approved payment origin', () => {
-    expect(
-      decideOxygenHostedNavigation(
-        'https://pay.example/3ds',
-        'payment',
-        caps,
-        true
-      )
-    ).toBe('external');
-    expect(
-      decideOxygenHostedNavigation(
-        'https://bank.example/3ds',
-        'payment',
-        caps,
-        true
-      )
-    ).toBe('block');
-    expect(
-      decideOxygenHostedNavigation(
-        'https://selfie.example/camera',
-        'selfie',
-        caps,
-        true
-      )
-    ).toBe('block');
+      canOpenOxygenHostedUrl('https://pay.example/pay', 'selfie', caps)
+    ).toBe(false);
   });
   it('coalesces refresh and bounds attempts without trusting event contents', async () => {
     let resolve!: () => void;

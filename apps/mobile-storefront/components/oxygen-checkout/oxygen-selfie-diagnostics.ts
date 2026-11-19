@@ -1,11 +1,8 @@
 import { recordCrashBreadcrumb } from '@/lib/crash-diagnostics';
 
 const events = new Set([
-  'page_loaded',
-  'page_load_failed',
-  'page_http_failed',
-  'camera_granted',
-  'camera_denied',
+  'browser_returned',
+  'browser_open_failed',
   'pending',
   'confirmed',
   'status_unavailable',

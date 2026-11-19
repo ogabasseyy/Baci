@@ -149,7 +149,7 @@ export function useOxygenHostedStep({
         recordOxygenSelfieDiagnostic(status);
       }
       // Only the authenticated provider read can advance the persisted KYC.
-      // WebView messages/navigation and OS camera permission cannot confirm it.
+      // Browser launch or dismissal does not confirm verification.
       if (result.confirmed) await controller.execute({ action: 'refresh_kyc' });
       return;
     }

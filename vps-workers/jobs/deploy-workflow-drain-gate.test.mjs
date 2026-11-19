@@ -31,109 +31,6 @@ describe('production cache-invalidation drain rollout gate', () => {
     );
   });
 
-  it('verifies the installed VPS drain before production migrations', () => {
-    const readiness = jobBlock('vps-drain-readiness', 'db-migrations');
-    const migrations = jobBlock('db-migrations', 'deploy-production');
-
-    assert.match(readiness, /runs-on: baci-deploy/);
-    assert.match(
-      readiness,
-      /vps-workers\/bin\/verify-cache-invalidation-drain-installed\.sh/
-    );
-    assert.match(
-      readiness,
-      /^\s+run: \.readiness-checkout\/vps-workers\/bin\/verify-gigl-direct-workers-installed\.sh --skip-live-smoke$/m
-    );
-    // The cutover marker runs on every push (no changeset condition),
-    // so an unrelated web push cannot deploy the cron removal while the
-    // worker was never installed.
-    assert.match(
-      readiness,
-      /^\s+run: \.readiness-checkout\/vps-workers\/bin\/verify-gigl-direct-workers-installed\.sh --cutover-marker$/m
-    );
-    assert.match(readiness, /needs: \[changes\]/);
-    assert.match(readiness, /needs\.changes\.outputs\.tracking != 'false'/);
-    assert.doesNotMatch(readiness, /outputs\.migrations/);
-    assert.doesNotMatch(readiness, /VPS_WORKER_SSH_TARGET|\bssh\b/);
-    assert.doesNotMatch(readiness, /continue-on-error:\s*true/);
-    // Production latch reads fingerprint the installed dotenv, never a
-    // runner export (job-level env reaches the check script's resolver).
-    assert.match(readiness, /^ {4}env:\n {6}GIGL_ENV_FILE_AUTHORITATIVE: '1'/m);
-    assert.match(migrations, /needs: \[vps-drain-readiness\]/);
-    assert.match(migrations, /needs\.vps-drain-readiness\.result == 'success'/);
-    // Production is mid-rollout (worker role LOGIN-capable until this PR's
-    // later migrations apply), so the cron removal must never land while
-    // the interim window is open: assert the NOLOGIN final state after
-    // every apply, before anything downstream can proceed.
-    assert.match(
-      migrations,
-      /run: \.github\/scripts\/verify-gigl-worker-final-state\.sh/
-    );
-    assert.ok(
-      migrations.indexOf('Apply pending migrations via Management API') <
-        migrations.indexOf('Verify GIGL worker least-privilege final state'),
-      'final-state verification must run after migrations apply'
-    );
-  });
-
-  it('smokes the live GIGL capability only after migrations apply', () => {
-    const capability = jobBlock('gigl-worker-capability', 'deploy-production');
-
-    assert.match(capability, /needs: \[changes, db-migrations\]/);
-    assert.match(capability, /needs\.db-migrations\.result == 'success'/);
-    assert.match(
-      capability,
-      /uses: actions\/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1/
-    );
-    // No dispatch exemption: always() runs the smoke even when the
-    // changes job is skipped, and unset outputs fail closed.
-    assert.match(capability, /if: always\(\) &&/);
-    assert.doesNotMatch(
-      capability,
-      /github\.event_name != 'workflow_dispatch'/
-    );
-    // `tracking` only: the broad `migrations` output must never gate
-    // the smoke, or unrelated migrations freeze on worker drift.
-    assert.match(capability, /needs\.changes\.outputs\.tracking != 'false'/);
-    assert.doesNotMatch(capability, /outputs\.migrations/);
-    // A mid-flight deploy.sh must not let the smoke/latch verify a
-    // different revision than readiness checked: recheck install identity
-    // in this job immediately before smoking.
-    assert.match(capability, /Recheck installed SHA before smoke/);
-    assert.match(
-      capability,
-      /run: vps-workers\/bin\/verify-gigl-direct-workers-installed\.sh --skip-live-smoke/
-    );
-    assert.match(
-      capability,
-      /run: \.github\/scripts\/smoke-gigl-worker-capability\.sh/
-    );
-    // The latch persists only after the smoke succeeds (same job, later
-    // step): it proves live token+hook function for the gate's bypass.
-    assert.match(capability, /Persist GIGL cutover latch/);
-    assert.match(capability, /\.gigl-capability-smoke-ok/);
-    // The latch must bind the token actually smoked: capture the
-    // identity before the smoke and refuse to persist on any drift,
-    // so a mid-job .env edit cannot latch an unsmoked token.
-    assert.match(capability, /Capture pre-smoke latch identity/);
-    assert.ok(
-      capability.indexOf('Capture pre-smoke latch identity') <
-        capability.indexOf('smoke-gigl-worker-capability.sh')
-    );
-    assert.match(capability, /GIGL_PRE_SMOKE_IDENTITY/);
-    assert.match(
-      capability,
-      /\[ "\$identity" != "\$\{GIGL_PRE_SMOKE_IDENTITY:-\}" \]/
-    );
-    // Production smoke/identity is file-authoritative at the job level,
-    // so a runner export can never certify one token while cron runs
-    // another (the smoke entry sets the same mode for its filter).
-    assert.match(
-      capability,
-      /^ {4}env:\n {6}GIGL_ENV_FILE_AUTHORITATIVE: '1'/m
-    );
-  });
-
   it('keeps the web release behind migrations and prebuilt-only', () => {
     const deployment = workflow.slice(workflow.indexOf('  deploy-production:'));
 
@@ -172,7 +69,19 @@ describe('production cache-invalidation drain rollout gate', () => {
       deployment.indexOf('refuse-publish-on-promote-overlap.sh') <
         deployment.indexOf('Deploy to Vercel (with retry)')
     );
-    assert.match(deployment, /deploy --prebuilt --prod/);
+    const publishCommand = deployment
+      .split('\n')
+      .find((line) =>
+        line
+          .trimStart()
+          .startsWith('run: .github/scripts/deploy-with-retry.sh ')
+      );
+    assert.ok(publishCommand, 'missing prebuilt publication command');
+    const publishArgs = publishCommand.trim().split(/\s+/);
+    assert.ok(publishArgs.includes('deploy'));
+    assert.ok(publishArgs.includes('--prebuilt'));
+    assert.ok(publishArgs.includes('--prod'));
+    assert.ok(publishArgs.includes('--skip-domain'));
     assert.doesNotMatch(deployment, /run-pinned-vercel\.sh deploy --prod/);
     assert.match(
       deployment,

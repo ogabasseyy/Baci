@@ -9,7 +9,7 @@ import {
   View,
   type ViewStyle,
 } from 'react-native';
-import TabLayout from '@/app/(tabs)/_layout';
+import TabLayout, { unstable_settings } from '@/app/(tabs)/_layout';
 
 const MockText = Text;
 const MockView = View;
@@ -293,4 +293,8 @@ describe('TabLayout', () => {
       color: mockThemeColors.primaryForeground,
     });
   });
+});
+
+test('starts on the storefront index tab', () => {
+  expect(unstable_settings.initialRouteName).toBe('index');
 });

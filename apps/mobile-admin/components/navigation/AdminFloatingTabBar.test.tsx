@@ -235,10 +235,8 @@ function createProps(focusedIndex = 0): BottomTabBarProps {
       },
     },
     insets: { bottom: 34, left: 0, right: 0, top: 0 },
-    navigation: {
-      dispatch: vi.fn(),
-      emit: vi.fn(() => ({ defaultPrevented: false })),
-    },
+    navigateToTab: vi.fn(),
+    emitter: { emit: vi.fn(() => ({ defaultPrevented: false })) },
     state: {
       history: [],
       index: focusedIndex,
@@ -328,12 +326,8 @@ describe('AdminFloatingTabBar', () => {
     fireEvent.mouseDown(ordersTab);
     fireEvent.click(ordersTab);
 
-    expect(props.navigation.dispatch).toHaveBeenCalledWith({
-      payload: { name: 'orders', params: { status: 'open' } },
-      target: 'admin-tabs-key',
-      type: 'JUMP_TO',
-    });
-    expect(props.navigation.dispatch).toHaveBeenCalledTimes(1);
+    expect(props.navigateToTab).toHaveBeenCalledWith('orders-key');
+    expect(props.navigateToTab).toHaveBeenCalledTimes(1);
     expect(globalThis.requestAnimationFrame).not.toHaveBeenCalled();
   });
 
@@ -347,7 +341,7 @@ describe('AdminFloatingTabBar', () => {
     fireEvent.mouseUp(ordersTab);
     fireEvent.click(ordersTab);
 
-    expect(props.navigation.dispatch).toHaveBeenCalledTimes(1);
+    expect(props.navigateToTab).toHaveBeenCalledTimes(1);
   });
 
   it('does not scroll on one press of the focused tab', () => {

@@ -54,7 +54,7 @@ test('expo-modules-core patch stays wired through install', () => {
   const workspace = readFileSync(workspacePath, 'utf8');
   assert.match(
     workspace,
-    /"expo-modules-core@57\.0\.21":\s*"patches\/expo-modules-core@57\.0\.21\.patch"/,
+    /"expo-modules-core@58\.0\.26":\s*"patches\/expo-modules-core@58\.0\.26\.patch"/,
     'pnpm-workspace.yaml must map expo-modules-core to the patch',
   );
 
@@ -63,12 +63,12 @@ test('expo-modules-core patch stays wired through install', () => {
   const lockfile = readFileSync(lockfilePath, 'utf8');
   assert.match(
     lockfile,
-    /^ {2}expo-modules-core@57\.0\.21: [0-9a-f]{64}$/m,
+    /^ {2}expo-modules-core@58\.0\.26: [0-9a-f]{64}$/m,
     'pnpm-lock.yaml patchedDependencies must record the patch hash',
   );
   assert.match(
     lockfile,
-    /expo-modules-core@57\.0\.21\(patch_hash=/,
+    /expo-modules-core@58\.0\.26\(patch_hash=/,
     'pnpm-lock.yaml snapshots must reference the patched package',
   );
 });
@@ -128,4 +128,11 @@ func emit(event: String, payload: JSValue, emitterSelf: FakeModule, runtime: Fak
   } finally {
     rmSync(folder, { recursive: true, force: true });
   }
+});
+
+
+test('installed SDK 58 keeps both emitters in weak sendable references', () => {
+  const emitter = readFileSync(join(root, 'node_modules/expo-modules-core/ios/Core/Events/EventEmitter.swift'), 'utf8');
+  assert.ok((emitter.match(/let emitter = WeakEventEmitterReference\(value: self\)/g) ?? []).length >= 2);
+  assert.doesNotMatch(emitter, /nonisolated\(unsafe\) weak let emitter = self/);
 });

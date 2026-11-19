@@ -5,12 +5,17 @@ import { getCachedBrandAuthorityInventory } from '@/lib/storefront-category/get-
 export async function getCachedBrandAuthorityProducts(
   merchantId: string,
   categorySlug: string,
-  entry: BrandAuthorityEntry
+  entry: BrandAuthorityEntry,
+  options: { limit?: number | null } = {}
 ) {
   const inventory = await getCachedBrandAuthorityInventory(
     merchantId,
     categorySlug,
     entry
   );
-  return inventory.products.slice(0, BRAND_AUTHORITY_PRODUCT_LIMIT);
+  if (options.limit === null) {
+    return inventory.products;
+  }
+  const limit = options.limit ?? BRAND_AUTHORITY_PRODUCT_LIMIT;
+  return inventory.products.slice(0, limit);
 }

@@ -93,4 +93,45 @@ describe('CategoryHubCardGrid', () => {
       screen.queryByRole('link', { name: /compare/i })
     ).not.toBeInTheDocument();
   });
+
+  it('expands model suffix plus signs into accessible aria-labels so S10 and S10+ links stay distinct', () => {
+    render(
+      <CategoryHubCardGrid
+        title="More from Samsung"
+        cards={[
+          {
+            title: 'Samsung Galaxy S10',
+            description: 'Compact flagship.',
+            href: '/smartphones/samsung-galaxy-s10',
+          },
+          {
+            title: 'Samsung Galaxy S10+',
+            description: 'Larger battery and display.',
+            href: '/smartphones/samsung-galaxy-s10-plus',
+            secondaryHref: '/smartphones/compare/samsung-galaxy-s10-plus-vs-s10',
+            secondaryLabel: 'Compare S10 +.',
+          },
+        ]}
+      />
+    );
+
+    const s10Link = screen.getByRole('link', { name: 'Samsung Galaxy S10' });
+    const s10PlusLink = screen.getByRole('link', {
+      name: 'Samsung Galaxy S10+ (Samsung Galaxy S10 Plus)',
+    });
+    const compareLink = screen.getByRole('link', {
+      name: 'Compare S10 +. (Compare S10 Plus.)',
+    });
+
+    expect(s10Link).not.toHaveAttribute('aria-label');
+    expect(s10PlusLink).toHaveAttribute(
+      'aria-label',
+      'Samsung Galaxy S10+ (Samsung Galaxy S10 Plus)'
+    );
+    expect(s10PlusLink).toHaveTextContent('Samsung Galaxy S10+');
+    expect(compareLink).toHaveAttribute(
+      'aria-label',
+      'Compare S10 +. (Compare S10 Plus.)'
+    );
+  });
 });

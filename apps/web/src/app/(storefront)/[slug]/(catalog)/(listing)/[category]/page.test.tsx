@@ -1,5 +1,6 @@
-import { render, screen, waitFor } from '@testing-library/react';
-import { type ReactElement, Suspense } from 'react';
+import './page.test-support';
+import { render, screen } from '@testing-library/react';
+import { Suspense } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CATEGORY_HUB_DEFAULTS } from '@/config/category-hub-defaults';
 import {
@@ -11,517 +12,26 @@ import {
   getMerchantByIdentifier,
 } from '@/lib/cached-data';
 import type { CategoryHubModel } from '@/lib/storefront-category/category-hub-types';
-
-const NORMALIZED_PLACEHOLDER_IMAGE = '/placeholder.svg';
-const mockGetPublishedClusterPosts = vi.fn();
-const mockGetCachedProductSemanticInventory = vi.fn();
-const mockCategoryPageDeferredCompareLinks = vi.hoisted(() => vi.fn());
-const mockConnection = vi.hoisted(() => vi.fn());
-const { mockCategoryPageContent } = vi.hoisted(() => ({
-  mockCategoryPageContent: vi.fn((_props: unknown) => (
-    <div>Category page content</div>
-  )),
-}));
-
-function defaultCategoryPageImplementation({
-  currentPage,
-  hubContent,
-}: {
-  currentPage?: number;
-  hubContent?: CategoryHubModel;
-}) {
-  return (
-    <div>
-      <div>Current page: {currentPage}</div>
-      <div>Hub heading: {hubContent?.intro.heading ?? 'none'}</div>
-      {hubContent?.bestForCards.map((card) => (
-        <div key={`best-for-${card.title}-${card.href}`}>
-          Best for: {card.title}
-        </div>
-      ))}
-      {hubContent?.brandCards.map((card) => (
-        <div key={`brand-${card.title}-${card.href}`}>
-          <div>Brand: {card.title}</div>
-          {card.secondaryLabel ? (
-            <div>Brand compare: {card.secondaryLabel}</div>
-          ) : null}
-        </div>
-      ))}
-      {hubContent?.priceBandCards.map((card) => (
-        <div key={`price-band-${card.title}-${card.href}`}>
-          Price band: {card.title}
-        </div>
-      ))}
-      {hubContent?.comparisonLinks.map((link) => (
-        <div key={`compare-link-${link.label}-${link.href}`}>
-          Compare link: {link.label}
-        </div>
-      ))}
-      {hubContent?.guideLinks.map((link) => (
-        <div key={`guide-link-${link.title}-${link.href}`}>
-          Guide link: {link.title}
-        </div>
-      ))}
-      {hubContent?.faqItems.map((item) => (
-        <div key={`faq-${item.question}-${item.answer}`}>
-          FAQ: {item.question}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-const categoryPageSpy = vi.fn(defaultCategoryPageImplementation);
-const mockBuildStoreUrl = vi.fn();
-const mockBuildRequestScopedStoreUrl = vi.fn();
-const mockGenerateBreadcrumbSchema = vi.fn(() => ({}));
-const mockGenerateCollectionPageSchema = vi.fn(() => ({}));
-const mockGenerateFAQSchema = vi.fn((faqItems) => ({
-  '@type': 'FAQPage',
-  mainEntity: faqItems,
-}));
-
-vi.mock('@/components/storefront/ogabassey/pages/category-page', () => ({
-  // The route now composes hub content as a server-rendered `hubSections`
-  // ReactNode slot (`<CategoryHubSections hub={…} />`) instead of a raw
-  // `hubContent` prop. Unwrap the element's `hub` prop back into `hubContent`
-  // so the spy-based assertions keep validating what the route composed.
-  CategoryPage: (props: {
-    currentPage?: number;
-    hubSections?: ReactElement<{ hub?: CategoryHubModel }>;
-  }) =>
-    categoryPageSpy({
-      ...props,
-      hubContent: props.hubSections?.props?.hub,
-    }),
-}));
-
-vi.mock('./category-page-deferred-compare-links', () => ({
-  CategoryPageDeferredCompareLinks: (props: { categorySlug: string }) => {
-    mockCategoryPageDeferredCompareLinks(props);
-
-    return <section>Maintained category compare links</section>;
-  },
-}));
-
-vi.mock(
-  '@/components/storefront/ogabassey/seo/commercial-support-links',
-  () => ({
-    CommercialSupportLinks: () => <div>CommercialSupportLinks footer</div>,
-  })
-);
-
-vi.mock('@/lib/cached-data', () => ({
-  getCachedCategoryPageData: vi.fn(),
-  getCachedCategoryPageGraphicsOptions: vi.fn(),
-  getCachedCategoryPageGraphicsOptionsStrict: vi.fn(),
-  getCachedMerchant: vi.fn(),
-  getCachedMerchantByDomain: vi.fn(),
-  getMerchantByIdentifier: vi.fn(),
-}));
-
-vi.mock('@/lib/normalize-product', () => ({
-  normalizeProduct: (product: {
-    id: string;
-    name: string;
-    slug: string;
-    description?: string | null;
-    price: number;
-    image: string;
-    images?: string[];
-    category?: string | null;
-    brand?: string | null;
-    condition?: string | null;
-    stock?: number | null;
-    product_key_specs?: Record<string, unknown> | null;
-    category_slug?: string | null;
-  }) => ({
-    id: product.id,
-    name: product.name,
-    slug: product.slug,
-    description: product.description ?? '',
-    price: product.price,
-    image: product.image || product.images?.[0] || NORMALIZED_PLACEHOLDER_IMAGE,
-    images: product.images ?? [product.image],
-    category: product.category ?? 'Smartphones',
-    brand: product.brand ?? null,
-    condition: product.condition ?? 'new',
-    stock: product.stock ?? 0,
-    product_key_specs: product.product_key_specs ?? null,
-    category_slug: product.category_slug ?? 'smartphones',
-  }),
-}));
-
-vi.mock('next/server', () => ({
-  connection: () => mockConnection(),
-}));
-
-vi.mock('@/lib/sanitize-json-ld', () => ({
-  safeJsonLdStringify: vi.fn((value: unknown) => JSON.stringify(value)),
-}));
-
-const mockHeaders = vi.fn();
-vi.mock('next/headers', () => ({
-  headers: () => mockHeaders(),
-}));
-
-vi.mock('@/lib/seo-utils', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/seo-utils')>();
-
-  return {
-    ...actual,
-    generateBreadcrumbSchema: (
-      ...args: Parameters<typeof mockGenerateBreadcrumbSchema>
-    ) => mockGenerateBreadcrumbSchema(...args),
-    generateCollectionPageSchema: (
-      ...args: Parameters<typeof mockGenerateCollectionPageSchema>
-    ) => mockGenerateCollectionPageSchema(...args),
-    generateFAQSchema: (...args: Parameters<typeof mockGenerateFAQSchema>) =>
-      mockGenerateFAQSchema(...args),
-    generateMetaDescription: (description: string) =>
-      description.replace(/<[^>]+>/g, '').trim(),
-    getIndexableRobotsMetadata: (
-      ...args: Parameters<typeof actual.getIndexableRobotsMetadata>
-    ) => actual.getIndexableRobotsMetadata(...args),
-  };
-});
-
-vi.mock('@/lib/store-url', () => ({
-  buildStoreUrl: (...args: unknown[]) => mockBuildStoreUrl(...args),
-  buildRequestScopedStoreUrl: (...args: unknown[]) =>
-    mockBuildRequestScopedStoreUrl(...args),
-}));
-
-vi.mock('@/lib/storefront-content/get-published-cluster-posts', () => ({
-  getPublishedClusterPosts: (...args: unknown[]) =>
-    mockGetPublishedClusterPosts(...args),
-}));
-
-vi.mock(
-  '@/lib/storefront-product/get-cached-product-semantic-inventory',
-  () => ({
-    getCachedProductSemanticInventory: (...args: unknown[]) =>
-      mockGetCachedProductSemanticInventory(...args),
-  })
-);
-
-vi.mock('@/lib/storefront-category/get-cached-brand-authority-entries', () => ({
-  getCachedBrandAuthorityEntries: vi.fn().mockResolvedValue([]),
-}));
-
-vi.mock('./category-page-content', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('./category-page-content')>();
-
-  return {
-    ...actual,
-    CategoryPageContent: (props: unknown) => mockCategoryPageContent(props),
-  };
-});
-
-vi.mock('@/lib/validation', () => ({
-  isDomainIdentifier: (value: string) => value.includes('.'),
-}));
-
-const notFound = vi.fn(() => {
-  throw new Error('NEXT_NOT_FOUND');
-});
-
-vi.mock('next/navigation', () => ({
-  notFound: () => notFound(),
-}));
-
-const merchant = {
-  id: 'merchant-1',
-  business_name: 'Ogabassey',
-  slug: 'test-store',
-  custom_domain: null,
-  payout_currency: 'NGN',
-  site_description: 'Store description',
-  logo_url: null,
-};
-
-function makeSmartphoneProduct(
-  index: number,
-  overrides: Partial<{
-    name: string;
-    slug: string;
-    brand: string;
-    price: number;
-    main_camera_mp: number;
-    battery_mah: number;
-    charging_watt: number;
-    ram_gb: number;
-    storage_gb: number;
-    screen_size_inches: number;
-  }> = {}
-) {
-  return {
-    id: `product-${index}`,
-    name: overrides.name ?? `Phone ${index}`,
-    slug: overrides.slug ?? `phone-${index}`,
-    description: `Description ${index}`,
-    price: overrides.price ?? 300000 + index * 1000,
-    image: `https://cdn.example.com/product-${index}.png`,
-    images: [`https://cdn.example.com/product-${index}.png`],
-    category: 'Smartphones',
-    brand: overrides.brand ?? 'Tecno',
-    condition: 'new',
-    stock: 5,
-    category_slug: 'smartphones',
-    product_key_specs: {
-      main_camera_mp: overrides.main_camera_mp ?? 48,
-      battery_mah: overrides.battery_mah ?? 5000,
-      charging_watt: overrides.charging_watt ?? 33,
-      ram_gb: overrides.ram_gb ?? 8,
-      storage_gb: overrides.storage_gb ?? 128,
-      screen_size_inches: overrides.screen_size_inches ?? 6.6,
-    },
-  };
-}
-
-const smartphoneHubProducts = [
-  makeSmartphoneProduct(1, {
-    name: 'Alpha Phone',
-    slug: 'alpha-phone',
-    brand: 'Apple',
-    price: 420000,
-    main_camera_mp: 50,
-    battery_mah: 5000,
-    charging_watt: 33,
-  }),
-  makeSmartphoneProduct(2, {
-    name: 'Beta Phone',
-    slug: 'beta-phone',
-    brand: 'Samsung',
-    price: 460000,
-    main_camera_mp: 64,
-    battery_mah: 6000,
-    charging_watt: 45,
-    ram_gb: 12,
-    storage_gb: 256,
-  }),
-  makeSmartphoneProduct(3, {
-    name: 'Apple Mini',
-    slug: 'apple-mini',
-    brand: 'Apple',
-    price: 390000,
-    main_camera_mp: 48,
-    battery_mah: 4700,
-  }),
-  makeSmartphoneProduct(4, {
-    name: 'Apple Pro',
-    slug: 'apple-pro',
-    brand: 'Apple',
-    price: 490000,
-    main_camera_mp: 108,
-    battery_mah: 6000,
-    charging_watt: 45,
-    ram_gb: 12,
-    storage_gb: 256,
-  }),
-  makeSmartphoneProduct(5, {
-    name: 'Samsung A',
-    slug: 'samsung-a',
-    brand: 'Samsung',
-    price: 350000,
-    main_camera_mp: 48,
-    battery_mah: 5000,
-  }),
-  makeSmartphoneProduct(6, {
-    name: 'Samsung B',
-    slug: 'samsung-b',
-    brand: 'Samsung',
-    price: 480000,
-    main_camera_mp: 50,
-    battery_mah: 5000,
-  }),
-  makeSmartphoneProduct(7, {
-    name: 'Tecno C',
-    slug: 'tecno-c',
-    brand: 'Tecno',
-    price: 470000,
-    main_camera_mp: 32,
-    battery_mah: 5000,
-  }),
-  makeSmartphoneProduct(8, {
-    name: 'Tecno Spark',
-    slug: 'tecno-spark',
-    brand: 'Tecno',
-    price: 220000,
-  }),
-  makeSmartphoneProduct(9, {
-    name: 'Infinix Zero',
-    slug: 'infinix-zero',
-    brand: 'Infinix',
-    price: 240000,
-    charging_watt: 45,
-  }),
-  makeSmartphoneProduct(10, {
-    name: 'Xiaomi Redmi',
-    slug: 'xiaomi-redmi',
-    brand: 'Xiaomi',
-    price: 260000,
-    battery_mah: 5100,
-  }),
-  makeSmartphoneProduct(11, {
-    name: 'Nokia G',
-    slug: 'nokia-g',
-    brand: 'Nokia',
-    price: 280000,
-    main_camera_mp: 50,
-  }),
-  makeSmartphoneProduct(12, {
-    name: 'Itel Vision',
-    slug: 'itel-vision',
-    brand: 'Itel',
-    price: 180000,
-    battery_mah: 5000,
-  }),
-  makeSmartphoneProduct(13, {
-    name: 'Oppo Reno',
-    slug: 'oppo-reno',
-    brand: 'Oppo',
-    price: 620000,
-    main_camera_mp: 50,
-    charging_watt: 65,
-    ram_gb: 12,
-    storage_gb: 256,
-  }),
-  makeSmartphoneProduct(14, {
-    name: 'Vivo V',
-    slug: 'vivo-v',
-    brand: 'Vivo',
-    price: 710000,
-    main_camera_mp: 64,
-    battery_mah: 5000,
-    charging_watt: 66,
-  }),
-  makeSmartphoneProduct(15, {
-    name: 'Pixel Prime',
-    slug: 'pixel-prime',
-    brand: 'Google',
-    price: 890000,
-    main_camera_mp: 50,
-    battery_mah: 5000,
-    ram_gb: 12,
-    storage_gb: 256,
-  }),
-  makeSmartphoneProduct(16, {
-    name: 'Motorola Edge',
-    slug: 'motorola-edge',
-    brand: 'Motorola',
-    price: 530000,
-    charging_watt: 68,
-  }),
-  makeSmartphoneProduct(17, {
-    name: 'Honor Magic',
-    slug: 'honor-magic',
-    brand: 'Honor',
-    price: 580000,
-    main_camera_mp: 54,
-    battery_mah: 5100,
-    charging_watt: 66,
-  }),
-  makeSmartphoneProduct(18, {
-    name: 'Huawei Nova',
-    slug: 'huawei-nova',
-    brand: 'Huawei',
-    price: 640000,
-    main_camera_mp: 50,
-    battery_mah: 5000,
-    charging_watt: 66,
-  }),
-  makeSmartphoneProduct(19, {
-    name: 'Realme GT',
-    slug: 'realme-gt',
-    brand: 'Realme',
-    price: 520000,
-    battery_mah: 5000,
-    charging_watt: 80,
-  }),
-  makeSmartphoneProduct(20, {
-    name: 'OnePlus Ace',
-    slug: 'oneplus-ace',
-    brand: 'OnePlus',
-    price: 760000,
-    main_camera_mp: 50,
-    battery_mah: 5100,
-    charging_watt: 100,
-  }),
-  makeSmartphoneProduct(21, {
-    name: 'Nothing Phone',
-    slug: 'nothing-phone',
-    brand: 'Nothing',
-    price: 690000,
-    main_camera_mp: 50,
-    battery_mah: 4700,
-    charging_watt: 45,
-  }),
-];
-
-const headphoneProducts = [
-  {
-    ...makeSmartphoneProduct(31, {
-      name: 'Sony Headphone',
-      slug: 'sony-headphone',
-      brand: 'Sony',
-      price: 45000,
-    }),
-    category: 'Headphones',
-    category_slug: 'headphones',
-  },
-  {
-    ...makeSmartphoneProduct(32, {
-      name: 'Anker Headphone',
-      slug: 'anker-headphone',
-      brand: 'Anker',
-      price: 55000,
-    }),
-    category: 'Headphones',
-    category_slug: 'headphones',
-  },
-  {
-    ...makeSmartphoneProduct(33, {
-      name: 'JBL Headphone',
-      slug: 'jbl-headphone',
-      brand: 'JBL',
-      price: 65000,
-    }),
-    category: 'Headphones',
-    category_slug: 'headphones',
-  },
-  {
-    ...makeSmartphoneProduct(34, {
-      name: 'Nokia Headphone',
-      slug: 'nokia-headphone',
-      brand: 'Nokia',
-      price: 75000,
-    }),
-    category: 'Headphones',
-    category_slug: 'headphones',
-  },
-];
-
-const categoryPageData = {
-  category: {
-    id: 'cat-1',
-    name: 'Smartphones',
-    slug: 'smartphones',
-    seo_heading: null,
-    seo_description: null,
-    seo_features: [],
-    seo_faq: [],
-    image_url: null,
-    parent: null,
-  },
-  products: smartphoneHubProducts,
-  isCollection: false,
-  fallbackName: 'Smartphones',
-  fallbackDescription: 'Shop smartphones',
-  seo: null,
-  name: null,
-};
+import { headphoneProducts, smartphoneHubProducts } from './page.test-fixtures';
+import {
+  categoryPageData,
+  categoryPageSpy,
+  defaultCategoryPageImplementation,
+  merchant,
+  mockBuildRequestScopedStoreUrl,
+  mockBuildStoreUrl,
+  mockCategoryPageContent,
+  mockCategoryPageDeferredCompareLinks,
+  mockConnection,
+  mockGenerateBreadcrumbSchema,
+  mockGenerateCollectionPageSchema,
+  mockGenerateFAQSchema,
+  mockGetCachedProductSemanticInventory,
+  mockGetPublishedClusterPosts,
+  mockHeaders,
+  NORMALIZED_PLACEHOLDER_IMAGE,
+  notFound,
+} from './page.test-support';
 
 const { default: CategoryPageRoute, generateMetadata } = await import('./page');
 const actualCategoryPageContentModule = await vi.importActual<
@@ -639,10 +149,10 @@ describe('category page route', () => {
     ).toBeInTheDocument();
     expect(screen.queryByText('Route loader fallback')).not.toBeInTheDocument();
     expect(screen.queryByText('Category page content')).not.toBeInTheDocument();
-    expect(mockConnection).toHaveBeenCalledOnce();
+    expect(mockConnection).not.toHaveBeenCalled();
   });
 
-  it('keeps category listings request-bound behind a static-shell fallback', async () => {
+  it('renders category listings without calling connection()', () => {
     const ui = CategoryPageRoute({
       params: Promise.resolve({
         slug: 'test-store',
@@ -653,10 +163,8 @@ describe('category page route', () => {
 
     render(ui);
 
-    expect(
-      screen.getByRole('status', { name: 'Loading product listing' })
-    ).toBeInTheDocument();
-    await waitFor(() => expect(mockConnection).toHaveBeenCalledOnce());
+    expect(screen.getByText('Category page content')).toBeInTheDocument();
+    expect(mockConnection).not.toHaveBeenCalled();
   });
 
   it('renders curated smartphone hub content when merchant-authored SEO is absent', async () => {
@@ -816,7 +324,7 @@ describe('category page route', () => {
   });
 
   it('renders non-priority category intro, features, and faq without hub cards', async () => {
-    vi.mocked(getCachedCategoryPageData).mockResolvedValueOnce({
+    vi.mocked(getCachedCategoryPageData).mockResolvedValue({
       ...categoryPageData,
       category: {
         ...categoryPageData.category,
@@ -868,14 +376,7 @@ describe('category page route', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('uses the request-scoped storefront host for category hub links', async () => {
-    mockHeaders.mockResolvedValue(
-      new Headers([['host', 'preview-ogabassey.vercel.app']])
-    );
-    mockBuildRequestScopedStoreUrl.mockReturnValue(
-      'https://preview-ogabassey.vercel.app'
-    );
-
+  it('uses the canonical storefront host for category hub links without reading headers', async () => {
     const ui = await actualCategoryPageContentModule.CategoryPageContent({
       params: Promise.resolve({ slug: 'test-store', category: 'smartphones' }),
       searchParams: Promise.resolve({ page: '1' }),
@@ -886,19 +387,19 @@ describe('category page route', () => {
     const hubContent = getLastHubContent();
 
     expect(hubContent?.bestForCards[0]?.href).toContain(
-      'https://preview-ogabassey.vercel.app/'
+      'https://test-store.usebaci.com/'
     );
     expect(hubContent?.brandCards[0]?.href).toContain(
-      'https://preview-ogabassey.vercel.app/'
+      'https://test-store.usebaci.com/'
     );
     expect(hubContent?.priceBandCards[0]?.href).toContain(
-      'https://preview-ogabassey.vercel.app/'
+      'https://test-store.usebaci.com/'
     );
     expect(hubContent?.comparisonLinks[0]?.href).toContain(
-      'https://preview-ogabassey.vercel.app/'
+      'https://test-store.usebaci.com/'
     );
     expect(hubContent?.guideLinks[0]?.href).toContain(
-      'https://preview-ogabassey.vercel.app/'
+      'https://test-store.usebaci.com/'
     );
   });
 

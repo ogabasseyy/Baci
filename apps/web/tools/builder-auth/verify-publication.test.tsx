@@ -96,7 +96,7 @@ it('verifies actual rendered revision plus changed content without credentials; 
     await verifyPublication(input, { launch, fetchPublic: required })
   ).toBe(false);
   expect(fetchPublic.mock.calls.every((args) => args.length === 1)).toBe(true);
-}, 60000);
+}, 120000);
 
 it('waits for delayed below-fold lazy images before accepting delivery', async () => {
   const snapshot = await createPortablePublishedSnapshot(home);

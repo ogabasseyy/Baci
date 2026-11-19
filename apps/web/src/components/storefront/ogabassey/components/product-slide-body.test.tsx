@@ -26,9 +26,10 @@ describe('ProductSlideBody', () => {
   it('renders the name, price, CTA and a lazy, descriptive image', () => {
     render(<ProductSlideBody slide={PRODUCT} />);
 
+    expect(screen.getByText('Galaxy A27 5G')).toBeInTheDocument();
     expect(
-      screen.getByRole('heading', { name: 'Galaxy A27 5G' })
-    ).toBeInTheDocument();
+      screen.queryByRole('heading', { name: 'Galaxy A27 5G' })
+    ).not.toBeInTheDocument();
     expect(screen.getByText('₦50,000')).toBeInTheDocument();
     expect(screen.getByText('Pre-order now')).toBeInTheDocument();
 

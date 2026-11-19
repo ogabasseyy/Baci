@@ -34,7 +34,12 @@ const serviceClient = () =>
 
 const event: DomainEventV1 = {
   data: {
-    delivery_user_data: { fbc: 'fb.1.1.click', ip: '203.0.113.1' },
+    delivery_user_data: {
+      analytics_consent: true,
+      marketing_consent: true,
+      fbc: 'fb.1.1.click',
+      ip: '203.0.113.1',
+    },
     event_data: {
       product_id: 'sku-1',
       product_price: 100,
@@ -101,7 +106,11 @@ describe('deliverAnalyticsEvent', () => {
         event_id: 'event-1',
         occurred_at: '2026-07-12T12:00:00.000Z',
         targets: ['facebook'],
-        user_data: { fbc: 'fb.1.1.click', ip: '203.0.113.1' },
+        user_data: expect.objectContaining({
+          analytics_consent: true,
+          fbc: 'fb.1.1.click',
+          ip: '203.0.113.1',
+        }),
       }),
       { signal: controller.signal }
     );
@@ -188,7 +197,7 @@ describe('deliverAnalyticsEvent', () => {
         merchant_id: event.merchant_id,
         occurred_at: event.occurred_at,
         source: 'server',
-        user_data: {},
+        user_data: { analytics_consent: true },
       },
       gaClientId: '123.456',
       orderNumber: 'ORDER-1',
@@ -210,4 +219,58 @@ describe('deliverAnalyticsEvent', () => {
       Date.parse(event.occurred_at) * 1_000
     );
   });
+});
+
+it.each([
+  'tiktok',
+  'snapchat',
+] as const)('skips %s paid conversion without stored marketing consent', async (destination) => {
+  mocks.fetchConfig.mockResolvedValue({
+    offline_conversions_enabled: true,
+    tiktok_pixel_id: 'pixel',
+    tiktok_access_token: 'token',
+    snapchat_pixel_id: 'pixel',
+    snapchat_capi_token: 'token',
+  });
+  mocks.loadPaidOrderDeliveryEvent.mockResolvedValue({
+    conversion: { user_data: { marketing_consent: false } },
+    orderNumber: 'order',
+  });
+  const result = await deliverAnalyticsEvent(
+    serviceClient(),
+    { ...event, event_name: 'analytics.purchase.completed.v1' },
+    destination
+  );
+  expect(result).toMatchObject({
+    success: true,
+    terminalOutcome: 'skipped',
+    providerResponseId: 'consent_required',
+  });
+  expect(mocks.sendConfiguredAdPlatforms).not.toHaveBeenCalled();
+});
+
+it.each([
+  'facebook',
+  'ga4',
+] as const)('does not read credentials for %s paid orders without analytics consent', async (destination) => {
+  for (const analytics_consent of [undefined, false]) {
+    vi.clearAllMocks();
+    mocks.loadPaidOrderDeliveryEvent.mockResolvedValue({
+      conversion: { user_data: { analytics_consent } },
+      orderNumber: 'order',
+    });
+    expect(
+      await deliverAnalyticsEvent(
+        serviceClient(),
+        { ...event, event_name: 'analytics.purchase.completed.v1' },
+        destination
+      )
+    ).toMatchObject({
+      terminalOutcome: 'skipped',
+      providerResponseId: 'consent_required',
+    });
+    expect(mocks.fetchConfig).not.toHaveBeenCalled();
+    expect(mocks.sendConfiguredAdPlatforms).not.toHaveBeenCalled();
+    expect(mocks.sendGA4Event).not.toHaveBeenCalled();
+  }
 });

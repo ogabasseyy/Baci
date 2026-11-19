@@ -40,6 +40,32 @@ if bash "$script" unknown >"$fixture_root/unknown-log" 2>&1; then
 fi
 grep -q 'Unknown Android storefront release operation' "$fixture_root/unknown-log"
 
+# GitHub's Hermes tarball can use either owner prefix. React Native 0.86's
+# extraction rule only recognizes the older prefix until the release fix runs.
+hermes_workspace="$fixture_root/hermes-workspace"
+hermes_gradle="$hermes_workspace/node_modules/react-native/ReactAndroid/hermes-engine/build.gradle.kts"
+mkdir -p "$(dirname "$hermes_gradle")"
+cat > "$hermes_gradle" <<'GRADLE'
+if (this.path.startsWith("facebook-hermes-")) {
+  this.path = this.path.substringAfter("/")
+}
+GRADLE
+ln "$hermes_gradle" "$fixture_root/original-hermes-gradle"
+GITHUB_WORKSPACE="$hermes_workspace" bash "$script" fix-hermes
+grep -Fq 'this.path.startsWith("facebook-hermes-") || this.path.startsWith("meta-hermes-")' "$hermes_gradle"
+if grep -Fq 'meta-hermes-' "$fixture_root/original-hermes-gradle"; then
+  echo 'Expected shared dependency-store files to remain unchanged' >&2
+  exit 1
+fi
+# Repeated setup is safe, while an unknown upstream rule fails closed.
+GITHUB_WORKSPACE="$hermes_workspace" bash "$script" fix-hermes
+printf '%s\n' 'unknown Hermes extraction rule' > "$hermes_gradle"
+if GITHUB_WORKSPACE="$hermes_workspace" bash "$script" fix-hermes >"$fixture_root/hermes-log" 2>&1; then
+  echo 'Expected an unknown Hermes extraction rule to fail' >&2
+  exit 1
+fi
+grep -Fq 'unknown Hermes extraction rule' "$hermes_gradle"
+
 sdk_root="$fixture_root/sdk"
 mkdir -p "$sdk_root/cmdline-tools/20.0/bin"
 touch "$sdk_root/cmdline-tools/20.0/bin/sdkmanager"
@@ -90,4 +116,100 @@ ANDROID_HOME="$valid_root" bash "$script" link-cmdline-tools-latest
 [ ! -L "$valid_root/cmdline-tools/latest" ]
 [ -x "$valid_root/cmdline-tools/latest/bin/sdkmanager" ]
 
+
+# Release builds must not share the default ~/.gradle cleanup target.
+runner_temp="$fixture_root/private-runner/_temp"
+mkdir -p "$runner_temp"
+private_env="$fixture_root/private-gradle-env"
+RUNNER_TEMP="$runner_temp" GITHUB_ENV="$private_env" \
+  bash "$script" configure-gradle-home
+grep -Fxq "GRADLE_USER_HOME=$fixture_root/private-runner/gradle-user-home" "$private_env"
+[ -d "$fixture_root/private-runner/gradle-user-home" ]
+
+# Repeated setup repairs existing permissions without deleting warm outputs.
+touch "$fixture_root/private-runner/gradle-user-home/retained"
+chmod 755 "$fixture_root/private-runner/gradle-user-home"
+RUNNER_TEMP="$runner_temp" GITHUB_ENV="$private_env" \
+  bash "$script" configure-gradle-home
+[ -f "$fixture_root/private-runner/gradle-user-home/retained" ]
+[ "$(LC_ALL=C ls -ld "$fixture_root/private-runner/gradle-user-home" | cut -c 1-10)" = "drwx------" ]
+
+if RUNNER_TEMP=relative/_temp GITHUB_ENV="$fixture_root/invalid-gradle-env" \
+  bash "$script" configure-gradle-home >"$fixture_root/invalid-gradle-log" 2>&1; then
+  echo 'Expected a relative runner temp directory to fail' >&2
+  exit 1
+fi
+[ ! -e "$fixture_root/invalid-gradle-env" ]
+
+# Compile native prerequisites separately; packaging retains the release target.
+mkdir -p "$fixture_root/gradle"
+cat > "$fixture_root/gradle/gradlew" <<'GRADLE'
+#!/usr/bin/env bash
+printf '%s\n' "$@" > "$GRADLE_CAPTURE"
+exit "${GRADLE_EXIT_CODE:-0}"
+GRADLE
+chmod +x "$fixture_root/gradle/gradlew"
+mkdir -p "$fixture_root/gradle/app/build/outputs/bundle/release"
+python3 - "$fixture_root/gradle/app/build/outputs/bundle/release/app-release.aab" <<'PYTHON'
+import struct, sys, zipfile
+with zipfile.ZipFile(sys.argv[1], 'w') as archive:
+    for abi, machine, elf_class in [('armeabi-v7a', 40, 1), ('arm64-v8a', 183, 2), ('x86', 3, 1), ('x86_64', 62, 2)]:
+        for library in ('libreactnative.so', 'libc++_shared.so', 'libhermesvm.so', 'libhermestooling.so', 'libsplashmotion.so'):
+            header_size = 64 if elf_class == 2 else 52
+            header_size_offset = 52 if elf_class == 2 else 40
+            program_header_offset_offset, program_header_count_offset, program_header_size_offset = (32, 56, 54) if elf_class == 2 else (28, 44, 42)
+            program_header_size = 56 if elf_class == 2 else 32
+            program_header_offset = header_size
+            dynamic_offset = program_header_offset + program_header_size * 2
+            dynamic_size = 16 if elf_class == 2 else 8
+            file_size = dynamic_offset + dynamic_size
+            header = bytearray(header_size)
+            header[:7] = b'\x7fELF' + bytes((elf_class, 1, 1))
+            header[16:18] = (3).to_bytes(2, 'little')
+            header[20:24] = (1).to_bytes(4, 'little')
+            header[header_size_offset:header_size_offset + 2] = header_size.to_bytes(2, 'little')
+            header[18:20] = machine.to_bytes(2, 'little')
+            header[program_header_offset_offset:program_header_offset_offset + (8 if elf_class == 2 else 4)] = program_header_offset.to_bytes(8 if elf_class == 2 else 4, 'little')
+            header[program_header_size_offset:program_header_size_offset + 2] = program_header_size.to_bytes(2, 'little')
+            header[program_header_count_offset:program_header_count_offset + 2] = (2).to_bytes(2, 'little')
+            if elf_class == 2:
+                load = struct.pack('<IIQQQQQQ', 1, 5, 0, 0, 0, file_size, file_size, 4096)
+                dynamic = struct.pack('<IIQQQQQQ', 2, 6, dynamic_offset, 0, 0, dynamic_size, dynamic_size, 8)
+            else:
+                load = struct.pack('<IIIIIIII', 1, 0, 0, 0, file_size, file_size, 5, 4096)
+                dynamic = struct.pack('<IIIIIIII', 2, dynamic_offset, 0, 0, dynamic_size, dynamic_size, 6, 4)
+            archive.writestr(f'base/lib/{abi}/{library}', header + load + dynamic + bytes(dynamic_size))
+PYTHON
+(
+  cd "$fixture_root/gradle"
+  GRADLE_CAPTURE="$fixture_root/native-args" bash "$script" build-native
+  GRADLE_CAPTURE="$fixture_root/bundle-args" bash "$script" build
+)
+rm "$fixture_root/gradle/app/build/outputs/bundle/release/app-release.aab"
+if (
+  cd "$fixture_root/gradle"
+  GRADLE_CAPTURE="$fixture_root/missing-bundle-args" GITHUB_WORKSPACE="$(dirname "$script_dir")/.." bash "$script" build
+) >"$fixture_root/missing-bundle-log" 2>&1; then
+  echo 'Expected missing bundle to block release' >&2
+  exit 1
+fi
+grep -q 'Expected the release bundle at app/build/outputs/bundle/release/app-release.aab' "$fixture_root/missing-bundle-log"
+grep -qx ':react-native:packages:react-native:ReactAndroid:assembleRelease' "$fixture_root/native-args"
+grep -qx ':react-native:packages:react-native:ReactAndroid:hermes-engine:assembleRelease' "$fixture_root/native-args"
+if grep -q 'app:bundleRelease' "$fixture_root/native-args"; then exit 1; fi
+grep -qx 'app:bundleRelease' "$fixture_root/bundle-args"
+for args in "$fixture_root/native-args" "$fixture_root/bundle-args"; do
+  grep -qx -- '--build-cache' "$args"
+  grep -qx -- '--max-workers=2' "$args"
+done
+
+if (
+  cd "$fixture_root/gradle"
+  GRADLE_CAPTURE="$fixture_root/failed-native-args" GRADLE_EXIT_CODE=42 bash "$script" build-native
+); then
+  echo 'Expected native compilation failure to stop the release' >&2
+  exit 1
+else
+  test "$?" -eq 42
+fi
 echo 'Android storefront release script checks passed'

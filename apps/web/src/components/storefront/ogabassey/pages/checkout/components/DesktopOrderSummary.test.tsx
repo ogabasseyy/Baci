@@ -14,7 +14,9 @@ function displayAtViewport(classes: string, width: number): string | undefined {
   const classSet = new Set(classes.split(/\s+/));
   let display: string | undefined;
   compiled.walkRules((rule: Rule) => {
-    const selectors = rule.selector.split(',').map((selector) => selector.trim());
+    const selectors = rule.selector
+      .split(',')
+      .map((selector) => selector.trim());
     const matches = [...classSet].some((name) =>
       selectors.includes(`.${name.replace(/:/g, '\\:')}`)
     );
@@ -23,7 +25,10 @@ function displayAtViewport(classes: string, width: number): string | undefined {
     rule.walkDecls('display', (declaration) => {
       let ancestor = declaration.parent;
       while (ancestor && ancestor.type !== 'root') {
-        if (ancestor.type === 'atrule' && (ancestor as AtRule).name === 'media') {
+        if (
+          ancestor.type === 'atrule' &&
+          (ancestor as AtRule).name === 'media'
+        ) {
           const media = (ancestor as AtRule).params;
           const minimum = media.match(/width\s*>=\s*(\d+)rem/);
           const maximum = media.match(/width\s*<\s*(\d+)rem/);
@@ -75,17 +80,19 @@ describe('desktop checkout summary visibility', () => {
       remainingAmount: 114,
       checkoutPayWithWallet: false,
       redvaultSummary: null,
+      redvaultOrderReady: false,
       newsletterOptIn: false,
       setNewsletterOptIn: vi.fn(),
       handlePlaceOrder: vi.fn(),
       isProcessing: false,
       isPayForMeValid: true,
+      isDeliveryValid: true,
     };
-    const html = renderToStaticMarkup(
-      <DesktopOrderSummary {...props} />
-    );
+    const html = renderToStaticMarkup(<DesktopOrderSummary {...props} />);
     const summaryClasses = html.match(/<div class="([^"]*lg:block[^"]*)"/);
-    const actionClasses = html.match(/<button[^>]*class="([^"]*)"[^>]*>Place Order/);
+    const actionClasses = html.match(
+      /<button[^>]*class="([^"]*)"[^>]*>Place Order/
+    );
 
     expect(summaryClasses).not.toBeNull();
     expect(actionClasses).not.toBeNull();
@@ -97,20 +104,48 @@ describe('desktop checkout summary visibility', () => {
     expect(html).toMatch(/<span>Tax<\/span><span>₦7<\/span>/);
     expect(html).toMatch(/<span>Discount<\/span><span>-₦5<\/span>/);
     expect(html).toMatch(/<span>Total<\/span><span>₦114<\/span>/);
+    const invalidDeliveryHtml = renderToStaticMarkup(
+      <DesktopOrderSummary {...props} isDeliveryValid={false} />
+    );
+    expect(invalidDeliveryHtml).toMatch(
+      /<button[^>]*disabled=""[^>]*>Place Order/
+    );
 
     const resumedHtml = renderToStaticMarkup(
       <DesktopOrderSummary
         {...props}
-        displayItems={[{ kind: 'resumed', id: 'line-1', product_id: 'phone', product_name: 'iPhone 17 Pro Max', quantity: 1, price: 2343000, condition: 'new', variant_name: '512GB / Physical + eSIM / Silver' }]}
+        displayItems={[
+          {
+            kind: 'resumed',
+            id: 'line-1',
+            product_id: 'phone',
+            product_name: 'iPhone 17 Pro Max',
+            quantity: 1,
+            price: 2343000,
+            condition: 'new',
+            variant_name: '512GB / Physical + eSIM / Silver',
+          },
+        ]}
         walletRedemptionAllowed={false}
         walletBalance={2500}
       />
     );
-    expect(resumedHtml).toMatch(/aria-label="Selected variant" class="[^"]*text-gray-500/);
+    expect(resumedHtml).toMatch(
+      /aria-label="Selected variant" class="[^"]*text-gray-500/
+    );
     expect(resumedHtml).toContain('Condition:');
     expect(resumedHtml).toContain('New');
     expect(resumedHtml).toContain('512GB / Physical + eSIM / Silver');
     expect(resumedHtml).not.toContain('Wallet Credit');
     expect(resumedHtml).toContain('₦114');
+
+    const preparedHtml = renderToStaticMarkup(
+      <DesktopOrderSummary
+        {...props}
+        paymentMethod="uba_redvault"
+        redvaultOrderReady
+      />
+    );
+    expect(preparedHtml).toContain('Review and continue to UBA');
   });
 });

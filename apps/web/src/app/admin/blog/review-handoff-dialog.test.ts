@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { describe, expect, it } from 'vitest';
 import { validateImportedContent } from './review-handoff-content';
 import { hasClosedDialog } from './review-handoff-dialog';

@@ -50,6 +50,26 @@ export async function fetchGoogleAutocomplete(
       { retryTimeouts: false }
     );
     if (!result.ok) {
+      if (result.failure === 'budget_limit_reached') {
+        console.warn('[Address API] Google autocomplete budget limit reached');
+        return {
+          status: 429,
+          body: {
+            error: 'Address suggestions are temporarily limited',
+            code: 'PLACES_AUTOCOMPLETE_BUDGET_LIMIT_REACHED',
+          },
+        };
+      }
+      if (result.failure === 'budget_unavailable') {
+        console.warn('[Address API] Google autocomplete budget unavailable');
+        return {
+          status: 503,
+          body: {
+            error: 'Address suggestions are temporarily unavailable',
+            code: 'PLACES_AUTOCOMPLETE_BUDGET_UNAVAILABLE',
+          },
+        };
+      }
       console.error('[Places API] Autocomplete HTTP error:', result.status);
       return {
         status: result.status === 429 ? 429 : 502,

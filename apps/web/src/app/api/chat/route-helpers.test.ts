@@ -6,12 +6,20 @@ import {
   createClientClosedRequestResponse,
   createRouteDeadline,
   createStaticChatFallbackResponse,
+  generateChatSessionId,
   getSafeChatBackendErrorMessage,
   isChatAbortError,
   withTimeout,
 } from '@/app/api/chat/route-helpers';
 
 describe('chat route helpers', () => {
+  it('uses a stable, IP-specific fallback session id', () => {
+    const sessionId = generateChatSessionId('192.0.2.1');
+    expect(sessionId).toMatch(/^[a-f0-9]{16}$/);
+    expect(generateChatSessionId('192.0.2.1')).toBe(sessionId);
+    expect(generateChatSessionId('192.0.2.2')).not.toBe(sessionId);
+  });
+
   it('builds backend messages without forwarding user-supplied system messages', () => {
     const messages = buildChatMessages(
       [
@@ -43,6 +51,10 @@ describe('chat route helpers', () => {
     expect(systemMessage.content).toContain('live inventory');
     expect(systemMessage.content).toContain('payment status');
     expect(systemMessage.content).toContain('order cancellation');
+    expect(systemMessage.content).toContain(
+      'Virtual account creation is not available in this chat yet'
+    );
+    expect(systemMessage.content).not.toContain('payment account requests');
     expect(systemMessage.content).not.toMatch(
       /cart|add to cart|remove from cart|update cart/i
     );

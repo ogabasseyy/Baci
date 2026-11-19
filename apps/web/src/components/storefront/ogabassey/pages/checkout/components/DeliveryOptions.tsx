@@ -1,5 +1,6 @@
 import { Building2 } from 'lucide-react';
 import type { ComponentProps } from 'react';
+import { PICKUP_CONFIG } from '../../../config/checkout/pickup-locations';
 import { AirportDeliveryOptions } from './AirportDeliveryOptions';
 import { DeliveryMethodTabs } from './DeliveryMethodTabs';
 import { DoorDeliveryQuoteOptions } from './DoorDeliveryQuoteOptions';
@@ -32,14 +33,27 @@ export function DeliveryOptions({
           </div>
           <div>
             <h4 className="font-bold text-gray-900 text-sm">
-              Main Office Pickup
+              {PICKUP_CONFIG.mainOffice.name}
             </h4>
             <p className="text-sm text-gray-600 mt-1">
-              Available for pickup at our Ikeja Store. Usually ready within 2
-              hours.
+              Available for pickup at our {PICKUP_CONFIG.mainOffice.location}.
+              Usually ready within {PICKUP_CONFIG.mainOffice.readinessTime}.
             </p>
+            <p className="mt-2 text-sm font-medium text-gray-700">
+              {PICKUP_CONFIG.mainOffice.address}
+            </p>
+            <button
+              type="button"
+              onClick={door.onRefreshRates}
+              disabled={door.isLoadingQuotes}
+              className="mt-2 text-sm font-medium text-store-primary underline disabled:opacity-50"
+            >
+              {door.isLoadingQuotes
+                ? 'Checking pickup availability…'
+                : 'Refresh pickup availability'}
+            </button>
             <div className="mt-2 text-xs font-mono bg-white inline-block px-2 py-1 rounded border border-gray-200 text-gray-500">
-              Pickup closes at 6 PM
+              Pickup closes at {PICKUP_CONFIG.mainOffice.closingTime}
             </div>
           </div>
         </div>

@@ -7,14 +7,14 @@ const {
   mockCheckCsrf,
   mockPrepare,
   mockFulfill,
-  mockResolveVtuCustomer,
   mockGetCurrentSlugForAliasStrict,
+  mockWalletPayStep,
 } = vi.hoisted(() => ({
+  mockWalletPayStep: vi.fn(),
   mockAuthenticate: vi.fn(),
   mockCheckCsrf: vi.fn(),
   mockPrepare: vi.fn(),
   mockFulfill: vi.fn(),
-  mockResolveVtuCustomer: vi.fn(),
   mockGetCurrentSlugForAliasStrict: vi.fn(),
 }));
 
@@ -36,15 +36,33 @@ vi.mock('@/lib/vtu-pending-transaction', () => ({
   VTU_TYPE_LABELS: { airtime: 'Airtime' },
 }));
 
-// resolveRequestingOwnership resolves via vtu-customer-resolution
-// directly (not the pending-transaction re-export), so the replay
-// path never imports the preparation module's provider graph.
-vi.mock('@/lib/vtu-customer-resolution', () => ({
-  resolveVtuCustomer: mockResolveVtuCustomer,
-}));
-
 vi.mock('@/lib/vtu-fulfillment', () => ({
   fulfillPendingVtuTransaction: mockFulfill,
+}));
+
+const walletPayOff = vi.hoisted(() => ({ on: false }));
+// The fulfil each wallet-pay fulfiller was built with (route wiring check).
+const walletPayFulfils = vi.hoisted((): unknown[] => []);
+// Pay from the PiggyVest wallet (dark): store credit gets no fulfiller, so
+// every existing path below is unchanged; PiggyVest requests reach the step.
+vi.mock('@/lib/vtu-wallet-pay/vtu-wallet-pay-fulfiller', () => ({
+  // Wallet pay switched on for these route tests (its own tests cover off).
+  refuseUnavailableWalletPayStart: () =>
+    walletPayOff.on
+      ? new Response(JSON.stringify({ code: 'PIGGYVEST_PAY_UNAVAILABLE' }), {
+          status: 503,
+        })
+      : null,
+  createVtuWalletPayFulfiller: (input: {
+    charge: { paymentMethod?: string };
+    fulfil?: unknown;
+  }) => {
+    walletPayFulfils.push(input.fulfil);
+    return input.charge.paymentMethod === 'piggyvest_wallet'
+      ? (merchantId: string, customerId: string) => (transactionId: string) =>
+          mockWalletPayStep({ merchantId, customerId, transactionId })
+      : null;
+  },
 }));
 
 interface MockSupabase {
@@ -73,20 +91,6 @@ async function callRoute(
   return { status: response.status, body, headers: response.headers };
 }
 
-/** Delete-chain starters issued against vtu_transactions (orphan-cleanup observation). */
-function vtuTransactionDeletes(): ReturnType<typeof vi.fn>[] {
-  const fromMock = supabaseMockRef.current?.from;
-  return (fromMock?.mock.results ?? [])
-    .map(
-      (result) =>
-        (result.value as { delete?: ReturnType<typeof vi.fn> } | undefined)
-          ?.delete
-    )
-    .filter(
-      (del): del is ReturnType<typeof vi.fn> => typeof del === 'function'
-    );
-}
-
 interface ClaimMapping {
   key: string;
   vtu_transaction_id: string;
@@ -105,6 +109,8 @@ interface ClaimResult {
 }
 
 interface IdempotencyRowState {
+  /** The replayed row was prepared as PiggyVest-paid (owner-scoped read). */
+  piggyvestPaid?: boolean;
   row: {
     key: string;
     vtu_transaction_id: string;
@@ -114,6 +120,17 @@ interface IdempotencyRowState {
   } | null;
   insertCalls: number;
   rpcCalls?: Array<{ fn: string; args: Record<string, unknown> }>;
+  /**
+   * Forced lookup verdict (default: owned when row is set, fresh
+   * when null). 'foreign' drives the cross-customer 400.
+   */
+  lookupVerdict?: 'foreign';
+  /** find_vtu_customer_for_checkout result override (default: option). */
+  findCustomerId?: string | null;
+  findError?: { message: string } | null;
+  /** fail_orphan_vtu_transaction verdict override (default: deleted). */
+  failVerdict?: string;
+  failError?: { message: string } | null;
   /** claim_vtu_intent calls (the RPC replaced the direct insert). */
   claimCalls?: number;
   /** Per-test claim override; default below mirrors RPC semantics. */
@@ -294,20 +311,9 @@ function buildSupabase(
   return {
     from: vi.fn((table: string) => {
       if (table === 'vtu_idempotency_keys') {
-        return {
-          select: vi.fn(() => ({
-            eq: vi.fn(() => ({
-              maybeSingle: vi
-                .fn()
-                .mockResolvedValue({ data: state.row, error: null }),
-            })),
-          })),
-          insert: vi.fn((row: typeof state.row) => {
-            state.insertCalls += 1;
-            state.row = row;
-            return Promise.resolve({ data: null, error: null });
-          }),
-        };
+        // Dead by design (Phase 2): the lookup is a verdict RPC.
+        // Any direct table touch throws loudly instead of passing.
+        throw new Error('direct vtu_idempotency_keys reads are removed');
       }
       if (table === 'merchants') {
         return {
@@ -345,58 +351,19 @@ function buildSupabase(
         };
       }
       if (table === 'vtu_transactions') {
+        // Dead by design (Codex P1): no buyer policy exists — the
+        // replay binding is an RPC, orphan cleanup is an RPC
+        // verdict. Any direct table touch throws loudly instead of
+        // passing.
+        const gone = () => {
+          throw new Error('direct vtu_transactions access is removed');
+        };
         return {
-          delete: vi.fn(() => ({
-            eq: vi.fn(() => ({
-              eq: vi.fn(() => ({
-                eq: vi.fn(() => ({
-                  select: vi.fn(() => ({
-                    maybeSingle: vi.fn().mockResolvedValue({
-                      data: { id: 'vtu-tx-new' },
-                      error: null,
-                    }),
-                  })),
-                })),
-              })),
-            })),
-          })),
-          update: vi.fn(() => ({
-            eq: vi.fn(() => ({
-              eq: vi.fn(() => ({
-                select: vi.fn(() => ({
-                  maybeSingle: vi.fn().mockResolvedValue({
-                    data: { id: 'vtu-tx-new' },
-                    error: null,
-                  }),
-                })),
-              })),
-            })),
-          })),
-          select: vi.fn(() => ({
-            eq: vi.fn(() => ({
-              maybeSingle: vi.fn().mockImplementation(() => {
-                // Lazily derived: the fresh path inserts the key row
-                // after this mock is built.
-                const binding =
-                  options?.transactionBinding !== undefined
-                    ? options.transactionBinding
-                    : state.row
-                      ? {
-                          id: state.row.vtu_transaction_id,
-                          customer_id: state.row.customer_id,
-                          merchant_id: state.row.merchant_id,
-                          status: 'processing',
-                        }
-                      : {
-                          id: 'vtu-tx-new',
-                          customer_id: 'customer-1',
-                          merchant_id: 'merchant-1',
-                          status: 'processing',
-                        };
-                return Promise.resolve({ data: binding, error: null });
-              }),
-            })),
-          })),
+          delete: gone,
+          update: gone,
+          select: () => {
+            throw new Error('direct vtu_transactions access is removed');
+          },
         };
       }
       return {
@@ -409,6 +376,11 @@ function buildSupabase(
     }),
     rpc: vi.fn((fn: string, args: Record<string, string>) => {
       state.rpcCalls?.push({ fn, args });
+      if (fn === 'get_vtu_wallet_pay_purchase')
+        return Promise.resolve({
+          data: state.piggyvestPaid ? [{ piggyvest_paid: true }] : [],
+          error: null,
+        });
       if (fn === 'vtu_admission_proof') {
         const stamp =
           state.admissionTimestamp === undefined
@@ -425,6 +397,90 @@ function buildSupabase(
                   },
                 ],
           error: state.admissionError ?? null,
+        });
+      }
+      if (fn === 'lookup_vtu_idempotency_row') {
+        // Verdict mirror of lookup_vtu_idempotency_row: fresh for
+        // unmapped keys, owned(+row) for the caller's, foreign with
+        // null fields for others (forced via state.lookupVerdict).
+        if (!state.row) {
+          return Promise.resolve({
+            data: [
+              {
+                verdict: 'fresh',
+                key: args.p_key,
+                vtu_transaction_id: null,
+                customer_id: null,
+                merchant_id: null,
+                request_fingerprint: null,
+              },
+            ],
+            error: null,
+          });
+        }
+        if (state.lookupVerdict === 'foreign') {
+          return Promise.resolve({
+            data: [
+              {
+                verdict: 'foreign',
+                key: args.p_key,
+                vtu_transaction_id: null,
+                customer_id: null,
+                merchant_id: null,
+                request_fingerprint: null,
+              },
+            ],
+            error: null,
+          });
+        }
+        return Promise.resolve({
+          data: [{ verdict: 'owned', ...state.row }],
+          error: null,
+        });
+      }
+      if (fn === 'get_vtu_replay_binding') {
+        // Lazily derived: the fresh path inserts the key row
+        // after this mock is built. Zero rows for missing.
+        const binding =
+          options?.transactionBinding !== undefined
+            ? options.transactionBinding
+            : state.row
+              ? {
+                  id: state.row.vtu_transaction_id,
+                  customer_id: state.row.customer_id,
+                  merchant_id: state.row.merchant_id,
+                  status: 'processing',
+                }
+              : {
+                  id: 'vtu-tx-new',
+                  customer_id: 'customer-1',
+                  merchant_id: 'merchant-1',
+                  status: 'processing',
+                };
+        return Promise.resolve({
+          data: binding === null ? [] : [binding],
+          error: null,
+        });
+      }
+      if (fn === 'find_vtu_customer_for_checkout') {
+        if (state.findError) {
+          return Promise.resolve({ data: null, error: state.findError });
+        }
+        return Promise.resolve({
+          data:
+            state.findCustomerId !== undefined
+              ? state.findCustomerId
+              : requestingCustomerId,
+          error: null,
+        });
+      }
+      if (fn === 'fail_orphan_vtu_transaction') {
+        if (state.failError) {
+          return Promise.resolve({ data: null, error: state.failError });
+        }
+        return Promise.resolve({
+          data: state.failVerdict ?? 'deleted',
+          error: null,
         });
       }
       if (fn !== 'claim_vtu_intent') {
@@ -492,10 +548,14 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
       row: null,
       insertCalls: 0,
     });
+    // Lazy user client: tests reassign userSupabaseMockRef like the
+    // admin factory reads supabaseMockRef at call time.
     mockAuthenticate.mockResolvedValue({
       user: { id: AUTH_USER_ID, email: 'c@example.com' },
       error: null,
-      supabase: userSupabaseMockRef.current,
+      get supabase() {
+        return userSupabaseMockRef.current;
+      },
     });
     mockCheckCsrf.mockResolvedValue({ valid: true });
     mockPrepare.mockResolvedValue({
@@ -517,10 +577,6 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
       },
       reference: 'VTU-REF-NEW',
       status: 'successful',
-    });
-    mockResolveVtuCustomer.mockResolvedValue({
-      id: 'customer-1',
-      email: 'c@example.com',
     });
     mockGetCurrentSlugForAliasStrict.mockReset();
     mockGetCurrentSlugForAliasStrict.mockResolvedValue(null);
@@ -605,7 +661,7 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     // alone the debit — otherwise the POST debits the new account
     // for the old payload.
     const state: IdempotencyRowState = { row: null, insertCalls: 0 };
-    supabaseMockRef.current = buildSupabase(state);
+    userSupabaseMockRef.current = buildSupabase(state);
 
     const { status, body } = await callRoute(
       makeRequest({
@@ -623,6 +679,12 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     });
     expect(state.insertCalls).toBe(0);
     expect(
+      (userSupabaseMockRef.current?.from as ReturnType<typeof vi.fn>).mock.calls
+    ).toHaveLength(0);
+    expect(
+      (userSupabaseMockRef.current?.rpc as ReturnType<typeof vi.fn>).mock.calls
+    ).toHaveLength(0);
+    expect(
       (supabaseMockRef.current?.from as ReturnType<typeof vi.fn>).mock.calls
     ).toHaveLength(0);
     expect(mockPrepare).not.toHaveBeenCalled();
@@ -638,7 +700,7 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     const { expectedUserId: _omitted, ...bodyWithoutBinding } = VALID_BODY;
     expect(_omitted).toBe(AUTH_USER_ID);
     const state: IdempotencyRowState = { row: null, insertCalls: 0 };
-    supabaseMockRef.current = buildSupabase(state);
+    userSupabaseMockRef.current = buildSupabase(state);
 
     const { status } = await callRoute(
       makeRequest({
@@ -673,7 +735,7 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
 
   it('happy path: prepares the row, fulfills, returns success — no transactions table write', async () => {
     const state: IdempotencyRowState = { row: null, insertCalls: 0 };
-    supabaseMockRef.current = buildSupabase(state);
+    userSupabaseMockRef.current = buildSupabase(state);
 
     const { status, body } = await callRoute(
       makeRequest({ idempotencyKey: VALID_KEY })
@@ -699,9 +761,91 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     expect(state.insertCalls).toBe(0);
     // No `from('transactions')` write.
     const fromCalls = (
-      supabaseMockRef.current?.from as ReturnType<typeof vi.fn>
+      userSupabaseMockRef.current?.from as ReturnType<typeof vi.fn>
     ).mock.calls;
     expect(fromCalls.some((c) => c[0] === 'transactions')).toBe(false);
+  });
+
+  it('PiggyVest wallet (dark): a fresh purchase issues the payment instead of fulfilling', async () => {
+    const state: IdempotencyRowState = { row: null, insertCalls: 0 };
+    userSupabaseMockRef.current = buildSupabase(state);
+    mockWalletPayStep.mockResolvedValue(
+      Response.json({ status: 'payment_required' }, { status: 202 })
+    );
+
+    const { status, body } = await callRoute(
+      makeRequest({
+        body: { ...VALID_BODY, paymentMethod: 'piggyvest_wallet' },
+        idempotencyKey: VALID_KEY,
+      })
+    );
+
+    expect(status).toBe(202);
+    expect(body).toEqual({ status: 'payment_required' });
+    expect(mockPrepare).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: expect.objectContaining({ paymentMethod: 'piggyvest_wallet' }),
+      })
+    );
+    expect(mockWalletPayStep).toHaveBeenCalledWith({
+      merchantId: 'merchant-1',
+      customerId: 'customer-1',
+      transactionId: 'vtu-tx-new',
+    });
+    expect(mockFulfill).not.toHaveBeenCalled();
+    // The route hands the step its own approved fulfil (the lib never
+    // imports the fulfillment itself): it vends through the route's
+    // fulfillPendingVtuTransaction for the claimed purchase.
+    const fulfil = walletPayFulfils.at(-1) as (
+      transactionId: string,
+      walletPayClaimed: boolean
+    ) => Promise<unknown>;
+    await fulfil('vtu-tx-new', true);
+    expect(mockFulfill).toHaveBeenCalledWith(
+      expect.objectContaining({
+        transactionId: 'vtu-tx-new',
+        walletPayClaimed: true,
+      })
+    );
+  });
+
+  it('PiggyVest wallet (dark): a replay pays or re-checks instead of fulfilling', async () => {
+    const state: IdempotencyRowState = {
+      row: {
+        key: VALID_KEY,
+        vtu_transaction_id: 'vtu-tx-existing',
+        customer_id: 'customer-1',
+        merchant_id: 'merchant-1',
+        request_fingerprint: VALID_BODY_FINGERPRINT,
+      },
+      insertCalls: 0,
+      piggyvestPaid: true,
+    };
+    userSupabaseMockRef.current = buildSupabase(state);
+    mockWalletPayStep.mockResolvedValue(
+      Response.json({ status: 'successful' }, { status: 200 })
+    );
+
+    const { status } = await callRoute(
+      makeRequest({
+        body: {
+          ...VALID_BODY,
+          paymentMethod: 'piggyvest_wallet',
+          walletPayOperationId: '22222222-2222-4222-8222-222222222222',
+          walletPayPinProof: 'a'.repeat(64),
+        },
+        idempotencyKey: VALID_KEY,
+      })
+    );
+
+    expect(status).toBe(200);
+    expect(mockPrepare).not.toHaveBeenCalled();
+    expect(mockWalletPayStep).toHaveBeenCalledWith({
+      merchantId: 'merchant-1',
+      customerId: 'customer-1',
+      transactionId: 'vtu-tx-existing',
+    });
+    expect(mockFulfill).not.toHaveBeenCalled();
   });
 
   it('returns stale data bundle errors as client-refresh 400s without error logging', async () => {
@@ -772,7 +916,7 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
       },
       insertCalls: 0,
     };
-    supabaseMockRef.current = buildSupabase(state);
+    userSupabaseMockRef.current = buildSupabase(state);
     mockFulfill.mockResolvedValue({
       amount: 1000,
       loyaltyPoints: {
@@ -804,11 +948,50 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     expect(state.insertCalls).toBe(0);
   });
 
+  it('bugfix: wallet pay off still replays a retained key, refusing only a fresh purchase (Codex P1)', async () => {
+    walletPayOff.on = true;
+    try {
+      const state: IdempotencyRowState = {
+        row: {
+          key: VALID_KEY,
+          vtu_transaction_id: 'vtu-tx-existing',
+          customer_id: 'customer-1',
+          merchant_id: 'merchant-1',
+          request_fingerprint: VALID_BODY_FINGERPRINT,
+        },
+        insertCalls: 0,
+      };
+      userSupabaseMockRef.current = buildSupabase(state);
+      mockFulfill.mockResolvedValue({
+        amount: 1000,
+        reference: 'VTU-REF-OLD',
+        status: 'successful',
+      });
+      const replay = await callRoute(
+        makeRequest({ idempotencyKey: VALID_KEY })
+      );
+      expect(replay.status).toBe(200);
+      expect(mockPrepare).not.toHaveBeenCalled();
+
+      userSupabaseMockRef.current = buildSupabase({
+        row: null,
+        insertCalls: 0,
+      });
+      const fresh = await callRoute(makeRequest({ idempotencyKey: VALID_KEY }));
+      expect(fresh.status).toBe(503);
+      expect(mockPrepare).not.toHaveBeenCalled();
+    } finally {
+      walletPayOff.on = false;
+    }
+  });
+
   it('idempotent replay: existing key replays even when the admission proof RPC is down', async () => {
     // Codex P2: the replay path never uses the stamp or the live
     // set, so a proof-RPC outage must not 500 an already-debited
-    // result — the existing row short-circuits admission.
-    const state: IdempotencyRowState = {
+    // result — the existing row short-circuits admission. Split
+    // clients (Phase 2): the owned row comes from the user
+    // client; the admin client fails only the proof RPC.
+    userSupabaseMockRef.current = buildSupabase({
       row: {
         key: VALID_KEY,
         vtu_transaction_id: 'vtu-tx-existing',
@@ -817,9 +1000,12 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
         request_fingerprint: VALID_BODY_FINGERPRINT,
       },
       insertCalls: 0,
+    });
+    supabaseMockRef.current = buildSupabase({
+      row: null,
+      insertCalls: 0,
       admissionError: { message: 'proof rpc down' },
-    };
-    supabaseMockRef.current = buildSupabase(state);
+    });
     mockFulfill.mockResolvedValue({
       amount: 1000,
       reference: 'VTU-REF-OLD',
@@ -846,7 +1032,16 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     // replay proceeds — and the overlay must persist them (one atomic
     // RPC, no read-modify-write) before fulfillment re-drives the
     // Monnify/Kuda bill call.
-    const state: IdempotencyRowState = {
+    // The replay (lookup, binding, overlay) runs on the
+    // AUTHENTICATED user client (Phase 2) — the service-role client
+    // sees nothing (fulfill is module-mocked).
+    const adminState: IdempotencyRowState = {
+      row: null,
+      insertCalls: 0,
+      rpcCalls: [],
+    };
+    supabaseMockRef.current = buildSupabase(adminState);
+    const userState: IdempotencyRowState = {
       row: {
         key: VALID_KEY,
         vtu_transaction_id: 'vtu-tx-existing',
@@ -854,14 +1049,6 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
         merchant_id: 'merchant-1',
         request_fingerprint: VALID_BODY_FINGERPRINT,
       },
-      insertCalls: 0,
-      rpcCalls: [],
-    };
-    supabaseMockRef.current = buildSupabase(state);
-    // The overlay runs on the AUTHENTICATED user client (ownership-
-    // enforced RPC), never the service-role client.
-    const userState: IdempotencyRowState = {
-      row: null,
       insertCalls: 0,
       rpcCalls: [],
     };
@@ -888,19 +1075,18 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     );
 
     expect(status).toBe(200);
-    expect(userState.rpcCalls).toEqual([
-      {
-        fn: 'set_vtu_transaction_replay_attributes',
-        args: {
-          p_transaction_id: 'vtu-tx-existing',
-          p_customer_phone: '08012345678',
-          p_validation_reference: 'VRF-9',
-        },
+    expect(userState.rpcCalls).toContainEqual({
+      fn: 'set_vtu_transaction_replay_attributes',
+      args: {
+        p_transaction_id: 'vtu-tx-existing',
+        p_customer_phone: '08012345678',
+        p_validation_reference: 'VRF-9',
       },
-    ]);
+    });
     // Admission proof fires on the replay path too (concurrent
-    // with the key lookup; unused when a mapping exists).
-    expect(state.rpcCalls).toEqual([
+    // with the key lookup; unused when a mapping exists) — on the
+    // privileged client (narrowed exception).
+    expect(adminState.rpcCalls).toEqual([
       {
         fn: 'vtu_admission_proof',
         args: {
@@ -909,6 +1095,9 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
         },
       },
     ]);
+    expect(
+      (supabaseMockRef.current?.from as ReturnType<typeof vi.fn>).mock.calls
+    ).toHaveLength(0);
     expect(mockFulfill).toHaveBeenCalledWith({
       supabase: expect.anything(),
       transactionId: 'vtu-tx-existing',
@@ -920,7 +1109,13 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     // incoming phone degrades to omitted instead of 400ing the replay
     // — a 400 would rotate the clients' retained key, so the corrected
     // retry would mint fresh and debit twice (Codex R37 rktSo).
-    const state: IdempotencyRowState = {
+    const adminState: IdempotencyRowState = {
+      row: null,
+      insertCalls: 0,
+      rpcCalls: [],
+    };
+    supabaseMockRef.current = buildSupabase(adminState);
+    const userState: IdempotencyRowState = {
       row: {
         key: VALID_KEY,
         vtu_transaction_id: 'vtu-tx-existing',
@@ -928,12 +1123,6 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
         merchant_id: 'merchant-1',
         request_fingerprint: VALID_BODY_FINGERPRINT,
       },
-      insertCalls: 0,
-      rpcCalls: [],
-    };
-    supabaseMockRef.current = buildSupabase(state);
-    const userState: IdempotencyRowState = {
-      row: null,
       insertCalls: 0,
       rpcCalls: [],
     };
@@ -962,19 +1151,18 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
       );
 
       expect(status).toBe(200);
-      expect(userState.rpcCalls).toEqual([
-        {
-          fn: 'set_vtu_transaction_replay_attributes',
-          args: {
-            p_transaction_id: 'vtu-tx-existing',
-            p_customer_phone: null,
-            p_validation_reference: 'VRF-9',
-          },
+      expect(userState.rpcCalls).toContainEqual({
+        fn: 'set_vtu_transaction_replay_attributes',
+        args: {
+          p_transaction_id: 'vtu-tx-existing',
+          p_customer_phone: null,
+          p_validation_reference: 'VRF-9',
         },
-      ]);
+      });
       // Admission proof fires on the replay path too (concurrent
-      // with the key lookup; unused when a mapping exists).
-      expect(state.rpcCalls).toEqual([
+      // with the key lookup; unused when a mapping exists) — on the
+      // privileged client (narrowed exception).
+      expect(adminState.rpcCalls).toEqual([
         {
           fn: 'vtu_admission_proof',
           args: {
@@ -1011,7 +1199,7 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
       },
       insertCalls: 0,
     };
-    supabaseMockRef.current = buildSupabase(state);
+    userSupabaseMockRef.current = buildSupabase(state);
 
     const changedBody = {
       ...VALID_BODY,
@@ -1040,7 +1228,7 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     // future regression that drops it from the RPC args is caught —
     // without it, every replay would 409.
     const state: IdempotencyRowState = { row: null, insertCalls: 0 };
-    supabaseMockRef.current = buildSupabase(state);
+    userSupabaseMockRef.current = buildSupabase(state);
     mockPrepare.mockResolvedValue({
       transaction: { id: 'vtu-tx-new', merchant_id: 'merchant-1' },
       customer: { id: 'customer-1', email: 'c@example.com' },
@@ -1061,7 +1249,7 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     expect(state.insertCalls).toBe(0);
     expect(state.row?.request_fingerprint).toBe(VALID_BODY_FINGERPRINT);
     const claimCall = (
-      supabaseMockRef.current?.rpc as ReturnType<typeof vi.fn>
+      userSupabaseMockRef.current?.rpc as ReturnType<typeof vi.fn>
     ).mock.calls
       .map((call) => call as [string, Record<string, string>])
       .find(([fn]) => fn === 'claim_vtu_intent');
@@ -1086,12 +1274,13 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     const state: IdempotencyRowState = {
       row: null,
       insertCalls: 0,
+      rpcCalls: [],
       claimImpl: () => ({
         data: null,
         error: { message: 'claim_scope_mismatch: test collision' },
       }),
     };
-    supabaseMockRef.current = buildSupabase(state);
+    userSupabaseMockRef.current = buildSupabase(state);
 
     const { status, body } = await callRoute(
       makeRequest({ idempotencyKey: VALID_KEY })
@@ -1104,25 +1293,26 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     });
     expect(mockFulfill).not.toHaveBeenCalled();
     // Rejection cleanup (Codex R1 P2): the certain-abort claim
-    // orphaned our prepared row — the guarded delete targeted it.
-    const deletes = vtuTransactionDeletes();
-    expect(deletes).toHaveLength(1);
-    expect(deletes[0]).toHaveBeenCalledTimes(1);
-    const firstEq = deletes[0]?.mock.results[0]?.value as {
-      eq?: ReturnType<typeof vi.fn>;
-    };
-    expect(firstEq?.eq?.mock.calls[0]).toEqual(['id', 'vtu-tx-new']);
+    // orphaned our prepared row — discarded via the fail RPC on
+    // the user client (Phase 2 — no direct table writes).
+    expect(state.rpcCalls).toContainEqual({
+      fn: 'fail_orphan_vtu_transaction',
+      args: {
+        p_transaction_id: 'vtu-tx-new',
+        p_merchant_id: 'merchant-1',
+        p_user_id: AUTH_USER_ID,
+      },
+    });
   });
 
-  it('claim join: marks the orphan failed when its delete fails, then replays the winner', async () => {
+  it('claim join: discards the orphan via the fail RPC, then replays the winner', async () => {
     // Loser path: our key joins another key's in-flight transaction.
-    // Our prepared row is discarded via the existing orphan cleanup
-    // (Muse R55 HIGH: a failed delete falls back to the terminal
-    // failed mark — never log-and-continue), the winner is replayed,
-    // and the joined response carries the winner key for client
-    // adoption. The cleanup outcome never masks the replay.
+    // Our prepared row is discarded via the ownership-verifying fail
+    // RPC on the user client (Phase 2 — no direct table writes),
+    // the winner is replayed, and the joined response carries the
+    // winner key for client adoption. The cleanup outcome never
+    // masks the replay.
     const WINNER_KEY = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
-    const markPayloads: Record<string, unknown>[] = [];
     const claimArgs: Record<string, unknown>[] = [];
     mockPrepare.mockResolvedValue({
       transaction: { id: 'vtu-tx-mine', merchant_id: 'merchant-1' },
@@ -1134,33 +1324,56 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
       reference: 'VTU-REF-WINNER',
       status: 'successful',
     });
-    supabaseMockRef.current = {
+    const rpc = vi.fn((fn: string, args: Record<string, unknown>) => {
+      if (fn === 'lookup_vtu_idempotency_row') {
+        // Fresh key: the verdict misses; the claim joins.
+        return Promise.resolve({
+          data: [
+            {
+              verdict: 'fresh',
+              key: VALID_KEY,
+              vtu_transaction_id: null,
+              customer_id: null,
+              merchant_id: null,
+              request_fingerprint: null,
+            },
+          ],
+          error: null,
+        });
+      }
+      if (fn === 'claim_vtu_intent') {
+        claimArgs.push(args);
+        return Promise.resolve({
+          data: [
+            {
+              transaction_id: 'vtu-tx-winner',
+              idempotency_key: WINNER_KEY,
+              created: false,
+            },
+          ],
+          error: null,
+        });
+      }
+      if (fn === 'fail_orphan_vtu_transaction') {
+        return Promise.resolve({ data: 'marked_failed', error: null });
+      }
+      if (fn === 'get_vtu_replay_binding') {
+        return Promise.resolve({
+          data: [
+            {
+              id: 'vtu-tx-winner',
+              customer_id: 'customer-1',
+              merchant_id: 'merchant-1',
+              status: 'processing',
+            },
+          ],
+          error: null,
+        });
+      }
+      return Promise.resolve({ data: null, error: null });
+    });
+    userSupabaseMockRef.current = {
       from: vi.fn((table: string) => {
-        if (table === 'vtu_idempotency_keys') {
-          // Fresh key: the PK lookup misses; the claim joins.
-          return {
-            select: vi.fn(() => ({
-              eq: vi.fn(() => ({
-                maybeSingle: vi.fn().mockResolvedValue({
-                  data: null,
-                  error: null,
-                }),
-              })),
-            })),
-          };
-        }
-        if (table === 'merchants') {
-          return {
-            select: vi.fn(() => ({
-              eq: vi.fn(() => ({
-                maybeSingle: vi.fn().mockResolvedValue({
-                  data: { id: 'merchant-1' },
-                  error: null,
-                }),
-              })),
-            })),
-          };
-        }
         if (table === 'customers') {
           // R128 replay-owner claim: single-eq read for a linked row.
           const customerMaybeSingle = vi.fn().mockResolvedValue({
@@ -1183,95 +1396,16 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
           };
         }
         if (table === 'vtu_transactions') {
-          return {
-            delete: vi.fn(() => ({
-              eq: vi.fn(() => ({
-                eq: vi.fn(() => ({
-                  eq: vi.fn(() => ({
-                    select: vi.fn(() => ({
-                      maybeSingle: vi.fn().mockResolvedValue({
-                        data: null,
-                        error: { message: 'connection reset' },
-                      }),
-                    })),
-                  })),
-                })),
-              })),
-            })),
-            select: vi.fn((columns?: string) => ({
-              eq: vi.fn(() => ({
-                maybeSingle: vi.fn().mockResolvedValue(
-                  columns === 'id, customer_id, merchant_id, status'
-                    ? // Replay owner binding (Muse R119): the winner's
-                      // row belongs to the key owner.
-                      {
-                        data: {
-                          id: 'vtu-tx-winner',
-                          customer_id: 'customer-1',
-                          merchant_id: 'merchant-1',
-                          status: 'processing',
-                        },
-                        error: null,
-                      }
-                    : {
-                        data: {
-                          id: 'vtu-tx-mine',
-                          metadata: { provider: 'kuda' },
-                          status: 'pending',
-                        },
-                        error: null,
-                      }
-                ),
-              })),
-            })),
-            update: vi.fn((payload: Record<string, unknown>) => {
-              markPayloads.push(payload);
-              return {
-                eq: vi.fn(() => ({
-                  eq: vi.fn(() => ({
-                    select: vi.fn(() => ({
-                      maybeSingle: vi.fn().mockResolvedValue({
-                        data: { id: 'vtu-tx-mine' },
-                        error: null,
-                      }),
-                    })),
-                  })),
-                })),
-              };
-            }),
-          };
+          // Dead by design (Codex P1): the replay binding is an
+          // RPC and cleanup is an RPC verdict — no buyer policy
+          // exists. Any direct table touch throws loudly.
+          throw new Error('direct vtu_transactions access is removed');
         }
         return {
           select: vi.fn(() => ({ eq: vi.fn(() => ({ single: vi.fn() })) })),
         };
       }),
-      rpc: vi.fn((fn: string, args: Record<string, unknown>) => {
-        if (fn === 'vtu_admission_proof') {
-          return Promise.resolve({
-            data: [
-              {
-                admitted_at: ADMISSION_TS,
-                live_transaction_ids: [],
-              },
-            ],
-            error: null,
-          });
-        }
-        if (fn === 'claim_vtu_intent') {
-          claimArgs.push(args);
-          return Promise.resolve({
-            data: [
-              {
-                transaction_id: 'vtu-tx-winner',
-                idempotency_key: WINNER_KEY,
-                created: false,
-              },
-            ],
-            error: null,
-          });
-        }
-        return Promise.resolve({ data: null, error: null });
-      }),
+      rpc,
     };
 
     const consoleInfoSpy = vi
@@ -1284,10 +1418,10 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
 
     expect(status).toBe(200);
     expect(body).toMatchObject({ reference: 'VTU-REF-WINNER' });
-    expect(markPayloads).toHaveLength(1);
-    expect(markPayloads[0]).toMatchObject({
-      error_message: expect.stringContaining('no charge was made'),
-      status: 'failed',
+    expect(rpc).toHaveBeenCalledWith('fail_orphan_vtu_transaction', {
+      p_transaction_id: 'vtu-tx-mine',
+      p_merchant_id: 'merchant-1',
+      p_user_id: AUTH_USER_ID,
     });
     expect(mockFulfill).toHaveBeenCalledWith(
       expect.objectContaining({ transactionId: 'vtu-tx-winner' })
@@ -1319,31 +1453,6 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     // must NOT run (deleting our own row would strand the key),
     // and our row is fulfilled directly. No winner-key wire
     // either: the client's key is already the mapped key.
-    const deleteSpy = vi.fn(() => ({
-      eq: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          eq: vi.fn(() => ({
-            select: vi.fn(() => ({
-              maybeSingle: vi.fn().mockResolvedValue({
-                data: { id: 'vtu-tx-mine' },
-                error: null,
-              }),
-            })),
-          })),
-        })),
-      })),
-    }));
-    const updateSpy = vi.fn(() => ({
-      eq: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          select: vi.fn(() => ({
-            maybeSingle: vi
-              .fn()
-              .mockResolvedValue({ data: { id: 'vtu-tx-mine' }, error: null }),
-          })),
-        })),
-      })),
-    }));
     mockPrepare.mockResolvedValue({
       transaction: { id: 'vtu-tx-mine', merchant_id: 'merchant-1' },
       customer: { id: 'customer-1', email: 'c@example.com' },
@@ -1354,25 +1463,48 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
       reference: 'VTU-REF-MINE',
       status: 'successful',
     });
-    supabaseMockRef.current = {
+    const rpc = vi.fn((fn: string) => {
+      if (fn === 'lookup_vtu_idempotency_row') {
+        // Fresh key: the verdict misses; the claim adopts.
+        return Promise.resolve({
+          data: [
+            {
+              verdict: 'fresh',
+              key: VALID_KEY,
+              vtu_transaction_id: null,
+              customer_id: null,
+              merchant_id: null,
+              request_fingerprint: null,
+            },
+          ],
+          error: null,
+        });
+      }
+      if (fn === 'claim_vtu_intent') {
+        return Promise.resolve({
+          data: [
+            {
+              transaction_id: 'vtu-tx-mine',
+              idempotency_key: VALID_KEY,
+              created: false,
+            },
+          ],
+          error: null,
+        });
+      }
+      return Promise.resolve({ data: null, error: null });
+    });
+    userSupabaseMockRef.current = {
       from: vi.fn((table: string) => {
-        if (table === 'vtu_idempotency_keys') {
-          // Fresh key: the PK lookup misses; the claim adopts.
-          return {
-            select: vi.fn(() => ({
-              eq: vi.fn(() => ({
-                maybeSingle: vi.fn().mockResolvedValue({
-                  data: null,
-                  error: null,
-                }),
-              })),
-            })),
-          };
-        }
         if (table === 'vtu_transactions') {
+          // No delete/update at all: cleanup must not run, and the
+          // fail RPC is the only cleanup path now.
+          const gone = () => {
+            throw new Error('direct vtu_transactions writes are removed');
+          };
           return {
-            delete: deleteSpy,
-            update: updateSpy,
+            delete: gone,
+            update: gone,
             select: vi.fn(() => ({
               eq: vi.fn(() => ({
                 maybeSingle: vi.fn().mockResolvedValue({
@@ -1410,32 +1542,7 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
           select: vi.fn(() => ({ eq: vi.fn(() => ({ single: vi.fn() })) })),
         };
       }),
-      rpc: vi.fn((fn: string) => {
-        if (fn === 'vtu_admission_proof') {
-          return Promise.resolve({
-            data: [
-              {
-                admitted_at: ADMISSION_TS,
-                live_transaction_ids: [],
-              },
-            ],
-            error: null,
-          });
-        }
-        if (fn === 'claim_vtu_intent') {
-          return Promise.resolve({
-            data: [
-              {
-                transaction_id: 'vtu-tx-mine',
-                idempotency_key: VALID_KEY,
-                created: false,
-              },
-            ],
-            error: null,
-          });
-        }
-        return Promise.resolve({ data: null, error: null });
-      }),
+      rpc,
     };
 
     const { status, headers } = await callRoute(
@@ -1444,8 +1551,9 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
 
     expect(status).toBe(200);
     // Our own row is fulfilled, never cleaned up.
-    expect(deleteSpy).not.toHaveBeenCalled();
-    expect(updateSpy).not.toHaveBeenCalled();
+    expect(
+      rpc.mock.calls.some(([fn]) => fn === 'fail_orphan_vtu_transaction')
+    ).toBe(false);
     expect(mockFulfill).toHaveBeenCalledWith(
       expect.objectContaining({ transactionId: 'vtu-tx-mine' })
     );
@@ -1462,7 +1570,7 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     const KEY_A = 'aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa';
     const KEY_B = 'bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb';
     const state: IdempotencyRowState = { row: null, insertCalls: 0 };
-    supabaseMockRef.current = buildSupabase(state);
+    userSupabaseMockRef.current = buildSupabase(state);
     mockPrepare
       .mockResolvedValueOnce({
         transaction: { id: 'vtu-tx-a', merchant_id: 'merchant-1' },
@@ -1531,7 +1639,7 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
         txnStatus: { 'vtu-tx-old': terminalStatus },
       },
     };
-    supabaseMockRef.current = buildSupabase(state);
+    userSupabaseMockRef.current = buildSupabase(state);
     mockFulfill.mockResolvedValue({
       amount: 1000,
       reference: 'VTU-REF-NEW',
@@ -1572,7 +1680,7 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
         txnTerminalAt: { 'vtu-tx-old': ADMISSION_TS },
       },
     };
-    supabaseMockRef.current = buildSupabase(state);
+    userSupabaseMockRef.current = buildSupabase(state);
     mockFulfill.mockResolvedValue({
       amount: 1000,
       reference: 'VTU-REF-OLD',
@@ -1604,7 +1712,6 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     const state: IdempotencyRowState = {
       row: null,
       insertCalls: 0,
-      admissionLive: ['vtu-tx-old'],
       claimStore: {
         rows: [
           {
@@ -1619,7 +1726,14 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
         txnTerminalAt: { 'vtu-tx-old': '2026-10-20T04:00:00.000Z' },
       },
     };
-    supabaseMockRef.current = buildSupabase(state);
+    userSupabaseMockRef.current = buildSupabase(state);
+    // The proof fires on the privileged client: stage the live
+    // snapshot on the admin mock.
+    supabaseMockRef.current = buildSupabase({
+      row: null,
+      insertCalls: 0,
+      admissionLive: ['vtu-tx-old'],
+    });
     mockFulfill.mockResolvedValue({
       amount: 1000,
       reference: 'VTU-REF-OLD',
@@ -1646,12 +1760,13 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     const state: IdempotencyRowState = {
       row: null,
       insertCalls: 0,
+      rpcCalls: [],
       claimImpl: () => ({
         data: null,
         error: { message: 'claim_fingerprint_mismatch: test collision' },
       }),
     };
-    supabaseMockRef.current = buildSupabase(state);
+    userSupabaseMockRef.current = buildSupabase(state);
 
     const { status, body } = await callRoute(
       makeRequest({ idempotencyKey: VALID_KEY })
@@ -1663,21 +1778,23 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     });
     expect(mockFulfill).not.toHaveBeenCalled();
     // Rejection cleanup (Codex R1 P2): the certain-abort claim
-    // orphaned our prepared row — the guarded delete targeted it.
-    const deletes = vtuTransactionDeletes();
-    expect(deletes).toHaveLength(1);
-    expect(deletes[0]).toHaveBeenCalledTimes(1);
-    const firstEq = deletes[0]?.mock.results[0]?.value as {
-      eq?: ReturnType<typeof vi.fn>;
-    };
-    expect(firstEq?.eq?.mock.calls[0]).toEqual(['id', 'vtu-tx-new']);
+    // orphaned our prepared row — discarded via the fail RPC on
+    // the user client (Phase 2 — no direct table writes).
+    expect(state.rpcCalls).toContainEqual({
+      fn: 'fail_orphan_vtu_transaction',
+      args: {
+        p_transaction_id: 'vtu-tx-new',
+        p_merchant_id: 'merchant-1',
+        p_user_id: AUTH_USER_ID,
+      },
+    });
   });
 
   it('fresh claim: success response carries no canonical-key wire', async () => {
     // The client knows its own key on the fresh path; the wire
     // exists only for joins (clients converge retries on it).
     const state: IdempotencyRowState = { row: null, insertCalls: 0 };
-    supabaseMockRef.current = buildSupabase(state);
+    userSupabaseMockRef.current = buildSupabase(state);
 
     const { status, headers } = await callRoute(
       makeRequest({ idempotencyKey: VALID_KEY })
@@ -1693,7 +1810,7 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
       insertCalls: 0,
       claimImpl: () => ({ data: [], error: null }),
     };
-    supabaseMockRef.current = buildSupabase(state);
+    userSupabaseMockRef.current = buildSupabase(state);
     const consoleErrorSpy = vi
       .spyOn(console, 'error')
       .mockImplementation(() => undefined);
@@ -1719,34 +1836,32 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     const consoleErrorSpy = vi
       .spyOn(console, 'error')
       .mockImplementation(() => {});
-    const deleteSpy = vi.fn(() => ({
-      eq: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          eq: vi.fn(() => ({
-            select: vi.fn(() => ({
-              maybeSingle: vi.fn().mockResolvedValue({
-                data: { id: 'vtu-tx-new' },
-                error: null,
-              }),
-            })),
-          })),
-        })),
-      })),
-    }));
-    supabaseMockRef.current = {
+    const rpc = vi.fn((fn: string) => {
+      if (fn === 'lookup_vtu_idempotency_row') {
+        return Promise.resolve({
+          data: [
+            {
+              verdict: 'fresh',
+              key: VALID_KEY,
+              vtu_transaction_id: null,
+              customer_id: null,
+              merchant_id: null,
+              request_fingerprint: null,
+            },
+          ],
+          error: null,
+        });
+      }
+      if (fn === 'claim_vtu_intent') {
+        return Promise.resolve({
+          data: null,
+          error: { message: 'connection reset' },
+        });
+      }
+      return Promise.resolve({ data: null, error: null });
+    });
+    userSupabaseMockRef.current = {
       from: vi.fn((table: string) => {
-        if (table === 'vtu_idempotency_keys') {
-          return {
-            select: vi.fn(() => ({
-              eq: vi.fn(() => ({
-                maybeSingle: vi.fn().mockResolvedValue({
-                  data: null,
-                  error: null,
-                }),
-              })),
-            })),
-          };
-        }
         if (table === 'merchants') {
           return {
             select: vi.fn(() => ({
@@ -1781,34 +1896,16 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
           };
         }
         if (table === 'vtu_transactions') {
-          return {
-            delete: deleteSpy,
+          const gone = () => {
+            throw new Error('direct vtu_transactions writes are removed');
           };
+          return { delete: gone, update: gone };
         }
         return {
           select: vi.fn(() => ({ eq: vi.fn(() => ({ single: vi.fn() })) })),
         };
       }),
-      rpc: vi.fn((fn: string) => {
-        if (fn === 'vtu_admission_proof') {
-          return Promise.resolve({
-            data: [
-              {
-                admitted_at: ADMISSION_TS,
-                live_transaction_ids: [],
-              },
-            ],
-            error: null,
-          });
-        }
-        if (fn === 'claim_vtu_intent') {
-          return Promise.resolve({
-            data: null,
-            error: { message: 'connection reset' },
-          });
-        }
-        return Promise.resolve({ data: null, error: null });
-      }),
+      rpc,
     };
 
     const { status, body } = await callRoute(
@@ -1822,7 +1919,9 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     }
     expect(JSON.stringify(body)).not.toContain(VALID_KEY);
     // No blind cleanup: the claim may have committed.
-    expect(deleteSpy).not.toHaveBeenCalled();
+    expect(
+      rpc.mock.calls.some(([fn]) => fn === 'fail_orphan_vtu_transaction')
+    ).toBe(false);
     expect(mockFulfill).not.toHaveBeenCalled();
     consoleErrorSpy.mockRestore();
   });
@@ -1858,6 +1957,8 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
   });
 
   it('cross-customer collision: stored row owned by a different customer rejects with 400', async () => {
+    // Phase 2: the verdict RPC decides ownership inside Postgres —
+    // a foreign key 400s before the guards, with no row fields.
     const state: IdempotencyRowState = {
       row: {
         key: VALID_KEY,
@@ -1867,14 +1968,9 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
         request_fingerprint: VALID_BODY_FINGERPRINT,
       },
       insertCalls: 0,
+      lookupVerdict: 'foreign',
     };
-    supabaseMockRef.current = buildSupabase(state);
-    // Authenticated user resolves to customer-1; existing row recorded
-    // for OTHER-CUSTOMER → mismatch must reject.
-    mockResolveVtuCustomer.mockResolvedValue({
-      id: 'customer-1',
-      email: 'c@example.com',
-    });
+    userSupabaseMockRef.current = buildSupabase(state);
 
     const { status, body } = await callRoute(
       makeRequest({ idempotencyKey: VALID_KEY })
@@ -1906,7 +2002,7 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
       },
       insertCalls: 0,
     };
-    supabaseMockRef.current = buildSupabase(state);
+    userSupabaseMockRef.current = buildSupabase(state);
 
     const { status, body } = await callRoute(
       makeRequest({ idempotencyKey: VALID_KEY })
@@ -1941,12 +2037,16 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
       },
       insertCalls: 0,
     };
-    supabaseMockRef.current = buildSupabase(state, {
+    userSupabaseMockRef.current = buildSupabase(state, {
       customerRow: {
         email: 'c@example.com',
         id: 'customer-1',
         user_id: null,
       },
+      // Faithful hiding: the binding RPC returns zero rows for an
+      // unlinked owner. Owner-presence must run FIRST and 425 —
+      // a binding-first order would 400 and rotate (Codex P1).
+      transactionBinding: null,
     });
 
     const { status, body } = await callRoute(
@@ -1974,7 +2074,7 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
       },
       insertCalls: 0,
     };
-    supabaseMockRef.current = buildSupabase(state, { customerRow: null });
+    userSupabaseMockRef.current = buildSupabase(state, { customerRow: null });
 
     const { status, body } = await callRoute(
       makeRequest({ idempotencyKey: VALID_KEY })
@@ -2006,7 +2106,7 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
       },
       insertCalls: 0,
     };
-    supabaseMockRef.current = buildSupabase(state, {
+    userSupabaseMockRef.current = buildSupabase(state, {
       customerRow: {
         email: 'c@example.com',
         id: 'customer-1',
@@ -2037,7 +2137,7 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
       },
       insertCalls: 0,
     };
-    supabaseMockRef.current = buildSupabase(state, {
+    userSupabaseMockRef.current = buildSupabase(state, {
       transactionBinding: {
         id: 'vtu-tx-existing',
         customer_id: 'OTHER-CUSTOMER',
@@ -2071,7 +2171,7 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
       },
       insertCalls: 0,
     };
-    supabaseMockRef.current = buildSupabase(state, {
+    userSupabaseMockRef.current = buildSupabase(state, {
       transactionBinding: null,
     });
 
@@ -2103,7 +2203,7 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     };
     const base = buildSupabase(state);
     const baseFrom = base.from as unknown as (table: string) => unknown;
-    supabaseMockRef.current = {
+    userSupabaseMockRef.current = {
       ...base,
       from: vi.fn((table: string) => {
         if (table === 'merchants') {
@@ -2132,7 +2232,16 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     expect(status).toBe(500);
     expect(body).toMatchObject({ error: 'Wallet-only checkout failed.' });
     expect(mockFulfill).not.toHaveBeenCalled();
-    expect(mockResolveVtuCustomer).not.toHaveBeenCalled();
+    // Ownership resolution dies at the merchant read: the customer
+    // find RPC is never reached.
+    expect(
+      (userSupabaseMockRef.current?.rpc as ReturnType<typeof vi.fn>).mock.calls
+    ).toEqual([
+      [
+        'lookup_vtu_idempotency_row',
+        { p_key: VALID_KEY, p_user_id: AUTH_USER_ID },
+      ],
+    ]);
     consoleErrorSpy.mockRestore();
   });
 
@@ -2153,7 +2262,7 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     };
     const base = buildSupabase(state);
     const baseFrom = base.from as unknown as (table: string) => unknown;
-    supabaseMockRef.current = {
+    userSupabaseMockRef.current = {
       ...base,
       from: vi.fn((table: string) => {
         if (table === 'merchants') {
@@ -2188,7 +2297,7 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     consoleErrorSpy.mockRestore();
   });
 
-  it('replay: strict customer-resolver failure 500s without leaking DB text', async () => {
+  it('replay: strict customer-find failure 500s without leaking DB text', async () => {
     const state: IdempotencyRowState = {
       row: {
         key: VALID_KEY,
@@ -2198,11 +2307,9 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
         request_fingerprint: VALID_BODY_FINGERPRINT,
       },
       insertCalls: 0,
+      findError: { message: 'connection reset' },
     };
-    supabaseMockRef.current = buildSupabase(state);
-    mockResolveVtuCustomer.mockRejectedValueOnce(
-      new Error('Failed to look up VTU customer: connection reset')
-    );
+    userSupabaseMockRef.current = buildSupabase(state);
     const consoleErrorSpy = vi
       .spyOn(console, 'error')
       .mockImplementation(() => undefined);
@@ -2213,8 +2320,9 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
 
     expect(status).toBe(500);
     expect(body).toMatchObject({ error: 'Wallet-only checkout failed.' });
-    expect(mockResolveVtuCustomer).toHaveBeenCalledWith(
-      expect.objectContaining({ strictLookups: true })
+    expect(userSupabaseMockRef.current?.rpc).toHaveBeenCalledWith(
+      'find_vtu_customer_for_checkout',
+      { p_merchant_id: 'merchant-1', p_user_id: AUTH_USER_ID }
     );
     expect(mockFulfill).not.toHaveBeenCalled();
     consoleErrorSpy.mockRestore();
@@ -2222,7 +2330,7 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
 
   it('fresh path: prepare runs with strictLookups so transient errors 500', async () => {
     const state: IdempotencyRowState = { row: null, insertCalls: 0 };
-    supabaseMockRef.current = buildSupabase(state);
+    userSupabaseMockRef.current = buildSupabase(state);
 
     const { status } = await callRoute(
       makeRequest({ idempotencyKey: VALID_KEY })
@@ -2232,5 +2340,97 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     expect(mockPrepare).toHaveBeenCalledWith(
       expect.objectContaining({ strictLookups: true })
     );
+  });
+
+  it('foreign verdict: a key mapped to another customer 400s before any guard, no fields', async () => {
+    // Phase 2: the verdict RPC decides ownership inside Postgres.
+    // Same 400 the old ownership guard returned (existence was
+    // already revealed); the guards below stay as defense-in-depth.
+    const state: IdempotencyRowState = {
+      row: {
+        key: VALID_KEY,
+        vtu_transaction_id: 'vtu-tx-other',
+        customer_id: 'OTHER-CUSTOMER',
+        merchant_id: 'merchant-1',
+        request_fingerprint: VALID_BODY_FINGERPRINT,
+      },
+      insertCalls: 0,
+      lookupVerdict: 'foreign',
+    };
+    userSupabaseMockRef.current = buildSupabase(state);
+
+    const { status, body } = await callRoute(
+      makeRequest({ idempotencyKey: VALID_KEY })
+    );
+
+    expect(status).toBe(400);
+    expect(body).toMatchObject({
+      error: 'Idempotency-Key does not belong to this customer.',
+    });
+    expect(JSON.stringify(body)).not.toMatch(/vtu-tx-other|OTHER-CUSTOMER/);
+    expect(mockPrepare).not.toHaveBeenCalled();
+    expect(mockFulfill).not.toHaveBeenCalled();
+  });
+
+  it('narrowed boundary: the service-role client reaches only the admission proof and fulfillment', async () => {
+    // Phase 2 (#3694): lookup, ownership, prepare, claim, and
+    // cleanup run on the authenticated client; createAdminClient's
+    // product fires the admission-proof RPC (its merchant-wide
+    // live set spans customers by design — fence input only) and
+    // is passed to fulfillPendingVtuTransaction — never otherwise
+    // touched.
+    const state: IdempotencyRowState = { row: null, insertCalls: 0 };
+    userSupabaseMockRef.current = buildSupabase(state);
+
+    const { status } = await callRoute(
+      makeRequest({ idempotencyKey: VALID_KEY })
+    );
+
+    expect(status).toBe(200);
+    expect(mockFulfill).toHaveBeenCalledWith({
+      supabase: supabaseMockRef.current,
+      transactionId: 'vtu-tx-new',
+    });
+    expect(
+      (supabaseMockRef.current?.from as ReturnType<typeof vi.fn>).mock.calls
+    ).toHaveLength(0);
+    expect(
+      (supabaseMockRef.current?.rpc as ReturnType<typeof vi.fn>).mock.calls
+    ).toEqual([
+      [
+        'vtu_admission_proof',
+        {
+          p_merchant_slug: 'ogabassey',
+          p_fingerprint: VALID_BODY_FINGERPRINT,
+        },
+      ],
+    ]);
+  });
+
+  it('prepare reads on the user client, inserts on the privileged client', async () => {
+    // Codex P1: the insert RPC is service-role-only (server-computed
+    // settlement money); reads stay on the authenticated client.
+    const state: IdempotencyRowState = { row: null, insertCalls: 0 };
+    userSupabaseMockRef.current = buildSupabase(state);
+
+    const { status } = await callRoute(
+      makeRequest({ idempotencyKey: VALID_KEY })
+    );
+
+    expect(status).toBe(200);
+    expect(mockPrepare).toHaveBeenCalledWith(
+      expect.objectContaining({
+        supabase: userSupabaseMockRef.current,
+        insertSupabase: supabaseMockRef.current,
+        linkCustomerViaRpc: true,
+        insertViaRpc: true,
+      })
+    );
+    expect(
+      (userSupabaseMockRef.current?.rpc as ReturnType<typeof vi.fn>).mock.calls
+    ).toContainEqual([
+      'claim_vtu_intent',
+      expect.objectContaining({ p_key: VALID_KEY }),
+    ]);
   });
 });

@@ -1,10 +1,10 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import {
-  authenticateApiRequest,
-  getUserAccess,
-  hasPermission,
-} from '@/lib/api-auth';
+import { authenticateApiRequest, hasPermission } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
+import {
+  getMerchantForApiRequest,
+  toUserAccess,
+} from '@/lib/get-merchant-for-api-request';
 import { requireMerchantFeatureAccess } from '@/lib/merchant-feature-gates';
 import {
   createJumiaProductExportSelectionSchema,
@@ -36,10 +36,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid input' }, { status: 400 });
   }
 
-  const access = await getUserAccess(auth.supabase);
-  if (!access?.merchantId) {
+  const merchantContext = await getMerchantForApiRequest(
+    auth.supabase,
+    auth.user.id,
+    { requestedMerchantId: parsed.data.merchantId }
+  );
+  if (!merchantContext) {
     return NextResponse.json({ error: 'Merchant not found' }, { status: 404 });
   }
+  const access = toUserAccess(merchantContext);
   if (!hasPermission(access, 'integrations', 'manage')) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
@@ -54,7 +59,7 @@ export async function POST(request: NextRequest) {
   const { data, error } = await auth.supabase.rpc(
     'create_jumia_product_export_selection',
     {
-      p_merchant_id: access.merchantId,
+      p_merchant_id: merchantContext.merchantId,
       p_source_category_id: parsed.data.sourceCategoryId,
     }
   );

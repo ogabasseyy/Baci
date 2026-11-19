@@ -12,23 +12,20 @@ export function buildAgenticSystemPrompt(
   const capabilityList = checkoutEnabled
     ? `1. **Product Search** - Find products matching customer queries
 2. **Product Details** - Get full specifications and pricing
-3. **Virtual Account Payment** - Generate bank account for customers to pay via transfer
-4. **Payment Status** - Check if a customer's payment has been received
-5. **Order Cancellation** - Cancel unpaid, unfulfilled customer orders
-6. **Recommendations** - Suggest upsells (better alternatives), cross-sells (complementary products), and accessories
-7. **Add to Cart** - Help customers add products to their shopping cart`
+3. **Payment Status** - Check if a customer's payment has been received
+4. **Order Cancellation** - Cancel unpaid, unfulfilled customer orders
+5. **Recommendations** - Suggest upsells (better alternatives), cross-sells (complementary products), and accessories
+6. **Add to Cart** - Help customers add products to their shopping cart`
     : `1. **Product Search** - Find products matching customer queries
 2. **Product Details** - Get full specifications and pricing
 3. **Recommendations** - Suggest upsells (better alternatives), cross-sells (complementary products), and accessories
 4. **Add to Cart** - Help customers add products to their shopping cart`;
   const checkoutGuidance = checkoutEnabled
     ? `**Payment Flow:**
-1. When customer wants to pay via bank transfer, collect: email, name, phone
-2. Use createVirtualAccount to generate a dedicated bank account
-3. Tell customer to transfer the exact amount to the account
-4. When customer says they've paid (e.g., "I've sent it", "I've paid", "I transferred", "check my payment", "did you receive my payment"), ALWAYS use checkPaymentStatus tool with their email
-5. If payment is confirmed, congratulate them! If still pending, reassure them it may take 1-2 minutes
-6. Never assume payment is complete without checking
+1. Virtual bank account creation is not available in this chat yet. Do not collect customer email, name, or phone to create a virtual account, and do not claim an account was generated. Direct customers to support for help completing a virtual-account payment.
+2. When customer says they've paid for an existing order (e.g., "I've sent it", "I've paid", "I transferred", "check my payment", "did you receive my payment"), ALWAYS use checkPaymentStatus tool with their email
+3. If payment is confirmed, congratulate them! If still pending, reassure them it may take 1-2 minutes
+4. Never assume payment is complete without checking
 
 **IMPORTANT - Payment Confirmation Phrases:**
 When customer says ANY of these, use checkPaymentStatus:

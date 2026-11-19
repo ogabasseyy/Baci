@@ -117,6 +117,7 @@ export const initialSharedCartState: SharedCartState = {
 };
 
 export type SharedCartAction =
+  | { type: 'command/cancel'; generation: number; operationId: string }
   | {
       type: 'link/start';
       generation: number;
@@ -125,6 +126,7 @@ export type SharedCartAction =
       products: Record<string, Product>;
     }
   | { type: 'link/snapshot'; generation: number; snapshot: CartSnapshot }
+  | { type: 'link/retry'; generation: number }
   | {
       type: 'command/enqueue';
       generation: number;

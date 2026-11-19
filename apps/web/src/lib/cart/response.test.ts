@@ -23,6 +23,14 @@ describe('cartJsonResponse', () => {
 });
 
 describe('cartErrorResponse', () => {
+  it('does not blame the shopper when a quota denial can be a store outage', async () => {
+    const response = cartErrorResponse('quota_exceeded');
+    const body = await response.json();
+    expect(response.status).toBe(429);
+    expect(body.error).toMatch(/could not complete/i);
+    expect(body.error).not.toMatch(/too many/i);
+  });
+
   it('maps malformed input to a typed 400', async () => {
     const response = cartErrorResponse('invalid_request');
 

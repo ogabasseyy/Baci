@@ -49,3 +49,7 @@ enabled = false
 
 [functions.send-auth-email]
 verify_jwt = false
+
+# Legacy endpoint is inert (HTTP 410); no request can send mail.
+[functions.send-welcome-email]
+verify_jwt = true

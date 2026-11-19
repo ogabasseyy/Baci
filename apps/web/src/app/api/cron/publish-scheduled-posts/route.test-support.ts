@@ -81,7 +81,9 @@ export function configurePublishFlow(
     claimedPostIds?: string[];
   } = {}
 ) {
-  mockSupabase.lte.mockResolvedValue({ data: posts, error: null });
+  mockSupabase.lte
+    .mockResolvedValueOnce({ data: posts, error: null })
+    .mockReturnValueOnce(mockSupabase);
   mockSupabase.in
     .mockResolvedValueOnce({
       data:
@@ -95,7 +97,10 @@ export function configurePublishFlow(
     .mockResolvedValueOnce({ data: options.publishedPosts ?? [], error: null })
     .mockImplementationOnce((_column, ids: string[]) => {
       mockSupabase.select.mockResolvedValueOnce({
-        data: (options.claimedPostIds ?? ids).map((id) => ({ id })),
+        data: (options.claimedPostIds ?? ids).map((id) => ({
+          id,
+          status: 'published',
+        })),
         error: null,
       });
       return mockSupabase;

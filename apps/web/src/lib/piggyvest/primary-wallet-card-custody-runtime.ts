@@ -1,5 +1,6 @@
 import 'server-only';
 import { primaryWalletCardCustodySchemas as schemas } from '@/schemas/primary-wallet-card-custody';
+import { isPiggyvestFeatureOn } from './piggyvest-feature-on';
 
 export function readPrimaryCardCustodyRuntime(
   env: NodeJS.ProcessEnv = process.env,
@@ -14,8 +15,7 @@ export function readPrimaryCardCustodyRuntime(
   // credentials, contracts, and the retained-secret fail-closed rule
   // still apply in both modes.
   if (
-    (mode === 'intake' &&
-      env.PIGGYVEST_PRIMARY_CARD_CUSTODY_ENABLED !== 'true') ||
+    (mode === 'intake' && !isPiggyvestFeatureOn('card_custody', env)) ||
     (env.VERCEL_ENV === 'production') !==
       (env.PIGGYVEST_PRIMARY_CARD_ENVIRONMENT === 'production')
   )

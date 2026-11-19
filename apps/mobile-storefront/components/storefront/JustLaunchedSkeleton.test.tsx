@@ -32,4 +32,27 @@ describe('JustLaunchedSkeleton', () => {
       screen.getAllByTestId('launch-skeleton-block').length
     ).toBeGreaterThan(0);
   });
+
+  it('draws the loading state on the same opaque surface as the loaded carousel', () => {
+    render(
+      <JustLaunchedSkeleton
+        cardWidth={328}
+        colors={{
+          background: '#fafafa',
+          border: '#cccccc',
+          card: '#ffffff',
+          text: '#000000',
+        }}
+        title="Just Launched"
+      />
+    );
+
+    const surface = screen.getByTestId('just-launched-skeleton-surface');
+    const style = Object.assign(
+      {},
+      ...[surface.props.style].flat(Number.POSITIVE_INFINITY)
+    ) as { backgroundColor?: string; paddingVertical?: number };
+    expect(style.backgroundColor).toBe('#fafafa');
+    expect(style.paddingVertical).toBe(12);
+  });
 });

@@ -1,0 +1,100 @@
+{
+  "documentedCategories": {
+    "categories": [
+      {
+        "code": 1000052,
+        "name": "Foreign Language Study",
+        "completePath": "Books, Movies and Music / Art & Humanities / Foreign Language Study",
+        "hasChildren": false,
+        "attributeSet": {
+          "sid": "9b66c50c-562a-4a98-9eae-0cf133a50f9d",
+          "name": "Books & Magazines"
+        }
+      },
+      {
+        "code": 1020202,
+        "name": "Tire & Wheel Tools",
+        "completePath": "Automobile / Tools & Equipment / Tire & Wheel Tools",
+        "hasChildren": true,
+        "attributeSet": {
+          "sid": "ba808961-18be-4b5b-bf10-076f398f2ed2",
+          "name": "Vehicle & Parts"
+        }
+      }
+    ],
+    "page": {
+      "current": 1,
+      "totalOfPages": 42
+    }
+  },
+  "documentedAttributes": {
+    "attributes": [
+      {
+        "sid": "bac3047c-f2a3-46bc-864a-efce8d7cfb1b",
+        "code": 1000082,
+        "name": "package_content",
+        "description": "Whats in the box?",
+        "type": 4,
+        "mandatory": true,
+        "variation": false,
+        "translatable": true,
+        "translations": [
+          {
+            "languageId": 1,
+            "languageCode": "EN",
+            "translation": "Whats in the box?"
+          },
+          {
+            "languageId": 2,
+            "languageCode": "AR",
+            "translation": "Whats in the box?"
+          },
+          {
+            "languageId": 3,
+            "languageCode": "FR",
+            "translation": "Whats in the box?"
+          }
+        ]
+      },
+      {
+        "code": 1000256,
+        "name": "age_range",
+        "description": "Age Range",
+        "type": 0,
+        "mandatory": true,
+        "variation": false,
+        "translatable": false,
+        "translations": [],
+        "options": [
+          {
+            "id": 5241,
+            "sid": "01d04b74-73d5-460c-a884-0fdeb66f6094",
+            "name": "Digital",
+            "position": 1,
+            "isDefault": false,
+            "status": "ACTIVE",
+            "translations": []
+          },
+          {
+            "id": 5242,
+            "sid": "01d10986-2a29-4b63-8310-c2f33ba1e14b",
+            "name": "Hard back",
+            "position": 2,
+            "isDefault": false,
+            "status": "ACTIVE",
+            "translations": []
+          },
+          {
+            "id": 5243,
+            "sid": "01d28647-99ee-46ec-9812-70e2b0e821e3",
+            "name": "Paperback",
+            "position": 3,
+            "isDefault": false,
+            "status": "ACTIVE",
+            "translations": []
+          }
+        ]
+      }
+    ]
+  }
+}

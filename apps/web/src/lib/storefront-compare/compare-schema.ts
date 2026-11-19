@@ -1,5 +1,9 @@
 import { sanitizeText } from '@/lib/sanitize-core';
-import { generateBreadcrumbSchema, getProductUrl } from '@/lib/seo-utils';
+import {
+  generateBreadcrumbSchema,
+  generateMetaDescription,
+  getProductUrl,
+} from '@/lib/seo-utils';
 import type { ProductComparisonMatrix } from '@/lib/storefront-specs/spec-matrix';
 
 interface BreadcrumbItem {
@@ -15,6 +19,7 @@ interface FAQItem {
 interface ProductCompareSchemaProduct {
   id: string;
   name: string;
+  brand?: string | null;
   slug?: string;
   category?: string | null;
   categories?: { name?: string; slug?: string } | null;
@@ -109,6 +114,9 @@ export function buildProductCompareItemListSchema(input: {
         item: {
           '@type': 'Product',
           name: product.name,
+          ...(product.brand?.trim() && {
+            brand: { '@type': 'Brand', name: product.brand.trim() },
+          }),
           image: product.image ? [product.image] : undefined,
           description: sanitizedDescription || undefined,
           url: new URL(getProductUrl(product), pageUrl).toString(),
@@ -147,8 +155,13 @@ export function buildPriceBandPageSchemas(input: {
       '@type': 'ItemList',
       name: input.pageName,
       url: pageUrl,
-      itemListElement: input.products.map((product, index) => {
-        const sanitizedDescription = sanitizeText(product.description || '');
+      itemListElement: input.products.slice(0, 20).map((product, index) => {
+        const sanitizedDescription = product.description
+          ? generateMetaDescription(
+              sanitizeText(product.description || ''),
+              120
+            )
+          : '';
         const availability =
           product.availability === 'OutOfStock'
             ? 'https://schema.org/OutOfStock'

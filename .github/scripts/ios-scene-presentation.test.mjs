@@ -42,7 +42,7 @@ test('native presentation gate watches both apps source-compilation inputs', () 
 test('scene-aware presenters retain legacy windows only when no scene exists', { skip: process.platform !== 'darwin' }, () => {
   const folder = mkdtempSync(join(tmpdir(), 'baci-window-fallback-'));
   try {
-    const body = helper().replace('#if os(iOS) || os(tvOS)', '#if true');
+    const body = helper().replace('#if os(iOS) || os(tvOS)', '#if true').replace('Bundle.main.object(forInfoDictionaryKey: "UIApplicationSceneManifest")', 'TestSceneManifest.value');
     writeFileSync(join(folder, 'main.swift'), `import Foundation
 @MainActor final class UIWindow { var isKeyWindow = false }
 @MainActor final class UIApplication {
@@ -50,6 +50,7 @@ test('scene-aware presenters retain legacy windows only when no scene exists', {
   var connectedScenes: Set<Int> = []
   var windows: [UIWindow] = []
 }
+@MainActor enum TestSceneManifest { static var value: Any? = nil }
 @MainActor enum SceneGeometry {
   static var selected: UIWindow?
   static func keyWindow() -> UIWindow? { selected }
@@ -59,6 +60,9 @@ let legacy = UIWindow()
 legacy.isKeyWindow = true
 UIApplication.shared.windows = [UIWindow(), legacy]
 precondition(Utilities.keyWindow() === legacy, "legacy admin window must remain available")
+TestSceneManifest.value = [:] as [String: String]
+precondition(Utilities.keyWindow() == nil, "scene-configured apps must wait for a scene")
+TestSceneManifest.value = nil
 let scene = UIWindow()
 UIApplication.shared.connectedScenes = [1]
 SceneGeometry.selected = scene
@@ -68,6 +72,12 @@ precondition(Utilities.keyWindow() == nil, "connected scenes must never use a le
 UIApplication.shared.connectedScenes = []
 UIApplication.shared.windows = []
 precondition(Utilities.keyWindow() == nil, "missing windows must stay missing")
+let backgroundDone = DispatchSemaphore(value: 0)
+DispatchQueue.global().async {
+  precondition(Utilities.keyWindow() == nil, "off-main callers must fail safely")
+  backgroundDone.signal()
+}
+precondition(backgroundDone.wait(timeout: .now() + 2) == .success, "off-main lookup must return")
 `);
     const build = spawnSync('xcrun', ['swiftc', '-swift-version', '6', join(folder, 'main.swift'), '-o', join(folder, 'probe')], { encoding: 'utf8' });
     assert.equal(build.status, 0, build.stderr);
@@ -88,7 +98,8 @@ ${scene}
 public struct Utilities { ${helper()} }
 // ExpoPrint's main-queue callbacks have synchronous, nonisolated signatures.
 func synchronousPrintWindowLookup() -> UIWindow? { Utilities.keyWindow() }
-@MainActor final class AppleAnchorProbe: NSObject, ASAuthorizationControllerPresentationContextProviding { ${apple} }
+@MainActor final class AppleAnchorProbe: NSObject, ASAuthorizationControllerPresentationContextProviding { private var presentationAnchorWindow: UIWindow?
+${apple} }
 ${web}
 `);
     const sdk = spawnSync('xcrun', ['--sdk', 'iphonesimulator', '--show-sdk-path'], { encoding: 'utf8' });
@@ -96,4 +107,21 @@ ${web}
     const build = spawnSync('xcrun', ['swiftc', '-typecheck', '-swift-version', '6', '-target', 'arm64-apple-ios16.4-simulator', '-sdk', sdk.stdout.trim(), join(folder, 'presenters.swift')], { encoding: 'utf8' });
     assert.equal(build.status, 0, build.stderr);
   } finally { rmSync(folder, { recursive: true, force: true }); }
+});
+
+test('patched synchronous window lookup has main-queue callers', () => {
+  const request = native('expo-apple-authentication', 'AppleAuthenticationRequest.swift');
+  const module = native('expo-apple-authentication', 'AppleAuthenticationModule.swift');
+  assert.match(request, /Utilities\.keyWindow\(\)/);
+  assert.match(module, /AsyncFunction\("requestAsync"\)[\s\S]*?performRequest[\s\S]*?\.runOnQueue\(\.main\)/);
+  const core = native('expo-modules-core', 'Utilities/Utilities.swift');
+  assert.match(declaration(core, 'nonisolated public func currentViewController()'), /MainActor\.assumeIsolated[\s\S]*Utilities\.keyWindow\(\)/);
+  for (const [name, path] of [
+    ['expo-print', 'ExpoPrinterSelector.swift'],
+    ['expo-print', 'ExpoPrintWithPrinter.swift'],
+    ['expo-web-browser', 'WebAuthSession.swift'],
+    ['expo-web-browser', 'WebBrowserSession.swift'],
+  ]) {
+    assert.doesNotMatch(native(name, path), /Utilities\.keyWindow\(\)/);
+  }
 });

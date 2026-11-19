@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { checkCsrfProtection } from '@/lib/csrf';
+import { withCartProductOwners } from './cart-product-owner.test-support';
 import { POST } from './route';
 
 vi.mock('@/lib/csrf', () => ({
@@ -30,7 +30,10 @@ function buildSupabaseMock() {
     select: vi.fn(() => productsQuery),
     in: vi.fn(() => productsQuery),
     returns: vi.fn(() =>
-      Promise.resolve({ data: mocks.products, error: mocks.productError })
+      Promise.resolve({
+        data: withCartProductOwners(mocks.products),
+        error: mocks.productError,
+      })
     ),
   };
   const supabase = {
@@ -77,6 +80,55 @@ describe('POST /api/cart/validate offer authority', () => {
     mocks.offers = [];
     mocks.offerError = null;
     mocks.baseInventory = [];
+  });
+
+  it('invalidates an offer with an unresolved owner without failing other cart lines', async () => {
+    const otherId = '22222222-2222-4222-8222-222222222222';
+    const { supabase } = buildSupabaseMock();
+    mocks.createClient.mockResolvedValue(supabase);
+    mocks.products = [
+      {
+        id: PRODUCT_ID,
+        merchant_id: '',
+        name: 'Invalid',
+        price: 100,
+        status: 'active',
+      },
+      {
+        id: otherId,
+        name: 'Valid',
+        price: 100,
+        status: 'active',
+        manage_stock: false,
+      },
+    ];
+    mocks.offers = [
+      {
+        product_id: otherId,
+        offer_id: OFFER_ID,
+        condition: 'used',
+        price_basis: 100,
+        parent_eligible: true,
+      },
+    ];
+    const response = await postCartValidate({
+      cartItems: [
+        { id: PRODUCT_ID, price: 100, offerId: OFFER_ID },
+        { id: otherId, price: 100, offerId: OFFER_ID },
+      ],
+    });
+    const body = await response.json();
+    expect(response.status).toBe(200);
+    expect(body.invalidProductIds).toEqual([
+      `${PRODUCT_ID}::offer=${OFFER_ID}`,
+    ]);
+    expect(body.validProducts).toEqual([
+      expect.objectContaining({ id: otherId }),
+    ]);
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'get_storefront_offer_resolution',
+      expect.objectContaining({ p_product_ids: [otherId] })
+    );
   });
 
   it('accepts a live offer the authority flags as parent-ineligible', async () => {

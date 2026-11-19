@@ -7,6 +7,12 @@ import {
   verifyAnalyticsDeliveryAuthority,
 } from './verify-analytics-delivery-authority';
 
+// The whole-repository scan finishes in ~3 min with every blob checked out.
+// CI runs it in "Quality Gate - Repository Scans" (vitest.repository-scans.ts);
+// in the old blob:none test job lazy blob fetches pushed it past 35 min. Keep
+// headroom for a slow runner, but fail well inside that job's 20-min limit.
+const LIVE_REPOSITORY_SCAN_TIMEOUT_MS = 12 * 60_000;
+
 describe('analytics delivery authority repository contract', () => {
   it('enforces changed runtime size and colocated tests', () => {
     const good = 'apps/web/src/lib/analytics/good.ts';
@@ -167,9 +173,13 @@ describe('analytics delivery authority repository contract', () => {
     ).toThrow('repository unavailable');
   });
 
-  it('passes the live repository authority contract', () => {
-    expect(
-      verifyAnalyticsDeliveryAuthority(resolve(process.cwd(), '../..'))
-    ).toEqual([]);
-  }, 480_000);
+  it(
+    'passes the live repository authority contract',
+    () => {
+      expect(
+        verifyAnalyticsDeliveryAuthority(resolve(process.cwd(), '../..'))
+      ).toEqual([]);
+    },
+    LIVE_REPOSITORY_SCAN_TIMEOUT_MS
+  );
 });

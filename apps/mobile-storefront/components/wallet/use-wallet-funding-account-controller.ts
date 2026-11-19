@@ -1,7 +1,9 @@
 import { useState } from 'react';
+import { usePiggyvestCapabilityNow } from '@/hooks/use-piggyvest-capability-now';
 import type { PaymentSettings } from '@/hooks/useMerchantPaymentSettings';
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
 import { usePiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability';
+import { wasPiggyvestLastRuledOut } from '@/lib/piggyvest-primary-capability-cache';
 import type { Customer } from '@/stores/auth-store.types';
 import { deriveWalletFundingAccountAvailability } from './deriveWalletFundingAccountAvailability';
 import type { WalletFundPhoneSubmitResult } from './WalletFundPhonePrompt';
@@ -51,12 +53,30 @@ export function useWalletFundingAccountController({
   const primaryObserved = Boolean(
     activeMerchantId && isPiggyvestPrimaryMerchant(activeMerchantId)
   );
-  const primary = Boolean(primaryObserved && primaryCapability !== false);
-  // A never-observed non-pilot merchant must wait for the first capability
-  // verdict before creating a legacy DVA: creating now could orphan the
-  // account when the merchant turns out primary-enabled.
+  // The live verdict too (Codex): a rollback written by another flow ends
+  // the PiggyVest route even while the capability hook holds its old true.
+  const verdictNow = usePiggyvestCapabilityNow(activeMerchantId);
+  // A rollback whose ruling-out just expired (Codex): neither PiggyVest
+  // setup nor a Paystack account until a fresh verdict lands ("checking").
+  const expiredRollback = Boolean(
+    primaryObserved &&
+      verdictNow === null &&
+      activeMerchantId &&
+      wasPiggyvestLastRuledOut(activeMerchantId)
+  );
+  const primary = Boolean(
+    primaryObserved &&
+      primaryCapability !== false &&
+      verdictNow !== false &&
+      !expiredRollback
+  );
+  // Wait for a verdict only where it can still be unknown (Codex): per the
+  // owner decision (2026-11-13) a non-pilot merchant is legacy-only, so the
+  // live verdict is never unknown there and a failed probe never holds its
+  // Paystack account creation.
   const primaryVerdictPending = Boolean(
-    activeMerchantId && !primaryObserved && primaryCapability === null
+    (activeMerchantId && !primaryObserved && verdictNow === null) ||
+      expiredRollback
   );
   const availability = deriveWalletFundingAccountAvailability({
     customerPhone,

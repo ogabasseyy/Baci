@@ -2,6 +2,7 @@ import 'server-only';
 import { Client } from 'pg';
 import type { z } from 'zod';
 import { primaryWalletPaidInterestInboxSchemas as schemas } from '@/schemas/primary-wallet-paid-interest-inbox';
+import { primaryDbLink } from './primary-db-link';
 
 const verify = `SELECT current_database() AS database_name, SESSION_USER AS login_name, CURRENT_USER AS role_name,
   (NOT role.rolsuper AND NOT role.rolbypassrls AND NOT role.rolcreaterole AND NOT role.rolcreatedb AND NOT role.rolreplication
@@ -23,25 +24,26 @@ export function createPrimaryWalletPaidInterestInboxStore(
       | 'paid_interest_inbox_readiness',
     command: unknown
   ) {
+    const link = primaryDbLink(config.database.login, config.database.port);
     const client = new Client({
       host: config.database.host,
       port: config.database.port,
       database: config.database.name,
-      user: config.database.login,
+      user: link.user,
       password: config.database.password,
       ssl: {
         rejectUnauthorized: true,
         ca: config.database.certificateAuthority,
+        ...link.tls,
       },
       connectionTimeoutMillis: 4000,
       query_timeout: 4000,
-      statement_timeout: 2500,
-      lock_timeout: 1500,
-      options: '-c search_path=pg_catalog',
+      ...link.startup,
       application_name: 'baci-primary-interest-inbox',
     });
     try {
       await client.connect();
+      await link.afterConnect(client);
       const verified = await client.query(verify);
       const session = verified.rows[0];
       if (

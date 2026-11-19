@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { expect, vi } from 'vitest';
 import { CheckoutPage } from './checkout-page';
 
@@ -106,7 +106,9 @@ export async function placeBankTransferOrder() {
   render(<CheckoutPage />);
 
   fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
-  fireEvent.click(screen.getByRole('button', { name: /continue to payment/i }));
+  const continueButton = screen.getByRole('button', { name: /continue to payment/i });
+  await waitFor(() => expect(continueButton).toBeEnabled());
+  fireEvent.click(continueButton);
   fireEvent.click(await screen.findByText(/^Bank Transfer$/));
 
   const placeOrderButton = screen
@@ -121,4 +123,15 @@ export function called(
   url: string
 ): boolean {
   return fetchMock.mock.calls.some(([input]) => String(input) === url);
+}
+
+export async function placeOxygenOrder() {
+  render(<CheckoutPage />);
+  fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
+  const continueButton = screen.getByRole('button', { name: /continue to payment/i });
+  await waitFor(() => expect(continueButton).toBeEnabled());
+  fireEvent.click(continueButton);
+  fireEvent.click(screen.getByRole('button', { name: 'Pay Small Small' }));
+  fireEvent.click(await screen.findByRole('radio', { name: /Oxygen/ }));
+  fireEvent.click(screen.getAllByRole('button', { name: /begin process/i }).find(button => !button.hasAttribute('disabled')) as HTMLButtonElement);
 }

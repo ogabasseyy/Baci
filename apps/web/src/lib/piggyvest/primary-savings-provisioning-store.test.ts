@@ -90,3 +90,21 @@ it('persists explicit interest choice through the prepare RPC', async () => {
     ]
   );
 });
+it('passes the expired-claim flag from a status read through unchanged', async () => {
+  const row = {
+    status: 'pending',
+    claimToken: null,
+    providerCustomerId: 'customer',
+    primaryWalletId: 'primary',
+    walletName: 'baci-save-d80a9fbb7f8c666ce4462294b4e53d25',
+    providerWalletId: null,
+    interestAccepted: true,
+    setupRetryable: true,
+  };
+  const execute = vi.fn().mockResolvedValue({ rows: [{ result: row }] });
+  const store = createPrimarySavingsProvisioningStore({
+    scope: provisioningFixture.scope,
+    execute,
+  });
+  expect(await store.read(provisioningFixture.goalId)).toEqual(row);
+});

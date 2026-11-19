@@ -2,6 +2,8 @@
 
 import { useEffect, useEffectEvent, useState } from 'react';
 import type { DiscountResult } from '@/components/storefront/checkout/discount-code-input';
+import { getCartCookieEpoch } from '@/hooks/cart/cart-cross-tab-lock';
+import { subscribeCartSessionGeneration } from '@/hooks/cart/shared-cart-storage';
 import { loadWalletBalance } from '../checkout-page-data-loaders';
 import type { RedvaultQuoteSummary } from '../components/redvault/RedvaultPaymentOption';
 import type {
@@ -9,6 +11,7 @@ import type {
   RedvaultStatus,
 } from '../handlers/redvault-prepared-order-submit';
 import type { PendingCheckoutOrderSnapshot } from '../pending-checkout-order';
+import { readRedvaultReviewRecovery } from '../read-redvault-review-recovery';
 import { getRedvaultCompatibleCheckoutValues } from '../redvault-compatible-checkout-values';
 import type { PaymentMethod, PaymentTab } from '../types';
 
@@ -20,8 +23,10 @@ interface UseCheckoutPaymentSessionOptions {
   hasAuthenticatedUser: boolean;
   hasCheckoutCartItems: boolean;
   isOrderInFlightRef: { current: boolean };
+  merchantId?: string;
   merchantSlug?: string;
   pendingCheckoutOrder: PendingCheckoutOrderSnapshot | null;
+  recoverCart?: boolean;
   walletSessionUserId?: string;
   resumeOrderId: string | null;
   preferredGateway: 'credpal' | 'credit_direct' | null;
@@ -37,8 +42,10 @@ export function useCheckoutPaymentSession({
   hasAuthenticatedUser,
   hasCheckoutCartItems,
   isOrderInFlightRef,
+  merchantId,
   merchantSlug,
   pendingCheckoutOrder,
+  recoverCart = false,
   preferredGateway,
   resumeOrderId,
   resumedOrder,
@@ -62,6 +69,51 @@ export function useCheckoutPaymentSession({
     contact: '',
     note: '',
   });
+
+  useEffect(() => {
+    const fence = pendingCheckoutOrder?.redvaultReview?.recoveryFence;
+    if (!fence) return;
+    // Install the cross-tab epoch listener before subscribing to changes.
+    getCartCookieEpoch(fence.merchantSlug);
+    const validateFence = () => {
+      if (!readRedvaultReviewRecovery(pendingCheckoutOrder, merchantId)) {
+        setRedvaultOrderReady(null);
+        setRedvaultSummary(null);
+      }
+    };
+    const unsubscribe = subscribeCartSessionGeneration(validateFence);
+    validateFence();
+    return unsubscribe;
+  }, [pendingCheckoutOrder, merchantId]);
+
+  useEffect(() => {
+    if (
+      !recoverCart ||
+      hasCheckoutCartItems ||
+      method ||
+      redvaultOrderReady ||
+      resumeOrderId ||
+      resumedOrder
+    )
+      return;
+    const recovery = readRedvaultReviewRecovery(
+      pendingCheckoutOrder,
+      merchantId
+    );
+    if (!recovery) return;
+    setMethod('uba_redvault');
+    setRedvaultSummary(recovery.summary);
+    setRedvaultOrderReady(recovery.ready);
+  }, [
+    recoverCart,
+    hasCheckoutCartItems,
+    method,
+    redvaultOrderReady,
+    resumeOrderId,
+    resumedOrder,
+    pendingCheckoutOrder,
+    merchantId,
+  ]);
   const walletRedemptionAllowed = hasCheckoutCartItems || !resumeOrderId;
   const updatePayWithWallet = (nextValue: boolean) => {
     if (walletRedemptionAllowed || !nextValue) {

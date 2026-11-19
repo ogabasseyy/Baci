@@ -98,6 +98,8 @@ VALUES ('31000000-0000-4000-8000-000000000020','31000000-0000-4000-8000-00000000
 ('32000002-0001-4000-8000-000000000001','31000002-0001-4000-8000-000000000001','00000000-0000-4000-8000-000000000001','used',90,7,'active');
 ALTER TABLE public.product_offers ENABLE TRIGGER USER;
 SET ROLE anon;
+SELECT set_config('request.jwt.claims','{"role":"anon"}',true);
+SELECT set_config('request.jwt.claim.role','anon',true);
 DO $$
 DECLARE n integer; r record; price numeric;
 BEGIN
@@ -137,11 +139,13 @@ BEGIN
  -- Non-active products resolve nothing.
  SELECT count(*) INTO n FROM public.get_storefront_offer_resolution('00000000-0000-4000-8000-000000000001', ARRAY['31000000-0000-4000-8000-000000000006']::uuid[]);
  IF n <> 0 THEN RAISE EXCEPTION 'archived product must resolve nothing'; END IF;
- -- Merchant scoping: wrong merchant resolves nothing, NULL stays unscoped.
+ -- Merchant scoping: wrong merchant resolves nothing, anonymous NULL scope is rejected.
  SELECT count(*) INTO n FROM public.get_storefront_offer_resolution('00000000-0000-4000-8000-999999999999', ARRAY['31000000-0000-4000-8000-000000000001']::uuid[]);
  IF n <> 0 THEN RAISE EXCEPTION 'foreign merchant must resolve nothing'; END IF;
- SELECT count(*) INTO n FROM public.get_storefront_offer_resolution(NULL, ARRAY['31000000-0000-4000-8000-000000000001']::uuid[]);
- IF n <> 2 THEN RAISE EXCEPTION 'NULL merchant must keep the unscoped read'; END IF;
+ BEGIN
+  PERFORM public.get_storefront_offer_resolution(NULL, ARRAY['31000000-0000-4000-8000-000000000001']::uuid[]);
+  RAISE EXCEPTION 'anonymous NULL merchant read accepted';
+ EXCEPTION WHEN insufficient_privilege THEN NULL; END;
  -- Batch policy: 201 strict ids of one merchant succeed scoped (the
  -- merchant slices call the serialized-count page twice, 200 + 1,
  -- and both slices merge with capped units), fail unscoped, and
@@ -154,9 +158,9 @@ BEGIN
  IF n <> 1 THEN RAISE EXCEPTION 'second slice must cap by its units'; END IF;
  BEGIN
   PERFORM public.get_storefront_offer_resolution(NULL, (SELECT array_agg(('31000001-' || lpad(g::text, 4, '0') || '-4000-8000-' || lpad(g::text, 12, '0'))::uuid) FROM generate_series(1, 201) g));
-  RAISE EXCEPTION 'unscoped 201-id call must raise the 200 cap';
- EXCEPTION WHEN sqlstate '22023' THEN
-  IF SQLERRM NOT LIKE '%at most 200 product IDs without a merchant scope%' THEN RAISE; END IF;
+  RAISE EXCEPTION 'anonymous unscoped 201-id call accepted';
+ EXCEPTION WHEN insufficient_privilege THEN
+  IF SQLERRM <> 'merchant_scope_required' THEN RAISE; END IF;
  END;
  BEGIN
   PERFORM public.get_storefront_offer_resolution('00000000-0000-4000-8000-000000000001', (SELECT array_agg(gen_random_uuid()) FROM generate_series(1, 1001)));

@@ -12,6 +12,7 @@ describe('storefrontProductsQuerySchema', () => {
       condition: 'refurbished',
       min_price: '1000',
       max_price: '9000',
+      offset: '50',
       sort: 'price-asc',
       q: 'bravia',
       has_images: 'true',
@@ -23,6 +24,7 @@ describe('storefrontProductsQuerySchema', () => {
       expect(result.data.condition).toBe('open_box');
       expect(result.data.min_price).toBe(1000);
       expect(result.data.max_price).toBe(9000);
+      expect(result.data.offset).toBe(50);
       expect(result.data.has_images).toBe(true);
     }
   });
@@ -50,6 +52,15 @@ describe('storefrontProductsQuerySchema', () => {
       storefrontProductsQuerySchema.safeParse({
         merchant_id: VALID_MERCHANT_ID,
         condition: 'broken',
+      }).success
+    ).toBe(false);
+  });
+
+  it('rejects unbounded storefront search offsets', () => {
+    expect(
+      storefrontProductsQuerySchema.safeParse({
+        merchant_id: VALID_MERCHANT_ID,
+        offset: '100001',
       }).success
     ).toBe(false);
   });

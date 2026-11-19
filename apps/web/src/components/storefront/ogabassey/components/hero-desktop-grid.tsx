@@ -3,8 +3,17 @@ import Link from 'next/link';
 import { Suspense } from 'react';
 import { ogabasseyFallbackImageLoader } from '@/lib/ogabassey-image-fallback-loader';
 import { buildOgabasseyAvifSrcSet } from '@/lib/ogabassey-image-format-sources';
+import { toOgabasseySameOriginTransformUrl } from '@/lib/ogabassey-same-origin-hero-url';
+import { toOgabasseySameOriginSrcSet } from '@/lib/ogabassey-same-origin-srcset';
 import { asRoute } from '@/lib/routes';
-import { TRANSPARENT_PIXEL_SRC } from './hero-mobile-image-config';
+import {
+  capSrcSetWidthRungs,
+  DESKTOP_HERO_BIG_MAX_SRCSET_WIDTH,
+  DESKTOP_HERO_BIG_MIN_SRCSET_WIDTH,
+  DESKTOP_HERO_SIDE_MAX_SRCSET_WIDTH,
+  MOBILE_HERO_SOURCE_MEDIA,
+  TRANSPARENT_PIXEL_SRC,
+} from './hero-mobile-image-config';
 import type { LaunchProductSlide } from './LaunchCarousel';
 
 interface HeroDesktopGridProps {
@@ -31,9 +40,9 @@ const SIDE_IMAGE_SOURCE_MEDIA = '(min-width: 768px)';
 const SIDE_IMAGE_SIZES = '(min-width: 1024px) 160px, (min-width: 768px) 25vw, 1px';
 const HERO_IMAGE_QUALITY = 70;
 
-/** Media-scoped desktop hero image. On mobile no `<source>` matches, so the
- *  `<img>` falls back to a transparent pixel (zero network). Desktop keeps
- *  eager/high so this above-the-fold grid can still be the desktop LCP. */
+/** Media-scoped desktop hero image. On mobile the `<source media="(max-width: 767px)">`
+ *  matches a transparent pixel (zero network), while `<img src>` holds the real
+ *  fallback URL so no `fetchpriority="high"` hero `<img>` uses a `data:image/gif` `src`. */
 function HeroBigImage({ alt, src }: { alt: string; src: string }) {
   const {
     props: { sizes, src: imgSrc, srcSet, ...imgProps },
@@ -50,31 +59,48 @@ function HeroBigImage({ alt, src }: { alt: string; src: string }) {
     width: BIG_IMAGE_WIDTH,
   });
 
-  const fallbackSrcSet = srcSet ?? imgSrc;
+  const rawFallbackSrcSet =
+    capSrcSetWidthRungs(
+      srcSet,
+      DESKTOP_HERO_BIG_MAX_SRCSET_WIDTH,
+      DESKTOP_HERO_BIG_MIN_SRCSET_WIDTH
+    ) ?? imgSrc;
   // AVIF twin (per-format URL) so AVIF-capable browsers keep AVIF: CF Free
   // ignores `Vary: Accept`, so one `format=auto` body can't serve both tiers.
   // `null` for external images — the plain `<source>` then serves everyone.
-  const avifSrcSet = buildOgabasseyAvifSrcSet(fallbackSrcSet);
+  const avifSrcSet =
+    toOgabasseySameOriginSrcSet(buildOgabasseyAvifSrcSet(rawFallbackSrcSet)) ??
+    null;
+  const sameOriginImgSrc = toOgabasseySameOriginTransformUrl(imgSrc);
+  const fallbackSrcSet =
+    toOgabasseySameOriginSrcSet(rawFallbackSrcSet) ?? sameOriginImgSrc;
 
   return (
     <picture className="absolute inset-0 block h-full w-full">
       {avifSrcSet ? (
+        <Suspense fallback={null}>
+          <source
+            media={BIG_IMAGE_SOURCE_MEDIA}
+            sizes={sizes ?? BIG_IMAGE_SIZES}
+            srcSet={avifSrcSet}
+            type="image/avif"
+          />
+        </Suspense>
+      ) : null}
+      <Suspense fallback={null}>
         <source
           media={BIG_IMAGE_SOURCE_MEDIA}
           sizes={sizes ?? BIG_IMAGE_SIZES}
-          srcSet={avifSrcSet}
-          type="image/avif"
+          srcSet={fallbackSrcSet}
         />
-      ) : null}
-      <source
-        media={BIG_IMAGE_SOURCE_MEDIA}
-        sizes={sizes ?? BIG_IMAGE_SIZES}
-        srcSet={fallbackSrcSet}
-      />
+      </Suspense>
+      <Suspense fallback={null}>
+        <source media={MOBILE_HERO_SOURCE_MEDIA} srcSet={TRANSPARENT_PIXEL_SRC} />
+      </Suspense>
       <img
         {...imgProps}
         alt={alt}
-        src={TRANSPARENT_PIXEL_SRC}
+        src={sameOriginImgSrc}
         className="h-full w-full object-contain p-4 transition-transform duration-700 group-hover:scale-105"
       />
     </picture>
@@ -91,37 +117,47 @@ function HeroBigCard({
   slide: LaunchProductSlide;
 }) {
   return (
-    <Link
-      href={asRoute(slide.href)}
-      prefetch={false}
-      aria-label={`${slide.name} — ${slide.ctaLabel}`}
-      className={`group relative ${hasSideCards ? 'lg:col-span-3' : 'lg:col-span-5'} h-[400px] lg:h-full overflow-hidden rounded-2xl ring-1 ring-store-border/70 shadow-lg hover:shadow-xl transition-all duration-300 grid grid-cols-5 ${CARD_SURFACE}`}
-    >
-      <div className="col-span-3 flex flex-col justify-center gap-3 px-10 lg:px-16 py-8">
-        <span className="text-xs font-semibold uppercase tracking-[0.18em] text-store-primary">
-          Just launched
-        </span>
-        <h2 className="line-clamp-3 text-4xl font-bold leading-tight text-store-secondary-text lg:text-5xl">
-          {slide.name}
-        </h2>
-        <p className="text-xl font-semibold text-store-secondary-text">
-          {slide.priceLabel}
-        </p>
-        <div className="mt-1 h-1.5 w-16 rounded-full bg-store-primary" />
-        <span className="mt-3 inline-flex w-fit items-center rounded-full bg-store-primary px-7 py-3 text-base font-bold text-store-on-primary shadow-sm transition-all group-hover:scale-105 group-hover:shadow-lg group-active:scale-95">
-          {slide.ctaLabel}
-        </span>
-      </div>
-      <div className="relative col-span-2">
-        <HeroBigImage alt={slide.imageAlt} src={slide.imageUrl} />
-      </div>
-    </Link>
+    <Suspense fallback={null}>
+      <Link
+        href={asRoute(slide.href)}
+        prefetch={false}
+        aria-label={`${slide.name} — ${slide.ctaLabel}`}
+        className={`group relative ${hasSideCards ? 'lg:col-span-3' : 'lg:col-span-5'} h-[400px] lg:h-full overflow-hidden rounded-2xl ring-1 ring-store-border/70 shadow-lg hover:shadow-xl transition-all duration-300 grid grid-cols-5 ${CARD_SURFACE}`}
+      >
+        <Suspense fallback={null}>
+          <div className="col-span-3 flex flex-col justify-center gap-3 px-10 lg:px-16 py-8">
+            <span className="text-xs font-semibold uppercase tracking-[0.18em] text-store-primary">
+              Just launched
+            </span>
+            <Suspense fallback={null}>
+              <p className="ogabassey-hero-title line-clamp-3 text-4xl font-bold leading-tight text-store-secondary-text lg:text-5xl">
+                {slide.name}
+              </p>
+              <p className="ogabassey-hero-price text-xl font-semibold text-store-secondary-text">
+                {slide.priceLabel}
+              </p>
+            </Suspense>
+            <div className="mt-1 h-1.5 w-16 rounded-full bg-store-primary" />
+            <Suspense fallback={null}>
+              <span className="mt-3 inline-flex w-fit items-center rounded-full bg-store-primary px-7 py-3 text-base font-bold text-store-on-primary shadow-sm transition-all group-hover:scale-105 group-hover:shadow-lg group-active:scale-95">
+                {slide.ctaLabel}
+              </span>
+            </Suspense>
+          </div>
+        </Suspense>
+        <div className="relative col-span-2">
+          <Suspense fallback={null}>
+            <HeroBigImage alt={slide.imageAlt} src={slide.imageUrl} />
+          </Suspense>
+        </div>
+      </Link>
+    </Suspense>
   );
 }
 
 
-/** Desktop-only side-card image. The fallback `<img>` is a transparent pixel so
- * hidden desktop cards do not add mobile hero image requests. */
+/** Desktop-only side-card image. On mobile the `<source media="(max-width: 767px)">`
+ *  matches a transparent pixel so hidden desktop cards do not add mobile hero image requests. */
 function HeroSideImage({ alt, src }: { alt: string; src: string }) {
   const {
     props: { sizes, src: imgSrc, srcSet, ...imgProps },
@@ -136,28 +172,36 @@ function HeroSideImage({ alt, src }: { alt: string; src: string }) {
     width: SIDE_IMAGE_WIDTH,
   });
 
-  const fallbackSrcSet = srcSet ?? imgSrc;
+  const fallbackSrcSet =
+    capSrcSetWidthRungs(srcSet, DESKTOP_HERO_SIDE_MAX_SRCSET_WIDTH) ?? imgSrc;
   const avifSrcSet = buildOgabasseyAvifSrcSet(fallbackSrcSet);
 
   return (
     <picture className="absolute inset-0 block h-full w-full">
       {avifSrcSet ? (
+        <Suspense fallback={null}>
+          <source
+            media={SIDE_IMAGE_SOURCE_MEDIA}
+            sizes={sizes ?? SIDE_IMAGE_SIZES}
+            srcSet={avifSrcSet}
+            type="image/avif"
+          />
+        </Suspense>
+      ) : null}
+      <Suspense fallback={null}>
         <source
           media={SIDE_IMAGE_SOURCE_MEDIA}
           sizes={sizes ?? SIDE_IMAGE_SIZES}
-          srcSet={avifSrcSet}
-          type="image/avif"
+          srcSet={fallbackSrcSet}
         />
-      ) : null}
-      <source
-        media={SIDE_IMAGE_SOURCE_MEDIA}
-        sizes={sizes ?? SIDE_IMAGE_SIZES}
-        srcSet={fallbackSrcSet}
-      />
+      </Suspense>
+      <Suspense fallback={null}>
+        <source media={MOBILE_HERO_SOURCE_MEDIA} srcSet={TRANSPARENT_PIXEL_SRC} />
+      </Suspense>
       <img
         {...imgProps}
         alt={alt}
-        src={TRANSPARENT_PIXEL_SRC}
+        src={imgSrc}
         className="h-full w-full object-contain p-2 transition-transform duration-700 group-hover:scale-105"
       />
     </picture>
@@ -177,10 +221,12 @@ function HeroSideCard({ slide }: { slide: LaunchProductSlide }) {
         <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-store-primary">
           Just launched
         </span>
-        <h3 className="line-clamp-2 text-lg font-bold leading-tight text-store-secondary-text">
+        <p className="ogabassey-hero-title line-clamp-2 text-lg font-bold leading-tight text-store-secondary-text">
           {slide.name}
-        </h3>
-        <p className="text-sm font-semibold text-store-secondary-text">{slide.priceLabel}</p>
+        </p>
+        <p className="ogabassey-hero-price text-sm font-semibold text-store-secondary-text">
+          {slide.priceLabel}
+        </p>
         <span className="mt-1 text-xs font-bold text-store-primary underline underline-offset-2">
           {slide.ctaLabel}
         </span>
@@ -196,13 +242,13 @@ function HeroDesktopSideCardsReserve({ count }: { count: number }) {
   return (
     <div
       aria-hidden="true"
-      className="flex flex-col gap-4 h-full lg:col-span-2"
+      className="hidden lg:flex flex-col gap-4 h-full lg:col-span-2"
     >
       {Array.from({ length: count }).map((_, index) => (
         <div
           // biome-ignore lint/suspicious/noArrayIndexKey: static reserve slots
           key={index}
-          className={`flex-1 min-h-[160px] lg:min-h-0 rounded-2xl shadow-lg ring-1 ring-store-border/70 ${CARD_SURFACE}`}
+          className={`flex-1 rounded-2xl shadow-lg ring-1 ring-store-border/70 ${CARD_SURFACE}`}
         />
       ))}
     </div>
@@ -218,25 +264,29 @@ export function HeroDesktopGrid({ slides }: HeroDesktopGridProps) {
   }
 
   return (
-    <div
-      className="hidden md:grid grid-cols-1 lg:grid-cols-5 gap-4 h-auto lg:h-[540px] order-2"
-      aria-label="Featured products"
-      data-ogabassey-desktop-hero="true"
-      role="region"
-    >
-      <HeroBigCard hasSideCards={sideCards.length > 0} slide={big} />
+    <Suspense fallback={null}>
+      <div
+        className="hidden md:grid grid-cols-1 lg:grid-cols-5 gap-4 h-auto lg:h-[540px] order-2"
+        aria-label="Featured products"
+        data-ogabassey-desktop-hero="true"
+        role="region"
+      >
+        <HeroBigCard hasSideCards={sideCards.length > 0} slide={big} />
 
-      {sideCards.length > 0 ? (
-        <Suspense
-          fallback={<HeroDesktopSideCardsReserve count={sideCards.length} />}
-        >
-          <div className="flex flex-col gap-4 h-full lg:col-span-2">
-            {sideCards.map((slide) => (
-              <HeroSideCard key={slide.id} slide={slide} />
-            ))}
-          </div>
-        </Suspense>
-      ) : null}
-    </div>
+        {sideCards.length > 0 ? (
+          <Suspense fallback={null}>
+            <Suspense
+              fallback={<HeroDesktopSideCardsReserve count={sideCards.length} />}
+            >
+              <div className="flex flex-col gap-4 h-full lg:col-span-2">
+                {sideCards.map((slide) => (
+                  <HeroSideCard key={slide.id} slide={slide} />
+                ))}
+              </div>
+            </Suspense>
+          </Suspense>
+        ) : null}
+      </div>
+    </Suspense>
   );
 }

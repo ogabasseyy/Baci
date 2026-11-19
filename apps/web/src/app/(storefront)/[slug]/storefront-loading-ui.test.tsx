@@ -120,7 +120,7 @@ describe('storefront-loading-ui', () => {
     const bar = container.querySelector('.storefront-shell-loading__bar');
 
     expect(shell).toHaveStyle({
-      background: 'var(--store-background, #ffffff)',
+      background: 'transparent',
       color: 'var(--store-background-text, #111827)',
       boxSizing: 'border-box',
       padding: '0.75rem 1rem',
@@ -172,5 +172,12 @@ describe('storefront-loading-ui', () => {
     expect(
       screen.getByRole('status', { name: 'Loading utility page' })
     ).toBeInTheDocument();
+  });
+
+  it('keeps HomeRouteLoading compact so LoadingBoundaryProvider does not serialize a full skeleton tree into initial RSC Flight', () => {
+    const html = renderToString(<HomeRouteLoading />);
+
+    expect(html).toContain('aria-label="Loading storefront homepage"');
+    expect(html.length).toBeLessThan(300);
   });
 });

@@ -92,6 +92,15 @@ export function admitZeptomailPlatformFallback({
   });
 }
 
+/**
+ * Static platform-fallback ceiling for manual-order document sends: they
+ * run inside the 60s cron worker with no caller deadline, so without a
+ * cap a slow fallback would overrun the worker mid-dispatch. Covers one
+ * worst-case attempt plus the audit margin, keeping the retry budget for
+ * the outbox path instead of the transport.
+ */
+export const MANUAL_DOC_FALLBACK_CEILING_MS = 45_000;
+
 export function resolveZeptomailFallbackAdmission({
   attemptsPerSender,
   remainingBudgetMs,

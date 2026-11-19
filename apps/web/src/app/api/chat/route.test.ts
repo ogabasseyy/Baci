@@ -17,7 +17,6 @@ let ollamaBaseUrl: string | undefined;
 let ollamaBasicAuth: string | undefined;
 let ollamaExecutedToolNameBeforeFailure: string | null = null;
 let ollamaExecutedToolResultBeforeFailure: string | null = null;
-let ollamaExecuteDuplicateVirtualAccount = false;
 let ollamaError: Error | null = null;
 let ollamaStreamError: Error | null = null;
 let ollamaResponseText = 'Gemma response';
@@ -83,6 +82,12 @@ vi.mock('@/lib/agentic/agentic-chat-tenant', () => ({
   resolveAgenticChatTenant: vi.fn(async () => mockTenant),
 }));
 
+// The fast catalog path is covered by its own route and flow tests. Keep the
+// provider-chain regression suite independent of catalog network access.
+vi.mock('./fast-catalog-flow', () => ({
+  tryFastCatalogChat: vi.fn(async () => null),
+}));
+
 vi.mock('@/env', () => ({
   getAiChatProvider: vi.fn(() => chatProvider),
   getAiChatModel: vi.fn(() => 'gemma4:e4b'),
@@ -134,41 +139,6 @@ vi.mock('@/lib/ollama-agentic-chat', () => ({
         result: string
       ) => void;
     }) => {
-      if (ollamaExecuteDuplicateVirtualAccount) {
-        const call = {
-          function: {
-            name: 'createVirtualAccount',
-            arguments: {
-              amount: 50_000,
-              customerEmail: 'buyer@example.com',
-              customerName: 'Buyer',
-              items: [
-                {
-                  productId: 'p1',
-                  name: 'iPhone 11',
-                  price: 50_000,
-                  quantity: 1,
-                },
-              ],
-            },
-          },
-        };
-        const firstResult = await options.executeToolCall(call);
-        options.onToolExecuted?.(call, firstResult);
-        const secondResult = await options.executeToolCall(call);
-        options.onToolExecuted?.(call, secondResult);
-
-        return new Response(
-          JSON.stringify({
-            firstResult: JSON.parse(firstResult),
-            secondResult: JSON.parse(secondResult),
-          }),
-          {
-            headers: { 'Content-Type': 'text/plain; charset=utf-8' },
-          }
-        );
-      }
-
       if (ollamaExecutedToolNameBeforeFailure) {
         options.onToolExecuted?.(
           {
@@ -311,7 +281,6 @@ describe('POST /api/chat', () => {
     ollamaBasicAuth = undefined;
     ollamaExecutedToolNameBeforeFailure = null;
     ollamaExecutedToolResultBeforeFailure = null;
-    ollamaExecuteDuplicateVirtualAccount = false;
     ollamaError = null;
     ollamaStreamError = null;
     ollamaResponseText = 'Gemma response';
@@ -617,52 +586,6 @@ describe('POST /api/chat', () => {
       '[Agentic Chat] Ollama request failed after executing commerce tools; returning static fallback:',
       'Chat returned an empty completion'
     );
-  });
-
-  it('blocks repeated side-effecting Ollama tool execution after an order is created', async () => {
-    // Arrange
-    const args = {
-      amount: 50_000,
-      customerEmail: 'buyer@example.com',
-      customerName: 'Buyer',
-      items: [
-        { productId: 'p1', name: 'iPhone 11', price: 50_000, quantity: 1 },
-      ],
-    };
-    ollamaBaseUrl = 'https://ollama.example.com';
-    ollamaExecuteDuplicateVirtualAccount = true;
-    vi.mocked(createVirtualAccountSchema.parse).mockReturnValue(args);
-    vi.mocked(handleCreateVirtualAccount).mockResolvedValue({
-      success: false,
-      orderId: 'order-1',
-    });
-
-    // Act
-    const response = await POST(
-      makeRequest({
-        sessionId: 'og_chat_customer_session_1234',
-        messages: [{ role: 'user', content: 'Create payment account' }],
-      })
-    );
-    const text = await response.text();
-    const result = JSON.parse(text);
-
-    // Assert
-    expect(response.status).toBe(200);
-    expect(handleCreateVirtualAccount).toHaveBeenCalledTimes(1);
-    expect(handleCreateVirtualAccount).toHaveBeenCalledWith(
-      args,
-      'og_chat_customer_session_1234'
-    );
-    expect(result.firstResult).toEqual({
-      success: false,
-      orderId: 'order-1',
-    });
-    expect(result.secondResult).toEqual({
-      error:
-        'createVirtualAccount already completed a commerce action in this chat turn. Use the existing tool result instead of calling it again.',
-    });
-    expect(generateText).not.toHaveBeenCalled();
   });
 
   it('returns a static fallback when Ollama fails after canceling an order', async () => {

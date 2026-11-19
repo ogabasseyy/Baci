@@ -1,6 +1,13 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+let mockUser: { id: string } | null = null;
+let mockSessionUser: { id: string } | null = null;
+const mockGetUser = vi.fn();
+const mockPush = vi.fn();
+vi.mock('@/contexts/auth-context', () => ({ useAuthSafe: () => ({ user: mockUser }) }));
+vi.mock('@/components/storefront/checkout-code-signin', () => ({ CheckoutCodeSignin: () => <div>Sign in with email</div> }));
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -32,12 +39,16 @@ const mockApplyCartWideNegotiation = vi.fn();
 const mockClearNegotiatedPrice = vi.fn();
 const mockToggleAssurance = vi.fn();
 
+let mockIsCartOpen = true;
+
 type MockCartItem = {
   id: string;
   cartItemId: string;
   name: string;
   price: number;
   quantity: number;
+  variantId?:string;
+  variantAttributes?:Record<string,string>;
   image: string;
   category: string;
   brand: string;
@@ -64,7 +75,7 @@ let mockCartItems: MockCartItem[] = [
 
 vi.mock('@/hooks/cart', () => ({
   useCart: () => ({
-    isCartOpen: true,
+    isCartOpen: mockIsCartOpen,
     setIsCartOpen: mockSetIsCartOpen,
     cart: mockCartItems,
     removeFromCart: mockRemoveFromCart,
@@ -86,7 +97,7 @@ vi.mock('@/lib/routes', () => ({
 }));
 
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: mockPush }),
 }));
 
 vi.mock('next/image', () => ({
@@ -147,7 +158,7 @@ vi.mock('./empty-state', () => ({
 
 vi.mock('@/lib/supabase/client', () => ({
   createClient: () => ({
-    auth: { getUser: vi.fn().mockResolvedValue({ data: { user: null } }) },
+    auth: { getUser: mockGetUser },
     from: () => ({ insert: vi.fn().mockResolvedValue({ error: null }) }),
   }),
 }));
@@ -163,6 +174,10 @@ import { CartSidebar } from './CartSidebar';
 describe('CartSidebar', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUser = null;
+    mockSessionUser = null;
+    mockGetUser.mockImplementation(async () => ({ data: { user: mockSessionUser }, error: null }));
+    mockIsCartOpen=true;
     vi.mocked(hasStorefrontPriceNegotiation).mockReturnValue(true);
     mockMerchant = { id: 'merchant-abc', slug: 'test-store' };
     mockCartItems = [
@@ -179,6 +194,14 @@ describe('CartSidebar', () => {
         negotiationStatus: 'accepted' as const,
       },
     ];
+  });
+
+  it('shows cart totals without the shipping placeholder', () => {
+    render(<CartSidebar />);
+    expect(screen.queryByText('Subtotal')).not.toBeInTheDocument();
+    expect(screen.getByText('Total', { exact: true })).toBeInTheDocument();
+    expect(screen.queryByText('Shipping', { exact: true })).not.toBeInTheDocument();
+    expect(screen.queryByText('Calculated at checkout')).not.toBeInTheDocument();
   });
 
   it('renders cart items when open', () => {
@@ -249,6 +272,11 @@ describe('CartSidebar', () => {
     expect(mockClearNegotiatedPrice).toHaveBeenCalled();
     // The NegotiationModal should now be visible
     expect(screen.getByPlaceholderText('Enter amount...')).toBeInTheDocument();
+    const modalLayer = screen.getByRole('dialog', { name: /negotiate price/i }).parentElement;
+    const cartLayer = screen.getByRole('button', { name: /dismiss cart backdrop/i }).parentElement;
+    expect(cartLayer).toHaveClass('z-80');
+    expect(modalLayer).toHaveClass('z-90');
+    expect(modalLayer?.parentElement).toBe(cartLayer?.parentElement);
     confirmSpy.mockRestore();
   });
 
@@ -345,4 +373,25 @@ describe('CartSidebar', () => {
       screen.getByRole('button', { name: /negotiate total amount/i })
     ).toBeInTheDocument();
   });
+});
+
+describe('stable logical cart view',()=>{
+ beforeEach(()=>{vi.clearAllMocks();mockIsCartOpen=true;mockMerchant={id:'merchant-abc',slug:'test-store'};mockCartItems=[{id:'p1',cartItemId:'ci-1',name:'Test Shoe',price:15000,quantity:1,image:'/shoe.jpg',category:'shoes',brand:'TestBrand'}];});
+it('does not count cloned or re-enriched cart metadata as a new view while the drawer stays open',()=>{
+ const view=render(<CartSidebar/>);expect(analytics.viewCart).toHaveBeenCalledTimes(1);
+ mockCartItems=mockCartItems.map(item=>({...item,name:'Enriched catalog name',image:'/enriched.jpg'}));view.rerender(<CartSidebar/>);
+ expect(analytics.viewCart).toHaveBeenCalledTimes(1);
+});
+it('tracks actual quantity, price or variant changes while the drawer remains open',()=>{
+ const view=render(<CartSidebar/>);expect(analytics.viewCart).toHaveBeenCalledTimes(1);
+ mockCartItems=mockCartItems.map(item=>({...item,quantity:2}));view.rerender(<CartSidebar/>);expect(analytics.viewCart).toHaveBeenCalledTimes(2);
+ mockCartItems=mockCartItems.map(item=>({...item,price:16000}));view.rerender(<CartSidebar/>);expect(analytics.viewCart).toHaveBeenCalledTimes(3);
+ mockCartItems=mockCartItems.map(item=>({...item,variantId:'new-variant'}));view.rerender(<CartSidebar/>);expect(analytics.viewCart).toHaveBeenCalledTimes(4);
+});
+it('counts closing and reopening the same cart as a new view',()=>{
+ mockIsCartOpen=true;const view=render(<CartSidebar/>);expect(analytics.viewCart).toHaveBeenCalledTimes(1);
+ mockIsCartOpen=false;view.rerender(<CartSidebar/>);mockIsCartOpen=true;view.rerender(<CartSidebar/>);
+ expect(analytics.viewCart).toHaveBeenCalledTimes(2);
+});
+
 });

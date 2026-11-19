@@ -1,4 +1,5 @@
-// App Router loading modules import from this path; the shell implementation lives in the shared storefront component module re-exported below.
+// App Router loading modules import from this path; the shell implementation lives in the shared storefront component modules re-exported below.
+export { HomeRouteLoading } from '@/components/storefront/ogabassey/home-route-loading';
 export {
   BlogListingRouteLoading,
   BlogPostRouteLoading,
@@ -6,7 +7,6 @@ export {
   CommerceRouteLoading,
   ContentRouteLoading,
   CustomerRouteLoading,
-  HomeRouteLoading,
   ProductDetailRouteLoading,
   ShellChromeLoading,
   UtilityRouteLoading,

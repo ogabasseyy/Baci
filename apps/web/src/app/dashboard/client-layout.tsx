@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { useUpgradeModal } from '@/components/dashboard/upgrade-modal';
 import { NotificationBanner } from '@/components/notifications/notification-banner';
+import { OnboardingReminderBanner } from '@/components/notifications/onboarding-reminder';
 import { BagLoader } from '@/components/ui/bag-loader';
 import { useAuth } from '@/contexts/auth-context';
 import { useMerchant } from '@/hooks/use-merchant-client';
@@ -191,9 +192,15 @@ export default function DashboardClientLayout({
 
           <main
             id="main-content"
-            className="flex-1 transition-all duration-300 ease-in-out p-4 md:p-6 lg:p-8 overflow-auto"
+            className="flex-1 transition-all duration-300 ease-in-out p-4 pb-[calc(6rem+env(safe-area-inset-bottom))] md:p-6 lg:p-8 overflow-auto"
           >
             <NotificationBanner />
+            {user && merchant?.user_id === user.id && (
+              <OnboardingReminderBanner
+                key={`${user.id}:${merchant.id}`}
+                merchantId={merchant.id}
+              />
+            )}
             <Suspense
               fallback={
                 <div className="flex h-screen items-center justify-center">

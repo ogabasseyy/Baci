@@ -12,8 +12,10 @@ import {
 } from '../pending-checkout-order';
 import { resolveCheckoutResumeContext } from '../resolve-checkout-resume-context';
 import { usePaymentReturnReset } from '../use-payment-return-reset';
+import { useBeginCheckoutTracking } from './use-begin-checkout-tracking';
 import { useCheckoutResumeLifecycle } from './use-checkout-resume-lifecycle';
 import { useCheckoutSubmissionState } from './use-checkout-submission-state';
+import { useRedvaultUncertainRecovery } from './use-redvault-uncertain-recovery';
 import { useResumedCheckoutStartFunnel } from './use-resumed-checkout-start-funnel';
 
 interface SearchParams {
@@ -78,6 +80,15 @@ export function useCheckoutAttemptSession({
     setCurrentStep: navigation.setCurrentStep,
     setCompletedSteps: navigation.setCompletedSteps,
   });
+  useRedvaultUncertainRecovery({
+    merchantId,
+    merchantSlug,
+    isHydrated,
+    pendingOrder: pendingCheckoutOrder,
+    setPendingOrder: setPendingCheckoutOrder,
+    setIsProcessing: submission.setIsProcessing,
+    setCurrentStep: navigation.setCurrentStep,
+  });
   const resumeContext = resolveCheckoutResumeContext({
     searchParams,
     pendingCheckoutOrder,
@@ -117,8 +128,16 @@ export function useCheckoutAttemptSession({
     }
   }, [pendingCheckoutOrder, merchantId, clearPendingCheckoutOrder]);
 
+  const attemptId = `gen-${readCheckoutAttemptGeneration()}`;
+  useBeginCheckoutTracking({
+    attemptId,
+    checkoutCart: funnel.checkoutCart,
+    currency: funnel.currencyCode,
+    isHydrated: isHydrated && !checkoutOrderCreated,
+    merchantId,
+  });
   useResumedCheckoutStartFunnel({
-    attemptId: `gen-${readCheckoutAttemptGeneration()}`,
+    attemptId,
     checkoutCartTotal: funnel.checkoutCartTotal,
     currencyCode: funnel.currencyCode,
     displayItems: displayModel.displayItems,

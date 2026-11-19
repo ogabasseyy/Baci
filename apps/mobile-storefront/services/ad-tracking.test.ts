@@ -87,7 +87,7 @@ describe('ad-tracking server conversions', () => {
     await initAdTracking();
   });
 
-  it('sends AddToWishlist through the Events API fan-out route', async () => {
+  it('records AddToWishlist internally without inferring purpose consent from ATT', async () => {
     await trackAddToWishlist({
       id: 'sku-1',
       name: 'iPhone 15',
@@ -114,7 +114,9 @@ describe('ad-tracking server conversions', () => {
         currency: 'NGN',
         value: 120_000,
       },
-      targets: ['facebook', 'tiktok', 'snapchat', 'google'],
+      analytics_consent: false,
+      marketing_consent: false,
+      targets: [],
     });
   });
 

@@ -26,7 +26,7 @@ export function NavbarNotificationsPanel({
 
   return (
     <section
-      className="absolute top-full right-0 z-50 mt-4 w-80 animate-in overflow-hidden rounded-xl border border-store-border bg-store-background py-0 shadow-xl fade-in slide-in-from-top-2"
+      className="absolute top-full right-0 z-50 mt-4 w-[min(20rem,calc(100vw-2rem))] animate-in overflow-hidden rounded-xl border border-store-border bg-store-background py-0 shadow-xl fade-in slide-in-from-top-2 md:w-80"
       aria-label="Notifications"
     >
       <div className="flex items-center justify-between border-store-border border-b bg-store-background-text/5 px-4 py-3">

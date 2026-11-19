@@ -1,3 +1,5 @@
+const { readFileSync } = require('node:fs');
+const path = require('node:path');
 const withAdaptiveAndroidManifest = require('./withAdaptiveAndroidManifest');
 
 const ML_KIT_SCANNER_DELEGATE_ACTIVITY =
@@ -29,6 +31,13 @@ function findActivity(manifest, name) {
 }
 
 describe('withAdaptiveAndroidManifest', () => {
+  it('keeps shell profiling enabled in the checked-in manifest', () => {
+    const manifest = readFileSync(
+      path.join(__dirname, '../android/app/src/main/AndroidManifest.xml'),
+      'utf8'
+    );
+    expect(manifest).toMatch(/<profileable\s+android:shell="true"\s*\/>/);
+  });
   it('removes storefront and scanner orientation locks from Android manifest metadata', () => {
     const config = buildConfig([
       {

@@ -15,6 +15,7 @@ import { RedvaultPendingView } from '@/components/payment-gateway/RedvaultPendin
 import { resolvePendingOrdersRoute } from '@/components/payment-gateway/resolve-pending-orders-route';
 import { usePaymentGatewayController } from '@/components/payment-gateway/use-payment-gateway-controller';
 import { usePrimaryWalletCardOwnership } from '@/components/payment-gateway/use-primary-wallet-card-ownership';
+import { WalletCheckoutRecoveryView } from '@/components/payment-gateway/WalletCheckoutRecoveryView';
 import { StorefrontScreenShell } from '@/components/storefront/StorefrontScreenShell';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
@@ -79,9 +80,11 @@ export default function PaymentGatewayScreen() {
     // persisted-record check below is the authority for every launch.
     // Gated on auth hydration: an unresolved user must not flash the
     // account-changed dead end on a legitimate checkout.
+    // Legacy (store credit) wallet checkouts carry the same stamp (Codex).
     if (
       authReady &&
-      controller.paymentKind === 'primary_wallet_card' &&
+      (controller.paymentKind === 'primary_wallet_card' ||
+        controller.paymentKind === 'wallet') &&
       controller.validatedParams.data?.userId &&
       user?.id !== controller.validatedParams.data.userId
     ) {
@@ -211,6 +214,21 @@ export default function PaymentGatewayScreen() {
     }
 
     if (controller.status === 'error') {
+      if (
+        controller.paymentKind === 'wallet' &&
+        controller.validatedParams.data?.gateway === 'paystack' &&
+        controller.authorizationUrl
+      ) {
+        return (
+          <WalletCheckoutRecoveryView
+            authorizationUrl={controller.authorizationUrl}
+            colors={colors}
+            errorMessage={controller.errorMessage}
+            onBack={controller.handleBack}
+            onCheck={controller.handleCheckWalletPaymentStatus}
+          />
+        );
+      }
       return (
         <PaymentErrorView
           colors={colors}
@@ -226,6 +244,13 @@ export default function PaymentGatewayScreen() {
       <PaymentGatewayCheckoutView
         amount={controller.amount}
         authorizationUrl={controller.authorizationUrl}
+        interactiveWalletCheckout={
+          controller.paymentKind === 'wallet' &&
+          controller.validatedParams.data?.gateway === 'paystack'
+        }
+        walletCheckoutInteractive={controller.walletCheckoutInteractive}
+        walletCheckoutStalled={controller.walletCheckoutStalled}
+        onWalletCheckoutRecovery={controller.handleWalletCheckoutRecovery}
         colors={colors}
         gatewayName={controller.gatewayName}
         missingUrlMessage={

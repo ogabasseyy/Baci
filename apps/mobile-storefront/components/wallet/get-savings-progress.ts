@@ -14,5 +14,15 @@ export function getSavingsProgress(goal: WalletActiveSavingsGoal) {
           ? 'Your plan is growing'
           : 'Your plan is ready';
 
-  return { milestone, percent: Math.round(progress * 100) };
+  const percent =
+    goal.target_amount > 0
+      ? Math.floor(
+          Math.min(
+            100,
+            Math.max(0, (goal.current_amount * 100) / goal.target_amount)
+          )
+        )
+      : 0;
+  const displayPercent = progress > 0 && percent === 0 ? '<1%' : `${percent}%`;
+  return { displayPercent, milestone, percent };
 }

@@ -1,7 +1,6 @@
 'use client';
-
 import { Check, ChevronsUpDown } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useId, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Command,
@@ -18,197 +17,121 @@ import {
 } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
-
-interface JumiaCategoryItem {
+import { jumiaCategoryMetadataSchema } from '@/schemas/jumia/metadata-query';
+import { useJumiaMetadata } from './use-jumia-metadata';
+export type JumiaCategorySelection = {
   code: number;
   name: string;
-  completePath: string;
-  attributeSet?: string;
-}
-
+  attributeSetId: string;
+};
 interface CategorySelectorProps {
   merchantId: string;
   integrationId?: string;
+  businessClientCode?: string;
   value?: number;
-  onSelect: (code: number, name: string) => void;
+  leafOnly?: boolean;
+  onSelect: (category: JumiaCategorySelection) => void;
 }
-
-const CATEGORY_LISTBOX_ID = 'jumia-category-selector-listbox';
-
-export function JumiaCategorySelector({
+export function JumiaCategorySelector(props: CategorySelectorProps) {
+  return (
+    <CategorySelectorContent
+      key={JSON.stringify([
+        props.merchantId,
+        props.integrationId,
+        props.businessClientCode,
+      ])}
+      {...props}
+    />
+  );
+}
+function CategorySelectorContent({
   merchantId,
   integrationId,
+  businessClientCode,
   value,
+  leafOnly = false,
   onSelect,
 }: CategorySelectorProps) {
   const [open, setOpen] = useState(false);
-  const [categories, setCategories] = useState<JumiaCategoryItem[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [hasFetched, setHasFetched] = useState(false);
-  const [prevMerchantId, setPrevMerchantId] = useState(merchantId);
-
-  const abortControllerRef = useRef<AbortController | null>(null);
-
-  // Reset state during render when the merchant context changes so a new
-  // merchant refetches its own categories (replaces a setState-in-effect sync).
-  // The previous request's controller is aborted inside fetchCategories before
-  // any new fetch starts (and on unmount), so we must not read/touch the ref
-  // here — refs cannot be accessed during render.
-  if (merchantId !== prevMerchantId) {
-    setPrevMerchantId(merchantId);
-    setCategories([]);
-    setError(null);
-    setHasFetched(false);
-    setLoading(false);
-    setOpen(false);
-  }
-
-  // The selected label is derived from the controlled value + loaded
-  // categories, so it never needs to be mirrored into local state.
-  const selectedMatch =
-    value == null ? null : categories.find((c) => c.code === value);
-  const selectedName = selectedMatch
-    ? selectedMatch.completePath || selectedMatch.name
-    : '';
-
-  const fetchCategories = () => {
-    abortControllerRef.current?.abort();
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
-
-    setLoading(true);
-    setError(null);
-    let didTimeout = false;
-    const timeoutId = setTimeout(() => {
-      didTimeout = true;
-      controller.abort();
-    }, 10_000);
-    fetch(
-      `/api/marketplace/jumia/categories?merchantId=${encodeURIComponent(merchantId)}${integrationId ? `&integrationId=${encodeURIComponent(integrationId)}` : ''}`,
-      { signal: controller.signal }
-    )
-      .then((res) => {
-        if (!res.ok) throw new Error('Failed to load categories');
-        return res.json();
-      })
-      .then((data) => {
-        if (controller.signal.aborted) return;
-        // Categories are already flat from the Vendor Center API
-        const cats = Array.isArray(data.categories)
-          ? data.categories.filter(
-              (c: unknown): c is JumiaCategoryItem =>
-                typeof c === 'object' &&
-                c !== null &&
-                typeof (c as Record<string, unknown>).code === 'number' &&
-                typeof (c as Record<string, unknown>).name === 'string' &&
-                typeof (c as Record<string, unknown>).completePath === 'string'
-            )
-          : [];
-        setCategories(cats);
-        setHasFetched(true);
-      })
-      .catch((err: unknown) => {
-        if (didTimeout) {
-          setError('Timeout while loading categories');
-          return;
-        }
-        if (err instanceof DOMException && err.name === 'AbortError') return;
-        setError(
-          err instanceof Error ? err.message : 'Failed to load categories'
-        );
-      })
-      .finally(() => {
-        clearTimeout(timeoutId);
-        if (!controller.signal.aborted || didTimeout) {
-          setLoading(false);
-        }
-      });
-  };
-
-  // Abort any in-flight request when the component unmounts.
-  useEffect(() => {
-    return () => abortControllerRef.current?.abort();
-  }, []);
-
-  const handleOpenChange = (nextOpen: boolean) => {
-    if (!nextOpen && error) {
-      setError(null);
-    }
-    setOpen(nextOpen);
-    if (nextOpen && !hasFetched && !error) {
-      fetchCategories();
-    }
-  };
-
+  const [requested, setRequested] = useState(false);
+  const id = useId();
+  const query = new URLSearchParams({ merchantId });
+  if (integrationId) query.set('integrationId', integrationId);
+  if (businessClientCode) query.set('businessClientCode', businessClientCode);
+  const metadata = useJumiaMetadata(
+    `/api/marketplace/jumia/categories?${query}`,
+    jumiaCategoryMetadataSchema,
+    requested && Boolean(merchantId)
+  );
+  const categories = metadata.data?.categories ?? [];
+  const selected = categories.find((item) => item.code === value);
   return (
-    <Popover open={open} onOpenChange={handleOpenChange}>
+    <Popover
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (nextOpen) setRequested(true);
+      }}
+    >
       <PopoverTrigger asChild>
         <Button
+          type="button"
           variant="outline"
           role="combobox"
-          aria-controls={CATEGORY_LISTBOX_ID}
+          aria-label="Jumia category"
+          aria-controls={id}
           aria-expanded={open}
           className="w-full justify-between"
         >
-          {selectedName ||
-            (value
-              ? loading
-                ? 'Loading...'
-                : 'Category selected'
-              : 'Select Jumia Category...')}
-          <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
+          {selected?.completePath ||
+            (value != null ? 'Category selected' : 'Select Jumia Category...')}
+          <ChevronsUpDown className="ml-2 size-4" />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-[400px] p-0" align="start">
         <Command>
           <CommandInput placeholder="Search Jumia category..." />
-          <CommandList id={CATEGORY_LISTBOX_ID}>
-            <CommandEmpty>
-              {error ? (
-                <div className="p-4 text-sm text-center">
-                  <p className="text-destructive">{error}</p>
-                  <Button
-                    variant="link"
-                    size="sm"
-                    onClick={() => fetchCategories()}
-                    className="mt-2 text-sm underline"
-                  >
-                    Retry
-                  </Button>
-                </div>
-              ) : (
-                'No category found.'
-              )}
-            </CommandEmpty>
-            {loading ? (
-              <div className="p-4 text-sm text-center text-muted-foreground">
-                Loading categories…
+          <CommandList id={id}>
+            {metadata.error ? (
+              <div role="alert" className="p-4 text-sm">
+                <p>{metadata.error}</p>
+                <Button type="button" variant="link" onClick={metadata.retry}>
+                  Retry
+                </Button>
               </div>
+            ) : metadata.status === 'loading' ? (
+              <p className="p-4 text-sm">Loading categories…</p>
             ) : (
-              <CommandGroup>
-                <ScrollArea className="h-72">
-                  {categories.map((category) => (
-                    <CommandItem
-                      key={category.code}
-                      value={category.completePath || category.name}
-                      onSelect={() => {
-                        onSelect(category.code, category.name);
-                        setOpen(false);
-                      }}
-                    >
-                      <Check
-                        className={cn(
-                          'mr-2 size-4',
-                          value === category.code ? 'opacity-100' : 'opacity-0'
-                        )}
-                      />
-                      {category.completePath || category.name}
-                    </CommandItem>
-                  ))}
-                </ScrollArea>
-              </CommandGroup>
+              <CommandEmpty>No category found.</CommandEmpty>
             )}
+            <CommandGroup>
+              <ScrollArea className="h-72">
+                {categories.map((category) => (
+                  <CommandItem
+                    key={category.code}
+                    value={category.completePath}
+                    disabled={leafOnly && category.hasChildren}
+                    onSelect={() => {
+                      if (leafOnly && category.hasChildren) return;
+                      onSelect({
+                        code: category.code,
+                        name: category.name,
+                        attributeSetId: category.attributeSet.sid,
+                      });
+                      setOpen(false);
+                    }}
+                  >
+                    <Check
+                      className={cn(
+                        'mr-2 size-4',
+                        value === category.code ? 'opacity-100' : 'opacity-0'
+                      )}
+                    />
+                    {category.completePath}
+                  </CommandItem>
+                ))}
+              </ScrollArea>
+            </CommandGroup>
           </CommandList>
         </Command>
       </PopoverContent>

@@ -1,0 +1,56 @@
+:root {
+  font-family: system-ui, sans-serif;
+  color: #20233a;
+  background: #f4f5fa;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+main {
+  max-width: 62rem;
+  padding: clamp(1rem, 5vw, 4rem);
+  margin: auto;
+}
+nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+button,
+select {
+  padding: 0.8rem 1rem;
+  border: 1px solid currentColor;
+  border-radius: 0.7rem;
+  background: white;
+  color: inherit;
+  cursor: pointer;
+}
+h1 {
+  font-size: clamp(2rem, 7vw, 5rem);
+  line-height: 1.05;
+}
+.device {
+  width: min(65vw, 15rem);
+  aspect-ratio: 0.6;
+  margin: 2rem auto;
+  border: 0.5rem solid #343b60;
+  border-radius: 2rem;
+  background: linear-gradient(135deg, #c1d6e8, #6a77a8);
+  touch-action: none;
+  transition: scale 0.2s;
+}
+label {
+  display: block;
+  margin: 1rem 0;
+}
+.motion-tile {
+  width: 8rem;
+  height: 8rem;
+  background: #6264b8;
+  border-radius: 2rem;
+  margin: 3rem;
+  touch-action: none;
+}

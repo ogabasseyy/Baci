@@ -20,18 +20,26 @@ export interface RawDbProduct {
   category_id?: string;
   category_slug?: string | null;
   brand?: string;
+  created_at?: string | null;
   price: number;
   compare_at_price?: number;
   condition?: string;
   stock?: number | string | null;
   stock_quantity?: number | string | null;
   manage_stock?: boolean | null;
+  is_parent?: boolean | null;
+  parent_product_id?: string | null;
   low_stock_threshold?: number | string | null;
   rating?: number;
   product_key_specs?: unknown;
   merchant_id?: string;
   status?: string;
   has_condition_offers?: boolean;
+  has_variants?: boolean | null;
+  advertised_price?: number;
+  advertised_condition?: string | null;
+  advertised_compare_at_price?: number | null;
+  advertised_image?: string;
   available_conditions?: string[] | null;
   variant_model?: 'legacy' | 'sku_matrix' | null;
   // Allow additional fields

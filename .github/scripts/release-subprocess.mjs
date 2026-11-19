@@ -6,6 +6,9 @@ import { spawnSync } from 'node:child_process';
 // may have landed, so the caller must hold the release lock for
 // reconcile-before-removal.
 export const API_COMMAND_TIMEOUT_MS = 60000;
+// Workflow history and job listings can exceed Node's default 1 MiB cap.
+// Keep a finite ceiling even when callers request compact API projections.
+export const COMMAND_MAX_BUFFER_BYTES = 16 * 1024 * 1024;
 
 function run(binary, args, cwd, capture, timeoutMs, trim = true) {
   const result = spawnSync(binary, args, {
@@ -13,6 +16,7 @@ function run(binary, args, cwd, capture, timeoutMs, trim = true) {
     encoding: 'utf8',
     stdio: capture ? ['ignore', 'pipe', 'inherit'] : 'inherit',
     timeout: timeoutMs,
+    maxBuffer: COMMAND_MAX_BUFFER_BYTES,
     // SIGKILL, not SIGTERM: spawnSync sends the signal once and then
     // waits, so a SIGTERM-ignoring child would wedge the release with
     // the lock held. Hung gh/vercel/ssh children need no grace.
@@ -39,27 +43,6 @@ function run(binary, args, cwd, capture, timeoutMs, trim = true) {
     throw error;
   }
   return capture ? (trim ? result.stdout.trim() : result.stdout) : '';
-}
-
-// deploy.sh exits 42 only when the live worker tree may be changed
-// but unrecorded (rollback failed, or the rollback landed with
-// unrecorded readers and a stuck barrier): the coordinator must hold
-// the release lock for reconciliation instead of auto-releasing it
-// for a clean retry.
-export const WORKER_UNRECONCILED_EXIT = 42;
-
-export function runWorkerDeploy(invoke) {
-  try {
-    return invoke();
-  } catch (error) {
-    // A signal death carries no position: the child may have died
-    // mid-flip, so hold even though a pre-flip kill is also caught
-    // (rare, and the operator confirms clean state before removing).
-    if (error && typeof error === 'object' && (error.status === WORKER_UNRECONCILED_EXIT || error.signal != null)) {
-      error.indeterminateDispatch = true;
-    }
-    throw error;
-  }
 }
 
 // Bind the subprocess helpers to a working directory (the release

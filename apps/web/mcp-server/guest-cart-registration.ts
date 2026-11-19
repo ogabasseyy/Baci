@@ -1,3 +1,4 @@
+import { registerCartLinkTools } from './cart-link-tool';
 import { registerConnectedCartRead } from './register-connected-cart-read';
 import type { McpServer } from '@modelcontextprotocol/server';
 import { registerGuestCartTool } from './guest-cart-tool';
@@ -12,5 +13,11 @@ export function registerConfiguredGuestCartTool(
     ...options,
     enablePrivateTextContinuation: privateCartContinuationEnabled(),
   });
-  if (options.connectionCart) registerConnectedCartRead(server, options.store, options.connectionCart);
+  if (options.connectionCart) {
+    registerConnectedCartRead(server, options.store, options.connectionCart);
+  } else {
+    // Stateless links are only for legacy callers. Connected shoppers use the
+    // persistent cart tools so additions, removals and handoffs share one cart.
+    registerCartLinkTools(server, options);
+  }
 }

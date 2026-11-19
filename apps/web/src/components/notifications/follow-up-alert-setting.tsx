@@ -17,7 +17,7 @@ export function FollowUpAlertSetting({
       <div className="space-y-0.5">
         <Label htmlFor="follow_up_alerts">Follow-up Alerts</Label>
         <p className="text-sm text-muted-foreground">
-          Alert me when a customer creates an invoice that needs follow-up
+          Remind me to finish store setup and follow up on customer invoices
         </p>
       </div>
       <Switch

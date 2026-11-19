@@ -6,15 +6,10 @@ import type { TransferModalProps } from './start-savings-transfer-modal-props';
 export function PlanTransferActions({
   colors,
   controller,
-  onConfirmTransfer,
   onContributeFromWallet,
 }: TransferModalProps & {
-  onConfirmTransfer: () => void;
   onContributeFromWallet: () => void;
 }) {
-  const usePlanAccount =
-    controller.planFundingPhase === 'ready' &&
-    controller.planFundingAccounts.length > 0;
   return (
     <View style={styles.transferActionRow}>
       <Pressable
@@ -29,22 +24,18 @@ export function PlanTransferActions({
       </Pressable>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={
-          usePlanAccount
-            ? 'Confirm plan transfer'
-            : 'Record wallet contribution'
-        }
+        accessibilityLabel="Record wallet contribution"
         accessibilityState={{ disabled: controller.isSubmitting }}
         style={[
           styles.secondaryButton,
           { borderColor: BRAND.primary, backgroundColor: BRAND.primary },
           controller.isSubmitting ? styles.buttonDisabled : null,
         ]}
-        onPress={usePlanAccount ? onConfirmTransfer : onContributeFromWallet}
+        onPress={onContributeFromWallet}
         disabled={controller.isSubmitting}
       >
         <Text style={[styles.secondaryButtonText, { color: palette.white }]}>
-          {usePlanAccount ? "I've made the transfer" : "I've funded wallet"}
+          I've funded wallet
         </Text>
       </Pressable>
     </View>

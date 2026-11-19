@@ -1,96 +1,34 @@
-import { generateSlug } from '../seo-utils';
+import {
+  buildCategoryPriceBandCandidates,
+  type PriceBandCandidate,
+} from './build-category-price-band-candidates';
 import {
   buildBrandCompareCandidate,
-  buildPriceBandCandidate,
   buildProductCompareCandidate,
 } from './compare-eligibility';
-import {
-  buildCanonicalBrandCompareSlug,
-  buildCanonicalProductCompareSlug,
-} from './compare-slugs';
-import { getCuratedPriceBands } from './price-band-taxonomy';
+import { buildCanonicalProductCompareSlug } from './compare-slugs';
+import { filterProductsByBrandSlugs } from './filter-products-by-brand-slugs';
+import { findFirstEligibleProductCompare } from './find-first-eligible-product-compare';
+import { normalizeInferredBrands } from './normalize-inferred-brands';
+import { resolveCanonicalBrandKey } from './resolve-canonical-brand-key';
 
 export interface CommercialSupportLink {
   href: string;
   label: string;
 }
 
-interface CommercialSupportProduct {
+export interface CommercialSupportProduct {
+  id?: string | null;
   slug: string;
   name: string;
   brand?: string | null;
   price: number;
   category_slug?: string | null;
   product_key_specs?: Record<string, unknown> | null;
-}
-
-/**
- * The curated price-band candidate list for a category. It is INVARIANT of the
- * current product (depends only on categorySlug + products), so callers that
- * fan buildProductSupportLinks across many products should build it ONCE and
- * pass it back in via `priceBandCandidates` rather than rebuilding it per
- * product (the discovery fan-out did this up to 150x).
- */
-export type PriceBandCandidate = ReturnType<typeof buildPriceBandCandidate>;
-
-export function buildCategoryPriceBandCandidates(
-  categorySlug: string,
-  products: CommercialSupportProduct[]
-): PriceBandCandidate[] {
-  return getCuratedPriceBands(categorySlug).map((band) =>
-    buildPriceBandCandidate({ categorySlug, band, products })
-  );
-}
-
-function findFirstEligibleProductCompare(
-  categorySlug: string,
-  products: CommercialSupportProduct[]
-) {
-  for (let leftIndex = 0; leftIndex < products.length - 1; leftIndex += 1) {
-    const leftProduct = products[leftIndex];
-
-    for (
-      let rightIndex = leftIndex + 1;
-      rightIndex < products.length;
-      rightIndex += 1
-    ) {
-      const rightProduct = products[rightIndex];
-      const candidate = buildProductCompareCandidate({
-        categorySlug,
-        leftProduct,
-        rightProduct,
-      });
-
-      if (candidate.isIndexable) {
-        return {
-          leftProduct,
-          rightProduct,
-        };
-      }
-    }
-  }
-
-  return null;
-}
-
-function buildFirstEligiblePriceBandLink(input: {
-  storeUrl: string;
-  categorySlug: string;
-  products: CommercialSupportProduct[];
-}) {
-  const candidate = buildCategoryPriceBandCandidates(
-    input.categorySlug,
-    input.products
-  ).find((entry) => entry.isIndexable);
-
-  if (!candidate) {
-    return null;
-  }
-
-  return {
-    href: `${input.storeUrl}/${input.categorySlug}/best-under/${candidate.band.slug}`,
-    label: candidate.band.label,
-  } satisfies CommercialSupportLink;
+  stock?: number | string | null;
+  stock_quantity?: number | string | null;
+  manage_stock?: boolean | null;
+  has_condition_offers?: boolean | null;
 }
 
 export function buildCategorySupportLinks(input: {
@@ -99,12 +37,35 @@ export function buildCategorySupportLinks(input: {
   categoryName: string;
   includeBrandCompareLink?: boolean;
   products: CommercialSupportProduct[];
+  inferredBrands?: string[];
+  preferredPriceBandSlugs?: string[];
+  approvedCompareSlugs?: ReadonlySet<string>;
+  merchantCurrency?: string | null;
+  /** Destination compare inventory. Brand candidates derive from it; callers that cannot supply it must pass a pool identical to the destination compare inventory, or those links may point at a candidate the compare page rejects. */
+  compareProducts?: CommercialSupportProduct[];
+  /** Bounded price-band pool. Callers that separate price bands from brand compare pass the 150-product pool here. */
+  priceBandProducts?: CommercialSupportProduct[];
+  /** Article contexts: compare links require an inferred brand; price bands count only inferred-brand products. */
+  requireInferredBrandRelevance?: boolean;
+  /** When true, emits all indexable price-band links (e.g. for discovery/sitemap parity) instead of stopping at the first match. */
+  allPriceBands?: boolean;
 }): CommercialSupportLink[] {
   const links: CommercialSupportLink[] = [];
-  const firstEligibleProductCompare = findFirstEligibleProductCompare(
+  const normalizedInferred = normalizeInferredBrands(
     input.categorySlug,
-    input.products
+    input.inferredBrands
   );
+  const brandRelevanceRequired = input.requireInferredBrandRelevance === true;
+  const hasInferredBrand = normalizedInferred.length > 0;
+  const firstEligibleProductCompare =
+    brandRelevanceRequired && !hasInferredBrand
+      ? null
+      : findFirstEligibleProductCompare(
+          input.categorySlug,
+          input.products,
+          input.inferredBrands,
+          input.approvedCompareSlugs
+        );
 
   if (firstEligibleProductCompare) {
     links.push({
@@ -114,27 +75,88 @@ export function buildCategorySupportLinks(input: {
   }
 
   if (input.includeBrandCompareLink ?? true) {
+    const normalizedInferredBrands = normalizeInferredBrands(
+      input.categorySlug,
+      input.inferredBrands
+    );
+
     const brandCandidate = buildBrandCompareCandidate({
       categorySlug: input.categorySlug,
-      products: input.products,
+      products: input.compareProducts ?? input.products,
     });
 
     if (brandCandidate?.isIndexable) {
-      links.push({
-        href: `${input.storeUrl}/${input.categorySlug}/compare/${buildCanonicalBrandCompareSlug(brandCandidate.leftBrand, brandCandidate.rightBrand)}`,
-        label: `${brandCandidate.leftBrand} vs ${brandCandidate.rightBrand}`,
-      });
+      const leftKey = resolveCanonicalBrandKey(
+        input.categorySlug,
+        brandCandidate.leftBrand
+      );
+      const rightKey = resolveCanonicalBrandKey(
+        input.categorySlug,
+        brandCandidate.rightBrand
+      );
+      const isRelevant =
+        leftKey !== rightKey &&
+        (brandRelevanceRequired && !hasInferredBrand
+          ? false
+          : normalizedInferredBrands.length === 0 ||
+            (normalizedInferredBrands.includes(leftKey) &&
+              normalizedInferredBrands.includes(rightKey)));
+
+      if (isRelevant) {
+        links.push({
+          href: `${input.storeUrl}/${input.categorySlug}/compare/${brandCandidate.canonicalSlug}`,
+          label: `${brandCandidate.leftBrand} vs ${brandCandidate.rightBrand}`,
+        });
+      }
     }
   }
 
-  const priceBandLink = buildFirstEligiblePriceBandLink({
-    storeUrl: input.storeUrl,
-    categorySlug: input.categorySlug,
-    products: input.products,
-  });
+  // Destination eligibility uses the price-band pool (or caller pool); relevance only requires
+  // the chosen band to contain inferred-brand products.
+  const fullPool = input.priceBandProducts ?? input.products;
+  if (!brandRelevanceRequired || hasInferredBrand) {
+    const candidates = buildCategoryPriceBandCandidates(
+      input.categorySlug,
+      fullPool,
+      { merchantCurrency: input.merchantCurrency }
+    );
+    const isEligibleCandidate = (candidate: (typeof candidates)[number]) => {
+      if (!candidate.isIndexable) return false;
+      if (!brandRelevanceRequired) return true;
+      const bandProducts = filterProductsByBrandSlugs(
+        input.categorySlug,
+        candidate.products,
+        normalizedInferred
+      );
+      return bandProducts.length > 0;
+    };
 
-  if (priceBandLink) {
-    links.push(priceBandLink);
+    if (input.allPriceBands) {
+      for (const candidate of candidates) {
+        if (isEligibleCandidate(candidate)) {
+          links.push({
+            href: `${input.storeUrl}/${input.categorySlug}/best-under/${candidate.band.slug}`,
+            label: candidate.band.label,
+          });
+        }
+      }
+    } else {
+      const preferredSlugs = new Set(input.preferredPriceBandSlugs ?? []);
+      const chosen =
+        (preferredSlugs.size > 0
+          ? candidates.find(
+              (candidate) =>
+                preferredSlugs.has(candidate.band.slug) &&
+                isEligibleCandidate(candidate)
+            )
+          : undefined) ?? candidates.find(isEligibleCandidate);
+      if (chosen) {
+        links.push({
+          href: `${input.storeUrl}/${input.categorySlug}/best-under/${chosen.band.slug}`,
+          label: chosen.band.label,
+        });
+      }
+    }
   }
 
   return links;
@@ -153,6 +175,7 @@ export function buildProductSupportLinks(input: {
   // list instead of rebuilding it per product. Omitted callers keep the old
   // self-computing behavior.
   priceBandCandidates?: PriceBandCandidate[];
+  merchantCurrency?: string | null;
 }): CommercialSupportLink[] {
   const links: CommercialSupportLink[] = [];
   const currentProduct = input.products.find(
@@ -201,17 +224,20 @@ export function buildProductSupportLinks(input: {
       categorySlug: input.categorySlug,
       products: input.products,
     });
-    const currentBrandKey = generateSlug(currentProduct.brand || '');
+    const currentBrandKey = resolveCanonicalBrandKey(
+      input.categorySlug,
+      currentProduct.brand
+    );
 
     if (
       brandCandidate?.isIndexable &&
       currentBrandKey &&
       [brandCandidate.leftBrand, brandCandidate.rightBrand]
-        .map((brand) => generateSlug(brand))
+        .map((brand) => resolveCanonicalBrandKey(input.categorySlug, brand))
         .includes(currentBrandKey)
     ) {
       links.push({
-        href: `${input.storeUrl}/${input.categorySlug}/compare/${buildCanonicalBrandCompareSlug(brandCandidate.leftBrand, brandCandidate.rightBrand)}`,
+        href: `${input.storeUrl}/${input.categorySlug}/compare/${brandCandidate.canonicalSlug}`,
         label: `${brandCandidate.leftBrand} vs ${brandCandidate.rightBrand}`,
       });
     }
@@ -219,7 +245,9 @@ export function buildProductSupportLinks(input: {
 
   const priceBandCandidates =
     input.priceBandCandidates ??
-    buildCategoryPriceBandCandidates(input.categorySlug, input.products);
+    buildCategoryPriceBandCandidates(input.categorySlug, input.products, {
+      merchantCurrency: input.merchantCurrency,
+    });
   const priceBandCandidate = priceBandCandidates.find(
     (candidate) =>
       candidate.isIndexable &&

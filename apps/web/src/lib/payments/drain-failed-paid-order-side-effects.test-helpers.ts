@@ -9,7 +9,7 @@ const failedRow = {
     created_at: '2026-07-01T00:00:00.000Z',
     gateway: 'paystack',
     gateway_reference: 'REF-1',
-    gateway_response: { status: 'success' },
+    gateway_response: { fees_split: null, status: 'success', subaccount: {} },
     id: 'txn-1',
     merchant_id: 'merchant-1',
     order_id: 'order-1',

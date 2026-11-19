@@ -1,6 +1,7 @@
 import type { NextRequest } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { redactMerchantFeatureSettingsResponse } from '@/lib/merchant-feature-settings-redaction';
+import { attachIntegrationSecretPresence } from './attach-integration-secret-presence';
 import { jsonNoStore } from './feature-settings-response';
 import {
   buildReadOnlyDefaultFeatureSettings,
@@ -40,13 +41,6 @@ export async function getFeatureSettings(request: NextRequest) {
       .eq('merchant_id', access.merchantId)
       .maybeSingle();
 
-    if (!error && !settings) {
-      return jsonNoStore(
-        redactMerchantFeatureSettingsResponse(
-          buildReadOnlyDefaultFeatureSettings(access.merchantId)
-        )
-      );
-    }
     if (error) {
       console.error('Error fetching feature settings:', error);
       return jsonNoStore(
@@ -55,7 +49,18 @@ export async function getFeatureSettings(request: NextRequest) {
       );
     }
 
-    return jsonNoStore(redactMerchantFeatureSettingsResponse(settings));
+    const withPresence = await attachIntegrationSecretPresence(
+      auth.supabase,
+      access.merchantId,
+      settings ?? buildReadOnlyDefaultFeatureSettings(access.merchantId)
+    );
+    if (!withPresence) {
+      return jsonNoStore(
+        { error: 'Failed to fetch settings' },
+        { status: 500 }
+      );
+    }
+    return jsonNoStore(redactMerchantFeatureSettingsResponse(withPresence));
   } catch (error) {
     console.error('Feature settings GET error:', error);
     return jsonNoStore({ error: 'Internal server error' }, { status: 500 });

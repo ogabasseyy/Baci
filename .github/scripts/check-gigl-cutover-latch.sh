@@ -75,6 +75,9 @@ installed_sha=""
 if [ -f "$remote_dir/app-checkout.sha" ]; then
   installed_sha="$(tr -d '\r\n' < "$remote_dir/app-checkout.sha")"
 fi
+if [[ ! "$installed_sha" =~ ^[0-9a-f]{40}$ ]]; then
+  installed_sha=""
+fi
 
 if [ "$latched" = true ]; then
   if [ "$installed_sha" != "$latch_sha" ]; then
@@ -98,6 +101,7 @@ if [ "$latched" = true ]; then
 fi
 
 tracking_stale=true
+installed_tracking_stale=true
 # The job token must never appear in a process argument vector (visible
 # via `ps` on the shared runner): hand it to git through a 0600 config
 # file instead of `-c http.extraHeader=...`. Any failure here falls
@@ -146,6 +150,18 @@ if [[ "$installed_sha" =~ ^[0-9a-f]{40}$ ]]; then
   # missing/invalid latch already closes the bypass, but a VALID latch
   # over a drifted tree must still block.
   if "${fetch_env[@]}" -C "$checkout_dir" fetch --quiet --depth 1 origin "$installed_sha" 2>/dev/null; then
+    # A worker promote preserves the old proof. Independently establish
+    # whether the installed code covers this release so a POST-migration
+    # live smoke can repair that proof without adopting stale worker code.
+    # This is eligibility for a new smoke, never a substitute for one.
+    tracking_paths="$(awk '/^tracking:/ { in_group=1; next } /^[^ #]/ { in_group=0 } in_group && $1 == "-" { gsub(/'\''/, "", $2); print $2 }' "$checkout_dir/.github/filters/deploy.yml" 2>/dev/null || true)"
+    if [ -n "$tracking_paths" ]; then
+      set -f
+      # shellcheck disable=SC2086
+      installed_diff="$(git -C "$checkout_dir" diff --name-only "$installed_sha" HEAD -- $tracking_paths 2>/dev/null || echo "stale")"
+      set +f
+      if [ -z "$installed_diff" ]; then installed_tracking_stale=false; fi
+    fi
     manifest_paths="$(awk '/^manifests:/ { in_group=1; next } /^[^ #]/ { in_group=0 } in_group && $1 == "-" { gsub(/'\''/, "", $2); print $2 }' "$checkout_dir/.github/filters/deploy.yml" 2>/dev/null || true)"
     if [ -n "$manifest_paths" ]; then
       # Same noglob discipline as the tracking diff above: the
@@ -168,11 +184,17 @@ if [ -n "$auth_config" ]; then rm -f "$auth_config"; fi
 # append — on Linux that fails with ENXIO when stdout is a pipe,
 # breaking the never-fail contract (proven by CI, which macOS masked).
 if [ -n "${GITHUB_OUTPUT:-}" ]; then
-  echo "latched=$latched" >> "$GITHUB_OUTPUT"
-  echo "tracking_stale=$tracking_stale" >> "$GITHUB_OUTPUT"
-  echo "manifest_drift=$manifest_drift" >> "$GITHUB_OUTPUT"
+  {
+    echo "latched=$latched"
+    echo "tracking_stale=$tracking_stale"
+    echo "manifest_drift=$manifest_drift"
+    echo "installed_sha=$installed_sha"
+    echo "installed_tracking_stale=$installed_tracking_stale"
+  } >> "$GITHUB_OUTPUT"
 else
   echo "latched=$latched"
   echo "tracking_stale=$tracking_stale"
   echo "manifest_drift=$manifest_drift"
+  echo "installed_sha=$installed_sha"
+  echo "installed_tracking_stale=$installed_tracking_stale"
 fi

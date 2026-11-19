@@ -1,10 +1,10 @@
 import {
-  CheckoutPage,
+  continueToPaymentAfterPickupCheck,
   expect,
   fireEvent,
   it,
   mockCaptureCheckoutFunnelEventOnce,
-  render,
+  renderCheckoutWithStoreRates,
   screen,
   useCart,
   useMerchantSafe,
@@ -126,12 +126,10 @@ it('labels DVA completion with the stamped order currency after a merchant curre
   vi.mocked(usePersistedForm).mockReturnValue(paymentForm);
 
   try {
-    render(<CheckoutPage />);
+    renderCheckoutWithStoreRates();
     fireEvent.click(screen.getByRole('button', { name: /delivery method/i }));
     fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
-    fireEvent.click(
-      screen.getByRole('button', { name: /continue to payment/i })
-    );
+    await continueToPaymentAfterPickupCheck();
     const paymentRadio = screen
       .getAllByRole('radio', { name: /bank transfer/i })
       .find((radio) => radio.getAttribute('value') === 'bank_transfer');

@@ -1,16 +1,11 @@
 import { beforeEach, vi } from 'vitest';
 import '@testing-library/jest-dom';
-import React from 'react';
-import { resetProviderCooldowns } from '@/ai/provider-cooldown';
+import { installSharedTestSetup } from './vitest.setup.shared';
 
+// Setup for the `jsdom` Vitest project (see vitest.config.ts). Tests that need
+// no DOM run in the `node` project with vitest.setup.node.ts instead, which
+// loads this file only when a test opts into jsdom with a docblock.
 vi.mock('server-only', () => ({}));
-
-type MockImageSrc = string | { src: string } | { default: { src: string } };
-
-type MockNextImageProps = React.ImgHTMLAttributes<HTMLImageElement> & {
-  src?: MockImageSrc;
-  alt?: string;
-};
 
 async function blobToArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
   if (typeof blob.stream === 'function') {
@@ -88,11 +83,6 @@ if (typeof File !== 'undefined' && !File.prototype.arrayBuffer) {
   });
 }
 
-process.env.NEXT_PUBLIC_SUPABASE_URL =
-  process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://mock.supabase.co';
-process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY =
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'mock-anon-key';
-
 if (typeof window !== 'undefined') {
   // Radix FocusScope creates CustomEvent from the global constructor; jsdom
   // EventTargets require events from the window realm.
@@ -129,53 +119,36 @@ if (typeof Blob !== 'undefined' && !Blob.prototype.stream) {
   };
 }
 
-function normalizeMockImageSrc(src?: MockImageSrc): string | undefined {
-  return typeof src === 'string'
-    ? src
-    : src && 'default' in src
-      ? src.default.src
-      : src?.src;
-}
+// Mock Next.js Image component (factory shared with the node project setup)
+vi.mock('next/image', async () => {
+  const { createNextImageMock } = await import('./vitest.next-image-mock');
+  return createNextImageMock();
+});
 
-// Mock Next.js Image component
-vi.mock('next/image', () => ({
-  default: ({ src, alt, ...props }: MockNextImageProps) =>
-    React.createElement('img', {
-      src: normalizeMockImageSrc(src),
-      alt,
-      ...props,
-    }),
-  // `getImageProps` powers the per-format `<picture>` pipeline (CdnFormatImage /
-  // ogabassey-image-format-sources). Mirror the default mock: raw-src
-  // passthrough with NO srcSet, so CdnFormatImage's AVIF-tier derivation finds
-  // no transform twin and renders a plain <img> — identical to the default mock
-  // above and to the pre-migration `<Image>`. Tests asserting the REAL
-  // per-format srcSet re-mock next/image with `importOriginal` in-file.
-  getImageProps: ({
-    src,
-    alt,
-    fill: _fill,
-    priority: _priority,
-    loader: _loader,
-    quality: _quality,
-    preload: _preload,
-    ...props
-  }: MockNextImageProps & {
-    fill?: boolean;
-    priority?: boolean;
-    loader?: unknown;
-    quality?: number;
-    preload?: boolean;
-  }) => ({
-    props: { ...props, src: normalizeMockImageSrc(src), alt: alt ?? '' },
-  }),
-}));
+// Env defaults, provider-cooldown reset and deterministic UUIDs.
+installSharedTestSetup();
 
-// The AI provider chain parks rate-limited providers in a module-level
-// cooldown Map (src/ai/provider-cooldown.ts). Any test that simulates a
-// quota/429 rejection would otherwise leak that cooldown into the tests that
-// follow it in the same file, silently changing which provider the chain
-// attempts. Reset it globally so each test starts from a clean chain.
 beforeEach(() => {
-  resetProviderCooldowns();
+  // jsdom's navigator has no Web Locks API (Node's own navigator does).
+  if (!navigator.locks) {
+    const heldLocks = new Set<string>();
+    Object.defineProperty(navigator, 'locks', {
+      configurable: true,
+      value: {
+        request: async (
+          name: string,
+          _options: unknown,
+          callback: (lock: Lock | null) => Promise<unknown>
+        ) => {
+          if (heldLocks.has(name)) return callback(null);
+          heldLocks.add(name);
+          try {
+            return await callback({ name, mode: 'exclusive' } as Lock);
+          } finally {
+            heldLocks.delete(name);
+          }
+        },
+      } as unknown as LockManager,
+    });
+  }
 });

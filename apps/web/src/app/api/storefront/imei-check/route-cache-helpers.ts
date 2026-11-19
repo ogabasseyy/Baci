@@ -1,5 +1,7 @@
 import type { ImeiServiceTierKey } from '@baci/shared/imei';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { ImeiAccessClient } from '@/lib/imei-access';
+import { enrichImeiDeviceResult } from '@/lib/imei-device-catalog';
 import {
   hashProviderResponse,
   type ImeiLookupErrorBody,
@@ -8,10 +10,9 @@ import {
   refundImeiWalletPayment,
   type SickwLookupResult,
 } from '@/lib/imei-lookup-fulfillment';
-import type { createAdminClient } from '@/lib/supabase/admin';
 import { errorBody, type ImeiLookupStatus, json } from './route-helpers';
 
-type AdminSupabaseClient = ReturnType<typeof createAdminClient>;
+type AdminSupabaseClient = ImeiAccessClient;
 
 export async function cacheLookupResponse({
   body,
@@ -30,18 +31,13 @@ export async function cacheLookupResponse({
   supabaseAdmin: AdminSupabaseClient;
   terminalStatus: ImeiLookupStatus;
 }) {
-  const { error } = await supabaseAdmin
-    .from('imei_lookups')
-    .update({
-      cached_response: body,
-      cached_status: status,
-      ...(responseHash ? { response_hash: responseHash } : {}),
-      ...(sickwStatus ? { sickw_status: sickwStatus } : {}),
-      status: terminalStatus,
-    })
-    .eq('id', lookupId)
-    .select('id')
-    .single();
+  const { error } = await supabaseAdmin.cache(lookupId, {
+    cached_response: body,
+    cached_status: status,
+    ...(responseHash ? { response_hash: responseHash } : {}),
+    ...(sickwStatus ? { sickw_status: sickwStatus } : {}),
+    status: terminalStatus,
+  });
 
   if (error) {
     throw new Error(`Failed to cache IMEI lookup response: ${error.message}`);
@@ -202,12 +198,7 @@ export async function cacheInsufficientBalanceResponse({
     error: 'Insufficient wallet balance',
     required: amount,
   });
-  const { error } = await supabaseAdmin
-    .from('imei_lookups')
-    .delete()
-    .eq('id', lookupId)
-    .select('id')
-    .single();
+  const { error } = await supabaseAdmin.deletePending(lookupId);
 
   if (error) {
     throw new Error(
@@ -239,6 +230,7 @@ export async function cacheSuccessfulLookup({
 }) {
   const completeBody = {
     ...providerResult.body,
+    data: await enrichImeiDeviceResult(merchantId, providerResult.body.data),
     lookupId,
     status: 'complete' as const,
   };

@@ -8,7 +8,7 @@ describe('storefront CSS partitioning (core chrome sheets)', () => {
     expect(coreCss).toMatch(/\.storefront-shell-loading/);
     expect(coreCss).toMatch(/\.storefront-ppr-static-shell/);
     expect(coreCss).toMatch(/\.ogabassey-navbar/);
-    expect(coreCss).toMatch(/\.ogabassey-mobile-footer/);
+    expect(coreCss).not.toMatch(/\.ogabassey-mobile-footer/);
     expect(coreCss).not.toMatch(/\.ogabassey-chat-/);
   });
 

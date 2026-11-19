@@ -33,6 +33,7 @@ import {
 import { runStorefrontPreflight } from '@/lib/proxy/storefront-preflight';
 import { buildLegacyTermsAliasRedirectResponse } from '@/lib/proxy/terms-redirects';
 import { getCurrentSlugForAlias } from '@/lib/slug-alias-cache';
+import { applyOwnedOxygenDocumentPolicy } from './oxygen-owned-document';
 
 export function getRequestSubdomain(hostname: string): string | null {
   return isLocalhost(hostname)
@@ -72,7 +73,7 @@ function annotateSubdomainTrace(subdomain: string, hostname: string): void {
 }
 
 /** Runs the reserved-alias and storefront subdomain branches in their former order. */
-export async function runSubdomainRouting(
+async function runSubdomainRoutingInternal(
   request: NextRequest,
   pathname: string,
   hostname: string,
@@ -185,8 +186,9 @@ export async function runSubdomainRouting(
     merchantIdentifier: subdomain,
   });
   if (preflight) return preflight;
+  const normalizedHostname = normalizeHostname(hostname);
   const url = request.nextUrl.clone();
-  url.pathname = `/${subdomain}${pathname}`;
+  url.pathname = `/${normalizedHostname}${pathname}`;
   if (
     shouldPartitionStorefrontMetadataCache(
       pathname,
@@ -204,4 +206,30 @@ export async function runSubdomainRouting(
     hostname,
     userAgent
   );
+}
+
+export async function runSubdomainRouting(
+  request: NextRequest,
+  pathname: string,
+  hostname: string,
+  userAgent: string,
+  subdomain: string | null
+): Promise<NextResponse | null> {
+  const response = await runSubdomainRoutingInternal(
+    request,
+    pathname,
+    hostname,
+    userAgent,
+    subdomain
+  );
+  return response
+    ? applyOwnedOxygenDocumentPolicy(
+        response,
+        request,
+        pathname,
+        hostname,
+        userAgent,
+        subdomain
+      )
+    : null;
 }

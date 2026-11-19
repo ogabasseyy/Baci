@@ -17,6 +17,7 @@ import {
 } from './feeds-validation';
 import { verifyJumiaSingleMarketplaceScope } from './verify-jumia-single-marketplace-scope';
 
+export type { JumiaCreateProduct } from '@/schemas/jumia/create-product';
 export { updatePrice } from './feeds-price';
 export { updateStatus } from './feeds-status';
 

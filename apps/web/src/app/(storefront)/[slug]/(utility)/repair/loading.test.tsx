@@ -16,7 +16,7 @@ describe('repair loading', () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        /Have a broken device\? Describe the model, visible damage and fault/
+        /Tell us what happened and our team will help with the next step/
       )
     ).toBeInTheDocument();
   });

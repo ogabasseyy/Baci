@@ -1,7 +1,10 @@
 import { ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 import { CdnFormatImage } from '@/components/storefront/cdn-format-image';
-import { BLOG_HERO_IMAGE_QUALITY } from '@/components/storefront/ogabassey/config/blog-media';
+import {
+  BLOG_HERO_IMAGE_QUALITY,
+  BLOG_LISTING_FEATURED_IMAGE_SIZES,
+} from '@/components/storefront/ogabassey/config/blog-media';
 import { asRoute, joinRouteBasePath } from '@/lib/routes';
 import type { BlogPostData } from '@/templates/registry';
 
@@ -12,10 +15,20 @@ interface BlogFeaturedStoryProps {
   publishedDateLabel: string;
 }
 
+/**
+ * Resolves the full route path for a blog post link within a store base path.
+ */
 function blogPostHref(basePath: string, slug: string): string {
   return joinRouteBasePath(basePath, `/blog/${slug}`);
 }
 
+/**
+ * Featured story hero card for the Ogabassey storefront blog listing.
+ *
+ * Renders an optimized per-format `<picture>` via `CdnFormatImage` using
+ * responsive `BLOG_LISTING_FEATURED_IMAGE_SIZES` to ensure candidate parity
+ * with early server preload hints.
+ */
 export function BlogFeaturedStory({
   basePath,
   featuredPost,
@@ -25,6 +38,7 @@ export function BlogFeaturedStory({
   return (
     <Link
       href={asRoute(blogPostHref(basePath, featuredPost.slug))}
+      prefetch={false}
       className="group relative mb-12 block h-[400px] overflow-hidden rounded-4xl shadow-2xl transition-all hover:shadow-[0_20px_50px_rgba(0,0,0,0.15)] md:h-[500px]"
     >
       <div className="ogabassey-blog-featured-story__media absolute inset-0">
@@ -42,7 +56,7 @@ export function BlogFeaturedStory({
           fill
           fetchPriority="high"
           loading="eager"
-          sizes="100vw"
+          sizes={BLOG_LISTING_FEATURED_IMAGE_SIZES}
           quality={BLOG_HERO_IMAGE_QUALITY}
         />
         <div className="ogabassey-blog-featured-story__scrim absolute inset-0" />

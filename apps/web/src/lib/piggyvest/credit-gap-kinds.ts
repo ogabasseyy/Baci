@@ -1,0 +1,32 @@
+/** Finding kinds and matching constants for the credit-gap check (credit-gap-reconciliation.ts). */
+export const SETTLE_MS = 6 * 3_600_000;
+/**
+ * PVB credit ids are `PVB01…` (PiggyVest, 2026-11-11): the prefix followed
+ * by an alphanumeric body. A bare or malformed `PVB01` value stays
+ * review-only instead of paging.
+ */
+export const PVB_CREDIT_ID = /^PVB01[0-9A-Za-z]{3,}$/;
+/**
+ * Wallet-to-wallet categories (our own savings transfers), compared trimmed
+ * and lower-cased. Only `p2p` has been observed; an unknown category still
+ * pages, which fails loud rather than silently skipping money.
+ */
+export const INTERNAL_CATEGORIES: ReadonlySet<string> = new Set(['p2p']);
+export const EDGE_MS = 3_600_000;
+
+export type CreditGapKind =
+  | 'unrecorded_credit'
+  | 'not_on_provider'
+  | 'interest_not_listed'
+  | 'partial_credit'
+  | 'unverified_reference'
+  | 'list_namespace_unproven';
+
+/** Findings listed for a person to review that never page on their own. */
+export const REVIEW_ONLY: ReadonlySet<CreditGapKind> = new Set([
+  'interest_not_listed',
+  'partial_credit',
+]);
+// `unverified_reference` pages on purpose: a credit PiggyVest made that we
+// cannot match is money until proven otherwise, and the report is one alert
+// per daily run, so failing loud costs one page, not one per credit.

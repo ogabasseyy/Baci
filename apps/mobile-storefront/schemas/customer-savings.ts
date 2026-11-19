@@ -160,6 +160,8 @@ export const SavingsPlanFundingAccountSchema = z.object({
 export const SavingsPlanFundingResponseSchema = z.object({
   accounts: z.array(SavingsPlanFundingAccountSchema).max(32).optional(),
   code: z.string().min(1).max(64).optional(),
+  // A pending plan whose stored setup claim expired, so setup may run again.
+  setupRetryable: z.boolean().optional(),
   status: z.enum(['ready', 'pending', 'unavailable']),
 });
 

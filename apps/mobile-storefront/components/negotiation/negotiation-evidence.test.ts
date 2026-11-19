@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import type { Mock } from 'jest-mock';
 import {
   extractNegotiationFileExtension,
   isRemoteEvidenceUrl,
@@ -16,7 +15,7 @@ type UploadToSignedUrlResult = {
   error: { message: string } | null;
 };
 
-const mockUploadToSignedUrl = jest.fn() as Mock<
+const mockUploadToSignedUrl = jest.fn() as jest.Mock<
   (...args: unknown[]) => Promise<UploadToSignedUrlResult>
 >;
 

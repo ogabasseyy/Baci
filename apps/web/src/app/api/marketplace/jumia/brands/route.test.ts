@@ -1,87 +1,106 @@
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { JumiaApiError } from '@/lib/jumia/helpers';
+import { logger } from '@/lib/logger';
 
-const mockAuthenticate = vi.fn();
-const mockGetUserAccess = vi.fn();
-const mockHasPermission = vi.fn();
-const mockForMerchant = vi.fn();
-const mockGetAllBrands = vi.fn();
-const mockSupabase = {};
-
-vi.mock('@/lib/api-auth', () => ({
-  authenticateApiRequest: (...args: unknown[]) => mockAuthenticate(...args),
-  getUserAccess: (...args: unknown[]) => mockGetUserAccess(...args),
-  hasPermission: (...args: unknown[]) => mockHasPermission(...args),
+const mocks = vi.hoisted(() => ({
+  auth: vi.fn(),
+  merchant: vi.fn(),
+  permission: vi.fn(),
+  exact: vi.fn(),
+  legacy: vi.fn(),
+  catalog: vi.fn(),
 }));
-vi.mock('@/lib/jumia/catalog', () => ({
-  getAllBrands: (...args: unknown[]) => mockGetAllBrands(...args),
+vi.mock('@/lib/api-auth', () => ({
+  authenticateApiRequest: mocks.auth,
+  hasPermission: mocks.permission,
+  getUserAccess: vi.fn(),
+}));
+vi.mock('@/lib/get-merchant-for-api-request', () => ({
+  getMerchantForApiRequest: mocks.merchant,
+  toUserAccess: (value: unknown) => value,
 }));
 vi.mock('@/lib/jumia/client', () => ({
-  JumiaClient: {
-    forMerchant: (...args: unknown[]) => mockForMerchant(...args),
-  },
+  JumiaClient: { forIntegration: mocks.exact, forMerchant: mocks.legacy },
 }));
-vi.mock('@/lib/jumia/helpers', () => ({
-  JumiaApiError: class JumiaApiError extends Error {
-    status: number;
+vi.mock('@/lib/jumia/catalog', () => ({ getAllBrands: mocks.catalog }));
+vi.mock('@/lib/logger', () => ({ logger: { error: vi.fn() } }));
 
-    constructor(status: number, message: string) {
-      super(message);
-      this.status = status;
-    }
-  },
-}));
-vi.mock('@/lib/logger', () => ({
-  logger: { error: vi.fn(), warn: vi.fn() },
-}));
+import { GET } from './route';
 
-const { GET } = await import('./route');
-
-describe('GET /api/marketplace/jumia/brands', () => {
+const merchantId = '11111111-1111-4111-8111-111111111111';
+const integrationId = '22222222-2222-4222-8222-222222222222';
+const fixture = [{ code: 1, name: 'Acme' }];
+const request = (
+  query = `merchantId=${merchantId}&integrationId=${integrationId}`
+) => new NextRequest(`http://localhost/api?${query}`);
+describe('brands metadata route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockAuthenticate.mockResolvedValue({
-      user: { id: 'user-1' },
-      error: null,
-      supabase: mockSupabase,
-    });
-    mockGetUserAccess.mockResolvedValue({
-      merchantId: 'merchant-1',
-      isOwner: false,
-      isStaff: true,
-      role: 'staff',
-      permissions: {},
-    });
-    mockHasPermission.mockReturnValue(true);
-    mockForMerchant.mockResolvedValue({ shopId: 'shop-1' });
-    mockGetAllBrands.mockResolvedValue([{ id: 'brand-1', name: 'Acme' }]);
+    mocks.auth.mockResolvedValue({ user: { id: 'user' }, supabase: {} });
+    mocks.merchant.mockResolvedValue({ merchantId });
+    mocks.permission.mockReturnValue(true);
+    mocks.exact.mockResolvedValue({ shopId: 'exact' });
+    mocks.legacy.mockResolvedValue({ shopId: 'legacy' });
+    mocks.catalog.mockResolvedValue(fixture);
   });
-
-  it('rejects view-only callers before creating a provider client', async () => {
-    mockHasPermission.mockReturnValue(false);
-
-    const response = await GET(
-      new NextRequest('http://localhost/api/marketplace/jumia/brands')
-    );
-
-    expect(response.status).toBe(403);
-    expect(mockForMerchant).not.toHaveBeenCalled();
-    expect(mockGetAllBrands).not.toHaveBeenCalled();
-  });
-
-  it('returns brands for callers with integration management access', async () => {
-    const response = await GET(
-      new NextRequest('http://localhost/api/marketplace/jumia/brands')
-    );
-
+  it('uses the explicitly authorized merchant and exact integration', async () => {
+    const response = await GET(request());
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({
-      brands: [{ id: 'brand-1', name: 'Acme' }],
+    const body = await response.json();
+    expect(body.brands).toEqual(fixture);
+    expect(body.availability).toEqual({
+      scope: 'provider-wide',
+      destinationVerified: false,
     });
-    expect(mockHasPermission).toHaveBeenCalledWith(
-      expect.anything(),
-      'integrations',
-      'manage'
+    expect(mocks.merchant).toHaveBeenCalledWith({}, 'user', {
+      requestedMerchantId: merchantId,
+    });
+    expect(mocks.exact).toHaveBeenCalledWith({}, merchantId, integrationId);
+    expect(mocks.legacy).not.toHaveBeenCalled();
+  });
+  it('retains omitted integration compatibility through the uniquely-one factory', async () => {
+    expect((await GET(request(`merchantId=${merchantId}`))).status).toBe(200);
+    expect(mocks.legacy).toHaveBeenCalledWith({}, merchantId);
+  });
+  it('rejects a wrong tenant', async () => {
+    mocks.merchant.mockResolvedValue(null);
+    expect((await GET(request())).status).toBe(403);
+    expect(mocks.catalog).not.toHaveBeenCalled();
+  });
+  it('rejects view-only staff', async () => {
+    mocks.permission.mockReturnValue(false);
+    expect((await GET(request())).status).toBe(403);
+    expect(mocks.catalog).not.toHaveBeenCalled();
+  });
+  it('rejects invalid UUIDs without business reads', async () => {
+    expect((await GET(request('merchantId=wrong'))).status).toBe(400);
+    expect(mocks.catalog).not.toHaveBeenCalled();
+  });
+  it('returns safe unavailable errors for an exact missing integration', async () => {
+    mocks.exact.mockRejectedValue(
+      new JumiaApiError(404, 'secret provider detail')
+    );
+    const response = await GET(request());
+    expect(response.status).toBe(404);
+    expect(JSON.stringify(await response.json())).not.toContain('secret');
+  });
+  it('fails closed on malformed provider data', async () => {
+    mocks.catalog.mockResolvedValue([{ code: 'bad' }]);
+    expect((await GET(request())).status).toBe(502);
+  });
+  it('does not expose provider error detail', async () => {
+    mocks.catalog.mockRejectedValue(new Error('secret token'));
+    const response = await GET(request());
+    expect(response.status).toBe(502);
+    expect(JSON.stringify(await response.json())).not.toContain('secret');
+    expect(logger.error).toHaveBeenCalledWith({
+      message: 'Jumia brands metadata unavailable',
+      status: 502,
+      kind: 'metadata',
+    });
+    expect(JSON.stringify(vi.mocked(logger.error).mock.calls)).not.toContain(
+      'secret'
     );
   });
 });

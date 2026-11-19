@@ -160,6 +160,7 @@ describe('env validation', () => {
 
   it.each([
     'petrock-reconciliation',
+    'merchant-onboarding-emails',
     'quiz-finalization',
   ])('allows the %s worker profile without unrelated agentic signing material', async (workerProfile) => {
     vi.stubEnv('NODE_ENV', 'production');

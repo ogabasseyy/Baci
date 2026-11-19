@@ -1,9 +1,12 @@
-import { DEFAULT_IMAGE_QUALITY } from '@/config/cdn';
+import { DEFAULT_IMAGE_QUALITY, DEFAULT_MEDIA_CDN_ORIGIN } from '@/config/cdn';
 import imageLoader from '@/lib/image-loader';
 import {
   buildOgabasseyCdnFallbackImageLoaderUrl,
   isOgabasseyCdnImageUrl,
 } from '@/lib/ogabassey-cdn-image-url';
+import { toOgabasseySameOriginTransformUrl } from '@/lib/ogabassey-same-origin-hero-url';
+
+const SAME_ORIGIN_CDN_IMAGE_PREFIX = '/cdn-image/';
 
 /**
  * The shared `next/image` loader for every OgaBassey `<picture>` surface.
@@ -27,6 +30,10 @@ import {
  * The CDN branch defaults an absent quality to `DEFAULT_IMAGE_QUALITY`, exactly
  * what the global `imageLoader` clamps `undefined` to, so quality-less card
  * surfaces produce the same width/quality URL through either path.
+ *
+ * Same-origin `/cdn-image/<options>/<asset>` proxy URLs are re-sized through
+ * their CDN twin and mapped back, because the proxy route rejects any query
+ * parameter other than `?v=` — appending `?w=&q=` would 400.
  */
 export function ogabasseyFallbackImageLoader({
   quality,
@@ -37,6 +44,16 @@ export function ogabasseyFallbackImageLoader({
   src: string;
   width: number;
 }): string {
+  if (src.startsWith(SAME_ORIGIN_CDN_IMAGE_PREFIX)) {
+    return toOgabasseySameOriginTransformUrl(
+      buildOgabasseyCdnFallbackImageLoaderUrl(
+        `${DEFAULT_MEDIA_CDN_ORIGIN}/image/${src.slice(SAME_ORIGIN_CDN_IMAGE_PREFIX.length)}`,
+        width,
+        quality ?? DEFAULT_IMAGE_QUALITY
+      )
+    );
+  }
+
   if (isOgabasseyCdnImageUrl(src)) {
     return buildOgabasseyCdnFallbackImageLoaderUrl(
       src,

@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCartFromStorage, saveCartToStorage } from './cart-storage';
 import {
   bootstrapSharedCart,
@@ -14,8 +14,10 @@ import {
   cartLine,
   MERCHANT_ID,
   product,
+  resetCartSessionHintForTests,
   SLUG,
   snapshot,
+  writeCartSessionHint,
 } from './shared-cart-provisioning.test-support';
 import { useSharedCart } from './use-shared-cart';
 
@@ -28,13 +30,20 @@ vi.mock('./shared-cart-client', () => ({
 }));
 
 describe('useSharedCart legacy import', () => {
+  afterEach(() => {
+    resetCartSessionHintForTests();
+    vi.useRealTimers();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     window.localStorage.clear();
+    resetCartSessionHintForTests();
+    writeCartSessionHint(MERCHANT_ID, '1');
     vi.mocked(fetchSharedCartProducts).mockResolvedValue(new Map());
   });
 
   it('keeps creation pending and retries its exact cached lines after an unknown outcome', async () => {
+    vi.useFakeTimers();
     saveCartToStorage([cartItem({ quantity: 2 })], SLUG);
     vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({
       code: 'unauthorized',
@@ -71,11 +80,15 @@ describe('useSharedCart legacy import', () => {
         sessionGeneration: 1,
       })
     );
-    await waitFor(() =>
-      expect(fetchSharedCartSnapshot).toHaveBeenCalledTimes(1)
-    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(fetchSharedCartSnapshot).toHaveBeenCalledTimes(1);
     act(() => result.current.addToCart(product({ id: 'prod-9' }), 1));
-    await waitFor(() => expect(createSharedCart).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(createSharedCart).toHaveBeenCalledTimes(1);
     expect(result.current.importStatus).toBe('pending');
     expect(result.current.syncStatus).not.toBe('retrying');
     expect(result.current.syncError).toBeNull();
@@ -87,14 +100,17 @@ describe('useSharedCart legacy import', () => {
         snapshot: null,
       });
     });
-    await waitFor(() => expect(result.current.syncStatus).toBe('retrying'));
+    // Linking owns the automatic retry even when no new edit is made.
+    // Changing the device cache must not change the indeterminate request.
     saveCartToStorage([cartItem({ quantity: 7 })], SLUG);
-    act(() => result.current.retryPendingSync());
-    await waitFor(() => expect(createSharedCart).toHaveBeenCalledTimes(2));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(createSharedCart).toHaveBeenCalledTimes(2);
     expect(vi.mocked(createSharedCart).mock.calls[1][0]).toEqual(
       vi.mocked(createSharedCart).mock.calls[0][0]
     );
-    await waitFor(() => expect(result.current.importStatus).toBe('done'));
+    expect(result.current.importStatus).toBe('done');
   });
 
   it('blocks an over-capacity first import instead of creating an empty cart', async () => {

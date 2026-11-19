@@ -38,6 +38,16 @@ const sanitizedReturnTo = z.preprocess(
     .optional()
 );
 
+// Contract: these coerced floats (`amount` and `orderTotal` below) are
+// display and analytics values only (banner formatting, tracking
+// figures) — they must never be converted into charge amounts, because
+// binary-float rounding corrupts minor units. Paid-order consumers
+// prefer a server-confirmed total where one is fetched; lanes without
+// one (REDVAULT funnel, terminal-failure, Juicyway VTU) emit the coerced
+// value directly as the only available figure. Money math parses the
+// raw `amount` search param to integer kobo via parseFundAmountKobo
+// (components/wallet/fund-primary-wallet-card-amount.ts, as the
+// primary-card mount bind does) or uses server totals.
 const optionalPositiveAmount = z.preprocess(
   (value) =>
     typeof value === 'string' && value.trim() === '' ? undefined : value,

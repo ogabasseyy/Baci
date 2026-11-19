@@ -210,9 +210,7 @@ describe('checkout order builders', () => {
     );
     expect(request.shipping_provider).toBe('GIGL');
     expect(request.shipping_fee).toBe(9493);
-    expect(request.shipping_address.address).toBe(
-      'PORT HARCOURT, GIGL Aba Road, Port Harcourt'
-    );
+    expect(request.shipping_address.address).toBe('1 Test Street');
     expect(request.shipping_address.city).toBe('Port Harcourt');
     expect(request.shipping_address.state).toBe('Rivers');
   });

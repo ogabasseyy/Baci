@@ -1,7 +1,16 @@
+import '@/app/(storefront)/storefront-cart-drawer.css';
 import type { Metadata, Viewport } from 'next';
 import { notFound } from 'next/navigation';
 import type React from 'react';
 import { ShellChromeLoading } from '@/app/(storefront)/[slug]/storefront-loading-ui';
+import { resolveOgabasseyHomeHeroShell } from '@/app/(storefront)/ogabassey/ogabassey-home-hero-shell-data';
+import {
+  clearSettledCanonicalOgabasseyHomeState,
+  getSettledCanonicalOgabasseyHomeStateBox,
+  isStorefrontHomeRequest,
+  recordSettledCanonicalOgabasseyHomeState,
+  settleCanonicalOgabasseyHomeMerchant,
+} from '@/app/(storefront)/ogabassey/ogabassey-home-settled-state';
 import { StorefrontLcpCopyStyle } from '@/app/(storefront)/storefront-lcp-copy-style';
 import { AdAttributionCapture } from '@/components/storefront/ad-attribution-capture';
 import {
@@ -13,11 +22,12 @@ import { loadUnpublishedStorefront } from '@/components/storefront/unpublished-s
 import { OGABASSEY_MERCHANT_ID } from '@/config/ogabassey';
 import { getStorefrontNavigationCategories } from '@/lib/cached-categories';
 import { getRequestScopedMerchant } from '@/lib/cached-data';
-import { buildStoreUrl } from '@/lib/store-url';
-import { mergeStorefrontSmartAppBannerOther } from '@/lib/storefront-smart-app-banner-metadata';
 import { isValidMerchantIdentifier } from '@/lib/validation';
-import { isOgabasseyHomeIdentifier } from './(home)/is-ogabassey-home-identifier';
-import { getStorefrontSeoDescription } from './seo-helpers';
+import {
+  isOgabasseyCanonicalDomainSlug,
+  isOgabasseyHomeIdentifier,
+} from './(home)/is-ogabassey-home-identifier';
+import { buildStorefrontMerchantMetadata } from './build-storefront-merchant-metadata';
 import { StorefrontPprStaticShell } from './storefront-ppr-static-shell';
 import { StorefrontShellFrame } from './storefront-shell-frame';
 import {
@@ -26,10 +36,7 @@ import {
 } from './storefront-shell-snapshot';
 import { StorefrontThemeFrame } from './storefront-theme-frame';
 
-// Run storefront SSR next to the Supabase primary (AWS eu-west-1 / Dublin) so
-// every render's DB round-trips stay intra-region. Region pinning lives in
-// vercel.json `regions` (dub1); per-route `preferredRegion` is deprecated and
-// removed — the project-level pin is the supported mechanism.
+// Storefront SSR runs next to Supabase primary (eu-west-1 / dub1 via vercel.json).
 
 const STORE_NOT_FOUND_METADATA: Metadata = {
   title: 'Store Not Found',
@@ -39,8 +46,7 @@ const STORE_NOT_FOUND_METADATA: Metadata = {
     index: false,
     follow: true,
   },
-  // Replace root verification so the platform `google-adsense-account` meta does
-  // not bleed onto not-found pages served on third-party custom domains.
+  // Replace root verification so platform google-adsense-account meta does not bleed onto fallback pages.
   verification: {},
 };
 
@@ -51,100 +57,21 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
 
-  // Validate identifier format
   if (!isValidMerchantIdentifier(slug)) {
     return STORE_NOT_FOUND_METADATA;
   }
 
-  // Keep metadata cacheable. Request-bound storefront validation belongs in
-  // StorefrontLayoutContent so Next's metadata boundary cannot displace PDP slots.
+  // Keep metadata cacheable; request-bound validation stays in StorefrontLayoutContent.
   const merchant = await getRequestScopedMerchant(slug);
 
   if (!merchant) {
     return STORE_NOT_FOUND_METADATA;
   }
 
-  // Extract verification code from feature settings or published config.
-  // feature_settings is normalized in cached-data; published_config is optional.
-  const featureSettings = merchant.feature_settings;
-  const publishedConfig = merchant.published_config;
-
-  const rawVerification =
-    featureSettings?.google_site_verification ||
-    publishedConfig?.google_site_verification;
-  const verificationCode =
-    typeof rawVerification === 'string' ? rawVerification : undefined;
-
-  // Build icons configuration for merchant favicon
-  // Fall back to logo_url if no dedicated favicon exists
-  const faviconSvg = merchant.favicon_svg_url;
-  const faviconPng32 = merchant.favicon_png_32_url;
-  const faviconAppleTouch = merchant.favicon_apple_touch_url;
-
-  // Build icons array only if merchant has custom favicons
-  const icons =
-    faviconSvg || faviconPng32 || faviconAppleTouch
-      ? {
-          icon: [
-            ...(faviconSvg ? [{ url: faviconSvg, type: 'image/svg+xml' }] : []),
-            ...(faviconPng32
-              ? [{ url: faviconPng32, sizes: '32x32', type: 'image/png' }]
-              : []),
-          ].filter(Boolean),
-          apple: faviconAppleTouch
-            ? [{ url: faviconAppleTouch, sizes: '180x180', type: 'image/png' }]
-            : undefined,
-        }
-      : merchant.logo_url
-        ? {
-            icon: [{ url: merchant.logo_url }],
-            apple: [{ url: merchant.logo_url }],
-          }
-        : undefined;
-
-  // Build SEO-friendly description with proper fallbacks
-  const description = getStorefrontSeoDescription(merchant);
-  const baseUrl = buildStoreUrl(merchant);
-  let metadataBase: URL | undefined;
-
-  try {
-    metadataBase = baseUrl ? new URL(baseUrl) : undefined;
-  } catch {
-    metadataBase = undefined;
-  }
-
-  const other = mergeStorefrontSmartAppBannerOther(slug);
-
-  return {
-    metadataBase,
-    description,
-    icons,
-    // Always emit an explicit verification object so the platform-level
-    // `google-adsense-account` meta from the root layout never bleeds onto
-    // merchant storefronts — especially independent third-party custom domains
-    // (merchant sovereignty). The platform AdSense tag stays scoped to the
-    // usebaci.com apex, which is served by the root layout. A merchant's own
-    // Google Search Console code is still applied here when configured.
-    verification: {
-      google: verificationCode,
-    },
-    openGraph: {
-      title: merchant.site_title || merchant.business_name,
-      description,
-      images: merchant.logo_url ? [merchant.logo_url] : [],
-    },
-    // Apple Smart App Banner — prompts iOS Safari users to open/install the app
-    ...(other ? { other } : {}),
-    // Disable platform manifest for merchant stores to prevent Baci branding leakage
-    manifest: null,
-  };
+  return buildStorefrontMerchantMetadata(merchant, slug);
 }
 
-/**
- * Next.js 16+ Viewport Configuration
- * 2026 Best Practice: Static viewport for PPR compatibility
- * Dynamic theme colors are applied via meta tag in the layout component
- */
+/** Static viewport for Next.js 16+ PPR compatibility. */
 export function generateViewport(): Viewport {
   return {
     width: 'device-width',
@@ -156,6 +83,10 @@ export async function StorefrontLayoutContent(props: {
   children: React.ReactNode;
   params: Promise<{ slug: string }>;
 }) {
+  const isHomeRequestBeforeSlug = isStorefrontHomeRequest();
+  const settledStateBox = isHomeRequestBeforeSlug
+    ? getSettledCanonicalOgabasseyHomeStateBox(props.params)
+    : null;
   const { slug } = await props.params;
 
   if (!isValidMerchantIdentifier(slug)) {
@@ -163,6 +94,24 @@ export async function StorefrontLayoutContent(props: {
   }
 
   const appearance = resolveStorefrontAppearance(slug);
+
+  const isCanonicalOgabasseyDomain = isOgabasseyCanonicalDomainSlug(slug);
+  const isHomeRequest =
+    isCanonicalOgabasseyDomain &&
+    (isHomeRequestBeforeSlug || isStorefrontHomeRequest());
+  if (!isHomeRequest) {
+    clearSettledCanonicalOgabasseyHomeState();
+  }
+  const activeSettledStateBox = isHomeRequest
+    ? (settledStateBox ??
+      getSettledCanonicalOgabasseyHomeStateBox(props.params))
+    : null;
+  const canonicalHomeHeroShellPromise = isHomeRequest
+    ? resolveOgabasseyHomeHeroShell()
+    : null;
+  const canonicalHomeMerchantPromise = isHomeRequest
+    ? settleCanonicalOgabasseyHomeMerchant(getRequestScopedMerchant(slug))
+    : null;
 
   // Start the merchant read and, for the known OgaBassey home tenant, the
   // navigation read together: the merchant id is a committed constant, so
@@ -202,6 +151,21 @@ export async function StorefrontLayoutContent(props: {
 
   if (!shellSnapshot) {
     notFound();
+  }
+
+  if (isHomeRequest && activeSettledStateBox) {
+    const [heroShell, resolvedMerchant] = await Promise.all([
+      canonicalHomeHeroShellPromise,
+      canonicalHomeMerchantPromise,
+    ]);
+    recordSettledCanonicalOgabasseyHomeState({
+      box: activeSettledStateBox,
+      heroShell: heroShell ?? null,
+      merchant: resolvedMerchant ?? null,
+      params: props.params,
+      shareAcrossRequestTree: true,
+      slug,
+    });
   }
 
   return (

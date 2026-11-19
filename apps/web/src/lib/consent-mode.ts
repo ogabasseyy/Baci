@@ -1,5 +1,7 @@
 'use client';
 
+import { parseCookiePreferences } from '@/components/storefront/parse-cookie-preferences';
+
 /**
  * Google Consent Mode v2 Implementation
  *
@@ -28,7 +30,7 @@ const DEFAULT_CONSENT: ConsentSettings = {
   ad_user_data: 'denied',
   ad_personalization: 'denied',
   analytics_storage: 'denied',
-  functionality_storage: 'granted', // Required for basic site functionality
+  functionality_storage: 'denied',
   personalization_storage: 'denied',
   security_storage: 'granted', // Required for security features
 };
@@ -148,7 +150,7 @@ export function getStoredConsent(): {
   try {
     const saved = localStorage.getItem('baci-cookie-consent');
     if (!saved) return null;
-    return JSON.parse(saved);
+    return parseCookiePreferences(JSON.parse(saved));
   } catch {
     return null;
   }

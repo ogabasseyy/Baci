@@ -29,17 +29,26 @@ describe('Jumia discovery purge RPC migration contract', () => {
     );
   });
 
-  it('schedules the authenticated purge route', () => {
+  it('schedules the purge directly on the VPS worker every 10 minutes', () => {
     const vercelConfig = JSON.parse(
       readFileSync(path.join(workspaceRoot, 'vercel.json'), 'utf8')
     ) as {
       crons?: Array<{ path?: string; schedule?: string }>;
     };
+    const deployScript = readFileSync(
+      path.join(workspaceRoot, 'vps-workers/deploy.sh'),
+      'utf8'
+    );
 
-    expect(vercelConfig.crons).toContainEqual({
-      path: '/api/cron/purge-jumia-self-authorization-discoveries',
-      schedule: '*/10 * * * *',
-    });
+    expect(
+      vercelConfig.crons?.some(
+        (cron) =>
+          cron.path === '/api/cron/purge-jumia-self-authorization-discoveries'
+      )
+    ).toBe(false);
+    expect(deployScript).toMatch(
+      /^\*\/10 \* \* \* \* flock -n \$REMOTE_DIR\/locks\/purge-jumia-self-authorization-discoveries\.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=purge-jumia-self-authorization-discoveries && cd \$REMOTE_DIR && timeout --signal=TERM --kill-after=30s 2m \$REMOTE_DIR\/bin\/purge-jumia-self-authorization-discoveries\.sh' >> \$REMOTE_DIR\/logs\/purge-jumia-self-authorization-discoveries\.log 2>&1$/m
+    );
   });
 
   it('keeps manage-authorized staff in the effective credential loader', () => {

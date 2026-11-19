@@ -1,5 +1,6 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { useRef } from 'react';
+import type { TextInputInstance } from 'react-native';
 import { Text, TextInput, View } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import type { PasswordValidationResult } from '@/lib/password-utils';
@@ -47,9 +48,9 @@ export function RegisterAccountStep({
   const styles = getStyles(colors);
   const setupStyles = getMerchantSetupStyles(colors);
 
-  const emailRef = useRef<TextInput>(null);
-  const passwordRef = useRef<TextInput>(null);
-  const confirmPasswordRef = useRef<TextInput>(null);
+  const emailRef = useRef<TextInputInstance>(null);
+  const passwordRef = useRef<TextInputInstance>(null);
+  const confirmPasswordRef = useRef<TextInputInstance>(null);
 
   return (
     <View style={styles.formSection}>

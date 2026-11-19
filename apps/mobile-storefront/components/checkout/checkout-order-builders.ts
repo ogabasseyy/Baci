@@ -1,8 +1,5 @@
 import { parseMerchantRateQuoteId } from '@baci/shared/lib';
-import {
-  getPickupStationAddressText,
-  isProviderStationPickupQuote,
-} from '@/components/checkout/checkout-station-pickup';
+import { isProviderStationPickupQuote } from '@/components/checkout/checkout-station-pickup';
 import { isGiglGoFasterQuote } from '@/components/checkout/checkout-step-helpers';
 import type {
   DeliveryMethod,
@@ -110,7 +107,9 @@ export function buildOrderShippingAddress(
     if (isProviderStationPickupQuote(selectedQuote)) {
       return {
         ...address,
-        address: getPickupStationAddressText(selectedQuote),
+        // The selected quote carries station booking metadata separately.
+        // Replacing the receiver street with its display address breaks validation.
+        address: selectedQuote.receiverAddress ?? address.address,
       };
     }
 

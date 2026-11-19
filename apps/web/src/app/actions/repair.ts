@@ -141,12 +141,12 @@ export async function calculateRepairShipping(
     return dropOffOnly;
   }
 
-  const repairCenter = await getRepairCenterAddress(merchant.id);
-  if (!repairCenter) {
-    return dropOffOnly;
-  }
-
   try {
+    const repairCenter = await getRepairCenterAddress(merchant.id);
+    if (!repairCenter) {
+      return dropOffOnly;
+    }
+
     // Calculate GIGL doorstep collection (customer -> repair center).
     const quotes = await shippingService.getProviderQuotes(
       REPAIR_PICKUP_PROVIDER,

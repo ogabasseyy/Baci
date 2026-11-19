@@ -23,7 +23,6 @@ export interface PaymentMethod {
 
 const PAYMENT_METHOD_ICON_BY_ID: Partial<Record<string, IoniconsIconName>> = {
   credit_direct: 'time-outline',
-  credpal: 'calendar-outline',
   juicyway: 'flash-outline',
   klump: 'calendar-outline',
   korapay: 'wallet-outline',
@@ -66,7 +65,10 @@ export function getRenderablePaymentMethods(
 ): readonly Readonly<PaymentMethod>[] {
   if (!settings) return [];
 
-  return methods.filter((method) => Object.hasOwn(settings, method.dbField));
+  return methods.filter(
+    (method) =>
+      method.id !== 'credpal' && Object.hasOwn(settings, method.dbField)
+  );
 }
 
 export const paymentMethods = buildPaymentMethods();

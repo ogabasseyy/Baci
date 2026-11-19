@@ -35,6 +35,16 @@ and enrollment gates in the release sequence below.
   non-canonical stored values silently keep every cart surface
   disabled. (Trim + lowercase normalization in the web helper applies
   only to non-cart feature gates.)
+- Cloudflare visitor trust for anonymous cart quotas
+  (`apps/web/src/lib/cloudflare-peer.ts`): `CF-Connecting-IP` is only
+  used as a quota identity when the platform-verified peer is inside
+  Cloudflare's published egress ranges. Hard deploy prerequisite:
+  restrict origin ingress to the proxied Cloudflare zone
+  (Authenticated Origin Pulls or equivalent) so callers originating
+  from other Cloudflare egress (e.g. a Worker fetching the origin
+  directly) cannot present forged `CF-Connecting-IP`/`CF-Ray` headers.
+  Until that restriction is verifiably in place, treat this trust as
+  quota-shaping only — it is never an authentication signal.
 - Bounded retention: `cleanup_commerce_carts()` (final body in
   `20261015163000`, batching every statement to 1000 rows per call)
   deletes expired operations/creation requests/events, handoffs
@@ -43,9 +53,48 @@ and enrollment gates in the release sequence below.
   active expired carts to `expired` only when no active, unexpired
   checkout session exists for them (`NOT EXISTS` guard). Unexpired
   retry receipts are spared.
-- Transactional outbox publisher with leases, bounded backoff and
-  dead-letter handling (local unit/SQL evidence; live qualification
-  pending).
+- Change notices are sent by the database itself
+  (`20261110130000_commerce_cart_publish_on_write.sql`): a trigger on the
+  outbox sends each notice inside the cart write's transaction, and a
+  pg_cron sweep (`commerce-cart-publish-events`, every 30 seconds) retries
+  anything that was not confirmed, with leases, bounded backoff and
+  dead-letter handling. A failed send never fails a cart write. No worker
+  process or worker credential is needed; the VPS worker described in
+  `vps-workers/docs/cart-events.md` is not installed. The first live
+  switch-on (2026-11-10) found the original publisher could never
+  acknowledge a send, because `realtime.send` adds an `id` to the stored
+  payload; the sender now supplies its own id and confirms by it.
+  `commerce_cart_publish_health()` reports stale and dead-lettered notices
+  as counts for alerting. The sweep sends at most 100 notices a minute, so
+  when a merchant with an existing undelivered backlog is first enrolled,
+  drain it by calling `commerce_cart_publish_events(50, 'operator-backfill')`
+  repeatedly from a database-owner connection (the SQL editor or
+  `supabase db query --linked`; the function is not callable by API roles) before relying on the alarm; otherwise
+  `/api/cron/cart-notice-health` reports the old backlog as stale until the
+  sweep catches up. A notice that fails ten sends is dead-lettered and not
+  retried; the alarm reports it for 24 hours. Write-time sending adds
+  one insert and one indexed lookup to each cart write for an enrolled
+  merchant, so compare cart-write latency before and after the first
+  enrollment. Kill switch that keeps delivery working through the sweep
+  alone (notices then arrive within about 30 seconds):
+  `ALTER TABLE public.commerce_cart_events DISABLE TRIGGER commerce_cart_events_send_on_write;`
+  (re-enable with `ENABLE TRIGGER`). Removing a merchant's
+  `shared_cart_realtime` flag stops both paths for that merchant. The
+  health counts are readable with the public anon key by design: an
+  accepted, unauthenticated operational signal with no cart, shopper or
+  merchant data.
+  Sending is only half of delivery. The second live switch-on
+  (2026-11-11) found every browser was refused when joining its channel:
+  Realtime authorizes a private-channel join with a probe row that never
+  sets `private`, and the receiver policies required `private IS TRUE`
+  (fixed by `20261111100000`). Notices were sent and acknowledged while
+  carts converged only through the 15-second fallback poll, and the send
+  health check stayed green. After any change to the receiver policies or
+  a Realtime upgrade, verify a real join: with live updates on, a
+  storefront tab must poll `/api/storefront/cart` about once a minute, not
+  every 15 seconds, and a second tab must update within about a second of
+  a cart edit. `supabase/tests/commerce_cart_receive_join_probe.sql`
+  replays the join check with a production-shaped probe.
 - Device-scoped revocation (`commerce_cart_revoke_device_grants`) used
   by native retirement and web sign-out; it never clears cart contents.
 - Worker credential boundary: `20261015157000` revokes the
@@ -96,14 +145,68 @@ and enrollment gates in the release sequence below.
    `CART_PROOF_ENVIRONMENT` shared by all its instances: proof issuance
    and verification fail closed without it, and distinct deployments
    must never share a value (or the master secret).
-3. Deploy compatible server adapters with enrollment still disabled.
-4. Activate terminal-cart retention explicitly (only with the release
+3. Before deploying the Cloudflare visitor-quota trust: verify the
+   origin is restricted to the proxied Cloudflare zone
+   (Authenticated Origin Pulls or equivalent) and confirm a
+   direct-to-origin request with forged `CF-Connecting-IP`/`CF-Ray`
+   headers is rejected or ignored; record the evidence. This is a
+   hard gate for that change, not a follow-up. Also wire an operator
+   alert on the `Cart quota store degraded` warning before rollout.
+4. Deploy compatible server adapters with enrollment still disabled.
+5. Activate terminal-cart retention explicitly (only with the release
    authorization): where pg_cron exists, run
    `SELECT cron.schedule('commerce-cart-terminal-purge', '37 * * * *', $cron$SELECT public.commerce_cart_purge_terminal_carts(interval '90 days', 500)$cron$);`
    Migration application alone never schedules this job.
-5. Pilot one controlled merchant (Ogabassey), run the acceptance matrix
+   Activated in production on 2026-11-10 with the owner's approval.
+5a. Activate bounded retention explicitly (only with the owner's
+   authorization): where pg_cron exists, run
+   `SELECT cron.schedule('commerce-cart-retention', '*/5 * * * *', $cron$SELECT public.cleanup_commerce_carts()$cron$);`
+   `cleanup_commerce_carts()` was written to be run by the cart events
+   worker, which was never installed, so until this job exists nothing
+   deletes expired retry receipts, account-operation receipts, creation
+   requests and outbox events,
+   handoffs expired over a day, non-submitted checkout sessions expired
+   over a day, or submitted checkout sessions older than 90 days, and
+   nothing flips idle carts to `expired`. Each call handles at most 1,000 rows per
+   table, so a backlog drains over successive runs. Flipping an idle cart
+   to `expired` should not take anything away from a shopper: a
+   cart and its guest grant are both created with a seven-day life
+   (`20261012050200_commerce_cart_commands.sql`), and cart access requires
+   an unrevoked, unexpired grant. Grants issued later (pairing, account
+   link) can outlive the cart, so confirm before activating that no
+   active cart past `expires_at` still has a live grant, by running
+   `SELECT count(*) AS expired_active, count(*) FILTER (WHERE EXISTS (SELECT 1 FROM public.commerce_cart_grants g WHERE g.cart_id = c.id AND g.revoked_at IS NULL AND g.expires_at > now())) AS with_live_grant FROM public.commerce_carts c WHERE c.state = 'active' AND c.expires_at < now();`
+   and requiring `with_live_grant = 0`. The result is time-sensitive:
+   always run it at activation and record the output with the activation
+   evidence. (Dated example only, not current state: on 2026-11-10 it
+   returned `expired_active = 528, with_live_grant = 0`.) `expired_active` is an upper bound on the
+   carts that will flip: the function also skips carts with a live
+   checkout session or a live dispatch hold, so fewer flips than that
+   count is expected, not a fault. Activated in production on 2026-11-10
+   with the owner's approval: the pre-check at 13:03 UTC returned
+   `expired_active = 528, with_live_grant = 0` and no existing job; the
+   first run flipped all 528 carts, and the first scheduled run (13:05
+   UTC) succeeded. It does
+   start the 90-day clock after which the terminal purge deletes the cart.
+   Dispatch-held carts, handoffs and checkout sessions are skipped by the
+   function's own fences. Schedule it as the role that owns the
+   SECURITY DEFINER function, because definer rights follow the function
+   owner: confirm it with
+   `SELECT pg_get_userbyid(proowner) FROM pg_proc WHERE oid = 'public.cleanup_commerce_carts()'::regprocedure;`
+   (`postgres` in production, the same role that owns the terminal-purge
+   job). No migration sets that owner explicitly, so it is whichever role
+   applied the chain. This step applies only where pg_cron is installed
+   (`SELECT 1 FROM pg_catalog.pg_namespace WHERE nspname = 'cron'`
+   returns a row); without it there is nothing to schedule. Verify
+   afterwards with
+   `SELECT jobname, schedule, username, active FROM cron.job WHERE jobname = 'commerce-cart-retention';`
+   (expect one active row whose `username` is the function owner). Before
+   activation the same query must return no row. To stop it:
+   `SELECT cron.unschedule('commerce-cart-retention');`
+   Migration application alone never schedules this job.
+6. Pilot one controlled merchant (Ogabassey), run the acceptance matrix
    in `docs/qa/shared-cart-acceptance.md`, then a second merchant.
-6. Expand only after convergence, checkout-binding and isolation
+7. Expand only after convergence, checkout-binding and isolation
    evidence pass at the deployed revision.
 
 ## Signing keys
@@ -164,11 +267,59 @@ holder of that key from signing a forged issuance time.
 - Disable new enrollment/realtime first. Migrated carts keep canonical
   ownership; never restore stale local carts as authoritative and never
   drop the canonical tables as a rollback step.
+- Removing `shared_cart`, unpublishing a store, or remapping a slug or
+  custom domain to another store reaches the cart read, create and
+  command routes within 30 seconds, not instantly: each warm server
+  instance reuses a published store's mapping and feature row for that
+  long (`CART_MERCHANT_LOOKUP_TTL_MS`). Other cart routes read them on
+  every request.
 - Keep the last compatible server version available while clients
   drain. Native/web clients retain foreground HTTP recovery when
   realtime is disabled.
 
 ## Telemetry redaction
+
+Anonymous cart calls carry the client quota credential in the
+`x-baci-client-credential` header. It is a quota identity, not an
+authentication secret, but a leaked value lets an attacker burn one
+shopper's quota bucket, so treat it like a session identifier: it is
+on the same proxy/APM redaction denylist below, and in-repo logging
+never records it (quota keys store only its SHA-256 hash).
+
+Abuse posture: credential budgets are always paired with a
+non-rotatable network backstop at 25x the primary limit. That
+backstop is a deliberate trade-off, not strict isolation — a hostile
+host sharing an egress with legitimate shoppers can still exhaust
+the shared backstop and deny them until the window resets, exactly
+as any finite per-network ceiling allows. The multiple is sized far
+above legitimate shared-egress volume; alert on sustained backstop
+denials rather than raising it silently. While the Redis quota
+store is degraded, the credential dimension is skipped and network
+identity alone applies, so the bounded per-instance memory store
+cannot be poisoned by credential churn.
+
+Privacy basis: the credential is a persistent random per-profile /
+per-install quota key. It exists solely so anonymous budgets follow
+the shopper instead of their network address. It is never used for
+authentication, advertising, or cross-merchant joins; clients
+store a separate credential per merchant and quota keys are
+merchant-salted SHA-256 hashes with the budget window as their
+retention, and the raw value is redacted from telemetry (below).
+Web handoff preview sends no credential (the merchant is learned
+from the preview itself) and uses the verified network identity;
+mobile handoff preview sends its per-merchant credential (the slug
+is known from app config). Either way, stored quota keys are never
+joinable across merchants: clients store a separate credential per
+merchant wherever the merchant is known, and every quota subject is
+a merchant-salted hash. Deleting site/app data rotates it.
+
+Accepted risk — Redis key cardinality: in the healthy-store path,
+each distinct credential creates its own quota key per merchant
+and operation (bounded per network by the backstop, e.g. 3,000
+bootstrap keys/hour/network/merchant, all TTL'd to their budget
+window). Alert on Redis key-count/memory growth alongside the
+degradation warning; revisit a cardinality guard only if key
+pressure is observed.
 
 The handoff preview endpoint (`GET /api/storefront/cart/handoff`)
 takes the pairing secret in the `x-handoff-token` header. Proxy, APM,
@@ -177,11 +328,12 @@ that header exactly like `Authorization` before activation; in-repo
 logging never records request headers for these routes. This is an
 explicit pre-activation checklist item (not a documentation-only
 note): before any merchant is enrolled, verify against the deployed
-proxy and APM configuration that (1) `x-handoff-token` is on the
-header denylist alongside `Authorization`, and (2) a synthetic
-handoff preview request leaves no token value in proxy, APM, or
-error-reporting captures; record both checks in the activation
-evidence. Enrollment stays closed until they pass.
+proxy and APM configuration that (1) `x-handoff-token` and
+`x-baci-client-credential` are on the header denylist alongside
+`Authorization`, and (2) a synthetic handoff preview request and a
+synthetic bootstrap request leave no token or credential value in
+proxy, APM, or error-reporting captures; record both checks in the
+activation evidence. Enrollment stays closed until they pass.
 
 Preview RPC authority: both preview functions require the dedicated
 `commerce_cart_previewer` role and a server-signed `cart_handoff_id`
@@ -253,9 +405,15 @@ callers; no anonymous fallback or new production secret is introduced.
   against the real worker scheduler.
 - Quota degradation is an explicit pre-activation gate: when the
   Redis quota store is degraded, anonymous/enumeration operations
-  and the server-to-server legacy bridge fail closed, but
-  authenticated shopper operations (commands, snapshot,
-  checkout_prepare) deliberately fall back to per-instance in-memory
+  (create, handoff preview/redeem/issue, account link, session
+  revoke) and the server-to-server legacy bridge fail closed.
+  Bootstrap is the exception — it is a stateless proof mint and
+  degrades to a reduced per-instance ceiling
+  (`DEGRADED_BOOTSTRAP_LIMIT`) so a Redis outage cannot blank every
+  shopper's cart at the first step; proofs minted then still cannot
+  materialize carts because create stays fail-closed. Authenticated
+  shopper operations (commands, snapshot, checkout_prepare)
+  deliberately fall back to per-instance in-memory
   counters, so one valid proof's effective budget multiplies by the
   instance count for the outage duration. Before any merchant is
   enrolled, put an operator alert on the throttled

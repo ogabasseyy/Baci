@@ -6,6 +6,58 @@ function responder(status: number, body: unknown = {}) {
 }
 
 describe('cancelStaleCheckoutOrder', () => {
+  it.each([
+    '<html>unexpected proxy response</html>',
+    '{}',
+    '{"success":true}',
+    '{"success":false,"cancelled":true}',
+    '{"success":true,"cancelled":"true"}',
+  ])('does not treat an unconfirmed 200 response as cancellation: %s', async (body) => {
+    const result = await cancelStaleCheckoutOrder({
+      isAuthenticated: false,
+      orderId: 'order-1',
+      reason: 'changed review',
+      trackingToken: 'track-1',
+      guestFetch: vi.fn(async () => new Response(body, { status: 200 })),
+    });
+    expect(result).toBe('failed');
+  });
+
+  it('accepts the confirmed already-cancelled response', async () => {
+    const result = await cancelStaleCheckoutOrder({
+      isAuthenticated: false,
+      orderId: 'order-1',
+      reason: 'changed review',
+      trackingToken: 'track-1',
+      guestFetch: responder(200, { success: true, cancelled: false }),
+    });
+    expect(result).toBe('cancelled');
+  });
+
+  it('retains the fence when a strict caller receives only an already-cancelled response', async () => {
+    const result = await cancelStaleCheckoutOrder({
+      isAuthenticated: false,
+      orderId: 'order-1',
+      reason: 'changed review',
+      trackingToken: 'track-1',
+      requireNewCancellation: true,
+      guestFetch: responder(200, { success: true, cancelled: false }),
+    });
+    expect(result).toBe('failed');
+  });
+
+  it('accepts a newly confirmed cancellation for a strict caller', async () => {
+    const result = await cancelStaleCheckoutOrder({
+      isAuthenticated: false,
+      orderId: 'order-1',
+      reason: 'changed review',
+      trackingToken: 'track-1',
+      requireNewCancellation: true,
+      guestFetch: responder(200, { success: true, cancelled: true }),
+    });
+    expect(result).toBe('cancelled');
+  });
+
   it('cancels through the account route when authenticated', async () => {
     const accountFetch = responder(200, { success: true, cancelled: true });
     const guestFetch = vi.fn();

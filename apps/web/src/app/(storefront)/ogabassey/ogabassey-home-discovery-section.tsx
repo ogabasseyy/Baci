@@ -2,7 +2,10 @@ import { selectLaunchProducts } from '@baci/shared/storefront';
 import Link from 'next/link';
 import { mapHomeProductsToTemplateProducts } from '@/app/(storefront)/ogabassey/ogabassey-home-product-adapter';
 import { JsonLd } from '@/components/seo/json-ld';
-import { OGABASSEY_HOME_SCHEMA_PRODUCT_LIMIT } from '@/components/storefront/ogabassey/config/products';
+import {
+  OGABASSEY_HOME_INITIAL_PRODUCT_LIMIT,
+  OGABASSEY_HOME_SCHEMA_PRODUCT_LIMIT,
+} from '@/components/storefront/ogabassey/config/products';
 import type { CategoryNavItem } from '@/lib/cached-categories';
 import type { StorefrontHomeProduct } from '@/lib/cached-data';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
@@ -130,7 +133,11 @@ export async function OgabasseyHomeDiscoverySection({
         .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
     ).values()
   ).slice(0, 20);
-  const productDiscoveryLinks = merchantProducts
+  const discoveryCandidateProducts =
+    merchantProducts.length > OGABASSEY_HOME_INITIAL_PRODUCT_LIMIT
+      ? merchantProducts.slice(OGABASSEY_HOME_INITIAL_PRODUCT_LIMIT)
+      : merchantProducts;
+  const productDiscoveryLinks = discoveryCandidateProducts
     .map((product) => {
       const canonicalCategorySlug = product.category_slug
         ? canonicalizeCategorySlug(product.category_slug)
@@ -206,7 +213,7 @@ export async function OgabasseyHomeDiscoverySection({
 
           {productDiscoveryLinks.length > 0 && (
             <>
-              <h3 className="mt-5 text-xs font-semibold uppercase tracking-[0.08em] text-store-background-text/55">
+              <h3 className="mt-5 text-xs font-semibold uppercase tracking-[0.08em] text-store-background-text/75">
                 Featured Product Links
               </h3>
               <ul className="mt-2 grid gap-1 md:grid-cols-2 lg:grid-cols-3">

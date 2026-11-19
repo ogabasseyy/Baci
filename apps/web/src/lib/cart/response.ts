@@ -1,13 +1,24 @@
 import type { CartErrorCode } from '@baci/shared/cart';
 import { NextResponse } from 'next/server';
+import { checkoutReconciliationCookieName } from './checkout-reconciliation-proof';
+import { checkoutRecoveryCookieName } from './checkout-recovery-proof';
 import { safeCartErrorMessage } from './mutation-errors';
 import { cartSessionCookieName } from './principal';
+import { setCartSessionHintCookie } from './set-cart-session-hint-cookie';
 
 /**
  * Cart responses are private per-guest state. They must never sit in a
  * shared cache, even when two stores share one origin.
  */
 export const CART_PRIVATE_CACHE_CONTROL = 'private, no-store';
+
+/** Optional browser discovery: no cookie means no session, never a public cart. */
+export function emptyCartProbeResponse(): NextResponse {
+  return new NextResponse(null, {
+    status: 204,
+    headers: { 'Cache-Control': CART_PRIVATE_CACHE_CONTROL },
+  });
+}
 
 export type CartRouteErrorCode =
   | CartErrorCode
@@ -17,7 +28,6 @@ export type CartRouteErrorCode =
   | 'expired_proof'
   | 'merchant_unresolved'
   | 'merchant_mismatch'
-  | 'forbidden'
   | 'quota_exceeded';
 
 const ROUTE_STATUS: Record<CartRouteErrorCode, number> = {
@@ -50,13 +60,13 @@ const ROUTE_MESSAGES: Record<
   string
 > = {
   expired_proof: 'Your cart session ended. Reconnect to keep shopping.',
-  forbidden: 'This cart action is not allowed here.',
   invalid_proof: 'Your cart session is not valid here. Reconnect to continue.',
   invalid_request: 'This cart request was malformed.',
   merchant_mismatch: 'This cart session belongs to a different store.',
   merchant_unresolved: 'We could not find this store.',
   missing_proof: 'Connect to the cart before making changes.',
-  quota_exceeded: 'Too many cart requests. Wait a moment and try again.',
+  quota_exceeded:
+    'We could not complete this cart request. Please try again later.',
 };
 
 function routeErrorMessage(code: CartRouteErrorCode): string {
@@ -95,18 +105,51 @@ export function cartErrorResponse(
   );
 }
 
-/**
- * Host-only session cookie, namespaced per merchant so two stores on
- * one shared origin keep separate sessions. Native clients ignore the
- * cookie and carry the proof from the response body instead.
- */
 export function setCartSessionCookie(
+  response: NextResponse,
+  merchantId: string,
+  proof: string,
+  maxAgeSeconds: number,
+  hintValue: '1' | '0' | null = maxAgeSeconds > 0 ? '1' : '0'
+): void {
+  response.cookies.set(cartSessionCookieName(merchantId), proof, {
+    httpOnly: true,
+    maxAge: maxAgeSeconds,
+    path: '/',
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+  });
+  if (hintValue !== null) {
+    // Use the documented hint TTL defaults (30d for '1', 1h for '0') rather
+    // than coupling to the proof's Max-Age so server and client TTLs match.
+    setCartSessionHintCookie(response, merchantId, hintValue);
+  }
+}
+
+/** A checkout-only proof is host-only and cannot be read by browser scripts. */
+export function setCheckoutRecoveryCookie(
   response: NextResponse,
   merchantId: string,
   proof: string,
   maxAgeSeconds: number
 ): void {
-  response.cookies.set(cartSessionCookieName(merchantId), proof, {
+  response.cookies.set(checkoutRecoveryCookieName(merchantId), proof, {
+    httpOnly: true,
+    maxAge: maxAgeSeconds,
+    path: '/',
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+  });
+}
+
+/** Kept beyond checkout expiry only for the narrow reconciliation endpoint. */
+export function setCheckoutReconciliationCookie(
+  response: NextResponse,
+  merchantId: string,
+  proof: string,
+  maxAgeSeconds: number
+): void {
+  response.cookies.set(checkoutReconciliationCookieName(merchantId), proof, {
     httpOnly: true,
     maxAge: maxAgeSeconds,
     path: '/',

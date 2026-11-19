@@ -2,156 +2,117 @@
 
 import { Cookie, Settings2, Shield, X } from 'lucide-react';
 import Link from 'next/link';
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { ThemedButton } from '@/components/themed';
 import { Button } from '@/components/ui/button';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
-import { updateConsentMode } from '@/lib/consent-mode';
 import { asRoute } from '@/lib/routes';
 import { cn } from '@/lib/utils';
+import styles from './cookie-consent.module.css';
+import { useCookieConsentController } from './use-cookie-consent-controller';
 
-const COOKIE_CONSENT_KEY = 'baci-cookie-consent';
-
-interface CookiePreferences {
-  necessary: boolean; // Always true, required for site functionality
-  analytics: boolean; // Google Analytics, etc.
-  marketing: boolean; // Ad tracking, retargeting
-  functional: boolean; // Preferences, language settings
-}
-
-const defaultPreferences: CookiePreferences = {
-  necessary: true,
-  analytics: false,
-  marketing: false,
-  functional: true,
-};
+export { isCookieAllowed } from './is-cookie-allowed';
+export { useCookieConsent } from './use-cookie-consent';
 
 export function CookieConsent() {
-  const [isVisible, setIsVisible] = useState(false);
-  const [isClosing, setIsClosing] = useState(false);
-  const [showDetails, setShowDetails] = useState(false);
-  const [preferences, setPreferences] =
-    useState<CookiePreferences>(defaultPreferences);
-  const closeTimerRef = useRef<ReturnType<typeof setTimeout>>(null);
+  const {
+    isVisible,
+    isClosing,
+    showDetails,
+    setShowDetails,
+    hasStorageError,
+    preferences,
+    setPreferences,
+    acceptAll,
+    acceptNecessary,
+    savePreferences,
+  } = useCookieConsentController();
   const merchantContext = useMerchantSafe();
   const basePath = merchantContext?.basePath || '';
-
-  useEffect(() => {
-    // Check if consent has already been given
-    const savedConsent = localStorage.getItem(COOKIE_CONSENT_KEY);
-    if (!savedConsent) {
-      // Small delay to prevent flash on page load
-      const timer = setTimeout(() => setIsVisible(true), 1000);
-      return () => clearTimeout(timer);
-    }
-  }, []);
-
-  // Clean up exit animation timer on unmount
-  useEffect(() => {
-    return () => {
-      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
-    };
-  }, []);
-
-  const saveConsent = (prefs: CookiePreferences) => {
-    localStorage.setItem(
-      COOKIE_CONSENT_KEY,
-      JSON.stringify({
-        ...prefs,
-        timestamp: new Date().toISOString(),
-      })
-    );
-
-    // Trigger exit animation, then unmount after it completes
-    setIsClosing(true);
-    closeTimerRef.current = setTimeout(() => setIsVisible(false), 200);
-
-    // Update Google Consent Mode v2
-    updateConsentMode({
-      analytics: prefs.analytics,
-      marketing: prefs.marketing,
-      functional: prefs.functional,
-    });
-
-    // Dispatch event for analytics to pick up
-    window.dispatchEvent(
-      new CustomEvent('cookie-consent-updated', {
-        detail: prefs,
-      })
-    );
-  };
-
-  const acceptAll = () => {
-    const allAccepted: CookiePreferences = {
-      necessary: true,
-      analytics: true,
-      marketing: true,
-      functional: true,
-    };
-    setPreferences(allAccepted);
-    saveConsent(allAccepted);
-  };
-
-  const acceptNecessary = () => {
-    saveConsent(defaultPreferences);
-  };
-
-  const savePreferences = () => {
-    saveConsent(preferences);
-  };
 
   if (!isVisible) return null;
 
   return (
     <div
       className={cn(
-        'fixed bottom-4 left-4 right-4 z-50 md:left-1/2 md:right-auto md:-translate-x-1/2 md:max-w-5xl w-full',
+        styles.banner,
         isClosing
           ? 'animate-out fade-out slide-out-to-bottom-4 duration-200'
           : 'animate-in slide-in-from-bottom-4 duration-500',
         'will-change-transform'
       )}
       style={{
+        // Keep the delayed prompt out of document flow even before route CSS.
+        position: 'fixed',
+        bottom: '1rem',
+        left: 'max(1rem, calc((100% - 32rem) / 2))',
+        right: 'max(1rem, calc((100% - 32rem) / 2))',
+        width: 'auto',
+        // Below the cart drawer (z-60), above the mobile footer (z-40):
+        // an open drawer must not be covered by the consent prompt.
+        zIndex: 50,
         contain: 'layout style paint',
       }}
+      data-storefront-cookie-consent
       role="dialog"
       aria-label="Cookie consent"
     >
       <div
+        style={{
+          background:
+            'var(--store-background, hsl(var(--background, 0 0% 100%)))',
+          color:
+            'var(--store-background-text, hsl(var(--foreground, 240 10% 3.9%)))',
+          border:
+            '1px solid var(--store-border, hsl(var(--border, 240 5.9% 90%)))',
+          borderRadius: '1rem',
+          padding: '1rem',
+        }}
         className={cn(
+          styles.panel,
           'bg-background/95 backdrop-blur-xl border border-border/50 shadow-2xl rounded-2xl p-4',
-          'transition-all duration-300 ease-in-out'
+          'transition-[opacity,transform] duration-300 ease-in-out'
         )}
       >
+        {hasStorageError && (
+          <p role="alert" className="mb-3 text-sm text-destructive">
+            Unable to save your cookie preferences. Please try again. Optional
+            tracking remains disabled.
+          </p>
+        )}
         {!showDetails ? (
-          // Simple View - Horizontal Floating Bar
-          <div className="flex flex-col md:flex-row items-center gap-4 md:gap-6">
-            <div className="flex items-center gap-4 flex-1 w-full md:w-auto">
+          // Compact prompt
+          <div
+            className={cn(styles.content, 'flex flex-col items-start gap-3')}
+          >
+            <div className="flex w-full items-start gap-3">
               <div className="hidden sm:flex items-center justify-center size-10 rounded-full bg-primary/10 shrink-0">
                 <Cookie className="size-5 text-primary" />
               </div>
 
               <div className="flex-1 space-y-1">
                 <h3 className="font-semibold text-sm">We value your privacy</h3>
-                <p className="text-sm text-muted-foreground leading-snug">
-                  We use cookies to improve your experience. By using our store,
-                  you agree to our{' '}
-                  <Link
-                    href={asRoute(`${basePath}/privacy`)}
-                    className="underline underline-offset-4 hover:text-white"
-                  >
-                    Read our policy
-                  </Link>
-                </p>
+                <div className="space-y-1 text-sm text-muted-foreground leading-snug">
+                  <p>We use cookies to improve your experience.</p>
+                  <p>
+                    Optional cookies are up to you.{' '}
+                    <Link
+                      href={asRoute(`${basePath}/privacy`)}
+                      prefetch={false}
+                      className="underline underline-offset-4 hover:text-foreground"
+                    >
+                      Read our policy
+                    </Link>
+                  </p>
+                </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 w-full md:w-auto justify-end flex-wrap">
+            <div className="flex w-full flex-wrap items-center justify-end gap-2">
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => setShowDetails(true)}
-                className="text-muted-foreground hover:text-foreground h-9"
+                className="text-muted-foreground hover:text-foreground min-h-11"
                 type="button"
               >
                 Customize
@@ -160,7 +121,7 @@ export function CookieConsent() {
                 variant="outline"
                 size="sm"
                 onClick={acceptNecessary}
-                className="h-9"
+                className="min-h-11"
               >
                 Necessary Only
               </Button>
@@ -168,7 +129,7 @@ export function CookieConsent() {
                 colorRole="primary"
                 size="sm"
                 onClick={acceptAll}
-                className="h-9 px-6 shadow-sm"
+                className="min-h-11 px-6 shadow-sm"
               >
                 Accept All
               </ThemedButton>
@@ -193,7 +154,7 @@ export function CookieConsent() {
               <button
                 type="button"
                 onClick={() => setShowDetails(false)}
-                className="text-muted-foreground hover:text-foreground p-1 rounded-md hover:bg-muted"
+                className="inline-flex min-h-11 min-w-11 items-center justify-center text-muted-foreground hover:text-foreground p-1 rounded-md hover:bg-muted"
                 aria-label="Close details"
               >
                 <X className="size-5" />
@@ -302,7 +263,7 @@ export function CookieConsent() {
                 variant="ghost"
                 size="sm"
                 onClick={() => setShowDetails(false)}
-                className="text-muted-foreground h-9"
+                className="text-muted-foreground min-h-11"
               >
                 Cancel
               </Button>
@@ -310,7 +271,7 @@ export function CookieConsent() {
                 colorRole="primary"
                 size="sm"
                 onClick={savePreferences}
-                className="h-9 px-6"
+                className="min-h-11 px-6"
               >
                 Save Preferences
               </ThemedButton>
@@ -320,55 +281,4 @@ export function CookieConsent() {
       </div>
     </div>
   );
-}
-
-// Listen for consent updates (saveConsent writes localStorage before
-// dispatching, so re-reading the snapshot always observes the new value)
-function subscribeToConsentUpdates(callback: () => void) {
-  window.addEventListener('cookie-consent-updated', callback);
-  return () => window.removeEventListener('cookie-consent-updated', callback);
-}
-
-function getConsentSnapshot(): string | null {
-  return localStorage.getItem(COOKIE_CONSENT_KEY);
-}
-
-function getConsentServerSnapshot(): string | null {
-  return null;
-}
-
-/**
- * Hook to check cookie consent status
- */
-export function useCookieConsent(): CookiePreferences | null {
-  const savedConsent = useSyncExternalStore(
-    subscribeToConsentUpdates,
-    getConsentSnapshot,
-    getConsentServerSnapshot
-  );
-
-  if (!savedConsent) return null;
-
-  try {
-    return JSON.parse(savedConsent) as CookiePreferences;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Check if a specific cookie category is allowed
- */
-export function isCookieAllowed(category: keyof CookiePreferences): boolean {
-  if (typeof window === 'undefined') return false;
-
-  const saved = localStorage.getItem(COOKIE_CONSENT_KEY);
-  if (!saved) return false;
-
-  try {
-    const consent = JSON.parse(saved) as CookiePreferences;
-    return consent[category] ?? false;
-  } catch {
-    return false;
-  }
 }

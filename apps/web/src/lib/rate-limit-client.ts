@@ -1,33 +1,46 @@
 import type { NextRequest } from 'next/server';
 
-// ---------------------------------------------------------------------------
-// IP validation (Edge-compatible, no Node.js 'net' module)
-// ---------------------------------------------------------------------------
+import {
+  isValidIP,
+  normalizedClientIp,
+  platformPeerIp,
+  verifiedCloudflareVisitorIp,
+  visitorQuotaIdentity,
+} from './cloudflare-peer';
 
-const IPV4_REGEX =
-  /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
-
-const IPV6_REGEX =
-  /^(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$|^::(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}$|^[0-9a-fA-F]{1,4}::(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}$|^(?:[0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}$|^(?:[0-9a-fA-F]{1,4}:){1,7}:$|^::$/;
-
-function isValidIP(ip: string): boolean {
-  return IPV4_REGEX.test(ip) || IPV6_REGEX.test(ip);
+/**
+ * Whether the deployment guarantees the edge overwrites proxy headers:
+ * on Vercel, or where the operator explicitly asserts a trusted proxy
+ * (CART_TRUST_PROXY_HEADERS=true).
+ */
+function proxyHeadersGuaranteed(): boolean {
+  return (
+    process.env.VERCEL === '1' ||
+    process.env.CART_TRUST_PROXY_HEADERS?.trim() === 'true'
+  );
 }
-
-// ---------------------------------------------------------------------------
-// Client identifier (IP)
-// ---------------------------------------------------------------------------
 
 export function getClientIdentifier(request: NextRequest): string {
   // Prefer Next.js/Vercel trusted IP
   const requestWithIp = request as NextRequest & { ip?: string };
   const requestIp = requestWithIp.ip;
+  const realIp = request.headers.get('x-real-ip');
+  const forwarded = request.headers.get('x-forwarded-for');
+
+  // Behind Cloudflare the platform address is a shared egress, not the
+  // visitor: prefer the authenticated visitor address so per-IP rate
+  // limiting also buckets per customer instead of per egress. The peer
+  // evidence must itself be trustworthy: the platform address, or an
+  // x-real-ip only under the same proxy guarantee the trusted
+  // identifier requires. The result is always a real IP address (or
+  // 'unknown'): consumers persist and forward it as one.
+  const peerIp = platformPeerIp(request, proxyHeadersGuaranteed());
+  const visitorIp = verifiedCloudflareVisitorIp(request, peerIp);
+  if (visitorIp) return visitorIp;
+
   if (requestIp && isValidIP(requestIp)) {
     return requestIp;
   }
-
-  const realIp = request.headers.get('x-real-ip');
-  const forwarded = request.headers.get('x-forwarded-for');
 
   if (realIp && isValidIP(realIp)) return realIp;
 
@@ -45,6 +58,22 @@ export function getClientIdentifier(request: NextRequest): string {
 }
 
 /**
+ * Bucket key for generic per-IP rate limiting. Rate-limit keys are
+ * opaque counters, never persisted as addresses, so a verified IPv6
+ * Cloudflare visitor is bucketed by /64 here: keying the full address
+ * would let them mint a fresh bucket per rotated interface
+ * identifier. All other clients keep the generic identifier, and
+ * consumers that persist or forward an address must keep using
+ * getClientIdentifier, which always returns a real IP.
+ */
+export function getRateLimitBucketKey(request: NextRequest): string {
+  const peerIp = platformPeerIp(request, proxyHeadersGuaranteed());
+  const visitorIp = verifiedCloudflareVisitorIp(request, peerIp);
+  if (visitorIp) return visitorQuotaIdentity(visitorIp);
+  return getClientIdentifier(request);
+}
+
+/**
  * Client identity for the unauthenticated cart budgets, which are the
  * only bound tying anonymous proofs to one client. Unlike
  * getClientIdentifier this never trusts x-forwarded-for: that header is
@@ -57,22 +86,38 @@ export function getClientIdentifier(request: NextRequest): string {
 export function getTrustedClientIdentifier(request: NextRequest): string {
   const requestWithIp = request as NextRequest & { ip?: string };
   const requestIp = requestWithIp.ip;
-  if (requestIp && isValidIP(requestIp)) {
-    return requestIp;
-  }
 
   // x-real-ip is only trustworthy when the platform guarantees the
   // edge overwrites it: on Vercel, or where the operator explicitly
   // asserts a trusted proxy (CART_TRUST_PROXY_HEADERS=true). On any
   // other deployment the header is client-suppliable, so it collapses
   // into the shared 'unknown' bucket instead of resetting budgets.
-  const proxyGuaranteed =
-    process.env.VERCEL === '1' ||
-    process.env.CART_TRUST_PROXY_HEADERS?.trim() === 'true';
+  const proxyGuaranteed = proxyHeadersGuaranteed();
   if (proxyGuaranteed) {
     const realIp = request.headers.get('x-real-ip');
-    if (realIp && isValidIP(realIp)) return realIp;
+    // Behind Cloudflare, the platform address is a shared Cloudflare
+    // egress, so keying anonymous budgets on it collapses many
+    // customers into one bootstrap bucket and mass-produces "cart sync
+    // was interrupted" failures. Prefer the authenticated visitor
+    // address when the immediate peer proves Cloudflare traversal.
+    const peerIp = platformPeerIp(request, true);
+    const visitorIp = verifiedCloudflareVisitorIp(request, peerIp);
+    // /64 bucketing is scoped to the verified-visitor path: it exists
+    // because a verified IPv6 visitor controls their interface
+    // identifier. Fallback platform addresses keep their exact
+    // (normalized) form so unrelated subscribers sharing a /64 —
+    // carrier NAT64, corporate egress — never share anonymous budgets.
+    if (visitorIp) return visitorQuotaIdentity(visitorIp);
+    // Fall back in platformPeerIp's trust order: the platform address
+    // outranks any header, even a guaranteed one.
+    if (requestIp && isValidIP(requestIp)) {
+      return normalizedClientIp(requestIp);
+    }
+    if (realIp && isValidIP(realIp)) return normalizedClientIp(realIp);
   }
 
+  if (requestIp && isValidIP(requestIp)) {
+    return normalizedClientIp(requestIp);
+  }
   return 'unknown';
 }

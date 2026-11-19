@@ -217,7 +217,7 @@ export async function verifySupabaseReplayContract(options: {
   const nodeMajor = Number.parseInt(nodeVersion.split('.')[0] ?? '', 10);
   if (nodeMajor !== 24) mismatch('node');
 
-  if ((await stdout(options.runCommand, 'pnpm', ['--version'])) !== '11.7.0') {
+  if ((await stdout(options.runCommand, 'pnpm', ['--version'])) !== '11.22.0') {
     mismatch('pnpm');
   }
   if (
@@ -245,13 +245,13 @@ export async function verifySupabaseReplayContract(options: {
     mismatch('tsx-node');
   }
   if (
-    (await stdout(options.runCommand, 'supabase', ['--version'])) !== '2.95.4'
+    (await stdout(options.runCommand, 'supabase', ['--version'])) !== '2.111.0'
   ) {
     mismatch('supabase');
   }
   const psqlBin = options.psqlBin ?? process.env.PSQL_BIN ?? DEFAULT_PSQL_BIN;
   if (
-    !/^psql \(PostgreSQL\) 18\.3(?: \(.+\))?$/.test(
+    !/^psql \(PostgreSQL\) 18\.6(?: \(.+\))?$/.test(
       await stdout(options.runCommand, psqlBin, ['--version'])
     )
   ) {

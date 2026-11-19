@@ -18,12 +18,12 @@
  * - Rate limiting: In-memory, see provider.ts for known limitations.
  */
 
-import crypto from 'node:crypto';
 import { headers } from 'next/headers';
 import z from 'zod';
 import { checkRateLimit } from '@/ai/provider';
 import { withChatTenantHeader } from '@/app/api/chat/chat-tenant';
 import { negotiateChatAgentUiResponse } from '@/app/api/chat/negotiate-chat-agent-ui-response';
+import { tryOgabasseyPreferredResponse } from '@/app/api/chat/ogabassey-preferred-response';
 import { executeAgenticChatToolForOllama } from '@/app/api/chat/ollama-chat-tool-runtime';
 import {
   bufferTextResponse,
@@ -32,6 +32,7 @@ import {
   createClientClosedRequestResponse,
   createRouteDeadline,
   createStaticChatFallbackResponse,
+  generateChatSessionId,
   getSafeChatBackendErrorMessage,
   isChatAbortError,
   withTimeout,
@@ -75,14 +76,6 @@ const chatRequestSchema = z.object({
     .regex(/^[A-Za-z0-9:_-]+$/)
     .optional(),
 });
-
-function generateSessionId(ip: string): string {
-  return crypto
-    .createHash('sha256')
-    .update(`${ip}-ogabassey-chat`)
-    .digest('hex')
-    .slice(0, 16);
-}
 
 export async function POST(req: Request) {
   try {
@@ -138,7 +131,7 @@ export async function POST(req: Request) {
     }
 
     const { messages, sessionId: providedSessionId } = validation.data;
-    const sessionId = providedSessionId || generateSessionId(clientIp);
+    const sessionId = providedSessionId || generateChatSessionId(clientIp);
 
     // The chat tools self-resolve this same tenant; resolving here fails the
     // whole request closed (503) instead of letting providers run unscoped,
@@ -163,6 +156,14 @@ export async function POST(req: Request) {
     }));
 
     const chatProvider = getAiChatProvider();
+    const fastResponse = await tryOgabasseyPreferredResponse(
+      req,
+      sanitizedMessages,
+      tenant,
+      chatProvider,
+      remainingRouteMs
+    );
+    if (fastResponse) return fastResponse;
     const shouldTryLlm = chatProvider === 'auto' || chatProvider === 'llm';
     const shouldTryOllama =
       chatProvider === 'auto' || chatProvider === 'ollama';

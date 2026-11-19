@@ -1,6 +1,7 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef } from 'react';
+import type { TextInputInstance } from 'react-native';
 import {
   Keyboard,
   Pressable,
@@ -15,9 +16,10 @@ import Colors, { BRAND, SHADOWS } from '@/constants/Colors';
 import { MIN_SEARCH_QUERY_LENGTH } from '@/constants/search';
 import { type Category, useCategories, useProducts } from '@/hooks';
 import { useSearchStorage } from '@/hooks/use-search-storage';
-import type { Product } from '@/types/product';
 import { searchDropdownStyles as styles } from './search/SearchDropdown.styles';
 import { SearchDropdownList } from './search/SearchDropdownList';
+import { useProductSearchNavigation } from './search/use-product-search-navigation';
+import { useSearchNavigationGuard } from './search/use-search-navigation-guard';
 import { useSearchDropdownState } from './search/useSearchDropdownState';
 
 const MAX_RESULTS = 6;
@@ -26,6 +28,7 @@ interface SearchDropdownProps {
   hideInput?: boolean;
   isVisible: boolean;
   onClose: () => void;
+  onProductSelectionStart?: () => void;
   onQueryChange?: (text: string) => void;
   /**
    * Full-search submission for the "See all results" action and the
@@ -44,6 +47,7 @@ export function SearchDropdown({
   hideInput = false,
   isVisible,
   onClose,
+  onProductSelectionStart,
   onQueryChange: onExternalQueryChange,
   onSeeAllResults,
   query: externalQuery,
@@ -53,7 +57,7 @@ export function SearchDropdown({
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme as 'light' | 'dark'];
   const router = useRouter();
-  const inputRef = useRef<TextInput>(null);
+  const inputRef = useRef<TextInputInstance>(null);
 
   const {
     activeQuery,
@@ -93,11 +97,18 @@ export function SearchDropdown({
     }
   }, [hideInput, isControlled, isVisible, setInternalQuery]);
 
-  const handleProductPress = (product: Product) => {
-    saveSearch(activeQuery.trim() || product.name);
-    onClose();
-    router.push(`/product/${product.slug}`);
-  };
+  const handleProductPress = useProductSearchNavigation({
+    isVisible,
+    query: activeQuery,
+    saveSearch,
+    onClose,
+    onSelectionStart: onProductSelectionStart,
+    onNavigate: (product) => router.push(`/product/${product.slug}`),
+  });
+  const navigateSafely = useSearchNavigationGuard({
+    isVisible,
+    invalidationKey: activeQuery,
+  });
 
   const handleSuggestionPress = (term: string) => {
     setQuery(term);
@@ -107,10 +118,11 @@ export function SearchDropdown({
     }
   };
 
-  const handleCategoryPress = (slug: string) => {
-    onClose();
-    router.push({ pathname: '/category/[slug]', params: { slug } });
-  };
+  const handleCategoryPress = (slug: string) =>
+    navigateSafely(() => {
+      onClose();
+      router.push({ pathname: '/category/[slug]', params: { slug } });
+    });
 
   const handleSubmit = () => {
     // The results screen owns search-history writes for submitted queries,

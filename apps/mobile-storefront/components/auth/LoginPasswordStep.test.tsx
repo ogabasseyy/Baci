@@ -5,7 +5,8 @@ import {
   waitFor,
 } from '@testing-library/react-native';
 import type { ComponentProps } from 'react';
-import { Alert, type TextInput } from 'react-native';
+import type { TextInputInstance } from 'react-native';
+import { Alert } from 'react-native';
 import { LoginPasswordStep } from '@/components/auth/LoginPasswordStep';
 import Colors from '@/constants/Colors';
 
@@ -100,7 +101,7 @@ describe('LoginPasswordStep', () => {
     const focus = jest.fn();
     const props = makeProps({
       otpInputRef: {
-        current: { focus } as unknown as TextInput,
+        current: { focus } as unknown as TextInputInstance,
       } as LoginPasswordStepProps['otpInputRef'],
     });
 

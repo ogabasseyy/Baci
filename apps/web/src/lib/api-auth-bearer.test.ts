@@ -1,3 +1,4 @@
+import { AuthSessionMissingError } from '@supabase/supabase-js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const authMocks = vi.hoisted(() => {
@@ -121,5 +122,60 @@ describe('authenticateApiRequest', () => {
     expect(authMocks.getUser).toHaveBeenCalledWith('bad-token');
     expect(authMocks.createScopedClient).not.toHaveBeenCalled();
     expect(authMocks.cookies).not.toHaveBeenCalled();
+  });
+
+  it('distinguishes a missing guest session from an authentication failure when asked', async () => {
+    authMocks.cookies.mockResolvedValue({});
+    authMocks.createClient.mockReturnValue({
+      auth: { getUser: authMocks.getUser },
+    });
+    const request = new Request('https://example.com');
+
+    authMocks.getUser.mockResolvedValueOnce({
+      data: { user: null },
+      error: new AuthSessionMissingError(),
+    });
+    expect(
+      await authenticateApiRequest(request, { requireVerifiedGuest: true })
+    ).toMatchObject({
+      user: null,
+      error: 'Not authenticated',
+    });
+
+    authMocks.getUser.mockResolvedValueOnce({
+      data: { user: null },
+      error: new Error('authentication service unavailable'),
+    });
+    expect(
+      await authenticateApiRequest(request, { requireVerifiedGuest: true })
+    ).toMatchObject({
+      user: null,
+      error: 'Authentication failed',
+    });
+  });
+
+  it('does not downgrade a malformed bearer or an indeterminate empty result to a verified guest', async () => {
+    const malformed = new Request('https://example.com', {
+      headers: { authorization: 'Bearer ' },
+    });
+    expect(
+      await authenticateApiRequest(malformed, { requireVerifiedGuest: true })
+    ).toMatchObject({
+      error: 'Invalid or expired token',
+    });
+    expect(authMocks.cookies).not.toHaveBeenCalled();
+
+    authMocks.cookies.mockResolvedValue({});
+    authMocks.createClient.mockReturnValue({
+      auth: { getUser: authMocks.getUser },
+    });
+    authMocks.getUser.mockResolvedValue({ data: { user: null }, error: null });
+    expect(
+      await authenticateApiRequest(new Request('https://example.com'), {
+        requireVerifiedGuest: true,
+      })
+    ).toMatchObject({
+      error: 'Authentication failed',
+    });
   });
 });

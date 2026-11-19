@@ -1,3 +1,5 @@
+jest.mock('@/lib/config', () => require('./cart-merchant.test-support'));
+
 import { getStorefrontProductVariantsByProductIds } from '@/lib/storefront-product-variants';
 import { supabase } from '@/lib/supabase';
 import { useCartStore } from '@/stores/cart-store';

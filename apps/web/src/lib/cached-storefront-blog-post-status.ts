@@ -4,6 +4,7 @@ import { getMerchantSafe } from '@/lib/cached-data';
 import { applyPublicBlogSqlFilters } from '@/lib/public-blog-sql-filters';
 import { toSafeInternalRedirectPath } from '@/lib/safe-internal-redirect-path';
 import { createPublicClient } from '@/lib/supabase/anon';
+import { getBlogPostsMerchantCacheTag } from '@/lib/tenant-cache-tags';
 
 interface BlogPostRedirectRow {
   target_post_id: string | null;
@@ -47,6 +48,7 @@ export async function getCachedStorefrontBlogPostStatus(
   if (!merchant?.is_published) {
     return FAIL_OPEN;
   }
+  cacheTag(getBlogPostsMerchantCacheTag(merchant.id));
 
   if (!merchant.feature_settings?.blog_enabled) {
     return MISSING;

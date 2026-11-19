@@ -26,6 +26,15 @@ export const metadata = {
 
 const integrations = [
   {
+    id: 'chatgpt',
+    name: 'ChatGPT Ads',
+    description:
+      'Connect your Pixel and Conversions API to measure browser activity and successful payments.',
+    href: '/dashboard/integrations/chatgpt-ads',
+    icon: <Bot className="size-10 text-primary" aria-label="ChatGPT Ads" />,
+    color: 'bg-primary/10',
+  },
+  {
     id: 'muse',
     name: 'Muse',
     description:

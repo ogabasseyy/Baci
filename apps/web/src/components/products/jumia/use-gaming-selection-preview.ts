@@ -1,0 +1,297 @@
+'use client';
+
+import { jumiaPreviewMessages } from './constants';
+import { fetchMatchingGamingCategories } from './fetch-matching-gaming-categories';
+import { gamingSelectionPreviewCache } from './gaming-selection-preview-cache';
+import { recoverKnownSuccessfulPreview } from './gaming-selection-preview-known-success';
+import { createGamingPreviewPageLoader } from './gaming-selection-preview-page-loader';
+import {
+  createGamingSelection,
+  UnreadableSelectionCreationError,
+} from './selection-create-request';
+import { useGamingSelectionPreviewState } from './use-gaming-selection-preview-state';
+
+type PreviewCreationAction = 'create' | 'refresh' | 'retry';
+
+export function useGamingSelectionPreview(merchantId: string) {
+  const {
+    currentMerchantRef,
+    snapshot,
+    loading,
+    error,
+    creationOutcomeUnknown,
+    isCurrentMerchant,
+    setCreationState,
+    updateCreationOutcome,
+    setSnapshotForMerchant,
+    setLoadingForMerchant,
+    setErrorForMerchant,
+  } = useGamingSelectionPreviewState(merchantId);
+
+  const loadPage = createGamingPreviewPageLoader(
+    isCurrentMerchant,
+    setSnapshotForMerchant
+  );
+  const loadAnyCachedPreview = (
+    owner: string,
+    generation: number,
+    signal: AbortSignal
+  ) =>
+    gamingSelectionPreviewCache.loadFirstValid(owner, (selectionId) =>
+      loadPage(owner, generation, selectionId, 1, signal)
+    );
+
+  const createPreview = async (action: PreviewCreationAction = 'create') => {
+    const owner = merchantId;
+    const generation = currentMerchantRef.current.generation;
+    const requestSignal = currentMerchantRef.current.requestController.signal;
+    const refresh = action === 'refresh';
+    const retryAfterUnreadableResponse = action === 'retry';
+    const uncertainCreation =
+      creationOutcomeUnknown ||
+      gamingSelectionPreviewCache.hasUncertainCreation(owner);
+    if (
+      retryAfterUnreadableResponse &&
+      gamingSelectionPreviewCache.findKnownSuccessfulSelection(owner)
+    ) {
+      const recovery = await recoverKnownSuccessfulPreview({
+        loadPage: (selectionId) =>
+          loadPage(owner, generation, selectionId, 1, requestSignal),
+        merchantId: owner,
+        generation,
+        setError: setErrorForMerchant,
+        setLoading: setLoadingForMerchant,
+      });
+      if (recovery !== 'missing') return;
+    }
+    if (gamingSelectionPreviewCache.hasCreationInFlight(owner)) {
+      setErrorForMerchant(
+        owner,
+        generation,
+        jumiaPreviewMessages.creationInFlight
+      );
+      return;
+    }
+    if (uncertainCreation && !retryAfterUnreadableResponse) {
+      setCreationState({ merchantId: owner, value: true });
+      setLoadingForMerchant(owner, generation, true);
+      setErrorForMerchant(owner, generation, null);
+      try {
+        if (!(await loadAnyCachedPreview(owner, generation, requestSignal))) {
+          setErrorForMerchant(
+            owner,
+            generation,
+            jumiaPreviewMessages.unreadableCreation
+          );
+        }
+      } catch (cause) {
+        setErrorForMerchant(
+          owner,
+          generation,
+          gamingSelectionPreviewCache.errorMessage(
+            cause,
+            jumiaPreviewMessages.unreadableCreation
+          )
+        );
+      } finally {
+        setLoadingForMerchant(owner, generation, false);
+      }
+      return;
+    }
+    setLoadingForMerchant(owner, generation, true);
+    setErrorForMerchant(owner, generation, null);
+    let finishCreation: (() => void) | null = null;
+    try {
+      const { data: categories, error: categoryError } =
+        await fetchMatchingGamingCategories(owner);
+      if (!isCurrentMerchant(owner, generation)) return;
+      const gamingCategories = categories?.filter(
+        (category) =>
+          category.name?.replace(/^ +| +$/g, '').toLowerCase() === 'gaming'
+      );
+      if (categoryError) {
+        if (
+          !refresh &&
+          !retryAfterUnreadableResponse &&
+          (await loadAnyCachedPreview(owner, generation, requestSignal))
+        )
+          return;
+        throw new Error('Unable to find the Gaming category. Please retry.');
+      }
+      if (!gamingCategories?.length) {
+        if (refresh || retryAfterUnreadableResponse) {
+          throw new Error(
+            'An active Gaming category is required to refresh or retry this preview.'
+          );
+        }
+        if (await loadAnyCachedPreview(owner, generation, requestSignal))
+          return;
+        throw new Error(
+          'An active Gaming category was not found for this store.'
+        );
+      }
+      if (gamingCategories.length > 1) {
+        if (!refresh && !retryAfterUnreadableResponse) {
+          const loadedCached =
+            await gamingSelectionPreviewCache.loadFirstValidForCategories(
+              owner,
+              gamingCategories.map((category) => category.id),
+              (selectionId) =>
+                loadPage(owner, generation, selectionId, 1, requestSignal)
+            );
+          if (loadedCached) return;
+        }
+        throw new Error(
+          'More than one active category is named Gaming. Keep one active Gaming category before creating a preview.'
+        );
+      }
+      const categoryId = gamingCategories[0].id;
+      const cacheKey = gamingSelectionPreviewCache.key(owner, categoryId);
+      if (!isCurrentMerchant(owner, generation)) return;
+      let loadedCachedSelection = false;
+      finishCreation = await gamingSelectionPreviewCache.beginCreation(
+        owner,
+        retryAfterUnreadableResponse,
+        refresh
+          ? undefined
+          : async () => {
+              const cachedSelection = retryAfterUnreadableResponse
+                ? gamingSelectionPreviewCache.findKnownSuccessfulSelection(
+                    owner
+                  )?.selection
+                : gamingSelectionPreviewCache.read(cacheKey);
+              if (!cachedSelection) return false;
+              try {
+                await loadPage(
+                  owner,
+                  generation,
+                  cachedSelection.selectionId,
+                  1,
+                  requestSignal
+                );
+                loadedCachedSelection = true;
+                return true;
+              } catch (cause) {
+                if (!isCurrentMerchant(owner, generation)) return true;
+                if (!gamingSelectionPreviewCache.isRejected(cause)) throw cause;
+                if (retryAfterUnreadableResponse) {
+                  gamingSelectionPreviewCache.clearKnownSuccessfulSelection(
+                    owner
+                  );
+                }
+                gamingSelectionPreviewCache.removeIfMatches(
+                  cacheKey,
+                  cachedSelection.selectionId
+                );
+                return false;
+              }
+            }
+      );
+      if (loadedCachedSelection) return;
+      if (!finishCreation) {
+        const uncertain =
+          gamingSelectionPreviewCache.hasUncertainCreation(owner);
+        if (uncertain && isCurrentMerchant(owner, generation)) {
+          setCreationState({ merchantId: owner, value: true });
+        }
+        if (
+          uncertain &&
+          !retryAfterUnreadableResponse &&
+          (await loadAnyCachedPreview(owner, generation, requestSignal))
+        ) {
+          return;
+        }
+        setErrorForMerchant(
+          owner,
+          generation,
+          uncertain
+            ? jumiaPreviewMessages.unreadableCreation
+            : jumiaPreviewMessages.creationInFlight
+        );
+        return;
+      }
+      if (!isCurrentMerchant(owner, generation)) return;
+      gamingSelectionPreviewCache.clearKnownSuccessfulSelection(owner);
+      let createdSelection: Awaited<ReturnType<typeof createGamingSelection>>;
+      try {
+        createdSelection = await createGamingSelection(owner, categoryId);
+      } catch (cause) {
+        if (cause instanceof UnreadableSelectionCreationError) {
+          updateCreationOutcome(owner, generation, true);
+        }
+        throw cause;
+      }
+      const persisted = gamingSelectionPreviewCache.write(cacheKey, {
+        selectionId: createdSelection.selectionId,
+        expiresAt: createdSelection.expiresAt,
+      });
+      if (!persisted) {
+        gamingSelectionPreviewCache.rememberKnownSuccessfulSelection(
+          owner,
+          cacheKey,
+          createdSelection
+        );
+      }
+      updateCreationOutcome(owner, generation, !persisted);
+      finishCreation();
+      finishCreation = null;
+      await loadPage(
+        owner,
+        generation,
+        createdSelection.selectionId,
+        1,
+        requestSignal
+      );
+    } catch (cause) {
+      setErrorForMerchant(
+        owner,
+        generation,
+        gamingSelectionPreviewCache.errorMessage(
+          cause,
+          'Unable to create a Gaming preview.'
+        )
+      );
+    } finally {
+      finishCreation?.();
+      setLoadingForMerchant(owner, generation, false);
+    }
+  };
+
+  const goToPage = async (page: number) => {
+    if (!snapshot) return;
+    const owner = merchantId;
+    const generation = currentMerchantRef.current.generation;
+    const requestSignal = currentMerchantRef.current.requestController.signal;
+    setLoadingForMerchant(owner, generation, true);
+    setErrorForMerchant(owner, generation, null);
+    try {
+      await loadPage(
+        owner,
+        generation,
+        snapshot.selectionId,
+        page,
+        requestSignal
+      );
+    } catch (cause) {
+      setErrorForMerchant(
+        owner,
+        generation,
+        gamingSelectionPreviewCache.errorMessage(
+          cause,
+          'Unable to load this Gaming preview.'
+        )
+      );
+    } finally {
+      setLoadingForMerchant(owner, generation, false);
+    }
+  };
+
+  return {
+    snapshot,
+    loading,
+    error,
+    creationOutcomeUnknown,
+    createPreview,
+    goToPage,
+  };
+}

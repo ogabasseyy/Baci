@@ -1,13 +1,12 @@
 import { headers } from 'next/headers';
 import { CONTENT_CLUSTER_SUPPORT } from '@/config/storefront-content-clusters';
-import {
-  normalizeProduct,
-  type ProductKeySpecsRecord,
-  type RawDbProduct,
-} from '@/lib/normalize-product';
+import type { ProductKeySpecsRecord } from '@/lib/normalize-product';
 import { buildStoreUrl } from '@/lib/store-url';
+import { authorityHubEligibility } from '@/lib/storefront-category/authority-hub-eligibility';
+import { BRAND_AUTHORITY_PRODUCT_LIMIT } from '@/lib/storefront-category/brand-authority-product-limit';
 import { brandAuthorityPublicData } from '@/lib/storefront-category/brand-authority-public-data';
 import { brandAuthorityTaxonomy } from '@/lib/storefront-category/brand-authority-taxonomy';
+import { formatBrandAuthorityCopy } from '@/lib/storefront-category/format-brand-authority-copy';
 import { getCachedBrandAuthorityProducts } from '@/lib/storefront-category/get-cached-brand-authority-products';
 import { modelFamilyAuthorityTaxonomy } from '@/lib/storefront-category/model-family-authority-taxonomy';
 import { buildCommercialGuideLinks } from '@/lib/storefront-content/build-commercial-guide-links';
@@ -15,10 +14,11 @@ import type { SupportedClusterCategory } from '@/lib/storefront-content/content-
 import { loadPublishedClusterPostsSafely } from '@/lib/storefront-content/load-published-cluster-posts-safely';
 import { getCountryShoppingContext } from '@/lib/storefront-localization';
 import { buildStorefrontMetadataTitle } from '@/lib/storefront-metadata-title';
+import { getStorefrontPathPrefix } from '@/lib/storefront-path-prefix';
 import { evaluateStorefrontSlugSafety } from '@/lib/storefront-slug-safety';
 import { isDomainIdentifier } from '@/lib/validation';
 
-interface BrandAuthorityPageProduct {
+export interface BrandAuthorityPageProduct {
   id: string;
   name: string;
   slug: string;
@@ -28,21 +28,12 @@ interface BrandAuthorityPageProduct {
   price: number;
   condition: string;
   stock: number;
+  manage_stock: boolean;
   availability: 'InStock' | 'OutOfStock';
   has_condition_offers: boolean;
   product_key_specs?: ProductKeySpecsRecord | null;
   image: string;
   description: string;
-}
-
-function isRawDbProduct(value: unknown): value is RawDbProduct {
-  return Boolean(
-    value &&
-      typeof value === 'object' &&
-      'id' in value &&
-      'name' in value &&
-      'price' in value
-  );
 }
 
 async function getBrandAuthorityStorefrontPathPrefix(
@@ -55,7 +46,7 @@ async function getBrandAuthorityStorefrontPathPrefix(
     headersList.has('x-merchant-slug') ||
     isDomainIdentifier(routeIdentifier)
     ? ''
-    : `/${merchantSlug}`;
+    : getStorefrontPathPrefix(headersList, merchantSlug);
 }
 
 async function loadBrandAuthorityPage(
@@ -97,42 +88,21 @@ async function loadBrandAuthorityPage(
   );
   if (!categoryData) return null;
 
-  let brandProducts: RawDbProduct[];
-  try {
-    brandProducts = await getCachedBrandAuthorityProducts(
-      merchant.id,
-      args.categorySlug,
-      authorityEntry
-    );
-  } catch (error) {
-    console.warn('Failed to load brand authority products', {
-      merchantId: merchant.id,
-      categorySlug: args.categorySlug,
-      brandKey: authorityEntry.brandKey,
-      error,
-    });
-    return null;
-  }
-  const normalizedProducts = (brandProducts as unknown[])
-    .filter(isRawDbProduct)
-    .map((product) =>
-      normalizeProduct(product, { preferredCategorySlug: args.categorySlug })
-    )
-    .filter(
-      (product) =>
-        brandAuthorityTaxonomy.matchesBrand(
-          authorityEntry,
-          product.brand ?? null
-        ) && product.availability === 'InStock'
-    );
-  const isIndexable =
-    normalizedProducts.length >= authorityEntry.minimumProducts;
-  if (!isIndexable) {
-    return null;
-  }
+  const brandProducts = await getCachedBrandAuthorityProducts(
+    merchant.id,
+    args.categorySlug,
+    authorityEntry,
+    { limit: null }
+  );
 
-  const products: BrandAuthorityPageProduct[] = normalizedProducts.map(
-    (product) => ({
+  const eligibility = authorityHubEligibility.resolveBrandAuthorityEligibility(
+    brandProducts,
+    args.categorySlug,
+    authorityEntry
+  );
+  if (!eligibility.eligible) return null;
+  const allInStockProducts: BrandAuthorityPageProduct[] =
+    eligibility.products.map((product) => ({
       id: product.id,
       name: product.name,
       slug: product.slug,
@@ -142,19 +112,35 @@ async function loadBrandAuthorityPage(
       price: product.price,
       condition: product.condition,
       stock: product.stock,
+      manage_stock: product.manage_stock ?? false,
       availability: product.availability,
       has_condition_offers: product.has_condition_offers ?? false,
       product_key_specs: product.product_key_specs,
       image: product.image,
       description: product.description,
-    })
+    }));
+
+  const products: BrandAuthorityPageProduct[] = allInStockProducts.slice(
+    0,
+    BRAND_AUTHORITY_PRODUCT_LIMIT
   );
+
   const storeUrl = buildStoreUrl(merchant);
   const categoryName = categoryData.name;
   const canonicalUrl = `${storeUrl}/${args.categorySlug}/brands/${authorityEntry.brandKey}`;
   const countryContext = getCountryShoppingContext(merchant.country);
   const countrySuffix = countryContext ? ` ${countryContext}` : '';
-  const heading = `${authorityEntry.displayName} Phones and Prices${countrySuffix}`;
+  const copy = formatBrandAuthorityCopy({
+    categorySlug: args.categorySlug,
+    categoryName,
+    brandKey: authorityEntry.brandKey,
+    brandDisplayName: authorityEntry.displayName,
+    merchantBusinessName: merchant.business_name,
+    productCount: products.length,
+    countrySuffix,
+    customIntro: authorityEntry.intro,
+  });
+  const heading = copy.heading;
   const supportedCategory =
     args.categorySlug in CONTENT_CLUSTER_SUPPORT
       ? (args.categorySlug as SupportedClusterCategory)
@@ -168,8 +154,8 @@ async function loadBrandAuthorityPage(
           authorityEntry.brandKey,
           ...(authorityEntry.brandAliases ?? []),
         ],
-        productNames: normalizedProducts.map((product) => product.name),
-        productSlugs: normalizedProducts.map((product) => product.slug),
+        productNames: products.map((product) => product.name),
+        productSlugs: products.map((product) => product.slug),
       }
     : null;
   const guidePosts =
@@ -179,14 +165,16 @@ async function loadBrandAuthorityPage(
   const familyLinks = modelFamilyAuthorityTaxonomy
     .getEntries(args.categorySlug, authorityEntry.brandKey)
     .flatMap((entry) => {
-      const productCount = products.filter((product) =>
-        modelFamilyAuthorityTaxonomy.matchesProduct(entry, product.name)
-      ).length;
-      return productCount >= entry.minimumProducts
+      const { productCount, eligible } =
+        authorityHubEligibility.resolveFamilyAuthorityEligibility(
+          allInStockProducts,
+          entry
+        );
+      return eligible
         ? [
             {
               href: `${canonicalUrl}/families/${entry.familyKey}`,
-              label: `${entry.displayName} phones`,
+              label: copy.formatFamilyLinkLabel(entry.displayName),
               productCount,
             },
           ]
@@ -201,12 +189,13 @@ async function loadBrandAuthorityPage(
       suffix: merchant.business_name,
       fallback: authorityEntry.displayName,
     }).title,
-    metaDescription: `Compare a selection of ${products.length} ${authorityEntry.displayName} phones from ${merchant.business_name}, with current prices, key specs, condition, and availability${countrySuffix}.`,
+    metaDescription: copy.metaDescription,
     heading,
-    intro: `Explore a selection of ${products.length} ${authorityEntry.displayName} phones from ${merchant.business_name}. Compare current prices, specifications, condition, and availability before choosing a model.`,
+    intro: copy.intro,
     categoryName,
     brand: authorityEntry,
     products,
+    brandInventory: { products: allInStockProducts },
     guideLinks:
       guideContext && options.includeGuideLinks !== false
         ? buildCommercialGuideLinks({

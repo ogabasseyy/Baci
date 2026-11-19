@@ -7,7 +7,7 @@ jest.mock('@/lib/supabase', () => ({
   supabase: {
     auth: {
       getSession: jest.fn(async () => ({
-        data: { session: { access_token: 'token' } },
+        data: { session: { access_token: 'token', user: { id: 'user-1' } } },
       })),
       getUser: jest.fn(async () => ({
         data: { user: { id: 'user-1' } },

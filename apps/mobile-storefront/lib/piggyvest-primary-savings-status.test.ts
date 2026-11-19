@@ -36,6 +36,8 @@ it('uses a status-only PATCH with CSRF and checks the echoed operation', async (
     method: 'PATCH',
     includeCsrf: true,
     body: input,
+    signal: expect.any(AbortSignal),
+    timeoutMs: 15_000,
   });
   mockFetchJson.mockResolvedValue({
     operationId: input.merchantId,
@@ -67,4 +69,26 @@ it('constructs a fresh API client for every status check', async () => {
   await checkPiggyvestPrimarySavingsStatus(input);
   await checkPiggyvestPrimarySavingsStatus(input);
   expect(mockCreateClient).toHaveBeenCalledTimes(2);
+});
+it('gives up on a read that never settles after 15 s, aborting it', async () => {
+  jest.clearAllMocks();
+  jest.useFakeTimers();
+  try {
+    let signal: AbortSignal | undefined;
+    // Session, CSRF or PATCH stalled: the promise never settles by itself.
+    mockFetchJson.mockImplementation((...args: unknown[]) => {
+      signal = (args[0] as { signal?: AbortSignal }).signal;
+      return new Promise(() => undefined);
+    });
+    const check = checkPiggyvestPrimarySavingsStatus(input);
+    const settled = jest.fn();
+    check.then(settled, settled);
+    await jest.advanceTimersByTimeAsync(14_999);
+    expect(settled).not.toHaveBeenCalled();
+    jest.advanceTimersByTime(1);
+    await expect(check).rejects.toThrow('timed out after 15000ms');
+    expect(signal?.aborted).toBe(true);
+  } finally {
+    jest.useRealTimers();
+  }
 });

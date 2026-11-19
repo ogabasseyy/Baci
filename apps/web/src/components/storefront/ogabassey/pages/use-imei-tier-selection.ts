@@ -1,20 +1,21 @@
 'use client';
 
-import { useState } from 'react';
 import {
   IMEI_IDENTIFIER_BY_DEVICE,
   IMEI_SERVICE_TIERS,
-  RECOMMENDED_TIER_BY_DEVICE,
-  normalizeDeviceIdentifier,
-  resolveInputIdentifier,
   type ImeiBrandFilter,
   type ImeiDeviceCategory,
   type ImeiServiceTierKey,
+  normalizeDeviceIdentifier,
+  RECOMMENDED_TIER_BY_DEVICE,
+  resolveInputIdentifier,
 } from '@baci/shared/imei';
+import { useEffect, useState } from 'react';
 import {
   getVisibleWebImeiServiceTierKeys,
   hasAdditionalWebImeiServiceTierKeys,
 } from './imei-checker-visible-tiers';
+import { useImeiRuntimeAvailability } from './use-imei-runtime-availability';
 
 const DEFAULT_BRAND: ImeiBrandFilter = 'apple';
 
@@ -26,7 +27,10 @@ export interface UseImeiTierSelectionResult {
   displayedTierKeys: ImeiServiceTierKey[];
   identifier: ReturnType<typeof resolveInputIdentifier>;
   imei: string;
-  selectedTier: ImeiServiceTierKey;
+  selectedTier: ImeiServiceTierKey | null;
+  availabilityFailed: boolean;
+  availabilityLoading: boolean;
+  retryAvailability: () => void;
   showAllServices: boolean;
   onChangeImei: (raw: string) => void;
   onClearImei: () => void;
@@ -47,30 +51,48 @@ export interface UseImeiTierSelectionResult {
 export function useImeiTierSelection(): UseImeiTierSelectionResult {
   const [device, setDevice] = useState<ImeiDeviceCategory>('smartphone');
   const [brand, setBrand] = useState<ImeiBrandFilter>(DEFAULT_BRAND);
-  const [selectedTier, setSelectedTier] = useState<ImeiServiceTierKey>(
-    RECOMMENDED_TIER_BY_DEVICE.smartphone
-  );
+  const [selectedTierKey, setSelectedTier] =
+    useState<ImeiServiceTierKey | null>(RECOMMENDED_TIER_BY_DEVICE.smartphone);
   const [showAllServices, setShowAllServices] = useState(false);
   const [imei, setImei] = useState('');
 
-  const currentTier = IMEI_SERVICE_TIERS[selectedTier];
+  const availability = useImeiRuntimeAvailability(device);
+  const currentTier =
+    IMEI_SERVICE_TIERS[selectedTierKey ?? RECOMMENDED_TIER_BY_DEVICE[device]];
   const identifier = resolveInputIdentifier(
     currentTier.identifier,
     IMEI_IDENTIFIER_BY_DEVICE[device]
   );
 
   const expanded = showAllServices;
-  let displayedTierKeys = getVisibleWebImeiServiceTierKeys(
+  const displayedTierKeys = getVisibleWebImeiServiceTierKeys(
     device,
     brand,
-    expanded
+    expanded,
+    availability.availableTierKeys
   );
-  if (displayedTierKeys.length === 0) {
-    displayedTierKeys = [RECOMMENDED_TIER_BY_DEVICE[device]];
-  }
-  const canToggleServices = hasAdditionalWebImeiServiceTierKeys(device, brand);
+  const selectedTier =
+    selectedTierKey && displayedTierKeys.includes(selectedTierKey)
+      ? selectedTierKey
+      : null;
+  const canToggleServices = hasAdditionalWebImeiServiceTierKeys(
+    device,
+    brand,
+    availability.availableTierKeys
+  );
+  useEffect(() => {
+    if (selectedTierKey && !displayedTierKeys.includes(selectedTierKey))
+      setSelectedTier(null);
+  }, [displayedTierKeys, selectedTierKey]);
 
-  function applyTier(nextTierKey: ImeiServiceTierKey, forDevice = device) {
+  function applyTier(
+    nextTierKey: ImeiServiceTierKey | null,
+    forDevice = device
+  ) {
+    if (!nextTierKey) {
+      setSelectedTier(null);
+      return;
+    }
     const nextIdentifier = resolveInputIdentifier(
       IMEI_SERVICE_TIERS[nextTierKey].identifier,
       IMEI_IDENTIFIER_BY_DEVICE[forDevice]
@@ -94,10 +116,11 @@ export function useImeiTierSelection(): UseImeiTierSelectionResult {
     const nextVisible = getVisibleWebImeiServiceTierKeys(
       device,
       nextBrand,
-      showAllServices
+      showAllServices,
+      availability.availableTierKeys
     );
-    if (!nextVisible.includes(selectedTier)) {
-      applyTier(nextVisible[0] ?? RECOMMENDED_TIER_BY_DEVICE[device]);
+    if (!selectedTier || !nextVisible.includes(selectedTier)) {
+      applyTier(nextVisible[0] ?? null);
     }
   }
 
@@ -107,10 +130,11 @@ export function useImeiTierSelection(): UseImeiTierSelectionResult {
     const nextVisible = getVisibleWebImeiServiceTierKeys(
       device,
       brand,
-      nextExpanded
+      nextExpanded,
+      availability.availableTierKeys
     );
-    if (!nextVisible.includes(selectedTier)) {
-      applyTier(nextVisible[0] ?? RECOMMENDED_TIER_BY_DEVICE[device]);
+    if (!selectedTier || !nextVisible.includes(selectedTier)) {
+      applyTier(nextVisible[0] ?? null);
     }
   }
 
@@ -123,6 +147,9 @@ export function useImeiTierSelection(): UseImeiTierSelectionResult {
   }
 
   return {
+    availabilityFailed: availability.failed,
+    availabilityLoading: availability.loading,
+    retryAvailability: availability.retry,
     brand,
     canToggleServices,
     currentTier,
@@ -136,7 +163,9 @@ export function useImeiTierSelection(): UseImeiTierSelectionResult {
     onClearImei,
     onSelectBrand,
     onSelectDevice,
-    onSelectTier: applyTier,
+    onSelectTier: (tier) => {
+      if (displayedTierKeys.includes(tier)) applyTier(tier);
+    },
     onToggleServices,
   };
 }

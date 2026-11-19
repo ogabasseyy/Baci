@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { connection } from 'next/server';
 import { Suspense } from 'react';
 import { getOgabasseyStaticParams } from '@/app/(storefront)/[slug]/ogabassey-static-params';
 import { STOREFRONT_METADATA_CACHE_BUCKET_QUERY_PARAM } from '@/config/storefront-metadata-cache-bots';
@@ -182,7 +181,6 @@ export async function generateMetadata({
 }
 
 export async function CompareIndexRuntime(props: CompareIndexPageProps) {
-  await connection();
   const { slug } = await props.params;
 
   if (!isValidMerchantIdentifier(slug)) {
@@ -217,7 +215,7 @@ export async function CompareIndexRuntime(props: CompareIndexPageProps) {
 }
 
 const COMPARE_HUB_SHELL_CLASS =
-  'min-h-screen bg-[color-mix(in_srgb,var(--store-background,#ffffff)_94%,var(--store-background-text,#111827)_6%)] pb-20 pt-6';
+  'bg-[color-mix(in_srgb,var(--store-background,#ffffff)_94%,var(--store-background-text,#111827)_6%)] pb-4 pt-6';
 
 async function CompareHubResolvedIntro({
   params,
@@ -240,8 +238,8 @@ async function CompareHubResolvedIntro({
 
 export default function CompareIndexPage(props: CompareIndexPageProps) {
   return (
-    <>
-      <main className={COMPARE_HUB_SHELL_CLASS} data-compare-hub-chrome="">
+    <main className={COMPARE_HUB_SHELL_CLASS}>
+      <header data-compare-hub-chrome="">
         <div className="mx-auto max-w-[1400px] px-4 md:px-6">
           <nav
             aria-label="Breadcrumb"
@@ -267,16 +265,18 @@ export default function CompareIndexPage(props: CompareIndexPageProps) {
             }
           />
         </div>
-      </main>
+      </header>
       <Suspense
         fallback={
-          <div className="mx-auto max-w-[1400px] px-4 md:px-6">
-            <CompareIndexFallback hideChrome />
+          <div className="bg-[color-mix(in_srgb,var(--store-background,#ffffff)_94%,var(--store-background-text,#111827)_6%)] pb-20">
+            <div className="mx-auto max-w-[1400px] px-4 md:px-6">
+              <CompareIndexFallback hideChrome />
+            </div>
           </div>
         }
       >
         <CompareIndexRuntime {...props} />
       </Suspense>
-    </>
+    </main>
   );
 }

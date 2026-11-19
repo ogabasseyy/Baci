@@ -29,6 +29,18 @@ set -euo pipefail
 : "${GITHUB_RUN_ID:?GITHUB_RUN_ID is required}"
 : "${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is required}"
 
+# The VPS installs gh in the runner user's local bin, which systemd's
+# runner PATH may omit. Resolve that existing executable for every guard
+# invocation, including the retry wrapper's later pre-promote checks.
+if ! command -v gh >/dev/null 2>&1; then
+  if [ -n "${HOME:-}" ] && [ -x "$HOME/.local/bin/gh" ]; then
+    export PATH="$HOME/.local/bin:${PATH:-/usr/bin:/bin}"
+  else
+    echo 'Refusing production publish: GitHub CLI (gh) is required on PATH or in the runner user local bin directory.' >&2
+    exit 1
+  fi
+fi
+
 overlap_err="$(mktemp 2>/dev/null)" || overlap_err=""
 overlap_barrier=""
 overlap_barrier_ok=0

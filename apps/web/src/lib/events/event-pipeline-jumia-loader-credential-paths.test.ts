@@ -6,6 +6,24 @@ const LOADER_CLIENT =
 const ENV_PATH = 'apps/web/src/env.ts';
 
 describe('eventPipelineJumiaLoaderCredentialPaths', () => {
+  it.each([
+    'apps/web/src/app/api/marketplace/jumia/attribute-sets/[attributeSetId]/route.ts',
+    'apps/web/src/app/api/marketplace/jumia/destination-context/route.ts',
+    'apps/web/src/app/api/marketplace/jumia/categories/route.ts',
+    'apps/web/src/app/api/marketplace/jumia/brands/route.ts',
+  ])('pins the actual metadata helper-to-loader chain for %s', (route) => {
+    expect(eventPipelineJumiaLoaderCredentialPaths).toContainEqual([
+      route,
+      'apps/web/src/lib/jumia/metadata-request.ts',
+      'apps/web/src/lib/jumia/client.ts',
+      'apps/web/src/lib/jumia/jumia-client-config.ts',
+      'apps/web/src/lib/jumia/load-jumia-authorization-grant.ts',
+      LOADER_CLIENT,
+      'apps/web/src/lib/supabase/scoped-jwt.ts',
+      'apps/web/src/lib/agentic/jwt-signing-material.ts',
+      ENV_PATH,
+    ]);
+  });
   it('terminates every loader path at the environment module', () => {
     expect(eventPipelineJumiaLoaderCredentialPaths.length).toBeGreaterThan(0);
     for (const path of eventPipelineJumiaLoaderCredentialPaths) {
@@ -41,5 +59,26 @@ describe('eventPipelineJumiaLoaderCredentialPaths', () => {
       'apps/web/src/lib/agentic/jwt-signing-material.ts',
       ENV_PATH,
     ]);
+  });
+
+  it('registers the preflight route only for its exact loader path', () => {
+    const preflightRoute =
+      'apps/web/src/app/api/marketplace/jumia/products/preflight/route.ts';
+    expect(eventPipelineJumiaLoaderCredentialPaths).toContainEqual([
+      preflightRoute,
+      'apps/web/src/lib/jumia/client.ts',
+      'apps/web/src/lib/jumia/jumia-client-config.ts',
+      'apps/web/src/lib/jumia/load-jumia-authorization-grant.ts',
+      LOADER_CLIENT,
+      'apps/web/src/lib/supabase/scoped-jwt.ts',
+      'apps/web/src/lib/agentic/jwt-signing-material.ts',
+      ENV_PATH,
+    ]);
+    expect(eventPipelineJumiaLoaderCredentialPaths).not.toContainEqual(
+      expect.arrayContaining([
+        'apps/web/src/app/api/marketplace/jumia/products/preflight-preview/route.ts',
+        LOADER_CLIENT,
+      ])
+    );
   });
 });

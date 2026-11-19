@@ -66,4 +66,28 @@ describe('ogabasseyFallbackImageLoader', () => {
     expect(url).not.toContain('format=auto');
     expect(url).toContain('format=jpeg');
   });
+
+  it('re-sizes a same-origin /cdn-image/ proxy URL in its path without appending w/q params', () => {
+    const url = ogabasseyFallbackImageLoader({
+      quality: 60,
+      src: '/cdn-image/width=384,quality=70,format=avif/core-assets/products/phone.jpg',
+      width: 640,
+    });
+
+    expect(url).toBe(
+      '/cdn-image/width=640,quality=60,format=jpeg/core-assets/products/phone.jpg'
+    );
+  });
+
+  it('preserves the allowed ?v= version param on a /cdn-image/ proxy URL', () => {
+    const url = ogabasseyFallbackImageLoader({
+      quality: 75,
+      src: '/cdn-image/width=384,quality=70,format=avif/core-assets/products/phone.png?v=abc123',
+      width: 828,
+    });
+
+    expect(url).toBe(
+      '/cdn-image/width=828,quality=75,format=png/core-assets/products/phone.png?v=abc123'
+    );
+  });
 });

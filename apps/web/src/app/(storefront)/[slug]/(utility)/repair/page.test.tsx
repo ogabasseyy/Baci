@@ -14,6 +14,7 @@ vi.mock('@/components/storefront/RepairBookingWizard', () => ({
     merchantId: string;
     merchantName: string;
     preselection?: unknown;
+    repairsCatalogEnabled?: boolean;
   }) => {
     mockRepairBookingWizard(props);
     return (
@@ -93,10 +94,10 @@ describe('RepairPage', () => {
     const { container } = render(await callRepairPage('ogabassey'));
 
     expect(
-      screen.getByRole('heading', { name: 'Before you book a repair' })
+      screen.getByRole('heading', { name: 'Before you start' })
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/describe the device model, visible damage/i)
+      screen.getByText(/include the model and symptoms/i)
     ).toBeInTheDocument();
     expect(screen.getByText('Repair booking wizard')).toHaveAttribute(
       'data-merchant-id',
@@ -132,6 +133,7 @@ describe('RepairPage', () => {
     );
     expect(mockRepairBookingWizard).toHaveBeenCalledWith(
       expect.objectContaining({
+        repairsCatalogEnabled: true,
         preselection: expect.objectContaining({
           deviceId: 'device-1',
           deviceLabel: 'Apple iPhone 13 Pro Max',
@@ -186,7 +188,10 @@ describe('RepairPage', () => {
     render(await callRepairPage('ogabassey', { device: 'unknown-device' }));
 
     expect(mockRepairBookingWizard).toHaveBeenCalledWith(
-      expect.objectContaining({ preselection: undefined })
+      expect.objectContaining({
+        preselection: undefined,
+        repairsCatalogEnabled: true,
+      })
     );
   });
 
@@ -202,7 +207,10 @@ describe('RepairPage', () => {
 
     expect(mockGetRepairDeviceDetailBySlug).not.toHaveBeenCalled();
     expect(mockRepairBookingWizard).toHaveBeenCalledWith(
-      expect.objectContaining({ preselection: undefined })
+      expect.objectContaining({
+        preselection: undefined,
+        repairsCatalogEnabled: false,
+      })
     );
   });
 

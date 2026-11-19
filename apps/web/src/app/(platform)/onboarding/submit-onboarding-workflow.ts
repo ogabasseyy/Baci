@@ -5,7 +5,6 @@ import {
   getRootDomain,
   isProduction,
 } from '@/env';
-import { sendWelcomeEmail } from '@/lib/email';
 import { ensureActionRateLimit } from '@/lib/ensure-action-rate-limit';
 import { logger } from '@/lib/logger';
 import { normalizeBusinessName } from '@/lib/normalize-business-name';
@@ -97,16 +96,8 @@ export async function runSubmitOnboardingWorkflow(
       password,
       redirectUrl: buildOnboardingRedirectUrl(),
       businessName,
-      onNewSession: () => {
-        sendWelcomeEmail(email, businessName || 'Valued Merchant').catch(
-          (error) =>
-            logger.error({
-              message: 'Failed to send welcome email',
-              email,
-              error,
-            })
-        );
-      },
+      // Merchant enrollment is database-owned; never send before provisioning.
+      onNewSession: () => undefined,
     });
     if (userResolution.status === 'message')
       return { success: false, message: userResolution.message };

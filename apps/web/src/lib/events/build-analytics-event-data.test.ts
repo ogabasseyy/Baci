@@ -19,6 +19,7 @@ describe('buildAnalyticsEventData', () => {
         'purchase'
       )
     ).toEqual({
+      targets: [],
       currency: 'NGN',
       custom_data: {
         campaign_variant: 'checkout-b',
@@ -44,7 +45,9 @@ describe('buildAnalyticsEventData', () => {
         },
         'custom_event'
       )
-    ).toEqual({ custom_data: { campaign_variant: 'b' } });
+    ).toEqual({
+      custom_data: { campaign_variant: 'b' },
+    });
   });
 
   it('preserves mobile product conversion contents from custom data', () => {
@@ -63,6 +66,7 @@ describe('buildAnalyticsEventData', () => {
         'add_to_cart'
       )
     ).toEqual({
+      targets: [],
       currency: 'NGN',
       custom_data: {
         campaign_variant: 'cart-b',
@@ -72,6 +76,23 @@ describe('buildAnalyticsEventData', () => {
       },
       items: [{ id: 'sku-1', name: 'Phone', price: 100, quantity: 2 }],
       total: 200,
+    });
+  });
+
+  describe('bugfix: shopper user agent stored in event data', () => {
+    it('does not copy the visitor user agent into the stored event data', () => {
+      const data = buildAnalyticsEventData(
+        {
+          custom_data: {},
+          event_type: 'page_view',
+          merchant_id: 'merchant-1',
+          session_id: 'session-1',
+          user_agent: 'Mozilla/5.0 Sensitive',
+        },
+        'page_view'
+      );
+      expect(data).not.toHaveProperty('user_agent');
+      expect(data).toMatchObject({ session_id: 'session-1' });
     });
   });
 });

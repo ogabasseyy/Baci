@@ -11,6 +11,7 @@ export interface StorefrontCustomerTransaction {
   gateway: string | null;
   status: string | null;
   transaction_type: string | null;
+  payment_method: string | null;
 }
 
 interface CustomerTransactionRpcRow {
@@ -23,6 +24,7 @@ interface CustomerTransactionRpcRow {
   status: string | null;
   transaction_type: string | null;
   dva_account_number: string | null;
+  payment_method: string | null;
 }
 
 const MAX_ORDER_IDS_PER_LOOKUP = 100;
@@ -42,6 +44,9 @@ function toCustomerTransaction(
     gateway: row.gateway,
     status: row.status,
     transaction_type: row.transaction_type,
+    // Surfaced as its own field (not merged into metadata) so archive
+    // previews render the emailed method without inheriting the DVA entry.
+    payment_method: row.payment_method ?? null,
   };
 }
 

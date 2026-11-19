@@ -202,6 +202,10 @@ jest.mock('@/hooks/use-merchant', () => ({
   useMerchant: () => ({ data: { id: 'merchant-1' } }),
 }));
 
+jest.mock('@/hooks/use-home-order-shortcuts', () => ({
+  useHomeOrderShortcuts: () => undefined,
+}));
+
 jest.mock('@/hooks/use-network-state', () => ({
   useNetworkState: () => ({ isOnline: true }),
 }));

@@ -18,6 +18,7 @@ const ADDRESS_FIELDS = [
 
 interface LegacyAddressComponent {
   long_name?: string;
+  short_name?: string;
   types?: string[];
 }
 
@@ -126,6 +127,26 @@ export async function GET(request: NextRequest) {
     );
 
     if (!fetched.ok) {
+      if (fetched.failure === 'budget_limit_reached') {
+        console.warn('[Address API] Google details budget limit reached');
+        return NextResponse.json(
+          {
+            error: 'Address suggestions are temporarily limited',
+            code: 'PLACES_DETAILS_BUDGET_LIMIT_REACHED',
+          },
+          { status: 429 }
+        );
+      }
+      if (fetched.failure === 'budget_unavailable') {
+        console.warn('[Address API] Google details budget unavailable');
+        return NextResponse.json(
+          {
+            error: 'Address suggestions are temporarily unavailable',
+            code: 'PLACES_DETAILS_BUDGET_UNAVAILABLE',
+          },
+          { status: 503 }
+        );
+      }
       console.error('[Places API] Details HTTP error:', fetched.status);
       return NextResponse.json(
         {
@@ -171,6 +192,15 @@ export async function GET(request: NextRequest) {
       route: getComponent('route'),
       city:
         getComponent('locality') || getComponent('administrative_area_level_2'),
+      // Nigerian LGAs are supplied as a second-level administrative area when
+      // Google has one. Never substitute locality/city or a foreign county.
+      lga: components.some(
+        (component) =>
+          component.types?.includes('country') &&
+          (component.short_name === 'NG' || component.long_name === 'Nigeria')
+      )
+        ? getComponent('administrative_area_level_2')
+        : '',
       state: getComponent('administrative_area_level_1'),
       country: getComponent('country'),
       postalCode: getComponent('postal_code'),

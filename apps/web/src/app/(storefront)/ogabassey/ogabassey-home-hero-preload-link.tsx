@@ -1,42 +1,24 @@
-import { ogabasseyHomeHeroResourceHintProjection } from '@/lib/ogabassey-home-hero-resource-hint-projection';
+import { preloadOgabasseyHomeHeroResources } from './ogabassey-home-hero-resource-hints';
 
 /**
- * Scanner-visible twin of the react-dom `preload()` in
- * `preloadOgabasseyHomeHeroResources`.
+ * Synchronous component boundary and single preload owner for the home hero's
+ * slide-0 LCP image.
  *
- * The `preload()` hint travels as a flight `:HL` row, so the browser can only
- * act on it after client JS processes the flight stream — while the hero
- * `<picture>` itself streams much later in the document. A literal `<link>`
- * is discoverable by the preload scanner during HTML parse instead. React
- * hoists it to the document head, so it never precedes the critical-shell
- * host node in the body (see the PPR resume note in
- * `ogabassey-pdp-product-resource-hints.ts`).
- *
- * Attributes come from the shared projection, so this can never diverge from
- * the flight hint or the rendered `<picture>` (same builders, same tiers).
- * Renders nothing for non-CDN/blank sources — fail-open like `preload()`.
+ * 1. Keeping this as a synchronous component rendered by `async` callers
+ *    (such as `OgabasseyHomeCommittedSlideZeroPreload`) ensures `preload()`
+ *    executes inside an active synchronous React Fizz `performWork` tick where
+ *    `currentRequest` is bound.
+ * 2. Calling `preloadOgabasseyHomeHeroResources(src)` (`react-dom` `preload()`)
+ *    and returning `null` instead of rendering a literal `<link rel="preload">`
+ *    JSX element avoids React 19's `react-server-dom-webpack` double-preload
+ *    behavior (which both calls `preload()` for `<link rel="preload" as="image">`
+ *    AND serializes the `<link>` tag into `hoistableChunks`).
  */
 export function OgabasseyHomeHeroPreloadLink({
   src,
 }: {
   src: string | null | undefined;
 }) {
-  const projection = ogabasseyHomeHeroResourceHintProjection.build(src);
-  if (!projection) {
-    return null;
-  }
-
-  return (
-    <link
-      rel="preload"
-      as="image"
-      href={projection.href}
-      imageSrcSet={projection.imageSrcSet}
-      imageSizes={projection.imageSizes}
-      media={projection.media}
-      fetchPriority="high"
-      {...(projection.type ? { type: projection.type } : {})}
-      data-ogabassey-home-hero-preload="true"
-    />
-  );
+  preloadOgabasseyHomeHeroResources(src);
+  return null;
 }

@@ -10,7 +10,7 @@ vi.mock('./legacy-places', async (importOriginal) => ({
   fetchLegacyPlacesJson: vi.fn(),
 }));
 vi.mock('./provider-budget', () => ({
-  reserveGooglePlacesRequest: vi.fn(async () => true),
+  reserveGooglePlacesRequest: vi.fn(async () => ({ reserved: true })),
 }));
 
 beforeEach(() => {
@@ -64,7 +64,7 @@ describe('Google autocomplete provider boundary', () => {
     expect(url.searchParams.get('key')).toBe('places-test-key');
     expect(url.searchParams.get('sessiontoken')).toBe('session');
     expect(url.searchParams.get('components')).toBe('country:ng');
-    expect(await beforeAttempt?.()).toBe(true);
+    expect(await beforeAttempt?.()).toEqual({ reserved: true });
     expect(reserveGooglePlacesRequest).toHaveBeenCalledWith('autocomplete');
     expect(JSON.stringify(result)).not.toContain('places-test-key');
   });
@@ -168,8 +168,40 @@ describe('Google autocomplete provider boundary', () => {
     [403, 502],
     [500, 502],
   ])('maps transport status %s to %s', async (status, expected) => {
-    vi.mocked(fetchLegacyPlacesJson).mockResolvedValue({ ok: false, status });
+    vi.mocked(fetchLegacyPlacesJson).mockResolvedValue({
+      ok: false,
+      status,
+      failure: 'http_error',
+    });
     expect((await fetchGoogleAutocomplete('Lagos')).status).toBe(expected);
+  });
+  it('reports a Baci budget limit separately from a Google HTTP 429', async () => {
+    vi.mocked(fetchLegacyPlacesJson).mockResolvedValue({
+      ok: false,
+      status: 429,
+      failure: 'budget_limit_reached',
+    });
+    expect(await fetchGoogleAutocomplete('Lagos')).toEqual({
+      status: 429,
+      body: {
+        error: 'Address suggestions are temporarily limited',
+        code: 'PLACES_AUTOCOMPLETE_BUDGET_LIMIT_REACHED',
+      },
+    });
+  });
+  it('reports a Baci budget-store outage as unavailable rather than a Google error', async () => {
+    vi.mocked(fetchLegacyPlacesJson).mockResolvedValue({
+      ok: false,
+      status: 503,
+      failure: 'budget_unavailable',
+    });
+    expect(await fetchGoogleAutocomplete('Lagos')).toEqual({
+      status: 503,
+      body: {
+        error: 'Address suggestions are temporarily unavailable',
+        code: 'PLACES_AUTOCOMPLETE_BUDGET_UNAVAILABLE',
+      },
+    });
   });
   it('does not expose unexpected provider exceptions', async () => {
     vi.mocked(fetchLegacyPlacesJson).mockRejectedValue(

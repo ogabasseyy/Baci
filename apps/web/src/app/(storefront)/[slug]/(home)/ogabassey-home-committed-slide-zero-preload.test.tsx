@@ -14,9 +14,14 @@ const LENOVO_SLIDE_ZERO_URL =
 describe('OgabasseyHomeCommittedSlideZeroPreload', () => {
   beforeEach(() => {
     mockResolveHeroShell.mockReset();
+    for (const node of document.head.querySelectorAll(
+      'link[rel="preload"][as="image"]'
+    )) {
+      node.remove();
+    }
   });
 
-  it('preloads the live slide-0 so the hint matches the rendered hero', async () => {
+  it('preloads the live slide-0 once so the hint matches the rendered hero', async () => {
     mockResolveHeroShell.mockResolvedValue({
       status: 'published',
       merchantId: 'merchant-1',
@@ -25,13 +30,13 @@ describe('OgabasseyHomeCommittedSlideZeroPreload', () => {
 
     render(await OgabasseyHomeCommittedSlideZeroPreload());
 
-    const preload = document.head.querySelector(
-      'link[data-ogabassey-home-hero-preload]'
+    const preloads = document.head.querySelectorAll(
+      'link[rel="preload"][as="image"]'
     );
-    expect(preload).not.toBeNull();
+    expect(preloads).toHaveLength(1);
+    const [preload] = preloads;
     expect(preload?.getAttribute('rel')).toBe('preload');
     expect(preload?.getAttribute('as')).toBe('image');
-    expect(preload?.getAttribute('href')).toContain('loq-gaming-red-circle');
     expect(preload?.getAttribute('fetchpriority')).toBe('high');
     expect(preload?.getAttribute('imagesrcset')).toContain(
       'loq-gaming-red-circle'

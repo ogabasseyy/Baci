@@ -1,6 +1,7 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import type { ComponentProps } from 'react';
 import { useEffect, useRef, useState } from 'react';
+import type { ScrollViewInstance } from 'react-native';
 import {
   type LayoutChangeEvent,
   Platform,
@@ -57,7 +58,7 @@ export function UtilityTypeTabs({
 }: UtilityTypeTabsProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<ScrollViewInstance>(null);
   const measuredWidthsRef = useRef<Partial<Record<UtilityType, number>>>({});
   const [viewportWidth, setViewportWidth] = useState(0);
   const [measurementVersion, setMeasurementVersion] = useState(0);

@@ -41,7 +41,7 @@ export function getCloseConfirmationMessage(paymentKind?: string) {
     case PAYMENT_KINDS.VTU:
       return 'If you leave now, this utility payment may remain incomplete until you retry it.';
     case PAYMENT_KINDS.WALLET:
-      return 'If you leave now, your wallet top-up may remain incomplete until you retry it.';
+      return 'If you have already paid, check your wallet or funding status before trying again.';
     default:
       return 'Your order has been created. If you leave, you can complete payment later from your orders page.';
   }

@@ -2,7 +2,7 @@ import type { BottomTabBarProps } from 'expo-router/js-tabs';
 
 type WarmTabScreensOptions = {
   activeRouteName: string;
-  navigation: BottomTabBarProps['navigation'];
+  navigateToTab: BottomTabBarProps['navigateToTab'];
   preloadProtectedTabs: boolean;
   routes: BottomTabBarProps['state']['routes'];
 };

@@ -56,7 +56,11 @@ export function resolveCartItemImageUrl(options: {
   );
 }
 
-export function resolveColorSwatchValue(colorName: string | null | undefined) {
+/** Resolve merchant colour names, optionally requiring a complete named-colour match. */
+export function resolveColorSwatchValue(
+  colorName: string | null | undefined,
+  options: { exact?: boolean } = {}
+) {
   if (typeof colorName !== 'string') {
     return undefined;
   }
@@ -69,6 +73,8 @@ export function resolveColorSwatchValue(colorName: string | null | undefined) {
   if (COLOR_HEX_MAP[normalizedName]) {
     return COLOR_HEX_MAP[normalizedName];
   }
+
+  if (options.exact) return undefined;
 
   for (const [key, value] of Object.entries(COLOR_HEX_MAP)) {
     if (normalizedName.includes(key)) {

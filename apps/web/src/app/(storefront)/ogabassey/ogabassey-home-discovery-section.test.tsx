@@ -79,6 +79,51 @@ describe('OgabasseyHomeDiscoverySection', () => {
     );
   });
 
+  it('skips the first 8 products for discovery links when > 8 products exist to avoid grid duplication', async () => {
+    const products = Array.from({ length: 12 }, (_, i) =>
+      createSectionProduct({
+        id: `prod-${i + 1}`,
+        name: `Device ${i + 1}`,
+        slug: `device-${i + 1}`,
+      })
+    );
+
+    const result = await resolveSectionDiscovery({ products });
+    render(result as ReactElement);
+
+    // First 8 should NOT be in the featured discovery links
+    expect(
+      screen.queryByRole('link', { name: 'Device 1' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: 'Device 8' })
+    ).not.toBeInTheDocument();
+
+    // Products 9..12 SHOULD be present
+    expect(screen.getByRole('link', { name: 'Device 9' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Device 12' })).toBeInTheDocument();
+  });
+
+  it('falls back to all products when products length <= 8', async () => {
+    const products = Array.from({ length: 5 }, (_, i) =>
+      createSectionProduct({
+        id: `prod-${i + 1}`,
+        name: `Short Device ${i + 1}`,
+        slug: `short-device-${i + 1}`,
+      })
+    );
+
+    const result = await resolveSectionDiscovery({ products });
+    render(result as ReactElement);
+
+    expect(
+      screen.getByRole('link', { name: 'Short Device 1' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: 'Short Device 5' })
+    ).toBeInTheDocument();
+  });
+
   it('emits raw parsable JSON-LD scripts', async () => {
     const result = await resolveSectionDiscovery({
       products: [createSectionProduct()],

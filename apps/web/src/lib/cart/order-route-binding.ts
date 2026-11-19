@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server';
 import type { OrderCreateInput } from '@/schemas/orders';
 import {
+  requestPresentsCheckoutRecoveryProof,
+  verifyCheckoutRecoveryProof,
+} from './checkout-recovery-proof';
+import {
+  type OrderBindingErrorCode,
   type SubmitCartBoundOrderDeps,
   type SubmitCartBoundOrderInput,
   type SubmitCartBoundOrderResult,
@@ -19,12 +24,22 @@ export function getSharedCartOrderAuthority(
   request: Request,
   binding: OrderCartBinding,
   merchantId: string,
-  options?: { sharedCartEnrolled?: boolean }
+  options?: {
+    sharedCartEnrolled?: boolean;
+    recovery?: {
+      userId: string | null;
+      paymentMethod: string;
+      requireRecoveryProof?: boolean;
+    };
+  }
 ):
   | { ok: true; principalId: string | null }
   | { ok: false; response: NextResponse } {
   if (!binding) {
-    if (options?.sharedCartEnrolled === false) {
+    if (
+      options?.sharedCartEnrolled === false &&
+      !options.recovery?.requireRecoveryProof
+    ) {
       return { ok: true, principalId: null };
     }
     // A request carrying shared-cart session authority must submit
@@ -33,6 +48,8 @@ export function getSharedCartOrderAuthority(
     // or invalid cart material fails closed the same way — only a
     // request with no cart credential at all is a legacy guest.
     if (
+      options?.recovery?.requireRecoveryProof ||
+      requestPresentsCheckoutRecoveryProof(request, merchantId) ||
       requestCarriesSharedCartSessionProof(request, merchantId) ||
       requestPresentsCartProofMaterial(request, merchantId)
     ) {
@@ -50,11 +67,25 @@ export function getSharedCartOrderAuthority(
     }
     return { ok: true, principalId: null };
   }
-  const proof = verifySharedCartOrderProof(request, {
-    cartId: binding.cart_id,
-    merchantId,
-  });
-  if (proof.ok) return { ok: true, principalId: proof.principalId };
+  if (!options?.recovery?.requireRecoveryProof) {
+    const proof = verifySharedCartOrderProof(request, {
+      cartId: binding.cart_id,
+      merchantId,
+    });
+    if (proof.ok) return { ok: true, principalId: proof.principalId };
+  }
+  if (
+    options?.recovery?.requireRecoveryProof &&
+    options.recovery.paymentMethod === 'uba_redvault'
+  ) {
+    const recovery = verifyCheckoutRecoveryProof(request, {
+      cartId: binding.cart_id,
+      merchantId,
+      sessionId: binding.checkout_session_id,
+      userId: options.recovery.userId,
+    });
+    if (recovery.ok) return recovery;
+  }
   return {
     ok: false,
     response: NextResponse.json(
@@ -76,18 +107,26 @@ export async function resolveSharedCartOrderAuthority(
   request: Request,
   binding: OrderCartBinding,
   merchantId: string,
-  isSharedCartEnrolled?: () => Promise<boolean> | boolean
+  isSharedCartEnrolled?: () => Promise<boolean> | boolean,
+  recovery?: {
+    userId: string | null;
+    paymentMethod: string;
+    requireRecoveryProof?: boolean;
+  }
 ): Promise<
   | { ok: true; principalId: string | null }
   | { ok: false; response: NextResponse }
 > {
-  const initial = getSharedCartOrderAuthority(request, binding, merchantId);
+  const initial = getSharedCartOrderAuthority(request, binding, merchantId, {
+    recovery,
+  });
   if (initial.ok || binding || !isSharedCartEnrolled) {
     return initial;
   }
   const sharedCartEnrolled = await isSharedCartEnrolled();
   return getSharedCartOrderAuthority(request, binding, merchantId, {
     sharedCartEnrolled,
+    recovery,
   });
 }
 
@@ -118,11 +157,18 @@ export async function submitSharedCartOrderBinding(
     bound,
     failure:
       bound && !bound.ok && bound.code !== 'order_rejected'
-        ? NextResponse.json(sharedCartBindingFailureBody(bound.code), {
-            status: sharedCartBindingFailureStatus(bound.code),
-          })
+        ? sharedCartBindingFailure(bound.code)
         : null,
   };
+}
+
+/** Return the same shopper-facing cart failure for all checkout variants. */
+export function sharedCartBindingFailure(
+  code: OrderBindingErrorCode
+): NextResponse {
+  return NextResponse.json(sharedCartBindingFailureBody(code), {
+    status: sharedCartBindingFailureStatus(code),
+  });
 }
 
 function sharedCartBindingFailureStatus(code: string): number {

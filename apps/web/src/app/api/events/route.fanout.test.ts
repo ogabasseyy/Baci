@@ -37,10 +37,16 @@ vi.mock('@/lib/analytics/trusted-server-ad-platform-fanout', () => ({
 vi.mock('@/lib/logger', () => ({
   logger: { error: mocks.loggerError, info: vi.fn(), warn: vi.fn() },
 }));
-vi.mock('@/lib/analytics/send-to-ad-platforms', () => ({
-  isConversionEvent: (value: string) => value === 'purchase',
-  normalizeEventType: (value: string) => value,
-}));
+vi.mock('@/lib/analytics/send-to-ad-platforms', async () => {
+  const { normalizeEventType } = await vi.importActual<
+    typeof import('@/lib/analytics/normalize-ad-platform-event-type')
+  >('@/lib/analytics/normalize-ad-platform-event-type');
+  return {
+    isConversionEvent: (value: string) =>
+      ['purchase', 'place_order', 'begin_checkout'].includes(value),
+    normalizeEventType,
+  };
+});
 vi.mock('@/lib/events/event-pipeline-config', () => ({
   isEventPipelineEnqueueEnabled: () => false,
   isLegacyAnalyticsFanoutDisabled: mocks.legacyFanoutDisabled,
@@ -72,7 +78,9 @@ describe('POST /api/events fanout authority', () => {
     mocks.build.mockReturnValue({
       custom_data: {},
       event_id: 'event-1',
-      event_type: 'purchase',
+      event_type: 'begin_checkout',
+      analytics_consent: true,
+      marketing_consent: true,
       merchant_id: EVENT_ROUTE_MERCHANT_ID,
       source: 'web',
       user_data: {},
@@ -83,7 +91,9 @@ describe('POST /api/events fanout authority', () => {
     const response = await POST(
       eventRouteRequest({
         event_id: 'event-1',
-        event_type: 'purchase',
+        event_type: 'begin_checkout',
+        analytics_consent: true,
+        marketing_consent: true,
         order_id: 'order-1',
         total: 100,
       })
@@ -104,7 +114,12 @@ describe('POST /api/events fanout authority', () => {
       lookupClient({ id: 'different-merchant' })
     );
     const response = await POST(
-      eventRouteRequest({ event_type: 'purchase', total: 100 })
+      eventRouteRequest({
+        event_type: 'begin_checkout',
+        analytics_consent: true,
+        marketing_consent: true,
+        total: 100,
+      })
     );
     expect(response.status).toBe(200);
     expect(mocks.insert).toHaveBeenCalled();
@@ -135,7 +150,13 @@ describe('POST /api/events fanout authority', () => {
   ])('does not construct service authority from a spoofed root-host %s', async (_name, payload, headers) => {
     const response = await POST(
       eventRouteRequest(
-        { event_type: 'purchase', total: 100, ...payload },
+        {
+          event_type: 'begin_checkout',
+          analytics_consent: true,
+          marketing_consent: true,
+          total: 100,
+          ...payload,
+        },
         headers
       )
     );
@@ -146,7 +167,13 @@ describe('POST /api/events fanout authority', () => {
   });
 
   it('generates a stable-shaped fanout event id when absent', async () => {
-    await POST(eventRouteRequest({ event_type: 'purchase' }));
+    await POST(
+      eventRouteRequest({
+        event_type: 'begin_checkout',
+        analytics_consent: true,
+        marketing_consent: true,
+      })
+    );
     expect(mocks.build).toHaveBeenCalledWith(
       expect.objectContaining({
         eventId: expect.stringMatching(/^evt_\d+_[0-9a-f]{32}$/),
@@ -161,7 +188,12 @@ describe('POST /api/events fanout authority', () => {
     );
 
     const response = await POST(
-      eventRouteRequest({ event_type: 'purchase', total: 100 })
+      eventRouteRequest({
+        event_type: 'begin_checkout',
+        analytics_consent: true,
+        marketing_consent: true,
+        total: 100,
+      })
     );
 
     expect(response.status).toBe(200);
@@ -181,7 +213,12 @@ describe('POST /api/events fanout authority', () => {
     });
 
     const response = await POST(
-      eventRouteRequest({ event_type: 'purchase', total: 100 })
+      eventRouteRequest({
+        event_type: 'begin_checkout',
+        analytics_consent: true,
+        marketing_consent: true,
+        total: 100,
+      })
     );
     expect(response.status).toBe(200);
     expect(deferred).toHaveLength(1);
@@ -190,6 +227,29 @@ describe('POST /api/events fanout authority', () => {
     mocks.legacyFanoutDisabled.mockReturnValue(true);
     await deferred[0]?.();
 
+    expect(mocks.createServiceClient).not.toHaveBeenCalled();
+    expect(mocks.fanout).not.toHaveBeenCalled();
+  });
+  it.each([
+    'purchase',
+    'PURCHASE',
+    'place_order',
+    'PLACE_ORDER',
+    'PLACE_AN_ORDER',
+  ])('keeps client %s as telemetry with legacy fanout enabled', async (event_type) => {
+    const response = await POST(
+      eventRouteRequest({
+        event_type,
+        analytics_consent: true,
+        marketing_consent: true,
+        total: 100,
+      })
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ success: true });
+    expect(mocks.insert).toHaveBeenCalled();
+    expect(mocks.createServerClient).not.toHaveBeenCalled();
+    expect(mocks.after).not.toHaveBeenCalled();
     expect(mocks.createServiceClient).not.toHaveBeenCalled();
     expect(mocks.fanout).not.toHaveBeenCalled();
   });

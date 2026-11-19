@@ -1,5 +1,6 @@
 // src/env.ts
 import z from 'zod';
+import { getAddressAutocompleteKvCredentialIssue } from '@/lib/address-autocomplete-kv-credentials';
 import { DEFAULT_ROOT_DOMAIN } from '@/lib/default-root-domain';
 import { normalizeEnvBoolean } from '@/lib/env-boolean';
 import { readHostedSavingsEnvironment } from '@/lib/hosted-savings-environment';
@@ -7,6 +8,7 @@ import { isNonAgenticWorkerProfile } from '@/lib/is-non-agentic-worker-profile';
 import { buildLlmBearerAuthHeader } from '@/lib/llm-auth';
 import { isNegotiatedCheckoutProofSecretMissing } from '@/lib/quiz/negotiated-checkout-proof-env';
 import { supabaseAgenticJwtPrivateJwkStringSchema } from '@/schemas/supabase-agentic-jwt-private-jwk';
+import { walletPinPepperEnvSchema } from '@/schemas/wallet-pin-pepper';
 
 /**
  * A type-safe and validated way to access environment variables.
@@ -180,6 +182,9 @@ const serverSchema = z
       .string()
       .min(1, 'SUPABASE_SERVICE_ROLE_KEY is required'),
     RECOVERY_CODE_PEPPER: recoveryCodePepperSchema,
+    // Wallet PIN hashing key; unset means no PIN can be set or verified. An
+    // unusable value reads as unset and never fails boot (dark feature).
+    WALLET_PIN_PEPPER: walletPinPepperEnvSchema,
     SUPABASE_JWT_SECRET: optionalTrimmedStringSchema,
     SUPABASE_LEGACY_ANON_JWT: optionalTrimmedStringSchema,
     SUPABASE_AGENTIC_JWT_PRIVATE_JWK: supabaseAgenticJwtPrivateJwkStringSchema,
@@ -266,6 +271,8 @@ const serverSchema = z
     GOOGLE_MAPS_API_KEY: optionalTrimmedStringSchema,
     GOOGLE_PLACES_API_KEY: optionalTrimmedStringSchema,
     GEOAPIFY_API_KEY: optionalTrimmedStringSchema,
+    ADDRESS_AUTOCOMPLETE_KV_REST_API_URL: optionalTrimmedUrlSchema,
+    ADDRESS_AUTOCOMPLETE_KV_REST_API_TOKEN: optionalTrimmedStringSchema,
     ADDRESS_AUTOCOMPLETE_REDIS_REST_URL: optionalTrimmedUrlSchema,
     ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN: optionalTrimmedStringSchema,
     AI_CHAT_MODEL: z.string().default('gemma4:e4b'),
@@ -408,6 +415,16 @@ const serverSchema = z
     ),
   })
   .strict()
+  .superRefine((value, ctx) => {
+    const credentialIssue = getAddressAutocompleteKvCredentialIssue(value);
+    if (credentialIssue) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: credentialIssue.message,
+        path: [credentialIssue.field],
+      });
+    }
+  })
   .superRefine((value, ctx) => {
     const isGitHubActionsBuild =
       process.env.GITHUB_ACTIONS === 'true' &&
@@ -656,6 +673,7 @@ const getEnv = (): Partial<z.infer<typeof serverSchema>> &
     ? {
         SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
         RECOVERY_CODE_PEPPER: process.env.RECOVERY_CODE_PEPPER,
+        WALLET_PIN_PEPPER: process.env.WALLET_PIN_PEPPER,
         SUPABASE_JWT_SECRET: process.env.SUPABASE_JWT_SECRET,
         SUPABASE_LEGACY_ANON_JWT: process.env.SUPABASE_LEGACY_ANON_JWT,
         SUPABASE_AGENTIC_JWT_PRIVATE_JWK:
@@ -744,6 +762,10 @@ const getEnv = (): Partial<z.infer<typeof serverSchema>> &
         GOOGLE_MAPS_API_KEY: process.env.GOOGLE_MAPS_API_KEY,
         GOOGLE_PLACES_API_KEY: process.env.GOOGLE_PLACES_API_KEY,
         GEOAPIFY_API_KEY: process.env.GEOAPIFY_API_KEY,
+        ADDRESS_AUTOCOMPLETE_KV_REST_API_URL:
+          process.env.ADDRESS_AUTOCOMPLETE_KV_REST_API_URL,
+        ADDRESS_AUTOCOMPLETE_KV_REST_API_TOKEN:
+          process.env.ADDRESS_AUTOCOMPLETE_KV_REST_API_TOKEN,
         ADDRESS_AUTOCOMPLETE_REDIS_REST_URL:
           process.env.ADDRESS_AUTOCOMPLETE_REDIS_REST_URL,
         ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN:

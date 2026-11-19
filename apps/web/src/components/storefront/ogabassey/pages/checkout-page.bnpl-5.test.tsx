@@ -1,111 +1,21 @@
-import {
-  driveFreshBNPLPlaceOrder,
-  paymentStartedCalls,
-  renderFreshBNPLCheckout,
-} from './checkout-page-bnpl.test-support';
+import { readPendingHandoffEntries } from '@/lib/privacy/pending-handoff.test-support';
+import { readPendingPrivateParams } from '@/lib/privacy/private-url-param-handoff';
 import {
   act,
-  CheckoutPage,
+  continueToPaymentAfterPickupCheck,
   expect,
   fireEvent,
   it,
   mockCaptureCheckoutFunnelEventOnce,
-  mockCaptureClientEvent,
-  openCredPalCheckout,
-  render,
+  renderCheckoutWithStoreRates,
   screen,
   useCart,
   useMerchantSafe,
   usePersistedForm,
   useRouter,
   vi,
-  waitFor,
   walletFundedTransferMock,
 } from './checkout-page-test-support';
-
-it('tracks payment_failed when CredPal errors after the widget loads', async () => {
-  vi.stubEnv('NEXT_PUBLIC_CREDPAL_KEY', 'pk_test_credpal');
-  const { fetchMock } = renderFreshBNPLCheckout({
-    featureSettings: { credpal_enabled: true },
-    orderId: 'order-credpal-matched-error',
-  });
-
-  try {
-    await driveFreshBNPLPlaceOrder(/credpal/i);
-
-    await waitFor(() => {
-      expect(openCredPalCheckout).toHaveBeenCalled();
-    });
-    const callArgs = vi.mocked(openCredPalCheckout).mock.calls[0]?.[0];
-    await act(async () => {
-      callArgs?.onLoad?.();
-    });
-    await waitFor(() => {
-      expect(paymentStartedCalls()).toHaveLength(1);
-    });
-
-    await act(async () => {
-      callArgs?.onError?.({ success: false, message: 'declined' });
-    });
-
-    await waitFor(() => {
-      expect(
-        mockCaptureClientEvent.mock.calls.some(
-          ([event]) => event === 'payment_failed'
-        )
-      ).toBe(true);
-    });
-  } finally {
-    fetchMock.mockRestore();
-    vi.unstubAllEnvs();
-  }
-});
-
-it('closes a CredPal failure at the canonical order total, not the residual due', async () => {
-  vi.stubEnv('NEXT_PUBLIC_CREDPAL_KEY', 'pk_test_credpal');
-  const { fetchMock } = renderFreshBNPLCheckout({
-    featureSettings: { credpal_enabled: true },
-    orderId: 'order-credpal-canonical-total',
-    // Canonical total above the 5750 residual gateway due.
-    orderTotal: 6000,
-  });
-
-  try {
-    await driveFreshBNPLPlaceOrder(/credpal/i);
-
-    await waitFor(() => {
-      expect(openCredPalCheckout).toHaveBeenCalled();
-    });
-    const callArgs = vi.mocked(openCredPalCheckout).mock.calls[0]?.[0];
-    await act(async () => {
-      callArgs?.onLoad?.();
-    });
-    await waitFor(() => {
-      expect(paymentStartedCalls()).toHaveLength(1);
-    });
-
-    await act(async () => {
-      callArgs?.onError?.({ success: false, message: 'declined' });
-    });
-
-    await waitFor(() => {
-      expect(
-        mockCaptureClientEvent.mock.calls.some(
-          ([event]) => event === 'payment_failed'
-        )
-      ).toBe(true);
-    });
-    const failure = mockCaptureClientEvent.mock.calls.find(
-      ([event]) => event === 'payment_failed'
-    );
-    expect(failure?.[1]).toEqual(
-      expect.objectContaining({ reason: 'credpal_error', total: 6000 })
-    );
-  } finally {
-    fetchMock.mockRestore();
-    vi.unstubAllEnvs();
-  }
-});
 
 it('records payment_completed before redirecting a paid wallet-funded transfer', async () => {
   const routerPush = vi.fn();
@@ -171,12 +81,10 @@ it('records payment_completed before redirecting a paid wallet-funded transfer',
   );
 
   try {
-    render(<CheckoutPage />);
+    renderCheckoutWithStoreRates();
     fireEvent.click(screen.getByRole('button', { name: /delivery method/i }));
     fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
-    fireEvent.click(
-      screen.getByRole('button', { name: /continue to payment/i })
-    );
+    await continueToPaymentAfterPickupCheck();
     const bankTransferRadio = (
       await screen.findAllByRole('radio', { name: /bank transfer/i })
     ).find((radio) => radio.getAttribute('value') === 'bank_transfer');
@@ -208,10 +116,23 @@ it('records payment_completed before redirecting a paid wallet-funded transfer',
       })
     );
     expect(routerPush).toHaveBeenCalledWith(
-      expect.stringContaining(
-        '/order-success?orderId=order-wf-1&wallet=true&trackingToken=track-wf-1'
-      )
+      expect.stringContaining('/order-success?orderId=order-wf-1&wallet=true')
     );
+    expect(JSON.stringify(routerPush.mock.calls)).not.toContain('track-wf-1');
+
+    expect(readPendingHandoffEntries()).toEqual([
+      ['trackingToken', 'track-wf-1'],
+    ]);
+    const pushed = new URL(
+      String(routerPush.mock.calls[0]?.[0]),
+      'http://x.test'
+    );
+    expect(
+      readPendingPrivateParams(
+        pushed.pathname,
+        pushed.search.replace(/^\?/, '')
+      )
+    ).toEqual([['trackingToken', 'track-wf-1']]);
   } finally {
     fetchMock.mockRestore();
   }

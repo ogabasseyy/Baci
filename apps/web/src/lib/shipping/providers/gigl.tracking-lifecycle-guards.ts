@@ -59,6 +59,9 @@ const EXPLICIT_ARRIVAL_CODES = new Set([
   'ARFK',
   'ARFP',
   'ARFH',
+  // Daily / delayed-pickup scans only occur after reaching the destination.
+  'AD',
+  'DUBC',
 ]);
 
 // Whole word only, so unrelated text that merely contains DEPART (e.g.
@@ -145,15 +148,16 @@ export function applyLifecycleGuards(
     const { event } = candidate;
     const raw = candidate.providerStatus.trim().toUpperCase();
     const isArrival =
-      EXPLICIT_ARRIVAL_CODES.has(raw) ||
-      (candidate.recognizedStatus === 'in_transit' &&
-        !DEPARTURE_CODES.has(raw) &&
-        !RETURN_CODES.has(raw) &&
-        !DEPARTURE_WORD.test(
-          `${raw} ${candidate.scanText || event.description}`
-        ) &&
-        (!sameCity || leftDestinationCentre) &&
-        matchesDestination(event.location, destination));
+      !destroyed &&
+      (EXPLICIT_ARRIVAL_CODES.has(raw) ||
+        (candidate.recognizedStatus === 'in_transit' &&
+          !DEPARTURE_CODES.has(raw) &&
+          !RETURN_CODES.has(raw) &&
+          !DEPARTURE_WORD.test(
+            `${raw} ${candidate.scanText || event.description}`
+          ) &&
+          (!sameCity || leftDestinationCentre) &&
+          matchesDestination(event.location, destination)));
     if (raw === 'SDR') destroyed = true;
     if (raw === 'MSHC' && destroyed) {
       event.status = 'failed';

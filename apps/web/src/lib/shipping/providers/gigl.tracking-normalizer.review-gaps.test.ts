@@ -127,3 +127,20 @@ describe('bugfix: a destroyed shipment (SDR) is never revived by a later MSHC', 
     expect(result.events.every((e) => e.status === 'failed')).toBe(true);
   });
 });
+
+describe('bugfix: tied out-for-delivery scan outranks tied in-transit', () => {
+  it.each([
+    ['WC first', ['WC', 'MSVC']],
+    ['MSVC first', ['MSVC', 'WC']],
+  ] as const)('reports out_for_delivery (%s)', (_name, order) => {
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W36',
+        MobileShipmentTrackings: order.map((code) => event(code, '10:00:00')),
+      },
+      'W36',
+      OBSERVED_AT
+    );
+    expect(result.status).toBe('out_for_delivery');
+  });
+});

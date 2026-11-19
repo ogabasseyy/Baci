@@ -41,5 +41,9 @@ export function currentStatusRank(candidate: Guardable): number {
   if (status === 'booked') {
     return 1;
   }
-  return isMshc(candidate) ? 5 : 4;
+  if (isMshc(candidate)) return 5;
+  // Same order as the database's canonical status ranking.
+  if (status === 'out_for_delivery' || status === 'failed') return 4.5;
+  if (status === 'picked_up') return 3.5;
+  return 4;
 }

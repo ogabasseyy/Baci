@@ -114,3 +114,12 @@ describe('bugfix: delay, customs and transfer scans are not arrivals', () => {
     expect(evt.event.rawStatus).toBe(code);
   });
 });
+
+describe('bugfix: an arrival after SDR does not revive the destroyed shipment', () => {
+  it('leaves a later arrival scan unrewritten once SDR was seen', () => {
+    const sdr = scan('SDR', 'failed', 9);
+    const arf = scan('ARF', 'in_transit', 12);
+    applyLifecycleGuards([sdr, arf], 'ABUJA', 'LAGOS');
+    expect(arf.event.rawStatus).toBe('ARF');
+  });
+});

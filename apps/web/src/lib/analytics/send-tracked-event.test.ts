@@ -94,4 +94,27 @@ describe('sendTrackedEvent', () => {
       getItem.mockRestore();
     }
   });
+  describe('bugfix: raw address overwrote the sanitized page_url', () => {
+    it('never posts a token or email from the address or referrer', async () => {
+      window.history.replaceState(
+        null,
+        '',
+        '/track-order?orderId=1&token=secret-token&email=a%40b.c#frag'
+      );
+      vi.spyOn(document, 'referrer', 'get').mockReturnValue(
+        'https://shop.example.com/pay?trackingToken=ref-secret&utm_source=x'
+      );
+
+      await sendTrackedEvent({ ...addToCart, event_type: 'page_view' });
+
+      const raw = String(sentInit().body);
+      const body = JSON.parse(raw);
+      expect(raw).not.toContain('secret-token');
+      expect(raw).not.toContain('a%40b.c');
+      expect(raw).not.toContain('ref-secret');
+      expect(body.page_url).toBe('http://localhost:3000/track-order?orderId=1');
+      expect(body.referrer).toBe('https://shop.example.com/pay?utm_source=x');
+      window.history.replaceState(null, '', '/');
+    });
+  });
 });

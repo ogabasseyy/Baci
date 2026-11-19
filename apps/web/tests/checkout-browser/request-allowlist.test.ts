@@ -30,6 +30,12 @@ it('permits fixture navigation and Next RSC navigation', () => {
   expect(
     isFixtureAssetRequest({
       ...request,
+      url: 'http://127.0.0.1:3217/private-params',
+    })
+  ).toBe(true);
+  expect(
+    isFixtureAssetRequest({
+      ...request,
       url: 'http://127.0.0.1:3217/products/test-phone',
     })
   ).toBe(true);

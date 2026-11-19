@@ -1,13 +1,22 @@
-import type { CartLine, CartSnapshot } from '@baci/shared/cart';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useCart } from './cart-context';
 import {
   fetchSharedCartProducts,
   fetchSharedCartSnapshot,
 } from './shared-cart-client';
 import { StorefrontCartProvider } from './storefront-cart-provider';
+import {
+  makeProviderCartLine as cartLine,
+  createLocalStorageMock,
+  PROVIDER_MERCHANT_ID as MERCHANT_A,
+  PROVIDER_MERCHANT_B_ID as MERCHANT_B,
+  makeProviderProduct,
+  makeProviderSnapshot,
+  resetCartSessionHintForTests,
+  writeCartSessionHint,
+} from './storefront-cart-provider.test-support';
 
 vi.mock('@/lib/logger', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -27,85 +36,35 @@ vi.mock('./shared-cart-client', () => ({
   sendSharedCartCommand: vi.fn(),
 }));
 
-const localStorageMock = (() => {
-  let store: Record<string, string> = {};
-  return {
-    getItem: (key: string) => store[key] || null,
-    setItem: (key: string, value: string) => {
-      store[key] = value;
-    },
-    removeItem: (key: string) => {
-      delete store[key];
-    },
-    clear: () => {
-      store = {};
-    },
-  };
-})();
-
+const localStorageMock = createLocalStorageMock();
 Object.defineProperty(window, 'localStorage', { value: localStorageMock });
 global.fetch = vi.fn();
 
-const product = {
-  id: 'prod-1',
+const product = makeProviderProduct({
   merchant_id: 'merchant-1',
-  name: 'Phone',
-  description: '',
-  status: 'active' as const,
-  price: 100,
-  manage_stock: false,
-  stock: 10,
   image: '',
   imageLarge: '',
   imageHint: '',
-  brand: 'Brand',
-  gtin: '',
-  mpn: '',
-  slug: 'phone',
   images: [],
-};
+});
 
-const MERCHANT_A = '11111111-1111-4111-8111-111111111111';
-const MERCHANT_B = '33333333-3333-4333-8333-333333333333';
-
-function cartLine(overrides: Record<string, unknown> = {}): CartLine {
-  return {
-    id: 'line-a',
-    item: { productId: 'prod-a' },
-    lineTotalMinor: 10000,
-    quantity: 1,
-    unitPriceMinor: 10000,
-    ...overrides,
-  } as CartLine;
-}
-
-function snapshot(
+const snapshot = (
   cartId: string,
   merchantId: string,
-  lines: CartLine[],
+  lines: ReturnType<typeof cartLine>[],
   version: number
-): CartSnapshot {
-  const subtotalMinor = lines.reduce(
-    (sum, line) => sum + line.lineTotalMinor,
-    0
-  );
-  return {
-    cartId,
-    currency: 'NGN',
-    estimatedTotals: false,
-    expiresAt: '2026-10-19T04:00:00.000Z',
-    lines,
-    merchantId,
-    state: 'active',
-    subtotalMinor,
-    totalMinor: subtotalMinor,
-    version,
-  } as CartSnapshot;
-}
+) => makeProviderSnapshot({ cartId, merchantId, lines, version });
 
 describe('StorefrontCartProvider merchant switching', () => {
+  afterEach(() => {
+    resetCartSessionHintForTests();
+  });
+
   beforeEach(() => {
     localStorageMock.clear();
+    resetCartSessionHintForTests();
+    writeCartSessionHint(MERCHANT_A, '1');
+    writeCartSessionHint(MERCHANT_B, '1');
     vi.clearAllMocks();
     vi.mocked(fetchSharedCartProducts).mockResolvedValue(new Map());
   });

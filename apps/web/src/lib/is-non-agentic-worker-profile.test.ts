@@ -5,7 +5,9 @@ describe('isNonAgenticWorkerProfile', () => {
   it.each([
     'agentic-commerce-health',
     'ai-storefront-jobs',
+    'cart-events',
     'cart-notice-health',
+    'cleanup-checkout-shipping-recovery-previews',
     'event-pipeline',
     'gigl-tracking',
     'import-jobs',
@@ -16,6 +18,8 @@ describe('isNonAgenticWorkerProfile', () => {
     'order-notifications',
     'oxygen-callback-reconciliation',
     'petrock-reconciliation',
+    'piggyvest-webhook-capture-drain',
+    'purge-jumia-self-authorization-discoveries',
     'quiz-finalization',
     'scheduled-post-publisher',
     'vtu-processing-reconciliation',

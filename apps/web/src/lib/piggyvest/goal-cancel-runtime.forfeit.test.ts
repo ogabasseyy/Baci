@@ -87,6 +87,7 @@ beforeEach(() => {
     business_id: 'business',
     currency: 'NGN',
     status: 'active',
+    type: 'api',
     balance: id === 'goal-wallet' ? 262000 : 10,
   }));
   mocks.transfer.mockResolvedValue({ accepted: true });

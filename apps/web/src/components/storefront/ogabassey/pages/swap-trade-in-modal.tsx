@@ -2,12 +2,18 @@
 
 import { ArrowRight, Camera, Check, Upload, X } from 'lucide-react';
 import { useRef, useState } from 'react';
+import { COMPACT_OPTIONS, formatCurrency } from '@/lib/currency';
 import {
   type DeviceGradingResult,
   requestDeviceGrading,
 } from '@/lib/storefront/request-device-grading';
 import { selectDeviceMedia } from '@/lib/storefront/select-device-media';
 import { SparklesIcon } from './swap-sparkles-icon';
+
+// /api/ai/grade-device prices come from NGN product rows without conversion;
+// keep compact NGN formatting regardless of storefront display currency.
+const formatNairaCompact = (amount: number) =>
+  formatCurrency(amount, 'NG', COMPACT_OPTIONS);
 
 /**
  * Callers must mount this only while it is open (as the swap page does): its
@@ -78,7 +84,7 @@ export function TradeInModal({
       `📱 Device: ${result.model}\n` +
       `✨ Grade: ${result.grade}\n` +
       (result.estimatedValue > 0
-        ? `💰 Estimate: ₦${result.estimatedValue.toLocaleString()}\n`
+        ? `💰 Estimate: ${formatNairaCompact(result.estimatedValue)}\n`
         : '') +
       `📝 Observations: ${result.observations.join(', ')}\n\n` +
       `I'd like to proceed with the swap.`
@@ -194,12 +200,12 @@ export function TradeInModal({
                 <p className="text-sm text-green-800 font-medium mb-1">Estimated Trade-in Value</p>
                 <div className="text-3xl font-extrabold text-green-700">
                   {result.estimatedValue > 0
-                    ? `₦${result.estimatedValue.toLocaleString()}`
+                    ? formatNairaCompact(result.estimatedValue)
                     : 'Confirmed in chat'}
                 </div>
                 {result.basePrice > 0 && (
                   <div className="text-xs text-green-600 mt-1">
-                    Based on market price: ₦{result.basePrice.toLocaleString()}
+                    Based on market price: {formatNairaCompact(result.basePrice)}
                   </div>
                 )}
               </div>

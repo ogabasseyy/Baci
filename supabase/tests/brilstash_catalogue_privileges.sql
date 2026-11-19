@@ -12,6 +12,10 @@ BEGIN
       AND NOT r.rolcanlogin AND NOT r.rolsuper AND NOT r.rolbypassrls
   ) THEN RAISE EXCEPTION 'BrilStash reader does not have a restricted owner'; END IF;
 
+  IF has_schema_privilege('baci_brilstash_reader', 'public', 'CREATE')
+    OR has_schema_privilege('baci_brilstash_reader', 'private', 'CREATE')
+  THEN RAISE EXCEPTION 'BrilStash reader retained schema CREATE after migration replay'; END IF;
+
   FOR relation IN
     SELECT c.oid, c.relname, c.relrowsecurity
     FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace

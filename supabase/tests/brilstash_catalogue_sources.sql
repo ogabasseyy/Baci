@@ -80,6 +80,7 @@ $$;
 \ir ../migrations/20261119122400_brilstash_align_image_identity_and_activation_clock.sql
 \ir ../migrations/20261119122500_brilstash_normalize_image_dns_root.sql
 \ir ../migrations/20261119122600_brilstash_require_selectable_offer_condition.sql
+\ir ../migrations/20261119122700_brilstash_align_inventory_and_image_port.sql
 \ir brilstash_catalogue_privileges.sql
 \ir brilstash_catalogue_digest.sql
 CREATE SCHEMA fixture;

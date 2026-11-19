@@ -254,64 +254,6 @@ BEGIN
   THEN RAISE EXCEPTION 'pagination did not preserve the payload or inclusive price filter'; END IF;
 END $$;
 RESET ROLE;
-SAVEPOINT renamed_published_slug;
-UPDATE public.products SET slug = 'renamed-after-activation' WHERE slug = 'paged-7';
-SET LOCAL ROLE anon;
-DO $$
-BEGIN
-  IF fixture.read_brilstash_page(repeat('p', 43), 1, 3, 0)->>'status' IS DISTINCT FROM 'unavailable'
-  THEN RAISE EXCEPTION 'slug change on the last page did not block the pull'; END IF;
-END $$;
-ROLLBACK TO SAVEPOINT renamed_published_slug;
-RELEASE SAVEPOINT renamed_published_slug;
-
-SAVEPOINT offer_hidden_by_parent;
-UPDATE public.products SET condition = 'UK-Used' WHERE slug = 'paged-2';
-SET LOCAL ROLE anon;
-DO $$
-BEGIN
-  IF fixture.read_brilstash_page(repeat('p', 43), 1, 3, 0)->>'status' IS DISTINCT FROM 'unavailable'
-  THEN RAISE EXCEPTION 'an offer hidden by the parent condition remained in the active feed'; END IF;
-END $$;
-ROLLBACK TO SAVEPOINT offer_hidden_by_parent;
-RELEASE SAVEPOINT offer_hidden_by_parent;
-
-SAVEPOINT stock_drop;
-UPDATE public.products SET stock_quantity = 2, stock = 2 WHERE slug = 'paged-7';
-SET LOCAL ROLE anon;
-DO $$
-BEGIN
-  IF fixture.read_brilstash_page(repeat('p', 43), 1, 3, 0)->>'status' IS DISTINCT FROM 'unavailable'
-  THEN RAISE EXCEPTION 'tracked stock decrease on the last page did not block the pull'; END IF;
-END $$;
-RESET ROLE;
-ROLLBACK TO SAVEPOINT stock_drop;
-RELEASE SAVEPOINT stock_drop;
-SAVEPOINT publish_variant;
-UPDATE public.products SET inventory_anchor_variant_id = NULL WHERE slug = 'paged-1';
-INSERT INTO public.product_variants (
-  id, merchant_id, product_id, condition, attributes, is_inventory_anchor,
-  stock_quantity, inventory_tracking_policy
-) VALUES (
-  '42000000-0000-4000-8000-000000000002', '20000000-0000-4000-8000-000000000001',
-  '41000000-0000-4000-8000-000000000001', 'new', '{"storage":"256GB"}'::jsonb, false, 12, 'inherit'
-);
-SET LOCAL ROLE anon;
-DO $$
-BEGIN
-  IF fixture.read_brilstash_page(repeat('p', 43), 1, 3, 0)->>'status' IS DISTINCT FROM 'unavailable'
-  THEN RAISE EXCEPTION 'a parent with a public variant was still served as a simple listing'; END IF;
-END $$;
-RESET ROLE;
-ROLLBACK TO SAVEPOINT publish_variant;
-RELEASE SAVEPOINT publish_variant;
-UPDATE public.products SET status = 'draft' WHERE slug = 'paged-7';
-SET LOCAL ROLE anon;
-DO $$
-BEGIN
-  IF fixture.read_brilstash_page(repeat('p', 43), 1, 3, 0)->>'status' IS DISTINCT FROM 'unavailable'
-  THEN RAISE EXCEPTION 'last-page withdrawal did not block the first page'; END IF;
-END $$;
-RESET ROLE;
+\ir paged-reader-live-eligibility.inc.sql
 ROLLBACK TO SAVEPOINT paged_reader;
 RELEASE SAVEPOINT paged_reader;

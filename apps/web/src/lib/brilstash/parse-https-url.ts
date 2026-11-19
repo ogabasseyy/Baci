@@ -35,7 +35,7 @@ export function brilStashImageUrlKey(value: string): string | null {
   const host = parts?.[1]?.replace(/\.$/, '');
   if (!host || host.length > 253) return null;
   const port = Number(parts?.[2] ?? 443);
-  if (port > 65535) return null;
+  if (port < 1 || port > 65535) return null;
   const suffix = parts?.[3] ?? '';
   const authority = `${host.toLowerCase()}${port === 443 ? '' : `:${port}`}`;
   const pathAndQuery = suffix.startsWith('/') ? suffix : `/${suffix}`;

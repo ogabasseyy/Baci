@@ -17,6 +17,7 @@ BEGIN
       IS DISTINCT FROM 'https://cdn.example.invalid/?width=42'
     OR private.brilstash_image_url_key('https://CDN.example.invalid:8443/file.jpg')
       IS DISTINCT FROM 'https://cdn.example.invalid:8443/file.jpg'
+    OR private.brilstash_image_url_key('https://cdn.example.invalid:0/image.jpg') IS NOT NULL
     OR private.brilstash_image_url_key('https://cdn.example.invalid:65536/image.jpg') IS NOT NULL
     OR private.brilstash_image_url_key('https://user@cdn.example.invalid/image.jpg') IS NOT NULL
     OR private.brilstash_image_url_key('https://cdn.example.invalid/image.jpg#crop') IS NOT NULL

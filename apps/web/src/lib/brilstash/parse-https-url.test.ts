@@ -37,6 +37,8 @@ it('uses the same key for an image on a trailing-dot DNS hostname', () => {
 });
 
 it.each([
+  'https://cdn.example.invalid:0/image.jpg',
+  'https://cdn.example.invalid:00000/image.jpg',
   'https://cdn.example.invalid:65536/image.jpg',
   'https://user@cdn.example.invalid/image.jpg',
   'https://cdn.example.invalid/image.jpg#crop',

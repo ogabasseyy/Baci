@@ -14,6 +14,7 @@ EXECUTION = 'baci-builder-output.ogabassey-ai.workers.dev'
 PATH = '/resource/' + 'b' * 64 + '/index.html'
 KEY = 's' * 43
 KEY_HEADER = 'X-Baci-Execution-Origin-Key'
+CADDY = os.environ.get('BACI_TEST_CADDY', 'caddy')
 
 
 class Backend(BaseHTTPRequestHandler):
@@ -48,7 +49,7 @@ def smoke(root, backend_port, secret, dead=False):
                BACI_DELIVERY_PORT=str(backend_port), BACI_EXECUTION_ORIGIN_KEY=secret)
 
     adapted = subprocess.run(
-        ['caddy', 'adapt', '--config', str(config), '--adapter', 'caddyfile'],
+        [CADDY, 'adapt', '--config', str(config), '--adapter', 'caddyfile'],
         env=env, capture_output=True, text=True, check=True,
     )
     assert KEY not in adapted.stdout and KEY not in adapted.stderr
@@ -61,7 +62,7 @@ def smoke(root, backend_port, secret, dead=False):
         ], capture_output=True, text=True).stdout.rsplit('\n', 1)
 
     with (root / 'caddy.log').open('w+') as log:
-        process = subprocess.Popen(['caddy', 'run', '--config', str(config)],
+        process = subprocess.Popen([CADDY, 'run', '--config', str(config)],
                                    env=env, stdout=log, stderr=log)
         try:
             for _ in range(100):

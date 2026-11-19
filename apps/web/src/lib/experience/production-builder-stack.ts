@@ -69,10 +69,10 @@ export async function startProductionBuilderStack(settings: {
     const buildKey = settings.host.integration.build.key;
     if (
       key.length !== 32 ||
-      runnerKey.length < 32 ||
-      buildKey.length < 32 ||
-      (runnerKey.length === key.length && timingSafeEqual(key, runnerKey)) ||
-      (buildKey.length === key.length && timingSafeEqual(key, buildKey))
+      runnerKey.length !== 32 ||
+      buildKey.length !== 32 ||
+      timingSafeEqual(key, runnerKey) ||
+      timingSafeEqual(key, buildKey)
     )
       throw Error('INVALID_OWNER_BRIDGE_CONFIG');
   }
@@ -84,8 +84,10 @@ export async function startProductionBuilderStack(settings: {
     if (
       !settings.verifierPort ||
       key.length !== 32 ||
-      (runnerKey.length === 32 && timingSafeEqual(key, runnerKey)) ||
-      (buildKey.length === 32 && timingSafeEqual(key, buildKey)) ||
+      runnerKey.length !== 32 ||
+      buildKey.length !== 32 ||
+      timingSafeEqual(key, runnerKey) ||
+      timingSafeEqual(key, buildKey) ||
       (previewKey?.length === 32 && timingSafeEqual(key, previewKey))
     )
       throw Error('INVALID_VERIFIER_CONFIG');

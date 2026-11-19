@@ -249,3 +249,37 @@ it('requires a separate verifier key and passes it only to trusted host startup'
     await stack.close();
   }
 });
+
+it.each([
+  'owner bridge',
+  'verifier',
+] as const)('rejects longer transport keys containing the %s key', async (entrypoint) => {
+  f.host.mockClear();
+  const key = new Uint8Array(32).fill(4);
+  const runnerKey = new Uint8Array(33);
+  runnerKey.set(key);
+  const host = {
+    integration: {
+      runner: { key: runnerKey },
+      build: { key: new Uint8Array(32).fill(6) },
+    },
+  } as never;
+  const base = { host, port: 8790, deliveryPort: 8791, ownerPort: 8793 };
+  if (entrypoint === 'owner bridge') {
+    await expect(
+      startProductionBuilderStack({
+        ...base,
+        ownerBridge: { key, consumeNonce: vi.fn(async () => true) },
+      })
+    ).rejects.toThrow('INVALID_OWNER_BRIDGE_CONFIG');
+  } else {
+    await expect(
+      startProductionBuilderStack({
+        ...base,
+        verifierPort: 8792,
+        verifierKey: key,
+      })
+    ).rejects.toThrow('INVALID_VERIFIER_CONFIG');
+  }
+  expect(f.host).not.toHaveBeenCalled();
+});

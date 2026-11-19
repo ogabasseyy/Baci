@@ -19,6 +19,8 @@ interface StaffFollowUpEditorProps {
   customerName: string;
   followUp?: StaffFollowUp;
   viewerId?: string;
+  /** True right after this viewer claimed the follow-up in this sheet. */
+  justClaimed?: boolean;
   busy: boolean;
   onClose: () => void;
   onClaim: () => Promise<StaffFollowUp>;
@@ -30,6 +32,7 @@ export function StaffFollowUpEditor({
   customerName,
   followUp,
   viewerId,
+  justClaimed = false,
   busy,
   onClose,
   onClaim,
@@ -86,6 +89,17 @@ export function StaffFollowUpEditor({
             ? `Handled by ${followUp.assignee_name}`
             : 'Unassigned'}
         </Text>
+        {justClaimed && canEdit ? (
+          <Text accessibilityRole="alert" style={{ color: colors.success }}>
+            You are now handling this follow-up. Add what happened, then save.
+          </Text>
+        ) : null}
+        {!followUp?.assignee_id && viewerId ? (
+          <Text style={{ color: colors.textSecondary }}>
+            Claim this follow-up first. Then you can record what happened and
+            set the next follow-up date.
+          </Text>
+        ) : null}
         {canEdit ? (
           <>
             <View style={styles.stages}>

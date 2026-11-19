@@ -18,7 +18,22 @@ vi.mock('@/hooks/useStaffOrderFollowUps', () => ({
   useStaffOrderFollowUps: mocks.useStaffOrderFollowUps,
 }));
 vi.mock('@/components/customers/StaffFollowUpEditor', () => ({
-  StaffFollowUpEditor: () => <div>Open follow-up editor</div>,
+  StaffFollowUpEditor: (props: {
+    justClaimed?: boolean;
+    onClaim: () => Promise<unknown>;
+    onClose: () => void;
+  }) => (
+    <div>
+      Open follow-up editor
+      {props.justClaimed ? <span>Claim confirmed</span> : null}
+      <button type="button" onClick={() => void props.onClaim()}>
+        Claim from editor
+      </button>
+      <button type="button" onClick={props.onClose}>
+        Close editor
+      </button>
+    </div>
+  ),
 }));
 
 vi.mock('@shopify/flash-list', async () => {
@@ -329,5 +344,121 @@ describe('FollowUpQueueList', () => {
         "Some follow-ups couldn't be loaded or may be out of date."
       )
     ).toBeTruthy();
+  });
+
+  it('shows an older order with an open claim as its own card beside the newest order of the same customer', () => {
+    // useFailedOrders keeps only the newest order per email, so the older
+    // order is not in the source queue; its open claim comes from the scan.
+    mocks.useFollowUpQueue.mockReturnValue({
+      failedOrders: [
+        {
+          id: 'order-new',
+          created_at: '2026-07-28T08:00:00Z',
+          customer_name: 'Ada',
+          customer_email: 'ada@example.test',
+        },
+      ],
+      merchant: { id: 'merchant-1' },
+      refresh: mocks.refresh,
+      viewState: { status: 'ready' },
+    });
+    mocks.useStaffOrderFollowUps.mockReturnValue({
+      isSuccess: true,
+      openOrders: [
+        {
+          id: 'order-old',
+          created_at: '2026-07-27T08:00:00Z',
+          customer_name: 'Ada',
+          customer_email: 'ada@example.test',
+        },
+      ],
+      data: {
+        'order-old': {
+          assignee_id: 'teammate',
+          assignee_name: 'Tola',
+          stage: 'contacted',
+          outcome: 'Left a voicemail.',
+          follow_up_on: null,
+        },
+      },
+    });
+
+    render(
+      <FollowUpQueueList
+        {...defaultProps}
+        renderOrder={(order) => <div>{`Order ${order.id}`}</div>}
+      />
+    );
+
+    expect(screen.getByText('Order order-new')).toBeVisible();
+    expect(screen.getByText('Needs follow-up · Unassigned')).toBeVisible();
+    expect(screen.getByText('Order order-old')).toBeVisible();
+    expect(screen.getByText('Contacted · Tola')).toBeVisible();
+    expect(screen.getByText('Left a voicemail.')).toBeVisible();
+  });
+
+  it('keeps an orphaned open follow-up claimable after its checkout leaves the source queue', () => {
+    mocks.useStaffOrderFollowUps.mockReturnValue({
+      isSuccess: true,
+      openOrders: [
+        {
+          id: 'order-1',
+          created_at: '2026-07-27T08:00:00Z',
+          customer_name: 'Ada',
+        },
+      ],
+      data: {
+        'order-1': {
+          assignee_id: null,
+          assignee_name: 'Former teammate',
+          stage: 'waiting',
+          outcome: '',
+          follow_up_on: null,
+        },
+      },
+    });
+
+    render(
+      <FollowUpQueueList {...defaultProps} renderOrder={() => <div>Ada</div>} />
+    );
+
+    expect(screen.getByText('Waiting · Unassigned')).toBeVisible();
+    expect(screen.queryByText('Former teammate')).toBeNull();
+    expect(screen.getByText('Claim follow-up')).toBeVisible();
+  });
+
+  it('tells the editor a claim just succeeded and clears that when the editor closes', async () => {
+    const save = vi.fn().mockResolvedValue({ order_id: 'order-1' });
+    mocks.useFollowUpQueue.mockReturnValue({
+      failedOrders: [
+        {
+          id: 'order-1',
+          created_at: '2026-07-27T08:00:00Z',
+          customer_name: 'Ada',
+        },
+      ],
+      merchant: { id: 'merchant-1' },
+      refresh: mocks.refresh,
+      viewState: { status: 'ready' },
+    });
+    mocks.useStaffOrderFollowUps.mockReturnValue({
+      isSuccess: true,
+      data: {},
+      save,
+    });
+
+    render(
+      <FollowUpQueueList {...defaultProps} renderOrder={() => <div>Ada</div>} />
+    );
+
+    fireEvent.click(screen.getByText('Claim follow-up'));
+    expect(screen.queryByText('Claim confirmed')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Claim from editor' }));
+    expect(await screen.findByText('Claim confirmed')).toBeVisible();
+    expect(save).toHaveBeenCalledWith({ type: 'claim', orderId: 'order-1' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close editor' }));
+    fireEvent.click(screen.getByText('Claim follow-up'));
+    expect(screen.queryByText('Claim confirmed')).toBeNull();
   });
 });

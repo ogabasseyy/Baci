@@ -11,6 +11,8 @@ INSERT INTO public.staff_members (merchant_id, user_id, name, email, role, statu
 SELECT set_config('request.jwt.claim.sub', 'aa000000-0000-4000-8000-000000000001', true);
 INSERT INTO public.orders (id, merchant_id, order_number, customer_name, customer_email, subtotal, total, payment_status) VALUES
   ('aa000000-0000-4000-8000-000000000021','aa000000-0000-4000-8000-000000000011','ORDER-FOLLOWUP-TEST','Guest','guest@example.test',100,100,'unpaid');
+-- A column added later must not leak through the RPC responses (they return an explicit field list).
+ALTER TABLE public.order_follow_ups ADD COLUMN internal_probe text NOT NULL DEFAULT 'internal';
 SET LOCAL ROLE authenticated;
 DO $$
 DECLARE
@@ -25,11 +27,21 @@ BEGIN
      OR row_data->>'stage' IS DISTINCT FROM 'needs_follow_up' THEN
     RAISE EXCEPTION 'Claim did not assign the current staff member';
   END IF;
+  IF (SELECT array_agg(k ORDER BY k) FROM jsonb_object_keys(row_data) AS k) IS DISTINCT FROM ARRAY[
+    'assignee_id','assignee_name','follow_up_on','merchant_id','order_id','outcome','revision','stage','updated_at'
+  ] THEN
+    RAISE EXCEPTION 'Claim returned more or fewer fields than the client contract';
+  END IF;
   row_data := public.update_order_follow_up(merchant_id, order_id, 1, 'waiting', 'Asked the customer to retry.', '2026-12-01');
   IF row_data->>'stage' IS DISTINCT FROM 'waiting' OR row_data->>'revision' IS DISTINCT FROM '2'
      OR row_data->>'outcome' IS DISTINCT FROM 'Asked the customer to retry.'
      OR row_data->>'follow_up_on' IS DISTINCT FROM '2026-12-01' THEN
     RAISE EXCEPTION 'Follow-up update did not persist all fields';
+  END IF;
+  IF (SELECT array_agg(k ORDER BY k) FROM jsonb_object_keys(row_data) AS k) IS DISTINCT FROM ARRAY[
+    'assignee_id','assignee_name','follow_up_on','merchant_id','order_id','outcome','revision','stage','updated_at'
+  ] THEN
+    RAISE EXCEPTION 'Update returned more or fewer fields than the client contract';
   END IF;
   BEGIN
     PERFORM public.update_order_follow_up(merchant_id, order_id, 1, 'closed', '', NULL);
@@ -71,6 +83,26 @@ BEGIN
     RAISE EXCEPTION 'An outsider could claim another store order';
   EXCEPTION WHEN insufficient_privilege THEN NULL;
   END;
+END $$;
+RESET ROLE;
+-- Deleting the assignee's account sets assignee_id to null: the open follow-up must be reclaimable.
+UPDATE public.order_follow_ups
+SET assignee_id = NULL, stage = 'waiting', follow_up_on = DATE '2026-12-02'
+WHERE order_id = 'aa000000-0000-4000-8000-000000000021';
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE
+  row_data jsonb;
+BEGIN
+  PERFORM set_config('request.jwt.claim.sub', 'aa000000-0000-4000-8000-000000000001', true);
+  row_data := public.claim_order_follow_up(
+    'aa000000-0000-4000-8000-000000000011', 'aa000000-0000-4000-8000-000000000021'
+  );
+  IF row_data->>'assignee_id' IS DISTINCT FROM 'aa000000-0000-4000-8000-000000000001'
+     OR row_data->>'stage' IS DISTINCT FROM 'waiting'
+     OR row_data->>'revision' IS DISTINCT FROM '4' THEN
+    RAISE EXCEPTION 'An orphaned follow-up could not be reclaimed with its progress kept';
+  END IF;
 END $$;
 RESET ROLE;
 DO $$

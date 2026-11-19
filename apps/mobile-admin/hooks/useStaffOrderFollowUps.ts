@@ -24,6 +24,12 @@ async function fetchFollowUps(
 ): Promise<StaffFollowUpQueue> {
   const records: Record<string, StaffFollowUp> = {};
   const openOrders: FailedOrder[] = [];
+  // Every open follow-up of the store, claimed or orphaned (assignee account
+  // deleted, so assignee_id is null and any staff member can reclaim it). It
+  // also covers older orders hidden by the email consolidation in
+  // useFailedOrders: only the newest order per email is in `orderIds`, so an
+  // open claim on an older order surfaces here as its own queue entry instead
+  // of being lost.
   const { data: openRows, error: openError } = await supabase
     .from('order_follow_ups')
     .select(
@@ -32,12 +38,11 @@ async function fetchFollowUps(
     .eq('merchant_id', merchantId)
     .eq('order.merchant_id', merchantId)
     .neq('stage', 'closed')
-    .not('assignee_id', 'is', null)
     .order('follow_up_on', { ascending: true, nullsFirst: false })
     .order('order_id')
     .limit(FOLLOW_UP_QUERY_LIMIT + 1);
 
-  if (openError) throw new Error('Could not load assigned follow-ups.');
+  if (openError) throw new Error('Could not load open follow-ups.');
   for (const row of (openRows ?? []).slice(0, FOLLOW_UP_QUERY_LIMIT)) {
     const followUp = staffFollowUpSchema.parse(row);
     const order = oxygenFollowUpOrderSchema.parse(row.order);

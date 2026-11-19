@@ -90,3 +90,38 @@ it('lets other staff see the handler and outcome without editing them', () => {
   expect(screen.getByText('Follow up on 2026-11-20')).toBeVisible();
   expect(screen.queryByRole('button', { name: 'Save follow-up' })).toBeNull();
 });
+
+it('explains that an unassigned follow-up must be claimed before it can be filled in', () => {
+  render(<StaffFollowUpEditor {...props()} />);
+  expect(
+    screen.getByText(/Claim this follow-up first\. Then you can record/)
+  ).toBeVisible();
+  expect(screen.queryByLabelText('What happened')).toBeNull();
+});
+
+it('confirms a fresh claim and points to the next step', () => {
+  render(<StaffFollowUpEditor {...props()} followUp={claimed} justClaimed />);
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    'You are now handling this follow-up. Add what happened, then save.'
+  );
+  expect(screen.getByRole('button', { name: 'Save follow-up' })).toBeVisible();
+  expect(screen.queryByText(/Claim this follow-up first/)).toBeNull();
+});
+
+it('does not show the claim confirmation when an assigned follow-up is reopened', () => {
+  render(<StaffFollowUpEditor {...props()} followUp={claimed} />);
+  expect(screen.queryByRole('alert')).toBeNull();
+});
+
+it('keeps the sheet open and shows the error when a claim is lost to a teammate', async () => {
+  const options = props();
+  options.onClaim.mockRejectedValue(
+    new Error('Someone else has already claimed this follow-up.')
+  );
+  render(<StaffFollowUpEditor {...options} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Claim follow-up' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Someone else has already claimed this follow-up.'
+  );
+  expect(options.onClose).not.toHaveBeenCalled();
+});

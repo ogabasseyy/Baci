@@ -64,6 +64,7 @@ export function FollowUpQueueList({
   } = useFollowUpQueue();
   const { user } = useAuth();
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [claimedOrderId, setClaimedOrderId] = useState<string | null>(null);
   const orderIds = failedOrders?.map((order) => order.id).sort() ?? [];
   const staffFollowUps = useStaffOrderFollowUps(
     merchant?.id,
@@ -245,11 +246,22 @@ export function FollowUpQueueList({
           }
           viewerId={user?.id}
           followUp={selectedFollowUp}
+          justClaimed={claimedOrderId === selectedOrder.id}
           busy={staffFollowUps.isSaving}
-          onClose={() => setSelectedOrderId(null)}
-          onClaim={() =>
-            staffFollowUps.save({ type: 'claim', orderId: selectedOrder.id })
-          }
+          onClose={() => {
+            setSelectedOrderId(null);
+            setClaimedOrderId(null);
+          }}
+          onClaim={async () => {
+            const claimed = await staffFollowUps.save({
+              type: 'claim',
+              orderId: selectedOrder.id,
+            });
+            // The editor remounts on the new revision, so the parent carries
+            // the "you just claimed this" notice across the remount.
+            setClaimedOrderId(selectedOrder.id);
+            return claimed;
+          }}
           onSave={(fields) => staffFollowUps.save({ type: 'update', fields })}
         />
       )}

@@ -1,5 +1,5 @@
 -- Staff workflow is independent of lender and order payment status.
-CREATE TABLE public.order_follow_ups (
+CREATE TABLE IF NOT EXISTS public.order_follow_ups (
   order_id uuid PRIMARY KEY REFERENCES public.orders(id) ON DELETE CASCADE,
   merchant_id uuid NOT NULL REFERENCES public.merchants(id) ON DELETE CASCADE,
   assignee_id uuid REFERENCES auth.users(id) ON DELETE SET NULL,
@@ -13,22 +13,24 @@ CREATE TABLE public.order_follow_ups (
   CHECK (stage <> 'closed' OR follow_up_on IS NULL)
 );
 
-CREATE INDEX order_follow_ups_merchant_idx ON public.order_follow_ups (merchant_id, order_id);
-CREATE INDEX order_follow_ups_assignee_idx ON public.order_follow_ups (assignee_id);
+CREATE INDEX IF NOT EXISTS order_follow_ups_merchant_idx ON public.order_follow_ups (merchant_id, order_id);
+CREATE INDEX IF NOT EXISTS order_follow_ups_assignee_idx ON public.order_follow_ups (assignee_id);
 
 ALTER TABLE public.order_follow_ups ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.order_follow_ups FROM PUBLIC, anon, authenticated;
 GRANT SELECT ON public.order_follow_ups TO authenticated;
+DROP POLICY IF EXISTS order_follow_ups_read ON public.order_follow_ups;
 CREATE POLICY order_follow_ups_read ON public.order_follow_ups
   FOR SELECT TO authenticated USING (public.has_merchant_access(merchant_id));
 
-CREATE FUNCTION public.claim_order_follow_up(p_merchant_id uuid, p_order_id uuid)
+CREATE OR REPLACE FUNCTION public.claim_order_follow_up(p_merchant_id uuid, p_order_id uuid)
 RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
   actor uuid := auth.uid();
   display_name text;
-  follow_up public.order_follow_ups;
+  claimed_by uuid;
+  result jsonb;
 BEGIN
   IF actor IS NULL OR public.has_merchant_access(p_merchant_id) IS NOT TRUE OR NOT EXISTS (
     SELECT 1 FROM public.orders o WHERE o.id = p_order_id AND o.merchant_id = p_merchant_id
@@ -55,16 +57,28 @@ BEGIN
     updated_at = clock_timestamp()
   WHERE f.merchant_id = p_merchant_id AND f.assignee_id IS NULL;
 
-  SELECT * INTO follow_up FROM public.order_follow_ups f
+  -- Explicit client contract: a column added to the table later is not returned.
+  SELECT f.assignee_id, jsonb_build_object(
+    'order_id', f.order_id,
+    'merchant_id', f.merchant_id,
+    'assignee_id', f.assignee_id,
+    'assignee_name', f.assignee_name,
+    'stage', f.stage,
+    'outcome', f.outcome,
+    'follow_up_on', f.follow_up_on,
+    'revision', f.revision,
+    'updated_at', f.updated_at
+  ) INTO claimed_by, result
+  FROM public.order_follow_ups f
   WHERE f.merchant_id = p_merchant_id AND f.order_id = p_order_id;
-  IF NOT FOUND OR follow_up.assignee_id IS DISTINCT FROM actor THEN
+  IF NOT FOUND OR claimed_by IS DISTINCT FROM actor THEN
     RAISE EXCEPTION 'Follow-up already claimed' USING ERRCODE = '23505';
   END IF;
-  RETURN to_jsonb(follow_up);
+  RETURN result;
 END;
 $$;
 
-CREATE FUNCTION public.update_order_follow_up(
+CREATE OR REPLACE FUNCTION public.update_order_follow_up(
   p_merchant_id uuid, p_order_id uuid, p_revision integer, p_stage text,
   p_outcome text, p_follow_up_on date
 )
@@ -72,7 +86,7 @@ RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
   actor uuid := auth.uid();
-  follow_up public.order_follow_ups;
+  result jsonb;
 BEGIN
   IF actor IS NULL OR public.has_merchant_access(p_merchant_id) IS NOT TRUE THEN
     RAISE EXCEPTION 'Follow-up unavailable' USING ERRCODE = '42501';
@@ -91,7 +105,17 @@ BEGIN
   WHERE f.merchant_id = p_merchant_id AND f.order_id = p_order_id
     AND f.assignee_id = actor AND f.revision = p_revision
     AND EXISTS (SELECT 1 FROM public.orders o WHERE o.id = f.order_id AND o.merchant_id = f.merchant_id)
-  RETURNING * INTO follow_up;
+  RETURNING jsonb_build_object(
+    'order_id', f.order_id,
+    'merchant_id', f.merchant_id,
+    'assignee_id', f.assignee_id,
+    'assignee_name', f.assignee_name,
+    'stage', f.stage,
+    'outcome', f.outcome,
+    'follow_up_on', f.follow_up_on,
+    'revision', f.revision,
+    'updated_at', f.updated_at
+  ) INTO result;
   IF NOT FOUND THEN
     IF EXISTS (
       SELECT 1 FROM public.order_follow_ups f
@@ -101,7 +125,7 @@ BEGIN
     END IF;
     RAISE EXCEPTION 'Follow-up unavailable' USING ERRCODE = '42501';
   END IF;
-  RETURN to_jsonb(follow_up);
+  RETURN result;
 END;
 $$;
 

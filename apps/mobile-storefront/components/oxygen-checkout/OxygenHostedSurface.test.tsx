@@ -106,6 +106,13 @@ it('checks server status after returning even if automatic reads were exhausted'
     }
     expect(props.onRefresh).toHaveBeenCalledTimes(8);
     expect(screen.getByRole('button', { name: 'Check status' })).toBeEnabled();
+    const onState = jest.mocked(AppState.addEventListener).mock.lastCall?.[1];
+    expect(onState).toBeDefined();
+    await act(async () => {
+      onState?.('background');
+      onState?.('active');
+    });
+    expect(props.onRefresh).toHaveBeenCalledTimes(8);
 
     openBrowser.mockResolvedValueOnce({
       type: WebBrowser.WebBrowserResultType.DISMISS,

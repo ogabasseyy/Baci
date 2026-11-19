@@ -20,6 +20,8 @@ const {
 vi.mock('@/lib/api-auth', () => ({
   authenticateApiRequest: mockAuthenticateApiRequest,
   hasPermission: vi.fn(() => true),
+  hasBearerAuthScheme: (request: Request) =>
+    /^\s*Bearer(?:\s|$)/i.test(request.headers.get('authorization') ?? ''),
 }));
 
 vi.mock('@/lib/agentic/checkout-order-tax', () => ({

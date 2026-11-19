@@ -55,6 +55,7 @@ export function installOxygenStagingBuild(
     manifest.ios?.bundleIdentifier !== expected.ios?.bundleIdentifier ||
     manifest.android?.package !== expected.android?.package ||
     manifest.scheme !== expected.scheme ||
+    // Includes the order service's merchantId, generated from this profile.
     Object.entries(expected.extra ?? {}).some(
       ([key, value]) =>
         !oxygenStagingManifestEqual(manifest.extra?.[key], value)

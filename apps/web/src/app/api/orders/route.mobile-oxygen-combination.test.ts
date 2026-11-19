@@ -1,4 +1,5 @@
 import { beforeEach, expect, it, vi } from 'vitest';
+import { readOxygenMobileCapabilities } from '@/lib/payments/oxygen/mobile-capabilities';
 import {
   createOrderRequest,
   getLatestRpc,
@@ -21,6 +22,21 @@ vi.mock('@/lib/loyalty/server-resolver-client', () => ({
 vi.mock('@/lib/supabase/anon', () => ({ createAnonClient: () => ({}) }));
 
 beforeEach(() => resetOrderRouteMocks('bc1b9fb3-697a-4b87-815b-06423f732d3c'));
+
+it('lets web checkout save an unpaid Oxygen order without using native admission', async () => {
+  const response = await POST(
+    createOrderRequest({ source: 'online_store', payment_method: 'oxygen' })
+  );
+  expect(response.status).toBeLessThan(400);
+  expect(readOxygenMobileCapabilities).not.toHaveBeenCalled();
+  expect(getLatestRpc()).toHaveBeenCalledWith(
+    'create_storefront_order',
+    expect.objectContaining({
+      p_payment_method: 'oxygen',
+      p_payment_status: 'unpaid',
+    })
+  );
+});
 
 it.each([
   {

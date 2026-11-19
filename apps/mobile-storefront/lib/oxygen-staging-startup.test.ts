@@ -111,6 +111,20 @@ test('rejects unexpected nested staging pins', () => {
   );
 });
 
+test('refuses a build whose order-service merchant differs from the staging profile', () => {
+  process.env = { ...env };
+  const config = buildOxygenStagingExpoConfig(env);
+  if (!config) throw new Error('Missing test config');
+  mockConstants.expoConfig = {
+    ...config,
+    extra: { ...config.extra, merchantId: 'unrelated-merchant' },
+  };
+  expect(() => installOxygenStagingBuild(config, true)).toThrow(
+    'fresh isolated'
+  );
+  expect(mockConfigure).not.toHaveBeenCalled();
+});
+
 test('opens the native storage file scoped to the installed staging identity', async () => {
   process.env = { ...env };
   const config = buildOxygenStagingExpoConfig(env);

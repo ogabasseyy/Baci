@@ -54,6 +54,7 @@ function HostedSurface({
   const [autoPaused, setAutoPaused] = useState(false);
   const [phase, setPhase] = useState<'opening' | 'checking' | null>(null);
   const openingBrowser = useRef(false);
+  const awaitingBrowserReturn = useRef(false);
   const refreshCallback = useRef(onRefresh);
   refreshCallback.current = onRefresh;
   const [refreshState] = useState(() =>
@@ -80,12 +81,16 @@ function HostedSurface({
       );
     }
     const interval = kind === 'selfie' ? 15000 : 5000;
-    if (AppState.currentState === 'active')
-      timer = setInterval(refresh, interval);
+    let appState = AppState.currentState;
+    if (appState === 'active') timer = setInterval(refresh, interval);
     const listener = AppState.addEventListener('change', (state) => {
+      if (state === appState) return;
+      appState = state;
       clearInterval(timer);
       if (state === 'active') {
-        if (!openingBrowser.current) {
+        // Only a return from a launched Custom Tab restarts the polling budget.
+        if (awaitingBrowserReturn.current) {
+          awaitingBrowserReturn.current = false;
           refreshState.start();
           setError('');
         }
@@ -128,7 +133,10 @@ function HostedSurface({
       // Launch only the current pinned workflow link. The browser handles redirects.
       const result = await WebBrowser.openBrowserAsync(url);
       if (result.type === 'locked') throw new Error('Browser already open');
-      if (result.type === 'opened') return; // Android refreshes on app foreground.
+      if (result.type === 'opened') {
+        awaitingBrowserReturn.current = true;
+        return;
+      }
       // iOS Safari reports dismissal. A dismissal only prompts a server read.
       if (kind === 'selfie') recordOxygenSelfieDiagnostic('browser_returned');
       await checkStatus();

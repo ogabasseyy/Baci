@@ -274,6 +274,7 @@ function OrderSuccessScroll({
   color: string;
   children: ReactNode;
 }) {
+  // OxygenCheckoutScreen already provides the theme and outer ScrollView.
   if (embedded) return <SafeAreaView edges={['top']}>{children}</SafeAreaView>;
   return (
     <SafeAreaView

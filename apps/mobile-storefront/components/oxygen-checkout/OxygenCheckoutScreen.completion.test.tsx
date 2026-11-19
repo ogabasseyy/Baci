@@ -1,5 +1,6 @@
 import { act, render, screen, waitFor } from '@testing-library/react-native';
 import { useState } from 'react';
+import { ScrollView } from 'react-native';
 import {
   OxygenCheckoutScreen,
   oxygenNativeSession,
@@ -38,7 +39,11 @@ describe('saved native Oxygen checkout completion', () => {
     } as unknown as ReturnType<typeof useOxygenWorkflow>);
     const result = render(<OxygenCheckoutScreen orderId="order" />);
     if (paymentStatus === 'unpaid') {
-      expect(await screen.findByText('Order Confirmed')).toBeTruthy();
+      const title = await screen.findByText('Order Confirmed');
+      const scroll = result.UNSAFE_getByType(ScrollView);
+      let ancestor = title.parent;
+      while (ancestor && ancestor !== scroll) ancestor = ancestor.parent;
+      expect(ancestor).toBe(scroll);
       expect(screen.getByText('#ORD-STAGING-1')).toBeTruthy();
       expect(screen.getByText('Upfront payment confirmed')).toBeTruthy();
       expect(screen.queryByText('View Receipt')).toBeNull();

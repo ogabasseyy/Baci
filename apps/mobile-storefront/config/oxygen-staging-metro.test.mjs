@@ -39,38 +39,24 @@ test('other modules and non-staging builds retain normal module resolution', () 
 });
 
 test('resolves the Oxygen preview fixture graph only in staging development', () => {
-  const name = '../components/oxygen-preview/visual-qa-route';
+  const names = [
+    '../components/oxygen-preview/visual-qa-route',
+    '@/components/oxygen-preview/visual-qa-route.tsx',
+  ];
   const staging = { EXPO_PUBLIC_OXYGEN_STAGING: '1' };
-  assert.equal(
-    resolveOxygenStagingModule(name, { ...staging, NODE_ENV: 'development' }),
-    null
-  );
-  for (const env of [
-    { NODE_ENV: 'production' },
-    { ...staging, NODE_ENV: 'production' },
-    { ...staging, NODE_ENV: 'development', EAS_BUILD: '1' },
-    { ...staging, NODE_ENV: 'development', EAS_BUILD_PROFILE: 'development' },
-    { ...staging, NODE_ENV: 'development', CI: 'true' },
-  ]) {
-    const stub = resolveOxygenStagingModule(name, env);
-    assert.ok(stub?.endsWith('oxygen-preview-release.js'));
-    assert.equal(require(stub).OxygenVisualQaRoute, null);
-  }
-});
-
-test('includes the native bank logos only in the local staging development build', () => {
-  const name = './oxygen-bank-logos';
-  const local = { EXPO_PUBLIC_OXYGEN_STAGING: '1', NODE_ENV: 'development' };
-  assert.equal(resolveOxygenStagingModule(name, local), null);
-  for (const env of [
-    { NODE_ENV: 'development' },
-    { ...local, NODE_ENV: 'production' },
-    { ...local, EAS_BUILD_PROFILE: 'development' },
-    { ...local, EAS_BUILD: '1' },
-    { ...local, CI: 'true' },
-  ]) {
-    const stub = resolveOxygenStagingModule(name, env);
-    assert.ok(stub?.endsWith('oxygen-bank-logos-release.js'));
-    assert.equal(require(stub).oxygenBankLogo('058'), undefined);
+  for (const name of names) {
+    const development = { ...staging, NODE_ENV: 'development' };
+    assert.equal(resolveOxygenStagingModule(name, development), null);
+    for (const env of [
+      { NODE_ENV: 'production' },
+      { ...staging, NODE_ENV: 'production' },
+      { ...development, EAS_BUILD: '1' },
+      { ...development, EAS_BUILD_PROFILE: 'development' },
+      { ...development, CI: 'true' },
+    ]) {
+      const stub = resolveOxygenStagingModule(name, env);
+      assert.ok(stub?.endsWith('oxygen-preview-release.js'));
+      assert.equal(require(stub).OxygenVisualQaRoute, null);
+    }
   }
 });

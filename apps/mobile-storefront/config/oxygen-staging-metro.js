@@ -5,12 +5,11 @@ function resolveOxygenStagingModule(moduleName, env) {
     env.EXPO_PUBLIC_OXYGEN_STAGING === '1' && env.NODE_ENV === 'development';
   const localStaging =
     stagingDevelopment && !env.EAS_BUILD && !env.EAS_BUILD_PROFILE && !env.CI;
-  if (!localStaging) {
-    if (moduleName === '../components/oxygen-preview/visual-qa-route')
-      return require.resolve('./oxygen-preview-release');
-    if (moduleName === './oxygen-bank-logos')
-      return require.resolve('./oxygen-bank-logos-release');
-  }
+  if (
+    !localStaging &&
+    /(?:^|\/)oxygen-preview\/visual-qa-route(?:\.[jt]sx?)?$/.test(moduleName)
+  )
+    return require.resolve('./oxygen-preview-release');
   if (moduleName === 'react-native-splash-motion' && stagingDevelopment)
     return require.resolve('./oxygen-staging-splash');
   return null;

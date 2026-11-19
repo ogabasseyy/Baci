@@ -9,7 +9,6 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { OxygenBankLogo } from './OxygenBankLogo';
 import { useOxygenColors } from './OxygenFormPrimitives';
 import { filterOxygenBanks, type OxygenBank } from './oxygen-form-utils';
 
@@ -55,7 +54,7 @@ export function OxygenBankPicker({
             },
           ]}
         >
-          <OxygenBankLogo code={selected?.code ?? ''} />
+          <BankIcon />
           <Text
             style={[
               styles.selected,
@@ -120,7 +119,7 @@ export function OxygenBankPicker({
                     },
                   ]}
                 >
-                  <OxygenBankLogo code={bank.code} />
+                  <BankIcon />
                   <Text style={[styles.selected, { color: colors.text }]}>
                     {bank.name}
                   </Text>
@@ -146,6 +145,19 @@ export function OxygenBankPicker({
   );
 }
 
+function BankIcon() {
+  const colors = useOxygenColors();
+  return (
+    <View
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      style={[styles.icon, { backgroundColor: colors.primaryLowOpacity }]}
+    >
+      <Ionicons name="business-outline" size={18} color={colors.primary} />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: { gap: 8, marginBottom: 18 },
   label: { fontSize: 14, fontWeight: '600' },
@@ -158,6 +170,13 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   selected: { fontSize: 16, flex: 1 },
+  icon: {
+    width: 34,
+    height: 34,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   dropdown: { padding: 8 },
   search: {
     flexDirection: 'row',

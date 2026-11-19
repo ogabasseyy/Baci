@@ -1,6 +1,7 @@
 import { type ExperienceManifest, sourceDigest } from '@baci/shared/experience';
 import { beforeEach, vi } from 'vitest';
 
+import { registerBuildCapacityCase } from './local-build-capacity.test-support';
 import { registerBuildLifecycleCases } from './local-build-lifecycle.test-support';
 import { registerBuildPerformanceCases } from './local-build-performance.test-support';
 
@@ -149,4 +150,5 @@ const fixture = {
 };
 export type BuildSupervisorTestFixture = typeof fixture;
 registerBuildLifecycleCases(fixture);
+registerBuildCapacityCase(fixture);
 registerBuildPerformanceCases(fixture);

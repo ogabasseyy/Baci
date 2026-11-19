@@ -89,6 +89,12 @@ function validateConfig(key: Uint8Array, digest: string) {
     throw Error('INVALID_RUNNER_CONFIG');
 }
 
+export class RunnerCapacityError extends Error {
+  constructor() {
+    super('RUNNER_UNAVAILABLE');
+  }
+}
+
 /** Trusted control plane only. Payload is the existing public-data/source envelope;
  * caller credentials, signing keys and owner clients never enter the sandbox. */
 export function createRunnerExecutor(config: {
@@ -142,6 +148,7 @@ export function createRunnerExecutor(config: {
     });
     if (response.status !== 200) {
       await response.body?.cancel();
+      if (response.status === 429) throw new RunnerCapacityError();
       throw Error('RUNNER_UNAVAILABLE');
     }
     const text = await boundedText(response.body, OUTPUT_LIMIT, signal);

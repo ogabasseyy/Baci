@@ -110,7 +110,16 @@ function fixture() {
     receiptDigest: 'b'.repeat(64),
     hostOrigin: 'https://synthetic.merchant.test',
   };
-  return { ctx, verifier, input, execute, withSignal, record, canonicalBase };
+  return {
+    ctx,
+    rows,
+    verifier,
+    input,
+    execute,
+    withSignal,
+    record,
+    canonicalBase,
+  };
 }
 it('records only after independent recompilation and browser qualification', async () => {
   const x = fixture();
@@ -189,4 +198,14 @@ it('passes the request abort to the active capture and skips subsequent captures
     controller.signal
   );
   expect(x.record).not.toHaveBeenCalled();
+});
+
+it('reconciles a duplicate write only when the exact owner-visible proof exists', async () => {
+  const x = fixture();
+  const duplicate = Object.assign(Error('duplicate'), { code: '23505' });
+  x.record.mockRejectedValueOnce(duplicate);
+  await expect(x.verifier(x.ctx as never, x.input)).rejects.toBe(duplicate);
+  x.rows.experience_evidence = { id };
+  x.record.mockRejectedValueOnce(duplicate);
+  await expect(x.verifier(x.ctx as never, x.input)).resolves.toBeUndefined();
 });

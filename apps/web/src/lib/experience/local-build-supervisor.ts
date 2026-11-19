@@ -278,11 +278,16 @@ export async function runExperienceBuild(
     };
   } catch (error) {
     await lease?.stop();
-    await ctx.supabase.rpc('experience_fail_build', {
-      ...ownerRpcArgs(ctx),
-      p_job: job.id,
-      p_attempt: job.attempt_nonce,
-    });
+    // The linked recovery worker can reclaim an expired lease after backpressure.
+    if (
+      !(lease && error instanceof Error && error.message === 'VERIFIER_BUSY')
+    ) {
+      await ctx.supabase.rpc('experience_fail_build', {
+        ...ownerRpcArgs(ctx),
+        p_job: job.id,
+        p_attempt: job.attempt_nonce,
+      });
+    }
     throw error;
   } finally {
     await lease?.stop();

@@ -98,6 +98,7 @@ export async function startVerifierService(settings: {
     key: settings.key,
     consumeNonce,
     resolveUserClient,
+    reserveOwnerWork,
     verify: createIndependentBuildVerifier({
       execute: createRunnerExecutor({ ...settings.runner, lane: 'owner' }),
       bootstrap: loadOwnerPreviewBootstrap,

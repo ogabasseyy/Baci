@@ -1,4 +1,4 @@
-export type OwnerVerificationKind = 'attest' | 'public';
+export type OwnerVerificationKind = 'attest' | 'public' | 'build';
 
 /** Bound expensive owner work independently of the verifier's listener slots. */
 export function createOwnerVerificationSlots() {
@@ -7,7 +7,7 @@ export function createOwnerVerificationSlots() {
     if (
       activeOwners.size >= 2 ||
       activeOwners.has(ownerId) ||
-      (kind === 'public' && [...activeOwners.values()].includes('public'))
+      (kind !== 'attest' && [...activeOwners.values()].includes(kind))
     )
       return null;
     activeOwners.set(ownerId, kind);

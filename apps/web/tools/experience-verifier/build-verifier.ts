@@ -17,6 +17,7 @@ import {
 } from '@/lib/experience/production-origins';
 import { qualifyBuildRender } from '@/lib/experience/qualify-build-render';
 import { createExperienceRepository } from '@/lib/experience/repository';
+import { hasExactVerifierEvidence } from '@/lib/experience/verifier-evidence-replay';
 import { parseExperienceManifest } from '@/schemas/experience-manifest';
 import type { runLocalQualification } from '../experience-runner/local-oci-executor';
 import { unpackPrerenderBuild } from '../experience-runner/prerender-artifacts';
@@ -196,6 +197,18 @@ export function createIndependentBuildVerifier(settings: {
     )
       throw Error('BUILD_FAILED');
     signal?.throwIfAborted();
-    await settings.record({ merchantId: ctx.merchantId, ...input });
+    const receipt = { merchantId: ctx.merchantId, ...input };
+    try {
+      await settings.record(receipt);
+    } catch (error) {
+      if (
+        typeof error !== 'object' ||
+        error === null ||
+        !('code' in error) ||
+        error.code !== '23505' ||
+        !(await hasExactVerifierEvidence(ctx.supabase, receipt, signal))
+      )
+        throw error;
+    }
   };
 }

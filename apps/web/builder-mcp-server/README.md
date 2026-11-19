@@ -60,11 +60,13 @@ durable verifier and preview nonce checks remain authoritative. A replay
 rejected by the early filter receives an admission denial, and the filter
 fails closed at capacity. This does not qualify the 600-second downstream work
 deadline or replace production ingress and load testing. On the verifier,
-attestation and public verification share two long-running work slots, with
-at most one per authenticated owner across both operations and one public
-observer at a time. Busy requests
-receive 429. Slots stay reserved until work settles, even on disconnect.
-Verify the remaining capacity and deadlines on the deployed topology.
+attestation, public verification and build verification share two
+long-running slots, with at most one operation per authenticated owner.
+Build verification and the public observer each allow one concurrent request.
+Busy verifier requests receive 429. Build verification retries admission for
+up to 75 seconds; a linked build can be reclaimed after its lease expires if
+the verifier stays busy. Slots stay reserved until work settles, even on
+disconnect. Verify remaining capacity and deadlines on the deployed topology.
 
 `owner-internal-node.ts` provides a separate loopback-only owner listener.
 The production composition requires a distinct configured owner port and does

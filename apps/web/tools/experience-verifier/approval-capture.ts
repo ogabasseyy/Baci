@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { loadDraftApproval } from '@/lib/experience/approval-service';
 import type { IndependentApprovalDependencies } from '@/lib/experience/independent-approval-verifier';
 import { digestBytes } from '@/lib/experience/manifest-digest';
@@ -7,6 +6,24 @@ import { parseExperienceManifest } from '@/schemas/experience-manifest';
 import type { createVerifierCaptureWorker } from './capture-worker';
 
 type Worker = Awaited<ReturnType<typeof createVerifierCaptureWorker>>;
+
+function approvalCaptureKey(
+  binding: Parameters<IndependentApprovalDependencies['capture']>[1],
+  route: string
+) {
+  const hex = digestBytes(
+    JSON.stringify([
+      'baci-approval-route-capture/v1',
+      binding.kind,
+      binding.approvalId,
+      binding.effectDigest,
+      binding.buildId,
+      route,
+    ])
+  );
+  // RFC 9562 custom UUID with a deterministic SHA-256 payload.
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-8${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+}
 
 /** Runs only in the verifier process; never accepts source, screenshot or proof bytes. */
 export function createApprovalCapture(
@@ -74,7 +91,7 @@ export function createApprovalCapture(
         {
           buildId: approval.buildId,
           routeId: route.path,
-          idempotencyKey: randomUUID(),
+          idempotencyKey: approvalCaptureKey(binding, route.path),
         }
       );
       signal?.throwIfAborted();

@@ -2,7 +2,9 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { readBoundedJsonBody } from '@/lib/events/read-bounded-json-body';
+import { RunnerCapacityError } from '../experience-runner/runner-transport';
 import type { createIndependentBuildVerifier } from './build-verifier';
+import type { OwnerVerificationKind } from './owner-verification-slots';
 
 const message = z.strictObject({
   version: z.literal(1),
@@ -31,6 +33,10 @@ export function createVerifierBuildHandler(settings: {
     signal: AbortSignal
   ): Promise<SupabaseClient>;
   verify: ReturnType<typeof createIndependentBuildVerifier>;
+  reserveOwnerWork?(
+    ownerId: string,
+    kind: OwnerVerificationKind
+  ): (() => void) | null;
 }) {
   if (settings.key.length !== 32) throw Error('INVALID_VERIFIER_CONFIG');
   const key = Uint8Array.from(settings.key);
@@ -82,14 +88,21 @@ export function createVerifierBuildHandler(settings: {
         receiptDigest,
         hostOrigin,
       } = parsed.data;
-      await settings.verify(
-        { supabase: client, merchantId },
-        { jobId, attemptNonce, buildDigest, receiptDigest, hostOrigin },
-        request.signal
-      );
-      request.signal.throwIfAborted();
-      return reply(204);
-    } catch {
+      const release = settings.reserveOwnerWork?.(user.data.user.id, 'build');
+      if (release === null) return reply(429);
+      try {
+        await settings.verify(
+          { supabase: client, merchantId },
+          { jobId, attemptNonce, buildDigest, receiptDigest, hostOrigin },
+          request.signal
+        );
+        request.signal.throwIfAborted();
+        return reply(204);
+      } finally {
+        release?.();
+      }
+    } catch (error) {
+      if (error instanceof RunnerCapacityError) return reply(429);
       return reply(403);
     }
   };

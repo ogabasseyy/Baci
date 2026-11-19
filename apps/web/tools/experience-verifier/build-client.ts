@@ -1,5 +1,6 @@
 import { createHmac, randomBytes } from 'node:crypto';
 import { request } from 'node:http';
+import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
 import type { BuilderIdentity } from '@/lib/builder-connector/types';
 import {
@@ -7,6 +8,7 @@ import {
   requireExperienceOwner,
 } from '@/lib/experience/authorization';
 import type { VerifierReceipt } from '@/lib/experience/local-build-supervisor-types';
+import { hasExactVerifierEvidence } from '@/lib/experience/verifier-evidence-replay';
 import { BUILD_VERIFIER_CALL_TIMEOUT_MS } from './build-deadline';
 
 const receiptSchema = z.strictObject({
@@ -42,42 +44,60 @@ export function createVerifierBuildClient(settings: {
     ctx.signal?.throwIfAborted();
     if (!token || token.length > 8192 || !/^[A-Za-z0-9_.-]+$/.test(token))
       throw Error('VERIFIER_UNAVAILABLE');
-    const body = JSON.stringify({
-      version: 1,
-      nonce: randomBytes(32).toString('hex'),
-      expiresAt: Date.now() + 30000,
-      accessToken: token,
-      ...value,
-    });
-    const signature = createHmac('sha256', key)
-      .update(`verifier-build/v1\n${body}`)
-      .digest('hex');
-    const status = await new Promise<number>((resolve, reject) => {
-      const req = request(
-        {
-          signal: AbortSignal.any([
-            AbortSignal.timeout(BUILD_VERIFIER_CALL_TIMEOUT_MS),
-            ...(ctx.signal ? [ctx.signal] : []),
-          ]),
-          host: '127.0.0.1',
-          port: settings.port,
-          path: '/v1/build',
-          method: 'POST',
-          headers: {
-            host: 'verifier.baci-internal.invalid',
-            'content-type': 'application/json',
-            'x-baci-verifier-signature': signature,
+    const signal = AbortSignal.any([
+      AbortSignal.timeout(BUILD_VERIFIER_CALL_TIMEOUT_MS),
+      ...(ctx.signal ? [ctx.signal] : []),
+    ]);
+    const send = () => {
+      const body = JSON.stringify({
+        version: 1,
+        nonce: randomBytes(32).toString('hex'),
+        expiresAt: Date.now() + 30000,
+        accessToken: token,
+        ...value,
+      });
+      const signature = createHmac('sha256', key)
+        .update(`verifier-build/v1\n${body}`)
+        .digest('hex');
+      return new Promise<number>((resolve, reject) => {
+        const req = request(
+          {
+            signal,
+            host: '127.0.0.1',
+            port: settings.port,
+            path: '/v1/build',
+            method: 'POST',
+            headers: {
+              host: 'verifier.baci-internal.invalid',
+              'content-type': 'application/json',
+              'x-baci-verifier-signature': signature,
+            },
           },
-        },
-        (res) => {
-          res.resume();
-          res.once('end', () => resolve(res.statusCode ?? 503));
-          res.once('error', reject);
-        }
-      );
-      req.once('error', reject);
-      req.end(body);
-    }).catch(() => 503);
+          (res) => {
+            res.resume();
+            res.once('end', () => resolve(res.statusCode ?? 503));
+            res.once('error', reject);
+          }
+        );
+        req.once('error', reject);
+        req.end(body);
+      }).catch(() => 503);
+    };
+    const retryUntil = Date.now() + 75_000;
+    let status = await send();
+    while (status === 429 && Date.now() < retryUntil && !signal.aborted) {
+      await delay(2_000, undefined, { signal }).catch(() => undefined);
+      if (signal.aborted) break;
+      status = await send();
+    }
+    if (status === 429) throw Error('VERIFIER_BUSY');
+    if (status === 503 && !ctx.signal?.aborted) {
+      await requireExperienceOwner(ctx);
+      if (await hasExactVerifierEvidence(ctx.supabase, value, ctx.signal)) {
+        await requireExperienceOwner(ctx);
+        return;
+      }
+    }
     if (status !== 204) throw Error('VERIFIER_UNAVAILABLE');
     await requireExperienceOwner(ctx);
   };

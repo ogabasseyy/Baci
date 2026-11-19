@@ -90,7 +90,7 @@ export function applyLifecycleGuards(
       raw === 'ARF' ||
       (candidate.recognizedStatus === 'in_transit' &&
         !DEPARTURE_CODES.has(raw) &&
-        !/DEPART/i.test(candidate.scanText ?? event.description) &&
+        !/DEPART/i.test(`${raw} ${candidate.scanText || event.description}`) &&
         (!sameCity || leftDestinationCentre) &&
         matchesDestination(event.location, destination));
     if (isArrival) {

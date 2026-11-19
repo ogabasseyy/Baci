@@ -64,6 +64,15 @@ describe('applyLifecycleGuards', () => {
     expect(dsc.event.rawStatus).toBe('DSC');
   });
 
+  it('does not treat a DEPARTED provider status at destination with empty scanText as arrival', () => {
+    const departed = {
+      ...scan('DEPARTED', 'in_transit', 11, 'WUSE ABUJA (Wuse)'),
+      scanText: '',
+    };
+    applyLifecycleGuards([departed], 'ABUJA', 'LAGOS');
+    expect(departed.event.rawStatus).toBe('DEPARTED');
+  });
+
   it('needs a located scan away from the destination before a same-city name match counts', () => {
     const noLocation = scan('MSVC', 'in_transit', 9);
     const atOrigin = scan('MSVC', 'in_transit', 11, 'WUSE ABUJA (Wuse)');

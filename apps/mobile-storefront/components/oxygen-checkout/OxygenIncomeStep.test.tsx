@@ -89,7 +89,6 @@ it('shows a selected photo as ready while an unrelated workflow refresh is busy'
       fields={completedIncome}
       busy
       proof={{
-        uri: 'file:///proof.png',
         name: 'proof.png',
         type: 'image/png',
         size: 8,

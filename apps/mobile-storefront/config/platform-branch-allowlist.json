@@ -16,6 +16,10 @@
       "path": "components/checkout/CheckoutScreenView.tsx",
       "justification": "Reviewed Android hardware-back handling, list virtualization, and monospace font selection."
     },
+    {
+      "path": "components/oxygen-checkout/OxygenBirthDateInput.tsx",
+      "justification": "Reviewed native monospace selection to align the editable birth date with its fixed-width format guide."
+    },
     "components/quiz/QuizPrizeCheckoutSimulationScreen.tsx",
     {
       "path": "components/checkout/CheckoutScreenView.styles.ts",

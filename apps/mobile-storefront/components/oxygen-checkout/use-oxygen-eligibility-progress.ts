@@ -37,7 +37,15 @@ export function useOxygenEligibilityProgress(
     if (count > 0 && snapshot.state.eligibilityStatus !== 'pending') return;
     const check = () => {
       attempts.current.set(snapshot.workflowId, count + 1);
-      void controller.execute({ action: 'refresh_eligibility' });
+      void controller.execute({ action: 'refresh_eligibility' }).then(() => {
+        const result = controller.getState();
+        if (
+          count === 0 &&
+          result.error &&
+          result.snapshot?.state.eligibilityStatus !== 'pending'
+        )
+          attempts.current.delete(snapshot.workflowId);
+      });
     };
     if (count === 0) {
       check();

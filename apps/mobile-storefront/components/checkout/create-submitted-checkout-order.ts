@@ -12,13 +12,18 @@ export async function createSubmittedCheckoutOrder(
     isAuthenticated: boolean;
     hasVoucher: boolean;
     hasCredits: boolean;
-    onOrderCreated: (orderId: string) => void;
   }
 ) {
   const { creditFields, orderRequest } = buildCheckoutSubmitOrderRequest(input);
+  // Promotional codes are priced on the server and reduce the financed order total.
   if (input.paymentMethodForOrder === 'oxygen') {
-    await submitOxygenCheckout({ request: orderRequest, ...options });
-    return { creditFields, orderResponse: null };
+    return {
+      creditFields,
+      orderResponse: await submitOxygenCheckout({
+        request: orderRequest,
+        ...options,
+      }),
+    };
   }
   return {
     creditFields,

@@ -1,13 +1,12 @@
 import {
-  type ComponentRef,
   createContext,
   type ReactNode,
   useContext,
   useLayoutEffect,
-  useRef,
   useState,
 } from 'react';
-import { KeyboardAvoidingView, Platform, View } from 'react-native';
+import { View } from 'react-native';
+import AppKeyboardContainer from '@/components/ui/AppKeyboardContainer';
 import { useOxygenColors } from './OxygenFormPrimitives';
 
 const RegisterFooter = createContext<
@@ -35,40 +34,26 @@ export function OxygenActionFooterProvider({
     );
   });
   const colors = useOxygenColors();
-  const container = useRef<ComponentRef<typeof View>>(null);
-  const [headerHeight, setHeaderHeight] = useState(0);
   return (
     <RegisterFooter value={register}>
-      <View
-        ref={container}
-        style={{ flex: 1 }}
-        onLayout={() =>
-          container.current?.measureInWindow((_x, y) => setHeaderHeight(y))
-        }
-      >
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          keyboardVerticalOffset={headerHeight}
-        >
-          {children}
-          {footer ? (
-            <View
-              style={{
-                gap: 10,
-                paddingHorizontal: 20,
-                paddingTop: 12,
-                paddingBottom: 12,
-                borderTopWidth: 1,
-                borderTopColor: colors.border,
-                backgroundColor: colors.background,
-              }}
-            >
-              {footer.node}
-            </View>
-          ) : null}
-        </KeyboardAvoidingView>
-      </View>
+      <AppKeyboardContainer>
+        {children}
+        {footer ? (
+          <View
+            style={{
+              gap: 10,
+              paddingHorizontal: 20,
+              paddingTop: 12,
+              paddingBottom: 12,
+              borderTopWidth: 1,
+              borderTopColor: colors.border,
+              backgroundColor: colors.background,
+            }}
+          >
+            {footer.node}
+          </View>
+        ) : null}
+      </AppKeyboardContainer>
     </RegisterFooter>
   );
 }

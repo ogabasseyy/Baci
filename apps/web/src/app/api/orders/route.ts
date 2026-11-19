@@ -100,6 +100,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { createPublicClient } from '@/lib/supabase/public';
 import { createClient } from '@/lib/supabase/server';
 import { type OrderCreateInput, orderCreateSchema } from '@/schemas/orders';
+import { rejectUnavailableMobileOxygenOrder } from './mobile-oxygen-order-admission';
 import { authenticateOrderRequest } from './order-request-auth';
 
 function isPayOnDelivery(paymentMethod: string): boolean {
@@ -1231,6 +1232,16 @@ export async function POST(request: NextRequest) {
         })
       : null;
     const isConditionReplay = replaySnapshot !== null;
+    const oxygenAdmission = await rejectUnavailableMobileOxygenOrder({
+      request,
+      client: supabase,
+      merchant,
+      userId: resolvedUserId,
+      paymentMethod: payment_method,
+      source,
+      replayed: isConditionReplay,
+    });
+    if (oxygenAdmission) return oxygenAdmission;
     const conditionPriceOverrides = replaySnapshot?.conditionPriceOverrides;
     let serverComputedTaxAmount: number;
     if (storedReplayTaxAmount != null) {

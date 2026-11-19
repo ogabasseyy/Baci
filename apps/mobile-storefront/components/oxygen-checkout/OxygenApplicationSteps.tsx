@@ -16,6 +16,8 @@ export interface OxygenApplicationStepsProps
     OxygenIncomeStepProps {
   accountConfirmed?: boolean;
   accountChecking?: boolean;
+  bankError?: string | null;
+  onRetryBanks?: () => void;
   submittingLabel?: string | null;
   step: 0 | 1 | 2;
   onStepChange: (step: 0 | 1 | 2) => void;
@@ -27,6 +29,7 @@ export interface OxygenApplicationStepsProps
 export function OxygenApplicationSteps(props: OxygenApplicationStepsProps) {
   const { step, fields, onChange, busy, onStepChange, onSubmit, error } = props;
   const colors = useOxygenColors();
+  const banksUnavailable = Boolean(props.onRetryBanks) && !props.banks.length;
   return (
     <OxygenDraftSaveContext value={props.onFieldBlur}>
       <AppKeyboardAwareScrollView
@@ -35,6 +38,19 @@ export function OxygenApplicationSteps(props: OxygenApplicationStepsProps) {
         contentContainerStyle={{ gap: step === 0 ? 12 : 24, paddingBottom: 24 }}
       >
         <OxygenApplicationHeader step={step} />
+        {step > 0 && props.bankError && props.onRetryBanks ? (
+          <>
+            <Text accessibilityRole="alert" style={{ color: colors.error }}>
+              {props.bankError}
+            </Text>
+            <OxygenButton
+              title="Retry loading banks"
+              secondary
+              disabled={busy || !props.active}
+              onPress={props.onRetryBanks}
+            />
+          </>
+        ) : null}
         {step === 0 ? (
           <OxygenIdentityFields
             fields={fields}
@@ -81,6 +97,7 @@ export function OxygenApplicationSteps(props: OxygenApplicationStepsProps) {
               Boolean(props.submittingLabel) ||
               props.accountChecking ||
               !props.active ||
+              (step > 0 && banksUnavailable) ||
               (step === 1 && props.accountConfirmed === false) ||
               (step === 2 &&
                 (!props.consent || (!props.proof && !props.proofReceived)))

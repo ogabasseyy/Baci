@@ -46,9 +46,7 @@ export function CheckoutBottomAction({
   total,
 }: CheckoutBottomActionProps) {
   const isReview = step === 'review';
-  const isInstalment = ['oxygen', 'credit_direct', 'klump'].includes(
-    selectedPayment ?? ''
-  );
+  const isOxygen = selectedPayment === 'oxygen';
   const isReviewDisabled =
     isProcessing || (!prizeSimulation && !selectedPayment);
   const isActionDisabled = isReview ? isReviewDisabled : !canContinue;
@@ -65,7 +63,7 @@ export function CheckoutBottomAction({
         ? 'Get a Proforma Invoice'
         : selectedPayment === 'payforme'
           ? 'Pay for Me'
-          : isInstalment
+          : isOxygen
             ? 'Begin process'
             : 'Place Order';
 
@@ -104,8 +102,8 @@ export function CheckoutBottomAction({
                 ? 'Complete test prize checkout'
                 : prizeCheckout
                   ? 'Claim prize, nothing to pay'
-                  : isInstalment
-                    ? 'Begin process'
+                  : isOxygen
+                    ? `Begin process for ${formatPrice(total)}`
                     : `${selectedPayment === 'invoice' ? 'Get a proforma invoice' : selectedPayment === 'payforme' ? 'Prepare pay for me order' : 'Place order'} for ${formatPrice(total)}`
               : `Continue to ${step === 'address' ? 'payment' : 'review'}`
           }

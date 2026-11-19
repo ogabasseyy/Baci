@@ -16,6 +16,7 @@ export function useOxygenHostedStep({
   disabled,
   ready,
   paymentUrl,
+  selfieRetryAttempt = 0,
 }: {
   snapshot: OxygenRuntimeSnapshot;
   client: OxygenClient;
@@ -23,13 +24,14 @@ export function useOxygenHostedStep({
   disabled: boolean;
   ready: boolean;
   paymentUrl?: string;
+  selfieRetryAttempt?: number;
 }) {
   const [hosted, setHosted] = useState<OxygenHostedKind | null>(null);
   const [approvedPayment, openApprovedPayment] =
     useState<ApprovedPayment | null>(null);
   const [paymentOpened, setPaymentOpened] = useState(false);
   const [requesting, setRequesting] = useState(false);
-  const requested = useRef(false);
+  const requestedAttempt = useRef<number | null>(null);
   const opened = useRef<string | null>(null);
   const lastStatus = useRef<string | null>(null);
   const state = snapshot.state;
@@ -75,13 +77,16 @@ export function useOxygenHostedStep({
     if (
       !disabled &&
       ready &&
+      !requesting &&
       state.validated &&
       !state.selfieUrl &&
       !state.bookingReference &&
       state.kyc?.selfie_status !== 'DONE' &&
-      !requested.current
+      requestedAttempt.current !== selfieRetryAttempt
     ) {
-      requested.current = true;
+      // Only an explicit recovery can start a second request. The controller
+      // still checks the canonical snapshot and local dispatch fence first.
+      requestedAttempt.current = selfieRetryAttempt;
       setRequesting(true);
       void controller
         .execute({ action: 'selfie_link' })
@@ -90,6 +95,8 @@ export function useOxygenHostedStep({
   }, [
     disabled,
     ready,
+    requesting,
+    selfieRetryAttempt,
     state.validated,
     state.selfieUrl,
     state.bookingReference,
@@ -146,7 +153,7 @@ export function useOxygenHostedStep({
       if (result.confirmed) await controller.execute({ action: 'refresh_kyc' });
       return;
     }
-    await controller.refresh();
+    await controller.pollHostedStatus();
   }
   function close() {
     setHosted(null);

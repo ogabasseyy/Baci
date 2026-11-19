@@ -23,7 +23,6 @@ export interface OxygenHostedSurfaceProps {
   active: boolean;
   onRefresh: () => Promise<unknown>;
   onExit: () => void;
-  onExternal?: (url: string) => void;
   sessionExpired?: boolean;
   renewing?: boolean;
   renewalError?: string;
@@ -40,7 +39,6 @@ function HostedSurface({
   active,
   onRefresh,
   onExit,
-  onExternal,
   sessionExpired = false,
   renewing = false,
   renewalError,
@@ -220,6 +218,8 @@ function HostedSurface({
           testID="oxygen-hosted"
           source={{ uri: url }}
           style={{ flex: 1 }}
+          // WebView sends whitelist misses to Linking before our callback.
+          // Route every navigation through the exact-origin check below.
           originWhitelist={['*']}
           sharedCookiesEnabled={false}
           thirdPartyCookiesEnabled={false}
@@ -235,16 +235,17 @@ function HostedSurface({
           }
           onOpenWindow={(event) => {
             const target = event.nativeEvent.targetUrl;
+            const message =
+              'This external page is unavailable. Return to saved progress for an update.';
             if (
               decideOxygenHostedNavigation(target, kind, capabilities, true) ===
-                'external' &&
-              onExternal
-            )
-              onExternal(target);
-            else
-              setError(
-                'This external page is unavailable. Return to saved progress for an update.'
-              );
+              'external'
+            ) {
+              setError('');
+              void Linking.openURL(target).catch(() => setError(message));
+            } else {
+              setError(message);
+            }
           }}
           onMessage={() => {
             if (kind !== 'selfie') requestRefresh();

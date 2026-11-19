@@ -166,8 +166,8 @@ describe('hosted Oxygen surface', () => {
       })
     ).toBe(true);
   });
-  it('approved popups require an explicit external fallback and hostile popups are blocked', () => {
-    const onExternal = jest.fn();
+  it('opens only pinned payment popups in the external browser', async () => {
+    const openURL = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
     const view = render(
       <OxygenHostedSurface
         url="https://pay.example/pay"
@@ -176,7 +176,6 @@ describe('hosted Oxygen surface', () => {
         active
         onRefresh={async () => undefined}
         onExit={jest.fn()}
-        onExternal={onExternal}
       />
     );
     const web = view.UNSAFE_getByType('ProviderWebView' as never);
@@ -185,13 +184,14 @@ describe('hosted Oxygen surface', () => {
         nativeEvent: { targetUrl: 'https://evil.example/3ds' },
       })
     );
-    expect(onExternal).not.toHaveBeenCalled();
-    act(() =>
+    expect(openURL).not.toHaveBeenCalled();
+    await act(async () =>
       web.props.onOpenWindow({
         nativeEvent: { targetUrl: 'https://pay.example/3ds' },
       })
     );
-    expect(onExternal).toHaveBeenCalledWith('https://pay.example/3ds');
+    expect(openURL).toHaveBeenCalledWith('https://pay.example/3ds');
+    openURL.mockRestore();
   });
   it('denies bad initial links and keeps saved progress on exit', () => {
     const onExit = jest.fn();

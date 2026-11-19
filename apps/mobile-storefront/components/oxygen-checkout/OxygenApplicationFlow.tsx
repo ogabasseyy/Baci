@@ -72,12 +72,15 @@ export function OxygenApplicationFlow(props: OxygenApplicationFlowProps) {
     props.prefill
   );
   const [consent, setConsent] = useState(false);
-  const banks = useOxygenBanks(
+  const {
+    banks,
+    error: bankError,
+    retry: retryBanks,
+  } = useOxygenBanks(
     client,
     snapshot.workflowId,
     snapshot.stage === 'application_required' &&
-      !snapshot.state.applicationReference,
-    setError
+      !snapshot.state.applicationReference
   );
   const identityFeedback = useOxygenIdentityFeedback(
     fields,
@@ -245,6 +248,8 @@ export function OxygenApplicationFlow(props: OxygenApplicationFlowProps) {
       }}
       active={snapshot.executionEnabled && !snapshot.pending}
       banks={banks}
+      bankError={bankError}
+      onRetryBanks={retryBanks}
       onResolveAccount={bankConfirmation.resolveAccount}
       onAccountName={bankConfirmation.confirm}
       accountChecking={bankConfirmation.checking}

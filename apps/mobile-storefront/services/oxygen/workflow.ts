@@ -126,6 +126,13 @@ export function createOxygenWorkflow(options: {
         });
         await read(generation);
       }),
+    pollHostedStatus: () =>
+      run(async (generation) => {
+        // The snapshot request still authenticates and checks the owned workflow.
+        if (!state.capabilitiesVerified)
+          throw new OxygenClientError('recovery');
+        await read(generation);
+      }),
     execute: (
       command: OxygenRuntimeAction,
       file?: OxygenTransientFile,

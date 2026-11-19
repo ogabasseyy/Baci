@@ -47,6 +47,33 @@ it('starts eligibility once after canonical selfie confirmation without waiting 
   await act(async () => {});
   expect(s.execute).toHaveBeenCalledTimes(1);
 });
+it('retries a failed initial check when saved progress is refreshed', async () => {
+  let error: Error | null = null;
+  const execute = jest
+    .fn()
+    .mockImplementationOnce(async () => {
+      error = new Error('Connection lost');
+    })
+    .mockResolvedValue(undefined);
+  const controller = {
+    execute,
+    getState: () => ({ error }),
+  } as unknown as OxygenWorkflowController;
+  const { rerender } = renderHook(
+    (p: { snapshot: typeof snapshot; blocked: boolean }) =>
+      useOxygenEligibilityProgress(p.snapshot, controller, p.blocked),
+    { initialProps: { snapshot, blocked: false } }
+  );
+  await act(async () => {});
+  rerender({ snapshot, blocked: true });
+  await act(async () => {});
+  expect(execute).toHaveBeenCalledTimes(1);
+  error = null;
+  rerender({ snapshot: { ...snapshot }, blocked: false });
+  await act(async () => {});
+  expect(execute).toHaveBeenCalledTimes(2);
+});
+
 it('never retries a failure automatically or advances without selfie confirmation', async () => {
   const s = setup();
   const { rerender } = renderHook(

@@ -33,16 +33,22 @@ function setup(confirmed: boolean) {
   const selfieStatus = jest.fn().mockResolvedValue({ confirmed });
   const execute = jest.fn().mockResolvedValue(undefined);
   const refresh = jest.fn().mockResolvedValue(undefined);
+  const pollHostedStatus = jest.fn().mockResolvedValue(undefined);
   return {
     selfieStatus,
     execute,
     refresh,
+    pollHostedStatus,
     options: {
       snapshot,
       ready: true,
       disabled: false,
       client: { selfieStatus } as unknown as OxygenClient,
-      controller: { execute, refresh } as unknown as OxygenWorkflowController,
+      controller: {
+        execute,
+        refresh,
+        pollHostedStatus,
+      } as unknown as OxygenWorkflowController,
     },
   };
 }
@@ -119,8 +125,34 @@ it('preserves the OTP success hold before opening an existing selfie link', () =
   expect(execute).not.toHaveBeenCalled();
 });
 
-it('opens payment once after the current approval and checks its status on return', () => {
+it('retries a missing selfie link once after explicit recovery without retrying on ordinary renders', async () => {
   const { options, execute } = setup(false);
+  const initialProps = {
+    ...options,
+    snapshot: {
+      ...snapshot,
+      state: { ...snapshot.state, selfieUrl: undefined },
+    },
+    selfieRetryAttempt: 0,
+  };
+  const { rerender } = renderHook(
+    (props: typeof initialProps) => useOxygenHostedStep(props),
+    { initialProps }
+  );
+  await act(async () => {});
+  expect(execute).toHaveBeenCalledTimes(1);
+  rerender({ ...initialProps, disabled: true });
+  rerender({ ...initialProps });
+  expect(execute).toHaveBeenCalledTimes(1);
+  await act(async () => rerender({ ...initialProps, selfieRetryAttempt: 1 }));
+  expect(execute.mock.calls).toEqual([
+    [{ action: 'selfie_link' }],
+    [{ action: 'selfie_link' }],
+  ]);
+});
+
+it('opens payment once after the current approval and checks its status on return', async () => {
+  const { options, execute, pollHostedStatus, refresh } = setup(false);
   const bookingReference = '33333333-3333-4333-8333-333333333333';
   const paymentUrl = 'https://payment.example/upfront';
   const approved = {
@@ -149,6 +181,9 @@ it('opens payment once after the current approval and checks its status on retur
   expect(result.current.hosted).toBe('payment');
   expect(result.current.paymentOpened).toBe(true);
   expect(execute).not.toHaveBeenCalled();
+  await act(async () => result.current.refresh());
+  expect(pollHostedStatus).toHaveBeenCalledTimes(1);
+  expect(refresh).not.toHaveBeenCalled();
 
   act(() => result.current.close());
   expect(result.current.hosted).toBeNull();

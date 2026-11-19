@@ -56,6 +56,23 @@ it('durable write failure prevents dispatch', async () => {
   await controller.initialize();
   expect(client.createOrResume).not.toHaveBeenCalled();
 });
+it('reads authenticated hosted progress without re-fetching verified capabilities', async () => {
+  const { controller, client } = setup();
+  await controller.initialize();
+  await controller.pollHostedStatus();
+  await controller.pollHostedStatus();
+  expect(client.capabilities).toHaveBeenCalledTimes(1);
+  expect(client.snapshot.mock.calls).toEqual([[id], [id], [id]]);
+  expect(controller.getState().capabilitiesVerified).toBe(true);
+});
+it('does not poll hosted status until capabilities have been verified', async () => {
+  const { controller, client } = setup();
+  client.capabilities.mockRejectedValueOnce(new OxygenClientError('transport'));
+  await controller.initialize();
+  await controller.pollHostedStatus();
+  expect(client.snapshot).toHaveBeenCalledTimes(1);
+  expect(controller.getState().error?.code).toBe('recovery');
+});
 it('lost create response resumes same owned order', async () => {
   const { controller, client } = setup();
   client.createOrResume.mockRejectedValueOnce(new Error('lost'));

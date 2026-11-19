@@ -83,7 +83,7 @@ export function OxygenBankStep({
       <OxygenBankPicker
         banks={banks}
         value={fields.bank_code}
-        disabled={busy || !active}
+        disabled={busy || !active || !banks.length}
         onChange={(bank_code) => onChange({ bank_code })}
       />
       <OxygenField

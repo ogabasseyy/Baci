@@ -19,6 +19,7 @@ import { handleCheckoutSubmitError } from './checkout-submit-error';
 import { createSubmittedOrderIdentity } from './checkout-submit-order-identity';
 import { tryCaptureCheckoutSubmitRollbackState } from './checkout-submit-rollback-state';
 import { validateCheckoutSubmission } from './checkout-submit-validation';
+import { completeOxygenCheckout } from './complete-oxygen-checkout';
 import { completeSubmittedOrder } from './complete-submitted-order';
 import { createSubmittedCheckoutOrder } from './create-submitted-checkout-order';
 import { isBnplPayment } from './is-bnpl-payment';
@@ -44,7 +45,6 @@ export function useCheckoutSubmit({
   isLoadingQuotes,
   isOrderInFlight,
   isProcessing,
-  isWalletFundedBankTransferHeld,
   mobileCheckoutIdempotencyRef,
   orderTotals,
   paymentSettings,
@@ -57,18 +57,14 @@ export function useCheckoutSubmit({
   selectedQuote,
   selectedSavedAddressId,
   setIsProcessing,
-  setPendingOrder,
-  setShowCryptoSelection,
   setStep,
-  user,
   walletBalance,
-  walletFundedBankTransferOptionEnabled,
   walletSelection,
-  walletTransferFallbackReason,
+  ...finalization
 }: UseCheckoutSubmitParams) {
   const { data: merchant } = useMerchant();
   const merchantId = merchant?.id || CHECKOUT_MERCHANT_ID;
-  const isMountedRef = useIsMountedRef(); // late tracking never erases a new cart
+  const isMountedRef = useIsMountedRef();
   return async (address: ShippingAddressInput) => {
     const itemsSnapshot = [...useCartStore.getState().items];
     const {
@@ -99,8 +95,7 @@ export function useCheckoutSubmit({
     ) {
       return;
     }
-    // Validate the REDVAULT fence before creation; retain its in-flight
-    // latch until the finally below, releasing on decline in the helper.
+    // The REDVAULT fence holds the in-flight latch until completion.
     const submitFence = await acquireCheckoutSubmitFence({
       accountPassword,
       address,
@@ -118,7 +113,6 @@ export function useCheckoutSubmit({
       return;
     }
     const { customerEmail, customerName, customerPhone } = submitFence;
-    // The acquired latch releases in finally.
     setIsProcessing(true);
     const orderIdentity = createSubmittedOrderIdentity();
     // Hoisted for the rollback path, which re-freezes these on cart restore.
@@ -220,10 +214,8 @@ export function useCheckoutSubmit({
             hasCredits:
               walletSelection?.use === true ||
               liveSavingsSelection?.use === true,
-            onOrderCreated: orderIdentity.captureCreatedOrder,
           }
         );
-      if (!orderResponse) return;
       orderIdentity.captureCreatedOrder(orderResponse.order.id);
       submittedGeneration.track(orderResponse);
       const rollbackCapture = await tryCaptureCheckoutSubmitRollbackState(
@@ -240,6 +232,16 @@ export function useCheckoutSubmit({
       submitCreditFields = rollbackCapture.creditFields;
       submitHadSortMarker = rollbackCapture.hadSortMarker;
       const { order } = orderResponse;
+      if (selectedPayment === 'oxygen') {
+        await completeOxygenCheckout({
+          clearCart,
+          generation: submittedGeneration.current(),
+          itemsSnapshot,
+          orderId: order.id,
+          sharedCartBinding,
+        });
+        return;
+      }
       const completedPaymentMethod =
         getFullyPaidStoreCreditPaymentMethod(orderResponse) ?? selectedPayment;
       const orderNumber =
@@ -258,7 +260,6 @@ export function useCheckoutSubmit({
           isAuthenticated,
           isMountedRef,
           isOrderInFlight,
-          // The reviewed items the order was bound with, not the cart.
           itemsSnapshot: boundItemsSnapshot,
           merchantId,
           onRedvaultOrder,
@@ -270,13 +271,8 @@ export function useCheckoutSubmit({
           selectedPayment,
           selectedSavedAddressId,
           setIsProcessing,
-          setPendingOrder,
-          setShowCryptoSelection,
           snapshot,
-          user,
-          walletFundedBankTransferOptionEnabled,
-          isWalletFundedBankTransferHeld,
-          walletTransferFallbackReason,
+          ...finalization,
         })
       ) {
         return;

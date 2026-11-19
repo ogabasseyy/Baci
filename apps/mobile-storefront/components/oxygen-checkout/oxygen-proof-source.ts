@@ -1,4 +1,5 @@
-import * as DocumentPicker from 'expo-document-picker';
+import { getDocumentAsync } from 'expo-document-picker';
+import { File } from 'expo-file-system';
 import type { OxygenProofPicker } from './use-oxygen-proof';
 
 export type OxygenProofSource = 'photos' | 'files';
@@ -15,12 +16,21 @@ export function warmOxygenPhotoPicker() {
 export async function pickOxygenProofSource(
   source: OxygenProofSource = 'files'
 ): ReturnType<OxygenProofPicker['pick']> {
-  if (source === 'files')
-    return DocumentPicker.getDocumentAsync({
+  if (source === 'files') {
+    const result = await getDocumentAsync({
       type: ['application/pdf', 'image/jpeg', 'image/png'],
-      copyToCacheDirectory: false,
+      copyToCacheDirectory: true,
       multiple: false,
     });
+    if (result.canceled) return { canceled: true };
+    return {
+      canceled: false,
+      assets: result.assets.map((asset) => ({
+        ...asset,
+        release: () => new File(asset.uri).delete(),
+      })),
+    };
+  }
   const { launchImageLibraryAsync } = await warmOxygenPhotoPicker();
   const result = await launchImageLibraryAsync({
     mediaTypes: ['images'],

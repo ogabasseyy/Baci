@@ -6,11 +6,9 @@ const request = {
   items: [{ id: 'a', quantity: 1, price: 20000 }],
 } as CreateOrderRequest;
 jest.mock('@/services/orders', () => ({ createOrder: jest.fn() }));
-jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
 describe('native Oxygen order admission', () => {
   const createOrder = jest.fn();
   const admit = jest.fn();
-  const navigate = jest.fn();
   beforeEach(() => {
     jest.clearAllMocks();
     admit.mockResolvedValue(undefined);
@@ -19,7 +17,7 @@ describe('native Oxygen order admission', () => {
     });
   });
   it('creates Oxygen initially using the unchanged durable checkout generation', async () => {
-    await submitOxygenCheckout(
+    const response = await submitOxygenCheckout(
       {
         request,
         checkoutGeneration: 'generation-1',
@@ -27,16 +25,14 @@ describe('native Oxygen order admission', () => {
         hasVoucher: false,
         hasCredits: false,
       },
-      { admit, createOrder, navigate }
+      { admit, createOrder }
     );
     expect(admit).toHaveBeenCalledTimes(1);
     expect(createOrder).toHaveBeenCalledWith(request, {
       checkoutGeneration: 'generation-1',
       analyticsPaymentMethod: 'oxygen',
     });
-    expect(navigate).toHaveBeenCalledWith(
-      'aebdc237-5363-4e2b-b0ee-5be12ea9edab'
-    );
+    expect(response.order.id).toBe('aebdc237-5363-4e2b-b0ee-5be12ea9edab');
   });
   it.each([
     { isAuthenticated: false, hasVoucher: false, hasCredits: false },
@@ -46,7 +42,7 @@ describe('native Oxygen order admission', () => {
     await expect(
       submitOxygenCheckout(
         { request, checkoutGeneration: 'g', ...flags },
-        { admit, createOrder, navigate }
+        { admit, createOrder }
       )
     ).rejects.toThrow();
     expect(createOrder).not.toHaveBeenCalled();
@@ -62,31 +58,26 @@ describe('native Oxygen order admission', () => {
           hasVoucher: false,
           hasCredits: false,
         },
-        { admit, createOrder, navigate }
+        { admit, createOrder }
       )
     ).rejects.toThrow('capability');
     expect(createOrder).not.toHaveBeenCalled();
   });
-  it('captures committed identity before a route failure', async () => {
-    const capture = jest.fn();
-    navigate.mockImplementationOnce(() => {
-      throw new Error('route failed');
-    });
-    await expect(
-      submitOxygenCheckout(
-        {
-          request,
-          checkoutGeneration: 'g',
-          isAuthenticated: true,
-          hasVoucher: false,
-          hasCredits: false,
-          onOrderCreated: capture,
-        },
-        { admit, createOrder, navigate }
-      )
-    ).rejects.toThrow();
-    expect(capture).toHaveBeenCalledWith(
-      'aebdc237-5363-4e2b-b0ee-5be12ea9edab'
+  it('preserves a promo code for the server to price before financing', async () => {
+    const discounted = { ...request, discount_code: 'SAVE10' };
+    await submitOxygenCheckout(
+      {
+        request: discounted,
+        checkoutGeneration: 'g',
+        isAuthenticated: true,
+        hasVoucher: false,
+        hasCredits: false,
+      },
+      { admit, createOrder }
+    );
+    expect(createOrder).toHaveBeenCalledWith(
+      discounted,
+      expect.objectContaining({ checkoutGeneration: 'g' })
     );
   });
 });

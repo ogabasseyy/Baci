@@ -32,6 +32,8 @@ export async function fetchOrderRecord(
     .from('orders')
     .select(`
       id,
+      customer_id,
+      merchant_id,
       order_number,
       shipping_status,
       subtotal,

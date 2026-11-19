@@ -91,3 +91,30 @@ it('allows the payday dropdown to consume nested scrolling within the form', () 
     )
   ).toBeLessThan(buttons.indexOf(screen.getByRole('button', { name: 'Back' })));
 });
+
+it.each([
+  1, 2,
+] as const)('offers bank catalog recovery on form step %s', (step) => {
+  const retry = jest.fn();
+  render(
+    <OxygenApplicationSteps
+      step={step}
+      fields={{}}
+      banks={[]}
+      bankError="Could not load banks"
+      onRetryBanks={retry}
+      onChange={jest.fn()}
+      onResolveAccount={jest.fn()}
+      active
+      consent={false}
+      onConsent={jest.fn()}
+      proof={null}
+      onPickProof={jest.fn()}
+      onStepChange={jest.fn()}
+      onSubmit={jest.fn()}
+    />
+  );
+  expect(screen.getByText('Could not load banks')).toBeTruthy();
+  fireEvent.press(screen.getByRole('button', { name: 'Retry loading banks' }));
+  expect(retry).toHaveBeenCalledTimes(1);
+});

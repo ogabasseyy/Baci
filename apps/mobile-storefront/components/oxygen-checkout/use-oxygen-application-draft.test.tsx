@@ -94,6 +94,43 @@ describe('encrypted native Oxygen draft lifecycle', () => {
     expect(write.mock.calls[1][0].draft.fields.bvn).toBe('12');
     expect(result.current.fields.bvn).toBe('123');
   });
+  it('flushes unblurred changes on unmount after an in-flight save', async () => {
+    let finish: (value: { version: number }) => void = () => {};
+    const write = jest
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          })
+      )
+      .mockResolvedValue({ version: 2 });
+    const client = {
+      draft: {
+        read: jest.fn().mockResolvedValue({ version: 0, draft: null }),
+        write,
+      },
+    } as unknown as OxygenClient;
+    const { result, unmount } = renderHook(() =>
+      useOxygenApplicationDraft(client, 'workflow', 'owner/order', true)
+    );
+    await act(async () => {});
+    act(() => result.current.setFields({ first_name: 'First' }));
+    act(() => {
+      void result.current.flush();
+    });
+    act(() => result.current.setFields({ first_name: 'Last' }));
+    unmount();
+    await act(async () => finish({ version: 1 }));
+    expect(write).toHaveBeenCalledTimes(2);
+    expect(write).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        version: 1,
+        draft: { step: 0, fields: { first_name: 'Last' } },
+      })
+    );
+  });
+
   it.each([
     null,
     { step: 0, fields: { first_name: '', email: 'edited@example.invalid' } },

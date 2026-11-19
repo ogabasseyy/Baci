@@ -24,6 +24,7 @@ export async function runOxygenCallbackReconciliationCli(): Promise<number> {
   }
 
   const worker = await connection.worker();
+  let eligibilityFailed = false;
   if (eligibility) {
     try {
       await runOxygenEligibilityBackground({
@@ -36,10 +37,10 @@ export async function runOxygenCallbackReconciliationCli(): Promise<number> {
       });
     } catch {
       console.error(JSON.stringify({ error: 'Oxygen eligibility worker failed' }));
-      if (!callbacks) return 1;
+      eligibilityFailed = true;
     }
   }
-  if (!callbacks) return 0;
+  if (!callbacks) return eligibilityFailed ? 1 : 0;
   await reconcileOxygenCallbacks(
     worker,
     connection.provider,
@@ -73,7 +74,7 @@ export async function runOxygenCallbackReconciliationCli(): Promise<number> {
   }
 
   console.log(JSON.stringify({ enabled: true, backlog }));
-  return 0;
+  return eligibilityFailed ? 1 : 0;
 }
 
 const currentFile = process.argv[1]

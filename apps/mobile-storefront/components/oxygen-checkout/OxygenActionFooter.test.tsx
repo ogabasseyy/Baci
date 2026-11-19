@@ -34,6 +34,9 @@ it('keeps exactly one action outside the scrolling content and updates its curre
   const first = jest.fn();
   const next = jest.fn();
   const { rerender } = render(<Page onPress={first} />);
+  const keyboard = within(screen.getByTestId('keyboard-container'));
+  expect(keyboard.getByLabelText('Scrollable choices')).toBeTruthy();
+  expect(keyboard.getByRole('button', { name: 'Continue' })).toBeTruthy();
   expect(
     within(screen.getByLabelText('Scrollable choices')).queryByRole('button')
   ).toBeNull();

@@ -14,15 +14,8 @@ vi.mock('@/lib/rate-limit', () => ({
 vi.mock('@/lib/payments/oxygen/mobile-capabilities', () => ({
   readOxygenMobileCapabilities: mocks.read,
 }));
-vi.mock('@/lib/proxy/host', () => ({
-  isPlatformHost: (host: string) => host === 'usebaci.com',
-  normalizeHostname: (host: string) => host.split(':')[0],
-  extractSubdomain: () => null,
-  extractLocalhostSubdomain: () => null,
-  isLocalhost: () => false,
-  ROOT_DOMAIN: 'usebaci.com',
-  RESERVED_SUBDOMAINS: new Set(),
-  getSlugForOriginCustomDomain: mocks.host,
+vi.mock('@/lib/domain-cache-simple', () => ({
+  getSlugForCustomDomain: mocks.host,
 }));
 
 import { GET } from './route';
@@ -88,6 +81,40 @@ it.each([
 it('rejects storefront-host slug mismatch before policy', async () => {
   mocks.host.mockResolvedValue('foreign');
   expect((await GET(request(undefined, 'shop.example.test'))).status).toBe(404);
+  expect(mocks.read).not.toHaveBeenCalled();
+});
+it.each([
+  '[::1]',
+  '[::1]:3000',
+])('recognizes the staging loopback authority %s as a central API host', async (host) => {
+  mocks.host.mockResolvedValue(null);
+  const response = await GET(
+    new NextRequest(
+      `http://${host}/api/payments/oxygen/mobile-capabilities?merchantSlug=test-store`,
+      { headers: { host } }
+    )
+  );
+  expect(response.status).toBe(200);
+  expect(mocks.host).not.toHaveBeenCalled();
+});
+it('pins a storefront Host header when the internal URL uses loopback', async () => {
+  const response = await GET(
+    new NextRequest(
+      'http://[::1]:3000/api/payments/oxygen/mobile-capabilities?merchantSlug=test-store',
+      { headers: { host: 'foreign.usebaci.com' } }
+    )
+  );
+  expect(response.status).toBe(404);
+  expect(mocks.read).not.toHaveBeenCalled();
+});
+it('rejects a Host header with trailing text after the loopback literal', async () => {
+  const response = await GET(
+    new NextRequest(
+      'http://[::1]:3000/api/payments/oxygen/mobile-capabilities?merchantSlug=test-store',
+      { headers: { host: '[::1].example.test' } }
+    )
+  );
+  expect(response.status).toBe(404);
   expect(mocks.read).not.toHaveBeenCalled();
 });
 it('fails closed when limiter or policy throws', async () => {

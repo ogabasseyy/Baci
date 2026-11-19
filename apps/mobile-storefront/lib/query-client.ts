@@ -20,16 +20,14 @@ import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persi
 import { QueryClient } from '@tanstack/react-query';
 import { oxygenStagingStorageKey } from './oxygen-staging-profile';
 
-export const QUERY_CACHE_STORAGE_KEY = oxygenStagingStorageKey(
-  'REACT_QUERY_OFFLINE_CACHE'
-);
+export const QUERY_CACHE_STORAGE_KEY = 'REACT_QUERY_OFFLINE_CACHE';
 
 /**
  * AsyncStorage-based Persister (startup-safe)
  * Uses async storage to avoid synchronous JS-thread stalls during startup.
  */
 export const queryPersister = createAsyncStoragePersister({
-  key: QUERY_CACHE_STORAGE_KEY,
+  key: oxygenStagingStorageKey(QUERY_CACHE_STORAGE_KEY),
   storage: AsyncStorage,
 });
 

@@ -1,4 +1,3 @@
-import { router } from 'expo-router';
 import { type CreateOrderRequest, createOrder } from '@/services/orders';
 
 type Input = {
@@ -7,12 +6,10 @@ type Input = {
   isAuthenticated: boolean;
   hasVoucher: boolean;
   hasCredits: boolean;
-  onOrderCreated?: (orderId: string) => void;
 };
 type Dependencies = {
   admit: () => Promise<unknown>;
   createOrder: typeof createOrder;
-  navigate: (orderId: string) => void;
 };
 export async function submitOxygenCheckout(
   input: Input,
@@ -43,16 +40,11 @@ export async function submitOxygenCheckout(
       return oxygenNativeSession().capabilities(true);
     },
     createOrder,
-    navigate: (orderId: string) =>
-      router.push({ pathname: '/oxygen-checkout', params: { orderId } }),
   };
   // Revalidate after every checkout await and immediately before order mutation.
   await deps.admit();
-  const result = await deps.createOrder(input.request, {
+  return deps.createOrder(input.request, {
     checkoutGeneration: input.checkoutGeneration,
     analyticsPaymentMethod: 'oxygen',
   });
-  input.onOrderCreated?.(result.order.id);
-  deps.navigate(result.order.id);
-  return result;
 }

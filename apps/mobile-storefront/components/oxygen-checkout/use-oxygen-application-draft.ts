@@ -77,17 +77,21 @@ export function useOxygenApplicationDraft(
       mounted.current = false;
     };
   }, [client, workflowId, scopeKey, attempt]);
-  async function save(nextStep: 0 | 1 | 2, nextFields = fields) {
+  async function save(
+    nextStep: 0 | 1 | 2,
+    nextFields = fields,
+    finalFlush = false
+  ) {
     if (!loaded || !editing) return false;
     const startedScope = scopeKey;
     const startedGeneration = generation.current;
     // Step navigation is local. Persistence stays serialized, including a blur
     // save that may have started just before the user pressed Continue.
     currentStep.current = nextStep;
-    setStep(nextStep);
+    if (mounted.current) setStep(nextStep);
     while (saveLock.current) await saveCompletion.current;
     if (
-      !mounted.current ||
+      (!mounted.current && !finalFlush) ||
       scope.current !== startedScope ||
       generation.current !== startedGeneration
     )
@@ -97,7 +101,7 @@ export function useOxygenApplicationDraft(
     saveCompletion.current = new Promise<void>((resolve) => {
       release = resolve;
     });
-    setSaving(true);
+    if (mounted.current) setSaving(true);
     const savedFingerprint = JSON.stringify({
       step: nextStep,
       fields: nextFields,
@@ -110,14 +114,13 @@ export function useOxygenApplicationDraft(
         draft: { step: nextStep, fields: nextFields },
       });
       if (
-        !mounted.current ||
         scope.current !== startedScope ||
         generation.current !== startedGeneration
       )
         return false;
       version.current = result.version;
       fingerprint.current = savedFingerprint;
-      setError(null);
+      if (mounted.current) setError(null);
       return true;
     } catch {
       if (
@@ -138,14 +141,12 @@ export function useOxygenApplicationDraft(
         setSaving(false);
     }
   }
-  const latestSave = useRef(save);
-  latestSave.current = save;
-  async function flush() {
+  async function flush(finalFlush = false) {
     if (!loaded || !editing) return false;
     const startedScope = scopeKey;
     const startedGeneration = generation.current;
     const snapshotFields = fields;
-    const snapshotStep = step;
+    const snapshotStep = finalFlush ? currentStep.current : step;
     while (saveLock.current) await saveCompletion.current;
     if (
       scope.current !== startedScope ||
@@ -158,21 +159,26 @@ export function useOxygenApplicationDraft(
       JSON.stringify({ step: snapshotStep, fields: snapshotFields })
     )
       return true;
-    return latestSave.current(snapshotStep, snapshotFields);
+    return save(snapshotStep, snapshotFields, finalFlush);
   }
-  const latestFlush = useRef(flush);
-  latestFlush.current = flush;
+  const latest = useRef({ client, workflowId, scopeKey, flush });
+  latest.current = { client, workflowId, scopeKey, flush };
   // No typing timer: field blur, app background and navigation persist explicitly.
   useEffect(() => {
-    const capturedScope = scopeKey;
     const subscription = AppState.addEventListener('change', (state) => {
-      if (state !== 'active') void latestFlush.current();
+      if (state !== 'active') void latest.current.flush();
     });
     return () => {
       subscription.remove();
-      if (scope.current === capturedScope) void latestFlush.current();
+      const current = latest.current;
+      if (
+        current.scopeKey === scopeKey &&
+        current.workflowId === workflowId &&
+        current.client === client
+      )
+        void current.flush(true);
     };
-  }, [scopeKey]);
+  }, [client, workflowId, scopeKey]);
   return {
     fields,
     setFields,

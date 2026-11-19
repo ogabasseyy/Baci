@@ -1,3 +1,6 @@
+import { oxygenEligibilityProgressLabels } from '@baci/shared/oxygen';
+import type { OxygenRuntimeSnapshot } from '@/schemas/oxygen-runtime-view';
+
 /** Label the actual prerequisite being checked, without inferring success. */
 export function oxygenVerificationHeading(input: {
   selfie: boolean;
@@ -10,7 +13,10 @@ export function oxygenVerificationHeading(input: {
   identityComplete: boolean;
   bvnDone: boolean;
   eligibilityFailed: boolean;
+  eligibilityProgress?: OxygenRuntimeSnapshot['state']['eligibilityProgress'];
 }): string {
+  if (input.identityComplete && input.eligibilityProgress)
+    return oxygenEligibilityProgressLabels[input.eligibilityProgress];
   if (input.selfie) return 'Opening face verification';
   if (input.retryStatus)
     return input.checking

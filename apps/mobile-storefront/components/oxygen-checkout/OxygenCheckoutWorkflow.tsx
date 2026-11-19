@@ -37,20 +37,35 @@ export function OxygenCheckoutWorkflow({
   const [refreshing, setRefreshing] = useState<false | 'progress' | 'recovery'>(
     false
   );
-  const showRecovery = Boolean(workflow.error) || refreshing === 'recovery';
   const [capabilities, setCapabilities] = useState(context.capabilities);
+  const [selfieRetryAttempt, setSelfieRetryAttempt] = useState(0);
+  const capabilitiesReady =
+    Boolean(capabilities) && workflow.capabilitiesVerified;
+  const showRecovery =
+    Boolean(workflow.error) ||
+    refreshing === 'recovery' ||
+    (Boolean(workflow.snapshot) && !workflow.busy && !capabilitiesReady);
   const activated = workflow.snapshot?.stage === 'activated';
   const orderPaymentConfirmed = ['paid', 'bnpl_approved'].includes(
     context.orderPaymentStatus
   );
   const refresh = async () => {
     if (refreshing || workflow.busy) return;
-    setRefreshing(workflow.error ? 'recovery' : 'progress');
+    setRefreshing(showRecovery ? 'recovery' : 'progress');
     try {
       await workflow.refresh?.();
-      await context.session
+      const refreshed = await context.session
         .capabilities(false)
-        .then(setCapabilities, () => setCapabilities(null));
+        .catch(() => null);
+      setCapabilities(refreshed);
+      const state = workflow.controller?.getState();
+      if (
+        showRecovery &&
+        refreshed &&
+        state?.capabilitiesVerified &&
+        !state.error
+      )
+        setSelfieRetryAttempt((attempt) => attempt + 1);
     } finally {
       setRefreshing(false);
     }
@@ -114,6 +129,7 @@ export function OxygenCheckoutWorkflow({
             >
               <OxygenWorkflowBody
                 focused={focused}
+                selfieRetryAttempt={selfieRetryAttempt}
                 onViewOrders={() => router.push('/orders')}
                 prefill={context.prefill}
                 snapshot={workflow.snapshot}
@@ -126,8 +142,7 @@ export function OxygenCheckoutWorkflow({
                   Boolean(completion) ||
                   workflow.busy ||
                   Boolean(refreshing) ||
-                  !capabilities ||
-                  !workflow.capabilitiesVerified
+                  !capabilitiesReady
                 }
                 productAmount={context.total}
                 scopeKey={`${context.session.profile.storagePrefix}:${context.session.userId}:${context.session.profile.merchantId}:${orderId}`}

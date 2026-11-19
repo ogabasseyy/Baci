@@ -26,11 +26,29 @@ describe('transient Oxygen proof', () => {
       { initialProps: { scope: 'user/merchant/workflow/address-revision' } }
     );
     await act(() => result.current.pick());
-    expect(result.current.proof?.uri).toBe(asset.uri);
+    expect(result.current.proof?.name).toBe(asset.name);
     jest.mocked(source.pick).mockResolvedValue({ canceled: true });
     await act(() => result.current.pick());
     rerender({ scope: 'user/merchant/workflow/address-revision' });
-    expect(result.current.proof?.uri).toBe(asset.uri);
+    expect(result.current.proof?.name).toBe(asset.name);
+  });
+  it('releases a cached document after reading it or rejecting it', async () => {
+    const release = jest.fn();
+    const source = picker();
+    jest.mocked(source.pick).mockResolvedValue({
+      canceled: false,
+      assets: [{ ...asset, release }],
+    });
+    const { result } = renderHook(() => useOxygenProof('one', source));
+    await act(() => result.current.pick());
+    expect(result.current.proof?.name).toBe(asset.name);
+    expect(release).toHaveBeenCalledTimes(1);
+    jest.mocked(source.pick).mockResolvedValue({
+      canceled: false,
+      assets: [{ ...asset, mimeType: 'text/plain', release }],
+    });
+    await act(() => result.current.pick());
+    expect(release).toHaveBeenCalledTimes(2);
   });
   it('rejects actual oversized bytes despite a small declared picker size', async () => {
     const source = { ...picker(), size: () => 1572865 };
@@ -74,10 +92,12 @@ describe('transient Oxygen proof', () => {
       pending = result.current.pick();
     });
     rerender({ scope: 'two' });
+    const release = jest.fn();
     await act(async () => {
-      finish({ canceled: false, assets: [asset] });
+      finish({ canceled: false, assets: [{ ...asset, release }] });
       await pending;
     });
     expect(result.current.proof).toBeNull();
+    expect(release).toHaveBeenCalledTimes(1);
   });
 });

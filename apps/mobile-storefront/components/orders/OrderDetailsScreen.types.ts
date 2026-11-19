@@ -14,6 +14,8 @@ export interface OrderItem {
 
 export interface OrderDetails {
   id: string;
+  customer_id?: string | null;
+  merchant_id?: string | null;
   order_number: string;
   shipping_status: string;
   subtotal: number;

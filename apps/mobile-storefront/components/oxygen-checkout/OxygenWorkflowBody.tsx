@@ -41,6 +41,7 @@ export function OxygenWorkflowBody({
   busy,
   productAmount,
   scopeKey,
+  selfieRetryAttempt,
   prefill,
 }: {
   focused: boolean;
@@ -52,6 +53,7 @@ export function OxygenWorkflowBody({
   busy: boolean;
   productAmount: number;
   scopeKey: string;
+  selfieRetryAttempt?: number;
   prefill?: OxygenFields;
 }) {
   const colors = useOxygenColors();
@@ -106,6 +108,7 @@ export function OxygenWorkflowBody({
     disabled,
     ready: Boolean(capabilities),
     paymentUrl,
+    selfieRetryAttempt,
   });
   const eligibilityProgress = useOxygenEligibilityProgress(
     snapshot,

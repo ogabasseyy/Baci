@@ -1,21 +1,37 @@
 import { router } from 'expo-router';
 import { Text, TouchableOpacity } from 'react-native';
+import { z } from 'zod';
 import { getOxygenStagingProfile } from '@/lib/oxygen-staging-profile';
+import { isClosedOxygenShippingStatus } from '@/services/oxygen/oxygen-order-status';
+import { useAuthStore } from '@/stores/auth-store';
+
 export function OxygenOrderResume({
   order,
 }: {
   order: {
     id: string;
+    customer_id?: string | null;
+    merchant_id?: string | null;
     payment_method?: string | null;
     payment_status?: string | null;
     shipping_status?: string | null;
   };
 }) {
+  const profile = getOxygenStagingProfile();
+  const userId = useAuthStore((state) => state.user?.id);
+  const customer = useAuthStore((state) => state.customer);
   if (
-    !getOxygenStagingProfile() ||
+    !profile ||
+    !userId ||
+    !customer ||
+    customer.user_id !== userId ||
+    customer.merchant_id !== profile.merchantId ||
+    customer.id !== order.customer_id ||
+    profile.merchantId !== order.merchant_id ||
+    !z.uuid().safeParse(order.id).success ||
     order.payment_method !== 'oxygen' ||
-    ['paid', 'refunded'].includes(order.payment_status ?? '') ||
-    ['cancelled', 'returned', 'refunded'].includes(order.shipping_status ?? '')
+    order.payment_status !== 'unpaid' ||
+    isClosedOxygenShippingStatus(order.shipping_status)
   )
     return null;
   return (

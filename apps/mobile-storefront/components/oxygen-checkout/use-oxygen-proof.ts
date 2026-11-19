@@ -7,18 +7,22 @@ import {
   pickOxygenProofSource,
 } from './oxygen-proof-source';
 export interface OxygenProof {
-  uri: string;
   name: string;
   type: 'application/pdf' | 'image/jpeg' | 'image/png';
   size: number;
   bytes: Uint8Array;
 }
+interface OxygenProofAsset {
+  uri: string;
+  name: string;
+  mimeType?: string;
+  size?: number;
+  release?: () => void;
+}
 export interface OxygenProofPicker {
   pick: (source?: OxygenProofSource) => Promise<{
     canceled: boolean;
-    assets?:
-      | { uri: string; name: string; mimeType?: string; size?: number }[]
-      | null;
+    assets?: OxygenProofAsset[] | null;
   }>;
   size: (uri: string) => number;
   readBytes: (uri: string) => Promise<Uint8Array>;
@@ -30,7 +34,7 @@ const nativePicker: OxygenProofPicker = {
 };
 export const OxygenProofPickerContext = createContext(nativePicker);
 
-/** No proof persistence: picker-owned URIs are never deleted by us. */
+/** Keep validated bytes in memory and release any cache copy owned by this picker. */
 export function useOxygenProof(
   scopeKey: string,
   pickerOverride?: OxygenProofPicker
@@ -61,15 +65,16 @@ export function useOxygenProof(
     const scope = scopeRef.current;
     setBusy(true);
     setError(null);
+    let asset: OxygenProofAsset | undefined;
     try {
       const result = await picker.pick(source);
+      asset = result.assets?.[0];
       if (
         revision !== generation.current ||
         scope !== scopeRef.current ||
         result.canceled
       )
         return;
-      const asset = result.assets?.[0];
       if (!asset) {
         setError('Could not read this file. Choose another file.');
         return;
@@ -97,7 +102,6 @@ export function useOxygenProof(
       setSelected({
         scope,
         file: {
-          uri: asset.uri,
           name: asset.name,
           type,
           size: bytes.length,
@@ -108,6 +112,11 @@ export function useOxygenProof(
       if (revision === generation.current)
         setError('Could not open this file. Choose another file.');
     } finally {
+      try {
+        asset?.release?.();
+      } catch {
+        // A missing temporary copy does not invalidate the bytes already read.
+      }
       if (revision === generation.current) setBusy(false);
     }
   }

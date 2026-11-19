@@ -7,11 +7,11 @@ import {
   getSlugForOriginCustomDomain,
   isLocalhost,
   isPlatformHost,
-  normalizeHostname,
   RESERVED_SUBDOMAINS,
   ROOT_DOMAIN,
 } from '@/lib/proxy/host';
 import { checkOxygenMobileCapabilitiesRateLimit } from '@/lib/rate-limit';
+import { stripPort } from '@/lib/storefront-host';
 import { oxygenMobileCapabilitiesQuerySchema } from '@/schemas/oxygen-mobile-capabilities';
 
 const privateHeaders = {
@@ -50,12 +50,15 @@ export async function GET(request: NextRequest) {
     if (!parsed.success || params.getAll('merchantSlug').length !== 1)
       return failure(400);
     const slug = parsed.data.merchantSlug;
-    const host = normalizeHostname(
+    const authority = (
       request.headers.get('host') || request.nextUrl.host
-    );
+    ).toLowerCase();
+    const host = stripPort(authority);
+    if (host.startsWith('[') && !/^\[::1\](?::\d{1,5})?$/.test(authority))
+      return failure(404);
     // Central API hosts have no storefront identity: the RPC proves the supplied
     // slug's customer binding. Storefront hosts additionally pin their own tenant.
-    if (!isPlatformHost(host)) {
+    if (host !== '[::1]' && !isPlatformHost(host)) {
       const subdomain = isLocalhost(host)
         ? extractLocalhostSubdomain(host)
         : extractSubdomain(host, ROOT_DOMAIN);

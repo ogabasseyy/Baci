@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { supabase } from '@/lib/supabase';
 import { oxygenOrderPrefill } from './order-prefill';
+import { isClosedOxygenShippingStatus } from './oxygen-order-status';
 
 const orderSchema = z.object({
   id: z.uuid(),
@@ -40,8 +41,9 @@ export async function readOwnedOxygenOrder(
       'This order uses another payment method. Open it from your order history.'
     );
   if (
-    ['cancelled', 'returned', 'refunded'].includes(order.shipping_status) ||
-    order.payment_status === 'refunded'
+    isClosedOxygenShippingStatus(order.shipping_status) ||
+    // Funded orders can be read back for the standard confirmation screen.
+    !['unpaid', 'paid', 'bnpl_approved'].includes(order.payment_status)
   )
     throw new Error(
       'This order is closed. Open your order history for details.'

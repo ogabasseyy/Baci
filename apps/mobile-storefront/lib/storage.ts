@@ -140,7 +140,13 @@ export const asyncStorage = {
 
     const prefix = getOxygenStagingProfile()?.storagePrefix;
     return Array.from(
-      new Set(prefix ? keys.filter((key) => key.startsWith(prefix)) : keys)
+      new Set(
+        prefix
+          ? keys
+              .filter((key) => key.startsWith(prefix))
+              .map((key) => key.slice(prefix.length))
+          : keys
+      )
     );
   },
 };

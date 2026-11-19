@@ -1,7 +1,5 @@
 'use client';
 
-import { oxygenEligibilityProgressLabels } from '@baci/shared/oxygen';
-
 import { Camera, CloudSun } from 'lucide-react';
 import { useContext, useEffect, useRef, useState } from 'react';
 import { oxygenEligibilityPrerequisites } from '@/lib/payments/oxygen/eligibility-prerequisites';
@@ -62,13 +60,6 @@ export function OxygenGuidedVerification({
   );
   // Oxygen confirms the bank during eligibility; bank status cannot gate that check.
   const identityComplete = oxygenEligibilityPrerequisites(state);
-  const progress =
-    identityComplete &&
-    !error &&
-    state.eligibilityStatus === 'pending' &&
-    state.eligibilityProgress
-      ? oxygenEligibilityProgressLabels[state.eligibilityProgress]
-      : undefined;
   const ninRequired =
     identityComplete &&
     state.eligible === true &&
@@ -224,19 +215,22 @@ export function OxygenGuidedVerification({
       )}
       <div className="space-y-2" aria-live="polite">
         <h3 className="text-xl font-bold text-gray-900">
-          {progress ??
-            oxygenVerificationHeading({
-              selfie: Boolean(selfie),
-              selfieConfirmed,
-              ninPending,
-              retryStatus,
-              bankPending,
-              review,
-              checking: busy || retrying,
-              identityComplete,
-              bvnDone: state.kyc?.bvn_status === 'DONE',
-              eligibilityFailed,
-            })}
+          {oxygenVerificationHeading({
+            selfie: Boolean(selfie),
+            selfieConfirmed,
+            ninPending,
+            retryStatus,
+            bankPending,
+            review,
+            checking: busy || retrying,
+            identityComplete,
+            bvnDone: state.kyc?.bvn_status === 'DONE',
+            eligibilityFailed,
+            eligibilityProgress:
+              state.eligibilityStatus === 'pending'
+                ? state.eligibilityProgress
+                : undefined,
+          })}
         </h3>
         <p className="text-sm leading-relaxed text-gray-500">
           {selfie

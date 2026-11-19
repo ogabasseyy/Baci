@@ -217,3 +217,27 @@ describe('bugfix: terminal outcome outranks a tied SDR', () => {
     expect(result.status).toBe('delivered');
   });
 });
+
+describe('bugfix: only the first destination scan becomes the inferred arrival', () => {
+  it('rewrites a single event when two hub scans at the destination follow transit', () => {
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W41',
+        Destination: 'ABUJA',
+        Origin: 'LAGOS',
+        MobileShipmentTrackings: [
+          event('MSVC', '08:00:00', { Location: 'IKEJA 2 (IKEJA)' }),
+          event('MSVC', '10:00:00', { Location: 'WUSE ABUJA' }),
+          event('MSVC', '12:00:00', { Location: 'GARKI ABUJA' }),
+        ],
+      },
+      'W41',
+      OBSERVED_AT
+    );
+    expect(
+      result.events.filter(
+        (e) => e.rawStatus === GIGL_ARRIVED_IN_CITY_RAW_STATUS
+      )
+    ).toHaveLength(1);
+  });
+});

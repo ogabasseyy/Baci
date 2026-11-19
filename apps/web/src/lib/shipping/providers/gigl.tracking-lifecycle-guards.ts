@@ -157,6 +157,8 @@ export function applyLifecycleGuards(
       !destroyed &&
       (EXPLICIT_ARRIVAL_CODES.has(raw) ||
         (candidate.recognizedStatus === 'in_transit' &&
+          // One inferred arrival per shipment; later destination scans stay as is.
+          !arrived &&
           !DEPARTURE_CODES.has(raw) &&
           !RETURN_CODES.has(raw) &&
           !DEPARTURE_WORD.test(

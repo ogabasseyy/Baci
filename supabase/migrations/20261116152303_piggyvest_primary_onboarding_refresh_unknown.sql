@@ -75,6 +75,9 @@ BEGIN
     OR intent.merchant_id <> (scope->>'merchantId')::uuid
     OR intent.user_id <> (scope->>'userId')::uuid
     OR intent.request_fingerprint = fingerprint
+    -- One refresh only: a second would dispatch yet another BVN while every
+    -- earlier request may still land, and the intent keeps one customer pair.
+    OR intent.identity_refreshed
     OR intent.provider_customer_id IS NOT NULL
     OR intent.provider_wallet_id IS NOT NULL
     OR intent.review_reason IS NOT NULL

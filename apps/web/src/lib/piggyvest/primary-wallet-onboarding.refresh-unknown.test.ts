@@ -245,7 +245,7 @@ describe('primary wallet onboarding: retry with new details after an unresolved 
     expect(input.storage.releaseIntent).not.toHaveBeenCalled();
   });
 
-  it('keeps custody on a BVN decline during an identity-refreshed attempt', async () => {
+  it('bugfix (Codex P1): holds a BVN decline during an identity-refreshed attempt for ownership review', async () => {
     const { PiggyvestApiError } = await import('./client');
     const input = conflictedFixture();
     input.findCustomers.mockResolvedValue(customerListing([]));
@@ -254,9 +254,11 @@ describe('primary wallet onboarding: retry with new details after an unresolved 
     );
 
     expect(await onboardPiggyvestPrimaryWallet(input)).toEqual({
-      status: 'pending',
+      status: 'conflict',
+      code: 'OWNERSHIP_REVIEW_REQUIRED',
     });
-    expect(input.storage.recordUncertain).toHaveBeenCalledExactlyOnceWith(
+    expect(input.storage.recordUncertain).not.toHaveBeenCalled();
+    expect(input.storage.recordOwnershipHold).toHaveBeenCalledExactlyOnceWith(
       expect.objectContaining({
         intentId: 'refreshed-intent',
         claimToken: 'refreshed-claim',

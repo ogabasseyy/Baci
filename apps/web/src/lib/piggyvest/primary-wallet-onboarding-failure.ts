@@ -6,6 +6,7 @@ import type {
   PrimaryWalletIntentScope,
   PrimaryWalletOnboardingStorage,
 } from './primary-wallet-onboarding.types';
+import { alertOwnershipReview } from './primary-wallet-onboarding-adoption';
 
 type ClaimedScope = PrimaryWalletIntentScope & {
   intentId: string;
@@ -13,8 +14,9 @@ type ClaimedScope = PrimaryWalletIntentScope & {
 };
 
 type OnboardingFailureOutcome = {
-  status: 'pending' | 'rejected' | 'unavailable';
+  status: 'pending' | 'rejected' | 'unavailable' | 'conflict';
   code?:
+    | 'OWNERSHIP_REVIEW_REQUIRED'
     | 'NOT_CONFIGURED'
     | 'INVALID_BVN'
     | 'STORAGE_UNAVAILABLE'
@@ -48,13 +50,27 @@ export async function settlePrimaryWalletCreateFailure(input: {
   const decline = classifyPrimaryWalletCreationDecline(input.error);
   // A BVN decline proves only that THIS request created nothing. After an
   // identity refresh, the earlier, ambiguous dispatch under the replaced BVN
-  // may still land a customer, and a lookup is only a point-in-time snapshot
-  // that cannot prove it never will: custody (identity fence and deletion
-  // hold) is always kept and the answer stays pending until review.
+  // may still land a customer, and no lookup can prove it never will. So
+  // custody is never released, and since no retry can settle it either, the
+  // intent goes straight to an ownership hold with an alert: support sees it
+  // and the client gets a review answer instead of polling a pending state.
+  if (decline === 'bvn' && input.identityRefreshed) {
+    alertOwnershipReview(
+      'replacement BVN declined after identity refresh',
+      input.claimedScope.intentId
+    );
+    try {
+      if (!(await input.storage.recordOwnershipHold(input.claimedScope)))
+        return { status: 'unavailable', code: 'STORAGE_UNAVAILABLE' };
+    } catch {
+      return { status: 'unavailable', code: 'STORAGE_UNAVAILABLE' };
+    }
+    return { status: 'conflict', code: 'OWNERSHIP_REVIEW_REQUIRED' };
+  }
   const keepReclaimable =
     decline === 'interest_routing'
       ? hasPriorDispatchCustody
-      : input.lookup?.kind === 'found' || input.identityRefreshed;
+      : input.lookup?.kind === 'found';
   if (decline !== null && !keepReclaimable) {
     try {
       if (!(await input.storage.releaseIntent(input.claimedScope)))

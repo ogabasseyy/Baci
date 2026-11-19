@@ -233,6 +233,7 @@ END $$;
 -- 10: identity-change fence persists across subsequent retries without masking ambiguous-dispatch tracking.
 DO $$
 DECLARE refreshed jsonb; retried jsonb; plain jsonb;
+  second_row piggyvest_primary.onboarding_intents;
 BEGIN
   -- An ordinary reclaim of a never-refreshed intent omits identityRefreshed,
   -- so the previous app release (strict parser) keeps working mid-rollout.
@@ -261,6 +262,17 @@ BEGIN
       AND retried->>'reclaimed' = 'true'
       AND retried->>'identityRefreshed' = 'true',
     'post-refresh retry lost ambiguous-dispatch tracking or identity-change fence');
+  -- A second identity refresh is refused even once the intent is unknown again
+  -- under different details: only one BVN change, then manual review.
+  PERFORM pg_temp.check(piggyvest_primary.record_onboarding(pg_temp.scope(9),
+    (retried->>'intentId')::uuid, (retried->>'claimToken')::uuid, NULL, NULL),
+    'slot 9 second transition back to unknown failed');
+  second_row := pg_temp.intent(9);
+  PERFORM pg_temp.check(piggyvest_primary.refresh_unknown_onboarding(pg_temp.scope(9), repeat('c', 64))
+      = '{"status":"conflict"}'::jsonb,
+    'a second identity refresh was allowed');
+  PERFORM pg_temp.check(pg_temp.intent(9) IS NOT DISTINCT FROM second_row,
+    'a refused second refresh changed the intent');
 END $$;
 
 ROLLBACK;

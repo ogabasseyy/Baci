@@ -12,7 +12,7 @@ function makeStorage(): PrimaryWalletOnboardingStorage {
     recordRoutingPending: vi.fn(),
     recordReview: vi.fn(),
     recordRejected: vi.fn(),
-    recordOwnershipHold: vi.fn(),
+    recordOwnershipHold: vi.fn().mockResolvedValue(true),
     releaseIntent: vi.fn().mockResolvedValue(true),
   };
 }
@@ -51,7 +51,7 @@ describe('settlePrimaryWalletCreateFailure', () => {
     expect(storage.recordUncertain).not.toHaveBeenCalled();
   });
 
-  it('keeps custody on identity-refreshed BVN declines', async () => {
+  it('bugfix (Codex P1): holds identity-refreshed BVN declines for ownership review', async () => {
     const storage = makeStorage();
     const outcome = await settlePrimaryWalletCreateFailure({
       error: new PiggyvestApiError(
@@ -68,12 +68,16 @@ describe('settlePrimaryWalletCreateFailure', () => {
       claimedScope,
     });
 
-    expect(outcome).toEqual({ status: 'pending' });
+    expect(outcome).toEqual({
+      status: 'conflict',
+      code: 'OWNERSHIP_REVIEW_REQUIRED',
+    });
+    expect(storage.recordOwnershipHold).toHaveBeenCalledWith(claimedScope);
     expect(storage.releaseIntent).not.toHaveBeenCalled();
-    expect(storage.recordUncertain).toHaveBeenCalledWith(claimedScope);
+    expect(storage.recordUncertain).not.toHaveBeenCalled();
   });
 
-  it('bugfix (Codex P1): keeps custody on a refreshed BVN decline even after a reclaim lookup listed none', async () => {
+  it('bugfix (Codex P1): holds a refreshed BVN decline for review even after a reclaim lookup listed none', async () => {
     const storage = makeStorage();
     const outcome = await settlePrimaryWalletCreateFailure({
       error: new PiggyvestApiError(
@@ -90,12 +94,16 @@ describe('settlePrimaryWalletCreateFailure', () => {
       claimedScope,
     });
 
-    expect(outcome).toEqual({ status: 'pending' });
+    expect(outcome).toEqual({
+      status: 'conflict',
+      code: 'OWNERSHIP_REVIEW_REQUIRED',
+    });
+    expect(storage.recordOwnershipHold).toHaveBeenCalledWith(claimedScope);
     expect(storage.releaseIntent).not.toHaveBeenCalled();
-    expect(storage.recordUncertain).toHaveBeenCalledWith(claimedScope);
+    expect(storage.recordUncertain).not.toHaveBeenCalled();
   });
 
-  it('keeps custody on a refreshed BVN decline whose reclaim lookup found our customer', async () => {
+  it('holds a refreshed BVN decline for review when the reclaim lookup found our customer', async () => {
     const storage = makeStorage();
     const outcome = await settlePrimaryWalletCreateFailure({
       error: new PiggyvestApiError(
@@ -112,7 +120,37 @@ describe('settlePrimaryWalletCreateFailure', () => {
       claimedScope,
     });
 
-    expect(outcome).toEqual({ status: 'pending' });
+    expect(outcome).toEqual({
+      status: 'conflict',
+      code: 'OWNERSHIP_REVIEW_REQUIRED',
+    });
+    expect(storage.recordOwnershipHold).toHaveBeenCalledWith(claimedScope);
+    expect(storage.releaseIntent).not.toHaveBeenCalled();
+    expect(storage.recordUncertain).not.toHaveBeenCalled();
+  });
+
+  it('returns STORAGE_UNAVAILABLE when the refreshed decline hold is not written', async () => {
+    const storage = makeStorage();
+    storage.recordOwnershipHold = vi.fn().mockResolvedValue(false);
+    const outcome = await settlePrimaryWalletCreateFailure({
+      error: new PiggyvestApiError(
+        'PIGGYVEST_REQUEST_ERROR',
+        'Invalid BVN',
+        400,
+        true
+      ),
+      createReturned: false,
+      reclaimed: false,
+      identityRefreshed: true,
+      lookup: null,
+      storage,
+      claimedScope,
+    });
+
+    expect(outcome).toEqual({
+      status: 'unavailable',
+      code: 'STORAGE_UNAVAILABLE',
+    });
     expect(storage.releaseIntent).not.toHaveBeenCalled();
   });
 

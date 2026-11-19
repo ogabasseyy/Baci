@@ -17,7 +17,9 @@ export async function readCrossRemCatalogVersion(): Promise<string> {
     throw new Error('CrossRem catalog version unavailable', { cause: error });
   }
   if (typeof data?.revision !== 'string') {
-    logger.warn({ message: 'Published CrossRem catalog enrollment missing' });
+    logger.warn({
+      message: 'CrossRem catalog enrollment or feed eligibility missing',
+    });
     throw new Error('CrossRem catalog version unavailable');
   }
   return data.revision;

@@ -52,7 +52,7 @@ CREATE TABLE public.product_feed_images (
   fixture_future_column text
 );
 CREATE TABLE public.categories (id uuid PRIMARY KEY, merchant_id uuid, name text, is_active boolean, slug text);
-CREATE TABLE public.domains (id uuid PRIMARY KEY, merchant_id uuid, domain text, status text, is_primary boolean);
+CREATE TABLE public.domains (id uuid PRIMARY KEY, merchant_id uuid, domain text, status text, is_primary boolean, verified_at timestamptz);
 CREATE TABLE public.product_categories (product_id uuid, category_id uuid, id uuid, is_primary boolean);
 CREATE TABLE public.product_key_specs (
   product_id uuid PRIMARY KEY, screen_size_inches numeric, ram_gb integer,
@@ -61,6 +61,15 @@ CREATE TABLE public.product_key_specs (
 );
 
 GRANT SELECT ON public.merchants TO anon, authenticated;
+-- Mirror the deployed public feed eligibility contract for this fixture.
+CREATE FUNCTION public.resolve_public_feed_merchant(identifier text, by_slug boolean)
+RETURNS TABLE (id uuid)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = ''
+AS $$
+  SELECT m.id FROM public.merchants AS m
+  WHERE (m.is_platform_admin IS TRUE OR m.is_published IS TRUE)
+    AND CASE WHEN by_slug THEN m.slug = identifier ELSE m.id::text = identifier END;
+$$;
 INSERT INTO public.merchants (id, is_published) VALUES
   ('6b5cb8a4-5575-456c-b936-8cdfae30db74', true),
   ('00000000-0000-4000-8000-000000000001', true);
@@ -69,6 +78,7 @@ INSERT INTO public.merchants (id, is_published) VALUES
 \ir ../20261119163500_crossrem_image_revision_heartbeat.sql
 \ir ../20261119165000_crossrem_image_audit_fields.sql
 \ir ../20261119170500_crossrem_projection_revisions.sql
+\ir ../20261119171500_crossrem_feed_eligibility_revisions.sql
 
 SET ROLE anon;
 DO $$ BEGIN
@@ -105,6 +115,7 @@ BEGIN
     format('UPDATE public.product_feed_images SET status = %L WHERE id = %L', 'stale', item),
     format('UPDATE public.product_feed_images SET fixture_future_column = %L WHERE id = %L', 'fixture change', item),
     format('INSERT INTO public.domains VALUES (%L, %L)', item, pilot),
+    format('UPDATE public.domains SET verified_at = now() WHERE id = %L', item),
     format('INSERT INTO public.product_categories VALUES (%L, %L)', item, category),
     format('INSERT INTO public.product_key_specs VALUES (%L)', item),
     format('UPDATE public.merchants SET slug = %L WHERE id = %L', 'updated-fixture-slug', pilot),
@@ -130,6 +141,7 @@ BEGIN
     RAISE EXCEPTION 'Image verification heartbeats must preserve the revision';
   END IF;
 
+  UPDATE public.domains SET verified_at = verified_at + interval '1 second' WHERE id = item;
   UPDATE public.product_offers SET updated_at = now() WHERE id = item;
   UPDATE public.product_variants SET cost_price = 100 WHERE id = item;
   UPDATE public.products
@@ -164,6 +176,16 @@ SET ROLE anon;
 DO $$ BEGIN
   IF EXISTS (SELECT revision FROM public.crossrem_catalog_generations) THEN
     RAISE EXCEPTION 'Anonymous callers must not read an unpublished revision';
+  END IF;
+END $$;
+RESET ROLE;
+
+UPDATE public.merchants SET is_platform_admin = true
+WHERE id = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
+SET ROLE anon;
+DO $$ BEGIN
+  IF (SELECT revision FROM public.crossrem_catalog_generations) IS NULL THEN
+    RAISE EXCEPTION 'An enrolled platform-admin storefront must remain readable';
   END IF;
 END $$;
 RESET ROLE;

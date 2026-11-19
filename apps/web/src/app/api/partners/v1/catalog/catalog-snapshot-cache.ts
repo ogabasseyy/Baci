@@ -16,6 +16,7 @@ const maxBodyBytes = 8 * 1024 * 1024;
 // Base64 expands the payload. Stay below Redis's 10 MB request limit.
 const maxCompressedBytes = 4 * 1024 * 1024;
 const etagPattern = /^"[a-f0-9]{64}"$/;
+const reportedDisabledReasons = new Set<string>();
 
 const publishUnderLease = `
   if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end
@@ -65,13 +66,25 @@ export function matchesValidator(value: string | null, etag: string) {
   );
 }
 
+function reportDisabledCache(reason: string) {
+  if (reportedDisabledReasons.has(reason)) return;
+  reportedDisabledReasons.add(reason);
+  logger.warn({ message: 'CrossRem shared snapshot cache disabled', reason });
+}
+
 export function createSnapshotCache() {
   const deploymentId =
     process.env.VERCEL_DEPLOYMENT_ID?.trim() ||
     process.env.CROSSREM_CATALOG_CACHE_DEPLOYMENT_ID?.trim();
-  if (!deploymentId) return null;
+  if (!deploymentId) {
+    reportDisabledCache('deployment ID missing');
+    return null;
+  }
   const client = getRedis();
-  if (!client) return null;
+  if (!client) {
+    reportDisabledCache('Redis not configured');
+    return null;
+  }
   const redis = client;
 
   const scope = createHash('sha256')

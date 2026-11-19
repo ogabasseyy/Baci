@@ -37,7 +37,7 @@ export async function findSyntheticMessage({
           (message.message_type === 1 ||
             String(message.message_type).toLowerCase() === 'outgoing') &&
           String(message.sender?.type ?? message.sender_type ?? '')
-            .replace(/[^a-z]/gi, '')
+            .trim()
             .toLowerCase() === 'user'
       )
     );

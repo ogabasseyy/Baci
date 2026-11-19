@@ -99,16 +99,18 @@ export async function verifyLostAckMessageReconciliation({
   const address = proxy.address();
   assert.ok(address && typeof address === 'object');
   const faultBase = `http://127.0.0.1:${address.port}`;
+  const lookupController = new AbortController();
   try {
     const post = () =>
       api(path, seed.human_token, {
         method: 'POST',
         body: { content, message_type: 'outgoing', private: false },
         base: faultBase,
+        signal: AbortSignal.timeout(10_000),
       });
     const lookupWithVisibilityPoll = async () => {
       const deadline = Date.now() + 15_000;
-      while (true) {
+      while (!lookupController.signal.aborted) {
         const remainingMs = deadline - Date.now();
         const matches = await findSyntheticMessage({
           api,
@@ -117,11 +119,26 @@ export async function verifyLostAckMessageReconciliation({
           content,
           timeoutMs: Math.max(remainingMs, 1),
         });
-        if (matches.length > 0 || Date.now() >= deadline - 300) {
+        if (
+          lookupController.signal.aborted ||
+          matches.length > 0 ||
+          Date.now() >= deadline - 300
+        ) {
           return matches;
         }
-        await new Promise((resolve) => setTimeout(resolve, 250));
+        await new Promise((resolve) => {
+          const timer = setTimeout(resolve, 250);
+          lookupController.signal.addEventListener(
+            'abort',
+            () => {
+              clearTimeout(timer);
+              resolve();
+            },
+            { once: true }
+          );
+        });
       }
+      return [];
     };
     const recovery = reconcileAmbiguousSend({
       send: post,
@@ -147,6 +164,8 @@ export async function verifyLostAckMessageReconciliation({
     ]);
     clearTimeout(timeout);
     if (outcome.error) {
+      lookupController.abort();
+      await settledRecoveryPromise;
       throw new Error('Chatwoot must return an API response', {
         cause: outcome.error,
       });
@@ -172,7 +191,9 @@ export async function verifyLostAckMessageReconciliation({
       postCount,
     };
   } finally {
+    lookupController.abort();
     for (const request of activeRequests) request.destroy();
+    proxy.closeAllConnections();
     await new Promise((resolve, reject) =>
       proxy.close((error) => (error ? reject(error) : resolve()))
     );

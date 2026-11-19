@@ -74,7 +74,7 @@ async function api(base, path, token, options = {}) {
     method: options.method ?? 'GET',
     headers: { api_access_token: token, 'content-type': 'application/json' },
     body: options.body ? JSON.stringify(options.body) : undefined,
-    signal: options.signal ?? AbortSignal.timeout(10_000),
+    ...(options.signal ? { signal: options.signal } : {}),
   });
   const text = await response.text();
   if (!response.ok)

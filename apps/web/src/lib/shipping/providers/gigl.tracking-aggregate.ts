@@ -14,6 +14,10 @@ type Aggregate = {
 // Canonical precedence among terminal outcomes (matches the database rank:
 // cancelled and returned outrank delivered, whatever their order in time).
 function terminalPrecedence(candidate: Guardable): number {
+  // cancelled and returned share the database rank; a tied pair resolves to
+  // cancelled (it also stops the monitor and refunds) so the result never
+  // depends on the payload order.
+  if (candidate.recognizedStatus === 'cancelled') return 3;
   return candidate.recognizedStatus === 'delivered' ? 1 : 2;
 }
 

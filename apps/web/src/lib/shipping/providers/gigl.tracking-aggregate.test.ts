@@ -134,4 +134,18 @@ describe('resolveAggregate', () => {
     expect(result.status).toBe('delivered');
     expect(result.lead).toBeUndefined();
   });
+
+  it.each([
+    ['cancelled listed first', ['MSCP', 'SRHUB']],
+    ['returned listed first', ['SRHUB', 'MSCP']],
+  ])('breaks a cancelled/returned tie deterministically whatever the payload order (%s)', (_label, order) => {
+    const scans = {
+      MSCP: scan('MSCP', 'cancelled', 10),
+      SRHUB: scan('SRHUB', 'returned', 10),
+    };
+    const result = resolveAggregate(
+      order.map((key) => scans[key as 'MSCP' | 'SRHUB'])
+    );
+    expect(result.status).toBe('cancelled');
+  });
 });

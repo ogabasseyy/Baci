@@ -29,10 +29,11 @@ export function FeedbackLauncher() {
     setIsOpen(true);
   };
   const close = () => setIsOpen(false);
+  // A send from an earlier session stays silent once the merchant has opened a
+  // new draft, so no thank-you appears over a report they have not sent yet.
   const handleSentFor = (sentSession: number) => () => {
-    if (sentSession === sessionRef.current) {
-      setIsOpen(false);
-    }
+    if (sentSession !== sessionRef.current) return;
+    setIsOpen(false);
     Alert.alert('Thanks for the feedback', 'The Baci team will look into it.');
   };
 

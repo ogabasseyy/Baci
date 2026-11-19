@@ -60,7 +60,9 @@ const bugButton = () => screen.getByRole('button', { name: 'Send feedback' });
 beforeEach(() => {
   pathname.current = '/orders';
   sentCallbacks.length = 0;
-  vi.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+  vi.spyOn(Alert, 'alert')
+    .mockClear()
+    .mockImplementation(() => undefined);
 });
 
 describe('FeedbackLauncher', () => {
@@ -103,7 +105,7 @@ describe('FeedbackLauncher', () => {
     );
   });
 
-  it('keeps a reopened sheet open when an earlier dismissed send completes', () => {
+  it('keeps a reopened sheet open and silent when an earlier dismissed send completes', () => {
     render(<FeedbackLauncher />);
     fireEvent.click(bugButton());
     const staleOnSent = sentCallbacks.at(-1);
@@ -113,6 +115,17 @@ describe('FeedbackLauncher', () => {
     act(() => staleOnSent?.());
 
     expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(Alert.alert).not.toHaveBeenCalled();
+  });
+
+  it('still thanks the merchant when a send completes after the sheet was closed', () => {
+    render(<FeedbackLauncher />);
+    fireEvent.click(bugButton());
+    const lateOnSent = sentCallbacks.at(-1);
+    fireEvent.click(screen.getByRole('button', { name: 'cancel form' }));
+
+    act(() => lateOnSent?.());
+
     expect(Alert.alert).toHaveBeenCalledWith(
       'Thanks for the feedback',
       'The Baci team will look into it.'

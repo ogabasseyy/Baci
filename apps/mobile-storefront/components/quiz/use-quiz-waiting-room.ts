@@ -3,7 +3,12 @@ import { AppState } from 'react-native';
 import { isQuizRewardedFlowActive } from '@/lib/quiz-fullscreen-ownership';
 import type { QuizEvent } from '@/services/quiz-types';
 import { randomDelay } from './quiz-random-delay';
-import { waitingRoomRetryDelay } from './quiz-waiting-room-retry-delay';
+import {
+  WAITING_ROOM_KICKOFF_SPREAD_MS,
+  waitingRoomPendingDelay,
+  waitingRoomRetryDelay,
+} from './quiz-waiting-room-retry-delay';
+import { getRemainingSeconds, isTerminal } from './quiz-waiting-room-timing';
 import { withSpread } from './quiz-with-spread';
 import { calculateQuizServerClockOffset } from './use-quiz-server-clock';
 import { useQuizStartHold } from './use-quiz-start-hold';
@@ -11,21 +16,6 @@ import { useQuizStartInterstitialRequest } from './use-quiz-start-interstitial-r
 
 const CLOCK_TICK_MS = 250;
 const BOUNDARY_REFRESH_INTERVAL_MS = 1_000;
-
-function getRemainingMs(event: QuizEvent, offsetMs: number): number {
-  if (!event.startsAt) return 0;
-  const startsAtMs = Date.parse(event.startsAt);
-  if (!Number.isFinite(startsAtMs)) return 0;
-  return Math.max(0, startsAtMs - (Date.now() + offsetMs));
-}
-
-function getRemainingSeconds(event: QuizEvent, offsetMs: number): number {
-  return Math.ceil(getRemainingMs(event, offsetMs) / 1_000);
-}
-
-function isTerminal(status: QuizEvent['status']): boolean {
-  return ['closed', 'completed', 'cancelled', 'finalizing'].includes(status);
-}
 
 type RefreshEvents = () => Promise<QuizEvent[]>;
 
@@ -111,6 +101,7 @@ export function useQuizWaitingRoom({
   const suspendedRef = useRef(suspended);
   const nextBoundaryRefreshAtRef = useRef(0);
   const boundaryFailuresRef = useRef(0);
+  const boundaryPendingRef = useRef(0);
   const appStateRef = useRef<typeof AppState.currentState>(
     AppState.currentState
   );
@@ -188,6 +179,12 @@ export function useQuizWaitingRoom({
       if (nextEvent) {
         setError(null);
         applyRefreshedEvent(nextEvent);
+        if (!stoppedRef.current && nextEvent.status === 'scheduled') {
+          // Answered but not active yet: widen the gap on each such answer.
+          boundaryPendingRef.current += 1;
+          nextBoundaryRefreshAtRef.current =
+            Date.now() + waitingRoomPendingDelay(boundaryPendingRef.current);
+        }
       } else {
         setError('This quiz is no longer available.');
         stoppedRef.current = true;
@@ -255,11 +252,14 @@ export function useQuizWaitingRoom({
       setRemainingSeconds(nextRemainingSeconds);
       // While counting down, re-arm: each time the countdown reaches zero the
       // first refresh waits a fresh random offset, to spread the phones.
-      if (nextRemainingSeconds !== 0) nextBoundaryRefreshAtRef.current = 0;
+      if (nextRemainingSeconds !== 0) {
+        nextBoundaryRefreshAtRef.current = 0;
+        boundaryPendingRef.current = 0;
+      }
       if (nextRemainingSeconds === 0) {
         const now = Date.now();
         nextBoundaryRefreshAtRef.current ||=
-          now + randomDelay(BOUNDARY_REFRESH_INTERVAL_MS);
+          now + randomDelay(WAITING_ROOM_KICKOFF_SPREAD_MS);
         if (now >= nextBoundaryRefreshAtRef.current) {
           nextBoundaryRefreshAtRef.current =
             now + withSpread(BOUNDARY_REFRESH_INTERVAL_MS);

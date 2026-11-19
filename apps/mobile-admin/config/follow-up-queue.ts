@@ -26,7 +26,8 @@
 export const FOLLOW_UP_WINDOW_DAYS = 90;
 
 /**
- * Hard ceiling on rows fetched, independent of the window.
+ * Hard ceiling on retained rows, independent of the window.
+ * One extra order is fetched to detect overflow before email consolidation.
  *
  * PostgREST applies this before the client-side consolidation by email, so
  * the cap is on orders, not customers. That degrades safely: rows arrive

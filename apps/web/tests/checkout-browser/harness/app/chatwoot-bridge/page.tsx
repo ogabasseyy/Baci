@@ -50,6 +50,7 @@ const cartContext: CartContextType = {
   merchantSlug: 'ogabassey',
   sharedCartEnabled: true,
   sharedCartRef: { cartId: 'fixture-cart-1', version: 8 },
+  ensureSharedCartSession: async () => ({ ok: true }),
 };
 
 function ChatwootBridgeFixtureMount() {

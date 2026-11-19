@@ -43,6 +43,45 @@ it('ignores a trusted-origin message from the wrong widget source', async () => 
   expect(fetchMock).not.toHaveBeenCalled();
 });
 
+it('requests a challenge for a trusted widget message after provisioning the fixture cart session', async () => {
+  const fetchMock = vi.fn(async () => {
+    throw new Error('offline fixture');
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  render(<ChatwootBridgeFixturePage />);
+  const trustedFrame = screen.getByTitle('Synthetic Chatwoot widget');
+  if (!(trustedFrame instanceof HTMLIFrameElement))
+    throw new Error('Expected the synthetic widget to render as an iframe');
+
+  await waitFor(() => {
+    expect(document.documentElement.dataset.chatwootBridgeReady).toBe('true');
+  });
+
+  act(() => {
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        origin: 'https://support.example.test',
+        source: trustedFrame.contentWindow,
+        data: `baci-commerce-context-request:${JSON.stringify({
+          requestId: 'context_123456',
+          conversationId: 905,
+          websiteToken: 'synthetic-widget-token-123456',
+          visitorTokenSha256: 'b'.repeat(64),
+        })}`,
+      })
+    );
+  });
+
+  // Without ensureSharedCartSession on the fixture cart context the handshake
+  // denies the request before any server call; this guards the harness wiring.
+  await waitFor(() => {
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/chatwoot/context/challenge'),
+      expect.anything()
+    );
+  });
+});
+
 it('renders both synthetic widgets and signals readiness after mounting the bridge', async () => {
   render(<ChatwootBridgeFixturePage />);
 

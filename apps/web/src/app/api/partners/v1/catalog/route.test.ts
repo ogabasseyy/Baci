@@ -186,6 +186,19 @@ describe('CrossRem catalog', () => {
     );
   });
 
+  it('returns 503 when a rebuild becomes stale during Redis publication', async () => {
+    readVersion
+      .mockResolvedValueOnce(version)
+      .mockResolvedValueOnce(version)
+      .mockResolvedValueOnce(nextVersion);
+    const response = await GET(request(`Bearer ${token}`));
+    expect(response.status).toBe(503);
+    expect(response.headers.has('etag')).toBe(false);
+    expect(
+      redis.eval.mock.calls.filter((call) => call[1].length === 3)
+    ).toHaveLength(1);
+  });
+
   it('round-trips a stored snapshot and publishes the new body after a version change', async () => {
     const cache = new Map();
     redis.get.mockImplementation(async (key) => cache.get(key));

@@ -73,6 +73,7 @@ export async function getVersionedCrossRemCatalog(validator: string | null) {
     }
     const { etag, body } = await buildSnapshot(version);
     published = await cache.publish(lease.token, version, etag, body);
+    await assertCurrentVersion(version);
     return { etag, body: matchesValidator(validator, etag) ? null : body };
   } finally {
     if (!published) await cache.release(lease.token);

@@ -76,6 +76,7 @@ $$;
 \ir ../migrations/20261119122000_brilstash_align_wire_shape.sql
 \ir ../migrations/20261119122100_brilstash_revalidate_served_product_paths.sql
 \ir ../migrations/20261119122200_brilstash_guard_drain_abort_freshness.sql
+\ir ../migrations/20261119122300_brilstash_pin_activation_prerequisites.sql
 \ir brilstash_catalogue_privileges.sql
 \ir brilstash_catalogue_digest.sql
 CREATE SCHEMA fixture;

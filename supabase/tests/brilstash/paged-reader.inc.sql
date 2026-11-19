@@ -34,6 +34,14 @@ INSERT INTO public.product_feed_images (
 SELECT gen_random_uuid(), merchant_id, id, 'verified', 'https://MEDIA.example.invalid:443/approved',
   true, 1, 'https://MEDIA.example.invalid:443/approved'
 FROM public.products WHERE slug LIKE 'paged-%';
+UPDATE public.products SET images = images || '["https://media.example.invalid/secondary"]'::jsonb
+WHERE slug = 'paged-1';
+INSERT INTO public.product_feed_images (
+  id, merchant_id, product_id, status, verified_url, is_primary, position, source_url
+)
+SELECT gen_random_uuid(), merchant_id, id, 'verified', 'https://media.example.invalid/secondary',
+  false, 2, 'https://media.example.invalid/secondary'
+FROM public.products WHERE slug = 'paged-1';
 INSERT INTO private.brilstash_listings (
   id, installation_id, source_kind, source_id, parent_product_id, external_id, pilot_slot, reviewed_identity
 )
@@ -64,7 +72,10 @@ BEGIN
     'product_url', 'https://shop.example.invalid/products/' || (item->>'slug'),
     'description', 'Condition: New. Specifications: Fixture specification. Box contents: Phone only. Warranty: 30 days.', 'category', item->>'partnerCategory',
     'price_naira', item->'priceNaira', 'stock_quantity', item->'inventory'->'units',
-    'images', jsonb_build_array(jsonb_build_object('url', 'https://MEDIA.example.invalid:443/approved'))
+    'images', (
+      SELECT jsonb_agg(jsonb_build_object('url', url) ORDER BY ord)
+      FROM jsonb_array_elements_text(item->'verifiedImages') WITH ORDINALITY AS images(url, ord)
+    )
   ) ORDER BY item->>'externalId') INTO payload
   FROM jsonb_array_elements(read_result->'rows') item;
   -- Compute the fixture digest outside the builder session.
@@ -79,13 +90,71 @@ DO $$
 DECLARE target uuid := '30000000-0000-4000-8000-000000000003';
 DECLARE candidate uuid := '71000000-0000-4000-8000-000000000003';
 DECLARE input jsonb := current_setting('fixture.paged_input')::jsonb;
+DECLARE source_at timestamptz := LEAST((input->>'sourceReadAt')::timestamptz,
+  ((statement_timestamp() AT TIME ZONE 'Africa/Lagos')::date + time '22:00') AT TIME ZONE 'Africa/Lagos');
+DECLARE first_images jsonb := input->'payload'->0->'images';
+DECLARE tampered_images jsonb;
+DECLARE tampered_payload jsonb;
 BEGIN
+  IF first_images IS DISTINCT FROM '[{"url":"https://MEDIA.example.invalid:443/approved"},{"url":"https://media.example.invalid/secondary"}]'::jsonb
+  THEN RAISE EXCEPTION 'fixture did not load verified images in priority order'; END IF;
+  FOREACH tampered_images IN ARRAY ARRAY[
+    jsonb_build_array(first_images->1, first_images->0), jsonb_build_array(first_images->0)
+  ] LOOP
+    tampered_payload := jsonb_set(input->'payload', '{0,images}', tampered_images);
+    BEGIN
+      PERFORM public.stage_brilstash_catalogue_snapshot(
+        target, gen_random_uuid(), (input->>'catalogueRevision')::bigint, NULL,
+        source_at, input->'rows', tampered_payload, fixture.brilstash_digest(tampered_payload)
+      );
+      RAISE EXCEPTION 'staging accepted a changed verified image sequence';
+    EXCEPTION WHEN check_violation THEN NULL;
+    END;
+  END LOOP;
   PERFORM public.stage_brilstash_catalogue_snapshot(
     target, candidate, (input->>'catalogueRevision')::bigint, NULL,
-    LEAST((input->>'sourceReadAt')::timestamptz,
-      ((statement_timestamp() AT TIME ZONE 'Africa/Lagos')::date + time '22:00') AT TIME ZONE 'Africa/Lagos'),
+    source_at,
     input->'rows', input->'payload', current_setting('fixture.paged_digest')
   );
+END $$;
+RESET ROLE;
+SET LOCAL ROLE authenticated;
+SET LOCAL "request.jwt.claim.sub" = '10000000-0000-4000-8000-000000000002';
+DO $$
+DECLARE installation uuid := '30000000-0000-4000-8000-000000000003';
+DECLARE candidate uuid := '71000000-0000-4000-8000-000000000003';
+DECLARE window_date date := (statement_timestamp() AT TIME ZONE 'Africa/Lagos')::date;
+DECLARE approval uuid;
+DECLARE evidence uuid;
+BEGIN
+  approval := public.approve_brilstash_candidate(installation, candidate, current_setting('fixture.paged_digest'));
+  evidence := public.record_brilstash_fresh_installation(
+    installation, 'fixture-paged', 'Local fresh fixture', false, false, 0, true
+  );
+  BEGIN
+    PERFORM public.activate_first_brilstash_snapshot(installation, candidate, window_date, evidence, approval);
+    RAISE EXCEPTION 'first activation accepted the missing drain policy';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  PERFORM public.configure_brilstash_drain_policy(installation, 1200, 120, NULL, 'Fixture drain protocol');
+  PERFORM set_config('fixture.paged_fresh_evidence', evidence::text, true);
+END $$;
+RESET ROLE;
+UPDATE private.brilstash_fresh_installation_evidence
+SET recorded_at = private.brilstash_clock() - interval '5 minutes'
+WHERE id = current_setting('fixture.paged_fresh_evidence')::uuid;
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE installation uuid := '30000000-0000-4000-8000-000000000003';
+DECLARE candidate uuid := '71000000-0000-4000-8000-000000000003';
+DECLARE approval uuid;
+BEGIN
+  approval := public.approve_brilstash_candidate(installation, candidate, current_setting('fixture.paged_digest'));
+  PERFORM public.activate_first_brilstash_snapshot(installation, candidate,
+    (statement_timestamp() AT TIME ZONE 'Africa/Lagos')::date,
+    current_setting('fixture.paged_fresh_evidence')::uuid, approval);
+  RAISE EXCEPTION 'first activation accepted expired fresh-installation evidence';
+EXCEPTION WHEN check_violation THEN NULL;
 END $$;
 RESET ROLE;
 SAVEPOINT changed_display;

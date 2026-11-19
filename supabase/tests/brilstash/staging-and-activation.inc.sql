@@ -141,7 +141,7 @@ BEGIN
   IF current_setting('fixture.activation_clock_step', true) = 'first' THEN
     PERFORM set_config('fixture.activation_clock_step', 'second', true);
   ELSIF current_setting('fixture.activation_clock_step', true) = 'second' THEN
-    RETURN base_time + interval '2 seconds';
+    RETURN base_time + interval '5 minutes';
   END IF;
   RETURN base_time;
 END $$;
@@ -157,22 +157,17 @@ END $$;
 RESET ROLE;
 SELECT set_config('fixture.candidate_digest', payload_digest, true) FROM private.brilstash_generations
 WHERE id = '70000000-0000-4000-8000-000000000001';
-INSERT INTO private.brilstash_generations (
-  installation_id, id, expected_active_generation_id, catalogue_revision, source_read_at, payload, payload_digest, source_manifest
-)
-SELECT installation_id, '70000000-0000-4000-8000-000000000092', NULL, catalogue_revision,
-  private.brilstash_clock() - interval '26 hours' + interval '11 seconds', payload, payload_digest, source_manifest
-FROM private.brilstash_generations WHERE id = '70000000-0000-4000-8000-000000000001';
 SET LOCAL ROLE authenticated;
 SET LOCAL "request.jwt.claim.sub" = '10000000-0000-4000-8000-000000000002';
+SELECT public.configure_brilstash_drain_policy(
+  '30000000-0000-4000-8000-000000000001', 1200, 120, NULL, 'Fixture drain protocol'
+);
 DO $$
 DECLARE
   installation uuid := '30000000-0000-4000-8000-000000000001';
   candidate uuid := '70000000-0000-4000-8000-000000000001';
   window_date date := (statement_timestamp() AT TIME ZONE 'Africa/Lagos')::date;
   approval uuid;
-  aged_candidate uuid := '70000000-0000-4000-8000-000000000092';
-  aged_approval uuid;
   evidence uuid;
 BEGIN
   BEGIN
@@ -191,13 +186,12 @@ BEGIN
   evidence := public.record_brilstash_fresh_installation(
     installation, 'fixture-one', 'partner proof', false, false, 0, true
   );
-  aged_approval := public.approve_brilstash_candidate(installation, aged_candidate, current_setting('fixture.candidate_digest'));
   BEGIN
     PERFORM set_config('fixture.activation_clock_step', 'first', true);
-    PERFORM public.activate_first_brilstash_snapshot(installation, aged_candidate, window_date, evidence, aged_approval);
-    RAISE EXCEPTION 'activation opened after the candidate ran out of freshness';
+    PERFORM public.activate_first_brilstash_snapshot(installation, candidate, window_date, evidence, approval);
+    RAISE EXCEPTION 'activation opened after the installation evidence expired';
   EXCEPTION WHEN check_violation THEN
-    IF SQLERRM <> 'BrilStash activation window or freshness ended' THEN RAISE; END IF;
+    IF SQLERRM <> 'BrilStash activation window, evidence or freshness ended' THEN RAISE; END IF;
   END;
   BEGIN
     PERFORM public.activate_first_brilstash_snapshot(installation, candidate, window_date, evidence, approval);

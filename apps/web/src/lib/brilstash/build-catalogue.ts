@@ -103,18 +103,18 @@ function resolveStock(inventory: Inventory): number | null {
 }
 
 function resolveImages(verifiedImages: SourceFacts['verifiedImages']) {
-  const urls = new Map<string, string>();
+  const urls = new Set<string>();
   for (const value of verifiedImages) {
     if (!value) continue;
     const url = parseBrilStashHttpsUrl(value);
     // Staging checks image URLs against the exact verified manifest. The
     // storefront hostname check applies to product_url only.
     // Fragmented inputs must be corrected and re-verified at their source.
-    if (!url || url.hash || urls.has(url.href)) continue;
-    urls.set(url.href, value);
+    if (!url || url.hash) continue;
+    urls.add(value);
     if (urls.size === 10) break;
   }
-  return Array.from(urls.values(), (url) => ({ url }));
+  return Array.from(urls, (url) => ({ url }));
 }
 
 function buildDescription(conditionLabel: string, facts: ApprovedFacts | null) {

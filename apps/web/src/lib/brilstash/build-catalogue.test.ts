@@ -193,12 +193,16 @@ describe('buildBrilStashCatalogue', () => {
         productUrl: 'https://SHOP.example.invalid:443/phone',
         verifiedImages: [
           provisioned,
-          'https://images.example.invalid/phone.jpg',
+          provisioned,
+          'https://images.example.invalid/secondary.jpg',
         ],
       },
     ]);
     expect(products[0]?.product_url).toBe('https://shop.example.invalid/phone');
-    expect(products[0]?.images).toEqual([{ url: provisioned }]);
+    expect(products[0]?.images).toEqual([
+      { url: provisioned },
+      { url: 'https://images.example.invalid/secondary.jpg' },
+    ]);
   });
 
   it.each([

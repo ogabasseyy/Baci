@@ -4,8 +4,20 @@ const mocks = vi.hoisted(() => ({
   after: vi.fn(),
   purge: vi.fn(),
   hostnamePurge: vi.fn(),
+  expireBlog: vi.fn(),
+  revalidateProducts: vi.fn(),
+  expireReliable: vi.fn(),
 }));
 vi.mock('next/server', () => ({ after: mocks.after }));
+vi.mock('./cache-revalidation', () => ({
+  revalidateProducts: mocks.revalidateProducts,
+}));
+vi.mock('./expire-product-blog-cache', () => ({
+  expireProductBlogCache: mocks.expireBlog,
+}));
+vi.mock('./expire-product-blog-cache-reliable', () => ({
+  expireProductBlogCacheReliable: mocks.expireReliable,
+}));
 vi.mock('./schedule-order-product-blog-purge', () => ({
   scheduleOrderProductBlogPurge: mocks.purge,
 }));
@@ -16,7 +28,12 @@ vi.mock('./storefront-product-purge-hostnames', () => ({
 import { scheduleReservationProductPurge } from './schedule-reservation-product-purge';
 
 describe('scheduleReservationProductPurge', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.expireBlog.mockReturnValue(true);
+    mocks.revalidateProducts.mockReturnValue(true);
+    mocks.expireReliable.mockResolvedValue(true);
+  });
   it('defers and scopes quiz reservation invalidation', async () => {
     const source = 'quiz' as const;
     const result = {
@@ -85,6 +102,50 @@ describe('scheduleReservationProductPurge', () => {
     });
     await mocks.after.mock.calls[0][0]();
     expect(mocks.purge).not.toHaveBeenCalled();
+    expect(mocks.revalidateProducts).toHaveBeenCalledWith('m1', undefined, {
+      expireImmediately: true,
+    });
+    expect(mocks.hostnamePurge).toHaveBeenCalledWith('quiz-store');
+    expect(mocks.revalidateProducts.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.hostnamePurge.mock.invocationCallOrder[0]
+    );
+  });
+  it('hard-expires PDPs and evicts the hostname when prize_product_id is missing from settings', async () => {
+    const emptySettingsQuery = {
+      select: vi.fn(),
+      eq: vi.fn(),
+      maybeSingle: vi.fn().mockResolvedValue({
+        data: { settings: {} },
+        error: null,
+      }),
+    };
+    emptySettingsQuery.select.mockReturnValue(emptySettingsQuery);
+    emptySettingsQuery.eq.mockReturnValue(emptySettingsQuery);
+    const merchantsQuery = {
+      select: vi.fn(),
+      eq: vi.fn(),
+      maybeSingle: vi
+        .fn()
+        .mockResolvedValue({ data: { slug: 'quiz-store' }, error: null }),
+    };
+    merchantsQuery.select.mockReturnValue(merchantsQuery);
+    merchantsQuery.eq.mockReturnValue(merchantsQuery);
+    const supabase = {
+      from: vi.fn((table: string) =>
+        table === 'merchants' ? merchantsQuery : emptySettingsQuery
+      ),
+    };
+    scheduleReservationProductPurge({
+      source: 'quiz',
+      sourceId: 'q1',
+      merchantId: 'm1',
+      supabase: supabase as never,
+    });
+    await mocks.after.mock.calls[0][0]();
+    expect(mocks.purge).not.toHaveBeenCalled();
+    expect(mocks.revalidateProducts).toHaveBeenCalledWith('m1', undefined, {
+      expireImmediately: true,
+    });
     expect(mocks.hostnamePurge).toHaveBeenCalledWith('quiz-store');
   });
   it('warns without a fallback when the merchant slug is also unresolvable', async () => {
@@ -113,6 +174,9 @@ describe('scheduleReservationProductPurge', () => {
       });
       await mocks.after.mock.calls[0][0]();
       expect(mocks.purge).not.toHaveBeenCalled();
+      expect(mocks.revalidateProducts).toHaveBeenCalledWith('m1', undefined, {
+        expireImmediately: true,
+      });
       expect(mocks.hostnamePurge).not.toHaveBeenCalled();
       expect(warnSpy).toHaveBeenCalledWith(
         'Reservation cache purge skipped; no fallback available',
@@ -121,5 +185,57 @@ describe('scheduleReservationProductPurge', () => {
     } finally {
       warnSpy.mockRestore();
     }
+  });
+  it('skips hostname eviction when both local and reliable PDP hard expiry fail', async () => {
+    mocks.revalidateProducts.mockReturnValueOnce(false);
+    mocks.expireReliable.mockResolvedValueOnce(false);
+    const supabase = {
+      from: vi.fn(() => {
+        throw new Error('quiz_events unavailable');
+      }),
+    };
+    const warnSpy = vi
+      .spyOn(console, 'warn')
+      .mockImplementation(() => undefined);
+    try {
+      scheduleReservationProductPurge({
+        source: 'quiz',
+        sourceId: 'q1',
+        merchantId: 'm1',
+        supabase: supabase as never,
+      });
+      await mocks.after.mock.calls[0][0]();
+      expect(mocks.expireReliable).toHaveBeenCalledWith('m1', {
+        expireWidePdpDetails: true,
+      });
+      expect(mocks.hostnamePurge).not.toHaveBeenCalled();
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Skipped reservation hostname purge because PDP hard expiry failed',
+        expect.objectContaining({ merchantId: 'm1' })
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it('requires reliable expiry before hostname purge when blog cache expiry fails even if revalidateProducts succeeds', async () => {
+    mocks.expireBlog.mockReturnValueOnce(false);
+    mocks.expireReliable.mockResolvedValueOnce(false);
+    const supabase = {
+      from: vi.fn(() => {
+        throw new Error('quiz_events unavailable');
+      }),
+    };
+    scheduleReservationProductPurge({
+      source: 'quiz',
+      sourceId: 'q1',
+      merchantId: 'm1',
+      supabase: supabase as never,
+    });
+    await mocks.after.mock.calls[0][0]();
+    expect(mocks.expireReliable).toHaveBeenCalledWith('m1', {
+      expireWidePdpDetails: true,
+    });
+    expect(mocks.hostnamePurge).not.toHaveBeenCalled();
   });
 });

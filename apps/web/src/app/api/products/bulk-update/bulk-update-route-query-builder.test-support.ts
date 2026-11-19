@@ -7,6 +7,10 @@ export function createBulkUpdateRouteQueryBuilder(
 ) {
   const builder: Record<string, unknown> = {};
   builder.eq = vi.fn(() => builder);
+  builder.in = vi.fn(() => builder);
+  builder.limit = vi.fn(() =>
+    Promise.resolve({ data: getRows(), error: getError() })
+  );
   builder.select = vi.fn(() =>
     Promise.resolve({ data: getRows(), error: getError() })
   );

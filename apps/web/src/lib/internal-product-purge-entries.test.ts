@@ -70,6 +70,19 @@ describe('buildInternalProductPurgeEntries', () => {
   it('returns an empty list for no products', () => {
     expect(buildInternalProductPurgeEntries([])).toEqual([]);
   });
+
+  it('emits an additional edge purge entry for previousSlug when it differs from slug', () => {
+    expect(
+      buildInternalProductPurgeEntries(
+        [{ id: 'prod-1', slug: 'new-slug', previousSlug: 'old-slug' }],
+        new Map([['prod-1', 'smartphones']]),
+        new Map([['prod-1', 'new-slug']])
+      )
+    ).toEqual([
+      { slug: 'new-slug', categorySegment: 'smartphones' },
+      { slug: 'old-slug', categorySegment: 'smartphones' },
+    ]);
+  });
 });
 
 describe('collectResolvedProductSlugs', () => {

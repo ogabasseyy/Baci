@@ -37,9 +37,12 @@ export interface DelegateStorefrontEdgePurgeInput {
   merchantId: string;
   merchantSlug: string;
   entries: readonly StorefrontProductPurgeEntry[];
+  productIds?: readonly string[];
+  authoritativeSlugsById?: ReadonlyMap<string, string>;
   productSlugs: readonly string[];
   blogPostSlugs: readonly string[];
   purgeWholeStorefront: boolean;
+  slugsUnchanged?: boolean;
 }
 
 /**
@@ -51,9 +54,12 @@ export async function delegateStorefrontEdgePurge({
   merchantId,
   merchantSlug,
   entries,
+  productIds = [],
+  authoritativeSlugsById,
   productSlugs,
   blogPostSlugs,
   purgeWholeStorefront,
+  slugsUnchanged = false,
 }: DelegateStorefrontEdgePurgeInput): Promise<boolean> {
   let secret: string | undefined;
   let baseUrl: string | undefined;
@@ -107,6 +113,63 @@ export async function delegateStorefrontEdgePurge({
       entries,
       normalizedBlogPostSlugs
     ).length > PURGE_WHOLE_STOREFRONT_URL_THRESHOLD;
+  const normalizedProductIds = Array.from(
+    new Set(productIds.map((id) => id.trim()).filter((id) => id.length > 0))
+  );
+  const toEntryPayload = (entry: StorefrontProductPurgeEntry) => ({
+    slug: entry.slug,
+    ...(entry.categorySegment ? { categorySlug: entry.categorySegment } : {}),
+  });
+  let canOmitMerchantWidePdpDetails = false;
+  let delegatedProducts: Record<string, unknown>[];
+
+  if (normalizedProductIds.length > 0 && authoritativeSlugsById) {
+    const matchedEntryIndices = new Set<number>();
+    let allIdsMatched = true;
+    const idProducts = normalizedProductIds.map((id) => {
+      const authoritativeSlug = authoritativeSlugsById.get(id)?.trim();
+      const matchedIndex = authoritativeSlug
+        ? entries.findIndex((entry) => entry.slug === authoritativeSlug)
+        : -1;
+      if (matchedIndex === -1) {
+        allIdsMatched = false;
+        return authoritativeSlug
+          ? { id, slug: authoritativeSlug, previousSlug: null }
+          : { id };
+      }
+      matchedEntryIndices.add(matchedIndex);
+      return {
+        id,
+        ...toEntryPayload(entries[matchedIndex]),
+        previousSlug: null,
+      };
+    });
+    const unmatchedEntries = entries.filter(
+      (_, index) => !matchedEntryIndices.has(index)
+    );
+    delegatedProducts = [
+      ...idProducts,
+      ...unmatchedEntries.map(toEntryPayload),
+    ];
+    canOmitMerchantWidePdpDetails =
+      productSlugs.length > 0 && allIdsMatched && unmatchedEntries.length === 0;
+  } else if (normalizedProductIds.length === 1 && entries.length === 1) {
+    delegatedProducts = [
+      {
+        id: normalizedProductIds[0],
+        ...toEntryPayload(entries[0]),
+        previousSlug: null,
+      },
+    ];
+    canOmitMerchantWidePdpDetails = productSlugs.length > 0;
+  } else if (normalizedProductIds.length > 0) {
+    delegatedProducts = [
+      ...normalizedProductIds.map((id) => ({ id })),
+      ...entries.map(toEntryPayload),
+    ];
+  } else {
+    delegatedProducts = entries.map(toEntryPayload);
+  }
   try {
     const response = await fetch(endpoint, {
       method: 'POST',
@@ -124,15 +187,16 @@ export async function delegateStorefrontEdgePurge({
         ...(useWholeStorefront
           ? { purgeWholeStorefront: true }
           : {
+              ...(canOmitMerchantWidePdpDetails
+                ? {
+                    omitMerchantWidePdpDetails: true,
+                    ...(slugsUnchanged ? { slugsUnchanged: true } : {}),
+                  }
+                : {}),
               ...(normalizedBlogPostSlugs.length > 0
                 ? { blogPostSlugs: normalizedBlogPostSlugs }
                 : {}),
-              products: entries.map((entry) => ({
-                slug: entry.slug,
-                ...(entry.categorySegment
-                  ? { categorySlug: entry.categorySegment }
-                  : {}),
-              })),
+              products: delegatedProducts,
             }),
       }),
       signal: AbortSignal.timeout(REMOTE_EDGE_PURGE_TIMEOUT_MS),

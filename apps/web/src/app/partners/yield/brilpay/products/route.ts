@@ -4,15 +4,13 @@ import {
   BRILSTASH_FULL_FEED_QUERY,
   BRILSTASH_PILOT_LISTING_LIMIT,
 } from '@/config/brilstash-feed';
+import { checkBrilStashFeedRateLimit } from '@/lib/brilstash/feed-rate-limit';
 import { createBrilStashPageCorrelation } from '@/lib/brilstash/page-correlation';
 import { parseBrilStashBearer } from '@/lib/brilstash/parse-bearer';
 import { readBrilStashPage } from '@/lib/brilstash/read-page';
 import { resolveBrilStashFeedDeployment } from '@/lib/brilstash/resolve-feed-deployment';
 import { logger } from '@/lib/logger';
-import {
-  checkBrilStashFeedRateLimit,
-  createRateLimitResponse,
-} from '@/lib/rate-limit';
+import { createRateLimitResponse } from '@/lib/rate-limit';
 import { parseBrilStashFeedQuery } from '@/schemas/brilstash-feed-query';
 
 export const runtime = 'nodejs';

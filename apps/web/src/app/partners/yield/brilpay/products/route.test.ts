@@ -1,7 +1,7 @@
-import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createBrilStashPageCorrelation } from '@/lib/brilstash/page-correlation';
 import { GET } from './route';
+import { feedFixture } from './route.test-fixture';
 
 const dependencies = vi.hoisted(() => {
   const abortSignal = vi.fn();
@@ -16,45 +16,11 @@ vi.mock('@/lib/logger', () => ({
   logger: { info: dependencies.info, warn: dependencies.warn },
 }));
 
-vi.mock('@/lib/rate-limit', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/rate-limit')>()),
+vi.mock('@/lib/brilstash/feed-rate-limit', () => ({
   checkBrilStashFeedRateLimit: dependencies.rateLimit,
 }));
 
-const host = 'sandbox-feed.example.invalid';
-const bearer = 'S'.repeat(43);
-const path = '/partners/yield/brilpay/products';
-const products = [
-  {
-    external_id: 'fixture-one',
-    product_url: 'https://shop.example.invalid/products/phone',
-    title: 'Phone',
-    description:
-      'Condition: New. Specifications: Phone. Box contents: Phone. Warranty: 30 days.',
-    category: 'Phones',
-    price_naira: 365000,
-    stock_quantity: 0,
-    images: [{ url: 'https://media.example.invalid/phone.jpg' }],
-  },
-];
-const result = {
-  status: 'ok',
-  products,
-  totalCount: 7,
-  totalPages: 7,
-  generationId: '70000000-0000-4000-8000-000000000001',
-  credentialId: '80000000-0000-4000-8000-000000000001',
-  payloadDigest: 'a'.repeat(64),
-};
-function request(
-  query = '?page=1&limit=1&min_price=350000',
-  token: string | null = bearer,
-  hostname = host
-) {
-  return new NextRequest(`https://${hostname}${path}${query}`, {
-    headers: token === null ? {} : { Authorization: `Bearer ${token}` },
-  });
-}
+const { bearer, host, request, result } = feedFixture;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -153,7 +119,7 @@ describe('BrilStash feed GET', () => {
     const requestId = response.headers.get('x-request-id');
     expect(requestId).toBeTruthy();
     expect(response.headers.get('x-baci-catalogue-correlation')).toBeNull();
-    expect(await response.json()).toEqual(products);
+    expect(await response.json()).toEqual(result.products);
     expect(dependencies.rpc).toHaveBeenCalledWith('read_brilstash_page', {
       p_bearer: bearer,
       p_page: 1,

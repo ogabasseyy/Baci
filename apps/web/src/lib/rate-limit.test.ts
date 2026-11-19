@@ -2,7 +2,6 @@ import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   __resetRateLimitStoreForTesting,
-  checkBrilStashFeedRateLimit,
   checkImeiPollRateLimit,
   checkOxygenPhoneRedemptionRateLimit,
   checkOxygenProviderRateLimit,
@@ -29,41 +28,6 @@ vi.mock('@upstash/ratelimit', () => ({
 vi.mock('./redis', () => ({
   getRedis: mockGetRedis,
 }));
-
-describe('BrilStash feed rate limiter', () => {
-  const feed = 'https://feed.example.invalid/partners/yield/brilpay/products';
-
-  it('reports unknown trusted IP without calling Redis', async () => {
-    mockGetRedis.mockClear();
-    await expect(
-      checkBrilStashFeedRateLimit(new NextRequest(feed), 'read')
-    ).resolves.toMatchObject({
-      allowed: false,
-      failureReason: 'trusted_client_ip_missing',
-    });
-    expect(mockGetRedis).not.toHaveBeenCalled();
-  });
-
-  it('reports a shared Redis outage for a trusted client', async () => {
-    vi.stubEnv('VERCEL', '1');
-    mockGetRedis.mockReturnValue(null);
-    try {
-      await expect(
-        checkBrilStashFeedRateLimit(
-          new NextRequest(feed, {
-            headers: { 'x-real-ip': '203.0.113.5' },
-          }),
-          'read'
-        )
-      ).resolves.toMatchObject({
-        allowed: false,
-        failureReason: 'distributed_limiter_unavailable',
-      });
-    } finally {
-      vi.unstubAllEnvs();
-    }
-  });
-});
 
 it('fails closed for Oxygen provider requests without shared Redis', async () => {
   mockGetRedis.mockReturnValue(null);

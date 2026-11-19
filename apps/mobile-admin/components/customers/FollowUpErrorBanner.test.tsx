@@ -22,11 +22,45 @@ vi.mock('@/hooks/useTheme', () => ({
 }));
 
 describe('FollowUpErrorBanner', () => {
-  it('tells the merchant the visible rows are stale', () => {
+  it('warns when follow-ups may be incomplete or stale', () => {
     render(<FollowUpErrorBanner isRetrying={false} onRetry={vi.fn()} />);
 
     expect(
-      screen.getByText("Couldn't refresh. Showing the last loaded follow-ups.")
+      screen.getByText(
+        "Some follow-ups couldn't be loaded or may be out of date."
+      )
+    ).toBeTruthy();
+  });
+
+  it('explains a limited result without offering a retry that repeats the cap', () => {
+    render(
+      <FollowUpErrorBanner
+        hasError={false}
+        isLimited
+        isRetrying={false}
+        onRetry={vi.fn()}
+      />
+    );
+    expect(screen.getByText(/This queue has reached its limit/)).toBeTruthy();
+    expect(
+      screen.queryByRole('button', { name: 'Retry loading follow-ups' })
+    ).toBeNull();
+    expect(screen.queryByText(/couldn't be loaded/)).toBeNull();
+  });
+
+  it('keeps error recovery available when results are also limited', () => {
+    render(
+      <FollowUpErrorBanner
+        hasError
+        isLimited
+        isRetrying={false}
+        onRetry={vi.fn()}
+      />
+    );
+    expect(screen.getByText(/This queue has reached its limit/)).toBeTruthy();
+    expect(screen.getByText(/couldn't be loaded/)).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: 'Retry loading follow-ups' })
     ).toBeTruthy();
   });
 

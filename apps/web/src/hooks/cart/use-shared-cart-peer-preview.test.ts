@@ -3,6 +3,10 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { Product } from '@/lib/products';
 import {
+  resetCartSessionHintForTests,
+  writeCartSessionHint,
+} from './cart-session-hint';
+import {
   fetchSharedCartProducts,
   fetchSharedCartSnapshot,
   sendSharedCartCommand,
@@ -81,6 +85,8 @@ function snapshot(quantity: number, version: number): CartSnapshot {
 beforeEach(() => {
   vi.clearAllMocks();
   window.localStorage.clear();
+  resetCartSessionHintForTests();
+  writeCartSessionHint(MERCHANT_ID, '1');
   TabChannel.open.clear();
   vi.stubGlobal('BroadcastChannel', TabChannel);
   vi.mocked(fetchSharedCartProducts).mockResolvedValue(new Map());
@@ -92,6 +98,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  resetCartSessionHintForTests();
   vi.unstubAllGlobals();
 });
 

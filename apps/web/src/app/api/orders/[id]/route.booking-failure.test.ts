@@ -290,4 +290,66 @@ describe('PATCH shipped: booking failure responses and lock state', () => {
 
     consoleErrorSpy.mockRestore();
   });
+
+  it('records lock_retained false when wallet booking already released the lock before throwing', async () => {
+    const existingOrder: ExistingOrderFixture = {
+      id: 'order-1',
+      order_number: 'BACI-001',
+      shipping_status: 'processing',
+      payment_status: 'paid',
+      is_credit_order: false,
+      customer_id: null,
+      selected_quote_id: 'quote-1',
+      shipping_provider: 'GIGL',
+      shipping_funding_source: 'merchant_wallet',
+      tracking_number: null,
+      shipment_id: null,
+    };
+    const updatedOrder: UpdatedOrderFixture = {
+      id: 'order-1',
+      shipping_status: 'shipped',
+      shipping_provider: 'GIGL',
+      tracking_number: 'TRACK-1',
+    };
+    const { supabase, ordersUpdate } = createCancelledTransitionHarness(
+      existingOrder,
+      updatedOrder
+    );
+    const failureRows = captureFailureRows(supabase);
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {
+        // Silence expected error logging for this assertion.
+      });
+
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      error: null,
+      user: createMockUser(),
+      supabase,
+    });
+    vi.mocked(runClaimedOrderWalletOrCheckoutBooking).mockImplementationOnce(
+      async (_supabase, _merchantId, _orderId, _order, options) => {
+        options?.onLockReleased?.();
+        throw new Error('MERCHANT_WALLET_SUBMISSION_FAILED');
+      }
+    );
+
+    const response = await PATCH(
+      createPatchRequest({ shipping_status: 'shipped' }),
+      {
+        params: Promise.resolve({ id: 'order-1' }),
+      }
+    );
+
+    expect(response.status).toBe(500);
+    expect(ordersUpdate).not.toHaveBeenCalled();
+    expect(clearOrderShipmentBookingLock).not.toHaveBeenCalled();
+    expect(failureRows).toEqual([
+      expect.objectContaining({
+        lock_retained: false,
+      }),
+    ]);
+
+    consoleErrorSpy.mockRestore();
+  });
 });

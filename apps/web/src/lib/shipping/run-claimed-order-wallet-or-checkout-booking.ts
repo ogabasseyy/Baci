@@ -33,6 +33,7 @@ export async function runClaimedOrderWalletOrCheckoutBooking(
   options: {
     paymentStatus?: string | null;
     lockToken?: string | null;
+    onLockReleased?: () => void;
   } = {}
 ): Promise<ClaimedOrderBookingResult> {
   const selectedQuoteId = existingOrder.selected_quote_id ?? '';
@@ -54,13 +55,15 @@ export async function runClaimedOrderWalletOrCheckoutBooking(
     existingOrder.shipping_funding_source,
     (quoteId) => bookOrderShipment(supabase, merchantId, orderId, quoteId),
     lockToken
-      ? () =>
-          clearOrderShipmentBookingLock(
+      ? async () => {
+          await clearOrderShipmentBookingLock(
             supabase,
             merchantId,
             orderId,
             lockToken
-          )
+          );
+          options.onLockReleased?.();
+        }
       : undefined,
     () =>
       refreshWalletOrderShipmentQuote(

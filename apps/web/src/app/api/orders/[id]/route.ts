@@ -448,6 +448,7 @@ export async function PATCH(
 
       if (bookingClaim.status === 'claimed') {
         shipmentBookingLockToken = bookingClaim.lockToken;
+        let lockReleased = false;
 
         try {
           const booking = await runClaimedOrderWalletOrCheckoutBooking(
@@ -464,6 +465,9 @@ export async function PATCH(
             {
               paymentStatus: payment_status ?? existingOrder.payment_status,
               lockToken: shipmentBookingLockToken,
+              onLockReleased: () => {
+                lockReleased = true;
+              },
             }
           );
           updates.shipping_provider = booking.provider;
@@ -476,8 +480,11 @@ export async function PATCH(
           }
         } catch (error) {
           console.error('Shipment booking failed:', error);
-          let lockReleased = false;
-          if (shipmentBookingLockToken && shouldReleaseBookingLock(error)) {
+          if (
+            shipmentBookingLockToken &&
+            !lockReleased &&
+            shouldReleaseBookingLock(error)
+          ) {
             try {
               await clearOrderShipmentBookingLock(
                 supabase,

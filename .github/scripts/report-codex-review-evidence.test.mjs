@@ -13,7 +13,7 @@ const summary = {
   body: `${marker}\n| 📝 **Code Review** | ✅ **Completed** <relative-time datetime="2026-11-19T05:00:00Z">2026-11-19T05:00:00Z</relative-time> |`,
 };
 
-function run({ comments = [summary], events = [], failComments = false, failEvents = false, failProjection = false, changedHead = false, changedComments = false, unrelatedComment = false, pr = '7' } = {}) {
+function run({ comments = [summary], events = [], failHead = false, failComments = false, failEvents = false, failProjection = false, changedHead = false, changedComments = false, changedEvents = false, unrelatedComment = false, pr = '7', fallbackHead = '' } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'codex-evidence-'));
   try {
     const gh = join(dir, 'gh');
@@ -21,10 +21,13 @@ function run({ comments = [summary], events = [], failComments = false, failEven
 set -eu
 case "$*" in
   *'/pulls/'*)
+    if [[ "${failHead}" == true ]]; then exit 1; fi
     if [[ -f "$TEST_DIR/seen" && "${changedHead}" == true ]]; then printf '%s\\n' '${'b'.repeat(40)}'; else printf '%s\\n' '${head}'; fi
     touch "$TEST_DIR/seen" ;;
   *'/events'*)
     if [[ "${failEvents}" == true ]]; then exit 1; fi
+    if [[ -f "$TEST_DIR/events-seen" && "${changedEvents}" == true ]]; then printf '%s\\n' '[{"event":"base_ref_changed","created_at":"2026-11-19T06:00:00Z"}]'; exit 0; fi
+    touch "$TEST_DIR/events-seen"
     cat "$TEST_DIR/events" ;;
   *'/issues/'*)
     if [[ "${failComments}" == true ]]; then exit 1; fi
@@ -44,7 +47,7 @@ esac
     }
     writeFileSync(join(dir, 'comments'), JSON.stringify([comments]));
     writeFileSync(join(dir, 'events'), JSON.stringify([events]));
-    const result = spawnSync('bash', ['.github/scripts/report-codex-review-evidence.sh', 'owner/repo', pr], {
+    const result = spawnSync('bash', ['.github/scripts/report-codex-review-evidence.sh', 'owner/repo', pr, ...(fallbackHead ? [fallbackHead] : [])], {
       encoding: 'utf8',
       env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, TEST_DIR: dir, RUNNER_TEMP: dir, GITHUB_SERVER_URL: 'https://github.com', GITHUB_RUN_ID: '1' },
     });
@@ -66,12 +69,19 @@ test('sets pending before reporting a current clean review', () => {
 });
 
 test('does not report clean if comment retrieval fails or the head changes', () => {
-  for (const args of [{ failComments: true }, { failEvents: true }, { failProjection: true }, { changedHead: true }, { changedComments: true }]) {
+  for (const args of [{ failComments: true }, { failEvents: true }, { failProjection: true }, { changedHead: true }, { changedComments: true }, { changedEvents: true }]) {
     const result = run(args);
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.statuses, /state=pending/);
     assert.doesNotMatch(result.statuses, /state=success/);
   }
+  const failedHead = run({ failHead: true, fallbackHead: head });
+  assert.equal(failedHead.status, 0, failedHead.stderr);
+  assert.match(failedHead.statuses, /state=pending/);
+  assert.doesNotMatch(failedHead.statuses, /state=success/);
+  const failedNoFallback = run({ failHead: true });
+  assert.equal(failedNoFallback.status, 0, failedNoFallback.stderr);
+  assert.equal(failedNoFallback.statuses, '');
 });
 
 test('keeps pre-retarget comments pending after base_ref_changed', () => {

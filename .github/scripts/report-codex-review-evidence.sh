@@ -13,7 +13,15 @@ post_status() {
     -f description="$2" -f target_url="${GITHUB_SERVER_URL}/${repo}/actions/runs/${GITHUB_RUN_ID}" >/dev/null
 }
 
-head=$(get_head)
+fallback_head=${3:-}
+if ! head=$(get_head); then
+  if [[ "$fallback_head" =~ ^[0-9a-f]{40}$ ]]; then
+    head=$fallback_head
+    post_status pending 'PR head lookup failed; leaving the advisory status pending' || true
+  fi
+  echo 'PR head retrieval failed; leaving the advisory status pending.'
+  exit 0
+fi
 [[ "$head" =~ ^[0-9a-f]{40}$ ]] || exit 1
 # Supersede any earlier result before fetching mutable comments. API or parse
 # failures leave this observation pending rather than publishing a clean vote.
@@ -21,7 +29,8 @@ post_status pending 'Checking the current Codex code review'
 comments=$(mktemp "${RUNNER_TEMP:?}/codex-review.XXXXXXXX")
 confirm=$(mktemp "${RUNNER_TEMP:?}/codex-review.XXXXXXXX")
 events=$(mktemp "${RUNNER_TEMP:?}/codex-review.XXXXXXXX")
-trap 'rm -f "$comments" "$confirm" "$events"' EXIT
+confirm_events=$(mktemp "${RUNNER_TEMP:?}/codex-review.XXXXXXXX")
+trap 'rm -f "$comments" "$confirm" "$events" "$confirm_events"' EXIT
 # Codex publishes its review-state summary as a PR issue comment rather than
 # a pull-request review object; leave transient fetch/parse errors pending
 # cleanly instead of failing this advisory workflow.
@@ -41,10 +50,18 @@ if ! gh api --paginate --slurp "repos/$repo/issues/$pr/comments?per_page=100" > 
   echo 'Codex confirmation retrieval failed; leaving the advisory status pending.'
   exit 0
 fi
-# Validate the second response too, then compare only authoritative app
-# comments so an unrelated discussion cannot strand the observation.
-if ! node .github/scripts/codex-review-evidence-cli.mjs "$confirm" "$head" "$events" >/dev/null; then
+if ! gh api --paginate --slurp "repos/$repo/issues/$pr/events?per_page=100" > "$confirm_events"; then
+  echo 'PR confirmation event retrieval failed; leaving the advisory status pending.'
+  exit 0
+fi
+# Validate the second response too, then compare both events classification and
+# authoritative app comments so neither a retarget nor comment edit slips through.
+if ! confirm_result=$(node .github/scripts/codex-review-evidence-cli.mjs "$confirm" "$head" "$confirm_events"); then
   echo 'Codex confirmation evaluation failed; leaving the advisory status pending.'
+  exit 0
+fi
+if [[ "$result" != "$confirm_result" ]]; then
+  echo 'PR events or Codex review state changed during observation; leaving the status pending.'
   exit 0
 fi
 projection() {

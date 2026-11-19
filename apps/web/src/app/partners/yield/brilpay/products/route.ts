@@ -48,6 +48,8 @@ export async function GET(request: NextRequest): Promise<Response> {
   if (authority !== deployment.host && authority !== `${deployment.host}:443`)
     return fail(404, 'Not found', 'NOT_FOUND');
 
+  // Scheme casing is ignored. The RPC receives and authenticates the token
+  // exactly as supplied, without the HTTP scheme prefix.
   const bearer = parseBrilStashBearer(request.headers.get('authorization'));
 
   // The live contract accepts any limit that fits the entire assortment
@@ -117,6 +119,8 @@ export async function GET(request: NextRequest): Promise<Response> {
         query.limit === BRILSTASH_FULL_FEED_QUERY.limit &&
         query.min_price === BRILSTASH_FULL_FEED_QUERY.min_price
       ) {
+        // The unsigned hash correlates this response with the server log.
+        // Auth and payload verification are handled separately.
         headers.set(
           'X-Baci-Catalogue-Proof',
           createBrilStashPageProof(requestId, page)

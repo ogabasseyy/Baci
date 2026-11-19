@@ -107,7 +107,8 @@ function resolveImages(verifiedImages: SourceFacts['verifiedImages']) {
   for (const value of verifiedImages) {
     if (!value) continue;
     const url = parseBrilStashHttpsUrl(value);
-    // Staging checks each exported URL against the exact verified manifest.
+    // Staging checks image URLs against the exact verified manifest. The
+    // storefront hostname check applies to product_url only.
     // Fragmented inputs must be corrected and re-verified at their source.
     if (!url || url.hash || urls.has(url.href)) continue;
     urls.set(url.href, value);

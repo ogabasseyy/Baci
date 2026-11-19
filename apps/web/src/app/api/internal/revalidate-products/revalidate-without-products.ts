@@ -76,9 +76,8 @@ export function revalidateWithoutProducts({
           expireImmediately: true,
         }) !== false
       );
-    } else {
-      revalidateProducts(merchantId);
     }
+    return revalidateProducts(merchantId) !== false;
   }
   return true;
 }

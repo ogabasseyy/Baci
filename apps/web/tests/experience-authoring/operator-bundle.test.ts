@@ -60,12 +60,19 @@ it('builds the builder operator without frontend condition or native dependency 
       encoding: 'utf8',
     });
     expect(check.status).toBe(0);
-    const run = spawnSync(process.execPath, [bundle], {
-      encoding: 'utf8',
-      timeout: 15000,
-    });
+    // Exercise the identity guard before startup can read host configuration.
+    const run = spawnSync(
+      process.execPath,
+      [
+        '--input-type=module',
+        '--eval',
+        'import { pathToFileURL } from "node:url"; process.getuid = () => 0; await import(pathToFileURL(process.argv[1]).href);',
+        bundle,
+      ],
+      { encoding: 'utf8', timeout: 15000 }
+    );
     expect(run.status).toBe(1);
-    expect(run.stderr.trim()).toBe('Baci builder could not start.');
+    expect(run.stderr.trim()).toBe('Baci builder startup failed (identity).');
     expect(
       execFileSync(
         process.execPath,

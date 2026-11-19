@@ -2,6 +2,7 @@ import type { BrowserContext } from 'playwright-core';
 import { productionOrigin } from '@/lib/experience/production-origins';
 import { publicFrameworkRequest } from '../experience-verifier/public-framework-request';
 import { createPublicProductPolicy } from '../experience-verifier/public-product-policy';
+import { MAX_PUBLIC_OBSERVATION_RESOURCES } from './public-observation-resource-limit';
 
 type CartRequest = { url: string; method: 'GET' | 'POST'; body?: string };
 type Resource = {
@@ -30,7 +31,10 @@ export async function installPublicCartBrowserRoutes(settings: {
   const origin = productionOrigin(settings.origin);
   const product =
     settings.product && createPublicProductPolicy(settings.product);
-  if (settings.resources.length < 1 || settings.resources.length > 256)
+  if (
+    settings.resources.length < 1 ||
+    settings.resources.length > MAX_PUBLIC_OBSERVATION_RESOURCES
+  )
     throw Error('INVALID_BROWSER_RESOURCES');
   const resources = new Map<string, Resource>();
   for (const resource of settings.resources) {

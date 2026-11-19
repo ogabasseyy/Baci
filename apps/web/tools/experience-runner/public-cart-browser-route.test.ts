@@ -1,7 +1,39 @@
-import { chromium } from 'playwright-core';
+import { type BrowserContext, chromium } from 'playwright-core';
 import { expect, it, vi } from 'vitest';
 import { HYDRATION_SELECT } from '@/hooks/cart/shared-cart-products';
 import { installPublicCartBrowserRoutes } from './public-cart-browser-route';
+import { MAX_PUBLIC_OBSERVATION_RESOURCES } from './public-observation-resource-limit';
+
+it('installs the full verifier resource set and rejects anything over the shared limit', async () => {
+  const origin = 'https://shop.example.com';
+  const addCookies = vi.fn();
+  const route = vi.fn();
+  const cart = vi.fn(async () => ({ status: 200, body: '{}' }));
+  const context = { addCookies, route } as unknown as BrowserContext;
+  const resources = Array.from(
+    { length: MAX_PUBLIC_OBSERVATION_RESOURCES + 1 },
+    (_, index) => ({
+      url: `${origin}/observation/${index}`,
+      mime: 'text/html',
+      bytes: Buffer.from('<h1>Synthetic storefront</h1>'),
+      headers: {},
+    })
+  );
+
+  await expect(
+    installPublicCartBrowserRoutes({ context, origin, resources, cart })
+  ).rejects.toThrow('INVALID_BROWSER_RESOURCES');
+  expect(cart).not.toHaveBeenCalled();
+  expect(route).not.toHaveBeenCalled();
+  await installPublicCartBrowserRoutes({
+    context,
+    origin,
+    resources: resources.slice(0, MAX_PUBLIC_OBSERVATION_RESOURCES),
+    cart,
+  });
+  expect(cart).toHaveBeenCalledOnce();
+  expect(route).toHaveBeenCalledOnce();
+});
 
 it('loads a dynamic framework chunk through the scoped host relay and blocks foreign chunks', async () => {
   const browser = await chromium.launch({ headless: true });

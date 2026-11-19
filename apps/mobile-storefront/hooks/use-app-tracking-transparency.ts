@@ -1,21 +1,35 @@
 import { useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
-import { recordCrashBreadcrumb } from '@/lib/crash-diagnostics';
+import {
+  isDenialUnrecorded,
+  recordAttLifecycleEvent,
+} from '@/hooks/att-lifecycle';
 import {
   canRequestTrackingTransparency,
   getTrackingPermissionStatus,
 } from '@/lib/tracking-transparency';
 import { requestTrackingPermission } from '@/services/ad-tracking';
-import { trackEvent } from '@/services/analytics';
 import { gatherConsentBeforeTracking } from '@/services/consent-before-tracking';
 
 interface UseAppTrackingTransparencyOptions {
   enabled: boolean;
+  /** Show our explainer screen and wait for Continue before Apple's prompt. */
+  explainFirst?: boolean;
 }
 
 interface UseAppTrackingTransparencyResult {
   isTrackingAuthorizationSettled: boolean;
+  explainer: {
+    visible: boolean;
+    onContinue: () => void;
+    onDismiss: () => void;
+  };
 }
+
+// Lets the native launch animation finish fading before the explainer shows.
+export const TRACKING_EXPLAINER_DELAY_MS = 1000;
+// Safety net if a platform/test harness does not emit Modal.onDismiss.
+export const MODAL_DISMISS_FALLBACK_MS = 500;
 
 // iOS silently completes an ATT request with 'denied' WITHOUT recording a
 // decision when the request lands outside a fully-active UIKit state (e.g.
@@ -28,29 +42,15 @@ interface UseAppTrackingTransparencyResult {
 const MAX_UNRECORDED_DENIAL_RETRIES = 3;
 const UNRECORDED_DENIAL_RETRY_BASE_DELAY_MS = 800;
 
-function recordAttLifecycleEvent(
-  eventName: string,
-  breadcrumbName: string,
-  properties?: Record<string, string>
-) {
-  try {
-    recordCrashBreadcrumb(breadcrumbName, properties);
-  } catch {
-    // Observability must never block the native permission request.
-  }
-
-  try {
-    trackEvent(eventName, properties);
-  } catch {
-    // Analytics may not be ready when the first visible frame appears.
-  }
-}
-
 export function useAppTrackingTransparency({
   enabled,
+  explainFirst = false,
 }: UseAppTrackingTransparencyOptions): UseAppTrackingTransparencyResult {
   const [isTrackingAuthorizationSettled, setIsTrackingAuthorizationSettled] =
     useState(() => !canRequestTrackingTransparency());
+  const [explainerVisible, setExplainerVisible] = useState(false);
+  const continueRef = useRef<(() => void) | null>(null);
+  const dismissRef = useRef<(() => void) | null>(null);
   const hasStartedRef = useRef(false);
 
   useEffect(() => {
@@ -71,22 +71,54 @@ export function useAppTrackingTransparency({
     let unrecordedDenialRetryTimeout: ReturnType<typeof setTimeout> | null =
       null;
     let unrecordedDenialRetries = 0;
+    let explainerTimeout: ReturnType<typeof setTimeout> | null = null;
+    let explainerDismissTimeout: ReturnType<typeof setTimeout> | null = null;
+    let resolveExplainerWait: (() => void) | null = null;
+
+    // Apple's prompt only follows the shopper's own tap on Continue and the
+    // native Modal's dismissal completion: it never covers the launch
+    // animation, and iOS cannot discard or collide with a still-dismissing VC.
+    const waitForContinue = () =>
+      new Promise<void>((resolve) => {
+        resolveExplainerWait = () => {
+          resolveExplainerWait = null;
+          dismissRef.current = null;
+          if (explainerDismissTimeout) {
+            clearTimeout(explainerDismissTimeout);
+            explainerDismissTimeout = null;
+          }
+          resolve();
+        };
+
+        explainerTimeout = setTimeout(() => {
+          explainerTimeout = null;
+          if (cancelled) {
+            resolveExplainerWait?.();
+            return;
+          }
+          continueRef.current = () => {
+            continueRef.current = null;
+            setExplainerVisible(false);
+            recordAttLifecycleEvent(
+              'ATT Explainer Continued',
+              'att:explainer_continued'
+            );
+            dismissRef.current = () => {
+              resolveExplainerWait?.();
+            };
+            explainerDismissTimeout = setTimeout(() => {
+              explainerDismissTimeout = null;
+              resolveExplainerWait?.();
+            }, MODAL_DISMISS_FALLBACK_MS);
+          };
+          setExplainerVisible(true);
+          recordAttLifecycleEvent('ATT Explainer Shown', 'att:explainer_shown');
+        }, TRACKING_EXPLAINER_DELAY_MS);
+      });
 
     const settle = () => {
       if (!cancelled) {
         setIsTrackingAuthorizationSettled(true);
-      }
-    };
-
-    // A user's real denial is recorded by iOS; a still-'undetermined' status
-    // right after a 'denied' result means the dialog never showed. null =
-    // the recheck itself failed and the truth is unknown.
-    const isDenialUnrecorded = async (): Promise<boolean | null> => {
-      try {
-        const recheck = await getTrackingPermissionStatus();
-        return recheck.status === 'undetermined';
-      } catch {
-        return null;
       }
     };
 
@@ -172,6 +204,14 @@ export function useAppTrackingTransparency({
           return;
         }
 
+        // Apple ATT guidelines forbid auto-skipping or timing out a pre-prompt;
+        // once shown, this intentionally remains gated until the shopper taps
+        // Continue (surviving background/foreground transitions) or the hook unmounts.
+        if (explainFirst) {
+          await waitForContinue();
+          if (cancelled) return;
+        }
+
         // Google's consent message carries the explainer for this prompt,
         // so it goes first. Only a shopper who has not decided yet waits on
         // it, and it never rejects or hangs: whatever the outcome, the
@@ -226,8 +266,21 @@ export function useAppTrackingTransparency({
       if (unrecordedDenialRetryTimeout) {
         clearTimeout(unrecordedDenialRetryTimeout);
       }
+      if (explainerTimeout) clearTimeout(explainerTimeout);
+      if (explainerDismissTimeout) clearTimeout(explainerDismissTimeout);
+      continueRef.current = null;
+      dismissRef.current = null;
+      setExplainerVisible(false);
+      resolveExplainerWait?.();
     };
-  }, [enabled, isTrackingAuthorizationSettled]);
+  }, [enabled, explainFirst, isTrackingAuthorizationSettled]);
 
-  return { isTrackingAuthorizationSettled };
+  return {
+    isTrackingAuthorizationSettled,
+    explainer: {
+      visible: explainerVisible,
+      onContinue: () => continueRef.current?.(),
+      onDismiss: () => dismissRef.current?.(),
+    },
+  };
 }

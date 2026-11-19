@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { storefrontPreflightRpcMemo } from './storefront-preflight-rpc-memo';
 
 const {
@@ -34,6 +34,10 @@ describe('storefront preflight RPC memo', () => {
     expect(isTimeout(read(unknownKey))).toBe(false);
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('identifies timeout markers', () => {
     const timeoutKey = key('timeout_fn', {}, undefined);
     write(timeoutKey, timeout);
@@ -41,5 +45,33 @@ describe('storefront preflight RPC memo', () => {
     expect(read(timeoutKey)).toBe(timeout);
     expect(isTimeout(read(timeoutKey))).toBe(true);
     expect(isEmptyResult(read(timeoutKey))).toBe(false);
+  });
+
+  it('respects custom TTLs for published-active and default verdicts', () => {
+    vi.useFakeTimers();
+    const activeKey = key(
+      'get_storefront_pdp_preflight',
+      { p_slug: 'a' },
+      undefined
+    );
+    const defaultKey = key(
+      'get_storefront_pdp_preflight',
+      { p_slug: 'b' },
+      undefined
+    );
+
+    write(activeKey, { present: true }, 60_000);
+    write(defaultKey, { present: false });
+
+    vi.advanceTimersByTime(2_999);
+    expect(read(activeKey)).toEqual({ present: true });
+    expect(read(defaultKey)).toEqual({ present: false });
+
+    vi.advanceTimersByTime(2);
+    expect(read(defaultKey)).toBeUndefined();
+    expect(read(activeKey)).toEqual({ present: true });
+
+    vi.advanceTimersByTime(57_000);
+    expect(read(activeKey)).toBeUndefined();
   });
 });

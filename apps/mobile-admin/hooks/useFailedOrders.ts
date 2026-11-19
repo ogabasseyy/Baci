@@ -5,6 +5,7 @@ import {
   STALE_PENDING_MINUTES,
 } from '@/config/follow-up-queue';
 import { supabase } from '@/lib/supabase';
+import type { OxygenFollowUpStatus } from '@/schemas/oxygen-follow-up';
 import {
   CUSTOMER_CHECKOUT_ORDER_FILTER,
   ONLINE_CHECKOUT_PAYMENT_METHODS,
@@ -18,13 +19,25 @@ export interface FailedOrder {
   customer_name: string;
   customer_email: string;
   customer_phone: string;
-  total: number;
-  payment_status: 'bnpl_pending' | 'failed' | 'pending' | 'expired' | 'unpaid';
+  total: number | null;
+  payment_status:
+    | 'bnpl_pending'
+    | 'bnpl_approved'
+    | 'failed'
+    | 'pending'
+    | 'expired'
+    | 'unpaid'
+    | 'paid'
+    | 'refunded'
+    | 'cancelled'
+    | 'unknown';
   payment_method: string;
   created_at: string;
   gateway_response?: Record<string, unknown> | null;
   gateway?: string;
   attempt_count: number;
+  oxygen_follow_up_status?: OxygenFollowUpStatus;
+  follow_up_at?: string;
 }
 
 type FailedOrderPaymentStatus = FailedOrder['payment_status'];
@@ -40,7 +53,7 @@ const VALID_PAYMENT_STATUSES: ReadonlySet<FailedOrderPaymentStatus> = new Set([
 const toPaymentStatus = (status: string): FailedOrderPaymentStatus => {
   return VALID_PAYMENT_STATUSES.has(status as FailedOrderPaymentStatus)
     ? (status as FailedOrderPaymentStatus)
-    : 'failed';
+    : 'unknown';
 };
 
 /** Shape returned by the Supabase select on orders with joined transactions */
@@ -49,7 +62,7 @@ interface FailedOrderRow {
   order_number: string;
   customer_id: string | null;
   customer_name: string;
-  customer_email: string;
+  customer_email: string | null;
   customer_phone: string;
   total: number;
   payment_status: string;
@@ -77,8 +90,8 @@ export function useFailedOrders() {
   const { merchant } = useMerchant();
   const merchantId = merchant?.id;
 
-  return useQuery({
-    queryKey: ['failed-orders', merchantId],
+  const query = useQuery({
+    queryKey: ['failed-orders', merchantId, 'v2'],
     queryFn: async () => {
       const staleCutoff = new Date(
         Date.now() - STALE_PENDING_MINUTES * 60 * 1000
@@ -115,28 +128,34 @@ export function useFailedOrders() {
         .eq('merchant_id', merchantId)
         .gte('created_at', windowStart)
         .or(
-          `payment_status.in.(bnpl_pending,failed,expired),and(payment_status.eq.pending,created_at.lt.${staleCutoff},payment_method.in.${ONLINE_CHECKOUT_PAYMENT_METHODS},${CUSTOMER_CHECKOUT_ORDER_FILTER}),and(payment_status.eq.unpaid,created_at.lt.${staleCutoff},payment_method.in.${ONLINE_CHECKOUT_PAYMENT_METHODS},${CUSTOMER_CHECKOUT_ORDER_FILTER})`
+          `and(payment_status.in.(bnpl_pending,failed,expired),or(payment_method.is.null,payment_method.not.in.(oxygen))),and(payment_status.eq.pending,created_at.lt.${staleCutoff},payment_method.in.${ONLINE_CHECKOUT_PAYMENT_METHODS},${CUSTOMER_CHECKOUT_ORDER_FILTER}),and(payment_status.eq.unpaid,created_at.lt.${staleCutoff},payment_method.in.${ONLINE_CHECKOUT_PAYMENT_METHODS},${CUSTOMER_CHECKOUT_ORDER_FILTER})`
         )
         .order('created_at', { ascending: false })
-        .limit(FOLLOW_UP_QUERY_LIMIT);
+        .limit(FOLLOW_UP_QUERY_LIMIT + 1);
 
       if (error) throw error;
 
-      // Consolidate failed orders by customer email
+      // Keep guest orders distinct when there is no email to consolidate.
       const consolidated: Record<
         string,
         FailedOrder & { attempt_count: number }
       > = {};
 
-      (data as FailedOrderRow[]).forEach((order) => {
-        const email = order.customer_email;
-        if (!consolidated[email]) {
-          consolidated[email] = {
+      const rows = (data ?? []) as FailedOrderRow[];
+      rows.slice(0, FOLLOW_UP_QUERY_LIMIT).forEach((order) => {
+        // Orders still marked Oxygen share the independent RPC budget.
+        if (order.payment_method === 'oxygen') return;
+        const email = order.customer_email?.trim() ?? '';
+        const key = email
+          ? `email:${email.toLowerCase()}`
+          : `order:${order.id}`;
+        if (!consolidated[key]) {
+          consolidated[key] = {
             id: order.id,
             order_number: order.order_number,
             customer_id: order.customer_id,
             customer_name: order.customer_name,
-            customer_email: order.customer_email,
+            customer_email: email,
             customer_phone: order.customer_phone,
             total: order.total,
             payment_status: toPaymentStatus(order.payment_status),
@@ -148,14 +167,22 @@ export function useFailedOrders() {
           };
         } else {
           // Track attempt count but keep most recent order's total (data is already ordered DESC)
-          consolidated[email].attempt_count += 1;
+          consolidated[key].attempt_count += 1;
         }
       });
 
-      return Object.values(consolidated);
+      return {
+        orders: Object.values(consolidated),
+        isLimited: rows.length > FOLLOW_UP_QUERY_LIMIT,
+      };
     },
     enabled: !!merchantId,
     staleTime: 1000 * 60 * 2, // 2 minutes
     refetchOnWindowFocus: false,
   });
+  return {
+    ...query,
+    data: query.data?.orders,
+    isLimited: query.data?.isLimited ?? false,
+  };
 }

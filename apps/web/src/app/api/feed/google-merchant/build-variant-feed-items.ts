@@ -13,11 +13,15 @@ import {
   buildGoogleColorXml,
   buildGoogleProductDetailXml,
 } from './build-product-detail-xml';
-import type { FeedProduct, FeedVariant } from './feed-builder';
 import { FEED_CONSTANTS } from './feed-constants';
 import { getFeedStockCount } from './feed-stock';
+import type {
+  FeedProduct,
+  FeedVariant,
+  GoogleMerchantListing,
+} from './feed-types';
 
-interface VariantFeedInput {
+export interface VariantFeedInput {
   product: FeedProduct;
   variants: FeedVariant[];
   manifest: FeedImageManifestEntry[];
@@ -26,6 +30,7 @@ interface VariantFeedInput {
   brand: string;
   platform: 'google' | 'facebook';
   familyRow?: boolean;
+  collectListing?: (listing: GoogleMerchantListing) => void;
 }
 
 const text = (value: unknown) =>
@@ -190,15 +195,27 @@ export function buildVariantFeedItems(input: VariantFeedInput): string {
       // Missing identifiers mean unknown, not that the manufacturer assigned none.
       const gtin = text(identifiers.gtin);
       const mpn = text(identifiers.mpn);
+      const id = input.familyRow ? product.id : variant.id;
+      const listingUrl = url.toString();
+      input.collectListing?.({
+        id,
+        product,
+        variant,
+        imageUrl: image,
+        url: listingUrl,
+        title: boundedTitle,
+        price,
+        stock,
+      });
       return [
         '    <item>',
-        `<g:id>${escapeXml(input.familyRow ? product.id : variant.id)}</g:id>`,
+        `<g:id>${escapeXml(id)}</g:id>`,
         input.familyRow
           ? ''
           : `<g:item_group_id>${escapeXml(product.id)}</g:item_group_id>`,
         `<g:title>${escapeXml(boundedTitle)}</g:title>`,
         `<g:description>${escapeXml(buildFeedDescription(variantProduct))}</g:description>`,
-        `<g:link>${escapeXml(url.toString())}</g:link>`,
+        `<g:link>${escapeXml(listingUrl)}</g:link>`,
         `<g:canonical_link>${escapeXml(productUrl)}</g:canonical_link>`,
         `<g:image_link>${escapeXml(image)}</g:image_link>`,
         ...[...new Set(resolveGmcAdditionalImages(entries))]

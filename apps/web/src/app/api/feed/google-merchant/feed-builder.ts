@@ -19,21 +19,26 @@ import { buildAgentProductUrl } from '@/lib/storefront-agent-urls';
 import { productManufacturerIdentifiers } from '@/lib/variant-product-identifiers';
 import { escapeXml } from '@/lib/xml-utils';
 import { buildFeedDescription } from './build-feed-description';
+import { buildGoogleVariantFeedItems } from './build-google-variant-feed-items';
 import {
   buildGoogleColorXml,
   buildGoogleProductDetailXml,
 } from './build-product-detail-xml';
-import { buildVariantFeedItems } from './build-variant-feed-items';
 import { getFeedStockCount } from './feed-stock';
-import type { FeedMerchant, FeedProduct, ImageManifestMap } from './feed-types';
+import type {
+  FeedMerchant,
+  FeedProduct,
+  GoogleMerchantListing,
+  ImageManifestMap,
+} from './feed-types';
 import { resolveFeedImages } from './resolve-feed-images';
-import { selectFeedFamilyVariant } from './select-feed-family-variant';
 
 export type {
   FeedMerchant,
   FeedOffer,
   FeedProduct,
   FeedVariant,
+  GoogleMerchantListing,
   ImageManifestMap,
 } from './feed-types';
 
@@ -99,15 +104,15 @@ export function generateGoogleMerchantFeed(
   products: FeedProduct[],
   merchant: FeedMerchant,
   baseUrl: string,
-  imageManifest: ImageManifestMap
+  imageManifest: ImageManifestMap,
+  collectListing?: (listing: GoogleMerchantListing) => void
 ): string {
   const currency = resolveMerchantCurrencyConfig(merchant).code;
   const brandName = merchant.business_name;
   const normalizedBaseUrl = baseUrl.replace(/\/+$/, '');
 
-  const validProducts = products.filter(isValidForGmc);
-
-  const items = validProducts
+  const items = products
+    .filter(isValidForGmc)
     .map((product) => {
       const productUrl = buildAgentProductUrl({
         baseUrl: normalizedBaseUrl,
@@ -134,30 +139,16 @@ export function generateGoogleMerchantFeed(
       const effectiveBrand = product.brand || brandName;
       const productType = getProductType(product);
       if (product.variant_model === 'sku_matrix') {
-        const variants = getConditionedVariants(product);
-        const input = {
+        return buildGoogleVariantFeedItems({
           product,
-          variants,
+          variants: getConditionedVariants(product),
           manifest: manifestEntries,
           productUrl,
           currency,
           brand: effectiveBrand,
-          platform: 'google' as const,
           familyRow: merchant.gmc_variants_enabled === false,
-        };
-        if (!input.familyRow) return buildVariantFeedItems(input);
-        // Rank only renderable SKUs; preserve the verified colour-image rule.
-        const rows = new Map(
-          variants.map((variant) => [
-            variant.id,
-            buildVariantFeedItems({ ...input, variants: [variant] }),
-          ])
-        );
-        const selection = selectFeedFamilyVariant(
-          product,
-          variants.filter((variant) => Boolean(rows.get(variant.id)))
-        );
-        return selection ? rows.get(selection.id) : '';
+          collectListing,
+        });
       }
       // Simple-product rows carry parent identifiers only when they are
       // usable non-blank strings; whitespace must not reach the feed.
@@ -173,36 +164,47 @@ export function generateGoogleMerchantFeed(
         hasConditionOffers && parentCondition
           ? `${product.id}-${parentCondition}`
           : product.id;
-      const baseItem =
+      let baseItem = '';
+      if (
         productLevelImages &&
         parentCondition &&
         Number.isFinite(product.price) &&
         product.price > 0
-          ? buildBaseItemXml({
-              additionalImagesXml: productLevelImages.additionalImagesXml,
-              availability:
-                getFeedStockCount(product) > 0 ? 'in_stock' : 'out_of_stock',
-              brandName: effectiveBrand,
-              compareAtPrice: product.compare_at_price,
-              condition: toGmcCondition(product.condition),
-              colorXml,
-              currency,
-              description,
-              googleProductCategory: product.google_product_category,
-              gtin: productIdentifiers.gtin,
-              id: baseItemId,
-              groupId: hasConditionOffers ? product.id : undefined,
-              imageUrl: productLevelImages.primaryImageUrl,
-              mpn: productIdentifiers.mpn,
-              price: product.price,
-              productDetailsXml,
-              productType,
-              shippingWeight,
-              stockCount: getFeedStockCount(product),
-              title: product.name,
-              url: productUrl,
-            })
-          : '';
+      ) {
+        const stock = getFeedStockCount(product);
+        collectListing?.({
+          id: baseItemId,
+          product,
+          imageUrl: productLevelImages.primaryImageUrl,
+          url: productUrl,
+          title: product.name,
+          price: product.price,
+          stock,
+        });
+        baseItem = buildBaseItemXml({
+          additionalImagesXml: productLevelImages.additionalImagesXml,
+          availability: stock > 0 ? 'in_stock' : 'out_of_stock',
+          brandName: effectiveBrand,
+          compareAtPrice: product.compare_at_price,
+          condition: toGmcCondition(product.condition),
+          colorXml,
+          currency,
+          description,
+          googleProductCategory: product.google_product_category,
+          gtin: productIdentifiers.gtin,
+          id: baseItemId,
+          groupId: hasConditionOffers ? product.id : undefined,
+          imageUrl: productLevelImages.primaryImageUrl,
+          mpn: productIdentifiers.mpn,
+          price: product.price,
+          productDetailsXml,
+          productType,
+          shippingWeight,
+          stockCount: stock,
+          title: product.name,
+          url: productUrl,
+        });
+      }
 
       if (eligibleOffers.length === 0) {
         return baseItem;
@@ -218,12 +220,23 @@ export function generateGoogleMerchantFeed(
         const offerStock = getFeedStockCount(product, offer);
         const offerAvailability = offerStock > 0 ? 'in_stock' : 'out_of_stock';
 
+        const url = `${productUrl}?condition=${normalizeCanonicalProductCondition(offer.condition) || offer.condition}`;
+        collectListing?.({
+          id: offer.id,
+          product,
+          offer,
+          imageUrl: offerImages.imageUrl,
+          url,
+          title: product.name,
+          price: offer.price,
+          stock: offerStock,
+        });
         const offerLines = [
           `        <g:id>${escapeXml(offer.id)}</g:id>`,
           `        <g:item_group_id>${escapeXml(product.id)}</g:item_group_id>`,
           `        <g:title>${escapeXml(product.name)}</g:title>`,
           `        <g:description>${escapeXml(description)}</g:description>`,
-          `        <g:link>${escapeXml(`${productUrl}?condition=${normalizeCanonicalProductCondition(offer.condition) || offer.condition}`)}</g:link>`,
+          `        <g:link>${escapeXml(url)}</g:link>`,
           `        <g:canonical_link>${escapeXml(productUrl)}</g:canonical_link>`,
           `        <g:image_link>${escapeXml(offerImages.imageUrl)}</g:image_link>`,
           offerImages.additionalImagesXml,

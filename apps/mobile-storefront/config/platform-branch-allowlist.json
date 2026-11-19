@@ -214,6 +214,10 @@
       "justification": "Reviewed Android-only list virtualization setting."
     },
     {
+      "path": "components/ui/Toast.tsx",
+      "justification": "Triggers imperative AccessibilityInfo announcements only on iOS because iOS VoiceOver ignores accessibilityLiveRegion, while Android and web rely on declarative live regions."
+    },
+    {
       "path": "constants/Colors.ts",
       "justification": "Reviewed platform-specific shadow tokens: web uses CSS box-shadow strings while native platforms preserve React Native shadow properties."
     },

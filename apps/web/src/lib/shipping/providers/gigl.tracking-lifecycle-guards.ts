@@ -9,7 +9,16 @@ import { TERMINAL_STATUSES } from './gigl.tracking-terminal-statuses';
 const PLACE_NOISE_WORDS = new Set(['FCT', 'STATE', 'CITY', 'THE', 'OF']);
 // Intentionally narrow: other in_transit scans at a destination-named centre
 // count as arriving. Missing an arrival beats a false one, so extend with care.
-const DEPARTURE_CODES = new Set(['DSC', 'DPC', 'DCC', 'DST', 'DTR', 'DIWN']);
+const DEPARTURE_CODES = new Set([
+  'DSC',
+  'DPC',
+  'DCC',
+  'DST',
+  'DTR',
+  'DIWN',
+  // GIG's "SHIPMENT DEPARTS SERVICE CENTRE" (code-only scans carry no reason).
+  'MDSE',
+]);
 
 // Whole word only, so unrelated text that merely contains DEPART (e.g.
 // DEPARTMENT) cannot suppress an arrival.
@@ -69,8 +78,10 @@ export function applyLifecycleGuards(
   // name match only counts once the parcel has moved through the network. An
   // unknown origin (the field is optional) is treated the same way: the first
   // scan could be the origin centre, so require a scan away from the destination.
-  const sameCity =
-    placeWords(origin).length === 0 || matchesDestination(origin, destination);
+  const originKnown = placeWords(origin).length > 0;
+  const originIsDestination =
+    originKnown && matchesDestination(origin, destination);
+  const sameCity = !originKnown || originIsDestination;
   // Equal timestamps: process MSHC last so a contemporaneous arrival or
   // movement scan is seen first, whatever order the payload listed them in.
   const ordered = [...candidates].sort(
@@ -91,7 +102,9 @@ export function applyLifecycleGuards(
     const { event } = candidate;
     const raw = candidate.providerStatus.trim().toUpperCase();
     const isArrival =
+      // ARF and MAFD are GIG's explicit "arrived final destination" scans.
       raw === 'ARF' ||
+      raw === 'MAFD' ||
       (candidate.recognizedStatus === 'in_transit' &&
         !DEPARTURE_CODES.has(raw) &&
         !DEPARTURE_WORD.test(
@@ -140,6 +153,8 @@ export function applyLifecycleGuards(
     // it, without counting as network movement for the MSHC guard above.
     if (
       candidate.recognizedStatus === 'picked_up' &&
+      // A pickup inside a known same-city origin proves nothing about leaving.
+      !originIsDestination &&
       placeWords(event.location).length > 0 &&
       !matchesDestination(event.location, destination)
     ) {

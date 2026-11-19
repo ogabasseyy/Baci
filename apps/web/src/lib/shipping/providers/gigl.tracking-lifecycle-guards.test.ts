@@ -92,4 +92,26 @@ describe('applyLifecycleGuards', () => {
     );
     expect(arrival.event.rawStatus).toBe(GIGL_ARRIVED_IN_CITY_RAW_STATUS);
   });
+
+  it('bugfix: a code-only MDSE (departs service centre) at the destination is not an arrival', () => {
+    const mdse = {
+      ...scan('MDSE', 'in_transit', 11, 'WUSE ABUJA (Wuse)'),
+      scanText: '',
+    };
+    applyLifecycleGuards([mdse], 'ABUJA', 'LAGOS');
+    expect(mdse.event.rawStatus).toBe('MDSE');
+  });
+
+  it('flags MAFD as an explicit arrival even without a location or destination', () => {
+    const mafd = scan('MAFD', 'in_transit', 11);
+    applyLifecycleGuards([mafd], undefined, undefined);
+    expect(mafd.event.rawStatus).toBe(GIGL_ARRIVED_IN_CITY_RAW_STATUS);
+  });
+
+  it('bugfix: a same-city pickup at a non-matching location does not prove the parcel left the city', () => {
+    const pickup = scan('MPIK', 'picked_up', 9, 'GARKI (Garki)');
+    const hub = scan('MSVC', 'in_transit', 11, 'WUSE ABUJA (Wuse)');
+    applyLifecycleGuards([pickup, hub], 'ABUJA', 'ABUJA');
+    expect(hub.event.rawStatus).toBe('MSVC');
+  });
 });

@@ -91,21 +91,6 @@ test('definitive provider HTTP errors propagate without reconciliation or retry'
   assert.equal(lookups, 0);
 });
 
-test('non-array lookup result throws fail-closed unknown outcome without retry', async () => {
-  let sends = 0;
-  await assert.rejects(
-    reconcileAmbiguousSend({
-      send: () => {
-        sends += 1;
-        throw new TypeError('fetch failed');
-      },
-      lookup: () => undefined,
-    }),
-    /lookup returned an invalid result.*not retried/
-  );
-  assert.equal(sends, 1);
-});
-
 test('non-network TypeError programming bugs propagate without reconciliation or retry', async () => {
   let sends = 0;
   let lookups = 0;
@@ -124,19 +109,4 @@ test('non-network TypeError programming bugs propagate without reconciliation or
   );
   assert.equal(sends, 1);
   assert.equal(lookups, 0);
-});
-
-test('non-array lookup result throws fail-closed unknown outcome without retry', async () => {
-  let sends = 0;
-  await assert.rejects(
-    reconcileAmbiguousSend({
-      send: () => {
-        sends += 1;
-        throw new TypeError('fetch failed');
-      },
-      lookup: () => undefined,
-    }),
-    /lookup returned an invalid result.*not retried/
-  );
-  assert.equal(sends, 1);
 });

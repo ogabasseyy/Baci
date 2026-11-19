@@ -96,10 +96,12 @@ reviews:
       browser CSRF tokens on webhooks or bearer requests.
     - **Supabase clients:** Use `@/lib/supabase/server` (SSR) and
       `@/lib/supabase/client` (browser) under RLS. Never use service-role/admin
-      clients for user-facing operations (all legacy exceptions in
+      clients for user-facing operations. The only exceptions are the explicit,
+      time-bound owner approvals recorded in `AGENTS.md` (mirrored in
+      `.ruler/01-critical-rules.md`), each limited to its named call graph and
+      expiry. The legacy exceptions in
       `docs/agent-guidance/service-role-exceptions.md` are expired; any renewal
-      requires explicit owner approval recorded there with exact scope and a new
-      expiry).
+      requires new explicit owner approval with exact scope and expiry.
     - **Scoped queries:** Scope business-data queries to the resolved
       `merchantId` — never `select('*')`, always explicit columns.
     - **No `any`.** Use `unknown` or explicit interfaces/Zod schemas.

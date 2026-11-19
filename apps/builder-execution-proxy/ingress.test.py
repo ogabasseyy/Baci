@@ -43,7 +43,8 @@ def smoke(root, backend_port, secret, dead=False):
     config.write_text(
         candidate.replace('\n{\n', '\n{\n admin off\n auto_https disable_redirects\n'
                           ' skip_install_trust\n default_bind 127.0.0.1\n', 1)
-        .replace(f'{UPSTREAM} {{', f'https://{UPSTREAM}:{caddy_port} {{\n tls internal')
+        # Deliberately enable access logging to model an operator adding log.
+        .replace(f'{UPSTREAM} {{', f'https://{UPSTREAM}:{caddy_port} {{\n tls internal\n log')
     )
     env = dict(os.environ, XDG_CONFIG_HOME=str(root), XDG_DATA_HOME=str(root),
                BACI_DELIVERY_PORT=str(backend_port), BACI_EXECUTION_ORIGIN_KEY=secret)
@@ -109,8 +110,13 @@ def smoke(root, backend_port, secret, dead=False):
             assert json.loads(body)['path'] == published_route
             assert request(published + '/index.html?path=%2F' + 'a' * 1023,
                            '-H', f'{KEY_HEADER}: {KEY}')[-1] == '200'
+            for encoded in ('%2Fa' * 512, '%2F%5Ba%5D' * 256):
+                boundary = published + '/index.html?path=' + encoded
+                assert request(boundary, '-H', f'{KEY_HEADER}: {KEY}')[-1] == '200'
+                assert request(boundary + 'a', '-H', f'{KEY_HEADER}: {KEY}')[-1] == '404'
             for query in (
                 '?unrecognized=1',
+                '?path=%2fproducts%2F%5bsample%5D',
                 '?path=%2F&path=%2Fproducts',
                 '?path=%2Fproducts%2F',
                 '?path=%2F' + 'a' * 1024,
@@ -129,6 +135,10 @@ def smoke(root, backend_port, secret, dead=False):
         finally:
             process.terminate()
             process.wait(timeout=10)
+            log.seek(0)
+            runtime = [json.loads(line) for line in log if line.startswith('{')]
+            assert not any(event.get('logger', '').startswith('http.log.access')
+                           for event in runtime), 'Output vhost emitted an access record'
 
 
 def main():
@@ -145,7 +155,7 @@ def main():
         dead_port = dead.getsockname()[1]
     with tempfile.TemporaryDirectory(prefix='baci-output-dead-') as directory:
         smoke(Path(directory), dead_port, KEY, dead=True)
-    print('Synthetic execution HTTPS upstream and runtime log checks passed.')
+    print('Synthetic execution HTTPS, access-log suppression and runtime redaction passed.')
 
 
 if __name__ == '__main__':

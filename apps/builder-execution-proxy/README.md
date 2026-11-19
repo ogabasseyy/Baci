@@ -52,7 +52,9 @@ content, verify this exact deployment has no account-level Tail Workers,
 log exports, traffic inspection or cached responses that could retain
 preview tickets from URLs. Keep the candidate global Caddy runtime log filter when combining vhosts.
 It removes full request headers and URLs from structured runtime errors.
-Verify all other Contabo logging sinks suppress path and key logging. Start with synthetic tickets and
+The output vhost skips access logging even when the access logger is enabled.
+The disposable HTTPS regression enables that logger and checks that the vhost
+emits no access records. Verify all remaining Contabo sinks separately. Start with synthetic tickets and
 verify they never appear in configured logs or instrumentation. Confirm plan
 and usage before enabling traffic. This candidate uses one upstream
 subrequest per file and requires no paid bindings.

@@ -63,4 +63,25 @@ describe('getMerchantInboxInsights', () => {
       ok: false,
     });
   });
+
+  it('uses the reports credential when the binding has one', async () => {
+    const fetchMock = stubFetch(() => ({ body: 'nope' }));
+    await getMerchantInboxInsights(
+      { ...binding, reportsApiAccessToken: 'synthetic-admin-token-bbbb' },
+      { days: 7 }
+    );
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect((init.headers as Record<string, string>).api_access_token).toBe(
+      'synthetic-admin-token-bbbb'
+    );
+  });
+
+  it('falls back to the agent credential without a reports credential', async () => {
+    const fetchMock = stubFetch(() => ({ body: 'nope' }));
+    await getMerchantInboxInsights(binding, { days: 7 });
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect((init.headers as Record<string, string>).api_access_token).toBe(
+      binding.apiAccessToken
+    );
+  });
 });

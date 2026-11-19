@@ -34,7 +34,9 @@ export async function getMerchantInboxInsights(
       cache: 'no-store',
       headers: {
         accept: 'application/json',
-        api_access_token: binding.apiAccessToken,
+        // Reports are administrator-only upstream; an agent token gets a 403.
+        api_access_token:
+          binding.reportsApiAccessToken ?? binding.apiAccessToken,
       },
       redirect: 'error',
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),

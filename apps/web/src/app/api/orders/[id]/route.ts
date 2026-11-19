@@ -16,20 +16,11 @@ import { fileInventoryConfirmationFailureReview } from '@/lib/payments/file-inve
 import { buildInventoryConfirmationFailurePayload } from '@/lib/payments/inventory-confirmation-response';
 import { shouldDeferShippedNotificationToGigPickup } from '@/lib/shipping/gigl-shipment-pickup-state';
 import { isFundedCheckoutGiglAddressLocked } from '@/lib/shipping/is-funded-checkout-gigl-address-locked';
-import {
-  recordOrderShipmentBookingFailure,
-  toBookingFailureResponseError,
-} from '@/lib/shipping/order-shipment-booking-failure';
-import {
-  claimOrderShipmentBooking,
-  clearOrderShipmentBookingLock,
-} from '@/lib/shipping/order-shipment-booking-lock';
-import { shouldReleaseBookingLock } from '@/lib/shipping/order-shipment-booking-lock-errors';
+import { claimOrderShipmentBooking } from '@/lib/shipping/order-shipment-booking-lock';
 import {
   isShippingProviderCode,
   OrderShipmentBookingError,
 } from '@/lib/shipping/order-shipment-booking-utils';
-import { runClaimedOrderWalletOrCheckoutBooking } from '@/lib/shipping/run-claimed-order-wallet-or-checkout-booking';
 import { orderUpdateSchema } from '@/schemas/orders';
 import { appendCancelledStatusFences } from './append-cancelled-status-fences';
 import { createRacedCancellationRejection } from './create-raced-cancellation-rejection';
@@ -37,6 +28,7 @@ import {
   evaluateOrderCancelledTransition,
   writesNonCancelledStatusValue,
 } from './evaluate-order-cancelled-transition';
+import { executeClaimedOrderShipmentBooking } from './execute-claimed-order-shipment-booking';
 import { mapOrderPatchUpdateError } from './map-order-patch-update-error';
 
 function isPaidStatusUpdate(value: unknown): value is 'paid' | 'bnpl_approved' {
@@ -448,71 +440,27 @@ export async function PATCH(
 
       if (bookingClaim.status === 'claimed') {
         shipmentBookingLockToken = bookingClaim.lockToken;
-        let lockReleased = false;
-
-        try {
-          const booking = await runClaimedOrderWalletOrCheckoutBooking(
-            supabase,
-            merchantId,
-            id,
-            {
-              selected_quote_id: existingOrder.selected_quote_id,
-              shipping_funding_source: existingOrder.shipping_funding_source,
-              shipping_provider: existingOrder.shipping_provider,
-              payment_status: existingOrder.payment_status,
-              payment_method: existingOrder.payment_method,
-            },
-            {
-              paymentStatus: payment_status ?? existingOrder.payment_status,
-              lockToken: shipmentBookingLockToken,
-              onLockReleased: () => {
-                lockReleased = true;
-              },
-            }
-          );
-          updates.shipping_provider = booking.provider;
-          updates.selected_quote_id = booking.quoteId;
-          updates.shipment_id = booking.shipmentId;
-          updates.tracking_number = booking.trackingNumber;
-          if (shipmentBookingLockToken) {
-            updates.shipment_booking_lock_token = null;
-            updates.shipment_booking_started_at = null;
-          }
-        } catch (error) {
-          console.error('Shipment booking failed:', error);
-          if (
-            shipmentBookingLockToken &&
-            !lockReleased &&
-            shouldReleaseBookingLock(error)
-          ) {
-            try {
-              await clearOrderShipmentBookingLock(
-                supabase,
-                merchantId,
-                id,
-                shipmentBookingLockToken
-              );
-              lockReleased = true;
-            } catch (lockError) {
-              console.error(
-                'Failed to release shipment booking lock after booking error:',
-                lockError
-              );
-            }
-          }
-          // Keep the reason on the order so a stuck booking can be diagnosed
-          // later; never let this hide the real error below.
-          await recordOrderShipmentBookingFailure(
-            supabase,
-            merchantId,
-            id,
-            error,
-            Boolean(shipmentBookingLockToken) && !lockReleased
-          );
-          throw toBookingFailureResponseError(error, {
-            walletFunded:
-              existingOrder.shipping_funding_source === 'merchant_wallet',
-          });
+        const booking = await executeClaimedOrderShipmentBooking({
+          supabase,
+          merchantId,
+          orderId: id,
+          existingOrder: {
+            selected_quote_id: existingOrder.selected_quote_id,
+            shipping_funding_source: existingOrder.shipping_funding_source,
+            shipping_provider: existingOrder.shipping_provider,
+            payment_status: existingOrder.payment_status,
+            payment_method: existingOrder.payment_method,
+          },
+          paymentStatus: payment_status ?? existingOrder.payment_status,
+          lockToken: shipmentBookingLockToken,
+        });
+        updates.shipping_provider = booking.provider;
+        updates.selected_quote_id = booking.quoteId;
+        updates.shipment_id = booking.shipmentId;
+        updates.tracking_number = booking.trackingNumber;
+        if (shipmentBookingLockToken) {
+          updates.shipment_booking_lock_token = null;
+          updates.shipment_booking_started_at = null;
         }
       }
     }

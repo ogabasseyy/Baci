@@ -62,7 +62,7 @@ export async function initiatePaystackCancellationRefunds({
   transactions: GatewayPaymentTransaction[];
 }): Promise<number[]> {
   const refundIds: number[] = [];
-  const mismatchedBankOfferLegs: GatewayPaymentTransaction[] = [];
+  const bankOfferLegsForReview: GatewayPaymentTransaction[] = [];
   let bankOfferLookupUnavailable = false;
 
   for (const transaction of transactions) {
@@ -156,10 +156,11 @@ export async function initiatePaystackCancellationRefunds({
       );
       if (capture.error) {
         bankOfferLookupUnavailable = true;
+        if (isLastAttempt) bankOfferLegsForReview.push(transaction);
         continue;
       }
       if (capture.data !== true) {
-        mismatchedBankOfferLegs.push(transaction);
+        bankOfferLegsForReview.push(transaction);
         continue;
       }
     }
@@ -191,13 +192,16 @@ export async function initiatePaystackCancellationRefunds({
       })
     );
   }
-  if (mismatchedBankOfferLegs.length > 0) {
+  if (bankOfferLegsForReview.length > 0) {
     await quarantineRefund({
       metadata: { accepted_refund_ids: refundIds, ambiguous_initiation: false },
       order,
-      reason: 'Bank card offer refund does not match the verified capture',
+      reason:
+        isLastAttempt && bankOfferLookupUnavailable
+          ? 'Bank card offer refund verification was unavailable on the final attempt'
+          : 'Bank card offer refund does not match the verified capture',
       supabase,
-      transactions: mismatchedBankOfferLegs,
+      transactions: bankOfferLegsForReview,
     });
   }
   if (bankOfferLookupUnavailable)

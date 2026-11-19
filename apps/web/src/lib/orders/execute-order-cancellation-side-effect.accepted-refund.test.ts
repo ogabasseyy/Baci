@@ -102,7 +102,10 @@ describe('cancellation refund accepted-refund safety', () => {
     expect(from).toHaveBeenCalledTimes(4);
   });
 
-  it('saves a later refund before retrying an unavailable bank-offer lookup', async () => {
+  it.each([
+    false,
+    true,
+  ])('saves a later refund when a bank-offer lookup is unavailable (final attempt: %s)', async (isLastAttempt) => {
     const refundInsert = vi.fn().mockResolvedValue({ error: null });
     const from = vi
       .fn()
@@ -139,17 +142,30 @@ describe('cancellation refund accepted-refund safety', () => {
       },
     });
 
-    await expect(
-      executeOrderCancellationSideEffect({
-        merchant,
-        order,
-        step: 'refund',
-        supabase: { from, rpc } as never,
-      })
-    ).rejects.toMatchObject({
-      message: 'Unable to verify bank card offer refund capture',
-      refundIds: [42],
+    const result = executeOrderCancellationSideEffect({
+      isLastAttempt,
+      merchant,
+      order,
+      step: 'refund',
+      supabase: { from, rpc } as never,
     });
+    if (isLastAttempt) {
+      await expect(result).rejects.toBeInstanceOf(DeliveryUncertainError);
+      expect(refundInsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          issue_type: 'order_cancellation_refund_requires_review',
+          candidates: [
+            expect.objectContaining({ paymentTransactionId: 'payment-1' }),
+          ],
+          metadata: { accepted_refund_ids: [42], ambiguous_initiation: false },
+        })
+      );
+    } else {
+      await expect(result).rejects.toMatchObject({
+        message: 'Unable to verify bank card offer refund capture',
+        refundIds: [42],
+      });
+    }
     expect(mocks.initiateRefund).toHaveBeenCalledTimes(1);
     expect(mocks.initiateRefund).toHaveBeenCalledWith(
       'regular-fixture',

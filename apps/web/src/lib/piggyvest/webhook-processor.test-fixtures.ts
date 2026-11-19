@@ -6,7 +6,8 @@ export const interestEvent = {
   eventData: {
     id: 'faas-interest-synthetic-001',
     amount: 95000,
-    destination_wallet: 'faas-wallet-synthetic-001',
+    // PVB-internal wallet id (PiggyVest, 2026-11-11).
+    destination_wallet: 'pvb-internal-wallet-synthetic-009',
     destination_wallet_balance: 1095000,
     destination_wallet_ledger_balance: 1095000,
     reference: 'faas-ref-synthetic-002',
@@ -19,7 +20,8 @@ export const interestEvent = {
     },
   },
   pvb_reference: 'pvb-txn-synthetic-002',
-  pvb_wallet: 'pvb-wallet-synthetic-002',
+  // The PVB wallet the payout credited.
+  pvb_wallet: 'faas-wallet-synthetic-001',
   pvb_accrued_interest_wallet: 'pvb-wallet-synthetic-001',
   pvb_destination_wallet: null,
   pvb_third_party_reference: null,

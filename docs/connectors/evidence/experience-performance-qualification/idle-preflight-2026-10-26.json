@@ -1,0 +1,222 @@
+{
+  "samples": [
+    {
+      "at": "2026-10-26T18:50:51.538Z",
+      "loadPerCpu": 0.9766031901041666,
+      "idleFraction": 0.5715842414082146,
+      "clean": false,
+      "quiet": 0
+    },
+    {
+      "at": "2026-10-26T18:51:11.541Z",
+      "loadPerCpu": 0.9892578125,
+      "idleFraction": 0.5928191377937911,
+      "clean": false,
+      "quiet": 0
+    },
+    {
+      "at": "2026-10-26T18:51:31.543Z",
+      "loadPerCpu": 1.0487874348958333,
+      "idleFraction": 0.44190140845070425,
+      "clean": false,
+      "quiet": 0
+    },
+    {
+      "at": "2026-10-26T18:51:51.545Z",
+      "loadPerCpu": 0.9267578125,
+      "idleFraction": 0.5151121358205827,
+      "clean": false,
+      "quiet": 0
+    },
+    {
+      "at": "2026-10-26T18:52:11.546Z",
+      "loadPerCpu": 0.798828125,
+      "idleFraction": 0.5646378269617707,
+      "clean": false,
+      "quiet": 0
+    },
+    {
+      "at": "2026-10-26T18:52:31.547Z",
+      "loadPerCpu": 0.7270100911458334,
+      "idleFraction": 0.5878825995807128,
+      "clean": false,
+      "quiet": 0
+    },
+    {
+      "at": "2026-10-26T18:52:51.549Z",
+      "loadPerCpu": 0.7254638671875,
+      "idleFraction": 0.5979467839932956,
+      "clean": false,
+      "quiet": 0
+    },
+    {
+      "at": "2026-10-26T18:53:11.550Z",
+      "loadPerCpu": 0.703857421875,
+      "idleFraction": 0.5995892363148629,
+      "clean": false,
+      "quiet": 0
+    },
+    {
+      "at": "2026-10-26T18:53:31.553Z",
+      "loadPerCpu": 0.81884765625,
+      "idleFraction": 0.5989862600536193,
+      "clean": false,
+      "quiet": 0
+    },
+    {
+      "at": "2026-10-26T18:53:51.555Z",
+      "loadPerCpu": 0.9304606119791666,
+      "idleFraction": 0.5883980216279655,
+      "clean": false,
+      "quiet": 0
+    },
+    {
+      "at": "2026-10-26T18:54:11.557Z",
+      "loadPerCpu": 1.0130208333333333,
+      "idleFraction": 0.5886691250419042,
+      "clean": false,
+      "quiet": 0
+    },
+    {
+      "at": "2026-10-26T18:54:31.558Z",
+      "loadPerCpu": 0.99072265625,
+      "idleFraction": 0.5849499308668873,
+      "clean": false,
+      "quiet": 0
+    },
+    {
+      "at": "2026-10-26T18:54:51.561Z",
+      "loadPerCpu": 0.8365478515625,
+      "idleFraction": 0.5694537533512064,
+      "clean": false,
+      "quiet": 0
+    },
+    {
+      "at": "2026-10-26T18:55:11.565Z",
+      "loadPerCpu": 1.5043538411458333,
+      "idleFraction": 0.5060584461867427,
+      "clean": false,
+      "quiet": 0
+    },
+    {
+      "at": "2026-10-26T18:55:31.567Z",
+      "loadPerCpu": 1.1902669270833333,
+      "idleFraction": 0.5338613695415305,
+      "clean": false,
+      "quiet": 0
+    },
+    {
+      "at": "2026-10-26T18:55:51.569Z",
+      "loadPerCpu": 1.5747884114583333,
+      "idleFraction": 0.474516548512941,
+      "clean": false,
+      "quiet": 0
+    },
+    {
+      "at": "2026-10-26T18:56:11.571Z",
+      "loadPerCpu": 1.44775390625,
+      "idleFraction": 0.3441449736335482,
+      "clean": false,
+      "quiet": 0
+    },
+    {
+      "at": "2026-10-26T18:56:31.573Z",
+      "loadPerCpu": 1.4400634765625,
+      "idleFraction": 0.29580056884724776,
+      "clean": false,
+      "quiet": 0
+    },
+    {
+      "at": "2026-10-26T18:56:51.575Z",
+      "loadPerCpu": 1.261474609375,
+      "idleFraction": 0.29881594912346765,
+      "clean": false,
+      "quiet": 0
+    },
+    {
+      "at": "2026-10-26T18:57:11.577Z",
+      "loadPerCpu": 1.1667887369791667,
+      "idleFraction": 0.33633357056139324,
+      "clean": false,
+      "quiet": 0
+    },
+    {
+      "at": "2026-10-26T18:57:31.617Z",
+      "loadPerCpu": 1.1455891927083333,
+      "idleFraction": 0.3260405772850868,
+      "clean": false,
+      "quiet": 0
+    },
+    {
+      "at": "2026-10-26T18:57:51.626Z",
+      "loadPerCpu": 1.2984619140625,
+      "idleFraction": 0.29694432817078276,
+      "clean": false,
+      "quiet": 0
+    },
+    {
+      "at": "2026-10-26T18:58:11.629Z",
+      "loadPerCpu": 1.2187906901041667,
+      "idleFraction": 0.3545740004186728,
+      "clean": false,
+      "quiet": 0
+    },
+    {
+      "at": "2026-10-26T18:58:31.632Z",
+      "loadPerCpu": 1.0663655598958333,
+      "idleFraction": 0.41505088152770214,
+      "clean": false,
+      "quiet": 0
+    },
+    {
+      "at": "2026-10-26T18:58:51.635Z",
+      "loadPerCpu": 0.9062906901041666,
+      "idleFraction": 0.5383100833647522,
+      "clean": false,
+      "quiet": 0
+    },
+    {
+      "at": "2026-10-26T18:59:11.636Z",
+      "loadPerCpu": 1.5550537109375,
+      "idleFraction": 0.10498391611313031,
+      "clean": false,
+      "quiet": 0
+    },
+    {
+      "at": "2026-10-26T18:59:31.637Z",
+      "loadPerCpu": 1.3700764973958333,
+      "idleFraction": 0.4832431525523258,
+      "clean": false,
+      "quiet": 0
+    },
+    {
+      "at": "2026-10-26T18:59:51.643Z",
+      "loadPerCpu": 1.1182047526041667,
+      "idleFraction": 0.5698068948184141,
+      "clean": false,
+      "quiet": 0
+    },
+    {
+      "at": "2026-10-26T19:00:11.645Z",
+      "loadPerCpu": 1.2937418619791667,
+      "idleFraction": 0.3125104532530523,
+      "clean": false,
+      "quiet": 0
+    },
+    {
+      "at": "2026-10-26T19:00:31.646Z",
+      "loadPerCpu": 2.6611735026041665,
+      "idleFraction": 0.0007083923660305025,
+      "clean": false,
+      "quiet": 0
+    }
+  ],
+  "quietRequired": {
+    "loadPerCpuMax": 0.8,
+    "cpuIdleFractionMin": 0.6,
+    "consecutive20SecondSamples": 2
+  },
+  "ready": false,
+  "productionBenchmarksStarted": false,
+  "unrelatedProcessesStopped": false
+}

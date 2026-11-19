@@ -28,6 +28,7 @@ vi.mock('@/lib/piggyvest/primary-wallet-card-custody-intake-runtime', () => ({
 
 import {
   collectPrimaryIntakeEvidence,
+  isPrimaryLegacyBankInflowUnavailable,
   primaryIntakeReason,
 } from './webhook-capture-primary-intake-readiness';
 
@@ -110,6 +111,27 @@ describe('collectPrimaryIntakeEvidence', () => {
       readers.bankInbox.mockReturnValue(configured);
       readers.inflow.mockImplementation(off);
       expect(collectPrimaryIntakeEvidence(ENV, NOW).notReady).toEqual([]);
+    });
+
+    it('records a broken inflow runtime independently of bank-key readiness', () => {
+      readers.bankInbox.mockImplementation(off);
+      readers.inflow.mockImplementation(broken);
+      expect(collectPrimaryIntakeEvidence(ENV, NOW)).toEqual({
+        notReady: ['bank'],
+        legacyBankInflowUnavailable: true,
+      });
+    });
+
+    it('omits the legacy signal when inflow is deliberately off', () => {
+      readers.inflow.mockImplementation(off);
+      expect(collectPrimaryIntakeEvidence(ENV, NOW)).toEqual({ notReady: [] });
+    });
+
+    it('exports the broken-only runtime probe', () => {
+      readers.inflow.mockImplementation(broken);
+      expect(isPrimaryLegacyBankInflowUnavailable(ENV)).toBe(true);
+      readers.inflow.mockImplementation(off);
+      expect(isPrimaryLegacyBankInflowUnavailable(ENV)).toBe(false);
     });
   });
 

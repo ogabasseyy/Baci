@@ -169,10 +169,13 @@ async function place(input: {
   }
 }
 
-async function list(merchantSlug: string): Promise<ImeiRemediationOrder[]> {
+async function list(
+  merchantSlug: string,
+  signal?: AbortSignal
+): Promise<ImeiRemediationOrder[]> {
   const response = await fetchWithCsrf(
     `/api/storefront/imei-remediation/orders?merchantSlug=${encodeURIComponent(merchantSlug)}`,
-    { method: 'GET' }
+    { method: 'GET', signal }
   );
   const data = record(await response.json());
   return response.ok && Array.isArray(data?.orders)

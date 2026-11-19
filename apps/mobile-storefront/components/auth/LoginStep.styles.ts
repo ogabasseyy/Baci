@@ -31,6 +31,10 @@ export const loginStepStyles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     paddingVertical: 16,
+    // Explicit, not omitted: after a code sign-in the email placeholder came
+    // back letter-spaced, most likely a recycled native TextInput keeping the
+    // code field's spacing when the new props leave it unset.
+    letterSpacing: 0,
   },
   otpInput: {
     letterSpacing: 8,

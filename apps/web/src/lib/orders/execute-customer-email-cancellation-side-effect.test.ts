@@ -73,6 +73,22 @@ describe('executeCustomerEmailCancellationSideEffect', () => {
     );
   });
 
+  it('does not present a refund amount for a cancel-only order', async () => {
+    const sendCancellationEmail = vi
+      .fn()
+      .mockResolvedValue({ messageId: 'msg-2', success: true });
+
+    await executeCustomerEmailCancellationSideEffect({
+      merchant: merchant as never,
+      order: { ...order, cancellation_refund_mode: 'manual' } as never,
+      sendCancellationEmail: sendCancellationEmail as never,
+    });
+
+    expect(mocks.buildOrderCancellationEmailMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ refundAmount: 0 })
+    );
+  });
+
   it('throws when no cancellation email sender is provided', async () => {
     await expect(
       executeCustomerEmailCancellationSideEffect({

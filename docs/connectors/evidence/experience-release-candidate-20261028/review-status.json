@@ -1,0 +1,63 @@
+{
+  "reviewer": "CodeRabbit",
+  "mode": "included-free-allowance-only",
+  "attempts": [
+    {
+      "log": "/tmp/experience-release-candidate-review-20261028.ndjson",
+      "status": "rate_limit",
+      "sourceReviewed": false
+    },
+    {
+      "log": "/tmp/experience-release-candidate-review-retry-20261028.ndjson",
+      "status": "rate_limit",
+      "sourceReviewed": false
+    },
+    {
+      "log": "/tmp/experience-candidate-free-review-resumed.ndjson",
+      "status": "too_many_files",
+      "sourceReviewed": false,
+      "changedFiles": 766,
+      "freeFileLimit": 150
+    },
+    {
+      "log": "/tmp/experience-candidate-free-review-experience-core.ndjson",
+      "status": "completed",
+      "scope": "apps/web/src/lib/experience",
+      "findings": 2,
+      "resolution": "Both minor findings fixed with red/green regression tests."
+    },
+    {
+      "log": "/tmp/experience-candidate-free-review-app.ndjson",
+      "status": "connection_failed",
+      "sourceReviewed": false
+    },
+    {
+      "log": "/tmp/experience-candidate-free-review-app-retry.ndjson",
+      "status": "completed",
+      "scope": "apps/web/src/app",
+      "findings": 9,
+      "resolution": "Valid preview/approval/workspace/AI-edit findings addressed and tested. Dedicated acknowledgment log event deferred because existing logger has a closed event contract."
+    },
+    {
+      "log": "/tmp/experience-candidate-free-review-core-postfix.ndjson",
+      "status": "completed",
+      "scope": "apps/web/src/lib/experience",
+      "reviewedFiles": 146,
+      "findings": 2,
+      "resolution": "Deterministic fingerprint ordering and launch cleanup fixed; 2 red regressions, then 9 green tests including successful launch and all three query failures."
+    },
+    {
+      "log": "/tmp/experience-candidate-free-review-runner.ndjson",
+      "status": "completed",
+      "scope": "apps/web/tools/experience-runner",
+      "reviewedFiles": 63,
+      "findings": 1,
+      "resolution": "Minor tuple-key collision fixed with failing-before regression and 114 passing runner tests."
+    }
+  ],
+  "reviewGate": "blocked-incomplete-whole-feature-coverage",
+  "paidCreditsUsed": false,
+  "candidateCommit": null,
+  "releaseQualified": false,
+  "wholeFeatureReviewed": false
+}

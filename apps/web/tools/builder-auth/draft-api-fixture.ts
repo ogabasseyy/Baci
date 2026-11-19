@@ -7,6 +7,7 @@ import { createServer, request as proxyRequest } from 'node:http';
 import { setTimeout as delay } from 'node:timers/promises';
 import { urlToHttpOptions } from 'node:url';
 import { importJWK, type JWK, jwtVerify } from 'jose';
+import { builderCiDockerArgs } from './ci-container-labels.mjs';
 import { startLocalPostgrest } from './local-postgrest-fixture.ts';
 export async function startDraftApi(
   containerName: string,
@@ -64,6 +65,41 @@ export async function startDraftApi(
         headers: req.headers,
       },
       (result) => {
+        // Synthetic fixture only: preserve SQLSTATE for a failed finish RPC,
+        // without logging bearer tokens, request bodies or database details.
+        if (
+          (result.statusCode ?? 0) >= 400 &&
+          req.url === '/rest/v1/rpc/builder_finish_edit'
+        ) {
+          console.error(
+            'Synthetic builder_finish_edit HTTP status:',
+            result.statusCode
+          );
+          let bytes = 0;
+          let body = '';
+          result.on('data', (chunk: Buffer) => {
+            bytes += chunk.length;
+            if (bytes <= 4096) body += chunk.toString('utf8');
+          });
+          result.on('end', () => {
+            try {
+              const value: unknown = JSON.parse(body);
+              if (
+                value &&
+                typeof value === 'object' &&
+                'code' in value &&
+                typeof value.code === 'string' &&
+                /^[A-Z0-9]{5,12}$/.test(value.code)
+              )
+                console.error(
+                  'Synthetic builder_finish_edit SQLSTATE:',
+                  value.code
+                );
+            } catch {
+              /* No raw response details are emitted. */
+            }
+          });
+        }
         res.writeHead(result.statusCode ?? 502, result.headers);
         result.pipe(res);
       }
@@ -104,6 +140,7 @@ export async function startDraftApi(
         'run',
         '--rm',
         '-d',
+        ...builderCiDockerArgs(),
         '--name',
         api,
         '-p',

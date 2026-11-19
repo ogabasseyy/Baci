@@ -20,13 +20,13 @@
     "scope": "approved_pilot_hosts_and_complete_browser_automatic_traffic",
     "zeroDenominatorVerdict": "NOT_PROVEN"
   },
-  "originMainSha": "c06c4808d9de0ba9d8884c8e8512aa93d0ef8f04",
+  "originMainSha": "96d93966c2b09d83faf5cb74e52ce7b34b2d6560",
   "pilotCandidateHostnameSha256": "6ecb417105cfa291c7286367f438872a3bf9e3d11bd6d32383aaf2a3e7c39705",
   "pilotCandidateHostnames": [
     "baci-edge-pilot.usebaci.com"
   ],
-  "routeTreeSha256": "9817b2b7cd6f6e91c505fb3923818dfdaaa00f8935300ec19885b18e26900f1e",
-  "routingProxyInputSha256": "319f931e9b63ea0c728a061612ac6b03293edfcef7e93b9c62785f514e86280c",
+  "routeTreeSha256": "de2993232f6d4b04fc315984ac88ce25f0ea47c36bd4d4ef0359b14bfb08c44b",
+  "routingProxyInputSha256": "ce47aac2317332efa7c53c8fb19a2caaf560a99580afc9980f8d66d71d50e31b",
   "rows": [
     {
       "decision": "origin_dynamic",
@@ -1167,6 +1167,19 @@
     },
     {
       "decision": "origin_dynamic",
+      "id": "api-route:storefront/black-friday/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/black-friday",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/black-friday/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
       "id": "api-route:storefront/cart/route.ts",
       "methods": [
         "GET",
@@ -1243,6 +1256,19 @@
     },
     {
       "decision": "origin_dynamic",
+      "id": "api-route:storefront/cart/continuity/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/cart/continuity",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/cart/continuity/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
       "id": "api-route:storefront/cart/handoff/route.ts",
       "methods": [
         "GET",
@@ -1303,6 +1329,78 @@
       "routePattern": "/api/storefront/cart/session/revoke",
       "sourceKind": "api_route",
       "sourcePath": "apps/web/src/app/api/storefront/cart/session/revoke/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/chatwoot/cart/add/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/chatwoot/cart/add",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/chatwoot/cart/add/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/chatwoot/cart/quantity/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/chatwoot/cart/quantity",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/chatwoot/cart/quantity/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/chatwoot/context/authorize/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/chatwoot/context/authorize",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/chatwoot/context/authorize/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/chatwoot/context/challenge/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/chatwoot/context/challenge",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/chatwoot/context/challenge/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/chatwoot/context/verify/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/chatwoot/context/verify",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/chatwoot/context/verify/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/chatwoot/products/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/chatwoot/products",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/chatwoot/products/route.ts"
     },
     {
       "decision": "origin_dynamic",
@@ -1692,6 +1790,19 @@
     },
     {
       "decision": "origin_dynamic",
+      "id": "api-route:storefront/customer/wallet/piggyvest-activity/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/customer/wallet/piggyvest-activity",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/customer/wallet/piggyvest-activity/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
       "id": "api-route:storefront/customer/wallet/piggyvest-plan/route.ts",
       "methods": [
         "GET",
@@ -1854,6 +1965,44 @@
     },
     {
       "decision": "origin_dynamic",
+      "id": "api-route:storefront/experience/catalog/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/experience/catalog",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/experience/catalog/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/experience/launch/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/experience/launch",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/experience/launch/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/experience/state/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/experience/state",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/experience/state/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
       "id": "api-route:storefront/features/route.ts",
       "methods": [
         "GET",
@@ -1881,6 +2030,19 @@
     },
     {
       "decision": "origin_dynamic",
+      "id": "api-route:storefront/imei-check/reports/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/imei-check/reports",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/imei-check/reports/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
       "id": "api-route:storefront/imei-check/[lookupId]/route.ts",
       "methods": [
         "GET",
@@ -1891,6 +2053,30 @@
       "routePattern": "/api/storefront/imei-check/{lookupId}",
       "sourceKind": "api_route",
       "sourcePath": "apps/web/src/app/api/storefront/imei-check/[lookupId]/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/imei-check/[lookupId]/wallet-pay/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/imei-check/{lookupId}/wallet-pay",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/imei-check/[lookupId]/wallet-pay/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/imei-check/[lookupId]/wallet-pin/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/imei-check/{lookupId}/wallet-pin",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/imei-check/[lookupId]/wallet-pin/route.ts"
     },
     {
       "decision": "origin_dynamic",
@@ -5750,6 +5936,29 @@
     },
     {
       "decision": "origin_dynamic",
+      "reason": "request_state_or_origin_action_required",
+      "id": "storefront:(blog)/blog/feed.xml/route.ts",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "routePattern": "/blog/feed.xml",
+      "sourceKind": "storefront_entrypoint",
+      "sourcePath": "apps/web/src/app/(storefront)/[slug]/(blog)/blog/feed.xml/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "storefront:(blog)/blog/feed.xml/route.ts:options",
+      "methods": [
+        "OPTIONS"
+      ],
+      "reason": "automatic_options_response",
+      "routePattern": "/blog/feed.xml",
+      "sourceKind": "storefront_entrypoint",
+      "sourcePath": "apps/web/src/app/(storefront)/[slug]/(blog)/blog/feed.xml/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
       "reason": "rolling_news_sitemap_requires_origin",
       "id": "storefront:(blog)/blog/news-sitemap.xml/route.ts",
       "methods": [
@@ -5770,6 +5979,29 @@
       "routePattern": "/blog/news-sitemap.xml",
       "sourceKind": "storefront_entrypoint",
       "sourcePath": "apps/web/src/app/(storefront)/[slug]/(blog)/blog/news-sitemap.xml/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "reason": "request_state_or_origin_action_required",
+      "id": "storefront:(blog)/blog/rss.xml/route.ts",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "routePattern": "/blog/rss.xml",
+      "sourceKind": "storefront_entrypoint",
+      "sourcePath": "apps/web/src/app/(storefront)/[slug]/(blog)/blog/rss.xml/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "storefront:(blog)/blog/rss.xml/route.ts:options",
+      "methods": [
+        "OPTIONS"
+      ],
+      "reason": "automatic_options_response",
+      "routePattern": "/blog/rss.xml",
+      "sourceKind": "storefront_entrypoint",
+      "sourcePath": "apps/web/src/app/(storefront)/[slug]/(blog)/blog/rss.xml/route.ts"
     },
     {
       "decision": "edge_release",
@@ -6111,6 +6343,18 @@
     {
       "decision": "origin_dynamic",
       "reason": "request_state_or_origin_action_required",
+      "id": "storefront:(catalog)/(listing)/collections/[handle]/page.tsx",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "routePattern": "/collections/{handle}",
+      "sourceKind": "storefront_entrypoint",
+      "sourcePath": "apps/web/src/app/(storefront)/[slug]/(catalog)/(listing)/collections/[handle]/page.tsx"
+    },
+    {
+      "decision": "origin_dynamic",
+      "reason": "request_state_or_origin_action_required",
       "id": "storefront:(catalog)/(pdp)/product/[productSlug]/page.tsx",
       "methods": [
         "GET",
@@ -6211,6 +6455,18 @@
       "routePattern": "/blog/{*catchAll}",
       "sourceKind": "storefront_entrypoint",
       "sourcePath": "apps/web/src/app/(storefront)/[slug]/(blog)/blog/[...catchAll]/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "reason": "request_state_or_origin_action_required",
+      "id": "storefront:(content)/pages/[...experiencePath]/page.tsx",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "routePattern": "/pages/{*experiencePath}",
+      "sourceKind": "storefront_entrypoint",
+      "sourcePath": "apps/web/src/app/(storefront)/[slug]/(content)/pages/[...experiencePath]/page.tsx"
     },
     {
       "decision": "origin_dynamic",
@@ -7045,6 +7301,18 @@
       "sourcePath": "apps/web/src/app/(storefront)/[slug]/(utility)/unlock-orders/page.tsx"
     },
     {
+      "decision": "origin_dynamic",
+      "reason": "request_state_or_origin_action_required",
+      "id": "storefront:black-friday/page.tsx",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "routePattern": "/black-friday",
+      "sourceKind": "storefront_entrypoint",
+      "sourcePath": "apps/web/src/app/(storefront)/[slug]/black-friday/page.tsx"
+    },
+    {
       "decision": "edge_redirect",
       "reason": "redirect_only_storefront_entrypoint",
       "id": "storefront:favicon.ico/route.ts",
@@ -7269,6 +7537,37 @@
     },
     {
       "decision": "origin_dynamic",
+      "id": "storefront:(blog)/blog/feed.xml/route.ts:options:slug-prefixed",
+      "methods": [
+        "OPTIONS"
+      ],
+      "reason": "automatic_options_response",
+      "routePattern": "/{storefrontIdentifier}/blog/feed.xml",
+      "sourceKind": "storefront_entrypoint",
+      "sourcePath": "apps/web/src/app/(storefront)/[slug]/(blog)/blog/feed.xml/route.ts",
+      "hostCondition": {
+        "hostKind": "platform_root_domain",
+        "precedence": "before_path_decision"
+      }
+    },
+    {
+      "decision": "origin_dynamic",
+      "reason": "request_state_or_origin_action_required",
+      "id": "storefront:(blog)/blog/feed.xml/route.ts:slug-prefixed",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "routePattern": "/{storefrontIdentifier}/blog/feed.xml",
+      "sourceKind": "storefront_entrypoint",
+      "sourcePath": "apps/web/src/app/(storefront)/[slug]/(blog)/blog/feed.xml/route.ts",
+      "hostCondition": {
+        "hostKind": "platform_root_domain",
+        "precedence": "before_path_decision"
+      }
+    },
+    {
+      "decision": "origin_dynamic",
       "id": "storefront:(blog)/blog/news-sitemap.xml/route.ts:options:slug-prefixed",
       "methods": [
         "OPTIONS"
@@ -7293,6 +7592,37 @@
       "routePattern": "/{storefrontIdentifier}/blog/news-sitemap.xml",
       "sourceKind": "storefront_entrypoint",
       "sourcePath": "apps/web/src/app/(storefront)/[slug]/(blog)/blog/news-sitemap.xml/route.ts",
+      "hostCondition": {
+        "hostKind": "platform_root_domain",
+        "precedence": "before_path_decision"
+      }
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "storefront:(blog)/blog/rss.xml/route.ts:options:slug-prefixed",
+      "methods": [
+        "OPTIONS"
+      ],
+      "reason": "automatic_options_response",
+      "routePattern": "/{storefrontIdentifier}/blog/rss.xml",
+      "sourceKind": "storefront_entrypoint",
+      "sourcePath": "apps/web/src/app/(storefront)/[slug]/(blog)/blog/rss.xml/route.ts",
+      "hostCondition": {
+        "hostKind": "platform_root_domain",
+        "precedence": "before_path_decision"
+      }
+    },
+    {
+      "decision": "origin_dynamic",
+      "reason": "request_state_or_origin_action_required",
+      "id": "storefront:(blog)/blog/rss.xml/route.ts:slug-prefixed",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "routePattern": "/{storefrontIdentifier}/blog/rss.xml",
+      "sourceKind": "storefront_entrypoint",
+      "sourcePath": "apps/web/src/app/(storefront)/[slug]/(blog)/blog/rss.xml/route.ts",
       "hostCondition": {
         "hostKind": "platform_root_domain",
         "precedence": "before_path_decision"
@@ -7709,6 +8039,22 @@
     {
       "decision": "origin_dynamic",
       "reason": "request_state_or_origin_action_required",
+      "id": "storefront:(catalog)/(listing)/collections/[handle]/page.tsx:slug-prefixed",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "routePattern": "/{storefrontIdentifier}/collections/{handle}",
+      "sourceKind": "storefront_entrypoint",
+      "sourcePath": "apps/web/src/app/(storefront)/[slug]/(catalog)/(listing)/collections/[handle]/page.tsx",
+      "hostCondition": {
+        "hostKind": "platform_root_domain",
+        "precedence": "before_path_decision"
+      }
+    },
+    {
+      "decision": "origin_dynamic",
+      "reason": "request_state_or_origin_action_required",
       "id": "storefront:(catalog)/(pdp)/product/[productSlug]/page.tsx:slug-prefixed",
       "methods": [
         "GET",
@@ -7900,6 +8246,22 @@
       "routePattern": "/{storefrontIdentifier}/blog/{*catchAll}",
       "sourceKind": "storefront_entrypoint",
       "sourcePath": "apps/web/src/app/(storefront)/[slug]/(blog)/blog/[...catchAll]/route.ts",
+      "hostCondition": {
+        "hostKind": "platform_root_domain",
+        "precedence": "before_path_decision"
+      }
+    },
+    {
+      "decision": "origin_dynamic",
+      "reason": "request_state_or_origin_action_required",
+      "id": "storefront:(content)/pages/[...experiencePath]/page.tsx:slug-prefixed",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "routePattern": "/{storefrontIdentifier}/pages/{*experiencePath}",
+      "sourceKind": "storefront_entrypoint",
+      "sourcePath": "apps/web/src/app/(storefront)/[slug]/(content)/pages/[...experiencePath]/page.tsx",
       "hostCondition": {
         "hostKind": "platform_root_domain",
         "precedence": "before_path_decision"
@@ -8444,6 +8806,22 @@
       "routePattern": "/{storefrontIdentifier}/unlock-orders",
       "sourceKind": "storefront_entrypoint",
       "sourcePath": "apps/web/src/app/(storefront)/[slug]/(utility)/unlock-orders/page.tsx",
+      "hostCondition": {
+        "hostKind": "platform_root_domain",
+        "precedence": "before_path_decision"
+      }
+    },
+    {
+      "decision": "origin_dynamic",
+      "reason": "request_state_or_origin_action_required",
+      "id": "storefront:black-friday/page.tsx:slug-prefixed",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "routePattern": "/{storefrontIdentifier}/black-friday",
+      "sourceKind": "storefront_entrypoint",
+      "sourcePath": "apps/web/src/app/(storefront)/[slug]/black-friday/page.tsx",
       "hostCondition": {
         "hostKind": "platform_root_domain",
         "precedence": "before_path_decision"
@@ -9080,5 +9458,5 @@
     }
   ],
   "schemaVersion": 6,
-  "inventorySha256": "c1ee5bd15bb5c22ae69d3a376711562d15b268b04fbb215fa299658b339d97a1"
+  "inventorySha256": "496f651a277a7765b3dac26b292a498cbccb0a1f1da8896a98209608a4d423c3"
 }

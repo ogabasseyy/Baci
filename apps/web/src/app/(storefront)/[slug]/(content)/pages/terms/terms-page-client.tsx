@@ -4,6 +4,7 @@ import { AlertCircle, CheckCircle, Scale, ScrollText } from 'lucide-react';
 import { StorefrontFooter } from '@/components/storefront/footer';
 import { StorefrontHeader } from '@/components/storefront/header';
 import { SafeHtml } from '@/components/ui/safe-html';
+import { useMerchantSafe } from '@/hooks/use-merchant-client';
 
 import { ContentPageProviders } from '../content-page-providers';
 
@@ -28,6 +29,7 @@ interface TermsPageClientProps {
 }
 
 export function TermsPageClient({ merchant, content }: TermsPageClientProps) {
+  const basePath = useMerchantSafe()?.basePath ?? `/${merchant.slug}`;
   return (
     <ContentPageProviders merchant={merchant}>
       <div className="flex flex-col min-h-screen">
@@ -95,6 +97,25 @@ export function TermsPageClient({ merchant, content }: TermsPageClientProps) {
           {/* Content */}
           <div className="container px-4 md:px-6 py-12 md:py-16">
             <div className="max-w-3xl mx-auto">
+              {merchant.slug === 'ogabassey' && (
+                <section className="mb-8 rounded-2xl border p-5">
+                  <h2 className="text-xl font-semibold">
+                    Returns and device coverage
+                  </h2>
+                  <p className="mt-2 text-muted-foreground">
+                    See our{' '}
+                    <a className="underline" href={`${basePath}/returns`}>
+                      return policy
+                    </a>{' '}
+                    for help with a fault after delivery and our{' '}
+                    <a className="underline" href={`${basePath}/warranty`}>
+                      warranty page
+                    </a>{' '}
+                    for device coverage and Ogabassey Assurance. These store
+                    policies are in addition to your statutory consumer rights.
+                  </p>
+                </section>
+              )}
               {content ? (
                 <SafeHtml
                   html={content}

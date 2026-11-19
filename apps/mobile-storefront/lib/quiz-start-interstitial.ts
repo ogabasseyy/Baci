@@ -6,6 +6,9 @@ import { trackEvent } from '@/services/analytics-core';
 import { initializeQuizMobileAds } from '@/services/initialize-quiz-mobile-ads';
 import { trackInterstitialPaidEvent } from './interstitial-paid-event';
 import { isQuizRewardedFlowActive } from './quiz-fullscreen-ownership';
+import type { QuizStartInterstitialOptions } from './quiz-start-interstitial.types';
+
+export type { QuizStartInterstitialOptions } from './quiz-start-interstitial.types';
 
 /**
  * Pre-quiz interstitial, shown when the waiting room opens and capped to one
@@ -24,6 +27,10 @@ let didShowThisSession = false;
 type QuizStartAttemptState = 'idle' | 'loading' | 'owned';
 let attemptState: QuizStartAttemptState = 'idle';
 
+// Longest a host's pre-present notice may hold the attempt. The in-app
+// host settles at 1.5 s; this only backstops a host that never settles.
+const QUIZ_NOTICE_MAX_MS = 5_000;
+
 export function resetQuizStartInterstitialForTests(): void {
   didShowThisSession = false;
   attemptState = 'idle';
@@ -31,27 +38,6 @@ export function resetQuizStartInterstitialForTests(): void {
 
 export function wasQuizStartInterstitialShown(): boolean {
   return didShowThisSession;
-}
-
-export interface QuizStartInterstitialOptions {
-  /**
-   * Polled before presenting a loaded interstitial. When it returns true the
-   * load is abandoned as `skipped` instead of showing an ad over live play
-   * or an unmounted lobby.
-   */
-  isCancelled?: () => boolean;
-  /**
-   * Invoked when a presented interstitial closes so hosts can remount
-   * banner slots withheld while the full-screen ad owned the screen.
-   */
-  onClosed?: () => void;
-  /**
-   * Invoked synchronously when LOADED claims the attempt and presentation
-   * begins, before the show() bridge round-trip resolves. Hosts claim
-   * fullscreen ownership here so a start boundary landing in that window
-   * holds instead of starting behind the presenting ad.
-   */
-  onPresenting?: () => void;
 }
 
 export async function maybeShowQuizStartInterstitial(
@@ -198,25 +184,61 @@ export async function maybeShowQuizStartInterstitial(
             abandon();
             return;
           }
-          // Claim the session cap before presenting: from here the attempt
-          // is owned through show()/close even if presentation fails.
-          attemptState = 'owned';
+          const present = () => {
+            // Claim the session cap before presenting: from here the
+            // attempt is owned through show()/close even if presentation
+            // fails.
+            attemptState = 'owned';
+            if (loadTimer !== null) {
+              clearTimeout(loadTimer);
+              loadTimer = null;
+            }
+            try {
+              // Claim host ownership synchronously: show() resolves over a
+              // native bridge round-trip after presentation begins, and a
+              // start boundary landing in that window must already see the
+              // presenting ad. Inside try so a host throw degrades to an
+              // owned-presentation failure instead of a stuck attempt.
+              options.onPresenting?.();
+              void interstitial
+                .show()
+                .then(() => finish('shown'), failOwnedPresentation);
+            } catch {
+              failOwnedPresentation();
+            }
+          };
+          if (!options.beforePresent) {
+            present();
+            return;
+          }
+          // The load phase is over: the 30s deadline must not fire during
+          // the notice and abandon an ad that already loaded. Every exit is
+          // re-checked in presentAfterNotice. A host notice that never
+          // settles must not hold the session reservation forever, so the
+          // helper bounds it too (present() and abandon() clear this timer).
           if (loadTimer !== null) {
             clearTimeout(loadTimer);
-            loadTimer = null;
           }
+          loadTimer = setTimeout(() => {
+            loadTimer = null;
+            abandon();
+          }, QUIZ_NOTICE_MAX_MS);
+          // The host's notice takes real time: the deadline, an SDK error,
+          // live play or the rewarded flow can all land while it is up, so
+          // every exit is re-checked before the ad is claimed. Nothing is
+          // owned yet, so abandoning here keeps the session cap free.
+          const presentAfterNotice = () => {
+            if (settled) return;
+            if (options.isCancelled?.() || isQuizRewardedFlowActive()) {
+              abandon();
+              return;
+            }
+            present();
+          };
           try {
-            // Claim host ownership synchronously: show() resolves over a
-            // native bridge round-trip after presentation begins, and a
-            // start boundary landing in that window must already see the
-            // presenting ad. Inside try so a host throw degrades to an
-            // owned-presentation failure instead of a stuck attempt.
-            options.onPresenting?.();
-            void interstitial
-              .show()
-              .then(() => finish('shown'), failOwnedPresentation);
+            void options.beforePresent().then(presentAfterNotice, abandon);
           } catch {
-            failOwnedPresentation();
+            abandon();
           }
         })
       );

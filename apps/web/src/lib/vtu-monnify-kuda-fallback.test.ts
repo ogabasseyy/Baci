@@ -181,4 +181,64 @@ describe('executeMonnifyAirtimeKudaFallback', () => {
     expect(row.metadata.provider).toBe('monnify');
     expect(row.updated_at).toBe('tok-1');
   });
+
+  it('keeps the Monnify response code in the patch when Kuda also fails', async () => {
+    const { supabase, updatePayloads } = createSupabase();
+    mockPurchaseAirtime.mockResolvedValueOnce({
+      amount: 100,
+      message: 'Kuda refused',
+      reference: 'VTU-123',
+      status: 'failed',
+      success: false,
+    });
+    const row = { ...rowBase, metadata: { ...rowBase.metadata } };
+
+    const result = await executeMonnifyAirtimeKudaFallback({
+      customerFirstName: 'OgaBassey',
+      monnifyResult: { ...monnifyResult, providerResponseCode: 'D02' } as never,
+      provider: 'MTN' as never,
+      row,
+      supabase: supabase as never,
+    });
+
+    expect(updatePayloads).toEqual([
+      {
+        metadata: expect.objectContaining({
+          monnifyFallbackResponseCode: 'D02',
+        }),
+      },
+    ]);
+    expect(result).toMatchObject({
+      status: 'failed',
+      metadataPatch: expect.objectContaining({
+        monnifyFallbackResponseCode: 'D02',
+      }),
+    });
+  });
+
+  it('drops a Monnify response code that is not code-shaped', async () => {
+    const { supabase, updatePayloads } = createSupabase();
+    mockPurchaseAirtime.mockResolvedValueOnce({
+      amount: 100,
+      message: 'Kuda refused',
+      reference: 'VTU-123',
+      status: 'failed',
+      success: false,
+    });
+
+    await executeMonnifyAirtimeKudaFallback({
+      customerFirstName: 'OgaBassey',
+      monnifyResult: {
+        ...monnifyResult,
+        providerResponseCode: '801-234-5678',
+      } as never,
+      provider: 'MTN' as never,
+      row: { ...rowBase, metadata: { ...rowBase.metadata } },
+      supabase: supabase as never,
+    });
+
+    expect(
+      (updatePayloads[0] as { metadata: Record<string, unknown> }).metadata
+    ).not.toHaveProperty('monnifyFallbackResponseCode');
+  });
 });

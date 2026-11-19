@@ -1,7 +1,8 @@
 'use client';
 
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, IdCard } from 'lucide-react';
 import { useId, useState } from 'react';
+import iconStyles from './OxygenFieldIcon.module.css';
 import { oxygenFieldClass } from './oxygen-checkout-styles';
 
 export function OxygenIdentityField({
@@ -20,9 +21,10 @@ export function OxygenIdentityField({
       <label htmlFor={id} className="text-xs font-bold text-gray-700">
         {label}
       </label>
-      <div className="relative">
+      <div className={iconStyles.field}>
         <input
           id={id}
+          placeholder=" "
           name={name}
           defaultValue={defaultValue}
           type={visible ? 'text' : 'password'}
@@ -35,6 +37,7 @@ export function OxygenIdentityField({
           autoComplete="off"
           spellCheck={false}
         />
+        <IdCard aria-hidden="true" className={iconStyles.icon} />
         <button
           type="button"
           aria-label={`${visible ? 'Hide' : 'Show'} ${label}`}

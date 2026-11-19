@@ -12,11 +12,13 @@
  */
 import { revalidatePath, revalidateTag } from 'next/cache';
 import { after } from 'next/server';
-import { getBlogCacheTag } from '@/lib/blog-cache-tags';
-import { getBlogContentLinksCacheTag } from '@/lib/blog-content-link-cache-tags';
 
 export { revalidateCategories } from '@/lib/revalidate-categories';
 
+import {
+  type BlogRevalidationOptions,
+  buildBlogRevalidationPlan,
+} from '@/lib/blog-revalidation-plan';
 import { purgeCloudflareUrls } from '@/lib/cloudflare-purge';
 import { buildMerchantPublicationDataCacheTags } from '@/lib/merchant-publication-data-cache-tags';
 import { normalizeMerchantId } from '@/lib/normalize-merchant-id';
@@ -28,29 +30,23 @@ import {
   PLATFORM_BLOG_SITEMAP_CACHE_TAG,
 } from '@/lib/platform-blog';
 import { productCacheRevalidation } from '@/lib/product-cache-revalidation';
-import { generateSlug } from '@/lib/seo-utils';
 import { buildStorefrontBlogPurgeUrls } from '@/lib/storefront-purge-urls';
+import {
+  getBlogRssMerchantCacheTag,
+  getBoundedMerchantSlugCacheTag,
+  getDomainCacheTag,
+  getMerchantIdentifierCacheTag,
+  getPageConfigMerchantCacheTag,
+  getPageConfigSlugCacheTag,
+  PLATFORM_SITEMAP_MERCHANTS_CACHE_TAG,
+} from '@/lib/tenant-cache-tags';
+import { isDomainIdentifier, isSlugShapedIdentifier } from '@/lib/validation';
 
 export const revalidateMerchantFeed =
   productCacheRevalidation.revalidateMerchantFeed;
 export const revalidateProductSlugs =
   productCacheRevalidation.revalidateProductSlugs;
 export const revalidateProducts = productCacheRevalidation.revalidateProducts;
-
-interface BlogRevalidationOptions {
-  identifiers?: Array<string | null | undefined>;
-  canonicalMerchantSlug?: string | null | undefined;
-  listingCategories?: Array<string | null | undefined>;
-  listingPages?: Array<number | null | undefined>;
-  merchantId?: string | null | undefined;
-  postSlugs?: Array<string | null | undefined>;
-}
-
-const CANONICAL_MERCHANT_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-
-function isSafeCanonicalMerchantSlug(slug: string): boolean {
-  return CANONICAL_MERCHANT_SLUG_PATTERN.test(slug);
-}
 
 /**
  * Evict the given canonical URLs from Cloudflare's edge cache. Fire-and-forget:
@@ -72,21 +68,33 @@ function schedulePurgeCloudflareUrls(urls: string[]): void {
 }
 
 /**
- * Revalidate all cached data related to a merchant store.
+ * Revalidate tenant-scoped cached data for a merchant store.
  * Call after ordinary merchant settings updates. Publication transitions must
  * use `revalidateMerchantPublication` because stale-while-revalidate is unsafe
  * for storefront availability state.
  */
 export function revalidateMerchant(merchantId: string, merchantSlug?: string) {
-  revalidateTag('merchants', 'merchant');
-  revalidateTag(`merchant-id-${merchantId}`, 'merchant');
+  const normalizedMerchantId = normalizeMerchantId(merchantId);
+  if (!normalizedMerchantId) {
+    console.warn(
+      'Skipped merchant cache revalidation for invalid merchant ID',
+      { merchantId }
+    );
+    return;
+  }
 
-  if (merchantSlug) {
-    revalidateTag(`merchant-${merchantSlug}`, 'merchant');
+  revalidateTag(`merchant-id-${normalizedMerchantId}`, 'merchant');
+
+  const normalizedSlug = merchantSlug?.trim().toLowerCase();
+  if (normalizedSlug) {
+    revalidateTag(getMerchantIdentifierCacheTag(normalizedSlug), 'merchant');
+    if (isSlugShapedIdentifier(normalizedSlug)) {
+      revalidateTag(getBoundedMerchantSlugCacheTag(normalizedSlug), 'merchant');
+    }
   }
 
   // Dashboard stats may change
-  revalidateTag(`dashboard-${merchantId}`, 'merchant');
+  revalidateTag(`dashboard-${normalizedMerchantId}`, 'merchant');
 }
 
 /**
@@ -120,44 +128,62 @@ export function revalidateMerchantPublication({
   })) {
     revalidateTag(tag, immediateExpiry);
   }
+  revalidateTag(PLATFORM_SITEMAP_MERCHANTS_CACHE_TAG, immediateExpiry);
+  revalidatePath('/sitemap.xml');
   revalidateTag(`dashboard-${normalizedMerchantId}`, 'merchant');
 }
 
 /**
- * Bust EVERY per-slug merchant cache for a specific slug:
+ * Bust per-slug merchant caches for a specific slug:
  *   - `merchant-slug-${slug}` + 'merchant' — the /api/merchants/by-slug route
- *   - `merchant-${slug}` + 'merchants' — getCachedMerchant() in lib/cached-data.ts
- * None of these are cleared by revalidateMerchant() for a slug OTHER than the one
- * passed to it. Call this for BOTH the old and the new slug after a rename so the
- * retired slug stops resolving to a live store and the new slug serves at once,
- * instead of staying cached for up to 5 minutes.
+ *   - `merchant-${slug}` + 'merchant' — getCachedMerchant() in lib/cached-data.ts
+ *   - `platform-sitemap-merchants` + `/sitemap.xml` — root sitemap discovery
+ * Call this for BOTH the old and the new slug after a rename so the retired slug
+ * stops resolving to a live store and the new slug serves at once. Only falls
+ * back to the global `'merchant'` tag when `slug` is omitted or empty.
  */
-export function revalidateMerchantSlugLookup(slug: string) {
-  revalidateTag('merchant', 'merchant');
-  revalidateTag(`merchant-slug-${slug}`, 'merchant');
-  revalidateTag(`merchant-${slug}`, 'merchant');
+export function revalidateMerchantSlugLookup(slug?: string) {
+  if (slug == null || slug.trim() === '') {
+    revalidateTag('merchant', 'merchant');
+    revalidateTag(PLATFORM_SITEMAP_MERCHANTS_CACHE_TAG, 'merchant');
+    revalidatePath('/sitemap.xml');
+    return;
+  }
+
+  const normalizedIdentifier = slug.trim().toLowerCase();
+  const lookupTag = isSlugShapedIdentifier(normalizedIdentifier)
+    ? getBoundedMerchantSlugCacheTag(normalizedIdentifier)
+    : isDomainIdentifier(normalizedIdentifier)
+      ? getDomainCacheTag(normalizedIdentifier)
+      : null;
+
+  if (lookupTag) {
+    revalidateTag(lookupTag, 'merchant');
+    revalidateTag(
+      getMerchantIdentifierCacheTag(normalizedIdentifier),
+      'merchant'
+    );
+    revalidateTag(getBlogRssMerchantCacheTag(normalizedIdentifier), 'merchant');
+    revalidateTag(PLATFORM_SITEMAP_MERCHANTS_CACHE_TAG, 'merchant');
+    revalidatePath(`/api/blog/feed/${normalizedIdentifier}`);
+    revalidatePath('/sitemap.xml');
+    return;
+  }
+
+  console.warn('Skipped merchant slug lookup revalidation for invalid slug', {
+    slug,
+  });
 }
 
 /**
- * Bust the `/api/storefront/[slug]/products` merchant-id lookup cache. That route's
- * `getMerchantIdBySlug` caches results (a MISS included) under the generic
- * 'merchant-slug' tag for 60s, and the tag is not per-slug, so
- * `revalidateMerchantSlugLookup` (which targets `merchant-slug-${slug}`) can't
- * clear it. After a rename, a pre-rename probe of the NEW slug would otherwise
- * 404 the renamed store's products API until the cached miss expires. Call once
- * per rename (the tag is shared across all slugs).
+ * Bust the `/api/storefront/[slug]/products` merchant-id lookup cache.
  */
 export function revalidateStorefrontProductsSlugCache() {
   revalidateTag('merchant-slug', 'merchant');
 }
 
 /**
- * Bust the blog RSS feed cache (`/api/blog/feed/[merchantSlug]`). It caches the
- * merchant + posts payload by merchant id under the generic 'blog-rss-feed' /
- * 'blog-posts' tags for an hour and EMBEDS the slug in the feed's storeUrl/feedUrl.
- * After a rename, both the old-alias URL and the new-slug URL resolve to the same
- * cached object and keep emitting the retired slug until the TTL — so bust it on
- * rename. Tags are not per-merchant, so call once.
+ * Bust the blog RSS feed cache (`/api/blog/feed/[merchantSlug]`).
  */
 export function revalidateBlogFeed() {
   revalidateTag('blog-rss-feed', 'merchant');
@@ -165,146 +191,29 @@ export function revalidateBlogFeed() {
 }
 
 /**
- * Revalidate blog post cache.
- * Call after blog post create/update/delete/publish.
+ * Revalidate blog post cache. Callers on storefront blog mutations (create,
+ * update, publish, delete, reservation release) MUST pass `identifiers` and
+ * `canonicalMerchantSlug`; `merchantId`-only invalidates origin tags only.
  */
 export function revalidateBlogPosts(
   identifierOrOptions: string | BlogRevalidationOptions,
   postSlug?: string
 ) {
-  const identifiers =
-    typeof identifierOrOptions === 'string'
-      ? [identifierOrOptions]
-      : (identifierOrOptions.identifiers ?? []);
-  const postSlugs =
-    typeof identifierOrOptions === 'string'
-      ? [postSlug]
-      : (identifierOrOptions.postSlugs ?? []);
-  const listingCategories =
-    typeof identifierOrOptions === 'string'
-      ? []
-      : (identifierOrOptions.listingCategories ?? []);
-  const listingPages =
-    typeof identifierOrOptions === 'string'
-      ? []
-      : (identifierOrOptions.listingPages ?? []);
-  const canonicalMerchantSlug =
-    typeof identifierOrOptions === 'string'
-      ? null
-      : (identifierOrOptions.canonicalMerchantSlug ?? null);
-  const merchantId =
-    typeof identifierOrOptions === 'string'
-      ? ''
-      : (identifierOrOptions.merchantId?.trim() ?? '');
+  const plan = buildBlogRevalidationPlan(identifierOrOptions, postSlug);
 
-  const normalizedIdentifiers = Array.from(
-    new Set(
-      identifiers
-        .map((identifier) => identifier?.trim().toLowerCase())
-        .filter((identifier): identifier is string => Boolean(identifier))
-    )
-  );
-  const normalizedPostSlugs = Array.from(
-    new Set(
-      postSlugs
-        .map((slug) => slug?.trim().toLowerCase())
-        .filter((slug): slug is string => Boolean(slug))
-    )
-  );
-  const normalizedListingCategories = Array.from(
-    new Set([
-      'all',
-      ...listingCategories
-        .map((category) => category?.trim())
-        .filter((category): category is string => Boolean(category)),
-    ])
-  );
-  const normalizedListingPages = Array.from(
-    new Set(
-      listingPages.filter(
-        (page): page is number =>
-          typeof page === 'number' && Number.isInteger(page) && page > 0
-      )
-    )
-  );
-  const effectiveListingPages =
-    normalizedListingPages.length > 0 ? normalizedListingPages : [1];
-  const rawCanonicalMerchantSlug =
-    canonicalMerchantSlug?.trim().toLowerCase() || '';
-  const normalizedCanonicalMerchantSlug = isSafeCanonicalMerchantSlug(
-    rawCanonicalMerchantSlug
-  )
-    ? rawCanonicalMerchantSlug
-    : '';
-
-  if (normalizedIdentifiers.length > 0 || rawCanonicalMerchantSlug.length > 0) {
-    // RSS cache entries use coarse shared tags by design. The merchant-scoped
-    // feed path below narrows the route cache refresh for the canonical slug.
-    revalidateTag('blog-rss-feed', 'merchant');
-    revalidateTag('blog-posts', 'merchant');
-    revalidateTag(
-      merchantId
-        ? getBlogContentLinksCacheTag(merchantId)
-        : 'blog-content-links',
-      'merchant'
-    );
-  }
-
-  if (
-    rawCanonicalMerchantSlug.length > 0 &&
-    normalizedCanonicalMerchantSlug.length === 0
-  ) {
+  if (plan.invalidCanonicalMerchantSlug) {
     console.warn('Skipped blog feed path revalidation for invalid slug', {
-      canonicalMerchantSlug: rawCanonicalMerchantSlug,
+      canonicalMerchantSlug: plan.invalidCanonicalMerchantSlug,
     });
   }
 
-  if (normalizedCanonicalMerchantSlug.length > 0) {
-    revalidatePath(`/api/blog/feed/${normalizedCanonicalMerchantSlug}`);
+  for (const tag of plan.tags) {
+    revalidateTag(tag, 'merchant');
+  }
+  for (const path of plan.paths) {
+    revalidatePath(path);
   }
 
-  for (const identifier of normalizedIdentifiers) {
-    revalidatePath(`/${identifier}/blog`);
-    revalidatePath(`/${identifier}/blog/news-sitemap.xml`);
-    revalidatePath(`/${identifier}/blog/sitemap.xml`);
-
-    for (const category of normalizedListingCategories) {
-      for (const page of effectiveListingPages) {
-        revalidateTag(
-          `blog-list-${identifier}-${category}-${page}`,
-          'merchant'
-        );
-      }
-    }
-
-    for (const slug of normalizedPostSlugs) {
-      revalidateTag(getBlogCacheTag(identifier, slug), 'merchant');
-      revalidatePath(`/${identifier}/blog/${slug}`);
-      revalidatePath(`/${identifier}/blog/${slug}/opengraph-image`);
-    }
-  }
-
-  // Evict the Cloudflare-fronted public blog URLs so the raised edge TTL never
-  // serves a stale post/listing. No-op for storefronts without a cache policy.
-  const purgeIdentifiers = Array.from(
-    new Set(
-      [...normalizedIdentifiers, normalizedCanonicalMerchantSlug].filter(
-        (identifier): identifier is string => identifier.length > 0
-      )
-    )
-  );
-  // Derive the category listing slugs to evict from the affected category
-  // labels. The public category route is /blog/category/<slug> where the slug
-  // is generateSlug(label) (getBlogCategorySlug), so slugify here to match the
-  // actually-cached URL. The 'all' sentinel used for the blog-list cache tags
-  // is intentionally excluded: its listing is /blog, already purged above.
-  const purgeCategorySlugs = Array.from(
-    new Set(
-      listingCategories
-        .map((category) => (category ? generateSlug(category) : ''))
-        .filter((categorySlug): categorySlug is string => Boolean(categorySlug))
-    )
-  );
   // `buildStorefrontBlogPurgeUrls` runs OUTSIDE the never-throw purge helper, so
   // guard the build + schedule sequence: a Cloudflare purge is always survivable
   // (caches self-heal on their TTL), and it must never break the Next-tag/path
@@ -312,9 +221,9 @@ export function revalidateBlogPosts(
   try {
     schedulePurgeCloudflareUrls(
       buildStorefrontBlogPurgeUrls(
-        purgeIdentifiers,
-        normalizedPostSlugs,
-        purgeCategorySlugs
+        plan.purgeIdentifiers,
+        plan.normalizedPostSlugs,
+        plan.purgeCategorySlugs
       )
     );
   } catch (error) {
@@ -358,25 +267,39 @@ export function revalidateFeatures(merchantId: string) {
 }
 
 /**
- * Revalidate page builder config cache.
- * Call after page config publish.
+ * Revalidate page builder config cache for a single merchant.
+ * Call after page config publish. Note: `apps/web/src` currently queries
+ * `page_configs` directly without `use cache` / `next.tags` readers, so
+ * tenant-scoped tags prevent cross-tenant global invalidation while remaining
+ * ready for any per-merchant `page-config-${merchantId}` reader.
  */
 export function revalidatePageConfig(merchantId: string, pageSlug?: string) {
-  revalidateTag('page-config', 'storefront-page');
+  const normalizedMerchantId = normalizeMerchantId(merchantId);
+  if (!normalizedMerchantId) {
+    console.warn(
+      'Skipped page config cache revalidation for invalid merchant ID',
+      { merchantId }
+    );
+    return;
+  }
 
-  if (pageSlug) {
-    revalidateTag(`page-config-${merchantId}-${pageSlug}`, 'storefront-page');
+  revalidateTag(
+    getPageConfigMerchantCacheTag(normalizedMerchantId),
+    'storefront-page'
+  );
+
+  const normalizedPageSlug = pageSlug?.trim();
+  if (normalizedPageSlug) {
+    revalidateTag(
+      getPageConfigSlugCacheTag(normalizedMerchantId, normalizedPageSlug),
+      'storefront-page'
+    );
   }
 }
 
 /**
  * Revalidate the repairs catalog feeds (Facebook repairs XML + agent-repairs
- * JSONL) for a merchant. Call after any repairs catalog mutation — device,
- * quote, or service-type CRUD, and AI import commit — so the machine-readable
- * feeds never serve a stale quote/device/service-type.
- *
- * The tags mirror `getCachedRepairsFeedData`'s
- * (`REPAIRS_FEED_CACHE_TAG`, `getRepairsFeedMerchantCacheTag(merchantId)`).
+ * JSONL) for a merchant without touching unrelated tenants.
  *
  * @param merchantId - Canonical merchant UUID (not slug).
  */
@@ -390,20 +313,25 @@ export function revalidateRepairsCatalog(merchantId: string) {
     return;
   }
 
-  revalidateTag('repairs-catalog-feed', 'products');
   revalidateTag(`repairs-feed-${normalizedMerchantId}`, 'products');
 }
 
 /**
  * Revalidate domain-related caches.
- * Call after custom domain add/remove/verify.
+ * Busts only the targeted domain/merchant tags when a domain is provided;
+ * falls back to the global `'domains'` tag only when omitted/empty.
  */
 export function revalidateDomains(domain?: string) {
-  revalidateTag('domains', 'merchant');
+  const normalizedDomain =
+    typeof domain === 'string' ? domain.trim().toLowerCase() : '';
 
-  if (domain) {
-    revalidateTag(`domain-${domain.toLowerCase()}`, 'merchant');
+  if (!normalizedDomain) {
+    revalidateTag('domains', 'merchant');
+    return;
   }
+
+  revalidateTag(getDomainCacheTag(normalizedDomain), 'merchant');
+  revalidateTag(getMerchantIdentifierCacheTag(normalizedDomain), 'merchant');
 }
 
 /**

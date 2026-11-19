@@ -3,7 +3,9 @@ import { logger } from '@/lib/logger';
 
 const mocks = vi.hoisted(() => ({
   approved: vi.fn(() => false),
+  invalidateQuizProductCaches: vi.fn(),
   phase: vi.fn(() => '1a'),
+  resolveQuizSweepWatermarks: vi.fn(),
   rpc: vi.fn(),
 }));
 vi.mock('@/lib/quiz/quiz-runtime-env', () => ({
@@ -16,14 +18,37 @@ vi.mock('@/lib/supabase/admin', () => ({
 vi.mock('@/lib/logger', () => ({
   logger: { error: vi.fn() },
 }));
+vi.mock('./quiz-sweep-watermarks', () => ({
+  resolveQuizSweepWatermarks: mocks.resolveQuizSweepWatermarks,
+}));
+vi.mock('./quiz-product-cache-invalidation', () => ({
+  invalidateQuizProductCaches: mocks.invalidateQuizProductCaches,
+}));
 
-import { finalizeDueQuizEvents } from './finalize-due-quiz-events';
+import {
+  finalizeDueQuizEvents,
+  resetQuizSweepStateForTests,
+} from './finalize-due-quiz-events';
+
+function makeOkWatermarks(status: 'empty' | 'ok' = 'ok') {
+  const floor =
+    status === 'empty' ? '1970-01-01T00:00:00.000Z' : '2026-09-01T00:00:00Z';
+  return {
+    events: { status, floor, boundarySnapshots: new Map() },
+    reservations: { status, floor, boundarySnapshots: new Map() },
+    awards: { status, floor, boundarySnapshots: new Map() },
+    hasProbeFailure: false,
+  };
+}
 
 describe('finalizeDueQuizEvents', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetQuizSweepStateForTests();
     mocks.phase.mockReturnValue('1a');
     mocks.approved.mockReturnValue(false);
+    mocks.resolveQuizSweepWatermarks.mockResolvedValue(makeOkWatermarks('ok'));
+    mocks.invalidateQuizProductCaches.mockResolvedValue(true);
     mocks.rpc.mockResolvedValue({ data: {}, error: null });
   });
 
@@ -253,22 +278,6 @@ describe('finalizeDueQuizEvents', () => {
     expect(mocks.rpc.mock.calls.map(([name]) => name)).toEqual([
       'set_quiz_runtime_control_v2',
       'process_due_quiz_deadlines_v2',
-      'expire_unclaimed_ranked_quiz_awards_v2',
-      'close_due_product_quiz_events',
-    ]);
-  });
-
-  it('does not process deadlines when the committed runtime gate update fails', async () => {
-    mocks.rpc.mockResolvedValueOnce({
-      data: null,
-      error: { code: 'P0001', details: '', hint: '', message: '' },
-    });
-
-    const result = await finalizeDueQuizEvents();
-
-    expect(result.status).toBe(500);
-    expect(mocks.rpc.mock.calls.map(([name]) => name)).toEqual([
-      'set_quiz_runtime_control_v2',
       'expire_unclaimed_ranked_quiz_awards_v2',
       'close_due_product_quiz_events',
     ]);

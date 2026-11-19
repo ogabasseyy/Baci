@@ -32,6 +32,7 @@ describe('collectPrimaryIntakeEvidence against the real runtime readers', () => 
     };
     expect(collectPrimaryIntakeEvidence(flagsOnly, NOW)).toEqual({
       notReady: ['bank', 'custody', 'interest'],
+      legacyBankInflowUnavailable: true,
     });
   });
 });

@@ -15,7 +15,9 @@ import type {
   AddToCartOutcome,
   CartItem,
 } from './cart-types';
+import { countAddedUnits } from './count-added-units';
 import { gateAddToCart } from './gate-add-to-cart';
+import { trackCartAdd } from './track-cart-add';
 import type { useStorefrontCartDelegation } from './use-storefront-cart-delegation';
 
 type DelegatedActions = ReturnType<
@@ -50,9 +52,23 @@ export function useStorefrontCartLineHandlers({
   setShowUpsell: Dispatch<SetStateAction<boolean>>;
   upsellTimerRef: RefObject<ReturnType<typeof setTimeout> | null>;
 }) {
-  const noteAddedProduct = (added: Product) => {
+  // Runs exactly once per applied add, on both the delegated (shared cart)
+  // and legacy paths, so every storefront entry point is tracked here and
+  // callers must not report add_to_cart themselves.
+  const noteAddedProduct = (
+    added: Product,
+    quantity: number,
+    options: AddToCartOptions | undefined
+  ) => {
+    trackCartAdd({
+      merchant: merchantContext?.merchant,
+      product: added,
+      quantity,
+      options,
+    });
     if (enableSmartCartPro) {
       setLastAddedProduct(added);
+      if (upsellTimerRef.current) clearTimeout(upsellTimerRef.current);
       upsellTimerRef.current = setTimeout(() => {
         setShowUpsell(true);
       }, 500);
@@ -70,13 +86,19 @@ export function useStorefrontCartLineHandlers({
     const normalizedOptions = gated.options;
 
     if (delegated) {
-      const accepted = delegatedActions.addToCart(
+      const sentQuantity = delegatedActions.addToCart(
         productForCart,
         quantity,
         normalizedOptions
       );
-      if (accepted) noteAddedProduct(productForCart);
-      return accepted ? 'applied' : 'rejected';
+      // Tracked when the shared cart accepts and shows the add, the same
+      // moment the shopper sees it land (as on the legacy path). A later
+      // server-side rejection is rare and reconciled in the cart itself;
+      // ad-platform add_to_cart measures the shopper's add intent.
+      if (sentQuantity > 0) {
+        noteAddedProduct(productForCart, sentQuantity, normalizedOptions);
+      }
+      return sentQuantity > 0 ? 'applied' : 'rejected';
     }
 
     const isQuizPrizeVoucherLine = Boolean(
@@ -130,12 +152,13 @@ export function useStorefrontCartLineHandlers({
     // the group flag set after the updater stripped the lines — the
     // money paths key off per-line negotiatedPrice so no charged total
     // changes, and the next validation drift self-heals the flag.
+    const previousCartForProbe = cartRef.current;
     const probeResult = applyStorefrontCartLineAdd({
-      previousCart: cartRef.current,
+      previousCart: previousCartForProbe,
       ...lineAddInput,
     });
     const outcome: AddToCartOutcome =
-      probeResult === cartRef.current ? 'rejected' : 'applied';
+      probeResult === previousCartForProbe ? 'rejected' : 'applied';
     if (outcome === 'applied') {
       cartRef.current = probeResult;
     }
@@ -175,7 +198,14 @@ export function useStorefrontCartLineHandlers({
     }
 
     if (outcome === 'applied') {
-      noteAddedProduct(productForCart);
+      // Caps can accept fewer units than requested: report what the add
+      // put in (same probe as the outcome; the documented same-tick
+      // remove/edit race above can make the commit differ).
+      noteAddedProduct(
+        productForCart,
+        countAddedUnits(previousCartForProbe, probeResult, productForCart.id),
+        normalizedOptions
+      );
     }
     return outcome;
   };

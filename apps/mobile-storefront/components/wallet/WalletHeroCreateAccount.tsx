@@ -7,6 +7,12 @@ import {
   View,
 } from 'react-native';
 
+/**
+ * Shared line metric: the add icon's box and the label's line height must
+ * match so the label sits on the icon's centre line.
+ */
+const WALLET_HERO_ACTION_LINE = 18;
+
 type Props = {
   canCreate: boolean;
   isCreating: boolean;
@@ -38,7 +44,12 @@ export function WalletHeroCreateAccount({
         {isCreating ? (
           <ActivityIndicator size="small" color="#F8B84C" />
         ) : (
-          <Ionicons name="add-circle-outline" size={18} color="#F8B84C" />
+          <Ionicons
+            name="add-circle-outline"
+            size={WALLET_HERO_ACTION_LINE}
+            color="#F8B84C"
+            style={styles.icon}
+          />
         )}
         <Text style={styles.label}>Create account number</Text>
       </Pressable>
@@ -55,11 +66,24 @@ const styles = StyleSheet.create({
     paddingLeft: 12,
   },
   button: {
-    minHeight: 48,
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
-  label: { color: '#F8B84C', fontSize: 12, fontWeight: '700', flexShrink: 1 },
+  // Icon and label share one line height so the text sits on the icon's
+  // centre line instead of riding above it (owner, 2026-11-16).
+  icon: {
+    width: WALLET_HERO_ACTION_LINE,
+    height: WALLET_HERO_ACTION_LINE,
+    lineHeight: WALLET_HERO_ACTION_LINE,
+  },
+  label: {
+    color: '#F8B84C',
+    fontSize: 11,
+    fontWeight: '700',
+    flexShrink: 1,
+    lineHeight: WALLET_HERO_ACTION_LINE,
+  },
   disabled: { opacity: 0.55 },
 });

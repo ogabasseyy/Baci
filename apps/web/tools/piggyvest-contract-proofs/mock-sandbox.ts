@@ -279,6 +279,12 @@ export class MockSandbox {
       updated_at: w.createdAt,
       deleted_at: null,
       balance: visibleBalance(w),
+      // As the sandbox answers (2026-11-12 probe, contract register): every
+      // wallet carries both flags, false unless frozen or under a lien.
+      // Wallet pay refuses a wallet missing them (fail closed), so the mock
+      // must send them too (Fable walk 14).
+      is_frozen: false,
+      has_an_active_lien: false,
       withdrawal_count: w.withdrawalCount,
       creation_interest_rate: 0,
       current_interest_rate: isDefault ? 0 : this.options.goalInterestRate,

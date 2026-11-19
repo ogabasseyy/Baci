@@ -65,3 +65,63 @@ describe('pollImeiLookup', () => {
     });
   });
 });
+
+describe('bugfix: a transient poll failure retired a paid lookup and its key', () => {
+  const answer = (status: number, body: Record<string, unknown>) =>
+    jest.fn<FetchImplementation>().mockResolvedValue({
+      json: () => Promise.resolve(body),
+      ok: status < 400,
+      status,
+    } as Response);
+  const poll = (fetchImpl: FetchImplementation) =>
+    pollImeiLookup({
+      accessToken: 'token',
+      apiBaseUrl: 'https://shop.example.com',
+      fetchImpl,
+      lookupId: '11111111-1111-4111-8111-111111111111',
+    });
+
+  it.each([
+    [500, 'LOOKUP_READ_FAILED'],
+    [503, 'IMEI_ACCESS_UNAVAILABLE'],
+    [401, 'AUTH_REQUIRED'],
+    [429, 'RATE_LIMITED'],
+  ])('keeps polling an unsettled lookup after a %i %s', async (status, code) => {
+    await expect(
+      poll(
+        answer(status, {
+          success: false,
+          status: 'error',
+          code,
+          error: 'Temporary',
+        })
+      )
+    ).resolves.toEqual({ kind: 'retry', pollAfterMs: 10_000 });
+  });
+
+  it('still settles a lookup the server finished with an error status', async () => {
+    await expect(
+      poll(
+        answer(502, {
+          success: false,
+          status: 'error',
+          error: 'Provider failed',
+          lookupId: '11111111-1111-4111-8111-111111111111',
+        })
+      )
+    ).resolves.toEqual({ kind: 'error', error: 'Provider failed' });
+  });
+
+  it('still ends a lookup the server no longer has', async () => {
+    await expect(
+      poll(
+        answer(404, {
+          success: false,
+          status: 'error',
+          code: 'LOOKUP_NOT_FOUND',
+          error: 'Lookup not found',
+        })
+      )
+    ).resolves.toEqual({ kind: 'error', error: 'Lookup not found' });
+  });
+});

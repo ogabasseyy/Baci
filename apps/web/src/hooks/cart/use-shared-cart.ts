@@ -1,8 +1,12 @@
 'use client';
 
+import { useRef } from 'react';
 import { DEFAULT_ASSURANCE_RATE } from '@/lib/checkout/constants';
+import { applyCartPeerPreview } from './cart-peer-preview';
 import { createCartActions } from './shared-cart-actions';
+import { createExperiencePortForCart } from './shared-cart-experience-runtime';
 import {
+  type EnsureCartResult,
   noop,
   type UseSharedCartOptions,
   type UseSharedCartResult,
@@ -13,6 +17,7 @@ import { createCartRecovery } from './shared-cart-recovery';
 import { deriveSyncStatus } from './shared-cart-reducer';
 import { createCartSnapshotActions } from './shared-cart-snapshots';
 import { useCartLinkLifecycle } from './use-cart-link-lifecycle';
+import { useCartPeerPreview } from './use-cart-peer-preview';
 import { useCartSendQueue } from './use-cart-send-queue';
 import { useCartSubscription } from './use-cart-subscription';
 import { useSharedCartRuntime } from './use-shared-cart-runtime';
@@ -36,8 +41,34 @@ export function useSharedCart(
     version: state.confirmed?.version ?? 0,
     generation: runtime.sessionGeneration,
     onRefresh: () => snapshots.refreshNow(true),
+    isOwnOperation: (operationId) =>
+      runtime.stateRef.current.queue.some(
+        (entry) =>
+          entry.operationId === operationId && entry.state === 'sending'
+      ),
   });
-  const provisioning = createCartProvisioning({ ...runtime, ...snapshots });
+  // A sibling tab's edit shows here at once; this tab's own authorized
+  // refetch still replaces it. Until then the cart reports 'pending', so
+  // checkout and other consumers wait for the server copy as they do for
+  // this tab's own unsaved edits.
+  const peerLines = useCartPeerPreview(runtime);
+  const visible = peerLines
+    ? applyCartPeerPreview(state.display, peerLines)
+    : state.display;
+  const ownSyncStatus = deriveSyncStatus(state);
+  const syncStatus =
+    peerLines && ownSyncStatus === 'synced' ? 'pending' : ownSyncStatus;
+  const ensureCartFlightRef = useRef<{
+    generation: number;
+    merchantId: string;
+    merchantSlug: string | null;
+    promise: Promise<EnsureCartResult>;
+  } | null>(null);
+  const provisioning = createCartProvisioning({
+    ...runtime,
+    ...snapshots,
+    ensureCartFlightRef,
+  });
   useCartLinkLifecycle({
     ...runtime,
     ...snapshots,
@@ -45,6 +76,9 @@ export function useSharedCart(
     realtimeConnected: runtime.realtimeConnected || connected,
   });
   useCartSendQueue({ ...runtime, ...snapshots, ...provisioning });
+  // Actions always work from this tab's own state. A sibling's preview is
+  // a display hint only: commands and capacity checks built on it could be
+  // rejected or reordered against the save it anticipates.
   const actions = createCartActions(runtime);
   const recovery = createCartRecovery({
     ...runtime,
@@ -67,12 +101,12 @@ export function useSharedCart(
     resolveImportConflicts,
   } = recovery;
 
-  const cartCount = state.display.reduce(
+  const cartCount = visible.reduce(
     (sum, line) => sum + (Number.isFinite(line.quantity) ? line.quantity : 0),
     0
   );
 
-  const cartTotal = state.display.reduce((sum, item) => {
+  const cartTotal = visible.reduce((sum, item) => {
     // Mirror the server: a negotiated price counts only once accepted;
     // pending/rejected proposals total at catalog.
     const unitPrice =
@@ -123,13 +157,16 @@ export function useSharedCart(
       syncStatus: 'synced',
       toggleAssurance: noop,
       updateQuantity: noop,
+      ensureCartSession: async () => null,
       version: null,
     };
   }
 
   return {
+    experienceCommandPort: createExperiencePortForCart(runtime),
     addToCart,
-    cart: state.display,
+    cart: visible,
+    ownCart: state.display,
     cartCount,
     cartId: state.cartId,
     cartTotal,
@@ -144,10 +181,11 @@ export function useSharedCart(
     refreshSharedCart,
     retryImport,
     discardLegacyImport,
+    ensureCartSession: provisioning.ensureCart,
     resolveImportConflicts,
     retryPendingSync,
     syncError: state.syncError,
-    syncStatus: deriveSyncStatus(state),
+    syncStatus,
     toggleAssurance,
     updateQuantity,
     version: state.confirmed?.version ?? null,

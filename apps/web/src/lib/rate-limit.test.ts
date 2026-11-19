@@ -200,30 +200,8 @@ describe('quiz route rate limits', () => {
     __resetRateLimitStoreForTesting();
   });
 
-  it.each([
-    ['/api/merchant/quiz/generate', 5],
-    ['/api/quiz/attempts/start', 20],
-    ['/api/quiz/awards/cash/claim', 10],
-    ['/api/quiz/prizes/grand/claim', 10],
-  ])('applies a dedicated limit to %s', async (path, expectedLimit) => {
-    const result = await checkRateLimit(
-      new NextRequest(`http://localhost:3000${path}`)
-    );
-
-    expect(result.limit).toBe(expectedLimit);
-  });
-
-  it.each([
-    ['/api/quiz/attempts/attempt-1/answers', 50],
-    ['/api/quiz/attempts/active', 50],
-    ['/api/quiz/attempts/attempt-1/finalize-awards', 50],
-  ])('keeps non-polling attempt routes on the default limit: %s', async (path, expectedLimit) => {
-    const result = await checkRateLimit(
-      new NextRequest(`http://localhost:3000${path}`)
-    );
-
-    expect(result.limit).toBe(expectedLimit);
-  });
+  // The per-route quiz budgets (start, claims, answers, recovery) are asserted
+  // in rate-limit-quiz-route-limits.test.ts.
 
   it('throttles submission writes without consuming the autocomplete budget and recovers after the window', async () => {
     vi.useFakeTimers();

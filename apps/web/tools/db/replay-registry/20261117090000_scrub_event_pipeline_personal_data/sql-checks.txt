@@ -1,0 +1,1 @@
+supabase/migrations/tests/scrub_event_pipeline_personal_data.sql

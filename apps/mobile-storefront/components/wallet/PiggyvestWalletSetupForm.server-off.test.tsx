@@ -1,0 +1,172 @@
+// Server-off release-gate test: PiggyVest stays off server-side; the
+// component must render and behave exactly as in production.
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react-native';
+import Colors from '@/constants/Colors';
+import { PiggyvestWalletSetupForm } from './PiggyvestWalletSetupForm';
+
+const merchantId = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
+
+it('requires BVN and explicit consent before submitting', () => {
+  const onSubmit = jest.fn();
+  render(
+    <PiggyvestWalletSetupForm
+      colors={Colors.dark}
+      merchantId={merchantId}
+      onSubmit={onSubmit}
+    />
+  );
+  const create = screen.getByRole('button', { name: 'Create account number' });
+  // Disabled until an 11-digit BVN and consent are both given.
+  expect(create).toBeDisabled();
+  fireEvent.press(create);
+  expect(onSubmit).not.toHaveBeenCalled();
+
+  fireEvent.changeText(screen.getByLabelText('BVN'), '12345678901');
+  expect(create).toBeDisabled();
+  fireEvent.press(screen.getByRole('checkbox'));
+  expect(create).toBeEnabled();
+});
+
+it('exposes the visible button label as its accessible name', () => {
+  render(
+    <PiggyvestWalletSetupForm
+      colors={Colors.light}
+      merchantId={merchantId}
+      onSubmit={jest.fn()}
+    />
+  );
+  expect(
+    screen.getByRole('button', { name: 'Create account number' })
+  ).toBeOnTheScreen();
+  expect(screen.getByText('Create account number')).toBeOnTheScreen();
+});
+
+it('keeps the BVN for retry and shows a safe inline error on failure', async () => {
+  const onSubmit = jest
+    .fn()
+    .mockRejectedValue(new Error('private provider error'));
+  render(
+    <PiggyvestWalletSetupForm
+      colors={Colors.light}
+      merchantId={merchantId}
+      onSubmit={onSubmit}
+    />
+  );
+  fireEvent.changeText(screen.getByLabelText('BVN'), '12345678901');
+  fireEvent.press(screen.getByRole('checkbox'));
+  fireEvent.press(
+    screen.getByRole('button', { name: 'Create account number' })
+  );
+  await waitFor(() => expect(screen.getByRole('alert')).toBeOnTheScreen());
+  expect(screen.getByLabelText('BVN').props.value).toBe('12345678901');
+  expect(screen.queryByText('private provider error')).toBeNull();
+  expect(onSubmit).toHaveBeenCalledWith({
+    merchantId,
+    bvn: '12345678901',
+    consent: true,
+  });
+});
+
+it('maps a definitive BVN rejection to correctable guidance', async () => {
+  const onSubmit = jest.fn().mockRejectedValue(
+    Object.assign(new Error('That BVN was rejected.'), {
+      code: 'INVALID_BVN',
+    })
+  );
+  render(
+    <PiggyvestWalletSetupForm
+      colors={Colors.light}
+      merchantId={merchantId}
+      onSubmit={onSubmit}
+    />
+  );
+  fireEvent.changeText(screen.getByLabelText('BVN'), '12345678901');
+  fireEvent.press(screen.getByRole('checkbox'));
+  fireEvent.press(
+    screen.getByRole('button', { name: 'Create account number' })
+  );
+  await waitFor(() => expect(screen.getByRole('alert')).toBeOnTheScreen());
+  expect(
+    screen.getByText('That BVN was rejected. Check the number and try again.')
+  ).toBeOnTheScreen();
+  // A definitively rejected number is dropped: keeping a known-wrong BVN
+  // serves no retry and only widens the sensitive value's lifetime.
+  expect(screen.getByLabelText('BVN').props.value).toBe('');
+});
+
+it('says setup is unavailable when PiggyVest refused before creating anything', async () => {
+  const onSubmit = jest
+    .fn()
+    .mockRejectedValue(
+      Object.assign(new Error('unavailable'), { code: 'PROVIDER_UNAVAILABLE' })
+    );
+  render(
+    <PiggyvestWalletSetupForm
+      colors={Colors.light}
+      merchantId={merchantId}
+      onSubmit={onSubmit}
+    />
+  );
+  fireEvent.changeText(screen.getByLabelText('BVN'), '12345678901');
+  fireEvent.press(screen.getByRole('checkbox'));
+  fireEvent.press(
+    screen.getByRole('button', { name: 'Create account number' })
+  );
+  await waitFor(() => expect(screen.getByRole('alert')).toBeOnTheScreen());
+  expect(
+    screen.getByText(
+      'Wallet setup is unavailable right now. Please try again later.'
+    )
+  ).toBeOnTheScreen();
+  // The form stays (no endless "setting up" screen) and keeps the BVN.
+  expect(screen.getByLabelText('BVN').props.value).toBe('12345678901');
+});
+
+it('clears the BVN only after the setup is confirmed', async () => {
+  const onSubmit = jest.fn().mockResolvedValue(undefined);
+  render(
+    <PiggyvestWalletSetupForm
+      colors={Colors.light}
+      merchantId={merchantId}
+      onSubmit={onSubmit}
+    />
+  );
+  fireEvent.changeText(screen.getByLabelText('BVN'), '12345678901');
+  fireEvent.press(screen.getByRole('checkbox'));
+  fireEvent.press(
+    screen.getByRole('button', { name: 'Create account number' })
+  );
+  await waitFor(() =>
+    expect(screen.getByLabelText('BVN').props.value).toBe('')
+  );
+  expect(onSubmit).toHaveBeenCalledWith({
+    merchantId,
+    bvn: '12345678901',
+    consent: true,
+  });
+});
+
+it('bugfix: the consent message clears once the box is ticked, and reads plainly', () => {
+  // The schema's consent message, triggered by a valid BVN without consent
+  // through a programmatic submit, is shown under the box and cleared on tick.
+  render(
+    <PiggyvestWalletSetupForm
+      colors={Colors.dark}
+      merchantId={merchantId}
+      onSubmit={jest.fn()}
+    />
+  );
+  expect(screen.getByText('Set up your savings wallet')).toBeOnTheScreen();
+  expect(screen.queryByText('Please accept wallet setup.')).toBeNull();
+  fireEvent.changeText(screen.getByLabelText('BVN'), '12345678901');
+  fireEvent.press(screen.getByRole('checkbox'));
+  fireEvent.press(screen.getByRole('checkbox'));
+  expect(
+    screen.queryByText('Tick the box to agree before continuing.')
+  ).toBeNull();
+});

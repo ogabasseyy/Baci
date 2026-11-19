@@ -88,6 +88,8 @@ describe('wallet savings data helpers', () => {
       product_condition: 'New',
       product_image: 'https://cdn.example.com/variant.jpg',
       product_variant_label: 'Color: Black · Storage: 256GB',
+      product_id: 'product-1',
+      variant_id: 'variant-1',
       selection_unresolved: false,
       source_mode: 'manual',
       status: 'active',
@@ -430,6 +432,17 @@ describe('wallet savings data helpers', () => {
         product_condition: 'New',
         product_variant_label: 'Color: Black · Storage: 256GB',
       })
+    );
+  });
+
+  it('carries the plan creation time when the row has one', () => {
+    expect(
+      toActiveSavingsGoal({
+        goal: { ...activeGoal, created_at: '2026-11-12T08:00:00Z' },
+      })
+    ).toMatchObject({ created_at: '2026-11-12T08:00:00Z' });
+    expect(toActiveSavingsGoal({ goal: activeGoal })).not.toHaveProperty(
+      'created_at'
     );
   });
 });

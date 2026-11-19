@@ -9,6 +9,11 @@ vi.mock('@/lib/storefront-blog-post-select', () => ({
 }));
 
 const mockSingle = vi.fn();
+const mockEditorSingle = vi.fn();
+const mockEditorFrom = vi.fn();
+vi.mock('@/lib/supabase/server', () => ({
+  createClient: async () => ({ from: mockEditorFrom }),
+}));
 
 // Mutable result that `.then()` on the builder resolves with.
 // Tests set this before calling getLiveBlogPost to control related-posts output.
@@ -53,6 +58,45 @@ const mockMerchant = {
 };
 
 describe('getLiveBlogPost', () => {
+  it('uses the editor session for the draft and fails closed on an RLS miss', async () => {
+    vi.mocked(getMerchantSafe).mockResolvedValue(mockMerchant as never);
+    mockEditorFrom.mockReturnValue({
+      select: () => ({
+        eq: () => ({ eq: () => ({ single: mockEditorSingle }) }),
+      }),
+    });
+    mockEditorSingle.mockResolvedValue({
+      data: null,
+      error: { code: 'PGRST116' },
+    });
+
+    await expect(
+      getLiveBlogPost('test-store', 'draft-post', true)
+    ).resolves.toBeNull();
+    expect(mockEditorFrom).toHaveBeenCalledWith('blog_posts');
+    expect(mockEditorSingle).toHaveBeenCalledOnce();
+    expect(mockSingle).not.toHaveBeenCalled();
+  });
+
+  it('returns an authorized draft with public related posts', async () => {
+    vi.mocked(getMerchantSafe).mockResolvedValue(mockMerchant as never);
+    const draft = { id: 'draft-id', slug: 'draft-post', status: 'draft' };
+    const related = { id: 'related-id', slug: 'related', title: 'Related' };
+    mockEditorFrom.mockReturnValue({
+      select: () => ({
+        eq: () => ({ eq: () => ({ single: mockEditorSingle }) }),
+      }),
+    });
+    mockEditorSingle.mockResolvedValue({ data: draft, error: null });
+    relatedQueryResult.data = [related];
+
+    await expect(
+      getLiveBlogPost('test-store', 'draft-post', true)
+    ).resolves.toMatchObject({ post: draft, relatedPosts: [related] });
+    expect(mockEditorFrom).toHaveBeenCalledExactlyOnceWith('blog_posts');
+    expect(mockSingle).not.toHaveBeenCalled();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     relatedQueryResult.data = [];

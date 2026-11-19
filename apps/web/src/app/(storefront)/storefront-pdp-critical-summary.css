@@ -176,6 +176,27 @@
     color: var(--store-on-primary, #ffffff);
   }
 
+  [data-ogabassey-pdp-commerce-primary-action][aria-disabled="true"],
+  [data-ogabassey-pdp-commerce-primary-action]:disabled {
+    opacity: 0.55;
+  }
+
+  [data-ogabassey-pdp-commerce-blocker] {
+    color: color-mix(
+      in srgb,
+      var(--store-background-text, #111827) 78%,
+      transparent
+    );
+    font-size: 0.875rem;
+    font-weight: 700;
+    margin: 0;
+    text-align: center;
+  }
+
+  [data-ogabassey-pdp-commerce-blocker][data-attention="true"] {
+    color: var(--store-primary, #d62027);
+  }
+
   [data-ogabassey-pdp-commerce-secondary-action] {
     border: 1px solid
       color-mix(in srgb, var(--store-primary, #d62027) 30%, transparent);

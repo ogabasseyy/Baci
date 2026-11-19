@@ -2,6 +2,7 @@ import { cacheLife, cacheTag } from 'next/cache';
 import { readStorefrontMerchantSnapshot } from '@/lib/storefront-merchant-snapshot';
 import { unwrapStorefrontReadResultForCache } from '@/lib/storefront-read-result';
 import { createPublicClient } from '@/lib/supabase/public';
+import { buildResolvedMerchantScopeTags } from '@/lib/tenant-cache-tags';
 import { isValidMerchantIdentifier } from '@/lib/validation';
 
 export interface BrandAuthorityMerchant {
@@ -18,10 +19,11 @@ export interface BrandAuthorityCategory {
   name: string;
 }
 
-function getClient() {
+function getClient(signal?: AbortSignal) {
   return createPublicClient({
     clientInfo: 'baci-web-brand-authority',
     timeoutMs: 10_000,
+    signal,
   });
 }
 
@@ -55,6 +57,14 @@ async function getCachedMerchant(
   }
 
   cacheTag(`merchant-${merchant.slug}`);
+  cacheTag(
+    ...buildResolvedMerchantScopeTags({
+      id: merchant.id,
+      slug: merchant.slug,
+      custom_domain:
+        typeof row.custom_domain === 'string' ? row.custom_domain : null,
+    })
+  );
   return {
     business_name: merchant.business_name,
     country:
@@ -84,8 +94,15 @@ async function getCategory(
   'use cache';
   cacheLife('storefront-page');
   cacheTag('categories', `categories-${merchantId}`);
+  return await readCategory(merchantId, categorySlug);
+}
 
-  const { data, error } = await getClient()
+async function readCategory(
+  merchantId: string,
+  categorySlug: string,
+  signal?: AbortSignal
+): Promise<BrandAuthorityCategory | null> {
+  const { data, error } = await getClient(signal)
     .from('categories')
     .select('id, name, is_active')
     .eq('merchant_id', merchantId)
@@ -103,5 +120,6 @@ async function getCategory(
 export const brandAuthorityPublicData = {
   createClient: getClient,
   getCategory,
+  readCategory,
   getMerchant,
 } as const;

@@ -139,6 +139,7 @@ export const DISABLED_SHARED_CART_STATE: {
   loadSavedCart: null;
   linkAccount: null;
   checkoutReview: null;
+  writeNotice: null;
   prepareCheckoutReview: null;
 } = {
   enabled: false,
@@ -156,5 +157,6 @@ export const DISABLED_SHARED_CART_STATE: {
   loadSavedCart: null,
   linkAccount: null,
   checkoutReview: null,
+  writeNotice: null,
   prepareCheckoutReview: null,
 };

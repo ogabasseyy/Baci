@@ -7,11 +7,12 @@ import {
   sanitizeAnalyticsInsightsContext,
 } from '@/lib/analytics/ollama-insights';
 import { authenticateApiRequest, hasPermission } from '@/lib/api-auth';
-import { cache, generateCacheKey } from '@/lib/cache';
+import { generateCacheKey } from '@/lib/cache';
 import {
   getMerchantForApiRequest,
   toUserAccess,
 } from '@/lib/get-merchant-for-api-request';
+import { getRedis } from '@/lib/redis';
 import { analyticsInsightsSchema } from '@/schemas/analytics-insights';
 import { GET, maxDuration } from './route';
 
@@ -31,12 +32,21 @@ vi.mock('@/lib/api-auth', () => ({
   hasPermission: vi.fn(),
 }));
 
+const mockRedis = {
+  get: vi.fn(),
+  set: vi.fn(),
+};
+
 vi.mock('@/lib/cache', () => ({
   cache: {
-    get: vi.fn(),
+    get: vi.fn(() => null),
     set: vi.fn(),
   },
   generateCacheKey: vi.fn(),
+}));
+
+vi.mock('@/lib/redis', () => ({
+  getRedis: vi.fn(() => mockRedis),
 }));
 
 vi.mock('@/lib/get-merchant-for-api-request', () => ({
@@ -132,7 +142,9 @@ describe('GET /api/analytics/insights', () => {
       resetIn: 60_000,
     });
     vi.mocked(generateCacheKey).mockReturnValue('ai-insights:merchant-1');
-    vi.mocked(cache.get).mockReturnValue(undefined);
+    vi.mocked(getRedis).mockReturnValue(mockRedis as never);
+    mockRedis.get.mockResolvedValue(null);
+    mockRedis.set.mockResolvedValue('OK');
     vi.mocked(isAnalyticsInsightsOllamaConfigured).mockReturnValue(false);
     vi.mocked(sanitizeAnalyticsInsightsContext).mockImplementation(
       (context) => context
@@ -342,14 +354,14 @@ describe('GET /api/analytics/insights', () => {
       }),
       expect.objectContaining({ timeoutMs: 10_000 })
     );
-    expect(cache.set).toHaveBeenCalledWith(
+    expect(mockRedis.set).toHaveBeenCalledWith(
       'ai-insights:merchant-1',
       expect.objectContaining({
         insights: [
           expect.objectContaining({ title: 'Products need attention' }),
         ],
       }),
-      86400
+      { ex: 86400 }
     );
   });
 
@@ -383,7 +395,7 @@ describe('GET /api/analytics/insights', () => {
         },
       ],
     });
-    expect(cache.set).toHaveBeenCalledWith(
+    expect(mockRedis.set).toHaveBeenCalledWith(
       'ai-insights:merchant-1',
       expect.objectContaining({
         insights: [
@@ -392,7 +404,7 @@ describe('GET /api/analytics/insights', () => {
           }),
         ],
       }),
-      300
+      { ex: 300 }
     );
     expect(console.warn).toHaveBeenCalledWith(
       'AI insights generation unavailable; using fallback',
@@ -423,7 +435,7 @@ describe('GET /api/analytics/insights', () => {
         },
       ],
     });
-    expect(cache.set).toHaveBeenCalledWith(
+    expect(mockRedis.set).toHaveBeenCalledWith(
       'ai-insights:merchant-1',
       expect.objectContaining({
         insights: [
@@ -432,7 +444,7 @@ describe('GET /api/analytics/insights', () => {
           }),
         ],
       }),
-      300
+      { ex: 300 }
     );
     expect(generateAnalyticsInsightsWithOllama).not.toHaveBeenCalled();
     expect(console.warn).toHaveBeenCalledWith(

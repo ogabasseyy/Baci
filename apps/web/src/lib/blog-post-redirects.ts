@@ -2,6 +2,7 @@ import { cacheLife, cacheTag } from 'next/cache';
 import { getBlogCacheTag } from '@/lib/blog-cache-tags';
 import { getMerchantSafe } from '@/lib/cached-data';
 import { createPublicClient } from '@/lib/supabase/anon';
+import { getBlogPostsMerchantCacheTag } from '@/lib/tenant-cache-tags';
 
 interface BlogPostRedirectRow {
   target_post_id: string | null;
@@ -50,6 +51,7 @@ export async function getBlogPostRedirect(
   if (!merchant) {
     return null;
   }
+  cacheTag(getBlogPostsMerchantCacheTag(merchant.id));
 
   const supabase = createPublicClient({
     clientInfo: 'baci-web-blog-post-redirect',

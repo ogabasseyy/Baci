@@ -3,8 +3,15 @@ import { z } from 'zod';
 import { logger } from '@/lib/logger';
 import { giglProvider } from '@/lib/shipping/providers/gigl';
 import type { GiglWaybillOwnership } from '@/lib/shipping/providers/gigl.preshipment-ownership';
+import type { GiglBatchTrackingOutcomes } from '@/lib/shipping/providers/gigl.tracking-batch';
 import type { TrackingResult } from '@/lib/shipping/types';
 import type { Database, Json } from '@/types/supabase';
+import { recordNotYetVisible } from './gigl-tracking-not-yet-visible';
+import {
+  needsPreshipmentCancellationRead,
+  type ReadWaybillCancellation,
+  withPreshipmentCancellation,
+} from './gigl-tracking-preshipment-cancellation';
 import { nullableSupabaseRpcArgument } from './nullable-supabase-rpc-argument';
 
 const claimedMonitorSchema = z.object({
@@ -30,7 +37,7 @@ export type GiglTrackingMonitorSummary = {
 type WorkerSupabase = Pick<SupabaseClient<Database>, 'rpc'>;
 type TrackShipments = (
   trackingNumbers: readonly string[]
-) => Promise<Map<string, TrackingResult>>;
+) => Promise<Map<string, TrackingResult> | GiglBatchTrackingOutcomes>;
 type AttestWaybillOwnership = (
   trackingNumber: string
 ) => Promise<GiglWaybillOwnership>;
@@ -169,9 +176,11 @@ export async function processClaimedGiglTrackingMonitors(
   monitors: ClaimedGiglTrackingMonitor[],
   workerId: string,
   trackShipments: TrackShipments = (trackingNumbers) =>
-    giglProvider.trackShipments(trackingNumbers),
+    giglProvider.trackShipmentOutcomes(trackingNumbers),
   attestWaybillOwnership: AttestWaybillOwnership = (trackingNumber) =>
-    giglProvider.attestWaybillOwnership(trackingNumber)
+    giglProvider.attestWaybillOwnership(trackingNumber),
+  readWaybillCancellation: ReadWaybillCancellation = (trackingNumber) =>
+    giglProvider.readWaybillCancellation(trackingNumber)
 ): Promise<GiglTrackingMonitorSummary> {
   const summary: GiglTrackingMonitorSummary = {
     applied: 0,
@@ -183,11 +192,19 @@ export async function processClaimedGiglTrackingMonitors(
   if (monitors.length === 0) return summary;
 
   let results: Map<string, TrackingResult>;
+  let failures: ReadonlyMap<string, Error>;
   try {
     const trackingNumbers = [
       ...new Set(monitors.map((monitor) => monitor.tracking_number)),
     ];
-    results = await trackShipments(trackingNumbers);
+    const tracked = await trackShipments(trackingNumbers);
+    if (tracked instanceof Map) {
+      results = tracked;
+      failures = new Map();
+    } else {
+      results = tracked.results;
+      failures = tracked.failures;
+    }
   } catch (error) {
     await Promise.all(
       monitors.map(async (monitor) => {
@@ -199,12 +216,42 @@ export async function processClaimedGiglTrackingMonitors(
   }
 
   const attestCancellation = createCancellationAttestor(attestWaybillOwnership);
+  const cancellationReads = new Map<
+    string,
+    ReturnType<ReadWaybillCancellation>
+  >();
+  const readCancellationOnce: ReadWaybillCancellation = (trackingNumber) => {
+    let read = cancellationReads.get(trackingNumber);
+    if (!read) {
+      read = readWaybillCancellation(trackingNumber);
+      cancellationReads.set(trackingNumber, read);
+    }
+    return read;
+  };
   await Promise.all(
     monitors.map(async (monitor) => {
-      const result = results.get(monitor.tracking_number);
+      let result = results.get(monitor.tracking_number);
+      const trackingFailure = failures.get(monitor.tracking_number);
       try {
-        if (!result)
-          throw new Error('GIGL batch tracking omitted claimed waybill');
+        if (needsPreshipmentCancellationRead(result)) {
+          const cancellation = await readCancellationOnce(
+            monitor.tracking_number
+          ).catch(() => 'unknown' as const);
+          if (cancellation === 'cancelled') {
+            result = withPreshipmentCancellation(
+              result,
+              monitor.tracking_number,
+              new Date()
+            );
+          }
+        }
+        if (!result && trackingFailure) {
+          throw trackingFailure;
+        }
+        if (!result) {
+          await recordNotYetVisible(supabase, monitor, workerId);
+          return;
+        }
         if (result.hasRecognizedLifecycleEvent === false) {
           const paused = await pauseMonitor(supabase, monitor, workerId);
           if (paused) {

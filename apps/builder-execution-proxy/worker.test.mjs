@@ -71,7 +71,7 @@ test('forwards private output and browser Origin without caller credentials', as
   assert.equal(await output.text(), 'widget');
 });
 
-test('forwards the original route parameter only for a published document', async (t) => {
+test('forwards a canonical route parameter only for a published document', async (t) => {
   const fetch = t.mock.method(
     globalThis,
     'fetch',
@@ -81,8 +81,12 @@ test('forwards the original route parameter only for a published document', asyn
         headers: { 'X-Baci-Output-Digest': digest },
       })
   );
-  const path = `/published/example-store/${digest}/index.html?path=%2Fproducts%2Fsample`;
-  const result = await worker.fetch(request(path), env);
+  const document = `/published/example-store/${digest}/index.html`;
+  const path = `${document}?path=%2Fproducts%2F%5Bsample%5D`;
+  const result = await worker.fetch(
+    request(`${document}?path=%2fproducts%2f%5bsample%5d`),
+    env
+  );
   assert.equal(result.status, 404);
   assert.equal(String(fetch.mock.calls[0].arguments[0]), upstreamOrigin + path);
   assert.equal(result.headers.get('Cache-Control'), 'private, no-store');

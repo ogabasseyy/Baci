@@ -103,10 +103,20 @@ def smoke(root, backend_port, secret, dead=False):
             assert request('/internal/owner/preview', '-H', f'{KEY_HEADER}: {KEY}')[-1] == '404'
             assert request(PATH, '-H', f'{KEY_HEADER}: {KEY}', '-X', 'POST')[-1] == '404'
             published = '/published/example/' + 'a' * 64
-            published_route = published + '/index.html?path=%2Fproducts%2Fsample'
+            published_route = published + '/index.html?path=%2Fproducts%2F%5Bsample%5D'
             body, status = request(published_route, '-H', f'{KEY_HEADER}: {KEY}')
             assert status == '200'
             assert json.loads(body)['path'] == published_route
+            assert request(published + '/index.html?path=%2F' + 'a' * 1023,
+                           '-H', f'{KEY_HEADER}: {KEY}')[-1] == '200'
+            for query in (
+                '?unrecognized=1',
+                '?path=%2F&path=%2Fproducts',
+                '?path=%2Fproducts%2F',
+                '?path=%2F' + 'a' * 1024,
+            ):
+                assert request(published + '/index.html' + query, '-H',
+                               f'{KEY_HEADER}: {KEY}')[-1] == '404'
             assert request(PATH + '?path=%2F', '-H', f'{KEY_HEADER}: {KEY}')[-1] == '404'
             assert request(published + '/app.js?path=%2F', '-H',
                            f'{KEY_HEADER}: {KEY}')[-1] == '404'

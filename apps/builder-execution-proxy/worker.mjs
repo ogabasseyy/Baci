@@ -91,7 +91,7 @@ export default {
     try {
       const upstream = new URL(origin);
       upstream.pathname = url.pathname;
-      upstream.search = url.search;
+      upstream.search = url.searchParams.toString();
       const headers = new Headers({
         'X-Baci-Execution-Origin-Key': env.EXECUTION_ORIGIN_KEY,
       });

@@ -37,8 +37,9 @@ Configure a dedicated 32-byte random base64url origin secret in the Worker
 `BACI_EXECUTION_ORIGIN_KEY`. Use the output-only Caddy vhost candidate. It
 requires the secret before forwarding, strips credentials, and fixes the
 upstream Host to the browser execution host. Only published index documents
-can carry a query through Caddy. The Worker and delivery listener validate the
-route value. Set the builder service
+can carry a query through Caddy. The Worker validates and serializes one
+bounded route parameter, Caddy checks that canonical query, and the delivery
+listener normalizes the route again. Set the builder service
 execution origin to the same canonical Worker URL. This arrangement requires
 a valid certificate and DNS-only record for the fixed upstream hostname so
 the Worker no-store subrequest reaches Contabo directly. The runtime environment placeholder keeps the origin key out of adapted

@@ -35,7 +35,10 @@ vi.mock('./catalog-bindings', () => ({
 
 beforeEach(() => {
   vi.resetAllMocks();
-  vi.stubEnv('CROSSREM_CATALOG_TOKEN', 'synthetic-token');
+  vi.stubEnv(
+    'CROSSREM_CATALOG_TOKEN',
+    'synthetic-crossrem-access-token-qa-test-0001'
+  );
   mocks.bindings.splice(0, mocks.bindings.length, {
     listingId: 'legacy-id',
     productId: 'item',
@@ -116,7 +119,9 @@ describe('CrossRem catalog source', () => {
     });
     const response = await GET(
       new Request('https://example.test/api/partners/v1/catalog', {
-        headers: { Authorization: 'Bearer synthetic-token' },
+        headers: {
+          Authorization: 'Bearer synthetic-crossrem-access-token-qa-test-0001',
+        },
       })
     );
     expect(response.status).toBe(200);

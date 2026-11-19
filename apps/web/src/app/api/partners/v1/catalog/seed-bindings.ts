@@ -1,6 +1,7 @@
 import type { GoogleMerchantListing } from '@/app/api/feed/google-merchant/feed-builder';
 import type { CrossRemListingBinding } from '@/schemas/crossrem-listing-binding';
-import { getSellableIdentity, sellableIdentityKey } from './sellable-identity';
+import { getSellableIdentity } from './sellable-identity';
+import { sellableIdentityKey } from './sellable-identity-key';
 
 export function seedBindingCandidates(rows: GoogleMerchantListing[]) {
   const byId = new Map<string, CrossRemListingBinding | null>();

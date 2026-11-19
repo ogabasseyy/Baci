@@ -5,6 +5,8 @@ import { seedBindingCandidates } from '@/app/api/partners/v1/catalog/seed-bindin
 import { isUuid, resolveFeedMerchant } from '@/lib/feed-identifier';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 
+class CatalogExportError extends Error {}
+
 let exportStep = 'validate the merchant UUID';
 
 async function main() {
@@ -17,11 +19,11 @@ async function main() {
 
   exportStep = 'resolve the merchant or verify NGN currency';
   const merchant = await resolveFeedMerchant(merchantId, false);
-  if (
-    merchant.id !== merchantId ||
-    resolveMerchantCurrencyConfig(merchant).code !== 'NGN'
-  ) {
-    throw new Error('CrossRem merchant unavailable');
+  if (merchant.id !== merchantId) {
+    throw new CatalogExportError('Resolved merchant does not match the requested UUID.');
+  }
+  if (resolveMerchantCurrencyConfig(merchant).code !== 'NGN') {
+    throw new CatalogExportError('CrossRem catalog pricing requires NGN.');
   }
 
   exportStep = 'read the public merchant catalog';
@@ -33,7 +35,7 @@ async function main() {
     buildMerchantBaseUrl({ slug: data.slug, custom_domain: data.custom_domain }),
     data.imageManifest
   );
-  if (!rows.length) throw new Error('Merchant catalog is empty');
+  if (!rows.length) throw new CatalogExportError('The merchant catalog has no eligible Google listings.');
 
   exportStep = 'export binding candidates';
   const candidates = seedBindingCandidates(rows);
@@ -42,7 +44,7 @@ async function main() {
   );
 }
 
-main().catch(() => {
-  console.error(`Unable to ${exportStep}.`);
+main().catch((error: unknown) => {
+  console.error(error instanceof CatalogExportError ? error.message : `Unable to ${exportStep}.`);
   process.exitCode = 1;
 });

@@ -1,8 +1,8 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { loadCrossRemCatalog } from './catalog-service';
 
-// RFC 6750 bearer-token syntax. Provision a random base64url value.
-const bearerTokenPattern = /^[A-Za-z0-9._~+/-]+=*$/;
+// 32 random bytes encoded as unpadded base64url need at least 43 characters.
+const bearerTokenPattern = /^[A-Za-z0-9_-]{43,}$/;
 const privateHeaders = { 'Cache-Control': 'private, no-store' };
 
 function digest(value: string) {
@@ -25,12 +25,16 @@ function unavailable() {
 
 export async function GET(request: Request) {
   const token = process.env.CROSSREM_CATALOG_TOKEN;
-  if (!token || !bearerTokenPattern.test(token)) return unavailable();
 
   const credential = /^Bearer +(.+)$/i.exec(
     request.headers.get('authorization') ?? ''
   )?.[1];
-  if (!credential || !timingSafeEqual(digest(credential), digest(token))) {
+  if (
+    !token ||
+    !bearerTokenPattern.test(token) ||
+    !credential ||
+    !timingSafeEqual(digest(credential), digest(token))
+  ) {
     return Response.json(
       { error: 'Unauthorized' },
       {

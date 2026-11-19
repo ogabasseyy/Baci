@@ -1,11 +1,9 @@
 import type { GoogleMerchantListing } from '@/app/api/feed/google-merchant/feed-builder';
 
 import type { CrossRemListingBinding } from '@/schemas/crossrem-listing-binding';
-import {
-  CONDITION_LABELS,
-  getSellableIdentity,
-  sellableIdentityKey,
-} from './sellable-identity';
+import { CONDITION_LABELS } from './condition-labels';
+import { getSellableIdentity } from './sellable-identity';
+import { sellableIdentityKey } from './sellable-identity-key';
 
 const CROSSREM_PRICE_PERCENT = 106n;
 

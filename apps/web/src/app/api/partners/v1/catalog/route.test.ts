@@ -7,7 +7,7 @@ const { loadCrossRemCatalog } = vi.hoisted(() => ({
 
 vi.mock('./catalog-service', () => ({ loadCrossRemCatalog }));
 
-const token = 'synthetic-crossrem-access-token';
+const token = 'synthetic-crossrem-access-token-qa-test-0001';
 const snapshot = { listings: [{ id: 'google-listed-variant' }] };
 
 function request(authorization?: string, ifNoneMatch?: string) {
@@ -26,11 +26,11 @@ describe('CrossRem catalog', () => {
 
   afterEach(() => vi.unstubAllEnvs());
 
-  it('fails closed when a credential is not configured', async () => {
-    for (const configuredToken of ['', 'bad:token']) {
+  it('rejects missing, malformed and short configured credentials', async () => {
+    for (const configuredToken of ['', 'bad:token', 'test']) {
       vi.stubEnv('CROSSREM_CATALOG_TOKEN', configuredToken);
-      const response = await GET(request(`Bearer ${token}`));
-      expect(response.status).toBe(503);
+      const response = await GET(request(`Bearer ${configuredToken || token}`));
+      expect(response.status).toBe(401);
       expect(response.headers.get('cache-control')).toBe('private, no-store');
     }
     expect(loadCrossRemCatalog).not.toHaveBeenCalled();

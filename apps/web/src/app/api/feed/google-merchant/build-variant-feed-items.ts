@@ -31,6 +31,7 @@ export interface VariantFeedInput {
   platform: 'google' | 'facebook';
   familyRow?: boolean;
   collectListing?: (listing: GoogleMerchantListing) => void;
+  renderXml?: boolean;
 }
 
 const text = (value: unknown) =>
@@ -123,10 +124,6 @@ export function buildVariantFeedItems(input: VariantFeedInput): string {
       if (!image) return '';
 
       const attributes = canonicalAttributes(variant);
-      const identifiers =
-        productManufacturerIdentifiers.resolveVariantProductIdentifiers(
-          variant.attributes
-        );
       const url = new URL(productUrl);
       url.searchParams.set('variantId', variant.id);
       url.searchParams.set(
@@ -184,17 +181,6 @@ export function buildVariantFeedItems(input: VariantFeedInput): string {
         title.length > maxTitle
           ? `${title.slice(0, maxTitle - 3).trimEnd()}...`
           : title;
-      const variantProduct = { ...product, variant_attributes: attributes };
-      const compareAt = variant.compare_at_price;
-      const prices =
-        typeof compareAt === 'number' &&
-        Number.isFinite(compareAt) &&
-        compareAt > price
-          ? `<g:price>${compareAt.toFixed(2)} ${currency}</g:price>\n<g:sale_price>${price.toFixed(2)} ${currency}</g:sale_price>`
-          : `<g:price>${price.toFixed(2)} ${currency}</g:price>`;
-      // Missing identifiers mean unknown, not that the manufacturer assigned none.
-      const gtin = text(identifiers.gtin);
-      const mpn = text(identifiers.mpn);
       const id = input.familyRow ? product.id : variant.id;
       const listingUrl = url.toString();
       input.collectListing?.({
@@ -207,6 +193,23 @@ export function buildVariantFeedItems(input: VariantFeedInput): string {
         price,
         stock,
       });
+      if (input.renderXml === false) return '';
+
+      const identifiers =
+        productManufacturerIdentifiers.resolveVariantProductIdentifiers(
+          variant.attributes
+        );
+      const variantProduct = { ...product, variant_attributes: attributes };
+      const compareAt = variant.compare_at_price;
+      const prices =
+        typeof compareAt === 'number' &&
+        Number.isFinite(compareAt) &&
+        compareAt > price
+          ? `<g:price>${compareAt.toFixed(2)} ${currency}</g:price>\n<g:sale_price>${price.toFixed(2)} ${currency}</g:sale_price>`
+          : `<g:price>${price.toFixed(2)} ${currency}</g:price>`;
+      // Missing identifiers mean unknown, not that the manufacturer assigned none.
+      const gtin = text(identifiers.gtin);
+      const mpn = text(identifiers.mpn);
       return [
         '    <item>',
         `<g:id>${escapeXml(id)}</g:id>`,

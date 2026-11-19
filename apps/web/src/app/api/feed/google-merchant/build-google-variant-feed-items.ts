@@ -30,7 +30,10 @@ export function buildGoogleVariantFeedItems(
   // Rank only renderable SKUs to preserve verified colour-image matching.
   const selection = selectFeedFamilyVariant(
     input.product,
-    input.variants.filter((variant) => Boolean(rows.get(variant.id)?.xml))
+    input.variants.filter((variant) => {
+      const row = rows.get(variant.id);
+      return Boolean(row?.xml || row?.listing);
+    })
   );
   const row = selection && rows.get(selection.id);
   if (!row) return '';

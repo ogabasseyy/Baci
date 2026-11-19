@@ -31,8 +31,8 @@ export async function exportCrossRemCatalogBindings(merchantId: string) {
     exportStep = 'render Google listing candidates from a nonempty catalog';
     const rows = collectGoogleMerchantListings(
       data.products,
-      // Keep export aligned with catalog-service.ts SKU expansion mode.
-      { ...merchant, gmc_variants_enabled: true },
+      // Import candidates keep the source's actual Google g:ids.
+      merchant,
       buildMerchantBaseUrl({
         slug: data.slug,
         custom_domain: data.custom_domain,

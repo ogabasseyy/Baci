@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import * as xmlUtils from '@/lib/xml-utils';
 import { collectGoogleMerchantListings } from './collect-google-merchant-listings';
 import type { FeedMerchant, FeedProduct, ImageManifestMap } from './feed-types';
 
@@ -47,14 +48,20 @@ describe('collectGoogleMerchantListings', () => {
       },
     ];
 
-    const listings = collectGoogleMerchantListings(
-      products,
-      merchant,
-      'https://ogabassey.com',
-      manifest
-    );
+    const escapeXml = vi.spyOn(xmlUtils, 'escapeXml');
+    try {
+      const listings = collectGoogleMerchantListings(
+        products,
+        merchant,
+        'https://ogabassey.com',
+        manifest
+      );
 
-    expect(listings).toHaveLength(1);
-    expect(listings[0].product.id).toBe('prod-valid');
+      expect(listings).toHaveLength(1);
+      expect(listings[0].product.id).toBe('prod-valid');
+      expect(escapeXml).not.toHaveBeenCalled();
+    } finally {
+      escapeXml.mockRestore();
+    }
   });
 });

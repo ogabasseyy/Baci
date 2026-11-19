@@ -1,56 +1,45 @@
-import { cacheLife, cacheTag } from 'next/cache';
 import { collectGoogleMerchantListings } from '@/app/api/feed/google-merchant/collect-google-merchant-listings';
 import { getCachedGoogleMerchantFeedData } from '@/app/api/feed/google-merchant/feed-data';
 import { buildMerchantBaseUrl } from '@/app/api/feed/google-merchant/route-utils';
 import { resolveFeedMerchant } from '@/lib/feed-identifier';
 import { logger } from '@/lib/logger';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
-import {
-  CROSSREM_CATALOG_BINDINGS,
-  CROSSREM_MERCHANT_ID,
-} from './catalog-bindings';
+import { crossRemCatalogConfig } from './catalog-bindings';
 import { projectCatalog } from './project-catalog';
 
 export async function loadCrossRemCatalog() {
-  'use cache';
-  cacheLife('products');
-  cacheTag(
-    'google-merchant-feed',
-    'products',
-    `merchant-feed-${CROSSREM_MERCHANT_ID}`
-  );
-
-  const activeCount = CROSSREM_CATALOG_BINDINGS.filter(
-    (binding) => !binding.retired
-  ).length;
-  if (!CROSSREM_MERCHANT_ID || activeCount === 0) {
+  const { merchantId, bindings } = crossRemCatalogConfig;
+  const activeCount = bindings.filter((binding) => !binding.retired).length;
+  if (!merchantId || activeCount === 0) {
     logger.warn({
       message: 'CrossRem catalog is unconfigured',
-      merchantId: CROSSREM_MERCHANT_ID,
+      merchantId,
       activeCount,
     });
     throw new Error('CrossRem catalog is unconfigured');
   }
 
-  const merchant = await resolveFeedMerchant(CROSSREM_MERCHANT_ID, false);
+  const merchant = await resolveFeedMerchant(merchantId, false);
   const currency = resolveMerchantCurrencyConfig(merchant).code;
-  if (merchant.id !== CROSSREM_MERCHANT_ID || currency !== 'NGN') {
+  if (merchant.id !== merchantId || currency !== 'NGN') {
     logger.warn({
       message: 'CrossRem merchant unavailable',
-      expectedMerchantId: CROSSREM_MERCHANT_ID,
+      expectedMerchantId: merchantId,
       resolvedMerchantId: merchant.id,
       currency,
     });
     throw new Error('CrossRem merchant unavailable');
   }
 
+  // The full partner response is too large for a single hosted cache entry.
+  // Reuse Google's cached source data and build the response per request.
   const data = await getCachedGoogleMerchantFeedData(
     merchant.id,
     merchant.slug
   );
   const rows = collectGoogleMerchantListings(
     data.products,
-    // Retain a bound SKU even when Google switches its representative family row.
+    // Resolve the pinned SKU even when Google selects a different family row.
     { ...merchant, gmc_variants_enabled: true },
     buildMerchantBaseUrl({
       slug: data.slug,
@@ -58,12 +47,13 @@ export async function loadCrossRemCatalog() {
     }),
     data.imageManifest
   );
-  const listings = projectCatalog(rows, CROSSREM_CATALOG_BINDINGS);
+  const listings = projectCatalog(rows, bindings);
   if (listings.length !== activeCount) {
     const resolvedIds = new Set(listings.map((listing) => listing.listing_id));
-    const sampleListingIds = CROSSREM_CATALOG_BINDINGS.filter(
-      (binding) => !binding.retired && !resolvedIds.has(binding.listingId)
-    )
+    const sampleListingIds = bindings
+      .filter(
+        (binding) => !binding.retired && !resolvedIds.has(binding.listingId)
+      )
       .slice(0, 10)
       .map((binding) => binding.listingId);
     logger.warn({

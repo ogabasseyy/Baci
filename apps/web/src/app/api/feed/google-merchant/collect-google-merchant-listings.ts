@@ -19,7 +19,8 @@ export function collectGoogleMerchantListings(
     merchant,
     baseUrl,
     imageManifest,
-    (row) => listings.push(row)
+    (row) => listings.push(row),
+    false
   );
   return listings;
 }

@@ -4,7 +4,8 @@ const mocks = vi.hoisted(() => ({
   resolveFeedMerchant: vi.fn(),
   getGoogleMerchantFeedData: vi.fn(),
   collectGoogleMerchantListings: vi.fn(),
-  seedBindingCandidates: vi.fn(),
+  seedBindingCandidates:
+    vi.fn<typeof import('@/app/api/partners/v1/catalog/seed-bindings').seedBindingCandidates>(),
 }));
 
 vi.mock('@/lib/feed-identifier', () => ({
@@ -33,6 +34,17 @@ vi.mock('@/app/api/partners/v1/catalog/seed-bindings', () => ({
 import { exportCrossRemCatalogBindings } from './export-crossrem-catalog-bindings';
 
 const VALID_MERCHANT_ID = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
+const seedResult = {
+  bindings: [
+    {
+      listingId: 'prod-1',
+      productId: 'prod-1',
+      variantId: 'var-1',
+      condition: 'new' as const,
+    },
+  ],
+  unresolved_listing_ids: ['unresolved-1'],
+};
 
 describe('exportCrossRemCatalogBindings', () => {
   beforeEach(() => {
@@ -56,10 +68,7 @@ describe('exportCrossRemCatalogBindings', () => {
         variant: { id: 'var-1' },
       },
     ]);
-    mocks.seedBindingCandidates.mockReturnValue({
-      bindings: [{ listingId: 'ogabassey-1', productId: 'prod-1' }],
-      skippedCount: 0,
-    });
+    mocks.seedBindingCandidates.mockReturnValue(seedResult);
   });
 
   it('rejects non-UUID merchant identifiers', async () => {
@@ -97,22 +106,21 @@ describe('exportCrossRemCatalogBindings', () => {
     ).rejects.toThrow('no eligible Google listings');
   });
 
-  it('forces gmc_variants_enabled: true to stay aligned with catalog-service', async () => {
+  it('preserves Google family mode and returns unresolved Google IDs', async () => {
     const result = await exportCrossRemCatalogBindings(VALID_MERCHANT_ID);
 
     expect(mocks.collectGoogleMerchantListings).toHaveBeenCalledWith(
       [{ id: 'prod-1' }],
       expect.objectContaining({
         id: VALID_MERCHANT_ID,
-        gmc_variants_enabled: true,
+        gmc_variants_enabled: false,
       }),
       'https://ogabassey.com',
       {}
     );
     expect(result).toEqual({
       merchant_id: VALID_MERCHANT_ID,
-      bindings: [{ listingId: 'ogabassey-1', productId: 'prod-1' }],
-      skippedCount: 0,
+      ...seedResult,
     });
   });
 });

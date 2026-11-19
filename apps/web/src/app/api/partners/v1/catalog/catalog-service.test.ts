@@ -4,8 +4,6 @@ import { GET } from './route';
 
 const mocks = vi.hoisted(() => ({
   warn: vi.fn(),
-  cacheTag: vi.fn(),
-  cacheLife: vi.fn(),
   resolveMerchant: vi.fn(),
   getFeedData: vi.fn(),
   bindings: [
@@ -17,10 +15,6 @@ const mocks = vi.hoisted(() => ({
     variantId?: string;
   }>,
 }));
-vi.mock('next/cache', () => ({
-  cacheLife: mocks.cacheLife,
-  cacheTag: mocks.cacheTag,
-}));
 vi.mock('@/lib/logger', () => ({ logger: { warn: mocks.warn } }));
 vi.mock('@/lib/feed-identifier', () => ({
   resolveFeedMerchant: mocks.resolveMerchant,
@@ -29,8 +23,10 @@ vi.mock('@/app/api/feed/google-merchant/feed-data', () => ({
   getCachedGoogleMerchantFeedData: mocks.getFeedData,
 }));
 vi.mock('./catalog-bindings', () => ({
-  CROSSREM_CATALOG_BINDINGS: mocks.bindings,
-  CROSSREM_MERCHANT_ID: 'ogabassey-id',
+  crossRemCatalogConfig: {
+    bindings: mocks.bindings,
+    merchantId: 'ogabassey-id',
+  },
 }));
 
 beforeEach(() => {
@@ -65,6 +61,7 @@ describe('CrossRem catalog source', () => {
   it('keeps the bound SKU when the Google family now prefers a different SKU', async () => {
     mocks.bindings[0] = {
       ...mocks.bindings[0],
+      listingId: 'item',
       variantId: 'used-sku',
     };
     mocks.getFeedData.mockResolvedValue({
@@ -125,18 +122,12 @@ describe('CrossRem catalog source', () => {
       })
     );
     expect(response.status).toBe(200);
-    expect(mocks.cacheLife).toHaveBeenCalledWith('products');
-    expect(mocks.cacheTag).toHaveBeenCalledWith(
-      'google-merchant-feed',
-      'products',
-      'merchant-feed-ogabassey-id'
-    );
     await expect(response.json()).resolves.toMatchObject({
       schema_version: 1,
       currency: 'NGN',
       listings: [
         {
-          listing_id: 'legacy-id',
+          listing_id: 'item',
           variant_id: 'used-sku',
           base_price_minor: 20000,
           availability: 'out_of_stock',

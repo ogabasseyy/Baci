@@ -99,13 +99,14 @@ function getConditionedVariants(product: FeedProduct) {
   );
 }
 
-/** Generate XML using only prevalidated images; performs no network calls. */
+/** Render XML or collect eligible rows using the same prevalidated images. */
 export function generateGoogleMerchantFeed(
   products: FeedProduct[],
   merchant: FeedMerchant,
   baseUrl: string,
   imageManifest: ImageManifestMap,
-  collectListing?: (listing: GoogleMerchantListing) => void
+  collectListing?: (listing: GoogleMerchantListing) => void,
+  renderXml = true
 ): string {
   const currency = resolveMerchantCurrencyConfig(merchant).code;
   const brandName = merchant.business_name;
@@ -125,15 +126,19 @@ export function generateGoogleMerchantFeed(
         product.offers,
         product.condition
       );
+      const offerClaimedImages = collectOfferClaimedImageUrls(eligibleOffers);
       const productLevelImages = resolveFeedImages(
         getProductLevelManifestEntries(manifestEntries),
-        collectOfferClaimedImageUrls(eligibleOffers)
+        offerClaimedImages,
+        renderXml
       );
-      const description = buildFeedDescription(product);
-      const colorXml = buildGoogleColorXml(product);
-      const productDetailsXml = buildGoogleProductDetailXml(product);
+      const description = renderXml ? buildFeedDescription(product) : '';
+      const colorXml = renderXml ? buildGoogleColorXml(product) : '';
+      const productDetailsXml = renderXml
+        ? buildGoogleProductDetailXml(product)
+        : '';
       const shippingWeight =
-        product.weight_value && product.weight_unit
+        renderXml && product.weight_value && product.weight_unit
           ? `        <g:shipping_weight>${product.weight_value} ${product.weight_unit}</g:shipping_weight>`
           : '';
       const effectiveBrand = product.brand || brandName;
@@ -148,6 +153,7 @@ export function generateGoogleMerchantFeed(
           brand: effectiveBrand,
           familyRow: merchant.gmc_variants_enabled === false,
           collectListing,
+          renderXml,
         });
       }
       // Simple-product rows carry parent identifiers only when they are
@@ -181,29 +187,30 @@ export function generateGoogleMerchantFeed(
           price: product.price,
           stock,
         });
-        baseItem = buildBaseItemXml({
-          additionalImagesXml: productLevelImages.additionalImagesXml,
-          availability: stock > 0 ? 'in_stock' : 'out_of_stock',
-          brandName: effectiveBrand,
-          compareAtPrice: product.compare_at_price,
-          condition: toGmcCondition(product.condition),
-          colorXml,
-          currency,
-          description,
-          googleProductCategory: product.google_product_category,
-          gtin: productIdentifiers.gtin,
-          id: baseItemId,
-          groupId: hasConditionOffers ? product.id : undefined,
-          imageUrl: productLevelImages.primaryImageUrl,
-          mpn: productIdentifiers.mpn,
-          price: product.price,
-          productDetailsXml,
-          productType,
-          shippingWeight,
-          stockCount: stock,
-          title: product.name,
-          url: productUrl,
-        });
+        if (renderXml)
+          baseItem = buildBaseItemXml({
+            additionalImagesXml: productLevelImages.additionalImagesXml,
+            availability: stock > 0 ? 'in_stock' : 'out_of_stock',
+            brandName: effectiveBrand,
+            compareAtPrice: product.compare_at_price,
+            condition: toGmcCondition(product.condition),
+            colorXml,
+            currency,
+            description,
+            googleProductCategory: product.google_product_category,
+            gtin: productIdentifiers.gtin,
+            id: baseItemId,
+            groupId: hasConditionOffers ? product.id : undefined,
+            imageUrl: productLevelImages.primaryImageUrl,
+            mpn: productIdentifiers.mpn,
+            price: product.price,
+            productDetailsXml,
+            productType,
+            shippingWeight,
+            stockCount: stock,
+            title: product.name,
+            url: productUrl,
+          });
       }
 
       if (eligibleOffers.length === 0) {
@@ -214,7 +221,8 @@ export function generateGoogleMerchantFeed(
         const offerImages = resolveOfferFeedImages(
           offer.images,
           manifestEntries,
-          collectOfferClaimedImageUrls(eligibleOffers)
+          offerClaimedImages,
+          renderXml
         );
         if (!offerImages) return '';
         const offerStock = getFeedStockCount(product, offer);
@@ -231,6 +239,7 @@ export function generateGoogleMerchantFeed(
           price: offer.price,
           stock: offerStock,
         });
+        if (!renderXml) return '';
         const offerLines = [
           `        <g:id>${escapeXml(offer.id)}</g:id>`,
           `        <g:item_group_id>${escapeXml(product.id)}</g:item_group_id>`,
@@ -276,6 +285,7 @@ export function generateGoogleMerchantFeed(
     .filter(Boolean)
     .join('\n');
 
+  if (!renderXml) return '';
   return `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:g="http://base.google.com/ns/1.0">
   <channel>

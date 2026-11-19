@@ -7,13 +7,15 @@ const target = {
 };
 
 describe('BrilStash builder input', () => {
-  it('accepts a canonical HTTPS origin', () => {
+  it.each([
+    'https://shop.example.invalid',
+    'https://shop.example.invalid:443',
+  ])('normalizes the HTTPS storefront origin %s', (storefrontOrigin) => {
     expect(
-      brilStashBuilderInputSchema.safeParse({
-        ...target,
-        storefrontOrigin: 'https://shop.example.invalid',
-      }).success
-    ).toBe(true);
+      brilStashBuilderInputSchema.parse({ ...target, storefrontOrigin })
+    ).toMatchObject({
+      storefrontOrigin: 'https://shop.example.invalid',
+    });
   });
 
   it.each([
@@ -21,6 +23,7 @@ describe('BrilStash builder input', () => {
     'https://user:password@shop.example.invalid',
     'https://shop.example.invalid/products',
     'https://shop.example.invalid/',
+    'https://shop.example.invalid:8443',
     'https://shop.example.invalid?q=1',
     'https://shop.example.invalid#products',
   ])('rejects a noncanonical storefront origin %s', (storefrontOrigin) => {

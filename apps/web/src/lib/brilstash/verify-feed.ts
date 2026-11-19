@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import {
   BRILSTASH_FEED_PROBE_TIMEOUT_MS,
@@ -84,8 +85,7 @@ export async function verifyBrilStashFeed(
     const after = brilStashProbeStateSchema.parse(
       await dependencies.readState()
     );
-    if (JSON.stringify(before) !== JSON.stringify(after))
-      throw new Error(failure);
+    if (!isDeepStrictEqual(before, after)) throw new Error(failure);
     return { ...after, requestId, feedUrl: target.href };
   } catch {
     throw new Error(failure);

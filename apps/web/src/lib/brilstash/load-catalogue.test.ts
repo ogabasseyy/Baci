@@ -45,7 +45,7 @@ describe('loadBrilStashSources', () => {
     const rpc = vi.fn(async () => ({ data: result, error: null }));
     const loaded = await loadBrilStashSources(
       { rpc },
-      { installationId, merchantId, storefrontOrigin: origin }
+      { installationId, merchantId, storefrontOrigin: `${origin}:443` }
     );
     expect(rpc).toHaveBeenCalledWith('load_brilstash_catalogue_sources', {
       p_installation_id: installationId,

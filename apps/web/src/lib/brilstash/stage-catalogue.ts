@@ -28,7 +28,7 @@ export async function stageBrilStashSnapshot(
 ): Promise<{ candidateId: string }> {
   const sources = await loadBrilStashSources(client, context);
   const catalogue = buildBrilStashCatalogue(
-    context,
+    { ...context, storefrontOrigin: sources.storefrontOrigin },
     sources.sources,
     sources.identities,
     sources.categoryMap

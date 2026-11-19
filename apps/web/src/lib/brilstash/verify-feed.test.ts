@@ -86,6 +86,19 @@ describe('full BrilStash feed verification', () => {
     );
   });
 
+  it('accepts probe state with equivalent values in a different key order', async () => {
+    const dependencies = fixture();
+    dependencies.readState
+      .mockReset()
+      .mockResolvedValueOnce(state)
+      .mockResolvedValueOnce(
+        Object.fromEntries(Object.entries(state).reverse())
+      );
+    await expect(
+      verifyBrilStashFeed(target, bearer, dependencies)
+    ).resolves.toMatchObject({ requestId });
+  });
+
   it('preserves a valid receipt without cancelling a drained response', async () => {
     const cancel = vi
       .spyOn(ReadableStreamDefaultReader.prototype, 'cancel')

@@ -2,7 +2,7 @@ import { brilStashSourcesSchema } from '../../schemas/brilstash-sources';
 import { serializeStorefrontProductPathSegment } from '../serialize-storefront-product-path-segment';
 import { evaluateStorefrontSlugSafety } from '../storefront-slug-safety';
 import type { SellableSource } from './build-catalogue';
-import { parseBrilStashHttpsUrl } from './parse-https-url';
+import { parseBrilStashStorefrontOrigin } from './parse-https-url';
 
 type SourceRpcClient = {
   rpc(
@@ -21,8 +21,8 @@ export async function loadBrilStashSources(
   client: SourceRpcClient,
   context: LoadContext
 ) {
-  const origin = parseBrilStashHttpsUrl(context.storefrontOrigin);
-  if (!origin || origin.origin !== context.storefrontOrigin) {
+  const origin = parseBrilStashStorefrontOrigin(context.storefrontOrigin);
+  if (!origin) {
     throw new Error('Invalid BrilStash storefront origin');
   }
 
@@ -91,6 +91,7 @@ export async function loadBrilStashSources(
 
   return {
     ...snapshotMetadata,
+    storefrontOrigin: origin,
     sourceRows: rows,
     sources,
     identities,

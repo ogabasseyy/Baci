@@ -12,6 +12,7 @@ const candidateId = '70000000-0000-4000-8000-000000000001';
 const loaded = {
   installationId: context.installationId,
   merchantId: context.merchantId,
+  storefrontOrigin: context.storefrontOrigin,
   catalogueRevision: '42',
   sourceReadAt: '2026-11-19T01:00:00+00:00',
   sourceRows: [],

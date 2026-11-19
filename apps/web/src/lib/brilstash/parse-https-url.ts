@@ -11,3 +11,15 @@ export function parseBrilStashHttpsUrl(value: string): URL | null {
     return null;
   }
 }
+
+export function parseBrilStashStorefrontOrigin(value: string): string | null {
+  const url = parseBrilStashHttpsUrl(value);
+  if (
+    !url ||
+    url.port ||
+    (value !== url.origin && value !== `${url.origin}:443`)
+  ) {
+    return null;
+  }
+  return url.origin;
+}

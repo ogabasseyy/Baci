@@ -14,6 +14,7 @@ it('shows saved products and totals without duplicating customer details', () =>
         shipping_fee: 10,
         tax_amount: 5,
         total: 115,
+        wallet_amount_used: 0,
         order_items: [
           {
             id: 'line',

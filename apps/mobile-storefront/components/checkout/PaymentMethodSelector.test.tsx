@@ -32,7 +32,7 @@ describe('PaymentMethodSelector', () => {
     expect(screen.queryByText(/5% processing fee may apply/i)).toBeNull();
   });
 
-  it('shows reordered installment providers with the requested messaging', () => {
+  it('shows active installment providers with the requested messaging', () => {
     render(
       <PaymentMethodSelector
         selectedMethod={'credit_direct' as PaymentMethodType}
@@ -51,7 +51,7 @@ describe('PaymentMethodSelector', () => {
     ).toBeTruthy();
     expect(screen.getByText('Credit Direct')).toBeTruthy();
     expect(screen.queryByText('CredPal')).toBeNull();
-    expect(screen.getByText('Klump')).toBeTruthy();
+    expect(screen.queryByText('Klump')).toBeNull();
     expect(screen.getByText('Salary Earners and Business Owners')).toBeTruthy();
     expect(screen.queryByText('Salary Earners Only')).toBeNull();
     const providers = screen
@@ -61,10 +61,7 @@ describe('PaymentMethodSelector', () => {
         (label: string | undefined) =>
           label?.startsWith('Credit Direct') || label?.startsWith('Klump')
       );
-    expect(providers).toEqual([
-      expect.stringMatching(/^Credit Direct/),
-      expect.stringMatching(/^Klump/),
-    ]);
+    expect(providers).toEqual([expect.stringMatching(/^Credit Direct/)]);
   });
 
   it('surfaces the invoice and pay-for-me intents and pins their method on select', () => {
@@ -124,68 +121,18 @@ describe('PaymentMethodSelector', () => {
     expect(screen.getByText('Pay for Me')).toBeTruthy();
   });
 
-  it('keeps the Pay Small Small intent visible when Klump is the only enabled BNPL provider', () => {
-    render(
-      <PaymentMethodSelector
-        selectedMethod={'klump' as PaymentMethodType}
-        onSelectMethod={() => {}}
-        selectedTab="installments"
-        onSelectTab={() => {}}
-        orderTotal={120000}
-        enabledMethods={['klump' as PaymentMethodType]}
-      />
-    );
-
-    expect(screen.getByText('Pay Small Small')).toBeTruthy();
-    expect(screen.getByText('Klump')).toBeTruthy();
-  });
-
-  it('shows Klump at exactly the maximum order amount', () => {
-    render(
-      <PaymentMethodSelector
-        selectedMethod={'klump' as PaymentMethodType}
-        onSelectMethod={() => {}}
-        selectedTab="installments"
-        onSelectTab={() => {}}
-        orderTotal={1_000_000}
-        enabledMethods={['klump' as PaymentMethodType]}
-      />
-    );
-
-    expect(screen.getByText('Pay Small Small')).toBeTruthy();
-    expect(screen.getByText('Klump')).toBeTruthy();
-  });
-
-  it('does not show Klump above the maximum order amount', () => {
-    render(
-      <PaymentMethodSelector
-        selectedMethod={'klump' as PaymentMethodType}
-        onSelectMethod={() => {}}
-        selectedTab="installments"
-        onSelectTab={() => {}}
-        orderTotal={1_000_001}
-        enabledMethods={['klump' as PaymentMethodType]}
-        hiddenMethods={['klump' as PaymentMethodType]}
-        methodDisabledReasons={{ klump: 'Maximum order: ₦1,000,000' }}
-      />
-    );
-
-    expect(screen.queryByText('Klump')).toBeNull();
-    expect(screen.queryByText('Pay Small Small')).toBeNull();
-  });
-
   it('disables the Pay Small Small intent below the BNPL minimum and shows the eligibility hint', () => {
     const onSelectTab = jest.fn();
     const onSelectMethod = jest.fn();
 
     render(
       <PaymentMethodSelector
-        selectedMethod={'klump' as PaymentMethodType}
+        selectedMethod={'credit_direct' as PaymentMethodType}
         onSelectMethod={onSelectMethod}
         selectedTab="installments"
         onSelectTab={onSelectTab}
         orderTotal={5000}
-        enabledMethods={['klump' as PaymentMethodType]}
+        enabledMethods={['credit_direct' as PaymentMethodType]}
       />
     );
 
@@ -201,66 +148,6 @@ describe('PaymentMethodSelector', () => {
     fireEvent.press(intentCard);
 
     expect(onSelectTab).toHaveBeenCalledWith('full');
-    expect(onSelectMethod).not.toHaveBeenCalled();
-  });
-
-  it('disables Klump when wallet credit is already active', () => {
-    const onSelectMethod = jest.fn();
-
-    render(
-      <PaymentMethodSelector
-        selectedMethod={'klump' as PaymentMethodType}
-        onSelectMethod={onSelectMethod}
-        selectedTab="installments"
-        onSelectTab={() => {}}
-        orderTotal={120000}
-        enabledMethods={['klump' as PaymentMethodType]}
-        walletSelection={{ use: true, amount: 5000 }}
-      />
-    );
-
-    const klumpRow = screen.getByLabelText(
-      'Klump. Wallet credit cannot be combined with Klump'
-    );
-
-    expect(
-      screen.getByText('Wallet credit cannot be combined with Klump')
-    ).toBeTruthy();
-
-    fireEvent.press(klumpRow);
-
-    expect(onSelectMethod).not.toHaveBeenCalled();
-  });
-
-  it('disables Klump when device savings credit is already active', () => {
-    const onSelectMethod = jest.fn();
-
-    render(
-      <PaymentMethodSelector
-        selectedMethod={'klump' as PaymentMethodType}
-        onSelectMethod={onSelectMethod}
-        selectedTab="installments"
-        onSelectTab={() => {}}
-        orderTotal={120000}
-        enabledMethods={['klump' as PaymentMethodType]}
-        savingsSelection={{
-          use: true,
-          goalId: '123e4567-e89b-12d3-a456-426614174555',
-          amount: 5000,
-        }}
-      />
-    );
-
-    const klumpRow = screen.getByLabelText(
-      'Klump. Device savings cannot be combined with Klump'
-    );
-
-    expect(
-      screen.getByText('Device savings cannot be combined with Klump')
-    ).toBeTruthy();
-
-    fireEvent.press(klumpRow);
-
     expect(onSelectMethod).not.toHaveBeenCalled();
   });
 
@@ -716,5 +603,21 @@ describe('PaymentMethodSelector', () => {
       // ...while the collapsed `installments` card keeps its BNPL rows hidden.
       expect(screen.queryByText('Credit Direct')).toBeNull();
     });
+  });
+  it.each([
+    5000, 120000, 1000001,
+  ])('does not offer closed Klump for stale settings at %s', (orderTotal) => {
+    render(
+      <PaymentMethodSelector
+        selectedMethod="klump"
+        onSelectMethod={() => {}}
+        selectedTab="installments"
+        onSelectTab={() => {}}
+        orderTotal={orderTotal}
+        enabledMethods={['klump']}
+      />
+    );
+    expect(screen.queryByText('Klump')).toBeNull();
+    expect(screen.queryByText('Pay Small Small')).toBeNull();
   });
 });

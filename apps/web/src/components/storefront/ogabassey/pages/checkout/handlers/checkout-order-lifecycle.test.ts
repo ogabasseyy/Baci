@@ -317,4 +317,75 @@ describe('runCheckoutOrderLifecycle', () => {
       expect.objectContaining({ orderId: 'order-12345678' })
     );
   });
+  it.each([
+    { paymentMethod: 'credit_direct', freshDebit: true, orderId: 'order-1', expectedWallet: 30 },
+    { paymentMethod: 'oxygen', freshDebit: true, orderId: 'order-1', expectedWallet: 30 },
+    { paymentMethod: 'credit_direct', freshDebit: false, orderId: 'order-1', expectedWallet: 30 },
+    { paymentMethod: 'credit_direct', freshDebit: false, orderId: 'replacement-order', expectedWallet: undefined },
+  ] as const)('binds the $paymentMethod wallet debit to the submitted order ($orderId, fresh: $freshDebit)', async ({ paymentMethod, freshDebit, orderId, expectedWallet }) => {
+    const input = lifecycleOptions();
+    input.fingerprint = JSON.stringify({ useWalletCredit: true, walletAmountUsed: 50 });
+    input.paymentMethod = paymentMethod;
+    input.reuse.paymentMethod = paymentMethod;
+    if (!freshDebit) input.reuse.pendingOrder = { orderId: 'order-1', merchantId: 'merchant-1', customerEmail: 'ada@example.com', customerPhone: '', checkoutFingerprint: 'fingerprint', paymentMethod, walletAmountUsed: 30, amountDueToGateway: 70, createdAt: '2026-11-07' };
+    vi.mocked(recoverPendingCheckoutOrder).mockResolvedValue({ kind: 'submit', pendingOrder: { reusableOrder: null, clearStoredOrder: false } });
+    vi.mocked(submitCheckoutOrder).mockResolvedValue({ order: { id: orderId }, wallet: freshDebit ? { amountUsed: 30, newBalance: 0 } : null, amountDueToGateway: 70 });
+    await runCheckoutOrderLifecycle(input);
+    const snapshot = vi.mocked(persistPendingCheckoutOrder).mock.lastCall?.[0];
+    expect(snapshot).toMatchObject({ orderId, paymentMethod });
+    expect(snapshot?.walletAmountUsed).toBe(expectedWallet);
+    expect(JSON.parse(snapshot?.checkoutFingerprint ?? '{}')).toMatchObject({
+      walletAmountUsed: expectedWallet ?? 50,
+    });
+  });
+
+  it('persists an unresolved funding fence when store-credit projection fails after wallet debit', async () => {
+    const input = lifecycleOptions();
+    input.fingerprint = JSON.stringify({
+      useWalletCredit: true,
+      walletAmountUsed: 300,
+    });
+    input.paymentMethod = 'paystack';
+    input.reuse.paymentMethod = 'paystack';
+    vi.mocked(recoverPendingCheckoutOrder).mockResolvedValue({
+      kind: 'submit',
+      pendingOrder: { reusableOrder: null, clearStoredOrder: false },
+    });
+    vi.mocked(submitCheckoutOrder).mockImplementationOnce(async (options) => {
+      options.onCommittedOrderFailure?.({
+        code: 'STORE_CREDIT_REVIEW_REQUIRED',
+        orderId: 'order-committed-1',
+        orderNumber: 'ORD-1',
+        trackingToken: 'tok-1',
+        wallet: { amountUsed: 300, newBalance: 0 },
+        amountDueToGateway: 700,
+      });
+      throw new Error('Store credit requires payment review.');
+    });
+
+    await expect(runCheckoutOrderLifecycle(input)).rejects.toThrow(
+      'Store credit requires payment review.'
+    );
+
+    expect(input.onOrderCreated).not.toHaveBeenCalled();
+    expect(persistPendingCheckoutOrder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderId: 'order-committed-1',
+        orderNumber: 'ORD-1',
+        trackingToken: 'tok-1',
+        paymentMethod: 'paystack',
+        walletAmountUsed: 300,
+        amountDueToGateway: 700,
+        fundingUnresolved: true,
+      })
+    );
+    expect(input.onPendingSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderId: 'order-committed-1',
+        fundingUnresolved: true,
+        walletAmountUsed: 300,
+      })
+    );
+  });
+
 });

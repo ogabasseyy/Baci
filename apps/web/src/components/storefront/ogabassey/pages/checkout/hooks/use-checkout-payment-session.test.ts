@@ -154,6 +154,26 @@ describe('useCheckoutPaymentSession', () => {
     expect(result.current.method).toBe('uba_redvault');
   });
 
+  it('retains a wallet-funded Credit Direct pending fence when selecting Redvault', () => {
+    const clearPendingCheckoutOrder = vi.fn();
+    const { result } = renderHook(() =>
+      useCheckoutPaymentSession(
+        options({
+          clearPendingCheckoutOrder,
+          pendingCheckoutOrder: {
+            paymentMethod: 'credit_direct',
+            walletAmountUsed: 10000,
+          },
+        }) as never
+      )
+    );
+
+    act(() => result.current.selectMethod('uba_redvault'));
+
+    expect(clearPendingCheckoutOrder).not.toHaveBeenCalled();
+    expect(result.current.method).toBe('uba_redvault');
+  });
+
   it('reloads wallet state when customer identity changes and ignores stale responses', async () => {
     const requests: Array<(response: Response) => void> = [];
     const signals: AbortSignal[] = [];
@@ -390,5 +410,47 @@ describe('useCheckoutPaymentSession', () => {
     expect(result.current.total).toBe(11_500);
     expect(result.current.checkoutValues.discountCode).toBeNull();
     expect(result.current.wallet.amountUsed).toBe(0);
+  });
+
+  it('preserves a funding-unresolved checkpoint when switching to Redvault', () => {
+    const clearPendingCheckoutOrder = vi.fn();
+    const input = options({
+      clearPendingCheckoutOrder,
+      pendingCheckoutOrder: {
+        paymentMethod: 'paystack',
+        walletAmountUsed: 5000,
+        fundingUnresolved: true,
+      },
+    });
+    const { result } = renderHook(() =>
+      useCheckoutPaymentSession(input as never)
+    );
+
+    act(() => {
+      result.current.selectMethod('uba_redvault');
+    });
+
+    expect(clearPendingCheckoutOrder).not.toHaveBeenCalled();
+  });
+
+  it('preserves a wallet-funded Oxygen checkpoint when switching to Redvault', () => {
+    const clearPendingCheckoutOrder = vi.fn();
+    const input = options({
+      clearPendingCheckoutOrder,
+      pendingCheckoutOrder: {
+        paymentMethod: 'oxygen',
+        walletAmountUsed: 5000,
+        fundingUnresolved: false,
+      },
+    });
+    const { result } = renderHook(() =>
+      useCheckoutPaymentSession(input as never)
+    );
+
+    act(() => {
+      result.current.selectMethod('uba_redvault');
+    });
+
+    expect(clearPendingCheckoutOrder).not.toHaveBeenCalled();
   });
 });

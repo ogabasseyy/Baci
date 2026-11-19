@@ -101,6 +101,7 @@ import { createPublicClient } from '@/lib/supabase/public';
 import { createClient } from '@/lib/supabase/server';
 import { type OrderCreateInput, orderCreateSchema } from '@/schemas/orders';
 import { authenticateOrderRequest } from './order-request-auth';
+import { buildPreGatewayRedemptionFailureResponse } from './pre-gateway-redemption-failure-response';
 
 function isPayOnDelivery(paymentMethod: string): boolean {
   return paymentMethod === 'pod' || paymentMethod === 'pay_on_delivery';
@@ -3053,12 +3054,32 @@ export async function POST(request: NextRequest) {
     // settled by the finalize RPCs below, and pre-writing amount_paid there
     // would make a failed finalization look like nothing is due.
     if (amountDueToGateway > 0) {
-      await recordPreGatewayRedemption(
+      const projectionFailure = await recordPreGatewayRedemption(
         order.id,
         orderTotal,
         savingsAmountUsed,
-        walletAmountUsed
+        walletAmountUsed,
+        supabase
       );
+      if (projectionFailure) {
+        return buildPreGatewayRedemptionFailureResponse({
+          failure: projectionFailure,
+          order: {
+            id: order.id,
+            orderNumber: order.order_number,
+            trackingToken: order.tracking_token,
+          },
+          amountDueToGateway,
+          ...(walletAmountUsed > 0 && walletRedemptionResult
+            ? {
+                wallet: {
+                  amountUsed: walletAmountUsed,
+                  newBalance: walletRedemptionResult.newBalance,
+                },
+              }
+            : {}),
+        });
+      }
     }
 
     // If wallet fully covers the order, mark as paid immediately (2025 best practice)

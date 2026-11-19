@@ -1,7 +1,8 @@
 import { PAYMENT_METHODS } from './paymentMethods';
 
-it('does not offer CredPal while keeping the other installment methods', () => {
+it('does not offer retired CredPal or Klump while keeping Credit Direct', () => {
   const ids = PAYMENT_METHODS.map((method) => method.id);
   expect(ids).not.toContain('credpal');
-  expect(ids).toEqual(expect.arrayContaining(['credit_direct', 'klump']));
+  expect(ids).not.toContain('klump');
+  expect(ids).toContain('credit_direct');
 });

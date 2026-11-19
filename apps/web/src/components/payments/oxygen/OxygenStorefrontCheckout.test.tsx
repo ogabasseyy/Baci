@@ -68,11 +68,43 @@ vi.mock('./OxygenProviderFlow', () => ({
 import { OxygenStorefrontCheckout } from './OxygenStorefrontCheckout';
 
 const id = '6974e8cc-4e90-4ca9-b2cf-aa2abaf461df';
+const savedOrderResult = {
+  error: null,
+  data: {
+    id,
+    merchant_id: 'merchant',
+    customer_id: 'customer-row',
+    payment_method: 'oxygen',
+    customers: {
+      id: 'customer-row',
+      merchant_id: 'merchant',
+      user_id: 'customer',
+    },
+    customer_name: 'Ada Buyer',
+    customer_email: 'ada@example.com',
+    currency: 'NGN',
+    subtotal: 400000,
+    shipping_fee: 0,
+    tax_amount: 0,
+    total: 400000,
+    order_items: [
+      {
+        id,
+        name: 'Saved phone',
+        quantity: 1,
+        price: 400000,
+        image_url: null,
+        products: { images: ['https://cdn.example.com/saved.jpg'] },
+      },
+    ],
+  },
+};
 beforeEach(() => {
   HTMLDialogElement.prototype.showModal = function () {
     this.setAttribute('open', '');
   };
   vi.clearAllMocks();
+  mocks.one.mockReset();
   const query = {
     select: mocks.select,
     eq: mocks.eq,
@@ -85,37 +117,7 @@ beforeEach(() => {
     data: { user: { id: 'customer' } },
     error: null,
   });
-  mocks.one.mockResolvedValue({
-    error: null,
-    data: {
-      id,
-      merchant_id: 'merchant',
-      customer_id: 'customer-row',
-      payment_method: 'oxygen',
-      customers: {
-        id: 'customer-row',
-        merchant_id: 'merchant',
-        user_id: 'customer',
-      },
-      customer_name: 'Ada Buyer',
-      customer_email: 'ada@example.com',
-      currency: 'NGN',
-      subtotal: 400000,
-      shipping_fee: 0,
-      tax_amount: 0,
-      total: 400000,
-      order_items: [
-        {
-          id,
-          name: 'Saved phone',
-          quantity: 1,
-          price: 400000,
-          image_url: null,
-          products: { images: ['https://cdn.example.com/saved.jpg'] },
-        },
-      ],
-    },
-  });
+  mocks.one.mockResolvedValue(savedOrderResult);
   mocks.one.mockResolvedValueOnce({
     data: {
       id,
@@ -272,4 +274,44 @@ it('allows sign-in before checkout without reading private order data', async ()
   render(checkout);
   expect(screen.getByText('Sign in to resume')).toBeVisible();
   expect(mocks.from).not.toHaveBeenCalled();
+});
+
+it('shows the original invoice and wallet debit while financing only the remainder', async () => {
+  mocks.one.mockResolvedValue({
+    ...savedOrderResult,
+    data: { ...savedOrderResult.data, wallet_amount_used: 20000 },
+  });
+  render(
+    await OxygenStorefrontCheckout({
+      orderId: id,
+      merchantId: 'merchant',
+      merchantSlug: 'shop',
+    })
+  );
+  expect(screen.getByText('Plan amount: 380000')).toBeVisible();
+  expect(
+    screen.getByRole('region', { name: 'Saved order summary' })
+  ).toHaveTextContent('Wallet credit');
+  expect(
+    screen.getByRole('region', { name: 'Saved order summary' })
+  ).toHaveTextContent('₦400,000.00');
+});
+
+it('passes the exact kobo remainder of a fractional saved order into the Oxygen dialog', async () => {
+  mocks.one.mockResolvedValue({
+    ...savedOrderResult,
+    data: {
+      ...savedOrderResult.data,
+      total: 50000.55,
+      wallet_amount_used: 20000.1,
+    },
+  });
+  render(
+    await OxygenStorefrontCheckout({
+      orderId: id,
+      merchantId: 'merchant',
+      merchantSlug: 'shop',
+    })
+  );
+  expect(screen.getByText('Plan amount: 30000.45')).toBeVisible();
 });

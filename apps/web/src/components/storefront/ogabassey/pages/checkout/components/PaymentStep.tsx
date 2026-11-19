@@ -20,6 +20,7 @@ import { PaymentOptionsPanel } from './PaymentOptionsPanel';
 import {
   type FeatureSettings,
   hasAnyInstallmentOption,
+  isCreditDirectEligible,
   isKlumpEligible,
   isNgnChargeCurrency,
   isPaymentMethodAvailable,
@@ -70,7 +71,7 @@ interface PaymentStepProps {
   oxygenAllowed?: boolean;
   remainingAmount: number;
   orderAmount: number;
-  currency?: string;
+  currency?: string | null;
   redvaultAvailable: boolean;
   redvaultStatus: RedvaultPaymentStatus;
   redvaultSummary: RedvaultQuoteSummary | null;
@@ -97,12 +98,13 @@ export function PaymentStep({
   oxygenAllowed = false,
   remainingAmount,
   orderAmount,
-  currency = 'NGN',
+  currency: checkoutCurrency,
   redvaultAvailable,
   redvaultStatus,
   redvaultSummary,
   redvaultOrderReady,
 }: PaymentStepProps) {
+  const currency = checkoutCurrency ?? 'NGN';
   // Paystack (and its DVA-backed bank transfer) settle NGN only — the
   // initialize API rejects them for non-NGN orders with UNSUPPORTED_CURRENCY,
   // so their country/subaccount availability alone must not surface them on a
@@ -147,6 +149,22 @@ export function PaymentStep({
     orderAmount,
     payableAmount: remainingAmount,
   });
+  const creditDirectEligible = isCreditDirectEligible({
+    featureSettings: merchant?.feature_settings,
+    currency,
+    orderAmount,
+    payableAmount: remainingAmount,
+  });
+  const normalizedCurrency = currency.trim().toUpperCase();
+  const balanceLabel =
+    Number.isFinite(remainingAmount) &&
+    remainingAmount >= 0 &&
+    /^[A-Z]{3}$/.test(normalizedCurrency)
+      ? new Intl.NumberFormat('en-NG', {
+          style: 'currency',
+          currency: normalizedCurrency,
+        }).format(remainingAmount)
+      : null;
   const hasInstallmentOptions = hasAnyInstallmentOption({
     oxygenAllowed,
     featureSettings: merchant?.feature_settings,
@@ -188,6 +206,13 @@ export function PaymentStep({
       disabled={!completedSteps.delivery}
       onOpen={() => setCurrentStep('payment')}
     >
+      <p className="mb-2 text-sm font-medium">How would you like to pay?</p>
+      {balanceLabel && (
+        <p className="mb-4 text-sm text-store-foreground/70">
+          Remaining balance: {balanceLabel}
+          {remainingAmount < orderAmount ? ' after applied credit.' : '.'}
+        </p>
+      )}
       <PaymentOptionsPanel
         paymentTab={paymentTab}
         setPaymentTab={setPaymentTab}
@@ -198,6 +223,7 @@ export function PaymentStep({
         bankTransferCheckoutAvailable={bankTransferCheckoutAvailable}
         featureSettings={merchant?.feature_settings}
         klumpEligible={klumpEligible}
+        creditDirectEligible={creditDirectEligible}
         oxygenEligible={oxygenEligible}
         hasInstallmentOptions={hasInstallmentOptions}
         currency={currency}

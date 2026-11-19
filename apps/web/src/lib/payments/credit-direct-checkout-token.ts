@@ -14,6 +14,46 @@ export interface CreditDirectRpcErrorMapping {
 // Insertion order is match order; no code is a substring of another, so the
 // first `includes` hit is unambiguous even when Postgres prefixes the message.
 const KNOWN_RPC_ERRORS: Record<string, CreditDirectRpcErrorMapping> = {
+  credit_direct_wallet_attempt_pending: {
+    status: 409,
+    body: {
+      error:
+        'This Credit Direct application is still pending. Check your order or contact support before starting another payment.',
+      code: 'CREDIT_DIRECT_WALLET_PENDING',
+    },
+  },
+  credit_direct_wallet_shipping_unsupported: {
+    status: 409,
+    body: {
+      error:
+        'Credit Direct cannot combine wallet credit with this delivery charge. Your wallet credit remains on the order; contact support to continue.',
+      code: 'CREDIT_DIRECT_WALLET_SHIPPING_UNSUPPORTED',
+    },
+  },
+  credit_direct_wallet_origin_unverified: {
+    status: 409,
+    body: {
+      error:
+        'This order needs payment review before Credit Direct can use wallet credit. Check your order or contact support.',
+      code: 'CREDIT_DIRECT_WALLET_REVIEW_REQUIRED',
+    },
+  },
+  credit_direct_wallet_reconciliation_required: {
+    status: 409,
+    body: {
+      error:
+        'Your wallet payment needs review before Credit Direct can continue. Check your order or contact support.',
+      code: 'CREDIT_DIRECT_WALLET_REVIEW_REQUIRED',
+    },
+  },
+  credit_direct_wallet_retry_required: {
+    status: 503,
+    body: {
+      error:
+        'Your wallet payment is being updated. Please retry this saved order shortly.',
+      code: 'CREDIT_DIRECT_WALLET_RETRY_REQUIRED',
+    },
+  },
   order_not_found: {
     status: 404,
     body: { error: 'Order not found or email mismatch' },

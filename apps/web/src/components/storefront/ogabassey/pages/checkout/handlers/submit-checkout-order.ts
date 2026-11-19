@@ -24,6 +24,20 @@ export interface CheckoutOrderErrorData {
   details?: unknown;
   error?: unknown;
   rejectedVoucherToken?: unknown;
+  orderId?: unknown;
+  orderNumber?: unknown;
+  trackingToken?: unknown;
+  wallet?: unknown;
+  amountDueToGateway?: unknown;
+}
+
+export interface CommittedCheckoutOrderFailure {
+  code: string;
+  orderId: string;
+  orderNumber?: string;
+  trackingToken?: string;
+  wallet: CheckoutWalletRedemption | null;
+  amountDueToGateway?: number;
 }
 
 export interface CheckoutOrderResponse {
@@ -49,6 +63,7 @@ export interface SubmitCheckoutOrderOptions {
     idempotencyKey: string;
     orderRequest: ReturnType<typeof buildCheckoutOrderRequest>;
   }) => void;
+  onCommittedOrderFailure?: (failure: CommittedCheckoutOrderFailure) => void;
   request?: typeof fetch;
 }
 
@@ -66,6 +81,62 @@ const SHIPPING_RATE_REJECTION_CODES = new Set([
   'SHIPPING_RATE_ZONE_MISMATCH',
   'SHIPPING_RATE_CONDITION_UNMET',
 ]);
+
+const STORE_CREDIT_PROJECTION_FAILURE_CODES = new Set([
+  'STORE_CREDIT_REVIEW_REQUIRED',
+  'STORE_CREDIT_RETRY_REQUIRED',
+]);
+
+function readCommittedOrderWallet(
+  value: unknown
+): CheckoutWalletRedemption | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const amountUsed = (value as { amountUsed?: unknown }).amountUsed;
+  const newBalance = (value as { newBalance?: unknown }).newBalance;
+  if (
+    typeof amountUsed !== 'number' ||
+    !Number.isFinite(amountUsed) ||
+    amountUsed <= 0
+  ) {
+    return null;
+  }
+  return {
+    amountUsed,
+    newBalance:
+      typeof newBalance === 'number' && Number.isFinite(newBalance)
+        ? newBalance
+        : 0,
+  };
+}
+
+function readCommittedOrderFailure(
+  errorData: CheckoutOrderErrorData,
+  errorCode: string
+): CommittedCheckoutOrderFailure | null {
+  if (!STORE_CREDIT_PROJECTION_FAILURE_CODES.has(errorCode)) return null;
+  if (typeof errorData.orderId !== 'string' || !errorData.orderId.trim()) {
+    return null;
+  }
+  const amountDueToGateway =
+    typeof errorData.amountDueToGateway === 'number' &&
+    Number.isFinite(errorData.amountDueToGateway)
+      ? errorData.amountDueToGateway
+      : undefined;
+  return {
+    code: errorCode,
+    orderId: errorData.orderId,
+    ...(typeof errorData.orderNumber === 'string' &&
+    errorData.orderNumber.trim()
+      ? { orderNumber: errorData.orderNumber }
+      : {}),
+    ...(typeof errorData.trackingToken === 'string' &&
+    errorData.trackingToken.trim()
+      ? { trackingToken: errorData.trackingToken }
+      : {}),
+    wallet: readCommittedOrderWallet(errorData.wallet),
+    ...(amountDueToGateway !== undefined ? { amountDueToGateway } : {}),
+  };
+}
 
 function getErrorCode(errorData: CheckoutOrderErrorData): string {
   if (
@@ -106,6 +177,7 @@ export async function submitCheckoutOrder({
   onShippingRateRejected,
   getOrderErrorMessage,
   onBeforeBoundRedvaultSend,
+  onCommittedOrderFailure,
   request = fetch,
   resolvedPendingOrder,
 }: SubmitCheckoutOrderOptions): Promise<SubmittedCheckoutOrder> {
@@ -174,6 +246,10 @@ export async function submitCheckoutOrder({
   if (!response.ok) {
     const errorData = await readOrderError(response);
     const errorCode = getErrorCode(errorData);
+    const committedFailure = readCommittedOrderFailure(errorData, errorCode);
+    if (committedFailure) {
+      onCommittedOrderFailure?.(committedFailure);
+    }
     if (
       errorCode === 'CHECKOUT_ORDER_NOT_REUSABLE' ||
       errorCode === 'CHECKOUT_IDEMPOTENCY_CONFLICT'

@@ -178,6 +178,10 @@ describe('POST /api/payments/credit-direct/sign', () => {
     { code: 'order_not_payable', status: 409 },
     { code: 'amount_out_of_range', status: 400 },
     { code: 'credit_direct_disabled', status: 403 },
+    { code: 'credit_direct_wallet_attempt_pending', status: 409 },
+    { code: 'credit_direct_wallet_shipping_unsupported', status: 409 },
+    { code: 'credit_direct_wallet_reconciliation_required', status: 409 },
+    { code: 'credit_direct_wallet_origin_unverified', status: 409 },
   ])('maps issue-token RPC error $code to $status before signing', async ({
     code,
     status,

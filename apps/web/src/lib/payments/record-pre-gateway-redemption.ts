@@ -1,65 +1,68 @@
-import { logger } from '@/lib/logger';
-import { createAdminClient } from '@/lib/supabase/admin';
+interface StoreCreditProjectionClient {
+  rpc(
+    name: 'record_order_store_credit',
+    args: { p_order_id: string }
+  ): PromiseLike<{ data: unknown; error: unknown }>;
+}
 
-/**
- * Persists wallet/savings redemptions onto the order row at checkout time.
- *
- * Payment webhooks anchor their expected gateway amount to
- * `total − max(amount_paid, wallet_amount_used)`; the redemption RPCs only
- * write ledger rows, so without this order-row write those columns stay 0
- * and a legitimate residual payout (customer paid part of the order with
- * wallet/savings) is rejected as an amount mismatch.
- *
- * Uses the admin client because it runs server-side inside order creation
- * with a route-generated order id (matching the route's existing admin
- * usage), but stays blast-radius-bounded: amounts are clamped to the order
- * total and the update only applies while the order is still in a
- * pre-payment state with no recorded payment.
- *
- * Best-effort by design: a failure here must not fail order creation — it
- * falls back to the webhook's fail-closed mismatch handling.
- */
+const reconciliationFailure = {
+  status: 409,
+  code: 'STORE_CREDIT_REVIEW_REQUIRED',
+  message: 'Store credit requires payment review.',
+} as const;
+
+const contentionFailure = {
+  status: 503,
+  code: 'STORE_CREDIT_RETRY_REQUIRED',
+  message: 'Store credit is temporarily busy. Retry the same order shortly.',
+} as const;
+
+/** Confirm the durable debit before any provider can charge the residual. */
 export async function recordPreGatewayRedemption(
   orderId: string,
   orderTotal: number,
   savingsAmountUsed: number,
-  walletAmountUsed: number
-): Promise<void> {
-  const total = Math.max(Number(orderTotal) || 0, 0);
-  const savings = Math.max(Number(savingsAmountUsed) || 0, 0);
-  const wallet = Math.min(Math.max(Number(walletAmountUsed) || 0, 0), total);
-  const totalRedeemed = Math.min(savings + wallet, total);
-  if (totalRedeemed <= 0) return;
+  walletAmountUsed: number,
+  supabase: StoreCreditProjectionClient
+) {
+  if (savingsAmountUsed === 0 && walletAmountUsed === 0) return;
+  if (
+    ![orderTotal, savingsAmountUsed, walletAmountUsed].every(Number.isFinite) ||
+    orderTotal <= 0 ||
+    savingsAmountUsed < 0 ||
+    walletAmountUsed < 0 ||
+    savingsAmountUsed + walletAmountUsed > orderTotal
+  )
+    return reconciliationFailure;
 
-  const logContext = {
-    message: 'Failed to record pre-gateway redemption on order',
-    orderId,
-    savingsAmountUsed: savings,
-    walletAmountUsed: wallet,
-  };
-
+  let projection: Awaited<ReturnType<StoreCreditProjectionClient['rpc']>>;
   try {
-    const supabase = createAdminClient();
-    const { error } = await supabase
-      .from('orders')
-      .update({
-        amount_paid: totalRedeemed,
-        ...(wallet > 0 && { wallet_amount_used: wallet }),
-      })
-      .eq('id', orderId)
-      .in('payment_status', ['unpaid', 'pending'])
-      .eq('amount_paid', 0);
-
-    if (error) {
-      logger.error({
-        ...logContext,
-        error,
-      });
-    }
-  } catch (error) {
-    logger.error({
-      ...logContext,
-      error,
+    projection = await supabase.rpc('record_order_store_credit', {
+      p_order_id: orderId,
     });
+  } catch {
+    // An interrupted request leaves the projection outcome unknown.
+    return reconciliationFailure;
   }
+  const { data, error } = projection;
+  if (error && typeof error === 'object' && 'code' in error) {
+    if (error.code === '23514') return reconciliationFailure;
+    if (error.code === '40001') {
+      const needsReview =
+        'message' in error &&
+        error.message === 'Store credit reconciliation required';
+      return needsReview ? reconciliationFailure : contentionFailure;
+    }
+  }
+  if (error) return reconciliationFailure;
+  const credit: unknown = data;
+  if (
+    !credit ||
+    typeof credit !== 'object' ||
+    !('wallet' in credit) ||
+    !('savings' in credit) ||
+    Number(credit.wallet) !== walletAmountUsed ||
+    Number(credit.savings) !== savingsAmountUsed
+  )
+    return reconciliationFailure;
 }

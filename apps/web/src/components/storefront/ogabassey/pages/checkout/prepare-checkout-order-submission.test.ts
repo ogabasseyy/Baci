@@ -113,7 +113,7 @@ describe('prepareCheckoutOrderSubmission', () => {
     expect(result).toEqual({ kind: 'issue', issue: 'paystack-unavailable' });
   });
 
-  it('requires Klump to charge the full order amount before submitting', () => {
+  it.each([0, 90])('rejects retired Klump with %s remaining before submitting', (remainingAmount) => {
     const result = prepareCheckoutOrderSubmission(
       input({
         payment: {
@@ -122,7 +122,7 @@ describe('prepareCheckoutOrderSubmission', () => {
           paystackAvailable: true,
           korapayAvailable: true,
           redvaultAvailable: true,
-          remainingAmount: 90,
+          remainingAmount,
           total: 120,
         },
       })

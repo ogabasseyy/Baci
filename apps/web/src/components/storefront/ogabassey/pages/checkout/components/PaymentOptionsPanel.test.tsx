@@ -22,6 +22,7 @@ function renderPanel(
       korapayCheckoutAvailable={false}
       bankTransferCheckoutAvailable={false}
       klumpEligible={false}
+      creditDirectEligible={false}
       hasInstallmentOptions={hasInstallmentOptions}
       currency="NGN"
       redvaultAvailable={false}
@@ -37,6 +38,7 @@ describe('payment schedule selection', () => {
   it('shows the Oxygen and Credit Direct logos beside their options', () => {
     renderPanel('installments', true, true, {
       oxygenEligible: true,
+      creditDirectEligible: true,
       featureSettings: { credit_direct_enabled: true },
     });
     expect(screen.getByText('Oxygen Finance')).toBeInTheDocument();
@@ -52,7 +54,11 @@ describe('payment schedule selection', () => {
     expect(screen.getByRole('radio', { name: /juicyway/i })).toBeVisible();
   });
   it('shows Credit Direct terms and its bank list only when selected', () => {
-    renderPanel('installments', true, true, { paymentMethod: 'credit_direct', featureSettings: { credit_direct_enabled: true } });
+    renderPanel('installments', true, true, {
+      paymentMethod: 'credit_direct',
+      creditDirectEligible: true,
+      featureSettings: { credit_direct_enabled: true },
+    });
     expect(screen.getByText('From 30% down')).toBeVisible();
     expect(screen.getByText('3–6 months')).toBeVisible();
     expect(screen.getByText('24 supported banks')).toBeVisible();
@@ -210,7 +216,7 @@ describe('payment schedule selection', () => {
 });
 
 it('shows Oxygen only when the parent reports it eligible', () => {
-  const props = { paymentTab: 'installments' as const, setPaymentTab: vi.fn(), paymentMethod: '' as const, setPaymentMethod: vi.fn(), paystackCheckoutAvailable: false, korapayCheckoutAvailable: false, bankTransferCheckoutAvailable: false, klumpEligible: false, oxygenEligible: true, redvaultAvailable: false, redvaultStatus: 'idle' as const, redvaultSummary: null, hasInstallmentOptions: true, currency: 'NGN' };
+  const props = { paymentTab: 'installments' as const, setPaymentTab: vi.fn(), paymentMethod: '' as const, setPaymentMethod: vi.fn(), paystackCheckoutAvailable: false, korapayCheckoutAvailable: false, bankTransferCheckoutAvailable: false, klumpEligible: false, creditDirectEligible: false, oxygenEligible: true, redvaultAvailable: false, redvaultStatus: 'idle' as const, redvaultSummary: null, hasInstallmentOptions: true, currency: 'NGN' };
   const view = render(<PaymentOptionsPanel {...props} />);
   expect(screen.getByRole('radio', { name: /oxygen/i })).toBeVisible();
   view.rerender(<PaymentOptionsPanel {...props} oxygenEligible={false} />);

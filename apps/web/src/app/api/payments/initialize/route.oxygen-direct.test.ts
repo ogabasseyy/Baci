@@ -45,8 +45,12 @@ describe('POST /api/payments/initialize for an Oxygen order', () => {
   ])('does not start another payment for $gateway', async (choice) => {
     const response = await POST(makeRequest({ ...validBody, ...choice }));
 
-    expect(response.status).toBe(409);
-    expect((await response.json()).code).toBe('OXYGEN_PAYMENT_IN_PROGRESS');
+    expect(response.status).toBe(choice.gateway === 'klump' ? 410 : 409);
+    expect((await response.json()).code).toBe(
+      choice.gateway === 'klump'
+        ? 'GATEWAY_RETIRED'
+        : 'OXYGEN_PAYMENT_IN_PROGRESS'
+    );
     expect(mockInitializePaystack).not.toHaveBeenCalled();
     expect(mockCreateDedicatedVirtualAccount).not.toHaveBeenCalled();
     expect(

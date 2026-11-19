@@ -6,8 +6,12 @@ VALUES ('ea100000-0000-4000-8000-000000000001','00000000-0000-0000-0000-00000000
 SELECT set_config('request.jwt.claim.sub','ea100000-0000-4000-8000-000000000001',true);
 INSERT INTO public.merchants(id,user_id,email,business_name,slug)
 VALUES ('ea100000-0000-4000-8000-000000000002','ea100000-0000-4000-8000-000000000001','oxygen-gateway-fence@example.test','Gateway fixture','oxygen-gateway-fence-fixture');
-INSERT INTO public.orders(id,merchant_id,order_number,subtotal,total,currency,payment_status,payment_method)
-VALUES ('ea100000-0000-4000-8000-000000000003','ea100000-0000-4000-8000-000000000002','OXY-GATEWAY-FENCE',100,100,'NGN','unpaid','paystack');
+-- Satisfy the independent customer/funding guard so the recorded payment
+-- remains the reason this otherwise eligible order cannot enter Oxygen.
+INSERT INTO public.customers(id,merchant_id,user_id,first_name,last_name,email)
+VALUES ('ea100000-0000-4000-8000-000000000004','ea100000-0000-4000-8000-000000000002','ea100000-0000-4000-8000-000000000001','Gateway','Fixture','oxygen-gateway-fence@example.test');
+INSERT INTO public.orders(id,merchant_id,customer_id,order_number,subtotal,total,currency,payment_status,payment_method)
+VALUES ('ea100000-0000-4000-8000-000000000003','ea100000-0000-4000-8000-000000000002','ea100000-0000-4000-8000-000000000004','OXY-GATEWAY-FENCE',100,100,'NGN','unpaid','paystack');
 INSERT INTO public.transactions(merchant_id,order_id,transaction_type,amount,currency,status,gateway,gateway_reference)
 VALUES ('ea100000-0000-4000-8000-000000000002','ea100000-0000-4000-8000-000000000003','payment',100,'NGN','failed','paystack','oxygen-gateway-fence-fixture');
 SET LOCAL ROLE authenticated;

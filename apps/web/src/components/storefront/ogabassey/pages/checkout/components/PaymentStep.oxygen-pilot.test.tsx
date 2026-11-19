@@ -21,12 +21,13 @@ it('offers Oxygen to an admitted production pilot and hides it after admission i
   view.rerender(<PaymentStep {...props} oxygenAllowed={false} />);
   expect(screen.queryByRole('radio', { name: /oxygen/i })).toBeNull();
 });
-it('offers an admitted pilot only for a full NGN payment', () => {
+it('offers an admitted pilot for a positive NGN balance', () => {
   const base = { paymentMethod: 'oxygen' as const, paystackCheckoutAvailable: false,
     korapayCheckoutAvailable: false, bankTransferCheckoutAvailable: false,
     currency: 'NGN', orderAmount: 50000, payableAmount: 50000 };
   expect(isPaymentMethodAvailable({ ...base, oxygenAllowed: true })).toBe(true);
   expect(isPaymentMethodAvailable({ ...base, oxygenAllowed: false })).toBe(false);
-  expect(isPaymentMethodAvailable({ ...base, oxygenAllowed: true, payableAmount: 40000 })).toBe(false);
+  expect(isPaymentMethodAvailable({ ...base, oxygenAllowed: true, payableAmount: 40000 })).toBe(true);
+  expect(isPaymentMethodAvailable({ ...base, oxygenAllowed: true, payableAmount: 0 })).toBe(false);
   expect(hasAnyInstallmentOption({ ...base, oxygenAllowed: true })).toBe(true);
 });

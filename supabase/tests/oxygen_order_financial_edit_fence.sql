@@ -19,8 +19,6 @@ VALUES
  ('efb10000-0000-4000-8000-000000000032','efb10000-0000-4000-8000-000000000011','efb10000-0000-4000-8000-000000000021','OXYGEN-FENCE-2',100,100,'NGN','unpaid','paystack',0,0);
 INSERT INTO public.order_items(id,order_id,name,price,quantity)
 VALUES ('efb10000-0000-4000-8000-000000000061','efb10000-0000-4000-8000-000000000031','Fixture',100,1);
-INSERT INTO public.oxygen_workflows(id,order_id,merchant_id,customer_id,stage)
-VALUES ('efb10000-0000-4000-8000-000000000041','efb10000-0000-4000-8000-000000000031','efb10000-0000-4000-8000-000000000011','efb10000-0000-4000-8000-000000000021','application_required');
 SELECT set_config('request.jwt.claim.sub','efb10000-0000-4000-8000-000000000001',true);
 SET LOCAL ROLE authenticated;
 -- No obligation yet: edits remain available, as do unrelated orders.
@@ -44,6 +42,18 @@ RESET ROLE;
 UPDATE public.order_tax_subtotals SET id='efb10000-0000-4000-8000-000000000071'
  WHERE order_id='efb10000-0000-4000-8000-000000000031' AND vat_category_code='S' AND vat_rate=7.5;
 SELECT set_config('request.jwt.claim.sub','efb10000-0000-4000-8000-000000000001',true);
+INSERT INTO public.oxygen_workflows(id,order_id,merchant_id,customer_id,stage)
+VALUES ('efb10000-0000-4000-8000-000000000041','efb10000-0000-4000-8000-000000000031','efb10000-0000-4000-8000-000000000011','efb10000-0000-4000-8000-000000000021','application_required');
+SET LOCAL ROLE service_role;
+DO $$ BEGIN
+ BEGIN
+  UPDATE public.orders SET total=101 WHERE id='efb10000-0000-4000-8000-000000000031';
+  RAISE EXCEPTION 'Admitted total changed before provider activity';
+ EXCEPTION WHEN check_violation THEN
+  IF SQLERRM <> 'oxygen_funding_snapshot_changed' THEN RAISE; END IF;
+ END;
+END $$;
+RESET ROLE;
 -- Eligibility is already bound to the original order and customer.
 UPDATE public.oxygen_workflows SET stage='eligibility_required' WHERE id='efb10000-0000-4000-8000-000000000041';
 INSERT INTO oxygen_private.provider_states(workflow_id,state) VALUES ('efb10000-0000-4000-8000-000000000041','{"applicationReference":"fixture"}');

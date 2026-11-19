@@ -14,11 +14,11 @@ type QueryConfig = {
 describe('PaymentMethodsScreen', () => {
   beforeEach(resetPaymentMethodsScreenMocks);
 
-  it('renders Klump as a BNPL payment toggle', () => {
+  it('hides the retired Klump toggle even when saved settings enable it', () => {
     render(<PaymentMethodsScreen />);
 
-    expect(screen.getByText('Klump')).toBeInTheDocument();
-    expect(screen.getByLabelText('Toggle Klump')).toBeChecked();
+    expect(screen.queryByText('Klump')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Toggle Klump')).not.toBeInTheDocument();
   });
 
   it('persists a Paystack toggle through its rendered accessible control', async () => {
@@ -99,7 +99,7 @@ describe('PaymentMethodsScreen', () => {
     render(<PaymentMethodsScreen />);
 
     // Act
-    fireEvent.click(screen.getByRole('switch', { name: 'Toggle Klump' }));
+    fireEvent.click(screen.getByRole('switch', { name: 'Toggle Paystack' }));
 
     // Assert
     await waitFor(() => {

@@ -126,8 +126,10 @@ export const eventPipelineFrozenRoutes = {
   // signs server-verified claims for the existing order RPC. The rollout flag
   // defaults off; this change adds no privileged-client construction, payment,
   // notification, tenant, credential, or event-dispatch authority.
+  // Wallet projection uses the authenticated order client and distinguishes
+  // contention from reconciliation. Existing event and credential authority is unchanged.
   'apps/web/src/app/api/orders/route.ts':
-    'a5589c0931eb28e0e579925aa97978be7faec6246fefada2c781a9217bd38b90',
+    'f72ef93bdd6cad7653d179d0eeb5a8f0bf25e4b4e33b5d8d6fb8474e212e3ac6',
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

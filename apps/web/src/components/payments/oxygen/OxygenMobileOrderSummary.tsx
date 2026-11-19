@@ -2,6 +2,7 @@
 import type { z } from 'zod';
 import { MobileOrderSummary } from '@/components/storefront/ogabassey/components/MobileCheckoutComponents';
 import type { CartItem } from '@/hooks/cart';
+import { roundMoney } from '@/lib/order-wallet-funding-utils';
 import type { oxygenCheckoutOrderSchema } from '@/schemas/oxygen-checkout-order';
 import { oxygenOrderItemImage } from './oxygen-order-item-image';
 
@@ -37,9 +38,9 @@ export function OxygenMobileOrderSummary({
       deliveryMethod={null}
       giftWrappingCost={0}
       walletBalance={0}
-      payWithWallet={false}
-      walletAmountUsed={0}
-      remainingAmount={order.total}
+      payWithWallet={order.wallet_amount_used > 0}
+      walletAmountUsed={order.wallet_amount_used}
+      remainingAmount={roundMoney(order.total - order.wallet_amount_used)}
       taxAmount={order.tax_amount}
     />
   );

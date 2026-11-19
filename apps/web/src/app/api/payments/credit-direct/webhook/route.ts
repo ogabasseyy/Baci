@@ -10,6 +10,7 @@ import {
 } from '@/lib/credit-direct';
 import { notifyNewOrder, notifyPaymentReceived } from '@/lib/expo-push';
 import { logger } from '@/lib/logger';
+import { verifyCreditDirectWalletEvent } from '@/lib/payments/credit-direct-wallet-event';
 import {
   ensurePaidOrderInventoryConfirmed,
   rollbackOrderStatusAfterInventoryConfirmationFailure,
@@ -22,12 +23,21 @@ import {
 import { buildInventoryConfirmationFailurePayload } from '@/lib/payments/inventory-confirmation-response';
 import { resolveCreditDirectConfirmationReview } from '@/lib/payments/resolve-credit-direct-confirmation-review';
 import { escapeHtmlText } from '@/lib/sanitize';
+import { sanitizeLikePattern } from '@/lib/sanitize-core';
 import { createServiceClient } from '@/lib/supabase/service';
 import { respondCustomerInventoryFailure } from './customer-inventory-failure';
 
-function readNoteString(value: unknown) {
-  return typeof value === 'string' && value.trim() ? value.trim() : null;
-}
+import {
+  findCreditDirectWebhookOrder,
+  parseCreditDirectOrderNotes,
+  readNoteString,
+} from './webhook-order-reference';
+import {
+  getWebhookProductsTotal,
+  getWebhookWalletProductsTotal,
+  matchesRecordedFinancedAmount,
+  readProductAmount,
+} from './webhook-payment-amount';
 
 function getPayloadKeys(value: unknown) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -35,35 +45,6 @@ function getPayloadKeys(value: unknown) {
   }
 
   return Object.keys(value).sort().slice(0, 20);
-}
-
-function readProductAmount(value: unknown) {
-  if (typeof value === 'number') {
-    return Number.isFinite(value) ? value : null;
-  }
-
-  if (typeof value === 'string' && value.trim()) {
-    const amount = Number(value.trim());
-    return Number.isFinite(amount) ? amount : null;
-  }
-
-  return null;
-}
-
-function getWebhookProductsTotal(
-  products: CreditDirectWebhookPayload['products']
-) {
-  let total = 0;
-
-  for (const product of products) {
-    const amount = readProductAmount(product.productAmount);
-    if (amount === null) {
-      return null;
-    }
-    total += amount;
-  }
-
-  return total;
 }
 
 function formatCreditDirectProductAmount(value: unknown) {
@@ -269,13 +250,21 @@ export async function POST(request: NextRequest) {
 
     // Find the order by Credit Direct transaction ID
     // We store this in order notes when the checkout is initiated
-    const { data: orders, error: orderError } = await supabase
+    const {
+      data: orders,
+      error: orderError,
+      count: referenceCandidateCount,
+    } = await supabase
       .from('orders')
       .select(
-        'id, merchant_id, total, amount_paid, wallet_amount_used, payment_status, shipping_status, payment_method, customer_email, customer_name, order_number, notes'
+        'id, merchant_id, total, amount_paid, wallet_amount_used, payment_status, shipping_status, payment_method, customer_email, customer_name, order_number, notes',
+        { count: 'exact' }
       )
-      .in('payment_method', ['credit_direct', 'klump'])
-      .ilike('notes', `%${payload.checkoutTransactionId}%`);
+      .eq('payment_method', 'credit_direct')
+      .ilike(
+        'notes',
+        `%${sanitizeLikePattern(JSON.stringify(payload.checkoutTransactionId))}%`
+      );
 
     if (orderError) {
       logger.error({
@@ -286,6 +275,30 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'Failed to find order' },
         { status: 500 }
+      );
+    }
+
+    const referenceMatch = findCreditDirectWebhookOrder(
+      orders ?? [],
+      payload.checkoutTransactionId,
+      payload.metaData ?? undefined
+    );
+    // PostgREST may cap returned rows. Ambiguity cannot be ruled out on
+    // a truncated candidate set, even if the visible match looks exact.
+    if (
+      referenceMatch === null ||
+      (referenceCandidateCount ?? 0) > (orders?.length ?? 0)
+    ) {
+      logger.error({
+        message: 'Credit Direct reference candidates are ambiguous',
+        transactionId: payload.checkoutTransactionId,
+      });
+      return NextResponse.json(
+        {
+          error: 'Credit Direct reference requires payment review',
+          code: 'CREDIT_DIRECT_REFERENCE_REVIEW_REQUIRED',
+        },
+        { status: 409 }
       );
     }
 
@@ -303,7 +316,7 @@ export async function POST(request: NextRequest) {
       customer_name: string;
       order_number: string | null;
       notes: string | null;
-    } | null = orders?.[0] ?? null;
+    } | null = referenceMatch ?? null;
 
     if (!order && payload.metaData) {
       const { data: orderById } = await supabase
@@ -312,8 +325,12 @@ export async function POST(request: NextRequest) {
           'id, merchant_id, total, amount_paid, wallet_amount_used, payment_status, shipping_status, payment_method, customer_email, customer_name, order_number, notes'
         )
         .eq('id', payload.metaData)
+        .eq('payment_method', 'credit_direct')
         .single();
-      if (orderById) {
+      if (
+        orderById?.id === payload.metaData &&
+        orderById.payment_method === 'credit_direct'
+      ) {
         order = orderById;
       }
     }
@@ -324,16 +341,16 @@ export async function POST(request: NextRequest) {
         transactionId: payload.checkoutTransactionId,
         metaData: payload.metaData,
       });
-      // Return 200 to prevent retries - order might have been cancelled
-      return NextResponse.json({ received: true, warning: 'Order not found' });
+      // Preserve the stale-session acknowledgment for inexact notes hits.
+      return NextResponse.json({
+        received: true,
+        warning: orders?.length
+          ? 'Stale Credit Direct session'
+          : 'Order not found',
+      });
     }
 
-    let parsedNotes: Record<string, unknown> = {};
-    try {
-      parsedNotes = JSON.parse(order.notes || '{}') as Record<string, unknown>;
-    } catch {
-      parsedNotes = {};
-    }
+    const parsedNotes = parseCreditDirectOrderNotes(order.notes);
     const activeTransactionId =
       readNoteString(parsedNotes.creditDirectTransactionId) ??
       readNoteString(parsedNotes.credit_directTransactionId);
@@ -372,6 +389,9 @@ export async function POST(request: NextRequest) {
       Number.isFinite(signedAtMs) &&
       Number.isFinite(payloadTimeMs) &&
       payloadTimeMs < signedAtMs - CLOCK_SKEW_TOLERANCE_MS;
+    // The signed provider webhook echoes our order ID alongside the popup
+    // transaction ID. That ID differs from the signing session ID. Wallet
+    // events must additionally bind it to the durable reservation below.
     const acceptsUnpersistedPopupReference =
       !hasPersistedPopupTransaction &&
       activeSessionId !== null &&
@@ -406,6 +426,58 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // A wallet lender obligation survives lost responses and popup closure.
+    // Bind only verified provider evidence to its durable funding reservation.
+    const isPaidMerchantReplay =
+      order.payment_status === 'paid' &&
+      payload.eventType === 'Checkout_Merchant_Payment_Completed';
+    // The saved merchant settlement is authoritative for an exact paid retry.
+    // Other wallet events still have to bind to the durable reservation.
+    const hasRecordedMerchantCapture =
+      isPaidMerchantReplay &&
+      readNoteString(parsedNotes.merchantPaidAt) !== null &&
+      readNoteString(parsedNotes.creditDirectTransactionId) ===
+        payload.checkoutTransactionId;
+    const needsWalletVerification =
+      Number(order.wallet_amount_used) > 0 && !hasRecordedMerchantCapture;
+    const walletFunding = needsWalletVerification
+      ? await verifyCreditDirectWalletEvent({
+          supabase,
+          orderId: order.id,
+          merchantId: order.merchant_id,
+          reference: payload.checkoutTransactionId,
+          merchantCompleted:
+            payload.eventType === 'Checkout_Merchant_Payment_Completed',
+          providerAmount: getWebhookWalletProductsTotal(payload.products),
+        })
+      : null;
+    if (walletFunding === 'retry') {
+      logger.warn({
+        message: 'Credit Direct wallet reservation is busy',
+        orderId: order.id,
+      });
+      return NextResponse.json(
+        {
+          error: 'Wallet financing verification is temporarily busy',
+          code: 'CREDIT_DIRECT_WALLET_RETRY_REQUIRED',
+        },
+        { status: 503 }
+      );
+    }
+    if (needsWalletVerification && walletFunding === null) {
+      logger.warn({
+        message: 'Credit Direct wallet funding requires reconciliation',
+        orderId: order.id,
+      });
+      return NextResponse.json(
+        {
+          error: 'Wallet financing requires payment review',
+          code: 'CREDIT_DIRECT_WALLET_REVIEW_REQUIRED',
+        },
+        { status: 409 }
+      );
+    }
+
     const signedAmount =
       typeof parsedNotes.creditDirectSignedAmount === 'number'
         ? parsedNotes.creditDirectSignedAmount
@@ -426,10 +498,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Idempotency: If order is already paid, skip processing (webhook retry)
-    if (
-      order.payment_status === 'paid' &&
-      payload.eventType === 'Checkout_Merchant_Payment_Completed'
-    ) {
+    if (isPaidMerchantReplay) {
       logger.info({
         message: 'Credit Direct webhook already processed (order already paid)',
         orderId: order.id,
@@ -534,12 +603,14 @@ export async function POST(request: NextRequest) {
         // amount_paid / wallet_amount_used at order creation), so Credit
         // Direct legitimately collects the residual — not always the full
         // order total.
-        const orderTotal = Number(order.total) || 0;
+        const orderTotal =
+          walletFunding?.grossAmount ?? (Number(order.total) || 0);
         const preGatewayPaid = Math.max(
           Number(order.amount_paid) || 0,
           Number(order.wallet_amount_used) || 0
         );
         const expectedAmount =
+          walletFunding?.financedAmount ??
           Math.round((orderTotal - preGatewayPaid) * 100) / 100;
         if (
           signedAmount !== null &&
@@ -1073,6 +1144,7 @@ async function healPaidCreditDirectOrderReplay({
     customer_name: string;
     total: number;
     amount_paid?: number | string | null;
+    wallet_amount_used?: number | string | null;
   };
   parsedNotes: Record<string, unknown>;
   payload: CreditDirectWebhookPayload;
@@ -1082,8 +1154,26 @@ async function healPaidCreditDirectOrderReplay({
   const healedMerchantAmount = readProductAmount(parsedNotes.merchantAmount);
   let healedTransactionRow = false;
   if (healedPlatformFee !== null && healedMerchantAmount !== null) {
+    const recordedAmount = healedMerchantAmount + healedPlatformFee;
+    if (
+      Number(order.wallet_amount_used) > 0 &&
+      !matchesRecordedFinancedAmount(payload.products, recordedAmount)
+    ) {
+      logger.warn({
+        message: 'Credit Direct paid wallet replay amount differs from capture',
+        orderId: order.id,
+        transactionId: payload.checkoutTransactionId,
+      });
+      return NextResponse.json(
+        {
+          error: 'Wallet financing requires payment review',
+          code: 'CREDIT_DIRECT_WALLET_REVIEW_REQUIRED',
+        },
+        { status: 409 }
+      );
+    }
     const healResult = await recordCreditDirectTransaction({
-      amount: healedMerchantAmount + healedPlatformFee,
+      amount: recordedAmount,
       gatewayReference: payload.checkoutTransactionId,
       gatewayResponse: payload,
       merchantId: order.merchant_id,

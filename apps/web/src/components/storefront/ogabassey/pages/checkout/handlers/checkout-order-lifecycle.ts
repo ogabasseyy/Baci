@@ -6,6 +6,10 @@ import {
 } from '@baci/shared/contracts';
 import { captureCheckoutFunnelEventOnce } from '@/lib/posthog/capture-checkout-funnel-event';
 import { buildCheckoutBillingAddress } from '../build-checkout-billing-address';
+import {
+  buildCommittedFailureCheckoutSnapshot,
+  buildCreatedOrderCheckoutSnapshot,
+} from './build-committed-failure-snapshot';
 import type { RedvaultQuoteSummary } from '../components/redvault/RedvaultPaymentOption';
 import type { PendingCheckoutOrderSnapshot } from '../pending-checkout-order';
 import { persistPendingCheckoutOrder } from '../persist-pending-checkout-order';
@@ -128,6 +132,20 @@ export async function runCheckoutOrderLifecycle({
   const submitted: SubmittedCheckoutOrder = await submitCheckoutOrder({
     ...submit,
     resolvedPendingOrder: recovery.pendingOrder,
+    onCommittedOrderFailure: (failure) => {
+      const snapshot = buildCommittedFailureCheckoutSnapshot({
+        failure,
+        merchantId: customer.merchantId,
+        customerEmail: customer.email,
+        customerPhone: customer.phone,
+        fingerprint,
+        previousFingerprint: reuse.pendingOrder?.checkoutFingerprint,
+        paymentMethod: reuse.paymentMethod,
+        fallbackTotal,
+      });
+      persistPendingCheckoutOrder(snapshot);
+      onPendingSnapshot(snapshot);
+    },
     onBeforeBoundRedvaultSend: ({ idempotencyKey, orderRequest }) => {
       if (!redvaultReview.enabled) {
         throw new Error(
@@ -195,16 +213,9 @@ export async function runCheckoutOrderLifecycle({
     // Telemetry is best-effort; it must not prevent fencing a created order.
   }
 
-  const billingAddress = buildCheckoutBillingAddress(
-    shippingAddress.address,
-    shippingAddress.city,
-    shippingAddress.state,
-    merchantCountry
-  );
+  const billingAddress = buildCheckoutBillingAddress(shippingAddress.address, shippingAddress.city, shippingAddress.state, merchantCountry);
   const ready = {
-    ...(submit.orderRequest.shared_cart
-      ? { cartId: submit.orderRequest.shared_cart.cart_id }
-      : {}),
+    ...(submit.orderRequest.shared_cart ? { cartId: submit.orderRequest.shared_cart.cart_id } : {}),
     billingAddress,
     customerEmail: customer.email,
     customerName: redvaultReview.customerName,
@@ -216,22 +227,22 @@ export async function runCheckoutOrderLifecycle({
     total: order.total ?? fallbackTotal,
     orderNumber: createdOrderNumber,
   };
-  const snapshot: PendingCheckoutOrderSnapshot = {
-    orderId: order.id,
-    orderNumber: order.order_number,
-    trackingToken: order.tracking_token,
+  const snapshot = buildCreatedOrderCheckoutSnapshot({
+    order,
+    walletAmountUsed: wallet?.amountUsed,
     merchantId: customer.merchantId,
     customerEmail: customer.email,
     customerPhone: customer.phone,
-    checkoutFingerprint: fingerprint,
+    fingerprint,
     paymentMethod: reuse.paymentMethod,
     amountDueToGateway,
-    createdAt: new Date().toISOString(),
-    ...(redvaultReview.enabled &&
-    submit.orderRequest.shared_cart &&
-    submitted.redvaultSummary
-      ? {
-          redvaultReview: {
+    previousOrder:
+      reuse.pendingOrder?.orderId === order.id ? reuse.pendingOrder : undefined,
+    redvaultRecovery:
+      redvaultReview.enabled &&
+      submit.orderRequest.shared_cart &&
+      submitted.redvaultSummary
+        ? {
             ready,
             summary: submitted.redvaultSummary,
             ...(attemptFence
@@ -242,10 +253,9 @@ export async function runCheckoutOrderLifecycle({
                   },
                 }
               : {}),
-          },
-        }
-      : {}),
-  };
+          }
+        : undefined,
+  });
   if (
     attemptedKey &&
     (!attemptFence ||

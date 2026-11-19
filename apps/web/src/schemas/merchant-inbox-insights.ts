@@ -62,6 +62,6 @@ export const merchantInboxInsightsResponseSchema = z.object({
   customerMessages: z.number().int().nonnegative(),
   storeReplies: z.number().int().nonnegative(),
   resolved: z.number().int().nonnegative(),
-  avgFirstResponseSeconds: z.number().nonnegative().nullable(),
-  avgResolutionSeconds: z.number().nonnegative().nullable(),
+  avgFirstResponseSeconds: z.number().int().nonnegative().nullable(),
+  avgResolutionSeconds: z.number().int().nonnegative().nullable(),
 });

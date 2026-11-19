@@ -34,14 +34,16 @@ export function InsightsCard() {
   useEffect(() => {
     let cancelled = false;
     setState({ status: 'loading' });
-    fetchMerchantInboxInsights(days).then((result) => {
-      if (cancelled) return;
-      setState(
+    fetchMerchantInboxInsights(days)
+      .then((result) =>
         result.ok
-          ? { status: 'ready', insights: result.insights }
-          : { status: 'error' }
-      );
-    });
+          ? ({ status: 'ready', insights: result.insights } as const)
+          : ({ status: 'error' } as const)
+      )
+      .catch(() => ({ status: 'error' }) as const)
+      .then((next) => {
+        if (!cancelled) setState(next);
+      });
     return () => {
       cancelled = true;
     };

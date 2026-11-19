@@ -5,6 +5,7 @@ describe('formatInsightDuration', () => {
   it.each([
     [null, '—'],
     [45, '45s'],
+    [45.6, '46s'],
     [720, '12 min'],
     [3600, '1 h'],
     [12_000, '3 h 20 min'],

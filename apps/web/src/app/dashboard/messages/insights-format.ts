@@ -1,8 +1,9 @@
 /** "45s", "12 min", "3 h 20 min", "2 d 4 h"; "—" when there is no data. */
 export function formatInsightDuration(seconds: number | null): string {
   if (seconds === null) return '—';
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.round(seconds / 60);
+  const whole = Math.round(seconds);
+  if (whole < 60) return `${whole}s`;
+  const minutes = Math.round(whole / 60);
   if (minutes < 60) return `${minutes} min`;
   const hours = Math.floor(minutes / 60);
   if (hours < 24) {

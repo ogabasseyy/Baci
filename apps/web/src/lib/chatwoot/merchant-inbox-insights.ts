@@ -47,7 +47,14 @@ export async function getMerchantInboxInsights(
       return { ok: false };
     }
     const parsed = providerInboxSummarySchema.safeParse(await response.json());
-    if (!parsed.success) return { ok: false };
+    if (!parsed.success) {
+      // Field paths only: never the response body, so a fork that renamed a
+      // key is diagnosable without logging provider data.
+      console.error('[merchant-inbox] insights response unreadable', {
+        fields: parsed.error.issues.map((issue) => issue.path.join('.')),
+      });
+      return { ok: false };
+    }
     const summary = parsed.data;
     return {
       ok: true,

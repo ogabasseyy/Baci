@@ -51,4 +51,12 @@ describe('InsightsCard', () => {
       'Insights are temporarily unavailable.'
     );
   });
+
+  it('shows the unavailable message when the fetch rejects', async () => {
+    mocks.fetchInsights.mockRejectedValue(new Error('boom'));
+    render(<InsightsCard />);
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Insights are temporarily unavailable.'
+    );
+  });
 });

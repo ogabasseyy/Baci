@@ -59,8 +59,8 @@ REVOKE ALL ON FUNCTION private.gigl_has_newer_order_shipment(uuid, uuid, integer
   FROM PUBLIC, anon, authenticated, service_role;
 
 -- The one decision "does this cancelled shipment reopen its order": the order
--- is open (not cancelled, not delivered/completed/cancelled/returned/failed),
--- no newer shipment replaced this one, and the order points at this shipment
+-- is open (not cancelled, refunded, or delivered/completed/cancelled/returned/
+-- failed), no newer shipment replaced this one, and the order points at this shipment
 -- (or points at none and no other non-cancelled shipment exists). Read by the
 -- reopen in private.sync_gigl_tracking_order_status and by the merchant
 -- rebooking alert in private.gate_gigl_tracking_notification.
@@ -85,6 +85,10 @@ AS $$
       AND coalesce(orders.shipping_status, '') NOT IN (
         'delivered', 'completed', 'cancelled', 'canceled', 'returned', 'failed'
       )
+      -- claim_order_shipment_booking refuses these, so a rebooking could not
+      -- succeed.
+      AND pg_catalog.lower(pg_catalog.btrim(coalesce(orders.payment_status, '')))
+        NOT IN ('refunded', 'cancelled', 'canceled')
       AND NOT private.gigl_has_newer_order_shipment(
         p_order_id, p_merchant_id, p_generation
       )
@@ -109,6 +113,33 @@ ALTER FUNCTION private.gigl_cancellation_reopens_order(uuid, uuid, uuid, integer
 REVOKE ALL ON FUNCTION private.gigl_cancellation_reopens_order(uuid, uuid, uuid, integer)
   FROM PUBLIC, anon, authenticated, service_role;
 
+-- Settles the merchant rebooking alert once the reopen decision is serialized
+-- under the order lock: the gate decided before the shipments update, so an
+-- order change committed in between (for example a concurrent order
+-- cancellation) must still silence a prompt for an order that stays closed.
+CREATE OR REPLACE FUNCTION private.gigl_skip_unreopened_cancellation_alert(
+  p_shipment_id uuid
+)
+RETURNS void
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+  UPDATE public.shipment_tracking_notification_outbox AS outbox
+  SET status = 'skipped',
+      skipped_at = now(),
+      updated_at = now(),
+      skip_reason = 'cancellation_not_reopened'
+  WHERE outbox.shipment_id = p_shipment_id
+    AND outbox.audience = 'merchant'
+    AND outbox.notification_kind = 'cancelled'
+    AND outbox.status = 'pending';
+$$;
+ALTER FUNCTION private.gigl_skip_unreopened_cancellation_alert(uuid)
+  OWNER TO postgres;
+REVOKE ALL ON FUNCTION private.gigl_skip_unreopened_cancellation_alert(uuid)
+  FROM PUBLIC, anon, authenticated, service_role;
+
 CREATE OR REPLACE FUNCTION private.sync_gigl_tracking_order_status()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -119,6 +150,7 @@ DECLARE
   v_shipping_status text;
   v_order_id uuid;
   v_has_newer_shipment boolean;
+  v_reopens boolean := false;
 BEGIN
   IF NEW.provider IS DISTINCT FROM 'GIGL'
     OR NEW.order_id IS NULL
@@ -127,8 +159,10 @@ BEGIN
   END IF;
 
   IF NEW.status = 'cancelled' THEN
-    -- Lock the open order (same filter as private.gigl_cancellation_reopens_order)
-    -- before the charge guard and the reopen decision.
+    -- Lock the order that is still open for a shipping change (the same
+    -- cancelled/terminal filter private.gigl_cancellation_reopens_order starts
+    -- from; that decision also weighs the payment status) before the charge
+    -- guard, so the guard keeps covering every such order.
     SELECT orders.id
     INTO v_order_id
     FROM public.orders AS orders
@@ -139,35 +173,37 @@ BEGIN
         'delivered', 'completed', 'cancelled', 'canceled', 'returned', 'failed'
       )
     FOR UPDATE;
-    IF NOT FOUND THEN
-      RETURN NEW;
+    IF FOUND THEN
+      v_has_newer_shipment := private.gigl_has_newer_order_shipment(
+        NEW.order_id, NEW.merchant_id, NEW.tracking_timeline_generation
+      );
+
+      -- Refuse an unrefunded cancellation when an active wallet charge still
+      -- belongs to this shipment or to the current non-superseded order
+      -- timeline (covers recovered decoy shipments before orders.shipment_id
+      -- moves).
+      IF EXISTS (
+        SELECT 1
+        FROM public.merchant_shipping_charges AS charge
+        WHERE charge.order_id = v_order_id
+          AND charge.status IN (
+            'reserved', 'provider_submitting', 'booked', 'needs_reconciliation'
+          )
+          AND (
+            charge.shipment_id = NEW.id
+            OR NOT v_has_newer_shipment
+          )
+      ) THEN
+        RAISE EXCEPTION 'active_merchant_shipping_charge' USING ERRCODE = '55P03';
+      END IF;
+
+      v_reopens := private.gigl_cancellation_reopens_order(
+        NEW.id, NEW.order_id, NEW.merchant_id, NEW.tracking_timeline_generation
+      );
     END IF;
 
-    v_has_newer_shipment := private.gigl_has_newer_order_shipment(
-      NEW.order_id, NEW.merchant_id, NEW.tracking_timeline_generation
-    );
-
-    -- Refuse an unrefunded cancellation when an active wallet charge still
-    -- belongs to this shipment or to the current non-superseded order timeline
-    -- (covers recovered decoy shipments before orders.shipment_id moves).
-    IF EXISTS (
-      SELECT 1
-      FROM public.merchant_shipping_charges AS charge
-      WHERE charge.order_id = v_order_id
-        AND charge.status IN (
-          'reserved', 'provider_submitting', 'booked', 'needs_reconciliation'
-        )
-        AND (
-          charge.shipment_id = NEW.id
-          OR NOT v_has_newer_shipment
-        )
-    ) THEN
-      RAISE EXCEPTION 'active_merchant_shipping_charge' USING ERRCODE = '55P03';
-    END IF;
-
-    IF NOT private.gigl_cancellation_reopens_order(
-      NEW.id, NEW.order_id, NEW.merchant_id, NEW.tracking_timeline_generation
-    ) THEN
+    IF NOT v_reopens THEN
+      PERFORM private.gigl_skip_unreopened_cancellation_alert(NEW.id);
       RETURN NEW;
     END IF;
 

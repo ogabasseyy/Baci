@@ -36,9 +36,12 @@ END;
 $seed$;
 
 -- Writes the merchant 'cancelled' row, then the cancelled status; returns the
--- merchant alert as 'status/skip_reason'.
+-- merchant alert as 'status/skip_reason'. p_cancel_order_between cancels the
+-- order after the gate decided and before the order sync runs (a concurrent
+-- order cancellation committing in between).
 CREATE FUNCTION pg_temp.map_cancel_shipment(
-  p_ids uuid[], p_order uuid, p_merchant uuid
+  p_ids uuid[], p_order uuid, p_merchant uuid,
+  p_cancel_order_between boolean DEFAULT false
 )
 RETURNS text
 LANGUAGE plpgsql
@@ -52,6 +55,9 @@ BEGIN
   ) VALUES (
     p_ids[1], p_ids[2], p_order, p_merchant, p_ids[3], 'merchant', 'cancelled'
   );
+  IF p_cancel_order_between THEN
+    UPDATE public.orders SET cancelled_at = now() WHERE id = p_order;
+  END IF;
   UPDATE public.shipments SET status = 'cancelled' WHERE id = p_ids[1];
   SELECT outbox.status || '/' || coalesce(outbox.skip_reason, '') INTO v_state
   FROM public.shipment_tracking_notification_outbox AS outbox
@@ -150,8 +156,14 @@ BEGIN
     RAISE EXCEPTION 'the first cancellation must reopen the order with a new notification cycle';
   END IF;
   v_cycle := (SELECT fulfillment_notification_cycle_id FROM public.orders WHERE id = v_order);
+  -- A second, never-linked shipment of the reopened order cancels: the order is
+  -- still waiting for a shipment, so the merchant hears about this other
+  -- shipment too, and the order's notification cycle stays put.
   v_second := pg_temp.map_seed_shipment(v_order, f.merchant_id, 'GIGL-MAP-113B', now());
-  PERFORM pg_temp.map_cancel_shipment(v_second, v_order, f.merchant_id);
+  IF pg_temp.map_cancel_shipment(v_second, v_order, f.merchant_id)
+       IS DISTINCT FROM 'pending/' THEN
+    RAISE EXCEPTION 'another cancelled shipment of a reopened order must still alert the merchant';
+  END IF;
   IF (SELECT fulfillment_notification_cycle_id FROM public.orders WHERE id = v_order)
        IS DISTINCT FROM v_cycle THEN
     RAISE EXCEPTION 'a repeat cancellation of a reopened order must not rotate its notification cycle';
@@ -198,6 +210,34 @@ BEGIN
        IS DISTINCT FROM v_second[1]
   THEN
     RAISE EXCEPTION 'a cancellation of an unlinked shipment must not alert the merchant or reopen the order';
+  END IF;
+
+  -- A refunded order cannot be rebooked (claim_order_shipment_booking refuses
+  -- it), so it is neither reopened nor prompted.
+  v_order := pg_temp.map_seed_order(17, 'processing');
+  v_first := pg_temp.map_seed_shipment(v_order, f.merchant_id, 'GIGL-MAP-117A', now());
+  UPDATE public.orders SET shipment_id = v_first[1] WHERE id = v_order;
+  UPDATE public.orders SET payment_status = 'refunded' WHERE id = v_order;
+  IF pg_temp.map_cancel_shipment(v_first, v_order, f.merchant_id)
+       IS DISTINCT FROM 'skipped/cancellation_not_reopened'
+    OR (SELECT shipment_id FROM public.orders WHERE id = v_order)
+       IS DISTINCT FROM v_first[1]
+  THEN
+    RAISE EXCEPTION 'a refunded order must not alert the merchant to rebook or be reopened';
+  END IF;
+
+  -- The order is cancelled after the gate let the alert through and before the
+  -- order sync runs: the sync settles the pending alert instead of leaving a
+  -- rebooking prompt for an order that stays closed.
+  v_order := pg_temp.map_seed_order(18, 'processing');
+  v_first := pg_temp.map_seed_shipment(v_order, f.merchant_id, 'GIGL-MAP-118A', now());
+  UPDATE public.orders SET shipment_id = v_first[1] WHERE id = v_order;
+  IF pg_temp.map_cancel_shipment(v_first, v_order, f.merchant_id, true)
+       IS DISTINCT FROM 'skipped/cancellation_not_reopened'
+    OR (SELECT shipment_id FROM public.orders WHERE id = v_order)
+       IS DISTINCT FROM v_first[1]
+  THEN
+    RAISE EXCEPTION 'an order cancelled between the gate and the sync must not keep a rebooking prompt';
   END IF;
 END;
 $rebook$;

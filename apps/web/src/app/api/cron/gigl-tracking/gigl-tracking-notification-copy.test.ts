@@ -35,6 +35,19 @@ describe('GIGL tracking notification copy', () => {
     });
   });
 
+  it('tells the merchant a cancelled repair pickup needs a new pickup, not an order rebooking', () => {
+    expect(copyFor('cancelled', '', 'merchant', true)).toEqual({
+      title: 'GIG pickup cancelled',
+      body: 'GIG Logistics cancelled the repair pickup. If the device still needs collecting, book a new pickup.',
+    });
+    expect(copyFor('cancelled', '', 'merchant', false).title).toBe(
+      'GIG shipment cancelled'
+    );
+    expect(copyFor('pickup_delayed', '', 'merchant', true).title).toBe(
+      'GIG pickup delayed'
+    );
+  });
+
   it('titles the merchant delayed-pickup alert', () => {
     expect(copyFor('pickup_delayed', '', 'merchant').title).toBe(
       'GIG pickup delayed'

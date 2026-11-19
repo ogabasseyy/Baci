@@ -15,8 +15,13 @@
 --     shipment never tells the merchant to rebook. Shipments without an order
 --     (repair pickups) keep their merchant alert.
 --   The customer alert (order cancelled) and the merchant alert (order
---   reopened) are mutually exclusive by construction. The merchant alert copy
---   says the shipment needs rebooking (app code).
+--   reopened) are mutually exclusive by construction. The customer skip keeps
+--   private.gigl_cancellation_superseded (live newer shipment by created_at)
+--   on purpose: it is the existing rule the notification claim and dispatch
+--   functions also apply (20261103190400), and it only ever applies to a
+--   cancelled order, which the reopen never touches, so it cannot disagree
+--   with the reopen decision. The merchant alert copy says the shipment needs
+--   rebooking (app code).
 
 CREATE OR REPLACE FUNCTION private.gate_gigl_tracking_notification()
 RETURNS trigger

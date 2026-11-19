@@ -23,7 +23,8 @@ BEGIN
     'private.refund_gigl_wallet_charge_on_provider_cancellation(uuid, uuid, uuid, text, jsonb)'::regprocedure,
     'private.stamp_booked_gigl_charge_waybill()'::regprocedure,
     'private.gigl_has_newer_order_shipment(uuid, uuid, integer)'::regprocedure,
-    'private.gigl_cancellation_reopens_order(uuid, uuid, uuid, integer)'::regprocedure
+    'private.gigl_cancellation_reopens_order(uuid, uuid, uuid, integer)'::regprocedure,
+    'private.gigl_skip_unreopened_cancellation_alert(uuid)'::regprocedure
   ] LOOP
     FOREACH v_role IN ARRAY ARRAY[
       'anon', 'authenticated', 'service_role', 'gigl_tracking_worker'

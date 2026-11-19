@@ -3,6 +3,14 @@
 -- 2. Let a backfilled older terminal scan (delivered, cancelled, returned)
 --    override a newer stored progress scan, as the normalizer already does, so
 --    its status, delivered_at and notification stay consistent.
+--    Intended for all three terminal kinds: they outrank failed and progress
+--    scans in the canonical rank (failed 5, delivered 6, cancelled/returned 7),
+--    so an older cancelled also beats a newer failed or out_for_delivery.
+-- Dedup contract the arrival relies on (not changed here): unique index
+-- shipment_tracking_notifications_milestone_identity_key (20260801141500) keeps
+-- each kind to once per shipment, and trigger
+-- suppress_late_gigl_tracking_notifications (20260801130700) drops an older
+-- pending customer update when a newer one is queued in the same statement.
 -- In-place patch of
 -- the LIVE apply function (20261102053320 pattern), so the 20260904190550,
 -- 20260905140000 and 20261102053320 changes survive; CREATE OR REPLACE keeps

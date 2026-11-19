@@ -73,7 +73,15 @@ export default async function WalletPage() {
       transactions={transactions}
       merchantId={merchant.id}
       payoutCurrency={merchant.payout_currency || 'NGN'}
-      spendable={spendable.ok ? spendable : null}
+      spendable={
+        spendable.ok
+          ? {
+              spendableBalance: spendable.spendableBalance,
+              settledToBankTotal: spendable.settledToBankTotal,
+              pendingReconciliationTotal: spendable.pendingReconciliationTotal,
+            }
+          : null
+      }
     />
   );
 }

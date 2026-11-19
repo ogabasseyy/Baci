@@ -140,6 +140,9 @@ describe('WalletClient', () => {
     expect(
       screen.getByText(/already paid straight to your bank/i)
     ).toBeInTheDocument();
+    expect(
+      screen.getByText(/includes amounts held pending reconciliation/i)
+    ).toBeInTheDocument();
   });
 
   it('hides the breakdown when it could not be loaded', () => {

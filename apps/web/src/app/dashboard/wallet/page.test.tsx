@@ -58,7 +58,11 @@ describe('WalletPage', () => {
   it('passes the spendable breakdown to the wallet client', async () => {
     const props = await propsOf();
     expect(readBreakdown).toHaveBeenCalledWith(expect.anything(), 'm1');
-    expect(props.spendable).toEqual(breakdown);
+    expect(props.spendable).toEqual({
+      spendableBalance: 100,
+      settledToBankTotal: 500,
+      pendingReconciliationTotal: 0,
+    });
     expect(props.merchantId).toBe('m1');
   });
 

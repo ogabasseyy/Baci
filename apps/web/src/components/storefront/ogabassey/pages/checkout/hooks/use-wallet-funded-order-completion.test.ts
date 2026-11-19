@@ -13,6 +13,7 @@ vi.mock('../checkout-idempotency', () => ({
   clearCheckoutIdempotencyKey: clearKeyMock,
 }));
 
+import { readPendingHandoffEntries } from '@/lib/privacy/pending-handoff.test-support';
 import { useWalletFundedOrderCompletion } from './use-wallet-funded-order-completion';
 
 describe('useWalletFundedOrderCompletion', () => {
@@ -36,6 +37,7 @@ describe('useWalletFundedOrderCompletion', () => {
         clearCheckoutSession: clearSession,
         clearPendingCheckoutOrder: clearPending,
         getHref: (path) => `/shop${path}`,
+        merchantSlug: 'shop',
         paymentMethod: 'bank_transfer',
       })
     );
@@ -64,8 +66,11 @@ describe('useWalletFundedOrderCompletion', () => {
     expect(clearKeyMock).toHaveBeenCalledWith('fingerprint-1');
     expect(clearSession).toHaveBeenCalledOnce();
     expect(pushMock).toHaveBeenCalledWith(
-      '/shop/order-success?orderId=order+%2F1&wallet=true&trackingToken=track+%2F%3F%26'
+      '/shop/order-success?orderId=order+%2F1&wallet=true'
     );
+    expect(readPendingHandoffEntries()).toEqual([
+      ['trackingToken', 'track /?&'],
+    ]);
     expect(events).toEqual([
       'capture',
       'pending',
@@ -89,6 +94,7 @@ describe('useWalletFundedOrderCompletion', () => {
         clearCheckoutSession: vi.fn(),
         clearPendingCheckoutOrder: vi.fn(),
         getHref: (path) => path,
+        merchantSlug: 'shop',
         paymentMethod: 'bank_transfer',
       })
     );
@@ -124,6 +130,7 @@ describe('useWalletFundedOrderCompletion', () => {
         clearCheckoutSession: vi.fn(),
         clearPendingCheckoutOrder: vi.fn(),
         getHref: (path) => path,
+        merchantSlug: 'shop',
         paymentMethod: 'bank_transfer',
       })
     );

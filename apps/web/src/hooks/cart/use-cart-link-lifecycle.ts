@@ -1,12 +1,8 @@
 'use client';
 
-import { useEffect } from 'react';
-import {
-  getCartFromStorage,
-  getSharedCartImportReceipt,
-  saveCartToStorage,
-  saveSharedCartImportReceipt,
-} from './cart-storage';
+import { useEffect, useRef } from 'react';
+import { shouldSkipEmptyGuestCartFetch } from './cart-hydration-gate';
+import { getCartFromStorage, getSharedCartImportReceipt } from './cart-storage';
 import { createCartVisibilityWaiter } from './cart-visibility-waiter';
 import { fetchSharedCartSnapshot } from './shared-cart-client';
 import {
@@ -23,11 +19,12 @@ import { planLegacyImport } from './shared-cart-reducer';
 import {
   ensureCartDeviceRevocationCleared,
   isCartDeviceRevocationPending,
-  markCartDeviceSessionActive,
   retireDeEnrolledCartDeviceSession,
 } from './shared-cart-session-revoke-client';
 import type { createCartSnapshotActions } from './shared-cart-snapshots';
 import { adoptTerminalSnapshotCache } from './shared-cart-terminal-adoption';
+import { stampSkippedEmptyGuestCartHint } from './stamp-skipped-empty-guest-cart-hint';
+import { syncCartSessionMarkers } from './sync-cart-session-markers';
 import { useCartLinkPolling } from './use-cart-link-polling';
 import type { SharedCartRuntime } from './use-shared-cart-runtime';
 
@@ -65,6 +62,7 @@ export function useCartLinkLifecycle(
     hydrateMissing,
     refreshNow,
   } = context;
+  const previousSessionGenerationRef = useRef(sessionGeneration);
 
   // Seed the cache, then adopt under a fenced session generation.
   // biome-ignore lint/correctness/useExhaustiveDependencies: hydrateMissing closes over refs and stable dispatch only; listing it would relink every render.
@@ -79,7 +77,9 @@ export function useCartLinkLifecycle(
       setLinkPhase('ready');
       return;
     }
-    if (merchantSlug) markCartDeviceSessionActive?.(merchantSlug);
+    const sessionTransitioned =
+      previousSessionGenerationRef.current !== sessionGeneration;
+    previousSessionGenerationRef.current = sessionGeneration;
     const generation = sessionGeneration;
     let cancelled = false;
     let adoptRun = 0;
@@ -158,6 +158,23 @@ export function useCartLinkLifecycle(
         retryAdopt(attempt, run);
         return;
       }
+      if (cancelled || generationRef.current !== generation || run !== adoptRun)
+        return;
+      if (
+        !sessionTransitioned &&
+        shouldSkipEmptyGuestCartFetch({
+          merchantId,
+          merchantSlug,
+          cachedCount: cached.length,
+        })
+      ) {
+        stampSkippedEmptyGuestCartHint(merchantId);
+        adoptOutcomeRef.current = 'none';
+        dispatch({ generation, status: 'skipped', type: 'import/resolved' });
+        setLinkPhase('ready');
+        return;
+      }
+
       const result = await fetchSharedCartSnapshot(
         undefined,
         optionsRef.current.merchantSlug
@@ -179,10 +196,18 @@ export function useCartLinkLifecycle(
           await provision(attempt, run);
           return;
         }
+        syncCartSessionMarkers({ merchantId, merchantSlug, active: false });
       }
       if (result.ok) {
         adoptOutcomeRef.current = 'session';
         lastFetchRef.current = Date.now();
+        if (!isTerminalCart(result.snapshot)) {
+          syncCartSessionMarkers({
+            merchantId,
+            merchantSlug,
+            active: result.snapshot.lines.length > 0,
+          });
+        }
         dispatch({
           generation,
           snapshot: result.snapshot,
@@ -204,6 +229,12 @@ export function useCartLinkLifecycle(
         retryAdopt(attempt, run);
         return;
       }
+      syncCartSessionMarkers({
+        merchantId,
+        merchantSlug,
+        active: false,
+        preserveDeviceMarker: cached.length > 0,
+      });
       adoptOutcomeRef.current =
         result.code === 'not_found' ? 'bootstrap' : 'none';
       if (cached.length === 0) {

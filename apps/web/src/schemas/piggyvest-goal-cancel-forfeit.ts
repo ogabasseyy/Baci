@@ -110,13 +110,18 @@ export const piggyvestGoalCancelForfeitSchemas = {
   // A PiggyVest wallet as the forfeit leg checks it (both the destination and
   // the goal wallet the interest comes from). A reply that does not parse is a
   // failed check (retried), never read as a mismatch; the values are then
-  // compared by the caller.
+  // compared by the caller. A business-owned wallet has no API customer
+  // (PiggyVest answers null, which the wallet reader passes on as absent):
+  // read here as null, so only an explicit business-wallet rule accepts it.
   providerWallet: z.object({
     id: piggyvestProviderIdSchema,
     business_id: piggyvestProviderIdSchema,
-    api_customer_id: piggyvestProviderIdSchema,
+    api_customer_id: piggyvestProviderIdSchema
+      .nullish()
+      .transform((value) => value ?? null),
     currency: z.string(),
     status: z.string(),
+    type: z.string().optional(),
     balance: z.int().nonnegative().optional(),
   }),
   // Cancels held before anything was sent, for the sweep to page.

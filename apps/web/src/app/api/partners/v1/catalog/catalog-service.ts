@@ -24,12 +24,23 @@ export async function loadCrossRemCatalog() {
     (binding) => !binding.retired
   ).length;
   if (!CROSSREM_MERCHANT_ID || activeCount === 0) {
+    logger.warn({
+      message: 'CrossRem catalog is unconfigured',
+      merchantId: CROSSREM_MERCHANT_ID,
+      activeCount,
+    });
     throw new Error('CrossRem catalog is unconfigured');
   }
 
   const merchant = await resolveFeedMerchant(CROSSREM_MERCHANT_ID, false);
   const currency = resolveMerchantCurrencyConfig(merchant).code;
   if (merchant.id !== CROSSREM_MERCHANT_ID || currency !== 'NGN') {
+    logger.warn({
+      message: 'CrossRem merchant unavailable',
+      expectedMerchantId: CROSSREM_MERCHANT_ID,
+      resolvedMerchantId: merchant.id,
+      currency,
+    });
     throw new Error('CrossRem merchant unavailable');
   }
 

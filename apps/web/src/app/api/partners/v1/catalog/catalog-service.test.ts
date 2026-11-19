@@ -168,6 +168,12 @@ describe('CrossRem catalog source', () => {
     await expect(loadCrossRemCatalog()).rejects.toThrow(
       'CrossRem merchant unavailable'
     );
+    expect(mocks.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'CrossRem merchant unavailable',
+        resolvedMerchantId: 'other',
+      })
+    );
     expect(mocks.getFeedData).not.toHaveBeenCalled();
   });
 
@@ -175,6 +181,12 @@ describe('CrossRem catalog source', () => {
     mocks.bindings.length = 0;
     await expect(loadCrossRemCatalog()).rejects.toThrow(
       'CrossRem catalog is unconfigured'
+    );
+    expect(mocks.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'CrossRem catalog is unconfigured',
+        activeCount: 0,
+      })
     );
     expect(mocks.resolveMerchant).not.toHaveBeenCalled();
   });

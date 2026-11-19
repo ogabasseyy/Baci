@@ -74,8 +74,9 @@ grant, resolves a user-scoped client, and invokes the existing finalizer using
 the job ID as its stable idempotency key. Local synthetic tests cover this
 composition, connection isolation,
 revocation, role denial, invalid expiry and user mismatch. The production entry
-point always schedules the worker and rejects a private configuration that
-explicitly disables it. The worker still needs hosted qualification.
+point starts the scheduler only when the private operator configuration sets
+`"backgroundBuilds": true`. Without that setting, no background worker is
+installed. Hosted qualification is still required before enabling it.
 
 Each worker starts at most one build per tick. Ticks are scheduled every five
 seconds, but a running tick suppresses later ticks until that build finishes;
@@ -89,8 +90,9 @@ raising concurrency.
 
 The worker uses the stable job ID as its finalization retry key. A disposable
 database test against the live-lease finalization function verifies that an
-identical payload and key return the same build, while a changed receipt with
-that key is rejected as an idempotency conflict. A separate disposable
+identical payload and key return the same build. Changing the attempt nonce or
+receipt with that key produces an idempotency conflict. Using a mismatched
+attempt nonce or expired lease before commit also prevents finalization. A separate disposable
 PostgreSQL/PostgREST test uses a linked synthetic merchant and normal RLS,
 treats a successful finalize response as lost, reads the finalized job, replays
 the same result and rejects both a changed payload and another user. The

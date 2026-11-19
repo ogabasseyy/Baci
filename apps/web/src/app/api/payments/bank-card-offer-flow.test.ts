@@ -213,6 +213,21 @@ function setup(
       case 'record_bank_card_offer_checkout_url':
         checkoutUrl = args.p_checkout_url;
         return { data: true };
+      case 'get_bank_card_offer_webhook_transaction':
+        return (
+          lookup ?? {
+            data: {
+              id: transactionId,
+              merchant_id: merchantId,
+              order_id: orderId,
+              gateway: 'paystack',
+              gateway_reference: reference,
+              amount: 95,
+              platform_fee: 1,
+            },
+            error: null,
+          }
+        );
       case 'get_bank_card_offer_verification_context':
         return {
           data: {
@@ -292,20 +307,8 @@ function setup(
         data: [{ order_id: orderId, transaction_id: transactionId }],
         error: null,
       }),
-      single: vi
-        .fn()
-        .mockResolvedValue(
-          table === 'transactions' && lookup
-            ? lookup
-            : { data: row, error: null }
-        ),
-      maybeSingle: vi
-        .fn()
-        .mockResolvedValue(
-          table === 'transactions' && lookup
-            ? lookup
-            : { data: row, error: null }
-        ),
+      single: vi.fn().mockResolvedValue({ data: row, error: null }),
+      maybeSingle: vi.fn().mockResolvedValue({ data: row, error: null }),
       order: vi.fn(async () => ({
         data: filters.transaction_type === 'payment' ? [transaction] : [],
         error: null,

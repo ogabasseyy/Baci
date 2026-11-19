@@ -139,6 +139,11 @@ BEGIN
     IF SQLERRM <> 'bank_card_offer_payment_not_verified' THEN RAISE; END IF;
   END;
 
+  IF has_function_privilege('authenticated', 'public.get_bank_card_offer_webhook_transaction(text)', 'EXECUTE')
+    OR public.get_bank_card_offer_webhook_transaction(v_reference)->>'merchant_id' IS DISTINCT FROM v_merchant::text
+    OR public.get_bank_card_offer_webhook_transaction('BANK-OFFER-FALLBACK-FIXTURE') IS NOT NULL
+  THEN RAISE EXCEPTION 'Webhook lookup returned a payment outside the saved merchant attempt'; END IF;
+
   IF NOT public.bank_card_offer_refund_capture_matches(v_order, v_merchant, v_transaction, v_reference, 9500)
     OR public.bank_card_offer_refund_capture_matches(v_order, v_merchant, v_transaction, v_reference, 10000)
   THEN RAISE EXCEPTION 'Refund must use the discounted capture'; END IF;

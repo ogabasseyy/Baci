@@ -764,13 +764,12 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
-      const row = await supabase
-        .from('transactions')
-        .select(
-          'id, merchant_id, order_id, gateway, gateway_reference, amount, platform_fee'
-        )
-        .eq('gateway_reference', reference)
-        .maybeSingle();
+      const row = await supabase.rpc(
+        'get_bank_card_offer_webhook_transaction',
+        {
+          p_reference: reference,
+        }
+      );
       if (row.error) {
         return NextResponse.json(
           { error: 'Bank offer capture lookup unavailable' },

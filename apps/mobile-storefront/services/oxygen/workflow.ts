@@ -76,6 +76,42 @@ export function createOxygenWorkflow(options: {
     accept(snapshot, generation);
     return snapshot;
   }
+  async function refreshCapabilities() {
+    publish({ capabilitiesVerified: false });
+    publish({
+      capabilitiesVerified: await verifyOxygenCapabilities(options.client),
+    });
+  }
+  async function initializeWorkflow(generation: number) {
+    // The owned order is the server's idempotent resume key after a lost response.
+    await refreshCapabilities();
+    const saved = await options.journal.read();
+    const creationKey = saved?.key ?? options.key();
+    if (!saved)
+      await options.journal.write({
+        scope: options.journal.scope,
+        workflowId: null,
+        action: 'create',
+        version: 0,
+        key: creationKey,
+        time: (options.now ?? Date.now)(),
+      });
+    const created = await options.client.createOrResume(
+      options.journal.scope.orderId
+    );
+    if (!alive || generation !== revision) return;
+    ownedWorkflowId = created.id;
+    if (!saved?.workflowId || saved.workflowId !== created.id)
+      await options.journal.write({
+        scope: options.journal.scope,
+        workflowId: created.id,
+        action: 'create',
+        version: created.version,
+        key: creationKey,
+        time: (options.now ?? Date.now)(),
+      });
+    await read(generation);
+  }
   return {
     getState: () => state,
     subscribe(listener: () => void) {
@@ -84,46 +120,11 @@ export function createOxygenWorkflow(options: {
         listeners.delete(listener);
       };
     },
-    initialize: () =>
-      run(async (generation) => {
-        // Resume identity is the owned order, including after a lost create response.
-        publish({ capabilitiesVerified: false });
-        publish({
-          capabilitiesVerified: await verifyOxygenCapabilities(options.client),
-        });
-        const saved = await options.journal.read();
-        const creationKey = saved?.key ?? options.key();
-        if (!saved)
-          await options.journal.write({
-            scope: options.journal.scope,
-            workflowId: null,
-            action: 'create',
-            version: 0,
-            key: creationKey,
-            time: (options.now ?? Date.now)(),
-          });
-        const created = await options.client.createOrResume(
-          options.journal.scope.orderId
-        );
-        if (!alive || generation !== revision) return;
-        ownedWorkflowId = created.id;
-        if (!saved?.workflowId || saved.workflowId !== created.id)
-          await options.journal.write({
-            scope: options.journal.scope,
-            workflowId: created.id,
-            action: 'create',
-            version: created.version,
-            key: creationKey,
-            time: (options.now ?? Date.now)(),
-          });
-        accept(await options.client.snapshot(created.id), generation);
-      }),
+    initialize: () => run(initializeWorkflow),
     refresh: () =>
       run(async (generation) => {
-        publish({ capabilitiesVerified: false });
-        publish({
-          capabilitiesVerified: await verifyOxygenCapabilities(options.client),
-        });
+        if (!ownedWorkflowId) return initializeWorkflow(generation);
+        await refreshCapabilities();
         await read(generation);
       }),
     pollHostedStatus: () =>

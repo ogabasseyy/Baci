@@ -1,5 +1,5 @@
 import type { OxygenRuntimeSnapshot } from '@baci/shared/oxygen';
-import { render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
 import { OxygenIdentityStep } from './OxygenIdentityStep';
 
 const snapshot = {
@@ -24,7 +24,9 @@ it('never claims validation is running while its admission status is unavailable
     screen.getAllByRole('button', { name: 'Check for an update' })
   ).toHaveLength(1);
 });
-it('shows validation progress only when Oxygen has marked it processing', () => {
+it('lets the shopper check provider progress during NIN processing', () => {
+  const refresh = jest.fn();
+  const verify = jest.fn();
   render(
     <OxygenIdentityStep
       snapshot={{
@@ -42,9 +44,12 @@ it('shows validation progress only when Oxygen has marked it processing', () => 
         },
       }}
       busy={false}
-      onVerify={jest.fn()}
-      onRefresh={jest.fn()}
+      onVerify={verify}
+      onRefresh={refresh}
     />
   );
   expect(screen.getByText('Validating your NIN')).toBeTruthy();
+  fireEvent.press(screen.getByRole('button', { name: 'Check for an update' }));
+  expect(refresh).toHaveBeenCalledTimes(1);
+  expect(verify).not.toHaveBeenCalled();
 });

@@ -19,10 +19,9 @@ export function OxygenIdentityStep({
 }) {
   const colors = useOxygenColors();
   const kyc = snapshot.state.kyc;
-  const verifying =
-    verifyingRequest ||
-    snapshot.pending?.action === 'validate_nin' ||
-    kyc?.nin_status === 'PROCESSING';
+  const validationInFlight =
+    verifyingRequest || snapshot.pending?.action === 'validate_nin';
+  const verifying = validationInFlight || kyc?.nin_status === 'PROCESSING';
   const canVerify =
     snapshot.state.eligible === true &&
     kyc?.nin_status === 'NOT_DONE' &&
@@ -60,7 +59,7 @@ export function OxygenIdentityStep({
           onPress={onVerify}
         />
       ) : null}
-      {!busy && !verifying ? (
+      {!busy && !validationInFlight ? (
         <OxygenAction
           label="Check for an update"
           secondary={canVerify}

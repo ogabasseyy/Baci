@@ -28,9 +28,12 @@ it('lost create response resumes same owned order', async () => {
   const { controller, client } = setup();
   client.createOrResume.mockRejectedValueOnce(new Error('lost'));
   await controller.initialize();
-  await controller.initialize();
+  expect(controller.getState().snapshot).toBeNull();
+  await controller.refresh();
   expect(client.createOrResume.mock.calls).toEqual([[id], [id]]);
   expect(controller.getState().snapshot?.workflowId).toBe(id);
+  expect(controller.getState().error).toBeNull();
+  expect(client.action).not.toHaveBeenCalled();
 });
 it('serializes duplicate handlers and finishes journal before dispatch', async () => {
   const { controller, client, storage } = setup();

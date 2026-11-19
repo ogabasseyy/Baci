@@ -82,7 +82,7 @@ describe('BrilStash feed GET', () => {
     const input = request();
     const response = await GET(input);
 
-    expect(dependencies.rateLimit).toHaveBeenCalledWith(input);
+    expect(dependencies.rateLimit).toHaveBeenCalledWith(input, 'read');
     expect(dependencies.rpc).not.toHaveBeenCalled();
     expect(response.status).toBe(429);
     expect(response.headers.get('retry-after')).toBeTruthy();
@@ -100,9 +100,22 @@ describe('BrilStash feed GET', () => {
       remaining: 0,
       resetTime: Date.now() + 60_000,
     });
-    const response = await GET(request(query, token));
+    const input = request(query, token);
+    const response = await GET(input);
+    expect(dependencies.rateLimit).toHaveBeenCalledWith(input, 'malformed');
     expect(response.status).toBe(429);
     expect(dependencies.rpc).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [`${host}:443`, 200],
+    [`${host}:8443`, 404],
+    [`${host}.`, 404],
+    [`${host}:443, other.example.invalid`, 404],
+  ])('checks the configured hostname with a default HTTPS port only', async (authority, status) => {
+    const input = request();
+    input.headers.set('host', authority);
+    expect((await GET(input)).status).toBe(status);
   });
 
   it('serves a bare array with totals and no-store, and logs correlation without the key', async () => {

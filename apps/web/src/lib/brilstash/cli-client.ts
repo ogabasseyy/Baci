@@ -3,6 +3,8 @@ import { z } from 'zod';
 
 const tokenClaims = z.object({ role: z.string() });
 
+// An unverified role is useful only to reject malformed or privileged
+// configuration. Supabase verifies the access token before use.
 function tokenRole(token: string): string | undefined {
   if (token.length > 8192 || !/^[\w-]+\.[\w-]+\.[\w-]+$/.test(token))
     return undefined;
@@ -17,7 +19,7 @@ function tokenRole(token: string): string | undefined {
   }
 }
 
-export function resolveBrilStashToolConfiguration(
+function resolveBrilStashToolConfiguration(
   env: Record<string, string | undefined>
 ) {
   const url = env.NEXT_PUBLIC_SUPABASE_URL;

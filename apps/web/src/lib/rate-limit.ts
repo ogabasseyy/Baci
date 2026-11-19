@@ -197,12 +197,17 @@ async function applyRateLimit(
 }
 
 export function checkBrilStashFeedRateLimit(
-  request: NextRequest
+  request: NextRequest,
+  bucket: 'read' | 'malformed'
 ): Promise<RateLimitResult> {
   return applyRateLimit(
     getTrustedClientIdentifier(request),
-    BRILSTASH_FEED_PATH,
-    { maxRequests: 30, windowMs: 60_000, failClosedWithoutRedis: true }
+    `${BRILSTASH_FEED_PATH}:${bucket}`,
+    {
+      maxRequests: bucket === 'read' ? 30 : 15,
+      windowMs: 60_000,
+      failClosedWithoutRedis: true,
+    }
   );
 }
 

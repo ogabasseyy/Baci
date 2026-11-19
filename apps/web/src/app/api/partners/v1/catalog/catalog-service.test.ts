@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
     productId: string;
     condition: string;
     variantId?: string;
+    retired?: boolean;
   }>,
 }));
 vi.mock('@/lib/logger', () => ({ logger: { warn: mocks.warn } }));
@@ -148,6 +149,18 @@ describe('CrossRem catalog source', () => {
         sampleListingIds: ['legacy-id'],
       })
     );
+  });
+
+  it('publishes an empty snapshot when every configured listing was retired', async () => {
+    mocks.bindings[0].retired = true;
+
+    await expect(loadCrossRemCatalog()).resolves.toEqual({
+      schema_version: 1,
+      currency: 'NGN',
+      listings: [],
+    });
+    expect(mocks.getFeedData).not.toHaveBeenCalled();
+    expect(mocks.warn).not.toHaveBeenCalled();
   });
 
   it('fails before reading a catalog if the merchant identity differs', async () => {

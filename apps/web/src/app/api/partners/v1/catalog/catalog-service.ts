@@ -10,7 +10,7 @@ import { projectCatalog } from './project-catalog';
 export async function loadCrossRemCatalog() {
   const { merchantId, bindings } = crossRemCatalogConfig;
   const activeCount = bindings.filter((binding) => !binding.retired).length;
-  if (!merchantId || activeCount === 0) {
+  if (!merchantId || bindings.length === 0) {
     logger.warn({
       message: 'CrossRem catalog is unconfigured',
       merchantId,
@@ -29,6 +29,14 @@ export async function loadCrossRemCatalog() {
       currency,
     });
     throw new Error('CrossRem merchant unavailable');
+  }
+
+  if (activeCount === 0) {
+    return {
+      schema_version: 1,
+      currency,
+      listings: projectCatalog([], bindings),
+    };
   }
 
   // The full partner response is too large for a single hosted cache entry.

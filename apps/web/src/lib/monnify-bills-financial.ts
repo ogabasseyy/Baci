@@ -10,6 +10,7 @@ import {
 import {
   MonnifyHttpError,
   MonnifyTransientVendError,
+  sanitizeMonnifyErrorDetail,
 } from './monnify-bills-errors';
 import { monnifyRequest } from './monnify-bills-request';
 import {
@@ -18,6 +19,8 @@ import {
   MONNIFY_FINANCIAL_TIMEOUT_MS,
 } from './monnify-bills-shared';
 import { classifyMonnifyBillStatus } from './monnify-bills-status';
+import { isMonnifyDefiniteBusinessRefusal } from './monnify-business-refusal';
+import { readMonnifyResponseCode } from './monnify-response-code';
 
 export async function verifyBillCustomer(
   _billerCode: string,
@@ -116,16 +119,26 @@ export async function purchaseBill(
     );
 
     if (!isMonnifyBusinessSuccess(parsedEnvelope)) {
+      const rawMessage = getMonnifyEnvelopeMessage({
+        fallback: 'Monnify business failure',
+        responseCode: parsedEnvelope.responseCode,
+        responseMessage: parsedEnvelope.responseMessage,
+      });
       return {
         success: false,
         reference: requestReference,
-        message: getMonnifyEnvelopeMessage({
-          fallback: 'Monnify business failure',
-          responseCode: parsedEnvelope.responseCode,
-          responseMessage: parsedEnvelope.responseMessage,
-        }),
+        // Scrubbed like HTTP error details: Monnify may echo the customer's
+        // number, and this text is persisted and logged. Classification
+        // reads the full answer, before it is cut short.
+        message: sanitizeMonnifyErrorDetail(rawMessage),
         status: 'failed',
         amount,
+        providerDefiniteFailure: isMonnifyDefiniteBusinessRefusal({
+          envelope,
+          rawMessage,
+          responseCode: parsedEnvelope.responseCode,
+        }),
+        providerResponseCode: readMonnifyResponseCode(parsedEnvelope),
       };
     }
 
@@ -164,9 +177,10 @@ export async function purchaseBill(
       providerVendReference: vendReference,
       pin: body.metaData?.token || body.token || undefined,
       units: body.metaData?.unit || undefined,
-      message:
+      message: sanitizeMonnifyErrorDetail(
         parsedEnvelope.responseMessage ||
-        (isFailed ? 'Vend request failed' : 'Vend request completed'),
+          (isFailed ? 'Vend request failed' : 'Vend request completed')
+      ),
       status,
       amount,
     };
@@ -178,8 +192,31 @@ export async function purchaseBill(
         message:
           'Monnify rejected the bill payment request. Please verify the details and try again.',
         providerErrorDetail: error.diagnosticMessage,
+        providerResponseCode: error.responseCode,
         status: 'failed',
         amount,
+        // A refusal Monnify gave before vending: a known refusal (the amount
+        // check, Baci's Monnify float too low). A 401/403 never qualifies
+        // (owner decision): Monnify does not document that its auth check runs
+        // before any vend, so a login rejection is refunded, not re-vended. A
+        // timeout (408), a throttle (429) or anything that may be a duplicate
+        // never qualifies. Any answer that talks about the service being
+        // unavailable or a vend outcome, or whose body carries a vend status or
+        // reference, may come after a vend that ran, so it never qualifies.
+        providerDefiniteFailure:
+          // Only reachable for 4xx (isClientError above); kept explicit so a
+          // future refactor can never let a 5xx (unknown outcome) through.
+          error.status < 500 &&
+          error.status !== 401 &&
+          error.status !== 403 &&
+          error.status !== 408 &&
+          error.status !== 429 &&
+          !error.isDuplicateReference &&
+          !error.reportsUnexpectedError &&
+          !error.mentionsVendOutcome &&
+          !error.showsVendEvidence &&
+          !error.mentionsAuthWording &&
+          error.isKnownRefusal,
       };
     }
 
@@ -198,7 +235,13 @@ export async function purchaseBill(
 
 export async function checkTransactionStatus(
   transactionReference: string
-): Promise<{ status: string; message: string; pin?: string; units?: string }> {
+): Promise<{
+  status: string;
+  message: string;
+  pin?: string;
+  responseCode?: string;
+  units?: string;
+}> {
   const envelope = await monnifyRequest(
     `/api/v1/vas/bills-payment/requery?reference=${encodeURIComponent(transactionReference)}`,
     { method: 'GET', timeoutMs: MONNIFY_FINANCIAL_TIMEOUT_MS }
@@ -228,6 +271,7 @@ export async function checkTransactionStatus(
 
   return {
     status: 'failed',
+    responseCode: readMonnifyResponseCode(parsed),
     message: getMonnifyEnvelopeMessage({
       fallback: 'failed',
       responseCode: parsed.responseCode,

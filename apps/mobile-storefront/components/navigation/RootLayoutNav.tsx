@@ -19,6 +19,7 @@ import { NavigationBarStyleProvider } from '@/components/navigation/NavigationBa
 import { renderRootStackScreens } from '@/components/navigation/RootStackScreens';
 import { RouteResumeController } from '@/components/navigation/RouteResumeController';
 import { getRootStackScreenOptions } from '@/components/navigation/root-stack-screen-options';
+import { TrackingExplainer } from '@/components/TrackingExplainer';
 import AppKeyboardProvider from '@/components/ui/AppKeyboardProvider';
 import { StartupMotionProvider } from '@/components/ui/StartupMotionProvider';
 import { MobileUpdateController } from '@/components/updates/MobileUpdateController';
@@ -63,6 +64,11 @@ interface RootLayoutNavProps {
   adTrackingReady?: boolean;
   persistenceEnabled?: boolean;
   shouldResumeNavigation?: boolean;
+  trackingExplainer?: {
+    visible: boolean;
+    onContinue: () => void;
+    onDismiss?: () => void;
+  };
 }
 
 export function RootLayoutNav({
@@ -70,6 +76,7 @@ export function RootLayoutNav({
   adTrackingReady = true,
   persistenceEnabled = true,
   shouldResumeNavigation = false,
+  trackingExplainer,
 }: RootLayoutNavProps) {
   const rootNavigationState = useRootNavigationState();
   const [appShellHasLaidOut, setAppShellHasLaidOut] = useState(false);
@@ -180,6 +187,9 @@ export function RootLayoutNav({
                       ) : null}
                       {enableNegotiationModal ? <NegotiationModal /> : null}
                       {enableDrawerMenu ? <DrawerMenu /> : null}
+                      {trackingExplainer ? (
+                        <TrackingExplainer {...trackingExplainer} />
+                      ) : null}
                     </SafeAreaProvider>
                   </View>
                 </ThemeProvider>

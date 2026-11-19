@@ -7,6 +7,7 @@ const mockUseMerchant = vi.fn();
 
 vi.mock('next/navigation', () => ({
   useParams: () => mockUseParams(),
+  usePathname: () => '/track-order',
   useSearchParams: () => mockUseSearchParams(),
 }));
 

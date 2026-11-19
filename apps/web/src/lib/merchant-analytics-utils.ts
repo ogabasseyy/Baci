@@ -51,10 +51,18 @@ export interface AnalyticsOrderItemRow {
   products:
     | {
         brand: string | null;
-        cost_price: number | null;
+        cost_price?: number | null;
       }
     | Array<{
         brand: string | null;
+        cost_price?: number | null;
+      }>
+    | null;
+  merchant_product_costs?:
+    | {
+        cost_price: number | null;
+      }
+    | Array<{
         cost_price: number | null;
       }>
     | null;

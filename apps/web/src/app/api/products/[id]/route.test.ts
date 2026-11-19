@@ -23,8 +23,9 @@ vi.mock('next/cache', () => ({
   revalidateTag: vi.fn(),
 }));
 
+const mockHasPermission = vi.hoisted(() => vi.fn().mockReturnValue(true));
 vi.mock('@/lib/api-auth', () => ({
-  hasPermission: vi.fn().mockReturnValue(true),
+  hasPermission: mockHasPermission,
 }));
 
 const merchantMock = { context: null as unknown };
@@ -194,10 +195,12 @@ const lastVariantDeleteFilters: [string, unknown][] = [];
 // assert the Cloudflare purge reads the direct category join (including its
 // activity flag) and the ordered product_categories junction projection.
 const productSelectArgs: string[] = [];
+const productQueriedTables: string[] = [];
 // Ordered log of `products` table operations ('select' / 'delete') so tests can
 // assert the DELETE handler pre-reads the row BEFORE deleting it (the junction
 // rows cascade away with the delete, so reading after would come back empty).
 const productOps: string[] = [];
+let protectedRefreshError = false;
 let linkedBlogPostRows: unknown[] = [];
 
 const createMockSupabase = () => ({
@@ -220,6 +223,7 @@ const createMockSupabase = () => ({
     }),
   },
   from: vi.fn((table: string) => {
+    productQueriedTables.push(table);
     if (table === 'merchants') {
       return {
         select: vi.fn().mockReturnThis(),
@@ -237,6 +241,31 @@ const createMockSupabase = () => ({
           })
         ),
       };
+    }
+    if (table === 'merchant_products') {
+      const view = {
+        select: vi.fn((columns: string) => {
+          productSelectArgs.push(columns);
+          return view;
+        }),
+        eq: vi.fn(() => view),
+        single: vi.fn(() =>
+          Promise.resolve({
+            data:
+              productError ||
+              (lastProductUpdatePayload && protectedRefreshError)
+                ? null
+                : lastProductUpdatePayload
+                  ? updateResult
+                  : product,
+            error:
+              lastProductUpdatePayload && protectedRefreshError
+                ? { message: 'read unavailable' }
+                : productError,
+          })
+        ),
+      };
+      return view;
     }
     if (table === 'products') {
       let eqCallCount = 0;
@@ -271,8 +300,17 @@ const createMockSupabase = () => ({
         eq: vi.fn(() => productsApi),
         single: vi.fn(() =>
           Promise.resolve({
-            data: productError ? null : product,
-            error: productError,
+            data:
+              productError ||
+              (lastProductUpdatePayload && protectedRefreshError)
+                ? null
+                : lastProductUpdatePayload
+                  ? updateResult
+                  : product,
+            error:
+              lastProductUpdatePayload && protectedRefreshError
+                ? { message: 'read unavailable' }
+                : productError,
           })
         ),
         maybeSingle: vi.fn(() =>
@@ -288,14 +326,17 @@ const createMockSupabase = () => ({
           return {
             eq: vi.fn(() => ({
               eq: vi.fn(() => ({
-                select: vi.fn(() => ({
-                  single: vi.fn(() =>
-                    Promise.resolve({
-                      data: updateError ? null : updateResult,
-                      error: updateError,
-                    })
-                  ),
-                })),
+                select: vi.fn((columns: string) => {
+                  expect(columns).toBe('id');
+                  return {
+                    single: vi.fn(() =>
+                      Promise.resolve({
+                        data: updateError ? null : updateResult,
+                        error: updateError,
+                      })
+                    ),
+                  };
+                }),
               })),
             })),
           };
@@ -460,6 +501,7 @@ function resetMocks() {
     has_variants: false,
   };
   productError = null;
+  protectedRefreshError = false;
   variants = [];
   anchorVariants = [];
   updateResult = null;
@@ -475,7 +517,10 @@ function resetMocks() {
   productUpdatePayloads.length = 0;
   lastVariantDeleteFilters.length = 0;
   productSelectArgs.length = 0;
+  productQueriedTables.length = 0;
   productOps.length = 0;
+  mockHasPermission.mockReset();
+  mockHasPermission.mockReturnValue(true);
   linkedBlogPostRows = [];
   csrfValid = true;
 }
@@ -2063,5 +2108,87 @@ describe('DELETE /api/products/[id]', () => {
       expect(res.status).toBe(500);
       expect(json.error).toBe('Internal server error');
     });
+  });
+});
+
+describe('PUT protected product read boundary', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetMocks();
+  });
+  it('does not mutate when edit access exists but protected view denies the row', async () => {
+    productError = { message: 'not found' };
+    const res = await PUT(makePutRequest(PRODUCT_ID, { price: 6000 }), {
+      params: Promise.resolve({ id: PRODUCT_ID }),
+    });
+    expect(res.status).toBe(404);
+    expect(productUpdatePayloads).toHaveLength(0);
+  });
+  it('purges committed changes and regenerates embeddings when protected hydration fails', async () => {
+    protectedRefreshError = true;
+    const res = await PUT(
+      makePutRequest(PRODUCT_ID, { name: 'Renamed Phone', price: 6000 }),
+      {
+        params: Promise.resolve({ id: PRODUCT_ID }),
+      }
+    );
+    expect(res.status).toBe(500);
+    expect(await res.json()).toMatchObject({
+      saved: true,
+      error: expect.stringContaining('Product saved'),
+    });
+    expect(productUpdatePayloads).toHaveLength(1);
+    expect(mockScheduleStorefrontProductPurge).toHaveBeenCalled();
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/functions/v1/generate-embedding'),
+      expect.objectContaining({ method: 'POST' })
+    );
+  });
+
+  it('allows edit-only staff to preflight and refresh via public product columns without querying merchant_products', async () => {
+    mockHasPermission.mockImplementation(
+      (_access: unknown, resource: string, action: string) =>
+        resource === 'products' && action === 'edit'
+    );
+    updateResult = {
+      id: PRODUCT_ID,
+      name: 'Edited Public Product',
+      price: '6000',
+      slug: 'edited-public-product',
+    };
+
+    const res = await PUT(makePutRequest(PRODUCT_ID, { price: 6000 }), {
+      params: Promise.resolve({ id: PRODUCT_ID }),
+    });
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.product).toEqual(updateResult);
+    expect(productQueriedTables).not.toContain('merchant_products');
+    expect(
+      productSelectArgs.some(
+        (select) =>
+          select.includes('price, compare_at_price, stock, stock_quantity') &&
+          !select.includes('cost_price')
+      )
+    ).toBe(true);
+  });
+
+  it('rejects cost_price updates from edit-only staff without products:view', async () => {
+    mockHasPermission.mockImplementation(
+      (_access: unknown, resource: string, action: string) =>
+        resource === 'products' && action === 'edit'
+    );
+
+    const res = await PUT(
+      makePutRequest(PRODUCT_ID, { price: 6000, cost_price: 4000 }),
+      {
+        params: Promise.resolve({ id: PRODUCT_ID }),
+      }
+    );
+
+    expect(res.status).toBe(403);
+    expect(productUpdatePayloads).toHaveLength(0);
+    expect(productQueriedTables).toHaveLength(0);
   });
 });

@@ -1,5 +1,4 @@
 import type {
-  TransactionReviewProductRow,
   TransactionReviewUnitCostRow,
   TransactionReviewVariantRow,
 } from './transaction-review-types';
@@ -27,10 +26,10 @@ export interface FulfillmentUnitDetails {
   unitIndex: number;
 }
 
-export function getJoinedProduct(
-  value: TransactionReviewProductRow | TransactionReviewProductRow[] | null
-) {
-  return Array.isArray(value) ? (value[0] ?? null) : value;
+export function getJoinedProduct<T>(
+  value: T | T[] | null | undefined
+): T | null {
+  return Array.isArray(value) ? (value[0] ?? null) : (value ?? null);
 }
 
 export function getJoinedVariant(

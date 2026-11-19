@@ -1,0 +1,3 @@
+supabase/tests/product_cost_access.sql
+supabase/tests/product_cost_negotiation.sql
+supabase/tests/product_cost_invoker_compatibility.sql

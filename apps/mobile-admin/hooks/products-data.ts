@@ -1,4 +1,7 @@
-import { MOBILE_ADMIN_PRODUCT_COLUMNS as PRODUCT_COLUMNS } from '@baci/shared';
+import {
+  MOBILE_ADMIN_PRODUCT_COLUMNS as PRODUCT_COLUMNS,
+  MOBILE_ADMIN_PRODUCT_COLUMNS_PUBLIC as PRODUCT_COLUMNS_PUBLIC,
+} from '@baci/shared';
 import { normalizeProductInventory } from '@/lib/product-inventory';
 import type {
   AdminProductSearchFilters,
@@ -36,7 +39,7 @@ export async function fetchProducts(
   }
 
   let query = supabase
-    .from('products')
+    .from('merchant_products')
     .select(PRODUCT_COLUMNS, { count: 'exact' })
     .eq('merchant_id', merchantId)
     .is('parent_product_id', null)
@@ -61,12 +64,54 @@ export async function fetchProducts(
   };
 }
 
+const REFRESH_FAILED_ERROR =
+  'Product saved, but refreshing it failed. Reload before making another change.';
+
+async function preflightEditableProduct(productId: string, merchantId: string) {
+  const { data: previousProduct, error: accessError } = await supabase
+    .from('products')
+    .select('id, slug, category')
+    .eq('id', productId)
+    .eq('merchant_id', merchantId)
+    .maybeSingle();
+  if (accessError || !previousProduct) {
+    throw new Error(accessError?.message ?? 'Product is not accessible');
+  }
+  return previousProduct;
+}
+
+async function hydrateUpdatedProduct(
+  productId: string,
+  merchantId: string
+): Promise<Product> {
+  const { data, error: readError } = await supabase
+    .from('merchant_products')
+    .select(PRODUCT_COLUMNS)
+    .eq('id', productId)
+    .eq('merchant_id', merchantId)
+    .maybeSingle();
+  if (readError) throw new Error(REFRESH_FAILED_ERROR);
+  if (data) return normalizeProductInventory(data);
+
+  // Edit-only staff (products:edit without products:view) are excluded from
+  // merchant_products; fall back to public non-cost columns on products.
+  const { data: publicData, error: publicReadError } = await supabase
+    .from('products')
+    .select(PRODUCT_COLUMNS_PUBLIC)
+    .eq('id', productId)
+    .eq('merchant_id', merchantId)
+    .single();
+  if (publicReadError || !publicData) throw new Error(REFRESH_FAILED_ERROR);
+  return normalizeProductInventory({ ...publicData, cost_price: null });
+}
+
 export async function updateProductStock(
   productId: string,
   stock: number,
   merchantId: string
 ): Promise<Product> {
-  const { data, error } = await supabase
+  const previousProduct = await preflightEditableProduct(productId, merchantId);
+  const { error } = await supabase
     .from('products')
     .update({
       stock,
@@ -75,22 +120,22 @@ export async function updateProductStock(
     })
     .eq('id', productId)
     .eq('merchant_id', merchantId)
-    .select(PRODUCT_COLUMNS)
+    .select('id')
     .single();
 
   if (error) throw new Error(error.message);
-  const product = normalizeProductInventory(data);
-
-  // The quick stock edit mutated the product via Supabase directly (no web
-  // route ran), so nothing evicted the storefront's raised-TTL edge cache.
-  // Fire-and-forget the SAME purge the save path uses (never awaited, never
-  // throws) so the storefront reflects the new stock/availability immediately.
+  // The write committed. Invalidate even if the following hydration fails.
   void revalidateStorefrontProducts(
-    [{ slug: product.slug, id: product.id, category: product.category }],
+    [
+      {
+        slug: previousProduct.slug,
+        id: previousProduct.id,
+        category: previousProduct.category,
+      },
+    ],
     merchantId
   );
-
-  return product;
+  return hydrateUpdatedProduct(productId, merchantId);
 }
 
 export async function updateProductStatus(
@@ -98,27 +143,28 @@ export async function updateProductStatus(
   status: ProductStatus,
   merchantId: string
 ): Promise<Product> {
-  const { data, error } = await supabase
+  const previousProduct = await preflightEditableProduct(productId, merchantId);
+  const { error } = await supabase
     .from('products')
     .update({ status, updated_at: new Date().toISOString() })
     .eq('id', productId)
     .eq('merchant_id', merchantId)
-    .select(PRODUCT_COLUMNS)
+    .select('id')
     .single();
 
   if (error) throw new Error(error.message);
-  const product = normalizeProductInventory(data);
-
-  // A status flip (e.g. archive/activate) changes what the storefront lists and
-  // serves, but was written straight to Supabase with no web route to evict the
-  // raised-TTL edge cache. Fire-and-forget the same storefront purge the save
-  // path uses (never awaited, never throws).
+  // The write committed. Invalidate even if the following hydration fails.
   void revalidateStorefrontProducts(
-    [{ slug: product.slug, id: product.id, category: product.category }],
+    [
+      {
+        slug: previousProduct.slug,
+        id: previousProduct.id,
+        category: previousProduct.category,
+      },
+    ],
     merchantId
   );
-
-  return product;
+  return hydrateUpdatedProduct(productId, merchantId);
 }
 
 export type { AdminProductStockFilter };

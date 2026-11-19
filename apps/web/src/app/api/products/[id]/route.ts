@@ -44,6 +44,7 @@ import {
 } from '@/lib/storefront-product-purge-urls';
 import { createClient } from '@/lib/supabase/server';
 import { formatZodErrors, updateProductSchema } from '@/schemas/products';
+import { refreshUpdatedProduct } from './refresh-updated-product';
 
 const PREDELETE_BLOG_POST_ID_LIMIT = 256;
 
@@ -79,7 +80,7 @@ export async function GET(
 
     // Try to find by ID first, then by slug
     let query = supabase
-      .from('products')
+      .from('merchant_products')
       .select(PRODUCT_COLUMNS)
       .eq('merchant_id', merchantId);
 
@@ -263,9 +264,18 @@ export async function PUT(
     if (!hasPermission(access, 'products', 'edit')) {
       return NextResponse.json({ error: 'Permission denied' }, { status: 403 });
     }
+    const canViewProducts = hasPermission(access, 'products', 'view');
+    const hasCostPayload =
+      body.cost_price !== undefined ||
+      (body.variants?.some((variant) => Object.hasOwn(variant, 'cost_price')) ??
+        false);
+    if (hasCostPayload && !canViewProducts) {
+      return NextResponse.json({ error: 'Permission denied' }, { status: 403 });
+    }
     const merchantId = merchantContext.merchantId;
 
-    // Verify product belongs to merchant
+    // Verify ownership via safe non-cost columns so edit-only staff
+    // (`products:edit` without `products:view`) can still preflight and update.
     const { data: existingProduct, error: fetchError } = await supabase
       .from('products')
       .select(
@@ -731,23 +741,13 @@ export async function PUT(
       }
     }
 
-    // `updatedProduct` is re-read via PRODUCT_COLUMNS, which does NOT embed the
-    // category join or junction, so type it without `categories` /
-    // `product_categories`. Those are only read from `existingProduct` for the
-    // purge and are immutable across this update (neither `category_id` nor the
-    // junction is writable here).
-    let updatedProduct: Omit<
-      typeof existingProduct,
-      'categories' | 'product_categories'
-    > = existingProduct;
-    let hasFreshProductRow = false;
     if (Object.keys(updates).length > 1) {
-      const { data: persistedProduct, error: updateError } = await supabase
+      const { error: updateError } = await supabase
         .from('products')
         .update(updates)
         .eq('id', id)
         .eq('merchant_id', merchantId)
-        .select(PRODUCT_COLUMNS)
+        .select('id')
         .single();
 
       if (updateError) {
@@ -757,9 +757,6 @@ export async function PUT(
           { status: 500 }
         );
       }
-
-      updatedProduct = persistedProduct;
-      hasFreshProductRow = true;
     }
 
     // Handle Variants
@@ -805,17 +802,16 @@ export async function PUT(
     }
 
     if (deferredVariantModelUpdates) {
-      const { data: variantModelProduct, error: variantModelError } =
-        await supabase
-          .from('products')
-          .update({
-            ...deferredVariantModelUpdates,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', id)
-          .eq('merchant_id', merchantId)
-          .select(PRODUCT_COLUMNS)
-          .single();
+      const { error: variantModelError } = await supabase
+        .from('products')
+        .update({
+          ...deferredVariantModelUpdates,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+        .eq('merchant_id', merchantId)
+        .select('id')
+        .single();
 
       if (variantModelError) {
         console.error(
@@ -827,35 +823,20 @@ export async function PUT(
           { status: 500 }
         );
       }
-
-      updatedProduct = variantModelProduct;
-      hasFreshProductRow = true;
     }
 
-    if (!hasFreshProductRow) {
-      const { data: refreshedProduct, error: refreshedProductError } =
-        await supabase
-          .from('products')
-          .select(PRODUCT_COLUMNS)
-          .eq('id', id)
-          .eq('merchant_id', merchantId)
-          .single();
+    const { updatedProduct, refreshFailed } = await refreshUpdatedProduct({
+      supabase,
+      productId: id,
+      merchantId,
+      canViewProducts,
+      fallbackProduct: { ...existingProduct, ...updates } as Omit<
+        typeof existingProduct,
+        'categories' | 'product_categories'
+      >,
+    });
 
-      if (refreshedProductError) {
-        console.error(
-          'Error refreshing updated product:',
-          refreshedProductError
-        );
-        return NextResponse.json(
-          { error: 'Failed to load updated product' },
-          { status: 500 }
-        );
-      }
-
-      updatedProduct = refreshedProduct;
-    }
-
-    // Regenerate embedding if name or description changed
+    // Regenerate embedding if name or description changed, even if post-write refresh failed.
     if (updatedProduct && (body.name || body.description)) {
       const embeddingText = getProductEmbeddingText({
         name: updatedProduct.name,
@@ -968,6 +949,16 @@ export async function PUT(
       );
     }
 
+    if (refreshFailed) {
+      return NextResponse.json(
+        {
+          saved: true,
+          error:
+            'Product saved, but refreshing it failed. Reload before making another change.',
+        },
+        { status: 500 }
+      );
+    }
     return NextResponse.json({ product: updatedProduct });
   } catch (error) {
     console.error('Unexpected error in PUT /api/products/[id]:', error);

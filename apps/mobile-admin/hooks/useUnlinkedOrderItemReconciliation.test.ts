@@ -250,6 +250,11 @@ describe('useUnlinkedOrderItemReconciliation', () => {
     const productQuery = supabaseMock.queries.find(
       (query) => query.from === 'products'
     );
+    expect(productQuery).toBeDefined();
+    expect(productQuery?.eq).toHaveBeenCalledWith('merchant_id', 'merchant-1');
+    expect(
+      supabaseMock.queries.some((query) => query.from === 'merchant_products')
+    ).toBe(false);
     expect(productQuery?.or).not.toHaveBeenCalledWith(
       'status.neq.archived,status.is.null'
     );

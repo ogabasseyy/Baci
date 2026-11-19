@@ -110,13 +110,16 @@ export function mapTransactionOrderRows(rows: TransactionReviewOrderRow[]) {
     const items = orderItems.flatMap<TransactionReviewItem>(
       (item, itemIndex) => {
         const product = getJoinedProduct(item.products);
+        const productCost = getJoinedProduct(item.merchant_product_costs);
         const variant = getJoinedVariant(item.product_variants);
         const quantity = toFiniteNumberOrNull(item.quantity) ?? 1;
         const unitPrice = toFiniteNumberOrNull(item.price) ?? 0;
         const effectiveUnitPrice = discountedUnitPrices[itemIndex] ?? unitPrice;
         const orderItemCostPrice = toFiniteNumberOrNull(item.cost_price);
         const variantCostPrice = toFiniteNumberOrNull(variant?.cost_price);
-        const productCostPrice = toFiniteNumberOrNull(product?.cost_price);
+        const productCostPrice =
+          toFiniteNumberOrNull(productCost?.cost_price) ??
+          toFiniteNumberOrNull(product?.cost_price);
         const costPrice =
           orderItemCostPrice ?? variantCostPrice ?? productCostPrice;
         const costSource: TransactionReviewItem['costSource'] =

@@ -69,4 +69,20 @@ describe('resolveKnownOrderItemProfit', () => {
     ).toBe(50);
     expect(resolveKnownOrderItemProfit(item({ itemCost: 10 }), 0)).toBe(0);
   });
+
+  it('uses merchant_product_costs projection when product catalog embed is absent', () => {
+    expect(
+      resolveKnownOrderItemProfit(
+        {
+          cost_price: null,
+          merchant_product_costs: { cost_price: 30 },
+          order_item_unit_costs: [],
+          price: 50,
+          product_variants: null,
+          products: { cost_price: null },
+        },
+        2
+      )
+    ).toBe(40);
+  });
 });

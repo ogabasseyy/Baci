@@ -9,6 +9,10 @@ interface AnalyticsUnitCostRecord extends AnalyticsCostRecord {
 }
 
 export interface AnalyticsProfitOrderItem extends AnalyticsCostRecord {
+  merchant_product_costs?:
+    | AnalyticsCostRecord
+    | readonly AnalyticsCostRecord[]
+    | null;
   order_item_unit_costs?: readonly AnalyticsUnitCostRecord[] | null;
   price?: AnalyticsCostValue;
   product_variants?:
@@ -33,11 +37,13 @@ function toFiniteNumberOrNull(value: AnalyticsCostValue) {
 
 function resolveFallbackCost(item: AnalyticsProfitOrderItem) {
   const variant = getJoinedRecord(item.product_variants);
+  const productCost = getJoinedRecord(item.merchant_product_costs);
   const product = getJoinedRecord(item.products);
 
   return (
     toFiniteNumberOrNull(item.cost_price) ??
     toFiniteNumberOrNull(variant?.cost_price) ??
+    toFiniteNumberOrNull(productCost?.cost_price) ??
     toFiniteNumberOrNull(product?.cost_price)
   );
 }

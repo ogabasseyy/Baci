@@ -1,3 +1,5 @@
+// Chatwoot's list-messages `before` cursor endpoint returns at most 20
+// messages per page in ascending order.
 const PAGE_SIZE = 20;
 const MAX_LOOKUP_PAGES = 20;
 const LOOKUP_DEADLINE_MS = 15_000;
@@ -39,7 +41,7 @@ export async function findSyntheticMessage({
             .toLowerCase() === 'user'
       )
     );
-    if (messages.length < PAGE_SIZE) break;
+    if (messages.length === 0 || messages.length < PAGE_SIZE) break;
 
     if (page === MAX_LOOKUP_PAGES - 1)
       throw new Error('Chatwoot message lookup reached its page limit');

@@ -1,15 +1,30 @@
 const TRANSPORT_ERROR_CODES = new Set([
   'ECONNRESET',
+  'ECONNREFUSED',
+  'EPIPE',
   'ETIMEDOUT',
+  'UND_ERR_CLOSED',
   'UND_ERR_CONNECT_TIMEOUT',
   'UND_ERR_HEADERS_TIMEOUT',
   'UND_ERR_SOCKET',
 ]);
 
+const FETCH_NETWORK_TYPEERROR_MESSAGES = new Set([
+  'fetch failed',
+  'Failed to fetch',
+  'Load failed',
+  'NetworkError when attempting to fetch resource.',
+]);
+
 function isAmbiguousTransportError(error) {
-  if (error instanceof TypeError) return true;
   if (error?.name === 'AbortError' || error?.name === 'TimeoutError')
     return true;
+  if (error instanceof TypeError) {
+    return (
+      FETCH_NETWORK_TYPEERROR_MESSAGES.has(error.message) ||
+      TRANSPORT_ERROR_CODES.has(error?.cause?.code)
+    );
+  }
   return TRANSPORT_ERROR_CODES.has(error?.code ?? error?.cause?.code);
 }
 

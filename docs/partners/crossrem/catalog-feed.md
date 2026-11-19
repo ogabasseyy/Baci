@@ -12,6 +12,8 @@ Redis shares a validated snapshot within one release. Vercel uses its deployment
 
 The 200 and 304 responses send `Cache-Control: private, no-cache` and `Vary: Authorization`. Private clients can retain snapshots and must revalidate them with Baci before reuse. Shared caches cannot store them. Error responses send `Cache-Control: private, no-store`.
 
+Image verification audit fields do not advance the catalog revision. A whole-table `TRUNCATE` of a watched source is a maintenance operation that invalidates every enrolled feed, because it removes all rows from the shared table. Use merchant-scoped deletes for single-merchant maintenance. Truncating merchants with cascade removes the feed enrollments. Only registered, published merchants have a readable revision.
+
 ## Prepare a sandbox snapshot
 
 1. The repository pins the Ogabassey merchant UUID and the Google listing baseline in `ogabassey-listing-bindings.json`. For a synthetic sandbox, use an isolated copy with the synthetic merchant and equivalent fixture bindings. Register that published merchant in `crossrem_catalog_generations` after applying the migration and configure the sandbox Redis connection.

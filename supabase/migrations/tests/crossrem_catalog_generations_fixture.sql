@@ -29,7 +29,11 @@ CREATE TABLE public.product_feed_images (
   is_primary boolean,
   position integer,
   last_checked_at timestamptz,
-  failure_reason text
+  failure_reason text,
+  created_at timestamptz,
+  updated_at timestamptz,
+  verified_at timestamptz,
+  fixture_future_column text
 );
 CREATE TABLE public.categories (id uuid PRIMARY KEY, merchant_id uuid, name text);
 CREATE TABLE public.domains (id uuid PRIMARY KEY, merchant_id uuid);
@@ -43,6 +47,7 @@ INSERT INTO public.merchants (id, is_published) VALUES
 
 \ir ../20261119162000_crossrem_catalog_generations.sql
 \ir ../20261119163500_crossrem_image_revision_heartbeat.sql
+\ir ../20261119165000_crossrem_image_audit_fields.sql
 
 SET ROLE anon;
 DO $$ BEGIN
@@ -77,7 +82,7 @@ BEGIN
     format('INSERT INTO public.product_offers VALUES (%L, %L)', item, pilot),
     format('INSERT INTO public.product_feed_images (id, merchant_id, product_id, status) VALUES (%L, %L, %L, %L)', item, pilot, item, 'verified'),
     format('UPDATE public.product_feed_images SET status = %L WHERE id = %L', 'stale', item),
-    format('UPDATE public.product_feed_images SET failure_reason = %L WHERE id = %L', 'fixture reason', item),
+    format('UPDATE public.product_feed_images SET fixture_future_column = %L WHERE id = %L', 'fixture change', item),
     format('INSERT INTO public.domains VALUES (%L, %L)', item, pilot),
     format('INSERT INTO public.product_categories VALUES (%L, %L)', item, category),
     format('INSERT INTO public.product_key_specs VALUES (%L)', item),
@@ -93,7 +98,10 @@ BEGIN
     revision_before := revision_after;
   END LOOP;
 
-  UPDATE public.product_feed_images SET last_checked_at = now() WHERE id = item;
+  UPDATE public.product_feed_images
+  SET last_checked_at = now(), updated_at = now(), verified_at = now(),
+      created_at = now(), failure_reason = 'fixture reason'
+  WHERE id = item;
   IF (SELECT revision FROM public.crossrem_catalog_generations) <> revision_before THEN
     RAISE EXCEPTION 'Image verification heartbeats must preserve the revision';
   END IF;
@@ -126,3 +134,27 @@ DO $$ BEGIN
   END IF;
 END $$;
 RESET ROLE;
+
+-- Row-scoped deletes represent merchant-level maintenance. Whole-table
+-- truncation removes shared data for all enrolled merchants.
+INSERT INTO public.crossrem_catalog_generations (merchant_id)
+VALUES ('00000000-0000-4000-8000-000000000001');
+CREATE TEMP TABLE previous_revisions AS
+SELECT merchant_id, revision FROM public.crossrem_catalog_generations;
+TRUNCATE public.product_feed_images;
+
+DO $$ BEGIN
+  IF EXISTS (
+    SELECT 1 FROM public.crossrem_catalog_generations
+    JOIN previous_revisions USING (merchant_id, revision)
+  ) OR (SELECT count(*) FROM public.crossrem_catalog_generations) <> 2 THEN
+    RAISE EXCEPTION 'Global source truncation must change each enrolled revision';
+  END IF;
+END $$;
+
+TRUNCATE public.merchants CASCADE;
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM public.crossrem_catalog_generations) THEN
+    RAISE EXCEPTION 'Merchant truncation must clear all enrollments';
+  END IF;
+END $$;

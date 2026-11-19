@@ -147,9 +147,15 @@ describe('bulk-update purge ordering', () => {
 
     // Assert
     expect(response.status).toBe(200);
+    expect(mocks.revalidateProducts).not.toHaveBeenCalledWith(MERCHANT_ID);
+    expect(mocks.revalidateProducts).toHaveBeenCalledWith(
+      MERCHANT_ID,
+      undefined,
+      { expireImmediately: true, omitMerchantWidePdpDetails: true }
+    );
     expect(mocks.revalidateSlugs).toHaveBeenCalledWith(
       MERCHANT_ID,
-      ['updated-product'],
+      ['updated-product', '123e4567-e89b-42d3-a456-426614174000'],
       { expireImmediately: true }
     );
     expect(mocks.expire).toHaveBeenCalledWith(MERCHANT_ID);
@@ -226,9 +232,7 @@ describe('bulk-update purge ordering', () => {
 
   it('skips edge purge when both per-slug and broad hard expiry fail on bulk update', async () => {
     mocks.revalidateSlugs.mockReturnValueOnce(false);
-    mocks.revalidateProducts
-      .mockReturnValueOnce(true)
-      .mockReturnValueOnce(false);
+    mocks.revalidateProducts.mockReturnValueOnce(false);
     const request = makeRequest({
       changes: [
         {

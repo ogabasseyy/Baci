@@ -105,73 +105,75 @@ export async function POST(request: NextRequest) {
       supabase,
     });
 
-    // Invalidate product caches after bulk update
-    revalidateProducts(merchantId);
-
     // Evict the Cloudflare-fronted public URLs the batch changed so the raised
     // edge TTL never serves stale listings/PDPs. Fire-and-forget: a purge is
     // always survivable (caches self-heal on their TTL), so it must never break
     // the bulk update. The shared scheduler uses a bounded hostname purge for
     // high-cardinality batches so every affected PDP is still evicted.
-    try {
-      // Bust every purged slug's Next product cache BEFORE the edge purge —
-      // revalidateProducts(merchantId) above is slug-less and leaves the
-      // per-slug scoped tags cached, so a CF MISS would refill stale.
-      const slugsExpired =
-        revalidateProductSlugs(
-          merchantId,
-          purgeEntries.map((entry) => entry.slug),
-          { expireImmediately: true }
-        ) === true;
-      const originHardExpired =
-        (slugsExpired &&
+    if (purgeEntries.length > 0) {
+      try {
+        const requestedProductIds = parseResult.data.changes
+          .map((change) => change.productId?.trim())
+          .filter(
+            (productId): productId is string =>
+              typeof productId === 'string' && isValidUuid(productId)
+          );
+        const productIds = Array.from(
+          new Set([...requestedProductIds, ...resolvedProductIds])
+        ).filter(isValidUuid);
+        const slugIdentifiers = Array.from(
+          new Set([...purgeEntries.map((entry) => entry.slug), ...productIds])
+        );
+        // Bust every purged slug and product UUID cache BEFORE the edge purge
+        // so a CF MISS cannot refill from stale Next.js entries.
+        const slugsExpired =
+          revalidateProductSlugs(merchantId, slugIdentifiers, {
+            expireImmediately: true,
+          }) === true;
+        const originHardExpired =
+          (slugsExpired &&
+            revalidateProducts(merchantId, undefined, {
+              expireImmediately: true,
+              omitMerchantWidePdpDetails: true,
+            }) === true) ||
           revalidateProducts(merchantId, undefined, {
             expireImmediately: true,
-            omitMerchantWidePdpDetails: true,
-          }) === true) ||
-        revalidateProducts(merchantId, undefined, {
-          expireImmediately: true,
-        }) === true;
-      const requestedProductIds = parseResult.data.changes
-        .map((change) => change.productId?.trim())
-        .filter(
-          (productId): productId is string =>
-            typeof productId === 'string' && isValidUuid(productId)
-        );
-      const productIds = Array.from(
-        new Set([...requestedProductIds, ...resolvedProductIds])
-      ).filter(isValidUuid);
-      // The immediate purge can refill related articles from the edge before
-      // the post-response enrichment runs, so expire the merchant-scoped blog
-      // data before scheduling the Cloudflare purge.
-      expireProductBlogCache(merchantId);
-      // Keep paginated article fallback reads out of the mutation response.
-      // The after-response helper hard-expires the related-blog cache before
-      // scheduling any linked article URLs.
-      if (!originHardExpired) {
-        console.warn(
-          'Skipped Cloudflare product purge after bulk update because origin hard expiry failed',
-          { merchantId }
-        );
-      } else {
-        scheduleStorefrontProductPurge(
-          merchantContext.merchantSlug,
-          purgeEntries
-        );
-        scheduleProductBlogPurgeAfterResponse({
-          supabase,
-          merchantId,
-          merchantSlug: merchantContext.merchantSlug,
-          productIds,
-          entries: purgeEntries,
-          categorySlugs: purgeEntries.map((entry) => entry.categorySegment),
-          skipProductPurge: true,
+          }) === true;
+        // The immediate purge can refill related articles from the edge before
+        // the post-response enrichment runs, so expire the merchant-scoped blog
+        // data before scheduling the Cloudflare purge.
+        expireProductBlogCache(merchantId);
+        // Keep paginated article fallback reads out of the mutation response.
+        // The after-response helper hard-expires the related-blog cache before
+        // scheduling any linked article URLs.
+        if (!originHardExpired) {
+          console.warn(
+            'Skipped Cloudflare product purge after bulk update because origin hard expiry failed',
+            { merchantId }
+          );
+        } else {
+          scheduleStorefrontProductPurge(
+            merchantContext.merchantSlug,
+            purgeEntries
+          );
+          scheduleProductBlogPurgeAfterResponse({
+            supabase,
+            merchantId,
+            merchantSlug: merchantContext.merchantSlug,
+            productIds,
+            entries: purgeEntries,
+            categorySlugs: purgeEntries.map((entry) => entry.categorySegment),
+            skipProductPurge: true,
+          });
+        }
+      } catch (purgeError) {
+        revalidateProducts(merchantId, undefined, { expireImmediately: true });
+        console.warn('Skipped Cloudflare product purge after bulk update', {
+          purgeError,
         });
       }
-    } catch (purgeError) {
-      console.warn('Skipped Cloudflare product purge after bulk update', {
-        purgeError,
-      });
+    } else {
+      revalidateProducts(merchantId);
     }
 
     return NextResponse.json({ success: true, results });

@@ -121,7 +121,7 @@ describe('POST /api/internal/revalidate-products scoped fallback guards', () => 
     );
   });
 
-  it('rejects a stale merchantSlug mismatch before mutating caches or scheduling purges', async () => {
+  it('rejects a stale merchantSlug mismatch with 400 without scheduling edge purges while preserving origin invalidation', async () => {
     const res = await POST(
       makeRequest({
         merchantId: MERCHANT_ID,
@@ -137,8 +137,16 @@ describe('POST /api/internal/revalidate-products scoped fallback guards', () => 
       error: 'Merchant slug does not match merchant ID',
       code: 'MERCHANT_SLUG_MISMATCH',
     });
-    expect(mockRevalidateProductSlugs).not.toHaveBeenCalled();
-    expect(mockRevalidateProducts).not.toHaveBeenCalled();
+    expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
+      MERCHANT_ID,
+      ['iphone-15'],
+      { expireImmediately: true }
+    );
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      MERCHANT_ID,
+      undefined,
+      { expireImmediately: true }
+    );
     expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
     expect(mockScheduleStorefrontHostnamePurge).not.toHaveBeenCalled();
   });

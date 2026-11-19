@@ -115,12 +115,19 @@ export async function POST(request: NextRequest) {
       // Bust the per-slug Next entries before a Cloudflare MISS can repopulate
       // from them. The purge is best-effort and cannot change a publish result.
       try {
+        const updatedProductIds = (updatedProducts ?? [])
+          .map((product) => product.id?.trim())
+          .filter((id): id is string => Boolean(id));
+        const slugIdentifiers = Array.from(
+          new Set([
+            ...publicPurgeEntries.map((entry) => entry.slug),
+            ...updatedProductIds,
+          ])
+        );
         const slugsExpired =
-          revalidateProductSlugs(
-            merchantId,
-            publicPurgeEntries.map((entry) => entry.slug),
-            { expireImmediately: true }
-          ) === true;
+          revalidateProductSlugs(merchantId, slugIdentifiers, {
+            expireImmediately: true,
+          }) === true;
         const originHardExpired =
           (slugsExpired &&
             revalidateProducts(merchantId, undefined, {

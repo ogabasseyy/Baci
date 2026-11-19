@@ -96,6 +96,7 @@ export async function revalidateProductsTarget({
 
     return originHardExpired;
   } catch (purgeError) {
+    const blogExpired = expireProductBlogCache(merchantId) !== false;
     const recovered =
       revalidateProducts(merchantId, undefined, {
         expireImmediately: true,
@@ -104,6 +105,6 @@ export async function revalidateProductsTarget({
       merchantId,
       purgeError,
     });
-    return recovered;
+    return recovered && blogExpired;
   }
 }

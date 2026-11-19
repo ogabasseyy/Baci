@@ -146,7 +146,7 @@ describe('POST /api/products/bulk-publish blog purge', () => {
     expect(response.status).toBe(200);
     expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
       MERCHANT_ID,
-      ['baci-phone'],
+      ['baci-phone', 'product-1'],
       { expireImmediately: true }
     );
     expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(

@@ -171,12 +171,35 @@ describe('POST /api/products/bulk-update storefront purge', () => {
   });
 
   it('busts per-slug Next caches before scheduling the bulk purge', async () => {
+    productUpdateSelectRows = [
+      {
+        id: '123e4567-e89b-42d3-a456-426614174000',
+        slug: 'product-1',
+        category: 'Phones',
+        status: 'active',
+        categories: null,
+        product_categories: [],
+      },
+    ];
+
     await POST(
       makeRequest({
-        changes: [{ type: 'update', productId: 'p1', details: { price: 900 } }],
+        changes: [
+          {
+            type: 'update',
+            productId: '123e4567-e89b-42d3-a456-426614174000',
+            details: { price: 900 },
+          },
+        ],
       })
     );
 
+    expect(mockRevalidateProducts).not.toHaveBeenCalledWith(MERCHANT_ID);
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      MERCHANT_ID,
+      undefined,
+      { expireImmediately: true, omitMerchantWidePdpDetails: true }
+    );
     expect(mockRevalidateProductSlugs).toHaveBeenCalled();
     const revalidateOrder =
       mockRevalidateProductSlugs.mock.invocationCallOrder[0];

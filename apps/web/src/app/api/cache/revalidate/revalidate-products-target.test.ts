@@ -109,4 +109,24 @@ describe('revalidateProductsTarget', () => {
     expect(mockPurgeProduct).not.toHaveBeenCalled();
     expect(mockPurgeHostname).not.toHaveBeenCalled();
   });
+
+  it('attempts blog cache expiry in catch recovery and fails closed if it returns false', async () => {
+    mockEnrich.mockRejectedValueOnce(new Error('enrichment failed'));
+    mockExpireBlog.mockReturnValueOnce(false);
+
+    await expect(
+      revalidateProductsTarget({
+        supabase,
+        merchantId: 'merchant-1',
+        products: [{ id: 'prod-1' }],
+      })
+    ).resolves.toBe(false);
+
+    expect(mockExpireBlog).toHaveBeenCalledWith('merchant-1');
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      'merchant-1',
+      undefined,
+      { expireImmediately: true }
+    );
+  });
 });

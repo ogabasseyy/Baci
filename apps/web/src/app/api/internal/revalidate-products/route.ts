@@ -88,6 +88,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const needsPublicClient = Boolean(needsStorefrontPurge || hasProducts);
   let supabase: ReturnType<typeof createPublicClient> | undefined;
   let authoritativeMerchantSlug: string | undefined;
+  let merchantSlugMismatch = false;
 
   if (needsPublicClient) {
     try {
@@ -102,15 +103,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           merchantSlug
         );
         if (slugResult.status === 'mismatch') {
-          return NextResponse.json(
-            {
-              error: 'Merchant slug does not match merchant ID',
-              code: 'MERCHANT_SLUG_MISMATCH',
-            },
-            { status: 400 }
-          );
-        }
-        if (slugResult.status === 'ok') {
+          merchantSlugMismatch = true;
+        } else if (slugResult.status === 'ok') {
           authoritativeMerchantSlug = slugResult.slug;
         }
       }
@@ -286,6 +280,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         error: purgeError,
       });
     }
+  }
+
+  if (merchantSlugMismatch) {
+    return NextResponse.json(
+      {
+        error: 'Merchant slug does not match merchant ID',
+        code: 'MERCHANT_SLUG_MISMATCH',
+      },
+      { status: 400 }
+    );
   }
 
   return NextResponse.json(

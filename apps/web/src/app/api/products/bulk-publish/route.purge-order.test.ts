@@ -121,7 +121,10 @@ describe('POST /api/products/bulk-publish purge ordering', () => {
     );
     expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
       'merchant-1',
-      updatedProducts.map((product) => product.slug),
+      expect.arrayContaining([
+        ...updatedProducts.map((product) => product.slug),
+        ...updatedProducts.map((product) => product.id),
+      ]),
       { expireImmediately: true }
     );
     expect(mockExpireProductBlogCache).toHaveBeenCalledWith('merchant-1');

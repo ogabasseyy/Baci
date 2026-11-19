@@ -46,6 +46,27 @@ describe('buildPreviousCategoryPurgeEntries', () => {
     expect(result).toEqual([{ slug: 'iphone-15', categorySegment: 'phones' }]);
   });
 
+  it('emits both current and previous slugs under the old category on combined slug and category moves', () => {
+    const result = buildPreviousCategoryPurgeEntries(
+      [
+        entry({
+          id: 'p1',
+          slug: 'iphone-15-pro',
+          previousSlug: 'iphone-15',
+          categorySlug: 'smartphones',
+          previousCategoryId: 'cat-old',
+        }),
+      ],
+      new Map([['cat-old', 'phones']]),
+      new Map([['p1', 'smartphones']]),
+      new Map([['p1', 'iphone-15-pro']])
+    );
+    expect(result).toEqual([
+      { slug: 'iphone-15-pro', categorySegment: 'phones' },
+      { slug: 'iphone-15', categorySegment: 'phones' },
+    ]);
+  });
+
   it('resolves the current segment from flat hints when no authoritative segment is known', () => {
     const result = buildPreviousCategoryPurgeEntries(
       [
@@ -89,6 +110,27 @@ describe('buildPreviousCategoryPurgeEntries', () => {
         new Map([['p1', 'phones']])
       )
     ).toEqual([]);
+  });
+
+  it('emits both new and previous slug under old category when slug and category both change', () => {
+    expect(
+      buildPreviousCategoryPurgeEntries(
+        [
+          entry({
+            id: 'p1',
+            slug: 'new-phone',
+            previousSlug: 'old-phone',
+            previousCategoryId: 'cat-old',
+          }),
+        ],
+        new Map([['cat-old', 'phones']]),
+        new Map([['p1', 'smartphones']]),
+        new Map([['p1', 'new-phone']])
+      )
+    ).toEqual([
+      { slug: 'new-phone', categorySegment: 'phones' },
+      { slug: 'old-phone', categorySegment: 'phones' },
+    ]);
   });
 
   it('skips entries without a previousCategoryId', () => {

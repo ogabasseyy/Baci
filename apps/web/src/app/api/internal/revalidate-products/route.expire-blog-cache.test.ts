@@ -33,6 +33,8 @@ vi.mock('@/lib/logger', () => ({
   logger: { error: vi.fn(), warn: vi.fn() },
 }));
 
+import { enrichProductPurgeEntries } from '@/lib/authoritative-product-purge-enrichment';
+import { createPublicClient } from '@/lib/supabase/public';
 import { POST } from './route';
 
 function request(body: unknown) {
@@ -52,6 +54,8 @@ function request(body: unknown) {
 describe('internal product revalidation blog expiry', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockRevalidateProducts.mockReset();
+    mockRevalidateProductSlugs.mockReturnValue(true);
   });
 
   it('hard-expires only the merchant blog tag in the request context', async () => {
@@ -89,6 +93,145 @@ describe('internal product revalidation blog expiry', () => {
     expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
       merchantId,
       ['iphone-15'],
+      { expireImmediately: true }
+    );
+  });
+
+  it('falls back to broad hard-expiry on slug-only blog-cache requests even when omitMerchantWidePdpDetails is set without products', async () => {
+    const merchantId = 'merchant-1';
+
+    const response = await POST(
+      request({
+        merchantId,
+        expireProductBlogCache: true,
+        productSlugs: ['iphone-15'],
+        omitMerchantWidePdpDetails: true,
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockExpireProductBlogCache).toHaveBeenCalledWith(merchantId);
+    expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
+      merchantId,
+      ['iphone-15'],
+      { expireImmediately: true }
+    );
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(merchantId, undefined, {
+      expireImmediately: true,
+    });
+  });
+
+  it('hard-expires merchant-wide PDP details when omitMerchantWidePdpDetails is explicitly false', async () => {
+    const merchantId = 'merchant-1';
+
+    const response = await POST(
+      request({
+        merchantId,
+        expireProductBlogCache: true,
+        productSlugs: ['iphone-15'],
+        omitMerchantWidePdpDetails: false,
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockExpireProductBlogCache).toHaveBeenCalledWith(merchantId);
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(merchantId, undefined, {
+      expireImmediately: true,
+    });
+  });
+
+  it('falls back to immediate merchant-wide expiry when omitMerchantWidePdpDetails is true and slug expiry fails', async () => {
+    const merchantId = 'merchant-1';
+    mockRevalidateProductSlugs.mockReturnValueOnce(false);
+
+    const response = await POST(
+      request({
+        merchantId,
+        expireProductBlogCache: true,
+        productSlugs: ['iphone-15'],
+        omitMerchantWidePdpDetails: true,
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockExpireProductBlogCache).toHaveBeenCalledWith(merchantId);
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(merchantId, undefined, {
+      expireImmediately: true,
+    });
+  });
+
+  it('returns 500 when broad merchant-wide PDP expiry fails in blog-cache fallback mode', async () => {
+    const merchantId = 'merchant-1';
+    mockRevalidateProducts.mockReturnValueOnce(false);
+
+    const response = await POST(
+      request({
+        merchantId,
+        expireProductBlogCache: true,
+        omitMerchantWidePdpDetails: false,
+      })
+    );
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({
+      error: 'Failed to expire merchant-wide product caches',
+    });
+  });
+
+  it('returns 500 when scoped worker hard expiry fails in blog-cache mode', async () => {
+    const merchantId = 'merchant-1';
+    mockRevalidateProducts
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(false);
+
+    const response = await POST(
+      request({
+        merchantId,
+        expireProductBlogCache: true,
+        productSlugs: ['iphone-15'],
+        omitMerchantWidePdpDetails: true,
+      })
+    );
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({
+      error: 'Failed to expire merchant-wide product caches',
+    });
+  });
+
+  it('expires origin product caches in blog-cache mode when merchantSlug verification fails', async () => {
+    vi.mocked(createPublicClient).mockReturnValueOnce({
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            maybeSingle: () =>
+              Promise.resolve({ data: { slug: 'ogabassey' }, error: null }),
+          }),
+        }),
+      }),
+    } as never);
+    vi.mocked(enrichProductPurgeEntries).mockResolvedValueOnce({
+      entries: [{ slug: 'iphone-15', categorySegment: null }],
+      resolvedSlugs: ['iphone-15', 'prod-1'],
+      authoritativeSlugsById: new Map([['prod-1', 'iphone-15']]),
+      blogPostSlugs: [],
+      blogPostSlugsIncomplete: false,
+    });
+
+    const response = await POST(
+      request({
+        merchantId: 'merchant-1',
+        merchantSlug: 'wrong-slug',
+        expireProductBlogCache: true,
+        products: [{ id: 'prod-1', slug: 'iphone-15' }],
+      })
+    );
+
+    expect(response.status).toBe(400);
+    expect(mockExpireProductBlogCache).toHaveBeenCalledWith('merchant-1');
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      'merchant-1',
+      undefined,
       { expireImmediately: true }
     );
   });

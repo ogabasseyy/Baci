@@ -59,6 +59,10 @@ export async function verifyLostAckMessageReconciliation({
         },
       },
       (providerResponse) => {
+        providerResponse.once('error', (error) => {
+          resolveProviderOutcome({ error });
+          clientResponse.destroy(error);
+        });
         providerResponse.resume();
         providerResponse.once('end', () => {
           providerStatus = providerResponse.statusCode;
@@ -127,15 +131,17 @@ export async function verifyLostAckMessageReconciliation({
           return matches;
         }
         await new Promise((resolve) => {
-          const timer = setTimeout(resolve, 250);
-          lookupController.signal.addEventListener(
-            'abort',
-            () => {
-              clearTimeout(timer);
-              resolve();
-            },
-            { once: true }
-          );
+          const onAbort = () => {
+            clearTimeout(timer);
+            resolve();
+          };
+          const timer = setTimeout(() => {
+            lookupController.signal.removeEventListener('abort', onAbort);
+            resolve();
+          }, 250);
+          lookupController.signal.addEventListener('abort', onAbort, {
+            once: true,
+          });
         });
       }
       return [];

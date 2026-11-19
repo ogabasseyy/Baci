@@ -30,17 +30,29 @@ export async function findSyntheticMessage({
     if (!Array.isArray(messages))
       throw new Error('Chatwoot message lookup returned an invalid payload');
 
-    matches.push(
-      ...messages.filter(
-        (message) =>
-          message.content === content &&
-          (message.message_type === 1 ||
-            String(message.message_type).toLowerCase() === 'outgoing') &&
-          String(message.sender?.type ?? message.sender_type ?? '')
-            .trim()
-            .toLowerCase() === 'user'
+    for (const message of messages) {
+      if (message.content !== content) continue;
+      const isOutgoing =
+        message.message_type === 1 ||
+        String(message.message_type).toLowerCase() === 'outgoing';
+      const senderType = String(
+        message.sender?.type ?? message.sender_type ?? ''
       )
-    );
+        .trim()
+        .toLowerCase();
+      if (isOutgoing && senderType === 'user') {
+        matches.push(message);
+      } else {
+        console.warn(
+          'Ignoring Chatwoot candidate message with unexpected shape',
+          {
+            id: message.id,
+            message_type: message.message_type,
+            sender_type: message.sender?.type ?? message.sender_type ?? null,
+          }
+        );
+      }
+    }
     if (messages.length === 0 || messages.length < PAGE_SIZE) break;
 
     if (page === MAX_LOOKUP_PAGES - 1)

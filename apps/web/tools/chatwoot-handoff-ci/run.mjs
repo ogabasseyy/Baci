@@ -124,14 +124,14 @@ async function main() {
         writeFile('/run/chatwoot-test/harness-ready-for-followup', 'ready'),
       events,
     });
+    console.log(
+      'PASS: incoming event → AgentBot API reply → bot_handoff → silent human takeover → human API reply → pending handback → AgentBot API reply'
+    );
     const recovery = await verifyLostAckMessageReconciliation({
       seed,
       api: (path, token, options = {}) => api(base, path, token, options),
       upstreamBase: base,
     });
-    console.log(
-      'PASS: incoming event → AgentBot API reply → bot_handoff → silent human takeover → human API reply → pending handback → AgentBot API reply'
-    );
     console.log(
       `PASS: Chatwoot message POST returned HTTP ${recovery.providerStatus}, response dropped; lookup found one stored message and reconciled without resending`
     );

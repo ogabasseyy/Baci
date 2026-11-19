@@ -110,3 +110,20 @@ test('non-network TypeError programming bugs propagate without reconciliation or
   assert.equal(sends, 1);
   assert.equal(lookups, 0);
 });
+
+test('transient DNS cause code wrapped in TypeError triggers reconciliation without retry', async () => {
+  let sends = 0;
+  const result = await reconcileAmbiguousSend({
+    send: () => {
+      sends += 1;
+      throw Object.assign(new TypeError('network'), {
+        cause: { code: 'EAI_AGAIN' },
+      });
+    },
+    lookup: () => [recoveredMessage],
+  });
+
+  assert.equal(result.recovered, true);
+  assert.equal(result.result, recoveredMessage);
+  assert.equal(sends, 1);
+});

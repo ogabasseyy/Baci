@@ -17,6 +17,8 @@ const insights = {
   resolved: 6,
   avgFirstResponseSeconds: 720,
   avgResolutionSeconds: null,
+  handledByAi: 2,
+  handledByMerchant: null,
 };
 
 beforeEach(() => {
@@ -32,7 +34,11 @@ describe('InsightsCard', () => {
     expect(screen.getByText('Your replies')).toBeInTheDocument();
     expect(screen.getByText('22')).toBeInTheDocument();
     expect(screen.getByText('12 min')).toBeInTheDocument();
-    expect(screen.getByText('—')).toBeInTheDocument();
+    expect(screen.getByText('Answered by assistant')).toBeInTheDocument();
+    expect(screen.getByText('2')).toBeInTheDocument();
+    expect(screen.getByText('Handled by you')).toBeInTheDocument();
+    // Time to resolve and Handled by you have nothing to show: dashes.
+    expect(screen.getAllByText('—')).toHaveLength(2);
     expect(mocks.fetchInsights).toHaveBeenCalledWith(7);
   });
 

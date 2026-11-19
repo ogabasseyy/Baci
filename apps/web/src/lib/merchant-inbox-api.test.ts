@@ -239,6 +239,8 @@ describe('fetchMerchantInboxInsights', () => {
     resolved: 6,
     avgFirstResponseSeconds: 720,
     avgResolutionSeconds: null,
+    handledByAi: 2,
+    handledByMerchant: null,
   };
 
   it('requests the chosen window and returns validated insights', async () => {

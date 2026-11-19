@@ -19,8 +19,14 @@ export const chatWebhookMessageCreatedSchema = z.object({
   content: z.string().nullish(),
   account: z.object({ id: providerId }),
   inbox: z.object({ id: providerId }),
-  conversation: z.object({ id: providerId }),
-  sender: z.object({ name: z.string().nullish() }).nullish(),
+  conversation: z.object({
+    id: providerId,
+    status: z.string().max(40).nullish(),
+    labels: z.array(z.string().max(100)).max(50).nullish(),
+  }),
+  sender: z
+    .object({ name: z.string().nullish(), type: z.string().max(40).nullish() })
+    .nullish(),
 });
 
 export type ChatWebhookMessageCreated = z.infer<

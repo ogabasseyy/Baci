@@ -24,6 +24,12 @@ export type MerchantInboxBinding = {
    * refused. Server-only, like `apiAccessToken`.
    */
   reportsApiAccessToken?: string;
+  /**
+   * Optional credential of the store's assistant bot. Replies and the
+   * hand-over to a person are sent with it, so customers see the assistant
+   * (not a staff member). Without it the auto-reply stays off. Server-only.
+   */
+  botApiAccessToken?: string;
   apiOrigin: string;
 };
 
@@ -77,7 +83,7 @@ function parseBindings(
   for (const candidate of parsed) {
     if (!isRecord(candidate)) return null;
     const { merchantId, accountId, inboxId, apiAccessToken } = candidate;
-    const { reportsApiAccessToken } = candidate;
+    const { reportsApiAccessToken, botApiAccessToken } = candidate;
     if (
       typeof merchantId !== 'string' ||
       !UUID_PATTERN.test(merchantId) ||
@@ -87,7 +93,10 @@ function parseBindings(
       !API_TOKEN_PATTERN.test(apiAccessToken) ||
       (reportsApiAccessToken !== undefined &&
         (typeof reportsApiAccessToken !== 'string' ||
-          !API_TOKEN_PATTERN.test(reportsApiAccessToken)))
+          !API_TOKEN_PATTERN.test(reportsApiAccessToken))) ||
+      (botApiAccessToken !== undefined &&
+        (typeof botApiAccessToken !== 'string' ||
+          !API_TOKEN_PATTERN.test(botApiAccessToken)))
     ) {
       return null;
     }
@@ -107,6 +116,7 @@ function parseBindings(
       ...(typeof reportsApiAccessToken === 'string'
         ? { reportsApiAccessToken }
         : {}),
+      ...(typeof botApiAccessToken === 'string' ? { botApiAccessToken } : {}),
       apiOrigin,
     });
   }

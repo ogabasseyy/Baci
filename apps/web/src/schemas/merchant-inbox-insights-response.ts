@@ -10,6 +10,10 @@ export type MerchantInboxInsights = {
   /** Seconds; null when there is nothing to average yet. */
   avgFirstResponseSeconds: number | null;
   avgResolutionSeconds: number | null;
+  /** Conversations the assistant answered alone; null when unreadable. */
+  handledByAi: number | null;
+  /** Conversations a person took over; null when unreadable. */
+  handledByMerchant: number | null;
 };
 
 /** Baci's own insights response, validated again in the browser. */
@@ -21,4 +25,6 @@ export const merchantInboxInsightsResponseSchema = z.object({
   resolved: z.number().int().nonnegative(),
   avgFirstResponseSeconds: z.number().int().nonnegative().nullable(),
   avgResolutionSeconds: z.number().int().nonnegative().nullable(),
+  handledByAi: z.number().int().nonnegative().nullable(),
+  handledByMerchant: z.number().int().nonnegative().nullable(),
 });

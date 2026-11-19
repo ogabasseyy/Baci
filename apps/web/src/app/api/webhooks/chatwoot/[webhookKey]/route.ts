@@ -1,5 +1,11 @@
 import { after, type NextRequest, NextResponse } from 'next/server';
 import {
+  recordMerchantTakeover,
+  runChatAutoReply,
+} from '@/lib/chatwoot/chat-auto-reply';
+import { getChatAutoReplyBinding } from '@/lib/chatwoot/chat-auto-reply-config';
+import { isMerchantReply } from '@/lib/chatwoot/chat-auto-reply-decision';
+import {
   CHAT_EVENT_NAME_MAX_LENGTH,
   CHAT_EVENT_PREVIEW_MAX_LENGTH,
   normalizeChatEventText,
@@ -13,6 +19,9 @@ import {
   chatWebhookEnvelopeSchema,
   chatWebhookMessageCreatedSchema,
 } from '@/schemas/chat-webhook';
+
+// The assistant's reply runs after the response and may wait on the model.
+export const maxDuration = 60;
 
 const NO_STORE_HEADERS = { 'Cache-Control': 'private, no-store' };
 
@@ -104,11 +113,19 @@ export async function POST(
 
   const event = message.data;
   if (
-    event.message_type !== 'incoming' ||
     event.private === true ||
     event.account.id !== binding.accountId ||
     event.inbox.id !== binding.inboxId
   ) {
+    return respond(200, { received: true, handled: false });
+  }
+  // A staff reply takes the conversation over from the assistant.
+  if (isMerchantReply(event)) {
+    const assistant = getChatAutoReplyBinding(binding.merchantId);
+    if (assistant) after(() => recordMerchantTakeover(assistant, event));
+    return respond(200, { received: true, handled: false });
+  }
+  if (event.message_type !== 'incoming') {
     return respond(200, { received: true, handled: false });
   }
 
@@ -141,5 +158,11 @@ export async function POST(
   if (result.outcome === 'notified' && !result.duplicate) {
     after(() => pushChatMessage(chatEvent));
   }
+  // The assistant answers each message once: a redelivery is not answered
+  // again. It is off unless the store is switched on and has a bot credential.
+  const assistant = result.duplicate
+    ? null
+    : getChatAutoReplyBinding(binding.merchantId);
+  if (assistant) after(() => runChatAutoReply(assistant, event));
   return respond(200, { received: true, handled: true });
 }

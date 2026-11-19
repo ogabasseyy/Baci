@@ -78,6 +78,9 @@ export const AI_RATE_LIMITS = {
   imageGeneration: { requests: 5, windowMs: 60 * 1000 },
   santa: { requests: 1000, windowMs: 60 * 1000 },
   faqGeneration: { requests: 5, windowMs: 60 * 1000 },
+  // Customer-chat assistant: per conversation, and per store as a ceiling.
+  chatAutoReplyConversation: { requests: 6, windowMs: 60 * 1000 },
+  chatAutoReplyMerchant: { requests: 60, windowMs: 60 * 1000 },
 };
 
 /**

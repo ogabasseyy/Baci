@@ -168,3 +168,44 @@ describe('chatEventIntakeResultSchema', () => {
     ).toBe(false);
   });
 });
+
+describe('message_created assistant fields', () => {
+  const base = {
+    event: 'message_created',
+    id: 1,
+    message_type: 'outgoing',
+    account: { id: 2 },
+    inbox: { id: 3 },
+  };
+
+  it('reads the sender type, conversation status and labels', () => {
+    const parsed = chatWebhookMessageCreatedSchema.parse({
+      ...base,
+      conversation: { id: 4, status: 'pending', labels: ['vip'] },
+      sender: { name: 'Staff', type: 'user' },
+    });
+    expect(parsed.conversation).toMatchObject({
+      status: 'pending',
+      labels: ['vip'],
+    });
+    expect(parsed.sender?.type).toBe('user');
+  });
+
+  it('still accepts a payload without them', () => {
+    expect(
+      chatWebhookMessageCreatedSchema.safeParse({
+        ...base,
+        conversation: { id: 4 },
+      }).success
+    ).toBe(true);
+  });
+
+  it('rejects labels that are not a short list of strings', () => {
+    expect(
+      chatWebhookMessageCreatedSchema.safeParse({
+        ...base,
+        conversation: { id: 4, labels: [1] },
+      }).success
+    ).toBe(false);
+  });
+});

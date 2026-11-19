@@ -8,16 +8,24 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe('getMerchantInboxInsights', () => {
   it('asks the provider only about the bound inbox over the window', async () => {
-    const fetchMock = stubFetch(() => ({
-      body: {
-        conversations_count: 5,
-        incoming_messages_count: 20,
-        outgoing_messages_count: 18,
-        resolutions_count: 4,
-        avg_first_response_time: 120,
-        avg_resolution_time: '3600',
-      },
-    }));
+    const fetchMock = stubFetch((url, init) => {
+      if (url.pathname.endsWith('/conversations/filter')) {
+        const label = JSON.parse(String(init?.body)).payload[1].values[0];
+        return {
+          body: { meta: { all_count: label === 'handled-by-ai' ? 3 : 1 } },
+        };
+      }
+      return {
+        body: {
+          conversations_count: 5,
+          incoming_messages_count: 20,
+          outgoing_messages_count: 18,
+          resolutions_count: 4,
+          avg_first_response_time: 120,
+          avg_resolution_time: '3600',
+        },
+      };
+    });
     const result = await getMerchantInboxInsights(binding, {
       days: 7,
       now: 1_800_000_000_000,
@@ -41,7 +49,32 @@ describe('getMerchantInboxInsights', () => {
         resolved: 4,
         avgFirstResponseSeconds: 120,
         avgResolutionSeconds: 3600,
+        handledByAi: 3,
+        handledByMerchant: 1,
       },
+    });
+  });
+
+  it('shows no handled counts, not zeros, when the filter read fails', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    stubFetch((url) =>
+      url.pathname.endsWith('/conversations/filter')
+        ? { status: 500 }
+        : {
+            body: {
+              conversations_count: 1,
+              incoming_messages_count: 1,
+              outgoing_messages_count: 1,
+              resolutions_count: 0,
+              avg_first_response_time: null,
+              avg_resolution_time: null,
+            },
+          }
+    );
+    const result = await getMerchantInboxInsights(binding, { days: 7 });
+    expect(result).toMatchObject({
+      ok: true,
+      insights: { handledByAi: null, handledByMerchant: null },
     });
   });
 

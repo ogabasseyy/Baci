@@ -7,12 +7,13 @@ import {
   getMerchantForApiRequest,
   toUserAccess,
 } from '@/lib/get-merchant-for-api-request';
+import { fetchFallbackAnalyticsEvents } from './fallback-events';
 import { resolveWebsitePerformanceGemmaConfig } from './gemma-config';
 import { aggregateWebsitePerformance } from './website-performance-aggregation';
 
 export const maxDuration = 30;
 
-const MAX_FALLBACK_EVENT_ROWS = 100_000;
+const MAX_FALLBACK_EVENT_ROWS = 10_000;
 
 // Tight per-provider budget: the route has a 30s total budget and the legacy
 // VPS Gemma fallback below still needs its own 15s window. The overall budget
@@ -156,41 +157,23 @@ export async function GET(request: NextRequest) {
   );
 
   let eventSummary: unknown = databaseEventSummary;
+  let fallbackTruncated = false;
   if (eventsError?.code === 'PGRST202') {
-    const eventRows: Array<{ event_data: unknown; event_type: string }> = [];
-    const pageSize = 1000;
-    for (let from = 0; from < MAX_FALLBACK_EVENT_ROWS; from += pageSize) {
-      const pageEnd = Math.min(
-        from + pageSize - 1,
-        MAX_FALLBACK_EVENT_ROWS - 1
+    const fallbackResult = await fetchFallbackAnalyticsEvents(
+      supabase,
+      merchantContext.merchantId,
+      finalStartDate,
+      finalEndDate,
+      MAX_FALLBACK_EVENT_ROWS
+    );
+    if ('error' in fallbackResult) {
+      return NextResponse.json(
+        { error: fallbackResult.error },
+        { status: 500 }
       );
-      const { data: page, error: pageError } = await supabase
-        .from('analytics_events')
-        .select('event_type, event_data')
-        .eq('merchant_id', merchantContext.merchantId)
-        .gte('event_timestamp', finalStartDate)
-        .lte('event_timestamp', finalEndDate)
-        .in('event_type', ['search', 'product_view', 'purchase', 'add_to_cart'])
-        .order('event_timestamp', { ascending: false })
-        .order('id', { ascending: false })
-        .range(from, pageEnd);
-
-      if (pageError) {
-        return NextResponse.json(
-          { error: 'Failed to aggregate events' },
-          { status: 500 }
-        );
-      }
-      eventRows.push(...(page ?? []).slice(0, MAX_FALLBACK_EVENT_ROWS - from));
-      if (!page || page.length < pageSize) break;
     }
-    if (eventRows.length === MAX_FALLBACK_EVENT_ROWS) {
-      console.warn('[website-performance] Fallback event scan reached limit', {
-        maxRows: MAX_FALLBACK_EVENT_ROWS,
-        merchantId: merchantContext.merchantId,
-      });
-    }
-    eventSummary = eventRows;
+    fallbackTruncated = fallbackResult.truncated;
+    eventSummary = fallbackResult.rows;
   } else if (eventsError) {
     return NextResponse.json(
       { error: 'Failed to aggregate events' },
@@ -296,5 +279,6 @@ export async function GET(request: NextRequest) {
       topConverting,
     },
     aiInsights,
+    ...(fallbackTruncated ? { incompleteData: true } : {}),
   });
 }

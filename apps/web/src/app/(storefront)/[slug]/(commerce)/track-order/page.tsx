@@ -15,7 +15,7 @@ import {
   Truck,
   XCircle,
 } from 'lucide-react';
-import { useParams, useSearchParams } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import {
   ThemedBadge,
@@ -25,67 +25,17 @@ import {
 } from '@/components/themed';
 import { CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
+import { useMerchant } from '@/hooks/merchant';
+import { usePrivateSearchParamsState } from '@/hooks/use-private-search-params';
 import { formatCurrency as formatCurrencyByCountry } from '@/lib/currency';
 import { cn } from '@/lib/utils';
-import { OrderItemRow, type TrackOrderItem } from './order-item-row';
-
-interface TimelineEvent {
-  status: string;
-  title: string;
-  description: string;
-  timestamp: string;
-  icon:
-    | 'order'
-    | 'payment'
-    | 'processing'
-    | 'shipped'
-    | 'delivered'
-    | 'cancelled';
-}
-
-interface OrderData {
-  order: {
-    id: string;
-    order_number: string;
-    status: string;
-    payment_status: string;
-    created_at: string;
-    updated_at: string;
-    subtotal: number;
-    shipping_cost: number;
-    discount_amount: number;
-    total: number;
-    currency: string;
-  };
-  customer: {
-    name: string;
-    email: string;
-    phone: string;
-  };
-  shipping_address: {
-    address: string;
-    city: string;
-    state: string;
-    country: string;
-  };
-  items: TrackOrderItem[];
-  timeline: TimelineEvent[];
-  shipping_tracking: {
-    provider: string;
-    tracking_number: string;
-    tracking_url: string;
-  } | null;
-  estimated_delivery: {
-    min: string;
-    max: string;
-  } | null;
-  merchant: {
-    name: string;
-    logo?: string;
-    support_email?: string;
-    support_phone?: string;
-  };
-}
+import {
+  fetchOrderTracking,
+  type TrackingLookupParams,
+} from './fetch-order-tracking';
+import { OrderItemRow } from './order-item-row';
+import { resolveTrackOrderMerchantSlug } from './resolve-track-order-merchant-slug';
+import type { OrderData } from './track-order-types';
 
 const iconMap = {
   order: Package,
@@ -114,70 +64,6 @@ const getCountryCodeForCurrency = (currency?: string | null) =>
   (currency ? PREFERRED_COUNTRY_FOR_CURRENCY[currency] : null) ?? 'NG';
 
 const TERMINAL_STATUSES = new Set(['cancelled', 'failed']);
-
-interface TrackingLookupParams {
-  order_id?: string | null;
-  order_number?: string | null;
-  email?: string | null;
-  tracking_token?: string | null;
-}
-
-type TrackingLookupResult =
-  | { data: OrderData; error: null }
-  | { data: null; error: string };
-
-/**
- * Module-scope lookup keeps the try/finally and throw statements out of the
- * component body so React Compiler can memoize the page.
- */
-async function fetchOrderTracking(
-  merchantSlug: string | undefined,
-  trackingParams: TrackingLookupParams
-): Promise<TrackingLookupResult> {
-  try {
-    if (!merchantSlug) {
-      throw new Error('Store identifier is missing.');
-    }
-    // Token-based lookup doesn't need email; manual form does
-    if (!trackingParams.tracking_token && !trackingParams.email) {
-      throw new Error('Email is required to track an order.');
-    }
-
-    const queryParams = new URLSearchParams();
-    if (trackingParams.tracking_token) {
-      queryParams.set('token', trackingParams.tracking_token);
-    } else {
-      if (trackingParams.order_id)
-        queryParams.set('order_id', trackingParams.order_id);
-      if (trackingParams.order_number)
-        queryParams.set('order_number', trackingParams.order_number);
-      if (trackingParams.email) queryParams.set('email', trackingParams.email);
-    }
-    queryParams.set('merchant_slug', merchantSlug);
-
-    const response = await fetch(
-      `/api/storefront/orders/track-order?${queryParams}`
-    );
-    let data: OrderData | { error?: string };
-    try {
-      data = await response.json();
-    } catch {
-      throw new Error('Unexpected server response. Please try again later.');
-    }
-
-    if (!response.ok) {
-      const errorData = data as { error?: string };
-      throw new Error(errorData.error || 'Failed to find order');
-    }
-
-    return { data: data as OrderData, error: null };
-  } catch (err) {
-    return {
-      data: null,
-      error: err instanceof Error ? err.message : 'An error occurred',
-    };
-  }
-}
 
 function HorizontalProgressBar({
   status,
@@ -306,10 +192,13 @@ function OrderTrackContent() {
   const [orderData, setOrderData] = useState<OrderData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const searchParams = useSearchParams();
+  const { searchParams, isReady } = usePrivateSearchParamsState();
   const params = useParams();
-  const slugParam = params?.slug;
-  const merchantSlug = Array.isArray(slugParam) ? slugParam[0] : slugParam;
+  const { merchant } = useMerchant();
+  const merchantSlug = resolveTrackOrderMerchantSlug(
+    merchant?.slug,
+    params?.slug
+  );
 
   const qToken = searchParams.get('token');
   const qOrderId = searchParams.get('order_id') || searchParams.get('orderId');
@@ -329,7 +218,7 @@ function OrderTrackContent() {
   // prop changes), avoiding a stale frame between commits.
   const [prevSearchKey, setPrevSearchKey] = useState<string | null>(null);
   const searchKey = searchParams.toString();
-  if (searchKey !== prevSearchKey) {
+  if (isReady && searchKey !== prevSearchKey) {
     setPrevSearchKey(searchKey);
 
     // Clear stale state when params are absent
@@ -366,6 +255,7 @@ function OrderTrackContent() {
   // Automatic tracking from URL params. The loading state is entered by the
   // render-time prev-compare above; results land via the async callback.
   useEffect(() => {
+    if (!isReady) return;
     const token = searchParams.get('token');
     const orderIdParam =
       searchParams.get('order_id') || searchParams.get('orderId');
@@ -395,7 +285,7 @@ function OrderTrackContent() {
     return () => {
       cancelled = true;
     };
-  }, [searchParams, merchantSlug]);
+  }, [isReady, searchParams, merchantSlug]);
 
   const handleTrackOrder = async (e: React.FormEvent) => {
     e.preventDefault();

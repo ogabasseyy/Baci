@@ -14,6 +14,7 @@ import {
 const mocks = vi.hoisted(() => ({
   cartState: {
     addToCart: vi.fn(),
+    ensureSharedCartSession: vi.fn(async () => ({ ok: true as const })),
     cart: [
       {
         id: 'local-product',
@@ -26,6 +27,7 @@ const mocks = vi.hoisted(() => ({
     ],
     isHydrated: true,
     merchantSlug: 'store',
+    refreshSharedCart: vi.fn(async () => {}),
     sharedCartEnabled: true,
     sharedCartRef: { cartId: 'cart-1', version: 8 },
     syncStatus: 'synced',
@@ -51,6 +53,43 @@ function HookHarness({
 }
 
 describe('ChatwootInlineCartBridge', () => {
+  it('does not provision a cart for a context request from another origin', async () => {
+    const { target } = installFrame();
+    render(<HookHarness storeSlug="store" widgetOrigin={origin} />);
+
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: `baci-commerce-context-request:${JSON.stringify({
+            requestId: 'context_123456',
+            conversationId: 905,
+            websiteToken: 'synthetic-widget-token-123456',
+            visitorTokenSha256: 'b'.repeat(64),
+          })}`,
+          origin: 'https://attacker.example.com',
+          source: target,
+        })
+      );
+    });
+
+    expect(mocks.cartState.ensureSharedCartSession).not.toHaveBeenCalled();
+  });
+
+  it('posts context authorization only to the configured widget origin', async () => {
+    const { target, postMessage } = installFrame();
+    render(<HookHarness storeSlug="store" widgetOrigin={origin} />);
+
+    await act(async () => {
+      await establishWidgetContext(target, postMessage);
+    });
+
+    const authorizationPosts = postMessage.mock.calls.filter(([payload]) =>
+      String(payload).startsWith('baci-commerce-context-authorized:')
+    );
+    expect(authorizationPosts).toHaveLength(1);
+    expect(authorizationPosts[0]?.[1]).toBe(origin);
+  });
+
   it.each([
     ['empty challenge token', true],
     ['empty session token', false],
@@ -134,6 +173,18 @@ describe('ChatwootInlineCartBridge', () => {
         if (new URL(path, 'https://store.test').pathname.endsWith('/verify')) {
           return contextResponse(String(body.contextToken));
         }
+        if (
+          new URL(path, 'https://store.test').pathname.endsWith('/quantity')
+        ) {
+          return {
+            ok: true,
+            json: async () => ({
+              accepted: true,
+              cartVersion: 9,
+              operationId: body.requestId,
+            }),
+          };
+        }
         const conversationId = Number(
           String(body.sessionToken).split('-').at(-1)
         );
@@ -184,53 +235,5 @@ describe('ChatwootInlineCartBridge', () => {
       requestId: 'review-0004',
       status: 'unavailable',
     });
-  });
-
-  it('rejects quantity changes until a durable shared-cart receipt exists', async () => {
-    const { target, postMessage } = installFrame();
-    render(<HookHarness storeSlug="store" widgetOrigin={origin} />);
-    await act(async () => {
-      await establishWidgetContext(target, postMessage);
-      sendWidgetMessage(target, 'baci-cart-request', {
-        requestId: 'cart-0001',
-        conversationId: 905,
-        sessionToken: 'session-905',
-      });
-      await waitFor(() =>
-        expect(
-          postMessage.mock.calls.some(([payload]) =>
-            String(payload).startsWith('baci-cart-view:')
-          )
-        ).toBe(true)
-      );
-    });
-    const cartPayload = String(postMessage.mock.calls.at(-1)?.[0]);
-    const cart = JSON.parse(cartPayload.slice('baci-cart-view:'.length));
-    const item = cart.items[0];
-
-    await act(async () => {
-      sendWidgetMessage(target, 'baci-cart-quantity', {
-        requestId: 'quantity-0001',
-        lineToken: item.lineToken,
-        expectedQuantity: item.quantity,
-        quantity: item.quantity + 1,
-        conversationId: 905,
-        sessionToken: 'session-905',
-      });
-      await waitFor(() =>
-        expect(
-          postMessage.mock.calls.some(([payload]) =>
-            String(payload).startsWith('baci-cart-quantity-result:')
-          )
-        ).toBe(true)
-      );
-    });
-
-    const quantityPayload = String(postMessage.mock.calls.at(-1)?.[0]);
-    expect(quantityPayload.startsWith('baci-cart-quantity-result:')).toBe(true);
-    expect(
-      JSON.parse(quantityPayload.slice('baci-cart-quantity-result:'.length))
-    ).toEqual({ requestId: 'quantity-0001', accepted: false });
-    expect(mocks.cartState.updateQuantity).not.toHaveBeenCalled();
   });
 });

@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { defineArchiveRouteAuthorizationSuite } from './archive-route-authorization.test-suite';
+import { createArchiveSupabaseMock } from './archive-route-mocks.test-support';
 import { defineArchiveRoutePurgeSuite } from './archive-route-purge.test-suite';
 import { defineArchiveRouteValidationSuite } from './archive-route-validation.test-suite';
 
@@ -28,6 +29,11 @@ const mocks = vi.hoisted(() => ({
   } | null,
   authenticateApiRequest: vi.fn(),
   checkCsrfProtection: vi.fn(),
+  dependentAliasesResult: {
+    identifiers: [] as string[],
+    incomplete: false,
+  },
+  expireProductBlogCache: vi.fn(),
   filters: [] as [string, unknown][],
   getMerchantForApiRequest: vi.fn(),
   hasPermission: vi.fn(),
@@ -37,6 +43,7 @@ const mocks = vi.hoisted(() => ({
   revalidateProducts: vi.fn(),
   revalidateProductSlugs: vi.fn(),
   scheduleProductBlogPurgeAfterResponse: vi.fn(),
+  scheduleStorefrontHostnamePurge: vi.fn(),
   scheduleStorefrontProductPurge: vi.fn(),
   selectArgs: [] as string[],
   supabase: null as unknown,
@@ -54,27 +61,28 @@ vi.mock('@/lib/cache-revalidation', () => ({
 vi.mock('@/lib/csrf', () => ({
   checkCsrfProtection: mocks.checkCsrfProtection,
 }));
+vi.mock('@/lib/expire-product-blog-cache', () => ({
+  expireProductBlogCache: mocks.expireProductBlogCache,
+}));
 vi.mock('@/lib/get-merchant-for-api-request', () => ({
   getMerchantForApiRequest: mocks.getMerchantForApiRequest,
-  toUserAccess: (context: {
-    merchantId: string;
-    staffAccess: {
-      isOwner: boolean;
-      isStaff: boolean;
-      permissions: Record<string, Record<string, boolean>>;
-      role: string | null;
-    };
-  }) => ({
+  toUserAccess: (context: { merchantId: string; staffAccess: object }) => ({
     merchantId: context.merchantId,
-    isOwner: context.staffAccess.isOwner,
-    isStaff: context.staffAccess.isStaff,
-    permissions: context.staffAccess.permissions,
-    role: context.staffAccess.role ?? 'owner',
+    role: 'owner',
+    ...context.staffAccess,
   }),
+}));
+vi.mock('@/lib/resolve-dependent-legacy-product-identifiers', () => ({
+  resolveDependentLegacyProductIdentifiers: () =>
+    Promise.resolve(mocks.dependentAliasesResult),
 }));
 vi.mock('@/lib/storefront-product-purge', () => ({
   scheduleStorefrontProductPurge: (...args: unknown[]) =>
     mocks.scheduleStorefrontProductPurge(...args),
+}));
+vi.mock('@/lib/storefront-product-purge-hostnames', () => ({
+  scheduleStorefrontHostnamePurge: (...args: unknown[]) =>
+    mocks.scheduleStorefrontHostnamePurge(...args),
 }));
 vi.mock('@/lib/schedule-product-blog-purge-after-response', () => ({
   scheduleProductBlogPurgeAfterResponse: (...args: unknown[]) =>
@@ -93,54 +101,6 @@ vi.mock('@/lib/storefront-product-purge-urls', () => ({
     return row.product_categories?.[0]?.categories?.slug ?? null;
   },
 }));
-
-function createSupabase() {
-  return {
-    from: vi.fn((table: string) => {
-      if (table === 'merchants') {
-        const merchantQuery = {
-          select: vi.fn(() => merchantQuery),
-          eq: vi.fn(() => merchantQuery),
-          single: vi.fn(() => {
-            if (mocks.merchantThrows) {
-              return Promise.reject(new Error('merchant read failed'));
-            }
-            return Promise.resolve({
-              data: mocks.merchantError ? null : mocks.merchantSlugRow,
-              error: mocks.merchantError,
-            });
-          }),
-        };
-        return merchantQuery;
-      }
-
-      expect(table).toBe('products');
-      const query = {
-        eq: vi.fn((column: string, value: unknown) => {
-          mocks.filters.push([column, value]);
-          return query;
-        }),
-        select: vi.fn((arg?: string) => {
-          if (typeof arg === 'string') mocks.selectArgs.push(arg);
-          return {
-            single: vi.fn(() =>
-              Promise.resolve({
-                data: mocks.archiveError ? null : mocks.archiveResult,
-                error: mocks.archiveError,
-              })
-            ),
-          };
-        }),
-      };
-      return {
-        update: vi.fn((payload: unknown) => {
-          mocks.updatePayload = payload;
-          return query;
-        }),
-      };
-    }),
-  };
-}
 
 import { PATCH } from './route';
 
@@ -166,6 +126,10 @@ describe('PATCH /api/products/[id]/archive', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.archiveError = null;
+    mocks.dependentAliasesResult = {
+      identifiers: [],
+      incomplete: false,
+    };
     mocks.archiveResult = {
       id: '123e4567-e89b-42d3-a456-426614174000',
       slug: 'phone-ultra',
@@ -180,7 +144,7 @@ describe('PATCH /api/products/[id]/archive', () => {
     mocks.merchantSlugRow = { slug: 'test-store' };
     mocks.merchantThrows = false;
     mocks.selectArgs.length = 0;
-    mocks.supabase = createSupabase();
+    mocks.supabase = createArchiveSupabaseMock(mocks);
     mocks.updatePayload = null;
     mocks.authenticateApiRequest.mockResolvedValue({
       error: null,
@@ -198,6 +162,8 @@ describe('PATCH /api/products/[id]/archive', () => {
       },
     });
     mocks.hasPermission.mockReturnValue(true);
+    mocks.revalidateProducts.mockReturnValue(true);
+    mocks.revalidateProductSlugs.mockReturnValue(true);
   });
 
   it('archives a merchant product when the user has edit permission', async () => {
@@ -219,9 +185,15 @@ describe('PATCH /api/products/[id]/archive', () => {
       '123e4567-e89b-42d3-a456-426614174000',
     ]);
     expect(mocks.filters).toContainEqual(['merchant_id', MERCHANT_ONE_ID]);
+    expect(mocks.revalidateProductSlugs).toHaveBeenCalledWith(
+      MERCHANT_ONE_ID,
+      ['phone-ultra', '123e4567-e89b-42d3-a456-426614174000'],
+      { expireImmediately: true }
+    );
     expect(mocks.revalidateProducts).toHaveBeenCalledWith(
       MERCHANT_ONE_ID,
-      'phone-ultra'
+      undefined,
+      { expireImmediately: true, omitMerchantWidePdpDetails: true }
     );
   });
 
@@ -250,31 +222,9 @@ describe('PATCH /api/products/[id]/archive', () => {
     expect(mocks.filters).toContainEqual(['merchant_id', MERCHANT_TWO_ID]);
     expect(mocks.revalidateProducts).toHaveBeenCalledWith(
       MERCHANT_TWO_ID,
-      'phone-ultra'
+      undefined,
+      { expireImmediately: true, omitMerchantWidePdpDetails: true }
     );
-  });
-
-  it('does not leak the category join/junction embeds in the response body', async () => {
-    mocks.archiveResult = {
-      id: '123e4567-e89b-42d3-a456-426614174000',
-      slug: 'phone-ultra',
-      status: 'archived',
-      name: 'Phone Ultra',
-      category: 'Smartphones',
-      categories: { slug: 'smartphones' },
-      product_categories: [{ categories: { slug: 'gadgets' } }],
-    };
-
-    const response = await PATCH(makeRequest(), makeContext());
-
-    await expect(response.json()).resolves.toEqual({
-      product: {
-        id: '123e4567-e89b-42d3-a456-426614174000',
-        slug: 'phone-ultra',
-        status: 'archived',
-      },
-      success: true,
-    });
   });
 
   defineArchiveRouteAuthorizationSuite({

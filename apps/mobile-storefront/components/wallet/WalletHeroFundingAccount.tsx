@@ -5,18 +5,29 @@ import type { WalletDisplayFundingAccount } from './wallet.types';
 
 type Props = {
   account: WalletDisplayFundingAccount;
+  /** PiggyVest card: a clear "Copied" with a check icon after a copy. */
+  emphasizeCopied?: boolean;
   preview?: boolean;
   purpose?: 'wallet' | 'savings';
   sandbox?: boolean;
 };
 
+const COPIED = 'Copied';
+const COPIED_FEEDBACK_MS = 2000;
+
 export function WalletHeroFundingAccount({
   account,
+  emphasizeCopied = false,
   preview = false,
   purpose = 'wallet',
   sandbox = false,
 }: Props) {
-  const { copyToClipboard, feedback } = useCopyToClipboard();
+  const { copyToClipboard, feedback } = useCopyToClipboard(
+    emphasizeCopied
+      ? { successMessage: COPIED, timeoutMs: COPIED_FEEDBACK_MS }
+      : undefined
+  );
+  const copied = emphasizeCopied && feedback === COPIED;
   const isSavingsAccount = purpose === 'savings' && !preview;
 
   return (
@@ -57,14 +68,27 @@ export function WalletHeroFundingAccount({
             {account.accountNumber}
           </Text>
           {!preview ? (
-            <Ionicons name="copy-outline" size={15} color="#F8B84C" />
+            <Ionicons
+              name={copied ? 'checkmark-circle' : 'copy-outline'}
+              size={15}
+              color="#F8B84C"
+            />
           ) : null}
         </View>
-        <Text style={styles.bank} numberOfLines={1}>
-          {account.bankName}
+        {/* "Copied" swaps in for the bank line, so nothing below moves. */}
+        <Text
+          accessibilityLiveRegion={copied ? 'polite' : undefined}
+          style={copied ? styles.copiedBank : styles.bank}
+          numberOfLines={1}
+        >
+          {copied ? COPIED : account.bankName}
         </Text>
       </Pressable>
-      {feedback ? <Text style={styles.feedback}>{feedback}</Text> : null}
+      {feedback && !copied ? (
+        <Text accessibilityLiveRegion="polite" style={styles.feedback}>
+          {feedback}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -94,4 +118,10 @@ const styles = StyleSheet.create({
   number: { color: '#FFFFFF', fontSize: 17, fontWeight: '700' },
   bank: { color: '#AEB4BE', fontSize: 10, marginTop: 2 },
   feedback: { color: '#AEB4BE', fontSize: 9 },
+  copiedBank: {
+    color: '#F8B84C',
+    fontSize: 10,
+    fontWeight: '700',
+    marginTop: 2,
+  },
 });

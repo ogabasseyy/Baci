@@ -117,6 +117,93 @@ describe('revalidateProductsReliable purge scope', () => {
     );
   });
 
+  it('opts worker fallbacks into scoped PDP omission when merchantSlug, products, and tracked previousSlug are present', async () => {
+    mockRevalidateProducts.mockImplementation(() => {
+      throw new Error('no store');
+    });
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: true } as Response);
+    const products = [
+      {
+        id: 'prod-1',
+        slug: 'iphone-15',
+        previousSlug: 'iphone-15',
+        category: 'Phones',
+      },
+    ];
+    const productSlugs = ['iphone-15'];
+
+    await revalidateProductsReliable('merchant-1', {
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      merchantSlug: 'ogabassey',
+      products,
+      nextProductSlugs: productSlugs,
+    });
+
+    const [, init] = fetchImpl.mock.calls[0];
+    expect(JSON.parse((init as RequestInit).body as string)).toEqual({
+      merchantId: 'merchant-1',
+      merchantSlug: 'ogabassey',
+      products,
+      productSlugs,
+      omitMerchantWidePdpDetails: true,
+    });
+  });
+
+  it('keeps broad PDP/redirect invalidation when { id, slug } omits previousSlug', async () => {
+    mockRevalidateProducts.mockImplementation(() => {
+      throw new Error('no store');
+    });
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: true } as Response);
+    const products = [{ id: 'prod-1', slug: 'iphone-16', category: 'Phones' }];
+    const productSlugs = ['iphone-16'];
+
+    await revalidateProductsReliable('merchant-1', {
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      merchantSlug: 'ogabassey',
+      products,
+      nextProductSlugs: productSlugs,
+    });
+
+    const [, init] = fetchImpl.mock.calls[0];
+    expect(JSON.parse((init as RequestInit).body as string)).toEqual({
+      merchantId: 'merchant-1',
+      merchantSlug: 'ogabassey',
+      products,
+      productSlugs,
+    });
+  });
+
+  it('keeps broad PDP/redirect invalidation when previousSlug is null', async () => {
+    mockRevalidateProducts.mockImplementation(() => {
+      throw new Error('no store');
+    });
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: true } as Response);
+    const products = [
+      {
+        id: 'prod-1',
+        slug: 'iphone-16',
+        previousSlug: null,
+        category: 'Phones',
+      },
+    ];
+    const productSlugs = ['iphone-16'];
+
+    await revalidateProductsReliable('merchant-1', {
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      merchantSlug: 'ogabassey',
+      products,
+      nextProductSlugs: productSlugs,
+    });
+
+    const [, init] = fetchImpl.mock.calls[0];
+    expect(JSON.parse((init as RequestInit).body as string)).toEqual({
+      merchantId: 'merchant-1',
+      merchantSlug: 'ogabassey',
+      products,
+      productSlugs,
+    });
+  });
+
   it('forwards the hostname-purge contract through the HTTP fallback', async () => {
     mockRevalidateProducts.mockImplementation(() => {
       throw new Error('no store');

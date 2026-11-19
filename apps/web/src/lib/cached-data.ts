@@ -2,10 +2,10 @@ import type { RegisteredAddress } from '@baci/shared';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { cacheLife, cacheTag } from 'next/cache';
 import { cache } from 'react';
-import { OGABASSEY_MERCHANT_ID } from '@/config/ogabassey';
 import { RELATED_BLOG_POST_LIMITS } from '@/config/related-blog-post-limits';
 import { projectAdvertisedPhonePrices } from '@/lib/advertised-phone-price-projection';
 import { getBlogCacheTag } from '@/lib/blog-cache-tags';
+import { getBlogContentLinksCacheTag } from '@/lib/blog-content-link-cache-tags';
 import { BLOG_LISTING_PAGE_SIZE } from '@/lib/blog-listing-page-size';
 import type {
   CachedCategoryRecord,
@@ -24,9 +24,21 @@ import { hydrateAndSanitizePublicProducts } from '@/lib/hydrate-public-products'
 import { hydrateRelatedBlogProductAvailability } from '@/lib/hydrate-related-blog-product-availability';
 import { isPostgrestNoRowsError } from '@/lib/is-postgrest-no-rows-error';
 import { merchantFeatureSettingsDefaults } from '@/lib/merchant-feature-settings-defaults';
+import { getMerchantSlugCacheTag } from '@/lib/merchant-slug-cache-tag';
+import {
+  normalizeCachedMerchantEntity,
+  redactUnpublishedMerchantContactFields,
+} from '@/lib/normalize-cached-merchant';
 import { normalizeStorefrontCategoryValue } from '@/lib/normalize-storefront-category-value';
 import { getOrderedBlogPostProductLinks } from '@/lib/ordered-blog-post-product-links';
-import { getProductScopedCacheTag } from '@/lib/product-cache-tags';
+import { extractPlatformSubdomainSlug } from '@/lib/platform-subdomain';
+import {
+  buildProductCanonicalRedirectCacheTags,
+  buildProductDetailsCacheTags,
+  buildProductLcpHintCacheTags,
+  buildProductLegacyRedirectCacheTags,
+  buildStorefrontPdpCoreCacheTags,
+} from '@/lib/product-cache-tags';
 import type { Product } from '@/lib/products';
 import {
   filterPublicBlogCategories,
@@ -45,13 +57,11 @@ import { resolveBlogAuthorIdentity } from '@/lib/resolve-blog-author-identity';
 import { selectBlogCatalogProducts } from '@/lib/select-blog-catalog-products';
 import { selectSemanticRelatedBlogPosts } from '@/lib/semantic-related-blog-posts';
 import { generateSlug } from '@/lib/seo-utils';
-import { normalizeOgabasseyBusinessType } from '@/lib/storefront/ogabassey-entity';
 import {
   RELATED_BLOG_POST_SELECT,
   STOREFRONT_BLOG_LISTING_SELECT,
   STOREFRONT_BLOG_POST_SELECT,
 } from '@/lib/storefront-blog-post-select';
-import { canonicalizeStorefrontMediaUrl } from '@/lib/storefront-media-cdn-url';
 import { readStorefrontMerchantSnapshot } from '@/lib/storefront-merchant-snapshot';
 import { readStorefrontPdpCoreSnapshot } from '@/lib/storefront-pdp-core-snapshot';
 import {
@@ -59,6 +69,13 @@ import {
   unwrapStorefrontReadResultForCache,
 } from '@/lib/storefront-read-result';
 import type { VariantAttributeSource } from '@/lib/storefront-specs/variant-attributes';
+import {
+  buildResolvedMerchantScopeTags,
+  buildStorefrontMerchantLookupTags,
+  getBlogCategoriesMerchantCacheTag,
+  getBlogIdentifierCacheTag,
+  getBlogPostsMerchantCacheTag,
+} from '@/lib/tenant-cache-tags';
 import {
   isDomainIdentifier,
   isValidMerchantIdentifier,
@@ -414,104 +431,6 @@ export interface CachedMerchant {
   updated_at?: string;
 }
 
-type CachedMerchantMediaFields = {
-  custom_domain?: string | null;
-  favicon_apple_touch_url?: string | null;
-  favicon_png_32_url?: string | null;
-  favicon_svg_url?: string | null;
-  id?: string | null;
-  logo_url?: string | null;
-  slug?: string | null;
-};
-
-function isOgabasseyMerchantEntity(merchant: CachedMerchantMediaFields) {
-  const customDomain = merchant.custom_domain?.toLowerCase();
-  const slug = merchant.slug?.toLowerCase();
-
-  return (
-    merchant.id === OGABASSEY_MERCHANT_ID ||
-    customDomain === 'ogabassey.com' ||
-    slug === 'ogabassey'
-  );
-}
-
-function canonicalizeMerchantMediaUrl(value: string | null | undefined) {
-  if (!value) {
-    return value;
-  }
-
-  return canonicalizeStorefrontMediaUrl(value) ?? value;
-}
-
-function withStorefrontMediaCdnUrls<T extends CachedMerchantMediaFields>(
-  merchant: T
-): T {
-  if (!isOgabasseyMerchantEntity(merchant)) {
-    return merchant;
-  }
-
-  return {
-    ...merchant,
-    favicon_apple_touch_url: canonicalizeMerchantMediaUrl(
-      merchant.favicon_apple_touch_url
-    ),
-    favicon_png_32_url: canonicalizeMerchantMediaUrl(
-      merchant.favicon_png_32_url
-    ),
-    favicon_svg_url: canonicalizeMerchantMediaUrl(merchant.favicon_svg_url),
-    logo_url: canonicalizeMerchantMediaUrl(merchant.logo_url),
-  } as T;
-}
-
-function normalizeCachedMerchantEntity<
-  T extends {
-    business_type?: string | null;
-    custom_domain?: string | null;
-    favicon_apple_touch_url?: string | null;
-    favicon_png_32_url?: string | null;
-    favicon_svg_url?: string | null;
-    id?: string | null;
-    logo_url?: string | null;
-    slug?: string | null;
-    template_id?: string | null;
-  },
->(merchant: T): Omit<T, 'business_type'> & { business_type: string } {
-  const merchantWithCdnMedia = withStorefrontMediaCdnUrls(merchant);
-
-  return {
-    ...merchantWithCdnMedia,
-    business_type: normalizeOgabasseyBusinessType(merchantWithCdnMedia),
-  };
-}
-
-function redactUnpublishedMerchantContactFields<
-  T extends {
-    business_address?: unknown;
-    email?: unknown;
-    is_published?: boolean | null;
-    legal_entity_name?: unknown;
-    phone?: unknown;
-    registered_address?: unknown;
-    support_email?: unknown;
-    support_phone?: unknown;
-    tax_identification_number?: unknown;
-    trust_profile?: unknown;
-  },
->(merchant: T): T {
-  if (merchant.is_published) return merchant;
-
-  merchant.email = '';
-  merchant.phone = '';
-  merchant.support_email = '';
-  merchant.support_phone = '';
-  merchant.business_address = '';
-  merchant.legal_entity_name = null;
-  merchant.registered_address = null;
-  merchant.tax_identification_number = null;
-  merchant.trust_profile = null;
-  return merchant;
-}
-
 function normalizeResolvedStorefrontCachedMerchantRow(
   row: StorefrontMerchantSnapshotRow
 ): CachedMerchant | null {
@@ -555,8 +474,7 @@ async function getCachedStorefrontMerchantSnapshot(
   cacheTag(
     'merchants',
     'domains',
-    `merchant-${identifier}`,
-    `domain-${identifier}`
+    ...buildStorefrontMerchantLookupTags(identifier)
   );
 
   const row = unwrapStorefrontReadResultForCache(
@@ -576,13 +494,7 @@ async function getCachedStorefrontMerchantSnapshot(
     });
   }
 
-  cacheTag(
-    `features-${merchant.id}`,
-    `merchant-${merchant.slug}`,
-    ...(merchant.custom_domain
-      ? [`domain-${merchant.custom_domain.toLowerCase()}`]
-      : [])
-  );
+  cacheTag(...buildResolvedMerchantScopeTags(merchant));
   return merchant;
 }
 
@@ -611,7 +523,11 @@ export async function getCachedMerchant(
   'use cache';
   cacheLife('merchant');
   const normalizedSlug = slug.toLowerCase();
-  cacheTag('merchants', `merchant-${normalizedSlug}`);
+  cacheTag(
+    'merchants',
+    `merchant-${normalizedSlug}`,
+    getMerchantSlugCacheTag(normalizedSlug)
+  );
 
   let merchant: CachedMerchant | null;
   try {
@@ -630,12 +546,8 @@ export async function getCachedMerchant(
     return null;
   }
 
-  console.log(
-    'Successfully fetched merchant:',
-    sanitizeLookupLogValue(slug),
-    merchant.id
-  );
   cacheTag(`features-${merchant.id}`);
+  cacheTag(...buildResolvedMerchantScopeTags(merchant));
   return merchant;
 }
 
@@ -651,8 +563,17 @@ export async function getCachedMerchantByDomain(
   'use cache';
   cacheLife('merchant');
   const normalizedDomain = domain.toLowerCase();
+  const subdomainSlug = extractPlatformSubdomainSlug(normalizedDomain);
+  if (subdomainSlug) {
+    return await getCachedMerchant(subdomainSlug);
+  }
   const safeDomain = sanitizeLookupLogValue(normalizedDomain);
-  cacheTag('merchants', 'domains', `domain-${normalizedDomain}`);
+  cacheTag(
+    'merchants',
+    'domains',
+    `domain-${normalizedDomain}`,
+    `merchant-${normalizedDomain}`
+  );
 
   let resolvedMerchant: CachedMerchant | null;
   try {
@@ -671,13 +592,8 @@ export async function getCachedMerchantByDomain(
     return null;
   }
 
-  console.log('Successfully fetched merchant by domain', {
-    domain: safeDomain,
-    slug: resolvedMerchant.slug,
-    merchantId: resolvedMerchant.id,
-  });
-
   cacheTag(`features-${resolvedMerchant.id}`);
+  cacheTag(...buildResolvedMerchantScopeTags(resolvedMerchant));
   return resolvedMerchant;
 }
 
@@ -696,10 +612,16 @@ export async function getMerchantByIdentifier(
 ): Promise<CachedMerchant | null> {
   if (!isValidMerchantIdentifier(identifier)) return null;
 
-  if (isDomainIdentifier(identifier)) {
-    return await getCachedMerchantByDomain(identifier.toLowerCase());
+  const normalized = identifier.toLowerCase();
+  const subdomainSlug = extractPlatformSubdomainSlug(normalized);
+  if (subdomainSlug) {
+    return await getCachedMerchant(subdomainSlug);
   }
-  return await getCachedMerchant(identifier.toLowerCase());
+
+  if (isDomainIdentifier(normalized)) {
+    return await getCachedMerchantByDomain(normalized);
+  }
+  return await getCachedMerchant(normalized);
 }
 
 /**
@@ -820,7 +742,16 @@ export async function getCachedMerchantById(
     throw error;
   }
 
-  return normalizeCachedMerchantEntity(data);
+  const normalized = normalizeCachedMerchantEntity(data);
+  if (normalized.slug) {
+    cacheTag(
+      ...buildResolvedMerchantScopeTags({
+        id: merchantId,
+        slug: normalized.slug,
+      })
+    );
+  }
+  return normalized;
 }
 
 /**
@@ -1180,14 +1111,7 @@ async function getCachedStorefrontPdpCore(
 ): Promise<CachedStorefrontPdpSnapshot | null> {
   'use cache';
   cacheLife('products');
-  cacheTag(
-    'product',
-    'product-details',
-    'product-lcp-hint',
-    `products-${merchantId}`,
-    `categories-${merchantId}`,
-    getProductScopedCacheTag('product', merchantId, productSlug)
-  );
+  cacheTag(...buildStorefrontPdpCoreCacheTags(merchantId, productSlug));
 
   const snapshot = unwrapStorefrontReadResultForCache(
     await readStorefrontPdpCoreSnapshot(getStorefrontSnapshotSupabaseClient(), {
@@ -1231,12 +1155,7 @@ export async function getCachedProductLcpHint(
 ): Promise<CachedProductLcpHint | null> {
   'use cache';
   cacheLife('products');
-  cacheTag(
-    'product',
-    'product-lcp-hint',
-    `products-${merchantId}`,
-    getProductScopedCacheTag('product', merchantId, productSlug)
-  );
+  cacheTag(...buildProductLcpHintCacheTags(merchantId, productSlug));
 
   const snapshot = await getCachedStorefrontPdpCore(merchantId, productSlug);
   if (snapshot?.kind !== 'product') return null;
@@ -1262,11 +1181,7 @@ export async function getCachedProductWithDetails(
 ) {
   'use cache';
   cacheLife('products');
-  cacheTag(
-    'product',
-    'product-details',
-    getProductScopedCacheTag('product', merchantId, productSlug)
-  );
+  cacheTag(...buildProductDetailsCacheTags(merchantId, productSlug));
 
   const snapshot = await getCachedStorefrontPdpCore(merchantId, productSlug);
   return snapshot?.kind === 'product' ? snapshot.product : null;
@@ -1317,16 +1232,7 @@ export async function getCachedProductCanonicalRedirectTarget(
   // slug, so a per-instance local cache is behaviourally identical.
   'use cache';
   cacheLife('products');
-  cacheTag(
-    'product',
-    'product-canonical-redirect',
-    getProductScopedCacheTag('product', merchantId, productSlug),
-    getProductScopedCacheTag(
-      'product-canonical-redirect',
-      merchantId,
-      productSlug
-    )
-  );
+  cacheTag(...buildProductCanonicalRedirectCacheTags(merchantId, productSlug));
 
   const supabase = getPublicSupabaseClient();
   const isUuid =
@@ -1374,11 +1280,7 @@ export async function getCachedLegacyProductRedirectTarget(
 ): Promise<CachedLegacyProductRedirectTarget | null> {
   'use cache';
   cacheLife('products');
-  cacheTag(
-    'product',
-    'product-legacy-redirect',
-    getProductScopedCacheTag('product-legacy-redirect', merchantId, productSlug)
-  );
+  cacheTag(...buildProductLegacyRedirectCacheTags(merchantId, productSlug));
 
   const snapshot = await getCachedStorefrontPdpCore(merchantId, productSlug);
   return snapshot?.kind === 'redirect' ? snapshot.target : null;
@@ -2473,6 +2375,7 @@ async function getCachedBlogPostCore(
   'use cache';
   cacheLife('blog');
   cacheTag('blog-posts', getBlogCacheTag(identifier, postSlug));
+  cacheTag(getBlogIdentifierCacheTag(identifier));
 
   const lookupKey = identifier.toLowerCase();
   const merchant = await getMerchantStrict(lookupKey);
@@ -2482,6 +2385,7 @@ async function getCachedBlogPostCore(
   // The core includes payout_currency, so merchant profile changes must
   // invalidate this outer cache as well as the enrichment's product tag.
   cacheTag(`merchant-id-${merchant.id}`);
+  cacheTag(getBlogPostsMerchantCacheTag(merchant.id));
 
   if (!merchant.feature_settings?.blog_enabled) return null;
 
@@ -2538,6 +2442,10 @@ async function getCachedBlogPostEnrichment(core: CachedBlogPostCore) {
   'use cache';
   cacheLife('blog');
   cacheTag('blog-posts', 'products', `products-${core.merchant.id}`);
+  cacheTag(
+    getBlogPostsMerchantCacheTag(core.merchant.id),
+    getBlogContentLinksCacheTag(core.merchant.id)
+  );
 
   const { merchant, post } = core;
   const supabase = getPublicSupabaseClient();
@@ -2687,6 +2595,7 @@ async function getCachedBlogListingCore(
   cacheLife('merchant');
   cacheTag(
     'blog-posts',
+    getBlogIdentifierCacheTag(identifier),
     `blog-list-${identifier.toLowerCase()}-${category || 'all'}-${page}`
   );
 
@@ -2696,6 +2605,11 @@ async function getCachedBlogListingCore(
   const merchant = await getMerchantStrict(lookupKey);
 
   if (!merchant) return null;
+
+  cacheTag(
+    `merchant-id-${merchant.id}`,
+    getBlogPostsMerchantCacheTag(merchant.id)
+  );
 
   if (!merchant.feature_settings?.blog_enabled) return null;
 
@@ -2776,7 +2690,11 @@ async function getCachedBlogListingCore(
 async function getCachedBlogListingCategories(merchantId: string) {
   'use cache';
   cacheLife('merchant');
-  cacheTag('blog-posts', `blog-categories-${merchantId}`);
+  cacheTag(
+    'blog-posts',
+    getBlogPostsMerchantCacheTag(merchantId),
+    getBlogCategoriesMerchantCacheTag(merchantId)
+  );
 
   const supabase = getPublicSupabaseClient();
   let categoriesQuery = supabase
@@ -2869,6 +2787,7 @@ export async function getCachedBlogAuthor(
   cacheLife('merchant');
   cacheTag(
     'blog-posts',
+    getBlogIdentifierCacheTag(identifier),
     `blog-author-${identifier.toLowerCase()}-${authorSlug}-${page}`
   );
 
@@ -2876,6 +2795,11 @@ export async function getCachedBlogAuthor(
   const offset = (page - 1) * limit;
   const merchant = await getMerchantStrict(identifier.toLowerCase());
   if (!merchant) return null;
+
+  cacheTag(
+    `merchant-id-${merchant.id}`,
+    getBlogPostsMerchantCacheTag(merchant.id)
+  );
 
   if (!merchant.feature_settings?.blog_enabled) return null;
 

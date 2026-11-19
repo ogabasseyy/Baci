@@ -36,6 +36,20 @@ export async function refreshOxygenEligibility(
       : response.status === 'FAILED'
         ? 'failed'
         : 'pending';
+  // Match only the observed Oxygen prefix; unknown failures use the generic
+  // message. Never retain the provider's raw message.
+  if (
+    response.status === 'FAILED' &&
+    /^your\s+financial\s+details\s+do\s+not\s+match\b/i.test(
+      response.message.trim()
+    )
+  ) {
+    state.eligibilityFailureReason = 'financial_details_mismatch';
+  } else {
+    delete state.eligibilityFailureReason;
+    if (response.status === 'FAILED')
+      console.warn('oxygen_eligibility_failure_unclassified');
+  }
   if (response.status === 'COMPLETED') state.eligible = response.is_eligible;
   else delete state.eligible;
   if (state.eligible) {
@@ -51,7 +65,7 @@ export async function refreshOxygenEligibility(
     state.minimumAmount =
       response.minimum_loan_amount ?? OXYGEN_MINIMUM_LOAN_AMOUNT_NAIRA;
     state.maxTenure = requireValue(response.max_tenure);
-    if (response.offers) {
+    if (response.offers?.length) {
       if (response.tenure_unit?.toLowerCase() !== 'monthly') {
         throw new Error('Invalid eligibility offer period');
       }

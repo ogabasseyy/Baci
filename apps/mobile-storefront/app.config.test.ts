@@ -76,7 +76,7 @@ describe('Expo app config (Facebook SDK and merchant domain)', () => {
     expect(config.runtimeVersion).toBeTruthy();
   });
 
-  it('uses an separate OTA runtime boundaries for the SDK 58 native upgrade', () => {
+  it('uses separate OTA runtime boundaries for the splash native API', () => {
     const appConfig = loadAppConfigWithEnv({
       EXPO_PUBLIC_POSTHOG_API_KEY: 'ph_test',
       STOREFRONT_FACEBOOK_APP_ID: '123456789',
@@ -84,9 +84,9 @@ describe('Expo app config (Facebook SDK and merchant domain)', () => {
     });
     const config = renderConfig(appConfig);
     expect(config.version).toBe('2.0.1');
-    expect(config.runtimeVersion).toBe('2.0.1-ios-sdk58-rn0880');
+    expect(config.runtimeVersion).toBe('2.0.1-ios-sdk58-rn0880-splashmotion1');
     expect(config.android).toMatchObject({
-      runtimeVersion: '2.0.1-android-sdk58-rn0880',
+      runtimeVersion: '2.0.1-android-sdk58-rn0880-splashmotion1',
       versionCode: 741,
     });
   });

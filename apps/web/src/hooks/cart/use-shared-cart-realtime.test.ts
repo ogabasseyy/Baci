@@ -1,5 +1,9 @@
 import { renderHook, waitFor } from '@testing-library/react';
-import { beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import {
+  resetCartSessionHintForTests,
+  writeCartSessionHint,
+} from './cart-session-hint';
 import { fetchSharedCartSnapshot } from './shared-cart-client';
 import { useCartSubscription } from './use-cart-subscription';
 import { useSharedCart } from './use-shared-cart';
@@ -14,9 +18,12 @@ vi.mock('./shared-cart-client', () => ({
   createSharedCart: vi.fn(),
   sendSharedCartCommand: vi.fn(),
 }));
+afterEach(() => resetCartSessionHintForTests());
 beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
+  resetCartSessionHintForTests();
+  writeCartSessionHint('m', '1');
   vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({
     ok: true,
     warnings: [],

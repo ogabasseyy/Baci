@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { fetchWithCsrf } from '@/lib/api-client';
+import { oxygenEligibilityReasonHeader } from '@/lib/payments/oxygen/eligibility-reason-contract';
 import { oxygenRuntimeSnapshotSchema } from '@/schemas/oxygen-runtime-view';
 
 /** Create or resume only the authenticated customer's order-bound workflow. */
@@ -25,7 +26,10 @@ export async function fetchOxygenSnapshot(
     await decode(
       await fetchWithCsrf(
         `/api/payments/oxygen/workflows/actions?workflowId=${id}`,
-        { cache: 'no-store' }
+        {
+          cache: 'no-store',
+          headers: { [oxygenEligibilityReasonHeader]: '1' },
+        }
       )
     )
   );

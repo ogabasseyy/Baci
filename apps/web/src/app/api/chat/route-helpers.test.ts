@@ -51,6 +51,10 @@ describe('chat route helpers', () => {
     expect(systemMessage.content).toContain('live inventory');
     expect(systemMessage.content).toContain('payment status');
     expect(systemMessage.content).toContain('order cancellation');
+    expect(systemMessage.content).toContain(
+      'Virtual account creation is not available in this chat yet'
+    );
+    expect(systemMessage.content).not.toContain('payment account requests');
     expect(systemMessage.content).not.toMatch(
       /cart|add to cart|remove from cart|update cart/i
     );

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { EXPO_PUBLIC_API_URL } from '@/env';
 import { CONFIG } from '@/lib/config';
+import { customerErrorText } from '@/lib/customer-error-text';
 import { createLogger } from '@/lib/logger';
 import { pickMerchantId } from '@/lib/pick-merchant-id';
 import { getRegisteredPushToken } from '@/lib/push-token-storage';
@@ -38,9 +39,11 @@ const INITIAL_INBOX_STATE: InboxState = {
 };
 
 function getErrorMessage(error: unknown) {
-  return error instanceof Error
-    ? error.message
-    : 'Unable to update savings notifications. Please try again.';
+  // Never transport wording ("fetch failed: Could not connect…").
+  return customerErrorText(
+    error,
+    'Unable to update savings notifications. Please try again.'
+  );
 }
 
 export function useSavingsNotificationInbox({

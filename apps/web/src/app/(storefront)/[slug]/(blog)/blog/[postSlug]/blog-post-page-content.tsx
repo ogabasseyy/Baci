@@ -8,6 +8,7 @@ import { InformationalClusterPanel } from '@/components/storefront/ogabassey/seo
 import { Button } from '@/components/ui/button';
 import { hasBlogAuthorPage } from '@/lib/blog-authors';
 import { getBlogPostRedirect } from '@/lib/blog-post-redirects';
+import { isTecnoSponsoredBlogUrl } from '@/lib/posthog/is-tecno-sponsored-blog-url';
 import { getRequestLocale } from '@/lib/request-locale';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { asRoute } from '@/lib/routes';
@@ -23,8 +24,12 @@ import { BlogPostBody } from './BlogPostBody';
 import { BlogPostBodyFallback } from './BlogPostBodyFallback';
 import { buildCanonicalBlogPostUrl } from './blog-post-content';
 import { BlogPostShell } from './blog-post-shell';
-import { buildBlogPostStructuredData } from './blog-post-structured-data';
+import {
+  buildBlogPostStructuredData,
+  isOrganizationBlogAuthor,
+} from './blog-post-structured-data';
 import { getResolvedBlogPost } from './get-resolved-blog-post';
+import { TecnoBlogClickTracker } from './tecno-blog-click-tracker';
 import { ViewCounter } from './view-counter';
 
 interface BlogPostPageContentProps {
@@ -107,6 +112,12 @@ async function renderBlogPostContent({
   const hasAuthorHub = Boolean(
     post.author_name && hasBlogAuthorPage(post.author_name, merchant.slug)
   );
+  const isOrganizationAuthor = isOrganizationBlogAuthor({
+    authorName,
+    hasAuthorHub,
+    merchantBusinessName: merchant.business_name,
+    postAuthorName: post.author_name,
+  });
   const authorSlug =
     hasAuthorHub && post.author_name ? generateSlug(post.author_name) : null;
   const authorHref = authorSlug
@@ -119,6 +130,7 @@ async function renderBlogPostContent({
   const structuredData = buildBlogPostStructuredData({
     catalogPrices: { products: relatedProducts, currencySource: merchant },
     author: {
+      type: isOrganizationAuthor ? 'Organization' : 'Person',
       id: authorId,
       image: post.author_image_url ?? undefined,
       name: authorName,
@@ -187,6 +199,10 @@ async function renderBlogPostContent({
 
   const body = (
     <>
+      {/* Intentional canonical custom-domain gate so draft previews and usebaci.com subdomain visits do not fire campaign click events. */}
+      {!isDraftMode && isTecnoSponsoredBlogUrl(postUrl) && (
+        <TecnoBlogClickTracker />
+      )}
       <Suspense fallback={<BlogPostBodyFallback />}>
         <BlogPostBody
           basePath={basePath}

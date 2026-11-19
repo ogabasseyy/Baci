@@ -263,3 +263,39 @@ describe('bugfix: SDR keeps the aggregate failed without relabelling later event
     expect(result.events.filter((e) => e.status === 'failed')).toHaveLength(1);
   });
 });
+
+describe('bugfix: terminal outcome survives a later progress scan; MSHC keeps its raw code', () => {
+  it('stays delivered when an MSHC follows SHD', () => {
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W43',
+        MobileShipmentTrackings: [
+          event('SHD', '10:00:00'),
+          event('MSHC', '12:00:00'),
+        ],
+      },
+      'W43',
+      OBSERVED_AT
+    );
+    expect(result.status).toBe('delivered');
+  });
+
+  it('restores the MSHC provider code after the parcel moved through the network', () => {
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W44',
+        Destination: 'ABUJA',
+        MobileShipmentTrackings: [
+          event('ARF', '10:00:00', { Location: 'WUSE ABUJA' }),
+          event('MSHC', '12:00:00', {
+            ScanStatusReason: 'RIDER EN ROUTE FOR PICKUP',
+          }),
+        ],
+      },
+      'W44',
+      OBSERVED_AT
+    );
+    const mshc = result.events.find((e) => e.timestamp.getUTCHours() === 12);
+    expect(mshc?.rawStatus).toBe('MSHC');
+  });
+});

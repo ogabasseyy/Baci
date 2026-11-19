@@ -201,10 +201,19 @@ export function normalizeGiglTrackingShipment(
   const destroyed = candidates.some(
     (candidate) => candidate.providerStatus.trim().toUpperCase() === 'SDR'
   );
+  // A terminal outcome (delivered, returned, cancelled) stays authoritative
+  // over a later non-terminal scan; failed attempts are not terminal.
+  const terminalCandidate = sortedCandidates.find(
+    (candidate) =>
+      candidate.recognizedStatus !== null &&
+      TERMINAL_STATUSES.has(candidate.recognizedStatus)
+  );
   const status =
     destroyed && !TERMINAL_STATUSES.has(recognizedStatus)
       ? 'failed'
-      : recognizedStatus;
+      : terminalCandidate && !TERMINAL_STATUSES.has(recognizedStatus)
+        ? (terminalCandidate.recognizedStatus ?? recognizedStatus)
+        : recognizedStatus;
   const deliveredEvent = sortedCandidates.find(
     (candidate) => candidate.recognizedStatus === 'delivered'
   );

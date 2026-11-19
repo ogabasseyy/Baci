@@ -199,6 +199,15 @@ export function applyLifecycleGuards(
         candidate.recognizedStatus = 'pickup_scheduled';
       }
     }
+    if (
+      raw === 'MSHC' &&
+      candidate.recognizedStatus === 'out_for_delivery' &&
+      event.rawStatus === GIGL_PICKUP_EN_ROUTE_RAW_STATUS
+    ) {
+      // A genuine delivery run (after arrival or network movement) must not keep
+      // the pickup-en-route raw status the normalizer derived from the reason.
+      event.rawStatus = candidate.providerStatus;
+    }
     if (candidate.recognizedStatus === 'picked_up') pickedUp = true;
     if (
       candidate.recognizedStatus === 'in_transit' ||

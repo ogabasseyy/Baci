@@ -1,9 +1,15 @@
 import { canonicalizeCommerceVariantAxis } from '@baci/shared/lib/commerce-variant-axis';
 import { formatCanonicalProductConditionLabel } from '@baci/shared/lib/product-condition';
-import {
-  resolveCartColorChipStyle,
-  type VariantDetailsItem,
-} from './cart-item-badge-style';
+import { resolveCartColorChipStyle } from './cart-item-badge-style';
+
+export interface VariantDetailsItem {
+  condition?: string;
+  selectedColor?: string;
+  selectedColorValue?: string;
+  selectedStorage?: string;
+  secondaryColor?: string;
+  variantAttributes?: Record<string, string>;
+}
 
 /** Render the saved SKU selection consistently in carts and checkout. */
 export function CartVariantDetails({

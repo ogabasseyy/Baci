@@ -24,4 +24,4 @@ $$;
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS analytics_events_user_agent_scrub_idx
   ON public.analytics_events (created_at)
-  WHERE event_data ? 'user_agent';
+  WHERE pg_catalog.jsonb_typeof(event_data) = 'object' AND event_data ? 'user_agent';

@@ -13,15 +13,27 @@ DECLARE
   v_old_no_ua uuid := '00000000-0000-4000-8000-00000000a512';
   v_recent uuid := '00000000-0000-4000-8000-00000000a513';
   v_old_null_ua uuid := '00000000-0000-4000-8000-00000000a514';
+  v_user uuid := '00000000-0000-4000-8000-00000000a500';
+  v_arr uuid := '00000000-0000-4000-8000-00000000a515';
   v_data jsonb;
   v_count bigint;
 BEGIN
+  ALTER TABLE public.merchants DISABLE TRIGGER USER;
+  INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password,
+    email_confirmed_at, created_at, updated_at, raw_app_meta_data, raw_user_meta_data)
+  VALUES (v_user, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated',
+    'scrub-ua@example.com', 'test', now(), now(), now(), '{}', '{}');
+  INSERT INTO public.merchants (id, user_id, email, business_name, slug)
+  VALUES (v_merchant, v_user, 'scrub-ua@example.com', 'Scrub UA', 'scrub-ua');
+  ALTER TABLE public.merchants ENABLE TRIGGER USER;
+
   -- event_type 'purchase' so the unrelated low-value delete never touches them.
   INSERT INTO public.analytics_events (id, merchant_id, event_type, event_data, created_at, event_timestamp)
   VALUES
     (v_old, v_merchant, 'purchase', '{"user_agent":"Agent/1.0","session_id":"s1","value":10}', now() - interval '100 days', now() - interval '100 days'),
     (v_old_no_ua, v_merchant, 'purchase', '{"session_id":"s2"}', now() - interval '100 days', now() - interval '100 days'),
     (v_recent, v_merchant, 'purchase', '{"user_agent":"Agent/2.0","session_id":"s3"}', now() - interval '10 days', now() - interval '10 days'),
+    (v_arr, v_merchant, 'purchase', '["user_agent","x"]', now() - interval '100 days', now() - interval '100 days'),
     (v_old_null_ua, v_merchant, 'purchase', '{"user_agent":null,"session_id":"s4"}', now() - interval '100 days', now() - interval '100 days');
 
   PERFORM public.cleanup_database_retention();
@@ -49,8 +61,13 @@ BEGIN
     RAISE EXCEPTION 'old row with null user_agent key kept the key: %', v_data;
   END IF;
 
+  SELECT event_data INTO v_data FROM public.analytics_events WHERE id = v_arr;
+  IF v_data <> '["user_agent","x"]'::jsonb THEN
+    RAISE EXCEPTION 'non-object payload was modified: %', v_data;
+  END IF;
+
   SELECT count(*) INTO v_count FROM public.analytics_events WHERE merchant_id = v_merchant;
-  IF v_count <> 4 THEN
+  IF v_count <> 5 THEN
     RAISE EXCEPTION 'rows were deleted: %', v_count;
   END IF;
 
@@ -66,9 +83,11 @@ $$;
 DO $$
 BEGIN
   IF NOT EXISTS (
-    SELECT 1 FROM pg_catalog.pg_indexes
-    WHERE schemaname = 'public' AND indexname = 'analytics_events_user_agent_scrub_idx'
-      AND indexdef LIKE '%WHERE%user_agent%'
+    SELECT 1
+    FROM pg_catalog.pg_class AS index_class
+    JOIN pg_catalog.pg_index AS index_state ON index_state.indexrelid = index_class.oid
+    WHERE index_class.oid = 'public.analytics_events_user_agent_scrub_idx'::regclass
+      AND index_state.indisvalid AND index_state.indpred IS NOT NULL
   ) THEN
     RAISE EXCEPTION 'partial user_agent scrub index missing';
   END IF;

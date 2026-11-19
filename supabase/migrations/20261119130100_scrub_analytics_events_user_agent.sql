@@ -26,6 +26,7 @@ DECLARE
   v_batch_deleted bigint;
   v_scrub_batch_size CONSTANT integer := 10000;
   v_scrub_deadline timestamptz;
+  v_scrub_cutoff timestamptz;
   v_scrubbed bigint;
 BEGIN
   v_now := pg_catalog.clock_timestamp();
@@ -114,15 +115,18 @@ BEGIN
   -- dropped at ingest still carry event_data.user_agent. Once a row is older
   -- than v_personal_data_retention (OWNER DECISION: 90 days, the single place
   -- the period is set; age is the analytics row's own created_at, the column
-  -- the partial index is keyed on), remove ONLY that key. Other event_data
+  -- the partial index is keyed on), remove ONLY that key (object payloads only, so a
+  -- non-object row is never changed). Other event_data
   -- keys stay and no row is deleted. Batches of 10,000 with SKIP LOCKED and
   -- its own 4 second budget; leftovers carry to the next run.
+  v_scrub_cutoff := v_now - v_personal_data_retention;
   v_scrub_deadline := pg_catalog.clock_timestamp() + interval '4 seconds';
   LOOP
     WITH expired_events AS (
       SELECT events.id
       FROM public.analytics_events AS events
-      WHERE events.created_at < pg_catalog.clock_timestamp() - v_personal_data_retention
+      WHERE events.created_at < v_scrub_cutoff
+        AND pg_catalog.jsonb_typeof(events.event_data) = 'object'
         AND events.event_data ? 'user_agent'
       ORDER BY events.created_at
       LIMIT v_scrub_batch_size
@@ -132,6 +136,7 @@ BEGIN
     SET event_data = target.event_data - 'user_agent'
     FROM expired_events AS expired
     WHERE target.id = expired.id
+      AND pg_catalog.jsonb_typeof(target.event_data) = 'object'
       AND target.event_data ? 'user_agent';
 
     GET DIAGNOSTICS v_scrubbed = ROW_COUNT;

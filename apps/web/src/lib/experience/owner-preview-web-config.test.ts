@@ -37,6 +37,8 @@ describe('owner preview web configuration', () => {
     { ownerOrigin: undefined },
     { ownerOrigin: 'https://mcp.usebaci.com' },
     { ownerOrigin: 'https://builder-mcp.usebaci.com' },
+    { ownerOrigin: 'https://other.usebaci.com' },
+    { ownerOrigin: 'https://builder-owner.usebaci.com:8443' },
     { ownerOrigin: 'https://owner.baci-internal.invalid' },
     { ownerCert: undefined },
     { ownerKey: undefined },

@@ -2,8 +2,8 @@
 
 `Caddyfile.candidate` contains the auth, public MCP and owner vhosts. Use bare
 DNS hostnames for `BACI_AUTH_HOST` and `BACI_OWNER_HOST`. Set the auth host to
-`builder-auth.usebaci.com`. The public MCP host is fixed to
-`builder-mcp.usebaci.com` and terminates TLS directly at Contabo. Each port
+`builder-auth.usebaci.com` and the owner host to `builder-owner.usebaci.com`.
+The public MCP host is fixed to `builder-mcp.usebaci.com` and terminates TLS directly at Contabo. Each port
 variable must match its corresponding configured loopback listener.
 
 Combine those vhosts with the output-only site from the
@@ -56,10 +56,10 @@ was changed. This is not live OAuth or deployment qualification.
 
 The candidate web clients can use a fixed, mutually authenticated owner HTTPS
 transport configured by `BACI_OWNER_MTLS_ORIGIN`, `BACI_OWNER_MTLS_CERT` and
-`BACI_OWNER_MTLS_KEY`. Missing or invalid configuration leaves preview and
-approval disabled. These settings are not provisioned or deployed, and their
-production hostname, certificate lifecycle, rotation, trust and live failure
-behavior remain unqualified. The direct public MCP host has exact MCP and
+`BACI_OWNER_MTLS_KEY`. Set `BACI_OWNER_MTLS_ORIGIN` to
+`https://builder-owner.usebaci.com`. Missing or invalid configuration leaves
+preview and approval disabled. Certificate lifecycle, rotation, trust and live
+failure behavior remain unqualified. The direct public MCP host has exact MCP and
 protected-resource paths. Caddy sends the actual connecting address to the loopback listener.
 Validate rate-limit behavior through the direct production connection. The
 600-second verifier path and graceful shutdown need qualification against

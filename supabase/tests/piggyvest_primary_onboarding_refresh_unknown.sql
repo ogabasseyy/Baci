@@ -232,8 +232,18 @@ END $$;
 
 -- 10: identity-change fence persists across subsequent retries without masking ambiguous-dispatch tracking.
 DO $$
-DECLARE refreshed jsonb; retried jsonb;
+DECLARE refreshed jsonb; retried jsonb; plain jsonb;
 BEGIN
+  -- An ordinary reclaim of a never-refreshed intent omits identityRefreshed,
+  -- so the previous app release (strict parser) keeps working mid-rollout.
+  plain := piggyvest_primary.claim_onboarding(pg_temp.scope(9), repeat('a', 64));
+  PERFORM pg_temp.check(plain->>'status' = 'claimed'
+      AND plain->>'reclaimed' = 'true'
+      AND NOT (plain ? 'identityRefreshed'),
+    'ordinary reclaim must not send identityRefreshed');
+  PERFORM pg_temp.check(piggyvest_primary.record_onboarding(pg_temp.scope(9),
+    (plain->>'intentId')::uuid, (plain->>'claimToken')::uuid, NULL, NULL),
+    'slot 9 ordinary reclaim back to unknown failed');
   -- Customer 9 is 'unknown' under repeat('a', 64); refresh to repeat('b', 64), fail back to 'unknown', then retry 'b'.
   refreshed := piggyvest_primary.refresh_unknown_onboarding(pg_temp.scope(9), repeat('b', 64));
   PERFORM pg_temp.check(refreshed->>'status' = 'claimed'

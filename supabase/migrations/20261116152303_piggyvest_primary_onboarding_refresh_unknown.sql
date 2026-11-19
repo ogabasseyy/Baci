@@ -43,13 +43,17 @@ BEGIN
   IF intent.state = 'unknown' OR (intent.state = 'dispatched' AND intent.updated_at < pg_catalog.clock_timestamp() - interval '5 minutes') THEN
     UPDATE piggyvest_primary.onboarding_intents SET state = 'dispatched', claim_token = pg_catalog.gen_random_uuid(),
       updated_at = pg_catalog.clock_timestamp() WHERE id = intent.id RETURNING * INTO intent;
+    -- identityRefreshed is sent only when true: the previous app release
+    -- parses this answer strictly, so an always-present key would break
+    -- ordinary reclaims during a migration-first rollout or a rollback.
     RETURN jsonb_build_object(
       'status','claimed',
       'intentId',intent.id,
       'claimToken',intent.claim_token,
-      'reclaimed', true,
-      'identityRefreshed', intent.identity_refreshed
-    );
+      'reclaimed', true
+    ) || CASE WHEN intent.identity_refreshed
+      THEN jsonb_build_object('identityRefreshed', true)
+      ELSE '{}'::jsonb END;
   END IF;
   RETURN jsonb_build_object('status', CASE WHEN intent.state = 'verified' THEN 'ready' WHEN intent.state = 'rejected' THEN 'conflict' ELSE 'pending' END);
 END $$;

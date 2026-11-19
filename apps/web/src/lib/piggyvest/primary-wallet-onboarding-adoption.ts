@@ -23,12 +23,16 @@ import { emitPiggyvestWebhookAlert } from './webhook-alerts';
  *   returnIfExist may have matched another identity, or the listing may lag
  *   a just-created customer: never adopted, and the intent stays reclaimable
  *   so a later lookup decides.
+ * - `refreshed_existing`: an existing customer after an identity refresh.
+ *   Never adopted, but it may hold a live DVA under our identifier, so its
+ *   ids are kept for review and closure like a duplicate's.
  */
 export type CreatedCustomerVerdict =
   | 'adopt'
   | 'foreign'
   | 'duplicate'
-  | 'unproven';
+  | 'unproven'
+  | 'refreshed_existing';
 
 export function judgeCreatedCustomer(input: {
   lookup: PrimaryWalletCustomerLookup | null;
@@ -43,7 +47,7 @@ export function judgeCreatedCustomer(input: {
   // a wallet to that old BVN, so it is never adopted. The accepted cost: a
   // lost response after a refresh ends in OWNERSHIP_REVIEW_REQUIRED
   // (manual review) rather than an automatic adoption.
-  if (identityRefreshed && !created.new_customer) return 'foreign';
+  if (identityRefreshed && !created.new_customer) return 'refreshed_existing';
   if (lookup === null) return created.new_customer ? 'adopt' : 'foreign';
   if (lookup.kind === 'none')
     return created.new_customer ? 'adopt' : 'unproven';

@@ -63,7 +63,15 @@ describe('primary wallet onboarding: retry with new details after an unresolved 
       status: 'conflict',
       code: 'OWNERSHIP_REVIEW_REQUIRED',
     });
-    expect(input.storage.recordRejected).toHaveBeenCalledOnce();
+    // bugfix (Codex P1): the existing customer's ids are kept for review and
+    // DVA closure, never an id-less rejection.
+    expect(input.storage.recordReview).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        providerCustomerId: 'customer-fixture',
+        providerWalletId: 'wallet-fixture',
+      })
+    );
+    expect(input.storage.recordRejected).not.toHaveBeenCalled();
     expect(input.storage.recordAccepted).not.toHaveBeenCalled();
   });
 
@@ -150,7 +158,15 @@ describe('primary wallet onboarding: retry with new details after an unresolved 
       status: 'conflict',
       code: 'OWNERSHIP_REVIEW_REQUIRED',
     });
-    expect(input.storage.recordRejected).toHaveBeenCalledOnce();
+    // bugfix (Codex P1): the existing customer's ids are kept for review and
+    // DVA closure, never an id-less rejection.
+    expect(input.storage.recordReview).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        providerCustomerId: 'customer-fixture',
+        providerWalletId: 'wallet-fixture',
+      })
+    );
+    expect(input.storage.recordRejected).not.toHaveBeenCalled();
     expect(input.storage.recordAccepted).not.toHaveBeenCalled();
   });
 

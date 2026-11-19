@@ -169,8 +169,13 @@ export async function onboardPiggyvestPrimaryWallet(
       await input.storage.recordUncertain(claimedScope);
       return { status: 'pending' };
     }
-    if (verdict === 'duplicate') {
-      alertOwnershipReview('duplicate provider customer', claim.intentId);
+    if (verdict === 'duplicate' || verdict === 'refreshed_existing') {
+      alertOwnershipReview(
+        verdict === 'duplicate'
+          ? 'duplicate provider customer'
+          : 'existing customer after identity refresh',
+        claim.intentId
+      );
       const kept = await keepCreatedWalletForReview({
         storage: input.storage,
         claimedScope,

@@ -33,7 +33,19 @@ BEGIN
     notification_events_not_before = now() - interval '1 day'
   WHERE shipment_id = v_shipment_id;
 
-  -- One poll: the synthetic arrival plus a newer delivery run (MSHC).
+  -- The delivery run (MSHC) was persisted by an earlier poll, so in this poll it
+  -- conflicts and queues nothing: the arrival is the only new event, and the
+  -- supersession trigger has no newer notification to remove it with. Old code
+  -- dropped it (in_transit <> out_for_delivery); the fix must queue it.
+  UPDATE public.shipments SET status = 'out_for_delivery' WHERE id = v_shipment_id;
+  INSERT INTO public.shipment_tracking_events (
+    shipment_id, tracking_epoch_id, tracking_number, provider,
+    provider_event_key, raw_status, normalized_status, description, occurred_at
+  ) VALUES (
+    v_shipment_id, v_epoch, 'GIGL-ARRIVAL-ENQUEUE-001', 'GIGL',
+    'mshc-1', 'MSHC', 'out_for_delivery', 'Out for delivery',
+    now() - interval '1 hour'
+  );
   PERFORM public.apply_gigl_tracking_result(
     v_shipment_id, v_epoch, 'arrival-worker', 'out_for_delivery', NULL, NULL,
     jsonb_build_array(
@@ -53,14 +65,14 @@ BEGIN
   FROM public.shipment_tracking_notification_outbox
   WHERE shipment_id = v_shipment_id AND audience = 'customer';
   IF v_status IS DISTINCT FROM 'out_for_delivery'
-    OR v_kinds IS DISTINCT FROM ARRAY['out_for_delivery'] THEN
-    RAISE EXCEPTION 'arrival plus a newer delivery run must leave the customer one current update, got % / %',
+    OR v_kinds IS DISTINCT FROM ARRAY['arrived_in_city', 'transit_started'] THEN
+    RAISE EXCEPTION 'a new arrival beside an already-recorded delivery run must still be queued, got % / %',
       v_status, v_kinds;
   END IF;
 END;
 $test$;
 
-SELECT pass('arrival sharing a poll with a newer scan is superseded, not lost or duplicated');
+SELECT pass('a new arrival is queued even when the shipment already moved past in_transit');
 
 SELECT * FROM finish();
 ROLLBACK;

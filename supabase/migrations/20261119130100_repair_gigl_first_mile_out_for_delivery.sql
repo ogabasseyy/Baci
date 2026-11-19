@@ -3,6 +3,10 @@
 -- Only MSHC scans that precede every other movement scan are touched, and only
 -- shipments with no genuine out_for_delivery event; terminal shipments and
 -- notification history are left alone. Idempotent: a second run matches nothing.
+-- Residual scope (by design): an MSHC tied to a movement scan's timestamp, and
+-- terminal shipments, are not rewritten. provider_event_key is unique per
+-- shipment in tracking_events (the apply function dedupes on it), so the JSON
+-- patch joins on (shipment, key).
 WITH movement AS (
   SELECT event.shipment_id, event.tracking_epoch_id,
     min(event.occurred_at) AS first_movement_at

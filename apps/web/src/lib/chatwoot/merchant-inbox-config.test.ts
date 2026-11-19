@@ -45,6 +45,29 @@ describe('getMerchantInboxBinding', () => {
     });
   });
 
+  it('carries an optional reports credential and rejects a malformed one', () => {
+    const withReports = (reportsApiAccessToken: unknown) =>
+      env({
+        EKAETTE_CHATWOOT_INBOX_BINDINGS: JSON.stringify([
+          {
+            merchantId: MERCHANT_A,
+            accountId: 1,
+            inboxId: 10,
+            apiAccessToken: TOKEN_A,
+            reportsApiAccessToken,
+          },
+        ]),
+      });
+    expect(
+      getMerchantInboxBinding(MERCHANT_A, withReports(TOKEN_B))
+        ?.reportsApiAccessToken
+    ).toBe(TOKEN_B);
+    expect(
+      getMerchantInboxBinding(MERCHANT_A, withReports('has space'))
+    ).toBeNull();
+    expect(getMerchantInboxBinding(MERCHANT_A, withReports(42))).toBeNull();
+  });
+
   it('returns null for a merchant without a binding', () => {
     expect(
       getMerchantInboxBinding('33333333-3333-4333-8333-333333333333', env())

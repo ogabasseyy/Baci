@@ -134,4 +134,46 @@ describe('runClaimedOrderWalletOrCheckoutBooking', () => {
       })
     );
   });
+
+  it('invokes onLockReleased after clearing the claimed shipment lock', async () => {
+    bookWalletOrCustomerCheckout.mockImplementationOnce(
+      async (
+        _supabase,
+        _merchantId,
+        _orderId,
+        _quoteId,
+        _fundingSource,
+        _book,
+        releaseLock
+      ) => {
+        await releaseLock?.();
+        throw new Error('MERCHANT_WALLET_SUBMISSION_FAILED');
+      }
+    );
+    const onLockReleased = vi.fn();
+
+    await expect(
+      runClaimedOrderWalletOrCheckoutBooking(
+        {} as never,
+        'merchant-1',
+        'order-1',
+        {
+          selected_quote_id: null,
+          shipping_funding_source: 'merchant_wallet',
+          shipping_provider: 'GIGL',
+          payment_status: 'paid',
+          payment_method: 'paystack',
+        },
+        { lockToken: 'lock-1', onLockReleased }
+      )
+    ).rejects.toThrow('MERCHANT_WALLET_SUBMISSION_FAILED');
+
+    expect(clearOrderShipmentBookingLock).toHaveBeenCalledWith(
+      expect.anything(),
+      'merchant-1',
+      'order-1',
+      'lock-1'
+    );
+    expect(onLockReleased).toHaveBeenCalledTimes(1);
+  });
 });

@@ -83,6 +83,7 @@ function createSupabase() {
   }));
 
   return {
+    rpc: vi.fn(() => Promise.resolve({ data: {}, error: null })),
     from: vi.fn(() => ({
       select: vi.fn(() => ({
         eq: vi.fn((_column: string, merchantId: string) => {

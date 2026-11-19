@@ -180,12 +180,13 @@ export function normalizeGiglTrackingShipment(
         candidate.event.location &&
         candidate.event.timestamp.getTime() === top.event.timestamp.getTime()
     );
-    // Prefer the tied arrival scan: its location is the current one.
-    const located =
-      tied.find(
-        (candidate) =>
-          candidate.event.rawStatus === GIGL_ARRIVED_IN_CITY_RAW_STATUS
-      ) ?? tied[0];
+    // Only the verified arrival case: a tied arrival scan's location is the
+    // current one. Never copy a hub's location onto an unrelated leading event
+    // (e.g. a location-less delivered scan).
+    const located = tied.find(
+      (candidate) =>
+        candidate.event.rawStatus === GIGL_ARRIVED_IN_CITY_RAW_STATUS
+    );
     if (located) top.event.location = located.event.location;
   }
   const newestRecognized = sortedCandidates.find(

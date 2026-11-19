@@ -92,3 +92,21 @@ describe('bugfix: only the first explicit arrival is rewritten', () => {
     ).toHaveLength(1);
   });
 });
+
+describe('bugfix: tied location is only borrowed from an arrival scan', () => {
+  it('does not copy a hub location onto a location-less delivered scan', () => {
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W48',
+        MobileShipmentTrackings: [
+          event('DPC', '10:00:00', { Location: 'IKEJA 2 (IKEJA)' }),
+          event('SHD', '10:00:00'),
+        ],
+      },
+      'W48',
+      OBSERVED_AT
+    );
+    expect(result.status).toBe('delivered');
+    expect(result.events[0]?.location).toBeUndefined();
+  });
+});

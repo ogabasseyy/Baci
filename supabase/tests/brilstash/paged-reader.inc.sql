@@ -13,7 +13,7 @@ INSERT INTO public.products (
 SELECT ('41000000-0000-4000-8000-00000000000' || n)::uuid,
   '20000000-0000-4000-8000-000000000001', 'active', 'Fixture ' || n, 'paged-' || n,
   '50000000-0000-4000-8000-000000000001', 'new', 50000 + n * 70000, '["https://media.example.invalid/approved"]'::jsonb,
-  false, false, n, n, true, 'legacy'
+  false, false, n, n, true, 'off'
 FROM generate_series(1, 7) n;
 INSERT INTO public.product_feed_images (
   id, merchant_id, product_id, status, verified_url, is_primary, position, source_url

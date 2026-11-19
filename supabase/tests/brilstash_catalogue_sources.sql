@@ -20,7 +20,9 @@ CREATE TABLE public.products(
 CREATE TABLE public.product_variants(
   id uuid PRIMARY KEY, merchant_id uuid, product_id uuid, condition text,
   attributes jsonb, is_inventory_anchor boolean, price_override numeric,
-  stock_quantity integer, inventory_tracking_policy text
+  stock_quantity integer, inventory_tracking_policy text,
+  is_active boolean DEFAULT true, deleted_at timestamptz, archived_at timestamptz,
+  status text NOT NULL DEFAULT 'active'
 );
 CREATE TABLE public.product_offers(
   id uuid PRIMARY KEY, merchant_id uuid, product_id uuid, condition text, status text,
@@ -37,7 +39,14 @@ CREATE TABLE public.product_feed_images(
 CREATE SCHEMA private;
 CREATE FUNCTION private.get_public_serialized_variant_availability_counts(uuid, uuid[], uuid)
 RETURNS TABLE(product_id uuid, variant_id uuid, public_available_units integer)
-LANGUAGE sql STABLE AS $$ SELECT NULL::uuid, NULL::uuid, NULL::integer WHERE false $$;
+LANGUAGE plpgsql STABLE AS $$
+BEGIN
+  IF current_setting('fixture.serialized_count_error', true) = 'true' THEN
+    RAISE EXCEPTION 'fixture availability failed' USING ERRCODE = '22000';
+  END IF;
+  RETURN;
+END;
+$$;
 \ir ../migrations/20261119010141_brilstash_catalogue_storage.sql
 \ir ../migrations/20261119010330_brilstash_catalogue_assortment.sql
 \ir ../migrations/20261119010611_brilstash_catalogue_sources.sql
@@ -74,11 +83,13 @@ INSERT INTO public.products (
 ) VALUES
   ('40000000-0000-4000-8000-000000000001', '20000000-0000-4000-8000-000000000001',
     'active', 'Fixture phone', 'fixture-phone', '50000000-0000-4000-8000-000000000001', 'new', 350000,
-     true, 'sku_matrix', false, 3, 3, true, 'legacy'),
+     true, 'sku_matrix', false, 3, 3, true, 'off'),
   ('40000000-0000-4000-8000-000000000002', '20000000-0000-4000-8000-000000000002',
     'active', 'Other tenant product', 'other-product', NULL, 'new', 900000,
-     false, NULL, false, 2, 2, true, 'legacy');
-INSERT INTO public.product_variants VALUES
+     false, NULL, false, 2, 2, true, 'off');
+INSERT INTO public.product_variants (
+  id, merchant_id, product_id, condition, attributes, is_inventory_anchor, price_override, stock_quantity, inventory_tracking_policy
+) VALUES
   ('40000000-0000-4000-8000-000000000011','20000000-0000-4000-8000-000000000001',
    '40000000-0000-4000-8000-000000000001','new','{"storage":"128GB"}',false,365000,0,'inherit');
 INSERT INTO private.brilstash_listings (

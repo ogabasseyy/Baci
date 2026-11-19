@@ -38,3 +38,41 @@ BEGIN
 END $$;
 RESET ROLE;
 UPDATE public.products SET status = 'active' WHERE slug = 'fixture-phone';
+
+SAVEPOINT serialized_stock;
+UPDATE public.products SET inventory_tracking_policy = 'serialized_strict' WHERE slug = 'fixture-phone';
+SET LOCAL ROLE authenticated;
+SET LOCAL "request.jwt.claim.sub" = '10000000-0000-4000-8000-000000000001';
+DO $$
+DECLARE installation uuid := '30000000-0000-4000-8000-000000000001';
+BEGIN
+  IF public.load_brilstash_catalogue_sources(installation)->'rows'->0->'inventory'
+    IS DISTINCT FROM '{"kind":"serialized","units":0}'::jsonb
+  THEN RAISE EXCEPTION 'empty serialized count did not report zero'; END IF;
+  PERFORM set_config('fixture.serialized_count_error', 'true', true);
+  BEGIN
+    PERFORM public.load_brilstash_catalogue_sources(installation);
+    RAISE EXCEPTION 'a failed serialized count was reported as successful';
+  EXCEPTION WHEN SQLSTATE '22000' THEN NULL;
+  END;
+END $$;
+RESET ROLE;
+ROLLBACK TO SAVEPOINT serialized_stock;
+RELEASE SAVEPOINT serialized_stock;
+
+SAVEPOINT variant_visibility;
+DO $$
+DECLARE id_to_hide uuid := '40000000-0000-4000-8000-000000000011';
+BEGIN
+  FOR test_case IN 1..4 LOOP
+    UPDATE public.product_variants
+    SET is_active = test_case <> 1, status = CASE WHEN test_case = 2 THEN 'draft' ELSE 'active' END,
+      deleted_at = CASE WHEN test_case = 3 THEN now() END,
+      archived_at = CASE WHEN test_case = 4 THEN now() END
+    WHERE id = id_to_hide;
+    IF public.read_brilstash_page(repeat('k', 43), 1, 100, 0)->>'status' IS DISTINCT FROM 'unavailable'
+    THEN RAISE EXCEPTION 'unpublished variant was still served in visibility case %', test_case; END IF;
+  END LOOP;
+END $$;
+ROLLBACK TO SAVEPOINT variant_visibility;
+RELEASE SAVEPOINT variant_visibility;

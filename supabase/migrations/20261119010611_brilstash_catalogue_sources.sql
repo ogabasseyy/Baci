@@ -11,6 +11,14 @@ LANGUAGE sql STABLE SET search_path = '' AS $$
     WHERE i.id = p_installation_id AND i.merchant_id = p_merchant_id
       AND l.retired_at IS NULL
   ),
+  public_variants AS NOT MATERIALIZED (
+    SELECT v.id, v.merchant_id, v.product_id, v.condition, v.attributes,
+      v.price_override, v.stock_quantity, v.inventory_tracking_policy
+    FROM public.product_variants v
+    WHERE v.merchant_id = p_merchant_id AND v.is_inventory_anchor IS NOT TRUE
+      AND v.is_active IS NOT FALSE AND v.status = 'active'
+      AND v.deleted_at IS NULL AND v.archived_at IS NULL
+  ),
   resolved AS (
     SELECT a.*, p.id AS product_id, p.name, p.slug, p.brand,
       p.condition AS parent_condition, p.images AS product_images,
@@ -33,9 +41,9 @@ LANGUAGE sql STABLE SET search_path = '' AS $$
       END AS scalar_stock,
       COALESCE(NULLIF(CASE WHEN a.source_kind = 'variant'
         THEN v.inventory_tracking_policy ELSE anchor.inventory_tracking_policy END, 'inherit'),
-        NULLIF(p.inventory_tracking_policy, 'inherit'), 'legacy') AS stock_policy,
+        NULLIF(p.inventory_tracking_policy, 'inherit'), 'off') AS stock_policy,
       CASE a.source_kind
-        WHEN 'variant' THEN v.id IS NOT NULL AND v.is_inventory_anchor IS NOT TRUE AND shape.has_variants
+        WHEN 'variant' THEN v.id IS NOT NULL AND shape.has_variants
           AND v.attributes = a.reviewed_identity->'attributes'
         WHEN 'offer' THEN o.id IS NOT NULL AND p.has_condition_offers IS TRUE AND NOT shape.has_variants
         ELSE NOT shape.has_variants
@@ -44,7 +52,7 @@ LANGUAGE sql STABLE SET search_path = '' AS $$
     LEFT JOIN public.products p ON p.id = a.parent_product_id AND p.merchant_id = p_merchant_id
       AND p.status = 'active'
     LEFT JOIN public.merchants m ON m.id = p.merchant_id AND m.is_published IS TRUE
-    LEFT JOIN public.product_variants v ON a.source_kind = 'variant' AND v.id = a.source_id
+    LEFT JOIN public_variants v ON a.source_kind = 'variant' AND v.id = a.source_id
       AND v.product_id = p.id AND v.merchant_id = p.merchant_id
     LEFT JOIN public.product_variants anchor ON anchor.id = p.inventory_anchor_variant_id
       AND anchor.product_id = p.id AND anchor.merchant_id = p.merchant_id AND anchor.is_inventory_anchor IS TRUE
@@ -62,9 +70,8 @@ LANGUAGE sql STABLE SET search_path = '' AS $$
     ) o ON true
     CROSS JOIN LATERAL (
       SELECT (p.has_variants IS TRUE OR COALESCE(p.variant_model, '') = 'sku_matrix'
-        OR EXISTS (SELECT 1 FROM public.product_variants child
-          WHERE child.product_id = p.id AND child.merchant_id = p.merchant_id
-            AND child.is_inventory_anchor IS NOT TRUE)) AS has_variants
+        OR EXISTS (SELECT 1 FROM public_variants child
+          WHERE child.product_id = p.id AND child.merchant_id = p.merchant_id)) AS has_variants
     ) shape
     LEFT JOIN LATERAL (
       SELECT min(mapping.partner_category) AS partner_category,
@@ -89,9 +96,8 @@ LANGUAGE sql STABLE SET search_path = '' AS $$
     -- The PDP rejects a truncated variant matrix rather than resolving a subset.
       AND (q.source_kind <> 'variant' OR (
         SELECT count(*) FROM (
-          SELECT 1 FROM public.product_variants child
-          WHERE child.product_id = q.product_id AND child.merchant_id = p_merchant_id
-            AND child.is_inventory_anchor IS NOT TRUE LIMIT 129
+          SELECT 1 FROM public_variants child
+          WHERE child.product_id = q.product_id AND child.merchant_id = p_merchant_id LIMIT 129
         ) capped
       ) <= 128)
   )
@@ -118,11 +124,11 @@ LANGUAGE sql STABLE SET search_path = '' AS $$
     'inventory', CASE
       WHEN e.stock_policy IN ('serialized_strict', 'serialized_then_unlimited')
         THEN jsonb_build_object('kind', 'serialized', 'units', CASE
-          WHEN a.source_kind <> 'offer' THEN units.public_available_units
-          WHEN units.public_available_units IS NOT NULL AND e.scalar_stock IS NOT NULL
-            THEN LEAST(units.public_available_units, e.scalar_stock)
+          WHEN a.source_kind <> 'offer' THEN COALESCE(units.public_available_units, 0)
+          WHEN e.scalar_stock IS NOT NULL
+            THEN LEAST(COALESCE(units.public_available_units, 0), e.scalar_stock)
           ELSE NULL END)
-      WHEN a.source_kind = 'offer' OR (e.stock_policy = 'legacy' AND e.manage_stock IS TRUE)
+      WHEN a.source_kind = 'offer' OR (e.stock_policy = 'off' AND e.manage_stock IS TRUE)
         THEN jsonb_build_object('kind', 'quantity', 'units', e.scalar_stock,
           'legacyUnits', CASE WHEN a.source_kind = 'product' THEN e.stock ELSE NULL END)
       WHEN e.id IS NOT NULL AND withdrawal.id IS NOT NULL

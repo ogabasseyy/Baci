@@ -64,6 +64,28 @@ describe('native Oxygen order admission', () => {
     ).rejects.toThrow('capability');
     expect(createOrder).not.toHaveBeenCalled();
   });
+  it.each([
+    'voucherToken',
+    'voucherAwardId',
+  ])('rejects an unnormalized %s before sending the order', async (key) => {
+    await expect(
+      submitOxygenCheckout(
+        {
+          request: {
+            ...request,
+            items: request.items.map((item) => ({ ...item, [key]: 'id' })),
+          },
+          checkoutGeneration: 'g',
+          isAuthenticated: true,
+          hasVoucher: false,
+          hasCredits: false,
+        },
+        { admit, createOrder }
+      )
+    ).rejects.toThrow(/without vouchers/);
+    expect(admit).not.toHaveBeenCalled();
+    expect(createOrder).not.toHaveBeenCalled();
+  });
   it('preserves a promo code for the server to price before financing', async () => {
     const discounted = { ...request, discount_code: 'SAVE10' };
     await submitOxygenCheckout(

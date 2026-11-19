@@ -26,7 +26,11 @@ export async function submitOxygenCheckout(
     (input.request.wallet_amount ?? 0) > 0 ||
     (input.request.savings_amount ?? 0) > 0 ||
     input.request.items.some(
-      (item) => item.voucher_token || item.voucher_award_id
+      (item) =>
+        item.voucher_token ||
+        item.voucher_award_id ||
+        ('voucherToken' in item && item.voucherToken) ||
+        ('voucherAwardId' in item && item.voucherAwardId)
     )
   ) {
     throw new Error(

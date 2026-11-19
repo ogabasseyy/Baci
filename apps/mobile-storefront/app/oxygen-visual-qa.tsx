@@ -9,7 +9,7 @@ import {
 const OXYGEN_VISUAL_QA_ORIGIN = 'http://127.0.0.1:3198';
 
 export default function OxygenVisualQaRoute() {
-  const { step } = useLocalSearchParams<{ step?: string }>();
+  const { step } = useLocalSearchParams<{ step?: string | string[] }>();
   if (!__DEV__) return <Redirect href="/" />;
   if (
     process.env.EXPO_PUBLIC_OXYGEN_STAGING !== '1' ||
@@ -24,7 +24,18 @@ export default function OxygenVisualQaRoute() {
       </View>
     );
   }
-  const initial = previewSteps.find((value) => value === step) ?? 'identity';
+  return <OxygenVisualQaFixture step={step} />;
+}
+
+export function OxygenVisualQaFixture({ step }: { step?: string | string[] }) {
+  const initial = previewSteps.find((value) => value === (step ?? 'identity'));
+  if (!initial) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', padding: 24 }}>
+        <Text accessibilityRole="alert">Unknown Oxygen preview step.</Text>
+      </View>
+    );
+  }
   return (
     <>
       <Stack.Screen options={{ title: 'Oxygen preview', headerShown: true }} />

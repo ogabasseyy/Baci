@@ -15,9 +15,9 @@ import {
   PickupOptions,
 } from './gigl.constants';
 import type { giglSchemas } from './gigl.schemas';
+import { resolveAggregate } from './gigl.tracking-aggregate';
 import { applyLifecycleGuards } from './gigl.tracking-lifecycle-guards';
 import { currentStatusRank } from './gigl.tracking-status-rank';
-import { TERMINAL_STATUSES } from './gigl.tracking-terminal-statuses';
 
 type GiglTrackingShipment = z.input<typeof giglSchemas.trackingShipment>;
 
@@ -175,13 +175,11 @@ export function normalizeGiglTrackingShipment(
   // (e.g. MSHC, with or without its own location) must not hide the arrival
   // centre from the same poll.
   const top = sortedCandidates[0];
-  // A located terminal scan (e.g. SHD) keeps its own location: that is where
-  // the parcel ended up, not the arrival centre.
+  // A located leader keeps its own location (terminal, failed...) except the
+  // generic MSHC, whose hub is not where the parcel is: the arrival wins there.
   const topKeepsOwnLocation =
-    top?.event.location !== undefined &&
-    top.event.location !== '' &&
-    top.recognizedStatus !== null &&
-    TERMINAL_STATUSES.has(top.recognizedStatus);
+    Boolean(top?.event.location) &&
+    top?.providerStatus.trim().toUpperCase() !== 'MSHC';
   if (top && !topKeepsOwnLocation) {
     const tied = sortedCandidates.filter(
       (candidate) =>
@@ -197,45 +195,13 @@ export function normalizeGiglTrackingShipment(
     );
     if (located && located !== top) top.event.location = located.event.location;
   }
-  const newestRecognized = sortedCandidates.find(
-    (candidate) => candidate.recognizedStatus !== null
-  );
   if (sortedCandidates.length === 0) {
     throw new Error('GIGL tracking result has no valid tracking events');
   }
-  const hasRecognizedLifecycleEvent = newestRecognized !== undefined;
-  const recognizedStatus = newestRecognized?.recognizedStatus ?? 'pending';
-  // SDR (destroyed) stays authoritative for the aggregate status while later
-  // scans keep their own event status (so they queue no failure notification).
-  const destroyed = candidates.some(
-    (candidate) => candidate.providerStatus.trim().toUpperCase() === 'SDR'
+  const hasRecognizedLifecycleEvent = sortedCandidates.some(
+    (candidate) => candidate.recognizedStatus !== null
   );
-  // A terminal outcome (delivered, returned, cancelled) stays authoritative
-  // over a later non-terminal scan; failed attempts are not terminal.
-  const terminalCandidate = sortedCandidates.find(
-    (candidate) =>
-      candidate.recognizedStatus !== null &&
-      TERMINAL_STATUSES.has(candidate.recognizedStatus)
-  );
-  // A terminal outcome wins over the SDR fence and over later progress scans,
-  // unless the SDR itself is newer than that terminal scan.
-  const newestSdrAt = Math.max(
-    ...candidates
-      .filter(
-        (candidate) => candidate.providerStatus.trim().toUpperCase() === 'SDR'
-      )
-      .map((candidate) => candidate.event.timestamp.getTime()),
-    Number.NEGATIVE_INFINITY
-  );
-  const terminalOverrides =
-    terminalCandidate !== undefined &&
-    !TERMINAL_STATUSES.has(recognizedStatus) &&
-    !(destroyed && newestSdrAt > terminalCandidate.event.timestamp.getTime());
-  const status = terminalOverrides
-    ? (terminalCandidate.recognizedStatus ?? recognizedStatus)
-    : destroyed && !TERMINAL_STATUSES.has(recognizedStatus)
-      ? 'failed'
-      : recognizedStatus;
+  const { status, lead } = resolveAggregate(sortedCandidates);
   const deliveredEvent = sortedCandidates.find(
     (candidate) => candidate.recognizedStatus === 'delivered'
   );
@@ -248,16 +214,8 @@ export function normalizeGiglTrackingShipment(
     hasRecognizedLifecycleEvent,
     actualDelivery:
       status === 'delivered' ? deliveredEvent?.event.timestamp : undefined,
-    // The worker reads the snapshot location from events[0]: when a terminal
-    // outcome overrides newer scans, its event must lead so the location
-    // matches the persisted status.
-    events: (terminalOverrides
-      ? [
-          terminalCandidate,
-          ...sortedCandidates.filter(
-            (candidate) => candidate !== terminalCandidate
-          ),
-        ]
+    events: (lead
+      ? [lead, ...sortedCandidates.filter((candidate) => candidate !== lead)]
       : sortedCandidates
     ).map((candidate) => candidate.event),
     isStationPickup: shipment.PickupOptions === PickupOptions.ServiceCentre,

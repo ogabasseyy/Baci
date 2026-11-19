@@ -21,6 +21,8 @@ post_status pending 'Checking the current Codex code review'
 comments=$(mktemp "${RUNNER_TEMP:?}/codex-review.XXXXXXXX")
 confirm=$(mktemp "${RUNNER_TEMP:?}/codex-review.XXXXXXXX")
 trap 'rm -f "$comments" "$confirm"' EXIT
+# Codex publishes its review-state summary as a PR issue comment rather than
+# a pull-request review object; leave unparsed shapes pending rather than guessing.
 gh api --paginate --slurp "repos/$repo/issues/$pr/comments?per_page=100" > "$comments"
 result=$(node .github/scripts/codex-review-evidence-cli.mjs "$comments" "$head")
 gh api --paginate --slurp "repos/$repo/issues/$pr/comments?per_page=100" > "$confirm"

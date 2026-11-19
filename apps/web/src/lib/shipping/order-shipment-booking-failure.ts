@@ -91,7 +91,9 @@ export function classifyBookingFailure(
       httpStatus: error.status,
       outcome:
         error.code === BOOKED_SHIPMENT_NOT_SAVED_CODE ||
-        error.code === 'SHIPMENT_SAVE_FAILED'
+        error.code === 'SHIPMENT_SAVE_FAILED' ||
+        // The carrier accepted the parcel before the payment was refunded.
+        error.code === 'ORDER_REFUNDED_AFTER_BOOKING'
           ? 'booked_not_saved'
           : 'rejected',
     };
@@ -174,13 +176,13 @@ export function toBookingFailureResponseError(
       // The old quote cannot be reused after a wallet-funded attempt. Do not
       // claim the refund finished: it is attempted automatically, not confirmed.
       return new OrderShipmentBookingError(
-        'We could not reach GIG just now. Nothing was booked. Any wallet charge for this attempt should be returned automatically; check your wallet and contact support if it is missing. Please get a new shipping quote and book again.',
+        'We could not reach the shipping carrier just now. Nothing was booked. Any wallet charge for this attempt should be returned automatically; check your wallet and contact support if it is missing. Please get a new shipping quote and book again.',
         503,
         'PROVIDER_UNREACHABLE'
       );
     }
     return new OrderShipmentBookingError(
-      'We could not reach GIG just now. Nothing was booked; please try again.',
+      'We could not reach the shipping carrier just now. Nothing was booked; please try again.',
       503,
       'PROVIDER_UNREACHABLE'
     );
@@ -191,13 +193,13 @@ export function toBookingFailureResponseError(
   if (options.walletFunded) {
     // The wallet charge is held for reconciliation, so waiting will not help.
     return new OrderShipmentBookingError(
-      'GIG did not confirm this booking in time and your wallet charge is being checked. Please contact support before trying again.',
+      'The shipping carrier did not confirm this booking in time and your wallet charge is being checked. Please contact support before trying again.',
       503,
       'SHIPMENT_BOOKING_UNCONFIRMED'
     );
   }
   return new OrderShipmentBookingError(
-    'GIG did not confirm this booking in time. To avoid booking the parcel twice, this order is paused for up to 15 minutes. Please try again after that.',
+    'The shipping carrier did not confirm this booking in time. To avoid booking the parcel twice, this order is paused for up to 15 minutes. Please try again after that.',
     503,
     'SHIPMENT_BOOKING_UNCONFIRMED'
   );

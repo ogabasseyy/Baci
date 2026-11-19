@@ -144,6 +144,16 @@ describe('toBookingFailureResponseError', () => {
     });
   });
 
+  it('bugfix: does not name GIG when an unreachable carrier may be Topship', () => {
+    const result = toBookingFailureResponseError(
+      Object.assign(new TypeError('fetch failed'), {
+        cause: { code: 'ECONNREFUSED' },
+      })
+    );
+    expect((result as Error).message).not.toMatch(/GIG/);
+    expect((result as Error).message).toMatch(/shipping carrier/);
+  });
+
   it('leaves our own refusals untouched', () => {
     const own = new OrderShipmentBookingError('x', 400, 'QUOTE_PRICE_CHANGED');
     expect(toBookingFailureResponseError(own)).toBe(own);
@@ -235,6 +245,15 @@ describe('bugfix: order-route persistence failure is booked_not_saved', () => {
       'save failed',
       500,
       'SHIPMENT_SAVE_FAILED'
+    );
+    expect(classifyBookingFailure(error).outcome).toBe('booked_not_saved');
+  });
+
+  it('classifies ORDER_REFUNDED_AFTER_BOOKING as booked_not_saved because the carrier accepted the parcel', () => {
+    const error = new OrderShipmentBookingError(
+      'refunded',
+      409,
+      'ORDER_REFUNDED_AFTER_BOOKING'
     );
     expect(classifyBookingFailure(error).outcome).toBe('booked_not_saved');
   });

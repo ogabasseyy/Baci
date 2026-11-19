@@ -39,7 +39,11 @@ CREATE POLICY "merchant_staff_record_booking_failures"
   ON public.order_shipment_booking_failures
   FOR INSERT TO authenticated
   WITH CHECK (
-    public.has_merchant_access(merchant_id)
+    -- Mirrors the booking route: only staff who may fulfil orders can record a
+    -- booking failure, so a read-only staff account cannot forge history rows.
+    public.check_staff_permission(
+      (SELECT auth.uid()), merchant_id, 'orders', 'fulfill'
+    )
     AND EXISTS (
       SELECT 1 FROM public.orders o
       WHERE o.id = order_id AND o.merchant_id = order_shipment_booking_failures.merchant_id

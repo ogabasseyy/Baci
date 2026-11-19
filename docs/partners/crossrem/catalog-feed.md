@@ -6,6 +6,8 @@ The response includes `schema_version: 1`, `currency: "NGN"` and `listings`. Eac
 
 Retain the last accepted snapshot and its ETag. Send the validator with `If-None-Match`. On HTTP 304, retain the current catalog. On HTTP 200, validate the full response before replacing it. An ID missing from a complete snapshot can be deactivated. On any error, retain the previous catalog and retry according to the agreed sync schedule.
 
+Baci checks that the current snapshot is complete before hashing the exact response body. This ensures a conditional request still returns 503 when a binding is unresolved. The ETag saves transfer and importer work on an unchanged snapshot. The server still builds it from the cached feed source on each authenticated poll.
+
 ## Prepare a sandbox snapshot
 
 1. The repository pins the Ogabassey merchant UUID and the Google listing baseline in `ogabassey-listing-bindings.json`. For a synthetic sandbox, use an isolated copy with the synthetic merchant and equivalent fixture bindings.
@@ -28,6 +30,8 @@ Run the read-only live acceptance test to compare every active pinned ID, produc
 ```sh
 VERIFY_CROSSREM_LIVE_FEED=1 pnpm --dir apps/web exec vitest run src/app/api/partners/v1/catalog/catalog-bindings.live.test.ts
 ```
+
+Rerun once after a timeout or temporary upstream error. If the public XML redirects, confirm the correct canonical feed URL before updating the test. For persistent listing mismatches, use the reported sample IDs to check Google listing mode, product links, verified images and condition before changing a binding.
 
 ## Verification on 19 November 2026
 

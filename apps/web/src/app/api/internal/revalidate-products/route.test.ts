@@ -211,10 +211,14 @@ describe('POST /api/internal/revalidate-products', () => {
     );
 
     expect(res.status).toBe(200);
-    // Authoritative slug + category resolved from the row (not the uuid path).
+    // Authoritative slug + category resolved from the row, plus the UUID path
+    // (a cached /products/<uuid> response must be evicted at the edge too).
     expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
       'ogabassey',
-      [{ slug: 'iphone-15', categorySegment: 'smartphones' }]
+      [
+        { slug: 'iphone-15', categorySegment: 'smartphones' },
+        { slug: 'prod-1', categorySegment: null },
+      ]
     );
     // Per-slug Next caches hard-expired for the authoritative slug + id,
     // BEFORE the edge purge is scheduled.

@@ -19,7 +19,7 @@ describe('mergeDependentAliasTargets', () => {
     });
   });
 
-  it('merges dependent legacy child identifiers into Next slugs and edge entries', async () => {
+  it('merges parent ids and dependent legacy child identifiers into Next slugs and edge entries', async () => {
     const supabase = {} as SupabaseClient;
     const result = await mergeDependentAliasTargets({
       supabase,
@@ -39,12 +39,33 @@ describe('mergeDependentAliasTargets', () => {
     expect(result).toEqual({
       entries: [
         { slug: 'iphone-15', categorySegment: 'smartphones' },
+        { slug: 'parent-1', categorySegment: null },
         { slug: 'archived-child', categorySegment: null },
         { slug: 'child-uuid', categorySegment: null },
       ],
       slugs: ['iphone-15', 'parent-1', 'archived-child', 'child-uuid'],
       incomplete: false,
     });
+  });
+
+  it('adds the parent id edge entry even when no dependent aliases exist', async () => {
+    mockResolveDependentAliases.mockResolvedValueOnce({
+      identifiers: [],
+      incomplete: false,
+    });
+    const result = await mergeDependentAliasTargets({
+      supabase: {} as SupabaseClient,
+      merchantId: 'merchant-1',
+      products: [{ id: 'parent-1', slug: 'iphone-15' }],
+      entries: [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
+      slugs: ['iphone-15'],
+    });
+
+    expect(result.entries).toEqual([
+      { slug: 'iphone-15', categorySegment: 'smartphones' },
+      { slug: 'parent-1', categorySegment: null },
+    ]);
+    expect(result.slugs).toEqual(['iphone-15', 'parent-1']);
   });
 
   it('skips alias queries when no product ids are supplied and preserves incomplete flags', async () => {

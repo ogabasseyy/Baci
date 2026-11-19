@@ -71,7 +71,10 @@ describe('revalidateProductsReliable enrichment path', () => {
     );
     expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
       'ogabassey',
-      [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
+      [
+        { slug: 'iphone-15', categorySegment: 'smartphones' },
+        { slug: 'product-id', categorySegment: null },
+      ],
       { blogPostSlugs: ['iphone-15-buying-guide'] }
     );
     expect(mockExpireProductBlogCache).toHaveBeenCalledWith('merchant-1');
@@ -130,7 +133,10 @@ describe('revalidateProductsReliable enrichment path', () => {
 
     expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
       'ogabassey',
-      [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
+      [
+        { slug: 'iphone-15', categorySegment: 'smartphones' },
+        { slug: 'product-id', categorySegment: null },
+      ],
       { blogPostSlugs: ['known-guide'] }
     );
     expect(mockScheduleStorefrontHostnamePurge).toHaveBeenCalledWith(

@@ -38,15 +38,20 @@ export async function mergeDependentAliasTargets({
     productIds
   );
   const existingEntrySlugs = new Set(entries.map((entry) => entry.slug));
+  // Parent ids are edge targets too: a cached `/products/<uuid>` response is
+  // keyed by the id, so expiring its origin tag alone leaves Cloudflare stale.
+  const aliasIdentifiers = Array.from(
+    new Set([...productIds, ...dependentAliases.identifiers])
+  );
 
   return {
     entries: [
       ...entries,
-      ...dependentAliases.identifiers
+      ...aliasIdentifiers
         .filter((identifier) => !existingEntrySlugs.has(identifier))
         .map((identifier) => ({ slug: identifier, categorySegment: null })),
     ],
-    slugs: Array.from(new Set([...slugs, ...dependentAliases.identifiers])),
+    slugs: Array.from(new Set([...slugs, ...aliasIdentifiers])),
     incomplete: dependentAliases.incomplete,
   };
 }

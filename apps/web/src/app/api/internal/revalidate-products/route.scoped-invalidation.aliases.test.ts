@@ -120,6 +120,7 @@ describe('POST /api/internal/revalidate-products dependent alias guards', () => 
       'ogabassey',
       [
         { slug: 'iphone-15', categorySegment: 'smartphones' },
+        { slug: 'prod-1', categorySegment: null },
         { slug: 'archived-child', categorySegment: null },
         { slug: 'child-uuid', categorySegment: null },
       ]

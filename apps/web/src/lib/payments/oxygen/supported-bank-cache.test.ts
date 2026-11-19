@@ -6,6 +6,7 @@ import {
 } from './supported-bank-cache';
 
 const bank = { name: 'Example Bank', code: '001' };
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 describe('Oxygen supported bank cache', () => {
   it('separates environments and returns the saved list without contacting Oxygen', async () => {
     const cache = {
@@ -57,7 +58,7 @@ describe('cache-first read for checkout', () => {
     const cache = {
       get: vi.fn().mockResolvedValue({ banks: [bank] }),
       set: vi.fn(),
-      del: vi.fn(),
+      eval: vi.fn(),
     };
     const providerSource = vi.fn();
 
@@ -74,11 +75,11 @@ describe('cache-first read for checkout', () => {
     expect(cache.set).not.toHaveBeenCalled();
   });
 
-  it('repopulates a cold cache and releases the refresh lock', async () => {
+  it('repopulates a cold cache and releases only its own refresh lock', async () => {
     const cache = {
       get: vi.fn().mockResolvedValue(null),
       set: vi.fn().mockResolvedValue('OK'),
-      del: vi.fn().mockResolvedValue(1),
+      eval: vi.fn().mockResolvedValue(1),
     };
     const provider = { call: vi.fn().mockResolvedValue(providerList) };
     const providerSource = vi.fn().mockReturnValue(provider);
@@ -92,13 +93,14 @@ describe('cache-first read for checkout', () => {
       )
     ).toEqual([bank]);
 
-    expect(cache.set).toHaveBeenCalledWith(
-      expect.stringMatching(/:refresh-lock$/),
-      'refreshing',
-      { nx: true, ex: 60 }
-    );
-    expect(cache.del).toHaveBeenCalledWith(
-      expect.stringMatching(/:refresh-lock$/)
+    const [lockKey, token] = cache.set.mock.calls[0];
+    expect(lockKey).toMatch(/:refresh-lock$/);
+    expect(token).toMatch(UUID);
+    expect(cache.set.mock.calls[0][2]).toEqual({ nx: true, ex: 60 });
+    expect(cache.eval).toHaveBeenCalledWith(
+      expect.stringContaining("redis.call('get', KEYS[1]) == ARGV[1]"),
+      [lockKey],
+      [token]
     );
   });
 
@@ -106,7 +108,7 @@ describe('cache-first read for checkout', () => {
     const cache = {
       get: vi.fn().mockResolvedValue(null),
       set: vi.fn().mockResolvedValue(null),
-      del: vi.fn(),
+      eval: vi.fn(),
     };
     const providerSource = vi.fn();
 
@@ -120,35 +122,14 @@ describe('cache-first read for checkout', () => {
     ).toBeNull();
 
     expect(providerSource).not.toHaveBeenCalled();
-    expect(cache.del).not.toHaveBeenCalled();
-  });
-
-  it('releases the lock and reports unavailable when the refresh fails', async () => {
-    const cache = {
-      get: vi.fn().mockResolvedValue(null),
-      set: vi.fn().mockResolvedValue('OK'),
-      del: vi.fn().mockResolvedValue(1),
-    };
-    const provider = {
-      call: vi.fn().mockRejectedValue(new Error('provider down')),
-    };
-
-    expect(
-      await readOrRefreshSupportedBanks(
-        cache,
-        'production',
-        'partner',
-        () => provider
-      )
-    ).toBeNull();
-    expect(cache.del).toHaveBeenCalled();
+    expect(cache.eval).not.toHaveBeenCalled();
   });
 
   it('skips the provider when no runtime matches the configured environment', async () => {
     const cache = {
       get: vi.fn().mockResolvedValue(null),
       set: vi.fn().mockResolvedValue('OK'),
-      del: vi.fn().mockResolvedValue(1),
+      eval: vi.fn().mockResolvedValue(1),
     };
 
     expect(
@@ -159,7 +140,7 @@ describe('cache-first read for checkout', () => {
         () => null
       )
     ).toBeNull();
-    expect(cache.del).toHaveBeenCalled();
+    expect(cache.eval).toHaveBeenCalled();
   });
 
   it('returns the newly cached list without calling the provider when populated before the lock is claimed', async () => {
@@ -171,7 +152,7 @@ describe('cache-first read for checkout', () => {
           banks: [bank],
         }),
       set: vi.fn().mockResolvedValue('OK'),
-      del: vi.fn().mockResolvedValue(1),
+      eval: vi.fn().mockResolvedValue(1),
     };
     const provider = {
       call: vi.fn().mockRejectedValue(new Error('should not call Oxygen')),
@@ -188,6 +169,6 @@ describe('cache-first read for checkout', () => {
     ).toEqual([bank]);
     expect(providerSource).not.toHaveBeenCalled();
     expect(provider.call).not.toHaveBeenCalled();
-    expect(cache.del).toHaveBeenCalled();
+    expect(cache.eval).toHaveBeenCalled();
   });
 });

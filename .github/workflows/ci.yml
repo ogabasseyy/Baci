@@ -223,18 +223,25 @@ jobs:
           # 8 GB hosted runners. `typecheck:ci` excludes tests for @baci/web and
           # delegates to the full `typecheck` for every other package; the full
           # `pnpm turbo typecheck` stays available locally.
+          # `--concurrency=1` runs one compiler at a time: turbo defaults to 10
+          # parallel tasks, and the ~6.8 GB web program must not overlap another
+          # package's tsc on an 8 GB runner when shared code is affected.
           set -o pipefail
           LOG_FILE="${RUNNER_TEMP:-/tmp}/typecheck.log"
           STATUS=0
           if [ "$EVENT_NAME" = "pull_request" ]; then
-            pnpm turbo typecheck:ci --affected 2>&1 | tee "$LOG_FILE" || STATUS=$?
+            pnpm turbo typecheck:ci --affected --concurrency=1 2>&1 | tee "$LOG_FILE" || STATUS=$?
           else
-            pnpm turbo typecheck:ci 2>&1 | tee "$LOG_FILE" || STATUS=$?
+            pnpm turbo typecheck:ci --concurrency=1 2>&1 | tee "$LOG_FILE" || STATUS=$?
           fi
+          # Only the @baci/web main program (tsconfig.ci.json) passes
+          # `--extendedDiagnostics`; every other tsc pass is silent, so these
+          # lines are that one program's budget (turbo prefixes each line with
+          # the package and task).
           {
-            echo "### Typecheck budget"
+            echo "### Typecheck budget (@baci/web main program, tsconfig.ci.json)"
             echo '```'
-            grep -E 'Instantiations|Memory used|Check time' "$LOG_FILE" || echo 'no diagnostics reported'
+            grep -E 'Instantiations|Memory used|Check time' "$LOG_FILE" || echo 'no diagnostics reported (@baci/web was not type-checked in this run)'
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
           exit "$STATUS"

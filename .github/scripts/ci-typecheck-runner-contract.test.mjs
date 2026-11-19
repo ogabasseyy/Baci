@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import test from 'node:test';
 import YAML from 'yaml';
 import { privateRunnerRoute } from './ci-private-runner-contract-utils.mjs';
@@ -60,4 +60,39 @@ test('builder fixture containers are scoped and cleaned after interruption', asy
     assert.match(webCleanup.run, /cleanup-builder-ci-containers\.mjs/);
   }
   assert.equal(workflow.jobs['quality-test-web'].env.BACI_FIXTURE_SCOPE, '${{ matrix.shard }}');
+});
+
+test('typecheck runs one compiler at a time so the web program never overlaps another package', () => {
+  const step = job.steps.find((candidate) => candidate.name === 'Run Typecheck');
+  const turboCalls = step.run.split('\n').filter((line) => line.includes('pnpm turbo typecheck:ci'));
+  assert.equal(turboCalls.length, 2);
+  for (const call of turboCalls) assert.match(call, /--concurrency=1\b/);
+});
+
+test('every workspace package with a typecheck script also defines typecheck:ci', async () => {
+  // `turbo typecheck:ci` only runs packages that define the script, so a package
+  // that has `typecheck` but not `typecheck:ci` silently drops out of CI.
+  const { packages } = YAML.parse(await readFile('pnpm-workspace.yaml', 'utf8'));
+  const dirs = [];
+  for (const pattern of packages) {
+    if (!pattern.endsWith('/*')) {
+      dirs.push(pattern);
+      continue;
+    }
+    const base = pattern.slice(0, -2);
+    for (const entry of await readdir(base, { withFileTypes: true })) {
+      if (entry.isDirectory()) dirs.push(`${base}/${entry.name}`);
+    }
+  }
+  const missing = [];
+  for (const dir of dirs) {
+    let pkg;
+    try {
+      pkg = JSON.parse(await readFile(`${dir}/package.json`, 'utf8'));
+    } catch {
+      continue;
+    }
+    if (pkg.scripts?.typecheck && !pkg.scripts['typecheck:ci']) missing.push(pkg.name);
+  }
+  assert.deepEqual(missing, []);
 });

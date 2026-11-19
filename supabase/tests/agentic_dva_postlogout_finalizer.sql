@@ -154,6 +154,46 @@ BEGIN
     RAISE EXCEPTION 'finalizer role created an order under a non-transfer payment method';
   END IF;
 
+  -- A token minted with forward clock skew (+2s) and a 60s lifetime relative to iat passes JWT expiry validation.
+  v_rejected := false;
+  PERFORM set_config('request.jwt.claims',jsonb_build_object(
+    'role','agentic_dva_finalizer','aud','authenticated',
+    'agentic_context','checkout',
+    'agentic_merchant_id','11111111-1111-4111-8111-111111111111',
+    'iat',extract(epoch FROM clock_timestamp())::bigint+2,
+    'exp',extract(epoch FROM clock_timestamp())::bigint+62,
+    'agentic_dva_post_logout',v_scope
+  )::text,true);
+  BEGIN
+    PERFORM public.create_storefront_order_with_cart_binding('base','f6f6f6f6-6666-4666-8666-000000000003',11,
+      jsonb_build_object('p_merchant_id','11111111-1111-4111-8111-111111111111','p_items','[]'::jsonb,
+        'p_cart_id','f6f6f6f6-6666-4666-8666-000000000001','p_cart_version',2,'p_cart_principal_id','forged'));
+  EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS v_message = MESSAGE_TEXT;
+    IF SQLSTATE = 'P0001' AND v_message = 'cart_checkout_stale' THEN v_rejected := true; ELSE RAISE; END IF;
+  END;
+  IF NOT v_rejected THEN RAISE EXCEPTION 'skewed 60s token failed JWT validation before cart check'; END IF;
+
+  -- A token with exp exceeding iat + 60 is rejected even if exp is within now + 60.
+  v_rejected := false;
+  PERFORM set_config('request.jwt.claims',jsonb_build_object(
+    'role','agentic_dva_finalizer','aud','authenticated',
+    'agentic_context','checkout',
+    'agentic_merchant_id','11111111-1111-4111-8111-111111111111',
+    'iat',extract(epoch FROM clock_timestamp())::bigint-30,
+    'exp',extract(epoch FROM clock_timestamp())::bigint+35,
+    'agentic_dva_post_logout',v_scope
+  )::text,true);
+  BEGIN
+    PERFORM public.create_storefront_order_with_cart_binding('base','f6f6f6f6-6666-4666-8666-000000000003',11,
+      jsonb_build_object('p_merchant_id','11111111-1111-4111-8111-111111111111','p_items','[]'::jsonb,
+        'p_cart_id','f6f6f6f6-6666-4666-8666-000000000001','p_cart_version',1,'p_cart_principal_id','forged'));
+  EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS v_message = MESSAGE_TEXT;
+    IF SQLSTATE = 'P0001' AND v_message = 'cart_order_unauthorized' THEN v_rejected := true; ELSE RAISE; END IF;
+  END;
+  IF NOT v_rejected THEN RAISE EXCEPTION 'token lifetime > 60s relative to iat unexpectedly passed'; END IF;
+
 END $$;
 RESET ROLE;
 -- Commit only in the ephemeral cluster owned and dropped by the runner so two

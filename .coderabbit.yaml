@@ -63,7 +63,11 @@ reviews:
 
     Authoritative guidance lives in `CLAUDE.md` at the repo root and app root
     (`apps/web/CLAUDE.md`, `apps/mobile-admin/CLAUDE.md`). When repo guidance
-    disagrees with these instructions, prefer the more specific CLAUDE.md.
+    disagrees with these instructions, prefer the more specific CLAUDE.md,
+    except for section 2 (Security & Stability) below: its merchant-resolution,
+    mutation-protection and webhook-signature rules are the current contracts
+    and override older CLAUDE.md examples such as `.eq('merchant_id', user.id)`,
+    blanket CSRF tokens or HMAC-SHA256 for every provider.
 
     ## 1. 🚀 Next.js 16 + React 19 (Cache Components)
     - **Server Components by default.** Flag ANY `'use client'` directive that

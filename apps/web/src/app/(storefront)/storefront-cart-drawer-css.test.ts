@@ -45,6 +45,7 @@ it('keeps cart styles in the persistent storefront route layout', async () => {
     '.size-12',
     '.tabular-nums',
     '.size-7',
+    '.has-disabled\\:opacity-50',
   ]) {
     const rules: string[] = [];
     css.walkRules(selector, (rule) => {

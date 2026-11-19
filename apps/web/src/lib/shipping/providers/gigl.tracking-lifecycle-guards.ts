@@ -11,6 +11,10 @@ const PLACE_NOISE_WORDS = new Set(['FCT', 'STATE', 'CITY', 'THE', 'OF']);
 // count as arriving. Missing an arrival beats a false one, so extend with care.
 const DEPARTURE_CODES = new Set(['DSC', 'DPC', 'DCC', 'DST', 'DTR', 'DIWN']);
 
+// Whole word only, so unrelated text that merely contains DEPART (e.g.
+// DEPARTMENT) cannot suppress an arrival.
+const DEPARTURE_WORD = /\bDEPART(?:ED|ING|URE)?\b/i;
+
 function placeWords(value: string | undefined): string[] {
   return (value ?? '')
     .split('(')[0]
@@ -90,7 +94,9 @@ export function applyLifecycleGuards(
       raw === 'ARF' ||
       (candidate.recognizedStatus === 'in_transit' &&
         !DEPARTURE_CODES.has(raw) &&
-        !/DEPART/i.test(`${raw} ${candidate.scanText || event.description}`) &&
+        !DEPARTURE_WORD.test(
+          `${raw} ${candidate.scanText || event.description}`
+        ) &&
         (!sameCity || leftDestinationCentre) &&
         matchesDestination(event.location, destination));
     if (isArrival) {

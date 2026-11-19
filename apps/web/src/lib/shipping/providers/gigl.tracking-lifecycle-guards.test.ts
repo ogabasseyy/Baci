@@ -79,4 +79,17 @@ describe('applyLifecycleGuards', () => {
     applyLifecycleGuards([noLocation, atOrigin], 'ABUJA', 'ABUJA');
     expect(atOrigin.event.rawStatus).toBe('MSVC');
   });
+
+  it('bugfix: reason text that merely contains DEPART as part of another word does not block an arrival', () => {
+    const arrival = {
+      ...scan('MSVC', 'in_transit', 11, 'WUSE ABUJA (Wuse)'),
+      scanText: 'RECEIVED AT DEPARTMENT STORE COUNTER',
+    };
+    applyLifecycleGuards(
+      [scan('DPC', 'in_transit', 9, 'IKEJA 2 (IKEJA)'), arrival],
+      'ABUJA',
+      'LAGOS'
+    );
+    expect(arrival.event.rawStatus).toBe(GIGL_ARRIVED_IN_CITY_RAW_STATUS);
+  });
 });

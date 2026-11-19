@@ -78,8 +78,8 @@ describe('ollama chat tool runtime', () => {
     expect(mocks.handleSearchProducts).not.toHaveBeenCalled();
   });
 
-  it('passes session-scoped Ollama tools to handlers that require session state', async () => {
-    const args = {
+  it('rejects legacy PII arguments on createVirtualAccount and passes session state on empty payload', async () => {
+    const legacyArgs = {
       amount: 50_000,
       customerEmail: 'buyer@example.com',
       customerName: 'Buyer',
@@ -88,9 +88,18 @@ describe('ollama chat tool runtime', () => {
       ],
     };
 
+    const rejected = await executeAgenticChatToolForOllama(
+      'createVirtualAccount',
+      JSON.stringify(legacyArgs),
+      'session-42',
+      true
+    );
+    expect(JSON.parse(rejected)).toEqual({ error: 'Invalid tool arguments' });
+    expect(mocks.handleCreateVirtualAccount).not.toHaveBeenCalled();
+
     const result = await executeAgenticChatToolForOllama(
       'createVirtualAccount',
-      JSON.stringify(args),
+      JSON.stringify({}),
       'session-42',
       true
     );
@@ -100,7 +109,7 @@ describe('ollama chat tool runtime', () => {
       accountNumber: '1234567890',
     });
     expect(mocks.handleCreateVirtualAccount).toHaveBeenCalledWith(
-      args,
+      {},
       'session-42'
     );
   });

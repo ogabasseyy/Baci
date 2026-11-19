@@ -9,6 +9,7 @@ import { cartHasVoucherLine } from './checkout-prize-cart-guard';
 
 const unavailable =
   'Oxygen staging setup is unavailable. Check your staging account and connection.';
+const retryDelaysMs = [2000, 8000];
 
 export function useOxygenCheckoutAvailability(items: CartItem[]) {
   const userId = useAuthStore((state) => state.user?.id);
@@ -49,7 +50,7 @@ export function useOxygenCheckoutAvailability(items: CartItem[]) {
     let previousState: 'unknown' | 'online' | 'offline' | undefined;
     let retry: ReturnType<typeof setTimeout> | undefined;
 
-    const checkReadiness = (currentProbe: number, canRetry: boolean) => {
+    const checkReadiness = (currentProbe: number, attempt = 0) => {
       setReadiness(null);
       void withTimeout(
         Promise.resolve().then(() => oxygenNativeSession().capabilities(true)),
@@ -63,16 +64,19 @@ export function useOxygenCheckoutAvailability(items: CartItem[]) {
         () => {
           if (currentProbe !== probe) return;
           setReadiness({ scope, reason: unavailable });
-          if (canRetry) {
-            retry = setTimeout(() => checkReadiness(currentProbe, false), 2000);
-          }
+          const delay = retryDelaysMs[attempt];
+          if (delay !== undefined)
+            retry = setTimeout(
+              () => checkReadiness(currentProbe, attempt + 1),
+              delay
+            );
         }
       );
     };
 
     const scheduleUnknownProbe = () => {
       const currentProbe = ++probe;
-      delayedProbe = setTimeout(() => checkReadiness(currentProbe, true), 1500);
+      delayedProbe = setTimeout(() => checkReadiness(currentProbe), 1500);
     };
     scheduleUnknownProbe();
     const unsubscribe = NetInfo.addEventListener((state) => {
@@ -87,7 +91,7 @@ export function useOxygenCheckoutAvailability(items: CartItem[]) {
       clearTimeout(retry);
       clearTimeout(delayedProbe);
       const currentProbe = ++probe;
-      if (network === 'online') checkReadiness(currentProbe, true);
+      if (network === 'online') checkReadiness(currentProbe);
       else if (network === 'offline')
         setReadiness({ scope, reason: unavailable });
       else {

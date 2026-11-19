@@ -16,6 +16,7 @@ import {
   validateOxygenFile,
 } from '@baci/shared/oxygen';
 import { z } from 'zod';
+import { oxygenStagingCapabilityPinsMatch } from '@/lib/oxygen-staging-profile';
 import { assertOxygenActionFile } from './action-file';
 import { OxygenClientError } from './errors';
 import { prepareOxygenMultipart } from './multipart';
@@ -23,6 +24,7 @@ import { prepareOxygenMultipart } from './multipart';
 export interface OxygenClientProfile {
   apiOrigin: string;
   authOrigin: string;
+  authBaseUrl?: string;
   merchantId: string;
   merchantSlug: string;
 }
@@ -146,12 +148,7 @@ export function createOxygenClient(options: {
         `mobile-capabilities?merchantSlug=${encodeURIComponent(profile.merchantSlug)}`,
         oxygenMobileCapabilitiesSchema
       );
-      if (
-        caps.environment !== 'staging' ||
-        caps.authOrigin !== profile.authOrigin ||
-        caps.merchant.id !== profile.merchantId ||
-        caps.merchant.slug !== profile.merchantSlug
-      )
+      if (!oxygenStagingCapabilityPinsMatch(profile, caps))
         throw new OxygenClientError('scope');
       return caps;
     },

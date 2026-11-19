@@ -128,17 +128,19 @@ it('waits for known connectivity before checking readiness', async () => {
   await waitFor(() => expect(result.current.disabledReason).toBeUndefined());
 });
 
-it('recovers from one transient probe failure while connectivity stays online', async () => {
+it('recovers with bounded backoff after two failures while connectivity stays online', async () => {
   jest.useFakeTimers();
   try {
-    mockCapabilities.mockRejectedValueOnce(
-      new Error('temporarily unavailable')
-    );
+    mockCapabilities
+      .mockRejectedValueOnce(new Error('temporarily unavailable'))
+      .mockRejectedValueOnce(new Error('still unavailable'));
     const { result } = renderHook(() => useOxygenCheckoutAvailability([]));
     await act(async () => {});
     expect(mockCapabilities).toHaveBeenCalledTimes(1);
     await act(async () => jest.advanceTimersByTime(3000));
     expect(mockCapabilities).toHaveBeenCalledTimes(2);
+    await act(async () => jest.advanceTimersByTime(8000));
+    expect(mockCapabilities).toHaveBeenCalledTimes(3);
     expect(result.current.disabledReason).toBeUndefined();
   } finally {
     jest.useRealTimers();

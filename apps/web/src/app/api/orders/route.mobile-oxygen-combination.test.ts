@@ -38,6 +38,34 @@ it('lets web checkout save an unpaid Oxygen order without using native admission
   );
 });
 
+it('checks merchant admission before any replay of a Bearer Oxygen order', async () => {
+  vi.mocked(readOxygenMobileCapabilities).mockResolvedValueOnce({
+    ok: false,
+    status: 404,
+  });
+  const request = createOrderRequest({
+    source: 'online_store',
+    payment_method: 'oxygen',
+  });
+  request.headers.set('Authorization', 'Bearer test-token');
+  request.headers.set(
+    'Idempotency-Key',
+    '43276b67-0362-4d83-a522-eb445dc11735'
+  );
+
+  const response = await POST(request);
+
+  expect(response.status).toBe(409);
+  await expect(response.json()).resolves.toMatchObject({
+    code: 'OXYGEN_MOBILE_UNAVAILABLE',
+  });
+  expect(readOxygenMobileCapabilities).toHaveBeenCalledWith(
+    expect.anything(),
+    'test-merchant'
+  );
+  expect(getLatestRpc()).not.toHaveBeenCalled();
+});
+
 it.each([
   {
     items: [

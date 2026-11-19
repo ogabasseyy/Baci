@@ -106,6 +106,33 @@ it('reads disabled owned capabilities but checks pins', async () => {
   expect(init.cache).toBeUndefined();
   expect(init.headers['Cache-Control']).toBe('no-store');
 });
+
+it('rejects an auth base URL mismatch even on the same origin', async () => {
+  const authOrigin = 'http://127.0.0.1:3198';
+  const transport = jest.fn().mockResolvedValue(
+    Response.json({
+      schemaVersion: 1,
+      environment: 'staging',
+      authOrigin,
+      authBaseUrl: authOrigin,
+      merchant: { id, slug: 'shop' },
+      mobileEnabled: true,
+      reason: null,
+      hostedOrigins: [],
+      selfieOrigins: [],
+    })
+  );
+  const client = createOxygenClient({
+    profile: {
+      ...profile,
+      authOrigin,
+      authBaseUrl: `${authOrigin}/qa-backend`,
+    },
+    getSession: session,
+    fetch: transport,
+  });
+  await expect(client.capabilities()).rejects.toMatchObject({ code: 'scope' });
+});
 it('validates draft write version-only response and rejects a changed auth user', async () => {
   const transport = jest.fn().mockResolvedValue(new Response('{"version":2}'));
   const client = createOxygenClient({

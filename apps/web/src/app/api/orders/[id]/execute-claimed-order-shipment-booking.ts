@@ -28,7 +28,7 @@ type ClaimedBookingRunner = (
   provider: string;
   quoteId: string;
   shipmentId: string;
-  trackingNumber: string;
+  trackingNumber: string | null;
 }>;
 
 export async function executeClaimedOrderShipmentBooking({

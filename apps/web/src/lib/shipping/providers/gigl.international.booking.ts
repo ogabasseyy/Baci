@@ -1,3 +1,4 @@
+import { hasNeverReachedCause } from '../never-reached-cause';
 import {
   GIGL_INTERNATIONAL_BOOKING_TIMEOUT_MESSAGE,
   ProviderBookingTimeoutError,
@@ -63,10 +64,26 @@ export async function bookGiglInternationalShipment(
       request.providerRateId
     );
     const shipmentPackages = buildInternationalPackages(request.items);
-    const tokenData = await apiClient.getApiToken(
-      GIGL_BOOKING_TIMEOUT_MS,
-      signal
-    );
+    let tokenData: Awaited<ReturnType<GiglApiClient['getApiToken']>>;
+    try {
+      tokenData = await apiClient.getApiToken(GIGL_BOOKING_TIMEOUT_MS, signal);
+    } catch (error) {
+      if (
+        error instanceof OrderShipmentBookingError ||
+        signal.aborted ||
+        isGiglAbortError(error)
+      ) {
+        throw error;
+      }
+      // A refused or malformed login: nothing was submitted, so free the lock.
+      throw new OrderShipmentBookingError(
+        error instanceof Error
+          ? error.message
+          : 'GIGL API authentication failed',
+        502,
+        'GIGL_AUTHENTICATION_FAILED'
+      );
+    }
     const declaredValue = totalDeclaredValue(request);
     const destinationCountry = await resolveDestinationCountryId(
       apiClient,
@@ -200,6 +217,15 @@ export async function bookGiglInternationalShipment(
       }
       throw new ProviderBookingTimeoutError(
         GIGL_INTERNATIONAL_BOOKING_TIMEOUT_MESSAGE
+      );
+    }
+    if (submitStarted && !hasNeverReachedCause(error)) {
+      // The create POST may have created the shipment, so an unreadable answer
+      // or a mid-request network failure is unconfirmed, not unexpected.
+      throw new ProviderBookingTimeoutError(
+        error instanceof Error
+          ? error.message
+          : GIGL_INTERNATIONAL_BOOKING_TIMEOUT_MESSAGE
       );
     }
 

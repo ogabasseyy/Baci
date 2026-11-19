@@ -146,6 +146,7 @@ tracking:
   - 'apps/web/src/lib/shipping/order-shipment-booking-failure.ts'
   - 'apps/web/src/lib/shipping/booking-failure-constants.ts'
   - 'apps/web/src/lib/shipping/classify-booking-failure.ts'
+  - 'apps/web/src/lib/shipping/never-reached-cause.ts'
   - 'apps/web/src/lib/shipping/provider-booking-timeout-error.ts'
   - 'apps/web/src/lib/shipping/provider-never-reached.ts'
   - 'apps/web/src/lib/shipping/record-order-shipment-booking-failure.ts'

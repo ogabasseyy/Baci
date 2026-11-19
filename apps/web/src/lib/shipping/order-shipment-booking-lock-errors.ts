@@ -1,3 +1,4 @@
+import { bookingLockMustStay } from './booking-lock-must-stay';
 import { isProviderNeverReachedError } from './order-shipment-booking-failure';
 import { OrderShipmentBookingError } from './order-shipment-booking-utils';
 
@@ -57,6 +58,8 @@ const RELEASEABLE_BOOKING_ERROR_CODES = new Set([
 ]);
 
 export function shouldReleaseBookingLock(error: unknown): boolean {
+  // A failed refund leaves the charge reserved: nothing may free the lock.
+  if (bookingLockMustStay(error)) return false;
   return (
     isProviderNeverReachedError(error) ||
     (error instanceof OrderShipmentBookingError &&

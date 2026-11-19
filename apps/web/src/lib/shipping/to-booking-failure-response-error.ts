@@ -20,11 +20,12 @@ export function toBookingFailureResponseError(
   if (
     outcome === 'not_submitted' &&
     error instanceof OrderShipmentBookingError &&
-    error.code === 'GIGL_AUTHENTICATION_FAILED' &&
-    error.status !== 504
+    ((error.code === 'GIGL_AUTHENTICATION_FAILED' && error.status !== 504) ||
+      // A wallet transition failed, not the carrier: keep its own answer.
+      error.code === 'MERCHANT_WALLET_SUBMISSION_FAILED')
   ) {
-    // A rejected GIG login is a configuration problem, not a connection
-    // problem: keep its own message instead of telling the merchant to retry.
+    // Not a connection problem (a rejected GIG login or a wallet transition):
+    // keep the original message instead of telling the merchant to retry.
     return error;
   }
   if (outcome === 'not_submitted') {

@@ -103,4 +103,22 @@ describe('bugfix: Topship save-shipment refusals and the booking lock', () => {
     expect(classifyBookingFailure(error).outcome).toBe('provider_unconfirmed');
     expect(shouldReleaseBookingLock(error)).toBe(false);
   });
+
+  it('bugfix: a save-shipment body read failure on a 2xx answer is unconfirmed and keeps the lock', async () => {
+    const brokenBody = new Response('{}', { status: 200 });
+    vi.spyOn(brokenBody, 'text').mockRejectedValue(new TypeError('terminated'));
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(brokenBody));
+    const { TopshipProvider } = await import('./topship');
+    const error = await new TopshipProvider()
+      .bookShipment(request)
+      .catch((e: unknown) => e);
+    const { classifyBookingFailure } = await import(
+      './../classify-booking-failure'
+    );
+    const { shouldReleaseBookingLock } = await import(
+      '@/lib/shipping/order-shipment-booking-lock-errors'
+    );
+    expect(classifyBookingFailure(error).outcome).toBe('provider_unconfirmed');
+    expect(shouldReleaseBookingLock(error)).toBe(false);
+  });
 });

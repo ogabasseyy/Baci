@@ -5,6 +5,7 @@ import {
   cleanupPreSubmissionReservation,
   hasActiveMerchantShippingCharge,
 } from './book-wallet-funded-reservation-cleanup';
+import { markBookingLockMustStay } from './booking-lock-must-stay';
 import {
   completePendingWalletExistingShipment,
   readPendingWalletExistingShipment,
@@ -202,6 +203,8 @@ export async function bookWalletFundedOrderShipment(
     );
   }
   let providerSubmissionStarted = false;
+  // The carrier reference once booked, for reconciliation if completion fails.
+  let bookedReference: string | undefined;
   try {
     const submissionStatus = await beginMerchantShippingChargeSubmission(
       supabase,
@@ -221,6 +224,7 @@ export async function bookWalletFundedOrderShipment(
     }
     providerSubmissionStarted = true;
     const shipment = await book(preparedQuoteId);
+    bookedReference = shipment.providerShipmentId || shipment.trackingNumber;
     await completeMerchantShippingCharge(
       supabase,
       charge.chargeId,
@@ -249,6 +253,7 @@ export async function bookWalletFundedOrderShipment(
         // Keep the provider error and the lock: the charge is still reserved,
         // so hand it to reconciliation rather than inviting a retry.
         refunded = false;
+        markBookingLockMustStay(error);
         console.error(
           'Wallet shipping refund failed after a rejected provider attempt:',
           refundError
@@ -288,10 +293,10 @@ export async function bookWalletFundedOrderShipment(
         error instanceof OrderShipmentBookingError
           ? error.code
           : 'UNKNOWN_PROVIDER_FAILURE',
-        error instanceof OrderShipmentBookingError ||
-          error instanceof ShippingBookingRejectedError
+        (error instanceof OrderShipmentBookingError ||
+        error instanceof ShippingBookingRejectedError
           ? error.providerReference
-          : undefined
+          : undefined) ?? bookedReference
       );
     }
     throw error;

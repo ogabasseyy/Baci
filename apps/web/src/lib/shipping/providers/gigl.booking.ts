@@ -1,3 +1,4 @@
+import { hasNeverReachedCause } from '../never-reached-cause';
 import {
   GIGL_BOOKING_TIMEOUT_MESSAGE,
   ProviderBookingTimeoutError,
@@ -281,6 +282,16 @@ export async function bookGiglShipment(
         );
       }
       throw new ProviderBookingTimeoutError(GIGL_BOOKING_TIMEOUT_MESSAGE);
+    }
+    if (submitStarted && !hasNeverReachedCause(error)) {
+      // The booking POST may have created the shipment, so an unreadable
+      // answer or a mid-request network failure is unconfirmed, not unexpected.
+      io.log('error', 'GIGL booking answer could not be used', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw new ProviderBookingTimeoutError(
+        error instanceof Error ? error.message : GIGL_BOOKING_TIMEOUT_MESSAGE
+      );
     }
 
     throw error;

@@ -3,8 +3,6 @@
  * Aggregator that provides access to multiple carriers (DHL, FedEx, etc.)
  */
 
-import { OrderShipmentBookingError } from '../order-shipment-booking-utils';
-import { ProviderBookingTimeoutError } from '../provider-booking-timeout-error';
 import { quoteProviderFailure } from '../quote-provider-failure';
 import { mapTopshipStatus } from '../status-mapper';
 import type {
@@ -21,6 +19,8 @@ import { ShippingBookingRejectedError } from '../types';
 import { BaseShippingProvider } from './base';
 import { parsePaidShipmentAfterSave } from './topship-parse-paid-shipment';
 import { requestTopshipPaymentAfterSave } from './topship-pay-after-save';
+import { topshipSaveFailure } from './topship-save-failure';
+import { readOkSaveResponse } from './topship-save-ok-response';
 
 // =============================================================================
 // CONFIGURATION
@@ -652,19 +652,14 @@ export class TopshipProvider extends BaseShippingProvider {
           body: JSON.stringify(payload),
         }
       );
-      const result = await this.readResponseBody(response);
-
       if (response.ok) {
-        try {
-          return this.parseSavedShipment(result);
-        } catch {
-          // Topship answered 2xx but the body is unreadable: the shipment may
-          // exist, so treat the call as unconfirmed and keep the lock.
-          throw new ProviderBookingTimeoutError(
-            'Topship returned an unreadable save-shipment response'
-          );
-        }
+        return readOkSaveResponse(
+          response,
+          (r) => this.readResponseBody(r),
+          (body) => this.parseSavedShipment(body)
+        );
       }
+      const result = await this.readResponseBody(response);
 
       const expectedPickupCharge = this.parseExpectedPickupCharge(result);
       if (
@@ -680,19 +675,10 @@ export class TopshipProvider extends BaseShippingProvider {
         status: response.status,
         error: this.getErrorMessage(result) || String(result),
       });
-      const refusalMessage =
-        this.getErrorMessage(result) || 'Failed to create Topship shipment';
-      if (response.status >= 400 && response.status < 500) {
-        // A clear refusal: Topship created nothing, so the lock can be freed
-        // and the merchant sees the reason instead of a generic 500.
-        throw new OrderShipmentBookingError(
-          refusalMessage,
-          422,
-          'TOPSHIP_SAVE_REJECTED'
-        );
-      }
-      // A 5xx may or may not have created the shipment: stay locked.
-      throw new Error(refusalMessage);
+      throw topshipSaveFailure(
+        response.status,
+        this.getErrorMessage(result) || 'Failed to create Topship shipment'
+      );
     }
 
     throw new Error('Failed to create Topship shipment');

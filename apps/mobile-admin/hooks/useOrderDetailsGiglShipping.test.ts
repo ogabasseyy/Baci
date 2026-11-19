@@ -6,8 +6,12 @@ import { describe, expect, it, vi } from 'vitest';
 type HookInput = Parameters<typeof useOrderDetailsGiglShipping>[0];
 const buildMerchant = (overrides: Partial<HookInput['merchant']> = {}) =>
   ({ user_id: 'owner-1', ...overrides }) as unknown as HookInput['merchant'];
-const buildOrder = (overrides: Record<string, unknown> = {}) =>
-  ({ id: 'order-1', ...overrides }) as unknown as HookInput['order'];
+type HookOrder = NonNullable<HookInput['order']>;
+const baseOrder = { id: 'order-1' } as HookOrder;
+const buildOrder = (overrides: Partial<HookOrder> = {}): HookOrder => ({
+  ...baseOrder,
+  ...overrides,
+});
 
 const shippingHook = vi.hoisted(() => vi.fn());
 const prefetchHook = vi.hoisted(() => vi.fn(() => 'preview-scope'));

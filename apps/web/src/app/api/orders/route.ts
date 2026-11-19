@@ -994,6 +994,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const oxygenAdmission = await rejectUnavailableMobileOxygenOrder({
+      request,
+      client: supabase,
+      merchant,
+      userId: resolvedUserId,
+      paymentMethod: payment_method,
+      source,
+    });
+    if (oxygenAdmission) return oxygenAdmission;
+
     // Canonical merchant currency (payout_currency -> country -> NGN). The
     // order-create RPC stamps orders.currency the same way, so this is the
     // currency any FRESH order created below will carry.
@@ -1241,16 +1251,6 @@ export async function POST(request: NextRequest) {
         })
       : null;
     const isConditionReplay = replaySnapshot !== null;
-    const oxygenAdmission = await rejectUnavailableMobileOxygenOrder({
-      request,
-      client: supabase,
-      merchant,
-      userId: resolvedUserId,
-      paymentMethod: payment_method,
-      source,
-      replayed: isConditionReplay,
-    });
-    if (oxygenAdmission) return oxygenAdmission;
     const conditionPriceOverrides = replaySnapshot?.conditionPriceOverrides;
     let serverComputedTaxAmount: number;
     if (storedReplayTaxAmount != null) {

@@ -56,7 +56,6 @@ export async function rejectUnavailableMobileOxygenOrder({
   userId,
   paymentMethod,
   source,
-  replayed,
 }: {
   request: Request;
   client: OxygenRuntimeRpc;
@@ -64,7 +63,6 @@ export async function rejectUnavailableMobileOxygenOrder({
   userId: string | null;
   paymentMethod: string;
   source: string;
-  replayed: boolean;
 }): Promise<NextResponse | null> {
   if (!isMobileOxygenOrder(request, paymentMethod, source)) return null;
   if (!userId) {
@@ -73,9 +71,8 @@ export async function rejectUnavailableMobileOxygenOrder({
       { status: 401 }
     );
   }
-  // Run admission only for new orders. The existing order RPC still
-  // verifies the replay identity and payload before returning that order.
-  if (replayed) return null;
+  // Order POST can change the payment method on an idempotent replay.
+  // Saved-Oxygen recovery uses the owned workflow read instead.
   const result = await readOxygenMobileCapabilities(client, merchant.slug);
   if (
     result.ok &&

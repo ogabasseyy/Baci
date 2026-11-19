@@ -15,7 +15,6 @@ const args = {
   client: { rpc: vi.fn() },
   merchant,
   paymentMethod: 'oxygen',
-  replayed: false,
   request: new Request('https://shop.example.com/api/orders'),
   source: 'mobile_app',
   userId: 'buyer',
@@ -92,11 +91,22 @@ describe('mobile Oxygen order admission', () => {
     expect(result?.status).toBe(409);
   });
 
+  it('rechecks admission when checkout reuses an existing idempotency key', async () => {
+    declarations.mockResolvedValue({ ok: false, status: 404 });
+    const result = await rejectUnavailableMobileOxygenOrder({
+      ...args,
+      request: new Request(args.request, {
+        headers: { 'Idempotency-Key': '43276b67-0362-4d83-a522-eb445dc11735' },
+      }),
+    });
+    expect(result?.status).toBe(409);
+    expect(declarations).toHaveBeenCalledWith(args.client, merchant.slug);
+  });
+
   it.each([
-    { replayed: true },
     { paymentMethod: 'card' },
     { source: 'online_store' },
-  ])('leaves existing and non-mobile checkout admission intact', async (overrides) => {
+  ])('leaves unrelated payment methods and web checkout admission intact', async (overrides) => {
     await expect(
       rejectUnavailableMobileOxygenOrder({ ...args, ...overrides })
     ).resolves.toBeNull();

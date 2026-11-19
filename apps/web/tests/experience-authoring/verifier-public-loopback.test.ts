@@ -1,4 +1,5 @@
 import { request } from 'node:http';
+import { SignJWT } from 'jose';
 import { expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
@@ -13,10 +14,14 @@ import { createPublicVerificationHandler } from '../../tools/experience-verifier
 it('forwards a signed public-verification request over loopback and reauthenticates the synthetic owner', async () => {
   const key = Buffer.alloc(32, 7);
   const approvalId = '11111111-1111-4111-8111-111111111111';
+  const token = await new SignJWT({})
+    .setProtectedHeader({ alg: 'HS256' })
+    .setSubject(approvalId)
+    .sign(key);
   const owner = {
     auth: {
       getSession: async () => ({
-        data: { session: { access_token: 'synthetic.jwt.token' } },
+        data: { session: { access_token: token } },
         error: null,
       }),
       getUser: vi.fn(async () => ({

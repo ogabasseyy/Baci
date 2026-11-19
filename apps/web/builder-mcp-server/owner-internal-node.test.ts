@@ -78,7 +78,8 @@ it('routes signed public verification only through the owner listener', async ()
   );
   const owner = createOwnerInternalNodeServer({
     ownerPublicVerification: verify,
-    ownerPublicVerificationAdmission: () => true,
+    ownerPublicVerificationAdmission: (_body, _signature, reserve) =>
+      reserve?.('synthetic-owner') ?? false,
   });
   const listener = createBuilderMcpNodeServer();
   listener.server.listen(0, '127.0.0.1');

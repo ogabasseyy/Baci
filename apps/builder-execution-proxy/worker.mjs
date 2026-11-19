@@ -25,21 +25,22 @@ function unavailable(status) {
   });
 }
 
-function isDeliveryPath(url) {
-  if (privatePath.test(url.pathname)) return !url.search;
+// Match the decoded Caddy budget before forwarding the canonical query.
+function deliveryQuery(url) {
+  if (privatePath.test(url.pathname)) return url.search ? null : '';
   const match = publishedPath.exec(url.pathname);
-  if (!match) return false;
-  if (!url.search) return true;
-  if (match[1] !== 'index.html' || url.searchParams.size !== 1) return false;
+  if (!match) return null;
+  if (!url.search) return '';
+  if (match[1] !== 'index.html' || url.searchParams.size !== 1) return null;
   const path = url.searchParams.get('path');
-  if (!path || path.length > 1024 || !path.startsWith('/')) return false;
-  return (
-    path === '/' ||
+  if (!path || path.length > 1024 || !path.startsWith('/')) return null;
+  return path === '/' ||
     path
       .slice(1)
       .split('/')
       .every((segment) => /^[A-Za-z0-9_[\]-]+$/.test(segment))
-  );
+    ? `?path=${encodeURIComponent(path)}`
+    : null;
 }
 
 function hasDocumentSandbox(response) {
@@ -71,11 +72,13 @@ export default {
       url.username ||
       url.password ||
       url.hash ||
-      url.pathname.length + url.search.length > 4096 ||
-      !isDeliveryPath(url)
+      url.pathname.length + url.search.length > 4096
     ) {
       return unavailable(404);
     }
+    const query = deliveryQuery(url);
+    if (query === null || url.pathname.length + query.length > 4096)
+      return unavailable(404);
     const isPrivate = privatePath.test(url.pathname);
     const browserOrigin = request.headers.get('Origin');
     // Private assets are read by the opaque sandbox. Document navigation
@@ -91,7 +94,7 @@ export default {
     try {
       const upstream = new URL(origin);
       upstream.pathname = url.pathname;
-      upstream.search = url.searchParams.toString();
+      upstream.search = query;
       const headers = new Headers({
         'X-Baci-Execution-Origin-Key': env.EXECUTION_ORIGIN_KEY,
       });

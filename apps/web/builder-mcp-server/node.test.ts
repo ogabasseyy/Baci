@@ -180,7 +180,8 @@ it('routes signed attestation only when explicitly installed', async () => {
   });
   const runtime = createOwnerInternalNodeServer({
     ownerAttestation,
-    ownerAttestationAdmission: () => true,
+    ownerAttestationAdmission: (_body, _signature, reserve) =>
+      reserve?.('synthetic-owner') ?? false,
   });
   const port = await runtime.listen(0);
   try {
@@ -220,7 +221,7 @@ it('does not treat the request-body timeout as a completed attestation response 
   });
   const handler = createOwnerAttestationHttpHandler(
     ownerAttestation,
-    () => true
+    (_body, _signature, reserve) => reserve?.('synthetic-owner') ?? false
   );
   const server = createServer((req, res) => {
     void handler.handle(req, res);

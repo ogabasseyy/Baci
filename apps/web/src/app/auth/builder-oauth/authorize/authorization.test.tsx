@@ -51,6 +51,7 @@ const clientId = 'c913932b-a768-41a0-8c2a-9f749a63abee';
 const actorUserId = 'a6b7fb66-ced9-4eca-9373-3c543e031cd3';
 const otherId = 'e84bb1fa-2c5a-42cc-9432-dd43eb2ae48d';
 const callback = 'https://builder-auth.usebaci.com/upstream/callback';
+const upstream = 'https://project.supabase.co';
 const consentDetails = {
   authorization_id: authorizationId,
   redirect_uri: callback,
@@ -75,6 +76,7 @@ function decision(choice: string, value = authorizationId) {
 beforeEach(() => {
   vi.resetAllMocks();
   vi.stubEnv('BACI_BUILDER_UPSTREAM_OAUTH_CLIENT_ID', clientId);
+  vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', upstream);
   getOrigin.mockReturnValue('https://usebaci.com');
   getUser.mockResolvedValue({
     data: { user: { id: actorUserId } },
@@ -108,7 +110,7 @@ it('sends signed-out users through the normal login flow with the validated cons
 
 it('shows the consent prompt without exposing upstream user or client fields', async () => {
   render(await page());
-  expect(screen.getByRole('button', { name: 'Continue' })).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Verify account' })).toBeVisible();
   expect(screen.getByRole('button', { name: 'Decline' })).toBeVisible();
   expect(screen.queryByText('private@example.com')).toBeNull();
   expect(screen.queryByText('Upstream metadata')).toBeNull();
@@ -167,7 +169,7 @@ it('denies only after rereading the authorization and rejects an untrusted callb
 });
 
 it('resumes an already-approved GoTrue request through the dedicated callback without approving it again', async () => {
-  const destination = `${callback}?code=test&state=test`;
+  const destination = `${callback}?code=test&state=test&iss=${encodeURIComponent(`${upstream}/auth/v1`)}`;
   getAuthorizationDetails.mockResolvedValue({
     data: { redirect_url: destination },
     error: null,
@@ -189,12 +191,24 @@ it.each([
   `${callback}?code=test&state=test&state=another`,
   `${callback}?code=test&state=`,
   `${callback}?state=test&error=access_denied`,
+  `${callback}?code=test&state=test&iss=https%3A%2F%2Fother.example%2Fauth%2Fv1`,
+  `${callback}?code=test&state=test&iss=`,
 ])('rejects an invalid pre-approved callback %s', async (destination) => {
   getAuthorizationDetails.mockResolvedValue({
     data: { redirect_url: destination },
     error: null,
   });
   await expect(page()).rejects.toThrow('not-found');
+  expect(redirect).not.toHaveBeenCalled();
+});
+
+it('rejects an issuer mismatch on the fresh approval redirect too', async () => {
+  approveAuthorization.mockResolvedValue({
+    data: {
+      redirect_url: `${callback}?code=test&state=test&iss=https%3A%2F%2Fbuilder-auth.usebaci.com`,
+    },
+  });
+  await expect(decision('approve')).rejects.toThrow('not-found');
   expect(redirect).not.toHaveBeenCalled();
 });
 

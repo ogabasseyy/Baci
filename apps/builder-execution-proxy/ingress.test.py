@@ -17,6 +17,43 @@ KEY_HEADER = 'X-Baci-Execution-Origin-Key'
 CADDY = os.environ.get('BACI_TEST_CADDY', 'caddy')
 
 
+def check_worker_caddy_boundary(caddy_port, published):
+    subprocess.run([
+        'node', '--input-type=module', '-e', r"""
+import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+const [workerUrl, port, execution, published, key] = process.argv.slice(1);
+const { default: worker } = await import(workerUrl);
+const boundary = '%2F%5Ba%5D'.repeat(256);
+let forwarded = 0;
+globalThis.fetch = (url, options) => {
+  forwarded++;
+  assert.equal(url.search, '?path=' + boundary);
+  const result = execFileSync('curl', [
+    '-ksS', '--noproxy', '*', '--max-time', '2',
+    '--resolve', `${url.hostname}:${port}:127.0.0.1`,
+    '-H', 'X-Baci-Execution-Origin-Key: ' +
+      options.headers.get('x-baci-execution-origin-key'),
+    '-w', '\n%{http_code}', `https://${url.hostname}:${port}${url.pathname}${url.search}`,
+  ], { encoding: 'utf8' });
+  const end = result.lastIndexOf('\n');
+  return new Response(result.slice(0, end), {
+    status: Number(result.slice(end + 1)),
+    headers: { 'content-type': 'text/html', 'content-security-policy': 'sandbox allow-scripts' },
+  });
+};
+const url = `https://${execution}${published}/index.html?path=`;
+const env = { EXECUTION_ORIGIN_KEY: key };
+const accepted = await worker.fetch(new Request(url + boundary.toLowerCase()), env);
+assert.equal(accepted.status, 200);
+assert.equal((await accepted.json()).path, published + '/index.html?path=' + boundary);
+assert.equal((await worker.fetch(new Request(url + boundary + 'a'), env)).status, 404);
+assert.equal(forwarded, 1);
+""", Path(__file__).resolve().with_name('worker.mjs').as_uri(),
+        str(caddy_port), EXECUTION, published, KEY,
+    ], check=True)
+
+
 class Backend(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -114,6 +151,7 @@ def smoke(root, backend_port, secret, dead=False):
                 boundary = published + '/index.html?path=' + encoded
                 assert request(boundary, '-H', f'{KEY_HEADER}: {KEY}')[-1] == '200'
                 assert request(boundary + 'a', '-H', f'{KEY_HEADER}: {KEY}')[-1] == '404'
+            check_worker_caddy_boundary(caddy_port, published)
             for query in (
                 '?unrecognized=1',
                 '?path=%2fproducts%2F%5bsample%5D',

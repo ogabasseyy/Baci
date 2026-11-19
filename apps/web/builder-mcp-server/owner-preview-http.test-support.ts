@@ -17,6 +17,7 @@ export async function send(
     method?: string;
     body?: string;
     signature?: string | null;
+    signatureHeader?: string;
     cookie?: string;
     signal?: AbortSignal;
   } = {}
@@ -40,7 +41,8 @@ export async function send(
           ...(options.signature === null
             ? {}
             : {
-                'x-baci-owner-signature': options.signature ?? 'a'.repeat(64),
+                [options.signatureHeader ?? 'x-baci-owner-signature']:
+                  options.signature ?? 'a'.repeat(64),
               }),
           ...(options.cookie ? { cookie: options.cookie } : {}),
         },

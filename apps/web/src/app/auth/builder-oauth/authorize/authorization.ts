@@ -54,7 +54,6 @@ export async function readBuilderConsent(
     searchParams.getAll('code').length !== 1 ||
     !searchParams.get('state') ||
     searchParams.getAll('state').length !== 1 ||
-    searchParams.getAll('iss').length > 1 ||
     [...searchParams.keys()].some(
       (param) => !['code', 'state', 'iss'].includes(param)
     )
@@ -76,6 +75,14 @@ export function parseBuilderCallback(
       url.hash
     )
       return null;
+    const issuers = url.searchParams.getAll('iss');
+    if (issuers.length) {
+      // GoTrue issues this response. The builder broker owns the callback,
+      // while the configured Supabase Auth server is the upstream issuer.
+      const upstream = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? '');
+      if (issuers.length !== 1 || issuers[0] !== `${upstream.origin}/auth/v1`)
+        return null;
+    }
     return `${BUILDER_CALLBACK}${url.search}`;
   } catch {
     return null;

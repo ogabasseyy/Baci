@@ -1,12 +1,11 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { OWNER_PREVIEW_WORK_TIMEOUT_MS } from '../src/lib/experience/owner-preview-deadline';
-
-type Admission = (body: Uint8Array, signature: string) => boolean;
+import type { OwnerAdmission } from './owner-admission';
 
 /** Fixed, bounded transport for the signed server-to-server owner preview route. */
 export function createOwnerPreviewHttpHandler(
   bridge: (request: Request) => Promise<Response>,
-  options: { timeoutMs?: number; admit?: Admission } = {}
+  options: { timeoutMs?: number; admit?: OwnerAdmission } = {}
 ) {
   const timeoutMs = options.timeoutMs ?? OWNER_PREVIEW_WORK_TIMEOUT_MS;
   if (
@@ -27,7 +26,8 @@ export function createOwnerPreviewHttpHandler(
 /** The fixed verifier target is reachable only through the trusted relay. */
 export function createOwnerAttestationHttpHandler(
   bridge: (request: Request) => Promise<Response>,
-  admit?: Admission
+  admit?: OwnerAdmission,
+  ownerSlots = new Set<string>()
 ) {
   return createOwnerHttpHandler(bridge, {
     path: '/internal/owner/attest',
@@ -35,13 +35,15 @@ export function createOwnerAttestationHttpHandler(
     signature: 'x-baci-verifier-signature',
     timeoutMs: 600000,
     admit,
+    ownerSlots,
   });
 }
 
 /** Public verification remains an authenticated owner-only verifier operation. */
 export function createOwnerPublicVerificationHttpHandler(
   bridge: (request: Request) => Promise<Response>,
-  admit?: Admission
+  admit?: OwnerAdmission,
+  ownerSlots = new Set<string>()
 ) {
   return createOwnerHttpHandler(bridge, {
     path: '/internal/owner/public',
@@ -49,6 +51,7 @@ export function createOwnerPublicVerificationHttpHandler(
     signature: 'x-baci-verifier-signature',
     timeoutMs: 600000,
     admit,
+    ownerSlots,
   });
 }
 
@@ -59,7 +62,8 @@ function createOwnerHttpHandler(
     target: string;
     signature: string;
     timeoutMs: number;
-    admit?: Admission;
+    admit?: OwnerAdmission;
+    ownerSlots?: Set<string>;
   }
 ) {
   let readers = 0;
@@ -162,8 +166,22 @@ function createOwnerHttpHandler(
       respond(res, 429);
       return;
     }
-    if (!binding.admit?.(bytes, signature)) {
-      respond(res, 401);
+    const ownerSlots = binding.ownerSlots;
+    let ownerId: string | undefined;
+    const admitted = binding.admit?.(
+      bytes,
+      signature,
+      ownerSlots &&
+        ((id) => {
+          if (ownerSlots.has(id)) return false;
+          ownerSlots.add(id);
+          ownerId = id;
+          return true;
+        })
+    );
+    if (admitted !== true || (ownerSlots && !ownerId)) {
+      if (ownerId) ownerSlots?.delete(ownerId);
+      respond(res, admitted === 'busy' ? 429 : 401);
       return;
     }
     active++;
@@ -228,6 +246,7 @@ function createOwnerHttpHandler(
       clearTimeout(deadline);
       res.off('close', onClose);
       active--;
+      if (ownerId) ownerSlots?.delete(ownerId);
     }
   }
   return {

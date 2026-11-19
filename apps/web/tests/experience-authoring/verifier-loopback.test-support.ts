@@ -16,7 +16,8 @@ export async function sendVerifierTwice(
     gateway = createOwnerInternalNodeServer({
       ownerAttestation: createVerifierLoopbackForwarder(address.port),
       // This helper tests replay at the verifier; signature admission is covered separately.
-      ownerAttestationAdmission: () => true,
+      ownerAttestationAdmission: (_body, _signature, reserve) =>
+        reserve?.('synthetic-owner') ?? false,
     });
     const gatewayPort = await gateway.listen(0);
     const send = () =>

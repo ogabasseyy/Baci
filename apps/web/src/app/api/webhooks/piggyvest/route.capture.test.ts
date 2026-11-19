@@ -221,4 +221,16 @@ describe('R5 processing is separate from the reply', () => {
       expect.stringContaining('PIGGYVEST_WEBHOOK_PROCESSING_DEFERRED')
     );
   });
+  it('preserves the response when the restricted intake disposal throws synchronously', async () => {
+    const dispose = vi.fn(() => {
+      throw new Error('synthetic cleanup failure');
+    });
+    mocks.createIntakeClient.mockReturnValue(
+      Object.assign(store.client(), { dispose })
+    );
+    const response = await post(accrued, sign(current, accrued));
+    expect(response.status).toBe(200);
+    expect(store.rows).toHaveLength(1);
+    expect(dispose).toHaveBeenCalledOnce();
+  });
 });

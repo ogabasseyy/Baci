@@ -1,3 +1,4 @@
+import type { User } from '@supabase/supabase-js';
 import { act, render, screen, waitFor } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
@@ -47,9 +48,24 @@ const props = {
   remainingAmount: 1000,
   walletBalance: 0,
 };
+const authUser: User = {
+  id: 'customer-a',
+  app_metadata: {},
+  user_metadata: {},
+  aud: 'authenticated',
+  created_at: '2026-01-01T00:00:00.000Z',
+};
 
 // Without plan funding the section is today's wallet contribution alone.
 describe('server keeps PiggyVest off', () => {
+  beforeEach(() => {
+    act(() =>
+      useAuthStore.setState({
+        user: authUser,
+        merchantId: SERVER_OFF_MERCHANT_ID,
+      })
+    );
+  });
   it.each([
     true,
     false,
@@ -102,7 +118,7 @@ describe('server keeps PiggyVest off (readiness gate)', () => {
       .mockImplementation(answer as never);
     act(() => {
       useAuthStore.setState({
-        user: { id: 'u' } as never,
+        user: authUser,
         merchantId: SERVER_OFF_MERCHANT_ID,
       });
     });

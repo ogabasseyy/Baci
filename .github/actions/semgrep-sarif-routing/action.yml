@@ -1,0 +1,34 @@
+name: Route Semgrep SARIF
+description: Publish SARIF to code scanning for public repositories or an artifact for private repositories.
+inputs:
+  visibility:
+    description: JSON boolean indicating whether the repository is private.
+    required: true
+  sarif-exists:
+    description: Whether the scanner produced a nonempty SARIF file.
+    required: true
+  retention-days:
+    description: Artifact retention in days for private repositories.
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Verify repository visibility
+      if: ${{ always() && !contains(fromJSON('["true", "false"]'), inputs.visibility) }}
+      shell: bash
+      run: |
+        echo "::error::Repository visibility is unavailable; cannot route SARIF safely."
+        exit 1
+    - name: Upload SARIF to GitHub code scanning
+      if: ${{ always() && inputs.visibility == 'false' && inputs.sarif-exists == 'true' }}
+      uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+      with:
+        sarif_file: semgrep.sarif
+    - name: Preserve SARIF for private repositories
+      if: ${{ always() && inputs.visibility == 'true' && inputs.sarif-exists == 'true' }}
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: semgrep-private-sarif
+        path: semgrep.sarif
+        if-no-files-found: error
+        retention-days: ${{ inputs.retention-days }}

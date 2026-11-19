@@ -25,11 +25,16 @@ VALUES ('efab0000-0000-4000-8000-000000000051','efab0000-0000-4000-8000-00000000
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub','efab0000-0000-4000-8000-000000000003',true);
 SELECT public.oxygen_runtime('finish','efab0000-0000-4000-8000-000000000051',
- '{"commandId":"efab0000-0000-4000-8000-000000000051","outcome":"succeeded","stage":"eligibility_required","state":{"eligibilityStatus":"failed","validated":true}}');
+ '{"commandId":"efab0000-0000-4000-8000-000000000051","outcome":"succeeded","stage":"eligibility_required","state":{"eligibilityStatus":"failed","eligibilityFailureReason":"financial_details_mismatch","validated":true}}');
+DO $$ BEGIN
+ IF public.oxygen_runtime('worker_status','efab0000-0000-4000-8000-000000000041','{"includeEligibilityFailureReason":true}')->'state' ? 'eligibilityFailureReason' THEN
+  RAISE EXCEPTION 'Legacy worker state exposed the new reason';
+ END IF;
+END $$;
 DO $$
 DECLARE invalid jsonb;
 BEGIN
- FOREACH invalid IN ARRAY ARRAY['{"eligibilityStatus":"approved"}'::jsonb,'{"eligibilityStatus":null}'::jsonb,'{"eligibilityStatus":3}'::jsonb,'{"eligibilityStatus":"failed","unexpected":"x"}'::jsonb] LOOP
+ FOREACH invalid IN ARRAY ARRAY['{"eligibilityStatus":"approved"}'::jsonb,'{"eligibilityStatus":null}'::jsonb,'{"eligibilityStatus":3}'::jsonb,'{"eligibilityStatus":"failed","unexpected":"x"}'::jsonb,'{"eligibilityStatus":"failed","eligibilityFailureReason":"private provider text"}'::jsonb,'{"eligibilityStatus":"failed","eligibilityFailureReason":null}'::jsonb,'{"eligibilityStatus":"pending","eligibilityFailureReason":"financial_details_mismatch"}'::jsonb,'{"eligibilityStatus":"failed","eligible":false,"eligibilityFailureReason":"financial_details_mismatch"}'::jsonb] LOOP
   BEGIN
    PERFORM public.oxygen_runtime('finish','efab0000-0000-4000-8000-000000000051',jsonb_build_object('commandId','efab0000-0000-4000-8000-000000000051','outcome','succeeded','stage','eligibility_required','state',invalid));
    RAISE EXCEPTION 'Invalid provider status accepted';
@@ -40,12 +45,27 @@ END $$;
 SELECT set_config('request.jwt.claim.sub','efab0000-0000-4000-8000-000000000002',true);
 DO $$ BEGIN
  BEGIN
+  PERFORM public.oxygen_runtime('status','efab0000-0000-4000-8000-000000000041','{"includeEligibilityFailureReason":true}');
+  RAISE EXCEPTION 'Stranger could read eligibility reason';
+ EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+ BEGIN
   PERFORM public.oxygen_runtime('finish','efab0000-0000-4000-8000-000000000051','{"commandId":"efab0000-0000-4000-8000-000000000051","outcome":"succeeded","stage":"eligibility_required","state":{"eligibilityStatus":"failed"}}');
   RAISE EXCEPTION 'Unbound caller accepted';
  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
 END $$;
+SELECT set_config('request.jwt.claim.sub','efab0000-0000-4000-8000-000000000001',true);
+DO $$ BEGIN
+ IF public.oxygen_runtime('status','efab0000-0000-4000-8000-000000000041')->'state' ? 'eligibilityFailureReason' THEN
+  RAISE EXCEPTION 'Legacy customer state exposed the new reason';
+ END IF;
+ IF public.oxygen_runtime('status','efab0000-0000-4000-8000-000000000041','{"includeEligibilityFailureReason":true}')->'state'->>'eligibilityFailureReason' IS DISTINCT FROM 'financial_details_mismatch' THEN
+  RAISE EXCEPTION 'Owner could not read saved eligibility reason';
+ END IF;
+END $$;
 RESET ROLE;
 DO $$ BEGIN
  IF (SELECT state->>'eligibilityStatus' FROM oxygen_private.provider_states WHERE workflow_id='efab0000-0000-4000-8000-000000000041') IS DISTINCT FROM 'failed' THEN RAISE EXCEPTION 'Failure status not saved'; END IF;
+ IF (SELECT state ? 'eligibilityFailureReason' FROM oxygen_private.provider_states WHERE workflow_id='efab0000-0000-4000-8000-000000000041') THEN RAISE EXCEPTION 'Failure reason leaked into legacy state'; END IF;
+ IF (SELECT eligibility_failure_reason FROM oxygen_private.provider_states WHERE workflow_id='efab0000-0000-4000-8000-000000000041') IS DISTINCT FROM 'financial_details_mismatch' THEN RAISE EXCEPTION 'Failure reason not saved'; END IF;
 END $$;
 ROLLBACK;

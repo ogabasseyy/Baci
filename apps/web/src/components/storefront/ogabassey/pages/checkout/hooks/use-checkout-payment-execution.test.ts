@@ -191,22 +191,11 @@ describe('useCheckoutPaymentExecution', () => {
     expect(completion).toBeTypeOf('function');
     act(() => completion?.(payload));
 
-    expect(mocks.captureCompleted).toHaveBeenCalledWith({
-      currency: 'NGN',
-      orderId: 'order-paid-1',
-      orderNumber: 'ORD-1',
-      paymentMethod: 'bank_transfer',
-      reference: 'intent-1',
-      total: 5000,
-    });
-    expect(options.attempt.clearPendingCheckoutOrder).toHaveBeenCalledOnce();
-    expect(mocks.clearIdempotencyKey).toHaveBeenCalledWith('fingerprint-1');
-    expect(options.form.session.clear).toHaveBeenCalledOnce();
+    // The paid-callback behaviour (capture, cleanup, hand-off, cart clear) is
+    // covered in use-wallet-funded-order-completion.test.ts.
     expect(mocks.push).toHaveBeenCalledWith(
-      '/shop/order-success?orderId=order-paid-1&wallet=true&trackingToken=paid-track-1'
+      '/shop/order-success?orderId=order-paid-1&wallet=true'
     );
-    act(() => vi.advanceTimersByTime(500));
-    expect(options.cart.clearCart).toHaveBeenCalledOnce();
   });
 
   it.each([

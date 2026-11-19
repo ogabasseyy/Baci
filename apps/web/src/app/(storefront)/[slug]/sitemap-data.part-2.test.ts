@@ -56,6 +56,7 @@ describe('sitemap-data', () => {
         slug: 'ogabassey',
         is_published: true,
         business_name: 'Ogabassey',
+        faq_items: [{ question: 'Q', answer: 'A' }],
         updated_at: '2026-06-01T00:00:00Z',
       },
       storeUrl: 'https://ogabassey.com',
@@ -88,6 +89,7 @@ describe('sitemap-data', () => {
         slug: 'ogabassey',
         is_published: true,
         business_name: 'Ogabassey',
+        faq_items: [{ question: 'Q', answer: 'A' }],
       },
       storeUrl: 'https://ogabassey.com',
     } as unknown as Parameters<typeof getStaticSitemapEntries>[0]);

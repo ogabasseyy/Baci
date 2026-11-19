@@ -61,3 +61,35 @@ it('restores recovery only for the owned snapshot, without calling Oxygen', asyn
   expect((await response.json()).state.eligibilityStatus).toBe('failed');
   expect(call).not.toHaveBeenCalled();
 });
+
+it.each([
+  [undefined, false],
+  ['1', true],
+])('only sends the new reason to clients that advertise support (%s)', async (version, expected) => {
+  const snapshot = {
+    workflowId: id,
+    executionEnabled: true,
+    state: {
+      validated: true,
+      eligibilityStatus: 'failed',
+      eligibilityFailureReason: 'financial_details_mismatch',
+    },
+  };
+  m.auth.mockResolvedValue({ user: { id: 'customer' }, supabase: {} });
+  m.read.mockResolvedValue(snapshot);
+  m.connect.mockReturnValue(null);
+  const headers: Record<string, string> = version
+    ? { 'x-oxygen-eligibility-reason': version }
+    : {};
+  const response = await GET(
+    new NextRequest(
+      `http://localhost/api/payments/oxygen/workflows/actions?workflowId=${id}`,
+      { headers }
+    )
+  );
+  expect(response.status).toBe(200);
+  const result = await response.json();
+  expect(result.state.eligibilityFailureReason).toBe(
+    expected ? 'financial_details_mismatch' : undefined
+  );
+});

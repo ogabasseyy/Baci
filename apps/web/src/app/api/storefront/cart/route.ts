@@ -1,12 +1,13 @@
 import { CART_FULL_SESSION_OPERATIONS } from '@baci/shared/cart';
 import type { NextRequest } from 'next/server';
+import { applyCartSnapshotCookies } from '@/lib/cart/apply-cart-snapshot-cookies';
 import { getCartProofEnvironment } from '@/lib/cart/cart-runtime-env';
 import { upgradeLegacySessionPrincipal } from '@/lib/cart/grant-operations';
 import { checkAnonymousCartQuota } from '@/lib/cart/quota-identity';
 import {
   type CartRequestContextDeps,
+  cachedCartMerchantLookups,
   checkCartQuota,
-  createAnonMerchantFeatureLookup,
   readCartJsonBody,
   requestUsesDeviceProof,
   resolveCartRequestContext,
@@ -16,9 +17,12 @@ import {
   cartErrorResponse,
   cartJsonResponse,
   emptyCartProbeResponse,
-  setCartSessionCookie,
 } from '@/lib/cart/response';
 import { createCartScopedClient } from '@/lib/cart/scoped-client';
+import {
+  type CartServerTimer,
+  createCartServerTimer,
+} from '@/lib/cart/server-timing';
 import { createCart, getCart } from '@/lib/cart/service';
 import {
   cartSessionCookieMaxAge,
@@ -31,21 +35,23 @@ import { getCurrentSlugForAlias } from '@/lib/slug-alias-cache';
 import { createAnonClient } from '@/lib/supabase/anon';
 import { createCartRequestSchema } from '@/schemas/cart';
 
-function contextDeps(
+function defaultContextDeps(
   requireScope: CartRequestContextDeps['requireScope'],
-  wrongScopeError: CartRequestContextDeps['wrongScopeError']
+  wrongScopeError: CartRequestContextDeps['wrongScopeError'],
+  timer?: CartServerTimer
 ): CartRequestContextDeps {
+  const cached = cachedCartMerchantLookups(createAnonClient());
   return {
     merchant: {
       resolveAlias: getCurrentSlugForAlias,
-      rpcClient: createAnonClient(),
-      loadMerchantFeatures: createAnonMerchantFeatureLookup(createAnonClient()),
+      rpcClient: cached.rpcClient,
+      loadMerchantFeatures: timer
+        ? (id) => timer.measure('auth-features', () => cached.features(id))
+        : cached.features,
     },
     requireScope,
     verify: (proof) =>
-      verifyCartSessionProof(proof, {
-        environment: getCartProofEnvironment(),
-      }),
+      verifyCartSessionProof(proof, { environment: getCartProofEnvironment() }),
     wrongScopeError,
   };
 }
@@ -53,43 +59,47 @@ function contextDeps(
 /**
  * GET /api/storefront/cart
  *
- * Returns the authorized snapshot for a session proof. Preview-safe:
- * creates no cart and mints no session. A bootstrap proof (no cart
- * yet) reads as not-found. A legacy session proof that predates the
- * operations claim is upgraded here: the live grant's verified
- * operations are loaded and the proof is re-issued with them (cookie,
- * plus body for device callers), so older carts stay editable.
+ * Returns the authorized snapshot for a session proof. Preview-safe: creates
+ * no cart and mints no session. A bootstrap proof (no cart yet) reads as
+ * not-found. A legacy session proof that predates the operations claim is
+ * upgraded here: the live grant's verified operations are loaded and the proof
+ * is re-issued (cookie, plus body for device callers), so older carts stay editable.
  */
 export async function GET(request: NextRequest) {
+  // Every outcome reports its step timings; `auth-features` runs inside `auth`.
+  const timer = createCartServerTimer();
+  return timer.apply(await readCart(request, timer));
+}
+
+async function readCart(request: NextRequest, timer: CartServerTimer) {
   try {
-    const context = await resolveCartRequestContext(
-      request,
-      contextDeps('session', 'not_found')
+    const deps = defaultContextDeps('session', 'not_found', timer);
+    const context = await timer.measure('auth', () =>
+      resolveCartRequestContext(request, deps)
     );
     if (!context.ok) {
-      if (
+      const probe =
         context.error === 'missing_proof' &&
-        request.headers.get('x-baci-cart-probe') === '1'
-      ) {
-        return emptyCartProbeResponse();
-      }
-      return cartErrorResponse(context.error);
+        request.headers.get('x-baci-cart-probe') === '1';
+      return probe
+        ? emptyCartProbeResponse()
+        : cartErrorResponse(context.error);
     }
-
-    const quota = await checkCartQuota({
-      merchantId: context.merchant.id,
-      operation: 'snapshot',
-      subject: context.principal.principalId,
-    });
+    const quota = await timer.measure('quota', () =>
+      checkCartQuota({
+        merchantId: context.merchant.id,
+        operation: 'snapshot',
+        subject: context.principal.principalId,
+      })
+    );
     if (!quota.allowed) {
       return cartErrorResponse('quota_exceeded');
     }
 
     const client = createCartScopedClient(context.principal);
-    const result = await getCart({
-      client,
-      principal: context.principal,
-    });
+    const result = await timer.measure('cart', () =>
+      getCart({ client, principal: context.principal })
+    );
     if (!result.ok) {
       return cartErrorResponse(
         result.code,
@@ -97,9 +107,8 @@ export async function GET(request: NextRequest) {
       );
     }
     let proof: string | null = null;
-    const upgraded = await upgradeLegacySessionPrincipal(
-      client,
-      context.principal
+    const upgraded = await timer.measure('grant', () =>
+      upgradeLegacySessionPrincipal(client, context.principal).catch(() => null)
     );
     if (upgraded && upgraded !== context.principal) {
       try {
@@ -139,9 +148,12 @@ export async function GET(request: NextRequest) {
         ? upgraded.liveGrantExpiresAt
         : result.cart.expiresAt;
     const cookieMaxAge = cartSessionCookieMaxAge(cookieExpiry);
-    if (proof && cookieMaxAge > 0) {
-      setCartSessionCookie(response, context.merchant.id, proof, cookieMaxAge);
-    }
+    applyCartSnapshotCookies(response, {
+      merchantId: context.merchant.id,
+      cart: result.cart,
+      proof,
+      cookieMaxAge,
+    });
     return response;
   } catch (error) {
     console.error('Unexpected error in GET /api/storefront/cart:', {
@@ -154,18 +166,15 @@ export async function GET(request: NextRequest) {
 /**
  * POST /api/storefront/cart
  *
- * Lazily creates one guest cart for a bootstrap proof and returns the
- * upgraded session proof (body plus merchant-namespaced cookie). The
- * creation key makes response-loss retries converge instead of
- * duplicating the cart. Client JSON never overrides the resolved
- * merchant.
+ * Lazily creates one guest cart for a bootstrap proof and returns the upgraded
+ * session proof (body plus merchant-namespaced cookie). The creation key makes
+ * response-loss retries converge instead of duplicating the cart. Client JSON
+ * never overrides the resolved merchant.
  */
 export async function POST(request: NextRequest) {
   try {
     const csrf = await checkCsrfProtection(request);
-    if (!csrf.valid) {
-      return cartErrorResponse('forbidden');
-    }
+    if (!csrf.valid) return cartErrorResponse('forbidden');
 
     // Authenticate before reading the creation body, like every other
     // protected cart mutation route: unauthenticated callers must not
@@ -173,20 +182,14 @@ export async function POST(request: NextRequest) {
     const context = await resolveCartRequestContext(
       request,
       // Keep scope rejection distinct from the CSRF forbidden response.
-      contextDeps('bootstrap', 'unauthorized')
+      defaultContextDeps('bootstrap', 'unauthorized')
     );
-    if (!context.ok) {
-      return cartErrorResponse(context.error);
-    }
+    if (!context.ok) return cartErrorResponse(context.error);
 
     const rawBody = await readCartJsonBody(request);
-    if (!rawBody.ok) {
-      return cartErrorResponse('invalid_request');
-    }
+    if (!rawBody.ok) return cartErrorResponse('invalid_request');
     const parsedBody = createCartRequestSchema.safeParse(rawBody.body);
-    if (!parsedBody.success) {
-      return cartErrorResponse('invalid_request');
-    }
+    if (!parsedBody.success) return cartErrorResponse('invalid_request');
     if (!voucherAttachmentsValid(parsedBody.data.lines ?? [])) {
       return cartErrorResponse('invalid_request');
     }
@@ -200,9 +203,7 @@ export async function POST(request: NextRequest) {
       },
       quotaContext
     );
-    if (!quota.allowed) {
-      return cartErrorResponse('quota_exceeded');
-    }
+    if (!quota.allowed) return cartErrorResponse('quota_exceeded');
     // Bootstrap mints a fresh principal per call, so the per-principal
     // budget alone can be reset by rotating bootstrap proofs; the same
     // budget also applies per quota client identity. A client
@@ -217,9 +218,7 @@ export async function POST(request: NextRequest) {
       },
       quotaContext
     );
-    if (!clientQuota.allowed) {
-      return cartErrorResponse('quota_exceeded');
-    }
+    if (!clientQuota.allowed) return cartErrorResponse('quota_exceeded');
 
     const result = await createCart(
       {
@@ -238,9 +237,7 @@ export async function POST(request: NextRequest) {
         result.cart ? { cart: result.cart } : undefined
       );
     }
-    if (!result.grantId) {
-      return cartErrorResponse('temporarily_unavailable');
-    }
+    if (!result.grantId) return cartErrorResponse('temporarily_unavailable');
 
     let proof: string | null = null;
     try {
@@ -279,9 +276,12 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     );
     const cookieMaxAge = cartSessionCookieMaxAge(result.cart.expiresAt);
-    if (proof && cookieMaxAge > 0) {
-      setCartSessionCookie(response, context.merchant.id, proof, cookieMaxAge);
-    }
+    applyCartSnapshotCookies(response, {
+      merchantId: context.merchant.id,
+      cart: result.cart,
+      proof,
+      cookieMaxAge,
+    });
     return response;
   } catch (error) {
     console.error('Unexpected error in POST /api/storefront/cart:', {

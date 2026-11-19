@@ -58,5 +58,6 @@ jobs:
         with:
           name: bundle-analysis-report
           path: apps/web/.next/diagnostics/analyze/
-          retention-days: 30
+          # Keep weekly reports for comparison; push and manual reports expire after a day.
+          retention-days: ${{ github.event_name == 'schedule' && 14 || 1 }}
           if-no-files-found: warn

@@ -4,6 +4,17 @@ import { changeWalletPin } from '@/lib/wallet-pin-change-api';
 import { useWalletPinSettings } from './use-wallet-pin-settings';
 
 const mockRefresh = jest.fn();
+const mockBack = jest.fn();
+const mockReplace = jest.fn();
+const mockCanGoBack = jest.fn();
+const mockNavigationListeners = new Map<string, () => void>();
+const mockNavigation = {
+  addListener: (event: string, listener: () => void) => {
+    mockNavigationListeners.set(event, listener);
+    return () => mockNavigationListeners.delete(event);
+  },
+};
+let mockUserId: string | null = 'user-1';
 let mockStatus: object = {
   primary: true,
   hasPin: false,
@@ -22,16 +33,23 @@ jest.mock('@/lib/wallet-pin-change-api', () => ({
   changeWalletPin: jest.fn(),
 }));
 jest.mock('expo-router', () => ({
-  useNavigation: () => ({ addListener: () => () => undefined }),
+  router: { back: mockBack, replace: mockReplace, canGoBack: mockCanGoBack },
+  useNavigation: () => mockNavigation,
 }));
 jest.mock('@/stores/auth-store', () => ({
   useAuthStore: (selector: (s: unknown) => unknown) =>
-    selector({ user: { id: 'user-1' }, signOut: jest.fn() }),
+    selector({
+      user: mockUserId ? { id: mockUserId } : null,
+      signOut: jest.fn(),
+    }),
 }));
 
 describe('useWalletPinSettings', () => {
   beforeEach(() => {
     jest.resetAllMocks();
+    mockCanGoBack.mockReturnValue(true);
+    mockNavigationListeners.clear();
+    mockUserId = 'user-1';
     mockStatus = {
       primary: true,
       hasPin: false,
@@ -61,6 +79,17 @@ describe('useWalletPinSettings', () => {
     expect(result.current.mode).toBe('reset');
   });
 
+  it('never lets one account inherit another account\'s "confirm it\'s you"', () => {
+    mockStatus = { ...mockStatus, signInConfirmationRequired: true };
+    const { result, rerender } = renderHook(() => useWalletPinSettings());
+    expect(result.current.needsIdentity).toBe(true);
+    act(() => result.current.identityConfirmed());
+    expect(result.current.needsIdentity).toBe(false);
+    mockUserId = 'user-2';
+    rerender({});
+    expect(result.current.needsIdentity).toBe(true);
+  });
+
   it('clears fields and the validation error path sends nothing', () => {
     const { result } = renderHook(() => useWalletPinSettings());
     act(() => {
@@ -83,7 +112,114 @@ describe('useWalletPinSettings', () => {
     await act(async () => result.current.submit());
     expect(submitWalletPin).toHaveBeenCalledWith('set', '1234', 'user-1');
     expect(result.current.newPin).toBe('');
-    expect(result.current.notice).toBe('Your wallet PIN has been saved.');
     expect(result.current.busy).toBe(false);
+  });
+
+  it('ignores success after blur', async () => {
+    let resolveRequest!: () => void;
+    (submitWalletPin as jest.Mock).mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveRequest = resolve;
+      })
+    );
+    const { result } = renderHook(() => useWalletPinSettings());
+    act(() => {
+      result.current.setNewPin('1234');
+      result.current.setConfirmPin('1234');
+    });
+    act(() => result.current.submit());
+    expect(submitWalletPin).toHaveBeenCalledTimes(1);
+    act(() => mockNavigationListeners.get('blur')?.());
+    await act(async () => resolveRequest());
+    expect(result.current.savedTitle).toBeNull();
+  });
+
+  it('shows the saved state once, and drops it when the screen blurs', async () => {
+    (submitWalletPin as jest.Mock).mockResolvedValue(undefined);
+    const { result } = renderHook(() => useWalletPinSettings());
+    act(() => {
+      result.current.setNewPin('1234');
+      result.current.setConfirmPin('1234');
+    });
+    await act(async () => result.current.submit());
+    expect(submitWalletPin).toHaveBeenCalledTimes(1);
+    expect(result.current.savedTitle).toBe('PIN set');
+    act(() => mockNavigationListeners.get('blur')?.());
+    expect(result.current.savedTitle).toBeNull();
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it('never shows one account the saved state of another', async () => {
+    (submitWalletPin as jest.Mock).mockResolvedValue(undefined);
+    const { result, rerender } = renderHook(() => useWalletPinSettings());
+    act(() => {
+      result.current.setNewPin('1234');
+      result.current.setConfirmPin('1234');
+    });
+    await act(async () => result.current.submit());
+    expect(result.current.savedTitle).toBe('PIN set');
+    mockUserId = 'user-2';
+    rerender({});
+    expect(result.current.savedTitle).toBeNull();
+  });
+
+  it('ignores a late success after unmount', async () => {
+    let resolveRequest!: () => void;
+    (submitWalletPin as jest.Mock).mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveRequest = resolve;
+      })
+    );
+    const { result, unmount } = renderHook(() => useWalletPinSettings());
+    act(() => {
+      result.current.setNewPin('1234');
+      result.current.setConfirmPin('1234');
+    });
+    act(() => result.current.submit());
+    expect(submitWalletPin).toHaveBeenCalledTimes(1);
+    unmount();
+    await act(async () => resolveRequest());
+    expect(result.current.savedTitle).toBeNull();
+  });
+
+  it('does not revive a pending request when focus returns', async () => {
+    let resolveRequest!: () => void;
+    (submitWalletPin as jest.Mock).mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveRequest = resolve;
+      })
+    );
+    const { result } = renderHook(() => useWalletPinSettings());
+    act(() => {
+      result.current.setNewPin('1234');
+      result.current.setConfirmPin('1234');
+    });
+    act(() => result.current.submit());
+    expect(submitWalletPin).toHaveBeenCalledTimes(1);
+    act(() => mockNavigationListeners.get('blur')?.());
+    act(() => mockNavigationListeners.get('focus')?.());
+    await act(async () => resolveRequest());
+    expect(result.current.savedTitle).toBeNull();
+  });
+
+  it('ignores a pending request after the authenticated user changes', async () => {
+    let resolveRequest!: () => void;
+    (submitWalletPin as jest.Mock).mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveRequest = resolve;
+      })
+    );
+    const { result, rerender } = renderHook(() => useWalletPinSettings());
+    act(() => {
+      result.current.setNewPin('1234');
+      result.current.setConfirmPin('1234');
+    });
+    act(() => result.current.submit());
+    expect(submitWalletPin).toHaveBeenCalledTimes(1);
+    mockUserId = 'user-2';
+    rerender({});
+    await act(async () => resolveRequest());
+    expect(result.current.savedTitle).toBeNull();
   });
 });

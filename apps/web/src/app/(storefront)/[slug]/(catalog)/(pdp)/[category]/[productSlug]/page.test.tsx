@@ -1999,7 +1999,7 @@ describe('[category]/[productSlug] page metadata', () => {
     expect(ogabasseyProps?.product?.price).not.toContain('₦');
   });
 
-  it('leaves variant query redirects to page rendering, not metadata generation', async () => {
+  it('returns noindex metadata for variant query redirects (real HTTP 308 happens during page render)', async () => {
     mockGetCachedProductWithDetails.mockResolvedValue(
       categorizedDetailedProduct
     );
@@ -2030,9 +2030,8 @@ describe('[category]/[productSlug] page metadata', () => {
       }),
     });
 
-    expect(metadata.alternates?.canonical).toBe(
-      'https://teststore.usebaci.com/laptops/hp-laptop-14-ep0063nia'
-    );
+    expect(metadata.robots).toMatchObject({ index: false, follow: true });
+    expect(metadata.alternates).toBeNull();
     expect(mockPermanentRedirect).not.toHaveBeenCalled();
   });
 });

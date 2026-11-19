@@ -55,6 +55,48 @@ describe('handlePaystackCancellationRefundFailure', () => {
     );
   });
 
+  it('keeps Paystack rejection text in the review reason and metadata', async () => {
+    await expect(
+      invoke({
+        code: 'HTTP_400',
+        error: 'Transaction has been fully reversed',
+      })
+    ).rejects.toThrow('Transaction has been fully reversed');
+
+    expect(mocks.quarantineRefund).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          provider_error: 'Transaction has been fully reversed',
+          provider_error_code: 'HTTP_400',
+        }),
+        reason:
+          'Paystack refund initiation was rejected for this payment leg: Transaction has been fully reversed',
+      })
+    );
+  });
+
+  it('keeps Paystack rejection text when a later leg fails after progress', async () => {
+    await expect(
+      invoke({
+        code: 'HTTP_400',
+        error: 'Insufficient balance',
+        refundIds: [7],
+      })
+    ).rejects.toThrow('Insufficient balance');
+
+    expect(mocks.quarantineRefund).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          accepted_refund_ids: [7],
+          provider_error: 'Insufficient balance',
+          provider_error_code: 'HTTP_400',
+        }),
+        reason:
+          'Some payment legs were accepted for refund, but a later leg failed: Insufficient balance',
+      })
+    );
+  });
+
   it('quarantines an ambiguous failure terminally and throws delivery-uncertain', async () => {
     await expect(
       invoke({ code: 'NETWORK_ERROR', error: 'socket hung up' })

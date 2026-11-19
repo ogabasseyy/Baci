@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { runPiggyvestDailyReconciliation } from './daily-reconciliation-runtime';
 import {
   env,
+  executeWith,
   INTEGRATION,
   makeDeps,
   runtime,
@@ -89,9 +90,7 @@ describe('runPiggyvestDailyReconciliation', () => {
     };
     const { deps } = makeDeps({
       createExecutor: vi.fn(() =>
-        vi.fn(async () => ({
-          rows: [{ result: snapshot({ stuck: [stuck], stuckTotal: 1 }) }],
-        }))
+        executeWith(snapshot({ stuck: [stuck], stuckTotal: 1 }))
       ) as never,
     });
     const result = await runPiggyvestDailyReconciliation({ env, deps });
@@ -130,16 +129,12 @@ describe('runPiggyvestDailyReconciliation', () => {
   it('pages when a goal wallet holds less than recorded, reading the balance from the bound wallet', async () => {
     const { deps } = makeDeps({
       createExecutor: vi.fn(() =>
-        vi.fn(async () => ({
-          rows: [
-            {
-              result: snapshot({
-                wallets: [{ walletId: 'goal-a', expectedKobo: 1500 }],
-                walletsTotal: 1,
-              }),
-            },
-          ],
-        }))
+        executeWith(
+          snapshot({
+            wallets: [{ walletId: 'goal-a', expectedKobo: 1500 }],
+            walletsTotal: 1,
+          })
+        )
       ) as never,
       retrieveWallet: vi.fn(async (_c: unknown, id: string) => ({
         id,
@@ -170,16 +165,12 @@ describe('runPiggyvestDailyReconciliation', () => {
   ])('reads the balance as unreadable (and pages) for %s', async (_l, wallet) => {
     const { deps } = makeDeps({
       createExecutor: vi.fn(() =>
-        vi.fn(async () => ({
-          rows: [
-            {
-              result: snapshot({
-                wallets: [{ walletId: 'goal-a', expectedKobo: 1500 }],
-                walletsTotal: 1,
-              }),
-            },
-          ],
-        }))
+        executeWith(
+          snapshot({
+            wallets: [{ walletId: 'goal-a', expectedKobo: 1500 }],
+            walletsTotal: 1,
+          })
+        )
       ) as never,
       retrieveWallet: vi.fn(async () => wallet) as never,
     });

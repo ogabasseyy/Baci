@@ -60,6 +60,7 @@ export interface NormalizedProduct {
   merchant_id?: string;
   status?: string;
   has_condition_offers?: boolean;
+  has_variants?: boolean;
   available_conditions: string[];
   variant_model: 'legacy' | 'sku_matrix';
   canonical_url?: string | null;
@@ -146,8 +147,15 @@ export function normalizeProduct(
   raw: RawDbProduct,
   options: NormalizeProductOptions = {}
 ): NormalizedProduct {
-  const primaryImage = extractPrimaryImage(raw.images);
-  const normalizedImages = normalizeImages(raw.images);
+  const primaryImage = raw.advertised_image || extractPrimaryImage(raw.images);
+  const rawNormalizedImages = normalizeImages(raw.images);
+  const normalizedImages =
+    typeof raw.advertised_image === 'string' && raw.advertised_image.trim()
+      ? [
+          raw.advertised_image,
+          ...rawNormalizedImages.filter((url) => url !== raw.advertised_image),
+        ]
+      : rawNormalizedImages;
   const joinedCategories = getJoinedCategories(raw);
   const preferredCategory = options.preferredCategorySlug
     ? joinedCategories.find(
@@ -182,9 +190,15 @@ export function normalizeProduct(
     stock: raw.stock,
     stock_quantity: raw.stock_quantity,
   });
-  const stock = agentAvailability.stock;
+  const hasProjectedInStock =
+    typeof raw.advertised_price === 'number' && raw.availability === 'InStock';
+  const stock = hasProjectedInStock
+    ? Math.max(agentAvailability.stock, 1)
+    : agentAvailability.stock;
   const availability: 'InStock' | 'OutOfStock' =
-    agentAvailability.availability === 'in_stock' ? 'InStock' : 'OutOfStock';
+    hasProjectedInStock || agentAvailability.availability === 'in_stock'
+      ? 'InStock'
+      : 'OutOfStock';
 
   return {
     id: raw.id,
@@ -193,13 +207,24 @@ export function normalizeProduct(
     description: raw.description || '',
     image: primaryImage,
     imageLarge: primaryImage,
-    images: normalizedImages.length > 0 ? normalizedImages : [primaryImage],
+    images: raw.advertised_image
+      ? [raw.advertised_image]
+      : normalizedImages.length > 0
+        ? normalizedImages
+        : [primaryImage],
     category: categoryName,
     category_slug: categorySlug,
     brand: raw.brand || null,
-    price: raw.price,
-    compare_at_price: raw.compare_at_price ?? null,
-    condition: raw.condition || 'New',
+    price:
+      typeof raw.advertised_price === 'number' &&
+      Number.isFinite(raw.advertised_price)
+        ? raw.advertised_price
+        : raw.price,
+    compare_at_price:
+      raw.advertised_price !== undefined
+        ? (raw.advertised_compare_at_price ?? null)
+        : (raw.compare_at_price ?? null),
+    condition: raw.advertised_condition || raw.condition || 'New',
     stock,
     manage_stock: coerceStorefrontManageStock(raw.manage_stock),
     rating: raw.rating ?? 0,
@@ -210,6 +235,9 @@ export function normalizeProduct(
     merchant_id: raw.merchant_id,
     status: raw.status,
     has_condition_offers: raw.has_condition_offers ?? false,
+    ...(typeof raw.has_variants === 'boolean'
+      ? { has_variants: raw.has_variants }
+      : {}),
     available_conditions:
       Array.isArray(raw.available_conditions) &&
       raw.available_conditions.every((value) => typeof value === 'string')

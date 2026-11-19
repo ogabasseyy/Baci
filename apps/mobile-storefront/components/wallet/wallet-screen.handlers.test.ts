@@ -26,6 +26,7 @@ const mockFundPrimaryWalletCard =
 jest.mock('./fund-primary-wallet-card', () => ({
   fundPrimaryWalletCard: (...args: never[]) =>
     mockFundPrimaryWalletCard(...args),
+  NOTHING_TO_RECOVER: 'nothing-to-recover',
 }));
 
 // These suites pin the known-verdict paths: merchant-1 is observed
@@ -59,7 +60,9 @@ jest.mock('@/lib/piggyvest-primary-capability-cache', () => {
 
 jest.mock('@/lib/logger', () => ({
   createLogger: () => ({
+    debug: jest.fn(),
     error: jest.fn(),
+    warn: jest.fn(),
   }),
 }));
 

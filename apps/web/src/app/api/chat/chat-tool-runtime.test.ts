@@ -170,14 +170,7 @@ describe('chat tool runtime', () => {
     const onSideEffect = vi.fn();
     const tools = createAiSdkAgenticChatTools('session-1', { onSideEffect });
 
-    await tools.createVirtualAccount.execute({
-      amount: 150000,
-      customerEmail: 'buyer@example.com',
-      customerName: 'Buyer',
-      items: [
-        { productId: 'p1', name: 'iPhone 11', price: 150000, quantity: 1 },
-      ],
-    });
+    await tools.createVirtualAccount.execute({});
 
     expect(onSideEffect).toHaveBeenCalledWith('createVirtualAccount');
   });
@@ -187,18 +180,10 @@ describe('chat tool runtime', () => {
       // The AI SDK runs a step's tool calls concurrently; without dedupe each
       // duplicate would insert its own chat_orders row.
       const tools = createAiSdkAgenticChatTools('session-1');
-      const params = {
-        amount: 150000,
-        customerEmail: 'buyer@example.com',
-        customerName: 'Buyer',
-        items: [
-          { productId: 'p1', name: 'iPhone 11', price: 150000, quantity: 1 },
-        ],
-      };
 
       const [first, second] = await Promise.all([
-        tools.createVirtualAccount.execute({ ...params }),
-        tools.createVirtualAccount.execute({ ...params }),
+        tools.createVirtualAccount.execute({}),
+        tools.createVirtualAccount.execute({}),
       ]);
 
       expect(mocks.handleCreateVirtualAccount).toHaveBeenCalledTimes(1);

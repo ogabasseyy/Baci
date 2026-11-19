@@ -4,6 +4,7 @@ import { checkoutReconciliationCookieName } from './checkout-reconciliation-proo
 import { checkoutRecoveryCookieName } from './checkout-recovery-proof';
 import { safeCartErrorMessage } from './mutation-errors';
 import { cartSessionCookieName } from './principal';
+import { setCartSessionHintCookie } from './set-cart-session-hint-cookie';
 
 /**
  * Cart responses are private per-guest state. They must never sit in a
@@ -104,16 +105,12 @@ export function cartErrorResponse(
   );
 }
 
-/**
- * Host-only session cookie, namespaced per merchant so two stores on
- * one shared origin keep separate sessions. Native clients ignore the
- * cookie and carry the proof from the response body instead.
- */
 export function setCartSessionCookie(
   response: NextResponse,
   merchantId: string,
   proof: string,
-  maxAgeSeconds: number
+  maxAgeSeconds: number,
+  hintValue: '1' | '0' | null = maxAgeSeconds > 0 ? '1' : '0'
 ): void {
   response.cookies.set(cartSessionCookieName(merchantId), proof, {
     httpOnly: true,
@@ -122,6 +119,11 @@ export function setCartSessionCookie(
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',
   });
+  if (hintValue !== null) {
+    // Use the documented hint TTL defaults (30d for '1', 1h for '0') rather
+    // than coupling to the proof's Max-Age so server and client TTLs match.
+    setCartSessionHintCookie(response, merchantId, hintValue);
+  }
 }
 
 /** A checkout-only proof is host-only and cannot be read by browser scripts. */

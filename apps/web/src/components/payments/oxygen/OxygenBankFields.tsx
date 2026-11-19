@@ -25,11 +25,13 @@ export function OxygenBankFields({
   busy,
   defaults = {},
   active = true,
+  onVerifiedChange,
 }: {
   workflowId?: string;
   busy: boolean;
   active?: boolean;
   defaults?: { bank_code?: string; account_number?: string };
+  onVerifiedChange?: (verified: boolean) => void;
 }) {
   const bankId = useId();
   const [banks, setBanks] = useState<{ name: string; code: string }[]>([]);
@@ -65,6 +67,7 @@ export function OxygenBankFields({
   }, [workflowId]);
   function invalidate() {
     generation.current++;
+    onVerifiedChange?.(false);
     setName('');
     setError('');
     setResolving(false);
@@ -90,6 +93,7 @@ export function OxygenBankFields({
       return;
     const token = ++generation.current;
     setResolving(true);
+    onVerifiedChange?.(false);
     setError('');
     setName('');
     try {
@@ -101,7 +105,10 @@ export function OxygenBankFields({
           account_number: number,
         })
       );
-      if (generation.current === token) setName(result.accountName);
+      if (generation.current === token) {
+        setName(result.accountName);
+        onVerifiedChange?.(Boolean(result.accountName.trim()));
+      }
     } catch {
       if (generation.current === token)
         setError(
@@ -130,13 +137,19 @@ export function OxygenBankFields({
       <p className="text-sm leading-relaxed text-gray-500">
         Your account name appears automatically after you enter all 10 digits.
       </p>
+      {!workflowId && active && (
+        <p role="alert" className="text-sm text-red-700">
+          Unable to load your application. Close and reopen checkout to
+          continue.
+        </p>
+      )}
       <div className="grid gap-2 text-sm font-medium text-gray-700">
         <label htmlFor={bankId}>Bank</label>
         <OxygenBankSelect
           id={bankId}
           banks={banks}
           value={bank}
-          disabled={busy || loading}
+          disabled={busy || loading || !workflowId}
           loading={loading}
           onChange={(code) => {
             invalidate();
@@ -149,7 +162,7 @@ export function OxygenBankFields({
         name="bank_name"
         value={banks.find((b) => b.code === bank)?.name ?? ''}
       />
-      {banks.length === 0 && !loading && (
+      {workflowId && banks.length === 0 && !loading && (
         <button type="button" disabled={busy} onClick={() => void loadBanks()}>
           Load banks
         </button>
@@ -166,7 +179,7 @@ export function OxygenBankFields({
           placeholder="10-digit account number"
           autoComplete="off"
           value={number}
-          disabled={busy}
+          disabled={busy || !workflowId}
           onChange={(e) => {
             invalidate();
             setNumber(e.target.value.replace(/\D/g, '').slice(0, 10));
@@ -175,6 +188,7 @@ export function OxygenBankFields({
       </label>
       <div
         aria-live="polite"
+        hidden={!name && !resolving}
         className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3"
       >
         <label className="grid gap-1 text-xs font-medium text-gray-500">
@@ -184,11 +198,7 @@ export function OxygenBankFields({
             name="account_name"
             value={name}
             readOnly
-            placeholder={
-              resolving
-                ? 'Verifying account…'
-                : 'Waiting for your account details'
-            }
+            placeholder={resolving ? 'Verifying account…' : undefined}
           />
         </label>
         {resolving && (

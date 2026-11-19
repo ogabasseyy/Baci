@@ -52,7 +52,9 @@ const vendorSettlement = z.object({
   vendor_name: reference,
 });
 const transaction = z.object({
-  webhook_type: z.never().optional(),
+  webhook_type: z
+    .enum(['split_payment', 'repayment_setup', 'loan_repayment', 'transaction'])
+    .optional(),
   phone_number: reference,
   transaction_reference: reference,
   amount_deducted: stringMoney,
@@ -67,9 +69,16 @@ const address = z.object({
   address_validated: z.boolean(),
 });
 
+const selfie = z.object({
+  webhook_type: z.literal('selfie_status_update'),
+  phone_number: reference,
+  loan_request_reference: reference,
+  selfie: z.boolean(),
+});
+
 // Unknown fields are stripped; unknown event types/statuses fail closed.
 export const oxygenWebhookSchema = z
-  .union([partnerSettlement, vendorSettlement, transaction, address])
+  .union([partnerSettlement, vendorSettlement, transaction, address, selfie])
   .refine(
     (event) =>
       !('activated_loans' in event) ||

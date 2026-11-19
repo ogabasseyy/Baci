@@ -54,10 +54,11 @@ export function isKudaOutcomeUnknown(error: unknown): boolean {
     // no vend.)
     return error.status === 408 || error.status >= 500;
   }
-  // Timeout (Error('…timed out') and DOMException aborts, which skip
-  // the instanceof Error conversion in kudaRequest), connection
-  // drops (fetch TypeErrors), malformed bodies (JSON SyntaxError),
-  // and anything else thrown post-attempt: the request may have
-  // landed, so the outcome is unknown.
+  // Timeouts (kudaRequest turns a real fetch abort into
+  // Error('…timed out'); an AbortError that is not an Error, for example
+  // one from another realm, arrives unconverted), connection drops
+  // (fetch TypeErrors), malformed bodies (JSON SyntaxError), and
+  // anything else thrown post-attempt: the request may have landed, so
+  // the outcome is unknown.
   return true;
 }

@@ -8,7 +8,19 @@ import {
 } from '@testing-library/react-native';
 import { Text } from 'react-native';
 import { WalletContent } from './WalletContent';
+import { setWalletTestCustomer } from './wallet-auth.test-support';
 import { createWalletContentProps } from './wallet-content.test-utils';
+
+// PiggyVest ruled out or known for this merchant: the account shows as today.
+jest.mock('@/hooks/use-legacy-funding-unconfirmed', () => ({
+  useLegacyFundingUnconfirmed: () => false,
+}));
+
+let restoreCustomer: () => void;
+beforeEach(() => {
+  restoreCustomer = setWalletTestCustomer();
+});
+afterEach(() => restoreCustomer());
 
 jest.mock('react-native-reanimated', () => {
   const { View } = jest.requireActual(
@@ -64,16 +76,15 @@ it('passes the exact resolver to completed savings recovery and closes on succes
   fireEvent.press(
     screen.getByRole('button', { name: 'Resolve savings device variant' })
   );
-  fireEvent.press(
-    screen.getByRole('button', { name: 'Resolve savings variant 256GB' })
-  );
+  // Choosing only selects; nothing is saved until the customer confirms.
+  fireEvent.press(screen.getByRole('radio', { name: '256GB' }));
+  expect(props.onResolveSavingsVariant).not.toHaveBeenCalled();
+  fireEvent.press(screen.getByRole('button', { name: 'Confirm this option' }));
   await waitFor(() =>
     expect(props.onResolveSavingsVariant).toHaveBeenCalledWith('variant-1')
   );
   await waitFor(() =>
-    expect(
-      screen.queryByRole('button', { name: 'Resolve savings variant 256GB' })
-    ).toBeNull()
+    expect(screen.queryByRole('radio', { name: '256GB' })).toBeNull()
   );
 });
 
@@ -82,16 +93,23 @@ it('renders savings progress modal and wires manual contribution actions', async
   render(
     <WalletContent
       {...props}
+      activeSavingsGoal={{
+        ...props.activeSavingsGoal,
+        product_variant_label: 'Color: Black · Storage: 256GB',
+      }}
       savingsContributionAmount="500"
-      spendableBalance={1000}
+      walletBalance={1000}
       showSavingsProgress
     />
   );
 
   expect(screen.getAllByText('Add to savings').length).toBeGreaterThan(0);
   expect(screen.getByText('50%')).toBeOnTheScreen();
-  expect(screen.getByText('Condition: Used')).toBeOnTheScreen();
-  expect(screen.getAllByText('Storage: 256GB')).toHaveLength(2);
+  expect(screen.getAllByLabelText('Device condition: Used')).toHaveLength(2);
+  expect(screen.getAllByText('256GB')).toHaveLength(2);
+  expect(
+    screen.getAllByRole('image', { name: 'Device colour: Black' })
+  ).toHaveLength(2);
 
   fireEvent.changeText(screen.getByLabelText('Savings top-up amount'), '500');
   fireEvent.press(
@@ -105,10 +123,13 @@ it('renders savings progress modal and wires manual contribution actions', async
   fireEvent.press(
     screen.getByRole('button', { name: 'Change savings device' })
   );
+  // Picking a phone only previews the switch; nothing is sent until the
+  // customer confirms it.
+  fireEvent.press(screen.getByRole('button', { name: 'Choose iPhone 16 Pro' }));
+  expect(props.onChangeSavingsDevice).not.toHaveBeenCalled();
+  expect(screen.getByText('Switch to iPhone 16 Pro?')).toBeOnTheScreen();
   await act(async () => {
-    fireEvent.press(
-      screen.getByRole('button', { name: 'Select iPhone 16 Pro' })
-    );
+    fireEvent.press(screen.getByRole('button', { name: 'Switch phone' }));
     await Promise.resolve();
   });
 
@@ -125,7 +146,7 @@ it('requires an amount before opening wallet payment for an empty spendable wall
   const props = createWalletContentProps();
   const { rerender } = render(<WalletContent {...props} showSavingsProgress />);
 
-  expect(screen.getByText('Available in wallet: ₦0')).toBeOnTheScreen();
+  expect(screen.getByText('₦0 available in wallet')).toBeOnTheScreen();
   expect(
     screen.queryByRole('button', { name: 'Confirm savings top-up' })
   ).toBeNull();

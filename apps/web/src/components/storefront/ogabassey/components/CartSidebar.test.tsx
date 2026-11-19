@@ -1,6 +1,13 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+let mockUser: { id: string } | null = null;
+let mockSessionUser: { id: string } | null = null;
+const mockGetUser = vi.fn();
+const mockPush = vi.fn();
+vi.mock('@/contexts/auth-context', () => ({ useAuthSafe: () => ({ user: mockUser }) }));
+vi.mock('@/components/storefront/checkout-code-signin', () => ({ CheckoutCodeSignin: () => <div>Sign in with email</div> }));
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -90,7 +97,7 @@ vi.mock('@/lib/routes', () => ({
 }));
 
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: mockPush }),
 }));
 
 vi.mock('next/image', () => ({
@@ -151,7 +158,7 @@ vi.mock('./empty-state', () => ({
 
 vi.mock('@/lib/supabase/client', () => ({
   createClient: () => ({
-    auth: { getUser: vi.fn().mockResolvedValue({ data: { user: null } }) },
+    auth: { getUser: mockGetUser },
     from: () => ({ insert: vi.fn().mockResolvedValue({ error: null }) }),
   }),
 }));
@@ -167,6 +174,9 @@ import { CartSidebar } from './CartSidebar';
 describe('CartSidebar', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUser = null;
+    mockSessionUser = null;
+    mockGetUser.mockImplementation(async () => ({ data: { user: mockSessionUser }, error: null }));
     mockIsCartOpen=true;
     vi.mocked(hasStorefrontPriceNegotiation).mockReturnValue(true);
     mockMerchant = { id: 'merchant-abc', slug: 'test-store' };

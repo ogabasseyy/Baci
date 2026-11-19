@@ -4,7 +4,7 @@
  * Provides Zod schemas and descriptions for function-calling with Gemini.
  * These tools enable the chatbot to:
  * - Search and retrieve products
- * - Generate virtual bank accounts for payment
+ * - Surface the currently unavailable virtual-account notice without collecting PII
  * - Check payment status
  * - Cancel unpaid, unfulfilled orders
  * - Get upsell/cross-sell recommendations
@@ -35,22 +35,9 @@ export const getProductDetailsSchema = z.object({
   productId: z.string().describe('The unique ID of the product'),
 });
 
-export const createVirtualAccountSchema = z.object({
-  amount: z.number().describe('Total amount to pay in the storefront currency'),
-  customerEmail: z.email().describe('Customer email address'),
-  customerName: z.string().describe('Customer full name'),
-  customerPhone: z.string().optional().describe('Customer phone number'),
-  items: z
-    .array(
-      z.object({
-        productId: z.string(),
-        name: z.string(),
-        price: z.number(),
-        quantity: z.number(),
-      })
-    )
-    .describe('Items being purchased'),
-});
+// Virtual-account creation is not yet integrated; keep the schema empty so
+// models never collect customer PII to call this unavailable handler.
+export const createVirtualAccountSchema = z.object({});
 
 export const checkPaymentStatusSchema = z
   .object({

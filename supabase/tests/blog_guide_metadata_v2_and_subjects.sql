@@ -253,18 +253,24 @@ DECLARE
   v_status_laptops text;
   v_status_subject text;
 BEGIN
-  -- Re-verify smartphone brand guide, then rename product brand in Smartphones category
+  -- Re-verify both smartphone brand guide and subject-linked guide before product update
   UPDATE public.blog_posts SET metadata_status = 'verified' WHERE id = v_post_brand;
+  UPDATE public.blog_posts SET metadata_status = 'verified' WHERE id = v_post_subject;
 
   UPDATE public.products
      SET brand = 'Apple Inc'
    WHERE id = v_prod_primary;
 
+  SELECT metadata_status INTO v_status_subject FROM public.blog_posts WHERE id = v_post_subject;
   SELECT metadata_status INTO v_status_phones FROM public.blog_posts WHERE id = v_post_brand;
   SELECT metadata_status INTO v_status_laptops FROM public.blog_posts WHERE id = v_post_laptop_brand;
 
-  IF v_status_phones IS DISTINCT FROM 'stale' THEN
-    RAISE EXCEPTION 'expected same-category brand change to mark smartphone brand guide stale, got %', v_status_phones;
+  IF v_status_subject IS DISTINCT FROM 'stale' THEN
+    RAISE EXCEPTION 'expected subject-linked post to become stale when subject product brand changes, got %', v_status_subject;
+  END IF;
+
+  IF v_status_phones IS DISTINCT FROM 'verified' THEN
+    RAISE EXCEPTION 'expected unlinked smartphone brand guide to remain verified when product brand changes, got %', v_status_phones;
   END IF;
 
   IF v_status_laptops IS DISTINCT FROM 'verified' THEN

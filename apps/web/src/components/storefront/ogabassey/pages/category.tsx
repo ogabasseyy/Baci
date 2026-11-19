@@ -157,9 +157,6 @@ export const OgabasseyV2CategoryPage: React.FC<
                 onFilterChange={handleFilterChange}
                 onClearFilters={() => setFilters(initialFilterState)}
               />
-              <div className="mt-6">
-                <AdUnit placementKey="PRODUCT_SIDEBAR" />
-              </div>
             </div>
           </div>
 
@@ -208,12 +205,18 @@ export const OgabasseyV2CategoryPage: React.FC<
                       {/* Ad insertion logic */}
                       {viewMode === 'grid' && (index === 5 || index === 11) && (
                         <div className="col-span-2 md:col-span-3 my-4">
-                          <AdUnit placementKey="PRODUCT_GRID_MPU" />
+                          <AdUnit
+                            placementKey="PRODUCT_GRID_MPU"
+                            slotInstance={`category-${index + 1}`}
+                          />
                         </div>
                       )}
                       {viewMode === 'list' && (index === 3 || index === 7) && (
                         <div className="w-full my-4">
-                          <AdUnit placementKey="PRODUCT_GRID_MPU" />
+                          <AdUnit
+                            placementKey="PRODUCT_GRID_MPU"
+                            slotInstance={`category-${index + 1}`}
+                          />
                         </div>
                       )}
                     </React.Fragment>

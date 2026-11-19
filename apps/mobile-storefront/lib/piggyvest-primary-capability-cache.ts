@@ -35,13 +35,56 @@ export function readObservedPiggyvestPrimaryCapability(
   return cached.available;
 }
 
+/**
+ * True when the last answer for this merchant was a ruling-out, even once it
+ * has expired: until a positive verdict replaces it, the wallet keeps the
+ * PiggyVest balance suppressed, so money actions must not assume PiggyVest.
+ */
+export function wasPiggyvestLastRuledOut(merchantId: string): boolean {
+  return capabilityCache.get(merchantId)?.available === false;
+}
+
+/**
+ * Milliseconds until a cached ruling-out expires, or null when there is no
+ * current negative verdict. Lets a screen re-render exactly at expiry.
+ */
+export function msUntilNegativeCapabilityExpires(
+  merchantId: string
+): number | null {
+  const cached = capabilityCache.get(merchantId);
+  if (!cached || cached.available) return null;
+  const remaining =
+    NEGATIVE_CAPABILITY_TTL_MS - (Date.now() - cached.observedAt);
+  return remaining > 0 ? remaining : null;
+}
+
+// Version + listeners so render-time readers re-render on any cache write,
+// including a rollback from a mounted funding flow (Codex).
+let cacheVersion = 0;
+const listeners = new Set<() => void>();
+function notifyCacheChanged() {
+  cacheVersion += 1;
+  for (const listener of listeners) listener();
+}
+
+export function subscribeCapabilityCache(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+export function getCapabilityCacheVersion(): number {
+  return cacheVersion;
+}
+
 export function observePiggyvestPrimaryCapability(
   merchantId: string,
   available: boolean
 ) {
   capabilityCache.set(merchantId, { available, observedAt: Date.now() });
+  notifyCacheChanged();
 }
 
 export function clearObservedPiggyvestPrimaryCapability() {
   capabilityCache.clear();
+  notifyCacheChanged();
 }

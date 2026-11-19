@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getCachedGoogleMerchantFeedData } from '@/app/api/feed/google-merchant/feed-data';
 import { getCachedOpenAIFeedData } from '@/app/api/feed/openai/feed-data';
-import { getRootDomain } from '@/env';
+import { getGooglePlacesApiKey, getRootDomain } from '@/env';
 import { buildRequestBaseUrl } from '@/lib/storefront-host';
 import { resolveStorefrontMerchantFromRequest } from '@/lib/storefront-merchant';
 import { buildAgentCommerceTrustReadiness } from '@/lib/storefront-trust/build-agent-commerce-trust-readiness';
@@ -35,7 +35,18 @@ export async function GET(request: Request) {
 
     return NextResponse.json(
       { error: merchantResolution.error },
-      { status: merchantResolution.status }
+      {
+        status: merchantResolution.status,
+        headers:
+          merchantResolution.status === 404
+            ? {
+                'Cache-Control': AGENT_TRUST_CACHE_CONTROL,
+                'Vercel-CDN-Cache-Control': AGENT_TRUST_CDN_CACHE_CONTROL,
+              }
+            : {
+                'Cache-Control': 'no-store',
+              },
+      }
     );
   }
 
@@ -47,9 +58,10 @@ export async function GET(request: Request) {
       getCachedOpenAIFeedData(merchant.id, true),
       getCachedGoogleMerchantFeedData(merchant.id, merchant.slug),
     ]);
-    const trustProfile = await enrichMerchantReviewAuthority(
-      buildMerchantTrustProfile(merchant, baseUrl)
-    );
+    const baseTrustProfile = buildMerchantTrustProfile(merchant, baseUrl);
+    const trustProfile = getGooglePlacesApiKey()
+      ? await enrichMerchantReviewAuthority(baseTrustProfile)
+      : baseTrustProfile;
 
     return NextResponse.json(
       {
@@ -80,7 +92,12 @@ export async function GET(request: Request) {
 
     return NextResponse.json(
       { error: 'Failed to build agent trust readiness' },
-      { status: 500 }
+      {
+        status: 500,
+        headers: {
+          'Cache-Control': 'no-store',
+        },
+      }
     );
   }
 }

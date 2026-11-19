@@ -2,6 +2,7 @@ name: RN FindShadowNodeByTag gtest
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - 'patches/react-native@*'
       - 'tools/rn-find-shadow-node-gtest/**'
@@ -31,6 +32,7 @@ concurrency:
 
 jobs:
   matrix:
+    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     name: Resolve sanitizer matrix
     runs-on: ubuntu-24.04
     outputs:
@@ -53,6 +55,7 @@ jobs:
           echo "include=$include" >> "$GITHUB_OUTPUT"
 
   find-shadow-node-gtest:
+    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     name: Compile + run FindShadowNodeByTagTest (${{ matrix.sanitizer || 'plain' }})
     needs: matrix
     runs-on: ubuntu-24.04

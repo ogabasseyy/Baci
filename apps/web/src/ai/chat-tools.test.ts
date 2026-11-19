@@ -81,33 +81,10 @@ describe('addToCartSchema', () => {
 });
 
 describe('createVirtualAccountSchema', () => {
-  it('validates full input', () => {
-    const result = createVirtualAccountSchema.safeParse({
-      email: 'test@example.com',
-      amount: 50000,
-      customerName: 'John Doe',
-      customerEmail: 'test@example.com',
-      customerPhone: '+2348012345678',
-      items: [{ productId: 'p1', name: 'Phone', price: 50000, quantity: 1 }],
-    });
+  it('accepts an empty payload without requiring customer PII', () => {
+    const result = createVirtualAccountSchema.safeParse({});
     expect(result.success).toBe(true);
-  });
-
-  it('rejects invalid email', () => {
-    const result = createVirtualAccountSchema.safeParse({
-      amount: 50000,
-      customerEmail: 'not-an-email',
-      customerName: 'John Doe',
-      items: [{ productId: 'p1', name: 'Phone', price: 50000, quantity: 1 }],
-    });
-    expect(result.success).toBe(false);
-  });
-
-  it('rejects missing required fields', () => {
-    const result = createVirtualAccountSchema.safeParse({
-      amount: 50000,
-    });
-    expect(result.success).toBe(false);
+    expect(result.data).toEqual({});
   });
 });
 

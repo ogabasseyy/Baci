@@ -1,5 +1,7 @@
+import { bookedPlanIsOffered } from '@/lib/payments/oxygen/booked-plan-offer';
 import { oxygenEligibilityPrerequisites } from '@/lib/payments/oxygen/eligibility-prerequisites';
 import type { OxygenRuntimeSnapshot } from '@/schemas/oxygen-runtime-view';
+import { isLegacyOfferRecoveryQueued } from './oxygen-legacy-offer-recovery-queued';
 
 /** Identify pending commands safe for an explicit customer action. */
 export function pendingReadRecovery(
@@ -21,6 +23,7 @@ export function pendingReadRecovery(
     (pending?.status !== 'queued' && pending?.status !== 'executing')
   )
     return null;
+  if (isLegacyOfferRecoveryQueued(snapshot)) return 'refresh_eligibility';
   // A queued address upload needs a new proof and a separate retirement step.
   if (
     pending.action === 'submit_address' &&
@@ -69,6 +72,18 @@ export function pendingReadRecovery(
     snapshot.stage !== 'reconciliation_required'
   )
     return 'validate_nin';
+  if (
+    pending.action === 'refresh_eligibility' &&
+    ['booked', 'approval_required'].includes(snapshot.stage) &&
+    snapshot.state.applicationReference &&
+    snapshot.state.bookingReference &&
+    snapshot.state.booking?.status === 'BOOKED' &&
+    !bookedPlanIsOffered(snapshot.state) &&
+    !snapshot.state.paymentComplete &&
+    !snapshot.state.setupComplete &&
+    oxygenEligibilityPrerequisites(snapshot.state)
+  )
+    return 'refresh_eligibility';
   if (
     pending.action === 'refresh_eligibility' &&
     ['eligibility_required', 'kyc_required'].includes(snapshot.stage) &&

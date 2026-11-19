@@ -1,0 +1,62 @@
+import { WALLET_TOP_UP_MIN_AMOUNT } from '@/lib/wallet-top-up-constants';
+import { formatServicePrice } from './format-service-price';
+
+export interface ImeiWalletCopy {
+  balanceLabel: (balance: number) => string;
+  badgePrefix: string | null;
+  loading: string;
+  loadingButton: string;
+  shortfallHint: (shortfall: number) => string;
+  topUpButton: string;
+  unavailable: string;
+  unavailableButton: string;
+}
+
+const WALLET_COPY: ImeiWalletCopy = {
+  balanceLabel: (balance) => `Wallet balance ${formatServicePrice(balance)}`,
+  badgePrefix: null,
+  loading: 'Loading wallet balance...',
+  loadingButton: 'Loading wallet...',
+  shortfallHint: (shortfall) =>
+    `Balance low — top up ${formatServicePrice(shortfall)} to run this check`,
+  topUpButton: 'Top up to unlock',
+  unavailable: 'Wallet balance unavailable. Refresh your wallet and try again.',
+  unavailableButton: 'Wallet unavailable',
+};
+
+// PiggyVest customers pay IMEI checks from store credit (their older wallet
+// balance). Their PiggyVest savings wallet cannot pay for checks yet.
+const STORE_CREDIT_COPY: ImeiWalletCopy = {
+  balanceLabel: (balance) => `Store credit ${formatServicePrice(balance)}`,
+  badgePrefix: 'Store credit',
+  loading: 'Loading store credit...',
+  loadingButton: 'Loading store credit...',
+  shortfallHint: (shortfall) =>
+    // Card top-ups have a minimum, so quote what the sheet will prefill.
+    `Add ${formatServicePrice(cardMinimum(shortfall))} store credit by card to run this check`,
+  topUpButton: 'Add store credit',
+  unavailable: 'Store credit unavailable. Refresh your wallet and try again.',
+  unavailableButton: 'Store credit unavailable',
+};
+
+function cardMinimum(shortfall: number): number {
+  return Math.max(WALLET_TOP_UP_MIN_AMOUNT, Math.ceil(shortfall));
+}
+
+/**
+ * cardOnlyTopUp: the top-up opens the card-only sheet even though the wallet
+ * keeps today's wording (Ogabassey, verdict still unknown). The hint quotes
+ * the amount that sheet prefills (Codex), never a lower one.
+ */
+export function getImeiWalletCopy(
+  storeCredit: boolean,
+  cardOnlyTopUp = false
+): ImeiWalletCopy {
+  if (storeCredit) return STORE_CREDIT_COPY;
+  if (!cardOnlyTopUp) return WALLET_COPY;
+  return {
+    ...WALLET_COPY,
+    shortfallHint: (shortfall) =>
+      `Balance low — top up ${formatServicePrice(cardMinimum(shortfall))} to run this check`,
+  };
+}

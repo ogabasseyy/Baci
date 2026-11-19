@@ -4,20 +4,23 @@ const mockCookies = vi.fn();
 const mockHeaders = vi.fn();
 const mockCreateClient = vi.fn();
 const mockSelect = vi.fn();
+const mockEq = vi.fn();
 const mockNot = vi.fn();
 const mockOrder = vi.fn();
 const mockGetPlatformBlogSitemapPosts = vi.fn();
+const mockCacheTag = vi.fn();
 
-vi.mock('next/headers', () => ({
-  cookies: () => mockCookies(),
-  headers: () => mockHeaders(),
+vi.mock('next/cache', () => ({
+  cacheLife: vi.fn(),
+  cacheTag: (...args: unknown[]) => mockCacheTag(...args),
 }));
 
-vi.mock('@/lib/supabase/server', () => ({
-  createClient: (...args: unknown[]) => mockCreateClient(...args),
+vi.mock('@/lib/supabase/anon', () => ({
+  createAnonClient: (...args: unknown[]) => mockCreateClient(...args),
 }));
 
 vi.mock('@/lib/platform-blog', () => ({
+  PLATFORM_BLOG_SITEMAP_CACHE_TAG: 'platform-blog-sitemap',
   getPlatformBlogSitemapPosts: (...args: unknown[]) =>
     mockGetPlatformBlogSitemapPosts(...args),
 }));
@@ -44,8 +47,12 @@ describe('root sitemap', () => {
       order: mockOrder,
     });
 
-    mockSelect.mockReturnValue({
+    mockEq.mockReturnValue({
       not: mockNot,
+    });
+
+    mockSelect.mockReturnValue({
+      eq: mockEq,
     });
 
     mockCreateClient.mockReturnValue({
@@ -101,6 +108,16 @@ describe('root sitemap', () => {
 
     const result = await sitemap();
 
+    expect(mockSelect).toHaveBeenCalledWith(
+      'slug, updated_at, domains(domain, status, domain_type, is_primary)'
+    );
+    expect(mockCacheTag).toHaveBeenCalledWith(
+      'merchants',
+      'platform-blog-sitemap',
+      'platform-sitemap-merchants'
+    );
+    expect(mockEq).toHaveBeenCalledWith('is_published', true);
+    expect(mockNot).toHaveBeenCalledWith('slug', 'is', null);
     expect(result).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -137,6 +154,45 @@ describe('root sitemap', () => {
       expect(urls).not.toContain('https://usebaci.com/ogabassey');
       expect(urls).not.toContain('https://usebaci.com/blog/launch-faster');
       expect(errorSpy).toHaveBeenCalled();
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it('preserves merchant entries when blog sitemap lookup fails', async () => {
+    const errorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    try {
+      mockGetPlatformBlogSitemapPosts.mockRejectedValueOnce(
+        new Error('blog failure')
+      );
+
+      const { default: sitemap } = await import('./sitemap');
+      const urls = (await sitemap()).map((entry) => entry.url);
+
+      expect(urls).toContain('https://usebaci.com/ogabassey');
+      expect(urls).not.toContain('https://usebaci.com/blog/launch-faster');
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it('preserves blog entries when merchant sitemap lookup fails', async () => {
+    const errorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    try {
+      mockOrder.mockResolvedValue({
+        data: [],
+        error: new Error('db failure'),
+      });
+
+      const { default: sitemap } = await import('./sitemap');
+      const urls = (await sitemap()).map((entry) => entry.url);
+
+      expect(urls).toContain('https://usebaci.com/blog/launch-faster');
+      expect(urls).not.toContain('https://usebaci.com/ogabassey');
     } finally {
       errorSpy.mockRestore();
     }

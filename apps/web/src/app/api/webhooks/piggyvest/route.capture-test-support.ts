@@ -69,7 +69,7 @@ export interface FakeCaptureRow {
  * In-memory stand-in for the database capture functions. It mirrors the SQL
  * contract the route relies on: an atomic insert that recomputes the body
  * digest, dedupe on (event key, body digest, matched signing families),
- * inline completion that only ever moves a pending row to processed, and
+ * successful inline completion that also closes a claimed row, and
  * the worker claim/lease/resolve cycle. `failCapture` simulates an outage.
  */
 export function createFakeCaptureStore() {
@@ -113,13 +113,13 @@ export function createFakeCaptureStore() {
       const row = store.rows.find((candidate) => candidate.id === args.p_id);
       if (!row) return false;
       const token = args.p_claim_token as string | null;
-      // Tokenless inline completion: only a pending row, except that a
-      // successful retry also closes a needs_review row (as the SQL does).
+      // Successful inline completion closes pending, claimed or review rows.
+      // Incomplete releases cannot overwrite a worker claim.
       const fenced =
         token === null
           ? row.processingState === 'pending' ||
             (args.p_state === 'processed' &&
-              row.processingState === 'needs_review')
+              ['claimed', 'needs_review'].includes(row.processingState))
           : row.processingState === 'claimed' && row.claimToken === token;
       if (!fenced) return false;
       // 'deferred' releases the row to pending and refunds the claim's
@@ -155,6 +155,13 @@ export function createFakeCaptureStore() {
           provider_transaction_id: row.providerTransactionId,
         };
       });
+    },
+    /** Mirrors the worker resolve command's renewal claim-token fence. */
+    renew(id: string, token: string): boolean {
+      const row = store.rows.find((candidate) => candidate.id === id);
+      return Boolean(
+        row && row.processingState === 'claimed' && row.claimToken === token
+      );
     },
     capture(command: Record<string, unknown>): CaptureRpcResult {
       const raw = Buffer.from(String(command.rawHex), 'hex');

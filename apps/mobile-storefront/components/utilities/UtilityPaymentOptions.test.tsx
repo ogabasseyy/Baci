@@ -194,4 +194,43 @@ describe('UtilityPaymentOptions', () => {
     expect(screen.getByText(/checking wallet balance/i)).toBeTruthy();
     expect(screen.queryByText(/₦5,000 available/i)).toBeNull();
   });
+
+  it('bugfix: preselects the wallet when it is the only method, even if it cannot cover the bill yet', () => {
+    render(
+      <UtilityPaymentOptions
+        amount={1000}
+        returnToHref={RETURN_TO_HREF}
+        walletBalance={200}
+        walletIsLoading={false}
+      />
+    );
+
+    expect(screen.getByTestId('wallet-selected')).toBeTruthy();
+  });
+
+  it('bugfix: preselects the wallet before an amount is entered', () => {
+    render(
+      <UtilityPaymentOptions
+        amount={0}
+        returnToHref={RETURN_TO_HREF}
+        walletBalance={0}
+        walletIsLoading={false}
+      />
+    );
+
+    expect(screen.getByTestId('wallet-selected')).toBeTruthy();
+  });
+
+  it('bugfix: tells screen readers the preselected wallet is selected (Muse)', () => {
+    render(
+      <UtilityPaymentOptions
+        amount={1000}
+        returnToHref={RETURN_TO_HREF}
+        walletBalance={200}
+        walletIsLoading={false}
+      />
+    );
+
+    expect(screen.getByLabelText(/pay with wallet, selected\./i)).toBeTruthy();
+  });
 });

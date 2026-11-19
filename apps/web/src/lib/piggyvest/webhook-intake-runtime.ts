@@ -27,3 +27,15 @@ export function readPiggyvestWebhookIntakeRuntime(
     throw new Error('PiggyVest webhook intake database unavailable');
   return parsed.data;
 }
+
+/** Configuration-only check; session/TLS verification still runs on connect. */
+export function isPiggyvestWebhookIntakeRuntimeReady(
+  env: NodeJS.ProcessEnv
+): boolean {
+  try {
+    readPiggyvestWebhookIntakeRuntime(env);
+    return true;
+  } catch {
+    return false;
+  }
+}

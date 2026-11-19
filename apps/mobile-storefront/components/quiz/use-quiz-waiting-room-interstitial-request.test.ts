@@ -4,7 +4,10 @@ import { AppState, type AppStateStatus } from 'react-native';
 import { maybeShowQuizStartInterstitial } from '@/lib/quiz-start-interstitial';
 import type { QuizEvent } from '@/services/quiz-types';
 import { useQuizWaitingRoom } from './use-quiz-waiting-room';
-import { event } from './use-quiz-waiting-room-test-harness';
+import {
+  event,
+  pinKickoffOffsetToZero,
+} from './use-quiz-waiting-room-test-harness';
 
 jest.mock('@/lib/quiz-start-interstitial', () => ({
   maybeShowQuizStartInterstitial: jest.fn(async () => 'skipped'),
@@ -15,6 +18,8 @@ const mockMaybeShowQuizStartInterstitial = jest.mocked(
 );
 
 describe('useQuizWaitingRoom interstitial request', () => {
+  pinKickoffOffsetToZero();
+
   afterEach(() => {
     jest.useRealTimers();
   });
@@ -83,6 +88,53 @@ describe('useQuizWaitingRoom interstitial request', () => {
     });
     expect(onStart).toHaveBeenCalledTimes(1);
     expect(isCancelled?.()).toBe(true);
+  });
+
+  it('takes the ad-break notice down when live play starts during it', async () => {
+    // Regression: an early server-side start while the notice was up began
+    // timed play under the touch-blocking cover.
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-08-23T11:59:00.000Z'));
+    mockMaybeShowQuizStartInterstitial.mockClear();
+    // The helper stays pending while the notice is up.
+    mockMaybeShowQuizStartInterstitial.mockImplementationOnce(
+      () => new Promise(() => {})
+    );
+    const refresh = jest
+      .fn<() => Promise<QuizEvent[]>>()
+      .mockResolvedValueOnce([
+        event({
+          serverNow: '2026-08-23T11:59:00.000Z',
+          startsAt: '2026-08-23T12:00:00.000Z',
+          status: 'active',
+        }),
+      ]);
+    const onStart = jest.fn();
+    const { result } = renderHook(() =>
+      useQuizWaitingRoom({
+        event: event(),
+        onExit: jest.fn(),
+        onStart,
+        refresh,
+      })
+    );
+    const beforePresent =
+      mockMaybeShowQuizStartInterstitial.mock.calls[0]?.[0]?.beforePresent;
+    act(() => {
+      void beforePresent?.();
+    });
+    expect(result.current.isAdBreakNoticeVisible).toBe(true);
+
+    const listener = jest
+      .mocked(AppState.addEventListener)
+      .mock.calls.at(-1)?.[1] as (state: 'active') => void;
+    await act(async () => {
+      listener('active');
+      await Promise.resolve();
+    });
+
+    expect(onStart).toHaveBeenCalledTimes(1);
+    expect(result.current.isAdBreakNoticeVisible).toBe(false);
   });
 
   it('cancels the pending pre-quiz ad while the lobby is suspended', async () => {

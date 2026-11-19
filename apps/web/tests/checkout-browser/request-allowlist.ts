@@ -4,6 +4,7 @@ interface FixtureRequest {
   resourceType: string;
   rsc?: string;
 }
+
 export function isFixtureAssetRequest(request: FixtureRequest): boolean {
   const url = new URL(request.url);
   const configuredPort = process.env.CHECKOUT_BROWSER_PORT?.trim();
@@ -21,7 +22,9 @@ export function isFixtureAssetRequest(request: FixtureRequest): boolean {
     '/checkout-shared',
     '/crypto-payment-modal',
     '/dva-modal',
+    '/oxygen-theme',
     '/payment-handoff',
+    '/private-params',
     '/products/test-phone',
     '/unlock-orders',
   ].includes(url.pathname);

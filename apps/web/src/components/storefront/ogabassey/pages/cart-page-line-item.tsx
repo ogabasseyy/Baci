@@ -10,6 +10,7 @@ import {
 import { DEFAULT_ASSURANCE_RATE } from '@/lib/checkout/constants';
 import { asRoute } from '@/lib/routes';
 import { CartVariantDetails } from '../components/cart-variant-details';
+import { CartAssuranceRow } from './cart-assurance-row';
 import { CartPageNegotiationIcon } from './cart-page-negotiation-icon';
 
 interface CartPageLineItemProps {
@@ -147,48 +148,46 @@ export function CartPageLineItem({
         >
           {/* An assured line keeps its removal control even when the
             setting is off, so the fee stays removable pre-checkout. */}
-          {(shippingInsuranceEnabled || item.hasAssurance) && (
-            <label className="flex items-start gap-2 cursor-pointer select-none group active:opacity-70 max-w-[70%]">
-              <div className="relative flex items-center mt-0.5">
-                <input
-                  type="checkbox"
-                  checked={item.hasAssurance || false}
-                  onChange={() => onToggleAssurance?.(item.cartItemId)}
-                  className="peer sr-only"
-                />
-                <div className="w-9 h-5 bg-store-background-text/20 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-store-primary-text after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-store-background after:border-store-border after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-store-primary" />
-              </div>
-              <div className="flex flex-col">
-                <span className="text-xs font-bold text-gray-800 flex items-center gap-1.5">
-                  <ShieldCheck size={12} className="text-store-primary" />
-                  {merchantSlug === 'ogabassey'
-                    ? 'Ogabassey Assurance'
-                    : 'Order Protection'}
+          {(shippingInsuranceEnabled || item.hasAssurance) &&
+            (merchantSlug === 'ogabassey' ? (
+              <CartAssuranceRow
+                hasAssurance={item.hasAssurance}
+                assuranceCost={assuranceCost}
+                assuranceRateLabel={assuranceRateLabel}
+                cartItemId={item.cartItemId}
+                onToggle={onToggleAssurance}
+              />
+            ) : (
+              <label className="flex items-start gap-2 cursor-pointer select-none group active:opacity-70 max-w-[70%]">
+                <span className="relative flex items-center mt-0.5">
+                  <input
+                    type="checkbox"
+                    checked={item.hasAssurance || false}
+                    onChange={() => onToggleAssurance?.(item.cartItemId)}
+                    className="peer sr-only"
+                  />
+                  <span className="block w-9 h-5 bg-store-background-text/20 peer-focus:outline-hidden peer-focus:ring-2 peer-focus:ring-store-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-store-primary-text after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-store-background after:border-store-border after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-store-primary" />
                 </span>
-                <p className="text-[10px] text-gray-500 leading-tight mt-0.5">
-                  {item.hasAssurance ? (
-                    <>
-                      {merchantSlug === 'ogabassey' ? (
-                        <>
-                          Covers{' '}
-                          <span className="font-bold text-gray-700">
-                            Screen & Liquid Damage
-                          </span>
-                        </>
-                      ) : (
-                        'Standard Shipping Protection'
-                      )}
-                      <span className="ml-1 text-store-primary font-bold">
-                        +₦{(assuranceCost || 0).toLocaleString()}
-                      </span>
-                    </>
-                  ) : (
-                    `${merchantSlug === 'ogabassey' ? 'Device Protection' : 'Safety & Shipping Coverage'} (+${assuranceRateLabel})`
-                  )}
-                </p>
-              </div>
-            </label>
-          )}
+                <span className="flex flex-col">
+                  <span className="text-xs font-bold text-gray-800 flex items-center gap-1.5">
+                    <ShieldCheck size={12} className="text-store-primary" />
+                    Order Protection
+                  </span>
+                  <span className="block text-[10px] text-gray-500 leading-tight mt-0.5">
+                    {item.hasAssurance ? (
+                      <>
+                        Standard Shipping Protection
+                        <span className="ml-1 text-store-primary font-bold">
+                          +₦{(assuranceCost || 0).toLocaleString('en-NG')}
+                        </span>
+                      </>
+                    ) : (
+                      `Safety & Shipping Coverage (+${assuranceRateLabel})`
+                    )}
+                  </span>
+                </span>
+              </label>
+            ))}
 
           {hasPriceNegotiation && !isQuizGift && (
             <div className="flex items-center gap-2">

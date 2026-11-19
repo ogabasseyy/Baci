@@ -83,6 +83,24 @@ export async function GET(
     // Success! Redirect to the account page
     // Use the slug to maintain proper routing
     const accountPath = slug ? `/${slug}/account` : '/account';
+    const next = searchParams.get('next');
+    let destination = accountPath;
+    if (next) {
+      let parsed: URL | null = null;
+      try {
+        parsed = new URL(next, origin);
+      } catch {
+        // Invalid return paths fall back to the account page.
+      }
+      if (
+        parsed?.origin === origin &&
+        (parsed.pathname === '/checkout' ||
+          parsed.pathname === `/${slug}/checkout`)
+      ) {
+        const checkoutPath = `${parsed.pathname}${parsed.search}`;
+        destination = `/${slug}/account/checkout-return?next=${encodeURIComponent(checkoutPath)}`;
+      }
+    }
 
     logger.info({
       message: 'OAuth successful for user',
@@ -90,7 +108,7 @@ export async function GET(
       slug,
     });
 
-    return NextResponse.redirect(`${origin}${accountPath}`);
+    return NextResponse.redirect(`${origin}${destination}`);
   } catch (err) {
     logger.error({
       message: 'Unexpected error during OAuth callback',

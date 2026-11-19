@@ -153,7 +153,9 @@ describe('useDeferredKeyboardPreload', () => {
   });
 
   it('falls back to a delayed timeout when requestIdleCallback is unavailable', () => {
-    jest.useFakeTimers();
+    jest.useFakeTimers({
+      doNotFake: ['requestAnimationFrame', 'cancelAnimationFrame'],
+    });
     Object.defineProperty(global, 'requestIdleCallback', {
       configurable: true,
       value: undefined,

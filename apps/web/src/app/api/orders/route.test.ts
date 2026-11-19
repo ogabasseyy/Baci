@@ -416,7 +416,20 @@ function buildMockSupabase(
   } = {}
 ) {
   const sharedChainable: any = {
-    select: vi.fn().mockReturnThis(),
+    // The authoritative purge enrichment (`id, slug, name, ...` projection)
+    // awaits `.eq(...).in(...)` directly; resolve it like a real PostgREST
+    // response instead of the thenable default that yields `undefined`.
+    select: vi.fn(function (this: unknown, columns?: unknown) {
+      if (typeof columns === 'string' && columns.startsWith('id, slug, name')) {
+        return {
+          eq: () => ({
+            in: () =>
+              Promise.resolve({ data: opts.productRows ?? [], error: null }),
+          }),
+        };
+      }
+      return this;
+    }),
     eq: vi.fn().mockReturnThis(),
     // B3.5 round 7: helper's `merchants.select(...).eq(...).maybeSingle()`
     // call. Default returns the existing merchant fixture; the
@@ -888,11 +901,14 @@ describe('POST /api/orders REDVAULT integration', () => {
       // The REDVAULT draft reserves inventory, so the draft success path
       // runs the same merchant and per-slug PDP cache revalidation.
       expect(mockRevalidateProducts).toHaveBeenCalledWith(
-        '6b5cb8a4-5575-456c-b936-8cdfae30db74'
+        '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+        undefined,
+        expect.objectContaining({ expireImmediately: true })
       );
       expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
         '6b5cb8a4-5575-456c-b936-8cdfae30db74',
-        ['galaxy-s24']
+        expect.arrayContaining(['galaxy-s24']),
+        { expireImmediately: true }
       );
     } finally {
       availabilitySpy.mockRestore();
@@ -4282,7 +4298,11 @@ describe('POST /api/orders — product cache revalidation after order creation',
     );
 
     expect(response.status).toBe(201);
-    expect(mockRevalidateProducts).toHaveBeenCalledExactlyOnceWith(MERCHANT_ID);
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      MERCHANT_ID,
+      undefined,
+      expect.objectContaining({ expireImmediately: true })
+    );
   });
 
   it('resolves the touched product slugs and revalidates their per-slug PDP caches', async () => {
@@ -4303,9 +4323,11 @@ describe('POST /api/orders — product cache revalidation after order creation',
     );
 
     expect(response.status).toBe(201);
+    // Scoped, hard-expired per-slug PDP invalidation (slug + product id tags).
     expect(mockRevalidateProductSlugs).toHaveBeenCalledExactlyOnceWith(
       MERCHANT_ID,
-      ['test-widget']
+      ['test-widget', 'p-1'],
+      { expireImmediately: true }
     );
   });
 
@@ -4361,7 +4383,11 @@ describe('POST /api/orders — product cache revalidation after order creation',
     );
 
     expect(response.status).toBe(201);
-    expect(mockRevalidateProducts).toHaveBeenCalledExactlyOnceWith(MERCHANT_ID);
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      MERCHANT_ID,
+      undefined,
+      expect.objectContaining({ expireImmediately: true })
+    );
     // Fail-closed: the route-level slug lookup failed, but the known-ids blog
     // purge fallback still hard-expires the per-slug Next tags from the caller
     // hints so a later edge purge cannot refill from stale snapshots.
@@ -4468,7 +4494,11 @@ describe('POST /api/orders — product cache revalidation after order creation',
     );
 
     expect(response.status).toBe(201);
-    expect(mockRevalidateProducts).toHaveBeenCalledExactlyOnceWith(MERCHANT_ID);
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      MERCHANT_ID,
+      undefined,
+      expect.objectContaining({ expireImmediately: true })
+    );
     expect(mockRevalidateProductSlugs).not.toHaveBeenCalled();
   });
 });

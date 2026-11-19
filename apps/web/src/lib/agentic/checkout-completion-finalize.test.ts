@@ -421,10 +421,19 @@ describe('finalizeAgenticCheckoutPayment', () => {
     // call above — the cache bust fires on creation, independent of whether
     // this later session-finalization step (and the resulting cancellation)
     // succeeds. A restock-on-cancel cache bust is a separate, unaddressed gap.
-    expect(revalidateProducts).toHaveBeenCalledExactlyOnceWith(
+    expect(revalidateProducts).toHaveBeenCalledTimes(2);
+    expect(revalidateProducts).toHaveBeenNthCalledWith(
+      1,
       'merchant-1',
       undefined,
       { feedScope: 'merchant' }
+    );
+    // The order-purge helper hard-expires the merchant PDP/listing caches.
+    expect(revalidateProducts).toHaveBeenNthCalledWith(
+      2,
+      'merchant-1',
+      undefined,
+      expect.objectContaining({ expireImmediately: true })
     );
     expect(revalidateProductSlugs).toHaveBeenCalledTimes(2);
     expect(revalidateProductSlugs).toHaveBeenNthCalledWith(1, 'merchant-1', [
@@ -520,10 +529,19 @@ describe('finalizeAgenticCheckoutPayment', () => {
 
     expect(response.status).toBe(500);
     expect(body).toEqual({ error: 'Database error' });
-    expect(revalidateProducts).toHaveBeenCalledExactlyOnceWith(
+    expect(revalidateProducts).toHaveBeenCalledTimes(2);
+    expect(revalidateProducts).toHaveBeenNthCalledWith(
+      1,
       'merchant-1',
       undefined,
       { feedScope: 'merchant' }
+    );
+    // The order-purge helper hard-expires the merchant PDP/listing caches.
+    expect(revalidateProducts).toHaveBeenNthCalledWith(
+      2,
+      'merchant-1',
+      undefined,
+      expect.objectContaining({ expireImmediately: true })
     );
     expect(revalidateProductSlugs).toHaveBeenCalledTimes(2);
     expect(revalidateProductSlugs).toHaveBeenNthCalledWith(1, 'merchant-1', [
@@ -586,10 +604,19 @@ describe('finalizeAgenticCheckoutPayment', () => {
     });
     expect(markAgenticCheckoutOrderCanceled).not.toHaveBeenCalled();
     expect(sendAgenticOrderCreatedWebhook).toHaveBeenCalled();
-    expect(revalidateProducts).toHaveBeenCalledExactlyOnceWith(
+    expect(revalidateProducts).toHaveBeenCalledTimes(2);
+    expect(revalidateProducts).toHaveBeenNthCalledWith(
+      1,
       'merchant-1',
       undefined,
       { feedScope: 'merchant' }
+    );
+    // The order-purge helper hard-expires the merchant PDP/listing caches.
+    expect(revalidateProducts).toHaveBeenNthCalledWith(
+      2,
+      'merchant-1',
+      undefined,
+      expect.objectContaining({ expireImmediately: true })
     );
     expect(revalidateProductSlugs).toHaveBeenCalledTimes(2);
     expect(revalidateProductSlugs).toHaveBeenNthCalledWith(1, 'merchant-1', [
@@ -631,11 +658,23 @@ describe('finalizeAgenticCheckoutPayment', () => {
     );
 
     expect(response.status).toBe(200);
-    expect(revalidateProducts).toHaveBeenCalledExactlyOnceWith(
+    expect(revalidateProducts).toHaveBeenCalledTimes(3);
+    expect(revalidateProducts).toHaveBeenNthCalledWith(
+      1,
       'merchant-1',
       undefined,
       { feedScope: 'merchant' }
     );
+    // The order-purge helper hard-expires the merchant PDP/listing caches on
+    // both purge paths, even though the first call threw.
+    for (const n of [2, 3]) {
+      expect(revalidateProducts).toHaveBeenNthCalledWith(
+        n,
+        'merchant-1',
+        undefined,
+        expect.objectContaining({ expireImmediately: true })
+      );
+    }
     // revalidateProducts() threw synchronously, so the agentic layer's own
     // per-slug invalidation did not run — but the order-purge helper still
     // performs its merchant-independent local invalidation (hard-expire) on
@@ -714,10 +753,19 @@ describe('finalizeAgenticCheckoutPayment', () => {
     );
 
     expect(response.status).toBe(200);
-    expect(revalidateProducts).toHaveBeenCalledExactlyOnceWith(
+    expect(revalidateProducts).toHaveBeenCalledTimes(2);
+    expect(revalidateProducts).toHaveBeenNthCalledWith(
+      1,
       'merchant-1',
       undefined,
       { feedScope: 'merchant' }
+    );
+    // The order-purge helper hard-expires the merchant PDP/listing caches.
+    expect(revalidateProducts).toHaveBeenNthCalledWith(
+      2,
+      'merchant-1',
+      undefined,
+      expect.objectContaining({ expireImmediately: true })
     );
     // The agentic layer skips its own per-slug invalidation when the product
     // read fails, but the order-purge helper still runs its fail-open local

@@ -450,10 +450,19 @@ describe('finalizeAgenticPayOnDeliveryCheckout', () => {
     const result = await callFinalize(supabase, trackedOrderSessionCalc);
 
     expect(result).toMatchObject({ status: 200 });
-    expect(mocks.revalidateProducts).toHaveBeenCalledExactlyOnceWith(
+    expect(mocks.revalidateProducts).toHaveBeenCalledTimes(2);
+    expect(mocks.revalidateProducts).toHaveBeenNthCalledWith(
+      1,
       'merchant-1',
       undefined,
       { feedScope: 'merchant' }
+    );
+    // The order-purge helper hard-expires the merchant PDP/listing caches.
+    expect(mocks.revalidateProducts).toHaveBeenNthCalledWith(
+      2,
+      'merchant-1',
+      undefined,
+      expect.objectContaining({ expireImmediately: true })
     );
     // The agentic layer skips its own per-slug invalidation when the product
     // read fails, but the order-purge helper still runs its fail-open local

@@ -72,4 +72,11 @@ describe('classifyBookingFailure outcomes for booking-state codes', () => {
       )
     ).toMatchObject({ outcome: 'rejected', providerReference: 'T1' });
   });
+
+  it('bounds an oversized carrier reference on a carrier refusal so the row can be stored', () => {
+    const result = classifyBookingFailure(
+      new ShippingBookingRejectedError('Payment declined', 'T'.repeat(500))
+    );
+    expect(result.providerReference).toHaveLength(128);
+  });
 });

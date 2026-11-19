@@ -235,15 +235,40 @@ export async function bookWalletFundedOrderShipment(
     const definitive =
       !providerSubmissionStarted || shouldReleaseBookingLock(error);
     if (definitive) {
-      await refundMerchantShippingCharge(
-        supabase,
-        charge.chargeId,
-        token,
-        error instanceof OrderShipmentBookingError
-          ? error.code
-          : 'BOOKING_REJECTED'
-      );
-      if (releaseLock) {
+      let refunded = true;
+      try {
+        await refundMerchantShippingCharge(
+          supabase,
+          charge.chargeId,
+          token,
+          error instanceof OrderShipmentBookingError
+            ? error.code
+            : 'BOOKING_REJECTED'
+        );
+      } catch (refundError) {
+        // Keep the provider error and the lock: the charge is still reserved,
+        // so hand it to reconciliation rather than inviting a retry.
+        refunded = false;
+        console.error(
+          'Wallet shipping refund failed after a rejected provider attempt:',
+          refundError
+        );
+        try {
+          await markMerchantShippingChargeForReconciliation(
+            supabase,
+            charge.chargeId,
+            token,
+            'REFUND_FAILED_AFTER_REJECTED_ATTEMPT',
+            undefined
+          );
+        } catch (markError) {
+          console.error(
+            'Wallet shipping reconciliation marking failed:',
+            markError
+          );
+        }
+      }
+      if (refunded && releaseLock) {
         // A failed release must not replace the provider error, so the routes
         // can still answer and record the real cause.
         try {

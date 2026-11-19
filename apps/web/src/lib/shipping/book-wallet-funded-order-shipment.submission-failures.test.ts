@@ -139,6 +139,45 @@ describe('wallet-funded shipment orchestration — submission failures', () => {
     );
   });
 
+  it('bugfix: keeps the provider error and the lock when the refund RPC fails after an unreachable carrier', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const release = vi.fn();
+    vi.mocked(charge.reserveMerchantShippingCharge).mockResolvedValue({
+      charge: {
+        chargeId: 'c-refund-fail',
+        chargedAmount: 100,
+        balanceAfter: 0,
+        status: 'reserved',
+      },
+      token: 'f'.repeat(64),
+    });
+    vi.mocked(charge.refundMerchantShippingCharge).mockRejectedValue(
+      new Error('refund rpc down')
+    );
+    const unreachable = new OrderShipmentBookingError(
+      'quote mismatch',
+      409,
+      'SHIPPING_QUOTE_RECEIVER_MISMATCH'
+    );
+
+    await expect(
+      bookWalletOrCustomerCheckout(
+        supabaseFixture,
+        'm1',
+        'o1',
+        'q1',
+        'merchant_wallet',
+        vi.fn().mockRejectedValue(unreachable),
+        release
+      )
+    ).rejects.toBe(unreachable);
+
+    expect(release).not.toHaveBeenCalled();
+    expect(
+      charge.markMerchantShippingChargeForReconciliation
+    ).toHaveBeenCalledOnce();
+  });
+
   it('does not call GIGL when begin submission returns refunded without an RPC error', async () => {
     const release = vi.fn().mockResolvedValue(undefined);
     vi.mocked(charge.reserveMerchantShippingCharge).mockResolvedValue({

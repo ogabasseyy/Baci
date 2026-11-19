@@ -83,7 +83,9 @@ describe('confirmBookedOrderPaymentPersist', () => {
       supabase: mockSupabase(rpc),
     }).catch((error: unknown) => error);
     expect(failure).toBeInstanceOf(OrderShipmentBookingError);
-    expect((failure as OrderShipmentBookingError).code).toBe('ORDER_NOT_FOUND');
+    expect((failure as OrderShipmentBookingError).code).toBe(
+      'BOOKED_SHIPMENT_NOT_SAVED'
+    );
   });
 
   it('fails closed on unexpected confirm failures', async () => {

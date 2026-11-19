@@ -81,7 +81,10 @@ export function classifyBookingFailure(
       message,
       httpStatus: null,
       outcome: 'rejected',
-      providerReference: error.providerReference,
+      providerReference: error.providerReference?.slice(
+        0,
+        BOOKING_FAILURE_MAX_CODE_LENGTH * 2
+      ),
     };
   }
   if (isProviderNeverReachedError(error)) {

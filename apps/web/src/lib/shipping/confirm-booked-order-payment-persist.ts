@@ -56,10 +56,13 @@ export async function confirmBookedOrderPaymentPersist({
     return;
   }
   if (error.message?.includes('order_not_found_for_shipment')) {
+    // Post-submit: the carrier already booked the parcel for an order that
+    // can no longer be found, so this needs reconciliation, not a plain 404.
     throw new OrderShipmentBookingError(
-      'Order not found',
+      'The carrier booked this shipment but the order could not be found to save it. Check the shipment before booking again.',
       404,
-      'ORDER_NOT_FOUND'
+      BOOKED_SHIPMENT_NOT_SAVED_CODE,
+      providerShipmentId || trackingNumber || undefined
     );
   }
   // Post-submit: the carrier already booked the parcel, so say so (and keep

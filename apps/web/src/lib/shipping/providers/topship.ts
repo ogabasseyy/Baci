@@ -4,6 +4,7 @@
  */
 
 import { OrderShipmentBookingError } from '../order-shipment-booking-utils';
+import { ProviderBookingTimeoutError } from '../provider-booking-timeout-error';
 import { quoteProviderFailure } from '../quote-provider-failure';
 import { mapTopshipStatus } from '../status-mapper';
 import type {
@@ -654,7 +655,15 @@ export class TopshipProvider extends BaseShippingProvider {
       const result = await this.readResponseBody(response);
 
       if (response.ok) {
-        return this.parseSavedShipment(result);
+        try {
+          return this.parseSavedShipment(result);
+        } catch {
+          // Topship answered 2xx but the body is unreadable: the shipment may
+          // exist, so treat the call as unconfirmed and keep the lock.
+          throw new ProviderBookingTimeoutError(
+            'Topship returned an unreadable save-shipment response'
+          );
+        }
       }
 
       const expectedPickupCharge = this.parseExpectedPickupCharge(result);

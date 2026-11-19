@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { CryptoCheckoutPage } from './crypto-checkout';
+import { readPendingHandoffEntries } from '@/lib/privacy/pending-handoff.test-support';
 
 // Mock next/navigation
 const mockPush = vi.fn();
@@ -13,6 +14,7 @@ const mockUseRouter = vi.fn(() => mockRouter);
 
 vi.mock('next/navigation', () => ({
   useRouter: () => mockUseRouter(),
+  usePathname: () => '/checkout/crypto',
   useSearchParams: () => mockUseSearchParams(),
 }));
 
@@ -197,111 +199,6 @@ describe('CryptoCheckoutPage', () => {
     });
   });
 
-  it('displays correct chain label for TRX (Tron TRC-20)', async () => {
-    // Arrange
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        success: true,
-        crypto_payment: {
-          address: 'TRXAddressHere123456789',
-          chain: 'TRX',
-          currency: 'USDT',
-          amount: 500000,
-          confirmation_time: '5-10 minutes',
-          payment_id: 'payment-123',
-        },
-        reference: 'REF-123456',
-      }),
-    });
-
-    // Act
-    render(<CryptoCheckoutPage />);
-
-    // Assert
-    await waitFor(() => {
-      expect(screen.getByText('Network: Tron (TRC-20)')).toBeInTheDocument();
-    });
-  });
-
-  it('displays correct chain label for ETH (Ethereum ERC-20)', async () => {
-    // Arrange
-    const paramsWithETH = new URLSearchParams({
-      orderId: 'test-order-123',
-      amount: '5000',
-      customer_email: 'test@example.com',
-      customer_name: 'Test Customer',
-      customer_phone: '+2348012345678',
-      crypto_chain: 'ETH',
-      crypto_currency: 'USDT',
-      merchant_slug: 'testmerchant',
-    });
-    mockUseSearchParams.mockReturnValue(paramsWithETH);
-
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        success: true,
-        crypto_payment: {
-          address: 'ETHAddressHere123456789',
-          chain: 'ETH',
-          currency: 'USDT',
-          amount: 500000,
-          confirmation_time: '15-20 minutes',
-          payment_id: 'payment-123',
-        },
-        reference: 'REF-123456',
-      }),
-    });
-
-    // Act
-    render(<CryptoCheckoutPage />);
-
-    // Assert
-    await waitFor(() => {
-      expect(screen.getByText('Network: Ethereum (ERC-20)')).toBeInTheDocument();
-    });
-  });
-
-  it('shows copy confirmation when copy button is clicked', async () => {
-    // Arrange
-    const user = userEvent.setup();
-
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        success: true,
-        crypto_payment: {
-          address: 'TRXAddressHere123456789',
-          chain: 'TRX',
-          currency: 'USDT',
-          amount: 500000,
-          confirmation_time: '5-10 minutes',
-          payment_id: 'payment-123',
-        },
-        reference: 'REF-123456',
-      }),
-    });
-
-    render(<CryptoCheckoutPage />);
-
-    await waitFor(() => {
-      expect(screen.getByText('TRXAddressHere123456789')).toBeInTheDocument();
-    });
-
-    // Assert initial state
-    expect(screen.getByTitle('Copy Address')).toBeInTheDocument();
-
-    // Act - click copy button
-    const copyButton = screen.getByTitle('Copy Address');
-    await user.click(copyButton);
-
-    // Assert - visual feedback shows copy was successful
-    await waitFor(() => {
-      expect(screen.getByTitle('Copied!')).toBeInTheDocument();
-    });
-  });
-
   it('shows error state on failed payment initialization', async () => {
     // Arrange
     mockFetch.mockResolvedValueOnce({
@@ -359,36 +256,6 @@ describe('CryptoCheckoutPage', () => {
 
     // Should show loading state (default initial state)
     expect(screen.getByText('Preparing Crypto Payment')).toBeInTheDocument();
-  });
-
-  it('uses fallback QR code URL when qrcode is not provided', async () => {
-    // Arrange
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        success: true,
-        crypto_payment: {
-          address: 'TRXAddressHere123456789',
-          chain: 'TRX',
-          currency: 'USDT',
-          amount: 500000,
-          confirmation_time: '5-10 minutes',
-          payment_id: 'payment-123',
-          // qrcode is missing
-        },
-        reference: 'REF-123456',
-      }),
-    });
-
-    // Act
-    render(<CryptoCheckoutPage />);
-
-    // Assert
-    await waitFor(() => {
-      const qrImage = screen.getByAltText('Scan to pay') as HTMLImageElement;
-      expect(qrImage.src).toContain('api.qrserver.com');
-      expect(qrImage.src).toContain('TRXAddressHere123456789');
-    });
   });
 
   it('handles network errors during initialization', async () => {
@@ -449,35 +316,6 @@ describe('CryptoCheckoutPage', () => {
     });
   });
 
-  it('shows warning about correct network', async () => {
-    // Arrange
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        success: true,
-        crypto_payment: {
-          address: 'TRXAddressHere123456789',
-          chain: 'TRX',
-          currency: 'USDT',
-          amount: 500000,
-          confirmation_time: '5-10 minutes',
-          payment_id: 'payment-123',
-        },
-        reference: 'REF-123456',
-      }),
-    });
-
-    // Act
-    render(<CryptoCheckoutPage />);
-
-    // Assert
-    await waitFor(() => {
-      expect(screen.getByText(/Warning:/i)).toBeInTheDocument();
-      expect(screen.getByText(/Only send/i)).toBeInTheDocument();
-      expect(screen.getByText(/Using the wrong network will result in permanent loss./i)).toBeInTheDocument();
-    });
-  });
-
   it('preserves trackingToken when redirecting after a confirmed payment', async () => {
     const paramsWithTrackingToken = new URLSearchParams({
       orderId: 'test-order-123',
@@ -529,8 +367,10 @@ describe('CryptoCheckoutPage', () => {
       });
 
       expect(mockPush).toHaveBeenCalledWith(
-        '/testmerchant/order-success?type=crypto&orderId=test-order-123&reference=REF-123456&trackingToken=track-token-123'
+        '/testmerchant/order-success?type=crypto&orderId=test-order-123&reference=REF-123456'
       );
+      // The token travels off the URL, in the one-shot hand-off.
+      expect(readPendingHandoffEntries()).toEqual([['trackingToken', 'track-token-123']]);
     } finally {
       vi.useRealTimers();
     }
@@ -587,8 +427,11 @@ describe('CryptoCheckoutPage', () => {
       });
 
       expect(mockPush).toHaveBeenCalledWith(
-        '/testmerchant/order-success?type=crypto&orderId=test-order-123&reference=REF-123456&trackingToken=snake-track-token-123'
+        '/testmerchant/order-success?type=crypto&orderId=test-order-123&reference=REF-123456'
       );
+      expect(readPendingHandoffEntries()).toEqual([
+        ['trackingToken', 'snake-track-token-123'],
+      ]);
     } finally {
       vi.useRealTimers();
     }

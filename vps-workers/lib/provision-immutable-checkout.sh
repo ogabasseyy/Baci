@@ -88,7 +88,9 @@ for script_path in \
   apps/web/src/scripts/cart-notice-health.ts \
   apps/web/src/scripts/process-order-notifications.ts \
   apps/web/src/scripts/publish-scheduled-posts.ts \
-  apps/web/src/scripts/agentic-commerce-health.ts
+  apps/web/src/scripts/agentic-commerce-health.ts \
+  apps/web/src/scripts/purge-jumia-self-authorization-discoveries.ts \
+  apps/web/src/scripts/cleanup-checkout-shipping-recovery-previews.ts
 do
   if [ ! -f "$repo_dir/$script_path" ]; then
     echo "Direct-worker checkout is missing $script_path." >&2
@@ -108,7 +110,9 @@ for wrapper_path in \
   "$staging_dir/bin/cart-notice-health.sh" \
   "$staging_dir/bin/process-order-notifications.sh" \
   "$staging_dir/bin/publish-scheduled-posts.sh" \
-  "$staging_dir/bin/agentic-commerce-health.sh"
+  "$staging_dir/bin/agentic-commerce-health.sh" \
+  "$staging_dir/bin/purge-jumia-self-authorization-discoveries.sh" \
+  "$staging_dir/bin/cleanup-checkout-shipping-recovery-previews.sh"
 do
   if [ ! -x "$wrapper_path" ]; then
     echo "Missing or non-executable direct-worker wrapper: $wrapper_path" >&2

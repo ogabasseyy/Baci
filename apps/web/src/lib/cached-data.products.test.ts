@@ -172,6 +172,7 @@ describe('cached-data product query projections', () => {
     expect(cacheTag).toHaveBeenCalledWith(
       'product',
       'product-details',
+      'product-details-merchant-123',
       'product-lcp-hint',
       'products-merchant-123',
       'categories-merchant-123',
@@ -303,6 +304,7 @@ describe('cached-data product query projections', () => {
     expect(cacheTag).toHaveBeenCalledWith(
       'product',
       'product-canonical-redirect',
+      'product-canonical-redirect-merchant-123',
       getProductScopedCacheTag('product', 'merchant-123', 'iphone-16'),
       getProductScopedCacheTag(
         'product-canonical-redirect',
@@ -363,6 +365,7 @@ describe('cached-data product query projections', () => {
     expect(cacheTag).toHaveBeenCalledWith(
       'product',
       'product-details',
+      'product-details-merchant-123',
       expectedTag
     );
     expect(expectedTag).not.toContain('–');

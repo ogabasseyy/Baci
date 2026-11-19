@@ -9,21 +9,40 @@ export interface DependentLegacyProductIdentifiers {
 
 /**
  * Resolves identifiers (`id` and `slug`) for archived child products that
- * redirect to `productId` via `parent_product_id` so scoped parent mutations
- * expire cached legacy redirect targets without wiping unrelated PDPs.
+ * redirect to `productIdOrIds` via `parent_product_id` so scoped parent
+ * mutations expire cached legacy redirect targets without wiping unrelated PDPs.
  */
 export async function resolveDependentLegacyProductIdentifiers(
   supabase: SupabaseClient,
   merchantId: string,
-  productId: string
+  productIdOrIds: string | readonly string[]
 ): Promise<DependentLegacyProductIdentifiers> {
+  const parentIds = Array.from(
+    new Set(
+      (typeof productIdOrIds === 'string' ? [productIdOrIds] : productIdOrIds)
+        .map((id) => id.trim())
+        .filter(Boolean)
+    )
+  );
+  if (parentIds.length === 0) {
+    return { identifiers: [], incomplete: false };
+  }
+  if (parentIds.length > DEPENDENT_LEGACY_ALIAS_LIMIT) {
+    return { identifiers: [], incomplete: true };
+  }
+
   try {
-    const { data, error } = await supabase
+    const baseQuery = supabase
       .from('products')
       .select('id, slug')
-      .eq('merchant_id', merchantId)
-      .eq('parent_product_id', productId)
-      .limit(DEPENDENT_LEGACY_ALIAS_LIMIT);
+      .eq('merchant_id', merchantId);
+    const filteredQuery =
+      parentIds.length === 1
+        ? baseQuery.eq('parent_product_id', parentIds[0])
+        : baseQuery.in('parent_product_id', parentIds);
+    const { data, error } = await filteredQuery.limit(
+      DEPENDENT_LEGACY_ALIAS_LIMIT
+    );
 
     if (error) {
       return { identifiers: [], incomplete: true };

@@ -7,7 +7,8 @@ function createSupabaseMock(result: { data: unknown; error: unknown } | Error) {
     result instanceof Error ? Promise.reject(result) : Promise.resolve(result)
   );
   const eqParent = vi.fn(() => ({ limit }));
-  const eqMerchant = vi.fn(() => ({ eq: eqParent }));
+  const inParents = vi.fn(() => ({ limit }));
+  const eqMerchant = vi.fn(() => ({ eq: eqParent, in: inParents }));
   const select = vi.fn(() => ({ eq: eqMerchant }));
   return {
     from: vi.fn(() => ({ select })),
@@ -89,6 +90,39 @@ describe('resolveDependentLegacyProductIdentifiers', () => {
         createSupabaseMock({ data: [{ id: 123, slug: 'ok' }], error: null }),
         'merchant-1',
         'parent-1'
+      )
+    ).resolves.toEqual({ identifiers: [], incomplete: true });
+  });
+
+  it('supports multiple parent ids, empty parent lists, and >256 parent cap', async () => {
+    await expect(
+      resolveDependentLegacyProductIdentifiers(
+        createSupabaseMock({ data: [], error: null }),
+        'merchant-1',
+        ['  ']
+      )
+    ).resolves.toEqual({ identifiers: [], incomplete: false });
+
+    await expect(
+      resolveDependentLegacyProductIdentifiers(
+        createSupabaseMock({
+          data: [{ id: 'child-1', slug: 'old-child' }],
+          error: null,
+        }),
+        'merchant-1',
+        ['parent-1', 'parent-2']
+      )
+    ).resolves.toEqual({
+      identifiers: ['child-1', 'old-child'],
+      incomplete: false,
+    });
+
+    const tooManyParents = Array.from({ length: 257 }, (_, i) => `parent-${i}`);
+    await expect(
+      resolveDependentLegacyProductIdentifiers(
+        createSupabaseMock({ data: [], error: null }),
+        'merchant-1',
+        tooManyParents
       )
     ).resolves.toEqual({ identifiers: [], incomplete: true });
   });

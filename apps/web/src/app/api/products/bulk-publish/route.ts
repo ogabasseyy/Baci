@@ -11,6 +11,7 @@ import {
   getMerchantForApiRequest,
   toUserAccess,
 } from '@/lib/get-merchant-for-api-request';
+import { resolveDependentLegacyProductIdentifiers } from '@/lib/resolve-dependent-legacy-product-identifiers';
 import { scheduleProductBlogPurgeAfterResponse } from '@/lib/schedule-product-blog-purge-after-response';
 import { scheduleStorefrontProductPurge } from '@/lib/storefront-product-purge';
 import {
@@ -118,10 +119,16 @@ export async function POST(request: NextRequest) {
         const updatedProductIds = (updatedProducts ?? [])
           .map((product) => product.id?.trim())
           .filter((id): id is string => Boolean(id));
+        const dependentAliases = await resolveDependentLegacyProductIdentifiers(
+          supabase,
+          merchantId,
+          updatedProductIds
+        );
         const slugIdentifiers = Array.from(
           new Set([
             ...publicPurgeEntries.map((entry) => entry.slug),
             ...updatedProductIds,
+            ...dependentAliases.identifiers,
           ])
         );
         const slugsExpired =
@@ -130,6 +137,7 @@ export async function POST(request: NextRequest) {
           }) === true;
         const originHardExpired =
           (slugsExpired &&
+            !dependentAliases.incomplete &&
             revalidateProducts(merchantId, undefined, {
               expireImmediately: true,
               omitMerchantWidePdpDetails: true,

@@ -95,7 +95,13 @@ describe('POST /api/products/bulk-publish purge ordering', () => {
       },
       from: vi.fn((table: string) => {
         if (table !== 'products') throw new Error(`unexpected table: ${table}`);
+        const aliasQuery = {
+          eq: vi.fn(() => aliasQuery),
+          in: vi.fn(() => aliasQuery),
+          limit: vi.fn().mockResolvedValue({ data: [], error: null }),
+        };
         return {
+          select: vi.fn(() => aliasQuery),
           delete: vi.fn().mockReturnValue(deleteQuery),
           update: vi.fn().mockReturnValue(updateQuery),
         };
@@ -171,5 +177,44 @@ describe('POST /api/products/bulk-publish purge ordering', () => {
     expect(response.status).toBe(200);
     expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
     expect(mockScheduleProductBlogPurgeAfterResponse).not.toHaveBeenCalled();
+  });
+
+  it('expires dependent legacy child aliases before scoped bulk-publish expiry', async () => {
+    const deleteQuery = makeQuery([]);
+    const updateQuery = makeQuery([updatedProducts[0]]);
+    const aliasQuery = {
+      eq: vi.fn(() => aliasQuery),
+      in: vi.fn(() => aliasQuery),
+      limit: vi.fn().mockResolvedValue({
+        data: [{ id: 'child-1', slug: 'old-child' }],
+        error: null,
+      }),
+    };
+    mockCreateClient.mockReturnValueOnce({
+      auth: {
+        getUser: vi
+          .fn()
+          .mockResolvedValue({ data: { user: { id: 'user-1' } } }),
+      },
+      from: vi.fn(() => ({
+        select: vi.fn(() => aliasQuery),
+        delete: vi.fn().mockReturnValue(deleteQuery),
+        update: vi.fn().mockReturnValue(updateQuery),
+      })),
+    });
+    const { POST } = await import('./route');
+
+    const response = await POST(
+      new NextRequest('http://localhost/api/products/bulk-publish', {
+        method: 'POST',
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
+      'merchant-1',
+      ['phone-0', 'product-0', 'child-1', 'old-child'],
+      { expireImmediately: true }
+    );
   });
 });

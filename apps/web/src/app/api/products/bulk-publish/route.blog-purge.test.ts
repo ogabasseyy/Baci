@@ -69,7 +69,13 @@ vi.mock('@/lib/supabase/server', () => ({
     },
     from: vi.fn((table: string) => {
       if (table === 'products') {
+        const aliasQuery = {
+          eq: vi.fn(() => aliasQuery),
+          in: vi.fn(() => aliasQuery),
+          limit: vi.fn().mockResolvedValue({ data: [], error: null }),
+        };
         return {
+          select: vi.fn(() => aliasQuery),
           delete: vi.fn().mockReturnValue({
             eq: vi.fn().mockReturnValue({
               eq: vi.fn().mockReturnValue({

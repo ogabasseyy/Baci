@@ -66,6 +66,7 @@ describe('CrossRem catalog', () => {
     for (const authorization of [
       undefined,
       'Bearer incorrect',
+      `Bearer x${token.slice(1)}`,
       `Basic ${token}`,
     ]) {
       const response = await GET(request(authorization, '*'));

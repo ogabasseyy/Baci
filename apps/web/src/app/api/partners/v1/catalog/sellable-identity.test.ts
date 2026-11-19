@@ -4,12 +4,18 @@ import { getSellableIdentity } from './sellable-identity';
 
 function makeRow(
   overrides: {
-    productCondition?: string;
-    variant?: { id: string; condition?: string };
-    offer?: { id: string; condition?: string };
+    productCondition?: GoogleMerchantListing['product']['condition'];
+    variant?: GoogleMerchantListing['variant'];
+    offer?: GoogleMerchantListing['offer'];
   } = {}
 ): GoogleMerchantListing {
   return {
+    id: 'prod-1',
+    imageUrl: 'https://cdn.example.test/phone.jpg',
+    url: 'https://store.example.test/products/phone',
+    title: 'Phone',
+    price: 1000,
+    stock: 1,
     product: {
       id: 'prod-1',
       name: 'Phone',
@@ -20,9 +26,9 @@ function makeRow(
       manage_stock: true,
       condition: overrides.productCondition,
     },
-    variant: overrides.variant as GoogleMerchantListing['variant'],
-    offer: overrides.offer as GoogleMerchantListing['offer'],
-  } as GoogleMerchantListing;
+    variant: overrides.variant,
+    offer: overrides.offer,
+  };
 }
 
 describe('getSellableIdentity', () => {
@@ -31,7 +37,7 @@ describe('getSellableIdentity', () => {
       getSellableIdentity(
         makeRow({
           productCondition: 'new',
-          offer: { id: 'offer-1', condition: 'open_box' },
+          offer: { id: 'offer-1', condition: 'open_box', price: 800 },
           variant: { id: 'var-1', condition: 'used' },
         })
       )
@@ -46,7 +52,7 @@ describe('getSellableIdentity', () => {
       getSellableIdentity(
         makeRow({
           productCondition: 'new',
-          offer: { id: 'offer-1', condition: 'open_box' },
+          offer: { id: 'offer-1', condition: 'open_box', price: 800 },
         })
       )
     ).toEqual({
@@ -66,8 +72,9 @@ describe('getSellableIdentity', () => {
 
   it('returns null when condition is missing or unrecognized', () => {
     expect(getSellableIdentity(makeRow())).toBeNull();
-    expect(
-      getSellableIdentity(makeRow({ productCondition: 'refurbished_unknown' }))
-    ).toBeNull();
+    const row = makeRow();
+    // @ts-expect-error Exercise unexpected source data at the runtime boundary.
+    row.product.condition = 'refurbished_unknown';
+    expect(getSellableIdentity(row)).toBeNull();
   });
 });

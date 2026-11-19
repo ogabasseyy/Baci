@@ -1,6 +1,7 @@
 import type { Route } from 'next';
 import type { useRouter } from 'next/navigation';
 import { useEffect, useRef } from 'react';
+import { stashPrivateParamsForNavigation } from '@/lib/privacy/private-url-param-handoff';
 import { captureBnplPaymentCompleted } from '../capture-bnpl-payment-completed';
 import { clearCheckoutIdempotencyKey } from '../checkout-idempotency';
 import {
@@ -59,6 +60,8 @@ interface UseCreditDirectConfirmationRedirectOptions {
   confirmedTotal?: number;
   confirmedCurrency?: string;
   orderSuccessBasePath: string;
+  /** Storefront slug, so the off-URL hand-off matches with or without it. */
+  merchantSlug: string;
   clearCart?: () => void;
   router: ReturnType<typeof useRouter>;
 }
@@ -77,6 +80,7 @@ export function useCreditDirectConfirmationRedirect({
   confirmedTotal,
   confirmedCurrency,
   orderSuccessBasePath,
+  merchantSlug,
   clearCart,
   router,
 }: UseCreditDirectConfirmationRedirectOptions): void {
@@ -137,7 +141,10 @@ export function useCreditDirectConfirmationRedirect({
     }
     clearCreditDirectPopupMarker(orderId);
     router.push(
-      `${orderSuccessBasePath}?${successQuery.toString()}` as Route
+      stashPrivateParamsForNavigation(
+        `${orderSuccessBasePath}?${successQuery.toString()}`,
+        merchantSlug
+      ) as Route
     );
   }, [
     phase,
@@ -148,6 +155,7 @@ export function useCreditDirectConfirmationRedirect({
     trackingToken,
     lookupEmail,
     orderSuccessBasePath,
+    merchantSlug,
     clearCart,
     router,
   ]);

@@ -1,10 +1,13 @@
+import { matchesProviderWalletName } from '@/lib/piggyvest/provider-wallet-name';
 import { AMOUNTS_KOBO, FUNDING_FLOOR_KOBO } from './constants';
+import { creditIdsOf, fundingSettled } from './funding-settle';
 import {
   createDataSchema,
   isOwnedBy,
   pickString,
   walletDataSchema,
 } from './loose-schemas';
+import { MovementLedger } from './movement-ledger';
 import type { ProofContext, WalletView } from './proof-context';
 import { discoverQaCustomer, verifiesCreatedCustomer } from './qa-discovery';
 import { okData, usableList } from './read-rules';
@@ -76,13 +79,28 @@ async function loadWallets(ctx: ProofContext): Promise<void> {
   state.wallets = views.filter((view) => state.authorized.has(view.id));
 }
 
-function assignRoles(ctx: ProofContext): void {
-  const { state, qa } = ctx;
-  const goal = state.wallets.find(
-    (wallet) => wallet.name === qa.goalWalletName
+const AMBIGUOUS_GOAL_NOTE =
+  'more than one QA wallet reads as the goal wallet name; none is used as the goal or main wallet and no other goal wallet is created';
+
+/**
+ * QA wallets that read as the goal wallet. The sandbox rewrites names (every
+ * `-` was gone on 2026-10-31), so this compares letters and digits only and
+ * is a set, never a pick: more than one match leaves the goal unassigned.
+ */
+function goalNamedWallets(ctx: ProofContext): WalletView[] {
+  return ctx.state.wallets.filter((wallet) =>
+    matchesProviderWalletName(wallet.name, ctx.qa.goalWalletName)
   );
+}
+
+function assignRoles(ctx: ProofContext): void {
+  const { state } = ctx;
+  const named = goalNamedWallets(ctx);
+  if (named.length > 1 && !state.notes.includes(AMBIGUOUS_GOAL_NOTE))
+    state.notes.push(AMBIGUOUS_GOAL_NOTE);
+  const goal = named.length === 1 ? named[0] : undefined;
   state.goalWalletId = goal?.id ?? null;
-  const candidates = state.wallets.filter((wallet) => wallet.id !== goal?.id);
+  const candidates = state.wallets.filter((wallet) => !named.includes(wallet));
   if (
     state.createdWalletId &&
     candidates.some((w) => w.id === state.createdWalletId)
@@ -109,6 +127,7 @@ function assignRoles(ctx: ProofContext): void {
 async function ensureGoalWallet(ctx: ProofContext): Promise<void> {
   const { api, qa, state } = ctx;
   if (state.goalWalletId || !state.customerId) return;
+  if (goalNamedWallets(ctx).length > 1) return;
   const created = await api.createGoalWallet(
     qa,
     state.customerId,
@@ -132,7 +151,9 @@ async function ensureGoalWallet(ctx: ProofContext): Promise<void> {
   // A new wallet may not be listed yet: re-list within the polling budget.
   for (
     let attempt = 0;
-    attempt < ctx.maxPolls && !state.goalWalletId;
+    attempt < ctx.maxPolls &&
+    !state.goalWalletId &&
+    goalNamedWallets(ctx).length < 2;
     attempt += 1
   ) {
     await loadWallets(ctx);
@@ -143,7 +164,10 @@ async function ensureGoalWallet(ctx: ProofContext): Promise<void> {
     state.notes.push('goal wallet unavailable after creation attempt');
 }
 
-async function ensureFundedMain(ctx: ProofContext): Promise<void> {
+async function ensureFundedMain(
+  ctx: ProofContext,
+  ledger: MovementLedger
+): Promise<void> {
   const { api, qa, state } = ctx;
   if (!state.mainWalletId) {
     state.notes.push('main wallet could not be identified; funding skipped');
@@ -160,35 +184,57 @@ async function ensureFundedMain(ctx: ProofContext): Promise<void> {
   }
   const balance = before.data.balance;
   if (balance >= FUNDING_FLOOR_KOBO) return;
+  // Older credits (and their fees) must never be taken for this funding's.
+  const priorCredits = await creditIdsOf(ctx, state.mainWalletId);
   const funded = await api.fundWallet(
     qa,
     state.mainWalletId,
     AMOUNTS_KOBO.fundMain,
     'scenario/fund_main'
   );
+  const movement = {
+    from: null,
+    to: state.mainWalletId,
+    amountKobo: AMOUNTS_KOBO.fundMain,
+  };
   if (funded.kind === 'resumed') {
+    // Sent in an earlier run: this run never saw it settle.
+    ledger.append({ ...movement, settled: false });
     state.notes.push(
       `main funding slot resumed from journal (${funded.priorOutcome}); not re-funded`
     );
     return;
   }
-  for (let poll = 0; poll < ctx.maxPolls; poll += 1) {
-    const now = walletDataSchema.safeParse(
-      okData(await api.wallet(state.mainWalletId))
-    );
-    if (now.success && now.data.balance > balance) return;
-    await ctx.sleep(ctx.pollIntervalMs);
+  if (
+    await fundingSettled(
+      ctx,
+      state.mainWalletId,
+      balance,
+      AMOUNTS_KOBO.fundMain,
+      priorCredits
+    )
+  ) {
+    ledger.append({ ...movement, settled: true });
+    return;
   }
+  // The credit may still land under a later baseline.
+  ledger.append({ ...movement, settled: false });
   state.notes.push(
     'main wallet funding did not settle within the polling window'
   );
 }
 
-export async function setupScenario(ctx: ProofContext): Promise<void> {
+export async function setupScenario(
+  ctx: ProofContext,
+  ledger: MovementLedger = new MovementLedger()
+): Promise<void> {
   const { api, qa, state, mode, redactor } = ctx;
   redactor.register('Q', qa.qaKey);
   redactor.register('Q', qa.thirdPartyIdentifier);
   redactor.register('Q', qa.goalWalletName);
+  // The form the sandbox lists it under, which the harness-reference
+  // pattern (`pvbproof-...`) no longer catches.
+  redactor.register('Q', qa.goalWalletName.replaceAll('-', ''));
 
   if (mode !== 'live-readonly') {
     const created = await api.createCustomer(qa, 'scenario/create');
@@ -238,5 +284,5 @@ export async function setupScenario(ctx: ProofContext): Promise<void> {
   if (mode === 'live-readonly') return;
   await ensureGoalWallet(ctx);
   assignRoles(ctx);
-  await ensureFundedMain(ctx);
+  await ensureFundedMain(ctx, ledger);
 }

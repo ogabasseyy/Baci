@@ -104,7 +104,7 @@ const EVENT_ROUTES: Record<string, RouteDefinition> = {
   },
 };
 
-const CLIENT_OBSERVATION_ONLY_EVENTS = new Set([
+export const CLIENT_OBSERVATION_ONLY_EVENTS = new Set([
   'analytics.client.observed.v1',
   'analytics.page_view.v1',
   'analytics.purchase.observed.v1',
@@ -126,6 +126,13 @@ export type EventRouteResolution =
   | { kind: 'dead_letter'; code: string }
   | { kind: 'no_route'; destinations: [] }
   | { kind: 'route'; destinations: EventRouteDestination[] };
+
+/** Destinations a registered event name can ever route to (empty if unknown). */
+export function routeDestinationsFor(eventName: string): readonly string[] {
+  return Object.hasOwn(EVENT_ROUTES, eventName)
+    ? EVENT_ROUTES[eventName].destinations
+    : [];
+}
 
 export function resolveEventRoute(event: DomainEventV1): EventRouteResolution {
   if (CLIENT_OBSERVATION_ONLY_EVENTS.has(event.event_name)) {

@@ -62,4 +62,24 @@ describe('updateStorefrontProfile', () => {
       })
     ).rejects.toThrow('merchant_settings_conflict');
   });
+
+  it('sends the business phone and explains a sign-in the database requires', async () => {
+    rpc.mockResolvedValue({
+      data: null,
+      error: { message: 'merchant_settings_reauthentication_required' },
+    });
+
+    await expect(
+      updateStorefrontProfile({
+        merchantId: 'merchant-a',
+        expectedUpdatedAt: '2026-08-04T05:00:00.000Z',
+        settings: { phone: '+2348031234567' },
+      })
+    ).rejects.toThrow('Sign in again before changing your contact details.');
+
+    expect(rpc).toHaveBeenCalledWith(
+      'update_merchant_identity_settings',
+      expect.objectContaining({ p_settings: { phone: '+2348031234567' } })
+    );
+  });
 });

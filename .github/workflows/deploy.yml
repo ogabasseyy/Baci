@@ -423,6 +423,8 @@ jobs:
       name: production
       url: https://ogabassey.com
     permissions:
+      # current-main-deploy-guard inspects workflow runs and jobs for superseding commits
+      actions: read
       contents: read
     # Run 40987693051 used 151 minutes before static generation finished.
     # Leave the 55-minute publish budget plus completion and verification time.
@@ -487,6 +489,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: .github/scripts/refuse-publish-on-promote-overlap.sh
       - uses: ./.github/actions/pnpm-install-cached
+        with:
+          allow-self-hosted-cache-save: 'true'
       # Pin Vercel CLI + allow esbuild postinstall in an isolated runner-temp
       # package so pnpm 10's strict ERR_PNPM_IGNORED_BUILDS does not block
       # prebuilt deploys and pnpm dlx cache corruption cannot abort the job.
@@ -539,6 +543,9 @@ jobs:
         run: node .github/scripts/inject-prebuilt-env-secret.mjs SUPABASE_AGENTIC_JWT_PRIVATE_JWK .vercel/.env.production.local --generate-es256-jwk-standin
       - name: Build for Vercel
         env:
+          # TypeScript 7 is a Go binary; NODE_OPTIONS cannot budget its heap.
+          # This is a soft GC budget, with host swap headroom as protection.
+          GOMEMLIMIT: 6GiB
           # Grouped Turbo output hides the active phase until the build exits.
           TURBO_LOG_ORDER: stream
         run: .github/scripts/run-pinned-vercel.sh build --yes --prod

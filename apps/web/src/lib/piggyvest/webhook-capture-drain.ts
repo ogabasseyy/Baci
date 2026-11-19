@@ -7,11 +7,18 @@ import {
 } from './verify-stored-piggyvest-delivery';
 import { emitPiggyvestWebhookAlert } from './webhook-alerts';
 import {
+  MAX_DRAIN_ATTEMPTS,
+  type ReplayProcessResult,
+  settleReplayResult,
+} from './webhook-capture-drain-result';
+import {
   deferForIncompleteKeySet,
   parkForReview,
   type RowOutcome,
+  setAsideBeforeReplay,
   settle,
 } from './webhook-capture-drain-settle';
+import { captureFailureDetail } from './webhook-capture-failure-detail';
 import type { CaptureResolution } from './webhook-capture-queue';
 import type { PiggyvestWebhookKeyFamily } from './webhook-secret-union';
 
@@ -20,10 +27,10 @@ import type { PiggyvestWebhookKeyFamily } from './webhook-secret-union';
  *
  * The receiver stores the exact request and answers 200; this drain
  * consumes stored rows and runs the same processing pipeline over the
- * stored bytes. Because processing is keyed on the provider transaction id
- * (inflow transaction id, payout id) by the downstream ledgers, replaying a
- * row any number of times, including after a crash between processing and
- * completion, applies each provider transaction once.
+ * stored bytes. Because processing is keyed on the PVB credit id
+ * (`pvb_reference`, PiggyVest 2026-11-11) by the downstream ledgers,
+ * replaying a row any number of times, including after a crash between
+ * processing and completion, applies each provider credit once.
  *
  * Authenticity is re-established on every replay: the stored bytes and
  * signature are re-verified against current, overlap and replay-only
@@ -31,14 +38,22 @@ import type { PiggyvestWebhookKeyFamily } from './webhook-secret-union';
  * signed, while bytes that no key vouches for are never processed.
  */
 
-export const MAX_DRAIN_ATTEMPTS = 20;
+export { MAX_DRAIN_ATTEMPTS, type ReplayProcessResult };
+
 const DEFAULT_BATCH = 25;
 
 export interface ReplayDelivery {
   rawBody: Buffer;
   signature: string;
   matchedSecret: string;
+  /** Processing authority: verified families narrowed to the recorded ones. */
   families: readonly PiggyvestWebhookKeyFamily[];
+  /**
+   * Families recorded at admission. Never processing authority; it only
+   * tells a row a legacy path could take (set aside on a runtime that holds
+   * no legacy path) from a wrong-family delivery (quarantined).
+   */
+  recordedFamilies: readonly PiggyvestWebhookKeyFamily[];
   /**
    * Part of the key set was unavailable when the replay verified, so
    * `families` may be only part of what the recorded authority covers.
@@ -50,6 +65,9 @@ export interface ReplayDelivery {
 
 export interface DrainDeps {
   claim(limit: number): Promise<PiggyvestClaimedCapture[]>;
+  renew(captureId: string, claimToken: string): Promise<boolean>;
+  nowMs?: () => number;
+  deferBeforeReplay?(row: PiggyvestClaimedCapture): string | null;
   resolve(
     captureId: string,
     claimToken: string,
@@ -61,22 +79,24 @@ export interface DrainDeps {
     signature: string;
     /** Families durably recorded at admission: the ceiling on authority. */
     recordedFamilies: readonly PiggyvestWebhookKeyFamily[];
+    /** Version of the key admission matched (never key material). */
+    keyVersion: string;
+    captureId: string;
   }): StoredPiggyvestDeliveryVerification;
   /**
-   * Runs the shared processing pipeline. A non-2xx status means incomplete,
-   * and so does an acknowledged quarantine, which ran no financial handler:
-   * `authorizationQuarantine` (the wrong key family signed it) and
-   * `contentQuarantine` (the body was unparseable or schema-rejected). Such a
-   * row is never resolved processed. `keySetIncomplete` marks a retry that
-   * only a complete key set can settle (the loaded families could not
-   * authorize the event): that row is deferred, not failed.
+   * Runs a processing pipeline over the stored bytes. A non-2xx status
+   * means incomplete, and so does every marker of ReplayProcessResult (an
+   * acknowledged quarantine ran no financial handler): such a row is never
+   * resolved processed. See webhook-capture-drain-result.ts.
    */
-  process(delivery: ReplayDelivery): Promise<{
-    status: number;
-    authorizationQuarantine?: boolean;
-    contentQuarantine?: boolean;
-    keySetIncomplete?: boolean;
-  }>;
+  process(delivery: ReplayDelivery): Promise<ReplayProcessResult>;
+  /**
+   * Optional replay scope, checked before anything else. A runtime that
+   * does not hold every processing path (the worker-host drain holds no
+   * service-role authority) names why it must leave a row alone; the row
+   * is then set aside for review with an alert, unverified and unprocessed.
+   */
+  outOfScope?(row: PiggyvestClaimedCapture): string | null;
 }
 
 export interface DrainSummary {
@@ -95,6 +115,8 @@ async function drainRow(
     rawBody,
     signature: row.signature,
     recordedFamilies: row.key_families,
+    keyVersion: row.key_version,
+    captureId: row.capture_id,
   });
 
   if (verification.status === 'unconfigured') {
@@ -107,11 +129,17 @@ async function drainRow(
     return 'retried';
   }
   if (verification.status === 'unverifiable') {
+    const parked = await settle(
+      deps,
+      row,
+      'needs_review',
+      'REPLAY_SIGNATURE_UNVERIFIABLE'
+    );
+    if (!parked) return 'retried';
     emitPiggyvestWebhookAlert('PIGGYVEST_WEBHOOK_REPLAY_UNVERIFIABLE', {
       captureId: row.capture_id,
       keyVersion: row.key_version,
     });
-    await settle(deps, row, 'needs_review', 'REPLAY_SIGNATURE_UNVERIFIABLE');
     return 'needsReview';
   }
 
@@ -158,7 +186,7 @@ async function drainRow(
             deps,
             row,
             'OWNER_FAMILY_NOT_RECORDED',
-            'owning family not recorded at admission; request a resend'
+            'owning family not recorded at admission; needs operator review (no provider resend exists)'
           )
         : parkForReview(
             deps,
@@ -169,77 +197,48 @@ async function drainRow(
     }
   }
 
-  let completed = false;
-  let keySetIncomplete = false;
-  let authorizationQuarantine = false;
-  let contentQuarantine = false;
+  // A claim may have expired while an earlier row or connection was stalled.
+  // Renew atomically, and measure from BEFORE the request: a delayed response
+  // must not grant a fresh local replay window on an already expired lease.
+  const nowMs = deps.nowMs ?? (() => performance.now());
+  const renewalStarted = nowMs();
   try {
-    const result = await deps.process({
+    if (
+      !(await deps.renew(row.capture_id, row.claim_token)) ||
+      nowMs() - renewalStarted >= 30_000
+    )
+      return 'retried';
+  } catch (error) {
+    console.warn('[PiggyVest Webhook] Capture renewal failed', {
+      captureId: row.capture_id,
+      ...captureFailureDetail(error, 'renew'),
+    });
+    return 'retried';
+  }
+  let result: ReplayProcessResult | null = null;
+  try {
+    result = await deps.process({
       rawBody,
       signature: row.signature,
       matchedSecret: verification.secret,
       families,
+      recordedFamilies: row.key_families,
       incompleteKeySet: verification.incompleteKeySet,
       keyScope: 'replay',
     });
-    authorizationQuarantine = result.authorizationQuarantine === true;
-    contentQuarantine = result.contentQuarantine === true;
-    completed =
-      result.status >= 200 &&
-      result.status < 300 &&
-      !authorizationQuarantine &&
-      !contentQuarantine;
-    keySetIncomplete = result.keySetIncomplete === true;
-  } catch {
-    completed = false;
+  } catch (error) {
+    console.warn('[PiggyVest Webhook] Capture replay failed', {
+      captureId: row.capture_id,
+      ...captureFailureDetail(error, 'process'),
+    });
+    result = null;
   }
-  if (completed) {
-    await settle(deps, row, 'processed', null);
-    return 'processed';
-  }
-  if (contentQuarantine) {
-    // The bytes verified, so the key set cannot change this outcome: only a
-    // parser fix plus a resend can make them processable.
-    return parkForReview(
-      deps,
-      row,
-      'REPLAY_CONTENT_QUARANTINED',
-      'body rejected by the parser; request a resend after the fix'
-    );
-  }
-  if (keySetIncomplete || verification.incompleteKeySet === true) {
-    // The key set is incomplete (the replay verified under only the
-    // families that loaded), so ANY unsuccessful outcome (a non-2xx answer,
-    // a thrown error, an authorization quarantine, or the explicit marker)
-    // may just be the missing assignment. It is not a failure of the row:
-    // defer (attempt refunded, bounded backoff, never dead-lettered) so a
-    // repaired configuration resumes it.
-    await deferForIncompleteKeySet(deps, row, 'processing incomplete');
-    return 'retried';
-  }
-  if (authorizationQuarantine) {
-    // Signed by a family not authorized for this event, with a complete key
-    // set and immutable recorded authority: replay can never succeed, so it
-    // must not take 20 batch slots. A correctly signed redelivery has its
-    // own capture row.
-    return parkForReview(
-      deps,
-      row,
-      'REPLAY_AUTHORIZATION_QUARANTINED',
-      'signed by a key family not authorized for this event'
-    );
-  }
-  if (row.attempts >= MAX_DRAIN_ATTEMPTS) {
-    return parkForReview(
-      deps,
-      row,
-      'PROCESSING_ATTEMPTS_EXHAUSTED',
-      'processing attempts exhausted',
-      row.attempts
-    );
-  }
-  await settle(deps, row, 'pending', 'PROCESSING_INCOMPLETE');
-  return 'retried';
+  return settleReplayResult(
+    deps,
+    row,
+    result,
+    verification.incompleteKeySet === true
+  );
 }
 
 export async function drainPiggyvestWebhookCaptures(
@@ -253,7 +252,22 @@ export async function drainPiggyvestWebhookCaptures(
     retried: 0,
     needsReview: 0,
   };
+  // Rows this runtime may not replay are settled first, before any replay
+  // runs. A successful inline redelivery can close even a claimed row;
+  // token-fenced settlement then refuses to overwrite that completion.
+  const inScope: PiggyvestClaimedCapture[] = [];
   for (const row of rows) {
+    const scope = deps.outOfScope?.(row) ?? null;
+    if (scope) summary[await setAsideBeforeReplay(deps, row, scope)] += 1;
+    else {
+      const deferred = deps.deferBeforeReplay?.(row);
+      if (deferred) {
+        await settle(deps, row, 'deferred', deferred);
+        summary.retried += 1;
+      } else inScope.push(row);
+    }
+  }
+  for (const row of inScope) {
     const outcome = await drainRow(deps, row);
     summary[outcome] += 1;
   }

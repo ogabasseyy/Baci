@@ -38,6 +38,7 @@ function toProductIndexCardModel(
     compare_at_price: null,
     condition: product.condition,
     stock: product.stock,
+    manage_stock: product.manage_stock,
     rating: 0,
     availability: product.availability,
     product_key_specs: product.product_key_specs ?? null,
@@ -101,6 +102,7 @@ export async function PriceBandPageContent({
             </p>
           </header>
 
+          <h2 className="sr-only">Matching products</h2>
           <ul className="mt-8 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
             {page.products.map((product) => (
               <li key={product.id}>

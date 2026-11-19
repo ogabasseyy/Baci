@@ -47,13 +47,21 @@ export class WalletTopUpStillProcessingError extends Error {
   }
 }
 
-async function getAccessToken() {
+const SIGNED_IN_ACCOUNT_CHANGED =
+  'You switched accounts. Start the top-up again from this account.';
+
+async function getAccessToken(expectedUserId?: string) {
   const {
     data: { user },
     error: userError,
   } = await supabase.auth.getUser();
   if (userError || !user) {
     throw new Error('Authentication required. Please sign in again.');
+  }
+  // The flow captured its account before acquiring credentials (Codex): a
+  // switch meanwhile must never fund it under the new account's token.
+  if (expectedUserId && user.id !== expectedUserId) {
+    throw new Error(SIGNED_IN_ACCOUNT_CHANGED);
   }
 
   const {
@@ -63,6 +71,9 @@ async function getAccessToken() {
 
   if (sessionError || !session?.access_token) {
     throw new Error('Authentication required. Please sign in again.');
+  }
+  if (expectedUserId && session.user?.id !== expectedUserId) {
+    throw new Error(SIGNED_IN_ACCOUNT_CHANGED);
   }
 
   return session.access_token;
@@ -106,6 +117,7 @@ export async function initializeWalletTopUp({
   amount,
   customerName,
   customerPhone,
+  expectedUserId,
   gateway,
   merchantId,
   merchantSlug,
@@ -114,12 +126,14 @@ export async function initializeWalletTopUp({
   amount: number;
   customerName?: string;
   customerPhone?: string | null;
+  /** The account the flow started for; a different signed-in one aborts. */
+  expectedUserId?: string;
   gateway?: WalletTopUpGateway;
   merchantId?: string | null;
   merchantSlug?: string | null;
   returnTo?: string;
 }): Promise<WalletTopUpInitializeResponse> {
-  const accessToken = await getAccessToken();
+  const accessToken = await getAccessToken(expectedUserId);
   const requestBody = {
     amount,
     customerName: getOptionalString(customerName),

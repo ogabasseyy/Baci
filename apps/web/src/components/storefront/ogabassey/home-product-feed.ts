@@ -148,6 +148,12 @@ export function mapStorefrontProductsToOgabasseyProducts(
       ...(product.has_condition_offers
         ? { has_condition_offers: true }
         : {}),
+      ...(typeof product.has_variants === 'boolean'
+        ? { has_variants: product.has_variants }
+        : {}),
+      ...(product.variant_model
+        ? { variant_model: product.variant_model }
+        : {}),
       ...(product.brand ? { brand: product.brand } : {}),
       ...(product.colors && product.colors.length > 0
         ? { colors: product.colors }

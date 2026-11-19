@@ -14,5 +14,14 @@ export function supabaseReplayFailureDiagnostic(stderr: string): string {
     ['container-health', /unhealthy|health check failed/i],
   ] as const;
   const diagnostic = patterns.find(([, pattern]) => pattern.test(stderr))?.[0];
-  return diagnostic ? ` (diagnostic=${diagnostic})` : '';
+  if (diagnostic) return ` (diagnostic=${diagnostic})`;
+  // Fixed CLI progress markers help locate a startup failure without emitting
+  // the surrounding output, which may contain database credentials.
+  if (/^Initialising schema\.\.\.\s*$/m.test(stderr)) {
+    return ' (diagnostic=startup-schema)';
+  }
+  if (/^Starting database(?: from backup)?\.\.\.\s*$/m.test(stderr)) {
+    return ' (diagnostic=startup-database)';
+  }
+  return '';
 }

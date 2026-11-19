@@ -76,9 +76,16 @@ describe('proof 3: unreadable or lagging reads are not "absent"', () => {
   });
 
   it('cannot exclude earlier rows when the pre-deposit list is unreadable, so row facts are unknown', async () => {
-    const h = await prepared({
-      mock: { failNetworkOnce: ['/api/v1/transaction'] },
-    });
+    const h = await prepared();
+    // Armed after setup, so setup's own list reads cannot consume the failure.
+    const real = h.api.transactions.bind(h.api);
+    let failed = false;
+    h.api.transactions = async (...args: Parameters<typeof real>) => {
+      const out = await real(...args);
+      if (failed) return out;
+      failed = true;
+      return { ...out, ok: false, httpStatus: null, data: null };
+    };
     const result = await runProof3(h.ctx);
     expect(answer(result, 'transaction_list_names_goal_wallet')).toBe(
       'unknown'

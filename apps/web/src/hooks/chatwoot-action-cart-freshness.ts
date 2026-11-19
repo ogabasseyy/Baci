@@ -1,0 +1,46 @@
+type CartRef = { cartId: string; version: number } | null;
+
+/** Cart-ref and cart-version freshness for an authorized inline action. */
+export function evaluateChatwootActionCartFreshness(input: {
+  authorizedVersion: number | null;
+  currentCartRef: CartRef;
+  event: string;
+  generationIsCurrent?: boolean;
+  merchantSlug?: string | null;
+  requestedCartRef: CartRef;
+  requestedMerchantSlug?: string | null;
+}) {
+  const { authorizedVersion, currentCartRef, event, requestedCartRef } = input;
+  const isMutation =
+    event === 'baci-cart-add' || event === 'baci-cart-quantity';
+  const isProduct = event === 'baci-product-request';
+  const authorizedVersionIsCurrent = isMutation
+    ? (authorizedVersion ?? -1) >=
+      (currentCartRef?.version ?? Number.POSITIVE_INFINITY)
+    : isProduct
+      ? authorizedVersion !== null &&
+        requestedCartRef !== null &&
+        currentCartRef !== null &&
+        authorizedVersion >= requestedCartRef.version &&
+        authorizedVersion <= currentCartRef.version
+      : authorizedVersion !== null &&
+        authorizedVersion === currentCartRef?.version;
+  const cartRefIsCurrent =
+    requestedCartRef !== null &&
+    currentCartRef?.cartId === requestedCartRef.cartId &&
+    (event === 'baci-cart-add' ||
+      (isProduct
+        ? currentCartRef.version >= requestedCartRef.version
+        : currentCartRef.version === requestedCartRef.version));
+  const merchantIsCurrent =
+    !isProduct || input.merchantSlug === input.requestedMerchantSlug;
+  return {
+    authorizedVersionIsCurrent,
+    cartRefIsCurrent,
+    stillCurrent:
+      input.generationIsCurrent !== false &&
+      authorizedVersionIsCurrent &&
+      cartRefIsCurrent &&
+      merchantIsCurrent,
+  };
+}

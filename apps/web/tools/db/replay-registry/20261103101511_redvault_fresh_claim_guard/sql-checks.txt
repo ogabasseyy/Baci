@@ -1,0 +1,2 @@
+supabase/tests/redvault_fresh_initialization_claim.sql
+supabase/tests/redvault_guard_uncertain_void.sql

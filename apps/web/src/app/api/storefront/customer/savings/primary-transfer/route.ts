@@ -42,13 +42,23 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     const runtime =
       readPrimaryWalletSavingsRuntime() ??
       readPrimaryWalletSavingsRecoveryRuntime();
-    if (!runtime || runtime.merchantId !== parsed.data.merchantId)
+    if (!runtime)
       return NextResponse.json(
         {
           error: 'Savings status is temporarily unavailable.',
           code: 'SAVINGS_NOT_READY',
         },
         { status: 503 }
+      );
+    // A runtime for a different merchant means this merchant can hold no
+    // primary record, so clients may route its stored ids to the legacy rail.
+    if (runtime.merchantId !== parsed.data.merchantId)
+      return NextResponse.json(
+        {
+          error: 'Primary savings is not enabled for this merchant.',
+          code: 'SAVINGS_MERCHANT_NOT_PRIMARY',
+        },
+        { status: 409 }
       );
     const identity = await resolvePrimaryWalletIdentity({
       supabase: auth.supabase,
@@ -157,7 +167,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         { error: 'Savings is not enabled.', code: 'CUSTOMER_SAVINGS_DISABLED' },
         { status: 403 }
       );
-    const { merchantId: _merchantId, ...selection } = parsed.data;
+    // Whether a proof is needed is decided by the database at reservation
+    // time (merchant PIN checking on or off, replay of a reserved operation),
+    // so a merchant without PIN checking keeps funding with no proof.
+    const { merchantId: _merchantId, pinProof, ...selection } = parsed.data;
     const result = await submitPrimaryWalletSavings({
       configuration: runtime.configuration,
       reconciliationConfiguration: runtime.reconciliationConfiguration,
@@ -171,7 +184,24 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         businessId: runtime.businessId,
       },
       request: selection,
+      pinProof: pinProof ?? '',
     });
+    if (result.status === 'pin_refused' && result.reason === 'missing')
+      return NextResponse.json(
+        {
+          error: 'Please confirm your PIN to continue.',
+          code: 'PIN_PROOF_REQUIRED',
+        },
+        { status: 400, headers: { 'Cache-Control': 'no-store' } }
+      );
+    if (result.status === 'pin_refused')
+      return NextResponse.json(
+        {
+          error: 'Please confirm your PIN again to continue.',
+          code: 'PIN_PROOF_REFUSED',
+        },
+        { status: 403, headers: { 'Cache-Control': 'no-store' } }
+      );
     if (result.status === 'insufficient')
       return NextResponse.json(
         {

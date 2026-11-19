@@ -6,7 +6,7 @@ export const SUPABASE_REPLAY_PORT_KEYS = [
   'db.port',
   'db.shadow_port',
   'studio.port',
-  'inbucket.port',
+  'local_smtp.port',
   'edge_runtime.inspector_port',
   'analytics.port',
 ] as const;

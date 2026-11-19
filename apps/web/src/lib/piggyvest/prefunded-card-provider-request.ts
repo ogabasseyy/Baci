@@ -1,4 +1,5 @@
 import 'server-only';
+import { classifyRelayResponse, routeThroughRelay } from './egress-relay';
 
 async function readBoundedJson(
   response: Response,
@@ -28,7 +29,9 @@ async function readBoundedJson(
       chunks.push(result.value);
     }
   } finally {
-    if (!complete) await reader.cancel().catch(() => undefined);
+    // Never wait on cancellation: a body that ignores it would otherwise
+    // hold this call past its deadline. The caller aborts the request.
+    if (!complete) void reader.cancel().catch(() => undefined);
     reader.releaseLock();
   }
   const bytes = new Uint8Array(length);
@@ -69,19 +72,43 @@ export async function requestPrefundedCardProviderJson({
     rejectDeadline(new Error('PROVIDER_TIMEOUT'));
   }, timeoutMs);
   try {
+    const headers = {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    };
+    // Null unless the PiggyVest egress relay is configured and `url` is the
+    // PiggyVest production origin (Paystack and sandbox stay direct).
+    const relayed = routeThroughRelay({
+      url,
+      method: init.method ?? 'GET',
+      body: typeof init.body === 'string' ? init.body : undefined,
+      headers,
+    });
+    if (relayed && init.body != null && typeof init.body !== 'string') {
+      throw new Error('PROVIDER_RELAY_UNAVAILABLE');
+    }
     const response = await Promise.race([
-      fetchImplementation(url, {
+      fetchImplementation(relayed?.url ?? url, {
         ...init,
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
+        headers: relayed?.headers ?? headers,
         cache: 'no-store',
         redirect: 'error',
         signal: controller.signal,
       }),
       deadline,
     ]);
+    const relayFailure = relayed ? classifyRelayResponse(response) : null;
+    if (relayFailure) {
+      void response.body?.cancel().catch(() => undefined);
+      // maybe-sent reuses the timeout path callers already treat as
+      // indeterminate; not-sent is a distinct, non-HTTP error so a relay 401
+      // or 404 can never be read as a PiggyVest refusal. Never retried here.
+      throw new Error(
+        relayFailure.sendState === 'maybe-sent'
+          ? 'PROVIDER_TIMEOUT'
+          : 'PROVIDER_RELAY_UNAVAILABLE'
+      );
+    }
     if (
       !response.ok ||
       response.redirected ||
@@ -110,6 +137,9 @@ export async function requestPrefundedCardProviderJson({
     }
     return await readBoundedJson(response, maxResponseBytes, deadline);
   } catch (error) {
+    // Abort fence: a request that fails here (byte cap, deadline, HTTP
+    // error, transport) never keeps streaming in the background.
+    controller.abort();
     if (error instanceof Error && error.message.startsWith('PROVIDER_'))
       throw error;
     throw new Error('PROVIDER_UNAVAILABLE');

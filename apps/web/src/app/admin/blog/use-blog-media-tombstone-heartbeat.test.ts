@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BLOG_MEDIA_TOMBSTONE_GRACE_MS } from '@/app/api/admin/blog/upload/blog-media-tombstone-constants';

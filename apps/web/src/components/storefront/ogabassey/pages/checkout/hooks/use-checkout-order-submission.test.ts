@@ -8,6 +8,7 @@ import type { PrepareCheckoutOrderSubmissionResult } from '../prepare-checkout-o
 import { prepareCheckoutOrderSubmission } from '../prepare-checkout-order-submission';
 import {
   createContext,
+  readySharedCartCheckout,
   resumedOrder,
 } from './checkout-order-submission.test-support';
 import type { CheckoutOrderSubmissionContext } from './checkout-order-submission-types';
@@ -330,12 +331,9 @@ describe('useCheckoutOrderSubmission', () => {
       const context = freshContext();
       context.cart.sharedCartRef = SHARED_REF;
       context.cart.sharedCartSyncStatus = 'synced';
-      vi.mocked(prepareSharedCartCheckout).mockResolvedValue({
-        ok: true,
-        replayed: false,
-        review: REVIEW,
-        sessionReused: false,
-      });
+      vi.mocked(prepareSharedCartCheckout).mockResolvedValue(
+        readySharedCartCheckout(REVIEW)
+      );
 
       const { result } = renderHook(() => useCheckoutOrderSubmission(context));
       await act(async () => result.current.handlePlaceOrder());
@@ -461,17 +459,14 @@ describe('useCheckoutOrderSubmission', () => {
         } as never,
       ];
       context.cart.checkoutCartTotal = 275;
-      vi.mocked(prepareSharedCartCheckout).mockResolvedValue({
-        ok: true,
-        replayed: false,
-        review: {
+      vi.mocked(prepareSharedCartCheckout).mockResolvedValue(
+        readySharedCartCheckout({
           ...REVIEW,
           lines: [
             { ...REVIEW.lines[0], assuranceRate: 0.1, hasAssurance: true },
           ],
-        },
-        sessionReused: false,
-      });
+        })
+      );
 
       const { result } = renderHook(() => useCheckoutOrderSubmission(context));
       await act(async () => result.current.handlePlaceOrder());
@@ -487,16 +482,13 @@ describe('useCheckoutOrderSubmission', () => {
       context.cart.sharedCartRef = SHARED_REF;
       context.cart.sharedCartSyncStatus = 'synced';
       context.cart.refreshSharedCart = vi.fn().mockResolvedValue(undefined);
-      vi.mocked(prepareSharedCartCheckout).mockResolvedValue({
-        ok: true,
-        replayed: false,
-        review: {
+      vi.mocked(prepareSharedCartCheckout).mockResolvedValue(
+        readySharedCartCheckout({
           ...REVIEW,
           lines: [{ ...REVIEW.lines[0], available: false }],
           unavailableCount: 1,
-        },
-        sessionReused: false,
-      });
+        })
+      );
 
       const { result } = renderHook(() => useCheckoutOrderSubmission(context));
       await act(async () => result.current.handlePlaceOrder());
@@ -514,12 +506,9 @@ describe('useCheckoutOrderSubmission', () => {
       context.cart.sharedCartRef = SHARED_REF;
       context.cart.sharedCartSyncStatus = 'synced';
       context.cart.refreshSharedCart = vi.fn().mockResolvedValue(undefined);
-      vi.mocked(prepareSharedCartCheckout).mockResolvedValue({
-        ok: true,
-        replayed: false,
-        review: { ...REVIEW, subtotalMinor: 24000 },
-        sessionReused: false,
-      });
+      vi.mocked(prepareSharedCartCheckout).mockResolvedValue(
+        readySharedCartCheckout({ ...REVIEW, subtotalMinor: 24000 })
+      );
 
       const { result } = renderHook(() => useCheckoutOrderSubmission(context));
       await act(async () => result.current.handlePlaceOrder());
@@ -643,12 +632,9 @@ describe('useCheckoutOrderSubmission', () => {
           quantity: 1,
         } as never,
       ];
-      vi.mocked(prepareSharedCartCheckout).mockResolvedValue({
-        ok: true,
-        replayed: false,
-        review: REVIEW,
-        sessionReused: false,
-      });
+      vi.mocked(prepareSharedCartCheckout).mockResolvedValue(
+        readySharedCartCheckout(REVIEW)
+      );
 
       const { result } = renderHook(() => useCheckoutOrderSubmission(context));
       await act(async () => result.current.handlePlaceOrder());

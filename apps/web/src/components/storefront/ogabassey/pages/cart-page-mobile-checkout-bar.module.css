@@ -1,0 +1,20 @@
+.checkoutBar {
+  display: flex;
+}
+
+.checkoutAction {
+  background-color: var(--store-checkout-button-bg);
+  color: var(--store-checkout-button-text);
+}
+
+.checkoutAction:hover,
+.checkoutAction:active {
+  background-color: color-mix(in srgb, var(--store-checkout-button-bg) 90%, var(--store-checkout-button-text));
+}
+
+/* Keep the compact action hidden when the desktop summary is visible. */
+@media (min-width: 64rem) {
+  .checkoutBar {
+    display: none;
+  }
+}

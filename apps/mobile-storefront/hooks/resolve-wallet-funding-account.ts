@@ -1,7 +1,7 @@
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
 import {
   getPiggyvestPrimaryCapabilitySnapshot,
-  isPrimaryWalletNotReady,
+  rollbackObservedCapabilityOnNotReady,
 } from '@/lib/piggyvest-primary-capability';
 import { piggyvestPrimaryWalletApi } from '@/lib/piggyvest-primary-wallet';
 import { useAuthStore } from '@/stores/auth-store';
@@ -11,7 +11,15 @@ type PrimarySnapshot = Awaited<
   ReturnType<typeof piggyvestPrimaryWalletApi.read>
 >;
 export type SettledPrimaryFundingAccount =
-  | { status: 'ready'; account: PrimarySnapshot['account'] }
+  | {
+      status: 'ready';
+      account: PrimarySnapshot['account'];
+      // Kobo; null when the snapshot is not ready (no account yet).
+      balanceKobo: number | null;
+      // A remembered answer standing in for a fresh read that ran slow or
+      // failed: shown, but still re-checked.
+      recalled?: true;
+    }
   // Primary definitively has no account for this customer (server
   // unconfigured, or enabled but never provisioned): the legacy
   // projection is authoritative, not stale.
@@ -31,7 +39,8 @@ function readActiveAuthUserId(): string | undefined {
 
 function settleBoundAccount(
   expectedUserId: string,
-  account: PrimarySnapshot['account'] | undefined
+  account: PrimarySnapshot['account'] | undefined,
+  balanceKobo: number | null = null
 ): SettledPrimaryFundingAccount {
   // Post-fetch bind: reject a snapshot that landed after an account
   // switch, even when the session matched at fetch start. Unknown is
@@ -41,7 +50,7 @@ function settleBoundAccount(
   // Enabled but never provisioned: the legacy projection is the
   // customer's actual funding path, not a stale fallback.
   if (account === undefined) return { status: 'not_ready' };
-  return { status: 'ready', account };
+  return { status: 'ready', account, balanceKobo };
 }
 
 /**
@@ -77,22 +86,29 @@ export async function readPrimaryFundingAccount(
       // explicit not-ready signal; anything else rejects.
       if (!snapshot.available) return { status: 'not_ready' };
       if (snapshot.account !== undefined)
-        return settleBoundAccount(userId, snapshot.account);
+        return settleBoundAccount(
+          userId,
+          snapshot.account,
+          snapshot.balanceKobo ?? null
+        );
     } catch {
       return { status: 'unavailable' };
     }
   }
   try {
-    const { account } = await piggyvestPrimaryWalletApi.read(
+    const { account, balanceKobo } = await piggyvestPrimaryWalletApi.read(
       merchantId,
       userId
     );
-    return settleBoundAccount(userId, account);
+    return settleBoundAccount(userId, account, balanceKobo ?? null);
   } catch (error) {
     // Only an authoritative not-ready keeps the legacy projection;
     // transient failures surface unavailable instead of a DVA the
     // primary account may have superseded.
-    if (isPrimaryWalletNotReady(error)) return { status: 'not_ready' };
+    // The wallet read is authoritative too (Codex): a base not-ready rolls
+    // a stale cached positive verdict back, as a failed mutation does.
+    if (rollbackObservedCapabilityOnNotReady(merchantId, error))
+      return { status: 'not_ready' };
     return { status: 'unavailable' };
   }
 }

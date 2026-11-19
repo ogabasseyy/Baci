@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { describe, expect, it } from 'vitest';
 import { defaultExtensions } from '@/components/blog/novel-features/extensions';
 import { validateImportedContent } from './review-handoff-content';

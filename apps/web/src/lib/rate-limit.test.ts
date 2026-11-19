@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   __resetRateLimitStoreForTesting,
   checkImeiPollRateLimit,
+  checkOxygenPhoneRedemptionRateLimit,
+  checkOxygenProviderRateLimit,
   checkRateLimit,
   getTrustedClientIdentifier,
   setRateLimitDiagnosticHook,
@@ -26,6 +28,61 @@ vi.mock('@upstash/ratelimit', () => ({
 vi.mock('./redis', () => ({
   getRedis: mockGetRedis,
 }));
+
+it('fails closed for Oxygen provider requests without shared Redis', async () => {
+  mockGetRedis.mockReturnValue(null);
+  await expect(
+    checkOxygenProviderRateLimit('customer', 'action:validate_customer', 6)
+  ).resolves.toMatchObject({ allowed: false });
+});
+it('fails closed for anonymous Oxygen handoff redemption without shared Redis', async () => {
+  mockGetRedis.mockReturnValue(null);
+  const request = new NextRequest(
+    'https://example.test/api/payments/oxygen/phone-handoff/redeem'
+  );
+  await expect(
+    checkOxygenPhoneRedemptionRateLimit(request)
+  ).resolves.toMatchObject({ allowed: false });
+});
+it('uses the same distributed Oxygen budget across requests', async () => {
+  __resetRateLimitStoreForTesting();
+  mockGetRedis.mockReturnValue({});
+  mockLimiterLimit.mockResolvedValueOnce({
+    success: true,
+    limit: 6,
+    remaining: 1,
+    reset: 10,
+  });
+  mockLimiterLimit.mockResolvedValueOnce({
+    success: false,
+    limit: 6,
+    remaining: 0,
+    reset: 10,
+  });
+  expect(
+    (
+      await checkOxygenProviderRateLimit(
+        'customer',
+        'action:validate_customer',
+        6
+      )
+    ).allowed
+  ).toBe(true);
+  expect(
+    (
+      await checkOxygenProviderRateLimit(
+        'customer',
+        'action:validate_customer',
+        6
+      )
+    ).allowed
+  ).toBe(false);
+  expect(mockLimiterLimit).toHaveBeenLastCalledWith(
+    'customer:oxygen-provider:action:validate_customer'
+  );
+  mockGetRedis.mockReturnValue(null);
+  __resetRateLimitStoreForTesting();
+});
 
 describe('legacy bridge rate limit keying', () => {
   beforeEach(() => {
@@ -143,30 +200,8 @@ describe('quiz route rate limits', () => {
     __resetRateLimitStoreForTesting();
   });
 
-  it.each([
-    ['/api/merchant/quiz/generate', 5],
-    ['/api/quiz/attempts/start', 20],
-    ['/api/quiz/awards/cash/claim', 10],
-    ['/api/quiz/prizes/grand/claim', 10],
-  ])('applies a dedicated limit to %s', async (path, expectedLimit) => {
-    const result = await checkRateLimit(
-      new NextRequest(`http://localhost:3000${path}`)
-    );
-
-    expect(result.limit).toBe(expectedLimit);
-  });
-
-  it.each([
-    ['/api/quiz/attempts/attempt-1/answers', 50],
-    ['/api/quiz/attempts/active', 50],
-    ['/api/quiz/attempts/attempt-1/finalize-awards', 50],
-  ])('keeps non-polling attempt routes on the default limit: %s', async (path, expectedLimit) => {
-    const result = await checkRateLimit(
-      new NextRequest(`http://localhost:3000${path}`)
-    );
-
-    expect(result.limit).toBe(expectedLimit);
-  });
+  // The per-route quiz budgets (start, claims, answers, recovery) are asserted
+  // in rate-limit-quiz-route-limits.test.ts.
 
   it('throttles submission writes without consuming the autocomplete budget and recovers after the window', async () => {
     vi.useFakeTimers();

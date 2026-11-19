@@ -7,6 +7,10 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { checkLegacyBridgeRateLimit } from './legacy-bridge-rate-limit';
 import {
+  checkQuizPlayerRateLimit,
+  isQuizPlayerPath,
+} from './quiz-player-rate-limit';
+import {
   getClientIdentifier,
   getRateLimitBucketKey,
   getTrustedClientIdentifier,
@@ -34,6 +38,12 @@ export interface RateLimitConfig {
   maxRequests: number;
   windowMs: number;
   failClosedWithoutRedis?: boolean;
+  /**
+   * Count with a fixed window instead of the sliding window. Half the Redis
+   * commands per request, at the price of allowing a short burst across a
+   * window boundary. For high-volume buckets where that burst is harmless.
+   */
+  fixedWindow?: boolean;
 }
 
 export interface RateLimitResult {
@@ -62,13 +72,15 @@ function getUpstashLimiter(config: RateLimitConfig): Ratelimit | null {
   if (!redis) return null;
 
   const windowSeconds = `${Math.ceil(config.windowMs / 1000)} s` as const;
-  const key = `${config.maxRequests}:${windowSeconds}`;
+  const key = `${config.fixedWindow ? 'fixed' : 'sliding'}:${config.maxRequests}:${windowSeconds}`;
 
   let limiter = upstashLimiters.get(key);
   if (!limiter) {
     limiter = new Ratelimit({
       redis,
-      limiter: Ratelimit.slidingWindow(config.maxRequests, windowSeconds),
+      limiter: config.fixedWindow
+        ? Ratelimit.fixedWindow(config.maxRequests, windowSeconds)
+        : Ratelimit.slidingWindow(config.maxRequests, windowSeconds),
       prefix: 'baci:ratelimit',
       ephemeralCache: new Map(),
     });
@@ -104,6 +116,21 @@ export function checkRateLimit(
     );
   }
 
+  if (isQuizPlayerPath(pathname)) {
+    // Quiz app requests are charged per signed-in player, not per shared
+    // carrier address. Browser sessions (no access token) fall through.
+    return checkQuizPlayerRateLimit(
+      request,
+      pattern,
+      config,
+      clientIdentifier,
+      applyRateLimit
+    ).then(
+      (playerResult) =>
+        playerResult ?? applyRateLimit(clientIdentifier, pattern, config)
+    );
+  }
+
   return applyRateLimit(clientIdentifier, pattern, config);
 }
 
@@ -129,6 +156,10 @@ async function applyRateLimit(
     try {
       const upstashKey = `${identifier}:${pattern}`;
       const result = await limiter.limit(upstashKey);
+      // Upstash's default timeout returns success=true; sensitive budgets
+      // must treat that fallback as a distributed-backend failure.
+      if (config.failClosedWithoutRedis && result.reason === 'timeout')
+        throw new Error('Distributed rate limiter timed out');
       void rateLimitDiagnostics.report({
         backend: 'redis',
         reason: 'redis_success',
@@ -171,6 +202,29 @@ export function checkImeiPollRateLimit(
     getRateLimitBucketKey(request),
     '/api/storefront/imei-check/:lookupId:poll',
     IMEI_POLL_RATE_LIMIT
+  );
+}
+
+/** Authenticated Oxygen provider budgets must be shared across instances. */
+export function checkOxygenProviderRateLimit(
+  userId: string,
+  bucket: string,
+  maxRequests: number
+): Promise<RateLimitResult> {
+  return applyRateLimit(userId, `oxygen-provider:${bucket}`, {
+    maxRequests,
+    windowMs: 60_000,
+    failClosedWithoutRedis: true,
+  });
+}
+
+export function checkOxygenPhoneRedemptionRateLimit(
+  request: NextRequest
+): Promise<RateLimitResult> {
+  return applyRateLimit(
+    getTrustedClientIdentifier(request),
+    'oxygen-phone-redemption',
+    { maxRequests: 10, windowMs: 60_000, failClosedWithoutRedis: true }
   );
 }
 

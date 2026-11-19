@@ -1,21 +1,20 @@
 import 'server-only';
 import { primaryWalletCardCustodySchemas as schemas } from '@/schemas/primary-wallet-card-custody';
+import type { TransferReferenceLookup } from './transfer-reference-lookup';
+import { emitPiggyvestWebhookAlert } from './webhook-alerts';
+
+type Command = ReturnType<typeof schemas.command.parse>;
 
 export async function runPrimaryCardTransfer(input: {
   operationId: string;
   claim: (operationId: string) => Promise<unknown>;
-  submitTransfer: (
-    command: ReturnType<typeof schemas.command.parse>
-  ) => Promise<void>;
-  lookupTransfer: (
-    command: ReturnType<typeof schemas.command.parse>
-  ) => Promise<'submitted' | 'absent' | 'uncertain'>;
+  submitTransfer: (command: Command) => Promise<void>;
+  lookupTransfer: (command: Command) => Promise<TransferReferenceLookup>;
   record: (
     operationId: string,
     token: string,
     submitted: boolean
   ) => Promise<unknown>;
-  requeue: (operationId: string, token: string) => Promise<unknown>;
 }) {
   const operationId = schemas.context.shape.operationId.parse(
     input.operationId
@@ -29,58 +28,53 @@ export async function runPrimaryCardTransfer(input: {
     claim.command.sourceWalletId === claim.command.destinationWalletId
   )
     throw new Error('Transfer claim unavailable');
-  // A reclaimed lease means the previous holder may have submitted before
-  // dying: verify the provider reference first. 'submitted' records the
-  // existing transfer without resubmitting; only a proven-absent
-  // reference submits fresh; anything uncertain records unknown and never
-  // resubmits blind.
+  const settle = async (submitted: boolean) => {
+    const acknowledged = await input.record(
+      operationId,
+      claim.token,
+      submitted
+    );
+    if (acknowledged !== true) throw new Error('Transfer result unavailable');
+    return submitted ? ('submitted' as const) : ('unknown' as const);
+  };
+  // A reclaimed lease (stale dispatch, or an 'unknown' row revisited after
+  // its five-minute backoff) may follow a submission that already reached
+  // PiggyVest, so it NEVER submits again. Only a successful bound transfer
+  // records submitted; everything else — including a 404, which the sandbox
+  // returned for a 202-accepted transfer before it was indexed
+  // (docs/piggyvest-contract-evidence/2026-10-31.md, P2) — records unknown,
+  // which keeps reconciliation_required and is re-probed.
+  // A reference still not found (or reported failed) this far past the
+  // indexing window is raised for operator review on every revisit.
   if (claim.outcome === 'reclaimed') {
-    let observed: 'submitted' | 'absent' | 'uncertain';
-    try {
-      observed = await input.lookupTransfer(claim.command);
-    } catch {
-      observed = 'uncertain';
-    }
-    if (observed === 'submitted') {
-      const acknowledged = await input.record(operationId, claim.token, true);
-      if (acknowledged !== true) throw new Error('Transfer result unavailable');
-      return 'submitted' as const;
-    }
-    if (observed === 'uncertain') {
-      const acknowledged = await input.record(operationId, claim.token, false);
-      if (acknowledged !== true) throw new Error('Transfer result unavailable');
-      return 'unknown' as const;
-    }
+    const observed = await observe(input, claim.command);
+    if (observed === 'not_found' || observed === 'failed')
+      emitPiggyvestWebhookAlert('PIGGYVEST_TRANSFER_NEEDS_REVIEW', {
+        reason: `card_reference_${observed}`,
+        operationId,
+      });
+    return await settle(observed === 'submitted');
   }
   try {
     await input.submitTransfer(claim.command);
   } catch {
-    // A submit throw is ambiguous: reconcile the deterministic reference
-    // before recording. Proven-absent requeues for the next pass with the
-    // identical reference; proven-submitted records without resubmitting;
-    // anything uncertain records unknown and never resubmits blind.
-    let observed: 'submitted' | 'absent' | 'uncertain';
-    try {
-      observed = await input.lookupTransfer(claim.command);
-    } catch {
-      observed = 'uncertain';
-    }
-    if (observed === 'absent') {
-      const requeued = await input.requeue(operationId, claim.token);
-      if (requeued !== true) throw new Error('Transfer result unavailable');
-      return 'requeued' as const;
-    }
-    const acknowledged = await input.record(
-      operationId,
-      claim.token,
-      observed === 'submitted'
-    );
-    if (acknowledged !== true) throw new Error('Transfer result unavailable');
-    return observed === 'submitted'
-      ? ('submitted' as const)
-      : ('unknown' as const);
+    // A submit throw is ambiguous: the provider may have accepted it. The
+    // identical reference is never resubmitted; an unproven outcome is
+    // held as unknown for the revisit and, if it persists, for review.
+    return await settle((await observe(input, claim.command)) === 'submitted');
   }
-  const acknowledged = await input.record(operationId, claim.token, true);
-  if (acknowledged !== true) throw new Error('Transfer result unavailable');
-  return 'submitted' as const;
+  return await settle(true);
+}
+
+async function observe(
+  input: {
+    lookupTransfer: (command: Command) => Promise<TransferReferenceLookup>;
+  },
+  command: Command
+): Promise<TransferReferenceLookup> {
+  try {
+    return await input.lookupTransfer(command);
+  } catch {
+    return 'uncertain';
+  }
 }

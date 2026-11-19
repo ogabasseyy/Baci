@@ -33,8 +33,9 @@ describe('proof 7: readbacks after creation are polled within the budget', () =>
     expect(
       answer(result, 'main_wallet_readback_names_payout_destination')
     ).toBe('yes');
+    // Goal (a) reads back payout null, which proves nothing either way.
     expect(answer(result, 'goal_without_payout_inherits_business_payout')).toBe(
-      'no'
+      'unknown'
     );
     expect(result.values.interest_routing_verdict).toBe(
       'create_time_routing_verified'
@@ -99,8 +100,9 @@ describe('proof 7: the payout destination appears after the accrual flag', () =>
       answer(result, 'main_wallet_readback_names_payout_destination')
     ).toBe('yes');
     expect(answer(result, 'main_wallet_accrual_flag_readable')).toBe('yes');
+    // Goal (a) reads back payout null, which proves nothing either way.
     expect(answer(result, 'goal_without_payout_inherits_business_payout')).toBe(
-      'no'
+      'unknown'
     );
     expect(
       answer(result, 'goal_explicit_readback_names_payout_destination')

@@ -7,6 +7,7 @@ import {
   getProductDetailsSchema,
   getRecommendationsSchema,
   searchProductsSchema,
+  TOOL_DESCRIPTIONS,
 } from './chat-tools';
 
 describe('searchProductsSchema', () => {
@@ -80,33 +81,31 @@ describe('addToCartSchema', () => {
 });
 
 describe('createVirtualAccountSchema', () => {
-  it('validates full input', () => {
-    const result = createVirtualAccountSchema.safeParse({
-      email: 'test@example.com',
-      amount: 50000,
-      customerName: 'John Doe',
-      customerEmail: 'test@example.com',
-      customerPhone: '+2348012345678',
-      items: [{ productId: 'p1', name: 'Phone', price: 50000, quantity: 1 }],
-    });
+  it('accepts an empty payload and rejects legacy PII arguments', () => {
+    const result = createVirtualAccountSchema.safeParse({});
     expect(result.success).toBe(true);
-  });
+    expect(result.data).toEqual({});
 
-  it('rejects invalid email', () => {
-    const result = createVirtualAccountSchema.safeParse({
-      amount: 50000,
-      customerEmail: 'not-an-email',
-      customerName: 'John Doe',
-      items: [{ productId: 'p1', name: 'Phone', price: 50000, quantity: 1 }],
+    const legacy = createVirtualAccountSchema.safeParse({
+      amount: 50_000,
+      customerEmail: 'buyer@example.com',
+      customerName: 'Buyer',
+      items: [{ productId: 'p1', name: 'Phone', price: 50_000, quantity: 1 }],
     });
-    expect(result.success).toBe(false);
+    expect(legacy.success).toBe(false);
   });
+});
 
-  it('rejects missing required fields', () => {
-    const result = createVirtualAccountSchema.safeParse({
-      amount: 50000,
-    });
-    expect(result.success).toBe(false);
+describe('createVirtualAccount tool description', () => {
+  it('does not promise account creation or direct customers to card payment', () => {
+    expect(TOOL_DESCRIPTIONS.createVirtualAccount).toContain(
+      'creation is not available in this chat yet'
+    );
+    expect(TOOL_DESCRIPTIONS.createVirtualAccount).not.toContain('Generate');
+    expect(TOOL_DESCRIPTIONS.createVirtualAccount).not.toContain('card');
+    expect(TOOL_DESCRIPTIONS.createVirtualAccount).toContain(
+      'Do not collect or submit customer or payment details'
+    );
   });
 });
 

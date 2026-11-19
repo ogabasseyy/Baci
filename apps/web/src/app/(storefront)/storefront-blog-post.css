@@ -14,6 +14,8 @@
   always imports storefront-blog.css immediately before this sheet.
 */
 /* stylelint-disable scss/at-rule-no-unknown -- Tailwind v4 source discovery directives. */
+/* Already emitted by storefront-blog.css, which the post layout loads first. */
+@source not inline("bg-card text-card-foreground");
 @source not "./**/*.test.ts";
 @source not "./**/*.test.tsx";
 @source "./[slug]/(blog)/blog/[postSlug]";

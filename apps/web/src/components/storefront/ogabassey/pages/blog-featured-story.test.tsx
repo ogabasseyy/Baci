@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import type { BlogPostData } from '@/templates/registry';
+import { BLOG_LISTING_FEATURED_IMAGE_SIZES } from '@/components/storefront/ogabassey/config/blog-media';
 import { BlogFeaturedStory } from './blog-featured-story';
 
 interface MockCdnFormatImageProps {
@@ -86,7 +87,10 @@ describe('BlogFeaturedStory', () => {
     expect(image).toHaveAttribute('data-fetchpriority', 'high');
     expect(image).toHaveAttribute('data-priority', 'false');
     expect(image).toHaveAttribute('data-fill', 'true');
-    expect(image).toHaveAttribute('data-sizes', '100vw');
+    expect(image).toHaveAttribute(
+      'data-sizes',
+      BLOG_LISTING_FEATURED_IMAGE_SIZES
+    );
     // Shared lighter blog hero quality to cut the measured Slow-4G LCP bytes.
     expect(image).toHaveAttribute('data-quality', '50');
     expect(screen.getByText('24 Jun 2026')).toBeInTheDocument();

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { resolveVariantSelectionParamResolution } from './product-selection-param-resolution';
 import type { ProductWithSelectionAxesLike } from './product-selection-params';
 import {
   extractVariantSelectionParams,
@@ -69,5 +70,35 @@ describe('product-selection-params', () => {
       'storage',
       'variantId',
     ]);
+  });
+
+  it('retains attributes when query keys require normalization and resolves to attribute_only', () => {
+    const product: ProductWithSelectionAxesLike = {
+      ...baseProduct,
+      attributeAxes: ['storage_size'],
+      variant_attributes: {
+        storage_size: ['128GB', '256GB'],
+      },
+    };
+
+    const extracted = extractVariantSelectionParams(
+      product,
+      new URLSearchParams('Storage-Size=256GB')
+    );
+
+    expect(extracted.attributes).toEqual({ storage_size: '256GB' });
+    expect(extracted.recognizedParamKeys).toEqual(['storage_size']);
+
+    const resolution = resolveVariantSelectionParamResolution(
+      product,
+      new URLSearchParams('Storage-Size=256GB')
+    );
+
+    expect(resolution.type).toBe('attribute_only');
+    expect(resolution.selectionInput).toEqual({
+      attributes: {
+        storage_size: '256GB',
+      },
+    });
   });
 });

@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { describe, expect, it } from 'vitest';
 import { toApiPayload } from './blog-api-payload';
 import { parseReviewHandoff } from './parse-review-handoff';

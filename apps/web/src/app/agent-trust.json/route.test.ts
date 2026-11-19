@@ -109,6 +109,7 @@ describe('GET /agent-trust.json', () => {
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'anon-key');
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://supabase.example.com');
     vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'service-role-key');
+    vi.stubEnv('GOOGLE_PLACES_API_KEY', 'test-places-key');
 
     mockGetMerchantByIdentifier.mockResolvedValue(merchant());
     mockGetCachedOpenAIFeedData.mockResolvedValue({

@@ -93,6 +93,7 @@ export interface CheckoutStepCompositionSession {
     setNewsletterOptIn: (value: boolean) => void;
     handlePlaceOrder: ComponentProps<typeof PaymentStep>['handlePlaceOrder'];
     merchant: ComponentProps<typeof PaymentStep>['merchant'];
+    oxygenAllowed?: boolean;
     user: ComponentProps<typeof PaymentStep>['user'];
     currency: string;
     redvaultAvailable: boolean;
@@ -227,6 +228,7 @@ export function CheckoutStepComposition({
         handlePlaceOrder={payment.handlePlaceOrder}
         setCurrentStep={flow.setCurrentStep}
         merchant={payment.merchant}
+        oxygenAllowed={payment.oxygenAllowed}
         user={payment.user}
         remainingAmount={paymentSession.wallet.remainingAmount}
         orderAmount={paymentSession.total}

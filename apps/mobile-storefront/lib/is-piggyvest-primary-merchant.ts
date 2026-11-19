@@ -2,9 +2,9 @@ import { readObservedPiggyvestPrimaryCapability } from './piggyvest-primary-capa
 
 // Pilot lifecycle: this hardcoded id is a cold-start bootstrap so the
 // pilot merchant routes primary-first before any probe has run. It is a
-// routing preference, never a credit bypass — server initialize still
-// fail-closes with PRIMARY_CARD_NOT_READY, and the not-ready rollback
-// re-routes on deprovision. The server verdict stays the rollout source
+// routing preference, never a credit bypass — server card initialize
+// always refuses (PRIMARY_CARD_FUNDING_RETIRED), and the not-ready rollback
+// re-routes to the regular top-up. The server verdict stays the rollout source
 // of truth; remove this constant (relying on observed capability alone)
 // once the pilot cohort is decommissioned.
 const PILOT_MERCHANT_ID = '6b5cb8a4-5575-456c-b936-8cdfae30db74';

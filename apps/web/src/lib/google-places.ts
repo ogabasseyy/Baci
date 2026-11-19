@@ -21,6 +21,8 @@ export interface GooglePlaceDetails {
   streetNumber?: string;
   route?: string; // Street name
   city?: string;
+  /** Nigerian LGA from an administrative component; never inferred from city. */
+  lga?: string;
   state?: string;
   country?: string;
   postalCode?: string;

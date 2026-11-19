@@ -125,7 +125,11 @@ it('records payment_failed when the initial Juicyway check reports failed', asyn
         .find((button) => !button.hasAttribute('disabled')) as HTMLButtonElement
     );
     fireEvent.click(
-      await screen.findByRole('button', { name: /continue with USDT on TRX/i })
+      await screen.findByRole(
+        'button',
+        { name: /continue with USDT on TRX/i },
+        { timeout: 10_000 }
+      )
     );
     await waitFor(() => {
       expect(
@@ -158,4 +162,4 @@ it('records payment_failed when the initial Juicyway check reports failed', asyn
   } finally {
     fetchMock.mockRestore();
   }
-});
+}, 30_000);

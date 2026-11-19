@@ -66,5 +66,21 @@ describe('privacy metadata', () => {
       'https://ogabassey.com/privacy'
     );
     expect(metadata.openGraph?.url).toBe('https://ogabassey.com/privacy');
+    expect(metadata.robots).toEqual({ index: false, follow: false });
+  });
+
+  it('returns indexable robots metadata when privacy content or template exists', async () => {
+    vi.mocked(getMerchantByIdentifier).mockResolvedValue({
+      business_name: 'Test Store',
+      logo_url: null,
+      slug: 'test-store',
+      template_id: 'ogabassey',
+    } as unknown as Awaited<ReturnType<typeof getMerchantByIdentifier>>);
+
+    const metadata = await generateMetadata({
+      params: Promise.resolve({ slug: 'test-store' }),
+    });
+
+    expect(metadata.robots).toMatchObject({ index: true, follow: true });
   });
 });

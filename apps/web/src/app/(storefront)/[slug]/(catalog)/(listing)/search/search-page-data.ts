@@ -214,7 +214,14 @@ export async function loadSearchPageData({
         searchResult = await fetchSearchPage(
           (page - 1) * STOREFRONT_PRODUCTS_PER_PAGE
         );
-        if (page > 1 && searchResult.products.length === 0) {
+        const isOutOfRange =
+          page > 1 &&
+          searchResult.products.length === 0 &&
+          !(
+            typeof searchResult.totalCount === 'number' &&
+            (page - 1) * STOREFRONT_PRODUCTS_PER_PAGE < searchResult.totalCount
+          );
+        if (isOutOfRange) {
           // The RPC reports its total only on returned rows, so an empty
           // non-first page needs a first-page probe to distinguish a genuine
           // no-results state from an invalid page.

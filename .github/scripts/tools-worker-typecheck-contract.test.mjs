@@ -36,7 +36,7 @@ test('the Quality Gate generates route types and reaches the tools, worker, and 
   const { webFilter, webFilterIndex, workflow } = await readWebFilter();
 
   assert.notEqual(webFilterIndex, -1);
-  assert.equal(pkg.scripts.typecheck, 'next typegen && tsc --noEmit && pnpm typecheck:tools-workers && pnpm typecheck:mcp && pnpm typecheck:builder-mcp && pnpm typecheck:builder-publication');
+  assert.equal(pkg.scripts.typecheck, 'next typegen && node tools/prepare-typed-navigation.mjs && tsc --noEmit && pnpm typecheck:tools-workers && pnpm typecheck:mcp && pnpm typecheck:builder-mcp && pnpm typecheck:builder-publication && pnpm typecheck:experience');
   assert.equal(pkg.scripts['typecheck:tools-workers'], 'tsc --noEmit -p tsconfig.tools-workers.json');
   assert.equal(pkg.scripts['typecheck:mcp'], 'tsc --noEmit -p tsconfig.mcp.json');
   for (const project of ['builder-mcp', 'builder-publication']) {
@@ -71,7 +71,9 @@ test('the Quality Gate generates route types and reaches the tools, worker, and 
     '../../tools/staging/prefunded-card/treasury-snapshot-cli.test.ts',
     'tools/events/**/*.ts',
     'tools/db/**/*.ts',
+    'tools/piggyvest-capture-replay/**/*.ts',
     'tools/cost/**/*.ts',
+    'tools/messaging/**/*.ts',
     'src/scripts/process-domain-events.ts',
     'src/scripts/process-merchant-onboarding-emails.ts',
     'src/scripts/process-merchant-onboarding-emails.test.ts',
@@ -101,6 +103,9 @@ test('the Quality Gate generates route types and reaches the tools, worker, and 
     'src/scripts/verify-gigl-tracking-worker-capability.test.ts',
     'src/scripts/process-quiz-finalization.ts',
     'src/scripts/process-quiz-finalization.test.ts',
+    'src/scripts/piggyvest-webhook-capture-drain-cli.ts',
+    'src/scripts/piggyvest-webhook-capture-drain-cli.test.ts',
+    'src/scripts/piggyvest-webhook-capture-drain-cli.graph.test.ts',
   ]);
   assert.ok(!toolsTsconfig.include.includes('tools/**/*.ts'));
   assert.ok(
@@ -148,4 +153,9 @@ test('full web shards install the isolated builder auth lockfile before fixture 
   const pkg = JSON.parse(await readFile('apps/web/tools/builder-auth/package.json', 'utf8'));
   assert.ok(pkg.dependencies['oidc-provider']);
   assert.match(await readFile('apps/web/tools/builder-auth/pnpm-lock.yaml', 'utf8'), /oidc-provider:/);
+});
+
+test('experience checks cover runner, authoring, commerce, durable and performance projects',async()=>{
+ const pkg=JSON.parse(await readFile(new URL('../../apps/web/package.json',import.meta.url),'utf8'));
+ assert.equal(pkg.scripts['typecheck:experience'],['runner','authoring','commerce','durable','performance'].map(name=>`tsc --noEmit -p tsconfig.experience-${name}.json`).join(' && '));
 });

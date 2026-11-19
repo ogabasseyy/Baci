@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { afterEach, expect, it, vi } from 'vitest';
 import { analytics } from '@/lib/analytics';
 import type { Product } from '@/lib/products';

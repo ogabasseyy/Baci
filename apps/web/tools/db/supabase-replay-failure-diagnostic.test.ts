@@ -43,4 +43,14 @@ describe('supabaseReplayFailureDiagnostic', () => {
       supabaseReplayFailureDiagnostic('connection refused (SQLSTATE 42501)')
     ).toBe(' (diagnostic=postgres-42501)');
   });
+  it('reports only a fixed startup milestone when the CLI emits unknown details', () => {
+    expect(
+      supabaseReplayFailureDiagnostic('Starting database...\nsecret-value')
+    ).toBe(' (diagnostic=startup-database)');
+    expect(
+      supabaseReplayFailureDiagnostic(
+        'Starting database...\nInitialising schema...\nsecret-value'
+      )
+    ).toBe(' (diagnostic=startup-schema)');
+  });
 });

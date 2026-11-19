@@ -8,6 +8,10 @@ export async function getResolvedBlogPost(
   postSlug: string,
   isDraftMode: boolean
 ): Promise<ResolvedBlogPost> {
+  if (isDraftMode) {
+    return getLiveBlogPost(slug, postSlug, true);
+  }
+
   try {
     // Request-scoped (React cache()) — reuses the same Promise generateMetadata
     // and the hero-shell resolver already awaited for this identifier/postSlug/

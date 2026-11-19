@@ -58,9 +58,20 @@ describe('visitorQuotaIdentity', () => {
     // carrier-NAT64 shopper into one quota bucket.
     expect(visitorQuotaIdentity('64:ff9b::c000:20a')).toBe('192.0.2.10');
     expect(visitorQuotaIdentity('64:ff9b::c633:6405')).toBe('198.51.100.5');
-    // 64:ff9b:1::/48 (local-use NAT64): IPv4 embedded at bits 48-79.
-    expect(visitorQuotaIdentity('64:ff9b:1:c000:20a::')).toBe('192.0.2.10');
-    expect(visitorQuotaIdentity('64:ff9b:1:c633:6405::')).toBe('198.51.100.5');
+    // RFC 6052 /48 inserts the reserved u octet between IPv4 halves.
+    expect(visitorQuotaIdentity('64:ff9b:1:c000:2:a00::')).toBe('192.0.2.10');
+    expect(visitorQuotaIdentity('64:ff9b:1:c000:2:b00::')).toBe('192.0.2.11');
+    expect(visitorQuotaIdentity('64:ff9b:1:c633:64:500::')).toBe(
+      '198.51.100.5'
+    );
+    expect(visitorQuotaIdentity('64:ff9b:1::')).toBe('0.0.0.0');
+    expect(visitorQuotaIdentity('64:ff9b:1:ffff:ff:ff00::')).toBe(
+      '255.255.255.255'
+    );
+    // A nonzero u octet is not an RFC 6052 address; retain normal /64 grouping.
+    expect(visitorQuotaIdentity('64:ff9b:1:c000:102:a00::')).toBe(
+      '64:ff9b:1:c000::/64'
+    );
   });
 });
 

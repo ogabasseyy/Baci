@@ -227,3 +227,29 @@
     }
   }
 }
+
+@layer components {
+  .ogabassey-product-card-badge--playstation {
+    background-color: var(--store-badge-playstation-bg, #2563eb);
+  }
+
+  .ogabassey-product-card-badge--xbox {
+    background-color: var(--store-badge-xbox-bg, #15803d);
+  }
+
+  .ogabassey-product-card-badge--nintendo {
+    background-color: var(--store-badge-nintendo-bg, #dc2626);
+  }
+
+  .ogabassey-product-card-badge--multi {
+    background-color: var(--store-badge-multi-bg, #9333ea);
+  }
+
+  .ogabassey-product-card-badge--new {
+    background-color: var(--store-badge-new-bg, #047857);
+  }
+
+  .ogabassey-product-card-badge--condition {
+    background-color: var(--store-badge-condition-bg, #b45309);
+  }
+}

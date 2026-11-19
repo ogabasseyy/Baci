@@ -115,11 +115,11 @@ describe('payment-step availability helpers', () => {
       // NGN checkout: unchanged.
       expect(
         isPaymentMethodAvailable({ ...base, paymentMethod, currency: 'NGN' }),
-      ).toBe(true);
+      ).toBe(paymentMethod === 'juicyway');
     }
   });
 
-  it('reports no installment options when only CredPal is enabled on a non-NGN checkout', () => {
+  it('reports no installment options when only retired CredPal is enabled', () => {
     const featureSettings = { credpal_enabled: true };
 
     expect(
@@ -137,7 +137,7 @@ describe('payment-step availability helpers', () => {
         orderAmount: 50_000,
         payableAmount: 50_000,
       }),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it('requires enabled NGN Credit Direct within its amount bounds', () => {

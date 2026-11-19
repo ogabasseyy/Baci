@@ -9,7 +9,6 @@ import {
 // recommended_for, ...) would make identical arrays read as differentiators and
 // change which compare links are publishable from the blog support links.
 import { normalizeProductKeySpecs } from '@/lib/product-key-specs-normalize';
-import { getEffectiveProductStock } from '@/lib/product-stock';
 import { generateSlug } from '@/lib/seo-utils';
 import { COMPARE_CATEGORY_INVENTORY_PRODUCT_LIMIT } from '@/lib/storefront-compare/get-cached-compare-category-inventory';
 import {
@@ -18,6 +17,7 @@ import {
   parseSemanticProductPrice,
 } from '@/lib/storefront-product/get-cached-product-semantic-inventory';
 import type { ProductSemanticCandidate } from '@/lib/storefront-product/product-semantic-types';
+import { resolveSemanticCandidateStock } from '@/lib/storefront-product/resolve-semantic-candidate-stock';
 
 export interface CategoryScopedSemanticInventory {
   isCollection: boolean;
@@ -126,21 +126,16 @@ function toScopedSemanticCandidate(
     price,
     brand: row.brand,
     condition: row.condition,
-    // Effective stock, matching the old normalizeProduct path
-    // (getStorefrontAgentAvailability -> getEffectiveProductStock): a product
-    // with stock_quantity=0 but a positive legacy `stock` stays in stock, so it
-    // is not demoted/filtered out of the SEO link pool. A naive
-    // `stock_quantity ?? stock` would zero out those rows (9 live for ogabassey).
-    stock: getEffectiveProductStock({
-      stock: row.stock,
-      stock_quantity: row.stock_quantity,
-    }),
+    // Candidate stock: resolveSemanticCandidateStock handles unmanaged (null)
+    // vs tracked/omitted finite effective stock.
+    stock: resolveSemanticCandidateStock(row),
     category_slug: resolveScopedCategorySlug(row, requestedCategorySlug),
     category_slugs: getJoinedCategorySlugs(row),
     product_key_specs: normalizeProductKeySpecs(row.product_key_specs),
     is_parent: row.is_parent ?? null,
     parent_product_id: row.parent_product_id ?? null,
-    manage_stock: row.manage_stock ?? null,
+    manage_stock: row.manage_stock,
+    has_condition_offers: row.has_condition_offers ?? false,
   };
 }
 

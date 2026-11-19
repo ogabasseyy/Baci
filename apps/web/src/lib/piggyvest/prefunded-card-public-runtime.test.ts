@@ -36,6 +36,17 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe('public card runtime construction', () => {
+  it('is closed by the master kill switch even when enabled', () => {
+    const { options } = fixture();
+    expect(
+      readPrefundedCardPublicRuntime({
+        ...options,
+        environment: { ...options.environment, PIGGYVEST_KILL_SWITCH: 'true' },
+      })
+    ).toBeNull();
+    expect(mocks.construct).not.toHaveBeenCalled();
+  });
+
   it('defaults off without reading malformed configuration or constructing SQL', () => {
     const { options } = fixture();
     options.environment.PREFUNDED_CARD_PUBLIC_ENABLED = 'false';

@@ -82,6 +82,8 @@ export type PrepareSharedCartCheckoutResult =
   | {
       ok: true;
       review: SharedCartCheckoutReview;
+      sessionExpiresAtMonotonicMs: number;
+      sessionExpiresAtEpochMs: number;
       replayed: boolean;
       sessionReused: boolean;
     }
@@ -151,6 +153,7 @@ async function requestSharedCartCheckout(
       ok: false,
       retryable: true,
     };
+  const requestStartedAt = performance.now();
   let response: Response;
   try {
     response = await fetchWithCsrf(
@@ -175,6 +178,7 @@ async function requestSharedCartCheckout(
       retryable: true,
     };
   }
+  const responseReceivedAt = performance.now();
   const body = await readBody(response);
   if (response.ok && body) {
     const review = reviewOf(body.snapshot);
@@ -190,10 +194,41 @@ async function requestSharedCartCheckout(
       };
     }
     if (review) {
+      const sessionExpiresAt = body.sessionExpiresAt;
+      const databaseNow = body.databaseNow;
+      const requestElapsedMs = responseReceivedAt - requestStartedAt;
+      // Both timestamps come from PostgreSQL, so the browser wall clock and
+      // app-server clock cannot extend the DB-authoritative expiry. Subtract
+      // the full request duration and a conservative one-second margin.
+      const sessionExpiresInMs =
+        typeof sessionExpiresAt === 'string' &&
+        Number.isFinite(Date.parse(sessionExpiresAt)) &&
+        typeof databaseNow === 'string' &&
+        Number.isFinite(Date.parse(databaseNow)) &&
+        Number.isFinite(requestElapsedMs)
+          ? Date.parse(sessionExpiresAt) -
+            Date.parse(databaseNow) -
+            requestElapsedMs -
+            1000
+          : Number.NaN;
+      if (
+        !Number.isFinite(sessionExpiresInMs) ||
+        sessionExpiresInMs <= 0 ||
+        responseReceivedAt + sessionExpiresInMs <= performance.now()
+      ) {
+        return {
+          code: 'temporarily_unavailable',
+          currentVersion: null,
+          ok: false,
+          retryable: true,
+        };
+      }
       return {
         ok: true,
         replayed: body.replayed === true,
         review,
+        sessionExpiresAtMonotonicMs: responseReceivedAt + sessionExpiresInMs,
+        sessionExpiresAtEpochMs: Date.now() + sessionExpiresInMs,
         sessionReused: body.sessionReused === true,
       };
     }

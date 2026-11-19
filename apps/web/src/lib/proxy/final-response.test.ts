@@ -7,11 +7,11 @@ describe('final proxy response', () => {
     '127.0.0.1',
     '127.0.0.1:3250',
     'localhost:3250',
-  ])('keeps development loopback %s on the direct route with verified metadata headers', (hostname) => {
+  ])('keeps development loopback %s on the direct route with verified metadata headers', async (hostname) => {
     const request = new NextRequest(
       'http://127.0.0.1:3250/ogabassey/imei-check'
     );
-    const response = buildFinalProxyResponse(
+    const response = await buildFinalProxyResponse(
       request,
       '/ogabassey/imei-check',
       hostname,
@@ -27,8 +27,8 @@ describe('final proxy response', () => {
     );
   });
 
-  it('forwards a strict CSP nonce on a dashboard response', () => {
-    const response = buildFinalProxyResponse(
+  it('forwards a strict CSP nonce on a dashboard response', async () => {
+    const response = await buildFinalProxyResponse(
       new NextRequest('https://usebaci.com/dashboard'),
       '/dashboard',
       'usebaci.com',
@@ -40,8 +40,8 @@ describe('final proxy response', () => {
     );
   });
 
-  it('adds storefront cache-bucket variation to ordinary storefront responses', () => {
-    const response = buildFinalProxyResponse(
+  it('adds storefront cache-bucket variation to ordinary storefront responses', async () => {
+    const response = await buildFinalProxyResponse(
       new NextRequest('https://shop.example/products/iphone'),
       '/products/iphone',
       'shop.example',

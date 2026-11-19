@@ -70,6 +70,7 @@ s = open(p).read()
 canon = """  push:
     branches: [main, develop]
     paths:
+      - '.github/actions/semgrep-sarif-routing/**'
       - '.github/scripts/muse-review/**'
       - '.github/scripts/semgrep-sarif*'
       - '.github/scripts/semgrep_sarif_*'

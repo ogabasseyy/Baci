@@ -209,12 +209,12 @@ describe('replay project ownership', () => {
       .mockResolvedValueOnce({
         containers: [
           {
-            image: 'public.ecr.aws/supabase/postgres:17.6.1.106',
+            image: 'public.ecr.aws/supabase/postgres:17.6.1.156',
             labels: projectLabel,
             name: `supabase_db_${ownership.projectId}`,
           },
           {
-            image: 'public.ecr.aws/supabase/gotrue:v2.188.1',
+            image: 'public.ecr.aws/supabase/gotrue:v2.194.0',
             labels: projectLabel,
             name: 'dreamy_einstein',
           },
@@ -240,7 +240,7 @@ describe('replay project ownership', () => {
         expectedResources: {
           containers: [
             {
-              image: 'public.ecr.aws/supabase/postgres:17.6.1.106',
+              image: 'public.ecr.aws/supabase/postgres:17.6.1.156',
               name: `supabase_db_${ownership.projectId}`,
             },
           ],

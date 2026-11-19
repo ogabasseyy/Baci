@@ -106,6 +106,6 @@ export const STOREFRONT_CWV_GUARD_BUDGETS: StorefrontCwvGuardBudgets = {
       blogPost: 3,
     },
     requireAuthorityHubLcpCopyLock: false,
-    requireFooterLockInCriticalCss: true,
+    requireFooterLockInCriticalCss: false,
   },
 };

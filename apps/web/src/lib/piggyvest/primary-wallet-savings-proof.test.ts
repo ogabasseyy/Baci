@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { verifyPrimaryWalletSavingsProof } from './primary-wallet-savings-proof';
+import { liveTransactionStatus } from './transaction-status-live.test-support';
 
 const reservation = {
   operationId: '11111111-1111-4111-8111-111111111111',
@@ -47,7 +48,7 @@ describe('primary wallet savings settlement proof', () => {
     { destination_wallet: 'another-goal' },
     { third_party_reference: 'another-operation' },
     { customer_id: 'another-customer' },
-    { customer_id: 'business' },
+    { customer_id: 'another-business' },
     { fee: 1 },
     { currency: 'USD' },
     { business_id: 'another-business' },
@@ -59,6 +60,28 @@ describe('primary wallet savings settlement proof', () => {
         data: { ...response.data, ...change },
       })
     ).toEqual({ status: 'unverified' });
+  });
+
+  it('accepts the business id in customer_id, as the sandbox reports API-key wallet transfers', () => {
+    // 2026-11-04 live sandbox (S12): the TSQ record of an API-key
+    // wallet-to-wallet transfer carries the BUSINESS id in customer_id, and
+    // no business_id field. The wallets, reference, amount and fee still bind
+    // the transfer to this customer's main and goal wallets.
+    expect(
+      verifyPrimaryWalletSavingsProof(reservation, {
+        ...response,
+        data: { ...response.data, customer_id: 'business' },
+      })
+    ).toEqual({
+      status: 'verified',
+      providerTransactionId: 'provider-transaction',
+      operationId: reservation.operationId,
+      reference: reservation.reference,
+      amountKobo: 10000,
+      sourceWalletId: 'source-wallet',
+      destinationWalletId: 'savings-wallet',
+      businessId: 'business',
+    });
   });
 
   it('authenticates a failed transfer against the same bindings without verifying settlement', () => {
@@ -114,70 +137,118 @@ describe('primary wallet savings settlement proof', () => {
       });
   });
 
-  it('settles on the transaction-verify TSQ success bound to the reservation', () => {
-    // The verify endpoint never returns the rich envelope: without TSQ
-    // acceptance every reconciled contribution would hold pending
-    // forever. The unguessable reference plus the amount, over the
-    // authenticated provider channel, is the success signal.
-    expect(
-      verifyPrimaryWalletSavingsProof(reservation, {
-        status: true,
-        data: {
-          status: 'success',
-          reference: reservation.reference,
-          amount: 10000,
-        },
-      })
-    ).toEqual({
-      status: 'verified',
-      providerTransactionId: reservation.reference,
-      operationId: reservation.operationId,
-      reference: reservation.reference,
-      amountKobo: 10000,
-      sourceWalletId: 'source-wallet',
-      destinationWalletId: 'savings-wallet',
-      businessId: 'business',
-    });
-  });
-
-  it('releases the hold on a TSQ failure bound to the reservation', () => {
-    expect(
-      verifyPrimaryWalletSavingsProof(reservation, {
-        status: true,
-        data: {
-          status: 'failed',
-          reference: reservation.reference,
-          amount: 10000,
-        },
-      })
-    ).toEqual({
-      status: 'failed',
-      providerTransactionId: reservation.reference,
-      operationId: reservation.operationId,
-      reference: reservation.reference,
-      amountKobo: 10000,
-      sourceWalletId: 'source-wallet',
-      destinationWalletId: 'savings-wallet',
-      businessId: 'business',
-    });
-  });
-
+  // "Success by reference" alone must never move or release money: a body
+  // that matches only our reference, the amount and a status proves neither
+  // direction, fee nor either wallet.
   it.each([
-    { reference: 'another-operation' },
-    { amount: 9999 },
-  ])('does not settle or release on mismatched TSQ evidence: %j', (change) => {
-    for (const status of ['success', 'failed']) {
+    ['minimal success', { status: 'success' }],
+    ['minimal successful', { status: 'successful' }],
+    ['minimal failed', { status: 'failed' }],
+    [
+      'documented bank success',
+      { status: 'success', recipient: '0123456789', bank: 'Sandbox Bank' },
+    ],
+    [
+      'documented bank failed',
+      { status: 'failed', recipient: '0123456789', bank: 'Sandbox Bank' },
+    ],
+  ])('never settles or releases on a reference-only %s body', (_label, data) => {
+    expect(
+      verifyPrimaryWalletSavingsProof(reservation, {
+        status: true,
+        data: {
+          reference: reservation.reference,
+          third_party_reference: reservation.reference,
+          amount: 10000,
+          created_at: '2026-10-31T10:00:00Z',
+          ...data,
+        },
+      })
+    ).toEqual({ status: 'unverified' });
+  });
+
+  describe('against the live TSQ record (docs/piggyvest-contract-evidence/2026-10-31.md, P2)', () => {
+    const binding = {
+      reference: reservation.reference,
+      amountKobo: reservation.amountKobo,
+      sourceWalletId: reservation.sourceWalletId,
+      destinationWalletId: reservation.destinationWalletId,
+      customerId: reservation.providerCustomerId,
+    };
+    const bound = {
+      operationId: reservation.operationId,
+      reference: reservation.reference,
+      amountKobo: 10000,
+      sourceWalletId: 'source-wallet',
+      destinationWalletId: 'savings-wallet',
+      businessId: 'business',
+    };
+
+    it('settles a successful record from the main wallet to the goal wallet', () => {
+      const live = liveTransactionStatus(binding, 'successful');
+      expect(verifyPrimaryWalletSavingsProof(reservation, live)).toEqual({
+        status: 'verified',
+        providerTransactionId: live.data.id,
+        ...bound,
+      });
+    });
+
+    it('releases only on a terminal failure of that exact record', () => {
+      const live = liveTransactionStatus(binding, 'failed');
+      expect(verifyPrimaryWalletSavingsProof(reservation, live)).toEqual({
+        status: 'failed',
+        providerTransactionId: live.data.id,
+        ...bound,
+      });
+    });
+
+    it.each([
+      ['the unobserved status "success"', { status: 'success' }],
+      ['no internal reference', { internal_reference: undefined }],
+      ['an internal reference unlike the id', { internal_reference: 'other' }],
+      ['another business', { business_id: 'another-business' }],
+    ])('neither settles nor releases a record with %s', (_label, change) => {
+      const live = liveTransactionStatus(binding, 'successful');
       expect(
         verifyPrimaryWalletSavingsProof(reservation, {
-          status: true,
-          data: {
-            status,
-            reference: reservation.reference,
-            amount: 10000,
-            ...change,
-          },
+          ...live,
+          data: { ...live.data, ...change },
         })
       ).toEqual({ status: 'unverified' });
-    }
+    });
+
+    it('neither settles nor releases a pending record', () => {
+      expect(
+        verifyPrimaryWalletSavingsProof(
+          reservation,
+          liveTransactionStatus(binding, 'pending')
+        )
+      ).toEqual({ status: 'unverified' });
+    });
+
+    it.each([
+      ['another source wallet', { source_wallet: 'another-wallet' }],
+      ['another destination wallet', { destination_wallet: 'another-goal' }],
+      [
+        'the reverse direction',
+        {
+          source_wallet: 'savings-wallet',
+          destination_wallet: 'source-wallet',
+        },
+      ],
+      ['a non-zero fee', { fee: 1 }],
+      ['a non-NGN currency', { currency: 'USD' }],
+      ['another source customer', { customer_id: 'another-customer' }],
+    ])('neither settles nor releases a matching reference, amount and status with %s', (_label, change) => {
+      for (const status of ['successful', 'failed'] as const) {
+        const live = liveTransactionStatus(binding, status);
+        expect(
+          verifyPrimaryWalletSavingsProof(reservation, {
+            ...live,
+            data: { ...live.data, ...change },
+          })
+        ).toEqual({ status: 'unverified' });
+      }
+    });
   });
 });

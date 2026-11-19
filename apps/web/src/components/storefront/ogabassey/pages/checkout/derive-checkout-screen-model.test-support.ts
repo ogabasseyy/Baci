@@ -275,6 +275,7 @@ export function makeInput(
           declineConsent: vi.fn(),
           error: null,
           isChecking: false,
+          pollingExhausted: false,
         } satisfies CheckoutScreenModelInput['sessions']['execution']['walletFundedTransfer'],
       },
     },

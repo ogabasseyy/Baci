@@ -4,6 +4,7 @@ import { SHADOWS } from '@/constants/Colors';
 import type { ShippingAddressInput } from '@/lib/validation';
 import { type CartItem, formatPrice } from '@/stores/cart-store';
 import { checkoutReviewStyles as styles } from './CheckoutReviewStep.styles';
+import { CheckoutReviewTotals } from './CheckoutReviewTotals';
 import {
   getPickupStationAddressText,
   isProviderStationPickupQuote,
@@ -18,8 +19,9 @@ import type { DeliveryMethod, ShippingQuote } from './types';
 
 const PAYMENT_METHOD_LABELS: Record<PaymentMethodType, string> = {
   uba_redvault: 'Pay with UBA — review final price before payment',
-  paystack: 'Card Payment (Paystack)',
-  korapay: 'Card Payment (Korapay)',
+  // Same words the Payment step shows; the gateway name is not shopper-facing.
+  paystack: 'Pay with Card',
+  korapay: 'Pay with Card',
   bank_transfer: 'Bank Transfer',
   pay_on_delivery: 'Pay on Delivery',
   credpal: 'CredPal (Installments)',
@@ -42,13 +44,14 @@ function getReviewAddressText(
       : merchantPickupLocation?.address || address.address;
   }
 
-  if (deliveryMethod === 'airport') {
-    return [address.address, `${address.city}, ${address.state}`]
-      .filter(Boolean)
-      .join('\n');
-  }
-
-  return address.address;
+  // Door and airport delivery both need the city and state on review, not
+  // just the street line.
+  return [
+    address.address,
+    [address.city, address.state].filter(Boolean).join(', '),
+  ]
+    .filter(Boolean)
+    .join('\n');
 }
 
 type CheckoutReviewStepProps = {
@@ -63,6 +66,8 @@ type CheckoutReviewStepProps = {
   merchantPickupLocation?: MerchantPickupLocation;
   onEditAddress: () => void;
   onEditPayment: () => void;
+  /** A real winner claiming a prize: nothing is charged. */
+  prizeCheckout?: boolean;
   prizeSimulation?: boolean;
   selectedPayment: PaymentMethodType | null;
   selectedQuote?: ShippingQuote;
@@ -84,6 +89,7 @@ export function CheckoutReviewStep({
   merchantPickupLocation,
   onEditAddress,
   onEditPayment,
+  prizeCheckout = false,
   prizeSimulation = false,
   selectedPayment,
   selectedQuote,
@@ -92,6 +98,7 @@ export function CheckoutReviewStep({
   taxRate,
   total,
 }: CheckoutReviewStepProps) {
+  const noPaymentRequired = prizeSimulation || prizeCheckout;
   const cardSurface = {
     backgroundColor: colors.card,
     borderColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
@@ -150,6 +157,15 @@ export function CheckoutReviewStep({
           <Text style={[styles.reviewTitle, { color: colors.text }]}>
             Delivery Address
           </Text>
+          <Pressable
+            accessibilityLabel="Edit delivery address"
+            accessibilityRole="button"
+            onPress={onEditAddress}
+          >
+            <Text style={[styles.editLink, { color: colors.primary }]}>
+              Edit
+            </Text>
+          </Pressable>
         </View>
         <Text style={[styles.reviewText, { color: colors.text }]}>
           {address.firstName} {address.lastName}
@@ -172,7 +188,7 @@ export function CheckoutReviewStep({
           <Text style={[styles.reviewTitle, { color: colors.text }]}>
             Payment Method
           </Text>
-          {!prizeSimulation ? (
+          {!noPaymentRequired ? (
             <Pressable
               accessibilityLabel="Edit payment method"
               accessibilityRole="button"
@@ -184,8 +200,18 @@ export function CheckoutReviewStep({
             </Pressable>
           ) : null}
         </View>
-        <Text style={[styles.reviewText, { color: colors.textSecondary }]}>
-          {prizeSimulation
+        {/* Both card gateways read "Pay with Card" (customers never see
+            provider names), so the testID keeps the gateway for screenshots,
+            E2E and support triage without showing or speaking it. */}
+        <Text
+          style={[styles.reviewText, { color: colors.textSecondary }]}
+          testID={
+            selectedPayment && !noPaymentRequired
+              ? `review-payment-method-${selectedPayment}`
+              : undefined
+          }
+        >
+          {noPaymentRequired
             ? 'Quiz prize · no payment required'
             : selectedPayment
               ? PAYMENT_METHOD_LABELS[selectedPayment]
@@ -216,58 +242,17 @@ export function CheckoutReviewStep({
         ))}
       </View>
 
-      <View style={[styles.totalCard, cardSurface]}>
-        <View style={styles.totalRow}>
-          <Text style={[styles.totalLabel, { color: colors.textSecondary }]}>
-            Subtotal
-          </Text>
-          <Text style={[styles.totalValue, { color: colors.text }]}>
-            {formatPrice(subtotal)}
-          </Text>
-        </View>
-        <View style={styles.totalRow}>
-          <Text style={[styles.totalLabel, { color: colors.textSecondary }]}>
-            Delivery
-          </Text>
-          <Text style={[styles.totalValue, { color: colors.text }]}>
-            {formatPrice(deliveryFee)}
-          </Text>
-        </View>
-        {assuranceFee > 0 ? (
-          <View style={styles.totalRow}>
-            <Text style={[styles.totalLabel, { color: colors.textSecondary }]}>
-              Device Assurance
-            </Text>
-            <Text style={[styles.totalValue, { color: colors.text }]}>
-              {formatPrice(assuranceFee)}
-            </Text>
-          </View>
-        ) : null}
-        {taxAmount !== null && taxRate > 0 ? (
-          <View style={styles.totalRow}>
-            <Text style={[styles.totalLabel, { color: colors.textSecondary }]}>
-              VAT ({(taxRate * 100).toFixed(1)}%)
-            </Text>
-            <Text style={[styles.totalValue, { color: colors.text }]}>
-              {formatPrice(taxAmount)}
-            </Text>
-          </View>
-        ) : null}
-        <View
-          style={[
-            styles.totalRow,
-            styles.grandTotalRow,
-            { borderTopColor: colors.border },
-          ]}
-        >
-          <Text style={[styles.grandTotalLabel, { color: colors.text }]}>
-            Total
-          </Text>
-          <Text style={[styles.grandTotalValue, { color: colors.primary }]}>
-            {formatPrice(total)}
-          </Text>
-        </View>
-      </View>
+      <CheckoutReviewTotals
+        assuranceFee={assuranceFee}
+        colors={colors}
+        deliveryFee={deliveryFee}
+        isDark={isDark}
+        prizeCheckout={prizeCheckout}
+        subtotal={subtotal}
+        taxAmount={taxAmount}
+        taxRate={taxRate}
+        total={total}
+      />
     </ScrollView>
   );
 }

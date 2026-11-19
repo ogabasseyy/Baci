@@ -11,7 +11,6 @@ export { NegotiationModal } from './components/NegotiationModal';
 export { ProductCard as OgabasseyProductCard } from './components/ProductCard';
 export { OgabasseyLayout } from './layout';
 export { OgabasseyFooter } from './layout/footer';
-export { MobileFooter as OgabasseyMobileFooter } from './components/MobileFooter';
 export { MobileMenu as OgabasseyMobileMenu } from './layout/mobile-menu';
 export { OgabasseyNavbar } from './layout/navbar';
 

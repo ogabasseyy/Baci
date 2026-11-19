@@ -2,8 +2,12 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
 
-import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
-import { createCaptureQueue } from './webhook-capture-queue';
+import {
+  CaptureDrainDatabaseError,
+  type CaptureDrainExecutor,
+  type CaptureDrainStatement,
+} from './webhook-capture-pg-executor';
+import { createPgCaptureQueue } from './webhook-capture-queue';
 
 const claimRow = {
   capture_id: '4204dc18-efb3-44d0-b9a2-1362448d4f21',
@@ -11,101 +15,183 @@ const claimRow = {
   raw_hex: '7b7d',
   signature: 'ab'.repeat(64),
   key_version: 'k-0123456789abcdef',
-  key_families: ['legacy'],
+  key_families: ['bank'],
   attempts: 1,
-  event_type: null,
-  provider_transaction_id: null,
+  event_type: 'bank-transfer.inflow.success',
+  provider_transaction_id: 'txn-1',
 };
 
-function clientWith(result: { data: unknown; error: unknown }) {
-  const rpc = vi.fn(async () => result);
-  return {
-    client: { rpc } as unknown as PiggyvestIntakeServiceClient,
-    rpc,
+const status = {
+  pending: 2,
+  claimed: 0,
+  needsReview: 0,
+  claimRecoveryVersion: 1,
+  oldestUnprocessedAt: '2026-10-30T11:58:00.000Z',
+  lastCapturedAt: '2026-10-30T11:59:00.000Z',
+  lastProcessedAt: null,
+};
+
+function executorReturning(rows: unknown[] | Error) {
+  const query = vi.fn(
+    async (
+      _statement: CaptureDrainStatement,
+      _parameters: readonly unknown[]
+    ) => {
+      if (rows instanceof Error) throw rows;
+      return rows;
+    }
+  );
+  const executor: CaptureDrainExecutor = {
+    query,
+    verifySession: async () => ({ ok: true }),
   };
+  return { executor, query };
 }
 
-describe('createCaptureQueue', () => {
-  it('claims due rows with a lease and a grace period for inline processing', async () => {
-    const { client, rpc } = clientWith({ data: [claimRow], error: null });
-
-    await expect(createCaptureQueue(client).claim(10)).resolves.toEqual([
-      claimRow,
+describe('createPgCaptureQueue', () => {
+  it('renews through the existing restricted claim-bound command and fails closed', async () => {
+    const result = executorReturning([{ resolved: true }]);
+    expect(
+      await createPgCaptureQueue(result.executor).renew(
+        claimRow.capture_id,
+        claimRow.claim_token
+      )
+    ).toBe(true);
+    expect(result.query).toHaveBeenCalledWith('resolve', [
+      claimRow.capture_id,
+      claimRow.claim_token,
+      'renew',
+      null,
     ]);
-    expect(rpc).toHaveBeenCalledWith('claim_piggyvest_webhook_captures', {
-      p_limit: 10,
-      p_lease_seconds: 300,
-      p_min_age_seconds: 120,
-    });
+    const broken = executorReturning(new Error('unavailable'));
+    expect(
+      await createPgCaptureQueue(broken.executor).renew(
+        claimRow.capture_id,
+        claimRow.claim_token
+      )
+    ).toBe(false);
   });
 
-  it('refuses to act on malformed claim rows', async () => {
-    const { client } = clientWith({
-      data: [{ ...claimRow, raw_hex: 'not hex' }],
-      error: null,
-    });
-    await expect(createCaptureQueue(client).claim(10)).rejects.toThrow(
-      'PiggyVest capture claim failed'
+  it('logs only the bounded SQLSTATE when lease renewal fails', async () => {
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const broken = executorReturning(new CaptureDrainDatabaseError('42501'));
+    try {
+      await expect(
+        createPgCaptureQueue(broken.executor).renew(
+          claimRow.capture_id,
+          claimRow.claim_token
+        )
+      ).resolves.toBe(false);
+      expect(warning).toHaveBeenCalledWith(
+        '[PiggyVest Webhook] Failed to renew captured delivery',
+        { phase: 'renew', sqlState: '42501' }
+      );
+    } finally {
+      warning.mockRestore();
+    }
+  });
+
+  it('refuses pre-recovery migration status before any claim can be made', async () => {
+    const { claimRecoveryVersion: _version, ...oldStatus } = status;
+    const old = executorReturning([{ status: oldStatus }]);
+    await expect(createPgCaptureQueue(old.executor).status()).rejects.toThrow(
+      'PiggyVest capture status failed'
     );
   });
-
-  it('surfaces a storage error without database detail', async () => {
-    const { client } = clientWith({
-      data: null,
-      error: { message: 'relation public.piggyvest_webhook_captures missing' },
-    });
-    const failure = createCaptureQueue(client).claim(10);
-    await expect(failure).rejects.toThrow('PiggyVest capture claim failed');
-    await expect(failure).rejects.not.toThrow(/relation/);
-  });
-
-  it('resolves a claimed row fenced by its claim token', async () => {
-    const { client, rpc } = clientWith({ data: true, error: null });
-
+  it('preserves the bounded SQLSTATE through status and resolve errors', async () => {
+    const broken = executorReturning(new CaptureDrainDatabaseError('42883'));
     await expect(
-      createCaptureQueue(client).resolve(
+      createPgCaptureQueue(broken.executor).status()
+    ).rejects.toMatchObject({
+      message: 'PiggyVest capture status failed',
+      sqlState: '42883',
+    });
+    await expect(
+      createPgCaptureQueue(broken.executor).resolve(
         claimRow.capture_id,
         claimRow.claim_token,
-        'needs_review',
-        'REPLAY_SIGNATURE_UNVERIFIABLE'
+        'processed',
+        null
       )
-    ).resolves.toBe(true);
-    expect(rpc).toHaveBeenCalledWith('resolve_piggyvest_webhook_capture', {
-      p_id: claimRow.capture_id,
-      p_claim_token: claimRow.claim_token,
-      p_state: 'needs_review',
-      p_error: 'REPLAY_SIGNATURE_UNVERIFIABLE',
+    ).rejects.toMatchObject({
+      message: 'PiggyVest capture resolve failed',
+      sqlState: '42883',
     });
   });
+  it('claims with the same lease and inline-processing grace as the web queue', async () => {
+    const { executor, query } = executorReturning([claimRow]);
+    await expect(createPgCaptureQueue(executor).claim(10)).resolves.toEqual([
+      claimRow,
+    ]);
+    expect(query).toHaveBeenCalledWith('claim', [10, 300, 120]);
+  });
 
-  it('defers a configuration-blocked row through the same fenced resolve call', async () => {
-    const { client, rpc } = clientWith({ data: true, error: null });
-
+  it('refuses malformed claim rows and hides executor detail', async () => {
+    const malformed = executorReturning([{ ...claimRow, raw_hex: 'zz' }]);
     await expect(
-      createCaptureQueue(client).resolve(
+      createPgCaptureQueue(malformed.executor).claim(10)
+    ).rejects.toThrow('PiggyVest capture claim failed');
+
+    const failing = executorReturning(new Error('host db.internal refused'));
+    const failure = createPgCaptureQueue(failing.executor).claim(10);
+    await expect(failure).rejects.toThrow('PiggyVest capture claim failed');
+    await expect(failure).rejects.not.toThrow(/db\.internal/);
+  });
+
+  it('resolves through the fenced function and reports a lost lease as false', async () => {
+    const won = executorReturning([{ resolved: true }]);
+    await expect(
+      createPgCaptureQueue(won.executor).resolve(
         claimRow.capture_id,
         claimRow.claim_token,
         'deferred',
-        'KEYS_UNCONFIGURED'
+        'REPLAY_DEFERRED_LEGACY_FAMILY'
       )
     ).resolves.toBe(true);
-    expect(rpc).toHaveBeenCalledWith('resolve_piggyvest_webhook_capture', {
-      p_id: claimRow.capture_id,
-      p_claim_token: claimRow.claim_token,
-      p_state: 'deferred',
-      p_error: 'KEYS_UNCONFIGURED',
-    });
-  });
+    expect(won.query).toHaveBeenCalledWith('resolve', [
+      claimRow.capture_id,
+      claimRow.claim_token,
+      'deferred',
+      'REPLAY_DEFERRED_LEGACY_FAMILY',
+    ]);
 
-  it('reports a lost lease as false instead of throwing', async () => {
-    const { client } = clientWith({ data: false, error: null });
+    const lost = executorReturning([{ resolved: false }]);
     await expect(
-      createCaptureQueue(client).resolve(
+      createPgCaptureQueue(lost.executor).resolve(
         claimRow.capture_id,
         claimRow.claim_token,
         'processed',
         null
       )
     ).resolves.toBe(false);
+  });
+
+  it.each([
+    ['no row', []],
+    ['two rows', [{ resolved: true }, { resolved: true }]],
+    ['a non-boolean answer', [{ resolved: 'true' }]],
+  ])('treats %s from resolve as a failure, never as success', async (_label, rows) => {
+    const { executor } = executorReturning(rows);
+    await expect(
+      createPgCaptureQueue(executor).resolve(
+        claimRow.capture_id,
+        claimRow.claim_token,
+        'processed',
+        null
+      )
+    ).rejects.toThrow('PiggyVest capture resolve failed');
+  });
+
+  it('reads the metadata-only status counters', async () => {
+    const { executor, query } = executorReturning([{ status }]);
+    await expect(createPgCaptureQueue(executor).status()).resolves.toEqual(
+      status
+    );
+    expect(query).toHaveBeenCalledWith('status', []);
+
+    const bad = executorReturning([{ status: { pending: 'x' } }]);
+    await expect(createPgCaptureQueue(bad.executor).status()).rejects.toThrow(
+      'PiggyVest capture status failed'
+    );
   });
 });

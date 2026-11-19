@@ -1,5 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { cacheLife, cacheTag } from 'next/cache';
+import { getBlogContentLinksCacheTag } from '@/lib/blog-content-link-cache-tags';
+import { resolveBlogPostKeywords } from '@/lib/resolve-blog-post-keywords';
 import { createPublicClient } from '@/lib/supabase/public';
 import type {
   MerchantBlogIntent,
@@ -14,6 +16,7 @@ interface ClusterPostInput
   extends Omit<PublishedClusterPost, 'tags' | 'keywords'> {
   id: string;
   classification_revision?: string | null;
+  focus_keyword?: string | null;
   tags?: string[] | null;
   keywords?: string[] | null;
 }
@@ -68,7 +71,11 @@ async function getCurrentClassifications(
   'use cache';
   try {
     cacheLife('merchant');
-    cacheTag('blog-posts', `features-${merchantId}`);
+    cacheTag(
+      'blog-posts',
+      getBlogContentLinksCacheTag(merchantId),
+      `features-${merchantId}`
+    );
   } catch {
     // Unit tests run outside the Next cacheComponents runtime.
   }
@@ -105,7 +112,7 @@ export async function loadClassifiedClusterPosts(
       excerpt: post.excerpt,
       category: post.category,
       tags: post.tags ?? null,
-      keywords: post.keywords ?? null,
+      keywords: resolveBlogPostKeywords(post) ?? post.keywords ?? null,
       featured_image_url: post.featured_image_url,
       published_at: post.published_at,
       reading_time_minutes: post.reading_time_minutes,

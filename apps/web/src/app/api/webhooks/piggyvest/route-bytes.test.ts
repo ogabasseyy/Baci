@@ -2,7 +2,7 @@ import { createHash, createHmac } from 'node:crypto';
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ createServiceClient: vi.fn() }));
+const mocks = vi.hoisted(() => ({ createIntakeClient: vi.fn() }));
 // Holder for the deterministic key: mock factories below are hoisted above
 // imports, so they read the shared derived value instead of a literal secret.
 const testSecret = vi.hoisted(() => ({ value: '' }));
@@ -35,8 +35,8 @@ vi.mock('@/lib/piggyvest/webhook-secret-union', async (importOriginal) => {
     },
   };
 });
-vi.mock('@/lib/supabase/service', () => ({
-  createServiceClient: () => withCaptureRpc(mocks.createServiceClient()),
+vi.mock('@/lib/piggyvest/server-intake-client', () => ({
+  createPiggyvestIntakeClient: () => withCaptureRpc(mocks.createIntakeClient()),
 }));
 
 import { POST } from './route';
@@ -68,7 +68,7 @@ describe('webhook raw request regression', () => {
       })),
     }));
     const from = vi.fn(() => ({ upsert }));
-    mocks.createServiceClient.mockReturnValue({ from });
+    mocks.createIntakeClient.mockReturnValue({ from });
 
     const response = await POST(request);
 
@@ -102,7 +102,7 @@ describe('webhook raw request regression', () => {
     expect(await response.json()).toMatchObject({
       code: 'PIGGYVEST_BODY_UNAVAILABLE',
     });
-    expect(mocks.createServiceClient).not.toHaveBeenCalled();
+    expect(mocks.createIntakeClient).not.toHaveBeenCalled();
   });
 
   it('rejects oversized bodies without creating a database client', async () => {
@@ -125,6 +125,6 @@ describe('webhook raw request regression', () => {
     expect(await response.json()).toMatchObject({
       code: 'PIGGYVEST_BODY_TOO_LARGE',
     });
-    expect(mocks.createServiceClient).not.toHaveBeenCalled();
+    expect(mocks.createIntakeClient).not.toHaveBeenCalled();
   });
 });

@@ -3,6 +3,10 @@ import { readExpectedStorefrontReleaseMarker } from './storefront-release-marker
 const DEFAULT_ATTEMPTS = 4;
 const DEFAULT_RETRY_DELAY_MS = 3_000;
 const DEFAULT_TIMEOUT_MS = 20_000;
+// Verification window after the hostname-purge fallback (~35 s at the defaults): the
+// purge is accepted at once but the cache is observed empty a few seconds to ~30 s later.
+const DEFAULT_ESCALATION_ATTEMPTS = 8;
+const DEFAULT_ESCALATION_RETRY_DELAY_MS = 5_000;
 
 function parseBoundedInteger(value, fallback, name, maximum) {
   const parsed = value === undefined || value === '' ? fallback : Number(value);
@@ -31,6 +35,18 @@ export function readReleaseConfig(env = process.env) {
       10
     ),
     baseUrl: baseUrl.origin,
+    escalationAttempts: parseBoundedInteger(
+      env.STOREFRONT_RELEASE_ESCALATION_ATTEMPTS,
+      DEFAULT_ESCALATION_ATTEMPTS,
+      'STOREFRONT_RELEASE_ESCALATION_ATTEMPTS',
+      10
+    ),
+    escalationRetryDelayMs: parseBoundedInteger(
+      env.STOREFRONT_RELEASE_ESCALATION_RETRY_DELAY_MS,
+      DEFAULT_ESCALATION_RETRY_DELAY_MS,
+      'STOREFRONT_RELEASE_ESCALATION_RETRY_DELAY_MS',
+      30_000
+    ),
     expectedMarker: readExpectedStorefrontReleaseMarker(env),
     pdpPath: env.STOREFRONT_RELEASE_PDP_PATH?.trim() || '',
     retryDelayMs: parseBoundedInteger(

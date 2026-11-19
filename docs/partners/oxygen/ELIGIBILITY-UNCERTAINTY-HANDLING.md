@@ -1,0 +1,11 @@
+# Interrupted Oxygen eligibility checks
+
+An eligibility command left `executing` or `indeterminate` has an unconfirmed provider outcome. The saved command remains a durable fence: refreshing checkout reads the saved status and does not retry the assessment. A stale queued command is different: it has not been dispatched and can follow the existing queued recovery rules.
+
+The store should ask the customer to contact it through its normal support channel and provide the order number, without sending identity documents, codes, account numbers, provider links or other sensitive information in an unsecured message. Support should verify the customer's identity and order ownership using its existing process before escalating the affected order to the integration operator.
+
+The operator should preserve the existing order, application reference, command and evidence. An authorized, owner-scoped read-only workflow snapshot, where available, can confirm that eligibility is still pending, but it does not establish the outcome at Oxygen. Escalate through the approved provider-support process using the minimum necessary reference and request written confirmation of the result and safe recovery contract. Do not replay the eligibility request, mark the command failed or completed, delete it, reset the application, or create another application merely because a timeout or lease has elapsed.
+
+There is currently no authorized automatic reconciliation or operator mutation in this path. A provider response or contract confirmation needs a separately reviewed, reference-bound reconciliation procedure before the saved fence can be cleared. Until then the customer cannot automatically advance from this state; closing and returning preserves the same pending state. No booking, activation or settlement is implied.
+
+On 4 November 2026, Oxygen's public [eligibility documentation](https://oxygenxfinance.gitbook.io/oxygenxfinance-docs/third-party-collection/eligibility-checks.md) described `POST /v1/loan-request/get` as an eligibility status request. Its examples do not specify whether the request starts or restarts an assessment, or whether it is safe to repeat after a lost response. The label alone does not establish an idempotency contract; keep the fence until Oxygen confirms that behavior or provides an authoritative recovery operation.

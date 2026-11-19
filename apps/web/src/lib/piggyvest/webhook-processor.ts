@@ -1,6 +1,6 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
+import type { PiggyvestIntakeClient } from '@/lib/piggyvest/intake-client.types';
 import type { PiggyvestWebhookEvent } from '@/schemas/piggyvest/events';
 import type { PiggyvestClientConfig } from './client';
 import { recordQuarantineEvent } from './event-quarantine';
@@ -20,6 +20,7 @@ import {
   applyOutflowTerminal,
   outflowReferenceCandidates,
 } from './transfer-outbox';
+import { alertUnmappedInflow } from './unmapped-alert-once';
 import { claimPiggyvestEvent, resolvePiggyvestEvent } from './webhook-inbox';
 
 /**
@@ -143,6 +144,7 @@ async function applyEvent(
     event.eventData as Record<string, unknown>
   );
   if (references.length === 0) {
+    await reconcileSavingsOutflowReferences([], deps, event);
     return;
   }
   await applyOutflowTerminal(supabase, {
@@ -152,7 +154,7 @@ async function applyEvent(
         ? 'failed'
         : 'succeeded',
   });
-  await reconcileSavingsOutflowReferences(references, deps);
+  await reconcileSavingsOutflowReferences(references, deps, event);
 }
 
 function poisonReason(error: unknown): string | null {
@@ -192,7 +194,7 @@ function failureReason(eventType: HandledEvent['eventType']): string {
 }
 
 export async function processPiggyvestEvent(
-  supabase: PiggyvestIntakeServiceClient,
+  supabase: PiggyvestIntakeClient,
   event: PiggyvestWebhookEvent,
   deps: ProcessPiggyvestEventDeps = {}
 ): Promise<ProcessPiggyvestEventOutcome> {
@@ -277,6 +279,7 @@ export async function processPiggyvestEvent(
       });
       return 'processed';
     }
+    await alertUnmappedInflow(error, event);
     await resolvePiggyvestEvent(supabase, {
       eventId: event.eventId,
       claimToken: claimed.claimToken,

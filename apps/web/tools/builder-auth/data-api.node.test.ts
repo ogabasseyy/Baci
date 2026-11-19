@@ -5,6 +5,7 @@ import { request } from 'node:http';
 import { test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
+import { builderCiDockerArgs } from './ci-container-labels.mjs';
 import { startLocalPostgrest } from './local-postgrest-fixture.ts';
 import { databaseFixture } from './test-fixtures.ts';
 
@@ -85,6 +86,7 @@ test('Data API accepts normal upstream authority but rejects a builder token and
         'run',
         '--rm',
         '-d',
+        ...builderCiDockerArgs(),
         '--name',
         api,
         '-p',

@@ -2,6 +2,9 @@ import { describe, expect, it, vi } from 'vitest';
 import { crossRemCatalogConfig } from './catalog-bindings';
 import { sellableIdentityKey } from './sellable-identity-key';
 
+const { warn } = vi.hoisted(() => ({ warn: vi.fn() }));
+vi.mock('@/lib/logger', () => ({ logger: { warn } }));
+
 describe('CrossRem catalog configuration', () => {
   it('binds the pinned Ogabassey CrossRem merchant ID', () => {
     expect(crossRemCatalogConfig.merchantId).toBe(
@@ -31,6 +34,14 @@ describe('CrossRem catalog configuration', () => {
         './catalog-bindings'
       );
       expect(invalidConfig.bindings).toEqual([]);
+      expect(warn).toHaveBeenCalledExactlyOnceWith({
+        message: 'CrossRem catalog bindings failed validation',
+        issueCount: 2,
+        issues: [
+          { code: 'invalid_type', path: '0.productId' },
+          { code: 'invalid_value', path: '0.condition' },
+        ],
+      });
     } finally {
       vi.doUnmock('./ogabassey-listing-bindings.json');
       vi.resetModules();

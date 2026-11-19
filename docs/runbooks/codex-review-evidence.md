@@ -3,7 +3,9 @@
 The `Codex Review Evidence` workflow observes the existing Codex app's pull
 request comment and publishes an advisory status for its code review of the
 current commit. It does not start a review or evaluate the separate security
-review. Missing, stale, malformed, or ambiguous evidence stays pending.
+review. Missing, stale, malformed, or ambiguous evidence stays pending. A summary
+reporting `has_any_findings: true` continues reporting `findings` (failure) even if
+existing threads are resolved until a fresh clean review is observed.
 
 This comment format is an observed integration detail, not a signed review
 API. Statuses reflect the last successful observation; comment changes and API

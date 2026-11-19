@@ -9,7 +9,7 @@ const head = 'a'.repeat(40);
 const marker = `<!-- codex-review-state:v1 ${JSON.stringify({ code_review: { commit_sha: head, status: 'completed', has_any_findings: false, has_unresolved_findings: false } })} -->`;
 const summary = { user: { id: 199175422, type: 'Bot' }, performed_via_github_app: { id: 1144995 }, body: marker };
 
-function run({ comments = [summary], failComments = false, failProjection = false, changedHead = false, changedComments = false, unrelatedComment = false, pr = '7' } = {}) {
+function run({ comments = [summary], events = [], failComments = false, failEvents = false, failProjection = false, changedHead = false, changedComments = false, unrelatedComment = false, pr = '7' } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'codex-evidence-'));
   try {
     const gh = join(dir, 'gh');
@@ -19,6 +19,9 @@ case "$*" in
   *'/pulls/'*)
     if [[ -f "$TEST_DIR/seen" && "${changedHead}" == true ]]; then printf '%s\\n' '${'b'.repeat(40)}'; else printf '%s\\n' '${head}'; fi
     touch "$TEST_DIR/seen" ;;
+  *'/events'*)
+    if [[ "${failEvents}" == true ]]; then exit 1; fi
+    cat "$TEST_DIR/events" ;;
   *'/issues/'*)
     if [[ "${failComments}" == true ]]; then exit 1; fi
     if [[ -f "$TEST_DIR/comments-seen" && "${changedComments}" == true ]]; then printf '[[]]'; exit 0; fi
@@ -36,6 +39,7 @@ esac
       chmodSync(node, 0o755);
     }
     writeFileSync(join(dir, 'comments'), JSON.stringify([comments]));
+    writeFileSync(join(dir, 'events'), JSON.stringify([events]));
     const result = spawnSync('bash', ['.github/scripts/report-codex-review-evidence.sh', 'owner/repo', pr], {
       encoding: 'utf8',
       env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, TEST_DIR: dir, RUNNER_TEMP: dir, GITHUB_SERVER_URL: 'https://github.com', GITHUB_RUN_ID: '1' },
@@ -57,12 +61,22 @@ test('sets pending before reporting a current clean review', () => {
 });
 
 test('does not report clean if comment retrieval fails or the head changes', () => {
-  for (const args of [{ failComments: true }, { failProjection: true }, { changedHead: true }, { changedComments: true }]) {
+  for (const args of [{ failComments: true }, { failEvents: true }, { failProjection: true }, { changedHead: true }, { changedComments: true }]) {
     const result = run(args);
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.statuses, /state=pending/);
     assert.doesNotMatch(result.statuses, /state=success/);
   }
+});
+
+test('keeps pre-retarget comments pending after base_ref_changed', () => {
+  const result = run({
+    comments: [{ ...summary, updated_at: '2026-11-19T03:00:00Z' }],
+    events: [{ event: 'base_ref_changed', created_at: '2026-11-19T04:00:00Z' }],
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.statuses, /state=pending/);
+  assert.doesNotMatch(result.statuses, /state=success/);
 });
 
 test('reports unresolved findings as failure', () => {

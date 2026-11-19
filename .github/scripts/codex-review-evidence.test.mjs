@@ -25,6 +25,18 @@ test('requires an actual completed clean review of the current commit', () => {
   assert.equal(classifyCodexReview([comment(code({ commit_sha: previous }))], head), 'stale');
   assert.equal(classifyCodexReview([comment(code({ status: 'in_progress' }))], head), 'pending');
   assert.equal(classifyCodexReview([comment(code({ has_unresolved_findings: null }))], head), 'unavailable');
+  assert.equal(
+    classifyCodexReview([comment(code(), { updated_at: '2026-11-19T03:00:00Z' })], head, {
+      invalidatedAt: '2026-11-19T04:00:00Z',
+    }),
+    'stale'
+  );
+  assert.equal(
+    classifyCodexReview([comment(code(), { updated_at: '2026-11-19T05:00:00Z' })], head, {
+      invalidatedAt: '2026-11-19T04:00:00Z',
+    }),
+    'clean'
+  );
 });
 
 test('treats any-findings summaries as non-clean unless both finding flags are false', () => {

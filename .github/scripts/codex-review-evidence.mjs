@@ -10,7 +10,7 @@ export function isCodexAppComment(item) {
 
 // This is an advisory interpretation of the app's observed comment format,
 // not a signed review API or a replacement for branch protection.
-export function classifyCodexReview(comments, head) {
+export function classifyCodexReview(comments, head, { invalidatedAt } = {}) {
   if (!Array.isArray(comments) || !/^[0-9a-f]{40}$/.test(head)) {
     throw new Error('Expected comments and an immutable head SHA');
   }
@@ -20,7 +20,8 @@ export function classifyCodexReview(comments, head) {
   );
   if (!summaries.length) return 'pending';
   if (summaries.length !== 1) return 'ambiguous';
-  const body = summaries[0].body;
+  const summary = summaries[0];
+  const body = summary.body;
   if (body.length > MAX_BODY_LENGTH) return 'unavailable';
   if (body.split(MARKER).length !== 2) return 'ambiguous';
   const matches = [...body.matchAll(/<!--\s*codex-review-state:v1\s+([\s\S]*?)\s*-->/g)];
@@ -40,6 +41,13 @@ export function classifyCodexReview(comments, head) {
   if (!review || typeof review !== 'object' || Array.isArray(review)) return 'unavailable';
   if (!/^[0-9a-f]{40}$/.test(review.commit_sha ?? '')) return 'unavailable';
   if (review.commit_sha !== head) return 'stale';
+  if (invalidatedAt) {
+    const invalidatedMs = Date.parse(invalidatedAt);
+    const updatedMs = Date.parse(summary.updated_at ?? summary.created_at ?? '');
+    if (!Number.isFinite(invalidatedMs) || !Number.isFinite(updatedMs) || updatedMs <= invalidatedMs) {
+      return 'stale';
+    }
+  }
   if (['pending', 'queued', 'in_progress'].includes(review.status)) return 'pending';
   if (review.status !== 'completed' || typeof review.has_any_findings !== 'boolean' ||
       typeof review.has_unresolved_findings !== 'boolean' ||

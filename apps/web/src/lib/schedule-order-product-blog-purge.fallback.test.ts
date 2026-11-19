@@ -46,8 +46,11 @@ function makeSupabase() {
 describe('scheduleOrderProductBlogPurge fallback and error handling', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockRevalidateProducts.mockReturnValue(true);
+    mockRevalidateSlugs.mockReturnValue(true);
     mockEnrichProductPurgeEntries.mockResolvedValue({
       entries: [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
+      authoritativeSlugsById: new Map([['product-1', 'iphone-15']]),
       blogPostSlugs: ['iphone-guide'],
     });
   });
@@ -131,6 +134,11 @@ describe('scheduleOrderProductBlogPurge fallback and error handling', () => {
       supabase: supabase as never,
     });
 
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      'merchant-1',
+      undefined,
+      { expireImmediately: true }
+    );
     expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
     expect(mockScheduleStorefrontHostnamePurge).toHaveBeenCalledWith(
       'ogabassey'
@@ -148,6 +156,11 @@ describe('scheduleOrderProductBlogPurge fallback and error handling', () => {
       targetSweepIncomplete: true,
     });
 
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      'merchant-1',
+      undefined,
+      { expireImmediately: true }
+    );
     expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
     expect(mockScheduleStorefrontHostnamePurge).toHaveBeenCalledWith(
       'ogabassey'
@@ -173,7 +186,11 @@ describe('scheduleOrderProductBlogPurge fallback and error handling', () => {
       expect(mockRevalidateSlugs).toHaveBeenCalled();
       expect(mockExpireProductBlogCacheReliable).toHaveBeenCalledWith(
         'merchant-1',
-        { productSlugs: ['iphone-15'] }
+        {
+          productSlugs: ['iphone-15'],
+          products: [{ id: 'product-1' }],
+          slugsUnchanged: true,
+        }
       );
       expect(maybeSingle).not.toHaveBeenCalled();
       expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
@@ -184,5 +201,29 @@ describe('scheduleOrderProductBlogPurge fallback and error handling', () => {
     } finally {
       consoleSpy.mockRestore();
     }
+  });
+
+  it('forwards expireWidePdpDetails through the reliable fallback when local broad expiry returns false', async () => {
+    const { supabase } = makeSupabase();
+    mockRevalidateProducts.mockReturnValueOnce(false);
+
+    await scheduleOrderProductBlogPurge({
+      merchantId: 'merchant-1',
+      merchantSlug: 'ogabassey',
+      productIds: ['product-1'],
+      supabase: supabase as never,
+      targetSweepIncomplete: true,
+    });
+
+    expect(mockExpireProductBlogCacheReliable).toHaveBeenCalledWith(
+      'merchant-1',
+      {
+        productSlugs: ['iphone-15'],
+        expireWidePdpDetails: true,
+      }
+    );
+    expect(mockScheduleStorefrontHostnamePurge).toHaveBeenCalledWith(
+      'ogabassey'
+    );
   });
 });

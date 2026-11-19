@@ -98,4 +98,22 @@ describe('sendFeedbackReportEmail', () => {
 
     await expect(sendFeedbackReportEmail(input())).resolves.toBe(false);
   });
+
+  it('gives up once the budget passes even if the email step stalls', async () => {
+    vi.useFakeTimers();
+    try {
+      mockSendEmail.mockReturnValue(new Promise(() => undefined));
+
+      const pending = sendFeedbackReportEmail(input());
+      await vi.advanceTimersByTimeAsync(FEEDBACK_EMAIL_BUDGET_MS);
+
+      await expect(pending).resolves.toBe(false);
+      expect(console.error).toHaveBeenCalledWith(
+        'Feedback email not sent:',
+        'timeout'
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

@@ -1,6 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GoogleMerchantListing } from '@/app/api/feed/google-merchant/feed-builder';
 import { projectCatalog } from './project-catalog';
+
+const { warn } = vi.hoisted(() => ({ warn: vi.fn() }));
+vi.mock('@/lib/logger', () => ({ logger: { warn } }));
 
 const product = {
   id: 'phone',
@@ -30,6 +33,8 @@ const binding = {
 } as const;
 
 describe('CrossRem catalog projection', () => {
+  beforeEach(() => warn.mockClear());
+
   it('pins the imported ID and publishes the exact condition and merchandise price', () => {
     expect(projectCatalog([row], [binding])).toEqual([
       {
@@ -125,6 +130,10 @@ describe('CrossRem catalog projection', () => {
         [binding, { ...binding, productId: 'other', retired: true }]
       )
     ).toThrow('Duplicate CrossRem listing ID');
+    expect(warn).toHaveBeenCalledExactlyOnceWith({
+      message: 'Duplicate CrossRem listing ID',
+      listingId: 'phone',
+    });
   });
 
   it('rejects re-keying a retired sellable identity', () => {
@@ -137,5 +146,22 @@ describe('CrossRem catalog projection', () => {
         ]
       )
     ).toThrow('Duplicate CrossRem sellable item');
+    expect(warn).toHaveBeenCalledExactlyOnceWith({
+      message: 'Duplicate CrossRem sellable item',
+      listingId: 'new-key',
+    });
+  });
+
+  it.each([
+    [0, 'Invalid CrossRem merchandise price'],
+    [90_000_000_000_000, 'Invalid CrossRem selling price'],
+  ])('identifies the binding when the price %s cannot be exposed', (price, message) => {
+    expect(() => projectCatalog([{ ...row, price }], [binding])).toThrow(
+      message
+    );
+    expect(warn).toHaveBeenCalledExactlyOnceWith({
+      message,
+      listingId: 'phone',
+    });
   });
 });

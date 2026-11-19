@@ -1,5 +1,5 @@
 import type { GoogleMerchantListing } from '@/app/api/feed/google-merchant/feed-builder';
-
+import { logger } from '@/lib/logger';
 import type { CrossRemListingBinding } from '@/schemas/crossrem-listing-binding';
 import { CONDITION_LABELS } from './condition-labels';
 import { getSellableIdentity } from './sellable-identity';
@@ -7,20 +7,25 @@ import { sellableIdentityKey } from './sellable-identity-key';
 
 const CROSSREM_PRICE_PERCENT = 106n;
 
+function rejectBinding(message: string, listingId: string): never {
+  logger.warn({ message, listingId });
+  throw new Error(message);
+}
+
 function toListing(
   row: GoogleMerchantListing,
   binding: CrossRemListingBinding
 ) {
   const basePriceMinor = Math.round(row.price * 100);
   if (!Number.isSafeInteger(basePriceMinor) || basePriceMinor <= 0) {
-    throw new Error('Invalid CrossRem merchandise price');
+    rejectBinding('Invalid CrossRem merchandise price', binding.listingId);
   }
 
   const priceMinor = Number(
     (BigInt(basePriceMinor) * CROSSREM_PRICE_PERCENT + 50n) / 100n
   );
   if (!Number.isSafeInteger(priceMinor)) {
-    throw new Error('Invalid CrossRem selling price');
+    rejectBinding('Invalid CrossRem selling price', binding.listingId);
   }
 
   const { product } = row;
@@ -86,13 +91,13 @@ export function projectCatalog(
   return bindings
     .flatMap((binding) => {
       if (listingIds.has(binding.listingId)) {
-        throw new Error('Duplicate CrossRem listing ID');
+        rejectBinding('Duplicate CrossRem listing ID', binding.listingId);
       }
       listingIds.add(binding.listingId);
 
       const key = sellableIdentityKey(binding);
       if (boundIdentities.has(key)) {
-        throw new Error('Duplicate CrossRem sellable item');
+        rejectBinding('Duplicate CrossRem sellable item', binding.listingId);
       }
       boundIdentities.add(key);
       if (binding.retired) return [];

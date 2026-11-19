@@ -85,7 +85,8 @@ describe('CrossRem catalog', () => {
     const response = await GET(request(`bearer ${token}`));
 
     expect(response.status).toBe(200);
-    expect(response.headers.get('cache-control')).toBe('private, no-store');
+    expect(response.headers.get('cache-control')).toBe('private, no-cache');
+    expect(response.headers.get('vary')).toBe('Authorization');
     expect(await response.json()).toEqual(snapshot);
     const etag = response.headers.get('etag');
     expect(etag).toMatch(/^"[a-f0-9]{64}"$/);
@@ -95,6 +96,8 @@ describe('CrossRem catalog', () => {
     );
     expect(unchanged.status).toBe(304);
     expect(unchanged.headers.get('etag')).toBe(etag);
+    expect(unchanged.headers.get('cache-control')).toBe('private, no-cache');
+    expect(unchanged.headers.get('vary')).toBe('Authorization');
     expect(await unchanged.text()).toBe('');
 
     loadCrossRemCatalog.mockResolvedValue({ listings: [{ id: 'changed' }] });
@@ -108,7 +111,7 @@ describe('CrossRem catalog', () => {
   it('hides internal details when the catalog cannot be built', async () => {
     loadCrossRemCatalog.mockRejectedValue(new Error('private storage detail'));
 
-    const response = await GET(request(`Bearer ${token}`));
+    const response = await GET(request(`Bearer ${token}`, '*'));
 
     expect(response.status).toBe(503);
     expect(response.headers.get('cache-control')).toBe('private, no-store');

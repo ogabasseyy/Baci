@@ -8,6 +8,8 @@ Retain the last accepted snapshot and its ETag. Send the validator with `If-None
 
 Baci checks that the current snapshot is complete before hashing the exact response body. This ensures a conditional request still returns 503 when a binding is unresolved. The ETag saves transfer and importer work on an unchanged snapshot. The server still builds it from the cached feed source on each authenticated poll.
 
+The 200 and 304 responses send `Cache-Control: private, no-cache` and `Vary: Authorization`. Private clients can retain snapshots and must revalidate them with Baci before reuse. Shared caches cannot store them. Error responses send `Cache-Control: private, no-store`.
+
 ## Prepare a sandbox snapshot
 
 1. The repository pins the Ogabassey merchant UUID and the Google listing baseline in `ogabassey-listing-bindings.json`. For a synthetic sandbox, use an isolated copy with the synthetic merchant and equivalent fixture bindings.
@@ -61,6 +63,7 @@ Use the publisher as the brand fallback for these game listings when the product
 - Baci Commerce Operations owns the [hourly production alert](https://eu.posthog.com/project/202711/alerts?alert_type=insights&alert_id=01a1f253-1cf2-0000-3a0f-280633e9e51c) for authenticated 503s. It watches `crossrem_catalog_snapshot_unavailable` and alerts the owner when the hourly count exceeds zero. Verify receipt with a sandbox-only alert before enabling partner sync. The event carries the environment and no request data.
 - Confirm the partner's poll interval and measure both 200 and 304 response times at that interval in the hosted sandbox. Use the agreed retry schedule after 503.
 - Triage from server logs. The `CrossRem snapshot incomplete` warning gives the missing count and sampled listing IDs. Check the catalog, source condition, and image eligibility against those IDs.
+- For invalid prices or duplicate bindings, the projection warning identifies the affected listing ID.
 - A single unresolved binding blocks snapshot replacement. If the log says `CrossRem catalog is unconfigured`, check the baseline JSON and rerun the binding tests. If partner requests return 401 and the server logs `CrossRem catalog credential is unconfigured`, check the deployment's credential configuration before requesting a retry.
 - Fix transient source failures before retrying a sync. For a confirmed withdrawal, retain the original binding with `retired: true`, review and deploy the change, then verify a 200 snapshot omits only the intended retired IDs.
 - When the last listing is deliberately retired, verify 200 with an empty listings array and confirm the sandbox importer deactivates the remaining listings.

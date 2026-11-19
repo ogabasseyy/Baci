@@ -5,6 +5,7 @@ import { redactMonnifyCredentials } from './monnify-credential-redaction';
 import { hasMonnifyDuplicateFlag } from './monnify-duplicate-flag';
 import { isMonnifyDuplicateReferenceText } from './monnify-duplicate-reference';
 import { hasMonnifyNonDefinitiveCode } from './monnify-non-definitive-code';
+import { readMonnifyResponseCode } from './monnify-response-code';
 import { reportsMonnifyUnexpectedError } from './monnify-unexpected-error-text';
 import { hasMonnifyVendEvidence } from './monnify-vend-evidence';
 import { mentionsMonnifyVendEvidence } from './monnify-vend-evidence-text';
@@ -49,6 +50,7 @@ interface MonnifyAnswerReading {
   reportsUnexpectedError: boolean;
   showsVendEvidence: boolean;
   mentionsAuthWording: boolean;
+  responseCode: string | undefined;
 }
 
 /**
@@ -96,6 +98,7 @@ function readMonnifyAnswer(
     // Auth wording counts from the HTTP reason phrase too (a proxy may move
     // "Unauthorized" there while keeping a 400 status).
     mentionsAuthWording: mentionsMonnifyAuthWording(text),
+    responseCode: readMonnifyResponseCode(parsed),
   };
 }
 
@@ -125,8 +128,7 @@ export class MonnifyHttpError extends Error {
     status: number;
     statusText: string;
   }) {
-    // The reason phrase is scrubbed like the body: a proxy may echo a phone
-    // number or token there, and the message is persisted.
+    // The reason phrase is scrubbed like the body (it is persisted).
     const safeStatusText = sanitizeMonnifyErrorDetail(statusText);
     super(`${prefix}: ${status} ${safeStatusText}`.trim());
     Object.setPrototypeOf(this, MonnifyHttpError.prototype);
@@ -152,12 +154,17 @@ export class MonnifyHttpError extends Error {
     return this.#reading.reportsUnexpectedError;
   }
 
-  /** The JSON body carries a vend status or reference: a vend may exist. */
+  /** Monnify's own response code (e.g. "99"), safe to store. */
+  get responseCode() {
+    return this.#reading.responseCode;
+  }
+
   /** The body carries login/credential wording (never goes to Kuda). */
   get mentionsAuthWording() {
     return this.#reading.mentionsAuthWording;
   }
 
+  /** The JSON body carries a vend status or reference: a vend may exist. */
   get showsVendEvidence() {
     return this.#reading.showsVendEvidence;
   }

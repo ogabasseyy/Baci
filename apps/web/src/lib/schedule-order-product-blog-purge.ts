@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { hasCompleteScopedProductSlugs } from '@/app/api/internal/revalidate-products/has-complete-scoped-product-slugs';
 import { enrichProductPurgeEntries } from '@/lib/authoritative-product-purge-enrichment';
 import {
   revalidateProductSlugs,
@@ -74,9 +75,12 @@ export async function scheduleOrderProductBlogPurge({
   // is gated on resolving the slug.
   const products = normalizedProductIds.map((id) => ({ id }));
   let entries: Awaited<ReturnType<typeof enrichProductPurgeEntries>>['entries'];
+  let authoritativeSlugsById: ReadonlyMap<string, string> | undefined;
   let blogPostSlugs: string[];
   let blogPostSlugsIncomplete: boolean;
   let slugs: string[];
+  let enrichmentFailed = false;
+  let needsBroadPdpExpiry = false;
   try {
     const enriched = await enrichProductPurgeEntries(
       supabase,
@@ -84,6 +88,7 @@ export async function scheduleOrderProductBlogPurge({
       products
     );
     entries = enriched.entries;
+    authoritativeSlugsById = enriched.authoritativeSlugsById;
     blogPostSlugs = enriched.blogPostSlugs;
     blogPostSlugsIncomplete =
       enriched.blogPostSlugsIncomplete === true || targetSweepIncomplete;
@@ -98,6 +103,7 @@ export async function scheduleOrderProductBlogPurge({
     // expire the broad merchant product tags (incl. `product-details`) so
     // the first post-purge request cannot refill the edge from a stale
     // snapshot that preceding callers only stale-while-revalidated.
+    enrichmentFailed = true;
     console.warn(
       'Order-related product enrichment failed; continuing with caller hints',
       { merchantId, error }
@@ -106,9 +112,20 @@ export async function scheduleOrderProductBlogPurge({
     blogPostSlugs = [];
     blogPostSlugsIncomplete = true;
     slugs = collectResolvedProductSlugs(products);
-    revalidateProducts(merchantId, undefined, { expireImmediately: true });
+    needsBroadPdpExpiry =
+      revalidateProducts(merchantId, undefined, { expireImmediately: true }) !==
+      true;
   }
   if (entries.length === 0) {
+    if (
+      !enrichmentFailed &&
+      revalidateProducts(merchantId, undefined, { expireImmediately: true }) !==
+        true
+    ) {
+      await expireProductBlogCacheReliable(merchantId, {
+        expireWidePdpDetails: true,
+      });
+    }
     return true;
   }
 
@@ -117,9 +134,47 @@ export async function scheduleOrderProductBlogPurge({
   // first post-purge request and re-seed Cloudflare with stale stock. The
   // slugs ride along to the worker-safe expiry so standalone workers (no
   // request context) invalidate the same tags via the internal endpoint.
-  revalidateProductSlugs(merchantId, slugs, { expireImmediately: true });
+  const scopedSlugIdentifiers = Array.from(
+    new Set([...slugs, ...normalizedProductIds])
+  );
+  const slugsRevalidated =
+    revalidateProductSlugs(merchantId, scopedSlugIdentifiers, {
+      expireImmediately: true,
+    }) === true;
+  if (!enrichmentFailed) {
+    if (
+      !slugsRevalidated ||
+      blogPostSlugsIncomplete ||
+      !hasCompleteScopedProductSlugs(
+        products,
+        entries,
+        slugs,
+        authoritativeSlugsById,
+        { allowAssumedUnchangedSlugs: true }
+      )
+    ) {
+      needsBroadPdpExpiry =
+        revalidateProducts(merchantId, undefined, {
+          expireImmediately: true,
+        }) !== true;
+    } else {
+      const scopedRevalidated = revalidateProducts(merchantId, undefined, {
+        expireImmediately: true,
+        omitMerchantWidePdpDetails: true,
+      });
+      if (scopedRevalidated !== true) {
+        needsBroadPdpExpiry =
+          revalidateProducts(merchantId, undefined, {
+            expireImmediately: true,
+          }) !== true;
+      }
+    }
+  }
   const blogCacheExpired = await expireProductBlogCacheReliable(merchantId, {
     productSlugs: slugs,
+    ...(needsBroadPdpExpiry
+      ? { expireWidePdpDetails: true }
+      : { products, slugsUnchanged: true }),
   });
   if (!blogCacheExpired) {
     // The standalone worker path reports hard-expiry failure as `false`
@@ -180,9 +235,12 @@ export async function scheduleOrderProductBlogPurge({
         merchantId,
         merchantSlug,
         entries,
+        productIds: normalizedProductIds,
+        authoritativeSlugsById,
         productSlugs: slugs,
         blogPostSlugs,
         purgeWholeStorefront: blogPostSlugsIncomplete,
+        slugsUnchanged: true,
       });
     }
     return false;

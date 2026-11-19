@@ -12,7 +12,7 @@ const mockRevalidateProductSlugs = vi.fn();
 vi.mock('@/lib/cache-revalidation', () => ({
   revalidateProductSlugs: (...args: unknown[]) =>
     mockRevalidateProductSlugs(...args),
-  revalidateProducts: vi.fn(),
+  revalidateProducts: vi.fn(() => true),
 }));
 
 const mockScheduleStorefrontProductPurge = vi.fn();
@@ -69,7 +69,13 @@ vi.mock('@/lib/supabase/server', () => ({
     },
     from: vi.fn((table: string) => {
       if (table === 'products') {
+        const aliasQuery = {
+          eq: vi.fn(() => aliasQuery),
+          in: vi.fn(() => aliasQuery),
+          limit: vi.fn().mockResolvedValue({ data: [], error: null }),
+        };
         return {
+          select: vi.fn(() => aliasQuery),
           delete: vi.fn().mockReturnValue({
             eq: vi.fn().mockReturnValue({
               eq: vi.fn().mockReturnValue({
@@ -107,6 +113,7 @@ describe('POST /api/products/bulk-publish blog purge', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockRevalidateProductSlugs.mockReturnValue(true);
     updateData = [
       {
         id: 'product-1',
@@ -143,19 +150,27 @@ describe('POST /api/products/bulk-publish blog purge', () => {
     const response = await POST(createRequest());
 
     expect(response.status).toBe(200);
-    expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(MERCHANT_ID, [
-      'baci-phone',
-    ]);
+    expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
+      MERCHANT_ID,
+      ['baci-phone', 'product-1'],
+      { expireImmediately: true }
+    );
     expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
       'test-store',
-      [{ slug: 'baci-phone', categorySegment: 'phones' }]
+      [
+        { slug: 'baci-phone', categorySegment: 'phones' },
+        { slug: 'product-1', categorySegment: null },
+      ]
     );
     expect(mockScheduleProductBlogPurgeAfterResponse).toHaveBeenCalledWith({
       supabase: expect.anything(),
       merchantId: MERCHANT_ID,
       merchantSlug: 'test-store',
       productIds: ['product-1'],
-      entries: [{ slug: 'baci-phone', categorySegment: 'phones' }],
+      entries: [
+        { slug: 'baci-phone', categorySegment: 'phones' },
+        { slug: 'product-1', categorySegment: null },
+      ],
       categorySlugs: ['phones'],
       skipProductPurge: true,
     });

@@ -17,6 +17,10 @@ import type {
 } from '../types';
 import { ShippingBookingRejectedError } from '../types';
 import { BaseShippingProvider } from './base';
+import { parsePaidShipmentAfterSave } from './topship-parse-paid-shipment';
+import { requestTopshipPaymentAfterSave } from './topship-pay-after-save';
+import { topshipSaveFailure } from './topship-save-failure';
+import { readOkSaveResponse } from './topship-save-ok-response';
 
 // =============================================================================
 // CONFIGURATION
@@ -648,11 +652,14 @@ export class TopshipProvider extends BaseShippingProvider {
           body: JSON.stringify(payload),
         }
       );
-      const result = await this.readResponseBody(response);
-
       if (response.ok) {
-        return this.parseSavedShipment(result);
+        return readOkSaveResponse(
+          response,
+          (r) => this.readResponseBody(r),
+          (body) => this.parseSavedShipment(body)
+        );
       }
+      const result = await this.readResponseBody(response);
 
       const expectedPickupCharge = this.parseExpectedPickupCharge(result);
       if (
@@ -668,7 +675,8 @@ export class TopshipProvider extends BaseShippingProvider {
         status: response.status,
         error: this.getErrorMessage(result) || String(result),
       });
-      throw new Error(
+      throw topshipSaveFailure(
+        response.status,
         this.getErrorMessage(result) || 'Failed to create Topship shipment'
       );
     }
@@ -845,19 +853,28 @@ export class TopshipProvider extends BaseShippingProvider {
       pickupCharge: initialPickupCharge,
     });
 
-    const payResponse = await this.safeFetch(
-      `${TOPSHIP_BASE_URL}/pay-from-wallet`,
-      {
-        method: 'POST',
-        headers: this.getHeaders(),
-        body: JSON.stringify({
-          detail: {
-            shipmentId: savedShipment.id,
-          },
-        }),
-      }
-    );
-    const payResult = await this.readResponseBody(payResponse);
+    // Reading the body is part of the post-save boundary: the shipment exists,
+    // so a stream failure here must also surface as booked-but-not-saved.
+    const { response: payResponse, result: payResult } =
+      await requestTopshipPaymentAfterSave({
+        trackingId: savedShipment.trackingId,
+        log: (level, message, context) => this.log(level, message, context),
+        fetchPayment: async () => {
+          const response = await this.safeFetch(
+            `${TOPSHIP_BASE_URL}/pay-from-wallet`,
+            {
+              method: 'POST',
+              headers: this.getHeaders(),
+              body: JSON.stringify({
+                detail: {
+                  shipmentId: savedShipment.id,
+                },
+              }),
+            }
+          );
+          return { response, result: await this.readResponseBody(response) };
+        },
+      });
 
     if (!payResponse.ok) {
       const message =
@@ -869,11 +886,15 @@ export class TopshipProvider extends BaseShippingProvider {
         trackingId: savedShipment.trackingId,
       });
       throw new ShippingBookingRejectedError(
-        `Failed to confirm Topship shipment payment for tracking ${savedShipment.trackingId}: ${message}`
+        `Failed to confirm Topship shipment payment for tracking ${savedShipment.trackingId}: ${message}`,
+        savedShipment.trackingId
       );
     }
 
-    const paidShipment = this.parseSavedShipment(payResult);
+    const paidShipment = parsePaidShipmentAfterSave(
+      () => this.parseSavedShipment(payResult),
+      savedShipment.trackingId
+    );
 
     return {
       provider: 'TOPSHIP',

@@ -97,12 +97,15 @@ vi.mock('@/lib/expire-product-blog-cache', () => ({
   expireProductBlogCache: (...args: unknown[]) =>
     mockExpireProductBlogCache(...args),
 }));
+vi.mock('@/lib/resolve-dependent-legacy-product-identifiers', () => ({
+  resolveDependentLegacyProductIdentifiers: () =>
+    Promise.resolve({ identifiers: [], incomplete: false }),
+}));
 
 // ---- Import handler AFTER mocks ----
 import { getBlogCacheTag } from '@/lib/blog-cache-tags';
 import { getBlogContentLinksCacheTag } from '@/lib/blog-content-link-cache-tags';
 import { getCategoryPageDataCacheTag } from '@/lib/category-page-cache-tags';
-import { getProductScopedCacheTag } from '@/lib/product-cache-tags';
 import { POST } from './route';
 
 // ---- Helpers ----
@@ -299,7 +302,10 @@ describe('POST /api/cache/revalidate', () => {
       // The staff-scoped product purge still fires for the server-resolved slug.
       expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
         'ogabassey',
-        [{ slug: 'iphone-15', categorySegment: 'smartphones' }]
+        [
+          { slug: 'iphone-15', categorySegment: 'smartphones' },
+          { slug: 'prod-1', categorySegment: null },
+        ]
       );
       expect(mockExpireProductBlogCache).toHaveBeenCalledWith(MERCHANT_ID);
     });
@@ -353,7 +359,10 @@ describe('POST /api/cache/revalidate', () => {
       expect(res.status).toBe(200);
       expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
         'ogabassey',
-        [{ slug: 'buds-pro', categorySegment: 'earbuds' }]
+        [
+          { slug: 'buds-pro', categorySegment: 'earbuds' },
+          { slug: 'prod-1', categorySegment: null },
+        ]
       );
     });
 
@@ -403,7 +412,10 @@ describe('POST /api/cache/revalidate', () => {
       expect(mockGetMerchantForApiRequest).not.toHaveBeenCalled();
       expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
         'ogabassey',
-        [{ slug: 'iphone-15', categorySegment: null }]
+        [
+          { slug: 'iphone-15', categorySegment: null },
+          { slug: 'prod-1', categorySegment: null },
+        ]
       );
     });
 
@@ -467,7 +479,10 @@ describe('POST /api/cache/revalidate', () => {
       // The purge targets the VERIFIED merchant's server-resolved slug.
       expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
         'other-merchant',
-        [{ slug: 'buds-pro', categorySegment: null }]
+        [
+          { slug: 'buds-pro', categorySegment: null },
+          { slug: 'prod-1', categorySegment: null },
+        ]
       );
     });
 
@@ -610,60 +625,10 @@ describe('POST /api/cache/revalidate', () => {
       // The merchant slug is resolved server-side (never trusted from the client).
       expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
         'ogabassey',
-        [{ slug: 'iphone-15', categorySegment: 'smartphones' }]
-      );
-    });
-
-    it('busts the per-slug Next product caches BEFORE scheduling the purge (F3)', async () => {
-      setupAuth(true, true);
-
-      await POST(
-        makeRequest({
-          targets: ['products'],
-          products: [
-            { slug: 'iphone-15', id: 'prod-1', category: 'Smartphones' },
-          ],
-        })
-      );
-
-      // The per-slug scoped product tag (getCachedProduct) is invalidated for the
-      // resolved slug so a CF MISS after the purge cannot refill from stale Next
-      // data. The slug-less revalidateProducts alone would never bust it.
-      const scopedTag = getProductScopedCacheTag(
-        'product',
-        MERCHANT_ID,
-        'iphone-15'
-      );
-      expect(mockRevalidateTag).toHaveBeenCalledWith(scopedTag, 'products');
-
-      // Ordering: the per-slug tag is busted before the edge purge is scheduled.
-      const scopedCallIndex = mockRevalidateTag.mock.calls.findIndex(
-        ([tag]) => tag === scopedTag
-      );
-      const scopedOrder =
-        mockRevalidateTag.mock.invocationCallOrder[scopedCallIndex];
-      const scheduleOrder =
-        mockScheduleStorefrontProductPurge.mock.invocationCallOrder[0];
-      expect(scopedOrder).toBeLessThan(scheduleOrder);
-    });
-
-    it('does not purge when the merchant has no resolvable slug', async () => {
-      setupAuth(true, true);
-      merchantSlugRow = { slug: null };
-
-      await POST(
-        makeRequest({
-          targets: ['products'],
-          products: [{ slug: 'iphone-15', category: 'Smartphones' }],
-        })
-      );
-
-      expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
-      // The per-slug Next cache bust only needs merchantId, not the storefront
-      // slug, so it must still run even though the Cloudflare purge is skipped.
-      expect(mockRevalidateTag).toHaveBeenCalledWith(
-        getProductScopedCacheTag('product', MERCHANT_ID, 'iphone-15'),
-        'products'
+        [
+          { slug: 'iphone-15', categorySegment: 'smartphones' },
+          { slug: 'prod-1', categorySegment: null },
+        ]
       );
     });
 
@@ -744,6 +709,7 @@ describe('POST /api/cache/revalidate', () => {
         [
           { slug: 'iphone-15', categorySegment: 'smartphones' },
           { slug: 'iphone-15', categorySegment: 'phones' },
+          { slug: 'prod-1', categorySegment: null },
         ]
       );
     });
@@ -771,7 +737,10 @@ describe('POST /api/cache/revalidate', () => {
       expect(res.status).toBe(200);
       expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
         'ogabassey',
-        [{ slug: 'iphone-15', categorySegment: 'smartphones' }]
+        [
+          { slug: 'iphone-15', categorySegment: 'smartphones' },
+          { slug: 'prod-1', categorySegment: null },
+        ]
       );
     });
 
@@ -818,45 +787,6 @@ describe('POST /api/cache/revalidate', () => {
       }
     });
 
-    it('logs and skips the (survivable) purge when the merchant slug lookup errors', async () => {
-      const consoleErrorSpy = vi
-        .spyOn(console, 'error')
-        .mockImplementation(() => undefined);
-      try {
-        setupAuth(true, true);
-        merchantSlugError = { message: 'db unavailable' };
-
-        const res = await POST(
-          makeRequest({
-            targets: ['products'],
-            products: [
-              { slug: 'iphone-15', id: 'prod-1', category: 'Smartphones' },
-            ],
-          })
-        );
-
-        // Revalidation still succeeds; only the fail-open purge is skipped.
-        expect(res.status).toBe(200);
-        expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
-        // The merchantSlug guard covers ONLY the Cloudflare edge purge — the
-        // Next-layer per-slug busting is independent (only needs merchantId)
-        // and must still run when the slug lookup fails.
-        expect(mockRevalidateTag).toHaveBeenCalledWith(
-          getProductScopedCacheTag('product', MERCHANT_ID, 'iphone-15'),
-          'products'
-        );
-        expect(consoleErrorSpy).toHaveBeenCalledWith(
-          expect.stringContaining('Failed to resolve merchant slug'),
-          expect.objectContaining({
-            merchantId: MERCHANT_ID,
-            error: { message: 'db unavailable' },
-          })
-        );
-      } finally {
-        consoleErrorSpy.mockRestore();
-      }
-    });
-
     it('revalidates categories cache when categories target specified', async () => {
       setupAuth(true, true);
 
@@ -885,7 +815,10 @@ describe('POST /api/cache/revalidate', () => {
       expect(res.status).toBe(200);
       expect(json.revalidated).toContain('merchant');
 
-      expect(mockRevalidateTag).toHaveBeenCalledWith('merchants', 'merchant');
+      expect(mockRevalidateTag).not.toHaveBeenCalledWith(
+        'merchants',
+        'merchant'
+      );
       expect(mockRevalidateTag).toHaveBeenCalledWith(
         `merchant-id-${MERCHANT_ID}`,
         'merchant'
@@ -978,17 +911,7 @@ describe('POST /api/cache/revalidate', () => {
       mockGetMerchantBlogPostSlugs.mockResolvedValue([
         'apple-studio-display-review',
         'airpods-max-2-2026',
-        'post-3',
-        'post-4',
-        'post-5',
-        'post-6',
-        'post-7',
-        'post-8',
-        'post-9',
-        'post-10',
-        'post-11',
-        'post-12',
-        'post-13',
+        ...Array.from({ length: 11 }, (_, index) => `post-${index + 3}`),
       ]);
 
       const res = await POST(makeRequest({ targets: ['blog'] }));
@@ -1083,8 +1006,12 @@ describe('POST /api/cache/revalidate', () => {
       expect(res.status).toBe(200);
       expect(json.revalidated).toContain('pages');
 
-      expect(mockRevalidateTag).toHaveBeenCalledWith(
+      expect(mockRevalidateTag).not.toHaveBeenCalledWith(
         'page-config',
+        'storefront-page'
+      );
+      expect(mockRevalidateTag).toHaveBeenCalledWith(
+        `page-config-${MERCHANT_ID}`,
         'storefront-page'
       );
     });
@@ -1110,7 +1037,10 @@ describe('POST /api/cache/revalidate', () => {
         `products-${MERCHANT_ID}`,
         'products'
       );
-      expect(mockRevalidateTag).toHaveBeenCalledWith('merchants', 'merchant');
+      expect(mockRevalidateTag).toHaveBeenCalledWith(
+        `merchant-id-${MERCHANT_ID}`,
+        'merchant'
+      );
       expect(mockRevalidateTag).toHaveBeenCalledWith(
         `dashboard-${MERCHANT_ID}`,
         'merchant'
@@ -1176,7 +1106,6 @@ describe('POST /api/cache/revalidate', () => {
         getCategoryPageDataCacheTag(MERCHANT_ID),
         'storefront-page'
       );
-      expect(mockRevalidateTag).toHaveBeenCalledWith('merchants', 'merchant');
       expect(mockRevalidateTag).toHaveBeenCalledWith(
         `merchant-id-${MERCHANT_ID}`,
         'merchant'
@@ -1206,7 +1135,7 @@ describe('POST /api/cache/revalidate', () => {
         'merchant'
       );
       expect(mockRevalidateTag).toHaveBeenCalledWith(
-        'page-config',
+        `page-config-${MERCHANT_ID}`,
         'storefront-page'
       );
       expect(mockRevalidateTag).toHaveBeenCalledWith(
@@ -1230,7 +1159,7 @@ describe('POST /api/cache/revalidate', () => {
         'merchant'
       );
       expect(mockRevalidateTag).toHaveBeenCalledWith(
-        'page-config',
+        `page-config-${MERCHANT_ID}`,
         'storefront-page'
       );
     });

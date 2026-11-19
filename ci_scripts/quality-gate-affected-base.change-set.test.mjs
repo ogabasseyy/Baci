@@ -6,32 +6,11 @@ import { join } from 'node:path';
 import test from 'node:test';
 import {
   commit,
-  createRepo,
+  gateFor,
   git,
-  run,
+  rebaseOnto,
   writeFile,
 } from './quality-gate-affected-base.test-helpers.mjs';
-
-// Commits the files written so far as the new origin/main base.
-function rebaseOnto(dir) {
-  git(dir, 'add', '-A');
-  const base = commit(dir, 'base files');
-  git(dir, 'update-ref', 'refs/remotes/origin/main', base);
-  return base;
-}
-
-// Runs the helper after `setup`; setup may return a new base.
-function gateFor(setup, env = {}) {
-  const dir = createRepo();
-  try {
-    const initial = commit(dir, 'base');
-    git(dir, 'update-ref', 'refs/remotes/origin/main', initial);
-    const base = setup(dir) ?? initial;
-    return { stdout: run({ cwd: dir, args: [dir], env }).stdout, base };
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-}
 
 test('keeps the full gate for an uncommitted change outside workspace packages', () => {
   const { stdout } = gateFor((dir) => {

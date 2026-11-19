@@ -1,6 +1,6 @@
 // Shared fixtures for the quality-gate-affected-base.sh tests.
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -65,4 +65,25 @@ export function run({ cwd, args = [], env = {} }) {
 export function writeFile(dir, path, content = 'x\n') {
   mkdirSync(dirname(join(dir, path)), { recursive: true });
   writeFileSync(join(dir, path), content);
+}
+
+// Commits the files written so far as the new origin/main base.
+export function rebaseOnto(dir) {
+  git(dir, 'add', '-A');
+  const base = commit(dir, 'base files');
+  git(dir, 'update-ref', 'refs/remotes/origin/main', base);
+  return base;
+}
+
+// Runs the helper after `setup`; setup may return a new base.
+export function gateFor(setup, env = {}) {
+  const dir = createRepo();
+  try {
+    const initial = commit(dir, 'base');
+    git(dir, 'update-ref', 'refs/remotes/origin/main', initial);
+    const base = setup(dir) ?? initial;
+    return { stdout: run({ cwd: dir, args: [dir], env }).stdout, base };
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 }

@@ -1,4 +1,5 @@
 import type { FailedOrder } from '@/hooks/useFailedOrders';
+import { compareFollowUpDatesDesc } from './compare-follow-up-dates-desc';
 
 export type GroupedFailedOrderListItem =
   | {
@@ -12,6 +13,10 @@ export type GroupedFailedOrderListItem =
       key: string;
       type: 'item';
     };
+
+export function getFollowUpActivityAt(order: FailedOrder): string {
+  return order.follow_up_at ?? order.created_at;
+}
 
 export function getLocalDateKey(value: string | Date): string | null {
   const date = value instanceof Date ? value : new Date(value);
@@ -53,10 +58,13 @@ export function groupFailedOrdersByDate(
   stickyHeaderIndices: number[];
 } {
   const groups = new Map<string, FailedOrder[]>();
+  const oxygenReviews: FailedOrder[] = [];
 
   for (const order of orders) {
-    const dateKey = getLocalDateKey(order.created_at);
-    if (!dateKey) {
+    const dateKey = getLocalDateKey(getFollowUpActivityAt(order)) ?? 'undated';
+
+    if (order.oxygen_follow_up_status === 'needs_review') {
+      oxygenReviews.push(order);
       continue;
     }
 
@@ -76,7 +84,28 @@ export function groupFailedOrdersByDate(
   const data: GroupedFailedOrderListItem[] = [];
   const stickyHeaderIndices: number[] = [];
 
-  const sortedDateKeys = [...groups.keys()].sort((a, b) => b.localeCompare(a));
+  if (oxygenReviews.length) {
+    stickyHeaderIndices.push(data.length);
+    data.push({
+      dateKey: 'oxygen-review',
+      key: 'failed-orders-header-oxygen-review',
+      title: 'Oxygen · Needs review',
+      type: 'header',
+    });
+    oxygenReviews.sort((a, b) =>
+      compareFollowUpDatesDesc(
+        getFollowUpActivityAt(a),
+        getFollowUpActivityAt(b)
+      )
+    );
+    for (const order of oxygenReviews) {
+      data.push({ data: order, key: `failed-order-${order.id}`, type: 'item' });
+    }
+  }
+
+  const sortedDateKeys = [...groups.keys()].sort((a, b) =>
+    a === 'undated' ? 1 : b === 'undated' ? -1 : b.localeCompare(a)
+  );
 
   for (const dateKey of sortedDateKeys) {
     stickyHeaderIndices.push(data.length);
@@ -84,13 +113,18 @@ export function groupFailedOrdersByDate(
     data.push({
       dateKey,
       key: `failed-orders-header-${dateKey}`,
-      title: getDateGroupTitle(dateKey, todayKey, yesterdayKey),
+      title:
+        dateKey === 'undated'
+          ? 'Date unavailable'
+          : getDateGroupTitle(dateKey, todayKey, yesterdayKey),
       type: 'header',
     });
 
-    const groupOrders = [...(groups.get(dateKey) ?? [])].sort(
-      (a, b) =>
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    const groupOrders = [...(groups.get(dateKey) ?? [])].sort((a, b) =>
+      compareFollowUpDatesDesc(
+        getFollowUpActivityAt(a),
+        getFollowUpActivityAt(b)
+      )
     );
 
     for (const order of groupOrders) {

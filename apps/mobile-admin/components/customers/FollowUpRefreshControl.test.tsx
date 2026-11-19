@@ -7,9 +7,11 @@ import CustomersScreen from '../../app/(admin)/(tabs)/customers';
 const mocks = vi.hoisted(() => ({
   invalidateQueries: vi.fn(),
   refetchFailed: vi.fn(),
+  refetchOxygen: vi.fn(),
   useCustomerStats: vi.fn(),
   useCustomers: vi.fn(),
   useFailedOrders: vi.fn(),
+  useOxygenFollowUps: vi.fn(),
   useMerchant: vi.fn(),
 }));
 
@@ -110,6 +112,10 @@ vi.mock('@/hooks/useFailedOrders', () => ({
   useFailedOrders: mocks.useFailedOrders,
 }));
 
+vi.mock('@/hooks/useOxygenFollowUps', () => ({
+  useOxygenFollowUps: mocks.useOxygenFollowUps,
+}));
+
 vi.mock('@/hooks/useMerchant', () => ({
   useMerchant: mocks.useMerchant,
 }));
@@ -143,6 +149,13 @@ describe('CustomersScreen Follow Up pull-to-refresh', () => {
       isFetching: false,
       isLoading: false,
       refetch: mocks.refetchFailed,
+    });
+    mocks.useOxygenFollowUps.mockReturnValue({
+      data: [],
+      isError: false,
+      isFetching: false,
+      isLoading: false,
+      refetch: mocks.refetchOxygen,
     });
   });
 

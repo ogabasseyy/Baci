@@ -58,12 +58,33 @@ describe('useQuizWaitingRoom', () => {
         .mockResolvedValue([event({ serverNow: undefined })]);
       renderAtCountdownZero(refresh);
 
+      // Offset is floor(0.999 * 3001) = 2997 ms, reached on the 3 s tick.
       await advance(60_000);
       expect(refresh).not.toHaveBeenCalled();
-      await advance(750);
+      await advance(2_750);
       expect(refresh).not.toHaveBeenCalled();
       await advance(250);
       expect(refresh).toHaveBeenCalledTimes(1);
+    });
+
+    it('widens the gap to 1 s, 2 s, 4 s then 5 s while the quiz is still scheduled', async () => {
+      randomSpy.mockReturnValue(0.5);
+      const refresh = jest
+        .fn<() => Promise<QuizEvent[]>>()
+        .mockResolvedValue([event({ serverNow: undefined })]);
+      renderAtCountdownZero(refresh);
+
+      await advance(61_500);
+      expect(refresh).toHaveBeenCalledTimes(1);
+      // The server keeps answering "scheduled": 1 s, 2 s, 4 s, 5 s (cap), 5 s.
+      let calls = 1;
+      for (const gap of [1_000, 2_000, 4_000, 5_000, 5_000]) {
+        await advance(gap - 1);
+        expect(refresh).toHaveBeenCalledTimes(calls);
+        await advance(1);
+        calls += 1;
+        expect(refresh).toHaveBeenCalledTimes(calls);
+      }
     });
 
     it('refreshes at once when the random offset is zero', async () => {
@@ -83,8 +104,8 @@ describe('useQuizWaitingRoom', () => {
         .mockRejectedValue(new Error('offline'));
       renderAtCountdownZero(refresh);
 
-      // Offset is floor(0.5 * 1001) = 500 ms.
-      await advance(60_499);
+      // Offset is floor(0.5 * 3001) = 1500 ms.
+      await advance(61_499);
       expect(refresh).not.toHaveBeenCalled();
       await advance(1);
       expect(refresh).toHaveBeenCalledTimes(1);
@@ -120,11 +141,11 @@ describe('useQuizWaitingRoom', () => {
         .mockResolvedValue([event({ serverNow: undefined })]);
       renderAtCountdownZero(refresh);
 
-      await advance(60_500); // call 1 fails
+      await advance(61_500); // call 1 fails
       await advance(1_000); // call 2 fails
       await advance(2_000); // call 3 succeeds (event still scheduled)
       expect(refresh).toHaveBeenCalledTimes(3);
-      // Back to the 1 s cadence, not the 4 s failure backoff.
+      // Back to a 1 s gap, not the 4 s failure backoff.
       await advance(999);
       expect(refresh).toHaveBeenCalledTimes(3);
       await advance(1);
@@ -143,10 +164,10 @@ describe('useQuizWaitingRoom', () => {
       // start has moved 30 s.
       await advance(60_000);
       expect(refresh).toHaveBeenCalledTimes(1);
-      // Second zero at 12:00:30 draws its own offset (about 1 s here), so it
+      // Second zero at 12:00:30 draws its own offset (about 3 s here), so it
       // neither fires at once nor repeats the first one.
       randomSpy.mockReturnValue(0.999);
-      await advance(30_000 + 750);
+      await advance(30_000 + 2_750);
       expect(refresh).toHaveBeenCalledTimes(1);
       await advance(250);
       expect(refresh).toHaveBeenCalledTimes(2);

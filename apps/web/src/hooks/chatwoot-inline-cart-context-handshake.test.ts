@@ -15,11 +15,11 @@ const conversationId = 905;
 const requestId = 'request-0001';
 const widgetOrigin = 'https://chat.example.com';
 
-function requestMessage(): Message {
+function requestMessage(id = requestId): Message {
   return {
     event: 'baci-commerce-context-request',
     data: {
-      requestId,
+      requestId: id,
       conversationId,
       websiteToken: 'synthetic-widget-token-123456',
       visitorTokenSha256: 'a'.repeat(64),
@@ -54,6 +54,9 @@ function input(
     message,
     post: vi.fn(),
     setAuthorized: vi.fn(),
+    ensureCartSession: vi.fn(
+      async (): Promise<{ ok: true } | { ok: false } | null> => ({ ok: true })
+    ),
     setChallenge: vi.fn((token: string | null, expiresAt: number) => {
       currentChallenge = { token, expiresAt };
     }),
@@ -76,7 +79,11 @@ describe('handleChatwootInlineContextHandshake', () => {
 
     await handleChatwootInlineContextHandshake(value);
 
+    expect(value.ensureCartSession).toHaveBeenCalledTimes(1);
     expect(value.begin).toHaveBeenCalledWith(conversationId, requestId);
+    expect(value.ensureCartSession.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.postChatwootBridgeJson.mock.invocationCallOrder[0]
+    );
     expect(value.setChallenge).toHaveBeenCalledWith(
       'signed-challenge-token',
       expect.any(Number)
@@ -84,6 +91,93 @@ describe('handleChatwootInlineContextHandshake', () => {
     expect(value.post).toHaveBeenCalledWith(
       'baci-commerce-context-challenge:',
       { requestId, challengeToken: 'signed-challenge-token' }
+    );
+  });
+
+  it('does not ask the server for a challenge when cart-session provisioning fails', async () => {
+    const value = input(requestMessage());
+    value.ensureCartSession.mockResolvedValue({ ok: false });
+
+    await handleChatwootInlineContextHandshake(value);
+
+    expect(mocks.postChatwootBridgeJson).not.toHaveBeenCalled();
+    expect(value.setChallenge).not.toHaveBeenCalled();
+    expect(value.post).toHaveBeenCalledWith('baci-commerce-context-denied:', {
+      requestId,
+    });
+  });
+
+  it('does not issue a challenge if the request becomes stale during provisioning', async () => {
+    let current = true;
+    let finishProvisioning: ((value: { ok: true }) => void) | undefined;
+    const value = input(requestMessage());
+    value.isCurrent.mockImplementation(() => current);
+    value.ensureCartSession.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishProvisioning = resolve;
+        })
+    );
+
+    const pending = handleChatwootInlineContextHandshake(value);
+    await vi.waitFor(() => expect(finishProvisioning).toBeTypeOf('function'));
+    current = false;
+    finishProvisioning?.({ ok: true });
+    await pending;
+
+    expect(mocks.postChatwootBridgeJson).not.toHaveBeenCalled();
+    expect(value.post).not.toHaveBeenCalled();
+  });
+
+  it('coalesces overlapping requests but challenges only the current request after provisioning', async () => {
+    let activeRequestId: string | null = null;
+    let finishProvisioning: ((value: { ok: true }) => void) | undefined;
+    // The production ensureCartSession is a single-flight ensureCart: every
+    // overlapping caller receives the same in-flight promise.
+    const sharedFlight = new Promise<{ ok: true }>((resolve) => {
+      finishProvisioning = resolve;
+    });
+    const ensureCartSession = vi.fn(() => sharedFlight);
+    const first = {
+      ...input(requestMessage('request-0001')),
+      begin: vi.fn((_conversationId: number, id: string) => {
+        activeRequestId = id;
+      }),
+      ensureCartSession,
+      isCurrent: vi.fn((_conversationId: number, id: string) =>
+        Boolean(activeRequestId === id)
+      ),
+    };
+    const second = {
+      ...input(requestMessage('request-0002')),
+      begin: first.begin,
+      ensureCartSession,
+      isCurrent: first.isCurrent,
+    };
+    mocks.postChatwootBridgeJson.mockImplementation(async (_path, body) => ({
+      requestId: body.requestId as string,
+      widgetOrigin,
+      challengeToken: 'signed-challenge-token',
+      expiresAt: Math.floor(Date.now() / 1000) + 300,
+    }));
+
+    const staleRequest = handleChatwootInlineContextHandshake(first);
+    await vi.waitFor(() => expect(finishProvisioning).toBeTypeOf('function'));
+    const currentRequest = handleChatwootInlineContextHandshake(second);
+    await vi.waitFor(() => expect(ensureCartSession).toHaveBeenCalledTimes(2));
+    finishProvisioning?.({ ok: true });
+    await Promise.all([staleRequest, currentRequest]);
+
+    expect(mocks.postChatwootBridgeJson).toHaveBeenCalledTimes(1);
+    expect(mocks.postChatwootBridgeJson).toHaveBeenCalledWith(
+      '/api/storefront/chatwoot/context/challenge',
+      expect.objectContaining({ requestId: 'request-0002' }),
+      'merchant-store'
+    );
+    expect(first.post).not.toHaveBeenCalled();
+    expect(second.post).toHaveBeenCalledWith(
+      'baci-commerce-context-challenge:',
+      expect.objectContaining({ requestId: 'request-0002' })
     );
   });
 

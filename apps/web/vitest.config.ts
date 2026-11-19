@@ -80,6 +80,10 @@ const sharedAliases = [
     replacement: path.join(sharedPackagePath, 'contracts/index.ts'),
   },
   {
+    find: /^@baci\/shared\/cart$/,
+    replacement: path.join(sharedPackagePath, 'cart/index.ts'),
+  },
+  {
     find: /^@baci\/shared\/lib$/,
     replacement: path.join(sharedPackagePath, 'lib/index.ts'),
   },

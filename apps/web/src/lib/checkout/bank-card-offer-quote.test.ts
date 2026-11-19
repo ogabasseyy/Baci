@@ -1,12 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { BankCardOffer } from '@/schemas/bank-card-offer';
-import {
-  bankCardOfferAuthorization,
-  calculateBankCardOfferMerchandiseRefund,
-  hashBankCardOfferFilter,
-  verifyBankCardOfferAttempt,
-} from './bank-card-offer-payment';
+import { bankCardOfferAuthorization } from './bank-card-offer-authorization';
+import { verifyBankCardOfferAttempt } from './bank-card-offer-payment';
 import { quoteBankCardOffer } from './bank-card-offer-quote';
+import { calculateBankCardOfferMerchandiseRefund } from './calculate-bank-card-offer-merchandise-refund';
+import { hashBankCardOfferFilter } from './hash-bank-card-offer-filter';
 
 const merchantId = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
 const productId = '821516a6-f4b4-427e-83fb-757ed7658082';
@@ -86,6 +84,7 @@ describe('bank card offer quotes', () => {
       quote,
       acceptedFilterPolicyHash: hashBankCardOfferFilter(quote.paymentPolicy),
       amountKobo: 22_500,
+      adjustmentsKobo: 1499,
       currency: 'NGN' as const,
       customerEmail: 'buyer@example.test',
       domain: 'test' as const,
@@ -160,6 +159,84 @@ describe('bank card offer quotes', () => {
         offer: { ...offer, ...override },
         merchantId,
         items,
+        now,
+      })
+    ).toBeNull();
+  });
+
+  it.each([
+    0,
+    -1,
+    1.5,
+    Number.MAX_SAFE_INTEGER + 1,
+  ])('rejects quantity %s', (quantity) => {
+    expect(() =>
+      quoteBankCardOffer({
+        offer,
+        merchantId,
+        items: [{ ...items[0], quantity }],
+        now,
+      })
+    ).toThrow('quantity');
+  });
+
+  it.each([
+    -1,
+    1.5,
+    Number.MAX_SAFE_INTEGER + 1,
+  ])('rejects unit amount %s', (unitPriceKobo) => {
+    expect(() =>
+      quoteBankCardOffer({
+        offer,
+        merchantId,
+        items: [{ ...items[0], unitPriceKobo }],
+        now,
+      })
+    ).toThrow('unit price');
+  });
+
+  it('rejects cumulative unit and money overflow', () => {
+    expect(() =>
+      quoteBankCardOffer({
+        offer,
+        merchantId,
+        items: items.map((item) => ({ ...item, quantity: 6_000 })),
+        now,
+      })
+    ).toThrow('quantity');
+    expect(() =>
+      quoteBankCardOffer({
+        offer,
+        merchantId,
+        items: [{ ...items[0], unitPriceKobo: Number.MAX_SAFE_INTEGER }],
+        now,
+      })
+    ).toThrow('safe integer');
+  });
+
+  it('accepts the exact campaign start and rounds up a half kobo', () => {
+    expect(
+      quoteBankCardOffer({
+        offer,
+        merchantId,
+        items: [
+          { ...items[0], unitPriceKobo: 30, quantity: 1 },
+          { ...items[1], unitPriceKobo: 0 },
+        ],
+        now: Date.parse(offer.startsAt),
+      })
+    ).toMatchObject({
+      discountKobo: 2,
+      allocations: [{ unitNetAmountsKobo: [28] }, { unitNetAmountsKobo: [0] }],
+    });
+  });
+
+  it('rejects a discount that rounds to the whole merchandise total', () => {
+    expect(
+      quoteBankCardOffer({
+        offer: { ...offer, discountBasisPoints: 9_999 },
+        merchantId,
+        items: [{ ...items[0], unitPriceKobo: 25, quantity: 1 }],
         now,
       })
     ).toBeNull();

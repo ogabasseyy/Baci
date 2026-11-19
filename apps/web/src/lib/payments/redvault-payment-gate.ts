@@ -1,6 +1,6 @@
 import { z } from 'zod';
+import { createPaystackCardOfferMetadata } from './create-paystack-card-offer-metadata';
 import {
-  createPaystackCardOfferMetadata,
   type PaystackVerifiedCardEvidence,
   verifyPaystackCardOffer,
 } from './paystack-card-offer';

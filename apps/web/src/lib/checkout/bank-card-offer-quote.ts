@@ -79,7 +79,7 @@ export function quoteBankCardOffer({
     BASIS_POINTS;
   const cap = BigInt(offer.maximumDiscountKobo);
   const discount = roundedDiscount < cap ? roundedDiscount : cap;
-  if (discount === 0n) return null;
+  if (discount === 0n || discount >= productSubtotal) return null;
 
   // Allocate against running eligible value so the stored unit discounts sum
   // to the capped total, including when the proportion contains half a kobo.

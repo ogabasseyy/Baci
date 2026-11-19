@@ -18,13 +18,52 @@ const offer = {
 };
 
 describe('bank card offer configuration', () => {
-  it.each(['035', '232'])('accepts complete terms for %s', (bankCode) => {
-    expect(bankCardOfferSchema.safeParse({ ...offer, bankCode }).success).toBe(
-      true
-    );
+  it.each([
+    ['035', 'Wema Bank'],
+    ['232', 'Sterling Bank'],
+  ])('accepts complete terms for %s', (bankCode, verifiedIssuerName) => {
+    expect(
+      bankCardOfferSchema.safeParse({ ...offer, bankCode, verifiedIssuerName })
+        .success
+    ).toBe(true);
+  });
+
+  it.each([1, 9999])('accepts discount bounds %s', (discountBasisPoints) => {
+    expect(
+      bankCardOfferSchema.safeParse({
+        ...offer,
+        discountBasisPoints,
+        maximumDiscountKobo: Number.MAX_SAFE_INTEGER,
+      }).success
+    ).toBe(true);
   });
 
   it.each([
+    { id: 'bad id' },
+    { id: 'a' },
+    { id: 'a'.repeat(65) },
+    { merchantId: 'invalid' },
+    { bankCode: '232' },
+    { displayName: ' ' },
+    { eligibleProductIds: ['invalid'] },
+    {
+      eligibleProductIds: [
+        offer.eligibleProductIds[0],
+        offer.eligibleProductIds[0].toUpperCase(),
+      ],
+    },
+    { cardBrands: [] },
+    { cardBrands: ['unknown'] },
+    { startsAt: 'invalid' },
+    { endsAt: '2026-11-28T00:00:00' },
+    { enabled: 'true' },
+    { extra: true },
+    { discountBasisPoints: 0 },
+    { discountBasisPoints: 1.5 },
+    { discountBasisPoints: 10_000 },
+    { maximumDiscountKobo: 0 },
+    { maximumDiscountKobo: 0.5 },
+    { maximumDiscountKobo: Number.MAX_SAFE_INTEGER + 1 },
     { bankCode: '033' },
     { approvedTermsReference: '' },
     { verifiedIssuerName: '' },

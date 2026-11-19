@@ -1,0 +1,42 @@
+import 'server-only';
+import { initializeTransaction } from '@/lib/paystack';
+import { bankCardOfferAuthorization } from './bank-card-offer-authorization';
+import type { BankCardOfferAttempt } from './bank-card-offer-payment';
+
+export async function initializeBankCardOfferPaystack({
+  attempt,
+  callbackUrl,
+  subaccount,
+  transactionChargeKobo,
+}: {
+  // The caller must exclusively claim the persisted attempt before submission.
+  attempt: BankCardOfferAttempt;
+  callbackUrl: string;
+  subaccount: string;
+  transactionChargeKobo: number;
+}) {
+  const metadata = bankCardOfferAuthorization(attempt);
+  const result = await initializeTransaction({
+    amount: attempt.amountKobo,
+    email: attempt.customerEmail,
+    reference: attempt.reference,
+    callback_url: callbackUrl,
+    subaccount,
+    transaction_charge: transactionChargeKobo,
+    bearer: 'account',
+    channels: ['card'],
+    metadata,
+  });
+  const url = new URL(result.authorization_url);
+  if (
+    result.reference !== attempt.reference ||
+    url.protocol !== 'https:' ||
+    url.hostname !== 'checkout.paystack.com' ||
+    url.username ||
+    url.password ||
+    url.port
+  ) {
+    throw new Error('Unverified bank offer initialization response');
+  }
+  return url.href;
+}

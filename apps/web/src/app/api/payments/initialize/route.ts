@@ -1170,6 +1170,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (orderSnapshot.payment_method === 'bank_card_offer') {
+      return createErrorResponse(
+        'This order requires bank card offer payment initialization',
+        'BANK_CARD_OFFER_PAYMENT_METHOD_REQUIRED',
+        409
+      );
+    }
     const orderRequiresRedvault =
       orderSnapshot.payment_method === 'uba_redvault';
     if (orderRequiresRedvault && !redvaultRequested) {

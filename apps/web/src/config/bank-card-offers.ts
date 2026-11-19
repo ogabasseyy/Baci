@@ -1,18 +1,8 @@
 import 'server-only';
-import {
-  type BankCardOffer,
-  bankCardOfferSchema,
-} from '@/schemas/bank-card-offer';
+import type { BankCardOffer } from '@/schemas/bank-card-offer';
+import { bankCardOffersSchema } from '@/schemas/bank-card-offers';
 
 // Add bank-approved terms after the checkout and persistence paths are wired.
 const configuredOffers: readonly BankCardOffer[] = [];
 
-export const BANK_CARD_OFFERS = bankCardOfferSchema
-  .array()
-  .refine(
-    (offers) =>
-      new Set(offers.map(({ merchantId, id }) => `${merchantId}:${id}`))
-        .size === offers.length,
-    'Offer IDs must be unique per merchant.'
-  )
-  .parse(configuredOffers);
+export const BANK_CARD_OFFERS = bankCardOffersSchema.parse(configuredOffers);

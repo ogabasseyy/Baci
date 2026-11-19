@@ -18,6 +18,20 @@ BEGIN
     RAISE EXCEPTION 'Bank offer snapshots must be private';
   END IF;
 
+  IF has_function_privilege('anon', 'public.create_storefront_bank_card_offer_order(jsonb,jsonb,jsonb)', 'EXECUTE')
+    OR NOT has_function_privilege('authenticated', 'public.create_storefront_bank_card_offer_order(jsonb,jsonb,jsonb)', 'EXECUTE')
+  THEN
+    RAISE EXCEPTION 'Atomic bank-offer checkout must be available only through the authenticated route';
+  END IF;
+  BEGIN
+    PERFORM public.create_storefront_bank_card_offer_order(
+      jsonb_build_object('merchant_id', v_merchant), '{}'::jsonb, '{}'::jsonb
+    );
+    RAISE EXCEPTION 'Expected an unsigned bank-offer checkout to fail';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'bank_card_offer_checkout_not_authorized' THEN RAISE; END IF;
+  END;
+
   INSERT INTO public.merchants (id, email, business_name, slug)
     VALUES (v_merchant, 'bank-offer-fixture@example.test', 'Bank Offer Fixture', 'bank-offer-fixture');
   INSERT INTO public.products (id, merchant_id, name, slug, price, status)

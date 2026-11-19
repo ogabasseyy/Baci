@@ -171,6 +171,10 @@ const orderCreateSchemaBase = z
       .string()
       .min(1)
       .transform((val) => sanitizeText(val)),
+    bank_card_offer_id: z
+      .string()
+      .regex(/^[a-z][a-z0-9-]{1,63}$/)
+      .optional(),
     payment_status: z.string().default('unpaid'),
     shipping_status: z.string().default('pending'),
     shipping_address: orderShippingAddressSchema.optional(),

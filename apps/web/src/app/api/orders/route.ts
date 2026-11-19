@@ -1,5 +1,7 @@
+import { createHash } from 'node:crypto';
 import { cookies } from 'next/headers';
 import { after, type NextRequest, NextResponse } from 'next/server';
+import { BANK_CARD_OFFERS } from '@/config/bank-card-offers';
 import { getQuizPhaseEnv, getQuizProductionApprovedEnv } from '@/env';
 import {
   computeAgenticOrderTax,
@@ -14,6 +16,7 @@ import {
 import { dispatchOrderCreation } from '@/lib/cart/order-creation-dispatch';
 import { resolveSharedCartOrderAuthority } from '@/lib/cart/order-route-binding';
 import { addStorefrontOrderLineOrdinals } from '@/lib/checkout/add-storefront-order-line-ordinals';
+import { quoteBankCardOffer } from '@/lib/checkout/bank-card-offer-quote';
 import { buildTransactionDiscountAdTracking } from '@/lib/checkout/build-transaction-discount-ad-tracking';
 import {
   computeCanonicalOrderSubtotal,
@@ -24,6 +27,7 @@ import {
   computeRedvaultOrderQuote,
   type RedvaultOrderQuote,
 } from '@/lib/checkout/compute-redvault-order-quote';
+import { createBankCardOfferCheckout } from '@/lib/checkout/create-bank-card-offer-checkout';
 import { createRedvaultCheckoutResponse } from '@/lib/checkout/create-redvault-checkout-response';
 import type { createTransactionDiscountProof } from '@/lib/checkout/create-transaction-discount-proof';
 import { createTransactionDiscountProofForCheckout } from '@/lib/checkout/create-transaction-discount-proof-for-checkout';
@@ -548,6 +552,38 @@ export async function POST(request: NextRequest) {
         requestIdempotencyKey
       );
       if (invalidKeyResponse) return invalidKeyResponse;
+    }
+    const bankCardOfferRequested = payment_method === 'bank_card_offer';
+    const bankCardOffer = bankCardOfferRequested
+      ? BANK_CARD_OFFERS.find(
+          (offer) =>
+            offer.id === body.bank_card_offer_id &&
+            offer.merchantId === merchant_id &&
+            offer.enabled
+        )
+      : undefined;
+    if (
+      bankCardOfferRequested &&
+      (!bankCardOffer ||
+        !resolvedUserId ||
+        user?.email?.trim().toLowerCase() !==
+          customer_email.trim().toLowerCase() ||
+        !requestIdempotencyKey ||
+        shared_cart ||
+        hasVoucherItem ||
+        body.discount_code ||
+        use_wallet_credit ||
+        wallet_amount ||
+        use_savings_credit ||
+        savings_amount)
+    ) {
+      return NextResponse.json(
+        {
+          code: 'BANK_CARD_OFFER_UNAVAILABLE',
+          error: 'Bank card offer unavailable for this checkout',
+        },
+        { status: 409 }
+      );
     }
     const verifiedQuizVoucherAwardIdsByIndex = new Map<number, string>();
     if (payment_method === 'uba_redvault') {
@@ -1379,6 +1415,7 @@ export async function POST(request: NextRequest) {
     //   decides whether the validated discount should be charged.
     const shouldApplyServerDerivedDiscount =
       !redvaultRequested &&
+      !bankCardOfferRequested &&
       merchantCanAutoNegotiate &&
       !requestedDiscountCode &&
       (typeof body.expected_total === 'number' || source === 'mobile_app');
@@ -2273,6 +2310,73 @@ export async function POST(request: NextRequest) {
         ? { merchantRateAttestation: checkoutContext.merchantRateAttestation }
         : {}),
     });
+    if (bankCardOfferRequested && bankCardOffer && resolvedUserId) {
+      const quote = quoteBankCardOffer({
+        offer: bankCardOffer,
+        merchantId: merchant_id,
+        now: Date.now(),
+        items: orderItemsRpcPayload.map((item) => ({
+          itemId: String(item.__baci_line_ordinal),
+          productId: item.product_id ?? '',
+          unitPriceKobo: Math.round(item.price * 100),
+          quantity: item.quantity,
+        })),
+      });
+      if (
+        merchantResolvedCurrency !== 'NGN' ||
+        !quote ||
+        discountCodeId ||
+        loyaltyRedemptionId ||
+        requestedSavingsRedemption ||
+        !checkoutRequestHash
+      ) {
+        return NextResponse.json(
+          {
+            code: 'BANK_CARD_OFFER_UNAVAILABLE',
+            error: 'Bank card offer unavailable for this checkout',
+          },
+          { status: 409 }
+        );
+      }
+      const result = await createBankCardOfferCheckout({
+        client: orderRpcClient,
+        orderArgs: {
+          ...orderRpcArgs,
+          ...(checkoutContext.shippingRateMarker ?? {}),
+          // Bind retries to this offer, including a switch between banks.
+          p_checkout_request_hash: createHash('sha256')
+            .update(JSON.stringify([checkoutRequestHash, bankCardOffer.id]))
+            .digest('hex'),
+        },
+        quote,
+        userId: resolvedUserId,
+      });
+      if (result.error || !result.data) {
+        logger.warn({
+          message: 'Bank card offer checkout was rejected',
+          merchantId: merchant_id,
+          code: result.error?.code,
+        });
+        return NextResponse.json(
+          {
+            code: 'BANK_CARD_OFFER_ORDER_REJECTED',
+            error: 'Unable to create this bank card offer order',
+          },
+          { status: 409 }
+        );
+      }
+      const replayed = result.data.idempotency_replayed === true;
+      return NextResponse.json(
+        {
+          order: result.data,
+          ...(replayed ? { idempotency: { replayed: true } } : {}),
+        },
+        {
+          status: replayed ? 200 : 201,
+          headers: replayed ? { 'x-idempotency-replayed': 'true' } : undefined,
+        }
+      );
+    }
     if (redvaultRequested && redvaultQuote) {
       if (merchantResolvedCurrency !== 'NGN') {
         return NextResponse.json(

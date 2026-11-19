@@ -172,9 +172,10 @@ export function normalizeGiglTrackingShipment(
       currentStatusRank(right) - currentStatusRank(left)
   );
   // The worker reads the current location from events[0]; a same-time scan
-  // without one (e.g. MSHC) must not hide the located scan from the same poll.
+  // (e.g. MSHC, with or without its own location) must not hide the arrival
+  // centre from the same poll.
   const top = sortedCandidates[0];
-  if (top && !top.event.location) {
+  if (top) {
     const tied = sortedCandidates.filter(
       (candidate) =>
         candidate.event.location &&
@@ -187,7 +188,7 @@ export function normalizeGiglTrackingShipment(
       (candidate) =>
         candidate.event.rawStatus === GIGL_ARRIVED_IN_CITY_RAW_STATUS
     );
-    if (located) top.event.location = located.event.location;
+    if (located && located !== top) top.event.location = located.event.location;
   }
   const newestRecognized = sortedCandidates.find(
     (candidate) => candidate.recognizedStatus !== null

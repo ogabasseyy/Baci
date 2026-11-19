@@ -1,5 +1,5 @@
 import { act, renderHook } from '@testing-library/react-native';
-import { Keyboard } from 'react-native';
+import { Keyboard, Platform } from 'react-native';
 import { KeyboardController } from 'react-native-keyboard-controller';
 import { useDeferredKeyboardPreload } from './useDeferredKeyboardPreload';
 
@@ -156,6 +156,22 @@ describe('useDeferredKeyboardPreload', () => {
 
     await act(async () => lateCallback?.());
     expect(KeyboardController.preload).not.toHaveBeenCalled();
+  });
+
+  it('does not subscribe or schedule preload on Android', () => {
+    const platform = jest.replaceProperty(Platform, 'OS', 'android');
+    const { addListenerSpy } = mockKeyboardListeners();
+    try {
+      renderHook(() => useDeferredKeyboardPreload(true));
+
+      expect(addListenerSpy).not.toHaveBeenCalled();
+      expect(global.requestAnimationFrame).not.toHaveBeenCalled();
+      expect(global.requestIdleCallback).not.toHaveBeenCalled();
+      expect(KeyboardController.preload).not.toHaveBeenCalled();
+    } finally {
+      addListenerSpy.mockRestore();
+      platform.restore();
+    }
   });
 
   it('does not preload when requestIdleCallback is unavailable', () => {

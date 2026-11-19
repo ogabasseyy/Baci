@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Keyboard } from 'react-native';
+import { Keyboard, Platform } from 'react-native';
 import { KeyboardController } from 'react-native-keyboard-controller';
 
 /** Preload opportunistically after startup, unless the keyboard has opened. */
@@ -7,9 +7,10 @@ export function useDeferredKeyboardPreload(startupReady: boolean): void {
   const keyboardOpenedRef = useRef(false);
 
   useEffect(() => {
-    // Skip optional warmup on runtimes that cannot schedule idle work.
-    // A timer can interrupt the first interaction, and input focus opens the keyboard normally.
-    if (typeof requestIdleCallback !== 'function') return;
+    // The keyboard controller only preloads on iOS.
+    if (Platform.OS !== 'ios' || typeof requestIdleCallback !== 'function') {
+      return;
+    }
 
     let active = true;
     let frameId: number | null = null;
@@ -42,6 +43,8 @@ export function useDeferredKeyboardPreload(startupReady: boolean): void {
       const scheduleIdlePreload = () => {
         frameId = null;
         if (!active) return;
+        // This warmup is optional. If the app stays busy, the first input
+        // opens the keyboard normally instead of a timeout forcing UIKit work.
         idleCallbackId = requestIdleCallback(() => {
           idleCallbackId = null;
           if (active && !KeyboardController.isVisible?.()) {

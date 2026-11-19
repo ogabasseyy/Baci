@@ -83,6 +83,11 @@ export async function readOrRefreshSupportedBanks(
   if (!claimed) return null;
 
   try {
+    // Another request may have populated the cache after our initial miss and
+    // released the lock before we claimed it; recheck before calling Oxygen.
+    const rechecked = await readSupportedBanks(cache, environment, partner);
+    if (rechecked) return rechecked;
+
     const provider = providerSource();
     if (!provider) return null;
     return await refreshSupportedBanks(cache, provider, environment, partner);

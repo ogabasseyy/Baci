@@ -161,4 +161,33 @@ describe('cache-first read for checkout', () => {
     ).toBeNull();
     expect(cache.del).toHaveBeenCalled();
   });
+
+  it('returns the newly cached list without calling the provider when populated before the lock is claimed', async () => {
+    const cache = {
+      get: vi
+        .fn()
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({
+          banks: [bank],
+        }),
+      set: vi.fn().mockResolvedValue('OK'),
+      del: vi.fn().mockResolvedValue(1),
+    };
+    const provider = {
+      call: vi.fn().mockRejectedValue(new Error('should not call Oxygen')),
+    };
+    const providerSource = vi.fn().mockReturnValue(provider);
+
+    expect(
+      await readOrRefreshSupportedBanks(
+        cache,
+        'production',
+        'partner',
+        providerSource
+      )
+    ).toEqual([bank]);
+    expect(providerSource).not.toHaveBeenCalled();
+    expect(provider.call).not.toHaveBeenCalled();
+    expect(cache.del).toHaveBeenCalled();
+  });
 });

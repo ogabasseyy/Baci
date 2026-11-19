@@ -1,5 +1,5 @@
 const MEMO_TTL_MS = 3_000;
-const MEMO_MAX_ENTRIES = 512;
+const MEMO_MAX_ENTRIES = 1_024;
 
 const memo = new Map<string, { expires: number; row: unknown }>();
 const TIMEOUT_MEMO = Symbol('storefront-preflight-timeout');
@@ -26,15 +26,20 @@ function read(key: string): unknown | undefined {
     memo.delete(key);
     return undefined;
   }
+  // Refresh LRU recency on read so hot keys stay in cache.
+  memo.delete(key);
+  memo.set(key, entry);
   return entry.row;
 }
 
-function write(key: string, row: unknown): void {
-  if (memo.size >= MEMO_MAX_ENTRIES) {
+function write(key: string, row: unknown, ttlMs = MEMO_TTL_MS): void {
+  if (memo.has(key)) {
+    memo.delete(key);
+  } else if (memo.size >= MEMO_MAX_ENTRIES) {
     const oldest = memo.keys().next().value;
     if (oldest !== undefined) memo.delete(oldest);
   }
-  memo.set(key, { expires: Date.now() + MEMO_TTL_MS, row });
+  memo.set(key, { expires: Date.now() + ttlMs, row });
 }
 
 function clear(): void {

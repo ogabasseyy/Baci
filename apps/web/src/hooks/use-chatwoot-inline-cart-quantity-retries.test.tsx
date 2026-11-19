@@ -13,6 +13,7 @@ import {
 
 const mocks = vi.hoisted(() => ({
   cartState: {
+    ensureSharedCartSession: vi.fn(async () => ({ ok: true as const })),
     isHydrated: true,
     merchantSlug: 'store',
     refreshSharedCart: vi.fn(async () => {}),

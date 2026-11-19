@@ -304,4 +304,34 @@ describe('deploy crontab schedules', () => {
       /systemctl --user restart baci-vercel-log-drain-receiver\.service/
     );
   });
+
+  it('schedules Jumia self-authorization discovery purge every 10 minutes via direct worker', () => {
+    const deployScript = readDeployScript();
+    const cronLine = deployScript
+      .split('\n')
+      .find((line) =>
+        line.includes('purge-jumia-self-authorization-discoveries.lock')
+      );
+
+    assert.ok(cronLine);
+    assert.match(
+      cronLine,
+      /^\*\/10 \* \* \* \* flock -n \$REMOTE_DIR\/locks\/purge-jumia-self-authorization-discoveries\.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=purge-jumia-self-authorization-discoveries && cd \$REMOTE_DIR && timeout --signal=TERM --kill-after=30s 2m \$REMOTE_DIR\/bin\/purge-jumia-self-authorization-discoveries\.sh' >> \$REMOTE_DIR\/logs\/purge-jumia-self-authorization-discoveries\.log 2>&1$/
+    );
+  });
+
+  it('schedules checkout shipping recovery preview cleanup hourly via direct worker', () => {
+    const deployScript = readDeployScript();
+    const cronLine = deployScript
+      .split('\n')
+      .find((line) =>
+        line.includes('cleanup-checkout-shipping-recovery-previews.lock')
+      );
+
+    assert.ok(cronLine);
+    assert.match(
+      cronLine,
+      /^11 \*\s+\* \* \* flock -n \$REMOTE_DIR\/locks\/cleanup-checkout-shipping-recovery-previews\.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=cleanup-checkout-shipping-recovery-previews && cd \$REMOTE_DIR && timeout --signal=TERM --kill-after=30s 2m \$REMOTE_DIR\/bin\/cleanup-checkout-shipping-recovery-previews\.sh' >> \$REMOTE_DIR\/logs\/cleanup-checkout-shipping-recovery-previews\.log 2>&1$/
+    );
+  });
 });

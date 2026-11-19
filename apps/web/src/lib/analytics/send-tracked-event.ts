@@ -2,6 +2,7 @@
 
 import { isAnalyticsAllowed } from '@/lib/analytics-consent';
 import { isMarketingAllowed } from '@/lib/marketing-consent';
+import { sanitizeTrackingUrl } from '@/lib/privacy/sanitize-tracking-url';
 import type { TrackedEvent } from './tracked-event-types';
 
 // Get or create session ID
@@ -29,8 +30,11 @@ function getEventMetadata(): Record<string, string | undefined> {
   return {
     session_id: getSessionId(),
     user_agent: navigator.userAgent,
-    referrer: document.referrer || undefined,
-    page_url: window.location.href,
+    // Tokens and shopper details in either address must not leave the browser.
+    referrer: document.referrer
+      ? sanitizeTrackingUrl(document.referrer)
+      : undefined,
+    page_url: sanitizeTrackingUrl(window.location.href),
   };
 }
 

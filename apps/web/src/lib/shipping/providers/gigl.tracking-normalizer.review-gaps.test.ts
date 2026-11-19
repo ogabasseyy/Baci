@@ -200,3 +200,20 @@ describe('bugfix: tied terminal order and same-time ARF with SDR', () => {
     ).toBe(false);
   });
 });
+
+describe('bugfix: terminal outcome outranks a tied SDR', () => {
+  it.each([
+    ['SDR first', ['SDR', 'SHD']],
+    ['SHD first', ['SHD', 'SDR']],
+  ] as const)('reports delivered (%s)', (_n, order) => {
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W40',
+        MobileShipmentTrackings: order.map((code) => event(code, '10:00:00')),
+      },
+      'W40',
+      OBSERVED_AT
+    );
+    expect(result.status).toBe('delivered');
+  });
+});

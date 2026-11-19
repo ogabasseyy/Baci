@@ -12,6 +12,7 @@ const mockFetchWithCsrf = vi.fn();
 const mockUseMerchantSafe = vi.fn();
 
 vi.mock('next/navigation', () => ({
+  usePathname: () => '/checkout/success',
   useRouter: () => ({ push: mockPush }),
   useSearchParams: () => mockSearchParams(),
 }));

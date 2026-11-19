@@ -24,6 +24,7 @@ export function isFixtureAssetRequest(request: FixtureRequest): boolean {
     '/dva-modal',
     '/oxygen-theme',
     '/payment-handoff',
+    '/private-params',
     '/products/test-phone',
     '/unlock-orders',
   ].includes(url.pathname);

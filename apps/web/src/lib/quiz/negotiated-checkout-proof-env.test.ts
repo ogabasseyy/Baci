@@ -39,12 +39,30 @@ describe('negotiated checkout proof environment validation', () => {
     ).toBe(false);
   });
 
-  it('allows the onboarding worker without negotiated checkout credentials', () => {
+  it('allows non-agentic VPS workers without negotiated checkout credentials', () => {
+    for (const profile of [
+      'ai-storefront-jobs',
+      'cart-events',
+      'event-pipeline',
+      'gigl-tracking',
+      'import-jobs',
+      'jumia-order-sync',
+      'merchant-onboarding-emails',
+      'petrock-reconciliation',
+      'piggyvest-webhook-capture-drain',
+      'quiz-finalization',
+    ]) {
+      expect(
+        isNegotiatedCheckoutProofSecretMissing(productionPhaseOneA, {
+          BACI_WORKER_PROFILE: profile,
+        })
+      ).toBe(false);
+    }
     expect(
       isNegotiatedCheckoutProofSecretMissing(productionPhaseOneA, {
-        BACI_WORKER_PROFILE: 'merchant-onboarding-emails',
+        BACI_WORKER_PROFILE: 'unknown-worker',
       })
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it('does not require the secret outside production phase 1a', () => {

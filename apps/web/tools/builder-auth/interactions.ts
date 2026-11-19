@@ -165,12 +165,12 @@ export function createInteractionHandler(deps: {
       !pending.csrf
     )
       throw new Error('Reconnect Baci to continue.');
-    const ownedMerchantId =
-      (await getOwnedMerchant(
-        deps.supabase,
-        pending.tokens.accessToken,
-        pending.subject
-      )) ?? null;
+    const ownedMerchant = await getOwnedMerchant(
+      deps.supabase,
+      pending.tokens.accessToken,
+      pending.subject
+    );
+    const ownedMerchantId = ownedMerchant?.id ?? null;
     const state = {
       actorUserId: pending.subject,
       ownedMerchantId,
@@ -181,7 +181,13 @@ export function createInteractionHandler(deps: {
     if (req.method === 'GET') {
       await put(res, { ...pending, consentMerchantId: ownedMerchantId });
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-      res.end(renderConsentPage(state, url.pathname));
+      res.end(
+        renderConsentPage(
+          state,
+          url.pathname,
+          ownedMerchant?.business_name ?? null
+        )
+      );
       return true;
     }
     if (req.method !== 'POST') throw new Error('Method not allowed');

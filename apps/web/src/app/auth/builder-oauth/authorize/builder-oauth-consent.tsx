@@ -41,8 +41,9 @@ export async function BuilderOAuthConsent({
     <main className="mx-auto max-w-md space-y-6 px-6 py-16">
       <h1 className="text-2xl font-semibold">Connect Baci Website Builder</h1>
       <p>
-        Allow Baci Website Builder to verify your Baci account. You’ll choose
-        which store to link and what the builder can do on the next screen.
+        Verify your Baci account for Baci Website Builder in ChatGPT. After
+        verification, you can review the store and requested permissions before
+        connecting.
       </p>
       <form action={decideBuilderOAuthAuthorization} className="flex gap-3">
         <input type="hidden" name="authorizationId" value={authorizationId} />
@@ -52,7 +53,7 @@ export async function BuilderOAuthConsent({
           value="approve"
           className="rounded-md bg-primary px-4 py-2 text-primary-foreground"
         >
-          Continue
+          Verify account
         </button>
         {consent.kind === 'pending' && (
           <button

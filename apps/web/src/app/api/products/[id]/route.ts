@@ -18,7 +18,6 @@ import {
 } from '@/lib/product-image';
 import {
   PRODUCT_COLUMNS,
-  PRODUCT_COLUMNS_PUBLIC,
   PRODUCT_VARIANT_COLUMNS,
 } from '@/lib/product-queries';
 import { getEffectiveStock } from '@/lib/product-stock';
@@ -45,6 +44,7 @@ import {
 } from '@/lib/storefront-product-purge-urls';
 import { createClient } from '@/lib/supabase/server';
 import { formatZodErrors, updateProductSchema } from '@/schemas/products';
+import { refreshUpdatedProduct } from './refresh-updated-product';
 
 const PREDELETE_BLOG_POST_ID_LIMIT = 256;
 
@@ -741,15 +741,6 @@ export async function PUT(
       }
     }
 
-    // `updatedProduct` is re-read via PRODUCT_COLUMNS, which does NOT embed the
-    // category join or junction, so type it without `categories` /
-    // `product_categories`. Those are only read from `existingProduct` for the
-    // purge and are immutable across this update (neither `category_id` nor the
-    // junction is writable here).
-    let updatedProduct: Omit<
-      typeof existingProduct,
-      'categories' | 'product_categories'
-    > = existingProduct;
     if (Object.keys(updates).length > 1) {
       const { error: updateError } = await supabase
         .from('products')
@@ -834,35 +825,16 @@ export async function PUT(
       }
     }
 
-    let refreshFailed = false;
-    {
-      const { data: refreshedProduct, error: refreshedProductError } =
-        canViewProducts
-          ? await supabase
-              .from('merchant_products')
-              .select(PRODUCT_COLUMNS)
-              .eq('id', id)
-              .eq('merchant_id', merchantId)
-              .single()
-          : await supabase
-              .from('products')
-              .select(PRODUCT_COLUMNS_PUBLIC)
-              .eq('id', id)
-              .eq('merchant_id', merchantId)
-              .single();
-
-      if (refreshedProductError || !refreshedProduct) {
-        console.error(
-          'Error refreshing updated product:',
-          refreshedProductError
-        );
-        refreshFailed = true;
-        // Preserve committed inputs for cache invalidation despite read failure.
-        updatedProduct = { ...existingProduct, ...updates };
-      } else {
-        updatedProduct = refreshedProduct;
-      }
-    }
+    const { updatedProduct, refreshFailed } = await refreshUpdatedProduct({
+      supabase,
+      productId: id,
+      merchantId,
+      canViewProducts,
+      fallbackProduct: { ...existingProduct, ...updates } as Omit<
+        typeof existingProduct,
+        'categories' | 'product_categories'
+      >,
+    });
 
     // Regenerate embedding if name or description changed, even if post-write refresh failed.
     if (updatedProduct && (body.name || body.description)) {

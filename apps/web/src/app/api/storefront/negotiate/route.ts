@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
 
     const formatOfferPrice = (amount: number) =>
       formatMerchantCurrency(amount, merchantCurrency ?? {}, {
-        maximumFractionDigits: 0,
+        maximumFractionDigits: Number.isInteger(amount) ? 0 : 2,
       });
 
     const originalPrice = Number(product.price);
@@ -180,6 +180,7 @@ export async function POST(request: NextRequest) {
         minAcceptablePrice,
         originalPrice * (1 - DISCOUNT_TIERS[3])
       );
+      const finalCounterOffer = Math.min(originalPrice, Math.ceil(finalPrice));
 
       if (offeredPrice >= finalPrice) {
         result = {
@@ -193,10 +194,10 @@ export async function POST(request: NextRequest) {
       } else {
         result = {
           status: 'final',
-          counterOffer: Math.ceil(finalPrice),
+          counterOffer: finalCounterOffer,
           originalPrice,
           offeredPrice,
-          message: `This is our best price: ${formatOfferPrice(Math.ceil(finalPrice))}. We cannot go lower.`,
+          message: `This is our best price: ${formatOfferPrice(finalCounterOffer)}. We cannot go lower.`,
           attemptNumber,
           canContinue: false,
         };
@@ -208,16 +209,20 @@ export async function POST(request: NextRequest) {
         minAcceptablePrice,
         originalPrice * (1 - discountRate)
       );
+      const roundedCounterOffer = Math.min(
+        originalPrice,
+        Math.ceil(counterOffer)
+      );
 
       result = {
         status: 'counter',
-        counterOffer: Math.ceil(counterOffer),
+        counterOffer: roundedCounterOffer,
         originalPrice,
         offeredPrice,
         message:
           attemptNumber === 1
-            ? `We appreciate your offer! How about ${formatOfferPrice(Math.ceil(counterOffer))}?`
-            : `We've reduced our price further to ${formatOfferPrice(Math.ceil(counterOffer))}.`,
+            ? `We appreciate your offer! How about ${formatOfferPrice(roundedCounterOffer)}?`
+            : `We've reduced our price further to ${formatOfferPrice(roundedCounterOffer)}.`,
         attemptNumber,
         canContinue: attemptNumber < 3,
       };

@@ -246,4 +246,44 @@ describe('currency-aware negotiation messages', () => {
     expect(body.status).toBe('accepted');
     expect(body.message).toBe('Great news! We can accept your offer of ₦985.');
   });
+
+  it('caps rounded counteroffers at the original fractional list price', async () => {
+    const { body } = await callNegotiate(
+      {
+        id: PRODUCT_ID,
+        name: 'MacBook Air M2',
+        brand: 'Apple',
+        price: 50.9,
+        cost_price: null,
+        merchant_id: MERCHANT_ID,
+      },
+      40,
+      1,
+      { payout_currency: 'NGN', country: 'NG' },
+      { data: 50, error: null }
+    );
+    expect(body.status).toBe('counter');
+    expect(body.counterOffer).toBe(50.9);
+    expect(body.message).toBe('We appreciate your offer! How about ₦50.90?');
+  });
+
+  it('caps rounded final offers at the original fractional list price', async () => {
+    const { body } = await callNegotiate(
+      {
+        id: PRODUCT_ID,
+        name: 'MacBook Air M2',
+        brand: 'Apple',
+        price: 50.9,
+        cost_price: null,
+        merchant_id: MERCHANT_ID,
+      },
+      40,
+      2,
+      { payout_currency: 'NGN', country: 'NG' },
+      { data: 50, error: null }
+    );
+    expect(body.status).toBe('counter');
+    expect(body.counterOffer).toBe(50.9);
+    expect(body.message).toBe("We've reduced our price further to ₦50.90.");
+  });
 });

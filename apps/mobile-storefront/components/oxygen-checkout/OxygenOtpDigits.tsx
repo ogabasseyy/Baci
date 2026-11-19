@@ -34,7 +34,10 @@ export function OxygenOtpDigits({
           <Ionicons name="checkmark-circle" size={52} color={colors.success} />
         </View>
       ) : (
-        <View accessible={false} pointerEvents="none" style={styles.row}>
+        <View
+          accessible={false}
+          style={[styles.row, { pointerEvents: 'none' }]}
+        >
           {[0, 1, 2, 3, 4, 5].map((index) => (
             <Animated.View
               key={index}

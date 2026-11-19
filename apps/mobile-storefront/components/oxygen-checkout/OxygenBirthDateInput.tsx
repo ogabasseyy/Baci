@@ -40,11 +40,10 @@ export function OxygenBirthDateInput({
         style={[styles.typography, styles.input]}
       />
       <View
-        pointerEvents="none"
         accessible={false}
         accessibilityElementsHidden
         importantForAccessibility="no-hide-descendants"
-        style={styles.guide}
+        style={[styles.guide, { pointerEvents: 'none' }]}
       >
         <Text style={[styles.typography, { color: colors.text }]}>
           {TEMPLATE.split('').map((character, index) => (

@@ -88,8 +88,10 @@ export function OxygenPlanSlider({
         style={styles.touch}
       >
         <View
-          pointerEvents="none"
-          style={[styles.track, { backgroundColor: colors.border }]}
+          style={[
+            styles.track,
+            { backgroundColor: colors.border, pointerEvents: 'none' },
+          ]}
         >
           <View
             style={[
@@ -114,9 +116,9 @@ export function OxygenPlanSlider({
           ))}
         </View>
         <View
-          pointerEvents="none"
           style={[
             styles.thumb,
+            { pointerEvents: 'none' },
             {
               left: `${safe}%`,
               backgroundColor: colors.primary,

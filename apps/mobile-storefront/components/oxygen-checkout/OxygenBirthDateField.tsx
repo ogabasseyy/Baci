@@ -44,7 +44,7 @@ export function OxygenBirthDateField({
           {value ? formatDateTimeDisplay(value, 'date') : 'DD/MM/YYYY'}
         </Text>
       </Pressable>
-      <View style={styles.icon} pointerEvents="none">
+      <View style={[styles.icon, { pointerEvents: 'none' }]}>
         <Ionicons name="calendar-outline" size={22} color={colors.primary} />
       </View>
       {error ? (

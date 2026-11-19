@@ -43,10 +43,10 @@ export function OxygenOtp(props: OxygenOtpProps) {
             />
             {props.pending ? (
               <Animated.View
-                pointerEvents="none"
                 style={[
                   styles.ring,
                   {
+                    pointerEvents: 'none',
                     borderColor: colors.primary,
                     borderRightColor: 'transparent',
                     borderBottomColor: 'transparent',

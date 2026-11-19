@@ -40,6 +40,8 @@ const EXPLICIT_STATIC_ROUTES = new Set([
   'device-protection.tsx',
   'notifications.tsx',
   'order-success.tsx',
+  'oxygen-checkout.tsx',
+  'oxygen-visual-qa.tsx',
   'profile/delete-account.tsx',
   'profile/edit.tsx',
   'quiz/prize-checkout-simulation.tsx',

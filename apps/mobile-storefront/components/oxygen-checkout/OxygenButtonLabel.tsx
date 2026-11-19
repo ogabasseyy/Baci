@@ -23,8 +23,8 @@ export function OxygenButtonLabel({
       {loading ? (
         <Animated.View
           accessible={false}
-          pointerEvents="none"
           style={{
+            pointerEvents: 'none',
             width: 18,
             height: 18,
             borderWidth: 2,

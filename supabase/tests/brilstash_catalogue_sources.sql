@@ -20,9 +20,7 @@ CREATE TABLE public.products(
 CREATE TABLE public.product_variants(
   id uuid PRIMARY KEY, merchant_id uuid, product_id uuid, condition text,
   attributes jsonb, is_inventory_anchor boolean, price_override numeric,
-  stock_quantity integer, inventory_tracking_policy text,
-  is_active boolean DEFAULT true, deleted_at timestamptz, archived_at timestamptz,
-  status text NOT NULL DEFAULT 'active'
+  stock_quantity integer, inventory_tracking_policy text
 );
 CREATE TABLE public.product_offers(
   id uuid PRIMARY KEY, merchant_id uuid, product_id uuid, condition text, status text,

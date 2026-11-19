@@ -15,6 +15,17 @@ SELECT ('41000000-0000-4000-8000-00000000000' || n)::uuid,
   '50000000-0000-4000-8000-000000000001', 'new', 50000 + n * 70000, '["https://media.example.invalid/approved"]'::jsonb,
   false, false, n, n, true, 'off'
 FROM generate_series(1, 7) n;
+-- An internal inventory anchor does not change a simple listing into a
+-- variant listing. The simple listing must still stage, activate, and serve.
+INSERT INTO public.product_variants (
+  id, merchant_id, product_id, condition, attributes, is_inventory_anchor,
+  stock_quantity, inventory_tracking_policy
+) VALUES
+  ('42000000-0000-4000-8000-000000000001', '20000000-0000-4000-8000-000000000001',
+    '41000000-0000-4000-8000-000000000001', 'new', '{}'::jsonb, true, 99, 'inherit');
+UPDATE public.products SET inventory_anchor_variant_id = '42000000-0000-4000-8000-000000000001'
+WHERE slug = 'paged-1';
+
 INSERT INTO public.product_feed_images (
   id, merchant_id, product_id, status, verified_url, is_primary, position, source_url
 )
@@ -44,6 +55,8 @@ DECLARE installation uuid := '30000000-0000-4000-8000-000000000003';
 DECLARE read_result jsonb := public.load_brilstash_catalogue_sources(installation);
 DECLARE payload jsonb;
 BEGIN
+  IF NOT ((read_result->'rows') @> '[{"externalId":"paged-1","visible":true,"inventory":{"kind":"quantity","units":1}}]'::jsonb)
+  THEN RAISE EXCEPTION 'inventory anchor hid a simple listing'; END IF;
   SELECT jsonb_agg(jsonb_build_object(
     'external_id', item->>'externalId', 'title', item->>'name',
     'product_url', 'https://shop.example.invalid/products/' || (item->>'slug'),
@@ -112,6 +125,24 @@ BEGIN
   THEN RAISE EXCEPTION 'pagination did not preserve the payload or inclusive price filter'; END IF;
 END $$;
 RESET ROLE;
+SAVEPOINT publish_variant;
+UPDATE public.products SET inventory_anchor_variant_id = NULL WHERE slug = 'paged-1';
+INSERT INTO public.product_variants (
+  id, merchant_id, product_id, condition, attributes, is_inventory_anchor,
+  stock_quantity, inventory_tracking_policy
+) VALUES (
+  '42000000-0000-4000-8000-000000000002', '20000000-0000-4000-8000-000000000001',
+  '41000000-0000-4000-8000-000000000001', 'new', '{"storage":"256GB"}'::jsonb, false, 12, 'inherit'
+);
+SET LOCAL ROLE anon;
+DO $$
+BEGIN
+  IF public.read_brilstash_page(repeat('p', 43), 1, 3, 0)->>'status' IS DISTINCT FROM 'unavailable'
+  THEN RAISE EXCEPTION 'a parent with a public variant was still served as a simple listing'; END IF;
+END $$;
+RESET ROLE;
+ROLLBACK TO SAVEPOINT publish_variant;
+RELEASE SAVEPOINT publish_variant;
 UPDATE public.products SET status = 'draft' WHERE slug = 'paged-7';
 SET LOCAL ROLE anon;
 DO $$

@@ -97,8 +97,7 @@ BEGIN
           AND p.condition = p_reviewed_identity->>'condition'
         WHEN 'variant' THEN EXISTS (SELECT 1 FROM public.product_variants v
           WHERE v.id = p_source_id AND v.product_id = p.id AND v.merchant_id = p.merchant_id
-            AND v.is_inventory_anchor IS NOT TRUE AND v.is_active IS NOT FALSE AND v.status = 'active'
-            AND v.deleted_at IS NULL AND v.archived_at IS NULL AND v.condition = p_reviewed_identity->>'condition'
+            AND v.is_inventory_anchor IS NOT TRUE AND v.condition = p_reviewed_identity->>'condition'
             AND v.attributes = p_reviewed_identity->'attributes')
         WHEN 'offer' THEN EXISTS (SELECT 1 FROM public.product_offers o
           WHERE o.id = p_source_id AND o.product_id = p.id AND o.merchant_id = p.merchant_id

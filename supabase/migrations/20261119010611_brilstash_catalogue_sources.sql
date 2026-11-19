@@ -11,13 +11,13 @@ LANGUAGE sql STABLE SET search_path = '' AS $$
     WHERE i.id = p_installation_id AND i.merchant_id = p_merchant_id
       AND l.retired_at IS NULL
   ),
+  -- Match the storefront PDP population. The canonical variant table has
+  -- no active/status/archive columns. Removed variants are absent here.
   public_variants AS NOT MATERIALIZED (
     SELECT v.id, v.merchant_id, v.product_id, v.condition, v.attributes,
       v.price_override, v.stock_quantity, v.inventory_tracking_policy
     FROM public.product_variants v
     WHERE v.merchant_id = p_merchant_id AND v.is_inventory_anchor IS NOT TRUE
-      AND v.is_active IS NOT FALSE AND v.status = 'active'
-      AND v.deleted_at IS NULL AND v.archived_at IS NULL
   ),
   resolved AS (
     SELECT a.*, p.id AS product_id, p.name, p.slug, p.brand,
@@ -70,6 +70,7 @@ LANGUAGE sql STABLE SET search_path = '' AS $$
     ) o ON true
     CROSS JOIN LATERAL (
       SELECT (p.has_variants IS TRUE OR COALESCE(p.variant_model, '') = 'sku_matrix'
+        -- The public variant scan excludes internal inventory anchors.
         OR EXISTS (SELECT 1 FROM public_variants child
           WHERE child.product_id = p.id AND child.merchant_id = p.merchant_id)) AS has_variants
     ) shape

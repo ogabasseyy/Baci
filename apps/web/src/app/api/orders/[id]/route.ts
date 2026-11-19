@@ -456,7 +456,6 @@ export async function PATCH(
           },
           paymentStatus: payment_status ?? existingOrder.payment_status,
           lockToken: shipmentBookingLockToken,
-          // Keep provider and credential dependencies at the authorized route.
           runBooking: runClaimedOrderWalletOrCheckoutBooking,
         });
         updates.shipping_provider = booking.provider;

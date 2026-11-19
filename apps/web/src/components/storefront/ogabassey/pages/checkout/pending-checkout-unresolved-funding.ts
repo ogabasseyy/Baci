@@ -3,14 +3,14 @@ import { checkoutFingerprintsMatch } from './checkout-fingerprints-match';
 import type {
   PendingCheckoutOrderSnapshot,
   ResolvePendingCheckoutOrderResult,
-} from './pending-checkout-order';
+  ReusedCheckoutOrder,
+} from './pending-checkout-order.types';
 import { oxygenPreviousPaymentUnresolved } from './pending-checkout-oxygen-fence';
 import {
   fetchFencedOrderState,
   isNonReusableOrderState,
   isPaidOrderState,
   paidOrderIdentity,
-  type ReusedCheckoutOrder,
 } from './pending-checkout-redvault-fence';
 
 export const unresolvedFundingOrderMessage =

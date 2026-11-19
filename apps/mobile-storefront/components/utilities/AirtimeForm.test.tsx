@@ -69,10 +69,15 @@ jest.mock('@/hooks/use-utility-payment', () => ({
   useUtilityPayment: () => mockUseUtilityPayment(),
 }));
 
-jest.mock('@/stores/auth-store', () => ({
-  useAuthStore: <Selected,>(selector: (state: AuthStorePartial) => Selected) =>
-    selector(mockAuthStoreState),
-}));
+jest.mock('@/stores/auth-store', () => {
+  const useAuthStore = Object.assign(
+    <Selected,>(selector: (state: AuthStorePartial) => Selected) =>
+      selector(mockAuthStoreState),
+    // The wallet pay hand-over reads the signed-in account directly.
+    { getState: () => ({ user: null }) }
+  );
+  return { useAuthStore };
+});
 
 jest.mock('@/lib/vtu-checkout', () => {
   const actual =
@@ -140,6 +145,12 @@ describe('AirtimeForm', () => {
 
   afterEach(() => {
     jest.restoreAllMocks();
+  });
+
+  it('shows a disabled Pay button on an empty form', () => {
+    render(<AirtimeForm onSuccess={jest.fn()} />);
+
+    expect(screen.getByRole('button', { name: 'Pay ₦0' })).toBeDisabled();
   });
 
   it('keeps network provider cards hidden when phone number is empty', () => {

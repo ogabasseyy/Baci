@@ -30,8 +30,8 @@ describe('isKudaOutcomeUnknown', () => {
         new Error('Kuda ADMIN_PURCHASE_BILL request timed out')
       )
     ).toBe(true);
-    // DOMException aborts skip kudaRequest's instanceof Error
-    // conversion, so match by name like the request layer does.
+    // A DOMException abort has no special case: it falls through to the
+    // default, which treats any other post-attempt throw as unknown.
     expect(
       isKudaOutcomeUnknown(new DOMException('Aborted', 'AbortError'))
     ).toBe(true);

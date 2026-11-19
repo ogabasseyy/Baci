@@ -11,9 +11,12 @@ import { runStorefrontEdit } from '../../src/lib/website-builder/run-edit';
 import { builderEditLeaseSchema } from '../../src/schemas/builder-edit-lease';
 import type { PortableHome } from '../../src/schemas/portable-storefront';
 import { publicationRlsClient } from '../../tools/builder-auth/publication-rls-client';
-import { publicationFixture } from '../../tools/builder-auth/publication-test-support';
+import { lifecycleFixture } from '../experience-lifecycle/sql.test-support';
 export async function createLifecycleHarness() {
-  const f = await publicationFixture();
+  const f = await lifecycleFixture(
+    false,
+    process.env.BACI_BUILDER_LOCAL_PG === '1'
+  );
   const client = publicationRlsClient(f.actor, f.owner);
   const ctx: BuilderContext = {
     merchantId: f.merchantId,
@@ -39,7 +42,7 @@ export async function createLifecycleHarness() {
       )
     ).rows[0];
   const call = (name: string, args: unknown[]) =>
-    f.owner((c) => f.run(c, name, args));
+    f.owner((c) => f.legacyRun(c, name, args));
   const journey = async (existing: boolean) => {
     if (existing)
       await f.pool.query(
@@ -104,7 +107,7 @@ export async function createLifecycleHarness() {
     const committed = await confirmStorefrontPublication(
       client,
       requested.intentId,
-      { certifyRender: () => f.proof(requested.intentId) }
+      { certifyRender: () => f.legacyProof(requested.intentId) }
     );
     const state = await publicState();
     const heroTitle = (config: PortableHome) => {
@@ -126,5 +129,13 @@ export async function createLifecycleHarness() {
       ).rows[0].n,
     };
   };
-  return { ...f, ctx, client, call, publicState, journey };
+  return {
+    ...f,
+    proof: f.legacyProof,
+    ctx,
+    client,
+    call,
+    publicState,
+    journey,
+  };
 }

@@ -4,8 +4,14 @@ import {
   type PiggyvestCaptureDrainRuntime,
   piggyvestCaptureDrainRuntimeSchema,
 } from '@/schemas/piggyvest/webhook-capture-drain-runtime';
-import { primaryOwnerFamily } from './primary-event-owner';
-import { isPiggyvestCaptureDrainEnabled } from './webhook-capture-attestation';
+import {
+  authorizesLegacyHandling,
+  primaryOwnerFamily,
+} from './primary-event-owner';
+import {
+  isPiggyvestCaptureDrainEnabled,
+  isPiggyvestCaptureLegacyReplayEnabled,
+} from './webhook-capture-attestation';
 import type { DrainDeps, DrainSummary } from './webhook-capture-drain';
 import { runCaptureDrainPass } from './webhook-capture-drain-pass';
 import { workerHostReplayScope } from './webhook-capture-drain-scope';
@@ -22,6 +28,7 @@ import {
 import { replayPrimaryDelivery } from './webhook-capture-primary-replay';
 import { createPgCaptureQueue } from './webhook-capture-queue';
 import { monitorCaptureReviews } from './webhook-capture-review-monitor';
+import { isPiggyvestWebhookIntakeRuntimeReady } from './webhook-intake-runtime';
 
 /**
  * The worker-host capture drain (R5): one bounded pass over the captured
@@ -32,8 +39,8 @@ import { monitorCaptureReviews } from './webhook-capture-review-monitor';
  * connection. When enabled it connects only as the dedicated drain login
  * (never a service-role key), re-verifies every stored signature (a row
  * signed by a key this host does not hold is deferred, never parked),
- * replays rows a primary intake owns through that intake's own login, and
- * sets legacy-family rows aside for review with an alert. Replay is
+ * replays primary rows through their own logins, and optionally replays
+ * legacy rows through the restricted webhook-intake login. Replay is
  * idempotent because every downstream ledger keys on the provider
  * transaction id, so a crash at any point is recovered by the next pass
  * once the lease expires.
@@ -69,6 +76,7 @@ export type CaptureDrainRun =
   | { status: 'disabled' }
   | { status: 'unconfigured' }
   | { status: 'intake_not_ready'; notReady: PrimaryIntakeFamily[] }
+  | { status: 'legacy_intake_not_ready' }
   | { status: 'drained'; summary: DrainSummary };
 
 export interface CaptureDrainRuntimeDeps {
@@ -99,12 +107,23 @@ export async function runPiggyvestWebhookCaptureDrain(input: {
     env,
     deps.now?.() ?? new Date()
   );
+  const legacyReplayEnabled = isPiggyvestCaptureLegacyReplayEnabled(env);
+  const legacyIntakeReady = isPiggyvestWebhookIntakeRuntimeReady(env);
   const executor = (deps.createExecutor ?? createCaptureDrainPgExecutor)(
     runtime
   );
   const queue = createPgCaptureQueue(executor);
   await monitorCaptureReviews(() => queue.status());
   if (
+    legacyReplayEnabled &&
+    !legacyIntakeReady &&
+    notReady.includes('bank') &&
+    notReady.includes('custody') &&
+    notReady.includes('interest')
+  )
+    return { status: 'legacy_intake_not_ready' };
+  if (
+    !legacyReplayEnabled &&
     notReady.includes('bank') &&
     notReady.includes('custody') &&
     notReady.includes('interest')
@@ -127,11 +146,20 @@ export async function runPiggyvestWebhookCaptureDrain(input: {
         deps.process ?? ((delivery) => replayPrimaryDelivery(delivery, env)),
       deferBeforeReplay: (row) => {
         const family = primaryOwnerFamily(row.event_type ?? '');
-        return family && notReady.some((unavailable) => unavailable === family)
+        if (
+          legacyReplayEnabled &&
+          !legacyIntakeReady &&
+          authorizesLegacyHandling(row.event_type ?? '', row.key_families) &&
+          (!family || !row.key_families.includes(family))
+        )
+          return 'LEGACY_INTAKE_UNAVAILABLE';
+        return family &&
+          row.key_families.includes(family) &&
+          notReady.some((unavailable) => unavailable === family)
           ? 'PRIMARY_INTAKE_UNAVAILABLE'
           : null;
       },
-      outOfScope: workerHostReplayScope,
+      outOfScope: (row) => workerHostReplayScope(row, legacyReplayEnabled),
     },
     { limit: input.limit ?? CAPTURE_DRAIN_BATCH, nowMs: deps.nowMs }
   );

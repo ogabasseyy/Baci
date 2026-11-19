@@ -1,0 +1,40 @@
+{
+  "base": "f5985ba6aa4dba11abef872a18409518624386e6",
+  "date": "2026-11-03",
+  "scopedTests": {
+    "runnerIntegrityTlsTransport": 35,
+    "integrationStorefrontBoot": 10,
+    "normalOwnerRlsBrowserMatrix": 2,
+    "nativeLinuxInstallation": 1
+  },
+  "browserCells": 12,
+  "types": "runner and commerce scoped passed",
+  "biome": "targeted passed; unused test parameter warning corrected",
+  "ordersCreated": 0,
+  "benchmarks": "parked by owner; none executed this task",
+  "productionInstallation": "not performed",
+  "wholeCandidateCi": "not run locally on shared overloaded host; required on exact candidate commit",
+  "freeReview": "blocked by included allowance; 22-minute cooldown reported",
+  "releaseQualified": false,
+  "publishingReady": false,
+  "validationBase": "f5985ba6aa4dba11abef872a18409518624386e6",
+  "reconciliation": {
+    "newMain": "f5985ba6aa4dba11abef872a18409518624386e6",
+    "upstreamPaths": 26,
+    "taskFileOverlap": 0,
+    "preservedTaskFileBytes": 900,
+    "postRefreshChecks": "35 runner/transport/TLS tests, 10 integration/boot tests, native Linux inventory/compile and runner/commerce scoped TypeScript; normal-RLS browser proof source unchanged and retains original execution base"
+  },
+  "postRefreshValidation": {
+    "runnerTests": 35,
+    "integrationBootTests": 10,
+    "runnerTypes": "passed",
+    "base": "f5985ba6aa4dba11abef872a18409518624386e6",
+    "nativeLinuxInstallation": 1,
+    "commerceTypes": "passed"
+  },
+  "nativeAndRlsExecutionBases": {
+    "nativeLinuxInstallation": "f5985ba6aa4dba11abef872a18409518624386e6",
+    "normalOwnerRlsBrowserMatrix": "7a2f3cc9b1f610d33b5c6da49147166f814e2404"
+  }
+}

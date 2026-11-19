@@ -37,7 +37,15 @@ describe('WalletHeroSection', () => {
     expect(screen.getByText('₦125,000')).toBeOnTheScreen();
     expect(screen.getByText('₦35,000')).toBeOnTheScreen();
     expect(screen.getByText('2,000 pts')).toBeOnTheScreen();
-    expect(screen.getByText('Loyalty · Silver')).toBeOnTheScreen();
+    // With points to spend the pill shows Redeem instead of the tier.
+    expect(screen.getByText('Redeem')).toBeOnTheScreen();
+    expect(screen.queryByText('Silver')).toBeNull();
+  });
+
+  it('shows the loyalty tier in the pill when there are no points to redeem', () => {
+    render(<WalletHeroSection {...baseProps} loyaltyPoints={0} />);
+    expect(screen.getByText('0 pts')).toBeOnTheScreen();
+    expect(screen.getByText('Silver')).toBeOnTheScreen();
   });
 
   it('shows an earnings dash when the hosted earnings contract is unavailable', () => {
@@ -55,39 +63,56 @@ describe('WalletHeroSection', () => {
 
   it('does not invent a Bronze membership for a missing or historical Bronze tier', () => {
     const { rerender } = render(
-      <WalletHeroSection {...baseProps} loyaltyTier={undefined} />
+      <WalletHeroSection
+        {...baseProps}
+        loyaltyPoints={0}
+        loyaltyTier={undefined}
+      />
     );
-    expect(screen.getByText('Loyalty')).toBeOnTheScreen();
+    expect(screen.getByText('0 pts')).toBeOnTheScreen();
     expect(screen.queryByText(/bronze/i)).toBeNull();
 
-    rerender(<WalletHeroSection {...baseProps} loyaltyTier="bronze" />);
-    expect(screen.getByText('Loyalty')).toBeOnTheScreen();
+    rerender(
+      <WalletHeroSection
+        {...baseProps}
+        loyaltyPoints={0}
+        loyaltyTier="bronze"
+      />
+    );
+    expect(screen.getByText('0 pts')).toBeOnTheScreen();
     expect(screen.queryByText(/bronze/i)).toBeNull();
   });
 
-  it('opens funding and loyalty actions from the balance card', () => {
+  it('has no Add Money button; loyalty points open redemption from the card header', () => {
     render(<WalletHeroSection {...baseProps} />);
 
-    fireEvent.press(screen.getByRole('button', { name: 'Add money' }));
+    expect(screen.queryByRole('button', { name: 'Add money' })).toBeNull();
     fireEvent.press(
       screen.getByRole('button', { name: 'Redeem loyalty points' })
     );
 
-    expect(baseProps.onOpenFundPanel).toHaveBeenCalledTimes(1);
     expect(baseProps.onOpenRedeemPanel).toHaveBeenCalledTimes(1);
+    expect(baseProps.onOpenFundPanel).not.toHaveBeenCalled();
   });
 
-  it('keeps Add Money compact without shrinking its touch area', () => {
+  it('shows Start Savings inside the card only when a handler is given', () => {
+    const onStartSavings = jest.fn();
+    const { rerender } = render(<WalletHeroSection {...baseProps} />);
+    expect(screen.queryByRole('button', { name: 'Start Savings' })).toBeNull();
+
+    rerender(
+      <WalletHeroSection {...baseProps} onStartSavings={onStartSavings} />
+    );
+    fireEvent.press(screen.getByRole('button', { name: 'Start Savings' }));
+    expect(onStartSavings).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows only Earnings and Savings boxes under the balance', () => {
     render(<WalletHeroSection {...baseProps} />);
 
-    const addMoneyButton = screen.getByRole('button', { name: 'Add money' });
-    expect(addMoneyButton).toHaveStyle({
-      minHeight: 36,
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-    });
-    expect(addMoneyButton).toHaveProp('hitSlop', 6);
-    expect(screen.getByText('Add Money')).toHaveStyle({ fontSize: 12 });
+    expect(screen.getByText('Earnings')).toBeOnTheScreen();
+    expect(screen.getByText('Savings')).toBeOnTheScreen();
+    expect(screen.queryByText('Loyalty')).toBeNull();
   });
 
   it('shows the real funding account beside the balance without inventing one', () => {

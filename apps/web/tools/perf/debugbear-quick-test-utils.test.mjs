@@ -212,6 +212,38 @@ describe('getDebugBearCategoryScore', () => {
     ).toBe(91);
   });
 
+  it('normalizes DebugBear metrics-backed category scores to percentages', () => {
+    expect(
+      getDebugBearCategoryScore({ metrics: { 'performance.score': 0.88 } }, [
+        'performance',
+      ])
+    ).toBe(88);
+  });
+
+  it('normalizes DebugBear summary-backed category scores to percentages', () => {
+    expect(
+      getDebugBearCategoryScore({ summary: { 'performance.score': 0.73 } }, [
+        'performance',
+      ])
+    ).toBe(73);
+  });
+
+  it('prefers metrics score over conflicting lighthouseResult for aliased category names', () => {
+    expect(
+      getDebugBearCategoryScore(
+        {
+          metrics: { 'bestPractices.score': 0.73 },
+          lighthouseResult: {
+            categories: {
+              'best-practices': { score: 0.5 },
+            },
+          },
+        },
+        ['best-practices', 'bestPractices']
+      )
+    ).toBe(73);
+  });
+
   it('returns null when DebugBear does not include category scores', () => {
     expect(
       getDebugBearCategoryScore({ metrics: {} }, ['performance'])

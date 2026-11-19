@@ -1,8 +1,7 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { StyleSheet, Text, View } from 'react-native';
 import { formatDateTimeDisplay } from '@/components/ui/format-date-time-display';
-import { BRAND, SPACING, TYPOGRAPHY } from '@/constants/Colors';
-import { formatSavingsDuration } from './format-savings-duration';
+import { BRAND, SPACING } from '@/constants/Colors';
 import type { SavingsFrequency } from './start-savings.helpers';
 import type { StartSavingsColors } from './start-savings.types';
 
@@ -31,12 +30,10 @@ export function SavingsTimelinePreview({
     return null;
   }
 
+  // One headline (the number of payments) and the end date: a separate
+  // "about N months" span counted the gaps between payments, so it read one
+  // short of the payment count beside it.
   const count = Math.ceil(targetAmount / contributionAmount);
-  const duration = formatSavingsDuration(
-    targetAmount,
-    contributionAmount,
-    frequency
-  );
 
   return (
     <View
@@ -49,13 +46,10 @@ export function SavingsTimelinePreview({
       <View style={styles.header}>
         <Ionicons name="calendar-outline" size={16} color={BRAND.primary} />
         <Text style={[styles.eyebrow, { color: colors.textSecondary }]}>
-          YOUR SAVINGS TIMELINE
+          Your savings timeline
         </Text>
       </View>
       <Text style={[styles.duration, { color: colors.text }]}>
-        {duration === 'Same day' ? duration : `About ${duration}`}
-      </Text>
-      <Text style={[styles.detail, { color: colors.textSecondary }]}>
         {count} {frequency} contribution{count === 1 ? '' : 's'}
       </Text>
       <View style={[styles.divider, { backgroundColor: colors.border }]} />
@@ -85,12 +79,10 @@ const styles = StyleSheet.create({
   },
   header: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   eyebrow: {
-    fontSize: TYPOGRAPHY.size.xs,
-    fontWeight: '700',
-    letterSpacing: 0.8,
+    fontSize: 12,
+    fontWeight: '600',
   },
-  duration: { fontSize: TYPOGRAPHY.size['2xl'], fontWeight: '700' },
-  detail: { fontSize: TYPOGRAPHY.size.sm },
+  duration: { fontSize: 21, fontWeight: '700' },
   divider: { height: 1, marginVertical: SPACING.xs },
   dateRow: {
     flexDirection: 'row',
@@ -100,7 +92,7 @@ const styles = StyleSheet.create({
     columnGap: SPACING.sm,
     rowGap: 4,
   },
-  dateLabel: { fontSize: TYPOGRAPHY.size.sm },
-  dateValue: { fontSize: TYPOGRAPHY.size.sm, fontWeight: '700' },
-  note: { fontSize: TYPOGRAPHY.size.xs, lineHeight: 18, marginTop: 2 },
+  dateLabel: { fontSize: 11 },
+  dateValue: { fontSize: 11, fontWeight: '700' },
+  note: { fontSize: 10, lineHeight: 18, marginTop: 2 },
 });

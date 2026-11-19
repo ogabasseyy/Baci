@@ -67,6 +67,15 @@ describe('storefront-filter-metadata-policy', () => {
         expect(hasFilterableQueryParams(params)).toBe(true);
       }
     });
+
+    it('detects category and categories query parameters', () => {
+      for (const params of [
+        { category: 'Smartphones' },
+        { categories: 'Smartphones' },
+      ]) {
+        expect(hasFilterableQueryParams(params)).toBe(true);
+      }
+    });
   });
 
   describe('getCanonicalStorefrontFilterSearchParams', () => {
@@ -121,6 +130,11 @@ describe('storefront-filter-metadata-policy', () => {
       expect(
         toCanonical({ graphics: 'NVIDIA RTX 4070', graphicsHub: 'rtx-4070' })
       ).toBe('');
+    });
+
+    it('drops category and categories query parameters from canonical search params', () => {
+      expect(toCanonical({ category: 'Smartphones' })).toBe('');
+      expect(toCanonical({ categories: 'Smartphones' })).toBe('');
     });
 
     it('handles array values and trims whitespace', () => {
@@ -195,6 +209,17 @@ describe('storefront-filter-metadata-policy', () => {
         { sortBy: 'price' },
         { order: 'desc' },
         { graphicsHub: 'rtx-4070' },
+      ]) {
+        expect(hasFilterableQueryParams(searchParams)).toBe(true);
+        expectRobots(searchParams, undefined, false);
+        expectRobots(searchParams, { filtersAffectResults: true }, false);
+      }
+    });
+
+    it('noindexes category and categories listing URLs while preserving follow directives', () => {
+      for (const searchParams of [
+        { category: 'Smartphones' },
+        { categories: 'Smartphones' },
       ]) {
         expect(hasFilterableQueryParams(searchParams)).toBe(true);
         expectRobots(searchParams, undefined, false);

@@ -13,6 +13,7 @@ interface CheckoutIdentityModalProps {
   isOpen: boolean;
   onClose: () => void;
   checkoutUrl: string;
+  onProceed?: () => void;
 }
 
 /**
@@ -26,6 +27,7 @@ export function CheckoutIdentityModal({
   isOpen,
   onClose,
   checkoutUrl,
+  onProceed,
 }: CheckoutIdentityModalProps) {
   const router = useRouter();
   const merchantContext = useMerchantSafe();
@@ -36,6 +38,7 @@ export function CheckoutIdentityModal({
 
   const handleGuestCheckout = () => {
     router.push(normalizedCheckoutUrl);
+    onProceed?.();
     onClose();
   };
 

@@ -25,6 +25,8 @@ export type PrimaryIntakeFamily = 'bank' | 'custody' | 'interest';
 export interface PrimaryIntakeEvidence {
   /** Families whose primary intake cannot finish a replay on this host. */
   notReady: PrimaryIntakeFamily[];
+  /** Enabled legacy bank inflow runtime is broken, independent of key presence. */
+  legacyBankInflowUnavailable?: boolean;
 }
 
 type Probe = 'ready' | 'off' | 'broken';
@@ -37,6 +39,12 @@ function probe(read: () => unknown): Probe {
   }
 }
 
+export function isPrimaryLegacyBankInflowUnavailable(
+  env: NodeJS.ProcessEnv
+): boolean {
+  return probe(() => readPrimaryWalletInflowRuntime(env)) === 'broken';
+}
+
 function firstReaderDecides(reads: readonly (() => unknown)[]): boolean {
   for (const read of reads) {
     const outcome = probe(read);
@@ -45,9 +53,8 @@ function firstReaderDecides(reads: readonly (() => unknown)[]): boolean {
   return false;
 }
 
-function bankReadersReady(env: NodeJS.ProcessEnv): boolean {
+function bankReadersReady(env: NodeJS.ProcessEnv, fallback: Probe): boolean {
   const inbox = probe(() => readPrimaryWalletBankInboxRuntime('intake', env));
-  const fallback = probe(() => readPrimaryWalletInflowRuntime(env));
   // A deliberately disabled fallback is valid: the inbox still accepts the
   // family. A configured-but-broken fallback is not, because unknown-wallet
   // receipts can be declined by the inbox and dispatched to that path.
@@ -60,8 +67,9 @@ export function collectPrimaryIntakeEvidence(
   env: NodeJS.ProcessEnv,
   now: Date
 ): PrimaryIntakeEvidence {
+  const inflow = probe(() => readPrimaryWalletInflowRuntime(env));
   const ready: Record<PrimaryIntakeFamily, boolean> = {
-    bank: bankReadersReady(env),
+    bank: bankReadersReady(env, inflow),
     custody: firstReaderDecides([
       () => readPrimaryCardCustodyIntakeRuntime(env, now.getTime()),
     ]),
@@ -71,7 +79,11 @@ export function collectPrimaryIntakeEvidence(
     ]),
   };
   const families = Object.keys(ready).sort() as PrimaryIntakeFamily[];
-  return { notReady: families.filter((family) => !ready[family]) };
+  const evidence: PrimaryIntakeEvidence = {
+    notReady: families.filter((family) => !ready[family]),
+  };
+  if (inflow === 'broken') evidence.legacyBankInflowUnavailable = true;
+  return evidence;
 }
 
 export function primaryIntakeReason(

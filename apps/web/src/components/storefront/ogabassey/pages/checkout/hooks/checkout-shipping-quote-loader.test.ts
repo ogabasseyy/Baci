@@ -102,9 +102,35 @@ describe('loadCheckoutShippingQuotes', () => {
         String(vi.mocked(global.fetch).mock.calls[0]?.[1]?.body),
       );
       expect(body.deliveryPreference).toBe('pickup_station');
+      expect(body.merchant_rates_only).toBe(false);
       expect(body.receiver.address).toBe('Ikeja, Lagos');
       expect(body.receiver.city).toBe('Ikeja');
       expect(body.receiver.state).toBe('Lagos');
+    });
+
+    it('requests carrier pickup_station quotes without requiring customer coordinates', async () => {
+      const state = createState();
+      await loadCheckoutShippingQuotes(
+        {
+          ...receiver,
+          address: '',
+          city: 'Port Harcourt',
+          state: 'Rivers',
+          latitude: undefined,
+          longitude: undefined,
+          deliveryPreference: 'pickup_station',
+        },
+        cart,
+        state
+      );
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      const body = JSON.parse(
+        String(vi.mocked(global.fetch).mock.calls[0]?.[1]?.body)
+      );
+      expect(body.deliveryPreference).toBe('pickup_station');
+      expect(body.merchant_rates_only).toBe(false);
+      expect(body.receiver.latitude).toBeUndefined();
+      expect(body.receiver.longitude).toBeUndefined();
     });
   });
 

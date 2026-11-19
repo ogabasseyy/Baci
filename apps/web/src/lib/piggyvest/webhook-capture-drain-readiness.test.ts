@@ -195,6 +195,7 @@ describe('collectCaptureDrainEvidence', () => {
         login: { ok: true },
         schedule: { enabled: true, cron: 'installed' },
         primaryIntake: { notReady: ['bank', 'custody', 'interest'] },
+        legacyReplayRuntimeReady: false,
         alerts: { configured: true },
       },
     });
@@ -226,6 +227,7 @@ describe('collectCaptureDrainEvidence', () => {
       login: { ok: false, reason: 'not_configured' },
       schedule: { enabled: false, cron: 'unreadable' },
       primaryIntake: { notReady: ['bank', 'custody', 'interest'] },
+      legacyReplayRuntimeReady: false,
       alerts: { configured: false },
     });
   });
@@ -272,6 +274,7 @@ describe('collectCaptureDrainEvidence', () => {
       login: { ok: false, reason: 'unsafe', failedChecks: ['membership'] },
       schedule: { enabled: true, cron: 'unreadable' },
       primaryIntake: { notReady: ['bank', 'custody', 'interest'] },
+      legacyReplayRuntimeReady: false,
       alerts: { configured: true },
     });
   });

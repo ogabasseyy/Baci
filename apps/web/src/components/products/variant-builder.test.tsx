@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { describe, expect, it, vi } from 'vitest';
 import { VariantBuilder } from '@/components/products/variant-builder';
@@ -106,6 +106,46 @@ describe('VariantBuilder', () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText('3. Set stock quantity per variant')
+    ).toBeInTheDocument();
+  });
+
+  it('does not add an attribute value when Enter confirms IME composition', () => {
+    function AttributeForm() {
+      const form = useForm();
+      return (
+        <FormProvider {...form}>
+          <VariantBuilder
+            basePrice={1000}
+            categoryConfig={{
+              description: 'Clothing',
+              displayName: 'Fashion',
+              supportsVariants: true,
+              variantAttributes: [{ key: 'size', label: 'Size', type: 'text' }],
+            }}
+            onVariantsChange={vi.fn()}
+            stockTrackingEnabled={false}
+          />
+        </FormProvider>
+      );
+    }
+    render(<AttributeForm />);
+    const input = screen.getByRole('textbox');
+    fireEvent.change(input, { target: { value: 'Large' } });
+
+    expect(fireEvent.keyDown(input, { key: 'Enter', isComposing: true })).toBe(
+      false
+    );
+    expect(fireEvent.keyDown(input, { key: 'Enter', keyCode: 229 })).toBe(
+      false
+    );
+    expect(
+      screen.queryByRole('button', { name: 'Remove Large' })
+    ).not.toBeInTheDocument();
+    expect(input).toHaveValue('Large');
+
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(
+      screen.getByRole('button', { name: 'Remove Large' })
     ).toBeInTheDocument();
   });
 });

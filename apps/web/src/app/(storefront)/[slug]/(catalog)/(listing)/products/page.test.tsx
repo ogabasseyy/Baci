@@ -1,4 +1,15 @@
-import { render, screen, waitFor } from '@testing-library/react';
+vi.mock(
+  '@/components/storefront/experience/experience-server-boundary',
+  () => ({
+    ExperienceServerBoundary: ({
+      fallback,
+    }: {
+      fallback: import('react').ReactNode;
+    }) => fallback,
+  })
+);
+
+import { render, screen } from '@testing-library/react';
 import type React from 'react';
 import { Suspense } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -185,12 +196,8 @@ describe('products index page', () => {
     expect(screen.getByText('Store description')).toBeInTheDocument();
   });
 
-  it('does not prepend the merchant slug on subdomain storefront links', async () => {
-    mockHeaders.mockResolvedValue(
-      new Headers([['x-merchant-slug', 'test-store']])
-    );
-
-    await renderProductsPageContent('2');
+  it('does not prepend the merchant slug on domain-routed storefront links', async () => {
+    await renderProductsPageContent('2', 'test-store.com');
 
     expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute(
       'href',
@@ -258,10 +265,10 @@ describe('products index page', () => {
     ).toBeInTheDocument();
     expect(screen.queryByText('Route loader fallback')).not.toBeInTheDocument();
     expect(screen.queryByText('Products page content')).not.toBeInTheDocument();
-    expect(mockConnection).toHaveBeenCalledOnce();
+    expect(mockConnection).not.toHaveBeenCalled();
   });
 
-  it('keeps product listings request-bound behind a static-shell fallback', async () => {
+  it('renders product listings without calling connection()', () => {
     render(
       ProductsPage({
         params: Promise.resolve({ slug: 'test-store' }),
@@ -269,10 +276,8 @@ describe('products index page', () => {
       })
     );
 
-    expect(
-      screen.getByRole('status', { name: 'Loading product listing' })
-    ).toBeInTheDocument();
-    await waitFor(() => expect(mockConnection).toHaveBeenCalledOnce());
+    expect(screen.getByText('Products page content')).toBeInTheDocument();
+    expect(mockConnection).not.toHaveBeenCalled();
   });
 
   it('renders a placeholder when a catalog item is missing an image', async () => {

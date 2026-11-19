@@ -4,11 +4,14 @@ import { type CartSnapshot, cartLineIdentity } from '@baci/shared/cart';
 
 import type { Product } from '@/lib/products';
 
+import { shouldSkipEmptyGuestCartFetch } from './cart-hydration-gate';
+import { writeCartSessionHint } from './cart-session-hint';
 import {
   fetchSharedCartProducts,
   fetchSharedCartSnapshot,
 } from './shared-cart-client';
 import { FETCH_COALESCE_MS } from './shared-cart-hook-support';
+import { isTerminalCart } from './shared-cart-queue';
 import type { SharedCartRuntime } from './use-shared-cart-runtime';
 
 export function createCartSnapshotActions(context: SharedCartRuntime) {
@@ -90,14 +93,42 @@ export function createCartSnapshotActions(context: SharedCartRuntime) {
     // deferred adopt would double-fetch and dispatch a bare poll
     // snapshot before the link (import, hydration, send-ready) runs.
     if (adoptOutcomeRef.current === 'unknown') return;
+    if (
+      !force &&
+      stateRef.current.cartId === null &&
+      shouldSkipEmptyGuestCartFetch({
+        merchantId: optionsRef.current.merchantId,
+        merchantSlug: optionsRef.current.merchantSlug,
+        cachedCount: stateRef.current.display.length,
+      })
+    ) {
+      return;
+    }
     if (!force && Date.now() - lastFetchRef.current < FETCH_COALESCE_MS) return;
+    // Claim the coalescing window before the read starts. Returning to a
+    // tab fires visibilitychange and focus together; marking the window
+    // only on completion let both through, and each read holds the cart
+    // request lock, delaying the shopper's next edit by a round trip.
+    const previousFetch = lastFetchRef.current;
+    const claimedAt = Date.now();
+    if (!force) lastFetchRef.current = claimedAt;
     const result = await fetchSharedCartSnapshot(
       undefined,
       optionsRef.current.merchantSlug
     );
-    if (generationRef.current !== generation) return;
-    if (!result.ok) return;
+    if (generationRef.current !== generation || !result.ok) {
+      // Give the window back so a failed read never suppresses the retry.
+      if (!force && lastFetchRef.current === claimedAt)
+        lastFetchRef.current = previousFetch;
+      return;
+    }
     lastFetchRef.current = Date.now();
+    if (!isTerminalCart(result.snapshot)) {
+      writeCartSessionHint(
+        optionsRef.current.merchantId,
+        result.snapshot.lines.length > 0 ? '1' : '0'
+      );
+    }
     dispatch({
       generation,
       snapshot: result.snapshot,

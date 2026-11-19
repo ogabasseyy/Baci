@@ -31,7 +31,7 @@ const input = {
   operationRailRef: { current: null },
   refetchWallet: async () => undefined,
   savingsContributionAmount: '',
-  spendableBalance: 0,
+  walletBalance: 0,
   setIsAddingSavingsContribution: jest.fn(),
   setShowSavingsProgressModal: jest.fn(),
   setSavingsContributionAmount: jest.fn(),
@@ -176,7 +176,93 @@ describe('goalAwaitingSettlement', () => {
       hasPendingSavingsContribution:
         result.current.hasPendingSavingsContribution,
       goalAwaitingSettlement: true,
+      isCheckingSavingsContribution: false,
+      isSavingsContributionRetry: false,
+      onCheckSavingsContribution: expect.any(Function),
       walletUpdatedAt: 42,
     });
+  });
+});
+
+describe('bugfix: completed goal offered "Start another plan" while unreachable (walk 11)', () => {
+  const fundedCompleted = {
+    id: 'goal-1',
+    principal_amount: 500_000,
+    current_amount: 500_000,
+    status: 'completed',
+  } as never;
+
+  it('keeps "Complete goal" on the card while the check failed', () => {
+    mockGate.mockReturnValue('error');
+    const { result } = renderHook(() =>
+      useWalletSavingsController({ ...input, goal: fundedCompleted })
+    );
+    expect(
+      result.current.walletContentSavingsProps.goalAwaitingSettlement
+    ).toBe(true);
+    // The sheet's own action still waits for a ready check.
+    expect(mockCreateActions).toHaveBeenLastCalledWith(
+      expect.objectContaining({ goalAwaitingSettlement: false })
+    );
+  });
+
+  it('keeps it while the check is still running', () => {
+    mockGate.mockReturnValue('checking');
+    const { result } = renderHook(() =>
+      useWalletSavingsController({ ...input, goal: fundedCompleted })
+    );
+    expect(
+      result.current.walletContentSavingsProps.goalAwaitingSettlement
+    ).toBe(true);
+  });
+
+  it("keeps today's card where PiggyVest is off", () => {
+    mockGate.mockReturnValue('off');
+    const { result } = renderHook(() =>
+      useWalletSavingsController({ ...input, goal: fundedCompleted })
+    );
+    expect(
+      result.current.walletContentSavingsProps.goalAwaitingSettlement
+    ).toBe(false);
+  });
+});
+
+describe('pending contribution status', () => {
+  it('gives the sheet a status-only check that never reaches the submit path', async () => {
+    mockReady = true;
+    const { result } = renderHook(() => useWalletSavingsController(input));
+    const props = result.current.walletContentSavingsProps;
+    expect(props.isCheckingSavingsContribution).toBe(false);
+    // No stored operation id: a no-op, and never the add handler.
+    await expect(props.onCheckSavingsContribution()).resolves.toBe(
+      'no-operation'
+    );
+    expect(mockSubmit).not.toHaveBeenCalled();
+    expect(input.setIsAddingSavingsContribution).not.toHaveBeenCalled();
+    expect(mockCreateActions).toHaveBeenLastCalledWith(
+      expect.objectContaining({ checkPendingStatus: expect.any(Function) })
+    );
+  });
+
+  it('bugfix (Codex): a legacy-rail id keeps its card, whose button replays the same add', async () => {
+    mockReady = true;
+    const operationRailRef: { current: 'primary' | 'legacy' | null } = {
+      current: null,
+    };
+    const { result, rerender } = renderHook(() =>
+      useWalletSavingsController({ ...input, operationRailRef })
+    );
+    // Stored after the scope is bound (the first render drops stale ids).
+    operationRailRef.current = 'legacy';
+    rerender({});
+    // The card stays, so the amount can't be edited before the retry, and it
+    // says Retry, not Check: this button may send the request again.
+    expect(result.current.hasPendingSavingsContribution).toBe(true);
+    expect(
+      result.current.walletContentSavingsProps.isSavingsContributionRetry
+    ).toBe(true);
+    await result.current.walletContentSavingsProps.onCheckSavingsContribution();
+    // Same id, same rail, same amount: the original add, not a status read.
+    expect(mockSubmit).toHaveBeenCalledTimes(1);
   });
 });

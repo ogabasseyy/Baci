@@ -1,3 +1,7 @@
+vi.mock('@/lib/shipping/shipping-quote-route-proof', () => ({
+  createShippingQuoteRouteProof: () => ({ signature: 'synthetic-test-proof' }),
+}));
+
 import type { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -101,12 +105,17 @@ function buildSupabaseMock(
       }
       throw new Error(`Unexpected table: ${table}`);
     }),
-    // Merchant-configured rates RPC: no rates by default, so the historical
-    // carrier-only expectations in this suite stay byte-identical.
-    rpc: vi.fn().mockResolvedValue({
-      data: { locations: [], rates: [], zones: [] },
-      error: null,
-    }),
+    quotePersistence: shippingQuotesTable.upsert,
+    rpc: vi.fn((name: string, args: { p_quote?: unknown }) =>
+      name === 'storefront_shipping_quote_storage_ready'
+        ? Promise.resolve({ data: true, error: null })
+        : name === 'persist_storefront_shipping_quote'
+          ? shippingQuotesTable.upsert(args.p_quote)
+          : Promise.resolve({
+              data: { locations: [], rates: [], zones: [] },
+              error: null,
+            })
+    ),
   };
 }
 
@@ -167,9 +176,7 @@ describe('POST /api/shipping/quotes', () => {
       error: null,
     });
     mockCreateAdminClient.mockReturnValue(supabase);
-    mockCreateServerClient.mockResolvedValue(
-      buildSupabaseMock({ id: 'user-1' })
-    );
+    mockCreateServerClient.mockResolvedValue(supabase);
     mockGetQuotes.mockResolvedValue({
       quotes: {
         featured: [],
@@ -256,9 +263,7 @@ describe('POST /api/shipping/quotes', () => {
       { code: '23514', message: 'economics constraint failed' }
     );
     mockCreateAdminClient.mockReturnValue(supabase);
-    mockCreateServerClient.mockResolvedValue(
-      buildSupabaseMock({ id: 'user-1' })
-    );
+    mockCreateServerClient.mockResolvedValue(supabase);
     mockGetQuotes.mockResolvedValue({
       quotes: {
         featured: [],

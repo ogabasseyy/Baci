@@ -88,3 +88,16 @@ it('returns unavailable when the cache cannot be read or refreshed', async () =>
 
   expect((await GET(new Request('http://localhost'))).status).toBe(503);
 });
+
+it('includes a retry interval on rate-limited requests', async () => {
+  mocks.limit.mockResolvedValue({
+    allowed: false,
+    resetTime: Date.now() + 30000,
+  });
+  const response = await GET(new Request('http://localhost'));
+  expect(response.status).toBe(429);
+  expect(response.headers.get('X-Oxygen-Rate-Limit-Scope')).toBe('user');
+  expect(response.headers.get('X-Oxygen-Rate-Limit-User')).toBe('user');
+  expect(Number(response.headers.get('Retry-After'))).toBeGreaterThan(0);
+  expect(mocks.readOrRefresh).not.toHaveBeenCalled();
+});

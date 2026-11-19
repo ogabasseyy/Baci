@@ -216,4 +216,23 @@ describe('GET /auth/confirm', () => {
       'https://usebaci.com/ogabassey/account/login?error=OTP%20expired'
     );
   });
+
+  it('clears the guest session hint cookie when confirmation succeeds', async () => {
+    mockVerifyOtp.mockResolvedValue({ error: null });
+
+    const response = await GET(
+      new Request(
+        'https://usebaci.com/auth/confirm?token_hash=hash-123&type=magiclink&next=%2Fogabassey%2Faccount'
+      )
+    );
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get('location')).toBe(
+      'https://usebaci.com/ogabassey/account'
+    );
+    expect(response.headers.get('set-cookie')).toContain(
+      'baci_customer_session_hint=;'
+    );
+    expect(response.headers.get('set-cookie')).toContain('Max-Age=0');
+  });
 });

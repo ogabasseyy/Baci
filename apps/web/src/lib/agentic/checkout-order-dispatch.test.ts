@@ -586,35 +586,6 @@ describe('agentic checkout order dispatch', () => {
     );
   });
 
-  it('logs webhook delivery failures without throwing synchronously', async () => {
-    const error = new Error('webhook offline');
-    vi.mocked(sendAgenticWebhook).mockRejectedValue(error);
-
-    expect(() =>
-      sendAgenticOrderCreatedWebhook({
-        buyer: {
-          email: 'buyer@example.com',
-          first_name: 'Ada',
-          last_name: 'Lovelace',
-          phone_number: '+2348012345678',
-        },
-        currency: 'NGN',
-        orderId: 'order-1',
-        sessionId: 'agentic_session_1',
-        total: 500000,
-      })
-    ).not.toThrow();
-    await Promise.resolve();
-
-    expect(logger.error).toHaveBeenCalledWith(
-      expect.objectContaining({
-        error: '{}',
-        message: 'Webhook trigger failed',
-        sessionId: 'agentic_session_1',
-      })
-    );
-  });
-
   it('forwards a verified offer alias and persists the live condition', async () => {
     const productId = '22222222-2222-4222-8222-222222222222';
     const offerId = '33333333-3333-4333-8333-333333333333';

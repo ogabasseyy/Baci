@@ -52,6 +52,9 @@ export interface RateLimitResult {
   limit: number;
   remaining: number;
   resetTime: number;
+  failureReason?:
+    | 'distributed_limiter_unavailable'
+    | 'trusted_client_ip_missing';
 }
 
 export type { RateLimitDiagnostic } from './rate-limit-diagnostics';
@@ -136,13 +139,17 @@ export function checkRateLimit(
 }
 
 function denyWithoutDistributedBackend(
-  config: RateLimitConfig
+  config: RateLimitConfig,
+  failureReason: NonNullable<
+    RateLimitResult['failureReason']
+  > = 'distributed_limiter_unavailable'
 ): RateLimitResult {
   return {
     allowed: false,
     limit: config.maxRequests,
     remaining: 0,
     resetTime: Date.now() + config.windowMs,
+    failureReason,
   };
 }
 
@@ -207,7 +214,9 @@ export function checkBrilStashFeedRateLimit(
     failClosedWithoutRedis: true,
   };
   if (client === 'unknown') {
-    return Promise.resolve(denyWithoutDistributedBackend(config));
+    return Promise.resolve(
+      denyWithoutDistributedBackend(config, 'trusted_client_ip_missing')
+    );
   }
   return applyRateLimit(client, `${BRILSTASH_FEED_PATH}:${bucket}`, config);
 }

@@ -67,6 +67,13 @@ export async function GET(request: NextRequest): Promise<Response> {
     bearer && validQuery ? 'read' : 'malformed'
   );
   if (!budget.allowed) {
+    if (budget.failureReason) {
+      logger.warn({
+        message: 'BrilStash feed rate limiter unavailable',
+        requestId,
+        reason: budget.failureReason,
+      });
+    }
     const response = createRateLimitResponse(
       budget.limit,
       budget.remaining,

@@ -91,6 +91,29 @@ describe('BrilStash feed GET', () => {
     expect(response.headers.get('retry-after')).toBeTruthy();
     expect(response.headers.get('cache-control')).toBe('no-store');
     expect(response.headers.get('x-request-id')).toBeTruthy();
+    expect(dependencies.warn).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'trusted_client_ip_missing',
+    'distributed_limiter_unavailable',
+  ])('logs limiter failure %s without changing the 429 contract', async (failureReason) => {
+    dependencies.rateLimit.mockResolvedValueOnce({
+      allowed: false,
+      limit: 30,
+      remaining: 0,
+      resetTime: Date.now() + 60_000,
+      failureReason,
+    });
+    const response = await GET(request());
+    expect(response.status).toBe(429);
+    expect(await response.text()).not.toContain(failureReason);
+    expect(dependencies.rpc).not.toHaveBeenCalled();
+    expect(dependencies.warn).toHaveBeenCalledExactlyOnceWith({
+      message: 'BrilStash feed rate limiter unavailable',
+      requestId: response.headers.get('x-request-id'),
+      reason: failureReason,
+    });
   });
 
   it.each([

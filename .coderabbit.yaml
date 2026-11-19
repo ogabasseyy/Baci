@@ -103,9 +103,12 @@ reviews:
       clients for user-facing operations. The only exceptions are the explicit,
       time-bound owner approvals recorded in `AGENTS.md` (mirrored in
       `.ruler/01-critical-rules.md`), each limited to its named call graph and
-      expiry. The legacy exceptions in
-      `docs/agent-guidance/service-role-exceptions.md` are expired; any renewal
-      requires new explicit owner approval with exact scope and expiry.
+      expiry. The legacy batch that expired on 2026-09-16 and every dated
+      renewal in `docs/agent-guidance/service-role-exceptions.md` past its
+      expiry stay expired; the dated renewals still inside their window there
+      (for example the in-app feedback email graph, until 2027-01-30) stay
+      authoritative within their exact scope. Any new renewal requires explicit
+      owner approval with exact scope and expiry.
     - **Scoped queries:** Scope business-data queries to the resolved
       `merchantId` — never `select('*')`, always explicit columns.
     - **No `any`.** Use `unknown` or explicit interfaces/Zod schemas.

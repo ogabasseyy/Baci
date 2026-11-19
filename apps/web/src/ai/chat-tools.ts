@@ -37,7 +37,7 @@ export const getProductDetailsSchema = z.object({
 
 // Virtual-account creation is not yet integrated; keep the schema empty so
 // models never collect customer PII to call this unavailable handler.
-export const createVirtualAccountSchema = z.object({});
+export const createVirtualAccountSchema = z.object({}).strict();
 
 export const checkPaymentStatusSchema = z
   .object({

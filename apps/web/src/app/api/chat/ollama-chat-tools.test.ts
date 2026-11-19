@@ -33,6 +33,7 @@ describe('ollama chat tools', () => {
     });
     expect(accountTool?.function.parameters).toEqual({
       type: 'object',
+      additionalProperties: false,
       properties: {},
     });
   });

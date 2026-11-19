@@ -58,6 +58,7 @@ export const ollamaAgenticChatTools: OllamaChatTool[] = [
       description: TOOL_DESCRIPTIONS.createVirtualAccount,
       parameters: {
         type: 'object',
+        additionalProperties: false,
         properties: {},
       },
     },

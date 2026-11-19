@@ -81,10 +81,18 @@ describe('addToCartSchema', () => {
 });
 
 describe('createVirtualAccountSchema', () => {
-  it('accepts an empty payload without requiring customer PII', () => {
+  it('accepts an empty payload and rejects legacy PII arguments', () => {
     const result = createVirtualAccountSchema.safeParse({});
     expect(result.success).toBe(true);
     expect(result.data).toEqual({});
+
+    const legacy = createVirtualAccountSchema.safeParse({
+      amount: 50_000,
+      customerEmail: 'buyer@example.com',
+      customerName: 'Buyer',
+      items: [{ productId: 'p1', name: 'Phone', price: 50_000, quantity: 1 }],
+    });
+    expect(legacy.success).toBe(false);
   });
 });
 

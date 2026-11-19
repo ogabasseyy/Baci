@@ -209,12 +209,25 @@ export function normalizeGiglTrackingShipment(
       candidate.recognizedStatus !== null &&
       TERMINAL_STATUSES.has(candidate.recognizedStatus)
   );
-  const status =
-    destroyed && !TERMINAL_STATUSES.has(recognizedStatus)
+  // A terminal outcome wins over the SDR fence and over later progress scans,
+  // unless the SDR itself is newer than that terminal scan.
+  const newestSdrAt = Math.max(
+    ...candidates
+      .filter(
+        (candidate) => candidate.providerStatus.trim().toUpperCase() === 'SDR'
+      )
+      .map((candidate) => candidate.event.timestamp.getTime()),
+    Number.NEGATIVE_INFINITY
+  );
+  const terminalOverrides =
+    terminalCandidate !== undefined &&
+    !TERMINAL_STATUSES.has(recognizedStatus) &&
+    !(destroyed && newestSdrAt > terminalCandidate.event.timestamp.getTime());
+  const status = terminalOverrides
+    ? (terminalCandidate.recognizedStatus ?? recognizedStatus)
+    : destroyed && !TERMINAL_STATUSES.has(recognizedStatus)
       ? 'failed'
-      : terminalCandidate && !TERMINAL_STATUSES.has(recognizedStatus)
-        ? (terminalCandidate.recognizedStatus ?? recognizedStatus)
-        : recognizedStatus;
+      : recognizedStatus;
   const deliveredEvent = sortedCandidates.find(
     (candidate) => candidate.recognizedStatus === 'delivered'
   );
@@ -227,7 +240,18 @@ export function normalizeGiglTrackingShipment(
     hasRecognizedLifecycleEvent,
     actualDelivery:
       status === 'delivered' ? deliveredEvent?.event.timestamp : undefined,
-    events: sortedCandidates.map((candidate) => candidate.event),
+    // The worker reads the snapshot location from events[0]: when a terminal
+    // outcome overrides newer scans, its event must lead so the location
+    // matches the persisted status.
+    events: (terminalOverrides
+      ? [
+          terminalCandidate,
+          ...sortedCandidates.filter(
+            (candidate) => candidate !== terminalCandidate
+          ),
+        ]
+      : sortedCandidates
+    ).map((candidate) => candidate.event),
     isStationPickup: shipment.PickupOptions === PickupOptions.ServiceCentre,
   };
 }

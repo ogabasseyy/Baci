@@ -127,6 +127,11 @@ scopes, and emits allowlisted best-effort telemetry. Durable mutation evidence a
 AI quotas remain in the underlying SQL transactions. An uncertain response is not
 retried automatically: read status/reconcile using the existing retry key.
 
+The HTTP challenge handles token validation, including the broker's required
+base read scope. A valid builder token missing a tool-specific scope receives
+`insufficient_scope` with the required scopes in the MCP tool result's
+`_meta["mcp/www_authenticate"]`. Use that challenge to request broader consent.
+
 MCP request size is 64 KiB; HTTPS backend responses are bounded to 128 KiB with a
 25-second timeout. Redirects, alternative origins, cookie fallback, unimplemented
 tools and foreign browser origins are rejected. The existing proxy permits normal

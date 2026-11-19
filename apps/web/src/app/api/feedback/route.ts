@@ -40,7 +40,9 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const merchant = await getMerchantForApiRequest(supabase, user.id);
+  const merchant = await getMerchantForApiRequest(supabase, user.id, {
+    requestedMerchantId: parsed.data.merchantId,
+  });
   if (!merchant) {
     return NextResponse.json({ error: 'No merchant found' }, { status: 403 });
   }
@@ -75,7 +77,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const report = parsed.data;
+  const { merchantId: _requestedMerchantId, ...report } = parsed.data;
   const { data: saved, error: insertError } = await supabase
     .from('feedback')
     .insert({

@@ -113,6 +113,31 @@ describe('POST /api/feedback', () => {
     expect(mockInsert).not.toHaveBeenCalled();
   });
 
+  it('resolves the merchant the app is showing through the access check', async () => {
+    const merchantId = '7f9c2b4e-1d3a-4c5b-8e6f-0a1b2c3d4e5f';
+
+    const res = await POST(req({ ...validBody, merchantId }));
+
+    expect(res.status).toBe(201);
+    expect(mockGetMerchant).toHaveBeenCalledWith(supabase, 'user-1', {
+      requestedMerchantId: merchantId,
+    });
+    expect(mockSendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ report: validBody })
+    );
+  });
+
+  it('returns 403 when the user cannot access the requested merchant', async () => {
+    mockGetMerchant.mockResolvedValue(null);
+
+    const res = await POST(
+      req({ ...validBody, merchantId: '7f9c2b4e-1d3a-4c5b-8e6f-0a1b2c3d4e5f' })
+    );
+
+    expect(res.status).toBe(403);
+    expect(mockInsert).not.toHaveBeenCalled();
+  });
+
   it('returns 403 when the user has no merchant', async () => {
     mockGetMerchant.mockResolvedValue(null);
 

@@ -19,6 +19,8 @@ export const feedbackReportSchema = z.object({
   appVersion: optionalLabel(40),
   platform: z.enum(['ios', 'android', 'web']).optional(),
   device: optionalLabel(120),
+  // The store the app is showing; the server still checks the caller's access.
+  merchantId: z.uuid().optional(),
 });
 
 export type FeedbackReportInput = z.infer<typeof feedbackReportSchema>;

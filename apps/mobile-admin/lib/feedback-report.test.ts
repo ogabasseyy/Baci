@@ -102,6 +102,21 @@ describe('sendFeedbackReport', () => {
     });
   });
 
+  it('includes the store the app is showing when one is given', async () => {
+    mockApiClient.mockResolvedValue({ id: 'fb-2', emailed: true });
+
+    await sendFeedbackReport('Hi', { platform: 'ios' }, 'merchant-1');
+
+    expect(mockApiClient).toHaveBeenCalledWith('/api/feedback', {
+      method: 'POST',
+      body: JSON.stringify({
+        message: 'Hi',
+        platform: 'ios',
+        merchantId: 'merchant-1',
+      }),
+    });
+  });
+
   it('passes server errors through to the caller', async () => {
     mockApiClient.mockRejectedValue(new Error('Too many requests'));
 

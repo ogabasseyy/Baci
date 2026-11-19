@@ -54,6 +54,17 @@ describe('feedbackReportSchema', () => {
     ).toBe(false);
   });
 
+  it('accepts a store id and rejects one that is not a UUID', () => {
+    const merchantId = '7f9c2b4e-1d3a-4c5b-8e6f-0a1b2c3d4e5f';
+    expect(
+      feedbackReportSchema.parse({ message: 'x', merchantId }).merchantId
+    ).toBe(merchantId);
+    expect(
+      feedbackReportSchema.safeParse({ message: 'x', merchantId: 'store-1' })
+        .success
+    ).toBe(false);
+  });
+
   it('rejects an overlong screen label', () => {
     expect(
       feedbackReportSchema.safeParse({ message: 'x', screen: 's'.repeat(201) })

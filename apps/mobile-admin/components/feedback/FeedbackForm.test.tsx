@@ -12,6 +12,10 @@ vi.mock('@/lib/feedback-report', () => ({
   sendFeedbackReport: mockSend,
 }));
 
+vi.mock('@/hooks/useMerchant', () => ({
+  useMerchant: () => ({ merchant: { id: 'merchant-1' } }),
+}));
+
 vi.mock('@/hooks/useTheme', () => ({
   useTheme: () => ({
     colors: {
@@ -86,10 +90,19 @@ describe('FeedbackForm', () => {
 
     await waitFor(() => expect(onSent).toHaveBeenCalledTimes(1));
     expect(mockCollect).toHaveBeenCalledWith('/orders');
-    expect(mockSend).toHaveBeenCalledWith('Orders froze', {
-      screen: '/orders',
-      platform: 'ios',
-    });
+    expect(mockSend).toHaveBeenCalledWith(
+      'Orders froze',
+      { screen: '/orders', platform: 'ios' },
+      'merchant-1'
+    );
+  });
+
+  it('tells the merchant the store name and email address are included', () => {
+    renderForm();
+
+    expect(
+      screen.getByText(/your store name and email\s+address/)
+    ).toBeInTheDocument();
   });
 
   it('shows the server error and keeps the message when sending fails', async () => {

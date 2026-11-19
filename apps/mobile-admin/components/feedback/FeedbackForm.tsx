@@ -8,6 +8,7 @@ import {
   View,
 } from 'react-native';
 import { RADIUS, SPACING, TYPOGRAPHY } from '@/constants/theme';
+import { useMerchant } from '@/hooks/useMerchant';
 import { useTheme } from '@/hooks/useTheme';
 import {
   collectFeedbackDiagnostics,
@@ -28,10 +29,15 @@ interface FeedbackFormProps {
 // Module scope: React Compiler does not lower try/catch inside components.
 async function submitFeedback(
   message: string,
-  screen: string | null
+  screen: string | null,
+  merchantId: string | null
 ): Promise<string | null> {
   try {
-    await sendFeedbackReport(message, collectFeedbackDiagnostics(screen));
+    await sendFeedbackReport(
+      message,
+      collectFeedbackDiagnostics(screen),
+      merchantId
+    );
     return null;
   } catch (error) {
     return error instanceof Error && error.message
@@ -47,6 +53,8 @@ export function FeedbackForm({
   showTitle = true,
 }: FeedbackFormProps) {
   const { colors } = useTheme();
+  // Report against the store this app is showing, not a server-side guess.
+  const { merchant } = useMerchant();
   const [message, setMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,7 +64,7 @@ export function FeedbackForm({
     if (!canSend) return;
     setIsSending(true);
     setError(null);
-    const failure = await submitFeedback(message, screen);
+    const failure = await submitFeedback(message, screen, merchant?.id ?? null);
     setIsSending(false);
     if (failure) {
       setError(failure);
@@ -100,8 +108,8 @@ export function FeedbackForm({
         value={message}
       />
       <Text style={[styles.note, { color: colors.textSecondary }]}>
-        This report will include your message, the screen you’re on, and your
-        app and device details.
+        This report will include your message, your store name and email
+        address, the screen you’re on, and your app and device details.
       </Text>
       {error ? (
         <Text

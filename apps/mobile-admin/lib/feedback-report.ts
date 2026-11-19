@@ -62,10 +62,15 @@ export function collectFeedbackDiagnostics(
 /** Sends one feedback report; the server saves it and emails Baci support. */
 export function sendFeedbackReport(
   message: string,
-  diagnostics: FeedbackDiagnostics
+  diagnostics: FeedbackDiagnostics,
+  merchantId?: string | null
 ): Promise<FeedbackReportResponse> {
   return apiClient<FeedbackReportResponse>('/api/feedback', {
     method: 'POST',
-    body: JSON.stringify({ message: message.trim(), ...diagnostics }),
+    body: JSON.stringify({
+      message: message.trim(),
+      ...diagnostics,
+      ...(merchantId ? { merchantId } : {}),
+    }),
   });
 }

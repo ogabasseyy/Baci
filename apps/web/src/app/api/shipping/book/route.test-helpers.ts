@@ -28,6 +28,8 @@ function createSettledRetentionEqChain(
 
 export function buildSupabaseMock(
   options: {
+    /** Simulates a database without the claim_order_shipment_booking RPC. */
+    claimUnavailable?: boolean;
     selectedQuoteId?: string | null;
     provider?: 'GIGL' | 'TOPSHIP';
     bookingMetadata?: unknown;
@@ -147,12 +149,18 @@ export function buildSupabaseMock(
               data: giglBookingEconomicsProjection,
               error: null,
             })
-          : Promise.resolve({
-              data: [
-                { claimed: true, shipment_id: null, tracking_number: null },
-              ],
-              error: null,
-            })
+          : functionName === 'claim_order_shipment_booking' &&
+              options.claimUnavailable
+            ? Promise.resolve({
+                data: null,
+                error: { code: 'PGRST202', message: 'schema cache' },
+              })
+            : Promise.resolve({
+                data: [
+                  { claimed: true, shipment_id: null, tracking_number: null },
+                ],
+                error: null,
+              })
     ),
     auth: {
       getUser: vi.fn().mockResolvedValue({

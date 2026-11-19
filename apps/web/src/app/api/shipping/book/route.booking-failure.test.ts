@@ -1,6 +1,9 @@
 import type { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { tagProviderCallError } from '@/lib/shipping/order-shipment-booking-failure';
+import {
+  ProviderBookingTimeoutError,
+  tagProviderCallError,
+} from '@/lib/shipping/order-shipment-booking-failure';
 import { OrderShipmentBookingError } from '@/lib/shipping/order-shipment-booking-utils';
 import {
   buildBookingRequest,
@@ -136,6 +139,27 @@ describe('bugfix: POST /api/shipping/book records the real failure and lock stat
       expect.objectContaining({
         error_code: 'DOMESTIC_QUOTE_ORDER_MISMATCH',
         lock_retained: true,
+      }),
+    ]);
+  });
+
+  it('bugfix: records lock_retained false and no pause promise when no booking lock could be acquired', async () => {
+    mockCreateClient.mockReturnValue(
+      buildSupabaseMock({ claimUnavailable: true })
+    );
+    mockBookShipment.mockRejectedValue(
+      new ProviderBookingTimeoutError('GIGL booking timed out')
+    );
+    const { POST } = await import('./route');
+
+    const response = await POST(buildBookingRequest() as NextRequest);
+
+    expect(response.status).toBe(503);
+    expect((await response.json()).error).not.toMatch(/15 minutes/);
+    expect(failureInsertPayloads).toEqual([
+      expect.objectContaining({
+        outcome: 'provider_unconfirmed',
+        lock_retained: false,
       }),
     ]);
   });

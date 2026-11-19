@@ -17,6 +17,9 @@ CREATE TABLE IF NOT EXISTS public.order_shipment_booking_failures (
     outcome IN ('not_submitted', 'provider_unconfirmed', 'rejected', 'booked_not_saved', 'booked_unreconciled', 'unexpected')
   ),
   lock_retained boolean NOT NULL DEFAULT false,
+  -- Carrier reference (tracking or shipment id) when the carrier already
+  -- booked the parcel, so support can reconcile it.
+  provider_reference text CHECK (char_length(provider_reference) <= 128),
   created_at timestamptz NOT NULL DEFAULT now()
 );
 

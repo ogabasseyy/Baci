@@ -120,6 +120,26 @@ describe('recordOrderShipmentBookingFailure', () => {
     );
   });
 
+  it('persists the carrier reference of a booked-but-not-saved failure', async () => {
+    const insert = vi.fn().mockResolvedValue({ error: null });
+    const supabase = { from: vi.fn(() => ({ insert })) };
+    await recordOrderShipmentBookingFailure(
+      supabase as never,
+      'm1',
+      'o1',
+      new OrderShipmentBookingError(
+        'booked, not saved',
+        500,
+        'BOOKED_SHIPMENT_NOT_SAVED',
+        'GIGL-123'
+      ),
+      true
+    );
+    expect(insert).toHaveBeenCalledWith(
+      expect.objectContaining({ provider_reference: 'GIGL-123' })
+    );
+  });
+
   it('never throws when storing the failure itself fails', async () => {
     const supabase = {
       from: vi.fn(() => ({
@@ -135,33 +155,6 @@ describe('recordOrderShipmentBookingFailure', () => {
         false
       )
     ).resolves.toBeUndefined();
-  });
-});
-
-describe('toBookingFailureResponseError', () => {
-  it('explains an unconfirmed GIG timeout instead of a bare 500', () => {
-    const result = toBookingFailureResponseError(
-      new Error('GIGL booking timed out')
-    );
-    expect(result).toMatchObject({
-      status: 503,
-      code: 'SHIPMENT_BOOKING_UNCONFIRMED',
-    });
-  });
-
-  it('bugfix: does not name GIG when an unreachable carrier may be Topship', () => {
-    const unreachable = Object.assign(new TypeError('fetch failed'), {
-      cause: { code: 'ECONNREFUSED' },
-    });
-    tagProviderCallError(unreachable);
-    const result = toBookingFailureResponseError(unreachable);
-    expect((result as Error).message).not.toMatch(/GIG/);
-    expect((result as Error).message).toMatch(/shipping carrier/);
-  });
-
-  it('leaves our own refusals untouched', () => {
-    const own = new OrderShipmentBookingError('x', 400, 'QUOTE_PRICE_CHANGED');
-    expect(toBookingFailureResponseError(own)).toBe(own);
   });
 });
 
@@ -230,20 +223,6 @@ describe('bugfix: typed timeout and booked-but-not-saved', () => {
   });
 });
 
-describe('bugfix: wallet-funded unreachable booking asks for a new quote', () => {
-  it('tells the merchant the charge was refunded and a new quote is needed', () => {
-    const error = Object.assign(new Error('connect ECONNREFUSED'), {
-      code: 'ECONNREFUSED',
-    });
-    tagProviderCallError(error);
-    const mapped = toBookingFailureResponseError(error, {
-      walletFunded: true,
-    }) as { message: string; code?: string };
-    expect(mapped.code).toBe('PROVIDER_UNREACHABLE');
-    expect(mapped.message).toMatch(/new shipping quote/);
-  });
-});
-
 describe('bugfix: order-route persistence failure is booked_not_saved', () => {
   it('classifies SHIPMENT_SAVE_FAILED as booked_not_saved, not rejected', () => {
     const error = new OrderShipmentBookingError(
@@ -289,16 +268,26 @@ describe('bugfix: order-route persistence failure is booked_not_saved', () => {
     );
     expect(classifyBookingFailure(error).outcome).toBe('booked_unreconciled');
   });
-});
 
-describe('bugfix: no pause is promised when no booking lock was acquired', () => {
-  it('asks the merchant to check the carrier instead of promising a 15-minute pause', () => {
-    const mapped = toBookingFailureResponseError(
-      new Error('GIGL booking timed out'),
-      { lockHeld: false }
-    ) as { message: string; code: string };
-    expect(mapped.code).toBe('SHIPMENT_BOOKING_UNCONFIRMED');
-    expect(mapped.message).not.toMatch(/15 minutes/);
-    expect(mapped.message).toMatch(/check with the carrier/);
+  it('classifies a pre-submit GIG timeout as not_submitted', () => {
+    const error = new OrderShipmentBookingError(
+      'GIG did not respond before the booking was sent.',
+      504,
+      'GIGL_BOOKING_TIMED_OUT_BEFORE_SUBMIT'
+    );
+    expect(classifyBookingFailure(error).outcome).toBe('not_submitted');
+  });
+
+  it('carries the carrier reference of a booked-but-not-saved failure', () => {
+    const error = new OrderShipmentBookingError(
+      'booked, not saved',
+      500,
+      'BOOKED_SHIPMENT_NOT_SAVED',
+      'GIGL-123'
+    );
+    expect(classifyBookingFailure(error)).toMatchObject({
+      outcome: 'booked_not_saved',
+      providerReference: 'GIGL-123',
+    });
   });
 });

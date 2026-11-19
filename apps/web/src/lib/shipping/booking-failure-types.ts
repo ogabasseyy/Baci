@@ -12,4 +12,6 @@ export type ClassifiedBookingFailure = {
   message: string;
   httpStatus: number | null;
   outcome: BookingFailureOutcome;
+  /** Carrier reference when the carrier already booked the parcel. */
+  providerReference?: string;
 };

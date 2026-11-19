@@ -226,11 +226,13 @@ export async function POST(request: NextRequest) {
         bookingMerchantId,
         bookingOrderId,
         rawError,
-        retainBookingLock
+        // Only a lock that was actually acquired can still be held.
+        retainBookingLock && lockWasHeld
       );
     }
     const error = toBookingFailureResponseError(rawError, {
       lockHeld: lockWasHeld,
+      lockRetained: retainBookingLock && lockWasHeld,
     });
     if (error instanceof OrderShipmentBookingError)
       return NextResponse.json(

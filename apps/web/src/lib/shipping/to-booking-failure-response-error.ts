@@ -9,10 +9,26 @@ import { OrderShipmentBookingError } from './order-shipment-booking-utils';
  */
 export function toBookingFailureResponseError(
   error: unknown,
-  options: { walletFunded?: boolean; lockHeld?: boolean } = {}
+  options: {
+    walletFunded?: boolean;
+    lockHeld?: boolean;
+    /** The lock is still held after cleanup (e.g. the release failed). */
+    lockRetained?: boolean;
+  } = {}
 ): unknown {
   const { outcome } = classifyBookingFailure(error);
   if (outcome === 'not_submitted') {
+    if (options.lockRetained) {
+      // Nothing was booked, but cleanup could not free the lock, so an
+      // immediate retry would be refused until it expires.
+      return new OrderShipmentBookingError(
+        options.walletFunded
+          ? 'We could not reach the shipping carrier just now and nothing was booked, but this order is paused for up to 15 minutes. Any wallet charge for this attempt should be returned automatically; check your wallet and contact support if it is missing. After the pause, get a new shipping quote and book again.'
+          : 'We could not reach the shipping carrier just now and nothing was booked, but this order is paused for up to 15 minutes. Please try again after that.',
+        503,
+        'PROVIDER_UNREACHABLE'
+      );
+    }
     if (options.walletFunded) {
       // The old quote cannot be reused after a wallet-funded attempt. Do not
       // claim the refund finished: it is attempted automatically, not confirmed.

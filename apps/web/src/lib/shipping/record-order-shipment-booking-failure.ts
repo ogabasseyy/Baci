@@ -21,6 +21,7 @@ export async function recordOrderShipmentBookingFailure(
         error_message: failure.message,
         http_status: failure.httpStatus,
         outcome: failure.outcome,
+        provider_reference: failure.providerReference ?? null,
         lock_retained: lockRetained,
       });
     if (insertError) {

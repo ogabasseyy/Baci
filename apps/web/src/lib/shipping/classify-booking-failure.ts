@@ -37,7 +37,15 @@ export function classifyBookingFailure(
       code: error.code.slice(0, BOOKING_FAILURE_MAX_CODE_LENGTH),
       message: error.message.slice(0, BOOKING_FAILURE_MAX_MESSAGE_LENGTH),
       httpStatus: error.status,
+      providerReference: error.providerReference?.slice(
+        0,
+        BOOKING_FAILURE_MAX_CODE_LENGTH * 2
+      ),
     };
+    if (error.code === 'GIGL_BOOKING_TIMED_OUT_BEFORE_SUBMIT') {
+      // The deadline expired before the booking POST: nothing was submitted.
+      return { ...base, outcome: 'not_submitted' };
+    }
     if (error.code === 'MERCHANT_WALLET_COMPLETION_FAILED') {
       // The parcel is booked and saved; only the wallet charge is unfinished.
       return { ...base, outcome: 'booked_unreconciled' };

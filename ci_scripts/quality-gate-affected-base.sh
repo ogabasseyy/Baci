@@ -23,9 +23,10 @@ esac
 #   that any package file names (a test reading AGENTS.md). A rename counts as
 #   both its old and its new path.
 # Any listing or search error also keeps the full gate.
-# The path search is literal and best-effort: imports between packages are
-# covered by Turbo's own package graph, while a path built at run time (join or
-# resolve with variables) goes undetected, so CI's full gate stays the backstop.
+# The path search covers tracked and untracked files and is literal and
+# best-effort: imports between packages are covered by Turbo's own package
+# graph, while a path built at run time (join or resolve with variables) goes
+# undetected; CI's Quality Gate still runs on every PR.
 changes=$(
   git -C "$dir" diff --name-only --no-renames "$base" -- 2>/dev/null || echo '<unknown>'
   git -C "$dir" ls-files --others --exclude-standard --full-name 2>/dev/null || echo '<unknown>'
@@ -39,12 +40,12 @@ full_gate=$(
   done
 )
 if [ -z "$full_gate" ]; then
-  patterns=$(mktemp) || exit 0
+  patterns=$(mktemp "${TMPDIR:-/tmp}/qg-affected-patterns.XXXXXX") || exit 0
   trap 'rm -f "$patterns"' EXIT
   printf '%s\n' "$changes" | grep -v '^$' > "$patterns" || true
   if [ -s "$patterns" ]; then
     found=0
-    refs=$(git -C "$dir" grep -o -F -f "$patterns" -- apps packages 2>/dev/null) || found=$?
+    refs=$(git -C "$dir" grep --untracked -o -F -f "$patterns" -- apps packages 2>/dev/null) || found=$?
     if [ "$found" -gt 1 ]; then
       full_gate=full
     elif [ "$found" -eq 0 ]; then

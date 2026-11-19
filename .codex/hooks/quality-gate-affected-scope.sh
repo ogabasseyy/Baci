@@ -6,6 +6,9 @@
 # full gate runs.
 
 AFFECTED_ARGS=()
+# An ambient TURBO_SCM_BASE must not leak into a full-gate run (helper output
+# empty); a scoped run sets its own below.
+unset TURBO_SCM_BASE
 affected_base_script="$ROOT/ci_scripts/quality-gate-affected-base.sh"
 if [ -f "$affected_base_script" ]; then
   affected_base=$(sh "$affected_base_script" "$ROOT" 2>/dev/null || true)

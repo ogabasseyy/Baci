@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
-import { rmSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 import {
   commit,
@@ -18,13 +21,13 @@ function rebaseOnto(dir) {
 }
 
 // Runs the helper after `setup`; setup may return a new base.
-function gateFor(setup) {
+function gateFor(setup, env = {}) {
   const dir = createRepo();
   try {
     const initial = commit(dir, 'base');
     git(dir, 'update-ref', 'refs/remotes/origin/main', initial);
     const base = setup(dir) ?? initial;
-    return { stdout: run({ cwd: dir, args: [dir] }).stdout, base };
+    return { stdout: run({ cwd: dir, args: [dir], env }).stdout, base };
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -163,4 +166,61 @@ test('stays scoped for the package manifest at the root of a workspace', () => {
     writeFile(dir, 'packages/shared/package.json', '{}\n');
   });
   assert.equal(stdout, base);
+});
+
+test('bugfix: keeps the full gate when an untracked file in another workspace names a changed file', () => {
+  const { stdout } = gateFor((dir) => {
+    writeFile(dir, 'apps/mobile-admin/app.config.ts', 'export default {};\n');
+    const base = rebaseOnto(dir);
+    writeFile(
+      dir,
+      'apps/mobile-admin/app.config.ts',
+      'export default { a: 1 };\n'
+    );
+    writeFile(
+      dir,
+      'apps/mobile-storefront/new.test.mjs',
+      "resolve(root, 'apps/mobile-admin/app.config.ts');\n"
+    );
+    return base;
+  });
+  assert.equal(stdout, '');
+});
+
+test('stays scoped when an untracked file only names files in its own workspace', () => {
+  const { stdout, base } = gateFor((dir) => {
+    writeFile(dir, 'apps/web/src/b.ts', 'export const b = 1;\n');
+    const base = rebaseOnto(dir);
+    writeFile(dir, 'apps/web/src/b.ts', 'export const b = 2;\n');
+    writeFile(dir, 'apps/web/src/new.test.ts', "read('apps/web/src/b.ts');\n");
+    return base;
+  });
+  assert.equal(stdout, base);
+});
+
+// A mktemp that, like some BSD builds, rejects a call without a template.
+function templateOnlyMktempEnv() {
+  const real = execFileSync('sh', ['-c', 'command -v mktemp'], {
+    encoding: 'utf8',
+  }).trim();
+  const bin = mkdtempSync(join(tmpdir(), 'qg-affected-mktemp-'));
+  const stub = join(bin, 'mktemp');
+  writeFileSync(
+    stub,
+    `#!/bin/sh\n[ "$#" -eq 0 ] && { echo 'usage: mktemp template' >&2; exit 1; }\nexec ${real} "$@"\n`
+  );
+  chmodSync(stub, 0o755);
+  return { bin, env: { PATH: `${bin}:${process.env.PATH}` } };
+}
+
+test('bugfix: still scopes when mktemp requires a template argument', () => {
+  const { bin, env } = templateOnlyMktempEnv();
+  try {
+    const { stdout, base } = gateFor((dir) => {
+      writeFile(dir, 'apps/web/src/changed.ts');
+    }, env);
+    assert.equal(stdout, base);
+  } finally {
+    rmSync(bin, { recursive: true, force: true });
+  }
 });

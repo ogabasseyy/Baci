@@ -4,9 +4,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import {
-  EMPTY_TREE,
   commit,
   createRepo,
+  EMPTY_TREE,
   git,
   run,
 } from './quality-gate-affected-base.test-helpers.mjs';

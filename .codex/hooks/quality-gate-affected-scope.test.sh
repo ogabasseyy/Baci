@@ -97,6 +97,11 @@ output=$(run_stubbed_gate QUALITY_GATE_FULL=1)
 [ -z "$output" ] || fail "QUALITY_GATE_FULL=1 gates should allow stop without output"
 assert_unscoped "QUALITY_GATE_FULL=1"
 
+# A stale ambient TURBO_SCM_BASE must not leak into a forced full gate.
+output=$(run_stubbed_gate QUALITY_GATE_FULL=1 TURBO_SCM_BASE=stale-ambient-base)
+[ -z "$output" ] || fail "QUALITY_GATE_FULL=1 with an ambient base should allow stop without output"
+assert_unscoped "QUALITY_GATE_FULL=1 with an ambient TURBO_SCM_BASE"
+
 # The gate uses whatever base the checkout's own helper reports.
 printf '#!/bin/sh\nprintf "%%s\\n" cafebabecafebabecafebabecafebabecafebabe\n' > "$REPO/ci_scripts/quality-gate-affected-base.sh"
 output=$(run_stubbed_gate)

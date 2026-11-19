@@ -30,6 +30,7 @@ function section(text, heading) {
 }
 
 const SOURCES = {
+  '## ALWAYS Do': '.ruler/01-critical-rules.md',
   '## Quality Gate': '.ruler/02-code-standards.md',
   '## Pre-Completion Checklist': '.ruler/07-testing.md',
   '## Local Runs vs CI': '.ruler/07-testing.md',

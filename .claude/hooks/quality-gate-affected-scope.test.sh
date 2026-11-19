@@ -99,6 +99,18 @@ out=$(run_gate QUALITY_GATE_FULL=1) || fail "QUALITY_GATE_FULL=1: gate should pa
 [ -z "$out" ] || fail "QUALITY_GATE_FULL=1: expected no block output, got: $out"
 assert_unscoped "QUALITY_GATE_FULL=1"
 
+# 3b. A stale ambient TURBO_SCM_BASE must not leak into a forced full gate, and
+#     must be replaced by the merge base for a scoped one.
+out=$(run_gate QUALITY_GATE_FULL=1 TURBO_SCM_BASE=stale-ambient-base) || fail "ambient base, full: gate should pass"
+[ -z "$out" ] || fail "ambient base, full: expected no block output, got: $out"
+assert_unscoped "QUALITY_GATE_FULL=1 with an ambient TURBO_SCM_BASE"
+out=$(run_gate TURBO_SCM_BASE=stale-ambient-base) || fail "ambient base, scoped: gate should pass"
+[ -z "$out" ] || fail "ambient base, scoped: expected no block output, got: $out"
+for check in test lint typecheck; do
+  grep -qx "turbo $check --affected TURBO_SCM_BASE=$base_sha" "$TURBO_LOG" ||
+    fail "ambient base, scoped: turbo $check must use the merge base, got: $(cat "$TURBO_LOG")"
+done
+
 # 4. A change outside the workspaces (a migration) keeps the full gate.
 commit_file supabase/migrations/20990101000000_example.sql
 out=$(run_gate) || fail "migration change: gate should pass"

@@ -8,8 +8,8 @@ interface AppKeyboardProviderProps {
 export default function AppKeyboardProvider({
   children,
 }: AppKeyboardProviderProps) {
-  // Avoid launch-time UIKit work and the hidden responder's Spotlight flash
-  // on the pinned controller version. The first input opens the keyboard.
+  // Controller 1.22.7 preloads by focusing a hidden iOS text field, which
+  // can stall launch or flash over Spotlight. Let the first input open it.
   return (
     <KeyboardProvider
       navigationBarTranslucent

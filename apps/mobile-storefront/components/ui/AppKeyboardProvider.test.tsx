@@ -3,7 +3,7 @@ import { Text } from 'react-native';
 import AppKeyboardProvider from './AppKeyboardProvider';
 
 describe('AppKeyboardProvider', () => {
-  it('renders children inside an edge-to-edge keyboard provider', () => {
+  it('keeps edge-to-edge layout with startup keyboard preloading disabled', () => {
     render(
       <AppKeyboardProvider>
         <Text>Storefront app</Text>

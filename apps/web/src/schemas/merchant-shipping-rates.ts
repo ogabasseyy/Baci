@@ -226,6 +226,10 @@ export const storefrontShippingRatesPayloadSchema = z
     merchant_payout_currency: optionalMerchantTextSchema,
     merchant_country: optionalMerchantTextSchema,
     shipping_providers: optionalShippingProviderCodesSchema,
+    shipping_config_revision: z
+      .string()
+      .regex(/^[1-9][0-9]*$/)
+      .optional(),
   })
   .transform(
     (payload): StorefrontShippingRatesPayload => ({
@@ -235,6 +239,7 @@ export const storefrontShippingRatesPayloadSchema = z
       merchantPayoutCurrency: payload.merchant_payout_currency,
       merchantCountry: payload.merchant_country,
       enabledProviderCodes: payload.shipping_providers,
+      shippingConfigRevision: payload.shipping_config_revision,
     })
   );
 

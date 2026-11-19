@@ -112,3 +112,13 @@ describe('trusted custody deployment configuration', () => {
     ).toBeNull();
   });
 });
+describe('master kill switch', () => {
+  it('stops intake but the drain keeps settling accepted receipts', () => {
+    expect(readPrimaryCardCustodyRuntime(env, fixture.now)).not.toBeNull();
+    const killed = { ...env, PIGGYVEST_KILL_SWITCH: 'true' };
+    expect(readPrimaryCardCustodyRuntime(killed, fixture.now)).toBeNull();
+    expect(
+      readPrimaryCardCustodyRuntime(killed, fixture.now, 'drain')
+    ).not.toBeNull();
+  });
+});

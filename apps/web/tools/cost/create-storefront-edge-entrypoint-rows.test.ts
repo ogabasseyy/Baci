@@ -21,6 +21,16 @@ function entrypointSource(relativeSourcePath: string) {
 }
 
 describe('createStorefrontEdgeEntrypointRows', () => {
+  it('keeps the authenticated checkout return on the dynamic origin', () => {
+    expect(
+      STOREFRONT_EDGE_ENTRYPOINT_CLASSIFICATIONS.get(
+        '(customer)/account/checkout-return/page.tsx'
+      )
+    ).toEqual({
+      decision: 'origin_dynamic',
+      reason: 'request_state_or_origin_action_required',
+    });
+  });
   it('maps page, handler, and metadata conventions to public route patterns', () => {
     // Arrange
     const routeSources = [

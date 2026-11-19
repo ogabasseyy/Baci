@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const store = vi.hoisted(() => ({
   readiness: vi.fn(),
+  engineReady: vi.fn(),
   claim: vi.fn(),
   process: vi.fn(),
   retry: vi.fn(),
@@ -42,6 +43,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   store.created.length = 0;
   store.readiness.mockResolvedValue(true);
+  store.engineReady.mockResolvedValue({ ready: true, missing: [] });
   store.process.mockResolvedValue('prerequisite');
   store.retry.mockResolvedValue(true);
 });

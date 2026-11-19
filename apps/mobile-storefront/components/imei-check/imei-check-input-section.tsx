@@ -1,6 +1,7 @@
 import type { ImeiIdentifierType } from '@baci/shared/imei';
 import { isValidDeviceIdentifier } from '@baci/shared/imei';
 import Ionicons from '@react-native-vector-icons/ionicons';
+import { useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import { BRAND, withAlpha } from '@/constants/Colors';
 import { styles } from './imei-check.styles';
@@ -33,6 +34,9 @@ export function ImeiCheckInputSection({
         ? 'Enter 15-digit IMEI'
         : 'Enter IMEI or serial';
   const isComplete = isValidDeviceIdentifier(imei, identifier);
+  // Red while typing (like the sign-in field), and once a full number is in.
+  const [isFocused, setIsFocused] = useState(false);
+  const isActive = isFocused || isComplete;
   const countText = isImeiOnly ? `${imei.length}/15` : `${imei.length}`;
   // Durable accessible name: the placeholder disappears once text is entered,
   // so screen readers still need to know what this field is for.
@@ -63,18 +67,19 @@ export function ImeiCheckInputSection({
       ) : null}
 
       <View
+        testID="imei-input-field"
         style={[
           styles.inputField,
           {
-            backgroundColor: colors.background,
-            borderColor: isComplete ? BRAND.primary : colors.border,
+            backgroundColor: colors.muted,
+            borderColor: isActive ? BRAND.primary : colors.border,
           },
         ]}
       >
         <Ionicons
           name="barcode-outline"
           size={20}
-          color={isComplete ? BRAND.primary : colors.textSecondary}
+          color={isActive ? BRAND.primary : colors.textSecondary}
         />
         {/* No maxLength on purpose: it truncates a pasted spaced IMEI (e.g.
             "35 4442 067957 452") to 15 chars *including spaces* before the
@@ -97,6 +102,8 @@ export function ImeiCheckInputSection({
           // (serial input) keeps "go" as a normal return key.
           returnKeyType={isImeiOnly ? undefined : 'go'}
           onSubmitEditing={onCheck}
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
           autoComplete="off"
         />
         <Text

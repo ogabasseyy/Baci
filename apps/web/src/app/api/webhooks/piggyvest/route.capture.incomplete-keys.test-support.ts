@@ -4,6 +4,7 @@ import { drainPiggyvestWebhookCaptures } from '@/lib/piggyvest/webhook-capture-d
 import {
   isAuthorizationQuarantine,
   isKeySetIncompleteRetry,
+  isKillSwitchDeferred,
   processVerifiedDelivery,
 } from './process-delivery';
 import type { createFakeCaptureStore } from './route.capture-test-support';
@@ -68,6 +69,7 @@ export function replayDrain(store: ReturnType<typeof createFakeCaptureStore>) {
   const client = store.client();
   return drainPiggyvestWebhookCaptures({
     claim: () => Promise.resolve(store.claim(10)),
+    renew: async (id, token) => store.renew(id, token),
     resolve: async (id, token, state, error) => {
       const result = await client.rpc('resolve_piggyvest_webhook_capture', {
         p_id: id,
@@ -87,6 +89,7 @@ export function replayDrain(store: ReturnType<typeof createFakeCaptureStore>) {
         status: response.status,
         authorizationQuarantine: isAuthorizationQuarantine(response),
         keySetIncomplete: isKeySetIncompleteRetry(response),
+        killSwitchDeferred: isKillSwitchDeferred(response),
       };
     },
   });

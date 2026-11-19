@@ -23,6 +23,23 @@ const POSTHOG_DSYM_BEST_EFFORT_MARKER =
 const POSTHOG_DSYM_INPUT_PATH = `\${DWARF_DSYM_FOLDER_PATH}/\${DWARF_DSYM_FILE_NAME}/Contents/Resources/DWARF/\${PRODUCT_NAME}`;
 const QUOTED_POSTHOG_DSYM_INPUT_PATH = `"${POSTHOG_DSYM_INPUT_PATH}"`;
 
+// @sentry/react-native >= 8.28 wraps the whole react-native-xcode.sh line in
+// one pair of double quotes. When PostHog has already put its wrapper in front
+// of the React Native script, that line holds two backtick commands, so Sentry
+// received "<posthog-xcode.sh> "<react-native-xcode.sh>"" as ONE argument and
+// sentry-cli failed to spawn it (ENOENT), which broke the iOS archive.
+// Pass each script as its own argument again. Sentry only runs the first one.
+const SENTRY_JOINED_BUNDLE_LINE =
+  /^(\/bin\/sh "`[^`\n]*sentry-xcode\.sh[^`\n]*`") "(`[^`\n]*posthog-xcode\.sh[^`\n]*`) "(`[^`\n]*react-native-xcode\.sh[^`\n]*`)""$/m;
+
+function splitSentryJoinedBundleLine(script) {
+  return script.replace(
+    SENTRY_JOINED_BUNDLE_LINE,
+    (_line, sentry, posthog, reactNative) =>
+      `${sentry} "${posthog}" "${reactNative}"`
+  );
+}
+
 function parseShellScript(value) {
   if (typeof value !== 'string') {
     return null;
@@ -95,7 +112,9 @@ function patchShellPhaseCliPath(phase, marker) {
   const withCliPath = patchPostHogCliPath(shellScript, marker);
   const patchedScript =
     marker === POSTHOG_XCODE_SCRIPT
-      ? patchPostHogHermesUploadConflictHandling(withCliPath)
+      ? splitSentryJoinedBundleLine(
+          patchPostHogHermesUploadConflictHandling(withCliPath)
+        )
       : withCliPath;
   if (patchedScript !== shellScript) {
     phase.shellScript = JSON.stringify(patchedScript);

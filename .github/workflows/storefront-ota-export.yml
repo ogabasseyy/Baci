@@ -36,6 +36,28 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      # Storefront release gate: a source that carries the gate marker holds
+      # client work that reaches devices only in the deliberate owner release,
+      # so it must never go out as an OTA update.
+      - name: Refuse sources held by the storefront release gate
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo '::error::source_sha must be a full 40-character commit SHA.' >&2
+            exit 1
+          fi
+          if ! git cat-file -e "${SOURCE_SHA}^{commit}" 2>/dev/null; then
+            echo '::error::source_sha is not a commit in this repository.' >&2
+            exit 1
+          fi
+          held="$(git ls-tree --full-tree --name-only "$SOURCE_SHA" -- .github/storefront-release-gate.json)"
+          if [[ -n "$held" ]]; then
+            echo '::error::This source is held by the storefront release gate (.github/storefront-release-gate.json). It ships only in the deliberate owner store release; see docs/runbooks/storefront-release-gate.md.' >&2
+            exit 1
+          fi
+
       - name: Validate and select reviewed source
         env:
           SOURCE_SHA: ${{ inputs.source_sha }}

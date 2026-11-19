@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('server-only', () => ({}));
 
 import { deterministicTestSignature } from '@/lib/piggyvest/deterministic-test-data.test-support';
-import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
+import type { PiggyvestIntakeClient } from '@/lib/piggyvest/intake-client.types';
 import {
   captureVerifiedDelivery,
   describeDelivery,
@@ -22,7 +22,7 @@ function clientWith(
 ) {
   const spy = vi.fn(rpc);
   return {
-    client: { rpc: spy } as unknown as PiggyvestIntakeServiceClient,
+    client: { rpc: spy } as unknown as PiggyvestIntakeClient,
     rpc: spy,
   };
 }

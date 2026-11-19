@@ -7,6 +7,7 @@ vi.hoisted(() => {
   process.env.GIGL_PASSWORD = 'test-password';
 });
 
+import { classifyBookingFailure } from '../classify-booking-failure';
 import { GiglApiClient } from './gigl.auth';
 import { bookGiglShipment } from './gigl.booking';
 import { isGiglInternationalBookingRequest } from './gigl.international.booking';
@@ -221,6 +222,38 @@ describe('GiglProvider international booking', () => {
     ).rejects.toThrow(
       'GIGL international booking response missing tracking number'
     );
+  });
+
+  it('bugfix: a post-submit answer without tracking data is unconfirmed, not unexpected', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(loginResponseWithoutCustomerType))
+      .mockResolvedValueOnce(jsonResponse(internationalCountriesResponse))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          data: { message: 'Success', status: 200, data: {} },
+        })
+      );
+
+    const error = await buildHarness()
+      .bookShipment({
+        ...bookingRequest,
+        providerRateId: 'GIGL_INTL_2_0_0_1',
+        receiver: {
+          ...bookingRequest.receiver,
+          address: '123 Queen Street West',
+          city: 'Toronto',
+          state: 'Ontario',
+          country: 'Canada',
+          countryCode: 'CA',
+          postalCode: 'M5V 3L9',
+        },
+      })
+      .catch((e: unknown) => e);
+
+    expect(classifyBookingFailure(error).outcome).toBe('provider_unconfirmed');
   });
 
   it('keeps successful bookings when invoice label generation fails', async () => {

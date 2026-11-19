@@ -50,9 +50,21 @@ describe('PaymentMethodSelector', () => {
       screen.getByText('Interest rates vary. Breakdown shown during Checkout')
     ).toBeTruthy();
     expect(screen.getByText('Credit Direct')).toBeTruthy();
-    expect(screen.getByText('CredPal')).toBeTruthy();
+    expect(screen.queryByText('CredPal')).toBeNull();
+    expect(screen.getByText('Klump')).toBeTruthy();
     expect(screen.getByText('Salary Earners and Business Owners')).toBeTruthy();
-    expect(screen.getByText('Salary Earners Only')).toBeTruthy();
+    expect(screen.queryByText('Salary Earners Only')).toBeNull();
+    const providers = screen
+      .getAllByRole('radio')
+      .map((item) => item.props.accessibilityLabel)
+      .filter(
+        (label: string | undefined) =>
+          label?.startsWith('Credit Direct') || label?.startsWith('Klump')
+      );
+    expect(providers).toEqual([
+      expect.stringMatching(/^Credit Direct/),
+      expect.stringMatching(/^Klump/),
+    ]);
   });
 
   it('surfaces the invoice and pay-for-me intents and pins their method on select', () => {

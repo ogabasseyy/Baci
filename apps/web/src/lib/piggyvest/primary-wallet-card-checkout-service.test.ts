@@ -8,55 +8,32 @@ const scope = schemas.scope.parse(
     Object.entries(fixture.intent).filter(([key]) => key in schemas.scope.shape)
   )
 );
-const request = {
-  merchantId: fixture.settings.merchantId,
-  idempotencyKey: fixture.intent.operationId,
-  amountKobo: 25000,
-  consent: fixture.intent.consent,
+const collection = {
+  reference: fixture.intent.reference,
+  amountKobo: fixture.intent.amountKobo,
+  domain: 'test',
+  providerTransactionId: '12345',
+  token: null,
 };
+// Storage actions that belong to the retired initialization path. The
+// fake storage below refuses them, so any call fails the test.
+const RETIRED_ACTIONS = ['reserve', 'claim', 'initialize'];
 
-function setup() {
-  let intent = schemas.intent.parse(fixture.intent);
-  let leaseExpired = false;
+type Status = ReturnType<typeof schemas.intent.parse>['status'];
+
+function setup(status: Status, settings: unknown = fixture.settings) {
+  let intent = schemas.intent.parse({
+    ...fixture.intent,
+    status,
+    authorizationUrl:
+      status === 'ready' ? 'https://checkout.paystack.com/fixture123' : null,
+  });
   const execute = vi.fn(
     async (
       action: string,
-      parameters: readonly (string | null)[]
+      _parameters: readonly (string | null)[]
     ): Promise<unknown> => {
-      if (action === 'reserve' || action === 'read') return intent;
-      if (action === 'claim') {
-        // Mirrors claim_initialization lease semantics: a fresh
-        // 'initializing'/'init_unknown' claim is shared, only a stale one
-        // is re-issued (resetting to 'initializing' for a fresh recording).
-        if (
-          !leaseExpired &&
-          (intent.status === 'initializing' || intent.status === 'init_unknown')
-        )
-          return { outcome: 'existing', intent };
-        if (
-          intent.status !== 'reserved' &&
-          intent.status !== 'initializing' &&
-          intent.status !== 'init_unknown'
-        )
-          return { outcome: 'existing', intent };
-        intent = { ...intent, status: 'initializing' };
-        return {
-          outcome: 'claimed',
-          token: fixture.intent.operationId,
-          intent,
-        };
-      }
-      if (action === 'initialize') {
-        const session = parameters[3]
-          ? schemas.session.parse(JSON.parse(parameters[3]))
-          : null;
-        intent = {
-          ...intent,
-          status: session ? 'ready' : 'init_unknown',
-          authorizationUrl: session?.authorizationUrl ?? null,
-        };
-        return true;
-      }
+      if (action === 'read') return intent;
       if (action === 'collection') {
         intent = { ...intent, status: 'custody_pending' };
         return true;
@@ -69,339 +46,161 @@ function setup() {
         intent = { ...intent, status: 'abandoned' };
         return true;
       }
-      throw new Error('Invalid test action');
+      throw new Error(`Retired or unknown storage action: ${action}`);
     }
   );
   const provider = {
-    initialize: vi.fn().mockResolvedValue({
-      reference: fixture.intent.reference,
-      authorizationUrl: 'https://checkout.paystack.com/fixture123',
-    }),
-    verify: vi.fn().mockResolvedValue({
-      outcome: 'verified',
-      collection: {
-        reference: fixture.intent.reference,
-        amountKobo: 25000,
-        domain: 'test',
-        providerTransactionId: '12345',
-        token: null,
-      },
-    }),
+    // Sentinel: hosted checkout creation must never run again.
+    initialize: vi.fn(),
+    verify: vi.fn().mockResolvedValue({ outcome: 'verified', collection }),
   };
   const service = createPrimaryWalletCardCheckoutService({
-    settings: fixture.settings,
+    settings,
     scope,
     execute,
     provider,
   });
-  return {
-    execute,
-    provider,
-    service,
-    expireClaimLease: () => {
-      leaseExpired = true;
-    },
-  };
+  const actions = () => execute.mock.calls.map(([action]) => action);
+  return { execute, provider, service, actions };
 }
 
-describe('durable goal-independent card checkout service', () => {
-  it('initializes once and resumes the same stored checkout on retry', async () => {
-    const { service, provider } = setup();
-    const first = await service.initialize(request);
-    expect(first.status).toBe('ready');
-    expect(await service.initialize(request)).toEqual(first);
-    expect(provider.initialize).toHaveBeenCalledTimes(1);
-  });
-  it('refuses new reservations once the deadline passes', async () => {
-    const { execute, provider } = setup();
-    const service = createPrimaryWalletCardCheckoutService({
-      settings: fixture.settings,
-      scope,
-      execute,
-      provider,
-      now: () => Date.parse('2100-01-01T00:00:00Z'),
-    });
-    await expect(service.initialize(request)).rejects.toThrow(
-      'Primary card checkout unavailable'
-    );
-    expect(execute).not.toHaveBeenCalled();
-  });
-  it('resolves a committed reservation even when the deadline passes mid-initialization', async () => {
-    const { execute, provider } = setup();
-    let calls = 0;
-    const service = createPrimaryWalletCardCheckoutService({
-      settings: fixture.settings,
-      scope,
-      execute,
-      provider,
-      now: () =>
-        ++calls === 1
-          ? Date.parse('2026-01-01T00:00:00Z')
-          : Date.parse('2100-01-01T00:00:00Z'),
-    });
-    const result = await service.initialize(request);
-    expect(result.status).toBe('ready');
-    expect(result.operationId).toBe(fixture.intent.operationId);
-    expect(provider.initialize).toHaveBeenCalledTimes(1);
-  });
-  it('authorizes recovery by immutable IDs across a profile email change', async () => {
-    const { service, execute } = setup();
-    const changed = { ...fixture.intent, email: 'changed@example.test' };
-    execute.mockImplementationOnce(async () => changed);
-    execute.mockImplementationOnce(async () => ({
-      outcome: 'existing',
-      intent: changed,
-    }));
-    expect((await service.initialize(request)).status).toBe('reserved');
-  });
-  it('resumes the recovered unresolved operation after local storage loss', async () => {
-    const { service, provider, execute } = setup();
-    // Storage lost: same funding retried with a new key; reserve returns
-    // the existing ready operation instead of raising.
-    const recovered = schemas.intent.parse({
-      ...fixture.intent,
-      status: 'ready',
-      authorizationUrl: 'https://checkout.paystack.com/fixture123',
-    });
-    execute.mockImplementationOnce(async () => recovered);
-    execute.mockImplementationOnce(async () => ({
-      outcome: 'existing',
-      intent: recovered,
-    }));
-    const result = await service.initialize(request);
-    expect(result.status).toBe('ready');
-    expect(result.authorizationUrl).toBe(
-      'https://checkout.paystack.com/fixture123'
-    );
-    expect(provider.initialize).not.toHaveBeenCalled();
-  });
-  it('never reinitializes after an ambiguous provider result', async () => {
-    const { service, provider } = setup();
-    provider.initialize.mockRejectedValue(new Error('private provider error'));
-    expect((await service.initialize(request)).status).toBe('init_unknown');
-    expect((await service.initialize(request)).status).toBe('init_unknown');
-    expect(provider.initialize).toHaveBeenCalledTimes(1);
+function expectNoInitialization(test: ReturnType<typeof setup>) {
+  expect(test.actions().filter((a) => RETIRED_ACTIONS.includes(a))).toEqual([]);
+  expect(test.provider.initialize).not.toHaveBeenCalled();
+}
+
+describe('card checkout service after initialization retirement', () => {
+  it('exposes status as its only entry point', () => {
+    expect(Object.keys(setup('ready').service)).toEqual(['status']);
   });
   it('records collection without a reusable card and stops at custody_pending', async () => {
-    const { service, provider, execute } = setup();
-    await service.initialize(request);
-    const result = await service.status(fixture.intent.operationId);
+    const test = setup('ready');
+    const result = await test.service.status(fixture.intent.operationId);
     expect(result.status).toBe('custody_pending');
     expect(result).not.toHaveProperty('authorizationUrl');
     expect(JSON.stringify(result)).not.toContain('token');
-    expect(execute.mock.calls.some(([action]) => action === 'collection')).toBe(
-      true
-    );
-    expect((await service.status(fixture.intent.operationId)).status).toBe(
+    expect(test.actions()).toContain('collection');
+    expect((await test.service.status(fixture.intent.operationId)).status).toBe(
       'custody_pending'
     );
-    expect(provider.verify).toHaveBeenCalledTimes(1);
+    expect(test.provider.verify).toHaveBeenCalledTimes(1);
+    expectNoInitialization(test);
   });
   it('requires durable evidence storage before reporting custody_pending', async () => {
-    const { service, execute } = setup();
-    await service.initialize(request);
-    execute.mockImplementationOnce(async () =>
+    const test = setup('ready');
+    test.execute.mockImplementationOnce(async () =>
       schemas.intent.parse({ ...fixture.intent, status: 'ready' })
     );
-    execute.mockImplementationOnce(async () => false);
-    await expect(service.status(fixture.intent.operationId)).rejects.toThrow();
+    test.execute.mockImplementationOnce(async () => false);
+    await expect(
+      test.service.status(fixture.intent.operationId)
+    ).rejects.toThrow();
   });
   it('persists reconciliation on invalid collection evidence', async () => {
-    const { service, provider } = setup();
-    await service.initialize(request);
-    provider.verify.mockResolvedValue({ outcome: 'reconciliation_required' });
-    expect((await service.status(fixture.intent.operationId)).status).toBe(
+    const test = setup('ready');
+    test.provider.verify.mockResolvedValue({
+      outcome: 'reconciliation_required',
+    });
+    expect((await test.service.status(fixture.intent.operationId)).status).toBe(
       'reconciliation_required'
     );
   });
   it('terminalizes an abandoned checkout and stops verifying it', async () => {
-    const { service, provider, execute } = setup();
-    await service.initialize(request);
-    provider.verify.mockResolvedValue({ outcome: 'abandoned' });
-    expect((await service.status(fixture.intent.operationId)).status).toBe(
+    const test = setup('ready');
+    test.provider.verify.mockResolvedValue({ outcome: 'abandoned' });
+    expect((await test.service.status(fixture.intent.operationId)).status).toBe(
       'abandoned'
     );
-    expect(
-      execute.mock.calls.some(([action]) => action === 'abandonment')
-    ).toBe(true);
-    expect((await service.status(fixture.intent.operationId)).status).toBe(
+    expect(test.actions()).toContain('abandonment');
+    expect((await test.service.status(fixture.intent.operationId)).status).toBe(
       'abandoned'
     );
-    expect(provider.verify).toHaveBeenCalledTimes(1);
+    expect(test.provider.verify).toHaveBeenCalledTimes(1);
   });
-  it('shares a fresh claim and reinitializes only after the lease expires', async () => {
-    const { service, provider, execute, expireClaimLease } = setup();
-    const inner = execute.getMockImplementation();
-    let crashed = false;
-    execute.mockImplementation(async (action, parameters) => {
-      // First attempt crashes between claim and record: the acknowledgement
-      // is lost and the operation stays 'initializing'.
-      if (action === 'initialize' && !crashed) {
-        crashed = true;
-        return true;
-      }
-      return inner?.(action, parameters);
-    });
-    expect((await service.initialize(request)).status).toBe('initializing');
-    // Overlapping retry within the lease shares the claim instead of
-    // replacing the token (Paystack rejects repeated references).
-    expect((await service.initialize(request)).status).toBe('initializing');
-    expect(provider.initialize).toHaveBeenCalledTimes(1);
-    expireClaimLease();
-    expect((await service.initialize(request)).status).toBe('ready');
-    expect(provider.initialize).toHaveBeenCalledTimes(2);
+  it.each([
+    'initializing',
+    'init_unknown',
+  ] as const)('drains a %s operation by provider verification only', async (status) => {
+    const test = setup(status);
+    const result = await test.service.status(fixture.intent.operationId);
+    expect(result.status).toBe('custody_pending');
+    expect(test.provider.verify).toHaveBeenCalledTimes(1);
+    expectNoInitialization(test);
   });
-  it('re-enters initialization from status once a stale claim expires', async () => {
-    const { service, provider, expireClaimLease } = setup();
-    provider.initialize.mockRejectedValueOnce(
-      new Error('private provider error')
+  it.each([
+    'initializing',
+    'init_unknown',
+  ] as const)('keeps a %s operation pending while the provider is undecided', async (status) => {
+    const test = setup(status);
+    test.provider.verify.mockResolvedValue({ outcome: 'pending' });
+    expect((await test.service.status(fixture.intent.operationId)).status).toBe(
+      status
     );
-    expect((await service.initialize(request)).status).toBe('init_unknown');
-    // Fresh lease: status keeps verifying instead of reinitializing.
-    provider.verify.mockResolvedValue({ outcome: 'pending' });
-    expect((await service.status(fixture.intent.operationId)).status).toBe(
-      'init_unknown'
-    );
-    expect(provider.initialize).toHaveBeenCalledTimes(1);
-    expect(provider.verify).toHaveBeenCalledTimes(1);
-    expireClaimLease();
-    expect((await service.status(fixture.intent.operationId)).status).toBe(
-      'ready'
-    );
-    expect(provider.initialize).toHaveBeenCalledTimes(2);
+    expectNoInitialization(test);
   });
-  it('abandons an orphaned session when re-entry proves a duplicate reference', async () => {
-    const { service, provider, expireClaimLease } = setup();
-    provider.initialize.mockRejectedValueOnce(
-      new Error('private provider error')
+  it.each([
+    'reserved',
+    'custody_pending',
+    'reconciliation_required',
+    'completed',
+    'abandoned',
+  ] as const)('returns a stored %s operation without provider work', async (status) => {
+    const test = setup(status);
+    expect((await test.service.status(fixture.intent.operationId)).status).toBe(
+      status
     );
-    expect((await service.initialize(request)).status).toBe('init_unknown');
-    expireClaimLease();
-    provider.initialize.mockRejectedValueOnce(
-      Object.assign(new Error('Primary card duplicate reference'), {
-        code: 'PRIMARY_CARD_DUPLICATE_REFERENCE',
-      })
-    );
-    expect((await service.status(fixture.intent.operationId)).status).toBe(
-      'abandoned'
-    );
-    expect(provider.verify).not.toHaveBeenCalled();
+    expect(test.provider.verify).not.toHaveBeenCalled();
+    expect(test.actions()).toEqual(['read']);
   });
-  it('abandons from initialize when a reclaimed retry proves a duplicate reference', async () => {
-    const { service, provider, expireClaimLease } = setup();
-    provider.initialize.mockRejectedValueOnce(
-      new Error('private provider error')
+  it('authorizes status by immutable IDs across a profile email change', async () => {
+    const test = setup('custody_pending');
+    test.execute.mockImplementationOnce(async () => ({
+      ...fixture.intent,
+      email: 'changed@example.test',
+      status: 'custody_pending',
+    }));
+    expect((await test.service.status(fixture.intent.operationId)).status).toBe(
+      'custody_pending'
     );
-    expect((await service.initialize(request)).status).toBe('init_unknown');
-    expireClaimLease();
-    provider.initialize.mockRejectedValueOnce(
-      Object.assign(new Error('Primary card duplicate reference'), {
-        code: 'PRIMARY_CARD_DUPLICATE_REFERENCE',
-      })
-    );
-    expect((await service.initialize(request)).status).toBe('abandoned');
   });
-  it('rejects a foreign scope returned by storage before provider initialization', async () => {
-    const { service, execute, provider } = setup();
-    execute.mockResolvedValueOnce({
+  it('rejects a foreign scope returned by storage before provider verification', async () => {
+    const test = setup('ready');
+    test.execute.mockResolvedValueOnce({
       ...fixture.intent,
       customerId: '10000000-0000-4000-8000-000000000009',
     });
-    await expect(service.initialize(request)).rejects.toThrow();
-    expect(provider.initialize).not.toHaveBeenCalled();
+    await expect(
+      test.service.status(fixture.intent.operationId)
+    ).rejects.toThrow();
+    expect(test.provider.verify).not.toHaveBeenCalled();
   });
   it('does not verify a different operation returned by read', async () => {
-    const { service, execute, provider } = setup();
-    execute.mockResolvedValueOnce(fixture.intent);
+    const test = setup('ready');
     await expect(
-      service.status('10000000-0000-4000-8000-000000000009')
+      test.service.status('10000000-0000-4000-8000-000000000009')
     ).rejects.toThrow();
-    expect(provider.verify).not.toHaveBeenCalled();
-  });
-  it('rejects an expired config before storage', async () => {
-    const { execute, provider } = setup();
-    const service = createPrimaryWalletCardCheckoutService({
-      settings: { ...fixture.settings, expiresAt: '2026-09-29T15:59:10Z' },
-      scope,
-      execute,
-      provider,
-    });
-    await expect(service.initialize(request)).rejects.toThrow();
-    expect(execute).not.toHaveBeenCalled();
+    expect(test.provider.verify).not.toHaveBeenCalled();
   });
   it('drains status past expiry so pre-expiry payments still settle', async () => {
-    const { execute, provider } = setup();
-    const service = createPrimaryWalletCardCheckoutService({
-      settings: { ...fixture.settings, expiresAt: '2026-09-29T15:59:10Z' },
-      scope,
-      execute,
-      provider,
+    const test = setup('ready', {
+      ...fixture.settings,
+      expiresAt: '2026-09-29T15:59:10Z',
     });
-    execute.mockImplementationOnce(async () =>
-      schemas.intent.parse({ ...fixture.intent, status: 'ready' })
-    );
-    const result = await service.status(fixture.intent.operationId);
+    const result = await test.service.status(fixture.intent.operationId);
     expect(result.status).toBe('custody_pending');
-    expect(execute.mock.calls.some(([action]) => action === 'collection')).toBe(
-      true
-    );
+    expect(test.actions()).toContain('collection');
   });
-  it('re-enters initialization past expiry for a stale uninitialized claim', async () => {
-    const { execute, provider } = setup();
-    const service = createPrimaryWalletCardCheckoutService({
-      settings: { ...fixture.settings, expiresAt: '2026-09-29T15:59:10Z' },
-      scope,
-      execute,
-      provider,
-    });
-    execute.mockImplementationOnce(async () =>
-      schemas.intent.parse({ ...fixture.intent, status: 'initializing' })
-    );
-    execute.mockImplementationOnce(async () => ({
-      outcome: 'claimed',
-      token: '55555555-5555-4555-8555-555555555555',
-      intent: { ...fixture.intent, status: 'initializing' },
-    }));
-    const result = await service.status(fixture.intent.operationId);
-    expect(provider.initialize).toHaveBeenCalledTimes(1);
-    expect(result.status).toBe('ready');
-  });
-  it('rejects below-minimum funding before storage', async () => {
-    const { service, execute } = setup();
-    await expect(
-      service.initialize({ ...request, amountKobo: 4999 })
-    ).rejects.toThrow();
-    expect(execute).not.toHaveBeenCalled();
-  });
-  it('adopts the stored unresolved checkout when the re-entered amount differs', async () => {
-    const { service, provider } = setup();
-    const adopted = await service.initialize({
-      ...request,
-      idempotencyKey: '33333333-3333-4333-8333-333333333333',
-      amountKobo: 30000,
-    });
-    // The stored intent is authoritative: the response carries the stored
-    // amount and operation ID so the client persists and resumes it.
-    expect(adopted.amountKobo).toBe(25000);
-    expect(adopted.operationId).toBe(fixture.intent.operationId);
-    expect(adopted.status).toBe('ready');
-    expect(provider.initialize).toHaveBeenCalledWith(
-      expect.objectContaining({
-        operationId: fixture.intent.operationId,
-        amountKobo: 25000,
+  it('rejects a scope bound to a different integration at construction', () => {
+    expect(() =>
+      createPrimaryWalletCardCheckoutService({
+        settings: fixture.settings,
+        scope: {
+          ...scope,
+          integrationId: '10000000-0000-4000-8000-000000000009',
+        },
+        execute: vi.fn(),
+        provider: { verify: vi.fn() },
       })
-    );
-  });
-  it('adopts the stored unresolved checkout when consent differs', async () => {
-    const { service } = setup();
-    const adopted = await service.initialize({
-      ...request,
-      amountKobo: 25000,
-      consent: { ...request.consent, saveCard: !request.consent.saveCard },
-    });
-    expect(adopted.amountKobo).toBe(25000);
-    expect(adopted.operationId).toBe(fixture.intent.operationId);
-    // The stored consent echoes so the client can confirm the change.
-    expect(adopted.saveCard).toBe(fixture.intent.consent.saveCard);
+    ).toThrow('Primary card scope unavailable');
   });
 });

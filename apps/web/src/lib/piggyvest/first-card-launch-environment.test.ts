@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { createFirstCardLaunchEnvironment } from './first-card-launch-environment';
+import {
+  isPiggyvestFeatureFlagSet,
+  isPiggyvestFeatureOn,
+} from './piggyvest-feature-on';
 import { prefundedCardCheckoutFixture } from './prefunded-card-checkout.test-fixture';
 
 const checkout = prefundedCardCheckoutFixture();
@@ -66,6 +70,53 @@ describe('first-card standalone launch', () => {
     expect(() =>
       createFirstCardLaunchEnvironment(configuration, value, now)
     ).toThrow('First-card launch refused');
+  });
+
+  it.each([
+    'true',
+    '1',
+    '',
+  ])('carries a killed parent switch (%j) into the child and keeps the mutation flag so paid checkouts can refresh', (kill) => {
+    const result = createFirstCardLaunchEnvironment(
+      configuration,
+      anon,
+      now,
+      true,
+      kill
+    );
+    expect(result.PIGGYVEST_KILL_SWITCH).toBe(kill);
+    expect(result.PREFUNDED_CARD_CHECKOUT_MUTATIONS_ENABLED).toBe('true');
+  });
+
+  it('a killed child refuses new checkouts but still allows refresh', () => {
+    const child = createFirstCardLaunchEnvironment(
+      configuration,
+      anon,
+      now,
+      true,
+      'true'
+    );
+    expect(
+      isPiggyvestFeatureOn('prefunded_card_checkout_mutations', child)
+    ).toBe(false);
+    expect(
+      isPiggyvestFeatureFlagSet('prefunded_card_checkout_mutations', child)
+    ).toBe(true);
+  });
+
+  it.each([
+    undefined,
+    'false',
+  ])('leaves a not-killed parent (%j) unchanged', (kill) => {
+    const result = createFirstCardLaunchEnvironment(
+      configuration,
+      anon,
+      now,
+      true,
+      kill
+    );
+    expect(result.PREFUNDED_CARD_CHECKOUT_MUTATIONS_ENABLED).toBe('true');
+    expect(result.PIGGYVEST_KILL_SWITCH).toBe(kill);
   });
 
   it('refuses expiry and an increased test amount before importing the service', () => {

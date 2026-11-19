@@ -27,17 +27,29 @@ export function getProductGuideModelIdentifiers(
   const provenIdentifiers = identifiers.flatMap((identifier) => {
     const identifierTokens = tokenizeContentText(identifier);
     const modelCode = identifierTokens.at(-1) ?? '';
+    const tufVariants =
+      identifierTokens[0] === 'tuf' && identifierTokens.length > 1
+        ? sourceTokenGroups.flatMap((sourceTokens) => {
+            const hasTufGaming = hasTokenSequence(sourceTokens, [
+              'tuf',
+              'gaming',
+            ]);
+            const rest = identifierTokens.slice(1);
+            return hasTufGaming ? [['tuf', 'gaming', ...rest].join(' ')] : [];
+          })
+        : [];
     if (identifierTokens.length < 2 || !/^\d{3,}$/u.test(modelCode)) {
-      return [];
+      return tufVariants;
     }
     const familyTokens = identifierTokens.slice(0, -1);
-    return sourceTokenGroups.flatMap((sourceTokens) =>
+    const numericVariants = sourceTokenGroups.flatMap((sourceTokens) =>
       sourceTokens
         .filter((token) => /^\d{1,2}$/u.test(token))
         .map((numericFamily) => [...familyTokens, numericFamily, modelCode])
         .filter((candidate) => hasTokenSequence(sourceTokens, candidate))
         .map((candidate) => candidate.join(' '))
     );
+    return [...tufVariants, ...numericVariants];
   });
   return Array.from(new Set([...identifiers, ...provenIdentifiers]));
 }

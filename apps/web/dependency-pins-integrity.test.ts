@@ -29,6 +29,22 @@ const PINS: [string, readonly [number, number, number]][] = [
   ['proxy-addr', [2, 0, 8]],
   ['source-map-js', [1, 2, 2]],
   ['smol-toml', [1, 9, 0]],
+  ['next', [16, 4, 1]],
+  ['undici', [7, 30, 1]],
+  ['@vitest/mocker', [4, 1, 12]],
+  ['vite', [8, 1, 6]],
+  ['dompurify', [3, 4, 17]],
+  ['fast-uri', [3, 1, 9]],
+  ['hono', [4, 13, 11]],
+  ['@hono/node-server', [2, 1, 3]],
+  ['ip-address', [10, 7, 4]],
+  ['markdown-it', [14, 3, 3]],
+  ['minimatch', [11, 0, 1]],
+  ['sanitize-html', [2, 18, 1]],
+  ['qs', [6, 16, 1]],
+  ['graphql-scalars', [2, 0, 1]],
+  ['node-forge', [1, 4, 1]],
+  ['postcss-selector-parser', [6, 1, 5]],
 ];
 
 type ProxyAddr = (
@@ -68,6 +84,18 @@ describe('security override pins', () => {
         isAtLeast(parseVersion(versionAt(root, name)), floor),
         `${name} at ${root} is below its security floor`
       ).toBe(true);
+    }
+  });
+
+  it('keeps every modern glob consumer above its AbortSignal cancellation fix', () => {
+    const roots = findInstalledRoots('glob');
+    expect(roots.length).toBeGreaterThan(0);
+    for (const root of roots) {
+      const version = parseVersion(versionAt(root, 'glob'));
+      // The legacy 7.x line is outside GHSA-3g3m-2fjr-6pw4's affected range.
+      if (isAtLeast(version, [9, 0, 0])) {
+        expect(isAtLeast(version, [14, 0, 2]), root).toBe(true);
+      }
     }
   });
 

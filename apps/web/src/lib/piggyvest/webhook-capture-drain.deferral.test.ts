@@ -204,3 +204,24 @@ describe('drainPiggyvestWebhookCaptures deferral', () => {
     );
   });
 });
+
+describe('drainPiggyvestWebhookCaptures kill-switch deferral', () => {
+  it('defers a kill-switched row without parking it, even at the attempt cap', async () => {
+    const stored = row(inflow, sign(current, inflow), {
+      attempts: MAX_DRAIN_ATTEMPTS + 5,
+    });
+    const process = vi.fn(async () => ({
+      status: 503,
+      killSwitchDeferred: true,
+    }));
+
+    const summary = await drainPiggyvestWebhookCaptures(
+      deps([[stored]], process)
+    );
+
+    expect(resolved).toEqual([
+      { id: stored.capture_id, state: 'deferred', error: 'KILL_SWITCH_ACTIVE' },
+    ]);
+    expect(summary).toMatchObject({ retried: 1, needsReview: 0 });
+  });
+});

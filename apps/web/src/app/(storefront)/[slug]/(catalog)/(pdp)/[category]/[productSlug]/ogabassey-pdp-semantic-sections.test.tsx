@@ -7,6 +7,7 @@ import {
   mockBuildProductSemanticModel,
   mockGetCachedProductSeoLinkData,
   mockLoadPdpBrandHubEligibilityInventorySafely,
+  mockLoadPriceBandDestinationPoolSafely,
   mockProductSemanticSections,
   product,
 } from './ogabassey-pdp-semantic-sections.test-fixtures';
@@ -15,6 +16,7 @@ describe('OgabasseyPdpSemanticSections', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockLoadPdpBrandHubEligibilityInventorySafely.mockResolvedValue([]);
+    mockLoadPriceBandDestinationPoolSafely.mockResolvedValue([]);
     mockGetCachedProductSeoLinkData.mockResolvedValue({
       inventory: [
         {
@@ -82,6 +84,11 @@ describe('OgabasseyPdpSemanticSections', () => {
       productBrand: 'Lenovo',
       timeoutMs: 1_000,
     });
+    expect(mockLoadPriceBandDestinationPoolSafely).toHaveBeenCalledWith({
+      categorySlug: 'laptops',
+      merchantId: 'merchant-1',
+      merchantSlug: 'ogabassey',
+    });
     expect(mockBuildProductSemanticModel).toHaveBeenCalledWith(
       expect.objectContaining({
         categorySlug: 'laptops',
@@ -97,6 +104,7 @@ describe('OgabasseyPdpSemanticSections', () => {
             category_slug: 'laptops',
           }),
         ],
+        priceBandInventory: [],
         hubEligibilityInventory: [],
         storeUrl: 'https://ogabassey.com',
       })

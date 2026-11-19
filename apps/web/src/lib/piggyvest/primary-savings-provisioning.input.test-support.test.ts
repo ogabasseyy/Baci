@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { buildPrimaryGoalWalletName } from './primary-goal-wallet-name';
 import {
   fixture,
   goalId,
@@ -7,9 +8,13 @@ import {
   walletName,
 } from './primary-savings-provisioning.input.test-support';
 
+vi.mock('server-only', () => ({}));
+
 describe('primary-savings-provisioning input test support', () => {
   it('derives the wallet name the way the database names goal wallets', () => {
-    expect(walletName).toBe(`baci-save:${scope.integrationId}:${goalId}`);
+    expect(walletName).toBe(
+      buildPrimaryGoalWalletName(scope.integrationId, goalId)
+    );
   });
 
   it('builds independent doubles on every call', async () => {

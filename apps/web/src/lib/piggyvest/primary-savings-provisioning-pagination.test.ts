@@ -68,6 +68,10 @@ it('finds the wallet under the name the provider rewrote, without touching the c
     'customer-with-hyphens'
   );
 });
+it('reports a complete listing without a match as an empty list, never as unknown', async () => {
+  mocks.request.mockResolvedValueOnce(page([{ ...target, name: 'other' }]));
+  expect(await list()).toEqual([]);
+});
 it('does not match near-matching wallet names', async () => {
   mocks.request.mockResolvedValue(
     page([
@@ -91,7 +95,7 @@ it('discards an exact first-page match if a later request fails', async () => {
   mocks.request
     .mockResolvedValueOnce(page([target], true, 'next'))
     .mockRejectedValueOnce(new Error('Synthetic failure'));
-  expect(await list()).toEqual([]);
+  expect(await list()).toBeNull();
 });
 it.each([
   false,
@@ -102,7 +106,7 @@ it.each([
     .mockResolvedValueOnce(
       page([{ ...target, id: 'other' }], hasNextPage, 'same')
     );
-  expect(await list()).toEqual([]);
+  expect(await list()).toBeNull();
   expect(mocks.request).toHaveBeenCalledTimes(2);
 });
 it('discards a multi-page cursor cycle', async () => {
@@ -110,14 +114,14 @@ it('discards a multi-page cursor cycle', async () => {
     .mockResolvedValueOnce(page([target], true, 'first'))
     .mockResolvedValueOnce(page([{ ...target, id: 'other' }], true, 'second'))
     .mockResolvedValueOnce(page([{ ...target, id: 'third' }], true, 'first'));
-  expect(await list()).toEqual([]);
+  expect(await list()).toBeNull();
   expect(mocks.request).toHaveBeenCalledTimes(3);
 });
 it('discards duplicate wallet IDs across pages even with different cursors', async () => {
   mocks.request
     .mockResolvedValueOnce(page([target], true, 'first'))
     .mockResolvedValueOnce(page());
-  expect(await list()).toEqual([]);
+  expect(await list()).toBeNull();
 });
 it.each([
   false,
@@ -126,7 +130,7 @@ it.each([
   mocks.request
     .mockResolvedValueOnce(page([target], true, 'first'))
     .mockResolvedValueOnce(page([], hasNextPage));
-  expect(await list()).toEqual([]);
+  expect(await list()).toBeNull();
 });
 it('bounds traversal to ten pages and never accepts an incomplete matching list', async () => {
   mocks.request.mockImplementation(async () =>
@@ -136,7 +140,7 @@ it('bounds traversal to ten pages and never accepts an incomplete matching list'
       `cursor-${mocks.request.mock.calls.length}`
     )
   );
-  expect(await list()).toEqual([]);
+  expect(await list()).toBeNull();
   expect(mocks.request).toHaveBeenCalledTimes(limits.maxPages);
 });
 it('accepts a complete tenth page and retains at most two ambiguity witnesses', async () => {
@@ -150,7 +154,7 @@ it('accepts a complete tenth page and retains at most two ambiguity witnesses', 
   expect(await list()).toHaveLength(2);
   expect(mocks.request).toHaveBeenCalledTimes(limits.maxPages);
 });
-it('returns pending-compatible empty matches at the shared deadline and ignores late results', async () => {
+it('reports an unknown listing (null) at the shared deadline and ignores late results', async () => {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] });
   let complete: ((value: ReturnType<typeof page>) => void) | undefined;
   mocks.request.mockImplementationOnce(
@@ -161,7 +165,7 @@ it('returns pending-compatible empty matches at the shared deadline and ignores 
   );
   const result = list();
   await vi.advanceTimersByTimeAsync(limits.timeBudgetMs);
-  expect(await result).toEqual([]);
+  expect(await result).toBeNull();
   complete?.(page([target], true, 'late'));
   await Promise.resolve();
   expect(mocks.request).toHaveBeenCalledTimes(1);
@@ -182,6 +186,6 @@ it('shares one time budget across pages rather than resetting per page', async (
   await vi.advanceTimersByTimeAsync(limits.timeBudgetMs - 1);
   complete?.(page([target], true, 'first'));
   await vi.advanceTimersByTimeAsync(1);
-  expect(await result).toEqual([]);
+  expect(await result).toBeNull();
   expect(mocks.request).toHaveBeenCalledTimes(2);
 });

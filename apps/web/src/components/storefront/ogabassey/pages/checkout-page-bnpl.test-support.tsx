@@ -147,7 +147,7 @@ export const driveFreshBNPLPlaceOrder = async (radioName: RegExp) => {
   fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
   await continueToPaymentAfterPickupCheck();
   fireEvent.click(
-    await screen.findByRole('button', { name: /pay in installments/i })
+    await screen.findByRole('button', { name: /pay small small/i })
   );
   fireEvent.click(await screen.findByRole('radio', { name: radioName }));
   const placeOrderButton = screen

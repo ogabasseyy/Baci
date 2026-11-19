@@ -1,7 +1,7 @@
 {
   "name": "baci-pilot-codec-compatibility-runtime",
   "private": true,
-  "packageManager": "pnpm@11.7.0",
+  "packageManager": "pnpm@11.22.0",
   "dependencies": {
     "esbuild": "0.25.10",
     "playwright": "1.55.1",

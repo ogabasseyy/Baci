@@ -53,6 +53,7 @@ describe('getCachedCategoryScopedSemanticInventory', () => {
           brand: 'Apple',
           condition: 'new',
           stock_quantity: 7,
+          has_condition_offers: true,
           product_categories: [
             { category_id: 'cat-laptops', categories: { slug: 'laptops' } },
           ],
@@ -108,7 +109,8 @@ describe('getCachedCategoryScopedSemanticInventory', () => {
         category_slugs: ['laptops'],
         is_parent: null,
         parent_product_id: null,
-        manage_stock: null,
+        manage_stock: undefined,
+        has_condition_offers: true,
       },
       {
         slug: 'legion-5',
@@ -122,7 +124,8 @@ describe('getCachedCategoryScopedSemanticInventory', () => {
         category_slugs: ['gaming-laptops'],
         is_parent: null,
         parent_product_id: null,
-        manage_stock: null,
+        manage_stock: undefined,
+        has_condition_offers: false,
       },
     ]);
   });
@@ -279,7 +282,8 @@ describe('getCachedCategoryScopedSemanticInventory', () => {
         category_slugs: [],
         is_parent: null,
         parent_product_id: null,
-        manage_stock: null,
+        manage_stock: undefined,
+        has_condition_offers: false,
       },
     ]);
   });

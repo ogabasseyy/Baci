@@ -67,6 +67,23 @@ describe('applySupabaseReplaySql', () => {
     );
   });
 
+  it('propagates only allowlisted psql error categories', async () => {
+    const apply = vi.fn(async () => {
+      throw new Error(
+        'psql failed: non-zero-exit (line=88,reason=undefined-function)'
+      );
+    });
+    await expect(
+      applySupabaseReplaySql(apply, {
+        kind: 'sql-check',
+        ordinal: 189,
+        sqlPath: '/private.sql',
+      })
+    ).rejects.toThrow(
+      /^Replay SQL check failed at ordinal 189: non-zero-exit \(line=88,reason=undefined-function\)$/
+    );
+  });
+
   it.each([
     [
       'migration',

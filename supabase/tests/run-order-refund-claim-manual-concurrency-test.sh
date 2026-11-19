@@ -48,7 +48,12 @@ MANAGER_ID=9ef40000-0000-4000-8000-000000000002
 MERCHANT_ID=9ef40100-0000-4000-8000-000000000001
 ORDER_ID=9ef41000-0000-4000-8000-000000000001
 PAYMENT_ID=9ef42000-0000-4000-8000-000000000001
-HOLD_MARKER=/tmp/order-refund-claim-race-holding
+# One scratch directory per run for the lock-ready marker and the two session logs. Fixed /tmp names let two
+# runs on one host (for example two CI runner processes) delete each other's marker and truncate each other's logs.
+scratch_dir="$(mktemp -d "${TMPDIR:-/tmp}/order-refund-claim-race.XXXXXX")"
+HOLD_MARKER="$scratch_dir/holding"
+SESSION_A_LOG="$scratch_dir/session-a.log"
+CLAIM_LOG="$scratch_dir/claim.log"
 
 minimal_container="baci-refund-race-ci-$$"
 
@@ -71,7 +76,7 @@ DELETE FROM auth.users WHERE id IN (
 SQL
   rm -f "$HOLD_MARKER"
 }
-trap cleanup EXIT
+trap 'cleanup; rm -rf "$scratch_dir"' EXIT
 
 if [ "${MINIMAL_PHASE1:-0}" = '1' ]; then
   # Self-provisioned throwaway postgres (CI mode): the Phase-1
@@ -187,10 +192,10 @@ rm -f "$HOLD_MARKER"
 
 # Phase 1: hold the orders row FOR UPDATE (the manager's whole-manual
 # lock) while the claim attempts to run.
-psql -X -q -v ON_ERROR_STOP=1 <<SQL >/tmp/order-refund-claim-race-a.log 2>&1 &
+psql -X -q -v ON_ERROR_STOP=1 <<SQL >"$SESSION_A_LOG" 2>&1 &
 BEGIN;
 SELECT merchant_id FROM public.orders WHERE id = '$ORDER_ID' FOR UPDATE;
-\! touch $HOLD_MARKER
+\! touch '$HOLD_MARKER'
 SELECT pg_sleep(12);
 ROLLBACK;
 SQL
@@ -204,7 +209,7 @@ done
 if [ ! -f "$HOLD_MARKER" ]; then
   echo 'lock-holding session never reached its hold point' >&2
   wait "$session_a" || true
-  tail -5 /tmp/order-refund-claim-race-a.log >&2 || true
+  tail -5 "$SESSION_A_LOG" >&2 || true
   exit 1
 fi
 
@@ -216,9 +221,9 @@ if psql -X -q -v ON_ERROR_STOP=1 \
   -c "SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', false)" \
   -c "SET ROLE service_role" \
   -c "SELECT * FROM public.claim_order_cancellation_side_effect('$ORDER_ID', 'refund', gen_random_uuid())" \
-  >/tmp/order-refund-claim-race-b.log 2>&1; then
+  >"$CLAIM_LOG" 2>&1; then
   echo 'claim slipped through a held orders lock (double-pay race open)' >&2
-  cat /tmp/order-refund-claim-race-b.log >&2
+  cat "$CLAIM_LOG" >&2
   wait "$session_a" || true
   exit 1
 fi
@@ -228,9 +233,9 @@ fi
 # (claim_order_cancellation_side_effect), misclassifying every error
 # — including a lock regression that errors past the lock point in
 # the minimal fixture — as a successful block.
-if ! grep -qi 'statement timeout' /tmp/order-refund-claim-race-b.log; then
+if ! grep -qi 'statement timeout' "$CLAIM_LOG"; then
   echo 'claim failed without blocking (unexpected error):' >&2
-  cat /tmp/order-refund-claim-race-b.log >&2
+  cat "$CLAIM_LOG" >&2
   wait "$session_a" || true
   exit 1
 fi

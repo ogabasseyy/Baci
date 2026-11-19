@@ -29,7 +29,14 @@ function rawProduct(name: string, brand: string, index = 0) {
 describe('getBrandAuthoritySitemapEntries', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockCategory.mockResolvedValue({ id: 'category-1', name: 'Smartphones' });
+    mockCategory.mockImplementation(
+      async (_merchantId: string, categorySlug: string) => {
+        if (categorySlug === 'smartphones') {
+          return { id: 'category-1', name: 'Smartphones' };
+        }
+        return null;
+      }
+    );
   });
 
   it('does not query brand authority inventory for an unpublished store', async () => {
@@ -220,6 +227,64 @@ describe('getBrandAuthoritySitemapEntries', () => {
     expect(entries.map((entry) => entry.url)).toEqual([
       'https://store.test/smartphones/brands/samsung',
       'https://store.test/smartphones/brands/samsung/families/galaxy-s',
+    ]);
+  });
+
+  it('emits sitemap entries across multiple supported categories including gaming-laptops and playstation-5', async () => {
+    mockCategory.mockImplementation(
+      async (_merchantId: string, categorySlug: string) => {
+        if (categorySlug === 'gaming-laptops') {
+          return { id: 'category-gaming', name: 'Gaming Laptops' };
+        }
+        if (categorySlug === 'playstation-5') {
+          return { id: 'category-ps5', name: 'PlayStation 5' };
+        }
+        return null;
+      }
+    );
+    mockInventory.mockImplementation(
+      async (
+        _merchant: string,
+        category: string,
+        entry: { brandKey: string }
+      ) => {
+        if (category === 'gaming-laptops' && entry.brandKey === 'asus') {
+          return {
+            productCount: 5,
+            latestUpdatedAt: '2026-08-01T00:00:00Z',
+            products: Array.from({ length: 5 }, (_, index) =>
+              rawProduct(`ROG Strix ${index}`, 'ASUS', index)
+            ),
+          };
+        }
+        if (category === 'playstation-5' && entry.brandKey === 'playstation') {
+          return {
+            productCount: 5,
+            latestUpdatedAt: '2026-08-01T00:00:00Z',
+            products: Array.from({ length: 5 }, (_, index) =>
+              rawProduct(`DualSense ${index}`, 'PlayStation', index)
+            ),
+          };
+        }
+        return {
+          productCount: 0,
+          latestUpdatedAt: null,
+          products: [],
+        };
+      }
+    );
+
+    const { getBrandAuthoritySitemapEntries } = await import(
+      './brand-authority-sitemap'
+    );
+    const entries = await getBrandAuthoritySitemapEntries({
+      merchant: { id: 'merchant-1', slug: 'store', is_published: true },
+      storeUrl: 'https://store.test',
+    } as never);
+
+    expect(entries.map((entry) => entry.url)).toEqual([
+      'https://store.test/gaming-laptops/brands/asus',
+      'https://store.test/playstation-5/brands/playstation',
     ]);
   });
 });

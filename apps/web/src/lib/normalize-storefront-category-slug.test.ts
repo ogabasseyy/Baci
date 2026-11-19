@@ -20,6 +20,12 @@ describe('normalizeStorefrontCategorySlug', () => {
     expect(normalizeStorefrontCategorySlug('  Gaming  ')).toBe('gaming');
   });
 
+  it('does not map Object.prototype properties such as constructor or toString', () => {
+    expect(normalizeStorefrontCategorySlug('constructor')).toBe('constructor');
+    expect(normalizeStorefrontCategorySlug('toString')).toBe('tostring');
+    expect(normalizeStorefrontCategorySlug('valueOf')).toBe('valueof');
+  });
+
   it('returns null for empty inputs', () => {
     expect(normalizeStorefrontCategorySlug('')).toBeNull();
     expect(normalizeStorefrontCategorySlug('   ')).toBeNull();

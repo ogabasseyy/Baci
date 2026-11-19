@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  createServiceClient: vi.fn(),
+  createIntakeClient: vi.fn(),
   processPiggyvestEvent: vi.fn(),
 }));
 
@@ -14,8 +14,8 @@ vi.mock('@/env', () => ({
     process.env.PVB_SECRET_KEY?.trim() || undefined,
 }));
 
-vi.mock('@/lib/supabase/service', () => ({
-  createServiceClient: () => withCaptureRpc(mocks.createServiceClient()),
+vi.mock('@/lib/piggyvest/server-intake-client', () => ({
+  createPiggyvestIntakeClient: () => withCaptureRpc(mocks.createIntakeClient()),
 }));
 
 vi.mock('@/lib/piggyvest/webhook-processor', () => ({
@@ -51,7 +51,9 @@ const interestEvent = {
   eventData: {
     id: 'faas-interest-synthetic-001',
     amount: 95000,
-    destination_wallet: 'faas-wallet-synthetic-001',
+    // PVB-internal wallet id (PiggyVest, 2026-11-11): never the credited
+    // plan wallet.
+    destination_wallet: 'pvb-internal-wallet-synthetic-009',
     destination_wallet_balance: 1095000,
     destination_wallet_ledger_balance: 1095000,
     reference: 'faas-ref-synthetic-002',
@@ -64,7 +66,8 @@ const interestEvent = {
     },
   },
   pvb_reference: 'pvb-txn-synthetic-002',
-  pvb_wallet: 'pvb-wallet-synthetic-001',
+  // The PVB wallet the payout credited.
+  pvb_wallet: 'faas-wallet-synthetic-001',
   pvb_accrued_interest_wallet: 'pvb-wallet-synthetic-001',
   pvb_destination_wallet: null,
   pvb_third_party_reference: null,
@@ -112,7 +115,7 @@ describe('GET reachability probe', () => {
 describe('POST event intake', () => {
   it('acknowledges deferred processing as durable backlog', async () => {
     vi.stubEnv('PVB_SECRET_KEY', SECRET);
-    mocks.createServiceClient.mockReturnValue({
+    mocks.createIntakeClient.mockReturnValue({
       from: vi.fn(() => chainable({ data: [], error: null }).query),
     });
     mocks.processPiggyvestEvent.mockResolvedValue('deferred');
@@ -137,7 +140,7 @@ describe('POST event intake', () => {
       error: 'Integration unavailable',
       code: 'PIGGYVEST_NOT_READY',
     });
-    expect(mocks.createServiceClient).not.toHaveBeenCalled();
+    expect(mocks.createIntakeClient).not.toHaveBeenCalled();
   });
 
   it('records an authentic inflow and acks received', async () => {
@@ -146,7 +149,7 @@ describe('POST event intake', () => {
       data: [{ event_id: inflowEvent.eventId }],
       error: null,
     });
-    mocks.createServiceClient.mockReturnValue({
+    mocks.createIntakeClient.mockReturnValue({
       from: vi.fn(() => query),
     });
     const rawBody = JSON.stringify(inflowEvent);
@@ -171,7 +174,7 @@ describe('POST event intake', () => {
 
   it('acks duplicate deliveries and re-drives processing to recover crashed credits', async () => {
     vi.stubEnv('PVB_SECRET_KEY', SECRET);
-    mocks.createServiceClient.mockReturnValue({
+    mocks.createIntakeClient.mockReturnValue({
       from: vi.fn(() => chainable({ data: [], error: null }).query),
     });
     const rawBody = JSON.stringify(inflowEvent);
@@ -192,7 +195,7 @@ describe('POST event intake', () => {
       error: null,
     });
     const from = vi.fn(() => query);
-    mocks.createServiceClient.mockReturnValue({ from });
+    mocks.createIntakeClient.mockReturnValue({ from });
     const rawBody = JSON.stringify({
       ...inflowEvent,
       eventType: 'wallet.transfer.success',
@@ -218,15 +221,16 @@ describe('POST event intake', () => {
     expect(mocks.processPiggyvestEvent).not.toHaveBeenCalled();
   });
 
+  // A changed internal transaction_id alone is no longer a conflict: the
+  // credit identity is pvb_reference (route.pvb-reference-retry.test.ts).
   it.each([
     { amount: 1 },
-    { transaction_id: 'provider-txn-synthetic-002' },
   ])('quarantines same-identity conflicting deliveries without crediting: %j', async (changedDetail) => {
     vi.stubEnv('PVB_SECRET_KEY', SECRET);
     // Stored envelope keeps the original amount while the redelivery
     // claims amount 1: same identity, different content.
     const { query } = chainable({ data: [], error: null }, MATCHING_ENVELOPE);
-    mocks.createServiceClient.mockReturnValue({
+    mocks.createIntakeClient.mockReturnValue({
       from: vi.fn(() => query),
     });
     const rawBody = JSON.stringify({
@@ -246,7 +250,7 @@ describe('POST event intake', () => {
 
   it('processes duplicate deliveries so crashed credits still land', async () => {
     vi.stubEnv('PVB_SECRET_KEY', SECRET);
-    mocks.createServiceClient.mockReturnValue({
+    mocks.createIntakeClient.mockReturnValue({
       from: vi.fn(() => chainable({ data: [], error: null }).query),
     });
     const rawBody = JSON.stringify(inflowEvent);
@@ -263,7 +267,7 @@ describe('POST event intake', () => {
       data: [{ event_id: restrictionEvent.eventId }],
       error: null,
     });
-    mocks.createServiceClient.mockReturnValue({
+    mocks.createIntakeClient.mockReturnValue({
       from: vi.fn(() => query),
     });
     const rawBody = JSON.stringify(restrictionEvent);
@@ -281,13 +285,13 @@ describe('POST event intake', () => {
     );
   });
 
-  it('records the destination plan wallet for interest payouts', async () => {
+  it('records the credited pvb_wallet for interest payouts', async () => {
     vi.stubEnv('PVB_SECRET_KEY', SECRET);
     const { query, upsert } = chainable({
       data: [{ event_id: interestEvent.eventId }],
       error: null,
     });
-    mocks.createServiceClient.mockReturnValue({
+    mocks.createIntakeClient.mockReturnValue({
       from: vi.fn(() => query),
     });
     const rawBody = JSON.stringify(interestEvent);
@@ -318,7 +322,7 @@ describe('POST event intake', () => {
         amount_kobo: null,
       }
     );
-    mocks.createServiceClient.mockReturnValue({
+    mocks.createIntakeClient.mockReturnValue({
       from: vi.fn(() => query),
     });
     const rawBody = JSON.stringify({
@@ -342,7 +346,7 @@ describe('POST event intake', () => {
       data: [{ event_id: outflowEvent.eventId }],
       error: null,
     });
-    mocks.createServiceClient.mockReturnValue({
+    mocks.createIntakeClient.mockReturnValue({
       from: vi.fn(() => query),
     });
     const rawBody = JSON.stringify(outflowEvent);
@@ -379,7 +383,7 @@ describe('POST event intake', () => {
         amount_kobo: null,
       }
     );
-    mocks.createServiceClient.mockReturnValue({
+    mocks.createIntakeClient.mockReturnValue({
       from: vi.fn(() => query),
     });
     const rawBody = JSON.stringify({

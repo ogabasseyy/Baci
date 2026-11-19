@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('server-only', () => ({}));
 
 import { deterministicTestSignature } from '@/lib/piggyvest/deterministic-test-data.test-support';
-import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
+import type { PiggyvestIntakeClient } from '@/lib/piggyvest/intake-client.types';
 import {
   captureVerifiedDelivery,
   describeDelivery,
@@ -117,7 +117,7 @@ describe('captureVerifiedDelivery always captures the raw body', () => {
       data: { outcome: 'captured', id: captureId, processingState: 'pending' },
       error: null,
     }));
-    return { rpc, client: { rpc } as unknown as PiggyvestIntakeServiceClient };
+    return { rpc, client: { rpc } as unknown as PiggyvestIntakeClient };
   }
 
   it('sends oversized optional metadata as null and the full bytes regardless', async () => {

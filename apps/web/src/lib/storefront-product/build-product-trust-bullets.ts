@@ -1,14 +1,8 @@
 import { formatCurrencyCompact } from '@/lib/currency';
+import { formatVerifiedProductSpecHighlights } from '@/lib/format-verified-product-spec-highlights';
 import { getCuratedPriceBands } from '@/lib/storefront-compare/price-band-taxonomy';
+import { toTitleCase } from '@/lib/to-title-case';
 import type { BuildProductSemanticModelInput } from './product-semantic-types';
-
-function toTitleCase(value: string) {
-  return value
-    .split(/[\s_-]+/)
-    .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(' ');
-}
 
 function buildPriceBandLabel(
   input: BuildProductSemanticModelInput,
@@ -22,7 +16,7 @@ function buildPriceBandLabel(
 
 export function buildProductTrustBullets(
   input: BuildProductSemanticModelInput
-) {
+): string[] {
   const bullets: string[] = [];
 
   if (input.currentProduct.condition) {
@@ -31,7 +25,9 @@ export function buildProductTrustBullets(
     );
   }
 
-  const containingBand = getCuratedPriceBands(input.categorySlug).find(
+  const containingBand = getCuratedPriceBands(input.categorySlug, {
+    merchantCurrency: input.merchantCurrency,
+  }).find(
     (band) =>
       input.currentProduct.price <= band.ceiling &&
       (band.floor ? input.currentProduct.price > band.floor : true)
@@ -41,6 +37,30 @@ export function buildProductTrustBullets(
     bullets.push(
       `Listed in ${buildPriceBandLabel(input, containingBand.ceiling)}`
     );
+  }
+
+  if (
+    input.currentProduct.manage_stock === false ||
+    (typeof input.currentProduct.stock === 'number' &&
+      input.currentProduct.stock > 0)
+  ) {
+    bullets.push('In stock for immediate dispatch');
+  }
+
+  const specHighlights = formatVerifiedProductSpecHighlights({
+    specs: input.currentProduct.product_key_specs,
+    category: input.categoryName || input.categorySlug,
+    keys: [
+      'ram_gb',
+      'storage_gb',
+      'battery_mah',
+      'main_camera_mp',
+      'refresh_rate_hz',
+    ],
+    maxHighlights: 3,
+  });
+  if (specHighlights.length > 0) {
+    bullets.push(`Key specs: ${specHighlights.join(', ')}`);
   }
 
   return bullets;

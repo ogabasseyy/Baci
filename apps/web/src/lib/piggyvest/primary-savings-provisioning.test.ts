@@ -19,7 +19,7 @@ describe('primary savings provisioning connection', () => {
       reserveVirtualAccount: true,
       enableInterestAccrual: false,
     });
-    expect(input.listWallets).toHaveBeenCalledWith('customer');
+    expect(input.listWallets).toHaveBeenCalledWith('customer', walletName);
     expect(input.store.enroll).toHaveBeenCalledWith(goalId, {
       providerCustomerId: 'customer',
       providerWalletId: 'destination',

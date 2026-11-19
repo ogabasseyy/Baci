@@ -1,7 +1,9 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
+import { Dimensions } from 'react-native';
 import Colors from '@/constants/Colors';
 import { QuizRulesModal } from './QuizRulesModal';
+import { QUIZ_STAGE_COLORS } from './quiz-stage-colors';
 
 jest.mock('@react-native-vector-icons/ionicons', () => 'Ionicons');
 jest.mock('react-native-safe-area-context', () => ({
@@ -81,6 +83,29 @@ describe('QuizRulesModal', () => {
     expect(sheet.props.style).toEqual(
       expect.arrayContaining([expect.objectContaining({ maxHeight: '75%' })])
     );
+
+    // Once the banner is measured the sheet stops a clear 24pt below it,
+    // so the sheet's close button can never sit right under the ad.
+    // The banner is a sibling of the modal sheet, so it is hidden from
+    // accessibility queries by default.
+    fireEvent(
+      screen.getByTestId('quiz-rules-modal-banner', {
+        includeHiddenElements: true,
+      }),
+      'layout',
+      { nativeEvent: { layout: { height: 78, width: 390, x: 0, y: 75 } } }
+    );
+    const { height: windowHeight } = Dimensions.get('window');
+    const measuredSheet = screen.UNSAFE_getByProps({
+      accessibilityViewIsModal: true,
+    }) as unknown as {
+      props: { style: Record<string, unknown>[] };
+    };
+    expect(measuredSheet.props.style).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ maxHeight: windowHeight - 153 - 24 }),
+      ])
+    );
     expect(screen.getByTestId('quiz-rules-list')).toBeTruthy();
   });
 
@@ -115,7 +140,7 @@ describe('QuizRulesModal', () => {
       );
 
       expect(screen.getByText('Accept & play')).toHaveStyle({
-        color: Colors.light.textSecondary,
+        color: QUIZ_STAGE_COLORS.textSecondary,
       });
 
       fireEvent.press(
@@ -125,6 +150,118 @@ describe('QuizRulesModal', () => {
       expect(screen.getByText('Accept & play')).toHaveStyle({
         color: Colors.light.primaryForeground,
       });
+    });
+  });
+
+  describe('bugfix: measured banner edge cases', () => {
+    const banner = () =>
+      screen.getByTestId('quiz-rules-modal-banner', {
+        includeHiddenElements: true,
+      });
+    const sheetStyle = () =>
+      (
+        screen.UNSAFE_getByProps({
+          accessibilityViewIsModal: true,
+        }) as unknown as { props: { style: Record<string, unknown>[] } }
+      ).props.style;
+    const measure = (height: number) =>
+      fireEvent(banner(), 'layout', {
+        nativeEvent: { layout: { height, width: 390, x: 0, y: 75 } },
+      });
+    const modal = (visible: boolean) => (
+      <QuizRulesModal
+        eventTitle="Tonight quiz"
+        onClose={jest.fn()}
+        onConfirm={jest.fn()}
+        requiresAcceptance={false}
+        timePerQuestionSeconds={15}
+        visible={visible}
+      />
+    );
+
+    it('drops the banner instead of collapsing the sheet when there is no room', () => {
+      render(modal(true));
+      const { height: windowHeight } = Dimensions.get('window');
+
+      // A banner so tall that under 320pt would be left for the sheet.
+      measure(windowHeight - 75 - 24 - 200);
+
+      expect(sheetStyle()).toEqual(
+        expect.arrayContaining([expect.objectContaining({ maxHeight: '75%' })])
+      );
+      expect(banner().props.children).toBeNull();
+      expect(screen.getByTestId('quiz-rules-list')).toBeTruthy();
+    });
+
+    it('forgets the last banner measurement when the sheet closes', () => {
+      const { rerender } = render(modal(true));
+      measure(78);
+      expect(sheetStyle()).not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ maxHeight: '75%' })])
+      );
+
+      rerender(modal(false));
+      rerender(modal(true));
+
+      expect(sheetStyle()).toEqual(
+        expect.arrayContaining([expect.objectContaining({ maxHeight: '75%' })])
+      );
+    });
+
+    it('measures room against the backdrop height, not the window height', () => {
+      // Regression: banner y is relative to the backdrop, so a backdrop
+      // shorter than the window must shrink the cap by the same amount.
+      render(modal(true));
+      const backdrop = screen.getByTestId('quiz-rules-modal-backdrop', {
+        includeHiddenElements: true,
+      });
+      fireEvent(backdrop, 'layout', {
+        nativeEvent: { layout: { height: 800, width: 390, x: 0, y: 0 } },
+      });
+      measure(78);
+
+      expect(sheetStyle()).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ maxHeight: 800 - 153 - 24 }),
+        ])
+      );
+    });
+
+    it('does not mount the ad slot when even the shortest banner cannot fit', () => {
+      // Regression: the slot used to mount (and request an ad) before the
+      // first measurement, then get dropped when too tall.
+      render(modal(true));
+      expect(banner().props.children).not.toBeNull();
+
+      const backdrop = screen.getByTestId('quiz-rules-modal-backdrop', {
+        includeHiddenElements: true,
+      });
+      // 59 + 16 + 50 + 24 + 320 = 469 is the least that fits.
+      fireEvent(backdrop, 'layout', {
+        nativeEvent: { layout: { height: 468, width: 390, x: 0, y: 0 } },
+      });
+      expect(banner().props.children).toBeNull();
+
+      fireEvent(backdrop, 'layout', {
+        nativeEvent: { layout: { height: 469, width: 390, x: 0, y: 0 } },
+      });
+      expect(banner().props.children).not.toBeNull();
+    });
+
+    it('keeps a dropped banner dropped when its empty wrapper re-lays out', () => {
+      // Regression: the emptied wrapper reports height 0, which used to
+      // pull bannerBottom back up, re-fit the banner and remount the slot.
+      render(modal(true));
+      const { height: windowHeight } = Dimensions.get('window');
+      measure(windowHeight - 75 - 24 - 200);
+      expect(banner().props.children).toBeNull();
+
+      measure(0);
+
+      expect(banner().props.children).toBeNull();
+      expect(sheetStyle()).toEqual(
+        expect.arrayContaining([expect.objectContaining({ maxHeight: '75%' })])
+      );
     });
   });
 });

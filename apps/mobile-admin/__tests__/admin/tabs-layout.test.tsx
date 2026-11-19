@@ -4,7 +4,16 @@ import type React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  failedOrders: [] as Array<{ id: string }>,
+  failedOrders: [] as Array<{
+    id: string;
+    created_at: string;
+    customer_email?: string;
+  }>,
+  oxygenOrders: [] as Array<{
+    id: string;
+    created_at: string;
+    customer_email?: string;
+  }>,
   screens: [] as Array<{
     name: string;
     options?: Record<string, unknown>;
@@ -86,8 +95,21 @@ vi.mock('expo-router', async () => {
   return { Tabs };
 });
 
+vi.mock('@/components/feedback/FeedbackLauncher', () => ({
+  FeedbackLauncher: () => <div data-testid="feedback-launcher" />,
+}));
+
 vi.mock('@/hooks/useFailedOrders', () => ({
   useFailedOrders: () => ({ data: mocks.failedOrders }),
+}));
+vi.mock('@/hooks/useOxygenFollowUps', () => ({
+  useOxygenFollowUps: () => ({ data: mocks.oxygenOrders }),
+}));
+vi.mock('@/hooks/useMerchant', () => ({
+  useMerchant: () => ({ merchant: { id: 'merchant-1' } }),
+}));
+vi.mock('@tanstack/react-query', () => ({
+  useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }));
 
 vi.mock('@/hooks/useTheme', () => ({
@@ -109,6 +131,7 @@ type TabBarRenderer = (props: BottomTabBarProps) => React.ReactNode;
 describe('TabLayout', () => {
   beforeEach(() => {
     mocks.failedOrders = [];
+    mocks.oxygenOrders = [];
     mocks.screens = [];
     mocks.tabsProps = null;
   });
@@ -117,6 +140,7 @@ describe('TabLayout', () => {
     const { getByTestId } = render(<TabLayout />);
 
     expect(getByTestId('tabs-root')).toBeTruthy();
+    expect(getByTestId('feedback-launcher')).toBeTruthy();
 
     const screenOptions = mocks.tabsProps?.screenOptions as {
       freezeOnBlur: boolean;
@@ -155,7 +179,10 @@ describe('TabLayout', () => {
   });
 
   it('places follow-up badges on Customers instead of Orders', () => {
-    mocks.failedOrders = [{ id: 'dropoff-1' }, { id: 'dropoff-2' }];
+    mocks.failedOrders = [
+      { id: 'dropoff-1', created_at: '2026-11-17T09:00:00Z' },
+      { id: 'dropoff-2', created_at: '2026-11-17T08:00:00Z' },
+    ];
 
     render(<TabLayout />);
 
@@ -168,5 +195,49 @@ describe('TabLayout', () => {
 
     expect(ordersScreen?.options?.tabBarBadge).toBeUndefined();
     expect(customersScreen?.options?.tabBarBadge).toBe(2);
+  });
+
+  it('counts Oxygen follow-ups without double-counting an order', () => {
+    mocks.failedOrders = [{ id: 'same', created_at: '2026-11-17T09:00:00Z' }];
+    mocks.oxygenOrders = [
+      { id: 'same', created_at: '2026-11-17T09:00:00Z' },
+      { id: 'oxygen', created_at: '2026-11-17T08:00:00Z' },
+    ];
+    render(<TabLayout />);
+    expect(
+      mocks.screens.find((screen) => screen.name === 'customers')?.options
+        ?.tabBarBadge
+    ).toBe(2);
+  });
+
+  it('counts distinct follow-up orders for the same email as separate queue entries', () => {
+    mocks.failedOrders = [
+      {
+        id: 'standard',
+        created_at: '2026-11-17T09:00:00Z',
+        customer_email: 'ada@example.com',
+      },
+    ];
+    mocks.oxygenOrders = [
+      {
+        id: 'oxygen',
+        created_at: '2026-11-17T08:00:00Z',
+        customer_email: 'ada@example.com',
+      },
+    ];
+    render(<TabLayout />);
+    expect(
+      mocks.screens.find((screen) => screen.name === 'customers')?.options
+        ?.tabBarBadge
+    ).toBe(2);
+  });
+
+  it('shows a Customers badge for an Oxygen-only follow-up', () => {
+    mocks.oxygenOrders = [{ id: 'oxygen', created_at: '2026-11-17T08:00:00Z' }];
+    render(<TabLayout />);
+    expect(
+      mocks.screens.find((screen) => screen.name === 'customers')?.options
+        ?.tabBarBadge
+    ).toBe(1);
   });
 });

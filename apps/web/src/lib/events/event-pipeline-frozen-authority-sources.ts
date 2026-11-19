@@ -119,8 +119,15 @@ export const eventPipelineFrozenRoutes = {
   // notification authority is added.
   // Re-pinned for explicit UBA recovery authentication and proof binding.
   // The recovery changes add no privileged or notification authority.
+  // Reviewed Oxygen checkout changes: shipping-rate verification now uses the
+  // anonymous-safe storefront RPC; Oxygen order read-back uses the caller's
+  // RLS client. Neither adds service-role or event-dispatch authority.
+  // Re-pinned for merged #4052's shared-cart checkout-context preparation: it
+  // signs server-verified claims for the existing order RPC. The rollout flag
+  // defaults off; this change adds no privileged-client construction, payment,
+  // notification, tenant, credential, or event-dispatch authority.
   'apps/web/src/app/api/orders/route.ts':
-    '7f2a55370ed2fe5aa372a1d42c5430d536c274c2ffccf668862bf04ae4e9e1cc',
+    'a5589c0931eb28e0e579925aa97978be7faec6246fefada2c781a9217bd38b90',
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

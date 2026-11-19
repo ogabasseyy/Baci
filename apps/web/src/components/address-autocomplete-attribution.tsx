@@ -1,3 +1,5 @@
+import Image from 'next/image';
+
 export function AddressAutocompleteAttribution({
   provider,
 }: {
@@ -27,20 +29,13 @@ export function AddressAutocompleteAttribution({
       </span>
     );
   return (
-    <span
-      role="img"
-      aria-label="Powered by Google"
-      className="text-xs text-muted-foreground opacity-60"
-    >
-      Powered by{' '}
-      <span className="font-medium">
-        <span className="text-[#4285F4]">G</span>
-        <span className="text-[#EA4335]">o</span>
-        <span className="text-[#FBBC05]">o</span>
-        <span className="text-[#4285F4]">g</span>
-        <span className="text-[#34A853]">l</span>
-        <span className="text-[#EA4335]">e</span>
-      </span>
-    </span>
+    <Image
+      src="/attribution/powered-by-google-on-white.png"
+      alt="Powered by Google"
+      width={120}
+      height={14}
+      unoptimized
+      className="shrink-0"
+    />
   );
 }

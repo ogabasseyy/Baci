@@ -118,3 +118,58 @@ renewal permits no credential, firewall, authentication-setting or database-gran
 change, and renews no other exception. Required review, CI, coordinated deployment,
 rollback and recovery-activation checks remain enforced. At expiry, replace this
 boundary or obtain a new explicit owner decision; never silently extend it.
+
+## In-app feedback email only
+
+<!-- exception: in-app-feedback-email status=approved expires=2027-01-30T00:00:00.000Z -->
+
+The owner explicitly approved this exception on 2026-10-30 in the Claude Code
+conversation that produced PR #3852, after being shown that the shared Zeptomail
+sender records delivery attempts with the admin client and offered a
+queue-based alternative. It expires at **2027-01-30T00:00:00.000Z**, or when
+platform email delivery auditing moves to a restricted worker role, whichever
+occurs first.
+
+The permitted chain is `apps/web/src/app/api/feedback/route.ts` →
+`apps/web/src/lib/feedback/send-feedback-report-email.ts#sendFeedbackReportEmail`
+→ `apps/web/src/lib/zeptomail.ts#sendEmail`, whose only privileged operation is
+its existing email delivery-attempt audit. The exact import paths are pinned in
+`apps/web/src/lib/events/event-pipeline-feedback-credential-paths.ts` and
+`eventPipelineAdminImporters`.
+
+Authentication, CSRF validation, Zod validation, merchant resolution through
+`getMerchantForApiRequest`, the per-user rate limit and the RLS-scoped insert of
+the report must all succeed before the sender runs. The report is stored only
+with the caller's own session. The recipient is the fixed `FEEDBACK_INBOX_EMAIL`
+constant; request input never selects a recipient or sender. The request may
+name the store the app is showing (`merchantId`; owner-approved on 2026-11-19 in
+the same PR #3852 conversation, after Codex flagged the original wording). That
+value confers no authority: `getMerchantForApiRequest` must confirm the caller
+owns or is staff of that store, and an inaccessible store is refused before any
+insert or send. Each send
+is a single bounded attempt so a slow provider cannot time out the client after
+the report is saved.
+
+No sibling route, caller, table query, write or RPC inherits this approval.
+Credentials and provider bodies must not enter client bundles, responses, logs
+or event payloads. At expiry, replace this boundary or obtain a new explicit
+owner decision; never silently extend it.
+
+## GIGL tracking notification worker (retired)
+
+The temporary exception for `apps/web/src/app/api/cron/gigl-tracking-notifications/route.ts`
+(approved 2026-08-01, reapproved 2026-10-01, due to expire 2026-11-15) has been
+removed from `AGENTS.md` and `.ruler/01-critical-rules.md`. Its removal condition
+was met: the notification graph no longer constructs any service-role client.
+
+The route now uses the existing restricted `gigl_tracking_worker` capability
+(`GIGL_TRACKING_WORKER_TOKEN`, the same JWT the tracking fallback and webhook
+expedite already use, so no new secret). Migration
+`20261104100000_gigl_notification_worker_wrappers.sql` adds twelve lease-bound
+`gigl_worker_*` wrappers and extends the PostgREST request-scope hook allowlist.
+Every wrapper is keyed on an outbox row the caller currently leases; tenant,
+order, customer, audience and app type are derived inside the database, and the
+role keeps no table privilege. Push delivery runs through an injected store
+(`apps/web/src/lib/push-store.ts`) so the shared push core imports no
+service-role client. DB replay test `supabase/tests/gigl_notification_worker_wrappers.sql`
+asserts the grants through the catalog.

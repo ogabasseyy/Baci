@@ -1,10 +1,11 @@
 import 'server-only';
 import { piggyvestPrimaryInflowRuntimeSchema } from '@/schemas/piggyvest-primary-inflow-runtime';
+import { isPiggyvestFeatureOn } from './piggyvest-feature-on';
 
 export function readPrimaryWalletInflowRuntime(
   env: NodeJS.ProcessEnv = process.env
 ) {
-  if (env.PIGGYVEST_PRIMARY_INFLOWS_ENABLED !== 'true') return null;
+  if (!isPiggyvestFeatureOn('inflows', env)) return null;
   const parsed = piggyvestPrimaryInflowRuntimeSchema.safeParse({
     integrationId: env.PIGGYVEST_PRIMARY_INTEGRATION_ID,
     environment: env.PIGGYVEST_PRIMARY_ENVIRONMENT,

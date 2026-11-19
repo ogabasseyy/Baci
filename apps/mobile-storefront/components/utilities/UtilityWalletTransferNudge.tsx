@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
 import { BRAND, SPACING } from '@/constants/Colors';
+import { navigateToStoreCreditTopUp } from '@/lib/navigate-to-store-credit-top-up';
 import { navigateToWalletFunding } from '@/lib/navigate-to-wallet-funding';
 import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
 
@@ -9,6 +10,9 @@ type WalletColors = (typeof Colors)['light'];
 const WALLET_FUNDING_NUDGE =
   'Pay from your wallet to skip card fees — transfers to your wallet account number cost 1%, capped at ₦300.';
 const WALLET_FUNDING_CTA = 'Pay with Bank Transfer';
+const STORE_CREDIT_NUDGE =
+  'Not enough store credit. Your savings wallet can’t pay for this yet, so add store credit by card.';
+const STORE_CREDIT_CTA = 'Add store credit';
 
 interface UtilityWalletTransferNudgeProps {
   amount: number;
@@ -29,6 +33,10 @@ interface UtilityWalletTransferNudgeProps {
   walletBalance?: number;
   walletError?: Error | null;
   walletIsLoading?: boolean;
+  /** PiggyVest customer: utilities spend store credit, added by card. */
+  walletIsStoreCredit?: boolean;
+  /** PiggyVest check failed: no bank-transfer nudge until it retries. */
+  walletPrimaryUnknown?: boolean;
   /**
    * False while the wallet query is disabled with no data: the
    * funding nudge must stay hidden (a missing balance is not a zero
@@ -46,13 +54,25 @@ export function UtilityWalletTransferNudge({
   walletError,
   walletIsLoading,
   walletIsSettled,
+  walletIsStoreCredit = false,
+  walletPrimaryUnknown = false,
 }: UtilityWalletTransferNudgeProps) {
+  const storeCredit = walletIsStoreCredit && Boolean(returnToHref);
   const handlePress = () => {
+    if (storeCredit && returnToHref) {
+      navigateToStoreCreditTopUp(amount - (walletBalance ?? 0), returnToHref);
+      return;
+    }
     navigateToWalletFunding(returnToHref);
   };
 
+  // A PiggyVest customer is never sent to bank transfer (it would fund the
+  // savings wallet); without a return link there is no store credit path.
   const visible =
-    canFundByBankTransfer &&
+    (storeCredit ||
+      (canFundByBankTransfer &&
+        !walletIsStoreCredit &&
+        !walletPrimaryUnknown)) &&
     walletIsLoading !== true &&
     walletIsSettled !== false &&
     !walletError &&
@@ -74,14 +94,16 @@ export function UtilityWalletTransferNudge({
       ]}
     >
       <Text style={[styles.walletNudgeText, { color: colors.text }]}>
-        {WALLET_FUNDING_NUDGE}
+        {storeCredit ? STORE_CREDIT_NUDGE : WALLET_FUNDING_NUDGE}
       </Text>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={WALLET_FUNDING_CTA}
+        accessibilityLabel={storeCredit ? STORE_CREDIT_CTA : WALLET_FUNDING_CTA}
         onPress={handlePress}
       >
-        <Text style={styles.walletNudgeCta}>{WALLET_FUNDING_CTA}</Text>
+        <Text style={styles.walletNudgeCta}>
+          {storeCredit ? STORE_CREDIT_CTA : WALLET_FUNDING_CTA}
+        </Text>
       </Pressable>
     </View>
   );

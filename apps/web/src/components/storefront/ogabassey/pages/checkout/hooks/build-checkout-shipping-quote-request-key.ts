@@ -3,6 +3,7 @@ interface QuoteRequestReceiver {
   city: string;
   state: string;
   deliveryPreference: 'door' | 'pickup_station';
+  merchantRatesOnly?: boolean;
   merchantId?: string;
   latitude?: number;
   longitude?: number;
@@ -31,6 +32,7 @@ export function buildCheckoutShippingQuoteRequestKey(
     address: address.trim().toLowerCase(),
     city: receiver.city.trim().toLowerCase(),
     deliveryPreference: receiver.deliveryPreference,
+    ...(receiver.merchantRatesOnly ? { merchantRatesOnly: true } : {}),
     merchantId: receiver.merchantId ?? null,
     items: cart.map((item) => [
       item.name,

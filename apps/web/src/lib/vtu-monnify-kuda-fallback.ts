@@ -5,6 +5,7 @@ import {
   purchaseAirtime,
 } from '@/lib/kuda';
 import { VtuConcurrentUpdateError } from '@/lib/vtu-concurrent-update-error';
+import { readMonnifyResponseCode } from './monnify-response-code';
 
 /** Minimal row shape the fallback needs (structural; no import cycle). */
 export interface MonnifyAirtimeKudaFallbackRow {
@@ -54,10 +55,17 @@ export async function executeMonnifyAirtimeKudaFallback({
   row: MonnifyAirtimeKudaFallbackRow;
   supabase: SupabaseClient;
 }): Promise<PurchaseResult & { metadataPatch?: Record<string, string> }> {
+  const monnifyResponseCode = readMonnifyResponseCode({
+    responseCode: monnifyResult.providerResponseCode,
+  });
   const kudaFallbackPatch = {
     fulfillmentProvider: 'kuda',
     monnifyFallbackError:
       monnifyResult.providerErrorDetail ?? monnifyResult.message,
+    // Kept under its own key: a failed Kuda result carries no Monnify code.
+    ...(monnifyResponseCode && {
+      monnifyFallbackResponseCode: monnifyResponseCode,
+    }),
     originalProvider: 'monnify',
     provider: 'kuda',
     providerFallback: 'monnify_airtime_to_kuda',
@@ -99,6 +107,16 @@ export async function executeMonnifyAirtimeKudaFallback({
   }
   row.metadata = { ...(row.metadata ?? {}), ...kudaFallbackPatch };
 
+  // Logged only once the Kuda routing marker is stored, right before the
+  // Kuda call, so the log never claims a fallback that did not happen.
+  // Every fallback is logged so an outage on the Monnify side (expired
+  // credentials, rate limits, low float) shows up instead of hiding behind
+  // Kuda, which keeps airtime working meanwhile.
+  // A fixed label only: no provider text in logs. The scrubbed Monnify
+  // message is stored on the row as monnifyFallbackError.
+  console.warn('Monnify refused airtime; vending through Kuda backup:', {
+    transactionId: row.id,
+  });
   const kudaFallbackResult = await purchaseAirtime(
     row.phone_number,
     row.amount,

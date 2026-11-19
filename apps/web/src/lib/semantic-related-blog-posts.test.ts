@@ -151,3 +151,108 @@ it('does not create semantic matches from sliced partial words', () => {
 
   expect(scoreSemanticRelatedBlogPost(longSource, partialCandidate)).toBe(0);
 });
+
+it('scores focus_keyword and tokenized multi-word keyword overlap when keywords[] is null', () => {
+  const tecnoSource: SemanticBlogPostInput = {
+    id: 'tecno-camon-slim',
+    title: 'Tecno Camon Slim Price in Nigeria',
+    category: 'Smartphones',
+    focus_keyword: 'tecno camon slim price in nigeria',
+    keywords: null,
+  };
+  const sameBrandCandidate: SemanticBlogPostInput = {
+    id: 'tecno-camon-50-pro',
+    title: 'Charging habits for your phone',
+    category: 'Smartphones',
+    focus_keyword: 'tecno camon 50 pro price in nigeria',
+    keywords: null,
+  };
+  const unrelatedBrandCandidate: SemanticBlogPostInput = {
+    id: 'iphone-17-pro',
+    title: 'Charging habits for your phone',
+    category: 'Smartphones',
+    focus_keyword: 'iphone 17 pro price in nigeria',
+    keywords: null,
+  };
+
+  expect(
+    scoreSemanticRelatedBlogPost(tecnoSource, sameBrandCandidate)
+  ).toBeGreaterThan(
+    scoreSemanticRelatedBlogPost(tecnoSource, unrelatedBrandCandidate)
+  );
+});
+
+it('ignores boilerplate category tags and boosts same-brand candidates over cross-brand candidates', () => {
+  const tecnoSource: SemanticBlogPostInput = {
+    id: 'tecno-camon-slim',
+    title: 'Tecno Camon Slim Price in Nigeria',
+    category: 'Smartphones',
+    tags: ['Tecno', 'Smartphones', 'Nigeria buyer guide'],
+    keywords: [
+      'Tecno Camon Slim price in Nigeria',
+      'Smartphones',
+      'Nigeria buyer guide',
+    ],
+  };
+  const sameBrandPost: SemanticBlogPostInput = {
+    id: 'tecno-spark-40',
+    title: 'Spark 40 battery and display checks',
+    category: 'Smartphones',
+    tags: ['Tecno', 'Smartphones'],
+    keywords: ['Tecno Spark 40'],
+  };
+  const crossBrandBoilerplatePost: SemanticBlogPostInput = {
+    id: 'iphone-17-pro',
+    title: 'iPhone 17 Pro Price in Nigeria',
+    category: 'Smartphones',
+    tags: ['Apple', 'iPhone', 'Smartphones', 'Nigeria buyer guide'],
+    keywords: [
+      'iPhone 17 Pro price in Nigeria',
+      'Smartphones',
+      'Nigeria buyer guide',
+    ],
+  };
+
+  expect(
+    scoreSemanticRelatedBlogPost(tecnoSource, sameBrandPost)
+  ).toBeGreaterThan(
+    scoreSemanticRelatedBlogPost(tecnoSource, crossBrandBoilerplatePost)
+  );
+});
+
+it('does not score overlap that consists only of boilerplate tags and keywords', () => {
+  const source: SemanticBlogPostInput = {
+    id: 'source',
+    tags: ['Smartphones', 'Nigeria buyer guide'],
+    keywords: ['Smartphones', 'Nigeria buyer guide'],
+  };
+  const candidate: SemanticBlogPostInput = {
+    id: 'candidate',
+    tags: ['Smartphones', 'Nigeria buyer guide'],
+    keywords: ['Smartphones', 'Nigeria buyer guide'],
+  };
+
+  expect(scoreSemanticRelatedBlogPost(source, candidate)).toBe(0);
+});
+
+it('preserves two-character brands like HP in titles when scoring related posts', () => {
+  const hpSource: SemanticBlogPostInput = {
+    id: 'hp-probook',
+    title: 'HP ProBook 450 G10',
+    category: 'Laptops',
+  };
+  const hpCandidate: SemanticBlogPostInput = {
+    id: 'hp-zbook',
+    title: 'HP ZBook Firefly 14',
+    category: 'Laptops',
+  };
+  const dellCandidate: SemanticBlogPostInput = {
+    id: 'dell-vostro',
+    title: 'Dell Vostro 3520',
+    category: 'Laptops',
+  };
+
+  expect(scoreSemanticRelatedBlogPost(hpSource, hpCandidate)).toBeGreaterThan(
+    scoreSemanticRelatedBlogPost(hpSource, dellCandidate)
+  );
+});

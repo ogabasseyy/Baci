@@ -2,27 +2,20 @@ import { useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { isQuizRewardedFlowActive } from '@/lib/quiz-fullscreen-ownership';
 import type { QuizEvent } from '@/services/quiz-types';
+import { randomDelay } from './quiz-random-delay';
+import {
+  WAITING_ROOM_KICKOFF_SPREAD_MS,
+  waitingRoomPendingDelay,
+  waitingRoomRetryDelay,
+} from './quiz-waiting-room-retry-delay';
+import { getRemainingSeconds, isTerminal } from './quiz-waiting-room-timing';
+import { withSpread } from './quiz-with-spread';
 import { calculateQuizServerClockOffset } from './use-quiz-server-clock';
 import { useQuizStartHold } from './use-quiz-start-hold';
 import { useQuizStartInterstitialRequest } from './use-quiz-start-interstitial-request';
 
 const CLOCK_TICK_MS = 250;
-const BOUNDARY_REFRESH_MIN_INTERVAL_MS = 1_000;
-
-function getRemainingMs(event: QuizEvent, offsetMs: number): number {
-  if (!event.startsAt) return 0;
-  const startsAtMs = Date.parse(event.startsAt);
-  if (!Number.isFinite(startsAtMs)) return 0;
-  return Math.max(0, startsAtMs - (Date.now() + offsetMs));
-}
-
-function getRemainingSeconds(event: QuizEvent, offsetMs: number): number {
-  return Math.ceil(getRemainingMs(event, offsetMs) / 1_000);
-}
-
-function isTerminal(status: QuizEvent['status']): boolean {
-  return ['closed', 'completed', 'cancelled', 'finalizing'].includes(status);
-}
+const BOUNDARY_REFRESH_INTERVAL_MS = 1_000;
 
 type RefreshEvents = () => Promise<QuizEvent[]>;
 
@@ -34,6 +27,12 @@ export interface QuizWaitingRoomState {
    * banner slots must stay unmounted until it closes.
    */
   isFullscreenAdActive: boolean;
+  /**
+   * While true a loaded pre-quiz interstitial is about to present (or is
+   * presented): the room shows a non-interactive "ad break" notice so the
+   * ad never lands under a tap.
+   */
+  isAdBreakNoticeVisible: boolean;
   isRefreshing: boolean;
   remainingSeconds: number;
 }
@@ -77,6 +76,7 @@ export function useQuizWaitingRoom({
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isFullscreenAdActive, setIsFullscreenAdActive] = useState(false);
   const isFullscreenAdActiveRef = useRef(false);
+  const [isAdBreakNoticeVisible, setIsAdBreakNoticeVisible] = useState(false);
   // A start boundary that lands while the interstitial owns the screen waits
   // here until the ad closes instead of starting timed play behind it.
   const pendingStartRef = useRef<QuizEvent | null>(null);
@@ -99,7 +99,9 @@ export function useQuizWaitingRoom({
   const startedRef = useRef(false);
   const stoppedRef = useRef(false);
   const suspendedRef = useRef(suspended);
-  const lastBoundaryRefreshAtRef = useRef(0);
+  const nextBoundaryRefreshAtRef = useRef(0);
+  const boundaryFailuresRef = useRef(0);
+  const boundaryPendingRef = useRef(0);
   const appStateRef = useRef<typeof AppState.currentState>(
     AppState.currentState
   );
@@ -134,7 +136,11 @@ export function useQuizWaitingRoom({
       // the interstitial onClosed handler or the start-hold hook). The
       // rewarded prop arrives via a passive effect after the tap, so also
       // read the synchronously claimed ownership: a refresh resolving in
-      // that window must still hold.
+      // that window must still hold. The 1.5 s ad-break notice needs no
+      // hold: a natural boundary cannot land inside it (the request needs
+      // more than 30 s left and cancels at 30 s or less), and an early
+      // server-side start takes the notice down at once (below) while
+      // startedRef cancels the pending present.
       if (
         isFullscreenAdActiveRef.current ||
         isStartBlockedRef.current ||
@@ -144,6 +150,9 @@ export function useQuizWaitingRoom({
         return;
       }
       startedRef.current = true;
+      // Live play must never begin under the touch-blocking ad-break
+      // notice; the pending present is cancelled by startedRef.
+      setIsAdBreakNoticeVisible(false);
       onStartRef.current(nextEvent.id, true);
     }
   };
@@ -166,20 +175,32 @@ export function useQuizWaitingRoom({
       const nextEvent = events.find(
         (candidate) => candidate.id === eventRef.current.id
       );
+      boundaryFailuresRef.current = 0;
       if (nextEvent) {
         setError(null);
         applyRefreshedEvent(nextEvent);
+        if (!stoppedRef.current && nextEvent.status === 'scheduled') {
+          // Answered but not active yet: widen the gap on each such answer.
+          boundaryPendingRef.current += 1;
+          nextBoundaryRefreshAtRef.current =
+            Date.now() + waitingRoomPendingDelay(boundaryPendingRef.current);
+        }
       } else {
         setError('This quiz is no longer available.');
         stoppedRef.current = true;
         onExitRef.current();
       }
-    } catch {
+    } catch (error) {
       if (
         requestGeneration === refreshGenerationRef.current &&
         inFlightRequestRef.current === requestId
-      )
+      ) {
         setError('Waiting for the latest quiz status.');
+        boundaryFailuresRef.current += 1;
+        nextBoundaryRefreshAtRef.current =
+          Date.now() +
+          waitingRoomRetryDelay(boundaryFailuresRef.current, error);
+      }
     } finally {
       if (inFlightRequestRef.current === requestId) {
         inFlightRequestRef.current = null;
@@ -207,6 +228,7 @@ export function useQuizWaitingRoom({
     isStartBlockedRef,
     onStartRef,
     pendingStartRef,
+    setIsAdBreakNoticeVisible,
     setIsFullscreenAdActive,
     startedRef,
     stoppedRef,
@@ -228,13 +250,19 @@ export function useQuizWaitingRoom({
         offsetRef.current
       );
       setRemainingSeconds(nextRemainingSeconds);
+      // While counting down, re-arm: each time the countdown reaches zero the
+      // first refresh waits a fresh random offset, to spread the phones.
+      if (nextRemainingSeconds !== 0) {
+        nextBoundaryRefreshAtRef.current = 0;
+        boundaryPendingRef.current = 0;
+      }
       if (nextRemainingSeconds === 0) {
         const now = Date.now();
-        if (
-          now - lastBoundaryRefreshAtRef.current >=
-          BOUNDARY_REFRESH_MIN_INTERVAL_MS
-        ) {
-          lastBoundaryRefreshAtRef.current = now;
+        nextBoundaryRefreshAtRef.current ||=
+          now + randomDelay(WAITING_ROOM_KICKOFF_SPREAD_MS);
+        if (now >= nextBoundaryRefreshAtRef.current) {
+          nextBoundaryRefreshAtRef.current =
+            now + withSpread(BOUNDARY_REFRESH_INTERVAL_MS);
           void refreshAuthoritativeRef.current();
         }
       }
@@ -263,6 +291,7 @@ export function useQuizWaitingRoom({
   return {
     error,
     event,
+    isAdBreakNoticeVisible,
     isFullscreenAdActive,
     isRefreshing,
     remainingSeconds,

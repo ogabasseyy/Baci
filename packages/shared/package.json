@@ -14,11 +14,13 @@
     "./contracts": "./src/contracts/index.ts",
     "./cart": "./src/cart/index.ts",
     "./imei": "./src/imei/index.ts",
+    "./imei/report-history": "./src/imei/report-history.ts",
     "./insurance": "./src/insurance/index.ts",
     "./lib": "./src/lib/index.ts",
     "./lib/commerce-variant-axis": "./src/lib/commerce-variant-axis.ts",
     "./lib/filter-by-location-phrase": "./src/lib/filter-by-location-phrase.ts",
     "./lib/gigl-tracking-status": "./src/lib/gigl-tracking-status.ts",
+    "./lib/gigl-shipping-retention-payment-methods": "./src/lib/gigl-shipping-retention-payment-methods.ts",
     "./lib/negotiation-policy": "./src/lib/negotiation-policy.ts",
     "./lib/product-condition": "./src/lib/product-condition.ts",
     "./lib/product-default-variant": "./src/lib/product-default-variant.ts",
@@ -34,6 +36,7 @@
     "./repairs": "./src/repairs/index.ts",
     "./storefront": "./src/storefront/index.ts",
     "./storefront/launch-carousel": "./src/storefront/launch-carousel.ts",
+    "./storefront/ogabassey-care": "./src/storefront/ogabassey-care.ts",
     "./storefront/prioritize-smartphone-products": "./src/storefront/prioritize-smartphone-products.ts",
     "./gmc-feed": "./src/gmc-feed/index.ts",
     "./test-fixtures/builder-ai-edit": "./src/test-fixtures/builder-ai-edit.ts",
@@ -44,7 +47,10 @@
     "./test-fixtures/piggyvest-draft-closure": "./src/test-fixtures/piggyvest-draft-closure.ts",
     "./test-fixtures/piggyvest-schedule": "./src/test-fixtures/piggyvest-schedule.ts",
     "./test-fixtures/fixture-mock": "./src/test-fixtures/fixture-mock.ts",
-    "./test-fixtures/order-wallet-funding-intent": "./src/test-fixtures/order-wallet-funding-intent.ts"
+    "./test-fixtures/order-wallet-funding-intent": "./src/test-fixtures/order-wallet-funding-intent.ts",
+    "./experience": "./src/experience/index.ts",
+    "./experience/limits": "./src/experience/limits.ts",
+    "./lib/is-product-variant-purchasable": "./src/lib/is-product-variant-purchasable.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -54,10 +60,10 @@
     "zod": "^3.0.0 || ^4.0.0"
   },
   "devDependencies": {
-    "decode-uri-component": "0.2.2",
+    "decode-uri-component": "0.5.1",
     "typescript": "~7.0.2",
-    "vitest": "^4.1.11",
-    "zod": "^4.4.3"
+    "vitest": "4.1.12",
+    "zod": "4.6.6"
   },
   "dependencies": {
     "@noble/hashes": "^2.4.0"

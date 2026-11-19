@@ -9,7 +9,6 @@ const mocks = vi.hoisted(() => ({
   runtime: vi.fn(),
   runtimeDrain: vi.fn(),
   service: vi.fn(),
-  initialize: vi.fn(),
   status: vi.fn(),
   execute: vi.fn(),
   provider: vi.fn(),
@@ -37,24 +36,35 @@ beforeEach(() => {
   mocks.csrf.mockResolvedValue({ valid: true });
   mocks.runtime.mockReturnValue({ settings: fixture.settings });
   mocks.runtimeDrain.mockReturnValue({ settings: fixture.settings });
-  mocks.service.mockReturnValue({
-    initialize: mocks.initialize,
-    status: mocks.status,
-  });
-  mocks.initialize.mockResolvedValue({
-    operationId: fixture.intent.operationId,
-    status: 'ready',
-    authorizationUrl: 'https://checkout.paystack.com/fixture',
-  });
+  mocks.service.mockReturnValue({ status: mocks.status });
   mocks.status.mockResolvedValue({
     operationId: fixture.intent.operationId,
     status: 'custody_pending',
   });
 });
-describe.each([
-  'initialize',
-  'status',
-] as const)('authenticated primary card %s route', (action) => {
+describe('retired primary card initialize route', () => {
+  it('answers 410 before auth, CSRF, body, runtime, storage or provider work', async () => {
+    const test = primaryWalletCardCheckoutRouteFixture('initialize');
+    mocks.auth.mockResolvedValue(test.auth);
+    const response = await handlePrimaryWalletCardCheckout(
+      test.request(),
+      'initialize'
+    );
+    expect(response.status).toBe(410);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect((await response.json()).code).toBe('PRIMARY_CARD_FUNDING_RETIRED');
+    expect(mocks.auth).not.toHaveBeenCalled();
+    expect(mocks.csrf).not.toHaveBeenCalled();
+    expect(mocks.runtime).not.toHaveBeenCalled();
+    expect(mocks.runtimeDrain).not.toHaveBeenCalled();
+    expect(test.auth.supabase.from).not.toHaveBeenCalled();
+    expect(mocks.execute).not.toHaveBeenCalled();
+    expect(mocks.provider).not.toHaveBeenCalled();
+    expect(mocks.service).not.toHaveBeenCalled();
+  });
+});
+describe('authenticated primary card status route', () => {
+  const action = 'status' as const;
   it('returns 401 before CSRF, settings or database access when unauthenticated', async () => {
     const test = primaryWalletCardCheckoutRouteFixture(action);
     mocks.auth.mockResolvedValue({ user: null });
@@ -150,7 +160,7 @@ describe.each([
       test.request(),
       action
     );
-    expect(response.status).toBe(action === 'initialize' ? 200 : 202);
+    expect(response.status).toBe(202);
     expect(response.headers.get('cache-control')).toBe('no-store');
     expect(mocks.service).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -169,7 +179,6 @@ describe.each([
   it('does not expose provider errors or report completion on storage failure', async () => {
     const test = primaryWalletCardCheckoutRouteFixture(action);
     mocks.auth.mockResolvedValue(test.auth);
-    mocks.initialize.mockRejectedValue(new Error('private details'));
     mocks.status.mockRejectedValue(new Error('private details'));
     const response = await handlePrimaryWalletCardCheckout(
       test.request(),
@@ -181,7 +190,6 @@ describe.each([
   it('logs a redacted failure record distinguishing the failed action without provider bodies', async () => {
     const test = primaryWalletCardCheckoutRouteFixture(action);
     mocks.auth.mockResolvedValue(test.auth);
-    mocks.initialize.mockRejectedValue(new Error('private details'));
     mocks.status.mockRejectedValue(new Error('private details'));
     const response = await handlePrimaryWalletCardCheckout(
       test.request(),
@@ -192,14 +200,14 @@ describe.each([
       expect.objectContaining({
         action,
         merchantId: fixture.settings.merchantId,
-        operationId: action === 'status' ? fixture.intent.operationId : null,
+        operationId: fixture.intent.operationId,
         errorClass: 'Error',
       })
     );
     for (const call of mocks.loggerError.mock.calls)
       expect(JSON.stringify(call)).not.toContain('private details');
   });
-  it('binds status recovery to immutable IDs while initialize still requires the stored email', async () => {
+  it('binds status recovery to immutable IDs across an auth email change', async () => {
     const test = primaryWalletCardCheckoutRouteFixture(action);
     // The customer changed their confirmed auth email after initialize;
     // the stored customer row still carries the previous address.
@@ -211,28 +219,18 @@ describe.each([
       test.request(),
       action
     );
-    if (action === 'initialize') {
-      expect(response.status).toBe(403);
-      expect(mocks.execute).not.toHaveBeenCalled();
-    } else {
-      expect(response.status).toBe(202);
-      expect(mocks.status).toHaveBeenCalledTimes(1);
-    }
+    expect(response.status).toBe(202);
+    expect(mocks.status).toHaveBeenCalledTimes(1);
   });
-  it('reads runtime through the strict reader for initialize and the drain reader for status', async () => {
+  it('reads runtime through the drain reader only', async () => {
     const test = primaryWalletCardCheckoutRouteFixture(action);
     mocks.auth.mockResolvedValue(test.auth);
     const response = await handlePrimaryWalletCardCheckout(
       test.request(),
       action
     );
-    expect(response.status).toBe(action === 'initialize' ? 200 : 202);
-    if (action === 'initialize') {
-      expect(mocks.runtime).toHaveBeenCalledTimes(1);
-      expect(mocks.runtimeDrain).not.toHaveBeenCalled();
-    } else {
-      expect(mocks.runtimeDrain).toHaveBeenCalledTimes(1);
-      expect(mocks.runtime).not.toHaveBeenCalled();
-    }
+    expect(response.status).toBe(202);
+    expect(mocks.runtimeDrain).toHaveBeenCalledTimes(1);
+    expect(mocks.runtime).not.toHaveBeenCalled();
   });
 });

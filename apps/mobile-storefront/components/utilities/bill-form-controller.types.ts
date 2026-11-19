@@ -7,9 +7,12 @@ import type { useVTUVerify } from '@/hooks/use-vtu-verify';
 import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
 import type { UtilityBeneficiary } from '@/lib/utility-beneficiaries';
 import type { resolveBillItemSelection } from './bill-item-selection';
+import type { billPurchaseRequest } from './bill-retains-store-credit';
 
 export interface BillFormController {
   amount: string;
+  /** What the amount still needs before Pay (shown in the form), or null. */
+  amountIssue: string | null;
   beneficiaries: UtilityBeneficiary[];
   billersQuery: ReturnType<typeof useVTUBillers>;
   billItemSelection: ReturnType<typeof resolveBillItemSelection>;
@@ -41,6 +44,8 @@ export interface BillFormController {
   verifiedCustomerName: string | null;
   payment: ReturnType<typeof useUtilityPayment>;
   resetVerification: () => void;
+  /** The exact request the submit builds (its retry identity), or null. */
+  purchaseRequest: ReturnType<typeof billPurchaseRequest>;
   scheduleNextStepScroll: (nextStepY: number) => void;
   scrollViewRef: RefObject<ScrollViewInstance | null>;
   selectedBiller: Biller | null;

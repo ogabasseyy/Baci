@@ -1,4 +1,5 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
+import type { ReactNode } from 'react';
 import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
 import type {
   QuizPrizeProduct,
@@ -22,9 +23,9 @@ function formatCountdown(seconds: number) {
   return `${Math.floor(safeSeconds / 60)}:${String(safeSeconds % 60).padStart(2, '0')}`;
 }
 
-function formatFinishTime(serverNow: string | null | undefined) {
-  if (!serverNow) return null;
-  const timestamp = Date.parse(serverNow);
+function formatFinishTime(submittedAt: string | null | undefined) {
+  if (!submittedAt) return null;
+  const timestamp = Date.parse(submittedAt);
   if (Number.isNaN(timestamp)) return null;
   return new Intl.DateTimeFormat(undefined, {
     hour: 'numeric',
@@ -34,9 +35,12 @@ function formatFinishTime(serverNow: string | null | undefined) {
 }
 
 interface QuizResultsPanelProps {
+  /** Ad shown under the standings while players wait for the quiz to end. */
+  adSlot?: ReactNode;
   eventId?: string | null;
   eventEndsAt?: string | null;
   expectedUserId?: string | null;
+  getCurrentUserId?: () => string | null;
   legacyResult: QuizResult | null;
   lifecycle: QuizV2LifecycleStatus;
   allowPendingResultsExit?: boolean;
@@ -49,9 +53,11 @@ interface QuizResultsPanelProps {
 }
 
 export function QuizResultsPanel({
+  adSlot = null,
   eventId = null,
   eventEndsAt = null,
   expectedUserId = null,
+  getCurrentUserId,
   legacyResult,
   lifecycle,
   allowPendingResultsExit = false,
@@ -70,23 +76,36 @@ export function QuizResultsPanel({
     shouldTick: lifecycle === 'pending_results',
     serverClockOffsetMs: offsetMs,
   });
+  // The live board starts loading the moment the player finishes, without
+  // waiting for the first result poll, so standings appear straight away.
   const shouldLoadLeaderboard =
-    lifecycle === 'final' &&
+    (lifecycle === 'final' || lifecycle === 'pending_results') &&
     v2Result?.availability !== 'unavailable' &&
     Boolean(eventId && expectedUserId);
-  const { leaderboard, leaderboardError, participantCount } =
+  const { leaderboard, leaderboardError, liveBoardHidden, participantCount } =
     useQuizResultsLeaderboard({
       enabled: shouldLoadLeaderboard,
       eventHasEnded: eventTimer.hasEnded,
       eventId,
       expectedUserId,
       lifecycle,
+      getCurrentUserId,
+      deferFinalUntilPublished: true,
     });
   const currentPlayer =
     leaderboard?.currentPlayer ??
     leaderboard?.entries.find((entry) => entry.isCurrentCustomer);
+  const personalScore =
+    leaderboard?.status === 'live' &&
+    leaderboard.currentPlayer?.isCurrentCustomer &&
+    ['submitted', 'scored'].includes(leaderboard.currentPlayer.status) &&
+    Number.isFinite(leaderboard.currentPlayer.score)
+      ? leaderboard.currentPlayer.score
+      : null;
+  // Only a real submission timestamp is shown as the finish time; the server
+  // clock is not one, so without it the line stays generic.
   const finishTime = formatFinishTime(
-    currentPlayer?.submittedAt ?? submittedAt ?? serverNow
+    submittedAt ?? currentPlayer?.submittedAt
   );
   if (lifecycle !== 'idle') {
     const canReturnToQuizList = Boolean(
@@ -99,7 +118,9 @@ export function QuizResultsPanel({
           ? 'Quiz access ended'
           : 'Quiz result unavailable'
         : lifecycle === 'pending_results'
-          ? "You're all done!"
+          ? eventTimer.hasEnded
+            ? 'Time is up!'
+            : "You're all done!"
           : lifecycle === 'event_cancelled'
             ? 'Quiz cancelled'
             : v2Result?.availability === 'final'
@@ -133,51 +154,73 @@ export function QuizResultsPanel({
                 </Text>
               </View>
             ) : null}
+            {lifecycle === 'pending_results' &&
+            v2Result?.availability === 'pending' &&
+            shouldLoadLeaderboard &&
+            personalScore !== null ? (
+              <View style={styles.scoreSummary}>
+                <Text style={styles.scoreValue}>{personalScore}</Text>
+                <Text style={styles.scoreLabel}>Provisional best score</Text>
+              </View>
+            ) : null}
             {v2Result?.availability === 'unavailable' ? (
               <Text style={styles.eventMeta}>
                 {v2Result.reason === 'tester_revoked'
                   ? 'Your tester access was removed before this result was published.'
                   : 'We could not find this quiz attempt. Return to the quiz list and try again.'}
               </Text>
-            ) : lifecycle === 'pending_results' ? (
-              <View style={styles.finishTimeCard}>
-                <Text style={styles.finishTimeLabel}>You finished at</Text>
-                <Text style={styles.finishTimeValue}>
-                  {finishTime ?? 'Recorded'}
-                </Text>
-                <Text style={styles.finishTimeHint}>
-                  Finish time will be used as a tie breaker
-                </Text>
-              </View>
             ) : null}
-            {lifecycle === 'pending_results' ? (
+            {lifecycle === 'pending_results' &&
+            v2Result?.availability !== 'unavailable' ? (
               eventTimer.hasEnded ? (
-                <ActivityIndicator
-                  accessibilityLabel="Opening final standings"
-                  color={styles.finalStandingsTitle.color}
-                />
+                <View style={styles.countingRow}>
+                  <ActivityIndicator
+                    accessibilityLabel="Opening final standings"
+                    color={styles.stageCountdown.color}
+                  />
+                  <Text style={styles.countingText}>Counting the scores…</Text>
+                </View>
               ) : (
-                <Text style={styles.leaderboardCountdownLabel}>
-                  The leaderboard will appear when the quiz ends in
-                </Text>
+                <View style={styles.stageCountdownBlock}>
+                  <Text style={styles.stageCountdownLabel}>Quiz ends in</Text>
+                  <Text
+                    accessibilityRole="timer"
+                    style={styles.stageCountdown}
+                    testID="quiz-results-countdown"
+                  >
+                    {formatCountdown(eventTimer.remainingSeconds)}
+                  </Text>
+                  <Text style={styles.stageCountdownHint}>
+                    Winners are announced the moment it hits zero
+                  </Text>
+                </View>
               )
             ) : null}
-            {lifecycle === 'pending_results' && !eventTimer.hasEnded ? (
-              <Text
-                accessibilityRole="timer"
-                style={styles.leaderboardCountdown}
-              >
-                {formatCountdown(eventTimer.remainingSeconds)}
-              </Text>
-            ) : null}
-            {lifecycle === 'final' && shouldLoadLeaderboard ? (
+            {(lifecycle === 'final' || lifecycle === 'pending_results') &&
+            shouldLoadLeaderboard ? (
               <QuizResultsStandings
                 leaderboard={leaderboard}
                 leaderboardError={leaderboardError}
+                liveBoardHidden={liveBoardHidden}
                 participantCount={participantCount}
                 styles={styles}
               />
             ) : null}
+            {lifecycle === 'pending_results' &&
+            v2Result?.availability !== 'unavailable' ? (
+              <Text style={styles.finishTimeLine}>
+                {finishTime
+                  ? `You finished at ${finishTime}. `
+                  : 'Your finish time is recorded. '}
+                Ties go to the faster finish.
+              </Text>
+            ) : null}
+            {/* No wrapper: when the ad withholds itself the slot renders
+                nothing, so it leaves no empty gap in the card. */}
+            {lifecycle === 'pending_results' &&
+            v2Result?.availability !== 'unavailable'
+              ? adSlot
+              : null}
             {v2Result?.availability === 'final' && v2Result.prizeClaim ? (
               <QuizPrizeClaimPanel
                 prizeClaim={v2Result.prizeClaim}

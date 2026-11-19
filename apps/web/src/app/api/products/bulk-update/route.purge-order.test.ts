@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   revalidateProducts: vi.fn(),
   revalidateSlugs: vi.fn(),
   schedule: vi.fn(),
+  scheduleHostname: vi.fn(),
   scheduleAfter: vi.fn(),
 }));
 
@@ -42,6 +43,9 @@ vi.mock('@/lib/schedule-product-blog-purge-after-response', () => ({
 vi.mock('@/lib/storefront-product-purge', () => ({
   scheduleStorefrontProductPurge: mocks.schedule,
 }));
+vi.mock('@/lib/storefront-product-purge-hostnames', () => ({
+  scheduleStorefrontHostnamePurge: mocks.scheduleHostname,
+}));
 vi.mock('@/lib/supabase/server', () => ({
   createClient: vi.fn(() => mocks.auth()),
 }));
@@ -65,7 +69,22 @@ function makeRequest(body: unknown) {
   });
 }
 
-function makeSupabase() {
+function makeSupabase(
+  aliasResult: { data: unknown; error: unknown } = { data: [], error: null }
+) {
+  const aliasQuery = {
+    eq: vi.fn(() => aliasQuery),
+    in: vi.fn(() => aliasQuery),
+    limit: vi.fn().mockResolvedValue(aliasResult),
+    maybeSingle: vi.fn().mockResolvedValue({
+      data: {
+        business_name: 'Test Store',
+        country: 'NG',
+        payout_currency: 'NGN',
+      },
+      error: null,
+    }),
+  };
   return {
     auth: {
       getUser: vi.fn().mockResolvedValue({
@@ -74,18 +93,7 @@ function makeSupabase() {
       }),
     },
     from: vi.fn(() => ({
-      select: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          maybeSingle: vi.fn().mockResolvedValue({
-            data: {
-              business_name: 'Test Store',
-              country: 'NG',
-              payout_currency: 'NGN',
-            },
-            error: null,
-          }),
-        })),
-      })),
+      select: vi.fn(() => aliasQuery),
     })),
   };
 }
@@ -93,6 +101,8 @@ function makeSupabase() {
 describe('bulk-update purge ordering', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.revalidateProducts.mockReturnValue(true);
+    mocks.revalidateSlugs.mockReturnValue(true);
     mocks.csrf.mockResolvedValue({ valid: true, response: null });
     mocks.merchant.mockResolvedValue({
       merchantId: MERCHANT_ID,
@@ -145,9 +155,21 @@ describe('bulk-update purge ordering', () => {
 
     // Assert
     expect(response.status).toBe(200);
+    expect(mocks.revalidateProducts).not.toHaveBeenCalledWith(MERCHANT_ID);
+    expect(mocks.revalidateProducts).toHaveBeenCalledWith(
+      MERCHANT_ID,
+      undefined,
+      { expireImmediately: true, omitMerchantWidePdpDetails: true }
+    );
+    expect(mocks.revalidateSlugs).toHaveBeenCalledWith(
+      MERCHANT_ID,
+      ['updated-product', '123e4567-e89b-42d3-a456-426614174000'],
+      { expireImmediately: true }
+    );
     expect(mocks.expire).toHaveBeenCalledWith(MERCHANT_ID);
     expect(mocks.schedule).toHaveBeenCalledWith(MERCHANT_SLUG, [
       { slug: 'updated-product', categorySegment: 'electronics' },
+      { slug: '123e4567-e89b-42d3-a456-426614174000', categorySegment: null },
     ]);
     expect(mocks.expire.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.schedule.mock.invocationCallOrder[0]
@@ -188,5 +210,87 @@ describe('bulk-update purge ordering', () => {
         productIds: ['123e4567-e89b-42d3-a456-426614174000'],
       })
     );
+  });
+
+  it('falls back to broad hard expiry when per-slug expiry fails on bulk update', async () => {
+    mocks.revalidateSlugs.mockReturnValueOnce(false);
+    const request = makeRequest({
+      changes: [
+        {
+          type: 'update',
+          details: {
+            sku: 'SKU-PHONE',
+            name: 'SKU phone',
+            price: 150,
+            category: 'Smartphones',
+          },
+          newPrice: 150,
+        },
+      ],
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(200);
+    expect(mocks.revalidateProducts).toHaveBeenCalledWith(
+      MERCHANT_ID,
+      undefined,
+      { expireImmediately: true }
+    );
+  });
+
+  it('skips edge purge when both per-slug and broad hard expiry fail on bulk update', async () => {
+    mocks.revalidateSlugs.mockReturnValueOnce(false);
+    mocks.revalidateProducts.mockReturnValueOnce(false);
+    const response = await POST(
+      makeRequest({
+        changes: [{ type: 'update', details: { price: 150 }, newPrice: 150 }],
+      })
+    );
+    expect(response.status).toBe(200);
+    expect(mocks.schedule).not.toHaveBeenCalled();
+    expect(mocks.scheduleAfter).not.toHaveBeenCalled();
+  });
+
+  it('expires dependent child aliases and escalates to hostname purge when incomplete', async () => {
+    mocks.auth.mockReturnValueOnce(
+      makeSupabase({
+        data: [{ id: 'child-1', slug: 'old-child' }],
+        error: null,
+      })
+    );
+    const body = {
+      changes: [
+        {
+          type: 'remove',
+          productId: '123e4567-e89b-42d3-a456-426614174000',
+          details: { price: 150 },
+        },
+      ],
+    };
+    const res = await POST(makeRequest(body));
+    expect(res.status).toBe(200);
+    expect(mocks.revalidateSlugs).toHaveBeenCalledWith(
+      MERCHANT_ID,
+      [
+        'updated-product',
+        '123e4567-e89b-42d3-a456-426614174000',
+        'child-1',
+        'old-child',
+      ],
+      { expireImmediately: true }
+    );
+    expect(mocks.schedule).toHaveBeenCalledWith(MERCHANT_SLUG, [
+      { slug: 'updated-product', categorySegment: 'electronics' },
+      { slug: '123e4567-e89b-42d3-a456-426614174000', categorySegment: null },
+      { slug: 'child-1', categorySegment: null },
+      { slug: 'old-child', categorySegment: null },
+    ]);
+    mocks.auth.mockReturnValueOnce(
+      makeSupabase({ data: null, error: { message: 'timeout' } })
+    );
+    const incompleteRes = await POST(makeRequest(body));
+    expect(incompleteRes.status).toBe(200);
+    expect(mocks.scheduleHostname).toHaveBeenCalledWith(MERCHANT_SLUG);
   });
 });

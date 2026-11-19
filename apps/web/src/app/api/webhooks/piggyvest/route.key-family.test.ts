@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { beforeEach, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  createServiceClient: vi.fn(),
+  createIntakeClient: vi.fn(),
   processPiggyvestEvent: vi.fn(),
   families: ['interest'] as string[],
 }));
@@ -17,8 +17,8 @@ vi.mock('@/lib/piggyvest/webhook-secret-union', () => ({
 vi.mock('@/env', () => ({
   getPiggyvestApiConfig: () => null,
 }));
-vi.mock('@/lib/supabase/service', () => ({
-  createServiceClient: () => withCaptureRpc(mocks.createServiceClient()),
+vi.mock('@/lib/piggyvest/server-intake-client', () => ({
+  createPiggyvestIntakeClient: () => withCaptureRpc(mocks.createIntakeClient()),
 }));
 vi.mock('@/lib/piggyvest/webhook-processor', () => ({
   processPiggyvestEvent: (...args: unknown[]) =>
@@ -76,7 +76,7 @@ it('quarantines a legacy event signed solely by a primary family key', async () 
     error: null,
   });
   const from = vi.fn(() => query);
-  mocks.createServiceClient.mockReturnValue({ from });
+  mocks.createIntakeClient.mockReturnValue({ from });
 
   const response = await POST(createRequest(JSON.stringify(restrictionEvent)));
 
@@ -102,7 +102,7 @@ it('legacy-processes the same event when the legacy family matches', async () =>
     data: [{ event_id: restrictionEvent.eventId }],
     error: null,
   });
-  mocks.createServiceClient.mockReturnValue({
+  mocks.createIntakeClient.mockReturnValue({
     from: vi.fn(() => query),
   });
 

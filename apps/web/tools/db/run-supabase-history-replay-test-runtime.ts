@@ -29,7 +29,7 @@ export function createSupabaseReplayRuntimeFixture() {
     'db.port': 41_001,
     'db.shadow_port': 41_002,
     'edge_runtime.inspector_port': 41_005,
-    'inbucket.port': 41_004,
+    'local_smtp.port': 41_004,
     'studio.port': 41_003,
   } as const;
   const commands: string[] = [];

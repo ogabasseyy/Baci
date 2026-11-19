@@ -30,39 +30,53 @@ const withPath = (dir, extra = {}) => ({
   ...extra,
 });
 
-test(
-  'a hard deadline ends a remote read that ignores every transport timeout',
-  { timeout: 60_000 },
-  async () => {
-    const { root, work, featureSha } = setup();
-    try {
-      const ssh = hangingSsh(root);
-      git(work, 'remote', 'set-url', 'origin', 'ssh://git@example.invalid/repo.git');
-      const result = await runHookBounded(
-        work,
-        pushInput({ branch: 'feature', sha: featureSha }),
-        {
-          env: withPath(root, { BACI_BEHIND_BASE_DEADLINE_SECONDS: '3' }),
-          killAfterMs: 40_000,
-        }
-      );
+// A transport that survives its parent's SIGTERM must not outlive the hook:
+// git may start the SSH command through a wrapper shell that does not exec it
+// (git's own /bin/sh on Linux), so signalling only git's pid orphans it.
+const STUCK_TRANSPORTS = [
+  ['direct', {}],
+  ['behind a wrapper shell', { GIT_SSH_COMMAND: `sh -c 'ssh "$@"; exit $?' wrapper` }],
+];
 
-      assert.equal(
-        result.timedOut,
-        false,
-        `hook still waiting on a stuck transport after ${result.elapsedMs}ms`
-      );
-      assert.equal(result.status, 0);
-      assert.match(result.stdout, /skipping behind-base check/);
-      assert.equal(result.stderr, '', 'killing the read must not print shell job noise');
-      assert.ok(result.elapsedMs < 20_000, `took ${result.elapsedMs}ms`);
-      assert.ok(ssh.pids().length > 0, 'the stuck transport never started');
-      assert.ok(await allGone(ssh.pids()), 'the stuck transport was left running');
-    } finally {
-      rmSync(root, { recursive: true, force: true });
+for (const [shape, extraEnv] of STUCK_TRANSPORTS) {
+  test(
+    `a hard deadline ends a remote read that ignores every transport timeout (${shape})`,
+    { timeout: 60_000 },
+    async () => {
+      const { root, work, featureSha } = setup();
+      const ssh = hangingSsh(root);
+      try {
+        git(work, 'remote', 'set-url', 'origin', 'ssh://git@example.invalid/repo.git');
+        const result = await runHookBounded(
+          work,
+          pushInput({ branch: 'feature', sha: featureSha }),
+          {
+            env: withPath(root, {
+              BACI_BEHIND_BASE_DEADLINE_SECONDS: '3',
+              ...extraEnv,
+            }),
+            killAfterMs: 40_000,
+          }
+        );
+
+        assert.equal(
+          result.timedOut,
+          false,
+          `hook still waiting on a stuck transport after ${result.elapsedMs}ms`
+        );
+        assert.equal(result.status, 0);
+        assert.match(result.stdout, /skipping behind-base check/);
+        assert.equal(result.stderr, '', 'killing the read must not print job noise');
+        assert.ok(result.elapsedMs < 20_000, `took ${result.elapsedMs}ms`);
+        assert.ok(ssh.pids().length > 0, 'the stuck transport never started');
+        assert.ok(await allGone(ssh.pids()), 'the stuck transport outlived the hook');
+      } finally {
+        ssh.kill();
+        rmSync(root, { recursive: true, force: true });
+      }
     }
-  }
-);
+  );
+}
 
 test('reads every base tip in one remote call however many branches are pushed', () => {
   const { root, remote, work, featureSha } = setup();

@@ -225,7 +225,8 @@ exec "${realGit}" "$@"
 
 // An `ssh` that records its pid and never answers, ignoring every timeout
 // option it is given: a stand-in for a stall during DNS/TCP/TLS or SSH setup
-// that http.lowSpeed*, ConnectTimeout and ServerAlive* cannot end.
+// that http.lowSpeed*, ConnectTimeout and ServerAlive* cannot end. `kill()`
+// removes any survivor so a failing test never leaves it behind.
 function hangingSsh(root) {
   const pidLog = join(root, 'ssh.pids');
   writeFileSync(join(root, 'ssh'), `#!/bin/sh\necho $$ >> "${pidLog}"\nexec sleep 600\n`);
@@ -234,17 +235,26 @@ function hangingSsh(root) {
     existsSync(pidLog)
       ? readFileSync(pidLog, 'utf8').split('\n').filter(Boolean).map(Number)
       : [];
-  return { pids };
+  const kill = () => {
+    for (const pid of pids()) {
+      try {
+        process.kill(pid, 'SIGKILL');
+      } catch {
+        // already gone
+      }
+    }
+  };
+  return { kill, pids };
 }
 
-const isAlive = (pid) => {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-};
+// A process is alive unless it is gone or a zombie waiting to be reaped.
+function isAlive(pid) {
+  const { stdout } = spawnSync('ps', ['-o', 'stat=', '-p', String(pid)], {
+    encoding: 'utf8',
+  });
+  const state = stdout.trim();
+  return state !== '' && !state.startsWith('Z');
+}
 
 async function allGone(pids, timeoutMs = 5_000) {
   const until = Date.now() + timeoutMs;

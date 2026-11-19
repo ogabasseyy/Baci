@@ -39,6 +39,7 @@ interface ScheduleDeletedProductPurgeInput {
   merchantId: string;
   merchantSlug: string | null | undefined;
   deletedProduct: ProductPurgeRow | null;
+  deletedRowSlug?: string;
   preReadError: unknown;
   dependentAliases?: DependentLegacyProductIdentifiers;
   linkedBlogPostIds: string[];
@@ -135,6 +136,7 @@ export async function scheduleDeletedProductPurge({
   merchantId,
   merchantSlug,
   deletedProduct,
+  deletedRowSlug,
   preReadError,
   dependentAliases,
   linkedBlogPostIds,
@@ -142,19 +144,20 @@ export async function scheduleDeletedProductPurge({
 }: ScheduleDeletedProductPurgeInput): Promise<void> {
   try {
     if (deletedProduct) {
-      const purgeSlug = deletedProduct.slug?.trim() || id;
+      const purgeSlug = deletedProduct.slug?.trim() || deletedRowSlug || id;
+      const categorySegment = resolveProductPurgeCategorySegmentForRow({
+        slug: purgeSlug,
+        name: deletedProduct.name,
+        category: deletedProduct.category,
+        categories: deletedProduct.categories,
+        product_categories: deletedProduct.product_categories,
+      });
       const purgeEntries: StorefrontProductPurgeEntry[] = [
-        {
-          slug: purgeSlug,
-          categorySegment: resolveProductPurgeCategorySegmentForRow({
-            slug: purgeSlug,
-            name: deletedProduct.name,
-            category: deletedProduct.category,
-            categories: deletedProduct.categories,
-            product_categories: deletedProduct.product_categories,
-          }),
-        },
+        { slug: purgeSlug, categorySegment },
       ];
+      if (deletedRowSlug && deletedRowSlug !== purgeSlug) {
+        purgeEntries.push({ slug: deletedRowSlug, categorySegment });
+      }
       const resolvedAliases =
         dependentAliases ??
         (await resolveDependentLegacyProductIdentifiers(
@@ -178,12 +181,19 @@ export async function scheduleDeletedProductPurge({
         'Product purge pre-read failed after delete; scheduling complete fallback purge',
         { id, preReadError }
       );
+      const fallbackEntries: StorefrontProductPurgeEntry[] =
+        deletedRowSlug && deletedRowSlug !== id
+          ? [
+              { slug: deletedRowSlug, categorySegment: null },
+              { slug: id, categorySegment: null },
+            ]
+          : [{ slug: id, categorySegment: null }];
       scheduleProductMutationPurge({
         supabase,
         merchantId,
         merchantSlug,
         productIds: [id],
-        entries: [{ slug: id, categorySegment: null }],
+        entries: fallbackEntries,
         blogPostIds: linkedBlogPostIds,
         purgeWholeStorefront: true,
       });

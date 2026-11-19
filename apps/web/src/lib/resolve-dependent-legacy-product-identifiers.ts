@@ -29,17 +29,30 @@ export async function resolveDependentLegacyProductIdentifiers(
       return { identifiers: [], incomplete: true };
     }
 
-    const rows = Array.isArray(data)
-      ? (data as Array<{ id?: string | null; slug?: string | null }>)
-      : [];
-    if (rows.length >= DEPENDENT_LEGACY_ALIAS_LIMIT) {
+    if (!Array.isArray(data)) {
+      return { identifiers: [], incomplete: true };
+    }
+    if (data.length >= DEPENDENT_LEGACY_ALIAS_LIMIT) {
       return { identifiers: [], incomplete: true };
     }
 
     const identifiers = new Set<string>();
-    for (const row of rows) {
-      const id = row.id?.trim();
-      const slug = row.slug?.trim();
+    for (const row of data) {
+      if (typeof row !== 'object' || row === null) {
+        return { identifiers: [], incomplete: true };
+      }
+      const rawId = 'id' in row ? row.id : undefined;
+      const rawSlug = 'slug' in row ? row.slug : undefined;
+      if (
+        (rawId !== undefined && rawId !== null && typeof rawId !== 'string') ||
+        (rawSlug !== undefined &&
+          rawSlug !== null &&
+          typeof rawSlug !== 'string')
+      ) {
+        return { identifiers: [], incomplete: true };
+      }
+      const id = rawId?.trim();
+      const slug = rawSlug?.trim();
       if (id) identifiers.add(id);
       if (slug) identifiers.add(slug);
     }

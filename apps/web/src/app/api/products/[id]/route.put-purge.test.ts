@@ -4,7 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const MERCHANT_ID = 'merchant-123';
 const PRODUCT_ID = 'product-456';
 
-const mockRevalidateProductSlugs = vi.fn();
+const mockRevalidateProducts = vi.fn((..._args: unknown[]) => true);
+const mockRevalidateProductSlugs = vi.fn((..._args: unknown[]) => true);
 const mockScheduleStorefrontProductPurge = vi.fn();
 let product: Record<string, unknown> = {};
 let updateResult: Record<string, unknown> = {};
@@ -47,7 +48,7 @@ vi.mock('@/lib/get-merchant-for-api-request', () => ({
   }),
 }));
 vi.mock('@/lib/cache-revalidation', () => ({
-  revalidateProducts: vi.fn(() => true),
+  revalidateProducts: (...args: unknown[]) => mockRevalidateProducts(...args),
   revalidateProductSlugs: (...args: unknown[]) =>
     mockRevalidateProductSlugs(...args),
 }));
@@ -122,6 +123,7 @@ vi.mock('@/lib/supabase/server', () => ({
             return api;
           }),
           eq: vi.fn(() => api),
+          limit: vi.fn().mockResolvedValue({ data: [], error: null }),
           single: vi.fn().mockResolvedValue({ data: product, error: null }),
           update: vi.fn(() => ({
             eq: vi.fn(() => ({
@@ -206,6 +208,11 @@ describe('PUT /api/products/[id] storefront purge', () => {
       params: Promise.resolve({ id: PRODUCT_ID }),
     });
 
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      MERCHANT_ID,
+      undefined,
+      { expireImmediately: true, omitMerchantWidePdpDetails: true }
+    );
     expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
       MERCHANT_ID,
       expect.arrayContaining(['updated-product', 'old-name']),

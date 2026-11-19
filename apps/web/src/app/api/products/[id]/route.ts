@@ -1009,12 +1009,14 @@ export async function DELETE(
       id
     );
 
-    // Keep the delete itself lean — the purge inputs were pre-read above.
-    const { error: deleteError } = await supabase
+    // Pre-read metadata above covers category/name; select deleted slug too so
+    // any concurrent rename between pre-read and delete is still expired.
+    const { data: deletedRows, error: deleteError } = await supabase
       .from('products')
       .delete()
       .eq('id', id)
-      .eq('merchant_id', merchantId);
+      .eq('merchant_id', merchantId)
+      .select('slug');
 
     if (deleteError) {
       console.error('Error deleting product:', deleteError);
@@ -1023,6 +1025,17 @@ export async function DELETE(
         { status: 500 }
       );
     }
+
+    const firstDeletedRow = Array.isArray(deletedRows)
+      ? deletedRows[0]
+      : undefined;
+    const deletedRowSlug =
+      firstDeletedRow &&
+      typeof firstDeletedRow === 'object' &&
+      'slug' in firstDeletedRow &&
+      typeof firstDeletedRow.slug === 'string'
+        ? firstDeletedRow.slug.trim() || undefined
+        : undefined;
 
     // Evict the removed product's public URLs (fire-and-forget).
     await scheduleDeletedProductPurge({
@@ -1033,6 +1046,7 @@ export async function DELETE(
       deletedProduct: productToDelete as Parameters<
         typeof scheduleDeletedProductPurge
       >[0]['deletedProduct'],
+      deletedRowSlug,
       preReadError,
       dependentAliases,
       linkedBlogPostIds,

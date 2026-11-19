@@ -113,6 +113,12 @@ describe('POST /api/products/bulk-publish purge ordering', () => {
     );
 
     expect(response.status).toBe(200);
+    expect(mockRevalidateProducts).not.toHaveBeenCalledWith('merchant-1');
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      'merchant-1',
+      undefined,
+      { expireImmediately: true, omitMerchantWidePdpDetails: true }
+    );
     expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
       'merchant-1',
       updatedProducts.map((product) => product.slug),
@@ -150,7 +156,7 @@ describe('POST /api/products/bulk-publish purge ordering', () => {
 
   it('skips edge purge when both per-slug and broad hard expiry fail on bulk publish', async () => {
     mockRevalidateProductSlugs.mockReturnValueOnce(false);
-    mockRevalidateProducts.mockReturnValueOnce(true).mockReturnValueOnce(false);
+    mockRevalidateProducts.mockReturnValueOnce(false);
     const { POST } = await import('./route');
 
     const response = await POST(

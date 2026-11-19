@@ -66,4 +66,30 @@ describe('resolveDependentLegacyProductIdentifiers', () => {
       )
     ).resolves.toEqual({ identifiers: [], incomplete: true });
   });
+
+  it('fails closed when query data or row fields are malformed', async () => {
+    await expect(
+      resolveDependentLegacyProductIdentifiers(
+        createSupabaseMock({ data: 'not-an-array', error: null }),
+        'merchant-1',
+        'parent-1'
+      )
+    ).resolves.toEqual({ identifiers: [], incomplete: true });
+
+    await expect(
+      resolveDependentLegacyProductIdentifiers(
+        createSupabaseMock({ data: [null], error: null }),
+        'merchant-1',
+        'parent-1'
+      )
+    ).resolves.toEqual({ identifiers: [], incomplete: true });
+
+    await expect(
+      resolveDependentLegacyProductIdentifiers(
+        createSupabaseMock({ data: [{ id: 123, slug: 'ok' }], error: null }),
+        'merchant-1',
+        'parent-1'
+      )
+    ).resolves.toEqual({ identifiers: [], incomplete: true });
+  });
 });

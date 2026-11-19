@@ -19,19 +19,16 @@ import { resolveAuthoritativeMerchantSlug } from './resolve-authoritative-mercha
 import { revalidateWithoutProducts } from './revalidate-without-products';
 
 /**
- * Internal product-cache revalidation endpoint.
- *
- * `revalidateTag` requires a Next request/store context, which the standalone
- * import worker (`scripts/process-import-jobs.ts`) does NOT have — so its
- * in-process `revalidateProducts` is a no-op. That worker calls this Bearer-authed
- * route instead, which DOES run in a route context, to reliably invalidate the
- * product caches (incl. the proxy crawl-budget `product-slug-set-${merchantId}`)
- * after an import — so freshly imported products are never hard-404ed waiting on
- * the cacheLife TTL. See `revalidateProductsReliable`.
- *
- * Auth: `Authorization: Bearer ${INTERNAL_API_SECRET}` (timing-safe). Bearer
- * requests are CSRF-exempt and rate-limit-exempt in the proxy.
+ * Internal product-cache revalidation endpoint (`Authorization: Bearer
+ * ${INTERNAL_API_SECRET}`). Runs in a Next route context so `revalidateTag`
+ * works for standalone workers (whose in-process `revalidateTag` is a no-op).
  */
+const failedExpiryResponse = (): NextResponse =>
+  NextResponse.json(
+    { error: 'Failed to expire merchant-wide product caches' },
+    { status: 500 }
+  );
+
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const expectedSecret = getInternalApiSecret();
   if (!expectedSecret) {
@@ -145,10 +142,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       shouldExpireProductBlogCache,
     })
   ) {
-    return NextResponse.json(
-      { error: 'Failed to expire merchant-wide product caches' },
-      { status: 500 }
-    );
+    return failedExpiryResponse();
   }
   if (hasProducts && products) {
     let revalidatedDeferredProducts = false;
@@ -209,10 +203,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
               edgePurgeTarget: 'product',
             })
           ) {
-            return NextResponse.json(
-              { error: 'Failed to expire merchant-wide product caches' },
-              { status: 500 }
-            );
+            return failedExpiryResponse();
           }
           revalidatedDeferredProducts = true;
           const mergedBlogPostSlugs = Array.from(
@@ -228,12 +219,22 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             blogPostSlugsIncomplete,
             confirmEdgeEviction: Boolean(confirmEdgeEviction),
           });
-        } else if (!shouldExpireProductBlogCache) {
-          if (scopedOptions) {
-            revalidateProducts(merchantId, undefined, scopedOptions);
-          } else {
-            revalidateProducts(merchantId);
-          }
+        } else if (
+          !shouldExpireProductBlogCache ||
+          callerOmitMerchantWidePdpDetails === true
+        ) {
+          const opts = shouldExpireProductBlogCache
+            ? { ...scopedOptions, expireImmediately: true }
+            : scopedOptions;
+          const ok =
+            (opts
+              ? revalidateProducts(merchantId, undefined, opts)
+              : revalidateProducts(merchantId)) !== false ||
+            (Boolean(scopedOptions) &&
+              revalidateProducts(merchantId, undefined, {
+                expireImmediately: true,
+              }) !== false);
+          if (!ok) return failedExpiryResponse();
           revalidatedDeferredProducts = true;
         }
       }
@@ -242,9 +243,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         !purgeWholeStorefront &&
         !revalidatedDeferredProducts &&
         (!shouldExpireProductBlogCache ||
-          callerOmitMerchantWidePdpDetails === true)
+          callerOmitMerchantWidePdpDetails === true) &&
+        revalidateProducts(merchantId, undefined, {
+          expireImmediately: true,
+        }) === false
       ) {
-        revalidateProducts(merchantId, undefined, { expireImmediately: true });
+        logger.error({
+          message:
+            'Failed to expire merchant-wide product caches after purge error',
+          error: purgeError,
+        });
+        return failedExpiryResponse();
       }
       logger.error({
         message: 'Skipped Cloudflare product purge in revalidate-products',
@@ -262,10 +271,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           edgePurgeTarget: 'hostname',
         })
       ) {
-        return NextResponse.json(
-          { error: 'Failed to expire merchant-wide product caches' },
-          { status: 500 }
-        );
+        return failedExpiryResponse();
       }
       if (confirmEdgeEviction) {
         await flushOriginCacheRevalidations();

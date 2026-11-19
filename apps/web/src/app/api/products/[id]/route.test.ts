@@ -239,18 +239,12 @@ const createMockSupabase = () => ({
       };
     }
     if (table === 'products') {
-      let eqCallCount = 0;
-      const deleteChain: { eq: ReturnType<typeof vi.fn> } = {
-        eq: vi.fn((): unknown => {
-          eqCallCount++;
-          // The route now runs a LEAN delete (`delete().eq('id').eq('merchant')`)
-          // with no trailing select — the purge inputs are pre-read separately
-          // via `select(...).maybeSingle()` before the delete.
-          if (eqCallCount >= 2) {
-            return Promise.resolve({ error: deleteError });
-          }
-          return deleteChain;
-        }),
+      const deleteChain: {
+        eq: ReturnType<typeof vi.fn>;
+        select: ReturnType<typeof vi.fn>;
+      } = {
+        eq: vi.fn(() => deleteChain),
+        select: vi.fn(() => Promise.resolve({ data: [], error: deleteError })),
       };
 
       const productsApi: {
@@ -301,7 +295,6 @@ const createMockSupabase = () => ({
           };
         }),
         delete: vi.fn(() => {
-          eqCallCount = 0; // Reset counter
           productOps.push('delete');
           return deleteChain;
         }),

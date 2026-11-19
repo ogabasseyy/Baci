@@ -95,9 +95,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Invalidate product caches after bulk publish
-    revalidateProducts(merchantId);
-
     // Draft rows deleted above were never public and intentionally do not add
     // edge purge targets. Every returned update is now active, so it needs a
     // PDP/listing purge using the row's canonical category resolution.
@@ -165,10 +162,13 @@ export async function POST(request: NextRequest) {
           });
         }
       } catch (purgeError) {
+        revalidateProducts(merchantId, undefined, { expireImmediately: true });
         console.warn('Skipped Cloudflare product purge after bulk publish', {
           purgeError,
         });
       }
+    } else {
+      revalidateProducts(merchantId);
     }
 
     return NextResponse.json({

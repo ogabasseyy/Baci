@@ -192,4 +192,61 @@ describe('POST /api/internal/revalidate-products scoped fallback guards', () => 
       { expireImmediately: true }
     );
   });
+
+  it('expires merchant-wide caches (and returns 500 if that fails) when explicit slug expiry fails in blog mode without authoritativeMerchantSlug', async () => {
+    mockRevalidateProductSlugs.mockReturnValueOnce(false);
+    mockEnrichProductPurgeEntries.mockResolvedValue({
+      entries: [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
+      resolvedSlugs: ['iphone-15'],
+      authoritativeSlugsById: new Map([['prod-1', 'iphone-15']]),
+      blogPostSlugs: [],
+      blogPostSlugsIncomplete: false,
+    });
+
+    const okRes = await POST(
+      makeRequest({
+        merchantId: MERCHANT_ID,
+        expireProductBlogCache: true,
+        productSlugs: ['iphone-15'],
+        omitMerchantWidePdpDetails: true,
+        products: [{ id: 'prod-1' }],
+      })
+    );
+    expect(okRes.status).toBe(200);
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      MERCHANT_ID,
+      undefined,
+      { expireImmediately: true }
+    );
+
+    mockRevalidateProductSlugs.mockReturnValueOnce(false);
+    mockRevalidateProducts.mockReturnValueOnce(false);
+    const failRes = await POST(
+      makeRequest({
+        merchantId: MERCHANT_ID,
+        expireProductBlogCache: true,
+        productSlugs: ['iphone-15'],
+        omitMerchantWidePdpDetails: true,
+        products: [{ id: 'prod-1' }],
+      })
+    );
+    expect(failRes.status).toBe(500);
+  });
+
+  it('returns 500 when the catch fallback fails to expire merchant-wide caches', async () => {
+    mockEnrichProductPurgeEntries.mockRejectedValueOnce(new Error('db failed'));
+    mockRevalidateProducts.mockReturnValueOnce(false);
+
+    const res = await POST(
+      makeRequest({
+        merchantId: MERCHANT_ID,
+        merchantSlug: 'ogabassey',
+        expireProductBlogCache: true,
+        productSlugs: ['iphone-15'],
+        omitMerchantWidePdpDetails: true,
+        products: [{ id: 'prod-1' }],
+      })
+    );
+    expect(res.status).toBe(500);
+  });
 });

@@ -4,9 +4,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const MERCHANT_ID = 'merchant-123';
 const PRODUCT_ID = 'product-456';
 
-const mockRevalidateProductSlugs = vi.fn();
+const mockRevalidateProducts = vi.fn((..._args: unknown[]) => true);
+const mockRevalidateProductSlugs = vi.fn((..._args: unknown[]) => true);
 const mockScheduleStorefrontProductPurge = vi.fn();
 let productToDelete: unknown = null;
+let deletedRow: { slug?: string | null } | null = null;
 const productSelectArgs: string[] = [];
 const productOps: string[] = [];
 
@@ -47,7 +49,7 @@ vi.mock('@/lib/get-merchant-for-api-request', () => ({
   }),
 }));
 vi.mock('@/lib/cache-revalidation', () => ({
-  revalidateProducts: vi.fn(() => true),
+  revalidateProducts: (...args: unknown[]) => mockRevalidateProducts(...args),
   revalidateProductSlugs: (...args: unknown[]) =>
     mockRevalidateProductSlugs(...args),
 }));
@@ -92,14 +94,17 @@ vi.mock('@/lib/supabase/server', () => ({
     },
     from: vi.fn((table: string) => {
       if (table === 'products') {
-        let eqCount = 0;
-        const deleteChain: { eq: ReturnType<typeof vi.fn> } = {
-          eq: vi.fn(() => {
-            eqCount++;
-            return eqCount >= 2
-              ? Promise.resolve({ error: null })
-              : deleteChain;
-          }),
+        const deleteChain: {
+          eq: ReturnType<typeof vi.fn>;
+          select: ReturnType<typeof vi.fn>;
+        } = {
+          eq: vi.fn(() => deleteChain),
+          select: vi.fn(() =>
+            Promise.resolve({
+              data: deletedRow ? [deletedRow] : [],
+              error: null,
+            })
+          ),
         };
         const api = {
           select: vi.fn((arg?: string) => {
@@ -108,12 +113,12 @@ vi.mock('@/lib/supabase/server', () => ({
             return api;
           }),
           eq: vi.fn(() => api),
+          limit: vi.fn().mockResolvedValue({ data: [], error: null }),
           maybeSingle: vi.fn().mockResolvedValue({
             data: productToDelete,
             error: null,
           }),
           delete: vi.fn(() => {
-            eqCount = 0;
             productOps.push('delete');
             return deleteChain;
           }),
@@ -145,6 +150,7 @@ const makeDeleteRequest = (id: string) =>
 describe('DELETE /api/products/[id] storefront purge paths', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    deletedRow = null;
     productSelectArgs.length = 0;
     productOps.length = 0;
   });
@@ -165,6 +171,11 @@ describe('DELETE /api/products/[id] storefront purge paths', () => {
       'test-store',
       [{ slug: 'iphone-15', categorySegment: 'smartphones' }]
     );
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      MERCHANT_ID,
+      undefined,
+      { expireImmediately: true, omitMerchantWidePdpDetails: true }
+    );
     expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
       MERCHANT_ID,
       ['iphone-15', PRODUCT_ID],
@@ -172,6 +183,33 @@ describe('DELETE /api/products/[id] storefront purge paths', () => {
     );
     expect(mockRevalidateProductSlugs.mock.invocationCallOrder[0]).toBeLessThan(
       mockScheduleStorefrontProductPurge.mock.invocationCallOrder[0]
+    );
+  });
+
+  it('also expires a slug changed concurrently between pre-read and delete', async () => {
+    productToDelete = {
+      slug: 'iphone-15',
+      name: 'iPhone 15',
+      category: 'Smartphones',
+    };
+    deletedRow = { slug: 'iphone-15-renamed' };
+
+    const res = await DELETE(makeDeleteRequest(PRODUCT_ID), {
+      params: Promise.resolve({ id: PRODUCT_ID }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
+      MERCHANT_ID,
+      ['iphone-15', 'iphone-15-renamed', PRODUCT_ID],
+      { expireImmediately: true }
+    );
+    expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
+      'test-store',
+      [
+        { slug: 'iphone-15', categorySegment: 'smartphones' },
+        { slug: 'iphone-15-renamed', categorySegment: 'smartphones' },
+      ]
     );
   });
 

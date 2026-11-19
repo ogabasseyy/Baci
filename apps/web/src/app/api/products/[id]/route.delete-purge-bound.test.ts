@@ -104,14 +104,14 @@ function createSupabase(
             }
           ),
         };
-        let deleteEqCount = 0;
-        const deleteQuery: { eq: ReturnType<typeof vi.fn> } = {
-          eq: vi.fn(() => {
-            deleteEqCount += 1;
-            return deleteEqCount >= 2
-              ? Promise.resolve({ error: options.deleteError ?? null })
-              : deleteQuery;
-          }),
+        const deleteQuery: {
+          eq: ReturnType<typeof vi.fn>;
+          select: ReturnType<typeof vi.fn>;
+        } = {
+          eq: vi.fn(() => deleteQuery),
+          select: vi.fn(() =>
+            Promise.resolve({ data: [], error: options.deleteError ?? null })
+          ),
         };
         return {
           ...productQuery,

@@ -10,8 +10,8 @@ vi.mock('@/env', () => ({
   getRootDomain: () => 'localhost',
 }));
 
-const mockRevalidateProducts = vi.fn();
-const mockRevalidateProductSlugs = vi.fn();
+const mockRevalidateProducts = vi.fn((..._args: unknown[]) => true);
+const mockRevalidateProductSlugs = vi.fn((..._args: unknown[]) => true);
 vi.mock('@/lib/cache-revalidation', () => ({
   revalidateProducts: (...args: unknown[]) => mockRevalidateProducts(...args),
   revalidateProductSlugs: (...args: unknown[]) =>
@@ -220,12 +220,18 @@ describe('POST /api/products/bulk-publish', () => {
     expect(json.publishedProducts).toBe(2);
   });
 
-  it('calls revalidateProducts after publish', async () => {
+  it('calls scoped revalidateProducts without merchant-wide PDP wipe after publish', async () => {
     const { POST } = await import('./route');
-
     await POST(createRequest());
-
-    expect(mockRevalidateProducts).toHaveBeenCalledWith(MERCHANT_ID);
+    expect(mockRevalidateProducts).not.toHaveBeenCalledWith(MERCHANT_ID);
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      MERCHANT_ID,
+      undefined,
+      {
+        expireImmediately: true,
+        omitMerchantWidePdpDetails: true,
+      }
+    );
   });
 
   it('does not purge deleted drafts when no products became public', async () => {

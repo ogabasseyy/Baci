@@ -10,6 +10,7 @@ import { GOAL_CANCEL_FORFEIT_STATEMENTS as sql } from './goal-cancel-forfeit-sta
 import {
   readGoalInterestWalletId,
   readGoalInterestWalletOwnerId,
+  readPrimaryInterestPayoutWalletId,
 } from './goal-interest-wallet-env';
 import { getPrimaryWalletProviderOrigin } from './primary-wallet-provider-origin';
 import { createPrimaryWalletSavingsExecutor } from './primary-wallet-savings-executor';
@@ -198,6 +199,8 @@ export async function sweepPendingGoalCancelForfeits(input: {
           operationId: item.operationId,
           expectedDestinationWalletId: readGoalInterestWalletId(),
           expectedDestinationOwnerId: readGoalInterestWalletOwnerId(),
+          expectedPrimaryInterestPayoutWalletId:
+            readPrimaryInterestPayoutWalletId(),
         })
       );
       if (outcome === 'confirmed') result.confirmed += 1;

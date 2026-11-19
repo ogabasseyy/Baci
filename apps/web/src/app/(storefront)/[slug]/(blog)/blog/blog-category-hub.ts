@@ -2,6 +2,7 @@ import { cacheLife, cacheTag } from 'next/cache';
 import { getMerchantStrict, getPublicSupabaseClient } from '@/lib/cached-data';
 import { filterPublicBlogCategories } from '@/lib/public-blog-content-quality';
 import { buildStoreUrl } from '@/lib/store-url';
+import { getBlogPostsMerchantCacheTag } from '@/lib/tenant-cache-tags';
 import {
   buildBlogCategorySchemaUrl,
   findBlogCategoryLabelBySlug,
@@ -29,6 +30,7 @@ export async function resolveBlogCategoryHub(
   if (!merchant) {
     return null;
   }
+  cacheTag(getBlogPostsMerchantCacheTag(merchant.id));
 
   if (!merchant.feature_settings?.blog_enabled) {
     return null;

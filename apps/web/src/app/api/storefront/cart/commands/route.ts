@@ -1,4 +1,5 @@
 import type { NextRequest } from 'next/server';
+import { applyCartSnapshotCookies } from '@/lib/cart/apply-cart-snapshot-cookies';
 import { getCartProofEnvironment } from '@/lib/cart/cart-runtime-env';
 import {
   loadLiveGrantOperations,
@@ -11,11 +12,7 @@ import {
   requestUsesDeviceProof,
   resolveCartRequestContext,
 } from '@/lib/cart/request-context';
-import {
-  cartErrorResponse,
-  cartJsonResponse,
-  setCartSessionCookie,
-} from '@/lib/cart/response';
+import { cartErrorResponse, cartJsonResponse } from '@/lib/cart/response';
 import { createCartScopedClient } from '@/lib/cart/scoped-client';
 import {
   type CartServerTimer,
@@ -206,10 +203,13 @@ async function applyCommand(
         : result.cart.expiresAt;
     const maxAge = cartSessionCookieMaxAge(cookieExpiry);
     // A non-positive lifetime would delete the cookie the body proof just
-    // renewed; omit the cookie instead and let the body proof govern.
-    if (proof && maxAge > 0) {
-      setCartSessionCookie(response, context.merchant.id, proof, maxAge);
-    }
+    // renewed; omit the proof cookie instead and let the body proof govern.
+    applyCartSnapshotCookies(response, {
+      merchantId: context.merchant.id,
+      cart: result.cart,
+      proof,
+      cookieMaxAge: maxAge,
+    });
     return response;
   } catch (error) {
     console.error('Unexpected error in POST /api/storefront/cart/commands:', {

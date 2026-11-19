@@ -56,17 +56,17 @@ describe('enrichProductPurgeEntries', () => {
       },
     });
 
-    const { entries, resolvedSlugs } = await enrichProductPurgeEntries(
-      supabase,
-      MERCHANT_ID,
-      [{ id: 'prod-1' }]
-    );
+    const { entries, resolvedSlugs, authoritativeSlugsById } =
+      await enrichProductPurgeEntries(supabase, MERCHANT_ID, [
+        { id: 'prod-1' },
+      ]);
 
     expect(entries).toEqual([
       { slug: 'iphone-15', categorySegment: 'smartphones' },
     ]);
     // Authoritative slug + id are both busted (rename-safe).
     expect(resolvedSlugs).toEqual(['iphone-15', 'prod-1']);
+    expect(authoritativeSlugsById?.get('prod-1')).toBe('iphone-15');
   });
 
   it('appends an old-category purge when previousCategoryId resolves to a different slug', async () => {

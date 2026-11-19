@@ -9,6 +9,7 @@ export type DirectBookingAttempt =
   | { status: 'in_progress' | 'already_booked' }
   | {
       status: 'recovered';
+      lockToken: string | null;
       existingShipment: ReusableOrderShipmentResult;
       result: ShipmentBookingResult;
     };
@@ -39,6 +40,7 @@ export async function prepareDirectBookingAttempt(
 
   return {
     status: 'recovered',
+    lockToken: claim.lockToken,
     existingShipment,
     result: {
       provider: existingShipment.provider,

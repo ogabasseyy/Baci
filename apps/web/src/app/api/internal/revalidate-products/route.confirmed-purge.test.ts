@@ -43,6 +43,10 @@ vi.mock('@/lib/get-published-blog-post-slugs-for-products', () => ({
   getPublishedBlogPostSlugsForProducts: () =>
     Promise.resolve({ slugs: [], incomplete: false }),
 }));
+vi.mock('@/lib/resolve-dependent-legacy-product-identifiers', () => ({
+  resolveDependentLegacyProductIdentifiers: () =>
+    Promise.resolve({ identifiers: [], incomplete: false }),
+}));
 
 import { POST } from './route';
 
@@ -162,5 +166,74 @@ describe('POST /api/internal/revalidate-products confirmed edge purge', () => {
     expect(mockPurgeStorefrontHostnameConfirmed).toHaveBeenCalledWith(
       'ogabassey'
     );
+  });
+
+  it('withholds edge product purge and returns 500 when origin hard expiry fails', async () => {
+    mockCreatePublicClient.mockReturnValue(
+      makePublicClient({
+        merchantSlug: 'ogabassey',
+        productRows: [
+          {
+            id: 'prod-1',
+            slug: 'iphone-15',
+            category: 'smartphones',
+            categories: null,
+            product_categories: [],
+          },
+        ],
+      })
+    );
+    mockRevalidateProductSlugs.mockReturnValue(true);
+    mockRevalidateProducts.mockReturnValue(false);
+
+    const res = await POST(
+      request({
+        merchantId: MERCHANT_ID,
+        merchantSlug: 'ogabassey',
+        confirmEdgeEviction: true,
+        omitMerchantWidePdpDetails: true,
+        slugsUnchanged: true,
+        productSlugs: ['iphone-15'],
+        products: [
+          { id: 'prod-1', slug: 'iphone-15', previousSlug: 'iphone-15' },
+        ],
+      })
+    );
+
+    expect(res.status).toBe(500);
+    expect(mockRevalidateProducts).toHaveBeenNthCalledWith(
+      1,
+      MERCHANT_ID,
+      undefined,
+      { expireImmediately: true, omitMerchantWidePdpDetails: true }
+    );
+    expect(mockRevalidateProducts).toHaveBeenNthCalledWith(
+      2,
+      MERCHANT_ID,
+      undefined,
+      { expireImmediately: true }
+    );
+    expect(mockPurgeStorefrontProductConfirmed).not.toHaveBeenCalled();
+    expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
+  });
+
+  it('withholds edge hostname purge and returns 500 when origin hard expiry fails', async () => {
+    mockCreatePublicClient.mockReturnValue(
+      makePublicClient({ merchantSlug: 'ogabassey' })
+    );
+    mockExpireProductBlogCache.mockReturnValueOnce(false);
+
+    const res = await POST(
+      request({
+        merchantId: MERCHANT_ID,
+        merchantSlug: 'ogabassey',
+        confirmEdgeEviction: true,
+        purgeWholeStorefront: true,
+      })
+    );
+
+    expect(res.status).toBe(500);
+    expect(mockPurgeStorefrontHostnameConfirmed).not.toHaveBeenCalled();
+    expect(mockScheduleStorefrontHostnamePurge).not.toHaveBeenCalled();
   });
 });

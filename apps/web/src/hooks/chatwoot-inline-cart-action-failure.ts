@@ -3,7 +3,8 @@ type ChatwootActionEvent =
   | 'baci-cart-request'
   | 'baci-cart-quantity'
   | 'baci-product-request'
-  | 'baci-checkout-review-request';
+  | 'baci-checkout-review-request'
+  | 'baci-delivery-options-request';
 
 export function postChatwootInlineCartActionFailure(input: {
   event: ChatwootActionEvent;
@@ -12,6 +13,11 @@ export function postChatwootInlineCartActionFailure(input: {
 }) {
   if (input.event === 'baci-checkout-review-request') {
     input.post('baci-checkout-review:', {
+      requestId: input.requestId,
+      status: 'unavailable',
+    });
+  } else if (input.event === 'baci-delivery-options-request') {
+    input.post('baci-delivery-options-result:', {
       requestId: input.requestId,
       status: 'unavailable',
     });

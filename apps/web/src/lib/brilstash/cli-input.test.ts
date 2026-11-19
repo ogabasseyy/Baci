@@ -1,0 +1,55 @@
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterAll, beforeAll, expect, it } from 'vitest';
+import { readBrilStashCliInput } from './cli-input';
+
+let directory: string;
+let inputPath: string;
+const input = { fixture: true };
+
+beforeAll(async () => {
+  directory = await mkdtemp(join(tmpdir(), 'brilstash-cli-input-'));
+  inputPath = join(directory, 'input.json');
+  await writeFile(inputPath, JSON.stringify(input));
+});
+
+afterAll(async () => {
+  await rm(directory, { recursive: true, force: true });
+});
+
+it('requires the exact --apply switch to opt in to writes', async () => {
+  await expect(readBrilStashCliInput([inputPath])).resolves.toEqual({
+    input,
+    apply: false,
+  });
+  await expect(readBrilStashCliInput([inputPath, '--apply'])).resolves.toEqual({
+    input,
+    apply: true,
+  });
+  await expect(readBrilStashCliInput([inputPath, '--other'])).rejects.toThrow(
+    'Expected an input JSON file'
+  );
+  await expect(readBrilStashCliInput(['--apply', inputPath])).rejects.toThrow(
+    'Expected an input JSON file'
+  );
+});
+
+it('rejects missing files, directories, oversized files, and invalid JSON', async () => {
+  const oversized = join(directory, 'large.json');
+  const malformed = join(directory, 'malformed.json');
+  await Promise.all([
+    writeFile(oversized, ' '.repeat(262145)),
+    writeFile(malformed, '{'),
+  ]);
+  for (const path of [
+    directory,
+    join(directory, 'missing.json'),
+    oversized,
+    malformed,
+  ]) {
+    await expect(readBrilStashCliInput([path])).rejects.toThrow(
+      'Unable to read BrilStash input file'
+    );
+  }
+});

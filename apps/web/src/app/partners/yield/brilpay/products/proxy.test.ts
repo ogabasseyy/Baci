@@ -29,6 +29,11 @@ vi.mock('@/lib/supabase/anon', () => ({
   createAnonClient: () => ({ rpc: dependencies.rpc }),
 }));
 
+vi.mock('@/lib/rate-limit', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/rate-limit')>()),
+  checkBrilStashFeedRateLimit: vi.fn().mockResolvedValue({ allowed: true }),
+}));
+
 const path = '/partners/yield/brilpay/products';
 const query = '?page=1&limit=100&min_price=0';
 const credential = 'k'.repeat(43);
@@ -68,7 +73,7 @@ it('preserves the exact platform path, query and credential through normal proxy
       );
     }
     const response = await GET(
-      new Request(request.url, { headers: forwarded })
+      new NextRequest(request.url, { headers: forwarded })
     );
     expect(response.status).toBe(503);
     expect(dependencies.rpc).toHaveBeenCalledWith('read_brilstash_page', {

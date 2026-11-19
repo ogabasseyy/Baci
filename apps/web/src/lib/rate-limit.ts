@@ -5,6 +5,7 @@
 import { Ratelimit } from '@upstash/ratelimit';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
+import { BRILSTASH_FEED_PATH } from '@/config/brilstash-feed';
 import { checkLegacyBridgeRateLimit } from './legacy-bridge-rate-limit';
 import {
   checkQuizPlayerRateLimit,
@@ -193,6 +194,16 @@ async function applyRateLimit(
 
   // Fallback to in-memory
   return checkMemoryRateLimit(identifier, pattern, config);
+}
+
+export function checkBrilStashFeedRateLimit(
+  request: NextRequest
+): Promise<RateLimitResult> {
+  return applyRateLimit(
+    getTrustedClientIdentifier(request),
+    BRILSTASH_FEED_PATH,
+    { maxRequests: 30, windowMs: 60_000, failClosedWithoutRedis: true }
+  );
 }
 
 export function checkImeiPollRateLimit(

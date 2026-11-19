@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { NextRequest } from 'next/server';
 import {
   BRILSTASH_HANDOFF_PAGE_LIMIT,
   BRILSTASH_PILOT_LISTING_LIMIT,
@@ -8,11 +9,15 @@ import { parseBrilStashBearer } from '@/lib/brilstash/parse-bearer';
 import { readBrilStashPage } from '@/lib/brilstash/read-page';
 import { resolveBrilStashFeedDeployment } from '@/lib/brilstash/resolve-feed-deployment';
 import { logger } from '@/lib/logger';
+import {
+  checkBrilStashFeedRateLimit,
+  createRateLimitResponse,
+} from '@/lib/rate-limit';
 import { parseBrilStashFeedQuery } from '@/schemas/brilstash-feed-query';
 
 export const runtime = 'nodejs';
 
-export async function GET(request: Request): Promise<Response> {
+export async function GET(request: NextRequest): Promise<Response> {
   const requestId = randomUUID();
   const headers = new Headers({
     'Cache-Control': 'no-store',
@@ -46,6 +51,17 @@ export async function GET(request: Request): Promise<Response> {
         query.min_price !== 0))
   ) {
     return fail(400, 'Invalid catalogue query', 'INVALID_QUERY');
+  }
+
+  const budget = await checkBrilStashFeedRateLimit(request);
+  if (!budget.allowed) {
+    const response = createRateLimitResponse(
+      budget.limit,
+      budget.remaining,
+      budget.resetTime
+    );
+    for (const [name, value] of headers) response.headers.set(name, value);
+    return response;
   }
 
   const page = await readBrilStashPage(bearer, query);

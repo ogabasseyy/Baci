@@ -1,3 +1,4 @@
+import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createBrilStashPageProof } from '@/lib/brilstash/page-proof';
 import { GET } from './route';
@@ -5,13 +6,18 @@ import { GET } from './route';
 const dependencies = vi.hoisted(() => {
   const abortSignal = vi.fn();
   const rpc = vi.fn(() => ({ abortSignal }));
-  return { rpc, abortSignal, info: vi.fn() };
+  return { rpc, abortSignal, info: vi.fn(), rateLimit: vi.fn() };
 });
 
 vi.mock('@/lib/supabase/anon', () => ({
   createAnonClient: () => ({ rpc: dependencies.rpc }),
 }));
 vi.mock('@/lib/logger', () => ({ logger: { info: dependencies.info } }));
+
+vi.mock('@/lib/rate-limit', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/rate-limit')>()),
+  checkBrilStashFeedRateLimit: dependencies.rateLimit,
+}));
 
 const host = 'sandbox-feed.example.invalid';
 const bearer = 'S'.repeat(43);
@@ -43,7 +49,7 @@ function request(
   token: string | null = bearer,
   hostname = host
 ) {
-  return new Request(`https://${hostname}${path}${query}`, {
+  return new NextRequest(`https://${hostname}${path}${query}`, {
     headers: token === null ? {} : { Authorization: `Bearer ${token}` },
   });
 }
@@ -56,10 +62,34 @@ beforeEach(() => {
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://sandboxtest.supabase.co');
   vi.stubEnv('VERCEL_ENV', 'preview');
   dependencies.abortSignal.mockResolvedValue({ data: result, error: null });
+  dependencies.rateLimit.mockResolvedValue({
+    allowed: true,
+    limit: 30,
+    remaining: 29,
+    resetTime: Date.now() + 60_000,
+  });
 });
 afterEach(() => vi.unstubAllEnvs());
 
 describe('BrilStash feed GET', () => {
+  it('returns a non-cacheable 429 before the RPC when the partner feed budget is exhausted', async () => {
+    dependencies.rateLimit.mockResolvedValueOnce({
+      allowed: false,
+      limit: 30,
+      remaining: 0,
+      resetTime: Date.now() + 60_000,
+    });
+    const input = request();
+    const response = await GET(input);
+
+    expect(dependencies.rateLimit).toHaveBeenCalledWith(input);
+    expect(dependencies.rpc).not.toHaveBeenCalled();
+    expect(response.status).toBe(429);
+    expect(response.headers.get('retry-after')).toBeTruthy();
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(response.headers.get('x-request-id')).toBeTruthy();
+  });
+
   it('serves a bare array with totals and no-store, and logs correlation without the key', async () => {
     const response = await GET(request());
     expect(response.status).toBe(200);

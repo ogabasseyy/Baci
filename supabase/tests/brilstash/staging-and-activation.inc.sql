@@ -159,21 +159,27 @@ BEGIN
   EXCEPTION WHEN check_violation THEN
     IF SQLERRM <> 'BrilStash activation window or freshness ended' THEN RAISE; END IF;
   END;
-  IF public.activate_first_brilstash_snapshot(
-    installation, candidate, window_date, evidence, approval
-  ) IS DISTINCT FROM candidate THEN RAISE EXCEPTION 'activation did not return the candidate'; END IF;
   BEGIN
     PERFORM public.activate_first_brilstash_snapshot(installation, candidate, window_date, evidence, approval);
-    RAISE EXCEPTION 'first activation repeated';
-  EXCEPTION WHEN check_violation THEN NULL;
+    RAISE EXCEPTION 'first activation accepted a single listing';
+  EXCEPTION WHEN check_violation THEN
+    IF SQLERRM <> 'BrilStash first activation requires seven listings' THEN RAISE; END IF;
   END;
 END $$;
 RESET ROLE;
 DO $$
 BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM private.brilstash_installations
-    WHERE id = '30000000-0000-4000-8000-000000000001' AND admission = 'open'
-      AND active_generation_id = '70000000-0000-4000-8000-000000000001' AND activated_at IS NOT NULL
-  ) THEN RAISE EXCEPTION 'the operator-approved generation was not activated'; END IF;
+  IF EXISTS (SELECT 1 FROM private.brilstash_first_activations)
+    OR EXISTS (
+      SELECT 1 FROM private.brilstash_installations
+      WHERE admission = 'open' OR active_generation_id IS NOT NULL
+    )
+  THEN RAISE EXCEPTION 'rejected first activation changed serving state'; END IF;
 END $$;
+
+-- The remaining single-listing suites model an already serving, reduced
+-- assortment. The seven-listing activation is exercised in paged-reader.
+UPDATE private.brilstash_installations
+SET active_generation_id = '70000000-0000-4000-8000-000000000001',
+  activated_at = private.brilstash_clock(), admission = 'open', serving_revision = serving_revision + 1
+WHERE id = '30000000-0000-4000-8000-000000000001';

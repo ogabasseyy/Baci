@@ -62,6 +62,7 @@ $$;
 \ir ../migrations/20261119020052_brilstash_enablement_readback.sql
 \ir ../migrations/20261119020317_brilstash_installation_retirement.sql
 \ir ../migrations/20261119021534_brilstash_listing_source_remap.sql
+\ir ../migrations/20261119022000_brilstash_activation_stock_guards.sql
 \ir brilstash_catalogue_privileges.sql
 
 INSERT INTO auth.users VALUES ('10000000-0000-4000-8000-000000000001'), ('10000000-0000-4000-8000-000000000002');
@@ -147,6 +148,7 @@ BEGIN
   END IF;
 END $$;
 
+\ir brilstash/serialized-stock.inc.sql
 \ir brilstash/staging-and-activation.inc.sql
 \ir brilstash/reader.inc.sql
 \ir brilstash/probe-state.inc.sql

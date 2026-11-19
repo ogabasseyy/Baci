@@ -96,9 +96,18 @@ BEGIN
   evidence := public.record_brilstash_fresh_installation(
     installation, 'fixture-paged', 'Local fresh fixture', false, false, 0, true
   );
-  PERFORM public.activate_first_brilstash_snapshot(
+  IF public.activate_first_brilstash_snapshot(
     installation, candidate, (statement_timestamp() AT TIME ZONE 'Africa/Lagos')::date, evidence, approval
-  );
+  ) IS DISTINCT FROM candidate THEN
+    RAISE EXCEPTION 'seven-listing activation did not return the candidate';
+  END IF;
+  BEGIN
+    PERFORM public.activate_first_brilstash_snapshot(
+      installation, candidate, (statement_timestamp() AT TIME ZONE 'Africa/Lagos')::date, evidence, approval
+    );
+    RAISE EXCEPTION 'first activation repeated';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
   PERFORM public.rotate_brilstash_credential(
     installation, 0, encode(sha256(convert_to(repeat('p', 43), 'UTF8')), 'hex'), 0
   );

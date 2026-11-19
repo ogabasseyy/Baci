@@ -4289,33 +4289,39 @@ export type Database = {
           app_version: string | null;
           categories: string[] | null;
           created_at: string | null;
+          device: string | null;
           id: string;
           merchant_id: string | null;
           message: string | null;
           platform: string | null;
-          rating: number;
+          rating: number | null;
+          screen: string | null;
           user_id: string | null;
         };
         Insert: {
           app_version?: string | null;
           categories?: string[] | null;
           created_at?: string | null;
+          device?: string | null;
           id?: string;
           merchant_id?: string | null;
           message?: string | null;
           platform?: string | null;
-          rating: number;
+          rating?: number | null;
+          screen?: string | null;
           user_id?: string | null;
         };
         Update: {
           app_version?: string | null;
           categories?: string[] | null;
           created_at?: string | null;
+          device?: string | null;
           id?: string;
           merchant_id?: string | null;
           message?: string | null;
           platform?: string | null;
-          rating?: number;
+          rating?: number | null;
+          screen?: string | null;
           user_id?: string | null;
         };
         Relationships: [
@@ -18733,6 +18739,18 @@ export type Database = {
       get_merchant_analytics_config: {
         Args: { p_merchant_id: string };
         Returns: Json;
+      };
+      get_merchant_integration_secret_presence: {
+        Args: { p_merchant_id: string };
+        Returns: Json;
+      };
+      get_merchant_zoho_refresh_token: {
+        Args: { p_merchant_id: string };
+        Returns: string | null;
+      };
+      set_merchant_zoho_refresh_token: {
+        Args: { p_merchant_id: string; p_refresh_token: string };
+        Returns: undefined;
       };
       get_google_ads_connection_secret: {
         Args: { p_merchant_id: string };

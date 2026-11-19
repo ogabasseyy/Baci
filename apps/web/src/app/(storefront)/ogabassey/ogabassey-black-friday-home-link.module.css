@@ -10,7 +10,8 @@
   border-radius: clamp(1rem, 2vw, 1.5rem);
   background:
     linear-gradient(90deg, #10090b 36%, #10090b00 66%),
-    url("/campaigns/black-friday-hero-384.webp") right 62% / auto 145% no-repeat,
+    url("../../../assets/campaigns/black-friday-2026-hero-384.webp") right 62% /
+    auto 145% no-repeat,
     #10090b;
   color: #fff;
 }
@@ -49,8 +50,8 @@
   .banner {
     background:
       linear-gradient(90deg, #10090b 47%, #10090b00 75%),
-      url("/campaigns/black-friday-hero-768.webp") right 63% / auto 185%
-      no-repeat,
+      url("../../../assets/campaigns/black-friday-2026-hero-768.webp") right 63%
+      / auto 185% no-repeat,
       #10090b;
   }
 }

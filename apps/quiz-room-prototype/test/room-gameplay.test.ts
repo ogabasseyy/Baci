@@ -540,14 +540,12 @@ describe('QuizRoomEngine gameplay, deadlines, restarts, and SQLite counters', ()
       storage,
       controlState,
     });
-    preUpgradeRoom.initialize(
-      makeEventConfig({
-        startsAtMs,
-        endsAtMs,
-        questionCount: 1,
-        slots: makeEventConfig().slots.slice(0, 1),
-      })
-    );
+    const baseCfg = await buildEventConfig({ startsAtMs, endsAtMs });
+    preUpgradeRoom.initialize({
+      ...baseCfg,
+      questionCount: 1,
+      slots: baseCfg.slots.slice(0, 1),
+    });
     const ticket = makeTicket({
       userId: 'u-upg-1',
       customerId: 'c-upg-1',

@@ -41,8 +41,9 @@ it('response-loss reconciliation skips recapture after applied receipt; fresh ap
   vi.mocked(loadDraftApproval).mockResolvedValueOnce({
     status: 'confirmation-required',
   } as never);
-  await f.approval?.confirm({} as never, id);
-  expect(f.verifier.attest).toHaveBeenCalledWith({}, id, 'draft');
+  const { signal } = new AbortController();
+  await f.approval?.confirm({} as never, id, signal);
+  expect(f.verifier.attest).toHaveBeenCalledWith({}, id, 'draft', signal);
 });
 it('failed delivery remains verifying; replay verifies same receipt without fresh attestation or republish attempt', async () => {
   const f = setup();

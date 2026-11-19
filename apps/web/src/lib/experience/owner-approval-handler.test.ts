@@ -32,15 +32,14 @@ it('GET reads only and never confirms an intent', async () => {
 });
 it('POST uses owner auth and CSRF before confirming the exact intent', async () => {
   const f = fixture();
-  const r = await f.handler(
-    new Request('http://localhost/api', {
-      method: 'POST',
-      body: JSON.stringify({ action: 'confirm-draft', approvalId: id }),
-    })
-  );
+  const request = new Request('http://localhost/api', {
+    method: 'POST',
+    body: JSON.stringify({ action: 'confirm-draft', approvalId: id }),
+  });
+  const r = await f.handler(request);
   expect(r.status).toBe(200);
   expect(r.headers.get('Cache-Control')).toBe('private, no-store');
-  expect(f.confirm).toHaveBeenCalledWith(expect.anything(), id);
+  expect(f.confirm).toHaveBeenCalledWith(expect.anything(), id, request.signal);
 });
 it('fails closed for missing owner, rejected CSRF, malformed JSON and approval booleans', async () => {
   const f = fixture();

@@ -48,10 +48,11 @@ it('requires fresh verifier attestation before draft confirmation and exposes no
   f.load.mockResolvedValueOnce({ status: 'confirmation-required' });
   f.attest.mockResolvedValueOnce(undefined);
   f.confirm.mockResolvedValueOnce({ version: 1 });
-  await expect(approval?.confirm({} as never, id)).resolves.toEqual({
+  const { signal } = new AbortController();
+  await expect(approval?.confirm({} as never, id, signal)).resolves.toEqual({
     version: 1,
   });
-  expect(f.attest).toHaveBeenLastCalledWith({}, id, 'draft');
+  expect(f.attest).toHaveBeenLastCalledWith({}, id, 'draft', signal);
   expect(approval).not.toHaveProperty('confirmPublication');
   expect(approval).not.toHaveProperty('confirmModeExit');
 });
@@ -64,4 +65,19 @@ it('reconciles an already applied approval without repeating attestation', async
     version: 2,
   });
   expect(f.attest).not.toHaveBeenCalled();
+});
+
+it('does not start the confirmation if the request ends during attestation', async () => {
+  const approval = configuredOwnerApproval({ enabled: true, key, ...owner });
+  const abort = new AbortController();
+  f.confirm.mockClear();
+  f.load.mockResolvedValueOnce({ status: 'confirmation-required' });
+  const reason = Error('request ended');
+  f.attest.mockImplementationOnce(async () => {
+    abort.abort(reason);
+  });
+  await expect(approval?.confirm({} as never, id, abort.signal)).rejects.toBe(
+    reason
+  );
+  expect(f.confirm).not.toHaveBeenCalled();
 });

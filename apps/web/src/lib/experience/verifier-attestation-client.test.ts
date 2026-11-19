@@ -87,3 +87,29 @@ it('does not forward revoked users or malformed approval IDs', async () => {
   await expect(f.client(f.user as never, 'bad', 'draft')).rejects.toThrow();
   expect(f.fetchImpl).not.toHaveBeenCalled();
 });
+
+it('cancels an in-flight attestation when the approval request disconnects', async () => {
+  const f = fixture();
+  const abort = new AbortController();
+  const started = Promise.withResolvers<AbortSignal>();
+  f.fetchImpl.mockImplementationOnce(async (_url, init) => {
+    const signal = init?.signal;
+    if (!signal) throw Error('Missing verifier signal');
+    started.resolve(signal);
+    return await new Promise<Response>((resolve, reject) => {
+      abort.signal.addEventListener(
+        'abort',
+        () => {
+          if (signal.aborted) reject(signal.reason);
+          else resolve(new Response(null, { status: 204 }));
+        },
+        { once: true }
+      );
+    });
+  });
+  const pending = f.client(f.user as never, id, 'draft', abort.signal);
+  const verifierSignal = await started.promise;
+  abort.abort();
+  expect(verifierSignal.aborted).toBe(true);
+  await expect(pending).rejects.toBeInstanceOf(VerifierTemporarilyUnavailable);
+});

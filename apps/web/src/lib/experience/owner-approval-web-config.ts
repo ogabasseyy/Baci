@@ -36,10 +36,15 @@ export function configuredOwnerApproval(settings: {
   const attest = createVerifierAttestationClient({ key, fetch });
   return {
     load: loadDraftApproval,
-    confirm: async (client: SupabaseClient, id: string) => {
+    confirm: async (
+      client: SupabaseClient,
+      id: string,
+      signal?: AbortSignal
+    ) => {
       const current = await loadDraftApproval(client, id);
       if (current.status === 'confirmation-required')
-        await attest(client, id, 'draft');
+        await attest(client, id, 'draft', signal);
+      signal?.throwIfAborted();
       return confirmDraftApply(client, id);
     },
   };

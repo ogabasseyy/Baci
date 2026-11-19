@@ -28,16 +28,18 @@ export function createOwnerLifecycleRuntime(
     approval: {
       load: loadDraftApproval,
       loadLifecycle: loadLifecycleApproval,
-      confirm: async (client, id) => {
+      confirm: async (client, id, signal) => {
         const existing = await loadDraftApproval(client, id);
         if (existing.status === 'confirmation-required')
-          await verifier.attest(client, id, 'draft');
+          await verifier.attest(client, id, 'draft', signal);
+        signal?.throwIfAborted();
         return confirmDraftApply(client, id);
       },
-      confirmPublication: async (client, id) => {
+      confirmPublication: async (client, id, signal) => {
         const existing = await loadLifecycleApproval(client, id);
         if (existing.status === 'confirmation-required')
-          await verifier.attest(client, id, 'lifecycle');
+          await verifier.attest(client, id, 'lifecycle', signal);
+        signal?.throwIfAborted();
         const receipt = await confirmExperiencePublication(client, id);
         if (receipt.status === 'verifying') {
           try {
@@ -52,10 +54,11 @@ export function createOwnerLifecycleRuntime(
         }
         return receipt;
       },
-      confirmModeExit: async (client, id) => {
+      confirmModeExit: async (client, id, signal) => {
         const existing = await loadLifecycleApproval(client, id);
         if (existing.status === 'confirmation-required')
-          await verifier.attest(client, id, 'lifecycle');
+          await verifier.attest(client, id, 'lifecycle', signal);
+        signal?.throwIfAborted();
         return confirmExperienceModeExit(client, id);
       },
     },

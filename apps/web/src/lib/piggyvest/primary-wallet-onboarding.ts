@@ -253,11 +253,16 @@ export async function onboardPiggyvestPrimaryWallet(
       ? { status: 'pending' }
       : { status: 'unavailable', code: 'STORAGE_UNAVAILABLE' };
   } catch (error) {
+    // Both a reclaimed retry and an identity-refreshed attempt follow an
+    // earlier ambiguous dispatch whose create may still land, so neither may
+    // release the intent and lose custody/identity-fence protection.
+    const hasPriorDispatchCustody =
+      claim.reclaimed === true || claim.identityRefreshed === true;
     // Credentials rejected or relay refused: fail fast, never "pending".
     const notSent = await settlePrimaryWalletCreateIfNotSent({
       error,
       createReturned,
-      reclaimed: claim.reclaimed === true,
+      reclaimed: hasPriorDispatchCustody,
       storage: input.storage,
       claimedScope,
     });
@@ -265,16 +270,16 @@ export async function onboardPiggyvestPrimaryWallet(
     // A decline that names the interest settings is our configured payout
     // wallet being refused, never the customer's BVN. On a fresh claim it
     // proves nothing was created, so the intent is released for a corrected
-    // request. On a reclaimed claim it proves only that THIS attempt created
-    // nothing: the earlier dispatch may have created the customer, so the
-    // intent stays reclaimable and a later retry can adopt it. A BVN decline
-    // is released so a corrected BVN can be claimed, unless the lookup found
-    // our customer: releasing would make the next attempt a fresh claim that
-    // refuses it. Every other throw stays ambiguous.
+    // request. On a reclaimed or identity-refreshed claim it proves only that
+    // THIS attempt created nothing: the earlier dispatch may have created the
+    // customer, so the intent stays reclaimable and a later retry can adopt
+    // it. A BVN decline is released so a corrected BVN can be claimed, unless
+    // the lookup found our customer: releasing would make the next attempt a
+    // fresh claim that refuses it. Every other throw stays ambiguous.
     const decline = classifyPrimaryWalletCreationDecline(error);
     const keepReclaimable =
       decline === 'interest_routing'
-        ? claim.reclaimed === true
+        ? hasPriorDispatchCustody
         : lookup?.kind === 'found';
     if (decline !== null && !keepReclaimable) {
       try {

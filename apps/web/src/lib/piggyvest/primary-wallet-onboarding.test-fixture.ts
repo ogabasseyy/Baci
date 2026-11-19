@@ -73,6 +73,7 @@ export function onboardingFixture() {
         intentId: 'refreshed-intent',
         claimToken: 'refreshed-claim',
         reclaimed: false,
+        identityRefreshed: true,
       }),
     },
     createCustomer: vi.fn().mockResolvedValue({

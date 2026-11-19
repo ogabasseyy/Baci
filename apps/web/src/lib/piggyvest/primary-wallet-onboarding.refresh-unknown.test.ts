@@ -176,4 +176,51 @@ describe('primary wallet onboarding: retry with new details after an unresolved 
     expect(input.storage.recordUncertain).toHaveBeenCalledOnce();
     expect(input.storage.releaseIntent).not.toHaveBeenCalled();
   });
+
+  it('keeps custody on a not-sent error during the initial refresh', async () => {
+    const { PiggyvestApiError } = await import('./client');
+    const input = conflictedFixture();
+    input.findCustomers.mockResolvedValue(customerListing([]));
+    input.createCustomer.mockRejectedValue(
+      new PiggyvestApiError('PIGGYVEST_AUTH_ERROR', 'unauthorized', 401)
+    );
+
+    expect(await onboardPiggyvestPrimaryWallet(input)).toEqual({
+      status: 'unavailable',
+      code: 'PROVIDER_UNAVAILABLE',
+    });
+    expect(input.storage.recordUncertain).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        intentId: 'refreshed-intent',
+        claimToken: 'refreshed-claim',
+      })
+    );
+    expect(input.storage.releaseIntent).not.toHaveBeenCalled();
+  });
+
+  it('keeps custody on an interest-routing decline during the initial refresh', async () => {
+    const { PiggyvestApiError } = await import('./client');
+    const input = conflictedFixture();
+    input.findCustomers.mockResolvedValue(customerListing([]));
+    input.createCustomer.mockRejectedValue(
+      new PiggyvestApiError(
+        'PIGGYVEST_REQUEST_ERROR',
+        'Invalid interest_payout_wallet',
+        400,
+        true
+      )
+    );
+
+    expect(await onboardPiggyvestPrimaryWallet(input)).toEqual({
+      status: 'unavailable',
+      code: 'NOT_CONFIGURED',
+    });
+    expect(input.storage.recordUncertain).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        intentId: 'refreshed-intent',
+        claimToken: 'refreshed-claim',
+      })
+    );
+    expect(input.storage.releaseIntent).not.toHaveBeenCalled();
+  });
 });

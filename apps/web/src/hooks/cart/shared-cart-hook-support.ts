@@ -78,6 +78,8 @@ export interface UseSharedCartResult {
   ) => void;
   /** Refetches the authoritative snapshot (checkout review refresh). */
   refreshSharedCart: () => Promise<void>;
+  /** Ensures the delegated cart has an active session proof for host integrations. */
+  ensureCartSession: () => Promise<EnsureCartResult>;
 }
 
 export type AdoptOutcome =

@@ -14,6 +14,7 @@ import {
   collectFeedbackDiagnostics,
   sendFeedbackReport,
 } from '@/lib/feedback-report';
+import { FeedbackStoreStatus } from './FeedbackStoreStatus';
 
 const MAX_LENGTH = 4000;
 
@@ -54,7 +55,11 @@ export function FeedbackForm({
 }: FeedbackFormProps) {
   const { colors } = useTheme();
   // Report against the store this app is showing, not a server-side guess.
-  const { merchant } = useMerchant();
+  const {
+    merchant,
+    isLoading: isStoreLoading,
+    refetch: refetchStore,
+  } = useMerchant();
   const [message, setMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -115,6 +120,14 @@ export function FeedbackForm({
         This report will include your message, your store name and email
         address, the screen you’re on, and your app and device details.
       </Text>
+      {merchantId === null ? (
+        <FeedbackStoreStatus
+          isLoading={isStoreLoading}
+          onRetry={() => {
+            void refetchStore();
+          }}
+        />
+      ) : null}
       {error ? (
         <Text
           accessibilityRole="alert"

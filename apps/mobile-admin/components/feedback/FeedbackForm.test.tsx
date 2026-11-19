@@ -2,11 +2,17 @@ import '@testing-library/jest-dom/vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockSend, mockCollect, merchantState } = vi.hoisted(() => ({
-  merchantState: { merchant: { id: 'merchant-1' } as { id: string } | null },
-  mockSend: vi.fn(),
-  mockCollect: vi.fn(),
-}));
+const { mockSend, mockCollect, mockRefetch, merchantState } = vi.hoisted(
+  () => ({
+    merchantState: {
+      merchant: { id: 'merchant-1' } as { id: string } | null,
+      isLoading: false,
+    },
+    mockRefetch: vi.fn(),
+    mockSend: vi.fn(),
+    mockCollect: vi.fn(),
+  })
+);
 
 vi.mock('@/lib/feedback-report', () => ({
   collectFeedbackDiagnostics: mockCollect,
@@ -14,7 +20,11 @@ vi.mock('@/lib/feedback-report', () => ({
 }));
 
 vi.mock('@/hooks/useMerchant', () => ({
-  useMerchant: () => ({ merchant: merchantState.merchant }),
+  useMerchant: () => ({
+    merchant: merchantState.merchant,
+    isLoading: merchantState.isLoading,
+    refetch: mockRefetch,
+  }),
 }));
 
 vi.mock('@/hooks/useTheme', () => ({
@@ -55,10 +65,46 @@ beforeEach(() => {
   mockSend.mockReset();
   mockCollect.mockReset();
   merchantState.merchant = { id: 'merchant-1' };
+  merchantState.isLoading = false;
+  mockRefetch.mockReset();
   mockCollect.mockReturnValue({ screen: '/orders', platform: 'ios' });
 });
 
 describe('FeedbackForm', () => {
+  it('says the store is loading while Send waits for it', () => {
+    merchantState.merchant = null;
+    merchantState.isLoading = true;
+    renderForm();
+
+    expect(screen.getByText('Loading your store…')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Try loading your store again' })
+    ).not.toBeInTheDocument();
+  });
+
+  it('explains a failed store load and retries it on request', () => {
+    merchantState.merchant = null;
+    renderForm();
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'We couldn’t load your store'
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Try loading your store again' })
+    );
+
+    expect(mockRefetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows no store notice once the store has loaded', () => {
+    renderForm();
+
+    expect(screen.queryByText('Loading your store…')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Try loading your store again' })
+    ).not.toBeInTheDocument();
+  });
+
   it('shows the heading by default and hides it on request', () => {
     const { unmount } = render(
       <FeedbackForm onCancel={vi.fn()} onSent={vi.fn()} screen={null} />

@@ -16,6 +16,9 @@ const TIMED_OUT = Symbol('feedback-email-timed-out');
 // The provider signal only bounds the transport; the shared sender's audit
 // writes run before and after it. This caps the whole step, so a stalled
 // audit write cannot hold the response past the budget.
+// A false result therefore means "not confirmed within the budget": a send
+// that is still in flight may finish later and its audit row then records the
+// real outcome. The report itself is already saved either way.
 async function withinBudget<T>(
   work: Promise<T>
 ): Promise<T | typeof TIMED_OUT> {

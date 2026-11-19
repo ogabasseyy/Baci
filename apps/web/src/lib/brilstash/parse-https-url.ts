@@ -32,8 +32,8 @@ export function brilStashImageUrlKey(value: string): string | null {
     /^https:\/\/((?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?\.?)(?::([0-9]{1,5}))?([/?].*)?$/i.exec(
       value
     );
-  const host = parts?.[1];
-  if (!host || host.replace(/\.$/, '').length > 253) return null;
+  const host = parts?.[1]?.replace(/\.$/, '');
+  if (!host || host.length > 253) return null;
   const port = Number(parts?.[2] ?? 443);
   if (port > 65535) return null;
   const suffix = parts?.[3] ?? '';

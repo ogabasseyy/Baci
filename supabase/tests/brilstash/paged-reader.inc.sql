@@ -14,7 +14,7 @@ INSERT INTO public.products (
 )
 SELECT ('41000000-0000-4000-8000-00000000000' || n)::uuid,
   '20000000-0000-4000-8000-000000000001', 'active', 'Fixture ' || n, 'paged-' || n,
-  '50000000-0000-4000-8000-000000000001', 'new', 50000 + n * 70000, '["https://MEDIA.example.invalid:443/approved"]'::jsonb,
+  '50000000-0000-4000-8000-000000000001', 'new', 50000 + n * 70000, '["https://MEDIA.example.invalid.:443/approved"]'::jsonb,
   false, false, n, n, true, 'off'
 FROM generate_series(1, 7) n;
 -- An internal inventory anchor does not change a simple listing into a
@@ -31,8 +31,8 @@ WHERE slug = 'paged-1';
 INSERT INTO public.product_feed_images (
   id, merchant_id, product_id, status, verified_url, is_primary, position, source_url
 )
-SELECT gen_random_uuid(), merchant_id, id, 'verified', 'https://MEDIA.example.invalid:443/approved',
-  true, 1, 'https://MEDIA.example.invalid:443/approved'
+SELECT gen_random_uuid(), merchant_id, id, 'verified', 'https://MEDIA.example.invalid.:443/approved',
+  true, 1, 'https://MEDIA.example.invalid.:443/approved'
 FROM public.products WHERE slug LIKE 'paged-%';
 UPDATE public.products
 SET images = images || '["https://media.example.invalid/approved","https://media.example.invalid/secondary"]'::jsonb
@@ -77,8 +77,8 @@ BEGIN
     'description', 'Condition: New. Specifications: Fixture specification. Box contents: Phone only. Warranty: 30 days.', 'category', item->>'partnerCategory',
     'price_naira', item->'priceNaira', 'stock_quantity', item->'inventory'->'units',
     'images', CASE WHEN item->>'externalId' = 'paged-1' THEN
-      '[{"url":"https://MEDIA.example.invalid:443/approved"},{"url":"https://media.example.invalid/secondary"}]'::jsonb
-      ELSE '[{"url":"https://MEDIA.example.invalid:443/approved"}]'::jsonb END
+      '[{"url":"https://MEDIA.example.invalid.:443/approved"},{"url":"https://media.example.invalid/secondary"}]'::jsonb
+      ELSE '[{"url":"https://MEDIA.example.invalid.:443/approved"}]'::jsonb END
   ) ORDER BY item->>'externalId') INTO payload
   FROM jsonb_array_elements(read_result->'rows') item;
   -- Compute the fixture digest outside the builder session.
@@ -99,7 +99,7 @@ DECLARE first_images jsonb := input->'payload'->0->'images';
 DECLARE tampered_images jsonb;
 DECLARE tampered_payload jsonb;
 BEGIN
-  IF first_images IS DISTINCT FROM '[{"url":"https://MEDIA.example.invalid:443/approved"},{"url":"https://media.example.invalid/secondary"}]'::jsonb
+  IF first_images IS DISTINCT FROM '[{"url":"https://MEDIA.example.invalid.:443/approved"},{"url":"https://media.example.invalid/secondary"}]'::jsonb
   THEN RAISE EXCEPTION 'fixture did not load verified images in priority order'; END IF;
   FOREACH tampered_images IN ARRAY ARRAY[
     jsonb_build_array(first_images->1, first_images->0), jsonb_build_array(first_images->0)

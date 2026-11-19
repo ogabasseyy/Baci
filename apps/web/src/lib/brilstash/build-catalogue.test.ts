@@ -186,7 +186,7 @@ describe('buildBrilStashCatalogue', () => {
   });
 
   it('canonicalizes the product authority and preserves the exact verified image authority', () => {
-    const provisioned = 'https://IMAGES.example.invalid:443/phone.jpg';
+    const provisioned = 'https://IMAGES.example.invalid.:443/phone.jpg';
     const { products } = build([
       {
         ...sources[0],

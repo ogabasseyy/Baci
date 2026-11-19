@@ -30,6 +30,12 @@ it('normalizes verified image authorities without modifying the path or query', 
   ).toBe('https://cdn.example.invalid:8443/file.jpg');
 });
 
+it('uses the same key for an image on a trailing-dot DNS hostname', () => {
+  expect(brilStashImageUrlKey('https://CDN.example.invalid.:443/p.jpg')).toBe(
+    brilStashImageUrlKey('https://cdn.example.invalid/p.jpg')
+  );
+});
+
 it.each([
   'https://cdn.example.invalid:65536/image.jpg',
   'https://user@cdn.example.invalid/image.jpg',

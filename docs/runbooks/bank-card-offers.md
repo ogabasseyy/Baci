@@ -11,3 +11,5 @@ When Paystack verification reports a failed, abandoned, or cancelled attempt, ch
 For a capture review, reconcile the payment with Paystack under the original reference. Preserve the saved order and attempt while evaluating the provider evidence. The customer verification endpoint reports this state as pending with HTTP 202. The webhook returns HTTP 200 once the review is recorded so Paystack can stop retrying the delivery.
 
 When a signed webhook has no matching saved bank-offer attempt, platform operations should look up the `payment_match_zero_candidates` review by `paystack_ref`. The row is intentionally unassigned because tenant and order identity come from the saved attempt. The webhook metadata does not establish that relationship.
+
+Hosted storefront callbacks use HTTPS with both Paystack test and live keys. Non-production localhost can use HTTP for local QA with mocked Paystack responses.

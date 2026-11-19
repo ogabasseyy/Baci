@@ -120,6 +120,13 @@ async function verifyPaymentReference(
     );
   }
 
+  if (isBankOfferReference && transaction.gateway !== 'paystack') {
+    return NextResponse.json(
+      { error: 'Invalid bank offer capture' },
+      { status: 400 }
+    );
+  }
+
   if (!transaction.order_id) {
     // Wallet top-ups and other non-order references have their own
     // verification flows. Flipping the transaction here would make the
@@ -186,11 +193,9 @@ async function verifyPaymentReference(
       finalizationOutcome: 'completed',
     });
   }
-  const isBankOffer =
-    isBankOfferReference && transaction.gateway === 'paystack';
   let gatewayResponse: Record<string, unknown> | undefined;
   // Bank offers verify (or replay stored proof) inside the shared finalizer.
-  if (!isBankOffer) {
+  if (!isBankOfferReference) {
     const storedGatewayResponse = transaction.gateway_response;
     const hasStoredGatewayResponse =
       storedGatewayResponse !== null &&
@@ -353,7 +358,8 @@ async function verifyPaymentReference(
       order_id: transaction.order_id,
       platform_fee: transaction.platform_fee,
     },
-    wonTransactionFlip: !isBankOffer && transaction.status !== 'completed',
+    wonTransactionFlip:
+      !isBankOfferReference && transaction.status !== 'completed',
   });
 
   if (finalizeOutcome.kind === 'bank_offer_terminal') {

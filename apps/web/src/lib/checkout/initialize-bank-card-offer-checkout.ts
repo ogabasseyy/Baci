@@ -79,7 +79,10 @@ export async function initializeBankCardOfferCheckout({
     return { kind: 'pending', reference } as const;
   }
   const root = process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'usebaci.com';
-  const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
+  const protocol =
+    process.env.NODE_ENV !== 'production' && /^localhost(?::\d+)?$/.test(root)
+      ? 'http'
+      : 'https';
   let url: string;
   try {
     url = await initializeBankCardOfferPaystack({

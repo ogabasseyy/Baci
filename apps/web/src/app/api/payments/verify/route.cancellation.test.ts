@@ -274,6 +274,19 @@ describe('POST /api/payments/verify — finalizer outcomes', () => {
     expect(mockVerifyPaystack).not.toHaveBeenCalled();
   });
 
+  it('rejects a bank offer reference bound to a non-Paystack transaction', async () => {
+    const supabase = buildSupabase({ completion: null, gateway: 'korapay' });
+    mockCreateServiceClient.mockReturnValue(supabase);
+
+    const response = await POST(createRequest(`BCO-${'a'.repeat(32)}`));
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: 'Invalid bank offer capture',
+    });
+    expect(supabase.rpc).not.toHaveBeenCalled();
+  });
+
   it('returns a pending response instead of a paid signal for a held REDVAULT capture', async () => {
     const supabase = buildSupabase({ completion: null });
     mockCreateServiceClient.mockReturnValue(supabase);

@@ -447,6 +447,7 @@ describe('bank card offer payment handlers', () => {
     ['232', 'Sterling Bank', 'Wema Bank'],
   ] as const)('initializes, verifies, and refunds bank %s using the saved offer', async (bankCode, issuer, wrongIssuer) => {
     vi.stubEnv('PAYSTACK_SECRET_KEY', secret);
+    vi.stubEnv('NEXT_PUBLIC_ROOT_DOMAIN', 'usebaci.com');
     const { data, refundInsert } = setup(bankCode, issuer);
     const input = {
       merchant_id: merchantId,
@@ -465,6 +466,7 @@ describe('bank card offer payment handlers', () => {
       expect.objectContaining({
         reference,
         amount: 9500,
+        callback_url: `https://ogabassey.usebaci.com/checkout/success?reference=${reference}`,
         metadata: expect.objectContaining({
           custom_filters: { banks: [bankCode], card_brands: ['visa'] },
         }),

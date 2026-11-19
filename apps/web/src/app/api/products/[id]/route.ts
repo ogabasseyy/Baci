@@ -2,7 +2,6 @@ import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServiceRoleKey } from '@/env';
 import { hasPermission } from '@/lib/api-auth';
-import { revalidateProducts } from '@/lib/cache-revalidation';
 import { getCountryByCode } from '@/lib/countries';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { deriveProductVariantWriteProjections } from '@/lib/derive-product-variant-projections';
@@ -27,23 +26,23 @@ import {
   normalizeProductVariantModel,
 } from '@/lib/product-variant-model';
 import type { Product, ProductVariant } from '@/lib/products';
+import { resolveDependentLegacyProductIdentifiers } from '@/lib/resolve-dependent-legacy-product-identifiers';
 import { sanitizeHtml } from '@/lib/sanitize';
 import { sanitizeText } from '@/lib/sanitize-core';
 import { sanitizeSchemaMarkup } from '@/lib/sanitize-json-ld';
 import { scheduleProductImageTransformsPrewarm } from '@/lib/schedule-product-image-prewarm';
-import { scheduleProductMutationPurge } from '@/lib/schedule-product-mutation-purge';
 import {
   generateMetaDescription,
   generateProductSchema,
   generateProductSlug,
   generateSlug,
 } from '@/lib/seo-utils';
-import {
-  resolveProductPurgeCategorySegmentForRow,
-  type StorefrontProductPurgeEntry,
-} from '@/lib/storefront-product-purge-urls';
 import { createClient } from '@/lib/supabase/server';
 import { formatZodErrors, updateProductSchema } from '@/schemas/products';
+import {
+  scheduleDeletedProductPurge,
+  scheduleUpdatedProductPurge,
+} from './schedule-product-id-purge';
 
 const PREDELETE_BLOG_POST_ID_LIMIT = 256;
 
@@ -275,7 +274,7 @@ export async function PUT(
         // from the OLD data with the full PR #2914 precedence (active direct
         // join → active junction → legacy text). None of these are writable in this handler,
         // so they are also the product's current joined/junction categories.
-        'id, name, description, brand, color, slug, category, condition, condition_detail, has_variants, variant_model, categories:category_id(slug, is_active), product_categories(category_id, categories(slug, is_active))'
+        'id, name, description, brand, color, slug, category, status, condition, condition_detail, has_variants, variant_model, categories:category_id(slug, is_active), product_categories(category_id, categories(slug, is_active))'
       )
       .eq('id', id)
       .eq('merchant_id', merchantId)
@@ -886,76 +885,16 @@ export async function PUT(
       );
     }
 
-    // Invalidate product caches so storefront reflects changes immediately
-    revalidateProducts(merchantId, updatedProduct.slug);
-
-    // Evict the Cloudflare-fronted public URLs the edit can change (home, the
-    // product's category listing, and its PDP paths) so the raised edge TTL
-    // never serves the stale page. Fire-and-forget: a purge is always
-    // survivable (caches self-heal on their TTL), so it must never break the
-    // update — guard the derive + schedule the same way revalidateBlogPosts
-    // does.
-    try {
-      // Legacy rows can have a null/blank slug but are still publicly
-      // addressable by id (`/products/<id>`; the PDP lookup accepts UUIDs and
-      // normalizeProduct falls back to `slug || id`), so fall back to the id
-      // for the purge target when the slug is missing.
-      const nextSlug = updatedProduct.slug?.trim() || id;
-      const previousSlug = existingProduct.slug?.trim() || id;
-      // The direct join (`category_id`) and the `product_categories` junction
-      // are not writable in this handler, so they are immutable across the
-      // update: read them once from the OLD row and reuse for both entries. Only
-      // the legacy TEXT category can change, so the NEW entry uses the fresh
-      // row's text and the OLD entry uses the OLD row's text — the direct join
-      // still wins, and the junction only applies when no direct join AND no
-      // text are present (resolveProductPurgeCategorySegmentForRow, PR #2914).
-      const immutableJoins = {
-        categories: (existingProduct as { categories?: unknown }).categories,
-        product_categories: (
-          existingProduct as { product_categories?: unknown }
-        ).product_categories,
-      };
-      const nextCategorySegment = resolveProductPurgeCategorySegmentForRow({
-        slug: nextSlug,
-        name: updatedProduct.name,
-        category: (updatedProduct as { category?: string | null }).category,
-        ...immutableJoins,
-      });
-      const productPurgeEntries: StorefrontProductPurgeEntry[] = [
-        { slug: nextSlug, categorySegment: nextCategorySegment },
-      ];
-      const previousCategorySegment = resolveProductPurgeCategorySegmentForRow({
-        slug: previousSlug,
-        name: existingProduct.name,
-        category: (existingProduct as { category?: string | null }).category,
-        ...immutableJoins,
-      });
-      // A rename (slug change) OR a category move (segment change) leaves the
-      // OLD canonical PDP `/<old-category>/<old-slug>` AND the OLD category
-      // listing cached — derive the old entry from the OLD row's own data so
-      // both get evicted (the builder emits a listing per distinct segment, so
-      // pushing the old entry also purges `/<old-category>` when it differs).
-      if (
-        previousSlug !== nextSlug ||
-        (previousCategorySegment ?? '') !== (nextCategorySegment ?? '')
-      ) {
-        productPurgeEntries.push({
-          slug: previousSlug,
-          categorySegment: previousCategorySegment,
-        });
-      }
-      scheduleProductMutationPurge({
-        supabase,
-        merchantId,
-        merchantSlug: merchantContext.merchantSlug,
-        productIds: [updatedProduct.id],
-        entries: productPurgeEntries,
-      });
-    } catch (purgeError) {
-      console.warn('Skipped Cloudflare product purge after update', {
-        purgeError,
-      });
-    }
+    // Evict the Cloudflare-fronted public URLs the edit can change (fire-and-forget).
+    await scheduleUpdatedProductPurge({
+      supabase,
+      id,
+      merchantId,
+      merchantSlug: merchantContext.merchantSlug,
+      existingProduct,
+      updatedProduct,
+      statusUpdated: updates.status !== undefined,
+    });
 
     // Pre-warm the CDN image-transform cache for the product's images so the
     // first real storefront visitor never pays the cold-transform cost. Only
@@ -1064,12 +1003,20 @@ export async function DELETE(
       });
     }
 
-    // Keep the delete itself lean — the purge inputs were pre-read above.
-    const { error: deleteError } = await supabase
+    const dependentAliases = await resolveDependentLegacyProductIdentifiers(
+      supabase,
+      merchantId,
+      id
+    );
+
+    // Pre-read metadata above covers category/name; select deleted slug too so
+    // any concurrent rename between pre-read and delete is still expired.
+    const { data: deletedRows, error: deleteError } = await supabase
       .from('products')
       .delete()
       .eq('id', id)
-      .eq('merchant_id', merchantId);
+      .eq('merchant_id', merchantId)
+      .select('slug');
 
     if (deleteError) {
       console.error('Error deleting product:', deleteError);
@@ -1079,72 +1026,32 @@ export async function DELETE(
       );
     }
 
-    // Invalidate product caches after deletion
-    revalidateProducts(merchantId);
+    const firstDeletedRow = Array.isArray(deletedRows)
+      ? deletedRows[0]
+      : undefined;
+    const deletedRowSlug =
+      firstDeletedRow &&
+      typeof firstDeletedRow === 'object' &&
+      'slug' in firstDeletedRow &&
+      typeof firstDeletedRow.slug === 'string'
+        ? firstDeletedRow.slug.trim() || undefined
+        : undefined;
 
-    // Evict the removed product's public URLs (home, its category listing, and
-    // its PDP paths) so the raised edge TTL never serves a 200 for a deleted
-    // product. Fire-and-forget: a purge is always survivable (caches self-heal
-    // on their TTL), so it must never break the delete — guard the derive +
-    // schedule the same way revalidateBlogPosts does.
-    try {
-      const deletedProduct = productToDelete as {
-        id?: string | null;
-        slug?: string | null;
-        name?: string | null;
-        category?: string | null;
-        categories?: unknown;
-        product_categories?: unknown;
-      } | null;
-      if (deletedProduct) {
-        // Legacy rows can have a null/blank slug but are still publicly
-        // addressable by id, so fall back to the deleted row's id
-        // (`/products/<id>`) when the slug is missing.
-        const purgeSlug = deletedProduct.slug?.trim() || id;
-        const purgeEntries: StorefrontProductPurgeEntry[] = [
-          {
-            slug: purgeSlug,
-            categorySegment: resolveProductPurgeCategorySegmentForRow({
-              slug: purgeSlug,
-              name: deletedProduct.name,
-              category: deletedProduct.category,
-              categories: deletedProduct.categories,
-              product_categories: deletedProduct.product_categories,
-            }),
-          },
-        ];
-        scheduleProductMutationPurge({
-          supabase,
-          merchantId,
-          merchantSlug: merchantContext.merchantSlug,
-          productIds: [id],
-          entries: purgeEntries,
-          blogPostIds: linkedBlogPostIds,
-          purgeWholeStorefront: incompleteBlogSnapshot,
-        });
-      } else {
-        // The pre-read failed, but deletion committed. Its old slug/category
-        // are unknown, so evict the hostname rather than leaving canonical
-        // product or cross-category article URLs cached after the cascade.
-        console.warn(
-          'Product purge pre-read failed after delete; scheduling complete fallback purge',
-          { id, preReadError }
-        );
-        scheduleProductMutationPurge({
-          supabase,
-          merchantId,
-          merchantSlug: merchantContext.merchantSlug,
-          productIds: [id],
-          entries: [{ slug: id, categorySegment: null }],
-          blogPostIds: linkedBlogPostIds,
-          purgeWholeStorefront: true,
-        });
-      }
-    } catch (purgeError) {
-      console.warn('Skipped Cloudflare product purge after delete', {
-        purgeError,
-      });
-    }
+    // Evict the removed product's public URLs (fire-and-forget).
+    await scheduleDeletedProductPurge({
+      supabase,
+      id,
+      merchantId,
+      merchantSlug: merchantContext.merchantSlug,
+      deletedProduct: productToDelete as Parameters<
+        typeof scheduleDeletedProductPurge
+      >[0]['deletedProduct'],
+      deletedRowSlug,
+      preReadError,
+      dependentAliases,
+      linkedBlogPostIds,
+      incompleteBlogSnapshot,
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {

@@ -18,6 +18,9 @@ const DEPARTURE_CODES = new Set([
   'DIWN',
   // GIG's "SHIPMENT DEPARTS SERVICE CENTRE" (code-only scans carry no reason).
   'MDSE',
+  // Departures from the UK and US (international origin offices).
+  'IDK',
+  'IDH',
 ]);
 
 // Return-flow and exception scans (damage, claims) can occur at the destination
@@ -37,6 +40,8 @@ const EXPLICIT_ARRIVAL_CODES = new Set([
   'ARFGH',
   'ARFFSTP',
   'ARFFSHD',
+  'ARFGFR',
+  'ARFGFS',
 ]);
 
 // Whole word only, so unrelated text that merely contains DEPART (e.g.

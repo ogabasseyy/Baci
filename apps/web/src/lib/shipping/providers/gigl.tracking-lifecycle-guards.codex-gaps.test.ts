@@ -77,3 +77,24 @@ describe('bugfix: exception scans and more explicit arrival codes', () => {
     expect(evt.event.status).toBe('in_transit');
   });
 });
+
+describe('bugfix: IDK/IDH departures and Go Faster arrivals', () => {
+  it.each([
+    'IDK',
+    'IDH',
+  ])('does not infer an arrival from the %s departure scan at the destination office', (code) => {
+    const away = scan('MSVC', 'in_transit', 9, 'LAGOS');
+    const dep = scan(code, 'in_transit', 12, 'LONDON OFFICE');
+    applyLifecycleGuards([away, dep], 'LONDON', 'LAGOS');
+    expect(dep.event.rawStatus).toBe(code);
+  });
+
+  it.each([
+    'ARFGFR',
+    'ARFGFS',
+  ])('treats %s as an explicit arrival without location metadata', (code) => {
+    const evt = scan(code, null, 12);
+    applyLifecycleGuards([evt], 'ABUJA', 'LAGOS');
+    expect(evt.event.rawStatus).toBe(GIGL_ARRIVED_IN_CITY_RAW_STATUS);
+  });
+});

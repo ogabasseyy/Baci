@@ -57,7 +57,7 @@ export async function generateMetadata(props: PageProps): Promise<Metadata> {
       description,
       url: canonical,
       type: 'website',
-      images: ['/campaigns/black-friday-hero-768.webp'],
+      images: ['/campaigns/black-friday-2026-hero-768.webp'],
     },
   };
 }

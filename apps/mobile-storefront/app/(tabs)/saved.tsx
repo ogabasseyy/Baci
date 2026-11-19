@@ -84,7 +84,9 @@ export default function SavedTabScreen() {
             accessibilityRole="button"
             accessibilityLabel="Browse products"
           >
-            <Text style={styles.browseButtonText}>Browse Products</Text>
+            <Text style={[styles.browseButtonText, { color: BRAND.onPrimary }]}>
+              Browse Products
+            </Text>
           </Pressable>
           {!isOnline && (
             <Text style={[styles.offlineHint, { color: colors.textSecondary }]}>
@@ -145,7 +147,7 @@ export default function SavedTabScreen() {
                 uri: item.image,
                 width: 80,
               })}
-              style={styles.productImage}
+              style={[styles.productImage, { backgroundColor: colors.muted }]}
               contentFit="cover"
               autoplay={false}
             />
@@ -240,7 +242,6 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   browseButtonText: {
-    color: '#FFF',
     fontSize: 16,
     fontFamily: 'Inter_600SemiBold',
   },
@@ -268,7 +269,6 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: RADIUS.lg,
-    backgroundColor: '#F3F4F6',
   },
   productInfo: {
     flex: 1,

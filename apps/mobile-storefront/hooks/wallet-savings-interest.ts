@@ -17,6 +17,11 @@ type WalletSavingsInterest = {
   status: 'available' | 'unavailable';
   creditedInterestKobo: number | null;
   goalInterestKobo: WalletSavingsInterestResponse['goal_interest_kobo'];
+  /**
+   * True only when the server answered with per-goal interest, so a goal
+   * missing from goalInterestKobo truly has none (not just "not reported").
+   */
+  goalInterestKnown: boolean;
 };
 
 const missingFunctionCodes = new Set(['PGRST202', '42883']);
@@ -26,6 +31,7 @@ function unavailable(): WalletSavingsInterest {
     status: 'unavailable',
     creditedInterestKobo: null,
     goalInterestKobo: [],
+    goalInterestKnown: false,
   };
 }
 
@@ -59,6 +65,8 @@ export async function fetchWalletSavingsInterest(
             status: 'available',
             creditedInterestKobo,
             goalInterestKobo: [],
+            // The legacy read has a total only, never per-goal figures.
+            goalInterestKnown: false,
           };
     }
 
@@ -68,6 +76,7 @@ export async function fetchWalletSavingsInterest(
       status: 'available',
       creditedInterestKobo: parsed.data.credited_interest_kobo,
       goalInterestKobo: parsed.data.goal_interest_kobo,
+      goalInterestKnown: true,
     };
   } catch {
     return unavailable();

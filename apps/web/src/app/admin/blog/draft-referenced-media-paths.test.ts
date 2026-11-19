@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { draftReferencedMediaPaths } from './draft-referenced-media-paths';
 

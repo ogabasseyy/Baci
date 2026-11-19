@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { afterEach, expect, it } from 'vitest';
 import { getAdTrackingData } from '@/lib/ad-tracking-cookies';
 

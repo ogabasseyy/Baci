@@ -6,6 +6,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import styles from './OxygenBirthDateField.module.css';
+import iconStyles from './OxygenFieldIcon.module.css';
 import { oxygenFieldClass } from './oxygen-checkout-styles';
 
 function readDate(value: string): Date | null {
@@ -74,7 +75,7 @@ export function OxygenBirthDateField({
       <label htmlFor={id} className="text-xs font-bold text-gray-700">
         Date of birth
       </label>
-      <div className="relative">
+      <div className={iconStyles.stateField}>
         <input
           ref={input}
           id={id}
@@ -109,7 +110,10 @@ export function OxygenBirthDateField({
           className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-xl text-gray-500"
           onClick={() => setOpen(!open)}
         >
-          <CalendarDays aria-hidden="true" className="size-4" />
+          <CalendarDays
+            aria-hidden="true"
+            className={`size-4 ${iconStyles.actionIcon}`}
+          />
         </button>
       </div>
       <span id={`${id}-format`} className="sr-only">

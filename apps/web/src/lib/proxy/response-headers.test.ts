@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { describe, expect, it, vi } from 'vitest';
+import { installExperienceExecutionOrigin } from '@/lib/experience/execution-origin-runtime';
 import { applySecurityHeaders } from './response-headers';
 
 describe('proxy response headers', () => {
@@ -285,4 +286,28 @@ it.each([
   expect(response.headers.get('Permissions-Policy')).toContain(
     'camera=(), microphone=()'
   );
+});
+
+it('grants execution framing only to the private builder response among admin pages', () => {
+  const uninstall = installExperienceExecutionOrigin(
+    'https://execution.example.net'
+  );
+  try {
+    for (const pathname of ['/builder/experience/preview', '/dashboard']) {
+      const response = applySecurityHeaders(
+        NextResponse.next(),
+        pathname,
+        'Mozilla',
+        'admin',
+        false,
+        'nonce'
+      );
+      const policy = response.headers.get('content-security-policy') ?? '';
+      expect(policy.includes('https://execution.example.net')).toBe(
+        pathname === '/builder/experience/preview'
+      );
+    }
+  } finally {
+    uninstall();
+  }
 });

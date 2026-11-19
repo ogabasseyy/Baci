@@ -19,6 +19,7 @@ interface FAQItem {
 interface ProductCompareSchemaProduct {
   id: string;
   name: string;
+  brand?: string | null;
   slug?: string;
   category?: string | null;
   categories?: { name?: string; slug?: string } | null;
@@ -113,6 +114,9 @@ export function buildProductCompareItemListSchema(input: {
         item: {
           '@type': 'Product',
           name: product.name,
+          ...(product.brand?.trim() && {
+            brand: { '@type': 'Brand', name: product.brand.trim() },
+          }),
           image: product.image ? [product.image] : undefined,
           description: sanitizedDescription || undefined,
           url: new URL(getProductUrl(product), pageUrl).toString(),

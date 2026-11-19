@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 'use client';
 import { act, renderHook } from '@testing-library/react';
 import { createElement, type ReactNode } from 'react';

@@ -18,9 +18,9 @@ it('binds the checked-in inventory snapshot to current committed source content'
   expect(result).toEqual({
     validationKind: 'repository_snapshot',
     snapshotSha256:
-      '709ace85e0379ce316229d6c2932cd78a567533de2e43dd96a2eb1731aad991d',
+      '496f651a277a7765b3dac26b292a498cbccb0a1f1da8896a98209608a4d423c3',
     validatedSourceSha: expect.stringMatching(/^[a-f0-9]{40}$/),
-    rowCount: 615,
+    rowCount: 648,
   });
 });
 
@@ -35,7 +35,7 @@ it('keeps every private cart endpoint on the dynamic origin', async () => {
   const cartRows = inventory.rows.filter((row) =>
     row.sourcePath?.startsWith('apps/web/src/app/api/storefront/cart/')
   );
-  expect(cartRows).toHaveLength(11);
+  expect(cartRows).toHaveLength(12);
   expect(cartRows).toEqual(
     expect.arrayContaining([
       expect.objectContaining({
@@ -59,7 +59,14 @@ it('keeps every Oxygen API route on the dynamic origin', async () => {
   const rows = inventory.rows.filter((row) =>
     row.sourcePath?.startsWith('apps/web/src/app/api/payments/oxygen/')
   );
-  expect(rows).toHaveLength(22);
+  expect(rows).toHaveLength(24);
+  expect(rows).toContainEqual(
+    expect.objectContaining({
+      sourcePath:
+        'apps/web/src/app/api/payments/oxygen/storefront-availability/route.ts',
+      decision: 'origin_dynamic',
+    })
+  );
   for (const row of rows) expect(row.decision).toBe('origin_dynamic');
 });
 
@@ -112,4 +119,26 @@ it('keeps the savings goal completion endpoint on the dynamic origin', async () 
       decision: 'origin_dynamic',
     })
   );
+});
+
+it('keeps Chatwoot context endpoints on the dynamic origin', async () => {
+  const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '../../../..');
+  const inventory = await readStorefrontEdgeInventory(
+    join(
+      repoRoot,
+      'docs/superpowers/evidence/storefront-edge/task-1a-inventory.json'
+    )
+  );
+  const rows = inventory.rows.filter((row) =>
+    row.sourcePath?.startsWith(
+      'apps/web/src/app/api/storefront/chatwoot/context/'
+    )
+  );
+  expect(rows).toHaveLength(3);
+  expect(rows.map((row) => row.routePattern).sort()).toEqual([
+    '/api/storefront/chatwoot/context/authorize',
+    '/api/storefront/chatwoot/context/challenge',
+    '/api/storefront/chatwoot/context/verify',
+  ]);
+  expect(rows.every((row) => row.decision === 'origin_dynamic')).toBe(true);
 });

@@ -6,6 +6,38 @@
     "amount_sent": "28000.00",
     "loan_request_reference": "fe448e69-9e01-47b6-a1f9-f90ab6455ea8"
   },
+  "Upfront payment callback": {
+    "webhook_type": "split_payment",
+    "phone_number": "08000000000",
+    "transaction_reference": "txn-example-001",
+    "amount_deducted": "28000.00",
+    "amount_sent": "28000.00",
+    "loan_request_reference": "fe448e69-9e01-47b6-a1f9-f90ab6455ea8"
+  },
+  "Repayment setup callback": {
+    "webhook_type": "repayment_setup",
+    "phone_number": "08000000000",
+    "transaction_reference": "txn-example-001",
+    "amount_deducted": "0.00",
+    "amount_sent": "0.00",
+    "loan_request_reference": "fe448e69-9e01-47b6-a1f9-f90ab6455ea8"
+  },
+  "Loan repayment callback": {
+    "webhook_type": "loan_repayment",
+    "phone_number": "08000000000",
+    "transaction_reference": "txn-example-001",
+    "amount_deducted": "12000.00",
+    "amount_sent": "12000.00",
+    "loan_request_reference": "fe448e69-9e01-47b6-a1f9-f90ab6455ea8"
+  },
+  "Generic transaction callback": {
+    "webhook_type": "transaction",
+    "phone_number": "08000000000",
+    "transaction_reference": "txn-example-001",
+    "amount_deducted": "28000.00",
+    "amount_sent": "28000.00",
+    "loan_request_reference": "fe448e69-9e01-47b6-a1f9-f90ab6455ea8"
+  },
   "Address validation callback": {
     "webhook_type": "address_status_update",
     "phone_number": "08000000000",

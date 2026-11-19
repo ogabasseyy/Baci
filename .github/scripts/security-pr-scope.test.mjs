@@ -154,12 +154,14 @@ test('a root Next config change remains in targeted PR scope', () => {
 for (const baseKnowsDiagnostics of [false, true]) {
   test(`base-pinned selection preserves unique NUL paths when base knows diagnostics: ${baseKnowsDiagnostics}`, () => {
     const diagnosticPaths = ['.github/scripts/semgrep-sarif-pg-diagnostic.py', '.github/scripts/semgrep-sarif-pg-diagnostic.test.py'];
+    const routingPath = '.github/actions/semgrep-sarif-routing/action.yml';
     const basePaths = ['apps/web/src/lib/probe.ts', 'apps/web/src/lib/space name.ts', 'apps/web/src/lib/line\nbreak.ts', 'apps/web/src/lib/é.ts', 'apps/web/src/lib/e\u0301.ts'];
     const selectedBasePaths = [...basePaths, ...(baseKnowsDiagnostics ? diagnosticPaths : [])];
     const baseHelper = `import pathlib\npathlib.Path("semgrep.requested-targets").write_bytes(${JSON.stringify(selectedBasePaths.join('\0') + '\0')}.encode())\n`;
     const f = fixture('probe.ts', 'apps/web/src/lib', baseHelper);
     try {
-      for (const path of [...basePaths, ...diagnosticPaths, '.github/scripts/unrelated.py']) {
+      for (const path of [...basePaths, ...diagnosticPaths, routingPath, '.github/scripts/unrelated.py']) {
+        mkdirSync(join(f.root, path, '..'), { recursive: true });
         writeFileSync(join(f.root, path), 'print("synthetic")');
       }
       f.git('add', '.');
@@ -172,7 +174,7 @@ for (const baseKnowsDiagnostics of [false, true]) {
       const manifest = readFileSync(join(f.root, 'semgrep.requested-targets'), 'utf8');
       assert.ok(manifest.endsWith('\0'));
       const paths = manifest.split('\0').filter(Boolean);
-      assert.deepEqual(paths.sort(), [...basePaths, ...diagnosticPaths].sort());
+      assert.deepEqual(paths.sort(), [...basePaths, ...diagnosticPaths, routingPath].sort());
       assert.equal(paths.length, new Set(paths).size);
     } finally {
       rmSync(f.root, { recursive: true, force: true });
@@ -190,6 +192,7 @@ for (const baseKnowsDiagnostics of [false, true]) {
       'packages/shared/scripts/check-module-size-report.mjs': 'console.log("synthetic");',
       '.github/scripts/semgrep-sarif-pg-diagnostic.py': 'pass',
       '.github/scripts/semgrep-sarif-pg-diagnostic.test.py': 'pass',
+      '.github/actions/semgrep-sarif-routing/action.yml': 'name: synthetic',
       'docs/unrelated.ts': 'export const value = 1;',
       'apps/web/src/lib/config.json': '{}',
     };
@@ -197,7 +200,8 @@ for (const baseKnowsDiagnostics of [false, true]) {
     if (!baseKnowsDiagnostics) {
       baseHelper = baseHelper
         .replace('    ".github/scripts/semgrep-sarif-pg-diagnostic.py",\n', '')
-        .replace('    ".github/scripts/semgrep-sarif-pg-diagnostic.test.py",\n', '');
+        .replace('    ".github/scripts/semgrep-sarif-pg-diagnostic.test.py",\n', '')
+        .replace(' ".github/actions/semgrep-sarif-routing/",', '');
     }
     baseHelper += '\nif len(sys.argv) == 3 and sys.argv[1] == "pr-targets":\n    with open("semgrep.requested-targets", "ab") as manifest:\n        manifest.write(b"outside-protected-base/probe.ts\\0")\n';
     const f = fixture('.semgrepignore', '.', baseHelper, baseFiles);
@@ -226,4 +230,15 @@ test('ignore policy changes trigger Security and scope regression jobs', () => {
   assert.ok(parse(changes.with.filters).semgrep_relevant.includes('.semgrepignore'));
   const filters = parse(readFileSync(new URL('../filters/ci.yml', import.meta.url), 'utf8'));
   assert.ok(filters.quiz_db.includes('.semgrepignore'));
+});
+
+test('SARIF routing action changes are included in semantic scanning', () => {
+  const f = fixture('action.yml', '.github/actions/semgrep-sarif-routing');
+  try {
+    const result = f.run();
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(result.paths, ['.github/actions/semgrep-sarif-routing/action.yml']);
+  } finally {
+    rmSync(f.root, { recursive: true, force: true });
+  }
 });

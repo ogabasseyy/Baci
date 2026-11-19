@@ -56,4 +56,53 @@ describe('server keeps PiggyVest off', () => {
     ).toBeOnTheScreen();
     expect(screen.queryByText('Add money')).toBeNull();
   });
+
+  describe('starting amount and quick picks', () => {
+    function renderFlow(
+      props: Partial<{
+        addAmount: string;
+        onAddAmountChange: (value: string) => void;
+        remainingAmount: number;
+        walletBalance: number;
+      }> = {}
+    ) {
+      const onAddAmountChange = props.onAddAmountChange ?? jest.fn();
+      const view = render(
+        <WalletSavingsContributionFlow
+          addAmount={props.addAmount ?? ''}
+          colors={Colors.light}
+          isAdding={false}
+          isFundPending={false}
+          onAddAmountChange={onAddAmountChange}
+          onAddSavings={jest.fn()}
+          onFundWallet={jest.fn()}
+          remainingAmount={props.remainingAmount ?? 250000}
+          walletBalance={props.walletBalance ?? 1000}
+        />
+      );
+      return { onAddAmountChange, ...view };
+    }
+
+    it('offers only chips within the remaining amount and fills the field on tap', () => {
+      const { onAddAmountChange } = renderFlow({
+        addAmount: '1000',
+        remainingAmount: 6000,
+        walletBalance: 1000,
+      });
+      expect(screen.queryByRole('button', { name: 'Use ₦10,000' })).toBeNull();
+      fireEvent.press(screen.getByRole('button', { name: 'Use ₦5,000' }));
+      expect(onAddAmountChange).toHaveBeenCalledWith('5000');
+      expect(
+        screen.getByRole('button', { name: 'Use ₦1,000, all available' })
+      ).toHaveAccessibilityState({ selected: true });
+    });
+
+    it('shows the hero action instead of Add money for the default amount', () => {
+      renderFlow({ addAmount: '1000', walletBalance: 1000 });
+      expect(
+        screen.getByRole('button', { name: 'Confirm savings top-up' })
+      ).toBeOnTheScreen();
+      expect(screen.queryByText('Add money')).toBeNull();
+    });
+  });
 });

@@ -75,9 +75,19 @@ describe('useCookieConsentController', () => {
     act(() => result.current.acceptNecessary());
     expect(result.current.hasStorageError).toBe(false);
     expect(getStoredConsent()).toMatchObject({
+      functional: false,
       analytics: false,
       marketing: false,
     });
+    expect(gtag).toHaveBeenCalledWith(
+      'consent',
+      'update',
+      expect.objectContaining({
+        functionality_storage: 'denied',
+        personalization_storage: 'denied',
+        security_storage: 'granted',
+      })
+    );
   });
 
   it('offers consent when reading storage is denied', () => {

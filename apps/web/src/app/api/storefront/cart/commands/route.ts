@@ -1,22 +1,23 @@
 import type { NextRequest } from 'next/server';
+import { applyCartSnapshotCookies } from '@/lib/cart/apply-cart-snapshot-cookies';
 import { getCartProofEnvironment } from '@/lib/cart/cart-runtime-env';
 import {
   loadLiveGrantOperations,
   upgradeLegacySessionPrincipal,
 } from '@/lib/cart/grant-operations';
 import {
+  cachedCartMerchantLookups,
   checkCartQuota,
-  createAnonMerchantFeatureLookup,
   readCartJsonBody,
   requestUsesDeviceProof,
   resolveCartRequestContext,
 } from '@/lib/cart/request-context';
-import {
-  cartErrorResponse,
-  cartJsonResponse,
-  setCartSessionCookie,
-} from '@/lib/cart/response';
+import { cartErrorResponse, cartJsonResponse } from '@/lib/cart/response';
 import { createCartScopedClient } from '@/lib/cart/scoped-client';
+import {
+  type CartServerTimer,
+  createCartServerTimer,
+} from '@/lib/cart/server-timing';
 import { mutateCart } from '@/lib/cart/service';
 import {
   cartSessionCookieMaxAge,
@@ -40,29 +41,43 @@ import { sharedCartMutationRequestSchema } from '@/schemas/cart';
  * instead of overwriting newer state; operation-id retries converge.
  */
 export async function POST(request: NextRequest) {
+  // Every outcome, including errors, reports its step timings.
+  const timer = createCartServerTimer();
+  return timer.apply(await applyCommand(request, timer));
+}
+
+async function applyCommand(
+  request: NextRequest,
+  timer: CartServerTimer
+): Promise<Response> {
   try {
-    const csrf = await checkCsrfProtection(request);
+    const csrf = await timer.measure('csrf', () =>
+      checkCsrfProtection(request)
+    );
     if (!csrf.valid) {
       return cartErrorResponse('forbidden');
     }
 
     // Authenticate before reading the body: protected-route work and
     // response selection must not be driven by unauthenticated payloads.
-    const context = await resolveCartRequestContext(request, {
-      merchant: {
-        resolveAlias: getCurrentSlugForAlias,
-        rpcClient: createAnonClient(),
-        loadMerchantFeatures: createAnonMerchantFeatureLookup(
-          createAnonClient()
-        ),
-      },
-      requireScope: 'session',
-      verify: (proof) =>
-        verifyCartSessionProof(proof, {
-          environment: getCartProofEnvironment(),
-        }),
-      wrongScopeError: 'not_found',
-    });
+    const cached = cachedCartMerchantLookups(createAnonClient());
+    const context = await timer.measure('auth', () =>
+      resolveCartRequestContext(request, {
+        merchant: {
+          resolveAlias: getCurrentSlugForAlias,
+          rpcClient: cached.rpcClient,
+          // `auth-features` runs inside `auth`: the two overlap, never sum them.
+          loadMerchantFeatures: (id) =>
+            timer.measure('auth-features', () => cached.features(id)),
+        },
+        requireScope: 'session',
+        verify: (proof) =>
+          verifyCartSessionProof(proof, {
+            environment: getCartProofEnvironment(),
+          }),
+        wrongScopeError: 'not_found',
+      })
+    );
     if (!context.ok) {
       return cartErrorResponse(context.error);
     }
@@ -81,11 +96,13 @@ export async function POST(request: NextRequest) {
       return cartErrorResponse('invalid_request');
     }
 
-    const quota = await checkCartQuota({
-      merchantId: context.merchant.id,
-      operation: 'commands',
-      subject: context.principal.principalId,
-    });
+    const quota = await timer.measure('quota', () =>
+      checkCartQuota({
+        merchantId: context.merchant.id,
+        operation: 'commands',
+        subject: context.principal.principalId,
+      })
+    );
     if (!quota.allowed) {
       return cartErrorResponse('quota_exceeded');
     }
@@ -94,24 +111,25 @@ export async function POST(request: NextRequest) {
     // authority: load the live grant's verified operations first, or
     // every command would be rejected on an otherwise live cart.
     const client = createCartScopedClient(context.principal);
-    const principal = await upgradeLegacySessionPrincipal(
-      client,
-      context.principal
+    const principal = await timer.measure('grant', () =>
+      upgradeLegacySessionPrincipal(client, context.principal)
     );
     if (!principal) {
       return cartErrorResponse('temporarily_unavailable');
     }
 
-    const result = await mutateCart(
-      {
-        client,
-        principal,
-      },
-      {
-        command: parsedBody.data.command,
-        expectedVersion: parsedBody.data.expectedVersion,
-        operationId: parsedBody.data.operationId,
-      }
+    const result = await timer.measure('cart', () =>
+      mutateCart(
+        {
+          client,
+          principal,
+        },
+        {
+          command: parsedBody.data.command,
+          expectedVersion: parsedBody.data.expectedVersion,
+          operationId: parsedBody.data.operationId,
+        }
+      )
     );
     if (!result.ok) {
       return cartErrorResponse(
@@ -123,13 +141,18 @@ export async function POST(request: NextRequest) {
     // outlive the grant: reload the (just-renewed) grant's authoritative
     // expiry and cap the proof there; the cart expiry alone can exceed
     // this grant when another linked session extended the cart. If the
-    // reload fails, fall back to the incoming proof's expiry, which
-    // never exceeds the grant as issued. If reissue crosses the grant
+    // reload fails, no new proof is issued (the incoming proof's
+    // operations may be stale). If reissue crosses the grant
     // expiry the committed cart is returned without a new proof instead
     // of surfacing the committed change as a 503; the existing proof and
     // cookie govern until they expire, and retries replay by
     // operation id.
-    const liveGrant = await loadLiveGrantOperations(client, principal);
+    const liveGrant = await timer.measure('renew', () =>
+      loadLiveGrantOperations(client, principal).catch(() => null)
+    );
+    // Fail closed: without the live grant the renewed proof would carry
+    // the incoming proof's possibly stale operations, so no new proof is
+    // issued and the existing proof and cookie govern until they expire.
     const proofGrantExpiry = liveGrant
       ? Date.parse(liveGrant.grantExpiresAt) < Date.parse(result.cart.expiresAt)
         ? liveGrant.grantExpiresAt
@@ -137,14 +160,15 @@ export async function POST(request: NextRequest) {
       : principal.expiresAt;
     let proof: string | null = null;
     try {
+      if (!liveGrant) {
+        throw new Error('live grant unavailable');
+      }
       proof = issueCartSessionProof(
         {
           // Renew with the live grant's operations, not the incoming
           // proof's: a grant narrowed (or widened) since issuance must
-          // be reflected in the renewed proof. The incoming proof's
-          // operations are only the fallback when the reload failed.
-          allowedOperations:
-            liveGrant?.allowedOperations ?? principal.allowedOperations,
+          // be reflected in the renewed proof.
+          allowedOperations: liveGrant.allowedOperations,
           cartId: principal.cartId,
           grantId: principal.grantId,
           grantExpiresAt: proofGrantExpiry,
@@ -179,10 +203,13 @@ export async function POST(request: NextRequest) {
         : result.cart.expiresAt;
     const maxAge = cartSessionCookieMaxAge(cookieExpiry);
     // A non-positive lifetime would delete the cookie the body proof just
-    // renewed; omit the cookie instead and let the body proof govern.
-    if (proof && maxAge > 0) {
-      setCartSessionCookie(response, context.merchant.id, proof, maxAge);
-    }
+    // renewed; omit the proof cookie instead and let the body proof govern.
+    applyCartSnapshotCookies(response, {
+      merchantId: context.merchant.id,
+      cart: result.cart,
+      proof,
+      cookieMaxAge: maxAge,
+    });
     return response;
   } catch (error) {
     console.error('Unexpected error in POST /api/storefront/cart/commands:', {

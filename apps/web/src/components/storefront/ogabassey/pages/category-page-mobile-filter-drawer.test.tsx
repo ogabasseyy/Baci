@@ -41,6 +41,18 @@ describe('CategoryPageMobileFilterDrawer', () => {
     ).toBeInTheDocument();
   });
 
+  it('applies a custom action without calling the dismiss callback', () => {
+    const apply = vi.fn();
+    const { onClose } = renderDrawer({
+      action: { label: 'Apply filters', onClick: apply },
+      children: <label htmlFor="drawer-sort">Sort by</label>,
+    });
+    expect(screen.getByText('Sort by')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Apply filters' }));
+    expect(apply).toHaveBeenCalledOnce();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
   it('invokes onClose from the backdrop, the header close, and the results button', () => {
     const { onClose } = renderDrawer();
 

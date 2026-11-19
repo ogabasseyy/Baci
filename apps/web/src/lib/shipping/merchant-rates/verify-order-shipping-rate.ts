@@ -97,6 +97,8 @@ export type VerifyOrderShippingRateResult =
        * rate carries no address.
        */
       pickupAddress?: MerchantPickupAddress | null;
+      /** Revision from the same database statement as the loaded rate config. */
+      shippingConfigRevision?: string;
     }
   | {
       ok: false;
@@ -218,5 +220,8 @@ export async function verifyOrderShippingRate(
     // Snapshot the collection point for pickup rates so the order retains it
     // durably; `ship` rates omit the field entirely.
     ...(rate.kind === 'pickup' ? { pickupAddress: rate.pickupAddress } : {}),
+    ...(payload.shippingConfigRevision
+      ? { shippingConfigRevision: payload.shippingConfigRevision }
+      : {}),
   };
 }

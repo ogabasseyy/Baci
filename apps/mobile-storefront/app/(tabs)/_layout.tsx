@@ -6,8 +6,10 @@ import {
   TabBarIcon,
   TabBarLabel,
 } from '@/components/navigation/TabBarComponents';
+import { palette } from '@/constants/Colors';
 import { useWarmMerchantPaymentSettings } from '@/hooks/use-warm-merchant-payment-settings';
 import { useTheme } from '@/hooks/useTheme';
+import { CONFIG } from '@/lib/config';
 import { useAuthStore } from '@/stores/auth-store';
 import { useCartStore } from '@/stores/cart-store';
 import { useSavedStore } from '@/stores/saved-store';
@@ -25,7 +27,13 @@ export function ErrorBoundary({
 export const unstable_settings = { initialRouteName: 'index' };
 
 export default function TabLayout() {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
+  const homeActiveColor =
+    CONFIG.MERCHANT_SLUG === 'ogabassey'
+      ? isDark
+        ? palette.red[400]
+        : palette.red[600]
+      : undefined;
   // Warm the payment-settings cache at storefront launch so quick-adds
   // resolve the live shipping-insurance toggle instead of unknown, and
   // reconcile lines that were added while it was still loading.
@@ -95,12 +103,17 @@ export default function TabLayout() {
           freezeOnBlur: true,
           tabBarIcon: ({ focused }) => (
             <TabBarIcon
+              activeColor={homeActiveColor}
               name={focused ? 'home' : 'home-outline'}
               focused={focused}
             />
           ),
           tabBarLabel: ({ focused }) => (
-            <TabBarLabel focused={focused} label="Home" />
+            <TabBarLabel
+              activeColor={homeActiveColor}
+              focused={focused}
+              label="Home"
+            />
           ),
         }}
       />

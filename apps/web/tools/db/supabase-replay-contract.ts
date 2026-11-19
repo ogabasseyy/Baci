@@ -251,7 +251,7 @@ export async function verifySupabaseReplayContract(options: {
   }
   const psqlBin = options.psqlBin ?? process.env.PSQL_BIN ?? DEFAULT_PSQL_BIN;
   if (
-    !/^psql \(PostgreSQL\) 18\.3(?: \(.+\))?$/.test(
+    !/^psql \(PostgreSQL\) 18\.6(?: \(.+\))?$/.test(
       await stdout(options.runCommand, psqlBin, ['--version'])
     )
   ) {

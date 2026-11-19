@@ -1,7 +1,7 @@
 'use client';
 
 import { ShoppingBag } from 'lucide-react';
-import { useCart } from '@/hooks/cart';
+import { type CartItem, useCart } from '@/hooks/cart';
 import { useCurrency } from '@/hooks/use-currency';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import {
@@ -13,17 +13,26 @@ import {
 import { hasStorefrontPriceNegotiation } from '@/lib/storefront-price-negotiation';
 import { CartVariantDetails } from '../cart-variant-details';
 import { hasCartMerchantContext } from '../cart-sidebar-merchant-context';
+import { ChatCartCheckoutReview } from './chat-cart-checkout-review';
 
 export function ChatCartReview() {
-  const { cart, setIsCartOpen, isHydrated, merchantSlug } = useCart();
-  const { formatCurrency } = useCurrency();
-  const merchant = useMerchantSafe()?.merchant;
+  const {
+    cart,
+    setIsCartOpen,
+    isHydrated,
+    merchantSlug,
+    sharedCartEnabled,
+    sharedCartRef,
+    syncStatus,
+    refreshSharedCart,
+  } = useCart();
+  const { formatCurrency, currencyCode } = useCurrency();
+  const merchantContext = useMerchantSafe();
+  const merchant = merchantContext?.merchant;
 
   if (!isHydrated) {
     return (
-      <div
-        className="rounded-xl border border-store-border bg-store-background p-3 text-store-background-text"
-      >
+      <div className="rounded-xl border border-store-border bg-store-background p-3 text-store-background-text">
         <div className="mb-2 flex items-center gap-2 font-semibold">
           <ShoppingBag size={16} aria-hidden="true" />
           <h4>Review your cart</h4>
@@ -50,9 +59,7 @@ export function ChatCartReview() {
   const includesProtection = displayCart.some((item) => item.hasAssurance);
 
   return (
-    <div
-      className="rounded-xl border border-store-border bg-store-background p-3 text-store-background-text"
-    >
+    <div className="rounded-xl border border-store-border bg-store-background p-3 text-store-background-text">
       <div className="mb-2 flex items-center gap-2 font-semibold">
         <ShoppingBag size={16} aria-hidden="true" />
         <h4>Review your cart</h4>
@@ -64,7 +71,7 @@ export function ChatCartReview() {
         </p>
       ) : (
         <ul className="divide-y divide-store-border">
-          {displayCart.map((item) => (
+          {displayCart.map((item: CartItem) => (
             <li key={item.cartItemId} className="py-2 text-sm">
               <div className="font-medium">{item.name}</div>
               <CartVariantDetails
@@ -101,6 +108,16 @@ export function ChatCartReview() {
           >
             Open cart to edit items
           </button>
+          <ChatCartCheckoutReview
+            items={displayCart}
+            merchantId={merchant?.id}
+            merchantSlug={merchantSlug}
+            currencyCode={currencyCode}
+            sharedCartEnabled={sharedCartEnabled}
+            sharedCartRef={sharedCartRef}
+            syncStatus={syncStatus}
+            refreshSharedCart={refreshSharedCart}
+          />
         </>
       )}
     </div>

@@ -87,4 +87,84 @@ describe('repair device product fallback pagination', () => {
       suggestions: [],
     });
   });
+
+  it('continues past a sparse page filtered by projection when additional ranked pages exist', async () => {
+    vi.useFakeTimers();
+    mocks.apiGet.mockImplementation((url: unknown) => {
+      if (typeof url === 'string' && url.includes('offset=50')) {
+        return Promise.resolve({
+          count: 60,
+          pagination: {
+            hasMore: false,
+            limit: 50,
+            offset: 50,
+            totalCount: 60,
+          },
+          products: [
+            { id: 'pixel-9', name: 'Google Pixel 9', category: 'Smartphones' },
+          ],
+        });
+      }
+      return Promise.resolve({
+        count: 60,
+        pagination: {
+          hasMore: true,
+          limit: 50,
+          offset: 0,
+          totalCount: 60,
+        },
+        // Sparse page: only 2 products survived projection out of a 50-item window
+        products: [
+          { id: 'case-1', name: 'Case 1', category: 'Accessories' },
+          { id: 'case-2', name: 'Case 2', category: 'Accessories' },
+        ],
+      });
+    });
+
+    const { result } = renderSuggestions();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(250);
+    });
+
+    expect(mocks.apiGet).toHaveBeenCalledTimes(2);
+    expect(mocks.apiGet.mock.calls[0]?.[0]).toContain('offset=0');
+    expect(mocks.apiGet.mock.calls[1]?.[0]).toContain('offset=50');
+    expect(result.current.suggestions).toMatchObject([
+      { productId: 'pixel-9', deviceType: 'Smartphone' },
+    ]);
+  });
+
+  it('continues past a sparse page with count: 60 and no pagination field', async () => {
+    vi.useFakeTimers();
+    mocks.apiGet.mockImplementation((url: unknown) => {
+      if (typeof url === 'string' && url.includes('offset=50')) {
+        return Promise.resolve({
+          count: 60,
+          products: [
+            { id: 'pixel-9', name: 'Google Pixel 9', category: 'Smartphones' },
+          ],
+        });
+      }
+      return Promise.resolve({
+        count: 60,
+        // Sparse page with fewer items than 50 and no pagination object
+        products: [
+          { id: 'case-1', name: 'Case 1', category: 'Accessories' },
+          { id: 'case-2', name: 'Case 2', category: 'Accessories' },
+        ],
+      });
+    });
+
+    const { result } = renderSuggestions();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(250);
+    });
+
+    expect(mocks.apiGet).toHaveBeenCalledTimes(2);
+    expect(mocks.apiGet.mock.calls[0]?.[0]).toContain('offset=0');
+    expect(mocks.apiGet.mock.calls[1]?.[0]).toContain('offset=50');
+    expect(result.current.suggestions).toMatchObject([
+      { productId: 'pixel-9', deviceType: 'Smartphone' },
+    ]);
+  });
 });

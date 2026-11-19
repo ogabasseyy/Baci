@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { describe, expect, it } from 'vitest';
 import { validateImportedContent } from './review-handoff-content';
 import { hasUnpreservableStylesheet } from './review-handoff-stylesheet';

@@ -4,7 +4,10 @@ import type { MutableRefObject } from 'react';
 import type { AppStateStatus } from 'react-native';
 import { maybeShowQuizStartInterstitial } from '@/lib/quiz-start-interstitial';
 import type { QuizEvent } from '@/services/quiz-types';
-import { useQuizStartInterstitialRequest } from './use-quiz-start-interstitial-request';
+import {
+  QUIZ_AD_BREAK_NOTICE_MS,
+  useQuizStartInterstitialRequest,
+} from './use-quiz-start-interstitial-request';
 
 jest.mock('@/lib/quiz-start-interstitial', () => ({
   maybeShowQuizStartInterstitial: jest.fn(async () => 'skipped'),
@@ -24,6 +27,11 @@ type InterstitialOptions = NonNullable<
 
 function setup(getRemainingSeconds = 60) {
   mockMaybeShowQuizStartInterstitial.mockClear();
+  return setupWithoutClear(getRemainingSeconds);
+}
+
+// For tests that queue a one-off helper result before rendering.
+function setupWithoutClear(getRemainingSeconds = 60) {
   const refs = {
     appStateRef: ref<AppStateStatus>('active'),
     getRemainingSeconds: jest.fn(() => getRemainingSeconds),
@@ -31,6 +39,7 @@ function setup(getRemainingSeconds = 60) {
     isStartBlockedRef: ref(false),
     onStartRef: ref(jest.fn()),
     pendingStartRef: ref<QuizEvent | null>(null),
+    setIsAdBreakNoticeVisible: jest.fn(),
     setIsFullscreenAdActive: jest.fn(),
     startedRef: ref(false),
     stoppedRef: ref(false),
@@ -176,5 +185,102 @@ describe('useQuizStartInterstitialRequest', () => {
 
     expect(refs.isFullscreenAdActiveRef.current).toBe(false);
     expect(refs.setIsFullscreenAdActive).not.toHaveBeenCalled();
+  });
+
+  describe('ad break notice', () => {
+    it('covers the room for the notice time before the ad may present', async () => {
+      jest.useFakeTimers();
+      // The request stays in flight while the notice is up.
+      mockMaybeShowQuizStartInterstitial.mockReturnValueOnce(
+        new Promise<'shown' | 'skipped'>(() => undefined)
+      );
+      const { options, refs } = setupWithoutClear();
+      const settled = jest.fn();
+
+      let notice: Promise<void> | undefined;
+      act(() => {
+        notice = options()?.beforePresent?.();
+      });
+      void notice?.then(settled);
+      expect(refs.setIsAdBreakNoticeVisible).toHaveBeenLastCalledWith(true);
+
+      await act(async () => {
+        jest.advanceTimersByTime(QUIZ_AD_BREAK_NOTICE_MS - 1);
+        await Promise.resolve();
+      });
+      expect(settled).not.toHaveBeenCalled();
+
+      await act(async () => {
+        jest.advanceTimersByTime(1);
+        await Promise.resolve();
+      });
+      expect(settled).toHaveBeenCalledTimes(1);
+      jest.useRealTimers();
+    });
+
+    it('takes the notice down when the ad closes', () => {
+      const { options, refs } = setup();
+
+      act(() => options()?.onClosed?.());
+
+      expect(refs.setIsAdBreakNoticeVisible).toHaveBeenLastCalledWith(false);
+    });
+
+    it('takes the notice down when the ad is abandoned after it', async () => {
+      const { refs } = setup();
+
+      await flushPromises();
+
+      // The mocked helper resolves 'skipped', as an abandoned load does.
+      expect(refs.setIsAdBreakNoticeVisible).toHaveBeenLastCalledWith(false);
+    });
+
+    it('settles a notice still on screen when the room unmounts', async () => {
+      jest.useFakeTimers();
+      const { options, unmount } = setup();
+      const settled = jest.fn();
+      let notice: Promise<void> | undefined;
+      act(() => {
+        notice = options()?.beforePresent?.();
+      });
+      void notice?.then(settled);
+
+      unmount();
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      expect(settled).toHaveBeenCalledTimes(1);
+      expect(options()?.isCancelled?.()).toBe(true);
+      jest.useRealTimers();
+    });
+  });
+
+  it('bugfix: ends a counting-down notice when the request settles early', async () => {
+    jest.useFakeTimers();
+    let settleRequest: (outcome: 'shown' | 'skipped') => void = () => undefined;
+    mockMaybeShowQuizStartInterstitial.mockReturnValueOnce(
+      new Promise<'shown' | 'skipped'>((resolve) => {
+        settleRequest = resolve;
+      })
+    );
+    const { options } = setupWithoutClear();
+    const settled = jest.fn();
+    let notice: Promise<void> | undefined;
+    act(() => {
+      notice = options()?.beforePresent?.();
+    });
+    void notice?.then(settled);
+
+    // An SDK error or the load deadline abandons the ad mid-notice.
+    await act(async () => {
+      settleRequest('skipped');
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Settled by the early exit, well before the notice time is up.
+    expect(settled).toHaveBeenCalledTimes(1);
+    jest.useRealTimers();
   });
 });

@@ -45,3 +45,15 @@ neutering the signal is a loud diff the owner must approve — but a
 base-owned `pull_request_target` gate would close even the loud vector
 (social-engineering the owner); tracked in issue #3622, while the
 ~5k-line auditor (unreviewable per-PR) stays base-pinned.
+
+## Repository visibility and SARIF publication
+
+Public repositories publish Semgrep SARIF to GitHub code scanning. Private
+repositories save `semgrep-private-sarif` as an Actions artifact instead;
+this does not create GitHub code-scanning alerts. The Semgrep finding and
+analysis-completeness gates still fail the job independently of publication.
+The private artifact lasts one day for a clean job or seven days when an
+earlier security step failed. Raw diagnostic artifacts remain available under
+the existing retention rules. This is a visibility-based policy, so it also
+uses artifacts for private repositories with a paid code-scanning entitlement;
+changing that behavior requires a reviewed workflow change.

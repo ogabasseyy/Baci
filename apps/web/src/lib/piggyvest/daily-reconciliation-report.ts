@@ -1,4 +1,5 @@
 import { escapeHtmlText } from '@/lib/sanitize';
+import { creditGapLines, creditGapPageFragment } from './credit-gap-report';
 import type {
   BalanceFinding,
   ReconciliationReport,
@@ -71,8 +72,12 @@ export function renderReconciliationEmail(report: ReconciliationReport): {
     const aboveRecord = report.balances.some(
       (balance) => balance.kind === 'above_expected'
     );
+    const creditReview =
+      report.creditGap?.status === 'checked' &&
+      report.creditGap.findings.length > 0;
     if (report.status === 'attention') headline = 'NEEDS ATTENTION';
     else if (aboveRecord) headline = 'REVIEW balances above record';
+    else if (creditReview) headline = 'REVIEW PiggyVest credit findings';
     else if (report.deferred.wallets > 0)
       headline = `all clear, ${report.deferred.wallets} wallet(s) deferred to later runs`;
     else headline = 'all clear';
@@ -95,6 +100,7 @@ export function renderReconciliationEmail(report: ReconciliationReport): {
         '',
         `${report.deferred.wallets} wallet(s) were not in today's window and will be checked on later runs.`
       );
+    lines.push(...creditGapLines(report.creditGap));
     if (report.deadlineReached)
       lines.push(
         '',
@@ -121,5 +127,5 @@ export function pageReasonOf(report: ReconciliationReport): string | null {
   const count = (kind: BalanceFinding['kind']) =>
     report.balances.filter((balance) => balance.kind === kind).length;
   const deadline = report.deadlineReached ? ' deadline=reached' : '';
-  return `stuck=${report.stuckTotal} below_expected=${count('below_expected')} unreadable=${count('unreadable')} truncated=${report.truncated.stuck ? 'yes' : 'no'}${deadline}`;
+  return `stuck=${report.stuckTotal} below_expected=${count('below_expected')} unreadable=${count('unreadable')} truncated=${report.truncated.stuck ? 'yes' : 'no'}${creditGapPageFragment(report.creditGap)}${deadline}`;
 }

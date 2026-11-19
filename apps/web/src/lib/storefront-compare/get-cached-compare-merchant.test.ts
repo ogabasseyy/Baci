@@ -53,6 +53,13 @@ describe('getCachedCompareMerchantByIdentifier', () => {
       expect.anything(),
       'ogabassey'
     );
+    expect(mockCacheTag.mock.calls.flat()).toEqual(
+      expect.arrayContaining([
+        'merchant-id-merchant-1',
+        'merchant-ogabassey',
+        'merchant-slug-ogabassey',
+      ])
+    );
   });
 
   it('returns null for invalid identifiers without querying Supabase', async () => {

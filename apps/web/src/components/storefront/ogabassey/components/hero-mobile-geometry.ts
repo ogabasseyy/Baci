@@ -20,10 +20,10 @@ export const HERO_MOBILE_EYEBROW_CLASSES =
   'text-[9px] font-semibold uppercase tracking-[0.12em] text-store-primary';
 
 export const HERO_MOBILE_TITLE_CLASSES =
-  'line-clamp-3 text-[1.25rem] font-extrabold leading-[1.05] text-store-secondary-text';
+  'ogabassey-hero-title line-clamp-3 text-[1.25rem] font-extrabold leading-[1.05] text-store-secondary-text';
 
 export const HERO_MOBILE_PRICE_CLASSES =
-  'text-[11px] font-semibold text-store-secondary-text';
+  'ogabassey-hero-price text-[11px] font-semibold text-store-secondary-text';
 
 export const HERO_MOBILE_CTA_CLASSES =
   'mt-2 inline-flex w-fit items-center rounded-full bg-store-primary px-4 py-1.5 text-[11px] font-bold text-store-on-primary shadow-sm';

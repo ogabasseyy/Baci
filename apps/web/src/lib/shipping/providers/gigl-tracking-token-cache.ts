@@ -21,6 +21,7 @@ import {
   type CacheCredentials,
   decryptGiglToken,
   encryptGiglToken,
+  GiglTokenCacheKdfError,
 } from './gigl-tracking-cache-crypto';
 
 function errorCode(error: unknown): string | undefined {
@@ -219,7 +220,12 @@ export function createGiglTrackingTokenCache({
               await decryptGiglToken(credentials, parsed.data)
             );
             if (result.success && usable(result.data)) token = result.data;
-          } catch {
+          } catch (error) {
+            if (error instanceof GiglTokenCacheKdfError) {
+              // Transient KDF/system errors should not evict a potentially valid cache file.
+              onUnavailable();
+              return null;
+            }
             // Wrong credentials or a modified ciphertext is a cache miss.
           }
         }

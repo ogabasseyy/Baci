@@ -1,6 +1,7 @@
 import { mkdir, open, readFile, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as cacheCrypto from './gigl-tracking-cache-crypto';
 import { createGiglTrackingTokenCache } from './gigl-tracking-token-cache';
 import {
   cleanupFixtures,
@@ -274,5 +275,32 @@ describe('GIGL tracking token cache', () => {
     const value = { ...token, customerType };
     await cache.save(value);
     expect(await cache.load()).toEqual(value);
+  });
+
+  it('preserves token.json without eviction on transient KDF errors', async () => {
+    const { directory } = await fixture();
+    const onUnavailable = vi.fn();
+    const cache = createGiglTrackingTokenCache({
+      isLocked: () => true,
+      directory,
+      credentials,
+      now: () => now,
+      onUnavailable,
+    });
+    await cache.save(token);
+    const spy = vi
+      .spyOn(cacheCrypto, 'decryptGiglToken')
+      .mockRejectedValueOnce(
+        new cacheCrypto.GiglTokenCacheKdfError(new Error('scrypt OOM'))
+      );
+
+    try {
+      expect(await cache.load()).toBeNull();
+      expect(onUnavailable).toHaveBeenCalledTimes(1);
+      expect(await stat(join(directory, 'token.json'))).toBeDefined();
+      expect(await cache.load()).toEqual(token);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

@@ -17,6 +17,19 @@ export type CacheCredentials = {
 };
 type Record = z.infer<typeof giglTrackingTokenCacheRecordSchema>;
 
+/** Error raised when scrypt key derivation fails transiently rather than from corrupt ciphertext. */
+export class GiglTokenCacheKdfError extends Error {
+  constructor(cause: unknown) {
+    super(
+      cause instanceof Error
+        ? cause.message
+        : 'GIGL tracking token cache key derivation failed'
+    );
+    this.name = 'GiglTokenCacheKdfError';
+    this.cause = cause;
+  }
+}
+
 function deriveKey(
   credentials: CacheCredentials,
   salt: Buffer
@@ -28,7 +41,7 @@ function deriveKey(
   ]);
   return new Promise((resolve, reject) => {
     scrypt(secret, salt, 32, { N: 16384, r: 8, p: 1 }, (error, key) => {
-      if (error) reject(error);
+      if (error) reject(new GiglTokenCacheKdfError(error));
       else resolve(key);
     });
   });

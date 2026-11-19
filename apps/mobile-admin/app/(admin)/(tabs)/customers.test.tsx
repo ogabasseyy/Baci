@@ -2,6 +2,7 @@ import '@testing-library/jest-dom/vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import type React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { oxygenProcessingOrder } from '@/test/fixtures/oxygen-follow-up';
 import CustomersScreen from './customers';
 
 vi.mock('@shopify/flash-list', async () => {
@@ -46,9 +47,10 @@ vi.mock('react-native-safe-area-context', async () => {
   };
 });
 
+const navigation = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
 vi.mock('expo-router', () => ({
-  router: { push: vi.fn(), replace: vi.fn() },
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  router: navigation,
+  useRouter: () => navigation,
 }));
 
 vi.mock('expo-linking', () => ({
@@ -84,6 +86,7 @@ const customerHookMocks = vi.hoisted(() => ({
   invalidateQueries: vi.fn(),
   useCustomers: vi.fn(),
   useFailedOrders: vi.fn(),
+  useOxygenFollowUps: vi.fn(),
   useCustomerStats: vi.fn(),
   useMerchant: vi.fn(),
 }));
@@ -103,27 +106,24 @@ vi.mock('@/hooks/useCustomers', () => ({
 vi.mock('@/hooks/useFailedOrders', () => ({
   useFailedOrders: customerHookMocks.useFailedOrders,
 }));
+vi.mock('@/hooks/useOxygenFollowUps', () => ({
+  useOxygenFollowUps: customerHookMocks.useOxygenFollowUps,
+}));
 
 vi.mock('@/hooks/useMerchant', () => ({
   useMerchant: customerHookMocks.useMerchant,
 }));
 
-/**
- * Colocated cover for the CustomersScreen follow-up error surface.
- *
- * Regression origin: the Follow Up tab reported a *failed* query as "All
- * recent transactions are successful!". See PR #3200 — an ambiguous
- * orders->transactions embed made every request fail with PostgREST
- * PGRST201, leaving `data` undefined and the success empty state on screen
- * while 145 orders awaited follow-up.
- *
- * The screen's broader rendering, tab, and pagination cases live in
- * `__tests__/admin/tabs/customers.test.tsx`; these are kept separate so
- * neither module exceeds the 300-line limit.
- */
 describe('CustomersScreen follow-up error surface', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    customerHookMocks.useOxygenFollowUps.mockReturnValue({
+      data: [],
+      isError: false,
+      isLoading: false,
+      isFetching: false,
+      refetch: vi.fn(),
+    });
     customerHookMocks.useCustomers.mockReturnValue({
       data: { pages: [{ customers: [] }] },
       isLoading: false,
@@ -139,9 +139,38 @@ describe('CustomersScreen follow-up error surface', () => {
       merchant: { id: 'merchant-1', payout_currency: 'NGN' },
     });
   });
-
+  it('shows the Oxygen state on the follow-up card', () => {
+    customerHookMocks.useFailedOrders.mockReturnValue({
+      data: [],
+      isError: false,
+      isLoading: false,
+      refetch: vi.fn(),
+    });
+    customerHookMocks.useOxygenFollowUps.mockReturnValue({
+      data: [oxygenProcessingOrder],
+      isError: false,
+      isLoading: false,
+      isFetching: false,
+      refetch: vi.fn(),
+    });
+    render(<CustomersScreen />);
+    expect(screen.getByText(/Oxygen · Processing/)).toBeTruthy();
+    expect(
+      screen.getByRole('button', {
+        name: /Follow up: Ada.*Oxygen · Processing/,
+      })
+    ).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: /Follow up: Ada.*Oxygen · Processing/,
+      })
+    );
+    expect(navigation.push).toHaveBeenCalledWith({
+      pathname: '/(admin)/order/[id]',
+      params: { id: 'oxygen-1' },
+    });
+  });
   it('does not claim transactions are successful when the follow-up query errors', () => {
-    // Arrange: the query throws, so `data` is undefined and the list is empty.
     customerHookMocks.useFailedOrders.mockReturnValue({
       data: undefined,
       isError: true,
@@ -149,19 +178,15 @@ describe('CustomersScreen follow-up error surface', () => {
       refetch: vi.fn(),
     });
 
-    // Act
     render(<CustomersScreen />);
 
-    // Assert
     expect(
-      screen.queryByText('All recent transactions are successful!')
+      screen.queryByText('No follow-ups need attention right now.')
     ).toBeNull();
     expect(screen.queryByText('No issues')).toBeNull();
     expect(screen.getByText("Couldn't load follow-ups")).toBeTruthy();
   });
-
   it('refetches follow-ups when the error state retry is pressed', () => {
-    // Arrange
     const refetch = vi.fn();
     customerHookMocks.useFailedOrders.mockReturnValue({
       data: undefined,
@@ -171,17 +196,14 @@ describe('CustomersScreen follow-up error surface', () => {
     });
     render(<CustomersScreen />);
 
-    // Act
     fireEvent.click(
       screen.getByRole('button', { name: 'Retry loading follow-ups' })
     );
 
-    // Assert
     expect(refetch).toHaveBeenCalledTimes(1);
   });
 
   it('still reports success when the query succeeds with no follow-ups', () => {
-    // Arrange: the success path must survive the error branch being added.
     customerHookMocks.useFailedOrders.mockReturnValue({
       data: [],
       isError: false,
@@ -189,17 +211,13 @@ describe('CustomersScreen follow-up error surface', () => {
       refetch: vi.fn(),
     });
 
-    // Act
     render(<CustomersScreen />);
 
-    // Assert
     expect(screen.getByText('No issues')).toBeTruthy();
     expect(screen.queryByText("Couldn't load follow-ups")).toBeNull();
   });
 
   it('does not report no issues when merchant context fails and retries merchant context', () => {
-    // Arrange: useFailedOrders is disabled without a merchant id, so its
-    // undefined data must not be mistaken for a successful empty queue.
     customerHookMocks.useMerchant.mockReturnValue({
       merchant: null,
       isLoading: false,
@@ -212,10 +230,8 @@ describe('CustomersScreen follow-up error surface', () => {
       refetch: vi.fn(),
     });
 
-    // Act
     render(<CustomersScreen />);
 
-    // Assert
     expect(screen.queryByText('No issues')).toBeNull();
     expect(screen.getByText('Failed to load store')).toBeTruthy();
 
@@ -229,8 +245,6 @@ describe('CustomersScreen follow-up error surface', () => {
   });
 
   it('warns that rows are stale when a refresh fails over cached follow-ups', () => {
-    // Arrange: React Query keeps the cached rows on a failed refetch, so the
-    // empty state never renders and the staleness would go unannounced.
     customerHookMocks.useFailedOrders.mockReturnValue({
       data: [
         {
@@ -253,12 +267,12 @@ describe('CustomersScreen follow-up error surface', () => {
       refetch: vi.fn(),
     });
 
-    // Act
     render(<CustomersScreen />);
 
-    // Assert
     expect(
-      screen.getByText("Couldn't refresh. Showing the last loaded follow-ups.")
+      screen.getByText(
+        "Some follow-ups couldn't be loaded or may be out of date."
+      )
     ).toBeTruthy();
     expect(
       screen.getByRole('button', { name: 'Retry loading follow-ups' })
@@ -266,8 +280,6 @@ describe('CustomersScreen follow-up error surface', () => {
   });
 
   it('disables the retry control while a retry is already in flight', () => {
-    // Arrange: isLoading stays false once the query is in its error state, so
-    // only isFetching distinguishes an in-flight retry.
     customerHookMocks.useFailedOrders.mockReturnValue({
       data: undefined,
       isError: true,
@@ -276,10 +288,8 @@ describe('CustomersScreen follow-up error surface', () => {
       refetch: vi.fn(),
     });
 
-    // Act
     render(<CustomersScreen />);
 
-    // Assert
     const retry = screen.getByRole('button', {
       name: 'Retry loading follow-ups',
     });

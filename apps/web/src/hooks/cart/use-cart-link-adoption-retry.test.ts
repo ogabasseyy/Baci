@@ -1,10 +1,14 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import {
   fetchSharedCartProducts,
   fetchSharedCartSnapshot,
 } from './shared-cart-client';
-import { snapshot } from './shared-cart-provisioning.test-support';
+import {
+  resetCartSessionHintForTests,
+  snapshot,
+  writeCartSessionHint,
+} from './shared-cart-provisioning.test-support';
 import { useSharedCart } from './use-shared-cart';
 
 vi.mock('./shared-cart-client', () => ({
@@ -17,6 +21,8 @@ vi.mock('./shared-cart-client', () => ({
 const MERCHANT_ID = '11111111-1111-4111-8111-111111111111';
 const SLUG = 'ogabassey';
 const CART_ID = '22222222-2222-4222-8222-222222222222';
+beforeEach(() => writeCartSessionHint(MERCHANT_ID, '1'));
+afterEach(() => resetCartSessionHintForTests());
 it('bounds unavailable adoption and lets an explicit retry recover', async () => {
   vi.clearAllMocks();
   window.localStorage.clear();

@@ -1,12 +1,9 @@
 'use client';
-import { useRouter, useSearchParams } from 'next/navigation';
 import type React from 'react';
 import { useCart } from '@/hooks/cart';
 import { useCurrency } from '@/hooks/use-currency';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
-import { asRoute } from '@/lib/routes';
 import { hasStorefrontPriceNegotiation } from '@/lib/storefront-price-negotiation';
-import { checkoutHref } from './checkout/checkout-href';
 import { CheckoutCartScreen } from './checkout/components/CheckoutCartScreen';
 import { CheckoutResumeFallback } from './checkout/components/CheckoutResumeFallback';
 import { deriveCheckoutCartModel } from './checkout/derive-checkout-cart-model';
@@ -15,10 +12,10 @@ import { useCheckoutAttemptSession } from './checkout/hooks/use-checkout-attempt
 import { useCheckoutDeliverySession } from './checkout/hooks/use-checkout-delivery-session';
 import { useCheckoutFinancialSession } from './checkout/hooks/use-checkout-financial-session';
 import { useCheckoutFormSession } from './checkout/hooks/use-checkout-form-session';
+import { useCheckoutNavigation } from './checkout/hooks/use-checkout-navigation';
 import { useCheckoutPaymentExecution } from './checkout/hooks/use-checkout-payment-execution';
 import { useCheckoutScrollTop } from './checkout/hooks/use-checkout-scroll-top';
 import { useCheckoutUser } from './checkout/hooks/use-checkout-user';
-import { navigateCheckoutResult } from './checkout/navigate-checkout-result';
 import type { OxygenCheckoutSlots } from './checkout/oxygen-checkout-slots';
 import { checkoutPaymentRails } from './checkout/payment-rail-availability';
 import { shouldShowResumeGate } from './checkout/should-show-resume-gate';
@@ -28,7 +25,7 @@ export const CheckoutPage: React.FC<OxygenCheckoutSlots> = (oxygenSlots) => {
   const {
     cart,
     clearCart,
-    isHydrated,
+    isHydrated: isCartHydrated,
     removeFromCart,
     sharedCartRef,
     sharedCartEnabled,
@@ -54,9 +51,12 @@ export const CheckoutPage: React.FC<OxygenCheckoutSlots> = (oxygenSlots) => {
     bankTransferCheckoutAvailable,
   } = checkoutPaymentRails(merchant, currencyCode);
   const basePath = merchantContext?.basePath;
-  const router = useRouter();
-  const getHref = (path: string) => checkoutHref(basePath, path);
-  const searchParams = useSearchParams();
+  const { searchParams, isHydrated, getHref, routerPush, pushSuccessRoute } =
+    useCheckoutNavigation({
+      basePath,
+      isCartHydrated,
+      merchantSlug: merchant?.slug,
+    });
   const user = useCheckoutUser();
   const checkoutFormSession = useCheckoutFormSession({ isHydrated, user });
   const {
@@ -83,7 +83,7 @@ export const CheckoutPage: React.FC<OxygenCheckoutSlots> = (oxygenSlots) => {
     navigation: {
       setCurrentStep,
       setCompletedSteps,
-      routerPush: (url) => router.push(asRoute(url)),
+      routerPush,
       getHref,
     },
     funnel: {
@@ -211,12 +211,7 @@ export const CheckoutPage: React.FC<OxygenCheckoutSlots> = (oxygenSlots) => {
     merchant,
     navigation: {
       flow: checkoutFlow,
-      pushSuccessRoute: (url) =>
-        navigateCheckoutResult(
-          url,
-          (path) => router.push(asRoute(path)),
-          (path) => window.location.assign(path)
-        ),
+      pushSuccessRoute,
       getHref,
     },
     payment: {
@@ -249,7 +244,7 @@ export const CheckoutPage: React.FC<OxygenCheckoutSlots> = (oxygenSlots) => {
         cartEmpty={checkoutCart.length === 0}
         isAutoTriggerProcessing={isAutoTriggerProcessing}
         isLoadingResumedOrder={isLoadingResumedOrder}
-        navigate={(path) => router.push(asRoute(getHref(path)))}
+        navigate={(path) => routerPush(getHref(path))}
         resumeOrderError={resumeOrderError}
         resumeOrderId={resumeOrderId}
         resumedOrderId={resumedOrder?.id}
@@ -280,7 +275,7 @@ export const CheckoutPage: React.FC<OxygenCheckoutSlots> = (oxygenSlots) => {
       formatCurrencyAuto,
     },
     actions: {
-      onReturnToCart: () => router.push(asRoute(getHref('/cart'))),
+      onReturnToCart: () => routerPush(getHref('/cart')),
     },
     availability: {
       oxygenAllowed,

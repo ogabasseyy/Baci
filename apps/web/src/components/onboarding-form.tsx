@@ -28,6 +28,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
+import { runOnEnter } from '@/lib/run-on-enter';
 import { createClient } from '@/lib/supabase/client';
 import {
   checkPasswordStrength,
@@ -318,17 +319,16 @@ export default function OnboardingForm() {
     if (step > 1) setStep((s) => s - 1);
   };
 
-  const handleKeyDown = async (
+  const handleKeyDown = (
     e: React.KeyboardEvent<HTMLInputElement | HTMLButtonElement>
   ) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
+    runOnEnter(e, () => {
       if (step < totalSteps) {
-        await handleNext();
+        void handleNext();
       } else {
         document.getElementById('submit-button')?.click();
       }
-    }
+    });
   };
 
   const handleMagicLinkSent = () => {

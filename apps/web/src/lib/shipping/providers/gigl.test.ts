@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('./gigl.tracking-batch', () => ({
   trackGiglShipmentBatch: vi.fn(),
+  trackGiglShipmentBatchOutcomes: vi.fn(),
 }));
 vi.mock('./gigl.preshipment-ownership', () => ({
   attestGiglWaybillOwnership: vi.fn(),
@@ -9,9 +10,15 @@ vi.mock('./gigl.preshipment-ownership', () => ({
 
 import { GiglProvider, giglProvider } from './gigl';
 import { attestGiglWaybillOwnership } from './gigl.preshipment-ownership';
-import { trackGiglShipmentBatch } from './gigl.tracking-batch';
+import {
+  trackGiglShipmentBatch,
+  trackGiglShipmentBatchOutcomes,
+} from './gigl.tracking-batch';
 
 const trackGiglShipmentBatchMock = vi.mocked(trackGiglShipmentBatch);
+const trackGiglShipmentBatchOutcomesMock = vi.mocked(
+  trackGiglShipmentBatchOutcomes
+);
 const attestGiglWaybillOwnershipMock = vi.mocked(attestGiglWaybillOwnership);
 
 describe('GiglProvider orchestrator', () => {
@@ -68,5 +75,18 @@ describe('GiglProvider orchestrator', () => {
     trackGiglShipmentBatchMock.mockRejectedValueOnce(error);
 
     await expect(provider.trackShipments(['WB-1'])).rejects.toBe(error);
+  });
+
+  it('forwards batch tracking outcomes including per-waybill failures', async () => {
+    const provider = new GiglProvider();
+    const outcomes = {
+      results: new Map(),
+      failures: new Map([['WB-BAD', new Error('schema-invalid')]]),
+    };
+    trackGiglShipmentBatchOutcomesMock.mockResolvedValueOnce(outcomes);
+
+    await expect(provider.trackShipmentOutcomes(['WB-BAD'])).resolves.toBe(
+      outcomes
+    );
   });
 });

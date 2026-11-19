@@ -84,6 +84,7 @@ export function registerRootLayoutAttTests({
     await waitFor(() => {
       expect(useAppTrackingTransparency).toHaveBeenLastCalledWith({
         enabled: true,
+        explainFirst: true,
       });
     });
     expect(initializeAdTrackingForStartup).not.toHaveBeenCalled();
@@ -110,6 +111,7 @@ export function registerRootLayoutAttTests({
     });
     expect(useAppTrackingTransparency).toHaveBeenLastCalledWith({
       enabled: false,
+      explainFirst: true,
     });
 
     await finishNativeSplash();
@@ -117,6 +119,7 @@ export function registerRootLayoutAttTests({
     await waitFor(() => {
       expect(useAppTrackingTransparency).toHaveBeenLastCalledWith({
         enabled: true,
+        explainFirst: true,
       });
     });
   });
@@ -135,6 +138,7 @@ export function registerRootLayoutAttTests({
     await waitFor(() => {
       expect(useAppTrackingTransparency).toHaveBeenLastCalledWith({
         enabled: true,
+        explainFirst: true,
       });
     });
     expect(registerPushNotifications).not.toHaveBeenCalled();

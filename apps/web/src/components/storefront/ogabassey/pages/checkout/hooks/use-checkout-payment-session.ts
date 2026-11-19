@@ -133,11 +133,15 @@ export function useCheckoutPaymentSession({
       nextMethod !== method &&
       (nextMethod === 'uba_redvault' || method === 'uba_redvault')
     ) {
-      // A persisted Redvault, wallet-funded Credit Direct, or funding-unresolved
-      // checkpoint remains authoritative during method changes; submit-time
-      // recovery alone can authorize clearing it.
+      // A persisted Redvault, wallet-funded Credit Direct/Oxygen, or
+      // funding-unresolved checkpoint remains authoritative during method
+      // changes; submit-time recovery alone can authorize clearing it.
       const hasWalletCreditDirectFence =
         pendingCheckoutOrder?.paymentMethod === 'credit_direct' &&
+        Number.isFinite(pendingCheckoutOrder.walletAmountUsed) &&
+        (pendingCheckoutOrder.walletAmountUsed ?? 0) > 0;
+      const hasWalletOxygenFence =
+        pendingCheckoutOrder?.paymentMethod === 'oxygen' &&
         Number.isFinite(pendingCheckoutOrder.walletAmountUsed) &&
         (pendingCheckoutOrder.walletAmountUsed ?? 0) > 0;
       const hasUnresolvedFundingFence =
@@ -145,6 +149,7 @@ export function useCheckoutPaymentSession({
       if (
         pendingCheckoutOrder?.paymentMethod !== 'uba_redvault' &&
         !hasWalletCreditDirectFence &&
+        !hasWalletOxygenFence &&
         !hasUnresolvedFundingFence
       ) {
         clearPendingCheckoutOrder();

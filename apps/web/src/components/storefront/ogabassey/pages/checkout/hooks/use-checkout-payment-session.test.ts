@@ -432,4 +432,25 @@ describe('useCheckoutPaymentSession', () => {
 
     expect(clearPendingCheckoutOrder).not.toHaveBeenCalled();
   });
+
+  it('preserves a wallet-funded Oxygen checkpoint when switching to Redvault', () => {
+    const clearPendingCheckoutOrder = vi.fn();
+    const input = options({
+      clearPendingCheckoutOrder,
+      pendingCheckoutOrder: {
+        paymentMethod: 'oxygen',
+        walletAmountUsed: 5000,
+        fundingUnresolved: false,
+      },
+    });
+    const { result } = renderHook(() =>
+      useCheckoutPaymentSession(input as never)
+    );
+
+    act(() => {
+      result.current.selectMethod('uba_redvault');
+    });
+
+    expect(clearPendingCheckoutOrder).not.toHaveBeenCalled();
+  });
 });

@@ -6,10 +6,8 @@
  */
 
 import { type BillItem, mapKudaBillItems } from '@/lib/kuda-bill-items';
-import {
-  assertKudaBillListInKobo,
-  collectRawFixedPricesKobo,
-} from '@/lib/kuda-bill-list-unit-check';
+import { assertKudaBillListInKobo } from '@/lib/kuda-bill-list-unit-check';
+import { collectRawFixedPricesKobo } from '@/lib/kuda-raw-fixed-prices';
 import { isKudaOutcomeUnknown } from '@/lib/kuda-transport-error';
 import {
   extractKudaTransactionId,

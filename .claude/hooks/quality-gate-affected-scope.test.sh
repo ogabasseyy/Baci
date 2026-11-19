@@ -11,7 +11,7 @@ REPO_ROOT=$(cd "$HOOK_DIR/../.." && pwd)
 HOOK="$HOOK_DIR/quality-gate-check-worktree.sh"
 
 # Ambient scoping settings must not leak into the hook under test.
-unset QUALITY_GATE_FULL TURBO_SCM_BASE QUALITY_GATE_SKIP_DEPS
+unset QUALITY_GATE_FULL TURBO_SCM_BASE TURBO_SCM_HEAD QUALITY_GATE_SKIP_DEPS
 
 fail() {
   printf 'FAIL: %s\n' "$1" >&2
@@ -30,10 +30,12 @@ mkdir -p "$REPO/ci_scripts" "$REPO/node_modules/.bin" "$STUB_BIN"
 cp "$REPO_ROOT/ci_scripts/resolve-turbo-cmd.sh" "$REPO_ROOT/ci_scripts/quality-gate-affected-base.sh" "$REPO/ci_scripts/"
 printf 'node_modules/\n' > "$REPO/.gitignore"
 
-# Stub turbo records its arguments and the base it was given.
+# Stub turbo records its arguments and the base it was given, and (in a second
+# file) the comparison head it was given.
 cat > "$REPO/node_modules/.bin/turbo" <<'SH'
 #!/bin/bash
 printf 'turbo %s TURBO_SCM_BASE=%s\n' "$*" "${TURBO_SCM_BASE-<unset>}" >> "${TURBO_STUB_LOG:?}"
+printf 'TURBO_SCM_HEAD=%s\n' "${TURBO_SCM_HEAD-<unset>}" >> "${TURBO_STUB_LOG}.head"
 exit 0
 SH
 chmod +x "$REPO/node_modules/.bin/turbo"
@@ -61,6 +63,7 @@ commit_file() { # $1 = path relative to the repo
 
 run_gate() { # extra KEY=VALUE environment assignments as arguments
   : > "$TURBO_LOG"
+  : > "$TURBO_LOG.head"
   env PATH="$STUB_BIN:$PATH" TURBO_STUB_LOG="$TURBO_LOG" "$@" bash "$HOOK" "$REPO"
 }
 
@@ -69,6 +72,14 @@ assert_checks_ran() {
   for check in test lint typecheck; do
     grep -q "^turbo $check " "$TURBO_LOG" || fail "$label: turbo $check did not run"
   done
+}
+
+assert_head_unset() {
+  local label="$1"
+  [ -s "$TURBO_LOG.head" ] || fail "$label: turbo did not run"
+  if grep -qvx 'TURBO_SCM_HEAD=<unset>' "$TURBO_LOG.head"; then
+    fail "$label: turbo must not see TURBO_SCM_HEAD, got: $(cat "$TURBO_LOG.head")"
+  fi
 }
 
 assert_unscoped() {
@@ -112,6 +123,16 @@ for check in test lint typecheck; do
   grep -qx "turbo $check --affected TURBO_SCM_BASE=$base_sha" "$TURBO_LOG" ||
     fail "ambient base, scoped: turbo $check must use the merge base, got: $(cat "$TURBO_LOG")"
 done
+
+# 3c. A stale ambient TURBO_SCM_HEAD would end the --affected comparison before
+#     the current work, so neither a scoped nor a full run may see it.
+out=$(run_gate TURBO_SCM_HEAD=stale-ambient-head) || fail "ambient head, scoped: gate should pass"
+[ -z "$out" ] || fail "ambient head, scoped: expected no block output, got: $out"
+assert_checks_ran "ambient head, scoped"
+assert_head_unset "ambient head, scoped"
+out=$(run_gate QUALITY_GATE_FULL=1 TURBO_SCM_HEAD=stale-ambient-head) || fail "ambient head, full: gate should pass"
+[ -z "$out" ] || fail "ambient head, full: expected no block output, got: $out"
+assert_head_unset "ambient head, full"
 
 # 4. A change outside the workspaces (a migration) keeps the full gate.
 commit_file supabase/migrations/20990101000000_example.sql

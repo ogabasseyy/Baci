@@ -70,10 +70,12 @@ if [ ! -d node_modules ] || [ ! -x node_modules/.bin/turbo ]; then
   • Set QUALITY_GATE_SKIP_DEPS=1 (export it globally if you routinely work in dep-less worktrees and rely on PR CI to enforce the contract)"
 fi
 
-# Turbo command + worktree-aware pnpm configuration. An ambient TURBO_SCM_BASE
-# must not leak into a full-gate run; the resolver's ENV section sets it for a
-# scoped one.
-unset TURBO_SCM_BASE
+# Turbo command + worktree-aware pnpm configuration. Ambient comparison
+# overrides must not leak into the gate: a stale TURBO_SCM_BASE into a full-gate
+# run, and a stale TURBO_SCM_HEAD into a scoped one, where it would end the
+# --affected comparison before the current work. The resolver's ENV section sets
+# the base for a scoped run.
+unset TURBO_SCM_BASE TURBO_SCM_HEAD
 TURBO_CMD=()
 TURBO_SPARSE_FILTERS=()
 if [ -x "$ACTIVE_DIR/ci_scripts/resolve-turbo-cmd.sh" ]; then

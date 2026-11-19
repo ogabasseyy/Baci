@@ -6,7 +6,7 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 HOOK="$SCRIPT_DIR/quality-gate.sh"
 
 # Ambient scoping settings must not leak into the hook under test.
-unset QUALITY_GATE_FULL TURBO_SCM_BASE
+unset QUALITY_GATE_FULL TURBO_SCM_BASE TURBO_SCM_HEAD
 
 # The hook falls back to `pnpm exec turbo` when the repo has no local turbo.
 PNPM_TURBO='pnpm stub --config.verify-deps-before-run=false exec turbo'
@@ -39,15 +39,25 @@ mkdir -p "$STUB_BIN"
 cat > "$STUB_BIN/pnpm" <<'SH'
 #!/usr/bin/env bash
 printf 'pnpm stub %s TURBO_SCM_BASE=%s\n' "$*" "${TURBO_SCM_BASE:-}" >> "${PNPM_STUB_LOG:?}"
+printf 'TURBO_SCM_HEAD=%s\n' "${TURBO_SCM_HEAD-<unset>}" >> "${PNPM_STUB_LOG}.head"
 exit 0
 SH
 chmod +x "$STUB_BIN/pnpm"
 
 run_stubbed_gate() {
   : > "$PNPM_LOG"
+  : > "$PNPM_LOG.head"
   jq -n --arg cwd "$REPO" \
     '{cwd: $cwd, hook_event_name: "Stop", last_assistant_message: "Implemented the change.", stop_hook_active: false}' |
     env PATH="$STUB_BIN:$PATH" PNPM_STUB_LOG="$PNPM_LOG" CODEX_QUALITY_GATE_MODE=completion CODEX_QUALITY_GATE_CODERABBIT=0 CODEX_QUALITY_GATE_PR_REVIEW=off "$@" bash "$HOOK"
+}
+
+assert_head_unset() {
+  local label="$1"
+  [ -s "$PNPM_LOG.head" ] || fail "$label: turbo did not run"
+  if grep -qvx 'TURBO_SCM_HEAD=<unset>' "$PNPM_LOG.head"; then
+    fail "$label: turbo must not see TURBO_SCM_HEAD, got: $(cat "$PNPM_LOG.head")"
+  fi
 }
 
 assert_unscoped() {
@@ -101,6 +111,15 @@ assert_unscoped "QUALITY_GATE_FULL=1"
 output=$(run_stubbed_gate QUALITY_GATE_FULL=1 TURBO_SCM_BASE=stale-ambient-base)
 [ -z "$output" ] || fail "QUALITY_GATE_FULL=1 with an ambient base should allow stop without output"
 assert_unscoped "QUALITY_GATE_FULL=1 with an ambient TURBO_SCM_BASE"
+
+# A stale ambient TURBO_SCM_HEAD would end the --affected comparison before the
+# current work, so neither a scoped nor a full run may see it.
+output=$(run_stubbed_gate TURBO_SCM_HEAD=stale-ambient-head)
+[ -z "$output" ] || fail "scoped gate with an ambient head should allow stop without output"
+assert_head_unset "scoped run with an ambient TURBO_SCM_HEAD"
+output=$(run_stubbed_gate QUALITY_GATE_FULL=1 TURBO_SCM_HEAD=stale-ambient-head)
+[ -z "$output" ] || fail "full gate with an ambient head should allow stop without output"
+assert_head_unset "full run with an ambient TURBO_SCM_HEAD"
 
 # The gate uses whatever base the checkout's own helper reports.
 printf '#!/bin/sh\nprintf "%%s\\n" cafebabecafebabecafebabecafebabecafebabe\n' > "$REPO/ci_scripts/quality-gate-affected-base.sh"

@@ -18,6 +18,7 @@ const resourceMap: Record<string, string> = {
   Products: 'products',
   Repairs: 'repairs',
   Customers: 'customers',
+  Messages: 'customers', // Same permission as the inbox API
   Staff: 'staff',
   Loyalty: 'marketing', // Loyalty is part of marketing permissions
   Quiz: 'marketing',
@@ -43,6 +44,14 @@ function canShowNavItem(
   // Santa Campaign is available only to the configured agentic tenant.
   if (
     item.label === 'Santa Campaign' &&
+    !isSantaCampaignVisible(ctx.merchant?.slug, ctx.agenticMerchantSlug)
+  ) {
+    return false;
+  }
+
+  // Customer chat is live for the configured agentic tenant only for now.
+  if (
+    item.label === 'Messages' &&
     !isSantaCampaignVisible(ctx.merchant?.slug, ctx.agenticMerchantSlug)
   ) {
     return false;

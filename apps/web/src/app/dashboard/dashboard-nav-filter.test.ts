@@ -88,4 +88,18 @@ describe('filterDashboardNavItems', () => {
     const marketing = items.find((item) => item.id === 'marketing');
     expect(marketing).toBeUndefined();
   });
+
+  it('shows Messages only for the configured agentic tenant', () => {
+    const hidden = filterDashboardNavItems(
+      buildDashboardNavItems(0),
+      makeContext()
+    ).map((item) => item.id);
+    expect(hidden).not.toContain('messages');
+
+    const shown = filterDashboardNavItems(
+      buildDashboardNavItems(0),
+      makeContext({ agenticMerchantSlug: 'acme' })
+    ).map((item) => item.id);
+    expect(shown).toContain('messages');
+  });
 });

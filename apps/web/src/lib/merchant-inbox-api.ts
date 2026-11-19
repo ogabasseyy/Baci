@@ -8,6 +8,10 @@ import {
   merchantInboxReplyResponseSchema,
   merchantInboxThreadResponseSchema,
 } from '@/schemas/merchant-inbox';
+import {
+  type MerchantInboxInsights,
+  merchantInboxInsightsResponseSchema,
+} from '@/schemas/merchant-inbox-insights';
 
 export type MerchantInboxApiErrorCode =
   | 'unauthorized'
@@ -157,4 +161,16 @@ export async function sendMerchantInboxReply(
   );
   if (!result.ok) return result;
   return { ok: true, message: result.data.message };
+}
+
+export async function fetchMerchantInboxInsights(
+  days: number
+): Promise<
+  { ok: true; insights: MerchantInboxInsights } | MerchantInboxApiFailure
+> {
+  const result = await request(
+    `/api/merchant/inbox/insights?days=${days}`,
+    merchantInboxInsightsResponseSchema
+  );
+  return result.ok ? { ok: true, insights: result.data } : result;
 }

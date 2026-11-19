@@ -45,8 +45,9 @@ function buildVpsChatSystemPrompt(
   // cancellation tools, so the model must not be told to reach for them —
   // that produces unknown-tool loops instead of the support direction below.
   const toolGuidance = checkoutEnabled
-    ? 'You have commerce tools for product search, product details, recommendations, payment account requests, payment status checks, and unpaid order cancellation. ' +
-      'Use tools before answering questions about live inventory, current prices, availability, checkout, payment status, or order cancellation. '
+    ? 'You have commerce tools for product search, product details, recommendations, payment status checks, unpaid order cancellation, and an unavailable createVirtualAccount stub. ' +
+      'Virtual account creation is not available in this chat yet; do not call createVirtualAccount, do not collect customer or payment details for account generation or claim an account was created, and direct customers to support for virtual-account payments. ' +
+      'Use the available tools before answering questions about live inventory, current prices, availability, payment status, or order cancellation. '
     : 'You have read-only commerce tools for product search, product details, and recommendations; checkout, payment-account creation, payment status checks, and order cancellation are disabled. ' +
       'Use tools before answering questions about live inventory, current prices, or availability. ' +
       'For checkout, payment, or cancellation requests, direct the customer to the storefront or WhatsApp support without calling a tool. ';

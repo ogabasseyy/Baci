@@ -1,0 +1,124 @@
+SAVEPOINT paged_reader;
+INSERT INTO auth.users VALUES ('10000000-0000-4000-8000-000000000003');
+INSERT INTO private.brilstash_installations(id, merchant_id, partner_identity, single_page_only)
+VALUES ('30000000-0000-4000-8000-000000000003', '20000000-0000-4000-8000-000000000001', 'fixture-paged', false);
+INSERT INTO private.brilstash_builder_entitlements
+VALUES ('30000000-0000-4000-8000-000000000003', '10000000-0000-4000-8000-000000000003');
+INSERT INTO private.brilstash_category_mappings VALUES
+  ('30000000-0000-4000-8000-000000000003', '50000000-0000-4000-8000-000000000001', 'Phones');
+INSERT INTO public.products (
+  id, merchant_id, status, name, slug, category_id, condition, price, images,
+  has_variants, has_condition_offers, stock_quantity, stock, manage_stock, inventory_tracking_policy
+)
+SELECT ('41000000-0000-4000-8000-00000000000' || n)::uuid,
+  '20000000-0000-4000-8000-000000000001', 'active', 'Fixture ' || n, 'paged-' || n,
+  '50000000-0000-4000-8000-000000000001', 'new', 50000 + n * 70000, '["https://media.example.invalid/approved"]'::jsonb,
+  false, false, n, n, true, 'legacy'
+FROM generate_series(1, 7) n;
+INSERT INTO public.product_feed_images (
+  id, merchant_id, product_id, status, verified_url, is_primary, position, source_url
+)
+SELECT gen_random_uuid(), merchant_id, id, 'verified', 'https://media.example.invalid/approved',
+  true, 1, 'https://media.example.invalid/approved'
+FROM public.products WHERE slug LIKE 'paged-%';
+INSERT INTO private.brilstash_listings (
+  id, installation_id, source_kind, source_id, parent_product_id, external_id, pilot_slot, reviewed_identity
+)
+SELECT ('61000000-0000-4000-8000-00000000000' || n)::uuid, '30000000-0000-4000-8000-000000000003',
+  'product', product_id, product_id, 'paged-' || n, n, '{"condition":"new"}'::jsonb
+FROM generate_series(1, 7) n
+CROSS JOIN LATERAL (SELECT ('41000000-0000-4000-8000-00000000000' || n)::uuid AS product_id) fixture;
+INSERT INTO private.brilstash_listing_facts (
+  installation_id, listing_id, revision, specifications, box_contents, warranty, evidence_reference, reviewed_by
+)
+SELECT installation_id, id, 1, 'Fixture specification', 'Phone only', '30 days', 'Fixture evidence',
+  '10000000-0000-4000-8000-000000000002'
+FROM private.brilstash_listings WHERE installation_id = '30000000-0000-4000-8000-000000000003';
+UPDATE private.brilstash_listings SET approved_facts_revision = 1
+WHERE installation_id = '30000000-0000-4000-8000-000000000003';
+
+SET LOCAL ROLE authenticated;
+SET LOCAL "request.jwt.claim.sub" = '10000000-0000-4000-8000-000000000003';
+DO $$
+DECLARE installation uuid := '30000000-0000-4000-8000-000000000003';
+DECLARE read_result jsonb := public.load_brilstash_catalogue_sources(installation);
+DECLARE payload jsonb;
+BEGIN
+  SELECT jsonb_agg(jsonb_build_object(
+    'external_id', item->>'externalId', 'title', item->>'name',
+    'product_url', 'https://shop.example.invalid/products/' || (item->>'slug'),
+    'description', 'Condition New. Phone only. Warranty 30 days.', 'category', item->>'partnerCategory',
+    'price_naira', item->'priceNaira', 'stock_quantity', item->'inventory'->'units',
+    'images', jsonb_build_array(jsonb_build_object('url', 'https://media.example.invalid/approved'))
+  ) ORDER BY item->>'externalId') INTO payload
+  FROM jsonb_array_elements(read_result->'rows') item;
+  -- Compute the fixture digest outside the builder session.
+  PERFORM set_config('fixture.paged_input', (read_result || jsonb_build_object('payload', payload))::text, true);
+END $$;
+RESET ROLE;
+SELECT set_config('fixture.paged_digest', encode(sha256(convert_to(
+  private.brilstash_canonical_json(current_setting('fixture.paged_input')::jsonb->'payload'), 'UTF8'
+)), 'hex'), true);
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE target uuid := '30000000-0000-4000-8000-000000000003';
+DECLARE candidate uuid := '71000000-0000-4000-8000-000000000003';
+DECLARE input jsonb := current_setting('fixture.paged_input')::jsonb;
+BEGIN
+  PERFORM public.stage_brilstash_catalogue_snapshot(
+    target, candidate, (input->>'catalogueRevision')::bigint, NULL,
+    LEAST((input->>'sourceReadAt')::timestamptz,
+      ((statement_timestamp() AT TIME ZONE 'Africa/Lagos')::date + time '22:00') AT TIME ZONE 'Africa/Lagos'),
+    input->'rows', input->'payload', current_setting('fixture.paged_digest')
+  );
+END $$;
+SET LOCAL "request.jwt.claim.sub" = '10000000-0000-4000-8000-000000000002';
+DO $$
+DECLARE installation uuid := '30000000-0000-4000-8000-000000000003';
+DECLARE candidate uuid := '71000000-0000-4000-8000-000000000003';
+DECLARE approval uuid;
+DECLARE evidence uuid;
+BEGIN
+  approval := public.approve_brilstash_candidate(installation, candidate, current_setting('fixture.paged_digest'));
+  evidence := public.record_brilstash_fresh_installation(
+    installation, 'fixture-paged', 'Local fresh fixture', false, false, 0, true
+  );
+  PERFORM public.activate_first_brilstash_snapshot(
+    installation, candidate, (statement_timestamp() AT TIME ZONE 'Africa/Lagos')::date, evidence, approval
+  );
+  PERFORM public.rotate_brilstash_credential(
+    installation, 0, encode(sha256(convert_to(repeat('p', 43), 'UTF8')), 'hex'), 0
+  );
+END $$;
+RESET ROLE;
+SET LOCAL ROLE anon;
+DO $$
+DECLARE combined jsonb := '[]'::jsonb;
+DECLARE result jsonb;
+BEGIN
+  FOR page IN 1..3 LOOP
+    result := public.read_brilstash_page(repeat('p', 43), page, 3, 0);
+    IF result->>'status' IS DISTINCT FROM 'ok' OR result->>'totalCount' IS DISTINCT FROM '7'
+      OR result->>'totalPages' IS DISTINCT FROM '3'
+      OR jsonb_array_length(result->'products') IS DISTINCT FROM (CASE WHEN page = 3 THEN 1 ELSE 3 END)
+    THEN RAISE EXCEPTION 'unexpected response on page %: %', page, result; END IF;
+    combined := combined || (result->'products');
+  END LOOP;
+  IF combined IS DISTINCT FROM current_setting('fixture.paged_input')::jsonb->'payload'
+    OR public.read_brilstash_page(repeat('p', 43), 1, 3, 400000)->>'totalCount' IS DISTINCT FROM '3'
+    OR public.read_brilstash_page(repeat('p', 43), 1, 3, 400000)->'products'->0->>'price_naira'
+      IS DISTINCT FROM '400000'
+    OR public.read_brilstash_page(repeat('p', 43), 4, 3, 0)->'products' IS DISTINCT FROM '[]'::jsonb
+  THEN RAISE EXCEPTION 'pagination did not preserve the payload or inclusive price filter'; END IF;
+END $$;
+RESET ROLE;
+UPDATE public.products SET status = 'draft' WHERE slug = 'paged-7';
+SET LOCAL ROLE anon;
+DO $$
+BEGIN
+  IF public.read_brilstash_page(repeat('p', 43), 1, 3, 0)->>'status' IS DISTINCT FROM 'unavailable'
+  THEN RAISE EXCEPTION 'last-page withdrawal did not block the first page'; END IF;
+END $$;
+RESET ROLE;
+ROLLBACK TO SAVEPOINT paged_reader;
+RELEASE SAVEPOINT paged_reader;

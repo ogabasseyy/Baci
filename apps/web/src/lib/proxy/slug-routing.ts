@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from 'next/server';
+import { BRILSTASH_FEED_PATH } from '@/config/brilstash-feed';
 import { getCustomDomainForSlug } from '@/lib/domain-cache-simple';
 import { MERCHANT_SLUG_QUERY_PARAMS } from '@/lib/proxy/api-alias';
 import {
@@ -149,7 +150,11 @@ export async function runSlugRoutingStage(
   hostname: string,
   userAgent: string
 ): Promise<NextResponse | null> {
-  if (!isRootOrPreviewStorefrontHost(hostname)) return null;
+  if (
+    pathname === BRILSTASH_FEED_PATH ||
+    !isRootOrPreviewStorefrontHost(hostname)
+  )
+    return null;
 
   const segments = pathname.split('/').filter(Boolean);
   const slug = segments[0];

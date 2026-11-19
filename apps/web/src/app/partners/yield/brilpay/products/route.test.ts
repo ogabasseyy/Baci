@@ -1,0 +1,168 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createBrilStashPageProof } from '@/lib/brilstash/page-proof';
+import { GET } from './route';
+
+const dependencies = vi.hoisted(() => {
+  const abortSignal = vi.fn();
+  const rpc = vi.fn(() => ({ abortSignal }));
+  return { rpc, abortSignal, info: vi.fn() };
+});
+
+vi.mock('@/lib/supabase/anon', () => ({
+  createAnonClient: () => ({ rpc: dependencies.rpc }),
+}));
+vi.mock('@/lib/logger', () => ({ logger: { info: dependencies.info } }));
+
+const host = 'sandbox-feed.example.invalid';
+const bearer = 'S'.repeat(43);
+const path = '/partners/yield/brilpay/products';
+const products = [
+  {
+    external_id: 'fixture-one',
+    product_url: 'https://shop.example.invalid/products/phone',
+    title: 'Phone',
+    description:
+      'Condition: New. Specifications: Phone. Box contents: Phone. Warranty: 30 days.',
+    category: 'Phones',
+    price_naira: 365000,
+    stock_quantity: 0,
+    images: [{ url: 'https://media.example.invalid/phone.jpg' }],
+  },
+];
+const result = {
+  status: 'ok',
+  products,
+  totalCount: 7,
+  totalPages: 7,
+  generationId: '70000000-0000-4000-8000-000000000001',
+  credentialId: '80000000-0000-4000-8000-000000000001',
+  payloadDigest: 'a'.repeat(64),
+};
+function request(
+  query = '?page=1&limit=1&min_price=350000',
+  token: string | null = bearer,
+  hostname = host
+) {
+  return new Request(`https://${hostname}${path}${query}`, {
+    headers: token === null ? {} : { Authorization: `Bearer ${token}` },
+  });
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.stubEnv('BRILSTASH_FEED_HOST', host);
+  vi.stubEnv('BRILSTASH_FEED_ENV', 'sandbox');
+  vi.stubEnv('BRILSTASH_SUPABASE_PROJECT_REF', 'sandboxtest');
+  vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://sandboxtest.supabase.co');
+  vi.stubEnv('VERCEL_ENV', 'preview');
+  dependencies.abortSignal.mockResolvedValue({ data: result, error: null });
+});
+afterEach(() => vi.unstubAllEnvs());
+
+describe('BrilStash feed GET', () => {
+  it('serves a bare array with totals and no-store, and logs correlation without the key', async () => {
+    const response = await GET(request());
+    expect(response.status).toBe(200);
+    expect(response.headers.get('x-total-count')).toBe('7');
+    expect(response.headers.get('x-total-pages')).toBe('7');
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    const requestId = response.headers.get('x-request-id');
+    expect(requestId).toBeTruthy();
+    expect(response.headers.get('x-baci-catalogue-proof')).toBeNull();
+    expect(await response.json()).toEqual(products);
+    expect(dependencies.rpc).toHaveBeenCalledWith('read_brilstash_page', {
+      p_bearer: bearer,
+      p_page: 1,
+      p_limit: 1,
+      p_min_price: 350000,
+    });
+    expect(dependencies.abortSignal).toHaveBeenCalledWith(
+      expect.any(AbortSignal)
+    );
+    expect(JSON.stringify(dependencies.info.mock.calls)).not.toContain(bearer);
+  });
+
+  it('correlates only the exact unfiltered handoff request', async () => {
+    dependencies.abortSignal.mockResolvedValueOnce({
+      data: { ...result, totalCount: 1, totalPages: 1 },
+      error: null,
+    });
+    const response = await GET(request('?page=1&limit=100&min_price=0'));
+    const requestId = response.headers.get('x-request-id');
+    expect(response.status).toBe(200);
+    expect(response.headers.get('x-baci-catalogue-proof')).toBe(
+      createBrilStashPageProof(requestId ?? '', result)
+    );
+    expect(dependencies.info).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requestId,
+        keyId: result.credentialId,
+        generationId: result.generationId,
+      })
+    );
+  });
+
+  it.each([
+    [request('?page=1&page=2'), 400],
+    [request('', null), 401],
+    [request('', 'short'), 401],
+    [request('', bearer, 'other.example.invalid'), 404],
+  ])('rejects locally without RPC', async (invalidRequest, status) => {
+    const response = await GET(invalidRequest);
+    expect(response.status).toBe(status);
+    expect(dependencies.rpc).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['?page=1&limit=6', 400],
+    ['?page=1&limit=7', 200],
+    ['?page=2', 400],
+    ['?min_price=1', 400],
+  ])('enforces the live single-page contract for %s', async (query, status) => {
+    vi.stubEnv('BRILSTASH_FEED_ENV', 'live');
+    vi.stubEnv('VERCEL_ENV', 'production');
+    dependencies.abortSignal.mockResolvedValue({
+      data: { ...result, totalCount: 1, totalPages: 1 },
+      error: null,
+    });
+    expect((await GET(request(query))).status).toBe(status);
+    expect(dependencies.rpc).toHaveBeenCalledTimes(status === 200 ? 1 : 0);
+  });
+
+  it('fails closed on a database project mismatch and on live configuration in preview', async () => {
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://liveproject.supabase.co');
+    expect((await GET(request())).status).toBe(503);
+    vi.stubEnv('BRILSTASH_SUPABASE_PROJECT_REF', 'liveproject');
+    vi.stubEnv('BRILSTASH_FEED_ENV', 'live');
+    expect((await GET(request())).status).toBe(503);
+    expect(dependencies.rpc).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [{ data: { status: 'unauthorized' }, error: null }, 401],
+    [{ data: { status: 'invalid_query' }, error: null }, 400],
+    [{ data: { status: 'unavailable' }, error: null }, 503],
+    [{ data: { status: 'ok', products: [] }, error: null }, 503],
+    [{ data: null, error: { message: 'database secret' } }, 503],
+  ])('rejects unavailable or malformed database results without leaking error text', async (rpcResult, status) => {
+    dependencies.abortSignal.mockResolvedValueOnce(rpcResult);
+    const response = await GET(request());
+    expect(response.status).toBe(status);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(await response.text()).not.toContain('database secret');
+  });
+
+  it('returns a safe failure when the read exceeds the local deadline', async () => {
+    vi.useFakeTimers();
+    try {
+      dependencies.abortSignal.mockReturnValueOnce(
+        new Promise(() => undefined)
+      );
+      const pending = GET(request());
+      await vi.advanceTimersByTimeAsync(8001);
+      expect((await pending).status).toBe(503);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

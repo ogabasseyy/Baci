@@ -1,3 +1,4 @@
+import { BRILSTASH_FEED_PATH } from '@/config/brilstash-feed';
 import { storefrontRouteSegments } from '@/config/storefront-route-segments';
 import {
   isPlatformHost,
@@ -199,7 +200,7 @@ export function getRouteType(
     return 'auth';
   }
 
-  if (pathname.startsWith('/api')) {
+  if (pathname === BRILSTASH_FEED_PATH || pathname.startsWith('/api')) {
     return 'api';
   }
 

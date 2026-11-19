@@ -396,10 +396,14 @@ describe('bank card offer payment handlers', () => {
   });
 
   it.each([
-    'failed',
-    'abandoned',
-    'cancelled',
-  ])('stops polling and hides the old checkout URL after %s', async (status) => {
+    { status: 'failed', amount: 9500 },
+    { status: 'abandoned', amount: 9500 },
+    { status: 'cancelled', amount: 9500 },
+    { status: 'failed', amount: 1 },
+  ])('holds the attempt after $status with a reported amount of $amount kobo', async ({
+    status,
+    amount,
+  }) => {
     vi.stubEnv('PAYSTACK_SECRET_KEY', secret);
     const { data } = setup('035', 'Wema Bank');
     const input = {
@@ -416,7 +420,7 @@ describe('bank card offer payment handlers', () => {
 
     mocks.verify.mockResolvedValue({
       success: true,
-      data: { ...data, status },
+      data: { ...data, status, amount },
     });
     const callback = await verify(request('verify', { reference }));
     expect(callback.status).toBe(200);

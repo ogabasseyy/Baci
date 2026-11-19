@@ -7,6 +7,10 @@ export function useDeferredKeyboardPreload(startupReady: boolean): void {
   const keyboardOpenedRef = useRef(false);
 
   useEffect(() => {
+    // Skip optional warmup on runtimes that cannot schedule idle work.
+    // A timer can interrupt the first interaction, and input focus opens the keyboard normally.
+    if (typeof requestIdleCallback !== 'function') return;
+
     let active = true;
     let frameId: number | null = null;
     let idleCallbackId: number | null = null;
@@ -33,13 +37,11 @@ export function useDeferredKeyboardPreload(startupReady: boolean): void {
     if (
       startupReady &&
       !keyboardOpenedRef.current &&
-      !KeyboardController.isVisible?.() &&
-      typeof requestIdleCallback === 'function'
+      !KeyboardController.isVisible?.()
     ) {
       const scheduleIdlePreload = () => {
         frameId = null;
         if (!active) return;
-        // Preloading is optional. A timeout could run during the first interaction.
         idleCallbackId = requestIdleCallback(() => {
           idleCallbackId = null;
           if (active && !KeyboardController.isVisible?.()) {

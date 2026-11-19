@@ -167,10 +167,16 @@ describe('useDeferredKeyboardPreload', () => {
       value: undefined,
     });
 
-    renderHook(() => useDeferredKeyboardPreload(true));
-    act(() => flushAnimationFrames());
+    const { addListenerSpy } = mockKeyboardListeners();
+    try {
+      renderHook(() => useDeferredKeyboardPreload(true));
 
-    act(() => jest.runAllTimers());
-    expect(KeyboardController.preload).not.toHaveBeenCalled();
+      expect(addListenerSpy).not.toHaveBeenCalled();
+      expect(global.requestAnimationFrame).not.toHaveBeenCalled();
+      act(() => jest.runAllTimers());
+      expect(KeyboardController.preload).not.toHaveBeenCalled();
+    } finally {
+      addListenerSpy.mockRestore();
+    }
   });
 });

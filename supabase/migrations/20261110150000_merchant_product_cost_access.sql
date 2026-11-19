@@ -3,9 +3,9 @@
 -- supabase/operations/revoke-products-cost-price.sql after client verification.
 BEGIN;
 
--- Match permissionGrantsAccess in app code: broader grants (full_access.all,
--- *:*, *:action, resource:*, resource:all) grant access even when the specific
--- action key is false (COALESCE stopped at explicit false).
+-- Honor broader grants (full_access.all, *:*, *:action, resource:*, resource:all)
+-- even when a specific action key is explicitly false, while keeping wildcard
+-- denials (*:*, *:action, resource:*) effective when no broader grant is true.
 CREATE OR REPLACE FUNCTION public.check_staff_permission(
   p_user_id uuid,
   p_merchant_id uuid,
@@ -57,7 +57,13 @@ BEGIN
     OR COALESCE((v_staff_permissions -> '*' ->> p_action)::boolean, false)
     OR COALESCE((v_staff_permissions -> p_resource ->> '*')::boolean, false)
     OR COALESCE((v_staff_permissions -> p_resource ->> 'all')::boolean, false)
-    OR COALESCE((v_staff_permissions -> p_resource ->> p_action)::boolean, false)
+    OR COALESCE(
+      (v_staff_permissions -> '*' ->> '*')::boolean,
+      (v_staff_permissions -> '*' ->> p_action)::boolean,
+      (v_staff_permissions -> p_resource ->> '*')::boolean,
+      (v_staff_permissions -> p_resource ->> p_action)::boolean,
+      false
+    )
   );
 END;
 $$;

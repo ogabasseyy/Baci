@@ -70,14 +70,22 @@ function fixture(
     typeof createProductionStorefront
   >[0]['canonicalBase'] = async (slug) => `https://merchant.test/${slug}`
 ) {
-  const execute = vi.fn(async () => ({
-    output: {
-      format: 'baci-prerender/v1',
-      html: '<main><h1>Synthetic Orbit</h1></main>',
-    },
-    jobId: 'synthetic',
-    wallMs: 1,
-  }));
+  const execute = vi.fn(
+    async (
+      _kind: Parameters<
+        Parameters<typeof createProductionStorefront>[0]['execute']
+      >[0],
+      _payload: unknown,
+      _signal?: AbortSignal
+    ) => ({
+      output: {
+        format: 'baci-prerender/v1',
+        html: '<main><h1>Synthetic Orbit</h1></main>',
+      },
+      jobId: 'synthetic',
+      wallMs: 1,
+    })
+  );
   const storefront = createProductionStorefront({
     client: {} as never,
     artifactDirectory: '/unused-test-only',
@@ -129,4 +137,27 @@ it('cancels the canonical lookup when the delivery request disconnects', async (
   expect(response.status).toBe(404);
   expect(response.headers.get('Cache-Control')).toBe('no-store');
   expect(s.execute).not.toHaveBeenCalled();
+});
+
+it('aborts the runner for an uncached delivery when its last request disconnects', async () => {
+  const s = fixture();
+  const controller = new AbortController();
+  const started = Promise.withResolvers<AbortSignal | undefined>();
+  s.execute.mockImplementationOnce(async (_kind, _payload, signal) => {
+    started.resolve(signal);
+    await new Promise<never>((_, reject) => {
+      signal?.addEventListener('abort', () => reject(signal.reason), {
+        once: true,
+      });
+    });
+    throw Error('UNREACHABLE');
+  });
+  const response = s.deliver(
+    new Request(s.request(), { signal: controller.signal })
+  );
+  const signal = await started.promise;
+  expect(signal?.aborted).toBe(false);
+  controller.abort();
+  expect((await response).status).toBe(404);
+  expect(signal?.aborted).toBe(true);
 });

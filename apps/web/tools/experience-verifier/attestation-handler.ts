@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { readBoundedJsonBody } from '@/lib/events/read-bounded-json-body';
 import type { OwnerLifecycleVerification } from '@/lib/experience/owner-lifecycle-runtime';
 import { experienceOwnerWireSchemas } from '@/schemas/experience-owner-wire';
+import type { OwnerVerificationKind } from './owner-verification-slots';
 
 const message = experienceOwnerWireSchemas['verifier-attest/v1'];
 
@@ -10,7 +11,10 @@ const message = experienceOwnerWireSchemas['verifier-attest/v1'];
 export function createVerifierAttestationHandler(settings: {
   key: Uint8Array;
   now?: () => number;
-  reserveOwnerWork?(ownerId: string): (() => void) | null;
+  reserveOwnerWork?(
+    ownerId: string,
+    kind: OwnerVerificationKind
+  ): (() => void) | null;
   consumeNonce(nonce: string, expiresAt: number): Promise<boolean>;
   resolveUserClient(
     token: string,
@@ -64,7 +68,7 @@ export function createVerifierAttestationHandler(settings: {
       const user = await client.auth.getUser(parsed.data.accessToken);
       if (user.error || !user.data.user) return reply(403);
       request.signal.throwIfAborted();
-      const release = settings.reserveOwnerWork?.(user.data.user.id);
+      const release = settings.reserveOwnerWork?.(user.data.user.id, 'attest');
       if (release === null) return reply(429);
       try {
         await settings.attest(

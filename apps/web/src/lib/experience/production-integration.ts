@@ -190,7 +190,7 @@ export function createProductionExperienceIntegration(settings: {
     executionOrigin: settings.executionOrigin,
     canonicalBase: settings.canonicalBase,
     catalogImages: settings.catalogImages,
-    execute: publicExecute,
+    execute: publicExecute.withSignal,
   });
   const privateDelivery = createProductionPreviewDelivery({
     vault,

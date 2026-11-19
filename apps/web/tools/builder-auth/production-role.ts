@@ -8,9 +8,13 @@ export async function verifyProductionAuthDatabaseRole(pool: Pool) {
     unsafe: boolean;
     authenticated_member: boolean;
     storage_member: boolean;
+    storage_unsafe: boolean;
+    storage_memberships: boolean;
     extra_memberships: boolean;
   }>(`SELECT session_user AS login, current_user AS role,
     COALESCE((SELECT rolsuper OR rolbypassrls OR rolcreaterole OR rolcreatedb OR rolreplication OR rolinherit OR NOT rolcanlogin FROM pg_catalog.pg_roles WHERE rolname=session_user), true) AS unsafe,
+    COALESCE((SELECT rolsuper OR rolbypassrls OR rolcreaterole OR rolcreatedb OR rolreplication OR rolinherit OR rolcanlogin FROM pg_catalog.pg_roles WHERE rolname=current_user), true) AS storage_unsafe,
+    EXISTS(SELECT 1 FROM pg_catalog.pg_auth_members m WHERE m.member=(SELECT oid FROM pg_catalog.pg_roles WHERE rolname=current_user)) AS storage_memberships,
     pg_has_role(session_user,'authenticated','MEMBER') AS authenticated_member,
     pg_has_role(session_user,'baci_builder_auth_storage','MEMBER') AS storage_member,
     EXISTS(SELECT 1 FROM pg_catalog.pg_auth_members m JOIN pg_catalog.pg_roles r ON r.oid=m.roleid WHERE m.member=(SELECT oid FROM pg_catalog.pg_roles WHERE rolname=session_user) AND r.rolname<>'baci_builder_auth_storage') AS extra_memberships`);
@@ -21,6 +25,8 @@ export async function verifyProductionAuthDatabaseRole(pool: Pool) {
     principal.unsafe !== false ||
     principal.authenticated_member !== false ||
     principal.storage_member !== true ||
+    principal.storage_unsafe !== false ||
+    principal.storage_memberships !== false ||
     principal.extra_memberships !== false
   )
     throw Error('UNSAFE_AUTH_DATABASE_SESSION');

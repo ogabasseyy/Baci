@@ -57,3 +57,28 @@ it('bounds public fragment retention with LRU eviction and rejects oversize outp
     'QUOTA_EXCEEDED'
   );
 });
+
+it('keeps a shared render alive until its last connected reader aborts', async () => {
+  const cache = createPublicRenderCache();
+  const first = new AbortController();
+  const second = new AbortController();
+  let renderSignal: AbortSignal | undefined;
+  const render = vi.fn((signal: AbortSignal) => {
+    renderSignal = signal;
+    return new Promise<string>((_, reject) => {
+      signal.addEventListener('abort', () => reject(signal.reason), {
+        once: true,
+      });
+    });
+  });
+  const a = cache.read('page', render, first.signal);
+  const b = cache.read('page', render, second.signal);
+  first.abort(Error('first disconnected'));
+  await expect(a).rejects.toThrow('first disconnected');
+  expect(renderSignal?.aborted).toBe(false);
+  second.abort(Error('last disconnected'));
+  await expect(b).rejects.toThrow('last disconnected');
+  expect(renderSignal?.aborted).toBe(true);
+  expect(render).toHaveBeenCalledOnce();
+  expect(await cache.read('page', async () => 'retry')).toBe('retry');
+});

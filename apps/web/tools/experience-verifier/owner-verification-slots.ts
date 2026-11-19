@@ -1,9 +1,16 @@
-/** Share two long-running slots across owner attestation and public checks. */
+export type OwnerVerificationKind = 'attest' | 'public';
+
+/** Bound expensive owner work independently of the verifier's listener slots. */
 export function createOwnerVerificationSlots() {
-  const activeOwners = new Set<string>();
-  return (ownerId: string) => {
-    if (activeOwners.size >= 2 || activeOwners.has(ownerId)) return null;
-    activeOwners.add(ownerId);
+  const activeOwners = new Map<string, OwnerVerificationKind>();
+  return (ownerId: string, kind: OwnerVerificationKind) => {
+    if (
+      activeOwners.size >= 2 ||
+      activeOwners.has(ownerId) ||
+      (kind === 'public' && [...activeOwners.values()].includes('public'))
+    )
+      return null;
+    activeOwners.set(ownerId, kind);
     return () => {
       activeOwners.delete(ownerId);
     };

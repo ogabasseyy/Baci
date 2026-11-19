@@ -61,7 +61,8 @@ rejected by the early filter receives an admission denial, and the filter
 fails closed at capacity. This does not qualify the 600-second downstream work
 deadline or replace production ingress and load testing. On the verifier,
 attestation and public verification share two long-running work slots, with
-at most one per authenticated owner across both operations. Busy requests
+at most one per authenticated owner across both operations and one public
+observer at a time. Busy requests
 receive 429. Slots stay reserved until work settles, even on disconnect.
 Verify the remaining capacity and deadlines on the deployed topology.
 

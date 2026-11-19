@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createDurablePrerenderArtifacts } from '../../../tools/experience-runner/durable-prerender-artifacts';
-import type { runLocalQualification } from '../../../tools/experience-runner/local-oci-executor';
 import { createProductionPublishedDelivery } from '../../../tools/experience-runner/published-delivery';
+import type { createRunnerExecutor } from '../../../tools/experience-runner/runner-transport';
 import { createPrivatePrerenderDocument } from './private-prerender-document';
 import { createPublicOutputReader } from './public-output-reader';
 import { createPublicRenderCache } from './public-render-cache';
@@ -20,7 +20,7 @@ export function createProductionStorefront(settings: {
     signal?: AbortSignal
   ) => string | Promise<string>;
   catalogImages?: ReadonlyMap<string, { assetId: string; alt: string }>;
-  execute: typeof runLocalQualification;
+  execute: ReturnType<typeof createRunnerExecutor>['withSignal'];
 }) {
   const canonicalBase = async (slug: string, requestedSignal?: AbortSignal) => {
     const deadline = AbortSignal.timeout(CANONICAL_LOOKUP_TIMEOUT_MS);
@@ -64,34 +64,39 @@ export function createProductionStorefront(settings: {
     const key = createHash('sha256')
       .update(JSON.stringify([binding, before.manifest, before.bootstrap]))
       .digest('hex');
-    const markup = await fragments.read(key, async () => {
-      const result = (
-        await settings.execute('prerender', {
-          javascript: renderer.javascript,
-          bootstrap: before.bootstrap,
-        })
-      ).output;
-      if (
-        !result ||
-        typeof result !== 'object' ||
-        !('format' in result) ||
-        result.format !== 'baci-prerender/v1' ||
-        !('html' in result) ||
-        typeof result.html !== 'string'
-      )
-        throw Error('BUILD_FAILED');
-      createPrivatePrerenderDocument(
-        result.html,
-        before.bootstrap,
-        input.resources,
-        {
-          kind: 'published',
-          buildDigest: input.buildDigest,
-          executionOrigin: settings.executionOrigin,
-        }
-      );
-      return result.html;
-    });
+    const markup = await fragments.read(
+      key,
+      async (renderSignal) => {
+        const result = (
+          await settings.execute(
+            'prerender',
+            { javascript: renderer.javascript, bootstrap: before.bootstrap },
+            renderSignal
+          )
+        ).output;
+        if (
+          !result ||
+          typeof result !== 'object' ||
+          !('format' in result) ||
+          result.format !== 'baci-prerender/v1' ||
+          !('html' in result) ||
+          typeof result.html !== 'string'
+        )
+          throw Error('BUILD_FAILED');
+        createPrivatePrerenderDocument(
+          result.html,
+          before.bootstrap,
+          input.resources,
+          {
+            kind: 'published',
+            buildDigest: input.buildDigest,
+            executionOrigin: settings.executionOrigin,
+          }
+        );
+        return result.html;
+      },
+      signal
+    );
     const [after, afterBinding] = await Promise.all([
       runtime.resolveBoundary(identity, input.path, signal),
       reader.prerenderBinding(input.slug, input.buildDigest),

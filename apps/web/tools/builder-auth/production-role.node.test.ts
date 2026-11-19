@@ -9,7 +9,7 @@ test('requires the dedicated least-privilege login and storage execution role on
   let broker: Pool | undefined;
   try {
     await db.pool.query(
-      'CREATE ROLE authenticated NOLOGIN; CREATE ROLE baci_builder_auth_storage NOLOGIN NOINHERIT; CREATE ROLE baci_builder_auth_login LOGIN NOINHERIT; GRANT baci_builder_auth_storage TO baci_builder_auth_login;'
+      'CREATE ROLE authenticated NOLOGIN; CREATE ROLE extra_capability NOLOGIN; CREATE ROLE baci_builder_auth_storage NOLOGIN NOINHERIT; CREATE ROLE baci_builder_auth_login LOGIN NOINHERIT; GRANT baci_builder_auth_storage TO baci_builder_auth_login;'
     );
     broker = new Pool({
       ...db.connection,
@@ -24,6 +24,21 @@ test('requires the dedicated least-privilege login and storage execution role on
       /UNSAFE_AUTH_DATABASE_SESSION/
     );
     await db.pool.query('REVOKE authenticated FROM baci_builder_auth_login');
+    await verifyProductionAuthDatabaseRole(broker);
+    await db.pool.query('GRANT extra_capability TO baci_builder_auth_storage');
+    await assert.rejects(
+      verifyProductionAuthDatabaseRole(broker),
+      /UNSAFE_AUTH_DATABASE_SESSION/
+    );
+    await db.pool.query(
+      'REVOKE extra_capability FROM baci_builder_auth_storage'
+    );
+    await db.pool.query('ALTER ROLE baci_builder_auth_storage BYPASSRLS');
+    await assert.rejects(
+      verifyProductionAuthDatabaseRole(broker),
+      /UNSAFE_AUTH_DATABASE_SESSION/
+    );
+    await db.pool.query('ALTER ROLE baci_builder_auth_storage NOBYPASSRLS');
     await verifyProductionAuthDatabaseRole(broker);
     await db.pool.query('ALTER ROLE baci_builder_auth_login INHERIT');
     await assert.rejects(

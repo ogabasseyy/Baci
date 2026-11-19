@@ -80,6 +80,8 @@ jobs:
         run: node --test .github/actions/setup-pnpm-store/setup-pnpm-store-allowlist.test.mjs .github/actions/pnpm-install-cached/pnpm-install-cached-allowlist.test.mjs
       - name: Test Sentry Storefront Release Provenance
         run: node --test .github/scripts/sentry-storefront-provenance.test.mjs
+      - name: Test chat env pass-through guard
+        run: node --test .github/scripts/turbo-chat-env-passthrough.test.mjs
       - name: Test pilot change-detection contract
         run: node --test .github/scripts/pilot-change-detection-contract.test.mjs
       # Unfiltered on purpose; see docs/runbooks/storefront-release-gate.md.

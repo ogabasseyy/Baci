@@ -138,6 +138,33 @@ export async function initiatePaystackCancellationRefunds({
       });
       continue;
     }
+    if (transaction.gateway_reference?.startsWith('BCO-')) {
+      const capture = await supabase.rpc(
+        'bank_card_offer_refund_capture_matches',
+        {
+          p_order_id: order.id,
+          p_merchant_id: order.merchant_id,
+          p_transaction_id: transaction.id,
+          p_reference: transaction.gateway_reference,
+          p_amount_kobo: koboAmount,
+        }
+      );
+      if (capture.error)
+        throw new Error('Unable to verify bank card offer refund capture');
+      if (capture.data !== true) {
+        await quarantineRefund({
+          metadata: {
+            failed_payment_transaction_id: transaction.id,
+            ambiguous_initiation: false,
+          },
+          order,
+          reason: 'Bank card offer refund does not match the verified capture',
+          supabase,
+          transactions: [transaction],
+        });
+        continue;
+      }
+    }
     const paystackRefund = await initiatePaystackRefund(
       transaction.gateway_reference as string,
       koboAmount,

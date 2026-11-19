@@ -1,3 +1,4 @@
+import { initializeBankCardOfferCheckout } from '@/lib/checkout/initialize-bank-card-offer-checkout';
 /**
  * Payment Initialization API Route
  *
@@ -154,7 +155,7 @@ const PaymentInitRequestSchema = z.object({
   // Crypto payment options (only for juicyway gateway)
   crypto_chain: z.enum(['TRX', 'ETH', 'MATIC', 'AVAXC']).optional(),
   crypto_currency: z.enum(['USDT', 'USDC']).optional(),
-  payment_method: z.literal('uba_redvault').optional(),
+  payment_method: z.enum(['uba_redvault', 'bank_card_offer']).optional(),
   // Order-bound proof for guest REDVAULT initialization (below).
   tracking_token: z.string().min(1).max(128).optional(),
 });
@@ -1060,6 +1061,57 @@ export async function POST(request: NextRequest) {
     const data = parseResult.data;
     const retired = retiredGatewayResponse(data.gateway);
     if (retired) return retired;
+    if (data.payment_method === 'bank_card_offer') {
+      const auth = await authenticateApiRequest(request);
+      if (
+        !auth.user ||
+        (data.gateway && data.gateway !== 'paystack') ||
+        data.payment_type
+      ) {
+        return createErrorResponse(
+          'Bank card offer checkout unavailable',
+          'BANK_CARD_OFFER_UNAVAILABLE',
+          409
+        );
+      }
+      const client = createStorefrontOrderRpcClient({
+        fallbackClient: await createServerSupabaseClient(),
+        hasCanonicalDeliveryMetadata: false,
+        merchantId: data.merchant_id,
+        userId: auth.user.id,
+      });
+      const result = await initializeBankCardOfferCheckout({
+        client,
+        merchantId: data.merchant_id,
+        orderId: data.order_id,
+        email: data.customer_email,
+        currency: body.currency,
+      });
+      if (result.kind === 'unavailable') {
+        return createErrorResponse(
+          'Bank card offer checkout unavailable',
+          'BANK_CARD_OFFER_UNAVAILABLE',
+          409
+        );
+      }
+      if (result.kind === 'pending') {
+        return NextResponse.json(
+          {
+            code: 'BANK_CARD_OFFER_RECONCILIATION_REQUIRED',
+            reference: result.reference,
+          },
+          { status: 202 }
+        );
+      }
+      return NextResponse.json({
+        success: true,
+        gateway: 'paystack',
+        payment_method: 'bank_card_offer',
+        reference: result.reference,
+        authorization_url: result.checkoutUrl,
+        checkout_url: result.checkoutUrl,
+      });
+    }
     const redvaultRequested = data.payment_method === 'uba_redvault';
     const redvaultCustomerAuth = redvaultRequested
       ? await authenticateApiRequest(request)

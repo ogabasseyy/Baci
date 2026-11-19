@@ -754,6 +754,54 @@ export async function POST(request: NextRequest) {
     // Webhook handlers have no user cookies — use service client to bypass RLS
     const supabase = createServiceClient();
 
+    // Bank offer captures must pass the shared verification path before any
+    // transaction flip or fallback settlement can run.
+    if (reference.startsWith('BCO-')) {
+      const row = await supabase
+        .from('transactions')
+        .select(AGENTIC_PAYSTACK_DVA_TRANSACTION_SELECT)
+        .eq('gateway_reference', reference)
+        .single();
+      const transaction = row.data
+        ? normalizeAgenticPaystackDvaTransaction(row.data)
+        : null;
+      if (row.error || !transaction?.order_id || gateway !== 'paystack') {
+        return NextResponse.json(
+          { error: 'Invalid bank offer capture' },
+          { status: 400 }
+        );
+      }
+      const outcome = await finalizeOrderGatewayPayment({
+        actor: `webhook:${reference}`,
+        gateway,
+        gatewayResponse: {},
+        orderId: transaction.order_id,
+        reference,
+        scheduleAfter: (task) => after(task),
+        supabase,
+        transaction: {
+          amount: transaction.amount,
+          gateway_reference: transaction.gateway_reference ?? null,
+          id: transaction.id,
+          merchant_id: transaction.merchant_id,
+          order_id: transaction.order_id,
+          platform_fee: transaction.platform_fee,
+        },
+        wonTransactionFlip: false,
+      });
+      if (
+        outcome.kind === 'completed' ||
+        outcome.kind === 'order_cancelled' ||
+        outcome.kind === 'order_skipped'
+      ) {
+        return NextResponse.json({ success: true, outcome: outcome.kind });
+      }
+      return NextResponse.json(
+        { error: 'Bank offer capture requires reconciliation' },
+        { status: 503 }
+      );
+    }
+
     // Verify payment with the appropriate gateway
     let paymentStatus: string;
     let gatewayResponse: Record<string, unknown>;

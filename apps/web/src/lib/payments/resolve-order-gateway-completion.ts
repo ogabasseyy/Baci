@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createStorefrontOrderRpcClient } from '@/lib/checkout/storefront-order-rpc-client';
+import { approveBankCardOfferPayment } from './approve-bank-card-offer-payment';
 import { completeOrderGatewayPayment } from './complete-order-gateway-payment';
 import { fileRedvaultInventoryConfirmationReview } from './file-redvault-inventory-confirmation-review';
 import { captureOrHoldRedvaultPayment } from './redvault-capture-hold';
@@ -37,6 +38,50 @@ export async function resolveOrderGatewayCompletion({
       merchantId,
       userId: null,
     });
+    if (reference.startsWith('BCO-')) {
+      const verified =
+        gateway === 'paystack'
+          ? await approveBankCardOfferPayment({
+              client: redvaultScopedClient,
+              merchantId,
+              orderId,
+              reference,
+              transactionId,
+            })
+          : null;
+      if (!verified) {
+        return {
+          ok: false as const,
+          outcome: {
+            kind: 'completion_failed' as const,
+            error: new Error('bank_card_offer_verification_required'),
+          },
+        };
+      }
+      const result = await completeOrderGatewayPayment({
+        actor,
+        expectedOutstandingMinor,
+        gatewayResponse: verified,
+        orderId,
+        supabase,
+        transactionId,
+      });
+      if (!result.ok || result.completion.error_code) {
+        return {
+          ok: false as const,
+          outcome: {
+            kind: 'completion_failed' as const,
+            error: result.ok ? result.completion : result.error,
+          },
+        };
+      }
+      return {
+        ...result,
+        redvaultDuplicate: false,
+        redvaultInventoryConfirmed: false,
+        verifiedGatewayResponse: verified,
+      };
+    }
     const capture = await captureOrHoldRedvaultPayment({
       gateway,
       gatewayResponse,

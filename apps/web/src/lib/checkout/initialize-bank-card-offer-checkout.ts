@@ -1,0 +1,99 @@
+import 'server-only';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { resolvePaystackSplitTransactionCharge } from '@/lib/payments/resolve-paystack-split-transaction-charge';
+import { calculatePlatformFee } from '@/lib/paystack';
+import {
+  bankCardOfferCheckoutContextSchema,
+  bankCardOfferClaimSchema,
+} from '@/schemas/bank-card-offer-payment-context';
+import { hashBankCardOfferFilter } from './hash-bank-card-offer-filter';
+import { initializeBankCardOfferPaystack } from './initialize-bank-card-offer-paystack';
+
+export async function initializeBankCardOfferCheckout({
+  client,
+  merchantId,
+  orderId,
+  email,
+  currency,
+}: {
+  client: Pick<SupabaseClient, 'rpc'>;
+  merchantId: string;
+  orderId: string;
+  email: string;
+  currency: string | undefined;
+}) {
+  const key = process.env.PAYSTACK_SECRET_KEY;
+  const domain = key?.startsWith('sk_test_')
+    ? 'test'
+    : key?.startsWith('sk_live_')
+      ? 'live'
+      : null;
+  if (!domain || (currency && currency !== 'NGN'))
+    return { kind: 'unavailable' } as const;
+  const args = { p_order_id: orderId, p_merchant_id: merchantId };
+  const result = await client.rpc('get_bank_card_offer_checkout_context', args);
+  const context = bankCardOfferCheckoutContextSchema.safeParse(result.data);
+  if (
+    result.error ||
+    !context.success ||
+    context.data.quote.merchantId !== merchantId ||
+    email.trim().toLowerCase() !== context.data.customerEmail
+  ) {
+    return { kind: 'unavailable' } as const;
+  }
+  const { amountKobo, customerEmail, quote, slug, subaccount } = context.data;
+  const platformFeeKobo = calculatePlatformFee(amountKobo).platformFee;
+  const { retainedShippingKobo, transactionChargeKobo } =
+    await resolvePaystackSplitTransactionCharge({
+      client,
+      orderId,
+      merchantId,
+      amountKobo,
+      customerEmail,
+      platformFeeKobo,
+    });
+  const policyHash = hashBankCardOfferFilter(quote.paymentPolicy);
+  const claim = await client.rpc('claim_bank_card_offer_attempt', {
+    ...args,
+    p_amount_kobo: amountKobo,
+    p_domain: domain,
+    p_policy_hash: policyHash,
+    p_platform_fee_kobo: platformFeeKobo,
+    p_retained_shipping_kobo: retainedShippingKobo,
+  });
+  const reserved = bankCardOfferClaimSchema.safeParse(claim.data);
+  if (claim.error || !reserved.success) return { kind: 'unavailable' } as const;
+  const { claimed, reference, checkoutUrl } = reserved.data;
+  if (!claimed)
+    return checkoutUrl
+      ? ({ kind: 'initialized', reference, checkoutUrl } as const)
+      : ({ kind: 'pending', reference } as const);
+  const root = process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'usebaci.com';
+  const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
+  try {
+    const url = await initializeBankCardOfferPaystack({
+      attempt: {
+        ...context.data,
+        currency: 'NGN',
+        domain,
+        reference,
+        acceptedFilterPolicyHash: policyHash,
+        adjustmentsKobo:
+          amountKobo - (quote.productSubtotalKobo - quote.discountKobo),
+      },
+      subaccount,
+      transactionChargeKobo,
+      callbackUrl: `${protocol}://${slug}.${root}/checkout/success?reference=${reference}`,
+    });
+    const saved = await client.rpc('record_bank_card_offer_checkout_url', {
+      ...args,
+      p_reference: reference,
+      p_checkout_url: url,
+    });
+    if (!saved.error && saved.data === true)
+      return { kind: 'initialized', reference, checkoutUrl: url } as const;
+  } catch {
+    // The provider may have accepted the write. Keep this reference fenced.
+  }
+  return { kind: 'pending', reference } as const;
+}

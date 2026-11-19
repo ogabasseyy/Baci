@@ -206,7 +206,10 @@ export async function finalizeOrderGatewayPayment({
     emailMaxAttemptsPerSender,
     externalGatewayReference: reference,
     fallbackDeadlineMs,
-    gatewayResponse,
+    gatewayResponse:
+      'verifiedGatewayResponse' in result
+        ? result.verifiedGatewayResponse
+        : gatewayResponse,
     order: richOrder,
     scheduleAfter,
     settlementGateway: gateway,

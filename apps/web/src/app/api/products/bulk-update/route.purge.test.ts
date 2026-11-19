@@ -66,19 +66,14 @@ vi.mock('@/lib/get-merchant-for-api-request', () => ({
     merchantId: 'merchant-123',
     merchantSlug: 'ogabassey',
     businessName: 'Test Store',
-    staffAccess: {
-      isOwner: true,
-      isStaff: false,
-      role: null,
-      permissions: { full_access: { all: true } },
-    },
+    staffAccess: { isOwner: true, isStaff: false, role: null, permissions: {} },
   }),
   toUserAccess: vi.fn().mockReturnValue({
     merchantId: 'merchant-123',
     role: 'owner',
     isOwner: true,
     isStaff: false,
-    permissions: { full_access: { all: true } },
+    permissions: {},
   }),
 }));
 vi.mock('next/headers', () => ({
@@ -93,27 +88,20 @@ vi.mock('@/lib/supabase/server', () => ({
     },
     from: vi.fn((table: string) => {
       if (table === 'merchants') {
+        const merchant = {
+          data: {
+            id: MERCHANT_ID,
+            business_name: 'Test Store',
+            country: 'NG',
+            payout_currency: 'NGN',
+          },
+          error: null,
+        };
         return {
           select: vi.fn().mockReturnValue({
             eq: vi.fn().mockReturnValue({
-              maybeSingle: vi.fn().mockResolvedValue({
-                data: {
-                  id: MERCHANT_ID,
-                  business_name: 'Test Store',
-                  country: 'NG',
-                  payout_currency: 'NGN',
-                },
-                error: null,
-              }),
-              single: vi.fn().mockResolvedValue({
-                data: {
-                  id: MERCHANT_ID,
-                  business_name: 'Test Store',
-                  country: 'NG',
-                  payout_currency: 'NGN',
-                },
-                error: null,
-              }),
+              maybeSingle: vi.fn().mockResolvedValue(merchant),
+              single: vi.fn().mockResolvedValue(merchant),
             }),
           }),
         };
@@ -142,11 +130,12 @@ vi.mock('@/lib/supabase/server', () => ({
           })),
         };
       }
+      const empty = vi.fn().mockResolvedValue({ data: null, error: null });
       return {
         select: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
-        maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
-        single: vi.fn().mockResolvedValue({ data: null, error: null }),
+        maybeSingle: empty,
+        single: empty,
       };
     }),
   })),
@@ -266,6 +255,45 @@ describe('POST /api/products/bulk-update storefront purge', () => {
         { slug: 'slug-0', categorySegment: 'electronics' },
         { slug: 'slug-50', categorySegment: 'electronics' },
       ])
+    );
+  });
+
+  it('retains broad PDP expiry when a batched row lacks a non-id purge slug (archived/inactive)', async () => {
+    productUpdateSelectRows = [
+      {
+        id: '123e4567-e89b-42d3-a456-426614174000',
+        slug: 'product-1',
+        category: 'Phones',
+        status: 'active',
+        categories: null,
+        product_categories: [],
+      },
+      {
+        id: '223e4567-e89b-42d3-a456-426614174000',
+        slug: 'archived-phone',
+        category: 'Phones',
+        status: 'archived',
+        categories: null,
+        product_categories: [],
+      },
+    ];
+
+    await POST(
+      makeRequest({
+        changes: [
+          {
+            type: 'update',
+            productId: '123e4567-e89b-42d3-a456-426614174000',
+            details: { price: 900 },
+          },
+        ],
+      })
+    );
+
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      MERCHANT_ID,
+      undefined,
+      { expireImmediately: true }
     );
   });
 });

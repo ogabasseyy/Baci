@@ -112,7 +112,7 @@ export async function POST(request: NextRequest) {
     // always survivable (caches self-heal on their TTL), so it must never break
     // the bulk update. The shared scheduler uses a bounded hostname purge for
     // high-cardinality batches so every affected PDP is still evicted.
-    if (purgeEntries.length > 0) {
+    if (purgeEntries.length > 0 || resolvedProductIds.length > 0) {
       try {
         const requestedProductIds = parseResult.data.changes
           .map((change) => change.productId?.trim())
@@ -120,9 +120,22 @@ export async function POST(request: NextRequest) {
             (productId): productId is string =>
               typeof productId === 'string' && isValidUuid(productId)
           );
-        const productIds = Array.from(
+        const allProductIds = Array.from(
           new Set([...requestedProductIds, ...resolvedProductIds])
-        ).filter(isValidUuid);
+        );
+        const productIds = allProductIds.filter(isValidUuid);
+        const resolvedIdSet = new Set(resolvedProductIds);
+        const productIdSet = new Set(allProductIds);
+        const nonIdPurgeSlugs = new Set(
+          purgeEntries
+            .map((entry) => entry.slug.trim())
+            .filter((slug) => Boolean(slug) && !productIdSet.has(slug))
+        );
+        const hasCompleteScopedCoverage =
+          purgeEntries.length > 0 &&
+          productIds.length > 0 &&
+          nonIdPurgeSlugs.size >= allProductIds.length &&
+          requestedProductIds.every((id) => resolvedIdSet.has(id));
         const dependentAliases = await resolveDependentLegacyProductIdentifiers(
           supabase,
           merchantId,
@@ -138,11 +151,13 @@ export async function POST(request: NextRequest) {
         // Bust every purged slug, product UUID, and dependent child cache
         // BEFORE the edge purge so a CF MISS cannot refill from stale entries.
         const slugsExpired =
+          slugIdentifiers.length > 0 &&
           revalidateProductSlugs(merchantId, slugIdentifiers, {
             expireImmediately: true,
           }) === true;
         const originHardExpired =
           (slugsExpired &&
+            hasCompleteScopedCoverage &&
             !dependentAliases.incomplete &&
             revalidateProducts(merchantId, undefined, {
               expireImmediately: true,

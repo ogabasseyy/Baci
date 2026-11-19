@@ -165,7 +165,10 @@ describe('POST /api/products/bulk-publish', () => {
     };
     deleteData = [{ id: 'draft-1' }];
     deleteError = null;
-    updateData = [{ id: 'product-1' }, { id: 'product-2' }];
+    updateData = [
+      { id: 'product-1', slug: 'product-1' },
+      { id: 'product-2', slug: 'product-2' },
+    ];
     updateError = null;
     mockCheckCsrfProtection.mockResolvedValue({ valid: true, response: null });
     mockHasPermission.mockReturnValue(true);

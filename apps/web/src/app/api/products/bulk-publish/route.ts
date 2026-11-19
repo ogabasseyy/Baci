@@ -120,6 +120,11 @@ export async function POST(request: NextRequest) {
         const updatedProductIds = (updatedProducts ?? [])
           .map((product) => product.id?.trim())
           .filter((id): id is string => Boolean(id));
+        const allPublishedHaveExplicitSlug =
+          (updatedProducts ?? []).length > 0 &&
+          (updatedProducts ?? []).every((product) =>
+            Boolean(product.slug?.trim() && product.id?.trim())
+          );
         const dependentAliases = await resolveDependentLegacyProductIdentifiers(
           supabase,
           merchantId,
@@ -138,6 +143,7 @@ export async function POST(request: NextRequest) {
           }) === true;
         const originHardExpired =
           (slugsExpired &&
+            allPublishedHaveExplicitSlug &&
             !dependentAliases.incomplete &&
             revalidateProducts(merchantId, undefined, {
               expireImmediately: true,

@@ -245,4 +245,43 @@ describe('POST /api/products/bulk-publish purge ordering', () => {
       'test-store'
     );
   });
+
+  it('retains broad PDP expiry when a published product has a blank slug', async () => {
+    const deleteQuery = makeQuery([]);
+    const updateQuery = makeQuery([
+      { id: 'product-blank', name: 'No Slug', slug: null },
+    ]);
+    const aliasQuery = {
+      eq: vi.fn(() => aliasQuery),
+      in: vi.fn(() => aliasQuery),
+      limit: vi.fn().mockResolvedValue({ data: [], error: null }),
+    };
+    mockCreateClient.mockReturnValue({
+      auth: {
+        getUser: vi
+          .fn()
+          .mockResolvedValue({ data: { user: { id: 'user-1' } } }),
+      },
+      from: vi.fn(() => ({
+        select: vi.fn(() => aliasQuery),
+        delete: vi.fn().mockReturnValue(deleteQuery),
+        update: vi.fn().mockReturnValue(updateQuery),
+      })),
+    });
+    const { POST } = await import('./route');
+
+    const response = await POST(
+      new NextRequest('http://localhost/api/products/bulk-publish', {
+        method: 'POST',
+      })
+    );
+    expect(response.status).toBe(200);
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      'merchant-1',
+      undefined,
+      {
+        expireImmediately: true,
+      }
+    );
+  });
 });

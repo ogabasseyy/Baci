@@ -55,15 +55,26 @@ function createWorkspace() {
   return { dir, base };
 }
 
+// The test's own environment, minus any ambient Turborepo settings (remote
+// cache credentials, a base ref) that could change what the dry run does.
+function turboEnv(base) {
+  const env = cleanEnv();
+  for (const key of Object.keys(env)) {
+    if (key.startsWith('TURBO_')) delete env[key];
+  }
+  return {
+    ...env,
+    TURBO_SCM_BASE: base,
+    TURBO_TELEMETRY_DISABLED: '1',
+    DO_NOT_TRACK: '1',
+  };
+}
+
 function affectedTasks(dir, base) {
   const result = spawnSync(turbo, ['run', 'lint', '--affected', '--dry=json'], {
     cwd: dir,
     encoding: 'utf8',
-    env: cleanEnv({
-      TURBO_SCM_BASE: base,
-      TURBO_TELEMETRY_DISABLED: '1',
-      DO_NOT_TRACK: '1',
-    }),
+    env: turboEnv(base),
   });
   assert.equal(result.status, 0, result.stderr);
   const plan = JSON.parse(result.stdout.slice(result.stdout.indexOf('{')));

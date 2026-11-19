@@ -37,9 +37,11 @@ printf 'turbo %s TURBO_SCM_BASE=%s\n' "$*" "${TURBO_SCM_BASE-<unset>}" >> "${TUR
 exit 0
 SH
 chmod +x "$REPO/node_modules/.bin/turbo"
-# Stub coderabbit so the final fail-open review step never reaches a real one.
+# Stub coderabbit (and the jq that parses its output) so the final fail-open
+# review step never reaches a real one and needs nothing installed.
 printf '#!/bin/bash\nexit 0\n' > "$STUB_BIN/coderabbit"
-chmod +x "$STUB_BIN/coderabbit"
+cp "$STUB_BIN/coderabbit" "$STUB_BIN/jq"
+chmod +x "$STUB_BIN/coderabbit" "$STUB_BIN/jq"
 
 git -C "$REPO" init -q
 git -C "$REPO" config user.email "gate-test@example.com"

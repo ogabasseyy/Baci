@@ -53,5 +53,5 @@ export const brilStashSourcesSchema = z.strictObject({
   sourceReadAt: z.iso.datetime({ offset: true }),
   rows: z.array(sourceRow).max(BRILSTASH_PILOT_LISTING_LIMIT),
   previousExternalIds: z.array(z.string()).max(BRILSTASH_PILOT_LISTING_LIMIT),
-  retiredExternalIds: z.array(z.string()),
+  retiredExternalIds: z.array(z.string()).max(BRILSTASH_PILOT_LISTING_LIMIT),
 });

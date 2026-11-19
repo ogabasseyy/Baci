@@ -90,6 +90,9 @@ LANGUAGE sql STABLE SET search_path = '' AS $$
     SELECT 1
     FROM private.brilstash_installations i
     JOIN private.brilstash_generations g ON g.installation_id = i.id AND g.id = p_candidate_id
+    JOIN private.brilstash_candidate_approvals a ON a.installation_id = g.installation_id
+      AND a.candidate_id = g.id AND a.catalogue_revision = g.catalogue_revision
+      AND a.payload_digest = g.payload_digest
     WHERE i.id = p_installation_id
       AND g.id IS DISTINCT FROM i.active_generation_id
       AND g.expected_active_generation_id IS NOT DISTINCT FROM i.active_generation_id

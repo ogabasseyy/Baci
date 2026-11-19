@@ -192,7 +192,9 @@ BEGIN
     'rows', COALESCE((SELECT jsonb_agg(source.row ORDER BY source.ordinal)
       FROM private.brilstash_source_rows(i.id, i.merchant_id) WITH ORDINALITY source(row, ordinal)), '[]'::jsonb),
     'retiredExternalIds', COALESCE((SELECT jsonb_agg(l.external_id ORDER BY l.external_id)
-      FROM private.brilstash_listings l WHERE l.installation_id = i.id AND l.retired_at IS NOT NULL), '[]'::jsonb),
+      FROM jsonb_array_elements(g.payload) previous(item)
+      JOIN private.brilstash_listings l ON l.installation_id = i.id
+        AND l.external_id = previous.item->>'external_id' AND l.retired_at IS NOT NULL), '[]'::jsonb),
     'previousExternalIds', COALESCE((SELECT jsonb_agg(item->>'external_id')
       FROM jsonb_array_elements(g.payload) item), '[]'::jsonb)
   ) INTO result

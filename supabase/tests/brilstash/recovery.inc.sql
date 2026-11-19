@@ -70,6 +70,7 @@ DECLARE
   revision bigint;
   next_revision bigint;
 BEGIN
+  PERFORM public.approve_brilstash_candidate(installation, candidate, current_setting('fixture.candidate_digest'));
   revision := public.close_brilstash_admission(installation, candidate, window_date);
   PERFORM public.abort_brilstash_drain(installation, revision);
   next_revision := public.close_brilstash_admission(installation, candidate, window_date);

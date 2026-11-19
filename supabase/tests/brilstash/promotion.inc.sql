@@ -64,6 +64,12 @@ DECLARE
   window_date date := (statement_timestamp() AT TIME ZONE 'Africa/Lagos')::date;
   revision bigint;
 BEGIN
+  BEGIN
+    PERFORM public.close_brilstash_admission(installation, candidate, window_date);
+    RAISE EXCEPTION 'closure started before the operator approved the candidate';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  PERFORM public.approve_brilstash_candidate(installation, candidate, current_setting('fixture.candidate_digest'));
   PERFORM set_config('fixture.closure_clock', ((window_date + time '00:15') AT TIME ZONE 'Africa/Lagos')::text, true);
   BEGIN
     PERFORM public.close_brilstash_admission(installation, candidate, window_date - 1);

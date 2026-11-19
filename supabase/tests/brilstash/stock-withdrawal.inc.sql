@@ -40,6 +40,9 @@ DECLARE read_result jsonb := public.load_brilstash_catalogue_sources(installatio
 DECLARE source_time timestamptz := LEAST((read_result->>'sourceReadAt')::timestamptz,
   ((statement_timestamp() AT TIME ZONE 'Africa/Lagos')::date + time '22:00') AT TIME ZONE 'Africa/Lagos');
 BEGIN
+  IF read_result->'retiredExternalIds' IS DISTINCT FROM '[]'::jsonb THEN
+    RAISE EXCEPTION 'the source response included retired history outside the active snapshot';
+  END IF;
   IF read_result->'rows'->0->'inventory'->>'kind' IS DISTINCT FROM 'withdrawn'
     OR read_result->'rows'->0->'inventory'->>'approvalId' IS DISTINCT FROM current_setting('fixture.withdrawal_approval')
   THEN RAISE EXCEPTION 'builder did not read the exact withdrawal approval'; END IF;
@@ -54,6 +57,10 @@ SET LOCAL ROLE authenticated;
 SET LOCAL "request.jwt.claim.sub" = '10000000-0000-4000-8000-000000000002';
 SELECT public.configure_brilstash_drain_policy(
   '30000000-0000-4000-8000-000000000001', 1200, 120, NULL, 'Fixture drain boundaries'
+);
+SELECT public.approve_brilstash_candidate(
+  '30000000-0000-4000-8000-000000000001', '70000000-0000-4000-8000-000000000090',
+  current_setting('fixture.withdrawal_digest')
 );
 SELECT set_config('fixture.withdrawal_closure', public.close_brilstash_admission(
   '30000000-0000-4000-8000-000000000001', '70000000-0000-4000-8000-000000000090',

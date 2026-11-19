@@ -6,6 +6,10 @@
  */
 
 import { type BillItem, mapKudaBillItems } from '@/lib/kuda-bill-items';
+import {
+  assertKudaBillListInKobo,
+  collectRawFixedPricesKobo,
+} from '@/lib/kuda-bill-list-unit-check';
 import { isKudaOutcomeUnknown } from '@/lib/kuda-transport-error';
 import {
   extractKudaTransactionId,
@@ -372,8 +376,14 @@ export async function getBillersByType(
 
   // Handle both camelCase (production) and PascalCase (legacy/test) responses
   const camelBillers = response.data?.billers;
+  const pascalBillers = response.data?.Billers;
+  let billers: Biller[] = [];
+  let rawFixedPricesKobo: number[] = [];
   if (camelBillers && camelBillers.length > 0) {
-    return camelBillers.map((raw) => ({
+    rawFixedPricesKobo = camelBillers.flatMap((raw) =>
+      collectRawFixedPricesKobo(raw.billItems)
+    );
+    billers = camelBillers.map((raw) => ({
       billerId: raw.id,
       billerName: raw.name,
       billerType: raw.description,
@@ -382,14 +392,19 @@ export async function getBillersByType(
       billerIconUrl: raw.billerIconUrl,
       billItems: mapKudaBillItems(raw.billItems),
     }));
+  } else if (pascalBillers && pascalBillers.length > 0) {
+    rawFixedPricesKobo = pascalBillers.flatMap((raw) =>
+      collectRawFixedPricesKobo(raw.BillItems)
+    );
+    billers = pascalBillers.map((raw) => mapKudaBiller(raw, billTypeName));
   }
 
-  const pascalBillers = response.data?.Billers;
-  if (pascalBillers && pascalBillers.length > 0) {
-    return pascalBillers.map((raw) => mapKudaBiller(raw, billTypeName));
-  }
-
-  return [];
+  // One answer shares one unit: a whole answer priced in naira (read as kobo
+  // it is 100x too cheap) is refused here, whatever the items are called and
+  // whichever billers list a cheap item. The raw prices are judged, since a
+  // per-list guard in the mapper may already have dropped the evidence.
+  assertKudaBillListInKobo(rawFixedPricesKobo, billTypeName);
+  return billers;
 }
 
 /**

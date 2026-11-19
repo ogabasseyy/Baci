@@ -10,6 +10,7 @@ import {
   type OwnerRequestContext,
   requireExperienceOwner,
 } from './authorization';
+import { isCanonicalMerchantSlug } from './canonical-domain';
 import type { ExperienceCompositionSettings } from './compose-runtime';
 import {
   createProductionPrerenderPipeline,
@@ -129,7 +130,7 @@ export function createProductionExperienceIntegration(settings: {
       merchant.error ||
       !merchant.data ||
       typeof merchant.data.slug !== 'string' ||
-      !/^[a-z0-9][a-z0-9-]{0,99}$/.test(merchant.data.slug)
+      !isCanonicalMerchantSlug(merchant.data.slug)
     )
       throw Error('NOT_FOUND');
     signal?.throwIfAborted();

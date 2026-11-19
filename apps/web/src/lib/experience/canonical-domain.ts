@@ -1,19 +1,17 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { productionOrigin } from '@/lib/experience/production-origins';
+import { VALID_SLUG_REGEX } from '@/lib/validation';
+
+export function isCanonicalMerchantSlug(slug: string): boolean {
+  return slug.length <= 63 && VALID_SLUG_REGEX.test(slug);
+}
 
 function safeHostname(host: string) {
   if (
     host.length > 253 ||
     host !== host.toLowerCase() ||
     !host.includes('.') ||
-    host
-      .split('.')
-      .some(
-        (part) =>
-          part.length < 1 ||
-          part.length > 63 ||
-          !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(part)
-      )
+    host.split('.').some((part) => !isCanonicalMerchantSlug(part))
   )
     throw Error('INVALID_CANONICAL_DOMAIN');
   const origin = productionOrigin(`https://${host}`);
@@ -29,8 +27,7 @@ export async function resolveCanonicalBase(
   rootDomain: string,
   signal?: AbortSignal
 ) {
-  if (!/^[a-z0-9][a-z0-9-]{0,99}$/.test(slug))
-    throw Error('INVALID_MERCHANT_SLUG');
+  if (!isCanonicalMerchantSlug(slug)) throw Error('INVALID_MERCHANT_SLUG');
   safeHostname(rootDomain);
   signal?.throwIfAborted();
   const query = client.rpc('resolve_storefront_custom_domain', {

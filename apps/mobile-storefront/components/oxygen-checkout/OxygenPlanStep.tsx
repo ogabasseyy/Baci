@@ -95,76 +95,59 @@ export function OxygenPlanStep({
           min={min}
           max={max}
           total={limits.productAmount}
-          disabled={busy}
+          disabled={busy || unavailable}
           onChange={(value) => {
-            if (
-              validOxygenPlan({ ...limits, offers: undefined }, value, tenure)
-            )
-              onEquityChange(value);
+            if (validOxygenPlan(limits, value, tenure)) onEquityChange(value);
           }}
         />
         <View style={styles.presets}>
-          {[25, 50, 75, 90].map((value) => (
-            <Pressable
-              key={value}
-              accessibilityRole="button"
-              accessibilityLabel={`${value}%`}
-              accessibilityState={{
-                selected: equityPercentage === value,
-                disabled:
-                  busy ||
-                  !validOxygenPlan(
-                    { ...limits, offers: undefined },
-                    value,
-                    tenure
-                  ),
-              }}
-              disabled={
-                busy ||
-                !validOxygenPlan(
-                  { ...limits, offers: undefined },
-                  value,
-                  tenure
-                )
-              }
-              onPress={() => {
-                Keyboard.dismiss();
-                onEquityChange(value);
-              }}
-              style={[
-                styles.preset,
-                {
-                  backgroundColor:
-                    equityPercentage === value
-                      ? colors.primaryLowOpacity
-                      : colors.background,
-                  borderColor:
-                    equityPercentage === value ? colors.primary : colors.border,
-                  opacity: !validOxygenPlan(
-                    { ...limits, offers: undefined },
-                    value,
-                    tenure
-                  )
-                    ? 0.4
-                    : 1,
-                },
-              ]}
-            >
-              <Text
+          {[25, 50, 75, 90].map((value) => {
+            const allowed = validOxygenPlan(limits, value, tenure);
+            return (
+              <Pressable
+                key={value}
+                accessibilityRole="button"
+                accessibilityLabel={`${value}%`}
+                accessibilityState={{
+                  selected: equityPercentage === value,
+                  disabled: busy || !allowed,
+                }}
+                disabled={busy || !allowed}
+                onPress={() => {
+                  Keyboard.dismiss();
+                  onEquityChange(value);
+                }}
                 style={[
-                  styles.choiceText,
+                  styles.preset,
                   {
-                    color:
-                      equityPercentage >= value - 2
+                    backgroundColor:
+                      equityPercentage === value
+                        ? colors.primaryLowOpacity
+                        : colors.background,
+                    borderColor:
+                      equityPercentage === value
                         ? colors.primary
-                        : colors.text,
+                        : colors.border,
+                    opacity: allowed ? 1 : 0.4,
                   },
                 ]}
               >
-                {value}%
-              </Text>
-            </Pressable>
-          ))}
+                <Text
+                  style={[
+                    styles.choiceText,
+                    {
+                      color:
+                        equityPercentage >= value - 2
+                          ? colors.primary
+                          : colors.text,
+                    },
+                  ]}
+                >
+                  {value}%
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
       </View>
       <View style={{ gap: 12 }}>

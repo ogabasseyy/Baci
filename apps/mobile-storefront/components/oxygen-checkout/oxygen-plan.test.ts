@@ -60,6 +60,18 @@ describe('Oxygen confirmed plan boundaries', () => {
     expect(defaultOxygenEquity({ ...limits, eligibleAmount: 60000 })).toBe(40);
     expect(defaultOxygenEquity({ ...limits, productAmount: 9000 })).toBeNull();
   });
+  it('finds the lowest equity admitted by the rounded financed amount', () => {
+    const roundedLimits = {
+      ...limits,
+      productAmount: 200000.02,
+      eligibleAmount: 132320.01,
+      minimumAmount: 132320.01,
+      offers: [{ tenure: 3, loanAmount: 132320.01 }],
+    };
+    expect(validOxygenPlan(roundedLimits, 33.84, 3)).toBe(true);
+    expect(defaultOxygenEquity(roundedLimits, 3)).toBe(33.84);
+  });
+
   it('enforces tenure, minimum financed amount and two decimal precision', () => {
     expect(validOxygenPlan(limits, 25, 6)).toBe(true);
     expect(validOxygenPlan(limits, 25, 7)).toBe(false);

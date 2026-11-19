@@ -98,3 +98,64 @@ it('keeps booking explicit and passes the selected terms unchanged', () => {
     tenure: 2,
   });
 });
+
+it('limits the slider and presets to the selected repayment offer', () => {
+  const onEquityChange = jest.fn();
+  render(
+    <OxygenPlanStep
+      limits={{
+        ...limits,
+        eligibleAmount: 189000,
+        minimumAmount: 68000,
+        offers: [
+          { tenure: 2, loanAmount: 131000 },
+          { tenure: 3, loanAmount: 189000 },
+        ],
+      }}
+      equityPercentage={50}
+      tenure={2}
+      onEquityChange={onEquityChange}
+      onTenureChange={jest.fn()}
+      onBook={jest.fn()}
+    />
+  );
+
+  const slider = screen.getByRole('adjustable', {
+    name: 'Down payment slider',
+  });
+  expect(slider.props.accessibilityValue.min).toBe(33.84);
+  expect(screen.getByRole('button', { name: '25%' })).toBeDisabled();
+  fireEvent(slider, 'layout', { nativeEvent: { layout: { width: 100 } } });
+  fireEvent(slider, 'responderGrant', { nativeEvent: { locationX: 25 } });
+  expect(onEquityChange).toHaveBeenCalledWith(33.84);
+  fireEvent.press(screen.getByRole('button', { name: '50%' }));
+  expect(onEquityChange).toHaveBeenLastCalledWith(50);
+});
+
+it('keeps a payable offer with one valid rounded percentage selectable', () => {
+  render(
+    <OxygenPlanStep
+      limits={{
+        ...limits,
+        productAmount: 100000.01,
+        eligibleAmount: 66160.01,
+        minimumAmount: 66160.01,
+        offers: [{ tenure: 3, loanAmount: 66160.01 }],
+      }}
+      equityPercentage={33.84}
+      tenure={3}
+      onEquityChange={jest.fn()}
+      onTenureChange={jest.fn()}
+      onBook={jest.fn()}
+    />
+  );
+  expect(screen.getByRole('adjustable').props.accessibilityValue).toMatchObject(
+    {
+      min: 33.84,
+      max: 33.84,
+    }
+  );
+  expect(
+    screen.getByRole('button', { name: 'See payment breakdown' })
+  ).toBeEnabled();
+});

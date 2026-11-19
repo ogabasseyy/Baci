@@ -1,4 +1,8 @@
-import { defaultOxygenEquity, type OxygenPlanLimits } from './oxygen-plan';
+import {
+  defaultOxygenEquity,
+  type OxygenPlanLimits,
+  validOxygenPlan,
+} from './oxygen-plan';
 
 export function oxygenPlanDisplay(
   limits: OxygenPlanLimits,
@@ -13,17 +17,8 @@ export function oxygenPlanDisplay(
   const months = limits.offers?.length
     ? Math.max(...limits.offers.map((offer) => offer.tenure))
     : Math.max(0, Math.min(12, Math.floor(limits.maxTenure)));
-  const min =
-    Math.ceil(
-      Math.max(
-        25,
-        limits.minEquity,
-        (1 - limits.eligibleAmount / limits.productAmount) * 100
-      ) *
-        100 -
-        1e-8
-    ) / 100;
-  const max =
+  const minimumEquity = defaultOxygenEquity(limits, tenure);
+  const nominalMax =
     Math.floor(
       Math.min(
         90,
@@ -33,10 +28,21 @@ export function oxygenPlanDisplay(
         100 +
         1e-8
     ) / 100;
+  // Currency rounds to cents before validation, which can admit one more
+  // hundredth of a percentage point than the continuous range suggests.
+  const nextPercent = Math.round(nominalMax * 100 + 1) / 100;
+  const max = validOxygenPlan(limits, nextPercent, tenure)
+    ? nextPercent
+    : Math.max(nominalMax, minimumEquity ?? nominalMax);
   const tenures =
     limits.offers?.map((offer) => offer.tenure).sort((a, b) => a - b) ??
     Array.from({ length: months }, (_, i) => i + 1);
-  const unavailable =
-    !!limits.offers && defaultOxygenEquity(limits, tenure) === null;
-  return { exceedsOffer, unavailable, months, min, max, tenures };
+  return {
+    exceedsOffer,
+    unavailable: minimumEquity === null,
+    months,
+    min: minimumEquity ?? max,
+    max,
+    tenures,
+  };
 }

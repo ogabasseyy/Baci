@@ -74,3 +74,21 @@ it('tracks screen movement when the native event target changes beneath the thum
   });
   expect(onChange).toHaveBeenLastCalledWith(35);
 });
+
+it('keeps accessibility increments at two decimal places', () => {
+  const onChange = jest.fn();
+  render(
+    <OxygenPlanSlider
+      value={31.01}
+      min={31.01}
+      max={75}
+      total={100000}
+      disabled={false}
+      onChange={onChange}
+    />
+  );
+  fireEvent(screen.getByRole('adjustable'), 'accessibilityAction', {
+    nativeEvent: { actionName: 'increment' },
+  });
+  expect(onChange).toHaveBeenCalledWith(32.01);
+});

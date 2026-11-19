@@ -70,8 +70,11 @@ export function defaultOxygenEquity(
         100 -
         1e-8
     ) / 100;
+  // Check the adjacent lower value against the same rounded cents as booking.
+  const lower = Math.round(equity * 100 - 1) / 100;
+  if (validOxygenPlan(limits, lower, tenure)) return lower;
   if (validOxygenPlan(limits, equity, tenure)) return equity;
-  const next = Math.round((equity + 0.01) * 100) / 100;
+  const next = Math.round(equity * 100 + 1) / 100;
   return validOxygenPlan(limits, next, tenure) ? next : null;
 }
 /** Reference and confirmed monetary schedule scope transient consent; never persist it. */

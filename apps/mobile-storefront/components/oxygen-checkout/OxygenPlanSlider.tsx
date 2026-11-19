@@ -50,16 +50,10 @@ export function OxygenPlanSlider({
         }}
         accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
         onAccessibilityAction={(e) => {
-          if (!disabled)
-            onChange(
-              Math.max(
-                min,
-                Math.min(
-                  max,
-                  safe + (e.nativeEvent.actionName === 'increment' ? 1 : -1)
-                )
-              )
-            );
+          if (disabled) return;
+          const delta = e.nativeEvent.actionName === 'increment' ? 100 : -100;
+          const next = (Math.round(safe * 100) + delta) / 100;
+          onChange(Math.max(min, Math.min(max, next)));
         }}
         onLayout={(e) => {
           width.current = Math.max(1, e.nativeEvent.layout.width);

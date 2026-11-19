@@ -5,6 +5,8 @@ import { getOxygenStagingProfile } from '@/lib/oxygen-staging-profile';
 import { isClosedOxygenShippingStatus } from '@/services/oxygen/oxygen-order-status';
 import { useAuthStore } from '@/stores/auth-store';
 
+// History shows funded orders through the regular order details and receipt when available.
+// This button opens the actionable financing flow for unpaid orders.
 export function OxygenOrderResume({
   order,
 }: {

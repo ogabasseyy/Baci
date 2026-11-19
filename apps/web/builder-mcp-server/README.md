@@ -129,6 +129,15 @@ scopes, and emits allowlisted best-effort telemetry. Durable mutation evidence a
 AI quotas remain in the underlying SQL transactions. An uncertain response is not
 retried automatically: read status/reconcile using the existing retry key.
 
+Production builds require the linked owner connection. The database claims the
+same job for a synchronous or background worker, with a ten-minute lease.
+Renewal runs every two minutes and cannot extend past job expiry. Recovery rotates the attempt
+nonce only after the lease expires. The enqueue key deduplicates creation.
+Background finalization uses the persisted job ID as its retry key, while
+synchronous finalization accepts a caller key. Both rely on the same locked
+job and attempt for finalization. A retry after finalization recovers that job's
+existing result.
+
 The HTTP challenge handles token validation, including the broker's required
 base read scope. A valid builder token missing a tool-specific scope receives
 `insufficient_scope` with the required scopes in the MCP tool result's

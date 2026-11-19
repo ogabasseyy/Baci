@@ -6,7 +6,6 @@ import {
   signJobTicket,
 } from '../../../tools/experience-runner/output-receiver';
 import { unpackPrerenderBuild } from '../../../tools/experience-runner/prerender-artifacts';
-import { localPreviewHost } from '../../../tools/experience-runner/preview-origin';
 import { packPrivateBuild } from '../../../tools/experience-runner/private-build-payload';
 import { RunnerCapacityError } from '../../../tools/experience-runner/runner-transport';
 import { loadOfflineAssets } from './asset-service';
@@ -15,7 +14,11 @@ import {
   ownerRpcArgs,
   requireExperienceOwner,
 } from './authorization';
-import { bindBuildExecutor, startLinkedBuildLease } from './build-execution';
+import {
+  bindBuildExecutor,
+  resolveBuildHost,
+  startLinkedBuildLease,
+} from './build-execution';
 import { retainBuildPerformanceReport } from './build-performance-retention';
 import { verifyCompiledCandidate } from './build-service';
 import { assertCandidatePerformanceBudget } from './candidate-performance-budget';
@@ -34,20 +37,7 @@ export async function runExperienceBuild(
   deps: ExperienceBuildDependencies
 ) {
   const signal = inputCtx.signal;
-  signal?.throwIfAborted();
-  if (deps.previewOrigin && deps.profile !== 'production')
-    throw Error('INVALID_PREVIEW_ORIGIN');
-  if (
-    deps.profile === 'production' &&
-    (!deps.execute ||
-      !deps.prerenderArtifacts ||
-      typeof deps.bootstrap !== 'function')
-  )
-    throw Error('INCOMPLETE_PRODUCTION_BUILD');
-  const hostOrigin =
-    deps.profile === 'production'
-      ? productionOrigin(deps.hostOrigin)
-      : localPreviewHost(deps.hostOrigin);
+  const hostOrigin = resolveBuildHost(inputCtx, deps);
   const ctx = await requireExperienceOwner(inputCtx);
   const repo = createExperienceRepository(ctx);
   const job = await repo.loadOwnedJob(input.jobId);

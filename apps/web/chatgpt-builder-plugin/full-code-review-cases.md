@@ -5,6 +5,10 @@ against the intended deployed ChatGPT connection. The endpoint, OAuth callback,
 synthetic reviewer account, exact tool inventory and reviewer-accessible demo
 must be qualified before these can be included in a submission. Do not create
 an order, initiate payment, or publish a storefront while executing these cases.
+The positive review flow ends with the private-draft approval request
+(`apply_experience`). The draft OAuth client requests `storefront.read` and
+`storefront.write`. Publication and rollback require separate
+`storefront.publish` consent and are outside this review flow.
 
 On 2026-11-12, the existing **Baci Builder Staging QA** connector exposed only
 the eight portable-homepage tools, not the conditional full-code experience

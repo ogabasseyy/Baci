@@ -108,12 +108,18 @@ export async function loadOwnerPreviewCatalog(
   images: ReadonlyMap<string, { assetId: string; alt: string }> = new Map()
 ): Promise<{ catalog: PublicCatalog; currency: string } | null> {
   experienceCatalogSelectionSchema.parse(selection);
+  ctx.signal?.throwIfAborted();
   const owner = await requireExperienceOwner(ctx, 'storefront.read');
-  const merchant = await owner.supabase
+  const signal = owner.signal;
+  signal?.throwIfAborted();
+  const merchantQuery = owner.supabase
     .from('merchants')
     .select('id,payout_currency,is_published')
-    .eq('id', owner.merchantId)
-    .maybeSingle();
+    .eq('id', owner.merchantId);
+  const merchant = await (signal
+    ? merchantQuery.abortSignal(signal)
+    : merchantQuery
+  ).maybeSingle();
   if (merchant.error || !merchant.data || merchant.data.id !== owner.merchantId)
     throw Error('NOT_FOUND');
   const currency = merchant.data.payout_currency ?? 'NGN';
@@ -126,8 +132,10 @@ export async function loadOwnerPreviewCatalog(
     },
     selection,
     images,
-    owner
+    owner,
+    signal
   );
+  signal?.throwIfAborted();
   await requireExperienceOwner(owner, 'storefront.read');
   return result ? { catalog: result, currency } : null;
 }
@@ -189,10 +197,13 @@ async function readCatalog(
           undefined,
           owner && !merchant.is_published
             ? async (supabase, _merchantId, productIds) => {
-                const { data, error } = await supabase.rpc(
+                const counts = supabase.rpc(
                   'experience_owner_serialized_availability_counts',
                   { ...ownerRpcArgs(owner), p_product_ids: productIds }
                 );
+                const { data, error } = await (signal
+                  ? counts.abortSignal(signal)
+                  : counts);
                 if (error) throw Error('CATALOG_UNAVAILABLE');
                 return data;
               }

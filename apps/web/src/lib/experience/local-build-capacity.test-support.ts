@@ -1,9 +1,30 @@
 import { expect, it, vi } from 'vitest';
+import { createLocalPrerenderArtifacts } from '../../../tools/experience-runner/prerender-artifacts';
 import { RunnerCapacityError } from '../../../tools/experience-runner/runner-transport';
 import type { BuildSupervisorTestFixture } from './local-build-supervisor.test';
 
 export function registerBuildCapacityCase(fixture: BuildSupervisorTestFixture) {
   const { f, context, deps, validCandidate, runExperienceBuild } = fixture;
+  it('rejects a production build before claiming a job without a connection identity', async () => {
+    const execute = vi.fn(async () => ({ output: validCandidate() }));
+    const rpc = vi.fn(async () => ({ data: true, error: null }));
+    await expect(
+      runExperienceBuild(
+        { merchantId: 'merchant', supabase: { rpc } } as never,
+        { jobId: 'j', idempotencyKey: 'i' },
+        {
+          ...deps(execute),
+          profile: 'production',
+          hostOrigin: 'https://shop.synthetic.test',
+          prerenderArtifacts: createLocalPrerenderArtifacts(),
+          bootstrap: async () => deps(execute).bootstrap,
+        }
+      )
+    ).rejects.toThrow('BUILD_CONNECTION_REQUIRED');
+    expect(rpc).not.toHaveBeenCalled();
+    expect(execute).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['verifier', Error('VERIFIER_BUSY')],
     ['runner', new RunnerCapacityError()],

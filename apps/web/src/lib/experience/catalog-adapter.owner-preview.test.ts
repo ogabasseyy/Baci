@@ -27,32 +27,43 @@ function fixture(serialized = false, withVariant = false) {
       error: null,
     })),
   };
-  const rpc = vi.fn(async (name: string, _args?: unknown) =>
-    name === 'experience_authorize_read'
-      ? { data: allowed, error: null }
-      : {
-          data:
-            name === 'experience_owner_serialized_availability_counts'
-              ? [
-                  {
-                    product_id: 'p1',
-                    variant_id: withVariant ? 'v1' : null,
-                    public_available_units: 2,
-                  },
-                ]
-              : name === 'get_storefront_product_variants' && withVariant
-                ? [
-                    {
-                      id: 'v1',
-                      product_id: 'p1',
-                      effective_policy: 'serialized_strict',
-                      available_units: 0,
-                      stock_quantity: 0,
-                    },
-                  ]
-                : [],
-          error: null,
-        }
+  const abortSignal = vi.fn<(source: string, signal: AbortSignal) => void>();
+  const rpc = vi.fn((name: string, _args?: unknown) =>
+    Object.assign(
+      Promise.resolve(
+        name === 'experience_authorize_read'
+          ? { data: allowed, error: null }
+          : {
+              data:
+                name === 'experience_owner_serialized_availability_counts'
+                  ? [
+                      {
+                        product_id: 'p1',
+                        variant_id: withVariant ? 'v1' : null,
+                        public_available_units: 2,
+                      },
+                    ]
+                  : name === 'get_storefront_product_variants' && withVariant
+                    ? [
+                        {
+                          id: 'v1',
+                          product_id: 'p1',
+                          effective_policy: 'serialized_strict',
+                          available_units: 0,
+                          stock_quantity: 0,
+                        },
+                      ]
+                    : [],
+              error: null,
+            }
+      ),
+      {
+        abortSignal: vi.fn(function (this: unknown, signal: AbortSignal) {
+          abortSignal(name, signal);
+          return this;
+        }),
+      }
+    )
   );
   const from = vi.fn((table: string) =>
     Object.assign(
@@ -80,6 +91,10 @@ function fixture(serialized = false, withVariant = false) {
         range: vi.fn().mockReturnThis(),
         in: vi.fn().mockReturnThis(),
         returns: vi.fn().mockReturnThis(),
+        abortSignal: vi.fn(function (this: unknown, signal: AbortSignal) {
+          abortSignal(table, signal);
+          return this;
+        }),
         maybeSingle: async () => ({
           data:
             table === 'merchants'
@@ -99,6 +114,7 @@ function fixture(serialized = false, withVariant = false) {
     rpc,
     auth,
     from,
+    abortSignal,
     revoke: () => {
       allowed = false;
     },
@@ -119,6 +135,22 @@ it('loads unpublished catalog only after owner authorization and returns public-
   expect(
     f.rpc.mock.calls.filter(([name]) => name === 'experience_authorize_read')
   ).toHaveLength(2);
+});
+
+it('binds owner cancellation to merchant, catalog and serialized availability reads', async () => {
+  const f = fixture(true, true);
+  const { signal } = new AbortController();
+  await loadOwnerPreviewCatalog({ ...f.ctx, signal }, {});
+  expect(f.abortSignal.mock.calls).toEqual([
+    ['merchants', signal],
+    ['experience_catalog_generations', signal],
+    ['products', signal],
+    ['get_storefront_product_variants', signal],
+    ['products', signal],
+    ['product_variants', signal],
+    ['experience_owner_serialized_availability_counts', signal],
+    ['experience_catalog_generations', signal],
+  ]);
 });
 
 it('rejects unauthorized owners before reading merchant data', async () => {

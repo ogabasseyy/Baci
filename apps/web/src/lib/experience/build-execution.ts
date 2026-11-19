@@ -1,7 +1,35 @@
 import { runLocalQualification } from '../../../tools/experience-runner/local-oci-executor';
-import { type ExperienceContext, ownerRpcArgs } from './authorization';
+import { localPreviewHost } from '../../../tools/experience-runner/preview-origin';
+import {
+  type ExperienceContext,
+  type OwnerRequestContext,
+  ownerRpcArgs,
+} from './authorization';
 import { startBuildLeaseHeartbeat } from './build-lease-heartbeat';
-import type { ExperienceBuildExecutor } from './local-build-supervisor-types';
+import type {
+  ExperienceBuildDependencies,
+  ExperienceBuildExecutor,
+} from './local-build-supervisor-types';
+import { productionOrigin } from './production-origins';
+
+export function resolveBuildHost(
+  ctx: OwnerRequestContext,
+  deps: ExperienceBuildDependencies
+) {
+  ctx.signal?.throwIfAborted();
+  if (deps.profile !== 'production') {
+    if (deps.previewOrigin) throw Error('INVALID_PREVIEW_ORIGIN');
+    return localPreviewHost(deps.hostOrigin);
+  }
+  if (!ctx.identity) throw Error('BUILD_CONNECTION_REQUIRED');
+  if (
+    !deps.execute ||
+    !deps.prerenderArtifacts ||
+    typeof deps.bootstrap !== 'function'
+  )
+    throw Error('INCOMPLETE_PRODUCTION_BUILD');
+  return productionOrigin(deps.hostOrigin);
+}
 
 export function bindBuildExecutor(
   run: ExperienceBuildExecutor = runLocalQualification,

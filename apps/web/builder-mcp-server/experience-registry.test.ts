@@ -249,18 +249,27 @@ it('the review draft targets the exact resource and requests the scopes used by 
   });
   const tools = (await s.list())?.tools ?? [];
   const cases = reviewDraft.extensions['com.openai'].review.test_cases.positive;
-  for (const testCase of cases) {
-    for (const name of testCase.tools_triggered
-      .split(',')
-      .map((tool) => tool.trim())) {
-      const tool = tools.find((entry) => entry.name === name);
-      expect(tool, name).toBeDefined();
-      const schemes = tool?.securitySchemes as Array<{ scopes: string[] }>;
-      for (const scope of schemes.flatMap((scheme) => scheme.scopes)) {
-        expect([...auth.baseScopes, ...auth.defaultScopes], name).toContain(
-          scope
-        );
-      }
+  const positiveTools = cases.flatMap((testCase) =>
+    testCase.tools_triggered.split(',').map((name) => name.trim())
+  );
+  for (const name of ['publish_experience', 'rollback_experience']) {
+    expect(positiveTools).not.toContain(name);
+    expect(tools.find((tool) => tool.name === name)?.securitySchemes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          scopes: expect.arrayContaining(['storefront.publish']),
+        }),
+      ])
+    );
+  }
+  for (const name of positiveTools) {
+    const tool = tools.find((entry) => entry.name === name);
+    expect(tool, name).toBeDefined();
+    const schemes = tool?.securitySchemes as Array<{ scopes: string[] }>;
+    for (const scope of schemes.flatMap((scheme) => scheme.scopes)) {
+      expect([...auth.baseScopes, ...auth.defaultScopes], name).toContain(
+        scope
+      );
     }
   }
 });

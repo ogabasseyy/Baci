@@ -82,4 +82,34 @@ describe('bugfix: Topship connection failure after the shipment was saved', () =
     expect((error as Error).message).toContain('T1');
     expect(shouldReleaseBookingLock(error)).toBe(false);
   });
+
+  it('bugfix: a response-body read failure after save keeps the lock and carries the tracking id', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const brokenBody = new Response('{}', { status: 200 });
+    vi.spyOn(brokenBody, 'text').mockRejectedValue(new TypeError('terminated'));
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            { id: 'shipment-1', trackingId: 'T1', pricingTier: 'Premium' },
+          ]),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+      )
+      .mockResolvedValueOnce(brokenBody);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { TopshipProvider } = await import('./topship');
+    const error = await new TopshipProvider()
+      .bookShipment(request)
+      .catch((e: unknown) => e);
+
+    expect(error).toMatchObject({
+      code: BOOKED_SHIPMENT_NOT_SAVED_CODE,
+      providerReference: 'T1',
+    });
+    expect(shouldReleaseBookingLock(error)).toBe(false);
+  });
 });

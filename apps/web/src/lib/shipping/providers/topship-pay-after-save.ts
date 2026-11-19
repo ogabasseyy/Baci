@@ -1,8 +1,9 @@
 import { OrderShipmentBookingError } from '../order-shipment-booking-error';
 import { BOOKED_SHIPMENT_NOT_SAVED_CODE } from '../order-shipment-booking-failure';
 
-interface PayAfterSaveInput {
-  fetchPayment: () => Promise<Response>;
+interface PayAfterSaveInput<T> {
+  /** The payment request together with reading its response body. */
+  fetchPayment: () => Promise<T>;
   log: (
     level: 'error',
     message: string,
@@ -18,11 +19,11 @@ interface PayAfterSaveInput {
  * instead of allowing a duplicate shipment. Do NOT attach the original as
  * `cause`: the never-reached check walks the cause chain and would release it.
  */
-export async function requestTopshipPaymentAfterSave({
+export async function requestTopshipPaymentAfterSave<T = Response>({
   fetchPayment,
   log,
   trackingId,
-}: PayAfterSaveInput): Promise<Response> {
+}: PayAfterSaveInput<T>): Promise<T> {
   try {
     return await fetchPayment();
   } catch (error) {

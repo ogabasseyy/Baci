@@ -42,8 +42,12 @@ export function classifyBookingFailure(
         BOOKING_FAILURE_MAX_CODE_LENGTH * 2
       ),
     };
-    if (error.code === 'GIGL_BOOKING_TIMED_OUT_BEFORE_SUBMIT') {
-      // The deadline expired before the booking POST: nothing was submitted.
+    if (
+      error.code === 'GIGL_BOOKING_TIMED_OUT_BEFORE_SUBMIT' ||
+      // The wallet submission could not start, so the carrier was never called.
+      error.code === 'MERCHANT_WALLET_SUBMISSION_FAILED'
+    ) {
+      // Nothing was submitted to the carrier.
       return { ...base, outcome: 'not_submitted' };
     }
     if (error.code === 'MERCHANT_WALLET_COMPLETION_FAILED') {

@@ -116,7 +116,11 @@ export async function POST(request: NextRequest) {
         { status: 409 }
       );
     }
-    if (bookingAttempt.status === 'claimed') {
+    if (
+      bookingAttempt.status === 'claimed' ||
+      bookingAttempt.status === 'recovered'
+    ) {
+      // A recovered attempt also holds the claimed lock until it is saved.
       bookingLockToken = bookingAttempt.lockToken;
     }
 

@@ -846,21 +846,28 @@ export class TopshipProvider extends BaseShippingProvider {
       pickupCharge: initialPickupCharge,
     });
 
-    const payResponse = await requestTopshipPaymentAfterSave({
-      trackingId: savedShipment.trackingId,
-      log: (level, message, context) => this.log(level, message, context),
-      fetchPayment: () =>
-        this.safeFetch(`${TOPSHIP_BASE_URL}/pay-from-wallet`, {
-          method: 'POST',
-          headers: this.getHeaders(),
-          body: JSON.stringify({
-            detail: {
-              shipmentId: savedShipment.id,
-            },
-          }),
-        }),
-    });
-    const payResult = await this.readResponseBody(payResponse);
+    // Reading the body is part of the post-save boundary: the shipment exists,
+    // so a stream failure here must also surface as booked-but-not-saved.
+    const { response: payResponse, result: payResult } =
+      await requestTopshipPaymentAfterSave({
+        trackingId: savedShipment.trackingId,
+        log: (level, message, context) => this.log(level, message, context),
+        fetchPayment: async () => {
+          const response = await this.safeFetch(
+            `${TOPSHIP_BASE_URL}/pay-from-wallet`,
+            {
+              method: 'POST',
+              headers: this.getHeaders(),
+              body: JSON.stringify({
+                detail: {
+                  shipmentId: savedShipment.id,
+                },
+              }),
+            }
+          );
+          return { response, result: await this.readResponseBody(response) };
+        },
+      });
 
     if (!payResponse.ok) {
       const message =

@@ -32,7 +32,7 @@ test('iOS release reports TestFlight-only, submitted, and slot-occupied outcomes
   assert.match(mode, /TESTFLIGHT_ONLY/);
   assert.match(mode, /SUBMISSION_RESULT/);
   assert.match(mode, /SUBMISSION_OUTCOME/);
-  const runSummary = ({ outcome, testflightOnly = false, result = '' }) => {
+  const runSummary = ({ outcome, testflightOnly = false, result = '', uploadCompleted = true }) => {
     const directory = mkdtempSync(join(tmpdir(), 'ios-release-summary-'));
     const summaryPath = join(directory, 'summary.md');
     try {
@@ -40,6 +40,7 @@ test('iOS release reports TestFlight-only, submitted, and slot-occupied outcomes
         env: {
           ...process.env,
           TESTFLIGHT_ONLY: String(testflightOnly),
+          TESTFLIGHT_UPLOAD_COMPLETED: String(uploadCompleted),
           SUBMISSION_OUTCOME: outcome,
           SUBMISSION_RESULT: result,
           GITHUB_STEP_SUMMARY: summaryPath,
@@ -50,8 +51,8 @@ test('iOS release reports TestFlight-only, submitted, and slot-occupied outcomes
       rmSync(directory, { force: true, recursive: true });
     }
   };
-  assert.match(runSummary({ outcome: 'failure' }), /App Store submission failed/);
-  assert.match(runSummary({ outcome: 'cancelled' }), /App Store submission was cancelled/);
+  assert.match(runSummary({ outcome: 'failure', testflightOnly: true }), /App Store submission failed/);
+  assert.match(runSummary({ outcome: 'cancelled', testflightOnly: true }), /App Store submission was cancelled/);
   assert.match(
     runSummary({ outcome: 'skipped' }),
     /App Store submission did not start/
@@ -68,6 +69,7 @@ test('iOS release reports TestFlight-only, submitted, and slot-occupied outcomes
     runSummary({ outcome: 'success', result: 'skipped' }),
     /version slot is occupied/
   );
+  assert.match(releaseModeStep.text, /TESTFLIGHT_UPLOAD_COMPLETED: 'true'/);
   assert.match(releaseModeStep.run, /record-ios-storefront-release-mode\.sh/);
   assert.match(mode, /intentionally skipped/);
   assert.match(mode, /submitted it for App Store review/);
@@ -78,28 +80,20 @@ test('iOS release reports TestFlight-only, submitted, and slot-occupied outcomes
   assert.match(manualSummary.text, /steps\.submit\.outcome != 'skipped'/);
   assert.match(manualSummary.text, /steps\.submit\.outputs\.app_store_submission/);
   assert.match(manualSummary.text, /SUBMISSION_OUTCOME: \$\{\{ steps\.submit\.outcome \}\}/);
-  assert.match(manualSummary.run, /submitted the iOS build for App Store review/);
-  assert.match(manualSummary.run, /skipped App Store submission because the App Store version slot is occupied/);
-  assert.match(manualSummary.run, /Fastlane completed without recording/);
-  const runManualSummary = (outcome) => {
-    const directory = mkdtempSync(join(tmpdir(), 'ios-submit-summary-'));
-    const summaryPath = join(directory, 'summary.md');
-    try {
-      execFileSync('bash', ['-c', manualSummary.run], {
-        env: {
-          ...process.env,
-          SUBMISSION_OUTCOME: outcome,
-          SUBMISSION_RESULT: '',
-          GITHUB_STEP_SUMMARY: summaryPath,
-        },
-      });
-      return readFileSync(summaryPath, 'utf8');
-    } finally {
-      rmSync(directory, { force: true, recursive: true });
-    }
-  };
-  assert.match(runManualSummary('failure'), /App Store submission failed/);
-  assert.match(runManualSummary('cancelled'), /App Store submission was cancelled/);
+  assert.match(manualSummary.text, /TESTFLIGHT_UPLOAD_COMPLETED: 'false'/);
+  assert.match(manualSummary.run, /record-ios-storefront-release-mode\.sh/);
+  assert.equal(
+    runSummary({ outcome: 'failure', uploadCompleted: false }).trim(),
+    'App Store submission failed. Inspect the Fastlane submit logs.'
+  );
+  assert.equal(
+    runSummary({ outcome: 'success', result: 'submitted', uploadCompleted: false }).trim(),
+    'This run submitted the iOS build for App Store review.'
+  );
+  assert.match(
+    runSummary({ outcome: 'success', result: 'skipped', uploadCompleted: false }),
+    /^This run skipped App Store submission because the App Store version slot is occupied/
+  );
   assert.match(manualWorkflow, /build_number:\n\s+description:.*\n\s+required: true/);
   assert.match(manualWorkflow, /app_version:\n\s+description:.*\n\s+required: true/);
 });

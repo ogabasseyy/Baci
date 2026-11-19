@@ -354,6 +354,7 @@ jobs:
       - name: Record release mode
         if: ${{ always() && steps.fastlane_release.outcome == 'success' }}
         env:
+          TESTFLIGHT_UPLOAD_COMPLETED: 'true'
           TESTFLIGHT_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.testflight_only }}
           SUBMISSION_OUTCOME: ${{ steps.submit.outcome }}
           SUBMISSION_RESULT: ${{ steps.submit.outputs.app_store_submission }}

@@ -94,7 +94,7 @@ describe('internal product revalidation blog expiry', () => {
     );
   });
 
-  it('hard-expires scoped listing tags alongside forwarded slugs when omitMerchantWidePdpDetails is set', async () => {
+  it('falls back to broad hard-expiry on slug-only blog-cache requests even when omitMerchantWidePdpDetails is set without products', async () => {
     const merchantId = 'merchant-1';
 
     const response = await POST(
@@ -115,7 +115,6 @@ describe('internal product revalidation blog expiry', () => {
     );
     expect(mockRevalidateProducts).toHaveBeenCalledWith(merchantId, undefined, {
       expireImmediately: true,
-      omitMerchantWidePdpDetails: true,
     });
   });
 

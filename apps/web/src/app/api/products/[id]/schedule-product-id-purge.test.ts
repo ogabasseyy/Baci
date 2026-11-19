@@ -65,6 +65,7 @@ describe('schedule-product-id-purge', () => {
       ],
       dependentProductIdentifiers: ['child-1', 'old-alias'],
       dependentAliasesIncomplete: false,
+      authoritativeScopedInputs: true,
     });
     expect(mockRevalidateProducts).not.toHaveBeenCalled();
   });
@@ -184,6 +185,7 @@ describe('schedule-product-id-purge', () => {
       entries: [{ slug: 'phone', categorySegment: 'smartphones' }],
       dependentProductIdentifiers: ['child-1', 'old-alias'],
       dependentAliasesIncomplete: false,
+      authoritativeScopedInputs: true,
     });
   });
 });

@@ -171,7 +171,7 @@ export async function scheduleOrderProductBlogPurge({
   }
   const blogCacheExpired = await expireProductBlogCacheReliable(merchantId, {
     productSlugs: slugs,
-    ...(needsBroadPdpExpiry ? { expireWidePdpDetails: true } : {}),
+    ...(needsBroadPdpExpiry ? { expireWidePdpDetails: true } : { products }),
   });
   if (!blogCacheExpired) {
     // The standalone worker path reports hard-expiry failure as `false`

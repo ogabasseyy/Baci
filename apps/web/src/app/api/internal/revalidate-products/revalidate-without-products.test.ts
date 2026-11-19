@@ -38,10 +38,8 @@ describe('revalidateWithoutProducts', () => {
     expect(ok).toBe(false);
   });
 
-  it('falls back to broad hard expiry when scoped listing expiry fails and returns false if broad also fails', () => {
-    mockRevalidateProducts.mockReturnValueOnce(false).mockReturnValueOnce(true);
-
-    const recovered = revalidateWithoutProducts({
+  it('forces broad hard expiry in slug-only mode when omitMerchantWidePdpDetails is requested without products', () => {
+    const ok = revalidateWithoutProducts({
       merchantId: MERCHANT_ID,
       hasProducts: false,
       purgeWholeStorefront: false,
@@ -51,47 +49,39 @@ describe('revalidateWithoutProducts', () => {
       shouldExpireProductBlogCache: true,
     });
 
-    expect(recovered).toBe(true);
-    expect(mockRevalidateProducts).toHaveBeenNthCalledWith(
-      2,
+    expect(ok).toBe(true);
+    expect(mockRevalidateProducts).toHaveBeenCalledTimes(1);
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
       MERCHANT_ID,
       undefined,
       { expireImmediately: true }
     );
 
-    mockRevalidateProducts.mockClear();
-    mockRevalidateProducts
-      .mockReturnValueOnce(false)
-      .mockReturnValueOnce(false);
+    mockRevalidateProducts.mockReturnValueOnce(false);
+    expect(
+      revalidateWithoutProducts({
+        merchantId: MERCHANT_ID,
+        hasProducts: false,
+        purgeWholeStorefront: false,
+        hasExplicitProductSlugs: true,
+        explicitSlugsRevalidated: true,
+        callerOmitMerchantWidePdpDetails: true,
+        shouldExpireProductBlogCache: true,
+      })
+    ).toBe(false);
 
-    const failed = revalidateWithoutProducts({
-      merchantId: MERCHANT_ID,
-      hasProducts: false,
-      purgeWholeStorefront: false,
-      hasExplicitProductSlugs: true,
-      explicitSlugsRevalidated: true,
-      callerOmitMerchantWidePdpDetails: true,
-      shouldExpireProductBlogCache: true,
-    });
-
-    expect(failed).toBe(false);
-
-    mockRevalidateProducts.mockClear();
-    mockRevalidateProducts
-      .mockReturnValueOnce(false)
-      .mockReturnValueOnce(false);
-
-    const slugChunkFailed = revalidateWithoutProducts({
-      merchantId: MERCHANT_ID,
-      hasProducts: false,
-      purgeWholeStorefront: false,
-      hasExplicitProductSlugs: true,
-      explicitSlugsRevalidated: true,
-      callerOmitMerchantWidePdpDetails: true,
-      shouldExpireProductBlogCache: false,
-    });
-
-    expect(slugChunkFailed).toBe(false);
+    mockRevalidateProducts.mockReturnValueOnce(false);
+    expect(
+      revalidateWithoutProducts({
+        merchantId: MERCHANT_ID,
+        hasProducts: false,
+        purgeWholeStorefront: false,
+        hasExplicitProductSlugs: true,
+        explicitSlugsRevalidated: true,
+        callerOmitMerchantWidePdpDetails: true,
+        shouldExpireProductBlogCache: false,
+      })
+    ).toBe(false);
   });
 
   it('returns false in blog mode when expireProductBlogCache fails or broad fallback fails', () => {

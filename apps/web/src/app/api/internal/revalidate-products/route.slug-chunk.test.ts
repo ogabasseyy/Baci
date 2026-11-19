@@ -76,7 +76,7 @@ describe('POST /api/internal/revalidate-products slug chunks', () => {
     expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
   });
 
-  it('omits merchant-wide PDP details only when caller opts in with omitMerchantWidePdpDetails', async () => {
+  it('forces broad PDP invalidation on slug-only calls even when caller sends omitMerchantWidePdpDetails without products', async () => {
     const productSlugs = ['phone-1', 'phone-2'];
     const res = await POST(
       request(
@@ -90,11 +90,10 @@ describe('POST /api/internal/revalidate-products slug chunks', () => {
     );
 
     expect(res.status).toBe(200);
-    expect(mockExpireProductBlogCache).toHaveBeenCalledWith(MERCHANT_ID);
     expect(mockRevalidateProducts).toHaveBeenCalledWith(
       MERCHANT_ID,
       undefined,
-      { expireImmediately: true, omitMerchantWidePdpDetails: true }
+      { expireImmediately: true }
     );
   });
 });

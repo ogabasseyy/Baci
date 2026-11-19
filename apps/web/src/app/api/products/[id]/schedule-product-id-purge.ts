@@ -114,6 +114,9 @@ export async function scheduleUpdatedProductPurge({
       entries: productPurgeEntries,
       dependentProductIdentifiers: dependentAliases.identifiers,
       dependentAliasesIncomplete: dependentAliases.incomplete,
+      authoritativeScopedInputs: Boolean(
+        id.trim() && updatedProduct.id?.trim()
+      ),
     });
   } catch (purgeError) {
     revalidateProducts(merchantId, updatedProduct.slug ?? undefined, {
@@ -173,6 +176,8 @@ export async function scheduleDeletedProductPurge({
         entries: purgeEntries,
         dependentProductIdentifiers: resolvedAliases.identifiers,
         dependentAliasesIncomplete: resolvedAliases.incomplete,
+        authoritativeScopedInputs:
+          Boolean(id.trim()) && !incompleteBlogSnapshot,
         blogPostIds: linkedBlogPostIds,
         purgeWholeStorefront: incompleteBlogSnapshot,
       });

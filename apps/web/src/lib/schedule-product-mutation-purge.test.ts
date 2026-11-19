@@ -82,6 +82,7 @@ describe('scheduleProductMutationPurge', () => {
       merchantSlug: 'test-store',
       productIds: ['product-1'],
       entries,
+      authoritativeScopedInputs: true,
       blogPostSlugs: ['old-article'],
     });
 
@@ -239,6 +240,7 @@ describe('scheduleProductMutationPurge', () => {
       entries,
       dependentProductIdentifiers: ['child-1', 'old-variant-slug'],
       dependentAliasesIncomplete: false,
+      authoritativeScopedInputs: true,
     });
 
     expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
@@ -281,5 +283,51 @@ describe('scheduleProductMutationPurge', () => {
     );
     expect(mockHostnamePurge).toHaveBeenCalledWith('test-store');
     expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
+  });
+
+  it('falls back to broad PDP expiry when authoritativeScopedInputs is omitted and defers reliable expiry when blog expiry fails', async () => {
+    const entries = [{ slug: 'new-phone', categorySegment: 'smartphones' }];
+
+    scheduleProductMutationPurge({
+      supabase: {} as never,
+      merchantId: 'merchant-1',
+      merchantSlug: 'test-store',
+      productIds: ['product-1'],
+      entries,
+    });
+
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      'merchant-1',
+      undefined,
+      { expireImmediately: true }
+    );
+
+    vi.clearAllMocks();
+    mockRevalidateProducts.mockReturnValue(true);
+    mockRevalidateProductSlugs.mockReturnValue(true);
+    mockExpire.mockReturnValueOnce(false);
+    mockExpireReliable.mockResolvedValueOnce(false);
+    const warnSpy = vi
+      .spyOn(console, 'warn')
+      .mockImplementation(() => undefined);
+    try {
+      scheduleProductMutationPurge({
+        supabase: {} as never,
+        merchantId: 'merchant-1',
+        merchantSlug: 'test-store',
+        productIds: ['product-1'],
+        entries,
+        authoritativeScopedInputs: true,
+      });
+
+      expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
+      await mockAfter.mock.calls[0][0]();
+      expect(mockExpireReliable).toHaveBeenCalledWith('merchant-1', {
+        expireWidePdpDetails: true,
+      });
+      expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 });

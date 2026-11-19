@@ -95,7 +95,7 @@ describe('scheduleOrderProductBlogPurge', () => {
     );
     expect(mockExpireProductBlogCacheReliable).toHaveBeenCalledWith(
       'merchant-1',
-      { productSlugs: ['iphone-15'] }
+      { productSlugs: ['iphone-15'], products: [{ id: 'product-1' }] }
     );
     // Resolved slugs get exact scoped PDP + listing busts without touching
     // unrelated merchant-wide PDP details.
@@ -143,7 +143,7 @@ describe('scheduleOrderProductBlogPurge', () => {
 
     expect(mockExpireProductBlogCacheReliable).toHaveBeenCalledWith(
       'merchant-1',
-      { productSlugs: ['iphone-15'] }
+      { productSlugs: ['iphone-15'], products: [{ id: 'product-1' }] }
     );
     expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
       'ogabassey',
@@ -210,7 +210,7 @@ describe('scheduleOrderProductBlogPurge', () => {
       );
       expect(mockExpireProductBlogCacheReliable).toHaveBeenCalledWith(
         'merchant-1',
-        { productSlugs: ['iphone-15'] }
+        { productSlugs: ['iphone-15'], products: [{ id: 'product-1' }] }
       );
       expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
       expect(consoleSpy).toHaveBeenCalledWith(

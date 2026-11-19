@@ -1,6 +1,7 @@
 import { expireProductBlogCache } from '@/lib/expire-product-blog-cache';
 import { normalizeMerchantId } from '@/lib/normalize-merchant-id';
 import { getProductBlogCacheRuntimeConfig } from '@/lib/product-blog-cache-runtime-config';
+import type { InternalRevalidateProductEntry } from '@/schemas/internal-revalidate-products-route';
 
 const DEFAULT_REMOTE_EXPIRY_TIMEOUT_MS = 5_000;
 
@@ -20,6 +21,13 @@ interface ReliableBlogCacheExpiryOptions {
    * route, where they are expired in a real request context.
    */
   productSlugs?: readonly (string | null | undefined)[];
+  /**
+   * Authoritative product descriptors (e.g. `{ id }`) so the internal route
+   * can verify `hasCompleteScopedProductSlugs` before omitting merchant-wide
+   * PDP/redirect tags. Slug-only calls without `products` fail closed to broad
+   * invalidation.
+   */
+  products?: readonly InternalRevalidateProductEntry[];
   /**
    * Forward `omitMerchantWidePdpDetails: false` in the worker fallback so the
    * internal route also hard-expires merchant-wide PDP details when local
@@ -86,12 +94,17 @@ export async function expireProductBlogCacheReliable(
                   ? { productSlugs: forwardedSlugs }
                   : {}),
               }
-            : forwardedSlugs.length > 0
+            : forwardedSlugs.length > 0 &&
+                options.products &&
+                options.products.length > 0
               ? {
                   productSlugs: forwardedSlugs,
+                  products: options.products,
                   omitMerchantWidePdpDetails: true,
                 }
-              : {}),
+              : forwardedSlugs.length > 0
+                ? { productSlugs: forwardedSlugs }
+                : {}),
         }),
         signal: AbortSignal.timeout(
           options.timeoutMs ?? DEFAULT_REMOTE_EXPIRY_TIMEOUT_MS

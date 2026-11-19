@@ -26,28 +26,6 @@ export function revalidateWithoutProducts({
   callerOmitMerchantWidePdpDetails,
   shouldExpireProductBlogCache = false,
 }: RevalidateWithoutProductsInput): boolean {
-  const isScopedSlugOnly =
-    !hasProducts &&
-    !purgeWholeStorefront &&
-    callerOmitMerchantWidePdpDetails === true &&
-    explicitSlugsRevalidated;
-
-  if (isScopedSlugOnly) {
-    const blogExpired = expireProductBlogCache(merchantId);
-    const scopedExpired = revalidateProducts(merchantId, undefined, {
-      expireImmediately: true,
-      omitMerchantWidePdpDetails: true,
-    });
-    if (
-      scopedExpired === false &&
-      revalidateProducts(merchantId, undefined, { expireImmediately: true }) ===
-        false
-    ) {
-      return false;
-    }
-    return !(shouldExpireProductBlogCache && blogExpired === false);
-  }
-
   if (shouldExpireProductBlogCache) {
     const blogExpired = expireProductBlogCache(merchantId);
     if (blogExpired === false) {

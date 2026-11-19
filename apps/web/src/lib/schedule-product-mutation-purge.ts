@@ -19,6 +19,8 @@ interface ScheduleProductMutationPurgeInput {
   entries: readonly StorefrontProductPurgeEntry[];
   dependentProductIdentifiers?: readonly string[];
   dependentAliasesIncomplete?: boolean;
+  /** Caller verified authoritative pre/post slugs, category segments, and blog completeness. */
+  authoritativeScopedInputs?: boolean;
   blogPostSlugs?: readonly string[];
   blogPostIds?: readonly string[];
   purgeWholeStorefront?: boolean;
@@ -37,6 +39,7 @@ export function scheduleProductMutationPurge({
   entries,
   dependentProductIdentifiers = [],
   dependentAliasesIncomplete = false,
+  authoritativeScopedInputs = false,
   blogPostSlugs,
   blogPostIds,
   purgeWholeStorefront,
@@ -57,7 +60,7 @@ export function scheduleProductMutationPurge({
         expireImmediately: true,
       }
     ) === true;
-  expireProductBlogCache(merchantId);
+  const blogExpired = expireProductBlogCache(merchantId) !== false;
 
   const scheduleEdgePurge = () => {
     if (purgeWholeStorefront || dependentAliasesIncomplete) {
@@ -94,9 +97,17 @@ export function scheduleProductMutationPurge({
     });
   };
 
+  const hasCompleteScopedInputs =
+    authoritativeScopedInputs &&
+    productIds.length > 0 &&
+    productIds.every((id) => id.trim().length > 0) &&
+    entries.length > 0 &&
+    entries.every((entry) => entry.slug.trim().length > 0);
   const scopedListingsExpired =
+    blogExpired &&
     !purgeWholeStorefront &&
     !dependentAliasesIncomplete &&
+    hasCompleteScopedInputs &&
     slugsExpired &&
     revalidateProducts(merchantId, undefined, {
       expireImmediately: true,
@@ -108,8 +119,9 @@ export function scheduleProductMutationPurge({
   }
 
   if (
+    blogExpired &&
     revalidateProducts(merchantId, undefined, { expireImmediately: true }) ===
-    true
+      true
   ) {
     scheduleEdgePurge();
     return;

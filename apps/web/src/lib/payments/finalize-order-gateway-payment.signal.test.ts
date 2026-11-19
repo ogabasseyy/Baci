@@ -100,3 +100,33 @@ describe('finalizeOrderGatewayPayment abort signal', () => {
     );
   });
 });
+
+describe('finalizeOrderGatewayPayment Pay for Me', () => {
+  it.each([
+    false,
+    true,
+  ])('only notifies on a new paid transition (already paid: %s)', async (alreadyPaid) => {
+    mocks.completeOrderGatewayPayment.mockResolvedValue(
+      completion({
+        already_completed: alreadyPaid,
+        order_already_paid: alreadyPaid,
+        order_updated: !alreadyPaid,
+        previous_payment_status: alreadyPaid ? 'paid' : 'unpaid',
+      })
+    );
+
+    await finalizeOrderGatewayPayment(
+      baseArgs(
+        buildSupabase({
+          data: { ...richOrderRow, payment_method: 'payforme' },
+        }),
+        { wonTransactionFlip: !alreadyPaid }
+      )
+    );
+
+    expect(mocks.notifyNewOrder).toHaveBeenCalledTimes(alreadyPaid ? 0 : 1);
+    expect(mocks.notifyPaymentReceived).toHaveBeenCalledTimes(
+      alreadyPaid ? 0 : 1
+    );
+  });
+});

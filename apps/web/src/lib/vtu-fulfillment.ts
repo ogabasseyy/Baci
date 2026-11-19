@@ -45,6 +45,7 @@ import { isPiggyvestWalletPaid } from '@/lib/vtu-piggyvest-wallet-paid';
 
 export { VtuPersistenceError };
 
+import { readMonnifyResponseCode } from '@/lib/monnify-response-code';
 import {
   applyKudaFallbackCreditCorrection,
   refreshSnapshotMoneyColumns,
@@ -55,6 +56,7 @@ import { isMonnifyAirtimeKudaFallbackEligible } from '@/lib/vtu-monnify-kuda-fal
 import { getVtuProviderLabel, readPaymentSplit } from '@/lib/vtu-payment-split';
 import { VTU_TYPE_LABELS } from '@/lib/vtu-pending-transaction';
 import { restoreInterruptedPreVendVtuRow } from '@/lib/vtu-pre-vend-recovery';
+import { applyProviderFailureDiagnostics } from '@/lib/vtu-provider-failure-diagnostics';
 import {
   VTU_REFUND_SKIPPED_KEY,
   VTU_REFUND_SKIPPED_NO_CHARGE,
@@ -1703,6 +1705,8 @@ async function reconcileProcessingVtuTransaction({
 
     if (reconciledStatus === 'successful') {
       const successMetadata = { ...(currentRow.metadata ?? {}) };
+      // A success clears stale failure diagnostics, as on the fresh path.
+      applyProviderFailureDiagnostics(successMetadata, { success: true });
       const voucherPin = normalizeVoucherPin(providerStatus.pin);
       if (voucherPin) {
         successMetadata.voucherPin = voucherPin;
@@ -1764,6 +1768,13 @@ async function reconcileProcessingVtuTransaction({
       // Provider-authored text (below): drop any inherited safe flag
       // for the same reason as the fresh path.
       delete failedMetadata[VTU_CUSTOMER_SAFE_ERROR_MESSAGE_KEY];
+      // Monnify's requery code (shape-checked), kept like a vend failure's.
+      const requeryResponseCode = readMonnifyResponseCode(providerStatus);
+      if (requeryResponseCode) {
+        failedMetadata.providerResponseCode = requeryResponseCode;
+      } else {
+        delete failedMetadata.providerResponseCode;
+      }
       const failedMessage =
         providerStatus.message || 'Utility purchase failed with provider';
       const failedPersistError = await updateVtuPurchaseResultWithRetry({
@@ -2627,9 +2638,6 @@ export async function fulfillPendingVtuTransaction({
   }
   // Inline vend units take precedence; otherwise use units resolved via requery.
   const units = result.units || backfilledUnits;
-  const providerErrorDetail = result.success
-    ? undefined
-    : result.providerErrorDetail?.trim();
   const updatedMetadata: Record<string, unknown> = {
     ...(row.metadata ?? {}),
     ...(result.metadataPatch ?? {}),
@@ -2642,11 +2650,7 @@ export async function fulfillPendingVtuTransaction({
   // mistakes the persisted provider text for first-party copy (the
   // replay check fails closed on a missing flag).
   delete updatedMetadata[VTU_CUSTOMER_SAFE_ERROR_MESSAGE_KEY];
-  if (providerErrorDetail) {
-    updatedMetadata.providerErrorDetail = providerErrorDetail;
-  } else {
-    delete updatedMetadata.providerErrorDetail;
-  }
+  applyProviderFailureDiagnostics(updatedMetadata, result);
 
   if (result.status === 'pending') {
     const processingUpdatePayload: {

@@ -5,6 +5,7 @@ import {
   purchaseAirtime,
 } from '@/lib/kuda';
 import { VtuConcurrentUpdateError } from '@/lib/vtu-concurrent-update-error';
+import { readMonnifyResponseCode } from './monnify-response-code';
 
 /** Minimal row shape the fallback needs (structural; no import cycle). */
 export interface MonnifyAirtimeKudaFallbackRow {
@@ -54,10 +55,17 @@ export async function executeMonnifyAirtimeKudaFallback({
   row: MonnifyAirtimeKudaFallbackRow;
   supabase: SupabaseClient;
 }): Promise<PurchaseResult & { metadataPatch?: Record<string, string> }> {
+  const monnifyResponseCode = readMonnifyResponseCode({
+    responseCode: monnifyResult.providerResponseCode,
+  });
   const kudaFallbackPatch = {
     fulfillmentProvider: 'kuda',
     monnifyFallbackError:
       monnifyResult.providerErrorDetail ?? monnifyResult.message,
+    // Kept under its own key: a failed Kuda result carries no Monnify code.
+    ...(monnifyResponseCode && {
+      monnifyFallbackResponseCode: monnifyResponseCode,
+    }),
     originalProvider: 'monnify',
     provider: 'kuda',
     providerFallback: 'monnify_airtime_to_kuda',

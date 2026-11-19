@@ -4,6 +4,8 @@ import {
   revalidateProductSlugs,
   revalidateProducts,
 } from '@/lib/cache-revalidation';
+import { getCloudflarePurgeCredentials } from '@/lib/cloudflare-purge-credentials';
+import { delegateStorefrontEdgePurge } from '@/lib/delegate-storefront-edge-purge';
 import { expireProductBlogCacheReliable } from '@/lib/expire-product-blog-cache-reliable';
 import {
   buildInternalProductPurgeEntries,
@@ -159,20 +161,39 @@ export async function scheduleOrderProductBlogPurge({
     return true;
   }
 
+  if (confirmEdgeEviction) {
+    const confirmed = blogPostSlugsIncomplete
+      ? await purgeStorefrontHostnameConfirmed(merchantSlug)
+      : blogPostSlugs.length > 0
+        ? await purgeStorefrontProductConfirmed(merchantSlug, entries, {
+            blogPostSlugs,
+          })
+        : await purgeStorefrontProductConfirmed(merchantSlug, entries);
+    if (confirmed) {
+      return true;
+    }
+    if (!getCloudflarePurgeCredentials()) {
+      // Standalone VPS workers do not hold Cloudflare credentials locally;
+      // delegate the storefront edge purge to the authenticated internal web
+      // route, which runs with Vercel's Cloudflare configuration.
+      return await delegateStorefrontEdgePurge({
+        merchantId,
+        merchantSlug,
+        entries,
+        productSlugs: slugs,
+        blogPostSlugs,
+        purgeWholeStorefront: blogPostSlugsIncomplete,
+      });
+    }
+    return false;
+  }
+
   if (blogPostSlugsIncomplete) {
     // The purge scope is unknown (failed article lookup or truncated
     // caller sweep): evict the hostname (a superset of the product purge)
     // rather than leaving affected URLs stale until TTL.
-    if (confirmEdgeEviction) {
-      return await purgeStorefrontHostnameConfirmed(merchantSlug);
-    }
     scheduleStorefrontHostnamePurge(merchantSlug);
   } else if (blogPostSlugs.length > 0) {
-    if (confirmEdgeEviction) {
-      return await purgeStorefrontProductConfirmed(merchantSlug, entries, {
-        blogPostSlugs,
-      });
-    }
     scheduleStorefrontProductPurge(merchantSlug, entries, {
       blogPostSlugs,
     });
@@ -180,9 +201,6 @@ export async function scheduleOrderProductBlogPurge({
     // The relationship lookup can legitimately find no published article,
     // but the order still changed the product PDP/listing. Keep the core
     // purge in that case so those pages cannot remain stale until TTL.
-    if (confirmEdgeEviction) {
-      return await purgeStorefrontProductConfirmed(merchantSlug, entries);
-    }
     scheduleStorefrontProductPurge(merchantSlug, entries);
   }
   return true;

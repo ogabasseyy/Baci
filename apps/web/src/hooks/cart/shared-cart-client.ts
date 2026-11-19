@@ -9,14 +9,17 @@ import {
   type AttemptPolicy,
 } from '@/lib/api-attempt-policy';
 import { fetchWithCsrf } from '@/lib/api-client';
+import { writeCartSessionHint } from './cart-session-hint';
 import {
   isCartSessionRetiring,
   runBoundedCartSessionWrite,
 } from './cart-session-write-fence';
 import { cartClientCredentialHeaders } from './client-credential';
 import {
+  clearCartDeviceSessionActive,
   ensureCartDeviceRevocationCleared,
   isCartDeviceRevocationPending,
+  markCartDeviceSessionActive,
 } from './shared-cart-session-revoke-client';
 
 export * from './shared-cart-client-support';
@@ -143,10 +146,20 @@ async function requestCreateSharedCart(
   }
   const body = await readBody(response);
   if (response.ok && body && isSnapshot(body.cart)) {
+    const cart = body.cart as CartSnapshot;
+    const isActive = cart.state === 'active' && cart.lines.length > 0;
+    writeCartSessionHint(cart.merchantId, isActive ? '1' : '0');
+    if (merchantSlug) {
+      if (isActive) {
+        markCartDeviceSessionActive(merchantSlug);
+      } else {
+        clearCartDeviceSessionActive(merchantSlug);
+      }
+    }
     return {
       ok: true,
       replayed: body.replayed === true,
-      snapshot: body.cart as CartSnapshot,
+      snapshot: cart,
       warnings: warningsOf(body),
     };
   }
@@ -218,10 +231,20 @@ async function requestSharedCartCommand(
   }
   const body = await readBody(response);
   if (response.ok && body && isSnapshot(body.cart)) {
+    const cart = body.cart as CartSnapshot;
+    const isActive = cart.state === 'active' && cart.lines.length > 0;
+    writeCartSessionHint(cart.merchantId, isActive ? '1' : '0');
+    if (merchantSlug) {
+      if (isActive) {
+        markCartDeviceSessionActive(merchantSlug);
+      } else {
+        clearCartDeviceSessionActive(merchantSlug);
+      }
+    }
     return {
       ok: true,
       replayed: body.replayed === true,
-      snapshot: body.cart as CartSnapshot,
+      snapshot: cart,
       warnings: warningsOf(body),
     };
   }

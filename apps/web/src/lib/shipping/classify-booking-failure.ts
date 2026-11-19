@@ -50,8 +50,9 @@ export function classifyBookingFailure(
       // Nothing was submitted to the carrier.
       return { ...base, outcome: 'not_submitted' };
     }
-    if (error.code === 'GIGL_AUTHENTICATION_FAILED' && error.status === 504) {
-      // The GIG token call timed out, so the booking POST was never sent.
+    if (error.code === 'GIGL_AUTHENTICATION_FAILED') {
+      // The GIG token call failed or timed out, so the booking POST was never
+      // sent (and the lock is released), whatever the HTTP status.
       return { ...base, outcome: 'not_submitted' };
     }
     if (error.code === 'MERCHANT_WALLET_COMPLETION_FAILED') {

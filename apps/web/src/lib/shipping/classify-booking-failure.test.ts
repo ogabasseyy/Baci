@@ -44,7 +44,7 @@ describe('classifyBookingFailure outcomes for booking-state codes', () => {
     expect(classifyBookingFailure(error).outcome).toBe('not_submitted');
   });
 
-  it('classifies a GIG authentication timeout (504) as not_submitted but a bad-credentials failure as rejected', () => {
+  it('classifies GIG authentication failures (504 timeout and 502) as not_submitted, matching the lock release', () => {
     expect(
       classifyBookingFailure(
         new OrderShipmentBookingError(
@@ -62,7 +62,7 @@ describe('classifyBookingFailure outcomes for booking-state codes', () => {
           'GIGL_AUTHENTICATION_FAILED'
         )
       ).outcome
-    ).toBe('rejected');
+    ).toBe('not_submitted');
   });
 
   it('keeps the carrier reference on a carrier refusal that follows a saved shipment', () => {

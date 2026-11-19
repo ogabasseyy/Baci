@@ -13,17 +13,15 @@ import {
   resolveAgenticChatTenant,
 } from '@/lib/agentic/agentic-chat-tenant';
 import { createAgenticScopedSupabaseClient } from '@/lib/agentic/scoped-supabase';
-import type {
-  AddToCartParams,
-  CheckPaymentStatusParams,
-  CreateVirtualAccountParams,
-} from './chat-tools';
+import type { AddToCartParams, CheckPaymentStatusParams } from './chat-tools';
 
 export {
   handleGetProductDetails,
   handleGetRecommendations,
   handleSearchProducts,
 } from './chat-catalog-handlers';
+
+export { handleCreateVirtualAccount } from './chat-virtual-account-handler';
 
 type ChatToolSupabaseClient = Pick<SupabaseClient, 'from' | 'rpc'>;
 
@@ -52,34 +50,6 @@ function createScopedClient(
     merchantId: tenant.merchantId,
     merchantSlug: tenant.merchantSlug,
     sessionId,
-  });
-}
-
-// ============================================
-// CREATE VIRTUAL ACCOUNT
-// ============================================
-
-interface VirtualAccountResult {
-  success: boolean;
-  orderId?: string;
-  accountNumber?: string;
-  bankName?: string;
-  accountName?: string;
-  amount?: number;
-  expiresAt?: string;
-  error?: string;
-}
-
-export function handleCreateVirtualAccount(
-  _params: CreateVirtualAccountParams,
-  _sessionId: string
-): Promise<VirtualAccountResult> {
-  // Account generation is not integrated. Do not create a pending order with
-  // model-supplied prices for a payment flow that cannot be completed.
-  return Promise.resolve({
-    success: false,
-    error:
-      'Bank transfer payment is temporarily unavailable. Please use card payment at checkout or contact support.',
   });
 }
 

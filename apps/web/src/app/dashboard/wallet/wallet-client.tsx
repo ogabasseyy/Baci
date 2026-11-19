@@ -227,7 +227,7 @@ export default function WalletClient({
             <p className="text-xs text-muted-foreground mt-2 text-center">
               Withdrawals are currently disabled
             </p>
-            {spendable ? (
+            {spendable && spendable.pendingReconciliationTotal > 0 ? (
               <p className="text-xs text-muted-foreground mt-1 text-center">
                 Includes amounts held pending reconciliation — see Spendable
                 above.

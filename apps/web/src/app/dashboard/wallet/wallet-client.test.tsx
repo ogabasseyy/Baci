@@ -157,4 +157,25 @@ describe('WalletClient', () => {
     );
     expect(screen.queryByText('Spendable')).not.toBeInTheDocument();
   });
+
+  it('omits the reconciliation note on Available when nothing is pending', () => {
+    render(
+      <WalletClient
+        merchantId="m"
+        payoutCurrency="NGN"
+        wallet={null}
+        pendingSettlements={[]}
+        transactions={[]}
+        spendable={{
+          spendableBalance: 1200,
+          settledToBankTotal: 9000,
+          pendingReconciliationTotal: 0,
+        }}
+      />
+    );
+    expect(screen.getByText('Spendable')).toBeInTheDocument();
+    expect(
+      screen.queryByText(/includes amounts held pending reconciliation/i)
+    ).not.toBeInTheDocument();
+  });
 });

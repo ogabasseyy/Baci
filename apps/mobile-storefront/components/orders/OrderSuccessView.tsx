@@ -44,7 +44,7 @@ export function OrderSuccessView({
     : resolveOrderSuccessDeliveryEstimate(deliveryEstimate);
   const successTone = oxygenPlanConfirmed
     ? {
-        documentLabel: 'View Receipt',
+        documentLabel: null,
         eyebrow: 'Oxygen plan confirmed',
         title: 'Order Confirmed',
         subtitle: 'Your Oxygen payment plan is active.',
@@ -156,7 +156,7 @@ export function OrderSuccessView({
             }
           />
           <View style={styles.actions}>
-            {onViewDocument && !oxygenPlanConfirmed ? (
+            {onViewDocument && successTone.documentLabel ? (
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={successTone.documentLabel}

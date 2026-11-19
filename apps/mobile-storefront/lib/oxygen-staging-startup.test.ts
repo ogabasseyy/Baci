@@ -110,3 +110,32 @@ test('rejects unexpected nested staging pins', () => {
     'fresh isolated'
   );
 });
+
+test('opens the native storage file scoped to the installed staging identity', async () => {
+  process.env = { ...env };
+  const config = buildOxygenStagingExpoConfig(env);
+  if (!config) throw new Error('Missing test config');
+  mockConstants.expoConfig = config;
+  installOxygenStagingBuild(config, true);
+
+  const { getOxygenStagingProfile } = await import('./oxygen-staging-profile');
+  const storagePrefix = getOxygenStagingProfile()?.storagePrefix;
+  expect(storagePrefix).toMatch(/^baci-oxygen-staging\.v2\./);
+
+  const createMMKV = jest.fn(() => ({
+    getString: jest.fn(() => null),
+    remove: jest.fn(),
+    set: jest.fn(),
+  }));
+  process.env.NODE_ENV = 'development';
+  try {
+    jest.doMock('react-native-mmkv', () => ({ createMMKV }));
+    await jest.isolateModulesAsync(async () => {
+      const storage = await import('./storage');
+      await storage.waitForStorageReady();
+    });
+    expect(createMMKV).toHaveBeenCalledWith({ id: storagePrefix });
+  } finally {
+    jest.dontMock('react-native-mmkv');
+  }
+});

@@ -149,6 +149,22 @@ describe('OrderSuccessView', () => {
     expect(onViewDocument).toHaveBeenCalledTimes(1);
   });
 
+  it('withholds the receipt while an active Oxygen plan is awaiting settlement', () => {
+    render(
+      <OrderSuccessView
+        {...createProps()}
+        oxygenPlanConfirmed
+        orderNumber="TEST-100"
+        onViewDocument={jest.fn()}
+        paymentMethod="oxygen"
+      />
+    );
+
+    expect(screen.getByText('Upfront payment confirmed')).toBeTruthy();
+    expect(screen.getByText(/once merchant payment is confirmed/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'View Receipt' })).toBeNull();
+  });
+
   it('disables the document action while preparing a document', () => {
     // Arrange
     const onViewDocument = jest.fn();

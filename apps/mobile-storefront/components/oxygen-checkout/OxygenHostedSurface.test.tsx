@@ -153,6 +153,12 @@ describe('hosted Oxygen surface', () => {
         url: 'https://evil.example/success',
       })
     ).toBe(false);
+    expect(
+      web.props.onShouldStartLoadWithRequest({
+        url: 'https://evil.example/subframe',
+        isTopFrame: false,
+      })
+    ).toBe(false);
     await act(async () => {
       web.props.onMessage({
         nativeEvent: { data: '{"paid":true,"activated":true}' },

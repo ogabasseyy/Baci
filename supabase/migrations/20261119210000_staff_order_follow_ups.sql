@@ -121,7 +121,9 @@ BEGIN
       SELECT 1 FROM public.order_follow_ups f
       WHERE f.merchant_id = p_merchant_id AND f.order_id = p_order_id AND f.assignee_id = actor
     ) THEN
-      RAISE EXCEPTION 'Follow-up changed' USING ERRCODE = '40001';
+      -- PT409 reaches the app as HTTP 409. Not 40001: PostgREST treats that as a
+      -- transient failure and retries the whole transaction.
+      RAISE EXCEPTION 'Follow-up changed' USING ERRCODE = 'PT409';
     END IF;
     RAISE EXCEPTION 'Follow-up unavailable' USING ERRCODE = '42501';
   END IF;

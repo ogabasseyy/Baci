@@ -12,6 +12,24 @@ import {
 const SELECT_FIELDS =
   'order_id,merchant_id,assignee_id,assignee_name,stage,outcome,follow_up_on,revision,updated_at';
 
+const OPEN_LOAD_ERROR = 'Could not load open follow-ups.';
+const STAFF_LOAD_ERROR = 'Could not load staff follow-ups.';
+const UNREADABLE_REPLY_ERROR =
+  'Saved, but the latest details could not be shown. Pull down to refresh.';
+
+/**
+ * A row that breaks the follow-up contract fails the whole load with a plain
+ * message (the queue shows its retry banner) instead of a raw validation
+ * error. Skipping the row would silently hide a follow-up from the team.
+ */
+function readOrThrow<T>(read: () => T, message: string): T {
+  try {
+    return read();
+  } catch (failure) {
+    throw new Error(message, { cause: failure });
+  }
+}
+
 type StaffFollowUpQueue = {
   records: Record<string, StaffFollowUp>;
   openOrders: FailedOrder[];
@@ -42,10 +60,16 @@ async function fetchFollowUps(
     .order('order_id')
     .limit(FOLLOW_UP_QUERY_LIMIT + 1);
 
-  if (openError) throw new Error('Could not load open follow-ups.');
+  if (openError) throw new Error(OPEN_LOAD_ERROR);
   for (const row of (openRows ?? []).slice(0, FOLLOW_UP_QUERY_LIMIT)) {
-    const followUp = staffFollowUpSchema.parse(row);
-    const order = oxygenFollowUpOrderSchema.parse(row.order);
+    const followUp = readOrThrow(
+      () => staffFollowUpSchema.parse(row),
+      OPEN_LOAD_ERROR
+    );
+    const order = readOrThrow(
+      () => oxygenFollowUpOrderSchema.parse(row.order),
+      OPEN_LOAD_ERROR
+    );
     records[followUp.order_id] = followUp;
     const total = order.total === null ? null : Number(order.total);
     openOrders.push({
@@ -71,10 +95,12 @@ async function fetchFollowUps(
       .eq('merchant_id', merchantId)
       .in('order_id', remainingIds.slice(i, i + 50));
 
-    if (error) throw new Error('Could not load staff follow-ups.');
-    for (const row of staffFollowUpSchema.array().parse(data)) {
-      records[row.order_id] = row;
-    }
+    if (error) throw new Error(STAFF_LOAD_ERROR);
+    const rows = readOrThrow(
+      () => staffFollowUpSchema.array().parse(data),
+      STAFF_LOAD_ERROR
+    );
+    for (const row of rows) records[row.order_id] = row;
   }
   return {
     records,
@@ -124,13 +150,18 @@ export function useStaffOrderFollowUps(
       if (error?.code === '23505') {
         throw new Error('Someone else has already claimed this follow-up.');
       }
-      if (error?.code === '40001') {
+      // The update function signals a stale revision with PT409 (HTTP 409).
+      if (error?.code === 'PT409') {
         throw new Error(
           'This follow-up changed. Check the latest details before saving.'
         );
       }
       if (error) throw new Error('Could not save the follow-up. Try again.');
-      return staffFollowUpSchema.parse(data);
+      // The change is already saved here; the refetch below shows the truth.
+      return readOrThrow(
+        () => staffFollowUpSchema.parse(data),
+        UNREADABLE_REPLY_ERROR
+      );
     },
     onSuccess: (row) => {
       queryClient.setQueryData<StaffFollowUpQueue>(queryKey, (current) => {

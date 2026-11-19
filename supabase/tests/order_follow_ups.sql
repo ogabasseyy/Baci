@@ -46,7 +46,7 @@ BEGIN
   BEGIN
     PERFORM public.update_order_follow_up(merchant_id, order_id, 1, 'closed', '', NULL);
     RAISE EXCEPTION 'Stale update overwrote a newer note';
-  EXCEPTION WHEN serialization_failure THEN NULL;
+  EXCEPTION WHEN SQLSTATE 'PT409' THEN NULL;
   END;
   PERFORM set_config('request.jwt.claim.sub','aa000000-0000-4000-8000-000000000001',true);
   IF (SELECT count(*) FROM public.order_follow_ups f WHERE f.order_id = 'aa000000-0000-4000-8000-000000000021') <> 1 THEN

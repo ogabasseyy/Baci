@@ -346,6 +346,36 @@ describe('FollowUpQueueList', () => {
     ).toBeTruthy();
   });
 
+  it('offers no claim or update action until the team follow-up details have loaded', () => {
+    // Without the loaded state a card could show Claim for an order a teammate
+    // already holds; the banner Retry is the recovery path.
+    mocks.useFollowUpQueue.mockReturnValue({
+      failedOrders: [
+        {
+          id: 'order-1',
+          created_at: '2026-07-27T08:00:00Z',
+          customer_name: 'Ada',
+        },
+      ],
+      merchant: { id: 'merchant-1' },
+      refresh: mocks.refresh,
+      viewState: { status: 'ready' },
+    });
+    mocks.useStaffOrderFollowUps.mockReturnValue({
+      isSuccess: false,
+      isError: true,
+      refetch: vi.fn(),
+    });
+
+    render(
+      <FollowUpQueueList {...defaultProps} renderOrder={() => <div>Ada</div>} />
+    );
+
+    expect(screen.getByText('Ada')).toBeVisible();
+    expect(screen.queryByText('Claim follow-up')).toBeNull();
+    expect(screen.queryByText('Update follow-up')).toBeNull();
+  });
+
   it('shows an older order with an open claim as its own card beside the newest order of the same customer', () => {
     // useFailedOrders keeps only the newest order per email, so the older
     // order is not in the source queue; its open claim comes from the scan.

@@ -94,11 +94,13 @@ describe('useStaffOrderFollowUps saving', () => {
       ['claim', '23505', 'Someone else has already claimed this follow-up.'],
       [
         'update',
-        '40001',
+        'PT409',
         'This follow-up changed. Check the latest details before saving.',
       ],
       ['claim', '42501', 'Could not save the follow-up. Try again.'],
       ['update', 'XX000', 'Could not save the follow-up. Try again.'],
+      // bugfix: 40001 made PostgREST retry the transaction, so it is no longer the stale signal.
+      ['update', '40001', 'Could not save the follow-up. Try again.'],
     ])('maps a failed %s (code %s) to a plain message', async (kind, code, message) => {
       mocks.rpc.mockResolvedValue({ data: null, error: { code } });
       const { result } = render();
@@ -123,7 +125,7 @@ describe('useStaffOrderFollowUps saving', () => {
       });
     });
 
-    it('rejects a reply that is not a valid follow-up', async () => {
+    it('tells the user the change was saved when the reply is not a valid follow-up', async () => {
       mocks.rpc.mockResolvedValue({ data: { order_id: 'nope' }, error: null });
       const { result } = render();
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -131,7 +133,9 @@ describe('useStaffOrderFollowUps saving', () => {
       await act(async () => {
         await expect(
           result.current.save({ type: 'claim', orderId: orderId(1) })
-        ).rejects.toThrow();
+        ).rejects.toThrow(
+          'Saved, but the latest details could not be shown. Pull down to refresh.'
+        );
       });
     });
 

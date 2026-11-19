@@ -220,7 +220,7 @@ describe('useStaffOrderFollowUps', () => {
       );
     });
 
-    it('fails instead of showing a record that breaks the follow-up contract', async () => {
+    it('fails with the plain message, not a raw validation error, when a source-order record breaks the follow-up contract', async () => {
       mocks.from
         .mockReturnValueOnce(queryBuilder(ok([])).builder)
         .mockReturnValueOnce(
@@ -230,6 +230,26 @@ describe('useStaffOrderFollowUps', () => {
       const { result } = render([orderId(1)]);
       await waitFor(() => expect(result.current.isError).toBe(true));
 
+      expect(result.current.error?.message).toBe(
+        'Could not load staff follow-ups.'
+      );
+      expect(result.current.data).toBeUndefined();
+    });
+
+    it.each([
+      ['follow-up', openRow(2, { stage: 'bogus' })],
+      ['order', { ...openRow(2), order: { id: 'not-a-uuid' } }],
+    ])('fails with the plain message when an open row has a malformed %s, even beside a valid one', async (_part, badRow) => {
+      mocks.from.mockReturnValueOnce(
+        queryBuilder(ok([openRow(1), badRow])).builder
+      );
+
+      const { result } = render();
+      await waitFor(() => expect(result.current.isError).toBe(true));
+
+      expect(result.current.error?.message).toBe(
+        'Could not load open follow-ups.'
+      );
       expect(result.current.data).toBeUndefined();
     });
   });

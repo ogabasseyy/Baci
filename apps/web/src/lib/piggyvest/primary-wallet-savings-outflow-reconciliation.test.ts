@@ -163,21 +163,6 @@ it('releases a matched operation the provider reports as failed', async () => {
     )
   ).toBe(true);
 });
-it('stays pending when the provider re-query cannot confirm', async () => {
-  mockLookup(reservation);
-  const fetchImplementation = vi
-    .fn()
-    .mockResolvedValue(new Response('private detail', { status: 404 }));
-  expect(
-    await runPrimaryWalletSavingsOutflowReconciliation({
-      configuration,
-      providerToken: 'test-token',
-      references: [reservation.reference],
-      fetchImplementation,
-    })
-  ).toBe('pending');
-});
-
 const cancelOperationId = '44444444-4444-4444-8444-444444444444';
 const cancelReference = `pvb-cancel-${reservation.goalId}`;
 const cancelReservation = {

@@ -14,44 +14,17 @@ import {
   Smartphone,
   Truck,
 } from 'lucide-react';
-import { parseLegacyFAQ, type FAQItem } from '@/types/faq';
+import { parseLegacyFAQ } from '@/types/faq';
 import type React from 'react';
 import { useState } from 'react';
-
-interface FaqItem {
-  question: string;
-  answer: string;
-}
-
-const FAQS: FaqItem[] = [
-  {
-    question: 'How do I track my order?',
-    answer:
-      "You can track your order by visiting the 'My Orders' section in your profile. Click on the specific order to see real-time status updates and tracking numbers if available.",
-  },
-  {
-    question: 'What is your return policy?',
-    answer:
-      'We offer a 7-day return policy for defective items. The device must be in its original condition with all accessories. Please visit our Returns page for the full policy and to initiate a return.',
-  },
-  {
-    question: 'How does the warranty work?',
-    answer:
-      'All new devices come with a standard 1-year manufacturer warranty. Used devices come with a 3-month warranty covering technical faults. Physical and liquid damage are not covered unless you purchased additional protection.',
-  },
-  {
-    question: 'Do you offer installment payments?',
-    answer:
-      "Yes, we partner with selected financial institutions to offer 'Buy Now, Pay Later' options. You can select this option at checkout if you are eligible.",
-  },
-  {
-    question: 'Can I swap my old phone?',
-    answer:
-      "Absolutely! Use our 'Swap & Trade-in' feature to get an estimated value for your current device. You can use this value as a discount towards your new purchase.",
-  },
-];
+import {
+  applyApprovedPolicyFaqs,
+  FALLBACK_HELP_FAQS,
+  type FaqItem,
+} from './approved-policy-faq';
 
 interface MerchantInfo {
+  slug?: string;
   business_name?: string;
   email?: string;
   support_email?: string;
@@ -82,16 +55,18 @@ export const OgabasseyV2HelpSupport: React.FC<HelpProps> = ({ merchant }) => {
   const address = merchant?.address || 'Lagos, Nigeria';
 
   // Get FAQs from structured items or legacy content
-  let displayFaqs: FaqItem[] = [];
+  let rawFaqs: FaqItem[] = [];
 
   if (merchant?.faq_items && merchant.faq_items.length > 0) {
-    displayFaqs = merchant.faq_items;
+    rawFaqs = merchant.faq_items;
   } else if (merchant?.pages?.faq) {
-    displayFaqs = parseLegacyFAQ(merchant.pages.faq);
+    rawFaqs = parseLegacyFAQ(merchant.pages.faq);
   } else {
     // Default FAQs if no content exists
-    displayFaqs = FAQS;
+    rawFaqs = FALLBACK_HELP_FAQS;
   }
+
+  const displayFaqs = applyApprovedPolicyFaqs(rawFaqs, merchant?.slug);
 
   const toggleFaq = (index: number) => {
     setOpenFaqIndex(openFaqIndex === index ? null : index);

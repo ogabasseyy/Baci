@@ -96,7 +96,7 @@ it('shows wallet guidance, never the plan account, and keeps the wallet amount f
   expect(screen.queryByText('0000008907')).toBeNull();
   expect(screen.queryByText('FAAS (SANDBOX)')).toBeNull();
   expect(screen.getByLabelText('Savings top-up amount')).toBeOnTheScreen();
-  expect(screen.getByText(/Available in wallet/)).toBeOnTheScreen();
+  expect(screen.getByText(/₦[\d,]+ available in wallet/)).toBeOnTheScreen();
   expect(fetchExistingSavingsPlanFunding).not.toHaveBeenCalled();
   expect(onFundWallet).not.toHaveBeenCalled();
   expect(onAddSavings).not.toHaveBeenCalled();

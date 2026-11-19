@@ -35,4 +35,15 @@ describe('buildAgenticSystemPrompt', () => {
     expect(prompt).toContain('Format prices in GHS (GH₵)');
     expect(prompt).not.toContain('Format prices in Naira');
   });
+
+  it('does not advertise virtual-account generation or PII collection when checkout is enabled', () => {
+    const prompt = buildAgenticSystemPrompt('Ogabassey', {
+      checkoutEnabled: true,
+    });
+
+    expect(prompt).toContain('Virtual bank account creation is not available');
+    expect(prompt).toContain('Do not collect customer email, name, or phone');
+    expect(prompt).not.toContain('Use createVirtualAccount');
+    expect(prompt).not.toContain('Generate bank account');
+  });
 });

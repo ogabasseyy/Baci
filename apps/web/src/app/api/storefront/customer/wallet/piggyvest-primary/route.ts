@@ -135,8 +135,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (outcome.status === 'unavailable') {
       return NextResponse.json(
         {
+          // Only an unconfirmed storage outcome is worth refreshing; a
+          // provider or configuration refusal means try again later.
           error:
-            'Wallet setup could not be confirmed. Please try refreshing later.',
+            outcome.code === 'STORAGE_UNAVAILABLE'
+              ? 'Wallet setup could not be confirmed. Please try refreshing later.'
+              : outcome.code === 'INVALID_INPUT'
+                ? 'Invalid wallet setup request.'
+                : 'Wallet setup is unavailable right now. Please try again later.',
           code: outcome.code,
         },
         { status: 503 }

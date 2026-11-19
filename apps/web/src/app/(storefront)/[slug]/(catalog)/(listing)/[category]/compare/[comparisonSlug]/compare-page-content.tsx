@@ -10,6 +10,7 @@ import {
 import { loadComparePage } from '@/lib/storefront-compare/load-compare-page';
 import { getStorefrontPathPrefix } from '@/lib/storefront-path-prefix';
 import { isDomainIdentifier } from '@/lib/validation';
+import { ComparePageBreadcrumb } from './compare-page-breadcrumb';
 import { CompareRelatedLinks } from './compare-related-links';
 import {
   type ProductCompareSchemaProduct,
@@ -134,6 +135,11 @@ export async function ComparePageContent({ params }: ComparePageContentProps) {
       */}
       <div className="min-h-[70vh] bg-store-background text-store-background-text">
         <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+          <ComparePageBreadcrumb
+            breadcrumbItems={page.breadcrumbItems}
+            fallbackTerminalName={page.heading}
+          />
+
           <header className="space-y-4">
             <h1
               className="text-3xl font-bold tracking-tight md:text-4xl"

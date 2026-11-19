@@ -55,13 +55,15 @@ function createSupabase() {
       if (table === 'order_items') {
         return {
           select: vi.fn(() => ({
-            eq: vi.fn().mockResolvedValue({
-              data: [
-                { product_id: 'product-1', variant_id: 'variant-1' },
-                { product_id: 'product-2', variant_id: 'variant-2' },
-              ],
-              error: null,
-            }),
+            eq: vi.fn(() => ({
+              eq: vi.fn().mockResolvedValue({
+                data: [
+                  { product_id: 'product-1', variant_id: 'variant-1' },
+                  { product_id: 'product-2', variant_id: 'variant-2' },
+                ],
+                error: null,
+              }),
+            })),
           })),
         };
       }
@@ -177,7 +179,9 @@ describe('merchant cancellation variant policy fallback', () => {
       .mockRejectedValueOnce(new Error('transport down'));
     supabase.from = vi.fn((table: string) => {
       if (table === 'order_items') {
-        return { select: vi.fn(() => ({ eq: itemsEq })) };
+        return {
+          select: vi.fn(() => ({ eq: vi.fn(() => ({ eq: itemsEq })) })),
+        };
       }
       if (table === 'product_variants') {
         return {

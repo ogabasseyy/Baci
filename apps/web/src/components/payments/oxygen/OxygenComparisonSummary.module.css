@@ -1,7 +1,8 @@
 .summary {
-  border: 1px solid #f1dfe1;
+  border: 1px solid var(--store-border, #e5e7eb);
   border-radius: 1rem;
-  background: linear-gradient(135deg, #fff7f7, #fff 65%);
+  background: var(--store-background, #fff);
+  color: var(--store-background-text, #111827);
   padding: 1.1rem;
 }
 .highlights {
@@ -15,7 +16,11 @@
 .highlights p {
   margin: 0 0 0.5rem;
   font-size: 0.8125rem;
-  color: #4b5563;
+  color: color-mix(
+    in srgb,
+    var(--store-background-text, #111827) 80%,
+    transparent
+  );
 }
 .highlights strong {
   display: block;
@@ -28,12 +33,20 @@
   display: block;
   margin-top: 0.25rem;
   font-size: 0.6875rem;
-  color: #6b7280;
+  color: color-mix(
+    in srgb,
+    var(--store-background-text, #111827) 70%,
+    transparent
+  );
 }
 .finalPayment {
   margin: 0.85rem 0 0;
   font-size: 0.75rem;
-  color: #6b7280;
+  color: color-mix(
+    in srgb,
+    var(--store-background-text, #111827) 70%,
+    transparent
+  );
 }
 .chips {
   display: flex;
@@ -42,22 +55,26 @@
   margin-top: 0.65rem;
 }
 .chips > span {
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--store-border, #e5e7eb);
   border-radius: 0.5rem;
-  background: white;
+  background: var(--store-background, #fff);
   padding: 0.35rem 0.5rem;
   font-size: 0.6875rem;
   line-height: 1.5;
-  color: #6b7280;
+  color: color-mix(
+    in srgb,
+    var(--store-background-text, #111827) 70%,
+    transparent
+  );
 }
 .chips b {
   font-weight: 500;
-  color: #374151;
+  color: var(--store-background-text, #111827);
 }
 .details {
   margin-top: 1rem;
   padding-top: 0.5rem;
-  border-top: 1px solid #e5e7eb;
+  border-top: 1px solid var(--store-border, #e5e7eb);
 }
 .details summary {
   min-height: 2.75rem;
@@ -66,7 +83,11 @@
   cursor: pointer;
   font-size: 0.8125rem;
   font-weight: 500;
-  color: #4b5563;
+  color: color-mix(
+    in srgb,
+    var(--store-background-text, #111827) 80%,
+    transparent
+  );
 }
 .details summary:focus-visible {
   outline: 2px solid var(--store-primary, #dc2626);
@@ -91,7 +112,11 @@
 }
 .details dt,
 .details li > span {
-  color: #6b7280;
+  color: color-mix(
+    in srgb,
+    var(--store-background-text, #111827) 70%,
+    transparent
+  );
 }
 .details h4 {
   font-size: 0.8125rem;
@@ -108,7 +133,11 @@
 .reference {
   font-size: 0.625rem;
   overflow-wrap: anywhere;
-  color: #6b7280;
+  color: color-mix(
+    in srgb,
+    var(--store-background-text, #111827) 70%,
+    transparent
+  );
   margin-top: 1rem;
 }
 .skeleton {
@@ -140,12 +169,16 @@
   display: grid;
   gap: 0.5rem;
   padding: 0.85rem 0;
-  background: white;
-  border-top: 1px solid #f3f4f6;
+  background: var(--store-background, #fff);
+  border-top: 1px solid var(--store-border, #e5e7eb);
 }
 .footer p {
   font-size: 0.75rem;
-  color: #6b7280;
+  color: color-mix(
+    in srgb,
+    var(--store-background-text, #111827) 70%,
+    transparent
+  );
   margin: 0;
   text-align: center;
 }
@@ -158,7 +191,11 @@
   display: flex;
   align-items: center;
   min-height: 2.75rem;
-  color: #9ca3af;
+  color: color-mix(
+    in srgb,
+    var(--store-background-text, #111827) 60%,
+    transparent
+  );
   font-size: 0.8125rem;
   font-weight: 600;
 }
@@ -166,12 +203,20 @@
 .highlights .finalPayment {
   margin-top: 0.55rem;
   font-size: 0.6875rem;
-  color: #6b7280;
+  color: color-mix(
+    in srgb,
+    var(--store-background-text, #111827) 70%,
+    transparent
+  );
 }
 
 .context {
   font-size: 0.75rem;
-  color: #6b7280;
+  color: color-mix(
+    in srgb,
+    var(--store-background-text, #111827) 70%,
+    transparent
+  );
   margin: 0.25rem 0 1rem;
 }
 
@@ -180,20 +225,24 @@
 }
 .dateGroups li {
   align-items: center;
-  border: 1px solid #f1e5e6;
+  border: 1px solid var(--store-border, #e5e7eb);
   border-radius: 0.75rem;
   padding: 0.65rem 0.8rem;
-  background: #fff;
+  background: var(--store-background, #fff);
 }
 .dateLabel {
   display: block;
-  color: #374151;
+  color: var(--store-background-text, #111827);
   font-weight: 500;
 }
 .dateRange {
   display: block;
   margin-top: 0.25rem;
-  color: #6b7280;
+  color: color-mix(
+    in srgb,
+    var(--store-background-text, #111827) 70%,
+    transparent
+  );
   font-size: 0.6875rem;
 }
 .dateGroups strong {
@@ -202,7 +251,11 @@
 }
 .dateGroups small {
   display: block;
-  color: #6b7280;
+  color: color-mix(
+    in srgb,
+    var(--store-background-text, #111827) 70%,
+    transparent
+  );
   font-weight: 400;
   font-size: 0.6875rem;
 }
@@ -211,7 +264,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
-  color: #b91c1c;
+  color: var(--store-primary, #b91c1c);
   font-weight: 600;
   vertical-align: middle;
 }

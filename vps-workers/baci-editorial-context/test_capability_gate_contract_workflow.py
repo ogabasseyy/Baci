@@ -30,9 +30,8 @@ class ContractWorkflowTests(unittest.TestCase):
     def test_workflow_must_keep_base_owned_execution(self):
         text = _workflow_text()
         self.assertEqual(check.workflow_failures(text), [])
-        dropped = text.replace(
-            "            git archive FETCH_HEAD .github/scripts/capability_gate_contract_check.py .github/scripts/capability_gate_contract_ci_checks.py .github/scripts/capability_gate_contract_workflow_checks.py | tar -x -C /tmp/cg-check\n", ""
-        )
+        archive = next(line for line in text.splitlines(keepends=True) if "git archive FETCH_HEAD" in line)
+        dropped = text.replace(archive, "", 1)
         self.assertNotEqual(dropped, text)
         self.assertTrue(check.workflow_failures(dropped))
 

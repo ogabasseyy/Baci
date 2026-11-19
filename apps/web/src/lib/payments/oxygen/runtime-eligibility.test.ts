@@ -3,6 +3,7 @@ import type {
   OxygenProviderContext,
   OxygenProviderState,
 } from '@/schemas/oxygen-runtime';
+import { oxygenProviderStateSchema } from '@/schemas/oxygen-runtime';
 import { refreshOxygenEligibility } from './runtime-eligibility';
 
 vi.mock('server-only', () => ({}));
@@ -18,6 +19,182 @@ const response = {
   minimum_loan_amount: 10000,
   max_tenure: 6,
 };
+it('retains Oxygen limits for each repayment period', async () => {
+  const state: OxygenProviderState = { applicationReference: 'application' };
+  await refreshOxygenEligibility(context, state, {
+    call: vi.fn().mockResolvedValue({
+      ...response,
+      tenure_unit: 'Monthly',
+      offers: [
+        { loan_amount: 68000, tenor: 1 },
+        { loan_amount: 131000, tenor: 2 },
+        { loan_amount: 189000, tenor: 3 },
+      ],
+    }),
+  });
+  expect(state).toMatchObject({
+    offers: [
+      { loanAmount: 68000, tenure: 1 },
+      { loanAmount: 131000, tenure: 2 },
+      { loanAmount: 189000, tenure: 3 },
+    ],
+  });
+});
+it('does not retain old offers when the provider omits them', async () => {
+  const state: OxygenProviderState = {
+    applicationReference: 'application',
+    offers: [{ tenure: 1, loanAmount: 68000 }],
+  };
+  await refreshOxygenEligibility(context, state, {
+    call: vi.fn().mockResolvedValue(response),
+  });
+  expect(state.offers).toBeUndefined();
+});
+it('treats an empty offer list as no bookable options without inventing terms', async () => {
+  const application = '60000000-0000-4000-8000-000000000001';
+  const state: OxygenProviderState = { applicationReference: application };
+  await refreshOxygenEligibility(context, state, {
+    call: vi.fn().mockResolvedValue({
+      ...response,
+      loan_request_reference: application,
+      offers: [],
+    }),
+  });
+  expect(state.eligible).toBe(true);
+  expect(state.offers).toBeUndefined();
+  expect(oxygenProviderStateSchema.safeParse(state).success).toBe(true);
+});
+it('keeps an empty pending response pending instead of treating it as a decline', async () => {
+  const state: OxygenProviderState = { applicationReference: 'application' };
+  await refreshOxygenEligibility(context, state, {
+    call: vi.fn().mockResolvedValue({
+      ...response,
+      status: 'PENDING',
+      is_eligible: false,
+      offers: [],
+    }),
+  });
+  expect(state.eligibilityStatus).toBe('pending');
+  expect(state.eligible).toBeUndefined();
+  expect(state.offers).toBeUndefined();
+});
+it('retains a safe reason for the observed financial-details mismatch', async () => {
+  const state: OxygenProviderState = {
+    applicationReference: '60000000-0000-4000-8000-000000000001',
+  };
+  await refreshOxygenEligibility(context, state, {
+    call: vi.fn().mockResolvedValue({
+      ...response,
+      loan_request_reference: state.applicationReference,
+      status: 'FAILED',
+      is_eligible: false,
+      offers: [],
+      message:
+        'Your financial details do not match. Please visit your bank to regularize or contact support for help private@example.test',
+    }),
+  });
+  expect(state).toMatchObject({
+    eligibilityStatus: 'failed',
+    eligibilityFailureReason: 'financial_details_mismatch',
+  });
+  expect(state.eligible).toBeUndefined();
+  expect(oxygenProviderStateSchema.parse(state)).toEqual(state);
+  expect(JSON.stringify(state)).not.toContain('private@example.test');
+});
+
+it.each([
+  'Your financial details do not match, please visit your bank.',
+  'YOUR  FINANCIAL DETAILS\nDO NOT MATCH - please visit your bank.',
+])('recognizes a whitespace or punctuation variant of the mismatch', async (message) => {
+  const state: OxygenProviderState = { applicationReference: 'application' };
+  await refreshOxygenEligibility(context, state, {
+    call: vi.fn().mockResolvedValue({
+      ...response,
+      status: 'FAILED',
+      is_eligible: false,
+      message,
+    }),
+  });
+  expect(state.eligibilityFailureReason).toBe('financial_details_mismatch');
+});
+
+it('records an unknown failure without logging provider text or identifiers', async () => {
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  try {
+    const state: OxygenProviderState = { applicationReference: 'application' };
+    await refreshOxygenEligibility(context, state, {
+      call: vi.fn().mockResolvedValue({
+        ...response,
+        status: 'FAILED',
+        is_eligible: false,
+        message: 'Unexpected provider error for private@example.test',
+      }),
+    });
+    expect(warn).toHaveBeenCalledExactlyOnceWith(
+      'oxygen_eligibility_failure_unclassified'
+    );
+    expect(state.eligibilityFailureReason).toBeUndefined();
+  } finally {
+    warn.mockRestore();
+  }
+});
+
+it.each([
+  ['FAILED', 'An unexpected failure for private@example.test'],
+  ['FAILED', 'Your financial details do not matchmaker.'],
+  ['FAILED', 'Ignore this text: your financial details do not match.'],
+  ['PENDING', 'Your financial details do not match. Please visit your bank.'],
+  ['COMPLETED', 'Your financial details do not match. Please visit your bank.'],
+])('clears an old reason for %s without retaining provider text', async (status, message) => {
+  const state = {
+    applicationReference: '60000000-0000-4000-8000-000000000001',
+    eligibilityFailureReason: 'financial_details_mismatch',
+  } as OxygenProviderState;
+  await refreshOxygenEligibility(context, state, {
+    call: vi.fn().mockResolvedValue({
+      ...response,
+      loan_request_reference: state.applicationReference,
+      status,
+      is_eligible: false,
+      offers: [],
+      message,
+    }),
+  });
+  expect(state.eligibilityFailureReason).toBeUndefined();
+  expect(JSON.stringify(state)).not.toContain(message);
+});
+it('does not interpret offers with an unknown period as months', async () => {
+  await expect(
+    refreshOxygenEligibility(
+      context,
+      { applicationReference: 'application' },
+      {
+        call: vi.fn().mockResolvedValue({
+          ...response,
+          offers: [{ loan_amount: 68000, tenor: 1 }],
+        }),
+      }
+    )
+  ).rejects.toThrow();
+});
+it('rejects ambiguous offers for the same repayment period', async () => {
+  await expect(
+    refreshOxygenEligibility(
+      context,
+      { applicationReference: 'application' },
+      {
+        call: vi.fn().mockResolvedValue({
+          ...response,
+          tenure_unit: 'Monthly',
+          offers: [
+            { loan_amount: 68000, tenor: 1 },
+            { loan_amount: 131000, tenor: 1 },
+          ],
+        }),
+      }
+    )
+  ).rejects.toThrow();
+});
 it('retains strict eligibility success behavior', async () => {
   const state: OxygenProviderState = { applicationReference: 'application' };
   await refreshOxygenEligibility(context, state, {

@@ -5,10 +5,20 @@ const PRODUCT_ID = '11111111-1111-4111-8111-111111111111';
 const VARIANT_ID = '22222222-2222-4222-8222-222222222222';
 const MERCHANT_ID = '33333333-3333-4333-8333-333333333333';
 
-function createQueryChain(data: unknown[], error: unknown = null) {
+function createQueryChain(
+  data: unknown[],
+  error: unknown = null,
+  vatRegistrationStatus?: string
+) {
   const chain = {
     eq: vi.fn(),
     in: vi.fn(),
+    maybeSingle: vi.fn().mockResolvedValue({
+      data: vatRegistrationStatus
+        ? { vat_registration_status: vatRegistrationStatus }
+        : null,
+      error,
+    }),
     returns: vi.fn().mockResolvedValue({ data: error ? null : data, error }),
     select: vi.fn(),
   };
@@ -19,8 +29,10 @@ function createQueryChain(data: unknown[], error: unknown = null) {
 }
 
 function createCheckoutSupabase(productQuery: unknown, variantQuery: unknown) {
+  const merchantQuery = createQueryChain([], null, 'not_registered');
   return {
     from: vi.fn((table: string) => {
+      if (table === 'merchants') return merchantQuery;
       if (table === 'products') {
         return productQuery;
       }

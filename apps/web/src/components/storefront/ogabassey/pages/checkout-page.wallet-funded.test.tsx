@@ -18,6 +18,7 @@ vi.mock('./checkout/navigate-checkout-result', async (importOriginal) => {
 // whole storefront shell, so every heavy dependency is stubbed.
 vi.mock('next/navigation', () => ({
   useRouter: vi.fn(() => ({ push: vi.fn(), back: vi.fn(), replace: vi.fn() })),
+  usePathname: vi.fn(() => '/checkout'),
   useSearchParams: vi.fn(() => new URLSearchParams()),
 }));
 

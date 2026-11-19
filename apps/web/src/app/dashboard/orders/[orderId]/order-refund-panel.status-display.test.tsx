@@ -223,4 +223,33 @@ describe('OrderRefundPanel status display', () => {
     expect(screen.queryByText('Loading refund…')).not.toBeInTheDocument();
     await act(async () => {});
   });
+  it('labels an idle cancelled-without-refund order as refund pending', async () => {
+    loadWith({
+      ...summary,
+      cancellationRefundMode: 'manual',
+      status: 'not_started',
+      canRetry: false,
+    });
+    expect(await screen.findByText('Refund pending')).toBeInTheDocument();
+    expect(
+      screen.getByText(/no automatic refund was queued/i)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Record manual refund' })
+    ).toBeInTheDocument();
+  });
+
+  it('keeps the neutral label for a not-started order that was not cancelled cancel-only', async () => {
+    loadWith({
+      ...summary,
+      cancellationRefundMode: 'automatic',
+      status: 'not_started',
+      canRetry: false,
+    });
+    await act(async () => {});
+    expect(screen.queryByText('Refund pending')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/no automatic refund was queued/i)
+    ).not.toBeInTheDocument();
+  });
 });

@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowRightLeft, Heart, ShoppingCart, Star } from 'lucide-react';
+import { ArrowRightLeft, Heart, Star } from 'lucide-react';
 import Link from 'next/link';
 import React, { useState } from 'react';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
@@ -12,6 +12,8 @@ import { useV2Saved } from '../providers/v2-saved-context';
 import type { Product } from '../types';
 import { ProductCardImage } from './product-card-image';
 import { ProductCardListView } from './product-card-list-view';
+import { ProductCardQuickAdd } from './product-card-quick-add';
+import { STOREFRONT_PRODUCT_CARD_IMAGE_SIZES } from './product-grid-image-sizes';
 
 interface ProductCardProps {
   product: Product;
@@ -79,6 +81,7 @@ function resolveProductCardBadge(
 export const ProductCard: React.FC<ProductCardProps> = ({
   product,
   onAddToCart,
+  isAdded,
   viewMode = 'grid',
   contentVisibilityClassName,
   imagePriority = false,
@@ -138,6 +141,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         }
         handleCartClick={handleCartClick}
         imagePriority={imagePriority}
+        isAdded={isAdded}
         isComparing={isComparing}
         isLiked={isLiked}
         linkAriaLabel={linkAriaLabel}
@@ -179,7 +183,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       <div className="ogabassey-product-card-image-surface relative aspect-square mb-3 md:mb-4 bg-gray-50 rounded-2xl flex items-center justify-center overflow-hidden z-10 pointer-events-none">
         <ProductCardImage
           product={product}
-          sizes="(max-width: 768px) 50vw, (max-width: 1200px) 33vw, 25vw"
+          sizes={STOREFRONT_PRODUCT_CARD_IMAGE_SIZES}
           imagePriority={imagePriority}
           className="object-cover transition-transform duration-500 md:group-hover:scale-105"
         />
@@ -225,38 +229,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           </button>
         </div>
 
-        {requiresSelection ? (
-          <Link
-            href={productHref}
-            prefetch={false}
-            aria-label={`Choose options for ${product.name}`}
-            className="absolute bottom-2 right-2 md:bottom-3 md:right-3 z-20 h-9 w-9 md:h-10 md:w-10 flex items-center justify-center rounded-full shadow-lg border border-gray-100 transition-all duration-300 pointer-events-auto active:scale-95 bg-white text-gray-900 md:hover:bg-primary md:hover:text-white md:hover:border-primary overflow-visible"
-          >
-            <ShoppingCart
-              size={16}
-              className="transition-transform md:w-[18px] md:h-[18px]"
-              strokeWidth={2}
-            />
-          </Link>
-        ) : (
-          <button
-            type="button"
-            onClick={handleCartClick}
-            aria-label={`Add ${product.name} to cart`}
-            className="absolute bottom-2 right-2 md:bottom-3 md:right-3 z-20 h-9 w-9 md:h-10 md:w-10 flex items-center justify-center rounded-full shadow-lg border border-gray-100 transition-all duration-300 pointer-events-auto active:scale-95 bg-white text-gray-900 md:hover:bg-primary md:hover:text-white md:hover:border-primary overflow-visible"
-          >
-            <ShoppingCart
-              size={16}
-              className={`transition-transform md:w-[18px] md:h-[18px] ${showPlusOne ? 'scale-90' : ''}`}
-              strokeWidth={2}
-            />
-            {showPlusOne && (
-              <span className="absolute -top-8 left-1/2 -translate-x-1/2 text-primary font-bold text-sm animate-out fade-out slide-out-to-top-4 duration-1000 fill-mode-forwards z-30 pointer-events-none shadow-sm bg-white px-1.5 rounded-full border border-primary/20">
-                +1
-              </span>
-            )}
-          </button>
-        )}
+        <ProductCardQuickAdd
+          handleCartClick={handleCartClick}
+          isAdded={isAdded}
+          productHref={productHref}
+          productName={product.name}
+          requiresSelection={requiresSelection}
+          showPlusOne={showPlusOne}
+        />
       </div>
 
       <div className="flex flex-col flex-1 pointer-events-none px-1 pt-1">

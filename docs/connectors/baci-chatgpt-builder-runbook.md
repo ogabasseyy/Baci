@@ -56,3 +56,13 @@ Production remains a separate owner-authorized VPS release ending in the approve
 - Local Task9 journeys use PostgreSQL17.11 RLS/services and deterministic generated plans. The authenticated create/edit journey also passed through native PostgREST16.4 with signed tokens. Its upstream `/auth/v1/user` response is simulated; this is not real Supabase Auth, pinned-container conformance, or ChatGPT host proof. Test state is synthetic and owned processes are cleaned per test.
 - OpenAI package formats/listing links: [package guide](https://developers.openai.com/plugins/build/plugins), [submission guide](https://developers.openai.com/plugins/deploy/submission), [submission errors](https://developers.openai.com/plugins/deploy/submission-errors). Retrieved2026-10-22; no submission portal action performed.
 - Supabase changelog retrieved2026-10-22: current TLS deprecation requires modern TLS; no staging TLS qualification is inferred from retrieval.
+
+### Recovering an indeterminate custom-store cart operation
+
+When an SDK cart mutation returns `{ status: 'indeterminate', operationId }`,
+retain that ID and call `commerce.cart.reconcile(operationId)`. Reconciliation
+uses the same admitted shopper/cart binding and existing commerce receipt; it
+does not submit a fresh add/remove/quantity mutation. If reconciliation is still
+indeterminate, retain the original ID and retry reconciliation or continue in the
+native cart. Calling `cart.add()` again creates a different operation and can
+apply the quantity twice.

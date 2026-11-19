@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { afterEach, expect, it, vi } from 'vitest';
 import type { Product } from '@/lib/products';
 import { analytics } from './analytics';
@@ -128,4 +130,28 @@ it('shares actual product wrapper identity between Meta and the generic queue', 
     { eventID: body.event_id }
   );
   vi.unstubAllGlobals();
+});
+
+it('bugfix: sends GA4 page_view without order tokens or shopper details', () => {
+  localStorage.setItem(
+    'baci-cookie-consent',
+    JSON.stringify({
+      necessary: true,
+      analytics: true,
+      marketing: false,
+      functional: false,
+    })
+  );
+  window.gtag = vi.fn();
+
+  analytics.pageView(
+    'https://shop.example/track-order?token=abc&email=a%40b.c&orderId=1#frag',
+    'Track'
+  );
+
+  expect(window.gtag).toHaveBeenCalledWith('event', 'page_view', {
+    page_location: 'https://shop.example/track-order?orderId=1',
+    page_title: 'Track',
+  });
+  Reflect.deleteProperty(window, 'gtag');
 });

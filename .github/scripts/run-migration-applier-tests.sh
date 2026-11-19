@@ -11,54 +11,59 @@ node --test "$script_dir/checkout-recovery-atomic-release.test.mjs" "$script_dir
 
 node --test "$repo_root/supabase/tests/mcp-guest-oauth-records.test.mjs"
 
-node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_sql_parser.test.mjs"
-node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_nested_queries.test.mjs"
-node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_availability.test.mjs"
-node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_availability_narrowing.test.mjs"
-node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_locks.test.mjs"
-node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_branches.test.mjs"
-node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_decrements.test.mjs"
-node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_decrement_null_stock.test.mjs"
-node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_decrement_guards.test.mjs"
-node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_decrement_guards_branches.test.mjs"
-node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_ddl.test.mjs"
-node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_dynamic_ddl.test.mjs"
-node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_dynamic_ddl_assignment.test.mjs"
-node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_predicates.test.mjs"
-node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_release.test.mjs"
-node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_release_scope.test.mjs"
-node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_review.test.mjs"
-node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_claim.test.mjs"
-node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_needed_count.test.mjs"
-node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_claim_excess_release.test.mjs"
-node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_claim_reachability.test.mjs"
-node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_confirmation.test.mjs"
-node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_confirmation_projection.test.mjs"
-node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_confirmation_reachability.test.mjs"
-node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_hold_eligibility.test.mjs"
-node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_privilege_parser.test.mjs"
-node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_privilege_roles.test.mjs"
-node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_privilege_lifecycle.test.mjs"
-node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_privilege_special_roles.test.mjs"
-node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_privilege_execution.test.mjs"
-node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_privilege_execution_lifecycle.test.mjs"
-node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_privilege_execution_recreation.test.mjs"
-node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_privilege_execution_session_scope.test.mjs"
-node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_privilege_execution_grant_scope.test.mjs"
-node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_definition_patches.test.mjs"
-node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_claim_shortage.test.mjs"
-node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_confirmation_item_order.test.mjs"
-node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_privileges.test.mjs"
-node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_privileges_default_grants.test.mjs"
-node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_privileges_release.test.mjs"
-node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_claim_branches.test.mjs"
-node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_confirmation_branches.test.mjs"
-node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_public_wrappers.test.mjs"
-node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_release_transitions.test.mjs"
-node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_release_locks.test.mjs"
-node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_sold_release.test.mjs"
-node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_control_flow.test.mjs"
-node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_zero_row.test.mjs"
+# One node --test run: it runs these files in parallel (one process each). They only parse
+# migration SQL text, so they share nothing. These 48 files used to run as 50 sequential calls
+# (two were listed twice), which took ~2 min of the job.
+# At most 4 files at once (the hosted runner's cores), which bounds peak memory.
+node --test --test-concurrency=4 \
+  "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_sql_parser.test.mjs" \
+  "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_nested_queries.test.mjs" \
+  "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_availability.test.mjs" \
+  "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_availability_narrowing.test.mjs" \
+  "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_locks.test.mjs" \
+  "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_branches.test.mjs" \
+  "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_decrements.test.mjs" \
+  "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_decrement_null_stock.test.mjs" \
+  "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_decrement_guards.test.mjs" \
+  "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_decrement_guards_branches.test.mjs" \
+  "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_ddl.test.mjs" \
+  "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_dynamic_ddl.test.mjs" \
+  "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_dynamic_ddl_assignment.test.mjs" \
+  "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_predicates.test.mjs" \
+  "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_release.test.mjs" \
+  "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_release_scope.test.mjs" \
+  "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_review.test.mjs" \
+  "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_claim.test.mjs" \
+  "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_needed_count.test.mjs" \
+  "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_claim_excess_release.test.mjs" \
+  "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_claim_reachability.test.mjs" \
+  "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_confirmation.test.mjs" \
+  "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_confirmation_projection.test.mjs" \
+  "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_confirmation_reachability.test.mjs" \
+  "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_hold_eligibility.test.mjs" \
+  "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_privilege_parser.test.mjs" \
+  "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_privilege_roles.test.mjs" \
+  "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_privilege_lifecycle.test.mjs" \
+  "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_privilege_special_roles.test.mjs" \
+  "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_privilege_execution.test.mjs" \
+  "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_privilege_execution_lifecycle.test.mjs" \
+  "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_privilege_execution_recreation.test.mjs" \
+  "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_privilege_execution_session_scope.test.mjs" \
+  "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_privilege_execution_grant_scope.test.mjs" \
+  "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_definition_patches.test.mjs" \
+  "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_claim_shortage.test.mjs" \
+  "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_confirmation_item_order.test.mjs" \
+  "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_privileges.test.mjs" \
+  "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_privileges_default_grants.test.mjs" \
+  "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_privileges_release.test.mjs" \
+  "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_claim_branches.test.mjs" \
+  "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_confirmation_branches.test.mjs" \
+  "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_public_wrappers.test.mjs" \
+  "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_release_transitions.test.mjs" \
+  "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_release_locks.test.mjs" \
+  "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_sold_release.test.mjs" \
+  "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_control_flow.test.mjs" \
+  "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_zero_row.test.mjs"
 node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract.test.mjs"
 node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_fixture_functions.test.mjs"
 bash "$script_dir/apply-pending-migrations.test.sh"
@@ -68,6 +73,7 @@ node --test "$script_dir/repair-sales-migration-collision.test.mjs"
 node --test "$script_dir/repair-sales-migration-collision.sql.test.mjs"
 node --test "$script_dir/shipping-policy-audit-repair.test.mjs" "$script_dir/shipping-policy-audit-repair.sql.test.mjs"
 node --test "$script_dir/checkout-reuse-ambiguous-id.sql.test.mjs"
+python3 "$repo_root/supabase/tests/run_commerce_cart_checkout_add_identity.py"
 bash "$script_dir/deferred-production-migrations.test.sh"
 bash "$script_dir/apply-pending-migrations-version-collision.test.sh"
 bash "$script_dir/historical-migration-repair-spec.test.sh"

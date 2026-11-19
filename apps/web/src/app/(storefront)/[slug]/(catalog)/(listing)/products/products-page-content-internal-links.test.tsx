@@ -109,6 +109,7 @@ vi.mock('@/lib/store-url', () => ({
 }));
 
 vi.mock('@/lib/validation', () => ({
+  isDomainIdentifier: (value: string) => value.includes('.'),
   isValidMerchantIdentifier: () => true,
 }));
 
@@ -213,11 +214,11 @@ describe('ProductsPageContent maintained buying path modules', () => {
     mockGetRequestScopedMerchant.mockResolvedValue(OGABASSEY_TEST_MERCHANT);
 
     const result = await ProductsPageContent({
-      params: Promise.resolve({ slug: 'ogabassey' }),
+      params: Promise.resolve({ slug: 'ogabassey.com' }),
       searchParams: Promise.resolve({ page: '1' }),
     });
 
-    render(result as React.ReactElement);
+    render((result.props as { fallback: React.ReactElement }).fallback);
 
     // Late SEO enrichment must never insert above the already-painted catalog.
     expect(
@@ -265,11 +266,11 @@ describe('ProductsPageContent maintained buying path modules', () => {
     mockGetRequestScopedMerchant.mockResolvedValue(OGABASSEY_TEST_MERCHANT);
 
     const result = await ProductsPageContent({
-      params: Promise.resolve({ slug: 'ogabassey' }),
+      params: Promise.resolve({ slug: 'ogabassey.com' }),
       searchParams: Promise.resolve({ page: '1' }),
     });
 
-    render(result as React.ReactElement);
+    render((result.props as { fallback: React.ReactElement }).fallback);
 
     expect(
       screen.queryByRole('link', { name: 'iPhone Air' })
@@ -292,7 +293,7 @@ describe('ProductsPageContent maintained buying path modules', () => {
       searchParams: Promise.resolve({ page: '1' }),
     });
 
-    render(result as React.ReactElement);
+    render((result.props as { fallback: React.ReactElement }).fallback);
 
     expect(
       screen.queryByRole('heading', { name: 'Explore Ogabassey buying paths' })

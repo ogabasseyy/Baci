@@ -22,6 +22,11 @@ function begin(pinnedUserId?: string) {
 const pathOf = (kind: GoalActionKind) =>
   `/api/storefront/customer/savings/goal-${kind}`;
 
+// The in-sheet cancel step tells the customer an early cancel forfeits the
+// goal's interest, so it says so to the server (older screens never did).
+const disclosure = (kind: GoalActionKind) =>
+  kind === 'cancel' ? { interestForfeitAcknowledged: true as const } : {};
+
 // An unreadable reply is indeterminate: no code, and never a reason to resend.
 function unreadable() {
   return new Error(GOAL_ACTION_UNREADABLE);
@@ -34,7 +39,11 @@ export async function issueGoalAction(
   pinnedUserId?: string
 ) {
   const { client, expectedUserId } = begin(pinnedUserId);
-  const body = schemas.issueRequest.parse({ step: 'issue', ...input });
+  const body = schemas.issueRequest.parse({
+    step: 'issue',
+    ...input,
+    ...disclosure(kind),
+  });
   const result = schemas.issueResponse[kind].safeParse(
     await client.fetchJson({
       path: pathOf(kind),
@@ -60,7 +69,11 @@ export async function submitGoalAction(
   pinnedUserId?: string
 ) {
   const { client, expectedUserId } = begin(pinnedUserId);
-  const body = schemas.submitRequest.parse({ step: 'submit', ...input });
+  const body = schemas.submitRequest.parse({
+    step: 'submit',
+    ...input,
+    ...disclosure(kind),
+  });
   const result = schemas.submitResponse.safeParse(
     await client.fetchJson({
       path: pathOf(kind),

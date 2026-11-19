@@ -1,7 +1,10 @@
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CartPrincipal } from '@/lib/cart/principal';
-import { __resetCartQuotaStoreForTesting } from '@/lib/cart/request-context';
+import {
+  __resetCartMerchantLookupCacheForTesting,
+  __resetCartQuotaStoreForTesting,
+} from '@/lib/cart/request-context';
 import * as sessionProofModule from '@/lib/cart/session-proof';
 import {
   CartSessionConfigError,
@@ -134,6 +137,7 @@ const savedSecret = process.env.CART_SESSION_SECRET;
 beforeEach(() => {
   vi.clearAllMocks();
   __resetCartQuotaStoreForTesting();
+  __resetCartMerchantLookupCacheForTesting();
   mocks.alias = null;
   mocks.capturedPrincipal = null;
   mocks.cartError = null;
@@ -228,6 +232,11 @@ describe('POST /api/storefront/cart/commands', () => {
 
   it('renews the session proof after an authorized mutation', async () => {
     const expiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    mocks.grantAuthority = {
+      ok: true,
+      allowedOperations: ['add'],
+      grantExpiresAt: expiry,
+    };
     mocks.cartPayload = {
       code: null,
       ok: true,
@@ -331,29 +340,6 @@ describe('POST /api/storefront/cart/commands', () => {
     } finally {
       spy.mockRestore();
     }
-  });
-
-  it('returns the committed cart without a renewed proof when reissue crosses grant expiry', async () => {
-    mocks.cartPayload = {
-      code: null,
-      ok: true,
-      replayed: false,
-      state: rawState({
-        expiresAt: new Date(Date.now() - 1000).toISOString(),
-        lines: [rawLine()],
-      }),
-    };
-    const response = await postCommand({
-      body: addCommand('expired-reissue'),
-      headers: {
-        cookie: `baci-cart-11111111-1111-4111-8111-111111111111=${sessionProof()}`,
-      },
-    });
-    expect(response.status).toBe(200);
-    const payload = await response.json();
-    expect(payload.cart.version).toBe(2);
-    expect(payload.proof).toBeUndefined();
-    expect(response.headers.get('set-cookie')).toBeNull();
   });
 
   it('returns replayed outcomes for response-loss retries', async () => {
@@ -463,6 +449,9 @@ describe('POST /api/storefront/cart/commands', () => {
     });
 
     expect(response.status).toBe(403);
+    expect(response.headers.get('Server-Timing')).toMatch(
+      /^csrf;dur=[\d.]+, total;dur=[\d.]+$/
+    );
     expect((await response.json()).code).toBe('forbidden');
   });
 

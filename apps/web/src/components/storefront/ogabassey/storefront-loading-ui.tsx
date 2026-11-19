@@ -227,20 +227,20 @@ export function BlogPostRouteLoading() {
   return (
     <LoadingStatus label="Loading blog post">
       <div className="min-h-screen bg-background">
-        <div className="border-b bg-white">
+        <div className="border-b border-border bg-background">
           <div className="container mx-auto px-4 py-4">
             <Skeleton className="h-4 w-28 bg-muted/40" shimmer />
           </div>
         </div>
 
         <main className="container mx-auto px-4 py-8">
-          <article className="mx-auto max-w-6xl overflow-hidden rounded-3xl border border-gray-100 bg-white p-6 shadow-sm md:p-10 md:px-12">
+          <article className="mx-auto max-w-6xl overflow-hidden rounded-3xl border border-border bg-card text-card-foreground p-6 shadow-sm md:p-10 md:px-12">
             <Skeleton
-              className="mb-8 aspect-video w-full rounded-2xl bg-muted/30"
+              className="mb-8 aspect-video w-full rounded-2xl bg-muted/30 ogabassey-blog-post-hero-frame"
               shimmer
             />
             <div className="mb-8 space-y-4">
-              {['h-5 w-20 rounded-full', 'h-8 w-3/4', 'h-8 w-1/2'].map(
+              {['h-5 w-20 rounded-full', 'h-9 w-3/4', 'h-9 w-1/2'].map(
                 (cls, idx) => (
                   // biome-ignore lint/suspicious/noArrayIndexKey: Static fallback header lines
                   <Skeleton key={idx} className={`${cls} bg-muted/40`} shimmer />
@@ -258,7 +258,7 @@ export function BlogPostRouteLoading() {
               {['w-full', 'w-full', 'w-5/6', 'w-full', 'w-4/5'].map(
                 (cls, idx) => (
                   // biome-ignore lint/suspicious/noArrayIndexKey: Static fallback lines
-                  <Skeleton key={idx} className={`h-6 ${cls} bg-muted/40`} shimmer />
+                  <Skeleton key={idx} className={`h-4 ${cls} bg-muted/40`} shimmer />
                 )
               )}
             </div>

@@ -44,6 +44,7 @@ vi.mock('@/hooks/use-merchant-client', () => ({
 }));
 vi.mock('@/hooks/use-currency', () => ({
   useCurrency: () => ({
+    currencyCode: 'NGN',
     formatCurrency: (amount: number) => `₦${amount.toLocaleString()}`,
   }),
 }));

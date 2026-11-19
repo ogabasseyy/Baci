@@ -9,12 +9,12 @@ test('Nitro implements the RN 0.88 JSI installer selector and uses its call invo
   const source = readFileSync(
     join(
       dirname(require.resolve('react-native-nitro-modules/package.json')),
-      'ios/turbomodule/NativeNitroModules+NewArch.mm'
+      'apple/turbomodule/NativeNitroModules+NewArch.mm'
     ),
     'utf8'
   );
   assert.match(
     source,
-    /installJSIBindingsWithRuntime:\(jsi::Runtime&\)runtime\s+callInvoker:\(const std::shared_ptr<react::CallInvoker>&\)callInvoker\s*\{\s*_callInvoker = callInvoker;\s*\[self installJSIBindingsWithRuntime:runtime\];/
+    /installJSIBindingsWithRuntime:\(jsi::Runtime&\)runtime\s+callInvoker:\(const std::shared_ptr<react::CallInvoker>&\)callInvoker\s*\{\s*_callInvoker = callInvoker;\s*\[self installNitroInRuntime:runtime\];/
   );
 });

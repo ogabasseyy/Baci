@@ -42,4 +42,23 @@ describe('CheckoutBottomAction', () => {
     expect(screen.getByText('Place Order')).toBeTruthy();
     expect(action.props.accessibilityState.disabled).toBe(true);
   });
+
+  it('bugfix: a prize checkout shows a zero total, not the delivery fee', () => {
+    render(
+      <CheckoutBottomAction
+        {...commonProps}
+        displayTotal={3500}
+        prizeCheckout
+        selectedPayment="paystack"
+        total={3500}
+      />
+    );
+
+    expect(screen.getByText('₦0')).toBeTruthy();
+    expect(screen.queryByText('₦3,500')).toBeNull();
+    expect(
+      screen.getByRole('button', { name: 'Claim prize, nothing to pay' })
+    ).toBeTruthy();
+    expect(screen.getByText('Claim Prize')).toBeTruthy();
+  });
 });

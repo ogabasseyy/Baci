@@ -1,6 +1,7 @@
 import { ChevronDown } from 'lucide-react';
 import { equityForPercentage } from './down-payment';
-import styles from './OxygenPlanForm.module.css';
+import formStyles from './OxygenPlanForm.module.css';
+import styles from './OxygenPlanPreview.module.css';
 
 const money = (value: number) =>
   new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(
@@ -37,7 +38,7 @@ export function OxygenPlanPreview({
           </div>
         </dl>
       ) : (
-        <p className={styles.hint}>
+        <p className={formStyles.hint}>
           {percentage === null
             ? 'Enter a down payment between 25% and 90%.'
             : `${percentage}% down payment`}

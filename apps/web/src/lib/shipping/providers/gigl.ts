@@ -21,13 +21,21 @@ import {
   lookupGiglExternalWaybill,
 } from './gigl.external-waybill';
 import {
+  type GiglWaybillCancellation,
+  readGiglWaybillCancellation,
+} from './gigl.preshipment-cancellation';
+import {
   attestGiglWaybillOwnership,
   type GiglWaybillOwnership,
 } from './gigl.preshipment-ownership';
 import { getGiglQuotes } from './gigl.quotes';
 import { GiglStationsService } from './gigl.stations';
 import { trackGiglShipment } from './gigl.tracking';
-import { trackGiglShipmentBatch } from './gigl.tracking-batch';
+import {
+  type GiglBatchTrackingOutcomes,
+  trackGiglShipmentBatch,
+  trackGiglShipmentBatchOutcomes,
+} from './gigl.tracking-batch';
 
 export class GiglProvider extends BaseShippingProvider {
   readonly code = 'GIGL' as const;
@@ -86,6 +94,16 @@ export class GiglProvider extends BaseShippingProvider {
     );
   }
 
+  trackShipmentOutcomes(
+    trackingNumbers: readonly string[]
+  ): Promise<GiglBatchTrackingOutcomes> {
+    return trackGiglShipmentBatchOutcomes(
+      this.apiClient,
+      this.providerIo,
+      trackingNumbers
+    );
+  }
+
   /** Read-only lookup of a waybill that may have been booked outside Baci. */
   lookupExternalWaybill(waybill: string): Promise<GiglExternalWaybillLookup> {
     return lookupGiglExternalWaybill(this.apiClient, this.providerIo, waybill);
@@ -96,6 +114,17 @@ export class GiglProvider extends BaseShippingProvider {
     trackingNumber: string
   ): Promise<GiglWaybillOwnership> {
     return attestGiglWaybillOwnership(
+      this.apiClient,
+      this.providerIo,
+      trackingNumber
+    );
+  }
+
+  /** Whether GIG's preshipment record says the waybill was cancelled. */
+  readWaybillCancellation(
+    trackingNumber: string
+  ): Promise<GiglWaybillCancellation> {
+    return readGiglWaybillCancellation(
       this.apiClient,
       this.providerIo,
       trackingNumber

@@ -55,12 +55,12 @@ describe('usePrimaryGoalGate', () => {
   });
 
   it.each([
-    'PIGGYVEST_NOT_READY',
-    undefined,
-  ])('is off when the read rejects (%s)', async (code) => {
+    ['PIGGYVEST_NOT_READY', 'off'],
+    [undefined, 'error'],
+  ] as const)('maps rejected read %s to %s', async (code, expected) => {
     read.mockRejectedValue(Object.assign(new Error('nope'), { code }));
     const { result } = renderHook(() => usePrimaryGoalGate());
-    await waitFor(() => expect(result.current).toBe('off'));
+    await waitFor(() => expect(result.current).toBe(expected));
   });
 
   it('is off without reading for a non-primary merchant or a signed-out customer', () => {
@@ -138,6 +138,29 @@ describe('usePrimaryGoalGate', () => {
       rerender({ key: 2 });
       await waitFor(() => expect(read).toHaveBeenCalledTimes(2));
       expect(result.current).toBe('ready');
+    });
+
+    it('reports a transient initial read failure as error', async () => {
+      read.mockRejectedValueOnce(new Error('network'));
+      const { result } = renderHook(() => usePrimaryGoalGate());
+      await waitFor(() => expect(result.current).toBe('error'));
+    });
+
+    it('retries a scoped error only when its nonce changes', async () => {
+      read
+        .mockRejectedValueOnce(new Error('network'))
+        .mockResolvedValueOnce(ready);
+      const { result, rerender } = renderHook(
+        ({ nonce }: { nonce: number }) => usePrimaryGoalGate(undefined, nonce),
+        { initialProps: { nonce: 0 } }
+      );
+      await waitFor(() => expect(result.current).toBe('error'));
+      expect(read).toHaveBeenCalledTimes(1);
+
+      rerender({ nonce: 1 });
+      expect(result.current).toBe('checking');
+      await waitFor(() => expect(result.current).toBe('ready'));
+      await waitFor(() => expect(read).toHaveBeenCalledTimes(2));
     });
 
     it.each([

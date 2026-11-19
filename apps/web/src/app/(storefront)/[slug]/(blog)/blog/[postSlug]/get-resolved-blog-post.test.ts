@@ -38,7 +38,7 @@ describe('getResolvedBlogPost', () => {
     expect(mockGetLiveBlogPost).not.toHaveBeenCalled();
   });
 
-  it('falls back to the live query when the cached lookup misses', async () => {
+  it('bypasses the anonymous cache in draft mode', async () => {
     const livePost = { post: { slug: 'live-post' } };
     mockGetRequestScopedBlogPost.mockResolvedValue(null);
     mockGetLiveBlogPost.mockResolvedValue(livePost);
@@ -55,6 +55,7 @@ describe('getResolvedBlogPost', () => {
       true
     );
     expect(result).toBe(livePost);
+    expect(mockGetRequestScopedBlogPost).not.toHaveBeenCalled();
   });
 
   it('logs cache failures before falling back to the live query', async () => {

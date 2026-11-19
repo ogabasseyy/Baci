@@ -94,4 +94,24 @@ describe('bugfix: unreachable response reflects a lock that could not be freed',
     expect(mapped.code).toBe('PROVIDER_UNREACHABLE');
     expect(mapped.message).toMatch(/new shipping quote/);
   });
+
+  it('bugfix: keeps a rejected GIG login message instead of a generic unreachable answer', () => {
+    const authError = new OrderShipmentBookingError(
+      'GIGL API authentication failed',
+      502,
+      'GIGL_AUTHENTICATION_FAILED'
+    );
+    expect(toBookingFailureResponseError(authError)).toBe(authError);
+  });
+
+  it('still answers a GIG login timeout (504) as unreachable', () => {
+    const mapped = toBookingFailureResponseError(
+      new OrderShipmentBookingError(
+        'GIGL API authentication timed out',
+        504,
+        'GIGL_AUTHENTICATION_FAILED'
+      )
+    ) as { code: string };
+    expect(mapped.code).toBe('PROVIDER_UNREACHABLE');
+  });
 });

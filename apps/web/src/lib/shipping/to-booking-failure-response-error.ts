@@ -17,6 +17,16 @@ export function toBookingFailureResponseError(
   } = {}
 ): unknown {
   const { outcome } = classifyBookingFailure(error);
+  if (
+    outcome === 'not_submitted' &&
+    error instanceof OrderShipmentBookingError &&
+    error.code === 'GIGL_AUTHENTICATION_FAILED' &&
+    error.status !== 504
+  ) {
+    // A rejected GIG login is a configuration problem, not a connection
+    // problem: keep its own message instead of telling the merchant to retry.
+    return error;
+  }
   if (outcome === 'not_submitted') {
     if (options.lockRetained) {
       // Nothing was booked, but cleanup could not free the lock, so an

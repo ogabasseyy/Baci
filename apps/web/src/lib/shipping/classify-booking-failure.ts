@@ -80,6 +80,7 @@ export function classifyBookingFailure(
       message,
       httpStatus: null,
       outcome: 'rejected',
+      providerReference: error.providerReference,
     };
   }
   if (isProviderNeverReachedError(error)) {

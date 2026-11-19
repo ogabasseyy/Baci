@@ -880,7 +880,8 @@ export class TopshipProvider extends BaseShippingProvider {
         trackingId: savedShipment.trackingId,
       });
       throw new ShippingBookingRejectedError(
-        `Failed to confirm Topship shipment payment for tracking ${savedShipment.trackingId}: ${message}`
+        `Failed to confirm Topship shipment payment for tracking ${savedShipment.trackingId}: ${message}`,
+        savedShipment.trackingId
       );
     }
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { classifyBookingFailure } from './classify-booking-failure';
 import { OrderShipmentBookingError } from './order-shipment-booking-utils';
+import { ShippingBookingRejectedError } from './types';
 
 describe('classifyBookingFailure outcomes for booking-state codes', () => {
   it('classifies a pre-submit GIG timeout as not_submitted', () => {
@@ -62,5 +63,13 @@ describe('classifyBookingFailure outcomes for booking-state codes', () => {
         )
       ).outcome
     ).toBe('rejected');
+  });
+
+  it('keeps the carrier reference on a carrier refusal that follows a saved shipment', () => {
+    expect(
+      classifyBookingFailure(
+        new ShippingBookingRejectedError('Payment declined', 'T1')
+      )
+    ).toMatchObject({ outcome: 'rejected', providerReference: 'T1' });
   });
 });

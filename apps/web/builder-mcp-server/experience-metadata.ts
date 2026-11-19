@@ -11,7 +11,7 @@ export const experienceToolDescriptions: Record<
   read_experience: {
     title: 'Read, patch or adopt uploaded source',
     description:
-      'Read bounded source pages, submit an exact-version patch, or adopt a completed chunk upload by artifact ID and base/version. Changes affect private source only; they do not apply a build, publish, or invoke AI. Use adopt-upload for large files to preserve bounded MCP requests.',
+      'Use operation=head to read the current private artifact ID, source digest, version, entry, and file paths before editing. Read bounded source pages, patch the exact head version, or adopt a completed chunk upload. If head is empty (version 0), adopt the first upload with expectedVersion 0 and its finalized sourceDigest as baseDigest. For subsequent changes, use the current head digest and version. If a write reports a conflict, read the head again before retrying. Changes affect private source only; they do not apply a build, publish, or invoke AI.',
   },
   begin_experience_upload: {
     title: 'Begin bounded source upload',

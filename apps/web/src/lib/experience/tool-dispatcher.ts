@@ -34,7 +34,7 @@ import {
 import { requestExperiencePublication } from './publication-service';
 import { requestExperienceRollback } from './rollback-service';
 import { adoptSourceCandidate } from './source-candidate';
-import { patchSource, readSource } from './source-service';
+import { patchSource, readSource, readSourceHead } from './source-service';
 import { experienceToolPolicy } from './tool-policy';
 import { beginUpload, finalizeUpload, writeChunk } from './upload-service';
 export interface ExperienceDispatcherDependencies {
@@ -173,6 +173,7 @@ async function execute(
         operation,
         ...v
       } = experienceToolInputs.read_experience.parse(raw);
+      if (operation === 'head') return readSourceHead(ctx);
       return operation === 'read'
         ? readSource(ctx, v as Parameters<typeof readSource>[1])
         : operation === 'adopt-upload'

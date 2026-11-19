@@ -20,13 +20,16 @@ of this workflow or invoke it during the no-extra-AI-cost test.
 
 1. Link a synthetic owner through the actual ChatGPT OAuth connection. Read
    `get_experience_capabilities`. Verify the linked merchant and supported
-   runtime; missing experience tools is a failed connection qualification.
+   runtime. Missing experience tools is a failed connection qualification.
 2. If needed, create the explicitly consented private synthetic store through
    `create_storefront_draft`, then read capabilities again. Keep the same account
    and merchant throughout the journey.
 3. Author custom source and upload through `begin_experience_upload`,
    `write_experience_chunk`, `finalize_experience_upload`, and
-   `read_experience` with `adopt-upload`. Retain exact artifact and version IDs.
+   `read_experience` with `adopt-upload`. Retain the exact artifact and version.
+   To edit in a new chat, use `read_experience` with `head`, then patch against
+   the returned version and digest. After a conflict, read the head again and
+   reconcile the change before retrying.
 4. Call `build_experience`, poll `get_experience_operation`, and reconcile with
    `finalize_experience_build`. A queued job is not a completed build.
 5. Use `preview_experience` and `read_experience_evidence` for the exact build.

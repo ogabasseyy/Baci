@@ -16,6 +16,7 @@ import {
 import { createBuilderMcpNodeServer } from '../../builder-mcp-server/node';
 import { createBuilderTransportVerifier } from '../../builder-mcp-server/token-verifier';
 import { experienceDataFixture } from './data-fixture.test-support';
+import { rehearseSourceHead } from './source-head.test-support';
 
 it('routes full-code MCP calls to the owner RLS database and rejects a revoked grant', async () => {
   const f = await experienceDataFixture();
@@ -146,6 +147,24 @@ it('routes full-code MCP calls to the owner RLS database and rejects a revoked g
     expect(
       await call('get_experience_capabilities', { storefrontId: randomUUID() })
     ).toMatchObject({ status: 'error', code: 'NOT_FOUND' });
+    expect(
+      await call('read_experience', { ...store, operation: 'head' })
+    ).toMatchObject({
+      status: 'ok',
+      value: {
+        artifactId: null,
+        sourceDigest: null,
+        version: 0,
+        entry: null,
+        files: [],
+      },
+    });
+    expect(
+      await call('read_experience', {
+        storefrontId: randomUUID(),
+        operation: 'head',
+      })
+    ).toMatchObject({ status: 'error', code: 'NOT_FOUND' });
     const content =
       'export default function App(){return <h1>Synthetic MCP storefront</h1>}';
     const started = await call('begin_experience_upload', {
@@ -202,9 +221,15 @@ it('routes full-code MCP calls to the owner RLS database and rejects a revoked g
       uploadId,
     });
     expect(finished.status).toBe('ok');
+    const artifactId = await rehearseSourceHead(
+      call,
+      f.merchantId,
+      finished.value,
+      content
+    );
     const queued = await call('build_experience', {
       ...store,
-      artifactId: finished.value?.artifactId,
+      artifactId,
       idempotencyKey: randomUUID(),
     });
     expect(queued.status).toBe('ok');

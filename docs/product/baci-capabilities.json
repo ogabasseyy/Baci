@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-19T11:45:26+00:00",
-  "source_revision": "cd480ce78466243ab154c06badb3b56112b86a67",
-  "evidence_digest": "2de4d81b4802a0e9b50971f393429ae6f5828f24cd22e2d62449296ef24ebc71",
-  "claims_digest": "2deb149613446abbf524ebe6b679d7ee09beb386681aa08e6de5fe9b10f67935",
+  "reviewed_at": "2026-11-19T18:39:41+00:00",
+  "source_revision": "bfb3b8e28edfa9598a9c3be5fe3b95391a3619f6",
+  "evidence_digest": "d4e669186873d75978ad93cfdf6c7338dfdf3d20de5f3e6372320c096db53a71",
+  "claims_digest": "3c403d5446222d246084ed4e9826f93c9b522178468ca4af2bf13b36b909bca5",
   "review_scope": "Source evidence only. Preserves current main\u2019s OAuth, cart retention and notices, payment reconciliation, merchant protocols and Oxygen pilot boundaries. Full-code storefront MCP remains disabled by default. Owner approval, evidence and public-verification schemas retain their existing validation. Direct local admission, source adoption, rollback and simulated commerce tests cover authority boundaries. Hosted qualification and activation remain separate.",
   "capabilities": [
     {
@@ -148,7 +148,7 @@
       "id": "followups",
       "title": "Customer follow-up workflows",
       "status": "code_evidenced",
-      "claim": "Baci mobile-admin implements a customer follow-up queue for failed and stale unpaid checkouts, including categorized Oxygen applications, with related order follow-up actions.",
+      "claim": "Baci mobile-admin implements a customer follow-up queue for failed and stale unpaid checkouts, including categorized Oxygen applications, with related order follow-up actions and labels for known lenders and checkout payment methods.",
       "limitations": "This is an operational queue, not automatic customer outreach or evidence of full CRM segmentation or guaranteed recovery. Query bounds and contact permissions apply; Oxygen availability and rollout remain separately controlled.",
       "source_refs": [
         "apps/mobile-admin/components/customers/FollowUpQueueList.tsx",

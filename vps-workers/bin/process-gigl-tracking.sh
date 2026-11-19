@@ -8,6 +8,7 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 . "$SCRIPT_DIR/gigl-tracking-scoped-env.sh"
 gigl_tracking_scope_env
+export BACI_WORKER_PROFILE="${BACI_WORKER_PROFILE:-gigl-tracking}"
 # The helper execs run-web-script.sh under a constructed allowlist
 # environment (env -i): caller-exported secrets never reach the child.
 if [ -f "$SCRIPT_DIR/gigl-cache-lock-exec.py" ] && env -i PATH="$PATH" python3 -I -c 'import pathlib,sys; compile(pathlib.Path(sys.argv[1]).read_bytes(), sys.argv[1], "exec")' "$SCRIPT_DIR/gigl-cache-lock-exec.py" 2>/dev/null; then

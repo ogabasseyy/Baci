@@ -26,6 +26,7 @@ describe('proxy matcher', () => {
     '/agent-commerce.json',
     '/agent-trust.json',
     '/baci-relay/static/relay.js',
+    '/baci-relay/e/capture/',
   ])('includes proxy-owned request %s', (url) => {
     expect(matches(url)).toBe(true);
   });

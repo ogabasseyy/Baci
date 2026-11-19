@@ -6,7 +6,6 @@ import { finalizeAgenticCheckoutPayment } from '@/lib/agentic/checkout-completio
 import { CHECKOUT_COMPLETION_IDEMPOTENCY_ROUTE } from '@/lib/agentic/checkout-completion-idempotency-route';
 import { reserveAgenticIdempotencyKey } from '@/lib/agentic/idempotency';
 import { logger } from '@/lib/logger';
-import { unknownValueGuards } from '@/lib/unknown-value-guards';
 const { emitDriftAlert, fingerprintsMatch, isPaused, parseArgs, printResult } =
   agenticDvaCutoverCli;
 export async function runDrainAgenticDvaConsentCutoverCli(
@@ -78,25 +77,6 @@ export async function runDrainAgenticDvaConsentCutoverCli(
     return 0;
   }
 
-  if (action === 'release_stale_no_account_claim') {
-    if (
-      !assessment.sessionId ||
-      !assessment.merchantId ||
-      !assessment.expectedUpdatedAt ||
-      !assessment.actionPayload
-    ) {
-      emitDriftAlert({
-        actualFingerprint: assessment.evidenceFingerprint,
-        actualState: assessment.state,
-        expectedFingerprint: args.fingerprint,
-        expectedState: args.expectedState,
-        reason: 'release_identity_or_timestamp_missing',
-        sessionId: args.sessionId,
-      });
-      return 1;
-    }
-    return releaseStaleClaim({ assessment, supabase: serviceClient });
-  }
   if (
     !assessment.resume ||
     !assessment.merchantId ||
@@ -211,76 +191,4 @@ export async function runDrainAgenticDvaConsentCutoverCli(
     status: response.status,
   });
   return response.status === 200 ? 0 : 1;
-}
-
-async function releaseStaleClaim({
-  assessment,
-  supabase,
-}: {
-  assessment: ReturnType<typeof assessAgenticDvaCutoverSession>;
-  supabase: SupabaseClient;
-}): Promise<number> {
-  const actionPayload = assessment.actionPayload?.unwrap();
-  const metadata = actionPayload?.metadata;
-  if (
-    !unknownValueGuards.isRecord(metadata) ||
-    !unknownValueGuards.isRecord(metadata.agentic)
-  ) {
-    emitDriftAlert({
-      actualFingerprint: assessment.evidenceFingerprint,
-      actualState: assessment.state,
-      expectedFingerprint: assessment.evidenceFingerprint,
-      expectedState: 'claiming_payment',
-      reason: 'release_metadata_missing',
-      sessionId: assessment.sessionId ?? 'unknown',
-    });
-    return 1;
-  }
-  const agentic = metadata.agentic;
-  const { data, error } = await supabase
-    .from('checkout_sessions')
-    .update({
-      metadata: {
-        ...metadata,
-        agentic: {
-          ...agentic,
-          cutover_evidence_fingerprint: assessment.evidenceFingerprint,
-          payment_error: 'agentic_dva_cutover_stale_claim_released',
-          payment_state: 'payment_setup_failed',
-        },
-      },
-      payment_reference: null,
-    })
-    .eq('session_id', assessment.sessionId)
-    .eq('merchant_id', assessment.merchantId)
-    .eq('payment_reference', actionPayload.paymentReference)
-    .eq('updated_at', assessment.expectedUpdatedAt)
-    .is('order_id', null)
-    .is('payment_method', null)
-    .is('payment_provider', null)
-    .is('virtual_account_bank', null)
-    .is('virtual_account_name', null)
-    .is('virtual_account_number', null)
-    .contains('metadata', { agentic: { payment_state: 'claiming_payment' } })
-    .select('session_id')
-    .maybeSingle();
-  if (error || !data) {
-    emitDriftAlert({
-      actualFingerprint: assessment.evidenceFingerprint,
-      actualState: assessment.state,
-      expectedFingerprint: assessment.evidenceFingerprint,
-      expectedState: 'claiming_payment',
-      reason: 'claim_compare_and_set_failed',
-      sessionId: assessment.sessionId ?? 'unknown',
-    });
-    return 1;
-  }
-  printResult({
-    action: 'release_stale_no_account_claim',
-    evidenceFingerprint: assessment.evidenceFingerprint,
-    mode: 'apply',
-    sessionId: assessment.sessionId ?? 'unknown',
-    state: 'claiming_payment',
-  });
-  return 0;
 }

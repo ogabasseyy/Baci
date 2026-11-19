@@ -1,7 +1,8 @@
 import { getAgenticConfirmationKeys } from '@/env';
-import type { GPTTotal } from '@/lib/agentic/checkout';
 import type { AgenticMetadata } from '@/lib/agentic/checkout-storage';
 import { logger } from '@/lib/logger';
+
+export { getCheckoutGrandTotal } from './checkout-totals';
 
 export type CheckoutAuthorizationErrorCode =
   | 'AUTHORIZATION_EXPIRED'
@@ -15,27 +16,6 @@ export type CheckoutAuthorizationErrorBody = {
   error: string;
   retryable: boolean;
 };
-
-export function getCheckoutGrandTotal(totals: GPTTotal[]): number {
-  const amount = totals.find((t) => t.type === 'total')?.amount;
-  if (typeof amount === 'number') {
-    if (!Number.isFinite(amount) || amount < 0) {
-      throw new Error('Missing or invalid total amount');
-    }
-    return amount;
-  }
-
-  if (typeof amount === 'string') {
-    if (/^\d+(?:\.\d+)?$/.test(amount)) {
-      const parsed = Number(amount);
-      if (Number.isFinite(parsed) && parsed >= 0) {
-        return parsed;
-      }
-    }
-  }
-
-  throw new Error('Missing or invalid total amount');
-}
 
 export function getCheckoutCompletionAuthorizationSecrets(): string[] {
   return getAgenticConfirmationKeys();

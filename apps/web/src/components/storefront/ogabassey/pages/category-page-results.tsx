@@ -121,9 +121,6 @@ export function CategoryPageResults({
                 onClearFilters={onClearFilters}
                 showPriceFilter={showPriceFilter}
               />
-              <div className="mt-6">
-                <AdUnit placementKey="PRODUCT_SIDEBAR" />
-              </div>
             </div>
           </div>
         )}
@@ -139,7 +136,7 @@ export function CategoryPageResults({
               <h3 className="text-lg font-bold text-store-background-text mb-1">
                 No products found
               </h3>
-              <p className="text-store-background-text/50 text-sm mb-6">
+              <p className="text-store-background-text/70 text-sm mb-6">
                 Try adjusting your filters to find what you're looking for.
               </p>
               <button
@@ -176,12 +173,18 @@ export function CategoryPageResults({
                     {/* Ad insertion logic */}
                     {viewMode === 'grid' && (index === 5 || index === 11) && (
                       <div className="col-span-2 md:col-span-3 my-4">
-                        <AdUnit placementKey="PRODUCT_GRID_IN_FEED" />
+                        <AdUnit
+                          placementKey="PRODUCT_GRID_MPU"
+                          slotInstance={`category-${index + 1}`}
+                        />
                       </div>
                     )}
                     {viewMode === 'list' && (index === 3 || index === 7) && (
                       <div className="w-full my-4">
-                        <AdUnit placementKey="PRODUCT_GRID_IN_FEED" />
+                        <AdUnit
+                          placementKey="PRODUCT_GRID_MPU"
+                          slotInstance={`category-${index + 1}`}
+                        />
                       </div>
                     )}
                   </React.Fragment>
@@ -196,7 +199,7 @@ export function CategoryPageResults({
               <h3 className="text-lg font-bold text-store-background-text mb-1">
                 Products on this page are temporarily unavailable.
               </h3>
-              <p className="text-store-background-text/50 text-sm">
+              <p className="text-store-background-text/70 text-sm">
                 Use the pagination links below to keep browsing available pages.
               </p>
             </div>
@@ -205,7 +208,7 @@ export function CategoryPageResults({
           {hasKnownProducts && (
             <div className="mt-8 space-y-3">
               {!hasActiveFilters && (
-                <p className="text-center text-sm text-store-background-text/50">
+                <p className="text-center text-sm text-store-background-text/70">
                   {hasVisibleProducts
                     ? `Showing ${pageStartIndex + 1}-${visibleProductEndIndex} of ${paginationProductCount} products`
                     : `Page ${currentPageNumber} of ${totalPages}`}
@@ -213,7 +216,7 @@ export function CategoryPageResults({
               )}
 
               {hasActiveFilters ? (
-                <p className="text-center text-sm text-store-background-text/50">
+                <p className="text-center text-sm text-store-background-text/70">
                   Filtered results show all {filteredProductCount} matching
                   products on one page.
                 </p>

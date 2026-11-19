@@ -1,9 +1,16 @@
 import type { CategoryHubDefaults } from '@/lib/storefront-category/category-hub-types';
+import { CATEGORY_HUB_CONSOLE_WEARABLE_DEFAULTS } from './category-hub-console-wearable-defaults';
+import { CATEGORY_HUB_EXPANSION_DEFAULTS } from './category-hub-expansion-defaults';
 
 export const CATEGORY_HUB_PRIORITY_CATEGORIES = [
   'smartphones',
   'laptops',
   'smart-tvs',
+  'gaming-laptops',
+  'tablets',
+  'audio',
+  'smartwatches',
+  'playstation-5',
 ] as const;
 
 export const CATEGORY_HUB_DEFAULTS = {
@@ -172,6 +179,8 @@ export const CATEGORY_HUB_DEFAULTS = {
       },
     ],
   },
+  ...CATEGORY_HUB_EXPANSION_DEFAULTS,
+  ...CATEGORY_HUB_CONSOLE_WEARABLE_DEFAULTS,
 } satisfies Record<
   (typeof CATEGORY_HUB_PRIORITY_CATEGORIES)[number],
   CategoryHubDefaults

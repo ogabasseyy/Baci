@@ -114,12 +114,14 @@ describe('primary wallet restricted executor', () => {
     );
   });
   it.each([
+    ['presence', 1],
     ['routingPending', 6],
     ['readRouting', 1],
     ['resolveRouting', 4],
     ['review', 6],
     ['ownershipHold', 3],
     ['readReview', 1],
+    ['readRolloutCohort', 1],
   ] as const)('permits the %s RPC only with its %i bound arguments', async (name, arity) => {
     const statement = PRIMARY_WALLET_STATEMENTS[name];
     const parameters = Array.from({ length: arity }, (_unused, index) =>

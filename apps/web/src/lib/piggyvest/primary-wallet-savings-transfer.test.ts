@@ -263,3 +263,17 @@ it('never accepts substituted destination or amount from storage', async () => {
   ).rejects.toThrow('ownership unavailable');
   expect(dependencies.transfer).not.toHaveBeenCalled();
 });
+it('stops at a PIN refusal without adopting, claiming or sending anything', async () => {
+  const dependencies = ports();
+  dependencies.reserve.mockResolvedValue({
+    status: 'pin_refused',
+    reason: 'expired',
+  });
+  expect(
+    await submitPrimaryWalletSavingsTransfer(request, dependencies)
+  ).toEqual({ status: 'pin_refused', reason: 'expired' });
+  expect(dependencies.adoptPending).not.toHaveBeenCalled();
+  expect(dependencies.claimDispatch).not.toHaveBeenCalled();
+  expect(dependencies.retrieveWallet).not.toHaveBeenCalled();
+  expect(dependencies.transfer).not.toHaveBeenCalled();
+});

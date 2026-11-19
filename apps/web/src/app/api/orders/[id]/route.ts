@@ -14,6 +14,7 @@ import {
 } from '@/lib/payments/ensure-paid-order-inventory-confirmed';
 import { fileInventoryConfirmationFailureReview } from '@/lib/payments/file-inventory-confirmation-review';
 import { buildInventoryConfirmationFailurePayload } from '@/lib/payments/inventory-confirmation-response';
+import { shouldDeferShippedNotificationToGigPickup } from '@/lib/shipping/gigl-shipment-pickup-state';
 import { isFundedCheckoutGiglAddressLocked } from '@/lib/shipping/is-funded-checkout-gigl-address-locked';
 import {
   claimOrderShipmentBooking,
@@ -653,7 +654,15 @@ export async function PATCH(
         .eq('id', existingOrder.customer_id)
         .single();
 
-      if (customer?.user_id) {
+      // GIG orders are told "shipped" when GIG picks the parcel up, not when
+      // the merchant books it (the picked_up notification does that).
+      const deferToGigPickup = await shouldDeferShippedNotificationToGigPickup(
+        supabase,
+        id,
+        shipping_status,
+        existingOrder.shipping_provider === 'GIGL'
+      );
+      if (customer?.user_id && !deferToGigPickup) {
         runAfterResponse(() =>
           notifyOrderStatusChange(
             customer.user_id,

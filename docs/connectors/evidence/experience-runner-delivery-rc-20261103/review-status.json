@@ -1,0 +1,50 @@
+{
+  "status": "blocked-free-allowance",
+  "reviewRan": false,
+  "errors": [
+    {
+      "type": "error",
+      "errorType": "rate_limit",
+      "message": "Rate limit exceeded",
+      "recoverable": true,
+      "details": {},
+      "metadata": {
+        "isProUser": false,
+        "waitTime": "22 minutes",
+        "policyGuidance": "**Limit details:** You\u2019ve used all 3 included reviews currently available.\n\nUsage-based reviews are enabled, but this Git provider account isn't linked to an assigned seat for the selected organization. Link or assign the seat, or use an Agentic API key, then retry.\n\n[Check out review usage here](https://app.coderabbit.ai/dashboard/review-capacity?orgId=43e40f82-d9c4-41ec-adeb-9bdcb78d639f).",
+        "onDemandReviewAvailable": false,
+        "cliReviewPolicyMode": "normal"
+      }
+    }
+  ],
+  "paidCreditsUsed": false,
+  "sourcePathsRequested": [
+    "apps/web/tools/experience-runner/installation-inventory.ts",
+    "apps/web/tools/experience-runner/installation-inventory.test.ts",
+    "apps/web/tools/experience-runner/installation-verifier.ts",
+    "apps/web/tools/experience-runner/installation-verifier.test.ts",
+    "apps/web/tools/experience-runner/preview-delivery-tls.test.ts",
+    "apps/web/tools/experience-runner/linux-runner.ts",
+    "apps/web/tools/experience-runner/linux-runner.test.ts",
+    "apps/web/tools/experience-runner/runner-transport.ts",
+    "apps/web/tools/experience-runner/runner-transport.test.ts",
+    "apps/web/tools/experience-runner/preview-delivery.ts",
+    "apps/web/tools/experience-runner/preview-delivery.test.ts",
+    "apps/web/tools/experience-runner/published-delivery.ts",
+    "apps/web/tools/experience-runner/published-delivery.test.ts",
+    "apps/web/src/schemas/experience-runner-installation.ts",
+    "apps/web/tests/experience-browser/production-linux-installation.test.ts",
+    "apps/web/tests/experience-browser/production-linux-installation-worker.ts",
+    "apps/web/tests/experience-authoring/production-runner.test.ts",
+    "apps/web/src/lib/experience/production-integration.ts",
+    "apps/web/src/lib/experience/production-integration.test.ts",
+    "apps/web/src/lib/experience/production-storefront.ts",
+    "apps/web/src/lib/experience/production-storefront.test.ts",
+    "apps/web/src/lib/experience/compose-runtime.ts",
+    "apps/web/src/lib/experience/compose-runtime.test.ts",
+    "apps/web/src/instrumentation-experience-boot.ts",
+    "apps/web/tsconfig.experience-runner.json",
+    "apps/web/experience-runtime/build.mjs"
+  ],
+  "wholeCandidateReviewed": false
+}

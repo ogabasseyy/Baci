@@ -47,3 +47,59 @@ it('rejects non-integer stock quantities in checkout lines', () => {
     parseSnapshot({ ...snapshot, lines: [{ ...line, stockQty: Number.NaN }] })
   ).toBeNull();
 });
+
+it('accepts old snapshots without a name and bounds reviewed names', () => {
+  const line = {
+    available: true,
+    effectiveUnitPriceMinor: 25000,
+    hasAssurance: false,
+    id: 'aaaaaaaa-aaaa-4aaa-8aaa-000000000001',
+    options: {},
+    priceChanged: false,
+    productId: '33333333-3333-4333-8333-333333333333',
+    quantity: 1,
+    stockQty: 10,
+    unavailableReason: null,
+    validatedUnitPriceMinor: 25000,
+  };
+  const snapshot = {
+    cartId: '22222222-2222-4222-8222-222222222222',
+    cartVersion: 3,
+    checkoutSessionId: '44444444-4444-4444-8444-444444444444',
+    estimates: {
+      currency: 'NGN',
+      lineCount: 1,
+      subtotalMinor: 25000,
+      unavailableCount: 0,
+    },
+    generation: 1,
+    lines: [line],
+    merchantId: '11111111-1111-4111-8111-111111111111',
+  };
+
+  expect(parseSnapshot(snapshot)?.lines[0]?.productName).toBeUndefined();
+  expect(
+    parseSnapshot({
+      ...snapshot,
+      lines: [{ ...line, productName: 'Reviewed product' }],
+    })?.lines[0]?.productName
+  ).toBe('Reviewed product');
+  expect(
+    parseSnapshot({
+      ...snapshot,
+      lines: [{ ...line, productName: 'x'.repeat(201) }],
+    })?.lines[0]?.productName
+  ).toBeNull();
+  expect(
+    parseSnapshot({
+      ...snapshot,
+      lines: [{ ...line, productName: '😀'.repeat(200) }],
+    })?.lines[0]?.productName
+  ).toBe('😀'.repeat(200));
+  expect(
+    parseSnapshot({
+      ...snapshot,
+      lines: [{ ...line, productName: '😀'.repeat(201) }],
+    })?.lines[0]?.productName
+  ).toBeNull();
+});

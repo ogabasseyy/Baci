@@ -1,3 +1,6 @@
+import { updateGuestGrant } from './guest-oauth-update-grant';
+import { currentGuestCart } from './guest-oauth-cart-lifetime';
+import { GUEST_CONNECTION_IDLE_TTL, GUEST_CART_TTL, GUEST_CLOCK_MARGIN, GUEST_REFRESH_MAX_GENERATION } from './config/guest-oauth-lifetime';
 import { refreshReceipt, recoverRefresh } from './guest-oauth-refresh-receipt';
 import { createGuestConsent } from './guest-oauth-consent';
 import { authenticRefreshToken, mintRefreshToken, refreshGrantId } from './guest-oauth-refresh-token';
@@ -15,7 +18,6 @@ import {
 } from '../src/schemas/guest-oauth';
 import type { OAuthRecordStore } from './guest-oauth-records';
 
-const TTL = 7 * 86400_000;
 const ACCESS_TTL = 15 * 60_000;
 const CLIENT = 'ogabassey-guest-chatgpt';
 const opaque = () => randomBytes(32).toString('hex');
@@ -103,12 +105,12 @@ export class GuestOAuth {
         iss: this.issuer,
         redirectUri: consent.request.redirect_uri,
       };
-    return this.authorize(consent.request);
+    return this.authorize(consent.request, consent.connectionRenewable === true);
   }
-  async authorize(input: unknown) {
+  async authorize(input: unknown, connectionRenewable = false) {
     const request = this.validateAuthorization(input);
     const code = opaque();
-    await this.put(`code:${hash(code)}`, { request, used: false }, this.now() + 5 * 60_000);
+    await this.put(`code:${hash(code)}`, { request, used: false, ...(connectionRenewable ? { connectionRenewable: true } : {}) }, this.now() + 5 * 60_000);
     return {
       code,
       state: request.state,
@@ -119,9 +121,12 @@ export class GuestOAuth {
   private async issue(grant: GuestOAuthGrant, revision: number) {
     // Bound rotation attempts; replay proof itself occupies only the grant.
     // Legacy refresh indices expire naturally after their existing deadline.
-    if (grant.tokenGenerations >= 1024) {
+    if (grant.tokenGenerations >= GUEST_REFRESH_MAX_GENERATION) {
       await this.revokeGrant(grant.id);
       throw new Error('invalid_grant');
+    }
+    if (grant.connectionRenewable) {
+      grant = { ...grant, expiresAt: this.now() + GUEST_CONNECTION_IDLE_TTL - GUEST_CLOCK_MARGIN };
     }
     if (revision === 0) {
       if (!(await this.options.store.compareAndSwap(`grant:${grant.id}`, 0, grant, grant.expiresAt)))
@@ -189,7 +194,9 @@ export class GuestOAuth {
         clientId: request.client_id,
         resource: request.resource,
         // Keep the absolute bound below the database deadline under small clock skew.
-        expiresAt: this.now() + TTL - 5 * 60_000,
+        expiresAt: this.now() + (code.connectionRenewable ? GUEST_CONNECTION_IDLE_TTL : GUEST_CART_TTL) - GUEST_CLOCK_MARGIN,
+        ...(code.connectionRenewable ? { connectionRenewable: true as const } : {}),
+        cartExpiresAt: this.now() + GUEST_CART_TTL - GUEST_CLOCK_MARGIN,
         revoked: false,
         refreshHash: '',
         tokenGenerations: 0,
@@ -281,18 +288,10 @@ export class GuestOAuth {
       return;
     }
   }
+  async currentCart(accessToken: string) {
+    return currentGuestCart(this, accessToken, this.now());
+  }
   async updateGrant(grantId: string, update: (grant: GuestOAuthGrant) => GuestOAuthGrant) {
-    const { row, grant } = await this.grant(grantId);
-    const next = update(grant);
-    if (
-      !(await this.options.store.compareAndSwap(
-        `grant:${grant.id}`,
-        row.revision,
-        next,
-        grant.expiresAt,
-      ))
-    )
-      throw new Error('temporarily_unavailable');
-    return next;
+    return updateGuestGrant(this.options.store, await this.grant(grantId), update);
   }
 }

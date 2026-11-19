@@ -50,11 +50,14 @@ describe('listEligibleAuthorityHubs', () => {
     mockInventory.mockImplementation(
       async (
         _merchant: string,
-        _category: string,
+        category: string,
         entry: { brandKey: string }
       ) => ({
         latestUpdatedAt: '2026-10-30T00:00:00Z',
-        products: entry.brandKey === 'samsung' ? SAMSUNG_SIX : [],
+        products:
+          category === 'smartphones' && entry.brandKey === 'samsung'
+            ? SAMSUNG_SIX
+            : [],
       })
     );
 
@@ -72,13 +75,16 @@ describe('listEligibleAuthorityHubs', () => {
     mockInventory.mockImplementation(
       async (
         _merchant: string,
-        _category: string,
+        category: string,
         entry: { brandKey: string }
       ) => {
         if (entry.brandKey === 'apple') throw new Error('timeout');
         return {
           latestUpdatedAt: null,
-          products: entry.brandKey === 'samsung' ? SAMSUNG_SIX : [],
+          products:
+            category === 'smartphones' && entry.brandKey === 'samsung'
+              ? SAMSUNG_SIX
+              : [],
         };
       }
     );

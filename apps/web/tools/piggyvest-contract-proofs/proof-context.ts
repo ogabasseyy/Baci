@@ -1,6 +1,8 @@
 import type { RunMode } from './constants';
-import type { ProviderApi, QaIdentity } from './provider-ops';
+import type { QaIdentity } from './provider-ops';
+import type { ProofApi } from './provider-ops-proofs';
 import type { Redactor } from './redactor';
+import type { TransportFaults } from './transport-faults';
 
 export interface WalletView {
   id: string;
@@ -19,6 +21,10 @@ export interface TransferObservation {
   feeFromRecordKobo: number | null;
   /** null = no record was read, so absence of a fee field is not established. */
   feeFieldPresent: boolean | null;
+  /** Our own reference for the transfer (proof 2's duplicate-reference step re-sends it). */
+  reference?: string;
+  /** The send itself was journaled 'accepted' (only such a reference may be re-sent). */
+  sendAccepted?: boolean;
 }
 
 export interface DepositObservation {
@@ -38,6 +44,8 @@ export interface ScenarioState {
   mainWalletId: string | null;
   mainWalletBasis: 'create_response' | 'earliest_created_heuristic' | 'none';
   goalWalletId: string | null;
+  /** The business sandbox wallet, once admitted as the house wallet (house-wallet.ts). */
+  houseWalletId: string | null;
   wallets: WalletView[];
   /** Wallets proven to belong to the allowlisted QA customer. */
   authorized: Set<string>;
@@ -55,6 +63,7 @@ export function emptyScenarioState(): ScenarioState {
     mainWalletId: null,
     mainWalletBasis: 'none',
     goalWalletId: null,
+    houseWalletId: null,
     wallets: [],
     authorized: new Set(),
     notes: [],
@@ -66,7 +75,7 @@ export function emptyScenarioState(): ScenarioState {
 
 export interface ProofContext {
   mode: RunMode;
-  api: ProviderApi;
+  api: ProofApi;
   redactor: Redactor;
   qa: QaIdentity;
   state: ScenarioState;
@@ -79,4 +88,6 @@ export interface ProofContext {
   bank: { code: string; account: string } | null;
   /** Ogabassey business sandbox wallet (interest payout target, proof 7). */
   businessWalletId: string | null;
+  /** Lets a proof lose one response after the request left (S8 timeout step). */
+  faults?: TransportFaults;
 }

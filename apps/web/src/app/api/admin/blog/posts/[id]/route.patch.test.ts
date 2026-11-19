@@ -282,4 +282,17 @@ describe('PATCH /api/admin/blog/posts/[id]', () => {
       })
     );
   });
+
+  it('rejects scheduled status on platform blog post updates', async () => {
+    const response = await PATCH(
+      patchRequest({
+        published_at: '2026-11-20T10:00:00.000Z',
+        status: 'scheduled',
+      }),
+      blogPostRouteContext()
+    );
+
+    expect(response.status).toBe(400);
+    expect(blogPostSupabaseMock.rpc).not.toHaveBeenCalled();
+  });
 });

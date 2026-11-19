@@ -52,19 +52,35 @@ describe('production build type checking', () => {
     expect(BUILD_TYPESCRIPT_CONFIG.ignoreBuildErrors).toBe(false);
   });
 
-  it('inherits the exact application file set and compiler settings', () => {
-    const buildConfig: unknown = JSON.parse(
-      readFileSync(buildConfigPath, 'utf8')
+  it('inherits application compiler settings but excludes the test graph', () => {
+    const buildConfig = JSON.parse(readFileSync(buildConfigPath, 'utf8')) as {
+      extends: string;
+      compilerOptions: Record<string, unknown>;
+      exclude: string[];
+    };
+    expect(buildConfig.extends).toBe('./tsconfig.json');
+    expect(buildConfig.compilerOptions.checkers).toBe(1);
+    // The production cache must not collide with the full CI typecheck cache.
+    expect(buildConfig.compilerOptions.tsBuildInfoFile).toBe(
+      '.next/cache/tsconfig.build.tsbuildinfo'
     );
-    expect(buildConfig).toEqual({
-      extends: './tsconfig.json',
-      compilerOptions: { checkers: 1 },
-    });
-    // Native --showConfig omits the performance-only checker count. Comparing
-    // its resolved outputs catches changes to files, strictness and aliases.
-    expect(resolvedConfig(buildConfigPath)).toEqual(
-      resolvedConfig(resolve(webRoot, 'tsconfig.json'))
+    expect(buildConfig.exclude).toEqual(
+      expect.arrayContaining(['**/*.test.ts', '**/*.test.tsx', 'supabase'])
     );
+
+    const full = resolvedConfig(resolve(webRoot, 'tsconfig.json')) as {
+      compilerOptions: Record<string, unknown>;
+    };
+    const prod = resolvedConfig(buildConfigPath) as {
+      compilerOptions: Record<string, unknown>;
+      files: string[];
+    };
+    // Strictness, aliases and targets stay identical to the full typecheck.
+    const { tsBuildInfoFile: _cache, ...prodOptions } = prod.compilerOptions;
+    const { tsBuildInfoFile: _fullCache, ...fullOptions } =
+      full.compilerOptions;
+    expect(prodOptions).toEqual(fullOptions);
+    expect(prod.files.some((file) => /\.test\.tsx?$/.test(file))).toBe(false);
   });
 
   it('actually uses one checker and still rejects errors in inherited files', () => {
@@ -91,6 +107,12 @@ describe('production build type checking', () => {
       );
       const project = join(dir, 'tsconfig.build.json');
       writeFileSync(project, readFileSync(buildConfigPath));
+      // The build config lists the prepared typed-route copy as a required file.
+      mkdirSync(join(dir, '.typed-navigation'));
+      writeFileSync(
+        join(dir, '.typed-navigation', 'link.d.ts'),
+        'export {};\n'
+      );
       const trace = join(dir, 'trace');
       const valid = compile(project, ['--generateTrace', trace, '--listFiles']);
       expect(valid.status, valid.stdout + valid.stderr).toBe(0);
@@ -104,6 +126,13 @@ describe('production build type checking', () => {
       expect(invalid.status).toBe(1);
       expect(invalid.stdout + invalid.stderr).toContain('TS2322');
       expect(invalid.stdout + invalid.stderr).toContain('fixture-7.ts');
+
+      // Without the prepared copy the check fails closed instead of skipping typed routes.
+      writeFileSync(files[7], "export const value7: string = 'valid';\n");
+      rmSync(join(dir, '.typed-navigation'), { recursive: true });
+      const missing = compile(project);
+      expect(missing.status).not.toBe(0);
+      expect(missing.stdout + missing.stderr).toContain('TS6053');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

@@ -7589,6 +7589,7 @@ export type Database = {
           in_app_enabled: boolean | null;
           merchant_id: string;
           quiet_hours_end: string | null;
+          shipment_event_preferences: Json;
           quiet_hours_start: string | null;
           quiet_hours_time_zone: string;
           updated_at: string | null;
@@ -7599,6 +7600,7 @@ export type Database = {
           in_app_enabled?: boolean | null;
           merchant_id: string;
           quiet_hours_end?: string | null;
+          shipment_event_preferences?: Json;
           quiet_hours_start?: string | null;
           quiet_hours_time_zone?: string;
           updated_at?: string | null;
@@ -7609,6 +7611,7 @@ export type Database = {
           in_app_enabled?: boolean | null;
           merchant_id?: string;
           quiet_hours_end?: string | null;
+          shipment_event_preferences?: Json;
           quiet_hours_start?: string | null;
           quiet_hours_time_zone?: string;
           updated_at?: string | null;
@@ -8840,6 +8843,7 @@ export type Database = {
           branch_id: string | null;
           buyer_reference: string | null;
           cancellation_reason: string | null;
+          cancellation_refund_mode: string | null;
           cancelled_at: string | null;
           cancelled_by: string | null;
           checkout_idempotency_key: string | null;
@@ -8926,6 +8930,7 @@ export type Database = {
           branch_id?: string | null;
           buyer_reference?: string | null;
           cancellation_reason?: string | null;
+          cancellation_refund_mode?: string | null;
           cancelled_at?: string | null;
           cancelled_by?: string | null;
           checkout_idempotency_key?: string | null;
@@ -9012,6 +9017,7 @@ export type Database = {
           branch_id?: string | null;
           buyer_reference?: string | null;
           cancellation_reason?: string | null;
+          cancellation_refund_mode?: string | null;
           cancelled_at?: string | null;
           cancelled_by?: string | null;
           checkout_idempotency_key?: string | null;
@@ -16560,6 +16566,10 @@ export type Database = {
           status: string;
         }[];
       };
+      get_negotiation_cost_floor_price: {
+        Args: { p_merchant_id: string; p_product_id: string };
+        Returns: number;
+      };
       get_santa_catalog: {
         Args: { p_merchant_id: string };
         Returns: {
@@ -16848,7 +16858,11 @@ export type Database = {
         Returns: boolean;
       };
       cancel_order_as_merchant: {
-        Args: { p_order_id: string; p_reason?: string };
+        Args: {
+          p_order_id: string;
+          p_reason?: string;
+          p_refund_mode?: string;
+        };
         Returns: boolean;
       };
       cancel_provider_shipment_order_and_release_inventory: {
@@ -17208,6 +17222,14 @@ export type Database = {
           terminal: boolean;
         }[];
       };
+      merge_shipment_event_preferences: {
+        Args: { p_fields?: Json; p_merchant_id: string; p_patch: Json };
+        Returns: Json;
+      };
+      get_notification_preferences: {
+        Args: { p_merchant_id: string };
+        Returns: Json;
+      };
       claim_shipment_tracking_notifications: {
         Args: { p_limit: number; p_worker_id: string };
         Returns: {
@@ -17218,6 +17240,7 @@ export type Database = {
           merchant_id: string;
           notification_kind: string;
           order_id: string | null;
+          recipient_user_ids: string[] | null;
           repair_id: string | null;
           shipment_id: string;
           tracking_epoch_id: string;
@@ -21467,6 +21490,7 @@ export type Database = {
           branch_id: string | null;
           buyer_reference: string | null;
           cancellation_reason: string | null;
+          cancellation_refund_mode: string | null;
           cancelled_at: string | null;
           cancelled_by: string | null;
           checkout_idempotency_key: string | null;

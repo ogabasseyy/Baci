@@ -8,9 +8,13 @@ import {
 import {
   type Journal,
   type JournalOutcome,
-  newReference,
   slotState,
 } from './mutation-journal';
+import {
+  acceptedReference,
+  newReference,
+  walletsDigest,
+} from './mutation-journal-references';
 import {
   assertNoRecordingAccount,
   assertSyntheticEmail,
@@ -36,6 +40,14 @@ export interface MutationIntent {
   amountKobo: number | null;
   /** Body field that carries the generated unique reference, if the API has one. */
   referenceField?: string;
+  /**
+   * Proof 2's duplicate-reference check only: send THIS reference again
+   * instead of minting one. Allowed only for a reference this QA key already
+   * sent, and had accepted, for the same operation (see acceptedReference).
+   */
+  reuseReference?: string;
+  /** The slot the reused reference was originally sent from. */
+  reuseOfSlot?: string;
 }
 
 export interface Permit {
@@ -141,12 +153,24 @@ export class MutationGate {
       };
     }
 
-    const reference = newReference(
-      journal,
-      intent.op,
-      runId,
-      this.options.random
-    );
+    const reuse = intent.reuseReference;
+    if (
+      reuse !== undefined &&
+      (!intent.referenceField ||
+        intent.reuseOfSlot === undefined ||
+        !acceptedReference(journal, reuse, intent.qaKey, intent.op, {
+          amountKobo: amount,
+          walletIds: intent.walletIds,
+          slot: intent.reuseOfSlot,
+        }))
+    ) {
+      throw new HarnessRefusal(
+        'REFERENCE_REUSE',
+        'only a reference this QA key already sent and had accepted may be sent again'
+      );
+    }
+    const reference =
+      reuse ?? newReference(journal, intent.op, runId, this.options.random);
     journal.append({
       v: 1,
       ts: (this.options.now?.() ?? new Date()).toISOString(),
@@ -158,6 +182,7 @@ export class MutationGate {
       reference,
       qaKey: intent.qaKey,
       amountKobo: amount,
+      walletsDigest: walletsDigest(intent.walletIds),
     });
     this.totalKobo += amount ?? 0;
     this.armed = { intent, reference, consumed: false };

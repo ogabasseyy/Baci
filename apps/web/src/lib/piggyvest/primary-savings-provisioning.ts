@@ -32,6 +32,7 @@ export async function provisionPrimarySavingsWallet(input: Input) {
   const scope = schemas.scope.parse(input.scope);
   const goalId = schemas.goalId.parse(input.goalId);
   let interestAccepted: boolean | null = null;
+  let claimExpired = false;
   const outcome = (
     status:
       | 'pending'
@@ -50,6 +51,7 @@ export async function provisionPrimarySavingsWallet(input: Input) {
     status,
     interestAccepted,
     accounts,
+    ...(status === 'pending' && claimExpired ? { setupRetryable: true } : {}),
     interestEnrollment:
       interestAccepted === null
         ? 'unknown'
@@ -68,6 +70,10 @@ export async function provisionPrimarySavingsWallet(input: Input) {
       : input.store.read(goalId));
     if (!intent) return outcome('not_found');
     interestAccepted = intent.interestAccepted;
+    // Only a status read can report an expired claim; a claim made by this
+    // very call is live.
+    claimExpired =
+      intent.status !== 'claimed' && intent.setupRetryable === true;
     if (
       input.mode === 'provision' &&
       interestAccepted !== input.interestAccepted

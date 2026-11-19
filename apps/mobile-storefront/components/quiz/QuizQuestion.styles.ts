@@ -1,9 +1,10 @@
 import { StyleSheet } from 'react-native';
+import { QUIZ_TILE } from './quiz-stage-colors';
 import type { QuizThemeColors } from './quiz-theme';
 
 export function createQuizQuestionStyles(colors: QuizThemeColors) {
   return StyleSheet.create({
-    questionCard: { gap: 18, paddingBottom: 24, paddingTop: 4 },
+    questionCard: { gap: 12, paddingBottom: 12 },
     questionHeader: {
       alignItems: 'center',
       flexDirection: 'row',
@@ -27,21 +28,21 @@ export function createQuizQuestionStyles(colors: QuizThemeColors) {
     },
     timerBadge: {
       alignItems: 'center',
-      backgroundColor: colors.primaryLowOpacity,
+      backgroundColor: colors.warning,
       borderRadius: 999,
       flexDirection: 'row',
-      gap: 5,
-      paddingHorizontal: 10,
-      paddingVertical: 6,
+      gap: 6,
+      paddingHorizontal: 14,
+      paddingVertical: 8,
     },
     timerBadgeText: {
-      color: colors.primary,
-      fontSize: 14,
+      color: QUIZ_TILE.text,
+      fontSize: 17,
       fontVariant: ['tabular-nums'],
       fontWeight: '900',
     },
-    timerBadgeUrgent: { backgroundColor: `${colors.error}1A` },
-    timerBadgeUrgentText: { color: colors.error },
+    timerBadgeUrgent: { backgroundColor: colors.error },
+    timerBadgeUrgentText: { color: QUIZ_TILE.text },
     progressTrack: {
       backgroundColor: colors.muted,
       borderRadius: 4,
@@ -66,13 +67,59 @@ export function createQuizQuestionStyles(colors: QuizThemeColors) {
     },
     question: {
       color: colors.text,
-      fontSize: 26,
+      fontSize: 21,
       fontWeight: '900',
-      letterSpacing: -0.5,
-      lineHeight: 34,
-      marginBottom: 2,
+      letterSpacing: -0.3,
+      lineHeight: 27,
     },
     answersList: { gap: 12 },
+    answersGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 10,
+    },
+    answerTile: {
+      justifyContent: 'center',
+      minHeight: 76,
+      paddingHorizontal: 18,
+      paddingVertical: 16,
+    },
+    answerTileGrid: {
+      alignItems: 'center',
+      flexBasis: '46%',
+      flexGrow: 1,
+      gap: 6,
+      minHeight: 96,
+      paddingVertical: 12,
+    },
+    answerTileRow: {
+      alignItems: 'center',
+      flexDirection: 'row',
+      gap: 12,
+    },
+    answerTileDisabled: { opacity: 0.5 },
+    // The tile dips under the finger so a tap is felt on both platforms.
+    answerTilePressed: { opacity: 0.85, transform: [{ scale: 0.97 }] },
+    answerTileLetter: {
+      borderRadius: 999,
+      color: '#FFFFFF',
+      fontSize: 14,
+      fontWeight: '900',
+      height: 28,
+      lineHeight: 28,
+      overflow: 'hidden',
+      textAlign: 'center',
+      width: 28,
+    },
+    answerTileText: {
+      color: QUIZ_TILE.text,
+      fontSize: 16,
+      fontWeight: '800',
+      lineHeight: 21,
+    },
+    answerTileTextGrid: { textAlign: 'center' },
+    answerTileTextRow: { flex: 1 },
+    answerTileCheck: { position: 'absolute', right: 10, top: 10 },
     answerButton: {
       alignItems: 'center',
       backgroundColor: colors.card,

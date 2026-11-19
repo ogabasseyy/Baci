@@ -2,16 +2,17 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-import { assertLiveDeployment, coordinateRelease, DEPLOY_PROMOTE_STEP_NAME } from './coordinate-production-release.mjs';
+import { assertLiveDeployment, coordinateRelease, DEPLOY_PROMOTE_STEP_NAME, WORKER_ACTIVATE_STEP_NAME } from './coordinate-production-release.mjs';
 import { commit, coordinationId, fixture } from './coordinate-production-release.test-fixtures.mjs';
 import { assertCanonicalOriginPushUrls } from './release-remote-validation.mjs';
-import { runWorkerDeploy, WORKER_UNRECONCILED_EXIT } from './release-subprocess.mjs';
+
+const withSyncedWorker = jobs => [{ name: 'vps-worker-sync', conclusion: 'success' }, ...jobs];
 
 // Split from coordinate-production-release.test.mjs: publication,
 // jobs-assessment, and live-verification cases live here so both
 // suites stay under the 300-line limit.
 test('a green workflow with skipped publication is not a release', async () => {
-  const setup = fixture({ readJobs: async () => [{ name: 'deploy-production', conclusion: 'skipped' }] });
+  const setup = fixture({ readJobs: async () => withSyncedWorker([{ name: 'deploy-production', conclusion: 'skipped' }]) });
   await assert.rejects(coordinateRelease(setup.operations, coordinationId), /publication did not succeed/);
 });
 
@@ -82,7 +83,7 @@ test('a post-promotion job failure holds the lock for reconciliation', async () 
       { name: 'Purge and verify storefront release HTML', conclusion: 'failure' },
     ],
   }];
-  const setup = fixture({ readJobs: async () => jobs });
+  const setup = fixture({ readJobs: async () => withSyncedWorker(jobs) });
   const error = await coordinateRelease(setup.operations, coordinationId).then(
     () => { throw new Error('expected rejection'); },
     rejection => rejection
@@ -98,7 +99,7 @@ test('a job that never reached promotion releases the lock for a clean retry', a
     [{ name: 'deploy-production', conclusion: 'cancelled', steps: [{ name: 'Set up job', conclusion: 'cancelled' }] }],
     [{ name: 'deploy-production', conclusion: 'skipped' }],
   ]) {
-    const setup = fixture({ readJobs: async () => jobs });
+    const setup = fixture({ readJobs: async () => withSyncedWorker(jobs) });
     const error = await coordinateRelease(setup.operations, coordinationId).then(
       () => { throw new Error('expected rejection'); },
       rejection => rejection
@@ -118,7 +119,7 @@ test('an ambiguously failed promotion holds the lock', async () => {
       conclusion: 'failure',
       steps: [{ name: DEPLOY_PROMOTE_STEP_NAME, conclusion }],
     }];
-    const setup = fixture({ readJobs: async () => jobs });
+    const setup = fixture({ readJobs: async () => withSyncedWorker(jobs) });
     const error = await coordinateRelease(setup.operations, coordinationId).then(
       () => { throw new Error('expected rejection'); },
       rejection => rejection
@@ -134,7 +135,7 @@ test('a cancelled run that promoted holds the lock like a failed one', async () 
     conclusion: 'cancelled',
     steps: [{ name: DEPLOY_PROMOTE_STEP_NAME, conclusion: 'success' }],
   }];
-  const setup = fixture({ readJobs: async () => jobs });
+  const setup = fixture({ readJobs: async () => withSyncedWorker(jobs) });
   const error = await coordinateRelease(setup.operations, coordinationId).then(
     () => { throw new Error('expected rejection'); },
     rejection => rejection
@@ -148,7 +149,7 @@ test('a non-green run with multiple attempts holds the lock', async () => {
   // pre-promotion; the latest jobs alone cannot rule that out.
   const jobs = [{ name: 'deploy-production', conclusion: 'failure', steps: [{ name: 'Set up job', conclusion: 'failure' }] }];
   for (const readAttemptCount of [async () => 2, async () => null, async () => { throw new Error('api flake'); }]) {
-    const setup = fixture({ readJobs: async () => jobs, readAttemptCount });
+    const setup = fixture({ readJobs: async () => withSyncedWorker(jobs), readAttemptCount });
     const error = await coordinateRelease(setup.operations, coordinationId).then(
       () => { throw new Error('expected rejection'); },
       rejection => rejection
@@ -160,7 +161,7 @@ test('a non-green run with multiple attempts holds the lock', async () => {
 
 test('a single-attempt pre-promotion failure still releases cleanly', async () => {
   const jobs = [{ name: 'deploy-production', conclusion: 'failure', steps: [{ name: 'Set up job', conclusion: 'failure' }] }];
-  const setup = fixture({ readJobs: async () => jobs, readAttemptCount: async () => 1 });
+  const setup = fixture({ readJobs: async () => withSyncedWorker(jobs), readAttemptCount: async () => 1 });
   const error = await coordinateRelease(setup.operations, coordinationId).then(
     () => { throw new Error('expected rejection'); },
     rejection => rejection
@@ -171,7 +172,7 @@ test('a single-attempt pre-promotion failure still releases cleanly', async () =
 
 test('unreadable steps on a non-skipped job fail closed', async () => {
   for (const conclusion of ['failure', 'cancelled', 'timed_out']) {
-    const setup = fixture({ readJobs: async () => [{ name: 'deploy-production', conclusion }] });
+    const setup = fixture({ readJobs: async () => withSyncedWorker([{ name: 'deploy-production', conclusion }]) });
     const error = await coordinateRelease(setup.operations, coordinationId).then(
       () => { throw new Error('expected rejection'); },
       rejection => rejection
@@ -184,6 +185,7 @@ test('unreadable steps on a non-skipped job fail closed', async () => {
 test('the promote-step pin matches the deploy workflow', () => {
   const deploy = readFileSync(new URL('../workflows/deploy.yml', import.meta.url), 'utf8');
   assert.ok(deploy.includes(`- name: ${DEPLOY_PROMOTE_STEP_NAME}`), 'deploy.yml must keep the pinned promote step name');
+  assert.ok(deploy.includes(`- name: ${WORKER_ACTIVATE_STEP_NAME}`), 'deploy.yml must keep the pinned worker activation step name');
   // The exactly-one-success check assumes a non-matrixed job: a
   // matrixed deploy-production would publish yet read as "did not
   // succeed", so pin the job shape, not just the step name.
@@ -219,40 +221,6 @@ test('live verification requires matching project, production target, state and 
   for (const malformed of [null, undefined, [], 'READY', 42, { message: 'not found' }]) {
     assert.throws(() => assertLiveDeployment(malformed, commit, 'baci'), /does not match/);
   }
-});
-
-test('a rollback-failed worker deploy holds the lock instead of releasing it', async () => {
-  const rollbackFailed = Object.assign(
-    new Error('bash vps-workers/deploy.sh failed with status 42; inspect preceding diagnostics'),
-    { status: WORKER_UNRECONCILED_EXIT },
-  );
-  try {
-    runWorkerDeploy(() => { throw rollbackFailed; });
-    assert.fail('worker deploy must throw');
-  } catch (error) {
-    assert.equal(error.indeterminateDispatch, true);
-  }
-  const cleanFailure = Object.assign(
-    new Error('bash vps-workers/deploy.sh failed with status 1; inspect preceding diagnostics'),
-    { status: 1 },
-  );
-  try {
-    runWorkerDeploy(() => { throw cleanFailure; });
-    assert.fail('worker deploy must throw');
-  } catch (error) {
-    assert.equal(error.indeterminateDispatch, undefined);
-  }
-  const setup = fixture({ updateWorkers: () => runWorkerDeploy(() => { throw rollbackFailed; }) });
-  await coordinateRelease(setup.operations, coordinationId).then(
-    () => assert.fail('coordinator must throw'),
-    error => assert.equal(error.indeterminateDispatch, true),
-  );
-  const signalled = Object.assign(new Error('bash vps-workers/deploy.sh failed with status null signal SIGTERM; inspect preceding diagnostics'), { status: null, signal: 'SIGTERM' });
-  const killed = fixture({ updateWorkers: () => runWorkerDeploy(() => { throw signalled; }) });
-  await coordinateRelease(killed.operations, coordinationId).then(
-    () => assert.fail('coordinator must throw'),
-    error => assert.equal(error.indeterminateDispatch, true),
-  );
 });
 
 test('rejects push remotes whose config value hides an embedded newline', () => {

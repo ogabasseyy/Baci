@@ -49,11 +49,22 @@ describe('storefront CSS partitioning (route layouts and delta sheets)', () => {
       '[slug]/(catalog)/(listing)/search/layout.tsx'
     );
     const contentLayout = readStorefrontFile('[slug]/(content)/layout.tsx');
-    expect(
-      comparePage.match(
-        /var\(--store-background,#ffffff\).*?var\(--store-background-text,#111827\)/g
+    const compareBackground = String.raw`bg-\[color-mix\(in_srgb,var\(--store-background,#ffffff\)_94%,var\(--store-background-text,#111827\)_6%\)\]`;
+    expect(comparePage).toMatch(
+      new RegExp(
+        String.raw`return \(\s*<div className="${compareBackground} pb-20">[\s\S]*?<ComparePageContent`
       )
-    ).toHaveLength(2);
+    );
+    expect(comparePage).toMatch(
+      new RegExp(
+        String.raw`const COMPARE_HUB_SHELL_CLASS =\s*'${compareBackground} pb-4 pt-6'`
+      )
+    );
+    expect(comparePage).toMatch(
+      new RegExp(
+        String.raw`fallback=\{\s*<div className="${compareBackground} pb-20">[\s\S]*?<CompareIndexFallback`
+      )
+    );
     expect(comparePage).not.toContain('storefront-eager-full-css-layout');
     expect(compareLayout).toContain('StorefrontEagerListingCssLayout');
     expect(categoryLayout).toContain('StorefrontEagerListingCssLayout');

@@ -26,6 +26,7 @@ const EXPECTED_CODES = [
   'PIGGYVEST_WEBHOOK_PROCESSING_DEFERRED',
   'PIGGYVEST_WEBHOOK_REPLAY_UNVERIFIABLE',
   'PIGGYVEST_WEBHOOK_NEEDS_REVIEW',
+  'PIGGYVEST_WEBHOOK_REPLAY_DEFERRED',
   'PIGGYVEST_TRANSFER_NEEDS_REVIEW',
   'PIGGYVEST_PRIMARY_ROUTING_NEEDS_REVIEW',
   'PIGGYVEST_PRIMARY_OWNERSHIP_NEEDS_REVIEW',
@@ -36,7 +37,16 @@ const EXPECTED_CODES = [
   'PIGGYVEST_GOAL_INTEREST_MISROUTED',
   'PIGGYVEST_ENGINE_CREDIT_NOT_BACKED',
   'PIGGYVEST_INFLOW_REVIEW_OPEN',
+  'PIGGYVEST_INFLOW_UNMAPPED',
   'PIGGYVEST_NEGATIVE_DRIFT',
+  'PIGGYVEST_RECONCILIATION_MISMATCH',
+  'PIGGYVEST_GOAL_CANCEL_NEEDS_REVIEW',
+  'PIGGYVEST_GOAL_CANCEL_FORFEIT_NEEDS_REVIEW',
+  'PIGGYVEST_GOAL_CANCEL_FORFEIT_UNAVAILABLE',
+  'PIGGYVEST_GOAL_COMPLETE_NEEDS_REVIEW',
+  'PIGGYVEST_GOAL_PURCHASE_REQUEST',
+  'PIGGYVEST_CREDIT_AUDIT_DRIFT',
+  'PIGGYVEST_DEGRADED',
 ] as const;
 
 let alerts: typeof WebhookAlerts;
@@ -88,6 +98,57 @@ describe('emitPiggyvestWebhookAlert console line', () => {
       reason: 'x'.repeat(500),
     });
     expect(String(error.mock.calls[0]?.[0]).length).toBeLessThan(260);
+  });
+});
+
+describe('logPiggyvestWebhookAlert and sendPiggyvestWebhookAlertDelivered', () => {
+  it('logs the console line without sending to PostHog', () => {
+    posthog.captureServerEvent.mockClear();
+    alerts.logPiggyvestWebhookAlert('PIGGYVEST_INFLOW_UNMAPPED', {
+      operationId: 'txn-log-1',
+    });
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(posthog.captureServerEvent).not.toHaveBeenCalled();
+  });
+
+  it('resolves true only when the PostHog page was sent, without a console line', async () => {
+    await expect(
+      alerts.sendPiggyvestWebhookAlertDelivered('PIGGYVEST_INFLOW_UNMAPPED', {
+        operationId: 'txn-delivered-1',
+      })
+    ).resolves.toBe(true);
+    expect(error).not.toHaveBeenCalled();
+  });
+
+  it('resolves true for a duplicate: PostHog already holds that page', async () => {
+    const detail = { operationId: 'txn-delivered-dup' };
+    await expect(
+      alerts.sendPiggyvestWebhookAlertDelivered(
+        'PIGGYVEST_INFLOW_UNMAPPED',
+        detail
+      )
+    ).resolves.toBe(true);
+    await expect(
+      alerts.sendPiggyvestWebhookAlertDelivered(
+        'PIGGYVEST_INFLOW_UNMAPPED',
+        detail
+      )
+    ).resolves.toBe(true);
+  });
+
+  it('resolves false, never rejects, when the PostHog send fails or rejects', async () => {
+    posthog.captureServerEvent.mockResolvedValueOnce(false);
+    await expect(
+      alerts.sendPiggyvestWebhookAlertDelivered('PIGGYVEST_INFLOW_UNMAPPED', {
+        operationId: 'txn-delivered-2',
+      })
+    ).resolves.toBe(false);
+    posthog.captureServerEvent.mockRejectedValueOnce(new Error('down'));
+    await expect(
+      alerts.sendPiggyvestWebhookAlertDelivered('PIGGYVEST_INFLOW_UNMAPPED', {
+        operationId: 'txn-delivered-3',
+      })
+    ).resolves.toBe(false);
   });
 });
 

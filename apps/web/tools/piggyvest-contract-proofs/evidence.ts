@@ -25,6 +25,9 @@ export const ASSUMPTIONS_TO_CONFIRM: readonly string[] = [
   'POST /customers accepts interest_payout_wallet set to an Ogabassey business sandbox wallet (PVB_PROOF_BUSINESS_WALLET_ID) together with enable_interest_accrual=true; whether GET /wallet/:id can read the payout destination back is unknown.',
   'POST /wallet/sub-account accepts interest_payout_wallet, and a goal sub-wallet created with no payout of its own may or may not inherit the customer payout wallet.',
   'Webhook delivery cannot be observed by this harness; the credited-wallet field must be confirmed from the durable inbox.',
+  'The business sandbox wallet (PVB_PROOF_BUSINESS_WALLET_ID) reads back with an explicit api_customer_id: null (a readback without the key is not admitted), so it can stand in for the Collection (house) wallet as a test-funding target and a transfer source (proofs 3 and 8).',
+  'POST /transfer/wallet with an already-settled reference either refuses it or books a second transfer; which one is recorded (proof 2). Production never resubmits a reference.',
+  'POST /customers?returnIfExist=true with an existing BVN under another third_party_identifier answers in a way the run records (proof 1); the answer is never adopted.',
 ];
 
 export function buildEvidence(input: {

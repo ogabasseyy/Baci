@@ -7,6 +7,20 @@ import {
 } from './payment-methods';
 
 describe('mobile admin payment method definitions', () => {
+  it('hides retired CredPal without removing other configured providers', () => {
+    const methods = getRenderablePaymentMethods({
+      id: 's',
+      merchant_id: 'm',
+      credpal_enabled: true,
+      credit_direct_enabled: true,
+      paystack_enabled: true,
+    });
+    expect(methods.map((method) => method.id)).not.toContain('credpal');
+    expect(methods.map((method) => method.id)).toEqual(
+      expect.arrayContaining(['credit_direct', 'paystack'])
+    );
+  });
+
   it('builds the admin list from registered provider definitions', () => {
     const methods = buildPaymentMethods([
       {

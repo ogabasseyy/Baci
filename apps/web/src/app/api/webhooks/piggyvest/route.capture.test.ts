@@ -11,15 +11,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  */
 
 const mocks = vi.hoisted(() => ({
-  createServiceClient: vi.fn(),
+  createIntakeClient: vi.fn(),
   processPiggyvestEvent: vi.fn(),
   recordPiggyvestEvent: vi.fn(),
 }));
 
 vi.mock('server-only', () => ({}));
 vi.mock('@/env', () => ({ getPiggyvestApiConfig: () => null }));
-vi.mock('@/lib/supabase/service', () => ({
-  createServiceClient: () => mocks.createServiceClient(),
+vi.mock('@/lib/piggyvest/server-intake-client', () => ({
+  createPiggyvestIntakeClient: () => mocks.createIntakeClient(),
 }));
 vi.mock('@/lib/piggyvest/webhook-processor', () => ({
   processPiggyvestEvent: (...args: unknown[]) =>
@@ -78,7 +78,7 @@ beforeEach(() => {
   vi.stubEnv('PIGGYVEST_WEBHOOK_KEY_ARCHIVE', '');
   vi.stubEnv('PIGGYVEST_WEBHOOK_KEY_OVERLAP_HOURS', '');
   vi.stubEnv('VERCEL_ENV', 'preview');
-  mocks.createServiceClient.mockImplementation(() => store.client());
+  mocks.createIntakeClient.mockImplementation(() => store.client());
   mocks.recordPiggyvestEvent.mockResolvedValue('new');
   mocks.processPiggyvestEvent.mockResolvedValue('processed');
   alerts = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -220,5 +220,17 @@ describe('R5 processing is separate from the reply', () => {
     expect(alerts).toHaveBeenCalledWith(
       expect.stringContaining('PIGGYVEST_WEBHOOK_PROCESSING_DEFERRED')
     );
+  });
+  it('preserves the response when the restricted intake disposal throws synchronously', async () => {
+    const dispose = vi.fn(() => {
+      throw new Error('synthetic cleanup failure');
+    });
+    mocks.createIntakeClient.mockReturnValue(
+      Object.assign(store.client(), { dispose })
+    );
+    const response = await post(accrued, sign(current, accrued));
+    expect(response.status).toBe(200);
+    expect(store.rows).toHaveLength(1);
+    expect(dispose).toHaveBeenCalledOnce();
   });
 });

@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { PIGGYVEST_FEATURE_FLAGS } from './piggyvest-feature-flags';
 import { primaryWalletCardCheckoutFixture as fixture } from './primary-wallet-card-checkout.test-fixture';
 import {
   readPrimaryWalletCardCheckoutRuntime,
@@ -23,6 +24,8 @@ describe('enabled primary card runtime env test support', () => {
         )
       )
     );
+    // The enable flag is read through the shared switch helper, not by name.
+    consumed.add(PIGGYVEST_FEATURE_FLAGS.card_checkout);
     expect(consumed.size).toBeGreaterThan(0);
     const provided = Object.entries(enabledPrimaryCardRuntimeEnv).filter(
       ([name]) => name.startsWith('PIGGYVEST_PRIMARY_CARD_')

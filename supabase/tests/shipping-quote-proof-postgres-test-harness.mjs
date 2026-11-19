@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { shippingCiContainerLabels } from './shipping-ci-container-labels.mjs';
 
 const directory = dirname(fileURLToPath(import.meta.url));
 const migrations = resolve(directory, '../migrations');
@@ -111,9 +112,17 @@ export function createShippingQuoteProofTestDatabase({
   }
 
   async function start() {
+    const labels = shippingCiContainerLabels();
+    // biome-ignore lint/suspicious/noUndeclaredEnvVars: This uncached Docker fixture needs the runner's CI identity.
+    if (process.env.GITHUB_ACTIONS === 'true' && labels.length !== 3) {
+      throw new Error(
+        'Missing or invalid GitHub Actions identifiers for shipping fixture'
+      );
+    }
     docker([
       'run',
       '--rm',
+      ...labels.flatMap((label) => ['--label', label]),
       '--name',
       container,
       '--network',
@@ -173,6 +182,8 @@ export function createShippingQuoteProofTestDatabase({
         '20260904123300_preserve_customer_checkout_on_quote_refresh.sql'
       )
     );
+    // Current 2-arg GIGL writers: either v1 price (unrounded or NGN 100).
+    query(readMigration('20261031220000_gigl_round_price_to_ngn_100.sql'));
     query(
       definition(original, 'public', 'persist_refreshed_order_shipping_quote')
     );

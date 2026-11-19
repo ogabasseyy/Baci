@@ -35,7 +35,12 @@ export function BlogPostHeader({
           {category}
         </Badge>
       )}
-      <h1 className="mb-4 text-3xl font-bold md:text-4xl">{title}</h1>
+      <h1
+        className="mb-4 text-3xl font-bold md:text-4xl"
+        data-cwv-lcp-copy="blog-post"
+      >
+        {title}
+      </h1>
 
       <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
         {author_name && (

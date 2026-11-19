@@ -23,7 +23,11 @@ const mockIsEligibleForHardStatusPreflight = vi.fn();
 const mockGetRouteType = vi.fn();
 const mockGetStorefrontContentSegments = vi.fn();
 const mockBuildHardStatusStorefrontResponse = vi.fn(
-  () => new NextResponse(null, { status: 404 })
+  () =>
+    new NextResponse(null, {
+      status: 404,
+      headers: { 'X-Robots-Tag': 'noindex, follow' },
+    })
 );
 
 const resolveComparePageHardStatus =
@@ -35,8 +39,11 @@ const resolveComparePageHardStatus =
     buildHardStatusStorefrontResponse: mockBuildHardStatusStorefrontResponse,
   });
 
-function buildRequest(path = '/laptops/compare/left-vs-right') {
-  return new NextRequest(`https://usebaci.com${path}`);
+function buildRequest(
+  path = '/laptops/compare/left-vs-right',
+  method: 'GET' | 'HEAD' = 'GET'
+) {
+  return new NextRequest(`https://usebaci.com${path}`, { method });
 }
 
 describe('createStorefrontComparePageHardStatusResolver', () => {
@@ -66,6 +73,7 @@ describe('createStorefrontComparePageHardStatusResolver', () => {
     );
 
     expect(response?.status).toBe(404);
+    expect(response?.headers.get('X-Robots-Tag')).toBe('noindex, follow');
     expect(mockResolveStorefrontComparePageStatus).toHaveBeenCalledWith({
       origin: 'https://usebaci.com',
       identifier: 'ogabassey',
@@ -83,21 +91,42 @@ describe('createStorefrontComparePageHardStatusResolver', () => {
     );
   });
 
-  it('falls through query variants and uncertain status results', async () => {
+  it.each([
+    'GET',
+    'HEAD',
+  ] as const)('returns hard 404 with X-Robots-Tag: noindex, follow on %s for parameterized dead compare pages', async (method) => {
     const queryRequest = buildRequest(
-      '/laptops/compare/left-vs-right?utm_source=email'
+      '/laptops/compare/left-vs-right?utm_source=email&sort=price',
+      method
     );
-    await expect(
-      resolveComparePageHardStatus(
-        queryRequest,
-        queryRequest.nextUrl.pathname,
-        'usebaci.com',
-        'test-agent',
-        'ogabassey'
-      )
-    ).resolves.toBeNull();
-    expect(mockResolveStorefrontComparePageStatus).not.toHaveBeenCalled();
+    const response = await resolveComparePageHardStatus(
+      queryRequest,
+      queryRequest.nextUrl.pathname,
+      'usebaci.com',
+      'test-agent',
+      'ogabassey'
+    );
 
+    expect(response?.status).toBe(404);
+    expect(response?.headers.get('X-Robots-Tag')).toBe('noindex, follow');
+    expect(mockResolveStorefrontComparePageStatus).toHaveBeenCalledWith({
+      origin: 'https://usebaci.com',
+      identifier: 'ogabassey',
+      categorySlug: 'laptops',
+      comparisonSlug: 'left-vs-right',
+      secret: 'test-internal-secret',
+    });
+    expect(mockBuildHardStatusStorefrontResponse).toHaveBeenCalledWith(
+      404,
+      queryRequest,
+      '/laptops/compare/left-vs-right',
+      'test-agent',
+      'usebaci.com',
+      '/'
+    );
+  });
+
+  it('falls through uncertain status results', async () => {
     mockResolveStorefrontComparePageStatus.mockResolvedValueOnce({
       kind: 'renderable-or-unknown',
     });

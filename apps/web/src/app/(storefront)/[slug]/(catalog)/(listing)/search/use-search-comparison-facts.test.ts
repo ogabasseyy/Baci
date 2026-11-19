@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
 

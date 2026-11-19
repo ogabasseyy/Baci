@@ -55,7 +55,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # Full history, so the next step can confirm the commit is on main.
+          fetch-depth: 0
           persist-credentials: false
+
+      # Storefront release gate: this job holds the App Store Connect key, so
+      # it runs only for a commit already on main. It runs before anything
+      # else; docs/runbooks/storefront-release-gate.md.
+      - name: Refuse release sources that are not on main
+        env:
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if ! git merge-base --is-ancestor "$RELEASE_SHA" refs/remotes/origin/main; then
+            echo '::error::This release commit is not on main. Store releases ship only reviewed commits from main; see docs/runbooks/storefront-release-gate.md.' >&2
+            exit 1
+          fi
 
       - name: Setup Ruby
         uses: ruby/setup-ruby@e81a8fa391b11a595c1b7ed84177cc0fe02faf83 # v1.328.0

@@ -8,6 +8,7 @@ import { useVTUBillers } from '@/hooks/use-vtu-billers';
 import { useVTUVerify } from '@/hooks/use-vtu-verify';
 import type { UtilityBeneficiary } from '@/lib/utility-beneficiaries';
 import { useAuthStore } from '@/stores/auth-store';
+import { scrollToAirtimePaymentSection } from './airtime-form-controller.helpers';
 import {
   BILL_FORM_FOOTER_ERROR_BUFFER,
   BILL_FORM_FOOTER_HEIGHT,
@@ -16,6 +17,8 @@ import {
 import { parseUtilityAmount } from './bill-form.helpers';
 import type { BillFormProps } from './bill-form.types';
 import type { BillFormController } from './bill-form-controller.types';
+import { getBillPaymentAmountError } from './bill-payment-amount-validation';
+import { billPurchaseRequest } from './bill-retains-store-credit';
 import { buildBillFormWalletReturnTo } from './build-bill-form-wallet-return-to';
 import { createBillFormPurchaseHandler } from './create-bill-form-purchase-handler';
 import { createBillFormVerifyHandler } from './create-bill-form-verify-handler';
@@ -172,10 +175,8 @@ export function useBillFormController({
     verify,
   });
 
-  // Prefilled deep-link so a wallet top-up round-trips the customer back to a
-  // ready-to-pay bill form (they still re-tap Pay — never auto-submitted).
-  // `isVerified` is the form's real verified state (`canShowPayment`), NOT
-  // "we have a customer name": billers may verify with no name at all.
+  // Wallet top-up return link (never auto-submits). `isVerified` is the real
+  // verified state: billers may verify with no name at all.
   const walletReturnToHref = buildBillFormWalletReturnTo({
     billItemIdentifier: selectedBillItemIdentifier,
     customerAddress: verifiedCustomerAddress,
@@ -198,48 +199,46 @@ export function useBillFormController({
     setIsSubmitting(nextIsSubmitting);
   };
 
-  const handlePurchase = () =>
-    createBillFormPurchaseHandler({
-      amount,
-      billType,
-      canShowPayment,
-      customer,
-      customerId,
-      dismissKeyboard,
-      getIsActive: () => mountedRef.current,
-      getIsSubmitting: () => isSubmittingRef.current,
-      numericAmount,
-      onSuccess,
-      payment,
-      selectedBiller,
-      selectedBillItem,
-      selectedBillItemIdentifier,
-      selectedBillItemPathLabel,
-      requireValidationRef: verifiedRequireValidationRef,
-      setIsSubmitting: updateSubmitting,
-      type,
-      validationReference: verifiedValidationReference ?? undefined,
-      verifiedCustomerName,
-      verifiedCustomerAddress,
-      returnToHref: walletReturnToHref,
-    })();
-
-  const handlePaymentLayout = (event: LayoutChangeEvent) => {
-    if (!shouldScrollToPayment) {
-      return;
-    }
-    const paymentY = event.nativeEvent.layout.y;
-    setShouldScrollToPayment(false);
-    requestAnimationFrame(() => {
-      scrollViewRef.current?.scrollTo({
-        animated: true,
-        y: Math.max(paymentY - SPACING.md, 0),
-      });
-    });
+  const purchaseInput = {
+    amount,
+    billType,
+    canShowPayment,
+    customer,
+    customerId,
+    dismissKeyboard,
+    getIsActive: () => mountedRef.current,
+    getIsSubmitting: () => isSubmittingRef.current,
+    numericAmount,
+    onSuccess,
+    payment,
+    selectedBiller,
+    selectedBillItem,
+    selectedBillItemIdentifier,
+    selectedBillItemPathLabel,
+    requireValidationRef: verifiedRequireValidationRef,
+    setIsSubmitting: updateSubmitting,
+    type,
+    validationReference: verifiedValidationReference ?? undefined,
+    verifiedCustomerName,
+    verifiedCustomerAddress,
+    returnToHref: walletReturnToHref,
   };
+  const handlePurchase = () => createBillFormPurchaseHandler(purchaseInput)();
+
+  const handlePaymentLayout = (event: LayoutChangeEvent) =>
+    scrollToAirtimePaymentSection({
+      event,
+      scrollViewRef,
+      setShouldScrollToPayment,
+      shouldScrollToPayment,
+    });
 
   return {
     amount,
+    // Shown in the form (Pay stays disabled), never as a system alert.
+    amountIssue: amount
+      ? getBillPaymentAmountError(numericAmount, selectedBillItem)
+      : 'Enter an amount to pay.',
     beneficiaries,
     billersQuery,
     billItemSelection,
@@ -272,6 +271,7 @@ export function useBillFormController({
     verifiedCustomerName,
     payment,
     resetVerification,
+    purchaseRequest: billPurchaseRequest(purchaseInput),
     scheduleNextStepScroll,
     scrollViewRef,
     selectedBiller,

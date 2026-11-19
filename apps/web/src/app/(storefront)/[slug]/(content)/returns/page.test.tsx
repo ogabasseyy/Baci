@@ -78,6 +78,14 @@ const trustMerchant = {
   logo_url: null,
 } as unknown as Awaited<ReturnType<typeof getRequestScopedMerchant>>;
 
+// Ogabassey renders owner-approved care copy instead of the generic policy
+// facts (#4252), so the generic fact rendering is exercised on another tenant.
+const genericTrustMerchant = {
+  ...trustMerchant,
+  business_name: 'Tenant Store',
+  slug: 'tenant-store',
+} as unknown as Awaited<ReturnType<typeof getRequestScopedMerchant>>;
+
 describe('returns page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -107,6 +115,7 @@ describe('returns page', () => {
     expect(metadata.alternates?.canonical).toBe(
       'https://ogabassey.com/returns'
     );
+    expect(metadata.robots).toMatchObject({ index: true, follow: true });
   });
 
   it('renders when the return summary exists', async () => {
@@ -149,7 +158,7 @@ describe('returns page', () => {
 
   it('renders when only the return window exists', async () => {
     vi.mocked(getRequestScopedMerchant).mockResolvedValue({
-      ...trustMerchant,
+      ...genericTrustMerchant,
       trust_profile: {
         return_policy: {
           window_days: 14,
@@ -195,12 +204,13 @@ describe('returns page', () => {
     expect(metadata.alternates?.canonical).toBe(
       'https://ogabassey.com/returns'
     );
+    expect(metadata.robots).toEqual({ index: false, follow: true });
     expect(mockNotFound).not.toHaveBeenCalled();
   });
 
   it('renders fallback policy content when no return content is present', async () => {
     vi.mocked(getRequestScopedMerchant).mockResolvedValue({
-      ...trustMerchant,
+      ...genericTrustMerchant,
       trust_profile: {
         return_policy: {},
       },
@@ -226,7 +236,7 @@ describe('returns page', () => {
 
   it('renders when only return method or fees exist', async () => {
     vi.mocked(getRequestScopedMerchant).mockResolvedValue({
-      ...trustMerchant,
+      ...genericTrustMerchant,
       trust_profile: {
         return_policy: {
           return_method: 'mail',

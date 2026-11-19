@@ -39,7 +39,6 @@ Every later PR is guarded base-owned from merge on.
 """
 import ast
 import fnmatch
-import hashlib
 import re
 import sys
 from pathlib import Path
@@ -60,16 +59,20 @@ from capability_gate_contract_ci_checks import (
     _strip_comment,
     ci_failures,
 )
-from capability_gate_contract_workflow_checks import workflow_failures
+from capability_gate_contract_workflow_checks import declared_checker_pin, sha256_of, workflow_failures
 
 BASE_PINS = {
+    "vps-workers/baci-editorial-context/test_capability_gate_contract_private_fetch.py": "6a65b7af808c202c6a5f63abeb4c92d078765f0c2bd5977b6ff413c2a5757205",
+    "vps-workers/baci-editorial-context/test_capability_gate_contract_companion_origin.py": "0c1279adab6caffb5cd6db6f6f216e5f0134909093227f0d191408a7df9eb702",
+    "vps-workers/baci-editorial-context/test_capability_gate_contract_archive_companion.py": "23db2eaa4e4636151784c68eb5b615abc6096f6832eea50c3a8831e9351a1864",
+    "vps-workers/baci-editorial-context/capability_gate_contract_private_fetch.py": "fb027c19a8e17efcb1606d72fe336ee0f6abb7087b15b52a8b93b3fd870e9cc7",
     "vps-workers/baci-editorial-context/test_capability_gate_continuity.py": "7ec8612c69ebda2f71cca449576e22ac420bac6d7474a2d87995c04b22920d1f",
     "vps-workers/baci-editorial-context/capability_gate_continuity.py": "0b481eabb3dc6528b0c4bd318092d38b2c9f0116fc251e4562a32969e1ece590",
     ".github/actions/capability-gate/action.yml": "257823346da306434103d77e3a4facbcee0e536ee8b342678e14a73aa9d0b8b9",
     # No self-pin: a self-hash is a fixed point. The checker's own baseline
     # lives in the workflow env (PINNED_CHECKER_SHA256, passed as argv[1]).
     ".github/scripts/capability_gate_contract_ci_checks.py": "f8a3fc7989435f4e84b0278ffbb3f6f1d1a9213b9ac22acdfe2fc781fcd86f64",
-    ".github/scripts/capability_gate_contract_workflow_checks.py": "b142c55772a4213e3eac9ff9e9d0e3ea13af6659b1d3715ab526c194c40d3675",
+    ".github/scripts/capability_gate_contract_workflow_checks.py": "a3ef086a61abeb5e1df99db204d920d73574f1825578fa2709027dadf5028150",
     ".github/workflows/capability-register-freshness.yml": "60eec995bf4da241c8aac1c3ba01fa052fb314feff547f66e423faf86aa9340e",
     "vps-workers/baci-editorial-context/capability_gate.py": "ee08cb0c94e2b0a5ee33d5250831692904168a9f241dd066638cc07aba6d6bf5",
     "vps-workers/baci-editorial-context/capability_gate_paths.py": "8a493b19c14f10ee3b7fd500b9d4173d524d99a37984570d45ab65320f7860a6",
@@ -79,10 +82,10 @@ BASE_PINS = {
     "vps-workers/baci-editorial-context/prompt-builder.patch": "4a5454701c14a0beae4471bc6952885baa3a3152ff733998202400751f0b5c8e",
     "vps-workers/baci-editorial-context/test_capability_agent_access_map.py": "a697cd05c1107268219490c23797e283cb9a3c03482f1e3dbfc590d949583687",
     "vps-workers/baci-editorial-context/test_capability_gate.py": "88815781ee49e265a1e94ee7a693340b77a53fef60a9cb08b2c3e9098c268fb8",
-    "vps-workers/baci-editorial-context/test_capability_gate_contract.py": "5007e1d3039cfd5c3007596d72a6f12a7564674be67b724d106ffe18eac896a4",
+    "vps-workers/baci-editorial-context/test_capability_gate_contract.py": "686df7ba40e47f280daaf570be7c23e6681d16560d0edc322b3d7790fcdc8690",
     "vps-workers/baci-editorial-context/test_capability_gate_contract_adversarial.py": "3b0492ae60b8ce4e6c1e7ba34adb0b06f4277bf54bddbb01e03198304c389b26",
     "vps-workers/baci-editorial-context/test_capability_gate_contract_ci.py": "411de0bb193a6b7c0d75244aab9b6dbb664fae3f4a51b5f7f76a4c5a09359d5e",
-    "vps-workers/baci-editorial-context/test_capability_gate_contract_workflow.py": "e2808d4bda408991739ad01f56b8f597ccafcf7cf95c8903469bf5a2edc1e2c2",
+    "vps-workers/baci-editorial-context/test_capability_gate_contract_workflow.py": "637d1377b90d0c6b87894082ecba103363f06bc1be8a30fce5918e63303fba66",
     "vps-workers/baci-editorial-context/test_capability_gate_main.py": "de2e01ec7fadae64bc02f0bfabc345c9677f64369ea235b09450575c8d4693e6",
     "vps-workers/baci-editorial-context/test_capability_register_binding.py": "67566abfee3947628513bf8c91049575485e46d5c35d73a8c6871f956eeb1476",
     "vps-workers/baci-editorial-context/test_capability_register_status.py": "d0e6e5130a9504b0d89b6e1377240f606e2538e650d290a8a7b91c1de4143418",
@@ -95,10 +98,6 @@ BASE_PINS = {
     "vps-workers/baci-editorial-context/test_capability_register_binding_dirs.py": "7b4ff9c060dda11ebff997c11afe29a990c73e9fc6890cadc4855133624c2a56",
     "vps-workers/baci-editorial-context/tests/fixtures/writer_stub/codex_content_agent/platform_capabilities.py": "e384cac8f670c565c2f767cd790d661c8ddad6627ecb17747cb82fa894c5d47b",
 }
-
-def sha256_of(path):
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
-
 
 def declared_pins(checker_path):
     """Read the BASE_PINS declaration without executing it (exactly one assignment: Python runs the last)."""
@@ -202,15 +201,6 @@ def undeclared_suite_files(repo_root, declared):
         if base in _RESERVED_MODULE_NAMES:
             shadows.append(f"suite must not shadow the interpreter: {rel}")
     return undeclared + links + shadows
-
-
-def declared_checker_pin(workflow_text):
-    """The PR-head workflow's declared checker hash (comments never count; duplicates fail)."""
-    stripped = [line.strip() for line in workflow_text.splitlines()]
-    pins = [m.group(1) for s in stripped if s and not s.startswith("#") and (m := re.match(r"PINNED_CHECKER_SHA256:\s*([0-9a-f]{64})\s*$", s))]
-    if len(pins) > 1:
-        raise ValueError("checker pin duplicated")
-    return pins[0] if pins else None
 
 
 def checker_file_failures(repo_root, base_pin, declared_pin):

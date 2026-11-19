@@ -1,7 +1,7 @@
 import 'server-only';
 import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
+import type { PiggyvestIntakeClient } from '@/lib/piggyvest/intake-client.types';
 import {
   type PiggyvestCaptureResult,
   piggyvestCaptureResultSchema,
@@ -147,7 +147,7 @@ export function selectCapturedHeaders(
 }
 
 export async function captureVerifiedDelivery(
-  supabase: PiggyvestIntakeServiceClient,
+  supabase: PiggyvestIntakeClient,
   input: CaptureDeliveryInput
 ): Promise<PiggyvestCaptureResult> {
   const db: SupabaseClient = supabase;
@@ -185,7 +185,7 @@ export async function captureVerifiedDelivery(
  * and replays idempotently, so a failure here must never change the reply.
  */
 export async function markCaptureProcessed(
-  supabase: PiggyvestIntakeServiceClient,
+  supabase: PiggyvestIntakeClient,
   captureId: string
 ): Promise<void> {
   const db: SupabaseClient = supabase;

@@ -1,5 +1,4 @@
 import { matchesProviderWalletName } from '@/lib/piggyvest/provider-wallet-name';
-import { goalWalletName } from './goal-wallet-names';
 import { pickString } from './loose-schemas';
 import type { PayoutReadback } from './payout-analysis';
 import { readbackPayout } from './proof-7-readback';
@@ -10,6 +9,18 @@ import { okData, usableList } from './read-rules';
 export interface GoalOwner {
   qa: QaIdentity;
   customerId: string;
+  /** The owner's main wallet, when known: a payout target and a pseudonym. */
+  mainWalletId?: string | null;
+}
+
+export interface GoalVariantInput {
+  slot: string;
+  /** The full subaccount_name sent (checked against the 50-character limit). */
+  walletName: string;
+  /** null leaves the wallet's own payout unset. */
+  payoutWalletId: string | null;
+  /** Defaults to true (opted in). */
+  enableInterestAccrual?: boolean;
 }
 
 export interface GoalVariantResult {
@@ -23,18 +34,23 @@ export interface GoalVariantResult {
   resumedOutcome: string | null;
   readback: PayoutReadback | null;
   readbackData: unknown;
+  /** The latest successful readback (never emitted; read field by field). */
+  readbackRecord: Record<string, unknown> | null;
+  /** Never emitted: registered with the redactor. */
+  walletId: string | null;
 }
 
 /**
  * Creates (or, on a resumed slot, finds by its deterministic name) one goal
  * sub-wallet and reads it back. `payoutWalletId` null leaves the wallet's own
  * payout unset, which is how inheritance from the customer is observed.
+ * Each slot is journaled and never resent.
  */
 export async function runGoalVariant(
   ctx: ProofContext,
   owner: GoalOwner,
   business: string,
-  variant: { slot: string; nameSuffix: string; payoutWalletId: string | null }
+  variant: GoalVariantInput
 ): Promise<GoalVariantResult> {
   const { api, redactor } = ctx;
   const result: GoalVariantResult = {
@@ -45,13 +61,16 @@ export async function runGoalVariant(
     resumedOutcome: null,
     readback: null,
     readbackData: undefined,
+    readbackRecord: null,
+    walletId: null,
   };
   const sent = await api.createGoalWallet(
     owner.qa,
     owner.customerId,
     variant.slot,
     {
-      nameSuffix: variant.nameSuffix,
+      subaccountName: variant.walletName,
+      enableInterestAccrual: variant.enableInterestAccrual ?? true,
       ...(variant.payoutWalletId
         ? { payoutWalletId: variant.payoutWalletId }
         : {}),
@@ -60,7 +79,7 @@ export async function runGoalVariant(
   let walletId: string | null = null;
   if (sent.kind === 'resumed') {
     result.resumedOutcome = sent.priorOutcome;
-    const wanted = goalWalletName(owner.qa.goalWalletName, variant.nameSuffix);
+    const wanted = variant.walletName;
     const list = usableList(await api.customerWallets(owner.customerId, 'ASC'));
     // The sandbox rewrites names, so match letters and digits only; two
     // matches are ambiguous and pick nothing.
@@ -87,8 +106,10 @@ export async function runGoalVariant(
   }
   if (walletId) {
     redactor.register('W', walletId);
+    result.walletId = walletId;
     const read = await readbackPayout(ctx, walletId, business);
     result.readbackData = read.data;
+    result.readbackRecord = read.record;
     result.readback = read.facts;
   }
   return result;

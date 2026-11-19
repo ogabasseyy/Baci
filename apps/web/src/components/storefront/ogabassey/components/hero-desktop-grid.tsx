@@ -130,10 +130,10 @@ function HeroBigCard({
               Just launched
             </span>
             <Suspense fallback={null}>
-              <h2 className="line-clamp-3 text-4xl font-bold leading-tight text-store-secondary-text lg:text-5xl">
+              <p className="ogabassey-hero-title line-clamp-3 text-4xl font-bold leading-tight text-store-secondary-text lg:text-5xl">
                 {slide.name}
-              </h2>
-              <p className="text-xl font-semibold text-store-secondary-text">
+              </p>
+              <p className="ogabassey-hero-price text-xl font-semibold text-store-secondary-text">
                 {slide.priceLabel}
               </p>
             </Suspense>
@@ -221,10 +221,12 @@ function HeroSideCard({ slide }: { slide: LaunchProductSlide }) {
         <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-store-primary">
           Just launched
         </span>
-        <h3 className="line-clamp-2 text-lg font-bold leading-tight text-store-secondary-text">
+        <p className="ogabassey-hero-title line-clamp-2 text-lg font-bold leading-tight text-store-secondary-text">
           {slide.name}
-        </h3>
-        <p className="text-sm font-semibold text-store-secondary-text">{slide.priceLabel}</p>
+        </p>
+        <p className="ogabassey-hero-price text-sm font-semibold text-store-secondary-text">
+          {slide.priceLabel}
+        </p>
         <span className="mt-1 text-xs font-bold text-store-primary underline underline-offset-2">
           {slide.ctaLabel}
         </span>

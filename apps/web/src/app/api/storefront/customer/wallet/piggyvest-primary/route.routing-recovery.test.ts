@@ -15,6 +15,10 @@ const mocks = vi.hoisted(() => ({
   provider: vi.fn(),
   order: [] as string[],
 }));
+// Every case here has a durable intent; not-started is get-route.presence.test.ts.
+vi.mock('@/lib/piggyvest/primary-wallet-presence', () => ({
+  hasPrimaryWalletOnboarding: vi.fn().mockResolvedValue(true),
+}));
 vi.mock('@/lib/api-auth', () => ({ authenticateApiRequest: mocks.auth }));
 vi.mock('@/lib/piggyvest/primary-wallet-runtime', () => ({
   readPrimaryWalletRuntime: mocks.runtime,

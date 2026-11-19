@@ -1,5 +1,4 @@
 type OrderListVisibilityQuery<TQuery> = {
-  not: (column: string, operator: string, value: string) => TQuery;
   or: (filters: string) => TQuery;
 };
 
@@ -22,16 +21,73 @@ const ONLINE_CHECKOUT_PAYMENT_METHOD_VALUES = [
 export const HIDDEN_CHECKOUT_PAYMENT_STATUSES = `(${HIDDEN_CHECKOUT_PAYMENT_STATUS_VALUES.join(',')})`;
 export const ONLINE_CHECKOUT_PAYMENT_METHODS = `(${ONLINE_CHECKOUT_PAYMENT_METHOD_VALUES.join(',')})`;
 
+// Staff-entered orders (in-store invoices, social and marketplace sales,
+// manual entries and imports) are never abandoned checkouts, so they always
+// stay in the orders list whatever their payment status. An order counts as
+// staff-entered when it records a staff creator or comes from a staff sales
+// channel. The channel matters because the creator is NULL on older staff
+// orders and is cleared if the staff account is deleted. Any other source,
+// including a blank or unknown one, is treated as a customer checkout, which
+// keeps the drop-off rules' long-standing behaviour for those orders.
+// The new-order CHANNELS (components/orders/new-order.shared.ts) plus the
+// manual-entry sources, which have no import marker (prod has unmarked
+// 'manual' rows). Imported sources such as the Bumpa fallback keys are
+// covered by the import markers below instead. A test keeps this list equal
+// to CHANNELS + extras.
+export const STAFF_ORDER_EXTRA_SOURCE_VALUES = [
+  'manual',
+  'staff_entry',
+] as const;
+
+export const STAFF_ORDER_SOURCE_VALUES = [
+  'physical',
+  'instagram',
+  'whatsapp',
+  'facebook',
+  'tiktok',
+  'jumia',
+  'jiji',
+  'konga',
+  ...STAFF_ORDER_EXTRA_SOURCE_VALUES,
+] as const;
+
+const STAFF_ORDER_SOURCES = `(${STAFF_ORDER_SOURCE_VALUES.join(',')})`;
+
+// Imported orders (Bumpa and other migrations) carry external_source and
+// usually import_job_id. They are historical records, never abandoned
+// checkouts, whatever source key the import gave them.
+
+/** Conditions for use inside and(): the order is a customer checkout. */
+export const CUSTOMER_CHECKOUT_ORDER_FILTER = [
+  'recorded_by_user_id.is.null',
+  'external_source.is.null',
+  'import_job_id.is.null',
+  `or(source.is.null,source.not.in.${STAFF_ORDER_SOURCES})`,
+].join(',');
+
+/** Conditions for use inside or(): the order was entered or imported by staff. */
+export const STAFF_CREATED_ORDER_FILTER = [
+  'recorded_by_user_id.not.is.null',
+  'external_source.not.is.null',
+  'import_job_id.not.is.null',
+  `source.in.${STAFF_ORDER_SOURCES}`,
+].join(',');
+
+// Customer checkouts are shown unless they are a drop-off: an unpaid
+// online-method checkout, or one that failed, expired or awaits BNPL.
 export const VISIBLE_PENDING_ORDER_FILTER = [
   'payment_status.not.in.(pending,unpaid)',
   'payment_method.is.null',
   `payment_method.not.in.${ONLINE_CHECKOUT_PAYMENT_METHODS}`,
 ].join(',');
 
+export const ORDER_LIST_VISIBILITY_FILTER = [
+  STAFF_CREATED_ORDER_FILTER,
+  `and(payment_status.not.in.${HIDDEN_CHECKOUT_PAYMENT_STATUSES},or(${VISIBLE_PENDING_ORDER_FILTER}))`,
+].join(',');
+
 export function applyOrderListVisibilityFilter<
   TQuery extends OrderListVisibilityQuery<TQuery>,
 >(query: TQuery): TQuery {
-  return query
-    .not('payment_status', 'in', HIDDEN_CHECKOUT_PAYMENT_STATUSES)
-    .or(VISIBLE_PENDING_ORDER_FILTER);
+  return query.or(ORDER_LIST_VISIBILITY_FILTER);
 }

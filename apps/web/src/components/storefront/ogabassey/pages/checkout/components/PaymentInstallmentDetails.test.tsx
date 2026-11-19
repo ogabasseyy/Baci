@@ -4,10 +4,15 @@ import { PaymentInstallmentDetails } from './PaymentInstallmentDetails';
 
 describe('PaymentInstallmentDetails', () => {
   it('renders the selected provider guidance', () => {
-    render(<PaymentInstallmentDetails paymentMethod="credpal" />);
+    render(<PaymentInstallmentDetails paymentMethod="credit_direct" />);
 
-    expect(screen.getByText('How CredPal works')).toBeInTheDocument();
-    expect(screen.getByText('- Quick approval in minutes')).toBeInTheDocument();
+    expect(screen.getByText('How Credit Direct works')).toBeInTheDocument();
+    expect(screen.getByText('- Instant approval decision')).toBeInTheDocument();
+  });
+
+  it('renders no guidance for retired CredPal', () => {
+    const { container } = render(<PaymentInstallmentDetails paymentMethod="credpal" />);
+    expect(container).toBeEmptyDOMElement();
   });
 
   it('renders no guidance for a non-installment method', () => {

@@ -145,6 +145,10 @@ describe('OgabasseyNavbar', () => {
   it('gives the account link an explicit accessible name', () => {
     render(<OgabasseyNavbar storeSlug="/ogabassey" />);
 
+    const menuButton = screen.getByRole('button', { name: /open menu/i });
+    expect(menuButton).toHaveAttribute('aria-controls', 'mobile-menu');
+    expect(menuButton).toHaveAttribute('aria-expanded', 'false');
+
     const accountLink = screen.getByRole('link', { name: /view account/i });
 
     expect(accountLink).toHaveAttribute('href', '/ogabassey/account');

@@ -1,5 +1,6 @@
 import 'server-only';
 import z from 'zod';
+import { classifyRelayResponse, routeThroughRelay } from './egress-relay';
 
 /**
  * PiggyVest Business API base client (sandbox-gated, no live calls).
@@ -25,7 +26,9 @@ export class PiggyvestApiError extends Error {
   readonly code:
     | 'PIGGYVEST_AUTH_ERROR'
     | 'PIGGYVEST_REQUEST_ERROR'
-    | 'PIGGYVEST_NETWORK_ERROR';
+    | 'PIGGYVEST_NETWORK_ERROR'
+    // Egress relay refused before contacting PiggyVest: nothing was sent.
+    | 'PIGGYVEST_RELAY_UNAVAILABLE';
   readonly status: number | null;
   /**
    * True only when the provider answered with an explicit decline
@@ -88,26 +91,52 @@ export async function piggyvestRequest<Data>(
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const targetUrl = buildUrl(
+    config.baseUrl ?? PIGGYVEST_API_BASE_URL,
+    path,
+    options.query
+  );
+  const method = options.method ?? (options.body ? 'POST' : 'GET');
+  const body = options.body ? JSON.stringify(options.body) : undefined;
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    'Content-Type': 'application/json',
+  };
+  // Null unless the egress relay is configured and this is production.
+  const relayed = routeThroughRelay({ url: targetUrl, method, body, headers });
   let response: Response;
   try {
-    response = await fetch(
-      buildUrl(config.baseUrl ?? PIGGYVEST_API_BASE_URL, path, options.query),
-      {
-        body: options.body ? JSON.stringify(options.body) : undefined,
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        method: options.method ?? (options.body ? 'POST' : 'GET'),
-        signal: controller.signal,
-      }
-    );
+    response = await fetch(relayed?.url ?? targetUrl, {
+      body,
+      headers: relayed?.headers ?? headers,
+      method,
+      signal: controller.signal,
+    });
   } catch (error) {
     clearTimeout(timeout);
     throw new PiggyvestApiError(
       'PIGGYVEST_NETWORK_ERROR',
       error instanceof Error ? error.message : 'PiggyVest request failed'
     );
+  }
+
+  if (relayed) {
+    const failure = classifyRelayResponse(response);
+    if (failure) {
+      clearTimeout(timeout);
+      void response.body?.cancel().catch(() => undefined);
+      // maybe-sent reuses the timeout path (NETWORK_ERROR triggers the
+      // existing create reconciliation). Never retried here.
+      throw failure.sendState === 'maybe-sent'
+        ? new PiggyvestApiError(
+            'PIGGYVEST_NETWORK_ERROR',
+            'PiggyVest relay outcome is indeterminate'
+          )
+        : new PiggyvestApiError(
+            'PIGGYVEST_RELAY_UNAVAILABLE',
+            'PiggyVest relay is unavailable'
+          );
+    }
   }
 
   if (response.status === 401 || response.status === 403) {

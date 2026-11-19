@@ -47,11 +47,14 @@ export function createPrimaryWalletSavingsStore(input: {
       );
       return schemas.statusRows.parse(result.rows)[0].result;
     },
-    async reserve(request: unknown) {
+    // Reserves and spends the PIN proof in one database transaction, so a
+    // reservation never exists without a spent proof.
+    async reserve(request: unknown, pinProof: unknown) {
       const parsed = schemas.request.parse(request);
+      const proof = schemas.pinProof.parse(pinProof);
       const result = await input.execute(
-        'SELECT piggyvest_primary.reserve_savings($1::jsonb,$2::jsonb) AS result',
-        [scope, JSON.stringify(parsed)]
+        'SELECT piggyvest_primary.reserve_savings_with_pin($1::jsonb,$2::jsonb,$3::text) AS result',
+        [scope, JSON.stringify(parsed), proof]
       );
       const rows = schemas.reservationRows.parse(result.rows);
       return rows[0].result;

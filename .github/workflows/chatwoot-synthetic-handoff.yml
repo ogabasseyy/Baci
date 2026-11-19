@@ -1,0 +1,73 @@
+name: Chatwoot synthetic handoff
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - '.github/workflows/chatwoot-synthetic-handoff.yml'
+      - 'apps/web/tools/chatwoot-handoff-ci/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chatwoot-synthetic-handoff-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  handoff:
+    if: >-
+      (github.event_name != 'pull_request' || !github.event.pull_request.draft) &&
+      (github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Static contract checks
+        run: node --test apps/web/tools/chatwoot-handoff-ci/*.test.mjs
+      - name: Pull pinned images before creating the isolated network
+        run: docker compose -f apps/web/tools/chatwoot-handoff-ci/compose.yml pull postgres redis rails sidekiq harness
+      - name: Run disposable Chatwoot synthetic handoff
+        shell: bash
+        run: |
+          set -euo pipefail
+          compose=(docker compose -f apps/web/tools/chatwoot-handoff-ci/compose.yml -p chatwoot-handoff-ci)
+          cleanup() {
+            status=$?
+            if [ "$status" -ne 0 ]; then
+              echo 'Synthetic Chatwoot startup diagnostics (service status and bounded logs):'
+              "${compose[@]}" ps --all
+              "${compose[@]}" logs --no-color --tail=120 rails sidekiq || true
+            fi
+            "${compose[@]}" down --volumes --remove-orphans
+          }
+          trap cleanup EXIT
+          "${compose[@]}" up -d --wait --wait-timeout 600 postgres redis rails sidekiq
+          "${compose[@]}" exec -T rails bundle exec rails runner /harness/seed.rb
+          "${compose[@]}" up -d harness
+          wait_for_file() {
+            local marker="$1"
+            for _ in $(seq 1 240); do
+              if "${compose[@]}" exec -T rails test -f "/run/chatwoot-test/$marker"; then return 0; fi
+              if ! "${compose[@]}" ps --status running --services | grep -x harness >/dev/null; then
+                "${compose[@]}" logs harness
+                return 1
+              fi
+              sleep 1
+            done
+            echo "Timed out waiting for $marker" >&2
+            return 1
+          }
+          wait_for_file harness-ready-for-trigger
+          "${compose[@]}" exec -T rails bundle exec rails runner /harness/trigger.rb 'Please connect me to a human operator.'
+          wait_for_file harness-ready-for-takeover
+          "${compose[@]}" exec -T rails bundle exec rails runner /harness/trigger.rb 'Synthetic customer: I have another question for the human operator.'
+          wait_for_file harness-ready-for-followup
+          "${compose[@]}" exec -T rails bundle exec rails runner /harness/trigger.rb 'Synthetic follow-up after handback.'
+          "${compose[@]}" wait harness || true
+          container_id="$("${compose[@]}" ps -aq harness)"
+          "${compose[@]}" logs harness || true
+          test "$(docker inspect --format '{{.State.ExitCode}}' "$container_id")" -eq 0

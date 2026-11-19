@@ -9,7 +9,7 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type React from 'react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useCart } from '@/hooks/cart';
 import { useMerchantSafe } from '@/hooks/merchant/use-merchant';
 import { Logo } from './logo';
@@ -58,6 +58,7 @@ export const OgabasseyNavbar: React.FC<NavbarProps> = ({
       slug: category.slug,
     })) ?? [];
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
   const isVisible = useOgabasseyScrollVisibility();
   const visibleCartItems = isHydrated ? totalItems : 0;
 
@@ -81,8 +82,10 @@ export const OgabasseyNavbar: React.FC<NavbarProps> = ({
                 <div className="ogabassey-navbar__brand-group">
                   <button
                     type="button"
+                    ref={menuButtonRef}
                     aria-label="Open menu"
                     aria-expanded={isMenuOpen}
+                    aria-controls="mobile-menu"
                     onClick={() => setIsMenuOpen(true)}
                     className="ogabassey-navbar__menu-button"
                   >
@@ -158,7 +161,13 @@ export const OgabasseyNavbar: React.FC<NavbarProps> = ({
       {isMenuOpen ? (
         <DeferredMobileMenu
           isOpen={isMenuOpen}
-          onClose={() => setIsMenuOpen(false)}
+          onClose={(reason = 'dismiss') => {
+            setIsMenuOpen(false);
+            if (reason === 'dismiss') {
+              menuButtonRef.current?.focus();
+            }
+          }}
+          storeSlug={basePath}
         />
       ) : null}
     </>

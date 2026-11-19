@@ -9,15 +9,15 @@ export const analyticsDeliveryAuthorityManifest = {
     eventPipelineAuthorityCutover.queueOnlyDeliveryActivated,
   authorityClosureHashes: {
     'apps/web/src/app/api/analytics/conversion/route.ts':
-      'c16a6142e32f25d4f2b993c4e4e0417fef1119b24d5fe10b38d0795b60922e3c',
+      '0382cfd476b65bb5ce3020387db2bc35623da13878d73f98c392336c8e23e74e',
     'apps/web/src/app/api/events/route.ts':
-      '9a12cecfcd3bdaea37946d6ef449014008eae881ed5e2f3c327186458bd7e647',
+      '10d065156d7ac4c801555c92e08b92f5f85c3ea3eb01cdf63d83cf745b84adc3',
     'apps/web/src/lib/analytics/fetch-analytics-platform-config.ts':
       '95cc62af2d374bfed4b9b89b5b745e2dbd4c34ada1f3a25cf0c398e3cb376c1e',
     'apps/web/src/lib/analytics/trusted-server-ad-platform-fanout.ts':
       '2f330fb4efcd9cbcbef7a524f43232572082908e4f73e27d72a8cbb8636380b5',
     'apps/web/src/lib/supabase/service.ts':
-      '9781da4be8bcd690fbb0d4feebf53e10c2f33aeaeb92c068f1f66b1ec446420c',
+      'b77e5a0d1024165b8015c3fa015278d8ed39d491bfbe6f74c05b5903cc3dbbb5',
   },
   callerScopedRouteHashes: {
     'apps/web/src/app/api/analytics/ads/route.ts':

@@ -1,17 +1,14 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { claimRepairPickupBooking } from '@/lib/repairs/claim-repair-pickup-booking';
 import { finalizeRepairPickupBooking } from '@/lib/repairs/finalize-repair-pickup-booking';
-import {
-  isRepairPickupPaymentReady,
-  isRepairPickupQuoteAbovePaidFee,
-} from '@/lib/repairs/is-repair-pickup-payment-ready';
+import { isRepairPickupPaymentReady } from '@/lib/repairs/is-repair-pickup-payment-ready';
 import {
   type BookRepairPickupResult,
   buildPickupItems,
   buildPickupSender,
   pickupFailure,
 } from '@/lib/repairs/pickup-shipment-utils';
-import { quoteRepairPickup } from '@/lib/repairs/quote-repair-pickup';
+import { prepareRepairPickupQuote } from '@/lib/repairs/prepare-repair-pickup-quote';
 import { reconcileLinkedRepairPickup } from '@/lib/repairs/reconcile-linked-repair-pickup';
 import { releaseRejectedRepairPickupReservation } from '@/lib/repairs/release-rejected-repair-pickup-reservation';
 import { releaseRepairPickupBookingClaim } from '@/lib/repairs/release-repair-pickup-booking-claim';
@@ -96,26 +93,17 @@ export async function bookRepairPickup(
     return pickupFailure('repair_center_unconfigured');
   }
   const items = buildPickupItems(repair);
-  let quoteResult: Awaited<ReturnType<typeof quoteRepairPickup>>;
-  try {
-    quoteResult = await quoteRepairPickup({
-      items,
-      merchantId,
-      receiver,
-      sender,
-    });
-  } catch (error) {
-    console.error('Repair pickup quote failed:', error);
-    return pickupFailure('gigl_unavailable');
+  const prepared = await prepareRepairPickupQuote({
+    items,
+    merchantId,
+    receiver,
+    sender,
+    paidPickupFee: repair.pickup_fee,
+  });
+  if (!prepared.ok) {
+    return pickupFailure(prepared.reason);
   }
-  const { quote, request: quoteRequest } = quoteResult;
-  if (!quote) {
-    return pickupFailure('gigl_unavailable');
-  }
-
-  if (isRepairPickupQuoteAbovePaidFee(quote.price, repair.pickup_fee)) {
-    return pickupFailure('quote_increased');
-  }
+  const { quote, request: quoteRequest } = prepared;
 
   const { data: quoteRowData, error: quoteInsertError } = await supabase
     .from('repair_pickup_quotes')

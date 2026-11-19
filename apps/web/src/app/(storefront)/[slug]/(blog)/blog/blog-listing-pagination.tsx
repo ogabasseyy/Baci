@@ -109,13 +109,15 @@ export function BlogListingPagination({
         ) : null}
       </div>
 
-      <BlogCrawlDiscoveryLinks
-        buildHref={buildPageHref}
-        currentPage={safeCurrentPage}
-        label="Browse blog archive pages"
-        pageLabel="Blog page"
-        totalPages={totalPages}
-      />
+      {safeCurrentPage === 1 && !category && !search ? (
+        <BlogCrawlDiscoveryLinks
+          buildHref={buildPageHref}
+          currentPage={safeCurrentPage}
+          label="Browse blog archive pages"
+          pageLabel="Blog page"
+          totalPages={totalPages}
+        />
+      ) : null}
     </nav>
   );
 }

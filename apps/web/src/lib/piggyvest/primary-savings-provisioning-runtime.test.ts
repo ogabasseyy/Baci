@@ -162,3 +162,16 @@ it('wires durable storage and documented provider adapters with a fixed environm
     expect.objectContaining({ enableInterestAccrual: false })
   );
 });
+it('master kill switch blocks new provisioning but not recovery', () => {
+  const env = {
+    NODE_ENV: 'test' as const,
+    PIGGYVEST_PRIMARY_SAVINGS_PROVISIONING_ENABLED: 'true',
+    PIGGYVEST_PRIMARY_GOAL_PROVISIONER_DB_PASSWORD: 'test-only-password',
+  };
+  expect(readPrimarySavingsProvisioningRuntime(env)).not.toBeNull();
+  const killed = { ...env, PIGGYVEST_KILL_SWITCH: 'true' };
+  expect(readPrimarySavingsProvisioningRuntime(killed)).toBeNull();
+  expect(
+    readPrimarySavingsProvisioningRuntime(killed, 'recover')
+  ).not.toBeNull();
+});

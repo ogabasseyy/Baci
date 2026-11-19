@@ -30,5 +30,9 @@ export function normalizeStorefrontCategorySlug(
     return null;
   }
 
-  return STOREFRONT_CATEGORY_ALIASES[normalized] ?? normalized;
+  if (Object.hasOwn(STOREFRONT_CATEGORY_ALIASES, normalized)) {
+    return STOREFRONT_CATEGORY_ALIASES[normalized];
+  }
+
+  return normalized;
 }

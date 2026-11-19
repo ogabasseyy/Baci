@@ -5,6 +5,7 @@ import type {
   BuilderIdentity,
   ListInput,
 } from '@/lib/builder-connector/types';
+import { readExperienceAuthoringMode } from '@/lib/experience/authoring-mode';
 import { BUILDER_EDITOR_URL } from '@/schemas/builder-mcp-primitives';
 import {
   builderListResultSchema,
@@ -78,7 +79,12 @@ export async function getStorefrontStatus(ctx: BuilderContext) {
   );
   if (!row?.version) throw new DraftServiceError('NOT_FOUND');
   const portable = portableHomeSchema.safeParse(row.draft_config);
+  const authoringMode = await readExperienceAuthoringMode(
+    ctx.supabase,
+    ctx.merchantId
+  );
   const supported =
+    authoringMode === 'legacy' &&
     row.template_id === 'puck' &&
     portable.success &&
     hasSafeBuilderPreviewAssets(portable.data);

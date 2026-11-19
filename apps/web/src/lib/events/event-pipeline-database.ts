@@ -2,6 +2,8 @@ import { eventPipelineAdminImporters } from '@/lib/events/event-pipeline-authori
 import { eventPipelineAuthorityServicePaths } from '@/lib/events/event-pipeline-authority-service-paths';
 import { eventPipelineCartCredentialPaths } from '@/lib/events/event-pipeline-cart-credential-paths';
 import { eventPipelineChatCredentialPaths } from '@/lib/events/event-pipeline-chat-credential-paths';
+import { eventPipelineChatPushCredentialPaths } from '@/lib/events/event-pipeline-chat-push-credential-paths';
+import { eventPipelineChatwootCartCredentialPaths } from '@/lib/events/event-pipeline-chatwoot-cart-credential-paths';
 import { eventPipelineCredentialPaths } from '@/lib/events/event-pipeline-credential-paths';
 // biome-ignore format: compact import preserves the 300-line verifier gate.
 import { eventPipelineFrozenRoutes, frozenEventPipelineAuthoritySources } from '@/lib/events/event-pipeline-frozen-authority-sources';
@@ -19,6 +21,7 @@ import { eventPipelineRedvaultCredentialPaths } from '@/lib/events/event-pipelin
 import { eventPipelineRepairPickupCredentialPaths } from '@/lib/events/event-pipeline-repair-pickup-credential-paths';
 import { eventPipelineShippingCredentialPaths } from '@/lib/events/event-pipeline-shipping-credential-paths';
 import { socialDeliveryProjections } from '@/lib/events/event-pipeline-social-projections';
+import { vpsCronWorkerAuthority } from '@/lib/events/event-pipeline-vps-cron-worker-paths';
 import {
   eventPipelineAdminAdjacentFunctions,
   eventPipelineExpenseCleanupAdjacentFunctions,
@@ -133,9 +136,10 @@ export const EVENT_PIPELINE_BOUNDARY = {
     ...eventPipelineExpenseCleanupAdjacentFunctions,
   ],
   authority: {
-    adminImporters: eventPipelineAdminImporters,
     // biome-ignore format: compact spread preserves the 300-line runtime ceiling.
-    adminPaths: [...eventPipelineGatewayCronAdminPaths, ...eventPipelineVtuReplayAdminPaths, ...onboardingEmailWorkerAuthority.adminPaths],
+    adminImporters: [...eventPipelineAdminImporters, ...vpsCronWorkerAuthority.adminImporters],
+    // biome-ignore format: compact spread preserves the 300-line runtime ceiling.
+    adminPaths: [...eventPipelineGatewayCronAdminPaths, ...eventPipelineVtuReplayAdminPaths, ...onboardingEmailWorkerAuthority.adminPaths, ...vpsCronWorkerAuthority.adminPaths],
     bareClientImporters: [
       ...Object.keys(eventPipelineFrozenRoutes),
       'apps/web/src/app/api/analytics/conversion/route.ts',
@@ -144,7 +148,7 @@ export const EVENT_PIPELINE_BOUNDARY = {
       'apps/web/src/lib/merchant-feature-gates.ts',
     ],
     // biome-ignore format: compact spread preserves the 300-line runtime ceiling.
-    credentialPaths: [...eventPipelineCartCredentialPaths, ...eventPipelineCredentialPaths, ...eventPipelineImmediateOrderCredentialPaths, ...eventPipelineJumiaCredentialPaths, ...eventPipelinePiggyvestCredentialPaths, ...eventPipelineRepairPickupCredentialPaths, ...eventPipelineRedvaultCredentialPaths, ...eventPipelineShippingCredentialPaths, ...eventPipelineChatCredentialPaths, ...eventPipelinePaystackRefundCredentialPaths, ...eventPipelineGatewayCronCredentialPaths, ...eventPipelineManualOrderDocumentCredentialPaths, ...onboardingEmailWorkerAuthority.credentialPaths],
+    credentialPaths: [...eventPipelineCartCredentialPaths, ...eventPipelineChatwootCartCredentialPaths, ...eventPipelineCredentialPaths, ...eventPipelineImmediateOrderCredentialPaths, ...eventPipelineJumiaCredentialPaths, ...eventPipelinePiggyvestCredentialPaths, ...eventPipelineRepairPickupCredentialPaths, ...eventPipelineRedvaultCredentialPaths, ...eventPipelineShippingCredentialPaths, ...eventPipelineChatCredentialPaths, ...eventPipelinePaystackRefundCredentialPaths, ...eventPipelineGatewayCronCredentialPaths, ...eventPipelineManualOrderDocumentCredentialPaths, ...onboardingEmailWorkerAuthority.credentialPaths, ...eventPipelineChatPushCredentialPaths, ...vpsCronWorkerAuthority.credentialPaths],
     // biome-ignore format: compact spread preserves the 300-line runtime ceiling.
     factoryModules: ['apps/web/src/lib/supabase/admin.ts', 'apps/web/src/lib/supabase/server.ts', 'apps/web/src/lib/supabase/service.ts'],
     legacySdkImporters: eventPipelineLegacySdkImporters,
@@ -161,7 +165,6 @@ export const EVENT_PIPELINE_BOUNDARY = {
     // biome-ignore format: compact reviewed authority allowlist preserves the 300-line module gate.
     serviceImporters: [
       'apps/web/src/app/api/cron/drain-cache-invalidations/route.ts',
-      'apps/web/src/app/api/cron/gigl-tracking-notifications/route.ts',
       'apps/web/src/app/api/cron/process-redvault-refunds/route.ts',
       'apps/web/src/app/api/analytics/conversion/route.ts',
       'apps/web/src/app/api/events/route.ts',
@@ -172,17 +175,16 @@ export const EVENT_PIPELINE_BOUNDARY = {
       'apps/web/src/lib/wallet/server-funding-recovery-hmac-client.ts',
       'apps/web/src/lib/immediate-order/server-completion-hmac-client.ts',
       'apps/web/src/lib/shipping/server-shipping-quote-booking-economics-client.ts',
-      'apps/web/src/lib/piggyvest/server-intake-client.ts',
       'apps/web/src/lib/storefront/server-intake-client.ts',
       'apps/web/src/lib/search/server-analytics-client.ts',
       'apps/web/src/scripts/process-domain-events.ts',
       'apps/web/src/scripts/process-event-deliveries.ts',
       onboardingEmailWorkerAuthority.worker,
+      ...vpsCronWorkerAuthority.serviceImporters,
     ],
     servicePaths: eventPipelineAuthorityServicePaths,
-    operationalServiceImporters: [
-      'apps/web/src/scripts/reconcile-paystack-unmatched-partial.ts',
-    ],
+    // biome-ignore format: compact list preserves the 300-line module gate.
+    operationalServiceImporters: ['apps/web/src/scripts/reconcile-paystack-unmatched-partial.ts'],
   },
   callers: runtimeCallers,
   frozenAuthoritySources: frozenEventPipelineAuthoritySources,

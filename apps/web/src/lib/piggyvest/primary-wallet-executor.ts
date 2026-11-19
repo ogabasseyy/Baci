@@ -1,6 +1,7 @@
 import 'server-only';
 import { Client } from 'pg';
 import { piggyvestPrimaryWalletRuntimeSchema } from '@/schemas/piggyvest-primary-wallet-runtime';
+import { primaryDbLink } from './primary-db-link';
 import { PRIMARY_WALLET_STATEMENTS } from './primary-wallet-statements';
 import { PRIMARY_WALLET_VERIFICATION_STATEMENT } from './primary-wallet-verification';
 import type { PiggyvestProvisioningExecutor } from './provisioning-store.types';
@@ -18,6 +19,7 @@ const VERIFY_SESSION = `SELECT current_database() AS database_name,
 
 // Every statement this executor may run, with its exact bound-argument count.
 const STATEMENT_ARITY = new Map<string, number>([
+  [PRIMARY_WALLET_STATEMENTS.presence, 1],
   [PRIMARY_WALLET_STATEMENTS.read, 1],
   [PRIMARY_WALLET_STATEMENTS.claim, 2],
   [PRIMARY_WALLET_VERIFICATION_STATEMENT, 2],
@@ -31,6 +33,7 @@ const STATEMENT_ARITY = new Map<string, number>([
   [PRIMARY_WALLET_STATEMENTS.review, 6],
   [PRIMARY_WALLET_STATEMENTS.ownershipHold, 3],
   [PRIMARY_WALLET_STATEMENTS.readReview, 1],
+  [PRIMARY_WALLET_STATEMENTS.readRolloutCohort, 1],
 ]);
 
 export function createPrimaryWalletExecutor(
@@ -54,22 +57,26 @@ export function createPrimaryWalletExecutor(
     ) {
       throw new Error('Primary wallet database unavailable');
     }
+    const link = primaryDbLink(config.login, config.port);
     const client = new Client({
       host: config.host,
       port: config.port,
       database: config.name,
-      user: config.login,
+      user: link.user,
       password: config.password,
-      ssl: { rejectUnauthorized: true, ca: config.certificateAuthority },
+      ssl: {
+        rejectUnauthorized: true,
+        ca: config.certificateAuthority,
+        ...link.tls,
+      },
       connectionTimeoutMillis: 4000,
       query_timeout: 4000,
-      statement_timeout: 2500,
-      lock_timeout: 1500,
-      options: '-c search_path=pg_catalog',
+      ...link.startup,
       application_name: 'baci-piggyvest-primary',
     });
     try {
       await client.connect();
+      await link.afterConnect(client);
       const verification = await client.query<{
         database_name: string;
         login_name: string;

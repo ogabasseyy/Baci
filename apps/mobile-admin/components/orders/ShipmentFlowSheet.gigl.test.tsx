@@ -4,6 +4,24 @@ import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ShipmentFlowSheet } from './ShipmentFlowSheet';
 
+vi.mock('./ShipmentFlowSheetPresence', () => ({
+  ShipmentFlowSheetPresence: ({
+    accessory,
+    children,
+    visible,
+  }: {
+    accessory?: ReactNode;
+    children?: ReactNode;
+    visible: boolean;
+  }) =>
+    visible ? (
+      <section>
+        {children}
+        {accessory}
+      </section>
+    ) : null,
+}));
+
 vi.mock('./CheckoutShippingRecoveryPanel', () => ({
   CheckoutShippingRecoveryPanel: () => null,
 }));
@@ -123,6 +141,7 @@ function gigl(canBook: boolean, error: string | null = null) {
     startTransferPoll: vi.fn(),
     state: error ? ('error' as const) : ('ready' as const),
     updateAddressField: vi.fn(),
+    selectAddressPlace: vi.fn(),
     wallet: {
       availableBalance: canBook ? 11000 : 1000,
       canBook,

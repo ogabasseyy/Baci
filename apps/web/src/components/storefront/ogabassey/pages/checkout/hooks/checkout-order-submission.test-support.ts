@@ -1,6 +1,27 @@
 import { vi } from 'vitest';
+import type { PrepareSharedCartCheckoutResult } from '@/hooks/cart/shared-cart-checkout-client';
 import type { ResumedOrder } from '../types';
 import type { CheckoutOrderSubmissionContext } from './checkout-order-submission-types';
+
+export function readySharedCartCheckout(
+  review: Extract<PrepareSharedCartCheckoutResult, { ok: true }>['review'],
+  overrides: {
+    replayed?: boolean;
+    sessionReused?: boolean;
+    sessionExpiresAtMonotonicMs?: number;
+    sessionExpiresAtEpochMs?: number;
+  } = {}
+): Extract<PrepareSharedCartCheckoutResult, { ok: true }> {
+  return {
+    ok: true,
+    replayed: false,
+    sessionExpiresAtMonotonicMs: performance.now() + 30 * 60_000,
+    sessionExpiresAtEpochMs: Date.now() + 30 * 60_000,
+    review,
+    sessionReused: false,
+    ...overrides,
+  };
+}
 
 export const resumedOrder: ResumedOrder = {
   id: 'order-1',

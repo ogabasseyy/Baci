@@ -1,5 +1,11 @@
 import { generateSlug } from '@/lib/seo-utils';
+import { isNonBrandPlaceholderKey } from '@/lib/storefront-category/category-hub-brand-placeholder';
 import type { CategoryHubProduct } from '@/lib/storefront-category/category-hub-types';
+
+export {
+  isNonBrandPlaceholderKey,
+  NON_BRAND_PLACEHOLDER_KEYS,
+} from '@/lib/storefront-category/category-hub-brand-placeholder';
 
 export interface BrandCountEntry {
   key: string;
@@ -9,12 +15,12 @@ export interface BrandCountEntry {
 
 function normalizeBrand(brand?: string | null) {
   const label = brand?.trim();
-  if (!label) {
+  if (!label || isNonBrandPlaceholderKey(label)) {
     return null;
   }
 
   const key = generateSlug(label);
-  if (!key) {
+  if (!key || isNonBrandPlaceholderKey(key)) {
     return null;
   }
 

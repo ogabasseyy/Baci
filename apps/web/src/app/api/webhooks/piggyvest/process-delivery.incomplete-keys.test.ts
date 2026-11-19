@@ -36,10 +36,10 @@ vi.mock('@/lib/piggyvest/webhook-processor', () => ({
   processPiggyvestEvent: (...args: unknown[]) => mocks.process(...args),
 }));
 
+import type { PiggyvestIntakeClient } from '@/lib/piggyvest/intake-client.types';
 import { primaryCardCustodyInboxFixture } from '@/lib/piggyvest/primary-wallet-card-custody-inbox.test-fixture';
 import { paidInterestFixture } from '@/lib/piggyvest/primary-wallet-paid-interest.test-support';
 import type { PiggyvestWebhookKeyFamily } from '@/lib/piggyvest/webhook-secret-union';
-import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
 import {
   isAuthorizationQuarantine,
   isKeySetIncompleteRetry,
@@ -57,7 +57,7 @@ import { inflow } from './route.capture.incomplete-keys.test-support';
  * the provider's retries. With a complete key set nothing changes.
  */
 
-const client = {} as unknown as PiggyvestIntakeServiceClient;
+const client = {} as unknown as PiggyvestIntakeClient;
 const createClient = () => client;
 
 const CASES: {

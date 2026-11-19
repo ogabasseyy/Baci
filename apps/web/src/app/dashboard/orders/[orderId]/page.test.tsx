@@ -48,7 +48,10 @@ describe('OrderDetailsPage', () => {
     const element = await OrderDetailsPage({ params });
     render(element);
     expect(getOrder).toHaveBeenCalledWith('merchant-1', 'ORD-1');
-    expect(getInitialRefundSummary).toHaveBeenCalledWith('order-uuid-1');
+    expect(getInitialRefundSummary).toHaveBeenCalledWith(
+      'order-uuid-1',
+      'merchant-1'
+    );
     expect(screen.getByTestId('client-page')).toHaveAttribute(
       'data-summary',
       JSON.stringify(summary)

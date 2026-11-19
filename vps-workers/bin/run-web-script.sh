@@ -137,6 +137,7 @@ if [ -z "${NODE_ENV:-}" ]; then
 fi
 
 export NODE_ENV
+export VPS_WORKER=1
 export CI="${CI:-true}"
 export DOTENV_CONFIG_PATH="$ENV_FILE"
 # Worker scripts do not need Puppeteer's managed browser. Keep dependency

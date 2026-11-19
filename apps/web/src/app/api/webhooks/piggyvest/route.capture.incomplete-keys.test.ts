@@ -18,7 +18,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  */
 
 const mocks = vi.hoisted(() => ({
-  createServiceClient: vi.fn(),
+  createIntakeClient: vi.fn(),
   processPiggyvestEvent: vi.fn(),
   recordPiggyvestEvent: vi.fn(),
   bankIntake: vi.fn(),
@@ -28,8 +28,8 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('server-only', () => ({}));
 vi.mock('@/env', () => ({ getPiggyvestApiConfig: () => null }));
-vi.mock('@/lib/supabase/service', () => ({
-  createServiceClient: () => mocks.createServiceClient(),
+vi.mock('@/lib/piggyvest/server-intake-client', () => ({
+  createPiggyvestIntakeClient: () => mocks.createIntakeClient(),
 }));
 vi.mock('@/lib/piggyvest/webhook-processor', () => ({
   processPiggyvestEvent: (...args: unknown[]) =>
@@ -99,7 +99,7 @@ beforeEach(() => {
   vi.stubEnv('PIGGYVEST_WEBHOOK_KEY_ARCHIVE', COMPLETE_ARCHIVE_WITHOUT_BANK);
   // Attested: a 200 "deferred" would normally stop the provider's retries.
   vi.stubEnv('PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_SCHEDULED', 'true');
-  mocks.createServiceClient.mockImplementation(() => store.client());
+  mocks.createIntakeClient.mockImplementation(() => store.client());
   mocks.inflow.mockResolvedValue('ignored');
   mocks.quarantine.mockResolvedValue('recorded');
   mocks.recordPiggyvestEvent.mockResolvedValue('new');

@@ -1,0 +1,31 @@
+.field {
+  position: relative;
+}
+.field input {
+  padding-left: 2.875rem;
+}
+.icon {
+  position: absolute;
+  left: 1rem;
+  top: 50%;
+  width: 1.125rem;
+  height: 1.125rem;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: var(--store-foreground, #6b7280);
+  opacity: 0.75;
+}
+.field:focus-within .icon,
+.field:has(input:not(:placeholder-shown)) .icon {
+  color: var(--store-primary, #dc2626);
+  opacity: 1;
+}
+
+.stateField {
+  position: relative;
+}
+
+.stateField:focus-within .actionIcon,
+.stateField:has(input:not(:placeholder-shown)) .actionIcon {
+  color: var(--store-primary, #dc2626);
+}

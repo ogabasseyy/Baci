@@ -1,13 +1,14 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
-import { useTheme } from '@/hooks/useTheme';
+import { QUIZ_STAGE_COLORS } from './quiz-stage-colors';
 
 const SUPERQUIZ_SPONSOR_EMAIL =
   'mailto:support@ogabassey.com?subject=SuperQuiz%20Sponsorship';
 
 export function QuizMissionHero() {
-  const { colors, isDark } = useTheme();
+  const colors = QUIZ_STAGE_COLORS;
+  const isDark = true;
   const styles = createStyles(
     colors.primary,
     colors.primaryForeground,

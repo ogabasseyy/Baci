@@ -30,7 +30,7 @@ const DEFAULT_CONSENT: ConsentSettings = {
   ad_user_data: 'denied',
   ad_personalization: 'denied',
   analytics_storage: 'denied',
-  functionality_storage: 'granted', // Required for basic site functionality
+  functionality_storage: 'denied',
   personalization_storage: 'denied',
   security_storage: 'granted', // Required for security features
 };

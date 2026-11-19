@@ -1,5 +1,5 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
-import type { ComponentProps, ReactNode } from 'react';
+import { type ComponentProps, type ReactNode, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { styles } from './styles';
 
@@ -36,44 +36,61 @@ export function SettingsSectionRow({
   subtitle,
   subtitleColor,
 }: SectionRowProps) {
+  const [pressed, setPressed] = useState(false);
   const computedRole = accessibilityRole ?? (onPress ? 'button' : undefined);
   const computedSubtitleColor = subtitleColor ?? labelColor;
 
+  // Layout lives on plain Views: the Pressable style callback can be dropped
+  // at runtime (RN New Architecture), which stacked every row's content.
   return (
-    <Pressable
-      disabled={!onPress}
-      onPress={onPress}
-      accessibilityLabel={accessibilityLabel}
-      accessibilityRole={computedRole}
-      style={({ pressed }) => [
+    <View
+      testID="settings-row"
+      style={[
         styles.row,
         borderBottom && styles.rowBorder,
         borderBottom && borderColor ? { borderBottomColor: borderColor } : null,
-        pressed && onPress && styles.rowPressed,
+        pressed && onPress ? styles.rowPressed : null,
       ]}
     >
-      <View style={styles.rowLeft}>
-        <View
-          style={[styles.iconCircle, { backgroundColor: iconBackgroundColor }]}
-        >
-          <Ionicons
-            name={icon}
-            size={20}
-            color={iconColor}
-            accessible={false}
-            importantForAccessibility="no"
-          />
-        </View>
-        <View style={styles.rowText}>
-          <Text style={[styles.rowLabel, { color: labelColor }]}>{label}</Text>
-          {subtitle ? (
-            <Text style={[styles.rowSub, { color: computedSubtitleColor }]}>
-              {subtitle}
+      <Pressable
+        disabled={!onPress}
+        onPress={onPress}
+        onPressIn={() => setPressed(true)}
+        onPressOut={() => setPressed(false)}
+        accessibilityLabel={accessibilityLabel}
+        accessibilityRole={computedRole}
+        style={styles.rowPressable}
+      >
+        <View testID="settings-row-content" style={styles.rowContent}>
+          <View
+            style={[
+              styles.iconCircle,
+              { backgroundColor: iconBackgroundColor },
+            ]}
+          >
+            <Ionicons
+              name={icon}
+              size={20}
+              color={iconColor}
+              accessible={false}
+              importantForAccessibility="no"
+            />
+          </View>
+          <View style={styles.rowText}>
+            <Text style={[styles.rowLabel, { color: labelColor }]}>
+              {label}
             </Text>
-          ) : null}
+            {subtitle ? (
+              <Text style={[styles.rowSub, { color: computedSubtitleColor }]}>
+                {subtitle}
+              </Text>
+            ) : null}
+          </View>
+          <View testID="settings-row-right" style={styles.rowRight}>
+            {right}
+          </View>
         </View>
-      </View>
-      <View style={styles.rowRight}>{right}</View>
-    </Pressable>
+      </Pressable>
+    </View>
   );
 }

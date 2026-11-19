@@ -78,6 +78,7 @@ if [ "$(grep -c "schema_migrations(version, name, statements).*20260713130000" "
   exit 1
 fi
 
+bash "$script_dir/test-evidence-migration-atomicity.sh" "$script_dir" "$fixture_root" "$fake_bin" "$applier"
 historical_repair_dir="$fixture_root/historical-repair"
 mkdir -p "$historical_repair_dir"
 cp \

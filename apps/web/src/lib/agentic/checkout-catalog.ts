@@ -5,6 +5,8 @@ export interface AgenticProduct {
   id: string;
   name: string;
   price: number;
+  vat_category_code?: string | null;
+  vat_rate?: number | string | null;
   stock: number;
   stock_quantity?: number;
   manage_stock?: boolean | null;
@@ -23,6 +25,8 @@ export interface AgenticVariant {
     manage_stock?: boolean | null;
     name: string;
     price?: number;
+    vat_category_code?: string | null;
+    vat_rate?: number | string | null;
     weight_unit?: string;
     weight_value?: number;
   };
@@ -53,7 +57,7 @@ export async function loadCheckoutCatalog(
   const { data: products, error: productsError } = await supabase
     .from('products')
     .select(
-      'id, name, price, stock, stock_quantity, manage_stock, weight_value, weight_unit'
+      'id, name, price, stock, stock_quantity, manage_stock, weight_value, weight_unit, vat_category_code, vat_rate'
     )
     .in('id', lookupIds)
     .eq('merchant_id', merchantId)
@@ -62,7 +66,7 @@ export async function loadCheckoutCatalog(
   const { data: variants, error: variantsError } = await supabase
     .from('product_variants')
     .select(
-      'id, merchant_id, product_id, price_override, stock_quantity, attributes, product:products!product_variants_product_id_fkey(name, price, manage_stock, weight_value, weight_unit)'
+      'id, merchant_id, product_id, price_override, stock_quantity, attributes, product:products!product_variants_product_id_fkey(name, price, manage_stock, weight_value, weight_unit, vat_category_code, vat_rate)'
     )
     .in('id', lookupIds)
     .eq('merchant_id', merchantId)

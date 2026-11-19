@@ -1,0 +1,1 @@
+supabase/tests/piggyvest_goal_pin_proof_consume_revoked.sql

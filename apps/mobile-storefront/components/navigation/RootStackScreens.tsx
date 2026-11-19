@@ -41,7 +41,6 @@ export function renderRootStackScreens({
       name="(tabs)"
       options={{
         headerShown: false,
-        headerBackTitle: '',
         title: '',
       }}
     />,
@@ -180,7 +179,7 @@ export function renderRootStackScreens({
       key="wallet/index"
       name="wallet/index"
       options={{
-        title: 'Wallet & Rewards',
+        title: 'Wallet & Loyalty',
       }}
     />,
     <Stack.Screen

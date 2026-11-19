@@ -6,7 +6,7 @@ import { seedBindingCandidates } from '@/app/api/partners/v1/catalog/seed-bindin
 import { isUuid, resolveFeedMerchant } from '@/lib/feed-identifier';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 
-export class CatalogExportError extends Error {}
+class CatalogExportError extends Error {}
 
 export async function exportCrossRemCatalogBindings(merchantId: string) {
   let exportStep = 'validate the merchant UUID';

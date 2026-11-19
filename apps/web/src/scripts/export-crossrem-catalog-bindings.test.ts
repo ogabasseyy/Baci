@@ -30,10 +30,7 @@ vi.mock('@/app/api/partners/v1/catalog/seed-bindings', () => ({
   seedBindingCandidates: mocks.seedBindingCandidates,
 }));
 
-import {
-  CatalogExportError,
-  exportCrossRemCatalogBindings,
-} from './export-crossrem-catalog-bindings';
+import { exportCrossRemCatalogBindings } from './export-crossrem-catalog-bindings';
 
 const VALID_MERCHANT_ID = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
 
@@ -67,7 +64,7 @@ describe('exportCrossRemCatalogBindings', () => {
 
   it('rejects non-UUID merchant identifiers', async () => {
     await expect(exportCrossRemCatalogBindings('not-a-uuid')).rejects.toThrow(
-      CatalogExportError
+      'Pass the approved merchant UUID.'
     );
     expect(mocks.resolveFeedMerchant).not.toHaveBeenCalled();
   });

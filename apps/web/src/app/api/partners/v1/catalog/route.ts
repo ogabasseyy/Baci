@@ -1,4 +1,6 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
+import { after } from 'next/server';
+import { captureServerEvent } from '@/lib/posthog/server';
 import { loadCrossRemCatalog } from './catalog-service';
 
 // 32 random bytes encoded as unpadded base64url need at least 43 characters.
@@ -57,6 +59,12 @@ export async function GET(request: Request) {
       headers: { ...headers, 'Content-Type': 'application/json' },
     });
   } catch {
+    after(async () => {
+      await captureServerEvent('crossrem_catalog_snapshot_unavailable', {
+        deployment_environment:
+          process.env.VERCEL_ENV || process.env.NODE_ENV || 'development',
+      });
+    });
     return unavailable();
   }
 }

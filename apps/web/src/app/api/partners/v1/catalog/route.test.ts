@@ -1,10 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GET } from './route';
 
-const { loadCrossRemCatalog } = vi.hoisted(() => ({
+const { after, captureServerEvent, loadCrossRemCatalog } = vi.hoisted(() => ({
+  after: vi.fn<(callback: () => Promise<unknown>) => void>(),
+  captureServerEvent: vi.fn(),
   loadCrossRemCatalog: vi.fn(),
 }));
 
+vi.mock('next/server', () => ({ after }));
+vi.mock('@/lib/posthog/server', () => ({ captureServerEvent }));
 vi.mock('./catalog-service', () => ({ loadCrossRemCatalog }));
 
 const token = 'synthetic-crossrem-access-token-qa-test-0001';
@@ -21,6 +25,9 @@ function request(authorization?: string, ifNoneMatch?: string) {
 describe('CrossRem catalog', () => {
   beforeEach(() => {
     vi.stubEnv('CROSSREM_CATALOG_TOKEN', token);
+    vi.stubEnv('VERCEL_ENV', 'preview');
+    after.mockClear();
+    captureServerEvent.mockReset().mockResolvedValue(true);
     loadCrossRemCatalog.mockReset().mockResolvedValue(snapshot);
   });
 
@@ -34,6 +41,7 @@ describe('CrossRem catalog', () => {
       expect(response.headers.get('cache-control')).toBe('private, no-store');
     }
     expect(loadCrossRemCatalog).not.toHaveBeenCalled();
+    expect(after).not.toHaveBeenCalled();
   });
 
   it('checks authentication before loading the feed or applying a validator', async () => {
@@ -74,6 +82,7 @@ describe('CrossRem catalog', () => {
     expect(changed.status).toBe(200);
     expect(changed.headers.get('etag')).not.toBe(etag);
     expect(await changed.json()).toEqual({ listings: [{ id: 'changed' }] });
+    expect(after).not.toHaveBeenCalled();
   });
 
   it('hides internal details when the catalog cannot be built', async () => {
@@ -87,5 +96,12 @@ describe('CrossRem catalog', () => {
     expect(await response.json()).toEqual({
       error: 'CrossRem catalog unavailable',
     });
+    expect(captureServerEvent).not.toHaveBeenCalled();
+    expect(after).toHaveBeenCalledTimes(1);
+    await after.mock.calls[0]?.[0]();
+    expect(captureServerEvent).toHaveBeenCalledExactlyOnceWith(
+      'crossrem_catalog_snapshot_unavailable',
+      { deployment_environment: 'preview' }
+    );
   });
 });

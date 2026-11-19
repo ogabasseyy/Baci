@@ -1,5 +1,12 @@
 import { revalidateTag } from 'next/cache';
 import { getCategoryPageDataCacheTag } from '@/lib/category-page-cache-tags';
+import { logger } from '@/lib/logger';
+import { normalizeMerchantId } from '@/lib/normalize-merchant-id';
+import {
+  getProductCanonicalRedirectCacheTag,
+  getProductLegacyRedirectCacheTag,
+} from '@/lib/product-cache-tags';
+import { sanitizeForLog } from '@/lib/sanitize-core';
 
 /**
  * Revalidate the cached category surfaces for a merchant.
@@ -17,6 +24,16 @@ export function revalidateCategories(
   categorySlug?: string,
   options: { expireImmediately?: boolean } = {}
 ) {
+  const normalizedMerchantId = normalizeMerchantId(merchantId);
+  if (!normalizedMerchantId) {
+    logger.warn({
+      message:
+        '[revalidateCategories] Skipped category cache revalidation for invalid merchant ID',
+      merchantId: sanitizeForLog(merchantId),
+    });
+    return;
+  }
+
   const profile = options.expireImmediately
     ? ({ expire: 0 } as const)
     : 'categories';
@@ -27,13 +44,22 @@ export function revalidateCategories(
     ? ({ expire: 0 } as const)
     : 'products';
 
-  revalidateTag(`categories-${merchantId}`, profile);
-  revalidateTag('navigation-categories', profile);
-  revalidateTag(getCategoryPageDataCacheTag(merchantId), storefrontProfile);
-  revalidateTag('product-canonical-redirect', productProfile);
-  revalidateTag('product-legacy-redirect', productProfile);
+  revalidateTag(`categories-${normalizedMerchantId}`, profile);
+  revalidateTag(`navigation-categories-${normalizedMerchantId}`, profile);
+  revalidateTag(
+    getCategoryPageDataCacheTag(normalizedMerchantId),
+    storefrontProfile
+  );
+  revalidateTag(
+    getProductCanonicalRedirectCacheTag(normalizedMerchantId),
+    productProfile
+  );
+  revalidateTag(
+    getProductLegacyRedirectCacheTag(normalizedMerchantId),
+    productProfile
+  );
 
   if (categorySlug) {
-    revalidateTag(`category-${merchantId}-${categorySlug}`, profile);
+    revalidateTag(`category-${normalizedMerchantId}-${categorySlug}`, profile);
   }
 }

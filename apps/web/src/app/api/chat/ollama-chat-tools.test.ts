@@ -31,16 +31,10 @@ describe('ollama chat tools', () => {
         maxPrice: { type: 'number' },
       },
     });
-    expect(accountTool?.function.parameters).toMatchObject({
-      required: ['amount', 'customerEmail', 'customerName', 'items'],
-      properties: {
-        items: {
-          type: 'array',
-          items: {
-            required: ['productId', 'name', 'price', 'quantity'],
-          },
-        },
-      },
+    expect(accountTool?.function.parameters).toEqual({
+      type: 'object',
+      additionalProperties: false,
+      properties: {},
     });
   });
 

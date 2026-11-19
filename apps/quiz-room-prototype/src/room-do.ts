@@ -329,6 +329,28 @@ export class QuizRoomEngine {
         acknowledged INTEGER NOT NULL DEFAULT 0
       ) WITHOUT ROWID;
     `);
+    const seeded = this.storage.exec<{ value_json: string }>(
+      `SELECT value_json FROM room_meta WHERE key = 'scoreboard_outbox_seeded_v1'`
+    ).rows[0];
+    if (!seeded) {
+      const alarmMeta = this.storage.exec<{ value_json: string }>(
+        `SELECT value_json FROM room_meta WHERE key = 'alarm_state'`
+      ).rows[0];
+      const parsedAlarm = alarmMeta
+        ? (JSON.parse(alarmMeta.value_json) as Partial<RoomAlarmState>)
+        : null;
+      if (!parsedAlarm?.sealed) {
+        this.storage.exec(`
+          INSERT OR IGNORE INTO room_scoreboard_outbox (attempt_id)
+          SELECT attempt_id FROM room_attempts
+          WHERE status = 'submitted' AND submitted_at_ms IS NOT NULL
+        `);
+      }
+      this.storage.exec(
+        `INSERT INTO room_meta (key, value_json) VALUES ('scoreboard_outbox_seeded_v1', 'true')
+         ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json`
+      );
+    }
     this.schemaInitialized = true;
   }
 

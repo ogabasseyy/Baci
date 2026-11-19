@@ -871,22 +871,21 @@ describe('Worker HTTP router (src/index.ts)', () => {
     await completePlayer(1);
     await completePlayer(2);
 
-    // Wait past scoreboardTickMs (1_000ms) and trigger alarm
-    const engine = (
-      roomDo as unknown as {
-        engine: {
-          onAlarm: (ms: number) => Promise<{ scoreboardTicked: boolean }>;
-        };
-      }
-    ).engine;
-    const firstTick = await engine.onAlarm(Date.now() + 2_000);
-    expect(firstTick.scoreboardTicked).toBe(true);
-    expect(rankFetches).toEqual(['/internal/submit-batch']);
+    // Wait past scoreboardTickMs (1_000ms) and trigger public roomDo.alarm() entrypoint
+    const baseNow = Date.now();
+    const nowSpy = vi.spyOn(Date, 'now');
+    try {
+      nowSpy.mockReturnValue(baseNow + 2_000);
+      await roomDo.alarm();
+      expect(rankFetches).toEqual(['/internal/submit-batch']);
 
-    // Second alarm sends 0 duplicate submissions
-    const secondTick = await engine.onAlarm(Date.now() + 5_000);
-    expect(secondTick.scoreboardTicked).toBe(false);
-    expect(rankFetches).toEqual(['/internal/submit-batch']);
+      // Second alarm sends 0 duplicate submissions
+      nowSpy.mockReturnValue(baseNow + 5_000);
+      await roomDo.alarm();
+      expect(rankFetches).toEqual(['/internal/submit-batch']);
+    } finally {
+      nowSpy.mockRestore();
+    }
 
     // /api/quiz/leaderboard/live reflects both players from that single batched DO call
     const bearer = await signBearerJwt(

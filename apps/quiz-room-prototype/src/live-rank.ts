@@ -541,8 +541,9 @@ export class LiveRankIndexEngine {
   }
 
   /**
-   * Records a batch of submissions in a single SQLite transaction and
+   * Records a single-event batch of submissions in one SQLite transaction and
    * optionally publishes the updated range snapshot in the same call.
+   * Throws `QUIZ_INVALID_INPUT` (400) before writing if multiple `eventId`s are mixed.
    */
   recordSubmissionsBatch(
     submissions: readonly QuizLiveRankSubmission[],
@@ -555,6 +556,17 @@ export class LiveRankIndexEngine {
     if (submissions.length === 0) {
       return { acceptedCount: 0, replacedCount: 0, published: null };
     }
+    const eventId = submissions[0]?.eventId;
+    if (
+      !eventId ||
+      submissions.some((submission) => submission.eventId !== eventId)
+    ) {
+      throw new QuizRoomError(
+        'QUIZ_INVALID_INPUT',
+        'recordSubmissionsBatch requires a single non-empty eventId across all submissions',
+        400
+      );
+    }
     return this.storage.transactionSync(() => {
       let acceptedCount = 0;
       let replacedCount = 0;
@@ -563,9 +575,8 @@ export class LiveRankIndexEngine {
         if (res.accepted) acceptedCount += 1;
         if (res.replacedPreviousBest) replacedCount += 1;
       }
-      const eventId = submissions[0]?.eventId;
       const published =
-        publishNowMs !== undefined && eventId
+        publishNowMs !== undefined
           ? this.publishSnapshotInTxSync(eventId, publishNowMs)
           : null;
       return { acceptedCount, replacedCount, published };

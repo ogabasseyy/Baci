@@ -527,4 +527,76 @@ describe('QuizRoomEngine gameplay, deadlines, restarts, and SQLite counters', ()
     expect(alarm3.deletedAll).toBe(true);
     storage.close();
   });
+
+  it('seeds room_scoreboard_outbox once when upgrading an unsealed room with pre-existing submitted attempts', async () => {
+    const startsAtMs = 1_790_100_000_000;
+    const endsAtMs = startsAtMs + 60_000;
+    const storage = new NodeSqliteAdapter(':memory:');
+    const controlState = new QuizControlStateStore();
+    controlState.applySnapshot(createEmptyControlState(startsAtMs, 1));
+
+    const preUpgradeRoom = new QuizRoomEngine({
+      roomId: 'room-upgrade-seed',
+      storage,
+      controlState,
+    });
+    preUpgradeRoom.initialize(
+      makeEventConfig({
+        startsAtMs,
+        endsAtMs,
+        questionCount: 1,
+        slots: makeEventConfig().slots.slice(0, 1),
+      })
+    );
+    const ticket = makeTicket({
+      userId: 'u-upg-1',
+      customerId: 'c-upg-1',
+      roomId: 'room-upgrade-seed',
+    });
+    const started = preUpgradeRoom.startAttempt({
+      ticket,
+      integrityTier: 'strong',
+      acceptedRulesVersion: 'live-v1',
+      termsAccepted: true,
+      startRequestId: 'req-upg-1',
+      appVersion: '2.0.0',
+      platform: 'ios',
+      nowMs: startsAtMs + 1_000,
+    });
+    await preUpgradeRoom.submitAnswer({
+      ticket,
+      attemptId: started.attemptId,
+      questionId: started.question?.id ?? '',
+      answer: 'opt-a',
+      receivedAtMs: startsAtMs + 1_500,
+      nowMs: startsAtMs + 1_500,
+    });
+
+    // Simulate pre-outbox room state before upgrade
+    storage.exec(`DROP TABLE room_scoreboard_outbox`);
+    storage.exec(
+      `DELETE FROM room_meta WHERE key = 'scoreboard_outbox_seeded_v1'`
+    );
+
+    const upgradedSubmissions: string[] = [];
+    const upgradedRoom = new QuizRoomEngine({
+      roomId: 'room-upgrade-seed',
+      storage,
+      controlState,
+      hooks: {
+        onScoreboardTick: (tick) => {
+          for (const s of tick.submissions) {
+            upgradedSubmissions.push(s.attemptId);
+          }
+        },
+      },
+    });
+    const tickRes = await upgradedRoom.onAlarm(startsAtMs + 4_000);
+    expect(tickRes.scoreboardTicked).toBe(true);
+    expect(upgradedSubmissions).toEqual([started.attemptId]);
+
+    const secondTick = await upgradedRoom.onAlarm(startsAtMs + 6_000);
+    expect(secondTick.scoreboardTicked).toBe(false);
+    storage.close();
+  });
 });

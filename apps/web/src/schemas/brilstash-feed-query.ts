@@ -2,7 +2,8 @@ import { z } from 'zod';
 import { BRILSTASH_FULL_FEED_QUERY } from '../config/brilstash-feed';
 
 const querySchema = z.strictObject({
-  page: z.int().positive(),
+  // The read RPC accepts a PostgreSQL integer page and computes the offset as bigint.
+  page: z.int().positive().max(2_147_483_647),
   limit: z.int().min(1).max(BRILSTASH_FULL_FEED_QUERY.limit),
   min_price: z.number().nonnegative().max(Number.MAX_SAFE_INTEGER),
 });
@@ -36,7 +37,5 @@ export function parseBrilStashFeedQuery(
   }
 
   const parsed = querySchema.safeParse(values);
-  if (!parsed.success) return null;
-  const { page, limit } = parsed.data;
-  return Number.isSafeInteger((page - 1) * limit) ? parsed.data : null;
+  return parsed.success ? parsed.data : null;
 }

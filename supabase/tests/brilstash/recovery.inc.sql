@@ -74,6 +74,7 @@ BEGIN
   revision := public.close_brilstash_admission(installation, candidate, window_date);
   PERFORM public.abort_brilstash_drain(installation, revision);
   next_revision := public.close_brilstash_admission(installation, candidate, window_date);
+  PERFORM set_config('fixture.recovery_closure_revision', next_revision::text, true);
   IF next_revision <= revision THEN RAISE EXCEPTION 'abort reused closure revision'; END IF;
   BEGIN
     PERFORM public.record_brilstash_drain_evidence(installation, revision, 'committed', 'old closure');
@@ -82,6 +83,37 @@ BEGIN
   END;
 END $$;
 RESET ROLE;
+
+SELECT set_config('fixture.recovery_protected_until', protected_until::text, true)
+FROM private.brilstash_drain_policies
+WHERE installation_id = '30000000-0000-4000-8000-000000000001';
+UPDATE private.brilstash_drain_policies p
+SET protected_until = g.source_read_at + interval '26 hours'
+FROM private.brilstash_installations i
+JOIN private.brilstash_generations g ON g.installation_id = i.id AND g.id = i.active_generation_id
+WHERE p.installation_id = i.id AND i.id = '30000000-0000-4000-8000-000000000001';
+SET LOCAL ROLE authenticated;
+DO $$
+BEGIN
+  PERFORM public.abort_brilstash_drain(
+    '30000000-0000-4000-8000-000000000001', current_setting('fixture.recovery_closure_revision')::bigint
+  );
+  RAISE EXCEPTION 'abort reopened admission even though the generation cannot cover the protected window';
+EXCEPTION WHEN check_violation THEN NULL;
+END $$;
+RESET ROLE;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM private.brilstash_installations i
+    JOIN private.brilstash_drains d ON d.installation_id = i.id AND d.closure_revision = i.serving_revision
+    WHERE i.id = '30000000-0000-4000-8000-000000000001' AND i.admission = 'closed' AND d.outcome IS NULL
+      AND i.serving_revision = current_setting('fixture.recovery_closure_revision')::bigint
+  ) THEN RAISE EXCEPTION 'a rejected abort changed the installation or drain'; END IF;
+END $$;
+UPDATE private.brilstash_drain_policies
+SET protected_until = NULLIF(current_setting('fixture.recovery_protected_until'), '')::timestamptz
+WHERE installation_id = '30000000-0000-4000-8000-000000000001';
 
 SET LOCAL ROLE authenticated;
 SELECT set_config('fixture.targeted_suspension_id', public.suspend_brilstash_listings(

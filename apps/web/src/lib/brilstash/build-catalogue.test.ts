@@ -132,6 +132,37 @@ describe('buildBrilStashCatalogue', () => {
     );
   });
 
+  it('exports distinct offers for the same normalized condition', () => {
+    const offer = sources[5];
+    const alternateOffer = {
+      ...offer,
+      id: 'laptop-open-2',
+      priceNaira: 340000,
+    };
+    const { rejected, products } = buildBrilStashCatalogue(
+      context,
+      [offer, alternateOffer],
+      new Map([
+        ['offer:laptop-open', 'listing-one'],
+        ['offer:laptop-open-2', 'listing-two'],
+      ]),
+      categoryMap
+    );
+    expect(rejected).toEqual([]);
+    expect(products).toMatchObject([
+      {
+        price_naira: offer.priceNaira,
+        product_url:
+          'https://shop.example.invalid/laptop?offer_id=laptop-open&condition=open_box',
+      },
+      {
+        price_naira: alternateOffer.priceNaira,
+        product_url:
+          'https://shop.example.invalid/laptop?offer_id=laptop-open-2&condition=open_box',
+      },
+    ]);
+  });
+
   it('preserves listing identity when only price changes', () => {
     const changed = build([{ ...sources[1], priceNaira: 365000 }]);
     expect(changed.products).toMatchObject([
@@ -211,7 +242,7 @@ describe('buildBrilStashCatalogue', () => {
     ).toBe('not_sellable');
   });
 
-  it('rejects a redundant legacy primary offer and ambiguous alternate conditions', () => {
+  it('rejects a redundant legacy primary offer and duplicate unqualified selections', () => {
     const primary = {
       ...sources[5],
       condition: 'new',
@@ -219,11 +250,14 @@ describe('buildBrilStashCatalogue', () => {
     } as const;
     expect(build([primary]).rejected[0]?.code).toBe('not_sellable');
     const duplicates = build([
-      { ...sources[5], productUrl: sources[4].productUrl },
-      { ...sources[4], condition: 'open_box' },
+      { ...sources[0], productUrl: sources[4].productUrl, condition: 'used' },
+      sources[4],
     ]);
     expect(duplicates.products).toEqual([]);
-    expect(duplicates.rejected).toHaveLength(2);
+    expect(duplicates.rejected).toEqual([
+      { sourceRef: 'product:accessory', code: 'ambiguous_selection' },
+      { sourceRef: 'product:laptop', code: 'ambiguous_selection' },
+    ]);
   });
 });
 

@@ -16,6 +16,9 @@ it('uses a full first page by default and preserves valid sandbox filters', () =
     limit: 7,
     min_price: 100.5,
   });
+  expect(
+    parseBrilStashFeedQuery(new URLSearchParams('page=2147483647&limit=1'))
+  ).toMatchObject({ page: 2147483647, limit: 1 });
 });
 
 it.each([
@@ -26,6 +29,7 @@ it.each([
   'min_price=1e3',
   'page=1&page=2',
   'unknown=x',
+  'page=2147483648&limit=1',
   'page=9007199254740991',
 ])('rejects invalid feed query %s', (query) =>
   expect(parseBrilStashFeedQuery(new URLSearchParams(query))).toBeNull());

@@ -203,8 +203,8 @@ function projectSource(
     selectionKey: JSON.stringify([
       url.origin,
       url.pathname.replace(/\/$/, ''),
-      source.kind === 'variant' ? source.id : null,
-      storefrontCondition,
+      source.kind,
+      source.kind === 'product' ? null : source.id,
     ]),
   };
 }

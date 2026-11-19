@@ -182,7 +182,10 @@ describe('PUT /api/products/[id] storefront purge', () => {
     expect(res.status).toBe(200);
     expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
       'test-store',
-      [{ slug: 'updated-product', categorySegment: 'smartphones' }]
+      [
+        { slug: 'updated-product', categorySegment: 'smartphones' },
+        { slug: PRODUCT_ID, categorySegment: null },
+      ]
     );
     expect(productSelectArgs[0]).toContain(
       'categories:category_id(slug, is_active)'
@@ -249,6 +252,7 @@ describe('PUT /api/products/[id] storefront purge', () => {
       [
         { slug: 'updated-product', categorySegment: 'smartphones' },
         { slug: 'old-name', categorySegment: 'audio' },
+        { slug: PRODUCT_ID, categorySegment: null },
       ]
     );
   });

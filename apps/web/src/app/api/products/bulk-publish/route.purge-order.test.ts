@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const {
   mockExpireProductBlogCache,
   mockScheduleStorefrontProductPurge,
+  mockScheduleStorefrontHostnamePurge,
   mockScheduleProductBlogPurgeAfterResponse,
   mockRevalidateProducts,
   mockRevalidateProductSlugs,
@@ -15,6 +16,7 @@ const {
 } = vi.hoisted(() => ({
   mockExpireProductBlogCache: vi.fn(),
   mockScheduleStorefrontProductPurge: vi.fn(),
+  mockScheduleStorefrontHostnamePurge: vi.fn(),
   mockScheduleProductBlogPurgeAfterResponse: vi.fn(),
   mockRevalidateProducts: vi.fn(),
   mockRevalidateProductSlugs: vi.fn(),
@@ -30,6 +32,9 @@ vi.mock('@/lib/expire-product-blog-cache', () => ({
 }));
 vi.mock('@/lib/storefront-product-purge', () => ({
   scheduleStorefrontProductPurge: mockScheduleStorefrontProductPurge,
+}));
+vi.mock('@/lib/storefront-product-purge-hostnames', () => ({
+  scheduleStorefrontHostnamePurge: mockScheduleStorefrontHostnamePurge,
 }));
 vi.mock('@/lib/schedule-product-blog-purge-after-response', () => ({
   scheduleProductBlogPurgeAfterResponse:
@@ -190,7 +195,7 @@ describe('POST /api/products/bulk-publish purge ordering', () => {
         error: null,
       }),
     };
-    mockCreateClient.mockReturnValueOnce({
+    mockCreateClient.mockReturnValue({
       auth: {
         getUser: vi
           .fn()
@@ -215,6 +220,29 @@ describe('POST /api/products/bulk-publish purge ordering', () => {
       'merchant-1',
       ['phone-0', 'product-0', 'child-1', 'old-child'],
       { expireImmediately: true }
+    );
+    expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
+      'test-store',
+      [
+        { slug: 'phone-0', categorySegment: 'smartphones' },
+        { slug: 'product-0', categorySegment: null },
+        { slug: 'child-1', categorySegment: null },
+        { slug: 'old-child', categorySegment: null },
+      ]
+    );
+
+    aliasQuery.limit.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'db timeout' },
+    });
+    const incompleteRes = await POST(
+      new NextRequest('http://localhost/api/products/bulk-publish', {
+        method: 'POST',
+      })
+    );
+    expect(incompleteRes.status).toBe(200);
+    expect(mockScheduleStorefrontHostnamePurge).toHaveBeenCalledWith(
+      'test-store'
     );
   });
 });

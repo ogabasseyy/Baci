@@ -169,7 +169,10 @@ describe('DELETE /api/products/[id] storefront purge paths', () => {
     expect(res.status).toBe(200);
     expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
       'test-store',
-      [{ slug: 'iphone-15', categorySegment: 'smartphones' }]
+      [
+        { slug: 'iphone-15', categorySegment: 'smartphones' },
+        { slug: PRODUCT_ID, categorySegment: null },
+      ]
     );
     expect(mockRevalidateProducts).toHaveBeenCalledWith(
       MERCHANT_ID,
@@ -209,6 +212,7 @@ describe('DELETE /api/products/[id] storefront purge paths', () => {
       [
         { slug: 'iphone-15', categorySegment: 'smartphones' },
         { slug: 'iphone-15-renamed', categorySegment: 'smartphones' },
+        { slug: PRODUCT_ID, categorySegment: null },
       ]
     );
   });
@@ -251,7 +255,10 @@ describe('DELETE /api/products/[id] storefront purge paths', () => {
     expect(res.status).toBe(200);
     expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
       'test-store',
-      [{ slug: 'usb-c-cable', categorySegment: 'accessories' }]
+      [
+        { slug: 'usb-c-cable', categorySegment: 'accessories' },
+        { slug: PRODUCT_ID, categorySegment: null },
+      ]
     );
     expect(
       productSelectArgs.some((arg) =>

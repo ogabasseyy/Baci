@@ -14,9 +14,12 @@ import {
 } from '@/lib/product-cache-tags';
 
 describe('getProductScopedCacheTag', () => {
-  it('preserves existing ASCII cache tag format for safe product slugs', () => {
+  it('preserves existing ASCII cache tag format and normalizes casing for safe product slugs', () => {
     expect(
       getProductScopedCacheTag('product', 'merchant-123', 'iphone-16-pro')
+    ).toBe('product-merchant-123-iphone-16-pro');
+    expect(
+      getProductScopedCacheTag('product', 'Merchant-123', ' IPhone-16-Pro ')
     ).toBe('product-merchant-123-iphone-16-pro');
   });
 

@@ -5,7 +5,9 @@ import type { InternalRevalidateProductEntry } from '@/schemas/internal-revalida
  * Verifies per-entry that every caller-supplied product resolved cleanly in
  * `entries` and `resolvedSlugs`, checking each ID-only product against
  * `authoritativeSlugsById` directly so extra entries or counts cannot mask an
- * unresolved product.
+ * unresolved product. Callers that may rename slugs must include `previousSlug`
+ * (or omit `omitMerchantWidePdpDetails`), because post-write DB enrichment only
+ * sees the current slug.
  */
 export function hasCompleteScopedProductSlugs(
   products: readonly InternalRevalidateProductEntry[],

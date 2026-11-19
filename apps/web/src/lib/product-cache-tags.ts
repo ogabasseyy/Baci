@@ -23,7 +23,10 @@ export function getProductScopedCacheTag(
   merchantId: string,
   productSlug: string
 ): string {
-  const rawTag = `${scope}-${merchantId}-${productSlug}`;
+  const normalizedScope = normalizeCacheTagPart(scope);
+  const normalizedMerchantId = normalizeCacheTagPart(merchantId);
+  const normalizedProductSlug = normalizeCacheTagPart(productSlug);
+  const rawTag = `${normalizedScope}-${normalizedMerchantId}-${normalizedProductSlug}`;
 
   if (
     rawTag.length <= MAX_CACHE_TAG_LENGTH &&
@@ -34,9 +37,7 @@ export function getProductScopedCacheTag(
 
   const digest = createHash('sha256')
     .update(
-      `${normalizeCacheTagPart(scope)}\0${normalizeCacheTagPart(
-        merchantId
-      )}\0${normalizeCacheTagPart(productSlug)}`
+      `${normalizedScope}\0${normalizedMerchantId}\0${normalizedProductSlug}`
     )
     .digest('hex')
     .slice(0, CACHE_TAG_HASH_LENGTH);

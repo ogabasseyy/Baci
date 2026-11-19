@@ -157,14 +157,20 @@ describe('POST /api/products/bulk-publish blog purge', () => {
     );
     expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
       'test-store',
-      [{ slug: 'baci-phone', categorySegment: 'phones' }]
+      [
+        { slug: 'baci-phone', categorySegment: 'phones' },
+        { slug: 'product-1', categorySegment: null },
+      ]
     );
     expect(mockScheduleProductBlogPurgeAfterResponse).toHaveBeenCalledWith({
       supabase: expect.anything(),
       merchantId: MERCHANT_ID,
       merchantSlug: 'test-store',
       productIds: ['product-1'],
-      entries: [{ slug: 'baci-phone', categorySegment: 'phones' }],
+      entries: [
+        { slug: 'baci-phone', categorySegment: 'phones' },
+        { slug: 'product-1', categorySegment: null },
+      ],
       categorySlugs: ['phones'],
       skipProductPurge: true,
     });

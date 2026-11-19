@@ -14,6 +14,7 @@ import {
 import { resolveDependentLegacyProductIdentifiers } from '@/lib/resolve-dependent-legacy-product-identifiers';
 import { scheduleProductBlogPurgeAfterResponse } from '@/lib/schedule-product-blog-purge-after-response';
 import { scheduleStorefrontProductPurge } from '@/lib/storefront-product-purge';
+import { scheduleStorefrontHostnamePurge } from '@/lib/storefront-product-purge-hostnames';
 import {
   type ProductPurgeCategoryRow,
   resolveProductPurgeCategorySegmentForRow,
@@ -159,17 +160,37 @@ export async function POST(request: NextRequest) {
             'Skipped Cloudflare product purge after bulk publish because origin hard expiry failed',
             { merchantId }
           );
+        } else if (dependentAliases.incomplete) {
+          scheduleStorefrontHostnamePurge(merchantContext.merchantSlug);
         } else {
+          const seenEdgeSlugs = new Set(
+            publicPurgeEntries
+              .map((entry) => entry.slug.trim().toLowerCase())
+              .filter(Boolean)
+          );
+          const aliasEdgeEntries: StorefrontProductPurgeEntry[] = [
+            ...updatedProductIds,
+            ...dependentAliases.identifiers,
+          ]
+            .map((identifier) => identifier.trim())
+            .filter((identifier) => {
+              const key = identifier.toLowerCase();
+              if (!key || seenEdgeSlugs.has(key)) return false;
+              seenEdgeSlugs.add(key);
+              return true;
+            })
+            .map((identifier) => ({ slug: identifier, categorySegment: null }));
+          const edgeEntries = [...publicPurgeEntries, ...aliasEdgeEntries];
           scheduleStorefrontProductPurge(
             merchantContext.merchantSlug,
-            publicPurgeEntries
+            edgeEntries
           );
           scheduleProductBlogPurgeAfterResponse({
             supabase,
             merchantId,
             merchantSlug: merchantContext.merchantSlug,
             productIds: (updatedProducts ?? []).map((product) => product.id),
-            entries: publicPurgeEntries,
+            entries: edgeEntries,
             categorySlugs: publicPurgeEntries.map(
               (entry) => entry.categorySegment
             ),

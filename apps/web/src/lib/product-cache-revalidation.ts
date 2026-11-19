@@ -170,7 +170,7 @@ function revalidateProducts(
     })),
   ];
 
-  const normalizedProductSlug = productSlug?.trim();
+  const normalizedProductSlug = productSlug?.trim().toLowerCase();
   if (normalizedProductSlug) {
     entries.push({
       profile: productsProfile,
@@ -256,7 +256,7 @@ function revalidateProductSlugs(
   const seen = new Set<string>();
   const entries: ProductTagEntry[] = [];
   for (const rawSlug of slugs) {
-    const slug = rawSlug?.trim();
+    const slug = rawSlug?.trim().toLowerCase();
     if (!slug || seen.has(slug)) continue;
     seen.add(slug);
     entries.push(

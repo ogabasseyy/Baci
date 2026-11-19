@@ -119,6 +119,7 @@ vi.mock('@/lib/supabase/server', () => ({
             return api;
           }),
           eq: vi.fn(() => api),
+          limit: vi.fn().mockResolvedValue({ data: [], error: null }),
           single: vi.fn().mockResolvedValue({ data: product, error: null }),
           update: vi.fn(() => ({
             eq: vi.fn(() => ({
@@ -179,6 +180,7 @@ describe('PUT /api/products/[id] storefront purge fallbacks', () => {
       [
         { slug: 'gadget', categorySegment: 'smartphones' },
         { slug: 'gadget', categorySegment: 'audio' },
+        { slug: PRODUCT_ID, categorySegment: null },
       ]
     );
   });
@@ -207,7 +209,10 @@ describe('PUT /api/products/[id] storefront purge fallbacks', () => {
     expect(res.status).toBe(200);
     expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
       'test-store',
-      [{ slug: 'usb-c-cable', categorySegment: 'accessories' }]
+      [
+        { slug: 'usb-c-cable', categorySegment: 'accessories' },
+        { slug: PRODUCT_ID, categorySegment: null },
+      ]
     );
     expect(productSelectArgs[0]).toContain(
       'product_categories(category_id, categories(slug, is_active))'

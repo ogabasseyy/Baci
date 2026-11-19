@@ -60,17 +60,33 @@ export function scheduleProductMutationPurge({
   expireProductBlogCache(merchantId);
 
   const scheduleEdgePurge = () => {
-    if (purgeWholeStorefront) {
+    if (purgeWholeStorefront || dependentAliasesIncomplete) {
       scheduleStorefrontHostnamePurge(merchantSlug);
       return;
     }
-    scheduleStorefrontProductPurge(merchantSlug, entries);
+    const seenEdgeSlugs = new Set(
+      entries.map((entry) => entry.slug.trim().toLowerCase()).filter(Boolean)
+    );
+    const aliasEdgeEntries: StorefrontProductPurgeEntry[] = [
+      ...productIds,
+      ...dependentProductIdentifiers,
+    ]
+      .map((identifier) => identifier.trim())
+      .filter((identifier) => {
+        const key = identifier.toLowerCase();
+        if (!key || seenEdgeSlugs.has(key)) return false;
+        seenEdgeSlugs.add(key);
+        return true;
+      })
+      .map((identifier) => ({ slug: identifier, categorySegment: null }));
+    const edgeEntries = [...entries, ...aliasEdgeEntries];
+    scheduleStorefrontProductPurge(merchantSlug, edgeEntries);
     scheduleProductBlogPurgeAfterResponse({
       supabase,
       merchantId,
       merchantSlug,
       productIds,
-      entries,
+      entries: edgeEntries,
       blogPostSlugs,
       blogPostIds,
       categorySlugs: entries.map((entry) => entry.categorySegment),

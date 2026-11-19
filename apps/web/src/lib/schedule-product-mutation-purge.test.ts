@@ -95,16 +95,20 @@ describe('scheduleProductMutationPurge', () => {
       undefined,
       { expireImmediately: true, omitMerchantWidePdpDetails: true }
     );
+    const expectedEdgeEntries = [
+      ...entries,
+      { slug: 'product-1', categorySegment: null },
+    ];
     expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
       'test-store',
-      entries
+      expectedEdgeEntries
     );
     expect(mockScheduleProductBlogPurgeAfterResponse).toHaveBeenCalledWith({
       supabase,
       merchantId: 'merchant-1',
       merchantSlug: 'test-store',
       productIds: ['product-1'],
-      entries,
+      entries: expectedEdgeEntries,
       blogPostSlugs: ['old-article'],
       categorySlugs: ['smartphones', 'audio'],
       skipProductPurge: true,
@@ -179,7 +183,7 @@ describe('scheduleProductMutationPurge', () => {
     );
     expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
       'test-store',
-      entries
+      [...entries, { slug: 'product-1', categorySegment: null }]
     );
     expect(mockAfter).not.toHaveBeenCalled();
   });
@@ -204,16 +208,20 @@ describe('scheduleProductMutationPurge', () => {
     expect(mockExpireReliable).toHaveBeenCalledWith('merchant-1', {
       expireWidePdpDetails: true,
     });
+    const expectedEdgeEntries = [
+      ...entries,
+      { slug: 'product-1', categorySegment: null },
+    ];
     expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
       'test-store',
-      entries
+      expectedEdgeEntries
     );
     expect(mockScheduleProductBlogPurgeAfterResponse).toHaveBeenCalledWith({
       supabase: expect.anything(),
       merchantId: 'merchant-1',
       merchantSlug: 'test-store',
       productIds: ['product-1'],
-      entries,
+      entries: expectedEdgeEntries,
       blogPostSlugs: ['old-article'],
       categorySlugs: ['smartphones'],
       skipProductPurge: true,
@@ -243,6 +251,15 @@ describe('scheduleProductMutationPurge', () => {
       undefined,
       { expireImmediately: true, omitMerchantWidePdpDetails: true }
     );
+    expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
+      'test-store',
+      [
+        ...entries,
+        { slug: 'parent-1', categorySegment: null },
+        { slug: 'child-1', categorySegment: null },
+        { slug: 'old-variant-slug', categorySegment: null },
+      ]
+    );
 
     vi.clearAllMocks();
     mockRevalidateProducts.mockReturnValue(true);
@@ -262,5 +279,7 @@ describe('scheduleProductMutationPurge', () => {
       undefined,
       { expireImmediately: true }
     );
+    expect(mockHostnamePurge).toHaveBeenCalledWith('test-store');
+    expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
   });
 });

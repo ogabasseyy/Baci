@@ -282,4 +282,16 @@ describe('productCacheRevalidation', () => {
     );
     expect(revalidated).toBe(false);
   });
+
+  it('normalizes mixed-case slugs and UUIDs consistently across scoped revalidation helpers', () => {
+    productCacheRevalidation.revalidateProductSlugs('merchant-1', [
+      ' IPhone-16 ',
+      'iphone-16',
+    ]);
+    expect(revalidateTag).toHaveBeenCalledTimes(3);
+    expect(revalidateTag).toHaveBeenCalledWith(
+      'product-merchant-1-iphone-16',
+      'products'
+    );
+  });
 });

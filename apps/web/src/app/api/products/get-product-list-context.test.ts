@@ -16,7 +16,7 @@ vi.mock('@/lib/supabase/server', () => ({
 
 vi.mock('@/lib/get-merchant-for-api-request', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('@/lib/get-merchant-for-api-request')>();
+    (await importOriginal()) as typeof import('@/lib/get-merchant-for-api-request');
   return {
     ...actual,
     getMerchantForApiRequest: mocks.getMerchantForApiRequest,

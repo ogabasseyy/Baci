@@ -1,9 +1,12 @@
-import type { TrackingEvent } from '../types';
+import {
+  type NormalizedShipmentStatus,
+  SHIPMENT_STATUS_LABELS,
+} from '../tracking-types';
 import type { Guardable } from './gigl.tracking-status-rank';
 import { TERMINAL_STATUSES } from './gigl.tracking-terminal-statuses';
 
 type Aggregate = {
-  status: TrackingEvent['status'];
+  status: NormalizedShipmentStatus;
   /** Event that must lead the list: the worker reads the snapshot location from events[0]. */
   lead: Guardable | undefined;
 };
@@ -12,6 +15,14 @@ type Aggregate = {
 // cancelled and returned outrank delivered, whatever their order in time).
 function terminalPrecedence(candidate: Guardable): number {
   return candidate.recognizedStatus === 'delivered' ? 1 : 2;
+}
+
+// Guardable carries the event's free-form status string; narrow it to the
+// lifecycle statuses (anything else means no recognised lifecycle state).
+function toStatus(value: string | null | undefined): NormalizedShipmentStatus {
+  return value && value in SHIPMENT_STATUS_LABELS
+    ? (value as NormalizedShipmentStatus)
+    : 'pending';
 }
 
 function isSdr(candidate: Guardable): boolean {
@@ -29,7 +40,7 @@ export function resolveAggregate(
   const newestRecognized = sortedCandidates.find(
     (candidate) => candidate.recognizedStatus !== null
   );
-  const recognizedStatus = newestRecognized?.recognizedStatus ?? 'pending';
+  const recognizedStatus = toStatus(newestRecognized?.recognizedStatus);
   const sdrScans = sortedCandidates.filter(isSdr);
   const bestTerminal = sortedCandidates
     .filter(
@@ -54,7 +65,7 @@ export function resolveAggregate(
     );
   if (terminalWins) {
     return {
-      status: bestTerminal.recognizedStatus ?? recognizedStatus,
+      status: toStatus(bestTerminal.recognizedStatus),
       // Already the newest recognized scan: leave the order (an unknown newer
       // scan keeps leading, as before).
       lead: bestTerminal === newestRecognized ? undefined : bestTerminal,

@@ -101,6 +101,7 @@ import { createPublicClient } from '@/lib/supabase/public';
 import { createClient } from '@/lib/supabase/server';
 import { type OrderCreateInput, orderCreateSchema } from '@/schemas/orders';
 import { authenticateOrderRequest } from './order-request-auth';
+import { buildPreGatewayRedemptionFailureResponse } from './pre-gateway-redemption-failure-response';
 
 function isPayOnDelivery(paymentMethod: string): boolean {
   return paymentMethod === 'pod' || paymentMethod === 'pay_on_delivery';
@@ -3061,28 +3062,23 @@ export async function POST(request: NextRequest) {
         supabase
       );
       if (projectionFailure) {
-        return NextResponse.json(
-          {
-            error: projectionFailure.message,
-            code: projectionFailure.code,
-            orderId: order.id,
-            orderNumber: order.order_number ?? undefined,
-            trackingToken:
-              typeof order.tracking_token === 'string'
-                ? order.tracking_token
-                : undefined,
-            amountDueToGateway,
-            ...(walletAmountUsed > 0 && walletRedemptionResult
-              ? {
-                  wallet: {
-                    amountUsed: walletAmountUsed,
-                    newBalance: walletRedemptionResult.newBalance,
-                  },
-                }
-              : {}),
+        return buildPreGatewayRedemptionFailureResponse({
+          failure: projectionFailure,
+          order: {
+            id: order.id,
+            orderNumber: order.order_number,
+            trackingToken: order.tracking_token,
           },
-          { status: projectionFailure.status }
-        );
+          amountDueToGateway,
+          ...(walletAmountUsed > 0 && walletRedemptionResult
+            ? {
+                wallet: {
+                  amountUsed: walletAmountUsed,
+                  newBalance: walletRedemptionResult.newBalance,
+                },
+              }
+            : {}),
+        });
       }
     }
 

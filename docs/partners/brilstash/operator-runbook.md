@@ -58,3 +58,9 @@ If a storefront migration changes an approved source ID, use `remap-listing` onl
 ## Qualification still required
 
 Confirm category labels, NGN precision, bearer and request deadline behavior, saved-connection correlation and revision-bound enablement, selective release and terminal readback, importer treatment of failed pages, delayed retry or commit bounds, HTTPS reachability, and daytime stock exceptions with BrilStash. Qualify single-page imports before live rollout. Multipage paging in local fixtures does not qualify a partner crawl or late-commit protection.
+
+## Database definitions after replay
+
+- `20261119121900_brilstash_revalidate_storefront_and_ingress.sql` defines the effective page RPC. It returns `ingress_unavailable` when deployment proof fails. The earlier reader migration establishes the restricted owner and grants.
+- `20261119121800_brilstash_bind_payload_display.sql` adds the generation insert guard. `20261119122000_brilstash_align_wire_shape.sql` independently excludes `model_number` in the SQL wire validator, matching the TypeScript schema.
+- The paged SQL fixture stages, activates and reads a verified image URL with an uppercase host and explicit HTTPS default port. Its output preserves the exact verified manifest spelling. Product URLs use the separate merchant-host and PDP checks.

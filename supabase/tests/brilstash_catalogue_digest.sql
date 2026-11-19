@@ -38,6 +38,9 @@ DECLARE vector jsonb := $vector${
   "digest": "a550664cb802aca3ae27d0a78df7e30db69de76e6e5173c7939b661bccecf196"
 }$vector$::jsonb;
 BEGIN
+  IF private.brilstash_payload_has_wire_shape(
+    jsonb_set(vector->'payload', '{0,model_number}', '"unreviewed"')
+  ) THEN RAISE EXCEPTION 'BrilStash wire shape accepted an unreviewed model number'; END IF;
   IF NOT private.brilstash_payload_has_wire_shape(vector->'payload')
     OR encode(sha256(convert_to(
       private.brilstash_canonical_json(vector->'payload'), 'UTF8'

@@ -70,3 +70,16 @@ export interface FeedMerchant {
 
 /** Map of product_id → manifest entries for that product */
 export type ImageManifestMap = Record<string, FeedImageManifestEntry[]>;
+
+/** Typed counterpart of a listing emitted in the Google Merchant feed. */
+export interface GoogleMerchantListing {
+  id: string;
+  product: FeedProduct;
+  variant?: FeedVariant;
+  offer?: FeedOffer;
+  imageUrl: string;
+  url: string;
+  title: string;
+  price: number;
+  stock: number;
+}

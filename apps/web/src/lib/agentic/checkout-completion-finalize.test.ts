@@ -421,11 +421,10 @@ describe('finalizeAgenticCheckoutPayment', () => {
     // call above — the cache bust fires on creation, independent of whether
     // this later session-finalization step (and the resulting cancellation)
     // succeeds. A restock-on-cancel cache bust is a separate, unaddressed gap.
-    expect(revalidateProducts).toHaveBeenCalledExactlyOnceWith(
-      'merchant-1',
-      undefined,
-      { feedScope: 'merchant' }
-    );
+    expect(vi.mocked(revalidateProducts).mock.calls).toEqual([
+      ['merchant-1', undefined, { feedScope: 'merchant' }],
+      ['merchant-1', undefined, { expireImmediately: true }],
+    ]);
     expect(revalidateProductSlugs).toHaveBeenCalledTimes(2);
     expect(revalidateProductSlugs).toHaveBeenNthCalledWith(1, 'merchant-1', [
       'product-1-slug',
@@ -520,11 +519,10 @@ describe('finalizeAgenticCheckoutPayment', () => {
 
     expect(response.status).toBe(500);
     expect(body).toEqual({ error: 'Database error' });
-    expect(revalidateProducts).toHaveBeenCalledExactlyOnceWith(
-      'merchant-1',
-      undefined,
-      { feedScope: 'merchant' }
-    );
+    expect(vi.mocked(revalidateProducts).mock.calls).toEqual([
+      ['merchant-1', undefined, { feedScope: 'merchant' }],
+      ['merchant-1', undefined, { expireImmediately: true }],
+    ]);
     expect(revalidateProductSlugs).toHaveBeenCalledTimes(2);
     expect(revalidateProductSlugs).toHaveBeenNthCalledWith(1, 'merchant-1', [
       'product-1-slug',
@@ -586,11 +584,10 @@ describe('finalizeAgenticCheckoutPayment', () => {
     });
     expect(markAgenticCheckoutOrderCanceled).not.toHaveBeenCalled();
     expect(sendAgenticOrderCreatedWebhook).toHaveBeenCalled();
-    expect(revalidateProducts).toHaveBeenCalledExactlyOnceWith(
-      'merchant-1',
-      undefined,
-      { feedScope: 'merchant' }
-    );
+    expect(vi.mocked(revalidateProducts).mock.calls).toEqual([
+      ['merchant-1', undefined, { feedScope: 'merchant' }],
+      ['merchant-1', undefined, { expireImmediately: true }],
+    ]);
     expect(revalidateProductSlugs).toHaveBeenCalledTimes(2);
     expect(revalidateProductSlugs).toHaveBeenNthCalledWith(1, 'merchant-1', [
       'product-1-slug',
@@ -631,11 +628,11 @@ describe('finalizeAgenticCheckoutPayment', () => {
     );
 
     expect(response.status).toBe(200);
-    expect(revalidateProducts).toHaveBeenCalledExactlyOnceWith(
-      'merchant-1',
-      undefined,
-      { feedScope: 'merchant' }
-    );
+    expect(vi.mocked(revalidateProducts).mock.calls).toEqual([
+      ['merchant-1', undefined, { feedScope: 'merchant' }],
+      ['merchant-1', undefined, { expireImmediately: true }],
+      ['merchant-1', undefined, { expireImmediately: true }],
+    ]);
     // revalidateProducts() threw synchronously, so the agentic layer's own
     // per-slug invalidation did not run — but the order-purge helper still
     // performs its merchant-independent local invalidation (hard-expire) on
@@ -714,11 +711,10 @@ describe('finalizeAgenticCheckoutPayment', () => {
     );
 
     expect(response.status).toBe(200);
-    expect(revalidateProducts).toHaveBeenCalledExactlyOnceWith(
-      'merchant-1',
-      undefined,
-      { feedScope: 'merchant' }
-    );
+    expect(vi.mocked(revalidateProducts).mock.calls).toEqual([
+      ['merchant-1', undefined, { feedScope: 'merchant' }],
+      ['merchant-1', undefined, { expireImmediately: true }],
+    ]);
     // The agentic layer skips its own per-slug invalidation when the product
     // read fails, but the order-purge helper still runs its fail-open local
     // invalidation (hard-expire) for the committed order.

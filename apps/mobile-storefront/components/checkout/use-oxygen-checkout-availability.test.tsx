@@ -113,3 +113,34 @@ it('rechecks availability when connectivity returns after a failed probe', async
   await waitFor(() => expect(result.current.disabledReason).toBeUndefined());
   expect(mockCapabilities).toHaveBeenCalledTimes(2);
 });
+
+it('waits for known connectivity before checking readiness', async () => {
+  jest.mocked(NetInfo.addEventListener).mockImplementationOnce((next) => {
+    listener = next;
+    next({ isConnected: null, isInternetReachable: null } as NetInfoState);
+    return () => {};
+  });
+  const { result } = renderHook(() => useOxygenCheckoutAvailability([]));
+  await act(async () => {});
+  expect(result.current.disabledReason).toContain('Checking');
+  expect(mockCapabilities).not.toHaveBeenCalled();
+  act(() => setOnline(true));
+  await waitFor(() => expect(result.current.disabledReason).toBeUndefined());
+});
+
+it('recovers from one transient probe failure while connectivity stays online', async () => {
+  jest.useFakeTimers();
+  try {
+    mockCapabilities.mockRejectedValueOnce(
+      new Error('temporarily unavailable')
+    );
+    const { result } = renderHook(() => useOxygenCheckoutAvailability([]));
+    await act(async () => {});
+    expect(mockCapabilities).toHaveBeenCalledTimes(1);
+    await act(async () => jest.advanceTimersByTime(3000));
+    expect(mockCapabilities).toHaveBeenCalledTimes(2);
+    expect(result.current.disabledReason).toBeUndefined();
+  } finally {
+    jest.useRealTimers();
+  }
+});

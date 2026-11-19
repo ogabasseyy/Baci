@@ -100,7 +100,10 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { createPublicClient } from '@/lib/supabase/public';
 import { createClient } from '@/lib/supabase/server';
 import { type OrderCreateInput, orderCreateSchema } from '@/schemas/orders';
-import { rejectUnavailableMobileOxygenOrder } from './mobile-oxygen-order-admission';
+import {
+  rejectMobileOxygenCreditCombination,
+  rejectUnavailableMobileOxygenOrder,
+} from './mobile-oxygen-order-admission';
 import { authenticateOrderRequest } from './order-request-auth';
 
 function isPayOnDelivery(paymentMethod: string): boolean {
@@ -539,6 +542,12 @@ export async function POST(request: NextRequest) {
     const sharedCartPrincipalId = cartAuthority.principalId;
 
     const hasVoucherItem = hasQuizVoucherItem(items);
+    const oxygenCombinationRejection = rejectMobileOxygenCreditCombination(
+      request,
+      body,
+      hasVoucherItem
+    );
+    if (oxygenCombinationRejection) return oxygenCombinationRejection;
     const requestIdempotencyKey = hasVoucherItem
       ? null
       : getRequestIdempotencyKey(request);

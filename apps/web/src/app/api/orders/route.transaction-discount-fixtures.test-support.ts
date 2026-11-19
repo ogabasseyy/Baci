@@ -220,13 +220,13 @@ export function buildSupabaseMock() {
   return { rpc, supabase };
 }
 
-export function resetOrderRouteMocks() {
+export function resetOrderRouteMocks(userId?: string) {
   vi.clearAllMocks();
   const { supabase } = buildSupabaseMock();
   mockAuthenticateApiRequest.mockResolvedValue({
     error: null,
     supabase,
-    user: null,
+    user: userId ? { id: userId, email: 'customer@example.com' } : null,
   });
   mockComputeAgenticOrderTax.mockResolvedValue(75);
   mockComputeOrderNegotiationDiscount.mockResolvedValue({

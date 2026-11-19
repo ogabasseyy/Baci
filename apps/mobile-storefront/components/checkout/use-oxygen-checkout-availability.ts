@@ -44,17 +44,10 @@ export function useOxygenCheckoutAvailability(items: CartItem[]) {
     setReadiness(null);
     if (!scope) return;
     let probe = 0;
-    let wasOnline: boolean | undefined;
-    const unsubscribe = NetInfo.addEventListener((state) => {
-      const online =
-        state.isConnected !== false && state.isInternetReachable !== false;
-      if (online === wasOnline) return;
-      wasOnline = online;
-      const currentProbe = ++probe;
-      if (!online) {
-        setReadiness({ scope, reason: unavailable });
-        return;
-      }
+    let previousState: 'unknown' | 'online' | 'offline' | undefined;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+
+    const checkReadiness = (currentProbe: number, canRetry: boolean) => {
       setReadiness(null);
       void Promise.resolve()
         .then(() => oxygenNativeSession().capabilities(true))
@@ -64,13 +57,37 @@ export function useOxygenCheckoutAvailability(items: CartItem[]) {
               setReadiness({ scope, reason: undefined });
           },
           () => {
-            if (currentProbe === probe)
-              setReadiness({ scope, reason: unavailable });
+            if (currentProbe !== probe) return;
+            setReadiness({ scope, reason: unavailable });
+            if (canRetry) {
+              retry = setTimeout(
+                () => checkReadiness(currentProbe, false),
+                2000
+              );
+            }
           }
         );
+    };
+
+    const unsubscribe = NetInfo.addEventListener((state) => {
+      const network =
+        state.isConnected === false || state.isInternetReachable === false
+          ? 'offline'
+          : state.isConnected === true && state.isInternetReachable === true
+            ? 'online'
+            : 'unknown';
+      if (network === previousState) return;
+      previousState = network;
+      clearTimeout(retry);
+      const currentProbe = ++probe;
+      if (network === 'online') checkReadiness(currentProbe, true);
+      else if (network === 'offline')
+        setReadiness({ scope, reason: unavailable });
+      else setReadiness(null);
     });
     return () => {
       ++probe;
+      clearTimeout(retry);
       unsubscribe();
     };
   }, [scope]);

@@ -13,6 +13,9 @@ describe('isTestSourcePath', () => {
     'worker.spec.mjs',
     'worker.test.mts',
     'worker.spec.cts',
+    'apps/web/src/schemas/agentic-checkout-currency.test-d.ts',
+    'worker.test-d.mts',
+    'worker.test-d.cts',
     'apps/web/src/app/api/merchant/blog/posts/route.post.success-a.tests.ts',
     'apps/web/src/app/api/merchant/blog/posts/route.test-support.ts',
     'apps/web/src/app/api/cron/agentic-commerce-health/route.test-setup.ts',
@@ -31,6 +34,8 @@ describe('isTestSourcePath', () => {
   it('keeps production modules classified as production', () => {
     expect(isTestSourcePath('worker.ts')).toBe(false);
     expect(isTestSourcePath('testimonials.ts')).toBe(false);
+    expect(isTestSourcePath('worker.test-d.tsx')).toBe(false);
+    expect(isTestSourcePath('worker.test-d.js')).toBe(false);
     expect(isTestSourcePath('apps/web/src/test-fixtures-live/page.tsx')).toBe(
       false
     );

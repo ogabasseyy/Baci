@@ -17,9 +17,9 @@ export function ProductSlideBody({
         <span className="text-[10px] font-semibold uppercase tracking-[0.12em] opacity-80">
           Just launched
         </span>
-        <h3 className="line-clamp-2 text-lg font-bold leading-tight md:text-2xl">
+        <p className="line-clamp-2 text-lg font-bold leading-tight md:text-2xl">
           {slide.name}
-        </h3>
+        </p>
         <p className="text-sm font-semibold opacity-90 md:text-base">
           {slide.priceLabel}
         </p>

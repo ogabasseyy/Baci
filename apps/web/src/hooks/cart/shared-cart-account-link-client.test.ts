@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-
 import { fetchWithCsrf } from '@/lib/api-client';
+import {
+  beginCartSessionRetirement,
+  runCartSessionWrite,
+} from './cart-session-write-fence';
 
 import { linkAccountCart } from './shared-cart-account-link-client';
 
@@ -52,4 +55,54 @@ describe('shared-cart account-link client', () => {
       linkAccountCart({ choice: 'keep_current', operationId: 'op-1' }, 'shop')
     ).resolves.toMatchObject({ ok: false, retryable: true });
   });
+});
+
+it('waits for an initial create before installing the explicitly selected account cart', async () => {
+  let finish!: () => void;
+  const initial = runCartSessionWrite(
+    'shop',
+    false,
+    () =>
+      new Promise<boolean>((resolve) => {
+        finish = () => resolve(true);
+      })
+  );
+  fetchMock.mockResolvedValue(jsonResponse({ cart: snapshot() }));
+  const selection = linkAccountCart(
+    { choice: 'use_saved', operationId: 'select' },
+    'shop'
+  );
+  await Promise.resolve();
+  expect(fetchMock).not.toHaveBeenCalled();
+  await expect(
+    runCartSessionWrite('shop', false, async () => true)
+  ).resolves.toBe(false);
+  finish();
+  await initial;
+  await selection;
+  expect(fetchMock).toHaveBeenCalledOnce();
+});
+it('keeps an in-flight account selection inside a subsequent logout drain', async () => {
+  let finish!: (value: Response) => void;
+  fetchMock.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      })
+  );
+  const selection = linkAccountCart(
+    { choice: 'use_saved', operationId: 'select' },
+    'shop'
+  );
+  await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+  const retirement = beginCartSessionRetirement('shop');
+  const drained = vi.fn();
+  void retirement.drained.then(drained);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(drained).not.toHaveBeenCalled();
+  finish(jsonResponse({ cart: snapshot() }));
+  await selection;
+  await retirement.drained;
+  expect(drained).toHaveBeenCalledOnce();
+  retirement.release();
 });

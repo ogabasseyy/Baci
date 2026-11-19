@@ -12,6 +12,11 @@ export const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
   },
+  // While the keyboard is up the form stays at the top: re-centring it in
+  // the space above the keyboard made it jump whenever that space changed.
+  contentContainerKeyboardShown: {
+    justifyContent: 'flex-start',
+  },
   header: {
     alignItems: 'center',
     marginBottom: SPACING['3xl'],

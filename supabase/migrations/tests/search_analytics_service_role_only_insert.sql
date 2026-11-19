@@ -12,6 +12,9 @@ BEGIN
   IF p_condition IS DISTINCT FROM true THEN RAISE EXCEPTION '%', p_message; END IF;
 END;
 $$;
+-- New functions are no longer executable by other roles by default; the
+-- assertions below run as service_role and authenticated.
+GRANT EXECUTE ON FUNCTION pg_temp.assert_true(boolean, text) TO PUBLIC;
 
 -- The open INSERT policy is gone; the merchant SELECT policy remains.
 SELECT pg_temp.assert_true(

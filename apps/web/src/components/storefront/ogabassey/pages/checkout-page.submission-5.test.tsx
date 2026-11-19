@@ -1,12 +1,12 @@
 import {
   CHECKOUT_IDEMPOTENCY_STORAGE_KEY,
-  CheckoutPage,
+  continueToPaymentAfterPickupCheck,
   expect,
   fireEvent,
   hasPriceNegotiationEntitlement,
   it,
   mockCheckoutSubmissionState,
-  render,
+  renderCheckoutWithStoreRates,
   screen,
   submitPickupPayOnDeliveryOrder,
   useCart,
@@ -128,12 +128,12 @@ it('strips/ignores negotiated price and cartDiscount when merchant is not entitl
       } as Response;
     });
 
-  render(<CheckoutPage />);
+  renderCheckoutWithStoreRates();
 
   // Let's submit the order
   fireEvent.click(screen.getByRole('button', { name: /delivery method/i }));
   fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
-  fireEvent.click(screen.getByRole('button', { name: /continue to payment/i }));
+  await continueToPaymentAfterPickupCheck();
   fireEvent.click(await screen.findByText(/pay on delivery/i));
   const placeOrderButton = screen
     .getAllByRole('button', { name: /place order/i })

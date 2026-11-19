@@ -1,6 +1,5 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { render, screen } from '@testing-library/react-native';
-import Colors from '@/constants/Colors';
 import HeroCard from './imei-check-hero-card';
 
 jest.mock('@react-native-vector-icons/ionicons', () => ({
@@ -12,7 +11,7 @@ jest.mock('@react-native-vector-icons/ionicons', () => ({
 
 describe('HeroCard', () => {
   it('renders the heading and trust indicators without a redundant title', () => {
-    render(<HeroCard colors={Colors.light} />);
+    render(<HeroCard />);
 
     expect(screen.getByText('Device verification')).toBeTruthy();
     expect(screen.queryByText('IMEI Checker')).toBeNull();

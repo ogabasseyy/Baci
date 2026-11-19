@@ -39,6 +39,7 @@ describe('/api/cron/customer-savings/charge-due', () => {
     mockGetCronSecret.mockReturnValue('cron-secret');
     mockHasValidCronSecret.mockReturnValue(true);
     mockChargeDueCustomerSavingsGoals.mockResolvedValue({
+      errored: 0,
       failed: 0,
       processed: 1,
       results: [{ goalId: 'goal-1', status: 'charged' }],
@@ -75,6 +76,7 @@ describe('/api/cron/customer-savings/charge-due', () => {
       supabase,
     });
     expect(body).toEqual({
+      errored: 0,
       failed: 0,
       processed: 1,
       skipped: 0,
@@ -86,6 +88,7 @@ describe('/api/cron/customer-savings/charge-due', () => {
     const supabase = { from: vi.fn(), rpc: vi.fn() };
     mockCreateServiceClient.mockReturnValue(supabase);
     mockChargeDueCustomerSavingsGoals.mockResolvedValue({
+      errored: 0,
       failed: 2,
       processed: 5,
       results: [
@@ -105,6 +108,7 @@ describe('/api/cron/customer-savings/charge-due', () => {
       supabase,
     });
     expect(body).toEqual({
+      errored: 0,
       failed: 2,
       processed: 5,
       skipped: 1,
@@ -114,6 +118,7 @@ describe('/api/cron/customer-savings/charge-due', () => {
 
   it('returns success counts when there are no due savings goals', async () => {
     mockChargeDueCustomerSavingsGoals.mockResolvedValue({
+      errored: 0,
       failed: 0,
       processed: 0,
       results: [],
@@ -127,6 +132,7 @@ describe('/api/cron/customer-savings/charge-due', () => {
 
     expect(response.status).toBe(200);
     expect(body).toEqual({
+      errored: 0,
       failed: 0,
       processed: 0,
       skipped: 0,
@@ -146,5 +152,35 @@ describe('/api/cron/customer-savings/charge-due', () => {
 
     expect(response.status).toBe(500);
     expect(body).toEqual({ error: 'charge job failed' });
+  });
+
+  it('answers 500 when any goal hit an unexpected error, keeping the counts', async () => {
+    mockChargeDueCustomerSavingsGoals.mockResolvedValue({
+      errored: 2,
+      failed: 2,
+      processed: 1,
+      results: [],
+      skipped: 0,
+    });
+    const response = await POST(request());
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toMatchObject({
+      success: false,
+      errored: 2,
+      failed: 2,
+      processed: 1,
+    });
+  });
+
+  it('stays 200 when goals only failed for ordinary reasons (declines)', async () => {
+    mockChargeDueCustomerSavingsGoals.mockResolvedValue({
+      errored: 0,
+      failed: 3,
+      processed: 0,
+      results: [],
+      skipped: 0,
+    });
+    const response = await POST(request());
+    expect(response.status).toBe(200);
   });
 });

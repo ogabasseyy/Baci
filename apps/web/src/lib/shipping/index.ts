@@ -1,3 +1,4 @@
+import { tagProviderCallError } from './order-shipment-booking-failure';
 import { OrderShipmentBookingError } from './order-shipment-booking-utils';
 import {
   type ShippingProvider,
@@ -139,7 +140,14 @@ export class ShippingService {
       quoteId: request.quoteId,
     });
 
-    const result = await providerInstance.bookShipment(request);
+    let result: ShipmentBookingResult;
+    try {
+      result = await providerInstance.bookShipment(request);
+    } catch (error) {
+      // Only errors from the carrier call itself may count as "never reached".
+      tagProviderCallError(error);
+      throw error;
+    }
 
     console.log('[ShippingService] Shipment booked successfully', {
       provider,

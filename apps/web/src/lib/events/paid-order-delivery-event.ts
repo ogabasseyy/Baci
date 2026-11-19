@@ -103,6 +103,12 @@ export async function loadPaidOrderDeliveryEvent(
       occurred_at: event.occurred_at,
       source: 'server',
       user_data: {
+        measurement_consent: tracking.chatgptConsent === true,
+        marketing_consent: tracking.marketingConsent === true,
+        analytics_consent: tracking.analyticsConsent === true,
+        twclid: optionalString(tracking.twclid),
+        oppref: optionalString(tracking.oppref),
+        obref: optionalString(tracking.obref),
         city: optionalString(shippingAddress.city),
         country: optionalString(shippingAddress.country),
         email: order.customer_email ?? undefined,

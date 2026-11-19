@@ -177,11 +177,12 @@ describe('OgabasseyPdpCriticalCommerceProvider M16 R2 deep link', () => {
     fireEvent.click(
       screen.getByRole('button', { name: /select used condition/i })
     );
-    expect(screen.getByText('blocked')).toBeInTheDocument();
+    expect(screen.getByText('2145000')).toBeInTheDocument();
+    expect(screen.getByText('ready')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /select 16gb ram/i }));
     expect(screen.getByText('2145000')).toBeInTheDocument();
-    expect(screen.getByText('blocked')).toBeInTheDocument();
+    expect(screen.getByText('ready')).toBeInTheDocument();
 
     fireEvent.click(
       screen.getByRole('button', {

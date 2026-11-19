@@ -1,29 +1,31 @@
 'use client';
-
-import { useRouter, useSearchParams } from 'next/navigation';
 import type React from 'react';
-import { useEffect } from 'react';
-import { useAuthSafe } from '@/contexts/auth-context';
 import { useCart } from '@/hooks/cart';
 import { useCurrency } from '@/hooks/use-currency';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
-import { asRoute } from '@/lib/routes';
 import { hasStorefrontPriceNegotiation } from '@/lib/storefront-price-negotiation';
-import { CheckoutResumeGate } from './checkout/components/CheckoutResumeStatus';
-import { CheckoutScreen } from './checkout/components/CheckoutScreen';
+import { CheckoutCartScreen } from './checkout/components/CheckoutCartScreen';
+import { CheckoutResumeFallback } from './checkout/components/CheckoutResumeFallback';
 import { deriveCheckoutCartModel } from './checkout/derive-checkout-cart-model';
 import { deriveCheckoutScreenModel } from './checkout/derive-checkout-screen-model';
 import { useCheckoutAttemptSession } from './checkout/hooks/use-checkout-attempt-session';
 import { useCheckoutDeliverySession } from './checkout/hooks/use-checkout-delivery-session';
 import { useCheckoutFinancialSession } from './checkout/hooks/use-checkout-financial-session';
 import { useCheckoutFormSession } from './checkout/hooks/use-checkout-form-session';
+import { useCheckoutNavigation } from './checkout/hooks/use-checkout-navigation';
 import { useCheckoutPaymentExecution } from './checkout/hooks/use-checkout-payment-execution';
+import { useCheckoutScrollTop } from './checkout/hooks/use-checkout-scroll-top';
+import { useCheckoutUser } from './checkout/hooks/use-checkout-user';
+import type { OxygenCheckoutSlots } from './checkout/oxygen-checkout-slots';
 import { checkoutPaymentRails } from './checkout/payment-rail-availability';
-export const CheckoutPage: React.FC = () => {
+import { shouldShowResumeGate } from './checkout/should-show-resume-gate';
+
+export type { OxygenCheckoutSlots } from './checkout/oxygen-checkout-slots';
+export const CheckoutPage: React.FC<OxygenCheckoutSlots> = (oxygenSlots) => {
   const {
     cart,
     clearCart,
-    isHydrated,
+    isHydrated: isCartHydrated,
     removeFromCart,
     sharedCartRef,
     sharedCartEnabled,
@@ -32,18 +34,8 @@ export const CheckoutPage: React.FC = () => {
   } = useCart();
   const merchantContext = useMerchantSafe();
   const merchant = merchantContext?.merchant;
-
-  // Address-form country: the merchant's own market (ISO-2, upper-case), NG as
-  // the pilot default when unset. Drives the state list source, the Places
-  // country bias, and whether the NG-only state->city sub-fetch runs — so a
-  // non-NG merchant's shoppers can populate state/city and reach merchant rates.
   const merchantCountry = (merchant?.country?.trim() || 'NG').toUpperCase();
-
-  // Merchant-resolved currency (payout_currency first, country second, NGN
-  // fallback). `currencyCode` is sent to /api/payments/initialize instead of a
-  // hardcoded 'NGN'; the compact formatter renders order amounts.
   const { formatCurrencyAuto, currencySymbol, currencyCode } = useCurrency();
-
   const hasPriceNegotiation = hasStorefrontPriceNegotiation(merchant);
   const {
     checkoutCart,
@@ -53,24 +45,19 @@ export const CheckoutPage: React.FC = () => {
     quoteItemsFingerprint,
     sharedCartRef: checkoutSharedCartRef,
   } = deriveCheckoutCartModel(cart, hasPriceNegotiation, sharedCartRef);
-
   const {
     paystackCheckoutAvailable,
     korapayCheckoutAvailable,
     bankTransferCheckoutAvailable,
   } = checkoutPaymentRails(merchant, currencyCode);
   const basePath = merchantContext?.basePath;
-  const router = useRouter();
-
-  const getHref = (path: string) =>
-    path.startsWith('http')
-      ? path
-      : `${basePath || ''}${path === '/' ? '' : path}`;
-
-  const searchParams = useSearchParams();
-  const auth = useAuthSafe();
-  const user = auth?.user;
-
+  const { searchParams, isHydrated, getHref, routerPush, pushSuccessRoute } =
+    useCheckoutNavigation({
+      basePath,
+      isCartHydrated,
+      merchantSlug: merchant?.slug,
+    });
+  const user = useCheckoutUser();
   const checkoutFormSession = useCheckoutFormSession({ isHydrated, user });
   const {
     form: checkoutFormState,
@@ -84,11 +71,8 @@ export const CheckoutPage: React.FC = () => {
     clear: clearCheckoutSession,
     inferredLocation,
   } = checkoutFormState;
-
   const { currentStep, completedSteps, setCurrentStep, setCompletedSteps } =
     checkoutFlow;
-  // Mobile app order resume state
-  // When opening from mobile app with ?orderId=xxx&gateway=credpal, we resume that order
   const checkoutAttempt = useCheckoutAttemptSession({
     searchParams,
     merchantId: merchant?.id,
@@ -99,7 +83,7 @@ export const CheckoutPage: React.FC = () => {
     navigation: {
       setCurrentStep,
       setCompletedSteps,
-      routerPush: (url) => router.push(asRoute(url)),
+      routerPush,
       getHref,
     },
     funnel: {
@@ -163,7 +147,6 @@ export const CheckoutPage: React.FC = () => {
   });
   const { cost: deliveryCost } = delivery;
 
-  // Live and resumed amount arithmetic feeds the payment session and summary.
   const { orderTotals, paymentSession, summaryAmounts } =
     useCheckoutFinancialSession({
       merchant,
@@ -173,6 +156,7 @@ export const CheckoutPage: React.FC = () => {
       deliveryMethod: checkoutForm.deliveryMethod,
       giftWrappingCost,
       hasCheckoutCartItems,
+      recoverCart: isHydrated && sharedCartEnabled && checkoutCart.length === 0,
       resumedOrder: summaryOrder,
       clearPendingCheckoutOrder,
       currencyCode,
@@ -186,14 +170,13 @@ export const CheckoutPage: React.FC = () => {
       preferredGateway,
     });
 
-  useEffect(() => {
-    window.scrollTo(0, 0);
-  }, []);
+  useCheckoutScrollTop();
 
   const {
     crypto,
     dva,
     handlePlaceOrder,
+    oxygenAllowed,
     redvaultAvailable,
     walletFundedTransfer,
   } = useCheckoutPaymentExecution({
@@ -228,7 +211,7 @@ export const CheckoutPage: React.FC = () => {
     merchant,
     navigation: {
       flow: checkoutFlow,
-      pushSuccessRoute: (url) => router.push(asRoute(url)),
+      pushSuccessRoute,
       getHref,
     },
     payment: {
@@ -240,35 +223,34 @@ export const CheckoutPage: React.FC = () => {
     },
     attempt: checkoutAttempt,
   });
-
-  // Loading state (Initial fetch OR waiting for auto-trigger)
-  // This prevents the form from flashing briefly before the payment widget opens
   const isAutoTriggerProcessing =
     isHydrated &&
     checkoutCart.length === 0 &&
     resumedOrder &&
     !!preferredGateway &&
     !isProcessing;
-
   if (
-    (checkoutCart.length === 0 && isLoadingResumedOrder) ||
-    isAutoTriggerProcessing ||
-    (checkoutCart.length === 0 && resumeOrderId && resumeOrderError)
+    shouldShowResumeGate(
+      checkoutCart.length === 0,
+      isLoadingResumedOrder,
+      Boolean(isAutoTriggerProcessing),
+      Boolean(resumeOrderId && resumeOrderError),
+      oxygenSlots.verifiedOxygenOrderId,
+      searchParams.get('oxygenOrderId')
+    )
   ) {
     return (
-      <CheckoutResumeGate
+      <CheckoutResumeFallback
         cartEmpty={checkoutCart.length === 0}
         isAutoTriggerProcessing={isAutoTriggerProcessing}
         isLoadingResumedOrder={isLoadingResumedOrder}
-        onContactSupport={() => router.push(asRoute(getHref('/contact')))}
-        onGoHome={() => router.push(asRoute(getHref('/')))}
-        onRetry={() => window.location.reload()}
+        navigate={(path) => routerPush(getHref(path))}
         resumeOrderError={resumeOrderError}
         resumeOrderId={resumeOrderId}
+        resumedOrderId={resumedOrder?.id}
       />
     );
   }
-
   const screenModel = deriveCheckoutScreenModel({
     sessions: {
       form: checkoutFormSession,
@@ -277,7 +259,13 @@ export const CheckoutPage: React.FC = () => {
       financial: { paymentSession, summaryAmounts },
       execution: { crypto, dva, handlePlaceOrder, walletFundedTransfer },
     },
-    display: { checkoutDisplay, checkoutCart, isHydrated },
+    display: {
+      checkoutDisplay,
+      checkoutCart,
+      isHydrated,
+      sharedCartEnabled,
+      sharedCartRef: checkoutSharedCartRef,
+    },
     identity: {
       merchant,
       user,
@@ -287,13 +275,20 @@ export const CheckoutPage: React.FC = () => {
       formatCurrencyAuto,
     },
     actions: {
-      onReturnToCart: () => router.push(asRoute(getHref('/cart'))),
+      onReturnToCart: () => routerPush(getHref('/cart')),
     },
     availability: {
+      oxygenAllowed,
       redvaultAvailable,
-      sharedCartActive: Boolean(checkoutSharedCartRef),
     },
   });
-
-  return <CheckoutScreen {...screenModel} />;
+  return (
+    <CheckoutCartScreen
+      model={{ ...screenModel, ...oxygenSlots }}
+      order={resumedOrder}
+      requestedId={searchParams.get('orderId')}
+      verifiedOxygenOrderId={oxygenSlots.verifiedOxygenOrderId}
+      requestedOxygenId={searchParams.get('oxygenOrderId')}
+    />
+  );
 };

@@ -1,4 +1,5 @@
 import { useLocalSearchParams } from 'expo-router';
+import { useClearWalletOnlyNoticeOnLeave } from '@/components/wallet/savings/use-clear-wallet-only-notice-on-leave';
 import { WalletScreen } from '@/components/wallet/WalletScreen';
 
 interface WalletRouteProps {
@@ -33,6 +34,8 @@ export default function WalletRoute({
     savingsAmount?: string | string[];
     savingsGoalId?: string | string[];
   }>();
+  // A "plan has closed" note is about this visit: it clears on leaving.
+  useClearWalletOnlyNoticeOnLeave();
 
   return (
     <WalletScreen

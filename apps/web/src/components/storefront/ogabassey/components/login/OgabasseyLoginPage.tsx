@@ -10,14 +10,13 @@
  * - Full accessibility support
  */
 
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
+import { usePrivateSearchParamsState } from '@/hooks/use-private-search-params';
 import { Suspense, useEffect } from 'react';
 import { useCustomerAuth } from '@/contexts/customer-auth-context';
 import { useMerchant } from '@/hooks/use-merchant-client';
-import {
-  fetchCustomerLoginEmailPrefillForRedirect,
-  sanitizeCustomerLoginEmailPrefill,
-} from '@/lib/customer-login-prefill';
+import { useReceiptClaimLoginHint } from '@/hooks/use-receipt-claim-login-hint';
+import { sanitizeCustomerLoginEmailPrefill } from '@/lib/customer-login-prefill';
 import { asRoute } from '@/lib/routes';
 import { Logo as OgabasseyLogo } from '../Logo';
 import {
@@ -52,7 +51,9 @@ export function OgabasseyLoginPage() {
 
 function OgabasseyLoginPageContent() {
   const router = useRouter();
-  const searchParams = useSearchParams();
+  // `isReady` is false while hydrating a reloaded link, before the stashed
+  // redirect target and email are readable.
+  const { searchParams, isReady } = usePrivateSearchParamsState();
   const redirectTo = sanitizeRedirect(searchParams.get('redirect'));
   const initialEmail = sanitizeCustomerLoginEmailPrefill(
     searchParams.get('email')
@@ -74,43 +75,40 @@ function OgabasseyLoginPageContent() {
     setEmail,
     handleSendCode,
     handleCodeChange,
-    handleKeyDown,
-    handlePaste,
+    handleCompleteCode,
     handleResendCode,
     handleChangeEmail,
     handleGoogleSignIn,
     handleAppleSignIn,
-    codeInputRefs,
+    verified,
+    codeSentAt,
+    resendSentAt,
   } = useOgabasseyLogin({ initialEmail, redirectTo });
+
+  // The claim login hint is masked guidance (never the full address):
+  // display it so the customer knows which inbox to open, but never
+  // place it in the input — the OTP code must go to the real address.
+  // Shared hook: clears the hint whenever the redirect target or prefill
+  // changes so a stale masked address from a previous claim never lingers.
+  const emailHint = useReceiptClaimLoginHint(
+    isReady ? redirectTo : null,
+    initialEmail || email
+  );
 
   // Redirect if already authenticated
   useEffect(() => {
-    if (!authLoading && isAuthenticated) {
+    if (isReady && !authLoading && isAuthenticated && !isVerifying && !verified) {
       router.push(asRoute(redirectTo));
     }
-  }, [authLoading, isAuthenticated, router, redirectTo]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    if (initialEmail || email) {
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    void fetchCustomerLoginEmailPrefillForRedirect(redirectTo).then(
-      (emailHint) => {
-        if (!cancelled && emailHint) {
-          setEmail(emailHint);
-        }
-      }
-    );
-
-    return () => {
-      cancelled = true;
-    };
-  }, [email, initialEmail, redirectTo, setEmail]);
+  }, [
+    isReady,
+    authLoading,
+    isAuthenticated,
+    isVerifying,
+    verified,
+    router,
+    redirectTo,
+  ]);
 
   // Show loading screen while checking auth/merchant
   if (merchantLoading || authLoading) {
@@ -141,12 +139,16 @@ function OgabasseyLoginPageContent() {
           <div className="text-center mb-8">
             <OgabasseyLogo className="h-10 mx-auto mb-6 text-primary" />
             <h1 className="text-2xl font-bold text-gray-900 mb-2">
-              {isCodeSent ? 'Enter verification code' : 'Sign in or Create account'}
+              {verified ? 'You’re signed in' : isCodeSent ? 'Enter verification code' : 'Sign in or Create account'}
             </h1>
             <p className="text-gray-500 text-sm">
-              {isCodeSent
+              {verified
+                ? 'Returning to your previous page…'
+                : isCodeSent
                 ? `We sent a 6-digit code to ${sentToEmail}`
-                : 'Enter your email to sign in or sign up instantly'}
+                : emailHint
+                  ? `This receipt was sent to ${emailHint} — sign in with that address.`
+                  : 'Enter your email to sign in or sign up instantly'}
             </p>
           </div>
 
@@ -164,17 +166,18 @@ function OgabasseyLoginPageContent() {
             />
           ) : (
             <OtpVerificationForm
-              email={sentToEmail || email}
+              continueHref={redirectTo}
               code={code}
               onCodeChange={handleCodeChange}
-              onKeyDown={handleKeyDown}
-              onPaste={handlePaste}
+              onComplete={handleCompleteCode}
               onResend={handleResendCode}
               onChangeEmail={handleChangeEmail}
               error={error}
               isVerifying={isVerifying}
               isSending={isSending}
-              inputRefs={codeInputRefs}
+              verified={verified}
+              sentAt={codeSentAt}
+              resendSentAt={resendSentAt}
             />
           )}
         </div>

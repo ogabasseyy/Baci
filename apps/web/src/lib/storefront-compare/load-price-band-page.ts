@@ -19,10 +19,15 @@ import {
   getStorefrontLocale,
 } from '@/lib/storefront-localization';
 import { buildStorefrontMetadataTitle } from '@/lib/storefront-metadata-title';
+import { getStorefrontPathPrefix } from '@/lib/storefront-path-prefix';
 import { evaluateStorefrontSlugSafety } from '@/lib/storefront-slug-safety';
 import { isDomainIdentifier } from '@/lib/validation';
 import { buildPriceBandCandidate } from './compare-eligibility';
-import { getCuratedPriceBands } from './price-band-taxonomy';
+import { parseCandidatePrice } from './is-price-band-candidate-available';
+import {
+  COMMERCIAL_SUPPORT_PRODUCTS_PER_CATEGORY_LIMIT,
+  getCuratedPriceBands,
+} from './price-band-taxonomy';
 
 interface PriceBandPageProduct {
   id: string;
@@ -34,6 +39,7 @@ interface PriceBandPageProduct {
   price: number;
   condition: string;
   stock: number;
+  manage_stock: boolean;
   availability: 'InStock' | 'OutOfStock';
   has_condition_offers: boolean;
   product_key_specs?: ProductKeySpecsRecord | null;
@@ -69,7 +75,7 @@ export async function getPriceBandStorefrontPathPrefix(
     headersList.has('x-merchant-slug') ||
     isDomainIdentifier(routeIdentifier)
     ? ''
-    : `/${merchantSlug}`;
+    : getStorefrontPathPrefix(headersList, merchantSlug);
 }
 
 function getSupportedClusterCategory(
@@ -98,6 +104,11 @@ function getPriceBandFormatter(
   }
   return formatter;
 }
+
+export {
+  COMMERCIAL_SUPPORT_PRODUCTS_PER_CATEGORY_LIMIT,
+  COMMERCIAL_SUPPORT_PRODUCTS_PER_CATEGORY_LIMIT as SITEMAP_COMMERCIAL_SUPPORT_PRODUCTS_PER_CATEGORY_LIMIT,
+};
 
 export async function loadPriceBandPage(
   args: {
@@ -129,22 +140,37 @@ export async function loadPriceBandPage(
     return null;
   }
 
-  const categoryData = await getCachedCategoryPageData(
-    merchant.id,
-    args.categorySlug,
-    args.merchantSlug
-  );
-
-  if (!categoryData || categoryData.isCollection) {
-    return null;
-  }
-
-  const band = getCuratedPriceBands(args.categorySlug).find(
-    (candidate) => candidate.slug === args.priceBandSlug
-  );
+  const payoutCurrency = resolveMerchantCurrencyConfig(merchant).code;
+  const band = getCuratedPriceBands(args.categorySlug, {
+    merchantCurrency: payoutCurrency,
+  }).find((candidate) => candidate.slug === args.priceBandSlug);
 
   if (!band) {
     return null;
+  }
+
+  const categoryData = await getCachedCategoryPageData(
+    merchant.id,
+    args.categorySlug,
+    args.merchantSlug,
+    0,
+    COMMERCIAL_SUPPORT_PRODUCTS_PER_CATEGORY_LIMIT
+  );
+
+  if (
+    !categoryData ||
+    categoryData.isCollection ||
+    categoryData.isInactiveCategory
+  ) {
+    return null;
+  }
+
+  if (
+    categoryData.categoryQueryFailed ||
+    categoryData.productsQueryFailed ||
+    categoryData.productIdsQueryFailed
+  ) {
+    throw new Error('Price band inventory is temporarily unavailable');
   }
 
   const rawProducts = ((categoryData.products ?? []) as unknown[]).filter(
@@ -158,31 +184,59 @@ export async function loadPriceBandPage(
     categorySlug: args.categorySlug,
     band,
     products: normalizedProducts.map((product) => ({
+      id: product.id,
       slug: product.slug,
       name: product.name,
       brand: product.brand,
-      price: product.price,
+      price: parseCandidatePrice(product.price),
+      stock: product.stock,
+      manage_stock: product.manage_stock,
+      has_condition_offers: product.has_condition_offers,
     })),
   });
 
-  const products: PriceBandPageProduct[] = normalizedProducts
-    .filter((product) => isWithinBand(product.price, band.floor, band.ceiling))
-    .map((product) => ({
+  const seenProductIdentities = new Set<string>();
+  const products: PriceBandPageProduct[] = [];
+  for (const product of normalizedProducts) {
+    const numericPrice = parseCandidatePrice(product.price);
+    if (
+      !Number.isFinite(numericPrice) ||
+      numericPrice <= 0 ||
+      !isWithinBand(numericPrice, band.floor, band.ceiling)
+    ) {
+      continue;
+    }
+    const isAvailable =
+      product.availability === 'InStock' ||
+      Boolean(product.has_condition_offers);
+    if (!isAvailable) {
+      continue;
+    }
+    const key = product.id?.trim() || product.slug?.trim();
+    if (key) {
+      if (seenProductIdentities.has(key)) {
+        continue;
+      }
+      seenProductIdentities.add(key);
+    }
+    products.push({
       id: product.id,
       name: product.name,
       slug: product.slug,
       category: product.category,
       category_slug: product.category_slug,
       brand: product.brand,
-      price: product.price,
+      price: numericPrice,
       condition: product.condition,
       stock: product.stock,
+      manage_stock: product.manage_stock,
       availability: product.availability,
       has_condition_offers: product.has_condition_offers ?? false,
       product_key_specs: product.product_key_specs,
       image: product.image,
       description: product.description,
-    }));
+    });
+  }
 
   const storeUrl = buildStoreUrl(merchant);
   const supportedClusterCategory = getSupportedClusterCategory(
@@ -197,7 +251,6 @@ export async function loadPriceBandPage(
     : [];
   const categoryName = categoryData.fallbackName || args.categorySlug;
   const canonicalUrl = `${storeUrl}/${args.categorySlug}/best-under/${band.slug}`;
-  const payoutCurrency = resolveMerchantCurrencyConfig(merchant).code;
   const priceFormatter = getPriceBandFormatter(
     getStorefrontLocale(merchant.country),
     payoutCurrency

@@ -48,6 +48,7 @@ it('claims a custody-signed outflow through the custody intake', async () => {
   expect(mocks.custody).toHaveBeenCalledWith({
     rawBody,
     signature: base.signature,
+    environment: expect.any(Object),
   });
 });
 
@@ -112,6 +113,7 @@ it('falls through to the shared inflow dispatcher when the bank intake declines'
     signature: base.signature,
     secret: 'fixture-secret',
     families: ['legacy', 'bank'],
+    env: expect.any(Object),
   });
 });
 
@@ -218,6 +220,42 @@ it('falls through when an enabled bank inbox declines an unmapped receipt', asyn
     ...base,
     event: { eventType: 'bank-transfer.inflow.success' } as never,
     families: ['bank'],
+  });
+  expect(response).toBeNull();
+});
+
+// The engine readiness gate refused the primary credit before anything was
+// applied. That must behave like the primary inflow being switched off.
+it.each([
+  'disabled',
+  'not_handled',
+] as const)('answers retryable for a bank-only delivery while the engine refuses it (inbox %s)', async (bankOutcome) => {
+  mocks.bank.mockResolvedValue({ outcome: bankOutcome, response: null });
+  mocks.inflow.mockResolvedValue('prerequisite');
+  const response = (await dispatchPrimaryPiggyvestIntake({
+    ...base,
+    event: { eventType: 'bank-transfer.inflow.success' } as never,
+    families: ['bank'],
+  })) as Response;
+  expect(response).toBeInstanceOf(Response);
+  expect(response.status).toBe(503);
+  expect(await response.json()).toEqual({
+    received: false,
+    code: 'PIGGYVEST_PRIMARY_INFLOW_NOT_READY',
+    error: 'Primary wallet inflow not ready',
+  });
+});
+
+it.each([
+  [['legacy']],
+  [['legacy', 'bank']],
+] as const)('falls through to legacy handling for %j while the engine refuses the inflow', async (families) => {
+  mocks.bank.mockResolvedValue({ outcome: 'not_handled', response: null });
+  mocks.inflow.mockResolvedValue('prerequisite');
+  const response = await dispatchPrimaryPiggyvestIntake({
+    ...base,
+    event: { eventType: 'bank-transfer.inflow.success' } as never,
+    families,
   });
   expect(response).toBeNull();
 });

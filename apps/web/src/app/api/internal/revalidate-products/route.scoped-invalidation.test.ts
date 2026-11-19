@@ -1,0 +1,256 @@
+import { NextRequest } from 'next/server';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const mockGetInternalApiSecret = vi.fn();
+const mockRevalidateProducts = vi.fn();
+const mockRevalidateProductSlugs = vi.fn();
+const mockEnrichProductPurgeEntries = vi.fn();
+const mockCreatePublicClient = vi.fn();
+const mockScheduleStorefrontProductPurge = vi.fn();
+const mockScheduleStorefrontHostnamePurge = vi.fn();
+const mockResolveDependentAliases = vi.fn();
+
+vi.mock('@/env', () => ({
+  getInternalApiSecret: () => mockGetInternalApiSecret(),
+}));
+vi.mock('@/lib/cache-revalidation', () => ({
+  revalidateProducts: (...args: unknown[]) => mockRevalidateProducts(...args),
+  revalidateProductSlugs: (...args: unknown[]) =>
+    mockRevalidateProductSlugs(...args),
+}));
+vi.mock('@/lib/authoritative-product-purge-enrichment', () => ({
+  enrichProductPurgeEntries: (...args: unknown[]) =>
+    mockEnrichProductPurgeEntries(...args),
+}));
+vi.mock('@/lib/resolve-dependent-legacy-product-identifiers', () => ({
+  resolveDependentLegacyProductIdentifiers: (...args: unknown[]) =>
+    mockResolveDependentAliases(...args),
+}));
+vi.mock('@/lib/expire-product-blog-cache', () => ({
+  expireProductBlogCache: vi.fn(),
+}));
+vi.mock('@/lib/storefront-product-purge', () => ({
+  scheduleStorefrontProductPurge: (...args: unknown[]) =>
+    mockScheduleStorefrontProductPurge(...args),
+}));
+vi.mock('@/lib/storefront-product-purge-hostnames', () => ({
+  scheduleStorefrontHostnamePurge: (...args: unknown[]) =>
+    mockScheduleStorefrontHostnamePurge(...args),
+}));
+vi.mock('@/lib/supabase/public', () => ({
+  createPublicClient: (...args: unknown[]) => mockCreatePublicClient(...args),
+}));
+vi.mock('@/lib/logger', () => ({
+  logger: { error: vi.fn(), warn: vi.fn() },
+}));
+
+import { POST } from './route';
+
+const SECRET = 'test-internal-secret';
+const MERCHANT_ID = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
+
+function makeRequest(body: unknown): NextRequest {
+  return new NextRequest(
+    'https://app.usebaci.com/api/internal/revalidate-products',
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${SECRET}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    }
+  );
+}
+
+describe('POST /api/internal/revalidate-products scoped PDP invalidation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetInternalApiSecret.mockReturnValue(SECRET);
+    mockRevalidateProductSlugs.mockReturnValue(true);
+    mockResolveDependentAliases.mockResolvedValue({
+      identifiers: [],
+      incomplete: false,
+    });
+    mockCreatePublicClient.mockReturnValue({
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            maybeSingle: () =>
+              Promise.resolve({ data: { slug: 'ogabassey' }, error: null }),
+          }),
+        }),
+      }),
+    });
+  });
+
+  it('omits merchant-wide PDP details only when caller opts in and all products resolve', async () => {
+    mockEnrichProductPurgeEntries.mockResolvedValueOnce({
+      entries: [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
+      resolvedSlugs: ['iphone-15', 'prod-1'],
+      authoritativeSlugsById: new Map([['prod-1', 'iphone-15']]),
+      blogPostSlugs: [],
+      blogPostSlugsIncomplete: false,
+    });
+
+    const res = await POST(
+      makeRequest({
+        merchantId: MERCHANT_ID,
+        merchantSlug: 'ogabassey',
+        productSlugs: ['iphone-15'],
+        omitMerchantWidePdpDetails: true,
+        slugsUnchanged: true,
+        products: [
+          { id: 'prod-1', slug: 'iphone-15', previousSlug: 'iphone-15' },
+        ],
+      })
+    );
+
+    expect(res.status).toBe(200);
+    expect(mockRevalidateProducts).toHaveBeenCalledTimes(1);
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      MERCHANT_ID,
+      undefined,
+      { expireImmediately: true, omitMerchantWidePdpDetails: true }
+    );
+  });
+
+  it('keeps full merchant-wide PDP invalidation when omitMerchantWidePdpDetails is omitted', async () => {
+    mockEnrichProductPurgeEntries.mockResolvedValueOnce({
+      entries: [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
+      resolvedSlugs: ['iphone-15', 'prod-1'],
+      authoritativeSlugsById: new Map([['prod-1', 'iphone-15']]),
+      blogPostSlugs: [],
+      blogPostSlugsIncomplete: false,
+    });
+
+    const res = await POST(
+      makeRequest({
+        merchantId: MERCHANT_ID,
+        merchantSlug: 'ogabassey',
+        productSlugs: ['iphone-15'],
+        products: [{ id: 'prod-1' }],
+      })
+    );
+
+    expect(res.status).toBe(200);
+    expect(mockRevalidateProducts).toHaveBeenCalledTimes(1);
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      MERCHANT_ID,
+      undefined,
+      { expireImmediately: true }
+    );
+  });
+
+  it('keeps full merchant-wide PDP invalidation when an id-only product fails authoritative slug lookup', async () => {
+    mockEnrichProductPurgeEntries.mockResolvedValueOnce({
+      entries: [{ slug: 'prod-archived', categorySegment: null }],
+      resolvedSlugs: ['prod-archived'],
+      authoritativeSlugsById: new Map(),
+      blogPostSlugs: [],
+      blogPostSlugsIncomplete: false,
+    });
+
+    const res = await POST(
+      makeRequest({
+        merchantId: MERCHANT_ID,
+        merchantSlug: 'ogabassey',
+        productSlugs: ['iphone-15'],
+        omitMerchantWidePdpDetails: true,
+        products: [{ id: 'prod-archived' }],
+      })
+    );
+
+    expect(res.status).toBe(200);
+    expect(mockRevalidateProducts).toHaveBeenCalledTimes(1);
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      MERCHANT_ID,
+      undefined,
+      { expireImmediately: true }
+    );
+  });
+
+  it('keeps full merchant-wide PDP invalidation when blogPostSlugsIncomplete is true', async () => {
+    mockEnrichProductPurgeEntries.mockResolvedValueOnce({
+      entries: [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
+      resolvedSlugs: ['iphone-15'],
+      blogPostSlugs: [],
+      blogPostSlugsIncomplete: true,
+    });
+
+    const res = await POST(
+      makeRequest({
+        merchantId: MERCHANT_ID,
+        merchantSlug: 'ogabassey',
+        productSlugs: ['iphone-15'],
+        omitMerchantWidePdpDetails: true,
+        products: [{ slug: 'iphone-15' }],
+      })
+    );
+
+    expect(res.status).toBe(200);
+    expect(mockRevalidateProducts).toHaveBeenCalledTimes(1);
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      MERCHANT_ID,
+      undefined,
+      { expireImmediately: true }
+    );
+  });
+
+  it('falls back to full merchant-wide PDP invalidation when enrichment throws', async () => {
+    mockEnrichProductPurgeEntries.mockRejectedValueOnce(new Error('db failed'));
+
+    const res = await POST(
+      makeRequest({
+        merchantId: MERCHANT_ID,
+        merchantSlug: 'ogabassey',
+        productSlugs: ['iphone-15'],
+        omitMerchantWidePdpDetails: true,
+        slugsUnchanged: true,
+        products: [
+          { id: 'prod-1', slug: 'iphone-15', previousSlug: 'iphone-15' },
+        ],
+      })
+    );
+
+    expect(res.status).toBe(200);
+    expect(mockRevalidateProducts).toHaveBeenCalledTimes(1);
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      MERCHANT_ID,
+      undefined,
+      { expireImmediately: true }
+    );
+  });
+
+  it('falls back to broad invalidation on legacy renames (caller slug != authoritative slug) while busting both slugs', async () => {
+    mockEnrichProductPurgeEntries.mockResolvedValueOnce({
+      entries: [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
+      resolvedSlugs: ['iphone-16', 'iphone-15', 'prod-1'],
+      authoritativeSlugsById: new Map([['prod-1', 'iphone-16']]),
+      blogPostSlugs: [],
+      blogPostSlugsIncomplete: false,
+    });
+
+    const res = await POST(
+      makeRequest({
+        merchantId: MERCHANT_ID,
+        merchantSlug: 'ogabassey',
+        productSlugs: ['iphone-16'],
+        omitMerchantWidePdpDetails: true,
+        products: [{ id: 'prod-1', slug: 'iphone-15' }],
+      })
+    );
+
+    expect(res.status).toBe(200);
+    expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
+      MERCHANT_ID,
+      ['iphone-16', 'iphone-15', 'prod-1'],
+      { expireImmediately: true }
+    );
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      MERCHANT_ID,
+      undefined,
+      { expireImmediately: true }
+    );
+  });
+});

@@ -35,6 +35,126 @@ describe('redirectSystemPath', () => {
     mockEnv.rootDomain = undefined;
   });
 
+  it.each([
+    'ogabassey:///',
+    'ogabassey://',
+    'OGABASSEY:///',
+    'ogabassey://?handoff=secret',
+    'ogabassey://#handoff=secret',
+    'ogabassey:///?handoff=secret',
+    'ogabassey:///#handoff=secret',
+  ])('keeps the initial custom-scheme launcher root %s on Home', (path) => {
+    expect(redirectSystemPath({ path, initial: true })).toBe('/');
+    expect(mockCapture).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'OGABASSEY:///',
+    'Ogabassey://',
+  ])('keeps mixed-case bare launcher roots on Home after launch: %s', (path) => {
+    expect(redirectSystemPath({ path, initial: false })).toBe('/');
+    expect(mockCapture).not.toHaveBeenCalled();
+  });
+
+  it('keeps bare launcher roots on Home and validates route URLs', () => {
+    for (const value of [{ path: 'ogabassey:///cart', initial: true }]) {
+      expect(redirectSystemPath(value)).toBe('/cart');
+      expect(mockCapture).toHaveBeenLastCalledWith('/cart', expect.anything());
+    }
+    expect(redirectSystemPath({ path: 'ogabassey:///', initial: false })).toBe(
+      '/'
+    );
+    expect(mockCapture).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves a route when only the custom URL scheme is uppercase', () => {
+    expect(
+      redirectSystemPath({ path: 'OGABASSEY:///cart', initial: true })
+    ).toBe('/cart');
+    expect(mockCapture).toHaveBeenCalledWith('/cart', expect.anything());
+  });
+
+  it.each([
+    'ogabassey://cart',
+    'ogabassey://cart/',
+    'ogabassey:///cart',
+    'ogabassey:///cart/',
+    'OGABASSEY://CART/',
+    'OGABASSEY:///cart/',
+  ])('normalizes route-form custom URL %s', (path) => {
+    expect(redirectSystemPath({ path, initial: true })).toBe('/cart');
+    expect(mockCapture).toHaveBeenCalledWith('/cart', expect.anything());
+  });
+
+  it('normalizes a custom-scheme host into the storefront route path', () => {
+    expect(
+      redirectSystemPath({ path: 'ogabassey://cart', initial: true })
+    ).toBe('/cart');
+    expect(mockCapture).toHaveBeenCalledWith('/cart', expect.anything());
+  });
+
+  it('preserves a pairing fragment on a host-form cart route with a trailing slash', () => {
+    const path = 'ogabassey://cart/#handoff=token&hid=handoff-id';
+    expect(redirectSystemPath({ path, initial: true })).toBe('/cart');
+    expect(mockCapture).toHaveBeenCalledWith(
+      '/cart#handoff=token&hid=handoff-id',
+      expect.anything()
+    );
+  });
+
+  it('preserves pairing fragments on path-form cart routes', () => {
+    const path = 'ogabassey:///cart/#handoff=token&hid=handoff-id';
+    expect(redirectSystemPath({ path, initial: true })).toBe('/cart');
+    expect(mockCapture).toHaveBeenCalledWith(
+      '/cart#handoff=token&hid=handoff-id',
+      expect.anything()
+    );
+  });
+
+  it('rejects custom-scheme pairing routes with URL userinfo', () => {
+    expect(
+      redirectSystemPath({
+        path: 'ogabassey://user:pass@cart/#handoff=secret',
+        initial: true,
+      })
+    ).toBe('/');
+    expect(mockCapture).not.toHaveBeenCalled();
+  });
+
+  it('rejects custom-scheme routes with a port', () => {
+    expect(
+      redirectSystemPath({
+        path: 'ogabassey://cart:123#handoff=token&hid=secret',
+        initial: true,
+      })
+    ).toBe('/');
+    expect(mockCapture).not.toHaveBeenCalled();
+  });
+
+  it('preserves non-cart custom routes while stripping pairing secrets', () => {
+    mockCapture.mockImplementationOnce((path) => path);
+    expect(
+      redirectSystemPath({
+        path: 'ogabassey://product/phone?color=blue&hid=secret#handoff=token&tab=details',
+        initial: true,
+      })
+    ).toBe('/product/phone?color=blue#tab=details');
+    expect(mockCapture).toHaveBeenCalledWith(
+      '/product/phone?color=blue#tab=details',
+      expect.anything()
+    );
+  });
+
+  it('strips case-insensitive pairing keys from non-cart custom routes', () => {
+    mockCapture.mockImplementationOnce((path) => path);
+    expect(
+      redirectSystemPath({
+        path: 'ogabassey://product/phone?Handoff=secret&color=blue#HID=token&tab=details',
+        initial: true,
+      })
+    ).toBe('/product/phone?color=blue#tab=details');
+  });
+
   it('delegates to pairing capture with the configured merchant and platform root', () => {
     const result = redirectSystemPath({
       path: '/cart/link#handoff=token',

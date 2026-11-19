@@ -1,5 +1,4 @@
 import { router, Tabs } from 'expo-router';
-import type { BottomTabBarProps } from 'expo-router/js-tabs';
 import { useShallow } from 'zustand/react/shallow';
 import { ErrorFallback } from '@/components/ErrorBoundary';
 import { CustomTabBar } from '@/components/navigation/CustomTabBar';
@@ -7,8 +6,10 @@ import {
   TabBarIcon,
   TabBarLabel,
 } from '@/components/navigation/TabBarComponents';
+import { palette } from '@/constants/Colors';
 import { useWarmMerchantPaymentSettings } from '@/hooks/use-warm-merchant-payment-settings';
 import { useTheme } from '@/hooks/useTheme';
+import { CONFIG } from '@/lib/config';
 import { useAuthStore } from '@/stores/auth-store';
 import { useCartStore } from '@/stores/cart-store';
 import { useSavedStore } from '@/stores/saved-store';
@@ -23,8 +24,16 @@ export function ErrorBoundary({
   return <ErrorFallback error={error} retry={retry} />;
 }
 
+export const unstable_settings = { initialRouteName: 'index' };
+
 export default function TabLayout() {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
+  const homeActiveColor =
+    CONFIG.MERCHANT_SLUG === 'ogabassey'
+      ? isDark
+        ? palette.red[400]
+        : palette.red[600]
+      : undefined;
   // Warm the payment-settings cache at storefront launch so quick-adds
   // resolve the live shipping-insurance toggle instead of unknown, and
   // reconcile lines that were added while it was still loading.
@@ -60,11 +69,10 @@ export default function TabLayout() {
 
   return (
     <Tabs
-      initialRouteName="index"
       detachInactiveScreens={true}
       tabBar={(props) => (
         <CustomTabBar
-          {...(props as unknown as BottomTabBarProps)}
+          {...props}
           preloadProtectedTabs={shouldPreloadProtectedTabs}
         />
       )}
@@ -95,12 +103,17 @@ export default function TabLayout() {
           freezeOnBlur: true,
           tabBarIcon: ({ focused }) => (
             <TabBarIcon
+              activeColor={homeActiveColor}
               name={focused ? 'home' : 'home-outline'}
               focused={focused}
             />
           ),
           tabBarLabel: ({ focused }) => (
-            <TabBarLabel focused={focused} label="Home" />
+            <TabBarLabel
+              activeColor={homeActiveColor}
+              focused={focused}
+              label="Home"
+            />
           ),
         }}
       />

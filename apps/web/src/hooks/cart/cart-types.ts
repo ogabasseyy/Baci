@@ -1,5 +1,7 @@
 import type { CartErrorCode } from '@baci/shared/cart';
+import type { ReactNode } from 'react';
 import type { Product } from '@/lib/products';
+import type { ExperienceCartHostPort } from './shared-cart-experience-runtime';
 
 /**
  * Link markers for a shared-cart display line. `serverLineId` is the
@@ -30,6 +32,8 @@ export interface CartItem extends Product {
   variantId?: string;
   variantAttributes?: Record<string, string>;
   cartItemId: string;
+  /** Unique to a locally added line, including after remove and re-add. */
+  cartLineInstanceId?: string;
   selectedColor?: string;
   selectedColorValue?: string;
   secondaryColor?: string;
@@ -78,6 +82,7 @@ export interface AddToCartOptions {
 export type AddToCartOutcome = 'applied' | 'rejected';
 
 export interface CartContextType {
+  experienceCommandPort?: ExperienceCartHostPort;
   cart: CartItem[];
   merchantSlug: string | null;
   addToCart: (
@@ -92,6 +97,10 @@ export interface CartContextType {
     variantId?: string
   ) => void;
   clearCart: () => void;
+  completeOxygenPurchasedLines?: (
+    merchantSlug: string,
+    lines: import('./oxygen-cart-completion').OxygenPurchasedCartLine[]
+  ) => void;
   setMerchantSlug: (slug: string) => void;
   cartCount: number;
   cartTotal: number;
@@ -121,6 +130,10 @@ export interface CartContextType {
   sharedCartRef?: { cartId: string; version: number } | null;
   /** Refetches the authoritative snapshot; absent in legacy mode. */
   refreshSharedCart?: () => Promise<void>;
+  /** Ensures a delegated cart session exists for trusted host integrations. */
+  ensureSharedCartSession?: () => Promise<
+    import('./shared-cart-hook-support').EnsureCartResult
+  >;
   /** Last-confirmed-plus-pending sync state; absent in legacy mode. */
   syncStatus?: SharedCartSyncStatus;
   /** Last sync failure code, cleared on the next success. */
@@ -131,10 +144,29 @@ export interface CartContextType {
   discardLegacyImport?: () => void;
   /** Import warnings such as `import_capacity_exceeded`. */
   importWarnings?: string[];
+  /** Initial device-cart import lifecycle state, when delegated. */
+  importStatus?: SharedCartImportStatus;
   /** Legacy-import lines blocked on an explicit offer choice. */
   importConflicts?: import('@baci/shared/cart').CartMergeConflict[];
   /** Applies the shopper's per-line choices and retries the import. */
   resolveImportConflicts?: (
     resolutions: import('@baci/shared/cart').CartMergeResolution[]
   ) => void;
+}
+
+export interface StorefrontCartProviderProps {
+  children: ReactNode;
+  enableSmartCartPro?: boolean;
+  merchantSlug?: string | null;
+  deferValidationUntilIdle?: boolean;
+  validationActivationTimeoutMs?: number;
+  /**
+   * Enrolled merchant identity for shared-cart delegation. The server frame
+   * evaluates enrollment; the provider delegates only while the active slug
+   * matches the enrolled merchant. Null/flag-missing means legacy local cart.
+   */
+  merchantId?: string | null;
+  sharedCartEnabled?: boolean;
+  sharedCartAccountsEnabled?: boolean;
+  sharedCartRealtimeEnabled?: boolean;
 }

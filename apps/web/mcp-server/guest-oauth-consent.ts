@@ -63,7 +63,7 @@ export async function createGuestConsent(
   // A thrown storage error is indeterminate: retain the reservation. A false
   // CAS definitively persisted nothing and can safely refund its one slot.
   if (!(await store.compareAndSwap(`consent:${hash(id)}`, 0,
-    { request, cookieHash: hash(cookie), used: false }, now + WINDOW_MS))) {
+    { request, cookieHash: hash(cookie), used: false, connectionRenewable: true }, now + WINDOW_MS))) {
     try { await refund(); } catch { /* Keep the reservation on uncertain refunds. */ }
     throw new Error('temporarily_unavailable');
   }

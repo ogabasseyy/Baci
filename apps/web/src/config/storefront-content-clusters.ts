@@ -10,6 +10,17 @@ export const CONTENT_CLUSTER_SUPPORT = {
   ...MEDIA_CONTENT_CLUSTER_SUPPORT,
 } satisfies Record<SupportedClusterCategory, ClusterSupport>;
 
+export const EXPLICIT_CONTENT_CLUSTER_CATEGORIES = (
+  Object.entries(CONTENT_CLUSTER_SUPPORT) as [
+    SupportedClusterCategory,
+    ClusterSupport,
+  ][]
+)
+  .flatMap(([categorySlug, support]) =>
+    support.categoryNames.map((name) => ({ categorySlug, name }))
+  )
+  .sort((left, right) => right.name.length - left.name.length);
+
 export const CONTENT_KIND_TOKENS = {
   'buyer-guide': [
     'buyer guide',

@@ -1,4 +1,5 @@
 import {
+  filterRuntimeImeiTierKeys,
   type ImeiBrandFilter,
   type ImeiServiceTierKey,
   PUBLIC_IMEI_SERVICE_TIERS,
@@ -168,11 +169,23 @@ export function getPublicVisibleImeiServiceTierKeys(
     expanded: boolean
   ) => ImeiServiceTierKey[],
   brand: ImeiBrandFilter,
-  expanded: boolean
+  expanded: boolean,
+  availableTierKeys: readonly ImeiServiceTierKey[] | null = null
 ): ImeiServiceTierKey[] {
-  return getVisibleTiers(brand, expanded).filter((tierKey) =>
-    PUBLIC_IMEI_SERVICE_TIER_KEYS.has(tierKey)
+  const visible = filterRuntimeImeiTierKeys(
+    getVisibleTiers(brand, expanded).filter((tierKey) =>
+      PUBLIC_IMEI_SERVICE_TIER_KEYS.has(tierKey)
+    ),
+    availableTierKeys
   );
+  return !expanded && visible.length === 0
+    ? getPublicVisibleImeiServiceTierKeys(
+        getVisibleTiers,
+        brand,
+        true,
+        availableTierKeys
+      )
+    : visible;
 }
 
 export function hasAdditionalPublicImeiServiceTierKeys(
@@ -180,17 +193,20 @@ export function hasAdditionalPublicImeiServiceTierKeys(
     brand: ImeiBrandFilter,
     expanded: boolean
   ) => ImeiServiceTierKey[],
-  brand: ImeiBrandFilter
+  brand: ImeiBrandFilter,
+  availableTierKeys: readonly ImeiServiceTierKey[] | null = null
 ): boolean {
   const collapsedKeys = getPublicVisibleImeiServiceTierKeys(
     getVisibleTiers,
     brand,
-    false
+    false,
+    availableTierKeys
   );
   const expandedKeys = getPublicVisibleImeiServiceTierKeys(
     getVisibleTiers,
     brand,
-    true
+    true,
+    availableTierKeys
   );
 
   return expandedKeys.some((tierKey) => !collapsedKeys.includes(tierKey));

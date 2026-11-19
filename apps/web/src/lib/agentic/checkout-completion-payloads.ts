@@ -5,6 +5,7 @@ import {
   getFulfillmentAmount,
   getSubtotalAmount,
 } from '@/lib/agentic/checkout-storage';
+import { getCheckoutGrandTotal } from './checkout-totals';
 
 interface CheckoutDvaAccount {
   account_name: string;
@@ -41,6 +42,8 @@ export function buildAgenticCheckoutOrderPayload({
     customer_email: buyer.email,
     customer_name: buildBuyerDisplayName(buyer),
     customer_phone: buyer.phone_number,
+    discount_amount: 0,
+    gift_wrapping_fee: 0,
     items: sessionCalc.lineItems.map((li) => ({
       name: li.item.title || li.item.id || 'Product',
       product_id: li.item.product_id,
@@ -56,9 +59,11 @@ export function buildAgenticCheckoutOrderPayload({
       ...(li.item.condition ? { condition: li.item.condition } : {}),
     })),
     subtotal: getSubtotalAmount(sessionCalc.totals),
+    expected_total: getCheckoutGrandTotal(sessionCalc.totals),
     shipping_fee: getFulfillmentAmount(sessionCalc.totals),
     payment_method: BANK_TRANSFER_PAYMENT_METHOD,
     payment_status: PENDING_STATUS,
+    tax_basis: 'exclusive' as const,
     payment_provider_reference: dvaAccount.account_number,
     shipping_status: PENDING_STATUS,
     shipping_address: session.shipping_address,

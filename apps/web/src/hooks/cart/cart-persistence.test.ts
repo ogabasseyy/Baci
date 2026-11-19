@@ -148,6 +148,14 @@ describe('cart-persistence', () => {
       expect(getSharedCartImportReceipt('acme')).toBeNull();
       expect(getCartSessionGeneration()).toBe(start + 1);
     });
+
+    it('scopes the generation fence to the cleared merchant', () => {
+      const otherBefore = getCartSessionGeneration('other');
+      const acmeBefore = getCartSessionGeneration('acme');
+      clearCartStorage('acme', 'user-1');
+      expect(getCartSessionGeneration('other')).toBe(otherBefore);
+      expect(getCartSessionGeneration('acme')).toBeGreaterThan(acmeBefore);
+    });
   });
 
   describe('shared-cart markers', () => {

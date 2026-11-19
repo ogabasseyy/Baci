@@ -69,7 +69,7 @@ describe('RepairsScreen route', () => {
     mockDevicesState.isLoading = false;
     mockDevicesState.isUnavailable = false;
     mockDevicesState.error = null;
-    jest.spyOn(Linking, 'openURL').mockResolvedValue(true);
+    jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
   });
 
   it('renders the device-first catalogue when repairs are enabled', () => {

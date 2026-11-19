@@ -1,0 +1,36 @@
+diff --git a/lib/typescript/components/bottomSheetTextInput/BottomSheetTextInput.d.ts b/lib/typescript/components/bottomSheetTextInput/BottomSheetTextInput.d.ts
+--- a/lib/typescript/components/bottomSheetTextInput/BottomSheetTextInput.d.ts
++++ b/lib/typescript/components/bottomSheetTextInput/BottomSheetTextInput.d.ts
+@@ -1,5 +1,5 @@
+ import React from 'react';
+-import { TextInput } from 'react-native-gesture-handler';
++import type { TextInputInstance } from 'react-native';
+ import type { BottomSheetTextInputProps } from './types';
+-declare const BottomSheetTextInput: React.MemoExoticComponent<React.ForwardRefExoticComponent<BottomSheetTextInputProps & React.RefAttributes<TextInput | undefined>>>;
++declare const BottomSheetTextInput: React.MemoExoticComponent<React.ForwardRefExoticComponent<BottomSheetTextInputProps & React.RefAttributes<TextInputInstance | undefined>>>;
+ export default BottomSheetTextInput;
+diff --git a/src/components/bottomSheetTextInput/BottomSheetTextInput.tsx b/src/components/bottomSheetTextInput/BottomSheetTextInput.tsx
+--- a/src/components/bottomSheetTextInput/BottomSheetTextInput.tsx
++++ b/src/components/bottomSheetTextInput/BottomSheetTextInput.tsx
+@@ -7,6 +7,7 @@
+   useRef,
+ } from 'react';
+ import type {
++  TextInputInstance,
+   NativeSyntheticEvent,
+   TextInputFocusEventData,
+ } from 'react-native';
+@@ -17,11 +18,11 @@
+ import type { BottomSheetTextInputProps } from './types';
+ 
+ const BottomSheetTextInputComponent = forwardRef<
+-  TextInput | undefined,
++  TextInputInstance | undefined,
+   BottomSheetTextInputProps
+ >(({ onFocus, onBlur, ...rest }, providedRef) => {
+   //#region refs
+-  const ref = useRef<TextInput>(null);
++  const ref = useRef<TextInputInstance>(null);
+   //#endregion
+ 
+   //#region hooks

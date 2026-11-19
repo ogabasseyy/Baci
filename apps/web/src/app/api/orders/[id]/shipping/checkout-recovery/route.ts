@@ -15,6 +15,7 @@ import { buildOrderGiglQuoteRequest } from '@/lib/shipping/build-order-gigl-quot
 import { matchesCheckoutRecoveryQuotePreference } from '@/lib/shipping/matches-checkout-recovery-quote-preference';
 import { selectPreferredQuote } from '@/lib/shipping/order-shipment-booking-utils';
 import { prepareCheckoutShippingRecovery } from '@/lib/shipping/prepare-checkout-shipping-recovery';
+import { repriceGiglQuoteForPaidFee } from '@/lib/shipping/reprice-gigl-quote-for-paid-fee';
 import { resolveBookingMerchantSender } from '@/lib/shipping/resolve-booking-merchant-sender';
 import { resolveRecoveryQuoteReceiver } from '@/lib/shipping/resolve-recovery-quote-receiver';
 import type { ShippingQuote } from '@/lib/shipping/types';
@@ -53,10 +54,12 @@ export async function POST(
       },
       { status: 400 }
     );
+  // The owner and staff granted orders.fulfill and orders.edit may recover
+  // the paid GIG destination (it rewrites the order, and the booking that
+  // follows needs orders.edit); the recovery RPCs re-check both under lock.
   const access = await getUserAccess(auth.supabase);
   if (
-    !access?.isOwner ||
-    !access.merchantId ||
+    !access?.merchantId ||
     !hasPermission(access, 'orders', 'fulfill') ||
     !hasPermission(access, 'orders', 'edit')
   )
@@ -176,13 +179,19 @@ export async function POST(
     );
   }
   const quote = selectPreferredQuote(
-    quotes.filter(
-      (candidate) =>
-        candidate.provider === 'GIGL' &&
-        candidate.currency === 'NGN' &&
-        !candidate.isStationPickup &&
-        matchesCheckoutRecoveryQuotePreference(candidate, preference)
-    ),
+    quotes
+      .filter(
+        (candidate) =>
+          candidate.provider === 'GIGL' &&
+          candidate.currency === 'NGN' &&
+          !candidate.isStationPickup &&
+          matchesCheckoutRecoveryQuotePreference(candidate, preference)
+      )
+      // A fee paid under the unrounded v1 rule (before NGN 100 rounding) is
+      // kept when the fresh provider cost reproduces it.
+      .map((candidate) =>
+        repriceGiglQuoteForPaidFee(candidate, order.shipping_fee)
+      ),
     {
       serviceTier: preference?.service_tier ?? null,
       carrierName: preference?.carrier_name ?? null,

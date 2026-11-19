@@ -1,0 +1,272 @@
+import { createDataSchema, pickString } from './loose-schemas';
+import {
+  position,
+  REPOST_QUESTIONS,
+  TRIVIALLY_DIFFERENT,
+  walletIdsOf,
+} from './proof-1-support';
+import { answerOf, ProofBuilder } from './proof-builder';
+import type { ProofContext } from './proof-context';
+import { okData, pollSettled, recordOf, usableList } from './read-rules';
+import type { Answer, ProofResult } from './types';
+
+export async function runProof1(ctx: ProofContext): Promise<ProofResult> {
+  const { api, qa, state, mode } = ctx;
+  const b = new ProofBuilder(
+    'p1',
+    'Create-customer re-POST with returnIfExist=true'
+  );
+  if (!state.customerId) {
+    return b
+      .inconclusive('QA customer unavailable: nothing to look up or re-POST')
+      .build(ctx);
+  }
+
+  // 1. Can the customer be found by third_party_identifier? (GET)
+  // A just-created customer may not be indexed yet, so poll within the budget.
+  const findCustomer = (
+    call: Awaited<ReturnType<typeof api.customersByIdentifier>>
+  ) =>
+    usableList(call)?.edges.find(
+      (edge) => pickString(edge, ['customer_id', 'id']) === state.customerId
+    );
+  const polled = await pollSettled(
+    ctx,
+    () => api.customersByIdentifier(qa.thirdPartyIdentifier),
+    (call) => findCustomer(call) !== undefined
+  );
+  const lookup = polled.value;
+  const lookupList = usableList(lookup);
+  const found = findCustomer(lookup);
+  // `no` needs a successful read of a recognised list for a customer that
+  // existed before this run; a fresh customer may simply not be indexed yet.
+  const lookupAnswer: Answer = found
+    ? 'yes'
+    : !lookupList || state.createdNewCustomer === true
+      ? 'unknown'
+      : 'no';
+  b.shape(
+    'GET /customers?third_party_identifier=',
+    lookup.httpStatus,
+    lookup.data
+  );
+  b.value('lookup_list_container', lookupList?.container ?? null).value(
+    'lookup_result_count',
+    lookupList ? lookupList.edges.length : null
+  );
+  b.finding(
+    'lookup_by_identifier_finds_customer',
+    'Can GET /api/v1/customers?third_party_identifier= find the customer?',
+    lookupAnswer,
+    lookupAnswer === 'unknown'
+      ? `not found within ${polled.polls} reads: the read failed, the list was not recognised, or the customer was created moments ago and may not be indexed yet`
+      : undefined
+  );
+  const listEcho = found ? pickString(found, ['third_party_identifier']) : null;
+  b.finding(
+    'list_echoes_identifier',
+    'Does the customer list row echo third_party_identifier?',
+    found ? answerOf(listEcho === qa.thirdPartyIdentifier) : 'unknown'
+  );
+
+  // 2. Re-POST with returnIfExist=true (mutation: skipped in read-only mode).
+  const baselineWallet = state.createdWalletId ?? state.mainWalletId;
+  const baselineIsCreate = state.createdWalletId !== null;
+  let sameWallet: boolean | null = null;
+  if (mode === 'live-readonly') {
+    b.note('Re-POST not run: read-only mode sends GET requests only.');
+    for (const [id, question] of REPOST_QUESTIONS)
+      b.finding(id, question, 'unknown', 'requires --live-sandbox-mutations');
+  } else {
+    const repost = await api.createCustomer(qa, 'p1/repost');
+    if (repost.kind === 'resumed') {
+      b.inconclusive('re-POST already executed in an earlier run');
+      b.note(
+        `The re-POST slot was already used (${repost.priorOutcome}); it is never resent. Use --new-attempt to repeat it.`
+      );
+      for (const [id, question] of REPOST_QUESTIONS)
+        b.finding(id, question, 'unknown', 'slot already executed');
+    } else {
+      const parsed = createDataSchema.safeParse(okData(repost.call));
+      b.shape(
+        'POST /customers (re-POST)',
+        repost.call.httpStatus,
+        repost.call.data
+      );
+      b.value('repost_http_status', repost.call.httpStatus).value(
+        'repost_outcome',
+        repost.outcome
+      );
+      if (!repost.call.ok || !parsed.success) {
+        b.inconclusive('re-POST did not return a parseable success response');
+        for (const [id, question] of REPOST_QUESTIONS)
+          b.finding(id, question, 'unknown', 'no parseable response');
+      } else {
+        sameWallet = baselineWallet
+          ? parsed.data.wallet_id === baselineWallet
+          : null;
+        b.finding(
+          'repost_returns_same_wallet_id',
+          'Does the re-POST return the SAME wallet_id as the original create?',
+          answerOf(sameWallet),
+          baselineIsCreate
+            ? "baseline: wallet_id from this run's own create call"
+            : 'baseline: earliest-created wallet (this run did not create the customer)'
+        );
+        b.finding(
+          'repost_returns_same_customer_id',
+          'Does the re-POST return the same customer_id?',
+          answerOf(parsed.data.customer_id === state.customerId)
+        );
+        b.finding(
+          'repost_reports_existing_customer',
+          'Does the re-POST report new_customer:false?',
+          answerOf(
+            parsed.data.new_customer === undefined
+              ? null
+              : parsed.data.new_customer === false
+          )
+        );
+        const echoed = (repost.call.data as Record<string, unknown>)
+          .third_party_identifier;
+        b.finding(
+          'create_response_echoes_identifier',
+          'Is third_party_identifier echoed in the create response?',
+          answerOf(echoed === qa.thirdPartyIdentifier)
+        );
+      }
+    }
+  }
+
+  // 3. How can the default wallet be identified among the customer's wallets?
+  // Findings need a successful, recognised list that already shows every
+  // wallet we know the customer has (a new wallet may lag in the list).
+  const ground = state.createdWalletId;
+  const knownWalletIds = state.wallets.map((wallet) => wallet.id);
+  const listsEveryWallet = (
+    call: Awaited<ReturnType<typeof api.customerWallets>>
+  ) => {
+    const list = usableList(call);
+    if (!list) return false;
+    const ids = walletIdsOf(list).ids;
+    return knownWalletIds.every((id) => ids.includes(id));
+  };
+  const ascPolled = await pollSettled(
+    ctx,
+    () => api.customerWallets(state.customerId ?? '', 'ASC'),
+    listsEveryWallet
+  );
+  const ascCall = ascPolled.value;
+  const ascList = ascPolled.settled ? usableList(ascCall) : null;
+  const descList = ascList
+    ? usableList(await api.customerWallets(state.customerId, 'DESC'))
+    : null;
+  const asc = walletIdsOf(ascList);
+  const desc = walletIdsOf(descList);
+  b.shape(
+    'GET wallet list (customer_id filter)',
+    ascCall.httpStatus,
+    ascCall.data
+  );
+  b.value('wallet_count', ascList ? asc.ids.length : null);
+  if (!ascList) {
+    b.inconclusive(
+      'the customer wallet list could not be read completely within the polling budget'
+    );
+  }
+  b.value(
+    'default_wallet_position_default_order',
+    ground && descList ? position(desc.ids, ground) : null
+  );
+  b.value(
+    'default_wallet_position_ascending',
+    ground && ascList ? position(asc.ids, ground) : null
+  );
+  if (!ground && ascList) {
+    b.note(
+      'No create response in this run, so there is no ground truth for the default wallet; position facts omitted.'
+    );
+  }
+  // A list row without a creation time falls back to the time read from the
+  // wallet itself when the scenario was set up.
+  const dated = asc.edges.map((edge) => {
+    const id = pickString(edge, ['id']);
+    return {
+      id,
+      at:
+        pickString(edge, ['created_at']) ??
+        state.wallets.find((wallet) => wallet.id === id)?.createdAt ??
+        null,
+    };
+  });
+  const canOrder = dated.length > 0 && dated.every((row) => row.at !== null);
+  const earliest = canOrder
+    ? [...dated].sort((a, c) => (a.at ?? '').localeCompare(c.at ?? ''))[0]?.id
+    : null;
+  b.finding(
+    'default_wallet_is_earliest_created',
+    'Is the default wallet the earliest-created wallet of the customer?',
+    ground && ascList && canOrder && asc.ids.includes(ground)
+      ? answerOf(earliest === ground)
+      : 'unknown',
+    canOrder
+      ? undefined
+      : 'no creation time could be read for every wallet (neither the list nor the wallet itself)'
+  );
+
+  const defaultEdge = asc.edges.find(
+    (edge) => pickString(edge, ['id']) === ground
+  );
+  const otherEdges = asc.edges.filter((edge) => edge !== defaultEdge);
+  const keys = new Set(
+    asc.edges.flatMap((edge) => Object.keys((edge ?? {}) as object))
+  );
+  const differing = [...keys].filter(
+    (key) =>
+      !TRIVIALLY_DIFFERENT.has(key) &&
+      defaultEdge &&
+      otherEdges.some(
+        (edge) =>
+          JSON.stringify((edge as Record<string, unknown>)[key]) !==
+          JSON.stringify((defaultEdge as Record<string, unknown>)[key])
+      )
+  );
+  b.value(
+    'wallet_list_fields_differing_default_vs_others',
+    differing.sort().join(',') || null
+  );
+  const flagKey = [...keys].find((key) => /default|primary|main/i.test(key));
+  b.finding(
+    'explicit_default_flag_in_wallet_list',
+    'Does the wallet list carry an explicit default/primary flag?',
+    ascList && asc.ids.length > 0 ? answerOf(flagKey !== undefined) : 'unknown',
+    flagKey ? `field name: ${flagKey}` : undefined
+  );
+
+  const detail = ground ? await api.wallet(ground) : null;
+  const detailRecord = detail ? recordOf(detail) : null;
+  if (detail)
+    b.shape('GET /wallet/:id (default wallet)', detail.httpStatus, detail.data);
+  b.finding(
+    'wallet_retrieve_exposes_customer_binding',
+    'Does GET /wallet/:id expose api_customer_id (owner binding)?',
+    detailRecord
+      ? answerOf(pickString(detailRecord, ['api_customer_id']) !== null)
+      : 'unknown'
+  );
+
+  b.value(
+    'adoption_rule',
+    mode === 'live-readonly' || sameWallet === null
+      ? 'unconfirmed'
+      : !sameWallet || lookupAnswer === 'no'
+        ? 'not_supported'
+        : lookupAnswer === 'yes' && baselineIsCreate
+          ? 'supported'
+          : 'unconfirmed'
+  );
+  b.note(
+    "adoption_rule: supported only if the identifier lookup finds the customer AND the re-POST returns the wallet_id of this run's own brand-new create (ground truth). A different wallet is not_supported; agreement with only the earliest-created heuristic stays unconfirmed."
+  );
+  return b.build(ctx);
+}

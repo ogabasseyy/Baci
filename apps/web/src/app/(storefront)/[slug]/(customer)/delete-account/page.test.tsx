@@ -55,7 +55,7 @@ describe('delete-account metadata', () => {
       params: Promise.resolve({ slug: 'test-store' }),
     });
 
-    expect(metadata.title).toBe('Delete Account | Test Store');
+    expect(metadata.title).toBe('Delete Account');
     expect(metadata.robots).toEqual({ index: false, follow: false });
   });
 });

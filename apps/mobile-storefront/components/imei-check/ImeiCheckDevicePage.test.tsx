@@ -1,7 +1,25 @@
-import { describe, expect, it, jest } from '@jest/globals';
+import type { ImeiServiceTierKey } from '@baci/shared/imei';
+import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
 import { ImeiCheckDevicePage } from './ImeiCheckDevicePage';
+
+let mockAvailableKeys: ImeiServiceTierKey[] | null = null;
+let mockAvailabilityFailed = false;
+const mockRetryAvailability = jest.fn();
+jest.mock('./use-imei-runtime-availability', () => ({
+  useImeiRuntimeAvailability: () => ({
+    availableTierKeys: mockAvailableKeys,
+    failed: mockAvailabilityFailed,
+    loading: false,
+    retry: mockRetryAvailability,
+  }),
+}));
+beforeEach(() => {
+  mockAvailableKeys = null;
+  mockAvailabilityFailed = false;
+  mockRetryAvailability.mockClear();
+});
 
 jest.mock('@react-native-vector-icons/ionicons', () => ({
   Ionicons: () => null,
@@ -26,11 +44,34 @@ const baseProps = {
 };
 
 describe('ImeiCheckDevicePage', () => {
-  it('defaults to the recommended check for the given device', () => {
+  it('bugfix: preselects no check, so no price shows before a choice (Fable walks 15/16)', () => {
+    const onVerify = jest.fn();
+    render(
+      <ImeiCheckDevicePage
+        {...baseProps}
+        device="smartphone"
+        onVerify={onVerify}
+      />
+    );
+
+    expect(screen.queryByText(/Verify Now|Pay ₦/)).toBeNull();
+    fireEvent.changeText(
+      screen.getByPlaceholderText('Enter 15-digit IMEI'),
+      '490154203237518'
+    );
+    fireEvent.press(screen.getByText('Choose a check'));
+    expect(onVerify).not.toHaveBeenCalled();
+    // Switching brand never picks a check on the customer's behalf.
+    fireEvent.press(screen.getByText('Samsung'));
+    expect(screen.getByText('Choose a check')).toBeTruthy();
+  });
+
+  it('shows the recommended checks for the given device', () => {
     render(<ImeiCheckDevicePage {...baseProps} device="laptop" />);
 
     // Mac's recommended flagship is the iCloud lock check.
     expect(screen.getByText('Mac iCloud Lock')).toBeTruthy();
+    fireEvent.press(screen.getByText('Mac iCloud Lock'));
     expect(screen.getByText(/Verify Now/)).toBeTruthy();
   });
 
@@ -55,7 +96,8 @@ describe('ImeiCheckDevicePage', () => {
       screen.getByPlaceholderText('Enter 15-digit IMEI'),
       '490154203237518'
     );
-    fireEvent.press(screen.getByText('Verify Now - ₦1,500'));
+    fireEvent.press(screen.getByText('Full Report'));
+    fireEvent.press(screen.getByText('Verify Now - ₦1,000'));
 
     expect(onVerify).toHaveBeenCalledWith('full', '490154203237518');
   });
@@ -78,5 +120,129 @@ describe('ImeiCheckDevicePage', () => {
     );
 
     expect(screen.queryByText(/Verify Now/)).toBeNull();
+  });
+});
+
+describe('runtime capability selection', () => {
+  it('keeps provider-only checks hidden until advertised and clears a revoked selection', () => {
+    const onVerify = jest.fn();
+    const { rerender } = render(
+      <ImeiCheckDevicePage
+        {...baseProps}
+        device="smartphone"
+        onVerify={onVerify}
+      />
+    );
+    fireEvent.press(screen.getByText('See all checks'));
+    expect(screen.queryByText('eSIM Compatibility')).toBeNull();
+    mockAvailableKeys = ['full', 'esimCompatibility'];
+    rerender(
+      <ImeiCheckDevicePage
+        {...baseProps}
+        device="smartphone"
+        onVerify={onVerify}
+      />
+    );
+    fireEvent.press(screen.getByRole('radio', { name: /eSIM Compatibility/ }));
+    fireEvent.changeText(
+      screen.getByPlaceholderText('Enter 15-digit IMEI'),
+      '490154203237518'
+    );
+    expect(screen.getByText('Verify Now - ₦400')).toBeTruthy();
+    mockAvailableKeys = [];
+    rerender(
+      <ImeiCheckDevicePage
+        {...baseProps}
+        device="smartphone"
+        onVerify={onVerify}
+      />
+    );
+    expect(
+      screen.queryByRole('radio', { name: /eSIM Compatibility/ })
+    ).toBeNull();
+    expect(screen.queryByText('Full Check')).toBeNull();
+    expect(
+      screen.getByText('No checks are available for this selection.')
+    ).toBeTruthy();
+    fireEvent.press(screen.getByText('Retry available checks'));
+    expect(mockRetryAvailability).toHaveBeenCalledTimes(1);
+    fireEvent.press(screen.getByText('Choose a check'));
+    expect(onVerify).not.toHaveBeenCalled();
+  });
+  it('offers retry after capability errors while keeping provider-only checks hidden', () => {
+    mockAvailabilityFailed = true;
+    render(<ImeiCheckDevicePage {...baseProps} device="smartphone" />);
+    fireEvent.press(screen.getByText('See all checks'));
+    expect(
+      screen.queryByRole('radio', { name: /eSIM Compatibility/ })
+    ).toBeNull();
+    expect(
+      screen.getByText('Some services could not be checked.')
+    ).toBeTruthy();
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Retry available checks' })
+    );
+    expect(mockRetryAvailability).toHaveBeenCalledTimes(1);
+  });
+  it('shows a sole advertised advanced check directly without choosing it automatically', () => {
+    mockAvailableKeys = ['esimCompatibility'];
+    render(<ImeiCheckDevicePage {...baseProps} device="smartphone" />);
+    expect(
+      screen.getByRole('radio', { name: /eSIM Compatibility/ })
+    ).toHaveAccessibilityState({ selected: false });
+    expect(
+      screen.queryByText('No checks are available for this selection.')
+    ).toBeNull();
+    expect(screen.getByText('Choose a check')).toBeTruthy();
+  });
+  it('filters an advertised Apple phone check after switching brand', () => {
+    mockAvailableKeys = ['full', 'esimCompatibility'];
+    render(<ImeiCheckDevicePage {...baseProps} device="smartphone" />);
+    fireEvent.press(screen.getByText('See all checks'));
+    fireEvent.press(screen.getByRole('radio', { name: /eSIM Compatibility/ }));
+    fireEvent.press(screen.getByText('Samsung'));
+    expect(screen.queryByText('eSIM Compatibility')).toBeNull();
+    expect(screen.queryByText('Verify Now - ₦400')).toBeNull();
+  });
+});
+
+describe('bugfix: picking another check wiped a typed IMEI (Fable walk 15)', () => {
+  it('drops an invalid-number note when the shown checks really change', () => {
+    const onEditIdentifier = jest.fn();
+    render(
+      <ImeiCheckDevicePage
+        {...baseProps}
+        device="smartphone"
+        onEditIdentifier={onEditIdentifier}
+      />
+    );
+
+    fireEvent.press(screen.getByText('See all checks'));
+    expect(onEditIdentifier).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a typed IMEI the next check also takes', () => {
+    render(<ImeiCheckDevicePage {...baseProps} device="smartphone" />);
+    fireEvent.changeText(
+      screen.getByPlaceholderText('Enter 15-digit IMEI'),
+      '356938035643809'
+    );
+    fireEvent.press(screen.getByText('Quick ID'));
+    expect(
+      screen.getByPlaceholderText('Enter IMEI or serial').props.value
+    ).toBe('356938035643809');
+  });
+
+  it('still clears a serial the next check can not take', () => {
+    render(<ImeiCheckDevicePage {...baseProps} device="smartphone" />);
+    fireEvent.press(screen.getByText('Quick ID'));
+    fireEvent.changeText(
+      screen.getByPlaceholderText('Enter IMEI or serial'),
+      'C02XL0ABJGH5'
+    );
+    fireEvent.press(screen.getByText('Full Report'));
+    expect(screen.getByPlaceholderText('Enter 15-digit IMEI').props.value).toBe(
+      ''
+    );
   });
 });

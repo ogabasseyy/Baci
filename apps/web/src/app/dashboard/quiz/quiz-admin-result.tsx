@@ -88,9 +88,9 @@ export function QuizAdminResult({
         ) : null}
       </div>
       <p className="mt-4 text-sm font-medium">
-        Questions to review: {questions.length}
+        {isLaunched ? 'Questions' : 'Questions to review'}: {questions.length}
       </p>
-      <div className="mt-3 grid max-h-[32rem] gap-3 overflow-y-auto rounded-lg border p-3">
+      <div className="mt-3 grid gap-3 rounded-lg border p-3 md:max-h-[32rem] md:overflow-y-auto">
         {questions.map(({ key, position, question }) => (
           <QuestionReview key={key} position={position} question={question} />
         ))}

@@ -12,9 +12,11 @@ import type { WalletActiveSavingsGoal } from './wallet-query';
 const SavingsGoalDataSchema = z.object({
   contribution_amount: z.union([z.number(), z.string()]),
   contribution_frequency: z.enum(['daily', 'weekly', 'monthly']),
+  created_at: z.string().nullable().optional(),
   current_amount: z.union([z.number(), z.string()]),
   id: z.string(),
   maturity_date: z.string(),
+  principal_amount: z.union([z.number(), z.string()]).optional(),
   product_id: z.string().nullable().optional(),
   product_snapshot: z.record(z.string(), z.unknown()).nullable().optional(),
   source_mode: z.enum(['manual', 'auto_debit']),
@@ -192,6 +194,10 @@ export function toActiveSavingsGoal({
   const currentAmount = coerceDatabaseNumber(goal.current_amount);
   const targetAmount = coerceDatabaseNumber(goal.target_amount);
   const contributionAmount = coerceDatabaseNumber(goal.contribution_amount);
+  const principalAmount =
+    goal.principal_amount === undefined
+      ? null
+      : coerceDatabaseNumber(goal.principal_amount);
   if (
     currentAmount === null ||
     targetAmount === null ||
@@ -262,14 +268,18 @@ export function toActiveSavingsGoal({
   return {
     contribution_amount: contributionAmount,
     contribution_frequency: goal.contribution_frequency,
+    ...(goal.created_at ? { created_at: goal.created_at } : {}),
     current_amount: currentAmount,
     id: goal.id,
     maturity_date: goal.maturity_date,
+    ...(principalAmount === null ? {} : { principal_amount: principalAmount }),
     product_condition: productCondition,
     product_image:
       snapshotImage ??
       (productImages ? getPrimaryProductImage(productImages) : null),
+    product_id: goal.product_id ?? null,
     product_variant_label: productVariantLabel,
+    variant_id: goal.variant_id,
     selection_unresolved: selectionUnresolved,
     source_mode: goal.source_mode,
     status: goal.status,

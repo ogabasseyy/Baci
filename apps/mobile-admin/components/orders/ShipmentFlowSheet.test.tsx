@@ -8,6 +8,24 @@ const runtimeState = vi.hoisted(() => ({
   isIos: true,
 }));
 
+vi.mock('./ShipmentFlowSheetPresence', () => ({
+  ShipmentFlowSheetPresence: ({
+    accessory,
+    children,
+    visible,
+  }: {
+    accessory?: ReactNode;
+    children?: ReactNode;
+    visible: boolean;
+  }) =>
+    visible ? (
+      <section>
+        {children}
+        {accessory}
+      </section>
+    ) : null,
+}));
+
 vi.mock('./CheckoutShippingRecoveryPanel', () => ({
   CheckoutShippingRecoveryPanel: ({
     onBlockingChange,

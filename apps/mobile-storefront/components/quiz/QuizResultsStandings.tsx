@@ -1,18 +1,19 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { ActivityIndicator, Text, View } from 'react-native';
-import type {
-  QuizLeaderboard,
-  QuizLeaderboardEntry,
-} from '@/services/quiz-types';
+import type { QuizLeaderboard } from '@/services/quiz-types';
 import { formatQuizStandingTime } from './format-quiz-standing-time';
 import { QuizPlayerAvatar } from './QuizPlayerAvatar';
 import type { createQuizStyles } from './QuizScreen.styles';
+import { QuizStandingsPodium } from './QuizStandingsPodium';
+import { buildQuizStandingsView } from './quiz-standings-view';
 
 type QuizStyles = ReturnType<typeof createQuizStyles>;
 
 interface QuizResultsStandingsProps {
   leaderboard: QuizLeaderboard | null;
   leaderboardError: boolean;
+  /** The server is holding the live board back; say so instead of spinning. */
+  liveBoardHidden?: boolean;
   participantCount: number | null;
   styles: QuizStyles;
 }
@@ -20,25 +21,22 @@ interface QuizResultsStandingsProps {
 export function QuizResultsStandings({
   leaderboard,
   leaderboardError,
+  liveBoardHidden = false,
   participantCount,
   styles,
 }: QuizResultsStandingsProps) {
-  const topEntries = leaderboard?.entries.slice(0, 5) ?? [];
-  const currentPlayer =
-    leaderboard?.currentPlayer ??
-    leaderboard?.entries.find((entry) => entry.isCurrentCustomer);
-  const currentPlayerIsVisible = currentPlayer
-    ? topEntries.some(
-        (entry) =>
-          entry.isCurrentCustomer ||
-          (entry.rank === currentPlayer.rank &&
-            entry.displayName === currentPlayer.displayName)
-      )
-    : false;
-  const rows: QuizLeaderboardEntry[] =
-    currentPlayer && !currentPlayerIsVisible
-      ? [...topEntries, currentPlayer]
-      : topEntries;
+  const { podium, rows, pointsBehindTopTen } =
+    buildQuizStandingsView(leaderboard);
+
+  // Entries carry no id and tied players can share a name, so a repeat
+  // counter keeps every row's key distinct even on an exact tie.
+  const repeats = new Map<string, number>();
+  const keyedRows = rows.map((entry) => {
+    const base = `${entry.rank}-${entry.displayName}`;
+    const repeat = repeats.get(base) ?? 0;
+    repeats.set(base, repeat + 1);
+    return { entry, key: `${base}-${repeat}` };
+  });
 
   return (
     <View style={styles.finalStandings}>
@@ -62,17 +60,25 @@ export function QuizResultsStandings({
           color={styles.finalStandingsTitle.color}
         />
       </View>
-      {!leaderboard && !leaderboardError ? (
+      {/* A fetch error wins: "reconnecting" and "opens at the end" must
+          never show together. */}
+      {!leaderboard && liveBoardHidden && !leaderboardError ? (
+        <Text style={styles.standingsHidden}>
+          Standings open when the quiz ends.
+        </Text>
+      ) : null}
+      {!leaderboard && !leaderboardError && !liveBoardHidden ? (
         <ActivityIndicator
           accessibilityLabel="Loading standings"
           color={styles.finalStandingsTitle.color}
         />
       ) : null}
-      {rows.map((entry) => {
+      <QuizStandingsPodium entries={podium} styles={styles} />
+      {keyedRows.map(({ entry, key }) => {
         const finishTime = formatQuizStandingTime(entry.totalTimeSeconds);
         return (
           <View
-            key={`${entry.rank}-${entry.displayName}`}
+            key={key}
             accessibilityLabel={`Rank ${entry.rank}, ${entry.displayName}, score ${entry.score}`}
             style={[
               styles.finalStandingRow,
@@ -100,6 +106,13 @@ export function QuizResultsStandings({
           </View>
         );
       })}
+      {pointsBehindTopTen !== null ? (
+        <Text style={styles.standingsGap}>
+          {pointsBehindTopTen === 0
+            ? 'Level on points with the top 10'
+            : `${pointsBehindTopTen} ${pointsBehindTopTen === 1 ? 'point' : 'points'} behind the top 10`}
+        </Text>
+      ) : null}
       {leaderboardError && !leaderboard ? (
         <Text style={styles.eventMeta}>
           Standings are reconnecting. Your result is safely recorded.

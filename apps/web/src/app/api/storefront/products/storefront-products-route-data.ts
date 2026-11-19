@@ -65,6 +65,15 @@ function mapProduct(product: RawStorefrontProductRow) {
       order: image.order ?? index,
     };
   });
+  const categoryFilterSource = buildCategoryFilterSource(product);
+  const categoryNames = Array.from(
+    new Set(
+      [
+        categoryFilterSource.category,
+        ...categoryFilterSource.categories.map(({ name }) => name),
+      ].filter((category): category is string => Boolean(category?.trim()))
+    )
+  );
 
   return {
     id: normalized.id,
@@ -82,6 +91,7 @@ function mapProduct(product: RawStorefrontProductRow) {
     imageLarge: normalized.imageLarge,
     category: normalized.category,
     category_slug: normalized.category_slug,
+    category_names: categoryNames,
     brand: normalized.brand,
     availability: agentAvailability.availability,
     inventory_policy: agentAvailability.inventory_policy,

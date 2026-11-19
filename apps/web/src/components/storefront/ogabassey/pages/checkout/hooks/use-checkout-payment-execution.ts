@@ -1,5 +1,7 @@
 'use client';
 
+import { isTerminalRedvaultReview } from '../is-terminal-redvault-review';
+import { readRedvaultReviewRecovery } from '../read-redvault-review-recovery';
 import type { CheckoutOrderSubmissionContext } from './checkout-order-submission-types';
 import type { useCheckoutAttemptSession } from './use-checkout-attempt-session';
 import { useCheckoutCryptoSession } from './use-checkout-crypto-session';
@@ -7,6 +9,7 @@ import { useCheckoutDvaSession } from './use-checkout-dva-session';
 import type { useCheckoutFormSession } from './use-checkout-form-session';
 import { useCheckoutOrderSubmission } from './use-checkout-order-submission';
 import { useCheckoutRedvaultAvailability } from './use-checkout-redvault-availability';
+import { useOxygenStorefrontAvailability } from './use-oxygen-storefront-availability';
 import { useStorefrontCustomerSession } from './use-storefront-customer-session';
 import { useWalletFundedBankTransfer } from './use-wallet-funded-bank-transfer';
 import { useWalletFundedOrderCompletion } from './use-wallet-funded-order-completion';
@@ -78,6 +81,13 @@ export function useCheckoutPaymentExecution({
   // The commerce checkout does not mount CustomerAuthProvider; resolve the
   // cookie-backed storefront session before choosing the wallet-funded path.
   const customerSession = useStorefrontCustomerSession(identity.merchantSlug);
+  const oxygenAllowed = useOxygenStorefrontAvailability({
+    customerId: customerSession.accountId,
+    merchantId: identity.merchantId,
+    revision: customerSession.revision,
+    authenticated: customerSession.isAuthenticated,
+    loading: customerSession.status === 'loading',
+  });
   const dva = useCheckoutDvaSession({
     checkoutCart: cart.checkoutCart,
     clearCart: cart.clearCart,
@@ -100,6 +110,7 @@ export function useCheckoutPaymentExecution({
     clearCheckoutSession: form.session.clear,
     clearPendingCheckoutOrder: attempt.clearPendingCheckoutOrder,
     getHref: navigation.getHref,
+    merchantSlug: identity.merchantSlug,
     paymentMethod: payment.session.method,
   });
   const walletFundedTransfer = useWalletFundedBankTransfer({
@@ -124,6 +135,40 @@ export function useCheckoutPaymentExecution({
         giftWrappingCost: delivery.giftWrappingCost,
       },
     });
+  // A completed shared cart disappears from the cart display after the
+  // REDVAULT order is prepared. Keep its existing payment review visible;
+  // initialization still verifies the order and current pilot policy.
+  const ready = payment.session.redvault?.orderReady;
+  const savedReview = cart.sharedCartRef
+    ? readRedvaultReviewRecovery(
+        attempt.pendingCheckoutOrder,
+        identity.merchantId ?? undefined
+      )
+    : null;
+  const hasMatchingReplacementReview = Boolean(
+    savedReview &&
+      ready &&
+      isTerminalRedvaultReview({
+        merchantId: identity.merchantId ?? undefined,
+        pendingOrder: attempt.pendingCheckoutOrder,
+        sharedCartEnabled: cart.sharedCartEnabled,
+        sharedCartRef: cart.sharedCartRef,
+        checkoutItemCount: cart.checkoutCart.length,
+      }) &&
+      ready.orderId === savedReview.ready.orderId &&
+      ready.cartId === savedReview.ready.cartId &&
+      ready.trackingToken === savedReview.ready.trackingToken &&
+      ready.checkoutFingerprint === savedReview.ready.checkoutFingerprint
+  );
+  const redvaultAvailable =
+    redvaultAvailability.available ||
+    Boolean(
+      cart.sharedCartEnabled &&
+        (!cart.sharedCartRef || hasMatchingReplacementReview) &&
+        cart.checkoutCart.length === 0 &&
+        payment.session.method === 'uba_redvault' &&
+        ready
+    );
   const { handlePlaceOrder } = useCheckoutOrderSubmission({
     account: {
       createAccount: form.account.createAccount,
@@ -170,9 +215,7 @@ export function useCheckoutPaymentExecution({
     },
     payment: {
       ...payment,
-      // Bound shared-cart orders have no REDVAULT path; offering it only
-      // defers a deterministic server rejection to submit time.
-      redvaultAvailable: redvaultAvailability.available && !cart.sharedCartRef,
+      redvaultAvailable,
     },
     resumed: {
       order: attempt.resumedOrder,
@@ -193,7 +236,8 @@ export function useCheckoutPaymentExecution({
     crypto,
     dva,
     handlePlaceOrder,
-    redvaultAvailable: redvaultAvailability.available && !cart.sharedCartRef,
+    oxygenAllowed,
+    redvaultAvailable,
     walletFundedTransfer,
   };
 }

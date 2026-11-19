@@ -1,3 +1,7 @@
+vi.mock('@/lib/experience/authoring-mode', () => ({
+  readExperienceAuthoringMode: async () => 'legacy',
+}));
+
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { describe, expect, it, vi } from 'vitest';
 import type { BuilderContext } from '@/lib/builder-connector/types';

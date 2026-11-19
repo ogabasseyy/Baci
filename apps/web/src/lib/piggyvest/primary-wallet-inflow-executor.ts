@@ -1,6 +1,8 @@
 import 'server-only';
 import { Client } from 'pg';
 import { piggyvestPrimaryInflowRuntimeSchema } from '@/schemas/piggyvest-primary-inflow-runtime';
+import { primaryDbLink } from './primary-db-link';
+import { readPrimaryEngineReady } from './primary-wallet-engine-ready';
 import type { preparePrimaryWalletInflowReceipt } from './primary-wallet-inflow-receipt';
 
 type Receipt = ReturnType<typeof preparePrimaryWalletInflowReceipt> & {
@@ -18,26 +20,29 @@ export function createPrimaryWalletInflowExecutor(configuration: unknown) {
   const config = piggyvestPrimaryInflowRuntimeSchema.parse(configuration);
   return async (
     receipt: Receipt
-  ): Promise<'credited' | 'duplicate' | 'unmapped' | 'conflict'> => {
+  ): Promise<
+    'credited' | 'duplicate' | 'unmapped' | 'conflict' | 'prerequisite'
+  > => {
+    const link = primaryDbLink(config.database.login, config.database.port);
     const client = new Client({
       host: config.database.host,
       port: config.database.port,
       database: config.database.name,
-      user: config.database.login,
+      user: link.user,
       password: config.database.password,
       ssl: {
         rejectUnauthorized: true,
         ca: config.database.certificateAuthority,
+        ...link.tls,
       },
       connectionTimeoutMillis: 4000,
       query_timeout: 4000,
-      statement_timeout: 2500,
-      lock_timeout: 1500,
-      options: '-c search_path=pg_catalog',
+      ...link.startup,
       application_name: 'baci-piggyvest-primary-inflow',
     });
     try {
       await client.connect();
+      await link.afterConnect(client);
       const verified = await client.query(VERIFY);
       const session = verified.rows[0];
       if (
@@ -49,6 +54,15 @@ export function createPrimaryWalletInflowExecutor(configuration: unknown) {
         session.tls !== true
       )
         throw new Error('Unsafe session');
+      // Hard check before any credit: until the engine fences are proven
+      // (the installed stub always says no), or when the check itself
+      // fails, nothing is applied. The retryable prerequisite keeps the
+      // captured delivery pending, so it credits once after readiness.
+      const engine = await readPrimaryEngineReady(
+        (statement, parameters) => client.query(statement, [...parameters]),
+        'inflow'
+      );
+      if (!engine.ready) return 'prerequisite';
       const result = await client.query(
         'SELECT piggyvest_primary.apply_inflow_environment($1::uuid,$2::text,$3::jsonb) AS result',
         [config.integrationId, config.environment, JSON.stringify(receipt)]

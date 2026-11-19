@@ -95,6 +95,11 @@ EXCLUDED=(
   # called by any disposable suite; covered by the replay --sql-check
   # storefront_refined_reread_anon_visibility suite instead.
   20261016170000_storefront_search_merchant_visibility_rpc.sql
+  # Repair-device typeahead RPC uses a separate table and has dedicated
+  # catalog coverage; no disposable storefront search suite calls it.
+  20261023111630_repair_device_typeahead_search.sql
+  20261024170000_repair_device_catalog_search_limit.sql
+  20261024180000_repair_device_catalog_preserve_private_boundary.sql
   # Shared-cart terminal purge: matched the registration pattern only via
   # "search_path"; no disposable search suite calls the purge function
   # (covered by the commerce_cart_terminal_purge replay suite instead).

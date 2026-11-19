@@ -4,6 +4,8 @@ export interface PlaceDetails {
   streetNumber: string;
   route: string;
   city: string;
+  /** Nigerian LGA from an administrative component; never inferred from city. */
+  lga?: string;
   state: string;
   zip: string;
   country: string;
@@ -22,6 +24,8 @@ export interface AddressAutocompleteProps
   useThemedInput?: boolean;
   showIcon?: boolean;
   country?: string;
+  /** Invalidates pending suggestions/selections after an external locality edit. */
+  selectionRevision?: number;
   /** Reports failed suggestions so callers can offer manual address entry. */
   onError?: (failed: boolean) => void;
 }

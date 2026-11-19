@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { readCreditDirectPopupMarker } from '@/components/storefront/ogabassey/pages/checkout/credit-direct-popup-return';
 import { handoffLegacyCreditDirectSuccess } from './credit-direct-success';

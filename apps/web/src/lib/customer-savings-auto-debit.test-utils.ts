@@ -42,11 +42,13 @@ export function createAutoDebitSupabase({
   existingContribution = null,
   goalPages,
   goals = [baseDueGoal],
+  primaryBoundGoalIds = [],
 }: {
   allocationError?: { message: string } | null;
   existingContribution?: ExistingContributionRow | null;
   goalPages?: DueSavingsGoalRow[][];
   goals?: DueSavingsGoalRow[];
+  primaryBoundGoalIds?: string[];
 } = {}) {
   const transactionInsertSingle = vi.fn().mockResolvedValue({
     data: { id: 'txn-1' },
@@ -115,19 +117,23 @@ export function createAutoDebitSupabase({
 
       return createChain({ data: null, error: null });
     }),
-    rpc: vi.fn().mockResolvedValue({
-      data: [
-        {
-          contribution_id: 'contribution-1',
-          goal_current_amount: '120000',
-          goal_status: 'active',
-          success: true,
-          wallet_balance: '0',
-          wallet_transaction_id: 'wallet-debit-1',
-        },
-      ],
-      error: allocationError,
-    }),
+    rpc: vi.fn(async (name: string) =>
+      name === 'savings_goal_ids_bound_to_primary'
+        ? { data: primaryBoundGoalIds, error: null }
+        : {
+            data: [
+              {
+                contribution_id: 'contribution-1',
+                goal_current_amount: '120000',
+                goal_status: 'active',
+                success: true,
+                wallet_balance: '0',
+                wallet_transaction_id: 'wallet-debit-1',
+              },
+            ],
+            error: allocationError,
+          }
+    ),
   };
 
   return {

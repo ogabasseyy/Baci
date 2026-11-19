@@ -162,6 +162,27 @@ describe('calculateRepairShipping', () => {
     expect(mocks.getQuotes).not.toHaveBeenCalled();
   });
 
+  it('returns a controlled quote error when the repair center lookup fails', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mocks.getRepairCenterAddress.mockRejectedValueOnce(
+      new Error('receiver RPC unavailable')
+    );
+
+    try {
+      const result = await calculateRepairShipping(validPlace, merchantSlug);
+
+      expect(result).toEqual({
+        isFree: false,
+        price: 0,
+        formattedPrice: 'Calculated at confirmation',
+        error: 'Failed to calculate shipping',
+      });
+      expect(mocks.getQuotes).not.toHaveBeenCalled();
+    } finally {
+      consoleSpy.mockRestore();
+    }
+  });
+
   it('quotes GIGL pickup even when the customer is in the repair center state', async () => {
     mocks.getQuotes.mockResolvedValueOnce([
       { price: 2500, isStationPickup: false },

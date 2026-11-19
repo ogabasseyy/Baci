@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { cacheLife, cacheTag } from 'next/cache';
+import { getBlogContentLinksCacheTag } from '@/lib/blog-content-link-cache-tags';
 import { createPublicClient } from '@/lib/supabase/public';
 import type {
   BuildCommercialGuideLinksContext,
@@ -17,7 +18,7 @@ type StorefrontClusterGuideDatabase = {
     Tables: Record<string, never>;
     Views: Record<string, never>;
     Functions: {
-      get_storefront_cluster_guide_candidates_v1: {
+      get_storefront_cluster_guide_candidates_v2: {
         Args: {
           p_category_slug: string;
           p_cluster_rules: ReturnType<
@@ -71,7 +72,12 @@ export async function getPublishedClusterPosts(
     // post publish/edit or a blog_enabled toggle busts every cached context
     // for this merchant instead of waiting out the TTL.
     cacheLife('blog');
-    cacheTag('blog-posts', `products-${merchantId}`, `features-${merchantId}`);
+    cacheTag(
+      'blog-posts',
+      getBlogContentLinksCacheTag(merchantId),
+      `products-${merchantId}`,
+      `features-${merchantId}`
+    );
   } catch {
     // Unit tests do not run with Next cacheComponents enabled.
   }
@@ -86,7 +92,7 @@ export async function getPublishedClusterPosts(
   }) as SupabaseClient<StorefrontClusterGuideDatabase>;
   const request = buildStorefrontClusterGuideRequest(context);
   const guideQuery = supabase
-    .rpc('get_storefront_cluster_guide_candidates_v1', {
+    .rpc('get_storefront_cluster_guide_candidates_v2', {
       p_category_slug: request.p_category_slug,
       p_cluster_rules: request.p_cluster_rules,
       p_merchant_id: merchantId,

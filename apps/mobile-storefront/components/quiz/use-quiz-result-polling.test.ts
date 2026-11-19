@@ -20,6 +20,8 @@ describe('useQuizResultPolling', () => {
   });
 
   it('backs off after consecutive result request failures', async () => {
+    // Centre of the retry spread, so the delays are exactly 5 s and 10 s.
+    jest.spyOn(Math, 'random').mockReturnValue(0.5);
     jest.mocked(fetchQuizResult).mockRejectedValue(new Error('offline'));
 
     renderHook(() =>

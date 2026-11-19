@@ -2,6 +2,7 @@ export * from './order-cancellation';
 export * from './order-confirmation';
 export * from './order-confirmation-text';
 export * from './order-delivered';
+export * from './order-delivery-exception';
 export * from './order-shipped';
 export * from './order-updated';
 export * from './payment-receipt';

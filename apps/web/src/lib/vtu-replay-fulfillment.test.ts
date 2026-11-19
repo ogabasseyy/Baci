@@ -89,7 +89,9 @@ describe('fulfillReplayVtuTransaction', () => {
     expect(await response.json()).toMatchObject({
       error: 'binding mismatch',
     });
-    expect(supabase.from).not.toHaveBeenCalled();
+    // Owner-presence runs FIRST (Codex P1): the linked owner
+    // passes, then the binding 400s.
+    expect(supabase.from).toHaveBeenCalledWith('customers');
     expect(mockOverlay).not.toHaveBeenCalled();
     expect(mockFulfill).not.toHaveBeenCalled();
   });
@@ -139,6 +141,9 @@ describe('fulfillReplayVtuTransaction', () => {
     const body = (await response.json()) as { error: string };
     expect(body.error).toMatch(/same purchase instead of starting a new one/);
     expect(body.error).not.toMatch(/fresh key/i);
+    // Order pin: an unbound owner 425s before the binding read,
+    // which would hide the transaction and 400 instead.
+    expect(mockVerifyBinding).not.toHaveBeenCalled();
     expect(mockOverlay).not.toHaveBeenCalled();
     expect(mockFulfill).not.toHaveBeenCalled();
   });

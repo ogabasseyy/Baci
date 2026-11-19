@@ -33,7 +33,7 @@ describe('cart scoped signing authority', () => {
     const sibling = 'apps/web/src/app/api/other/route.ts';
     graph.set(sibling, "import '@/lib/cart/scoped-client';");
     expect(
-      serviceAuthorityGraphFindings(graph, [sibling]).join('\n')
+      serviceAuthorityGraphFindings(graph, [sibling], new Map()).join('\n')
     ).toContain('credential authority');
   });
   it('never authorizes a service client through cart signing', () => {
@@ -50,4 +50,67 @@ describe('cart scoped signing authority', () => {
       'unauthorized service factory importer'
     );
   });
+  it('records only the exact quota path through the existing scoped cart factory', () => {
+    const graph = sources();
+    const roots = [
+      'account-request',
+      'request-context',
+      'request-quota',
+      'request-quota-counter',
+      'supabase-quota-counter',
+    ];
+    for (let index = 0; index < roots.length; index++) {
+      const next = roots[index + 1] ?? 'scoped-client';
+      graph.set(
+        `apps/web/src/lib/cart/${roots[index]}.ts`,
+        `import '@/lib/cart/${next}';`
+      );
+    }
+    expect(
+      serviceAuthorityGraphFindings(
+        graph,
+        roots.map((root) => `apps/web/src/lib/cart/${root}.ts`),
+        new Map()
+      )
+    ).toEqual([]);
+    const identity = 'apps/web/src/lib/cart/quota-identity.ts';
+    graph.set(identity, "import '@/lib/cart/request-quota';");
+    const operator = 'apps/web/src/scripts/probe-cart-quota.ts';
+    graph.set(operator, "import '@/lib/cart/scoped-client';");
+    expect(
+      serviceAuthorityGraphFindings(graph, [identity, operator], new Map())
+    ).toEqual([]);
+    const sibling = 'apps/web/src/lib/cart/rogue-quota.ts';
+    graph.set(sibling, "import '@/lib/cart/supabase-quota-counter';");
+    expect(
+      serviceAuthorityGraphFindings(graph, [sibling], new Map()).join('\n')
+    ).toContain('credential authority');
+  });
+  it('does not authorize a service factory through the quota helper', () => {
+    const graph = sources();
+    const quota = 'apps/web/src/lib/cart/supabase-quota-counter.ts';
+    graph.set(quota, "import '@/lib/supabase/service';");
+    graph.set(
+      'apps/web/src/lib/supabase/service.ts',
+      'export const createServiceClient = () => null;'
+    );
+    expect(serviceAuthorityGraphFindings(graph, [quota]).join('\n')).toContain(
+      'unauthorized service factory importer'
+    );
+  });
+});
+
+it('allows continuity only through the same narrow cart signer; direct service factories remain forbidden', () => {
+  const continuity = 'apps/web/src/app/api/storefront/cart/continuity/route.ts';
+  const graph = sources();
+  graph.set(continuity, "import '@/lib/cart/scoped-client';");
+  expect(serviceAuthorityGraphFindings(graph, [continuity])).toEqual([]);
+  graph.set(continuity, "import '@/lib/supabase/service';");
+  graph.set(
+    'apps/web/src/lib/supabase/service.ts',
+    'export const createServiceClient=()=>null;'
+  );
+  expect(
+    serviceAuthorityGraphFindings(graph, [continuity]).join('\n')
+  ).toContain('unauthorized service factory importer');
 });

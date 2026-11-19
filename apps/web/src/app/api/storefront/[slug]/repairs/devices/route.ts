@@ -28,6 +28,7 @@ export async function GET(
 
     const parsedQuery = repairsDevicesQuerySchema.safeParse({
       q: request.nextUrl.searchParams.get('q') ?? undefined,
+      mode: request.nextUrl.searchParams.get('mode') ?? undefined,
     });
     if (!parsedQuery.success) {
       return NextResponse.json(
@@ -51,7 +52,8 @@ export async function GET(
 
     const groups = await getRepairDevicesForMerchant(
       merchant.merchantId,
-      parsedQuery.data.q
+      parsedQuery.data.q,
+      parsedQuery.data.mode
     );
 
     return NextResponse.json(

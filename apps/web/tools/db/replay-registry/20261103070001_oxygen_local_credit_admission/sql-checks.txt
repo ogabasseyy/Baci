@@ -1,0 +1,1 @@
+supabase/tests/oxygen_local_credit_full_schema.sql

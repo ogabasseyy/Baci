@@ -69,7 +69,7 @@ describe('SavingsScreen', () => {
     { ...source(), progress: { status: 'ready', decision: {} } },
   ])('fails closed on malformed full source without retaining account details', async (invalid) => {
     const { rerender } = render(<SavingsScreen source={source()} />);
-    await screen.findByText('NOT-A-BANK-ACCOUNT');
+    await screen.findByRole('region', { name: 'Customer savings' });
     rerender(<SavingsScreen source={invalid} />);
     expect(screen.getByText('Staging savings are unavailable.')).toBeVisible();
     expect(screen.queryByText('NOT-A-BANK-ACCOUNT')).toBeNull();
@@ -105,22 +105,36 @@ describe('SavingsScreen', () => {
   });
 
   it.each([
+    'ready',
     'pending',
     'unavailable',
-  ] as const)('renders actual funding %s for an eligible snapshot', async (status) => {
-    render(<SavingsScreen source={{ ...source(), funding: { status } }} />);
+  ] as const)('never renders goal bank account details when funding is %s', async (status) => {
+    const current = source();
+    render(
+      <SavingsScreen
+        source={{
+          ...current,
+          funding: status === 'ready' ? current.funding : { status },
+        }}
+      />
+    );
     expect(
-      await screen.findByText(
-        status === 'pending'
-          ? 'Test funding details are pending confirmation.'
-          : 'Test funding details are unavailable.'
-      )
+      await screen.findByRole('region', { name: 'Customer savings' })
     ).toBeVisible();
+    expect(
+      screen.queryByRole('region', { name: 'Funding details' })
+    ).toBeNull();
     expect(screen.queryByText('NOT-A-BANK-ACCOUNT')).toBeNull();
+    expect(screen.queryByText('Synthetic Bank')).toBeNull();
+    expect(screen.queryByText(/account number/i)).toBeNull();
   });
+
   it('renders actual panels for eligible accepted server snapshots with purchase blocked', async () => {
     render(<SavingsScreen source={source()} />);
-    expect(await screen.findByText('NOT-A-BANK-ACCOUNT')).toBeVisible();
+    expect(
+      await screen.findByRole('region', { name: 'Customer savings' })
+    ).toBeVisible();
+    expect(screen.queryByText('NOT-A-BANK-ACCOUNT')).toBeNull();
     expect(
       screen.getByRole('region', { name: 'Draft policy review' })
     ).toBeVisible();
@@ -140,7 +154,7 @@ describe('SavingsScreen', () => {
     'unauthenticated',
   ] as const)('hides details in %s state', async (status) => {
     const { rerender } = render(<SavingsScreen source={source()} />);
-    await screen.findByText('NOT-A-BANK-ACCOUNT');
+    await screen.findByRole('region', { name: 'Customer savings' });
     rerender(<SavingsScreen source={{ environment: 'staging', status }} />);
     expect(screen.queryByText('NOT-A-BANK-ACCOUNT')).toBeNull();
     expect(

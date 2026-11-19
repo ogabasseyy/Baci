@@ -2,7 +2,10 @@
 
 import { Button } from '@/components/ui/button';
 import type { JumiaProductExportEligiblePage } from '@/schemas/jumia/eligible-page';
+import { jumiaGamingDraftPageSchema } from '@/schemas/jumia/selection-draft';
 import { GamingSelectionPreviewProducts } from './gaming-selection-preview-products';
+import type { JumiaMappingDraft } from './jumia-mapping-draft-types';
+import { JumiaProductPreflightPreview } from './jumia-product-preflight-preview';
 import { useGamingSelectionDraft } from './use-gaming-selection-draft';
 
 export function GamingSelectionDraft({
@@ -10,13 +13,18 @@ export function GamingSelectionDraft({
   snapshot,
   loading,
   onPageChange,
+  integrationId,
+  mapping,
 }: {
   merchantId: string;
   snapshot: JumiaProductExportEligiblePage;
   loading: boolean;
   onPageChange: (page: number) => void;
+  integrationId: string;
+  mapping: JumiaMappingDraft | null;
 }) {
   const selection = useGamingSelectionDraft(merchantId, snapshot);
+  const parsedSnapshot = jumiaGamingDraftPageSchema.safeParse(snapshot);
   const busy = loading || selection.progress !== null;
   return (
     <>
@@ -78,6 +86,19 @@ export function GamingSelectionDraft({
         onPageChange={onPageChange}
         selection={selection}
       />
+      {parsedSnapshot.success && selection.evidenceValid ? (
+        <JumiaProductPreflightPreview
+          merchantId={merchantId}
+          integrationId={integrationId}
+          page={parsedSnapshot.data}
+          selectedDraft={selection.draft}
+          mapping={mapping}
+        />
+      ) : (
+        <p role="status" className="text-sm text-amber-700">
+          Refresh the frozen Gaming preview before checking products.
+        </p>
+      )}
     </>
   );
 }

@@ -2,6 +2,7 @@ import 'server-only';
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
+import { redvaultOrderPaymentMethodRowsSchema } from '@/schemas/redvault-order-payment-method';
 
 const captureHoldOutcomeSchema = z.object({
   duplicate: z.boolean(),
@@ -48,17 +49,26 @@ export async function captureOrHoldRedvaultPayment({
       p_merchant_id: merchantId,
       p_order_id: orderId,
     });
-  const paymentMethod = Array.isArray(classification)
-    ? classification[0]?.payment_method
-    : undefined;
-
-  if (classificationError || !paymentMethod) {
-    throw (
-      classificationError ?? new Error('redvault_capture_hold_order_not_found')
-    );
+  if (classificationError) {
+    throw classificationError;
   }
 
-  if (paymentMethod !== 'uba_redvault') {
+  const classificationRows =
+    redvaultOrderPaymentMethodRowsSchema.safeParse(classification);
+  if (!classificationRows.success) {
+    throw new Error('redvault_capture_hold_classification_invalid');
+  }
+  const classifiedRow = classificationRows.data[0];
+
+  // A missing row means the order is absent or bound to another merchant:
+  // fail closed. A present row with no payment method is an order that was
+  // never routed through REDVAULT (for example a staff-created in-store
+  // invoice later paid by bank transfer), so it is simply not REDVAULT.
+  if (!classifiedRow) {
+    throw new Error('redvault_capture_hold_order_not_found');
+  }
+
+  if (classifiedRow.payment_method !== 'uba_redvault') {
     return { kind: 'not_redvault' };
   }
 

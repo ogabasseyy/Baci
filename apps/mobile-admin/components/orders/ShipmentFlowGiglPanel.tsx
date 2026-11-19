@@ -2,21 +2,53 @@ import * as Clipboard from 'expo-clipboard';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { OrderGiglShippingState } from '@/hooks/orders/useOrderGiglShipping';
 import { useTheme } from '@/hooks/useTheme';
-import { formatMerchantAmount } from '@/lib/format-merchant-currency';
+import { formatMerchantPrice } from '@/lib/format-merchant-currency';
 import type {
   MerchantWalletFundingAccount,
   OrderGiglMissingField,
   OrderGiglQuote,
   OrderGiglReceiver,
+  OrderGiglSelectedPlace,
 } from '@/lib/order-gigl-shipping';
-import { ShipmentOptionCard } from './ShipmentOptionCard';
+import { CheckoutRecoveryAddressInput } from './CheckoutRecoveryAddressInput';
+import {
+  ShipmentOptionCard,
+  type ShipmentOptionDetail,
+} from './ShipmentOptionCard';
 
 const formatPrice = (amount: number) =>
-  formatMerchantAmount(
-    amount,
-    { payout_currency: 'NGN' },
-    { minimumFractionDigits: 0 }
-  );
+  formatMerchantPrice(amount, { payout_currency: 'NGN' });
+
+// The balance only matters when it cannot cover the delivery.
+function getWalletDetails(wallet: Props['wallet']): ShipmentOptionDetail[] {
+  if (!wallet) return [];
+  if (wallet.canBook) return [{ text: 'From your wallet' }];
+  return [
+    { text: `Wallet balance: ${formatPrice(wallet.availableBalance)}` },
+    {
+      text: `Top up ${formatPrice(wallet.shortfall)} to book`,
+      tone: 'warning',
+    },
+  ];
+}
+
+// One line: "GoStandard · 2 days · Abakaliki" (the state when no city).
+function getQuoteSummary(
+  quote: OrderGiglQuote,
+  address: Partial<OrderGiglReceiver>
+): string {
+  const days = `${quote.estimatedDays} day${quote.estimatedDays === 1 ? '' : 's'}`;
+  const place = address.city?.trim() || address.state?.trim();
+  return [quote.serviceTier || quote.displayName, days, place]
+    .filter(Boolean)
+    .join(' · ');
+}
+
+// While a price loads the card keeps the height of a priced card the wallet
+// can pay, so the common case does not jump when the price arrives. A short
+// wallet adds the top-up line and the Fund wallet button on purpose.
+const LOADING_PRICE = '₦ …';
+const LOADING_DETAILS: ShipmentOptionDetail[] = [{ text: 'From your wallet' }];
 
 interface Props {
   addressDraft: Partial<OrderGiglReceiver>;
@@ -25,10 +57,13 @@ interface Props {
   missingFields: OrderGiglMissingField[];
   onAddressFieldChange: (field: OrderGiglMissingField, value: string) => void;
   onFundWallet: () => void;
+  onPlaceSelect: (place: OrderGiglSelectedPlace) => void;
   onRefreshFundingAccount: () => void;
   onModeChange: () => void;
   onRetryQuote: () => void;
   onTransferred: () => void;
+  /** Merchant-facing provider name, e.g. "GIG" — shown as "Ship with …". */
+  providerName: string;
   quote: OrderGiglQuote | null;
   selected: boolean;
   state: OrderGiglShippingState;
@@ -79,10 +114,12 @@ export function ShipmentFlowGiglPanel({
   missingFields,
   onAddressFieldChange,
   onFundWallet,
+  onPlaceSelect,
   onRefreshFundingAccount,
   onModeChange,
   onRetryQuote,
   onTransferred,
+  providerName,
   quote,
   selected,
   state,
@@ -91,43 +128,58 @@ export function ShipmentFlowGiglPanel({
   const { colors } = useTheme();
   const loading = state === 'loading';
   const description = quote
-    ? `${quote.displayName} · ${quote.estimatedDays} day${quote.estimatedDays === 1 ? '' : 's'}`
+    ? getQuoteSummary(quote, addressDraft)
     : loading
-      ? 'Getting a fresh delivery price…'
-      : 'Get a fresh GIG delivery price for this order.';
+      ? 'Getting a delivery price…'
+      : `Get a ${providerName} delivery price for this order.`;
+  const price = quote
+    ? formatPrice(quote.price)
+    : loading
+      ? LOADING_PRICE
+      : undefined;
+  const details = quote
+    ? getWalletDetails(wallet)
+    : loading
+      ? LOADING_DETAILS
+      : [];
 
   return (
     <View>
       <ShipmentOptionCard
+        badge={providerName}
         colors={colors}
         description={description}
+        details={details}
         disabled={loading}
         icon="paper-plane-outline"
         onPress={onModeChange}
+        price={price}
         selected={selected}
-        title="Ship with GIG"
+        title={`Ship with ${providerName}`}
       />
 
-      {quote ? (
-        <View style={panelStyles.summary}>
-          <Text style={[panelStyles.price, { color: colors.text }]}>
-            {formatPrice(quote.price)}
-          </Text>
-          {wallet ? (
-            <>
-              <Text style={{ color: colors.textSecondary }}>
-                Wallet balance: {formatPrice(wallet.availableBalance)}
-              </Text>
-              {!wallet.canBook ? (
-                <Text style={{ color: colors.textSecondary }}>
-                  Shortfall: {formatPrice(wallet.shortfall)}
-                </Text>
-              ) : null}
-            </>
-          ) : null}
-        </View>
+      {missingFields.includes('address') ? (
+        <CheckoutRecoveryAddressInput
+          accessibilityLabel="Search shipping address"
+          address={addressDraft.address ?? ''}
+          disabled={loading}
+          onSearchChange={(text) => onAddressFieldChange('address', text)}
+          onSelect={(place) => {
+            const latitude = Number.parseFloat(place.latitude);
+            const longitude = Number.parseFloat(place.longitude);
+            const hasPin =
+              Number.isFinite(latitude) && Number.isFinite(longitude);
+            onPlaceSelect({
+              address: place.address,
+              city: place.city,
+              state: place.state,
+              latitude: hasPin ? latitude : undefined,
+              longitude: hasPin ? longitude : undefined,
+            });
+          }}
+          placeholder="Search delivery address"
+        />
       ) : null}
-
       {missingFields.map((field) => (
         <View key={field} style={panelStyles.field}>
           <Text style={{ color: colors.text }}>{FIELD_LABELS[field]}</Text>
@@ -242,6 +294,4 @@ const panelStyles = StyleSheet.create({
     minHeight: 44,
     paddingHorizontal: 12,
   },
-  price: { fontSize: 20, fontWeight: '700' },
-  summary: { gap: 4, marginBottom: 12, paddingHorizontal: 12 },
 });

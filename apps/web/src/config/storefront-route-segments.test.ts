@@ -14,6 +14,20 @@ describe('storefrontRouteSegments.shouldStripRetiredSlugPrefix', () => {
     ).toBe(true);
   });
 
+  describe('bugfix: black-friday page was stripped as a retired slug', () => {
+    it('preserves the exact live black-friday page path', () => {
+      expect(
+        storefrontRouteSegments.shouldStripRetiredSlugPrefix('black-friday', 1)
+      ).toBe(false);
+    });
+
+    it('allows a suffixed retired black-friday slug to redirect', () => {
+      expect(
+        storefrontRouteSegments.shouldStripRetiredSlugPrefix('black-friday', 2)
+      ).toBe(true);
+    });
+  });
+
   it('preserves other live storefront route roots', () => {
     expect(
       storefrontRouteSegments.shouldStripRetiredSlugPrefix('blog', 1)

@@ -17,9 +17,6 @@ const walletFundingRecoveryClientBrand: unique symbol = Symbol(
 const shippingQuoteBookingEconomicsClientBrand: unique symbol = Symbol(
   'baci.shipping-quote-booking-economics.service-role-client'
 );
-const piggyvestIntakeClientBrand: unique symbol = Symbol(
-  'baci.piggyvest-intake.service-role-client'
-);
 const immediateNotificationCompletionClientBrand: unique symbol = Symbol(
   'baci.immediate-notification-completion.service-role-client'
 );
@@ -28,6 +25,9 @@ const searchAnalyticsClientBrand: unique symbol = Symbol(
 );
 const loyaltyResolverClientBrand: unique symbol = Symbol(
   'baci.loyalty-resolver.service-role-client'
+);
+const receiptLoginHintClientBrand: unique symbol = Symbol(
+  'baci.receipt-login-hint.service-role-client'
 );
 const serviceRoleBrandValue: true = true;
 
@@ -82,18 +82,6 @@ export type ShippingQuoteBookingEconomicsServiceClient =
   };
 
 /**
- * A service-role client reserved for the PiggyVest webhook intake edge.
- *
- * Keep this type distinct from `ServiceRoleClient` so the intake call graph
- * (inbox record, quarantine record, event processing) cannot be driven by a
- * generic service client from any other edge. Only the HMAC-authenticated
- * `/api/webhooks/piggyvest` route may construct it, via
- * `createPiggyvestIntakeServiceClient`.
- */
-export type PiggyvestIntakeServiceClient = SupabaseClient<Database> & {
-  readonly [piggyvestIntakeClientBrand]: true;
-};
-/**
  * A service-role client reserved for immediate-notification completion
  * HMAC provisioning.
  *
@@ -140,6 +128,21 @@ export type LoyaltyResolverServiceClient = SupabaseClient<Database> & {
 };
 
 /**
+ * A service-role client reserved for the receipt-claim login-hint edge.
+ *
+ * Keep this type distinct from `ServiceRoleClient` so the login-hint call
+ * graph cannot be driven by a generic service client from any other edge.
+ * Only the token-scoped login-email route may construct it, via
+ * `createReceiptLoginHintServiceClient`, and only for the
+ * `get_receipt_claim_login_hint` RPC. Covered by the owner-approved
+ * temporary exception in AGENTS.md: the backend key inherently bypasses
+ * RLS; the brand constrains the approved call graph, not that capability.
+ */
+export type ReceiptLoginHintServiceClient = SupabaseClient<Database> & {
+  readonly [receiptLoginHintClientBrand]: true;
+};
+
+/**
  * Creates a Supabase client with service role key for admin operations.
  * This client bypasses RLS policies and should only be used in:
  * - Webhook handlers (no user context)
@@ -164,9 +167,6 @@ export function createServiceClient(
   sentinel: 'shipping-quote-booking-economics'
 ): ShippingQuoteBookingEconomicsServiceClient;
 export function createServiceClient(
-  sentinel: 'piggyvest-intake'
-): PiggyvestIntakeServiceClient;
-export function createServiceClient(
   sentinel: 'immediate-notification-completion'
 ): ImmediateNotificationCompletionServiceClient;
 export function createServiceClient(
@@ -175,6 +175,9 @@ export function createServiceClient(
 export function createServiceClient(
   sentinel: 'loyalty-resolver'
 ): LoyaltyResolverServiceClient;
+export function createServiceClient(
+  sentinel: 'receipt-login-hint'
+): ReceiptLoginHintServiceClient;
 export function createServiceClient(): SupabaseClient;
 export function createServiceClient(
   sentinel?:
@@ -183,10 +186,10 @@ export function createServiceClient(
     | 'jumia-credentials'
     | 'wallet-funding-recovery'
     | 'shipping-quote-booking-economics'
-    | 'piggyvest-intake'
     | 'immediate-notification-completion'
     | 'search-analytics'
     | 'loyalty-resolver'
+    | 'receipt-login-hint'
 ) {
   const url = getSupabaseUrl();
   // `SUPABASE_ADS_CREDENTIAL_KEY` is the preferred deployment secret for the
@@ -249,11 +252,6 @@ export function createServiceClient(
       [shippingQuoteBookingEconomicsClientBrand]: serviceRoleBrandValue,
     });
   }
-  if (sentinel === 'piggyvest-intake') {
-    return Object.assign(createClient<Database>(url, serviceRoleKey, options), {
-      [piggyvestIntakeClientBrand]: serviceRoleBrandValue,
-    });
-  }
   if (sentinel === 'search-analytics') {
     return Object.assign(createClient<Database>(url, serviceRoleKey, options), {
       [searchAnalyticsClientBrand]: serviceRoleBrandValue,
@@ -262,6 +260,11 @@ export function createServiceClient(
   if (sentinel === 'loyalty-resolver') {
     return Object.assign(createClient<Database>(url, serviceRoleKey, options), {
       [loyaltyResolverClientBrand]: serviceRoleBrandValue,
+    });
+  }
+  if (sentinel === 'receipt-login-hint') {
+    return Object.assign(createClient<Database>(url, serviceRoleKey, options), {
+      [receiptLoginHintClientBrand]: serviceRoleBrandValue,
     });
   }
   return createClient(url, serviceRoleKey, options);

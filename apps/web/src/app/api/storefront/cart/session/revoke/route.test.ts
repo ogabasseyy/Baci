@@ -31,6 +31,7 @@ beforeEach(() => {
   });
   vi.mocked(checkCartQuota).mockResolvedValue({
     allowed: true,
+    degraded: false,
     limit: 60,
     remaining: 59,
     resetTime: 0,
@@ -48,6 +49,27 @@ it('requires CSRF and verified cart authority before revocation', async () => {
     valid: false,
   });
   expect((await POST(request())).status).toBe(403);
+});
+it('clears the checkout recovery cookie when device authority is retired', async () => {
+  vi.mocked(resolveCartRequestContext).mockResolvedValue({
+    ok: true,
+    merchant: { id: 'merchant-1', slug: 'shop', customDomain: null },
+    principal: {
+      merchantId: 'merchant-1',
+      cartId: 'cart-1',
+      grantId: 'grant-1',
+      principalId: 'principal-1',
+      scope: 'session',
+      allowedOperations: [],
+      expiresAt: '2099-01-01T00:00:00Z',
+    },
+  });
+  vi.mocked(revokeCartDeviceGrants).mockResolvedValue({ ok: true });
+  const response = await POST(request());
+  expect(response.status).toBe(200);
+  const cookies = response.headers.get('set-cookie') ?? '';
+  expect(cookies).toContain('baci-checkout-recovery-merchant-1=;');
+  expect(cookies).toContain('Max-Age=0');
 });
 it('rejects malformed or caller-selected tenant/grant fields', async () => {
   // Unauthenticated callers get the auth error before any body handling.
@@ -85,6 +107,7 @@ it('blocks revocation when the per-principal quota is exceeded', async () => {
   });
   vi.mocked(checkCartQuota).mockResolvedValue({
     allowed: false,
+    degraded: false,
     limit: 60,
     remaining: 0,
     resetTime: 0,
@@ -214,5 +237,8 @@ it('clears only the resolved merchant cookie after idempotent scoped revocation'
   expect(response.status).toBe(200);
   expect(response.headers.get('cache-control')).toContain('no-store');
   expect(response.headers.get('set-cookie')).toContain('Max-Age=0');
+  expect(response.headers.get('set-cookie')).toContain(
+    'baci-checkout-reconcile-m=;'
+  );
   expect(revokeCartDeviceGrants).toHaveBeenCalledWith(principal);
 });

@@ -1,10 +1,10 @@
 import {
-  CheckoutPage,
+  continueToPaymentAfterPickupCheck,
   expect,
   fireEvent,
   it,
   mockCheckoutSubmissionState,
-  render,
+  renderCheckoutWithStoreRates,
   screen,
   useMerchantSafe,
   usePersistedState,
@@ -101,29 +101,44 @@ it('attaches the guest checkout to the new account before REDVAULT initializatio
       return Response.json({});
     });
 
-  render(<CheckoutPage />);
+  const formSession = await import(
+    './checkout/hooks/use-checkout-form-session'
+  );
+  const originalUseFormSession = formSession.useCheckoutFormSession;
+  const formSpy = vi
+    .spyOn(formSession, 'useCheckoutFormSession')
+    .mockImplementation((options) => {
+      const session = originalUseFormSession(options);
+      return {
+        ...session,
+        account: {
+          ...session.account,
+          createAccount: true,
+          password: 'guest-password-1',
+        },
+      };
+    });
+  renderCheckoutWithStoreRates();
   fireEvent.click(screen.getByRole('button', { name: /delivery method/i }));
   fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
   fireEvent.click(screen.getByRole('button', { name: /contact information/i }));
   fireEvent.click(
-    screen.getByRole('checkbox', { name: /save my information/i })
-  );
-  fireEvent.change(screen.getByPlaceholderText('Min. 6 characters'), {
-    target: { value: 'guest-password-1' },
-  });
-  fireEvent.click(
     screen.getByRole('button', { name: /continue to delivery/i })
   );
-  fireEvent.click(screen.getByRole('button', { name: /continue to payment/i }));
+  await continueToPaymentAfterPickupCheck();
   fireEvent.click(await screen.findByRole('radio', { name: /pay with uba/i }));
   fireEvent.click(
     screen
       .getAllByRole('button', { name: /place order/i })
       .find((button) => !button.hasAttribute('disabled')) as HTMLButtonElement
   );
-  await screen.findByRole('button', { name: /review and continue to uba/i });
+  await screen.findAllByRole('button', { name: /review and continue to uba/i });
   fireEvent.click(
-    await screen.findByRole('button', { name: /review and continue to uba/i })
+    (
+      await screen.findAllByRole('button', {
+        name: /review and continue to uba/i,
+      })
+    )[0]
   );
 
   await waitFor(() => {
@@ -132,6 +147,7 @@ it('attaches the guest checkout to the new account before REDVAULT initializatio
       { p_order_id: 'order-redvault', p_tracking_token: 'track-redvault' }
     );
   });
+  formSpy.mockRestore();
   await waitFor(() => {
     expect(
       sequence.some((entry) => entry === 'fetch:/api/payments/initialize')
@@ -184,10 +200,10 @@ it('still clears a non-REDVAULT snapshot when switching methods', async () => {
       return Response.json({ states: ['Lagos'], locations: [] });
     });
 
-  render(<CheckoutPage />);
+  renderCheckoutWithStoreRates();
   fireEvent.click(screen.getByRole('button', { name: /delivery method/i }));
   fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
-  fireEvent.click(screen.getByRole('button', { name: /continue to payment/i }));
+  await continueToPaymentAfterPickupCheck();
   fireEvent.click(await screen.findByRole('radio', { name: /pay with uba/i }));
 
   expect(clearPendingCheckoutOrder).toHaveBeenCalled();

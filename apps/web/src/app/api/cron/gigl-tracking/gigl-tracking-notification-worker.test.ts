@@ -1,14 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { processClaimedGiglTrackingNotifications } from './gigl-tracking-notification-worker';
 import {
-  createGiglTrackingNotificationQuery,
   createGiglTrackingNotificationSupabase,
   giglTrackingNotificationTestNotification,
 } from './gigl-tracking-notification-worker.test-support';
 
 const notifyMerchant = vi.hoisted(() => vi.fn());
 const notifyCustomer = vi.hoisted(() => vi.fn());
-vi.mock('@/lib/expo-push', () => ({ notifyCustomer, notifyMerchant }));
+vi.mock('@/lib/expo-client', () => ({ getExpoClient: vi.fn() }));
+vi.mock('@/lib/expo-push-core', () => ({
+  notifyCustomerWithStore: (_store: unknown, ...args: unknown[]) =>
+    notifyCustomer(...args),
+  notifyMerchantWithStore: (_store: unknown, ...args: unknown[]) =>
+    notifyMerchant(...args),
+}));
 
 const notification = giglTrackingNotificationTestNotification;
 
@@ -37,7 +42,6 @@ describe('processClaimedGiglTrackingNotifications', () => {
       skipped: 0,
       success: true,
     });
-    expect(supabase.selections[0]).toBe('description');
     expect(notifyMerchant).toHaveBeenCalledWith(
       notification.merchant_id,
       'Rider en route',
@@ -47,11 +51,12 @@ describe('processClaimedGiglTrackingNotifications', () => {
       {
         onDeliveryStart: expect.any(Function),
         onDeliveryRejected: expect.any(Function),
+        recipientUserIds: ['00000000-0000-4000-8000-0000000000a1'],
         requiredShipmentUpdateCapability: 1,
       }
     );
     expect(supabase.rpc).toHaveBeenCalledWith(
-      'complete_shipment_tracking_notification',
+      'gigl_worker_complete_notification',
       expect.objectContaining({ p_outcome: 'sent' })
     );
   });
@@ -109,18 +114,12 @@ describe('processClaimedGiglTrackingNotifications', () => {
       description: 'Delivered',
       raw_status: 'DELIVERED',
     });
-    const failingOrderQuery = createGiglTrackingNotificationQuery(null);
-    failingOrderQuery.maybeSingle.mockResolvedValue({
-      data: null,
-      error: { message: 'database unavailable' },
-    });
-    supabase.from.mockReturnValueOnce(
-      createGiglTrackingNotificationQuery({
-        description: 'Delivered',
-        raw_status: 'DELIVERED',
-      })
+    const defaultRpc = supabase.rpc.getMockImplementation();
+    supabase.rpc.mockImplementation(async (name: string, args: unknown) =>
+      name === 'gigl_worker_notification_customer'
+        ? { data: null, error: { message: 'database unavailable' } }
+        : defaultRpc?.(name, args)
     );
-    supabase.from.mockReturnValueOnce(failingOrderQuery);
 
     const summary = await processClaimedGiglTrackingNotifications(
       supabase as never,
@@ -131,11 +130,11 @@ describe('processClaimedGiglTrackingNotifications', () => {
     expect(summary.failed).toBe(1);
     expect(notifyCustomer).not.toHaveBeenCalled();
     expect(supabase.rpc).not.toHaveBeenCalledWith(
-      'begin_shipment_tracking_notification_dispatch',
+      'gigl_worker_begin_notification_dispatch',
       expect.anything()
     );
     expect(supabase.rpc).toHaveBeenCalledWith(
-      'complete_shipment_tracking_notification',
+      'gigl_worker_complete_notification',
       expect.objectContaining({ p_outcome: 'failed' })
     );
   });
@@ -160,7 +159,7 @@ describe('processClaimedGiglTrackingNotifications', () => {
     expect(summary.sent).toBe(1);
     expect(summary.failed).toBe(0);
     expect(supabase.rpc).toHaveBeenCalledWith(
-      'complete_shipment_tracking_notification',
+      'gigl_worker_complete_notification',
       expect.objectContaining({ p_outcome: 'sent' })
     );
   });
@@ -180,7 +179,7 @@ describe('processClaimedGiglTrackingNotifications', () => {
 
     expect(summary).toMatchObject({ failed: 0, sent: 0, skipped: 1 });
     expect(supabase.rpc).toHaveBeenCalledWith(
-      'complete_shipment_tracking_notification',
+      'gigl_worker_complete_notification',
       expect.objectContaining({
         p_error: 'no_active_push_token',
         p_outcome: 'skipped',
@@ -207,7 +206,7 @@ describe('processClaimedGiglTrackingNotifications', () => {
 
     expect(summary.failed).toBe(1);
     expect(supabase.rpc).not.toHaveBeenCalledWith(
-      'begin_shipment_tracking_notification_dispatch',
+      'gigl_worker_begin_notification_dispatch',
       expect.anything()
     );
   });
@@ -231,7 +230,7 @@ describe('processClaimedGiglTrackingNotifications', () => {
     );
 
     expect(supabase.rpc).toHaveBeenCalledWith(
-      'begin_shipment_tracking_notification_dispatch',
+      'gigl_worker_begin_notification_dispatch',
       expect.objectContaining({ p_id: notification.id, p_worker_id: 'worker' })
     );
   });
@@ -241,7 +240,6 @@ describe('processClaimedGiglTrackingNotifications', () => {
       description: 'Rider assigned',
       raw_status: 'RIDER EN ROUTE FOR PICKUP',
     });
-    supabase.rpc.mockResolvedValue({ data: true, error: null });
     notifyMerchant.mockImplementation(
       async (_merchantId, _title, _body, _payload, _channel, options) => {
         await options?.onDeliveryStart?.();
@@ -257,7 +255,7 @@ describe('processClaimedGiglTrackingNotifications', () => {
     );
 
     const completionCalls = supabase.rpc.mock.calls.filter(
-      ([name]) => name === 'complete_shipment_tracking_notification'
+      ([name]) => name === 'gigl_worker_complete_notification'
     );
     expect(summary.failed).toBe(1);
     expect(completionCalls).toHaveLength(1);

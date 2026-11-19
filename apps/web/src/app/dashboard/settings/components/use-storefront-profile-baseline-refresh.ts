@@ -8,6 +8,7 @@ import type { SettingsFormValues, settingsSchema } from './settings-utils';
 const profileFields = [
   'business_name',
   'country',
+  'phone',
   'site_description',
   'support_email',
   'support_phone',

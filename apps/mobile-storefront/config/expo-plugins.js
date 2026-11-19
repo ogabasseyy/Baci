@@ -11,9 +11,15 @@ function createExpoPlugins({
   return [
     'expo-router',
     [
-      'expo-splash-screen',
+      'react-native-splash-motion',
       {
-        backgroundColor: '#000000',
+        source: './assets/splash-scene/native-splash.json',
+        background: '#20000b',
+        width: 420,
+        // Fill the whole screen (cropping the scene's edges) instead of a
+        // framed box at 90% of the screen.
+        fit: 'cover',
+        loop: false,
       },
     ],
     [
@@ -25,7 +31,7 @@ function createExpoPlugins({
       },
     ],
     'expo-font',
-    'expo-audio',
+    ['expo-audio', { enableBackgroundPlayback: false }],
     'expo-image',
     'expo-secure-store',
     'expo-sharing',
@@ -57,9 +63,9 @@ function createExpoPlugins({
           // (idempotent settings.gradle includeBuild). Do not also set
           // buildReactNativeFromSource — expo-build-properties appends without
           // deduping; the custom plugin survives clean and incremental prebuild.
-          compileSdkVersion: 36,
+          compileSdkVersion: 37,
           targetSdkVersion: 36,
-          buildToolsVersion: '36.0.0',
+          buildToolsVersion: '37.0.0',
           // Compress native libraries in Play-generated splits. Some Android
           // 11/Huawei installs report an incorrect nativeLibraryDir while
           // using direct APK loading, so extracted libraries give SoLoader a
@@ -77,8 +83,6 @@ function createExpoPlugins({
           // The clipping traversal fix must be compiled into Fabric. Expo's
           // prebuilt React Native core does not include local pnpm patches.
           buildReactNativeFromSource: true,
-          // SDK 57 opt-in forwards scene startup and link callbacks on iOS 27.
-          enableSceneSupport: true,
           useFrameworks: 'static',
           // Keep Expo consumers and their JSI provider on the same native ABI.
           usePrecompiledModules: false,
@@ -89,9 +93,9 @@ function createExpoPlugins({
     ...(googleMobileAdsPlugin ? [googleMobileAdsPlugin] : []),
     './config/withFirebaseModularHeaders.js',
     './config/withObjCLinkerFlag.js',
-    './config/withNoSplashImage.js',
     './config/withAdaptiveAndroidManifest.js',
     './config/withAndroidSystemBars.js',
+    './config/withSplashMotionWindowBackground.js',
     './config/withAndroidGradleFixes.js',
     './config/withReactNativeFromSource.js',
     // Expo executes AppDelegate mods in reverse registration order. Register

@@ -1,4 +1,5 @@
 import { useRef } from 'react';
+import type { TextInputInstance } from 'react-native';
 import { Text, TextInput, View } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { getStyles } from './register.styles';
@@ -30,7 +31,7 @@ export function PersonNameFields({
 }: PersonNameFieldsProps) {
   const { colors } = useTheme();
   const styles = getStyles(colors);
-  const lastNameRef = useRef<TextInput>(null);
+  const lastNameRef = useRef<TextInputInstance>(null);
 
   return (
     <View style={styles.nameRow}>

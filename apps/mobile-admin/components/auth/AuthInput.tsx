@@ -1,10 +1,10 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import type { ReactNode, Ref } from 'react';
+import type { TextInputInstance } from 'react-native';
 import {
   TextInput as NativeTextInput,
   StyleSheet,
   Text,
-  type TextInput,
   type TextInputProps,
   View,
 } from 'react-native';
@@ -18,7 +18,7 @@ interface AuthInputProps {
   editable?: boolean;
   iconColor: string;
   iconName: React.ComponentProps<typeof Ionicons>['name'];
-  inputRef?: Ref<TextInput>;
+  inputRef?: Ref<TextInputInstance>;
   keyboardType?: TextInputProps['keyboardType'];
   label: string;
   labelColor: string;

@@ -3,10 +3,10 @@ import Ionicons, {
   type IoniconsIconName,
 } from '@react-native-vector-icons/ionicons';
 import { type RefObject, useRef, useState } from 'react';
+import type { ScrollViewInstance } from 'react-native';
 import {
   ActivityIndicator,
   Pressable,
-  type ScrollView,
   Text,
   useWindowDimensions,
   View,
@@ -92,7 +92,7 @@ export function NewOrderCustomerCreateView({
   const lastNameInputRef = useRef<SheetTextInputRef>(null);
   const phoneInputRef = useRef<SheetTextInputRef>(null);
   const emailInputRef = useRef<SheetTextInputRef>(null);
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<ScrollViewInstance>(null);
   const { height: windowHeight } = useWindowDimensions();
   // Reserve room below the last field so the focused address input can scroll
   // up and its (position:absolute) predictions dropdown clears the keyboard.

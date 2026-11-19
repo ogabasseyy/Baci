@@ -168,6 +168,10 @@ vi.mock('@/hooks/useTheme', () => ({
   }),
 }));
 
+vi.mock('@/hooks/useKeyboardShown', () => ({
+  useKeyboardShown: () => false,
+}));
+
 vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => ({
     activeAuthProvider: mocks.activeAuthProvider,

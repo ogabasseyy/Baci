@@ -6,11 +6,8 @@ import {
   type CartSnapshot,
   cartLineIdentity,
 } from '@baci/shared/cart';
-
 import type { CartMergeConflict } from '@/lib/cart/merge';
-
 import type { Product } from '@/lib/products';
-
 import type {
   AddToCartOptions,
   CartItem,
@@ -18,6 +15,7 @@ import type {
   SharedCartImportStatus,
   SharedCartSyncStatus,
 } from './cart-types';
+import type { ExperienceCartHostPort } from './shared-cart-experience-runtime';
 
 import {
   cartItemToIdentity,
@@ -39,9 +37,17 @@ export interface UseSharedCartOptions {
 }
 
 export interface UseSharedCartResult {
+  experienceCommandPort?: ExperienceCartHostPort;
   cart: SharedCartDisplayItem[];
+  /**
+   * This tab's own lines without a sibling tab's preview. Anything that
+   * issues a command or checks capacity reads this, never the previewed
+   * `cart`. Absent when it is the same list as `cart`.
+   */
+  ownCart?: SharedCartDisplayItem[];
   cartId: string | null;
   version: number | null;
+  isTerminal: boolean;
   cartCount: number;
   cartTotal: number;
   isHydrated: boolean;
@@ -72,6 +78,8 @@ export interface UseSharedCartResult {
   ) => void;
   /** Refetches the authoritative snapshot (checkout review refresh). */
   refreshSharedCart: () => Promise<void>;
+  /** Ensures the delegated cart has an active session proof for host integrations. */
+  ensureCartSession: () => Promise<EnsureCartResult>;
 }
 
 export type AdoptOutcome =

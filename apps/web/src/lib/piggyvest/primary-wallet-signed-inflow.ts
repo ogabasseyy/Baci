@@ -4,7 +4,12 @@ import { preparePrimaryWalletInflowReceipt } from './primary-wallet-inflow-recei
 import { verifyPiggyvestPayloadSignature } from './verify-piggyvest-payload-signature';
 
 type Receipt = ReturnType<typeof preparePrimaryWalletInflowReceipt>;
-type Outcome = 'credited' | 'duplicate' | 'unmapped' | 'conflict';
+type Outcome =
+  | 'credited'
+  | 'duplicate'
+  | 'unmapped'
+  | 'conflict'
+  | 'prerequisite';
 interface Input {
   rawBody: Uint8Array;
   signature: string | null;
@@ -40,7 +45,15 @@ export async function applyPrimaryWalletSignedInflow(
       ...receipt,
       bodyDigest: createHash('sha256').update(input.rawBody).digest('hex'),
     });
-    if (!['credited', 'duplicate', 'unmapped', 'conflict'].includes(outcome))
+    if (
+      ![
+        'credited',
+        'duplicate',
+        'unmapped',
+        'conflict',
+        'prerequisite',
+      ].includes(outcome)
+    )
       throw new Error('Invalid outcome');
     return outcome;
   } catch {

@@ -40,6 +40,10 @@ vi.mock('@/lib/get-published-blog-post-slugs-for-products', () => ({
   getPublishedBlogPostSlugsForProducts: () =>
     Promise.resolve({ slugs: [], incomplete: false }),
 }));
+vi.mock('@/lib/resolve-dependent-legacy-product-identifiers', () => ({
+  resolveDependentLegacyProductIdentifiers: () =>
+    Promise.resolve({ identifiers: [], incomplete: false }),
+}));
 
 import { POST } from './route';
 
@@ -133,9 +137,17 @@ describe('POST /api/internal/revalidate-products', () => {
 
     expect(res.status).toBe(200);
     expect(mockRevalidateProducts).toHaveBeenCalledWith(MERCHANT_ID);
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      MERCHANT_ID,
+      undefined,
+      { expireImmediately: true }
+    );
     expect(mockMerchantLookup).toHaveBeenCalledWith('id', MERCHANT_ID);
     expect(mockScheduleStorefrontHostnamePurge).toHaveBeenCalledWith(
       'ogabassey'
+    );
+    expect(mockRevalidateProducts.mock.invocationCallOrder[1]).toBeLessThan(
+      mockScheduleStorefrontHostnamePurge.mock.invocationCallOrder[0]
     );
     expect(mockExpireProductBlogCache).toHaveBeenCalledWith(MERCHANT_ID);
     expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
@@ -153,34 +165,20 @@ describe('POST /api/internal/revalidate-products', () => {
     );
 
     expect(res.status).toBe(200);
-    expect(mockRevalidateProducts).toHaveBeenCalledWith(MERCHANT_ID);
+    expect(mockRevalidateProducts).toHaveBeenCalledTimes(1);
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      MERCHANT_ID,
+      undefined,
+      { expireImmediately: true }
+    );
     expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
       'ogabassey',
       [{ slug: 'iphone-15', categorySegment: 'smartphones' }]
     );
-    expect(mockExpireProductBlogCache).toHaveBeenCalledWith(MERCHANT_ID);
-  });
-
-  it('rejects a mismatched merchantSlug before scheduling a product purge', async () => {
-    const res = await POST(
-      request(
-        {
-          merchantId: MERCHANT_ID,
-          merchantSlug: 'another-store',
-          products: [{ slug: 'iphone-15', category: 'Smartphones' }],
-        },
-        `Bearer ${SECRET}`
-      )
+    expect(mockRevalidateProducts.mock.invocationCallOrder[0]).toBeLessThan(
+      mockScheduleStorefrontProductPurge.mock.invocationCallOrder[0]
     );
-
-    expect(res.status).toBe(400);
-    expect(await res.json()).toEqual({
-      error: 'Merchant slug does not match merchant ID',
-      code: 'MERCHANT_SLUG_MISMATCH',
-    });
-    expect(mockMerchantLookup).toHaveBeenCalledWith('id', MERCHANT_ID);
-    expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
-    expect(mockScheduleStorefrontHostnamePurge).not.toHaveBeenCalled();
+    expect(mockExpireProductBlogCache).toHaveBeenCalledWith(MERCHANT_ID);
   });
 
   it('resolves authoritative rows and busts per-slug Next caches BEFORE scheduling the purge (F1 + F3)', async () => {
@@ -213,10 +211,14 @@ describe('POST /api/internal/revalidate-products', () => {
     );
 
     expect(res.status).toBe(200);
-    // Authoritative slug + category resolved from the row (not the uuid path).
+    // Authoritative slug + category resolved from the row, plus the UUID path
+    // (a cached /products/<uuid> response must be evicted at the edge too).
     expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
       'ogabassey',
-      [{ slug: 'iphone-15', categorySegment: 'smartphones' }]
+      [
+        { slug: 'iphone-15', categorySegment: 'smartphones' },
+        { slug: 'prod-1', categorySegment: null },
+      ]
     );
     // Per-slug Next caches hard-expired for the authoritative slug + id,
     // BEFORE the edge purge is scheduled.

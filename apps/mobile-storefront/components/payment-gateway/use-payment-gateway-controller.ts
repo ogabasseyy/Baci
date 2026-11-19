@@ -1,19 +1,18 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Alert } from 'react-native';
 import type { WebView } from 'react-native-webview';
 import { useToast } from '@/components/ui/Toast';
 import { setClipboardString } from '@/lib/clipboard';
 import { useAuthStore } from '@/stores/auth-store';
 import { useCartStore } from '@/stores/cart-store';
+import { createPaymentGatewayCloseHandler } from './create-payment-gateway-close-handler';
 import {
   isPaymentGateway,
   PAYMENT_GATEWAY_LABELS,
 } from './payment-gateway.helpers';
 import {
   firstSearchParam,
-  getCloseConfirmationMessage,
   parsePaymentGatewayParams,
 } from './payment-gateway-controller.helpers';
 import type {
@@ -21,11 +20,11 @@ import type {
   PaymentGatewayStatus,
 } from './payment-gateway-controller.types';
 import { requiresServerCheckoutConfirmation } from './requires-server-checkout-confirmation';
-import { resolvePendingOrdersRoute } from './resolve-pending-orders-route';
 import { usePaymentGatewayCompletionHandlers } from './use-payment-gateway-completion-handlers';
 import { usePaymentGatewayEventHandlers } from './use-payment-gateway-event-handlers';
 import { usePaymentGatewayMessageHandler } from './use-payment-gateway-message-handler';
 import { usePaymentGatewayTimers } from './use-payment-gateway-timers';
+import { useWalletPaystackCheckout } from './use-wallet-paystack-checkout';
 export function usePaymentGatewayController() {
   const queryClient = useQueryClient();
   const params = useLocalSearchParams<Record<string, string>>();
@@ -104,18 +103,28 @@ export function usePaymentGatewayController() {
     []
   );
 
+  const validatedParams = parsePaymentGatewayParams(params);
+  const isPaystackWallet =
+    validatedParams.data?.paymentKind === 'wallet' &&
+    validatedParams.data.gateway === 'paystack';
+  const walletCheckout = useWalletPaystackCheckout({
+    enabled: isPaystackWallet,
+    setErrorMessage,
+    setPaymentStatus,
+    statusRef,
+  });
+
   const {
     clearPendingLoadTimeout,
     clearPendingNavigation,
     scheduleDelayedNavigation,
     scheduleLoadTimeout,
   } = usePaymentGatewayTimers({
+    onLoadTimeout: walletCheckout.onLoadTimeout,
     refs: gatewayRefs,
     setErrorMessage,
     setPaymentStatus,
   });
-
-  const validatedParams = parsePaymentGatewayParams(params);
 
   const {
     amount,
@@ -179,7 +188,7 @@ export function usePaymentGatewayController() {
     }
   };
 
-  const handleWebViewMessage = usePaymentGatewayMessageHandler({
+  const handleGatewayMessage = usePaymentGatewayMessageHandler({
     amount,
     clearCart,
     confirmVtuPaymentSuccess: beginVtuPaymentCompletion,
@@ -222,35 +231,21 @@ export function usePaymentGatewayController() {
     isMountedRef,
   });
 
-  const handleClose = () => {
-    Alert.alert('Cancel Payment?', getCloseConfirmationMessage(paymentKind), [
-      { text: 'Continue Payment', style: 'cancel' },
-      {
-        text: 'Leave',
-        style: 'destructive',
-        onPress: () => {
-          if (paymentMethod === 'uba_redvault') {
-            // The order is already initialized server-side with a live
-            // Paystack attempt. Route to the orders flow instead of back to
-            // the populated checkout so the shopper cannot place a second
-            // order while the first still reserves inventory. Guests have
-            // no authenticated orders view, so they land on the
-            // tracking-token status view for the still-live attempt.
-            router.replace(
-              resolvePendingOrdersRoute({
-                customerId: customer?.id,
-                orderId,
-                trackingToken,
-                userId: user?.id,
-              })
-            );
-            return;
-          }
-          router.back();
-        },
-      },
-    ]);
+  const handleWebViewMessage = async (
+    event: Parameters<typeof handleGatewayMessage>[0]
+  ) => {
+    if (walletCheckout.handleMessage(event.nativeEvent.data)) return;
+    await handleGatewayMessage(event);
   };
+
+  const handleClose = createPaymentGatewayCloseHandler({
+    customerId: customer?.id,
+    orderId,
+    paymentKind,
+    paymentMethod,
+    trackingToken,
+    userId: user?.id,
+  });
   const eventHandlers = usePaymentGatewayEventHandlers({
     beginPaymentCompletion,
     paymentMethod,
@@ -277,10 +272,20 @@ export function usePaymentGatewayController() {
     gatewayName,
     returnTo,
     terminalDirective,
-    // Alias retained for checkout back-button consumers; both paths confirm cancellation.
     handleBack: handleClose,
     handleClose,
     ...eventHandlers,
+    handleLoadStart: () => {
+      walletCheckout.onLoadStart();
+      eventHandlers.handleLoadStart();
+    },
+    handleLoadEnd: () => {
+      eventHandlers.handleLoadEnd();
+      walletCheckout.onLoadEnd();
+    },
+    handleCheckWalletPaymentStatus: beginPaymentCompletion,
+    handleWalletCheckoutRecovery: () =>
+      walletCheckout.showRecovery(clearPendingLoadTimeout),
     handleWebViewMessage,
     paymentMethod,
     paymentKind,
@@ -288,6 +293,8 @@ export function usePaymentGatewayController() {
     toast,
     utilityType,
     validatedParams,
+    walletCheckoutInteractive: walletCheckout.interactive,
+    walletCheckoutStalled: walletCheckout.stalled,
     webViewRef,
   };
 }

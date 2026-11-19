@@ -217,3 +217,10 @@ it('keeps the not-ready rollback after a positive probe', async () => {
     })
   );
 });
+
+it('marks a primary not_found status as SAVINGS_WALLET_NOT_FOUND so the note reads it as pending', async () => {
+  mockFetchJson.mockResolvedValueOnce({ status: 'not_found', goalId: GOAL });
+  await expect(
+    customerSavingsPlanFunding.recover({ goalId: GOAL, merchantId: MERCHANT })
+  ).rejects.toMatchObject({ code: 'SAVINGS_WALLET_NOT_FOUND' });
+});

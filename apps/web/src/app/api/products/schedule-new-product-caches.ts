@@ -1,4 +1,7 @@
-import { revalidateProducts } from '@/lib/cache-revalidation';
+import {
+  revalidateProductSlugs,
+  revalidateProducts,
+} from '@/lib/cache-revalidation';
 import { scheduleProductImageTransformsPrewarm } from '@/lib/schedule-product-image-prewarm';
 import { scheduleStorefrontProductPurge } from '@/lib/storefront-product-purge';
 import { resolveProductPurgeCategorySegment } from '@/lib/storefront-product-purge-urls';
@@ -24,14 +27,39 @@ export function scheduleNewProductCaches({
   images,
   blogPostSlugs = [],
 }: ScheduleNewProductCachesArgs) {
-  revalidateProducts(merchantId, slug);
+  const trimmedSlug = slug.trim();
+  const purgeSlug = trimmedSlug || productId.trim();
+  const slugInvalidated = purgeSlug
+    ? revalidateProductSlugs(merchantId, [purgeSlug], {
+        expireImmediately: true,
+      }) === true
+    : false;
+  const scopedExpired =
+    revalidateProducts(merchantId, trimmedSlug || undefined, {
+      expireImmediately: true,
+      omitMerchantWidePdpDetails: slugInvalidated,
+    }) !== false;
+  const originExpired =
+    scopedExpired ||
+    (slugInvalidated &&
+      revalidateProducts(merchantId, trimmedSlug || undefined, {
+        expireImmediately: true,
+      }) !== false);
+  if (!originExpired) {
+    console.warn(
+      'Skipped Cloudflare product purge after create because origin expiry failed',
+      { merchantId }
+    );
+    scheduleProductImageTransformsPrewarm(images);
+    return;
+  }
   try {
-    const purgeSlug = slug.trim() || productId;
+    const targetSlug = purgeSlug || productId;
     const purgeEntries = [
       {
-        slug: purgeSlug,
+        slug: targetSlug,
         categorySegment: resolveProductPurgeCategorySegment({
-          slug: purgeSlug,
+          slug: targetSlug,
           name,
           category,
         }),

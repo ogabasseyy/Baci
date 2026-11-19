@@ -1,4 +1,4 @@
-import type { ScrollView } from 'react-native';
+import type { ScrollViewInstance } from 'react-native';
 import { SPACING } from '@/constants/Colors';
 
 export type DataProvider = 'mtn' | 'airtel' | 'glo' | 't2';
@@ -31,7 +31,7 @@ export function inferProviderFromDataBillerName(
 
 export function scrollToDataPayment(
   paymentY: number,
-  scrollView: ScrollView | null
+  scrollView: ScrollViewInstance | null
 ) {
   requestAnimationFrame(() => {
     scrollView?.scrollTo({
@@ -39,4 +39,38 @@ export function scrollToDataPayment(
       y: Math.max(paymentY - SPACING.md, 0),
     });
   });
+}
+
+/**
+ * Records where the data form's payment section sits and, once, scrolls to it
+ * (a repeat purchase opens ready to pay).
+ */
+export function handleDataPaymentLayout({
+  paymentY,
+  paymentYRef,
+  scrollView,
+  shouldScrollToPaymentRef,
+}: {
+  paymentY: number;
+  paymentYRef: { current: number | null };
+  scrollView: ScrollViewInstance | null;
+  shouldScrollToPaymentRef: { current: boolean };
+}) {
+  paymentYRef.current = paymentY;
+  if (!shouldScrollToPaymentRef.current) {
+    return;
+  }
+  shouldScrollToPaymentRef.current = false;
+  scrollToDataPayment(paymentY, scrollView);
+}
+
+/** The bundle list's error line when the data billers failed to load. */
+export function getDataPlansErrorMessage(
+  hasPlansError: boolean,
+  plansError: unknown
+): string | undefined {
+  if (!hasPlansError) return undefined;
+  return plansError instanceof Error
+    ? plansError.message
+    : 'Could not load data bundles. Please try again.';
 }

@@ -36,6 +36,44 @@ const baseResult: ImeiResult = {
 };
 
 describe('OgabasseyImeiResults', () => {
+  it.each([
+    'Blacklisted',
+    'Unknown',
+  ])('does not mount unlock assessment for %s blacklist evidence', (blacklistStatus) => {
+    render(
+      <OgabasseyImeiResults
+        currentTier={fullTier}
+        onReset={vi.fn()}
+        lookupId="lookup-1"
+        result={{ ...baseResult, blacklistStatus, simLock: 'Locked' }}
+      />
+    );
+    expect(screen.queryByText('Unlock offer for lookup-1')).toBeNull();
+  });
+
+  it('shows the identified colour/storage and labels the catalog illustration', () => {
+    render(
+      <OgabasseyImeiResults
+        currentTier={fullTier}
+        onReset={vi.fn()}
+        result={{
+          ...baseResult,
+          deviceImage: 'https://cdn.example.com/silver.jpg',
+          deviceProfile: {
+            version: 1,
+            brand: 'Apple',
+            model: 'iPhone 17 Pro Max',
+            color: 'Silver',
+            storage: '512GB',
+            imageMatch: 'color',
+          },
+        }}
+      />
+    );
+    expect(screen.getByText('Silver · 512GB')).toBeTruthy();
+    expect(screen.getByText('Catalog illustration · Silver')).toBeTruthy();
+  });
+
   it('renders nothing without a result', () => {
     const { container } = render(
       <OgabasseyImeiResults
@@ -46,6 +84,12 @@ describe('OgabasseyImeiResults', () => {
     );
 
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it('does not render null colour in cached illustration captions', () => {
+    render(<OgabasseyImeiResults currentTier={fullTier} onReset={vi.fn()} result={{...baseResult, deviceProfile: {version: 1, brand: 'Apple', model: 'iPhone 15', color: null, storage: null, imageMatch: 'color'}}} />);
+    expect(screen.queryByText(/illustration · null/i)).not.toBeInTheDocument();
+    expect(screen.getByText('Model illustration · colour may differ')).toBeInTheDocument();
   });
 
   it('renders the core status cards gated on checksIncluded', () => {
@@ -99,6 +143,41 @@ describe('OgabasseyImeiResults', () => {
     expect(screen.queryByText('Blacklist Status')).toBeNull();
     expect(screen.queryByText('SIM Lock')).toBeNull();
     expect(screen.queryByText('Carrier')).toBeNull();
+  });
+
+  it('uses caution for an unchecked blacklist instead of a danger result', () => {
+    render(
+      <OgabasseyImeiResults
+        currentTier={fullTier}
+        onReset={vi.fn()}
+        result={{
+          ...baseResult,
+          status: 'Unknown',
+          blacklistStatus: 'Unknown',
+          score: 70,
+        }}
+      />
+    );
+    expect(screen.getByText('70%')).toHaveClass(
+      'text-[var(--store-warning-text,#854d0e)]'
+    );
+  });
+
+  it('does not show a safe cached verdict when the blacklist field reports risk', () => {
+    render(<OgabasseyImeiResults currentTier={fullTier} onReset={vi.fn()} result={{...baseResult, status: 'Clean', verdictType: 'safe', verdict: 'Safe to buy', blacklistStatus: 'Blacklisted'}} />);
+    expect(screen.queryByText('Safe to buy')).not.toBeInTheDocument();
+    expect(screen.getAllByText(/Blacklist risk detected/i).length).toBeGreaterThan(0);
+  });
+
+  it('replaces a cached safe verdict when finance is past due', () => {
+    render(<OgabasseyImeiResults currentTier={fullTier} onReset={vi.fn()} result={{...baseResult, financeStatus: 'Past Due'}} />);
+    expect(screen.queryByText('Safe to buy')).not.toBeInTheDocument();
+    expect(screen.getAllByText(/finance balance or overdue payment/i)).toHaveLength(2);
+  });
+
+  it('shows caution for a cached clean status with a lock warning', () => {
+    render(<OgabasseyImeiResults currentTier={fullTier} onReset={vi.fn()} result={{...baseResult, status: 'Clean', verdictType: 'caution', verdict: 'Device locked'}} />);
+    expect(screen.getByText('98%')).toHaveClass('text-[var(--store-warning-text,#854d0e)]');
   });
 
   it('renders clean and non-clean trust-score tones', () => {
@@ -175,7 +254,7 @@ describe('OgabasseyImeiResults', () => {
         currentTier={fullTier}
         lookupId="11111111-1111-4111-8111-111111111111"
         onReset={vi.fn()}
-        result={baseResult}
+        result={{ ...baseResult, simLock: 'Locked' }}
       />
     );
 

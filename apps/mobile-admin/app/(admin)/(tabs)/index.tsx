@@ -2,6 +2,7 @@ import Ionicons from '@react-native-vector-icons/ionicons';
 import { useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useState } from 'react';
+import type { ScrollViewInstance } from 'react-native';
 import {
   Pressable,
   RefreshControl,
@@ -64,7 +65,7 @@ function formatMetric(value: number): string {
 }
 
 export default function HomeScreen() {
-  const scrollRef = useAdminTabScrollToTop<ScrollView>('index');
+  const scrollRef = useAdminTabScrollToTop<ScrollViewInstance>('index');
   if (__DEV__) {
     console.log('[HomeScreen] Rendering');
   }

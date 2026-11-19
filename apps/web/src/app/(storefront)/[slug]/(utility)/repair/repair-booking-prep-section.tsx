@@ -1,19 +1,15 @@
 export function RepairBookingPrepSection() {
   return (
-    <section className="mb-10 space-y-3 text-left">
-      <h2 className="text-xl font-semibold text-store-background-text">
-        Before you book a repair
-      </h2>
-      <p className="text-sm leading-6 text-store-background-text/70">
-        Use this repair request to describe the device model, visible damage,
-        fault symptoms and any recent repair attempts. Clear details help our
-        technicians estimate the right diagnosis path before you bring in or
-        dispatch the device. For phones, laptops, tablets, consoles and
-        accessories, back up important data where possible, remove passcodes
-        only when support asks for them, and keep proof of purchase or warranty
-        information available. Final pricing depends on inspection, parts
-        availability and the confirmed fault.
-      </p>
+    <section className="mb-4 flex items-start gap-3 border-l-2 border-store-primary/80 px-4 py-2 text-left sm:mb-5">
+      <div className="space-y-1">
+        <h2 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-store-primary">
+          Before you start
+        </h2>
+        <p className="text-xs leading-5 text-store-background-text/70 sm:text-sm">
+          Include the model and symptoms. Final pricing is confirmed after
+          inspection and parts checks.
+        </p>
+      </div>
     </section>
   );
 }

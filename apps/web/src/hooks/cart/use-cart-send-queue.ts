@@ -1,12 +1,9 @@
 'use client';
 
 import { useEffect } from 'react';
-
-import {
-  saveCartToStorage,
-  stripUnconfirmedDisplayLines,
-} from './cart-storage';
-
+import { reportCartCookieStorageFailure } from './cart-cookie-storage-failure';
+import { isCartCookieEpochCurrent } from './cart-cross-tab-lock';
+import { createExperienceQueueObserver } from './experience-queue-observer';
 import {
   fetchSharedCartSnapshot,
   sendSharedCartCommand,
@@ -21,6 +18,7 @@ import {
 import type { createCartProvisioning } from './shared-cart-provisioning';
 import { isTerminalCart } from './shared-cart-queue';
 import type { createCartSnapshotActions } from './shared-cart-snapshots';
+import { useCartDisplayCache } from './use-cart-display-cache';
 import type { SharedCartRuntime } from './use-shared-cart-runtime';
 
 export function useCartSendQueue(
@@ -32,7 +30,6 @@ export function useCartSendQueue(
     >
 ) {
   const {
-    merchantSlug,
     sessionGeneration,
     enabled,
     state,
@@ -45,15 +42,14 @@ export function useCartSendQueue(
     hydrateMissing,
     ensureCart,
     finishImportOp,
+    experienceEntriesRef,
   } = context;
-
   // One per-cart send queue: strict head-of-line order, one in flight.
   // biome-ignore lint/correctness/useExhaustiveDependencies: ensureCart and finishImportOp close over refs and stable dispatch only; the queue state drives re-runs.
   useEffect(() => {
     if (!enabled || linkPhase !== 'ready') return;
     const generation = sessionGeneration;
-    // Settle import ops the reducer dropped without a sender-visible outcome
-    // so the import never sticks at pending with edits gated behind it.
+    // Settle import operations already removed by the reducer.
     if (importOpIdsRef.current.size > 0) {
       const queued = new Set(state.queue.map((entry) => entry.operationId));
       for (const operationId of [...importOpIdsRef.current]) {
@@ -74,23 +70,44 @@ export function useCartSendQueue(
     }
     const head = state.queue[0];
     if (head?.state !== 'queued' || head?.blockedOnTempId) return;
-
+    const cookieEpoch = context.cookieEpochRef.current?.value;
     async function send(): Promise<void> {
       if (generationRef.current !== generation) return;
+      if (
+        reportCartCookieStorageFailure(dispatch, generation, head.operationId)
+      )
+        return;
+      if (
+        !isCartCookieEpochCurrent(
+          context.cookieEpochRef.current?.value,
+          context.merchantSlug
+        )
+      )
+        return;
       const current = stateRef.current;
       const pending = current.queue.find(
         (entry) => entry.operationId === head.operationId
       );
       if (pending?.state !== 'queued') return;
+      const experience = experienceEntriesRef?.current.get(pending.operationId);
+      const observer = createExperienceQueueObserver(experience, {
+        generation,
+        operationId: pending.operationId,
+        isCurrent: () => generationRef.current === generation,
+        dispatch,
+      });
+      if (!observer.admit()) return;
+
       if (
         !current.cartId ||
         !current.confirmed ||
         isTerminalCart(current.confirmed)
       ) {
         const ensured = await ensureCart();
+        if (!observer.admit()) return;
         if (generationRef.current !== generation || ensured === null) return;
         if (!ensured.ok) {
-          // Surface the provisioning failure on the head entry for retry.
+          if (!ensured.retryable) experience?.deny();
           dispatch({
             code: ensured.code,
             generation,
@@ -100,10 +117,11 @@ export function useCartSendQueue(
           });
           return;
         }
-        // ensureCart adopted; the state update re-runs this effect.
         return;
       }
-      const command = buildCommand(pending.intent, current);
+      if (experience && !(await observer.prepare(current.confirmed))) return;
+      const command =
+        experience?.envelope?.command ?? buildCommand(pending.intent, current);
       if (!command) {
         if (
           (pending.intent.kind === 'set_quantity' ||
@@ -111,7 +129,6 @@ export function useCartSendQueue(
           pending.intent.target.kind === 'identity' &&
           current.importStatus === 'pending'
         ) {
-          // The import may still deliver this line; wait for it.
           return;
         }
         dispatch({
@@ -147,17 +164,26 @@ export function useCartSendQueue(
       // the queue head so a completed cart adopts without mutating, while later
       // user actions remain queued behind this clear barrier.
       if (pending.intent.kind === 'clear' && (await adoptIfTerminal())) return;
-      const result = await sendSharedCartCommand(
-        {
-          command,
-          expectedVersion:
-            pending.intent.kind === 'replace'
-              ? pending.intent.expectedVersion
-              : current.confirmed.version,
-          operationId: pending.operationId,
-        },
-        optionsRef.current.merchantSlug
-      );
+      if (!isCartCookieEpochCurrent(cookieEpoch, context.merchantSlug)) {
+        if (experience) observer.cancel?.();
+        return;
+      }
+      const envelope = experience?.envelope ?? {
+        command,
+        expectedVersion:
+          pending.intent.kind === 'replace'
+            ? pending.intent.expectedVersion
+            : current.confirmed.version,
+        operationId: pending.operationId,
+      };
+      const result = await (experience
+        ? sendSharedCartCommand(
+            envelope,
+            optionsRef.current.merchantSlug,
+            experience.policy
+          )
+        : sendSharedCartCommand(envelope, optionsRef.current.merchantSlug));
+      if (!observer.finish(result)) return;
       if (generationRef.current !== generation) return;
       if (result.ok) {
         dispatch({
@@ -166,7 +192,10 @@ export function useCartSendQueue(
           snapshot: result.snapshot,
           type: 'command/reconciled',
         });
-        finishImportOp(pending.operationId, { ok: true });
+        finishImportOp(pending.operationId, {
+          ok: true,
+          snapshot: result.snapshot,
+        });
         void hydrateMissing(result.snapshot);
         return;
       }
@@ -234,7 +263,6 @@ export function useCartSendQueue(
       if (!result.retryable)
         finishImportOp(pending.operationId, { code: result.code, ok: false });
     }
-
     void send();
   }, [enabled, linkPhase, sessionGeneration, state]);
 
@@ -265,30 +293,6 @@ export function useCartSendQueue(
     dispatch,
   ]);
 
-  // The display cache mirrors confirmed state only once the legacy
-  // import resolves: persisting earlier would overwrite the import
-  // source before its receipt exists.
-  useEffect(() => {
-    // Skip the merchant-switch transition commit: the reducer state still
-    // belongs to the previous session while the slug already names the
-    // next one, so persisting here would file A's lines under B's key.
-    if (
-      !enabled ||
-      state.generation !== sessionGeneration ||
-      (state.importStatus !== 'done' && state.importStatus !== 'skipped')
-    )
-      return;
-    saveCartToStorage(
-      stripUnconfirmedDisplayLines(state.display),
-      merchantSlug
-    );
-  }, [
-    enabled,
-    merchantSlug,
-    sessionGeneration,
-    state.display,
-    state.generation,
-    state.importStatus,
-  ]);
+  useCartDisplayCache(context);
   return {};
 }

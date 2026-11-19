@@ -1,5 +1,4 @@
 import type { Metadata } from 'next';
-import { connection } from 'next/server';
 import { Suspense } from 'react';
 import { CatalogListingLoading } from '@/app/(storefront)/[slug]/storefront-loading-ui';
 import {
@@ -7,6 +6,7 @@ import {
   getCachedMerchantByDomain,
 } from '@/lib/cached-data';
 import type { RawDbProduct } from '@/lib/normalize-product';
+import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import {
   generateMetaDescription,
   getCanonicalStorefrontFilterSearchParams,
@@ -54,18 +54,10 @@ function buildCategoryNotFoundMetadata(
   return {
     title,
     description,
-    // Replace root metadata alternates so soft-404 pages do not inherit a canonical.
     alternates: null,
     robots: { index: false, follow: true },
-    openGraph: {
-      title,
-      description,
-    },
-    twitter: {
-      card: 'summary',
-      title,
-      description,
-    },
+    openGraph: { title, description },
+    twitter: { card: 'summary', title, description },
   };
 }
 
@@ -185,6 +177,7 @@ export async function generateMetadata({
     categorySlug: category,
     categoryName,
     merchantBusinessName: merchant.business_name,
+    merchantCurrency: resolveMerchantCurrencyConfig(merchant).code,
     storeUrl: baseUrl,
     products: normalizedProducts,
   });
@@ -277,11 +270,7 @@ export async function generateMetadata({
   };
 }
 
-async function CategoryListingRuntime(props: PageProps) {
-  // Keep tenant/domain listing work request-bound while the page prerenders a
-  // Suspense fallback shell. Cache Components rejects route-level dynamic flags.
-  await connection();
-
+function CategoryListingRuntime(props: PageProps) {
   return <CategoryPageContent {...props} />;
 }
 

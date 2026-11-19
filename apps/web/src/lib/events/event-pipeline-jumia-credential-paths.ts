@@ -63,6 +63,7 @@ const jumiaApiRoutesUsingClient = [
   'apps/web/src/app/api/marketplace/jumia/products/export/route.ts',
   'apps/web/src/app/api/marketplace/jumia/products/feed-status/route.ts',
   'apps/web/src/app/api/marketplace/jumia/products/import/route.ts',
+  'apps/web/src/app/api/marketplace/jumia/products/preflight/route.ts',
   'apps/web/src/app/api/marketplace/jumia/products/route.ts',
   'apps/web/src/app/api/marketplace/jumia/products/stock/route.ts',
   'apps/web/src/app/api/marketplace/jumia/products/update/route.ts',

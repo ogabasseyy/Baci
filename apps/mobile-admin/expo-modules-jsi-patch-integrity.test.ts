@@ -14,7 +14,7 @@ describe('bugfix: expo-modules-jsi Xcode 26.2 RuntimeScheduler archive failure',
     const pkg = JSON.parse(readFileSync(jsiPackageJsonPath, 'utf8')) as {
       version?: string;
     };
-    expect(pkg.version).toBe('57.1.2');
+    expect(pkg.version).toBe('58.0.19');
   });
 
   it('does not annotate RuntimeScheduler constructors with SWIFT_RETURNS_RETAINED', () => {

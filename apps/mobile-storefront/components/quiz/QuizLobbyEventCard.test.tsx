@@ -220,4 +220,68 @@ describe('QuizLobbyEventCard', () => {
     );
     expect(onResume).toHaveBeenCalledTimes(isResume ? 1 : 0);
   });
+  describe("bugfix: closed quiz still advertised as tonight's prize", () => {
+    it('labels the prize as ended once the quiz deadline has passed', () => {
+      render(
+        <QuizLobbyEventCard
+          event={{
+            endsAt: '2026-08-03T18:53:00Z',
+            id: 'event-closed',
+            mode: 'test',
+            prizeName: 'itel Power Go',
+            questionCount: 2,
+            startsAt: '2026-08-03T18:30:00Z',
+            status: 'active',
+            timePerQuestionSeconds: 10,
+            timeZone: 'Africa/Lagos',
+            title: 'Daily Phone Quiz',
+          }}
+          isResume={false}
+          isStarting={false}
+          onOpenRules={jest.fn()}
+          onResume={jest.fn()}
+          serverNow="2026-08-03T22:50:00Z"
+          styles={createQuizLobbyStyles(colors)}
+        />
+      );
+
+      expect(screen.getByText('Quiz ended')).toBeTruthy();
+      expect(screen.queryByText("Tonight's Prize")).toBeNull();
+    });
+  });
+  describe('bugfix: countdown ran long when the lobby reused an older event list', () => {
+    it('counts down from when the event list was received, not when the card mounted', () => {
+      jest.useFakeTimers();
+      const receivedAt = Date.parse('2026-08-09T18:05:00.000Z');
+      jest.setSystemTime(new Date('2026-08-09T18:15:00.000Z'));
+
+      render(
+        <QuizLobbyEventCard
+          event={{
+            endsAt: '2026-08-09T18:34:00.000Z',
+            id: 'event-stale',
+            mode: 'test',
+            prizeName: 'itel Power Go',
+            questionCount: 2,
+            serverNow: '2026-08-09T18:05:00.000Z',
+            serverNowReceivedAtMs: receivedAt,
+            startsAt: '2026-08-09T18:04:00.000Z',
+            status: 'active',
+            timePerQuestionSeconds: 10,
+            timeZone: 'Africa/Lagos',
+            title: 'Daily Phone Quiz',
+          }}
+          isResume={false}
+          isStarting={false}
+          onOpenRules={jest.fn()}
+          onResume={jest.fn()}
+          serverNow="2026-08-09T18:05:00.000Z"
+          styles={createQuizLobbyStyles(colors)}
+        />
+      );
+
+      expect(screen.getByText('19:00')).toBeTruthy();
+      expect(screen.queryByText('29:00')).toBeNull();
+    });
+  });
 });

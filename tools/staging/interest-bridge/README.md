@@ -140,3 +140,13 @@ eligibility, a signed webhook receipt, or a customer allocation. It must not be
 credited to the phone plan based on the company profile's balance or reference.
 Neither the limited API audit nor the parent-profile payout replaces PiggyVest's
 confirmed global 9% customer rate and 3% split with an inferred setting.
+
+## Frozen schema pins
+
+`schema-guard.sql` and `notifications/notification_contract.py` pin the
+pre-copy body hash of `savings_notifications.interest_recorded()` and its
+routine inventory. They describe the October staging snapshot and are frozen
+to that pre-copy schema. The interest-copy migration
+(`20261102214500_savings_interest_notification_copy`) changes that body and
+adds two helper routines, so re-pin both files before reusing this tooling
+against a database that has the migration.

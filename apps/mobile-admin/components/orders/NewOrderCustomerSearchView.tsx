@@ -146,7 +146,7 @@ export function NewOrderCustomerSearchView({
                   Loading more customers…
                 </Text>
               </View>
-            ) : null
+            ) : undefined
           }
           onEndReached={() => {
             if (!canFetchMoreCustomers) {

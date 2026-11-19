@@ -48,6 +48,8 @@ export const conversionEventRequestSchema = z.strictObject({
   event_name: z.string().min(1).max(100),
   event_source: z.enum(['mobile_app', 'server', 'web']),
   event_time: z.number().int().positive(),
+  analytics_consent: z.boolean().optional(),
+  marketing_consent: z.boolean().optional(),
   merchant_id: z.uuid().optional(),
   platform: z.enum(['android', 'ios', 'web']).optional(),
   targets: z

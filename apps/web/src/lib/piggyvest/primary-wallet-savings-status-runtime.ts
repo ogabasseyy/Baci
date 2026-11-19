@@ -8,10 +8,8 @@ import { getPrimaryWalletProviderOrigin } from './primary-wallet-provider-origin
 import { createPrimaryWalletSavingsExecutor } from './primary-wallet-savings-executor';
 import { runPrimaryWalletSavingsReconciliation } from './primary-wallet-savings-reconciliation-runtime';
 import { createPrimaryWalletSavingsStore } from './primary-wallet-savings-store';
-import { resubmitReclaimedSavingsDispatch } from './primary-wallet-savings-transfer';
+import { reviewReclaimedSavingsDispatch } from './primary-wallet-savings-transfer';
 import { lookupSavingsTransferReference } from './primary-wallet-savings-transfer-lookup';
-import { transferToWallet } from './transfers';
-import { retrievePiggyvestWallet } from './wallets';
 
 export async function checkPrimaryWalletSavingsStatus(input: {
   configuration: unknown;
@@ -59,15 +57,14 @@ export async function checkPrimaryWalletSavingsStatus(input: {
   if (state === 'confirmed') return { status: 'confirmed' as const };
   if (state === 'cancelled') return { status: 'cancelled' as const };
   if (state === 'reserved') return { status: 'pending' as const };
-  // A dispatched operation whose holder died before the provider
-  // request pins the wallet hold and goal slot: reconciliation can
-  // only report pending for a reference that was never submitted, and
-  // the client polls status without ever re-posting. Drive the
-  // lookup-gated reclaim here instead: adoptPending returns 'existing'
-  // for a live holder's fresh dispatch (untouched), and only a
-  // proven-absent reference resubmits. Any failure falls through to
-  // reconciliation, which settles submitted transfers as before.
-  const reclaim = await driveStaleDispatchReclaim({
+  // A dispatched operation older than its five-minute lease may belong to
+  // a holder that died before OR after the provider accepted it. Drive the
+  // lookup-only reclaim here (adoptPending returns 'existing' for a live
+  // holder's fresh dispatch, untouched): it never re-posts the reference
+  // or releases the hold — a TSQ 404 is "not indexed yet" as often as
+  // "never sent" — and escalates a reference still not found to review.
+  // Reconciliation then settles or releases from bound provider evidence.
+  await driveStaleDispatchReclaim({
     scope,
     operationId,
     provider: {
@@ -75,12 +72,7 @@ export async function checkPrimaryWalletSavingsStatus(input: {
       baseUrl: getPrimaryWalletProviderOrigin(configuration.environment),
     },
     adoptPending: (id) => store.adoptPending(id),
-    releaseAfterRejection: (id) => store.releaseAfterRejection(id),
   }).catch(() => undefined);
-  // Mirror the submit path: a reclaim that released the hold reports
-  // cancelled now — reconciliation only reads dispatched rows and
-  // would otherwise answer pending for a restored balance.
-  if (reclaim === 'released') return { status: 'cancelled' as const };
   return await runPrimaryWalletSavingsReconciliation({
     configuration: evidence,
     operationId,
@@ -98,8 +90,7 @@ async function driveStaleDispatchReclaim(input: {
     | { status: 'adopted' | 'reclaimed'; reservation: unknown }
     | { status: 'existing' }
   >;
-  releaseAfterRejection: (operationId: string) => Promise<boolean>;
-}): Promise<'submitted' | 'released' | 'pending' | undefined> {
+}): Promise<'pending' | 'review' | undefined> {
   const adoption = await input.adoptPending(input.operationId);
   if (adoption.status !== 'reclaimed') return undefined;
   const reservation = piggyvestPrimarySavingsTransferSchemas.reserved.parse(
@@ -107,7 +98,7 @@ async function driveStaleDispatchReclaim(input: {
   );
   if (reservation.businessId !== input.scope.businessId)
     throw new Error('Savings ownership unavailable');
-  return await resubmitReclaimedSavingsDispatch(reservation, {
+  return await reviewReclaimedSavingsDispatch(reservation, {
     lookupTransfer: async (candidate) =>
       await lookupSavingsTransferReference({
         reference: candidate.reference,
@@ -117,17 +108,5 @@ async function driveStaleDispatchReclaim(input: {
         token: input.provider.token,
         baseUrl: input.provider.baseUrl,
       }),
-    retrieveWallet: async (walletId) =>
-      await retrievePiggyvestWallet(input.provider, walletId),
-    transfer: async (candidate) =>
-      await transferToWallet(input.provider, {
-        amountKobo: candidate.amountKobo,
-        sourceWalletId: candidate.sourceWalletId,
-        destinationWalletId: candidate.destinationWalletId,
-        reference: candidate.reference,
-        narration: 'Savings contribution',
-      }),
-    releaseAfterRejection: (operationId) =>
-      input.releaseAfterRejection(operationId),
   });
 }

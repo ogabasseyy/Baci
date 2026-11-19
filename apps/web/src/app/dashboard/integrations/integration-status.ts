@@ -1,4 +1,5 @@
 import type { MerchantData } from '@/hooks/merchant';
+import { INTEGRATION_SECRET_FIELDS } from '@/lib/integration-secret-settings';
 
 export type IntegrationStatusState =
   | 'active'
@@ -77,9 +78,16 @@ function getRequiredSettingsStatus(
   merchant: MerchantData,
   requiredSettings: readonly MerchantTextSettingKey[]
 ) {
-  const configuredCount = requiredSettings.filter((key) =>
-    readMerchantSetting(merchant, key)
-  ).length;
+  const configuredCount = requiredSettings.filter((key) => {
+    if ((INTEGRATION_SECRET_FIELDS as readonly string[]).includes(key))
+      return (
+        merchant.feature_settings?.[`${key}_configured`] === true ||
+        (merchant as unknown as Record<string, unknown>)[
+          `${key}_configured`
+        ] === true
+      );
+    return readMerchantSetting(merchant, key);
+  }).length;
 
   if (configuredCount === requiredSettings.length) {
     return STATUS_COPY.active;
@@ -96,6 +104,11 @@ export function getIntegrationStatus(
   integrationId: string,
   merchant: MerchantData
 ): IntegrationStatus {
+  if (integrationId === 'chatgpt') {
+    return isFilledText(merchant.feature_settings?.chatgpt_pixel_id)
+      ? { actionLabel: 'Manage', label: 'Pixel configured', state: 'partial' }
+      : STATUS_COPY.not_configured;
+  }
   if (integrationId === 'google-merchant') {
     return STATUS_COPY.feed_ready;
   }

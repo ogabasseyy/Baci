@@ -33,20 +33,16 @@ function createHiddenDescriptor(
   };
 }
 
-function expectSavedTabPress(navigation: BottomTabBarProps['navigation']) {
-  expect(navigation.emit).toHaveBeenCalledWith({
+function expectSavedTabPress(props: BottomTabBarProps) {
+  expect(props.emitter.emit).toHaveBeenCalledWith({
     type: 'tabPress',
     target: 'saved-key',
     canPreventDefault: true,
   });
 }
 
-function expectSavedJumpDispatch(navigation: BottomTabBarProps['navigation']) {
-  expect(navigation.dispatch).toHaveBeenCalledWith({
-    payload: { name: 'saved', params: {} },
-    type: 'JUMP_TO',
-    target: 'state-key',
-  });
+function expectSavedJumpDispatch(props: BottomTabBarProps) {
+  expect(props.navigateToTab).toHaveBeenCalledWith('saved-key');
 }
 
 export const customTabBarTestUtils = {

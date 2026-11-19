@@ -25,6 +25,7 @@ interface LoginEmailStepProps {
   colors: LoginColors;
   email: string;
   emailError: string | null;
+  emailHintGuidance?: string;
   isAppleLoading: boolean;
   isGoogleLoading: boolean;
   isLoading: boolean;
@@ -40,6 +41,7 @@ export function LoginEmailStep({
   colors,
   email,
   emailError,
+  emailHintGuidance,
   isAppleLoading,
   isGoogleLoading,
   isLoading,
@@ -57,6 +59,12 @@ export function LoginEmailStep({
       <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
         Enter your email to receive a verification code
       </Text>
+      {emailHintGuidance ? (
+        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+          This receipt was sent to {emailHintGuidance} — sign in with that
+          address.
+        </Text>
+      ) : null}
 
       <View style={styles.inputGroup}>
         <Text style={[styles.label, { color: colors.textSecondary }]}>

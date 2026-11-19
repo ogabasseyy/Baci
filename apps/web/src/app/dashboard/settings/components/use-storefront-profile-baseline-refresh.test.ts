@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { act, renderHook } from '@testing-library/react';
 import { useForm } from 'react-hook-form';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -14,6 +16,7 @@ vi.mock('./refresh-merchant-settings-snapshot', () => ({
 const baseline = {
   business_name: 'Store',
   country: 'NG',
+  phone: '+2348012345678',
   site_description: 'Old description',
   support_email: 'old@example.com',
   support_phone: '+2348000000000',

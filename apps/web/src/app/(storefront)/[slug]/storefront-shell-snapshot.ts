@@ -1,5 +1,4 @@
-import { headers } from 'next/headers';
-import { getRootDomain } from '@/env';
+import { buildMerchantAnalyticsSettings } from '@/components/analytics/analytics-merchant-settings';
 import type {
   StorefrontShellSnapshot,
   StorefrontShellSnapshotBase,
@@ -14,53 +13,8 @@ import { isDomainIdentifier } from '@/lib/validation';
 
 type RoutingMode = 'domain' | 'path';
 
-function shouldFallbackToPathRouting(error: unknown): boolean {
-  const digest =
-    typeof error === 'object' &&
-    error !== null &&
-    'digest' in error &&
-    typeof (error as { digest?: unknown }).digest === 'string'
-      ? (error as { digest: string }).digest
-      : null;
-
-  return (
-    digest === 'HANGING_PROMISE_REJECTION' ||
-    digest === 'NEXT_PRERENDER_INTERRUPTED'
-  );
-}
-
-function normalizeHostHeader(rawHost: string | null): string {
-  return (
-    rawHost?.split(',')[0]?.trim().replace(/:\d+$/, '').toLowerCase() ?? ''
-  );
-}
-
-async function resolveRoutingMode(slug: string): Promise<RoutingMode> {
-  if (isDomainIdentifier(slug)) {
-    return 'domain';
-  }
-
-  try {
-    const headersList = await headers();
-    const requestHost = normalizeHostHeader(
-      headersList.get('host') || headersList.get('x-forwarded-host')
-    );
-    const rootDomain = normalizeHostHeader(getRootDomain() || 'usebaci.com');
-    const slugSubdomainHost = `${slug.toLowerCase()}.${rootDomain}`;
-    const hostMatchesSlugSubdomain = requestHost === slugSubdomainHost;
-
-    return headersList.has('x-merchant-slug') ||
-      headersList.has('x-custom-domain') ||
-      hostMatchesSlugSubdomain
-      ? 'domain'
-      : 'path';
-  } catch (error) {
-    if (shouldFallbackToPathRouting(error)) {
-      return 'path';
-    }
-
-    throw error;
-  }
+function resolveRoutingMode(slug: string): RoutingMode {
+  return isDomainIdentifier(slug) ? 'domain' : 'path';
 }
 
 export async function getStorefrontShellSnapshotBase(
@@ -72,10 +26,12 @@ export async function getStorefrontShellSnapshotBase(
     return null;
   }
 
-  const routingMode = await resolveRoutingMode(slug);
+  const routingMode = resolveRoutingMode(slug);
   const merchantData = toTemplateMerchantData(merchant);
 
   return {
+    chatgptPixelId:
+      buildMerchantAnalyticsSettings(merchant)?.chatgpt_pixel_id ?? null,
     merchant: merchantData,
     routingMode,
     basePath: routingMode === 'domain' ? '' : `/${merchant.slug}`,

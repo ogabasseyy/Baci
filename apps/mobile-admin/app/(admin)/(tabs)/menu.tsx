@@ -1,6 +1,7 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { useRouter } from 'expo-router';
 import React from 'react';
+import type { ScrollViewInstance } from 'react-native';
 import {
   Alert,
   Pressable,
@@ -27,7 +28,7 @@ import { isBaciPaystackSettlementCountry } from '@/lib/is-baci-paystack-settleme
 import { createMenuSections, type MenuItem } from './menu-sections';
 
 export default function MenuScreen() {
-  const scrollRef = useAdminTabScrollToTop<ScrollView>('menu');
+  const scrollRef = useAdminTabScrollToTop<ScrollViewInstance>('menu');
   const { colors, shadows, isDark } = useTheme();
   const { signOut, user } = useAuth();
   const { resetOnboarding } = useOnboarding();

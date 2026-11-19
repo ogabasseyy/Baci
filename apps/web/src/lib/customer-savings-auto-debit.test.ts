@@ -123,15 +123,19 @@ describe('chargeDueCustomerSavingsGoals', () => {
     });
     const chargeAuthorizationFn = vi.fn();
 
-    await expect(
-      chargeDueCustomerSavingsGoals({
-        chargeAuthorizationFn,
-        creditWalletTopUpFn: vi.fn(),
-        loadSavedPaymentMethodFn: vi.fn(),
-        now: new Date('2026-05-21T07:30:00.000Z'),
-        supabase: supabase as unknown as SavingsAutoDebitDatabaseClient,
-      })
-    ).rejects.toThrow('Invalid savings amount');
+    const result = await chargeDueCustomerSavingsGoals({
+      chargeAuthorizationFn,
+      creditWalletTopUpFn: vi.fn(),
+      loadSavedPaymentMethodFn: vi.fn(),
+      now: new Date('2026-05-21T07:30:00.000Z'),
+      supabase: supabase as unknown as SavingsAutoDebitDatabaseClient,
+    });
+    // One goal's failure is isolated and reported, never thrown.
+    expect(result).toMatchObject({ failed: 1, processed: 0, errored: 1 });
+    expect(result.results[0]).toMatchObject({
+      status: 'failed',
+      reason: expect.stringContaining('Invalid savings amount'),
+    });
     expect(chargeAuthorizationFn).not.toHaveBeenCalled();
   });
 
@@ -141,32 +145,36 @@ describe('chargeDueCustomerSavingsGoals', () => {
         allocationError: { message: 'Savings allocation failed' },
       });
 
-    await expect(
-      chargeDueCustomerSavingsGoals({
-        chargeAuthorizationFn: vi.fn().mockResolvedValue({
-          data: {
-            amount: 2_000_000,
-            currency: 'NGN',
-            gateway_response: 'Approved',
-            message: null,
-            reference: 'SVG-111111111111-2026-05-21',
-            status: 'success',
-          },
-          success: true,
-        }),
-        creditWalletTopUpFn: vi.fn().mockResolvedValue({
-          balance: 20000,
+    const result = await chargeDueCustomerSavingsGoals({
+      chargeAuthorizationFn: vi.fn().mockResolvedValue({
+        data: {
+          amount: 2_000_000,
+          currency: 'NGN',
+          gateway_response: 'Approved',
+          message: null,
           reference: 'SVG-111111111111-2026-05-21',
-          transactionId: 'wallet-credit-1',
-        }),
-        loadSavedPaymentMethodFn: vi.fn().mockResolvedValue({
-          authorization_code: 'AUTH_saved',
-          provider_customer_email: 'jane@example.com',
-        }),
-        now: new Date('2026-05-21T07:30:00.000Z'),
-        supabase: supabase as unknown as SavingsAutoDebitDatabaseClient,
-      })
-    ).rejects.toThrow('Savings allocation failed');
+          status: 'success',
+        },
+        success: true,
+      }),
+      creditWalletTopUpFn: vi.fn().mockResolvedValue({
+        balance: 20000,
+        reference: 'SVG-111111111111-2026-05-21',
+        transactionId: 'wallet-credit-1',
+      }),
+      loadSavedPaymentMethodFn: vi.fn().mockResolvedValue({
+        authorization_code: 'AUTH_saved',
+        provider_customer_email: 'jane@example.com',
+      }),
+      now: new Date('2026-05-21T07:30:00.000Z'),
+      supabase: supabase as unknown as SavingsAutoDebitDatabaseClient,
+    });
+    // One goal's failure is isolated and reported, never thrown.
+    expect(result).toMatchObject({ failed: 1, processed: 0 });
+    expect(result.results[0]).toMatchObject({
+      status: 'failed',
+      reason: expect.stringContaining('Savings allocation failed'),
+    });
     expect(reconciliationInsert).toHaveBeenCalledWith(
       expect.objectContaining({
         issue_type: 'customer_savings_auto_debit_allocation_failed',
@@ -183,30 +191,34 @@ describe('chargeDueCustomerSavingsGoals', () => {
     const { contributionUpdateEq, reconciliationInsert, supabase } =
       createAutoDebitSupabase();
 
-    await expect(
-      chargeDueCustomerSavingsGoals({
-        chargeAuthorizationFn: vi.fn().mockResolvedValue({
-          data: {
-            amount: 2_000_000,
-            currency: 'NGN',
-            gateway_response: 'Approved',
-            message: null,
-            reference: 'SVG-111111111111-2026-05-21',
-            status: 'success',
-          },
-          success: true,
-        }),
-        creditWalletTopUpFn: vi
-          .fn()
-          .mockRejectedValue(new Error('Wallet credit failed')),
-        loadSavedPaymentMethodFn: vi.fn().mockResolvedValue({
-          authorization_code: 'AUTH_saved',
-          provider_customer_email: 'jane@example.com',
-        }),
-        now: new Date('2026-05-21T07:30:00.000Z'),
-        supabase: supabase as unknown as SavingsAutoDebitDatabaseClient,
-      })
-    ).rejects.toThrow('Wallet credit failed');
+    const result = await chargeDueCustomerSavingsGoals({
+      chargeAuthorizationFn: vi.fn().mockResolvedValue({
+        data: {
+          amount: 2_000_000,
+          currency: 'NGN',
+          gateway_response: 'Approved',
+          message: null,
+          reference: 'SVG-111111111111-2026-05-21',
+          status: 'success',
+        },
+        success: true,
+      }),
+      creditWalletTopUpFn: vi
+        .fn()
+        .mockRejectedValue(new Error('Wallet credit failed')),
+      loadSavedPaymentMethodFn: vi.fn().mockResolvedValue({
+        authorization_code: 'AUTH_saved',
+        provider_customer_email: 'jane@example.com',
+      }),
+      now: new Date('2026-05-21T07:30:00.000Z'),
+      supabase: supabase as unknown as SavingsAutoDebitDatabaseClient,
+    });
+    // One goal's failure is isolated and reported, never thrown.
+    expect(result).toMatchObject({ failed: 1, processed: 0 });
+    expect(result.results[0]).toMatchObject({
+      status: 'failed',
+      reason: expect.stringContaining('Wallet credit failed'),
+    });
     expect(reconciliationInsert).toHaveBeenCalledWith(
       expect.objectContaining({
         issue_type: 'customer_savings_auto_debit_allocation_failed',

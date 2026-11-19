@@ -59,6 +59,21 @@ describe('OgabasseyV2PrivacyPolicy', () => {
       expect(screen.getByText(/at least six years after the year of assessment/)).toBeInTheDocument();
       expect(screen.getByText(/do not create a saved Ogabassey account search history/)).toBeInTheDocument();
       expect(screen.getByText(/send product search text to Google Gemini/)).toBeInTheDocument();
+      expect(screen.getByText(/storefront chat messages may be sent to OpenAI, Meta, or DeepSeek/i)).toBeInTheDocument();
+      expect(screen.getByText(/for storefront chat, we send your message text and recent conversation context/i)).toBeInTheDocument();
+      expect(screen.getByText(/storefront chat prompts processed through OpenAI, Meta, or DeepSeek APIs/i)).toBeInTheDocument();
+      for (const metaLink of screen.getAllByRole('link', { name: 'Meta' })) {
+        expect(metaLink).toHaveAttribute(
+          'href',
+          'https://dev.meta.ai/legal/commitments',
+        );
+      }
+      for (const deepseekLink of screen.getAllByRole('link', { name: 'DeepSeek' })) {
+        expect(deepseekLink).toHaveAttribute(
+          'href',
+          'https://cdn.deepseek.com/policies/en-US/deepseek-privacy-policy.html',
+        );
+      }
       expect(screen.getByText(/up to 55 days for abuse monitoring/)).toBeInTheDocument();
       expect(screen.getByRole('heading', { name: 'Your Privacy Choices' })).toBeInTheDocument();
       expect(screen.getByText(/If you cannot use that address, email us/)).toBeInTheDocument();
@@ -71,6 +86,7 @@ describe('OgabasseyV2PrivacyPolicy', () => {
       render(<OgabasseyV2PrivacyPolicy merchant={{ slug: 'another-shop' }} />);
 
       expect(screen.queryByRole('heading', { name: 'How Long We Keep Your Information' })).not.toBeInTheDocument();
+      expect(screen.queryByText(/storefront chat messages may be sent to OpenAI, Meta, or DeepSeek/i)).not.toBeInTheDocument();
     });
 
     it('renders without crashing when no merchant prop is provided', () => {
@@ -146,6 +162,16 @@ describe('OgabasseyV2PrivacyPolicy', () => {
       expect(safeHtmlNode).toHaveTextContent(
         'Our custom privacy policy for DataSafe Co. customers.',
       );
+    });
+
+    it('preserves the storefront chat disclosure with an Ogabassey custom policy', () => {
+      render(
+        <OgabasseyV2PrivacyPolicy
+          merchant={{ slug: 'ogabassey', pages: { privacy: '<p>Custom policy.</p>' } }}
+        />
+      );
+
+      expect(screen.getByText(/storefront chat messages may be sent to OpenAI, Meta, or DeepSeek/i)).toBeInTheDocument();
     });
 
     it('does not render the default section headings when custom content is set', () => {

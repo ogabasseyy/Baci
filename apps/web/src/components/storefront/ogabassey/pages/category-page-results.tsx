@@ -66,6 +66,7 @@ interface CategoryPageResultsProps {
   totalPages: number;
   pageTitle: string;
   categoryPath: string;
+  prioritizeFirstRowImages?: boolean;
 }
 
 /**
@@ -95,6 +96,7 @@ export function CategoryPageResults({
   totalPages,
   pageTitle,
   categoryPath,
+  prioritizeFirstRowImages = false,
 }: CategoryPageResultsProps) {
   // Filtered mode renders every matching product in one page (unbounded) — defer
   // offscreen card work with a correctly-sized reservation per view mode.
@@ -119,15 +121,13 @@ export function CategoryPageResults({
                 onClearFilters={onClearFilters}
                 showPriceFilter={showPriceFilter}
               />
-              <div className="mt-6">
-                <AdUnit placementKey="PRODUCT_SIDEBAR" />
-              </div>
             </div>
           </div>
         )}
 
         {/* Product Grid */}
         <div className={canShowFilters ? 'lg:col-span-3' : 'lg:col-span-4'}>
+          <h2 className="sr-only">{pageTitle} Product Catalog</h2>
           {!hasKnownProducts ? (
             <div className="text-center py-20 bg-store-background rounded-2xl border border-store-background-text/10 shadow-sm">
               <div className="size-16 bg-store-background-text/5 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -136,7 +136,7 @@ export function CategoryPageResults({
               <h3 className="text-lg font-bold text-store-background-text mb-1">
                 No products found
               </h3>
-              <p className="text-store-background-text/50 text-sm mb-6">
+              <p className="text-store-background-text/70 text-sm mb-6">
                 Try adjusting your filters to find what you're looking for.
               </p>
               <button
@@ -164,17 +164,27 @@ export function CategoryPageResults({
                       onAddToCart={onAddToCart}
                       isAdded={isAdded}
                       viewMode={viewMode}
+                      imagePriority={
+                        prioritizeFirstRowImages &&
+                        index < (viewMode === 'grid' ? 2 : 1)
+                      }
                       contentVisibilityClassName={cardContentVisibilityClassName}
                     />
                     {/* Ad insertion logic */}
                     {viewMode === 'grid' && (index === 5 || index === 11) && (
                       <div className="col-span-2 md:col-span-3 my-4">
-                        <AdUnit placementKey="PRODUCT_GRID_IN_FEED" />
+                        <AdUnit
+                          placementKey="PRODUCT_GRID_MPU"
+                          slotInstance={`category-${index + 1}`}
+                        />
                       </div>
                     )}
                     {viewMode === 'list' && (index === 3 || index === 7) && (
                       <div className="w-full my-4">
-                        <AdUnit placementKey="PRODUCT_GRID_IN_FEED" />
+                        <AdUnit
+                          placementKey="PRODUCT_GRID_MPU"
+                          slotInstance={`category-${index + 1}`}
+                        />
                       </div>
                     )}
                   </React.Fragment>
@@ -189,7 +199,7 @@ export function CategoryPageResults({
               <h3 className="text-lg font-bold text-store-background-text mb-1">
                 Products on this page are temporarily unavailable.
               </h3>
-              <p className="text-store-background-text/50 text-sm">
+              <p className="text-store-background-text/70 text-sm">
                 Use the pagination links below to keep browsing available pages.
               </p>
             </div>
@@ -198,7 +208,7 @@ export function CategoryPageResults({
           {hasKnownProducts && (
             <div className="mt-8 space-y-3">
               {!hasActiveFilters && (
-                <p className="text-center text-sm text-store-background-text/50">
+                <p className="text-center text-sm text-store-background-text/70">
                   {hasVisibleProducts
                     ? `Showing ${pageStartIndex + 1}-${visibleProductEndIndex} of ${paginationProductCount} products`
                     : `Page ${currentPageNumber} of ${totalPages}`}
@@ -206,7 +216,7 @@ export function CategoryPageResults({
               )}
 
               {hasActiveFilters ? (
-                <p className="text-center text-sm text-store-background-text/50">
+                <p className="text-center text-sm text-store-background-text/70">
                   Filtered results show all {filteredProductCount} matching
                   products on one page.
                 </p>

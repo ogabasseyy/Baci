@@ -31,6 +31,14 @@ and cites sources. A redaction step scrubs common secret patterns from the
 review body before posting (defense in depth, since web access widens
 prompt-injection exfil options).
 
+Model selection defaults to the Muse CLI default. Setting the optional
+repo variable MUSE_MODEL overrides it (run.sh passes `--model` when set).
+Either way the Actions log records the effective model IDs from the run's
+token-usage events. The temporary session export used for model extraction
+is redacted and deleted afterwards; the review does not upload or print its
+contents. If no model ID is present, the log says the exact model is
+unavailable.
+
 ## Quota safety
 
 Subscription plans cap prompts per rolling window, so this workflow stays
@@ -81,4 +89,5 @@ The workflow file only orchestrates steps; every shell program lives in
 ## Prerequisites per repo
 
 - Secret META_API_KEY (repo Settings -> Secrets and variables -> Actions)
-- Optional repo variables: MUSE_MODEL, MUSE_REASONING_EFFORT
+- Optional repo variable: MUSE_REASONING_EFFORT
+- Optional repo variable: MUSE_MODEL (overrides the CLI default model)

@@ -6,7 +6,11 @@
  * After verification, use the returned supabase client for RLS-safe queries.
  */
 
-import type { SupabaseClient, User } from '@supabase/supabase-js';
+import {
+  isAuthSessionMissingError,
+  type SupabaseClient,
+  type User,
+} from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import type { NextRequest } from 'next/server';
 import type { UserAccess } from '@/lib/api-permissions';
@@ -47,10 +51,14 @@ export function getBearerTokenFromRequest(
  * @returns AuthResult with user or error
  */
 export async function authenticateApiRequest(
-  request: Request | NextRequest
+  request: Request | NextRequest,
+  options?: { requireVerifiedGuest?: boolean }
 ): Promise<AuthResult> {
   // Check for Bearer token first (mobile app)
   const token = getBearerTokenFromRequest(request);
+  if (!token && options?.requireVerifiedGuest && hasBearerAuthScheme(request)) {
+    return { user: null, error: 'Invalid or expired token', supabase: null };
+  }
   if (token) {
     const anonClient = createAnonClient();
 
@@ -77,6 +85,12 @@ export async function authenticateApiRequest(
     } = await supabase.auth.getUser();
 
     if (error || !user) {
+      if (
+        options?.requireVerifiedGuest &&
+        (!error || !isAuthSessionMissingError(error))
+      ) {
+        return { user: null, error: 'Authentication failed', supabase: null };
+      }
       return { user: null, error: 'Not authenticated', supabase: null };
     }
 

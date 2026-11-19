@@ -6,7 +6,8 @@ import {
   useRef,
   useState,
 } from 'react';
-import { Pressable, type ScrollView, Text, View } from 'react-native';
+import type { ScrollViewInstance, ViewInstance } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
 import { BRAND } from '@/constants/Colors';
 import {
@@ -36,7 +37,7 @@ interface PaymentIntentAccordionProps {
   /** Contextual info for the selected method (BNPL note, downpayment, etc.). */
   selectedInfo?: ReactNode;
   /** Scrolling ancestor + live offset so the selected card can stay in view. */
-  scrollRef?: RefObject<ScrollView | null>;
+  scrollRef?: RefObject<ScrollViewInstance | null>;
   scrollOffsetRef?: RefObject<number>;
   /** Open with every card collapsed (all options visible at a glance) instead
    * of auto-expanding the selected one. */
@@ -99,7 +100,7 @@ export function PaymentIntentAccordion({
 
   // Ref follows whichever intent is currently selected; the hook scrolls it back
   // into view after a selection collapses a taller sibling above it.
-  const selectedCardRef = useRef<View>(null);
+  const selectedCardRef = useRef<ViewInstance>(null);
   useIntentScrollIntoView({
     expandedKey: `${selectedTab}:${selectedMethod}`,
     cardRef: selectedCardRef,

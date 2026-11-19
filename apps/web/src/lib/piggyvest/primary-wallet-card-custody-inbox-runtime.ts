@@ -1,5 +1,6 @@
 import 'server-only';
 import { primaryCardCustodyInboxSchemas as schemas } from '@/schemas/primary-wallet-card-custody-inbox';
+import { isPiggyvestFeatureOn } from './piggyvest-feature-on';
 import { readPrimaryCardCustodyRuntime } from './primary-wallet-card-custody-runtime';
 
 export function readPrimaryCardCustodyInboxRuntime(
@@ -10,8 +11,7 @@ export function readPrimaryCardCustodyInboxRuntime(
   const custody = readPrimaryCardCustodyRuntime(env, now, mode);
   if (
     !custody ||
-    (mode === 'intake' &&
-      env.PIGGYVEST_PRIMARY_CARD_SIGNED_INBOX_ENABLED !== 'true')
+    (mode === 'intake' && !isPiggyvestFeatureOn('card_signed_inbox', env))
   )
     return null;
   const parsed = schemas.runtime.safeParse({

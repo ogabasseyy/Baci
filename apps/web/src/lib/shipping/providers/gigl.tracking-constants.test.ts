@@ -20,6 +20,13 @@ describe('GIGL tracking constants', () => {
     expect(constants.GIGL_TRACKING_BATCH_TIMEOUT_MS).toBe(15_000);
   });
 
+  it('bounds the preshipment ownership lookup to a single booking record', async () => {
+    const constants = await import('./gigl.tracking-constants');
+
+    expect(constants.GIGL_PRESHIPMENT_RESPONSE_MAX_BYTES).toBe(256 * 1_024);
+    expect(constants.GIGL_PRESHIPMENT_MAX_RECORDS).toBe(20);
+  });
+
   it('shares bounded positive environment parsing with provider constants', async () => {
     const { readPositiveIntegerEnv } = await import(
       './gigl.tracking-constants'

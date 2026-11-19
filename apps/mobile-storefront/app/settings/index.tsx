@@ -18,6 +18,7 @@ import {
 import { SettingsCardSection } from '@/components/settings/SettingsCardSection';
 import { SettingsNotificationSection } from '@/components/settings/SettingsNotificationSection';
 import { SettingsSectionRow } from '@/components/settings/SettingsSectionRow';
+import { SettingsWalletPinSection } from '@/components/settings/SettingsWalletPinSection';
 import { styles } from '@/components/settings/styles';
 import { StorefrontScreenShell } from '@/components/storefront/StorefrontScreenShell';
 import { useToast } from '@/components/ui/Toast';
@@ -185,6 +186,8 @@ export default function SettingsScreen() {
             void handleNotificationToggle(value);
           }}
         />
+
+        <SettingsWalletPinSection />
 
         <SettingsCardSection
           cardBackgroundColor={colors.card}

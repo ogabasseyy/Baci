@@ -1,5 +1,7 @@
 'use client';
 
+import { waitForLcpWindowEnd } from '@/lib/posthog/wait-for-lcp';
+
 const GPT_SCRIPT_SRC = 'https://securepubads.g.doubleclick.net/tag/js/gpt.js';
 
 let googleAdManagerBootPromise: Promise<void> | null = null;
@@ -87,50 +89,64 @@ export function ensureGoogleAdManagerBoot() {
 
     const configureServices = () => configureGoogleTagServices(resolve);
 
-    if (existingScript) {
+    const attachExistingScript = (scriptEl: HTMLScriptElement) => {
       if (
-        existingScript.dataset.baciLoaded === 'true' ||
+        scriptEl.dataset.baciLoaded === 'true' ||
         typeof googletag.pubads === 'function'
       ) {
         configureServices();
         return;
       }
 
-      existingScript.addEventListener(
+      scriptEl.addEventListener(
         'load',
         () => {
-          existingScript.dataset.baciLoaded = 'true';
+          scriptEl.dataset.baciLoaded = 'true';
           configureServices();
         },
         { once: true }
       );
-      existingScript.addEventListener(
+      scriptEl.addEventListener(
         'error',
         () => reject(new Error('Failed to load Google Publisher Tag')),
         { once: true }
       );
+    };
+
+    if (existingScript) {
+      attachExistingScript(existingScript);
       return;
     }
 
-    const script = document.createElement('script');
-    script.src = GPT_SCRIPT_SRC;
-    script.async = true;
-    script.type = 'text/javascript';
-    script.dataset.baciGpt = 'true';
-    script.addEventListener(
-      'load',
-      () => {
-        script.dataset.baciLoaded = 'true';
-        configureServices();
-      },
-      { once: true }
-    );
-    script.addEventListener(
-      'error',
-      () => reject(new Error('Failed to load Google Publisher Tag')),
-      { once: true }
-    );
-    document.head.appendChild(script);
+    void waitForLcpWindowEnd().then(() => {
+      const scriptAfterLcp = document.querySelector<HTMLScriptElement>(
+        `script[src="${GPT_SCRIPT_SRC}"]`
+      );
+      if (scriptAfterLcp) {
+        attachExistingScript(scriptAfterLcp);
+        return;
+      }
+
+      const script = document.createElement('script');
+      script.src = GPT_SCRIPT_SRC;
+      script.async = true;
+      script.type = 'text/javascript';
+      script.dataset.baciGpt = 'true';
+      script.addEventListener(
+        'load',
+        () => {
+          script.dataset.baciLoaded = 'true';
+          configureServices();
+        },
+        { once: true }
+      );
+      script.addEventListener(
+        'error',
+        () => reject(new Error('Failed to load Google Publisher Tag')),
+        { once: true }
+      );
+      document.head.appendChild(script);
+    }).catch(reject);
   }).catch((error) => {
     googleAdManagerBootPromise = null;
     throw error;

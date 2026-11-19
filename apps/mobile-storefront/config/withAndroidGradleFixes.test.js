@@ -221,7 +221,7 @@ android {
     expect(gradleProperties).toContain(
       'android.r8.optimizedResourceShrinking=true'
     );
-    expect(wrapperProperties).toContain('gradle-9.3.1-bin.zip');
+    expect(wrapperProperties).toContain('gradle-9.4.1-bin.zip');
     expect(wrapperProperties).toContain('distributionSha256Sum=');
   });
 });

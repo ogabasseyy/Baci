@@ -217,6 +217,7 @@ describe('withAndroidGradleFixes Kotlin compilation guard', () => {
       'implementation("com.google.android.material:material:1.14.0")'
     );
     expect(appBuildGradle).toContain("pickFirsts += ['**/libworklets.so']");
+    expect(gradleProperties).toContain('org.gradle.workers.max=2');
     expect(gradleProperties).toContain('android.builtInKotlin=false');
     expect(gradleProperties).toContain(
       'android.r8.optimizedResourceShrinking=true'
@@ -272,7 +273,6 @@ describe('withAndroidGradleFixes Kotlin compilation guard', () => {
     });
 
     runPlugin(projectRoot);
-
     expect(
       readFileSync(path.join(projectRoot, 'app/build.gradle'), 'utf-8')
     ).toContain('apply plugin: "org.jetbrains.kotlin.android"');

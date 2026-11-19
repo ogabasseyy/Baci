@@ -20,6 +20,7 @@ interface OrderPaymentAccountFixture {
 
 interface OrderTransactionFixture {
   order_id: string;
+  amount?: number | null;
   created_at: string | null;
   metadata: unknown;
   gateway?: string | null;
@@ -82,6 +83,7 @@ export function createSupabaseMock(input?: {
       currency: string;
       external_source?: string | null;
       import_job_id?: string | null;
+      recorded_by_user_id?: string | null;
       payment_status: string;
       shipping_status: string;
       shipping_address: Record<string, unknown> | null;
@@ -94,8 +96,16 @@ export function createSupabaseMock(input?: {
         serial_number?: string | null;
       } | null;
       order_payment_accounts?: OrderPaymentAccountFixture[];
+      order_tax_subtotals?: Array<{
+        vat_category_code?: string | null;
+        vat_rate?: number | null;
+        taxable_amount?: number | null;
+        tax_amount?: number | null;
+        exemption_reason?: string | null;
+      }>;
       order_items: Array<{
         id: string;
+        line_id?: number | null;
         product_id: string;
         image_url?: string | null;
         condition?: string | null;
@@ -103,6 +113,13 @@ export function createSupabaseMock(input?: {
         name: string;
         quantity: number;
         price: number;
+        item_description?: string | null;
+        line_extension_amount?: number | null;
+        unit_code?: string | null;
+        vat_category_code?: string | null;
+        vat_rate?: number | null;
+        vat_amount?: number | null;
+        sellers_item_id?: string | null;
         has_assurance: boolean | null;
         products?: {
           slug?: string;
@@ -149,6 +166,15 @@ export function createSupabaseMock(input?: {
         })),
         error: input?.transactions?.error ?? null,
       });
+    }
+    if (fn === 'get_customer_order_tax_subtotals') {
+      const subtotals = (input?.orders?.data ?? []).flatMap((order) =>
+        (order.order_tax_subtotals ?? []).map((subtotal) => ({
+          ...subtotal,
+          order_id: order.id,
+        }))
+      );
+      return Promise.resolve({ data: subtotals, error: null });
     }
     if (fn === 'get_customer_order_payment_accounts') {
       const accounts = (input?.orders?.data ?? []).flatMap((order) =>

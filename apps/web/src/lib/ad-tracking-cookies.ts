@@ -16,6 +16,9 @@
  * - _ga: Google Analytics client ID
  */
 
+import { isAnalyticsAllowed } from './analytics-consent';
+import { isMarketingAllowed } from './marketing-consent';
+
 // Cookie names for ad tracking
 export const AD_TRACKING_COOKIES = {
   // Click IDs (captured from URL params)
@@ -23,6 +26,7 @@ export const AD_TRACKING_COOKIES = {
   TIKTOK_CLICK_ID: 'baci_ttclid',
   GOOGLE_CLICK_ID: 'baci_gclid',
   SNAPCHAT_CLICK_ID: 'baci_sccid',
+  X_CLICK_ID: 'baci_twclid',
   // Browser IDs (read from platform cookies)
   FACEBOOK_BROWSER_ID: '_fbp',
   TIKTOK_BROWSER_ID: '_ttp',
@@ -42,6 +46,7 @@ export const CLICK_ID_PARAMS = {
   ttclid: AD_TRACKING_COOKIES.TIKTOK_CLICK_ID,
   gclid: AD_TRACKING_COOKIES.GOOGLE_CLICK_ID,
   sccid: AD_TRACKING_COOKIES.SNAPCHAT_CLICK_ID,
+  twclid: AD_TRACKING_COOKIES.X_CLICK_ID,
 } as const;
 
 // Cookie expiry: 90 days (matches Facebook's fbclid cookie)
@@ -51,6 +56,12 @@ const COOKIE_MAX_AGE = 90 * 24 * 60 * 60; // 90 days in seconds
  * Interface for captured ad tracking data
  */
 export interface AdTrackingData {
+  oppref?: string;
+  obref?: string;
+  chatgptConsent?: boolean;
+  marketingConsent?: boolean;
+  analyticsConsent?: boolean;
+  twclid?: string;
   // Click IDs from URL params
   fbclid?: string;
   ttclid?: string;
@@ -116,19 +127,33 @@ export function generateClickIdCookies(
  * Works on both client and server
  */
 export function parseAdTrackingCookies(cookieString: string): AdTrackingData {
+  const allowedNames = new Set<string>([
+    '__oppref',
+    '__obref',
+    ...Object.values(AD_TRACKING_COOKIES),
+  ]);
   const cookies = Object.fromEntries(
-    cookieString.split(';').map((c) => {
+    cookieString.split(';').flatMap((c) => {
       const [key, ...valueParts] = c.trim().split('=');
-      return [key, decodeURIComponent(valueParts.join('='))];
+      if (!allowedNames.has(key) || valueParts.length === 0) return [];
+      try {
+        return [[key, decodeURIComponent(valueParts.join('='))]];
+      } catch {
+        // A malformed optional reference must not stop an order submission.
+        return [];
+      }
     })
   );
 
   return {
+    oppref: cookies.__oppref,
+    obref: cookies.__obref,
     // Our captured click IDs
     fbclid: cookies[AD_TRACKING_COOKIES.FACEBOOK_CLICK_ID],
     ttclid: cookies[AD_TRACKING_COOKIES.TIKTOK_CLICK_ID],
     gclid: cookies[AD_TRACKING_COOKIES.GOOGLE_CLICK_ID],
     sccid: cookies[AD_TRACKING_COOKIES.SNAPCHAT_CLICK_ID],
+    twclid: cookies[AD_TRACKING_COOKIES.X_CLICK_ID],
     // Platform browser IDs (set by their pixels)
     fbp: cookies[AD_TRACKING_COOKIES.FACEBOOK_BROWSER_ID],
     ttp: cookies[AD_TRACKING_COOKIES.TIKTOK_BROWSER_ID],
@@ -161,7 +186,30 @@ export function getAdTrackingData(): AdTrackingData {
     return {};
   }
 
-  return parseAdTrackingCookies(document.cookie);
+  let tracking: AdTrackingData = {};
+  try {
+    tracking = parseAdTrackingCookies(document.cookie);
+  } catch {
+    // Cookie access can itself be denied. Checkout still proceeds without IDs.
+  }
+  const allowed = isAnalyticsAllowed();
+  if (!allowed) {
+    delete tracking.oppref;
+    delete tracking.obref;
+  }
+  const marketingConsent = isMarketingAllowed();
+  const twclid = marketingConsent
+    ? (new URLSearchParams(window.location.search).get('twclid') ??
+      tracking.twclid)
+    : null;
+  delete tracking.twclid;
+  return {
+    ...tracking,
+    chatgptConsent: allowed,
+    analyticsConsent: allowed,
+    marketingConsent,
+    ...(twclid && /^[A-Za-z0-9_-]{1,256}$/.test(twclid) ? { twclid } : {}),
+  };
 }
 
 /**

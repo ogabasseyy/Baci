@@ -16,7 +16,7 @@ import { createClient } from '@/lib/supabase/server';
 import { sanitizeBlogPostData } from '@/lib/validations/blog';
 import {
   adminPlatformBlogPostsListQuerySchema,
-  createPostSchema,
+  createPlatformPostSchema,
 } from '@/schemas/admin-platform-blog-posts';
 import type { Json } from '@/types/supabase';
 
@@ -154,7 +154,7 @@ export async function POST(request: NextRequest) {
       body.author_name = 'Baci Editorial';
     }
 
-    const validated = createPostSchema.safeParse(body);
+    const validated = createPlatformPostSchema.safeParse(body);
     if (!validated.success) {
       return NextResponse.json(
         { error: 'Validation error', details: validated.error.flatten() },

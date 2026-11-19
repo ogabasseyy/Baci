@@ -136,6 +136,34 @@ describe('destination-scoped mapping drafts', () => {
         )
     ).toBe(true);
   });
+
+  it('clears the parent draft when its selected business-client controls unmount', async () => {
+    const onDraftChange = vi.fn();
+    render(
+      <JumiaMappingDraftPanel
+        merchantId="merchant"
+        integrationId="integration"
+        onDraftChange={onDraftChange}
+      />
+    );
+    await screen.findByRole('option', { name: 'Nigeria (jumia-ng)' });
+    await mapCategory();
+    fireEvent.change(screen.getByLabelText('Enabled (required)'), {
+      target: { value: 'false' },
+    });
+    await waitFor(() =>
+      expect(onDraftChange).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          businessClientCode: 'jumia-ng',
+          categoryConfirmed: false,
+        })
+      )
+    );
+
+    chooseClient('');
+    await waitFor(() => expect(onDraftChange).toHaveBeenLastCalledWith(null));
+  });
+
   it('clears attributes and confirmation when category is replaced even with the same set SID', async () => {
     render(
       <JumiaMappingDraftPanel
@@ -185,6 +213,42 @@ describe('destination-scoped mapping drafts', () => {
       screen.getByRole('button', { name: 'Confirm draft category: Games' })
     );
     fireEvent.click(screen.getByText('Choose draft brand'));
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+  it.each([
+    ['bullets', 'Product bullets (one per line)', 'Updated product bullet'],
+    ['variation source', 'Variation source attribute (optional)', 'storage'],
+  ])('revokes category confirmation after a %s edit', async (_, label, value) => {
+    const onDraftChange = vi.fn();
+    render(
+      <JumiaMappingDraftPanel
+        merchantId="merchant"
+        integrationId="integration"
+        onDraftChange={onDraftChange}
+      />
+    );
+    await screen.findByRole('option', { name: 'Nigeria (jumia-ng)' });
+    await mapCategory();
+    fireEvent.change(screen.getByLabelText('Enabled (required)'), {
+      target: { value: 'false' },
+    });
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Confirm draft category: Games' })
+    );
+    await waitFor(() =>
+      expect(onDraftChange).toHaveBeenLastCalledWith(
+        expect.objectContaining({ categoryConfirmed: true })
+      )
+    );
+
+    fireEvent.change(screen.getByLabelText(label), {
+      target: { value },
+    });
+    await waitFor(() =>
+      expect(onDraftChange).toHaveBeenLastCalledWith(
+        expect.objectContaining({ categoryConfirmed: false })
+      )
+    );
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
   it('shows retry on a failed destination read, and an actionable empty state without auto-selection', async () => {

@@ -1,4 +1,7 @@
-import { sanitizeCustomerLoginEmailHint } from '@baci/shared/schemas';
+import {
+  sanitizeCustomerLoginEmailHint,
+  sanitizeMaskedCustomerLoginEmailHint,
+} from '@baci/shared/schemas';
 import { type Href, router } from 'expo-router';
 import type { Dispatch, SetStateAction } from 'react';
 import { EXPO_PUBLIC_API_URL } from '@/env';
@@ -19,9 +22,10 @@ interface LoginEmailHintLoaderOptions {
   currentEmail: string;
   fetchImpl?: typeof fetch;
   initialEmail: string;
+  initialEmailHint: string;
   onError: (error: unknown) => void;
   returnTo: string | string[] | undefined;
-  setEmail: Dispatch<SetStateAction<string>>;
+  setEmailHint: Dispatch<SetStateAction<string>>;
 }
 
 export function getValidatedLoginMode(
@@ -39,6 +43,16 @@ export function getValidatedLoginEmailHint(
   email: string | string[] | undefined
 ) {
   return sanitizeCustomerLoginEmailHint(email);
+}
+
+// Masked claim guidance is display-only: it must never reach the OTP
+// email input, so it validates through the masked schema (full addresses
+// keep flowing through getValidatedLoginEmailHint into the input).
+export function getValidatedMaskedLoginEmailHint(
+  email: string | string[] | undefined
+) {
+  const raw = Array.isArray(email) ? email[0] : email;
+  return sanitizeMaskedCustomerLoginEmailHint(raw);
 }
 
 export function getReceiptClaimTokenFromReturnTo(
@@ -94,7 +108,9 @@ export async function fetchLoginEmailHintFromReturnTo(
         ? body.emailHint
         : null;
 
-    return sanitizeCustomerLoginEmailHint(
+    // The login-email route returns only the masked hint; a full address
+    // here would mean a contract regression, so validate masked-only.
+    return sanitizeMaskedCustomerLoginEmailHint(
       typeof emailHint === 'string' ? emailHint : null
     );
   } catch {
@@ -106,11 +122,12 @@ export function loadLoginEmailHintFromReturnTo({
   currentEmail,
   fetchImpl,
   initialEmail,
+  initialEmailHint,
   onError,
   returnTo,
-  setEmail,
+  setEmailHint,
 }: LoginEmailHintLoaderOptions) {
-  if (initialEmail || currentEmail) {
+  if (initialEmail || currentEmail || initialEmailHint) {
     return undefined;
   }
 
@@ -119,7 +136,7 @@ export function loadLoginEmailHintFromReturnTo({
   fetchLoginEmailHintFromReturnTo(returnTo, fetchImpl)
     .then((emailHint) => {
       if (isActive && emailHint) {
-        setEmail(emailHint);
+        setEmailHint(emailHint);
       }
     })
     .catch(onError);
@@ -134,6 +151,26 @@ export function validateLoginEmailInput(value: string) {
   return {
     error: getFirstError(emailResult),
     normalizedEmail: normalizeEmail(value),
+  };
+}
+
+/**
+ * "Use password instead" opens the password field straight away when the
+ * email is already valid, instead of only relabelling the Continue button.
+ * With no valid email yet it only switches the method: the shopper has not
+ * tried to continue, so no error is raised.
+ */
+export function resolveAuthMethodToggle(
+  authMethod: 'otp' | 'password',
+  email: string
+): { authMethod: 'otp' | 'password'; passwordEmail: string | null } {
+  if (authMethod === 'password') {
+    return { authMethod: 'otp', passwordEmail: null };
+  }
+  const { error, normalizedEmail } = validateLoginEmailInput(email);
+  return {
+    authMethod: 'password',
+    passwordEmail: error ? null : normalizedEmail,
   };
 }
 

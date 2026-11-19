@@ -40,26 +40,21 @@ export function useStorefrontInsets() {
     const bottomInset =
       options.includeBottomInset === false ? 0 : insets.bottom;
 
-    const contentStyle: ViewStyle = {
+    const paddingBottomBase =
+      options.paddingBottom ??
+      options.padding ??
+      STOREFRONT_INSET_DEFAULTS.listPaddingBottom;
+    return {
       gap: options.gap ?? STOREFRONT_INSET_DEFAULTS.listGap,
       padding: options.padding ?? STOREFRONT_INSET_DEFAULTS.listPadding,
+      ...(typeof options.paddingTop === 'number'
+        ? { paddingTop: options.paddingTop }
+        : {}),
+      ...(typeof options.paddingHorizontal === 'number'
+        ? { paddingHorizontal: options.paddingHorizontal }
+        : {}),
+      paddingBottom: paddingBottomBase + bottomInset,
     };
-
-    if (typeof options.paddingTop === 'number') {
-      contentStyle.paddingTop = options.paddingTop;
-    }
-
-    if (typeof options.paddingHorizontal === 'number') {
-      contentStyle.paddingHorizontal = options.paddingHorizontal;
-    }
-
-    const paddingBottomBase =
-      typeof options.paddingBottom === 'number'
-        ? options.paddingBottom
-        : (options.padding ?? STOREFRONT_INSET_DEFAULTS.listPaddingBottom);
-    contentStyle.paddingBottom = paddingBottomBase + bottomInset;
-
-    return contentStyle;
   };
 
   return {

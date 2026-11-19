@@ -22,6 +22,7 @@ vi.mock('@/lib/get-merchant-for-api-request', () => ({
 }));
 
 describe('PATCH /api/notifications/preferences', () => {
+  const rpcMock = vi.fn();
   let authUser: { id: string } | null;
   let preferenceQuery: {
     eq: ReturnType<typeof vi.fn>;
@@ -57,7 +58,9 @@ describe('PATCH /api/notifications/preferences', () => {
         getUser: vi.fn(() => Promise.resolve({ data: { user: authUser } })),
       },
       from: vi.fn(() => preferenceQuery),
+      rpc: rpcMock,
     } as unknown as ReturnType<typeof createClient>);
+    rpcMock.mockResolvedValue({ data: null, error: null });
   });
 
   it('returns 401 before checking CSRF when unauthenticated', async () => {
@@ -115,6 +118,41 @@ describe('PATCH /api/notifications/preferences', () => {
       merchant_id: MERCHANT_ID,
       follow_up_notifications_enabled: true,
     });
+  });
+
+  it('lets staff read saved preferences through the authorised RPC when the owner-only table read finds nothing', async () => {
+    preferenceQuery.single.mockResolvedValueOnce({
+      data: null,
+      error: { code: 'PGRST116', message: 'No rows found' },
+    });
+    rpcMock.mockResolvedValueOnce({
+      data: {
+        merchant_id: MERCHANT_ID,
+        shipment_event_preferences: { delivered: false },
+      },
+      error: null,
+    });
+
+    const response = await GET();
+
+    expect(rpcMock).toHaveBeenCalledWith('get_notification_preferences', {
+      p_merchant_id: MERCHANT_ID,
+    });
+    await expect(response.json()).resolves.toMatchObject({
+      shipment_event_preferences: { delivered: false },
+    });
+  });
+
+  it('bugfix: reports an error instead of defaults when the staff preferences read fails', async () => {
+    preferenceQuery.single.mockResolvedValueOnce({
+      data: null,
+      error: { code: 'PGRST116', message: 'No rows found' },
+    });
+    rpcMock.mockResolvedValueOnce({ data: null, error: { message: 'down' } });
+
+    const response = await GET();
+
+    expect(response.status).toBe(500);
   });
 
   it('persists the follow-up alert toggle', async () => {

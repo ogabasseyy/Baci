@@ -14,12 +14,13 @@ const mockLoggerError = vi.fn();
 const mockGetCachedFeatureSettings = vi.fn();
 const mockGetCachedMerchantPaystackSubaccount = vi.fn();
 
-vi.mock('next/headers', () => ({
-  cookies: vi.fn(() => Promise.resolve(new Map())),
+vi.mock('next/cache', () => ({
+  cacheLife: vi.fn(),
+  cacheTag: vi.fn(),
 }));
 
-vi.mock('@/lib/supabase/server', () => ({
-  createClient: (...args: unknown[]) => mockCreateClient(...args),
+vi.mock('@/lib/supabase/anon', () => ({
+  createAnonClient: (...args: unknown[]) => mockCreateClient(...args),
 }));
 
 vi.mock('@/lib/cached-data', () => ({
@@ -69,6 +70,24 @@ describe('GET /api/storefront/features', () => {
     mockGetCachedFeatureSettings.mockResolvedValue({});
   });
 
+  it('does not advertise retired CredPal even if stored settings enable it', async () => {
+    mockSingle.mockResolvedValueOnce({
+      data: { id: 'merchant-1', country: 'NG', business_type: 'fashion' },
+      error: null,
+    });
+    mockGetCachedFeatureSettings.mockResolvedValueOnce({
+      credpal_enabled: true,
+      credit_direct_enabled: true,
+    });
+    const response = await GET(
+      buildMerchantRequest(`merchantId=${VALID_MERCHANT_ID}`)
+    );
+    expect(await response.json()).toMatchObject({
+      credpalEnabled: false,
+      creditDirectEnabled: true,
+    });
+  });
+
   it('resolves the merchant via the RLS anon client and derives paystack from the bounded RPC', async () => {
     mockSingle.mockResolvedValueOnce({
       data: { id: 'merchant-1', country: 'NG', business_type: 'fashion' },
@@ -92,6 +111,12 @@ describe('GET /api/storefront/features', () => {
     };
 
     expect(response.status).toBe(200);
+    expect(response.headers.get('Cache-Control')).toBe(
+      'public, s-maxage=30, must-revalidate'
+    );
+    expect(response.headers.get('Vercel-Cache-Tag')).toBe(
+      'merchant-features-merchant-1'
+    );
     // Subaccount presence comes from the RPC (default: not configured), not a
     // raw merchants read — so paystack is disabled here.
     expect(body.paystackEnabled).toBe(false);
@@ -127,6 +152,12 @@ describe('GET /api/storefront/features', () => {
     const body = (await response.json()) as { paystackEnabled: boolean };
 
     expect(response.status).toBe(200);
+    expect(response.headers.get('Cache-Control')).toBe(
+      'public, s-maxage=30, must-revalidate'
+    );
+    expect(response.headers.get('Vercel-Cache-Tag')).toBe(
+      'merchant-features-merchant-1'
+    );
     expect(body.paystackEnabled).toBe(true);
   });
 
@@ -149,6 +180,8 @@ describe('GET /api/storefront/features', () => {
     const body = (await response.json()) as { paystackEnabled: boolean };
 
     expect(response.status).toBe(200);
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
+    expect(response.headers.get('Vercel-Cache-Tag')).toBeNull();
     // Fail closed: an unverifiable subaccount must not advertise Paystack, even
     // with the feature flag enabled (the checkout client defaults to Paystack on
     // a non-ok response, so a 500 would expose it).
@@ -177,6 +210,12 @@ describe('GET /api/storefront/features', () => {
     };
 
     expect(response.status).toBe(200);
+    expect(response.headers.get('Cache-Control')).toBe(
+      'public, s-maxage=30, must-revalidate'
+    );
+    expect(response.headers.get('Vercel-Cache-Tag')).toBe(
+      'merchant-features-merchant-1'
+    );
     expect(body.paystackEnabled).toBe(false);
     expect(body.klumpEnabled).toBe(false);
     expect(body.klumpMinAmount).toBe(10000);
@@ -239,6 +278,12 @@ describe('GET /api/storefront/features', () => {
     };
 
     expect(response.status).toBe(200);
+    expect(response.headers.get('Cache-Control')).toBe(
+      'public, s-maxage=30, must-revalidate'
+    );
+    expect(response.headers.get('Vercel-Cache-Tag')).toBe(
+      'merchant-features-merchant-1'
+    );
     expect(body.vtuCheckoutAddonAmounts).toEqual([]);
   });
 
@@ -268,6 +313,12 @@ describe('GET /api/storefront/features', () => {
     };
 
     expect(response.status).toBe(200);
+    expect(response.headers.get('Cache-Control')).toBe(
+      'public, s-maxage=30, must-revalidate'
+    );
+    expect(response.headers.get('Vercel-Cache-Tag')).toBe(
+      'merchant-features-merchant-1'
+    );
     expect(body.klumpEnabled).toBe(true);
     expect(body.klumpMinAmount).toBe(2500);
     expect(body.klumpMaxAmount).toBe(750000);
@@ -292,6 +343,12 @@ describe('GET /api/storefront/features', () => {
     const body = (await response.json()) as { repairsCatalogEnabled: boolean };
 
     expect(response.status).toBe(200);
+    expect(response.headers.get('Cache-Control')).toBe(
+      'public, s-maxage=30, must-revalidate'
+    );
+    expect(response.headers.get('Vercel-Cache-Tag')).toBe(
+      'merchant-features-merchant-1'
+    );
     expect(body.repairsCatalogEnabled).toBe(true);
   });
 
@@ -314,6 +371,12 @@ describe('GET /api/storefront/features', () => {
     const body = (await response.json()) as { repairsCatalogEnabled: boolean };
 
     expect(response.status).toBe(200);
+    expect(response.headers.get('Cache-Control')).toBe(
+      'public, s-maxage=30, must-revalidate'
+    );
+    expect(response.headers.get('Vercel-Cache-Tag')).toBe(
+      'merchant-features-merchant-1'
+    );
     expect(body.repairsCatalogEnabled).toBe(false);
   });
 

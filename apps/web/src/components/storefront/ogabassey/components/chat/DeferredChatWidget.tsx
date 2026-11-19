@@ -4,6 +4,7 @@ import { Sparkles } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { StorefrontChatStyleLoader } from '@/app/(storefront)/storefront-chat-style-loader';
+import { useChatwootSupportActive } from '@/components/storefront/chatwoot-widget';
 import { useCart } from '@/hooks/cart';
 import { useV2Theme } from '../../providers/v2-theme-context';
 import { useOgabasseyScrollVisibility } from '../../scroll-visibility-store';
@@ -19,8 +20,8 @@ interface DeferredChatWidgetProps {
 
 const CHAT_MOBILE_OFFSET_ATTRIBUTES = {
   'data-mobile-offset-cart': '6.75rem',
-  'data-mobile-offset-default': '5.75rem',
-  'data-mobile-offset-product': '6.25rem',
+  'data-mobile-offset-default': '1rem',
+  'data-mobile-offset-product': '1rem',
   'data-mobile-offset-screen': '1rem',
 } as const;
 
@@ -51,6 +52,7 @@ export function DeferredChatWidget({
   loadChatWidget,
 }: DeferredChatWidgetProps) {
   const { isCartOpen } = useCart();
+  const chatwootSupportActive = useChatwootSupportActive();
   const { theme } = useV2Theme();
   const pathname = usePathname();
   const isFooterVisible = useOgabasseyScrollVisibility();
@@ -92,8 +94,14 @@ export function DeferredChatWidget({
       });
   };
 
+  if (chatwootSupportActive && !ChatRuntime) return null;
+
   if (ChatRuntime) {
-    return <ChatRuntime openOnMount />;
+    return (
+      <div hidden={chatwootSupportActive}>
+        <ChatRuntime openOnMount />
+      </div>
+    );
   }
 
   return (

@@ -1,11 +1,36 @@
 import { type NextRequest, NextResponse } from 'next/server';
+import {
+  normalizeHttpsOrigin,
+  parseChatwootTenantBindings,
+} from '@/lib/chatwoot/commerce-context-bindings';
+import { readOxygenHostedOrigins } from '@/lib/payments/oxygen/oxygen-hosted-origins';
+import { getExperienceExecutionOrigin } from '../experience/execution-origin-runtime';
+import { isOxygenPaymentSurface } from './oxygen-payment-surface';
 import { buildProxyRequestHeaders } from './request-headers';
 
 export function generateCSP(
   routeType: 'admin' | 'auth' | 'storefront' | 'api',
   isLocal: boolean,
-  nonce?: string
+  nonce?: string,
+  pathname?: string,
+  searchParams?: URLSearchParams,
+  oxygenOwned = false,
+  storefrontHostname?: string
 ): string {
+  const chatwootOrigin =
+    routeType === 'storefront'
+      ? getEnabledChatwootPlatformOrigin(storefrontHostname)
+      : null;
+  const hostedOrigins =
+    oxygenOwned &&
+    routeType === 'storefront' &&
+    isOxygenPaymentSurface(pathname ?? '', searchParams)
+      ? readOxygenHostedOrigins().hosted
+      : [];
+  const executionOrigin = getExperienceExecutionOrigin();
+  const builderExperiencePreview = isExperienceBuilderPreviewPath(
+    pathname ?? ''
+  );
   const storefrontUnsafeEval = isLocal ? " 'unsafe-eval'" : '';
   const strictScriptSource = nonce
     ? `'self' 'nonce-${nonce}'`
@@ -20,6 +45,13 @@ export function generateCSP(
     'frame-ancestors': "'self'",
     ...(isLocal ? {} : { 'upgrade-insecure-requests': '' }),
   };
+
+  // Exact browser SDK/collector origins; account configuration and consent still
+  // control whether any provider is loaded. Keep these out of admin/auth CSP.
+  const socialScripts =
+    'https://connect.facebook.net https://analytics.tiktok.com https://sc-static.net https://tr.snapchat.com https://static.ads-twitter.com';
+  const socialCollectors =
+    'https://www.facebook.com https://analytics.tiktok.com https://tr.snapchat.com https://tr6.snapchat.com https://analytics.twitter.com https://analytics.x.com https://t.co';
 
   const directives =
     routeType === 'admin' || routeType === 'auth'
@@ -38,12 +70,16 @@ export function generateCSP(
       : routeType === 'storefront'
         ? {
             ...baseDirectives,
-            'script-src': `'self' 'unsafe-inline'${storefrontUnsafeEval} https://vercel.live https://va.vercel-scripts.com https://static.cloudflareinsights.com https://*.myhuaweicloud.com https://js.useklump.com https://asset.useklump.com https://checkout.useklump.com https://checkout-v2.useklump.com https://directdebit.useklump.com https://checkout.credpal.com https://checkout.creditdirect.ng https://app.creditdirect.ng https://cdl.test.lendastack.io https://securepubads.g.doubleclick.net https://www.googletagservices.com https://pagead2.googlesyndication.com https://www.google.com https://www.gstatic.com https://googleads.g.doubleclick.net https://td.doubleclick.net https://ad.doubleclick.net https://pubads.g.doubleclick.net https://tpc.googlesyndication.com https://cdn.ampproject.org https://*.adtrafficquality.google https://cm.g.doubleclick.net`,
+            // blob: the swap device check reads still frames from the clip the
+            // shopper just picked. An https: source does not cover blob:.
+            'media-src': "'self' blob: https:",
+            'script-src': `'self' 'unsafe-inline'${storefrontUnsafeEval} ${socialScripts} https://bzrcdn.openai.com https://vercel.live https://va.vercel-scripts.com https://static.cloudflareinsights.com https://*.myhuaweicloud.com https://js.useklump.com https://asset.useklump.com https://checkout.useklump.com https://checkout-v2.useklump.com https://directdebit.useklump.com https://checkout.creditdirect.ng https://app.creditdirect.ng https://cdl.test.lendastack.io https://securepubads.g.doubleclick.net https://www.googletagservices.com https://pagead2.googlesyndication.com https://www.google.com https://www.gstatic.com https://googleads.g.doubleclick.net https://td.doubleclick.net https://ad.doubleclick.net https://pubads.g.doubleclick.net https://tpc.googlesyndication.com https://cdn.ampproject.org https://*.adtrafficquality.google https://cm.g.doubleclick.net${chatwootOrigin ? ` ${chatwootOrigin}` : ''}`,
             'style-src': "'self' 'unsafe-inline' https://fonts.googleapis.com",
-            'connect-src':
-              "'self' https://*.supabase.co https://vitals.vercel-insights.com https://cloudflareinsights.com https://checkout.useklump.com https://checkout-v2.useklump.com https://directdebit.useklump.com https://checkout.credpal.com https://api.credpal.com https://checkout.creditdirect.ng https://app.creditdirect.ng https://cdl.test.lendastack.io https://securepubads.g.doubleclick.net https://pagead2.googlesyndication.com https://*.adtrafficquality.google https://www.google.com https://googleads.g.doubleclick.net https://pubads.g.doubleclick.net https://cdn.ampproject.org https://cm.g.doubleclick.net",
-            'frame-src':
-              "'self' https://asset.useklump.com https://checkout.useklump.com https://checkout-v2.useklump.com https://directdebit.useklump.com https://checkout.credpal.com https://checkout.creditdirect.ng https://app.creditdirect.ng https://cdl.test.lendastack.io https://googleads.g.doubleclick.net https://*.safeframe.googlesyndication.com https://tpc.googlesyndication.com https://td.doubleclick.net https://www.google.com https://cdn.ampproject.org https://*.adtrafficquality.google https://ep2.adtrafficquality.google https://cm.g.doubleclick.net https://securepubads.g.doubleclick.net",
+            // wss://*.supabase.co: the shared cart's private Realtime channel.
+            // An https: source does not cover wss:, so without it browsers
+            // block the socket and shoppers never get cart-change notices.
+            'connect-src': `'self' ${socialCollectors} https://*.supabase.co wss://*.supabase.co https://vitals.vercel-insights.com https://cloudflareinsights.com https://bzr.openai.com https://bzrcdn.openai.com https://checkout.useklump.com https://checkout-v2.useklump.com https://directdebit.useklump.com https://checkout.creditdirect.ng https://app.creditdirect.ng https://cdl.test.lendastack.io https://securepubads.g.doubleclick.net https://pagead2.googlesyndication.com https://*.adtrafficquality.google https://www.google.com https://googleads.g.doubleclick.net https://pubads.g.doubleclick.net https://cdn.ampproject.org https://cm.g.doubleclick.net`,
+            'frame-src': `'self'${hostedOrigins.map((origin) => ` ${origin}`).join('')} https://payment.hydrogenpay.com https://asset.useklump.com https://checkout.useklump.com https://checkout-v2.useklump.com https://directdebit.useklump.com https://checkout.creditdirect.ng https://app.creditdirect.ng https://cdl.test.lendastack.io https://googleads.g.doubleclick.net https://*.safeframe.googlesyndication.com https://tpc.googlesyndication.com https://td.doubleclick.net https://www.google.com https://cdn.ampproject.org https://*.adtrafficquality.google https://ep2.adtrafficquality.google https://cm.g.doubleclick.net https://securepubads.g.doubleclick.net`,
           }
         : {
             'default-src': "'self'",
@@ -52,8 +88,59 @@ export function generateCSP(
           };
 
   return Object.entries(directives)
-    .map(([key, value]) => (value ? `${key} ${value}` : key).trim())
+    .map(([key, value]) => {
+      const source =
+        key === 'frame-src' &&
+        executionOrigin &&
+        (routeType === 'storefront' ||
+          (routeType === 'admin' && builderExperiencePreview))
+          ? `${value} ${executionOrigin}`
+          : value;
+      const withChatwoot =
+        routeType === 'storefront' &&
+        chatwootOrigin &&
+        (key === 'connect-src' || key === 'frame-src')
+          ? `${source} ${chatwootOrigin}${key === 'connect-src' ? ` ${toChatwootSocketOrigin(chatwootOrigin)}` : ''}`
+          : source;
+      return (withChatwoot ? `${key} ${withChatwoot}` : key).trim();
+    })
     .join('; ');
+}
+
+/** Exact HTTPS origin only; malformed environment values never widen CSP. */
+function getEnabledChatwootPlatformOrigin(
+  storefrontHostname?: string
+): string | null {
+  if (
+    process.env.EKAETTE_CHATWOOT_WIDGET_ENABLED !== 'true' ||
+    process.env.EKAETTE_CHATWOOT_CONTEXT_ENABLED !== 'true'
+  ) {
+    return null;
+  }
+  const value = process.env.EKAETTE_CHATWOOT_PLATFORM_ORIGIN?.trim();
+  const platformOrigin = normalizeHttpsOrigin(value);
+  if (!platformOrigin) return null;
+  const bindings = parseChatwootTenantBindings(
+    process.env.EKAETTE_CHATWOOT_CONTEXT_BINDINGS
+  );
+  const storefrontOrigin = normalizeHttpsOrigin(
+    storefrontHostname ? `https://${storefrontHostname}` : null
+  );
+  // CSP sees the request host, not the server-resolved merchant slug. On a
+  // shared custom host, one valid merchant binding therefore permits this
+  // fixed platform origin on sibling storefront paths too; the widget config
+  // still performs the exact merchant binding check before loading the SDK.
+  if (
+    !storefrontOrigin ||
+    !bindings?.some((binding) => binding.origin === storefrontOrigin)
+  ) {
+    return null;
+  }
+  return platformOrigin;
+}
+
+function toChatwootSocketOrigin(origin: string): string {
+  return origin.replace(/^https:/, 'wss:');
 }
 
 export function generateCspNonce(): string {
@@ -85,7 +172,7 @@ export function buildStrictCspResponse(
   isLocal: boolean
 ): { nonce: string; response: NextResponse } {
   const nonce = generateCspNonce();
-  const csp = generateCSP(routeType, isLocal, nonce);
+  const csp = generateCSP(routeType, isLocal, nonce, request.nextUrl.pathname);
   const requestHeaders = buildProxyRequestHeaders(request);
   requestHeaders.set('x-nonce', nonce);
   requestHeaders.set('Content-Security-Policy', csp);
@@ -98,4 +185,11 @@ export function buildStrictCspResponse(
       },
     }),
   };
+}
+
+export function isExperienceBuilderPreviewPath(pathname: string) {
+  return (
+    pathname === '/builder/experience' ||
+    pathname.startsWith('/builder/experience/')
+  );
 }

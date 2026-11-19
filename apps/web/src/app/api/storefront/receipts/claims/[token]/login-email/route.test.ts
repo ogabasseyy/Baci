@@ -4,6 +4,7 @@ import { hashReceiptClaimToken } from '@/lib/import-notifications/receipt-claim-
 
 const mockCheckCsrfProtection = vi.fn();
 const mockCreateClient = vi.fn();
+const mockCreateReceiptLoginHintServiceClient = vi.fn();
 const mockConsoleError = vi
   .spyOn(console, 'error')
   .mockImplementation(() => undefined);
@@ -16,17 +17,19 @@ vi.mock('@/lib/supabase/server', () => ({
   createClient: () => mockCreateClient(),
 }));
 
+vi.mock('@/lib/receipts/server-login-hint-client', () => ({
+  createReceiptLoginHintServiceClient: (...args: unknown[]) =>
+    mockCreateReceiptLoginHintServiceClient(...args),
+}));
+
 import { GET, POST } from './route';
 
 const baseClaim = {
   claimed_at: null,
-  claimed_by_user_id: null,
-  customer_email: '  BasseyBJohn@Yahoo.CO.UK  ',
-  customer_id: 'customer-1',
   customer_name: 'Bassey John',
   expires_at: '2099-01-01T00:00:00.000Z',
   id: 'claim-1',
-  merchant_id: 'merchant-1',
+  kind: 'manual',
   merchant: {
     business_name: 'Ogabassey',
     slug: 'ogabassey',
@@ -39,12 +42,20 @@ function createSupabaseRpcMock(
   trackingResponse: { data: unknown; error: unknown } = {
     data: null,
     error: null,
+  },
+  hintResponse: { data: unknown; error: unknown } = {
+    data: '  BasseyBJohn@Yahoo.CO.UK  ',
+    error: null,
   }
 ) {
   return {
     rpc: vi.fn((name: string) => {
-      if (name === 'preview_receipt_claim') {
+      if (name === 'preview_receipt_claim_v3') {
         return Promise.resolve(response);
+      }
+
+      if (name === 'get_receipt_claim_login_hint') {
+        return Promise.resolve(hintResponse);
       }
 
       if (name === 'record_receipt_claim_login_started_v2') {
@@ -99,30 +110,68 @@ describe('GET /api/storefront/receipts/claims/[token]/login-email', () => {
   it('returns a sanitized email hint for a valid claim token', async () => {
     const supabase = createSupabaseRpcMock({ data: baseClaim, error: null });
     mockCreateClient.mockResolvedValue(supabase);
+    mockCreateReceiptLoginHintServiceClient.mockReturnValue({
+      rpc: vi.fn().mockResolvedValue({
+        data: '  BasseyBJohn@Yahoo.CO.UK  ',
+        error: null,
+      }),
+    });
 
     const response = await GET(getRequest(), params);
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(supabase.rpc).toHaveBeenCalledWith('preview_receipt_claim', {
+    expect(supabase.rpc).toHaveBeenCalledWith('preview_receipt_claim_v3', {
       p_token_hash: hashReceiptClaimToken('claim-token'),
     });
     expect(supabase.rpc).not.toHaveBeenCalledWith(
       'record_receipt_claim_login_started',
       expect.anything()
     );
-    expect(body).toEqual({ emailHint: 'basseybjohn@yahoo.co.uk' });
+    expect(body).toEqual({ emailHint: 'b***@yahoo.co.uk' });
+  });
+
+  it('serves the hint from the service function', async () => {
+    // The v3 preview never carries an email: the hint function is the only
+    // source of the raw address.
+    const supabase = createSupabaseRpcMock({
+      data: baseClaim,
+      error: null,
+    });
+    mockCreateClient.mockResolvedValue(supabase);
+    const hintRpc = vi.fn().mockResolvedValue({
+      data: '  BasseyBJohn@Yahoo.CO.UK  ',
+      error: null,
+    });
+    mockCreateReceiptLoginHintServiceClient.mockReturnValue({
+      rpc: hintRpc,
+    });
+
+    const response = await GET(getRequest(), params);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(hintRpc).toHaveBeenCalledWith('get_receipt_claim_login_hint', {
+      p_token_hash: hashReceiptClaimToken('claim-token'),
+    });
+    expect(body).toEqual({ emailHint: 'b***@yahoo.co.uk' });
   });
 
   it('records app login-start activity from the mobile email hint request', async () => {
     const supabase = createSupabaseRpcMock({ data: baseClaim, error: null });
     mockCreateClient.mockResolvedValue(supabase);
+    mockCreateReceiptLoginHintServiceClient.mockReturnValue({
+      rpc: vi.fn().mockResolvedValue({
+        data: '  BasseyBJohn@Yahoo.CO.UK  ',
+        error: null,
+      }),
+    });
 
     const response = await GET(getRequest('GET', '?source=app'), params);
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body).toEqual({ emailHint: 'basseybjohn@yahoo.co.uk' });
+    expect(body).toEqual({ emailHint: 'b***@yahoo.co.uk' });
     expect(supabase.rpc).toHaveBeenCalledWith(
       'record_receipt_claim_login_started_v2',
       {
@@ -138,12 +187,18 @@ describe('GET /api/storefront/receipts/claims/[token]/login-email', () => {
       { data: null, error: { message: 'tracking write failed' } }
     );
     mockCreateClient.mockResolvedValue(supabase);
+    mockCreateReceiptLoginHintServiceClient.mockReturnValue({
+      rpc: vi.fn().mockResolvedValue({
+        data: '  BasseyBJohn@Yahoo.CO.UK  ',
+        error: null,
+      }),
+    });
 
     const response = await GET(getRequest('GET', '?source=app'), params);
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body).toEqual({ emailHint: 'basseybjohn@yahoo.co.uk' });
+    expect(body).toEqual({ emailHint: 'b***@yahoo.co.uk' });
     expect(mockConsoleError).toHaveBeenCalledWith(
       'Failed to record receipt claim login start',
       expect.any(Error)
@@ -167,7 +222,7 @@ describe('GET /api/storefront/receipts/claims/[token]/login-email', () => {
       }
     );
     expect(supabase.rpc).not.toHaveBeenCalledWith(
-      'preview_receipt_claim',
+      'preview_receipt_claim_v3',
       expect.anything()
     );
   });
@@ -213,12 +268,18 @@ describe('GET /api/storefront/receipts/claims/[token]/login-email', () => {
     expect(mockCreateClient).not.toHaveBeenCalled();
   });
 
-  it('returns an empty email hint when claim data has an invalid email', async () => {
-    const supabase = createSupabaseRpcMock({
-      data: { ...baseClaim, customer_email: 'not-an-email' },
-      error: null,
-    });
+  it('returns an empty email hint when the hint function resolves junk', async () => {
+    const supabase = createSupabaseRpcMock(
+      { data: baseClaim, error: null },
+      { data: null, error: null }
+    );
     mockCreateClient.mockResolvedValue(supabase);
+    mockCreateReceiptLoginHintServiceClient.mockReturnValue({
+      rpc: vi.fn().mockResolvedValue({
+        data: 'not-an-email',
+        error: null,
+      }),
+    });
 
     const response = await GET(getRequest(), params);
     const body = await response.json();
@@ -236,6 +297,11 @@ describe('GET /api/storefront/receipts/claims/[token]/login-email', () => {
 
     expect(response.status).toBe(404);
     expect(body).toEqual({ error: 'Receipt claim link not found' });
+    // The branded service client is constructed only after the anon
+    // preview validates the token: an invalid token never touches
+    // privileged material, so a missing service key cannot turn it
+    // into a 500.
+    expect(mockCreateReceiptLoginHintServiceClient).not.toHaveBeenCalled();
   });
 
   it('returns a generic 500 when loading the email hint fails', async () => {

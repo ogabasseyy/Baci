@@ -3,6 +3,10 @@ touch "\${TEST_SSH_MARKER}"
 args="$*"
 payload="$(cat)"
 case "$args" in
+  *"/srv/baci-worker/current"*)
+    echo legacy
+    exit 0
+    ;;
   *".config/baci/remediation.disabled"*)
     echo enabled
     exit 0

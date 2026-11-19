@@ -6,6 +6,7 @@ name: iOS RuntimeScheduler PR Gate
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - 'patches/expo-modules-jsi@*'
       - 'patches/expo-modules-core@*'
@@ -44,6 +45,7 @@ env:
 
 jobs:
   runtime-scheduler:
+    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     name: Swift RuntimeScheduler compatibility
     runs-on: macos-26
     timeout-minutes: 30

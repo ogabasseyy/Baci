@@ -88,6 +88,26 @@ describe('useCheckoutDeliverySession', () => {
 
   afterEach(() => vi.unstubAllGlobals());
 
+  it.each([200, 503])('validates legacy pickup only after a successful rate check: %s', async (status) => {
+    let complete: ((response: Response) => void) | undefined;
+    mockFetch.mockImplementation((input) =>
+      String(input).includes('/api/shipping/locations')
+        ? Promise.resolve(Response.json({ states: ['Lagos'] }))
+        : new Promise<Response>((resolve) => { complete = resolve; })
+    );
+    const { result } = renderHook(() =>
+      useCheckoutDeliverySession(options({ deliveryMethod: 'pickup' }))
+    );
+    expect(result.current.validation.isValid).toBe(false);
+    await waitFor(() => expect(complete).toBeDefined());
+    await act(async () => complete?.(Response.json(
+      status === 200 ? { quotes: { all: [], featured: [] } } : { error: 'Retry' },
+      { status }
+    )));
+    await waitFor(() => expect(result.current.quotes.loading).toBe(false));
+    expect(result.current.validation.isValid).toBe(status === 200);
+  });
+
   it('invalidates an in-flight quote when the address changes', async () => {
     mockFetch.mockImplementation((input, init) => {
       if (String(input).includes('/api/shipping/locations')) {

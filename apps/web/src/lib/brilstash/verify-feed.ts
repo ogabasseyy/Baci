@@ -19,17 +19,22 @@ async function readFeedJson(response: Response): Promise<unknown> {
 
   const chunks: Uint8Array[] = [];
   let size = 0;
+  let drained = false;
   try {
     for (;;) {
       const { done, value } = await reader.read();
-      if (done) break;
+      if (done) {
+        drained = true;
+        break;
+      }
       size += value.byteLength;
       if (size > BRILSTASH_JSON_MAX_BYTES) throw new Error(failure);
       chunks.push(value);
     }
     return JSON.parse(Buffer.concat(chunks).toString('utf8'));
   } finally {
-    await reader.cancel();
+    if (!drained) await reader.cancel().catch(() => undefined);
+    reader.releaseLock();
   }
 }
 

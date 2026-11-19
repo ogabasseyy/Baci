@@ -86,6 +86,20 @@ describe('full BrilStash feed verification', () => {
     );
   });
 
+  it('preserves a valid receipt without cancelling a drained response', async () => {
+    const cancel = vi
+      .spyOn(ReadableStreamDefaultReader.prototype, 'cancel')
+      .mockRejectedValue(new Error('transport cleanup failed'));
+    try {
+      await expect(
+        verifyBrilStashFeed(target, bearer, fixture())
+      ).resolves.toMatchObject({ requestId });
+      expect(cancel).not.toHaveBeenCalled();
+    } finally {
+      cancel.mockRestore();
+    }
+  });
+
   it.each([
     { price: 350000 },
     { total: '2' },

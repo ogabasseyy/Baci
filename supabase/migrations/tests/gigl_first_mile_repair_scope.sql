@@ -1,6 +1,6 @@
 BEGIN;
 
-SELECT plan(5);
+SELECT plan(6);
 
 CREATE TEMP TABLE repair_fixture (label text PRIMARY KEY, shipment_id uuid);
 
@@ -14,7 +14,7 @@ DECLARE
 BEGIN
   INSERT INTO public.merchants (id, email, business_name, slug)
   VALUES (v_merchant, 'gigl-first-mile-repair@example.com', 'GIGL Repair', 'gigl-first-mile-repair');
-  FOREACH v_label IN ARRAY ARRAY['first_mile', 'genuine', 'terminal'] LOOP
+  FOREACH v_label IN ARRAY ARRAY['first_mile', 'genuine', 'terminal', 'then_failed'] LOOP
     INSERT INTO public.orders (merchant_id, order_number, total)
     VALUES (v_merchant, 'GIGL-REPAIR-' || v_label, 1000) RETURNING id INTO v_order;
     INSERT INTO public.shipments (
@@ -35,8 +35,8 @@ BEGIN
        CASE v_label WHEN 'genuine' THEN 'in_transit' ELSE 'out_for_delivery' END,
        'scan a', '2026-11-09 10:00+00'),
       (v_ship, v_epoch, 'GIGL-REPAIR-' || v_label, 'GIGL', v_label || '-b',
-       CASE v_label WHEN 'genuine' THEN 'MSHC' ELSE 'DPC' END,
-       CASE v_label WHEN 'genuine' THEN 'out_for_delivery' ELSE 'in_transit' END,
+       CASE v_label WHEN 'genuine' THEN 'MSHC' WHEN 'then_failed' THEN 'DELIVERY_FAILED' ELSE 'DPC' END,
+       CASE v_label WHEN 'genuine' THEN 'out_for_delivery' WHEN 'then_failed' THEN 'failed' ELSE 'in_transit' END,
        'scan b', '2026-11-09 12:00+00');
     UPDATE public.shipments SET status = CASE v_label WHEN 'terminal' THEN 'delivered' ELSE 'out_for_delivery' END,
       tracking_events = jsonb_build_array(
@@ -50,8 +50,10 @@ BEGIN
 END;
 $setup$;
 
-SELECT is(private.repair_gigl_first_mile_out_for_delivery(), 1,
-  'repairs exactly the one first-mile shipment');
+SELECT is(private.repair_gigl_first_mile_out_for_delivery(), 2,
+  'repairs the first-mile and the MSHC-then-failed shipments');
+SELECT is((SELECT status FROM public.shipments WHERE id = (SELECT shipment_id FROM repair_fixture WHERE label = 'then_failed')),
+  'failed', 'a failed scan after the demoted MSHC stays failed');
 SELECT is((SELECT status FROM public.shipments WHERE id = (SELECT shipment_id FROM repair_fixture WHERE label = 'first_mile')),
   'in_transit', 'first-mile shipment status follows its remaining events');
 SELECT is((SELECT normalized_status FROM public.shipment_tracking_events WHERE provider_event_key = 'first_mile-a'),

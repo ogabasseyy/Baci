@@ -16,6 +16,19 @@ AS $fn$
 DECLARE
   v_repaired integer;
 BEGIN
+  -- Same order as apply_gigl_tracking_result (monitor, then shipment), taken
+  -- before the statement reads events, so a concurrent poll finishes first and
+  -- the repair never overwrites a newer status from a stale snapshot.
+  PERFORM 1 FROM public.shipment_tracking_monitors AS monitor
+  WHERE monitor.state = 'active'
+    AND EXISTS (SELECT 1 FROM public.shipments AS shipment
+      WHERE shipment.id = monitor.shipment_id AND shipment.status = 'out_for_delivery')
+  ORDER BY monitor.shipment_id FOR UPDATE;
+  PERFORM 1 FROM public.shipments AS shipment
+  WHERE shipment.status = 'out_for_delivery'
+    AND EXISTS (SELECT 1 FROM public.shipment_tracking_monitors AS monitor
+      WHERE monitor.shipment_id = shipment.id AND monitor.state = 'active')
+  ORDER BY shipment.id FOR UPDATE;
   WITH movement AS (
     SELECT event.shipment_id, event.tracking_epoch_id,
       min(event.occurred_at) AS first_movement_at
@@ -27,7 +40,7 @@ BEGIN
       )
     GROUP BY event.shipment_id, event.tracking_epoch_id
   ), first_mile AS (
-    SELECT event.id, event.shipment_id, event.tracking_epoch_id, event.provider_event_key,
+    SELECT event.id, event.shipment_id, event.tracking_epoch_id, event.provider_event_key, event.occurred_at,
       CASE WHEN EXISTS (
         SELECT 1 FROM public.shipment_tracking_events AS pickup
         WHERE pickup.shipment_id = event.shipment_id
@@ -67,7 +80,7 @@ BEGIN
   ), new_status AS (
     SELECT shipment.id AS shipment_id,
       (SELECT candidate.status FROM (
-         SELECT event.normalized_status AS status
+         SELECT event.normalized_status AS status, event.occurred_at
          FROM public.shipment_tracking_events AS event
          WHERE event.shipment_id = shipment.id
            AND event.tracking_epoch_id = (
@@ -77,9 +90,15 @@ BEGIN
            LIMIT 1)
          AND event.id NOT IN (SELECT id FROM first_mile WHERE shipment_id = shipment.id)
          UNION ALL
-         SELECT fm.fixed_status FROM first_mile AS fm WHERE fm.shipment_id = shipment.id
+         SELECT fm.fixed_status, fm.occurred_at FROM first_mile AS fm WHERE fm.shipment_id = shipment.id
        ) AS candidate
-       ORDER BY private.gigl_tracking_status_rank(candidate.status) DESC
+       -- Latest remaining event wins (a failed scan after the demoted MSHC
+       -- stays failed); ties fall back to the lifecycle rank, failed = 5.
+       ORDER BY candidate.occurred_at DESC,
+         CASE candidate.status
+           WHEN 'pending' THEN 0 WHEN 'booked' THEN 1 WHEN 'pickup_scheduled' THEN 2
+           WHEN 'picked_up' THEN 3 WHEN 'in_transit' THEN 4
+           WHEN 'out_for_delivery' THEN 5 WHEN 'failed' THEN 5 ELSE 6 END DESC
        LIMIT 1) AS status
     FROM public.shipments AS shipment
     WHERE shipment.id IN (SELECT shipment_id FROM repairable)

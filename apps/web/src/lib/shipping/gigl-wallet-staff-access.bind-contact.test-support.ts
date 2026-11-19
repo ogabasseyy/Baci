@@ -50,6 +50,14 @@ export function describeBindContactFallback({
       ).toThrow(/stale_order_quote_inputs/);
     });
 
+    it('still refuses when the customer name differs from the quoted receiver', () => {
+      expect(() =>
+        run(`${noContact}
+          UPDATE public.orders SET customer_name='Other Person' WHERE id='${bindOrderId}';
+          ${actor(ownerId)} ${bind}`)
+      ).toThrow(/stale_order_quote_inputs/);
+    });
+
     it('falls back to customer_name when shipping_address.name is blank whitespace', () => {
       const out = run(`RESET ROLE;
         UPDATE public.orders SET customer_name='Ada', customer_phone='08000000000',

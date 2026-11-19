@@ -24,14 +24,13 @@ export async function postChatwootBridgeJson(
     } catch {
       return response.ok ? null : { httpStatus: response.status };
     }
-    if (!value || typeof value !== 'object' || Array.isArray(value)) {
-      return null;
-    }
-    // Keep the HTTP status of non-OK JSON so callers can tell a gateway
-    // failure (outcome unknown) from a definitive application rejection.
-    return response.ok
-      ? (value as Record<string, unknown>)
-      : { ...(value as Record<string, unknown>), httpStatus: response.status };
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    const parsedBody = { ...(value as Record<string, unknown>) };
+    delete parsedBody.httpStatus;
+    return {
+      ...parsedBody,
+      ...(!response.ok ? { httpStatus: response.status } : null),
+    };
   } catch {
     return null;
   }

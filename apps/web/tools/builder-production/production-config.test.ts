@@ -36,6 +36,7 @@ describe('private builder operator configuration', () => {
   });
 
   it.each([
+    { backgroundBuilds: false },
     { verifierPort: 43100 },
     { authPort: 43100 },
     { ownerPort: 43100 },

@@ -206,6 +206,14 @@ def execute_job(jobs_fd, name, owner):
 
 
 def delete_job(jobs_fd, name, owner):
+    if not valid_name(name):
+        raise ValueError("invalid job")
+    try:
+        os.stat(name, dir_fd=jobs_fd, follow_symlinks=False)
+    except FileNotFoundError:
+        # Prepare can fail before a bundle exists. A present bundle still
+        # requires full verification and runtime deletion before removal.
+        return
     verify_job(jobs_fd, name, owner)
     subprocess.run([
         "/usr/local/bin/runsc", "--root=" + ROOT + "/state",

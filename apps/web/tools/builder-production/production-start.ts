@@ -42,17 +42,13 @@ export async function startProductionBuilder(input: unknown) {
       authPort: config.authPort,
       verifierPort: config.verifierPort,
       verifierKey: config.verifierKey,
-      ...(config.backgroundBuilds
-        ? {
-            backgroundWorker: {
-              schedule: (callback: () => void) => {
-                const timer = setInterval(callback, 5000);
-                timer.unref();
-                return () => clearInterval(timer);
-              },
-            },
-          }
-        : {}),
+      backgroundWorker: {
+        schedule: (callback: () => void) => {
+          const timer = setInterval(callback, 5000);
+          timer.unref();
+          return () => clearInterval(timer);
+        },
+      },
       ownerBridge: { key: config.previewKey, consumeNonce },
       rootDomain: config.rootDomain,
       expectedSupabase: config.supabase,

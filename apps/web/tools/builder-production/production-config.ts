@@ -18,7 +18,7 @@ const schema = z.strictObject({
   ownerPort: port,
   verifierPort: port,
   verifierKey: key,
-  backgroundBuilds: z.boolean().default(false),
+  backgroundBuilds: z.literal(true).optional(),
   previewKey: key,
   buildKey: key,
   runner: z.strictObject({

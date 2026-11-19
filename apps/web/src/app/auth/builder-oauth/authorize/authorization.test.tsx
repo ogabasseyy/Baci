@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import { isValidElement, Suspense } from 'react';
 import { beforeEach, expect, it, vi } from 'vitest';
 
 const {
@@ -42,6 +43,7 @@ vi.mock('@/lib/supabase/server', () => ({
 }));
 
 import { decideBuilderOAuthAuthorization } from './actions';
+import { BuilderOAuthConsent } from './builder-oauth-consent';
 import BuilderOAuthAuthorization from './page';
 
 const authorizationId = '5deac4bd-8179-40c7-ae8c-869fa2f7a926';
@@ -58,7 +60,7 @@ const consentDetails = {
 };
 
 function page(value: string | string[] = authorizationId) {
-  return BuilderOAuthAuthorization({
+  return BuilderOAuthConsent({
     searchParams: Promise.resolve({ authorization_id: value }),
   });
 }
@@ -82,6 +84,16 @@ beforeEach(() => {
     data: consentDetails,
     error: null,
   });
+});
+
+it('keeps request-time consent work below the prerender Suspense boundary', () => {
+  const result = BuilderOAuthAuthorization({
+    searchParams: Promise.resolve({ authorization_id: authorizationId }),
+  });
+  expect(result.type).toBe(Suspense);
+  const child: unknown = result.props.children;
+  expect(isValidElement(child) && child.type).toBe(BuilderOAuthConsent);
+  expect(getUser).not.toHaveBeenCalled();
 });
 
 it('sends signed-out users through the normal login flow with the validated consent return path', async () => {

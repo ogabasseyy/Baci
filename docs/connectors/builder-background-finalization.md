@@ -1,13 +1,11 @@
 # Background build finalization: implementation contract
 
-Status: **design under development; no worker is deployed or qualified**.
+Status: **implemented in the candidate; hosted worker qualification is pending**.
 
-The current `build_experience` queues an `experience_jobs` row, but
-`finalize_experience_build` performs the sandbox work synchronously. Two builds,
-prerender, and up to twelve serial browser captures can exceed both the
-300-second MCP backend deadline and the Next route's configured `maxDuration`.
-Vercel terminates a function that exceeds its configured limit; its
-[`waitUntil` and `after` work remains subject to that limit](https://vercel.com/kb/guide/troubleshooting-inconsistent-logs-in-vercel-functions).
+The hosted builder queues sandbox work with `build_experience`. The hosted
+`finalize_experience_build` reads the current operation, and the durable worker
+runs the full build matrix. Production startup requires the worker because the
+matrix can exceed the MCP backend deadline and Next route duration.
 
 ## Chosen direction
 
@@ -75,10 +73,9 @@ passes one job to an injected executor. A local adapter rechecks the canonical
 grant, resolves a user-scoped client, and invokes the existing finalizer using
 the job ID as its stable idempotency key. Local synthetic tests cover this
 composition, connection isolation,
-revocation, role denial, invalid expiry and user mismatch. Production-start
-source can schedule the discovery worker when explicitly configured; its
-background setting defaults to disabled and has not been activated or
-qualified in production.
+revocation, role denial, invalid expiry and user mismatch. The production entry
+point always schedules the worker and rejects a private configuration that
+explicitly disables it. The worker still needs hosted qualification.
 
 Each worker starts at most one build per tick. Ticks are scheduled every five
 seconds, but a running tick suppresses later ticks until that build finishes;
@@ -108,8 +105,8 @@ Lease-renewal waits now time out after 30 seconds and remain failed even if a
 late response succeeds; the regression covers a request that never settles.
 The timeout bounds the worker's wait but does not itself cancel network I/O.
 Disposable PostgreSQL tests cover competing claims, stale finalize/fail attempts and the
-retry limit. Opt-in builder-host wiring starts and stops the worker and makes
-MCP finalization return job status; the default remains off. On 14 November,
+retry limit. The builder-host lifecycle starts and stops the worker, and hosted
+MCP finalization returns job status. On 14 November,
 the synthetic local new-merchant journey passed through queued background
 build, independent gVisor verification, finalized status and private preview
 in 298.57 seconds. A read-only check of that disposable job observed the lease

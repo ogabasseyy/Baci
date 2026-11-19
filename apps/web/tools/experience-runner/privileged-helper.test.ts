@@ -203,3 +203,25 @@ with patch.object(h,'verify_preflight_files') as verify,patch.object(h.os,'execv
 `;
   execFileSync('python3', ['-I', '-c', script, helper], { stdio: 'pipe' });
 });
+
+it('reconciles an absent job but rejects an incomplete bundle', () => {
+  const script = `
+import importlib.util,os,tempfile
+from unittest.mock import patch
+spec=importlib.util.spec_from_file_location('helper', __import__('sys').argv[1]);h=importlib.util.module_from_spec(spec);spec.loader.exec_module(h)
+name='baci-experience-12345678-1234-4234-8234-123456789abc'
+with tempfile.TemporaryDirectory() as d:
+ fd=os.open(d,os.O_RDONLY | os.O_DIRECTORY)
+ try:
+  with patch.object(h.subprocess,'run') as run:
+   h.delete_job(fd,name,os.getuid())
+   run.assert_not_called()
+   os.mkdir(name,0o700,dir_fd=fd)
+   try: h.delete_job(fd,name,os.getuid())
+   except FileNotFoundError: pass
+   else: raise AssertionError('missing config accepted as missing bundle')
+   run.assert_not_called()
+ finally: os.close(fd)
+`;
+  execFileSync('python3', ['-I', '-c', script, helper], { stdio: 'pipe' });
+});

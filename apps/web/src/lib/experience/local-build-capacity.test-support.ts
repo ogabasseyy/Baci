@@ -1,9 +1,13 @@
 import { expect, it, vi } from 'vitest';
+import { RunnerCapacityError } from '../../../tools/experience-runner/runner-transport';
 import type { BuildSupervisorTestFixture } from './local-build-supervisor.test';
 
 export function registerBuildCapacityCase(fixture: BuildSupervisorTestFixture) {
   const { f, context, deps, validCandidate, runExperienceBuild } = fixture;
-  it('leaves a linked attempt recoverable when verifier capacity stays busy', async () => {
+  it.each([
+    ['verifier', Error('VERIFIER_BUSY')],
+    ['runner', new RunnerCapacityError()],
+  ])('leaves a linked attempt recoverable when %s capacity stays busy', async (stage, error) => {
     const candidate = validCandidate();
     const execute = vi.fn(async (kind: string) => ({
       jobId: 'synthetic',
@@ -29,20 +33,20 @@ export function registerBuildCapacityCase(fixture: BuildSupervisorTestFixture) {
       supabase: { ...original.supabase, rpc },
     };
     const input = deps(execute);
-    input.recordVerifiedEvidence.mockRejectedValueOnce(Error('VERIFIER_BUSY'));
+    if (stage === 'runner') execute.mockRejectedValueOnce(error);
+    else input.recordVerifiedEvidence.mockRejectedValueOnce(error);
     await expect(
       runExperienceBuild(
         linked as never,
         { jobId: 'j', idempotencyKey: 'i' },
         input
       )
-    ).rejects.toThrow('VERIFIER_BUSY');
-    expect(rpc.mock.calls.map(([name]) => name)).toContain(
-      'experience_renew_build_lease'
-    );
-    expect(rpc.mock.calls.map(([name]) => name)).not.toContain(
-      'experience_fail_build'
-    );
+    ).rejects.toBe(error);
+    const calls = rpc.mock.calls.map(([name]) => name);
+    expect(calls).toContain('experience_claim_build');
+    if (stage === 'verifier')
+      expect(calls).toContain('experience_renew_build_lease');
+    expect(calls).not.toContain('experience_fail_build');
     expect(f.finalize).not.toHaveBeenCalled();
   });
 }

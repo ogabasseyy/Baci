@@ -78,6 +78,7 @@ it('wires restricted nonce admission, independent verifier and fixed artifact st
   );
   const settings = f.boot.mock.calls.at(-1)?.[0];
   expect(settings.ownerPort).toBe(43104);
+  expect(settings.backgroundWorker).toEqual({ schedule: expect.any(Function) });
   expect(settings.ownerBridge.consumeNonce).toBe(f.nonce);
   expect(settings.integration.artifactDirectory).toBe(
     '/var/lib/baci-builder/artifacts'

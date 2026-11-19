@@ -8,6 +8,7 @@ import {
 import { unpackPrerenderBuild } from '../../../tools/experience-runner/prerender-artifacts';
 import { localPreviewHost } from '../../../tools/experience-runner/preview-origin';
 import { packPrivateBuild } from '../../../tools/experience-runner/private-build-payload';
+import { RunnerCapacityError } from '../../../tools/experience-runner/runner-transport';
 import { loadOfflineAssets } from './asset-service';
 import {
   type OwnerRequestContext,
@@ -279,9 +280,10 @@ export async function runExperienceBuild(
   } catch (error) {
     await lease?.stop();
     // The linked recovery worker can reclaim an expired lease after backpressure.
-    if (
-      !(lease && error instanceof Error && error.message === 'VERIFIER_BUSY')
-    ) {
+    const capacityRejected =
+      error instanceof RunnerCapacityError ||
+      (error instanceof Error && error.message === 'VERIFIER_BUSY');
+    if (!lease || !capacityRejected) {
       await ctx.supabase.rpc('experience_fail_build', {
         ...ownerRpcArgs(ctx),
         p_job: job.id,

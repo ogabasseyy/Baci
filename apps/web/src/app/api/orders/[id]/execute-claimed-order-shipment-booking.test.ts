@@ -49,6 +49,7 @@ describe('executeClaimedOrderShipmentBooking', () => {
 
     await expect(
       executeClaimedOrderShipmentBooking({
+        runBooking: runClaimedOrderWalletOrCheckoutBooking,
         supabase,
         merchantId: 'merchant-1',
         orderId: 'order-1',
@@ -78,6 +79,7 @@ describe('executeClaimedOrderShipmentBooking', () => {
     );
 
     const error = await executeClaimedOrderShipmentBooking({
+      runBooking: runClaimedOrderWalletOrCheckoutBooking,
       supabase,
       merchantId: 'merchant-1',
       orderId: 'order-1',

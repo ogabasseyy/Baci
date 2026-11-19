@@ -22,6 +22,7 @@ import {
   isShippingProviderCode,
   OrderShipmentBookingError,
 } from '@/lib/shipping/order-shipment-booking-utils';
+import { runClaimedOrderWalletOrCheckoutBooking } from '@/lib/shipping/run-claimed-order-wallet-or-checkout-booking';
 import { orderUpdateSchema } from '@/schemas/orders';
 import { appendCancelledStatusFences } from './append-cancelled-status-fences';
 import { createRacedCancellationRejection } from './create-raced-cancellation-rejection';
@@ -443,6 +444,7 @@ export async function PATCH(
       if (bookingClaim.status === 'claimed') {
         shipmentBookingLockToken = bookingClaim.lockToken;
         const booking = await executeClaimedOrderShipmentBooking({
+          runBooking: runClaimedOrderWalletOrCheckoutBooking,
           supabase,
           merchantId,
           orderId: id,

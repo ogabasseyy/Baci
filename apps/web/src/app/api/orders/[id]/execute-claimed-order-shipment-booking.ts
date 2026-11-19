@@ -5,9 +5,34 @@ import {
 } from '@/lib/shipping/order-shipment-booking-failure';
 import { clearOrderShipmentBookingLock } from '@/lib/shipping/order-shipment-booking-lock';
 import { shouldReleaseBookingLock } from '@/lib/shipping/order-shipment-booking-lock-errors';
-import { runClaimedOrderWalletOrCheckoutBooking } from '@/lib/shipping/run-claimed-order-wallet-or-checkout-booking';
+
+// The runner is injected by the route so this helper does not add a new link
+// to the route's reviewed import graph (booking-economics service authority).
+type ClaimedBookingRunner = (
+  supabase: SupabaseClient,
+  merchantId: string,
+  orderId: string,
+  existingOrder: {
+    selected_quote_id?: string | null;
+    shipping_funding_source?: string | null;
+    shipping_provider?: string | null;
+    payment_status?: string | null;
+    payment_method?: string | null;
+  },
+  options: {
+    paymentStatus: string | null | undefined;
+    lockToken: string | null;
+    onLockReleased: () => void;
+  }
+) => Promise<{
+  provider: string;
+  quoteId: string;
+  shipmentId: string;
+  trackingNumber: string;
+}>;
 
 export async function executeClaimedOrderShipmentBooking({
+  runBooking,
   supabase,
   merchantId,
   orderId,
@@ -15,29 +40,24 @@ export async function executeClaimedOrderShipmentBooking({
   paymentStatus,
   lockToken,
 }: {
+  runBooking: ClaimedBookingRunner;
   supabase: SupabaseClient;
   merchantId: string;
   orderId: string;
-  existingOrder: Parameters<typeof runClaimedOrderWalletOrCheckoutBooking>[3];
+  existingOrder: Parameters<ClaimedBookingRunner>[3];
   paymentStatus: string | null | undefined;
   lockToken: string | null;
 }) {
   let lockReleased = false;
 
   try {
-    return await runClaimedOrderWalletOrCheckoutBooking(
-      supabase,
-      merchantId,
-      orderId,
-      existingOrder,
-      {
-        paymentStatus,
-        lockToken,
-        onLockReleased: () => {
-          lockReleased = true;
-        },
-      }
-    );
+    return await runBooking(supabase, merchantId, orderId, existingOrder, {
+      paymentStatus,
+      lockToken,
+      onLockReleased: () => {
+        lockReleased = true;
+      },
+    });
   } catch (error) {
     // The failure row below is the diagnostic record; keep provider text
     // (waybills, addresses) out of the logs.

@@ -40,6 +40,9 @@ const RETURN_CODES = new Set([
   'TRO',
   'SRIC',
 ]);
+// Scans that start the return flow back to the sender: once seen, a later
+// arrival scan is the parcel reaching the sender, not the customer's city.
+const RETURN_FLOW_CODES = new Set(['SRC', 'MRTE', 'SSR', 'MRTD']);
 // Explicit "arrived final destination" scans. AHD ("arrived final destination
 // for home delivery") has no entry in the shared status map.
 const EXPLICIT_ARRIVAL_CODES = new Set([
@@ -153,6 +156,8 @@ export function applyLifecycleGuards(
   let pickedUp = false;
   // SDR ("Shipment Destroyed") is final: a later or same-time MSHC cannot revive it.
   let destroyed = false;
+  // Latched by a return-flow scan; fences arrival promotion like SDR does.
+  let returning = false;
   // Same-city shipments: only a scan away from the destination name proves
   // the parcel left the origin centre (repeat origin scans prove nothing).
   let leftDestinationCentre = false;
@@ -163,6 +168,7 @@ export function applyLifecycleGuards(
       // One arrival per shipment: only the first explicit or inferred arrival
       // is rewritten to the synthetic status.
       !destroyed &&
+      !returning &&
       !arrived &&
       (EXPLICIT_ARRIVAL_CODES.has(raw) ||
         FOREIGN_OFFICE_DESTINATIONS[raw]?.test(
@@ -180,6 +186,7 @@ export function applyLifecycleGuards(
           (!sameCity || leftDestinationCentre) &&
           matchesDestination(event.location, destination)));
     if (raw === 'SDR') destroyed = true;
+    if (RETURN_FLOW_CODES.has(raw)) returning = true;
     if (isArrival) {
       arrived = true;
       if (candidate.recognizedStatus === null) {

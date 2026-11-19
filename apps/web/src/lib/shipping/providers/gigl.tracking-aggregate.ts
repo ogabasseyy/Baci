@@ -35,8 +35,13 @@ function isSdr(candidate: Guardable): boolean {
  * keeps a destroyed shipment failed. The returned lead event owns the snapshot.
  */
 export function resolveAggregate(
-  sortedCandidates: Guardable[]
+  candidates: Guardable[]
 ): Aggregate & { recognizedStatus: Aggregate['status'] } {
+  // Newest first, whatever order the caller passed (stable for ties).
+  const sortedCandidates = [...candidates].sort(
+    (left, right) =>
+      right.event.timestamp.getTime() - left.event.timestamp.getTime()
+  );
   const newestRecognized = sortedCandidates.find(
     (candidate) => candidate.recognizedStatus !== null
   );

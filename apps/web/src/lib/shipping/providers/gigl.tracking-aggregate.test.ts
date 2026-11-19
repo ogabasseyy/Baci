@@ -123,4 +123,15 @@ describe('resolveAggregate', () => {
     expect(result.status).toBe('delivered');
     expect(result.lead).toBeDefined();
   });
+
+  it('does not depend on the caller sorting the scans newest first', () => {
+    const shd = scan('SHD', 'delivered', 11);
+    const result = resolveAggregate([
+      scan('MSVC', 'in_transit', 9),
+      shd,
+      scan('SDR', 'failed', 10),
+    ]);
+    expect(result.status).toBe('delivered');
+    expect(result.lead).toBeUndefined();
+  });
 });

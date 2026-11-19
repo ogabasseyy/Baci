@@ -67,7 +67,7 @@ export async function executeClaimedOrderShipmentBooking({
     );
     throw toBookingFailureResponseError(error, {
       walletFunded: existingOrder.shipping_funding_source === 'merchant_wallet',
-      lockHeld: Boolean(lockToken),
+      lockHeld: Boolean(lockToken) && !lockReleased,
       lockRetained: Boolean(lockToken) && !lockReleased,
     });
   }

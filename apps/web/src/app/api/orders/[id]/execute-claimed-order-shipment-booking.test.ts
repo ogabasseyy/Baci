@@ -67,4 +67,29 @@ describe('executeClaimedOrderShipmentBooking', () => {
       false
     );
   });
+
+  it('bugfix: does not promise a 15-minute pause on an unconfirmed timeout when the lock was already freed', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.mocked(runClaimedOrderWalletOrCheckoutBooking).mockImplementationOnce(
+      async (_supabase, _merchantId, _orderId, _order, options) => {
+        options?.onLockReleased?.();
+        throw new Error('GIGL booking timed out');
+      }
+    );
+
+    const error = await executeClaimedOrderShipmentBooking({
+      supabase,
+      merchantId: 'merchant-1',
+      orderId: 'order-1',
+      existingOrder: {
+        ...existingOrder,
+        shipping_funding_source: 'customer_paid' as never,
+      },
+      paymentStatus: 'paid',
+      lockToken: 'lock-1',
+    }).catch((e: unknown) => e);
+
+    expect((error as Error).message).not.toMatch(/15 minutes/);
+    expect((error as Error).message).toMatch(/check with the carrier/);
+  });
 });

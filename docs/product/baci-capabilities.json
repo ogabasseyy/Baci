@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-19T01:44:50+00:00",
-  "source_revision": "46d6fdbfdf5dc5c94d646e263c76e627b5346ffe",
-  "evidence_digest": "e923f8f29f6a30d20a53f0d2af08214166f99c48727292d5ea21eed04952cc61",
-  "claims_digest": "e756b1aa29cf1eb56bc48916869b010dabe320c49ee8cfb96fc7b1ad0160f285",
+  "reviewed_at": "2026-11-19T02:06:18+00:00",
+  "source_revision": "78de419e552670421110c1f9e2ebddbe7bfc7db5",
+  "evidence_digest": "d7cd422af5b3ccc30c3a0bde8697b16285ca3874c712db5961ca0feeca787d70",
+  "claims_digest": "d521c953f77cd612ab89a728a12c99b3395aa6f792dabebb47fcd8d017cdc7a9",
   "review_scope": "Source evidence only. Preserves current main\u2019s OAuth, cart retention and notices, payment reconciliation, merchant protocols and Oxygen pilot boundaries. Full-code storefront MCP remains disabled by default. Owner approval, evidence and public-verification schemas retain their existing validation. Direct local admission, source adoption, rollback and simulated commerce tests cover authority boundaries. Hosted qualification and activation remain separate.",
   "capabilities": [
     {

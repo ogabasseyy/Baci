@@ -12,13 +12,24 @@ type Aggregate = {
 };
 
 // Canonical precedence among terminal outcomes (matches the database rank:
-// cancelled and returned outrank delivered, whatever their order in time).
+// cancelled and returned share a rank above delivered, whatever their order in
+// time). Between cancelled and returned the newest scan wins; only an exact
+// timestamp tie prefers cancelled (it also stops the monitor and refunds), so
+// the result never depends on payload order.
 function terminalPrecedence(candidate: Guardable): number {
-  // cancelled and returned share the database rank; a tied pair resolves to
-  // cancelled (it also stops the monitor and refunds) so the result never
-  // depends on the payload order.
-  if (candidate.recognizedStatus === 'cancelled') return 3;
   return candidate.recognizedStatus === 'delivered' ? 1 : 2;
+}
+
+function preferTerminal(best: Guardable, candidate: Guardable): boolean {
+  const gap = terminalPrecedence(candidate) - terminalPrecedence(best);
+  if (gap !== 0) return gap > 0;
+  const newer =
+    candidate.event.timestamp.getTime() - best.event.timestamp.getTime();
+  if (newer !== 0) return newer > 0;
+  return (
+    candidate.recognizedStatus === 'cancelled' &&
+    best.recognizedStatus !== 'cancelled'
+  );
 }
 
 // Guardable carries the event's free-form status string; narrow it to the
@@ -65,8 +76,7 @@ export function resolveAggregate(
     )
     .reduce<Guardable | undefined>(
       (best, candidate) =>
-        best === undefined ||
-        terminalPrecedence(candidate) > terminalPrecedence(best)
+        best === undefined || preferTerminal(best, candidate)
           ? candidate
           : best,
       undefined

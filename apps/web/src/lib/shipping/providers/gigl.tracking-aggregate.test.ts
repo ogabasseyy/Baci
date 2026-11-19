@@ -148,4 +148,13 @@ describe('resolveAggregate', () => {
     );
     expect(result.status).toBe('cancelled');
   });
+
+  it('keeps the newest of cancelled and returned when their timestamps differ', () => {
+    const returned = scan('SRHUB', 'returned', 11);
+    const result = resolveAggregate(
+      newestFirst(scan('MSCP', 'cancelled', 9), returned)
+    );
+    expect(result.status).toBe('returned');
+    expect(result.lead).toBeUndefined();
+  });
 });

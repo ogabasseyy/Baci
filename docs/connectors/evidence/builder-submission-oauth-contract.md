@@ -199,7 +199,7 @@ uploaded as a completed connection until those checks pass:
   "mcpServers": {
     "baci-builder": {
       "type": "streamable-http",
-      "url": "https://mcp.usebaci.com/builder/mcp",
+      "url": "https://builder-mcp.usebaci.com/builder/mcp",
       "extensions": {
         "com.openai": {
           "auth": {
@@ -209,9 +209,9 @@ uploaded as a completed connection until those checks pass:
               "clientId": "baci-chatgpt-builder-v1",
               "tokenEndpointAuthMethod": "none"
             },
-            "resource": "https://mcp.usebaci.com/builder/mcp",
+            "resource": "https://builder-mcp.usebaci.com/builder/mcp",
             "baseScopes": ["openid", "offline_access", "storefront.read"],
-            "defaultScopes": ["storefront.write", "storefront.publish"]
+            "defaultScopes": ["storefront.write"]
           }
         }
       }
@@ -221,7 +221,9 @@ uploaded as a completed connection until those checks pass:
 ```
 
 The requested scope configuration is a candidate: verify the exact scopes
-requested by the saved app and the owner's consent screen. Publishing tools
+requested by the saved app and the owner's consent screen. The default
+connection requests draft authoring. Publication is outside the default grant.
+Publishing tools
 must create an approval intent only; they must not perform owner confirmation.
 No client secret belongs in the package. Verify the exact callback supplied by
 this draft's connection flow and configure that callback in the dedicated

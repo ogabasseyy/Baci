@@ -12,7 +12,10 @@
               "mode": "provided",
               "clientId": "baci-chatgpt-builder-v1",
               "tokenEndpointAuthMethod": "none"
-            }
+            },
+            "resource": "https://builder-mcp.usebaci.com/builder/mcp",
+            "baseScopes": ["openid", "offline_access", "storefront.read"],
+            "defaultScopes": ["storefront.write"]
           }
         }
       }

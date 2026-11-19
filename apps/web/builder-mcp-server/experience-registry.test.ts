@@ -1,4 +1,6 @@
 import { expect, it, vi } from 'vitest';
+import reviewDraft from '../chatgpt-builder-plugin/full-code-review-metadata.draft.json';
+import mcpDraft from '../chatgpt-builder-plugin/mcp.config-draft.json';
 import { experienceToolPolicy } from '../src/lib/experience/tool-policy';
 import {
   type ExperienceToolName,
@@ -12,6 +14,7 @@ import {
 } from './experience-contracts';
 import wire from './experience-contracts.json';
 import { experienceToolDescriptions } from './experience-metadata';
+import { BUILDER_RESOURCE } from './metadata';
 import { registerBuilderTools } from './registry';
 
 const id = '11111111-1111-4111-8111-111111111111';
@@ -225,5 +228,39 @@ it('rejects unknown root properties in every converted tool schema', () => {
     expect(schema.safeParse({ ...input, unexpected: true }).success, name).toBe(
       false
     );
+  }
+});
+
+it('the review draft targets the exact resource and requests the scopes used by its positive cases', async () => {
+  const mcp = mcpDraft.mcpServers['baci-builder'];
+  const auth = mcp.extensions['com.openai'].auth;
+  expect(mcp.url).toBe(BUILDER_RESOURCE);
+  expect(auth).toMatchObject({
+    resource: BUILDER_RESOURCE,
+    client: { mode: 'provided', tokenEndpointAuthMethod: 'none' },
+    baseScopes: ['openid', 'offline_access', 'storefront.read'],
+    defaultScopes: ['storefront.write'],
+  });
+
+  const s = server();
+  registerBuilderTools(s.mock as never, {
+    executeBuilderTool: vi.fn(),
+    experience: { enabled: true },
+  });
+  const tools = (await s.list())?.tools ?? [];
+  const cases = reviewDraft.extensions['com.openai'].review.test_cases.positive;
+  for (const testCase of cases) {
+    for (const name of testCase.tools_triggered
+      .split(',')
+      .map((tool) => tool.trim())) {
+      const tool = tools.find((entry) => entry.name === name);
+      expect(tool, name).toBeDefined();
+      const schemes = tool?.securitySchemes as Array<{ scopes: string[] }>;
+      for (const scope of schemes.flatMap((scheme) => scheme.scopes)) {
+        expect([...auth.baseScopes, ...auth.defaultScopes], name).toContain(
+          scope
+        );
+      }
+    }
   }
 });

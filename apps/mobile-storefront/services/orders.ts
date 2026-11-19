@@ -65,6 +65,7 @@ export type CreateOrderOptions = {
   checkoutGeneration?: string;
   analyticsPaymentMethod?: string;
   expectedOwner?: string;
+  expectedMerchantId?: string;
   queuedReplay?: boolean;
 };
 
@@ -72,6 +73,14 @@ export async function createOrder(
   request: CreateOrderRequest,
   options?: CreateOrderOptions
 ): Promise<CreateOrderResult> {
+  if (
+    options?.expectedMerchantId !== undefined &&
+    options.expectedMerchantId !== MERCHANT_ID
+  )
+    throw new OrderError(
+      'This order does not match the verified staging merchant',
+      'VALIDATION_ERROR'
+    );
   const startTime = Date.now();
   const frozenCheckoutGeneration = options?.checkoutGeneration;
   const checkoutGeneration =

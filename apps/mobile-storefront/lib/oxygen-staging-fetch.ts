@@ -29,12 +29,10 @@ const catalogTables = new Set([
   'product_variants',
   'categories',
   'product_categories',
-  'customers',
-  'orders',
-  'order_items',
   'shipping_settings',
   'page_configs',
 ]);
+const ownedReadTables = new Set(['customers', 'orders', 'order_items']);
 const catalogReadRpcs = new Set([
   'get_storefront_product_variants',
   'get_storefront_product_base_inventory',
@@ -44,7 +42,8 @@ const catalogReadRpcs = new Set([
   'search_products_v2',
 ]);
 
-function authenticatedBearer(
+// Client-side shape and expiry prefilter. The server verifies the token.
+function hasExpectedStagingTokenClaims(
   value: string,
   profile: OxygenStagingProfile
 ): boolean {
@@ -78,6 +77,10 @@ export function createOxygenStagingFetch(
     const url = new URL(request.url);
     const headers = new Headers(request.headers);
     const authorization = headers.get('authorization');
+    const hasSignedInClaims = hasExpectedStagingTokenClaims(
+      authorization ?? '',
+      profile
+    );
     const isApi = url.origin === profile.apiOrigin;
     const isAuth =
       url.origin === profile.authOrigin &&
@@ -102,7 +105,8 @@ export function createOxygenStagingFetch(
           ? ['GET', 'PUT'].includes(method)
           : method === 'POST')) ||
         (table &&
-          catalogTables.has(table) &&
+          (catalogTables.has(table) ||
+            (hasSignedInClaims && ownedReadTables.has(table))) &&
           ['GET', 'HEAD'].includes(method)) ||
         (rpc && catalogReadRpcs.has(rpc) && method === 'POST'));
     const allowed = allowedApi || allowedAuth;
@@ -120,7 +124,7 @@ export function createOxygenStagingFetch(
       (headers.has('apikey') && headers.get('apikey') !== profile.publicKey) ||
       (authorization &&
         !(allowedAuth && authorization === `Bearer ${profile.publicKey}`) &&
-        !authenticatedBearer(authorization, profile)) ||
+        !hasSignedInClaims) ||
       (allowedApi &&
         ![
           '/api/csrf',
@@ -129,7 +133,7 @@ export function createOxygenStagingFetch(
           '/api/shipping/locations',
           '/api/shipping/quotes',
         ].includes(url.pathname) &&
-        !authenticatedBearer(authorization ?? '', profile))
+        !hasSignedInClaims)
     )
       throw new Error('Oxygen staging blocked an unapproved request');
     const response = await transport(request, {

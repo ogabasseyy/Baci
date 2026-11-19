@@ -4,6 +4,7 @@ import { readOxygenMobileCapabilities } from '@/lib/payments/oxygen/mobile-capab
 import type { OxygenRuntimeRpc } from '@/lib/payments/oxygen/runtime-service';
 import type { OrderCreateInput } from '@/schemas/orders';
 
+// A mobile bearer request must remain gated even if it supplies a web source.
 function isMobileOxygenOrder(
   request: Request,
   paymentMethod: string,

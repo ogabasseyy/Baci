@@ -145,6 +145,15 @@ describe('createOrder — server errors', () => {
     });
   });
 
+  it('stops before dispatch when the admitted checkout merchant differs', async () => {
+    const { createOrder } = await import('./orders');
+    const request = {} as Parameters<typeof createOrder>[0];
+    await expect(
+      createOrder(request, { expectedMerchantId: 'another-merchant' })
+    ).rejects.toThrow('verified staging merchant');
+    expect(mockFetchWithRetry).not.toHaveBeenCalled();
+  });
+
   it('surfaces known server validation details instead of the generic create-order error', async () => {
     const { createOrder } = require('./orders');
 

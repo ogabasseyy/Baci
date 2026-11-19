@@ -14,6 +14,7 @@ import {
 } from './oxygen-staging-profile';
 import {
   getAsyncStorageEntries,
+  getStorageEntriesAcrossBackends,
   removeAsyncStorageItems,
 } from './storage-batch';
 
@@ -37,20 +38,10 @@ try {
   );
 }
 
-// biome-ignore lint/suspicious/useAwait: async wraps the sync mmkv/array return paths to match the declared Promise<...> signature callers await
-export async function getStorageEntries(
+export function getStorageEntries(
   keys: readonly string[]
 ): Promise<[string, string | null][]> {
-  if (keys.length === 0) return [];
-
-  if (mmkvStorage) {
-    return keys.map((key) => [
-      key,
-      mmkvStorage?.getString(oxygenStagingStorageKey(key)) ?? null,
-    ]);
-  }
-
-  return getAsyncStorageEntries(keys);
+  return getStorageEntriesAcrossBackends(keys, mmkvStorage);
 }
 
 export async function removeStorageItems(

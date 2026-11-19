@@ -8,7 +8,7 @@ type Input = {
   hasCredits: boolean;
 };
 type Dependencies = {
-  admit: () => Promise<unknown>;
+  admit: () => Promise<{ merchant: { id: string } }>;
   createOrder: typeof createOrder;
 };
 export async function submitOxygenCheckout(
@@ -42,9 +42,10 @@ export async function submitOxygenCheckout(
     createOrder,
   };
   // Revalidate after every checkout await and immediately before order mutation.
-  await deps.admit();
+  const { merchant } = await deps.admit();
   return deps.createOrder(input.request, {
     checkoutGeneration: input.checkoutGeneration,
     analyticsPaymentMethod: 'oxygen',
+    expectedMerchantId: merchant.id,
   });
 }

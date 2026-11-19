@@ -53,6 +53,28 @@ export async function getAsyncStorageEntries(
   );
 }
 
+export async function getStorageEntriesAcrossBackends(
+  keys: readonly string[],
+  native: { getString(key: string): string | undefined } | null
+): Promise<StorageEntry[]> {
+  if (!native) return getAsyncStorageEntries(keys);
+  const entries = keys.map(
+    (key): StorageEntry => [
+      key,
+      native.getString(oxygenStagingStorageKey(key)) ?? null,
+    ]
+  );
+  const fallback = new Map(
+    await getAsyncStorageEntries(
+      entries.filter(([, value]) => value === null).map(([key]) => key)
+    )
+  );
+  return entries.map(([key, value]) => [
+    key,
+    value ?? fallback.get(key) ?? null,
+  ]);
+}
+
 export async function removeAsyncStorageItems(
   keys: readonly string[]
 ): Promise<void> {

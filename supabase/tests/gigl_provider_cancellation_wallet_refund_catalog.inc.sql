@@ -21,7 +21,8 @@ DECLARE
 BEGIN
   FOREACH v_fn IN ARRAY ARRAY[
     'private.refund_gigl_wallet_charge_on_provider_cancellation(uuid, uuid, uuid, text, jsonb)'::regprocedure,
-    'private.stamp_booked_gigl_charge_waybill()'::regprocedure
+    'private.stamp_booked_gigl_charge_waybill()'::regprocedure,
+    'private.gigl_has_newer_order_shipment(uuid, uuid, integer)'::regprocedure
   ] LOOP
     FOREACH v_role IN ARRAY ARRAY[
       'anon', 'authenticated', 'service_role', 'gigl_tracking_worker'

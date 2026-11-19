@@ -90,6 +90,13 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'T1: a shipment-only cancellation must not alert the customer';
   END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.shipment_tracking_notification_outbox AS outbox
+    WHERE outbox.shipment_id = v_shipment AND outbox.audience = 'merchant'
+      AND outbox.notification_kind = 'cancelled' AND outbox.status = 'pending'
+  ) THEN
+    RAISE EXCEPTION 'T1: the merchant must be alerted that the shipment needs rebooking';
+  END IF;
   SELECT monitor.state, monitor.next_poll_at, monitor.locked_by INTO v_monitor
   FROM public.shipment_tracking_monitors AS monitor
   WHERE monitor.shipment_id = v_shipment;

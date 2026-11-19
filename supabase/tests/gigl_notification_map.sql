@@ -162,7 +162,7 @@ END;
 $toggles$;
 SELECT pass('merchant event toggles default sensibly and can be muted per event');
 \ir gigl_notification_map_cancel.inc.sql
-SELECT pass('customer cancellation is dropped only when a newer live shipment exists');
+SELECT pass('cancellation alerts: the customer only for a cancelled order, the merchant whenever the cancellation can reopen the order');
 -- 5. No shipped email at booking; shipped/failed/returned emails from GIG events --------------------------------
 DO $shipped$
 DECLARE

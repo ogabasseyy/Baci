@@ -14,19 +14,20 @@ async function readInputFile(path: string): Promise<unknown> {
       throw new Error('Invalid input size');
 
     // The file can grow after stat. Read at most one byte past the limit.
-    const chunks: Buffer[] = [];
+    const contents = Buffer.alloc(BRILSTASH_JSON_MAX_BYTES + 1);
     let bytes = 0;
-    for await (const chunk of file.createReadStream({
-      start: 0,
-      end: BRILSTASH_JSON_MAX_BYTES,
-      autoClose: false,
-    })) {
-      bytes += chunk.length;
-      if (bytes > BRILSTASH_JSON_MAX_BYTES)
-        throw new Error('Invalid input size');
-      chunks.push(chunk);
+    while (bytes < contents.length) {
+      const { bytesRead } = await file.read(
+        contents,
+        bytes,
+        contents.length - bytes,
+        bytes
+      );
+      if (bytesRead === 0) break;
+      bytes += bytesRead;
     }
-    return JSON.parse(Buffer.concat(chunks, bytes).toString('utf8'));
+    if (bytes > BRILSTASH_JSON_MAX_BYTES) throw new Error('Invalid input size');
+    return JSON.parse(contents.toString('utf8', 0, bytes));
   } finally {
     await file.close();
   }

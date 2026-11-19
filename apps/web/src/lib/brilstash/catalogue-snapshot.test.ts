@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   digestBrilStashPayload,
@@ -85,6 +86,20 @@ describe('prepareBrilStashSnapshot', () => {
 });
 
 describe('digestBrilStashPayload', () => {
+  it('matches the PostgreSQL wire vector for fractional prices, Unicode and escaping', () => {
+    const fixture = readFileSync(
+      new URL(
+        '../../../../../supabase/tests/brilstash_catalogue_digest.sql',
+        import.meta.url
+      ),
+      'utf8'
+    );
+    const vector = fixture.split('$vector$')[1];
+    if (!vector) throw new Error('Missing BrilStash SQL digest vector');
+    const { payload, digest } = JSON.parse(vector);
+    expect(digestBrilStashPayload(payload)).toBe(digest);
+  });
+
   it('preserves the canonical JSON SHA-256 v1 digest for a known payload', () => {
     expect(digestBrilStashPayload([first])).toBe(
       'f68e508b4a28b1fd757b89dc3ea3936f1d40609bb11e001b994b25a8c4a38b44'

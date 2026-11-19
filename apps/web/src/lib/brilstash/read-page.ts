@@ -1,17 +1,24 @@
 import { createHmac } from 'node:crypto';
 import type { z } from 'zod';
+import { BRILSTASH_DB_READ_TIMEOUT_MS } from '../../config/brilstash-feed';
 import type { BrilStashFeedQuery } from '../../schemas/brilstash-feed-query';
 import { brilStashPageResultSchema } from '../../schemas/brilstash-page';
 import { createAnonClient } from '../supabase/anon';
 
 const UNAVAILABLE = { status: 'unavailable' } as const;
+const DEADLINE = Symbol('BrilStash read deadline');
+type PageReadResult =
+  | z.infer<typeof brilStashPageResultSchema>
+  | { status: 'deadline' | 'misconfigured' };
 
 export async function readBrilStashPage(
   bearer: string,
   query: BrilStashFeedQuery
-): Promise<z.infer<typeof brilStashPageResultSchema>> {
+): Promise<PageReadResult> {
   const key = process.env.BRILSTASH_FEED_INGRESS_KEY;
-  if (!key || !/^[a-f0-9]{64}$/.test(key)) return UNAVAILABLE;
+  if (!key || !/^[a-f0-9]{64}$/.test(key)) {
+    return { status: 'misconfigured' };
+  }
 
   const issued = Math.floor(Date.now() / 1000);
   const signature = createHmac('sha256', key)
@@ -21,13 +28,13 @@ export async function readBrilStashPage(
   let timeout: ReturnType<typeof setTimeout> | undefined;
 
   try {
-    const deadline = new Promise<never>((_, reject) => {
+    const deadline = new Promise<typeof DEADLINE>((resolve) => {
       timeout = setTimeout(() => {
+        resolve(DEADLINE);
         controller.abort();
-        reject(new Error('BrilStash read deadline'));
-      }, 8000);
+      }, BRILSTASH_DB_READ_TIMEOUT_MS);
     });
-    const { data, error } = await Promise.race([
+    const resultOrDeadline = await Promise.race([
       createAnonClient()
         .rpc('read_brilstash_page', {
           p_bearer: bearer,
@@ -40,6 +47,8 @@ export async function readBrilStashPage(
       deadline,
     ]);
 
+    if (resultOrDeadline === DEADLINE) return { status: 'deadline' };
+    const { data, error } = resultOrDeadline;
     if (error) return UNAVAILABLE;
     const result = brilStashPageResultSchema.safeParse(data);
     if (!result.success) return UNAVAILABLE;

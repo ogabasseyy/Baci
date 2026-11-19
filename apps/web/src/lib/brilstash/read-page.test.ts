@@ -16,7 +16,7 @@ it('does not call PostgREST without the ingress key', async () => {
   vi.stubEnv('BRILSTASH_FEED_INGRESS_KEY', '');
   await expect(
     readBrilStashPage('X'.repeat(43), { page: 1, limit: 3, min_price: 0 })
-  ).resolves.toEqual({ status: 'unavailable' });
+  ).resolves.toEqual({ status: 'misconfigured' });
   expect(rpc).not.toHaveBeenCalled();
 });
 

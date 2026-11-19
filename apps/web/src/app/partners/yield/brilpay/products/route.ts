@@ -27,8 +27,19 @@ export async function GET(request: NextRequest): Promise<Response> {
     Response.json({ error: message, code }, { status, headers });
 
   const deployment = resolveBrilStashFeedDeployment();
-  if (!deployment)
+  if (!deployment) {
+    if (
+      process.env.BRILSTASH_FEED_HOST ||
+      process.env.BRILSTASH_FEED_ENV ||
+      process.env.BRILSTASH_SUPABASE_PROJECT_REF
+    ) {
+      logger.warn({
+        message: 'BrilStash feed deployment is misconfigured',
+        requestId,
+      });
+    }
     return fail(503, 'Catalogue unavailable', 'FEED_UNAVAILABLE');
+  }
 
   const url = new URL(request.url);
   // Host is client-supplied routing input. Tenant isolation and authentication
@@ -73,6 +84,18 @@ export async function GET(request: NextRequest): Promise<Response> {
       return fail(401, 'Invalid partner credential', 'UNAUTHORIZED');
     case 'invalid_query':
       return fail(400, 'Invalid catalogue query', 'INVALID_QUERY');
+    case 'deadline':
+      logger.warn({
+        message: 'BrilStash feed read exceeded its deadline',
+        requestId,
+      });
+      return fail(503, 'Catalogue unavailable', 'FEED_UNAVAILABLE');
+    case 'misconfigured':
+      logger.warn({
+        message: 'BrilStash feed ingress signing key is misconfigured',
+        requestId,
+      });
+      return fail(503, 'Catalogue unavailable', 'FEED_UNAVAILABLE');
     case 'unavailable':
       return fail(503, 'Catalogue unavailable', 'FEED_UNAVAILABLE');
     case 'ok':

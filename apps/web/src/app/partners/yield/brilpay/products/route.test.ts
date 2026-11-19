@@ -6,13 +6,15 @@ import { GET } from './route';
 const dependencies = vi.hoisted(() => {
   const abortSignal = vi.fn();
   const rpc = vi.fn(() => ({ setHeader: vi.fn(() => ({ abortSignal })) }));
-  return { rpc, abortSignal, info: vi.fn(), rateLimit: vi.fn() };
+  return { rpc, abortSignal, info: vi.fn(), warn: vi.fn(), rateLimit: vi.fn() };
 });
 
 vi.mock('@/lib/supabase/anon', () => ({
   createAnonClient: () => ({ rpc: dependencies.rpc }),
 }));
-vi.mock('@/lib/logger', () => ({ logger: { info: dependencies.info } }));
+vi.mock('@/lib/logger', () => ({
+  logger: { info: dependencies.info, warn: dependencies.warn },
+}));
 
 vi.mock('@/lib/rate-limit', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/rate-limit')>()),
@@ -196,7 +198,13 @@ describe('BrilStash feed GET', () => {
 
   it('fails closed on a database project mismatch and on live configuration in preview', async () => {
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://liveproject.supabase.co');
-    expect((await GET(request())).status).toBe(503);
+    const response = await GET(request());
+    expect(response.status).toBe(503);
+    expect(dependencies.warn).toHaveBeenCalledWith({
+      message: 'BrilStash feed deployment is misconfigured',
+      requestId: response.headers.get('x-request-id'),
+    });
+    expect(await response.text()).not.toContain('liveproject');
     vi.stubEnv('BRILSTASH_SUPABASE_PROJECT_REF', 'liveproject');
     vi.stubEnv('BRILSTASH_FEED_ENV', 'live');
     expect((await GET(request())).status).toBe(503);
@@ -237,7 +245,12 @@ describe('BrilStash feed GET', () => {
       );
       const pending = GET(request());
       await vi.advanceTimersByTimeAsync(8001);
-      expect((await pending).status).toBe(503);
+      const response = await pending;
+      expect(response.status).toBe(503);
+      expect(dependencies.warn).toHaveBeenCalledWith({
+        message: 'BrilStash feed read exceeded its deadline',
+        requestId: response.headers.get('x-request-id'),
+      });
     } finally {
       vi.useRealTimers();
     }

@@ -1,4 +1,6 @@
 import { brilStashSourcesSchema } from '../../schemas/brilstash-sources';
+import { serializeStorefrontProductPathSegment } from '../serialize-storefront-product-path-segment';
+import { evaluateStorefrontSlugSafety } from '../storefront-slug-safety';
 import type { SellableSource } from './build-catalogue';
 import { parseBrilStashHttpsUrl } from './parse-https-url';
 
@@ -55,11 +57,15 @@ export async function loadBrilStashSources(
     if (
       !row.visible ||
       !row.slug ||
-      row.slug === '.' ||
-      row.slug === '..' ||
+      !evaluateStorefrontSlugSafety(row.slug).safe ||
       row.priceNaira === null ||
       !row.currency
     ) {
+      continue;
+    }
+
+    const slug = serializeStorefrontProductPathSegment(row.slug);
+    if (!slug || slug === '.' || slug === '..' || /%2f|%5c/i.test(slug)) {
       continue;
     }
 
@@ -79,8 +85,7 @@ export async function loadBrilStashSources(
       verifiedImages: row.verifiedImages,
       brand: row.brand ?? undefined,
       parentCondition: row.parentCondition ?? undefined,
-      productUrl: new URL(`/products/${encodeURIComponent(row.slug)}`, origin)
-        .href,
+      productUrl: new URL(`/products/${slug}`, origin).href,
     });
   }
 

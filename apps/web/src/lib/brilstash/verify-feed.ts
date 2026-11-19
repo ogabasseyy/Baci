@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import {
+  BRILSTASH_FEED_PROBE_TIMEOUT_MS,
   BRILSTASH_FULL_FEED_QUERY,
   BRILSTASH_JSON_MAX_BYTES,
 } from '../../config/brilstash-feed';
@@ -48,7 +49,7 @@ export async function verifyBrilStashFeed(
       redirect: 'error',
       cache: 'no-store',
       headers: { Authorization: `Bearer ${bearer}` },
-      signal: AbortSignal.timeout(10000),
+      signal: AbortSignal.timeout(BRILSTASH_FEED_PROBE_TIMEOUT_MS),
     });
     const requestId = z.uuid().parse(response.headers.get('X-Request-Id'));
     const expectedPages = Math.ceil(

@@ -71,6 +71,7 @@ $$;
 \ir ../migrations/20261119023000_brilstash_generation_and_binding_guards.sql
 \ir ../migrations/20261119023100_brilstash_require_ingress_proof.sql
 \ir brilstash_catalogue_privileges.sql
+\ir brilstash_catalogue_digest.sql
 CREATE SCHEMA fixture;
 GRANT USAGE ON SCHEMA fixture, extensions TO anon;
 CREATE FUNCTION fixture.read_brilstash_page(bearer text, page integer, page_size integer, min_price numeric,

@@ -67,6 +67,41 @@ describe('loadBrilStashSources', () => {
     expect(loaded.factsRevisionsByExternalId['listing-approved']).toBe('1');
   });
 
+  it.each([
+    'café+phone',
+    'caf%C3%A9%2Bphone',
+  ])('matches storefront path serialization for %s', async (slug) => {
+    const rpc = vi.fn(async () => ({
+      data: { ...result, rows: [{ ...row, slug }] },
+      error: null,
+    }));
+    const loaded = await loadBrilStashSources(
+      { rpc },
+      { installationId, merchantId, storefrontOrigin: origin }
+    );
+    expect(loaded.sources[0]?.productUrl).toBe(
+      'https://shop.example.invalid/products/caf%C3%A9%2Bphone'
+    );
+  });
+
+  it.each([
+    '%2e%2e',
+    '%20',
+    'two/segments',
+    '%252525252565',
+  ])('keeps an unsafe slug out of the payload while preserving its approval', async (slug) => {
+    const rpc = vi.fn(async () => ({
+      data: { ...result, rows: [{ ...row, slug }] },
+      error: null,
+    }));
+    const loaded = await loadBrilStashSources(
+      { rpc },
+      { installationId, merchantId, storefrontOrigin: origin }
+    );
+    expect(loaded.sources).toEqual([]);
+    expect(loaded.approvedExternalIds).toEqual(['listing-approved']);
+  });
+
   it('preserves reviewed zero-stock evidence and rejects a positive withdrawal', async () => {
     const approvalId = 'a0000000-0000-4000-8000-000000000001';
     const inventory = { kind: 'withdrawn', units: 0, approvalId };

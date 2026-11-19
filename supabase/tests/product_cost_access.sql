@@ -52,6 +52,8 @@ SELECT pg_temp.assert_cost_rows(4,0); -- explicitly denied active staff
 SELECT pg_temp.assert_cost_rows(5,0); -- suspended despite permission
 SELECT pg_temp.assert_cost_rows(7,0); -- analytics-only staff stays excluded from catalog view
 SELECT pg_temp.assert_cost_rows(8,0); -- orders:edit-only staff stays excluded from catalog view
+SELECT pg_temp.assert_cost_rows(9,3); -- resource all:true overrides products:view=false
+SELECT pg_temp.assert_cost_rows(10,3); -- full_access.all:true overrides products:view=false
 SELECT pg_temp.assert_analytics_cost_rows(6,0); -- shopper
 SELECT pg_temp.assert_analytics_cost_rows(1,3); -- owner
 SELECT pg_temp.assert_analytics_cost_rows(2,0); -- foreign owner
@@ -60,6 +62,8 @@ SELECT pg_temp.assert_analytics_cost_rows(4,0); -- denied staff
 SELECT pg_temp.assert_analytics_cost_rows(5,0); -- suspended staff
 SELECT pg_temp.assert_analytics_cost_rows(7,3); -- analytics:view staff without products:view
 SELECT pg_temp.assert_analytics_cost_rows(8,3); -- orders:edit staff without products:view
+SELECT pg_temp.assert_analytics_cost_rows(9,3); -- resource all:true overrides products:view=false
+SELECT pg_temp.assert_analytics_cost_rows(10,3); -- full_access.all:true overrides products:view=false
 SELECT pg_temp.assert_cost_query_denied('UPDATE public.merchant_products SET cost_price=1 WHERE false');
 SELECT pg_temp.assert_cost_query_denied('DELETE FROM public.merchant_products WHERE false');
 SELECT pg_temp.assert_cost_query_denied('INSERT INTO public.merchant_products(id) VALUES (NULL)');

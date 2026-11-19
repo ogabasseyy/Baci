@@ -3,6 +3,65 @@
 -- supabase/operations/revoke-products-cost-price.sql after client verification.
 BEGIN;
 
+-- Match permissionGrantsAccess in app code: broader grants (full_access.all,
+-- *:*, *:action, resource:*, resource:all) grant access even when the specific
+-- action key is false (COALESCE stopped at explicit false).
+CREATE OR REPLACE FUNCTION public.check_staff_permission(
+  p_user_id uuid,
+  p_merchant_id uuid,
+  p_resource text,
+  p_action text
+) RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_is_owner boolean;
+  v_staff_permissions jsonb;
+BEGIN
+  IF p_user_id IS NULL OR p_merchant_id IS NULL THEN
+    RETURN false;
+  END IF;
+
+  IF COALESCE((SELECT auth.role()), '') <> 'service_role'
+    AND (SELECT auth.uid()) IS DISTINCT FROM p_user_id THEN
+    RETURN false;
+  END IF;
+
+  SELECT EXISTS(
+    SELECT 1
+    FROM public.merchants AS m
+    WHERE m.id = p_merchant_id
+      AND m.user_id = p_user_id
+  ) INTO v_is_owner;
+
+  IF v_is_owner THEN
+    RETURN true;
+  END IF;
+
+  SELECT public.get_staff_permissions(sm.id)
+    INTO v_staff_permissions
+  FROM public.staff_members AS sm
+  WHERE sm.merchant_id = p_merchant_id
+    AND sm.user_id = p_user_id
+    AND sm.status = 'active';
+
+  IF v_staff_permissions IS NULL THEN
+    RETURN false;
+  END IF;
+
+  RETURN (
+    COALESCE((v_staff_permissions -> 'full_access' ->> 'all')::boolean, false)
+    OR COALESCE((v_staff_permissions -> '*' ->> '*')::boolean, false)
+    OR COALESCE((v_staff_permissions -> '*' ->> p_action)::boolean, false)
+    OR COALESCE((v_staff_permissions -> p_resource ->> '*')::boolean, false)
+    OR COALESCE((v_staff_permissions -> p_resource ->> 'all')::boolean, false)
+    OR COALESCE((v_staff_permissions -> p_resource ->> p_action)::boolean, false)
+  );
+END;
+$$;
+
 -- RLS cannot hide a column on otherwise public product rows. This read-only
 -- owner-rights view has its own caller-bound authorization predicate. Do not
 -- enable security_invoker: the caller will intentionally lose cost SELECT.

@@ -5,7 +5,7 @@ INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password,
 SELECT ('ca570000-0000-4000-8000-' || lpad(n::text, 12, '0'))::uuid,
   '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated',
   'cost-fixture-' || n || '@example.invalid', 'test', now(), now(), now(), '{}', '{}'
-FROM generate_series(1, 8) AS n;
+FROM generate_series(1, 10) AS n;
 INSERT INTO public.merchants (id, user_id, email, business_name, slug, is_published)
 VALUES
  ('ca570000-0000-4000-8000-000000000101', 'ca570000-0000-4000-8000-000000000001',
@@ -28,7 +28,13 @@ VALUES
   '{"analytics":{"view":true},"products":{"view":false,"all":false},"orders":{"edit":false,"all":false},"full_access":{"all":false}}', 'active'),
  ('ca570000-0000-4000-8000-000000000101', 'ca570000-0000-4000-8000-000000000008',
   'cost-fixture-8@example.invalid', 'Order-edit-only staff', 'fulfillment',
-  '{"orders":{"edit":true},"products":{"view":false},"full_access":{"all":false}}', 'active');
+  '{"orders":{"edit":true},"products":{"view":false},"full_access":{"all":false}}', 'active'),
+ ('ca570000-0000-4000-8000-000000000101', 'ca570000-0000-4000-8000-000000000009',
+  'cost-fixture-9@example.invalid', 'Resource-all override staff', 'inventory',
+  '{"products":{"view":false,"all":true},"full_access":{"all":false}}', 'active'),
+ ('ca570000-0000-4000-8000-000000000101', 'ca570000-0000-4000-8000-000000000010',
+  'cost-fixture-10@example.invalid', 'Full-access override staff', 'inventory',
+  '{"products":{"view":false},"full_access":{"all":true}}', 'active');
 INSERT INTO public.products (id, merchant_id, name, slug, price, cost_price, status, manage_stock)
 VALUES
  ('ca570000-0000-4000-8000-000000000201','ca570000-0000-4000-8000-000000000101',

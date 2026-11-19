@@ -3,7 +3,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 \ir pgtap_public_execute.sql
 SET search_path = public, extensions;
-SELECT plan(5);
+SELECT plan(6);
 GRANT USAGE ON SCHEMA extensions TO service_role;
 SELECT set_config('request.jwt.claim.role', 'service_role', true);
 
@@ -162,7 +162,9 @@ END;
 $toggles$;
 SELECT pass('merchant event toggles default sensibly and can be muted per event');
 \ir gigl_notification_map_cancel.inc.sql
-SELECT pass('cancellation alerts: the customer only for a cancelled order, the merchant whenever the cancellation can reopen the order');
+SELECT pass('customer cancellation is dropped unless the order is cancelled and no newer live shipment exists');
+\ir gigl_notification_map_rebook.inc.sql
+SELECT pass('the merchant rebooking alert is sent exactly when the cancellation reopens the order');
 -- 5. No shipped email at booking; shipped/failed/returned emails from GIG events --------------------------------
 DO $shipped$
 DECLARE

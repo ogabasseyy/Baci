@@ -25,17 +25,10 @@
 --    handling and refunds nothing. A repeat cancellation of an order that is
 --    already reopened (processing, unlinked, nothing left to clear) changes
 --    nothing and keeps the notification cycle.
--- 2. private.gate_gigl_tracking_notification skips the customer 'cancelled'
---    alert unless the order itself is cancelled (shipment-only cancellation)
---    and keeps the customer's existing skip when a newer live shipment exists
---    (private.gigl_cancellation_superseded, unchanged). The merchant's
---    'cancelled' (rebooking) alert uses the same recency rule as the reopen in
---    1: private.gigl_has_newer_order_shipment, the database-owned
---    tracking_timeline_generation. The merchant is alerted exactly when the
---    cancellation can reopen the order, and never for a stale cancel of a
---    shipment that a newer shipment has replaced, whatever their created_at
---    order is.
---    The merchant alert copy says the shipment needs rebooking (app code).
+-- 2. The notification gate (private.gate_gigl_tracking_notification) follows
+--    in 20261114183100_gigl_cancel_rebooking_alert_gate.sql; it reads the
+--    reopen decision defined here so the merchant rebooking alert and the
+--    reopen can never disagree.
 
 -- The one definition of "a newer shipment" shared by the reopen in
 -- private.sync_gigl_tracking_order_status and the merchant rebooking alert in
@@ -65,6 +58,57 @@ ALTER FUNCTION private.gigl_has_newer_order_shipment(uuid, uuid, integer)
 REVOKE ALL ON FUNCTION private.gigl_has_newer_order_shipment(uuid, uuid, integer)
   FROM PUBLIC, anon, authenticated, service_role;
 
+-- The one decision "does this cancelled shipment reopen its order": the order
+-- is open (not cancelled, not delivered/completed/cancelled/returned/failed),
+-- no newer shipment replaced this one, and the order points at this shipment
+-- (or points at none and no other non-cancelled shipment exists). Read by the
+-- reopen in private.sync_gigl_tracking_order_status and by the merchant
+-- rebooking alert in private.gate_gigl_tracking_notification.
+CREATE OR REPLACE FUNCTION private.gigl_cancellation_reopens_order(
+  p_shipment_id uuid,
+  p_order_id uuid,
+  p_merchant_id uuid,
+  p_generation integer
+)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.orders AS orders
+    WHERE orders.id = p_order_id
+      AND orders.merchant_id = p_merchant_id
+      AND orders.cancelled_at IS NULL
+      AND coalesce(orders.shipping_status, '') NOT IN (
+        'delivered', 'completed', 'cancelled', 'canceled', 'returned', 'failed'
+      )
+      AND NOT private.gigl_has_newer_order_shipment(
+        p_order_id, p_merchant_id, p_generation
+      )
+      AND (
+        orders.shipment_id = p_shipment_id
+        OR (
+          orders.shipment_id IS NULL
+          AND NOT EXISTS (
+            SELECT 1
+            FROM public.shipments AS other_shipment
+            WHERE other_shipment.order_id = p_order_id
+              AND other_shipment.merchant_id = p_merchant_id
+              AND other_shipment.id <> p_shipment_id
+              AND other_shipment.status <> 'cancelled'
+          )
+        )
+      )
+  );
+$$;
+ALTER FUNCTION private.gigl_cancellation_reopens_order(uuid, uuid, uuid, integer)
+  OWNER TO postgres;
+REVOKE ALL ON FUNCTION private.gigl_cancellation_reopens_order(uuid, uuid, uuid, integer)
+  FROM PUBLIC, anon, authenticated, service_role;
+
 CREATE OR REPLACE FUNCTION private.sync_gigl_tracking_order_status()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -74,7 +118,6 @@ AS $$
 DECLARE
   v_shipping_status text;
   v_order_id uuid;
-  v_order_shipment_id uuid;
   v_has_newer_shipment boolean;
 BEGIN
   IF NEW.provider IS DISTINCT FROM 'GIGL'
@@ -84,8 +127,10 @@ BEGIN
   END IF;
 
   IF NEW.status = 'cancelled' THEN
-    SELECT orders.id, orders.shipment_id
-    INTO v_order_id, v_order_shipment_id
+    -- Lock the open order (same filter as private.gigl_cancellation_reopens_order)
+    -- before the charge guard and the reopen decision.
+    SELECT orders.id
+    INTO v_order_id
     FROM public.orders AS orders
     WHERE orders.id = NEW.order_id
       AND orders.merchant_id = NEW.merchant_id
@@ -120,21 +165,9 @@ BEGIN
       RAISE EXCEPTION 'active_merchant_shipping_charge' USING ERRCODE = '55P03';
     END IF;
 
-    IF v_has_newer_shipment
-      OR (
-        v_order_shipment_id IS DISTINCT FROM NEW.id
-        AND (
-          v_order_shipment_id IS NOT NULL
-          OR EXISTS (
-            SELECT 1
-            FROM public.shipments AS other_shipment
-            WHERE other_shipment.order_id = NEW.order_id
-              AND other_shipment.merchant_id = NEW.merchant_id
-              AND other_shipment.id <> NEW.id
-              AND other_shipment.status <> 'cancelled'
-          )
-        )
-      ) THEN
+    IF NOT private.gigl_cancellation_reopens_order(
+      NEW.id, NEW.order_id, NEW.merchant_id, NEW.tracking_timeline_generation
+    ) THEN
       RETURN NEW;
     END IF;
 
@@ -218,59 +251,3 @@ ALTER FUNCTION private.sync_gigl_tracking_order_status()
   OWNER TO postgres;
 REVOKE ALL ON FUNCTION private.sync_gigl_tracking_order_status()
   FROM PUBLIC, anon, authenticated, service_role;
-
-CREATE OR REPLACE FUNCTION private.gate_gigl_tracking_notification()
-RETURNS trigger
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
-AS $$
-BEGIN
-  IF NEW.status <> 'pending' THEN
-    RETURN NEW;
-  END IF;
-  IF NEW.audience = 'merchant'
-    AND NOT private.gigl_merchant_event_enabled(NEW.merchant_id, NEW.notification_kind)
-  THEN
-    NEW.status := 'skipped';
-    NEW.skipped_at := now();
-    NEW.skip_reason := 'merchant_preference_off';
-  ELSIF NEW.audience = 'merchant' AND NEW.notification_kind = 'cancelled'
-    AND EXISTS (
-      SELECT 1
-      FROM public.shipments AS cancelled_shipment
-      WHERE cancelled_shipment.id = NEW.shipment_id
-        AND private.gigl_has_newer_order_shipment(
-          cancelled_shipment.order_id,
-          cancelled_shipment.merchant_id,
-          cancelled_shipment.tracking_timeline_generation
-        )
-    )
-  THEN
-    NEW.status := 'skipped';
-    NEW.skipped_at := now();
-    NEW.skip_reason := 'superseded_by_newer_shipment';
-  ELSIF NEW.audience = 'customer' AND NEW.notification_kind = 'cancelled'
-    AND private.gigl_cancellation_superseded(NEW.shipment_id)
-  THEN
-    NEW.status := 'skipped';
-    NEW.skipped_at := now();
-    NEW.skip_reason := 'superseded_by_newer_shipment';
-  ELSIF NEW.audience = 'customer' AND NEW.notification_kind = 'cancelled'
-    AND NOT EXISTS (
-      SELECT 1
-      FROM public.orders AS orders
-      WHERE orders.id = NEW.order_id
-        AND (
-          orders.cancelled_at IS NOT NULL
-          OR orders.shipping_status IN ('cancelled', 'canceled')
-        )
-    )
-  THEN
-    NEW.status := 'skipped';
-    NEW.skipped_at := now();
-    NEW.skip_reason := 'shipment_only_cancellation';
-  END IF;
-  RETURN NEW;
-END;
-$$;
-REVOKE ALL ON FUNCTION private.gate_gigl_tracking_notification()
-  FROM PUBLIC, anon, authenticated;

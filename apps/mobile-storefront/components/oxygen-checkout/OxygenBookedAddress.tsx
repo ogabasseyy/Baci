@@ -33,7 +33,7 @@ export function OxygenBookedAddress({
 }) {
   const [fields, setFields] = useState<OxygenFields>({});
   const [loaded, setLoaded] = useState(false);
-  const [error, setError] = useState('');
+  const [loadFailed, setLoadFailed] = useState(false);
   const [edit, setEdit] = useState(false);
   const [requiresConfirmation, setRequiresConfirmation] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
@@ -42,6 +42,7 @@ export function OxygenBookedAddress({
   const proofScope = JSON.stringify([snapshot.workflowId, fields]);
   const picked = useOxygenProof(proofScope);
   useEffect(() => {
+    if (loadFailed) return;
     let live = true;
     void (async () => {
       try {
@@ -66,13 +67,12 @@ export function OxygenBookedAddress({
       }
       if (live) setLoaded(true);
     })().catch(() => {
-      if (live)
-        setError('Could not load your saved address. Check for an update.');
+      if (live) setLoadFailed(true);
     });
     return () => {
       live = false;
     };
-  }, [client, snapshot.workflowId]);
+  }, [client, loadFailed, snapshot.workflowId]);
   const address = {
     state: fields.home_state ?? '',
     lga: fields.home_lga ?? '',
@@ -95,7 +95,7 @@ export function OxygenBookedAddress({
       <OxygenAddressReview
         status={waiting ? 'reviewing' : file ? 'ready' : 'missing_proof'}
         busy={busy || !loaded}
-        showRefresh={!snapshot.pending}
+        showRefresh={loaded && !snapshot.pending}
         showSelectProof={false}
         onRefresh={onRefresh}
         onSelectProof={() => void picked.pick()}
@@ -124,10 +124,18 @@ export function OxygenBookedAddress({
           </Text>
         </View>
       ) : null}
-      {error ? (
-        <Text accessibilityRole="alert" style={{ color: colors.text }}>
-          {error}
-        </Text>
+      {loadFailed ? (
+        <>
+          <Text accessibilityRole="alert" style={{ color: colors.text }}>
+            We couldn’t load your saved address.
+          </Text>
+          <OxygenButton
+            title="Retry address lookup"
+            secondary
+            disabled={busy}
+            onPress={() => setLoadFailed(false)}
+          />
+        </>
       ) : null}
       {!waiting && loaded ? (
         <>

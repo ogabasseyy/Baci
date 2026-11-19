@@ -195,3 +195,48 @@ it('requires the customer to confirm a checkout address before submitting it as 
   fireEvent.press(submit);
   expect(execute).toHaveBeenCalledTimes(1);
 });
+
+it.each([
+  false,
+  true,
+])('retries a failed address lookup without resubmitting the address (retired draft: %s)', async (retiredDraft) => {
+  const snapshot = {
+    workflowId: 'workflow',
+    version: 1,
+    stage: 'booked',
+    executionEnabled: true,
+    state: { bookingReference: 'booking' },
+  } as OxygenRuntimeSnapshot;
+  const read = jest
+    .fn()
+    .mockRejectedValueOnce(
+      retiredDraft
+        ? new OxygenClientError('http', 409)
+        : new OxygenClientError('transport')
+    )
+    .mockResolvedValue({ draft: null });
+  const residentialContext = jest
+    .fn()
+    .mockRejectedValue(new OxygenClientError('transport'));
+  const client = {
+    draft: { read },
+    residentialContext,
+  } as unknown as OxygenClient;
+  const execute = jest.fn();
+  render(
+    <OxygenBookedAddress
+      snapshot={snapshot}
+      client={client}
+      busy={false}
+      onExecute={execute}
+      onRefresh={jest.fn()}
+    />
+  );
+  await screen.findByRole('alert');
+  fireEvent.press(screen.getByText('Retry address lookup'));
+  expect(await screen.findByText('Choose photo')).toBeTruthy();
+  expect(screen.queryByRole('alert')).toBeNull();
+  expect(read).toHaveBeenCalledTimes(2);
+  expect(residentialContext).toHaveBeenCalledTimes(retiredDraft ? 1 : 0);
+  expect(execute).not.toHaveBeenCalled();
+});

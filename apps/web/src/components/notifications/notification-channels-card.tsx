@@ -1,6 +1,7 @@
 'use client';
 
 import { Bell } from 'lucide-react';
+import { ChatMessageAlertSetting } from '@/components/notifications/chat-message-alert-setting';
 import { FollowUpAlertSetting } from '@/components/notifications/follow-up-alert-setting';
 import {
   Card,
@@ -72,6 +73,8 @@ export function NotificationChannelsCard({
             onUpdate({ follow_up_notifications_enabled: checked })
           }
         />
+
+        <ChatMessageAlertSetting />
       </CardContent>
     </Card>
   );

@@ -5,6 +5,10 @@ import { describe, expect, it, vi } from 'vitest';
 import type { NotificationPreferences } from '@/types/notifications';
 import { NotificationChannelsCard } from './notification-channels-card';
 
+vi.mock('@/components/notifications/chat-message-alert-setting', () => ({
+  ChatMessageAlertSetting: () => <div data-testid="chat-alert-setting" />,
+}));
+
 vi.mock('@/components/ui/card', () => {
   const Wrapper = ({ children }: { children?: ReactNode }) => (
     <div>{children}</div>

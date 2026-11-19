@@ -93,6 +93,11 @@ export function defineArchiveRoutePurgeSuite({
     expect(mocks.scheduleStorefrontHostnamePurge).toHaveBeenCalledWith(
       'test-store'
     );
+
+    mocks.scheduleStorefrontHostnamePurge.mockClear();
+    mocks.expireProductBlogCache.mockReturnValueOnce(false);
+    await PATCH(makeRequest(), makeContext());
+    expect(mocks.scheduleStorefrontHostnamePurge).not.toHaveBeenCalled();
   });
 
   it('reads the category_id join and product_categories junction on the archive select', async () => {

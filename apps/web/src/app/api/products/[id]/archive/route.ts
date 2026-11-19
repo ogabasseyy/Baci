@@ -149,7 +149,8 @@ export async function PATCH(
       revalidateProducts(merchantContext.merchantId, undefined, {
         expireImmediately: true,
       }) === true;
-    expireProductBlogCache(merchantContext.merchantId);
+    const blogExpired =
+      expireProductBlogCache(merchantContext.merchantId) !== false;
     // scheduleStorefrontProductPurge needs the merchant slug (the resolved
     // merchant context only yields its id). Resolve it here; a miss makes the
     // schedule a silent no-op (fail-open).
@@ -191,7 +192,14 @@ export async function PATCH(
       // are queued below so they cannot delay the response.
       scheduleStorefrontProductPurge(merchantRow?.slug, purgeEntries);
       if (dependentAliases.incomplete) {
-        scheduleStorefrontHostnamePurge(merchantRow?.slug);
+        if (blogExpired) {
+          scheduleStorefrontHostnamePurge(merchantRow?.slug);
+        } else {
+          console.warn(
+            'Skipped Cloudflare hostname purge after archive because blog cache hard expiry failed',
+            { merchantId: merchantContext.merchantId }
+          );
+        }
       }
       // Keep relationship/category fallback reads out of the archive response.
       // The product purge is queued after the response and the helper hard-

@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
+import { TextInput } from 'react-native';
 import Colors from '@/constants/Colors';
 import { SavingsAmountInput } from './SavingsAmountInput';
 
@@ -41,4 +42,23 @@ it('strips pasted separators and accepts clearing the amount', () => {
   expect(onChangeText).toHaveBeenLastCalledWith('25000');
   fireEvent.changeText(screen.getByLabelText('Contribution'), '');
   expect(onChangeText).toHaveBeenLastCalledWith('');
+});
+
+describe('bugfix: only the digits opened the keyboard', () => {
+  it('focuses the amount when the customer taps anywhere in the box', () => {
+    const focus = jest.spyOn(TextInput.prototype, 'focus');
+    render(
+      <SavingsAmountInput
+        colors={Colors.light}
+        label="Contribution"
+        value=""
+        onChangeText={jest.fn()}
+      />
+    );
+
+    fireEvent.press(screen.getByTestId('savings-amount-box'));
+
+    expect(focus).toHaveBeenCalledTimes(1);
+    focus.mockRestore();
+  });
 });

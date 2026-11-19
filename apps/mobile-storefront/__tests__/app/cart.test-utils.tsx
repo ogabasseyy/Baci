@@ -54,6 +54,8 @@ export const mockRouterPrefetch = jest.fn();
 export const mockRouterPush = jest.fn();
 export const mockRouterReplace = jest.fn();
 export const mockRouterBack = jest.fn();
+export const mockRouterDismissTo = jest.fn();
+export const mockRouterNavigate = jest.fn();
 export const mockRouterCanGoBack = jest.fn(() => false);
 
 export const buildAuthStatus = (
@@ -106,6 +108,8 @@ export function mockExpoRouterModule(): unknown {
     router: {
       back: (...args: unknown[]) => mockRouterBack(...args),
       canGoBack: () => mockRouterCanGoBack(),
+      dismissTo: (...args: unknown[]) => mockRouterDismissTo(...args),
+      navigate: (...args: unknown[]) => mockRouterNavigate(...args),
       prefetch: (...args: unknown[]) => mockRouterPrefetch(...args),
       push: (...args: unknown[]) => mockRouterPush(...args),
       replace: (...args: unknown[]) => mockRouterReplace(...args),

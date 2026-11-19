@@ -51,6 +51,7 @@ export function FollowUpQueueList({
   const {
     failedOrders,
     isFailedOrdersError,
+    isFollowUpLimited,
     isRefreshing,
     refresh,
     viewState,
@@ -64,11 +65,18 @@ export function FollowUpQueueList({
   const filteredFailedOrders = (() => {
     if (!failedOrders || !searchQuery.trim()) return failedOrders ?? [];
 
-    const query = searchQuery.toLowerCase();
+    const query = searchQuery.trim().toLowerCase();
+    const phoneQuery = /^[\d+().\s-]+$/.test(query)
+      ? query.replace(/\D/g, '')
+      : '';
     return failedOrders.filter(
       (order) =>
         (order.customer_name?.toLowerCase().includes(query) ?? false) ||
-        order.customer_email.toLowerCase().includes(query)
+        (order.customer_email?.toLowerCase().includes(query) ?? false) ||
+        (order.order_number?.toLowerCase().includes(query) ?? false) ||
+        (phoneQuery.length >= 4 &&
+          (order.customer_phone?.replace(/\D/g, '').includes(phoneQuery) ??
+            false))
     );
   })();
   const { data: groupedFailedOrders, stickyHeaderIndices } =
@@ -123,8 +131,14 @@ export function FollowUpQueueList({
         />
       }
       ListHeaderComponent={
-        isFailedOrdersError && groupedFailedOrders.length > 0 ? (
-          <FollowUpErrorBanner isRetrying={isRefreshing} onRetry={refresh} />
+        (isFailedOrdersError || isFollowUpLimited) &&
+        (failedOrders?.length ?? 0) > 0 ? (
+          <FollowUpErrorBanner
+            hasError={isFailedOrdersError}
+            isLimited={isFollowUpLimited}
+            isRetrying={isRefreshing}
+            onRetry={refresh}
+          />
         ) : null
       }
       ListEmptyComponent={

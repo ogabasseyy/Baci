@@ -15,7 +15,7 @@ if source.count(anchor) != 1:
     raise SystemExit('dispatch migration anchor changed; refusing stale harness')
 source = source.replace(
     anchor,
-    "20261106193000_agentic_cart_dispatch_revocation_safety.sql').read_text()\\n sql+='\\\\n'+(root/'supabase/migrations/20261106194000_agentic_dva_provider_success_evidence.sql').read_text()\\n sql+='\\\\n'+(root/'supabase/migrations/20260805090300_add_least_privilege_gigl_tracking_worker.sql').read_text()\\n sql+='\\\\n'+(root/'supabase/migrations/20260805113000_restore_gigl_tracking_postgrest_capability.sql').read_text()\\n sql+='\\\\n'+(root/'supabase/migrations/20261107103000_agentic_dva_postlogout_finalizer.sql').read_text()\\n sql+='\\\\n'+(root/'supabase/migrations/20261106230000_agentic_cart_dispatch_admission_off.sql').read_text()\\n tests=''",
+    "20261106193000_agentic_cart_dispatch_revocation_safety.sql').read_text()\\n sql+='\\\\n'+(root/'supabase/migrations/20261106194000_agentic_dva_provider_success_evidence.sql').read_text()\\n sql+='\\\\n'+(root/'supabase/migrations/20260805090300_add_least_privilege_gigl_tracking_worker.sql').read_text()\\n sql+='\\\\n'+(root/'supabase/migrations/20260805113000_restore_gigl_tracking_postgrest_capability.sql').read_text()\\n sql+='\\\\n'+(root/'supabase/migrations/20261119045500_agentic_dva_postlogout_gigl_hook_and_finalizer.sql').read_text()\\n sql+='\\\\n'+(root/'supabase/migrations/20261106230000_agentic_cart_dispatch_admission_off.sql').read_text()\\n tests=''",
     1,
 )
 anchor = "agentic_cart_provider_dispatch_revocation_race.sql').read_text()"
@@ -28,6 +28,7 @@ evidence_parts = (
     'agentic_dva_provider_success_evidence_rejections.sql',
     'agentic_dva_provider_success_evidence_persistence.sql',
     'agentic_dva_postlogout_finalizer.sql',
+    'agentic_dva_postlogout_finalizer_revocation_race.sql',
 )
 fragment_loader = "+'\\\\n'+".join(
     f"(root/'supabase/tests/{name}').read_text()" for name in evidence_parts

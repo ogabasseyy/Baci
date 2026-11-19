@@ -1,28 +1,16 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
-import type React from 'react';
-import { View, type ViewProps } from 'react-native';
+import { View } from 'react-native';
 import SavedTabScreen from '@/app/(tabs)/saved';
 import { SPACING } from '@/constants/Colors';
 import { SAVED_LIST_BOTTOM_PADDING } from '@/constants/saved-list-layout';
 import type { SavedItem } from '@/stores/saved-store';
-
-interface MockFlashListProps {
-  children?: React.ReactNode;
-  [key: string]: unknown;
-}
-
-type MockStorefrontScreenShellProps = ViewProps & {
-  children?: React.ReactNode;
-  edges?: string[];
-};
-
-type MockListStyleOptions = {
-  gap?: number;
-  includeBottomInset?: boolean;
-  padding?: number;
-  paddingBottom?: number;
-};
+import {
+  defaultListContentStyle,
+  type MockFlashListProps,
+  type MockListStyleOptions,
+  type MockStorefrontScreenShellProps,
+} from './saved.test-utils';
 
 const mockFlashList = jest.fn(({ children, ...props }: MockFlashListProps) => (
   <View testID="saved-flash-list" {...props}>
@@ -57,66 +45,17 @@ jest.mock('expo-router', () => ({
   },
 }));
 
-jest.mock('expo-image', () => {
-  const { View } = jest.requireActual(
-    'react-native'
-  ) as typeof import('react-native');
+jest.mock('expo-image', () =>
+  (
+    require('./saved.test-utils') as typeof import('./saved.test-utils')
+  ).createMockExpoImageModule()
+);
 
-  return {
-    Image: ({
-      autoplay,
-      accessibilityLabel,
-      testID,
-    }: {
-      autoplay?: boolean;
-      accessibilityLabel?: string;
-      testID?: string;
-    }) => {
-      const viewProps = {
-        testID: testID ?? 'saved-tab-product-image',
-        accessibilityLabel: accessibilityLabel ?? 'saved tab product image',
-        accessibilityRole: 'image' as const,
-        autoplay,
-      } as unknown as React.ComponentProps<typeof View>;
-      return <View {...viewProps} />;
-    },
-  };
-});
-
-jest.mock('@shopify/flash-list', () => ({
-  FlashList: ({
-    data = [],
-    renderItem,
-    children,
-    ...props
-  }: {
-    data?: SavedItem[];
-    children?: React.ReactNode;
-    renderItem?: (info: { item: SavedItem; index: number }) => React.ReactNode;
-  }) => {
-    const React = jest.requireActual('react') as typeof import('react');
-    const { View } = jest.requireActual(
-      'react-native'
-    ) as typeof import('react-native');
-
-    const renderedChildren = data.length
-      ? data.map((item, index) =>
-          React.createElement(
-            View,
-            { key: item.id },
-            renderItem ? renderItem({ item, index }) : null
-          )
-        )
-      : children;
-
-    return mockFlashList({
-      children: renderedChildren,
-      ...props,
-      data,
-      renderItem,
-    });
-  },
-}));
+jest.mock('@shopify/flash-list', () =>
+  (
+    require('./saved.test-utils') as typeof import('./saved.test-utils')
+  ).createMockFlashListModule((props) => mockFlashList(props))
+);
 
 jest.mock('@/components/storefront/StorefrontScreenShell', () => ({
   StorefrontScreenShell: ({
@@ -150,18 +89,7 @@ jest.mock('@/stores/saved-store', () => ({
 describe('SavedTabScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockGetListContentStyle.mockImplementation(
-      (options?: MockListStyleOptions) => {
-        const bottomInset = options?.includeBottomInset === false ? 0 : 34;
-        const padding = options?.padding ?? 16;
-
-        return {
-          gap: options?.gap ?? 12,
-          padding,
-          paddingBottom: (options?.paddingBottom ?? padding) + bottomInset,
-        };
-      }
-    );
+    mockGetListContentStyle.mockImplementation(defaultListContentStyle);
     mockUseStorefrontInsets.mockReturnValue({
       getScrollContentStyle: jest.fn(),
       getListContentStyle: mockGetListContentStyle,

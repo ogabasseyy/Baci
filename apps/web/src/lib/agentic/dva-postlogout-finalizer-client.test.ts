@@ -17,6 +17,7 @@ vi.mock('@/env', () => ({
 
 const validScope = {
   accountNumber: '1234567890',
+  agenticSessionId: 'agentic_session_abc123',
   binding: {
     cart_id: '00000000-0000-4000-8000-000000000002',
     cart_version: 7,
@@ -49,11 +50,14 @@ describe('createDvaPostLogoutFinalizerClient', () => {
     expect(payload).toMatchObject({
       aud: 'authenticated',
       role: 'agentic_dva_finalizer',
+      agentic_context: 'checkout',
+      agentic_merchant_id: validScope.merchantId,
       iat: 1794052800,
       exp: 1794052860,
       agentic_dva_post_logout: {
         version: '1',
         merchant_id: validScope.merchantId,
+        agentic_session_id: validScope.agenticSessionId,
         checkout_session_id: validScope.binding.checkout_session_id,
         cart_id: validScope.binding.cart_id,
         cart_version: 7,
@@ -70,6 +74,7 @@ describe('createDvaPostLogoutFinalizerClient', () => {
 
   it.each([
     ['merchant', { ...validScope, merchantId: 'bad' }],
+    ['agenticSessionId', { ...validScope, agenticSessionId: '' }],
     [
       'session',
       {

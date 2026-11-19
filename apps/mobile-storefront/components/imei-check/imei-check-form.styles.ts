@@ -64,8 +64,8 @@ export const formStyles = StyleSheet.create({
     gap: SPACING.sm,
     height: 54,
     paddingHorizontal: SPACING.md,
-    borderWidth: 1.5,
-    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderRadius: 12,
   },
   imeiInput: {
     flex: 1,
@@ -148,47 +148,6 @@ export const formStyles = StyleSheet.create({
   helpBold: {
     fontWeight: '700',
   },
-  bottomAction: {
-    padding: SPACING.md,
-    borderTopWidth: 1,
-    gap: SPACING.sm,
-  },
-  footerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.md,
-  },
-  footerHint: {
-    fontSize: 12,
-    fontFamily: 'Inter_600SemiBold',
-    textAlign: 'center',
-  },
-  walletBadge: {
-    alignItems: 'center',
-    minWidth: 52,
-  },
-  walletBadgeAmount: {
-    fontFamily: 'Inter_700Bold',
-    fontSize: 12,
-    marginTop: 2,
-  },
-  verifyButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: SPACING.sm,
-    paddingVertical: SPACING.md,
-    borderRadius: RADIUS.lg,
-  },
-  verifyButtonDisabled: {
-    opacity: 0.6,
-  },
-  verifyButtonText: {
-    color: BRAND.onPrimary,
-    fontSize: 16,
-    fontWeight: '700',
-  },
   walletBalancePill: {
     alignSelf: 'center',
     borderRadius: RADIUS.full,
@@ -235,5 +194,23 @@ export const formStyles = StyleSheet.create({
   walletCtaTitle: {
     fontFamily: 'Inter_700Bold',
     fontSize: 13,
+  },
+  // An outlined brand button, so the retry reads as tappable (not text).
+  retryButton: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    borderColor: BRAND.primary,
+    borderRadius: RADIUS.full,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: SPACING.xs,
+    marginTop: SPACING.sm,
+    minHeight: 44,
+    paddingHorizontal: SPACING.md,
+  },
+  retryButtonText: {
+    color: BRAND.primary,
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 14,
   },
 });

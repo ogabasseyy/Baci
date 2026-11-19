@@ -61,6 +61,7 @@ function OxygenDraftSession(props: CustomerFormProps) {
         saveDraft={draft.queue}
         flushDraft={draft.flush}
         saveBlocked={draft.status === 'conflict'}
+        saveStatus={draft.status}
       />
     </div>
   );

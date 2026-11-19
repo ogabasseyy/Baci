@@ -51,6 +51,7 @@ export async function createFinalizationOrder(
     const recoveryAvailable = recoveryBinding
       ? await hasDvaPostLogoutFinalizationEvidence({
           accountNumber: input.dvaAccount.account_number,
+          agenticSessionId: sessionId,
           binding: recoveryBinding,
           finalizationClaim,
           merchantId,
@@ -61,6 +62,7 @@ export async function createFinalizationOrder(
       recoveryBinding && recoveryAvailable
         ? createDvaPostLogoutFinalizerClient({
             accountNumber: input.dvaAccount.account_number,
+            agenticSessionId: sessionId,
             binding: recoveryBinding,
             finalizationClaim,
             merchantId,

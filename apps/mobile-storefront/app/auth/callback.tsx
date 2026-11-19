@@ -1,4 +1,4 @@
-import { router, useLocalSearchParams } from 'expo-router';
+import { type Href, router, useLocalSearchParams } from 'expo-router';
 import { useEffect } from 'react';
 import { ActivityIndicator, StyleSheet } from 'react-native';
 import { StorefrontScreenShell } from '@/components/storefront/StorefrontScreenShell';
@@ -8,6 +8,23 @@ import { createLogger } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
 
 const log = createLogger('AuthCallback');
+const callbackDestinations = new Map<string, Href>([
+  ['/account', '/(tabs)/account'],
+  ['/(tabs)/account', '/(tabs)/account'],
+  ['/wallet', '/(tabs)/wallet'],
+  ['/(tabs)/wallet', '/(tabs)/wallet'],
+]);
+
+function getCallbackDestination(value: string | string[] | undefined): Href {
+  if (typeof value !== 'string') return '/';
+
+  try {
+    const path = decodeURIComponent(value);
+    return callbackDestinations.get(path) ?? '/';
+  } catch {
+    return '/';
+  }
+}
 
 /**
  * OAuth Callback Handler (2026 Best Practice — Implicit Flow)
@@ -19,11 +36,10 @@ const log = createLogger('AuthCallback');
  * It checks if a session was already established and redirects accordingly.
  */
 export default function AuthCallback() {
-  const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
+  const { returnTo } = useLocalSearchParams<{ returnTo?: string | string[] }>();
   const { colors } = useTheme();
 
   useEffect(() => {
-    log.debug('AuthCallback route reached. returnTo:', returnTo);
     let cancelled = false;
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
@@ -46,15 +62,7 @@ export default function AuthCallback() {
       }
 
       if (session) {
-        log.info('Session found, redirecting. User:', session.user?.email);
-        if (returnTo) {
-          const cleanReturnTo = decodeURIComponent(returnTo);
-          log.debug('Redirecting to returnTo:', cleanReturnTo);
-          router.replace(cleanReturnTo as '/');
-        } else {
-          log.debug('Redirecting to home');
-          router.replace('/');
-        }
+        router.replace(getCallbackDestination(returnTo));
       } else {
         log.warn('No session found on callback route, returning to login');
         router.replace('/auth/login');

@@ -12,6 +12,7 @@ const UUID_RE =
 
 export type DvaPostLogoutFinalizerScope = {
   accountNumber: string;
+  agenticSessionId: string;
   binding: SharedCartBindingRef;
   finalizationClaim: string;
   merchantId: string;
@@ -22,17 +23,21 @@ export type DvaPostLogoutFinalizerScope = {
  * under its transaction locks before creating the order. */
 export async function hasDvaPostLogoutFinalizationEvidence(input: {
   accountNumber: string;
+  agenticSessionId: string;
   binding: SharedCartBindingRef;
   finalizationClaim: string;
   merchantId: string;
   supabase: SupabaseClient;
 }): Promise<boolean> {
   if (typeof input.supabase.rpc !== 'function') return false;
+  if (!input.agenticSessionId || input.agenticSessionId.length > 256)
+    return false;
   try {
     const { data, error } = await input.supabase.rpc(
       'commerce_cart_agentic_dva_recovery_available',
       {
         p_account_number: input.accountNumber,
+        p_agentic_session_id: input.agenticSessionId,
         p_cart_id: input.binding.cart_id,
         p_cart_version: input.binding.cart_version,
         p_finalization_claim: input.finalizationClaim,
@@ -69,11 +74,13 @@ export function createDvaPostLogoutFinalizerClient(
       aud: 'authenticated',
       role: 'agentic_dva_finalizer',
       agentic_context: 'checkout',
+      agentic_merchant_id: scope.merchantId,
       iat: issuedAt,
       exp: issuedAt + TOKEN_TTL_SECONDS,
       agentic_dva_post_logout: {
         version: '1',
         merchant_id: scope.merchantId,
+        agentic_session_id: scope.agenticSessionId,
         checkout_session_id: scope.binding.checkout_session_id,
         cart_id: scope.binding.cart_id,
         cart_version: scope.binding.cart_version,
@@ -94,6 +101,13 @@ export function createDvaPostLogoutFinalizerClient(
 function validateScope(scope: DvaPostLogoutFinalizerScope) {
   if (!UUID_RE.test(scope.merchantId) || !UUID_RE.test(scope.binding.cart_id)) {
     throw new Error('DVA finalizer scope identifiers are invalid');
+  }
+  if (
+    typeof scope.agenticSessionId !== 'string' ||
+    scope.agenticSessionId.length < 1 ||
+    scope.agenticSessionId.length > 256
+  ) {
+    throw new Error('DVA finalizer agentic session identifier is invalid');
   }
   if (!UUID_RE.test(scope.binding.checkout_session_id)) {
     throw new Error('DVA finalizer session identifier is invalid');

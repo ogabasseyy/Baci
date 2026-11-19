@@ -30,6 +30,9 @@ FIXTURE = HERE / 'piggyvest_stuck_funds_runbook_fixture.sql'
 SEED = HERE / 'piggyvest_stuck_funds_runbook_seed.sql'
 REAL_FUNCTIONS = ('reverse_vtu_wallet_payment', 'reverse_wallet_redemption',
                   'cancel_order_as_merchant')
+# Helpers the real cancel function calls (private schema).
+REAL_PRIVATE_FUNCTIONS = ('merchant_cancel_payment_in_flight',
+                          'transition_verified_abandoned_captures_for_cancel')
 PORT = '55491'
 OTHER_MERCHANT = '00000000-0000-4000-8000-0000000000a2'
 OWNER = '00000000-0000-4000-8000-0000000000f1'
@@ -113,6 +116,7 @@ class Cluster:
     def build_template(self):
         setup = '\n'.join([FIXTURE.read_text(encoding='utf-8'),
                            real_trigger('update_vtu_transactions_terminal_at', 'update_vtu_terminal_at'),
+                           *(real_function(name, 'private') for name in REAL_PRIVATE_FUNCTIONS),
                            *(real_function(name) for name in REAL_FUNCTIONS),
                            SEED.read_text(encoding='utf-8')])
         self.must('postgres', 'CREATE DATABASE runbook_template')

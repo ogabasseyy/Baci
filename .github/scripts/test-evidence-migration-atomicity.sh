@@ -41,8 +41,8 @@ fi
 finalizer_atomicity_dir="$fixture_root/finalizer-atomicity"
 mkdir -p "$finalizer_atomicity_dir"
 cp \
-  "$script_dir/../../supabase/migrations/20261107103000_agentic_dva_postlogout_finalizer.sql" \
-  "$finalizer_atomicity_dir/20261107103000_agentic_dva_postlogout_finalizer.sql"
+  "$script_dir/../../supabase/migrations/20261119045500_agentic_dva_postlogout_gigl_hook_and_finalizer.sql" \
+  "$finalizer_atomicity_dir/20261119045500_agentic_dva_postlogout_gigl_hook_and_finalizer.sql"
 finalizer_atomicity_log="$fixture_root/finalizer-atomicity-queries.log"
 PATH="$fake_bin:$PATH" \
   MIGRATIONS_DIR="$finalizer_atomicity_dir" \

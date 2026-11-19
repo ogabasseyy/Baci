@@ -1,5 +1,7 @@
 import { StyleSheet } from 'react-native';
+import { QUIZ_RESULT_CARD_SIDE_PADDING } from './QuizGameplayAdFooter.styles';
 import { createQuizQuestionStyles } from './QuizQuestion.styles';
+import { createQuizResultsStyles } from './QuizResults.styles';
 import type { QuizThemeColors } from './quiz-theme';
 
 export function createQuizStyles(colors: QuizThemeColors) {
@@ -9,8 +11,10 @@ export function createQuizStyles(colors: QuizThemeColors) {
       container: {
         backgroundColor: colors.background,
         flexGrow: 1,
-        gap: 16,
-        padding: 20,
+        gap: 12,
+        paddingBottom: 12,
+        paddingHorizontal: 20,
+        paddingTop: 8,
       },
       musicContainer: {
         backgroundColor: colors.background,
@@ -95,26 +99,23 @@ export function createQuizStyles(colors: QuizThemeColors) {
       passReceipt: { color: colors.textSecondary, fontWeight: '700' },
       resultCard: {
         alignItems: 'center',
-        backgroundColor: colors.card,
-        borderColor: colors.success,
-        borderRadius: 24,
-        borderWidth: 1,
-        gap: 12,
-        margin: 20,
-        padding: 24,
+        gap: 14,
+        paddingHorizontal: QUIZ_RESULT_CARD_SIDE_PADDING,
+        paddingVertical: 18,
       },
       resultIcon: {
         alignItems: 'center',
-        backgroundColor: colors.primaryLowOpacity,
+        backgroundColor: colors.card,
         borderRadius: 32,
-        height: 64,
+        height: 56,
         justifyContent: 'center',
-        width: 64,
+        width: 56,
       },
       resultTitle: {
-        color: colors.success,
-        fontSize: 22,
+        color: colors.text,
+        fontSize: 28,
         fontWeight: '900',
+        letterSpacing: -0.5,
         textAlign: 'center',
       },
       finishTimeCard: {
@@ -165,7 +166,7 @@ export function createQuizStyles(colors: QuizThemeColors) {
       prizeClaimHint: { color: colors.textSecondary, fontSize: 14 },
       finalStandings: {
         alignSelf: 'stretch',
-        backgroundColor: colors.background,
+        backgroundColor: colors.card,
         borderColor: colors.border,
         borderRadius: 18,
         borderWidth: 1,
@@ -178,7 +179,7 @@ export function createQuizStyles(colors: QuizThemeColors) {
         justifyContent: 'space-between',
       },
       finalStandingsTitle: {
-        color: colors.primary,
+        color: colors.warning,
         fontSize: 17,
         fontWeight: '900',
       },
@@ -203,7 +204,7 @@ export function createQuizStyles(colors: QuizThemeColors) {
         paddingHorizontal: 8,
       },
       finalStandingRank: {
-        color: colors.primary,
+        color: colors.warning,
         fontSize: 16,
         fontVariant: ['tabular-nums'],
         fontWeight: '900',
@@ -261,11 +262,12 @@ export function createQuizStyles(colors: QuizThemeColors) {
         paddingHorizontal: 16,
       },
       secondaryButtonText: {
-        color: colors.primary,
+        color: colors.text,
         fontSize: 15,
         fontWeight: '800',
       },
     }),
     ...createQuizQuestionStyles(colors),
+    ...createQuizResultsStyles(colors),
   };
 }

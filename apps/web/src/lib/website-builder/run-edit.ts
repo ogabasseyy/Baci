@@ -1,4 +1,5 @@
 import type { BuilderContext } from '@/lib/builder-connector/types';
+import { admitLegacyExecution } from '@/lib/experience/legacy-execution';
 import {
   builderEditLeaseSchema,
   type EditLease,
@@ -48,17 +49,37 @@ export async function runStorefrontEdit(
     if (!deps.rateLimit(`builder:${ctx.identity.actorUserId}`).allowed) {
       outcome = 'transient';
     } else {
+      const acknowledge = await admitLegacyExecution(
+        ctx.supabase,
+        ctx.merchantId
+      );
       const signal = AbortSignal.timeout(
         Math.min(deps.timeoutMs ?? 24000, 24000)
       );
+      // Retain admission until the actual provider promise settles, even when
+      // the outer deadline wins. A timeout is not cancellation acknowledgement.
+      const provider = Promise.resolve().then(() =>
+        deps.generate({ source, instructions: lease.instructions, signal })
+      );
+      const settled = provider.then(
+        async (generated) => {
+          await acknowledge();
+          return generated;
+        },
+        async (error: unknown) => {
+          await acknowledge();
+          throw error;
+        }
+      );
+      // Keep cleanup attached after a timeout. Successful generation waits for
+      // its acknowledgement transaction before finish_edit.
+      void settled.catch(() => undefined);
       const generated = await Promise.race([
-        deps.generate({ source, instructions: lease.instructions, signal }),
+        settled,
         new Promise<never>((_, reject) => {
-          signal.addEventListener(
-            'abort',
-            () => reject(new Error('Provider timeout')),
-            { once: true }
-          );
+          const expired = () => reject(new Error('Provider timeout'));
+          if (signal.aborted) expired();
+          else signal.addEventListener('abort', expired, { once: true });
         }),
       ]);
       candidate = buildEditCandidate(source, generated);

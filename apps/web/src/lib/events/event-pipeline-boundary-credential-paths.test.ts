@@ -4,6 +4,8 @@ import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { eventPipelineCartCredentialPaths } from './event-pipeline-cart-credential-paths';
 import { eventPipelineChatCredentialPaths } from './event-pipeline-chat-credential-paths';
+import { eventPipelineChatPushCredentialPaths } from './event-pipeline-chat-push-credential-paths';
+import { eventPipelineChatwootCartCredentialPaths } from './event-pipeline-chatwoot-cart-credential-paths';
 import { eventPipelineDvaCredentialPaths } from './event-pipeline-dva-credential-paths';
 import { eventPipelineGatewayCronCredentialPaths } from './event-pipeline-gateway-cron-credential-paths';
 import { eventPipelineGiglCredentialPaths } from './event-pipeline-gigl-credential-paths';
@@ -16,6 +18,7 @@ import { eventPipelinePiggyvestCredentialPaths } from './event-pipeline-piggyves
 import { eventPipelineRedvaultCredentialPaths } from './event-pipeline-redvault-credential-paths';
 import { eventPipelineRepairPickupCredentialPaths } from './event-pipeline-repair-pickup-credential-paths';
 import { eventPipelineShippingCredentialPaths } from './event-pipeline-shipping-credential-paths';
+import { vpsCronWorkerAuthority } from './event-pipeline-vps-cron-worker-paths';
 import { eventPipelineVtuReplayCredentialPaths } from './event-pipeline-vtu-replay-credential-paths';
 
 const modulePath = resolve(
@@ -34,6 +37,7 @@ describe('event pipeline credential-path authority', () => {
 
     expect(manifest.authority.credentialPaths).toEqual([
       ...eventPipelineCartCredentialPaths,
+      ...eventPipelineChatwootCartCredentialPaths,
       // One host-verified public observation may mint only the existing
       // short-lived event-ingress capability; it cannot read provider credentials.
       [
@@ -271,6 +275,8 @@ describe('event pipeline credential-path authority', () => {
       ...eventPipelineGatewayCronCredentialPaths,
       ...eventPipelineManualOrderDocumentCredentialPaths,
       ...onboardingEmailWorkerAuthority.credentialPaths,
+      ...eventPipelineChatPushCredentialPaths,
+      ...vpsCronWorkerAuthority.credentialPaths,
     ]);
   });
 });

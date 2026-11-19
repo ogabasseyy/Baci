@@ -94,7 +94,7 @@ describe('ComparePageContent', () => {
   it('renders grouped canonical compare links without platform prefixes on a custom domain', async () => {
     render(
       await ComparePageContent({
-        params: Promise.resolve({ slug: 'ogabassey' }),
+        params: Promise.resolve({ slug: 'ogabassey.com' }),
       })
     );
 

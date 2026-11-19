@@ -1,6 +1,10 @@
 import { EXPO_PUBLIC_API_URL } from '@/env';
 import { CONFIG } from '@/lib/config';
-import { DEFAULT_TIMEOUT, fetchWithTimeout } from '@/lib/fetch-with-timeout';
+import {
+  DEFAULT_TIMEOUT,
+  fetchWithTimeout,
+  TimeoutError,
+} from '@/lib/fetch-with-timeout';
 import { supabase } from '@/lib/supabase';
 import { StorefrontCsrfTokenSchema } from '@/schemas/storefront-csrf-token';
 
@@ -16,6 +20,8 @@ type FetchStorefrontCustomerApiInput = {
   method?: 'GET' | 'POST' | 'PATCH';
   query?: MerchantIdentifiersInput & { goalId?: string };
   signal?: AbortSignal;
+  /** Overrides the default request timeout for this call. */
+  timeoutMs?: number;
   /**
    * Binds the request to the user the caller acted for. The check runs
    * inside the same session read that mints the Bearer [REDACTED], so an
@@ -71,6 +77,38 @@ async function parseJsonResponse(response: Response) {
   }
 
   return data;
+}
+
+/**
+ * One deadline for the request and its body: when it passes, the request is
+ * aborted and the read fails, even if headers came back and the body then
+ * stalled (CodeRabbit, #4259).
+ */
+async function fetchJsonWithinDeadline(
+  send: (signal: AbortSignal) => Promise<Response>,
+  timeoutMs: number,
+  callerSignal?: AbortSignal
+): Promise<Record<string, unknown>> {
+  const controller = new AbortController();
+  const onCallerAbort = () => controller.abort(callerSignal?.reason);
+  if (callerSignal?.aborted) onCallerAbort();
+  callerSignal?.addEventListener('abort', onCallerAbort, { once: true });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expired = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(new TimeoutError(timeoutMs));
+    }, timeoutMs);
+  });
+  try {
+    return await Promise.race([
+      send(controller.signal).then(parseJsonResponse),
+      expired,
+    ]);
+  } finally {
+    clearTimeout(timer);
+    callerSignal?.removeEventListener('abort', onCallerAbort);
+  }
 }
 
 function buildMerchantIdentifiers({
@@ -166,39 +204,45 @@ export function createStorefrontCustomerApiClient() {
     path,
     query,
     signal,
+    timeoutMs,
     expectedUserId,
   }: FetchStorefrontCustomerApiInput) => {
     const accessToken = await getAccessToken(expectedUserId);
     let csrfToken: string | undefined;
     if (includeCsrf) {
-      const csrfResponse = await fetchWithTimeout(
-        `${EXPO_PUBLIC_API_URL}/api/csrf`,
-        {
+      const sendCsrf = (requestSignal?: AbortSignal) =>
+        fetchWithTimeout(`${EXPO_PUBLIC_API_URL}/api/csrf`, {
           headers: { Authorization: `Bearer ${accessToken}` },
           method: 'GET',
-          signal,
-          timeout: DEFAULT_TIMEOUT,
-        }
-      );
+          signal: requestSignal,
+          timeout: timeoutMs ?? DEFAULT_TIMEOUT,
+        });
+      // With a caller deadline the CSRF body read is bounded (and aborted)
+      // too, so a stalled token read cannot outlive the request.
       csrfToken = StorefrontCsrfTokenSchema.parse(
-        await parseJsonResponse(csrfResponse)
+        timeoutMs
+          ? await fetchJsonWithinDeadline(sendCsrf, timeoutMs, signal)
+          : await sendCsrf(signal).then(parseJsonResponse)
       ).token;
     }
     const queryString = query ? buildQueryString(query) : '';
     const url = `${EXPO_PUBLIC_API_URL}${path}${queryString ? `?${queryString}` : ''}`;
-    const response = await fetchWithTimeout(url, {
-      body: body ? JSON.stringify(body) : undefined,
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        ...(body ? { 'Content-Type': 'application/json' } : {}),
-        ...(csrfToken ? { 'x-csrf-token': csrfToken } : {}),
-      },
-      method,
-      signal,
-      timeout: DEFAULT_TIMEOUT,
-    });
+    const send = (requestSignal?: AbortSignal) =>
+      fetchWithTimeout(url, {
+        body: body ? JSON.stringify(body) : undefined,
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          ...(body ? { 'Content-Type': 'application/json' } : {}),
+          ...(csrfToken ? { 'x-csrf-token': csrfToken } : {}),
+        },
+        method,
+        signal: requestSignal,
+        timeout: timeoutMs ?? DEFAULT_TIMEOUT,
+      });
 
-    return parseJsonResponse(response);
+    return timeoutMs
+      ? fetchJsonWithinDeadline(send, timeoutMs, signal)
+      : send(signal).then(parseJsonResponse);
   };
 
   return {

@@ -1,10 +1,11 @@
 'use client';
 
-import { ArrowLeft, Check } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { useState } from 'react';
 import type { OxygenProviderState } from '@/schemas/oxygen-runtime';
-import { OxygenComparisonSummary } from './OxygenComparisonSummary';
+import { OxygenBookedPlanSummary } from './OxygenBookedPlanSummary';
 import { OxygenSavedPlans } from './OxygenSavedPlans';
+import { OxygenUnavailablePlanRecovery } from './OxygenUnavailablePlanRecovery';
 import { oxygenButtonClass } from './oxygen-checkout-styles';
 
 /** Reviewing a quote is local navigation, never provider approval. */
@@ -13,11 +14,15 @@ export function OxygenBookedPlanReview({
   state,
   busy,
   onAccept,
+  refreshOffers,
+  cancelUnavailablePlan,
 }: {
   workflowId: string;
   state: OxygenProviderState;
   busy: boolean;
   onAccept: (reference: string) => void;
+  refreshOffers?: () => Promise<boolean>;
+  cancelUnavailablePlan?: () => Promise<boolean>;
 }) {
   const [editing, setEditing] = useState(false);
   if (editing)
@@ -27,6 +32,7 @@ export function OxygenBookedPlanReview({
         state={state}
         approvalBusy={busy}
         onAccept={onAccept}
+        refreshOffers={refreshOffers}
       />
     );
   const ready = Boolean(
@@ -38,23 +44,29 @@ export function OxygenBookedPlanReview({
   return (
     <section className="grid gap-5" aria-label="Review payment breakdown">
       <header className="pr-10">
-        <p className="mb-2 flex items-center gap-2 text-sm font-semibold text-store-primary">
-          <Check size={18} aria-hidden="true" /> Your payment plan
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-store-primary">
+          Oxygen Finance · Payment plan
         </p>
-        <h3 className="text-xl font-bold text-gray-900">
-          Your payment breakdown
+        <h3 className="text-xl font-bold text-store-background-text">
+          Review your payment plan
         </h3>
-        <p className="mt-2 text-sm text-gray-600">
-          Here’s your confirmed breakdown from Oxygen. Check the amounts and
-          payment dates before continuing.
+        <p className="mt-2 text-sm text-store-background-text/70">
+          A clear look at what you’ll pay today and over time.
         </p>
       </header>
-      <OxygenComparisonSummary state={state} loading={!ready} />
+      <OxygenBookedPlanSummary state={state} />
+      {state.eligible === false && cancelUnavailablePlan && (
+        <OxygenUnavailablePlanRecovery
+          busy={busy}
+          cancel={cancelUnavailablePlan}
+          offersMissing
+        />
+      )}
       <div className="grid gap-2 border-t border-gray-100 pt-4">
         <button
           type="button"
           className={oxygenButtonClass}
-          disabled={busy || !ready}
+          disabled={busy || !ready || state.eligible === false}
           onClick={() => {
             if (state.bookingReference) onAccept(state.bookingReference);
           }}

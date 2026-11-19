@@ -115,6 +115,7 @@ describe('getCachedContentLinkRewrites', () => {
       getBlogContentLinksCacheTag('merchant-1'),
       'blog-content-links',
       'product-legacy-redirect',
+      'product-legacy-redirect-merchant-1',
       'products-merchant-1',
       'categories-merchant-1'
     );

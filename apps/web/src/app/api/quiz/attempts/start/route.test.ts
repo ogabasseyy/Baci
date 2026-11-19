@@ -4,14 +4,14 @@ import {
 } from '@baci/shared/constants';
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { logger } from '@/lib/logger';
 import { resolveQuizDevice } from '@/lib/quiz/quiz-device-hash';
+import { createAnonClient } from '@/lib/supabase/anon';
+import { createScopedClient } from '@/lib/supabase/scoped';
 import { createClient } from '@/lib/supabase/server';
 
 vi.mock('@/lib/api-auth', () => ({
-  authenticateApiRequest: vi.fn(),
   // Faithful stub of the real case-insensitive, whitespace-tolerant detection
   // so the route's bearer check matches the auth/CSRF paths in tests too.
   getBearerTokenFromRequest: (request: Request) => {
@@ -21,6 +21,24 @@ vi.mock('@/lib/api-auth', () => ({
   },
   hasBearerAuthScheme: (request: Request) =>
     /^\s*bearer(?:\s|$)/i.test(request.headers.get('Authorization') ?? ''),
+}));
+
+// requireQuizUser verifies a bearer token locally before it asks Supabase
+// Auth. These tests use a placeholder token, so local verification is
+// stubbed as passing; the Supabase Auth lookup below still decides the user.
+vi.mock('@/lib/quiz/quiz-access-token', () => ({
+  verifyQuizAccessToken: async () => ({
+    status: 'verified',
+    userId: '00000000-0000-4000-8000-000000000001',
+  }),
+}));
+
+vi.mock('@/lib/supabase/anon', () => ({
+  createAnonClient: vi.fn(),
+}));
+
+vi.mock('@/lib/supabase/scoped', () => ({
+  createScopedClient: vi.fn(),
 }));
 
 vi.mock('@/lib/csrf', () => ({
@@ -185,12 +203,14 @@ function mockAuthenticatedSupabase({
   };
 
   vi.mocked(createClient).mockResolvedValue(supabase as never);
-  // Bearer (mobile) requests authenticate via authenticateApiRequest instead of
-  // the cookie client; return the same mock supabase so both paths share it.
-  vi.mocked(authenticateApiRequest).mockResolvedValue({
-    supabase,
-    user,
+  // Bearer (mobile) start requests re-check the session with Supabase Auth and
+  // use a scoped client; return the same mock supabase so both paths share it.
+  vi.mocked(createAnonClient).mockReturnValue({
+    auth: {
+      getUser: vi.fn().mockResolvedValue({ data: { user }, error: null }),
+    },
   } as never);
+  vi.mocked(createScopedClient).mockReturnValue(supabase as never);
   return { customerAgeBuilder, eventGuardBuilder, from, rpc, supabase };
 }
 

@@ -193,3 +193,13 @@ it.each([
   expect(mockFetch).toHaveBeenCalledTimes(1);
   expect(mockInvalidate).not.toHaveBeenCalled();
 });
+
+it('still refreshes scoped savings for received pushes while navigation is not ready', async () => {
+  renderHook(() => usePushNotifications({ navigationReady: false }));
+  await waitFor(() => expect(mockReceive).toBeDefined());
+  await act(async () => mockReceive?.(notification(payload)));
+  expect(mockInvalidate).toHaveBeenCalledWith({
+    merchantId,
+    ownerId: 'customer-1',
+  });
+});

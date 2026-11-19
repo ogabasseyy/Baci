@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
+import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import type { CartItem } from '@/hooks/cart';
 import { CartPageLineItem } from './cart-page-line-item';
@@ -146,6 +147,40 @@ describe('CartPageLineItem', () => {
     );
 
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+  });
+
+  it('explains lost protection on the routed cart page and restores it', () => {
+    function CartLine() {
+      const [hasAssurance, setHasAssurance] = useState(true);
+      return (
+        <CartPageLineItem
+          hasPriceNegotiation={false}
+          item={{ ...cartItem, hasAssurance }}
+          merchantSlug="ogabassey"
+          onOpenItemNegotiation={vi.fn()}
+          onRemove={vi.fn()}
+          onToggleAssurance={() => setHasAssurance((current) => !current)}
+          onUpdateQuantity={vi.fn()}
+          productHref="/test-store/electronics/test-gadget"
+          shippingInsuranceEnabled
+        />
+      );
+    }
+
+    render(<CartLine />);
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
+
+    fireEvent.click(screen.getByRole('checkbox'));
+
+    expect(screen.getByRole('status')).toHaveTextContent(
+      /won’t include screen and liquid damage protection/i
+    );
+    expect(screen.getByText(/screen protector/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add Assurance back' }));
+
+    expect(screen.getByRole('checkbox')).toBeChecked();
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
   });
 });
 

@@ -9,7 +9,13 @@ const { mockFeedAddItem, mockFeedConstructor, mockFrom, mockUnstableCache } =
     mockFeedAddItem: vi.fn(),
     mockFeedConstructor: vi.fn(),
     mockFrom: vi.fn(),
-    mockUnstableCache: vi.fn(),
+    mockUnstableCache: vi.fn(
+      (
+        fn: (...args: unknown[]) => unknown,
+        _keyParts?: string[],
+        _options?: unknown
+      ) => fn
+    ),
   }));
 
 type QueryResult<T> = { data: T | null; error: { message: string } | null };
@@ -182,11 +188,11 @@ vi.mock('feed', () => ({
 }));
 
 vi.mock('next/cache', () => ({
-  unstable_cache: (fn: unknown, keyParts: string[], options: unknown) => {
-    mockUnstableCache(fn, keyParts, options);
-    return (...args: unknown[]) =>
-      (fn as (...args: unknown[]) => unknown)(...args);
-  },
+  unstable_cache: (
+    fn: (...args: unknown[]) => unknown,
+    keyParts?: string[],
+    options?: unknown
+  ) => mockUnstableCache(fn, keyParts, options),
 }));
 
 vi.mock('@/env', () => ({
@@ -194,6 +200,8 @@ vi.mock('@/env', () => ({
   getSupabaseAnonKey: () => 'test-anon-key',
   getSupabaseUrl: () => 'https://test.supabase.co',
 }));
+
+// No longer importing getImageMimeType here; tested in get-blog-feed-image-mime-type.test.ts
 
 const { GET } = await import('./route');
 
@@ -233,13 +241,29 @@ describe('GET /api/blog/feed/[merchantSlug]', () => {
     expect(postQuery.order).toHaveBeenNthCalledWith(2, 'id', {
       ascending: false,
     });
-    expect(mockUnstableCache.mock.calls.at(-1)).toEqual([
+    expect(mockUnstableCache).toHaveBeenCalledWith(
       expect.any(Function),
-      ['blog-rss-feed'],
-      expect.objectContaining({
-        tags: ['blog-posts', 'blog-rss-feed'],
-      }),
-    ]);
+      ['blog-feed-by-merchant-id', merchant.id, 'ogabassey'],
+      {
+        revalidate: 3600,
+        tags: [
+          'blog-posts',
+          'blog-rss-feed',
+          `blog-posts-${merchant.id}`,
+          `blog-rss-id-${merchant.id}`,
+          'blog-rss-slug-ogabassey',
+        ],
+      }
+    );
+    expect(response.headers.get('Vercel-Cache-Tag')).toBe(
+      [
+        'blog-posts',
+        'blog-rss-feed',
+        `blog-posts-${merchant.id}`,
+        `blog-rss-id-${merchant.id}`,
+        'blog-rss-slug-ogabassey',
+      ].join(',')
+    );
   });
 
   it('removes XML 1.0 control characters from feed metadata and article fields', async () => {
@@ -872,9 +896,228 @@ describe('GET /api/blog/feed/[merchantSlug]', () => {
     expect(mockFeedAddItem).toHaveBeenCalledWith(
       expect.objectContaining({
         title: 'Best Android Phones',
-        image: 'https://cdn.example.com/landscape.jpg',
+        image: {
+          url: 'https://cdn.example.com/landscape.jpg',
+          type: 'image/jpeg',
+        },
         category: [{ name: 'Smartphones' }],
       })
+    );
+  });
+
+  it('transforms titled images into semantic figure captions and cleans AI prompt instructions in feed content', async () => {
+    enqueueSlugFeedScenario({
+      posts: [
+        {
+          id: 'caption-post',
+          title: 'Audio Guide',
+          slug: 'audio-guide',
+          content:
+            '<p><img src="https://cdn.example.com/buds.jpg" title="Editorial illustration: compare models. Use approved hardware references, blank screens and no text or logos." /></p>',
+          excerpt: 'Excerpt',
+          featured_image_url: 'https://cdn.example.com/buds-hero.webp',
+          category: 'Smartphones',
+          author_name: 'Ogabassey',
+          published_at: '2026-05-01T10:00:00.000Z',
+          updated_at: null,
+        },
+      ],
+    });
+
+    const response = await GET(new NextRequest('https://usebaci.com/feed'), {
+      params: Promise.resolve({ merchantSlug: 'ogabassey' }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(mockFeedAddItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content:
+          '<figure><img src="https://cdn.example.com/buds.jpg" /><figcaption>Compare models.</figcaption></figure>',
+        image: {
+          url: 'https://cdn.example.com/buds-hero.webp',
+          type: 'image/webp',
+        },
+      })
+    );
+  });
+
+  it('sanitizes leaked figcaption prompts before deriving fallback excerpt when excerpt is null', async () => {
+    enqueueSlugFeedScenario({
+      posts: [
+        {
+          id: 'null-excerpt-post',
+          title: 'Battery Guide',
+          slug: 'battery-guide',
+          content:
+            '<figure><img src="https://cdn.example.com/cell.jpg" /><figcaption>Editorial illustration: compare battery wear. No text or logos.</figcaption></figure><p>Charging tips follow.</p>',
+          excerpt: null,
+          featured_image_url:
+            'https://cdn.example.com/cdn-cgi/image/width=800,format=auto/cell.jpg',
+          category: 'Smartphones',
+          author_name: 'Ogabassey',
+          published_at: '2026-05-01T10:00:00.000Z',
+          updated_at: null,
+        },
+      ],
+    });
+
+    const response = await GET(new NextRequest('https://usebaci.com/feed'), {
+      params: Promise.resolve({ merchantSlug: 'ogabassey' }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(mockFeedAddItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        description: 'Compare battery wear. Charging tips follow.',
+        image: {
+          url: 'https://cdn.example.com/cdn-cgi/image/width=800,format=jpeg/cell.jpg',
+          type: 'image/jpeg',
+        },
+      })
+    );
+  });
+
+  it('decodes HTML entities in fallback excerpts derived from captioned content', async () => {
+    enqueueSlugFeedScenario({
+      posts: [
+        {
+          id: 'entity-caption-post',
+          title: 'Carrier Guide',
+          slug: 'carrier-guide',
+          content:
+            '<img src="https://cdn.example.com/att.jpg" title="AT&amp;T 5G" /><p>Coverage notes.</p>',
+          excerpt: null,
+          featured_image_url: 'https://cdn.example.com/att.jpg',
+          category: 'Guides',
+          author_name: 'Ogabassey',
+          published_at: '2026-05-01T10:00:00.000Z',
+          updated_at: null,
+        },
+      ],
+    });
+
+    const response = await GET(new NextRequest('https://usebaci.com/feed'), {
+      params: Promise.resolve({ merchantSlug: 'ogabassey' }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(mockFeedAddItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        description: 'AT&T 5G Coverage notes.',
+      })
+    );
+  });
+
+  it('memoizes unstable_cache wrappers per merchant id and emits identifier-scoped Vercel-Cache-Tag for custom domains', async () => {
+    mockUnstableCache.mockClear();
+    enqueueCustomDomainFeedScenario();
+
+    const response = await GET(
+      new NextRequest(
+        'https://shop.example.com/api/blog/feed/Shop.Example.COM'
+      ),
+      { params: Promise.resolve({ merchantSlug: 'Shop.Example.COM' }) }
+    );
+
+    expect(response.status).toBe(200);
+    // Reuse the memoized wrapper created for merchant-1 instead of reallocating per request.
+    expect(mockUnstableCache).not.toHaveBeenCalled();
+    expect(response.headers.get('Vercel-Cache-Tag')).toBe(
+      [
+        'blog-posts',
+        'blog-rss-feed',
+        `blog-posts-${merchant.id}`,
+        `blog-rss-id-${merchant.id}`,
+        'blog-rss-slug-shop.example.com',
+        'blog-rss-slug-ogabassey',
+      ].join(',')
+    );
+  });
+
+  it('normalizes mixed-case and encoded path params when emitting Vercel-Cache-Tag', async () => {
+    enqueueTable(
+      'merchants',
+      createMerchantQuery({ data: merchant, error: null })
+    );
+    enqueueTable(
+      'merchants',
+      createMerchantQuery({ data: merchant, error: null })
+    );
+    enqueueTable('blog_posts', createPostQuery({ data: [], error: null }));
+
+    const response = await GET(
+      new NextRequest('https://usebaci.com/api/blog/feed/%20Ogabassey%20'),
+      { params: Promise.resolve({ merchantSlug: '%20Ogabassey%20' }) }
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Vercel-Cache-Tag')).toBe(
+      [
+        'blog-posts',
+        'blog-rss-feed',
+        `blog-posts-${merchant.id}`,
+        `blog-rss-id-${merchant.id}`,
+        'blog-rss-slug-ogabassey',
+      ].join(',')
+    );
+  });
+
+  it('returns 404 via thrown FeedMerchantNotFoundError when the cached merchant lookup misses', async () => {
+    enqueueTable(
+      'merchants',
+      createMerchantQuery({ data: merchant, error: null })
+    );
+    enqueueTable('merchants', createMerchantQuery({ data: null, error: null }));
+
+    const response = await GET(new NextRequest('https://usebaci.com/feed'), {
+      params: Promise.resolve({ merchantSlug: 'ogabassey' }),
+    });
+
+    expect(response.status).toBe(404);
+    expect(await response.text()).toBe('Blog feed not found');
+  });
+
+  it('keys and tags the feed Data Cache entry by merchant slug so slug renames invalidate stale payloads', async () => {
+    mockUnstableCache.mockClear();
+    const renamedMerchant = { ...merchant, slug: 'ogabassey-new' };
+    enqueueTable(
+      'merchants',
+      createMerchantQuery({ data: renamedMerchant, error: null })
+    );
+    enqueueTable(
+      'merchants',
+      createMerchantQuery({ data: renamedMerchant, error: null })
+    );
+    enqueueTable('blog_posts', createPostQuery({ data: [], error: null }));
+
+    const response = await GET(
+      new NextRequest('https://usebaci.com/api/blog/feed/ogabassey-new'),
+      { params: Promise.resolve({ merchantSlug: 'ogabassey-new' }) }
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockUnstableCache).toHaveBeenCalledWith(
+      expect.any(Function),
+      ['blog-feed-by-merchant-id', merchant.id, 'ogabassey-new'],
+      {
+        revalidate: 3600,
+        tags: [
+          'blog-posts',
+          'blog-rss-feed',
+          `blog-posts-${merchant.id}`,
+          `blog-rss-id-${merchant.id}`,
+          'blog-rss-slug-ogabassey-new',
+        ],
+      }
+    );
+    expect(response.headers.get('Vercel-Cache-Tag')).toBe(
+      [
+        'blog-posts',
+        'blog-rss-feed',
+        `blog-posts-${merchant.id}`,
+        `blog-rss-id-${merchant.id}`,
+        'blog-rss-slug-ogabassey-new',
+      ].join(',')
     );
   });
 });

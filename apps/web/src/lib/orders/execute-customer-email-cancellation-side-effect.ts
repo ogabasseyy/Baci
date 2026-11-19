@@ -30,7 +30,12 @@ export async function executeCustomerEmailCancellationSideEffect({
   reason?: string;
   sendCancellationEmail?: CancellationEmailSender;
 }): Promise<{ messageId: string | null }> {
-  const refundAmount = Number(order.amount_paid) || 0;
+  // A "cancel only" order is refunded outside Baci: the email must not
+  // present a refund amount or imply an automatic refund.
+  const refundAmount =
+    order.cancellation_refund_mode === 'manual'
+      ? 0
+      : Number(order.amount_paid) || 0;
   if (!sendCancellationEmail) {
     throw new Error('Cancellation email sender is required');
   }

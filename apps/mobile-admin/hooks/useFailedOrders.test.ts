@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FakeOrderRow } from '../test/mocks/supabase-order-query-fake';
+import { matchesOrFilter } from '../test/postgrest-filter';
 
 const DEFAULT_ROW: FakeOrderRow = {
   created_at: '2026-06-02T01:00:00.000Z',
@@ -17,6 +18,9 @@ const DEFAULT_ROW: FakeOrderRow = {
 
 /** Holder so the hoisted mock factory can publish the fake back to the tests. */
 const holder = vi.hoisted(() => ({
+  queryFn: undefined as
+    | (() => Promise<{ orders: FailedOrder[]; isLimited: boolean }>)
+    | undefined,
   fake: null as ReturnType<
     typeof import('../test/mocks/supabase-order-query-fake').createSupabaseOrderQueryFake
   > | null,
@@ -35,15 +39,25 @@ vi.mock('./useMerchant', () => ({
 }));
 
 vi.mock('@tanstack/react-query', () => ({
-  useQuery: vi.fn((config) => config),
+  useQuery: vi.fn(
+    (config: {
+      queryFn: () => Promise<{ orders: FailedOrder[]; isLimited: boolean }>;
+    }) => {
+      holder.queryFn = config.queryFn;
+      return {};
+    }
+  ),
 }));
 
 import {
   FOLLOW_UP_QUERY_LIMIT,
   FOLLOW_UP_WINDOW_DAYS,
 } from '@/config/follow-up-queue';
-import { ONLINE_CHECKOUT_PAYMENT_METHODS } from './orders/order-list-visibility';
-import { useFailedOrders } from './useFailedOrders';
+import {
+  CUSTOMER_CHECKOUT_ORDER_FILTER,
+  ONLINE_CHECKOUT_PAYMENT_METHODS,
+} from './orders/order-list-visibility';
+import { type FailedOrder, useFailedOrders } from './useFailedOrders';
 
 const NOW = '2026-06-02T02:00:00.000Z';
 
@@ -62,26 +76,11 @@ function daysBefore(days: number): string {
   return new Date(new Date(NOW).getTime() - days * 86_400_000).toISOString();
 }
 
-async function runQuery(): Promise<
-  Array<{
-    attempt_count: number;
-    customer_email: string;
-    gateway?: string;
-    payment_status: string;
-  }>
-> {
-  // biome-ignore lint/correctness/useHookAtTopLevel: useQuery is mocked to return its config object, so this is a plain call — no React runtime, no hook order to preserve
-  const query = useFailedOrders() as unknown as {
-    queryFn: () => Promise<
-      Array<{
-        attempt_count: number;
-        customer_email: string;
-        gateway?: string;
-        payment_status: string;
-      }>
-    >;
-  };
-  return query.queryFn();
+async function runQuery(): Promise<FailedOrder[]> {
+  // biome-ignore lint/correctness/useHookAtTopLevel: useQuery returns the mock config without React
+  useFailedOrders();
+  if (!holder.queryFn) throw new Error('Missing captured query');
+  return (await holder.queryFn()).orders;
 }
 
 describe('useFailedOrders', () => {
@@ -92,6 +91,62 @@ describe('useFailedOrders', () => {
     fake().reset([DEFAULT_ROW]);
   });
 
+  it('keeps distinct guest orders when their email is absent', async () => {
+    fake().setRows([
+      ...['', ' '].map((customer_email, i) =>
+        makeRow({ id: `guest-${i + 1}`, customer_email })
+      ),
+    ]);
+
+    expect(await runQuery()).toMatchObject([
+      { id: 'guest-1', customer_email: '', attempt_count: 1 },
+      { id: 'guest-2', customer_email: '', attempt_count: 1 },
+    ]);
+  });
+
+  it('does not label Oxygen applications as generic failed payments', async () => {
+    fake().setRows([
+      makeRow({
+        id: 'oxygen-order',
+        customer_email: 'oxygen@example.com',
+        payment_method: 'oxygen',
+        payment_status: 'bnpl_pending',
+      }),
+      DEFAULT_ROW,
+    ]);
+
+    const result = await runQuery();
+
+    expect(result.map((order) => order.customer_email)).toEqual([
+      'ada@example.com',
+    ]);
+  });
+
+  it('excludes Oxygen before the query limit while retaining other BNPL orders', async () => {
+    await runQuery();
+    const filter = String(
+      fake().calls.find((call) => call.method === 'or')?.args[0]
+    );
+    expect(
+      matchesOrFilter(
+        { payment_status: 'bnpl_pending', payment_method: 'oxygen' },
+        filter
+      )
+    ).toBe(false);
+    expect(
+      matchesOrFilter(
+        { payment_status: 'bnpl_pending', payment_method: 'credit_direct' },
+        filter
+      )
+    ).toBe(true);
+    expect(
+      matchesOrFilter(
+        { payment_status: 'failed', payment_method: null },
+        filter
+      )
+    ).toBe(true);
+  });
+
   it('routes stale unpaid online checkout initiations into customer follow-up', async () => {
     const result = await runQuery();
 
@@ -100,7 +155,7 @@ describe('useFailedOrders', () => {
         {
           method: 'or',
           args: [
-            `payment_status.in.(bnpl_pending,failed,expired),and(payment_status.eq.pending,created_at.lt.2026-06-02T01:30:00.000Z,payment_method.in.${ONLINE_CHECKOUT_PAYMENT_METHODS}),and(payment_status.eq.unpaid,created_at.lt.2026-06-02T01:30:00.000Z,payment_method.in.${ONLINE_CHECKOUT_PAYMENT_METHODS})`,
+            `and(payment_status.in.(bnpl_pending,failed,expired),or(payment_method.is.null,payment_method.not.in.(oxygen))),and(payment_status.eq.pending,created_at.lt.2026-06-02T01:30:00.000Z,payment_method.in.${ONLINE_CHECKOUT_PAYMENT_METHODS},${CUSTOMER_CHECKOUT_ORDER_FILTER}),and(payment_status.eq.unpaid,created_at.lt.2026-06-02T01:30:00.000Z,payment_method.in.${ONLINE_CHECKOUT_PAYMENT_METHODS},${CUSTOMER_CHECKOUT_ORDER_FILTER})`,
           ],
         },
       ])

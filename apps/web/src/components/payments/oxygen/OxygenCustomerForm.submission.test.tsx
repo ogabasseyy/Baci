@@ -70,15 +70,29 @@ it('submits only after identity, account verification, income and explicit conse
   fireEvent.change(screen.getByLabelText('Account number'), {
     target: { value: '0123456789' },
   });
-  fireEvent.click(
+  expect(
     screen.getByRole('button', { name: 'Continue to income details' })
-  );
-  expect(screen.getByRole('alert')).toHaveTextContent(
-    'Verify your bank account'
-  );
+  ).toBeDisabled();
   expect(submit).not.toHaveBeenCalled();
   await waitFor(() =>
     expect(screen.getByLabelText('Account name')).toHaveValue('ADA OKON')
+  );
+  expect(
+    screen.getByRole('button', { name: 'Continue to income details' })
+  ).toBeEnabled();
+  fireEvent.change(screen.getByLabelText('Account number'), {
+    target: { value: '012345678' },
+  });
+  expect(
+    screen.getByRole('button', { name: 'Continue to income details' })
+  ).toBeDisabled();
+  fireEvent.change(screen.getByLabelText('Account number'), {
+    target: { value: '0123456789' },
+  });
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Continue to income details' })
+    ).toBeEnabled()
   );
   fireEvent.click(
     screen.getByRole('button', { name: 'Continue to income details' })
@@ -87,6 +101,19 @@ it('submits only after identity, account verification, income and explicit conse
   fireEvent.change(screen.getByLabelText('Employer'), {
     target: { value: 'Test employer' },
   });
+  fireEvent.change(screen.getByLabelText('Monthly income (₦)'), {
+    target: { value: '300000.' },
+  });
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Continue verification' })
+  );
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    'Enter an amount with up to two decimal places.'
+  );
+  expect(screen.getByLabelText('Monthly income (₦)')).toHaveAttribute(
+    'aria-errormessage',
+    screen.getByRole('alert').id
+  );
   fireEvent.change(screen.getByLabelText('Monthly income (₦)'), {
     target: { value: '300000' },
   });

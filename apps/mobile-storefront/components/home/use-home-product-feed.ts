@@ -35,6 +35,7 @@ interface UseHomeProductFeedOptions {
   variant: CardVariant;
   /** Primary block page size (`block.props.limit ?? 12`). */
   limit: number;
+  initialViewMode?: 'grid' | 'list';
 }
 
 /**
@@ -49,6 +50,7 @@ export function useHomeProductFeed({
   selectedCategoryId,
   variant,
   limit,
+  initialViewMode,
 }: UseHomeProductFeedOptions) {
   const {
     handleCategorySelect,
@@ -64,7 +66,7 @@ export function useHomeProductFeed({
     setSelectedCondition,
     setViewMode,
     viewMode,
-  } = useProductGridFilters();
+  } = useProductGridFilters(initialViewMode);
   const [brandOptionsRequested, setBrandOptionsRequested] = useState(false);
 
   const {

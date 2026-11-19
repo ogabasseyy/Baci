@@ -449,6 +449,7 @@ describe('ShipmentFlowSheet prepaid recovery reachability', () => {
         .mockResolvedValue(undefined),
       startTransferPoll: vi.fn<GiglShipping['startTransferPoll']>(),
       updateAddressField: vi.fn<GiglShipping['updateAddressField']>(),
+      selectAddressPlace: vi.fn<GiglShipping['selectAddressPlace']>(),
     } satisfies GiglShipping;
     const { rerender } = render(
       <ShipmentFlowSheet

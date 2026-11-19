@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { tagProviderCallError } from '@/lib/shipping/provider-never-reached';
 
 vi.mock('@/lib/api-auth', () => ({
   authenticateApiRequest: vi.fn(),
@@ -244,10 +245,13 @@ describe('PATCH shipped: booking failure responses and lock state', () => {
       user: createMockUser(),
       supabase,
     });
+    // The booking helper is mocked, so tag the error as ShippingService would.
+    const unreachable = Object.assign(new Error('fetch failed'), {
+      cause: { code: 'ECONNREFUSED' },
+    });
+    tagProviderCallError(unreachable);
     vi.mocked(runClaimedOrderWalletOrCheckoutBooking).mockRejectedValue(
-      Object.assign(new Error('fetch failed'), {
-        cause: { code: 'ECONNREFUSED' },
-      })
+      unreachable
     );
 
     const response = await PATCH(

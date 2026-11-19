@@ -30,6 +30,7 @@ import {
 } from './evaluate-order-cancelled-transition';
 import { executeClaimedOrderShipmentBooking } from './execute-claimed-order-shipment-booking';
 import { mapOrderPatchUpdateError } from './map-order-patch-update-error';
+import { recordBookedOrderUpdateFailure } from './record-booked-order-update-failure';
 
 function isPaidStatusUpdate(value: unknown): value is 'paid' | 'bnpl_approved' {
   return value === 'paid' || value === 'bnpl_approved';
@@ -497,6 +498,10 @@ export async function PATCH(
 
     if (updateError) {
       console.error('Error updating order:', updateError);
+      if (updates.shipment_id) {
+        // The carrier already booked the parcel; keep the reason for support.
+        await recordBookedOrderUpdateFailure(supabase, merchantId, id);
+      }
       // A raced cancellation owns the row now: answer the terminal 409
       // BEFORE any rollback — restoring the stale pre-cancellation
       // statuses here would reopen the cancelled order after its

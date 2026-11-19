@@ -74,7 +74,11 @@ test('keeps the full gate when another workspace names a changed file', () => {
     );
     writeFile(dir, 'apps/mobile-admin/app.config.ts', 'export default {};\n');
     const base = rebaseOnto(dir);
-    writeFile(dir, 'apps/mobile-admin/app.config.ts', 'export default { a: 1 };\n');
+    writeFile(
+      dir,
+      'apps/mobile-admin/app.config.ts',
+      'export default { a: 1 };\n'
+    );
     return base;
   });
   assert.equal(stdout, '');
@@ -87,6 +91,76 @@ test('stays scoped when only its own workspace names a changed file', () => {
     const base = rebaseOnto(dir);
     writeFile(dir, 'apps/web/src/b.ts', 'export const b = 2;\n');
     return base;
+  });
+  assert.equal(stdout, base);
+});
+
+// Another workspace's test names the original path of a file that is renamed
+// away. Git's rename detection would list only the destination, so the old
+// path (the one the other workspace still reads) must be searched too.
+const RENAME_FIXTURE = {
+  referrer: 'apps/mobile-storefront/config.test.mjs',
+  referrerBody: "resolve(root, 'apps/mobile-admin/app.config.ts');\n",
+  source: 'apps/mobile-admin/app.config.ts',
+  destination: 'apps/mobile-admin/app.config.renamed.ts',
+  body: "export default { name: 'admin', version: 1 };\n",
+};
+
+function renameSetup(dir, { commitRename }) {
+  writeFile(dir, RENAME_FIXTURE.referrer, RENAME_FIXTURE.referrerBody);
+  writeFile(dir, RENAME_FIXTURE.source, RENAME_FIXTURE.body);
+  const base = rebaseOnto(dir);
+  git(dir, 'mv', RENAME_FIXTURE.source, RENAME_FIXTURE.destination);
+  if (commitRename) commit(dir, 'rename config');
+  return base;
+}
+
+test('bugfix: keeps the full gate when a committed rename moves a file another workspace names', () => {
+  const { stdout } = gateFor((dir) => renameSetup(dir, { commitRename: true }));
+  assert.equal(stdout, '');
+});
+
+test('bugfix: keeps the full gate when a staged rename moves a file another workspace names', () => {
+  const { stdout } = gateFor((dir) =>
+    renameSetup(dir, { commitRename: false })
+  );
+  assert.equal(stdout, '');
+});
+
+test('stays scoped when a rename moves a file nothing else names', () => {
+  const { stdout, base } = gateFor((dir) => {
+    writeFile(dir, 'apps/mobile-admin/old-name.ts', 'export const a = 1;\n');
+    const base = rebaseOnto(dir);
+    git(
+      dir,
+      'mv',
+      'apps/mobile-admin/old-name.ts',
+      'apps/mobile-admin/new-name.ts'
+    );
+    commit(dir, 'rename unreferenced file');
+    return base;
+  });
+  assert.equal(stdout, base);
+});
+
+test('bugfix: keeps the full gate for a file directly under apps/', () => {
+  const { stdout } = gateFor((dir) => {
+    writeFile(dir, 'apps/android-sdk-defaults.gradle', 'minSdk = 24\n');
+  });
+  assert.equal(stdout, '');
+});
+
+test('bugfix: keeps the full gate for a file directly under packages/', () => {
+  const { stdout } = gateFor((dir) => {
+    writeFile(dir, 'packages/tsconfig.base.json', '{}\n');
+  });
+  assert.equal(stdout, '');
+});
+
+test('stays scoped for the package manifest at the root of a workspace', () => {
+  const { stdout, base } = gateFor((dir) => {
+    writeFile(dir, 'apps/web/package.json', '{}\n');
+    writeFile(dir, 'packages/shared/package.json', '{}\n');
   });
   assert.equal(stdout, base);
 });

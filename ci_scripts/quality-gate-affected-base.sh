@@ -14,22 +14,26 @@ case "$base" in
   '' | *[!0-9a-f]*) exit 0 ;;
 esac
 
-# Turbo maps changes only to workspace packages (apps/*, packages/*), so keep
-# the full gate when a change could reach tests it would not select:
-# - a change outside the packages (supabase/migrations, root config), except
-#   Markdown;
+# Turbo maps changes only to workspace packages (apps/<name>/, packages/<name>/),
+# so keep the full gate when a change could reach tests it would not select:
+# - a change outside the packages (supabase/migrations, root config, a file
+#   directly under apps/ or packages/ that no workspace owns), except Markdown;
 # - a changed path that a file in another workspace names (a storefront test
 #   reading apps/mobile-admin/app.config.ts), or Markdown outside the packages
-#   that any package file names (a test reading AGENTS.md).
+#   that any package file names (a test reading AGENTS.md). A rename counts as
+#   both its old and its new path.
 # Any listing or search error also keeps the full gate.
+# The path search is literal and best-effort: imports between packages are
+# covered by Turbo's own package graph, while a path built at run time (join or
+# resolve with variables) goes undetected, so CI's full gate stays the backstop.
 changes=$(
-  git -C "$dir" diff --name-only "$base" -- 2>/dev/null || echo '<unknown>'
+  git -C "$dir" diff --name-only --no-renames "$base" -- 2>/dev/null || echo '<unknown>'
   git -C "$dir" ls-files --others --exclude-standard --full-name 2>/dev/null || echo '<unknown>'
 )
 full_gate=$(
   printf '%s\n' "$changes" | while IFS= read -r path; do
     case "$path" in
-      ('' | apps/* | packages/* | *.md) ;;
+      ('' | apps/*/* | packages/*/* | *.md) ;;
       (*) echo full ;;
     esac
   done

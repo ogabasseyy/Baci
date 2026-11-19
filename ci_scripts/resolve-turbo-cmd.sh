@@ -6,7 +6,10 @@
 #   ---FILTERS---   sparse-exclude filter arguments, plus --affected when scoped
 #
 # Local runs are scoped to packages changed since the origin/main merge base
-# (TURBO_SCM_BASE + --affected) unless QUALITY_GATE_FULL=1 or no base is found.
+# (TURBO_SCM_BASE + --affected) unless quality-gate-affected-base.sh prints
+# nothing (QUALITY_GATE_FULL=1, no merge base, or a change it cannot scope).
+# That output is the only scope verdict: callers must not add a base or
+# --affected of their own.
 #
 # Environment on entry:
 #   ACTIVE_DIR        — resolved worktree root (required)

@@ -40,9 +40,9 @@
 Before submitting, lint, typecheck and tests must pass for the packages your change affects; CI's Quality Gate runs them for every PR. Locally, scope them as described in "Local Runs vs CI":
 ```bash
 base=$(sh ci_scripts/quality-gate-affected-base.sh)   # empty output: run the full gate
-TURBO_SCM_BASE=$base pnpm turbo lint ${base:+--affected}        # Zero Biome errors
-TURBO_SCM_BASE=$base pnpm turbo typecheck ${base:+--affected}   # Zero TypeScript errors
-TURBO_SCM_BASE=$base pnpm turbo test ${base:+--affected}        # All tests pass
+env ${base:+TURBO_SCM_BASE=$base} pnpm turbo lint ${base:+--affected}        # Zero Biome errors
+env ${base:+TURBO_SCM_BASE=$base} pnpm turbo typecheck ${base:+--affected}   # Zero TypeScript errors
+env ${base:+TURBO_SCM_BASE=$base} pnpm turbo test ${base:+--affected}        # All tests pass
 ```
 
 ## Code Review (CodeRabbit)

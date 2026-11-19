@@ -55,3 +55,25 @@ describe('bugfix: DEPARTS wording is a departure, not an arrival', () => {
     expect(dep.event.rawStatus).toBe('XYZ');
   });
 });
+
+describe('bugfix: exception scans and more explicit arrival codes', () => {
+  it.each([
+    'DASH',
+    'CLS',
+  ])('does not infer an arrival from the %s exception scan at the destination centre', (code) => {
+    const away = scan('MSVC', 'in_transit', 9, 'IKEJA');
+    const exc = scan(code, 'in_transit', 12, 'WUSE ABUJA');
+    applyLifecycleGuards([away, exc], 'ABUJA', 'LAGOS');
+    expect(exc.event.rawStatus).toBe(code);
+  });
+
+  it.each([
+    ['ADF', 'in_transit'],
+    ['ARFTPKU', null],
+  ] as const)('treats %s as an explicit arrival without location metadata', (code, recognized) => {
+    const evt = scan(code, recognized, 12);
+    applyLifecycleGuards([evt], 'ABUJA', 'LAGOS');
+    expect(evt.event.rawStatus).toBe(GIGL_ARRIVED_IN_CITY_RAW_STATUS);
+    expect(evt.event.status).toBe('in_transit');
+  });
+});

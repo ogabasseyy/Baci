@@ -20,12 +20,18 @@ const DEPARTURE_CODES = new Set([
   'MDSE',
 ]);
 
-// Return-flow scans (return to sender/centre) can occur at the destination
+// Return-flow and exception scans (damage, claims) can occur at the destination
 // centre after a failed delivery; they are not an arrival.
-const RETURN_CODES = new Set(['SRC', 'MRTE', 'SSR', 'MRTD']);
+const RETURN_CODES = new Set(['SRC', 'MRTE', 'SSR', 'MRTD', 'DASH', 'CLS']);
 // Explicit "arrived final destination" scans. AHD ("arrived final destination
 // for home delivery") has no entry in the shared status map.
-const EXPLICIT_ARRIVAL_CODES = new Set(['ARF', 'MAFD', 'AHD']);
+const EXPLICIT_ARRIVAL_CODES = new Set([
+  'ARF',
+  'MAFD',
+  'AHD',
+  'ADF',
+  'ARFTPKU',
+]);
 
 // Whole word only, so unrelated text that merely contains DEPART (e.g.
 // DEPARTMENT) cannot suppress an arrival.

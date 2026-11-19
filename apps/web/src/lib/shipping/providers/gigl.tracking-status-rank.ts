@@ -34,7 +34,8 @@ export function currentStatusRank(candidate: Guardable): number {
   if (status === 'pickup_scheduled') {
     return isMshc(candidate) ? 3 : 2;
   }
-  if (status === 'pending') {
+  // An unrecognized scan (null) is emitted as pending, so it ranks as pending.
+  if (status === 'pending' || status === null) {
     return 0;
   }
   if (status === 'booked') {

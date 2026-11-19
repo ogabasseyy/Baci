@@ -42,6 +42,9 @@ const EXPLICIT_ARRIVAL_CODES = new Set([
   'ARFFSHD',
   'ARFGFR',
   'ARFGFS',
+  'ARFK',
+  'ARFP',
+  'ARFH',
 ]);
 
 // Whole word only, so unrelated text that merely contains DEPART (e.g.

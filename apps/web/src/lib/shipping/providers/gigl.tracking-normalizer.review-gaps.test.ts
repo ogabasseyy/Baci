@@ -87,4 +87,25 @@ describe('bugfix: SDR, international arrivals and equal-time location', () => {
     );
     expect(result.events[0]?.location).toBe('WUSE ABUJA');
   });
+
+  it.each([
+    ['unknown first', ['ZZUNK', 'MAPT']],
+    ['MAPT first', ['MAPT', 'ZZUNK']],
+  ] as const)('ranks an unrecognized tied scan below the lifecycle milestone (%s)', (_name, order) => {
+    const locations: Record<string, string> = {
+      ZZUNK: 'SOMEWHERE ELSE',
+      MAPT: 'IKEJA 2 (IKEJA)',
+    };
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W34',
+        MobileShipmentTrackings: order.map((code) =>
+          event(code, '09:00:00', { Location: locations[code] })
+        ),
+      },
+      'W34',
+      OBSERVED_AT
+    );
+    expect(result.events[0]?.location).toBe('IKEJA 2 (IKEJA)');
+  });
 });

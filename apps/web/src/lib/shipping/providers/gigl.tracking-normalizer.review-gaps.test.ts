@@ -162,3 +162,41 @@ describe('bugfix: any later scan after SDR keeps the shipment failed', () => {
     expect(result.status).toBe('failed');
   });
 });
+
+describe('bugfix: tied terminal order and same-time ARF with SDR', () => {
+  it.each([
+    ['SHD first', ['SHD', 'SRHUB']],
+    ['SRHUB first', ['SRHUB', 'SHD']],
+  ] as const)('ranks returned above delivered when tied (%s)', (_n, order) => {
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W38',
+        MobileShipmentTrackings: order.map((code) => event(code, '10:00:00')),
+      },
+      'W38',
+      OBSERVED_AT
+    );
+    expect(result.status).toBe('returned');
+  });
+
+  it.each([
+    ['ARF first', ['ARF', 'SDR']],
+    ['SDR first', ['SDR', 'ARF']],
+  ] as const)('keeps no arrival raw when ARF ties SDR (%s)', (_n, order) => {
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W39',
+        Destination: 'ABUJA',
+        MobileShipmentTrackings: order.map((code) =>
+          event(code, '10:00:00', { Location: 'WUSE ABUJA' })
+        ),
+      },
+      'W39',
+      OBSERVED_AT
+    );
+    expect(result.status).toBe('failed');
+    expect(
+      result.events.some((e) => e.rawStatus === GIGL_ARRIVED_IN_CITY_RAW_STATUS)
+    ).toBe(false);
+  });
+});

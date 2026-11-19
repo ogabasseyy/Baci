@@ -24,7 +24,8 @@ export type Guardable = {
 export function currentStatusRank(candidate: Guardable): number {
   const status = candidate.recognizedStatus;
   if (status !== null && TERMINAL_STATUSES.has(status)) {
-    return 6;
+    // Database order: delivered < returned/cancelled.
+    return status === 'delivered' ? 6 : 7;
   }
   // SDR is "shipment destroyed", not a failed attempt: a same-time MSHC is not
   // a retry, so the destroyed state must stay visible.

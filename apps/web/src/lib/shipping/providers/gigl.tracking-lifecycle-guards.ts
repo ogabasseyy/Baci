@@ -68,6 +68,10 @@ const EXPLICIT_ARRIVAL_CODES = new Set([
 // DEPARTMENT) cannot suppress an arrival.
 const DEPARTURE_WORD = /\bDEPART(?:S|ED|ING|URES?)?\b/i;
 
+function isSdr(candidate: Guardable): number {
+  return candidate.providerStatus.trim().toUpperCase() === 'SDR' ? 1 : 0;
+}
+
 function placeWords(value: string | undefined): string[] {
   return (value ?? '')
     .split('(')[0]
@@ -131,6 +135,8 @@ export function applyLifecycleGuards(
   const ordered = [...candidates].sort(
     (a, b) =>
       a.event.timestamp.getTime() - b.event.timestamp.getTime() ||
+      // A same-time SDR is processed first so it fences the other tied scans.
+      isSdr(b) - isSdr(a) ||
       isMshc(a) - isMshc(b) ||
       // Tied scans: movement away from the destination first, so the result
       // does not depend on payload order.

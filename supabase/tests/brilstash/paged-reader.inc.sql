@@ -1,4 +1,6 @@
 SAVEPOINT paged_reader;
+UPDATE private.brilstash_installations SET admission = 'suspended', retired_at = now()
+WHERE id = '30000000-0000-4000-8000-000000000001';
 INSERT INTO auth.users VALUES ('10000000-0000-4000-8000-000000000003');
 INSERT INTO private.brilstash_installations(id, merchant_id, partner_identity, single_page_only)
 VALUES ('30000000-0000-4000-8000-000000000003', '20000000-0000-4000-8000-000000000001', 'fixture-paged', false);
@@ -85,6 +87,33 @@ BEGIN
     input->'rows', input->'payload', current_setting('fixture.paged_digest')
   );
 END $$;
+RESET ROLE;
+SAVEPOINT changed_display;
+UPDATE public.products SET slug = 'renamed-after-staging' WHERE slug = 'paged-7';
+SET LOCAL ROLE authenticated;
+SET LOCAL "request.jwt.claim.sub" = '10000000-0000-4000-8000-000000000002';
+DO $$
+DECLARE installation uuid := '30000000-0000-4000-8000-000000000003';
+DECLARE candidate uuid := '71000000-0000-4000-8000-000000000003';
+DECLARE approval uuid;
+DECLARE evidence uuid;
+BEGIN
+  approval := public.approve_brilstash_candidate(installation, candidate, current_setting('fixture.paged_digest'));
+  evidence := public.record_brilstash_fresh_installation(
+    installation, 'fixture-paged', 'Local fresh fixture', false, false, 0, true
+  );
+  BEGIN
+    PERFORM public.activate_first_brilstash_snapshot(
+      installation, candidate, (statement_timestamp() AT TIME ZONE 'Africa/Lagos')::date, evidence, approval
+    );
+    RAISE EXCEPTION 'a candidate with a changed storefront slug was activated';
+  EXCEPTION WHEN check_violation THEN
+    IF SQLERRM <> 'BrilStash staged display data changed' THEN RAISE; END IF;
+  END;
+END $$;
+ROLLBACK TO SAVEPOINT changed_display;
+RELEASE SAVEPOINT changed_display;
+SET LOCAL ROLE authenticated;
 SET LOCAL "request.jwt.claim.sub" = '10000000-0000-4000-8000-000000000002';
 DO $$
 DECLARE installation uuid := '30000000-0000-4000-8000-000000000003';
@@ -119,7 +148,7 @@ DECLARE combined jsonb := '[]'::jsonb;
 DECLARE result jsonb;
 BEGIN
   FOR page IN 1..3 LOOP
-    result := public.read_brilstash_page(repeat('p', 43), page, 3, 0);
+    result := fixture.read_brilstash_page(repeat('p', 43), page, 3, 0);
     IF result->>'status' IS DISTINCT FROM 'ok' OR result->>'totalCount' IS DISTINCT FROM '7'
       OR result->>'totalPages' IS DISTINCT FROM '3'
       OR jsonb_array_length(result->'products') IS DISTINCT FROM (CASE WHEN page = 3 THEN 1 ELSE 3 END)
@@ -127,13 +156,24 @@ BEGIN
     combined := combined || (result->'products');
   END LOOP;
   IF combined IS DISTINCT FROM current_setting('fixture.paged_input')::jsonb->'payload'
-    OR public.read_brilstash_page(repeat('p', 43), 1, 3, 400000)->>'totalCount' IS DISTINCT FROM '3'
-    OR public.read_brilstash_page(repeat('p', 43), 1, 3, 400000)->'products'->0->>'price_naira'
+    OR fixture.read_brilstash_page(repeat('p', 43), 1, 3, 400000)->>'totalCount' IS DISTINCT FROM '3'
+    OR fixture.read_brilstash_page(repeat('p', 43), 1, 3, 400000)->'products'->0->>'price_naira'
       IS DISTINCT FROM '400000'
-    OR public.read_brilstash_page(repeat('p', 43), 4, 3, 0)->'products' IS DISTINCT FROM '[]'::jsonb
+    OR fixture.read_brilstash_page(repeat('p', 43), 4, 3, 0)->'products' IS DISTINCT FROM '[]'::jsonb
   THEN RAISE EXCEPTION 'pagination did not preserve the payload or inclusive price filter'; END IF;
 END $$;
 RESET ROLE;
+SAVEPOINT stock_drop;
+UPDATE public.products SET stock_quantity = 2, stock = 2 WHERE slug = 'paged-7';
+SET LOCAL ROLE anon;
+DO $$
+BEGIN
+  IF fixture.read_brilstash_page(repeat('p', 43), 1, 3, 0)->>'status' IS DISTINCT FROM 'unavailable'
+  THEN RAISE EXCEPTION 'tracked stock decrease on the last page did not block the pull'; END IF;
+END $$;
+RESET ROLE;
+ROLLBACK TO SAVEPOINT stock_drop;
+RELEASE SAVEPOINT stock_drop;
 SAVEPOINT publish_variant;
 UPDATE public.products SET inventory_anchor_variant_id = NULL WHERE slug = 'paged-1';
 INSERT INTO public.product_variants (
@@ -146,7 +186,7 @@ INSERT INTO public.product_variants (
 SET LOCAL ROLE anon;
 DO $$
 BEGIN
-  IF public.read_brilstash_page(repeat('p', 43), 1, 3, 0)->>'status' IS DISTINCT FROM 'unavailable'
+  IF fixture.read_brilstash_page(repeat('p', 43), 1, 3, 0)->>'status' IS DISTINCT FROM 'unavailable'
   THEN RAISE EXCEPTION 'a parent with a public variant was still served as a simple listing'; END IF;
 END $$;
 RESET ROLE;
@@ -156,7 +196,7 @@ UPDATE public.products SET status = 'draft' WHERE slug = 'paged-7';
 SET LOCAL ROLE anon;
 DO $$
 BEGIN
-  IF public.read_brilstash_page(repeat('p', 43), 1, 3, 0)->>'status' IS DISTINCT FROM 'unavailable'
+  IF fixture.read_brilstash_page(repeat('p', 43), 1, 3, 0)->>'status' IS DISTINCT FROM 'unavailable'
   THEN RAISE EXCEPTION 'last-page withdrawal did not block the first page'; END IF;
 END $$;
 RESET ROLE;

@@ -4,7 +4,10 @@ import { open } from 'node:fs/promises';
 import { BRILSTASH_JSON_MAX_BYTES } from '../../config/brilstash-feed';
 
 async function readInputFile(path: string): Promise<unknown> {
-  const file = await open(path, constants.O_RDONLY | constants.O_NONBLOCK);
+  const file = await open(
+    path,
+    constants.O_RDONLY | constants.O_NONBLOCK | constants.O_NOFOLLOW
+  );
   try {
     const info = await file.stat();
     if (!info.isFile() || info.size > BRILSTASH_JSON_MAX_BYTES)

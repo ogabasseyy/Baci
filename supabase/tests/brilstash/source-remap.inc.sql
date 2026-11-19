@@ -48,7 +48,7 @@ RESET ROLE;
 SET LOCAL ROLE anon;
 DO $$
 BEGIN
-  IF public.read_brilstash_page(repeat('k', 43), 1, 100, 0)->>'status' IS DISTINCT FROM 'unavailable'
+  IF fixture.read_brilstash_page(repeat('k', 43), 1, 100, 0)->>'status' IS DISTINCT FROM 'unavailable'
   THEN RAISE EXCEPTION 'old source generation still served after remap'; END IF;
 END $$;
 RESET ROLE;

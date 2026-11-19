@@ -48,7 +48,7 @@ RESET ROLE;
 SET LOCAL ROLE anon;
 DO $$
 BEGIN
-  IF public.read_brilstash_page(repeat('k', 43), 1, 100, 0)->>'generationId'
+  IF fixture.read_brilstash_page(repeat('k', 43), 1, 100, 0)->>'generationId'
     IS DISTINCT FROM '70000000-0000-4000-8000-000000000003'
   THEN RAISE EXCEPTION 'recovery did not serve the approved replacement'; END IF;
 END $$;

@@ -1,3 +1,6 @@
+-- This suite qualifies a fresh binding for the same merchant after retirement.
+UPDATE private.brilstash_installations SET admission = 'suspended', retired_at = now()
+WHERE id = '30000000-0000-4000-8000-000000000001';
 SET LOCAL ROLE authenticated;
 DO $$
 DECLARE
@@ -10,6 +13,11 @@ DECLARE
   listing jsonb;
 BEGIN
   installation := public.bind_brilstash_installation(merchant, 'new-fixture', true);
+  BEGIN
+    PERFORM public.bind_brilstash_installation(merchant, 'another-fresh-fixture', true);
+    RAISE EXCEPTION 'merchant acquired a second current installation';
+  EXCEPTION WHEN unique_violation THEN NULL;
+  END;
   BEGIN
     PERFORM public.bind_brilstash_installation(merchant, 'new-fixture', true);
     RAISE EXCEPTION 'partner binding was duplicated';
@@ -94,7 +102,7 @@ RESET ROLE;
 SET LOCAL ROLE anon;
 DO $$
 BEGIN
-  IF public.read_brilstash_page(repeat('n', 43), 1, 100, 0)->>'status' IS DISTINCT FROM 'unauthorized'
+  IF fixture.read_brilstash_page(repeat('n', 43), 1, 100, 0)->>'status' IS DISTINCT FROM 'unauthorized'
   THEN RAISE EXCEPTION 'retirement did not revoke the prior credential'; END IF;
 END $$;
 RESET ROLE;

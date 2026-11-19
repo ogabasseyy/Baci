@@ -113,7 +113,7 @@ RESET ROLE;
 SET LOCAL ROLE anon;
 DO $$
 BEGIN
-  IF public.read_brilstash_page(repeat('k', 43), 1, 100, 0)->>'status' IS DISTINCT FROM 'unavailable'
+  IF fixture.read_brilstash_page(repeat('k', 43), 1, 100, 0)->>'status' IS DISTINCT FROM 'unavailable'
   THEN RAISE EXCEPTION 'draining feed was still served'; END IF;
 END $$;
 RESET ROLE;
@@ -163,10 +163,27 @@ RESET ROLE;
 SET LOCAL ROLE anon;
 DO $$
 BEGIN
-  IF public.read_brilstash_page(repeat('k', 43), 1, 100, 0)->>'status' IS DISTINCT FROM 'unavailable'
+  IF fixture.read_brilstash_page(repeat('k', 43), 1, 100, 0)->>'status' IS DISTINCT FROM 'unavailable'
   THEN RAISE EXCEPTION 'recording evidence reopened the old generation'; END IF;
 END $$;
 RESET ROLE;
+SAVEPOINT changed_promotion_display;
+UPDATE public.products SET brand = 'Changed brand' WHERE slug = 'fixture-phone';
+SET LOCAL ROLE authenticated;
+DO $$
+BEGIN
+  PERFORM public.promote_brilstash_snapshot(
+    '30000000-0000-4000-8000-000000000001', '70000000-0000-4000-8000-000000000002',
+    (statement_timestamp() AT TIME ZONE 'Africa/Lagos')::date,
+    current_setting('fixture.closure_revision')::bigint
+  );
+  RAISE EXCEPTION 'promotion accepted a display field changed after staging';
+EXCEPTION WHEN check_violation THEN
+  IF SQLERRM <> 'BrilStash staged display data changed' THEN RAISE; END IF;
+END $$;
+ROLLBACK TO SAVEPOINT changed_promotion_display;
+RELEASE SAVEPOINT changed_promotion_display;
+
 SET LOCAL ROLE authenticated;
 DO $$
 DECLARE
@@ -199,7 +216,7 @@ RESET ROLE;
 SET LOCAL ROLE anon;
 DO $$
 BEGIN
-  IF public.read_brilstash_page(repeat('k', 43), 1, 100, 0)->>'generationId'
+  IF fixture.read_brilstash_page(repeat('k', 43), 1, 100, 0)->>'generationId'
     IS DISTINCT FROM '70000000-0000-4000-8000-000000000002'
   THEN RAISE EXCEPTION 'promoted generation was not served'; END IF;
 END $$;

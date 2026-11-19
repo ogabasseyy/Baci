@@ -198,17 +198,19 @@ async function applyRateLimit(
 
 export function checkBrilStashFeedRateLimit(
   request: NextRequest,
-  bucket: 'read' | 'malformed'
+  bucket: 'read' | 'malformed',
+  requireTrustedIdentity: boolean
 ): Promise<RateLimitResult> {
-  return applyRateLimit(
-    getTrustedClientIdentifier(request),
-    `${BRILSTASH_FEED_PATH}:${bucket}`,
-    {
-      maxRequests: bucket === 'read' ? 30 : 15,
-      windowMs: 60_000,
-      failClosedWithoutRedis: true,
-    }
-  );
+  const client = getTrustedClientIdentifier(request);
+  const config = {
+    maxRequests: bucket === 'read' ? 30 : 15,
+    windowMs: 60_000,
+    failClosedWithoutRedis: true,
+  };
+  if (requireTrustedIdentity && client === 'unknown') {
+    return Promise.resolve(denyWithoutDistributedBackend(config));
+  }
+  return applyRateLimit(client, `${BRILSTASH_FEED_PATH}:${bucket}`, config);
 }
 
 export function checkImeiPollRateLimit(

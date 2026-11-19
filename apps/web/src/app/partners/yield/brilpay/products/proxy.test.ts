@@ -9,7 +9,11 @@ import { GET } from './route';
 
 const dependencies = vi.hoisted(() => ({
   rpc: vi.fn(() => ({
-    abortSignal: vi.fn().mockResolvedValue({ data: { status: 'unavailable' } }),
+    setHeader: vi.fn(() => ({
+      abortSignal: vi
+        .fn()
+        .mockResolvedValue({ data: { status: 'unavailable' } }),
+    })),
   })),
 }));
 
@@ -40,6 +44,7 @@ const credential = 'k'.repeat(43);
 
 it('preserves the exact platform path, query and credential through normal proxy routing', async () => {
   vi.stubEnv('BRILSTASH_FEED_HOST', 'usebaci.com');
+  vi.stubEnv('BRILSTASH_FEED_INGRESS_KEY', 'a'.repeat(64));
   vi.stubEnv('BRILSTASH_FEED_ENV', 'live');
   vi.stubEnv('BRILSTASH_SUPABASE_PROJECT_REF', 'synthetic');
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://synthetic.supabase.co');

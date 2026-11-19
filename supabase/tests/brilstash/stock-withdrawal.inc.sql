@@ -3,7 +3,7 @@ UPDATE public.products SET manage_stock = false WHERE slug = 'fixture-phone';
 SET LOCAL ROLE anon;
 DO $$
 BEGIN
-  IF public.read_brilstash_page(repeat('k', 43), 1, 100, 0)->>'status' IS DISTINCT FROM 'unavailable'
+  IF fixture.read_brilstash_page(repeat('k', 43), 1, 100, 0)->>'status' IS DISTINCT FROM 'unavailable'
   THEN RAISE EXCEPTION 'old generation still served an untracked listing'; END IF;
 END $$;
 RESET ROLE;
@@ -24,7 +24,7 @@ RESET ROLE;
 SET LOCAL ROLE anon;
 DO $$
 BEGIN
-  IF public.read_brilstash_page(repeat('k', 43), 1, 100, 0)->>'status' IS DISTINCT FROM 'unavailable'
+  IF fixture.read_brilstash_page(repeat('k', 43), 1, 100, 0)->>'status' IS DISTINCT FROM 'unavailable'
   THEN RAISE EXCEPTION 'approval alone revived the old generation'; END IF;
 END $$;
 RESET ROLE;
@@ -92,7 +92,7 @@ END $$;
 RESET ROLE;
 SET LOCAL ROLE anon;
 DO $$
-DECLARE result jsonb := public.read_brilstash_page(repeat('k', 43), 1, 100, 0);
+DECLARE result jsonb := fixture.read_brilstash_page(repeat('k', 43), 1, 100, 0);
 BEGIN
   IF result->>'status' IS DISTINCT FROM 'ok'
     OR result->'products'->0->>'external_id' IS DISTINCT FROM 'fixture-one'
@@ -104,7 +104,7 @@ UPDATE public.products SET status = 'draft' WHERE slug = 'fixture-phone';
 SET LOCAL ROLE anon;
 DO $$
 BEGIN
-  IF public.read_brilstash_page(repeat('k', 43), 1, 100, 0)->>'status' IS DISTINCT FROM 'unavailable'
+  IF fixture.read_brilstash_page(repeat('k', 43), 1, 100, 0)->>'status' IS DISTINCT FROM 'unavailable'
   THEN RAISE EXCEPTION 'stock withdrawal approval exposed a private source'; END IF;
 END $$;
 RESET ROLE;

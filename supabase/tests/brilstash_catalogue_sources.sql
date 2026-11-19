@@ -3,6 +3,11 @@ BEGIN;
 CREATE ROLE anon NOLOGIN;
 CREATE ROLE authenticated NOLOGIN;
 CREATE ROLE service_role NOLOGIN;
+CREATE SCHEMA extensions;
+CREATE EXTENSION pgcrypto WITH SCHEMA extensions;
+CREATE SCHEMA vault;
+CREATE TABLE vault.decrypted_secrets (name text PRIMARY KEY, decrypted_secret text);
+INSERT INTO vault.decrypted_secrets VALUES ('brilstash_feed_ingress_key', repeat('a', 64));
 CREATE SCHEMA auth;
 CREATE TABLE auth.users(id uuid PRIMARY KEY);
 CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE
@@ -63,7 +68,32 @@ $$;
 \ir ../migrations/20261119020317_brilstash_installation_retirement.sql
 \ir ../migrations/20261119021534_brilstash_listing_source_remap.sql
 \ir ../migrations/20261119022000_brilstash_activation_stock_guards.sql
+\ir ../migrations/20261119023000_brilstash_generation_and_binding_guards.sql
+\ir ../migrations/20261119023100_brilstash_require_ingress_proof.sql
 \ir brilstash_catalogue_privileges.sql
+CREATE SCHEMA fixture;
+GRANT USAGE ON SCHEMA fixture, extensions TO anon;
+CREATE FUNCTION fixture.read_brilstash_page(bearer text, page integer, page_size integer, min_price numeric,
+  proof_bearer text DEFAULT NULL, proof_age_seconds integer DEFAULT 0
+)
+RETURNS jsonb LANGUAGE plpgsql AS $$
+DECLARE prior_headers text := current_setting('request.headers', true);
+DECLARE issued text := floor(extract(epoch FROM statement_timestamp()))::bigint::text;
+DECLARE signature text;
+DECLARE result jsonb;
+BEGIN
+  issued := (issued::bigint - proof_age_seconds)::text;
+  signature := encode(extensions.hmac(
+    'baci:brilstash-feed:v1:' || issued || ':' || COALESCE(proof_bearer, bearer), repeat('a', 64), 'sha256'
+  ), 'hex');
+  PERFORM set_config('request.headers', jsonb_build_object(
+    'x-baci-brilstash-ingress', issued || '.' || signature
+  )::text, true);
+  result := public.read_brilstash_page(bearer, page, page_size, min_price);
+  PERFORM set_config('request.headers', COALESCE(prior_headers, ''), true);
+  RETURN result;
+END;
+$$;
 
 INSERT INTO auth.users VALUES ('10000000-0000-4000-8000-000000000001'), ('10000000-0000-4000-8000-000000000002');
 INSERT INTO public.merchants VALUES ('20000000-0000-4000-8000-000000000001', true, 'NGN', '10000000-0000-4000-8000-000000000002'),

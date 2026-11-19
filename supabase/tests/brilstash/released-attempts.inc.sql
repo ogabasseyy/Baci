@@ -178,7 +178,7 @@ END $$;
 SET LOCAL ROLE anon;
 DO $$
 BEGIN
-  IF public.read_brilstash_page(repeat('k', 43), 1, 100, 0)->>'status' IS DISTINCT FROM 'unavailable'
+  IF fixture.read_brilstash_page(repeat('k', 43), 1, 100, 0)->>'status' IS DISTINCT FROM 'unavailable'
   THEN RAISE EXCEPTION 'suspended feed was still served'; END IF;
 END $$;
 RESET ROLE;

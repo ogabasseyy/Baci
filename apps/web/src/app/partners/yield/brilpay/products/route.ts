@@ -51,7 +51,8 @@ export async function GET(request: NextRequest): Promise<Response> {
 
   const budget = await checkBrilStashFeedRateLimit(
     request,
-    bearer && validQuery ? 'read' : 'malformed'
+    bearer && validQuery ? 'read' : 'malformed',
+    deployment.singlePageOnly
   );
   if (!budget.allowed) {
     const response = createRateLimitResponse(

@@ -5,7 +5,7 @@ import { GET } from './route';
 
 const dependencies = vi.hoisted(() => {
   const abortSignal = vi.fn();
-  const rpc = vi.fn(() => ({ abortSignal }));
+  const rpc = vi.fn(() => ({ setHeader: vi.fn(() => ({ abortSignal })) }));
   return { rpc, abortSignal, info: vi.fn(), rateLimit: vi.fn() };
 });
 
@@ -57,6 +57,7 @@ function request(
 beforeEach(() => {
   vi.clearAllMocks();
   vi.stubEnv('BRILSTASH_FEED_HOST', host);
+  vi.stubEnv('BRILSTASH_FEED_INGRESS_KEY', 'a'.repeat(64));
   vi.stubEnv('BRILSTASH_FEED_ENV', 'sandbox');
   vi.stubEnv('BRILSTASH_SUPABASE_PROJECT_REF', 'sandboxtest');
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://sandboxtest.supabase.co');
@@ -82,7 +83,7 @@ describe('BrilStash feed GET', () => {
     const input = request();
     const response = await GET(input);
 
-    expect(dependencies.rateLimit).toHaveBeenCalledWith(input, 'read');
+    expect(dependencies.rateLimit).toHaveBeenCalledWith(input, 'read', false);
     expect(dependencies.rpc).not.toHaveBeenCalled();
     expect(response.status).toBe(429);
     expect(response.headers.get('retry-after')).toBeTruthy();
@@ -102,7 +103,11 @@ describe('BrilStash feed GET', () => {
     });
     const input = request(query, token);
     const response = await GET(input);
-    expect(dependencies.rateLimit).toHaveBeenCalledWith(input, 'malformed');
+    expect(dependencies.rateLimit).toHaveBeenCalledWith(
+      input,
+      'malformed',
+      false
+    );
     expect(response.status).toBe(429);
     expect(dependencies.rpc).not.toHaveBeenCalled();
   });

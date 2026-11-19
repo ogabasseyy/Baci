@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto';
 import type { z } from 'zod';
 import type { BrilStashFeedQuery } from '../../schemas/brilstash-feed-query';
 import { brilStashPageResultSchema } from '../../schemas/brilstash-page';
@@ -9,6 +10,13 @@ export async function readBrilStashPage(
   bearer: string,
   query: BrilStashFeedQuery
 ): Promise<z.infer<typeof brilStashPageResultSchema>> {
+  const key = process.env.BRILSTASH_FEED_INGRESS_KEY;
+  if (!key || !/^[a-f0-9]{64}$/.test(key)) return UNAVAILABLE;
+
+  const issued = Math.floor(Date.now() / 1000);
+  const signature = createHmac('sha256', key)
+    .update(`baci:brilstash-feed:v1:${issued}:${bearer}`)
+    .digest('hex');
   const controller = new AbortController();
   let timeout: ReturnType<typeof setTimeout> | undefined;
 
@@ -27,6 +35,7 @@ export async function readBrilStashPage(
           p_limit: query.limit,
           p_min_price: query.min_price,
         })
+        .setHeader('x-baci-brilstash-ingress', `${issued}.${signature}`)
         .abortSignal(controller.signal),
       deadline,
     ]);

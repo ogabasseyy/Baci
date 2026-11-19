@@ -4,7 +4,10 @@ import {
   PRODUCT_IMAGE_LARGE_PLACEHOLDER_URL,
   PRODUCT_IMAGE_PLACEHOLDER_URL,
 } from '@/lib/product-image';
-import { PRODUCT_WITH_VARIANTS_QUERY } from '@/lib/product-queries';
+import {
+  PRODUCT_WITH_VARIANTS_QUERY,
+  PRODUCT_WITH_VARIANTS_QUERY_PUBLIC,
+} from '@/lib/product-queries';
 import {
   getEffectiveStock,
   matchesProductStockFilter,
@@ -18,7 +21,12 @@ export async function getProducts(request: NextRequest) {
   try {
     const context = await getProductListContext(request);
     if ('response' in context) return context.response;
-    const { merchantId, query: queryParams, supabase } = context;
+    const {
+      merchantId,
+      canViewProductCosts = false,
+      query: queryParams,
+      supabase,
+    } = context;
     const {
       page,
       limit,
@@ -31,12 +39,16 @@ export async function getProducts(request: NextRequest) {
     const search = searchRaw ? sanitizeSearchQuery(searchRaw) : '';
     const offset = (page - 1) * limit;
     const shouldPaginateInDatabase = !ids && stock === 'All';
+    const productTable = canViewProductCosts ? 'merchant_products' : 'products';
+    const baseSelect = canViewProductCosts
+      ? PRODUCT_WITH_VARIANTS_QUERY
+      : PRODUCT_WITH_VARIANTS_QUERY_PUBLIC;
     const productSelect = search.trim()
-      ? `${PRODUCT_WITH_VARIANTS_QUERY}, variant_search:product_variants!product_variants_product_id_fkey()`
-      : PRODUCT_WITH_VARIANTS_QUERY;
+      ? `${baseSelect}, variant_search:product_variants!product_variants_product_id_fkey()`
+      : baseSelect;
 
     let query = supabase
-      .from('merchant_products')
+      .from(productTable)
       .select(productSelect as typeof PRODUCT_WITH_VARIANTS_QUERY, {
         count: 'exact',
       })
@@ -231,7 +243,7 @@ export async function getProducts(request: NextRequest) {
           );
         }
         const oosResult = await supabase
-          .from('merchant_products')
+          .from(productTable)
           .select('id', { count: 'exact', head: true })
           .eq('merchant_id', merchantId)
           .eq('stock_quantity', 0);

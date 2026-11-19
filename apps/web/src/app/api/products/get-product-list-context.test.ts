@@ -14,9 +14,14 @@ vi.mock('@/lib/supabase/server', () => ({
   createClient: () => ({ auth: { getUser: mocks.getUser } }),
 }));
 
-vi.mock('@/lib/get-merchant-for-api-request', () => ({
-  getMerchantForApiRequest: mocks.getMerchantForApiRequest,
-}));
+vi.mock('@/lib/get-merchant-for-api-request', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@/lib/get-merchant-for-api-request')>();
+  return {
+    ...actual,
+    getMerchantForApiRequest: mocks.getMerchantForApiRequest,
+  };
+});
 
 import { getProductListContext } from './get-product-list-context';
 
@@ -29,6 +34,12 @@ describe('getProductListContext', () => {
     });
     mocks.getMerchantForApiRequest.mockResolvedValue({
       merchantId: 'merchant-b',
+      staffAccess: {
+        isStaff: false,
+        isOwner: true,
+        role: null,
+        permissions: { full_access: { all: true } },
+      },
     });
   });
 
@@ -40,10 +51,35 @@ describe('getProductListContext', () => {
     const result = await getProductListContext(request);
 
     expect('response' in result).toBe(false);
+    if (!('response' in result)) {
+      expect(result.canViewProductCosts).toBe(true);
+    }
     expect(mocks.getMerchantForApiRequest).toHaveBeenCalledWith(
       expect.anything(),
       'user-1',
       { requestedMerchantId: 'merchant-b' }
     );
+  });
+
+  it('marks canViewProductCosts false when staff lacks products:view', async () => {
+    mocks.getMerchantForApiRequest.mockResolvedValue({
+      merchantId: 'merchant-b',
+      staffAccess: {
+        isStaff: true,
+        isOwner: false,
+        role: 'marketing',
+        permissions: { marketing: { view: true } },
+      },
+    });
+    const request = new NextRequest(
+      'http://localhost:3000/api/products?ids=product-b&merchantId=merchant-b'
+    );
+
+    const result = await getProductListContext(request);
+
+    expect('response' in result).toBe(false);
+    if (!('response' in result)) {
+      expect(result.canViewProductCosts).toBe(false);
+    }
   });
 });

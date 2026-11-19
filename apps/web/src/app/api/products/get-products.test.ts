@@ -1,5 +1,9 @@
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  PRODUCT_WITH_VARIANTS_QUERY,
+  PRODUCT_WITH_VARIANTS_QUERY_PUBLIC,
+} from '@/lib/product-queries';
 
 const mocks = vi.hoisted(() => ({
   getProductListContext: vi.fn(),
@@ -55,6 +59,7 @@ describe('getProducts', () => {
     mocks.from.mockImplementation(() => query);
     mocks.getProductListContext.mockResolvedValue({
       merchantId: 'merchant-1',
+      canViewProductCosts: true,
       query: {
         page: 1,
         limit: 20,
@@ -115,6 +120,7 @@ describe('getProducts', () => {
     };
     mocks.getProductListContext.mockResolvedValue({
       merchantId: 'merchant-1',
+      canViewProductCosts: true,
       query: {
         page: 1,
         limit: 20,
@@ -187,6 +193,7 @@ describe('getProducts', () => {
     });
     mocks.getProductListContext.mockResolvedValue({
       merchantId: 'merchant-1',
+      canViewProductCosts: true,
       query: {
         page: 1,
         limit: 20,
@@ -208,5 +215,57 @@ describe('getProducts', () => {
 
     expect(response.status).toBe(200);
     expect(tables).toEqual(['merchant_products', 'merchant_products']);
+  });
+
+  it('queries public products without cost columns when staff lacks products:view', async () => {
+    const tables: string[] = [];
+    const selectedQueries: string[] = [];
+    const publicQuery = {
+      select: vi.fn((selectClause: string) => {
+        selectedQueries.push(selectClause);
+        return publicQuery;
+      }),
+      eq: vi.fn(() => publicQuery),
+      order: vi.fn(() => publicQuery),
+      range: mocks.range,
+      count: 1,
+    };
+    const publicFrom = vi.fn((table: string) => {
+      tables.push(table);
+      return publicQuery;
+    });
+    mocks.rpc.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'rpc failed' },
+    });
+    mocks.getProductListContext.mockResolvedValue({
+      merchantId: 'merchant-1',
+      canViewProductCosts: false,
+      query: {
+        page: 1,
+        limit: 20,
+        search: undefined,
+        migration: 'All',
+        status: 'All',
+        stock: 'All',
+        ids: undefined,
+      },
+      supabase: {
+        from: publicFrom,
+        rpc: mocks.rpc,
+      },
+    });
+
+    const response = await getProducts(
+      new NextRequest('http://localhost:3000/api/products')
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(tables).toEqual(['products', 'products']);
+    expect(selectedQueries[0]).toBe(PRODUCT_WITH_VARIANTS_QUERY_PUBLIC);
+    expect(selectedQueries[0]).not.toBe(PRODUCT_WITH_VARIANTS_QUERY);
+    expect(selectedQueries[0]).not.toContain('cost_price');
+    expect(body.products[0].cost_price).toBeUndefined();
   });
 });

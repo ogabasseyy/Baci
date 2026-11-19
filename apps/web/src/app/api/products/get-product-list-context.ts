@@ -1,6 +1,10 @@
 import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
-import { getMerchantForApiRequest } from '@/lib/get-merchant-for-api-request';
+import { hasPermission } from '@/lib/api-auth';
+import {
+  getMerchantForApiRequest,
+  toUserAccess,
+} from '@/lib/get-merchant-for-api-request';
 import { createClient } from '@/lib/supabase/server';
 import {
   type ProductListQuery,
@@ -11,6 +15,7 @@ type ProductListContext =
   | { response: NextResponse }
   | {
       merchantId: string;
+      canViewProductCosts: boolean;
       query: ProductListQuery;
       supabase: ReturnType<typeof createClient>;
     };
@@ -57,8 +62,15 @@ export async function getProductListContext(
     };
   }
 
+  const canViewProductCosts = hasPermission(
+    toUserAccess(merchantContext),
+    'products',
+    'view'
+  );
+
   return {
     merchantId: merchantContext.merchantId,
+    canViewProductCosts,
     query: queryParams.data,
     supabase,
   };

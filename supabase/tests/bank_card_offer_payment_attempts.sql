@@ -66,12 +66,35 @@ BEGIN
   IF public.get_bank_card_offer_verification_context(v_order, v_merchant, v_transaction) IS NOT NULL THEN
     RAISE EXCEPTION 'Customer scope cannot read internal capture context';
   END IF;
-  IF NOT public.record_bank_card_offer_checkout_url(v_order, v_merchant, v_reference, 'https://checkout.paystack.com/trx/test') THEN
-    RAISE EXCEPTION 'The attempt must retain its verified checkout URL';
-  END IF;
+  PERFORM public.flag_bank_card_offer_initialization_review(v_order, v_merchant, v_reference, true);
+  DECLARE v_review_id uuid;
+  BEGIN
+    SELECT id INTO STRICT v_review_id FROM public.reconciliation_review
+    WHERE txn_id = v_transaction AND metadata->>'source' = 'bank_card_offer_initialization';
+    IF public.retire_bank_card_offer_initialization(v_review_id, '')
+      OR NOT public.retire_bank_card_offer_initialization(v_review_id, 'Paystack case fixture confirms the reference cannot charge')
+    THEN RAISE EXCEPTION 'A confirmed unusable reference should be retired'; END IF;
+    IF NOT EXISTS (SELECT 1 FROM public.transactions WHERE id = v_transaction AND status = 'cancelled')
+    THEN RAISE EXCEPTION 'A retired reference must retain its audit row'; END IF;
+  END;
+  v_attempt := public.claim_bank_card_offer_attempt(v_order, v_merchant, 9500, v_hash, 'test', 100, 0);
+  IF v_attempt->>'claimed' IS DISTINCT FROM 'true' OR v_attempt->>'reference' = v_reference
+  THEN RAISE EXCEPTION 'A retired reference must permit a fresh claim'; END IF;
+  v_reference := v_attempt->>'reference';
+  SELECT id INTO STRICT v_transaction FROM public.transactions WHERE gateway_reference = v_reference;
+  PERFORM public.flag_bank_card_offer_initialization_review(v_order, v_merchant, v_reference, true);
+  DECLARE v_review_id uuid;
+  BEGIN
+    SELECT id INTO STRICT v_review_id FROM public.reconciliation_review
+    WHERE txn_id = v_transaction AND metadata->>'source' = 'bank_card_offer_initialization';
+    IF public.restore_bank_card_offer_checkout_url(v_review_id, 'https://checkout.paystack.com.evil.test/trx/test')
+      OR NOT public.restore_bank_card_offer_checkout_url(v_review_id, 'https://checkout.paystack.com/trx/test?state=one%2Btwo&x=1')
+      OR NOT public.record_bank_card_offer_checkout_url(v_order, v_merchant, v_reference, 'https://checkout.paystack.com/trx/test?state=one%2Btwo&x=1')
+    THEN RAISE EXCEPTION 'An operator must be able to restore the same checked URL idempotently'; END IF;
+  END;
   v_attempt := public.claim_bank_card_offer_attempt(v_order, v_merchant, 9500, v_hash, 'test', 100, 0);
   IF v_attempt->>'claimed' <> 'false' OR v_attempt->>'reference' <> v_reference
-    OR v_attempt->>'checkoutUrl' <> 'https://checkout.paystack.com/trx/test'
+    OR v_attempt->>'checkoutUrl' <> 'https://checkout.paystack.com/trx/test?state=one%2Btwo&x=1'
   THEN RAISE EXCEPTION 'A retry must replay its existing Paystack reference'; END IF;
   BEGIN
     UPDATE public.transactions SET status = 'completed' WHERE id = v_transaction;

@@ -64,14 +64,25 @@ export async function initializeBankCardOfferCheckout({
   const reserved = bankCardOfferClaimSchema.safeParse(claim.data);
   if (claim.error || !reserved.success) return { kind: 'unavailable' } as const;
   const { claimed, reference, checkoutUrl } = reserved.data;
-  if (!claimed)
-    return checkoutUrl
-      ? ({ kind: 'initialized', reference, checkoutUrl } as const)
-      : ({ kind: 'pending', reference } as const);
+  const review = (failed: boolean) =>
+    client.rpc('flag_bank_card_offer_initialization_review', {
+      ...args,
+      p_reference: reference,
+      p_failed: failed,
+    });
+  if (!claimed) {
+    if (checkoutUrl)
+      return { kind: 'initialized', reference, checkoutUrl } as const;
+    const flagged = await review(false);
+    if (flagged.error)
+      throw new Error('Unable to record bank offer initialization review');
+    return { kind: 'pending', reference } as const;
+  }
   const root = process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'usebaci.com';
   const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
+  let url: string;
   try {
-    const url = await initializeBankCardOfferPaystack({
+    url = await initializeBankCardOfferPaystack({
       attempt: {
         ...context.data,
         currency: 'NGN',
@@ -85,15 +96,31 @@ export async function initializeBankCardOfferCheckout({
       transactionChargeKobo,
       callbackUrl: `${protocol}://${slug}.${root}/checkout/success?reference=${reference}`,
     });
-    const saved = await client.rpc('record_bank_card_offer_checkout_url', {
-      ...args,
-      p_reference: reference,
-      p_checkout_url: url,
-    });
-    if (!saved.error && saved.data === true)
-      return { kind: 'initialized', reference, checkoutUrl: url } as const;
   } catch {
-    // The provider may have accepted the write. Keep this reference fenced.
+    // Paystack may have accepted the initialization. Send the same reference
+    // to operations without opening a second provider session.
+    const flagged = await review(true);
+    if (flagged.error)
+      throw new Error('Unable to record bank offer initialization review');
+    return { kind: 'pending', reference } as const;
   }
-  return { kind: 'pending', reference } as const;
+
+  async function save() {
+    try {
+      const result = await client.rpc('record_bank_card_offer_checkout_url', {
+        ...args,
+        p_reference: reference,
+        p_checkout_url: url,
+      });
+      return !result.error && result.data === true;
+    } catch {
+      return false;
+    }
+  }
+  if (!(await save()) && !(await save())) {
+    // The next retry also checks for an orphaned reference, so this
+    // review write can be best-effort after returning a usable URL.
+    await Promise.resolve(review(true)).catch(() => undefined);
+  }
+  return { kind: 'initialized', reference, checkoutUrl: url } as const;
 }

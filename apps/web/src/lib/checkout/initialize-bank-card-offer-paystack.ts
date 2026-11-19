@@ -1,5 +1,6 @@
 import 'server-only';
 import { initializeTransaction } from '@/lib/paystack';
+import { bankCardOfferCheckoutUrlSchema } from '@/schemas/bank-card-offer-payment-context';
 import { bankCardOfferAuthorization } from './bank-card-offer-authorization';
 import type { BankCardOfferAttempt } from './bank-card-offer-payment';
 
@@ -34,7 +35,8 @@ export async function initializeBankCardOfferPaystack({
     url.hostname !== 'checkout.paystack.com' ||
     url.username ||
     url.password ||
-    url.port
+    url.port ||
+    !bankCardOfferCheckoutUrlSchema.safeParse(url.href).success
   ) {
     throw new Error('Unverified bank offer initialization response');
   }

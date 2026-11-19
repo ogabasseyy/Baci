@@ -108,13 +108,18 @@ BEGIN
     )) THEN
       RAISE EXCEPTION 'Verification context leaked to another merchant';
     END IF;
-    UPDATE public.orders SET total = 201 WHERE id = v_order;
-    IF EXISTS (SELECT 1 FROM private.read_bank_card_offer_payment_context(
-      v_order, v_merchant, v_attempt
-    )) THEN
-      RAISE EXCEPTION 'Verification accepted an order total that changed after checkout';
-    END IF;
-    UPDATE public.orders SET total = 200 WHERE id = v_order;
+    BEGIN
+      UPDATE public.orders SET total = 201 WHERE id = v_order;
+      RAISE EXCEPTION 'Bank-offer order total was mutable';
+    EXCEPTION WHEN raise_exception THEN
+      IF SQLERRM <> 'bank_card_offer_order_snapshot_immutable' THEN RAISE; END IF;
+    END;
+    BEGIN
+      UPDATE public.order_items SET product_id = gen_random_uuid() WHERE id = v_item;
+      RAISE EXCEPTION 'Bank-offer order item was mutable';
+    EXCEPTION WHEN raise_exception THEN
+      IF SQLERRM <> 'bank_card_offer_order_snapshot_immutable' THEN RAISE; END IF;
+    END;
     UPDATE public.transactions SET amount = 201 WHERE id = v_attempt;
     IF EXISTS (SELECT 1 FROM private.read_bank_card_offer_payment_context(
       v_order, v_merchant, v_attempt

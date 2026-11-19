@@ -101,6 +101,7 @@ import type {
 } from '@/lib/shipping/merchant-rates/types';
 import { verifyOrderShippingRate } from '@/lib/shipping/merchant-rates/verify-order-shipping-rate';
 import { normalizeMerchantRateOrderAddress } from '@/lib/shipping/normalize-merchant-rate-order-address';
+import { stableStringify } from '@/lib/stable-stringify';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createPublicClient } from '@/lib/supabase/public';
 import { createClient } from '@/lib/supabase/server';
@@ -556,7 +557,7 @@ export async function POST(request: NextRequest) {
     }
     const bankCardOfferRequested = payment_method === 'bank_card_offer';
     const bankCardOfferRequestHash = bankCardOfferRequested
-      ? createHash('sha256').update(JSON.stringify(body)).digest('hex')
+      ? createHash('sha256').update(stableStringify(body)).digest('hex')
       : null;
     const bankCardOffer = bankCardOfferRequested
       ? BANK_CARD_OFFERS.find(
@@ -2453,6 +2454,30 @@ export async function POST(request: NextRequest) {
               'Failed to revalidate product caches after bank offer order creation',
             merchantId: merchant_id,
             error,
+          });
+        }
+        const offerOrder = result.data;
+        if (typeof offerOrder.id === 'string') {
+          await recordPlatformOrderCreatedEvent({
+            currency:
+              typeof offerOrder.currency === 'string'
+                ? offerOrder.currency
+                : merchantResolvedCurrency,
+            customerEmail: customer_email,
+            eventTimestamp:
+              typeof offerOrder.created_at === 'string'
+                ? offerOrder.created_at
+                : new Date().toISOString(),
+            ipAddress: clientIp,
+            merchantId: merchant_id,
+            orderId: offerOrder.id,
+            orderNumber:
+              typeof offerOrder.order_number === 'string' &&
+              offerOrder.order_number
+                ? offerOrder.order_number
+                : offerOrder.id.slice(0, 8).toUpperCase(),
+            userAgent: clientUserAgent,
+            value: Number(offerOrder.total ?? 0),
           });
         }
       }

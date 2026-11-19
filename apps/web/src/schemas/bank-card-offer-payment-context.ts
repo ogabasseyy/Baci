@@ -47,13 +47,31 @@ export const bankCardOfferCheckoutContextSchema = paymentContext.extend({
   slug: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
 });
 
+export const bankCardOfferCheckoutUrlSchema = z
+  .string()
+  .max(2048)
+  .regex(
+    /^https:\/\/checkout[.]paystack[.]com\/[A-Za-z0-9._~%/-]+(?:\?[A-Za-z0-9._~%+&=;:@,/?-]+)?$/
+  );
+
+export const bankCardOfferWebhookTransactionSchema = z.object({
+  id: z.uuid(),
+  merchant_id: z.uuid(),
+  order_id: z.uuid(),
+  gateway: z.literal('paystack'),
+  gateway_reference: reference,
+  amount: z.union([
+    positiveSafeInteger,
+    z.number().positive(),
+    z.string().regex(/^[0-9]+\.[0-9]{1,2}$|^[0-9]+$/),
+  ]),
+  platform_fee: z.number().nonnegative().nullable(),
+});
+
 export const bankCardOfferClaimSchema = z.object({
   claimed: z.boolean(),
   reference,
-  checkoutUrl: z
-    .string()
-    .regex(/^https:\/\/checkout[.]paystack[.]com\/[A-Za-z0-9._/-]+$/)
-    .nullable(),
+  checkoutUrl: bankCardOfferCheckoutUrlSchema.nullable(),
 });
 
 export const bankCardOfferVerificationContextSchema = paymentContext.extend({

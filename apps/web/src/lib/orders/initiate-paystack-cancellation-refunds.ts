@@ -59,6 +59,8 @@ export async function initiatePaystackCancellationRefunds({
   transactions: GatewayPaymentTransaction[];
 }): Promise<number[]> {
   const refundIds: number[] = [];
+  const mismatchedBankOfferLegs: GatewayPaymentTransaction[] = [];
+  let bankOfferLookupUnavailable = false;
 
   for (const transaction of transactions) {
     if (refundedPaymentIds.has(transaction.id)) continue;
@@ -149,19 +151,12 @@ export async function initiatePaystackCancellationRefunds({
           p_amount_kobo: koboAmount,
         }
       );
-      if (capture.error)
-        throw new Error('Unable to verify bank card offer refund capture');
+      if (capture.error) {
+        bankOfferLookupUnavailable = true;
+        continue;
+      }
       if (capture.data !== true) {
-        await quarantineRefund({
-          metadata: {
-            failed_payment_transaction_id: transaction.id,
-            ambiguous_initiation: false,
-          },
-          order,
-          reason: 'Bank card offer refund does not match the verified capture',
-          supabase,
-          transactions: [transaction],
-        });
+        mismatchedBankOfferLegs.push(transaction);
         continue;
       }
     }
@@ -193,5 +188,16 @@ export async function initiatePaystackCancellationRefunds({
       })
     );
   }
+  if (mismatchedBankOfferLegs.length > 0) {
+    await quarantineRefund({
+      metadata: { accepted_refund_ids: refundIds, ambiguous_initiation: false },
+      order,
+      reason: 'Bank card offer refund does not match the verified capture',
+      supabase,
+      transactions: mismatchedBankOfferLegs,
+    });
+  }
+  if (bankOfferLookupUnavailable)
+    throw new Error('Unable to verify bank card offer refund capture');
   return refundIds;
 }

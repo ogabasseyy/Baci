@@ -337,6 +337,13 @@ async function verifyPaymentReference(
     wonTransactionFlip: transaction.status !== 'completed',
   });
 
+  if (finalizeOutcome.kind === 'bank_offer_capture_review') {
+    return NextResponse.json(
+      { code: 'BANK_CARD_OFFER_CAPTURE_REVIEW', status: 'pending' },
+      { status: 202 }
+    );
+  }
+
   if (
     finalizeOutcome.kind === 'captured_held' ||
     finalizeOutcome.kind === 'capture_evidence_review'

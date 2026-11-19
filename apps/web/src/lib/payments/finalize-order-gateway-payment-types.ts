@@ -32,6 +32,7 @@ export interface FinalizeOrderGatewayPaymentArgs {
 export type FinalizeOrderGatewayPaymentOutcome =
   | { kind: 'captured_held'; duplicate: boolean; reason: string }
   | { kind: 'capture_evidence_review'; duplicate: boolean; reason: string }
+  | { kind: 'bank_offer_capture_review' }
   | { kind: 'capture_hold_failed'; error: unknown }
   | { kind: 'completion_failed'; error: unknown }
   | BlockedOrderPaymentOutcome

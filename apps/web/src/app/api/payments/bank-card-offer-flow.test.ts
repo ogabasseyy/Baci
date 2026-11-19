@@ -1,4 +1,4 @@
-import { createHmac } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
 import { NextRequest } from 'next/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { hashBankCardOfferFilter } from '@/lib/checkout/hash-bank-card-offer-filter';
@@ -22,7 +22,7 @@ const itemId = 'ef8cd4bb-010e-4ce6-ab1a-9a29ef36569f';
 const productId = 'f37548d2-5d3a-41cf-8109-6a82a1684567';
 const customerEmail = 'buyer@example.com';
 const reference = 'BCO-1234567890abcdef1234567890abcdef';
-const secret = 'sk_test_bank_offer_fixture';
+const secret = `sk_test_${randomBytes(32).toString('hex')}`;
 
 vi.mock('@/lib/go54', () => ({
   isGo54Configured: () => false,
@@ -30,7 +30,11 @@ vi.mock('@/lib/go54', () => ({
 }));
 vi.mock('@/env', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/env')>()),
-  env: { PAYSTACK_SECRET_KEY: 'sk_test_bank_offer_fixture' },
+  env: {
+    get PAYSTACK_SECRET_KEY() {
+      return process.env.PAYSTACK_SECRET_KEY;
+    },
+  },
   getSupabaseUrl: () => 'https://synthetic.example.test',
   getSupabaseAnonKey: () => 'synthetic',
 }));
@@ -83,7 +87,10 @@ function request(path: string, payload: Record<string, unknown>, sign = false) {
     'content-type': 'application/json',
   };
   if (sign)
-    headers['x-paystack-signature'] = createHmac('sha512', secret)
+    headers['x-paystack-signature'] = createHmac(
+      'sha512',
+      process.env.PAYSTACK_SECRET_KEY ?? ''
+    )
       .update(body)
       .digest('hex');
   return new NextRequest(`http://localhost/api/payments/${path}`, {
@@ -172,7 +179,8 @@ function setup(bankCode: '035' | '232', issuerName: string) {
   };
   mocks.initialize.mockResolvedValue({
     reference,
-    authorization_url: 'https://checkout.paystack.com/trx/example',
+    authorization_url:
+      'https://checkout.paystack.com/trx/example?state=one%2Btwo&x=1',
   });
   mocks.verify.mockResolvedValue({ success: true, data });
   mocks.refund.mockResolvedValue({
@@ -294,6 +302,29 @@ function setup(bankCode: '035' | '232', issuerName: string) {
 }
 
 describe('bank card offer payment handlers', () => {
+  it('opens a recovery review for an uncertain initialization without another provider call', async () => {
+    vi.stubEnv('PAYSTACK_SECRET_KEY', secret);
+    setup('035', 'Wema Bank');
+    mocks.initialize.mockRejectedValueOnce(new Error('Connection closed'));
+    const input = {
+      merchant_id: merchantId,
+      order_id: orderId,
+      payment_method: 'bank_card_offer',
+      currency: 'NGN',
+      customer_email: customerEmail,
+      customer_name: 'Buyer',
+      customer_phone: '08012345678',
+      gateway: 'paystack',
+    };
+    expect((await initialize(request('initialize', input))).status).toBe(202);
+    expect((await initialize(request('initialize', input))).status).toBe(202);
+    expect(mocks.initialize).toHaveBeenCalledTimes(1);
+    expect(mocks.rpc).toHaveBeenCalledWith(
+      'flag_bank_card_offer_initialization_review',
+      expect.objectContaining({ p_reference: reference, p_failed: true })
+    );
+  });
+
   it.each([
     ['035', 'Wema Bank', 'Sterling Bank'],
     ['232', 'Sterling Bank', 'Wema Bank'],
@@ -333,7 +364,24 @@ describe('bank card offer payment handlers', () => {
     const ignored = await webhook(
       request('webhook', { event: 'charge.success', data: wrong }, true)
     );
-    expect(ignored.status, await ignored.clone().text()).toBe(503);
+    expect(ignored.status, await ignored.clone().text()).toBe(200);
+    await expect(ignored.json()).resolves.toMatchObject({
+      code: 'BANK_CARD_OFFER_CAPTURE_REVIEW',
+    });
+    expect(refundInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        paystack_ref: reference,
+        metadata: { source: 'bank_card_offer_capture' },
+      })
+    );
+    mocks.verify.mockResolvedValue({ success: false, code: 'NETWORK_ERROR' });
+    expect(
+      (
+        await webhook(
+          request('webhook', { event: 'charge.success', data }, true)
+        )
+      ).status
+    ).toBe(503);
     expect(mocks.rpc).not.toHaveBeenCalledWith(
       'complete_order_gateway_payment',
       expect.anything()

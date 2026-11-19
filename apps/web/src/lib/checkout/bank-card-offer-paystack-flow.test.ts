@@ -163,9 +163,12 @@ describe('bank card offer checkout and mocked Paystack flow', () => {
         authorization: { ...data.authorization, bank: otherIssuerName },
       },
     });
-    await expect(verifyBankCardOfferPaystack(attempt)).resolves.toBeNull();
+    await expect(verifyBankCardOfferPaystack(attempt)).resolves.toEqual({
+      kind: 'mismatch',
+    });
     verify.mockResolvedValueOnce({ success: true, data });
-    const evidence = (await verifyBankCardOfferPaystack(attempt))?.evidence;
+    const verified = await verifyBankCardOfferPaystack(attempt);
+    const evidence = verified?.kind === 'verified' ? verified.evidence : null;
     expect(evidence).toMatchObject({
       issuerName,
       providerVerificationId: data.id,

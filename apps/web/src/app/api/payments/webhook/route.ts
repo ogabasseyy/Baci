@@ -71,6 +71,7 @@ import {
   scheduleVoucherPinBackfill,
 } from '@/lib/vtu-voucher-backfill';
 import { sendEmail } from '@/lib/zeptomail';
+import { bankCardOfferWebhookTransactionSchema } from '@/schemas/bank-card-offer-payment-context';
 import {
   paystackZeroCandidateReviewGatewayResponseSchema,
   referenceSchema,
@@ -759,18 +760,29 @@ export async function POST(request: NextRequest) {
     if (reference.startsWith('BCO-')) {
       const row = await supabase
         .from('transactions')
-        .select(AGENTIC_PAYSTACK_DVA_TRANSACTION_SELECT)
+        .select(
+          'id, merchant_id, order_id, gateway, gateway_reference, amount, platform_fee'
+        )
         .eq('gateway_reference', reference)
         .single();
-      const transaction = row.data
-        ? normalizeAgenticPaystackDvaTransaction(row.data)
-        : null;
-      if (row.error || !transaction?.order_id || gateway !== 'paystack') {
+      const match = bankCardOfferWebhookTransactionSchema.safeParse(row.data);
+      if (row.error) {
+        return NextResponse.json(
+          { error: 'Bank offer capture lookup unavailable' },
+          { status: 503 }
+        );
+      }
+      if (
+        !match.success ||
+        match.data.gateway_reference !== reference ||
+        gateway !== 'paystack'
+      ) {
         return NextResponse.json(
           { error: 'Invalid bank offer capture' },
           { status: 400 }
         );
       }
+      const transaction = match.data;
       const outcome = await finalizeOrderGatewayPayment({
         actor: `webhook:${reference}`,
         gateway,
@@ -789,6 +801,12 @@ export async function POST(request: NextRequest) {
         },
         wonTransactionFlip: false,
       });
+      if (outcome.kind === 'bank_offer_capture_review') {
+        return NextResponse.json({
+          code: 'BANK_CARD_OFFER_CAPTURE_REVIEW',
+          status: 'pending',
+        });
+      }
       if (
         outcome.kind === 'completed' ||
         outcome.kind === 'order_cancelled' ||

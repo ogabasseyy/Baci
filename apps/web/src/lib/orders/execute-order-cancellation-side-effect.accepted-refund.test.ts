@@ -102,6 +102,63 @@ describe('cancellation refund accepted-refund safety', () => {
     expect(from).toHaveBeenCalledTimes(4);
   });
 
+  it('saves a later refund before retrying an unavailable bank-offer lookup', async () => {
+    const refundInsert = vi.fn().mockResolvedValue({ error: null });
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(
+        transactionQuery([
+          {
+            amount: 60,
+            currency: 'NGN',
+            gateway: 'paystack',
+            gateway_reference: 'BCO-fixture',
+            id: 'payment-1',
+          },
+          {
+            amount: 40,
+            currency: 'NGN',
+            gateway: 'paystack',
+            gateway_reference: 'regular-fixture',
+            id: 'payment-2',
+          },
+        ])
+      )
+      .mockReturnValueOnce(transactionQuery([]))
+      .mockReturnValueOnce(auditReviewsQuery([]))
+      .mockReturnValue({ insert: refundInsert });
+    const rpc = vi
+      .fn()
+      .mockResolvedValue({ data: null, error: { code: '57014' } });
+    mocks.initiateRefund.mockResolvedValue({
+      success: true,
+      data: {
+        id: 42,
+        status: 'pending',
+        transaction: { id: 123, reference: 'regular-fixture' },
+      },
+    });
+
+    await expect(
+      executeOrderCancellationSideEffect({
+        merchant,
+        order,
+        step: 'refund',
+        supabase: { from, rpc } as never,
+      })
+    ).rejects.toThrow('Unable to verify bank card offer refund capture');
+    expect(mocks.initiateRefund).toHaveBeenCalledTimes(1);
+    expect(mocks.initiateRefund).toHaveBeenCalledWith(
+      'regular-fixture',
+      4000,
+      'Order cancelled',
+      undefined
+    );
+    expect(refundInsert).toHaveBeenCalledWith(
+      expect.objectContaining({ gateway_reference: '42' })
+    );
+  });
+
   it('initiates every payment leg when an earlier accepted refund is pending', async () => {
     const refundInsert = vi.fn().mockResolvedValue({ error: null });
     const from = vi

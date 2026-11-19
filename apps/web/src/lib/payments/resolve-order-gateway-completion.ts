@@ -58,10 +58,35 @@ export async function resolveOrderGatewayCompletion({
           },
         };
       }
+      if (verified.kind === 'mismatch') {
+        const review = await supabase.from('reconciliation_review').insert({
+          issue_type: 'payment_match_ambiguous',
+          merchant_id: merchantId,
+          order_id: orderId,
+          txn_id: transactionId,
+          paystack_ref: reference,
+          reason:
+            'Captured Paystack payment does not match the saved bank card offer',
+          metadata: { source: 'bank_card_offer_capture' },
+        });
+        if (review.error && review.error.code !== '23505') {
+          return {
+            ok: false as const,
+            outcome: {
+              kind: 'completion_failed' as const,
+              error: review.error,
+            },
+          };
+        }
+        return {
+          ok: false as const,
+          outcome: { kind: 'bank_offer_capture_review' as const },
+        };
+      }
       const result = await completeOrderGatewayPayment({
         actor,
         expectedOutstandingMinor,
-        gatewayResponse: verified,
+        gatewayResponse: verified.gatewayResponse,
         orderId,
         supabase,
         transactionId,
@@ -79,7 +104,7 @@ export async function resolveOrderGatewayCompletion({
         ...result,
         redvaultDuplicate: false,
         redvaultInventoryConfirmed: false,
-        verifiedGatewayResponse: verified,
+        verifiedGatewayResponse: verified.gatewayResponse,
       };
     }
     const capture = await captureOrHoldRedvaultPayment({

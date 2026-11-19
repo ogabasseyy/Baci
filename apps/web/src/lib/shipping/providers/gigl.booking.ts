@@ -54,6 +54,7 @@ export async function bookGiglShipment(
   const vehicleType =
     selectedRate.vehicleType ?? getVehicleTypeForWeight(totalWeight);
 
+  let submitStarted = false;
   try {
     let tokenData: Awaited<ReturnType<GiglApiClient['getApiToken']>>;
     try {
@@ -138,6 +139,9 @@ export async function bookGiglShipment(
       );
     }
 
+    // Past this point the carrier POST may have been sent, so a timeout is
+    // unconfirmed; before it, nothing was submitted and the lock can be freed.
+    submitStarted = true;
     const bookingTokenData = apiClient.currentToken ?? tokenData;
     const { envelope, response } =
       await apiClient.safeFetchEnvelopeWithAccessToken(
@@ -267,7 +271,15 @@ export async function bookGiglShipment(
     if (signal.aborted || isGiglAbortError(error)) {
       io.log('warn', 'GIGL booking timed out', {
         timeoutMs: GIGL_BOOKING_TIMEOUT_MS,
+        submitStarted,
       });
+      if (!submitStarted) {
+        throw new OrderShipmentBookingError(
+          'GIG did not respond before the booking was sent. Nothing was booked; please try again.',
+          504,
+          'GIGL_BOOKING_TIMED_OUT_BEFORE_SUBMIT'
+        );
+      }
       throw new ProviderBookingTimeoutError(GIGL_BOOKING_TIMEOUT_MESSAGE);
     }
 

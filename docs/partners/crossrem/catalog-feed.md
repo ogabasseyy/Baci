@@ -1,6 +1,6 @@
 # CrossRem catalog feed v1
 
-`GET /api/partners/v1/catalog` returns one complete JSON snapshot for the configured merchant. Send `Authorization: Bearer <token>`. Provision `CROSSREM_CATALOG_TOKEN` separately in each approved environment.
+`GET /api/partners/v1/catalog` returns one complete JSON snapshot for the configured merchant. Send `Authorization: Bearer <token>`. Provision a random base64url `CROSSREM_CATALOG_TOKEN` separately in each approved environment.
 
 The response includes `schema_version: 1`, `currency: "NGN"` and `listings`. Each listing has the existing `listing_id`, the exact Baci product and optional variant or offer ID, title, image and product URLs, product type, brand, condition and condition label, availability and prices in kobo. The `base_price_minor` field is the current Ogabassey merchandise price for the exact item. CrossRem displays `price_minor`, which is the base plus 6%, rounded to the nearest kobo. Protection and delivery are excluded from both prices. Missing brand or category data is represented by null. Legacy categories can have a label without a stable category key.
 
@@ -13,7 +13,7 @@ Retain the last accepted snapshot and its ETag. Send the validator with `If-None
 3. Review the assortment and merchandise prices. Keep the ID bound to the same sellable item through price and title updates. Mark withdrawn IDs as retired and retain their binding. Add a new entry for a different sellable item.
 4. Call the sandbox endpoint and check the exact listing IDs, prices and condition labels. Repeat with the returned ETag and expect 304. Remove a required fixture from the source without retiring it in the bindings and expect 503. Apply the same checks to the approved production assortment before enabling sync.
 
-The Ogabassey baseline includes 4,501 Google listing IDs. The Riversong Vision 20S 20000mAh keeps its original ID and uses the merchant-confirmed New condition when the source condition is blank. Before resuming sync, confirm that CrossRem uses Google `g:id` as the listing key. The endpoint returns 503 if the credential or bindings are missing or any active binding cannot resolve uniquely. This protects CrossRem's previous catalog from an incomplete snapshot.
+The Ogabassey baseline includes 4,501 Google listing IDs. The Riversong Vision 20S 20000mAh keeps its original ID and uses the merchant-confirmed New condition when the source condition is blank. Before resuming sync, confirm that CrossRem uses Google `g:id` as the listing key. The endpoint returns 503 if the credential or bindings are missing or any active binding cannot resolve uniquely. This protects CrossRem's previous catalog from an incomplete snapshot. For a confirmed withdrawal, mark the binding retired. The next complete snapshot omits its ID and CrossRem can deactivate it. Baci caches complete snapshots internally with the same product and merchant invalidation tags as Google Merchant. Partner HTTP responses are private.
 
 
 Run from the repository root. The command reads the configured merchant's public feed data and writes candidate bindings to standard output.

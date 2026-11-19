@@ -1,7 +1,9 @@
+import { cacheLife, cacheTag } from 'next/cache';
 import { collectGoogleMerchantListings } from '@/app/api/feed/google-merchant/collect-google-merchant-listings';
 import { getCachedGoogleMerchantFeedData } from '@/app/api/feed/google-merchant/feed-data';
 import { buildMerchantBaseUrl } from '@/app/api/feed/google-merchant/route-utils';
 import { resolveFeedMerchant } from '@/lib/feed-identifier';
+import { logger } from '@/lib/logger';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import {
   CROSSREM_CATALOG_BINDINGS,
@@ -10,6 +12,14 @@ import {
 import { projectCatalog } from './project-catalog';
 
 export async function loadCrossRemCatalog() {
+  'use cache';
+  cacheLife('products');
+  cacheTag(
+    'google-merchant-feed',
+    'products',
+    `merchant-feed-${CROSSREM_MERCHANT_ID}`
+  );
+
   const activeCount = CROSSREM_CATALOG_BINDINGS.filter(
     (binding) => !binding.retired
   ).length;
@@ -39,6 +49,18 @@ export async function loadCrossRemCatalog() {
   );
   const listings = projectCatalog(rows, CROSSREM_CATALOG_BINDINGS);
   if (listings.length !== activeCount) {
+    const resolvedIds = new Set(listings.map((listing) => listing.listing_id));
+    const sampleListingIds = CROSSREM_CATALOG_BINDINGS.filter(
+      (binding) => !binding.retired && !resolvedIds.has(binding.listingId)
+    )
+      .slice(0, 10)
+      .map((binding) => binding.listingId);
+    logger.warn({
+      message: 'CrossRem snapshot incomplete',
+      merchantId: merchant.id,
+      missingCount: activeCount - listings.length,
+      sampleListingIds,
+    });
     throw new Error('Incomplete CrossRem catalog');
   }
 

@@ -3,6 +3,9 @@ import { loadCrossRemCatalog } from './catalog-service';
 import { GET } from './route';
 
 const mocks = vi.hoisted(() => ({
+  warn: vi.fn(),
+  cacheTag: vi.fn(),
+  cacheLife: vi.fn(),
   resolveMerchant: vi.fn(),
   getFeedData: vi.fn(),
   bindings: [
@@ -14,6 +17,11 @@ const mocks = vi.hoisted(() => ({
     variantId?: string;
   }>,
 }));
+vi.mock('next/cache', () => ({
+  cacheLife: mocks.cacheLife,
+  cacheTag: mocks.cacheTag,
+}));
+vi.mock('@/lib/logger', () => ({ logger: { warn: mocks.warn } }));
 vi.mock('@/lib/feed-identifier', () => ({
   resolveFeedMerchant: mocks.resolveMerchant,
 }));
@@ -112,6 +120,12 @@ describe('CrossRem catalog source', () => {
       })
     );
     expect(response.status).toBe(200);
+    expect(mocks.cacheLife).toHaveBeenCalledWith('products');
+    expect(mocks.cacheTag).toHaveBeenCalledWith(
+      'google-merchant-feed',
+      'products',
+      'merchant-feed-ogabassey-id'
+    );
     await expect(response.json()).resolves.toMatchObject({
       schema_version: 1,
       currency: 'NGN',
@@ -131,6 +145,12 @@ describe('CrossRem catalog source', () => {
   it('refuses an incomplete snapshot so CrossRem retains the prior catalog', async () => {
     await expect(loadCrossRemCatalog()).rejects.toThrow(
       'Incomplete CrossRem catalog'
+    );
+    expect(mocks.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        missingCount: 1,
+        sampleListingIds: ['legacy-id'],
+      })
     );
   });
 

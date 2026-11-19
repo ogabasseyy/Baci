@@ -27,12 +27,12 @@ describe('CrossRem catalog', () => {
   afterEach(() => vi.unstubAllEnvs());
 
   it('fails closed when a credential is not configured', async () => {
-    vi.stubEnv('CROSSREM_CATALOG_TOKEN', '');
-
-    const response = await GET(request(`Bearer ${token}`));
-
-    expect(response.status).toBe(503);
-    expect(response.headers.get('cache-control')).toBe('private, no-store');
+    for (const configuredToken of ['', 'bad:token']) {
+      vi.stubEnv('CROSSREM_CATALOG_TOKEN', configuredToken);
+      const response = await GET(request(`Bearer ${token}`));
+      expect(response.status).toBe(503);
+      expect(response.headers.get('cache-control')).toBe('private, no-store');
+    }
     expect(loadCrossRemCatalog).not.toHaveBeenCalled();
   });
 

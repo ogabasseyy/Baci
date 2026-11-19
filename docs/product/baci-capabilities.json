@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-19T06:39:37+00:00",
-  "source_revision": "f958ee75d9dd126032c7d51d4dc14ed742857506",
-  "evidence_digest": "a7baaa7390a434ac4d326678c16ff485c81d1b9e61256a4e8d58d2cbe1247c21",
-  "claims_digest": "7a7687be54c6dcafa2c321cdf326c9002415fa0550b736e93bfd861007b8174c",
+  "reviewed_at": "2026-11-19T08:37:40+00:00",
+  "source_revision": "ceaeef881bea9e8726d8487cb89e701221baf8cf",
+  "evidence_digest": "1ea076c1c76093434b76485720a80a5a12f04c34a20a25e93ffe55706def7df8",
+  "claims_digest": "0239ddb15830e02eda1357a5af1300f2642f2a288c566fd90c3208b6080ae34c",
   "review_scope": "Source evidence only. Preserves current main\u2019s OAuth, cart retention and notices, payment reconciliation, merchant protocols and Oxygen pilot boundaries. Full-code storefront MCP remains disabled by default. Owner approval, evidence and public-verification schemas retain their existing validation. Direct local admission, source adoption, rollback and simulated commerce tests cover authority boundaries. Hosted qualification and activation remain separate.",
   "capabilities": [
     {
@@ -238,7 +238,7 @@
       "id": "custom-storefront-mcp",
       "title": "Full-code storefront MCP foundations",
       "status": "code_evidenced",
-      "claim": "Baci source implements custom React/CSS storefront upload, isolated build/prerender, inspection and private preview through MCP builder ports, reusing its commerce engine. The hosted candidate runs builds in a durable background worker and exposes their status through MCP.",
+      "claim": "Baci source implements custom React/CSS storefront upload, isolated build/prerender, inspection and private preview through MCP builder ports, reusing its commerce engine. When explicitly enabled in private operator configuration, the hosted candidate runs builds in a durable background worker and exposes their status through MCP.",
       "limitations": "Production composition is explicitly uninstalled/disabled by default. Local synthetic proofs are not deployed ChatGPT availability, merchant activation, permission to publish or CWV qualification. Existing auth/RLS, entitlement, owner approval and performance/private-apply gates still apply. Real runner/HTTPS delivery and scoped verifier provisioning require separate qualification and authorized rollout.",
       "source_refs": [
         "apps/web/builder-mcp-server/registry.ts",

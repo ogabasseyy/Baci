@@ -7,7 +7,11 @@ import test from 'node:test';
 
 const head = 'a'.repeat(40);
 const marker = `<!-- codex-review-state:v1 ${JSON.stringify({ code_review: { commit_sha: head, status: 'completed', has_any_findings: false, has_unresolved_findings: false } })} -->`;
-const summary = { user: { id: 199175422, type: 'Bot' }, performed_via_github_app: { id: 1144995 }, body: marker };
+const summary = {
+  user: { id: 199175422, type: 'Bot' },
+  performed_via_github_app: { id: 1144995 },
+  body: `${marker}\n| 📝 **Code Review** | ✅ **Completed** <relative-time datetime="2026-11-19T05:00:00Z">2026-11-19T05:00:00Z</relative-time> |`,
+};
 
 function run({ comments = [summary], events = [], failComments = false, failEvents = false, failProjection = false, changedHead = false, changedComments = false, unrelatedComment = false, pr = '7' } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'codex-evidence-'));
@@ -56,6 +60,7 @@ test('sets pending before reporting a current clean review', () => {
   const result = run();
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.statuses, /state=pending/);
+  assert.match(result.statuses, /context=Codex review evidence \/ code #7/);
   assert.match(result.statuses, /state=success/);
   assert.ok(result.statuses.indexOf('state=pending') < result.statuses.indexOf('state=success'));
 });
@@ -71,7 +76,11 @@ test('does not report clean if comment retrieval fails or the head changes', () 
 
 test('keeps pre-retarget comments pending after base_ref_changed', () => {
   const result = run({
-    comments: [{ ...summary, updated_at: '2026-11-19T03:00:00Z' }],
+    comments: [{
+      ...summary,
+      updated_at: '2026-11-19T06:00:00Z',
+      body: `${marker}\n| 📝 **Code Review** | ✅ **Completed** <relative-time datetime="2026-11-19T03:00:00Z">2026-11-19T03:00:00Z</relative-time> |`,
+    }],
     events: [{ event: 'base_ref_changed', created_at: '2026-11-19T04:00:00Z' }],
   });
   assert.equal(result.status, 0, result.stderr);

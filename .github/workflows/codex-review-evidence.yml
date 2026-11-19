@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: read
+  issues: read
   pull-requests: read
   statuses: write
 
@@ -49,7 +50,7 @@ jobs:
             description="Pull request base changed; waiting for fresh Codex review"
           fi
           gh api --method POST "repos/$REPO/statuses/$head" -f state=pending \
-            -f context='Codex review evidence / code' \
+            -f context="Codex review evidence / code #$PR_NUMBER" \
             -f description="$description" \
             -f target_url="$GITHUB_SERVER_URL/$REPO/actions/runs/$GITHUB_RUN_ID" >/dev/null
       # Always check out the trusted default branch, never the PR branch.

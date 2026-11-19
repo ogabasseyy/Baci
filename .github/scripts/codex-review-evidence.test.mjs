@@ -12,12 +12,16 @@ const code = (overrides = {}) => ({
   has_unresolved_findings: false,
   ...overrides,
 });
-const comment = (review, overrides = {}) => ({
-  user: { id: 199175422, type: 'Bot' },
-  performed_via_github_app: { id: 1144995 },
-  body: `<!-- codex-review-state:v1 ${JSON.stringify({ code_review: review })} -->`,
-  ...overrides,
-});
+const comment = (review, overrides = {}) => {
+  const time = overrides.updated_at ?? '2026-11-19T05:00:00Z';
+  return {
+    user: { id: 199175422, type: 'Bot' },
+    performed_via_github_app: { id: 1144995 },
+    updated_at: time,
+    body: `<!-- codex-review-state:v1 ${JSON.stringify({ code_review: review })} -->\n| 📝 **Code Review** | ✅ **Completed** <relative-time datetime="${time}">${time}</relative-time> |`,
+    ...overrides,
+  };
+};
 
 test('requires an actual completed clean review of the current commit', () => {
   assert.equal(classifyCodexReview([], head), 'pending');
@@ -74,4 +78,27 @@ test('does not infer a code review from a security review or an invalid head', (
   const securityOnly = comment(code(), { body: `<!-- codex-review-state:v1 ${JSON.stringify({ security_review: code() })} -->` });
   assert.equal(classifyCodexReview([securityOnly], head), 'unavailable');
   assert.throws(() => classifyCodexReview([], 'bad-sha'));
+});
+
+test('requires fresh code-review timestamp after retargeting and fails closed on later quota notices', () => {
+  const preRetargetCodeWithLaterSecurityEdit = comment(code(), {
+    updated_at: '2026-11-19T06:00:00Z',
+    body: `<!-- codex-review-state:v1 ${JSON.stringify({ code_review: code() })} -->\n| 📝 **Code Review** | ✅ **Completed** <relative-time datetime="2026-11-19T04:00:00Z">2026-11-19T04:00:00Z</relative-time> |\n| 🔒 **Security Review** | ✅ **Completed** <relative-time datetime="2026-11-19T06:00:00Z">2026-11-19T06:00:00Z</relative-time> |`,
+  });
+  assert.equal(
+    classifyCodexReview([preRetargetCodeWithLaterSecurityEdit], head, { invalidatedAt: '2026-11-19T05:00:00Z' }),
+    'stale'
+  );
+  assert.equal(
+    classifyCodexReview([comment(code())], head, { invalidatedAt: '2026-11-19T04:30:00Z' }),
+    'clean'
+  );
+  const quotaNotice = {
+    id: 2,
+    user: { id: 199175422, type: 'Bot' },
+    performed_via_github_app: { id: 1144995 },
+    created_at: '2026-11-19T05:10:00Z',
+    body: 'You have reached your Codex usage limits for this repository.',
+  };
+  assert.equal(classifyCodexReview([comment(code()), quotaNotice], head), 'unavailable');
 });

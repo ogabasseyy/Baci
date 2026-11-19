@@ -9,7 +9,7 @@ case "$pr" in *[!0-9]*|'') echo 'Invalid pull request number' >&2; exit 1;; esac
 get_head() { gh api "repos/$repo/pulls/$pr" --jq .head.sha; }
 post_status() {
   gh api --method POST "repos/$repo/statuses/$head" \
-    -f state="$1" -f context='Codex review evidence / code' \
+    -f state="$1" -f context="Codex review evidence / code #$pr" \
     -f description="$2" -f target_url="${GITHUB_SERVER_URL}/${repo}/actions/runs/${GITHUB_RUN_ID}" >/dev/null
 }
 

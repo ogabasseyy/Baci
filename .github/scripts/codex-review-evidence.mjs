@@ -2,6 +2,8 @@ const BOT_USER_ID = 199175422;
 const CODEX_APP_ID = 1144995;
 const MARKER = 'codex-review-state:v1';
 const MAX_BODY_LENGTH = 200_000;
+const USAGE_LIMIT = /(reached your Codex usage limits|Codex usage limits have been reached)/i;
+const CODE_REVIEW_TIME = /Code Review[^\n]*<relative-time\s+datetime="([^"]+)"/i;
 
 export function isCodexAppComment(item) {
   return item?.user?.id === BOT_USER_ID && item.user.type === 'Bot' &&
@@ -41,13 +43,25 @@ export function classifyCodexReview(comments, head, { invalidatedAt } = {}) {
   if (!review || typeof review !== 'object' || Array.isArray(review)) return 'unavailable';
   if (!/^[0-9a-f]{40}$/.test(review.commit_sha ?? '')) return 'unavailable';
   if (review.commit_sha !== head) return 'stale';
+  const codeTimeRaw = CODE_REVIEW_TIME.exec(body)?.[1];
+  const codeTimeMs = codeTimeRaw ? Date.parse(codeTimeRaw) : Number.NaN;
+  const summaryMs = Number.isFinite(codeTimeMs)
+    ? codeTimeMs
+    : Date.parse(summary.updated_at ?? summary.created_at ?? '');
   if (invalidatedAt) {
     const invalidatedMs = Date.parse(invalidatedAt);
-    const updatedMs = Date.parse(summary.updated_at ?? summary.created_at ?? '');
-    if (!Number.isFinite(invalidatedMs) || !Number.isFinite(updatedMs) || updatedMs <= invalidatedMs) {
+    if (!Number.isFinite(invalidatedMs) || !Number.isFinite(codeTimeMs) || codeTimeMs <= invalidatedMs) {
       return 'stale';
     }
   }
+  const hasLaterQuotaNotice = comments.some((item) => {
+    if (!isCodexAppComment(item) || typeof item.body !== 'string' || !USAGE_LIMIT.test(item.body)) {
+      return false;
+    }
+    const noticeMs = Date.parse(item.created_at ?? item.updated_at ?? '');
+    return !Number.isFinite(summaryMs) || !Number.isFinite(noticeMs) || noticeMs >= summaryMs;
+  });
+  if (hasLaterQuotaNotice) return 'unavailable';
   if (['pending', 'queued', 'in_progress'].includes(review.status)) return 'pending';
   if (review.status !== 'completed' || typeof review.has_any_findings !== 'boolean' ||
       typeof review.has_unresolved_findings !== 'boolean' ||

@@ -13,11 +13,15 @@ import {
   buildGoogleColorXml,
   buildGoogleProductDetailXml,
 } from './build-product-detail-xml';
-import type { FeedProduct, FeedVariant } from './feed-builder';
 import { FEED_CONSTANTS } from './feed-constants';
 import { getFeedStockCount } from './feed-stock';
+import type {
+  FeedProduct,
+  FeedVariant,
+  GoogleMerchantListing,
+} from './feed-types';
 
-interface VariantFeedInput {
+export interface VariantFeedInput {
   product: FeedProduct;
   variants: FeedVariant[];
   manifest: FeedImageManifestEntry[];
@@ -26,6 +30,8 @@ interface VariantFeedInput {
   brand: string;
   platform: 'google' | 'facebook';
   familyRow?: boolean;
+  collectListing?: (listing: GoogleMerchantListing) => void;
+  renderXml?: boolean;
 }
 
 const text = (value: unknown) =>
@@ -118,10 +124,6 @@ export function buildVariantFeedItems(input: VariantFeedInput): string {
       if (!image) return '';
 
       const attributes = canonicalAttributes(variant);
-      const identifiers =
-        productManufacturerIdentifiers.resolveVariantProductIdentifiers(
-          variant.attributes
-        );
       const url = new URL(productUrl);
       url.searchParams.set('variantId', variant.id);
       url.searchParams.set(
@@ -179,6 +181,24 @@ export function buildVariantFeedItems(input: VariantFeedInput): string {
         title.length > maxTitle
           ? `${title.slice(0, maxTitle - 3).trimEnd()}...`
           : title;
+      const id = input.familyRow ? product.id : variant.id;
+      const listingUrl = url.toString();
+      input.collectListing?.({
+        id,
+        product,
+        variant,
+        imageUrl: image,
+        url: listingUrl,
+        title: boundedTitle,
+        price,
+        stock,
+      });
+      if (input.renderXml === false) return '';
+
+      const identifiers =
+        productManufacturerIdentifiers.resolveVariantProductIdentifiers(
+          variant.attributes
+        );
       const variantProduct = { ...product, variant_attributes: attributes };
       const compareAt = variant.compare_at_price;
       const prices =
@@ -192,13 +212,13 @@ export function buildVariantFeedItems(input: VariantFeedInput): string {
       const mpn = text(identifiers.mpn);
       return [
         '    <item>',
-        `<g:id>${escapeXml(input.familyRow ? product.id : variant.id)}</g:id>`,
+        `<g:id>${escapeXml(id)}</g:id>`,
         input.familyRow
           ? ''
           : `<g:item_group_id>${escapeXml(product.id)}</g:item_group_id>`,
         `<g:title>${escapeXml(boundedTitle)}</g:title>`,
         `<g:description>${escapeXml(buildFeedDescription(variantProduct))}</g:description>`,
-        `<g:link>${escapeXml(url.toString())}</g:link>`,
+        `<g:link>${escapeXml(listingUrl)}</g:link>`,
         `<g:canonical_link>${escapeXml(productUrl)}</g:canonical_link>`,
         `<g:image_link>${escapeXml(image)}</g:image_link>`,
         ...[...new Set(resolveGmcAdditionalImages(entries))]

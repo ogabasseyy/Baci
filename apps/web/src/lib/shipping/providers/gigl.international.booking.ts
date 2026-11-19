@@ -1,3 +1,8 @@
+import { hasNeverReachedCause } from '../never-reached-cause';
+import {
+  GIGL_INTERNATIONAL_BOOKING_TIMEOUT_MESSAGE,
+  ProviderBookingTimeoutError,
+} from '../order-shipment-booking-failure';
 import { OrderShipmentBookingError } from '../order-shipment-booking-utils';
 import type { BookingRequest, ShipmentBookingResult } from '../types';
 import type { GiglApiClient } from './gigl.auth';
@@ -52,16 +57,33 @@ export async function bookGiglInternationalShipment(
     typeof giglSchemas.internationalBookingData.parse
   >;
   let trackingNumber!: string;
+  let submitStarted = false;
 
   try {
     const selectedRate = parseSelectedInternationalRateId(
       request.providerRateId
     );
     const shipmentPackages = buildInternationalPackages(request.items);
-    const tokenData = await apiClient.getApiToken(
-      GIGL_BOOKING_TIMEOUT_MS,
-      signal
-    );
+    let tokenData: Awaited<ReturnType<GiglApiClient['getApiToken']>>;
+    try {
+      tokenData = await apiClient.getApiToken(GIGL_BOOKING_TIMEOUT_MS, signal);
+    } catch (error) {
+      if (
+        error instanceof OrderShipmentBookingError ||
+        signal.aborted ||
+        isGiglAbortError(error)
+      ) {
+        throw error;
+      }
+      // A refused or malformed login: nothing was submitted, so free the lock.
+      throw new OrderShipmentBookingError(
+        error instanceof Error
+          ? error.message
+          : 'GIGL API authentication failed',
+        502,
+        'GIGL_AUTHENTICATION_FAILED'
+      );
+    }
     const declaredValue = totalDeclaredValue(request);
     const destinationCountry = await resolveDestinationCountryId(
       apiClient,
@@ -88,6 +110,8 @@ export async function bookGiglInternationalShipment(
         'GIGL_INTERNATIONAL_DESTINATION_COUNTRY_NOT_FOUND'
       );
     }
+    // Past this point the create POST may have been sent.
+    submitStarted = true;
     const {
       envelope,
       response,
@@ -182,8 +206,27 @@ export async function bookGiglInternationalShipment(
     if (signal.aborted || isGiglAbortError(error)) {
       io.log('warn', 'GIGL international booking timed out', {
         timeoutMs: GIGL_BOOKING_TIMEOUT_MS,
+        submitStarted,
       });
-      throw new Error('GIGL international booking timed out');
+      if (!submitStarted) {
+        throw new OrderShipmentBookingError(
+          'GIG did not respond before the booking was sent. Nothing was booked; please try again.',
+          504,
+          'GIGL_BOOKING_TIMED_OUT_BEFORE_SUBMIT'
+        );
+      }
+      throw new ProviderBookingTimeoutError(
+        GIGL_INTERNATIONAL_BOOKING_TIMEOUT_MESSAGE
+      );
+    }
+    if (submitStarted && !hasNeverReachedCause(error)) {
+      // The create POST may have created the shipment, so an unreadable answer
+      // or a mid-request network failure is unconfirmed, not unexpected.
+      throw new ProviderBookingTimeoutError(
+        error instanceof Error
+          ? error.message
+          : GIGL_INTERNATIONAL_BOOKING_TIMEOUT_MESSAGE
+      );
     }
 
     throw error;

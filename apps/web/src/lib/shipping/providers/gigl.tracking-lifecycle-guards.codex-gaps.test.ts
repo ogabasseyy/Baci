@@ -129,6 +129,8 @@ describe('bugfix: foreign-office arrivals need a matching destination', () => {
     ['ARFK', 'LONDON UK', true],
     ['ARFP', 'ABUJA', false],
     ['ARFH', 'HOUSTON', true],
+    ['ARUS', 'USA', true],
+    ['ARUS', 'ABUJA', false],
     ['ARFK', 'ABUJA', false],
   ] as const)('%s with destination %s promotes: %s', (code, dest, promoted) => {
     const evt = scan(code, null, 12);

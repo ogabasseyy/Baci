@@ -2,6 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { copyFor } from './gigl-tracking-notification-copy';
 
 describe('GIGL tracking notification copy', () => {
+  it('tells the customer their order reached their delivery city', () => {
+    expect(copyFor('arrived_in_city', 'provider detail')).toEqual({
+      title: 'Arrived in your city',
+      body: 'Your order has reached your delivery city. We will update you on the next step.',
+    });
+  });
+
   it('uses explicit copy for provider lifecycle kinds', () => {
     expect(copyFor('pickup_delayed', 'provider detail')).toEqual({
       title: 'Pickup delayed',

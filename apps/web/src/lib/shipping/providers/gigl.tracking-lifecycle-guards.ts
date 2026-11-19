@@ -67,6 +67,7 @@ const FOREIGN_OFFICE_DESTINATIONS: Record<string, RegExp> = {
   ARFK: /\b(UK|U\.K|UNITED KINGDOM|ENGLAND|LONDON)\b/,
   ARFP: /\b(UK|U\.K|UNITED KINGDOM|ENGLAND|LONDON)\b/,
   ARFH: /\b(US|USA|UNITED STATES|HOUSTON|TEXAS)\b/,
+  ARUS: /\b(US|USA|UNITED STATES|HOUSTON|TEXAS)\b/,
 };
 
 // Whole word only, so unrelated text that merely contains DEPART (e.g.

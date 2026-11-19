@@ -8,6 +8,7 @@ import {
   LayoutTemplate,
   Megaphone,
   MessageCircle,
+  MessageSquare,
   Newspaper,
   Package,
   Paintbrush,
@@ -57,6 +58,12 @@ export function buildDashboardNavItems(
       icon: ShoppingCart,
       label: 'Orders',
       badge: ordersCount > 0 ? ordersCount : undefined,
+    },
+    {
+      id: 'messages',
+      href: '/dashboard/messages' as Route,
+      icon: MessageSquare,
+      label: 'Messages',
     },
     {
       id: 'products',

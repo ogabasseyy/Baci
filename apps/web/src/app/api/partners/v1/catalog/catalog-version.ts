@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger';
 import { createAnonClient } from '@/lib/supabase/anon';
 import { crossRemCatalogConfig } from './catalog-bindings';
 
@@ -12,8 +13,12 @@ export async function readCrossRemCatalogVersion(): Promise<string> {
     .select('revision')
     .eq('merchant_id', merchantId)
     .maybeSingle();
-  if (error || typeof data?.revision !== 'string') {
+  if (error) {
     throw new Error('CrossRem catalog version unavailable', { cause: error });
+  }
+  if (typeof data?.revision !== 'string') {
+    logger.warn({ message: 'Published CrossRem catalog enrollment missing' });
+    throw new Error('CrossRem catalog version unavailable');
   }
   return data.revision;
 }

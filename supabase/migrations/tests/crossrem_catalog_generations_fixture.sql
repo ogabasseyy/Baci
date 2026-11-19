@@ -14,9 +14,25 @@ CREATE TABLE public.merchants (
   is_platform_admin boolean,
   is_published boolean
 );
-CREATE TABLE public.products (id uuid PRIMARY KEY, merchant_id uuid, category_id uuid);
-CREATE TABLE public.product_variants (id uuid PRIMARY KEY, merchant_id uuid);
-CREATE TABLE public.product_offers (id uuid PRIMARY KEY, merchant_id uuid);
+CREATE TABLE public.products (
+  id uuid PRIMARY KEY, merchant_id uuid, category_id uuid, discovery_metadata jsonb,
+  updated_at timestamptz, price numeric, status text, name text, description text,
+  slug text, compare_at_price numeric, brand text, gtin text, mpn text, sku text,
+  stock integer, stock_quantity integer, manage_stock boolean, condition text,
+  has_condition_offers boolean, variant_model text, available_conditions text[],
+  google_product_category text, category text, canonical_url text, color text,
+  weight_value numeric, weight_unit text, created_at timestamptz
+);
+CREATE TABLE public.product_variants (
+  id uuid PRIMARY KEY, merchant_id uuid, product_id uuid, sku text, attributes jsonb,
+  condition text, price_override numeric, stock_quantity integer,
+  is_inventory_anchor boolean, created_at timestamptz, cost_price numeric
+);
+CREATE TABLE public.product_offers (
+  id uuid PRIMARY KEY, merchant_id uuid, product_id uuid, status text,
+  condition text, price numeric, compare_at_price numeric, stock_quantity integer,
+  images jsonb, updated_at timestamptz
+);
 CREATE TABLE public.product_feed_images (
   id uuid PRIMARY KEY,
   merchant_id uuid,
@@ -35,10 +51,14 @@ CREATE TABLE public.product_feed_images (
   verified_at timestamptz,
   fixture_future_column text
 );
-CREATE TABLE public.categories (id uuid PRIMARY KEY, merchant_id uuid, name text);
-CREATE TABLE public.domains (id uuid PRIMARY KEY, merchant_id uuid);
-CREATE TABLE public.product_categories (product_id uuid, category_id uuid);
-CREATE TABLE public.product_key_specs (product_id uuid PRIMARY KEY);
+CREATE TABLE public.categories (id uuid PRIMARY KEY, merchant_id uuid, name text, is_active boolean, slug text);
+CREATE TABLE public.domains (id uuid PRIMARY KEY, merchant_id uuid, domain text, status text, is_primary boolean);
+CREATE TABLE public.product_categories (product_id uuid, category_id uuid, id uuid, is_primary boolean);
+CREATE TABLE public.product_key_specs (
+  product_id uuid PRIMARY KEY, screen_size_inches numeric, ram_gb integer,
+  storage_gb integer, main_camera_mp integer, weight_g numeric,
+  available_colors text[], display_resolution text, front_camera_mp integer
+);
 
 GRANT SELECT ON public.merchants TO anon, authenticated;
 INSERT INTO public.merchants (id, is_published) VALUES
@@ -48,6 +68,7 @@ INSERT INTO public.merchants (id, is_published) VALUES
 \ir ../20261119162000_crossrem_catalog_generations.sql
 \ir ../20261119163500_crossrem_image_revision_heartbeat.sql
 \ir ../20261119165000_crossrem_image_audit_fields.sql
+\ir ../20261119170500_crossrem_projection_revisions.sql
 
 SET ROLE anon;
 DO $$ BEGIN
@@ -88,6 +109,9 @@ BEGIN
     format('INSERT INTO public.product_key_specs VALUES (%L)', item),
     format('UPDATE public.merchants SET slug = %L WHERE id = %L', 'updated-fixture-slug', pilot),
     format('DELETE FROM public.product_key_specs WHERE product_id = %L', item),
+    format('UPDATE public.products SET price = 150 WHERE id = %L', item),
+    format('UPDATE public.product_offers SET status = %L WHERE id = %L', 'inactive', item),
+    format('UPDATE public.product_variants SET stock_quantity = 0 WHERE id = %L', item),
     format('UPDATE public.product_variants SET merchant_id = %L WHERE id = %L', other, item)
   ] LOOP
     EXECUTE mutation;
@@ -104,6 +128,15 @@ BEGIN
   WHERE id = item;
   IF (SELECT revision FROM public.crossrem_catalog_generations) <> revision_before THEN
     RAISE EXCEPTION 'Image verification heartbeats must preserve the revision';
+  END IF;
+
+  UPDATE public.product_offers SET updated_at = now() WHERE id = item;
+  UPDATE public.product_variants SET cost_price = 100 WHERE id = item;
+  UPDATE public.products
+  SET discovery_metadata = '{"fixture":true}', updated_at = now()
+  WHERE id = item;
+  IF (SELECT revision FROM public.crossrem_catalog_generations) <> revision_before THEN
+    RAISE EXCEPTION 'Product discovery metadata and internal variant or offer fields must preserve the revision';
   END IF;
 
   BEGIN

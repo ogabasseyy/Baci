@@ -3,6 +3,7 @@ import {
   bodyEtag,
   createSnapshotCache,
   matchesValidator,
+  uncachedBody,
 } from './catalog-snapshot-cache';
 import { readCrossRemCatalogVersion } from './catalog-version';
 
@@ -18,21 +19,46 @@ async function buildSnapshot(version: string) {
   return { etag: bodyEtag(body), body };
 }
 
+const localBuilds = new Map<string, ReturnType<typeof buildSnapshot>>();
+
+async function buildWithoutRedis(version: string) {
+  const existing = localBuilds.get(version);
+  if (existing) {
+    const snapshot = await existing;
+    await assertCurrentVersion(version);
+    return snapshot;
+  }
+  const pending = buildSnapshot(version);
+  localBuilds.set(version, pending);
+  try {
+    return await pending;
+  } finally {
+    localBuilds.delete(version);
+  }
+}
+
 export async function getVersionedCrossRemCatalog(validator: string | null) {
   const version = await readCrossRemCatalogVersion();
   const cache = createSnapshotCache();
   const cached = await cache?.read(version, validator);
-  if (cached) return cached;
+  if (cached && cached !== uncachedBody) {
+    await assertCurrentVersion(version);
+    return cached;
+  }
 
   const lease = await cache?.acquire();
   if (!cache || !lease || lease.status === 'unavailable') {
-    const { etag, body } = await buildSnapshot(version);
+    const { etag, body } = await buildWithoutRedis(version);
     return { etag, body: matchesValidator(validator, etag) ? null : body };
   }
 
   if (lease.status === 'busy') {
     const published = await cache.wait(version, validator);
-    if (!published) throw new Error('CrossRem snapshot rebuild pending');
+    if (!published || published === uncachedBody) {
+      throw new Error(
+        'CrossRem full snapshot unavailable from concurrent rebuild'
+      );
+    }
     await assertCurrentVersion(version);
     return published;
   }
@@ -41,7 +67,7 @@ export async function getVersionedCrossRemCatalog(validator: string | null) {
   try {
     // The previous owner may have finished between our first read and lock.
     const ready = await cache.read(version, validator);
-    if (ready) {
+    if (ready && ready !== uncachedBody) {
       await assertCurrentVersion(version);
       return ready;
     }

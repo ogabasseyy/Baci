@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { GET } from './route';
+import { GET, maxDuration } from './route';
 
 const {
   after,
@@ -155,7 +155,7 @@ describe('CrossRem catalog', () => {
     expect(response.status).toBe(304);
     expect(await response.text()).toBe('');
     expect(response.headers.get('etag')).toBe(etag);
-    expect(readVersion).toHaveBeenCalledTimes(1);
+    expect(readVersion).toHaveBeenCalledTimes(2);
     expect(redis.get).toHaveBeenCalledTimes(1);
     expect(loadCrossRemCatalog).not.toHaveBeenCalled();
   });
@@ -234,6 +234,39 @@ describe('CrossRem catalog', () => {
     expect(response.status).toBe(503);
     expect(redis.get).not.toHaveBeenCalled();
     expect(loadCrossRemCatalog).not.toHaveBeenCalled();
+  });
+
+  it('rejects a cache hit if the revision changed during the Redis read', async () => {
+    redis.get.mockResolvedValueOnce({ version, etag });
+    readVersion
+      .mockResolvedValueOnce(version)
+      .mockResolvedValueOnce(nextVersion);
+    expect((await GET(request(`Bearer ${token}`, etag))).status).toBe(503);
+    expect(loadCrossRemCatalog).not.toHaveBeenCalled();
+  });
+
+  it('shares an in-flight build without Redis and applies each request validator', async () => {
+    vi.stubEnv('VERCEL_DEPLOYMENT_ID', '');
+    vi.stubEnv('CROSSREM_CATALOG_CACHE_DEPLOYMENT_ID', '');
+    const build = Promise.withResolvers<typeof snapshot>();
+    loadCrossRemCatalog.mockReturnValue(build.promise);
+    const full = GET(request(`Bearer ${token}`));
+    const conditional = GET(request(`Bearer ${token}`, etag));
+    await vi.waitFor(() => expect(readVersion).toHaveBeenCalledTimes(2));
+    build.resolve(snapshot);
+    expect((await full).status).toBe(200);
+    expect((await conditional).status).toBe(304);
+    expect(loadCrossRemCatalog).toHaveBeenCalledOnce();
+  });
+
+  it('returns promptly when a concurrent build published only the validator', async () => {
+    redis.get.mockResolvedValue({ version, etag, bodyCached: false });
+    redis.set.mockResolvedValue(null);
+    expect((await GET(request(`Bearer ${token}`))).status).toBe(503);
+    expect(redis.get).toHaveBeenCalledTimes(2);
+    expect(loadCrossRemCatalog).not.toHaveBeenCalled();
+    expect(redis.set.mock.calls[0]?.[2].ex).toBeGreaterThan(maxDuration);
+    expect((await GET(request(`Bearer ${token}`, etag))).status).toBe(304);
   });
 
   it('bypasses Redis when no deployment scope is configured', async () => {

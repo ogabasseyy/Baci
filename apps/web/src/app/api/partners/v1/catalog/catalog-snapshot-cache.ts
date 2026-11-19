@@ -9,10 +9,12 @@ const configFingerprint = createHash('sha256')
   .update(JSON.stringify(crossRemCatalogConfig))
   .digest('hex');
 const snapshotTtlSeconds = 60 * 60;
-const leaseTtlSeconds = 30;
+// The route has a 60-second maximum. A live builder must retain its lease.
+const leaseTtlSeconds = 75;
 const waitIntervalsMs = [100, 250, 500, 1000, 1500, 1650];
 const maxBodyBytes = 8 * 1024 * 1024;
-const maxCompressedBytes = 1024 * 1024;
+// Base64 expands the payload. Stay below Redis's 10 MB request limit.
+const maxCompressedBytes = 4 * 1024 * 1024;
 const etagPattern = /^"[a-f0-9]{64}"$/;
 
 const publishUnderLease = `
@@ -32,6 +34,22 @@ const releaseLease = `
 `;
 
 export type Snapshot = { etag: string; body: string | null };
+export const uncachedBody = Symbol(
+  'CrossRem validated snapshot without a cached body'
+);
+
+function cacheErrorReason(error: unknown) {
+  const message = error instanceof Error ? error.message : '';
+  if (/timeout|timed out|abort/i.test(message)) return 'timeout';
+  if (/noauth|unauthoriz|forbidden|permission|wrongpass/i.test(message)) {
+    return 'access denied';
+  }
+  if (/fetch|network|connection/i.test(message)) return 'connection failure';
+  if (/gzip|header check|unexpected end|output length/i.test(message)) {
+    return 'invalid compressed body';
+  }
+  return 'unexpected Redis or snapshot error';
+}
 
 export function bodyEtag(body: string) {
   return `"${createHash('sha256').update(body).digest('hex')}"`;
@@ -60,7 +78,7 @@ export function createSnapshotCache() {
     .update(configFingerprint)
     .update(deploymentId)
     .digest('hex');
-  const key = `crossrem:snapshot:v2:{${scope}}`;
+  const key = `crossrem:snapshot:v3:{${scope}}`;
   const leaseKey = `${key}:lease`;
   const metadataKey = `${key}:etag`;
   const bodyKey = `${key}:body`;
@@ -68,11 +86,13 @@ export function createSnapshotCache() {
   async function read(
     version: string,
     validator: string | null
-  ): Promise<Snapshot | null> {
+  ): Promise<Snapshot | typeof uncachedBody | null> {
     try {
-      const metadata = await redis.get<{ version: string; etag: string }>(
-        metadataKey
-      );
+      const metadata = await redis.get<{
+        version: string;
+        etag: string;
+        bodyCached: boolean;
+      }>(metadataKey);
       if (
         metadata?.version !== version ||
         typeof metadata.etag !== 'string' ||
@@ -82,6 +102,7 @@ export function createSnapshotCache() {
 
       const { etag } = metadata;
       if (matchesValidator(validator, etag)) return { etag, body: null };
+      if (metadata.bodyCached === false) return uncachedBody;
       const packed = await redis.get<string>(bodyKey);
       if (
         typeof packed !== 'string' ||
@@ -93,15 +114,21 @@ export function createSnapshotCache() {
         maxOutputLength: maxBodyBytes,
       }).toString('utf8');
       return bodyEtag(body) === etag ? { etag, body } : null;
-    } catch {
-      logger.warn({ message: 'CrossRem snapshot cache read failed' });
+    } catch (error) {
+      logger.warn({
+        message: 'CrossRem snapshot cache read failed',
+        reason: cacheErrorReason(error),
+      });
       return null;
     }
   }
 
   return {
     read,
-    async wait(version: string, validator: string | null) {
+    async wait(
+      version: string,
+      validator: string | null
+    ): Promise<Snapshot | typeof uncachedBody | null> {
       for (const interval of waitIntervalsMs) {
         await setTimeout(interval);
         const result = await read(version, validator);
@@ -118,8 +145,11 @@ export function createSnapshotCache() {
         }))
           ? { status: 'acquired' as const, token }
           : { status: 'busy' as const };
-      } catch {
-        logger.warn({ message: 'CrossRem snapshot cache lease unavailable' });
+      } catch (error) {
+        logger.warn({
+          message: 'CrossRem snapshot cache lease unavailable',
+          reason: cacheErrorReason(error),
+        });
         return { status: 'unavailable' as const };
       }
     },
@@ -127,7 +157,8 @@ export function createSnapshotCache() {
       try {
         const bytes = Buffer.byteLength(body);
         const packed = bytes <= maxBodyBytes ? gzipSync(body) : null;
-        const cacheBody = packed && packed.byteLength <= maxCompressedBytes;
+        const cacheBody =
+          packed !== null && packed.byteLength <= maxCompressedBytes;
         if (!cacheBody) {
           logger.warn({
             message: 'CrossRem snapshot body exceeds cache budget',
@@ -140,23 +171,27 @@ export function createSnapshotCache() {
             [leaseKey, metadataKey, bodyKey],
             [
               token,
-              JSON.stringify({ version, etag }),
+              JSON.stringify({ version, etag, bodyCached: cacheBody }),
               cacheBody ? packed.toString('base64') : '',
               snapshotTtlSeconds,
             ]
           )) === 1
         );
-      } catch {
-        logger.warn({ message: 'CrossRem snapshot cache write failed' });
+      } catch (error) {
+        logger.warn({
+          message: 'CrossRem snapshot cache write failed',
+          reason: cacheErrorReason(error),
+        });
         return false;
       }
     },
     async release(token: string) {
       try {
         await redis.eval(releaseLease, [leaseKey], [token]);
-      } catch {
+      } catch (error) {
         logger.warn({
           message: 'CrossRem snapshot cache lease release failed',
+          reason: cacheErrorReason(error),
         });
       }
     },

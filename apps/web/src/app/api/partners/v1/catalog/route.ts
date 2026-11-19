@@ -4,6 +4,8 @@ import { logger } from '@/lib/logger';
 import { captureServerEvent } from '@/lib/posthog/server';
 import { getVersionedCrossRemCatalog } from './catalog-snapshot';
 
+export const maxDuration = 60;
+
 // 32 random bytes encoded as unpadded base64url need at least 43 characters.
 const bearerTokenPattern = /^[A-Za-z0-9_-]{43,}$/;
 const errorHeaders = { 'Cache-Control': 'private, no-store' };

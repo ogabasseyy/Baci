@@ -198,8 +198,7 @@ async function applyRateLimit(
 
 export function checkBrilStashFeedRateLimit(
   request: NextRequest,
-  bucket: 'read' | 'malformed',
-  requireTrustedIdentity: boolean
+  bucket: 'read' | 'malformed'
 ): Promise<RateLimitResult> {
   const client = getTrustedClientIdentifier(request);
   const config = {
@@ -207,7 +206,7 @@ export function checkBrilStashFeedRateLimit(
     windowMs: 60_000,
     failClosedWithoutRedis: true,
   };
-  if (requireTrustedIdentity && client === 'unknown') {
+  if (client === 'unknown') {
     return Promise.resolve(denyWithoutDistributedBackend(config));
   }
   return applyRateLimit(client, `${BRILSTASH_FEED_PATH}:${bucket}`, config);

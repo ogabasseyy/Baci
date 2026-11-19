@@ -30,7 +30,8 @@ function resolveBrilStashToolConfiguration(
     !publicKey ||
     !accessToken ||
     (!/^sb_publishable_[\w-]+$/.test(publicKey) &&
-      tokenRole(publicKey) !== 'anon') ||
+      (env.BRILSTASH_TOOL_TARGET !== 'local' ||
+        tokenRole(publicKey) !== 'anon')) ||
     tokenRole(accessToken) !== 'authenticated'
   )
     return null;

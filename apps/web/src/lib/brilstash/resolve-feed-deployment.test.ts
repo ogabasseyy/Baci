@@ -26,3 +26,19 @@ it('rejects a Supabase project mismatch', () => {
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://anotherref.supabase.co');
   expect(resolveBrilStashFeedDeployment()).toBeNull();
 });
+
+it.each([
+  '-',
+  '.',
+  '..',
+  '-.-',
+  '-feed.example.com',
+  'feed.example.com.',
+  '127.0.0.1',
+  'feed..example.com',
+])('rejects an invalid bare DNS hostname %s', (invalidHost) => {
+  vi.stubEnv('BRILSTASH_FEED_ENV', 'sandbox');
+  vi.stubEnv('VERCEL_ENV', 'preview');
+  vi.stubEnv('BRILSTASH_FEED_HOST', invalidHost);
+  expect(resolveBrilStashFeedDeployment()).toBeNull();
+});

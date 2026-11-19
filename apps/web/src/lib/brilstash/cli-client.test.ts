@@ -75,6 +75,7 @@ describe('BrilStash CLI configuration', () => {
     ['BRILSTASH_TOOL_TARGET', 'local'],
     ['BRILSTASH_TOOL_ACCESS_TOKEN', token('service_role')],
     ['NEXT_PUBLIC_SUPABASE_ANON_KEY', 'sb_secret_fixture'],
+    ['NEXT_PUBLIC_SUPABASE_ANON_KEY', token('anon')],
   ])('rejects unsafe %s before opening a client', async (name, value) => {
     vi.stubEnv(name, value);
     await expect(createBrilStashToolClient()).rejects.toThrow(

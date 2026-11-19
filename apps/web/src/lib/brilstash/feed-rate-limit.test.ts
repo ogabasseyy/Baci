@@ -15,10 +15,23 @@ it('rejects a live request without a trusted IP before spending the shared budge
   );
 
   await expect(
-    checkBrilStashFeedRateLimit(request, 'read', true)
+    checkBrilStashFeedRateLimit(request, 'read')
   ).resolves.toMatchObject({
     allowed: false,
     limit: 30,
+  });
+  expect(getRedis).not.toHaveBeenCalled();
+});
+
+it('preserves the shared Redis budget when trusted client identity is missing in sandbox', async () => {
+  const request = new NextRequest(
+    `https://sandbox-feed.example.invalid${BRILSTASH_FEED_PATH}`
+  );
+  await expect(
+    checkBrilStashFeedRateLimit(request, 'malformed')
+  ).resolves.toMatchObject({
+    allowed: false,
+    limit: 15,
   });
   expect(getRedis).not.toHaveBeenCalled();
 });

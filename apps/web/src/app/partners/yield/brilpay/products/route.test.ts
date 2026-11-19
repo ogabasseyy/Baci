@@ -85,7 +85,7 @@ describe('BrilStash feed GET', () => {
     const input = request();
     const response = await GET(input);
 
-    expect(dependencies.rateLimit).toHaveBeenCalledWith(input, 'read', false);
+    expect(dependencies.rateLimit).toHaveBeenCalledWith(input, 'read');
     expect(dependencies.rpc).not.toHaveBeenCalled();
     expect(response.status).toBe(429);
     expect(response.headers.get('retry-after')).toBeTruthy();
@@ -105,11 +105,7 @@ describe('BrilStash feed GET', () => {
     });
     const input = request(query, token);
     const response = await GET(input);
-    expect(dependencies.rateLimit).toHaveBeenCalledWith(
-      input,
-      'malformed',
-      false
-    );
+    expect(dependencies.rateLimit).toHaveBeenCalledWith(input, 'malformed');
     expect(response.status).toBe(429);
     expect(dependencies.rpc).not.toHaveBeenCalled();
   });

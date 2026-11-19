@@ -3,23 +3,23 @@ import { BRILSTASH_FEED_PATH, BRILSTASH_FULL_FEED_QUERY } from '../config/brilst
 import { createBrilStashToolClient } from '../lib/brilstash/cli-client';
 import { readBrilStashCliInput } from '../lib/brilstash/cli-input';
 import { verifyBrilStashFeed } from '../lib/brilstash/verify-feed';
+import { brilStashFeedHostSchema } from '../schemas/brilstash-feed-deployment';
 import { brilStashProbeInputSchema } from '../schemas/brilstash-probe-input';
 import { brilStashProbeStateSchema } from '../schemas/brilstash-probe-state';
 
 async function main() {
   const { input, apply } = await readBrilStashCliInput(process.argv.slice(2));
   const parsed = brilStashProbeInputSchema.safeParse(input);
-  const host = process.env.BRILSTASH_FEED_HOST;
+  const host = brilStashFeedHostSchema.safeParse(process.env.BRILSTASH_FEED_HOST);
   const bearer = process.env.BRILSTASH_FEED_BEARER;
   if (
     !parsed.success ||
-    !host ||
-    !/^[a-z0-9.-]+$/.test(host) ||
+    !host.success ||
     !bearer ||
     !/^[A-Za-z0-9_-]{32,256}$/.test(bearer)
   ) throw new Error('Invalid BrilStash probe configuration');
 
-  const target = new URL(`https://${host}${BRILSTASH_FEED_PATH}`);
+  const target = new URL(`https://${host.data}${BRILSTASH_FEED_PATH}`);
   for (const [name, value] of Object.entries(BRILSTASH_FULL_FEED_QUERY)) {
     target.searchParams.set(name, String(value));
   }

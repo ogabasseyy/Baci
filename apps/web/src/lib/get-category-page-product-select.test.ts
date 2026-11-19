@@ -16,6 +16,13 @@ describe('getCategoryPageProductSelect', () => {
     );
   });
 
+  it('projects has_condition_offers, manage_stock, and stock for inventory availability checks', () => {
+    const columns = selectedColumns(getCategoryPageProductSelect(false));
+    expect(columns).toContain('has_condition_offers');
+    expect(columns).toContain('manage_stock');
+    expect(columns).toContain('stock');
+  });
+
   it('inner-joins product categories for category-scoped pages', () => {
     const select = getCategoryPageProductSelect(true);
 

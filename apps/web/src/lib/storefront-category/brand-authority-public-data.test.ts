@@ -22,6 +22,7 @@ vi.mock('@/lib/storefront-merchant-snapshot', () => ({
   readStorefrontMerchantSnapshot: mockReadStorefrontMerchantSnapshot,
 }));
 
+import { cacheTag } from 'next/cache';
 import { brandAuthorityPublicData } from '@/lib/storefront-category/brand-authority-public-data';
 
 describe('brandAuthorityPublicData', () => {
@@ -61,6 +62,14 @@ describe('brandAuthorityPublicData', () => {
     expect(mockReadStorefrontMerchantSnapshot).toHaveBeenCalledWith(
       expect.any(Object),
       'store'
+    );
+    expect(vi.mocked(cacheTag).mock.calls.flat()).toEqual(
+      expect.arrayContaining([
+        'merchant-id-merchant-1',
+        'merchant-store',
+        'merchant-slug-store',
+        'domain-store.example',
+      ])
     );
   });
 

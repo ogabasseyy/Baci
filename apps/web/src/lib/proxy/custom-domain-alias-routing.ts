@@ -38,7 +38,7 @@ export async function runCustomDomainAliasRouting(
         const stripped = pathname.slice(`/${firstSegment}`.length) || '/';
         return NextResponse.redirect(
           `https://${domain}${normalizeStorefrontTermsAliasPath(stripped)}${request.nextUrl.search}`,
-          302
+          301
         );
       }
     }
@@ -65,19 +65,7 @@ export function runCustomDomainCurrentSlugCanonicalization(
     return null;
   }
   const stripped = pathname.slice(firstSegment.length + 1) || '/';
-  const segments = stripped.split('/').filter(Boolean);
-  const firstStripped = segments[0]?.toLowerCase();
-  const normalizedTerms = normalizeStorefrontTermsAliasPath(stripped);
-  const normalized =
-    normalizedTerms !== stripped
-      ? normalizedTerms
-      : segments.length === 2 &&
-          firstStripped &&
-          !storefrontRouteSegments.RESERVED_STOREFRONT_SEGMENTS.has(
-            firstStripped
-          )
-        ? `/products/${segments[segments.length - 1]}`
-        : stripped;
+  const normalized = normalizeStorefrontTermsAliasPath(stripped);
   const url = `https://${domain}${normalized}${request.nextUrl.search}`;
   return url === request.nextUrl.href ? null : NextResponse.redirect(url, 301);
 }

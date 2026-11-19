@@ -107,6 +107,10 @@ type SavingsAutoDebitDatabase = {
     };
     Views: Record<string, never>;
     Functions: {
+      savings_goal_ids_bound_to_primary: {
+        Args: { p_goal_ids: string[] };
+        Returns: string[];
+      };
       allocate_customer_savings_contribution: {
         Args: {
           p_amount: number;

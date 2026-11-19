@@ -17,6 +17,39 @@ key row nothing works at all.
 Prerequisites, in order: the PIN routes and the spend hold that consumes
 proofs are merged and deployed with their own switches still off.
 
+Pre-enable prerequisite: DONE. On top of the per-IP proxy limit, each signed-in
+customer now has their own limit, charged after sign-in and keyed by merchant
+and customer. Set and reset share 5 attempts per 10 minutes, change has its own
+tighter 3 per 10 minutes (it runs two hashes), and the goal-PIN check has its
+own 5 per 10 minutes. A limited request gets `RATE_LIMITED` (429) with a
+`Retry-After` header. If Redis is unavailable these limits refuse the request
+rather than allow it. The database lockout (five wrong PINs) still protects
+each PIN. Customers sharing one carrier address no longer count against each
+other here.
+
+The PIN routes (storefront customer, signed in, merchant taken from the
+server's primary-wallet configuration, never from the request):
+
+- `GET /api/storefront/customer/wallet-pin/status` answers `primary`,
+  `hasPin`, `resetRequired` and `available`. `available` is false while the
+  pepper or attestation key is unusable or the merchant is switched off.
+- `POST /api/storefront/customer/wallet-pin/set` sets the first PIN.
+- `POST /api/storefront/customer/wallet-pin/change` changes it, given the
+  current PIN.
+- `POST /api/storefront/customer/wallet-pin/reset` replaces it after a recent
+  sign-in.
+
+Set, change and reset answer 503 `PIN_UNAVAILABLE` while the pepper or
+attestation key is unusable. Status reports `available: false` in the same
+situation, including when the pepper's attestation key row is missing or has
+been deleted as an emergency stop. The per-IP limit is applied by the API
+proxy: set, change and reset share 10 requests a minute per IP address (IPv6 clients are
+counted per /64 block, not per customer), and status
+reads have their own separate allowance. A limited request gets the proxy's
+standard 429 response. A failed forgery check answers 403 `CSRF_FAILED`. Stable refusal codes: `PIN_INCORRECT` (401, with attempts left),
+`PIN_LOCKED` (423), `PIN_NOT_SET`, `PIN_ALREADY_SET`, `PIN_RESET_REQUIRED`
+(409), `REAUTHENTICATION_REQUIRED` (403). A PIN is never logged or returned.
+
 ## 1. Provision the pepper (server secret)
 
 - Generate one random value of at least 32 characters, for example the output

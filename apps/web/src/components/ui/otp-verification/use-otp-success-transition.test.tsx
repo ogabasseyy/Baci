@@ -18,7 +18,7 @@ it('starts only when called after confirmation and holds the next screen for the
   });
   expect(result.current.verified).toBe(true);
   await act(async () => {
-    await vi.advanceTimersByTimeAsync(799);
+    await vi.advanceTimersByTimeAsync(1399);
   });
   expect(complete).toBe(false);
   await act(async () => {

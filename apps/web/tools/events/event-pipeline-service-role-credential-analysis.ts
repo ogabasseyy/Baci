@@ -13,7 +13,7 @@ type CredentialReaderLedgers = {
 const defaultLedgers: CredentialReaderLedgers = {
   approvedTask6ReaderHashes: {
     'apps/web/src/lib/supabase/service.ts':
-      '9781da4be8bcd690fbb0d4feebf53e10c2f33aeaeb92c068f1f66b1ec446420c',
+      'b77e5a0d1024165b8015c3fa015278d8ed39d491bfbe6f74c05b5903cc3dbbb5',
   },
   // These are pre-existing factory, worker, or route readers. They are not part
   // of the temporary three-edge Task 6 analytics exception. Tracked operational
@@ -89,8 +89,11 @@ const defaultLedgers: CredentialReaderLedgers = {
       'db221f22d082dc352b274edd04445f5f7c1cf03f21c207483dc8d1dfb90b677c',
     'vps-workers/jobs/push-receipts.mjs':
       '53fdf8d8b8b3b897c533d150ddbdbfa8c250df465cca6f8eea7fbe8806a4b96c',
+    // Reviewed #4339: batched cleanup_database_retention passes only;
+    // credential reads unchanged. This fingerprint is not a service-role
+    // authorization renewal.
     'vps-workers/jobs/supabase-retention-cleanup.mjs':
-      'a4f4c7f0338ca6395a67a3cae75c3a86ccb7f3f97f19d8f6a8e295eb3fa0a152',
+      '4158d2e422bfa4cc4aa65727ffd5d0d1999ecb3a7b41c1991e410df72172dd72',
     'vps-workers/jobs/sync-gigl-service-centres.mjs':
       'fa6c2dc262e46ee1ead9f4330fe921fe23782fa79e4fe7864377dafe7b4a609b',
     'scripts-tmp/check-cdn-access.ts':

@@ -1,6 +1,7 @@
 import 'server-only';
 import { Client } from 'pg';
 import { piggyvestPrimaryInflowRuntimeSchema } from '@/schemas/piggyvest-primary-inflow-runtime';
+import { primaryDbLink } from './primary-db-link';
 import { readPrimaryEngineReady } from './primary-wallet-engine-ready';
 import type { preparePrimaryWalletInflowReceipt } from './primary-wallet-inflow-receipt';
 
@@ -22,25 +23,26 @@ export function createPrimaryWalletInflowExecutor(configuration: unknown) {
   ): Promise<
     'credited' | 'duplicate' | 'unmapped' | 'conflict' | 'prerequisite'
   > => {
+    const link = primaryDbLink(config.database.login, config.database.port);
     const client = new Client({
       host: config.database.host,
       port: config.database.port,
       database: config.database.name,
-      user: config.database.login,
+      user: link.user,
       password: config.database.password,
       ssl: {
         rejectUnauthorized: true,
         ca: config.database.certificateAuthority,
+        ...link.tls,
       },
       connectionTimeoutMillis: 4000,
       query_timeout: 4000,
-      statement_timeout: 2500,
-      lock_timeout: 1500,
-      options: '-c search_path=pg_catalog',
+      ...link.startup,
       application_name: 'baci-piggyvest-primary-inflow',
     });
     try {
       await client.connect();
+      await link.afterConnect(client);
       const verified = await client.query(VERIFY);
       const session = verified.rows[0];
       if (

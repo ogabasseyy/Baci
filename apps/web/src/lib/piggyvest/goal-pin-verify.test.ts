@@ -14,7 +14,12 @@ const proof = createHash('sha256').update('s5-verify-proof').digest('hex');
 const userId = 'f1a00000-0000-4000-8000-000000000001';
 const merchantId = 'f1a00002-0000-4000-8000-000000000001';
 const goalId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
-const binding = buildGoalPinBinding({ action: 'cancel', goalId });
+const operationId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+const binding = buildGoalPinBinding({
+  action: 'cancel',
+  goalId,
+  operationId,
+});
 const pin = '482915';
 const setState = { status: 'set', kdfVersion: 1, salt, attemptsRemaining: 5 };
 

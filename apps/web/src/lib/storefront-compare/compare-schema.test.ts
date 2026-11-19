@@ -36,6 +36,23 @@ describe('buildComparePageSchemas', () => {
 });
 
 describe('buildProductCompareItemListSchema', () => {
+  it('includes a known product brand while omitting missing brands', () => {
+    const schema = buildProductCompareItemListSchema({
+      pageName: 'Compare',
+      pageUrl: 'https://example.com/compare/a-b',
+      currency: 'NGN',
+      products: [
+        { id: 'a', name: 'Phone', brand: 'Google' },
+        { id: 'b', name: 'Other', brand: ' ' },
+      ],
+    });
+    expect(schema.itemListElement[0].item.brand).toEqual({
+      '@type': 'Brand',
+      name: 'Google',
+    });
+    expect(schema.itemListElement[1].item.brand).toBeUndefined();
+  });
+
   it('builds Product ItemList schema with additional compared properties', () => {
     const schema = buildProductCompareItemListSchema({
       pageName: 'iPhone 17 Pro Max vs Samsung Galaxy Z TriFold',

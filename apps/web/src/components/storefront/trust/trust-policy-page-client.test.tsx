@@ -63,6 +63,55 @@ describe('TrustPolicyPageClient', () => {
     );
   });
 
+  it('uses the curated Ogabassey return policy even when merchant facts are stale', () => {
+    render(
+      <TrustPolicyPageClient
+        kind="returns"
+        merchantName="Ogabassey"
+        ogabasseyCare
+        trustProfile={{
+          returnPolicy: {
+            summary: 'Legacy policy',
+            windowDays: 7,
+            localRoute: '/returns',
+          },
+          socialLinks: {},
+          derivedLinks: {},
+        }}
+      />
+    );
+    expect(
+      screen.getByText(/Report an undisclosed technical defect within 14 days/)
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Legacy policy')).not.toBeInTheDocument();
+    expect(screen.queryByText('7 days')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: /device coverage|read the warranty/i })
+    ).not.toBeInTheDocument();
+  });
+
+  it('offers one device coverage link when warranty coverage is published', () => {
+    render(
+      <TrustPolicyPageClient
+        kind="returns"
+        merchantName="Ogabassey"
+        ogabasseyCare
+        trustProfile={{
+          warrantyPolicy: {
+            summary: 'Manufacturer warranty applies.',
+            localRoute: '/warranty',
+          },
+          socialLinks: {},
+          derivedLinks: {},
+        }}
+      />
+    );
+
+    expect(
+      screen.getByRole('link', { name: /device coverage|read the warranty/i })
+    ).toHaveAttribute('href', './warranty');
+  });
+
   it('renders the shipping trust policy facts', () => {
     render(
       <TrustPolicyPageClient
@@ -96,7 +145,7 @@ describe('TrustPolicyPageClient', () => {
     expect(screen.getByText('Transit time')).toBeInTheDocument();
     expect(screen.getByText('1-5 business days')).toBeInTheDocument();
     expect(screen.getByText('Shipping fees')).toBeInTheDocument();
-    expect(screen.getByText('Calculated')).toBeInTheDocument();
+    expect(screen.getByText('Calculated at checkout')).toBeInTheDocument();
     expect(
       screen.getByRole('heading', { name: 'How delivery works' })
     ).toBeInTheDocument();
@@ -126,6 +175,8 @@ describe('TrustPolicyPageClient', () => {
       screen.getByRole('heading', { level: 1, name: 'Warranty Policy' })
     ).toBeInTheDocument();
     expect(screen.getByText('Coverage')).toBeInTheDocument();
+    expect(screen.queryByText(/usually excludes/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/unauthorized repairs/i)).not.toBeInTheDocument();
     expect(screen.getAllByText('Manufacturer warranty applies.')).toHaveLength(
       2
     );

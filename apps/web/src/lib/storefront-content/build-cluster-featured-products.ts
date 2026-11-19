@@ -1,6 +1,8 @@
 import { formatCurrencyCompact } from '@/lib/currency';
+import { formatVerifiedProductSpecHighlights } from '@/lib/format-verified-product-spec-highlights';
 import { normalizeInferredBrands } from '@/lib/storefront-compare/normalize-inferred-brands';
 import { resolveCanonicalBrandKey } from '@/lib/storefront-compare/resolve-canonical-brand-key';
+import { toTitleCase } from '@/lib/to-title-case';
 import { isAvailableProduct } from './is-available-product';
 
 export interface ClusterFeaturedInventoryProduct {
@@ -16,69 +18,18 @@ export interface ClusterFeaturedInventoryProduct {
   is_parent?: boolean | null;
   parent_product_id?: string | null;
   manage_stock?: boolean | null;
+  has_condition_offers?: boolean | null;
 }
 
-const GENERIC_CLUSTER_TOKENS = new Set([
-  'a',
-  'an',
-  'and',
-  'are',
-  'at',
-  'best',
-  'buy',
-  'buying',
-  'by',
-  'for',
-  'from',
-  'galaxy',
-  'guide',
-  'how',
-  'in',
-  'ipad',
-  'iphone',
-  'is',
-  'it',
-  'laptop',
-  'laptops',
-  'macbook',
-  'nigeria',
-  'of',
-  'on',
-  'or',
-  'phone',
-  'phones',
-  'pixel',
-  'playstation',
-  'price',
-  'prices',
-  'redmi',
-  'review',
-  'smartphone',
-  'smartphones',
-  'specs',
-  'the',
-  'to',
-  'vs',
-  'with',
-  '2024',
-  '2025',
-  '2026',
-  '2027',
-]);
+const GENERIC_CLUSTER_TOKENS = new Set(
+  'a an and are at best buy buying by for from galaxy guide how in ipad iphone is it laptop laptops macbook nigeria of on or phone phones pixel playstation price prices redmi review smartphone smartphones specs the to vs with 2024 2025 2026 2027'.split(
+    ' '
+  )
+);
 
-const TIER_MODIFIER_TOKENS = new Set([
-  'air',
-  'fe',
-  'flip',
-  'fold',
-  'lite',
-  'max',
-  'mini',
-  'plus',
-  'pro',
-  'slim',
-  'ultra',
-]);
+const TIER_MODIFIER_TOKENS = new Set(
+  'air fe flip fold lite max mini plus pro slim ultra'.split(' ')
+);
 
 const CAPACITY_TOKEN_REGEX = /^\d+(?:gb|tb)$/i;
 
@@ -146,6 +97,27 @@ function scoreProductModelAffinity(
     : 0;
 }
 
+function buildFeaturedProductDescription(
+  product: ClusterFeaturedInventoryProduct,
+  countryCode?: string | null,
+  categorySlug?: string | null
+): string {
+  const segments: string[] = [product.brand ?? 'Storefront pick'];
+  const condition = product.condition?.trim();
+  if (condition) segments.push(toTitleCase(condition));
+  segments.push(formatCurrencyCompact(product.price, countryCode || 'NG'));
+
+  const highlights = formatVerifiedProductSpecHighlights({
+    specs: product.product_key_specs,
+    category: product.category_slug ?? categorySlug,
+    categorySlugs: product.category_slugs,
+    keys: ['ram_gb', 'storage_gb', 'battery_mah'],
+    maxHighlights: 2,
+  });
+  if (highlights.length > 0) segments.push(highlights.join(', '));
+  return segments.join(' • ');
+}
+
 export function buildClusterFeaturedProducts(
   storeUrl: string,
   categorySlug: string,
@@ -198,6 +170,10 @@ export function buildClusterFeaturedProducts(
     .map((product) => ({
       href: buildProductHref(storeUrl, product),
       title: product.name,
-      description: `${product.brand ?? 'Storefront pick'} • ${formatCurrencyCompact(product.price, countryCode || 'NG')}`,
+      description: buildFeaturedProductDescription(
+        product,
+        countryCode,
+        categorySlug
+      ),
     }));
 }

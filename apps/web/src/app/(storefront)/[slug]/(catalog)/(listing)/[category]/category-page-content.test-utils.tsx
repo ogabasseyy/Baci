@@ -24,9 +24,15 @@ const {
   mockBuildRequestScopedStoreUrl: vi.fn(),
   mockCategoryPageDeferredCompareLinks: vi.fn(),
   mockBuildStoreUrl: vi.fn(),
-  mockGenerateBreadcrumbSchema: vi.fn(() => ({})),
-  mockGenerateCollectionPageSchema: vi.fn(() => ({})),
-  mockGenerateFAQSchema: vi.fn(() => ({})),
+  mockGenerateBreadcrumbSchema: vi.fn<
+    typeof import('@/lib/seo-utils').generateBreadcrumbSchema
+  >(() => ({}) as never),
+  mockGenerateCollectionPageSchema: vi.fn<
+    typeof import('@/lib/seo-utils').generateCollectionPageSchema
+  >(() => ({}) as never),
+  mockGenerateFAQSchema: vi.fn<
+    typeof import('@/lib/seo-utils').generateFAQSchema
+  >(() => ({}) as never),
   mockGetCachedCategoryPageData: vi.fn(),
   mockGetCachedCategoryPageGraphicsOptions: vi.fn(),
   mockGetCachedBrandAuthorityEntries: vi.fn(),
@@ -201,24 +207,28 @@ vi.mock('@/lib/validation', () => ({
   isDomainIdentifier: (value: string) => value.includes('.'),
 }));
 
-vi.mock('./category-page-content-helpers', () => ({
-  STOREFRONT_PRODUCTS_PER_PAGE: 24,
-  buildCategoryPageHubModel: (...args: unknown[]) =>
-    mockBuildCategoryPageHubModel(...args),
-  getCategoryPageProductSlots: (data: {
-    productSlots?: unknown[];
-    products: unknown[];
-  }) => data.productSlots ?? data.products,
-  hasMaintainedCategoryCompareHubLink: (...args: unknown[]) =>
-    mockHasMaintainedCategoryCompareHubLink(...args),
-  isCategoryPageProductSlot: (product: unknown) => product !== null,
-  normalizeCategoryPageProducts: (...args: unknown[]) =>
-    mockNormalizeCategoryPageProducts(...args),
-  resolveCategoryPageName: (...args: unknown[]) =>
-    mockResolveCategoryPageName(...args),
-  toClientCategoryPageProducts: (products: unknown[]) => products,
-  toCollectionSchemaProduct: (product: unknown) => product,
-}));
+vi.mock('./category-page-content-helpers', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('./category-page-content-helpers')>();
+  return {
+    ...actual,
+    buildCategoryPageHubModel: (...args: unknown[]) =>
+      mockBuildCategoryPageHubModel(...args),
+    getCategoryPageProductSlots: (data: {
+      productSlots?: unknown[];
+      products: unknown[];
+    }) => data.productSlots ?? data.products,
+    hasMaintainedCategoryCompareHubLink: (...args: unknown[]) =>
+      mockHasMaintainedCategoryCompareHubLink(...args),
+    isCategoryPageProductSlot: (product: unknown) => product !== null,
+    normalizeCategoryPageProducts: (...args: unknown[]) =>
+      mockNormalizeCategoryPageProducts(...args),
+    resolveCategoryPageName: (...args: unknown[]) =>
+      mockResolveCategoryPageName(...args),
+    toClientCategoryPageProducts: (products: unknown[]) => products,
+    toCollectionSchemaProduct: actual.toCollectionSchemaProduct,
+  };
+});
 
 export const { CategoryPageContent } = await import('./category-page-content');
 
@@ -238,21 +248,25 @@ export function resetCategoryPageContentMocks() {
   mockGetCachedCategoryPageGraphicsOptions.mockResolvedValue([]);
   mockGetCachedBrandAuthorityEntries.mockResolvedValue([]);
   mockResolveCategoryPageName.mockReturnValue('Phones');
-  mockNormalizeCategoryPageProducts.mockReturnValue([
-    {
-      id: 'product-1',
-      name: 'Phone',
-      description: 'Phone description',
-      rawPrice: 250000,
-      stock: 5,
-      image: 'https://cdn.example.com/phone.png',
-      brand: 'Brand',
-      category: 'Phones',
-      category_slug: 'phones',
-      slug: 'phone',
-      condition: 'new',
-    },
-  ]);
+  mockNormalizeCategoryPageProducts.mockImplementation((products: unknown[]) =>
+    Array.isArray(products) && products.length === 0
+      ? []
+      : [
+          {
+            id: 'product-1',
+            name: 'Phone',
+            description: 'Phone description',
+            rawPrice: 250000,
+            stock: 5,
+            image: 'https://cdn.example.com/phone.png',
+            brand: 'Brand',
+            category: 'Phones',
+            category_slug: 'phones',
+            slug: 'phone',
+            condition: 'new',
+          },
+        ]
+  );
   mockBuildCategoryPageHubModel.mockReturnValue({
     intro: { heading: 'Phones', description: 'Phone collection' },
     trustFeatures: [],

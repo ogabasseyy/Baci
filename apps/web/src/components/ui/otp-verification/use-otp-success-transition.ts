@@ -24,7 +24,7 @@ export function useOtpSuccessTransition() {
       timer.current = setTimeout(() => {
         done.current = undefined;
         resolve();
-      }, 800);
+      }, 1400);
     });
   }
   return { verified, showSuccess };

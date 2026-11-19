@@ -1,15 +1,13 @@
 import type { CartLine, CartSnapshot } from '@baci/shared/cart';
-
 import { act, renderHook, waitFor } from '@testing-library/react';
-
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import type { Product } from '@/lib/products';
-
+import {
+  resetCartSessionHintForTests,
+  writeCartSessionHint,
+} from './cart-session-hint';
 import { saveCartToStorage } from './cart-storage';
-
 import type { CartItem } from './cart-types';
-
 import {
   bootstrapSharedCart,
   createSharedCart,
@@ -17,7 +15,6 @@ import {
   fetchSharedCartSnapshot,
   sendSharedCartCommand,
 } from './shared-cart-client';
-
 import { useSharedCart } from './use-shared-cart';
 
 vi.mock('./shared-cart-client', () => ({
@@ -105,12 +102,15 @@ function mockAdopted(version = 3, lines: CartLine[] = [cartLine()]) {
 
 describe('useSharedCart link', () => {
   afterEach(() => {
+    resetCartSessionHintForTests();
     vi.useRealTimers();
     vi.restoreAllMocks();
   });
   beforeEach(() => {
     vi.clearAllMocks();
     window.localStorage.clear();
+    resetCartSessionHintForTests();
+    writeCartSessionHint(MERCHANT_ID, '1');
     vi.mocked(fetchSharedCartProducts).mockResolvedValue(new Map());
   });
 

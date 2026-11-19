@@ -1,0 +1,11 @@
+CREATE SCHEMA auth;
+CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql AS $$ SELECT nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
+CREATE FUNCTION auth.role() RETURNS text LANGUAGE sql AS $$ SELECT coalesce(current_setting('request.jwt.claim.role',true),'') $$;
+CREATE TABLE public.customers(id uuid PRIMARY KEY,merchant_id uuid,user_id uuid);
+ALTER TABLE public.orders ADD COLUMN merchant_id uuid,ADD COLUMN customer_id uuid;
+ALTER TABLE public.customer_wallet_transactions ADD COLUMN id uuid DEFAULT gen_random_uuid(),ADD COLUMN wallet_id uuid,ADD COLUMN customer_id uuid,ADD COLUMN merchant_id uuid,ADD COLUMN balance_after numeric,ADD COLUMN description text;
+ALTER TABLE public.customer_savings_redemptions ADD COLUMN id uuid,ADD COLUMN goal_id uuid,ADD COLUMN merchant_id uuid,ADD COLUMN customer_id uuid,ADD COLUMN idempotency_key text,ADD COLUMN metadata jsonb;
+CREATE TABLE public.customer_wallets(id uuid PRIMARY KEY,customer_id uuid,merchant_id uuid,available_balance numeric,total_redeemed numeric,updated_at timestamptz);
+CREATE TABLE public.order_items(order_id uuid,product_id uuid,variant_id uuid);
+CREATE TABLE public.customer_savings_goals(id uuid PRIMARY KEY,customer_id uuid,merchant_id uuid,product_id uuid,variant_id uuid,status text,current_amount numeric,target_amount numeric,spent_at timestamptz,applied_order_id uuid,updated_at timestamptz);
+CREATE TABLE public.customer_savings_events(goal_id uuid,merchant_id uuid,customer_id uuid,event_type text,actor_type text,metadata jsonb);

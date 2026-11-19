@@ -1,12 +1,14 @@
+import { useState } from 'react';
 import { Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { CONFIG } from '@/lib/config';
+import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
 import { pickMerchantId } from '@/lib/pick-merchant-id';
 import { useAuthStore } from '@/stores/auth-store';
 import { SavingsPlanCardContribution } from './savings/SavingsPlanCardContribution';
-import { SavingsPlanTransferPanel } from './savings/SavingsPlanTransferPanel';
-import { useSavingsPlanFunding } from './savings/use-savings-plan-funding';
+import { SavingsPlanStatusNote } from './savings/SavingsPlanStatusNote';
+import { SavingsPlanWalletNote } from './savings/SavingsPlanWalletNote';
 
 type Props = {
   addAmount: string;
@@ -29,16 +31,10 @@ export function WalletSavingsPlanFunding({
     pickMerchantId(merchantId, CONFIG.MERCHANT_ID) ?? undefined;
   const enabled = Boolean(userId && activeMerchantId);
   const manual = goal.source_mode === 'manual';
-  const funding = useSavingsPlanFunding({
-    activeMerchantId,
-    activeMerchantSlug: CONFIG.MERCHANT_SLUG?.trim() || undefined,
-    goalId: enabled && manual ? goal.id : null,
-    identityKey: userId,
-    loadExisting: enabled && manual,
-  });
-
-  const refreshFundingAndProgress = async () => {
-    await funding.fetchExistingPlanFunding();
+  // Bumped after a successful wallet refresh so the status note re-reads the
+  // goal's setup status (a pending goal may have become ready).
+  const [statusRefreshes, setStatusRefreshes] = useState(0);
+  const refreshProgress = async () => {
     const walletRefreshResult = await onRefreshWallet?.();
     if (
       walletRefreshResult &&
@@ -50,6 +46,7 @@ export function WalletSavingsPlanFunding({
         'error' in walletRefreshResult ? walletRefreshResult.error : null;
       throw queryError ?? new Error('Unable to refresh savings progress.');
     }
+    setStatusRefreshes((count) => count + 1);
   };
 
   if (!enabled) {
@@ -63,13 +60,31 @@ export function WalletSavingsPlanFunding({
   return (
     <View style={{ gap: 20 }}>
       {manual ? (
-        <SavingsPlanTransferPanel
-          key={JSON.stringify([userId, activeMerchantId, goal.id])}
-          account={funding.planFundingAccounts[0]}
+        <SavingsPlanWalletNote
+          key={JSON.stringify([
+            'wallet-note',
+            userId,
+            activeMerchantId,
+            goal.id,
+          ])}
           colors={colors}
-          error={funding.fundingError}
-          onRefresh={refreshFundingAndProgress}
-          phase={funding.planFundingPhase}
+          onRefresh={refreshProgress}
+          primary={isPiggyvestPrimaryMerchant(activeMerchantId)}
+        />
+      ) : null}
+      {manual ? (
+        <SavingsPlanStatusNote
+          key={JSON.stringify([
+            'status-note',
+            userId,
+            activeMerchantId,
+            goal.id,
+            statusRefreshes,
+          ])}
+          colors={colors}
+          goalId={goal.id}
+          identityKey={userId ?? ''}
+          merchantId={activeMerchantId ?? ''}
         />
       ) : null}
       <SavingsPlanCardContribution

@@ -5,6 +5,7 @@ import type {
 import { toFinitePrice } from '@/lib/to-finite-price';
 
 interface VariantStockRow {
+  attributes?: Record<string, unknown> | null;
   id?: string | null;
   inventory_tracking_policy?: string | null;
   price_override?: number | string | null;
@@ -31,6 +32,7 @@ export function normalizeRelatedBlogVariantRows(
     return [
       {
         ...(variant.id ? { id: variant.id } : {}),
+        ...(variant.attributes ? { attributes: variant.attributes } : {}),
         ...(variant.inventory_tracking_policy
           ? { inventory_tracking_policy: variant.inventory_tracking_policy }
           : {}),

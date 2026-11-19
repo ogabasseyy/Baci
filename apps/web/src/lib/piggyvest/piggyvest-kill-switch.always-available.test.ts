@@ -11,6 +11,10 @@ const entries = [
   'customer-cancel-handler.ts',
   'cancellation-recovery.ts',
   'collection-reconciliation.ts',
+  // Cancel-with-refund to the main wallet (S6).
+  'goal-cancel-runtime.ts',
+  // Complete-to-main with a purchase request (S7).
+  'goal-complete-runtime.ts',
 ];
 const forbiddenModules = [
   'piggyvest-kill-switch',

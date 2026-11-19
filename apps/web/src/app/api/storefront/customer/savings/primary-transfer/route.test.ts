@@ -120,6 +120,49 @@ it('drains status recovery through the recovery runtime after rollback', async (
     expect.objectContaining({ operationId: body.operationId })
   );
 });
+it('answers SAVINGS_NOT_READY (503) for a status read when no runtime exists at all', async () => {
+  mocks.runtime.mockReturnValue(null);
+  mocks.recovery.mockReturnValue(null);
+  const response = await PATCH(
+    request({ merchantId, operationId: body.operationId })
+  );
+  expect(response.status).toBe(503);
+  expect(await response.json()).toMatchObject({ code: 'SAVINGS_NOT_READY' });
+  expect(checkStatus).not.toHaveBeenCalled();
+});
+it('answers SAVINGS_MERCHANT_NOT_PRIMARY (409) when the runtime belongs to another merchant', async () => {
+  const response = await PATCH(
+    request({
+      merchantId: '99999999-9999-4999-8999-999999999999',
+      operationId: body.operationId,
+    })
+  );
+  expect(response.status).toBe(409);
+  expect(await response.json()).toMatchObject({
+    code: 'SAVINGS_MERCHANT_NOT_PRIMARY',
+  });
+  expect(checkStatus).not.toHaveBeenCalled();
+  expect(mocks.identity).not.toHaveBeenCalled();
+});
+it('also answers SAVINGS_MERCHANT_NOT_PRIMARY through the recovery runtime', async () => {
+  mocks.runtime.mockReturnValue(null);
+  mocks.recovery.mockReturnValue({
+    merchantId,
+    businessId: 'business',
+    providerToken: 'test-only',
+    configuration: { integrationId: 'integration', environment: 'staging' },
+  });
+  const response = await PATCH(
+    request({
+      merchantId: '99999999-9999-4999-8999-999999999999',
+      operationId: body.operationId,
+    })
+  );
+  expect(response.status).toBe(409);
+  expect(await response.json()).toMatchObject({
+    code: 'SAVINGS_MERCHANT_NOT_PRIMARY',
+  });
+});
 it('checks auth before configuration or transfer processing', async () => {
   mocks.auth.mockResolvedValue({ user: null });
   expect((await POST(request())).status).toBe(401);

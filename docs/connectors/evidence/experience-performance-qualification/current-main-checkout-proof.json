@@ -1,0 +1,37 @@
+{
+  "main": "29b41494c9cba1ee3c05c7d51ebc0d84909d7a68",
+  "localOnly": true,
+  "synthetic": true,
+  "desktop": {
+    "content": [
+      {
+        "type": "text",
+        "text": "Script ran on page and returned:\n```json\n{\"width\":1440,\"overflow\":false,\"visibleImages\":[{\"alt\":\"Synthetic QA Device\",\"decoded\":true}],\"placeOrderEnabled\":true,\"total1750\":true,\"payOnDelivery\":\"on\"}\n```"
+      }
+    ]
+  },
+  "mobile": {
+    "content": [
+      {
+        "type": "text",
+        "text": "Script ran on page and returned:\n```json\n{\"width\":390,\"overflow\":false,\"visibleImages\":[{\"alt\":\"Synthetic QA Device\",\"decoded\":true}],\"placeOrderEnabled\":true,\"total1750\":true}\n```"
+      }
+    ]
+  },
+  "network": {
+    "bootstrap": 201,
+    "createCart": 201,
+    "command": 200,
+    "prepareCheckout": 200,
+    "shippingQuote": 200,
+    "orderRequests": 0,
+    "paymentRequests": 0
+  },
+  "orderCountAfter": 0,
+  "finalPlaceOrderClicked": false,
+  "limitations": [
+    "Initial guest cart read401 precedes bootstrap.",
+    "Places autocomplete500 because no external provider configured; manual address and synthetic merchant shipping worked.",
+    "No actual order/payment submission tested."
+  ]
+}

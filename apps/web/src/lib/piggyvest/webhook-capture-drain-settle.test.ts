@@ -19,13 +19,35 @@ let alerts: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
   resolve = vi.fn(async () => true);
-  deps = { resolve } as unknown as DrainDeps;
+  deps = {
+    resolve,
+    claim: async () => [],
+    renew: async () => true,
+    verify: () => ({ status: 'unconfigured' }),
+    process: async () => ({ status: 503 }),
+  };
   alerts = vi.spyOn(console, 'error').mockImplementation(() => {});
   alerts.mockClear();
   vi.spyOn(console, 'warn').mockImplementation(() => {});
 });
 
 describe('settle', () => {
+  it('reports safe diagnostics without exposing the original exception or provider payload', async () => {
+    resolve.mockRejectedValue(
+      Object.assign(new Error('private credential must not be logged'), {
+        sqlState: '42501',
+        providerResponse: 'private payload',
+      })
+    );
+    expect(await settle(deps, stored, 'processed', null)).toBe(false);
+    expect(console.warn).toHaveBeenCalledWith(
+      '[PiggyVest Webhook] Failed to resolve captured delivery',
+      { captureId: stored.capture_id, phase: 'settle', sqlState: '42501' }
+    );
+    expect(JSON.stringify(vi.mocked(console.warn).mock.calls)).not.toMatch(
+      /private credential|private payload/
+    );
+  });
   it('resolves the claimed row fenced by its own claim token', async () => {
     await settle(deps, stored, 'processed', null);
 
@@ -37,12 +59,17 @@ describe('settle', () => {
     );
   });
 
-  it('swallows a failed resolve: the lease expires and the row is claimed again', async () => {
+  it('swallows a failed resolve and reports it unsettled: the lease expires and the row is claimed again', async () => {
     resolve.mockRejectedValue(new Error('database down'));
 
-    await expect(
-      settle(deps, stored, 'processed', null)
-    ).resolves.toBeUndefined();
+    await expect(settle(deps, stored, 'processed', null)).resolves.toBe(false);
+  });
+
+  it('reports a lost lease (the database matched no row) as unsettled', async () => {
+    resolve.mockResolvedValue(false);
+    await expect(settle(deps, stored, 'processed', null)).resolves.toBe(false);
+    resolve.mockResolvedValue(true);
+    await expect(settle(deps, stored, 'processed', null)).resolves.toBe(true);
   });
 });
 
@@ -92,6 +119,15 @@ describe('parkForReview', () => {
     expect(alerts).toHaveBeenCalledWith(
       expect.stringContaining('because of a reason')
     );
+  });
+
+  it('neither counts nor alerts a review it did not record because the lease was lost', async () => {
+    resolve.mockResolvedValue(false);
+
+    await expect(parkForReview(deps, stored, 'CODE', 'r')).resolves.toBe(
+      'retried'
+    );
+    expect(alerts).not.toHaveBeenCalled();
   });
 
   it('includes the attempt count only when given', async () => {

@@ -24,6 +24,7 @@ interface LoginScreenContentProps {
   handleGoogleSignIn: () => Promise<void>;
   handlePasswordSignIn: () => void;
   handleResendOtp: () => Promise<boolean | undefined>;
+  handleToggleAuthMethod: () => void;
   isAppleLoading: boolean;
   isGoogleLoading: boolean;
   isLoading: boolean;
@@ -67,6 +68,7 @@ export function LoginScreenContent({
   handleGoogleSignIn,
   handlePasswordSignIn,
   handleResendOtp,
+  handleToggleAuthMethod,
   isAppleLoading,
   isGoogleLoading,
   isLoading,
@@ -118,9 +120,7 @@ export function LoginScreenContent({
             if (emailError) setEmailError(null);
           }}
           onGoogleSignIn={handleGoogleSignIn}
-          onToggleAuthMethod={() =>
-            setAuthMethod(authMethod === 'otp' ? 'password' : 'otp')
-          }
+          onToggleAuthMethod={handleToggleAuthMethod}
         />
       ) : step === 'otp' ? (
         <LoginOtpStep

@@ -24,6 +24,9 @@ describe('OrderSuccessOrderSummary', () => {
     expect(screen.getByText('Items (2)')).toBeInTheDocument();
     expect(screen.getByText('NGN 21500')).toBeInTheDocument();
     expect(screen.getByText('buyer@example.com')).toBeInTheDocument();
+    expect(
+      screen.getByText('Order Number').parentElement?.parentElement
+    ).toHaveClass('bg-store-secondary', 'border-store-border');
   });
 
   it('falls back to the id prefix and hides a missing email', () => {

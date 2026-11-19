@@ -1,16 +1,10 @@
+import { isNonAgenticWorkerProfile } from '@/lib/is-non-agentic-worker-profile';
+
 type QuizProofEnvironment = {
   NODE_ENV?: string;
   QUIZ_PHASE?: string;
   QUIZ_RPC_SERVER_SECRET?: string;
 };
-
-const NON_AGENTIC_WORKER_PROFILES = new Set([
-  'ai-storefront-jobs',
-  'event-pipeline',
-  'merchant-onboarding-emails',
-  'petrock-reconciliation',
-  'quiz-finalization',
-]);
 
 /**
  * Returns whether a production web runtime using the default 1a quiz phase
@@ -25,8 +19,8 @@ export function isNegotiatedCheckoutProofSecretMissing(
     runtimeEnv.GITHUB_ACTIONS === 'true' &&
     Boolean(runtimeEnv.GITHUB_RUN_ID) &&
     Boolean(runtimeEnv.GITHUB_REPOSITORY);
-  const isNonAgenticWorker = NON_AGENTIC_WORKER_PROFILES.has(
-    runtimeEnv.BACI_WORKER_PROFILE ?? ''
+  const isNonAgenticWorker = isNonAgenticWorkerProfile(
+    runtimeEnv.BACI_WORKER_PROFILE
   );
 
   return (

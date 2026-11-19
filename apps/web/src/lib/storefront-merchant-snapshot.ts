@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { extractPlatformSubdomainSlug } from '@/lib/platform-subdomain';
 import type {
   StorefrontDatabase,
   StorefrontMerchantSnapshotRow,
@@ -36,9 +37,11 @@ export async function readStorefrontMerchantSnapshot(
   client: SupabaseClient<StorefrontDatabase>,
   identifier: string
 ): Promise<StorefrontReadResult<StorefrontMerchantSnapshotRow>> {
+  const resolvedIdentifier =
+    extractPlatformSubdomainSlug(identifier.toLowerCase()) ?? identifier;
   const query = client.rpc(
     'resolve_storefront_public_snapshot_v2',
-    { p_identifier: identifier },
+    { p_identifier: resolvedIdentifier },
     { get: true }
   );
   const boundedQuery =

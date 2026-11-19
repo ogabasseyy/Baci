@@ -35,7 +35,8 @@ interface Ports {
  * Definitive no-transfer rejections of a transfer POST: signals proving
  * the provider created nothing, so the hold may release once a lookup
  * also shows no transfer under the reference. (A 404 here is the POST's
- * own refusal, unrelated to a TSQ 404.) Auth failures are rejected before
+ * own refusal, unrelated to a TSQ 404.) Auth failures and relay-proven
+ * not-sent failures never reached the provider; both are rejected before
  * processing; 400/404/422 refuse the request content; an explicit decline envelope
  * on 2xx was processed and refused. Everything else — transport and
  * timeout failures, 429/5xx, conflicts, success-shaped responses that
@@ -45,6 +46,9 @@ interface Ports {
 export function isDefinitiveNoTransferRejection(error: unknown): boolean {
   if (!(error instanceof PiggyvestApiError)) return false;
   if (error.code === 'PIGGYVEST_AUTH_ERROR') return true;
+  // The relay proved it never contacted PiggyVest (explicit `not-sent`;
+  // timeouts and unknown outcomes surface as NETWORK_ERROR instead).
+  if (error.code === 'PIGGYVEST_RELAY_UNAVAILABLE') return true;
   if (error.code !== 'PIGGYVEST_REQUEST_ERROR') return false;
   if (
     error.status !== null &&

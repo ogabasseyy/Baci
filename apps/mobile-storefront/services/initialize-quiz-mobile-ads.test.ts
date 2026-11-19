@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 
-const mockGatherConsent = jest.fn<() => Promise<unknown>>();
+const mockRequestInfoUpdate = jest.fn<() => Promise<unknown>>();
+const mockLoadForm = jest.fn<() => Promise<unknown>>();
 const mockGetConsentInfo = jest.fn<() => Promise<{ canRequestAds: boolean }>>();
 const mockInitialize = jest.fn<() => Promise<unknown>>();
 const mockSetRequestConfiguration = jest.fn<() => Promise<void>>();
@@ -13,7 +14,8 @@ jest.mock('@/lib/logger', () => ({
 jest.mock('react-native-google-mobile-ads', () => ({
   __esModule: true,
   AdsConsent: {
-    gatherConsent: mockGatherConsent,
+    requestInfoUpdate: mockRequestInfoUpdate,
+    loadAndShowConsentFormIfRequired: mockLoadForm,
     getConsentInfo: mockGetConsentInfo,
   },
   MaxAdContentRating: { T: 'T' },
@@ -30,7 +32,8 @@ async function loadInitializer() {
 describe('initializeQuizMobileAds', () => {
   beforeEach(() => {
     jest.resetModules();
-    mockGatherConsent.mockReset().mockResolvedValue({});
+    mockRequestInfoUpdate.mockReset().mockResolvedValue({});
+    mockLoadForm.mockReset().mockResolvedValue({});
     mockGetConsentInfo.mockReset().mockResolvedValue({ canRequestAds: true });
     mockInitialize.mockReset().mockResolvedValue({});
     mockSetRequestConfiguration.mockReset().mockResolvedValue(undefined);
@@ -46,7 +49,8 @@ describe('initializeQuizMobileAds', () => {
       canRequestAds: true,
     });
 
-    expect(mockGatherConsent).toHaveBeenCalledTimes(1);
+    expect(mockRequestInfoUpdate).toHaveBeenCalledTimes(1);
+    expect(mockLoadForm).toHaveBeenCalledTimes(1);
     expect(mockGetConsentInfo).toHaveBeenCalledTimes(1);
     expect(mockSetRequestConfiguration).toHaveBeenCalledWith({
       maxAdContentRating: 'T',
@@ -55,7 +59,7 @@ describe('initializeQuizMobileAds', () => {
       testDeviceIdentifiers: ['EMULATOR'],
     });
     expect(mockInitialize).toHaveBeenCalledTimes(1);
-    expect(mockGatherConsent.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(mockLoadForm.mock.invocationCallOrder[0]).toBeLessThan(
       mockInitialize.mock.invocationCallOrder[0]
     );
   });
@@ -88,7 +92,7 @@ describe('initializeQuizMobileAds', () => {
   });
 
   it('uses the previous-session consent state when consent refresh fails', async () => {
-    mockGatherConsent.mockRejectedValue(new Error('UMP unavailable'));
+    mockRequestInfoUpdate.mockRejectedValue(new Error('UMP unavailable'));
     const { initializeQuizMobileAds } = await loadInitializer();
 
     await expect(initializeQuizMobileAds()).resolves.toEqual({
@@ -102,6 +106,45 @@ describe('initializeQuizMobileAds', () => {
     );
   });
 
+  it('reports the consent stage so callers can tell a stalled update from an open form', async () => {
+    let finishUpdate!: (value: unknown) => void;
+    let finishForm!: (value: unknown) => void;
+    mockRequestInfoUpdate.mockImplementationOnce(
+      () => new Promise((resolve) => (finishUpdate = resolve))
+    );
+    mockLoadForm.mockImplementationOnce(
+      () => new Promise((resolve) => (finishForm = resolve))
+    );
+    const { getQuizMobileAdsConsentStage, prepareQuizMobileAdsConsent } =
+      await loadInitializer();
+    expect(getQuizMobileAdsConsentStage()).toBe('idle');
+
+    const pending = prepareQuizMobileAdsConsent();
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(getQuizMobileAdsConsentStage()).toBe('updating');
+    expect(mockLoadForm).not.toHaveBeenCalled();
+
+    finishUpdate({});
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(getQuizMobileAdsConsentStage()).toBe('form');
+
+    finishForm({});
+    await pending;
+    expect(getQuizMobileAdsConsentStage()).toBe('done');
+  });
+
+  it('does not show the form when the info update fails, and finishes as failed', async () => {
+    mockRequestInfoUpdate.mockRejectedValueOnce(new Error('offline'));
+    const { getQuizMobileAdsConsentStage, prepareQuizMobileAdsConsent } =
+      await loadInitializer();
+
+    await expect(prepareQuizMobileAdsConsent()).resolves.toBeUndefined();
+
+    expect(mockLoadForm).not.toHaveBeenCalled();
+    expect(getQuizMobileAdsConsentStage()).toBe('failed');
+    expect(mockWarn).toHaveBeenCalled();
+  });
+
   it('deduplicates concurrent initialization calls for the app process', async () => {
     const { initializeQuizMobileAds } = await loadInitializer();
 
@@ -112,7 +155,8 @@ describe('initializeQuizMobileAds', () => {
 
     expect(first).toEqual({ canRequestAds: true });
     expect(second).toEqual({ canRequestAds: true });
-    expect(mockGatherConsent).toHaveBeenCalledTimes(1);
+    expect(mockRequestInfoUpdate).toHaveBeenCalledTimes(1);
+    expect(mockLoadForm).toHaveBeenCalledTimes(1);
     expect(mockInitialize).toHaveBeenCalledTimes(1);
   });
 
@@ -135,7 +179,7 @@ describe('initializeQuizMobileAds', () => {
 
   it('serializes overlapping identities in invocation order', async () => {
     let resolveGatherConsent!: (value: unknown) => void;
-    mockGatherConsent.mockImplementationOnce(
+    mockRequestInfoUpdate.mockImplementationOnce(
       () =>
         new Promise((resolve) => {
           resolveGatherConsent = resolve;

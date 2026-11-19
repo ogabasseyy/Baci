@@ -30,14 +30,59 @@ export function snapshot(overrides: Record<string, unknown> = {}) {
     businessId: 'synthetic-business',
     stuck: [],
     stuckTotal: 0,
+    stuckDeferred: 0,
     wallets: [],
     walletsTotal: 0,
+    walletsDeferred: 0,
     ...overrides,
   };
 }
 
+/** An empty credit-gap ledger read (no mapped plan wallets). */
+export function ledger(overrides: Record<string, unknown> = {}) {
+  return {
+    generatedAt: GENERATED_AT,
+    windowStart: '2026-10-31T00:29:30.079678+00:00',
+    businessId: 'synthetic-business',
+    wallets: [],
+    walletsTotal: 0,
+    walletsDeferred: 0,
+    ...overrides,
+  };
+}
+
+/** Wallet pay part of the report with nothing outstanding. */
+export const NO_WALLET_PAY_WORK = {
+  stuckPayments: [],
+  undelivered: [],
+  unrefunded: [],
+  needsReview: [],
+};
+
+/**
+ * Answers each statement with its own result: the snapshot, the ledger, or
+ * the wallet pay report (nothing outstanding unless given).
+ */
+export function executeWith(
+  snapshotResult: unknown = snapshot(),
+  ledgerResult: unknown = ledger(),
+  walletPayResult: unknown = NO_WALLET_PAY_WORK
+) {
+  return vi.fn(async (statement?: string) => ({
+    rows: [
+      {
+        result: statement?.includes('read_credit_gap_ledger')
+          ? ledgerResult
+          : statement?.includes('read_wallet_pay_reconciliation')
+            ? walletPayResult
+            : snapshotResult,
+      },
+    ],
+  }));
+}
+
 export function makeDeps(overrides: Partial<DailyReconciliationDeps> = {}) {
-  const execute = vi.fn(async () => ({ rows: [{ result: snapshot() }] }));
+  const execute = executeWith();
   const deps: DailyReconciliationDeps = {
     readRuntime: vi.fn(() => runtime) as never,
     createExecutor: vi.fn(() => execute) as never,
@@ -49,6 +94,19 @@ export function makeDeps(overrides: Partial<DailyReconciliationDeps> = {}) {
       business_id: 'synthetic-business',
       balance: 0,
     })) as never,
+    createWalletPageReader: vi.fn(() =>
+      vi.fn(async () => ({
+        status: true,
+        data: {
+          edges: [],
+          pageInfo: {
+            hasNextPage: false,
+            endCursor: null,
+            previousCursor: null,
+          },
+        },
+      }))
+    ),
     sendEmail: vi.fn(async () => ({ success: true })),
     emitAlert: vi.fn(),
     now: () => '2026-11-03T00:30:00.000Z',

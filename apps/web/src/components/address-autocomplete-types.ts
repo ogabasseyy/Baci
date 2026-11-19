@@ -4,6 +4,8 @@ export interface PlaceDetails {
   streetNumber: string;
   route: string;
   city: string;
+  /** Nigerian LGA from an administrative component; never inferred from city. */
+  lga?: string;
   state: string;
   zip: string;
   country: string;

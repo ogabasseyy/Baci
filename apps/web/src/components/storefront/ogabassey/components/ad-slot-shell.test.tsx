@@ -51,11 +51,22 @@ describe('AdSlotShell', () => {
     expect(screen.getByText('Sponsored')).toHaveClass(
       'ogabassey-ad-placeholder-text'
     );
-    expect(screen.getByText('Ad Space')).toHaveClass(
+    expect(screen.getByText('Advertisement')).toHaveClass(
       'ogabassey-ad-placeholder-text'
     );
-    expect(screen.getByText(dims.name)).toBeInTheDocument();
-    expect(screen.getByText('970x90')).toBeInTheDocument();
+  });
+
+  it('bugfix: never shows shoppers the internal unit name, size or "Ad Space"', () => {
+    render(<AdSlotShell {...dims} />);
+
+    expect(screen.queryByText('Ad Space')).not.toBeInTheDocument();
+    expect(screen.queryByText(dims.name)).not.toBeInTheDocument();
+    expect(screen.queryByText('970x90')).not.toBeInTheDocument();
+    // The unit name stays available for debugging, out of sight.
+    expect(screen.getByTestId('ad-slot-placeholder')).toHaveAttribute(
+      'data-ad-unit',
+      dims.name
+    );
   });
 
   it('hides the placeholder once an ad has painted but keeps the box', () => {
@@ -63,7 +74,7 @@ describe('AdSlotShell', () => {
       <AdSlotShell {...dims} showPlaceholder={false} />
     );
 
-    expect(screen.queryByText('Ad Space')).not.toBeInTheDocument();
+    expect(screen.queryByText('Advertisement')).not.toBeInTheDocument();
     expect(screen.getByText('Sponsored')).toBeInTheDocument();
     // The height-locked box is still present so removing the placeholder does
     // not change layout.

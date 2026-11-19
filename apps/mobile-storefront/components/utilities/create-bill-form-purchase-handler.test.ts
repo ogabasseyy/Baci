@@ -190,6 +190,20 @@ describe('createBillFormPurchaseHandler', () => {
     expect(setIsSubmitting).toHaveBeenCalledWith(false);
   });
 
+  describe('bugfix: amount validation raised a system alert', () => {
+    it.each([
+      ['empty', { amount: '', numericAmount: 0 }],
+      ['below the minimum', { amount: '20', numericAmount: 20 }],
+    ])('refuses an %s amount quietly, with no alert and no charge', async (_label, amounts) => {
+      const handlePurchase = createValidHandler(amounts);
+
+      await handlePurchase();
+
+      expect(Alert.alert).not.toHaveBeenCalled();
+      expect(mockChargeWalletForVtu).not.toHaveBeenCalled();
+    });
+  });
+
   it('checks wallet readiness before charging and skips the charge when not ready', async () => {
     const payment = createPaymentState({ getWalletBalance: () => 200 });
     const handlePurchase = createValidHandler({

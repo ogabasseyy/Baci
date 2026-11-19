@@ -124,8 +124,11 @@ test('shared cart checkout submits the prepared binding', async ({ page }) => {
   await page.route(/\/api\/storefront\/cart\/checkout(?:\?.*)?$/, (route) => {
     prepares.push(route.request().postDataJSON());
     return route.fulfill({
+      headers: { date: new Date().toUTCString() },
       json: {
         replayed: false,
+        databaseNow: new Date().toISOString(),
+        sessionExpiresAt: new Date(Date.now() + 30 * 60_000).toISOString(),
         sessionReused: false,
         snapshot: prepareSnapshot,
       },

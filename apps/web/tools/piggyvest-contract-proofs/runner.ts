@@ -1,7 +1,13 @@
 import { randomBytes } from 'node:crypto';
 import { homedir } from 'node:os';
 import path from 'node:path';
-import { RUN_MODES, SANDBOX_ORIGIN, STANDALONE_PROOFS } from './constants';
+import {
+  LIVE_MAX_POLLS,
+  LIVE_POLL_INTERVAL_MS,
+  RUN_MODES,
+  SANDBOX_ORIGIN,
+  STANDALONE_PROOFS,
+} from './constants';
 import { buildEvidence, renderMarkdown } from './evidence';
 import { type WrittenEvidence, writeEvidence } from './evidence-writer';
 import { createGuardedFetch } from './guarded-fetch';
@@ -200,8 +206,8 @@ export async function runHarness(
       qa: qaIdentityFor(qaKey),
       state,
       sleep: live ? (deps.sleep ?? realSleep) : async () => undefined,
-      pollIntervalMs: live ? 2_000 : 0,
-      maxPolls: live ? 15 : 6,
+      pollIntervalMs: live ? LIVE_POLL_INTERVAL_MS : 0,
+      maxPolls: live ? LIVE_MAX_POLLS : 6,
       attempt,
       faults,
       bank: !live

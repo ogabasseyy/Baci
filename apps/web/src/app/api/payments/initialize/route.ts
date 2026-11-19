@@ -53,6 +53,7 @@ import { initializeRedvaultPaystackCheckout } from '@/lib/payments/initialize-re
 import { initializeTransactionMetadata } from '@/lib/payments/initialize-transaction-metadata';
 import { persistPaystackDvaAssignment } from '@/lib/payments/persist-paystack-dva-assignment';
 import { redactPaymentLogValue } from '@/lib/payments/redact-payment-log-value';
+import { rejectOxygenGatewayInitialization } from '@/lib/payments/reject-oxygen-gateway-initialization';
 import { resolveChargeCurrency } from '@/lib/payments/resolve-charge-currency';
 import { resolvePaystackSplitTransactionCharge } from '@/lib/payments/resolve-paystack-split-transaction-charge';
 import {
@@ -63,6 +64,7 @@ import {
 import { sanitizeForLog } from '@/lib/sanitize-core';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient as createServerSupabaseClient } from '@/lib/supabase/server';
+import { retiredGatewayResponse } from './retired-gateway';
 
 // Types & Constants
 
@@ -1045,11 +1047,6 @@ export async function POST(request: NextRequest) {
 
     // Parse and validate request body
     const body = await request.clone().json();
-    console.log(
-      '[PaymentInit] Raw Request Body:',
-      sanitizeForLog(redactPaymentLogValue(body))
-    );
-
     const parseResult = PaymentInitRequestSchema.safeParse(body);
 
     if (!parseResult.success) {
@@ -1061,6 +1058,8 @@ export async function POST(request: NextRequest) {
     }
 
     const data = parseResult.data;
+    const retired = retiredGatewayResponse(data.gateway);
+    if (retired) return retired;
     const redvaultRequested = data.payment_method === 'uba_redvault';
     const redvaultCustomerAuth = redvaultRequested
       ? await authenticateApiRequest(request)
@@ -1155,6 +1154,19 @@ export async function POST(request: NextRequest) {
         'Merchant mismatch for this order',
         'MERCHANT_MISMATCH',
         403
+      );
+    }
+
+    // This snapshot check prevents direct initialization of an Oxygen order.
+    // It does not serialize a concurrent change of the order's payment method.
+    const oxygenRejection = rejectOxygenGatewayInitialization(
+      orderSnapshot.payment_method
+    );
+    if (oxygenRejection) {
+      return createErrorResponse(
+        oxygenRejection.message,
+        oxygenRejection.code,
+        oxygenRejection.status
       );
     }
 

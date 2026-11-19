@@ -16,11 +16,14 @@ const phoneBrands = {
 
 const laptopBrands = {
   hp: ['hp', 'elitebook', 'pavilion', 'omen'],
-  dell: ['dell', 'latitude', 'xps', 'inspiron'],
+  dell: ['dell', 'latitude', 'xps', 'inspiron', 'alienware'],
   lenovo: ['lenovo', 'thinkpad', 'legion'],
   apple: ['apple', 'macbook'],
   asus: ['asus', 'rog', 'tuf'],
-  msi: ['msi'],
+  msi: ['msi', 'katana', 'stealth', 'titan', 'raider', 'vector', 'crosshair'],
+  acer: ['acer', 'predator', 'nitro'],
+  razer: ['razer', 'blade'],
+  gigabyte: ['gigabyte', 'aorus'],
 } as const;
 
 export const CORE_CONTENT_CLUSTER_SUPPORT = {
@@ -74,7 +77,7 @@ export const CORE_CONTENT_CLUSTER_SUPPORT = {
     },
   },
   'gaming-laptops': {
-    categoryNames: ['gaming laptops', 'gaming-laptops'],
+    categoryNames: ['gaming laptop', 'gaming laptops', 'gaming-laptops'],
     articleTokens: [
       'gaming laptop',
       'rtx',
@@ -84,6 +87,13 @@ export const CORE_CONTENT_CLUSTER_SUPPORT = {
       'omen',
       'legion',
       'msi',
+      'alienware',
+      'aorus',
+      'razer blade',
+      'acer nitro',
+      'acer predator',
+      'predator helios',
+      'predator triton',
       'refresh rate',
     ],
     brandTokens: laptopBrands,

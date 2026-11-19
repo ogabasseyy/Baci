@@ -1,0 +1,80 @@
+import { vi } from 'vitest';
+import type { PlaceOrderOptions } from './place-order';
+
+export const mockFetch = vi.fn();
+
+export const buildOpts = (
+  overrides: Partial<PlaceOrderOptions> = {}
+): PlaceOrderOptions => ({
+  merchant: { id: 'merchant-1', slug: 'test-store' },
+  currency: 'NGN',
+  customerEmail: 'john@example.com',
+  firstName: 'John',
+  lastName: 'Doe',
+  customerPhone: '+2348012345678',
+  deliveryMethod: 'door',
+  isNewAddressMode: true,
+  newAddressStreet: '123 Test St',
+  newAddressCity: 'Ikeja',
+  newAddressState: 'Lagos',
+  selectedAddressId: 0,
+  addresses: [],
+  airportType: 'delivery',
+  cart: [
+    {
+      id: 'p1',
+      name: 'Product 1',
+      quantity: 2,
+      price: 5000,
+    },
+  ],
+  cartTotal: 10000,
+  deliveryCost: 2000,
+  total: 12000,
+  taxAmount: 0,
+  giftWrappingCost: 0,
+  selectedQuoteId: 'q1',
+  shippingQuotes: [
+    {
+      id: 'q1',
+      provider: 'GIGL',
+      serviceTier: 'standard',
+      carrierName: 'GIG Logistics',
+      displayName: 'Standard',
+      price: 2000,
+      estimatedDays: 3,
+      currency: 'NGN',
+      pickupIncluded: false,
+      insuranceIncluded: false,
+    },
+  ],
+  paymentMethod: 'invoice',
+  payWithWallet: false,
+  walletAmountUsed: 0,
+  createAccount: false,
+  accountPassword: '',
+  newsletterOptIn: false,
+  user: null,
+  payForMeDetails: { name: '', contact: '', note: '' },
+  resumedOrder: null,
+  preferredGateway: null,
+  isOrderInFlightRef: { current: false },
+  setIsProcessing: vi.fn(),
+  setWalletBalance: vi.fn(),
+  setCurrentStep: vi.fn(),
+  setCompletedSteps: vi.fn(),
+  clearCheckoutSession: vi.fn(),
+  clearCart: vi.fn(),
+  routerPush: vi.fn(),
+  getHref: vi.fn((path: string) => `/test-store${path}`),
+  executeDirectPayment: vi.fn(),
+  crypto: {
+    setPendingCryptoOrder: vi.fn(),
+    setShowCryptoSelector: vi.fn(),
+    setCryptoPaymentData: vi.fn(),
+  },
+  dva: {
+    handleBankTransfer: vi.fn(),
+  },
+  ...overrides,
+});

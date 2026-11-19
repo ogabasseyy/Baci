@@ -6,12 +6,16 @@ import { FacebookPixel } from '@/components/analytics/facebook-pixel';
 import { SnapchatPixel } from '@/components/analytics/snapchat-pixel';
 import { TikTokPixel } from '@/components/analytics/tiktok-pixel';
 import { TwitterPixel } from '@/components/analytics/twitter-pixel';
+import { ChatwootWidget } from '@/components/storefront/chatwoot-widget';
 import { CookieConsent } from '@/components/storefront/cookie-consent';
 import { DeferredPageViewTracker } from '@/components/storefront/deferred-page-view-tracker';
 import { WebMcpStorefrontTools } from '@/components/storefront/webmcp-storefront-tools';
 import { StorefrontCartProvider } from '@/hooks/cart/storefront-cart-provider';
 import { StorefrontMerchantProvider } from '@/hooks/merchant/storefront-merchant-provider';
+import { getStorefrontChatwootWidgetConfig } from '@/lib/chatwoot/storefront-widget-config';
+import { getExperienceStorefrontRuntime } from '@/lib/experience/storefront-runtime';
 import { merchantHasFeature } from '@/lib/merchant-has-feature';
+import { ExperienceStorefrontLayout } from './experience-storefront-layout';
 import { StorefrontLayoutRenderer } from './storefront-layout-renderer';
 import type { getStorefrontShellSnapshot } from './storefront-shell-snapshot';
 
@@ -30,8 +34,12 @@ export function StorefrontShellFrame({
 
   const { merchant, routingMode } = shellSnapshot;
   const merchantSlug = merchant.slug || '';
+  const chatwootConfig = getStorefrontChatwootWidgetConfig(merchant.id);
   const analyticsSettings = buildMerchantAnalyticsSettings(merchant);
   const facebookPixelId = analyticsSettings?.facebook_pixel_id;
+  const Layout = getExperienceStorefrontRuntime()
+    ? ExperienceStorefrontLayout
+    : StorefrontLayoutRenderer;
 
   return (
     <StorefrontMerchantProvider
@@ -80,13 +88,21 @@ export function StorefrontShellFrame({
           - Keeps layout persistent across route changes (seamless navigation)
           - Prevents header flashing/re-rendering
         */}
-        <StorefrontLayoutRenderer
-          merchant={merchant}
-          preloadHeroLcpImages={preloadHeroLcpImages}
-          routingMode={routingMode}
+        <ChatwootWidget
+          config={
+            chatwootConfig && merchantSlug
+              ? { ...chatwootConfig, storeSlug: merchantSlug }
+              : null
+          }
         >
-          {children}
-        </StorefrontLayoutRenderer>
+          <Layout
+            merchant={merchant}
+            preloadHeroLcpImages={preloadHeroLcpImages}
+            routingMode={routingMode}
+          >
+            {children}
+          </Layout>
+        </ChatwootWidget>
       </StorefrontCartProvider>
     </StorefrontMerchantProvider>
   );

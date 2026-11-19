@@ -13,11 +13,23 @@ export const piggyvestGoalPinSchemas = {
       operationId: z.uuid(),
       amountKobo: z.int().positive().max(9999999999),
     }),
+    // A cancel proof is bound to the operation id the server issued for this
+    // attempt (issue_goal_cancel), so it is required here.
     z.strictObject({
       merchantId: z.uuid(),
       pin,
-      action: z.enum(['cancel', 'complete']),
+      action: z.literal('cancel'),
       goalId: z.uuid(),
+      operationId: z.uuid(),
+    }),
+    // A complete proof is bound to the operation id the server issued for
+    // this attempt (issue_goal_complete), so it is required here too.
+    z.strictObject({
+      merchantId: z.uuid(),
+      pin,
+      action: z.literal('complete'),
+      goalId: z.uuid(),
+      operationId: z.uuid(),
     }),
   ]),
   pinState: z.discriminatedUnion('status', [

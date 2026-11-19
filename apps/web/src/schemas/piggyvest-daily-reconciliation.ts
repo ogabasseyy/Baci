@@ -25,15 +25,28 @@ const expectedWallet = z.strictObject({
  * key: an unexpected or missing key makes the whole snapshot unusable, which
  * the job reports as a failure instead of reading it as clean.
  */
-const snapshot = z.strictObject({
+const snapshotShape = z.strictObject({
   generatedAt: z.iso.datetime({ offset: true }),
   staleAfterSeconds: z.int().min(60).max(604800),
   businessId: piggyvestProviderIdSchema,
   stuck: z.array(stuckTransfer).max(200),
   stuckTotal: z.int().nonnegative(),
+  /** Stuck rows left out of this run's window (rotation covers them later). */
+  stuckDeferred: z.int().nonnegative(),
   wallets: z.array(expectedWallet).max(500),
   walletsTotal: z.int().nonnegative(),
+  /** Wallets left out of this run's window (rotation covers them later). */
+  walletsDeferred: z.int().nonnegative(),
 });
+
+// A deferred count must be exactly the rows the window left out. Anything
+// else means the list and its total disagree, so the snapshot is unusable.
+const snapshot = snapshotShape.refine(
+  (value) =>
+    value.stuckDeferred === value.stuckTotal - value.stuck.length &&
+    value.walletsDeferred === value.walletsTotal - value.wallets.length,
+  { message: 'deferred counts must equal total minus listed rows' }
+);
 
 export const piggyvestDailyReconciliationSchemas = {
   stuckTransfer,

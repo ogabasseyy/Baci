@@ -7,9 +7,15 @@ export type GoalPinBindingInput =
       operationId: string;
       amountKobo: number;
     }
-  | { action: 'cancel' | 'complete'; goalId: string };
+  | { action: 'cancel'; goalId: string; operationId: string }
+  | { action: 'complete'; goalId: string; operationId: string };
 
-export type GoalPinPurpose = 'goal_fund' | 'goal_cancel' | 'goal_complete';
+// wallet_pay: a PiggyVest wallet payment (binding built by wallet-pay-service).
+export type GoalPinPurpose =
+  | 'goal_fund'
+  | 'goal_cancel'
+  | 'goal_complete'
+  | 'wallet_pay';
 
 export type GoalPinBinding = {
   purpose: GoalPinPurpose;
@@ -27,9 +33,12 @@ export type GoalPinBinding = {
 export const GOAL_PIN_WHOLE_BALANCE_MARKER_KOBO = 1;
 
 /**
- * The key text the database hashes itself: '<goalId>:<operationId>' for
- * funding (reserve_savings_with_pin), '<goalId>:<action>' for cancel and complete
- * (consume_goal_pin_proof). Both sides use lower-case UUIDs.
+ * The key text the database hashes itself, with lower-case UUIDs on both
+ * sides: '<goalId>:<operationId>' for funding (reserve_savings_with_pin),
+ * '<goalId>:cancel:<operationId>' for cancel (reserve_goal_cancel_with_pin;
+ * the operation id is issued by the server per attempt, so a cancel proof is
+ * good for one attempt only) and '<goalId>:complete:<operationId>' for
+ * complete (reserve_goal_complete_with_pin, issued the same way).
  */
 export function buildGoalPinBinding(
   input: GoalPinBindingInput
@@ -43,11 +52,20 @@ export function buildGoalPinBinding(
       ),
     };
   }
+  if (input.action === 'cancel') {
+    return {
+      purpose: 'goal_cancel',
+      amountKobo: GOAL_PIN_WHOLE_BALANCE_MARKER_KOBO,
+      idempotencyKeySha256: deriveWalletPinIdempotencyDigest(
+        `${input.goalId.toLowerCase()}:cancel:${input.operationId.toLowerCase()}`
+      ),
+    };
+  }
   return {
-    purpose: input.action === 'cancel' ? 'goal_cancel' : 'goal_complete',
+    purpose: 'goal_complete',
     amountKobo: GOAL_PIN_WHOLE_BALANCE_MARKER_KOBO,
     idempotencyKeySha256: deriveWalletPinIdempotencyDigest(
-      `${input.goalId.toLowerCase()}:${input.action}`
+      `${input.goalId.toLowerCase()}:complete:${input.operationId.toLowerCase()}`
     ),
   };
 }

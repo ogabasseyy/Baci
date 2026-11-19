@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  createServiceClient: vi.fn(),
+  createIntakeClient: vi.fn(),
   processPiggyvestEvent: vi.fn(),
 }));
 
@@ -14,8 +14,8 @@ vi.mock('@/env', () => ({
     process.env.PVB_SECRET_KEY?.trim() || undefined,
 }));
 
-vi.mock('@/lib/supabase/service', () => ({
-  createServiceClient: () => withCaptureRpc(mocks.createServiceClient()),
+vi.mock('@/lib/piggyvest/server-intake-client', () => ({
+  createPiggyvestIntakeClient: () => withCaptureRpc(mocks.createIntakeClient()),
 }));
 
 vi.mock('@/lib/piggyvest/webhook-processor', () => ({
@@ -70,7 +70,7 @@ describe('POST event intake: capture succeeded, processing did not', () => {
         received: false,
         code: 'PIGGYVEST_INVALID_SIGNATURE',
       });
-      expect(mocks.createServiceClient).not.toHaveBeenCalled();
+      expect(mocks.createIntakeClient).not.toHaveBeenCalled();
       // Monitoring surface for the log drain: presence only.
       expect(warn).toHaveBeenCalledWith(
         expect.stringContaining(
@@ -87,7 +87,7 @@ describe('POST event intake: capture succeeded, processing did not', () => {
 
   it('keeps the captured row and answers 200 when the quarantine write fails', async () => {
     vi.stubEnv('PVB_SECRET_KEY', SECRET);
-    mocks.createServiceClient.mockReturnValue({
+    mocks.createIntakeClient.mockReturnValue({
       from: vi.fn(
         () =>
           chainable({ data: null, error: { message: 'synthetic db outage' } })
@@ -112,7 +112,7 @@ describe('POST event intake: capture succeeded, processing did not', () => {
       data: [{ event_id: inflowEvent.eventId }],
       error: null,
     });
-    mocks.createServiceClient.mockReturnValue({
+    mocks.createIntakeClient.mockReturnValue({
       from: vi.fn(() => query),
     });
     mocks.processPiggyvestEvent.mockRejectedValue(new Error('synthetic'));
@@ -126,7 +126,7 @@ describe('POST event intake: capture succeeded, processing did not', () => {
 
   it('answers 200 without leaking internals when the inbox write fails after capture', async () => {
     vi.stubEnv('PVB_SECRET_KEY', SECRET);
-    mocks.createServiceClient.mockReturnValue({
+    mocks.createIntakeClient.mockReturnValue({
       from: vi.fn(
         () =>
           chainable({ data: null, error: { message: 'synthetic db outage' } })

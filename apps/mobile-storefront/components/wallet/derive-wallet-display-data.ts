@@ -1,4 +1,7 @@
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
+import { hasMalformedPrimaryBalance } from '@/lib/has-malformed-primary-balance';
+import { isWalletPrimaryUnknown } from '@/lib/is-wallet-primary-unknown';
+import { isWalletStoreCredit } from '@/lib/wallet-store-credit';
 import type { WalletDisplayFundingAccount } from './wallet.types';
 
 interface WalletFundingAccountLike {
@@ -14,6 +17,11 @@ interface WalletDataLike {
   earnings_available?: boolean | null;
   earnings_balance?: number | null;
   funding_account?: WalletFundingAccountLike | null;
+  owner_unresolved?: boolean | null;
+  primary_balance_kobo?: number | null;
+  primary_pending?: boolean | null;
+  primary_stale?: boolean | null;
+  primary_unavailable?: boolean | null;
   savings_balance?: number | null;
   savings_goals?: WalletActiveSavingsGoal[] | null;
   total_balance?: number | null;
@@ -30,11 +38,38 @@ export function normalizeRequiredFundingAccountValue(
   return trimmedValue.length > 0 ? trimmedValue : null;
 }
 
+// The only kobo -> naira conversion for the PiggyVest balance: every other
+// app money value (wallet.balance, goal amounts) is already naira.
+export function koboToNaira(kobo: number): number {
+  return kobo / 100;
+}
+
 export function deriveWalletDisplayData(
   walletData: WalletDataLike,
   selectedSavingsGoalId?: string | null
 ) {
-  const spendableBalance = walletData.balance ?? 0;
+  // Once the server reports the PiggyVest main wallet, walletBalance is that
+  // savings wallet: it funds savings goals only and is never spent on
+  // purchases. Purchases spend the legacy balance, shown as store credit.
+  // Without a PiggyVest answer this is exactly the legacy computation.
+  // Same check as every purchase screen, so a malformed balance (NaN,
+  // negative) keeps the whole app on the legacy wallet consistently.
+  const primaryReady = isWalletStoreCredit(walletData);
+  // PiggyVest account confirmed, balance not ready yet: the savings wallet
+  // has nothing spendable for contributions (Codex), and the older balance
+  // stays store credit.
+  const primaryPending =
+    !primaryReady &&
+    (walletData.primary_pending === true ||
+      normalizeRequiredFundingAccountValue(
+        walletData.funding_account?.provider
+      ) === 'piggyvest');
+  const walletBalance =
+    primaryReady && typeof walletData.primary_balance_kobo === 'number'
+      ? koboToNaira(walletData.primary_balance_kobo)
+      : primaryPending
+        ? 0
+        : (walletData.balance ?? 0);
   const earningsAvailable =
     walletData.earnings_available === true &&
     typeof walletData.earnings_balance === 'number';
@@ -42,8 +77,9 @@ export function deriveWalletDisplayData(
     ? (walletData.earnings_balance ?? null)
     : null;
   const savingsBalance = walletData.savings_balance ?? 0;
-  const totalBalance =
-    walletData.total_balance ?? spendableBalance + savingsBalance;
+  const totalBalance = primaryReady
+    ? walletBalance + savingsBalance
+    : (walletData.total_balance ?? walletBalance + savingsBalance);
   const rawFundingAccount = walletData.funding_account;
   const accountName = normalizeRequiredFundingAccountValue(
     rawFundingAccount?.account_name
@@ -74,14 +110,55 @@ export function deriveWalletDisplayData(
     walletData.active_savings_goal ||
     null;
 
+  // savingsPrimary: the savings flows treat this wallet as PiggyVest, also
+  // while its balance is pending (Codex), so funding opens the PiggyVest
+  // transfer, never a card top-up into store credit.
+  const primaryFields: {
+    legacyBalance?: number;
+    primaryReady?: true;
+    savingsPrimary?: true;
+  } = primaryReady
+    ? {
+        primaryReady: true,
+        legacyBalance: walletData.balance ?? 0,
+        savingsPrimary: true,
+      }
+    : primaryPending
+      ? { legacyBalance: walletData.balance ?? 0, savingsPrimary: true }
+      : {};
   return {
     earningsBalance,
     earningsAvailable,
     activeSavingsGoal,
     fundingAccount,
+    // Only present on the PiggyVest path, so the legacy output is unchanged.
+    // The legacy balance is the customer's store credit: what IMEI checks,
+    // utilities and checkout spend. A contribution already bound to the
+    // legacy rail also validates against it, never the savings wallet.
+    ...primaryFields,
+    // The PiggyVest check is unsettled (failed, pending, or no customer row
+    // yet): purchase top-ups stay card-only store credit, like IMEI's.
+    // A malformed PiggyVest balance (negative, non-finite) is no answer
+    // either (Muse): purchase top-ups stay card-only store credit.
+    ...(isWalletPrimaryUnknown(walletData) ||
+    hasMalformedPrimaryBalance(walletData) ||
+    walletData.owner_unresolved === true
+      ? { walletPrimaryUnsettled: true as const }
+      : {}),
+    // The PiggyVest read failed (server unreachable): the wallet can't say
+    // what this customer's balance is. Callers gate it to the PiggyVest
+    // merchant and show a "can't check" state, never the goals total.
+    ...(walletData.primary_unavailable === true && !primaryReady
+      ? { primaryUnreadable: true as const }
+      : {}),
+    // The balance is recalled from moments ago (the fresh read failed): the
+    // account number is shown, marked as possibly out of date (walk 14).
+    ...(walletData.primary_stale === true && primaryReady
+      ? { primaryStale: true as const }
+      : {}),
     savingsBalance,
     showQuickSave: Boolean(walletData.active_savings_goal),
-    spendableBalance,
+    walletBalance,
     totalBalance,
   };
 }

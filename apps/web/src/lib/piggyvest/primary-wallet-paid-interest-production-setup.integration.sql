@@ -14,8 +14,7 @@ ALTER TABLE public.customer_savings_goals ADD COLUMN non_withdrawable_accepted_a
 \ir ../../../../../supabase/migrations/20261007220003_piggyvest_primary_interest_reads_notifications.sql
 \endif
 
-CREATE SCHEMA auth;
-CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$
+CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$
   SELECT nullif(current_setting('request.jwt.claim.sub',true),'')::uuid;
 $$;
 CREATE ROLE production_primary_interest_fixture LOGIN NOSUPERUSER NOBYPASSRLS;

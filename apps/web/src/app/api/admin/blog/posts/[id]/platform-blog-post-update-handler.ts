@@ -9,23 +9,18 @@ import {
 import { calculateReadingTime, calculateWordCount } from '@/lib/blog-utils';
 import { revalidatePlatformBlog } from '@/lib/cache-revalidation';
 import { createClient } from '@/lib/supabase/server';
-import { blogPostSchema, sanitizeBlogPostData } from '@/lib/validations/blog';
+import {
+  platformBlogPostUpdateSchema,
+  sanitizeBlogPostData,
+} from '@/lib/validations/blog';
 import { platformBlogRouteParamsSchema } from '@/schemas/platform-blog-route-params';
 import type { Json } from '@/types/supabase';
+import { hasFeaturedImageFields } from './platform-blog-post-featured-image-fields';
 import { readPlatformPatchError } from './platform-blog-post-patch-error';
 import {
   PLATFORM_BLOG_DETAIL_SELECT,
   type PlatformBlogRouteParams,
 } from './platform-blog-post-route-schema';
-
-function hasFeaturedImageFields(value: Record<string, unknown>): boolean {
-  return (
-    Object.hasOwn(value, 'featured_image_url') ||
-    Object.hasOwn(value, 'featured_image_width') ||
-    Object.hasOwn(value, 'featured_image_height') ||
-    Object.hasOwn(value, 'featured_image_variants')
-  );
-}
 
 export async function updatePlatformBlogPost(
   request: NextRequest,
@@ -53,7 +48,7 @@ export async function updatePlatformBlogPost(
       return NextResponse.json({ error: 'Invalid input' }, { status: 400 });
     }
     const body = sanitizeBlogPostData(rawBody as Record<string, unknown>);
-    const validated = blogPostSchema.partial().safeParse(body);
+    const validated = platformBlogPostUpdateSchema.safeParse(body);
 
     if (!validated.success) {
       return NextResponse.json(

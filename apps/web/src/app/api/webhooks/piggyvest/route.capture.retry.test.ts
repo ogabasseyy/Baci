@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  */
 
 const mocks = vi.hoisted(() => ({
-  createServiceClient: vi.fn(),
+  createIntakeClient: vi.fn(),
   processPiggyvestEvent: vi.fn(),
   recordPiggyvestEvent: vi.fn(),
   throwFromProcessing: false,
@@ -20,8 +20,8 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('server-only', () => ({}));
 vi.mock('@/env', () => ({ getPiggyvestApiConfig: () => null }));
-vi.mock('@/lib/supabase/service', () => ({
-  createServiceClient: () => mocks.createServiceClient(),
+vi.mock('@/lib/piggyvest/server-intake-client', () => ({
+  createPiggyvestIntakeClient: () => mocks.createIntakeClient(),
 }));
 vi.mock('@/lib/piggyvest/webhook-processor', () => ({
   processPiggyvestEvent: (...args: unknown[]) =>
@@ -101,7 +101,7 @@ beforeEach(() => {
   vi.stubEnv('PIGGYVEST_WEBHOOK_KEY_OVERLAP_HOURS', '');
   vi.stubEnv('VERCEL_ENV', 'preview');
   vi.stubEnv(DRAIN_FLAG, '');
-  mocks.createServiceClient.mockImplementation(() => store.client());
+  mocks.createIntakeClient.mockImplementation(() => store.client());
   mocks.recordPiggyvestEvent.mockResolvedValue('new');
   mocks.processPiggyvestEvent.mockResolvedValue('processed');
   alerts = vi.spyOn(console, 'error').mockImplementation(() => {});

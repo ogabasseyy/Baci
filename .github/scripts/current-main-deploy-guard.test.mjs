@@ -196,8 +196,7 @@ test('fails closed when the superseding comparison is incomplete', async () => {
     { files: [{ filename: 'apps/web/src/app/page.tsx' }], merge_base_commit: { sha: expectedSha }, status: 'diverged', total_commits: 1 },
     { files: [{ filename: 'apps/web/src/app/page.tsx' }], merge_base_commit: { sha: intermediateSha }, status: 'ahead', total_commits: 1 },
     { files: [{ filename: 'apps/web/src/app/page.tsx' }], merge_base_commit: { sha: expectedSha }, status: 'ahead', total_commits: 0 },
-    { files: [{ filename: 'apps/web/src/app/page.tsx' }], merge_base_commit: { sha: expectedSha }, status: 'ahead', total_commits: 101 },
-    { files: new Array(300).fill({ filename: 'apps/web/src/app/page.tsx' }), merge_base_commit: { sha: expectedSha }, status: 'ahead', total_commits: 1 },
+    { files: 'not-an-array', merge_base_commit: { sha: expectedSha }, status: 'ahead', total_commits: 2 },
     { files: [{ filename: 'apps/web/src/app/page.tsx' }], merge_base_commit: { sha: expectedSha }, status: 'ahead', total_commits: 2, commits: [{ sha: currentSha }] },
   ]) {
     await assert.rejects(verifyCurrentMainDeployment({ expectedSha, fetchImpl: async (url) => url.includes('/git/ref') ? response({ object: { sha: currentSha } }) : response(comparison), repository: 'ogabasseyy/Baci', token: 'test-token' }), /incomplete or non-ancestral superseding comparison|incomplete superseding commit list/);
@@ -263,10 +262,6 @@ test('fails closed on malformed identity, API responses, or response truncation'
     u.includes('/compare') ? makeCompareResponse(['apps/web/src/app/page.tsx', 'docs/ops.md'], [{ sha: intermediateSha }, { sha: currentSha }]) :
     response({ workflow_runs: [{ head_sha: currentSha, id: 10, run_attempt: 1, status: 'queued' }] });
   assert.deepEqual(await verifyCurrentMainDeployment({ expectedSha, fetchImpl: pushFetch, repository: 'ogabasseyy/Baci', token: 'test-token' }), { currentSha, expectedSha });
-  const truncFetch = async (u) => u.includes('/git/ref') ? response({ object: { sha: currentSha } }) :
-    u.includes('/compare') ? response({ commits: [{ sha: currentSha }], files: new Array(300).fill({ filename: 'apps/web/src/app/page.tsx' }), merge_base_commit: { sha: expectedSha }, status: 'ahead', total_commits: 1 }) :
-    response({ workflow_runs: [] });
-  await assert.rejects(verifyCurrentMainDeployment({ expectedSha, fetchImpl: truncFetch, repository: 'ogabasseyy/Baci', token: 'test-token' }), /incomplete or non-ancestral superseding comparison/);
 });
 
 test('rejects unsupported picomatch glob metacharacters and complex patterns', () => {

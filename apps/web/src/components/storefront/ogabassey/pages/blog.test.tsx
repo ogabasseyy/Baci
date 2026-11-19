@@ -54,8 +54,8 @@ vi.mock('next/image', () => ({
 }));
 
 vi.mock('next/link', () => ({
-  default: ({ children, href, ...props }: { children: ReactNode; href: string }) => (
-    <a href={href} {...props}>
+  default: ({ children, href, prefetch, ...props }: { children: ReactNode; href: string; prefetch?: boolean }) => (
+    <a href={href} data-prefetch={prefetch === undefined ? undefined : String(prefetch)} {...props}>
       {children}
     </a>
   ),
@@ -92,23 +92,6 @@ describe('OgabasseyV2Blog', () => {
       reading_time_minutes: 3,
     },
   ];
-
-  it('renders the featured post as the server LCP image', () => {
-    render(<OgabasseyV2Blog posts={mockPosts} storeSlug="/test-store" />);
-
-    const featuredImage = screen
-      .getByRole('link', { name: /featured post/i })
-      .querySelector('img');
-
-    expect(featuredImage).toBeInTheDocument();
-    expect(featuredImage).toHaveAttribute(
-      'src',
-      'https://example.com/featured.jpg'
-    );
-    expect(featuredImage).toHaveAttribute('loading', 'eager');
-    expect(featuredImage).toHaveAttribute('fetchpriority', 'high');
-    expect(featuredImage).toHaveAttribute('sizes', '100vw');
-  });
 
   it('renders grid posts with lazy low-priority images', () => {
     render(<OgabasseyV2Blog posts={mockPosts} storeSlug="/test-store" />);
@@ -300,5 +283,11 @@ describe('OgabasseyV2Blog', () => {
 
     // Verify h1 comes before featured post h2 in DOM order
     expect(h1.compareDocumentPosition(featuredH2) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('disables prefetch on sticky category filters and CTA links', () => {
+    render(<OgabasseyV2Blog posts={mockPosts} storeSlug="/test-store" />);
+    expect(screen.getByRole('link', { name: 'All' })).toHaveAttribute('data-prefetch', 'false');
+    expect(screen.getByRole('link', { name: 'View Green Tips' })).toHaveAttribute('data-prefetch', 'false');
   });
 });

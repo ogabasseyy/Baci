@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { descendantAlreadyDeployed } from './deploy-guard-descendants.mjs';
 
 const SHA_PATTERN = /^[0-9a-f]{40}$/i;
 const REPOSITORY_PATTERN = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
@@ -199,13 +200,13 @@ async function supersedingChangesCanProceed({
   if (
     comparison?.status !== 'ahead' ||
     comparison?.merge_base_commit?.sha?.toLowerCase() !== expectedSha.toLowerCase() ||
-    !Number.isSafeInteger(comparison?.total_commits) ||
-    comparison.total_commits < 1 ||
-    comparison.total_commits > 100 ||
-    !Array.isArray(comparison?.files) ||
-    comparison.files.length >= 300
+    !(Number.isSafeInteger(comparison?.total_commits) && comparison.total_commits >= 1) ||
+    (comparison.files != null && !Array.isArray(comparison.files))
   ) {
     throw new Error('incomplete or non-ancestral superseding comparison');
+  }
+  if (comparison.total_commits > 100 || !(comparison.files?.length < 300)) {
+    return !(await descendantAlreadyDeployed({ apiRoot, comparison, currentSha, expectedSha, fetchImpl, githubJson, repository, runHasDeployedProduction, token }));
   }
   let nonWebOnly = true;
   for (const file of comparison.files) {

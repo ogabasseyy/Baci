@@ -17,7 +17,7 @@ type CaptureServerEvent = (
 
 const mocks = vi.hoisted(() => ({
   captureServerEvent: vi.fn<CaptureServerEvent>(),
-  createServiceClient: vi.fn(),
+  createIntakeClient: vi.fn(),
   processPiggyvestEvent: vi.fn(),
   recordPiggyvestEvent: vi.fn(),
 }));
@@ -28,8 +28,8 @@ vi.mock('@/lib/posthog/server', () => ({
   captureServerEvent: (event: string, properties: { code: string }) =>
     mocks.captureServerEvent(event, properties),
 }));
-vi.mock('@/lib/supabase/service', () => ({
-  createServiceClient: () => mocks.createServiceClient(),
+vi.mock('@/lib/piggyvest/server-intake-client', () => ({
+  createPiggyvestIntakeClient: () => mocks.createIntakeClient(),
 }));
 vi.mock('@/lib/piggyvest/webhook-processor', () => ({
   processPiggyvestEvent: (...args: unknown[]) =>
@@ -78,7 +78,7 @@ beforeEach(() => {
   vi.stubEnv('PIGGYVEST_WEBHOOK_KEY_ARCHIVE', '');
   vi.stubEnv('PIGGYVEST_WEBHOOK_KEY_OVERLAP_HOURS', '');
   vi.stubEnv('VERCEL_ENV', 'preview');
-  mocks.createServiceClient.mockImplementation(() => store.client());
+  mocks.createIntakeClient.mockImplementation(() => store.client());
   mocks.recordPiggyvestEvent.mockResolvedValue('new');
   mocks.processPiggyvestEvent.mockResolvedValue('processed');
   vi.spyOn(console, 'error').mockImplementation(() => {});

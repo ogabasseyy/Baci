@@ -11,6 +11,7 @@ interface DeferredGoogleStoreWidgetProps {
   merchant?: Pick<MerchantData, 'custom_domain' | 'feature_settings'>;
   merchantCustomDomain?: string | null;
   enabled?: boolean;
+  homePath?: string;
   hostname?: string;
   loadWidgetModule?: () => Promise<GoogleStoreWidgetModule>;
 }
@@ -24,15 +25,10 @@ interface GoogleStoreWidgetModule {
 const GOOGLE_STORE_WIDGET_DELAY_MS = 20000;
 const MAX_DEFERRED_WIDGET_LOAD_RETRIES = 2;
 
-// The store-rating badge is fixed bottom-left and would cover critical UI on
-// payment/checkout flows — including the embedded Credit Direct (Mono) consent
-// checkbox shown in the mobile app's checkout WebView. Suppress it on those
-// routes; it stays on browse/PDP pages where it belongs.
-const SUPPRESSED_ROUTE_PATTERN =
-  /(?:^|\/)(checkout|payment|pay|credit-direct|bnpl)(?:\/|$)/i;
-
-function isSuppressedRoute(pathname: string | null): boolean {
-  return Boolean(pathname) && SUPPRESSED_ROUTE_PATTERN.test(pathname ?? '');
+// Only the storefront homepage may load or display the Google badge.
+function isSuppressedRoute(pathname: string | null, homePath: string): boolean {
+  const normalize = (value: string) => value.replace(/\/+$/, '') || '/';
+  return !pathname || normalize(pathname) !== normalize(homePath);
 }
 
 // Module-scope dynamic import keeps the `import()` expression out of the
@@ -46,7 +42,7 @@ export function DeferredGoogleStoreWidget(
   props: DeferredGoogleStoreWidgetProps
 ) {
   const pathname = usePathname();
-  const suppressed = isSuppressedRoute(pathname);
+  const suppressed = isSuppressedRoute(pathname, props.homePath ?? '/');
   const [Widget, setWidget] = useState<
     GoogleStoreWidgetModule['GoogleStoreWidget'] | null
   >(null);

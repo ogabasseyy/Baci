@@ -1,4 +1,5 @@
 import { escapeHtmlText } from '@/lib/sanitize';
+import { creditGapLines, creditGapPageFragment } from './credit-gap-report';
 import type {
   BalanceFinding,
   ReconciliationReport,
@@ -71,8 +72,14 @@ export function renderReconciliationEmail(report: ReconciliationReport): {
     const aboveRecord = report.balances.some(
       (balance) => balance.kind === 'above_expected'
     );
+    const creditReview =
+      report.creditGap?.status === 'checked' &&
+      report.creditGap.findings.length > 0;
     if (report.status === 'attention') headline = 'NEEDS ATTENTION';
     else if (aboveRecord) headline = 'REVIEW balances above record';
+    else if (creditReview) headline = 'REVIEW PiggyVest credit findings';
+    else if (report.deferred.wallets > 0)
+      headline = `all clear, ${report.deferred.wallets} wallet(s) deferred to later runs`;
     else headline = 'all clear';
     lines = [
       report.stuckTotal === 0
@@ -83,11 +90,17 @@ export function renderReconciliationEmail(report: ReconciliationReport): {
       `Goal wallet balances checked: ${report.balances.filter((balance) => balance.kind !== 'unreadable').length} of ${report.walletsTotal}.`,
       ...report.balances.map(balanceLine),
     ];
-    if (report.truncated.stuck || report.truncated.wallets)
+    if (report.deferred.stuck > 0)
       lines.push(
         '',
-        'The lists above are cut short; there are more rows than were checked.'
+        `${report.deferred.stuck} stuck transfer(s) are not listed above; they rotate into view on later runs.`
       );
+    if (report.deferred.wallets > 0)
+      lines.push(
+        '',
+        `${report.deferred.wallets} wallet(s) were not in today's window and will be checked on later runs.`
+      );
+    lines.push(...creditGapLines(report.creditGap));
     if (report.deadlineReached)
       lines.push(
         '',
@@ -113,7 +126,6 @@ export function pageReasonOf(report: ReconciliationReport): string | null {
   if (report.status === 'clean') return null;
   const count = (kind: BalanceFinding['kind']) =>
     report.balances.filter((balance) => balance.kind === kind).length;
-  const truncated = report.truncated.stuck || report.truncated.wallets;
   const deadline = report.deadlineReached ? ' deadline=reached' : '';
-  return `stuck=${report.stuckTotal} below_expected=${count('below_expected')} unreadable=${count('unreadable')} truncated=${truncated ? 'yes' : 'no'}${deadline}`;
+  return `stuck=${report.stuckTotal} below_expected=${count('below_expected')} unreadable=${count('unreadable')} truncated=${report.truncated.stuck ? 'yes' : 'no'}${creditGapPageFragment(report.creditGap)}${deadline}`;
 }

@@ -14,12 +14,16 @@ export function StartSavingsManualFundingContent({
   colors,
   controller,
 }: Props) {
+  // Locked while the plan is being created: the request already in flight
+  // uses the choice made when Create was tapped.
+  const busy = controller.isSubmitting || controller.isAuthorizingCard;
   return (
     <View style={styles.fundingOptionRow}>
       <FundingOptionCard
         active={controller.selectedFundingOption === 'wallet'}
         description={`Use available wallet balance (${formatNgnCurrency(controller.safeWalletBalance)}) for your initial contribution.`}
         label="Pay with wallet balance"
+        disabled={busy}
         onPress={() => controller.setSelectedFundingOption('wallet')}
         colors={colors}
       />
@@ -27,6 +31,7 @@ export function StartSavingsManualFundingContent({
         active={controller.selectedFundingOption === 'bank_transfer'}
         description="Show your dedicated account number and create the plan after wallet funding lands."
         label="Pay with bank transfer"
+        disabled={busy}
         onPress={() => controller.setSelectedFundingOption('bank_transfer')}
         colors={colors}
       />

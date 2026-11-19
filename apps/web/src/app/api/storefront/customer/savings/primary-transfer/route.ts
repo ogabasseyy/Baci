@@ -42,13 +42,23 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     const runtime =
       readPrimaryWalletSavingsRuntime() ??
       readPrimaryWalletSavingsRecoveryRuntime();
-    if (!runtime || runtime.merchantId !== parsed.data.merchantId)
+    if (!runtime)
       return NextResponse.json(
         {
           error: 'Savings status is temporarily unavailable.',
           code: 'SAVINGS_NOT_READY',
         },
         { status: 503 }
+      );
+    // A runtime for a different merchant means this merchant can hold no
+    // primary record, so clients may route its stored ids to the legacy rail.
+    if (runtime.merchantId !== parsed.data.merchantId)
+      return NextResponse.json(
+        {
+          error: 'Primary savings is not enabled for this merchant.',
+          code: 'SAVINGS_MERCHANT_NOT_PRIMARY',
+        },
+        { status: 409 }
       );
     const identity = await resolvePrimaryWalletIdentity({
       supabase: auth.supabase,

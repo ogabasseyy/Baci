@@ -1,6 +1,13 @@
 import 'server-only';
 import { piggyvestDailyReconciliationSchemas as schemas } from '@/schemas/piggyvest-daily-reconciliation';
 import {
+  createWalletPageReader,
+  type ListWalletPage,
+} from './credit-gap-provider-reader';
+import { runCreditGapCheck } from './credit-gap-reconciliation';
+import { withCreditGap } from './credit-gap-report';
+import { buildCreditGapPorts } from './credit-gap-runtime';
+import {
   type ReconciliationReport,
   runDailyReconciliation,
 } from './daily-reconciliation';
@@ -9,6 +16,16 @@ import {
   pageReasonOf,
   renderReconciliationEmail,
 } from './daily-reconciliation-report';
+import {
+  deliverReconciliationEmail,
+  withEmailLines,
+} from './daily-reconciliation-send';
+import {
+  readWalletPaySummary,
+  type WalletPaySummary,
+  walletPayEmailLines,
+  walletPayPageReason,
+} from './daily-reconciliation-wallet-pay';
 import { isPiggyvestFeatureFlagSet } from './piggyvest-feature-on';
 import { createPrimaryWalletEvidenceExecutor } from './primary-wallet-evidence-executor';
 import { getPrimaryWalletProviderOrigin } from './primary-wallet-provider-origin';
@@ -23,7 +40,9 @@ import { emitPiggyvestWebhookAlert } from './webhook-alerts';
  * owner email and the money page. It has its own switch and stays off until
  * the owner sets PIGGYVEST_RECONCILIATION_ENABLED=true; it only reads and
  * never moves money. It uses the recovery reader, so it keeps running when
- * the savings flags are off (a rollback cannot hide a stuck transfer).
+ * the savings flags are off (a rollback cannot hide a stuck transfer). Each
+ * day it reads a different rotating window of wallets and stuck transfers, so
+ * a book larger than one window is fully checked across runs.
  */
 export const RECONCILIATION_STALE_AFTER_SECONDS = 1800;
 /**
@@ -32,6 +51,21 @@ export const RECONCILIATION_STALE_AFTER_SECONDS = 1800;
  * still fit, so reads get 200.
  */
 export const RECONCILIATION_READ_BUDGET_MS = 200_000;
+
+const MS_PER_DAY = 86_400_000;
+
+/**
+ * The window position for this run: the UTC day number. Consecutive days move
+ * the database window by one page, so every wallet and stuck transfer is
+ * returned across runs instead of the same first rows every day.
+ */
+function rotationSlotOf(nowMs: number): number {
+  const slot = Math.floor(nowMs / MS_PER_DAY);
+  // Whole, non-negative and within the nine digits the database accepts.
+  if (!Number.isSafeInteger(slot) || slot < 0 || slot > 999_999_999)
+    throw new Error('Unusable rotation slot');
+  return slot;
+}
 
 const SNAPSHOT_STATEMENT =
   'SELECT piggyvest_primary.read_daily_reconciliation($1::uuid,$2::text,$3::jsonb) AS result';
@@ -44,6 +78,12 @@ export interface DailyReconciliationDeps {
   createExecutor: typeof createPrimaryWalletEvidenceExecutor;
   readProviderTransfer: typeof readProviderTransfer;
   retrieveWallet: typeof retrievePiggyvestWallet;
+  /** Builds the reader for PiggyVest's transaction list (credit-gap check). */
+  createWalletPageReader: (transport: {
+    environment: 'staging' | 'production';
+    token: string;
+    fetchImplementation: typeof fetch;
+  }) => ListWalletPage;
   sendEmail: (message: {
     to: string;
     subject: string;
@@ -64,6 +104,7 @@ function defaultDeps(): DailyReconciliationDeps {
     createExecutor: createPrimaryWalletEvidenceExecutor,
     readProviderTransfer,
     retrieveWallet: retrievePiggyvestWallet,
+    createWalletPageReader,
     sendEmail: sendReconciliationEmail,
     emitAlert: emitPiggyvestWebhookAlert,
     now: () => new Date().toISOString(),
@@ -85,13 +126,31 @@ function buildPorts(runtime: Runtime, deps: DailyReconciliationDeps) {
   const token = runtime.providerToken;
   const baseUrl = getPrimaryWalletProviderOrigin(environment);
   const execute = deps.createExecutor(runtime.reconciliationConfiguration);
+  const listPage = deps.createWalletPageReader({
+    environment,
+    token,
+    fetchImplementation: fetch,
+  });
+  const creditGap = (expired: () => boolean) =>
+    buildCreditGapPorts({
+      execute,
+      integrationId,
+      environment,
+      businessId: runtime.businessId,
+      rotationSlot: rotationSlotOf(deps.nowMs()),
+      listPage,
+      expired,
+    });
   return {
+    execute,
+    creditGap,
     loadSnapshot: async () => {
       const { rows } = await execute(SNAPSHOT_STATEMENT, [
         integrationId,
         environment,
         JSON.stringify({
           staleAfterSeconds: RECONCILIATION_STALE_AFTER_SECONDS,
+          rotationSlot: rotationSlotOf(deps.nowMs()),
         }),
       ]);
       const parsed = schemas.snapshotRows.safeParse(rows);
@@ -153,6 +212,8 @@ export async function runPiggyvestDailyReconciliation(
   const deps = { ...defaultDeps(), ...options.deps };
   let report: ReconciliationReport;
   let runtime: NullableRuntime = null;
+  // undefined: not run (no runtime); null: wallet pay could not be read.
+  let walletPay: WalletPaySummary | null | undefined;
   try {
     runtime = deps.readRuntime(env);
   } catch {
@@ -180,12 +241,24 @@ export async function runPiggyvestDailyReconciliation(
       };
     } else {
       try {
+        const deadlineMs = deps.nowMs() + RECONCILIATION_READ_BUDGET_MS;
         report = await runDailyReconciliation({
           ...ports,
           now: deps.now,
           nowMs: deps.nowMs,
-          deadlineMs: deps.nowMs() + RECONCILIATION_READ_BUDGET_MS,
+          deadlineMs,
         });
+        // Credits PiggyVest made that our ledgers never recorded: only reads.
+        if (report.status !== 'failed') {
+          const completed = report;
+          const gap = await runCreditGapCheck(
+            ports.creditGap(() => deps.nowMs() >= deadlineMs)
+          ).catch(() => ({
+            status: 'failed' as const,
+            reason: 'snapshot_unavailable' as const,
+          }));
+          report = withCreditGap(completed, gap);
+        }
       } catch {
         // The configuration was fine; the run itself threw.
         report = {
@@ -194,31 +267,27 @@ export async function runPiggyvestDailyReconciliation(
           generatedAt: deps.now(),
         };
       }
+      // Read on its own: a failed main report must not hide stuck payments.
+      walletPay = await readWalletPaySummary({
+        execute: ports.execute,
+        ...runtime.configuration,
+      }).catch(() => null);
     }
   }
-  const address = schemas.reportEmail.safeParse(
-    env.PIGGYVEST_RECONCILIATION_REPORT_EMAIL
-  );
-  let emailed = false;
-  if (address.success) {
-    const email = renderReconciliationEmail(report);
-    try {
-      emailed =
-        (
-          await deps.sendEmail({
-            to: address.data,
-            subject: email.subject,
-            textContent: email.text,
-            htmlContent: email.html,
-          })
-        ).success === true;
-    } catch {
-      emailed = false;
-    }
-  }
+  const emailed = await deliverReconciliationEmail({
+    address: env.PIGGYVEST_RECONCILIATION_REPORT_EMAIL,
+    email: withEmailLines(
+      renderReconciliationEmail(report),
+      walletPay === undefined ? [] : walletPayEmailLines(walletPay)
+    ),
+    sendEmail: deps.sendEmail,
+  });
+  // The email-failure marker goes first: the alert reason is clipped at
+  // 120 characters and must never lose it behind a long count list.
   const reasons = [
-    pageReasonOf(report),
     emailed ? null : 'report_email_failed',
+    pageReasonOf(report),
+    walletPay === undefined ? null : walletPayPageReason(walletPay),
   ];
   const reason = reasons.filter(Boolean).join(' ');
   if (reason) deps.emitAlert('PIGGYVEST_RECONCILIATION_MISMATCH', { reason });

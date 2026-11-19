@@ -29,7 +29,7 @@ const EXPLICIT_ARRIVAL_CODES = new Set(['ARF', 'MAFD', 'AHD']);
 
 // Whole word only, so unrelated text that merely contains DEPART (e.g.
 // DEPARTMENT) cannot suppress an arrival.
-const DEPARTURE_WORD = /\bDEPART(?:ED|ING|URE)?\b/i;
+const DEPARTURE_WORD = /\bDEPART(?:S|ED|ING|URES?)?\b/i;
 
 function placeWords(value: string | undefined): string[] {
   return (value ?? '')

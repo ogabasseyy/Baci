@@ -42,3 +42,16 @@ describe('bugfix: AHD and return scans in arrival inference', () => {
     expect(ret.event.rawStatus).toBe(code);
   });
 });
+
+describe('bugfix: DEPARTS wording is a departure, not an arrival', () => {
+  it.each([
+    'SHIPMENT DEPARTS SERVICE CENTRE',
+    'DEPARTURES LOGGED',
+  ])('does not infer an arrival from "%s" at the destination centre', (text) => {
+    const away = scan('MSVC', 'in_transit', 9, 'IKEJA');
+    const dep = scan('XYZ', 'in_transit', 12, 'ABUJA SERVICE CENTRE');
+    dep.scanText = text;
+    applyLifecycleGuards([away, dep], 'ABUJA', 'LAGOS');
+    expect(dep.event.rawStatus).toBe('XYZ');
+  });
+});

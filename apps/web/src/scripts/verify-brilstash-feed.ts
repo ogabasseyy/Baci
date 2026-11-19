@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { BRILSTASH_FEED_PATH, BRILSTASH_HANDOFF_PAGE_LIMIT } from '../config/brilstash-feed';
+import { BRILSTASH_FEED_PATH, BRILSTASH_FULL_FEED_QUERY } from '../config/brilstash-feed';
 import { createBrilStashToolClient } from '../lib/brilstash/cli-client';
 import { readBrilStashCliInput } from '../lib/brilstash/cli-input';
 import { verifyBrilStashFeed } from '../lib/brilstash/verify-feed';
@@ -19,9 +19,10 @@ async function main() {
     !/^[A-Za-z0-9_-]{32,256}$/.test(bearer)
   ) throw new Error('Invalid BrilStash probe configuration');
 
-  const target = new URL(
-    `https://${host}${BRILSTASH_FEED_PATH}?page=1&limit=${BRILSTASH_HANDOFF_PAGE_LIMIT}&min_price=0`
-  );
+  const target = new URL(`https://${host}${BRILSTASH_FEED_PATH}`);
+  for (const [name, value] of Object.entries(BRILSTASH_FULL_FEED_QUERY)) {
+    target.searchParams.set(name, String(value));
+  }
   const { installationId, expectedGenerationId, expectedPayloadDigest } = parsed.data;
   const client = await createBrilStashToolClient();
   const receipt = await verifyBrilStashFeed(target, bearer, {

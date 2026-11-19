@@ -62,7 +62,7 @@ beforeEach(() => {
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://sandboxtest.supabase.co');
   vi.stubEnv('VERCEL_ENV', 'preview');
   dependencies.abortSignal.mockResolvedValue({ data: result, error: null });
-  dependencies.rateLimit.mockResolvedValue({
+  dependencies.rateLimit.mockReset().mockResolvedValue({
     allowed: true,
     limit: 30,
     remaining: 29,
@@ -88,6 +88,21 @@ describe('BrilStash feed GET', () => {
     expect(response.headers.get('retry-after')).toBeTruthy();
     expect(response.headers.get('cache-control')).toBe('no-store');
     expect(response.headers.get('x-request-id')).toBeTruthy();
+  });
+
+  it.each([
+    ['?limit=1', 'short'],
+    ['?limit=wrong', bearer],
+  ])('charges malformed credential or query requests against the feed budget', async (query, token) => {
+    dependencies.rateLimit.mockResolvedValueOnce({
+      allowed: false,
+      limit: 30,
+      remaining: 0,
+      resetTime: Date.now() + 60_000,
+    });
+    const response = await GET(request(query, token));
+    expect(response.status).toBe(429);
+    expect(dependencies.rpc).not.toHaveBeenCalled();
   });
 
   it('serves a bare array with totals and no-store, and logs correlation without the key', async () => {

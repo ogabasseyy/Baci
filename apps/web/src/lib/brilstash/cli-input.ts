@@ -1,13 +1,13 @@
 import { constants } from 'node:fs';
 import { open } from 'node:fs/promises';
 
-const MAX_INPUT_BYTES = 262144;
+import { BRILSTASH_JSON_MAX_BYTES } from '../../config/brilstash-feed';
 
 async function readInputFile(path: string): Promise<unknown> {
   const file = await open(path, constants.O_RDONLY | constants.O_NONBLOCK);
   try {
     const info = await file.stat();
-    if (!info.isFile() || info.size > MAX_INPUT_BYTES)
+    if (!info.isFile() || info.size > BRILSTASH_JSON_MAX_BYTES)
       throw new Error('Invalid input size');
 
     // The file can grow after stat. Read at most one byte past the limit.
@@ -15,11 +15,12 @@ async function readInputFile(path: string): Promise<unknown> {
     let bytes = 0;
     for await (const chunk of file.createReadStream({
       start: 0,
-      end: MAX_INPUT_BYTES,
+      end: BRILSTASH_JSON_MAX_BYTES,
       autoClose: false,
     })) {
       bytes += chunk.length;
-      if (bytes > MAX_INPUT_BYTES) throw new Error('Invalid input size');
+      if (bytes > BRILSTASH_JSON_MAX_BYTES)
+        throw new Error('Invalid input size');
       chunks.push(chunk);
     }
     return JSON.parse(Buffer.concat(chunks, bytes).toString('utf8'));

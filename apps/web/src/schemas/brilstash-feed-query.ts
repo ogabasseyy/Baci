@@ -1,9 +1,9 @@
 import { z } from 'zod';
-import { BRILSTASH_HANDOFF_PAGE_LIMIT } from '../config/brilstash-feed';
+import { BRILSTASH_FULL_FEED_QUERY } from '../config/brilstash-feed';
 
 const querySchema = z.strictObject({
   page: z.int().positive(),
-  limit: z.int().min(1).max(BRILSTASH_HANDOFF_PAGE_LIMIT),
+  limit: z.int().min(1).max(BRILSTASH_FULL_FEED_QUERY.limit),
   min_price: z.number().nonnegative().max(Number.MAX_SAFE_INTEGER),
 });
 
@@ -13,7 +13,7 @@ export type BrilStashFeedQuery = z.infer<typeof querySchema>;
 export function parseBrilStashFeedQuery(
   params: URLSearchParams
 ): BrilStashFeedQuery | null {
-  const values = { page: 1, limit: BRILSTASH_HANDOFF_PAGE_LIMIT, min_price: 0 };
+  const values: BrilStashFeedQuery = { ...BRILSTASH_FULL_FEED_QUERY };
   const seen = new Set<string>();
 
   for (const [key, value] of params) {

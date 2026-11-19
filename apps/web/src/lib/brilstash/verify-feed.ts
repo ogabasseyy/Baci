@@ -1,5 +1,9 @@
 import { z } from 'zod';
 import {
+  BRILSTASH_FULL_FEED_QUERY,
+  BRILSTASH_JSON_MAX_BYTES,
+} from '../../config/brilstash-feed';
+import {
   type BrilStashProbeState,
   brilStashProbeStateSchema,
 } from '../../schemas/brilstash-probe-state';
@@ -19,7 +23,7 @@ async function readFeedJson(response: Response): Promise<unknown> {
       const { done, value } = await reader.read();
       if (done) break;
       size += value.byteLength;
-      if (size > 262144) throw new Error(failure);
+      if (size > BRILSTASH_JSON_MAX_BYTES) throw new Error(failure);
       chunks.push(value);
     }
     return JSON.parse(Buffer.concat(chunks).toString('utf8'));
@@ -47,9 +51,13 @@ export async function verifyBrilStashFeed(
       signal: AbortSignal.timeout(10000),
     });
     const requestId = z.uuid().parse(response.headers.get('X-Request-Id'));
+    const expectedPages = Math.ceil(
+      before.totalCount / BRILSTASH_FULL_FEED_QUERY.limit
+    );
     if (
       response.status !== 200 ||
-      response.headers.get('X-Total-Pages') !== '1' ||
+      expectedPages !== 1 ||
+      response.headers.get('X-Total-Pages') !== String(expectedPages) ||
       response.headers.get('X-Total-Count') !== String(before.totalCount) ||
       response.headers.get('X-Baci-Catalogue-Proof') !==
         createBrilStashPageProof(requestId, before)

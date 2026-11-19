@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { NextRequest } from 'next/server';
 import {
-  BRILSTASH_HANDOFF_PAGE_LIMIT,
+  BRILSTASH_FULL_FEED_QUERY,
   BRILSTASH_PILOT_LISTING_LIMIT,
 } from '@/config/brilstash-feed';
 import { createBrilStashPageProof } from '@/lib/brilstash/page-proof';
@@ -37,22 +37,6 @@ export async function GET(request: NextRequest): Promise<Response> {
   if (host.toLowerCase() !== deployment.host)
     return fail(404, 'Not found', 'NOT_FOUND');
 
-  const bearer = parseBrilStashBearer(request.headers.get('authorization'));
-  if (!bearer) return fail(401, 'Invalid partner credential', 'UNAUTHORIZED');
-
-  // The live contract accepts any limit that fits the entire assortment
-  // on one page. The separate handoff probe always uses the default limit.
-  const query = parseBrilStashFeedQuery(url.searchParams);
-  if (
-    !query ||
-    (deployment.singlePageOnly &&
-      (query.page !== 1 ||
-        query.limit < BRILSTASH_PILOT_LISTING_LIMIT ||
-        query.min_price !== 0))
-  ) {
-    return fail(400, 'Invalid catalogue query', 'INVALID_QUERY');
-  }
-
   const budget = await checkBrilStashFeedRateLimit(request);
   if (!budget.allowed) {
     const response = createRateLimitResponse(
@@ -62,6 +46,22 @@ export async function GET(request: NextRequest): Promise<Response> {
     );
     for (const [name, value] of headers) response.headers.set(name, value);
     return response;
+  }
+
+  const bearer = parseBrilStashBearer(request.headers.get('authorization'));
+  if (!bearer) return fail(401, 'Invalid partner credential', 'UNAUTHORIZED');
+
+  // The live contract accepts any limit that fits the entire assortment
+  // on one page. The separate handoff probe always uses the default limit.
+  const query = parseBrilStashFeedQuery(url.searchParams);
+  if (
+    !query ||
+    (deployment.singlePageOnly &&
+      (query.page !== BRILSTASH_FULL_FEED_QUERY.page ||
+        query.limit < BRILSTASH_PILOT_LISTING_LIMIT ||
+        query.min_price !== BRILSTASH_FULL_FEED_QUERY.min_price))
+  ) {
+    return fail(400, 'Invalid catalogue query', 'INVALID_QUERY');
   }
 
   const page = await readBrilStashPage(bearer, query);
@@ -76,9 +76,9 @@ export async function GET(request: NextRequest): Promise<Response> {
       headers.set('X-Total-Count', String(page.totalCount));
       headers.set('X-Total-Pages', String(page.totalPages));
       if (
-        query.page === 1 &&
-        query.limit === BRILSTASH_HANDOFF_PAGE_LIMIT &&
-        query.min_price === 0
+        query.page === BRILSTASH_FULL_FEED_QUERY.page &&
+        query.limit === BRILSTASH_FULL_FEED_QUERY.limit &&
+        query.min_price === BRILSTASH_FULL_FEED_QUERY.min_price
       ) {
         headers.set(
           'X-Baci-Catalogue-Proof',

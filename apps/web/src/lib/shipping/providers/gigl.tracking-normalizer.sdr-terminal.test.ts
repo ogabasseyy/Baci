@@ -110,3 +110,54 @@ describe('bugfix: tied location is only borrowed from an arrival scan', () => {
     expect(result.events[0]?.location).toBeUndefined();
   });
 });
+
+describe('bugfix: a terminal outcome beats the SDR fence and owns the snapshot location', () => {
+  it('stays delivered for SDR, SHD, then a newer scan on the first poll', () => {
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W45',
+        MobileShipmentTrackings: [
+          event('SDR', '10:00:00'),
+          event('SHD', '11:00:00'),
+          event('MSVC', '12:00:00'),
+        ],
+      },
+      'W45',
+      OBSERVED_AT
+    );
+    expect(result.status).toBe('delivered');
+    expect(result.actualDelivery).toEqual(new Date('2026-11-09T11:00:00.000Z'));
+  });
+
+  it('still fails when the SDR is newer than the terminal scan', () => {
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W46',
+        MobileShipmentTrackings: [
+          event('SHD', '10:00:00'),
+          event('SDR', '11:00:00'),
+          event('MSVC', '12:00:00'),
+        ],
+      },
+      'W46',
+      OBSERVED_AT
+    );
+    expect(result.status).toBe('failed');
+  });
+
+  it('puts the terminal event first so its location is the current location', () => {
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W47',
+        MobileShipmentTrackings: [
+          event('SHD', '10:00:00', { Location: 'WUSE ABUJA (Wuse)' }),
+          event('MSVC', '12:00:00', { Location: 'IKEJA 2 (IKEJA)' }),
+        ],
+      },
+      'W47',
+      OBSERVED_AT
+    );
+    expect(result.status).toBe('delivered');
+    expect(result.events[0]?.location).toContain('WUSE ABUJA');
+  });
+});

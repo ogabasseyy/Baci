@@ -27,6 +27,7 @@ const DEPARTURE_CODES = new Set([
 // centre after a failed delivery; they are not an arrival.
 const RETURN_CODES = new Set([
   'SRC',
+  'RSR',
   'MRTE',
   'SSR',
   'MRTD',
@@ -40,6 +41,10 @@ const RETURN_CODES = new Set([
   'TRO',
   'SRIC',
 ]);
+// Scans that start the return flow back to the sender: once seen, a later
+// arrival scan is the parcel reaching the sender, not the customer's city.
+// RSR: returned shipment received by Operations (GIG's scan-status list).
+const RETURN_FLOW_CODES = new Set(['SRC', 'MRTE', 'SSR', 'MRTD', 'RSR']);
 // Explicit "arrived final destination" scans. AHD ("arrived final destination
 // for home delivery") has no entry in the shared status map.
 const EXPLICIT_ARRIVAL_CODES = new Set([
@@ -76,6 +81,23 @@ const DEPARTURE_WORD = /\bDEPART(?:S|ED|ING|URES?)?\b/i;
 
 function isSdr(candidate: Guardable): number {
   return candidate.providerStatus.trim().toUpperCase() === 'SDR' ? 1 : 0;
+}
+
+function isReturnFlow(candidate: Guardable): number {
+  return RETURN_FLOW_CODES.has(candidate.providerStatus.trim().toUpperCase())
+    ? 1
+    : 0;
+}
+
+function locatedExplicitArrival(
+  candidate: Guardable,
+  destination: string | undefined
+): number {
+  const raw = candidate.providerStatus.trim().toUpperCase();
+  const explicit =
+    EXPLICIT_ARRIVAL_CODES.has(raw) ||
+    FOREIGN_OFFICE_DESTINATIONS[raw]?.test((destination ?? '').toUpperCase());
+  return explicit && placeWords(candidate.event.location).length > 0 ? 1 : 0;
 }
 
 function placeWords(value: string | undefined): string[] {
@@ -143,6 +165,12 @@ export function applyLifecycleGuards(
       a.event.timestamp.getTime() - b.event.timestamp.getTime() ||
       // A same-time SDR is processed first so it fences the other tied scans.
       isSdr(b) - isSdr(a) ||
+      // A same-time return scan is processed before any arrival so it fences it.
+      isReturnFlow(b) - isReturnFlow(a) ||
+      // Tied explicit arrivals: the located one takes the arrival status, so its
+      // centre can become the snapshot location whatever the payload order.
+      locatedExplicitArrival(b, destination) -
+        locatedExplicitArrival(a, destination) ||
       isMshc(a) - isMshc(b) ||
       // Tied scans: movement away from the destination first, so the result
       // does not depend on payload order.
@@ -153,6 +181,8 @@ export function applyLifecycleGuards(
   let pickedUp = false;
   // SDR ("Shipment Destroyed") is final: a later or same-time MSHC cannot revive it.
   let destroyed = false;
+  // Latched by a return-flow scan; fences arrival promotion like SDR does.
+  let returning = false;
   // Same-city shipments: only a scan away from the destination name proves
   // the parcel left the origin centre (repeat origin scans prove nothing).
   let leftDestinationCentre = false;
@@ -163,7 +193,11 @@ export function applyLifecycleGuards(
       // One arrival per shipment: only the first explicit or inferred arrival
       // is rewritten to the synthetic status.
       !destroyed &&
+      !returning &&
       !arrived &&
+      // A mapped reason that says failed/delivered/returned is not an arrival.
+      (candidate.recognizedStatus === null ||
+        candidate.recognizedStatus === 'in_transit') &&
       (EXPLICIT_ARRIVAL_CODES.has(raw) ||
         FOREIGN_OFFICE_DESTINATIONS[raw]?.test(
           (destination ?? '').toUpperCase()
@@ -180,6 +214,7 @@ export function applyLifecycleGuards(
           (!sameCity || leftDestinationCentre) &&
           matchesDestination(event.location, destination)));
     if (raw === 'SDR') destroyed = true;
+    if (RETURN_FLOW_CODES.has(raw)) returning = true;
     if (isArrival) {
       arrived = true;
       if (candidate.recognizedStatus === null) {

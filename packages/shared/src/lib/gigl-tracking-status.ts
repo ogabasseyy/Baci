@@ -43,6 +43,8 @@ const GIGL_STATUS_MAP: Readonly<Record<string, ShipmentTrackingStatus>> = {
   MRTE: 'in_transit',
   SSR: 'in_transit',
   SRC: 'in_transit',
+  // Returned shipment received by Operations: a return in progress, like SRC.
+  RSR: 'in_transit',
   DASH: 'in_transit',
   CLS: 'in_transit',
   ARF: 'in_transit',

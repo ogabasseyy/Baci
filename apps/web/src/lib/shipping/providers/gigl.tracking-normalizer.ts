@@ -15,9 +15,9 @@ import {
   PickupOptions,
 } from './gigl.constants';
 import type { giglSchemas } from './gigl.schemas';
+import { resolveAggregate } from './gigl.tracking-aggregate';
 import { applyLifecycleGuards } from './gigl.tracking-lifecycle-guards';
 import { currentStatusRank } from './gigl.tracking-status-rank';
-import { TERMINAL_STATUSES } from './gigl.tracking-terminal-statuses';
 
 type GiglTrackingShipment = z.input<typeof giglSchemas.trackingShipment>;
 
@@ -171,10 +171,24 @@ export function normalizeGiglTrackingShipment(
       right.event.timestamp.getTime() - left.event.timestamp.getTime() ||
       currentStatusRank(right) - currentStatusRank(left)
   );
+  if (sortedCandidates.length === 0) {
+    throw new Error('GIGL tracking result has no valid tracking events');
+  }
+  const hasRecognizedLifecycleEvent = sortedCandidates.some(
+    (candidate) => candidate.recognizedStatus !== null
+  );
+  const { status, lead } = resolveAggregate(sortedCandidates);
   // The worker reads the current location from events[0]; a same-time scan
-  // without one (e.g. MSHC) must not hide the located scan from the same poll.
-  const top = sortedCandidates[0];
-  if (top && !top.event.location) {
+  // (e.g. MSHC, with or without its own location) must not hide the arrival
+  // centre from the same poll.
+  // The event that will lead the list (see resolveAggregate) owns the snapshot.
+  const top = lead ?? sortedCandidates[0];
+  // A located leader keeps its own location (terminal, failed...) except the
+  // generic MSHC, whose hub is not where the parcel is: the arrival wins there.
+  const topKeepsOwnLocation =
+    Boolean(top?.event.location) &&
+    top?.providerStatus.trim().toUpperCase() !== 'MSHC';
+  if (top && !topKeepsOwnLocation) {
     const tied = sortedCandidates.filter(
       (candidate) =>
         candidate.event.location &&
@@ -187,34 +201,8 @@ export function normalizeGiglTrackingShipment(
       (candidate) =>
         candidate.event.rawStatus === GIGL_ARRIVED_IN_CITY_RAW_STATUS
     );
-    if (located) top.event.location = located.event.location;
+    if (located && located !== top) top.event.location = located.event.location;
   }
-  const newestRecognized = sortedCandidates.find(
-    (candidate) => candidate.recognizedStatus !== null
-  );
-  if (sortedCandidates.length === 0) {
-    throw new Error('GIGL tracking result has no valid tracking events');
-  }
-  const hasRecognizedLifecycleEvent = newestRecognized !== undefined;
-  const recognizedStatus = newestRecognized?.recognizedStatus ?? 'pending';
-  // SDR (destroyed) stays authoritative for the aggregate status while later
-  // scans keep their own event status (so they queue no failure notification).
-  const destroyed = candidates.some(
-    (candidate) => candidate.providerStatus.trim().toUpperCase() === 'SDR'
-  );
-  // A terminal outcome (delivered, returned, cancelled) stays authoritative
-  // over a later non-terminal scan; failed attempts are not terminal.
-  const terminalCandidate = sortedCandidates.find(
-    (candidate) =>
-      candidate.recognizedStatus !== null &&
-      TERMINAL_STATUSES.has(candidate.recognizedStatus)
-  );
-  const status =
-    destroyed && !TERMINAL_STATUSES.has(recognizedStatus)
-      ? 'failed'
-      : terminalCandidate && !TERMINAL_STATUSES.has(recognizedStatus)
-        ? (terminalCandidate.recognizedStatus ?? recognizedStatus)
-        : recognizedStatus;
   const deliveredEvent = sortedCandidates.find(
     (candidate) => candidate.recognizedStatus === 'delivered'
   );
@@ -227,7 +215,10 @@ export function normalizeGiglTrackingShipment(
     hasRecognizedLifecycleEvent,
     actualDelivery:
       status === 'delivered' ? deliveredEvent?.event.timestamp : undefined,
-    events: sortedCandidates.map((candidate) => candidate.event),
+    events: (lead
+      ? [lead, ...sortedCandidates.filter((candidate) => candidate !== lead)]
+      : sortedCandidates
+    ).map((candidate) => candidate.event),
     isStationPickup: shipment.PickupOptions === PickupOptions.ServiceCentre,
   };
 }

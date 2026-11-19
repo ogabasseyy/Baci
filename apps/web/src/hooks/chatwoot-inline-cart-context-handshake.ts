@@ -24,6 +24,7 @@ type HandshakeInput<Message extends ContextMessage> = {
   getChallenge: () => { token: string | null; expiresAt: number };
   setChallenge: (token: string | null, expiresAt: number) => void;
   setAuthorized: (token: string, expiresAt: number) => void;
+  ensureCartSession: () => Promise<{ ok: true } | { ok: false } | null>;
 };
 
 export async function handleChatwootInlineContextHandshake(
@@ -39,6 +40,19 @@ export async function handleChatwootInlineContextHandshake(
 async function issueChallenge(input: HandshakeInput<RequestMessage>) {
   const { requestId, conversationId } = input.message.data;
   input.begin(conversationId, requestId);
+  if (!input.isCurrent(conversationId, requestId)) return;
+  let cartSession: Awaited<ReturnType<typeof input.ensureCartSession>>;
+  try {
+    cartSession = await input.ensureCartSession();
+  } catch {
+    cartSession = null;
+  }
+  const currentAfterProvisioning = input.isCurrent(conversationId, requestId);
+  if (!currentAfterProvisioning) return;
+  if (!cartSession?.ok) {
+    input.post('baci-commerce-context-denied:', { requestId });
+    return;
+  }
   let challenge: Record<string, unknown> | null;
   try {
     challenge = await postChatwootBridgeJson(

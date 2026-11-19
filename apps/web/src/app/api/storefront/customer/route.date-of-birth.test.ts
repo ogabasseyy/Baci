@@ -52,18 +52,14 @@ function mockChain(returnValue: { data: unknown; error: unknown }) {
 // `matched` is the live row the write returned (null => no live row matched, i.e.
 // the customer was soft-deleted between the lookup and the update).
 function mockUpdateChain(matched: { id: string } | null) {
-  const update = vi.fn().mockReturnValue({
-    eq: vi.fn().mockReturnValue({
-      is: vi.fn().mockReturnValue({
-        select: vi.fn().mockReturnValue({
-          maybeSingle: vi
-            .fn()
-            .mockResolvedValue({ data: matched, error: null }),
-        }),
-      }),
-    }),
-  });
-  return { update };
+  const chain = {
+    update: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    is: vi.fn().mockReturnThis(),
+    select: vi.fn().mockReturnThis(),
+    maybeSingle: vi.fn().mockResolvedValue({ data: matched, error: null }),
+  };
+  return chain;
 }
 
 // --- Tests ---

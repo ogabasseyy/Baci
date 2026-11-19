@@ -1,4 +1,5 @@
 import type { NextRequest } from 'next/server';
+import { applyCartSnapshotCookies } from '@/lib/cart/apply-cart-snapshot-cookies';
 import { getCartProofEnvironment } from '@/lib/cart/cart-runtime-env';
 import {
   loadLiveGrantOperations,
@@ -11,11 +12,7 @@ import {
   requestUsesDeviceProof,
   resolveCartRequestContext,
 } from '@/lib/cart/request-context';
-import {
-  cartErrorResponse,
-  cartJsonResponse,
-  setCartSessionCookie,
-} from '@/lib/cart/response';
+import { cartErrorResponse, cartJsonResponse } from '@/lib/cart/response';
 import { createCartScopedClient } from '@/lib/cart/scoped-client';
 import {
   type CartServerTimer,
@@ -144,15 +141,18 @@ async function applyCommand(
     // outlive the grant: reload the (just-renewed) grant's authoritative
     // expiry and cap the proof there; the cart expiry alone can exceed
     // this grant when another linked session extended the cart. If the
-    // reload fails, fall back to the incoming proof's expiry, which
-    // never exceeds the grant as issued. If reissue crosses the grant
+    // reload fails, no new proof is issued (the incoming proof's
+    // operations may be stale). If reissue crosses the grant
     // expiry the committed cart is returned without a new proof instead
     // of surfacing the committed change as a 503; the existing proof and
     // cookie govern until they expire, and retries replay by
     // operation id.
     const liveGrant = await timer.measure('renew', () =>
-      loadLiveGrantOperations(client, principal)
+      loadLiveGrantOperations(client, principal).catch(() => null)
     );
+    // Fail closed: without the live grant the renewed proof would carry
+    // the incoming proof's possibly stale operations, so no new proof is
+    // issued and the existing proof and cookie govern until they expire.
     const proofGrantExpiry = liveGrant
       ? Date.parse(liveGrant.grantExpiresAt) < Date.parse(result.cart.expiresAt)
         ? liveGrant.grantExpiresAt
@@ -160,14 +160,15 @@ async function applyCommand(
       : principal.expiresAt;
     let proof: string | null = null;
     try {
+      if (!liveGrant) {
+        throw new Error('live grant unavailable');
+      }
       proof = issueCartSessionProof(
         {
           // Renew with the live grant's operations, not the incoming
           // proof's: a grant narrowed (or widened) since issuance must
-          // be reflected in the renewed proof. The incoming proof's
-          // operations are only the fallback when the reload failed.
-          allowedOperations:
-            liveGrant?.allowedOperations ?? principal.allowedOperations,
+          // be reflected in the renewed proof.
+          allowedOperations: liveGrant.allowedOperations,
           cartId: principal.cartId,
           grantId: principal.grantId,
           grantExpiresAt: proofGrantExpiry,
@@ -202,10 +203,13 @@ async function applyCommand(
         : result.cart.expiresAt;
     const maxAge = cartSessionCookieMaxAge(cookieExpiry);
     // A non-positive lifetime would delete the cookie the body proof just
-    // renewed; omit the cookie instead and let the body proof govern.
-    if (proof && maxAge > 0) {
-      setCartSessionCookie(response, context.merchant.id, proof, maxAge);
-    }
+    // renewed; omit the proof cookie instead and let the body proof govern.
+    applyCartSnapshotCookies(response, {
+      merchantId: context.merchant.id,
+      cart: result.cart,
+      proof,
+      cookieMaxAge: maxAge,
+    });
     return response;
   } catch (error) {
     console.error('Unexpected error in POST /api/storefront/cart/commands:', {

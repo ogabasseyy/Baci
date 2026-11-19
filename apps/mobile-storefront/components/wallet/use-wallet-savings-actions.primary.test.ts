@@ -129,6 +129,23 @@ describe('createWalletSavingsActions with PiggyVest', () => {
     });
   });
 
+  it('hands a stored PiggyVest id to the screen status check, never the Adding flag or a submit', async () => {
+    const checkPendingStatus = jest.fn(async () => 'pending');
+    const input = {
+      ...createInput(),
+      activeMerchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+      checkPendingStatus,
+    };
+    input.idempotencyKeyRef.current = 'op-1';
+    input.operationRailRef.current = 'primary';
+    await createWalletSavingsActions(input).handleAddSavingsContribution();
+    expect(checkPendingStatus).toHaveBeenCalledTimes(1);
+    expect(checkPendingPrimarySavings).not.toHaveBeenCalled();
+    expect(addSavingsContributionToGoal).not.toHaveBeenCalled();
+    expect(input.setIsAddingSavingsContribution).not.toHaveBeenCalled();
+    expect(input.idempotencyKeyRef.current).toBe('op-1');
+  });
+
   describe('a late status check', () => {
     type CheckInput = Parameters<typeof checkPendingPrimarySavings>[0];
     function startCheck() {

@@ -7,6 +7,7 @@ import { eventPipelineChatCredentialPaths } from './event-pipeline-chat-credenti
 import { eventPipelineChatPushCredentialPaths } from './event-pipeline-chat-push-credential-paths';
 import { eventPipelineChatwootCartCredentialPaths } from './event-pipeline-chatwoot-cart-credential-paths';
 import { eventPipelineDvaCredentialPaths } from './event-pipeline-dva-credential-paths';
+import { eventPipelineFeedbackCredentialPaths } from './event-pipeline-feedback-credential-paths';
 import { eventPipelineGatewayCronCredentialPaths } from './event-pipeline-gateway-cron-credential-paths';
 import { eventPipelineGiglCredentialPaths } from './event-pipeline-gigl-credential-paths';
 import { eventPipelineImmediateOrderCredentialPaths } from './event-pipeline-immediate-order-credential-paths';
@@ -18,6 +19,7 @@ import { eventPipelinePiggyvestCredentialPaths } from './event-pipeline-piggyves
 import { eventPipelineRedvaultCredentialPaths } from './event-pipeline-redvault-credential-paths';
 import { eventPipelineRepairPickupCredentialPaths } from './event-pipeline-repair-pickup-credential-paths';
 import { eventPipelineShippingCredentialPaths } from './event-pipeline-shipping-credential-paths';
+import { vpsCronWorkerAuthority } from './event-pipeline-vps-cron-worker-paths';
 import { eventPipelineVtuReplayCredentialPaths } from './event-pipeline-vtu-replay-credential-paths';
 
 const modulePath = resolve(
@@ -273,8 +275,10 @@ describe('event pipeline credential-path authority', () => {
       ...eventPipelinePaystackRefundCredentialPaths,
       ...eventPipelineGatewayCronCredentialPaths,
       ...eventPipelineManualOrderDocumentCredentialPaths,
+      ...eventPipelineFeedbackCredentialPaths,
       ...onboardingEmailWorkerAuthority.credentialPaths,
       ...eventPipelineChatPushCredentialPaths,
+      ...vpsCronWorkerAuthority.credentialPaths,
     ]);
   });
 });

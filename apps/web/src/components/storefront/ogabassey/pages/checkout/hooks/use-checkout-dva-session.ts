@@ -3,6 +3,7 @@ import { useRef, useState } from 'react';
 import type { CartItem } from '@/hooks/cart';
 import { toast } from '@/hooks/use-toast';
 import { buildCheckoutOrderItems } from '@/lib/checkout/build-order-items';
+import { stashPrivateParamsForNavigation } from '@/lib/privacy/private-url-param-handoff';
 import { asRoute } from '@/lib/routes';
 import { captureCheckoutPaymentCompleted } from '../capture-checkout-payment-completed';
 import { clearCheckoutIdempotencyKey } from '../checkout-idempotency';
@@ -199,7 +200,12 @@ export function useCheckoutDvaSession({
           successQuery.set('trackingToken', trackingToken);
         }
         router.push(
-          asRoute(getHref(`/order-success?${successQuery.toString()}`))
+          asRoute(
+            stashPrivateParamsForNavigation(
+              getHref(`/order-success?${successQuery.toString()}`),
+              merchantSlug
+            )
+          )
         );
       })
       .catch(() => {

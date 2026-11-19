@@ -9,6 +9,7 @@ import { fetchPiggyvestWalletActivity } from '@/lib/piggyvest-wallet-activity';
 import type { PiggyvestWalletActivityPage } from '@/schemas/piggyvest-wallet-activity';
 import { useAuthStore } from '@/stores/auth-store';
 import { useRefetchOnRefocus } from './use-refetch-on-refocus';
+import { WALLET_ACTIVITY_QUERY_KEY } from './wallet-activity-query-key';
 
 /** "Show more" gets one attempt and this long, so a hung server fails fast. */
 const LOAD_MORE_TIMEOUT_MS = 20_000;
@@ -19,7 +20,7 @@ class LoadMoreError extends Error {}
 type ActivityData = InfiniteData<PiggyvestWalletActivityPage, string | null>;
 
 const activityKey = (merchantId?: string, userId?: string) =>
-  ['piggyvest-wallet-activity', merchantId, userId] as const;
+  [...WALLET_ACTIVITY_QUERY_KEY, merchantId, userId] as const;
 
 /** Drops every page after the first, so a re-read reloads only page 1. */
 function keepFirstPage(

@@ -2,6 +2,7 @@ import { cacheLife, cacheTag } from 'next/cache';
 import { readStorefrontMerchantSnapshot } from '@/lib/storefront-merchant-snapshot';
 import { unwrapStorefrontReadResultForCache } from '@/lib/storefront-read-result';
 import { createPublicClient } from '@/lib/supabase/public';
+import { buildResolvedMerchantScopeTags } from '@/lib/tenant-cache-tags';
 import { isValidMerchantIdentifier } from '@/lib/validation';
 
 export interface BrandAuthorityMerchant {
@@ -56,6 +57,14 @@ async function getCachedMerchant(
   }
 
   cacheTag(`merchant-${merchant.slug}`);
+  cacheTag(
+    ...buildResolvedMerchantScopeTags({
+      id: merchant.id,
+      slug: merchant.slug,
+      custom_domain:
+        typeof row.custom_domain === 'string' ? row.custom_domain : null,
+    })
+  );
   return {
     business_name: merchant.business_name,
     country:

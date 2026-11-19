@@ -132,6 +132,26 @@ it('maps the known booking statement rejection to a safe code without raw provid
   });
   expect(fetcher).toHaveBeenCalledTimes(1);
 });
+it('recognizes the observed eligibility account-link email response without exposing its body', async () => {
+  const provider = createOxygenProvider({
+    environment: 'production',
+    token: async () => 'private',
+    fetch: async () =>
+      Response.json(
+        {
+          message:
+            'We have sent the account linking details to link your account to your email.',
+          privateDetails: 'private bank details',
+        },
+        { status: 400 }
+      ),
+  });
+  await expect(provider.call('eligibility', {})).rejects.toMatchObject({
+    outcome: 'rejected',
+    code: 'OXYGEN_STATEMENT_LINK_SENT',
+    message: 'Oxygen request could not be confirmed',
+  });
+});
 it('does not classify an oversized error response as the known statement rejection', async () => {
   const provider = createOxygenProvider({
     environment: 'staging',

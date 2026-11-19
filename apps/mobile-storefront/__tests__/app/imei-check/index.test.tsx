@@ -66,7 +66,21 @@ jest.mock('expo-router', () => ({
   useNavigation: () => ({ addListener: () => () => undefined }),
   router: { back: jest.fn(), push: jest.fn() },
   Stack: {
-    Screen: () => null,
+    // The title as text and the back button, so steps can be asserted.
+    Screen: ({
+      options,
+    }: {
+      options?: { title?: string; headerLeft?: () => unknown };
+    }) => {
+      const { Text } =
+        jest.requireActual<typeof import('react-native')>('react-native');
+      return (
+        <>
+          <Text testID="screen-title">{options?.title}</Text>
+          {(options?.headerLeft?.() ?? null) as never}
+        </>
+      );
+    },
   },
 }));
 
@@ -149,7 +163,7 @@ describe('ImeiCheckerScreen', () => {
   it('updates the CTA price when a different service tier is selected', () => {
     render(<ImeiCheckerScreen />);
 
-    fireEvent.press(screen.getByText('More checks'));
+    fireEvent.press(screen.getByText('See all checks'));
     fireEvent.press(screen.getByText('Non-Active Status PRO'));
 
     expect(screen.getByText(approvedPrice.activationLabel)).toBeTruthy();
@@ -231,19 +245,19 @@ describe('ImeiCheckerScreen', () => {
     render(<ImeiCheckerScreen />);
 
     // The full catalog is public now, so the "show all services" toggle appears.
-    expect(screen.getByText('More checks')).toBeTruthy();
+    expect(screen.getByText('See all checks')).toBeTruthy();
     // Selecting a non-Apple brand reveals its checks without needing "show all".
     fireEvent.press(screen.getByText('Samsung'));
 
     expect(screen.getByText('Quick ID')).toBeTruthy();
     expect(screen.queryByText('Samsung Info')).toBeNull();
     expect(screen.queryByText('Samsung Info PRO')).toBeNull();
-    fireEvent.press(screen.getByLabelText('Other options for Device details'));
+    fireEvent.press(screen.getByLabelText('More Device details options'));
     expect(screen.getByText('Samsung Info')).toBeTruthy();
     expect(screen.getByText('Samsung Info PRO')).toBeTruthy();
   });
 
-  it('alerts the user and skips the request when an invalid IMEI is submitted', () => {
+  it('bugfix: an invalid IMEI is explained inline, never with an iOS alert', () => {
     renderChoosingFullReport();
 
     const input = screen.getByPlaceholderText('Enter 15-digit IMEI');
@@ -251,10 +265,58 @@ describe('ImeiCheckerScreen', () => {
     fireEvent.changeText(input, '123456789012345');
     fireEvent(input, 'submitEditing');
 
-    expect(alertSpy).toHaveBeenCalledWith(
-      'Invalid number',
-      expect.stringContaining('valid 15-digit IMEI')
+    expect(
+      screen.getByText('Please enter a valid 15-digit IMEI number.')
+    ).toBeTruthy();
+    expect(alertSpy).not.toHaveBeenCalled();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('bugfix: tapping pay with a wrong IMEI explains it inline, never a dead button (Muse)', () => {
+    renderChoosingFullReport();
+
+    fireEvent.changeText(
+      screen.getByPlaceholderText('Enter 15-digit IMEI'),
+      '123456789012345'
     );
+    fireEvent.press(screen.getByRole('button', { name: /Verify Now/ }));
+
+    expect(
+      screen.getByText('Please enter a valid 15-digit IMEI number.')
+    ).toBeTruthy();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('bugfix: switching to another check clears the invalid-IMEI message (Muse)', () => {
+    renderChoosingFullReport();
+
+    const input = screen.getByPlaceholderText('Enter 15-digit IMEI');
+    fireEvent.changeText(input, '123456789012345');
+    fireEvent(input, 'submitEditing');
+    expect(
+      screen.getByText('Please enter a valid 15-digit IMEI number.')
+    ).toBeTruthy();
+
+    fireEvent.press(screen.getByText('Stolen Check'));
+    expect(
+      screen.queryByText('Please enter a valid 15-digit IMEI number.')
+    ).toBeNull();
+  });
+
+  it('bugfix: the invalid-IMEI message clears as soon as the number is edited (Muse)', () => {
+    renderChoosingFullReport();
+
+    const input = screen.getByPlaceholderText('Enter 15-digit IMEI');
+    fireEvent.changeText(input, '123456789012345');
+    fireEvent(input, 'submitEditing');
+    expect(
+      screen.getByText('Please enter a valid 15-digit IMEI number.')
+    ).toBeTruthy();
+
+    fireEvent.changeText(input, '49015420323751');
+    expect(
+      screen.queryByText('Please enter a valid 15-digit IMEI number.')
+    ).toBeNull();
   });
 
   it('waits for wallet balance before enabling verification', () => {
@@ -501,6 +563,53 @@ describe('ImeiCheckerScreen', () => {
     );
     expect(Crypto.randomUUID).toHaveBeenCalledTimes(1);
   });
+
+  it('bugfix: leaving a report puts the "IMEI Checker" title back (owner walk)', async () => {
+    jest.mocked(fetch).mockResolvedValueOnce({
+      json: () =>
+        Promise.resolve({
+          data: {
+            blacklistStatus: 'Clean',
+            carrier: 'Unlocked',
+            device: 'iPhone 13 Pro',
+            deviceImage: '',
+            deviceType: 'apple',
+            icloud: 'Off',
+            icloudLock: 'Off',
+            imei: '490154203237518',
+            modelNumber: 'A2638',
+            score: 98,
+            simLock: 'Unlocked',
+            status: 'Clean',
+            verdict: 'Safe to buy',
+            verdictType: 'safe',
+          },
+          success: true,
+        }),
+      ok: true,
+      status: 200,
+    } as Response);
+    renderChoosingFullReport();
+    expect(screen.getByTestId('screen-title')).toHaveTextContent(
+      'IMEI Checker'
+    );
+
+    fireEvent.changeText(
+      screen.getByPlaceholderText('Enter 15-digit IMEI'),
+      '490154203237518'
+    );
+    fireEvent.press(screen.getByText(approvedPrice.fullLabel));
+    await screen.findByText('iPhone 13 Pro');
+    expect(screen.getByTestId('screen-title')).toHaveTextContent('IMEI Report');
+
+    // Header back on a report returns to the checker, not to home.
+    fireEvent.press(screen.getByLabelText('Back'));
+    await screen.findByText('Choose a check');
+    expect(screen.getByTestId('screen-title')).toHaveTextContent(
+      'IMEI Checker'
+    );
+    expect(router.back).not.toHaveBeenCalled();
+  }, 15_000);
 
   it('returns to the checker form when the back-swipe fires while a result is showing', async () => {
     jest.mocked(fetch).mockResolvedValueOnce({

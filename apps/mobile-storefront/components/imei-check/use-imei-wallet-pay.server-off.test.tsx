@@ -1,6 +1,9 @@
 import { renderHook } from '@testing-library/react-native';
 import { useImeiWalletPay } from './use-imei-wallet-pay';
 
+jest.mock('./use-imei-wallet-payable-tiers', () => ({
+  useImeiWalletPayableTiers: jest.fn(() => null),
+}));
 jest.mock('expo-crypto', () => ({ randomUUID: jest.fn() }));
 jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
 jest.mock('@/stores/auth-store', () => {

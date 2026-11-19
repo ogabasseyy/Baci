@@ -41,6 +41,23 @@ it('bounds schema issues and never records arbitrary keys, messages or input', (
   expect(JSON.stringify(diagnostic)).not.toContain('private-');
   expect(diagnostic.providerRequestId).toBeNull();
 });
+it('identifies public offer fields without retaining provider values', () => {
+  const result = z
+    .object({ offers: z.array(z.object({ tenor: z.number().min(1) })) })
+    .safeParse({ offers: [{ tenor: 0, private: 'private-value' }] });
+  if (result.success) throw new Error('Expected schema failure');
+  const diagnostic = oxygenLocalValidationDiagnostic(
+    result.error,
+    'eligibility',
+    metadata,
+    Date.now()
+  );
+  expect(JSON.parse(diagnostic.providerMessage ?? '{}')).toEqual({
+    check: 'schema',
+    issues: [{ field: 'offers.[item].tenor', code: 'too_small' }],
+  });
+  expect(JSON.stringify(diagnostic)).not.toContain('private-value');
+});
 it.each([
   'reference_mismatch',
   'required_field_missing',

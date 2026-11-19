@@ -87,7 +87,8 @@ export function useWalletFundedBankTransfer({
   const sessionRef = useRef<WalletFundedTransferSession | null>(null);
   sessionRef.current = session;
 
-  const { checkNow, error, intent, isChecking } = useWalletFundingPolling({
+  const { checkNow, error, intent, isChecking, pollingExhausted } =
+    useWalletFundingPolling({
     enabled: Boolean(session),
     intentId: session?.intent.id,
     merchantId,
@@ -173,6 +174,7 @@ export function useWalletFundedBankTransfer({
     // The polled intent supersedes the one returned at creation time.
     intent: intent ?? session?.intent ?? null,
     isChecking,
+    pollingExhausted,
     start,
   };
 }

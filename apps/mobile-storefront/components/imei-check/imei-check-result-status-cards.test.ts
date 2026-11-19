@@ -1,6 +1,5 @@
 import { IMEI_SERVICE_TIERS, type ImeiCheckField } from '@baci/shared/imei';
 import { describe, expect, it } from '@jest/globals';
-import Colors from '@/constants/Colors';
 import type { ImeiResult } from '@/lib/validation';
 import { getImeiResultStatusCards } from './imei-check-result-status-cards';
 
@@ -30,11 +29,7 @@ const CORE_CHECKS: readonly ImeiCheckField[] = [
 
 describe('getImeiResultStatusCards', () => {
   it('includes the core status cards the tier actually checks', () => {
-    const cards = getImeiResultStatusCards(
-      baseResult,
-      Colors.light,
-      CORE_CHECKS
-    );
+    const cards = getImeiResultStatusCards(baseResult, CORE_CHECKS);
 
     expect(cards.map((card) => card.label)).toEqual([
       'Blacklist Status',
@@ -50,7 +45,6 @@ describe('getImeiResultStatusCards', () => {
     // render Unknown blacklist/iCloud/FMI/SIM/carrier cards it never ran.
     const cards = getImeiResultStatusCards(
       { ...baseResult, serialNumber: 'C02XK1ZLJGH5' },
-      Colors.light,
       IMEI_SERVICE_TIERS.serialInfo.checksIncluded
     );
     const labels = cards.map((card) => card.label);
@@ -65,7 +59,6 @@ describe('getImeiResultStatusCards', () => {
         icloud: 'Lost',
         icloudLock: 'Unknown',
       },
-      Colors.light,
       CORE_CHECKS
     );
 
@@ -96,7 +89,6 @@ describe('getImeiResultStatusCards', () => {
         miLockStatus: 'Locked',
         miLostStatus: 'Clean',
       },
-      Colors.light,
       CORE_CHECKS
     );
 
@@ -117,11 +109,7 @@ describe('getImeiResultStatusCards', () => {
   });
 
   it('omits optional status cards when provider fields are absent', () => {
-    const cards = getImeiResultStatusCards(
-      baseResult,
-      Colors.light,
-      CORE_CHECKS
-    );
+    const cards = getImeiResultStatusCards(baseResult, CORE_CHECKS);
     const labels = cards.map((card) => card.label);
 
     expect(labels).not.toEqual(
@@ -143,7 +131,6 @@ describe('getImeiResultStatusCards', () => {
         mdmStatus: '',
         serialNumber: '',
       },
-      Colors.light,
       CORE_CHECKS
     );
     const labels = cards.map((card) => card.label);
@@ -157,34 +144,15 @@ describe('getImeiResultStatusCards', () => {
     );
   });
 
-  it('uses active theme colors for non-clean-aware status tints', () => {
+  it('gives facts no colour of their own: the list colours by meaning', () => {
     const cards = getImeiResultStatusCards(
-      {
-        ...baseResult,
-        activationStatus: 'Activated',
-        serialNumber: 'F2LDN12345',
-        warranty: 'Limited Warranty',
-      },
-      Colors.dark,
+      { ...baseResult, warranty: 'Out Of Warranty' },
       CORE_CHECKS
     );
 
-    expect(
-      cards.find((card) => card.label === 'Activation Status')
-    ).toMatchObject({
-      tint: Colors.dark.primary,
-    });
-    expect(cards.find((card) => card.label === 'SIM Lock')).toMatchObject({
-      tint: Colors.dark.primary,
-    });
-    expect(cards.find((card) => card.label === 'Carrier')).toMatchObject({
-      tint: Colors.dark.accent,
-    });
-    expect(cards.find((card) => card.label === 'Serial Number')).toMatchObject({
-      tint: Colors.dark.textSecondary,
-    });
+    for (const card of cards) expect(card).not.toHaveProperty('tint');
     expect(cards.find((card) => card.label === 'Warranty')).toMatchObject({
-      tint: Colors.dark.success,
+      value: 'Out Of Warranty',
     });
   });
 
@@ -199,7 +167,6 @@ describe('getImeiResultStatusCards', () => {
         soldBy: 'Example Retailer',
         wifiMac: 'A1:B2:C3:D4:E5:F6',
       },
-      Colors.light,
       ['device']
     );
 

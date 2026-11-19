@@ -71,6 +71,8 @@ jobs:
         run: node --test .github/scripts/android-release-sdk.test.mjs .github/scripts/android-release-sdk-platform.test.mjs .github/scripts/android-release-sdk-compat.test.mjs .github/scripts/android-admin-release-budget.test.mjs .github/scripts/mobile-gradle-wrapper.test.mjs .github/scripts/rn-suite-migration.test.mjs
       - name: Test release retries and dependency update policy
         run: node --test .github/scripts/muse-dependabot-policy.test.mjs .github/scripts/posthog-release-cli.test.mjs
+      - name: Test Muse comment review concurrency routing
+        run: node --test .github/scripts/muse-comment-review-concurrency.test.mjs
       - name: Test loyalty replay binary discovery
         run: node --test tools/test/loyalty-postgres-bin.test.mjs
       - name: Test pnpm store action input hardening
@@ -81,7 +83,7 @@ jobs:
         run: node --test .github/scripts/pilot-change-detection-contract.test.mjs
       # Unfiltered on purpose; see docs/runbooks/storefront-release-gate.md.
       - name: Test storefront release gate
-        run: node --test .github/scripts/storefront-release-gate.test.mjs .github/scripts/storefront-release-gate-dispatch.test.mjs .github/scripts/storefront-release-gate-references.test.mjs .github/scripts/storefront-release-gate-scripts.test.mjs .github/scripts/storefront-release-gate-steps.test.mjs .github/scripts/storefront-release-gate-git.test.mjs .github/scripts/storefront-release-gate-server-off.test.mjs .github/scripts/storefront-release-gate-workflows.test.mjs
+        run: node --test .github/scripts/storefront-release-gate.test.mjs .github/scripts/storefront-release-gate-mode.test.mjs .github/scripts/storefront-release-gate-dispatch.test.mjs .github/scripts/storefront-release-gate-references.test.mjs .github/scripts/storefront-release-gate-scripts.test.mjs .github/scripts/storefront-release-gate-steps.test.mjs .github/scripts/storefront-release-gate-git.test.mjs .github/scripts/storefront-release-gate-server-off.test.mjs .github/scripts/storefront-release-gate-workflows.test.mjs
       - name: Test CI change-scope resolver
         run: bash .github/scripts/resolve-ci-change-scope.test.sh
       - name: Test PiggyVest stuck-funds runbook CI wiring
@@ -362,7 +364,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6]
+        # Keep in step with --shard=N/10 in .github/scripts/run-ci-web-shard.sh. 6 -> 10 on 2026-11-15:
+        # the slowest of six shards took 9-12 min while the fastest took ~7.
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -430,18 +434,23 @@ jobs:
           SUPABASE_CLI_SHA256: 31ee8a152e9c8c8eddae072c6bc7c9119748a96c8cdaf21a6d31c9ce7e62cc18
           SUPABASE_CLI_VERSION: 2.111.0
         run: bash .github/scripts/install-supabase-replay-toolchain.sh
+      # The ~50 s pinned-image download runs while the PostgreSQL suites below run; the
+      # "Prepare pinned Supabase database image" step waits for it before the replay needs it.
+      - name: Start pinned Supabase database image download
+        id: replay-image-start
+        run: bash .github/scripts/background-step.sh start replay-image bash .github/scripts/prepare-supabase-replay-image.sh
       - name: Test reviewed commerce cart checkout product names
         run: PATH="/usr/lib/postgresql/18/bin:$PATH" python3 supabase/tests/run_commerce_cart_checkout_complete_vouchers.py
       - name: Test shared cart validated-price order binding
         run: PATH="/usr/lib/postgresql/18/bin:$PATH" python3 supabase/tests/run_commerce_cart_remaining_review.py
+      - name: Test Chatwoot cart add receipt authority
+        run: PATH="/usr/lib/postgresql/18/bin:$PATH" python3 supabase/tests/run_chatwoot_cart_add_receipts.py
       - name: Test shared cart reviewed assurance binding
         run: PATH="/usr/lib/postgresql/18/bin:$PATH" python3 supabase/tests/run_commerce_cart_agentic_checkout_economics.py
       - name: Test agentic shared-cart provider dispatch fence
         run: PATH="/usr/lib/postgresql/18/bin:$PATH" python3 supabase/tests/run_agentic_cart_provider_dispatch_fence.py
       - name: Test agentic DVA provider-success evidence boundary
         run: PATH="/usr/lib/postgresql/18/bin:$PATH" python3 supabase/tests/run_agentic_dva_provider_success_evidence.py
-      - name: Prepare pinned Supabase database image
-        run: bash .github/scripts/prepare-supabase-replay-image.sh
       - name: Test loyalty checkout replay fixture against PostgreSQL
         env:
           PG_BINDIR: /usr/lib/postgresql/18/bin
@@ -468,6 +477,10 @@ jobs:
         run: PATH="/usr/lib/postgresql/18/bin:$PATH" bash supabase/tests/oxygen_payment_rail_origin.sh
       - name: Test interrupted Oxygen eligibility status recovery
         run: PATH="/usr/lib/postgresql/18/bin:$PATH" bash supabase/tests/oxygen_interrupted_eligibility_read.sh
+      - name: Test Oxygen eligibility failure migration guard
+        run: PATH="/usr/lib/postgresql/18/bin:$PATH" bash supabase/tests/oxygen_eligibility_failure_reason_guard.sh
+      - name: Test Oxygen merchant follow-up privacy and status
+        run: PATH="/usr/lib/postgresql/18/bin:$PATH" bash supabase/tests/oxygen_follow_up.sh
       # Every replay SQL suite is registered in
       # apps/web/tools/db/replay-registry/*/sql-checks.txt, one folder per
       # change, and --sql-check-registry expands them in sorted folder
@@ -481,6 +494,16 @@ jobs:
       # all surface here (e.g. the id_snapshot 23505 caught pre-merge),
       # so replay sql-check is sufficient for the order-offer and
       # product-request suites without a second disposable runner.
+      - name: Prepare pinned Supabase database image
+        # Also after an earlier step failed, so the download's output is always shown, but only
+        # when the download was started (as with the builder auth suite in quality-typecheck).
+        if: ${{ !cancelled() && steps.replay-image-start.outcome == 'success' }}
+        # 60 s once the job has already failed (fail fast), otherwise up to 15 min.
+        run: bash .github/scripts/background-step.sh wait replay-image ${{ job.status == 'failure' && 60 || 900 }}
+      - name: Stop pinned Supabase database image download
+        # A cancelled job skips the wait above; stop the detached download so it cannot run on.
+        if: ${{ always() && steps.replay-image-start.outcome == 'success' }}
+        run: bash .github/scripts/background-step.sh stop replay-image
       - name: Test final order-notification outbox RPC privileges
         run: >-
           pnpm --filter @baci/web db:replay:chronological
@@ -654,6 +677,8 @@ jobs:
         run: bash .github/scripts/check-mobile-gem-floors.test.sh
       - name: Verify Mobile Gem Floors
         run: bash .github/scripts/check-mobile-gem-floors.sh
+      - name: Test background CI step helper
+        run: node --test .github/scripts/background-step.test.mjs
       - name: Run CI Test Planner Unit Tests
         if: needs.changes.outputs.web == 'true'
         run: node --test .github/scripts/resolve-ci-test-plan.test.mjs .github/scripts/resolve-ci-test-plan-config.test.mjs .github/scripts/quiz-production-approval-workflow.test.mjs
@@ -775,6 +800,7 @@ jobs:
           .github/scripts/materialize-preview-prebuilt-refs.test.mjs
           .github/scripts/preview-deploy-run.test.mjs
           .github/scripts/coordinate-production-release.test.mjs
+          .github/scripts/coordinate-isolated-release.test.mjs
           .github/scripts/coordinate-publication.test.mjs
           .github/scripts/release-production.test.mjs
           .github/scripts/release-subprocess.test.mjs

@@ -13,6 +13,7 @@ import {
   walletPayPurchaseKeys,
 } from '@/components/wallet-pay/wallet-pay-purchase-keys';
 import { EXPO_PUBLIC_API_URL } from '@/env';
+import { useRefreshWalletActivity } from '@/hooks/use-refresh-wallet-activity';
 import { useWallet } from '@/hooks/use-wallet';
 import { CONFIG } from '@/lib/config';
 import { buildVtuPurchaseDescriptor } from '@/lib/pending-vtu-descriptor';
@@ -69,6 +70,7 @@ export function useVtuWalletPayHost({
   canPay?: boolean;
 } = {}) {
   const walletQuery = useWallet();
+  const refreshActivity = useRefreshWalletActivity();
   const wallet = walletQuery.data?.wallet;
   const refreshing = walletQuery.isRefetching === true;
   const pending = useVtuWalletPayStore((state) => state.pending);
@@ -231,7 +233,11 @@ export function useVtuWalletPayHost({
     void sheet.open(
       trackWalletPayPurchase(lazy, () => purchase, {
         key: () => usedKey,
-        onSettled: () => void walletQuery.refetch?.(),
+        onSettled: () => {
+          void walletQuery.refetch?.();
+          // The new spend must show in the wallet activity at once (Codex P2).
+          refreshActivity();
+        },
         stillOwner: () => useAuthStore.getState().user?.id === user?.id,
         stillWanted: wanted,
       })

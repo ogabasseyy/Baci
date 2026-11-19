@@ -36,3 +36,14 @@ it('disables creation while account availability is unknown', () => {
     screen.getByRole('button', { name: 'Create account number' })
   ).toHaveAccessibilityState({ disabled: true });
 });
+
+it('bugfix: the label sits on the add icon’s centre line', () => {
+  render(<WalletHeroCreateAccount {...props} />);
+  // One shared line height centres the 11px label on the 18px icon glyph.
+  expect(screen.UNSAFE_getByProps({ name: 'add-circle-outline' })).toHaveStyle({
+    lineHeight: 18,
+  });
+  expect(screen.getByText('Create account number')).toHaveStyle({
+    lineHeight: 18,
+  });
+});

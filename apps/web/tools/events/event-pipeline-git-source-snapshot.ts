@@ -1,7 +1,10 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { readGitIndexSources } from './event-pipeline-git-content';
+import {
+  readGitBlobSources,
+  readGitIndexSources,
+} from './event-pipeline-git-content';
 import { eventPipelineSourceFilePolicy } from './event-pipeline-source-file-policy';
 
 function gitPaths(root: string, args: readonly string[]): string[] {
@@ -50,50 +53,10 @@ function readCommittedRevisionSources(
     })
     .filter(({ path }) => eventPipelineSourceFilePolicy.isSourcePath(path));
   if (entries.length === 0) return new Map();
-  const batch = execFileSync('git', ['cat-file', '--batch'], {
-    cwd: root,
-    input: `${entries.map(({ object }) => object).join('\n')}\n`,
-    maxBuffer: 256 * 1024 * 1024,
-  });
-  const sources = new Map<string, string>();
-  let offset = 0;
-  for (const { object, path } of entries) {
-    const headerEnd = batch.indexOf(10, offset);
-    if (headerEnd < 0) throw new Error('invalid_frozen_source_batch');
-    const [actualObject, type, rawSize] = batch
-      .subarray(offset, headerEnd)
-      .toString('utf8')
-      .split(' ');
-    const size = Number(rawSize);
-    const contentStart = headerEnd + 1;
-    const contentEnd = contentStart + size;
-    if (
-      actualObject !== object ||
-      type !== 'blob' ||
-      !Number.isSafeInteger(size) ||
-      size < 0 ||
-      contentEnd >= batch.length ||
-      batch[contentEnd] !== 10
-    ) {
-      throw new Error('invalid_frozen_source_batch');
-    }
-    sources.set(
-      path,
-      batch.subarray(contentStart, contentEnd).toString('utf8')
-    );
-    offset = contentEnd + 1;
-  }
-  if (offset !== batch.length) throw new Error('invalid_frozen_source_batch');
-  return sources;
+  return readGitBlobSources(root, entries);
 }
 
-function readCurrentGitSourceSnapshot(root: string): {
-  filesystemSources: Map<string, string>;
-  indexSources: Map<string, string>;
-  missingPaths: string[];
-  missingStagedPaths: string[];
-  sources: Map<string, string>;
-} {
+function discoverCurrentGitSources(root: string) {
   const tracked = gitPaths(root, ['ls-files', '--cached', '-z']);
   const untracked = gitPaths(root, [
     'ls-files',
@@ -121,15 +84,47 @@ function readCurrentGitSourceSnapshot(root: string): {
       '-z',
     ])
   );
-  const paths = [...new Set([...tracked, ...untracked])]
-    .filter((path) => !deleted.has(path))
-    .sort();
+  const allPaths = [...new Set([...tracked, ...untracked])];
+  const paths = allPaths.filter((path) => !deleted.has(path)).sort();
+  return { allPaths, paths, staged };
+}
+
+function readImportClosureSources(
+  root: string
+): Pick<ReadonlyMap<string, string>, 'get' | 'has'> {
+  const { paths, staged } = discoverCurrentGitSources(root);
+  const known = new Set(paths);
+  const index = readGitIndexSources(root, [...staged]);
+  const cache = new Map<string, string | undefined>();
+  function get(path: string): string | undefined {
+    if (!known.has(path)) return undefined;
+    if (cache.has(path)) return cache.get(path);
+    const absolute = resolve(root, path);
+    const source = staged.has(path)
+      ? index.get(path)
+      : existsSync(absolute)
+        ? readFileSync(absolute, 'utf8')
+        : undefined;
+    cache.set(path, source);
+    return source;
+  }
+  return { get, has: (path) => get(path) !== undefined };
+}
+
+function readCurrentGitSourceSnapshot(root: string): {
+  filesystemSources: Map<string, string>;
+  indexSources: Map<string, string>;
+  missingPaths: string[];
+  missingStagedPaths: string[];
+  sources: Map<string, string>;
+} {
+  const { allPaths, paths, staged } = discoverCurrentGitSources(root);
   const missingPaths: string[] = [];
   const missingStagedPaths: string[] = [];
   const sources = new Map<string, string>();
   const stagedSources = readGitIndexSources(root, [...staged]);
   const filesystemSources = new Map<string, string>();
-  for (const path of new Set([...tracked, ...untracked])) {
+  for (const path of allPaths) {
     const absolute = resolve(root, path);
     if (existsSync(absolute))
       filesystemSources.set(path, readFileSync(absolute, 'utf8'));
@@ -165,5 +160,8 @@ function readCurrentGitSourceSnapshot(root: string): {
 
 export const readGitSourceSnapshot = Object.assign(
   readCurrentGitSourceSnapshot,
-  { committedRevision: readCommittedRevisionSources }
+  {
+    committedRevision: readCommittedRevisionSources,
+    forImportClosure: readImportClosureSources,
+  }
 );

@@ -1,5 +1,6 @@
-import { describe, expect, it, jest } from '@jest/globals';
+import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { act, renderHook } from '@testing-library/react-native';
+import { useAuthStore } from '@/stores/auth-store';
 import {
   runSavingsGoalSubmission,
   type UseStartSavingsSubmitInput,
@@ -21,9 +22,13 @@ jest.mock('./run-savings-goal-submission', () => ({
 }));
 
 describe('submit exact variant boundary', () => {
+  beforeEach(() => {
+    useAuthStore.setState({ user: { id: 'user-a' } } as never);
+  });
   it('rejects an unresolved selection at final submission even after preview validation', async () => {
     const setFormError = jest.fn();
     const input: UseStartSavingsSubmitInput = {
+      acceptsNonWithdrawableTerms: true,
       contributionValue: 100,
       effectiveInitialContribution: 0,
       frequency: 'daily',

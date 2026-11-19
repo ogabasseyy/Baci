@@ -5,11 +5,14 @@ import type {
   EventDestinationContext,
 } from './event-destination';
 import { deliverPlatformEvent } from './platform-destination-adapter';
+import { deliverXPaidOrder } from './x-destination-adapter';
 
 const REQUEST_TIMEOUT_MS = 10_000;
 
 const adapter: EventDestinationAdapter = {
   async deliver(context) {
+    if (context.destination === 'x')
+      return deliverXPaidOrder(context.supabase, context.event, context.signal);
     if (context.destination === 'chatgpt')
       return deliverChatgptPaidOrder(
         context.supabase,

@@ -1,8 +1,8 @@
 import {
-  CheckoutPage,
+  continueToPaymentAfterPickupCheck,
   fireEvent,
   mockCaptureClientEvent,
-  render,
+  renderCheckoutWithStoreRates,
   screen,
   useCart,
   useMerchantSafe,
@@ -142,12 +142,12 @@ export const renderFreshBNPLCheckout = ({
 };
 
 export const driveFreshBNPLPlaceOrder = async (radioName: RegExp) => {
-  render(<CheckoutPage />);
+  renderCheckoutWithStoreRates();
   fireEvent.click(screen.getByRole('button', { name: /delivery method/i }));
   fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
-  fireEvent.click(screen.getByRole('button', { name: /continue to payment/i }));
+  await continueToPaymentAfterPickupCheck();
   fireEvent.click(
-    await screen.findByRole('button', { name: /pay in installments/i })
+    await screen.findByRole('button', { name: /pay small small/i })
   );
   fireEvent.click(await screen.findByRole('radio', { name: radioName }));
   const placeOrderButton = screen

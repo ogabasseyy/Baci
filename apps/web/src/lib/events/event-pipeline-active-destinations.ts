@@ -6,6 +6,7 @@ const EVENT_DESTINATIONS: readonly EventRouteDestination[] = [
   'snapchat',
   'tiktok',
   'chatgpt',
+  'x',
 ];
 
 export function getEventPipelineActiveDestinations(): EventRouteDestination[] {

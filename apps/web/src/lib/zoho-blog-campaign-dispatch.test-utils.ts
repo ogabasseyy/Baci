@@ -35,21 +35,26 @@ const merchantZohoSettings = {
     enabled: true,
     fromEmail: 'news@merchant.test',
     listKey: 'merchant-list-key',
-    refreshToken: 'merchant-refresh-token',
     reviewListKey: 'merchant-review-list-key',
   },
 };
 
+// The refresh token is stored apart from custom_settings (read via RPC).
+const merchantRefreshToken = 'merchant-refresh-token';
+
 export function createDispatchSupabaseMock({
   customSettings = merchantZohoSettings,
   businessName = 'Oga Gadgets',
+  refreshToken = merchantRefreshToken,
 }: {
   customSettings?: unknown;
   businessName?: string;
+  refreshToken?: string | null;
 } = {}) {
   // Supports the dispatch query shape: from(table).select().eq().maybeSingle().
   // merchant_feature_settings returns custom_settings; other tables return brand data.
   return {
+    rpc: () => ({ data: refreshToken, error: null }),
     from(table: string) {
       const maybeSingle = () =>
         table === 'merchant_feature_settings'

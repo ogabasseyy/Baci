@@ -50,22 +50,11 @@ VALUES (
   'claim-race-customer@example.com'
 );
 INSERT INTO public.vtu_transactions (
-  id, merchant_id, customer_id, type, network_provider,
-  phone_number, amount, request_reference
-)
-VALUES
-  (
-    '01cc0000-0000-4000-8000-000000000021',
-    '01cc0000-0000-4000-8000-000000000001',
-    '01cc0000-0000-4000-8000-000000000011',
-    'airtime', 'mtn', '08030000021', 500, 'CLAIM-RACE-001'
-  ),
-  (
-    '01cc0000-0000-4000-8000-000000000022',
-    '01cc0000-0000-4000-8000-000000000001',
-    '01cc0000-0000-4000-8000-000000000011',
-    'airtime', 'mtn', '08030000021', 500, 'CLAIM-RACE-002'
-  );
+    id, merchant_id, customer_id, type, network_provider, phone_number, amount, request_reference, metadata
+  )
+  VALUES
+    ('01cc0000-0000-4000-8000-000000000021', '01cc0000-0000-4000-8000-000000000001', '01cc0000-0000-4000-8000-000000000011', 'airtime', 'mtn', '08030000021', 500, 'CLAIM-RACE-001', '{"paymentSplit":{"wallet":500,"card":0}}'::jsonb),
+    ('01cc0000-0000-4000-8000-000000000022', '01cc0000-0000-4000-8000-000000000001', '01cc0000-0000-4000-8000-000000000011', 'airtime', 'mtn', '08030000021', 500, 'CLAIM-RACE-002', '{"paymentSplit":{"wallet":500,"card":0}}'::jsonb);
 RESET ROLE;
 
 -- Both race sessions authenticate as service_role (the claim gates

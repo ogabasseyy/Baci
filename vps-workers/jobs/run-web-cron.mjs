@@ -3,19 +3,28 @@
  * Calls retained CRON_SECRET-gated web cron endpoints from the VPS schedule.
  */
 
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { config } from 'dotenv';
+import { isEntrypoint } from '../lib/is-entrypoint.mjs';
 
 // These paths expose CRON_SECRET-gated wrappers that delegate to the underlying
 // scheduled work. The VPS worker must not call OAuth callbacks.
 const WEB_CRON_CONFIG = new Map([
+  [
+    '/api/cron/oxygen-callback-reconciliation',
+    { method: 'GET', timeoutMs: 360_000 },
+  ],
   ['/api/cron/drain-cache-invalidations', { method: 'GET', timeoutMs: 90_000 }],
   ['/api/ai-jobs/worker', { method: 'GET', timeoutMs: 15 * 60_000 }],
   ['/api/cron/alert-stuck-bnpl', { method: 'GET', timeoutMs: 5 * 60_000 }],
   ['/api/cron/merchant-signup-health', { method: 'GET', timeoutMs: 60_000 }],
+  ['/api/cron/cart-notice-health', { method: 'GET', timeoutMs: 60_000 }],
   ['/api/cron/cleanup-orders', { method: 'GET', timeoutMs: 5 * 60_000 }],
   ['/api/cron/process-settlements', { method: 'POST', timeoutMs: 5 * 60_000 }],
-  ['/api/cron/process-redvault-refunds', { method: 'POST', timeoutMs: 5 * 60_000 }],
+  [
+    '/api/cron/process-redvault-refunds',
+    { method: 'POST', timeoutMs: 5 * 60_000 },
+  ],
   ['/api/cron/petrock-reconcile', { method: 'GET', timeoutMs: 5 * 60_000 }],
   [
     '/api/cron/publish-scheduled-posts',
@@ -45,6 +54,30 @@ const WEB_CRON_CONFIG = new Map([
     '/api/cron/agentic-commerce-health',
     { method: 'GET', timeoutMs: 5 * 60_000 },
   ],
+  [
+    // Read-only PiggyVest reconciliation; inert until its own switch is on.
+    // 6-min client timeout gives headroom over the route's 300s maxDuration.
+    '/api/cron/piggyvest-daily-reconciliation',
+    { method: 'GET', timeoutMs: 6 * 60_000 },
+  ],
+  [
+    // PiggyVest wallet pay drain: settles, delivers and refunds payments a
+    // customer request left behind. Not configured = a 200 no-op.
+    '/api/cron/piggyvest-wallet-pay-drain',
+    { method: 'GET', timeoutMs: 6 * 60_000 },
+  ],
+  [
+    // Read-only PiggyVest degraded-health check (counts only); inert until
+    // PIGGYVEST_DEGRADED_ALERTS_ENABLED=true. Two short reads, so 2 minutes.
+    '/api/cron/piggyvest-degraded-health',
+    { method: 'GET', timeoutMs: 2 * 60_000 },
+  ],
+  [
+    // Early-cancel interest forfeit sweep; inert until the PiggyVest savings
+    // credentials exist. 6-min client timeout over the route's 300s maxDuration.
+    '/api/cron/piggyvest-goal-cancel-forfeit-sweep',
+    { method: 'GET', timeoutMs: 6 * 60_000 },
+  ],
   ['/api/cron/wallet-payouts', { method: 'GET', timeoutMs: 5 * 60_000 }],
   ['/api/cron/order-notifications', { method: 'GET', timeoutMs: 5 * 60_000 }],
   ['/api/quiz/finalize', { method: 'GET', timeoutMs: 5 * 60_000 }],
@@ -72,6 +105,29 @@ function formatBodyPreview(body) {
     return body;
   }
   return `${body.slice(0, RESPONSE_PREVIEW_LIMIT)}... [truncated]`;
+}
+
+function parseJsonObject(body) {
+  try {
+    const parsed = JSON.parse(body);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? parsed
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function isIdleCacheInvalidationResponse({ pathname, status, bodyPayload }) {
+  return (
+    pathname === '/api/cron/drain-cache-invalidations' &&
+    status === 200 &&
+    bodyPayload !== null &&
+    bodyPayload.claimed === 0 &&
+    bodyPayload.completed === 0 &&
+    bodyPayload.failed === 0 &&
+    bodyPayload.deadLettersPresent === false
+  );
 }
 
 function throwWebCronRequestError({ error, path, timeoutMs }) {
@@ -166,17 +222,14 @@ export async function runWebCron({
     throwWebCronRequestError({ error, path, timeoutMs });
   }
 
+  const pathname = new URL(url).pathname;
+  const bodyPayload = parseJsonObject(body);
+
   if (!response.ok) {
     const preview = formatBodyPreview(body);
-    let bodyPayload;
-    try {
-      bodyPayload = JSON.parse(body);
-    } catch {
-      bodyPayload = null;
-    }
     if (
       allowCacheDeadLetter &&
-      new URL(url).pathname === '/api/cron/drain-cache-invalidations' &&
+      pathname === '/api/cron/drain-cache-invalidations' &&
       response.status === 503 &&
       bodyPayload?.code === CACHE_INVALIDATION_DEAD_LETTER_CODE
     ) {
@@ -187,7 +240,18 @@ export async function runWebCron({
     );
   }
 
-  logger.log(`[run-web-cron] ${path} completed with HTTP ${response.status}`);
+  // run-cache-invalidation-cron.mjs atomically updates state/cache-invalidations.json
+  // (nextAllowedAt) on every 2-minute sweep, preserving scheduler liveness
+  // observability without writing 21,600 idle stdout lines/month.
+  if (
+    !isIdleCacheInvalidationResponse({
+      pathname,
+      status: response.status,
+      bodyPayload,
+    })
+  ) {
+    logger.log(`[run-web-cron] ${path} completed with HTTP ${response.status}`);
+  }
   return { status: response.status, body };
 }
 
@@ -208,9 +272,6 @@ async function main() {
   }
 }
 
-if (
-  process.argv[1] &&
-  import.meta.url === pathToFileURL(process.argv[1]).href
-) {
+if (isEntrypoint(import.meta.url)) {
   await main();
 }

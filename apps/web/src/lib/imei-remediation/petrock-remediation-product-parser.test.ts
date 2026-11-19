@@ -2,6 +2,53 @@ import { describe, expect, it } from 'vitest';
 import { parsePetrockRemediationProduct } from './petrock-remediation-product-parser';
 
 describe('parsePetrockRemediationProduct', () => {
+  it.each([
+    'AT&T Mexico Unlock iPhone 17 [Clean]',
+    'T-Mobile Austria Unlock All iPhone Models',
+    'T-Mobile Croatia Unlock All iPhone Models',
+    'EE | T-Mobile | Orange UK Unlock [Clean]',
+  ])('never marks a foreign service as a US launch carrier: %s', (name) => {
+    const result = parsePetrockRemediationProduct({
+      categoryId: 'foreign',
+      categoryName: name,
+      name,
+      fields: [{ name: 'IMEI' }],
+      priceUsd: 10,
+      productId: 'foreign',
+      turnaround: '1 day',
+    });
+    expect(result.launchCarrier).toBe(false);
+  });
+
+  it('requires US context before classifying a launch carrier', () => {
+    const result = parsePetrockRemediationProduct({
+      categoryId: 'unrecognized',
+      categoryName: 'Network Unlock',
+      name: 'T-Mobile Unlock All iPhone Models',
+      fields: [{ name: 'IMEI' }],
+      priceUsd: 10,
+      productId: 'ambiguous',
+      turnaround: '1 day',
+    });
+    expect(result.launchCarrier).toBe(false);
+  });
+
+  it.each([
+    'T-Mobile USA iPhone XR to 14 Pro Max Unlock',
+    'AT&T USA Unlock All iPhone Models Till 15 Series',
+  ])('does not expand an unparsed model restriction: %s', (name) => {
+    const result = parsePetrockRemediationProduct({
+      categoryId: 'C159',
+      categoryName: 'T-Mobile USA',
+      name,
+      fields: [{ name: 'IMEI' }],
+      priceUsd: 10,
+      productId: 'restricted',
+      turnaround: '1 day',
+    });
+    expect(result.excludedReason).toBe('unverified_model_scope');
+  });
+
   it('parses a clean AT&T model-and-status unlock as review-pending', () => {
     const parsed = parsePetrockRemediationProduct({
       categoryId: 'C210',
@@ -89,5 +136,47 @@ describe('parsePetrockRemediationProduct', () => {
     });
 
     expect(parsed.refundPolicy).toBe('no_refund_denial');
+  });
+});
+
+it.each([
+  '1 to 3 Days',
+  'up to 24 hours',
+  'through 48 hrs',
+  'to 3 business days',
+])('does not interpret turnaround text as model restrictions: %s', (timing) => {
+  const result = parsePetrockRemediationProduct({
+    categoryId: 'C210',
+    categoryName: 'AT&T USA Network Unlock',
+    fields: [{ name: 'IMEI' }],
+    name: `AT&T USA Unlock All iPhone Models - ${timing}`,
+    priceUsd: 10,
+    productId: 'generic',
+    turnaround: timing,
+  });
+  expect(result.excludedReason).toBeNull();
+  expect(result.isActive).toBe(false);
+  expect(result.reviewStatus).toBe('pending');
+});
+
+describe('bugfix: a $0 Petrock product broke the whole catalogue sync', () => {
+  // Live catalogue 2026-11-15: product 658 is listed at 0.0000 USD, and
+  // petrock_remediation_products.cost_usd only allows NULL or > 0, so the
+  // sync's upsert failed on every run.
+  it.each([
+    0, -1,
+  ])('stores no cost for a %s USD price and never offers it', (priceUsd) => {
+    const result = parsePetrockRemediationProduct({
+      categoryId: 'C162',
+      categoryName: 'Tecno | Itel | Infinix',
+      name: 'Tecno | Itel | Infinix | MDM & Tecno ID Refund Request',
+      fields: [{ name: 'IMEI' }],
+      priceUsd,
+      productId: '658',
+      turnaround: '1-24 Hours',
+    });
+    expect(result.costUsd).toBeNull();
+    expect(result.excludedReason).toBe('invalid_product_contract');
+    expect(result.isActive).toBe(false);
   });
 });

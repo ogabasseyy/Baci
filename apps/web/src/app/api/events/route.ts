@@ -6,6 +6,7 @@ import {
 } from '@/lib/analytics/send-to-ad-platforms';
 import { trustedServerAdPlatformFanout } from '@/lib/analytics/trusted-server-ad-platform-fanout';
 import { buildAnalyticsEventData } from '@/lib/events/build-analytics-event-data';
+import { clientMarketingTargets } from '@/lib/events/client-marketing-targets';
 import { createEventIngressClient } from '@/lib/events/event-ingress-capability';
 import { resolveEventIngressContext } from '@/lib/events/event-ingress-context';
 import {
@@ -15,8 +16,11 @@ import {
 } from '@/lib/events/event-pipeline-config';
 import { toClientAnalyticsDomainEventName } from '@/lib/events/event-route-registry';
 import { isEventTimestampWithinWindow } from '@/lib/events/event-timestamp-window';
+import { isBotUserAgent } from '@/lib/events/is-bot-user-agent';
+import { minimizeDeliveryData } from '@/lib/events/minimize-delivery-data';
 import { readBoundedJsonBody } from '@/lib/events/read-bounded-json-body';
 import { recordAnalyticsDomainEvent } from '@/lib/events/record-analytics-domain-event';
+import { shopperIp } from '@/lib/events/shopper-ip';
 import { logger } from '@/lib/logger';
 import { createClient as createServerClient } from '@/lib/supabase/server';
 import { createServiceClient } from '@/lib/supabase/service';
@@ -30,14 +34,13 @@ import { resolveLegacyFanoutContext } from './resolve-legacy-fanout-context';
 const MAX_EVENT_BYTES = 64 * 1024;
 function deliveryData(input: AnalyticsEventRequest, request: NextRequest) {
   return {
+    analytics_consent: input.analytics_consent === true,
+    marketing_consent: input.marketing_consent === true,
     email: input.user_data?.em,
     external_id: input.user_data?.external_id,
     fbc: input.user_data?.fbc ?? request.cookies.get('_fbc')?.value,
     fbp: input.user_data?.fbp ?? request.cookies.get('_fbp')?.value,
-    ip:
-      request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
-      request.headers.get('x-real-ip') ??
-      undefined,
+    ip: shopperIp(request),
     phone: input.user_data?.ph,
     sccid: input.user_data?.sccid ?? request.cookies.get('ScCid')?.value,
     ttclid: input.user_data?.ttclid,
@@ -104,6 +107,14 @@ export async function POST(request: NextRequest) {
       { status: 400 }
     );
   }
+  if (
+    input.source !== 'server' &&
+    isBotUserAgent(request.headers.get('user-agent'))
+  ) {
+    // Acknowledge but do not record crawler traffic.
+    logger.debug({ message: 'Skipped crawler analytics event' });
+    return NextResponse.json({ success: true, event_id: input.event_id });
+  }
   const rawEventType = input.event_type ?? input.event_name ?? '';
   const eventType = normalizeEventType(rawEventType) ?? rawEventType;
   const eventData = buildAnalyticsEventData(input, eventType);
@@ -149,7 +160,11 @@ export async function POST(request: NextRequest) {
       });
       try {
         await recordAnalyticsDomainEvent(eventSupabase, {
-          deliveryData: deliveryData(input, request),
+          deliveryData: minimizeDeliveryData(
+            deliveryData(input, request),
+            eventType,
+            context.trustLevel
+          ),
           eventData,
           eventName: toClientAnalyticsDomainEventName(
             eventType,
@@ -206,7 +221,16 @@ export async function POST(request: NextRequest) {
         );
       }
     }
-    if (isConversionEvent(eventType) && !isLegacyAnalyticsFanoutDisabled()) {
+    if (
+      eventType !== 'purchase' &&
+      eventType !== 'place_order' &&
+      isConversionEvent(eventType) &&
+      !isLegacyAnalyticsFanoutDisabled() &&
+      clientMarketingTargets({
+        analytics: input.analytics_consent,
+        marketing: input.marketing_consent,
+      }).length > 0
+    ) {
       const contextSupabase = await createServerClient();
       verifiedFanoutMerchantId = await resolveLegacyFanoutContext({
         merchantId: input.merchant_id,

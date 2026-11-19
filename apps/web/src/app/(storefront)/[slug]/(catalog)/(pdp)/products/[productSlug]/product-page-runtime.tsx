@@ -1,6 +1,7 @@
 import { headers } from 'next/headers';
 import { Suspense } from 'react';
 import { JsonLd } from '@/components/seo/json-ld';
+import { ExperienceServerBoundary } from '@/components/storefront/experience/experience-server-boundary';
 import { ProductSemanticSections } from '@/components/storefront/ogabassey/seo/product-semantic-sections';
 import { PdpRepairDeviceLink } from '@/components/storefront/repairs/PdpRepairDeviceLink';
 import { CONTENT_CLUSTER_SUPPORT } from '@/config/storefront-content-clusters';
@@ -8,14 +9,15 @@ import {
   getCachedProductRatingStats,
   getCachedProductReviews,
 } from '@/lib/cached-data';
+import { generateStorefrontProductSchema } from '@/lib/generate-storefront-product-schema';
 import { isKorapayConfigured } from '@/lib/korapay';
 import { isPaystackConfigured } from '@/lib/paystack';
+import { getProductUrl } from '@/lib/product-url';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import {
   buildStorefrontAcceptedPaymentMethods,
   generateBreadcrumbSchema,
   generateFAQSchema,
-  generateProductSchema,
   generateSlug,
   getValidatedProductUrl,
 } from '@/lib/seo-utils';
@@ -26,6 +28,11 @@ import { getStorefrontPathPrefix } from '@/lib/storefront-path-prefix';
 import { buildProductContextParagraphs } from '@/lib/storefront-product/build-product-context-paragraphs';
 import { buildProductSemanticModel } from '@/lib/storefront-product/build-product-semantic-model';
 import { loadCategoryScopedSemanticInventorySafely } from '@/lib/storefront-product/load-category-scoped-semantic-inventory-safely';
+import {
+  loadPdpBrandHubEligibilityInventorySafely,
+  PDP_BRAND_HUB_ELIGIBILITY_BELOW_FOLD_TIMEOUT_MS,
+} from '@/lib/storefront-product/load-pdp-brand-hub-eligibility-inventory-safely';
+import { resolveSemanticCandidateStock } from '@/lib/storefront-product/resolve-semantic-candidate-stock';
 import { resolveStorefrontProductCategoryName } from '@/lib/storefront-product-category-name';
 import { buildProductPriceSeoCopy } from '@/lib/storefront-product-price-seo';
 import { isUnsupportedSpecValue } from '@/lib/storefront-specs/is-unsupported-spec-value';
@@ -65,7 +72,7 @@ export async function ProductPageRuntime({
   // identity for crawlers on the critical path. Live review signals
   // (aggregateRating + review) are NOT inlined here — they stream below as a
   // url-matched enhancement so this block never awaits the reviews query.
-  const productSchema = generateProductSchema(
+  const productSchema = generateStorefrontProductSchema(
     product,
     merchant.business_name || 'Baci Store',
     currency,
@@ -78,6 +85,7 @@ export async function ProductPageRuntime({
         paystackConfigured: isPaystackConfigured(),
         currency,
       }),
+      merchantBaseUrl: baseUrl,
       productUrl,
     }
   );
@@ -96,29 +104,32 @@ export async function ProductPageRuntime({
       : null;
 
   return (
-    <>
-      <JsonLd data={productSchema} />
-      <JsonLd data={breadcrumbSchema} />
-      {faqSchema && <JsonLd data={faqSchema} />}
-      <ProductDetailClient product={product} faqs={productFaqs} />
-      {/* Optional SEO enrichment, live review structured data and the repairs
-          link stream BELOW the already-rendered product shell. fallback={null}
-          is safe: this content appends beneath the visible PDP/LCP shell, so it
-          never hides or shifts it (matches the canonical categorized PDP's
-          semantic-section boundary). */}
-      <Suspense fallback={null}>
-        <ProductPageBelowFold
-          baseUrl={baseUrl}
-          categoryName={categoryName}
-          categorySlug={categorySlug}
-          currency={currency}
-          merchant={merchant}
-          product={product}
-          productUrl={productUrl}
-          slug={slug}
-        />
-      </Suspense>
-    </>
+    <ExperienceServerBoundary
+      merchant={merchant}
+      path={getProductUrl(product)}
+      fallback={
+        <>
+          <JsonLd data={productSchema} />
+          <JsonLd data={breadcrumbSchema} />
+          {faqSchema && <JsonLd data={faqSchema} />}
+          <ProductDetailClient product={product} faqs={productFaqs} />
+          {/* Stream SEO enrichment and the repairs link below the visible PDP
+              shell so late content never hides or shifts it. */}
+          <Suspense fallback={null}>
+            <ProductPageBelowFold
+              baseUrl={baseUrl}
+              categoryName={categoryName}
+              categorySlug={categorySlug}
+              currency={currency}
+              merchant={merchant}
+              product={product}
+              productUrl={productUrl}
+              slug={slug}
+            />
+          </Suspense>
+        </>
+      }
+    />
   );
 }
 
@@ -157,26 +168,57 @@ export async function ProductPageBelowFold({
     categorySlug in CONTENT_CLUSTER_SUPPORT
       ? (categorySlug as SupportedClusterCategory)
       : null;
-  const [reviewStats, recentReviews, scopedInventory, guidePosts] =
-    await Promise.all([
-      getCachedProductRatingStats(product.id),
-      getCachedProductReviews(product.id, { limit: 10 }),
-      loadCategoryScopedSemanticInventorySafely({
+  // The repair-device link is independent of every other read here, so it
+  // runs inside this batch: a slow optional read (including the hub scan
+  // below) must not hold it up serially.
+  // Awaited directly (not rendered as `<PdpRepairDeviceLink />`) because this
+  // is an async component: React's client renderer (used by
+  // @testing-library/react in tests) cannot invoke async components as JSX,
+  // only the RSC server renderer can.
+  const [
+    reviewStats,
+    recentReviews,
+    scopedInventory,
+    guidePosts,
+    repairDeviceLink,
+  ] = await Promise.all([
+    getCachedProductRatingStats(product.id),
+    getCachedProductReviews(product.id, { limit: 10 }),
+    loadCategoryScopedSemanticInventorySafely({
+      merchantId: merchant.id,
+      categorySlug,
+      storeSlug: slug,
+      warningMessage: 'Failed to load PDP semantic inventory',
+    }),
+    supportedClusterCategory
+      ? loadPublishedClusterPostsSafely(merchant.id, {
+          pageKind: 'product',
+          categorySlug: supportedClusterCategory,
+          brands: product.brand ? [product.brand] : undefined,
+          productNames: [product.name],
+          productSlugs: product.slug ? [product.slug] : undefined,
+        })
+      : Promise.resolve([]),
+    (async () =>
+      PdpRepairDeviceLink({
+        basePath: getStorefrontPathPrefix(await headers(), merchant),
+        merchant,
+        productId: product.id,
+      }))(),
+  ]);
+
+  // Hub eligibility is discarded for collection scopes, so only pay the
+  // brand-authority inventory scan for real categories. This deferred
+  // below-fold read runs after the parallel batch; the inventory is the
+  // destination's cached read, so the serial tail is normally milliseconds.
+  const hubEligibilityInventory = scopedInventory.isCollection
+    ? []
+    : await loadPdpBrandHubEligibilityInventorySafely({
         merchantId: merchant.id,
         categorySlug,
-        storeSlug: slug,
-        warningMessage: 'Failed to load PDP semantic inventory',
-      }),
-      supportedClusterCategory
-        ? loadPublishedClusterPostsSafely(merchant.id, {
-            pageKind: 'product',
-            categorySlug: supportedClusterCategory,
-            brands: product.brand ? [product.brand] : undefined,
-            productNames: [product.name],
-            productSlugs: product.slug ? [product.slug] : undefined,
-          })
-        : Promise.resolve([]),
-    ]);
+        productBrand: product.brand,
+        timeoutMs: PDP_BRAND_HUB_ELIGIBILITY_BELOW_FOLD_TIMEOUT_MS,
+      });
 
   const reviewEnhancementSchema = buildProductReviewEnhancementSchema({
     productName: product.name,
@@ -208,9 +250,11 @@ export async function ProductPageBelowFold({
     brand: product.brand,
     condition: product.condition,
     price: product.price,
-    stock: product.stock,
+    stock: resolveSemanticCandidateStock(product),
     category_slug: product.category_slug ?? categorySlug,
     product_key_specs: product.product_key_specs,
+    manage_stock: product.manage_stock,
+    has_condition_offers: product.has_condition_offers,
   };
   const semanticModel = buildProductSemanticModel({
     storeUrl: baseUrl,
@@ -218,8 +262,10 @@ export async function ProductPageBelowFold({
     categorySlug,
     categoryName,
     countryCode: merchant.country,
+    merchantCurrency: currency,
     currentProduct,
     inventory: inventoryCandidates,
+    hubEligibilityInventory,
     guidePosts,
   });
   const priceSeoCopy = buildProductPriceSeoCopy({
@@ -228,17 +274,6 @@ export async function ProductPageBelowFold({
     categoryName,
     currency,
     country: merchant.country,
-  });
-
-  // Awaited directly (not rendered as `<PdpRepairDeviceLink />`) because this
-  // is an async component: React's client renderer (used by
-  // @testing-library/react in tests) cannot invoke async components as JSX,
-  // only the RSC server renderer can — matching how this function itself is
-  // pre-awaited in tests instead of rendered as JSX.
-  const repairDeviceLink = await PdpRepairDeviceLink({
-    basePath: getStorefrontPathPrefix(await headers(), merchant),
-    merchant,
-    productId: product.id,
   });
 
   return (

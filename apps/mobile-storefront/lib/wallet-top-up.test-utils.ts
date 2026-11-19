@@ -40,6 +40,9 @@ jest.mock('@/lib/config', () => ({
 
 jest.mock('@/lib/fetch-with-timeout', () => ({
   DEFAULT_TIMEOUT: 30000,
+  TimeoutError: jest.requireActual<typeof import('@/lib/fetch-with-timeout')>(
+    '@/lib/fetch-with-timeout'
+  ).TimeoutError,
   fetchWithTimeout: (...args: unknown[]) => mockFetchWithTimeout(...args),
 }));
 

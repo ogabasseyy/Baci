@@ -129,96 +129,148 @@ describe('model family authority taxonomy', () => {
     expect(matchesAce).toBe(false);
   });
 
-  it('matches Apple iPhone model families correctly including iPhone 17e, 16e, 15 Pro Max, and SE', () => {
-    // Arrange
-    const iphone17Entry = modelFamilyAuthorityTaxonomy.getEntry(
-      'smartphones',
-      'apple',
-      'iphone-17'
-    );
-    const iphone16Entry = modelFamilyAuthorityTaxonomy.getEntry(
-      'smartphones',
-      'apple',
-      'iphone-16'
-    );
-    const iphone15Entry = modelFamilyAuthorityTaxonomy.getEntry(
-      'smartphones',
-      'apple',
-      'iphone-15'
-    );
-    const iphoneSeEntry = modelFamilyAuthorityTaxonomy.getEntry(
-      'smartphones',
-      'apple',
-      'iphone-se'
-    );
-
-    // Assert entries exist and have expected minimum products
-    expect(iphone17Entry).toMatchObject({
-      displayName: 'iPhone 17 Series',
-      minimumProducts: 3,
-    });
-    expect(iphone16Entry).toMatchObject({
-      displayName: 'iPhone 16 Series',
-      minimumProducts: 3,
-    });
-    expect(iphone15Entry).toMatchObject({
-      displayName: 'iPhone 15 Series',
-      minimumProducts: 3,
-    });
-    expect(iphoneSeEntry).toMatchObject({
-      displayName: 'iPhone SE Series',
-      minimumProducts: 2,
-    });
-
-    if (!iphone17Entry || !iphone16Entry || !iphone15Entry || !iphoneSeEntry) {
-      throw new Error('Expected Apple iPhone entries');
+  it('rejects family-name prefixes of longer words in product names', () => {
+    const cases: [string, string, string][] = [
+      ['tecno', 'spark', 'Tecno Sparkle 10'],
+      ['tecno', 'camon', 'Tecno Camonera 10'],
+      ['infinix', 'hot', 'Infinix Hotspot 10'],
+    ];
+    for (const [brand, family, name] of cases) {
+      const entry = modelFamilyAuthorityTaxonomy.getEntry(
+        'smartphones',
+        brand,
+        family
+      );
+      if (!entry) throw new Error(`Expected ${brand} ${family} entry`);
+      expect(modelFamilyAuthorityTaxonomy.matchesProduct(entry, name)).toBe(
+        false
+      );
     }
+  });
 
-    // Matching assertions
-    expect(
-      modelFamilyAuthorityTaxonomy.matchesProduct(iphone17Entry, 'iPhone 17e')
-    ).toBe(true);
+  it('keeps Galaxy Z TriFold in the Galaxy Z family', () => {
+    const galaxyZ = modelFamilyAuthorityTaxonomy.getEntry(
+      'smartphones',
+      'samsung',
+      'galaxy-z'
+    );
+    if (!galaxyZ) throw new Error('Expected Galaxy Z family entry');
     expect(
       modelFamilyAuthorityTaxonomy.matchesProduct(
-        iphone17Entry,
-        'Apple iPhone 17 Pro Max'
+        galaxyZ,
+        'Samsung Galaxy Z TriFold'
       )
     ).toBe(true);
     expect(
-      modelFamilyAuthorityTaxonomy.matchesProduct(iphone17Entry, 'iPhone 16')
+      modelFamilyAuthorityTaxonomy.matchesProduct(galaxyZ, 'Galaxy Z Fold 6')
+    ).toBe(true);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesProduct(galaxyZ, 'Samsung Z9 Ultra')
     ).toBe(false);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesProduct(
+        galaxyZ,
+        'Samsung Galaxy Z Fold7'
+      )
+    ).toBe(true);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesProduct(galaxyZ, 'Galaxy Z Flip7')
+    ).toBe(true);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesProduct(
+        galaxyZ,
+        'Samsung Galaxy Z Fold10'
+      )
+    ).toBe(true);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesProduct(
+        galaxyZ,
+        'Samsung Galaxy Z Flip 10'
+      )
+    ).toBe(true);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesContent(
+        galaxyZ,
+        'Samsung Galaxy Z Fold10 hands-on'
+      )
+    ).toBe(true);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesContent(
+        galaxyZ,
+        'The new Z Fold rival folds flat'
+      )
+    ).toBe(false);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesContent(
+        galaxyZ,
+        'Samsung Galaxy Z Fold 7 hands-on'
+      )
+    ).toBe(true);
+  });
 
+  it('rejects Samsung accessory names for Galaxy A/S families', () => {
+    const galaxyS = modelFamilyAuthorityTaxonomy.getEntry(
+      'smartphones',
+      'samsung',
+      'galaxy-s'
+    );
+    const galaxyA = modelFamilyAuthorityTaxonomy.getEntry(
+      'smartphones',
+      'samsung',
+      'galaxy-a'
+    );
+    if (!galaxyS || !galaxyA) throw new Error('Expected Galaxy entries');
     expect(
-      modelFamilyAuthorityTaxonomy.matchesProduct(iphone16Entry, 'iPhone 16e')
+      modelFamilyAuthorityTaxonomy.matchesProduct(galaxyS, 'Samsung S Pen Pro')
+    ).toBe(false);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesProduct(galaxyA, 'Samsung A Cover')
+    ).toBe(false);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesProduct(galaxyS, 'Galaxy S24 Ultra')
+    ).toBe(true);
+  });
+
+  it('matches Tecno Phantom and Itel A/S/P families without overlap', () => {
+    const phantom = modelFamilyAuthorityTaxonomy.getEntry(
+      'smartphones',
+      'tecno',
+      'phantom'
+    );
+    if (!phantom) throw new Error('Expected Tecno Phantom family entry');
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesProduct(phantom, 'Tecno Phantom X2')
     ).toBe(true);
     expect(
-      modelFamilyAuthorityTaxonomy.matchesProduct(
-        iphone16Entry,
-        'Apple iPhone 16 Plus'
+      modelFamilyAuthorityTaxonomy.matchesProduct(phantom, 'Tecno Spark 20')
+    ).toBe(false);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesContent(
+        phantom,
+        'The Tecno Phantom V Fold is here'
       )
     ).toBe(true);
 
-    expect(
-      modelFamilyAuthorityTaxonomy.matchesProduct(
-        iphone15Entry,
-        'iPhone 15 Pro Max'
-      )
-    ).toBe(true);
-    expect(
-      modelFamilyAuthorityTaxonomy.matchesProduct(
-        iphone15Entry,
-        'Apple iPhone 15'
-      )
-    ).toBe(true);
-
-    expect(
-      modelFamilyAuthorityTaxonomy.matchesProduct(iphoneSeEntry, 'iPhone SE')
-    ).toBe(true);
-    expect(
-      modelFamilyAuthorityTaxonomy.matchesProduct(
-        iphoneSeEntry,
-        'Apple iPhone SE 2022'
-      )
-    ).toBe(true);
+    const cases: [string, string, string[]][] = [
+      ['a-series', 'Itel A70', ['Itel S23', 'Itel P55']],
+      ['s-series', 'Itel S23', ['Itel A70', 'Itel P55']],
+      ['p-series', 'Itel P55', ['Itel A70', 'Itel S23']],
+    ];
+    for (const [familyKey, matching, nonMatching] of cases) {
+      const entry = modelFamilyAuthorityTaxonomy.getEntry(
+        'smartphones',
+        'itel',
+        familyKey
+      );
+      if (!entry) throw new Error(`Expected Itel ${familyKey} family entry`);
+      expect(modelFamilyAuthorityTaxonomy.matchesProduct(entry, matching)).toBe(
+        true
+      );
+      for (const name of nonMatching) {
+        expect(modelFamilyAuthorityTaxonomy.matchesProduct(entry, name)).toBe(
+          false
+        );
+      }
+    }
   });
 });

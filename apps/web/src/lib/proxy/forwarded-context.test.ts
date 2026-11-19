@@ -39,10 +39,10 @@ describe('untrusted forwarded merchant context', () => {
     '/login',
     '/',
     '/api/example',
-  ])('scrubs client context from final response for %s', (path) => {
+  ])('scrubs client context from final response for %s', async (path) => {
     const request = requestFor(path);
     expectSanitized(
-      buildFinalProxyResponse(request, path, ROOT_DOMAIN, 'Mozilla')
+      await buildFinalProxyResponse(request, path, ROOT_DOMAIN, 'Mozilla')
     );
   });
 

@@ -1,4 +1,9 @@
 import {
+  getImeiBlacklistState,
+  getImeiDeviceProfile,
+  getImeiFinanceState,
+} from '@baci/shared/imei';
+import {
   type ProviderLabelInput,
   parseProviderLabelMap,
 } from './label-map-parser';
@@ -6,7 +11,6 @@ import type { ImeiCheckResult } from './sickw-parser.types';
 import {
   buildVerdict,
   getProviderField,
-  hasBlacklistIssue,
   hasRiskToken,
   inferDeviceType,
 } from './sickw-parser-helpers';
@@ -18,6 +22,7 @@ import {
 
 const SCORE_PENALTIES = {
   BLACKLIST: 50,
+  FINANCE: 20,
   ICLOUD_LOCK: 30,
   ICLOUD_STATUS: 20,
   KNOX_GUARD: 30,
@@ -137,7 +142,11 @@ export function parseSickwResponse(
   const { miLockStatus, miLostStatus } = getXiaomiStatuses(data, device);
 
   const deviceType = inferDeviceType(device);
-  const isBlacklisted = hasBlacklistIssue(blacklist);
+  const blacklistState = getImeiBlacklistState(blacklist);
+  const financeState = getImeiFinanceState(financeStatus);
+  const hasFinanceIssue = financeState === 'risk';
+  const hasFinanceUnknown = financeState === 'unknown';
+  const isBlacklisted = blacklistState === 'risk';
   const hasIcloudLockOn = hasRiskToken(icloudLock, ['on', 'locked', 'lost']);
   const hasIcloudStatusIssue = hasRiskToken(icloudStatus, ['lost', 'locked']);
   const isSimLocked = hasRiskToken(simLock, ['locked']);
@@ -158,6 +167,7 @@ export function parseSickwResponse(
 
   let score = 100;
   if (isBlacklisted) score -= SCORE_PENALTIES.BLACKLIST;
+  if (hasFinanceIssue) score -= SCORE_PENALTIES.FINANCE;
   if (hasMiLostIssue) score -= SCORE_PENALTIES.MI_LOST;
   if (hasIcloudLockOn) score -= SCORE_PENALTIES.ICLOUD_LOCK;
   if (hasMdmIssue) score -= SCORE_PENALTIES.MDM_LOCK;
@@ -167,14 +177,23 @@ export function parseSickwResponse(
   if (isSimLocked) score -= SCORE_PENALTIES.SIM_LOCK;
   if (!device) score -= SCORE_PENALTIES.MISSING_DEVICE;
 
-  let status: 'Clean' | 'Blacklisted' | 'Unknown' = 'Clean';
-  if (!device && !blacklist && !icloudStatus && !icloudLock) {
-    status = 'Unknown';
-  } else if (isBlacklisted || hasIcloudStatusIssue || hasMiLostIssue) {
-    status = 'Blacklisted';
-  }
+  const status: 'Clean' | 'Blacklisted' | 'Unknown' =
+    isBlacklisted || hasIcloudStatusIssue || hasMiLostIssue
+      ? 'Blacklisted'
+      : blacklistState === 'clean' &&
+          !hasFinanceIssue &&
+          !hasFinanceUnknown &&
+          !hasIcloudLockOn &&
+          !hasMdmIssue &&
+          !hasKnoxGuardIssue &&
+          !hasMiLockIssue &&
+          !isSimLocked
+        ? 'Clean'
+        : 'Unknown';
 
   const verdict = buildVerdict({
+    hasFinanceIssue,
+    hasFinanceUnknown,
     hasIcloudLockOn,
     hasIcloudStatusIssue,
     hasKnoxGuardIssue,
@@ -187,6 +206,12 @@ export function parseSickwResponse(
   });
 
   return {
+    deviceProfile: getImeiDeviceProfile({
+      device,
+      color: data.color || data.colour || data['device color'],
+      storage: data.storage || data.capacity || data['storage capacity'],
+      brand: data.brand || data.manufacturer,
+    }),
     device,
     modelNumber,
     status,

@@ -1,7 +1,9 @@
+import { TERMS_REQUIRED_MESSAGE } from './savings-terms-acceptance';
 import type {
   SavingsProductChoice,
   SavingsSourceMode,
 } from './start-savings.types';
+import { PRIMARY_HEAD_START_ABOVE_TARGET_MESSAGE } from './start-savings-wallet-balance';
 
 export {
   applyStartSavingsProductSelection,
@@ -66,6 +68,30 @@ function supportsInitialContributionWithAutoDebit(paymentProvider: string) {
   );
 }
 
+/**
+ * Refuses a regular contribution bigger than the whole target: a ₦250,000
+ * phone can never need ₦82,000,000 a day. Shown as the customer types and
+ * enforced again on continue.
+ */
+export function contributionAboveTargetMessage(
+  contributionValue: number,
+  targetValue: number
+) {
+  if (
+    !Number.isFinite(contributionValue) ||
+    !Number.isFinite(targetValue) ||
+    targetValue <= 0 ||
+    contributionValue <= targetValue
+  ) {
+    return null;
+  }
+  return 'Each saving can’t be more than the phone’s price. Try a smaller amount.';
+}
+
+/** One wording for every head-start-above-target refusal. */
+export const HEAD_START_ABOVE_TARGET_MESSAGE =
+  PRIMARY_HEAD_START_ABOVE_TARGET_MESSAGE;
+
 export function validateStartSavingsForm({
   acceptsNonWithdrawableTerms,
   contributionValue,
@@ -96,14 +122,28 @@ export function validateStartSavingsForm({
   ) {
     return 'Select the exact device variant you want to save for.';
   }
-  if (targetValue <= 0) {
+  if (!Number.isFinite(targetValue) || targetValue <= 0) {
     return 'Enter a valid target amount.';
   }
-  if (contributionValue <= 0) {
+  if (!Number.isFinite(contributionValue) || contributionValue <= 0) {
     return 'Enter a valid contribution amount.';
+  }
+  const contributionRefusal = contributionAboveTargetMessage(
+    contributionValue,
+    targetValue
+  );
+  if (contributionRefusal) {
+    return contributionRefusal;
   }
   if (initialContributionEnabled && initialContributionValue <= 0) {
     return 'Enter your initial contribution amount.';
+  }
+  if (
+    initialContributionEnabled &&
+    targetValue > 0 &&
+    initialContributionValue > targetValue
+  ) {
+    return HEAD_START_ABOVE_TARGET_MESSAGE;
   }
   // Provider capability: Paystack auto-debit setup creates the mandate first;
   // providers must opt in before combining mandate setup and upfront funding.
@@ -115,7 +155,7 @@ export function validateStartSavingsForm({
     return 'Initial contributions are only supported with manual debit for now.';
   }
   if (!acceptsNonWithdrawableTerms) {
-    return 'You must accept the non-withdrawable savings terms.';
+    return TERMS_REQUIRED_MESSAGE;
   }
   return null;
 }

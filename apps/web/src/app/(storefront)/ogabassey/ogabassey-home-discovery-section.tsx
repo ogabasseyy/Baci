@@ -213,7 +213,7 @@ export async function OgabasseyHomeDiscoverySection({
 
           {productDiscoveryLinks.length > 0 && (
             <>
-              <h3 className="mt-5 text-xs font-semibold uppercase tracking-[0.08em] text-store-background-text/55">
+              <h3 className="mt-5 text-xs font-semibold uppercase tracking-[0.08em] text-store-background-text/75">
                 Featured Product Links
               </h3>
               <ul className="mt-2 grid gap-1 md:grid-cols-2 lg:grid-cols-3">

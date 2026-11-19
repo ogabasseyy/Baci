@@ -12,7 +12,6 @@ interface OgabasseyPdpCriticalVariantSelectorsProps {
   renderableVariantAxes: string[];
   selectedAttributes: Record<string, string>;
   variantAxisOptions?: Record<string, string[]>;
-  variantCount: number;
   variants: CartProduct['variants'];
 }
 
@@ -21,7 +20,6 @@ export function OgabasseyPdpCriticalVariantSelectors({
   renderableVariantAxes,
   selectedAttributes,
   variantAxisOptions = {},
-  variantCount,
   variants,
 }: OgabasseyPdpCriticalVariantSelectorsProps) {
   if (renderableVariantAxes.length === 0) {
@@ -30,11 +28,6 @@ export function OgabasseyPdpCriticalVariantSelectors({
 
   return (
     <div data-ogabassey-pdp-commerce-variant-picker>
-      {variantCount > 1 ? (
-        <p data-ogabassey-pdp-commerce-selection-hint>
-          Choose options below before checkout.
-        </p>
-      ) : null}
       {renderableVariantAxes.length > 0 ? (
         <div data-ogabassey-pdp-commerce-variant-selectors>
           {renderableVariantAxes.map((axis) => {
@@ -49,7 +42,11 @@ export function OgabasseyPdpCriticalVariantSelectors({
               : `Select ${label.toLowerCase()}`;
 
             return (
-              <div data-ogabassey-pdp-commerce-variant-axis key={axis}>
+              <div
+                data-axis={axis}
+                data-ogabassey-pdp-commerce-variant-axis
+                key={axis}
+              >
                 <p data-ogabassey-pdp-commerce-variant-label>
                   {label}:{' '}
                   <strong>{selectedOptionLabel}</strong>

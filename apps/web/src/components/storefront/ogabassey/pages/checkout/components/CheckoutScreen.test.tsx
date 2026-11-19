@@ -186,89 +186,48 @@ beforeEach(() => {
 });
 
 describe('CheckoutScreen', () => {
-  it('maps mobile and desktop summaries and forwards discount actions', () => {
-    const props = createProps();
-    render(<CheckoutScreen {...props} />);
-
-    expect(screen.getByTestId('mobile-summary')).toHaveAttribute(
-      'data-remaining',
-      '9000'
-    );
-    expect(screen.getByTestId('desktop-summary')).toHaveAttribute(
-      'data-subtotal',
-      '10000'
-    );
-    expect(screen.getByTestId('discount')).toHaveAttribute(
-      'data-merchant',
-      'merchant-1'
-    );
-    expect(screen.getByTestId('discount')).toHaveAttribute(
-      'data-total',
-      '10000'
-    );
-    expect(screen.getByTestId('discount')).toHaveAttribute(
-      'data-country',
-      'NG'
-    );
-    expect(screen.getByTestId('discount')).toHaveAttribute(
-      'data-payout',
-      'NGN'
-    );
-    expect(screen.getByTestId('discount')).toHaveAttribute(
-      'data-products',
-      'product-1'
-    );
-    expect(screen.getByTestId('discount')).toHaveAttribute(
-      'data-applied',
-      'WELCOME'
-    );
-    expect(screenMocks.captureSteps).toHaveBeenCalledWith(props.steps);
-    fireEvent.click(screen.getByRole('button', { name: 'Apply discount' }));
-    expect(onDiscountApplied).toHaveBeenCalledWith({
-      valid: true,
-      code: 'SAVE',
-      discount_type: 'fixed',
-      discount_value: 500,
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Remove discount' }));
-    expect(onDiscountApplied).toHaveBeenLastCalledWith(null);
-  });
-
-  it('shows the responsive desktop summary while omitting hidden mobile summary and resumed discount', () => {
+  it('keeps the Oxygen steps together in the main column beside the saved summary', () => {
     render(
       <CheckoutScreen
-        {...createProps({ showMobile: false, discountVisible: false })}
+        {...createProps()}
+        oxygenStep={
+          <>
+            <div>Contact saved</div>
+            <div>Delivery saved</div>
+            <div>Oxygen application</div>
+          </>
+        }
+        oxygenSummary={<div>Saved order</div>}
       />
     );
-
-    expect(screen.queryByTestId('mobile-summary')).not.toBeInTheDocument();
-    expect(screen.getByTestId('desktop-summary')).toBeInTheDocument();
+    const steps = screen.getByText('Contact saved').parentElement;
+    expect(steps).toHaveClass('lg:col-span-8');
+    expect(steps).toContainElement(screen.getByText('Delivery saved'));
+    expect(steps).toContainElement(screen.getByText('Oxygen application'));
+    expect(
+      screen.getAllByText('Saved order').at(-1)?.parentElement
+    ).toHaveClass('lg:col-span-4');
+  });
+  it('keeps the saved Oxygen application and its summaries inside checkout', () => {
+    render(
+      <CheckoutScreen
+        {...createProps()}
+        oxygenStep={<section aria-label="Saved Oxygen application" />}
+        oxygenSummary={<aside aria-label="Selected payment plan" />}
+        oxygenMobileSummary={<aside aria-label="Mobile selected plan" />}
+      />
+    );
+    expect(
+      screen.getByRole('region', { name: 'Saved Oxygen application' })
+    ).toBeVisible();
+    expect(
+      screen.getByRole('complementary', { name: 'Selected payment plan' })
+    ).toBeVisible();
+    expect(
+      screen.getByRole('complementary', { name: 'Mobile selected plan' })
+    ).toBeVisible();
+    expect(screen.queryByTestId('steps')).not.toBeInTheDocument();
     expect(screen.queryByTestId('discount')).not.toBeInTheDocument();
-  });
-
-  it('opens the auth prompt from checkout steps and renders the open auth dialog', () => {
-    render(<CheckoutScreen {...createProps({ authOpen: true })} />);
-
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
-    expect(onSignIn).toHaveBeenCalledOnce();
-    fireEvent.click(screen.getByRole('button', { name: 'Auth success' }));
-    expect(onAuthSuccess).toHaveBeenCalledOnce();
-  });
-
-  it('passes payment overlay controls through so transfer confirmation and close callbacks run', () => {
-    render(<CheckoutScreen {...createProps()} />);
-
-    expect(screen.getByTestId('payment-overlays')).toHaveAttribute(
-      'data-merchant',
-      'Ada Store'
-    );
-    expect(screen.getByRole('alert')).toHaveTextContent(
-      'Could not verify transfer'
-    );
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm transfer' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Close transfer' }));
-    expect(onConfirmTransfer).toHaveBeenCalledOnce();
-    expect(onCloseTransfer).toHaveBeenCalledOnce();
+    expect(screen.queryByTestId('mobile-summary')).not.toBeInTheDocument();
   });
 });

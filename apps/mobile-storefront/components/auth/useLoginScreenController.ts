@@ -1,13 +1,11 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, type TextInput } from 'react-native';
-import { useShallow } from 'zustand/react/shallow';
+import { Alert, type TextInputInstance } from 'react-native';
 import type { LoginAuthMethod } from '@/components/auth/LoginEmailStep';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { useKeyboard } from '@/hooks/use-keyboard';
 import { createLogger } from '@/lib/logger';
-import { useAuthStore } from '@/stores/auth-store';
 import {
   getAuthLoginResumeState,
   saveAuthLoginResumeState,
@@ -17,12 +15,14 @@ import {
   dismissAuthenticatedLogin,
   getValidatedLoginEmailHint,
   getValidatedLoginMode,
-  loadLoginEmailHintFromReturnTo,
   normalizeEmail,
+  resolveAuthMethodToggle,
   returnToEmailFromAuthStep,
   validateLoginEmailInput,
 } from './login-screen-controller.helpers';
 import { runLoginSocialSignIn } from './login-social-sign-in';
+import { useLoginAuthStore } from './use-login-auth-store';
+import { useLoginEmailHintGuidance } from './use-login-email-hint-guidance';
 import { useLoginHardwareBackHandler } from './useLoginHardwareBackHandler';
 
 const log = createLogger('Login');
@@ -54,18 +54,7 @@ export function useLoginScreenController() {
     signInWithApple,
     user,
     isInitialized,
-  } = useAuthStore(
-    useShallow((state) => ({
-      signInWithOtp: state.signInWithOtp,
-      verifyOtp: state.verifyOtp,
-      signInWithGoogle: state.signInWithGoogle,
-      isLoading: state.isLoading,
-      signInWithPassword: state.signInWithPassword,
-      signInWithApple: state.signInWithApple,
-      user: state.user,
-      isInitialized: state.isInitialized,
-    }))
-  );
+  } = useLoginAuthStore();
 
   const [step, setStep] = useState<AuthStep>('email');
   const [authMethod, setAuthMethod] = useState<LoginAuthMethod>('otp');
@@ -80,9 +69,9 @@ export function useLoginScreenController() {
   const [showPassword, setShowPassword] = useState(false);
   const [_isAppleAvailable, setIsAppleAvailable] = useState(false);
 
-  const { withKeyboardDismiss } = useKeyboard();
+  const { dismissKeyboard, withKeyboardDismiss } = useKeyboard();
 
-  const otpInputRef = useRef<TextInput>(null);
+  const otpInputRef = useRef<TextInputInstance>(null);
   const isMountedRef = useRef(true);
   const isVerifyingRef = useRef(false);
 
@@ -99,16 +88,14 @@ export function useLoginScreenController() {
     }
   }, [isInitialized, user, returnTo]);
 
-  useEffect(() => {
-    return loadLoginEmailHintFromReturnTo({
-      currentEmail: email,
-      initialEmail,
-      onError: (error) =>
-        log.warn('Failed to load receipt claim email hint', error),
-      returnTo,
-      setEmail,
-    });
-  }, [email, initialEmail, returnTo]);
+  const emailHintGuidance = useLoginEmailHintGuidance({
+    currentEmail: email,
+    emailParam,
+    initialEmail,
+    onError: (error) =>
+      log.warn('Failed to load receipt claim email hint', error),
+    returnTo,
+  });
 
   useEffect(() => {
     if (validatedMode !== 'otp') {
@@ -183,6 +170,17 @@ export function useLoginScreenController() {
       setStep('password');
     }
   });
+
+  const handleToggleAuthMethod = () => {
+    const next = resolveAuthMethodToggle(authMethod, email);
+    setAuthMethod(next.authMethod);
+    setEmailError(null);
+    if (!next.passwordEmail) return;
+    // Dismiss only when the step advances; else they still need to type.
+    dismissKeyboard();
+    setEmail(next.passwordEmail);
+    setStep('password');
+  };
 
   const handlePasswordSignIn = withKeyboardDismiss(async () => {
     if (!password) {
@@ -267,12 +265,14 @@ export function useLoginScreenController() {
     dismissAndNavigate,
     email,
     emailError,
+    emailHintGuidance,
     handleAppleSignIn,
     handleBack,
     handleContinue,
     handleGoogleSignIn,
     handlePasswordSignIn,
     handleResendOtp,
+    handleToggleAuthMethod,
     isAppleLoading,
     isGoogleLoading,
     isLoading,

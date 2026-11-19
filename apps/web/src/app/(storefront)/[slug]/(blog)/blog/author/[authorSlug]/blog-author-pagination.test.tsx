@@ -13,8 +13,25 @@ vi.mock('@/lib/routes', () => ({ asRoute: (value: string) => value }));
 import { BlogAuthorPagination } from './blog-author-pagination';
 
 describe('BlogAuthorPagination', () => {
-  it('renders prev/next and direct author archive page anchors', () => {
-    render(
+  it('renders prev/next on page 2+ and direct author archive page anchors only on page 1', () => {
+    const { rerender } = render(
+      <BlogAuthorPagination
+        authorName="Bassey John"
+        buildHref={(page) =>
+          page > 1
+            ? `/blog/author/bassey-john?page=${page}`
+            : '/blog/author/bassey-john'
+        }
+        currentPage={1}
+        totalPages={20}
+      />
+    );
+
+    expect(
+      screen.getByRole('link', { name: 'Bassey John articles page 20' })
+    ).toHaveAttribute('href', '/blog/author/bassey-john?page=20');
+
+    rerender(
       <BlogAuthorPagination
         authorName="Bassey John"
         buildHref={(page) =>
@@ -37,8 +54,8 @@ describe('BlogAuthorPagination', () => {
     );
     expect(screen.getByText('Page 2 of 20')).toBeInTheDocument();
     expect(
-      screen.getByRole('link', { name: 'Bassey John articles page 20' })
-    ).toHaveAttribute('href', '/blog/author/bassey-john?page=20');
+      screen.queryByRole('link', { name: 'Bassey John articles page 20' })
+    ).not.toBeInTheDocument();
   });
 
   it('renders nothing for single-page author archives', () => {

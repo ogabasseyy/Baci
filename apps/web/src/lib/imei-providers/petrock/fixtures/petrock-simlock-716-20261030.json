@@ -1,0 +1,12 @@
+{
+  "productId": "716",
+  "capturedAt": "2026-10-30",
+  "status": "success",
+  "provenance": "Owner-authorized single paid provider probe; terminal response read by the release operator. IMEI, IMEI2, serial number and purchase-date lines omitted; order, reference and transport credentials omitted.",
+  "verifiedScope": {
+    "brand": "apple",
+    "device": "smartphone",
+    "input": "imei"
+  },
+  "replay": "Model: IPHONE 17 PRO MAX SILVER-JPN 512GB<br>Warranty Status: Limited Warranty<br>SIMLock Status: <font color=008000>Unlocked</font>"
+}

@@ -1,3 +1,4 @@
+import type { TextInputInstance } from 'react-native';
 /**
  * Shared Types for Checkout Identity Components
  *
@@ -9,7 +10,7 @@
 
 import type { RefObject } from 'react';
 import type { Control, FieldErrors, UseFormSetValue } from 'react-hook-form';
-import type { ReturnKeyTypeOptions, TextInput } from 'react-native';
+import type { ReturnKeyTypeOptions } from 'react-native';
 
 /**
  * Sign-in form data structure
@@ -43,7 +44,7 @@ export interface EmailInputProps extends FormInputProps {
 export interface PasswordInputProps extends FormInputProps {
   onClearError?: () => void;
   onForgotPassword: () => void;
-  inputRef?: RefObject<TextInput | null>;
+  inputRef?: RefObject<TextInputInstance | null>;
 }
 
 /**

@@ -9,6 +9,7 @@ BEGIN
       'paused','manual','canonical_local',draft.id,p_revision,p_actor
     FROM public.customer_savings_drafts draft WHERE draft.id=p_draft;
 END $$;
+GRANT EXECUTE ON FUNCTION pg_temp.insert_wrong_canonical_scope(uuid, uuid, uuid, uuid, uuid, uuid) TO PUBLIC; -- called after SET ROLE
 SELECT revision_id AS actual_draft_revision FROM public.customer_savings_drafts WHERE id=:'draft' \gset
 SET SESSION AUTHORIZATION savings_local_plan_writer;
 SELECT pg_temp.isolation_reject(format('SELECT pg_temp.insert_wrong_canonical_scope(%L,%L,%L,%L,%L,%L)',

@@ -29,6 +29,14 @@ const config = {
   // processes. The handles are idle and only surface once suites are green, so
   // forcing exit is always safe here.
   forceExit: true,
+  // Two workers instead of one process. The 1,800+ suites used to run with
+  // `jest --runInBand`, which took about 15 minutes on CI and let late files
+  // run under accumulated memory pressure (see jest.setup.ts). Two workers
+  // roughly halve that on a 4-core runner while the mobile admin Vitest suite
+  // runs beside it; more workers would only compete with that suite, or with
+  // other work on a shared development machine. An explicit `--runInBand` on
+  // the command line still wins, which the targeted CI plans rely on.
+  maxWorkers: 2,
   // jest-expo 57.0.2 loads TypeScript sources from Expo packages nested under
   // its own pnpm node_modules tree, so that nested Expo subtree must be compiled.
   transformIgnorePatterns: [
@@ -38,8 +46,13 @@ const config = {
   setupFiles: ['<rootDir>/__mocks__/expo-winter-setup.js'],
   setupFilesAfterEnv: ['./jest.setup.ts'],
   moduleNameMapper: {
+    '^@gorhom/bottom-sheet$': '<rootDir>/__mocks__/gorhom-bottom-sheet.js',
     '^@/(.*)$': '<rootDir>/$1',
     '^@baci/shared$': '<rootDir>/../../packages/shared/src/index.ts',
+    '^@baci/shared/resolve-mobile-react$':
+      '<rootDir>/../../packages/shared/resolve-mobile-react.cjs',
+    '^@baci/shared/android-system-bars$':
+      '<rootDir>/../../packages/shared/android-system-bars.cjs',
     '^@baci/shared/(.*)$': '<rootDir>/../../packages/shared/src/$1',
     '^react$': reactPath,
     '^react-dom$': reactDomPath,

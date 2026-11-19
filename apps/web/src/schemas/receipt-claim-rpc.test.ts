@@ -2,22 +2,22 @@ import { describe, expect, it } from 'vitest';
 import {
   createReceiptClaimResultSchema,
   receiptClaimCampaignStatsSchema,
-  receiptClaimRecordSchema,
+  receiptClaimPreviewV3Schema,
   redeemReceiptClaimResultSchema,
 } from '@/schemas/receipt-claim-rpc';
 
 describe('receipt claim RPC schemas', () => {
-  it('accepts preview claim records returned by the preview RPC', () => {
+  it('accepts versioned manual preview payloads without any identity fields', () => {
+    // v3 carries a kind discriminator and never the recipient email: the
+    // login hint travels through the service-role-only hint RPC instead.
     expect(
-      receiptClaimRecordSchema.safeParse({
+      receiptClaimPreviewV3Schema.safeParse({
         claimed_at: null,
-        claimed_by_user_id: null,
-        customer_email: 'ada@example.com',
-        customer_id: 'customer-1',
         customer_name: 'Ada',
+        document_kind: 'invoice',
         expires_at: '2099-01-01T00:00:00.000Z',
         id: 'claim-1',
-        merchant_id: 'merchant-1',
+        kind: 'manual',
         merchant: { business_name: 'Ogabassey', slug: 'ogabassey' },
         orders: [
           {
@@ -30,12 +30,27 @@ describe('receipt claim RPC schemas', () => {
     ).toBe(true);
   });
 
-  it('rejects malformed preview claim records', () => {
+  it('accepts versioned import preview payloads without a document kind', () => {
     expect(
-      receiptClaimRecordSchema.safeParse({
+      receiptClaimPreviewV3Schema.safeParse({
         claimed_at: null,
-        customer_email: 'ada@example.com',
-        customer_id: 'customer-1',
+        customer_name: 'Ada',
+        expires_at: '2099-01-01T00:00:00.000Z',
+        id: 'claim-1',
+        kind: 'import',
+        merchant: { business_name: 'Ogabassey', slug: 'ogabassey' },
+        orders: [],
+      }).success
+    ).toBe(true);
+  });
+
+  it('rejects versioned preview payloads without a kind discriminator', () => {
+    expect(
+      receiptClaimPreviewV3Schema.safeParse({
+        claimed_at: null,
+        customer_name: 'Ada',
+        expires_at: '2099-01-01T00:00:00.000Z',
+        id: 'claim-1',
       }).success
     ).toBe(false);
   });

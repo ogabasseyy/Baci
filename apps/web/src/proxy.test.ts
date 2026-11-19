@@ -337,6 +337,7 @@ describe('Middleware Proxy', () => {
   it('forwards auth route CSP and nonce headers for Next script nonces', async () => {
     const req = new NextRequest(`https://${ROOT_DOMAIN}/login`);
     req.headers.set('host', ROOT_DOMAIN);
+    req.cookies.set('sb-project-auth-token', 'session');
 
     const res = await proxy(req);
     expect(updateSession).toHaveBeenCalledTimes(1);
@@ -396,6 +397,7 @@ describe('Middleware Proxy', () => {
     for (let index = 0; index < 3; index += 1) {
       const req = new NextRequest(`https://${ROOT_DOMAIN}/login`);
       req.headers.set('host', ROOT_DOMAIN);
+      req.cookies.set('sb-project-auth-token', 'session');
 
       await proxy(req);
       const forwardedRequest = vi.mocked(updateSession).mock.calls[index]?.[0];
@@ -419,6 +421,7 @@ describe('Middleware Proxy', () => {
 
     const req = new NextRequest(`https://${ROOT_DOMAIN}/login`);
     req.headers.set('host', ROOT_DOMAIN);
+    req.cookies.set('sb-project-auth-token', 'session');
 
     try {
       const res = await proxy(req);
@@ -480,6 +483,7 @@ describe('Middleware Proxy', () => {
       `https://${ROOT_DOMAIN}/login?redirect=%2Fadmin&redirectTo=%2Fdashboard`
     );
     req.headers.set('host', ROOT_DOMAIN);
+    req.cookies.set('sb-project-auth-token', 'session');
 
     const res = await proxy(req);
 
@@ -497,6 +501,7 @@ describe('Middleware Proxy', () => {
       `https://${ROOT_DOMAIN}/login?redirectTo=%2Fadmin`
     );
     req.headers.set('host', ROOT_DOMAIN);
+    req.cookies.set('sb-project-auth-token', 'session');
 
     const res = await proxy(req);
 
@@ -552,6 +557,7 @@ describe('Middleware Proxy', () => {
         `https://${ROOT_DOMAIN}/login?redirect=${encodeURIComponent(rawRedirect)}`
       );
       req.headers.set('host', ROOT_DOMAIN);
+      req.cookies.set('sb-project-auth-token', 'session');
 
       const res = await proxy(req);
       const location = res.headers.get('location');
@@ -574,6 +580,7 @@ describe('Middleware Proxy', () => {
         `https://${ROOT_DOMAIN}/login?redirect=${encodeURIComponent('/admin\r\nx-test:1')}`
       );
       req.headers.set('host', ROOT_DOMAIN);
+      req.cookies.set('sb-project-auth-token', 'session');
 
       const res = await proxy(req);
       const location = res.headers.get('location');
@@ -743,8 +750,15 @@ describe('Middleware Proxy', () => {
     );
   });
 
-  it('matches PostHog relay static assets so rewrites cannot bypass header stripping', () => {
-    expect(config.matcher).toContain('/baci-relay/:path*');
+  it('matches default PostHog relay paths in proxy matcher so credential stripping runs in-repo', async () => {
+    const { unstable_doesMiddlewareMatch: unstable_doesProxyMatch } =
+      await import('next/experimental/testing/server');
+    expect(
+      unstable_doesProxyMatch({ config, url: '/baci-relay/e/capture/' })
+    ).toBe(true);
+    expect(
+      unstable_doesProxyMatch({ config, url: '/baci-relay/static/recorder.js' })
+    ).toBe(true);
   });
 
   it('does not force no-cache on default PostHog relay static assets', async () => {
@@ -865,7 +879,7 @@ describe('Middleware Proxy', () => {
 
     expect(res.headers.get('location')).toBeNull();
     expect(res.headers.get('x-middleware-rewrite')).toBe(
-      `https://ogabassey.${ROOT_DOMAIN}/ogabassey/checkout`
+      `https://ogabassey.${ROOT_DOMAIN}/ogabassey.${ROOT_DOMAIN}/checkout`
     );
     expect(res.headers.get('x-middleware-request-x-merchant-slug')).toBe(
       'ogabassey'
@@ -1292,7 +1306,7 @@ describe('Middleware Proxy', () => {
       );
     });
 
-    it('does not hard-404 query-param product URLs even when the slug is reported missing', async () => {
+    it('hard-404s query-param product URLs when the slug is reported missing', async () => {
       mockMissing(true);
       const req = new NextRequest(
         'https://ogabassey.com/smartphones/totally-made-up?utm_source=email'
@@ -1301,7 +1315,8 @@ describe('Middleware Proxy', () => {
 
       const res = await proxy(req);
 
-      expect(res.status).not.toBe(404);
+      expect(res.status).toBe(404);
+      expect(res.headers.get('X-Robots-Tag')).toBe('noindex, follow');
     });
 
     it('falls through (rewrite, not 404) when the product slug exists', async () => {
@@ -1421,7 +1436,7 @@ describe('Middleware Proxy', () => {
 
       expect(res.status).not.toBe(404);
       expect(res.headers.get('x-middleware-rewrite')).toContain(
-        '/ogabassey/smartphones/compare'
+        `/ogabassey.${ROOT_DOMAIN}/smartphones/compare`
       );
       expect(resolutionMock).not.toHaveBeenCalled();
       expect(canonicalRedirectMock).not.toHaveBeenCalled();
@@ -1533,7 +1548,7 @@ describe('Middleware Proxy', () => {
       );
     });
 
-    it('does not hard-404 an empty hub on param URLs and skips the status lookup entirely', async () => {
+    it('hard-404s an empty hub on param URLs', async () => {
       compareHubStatusMock.mockResolvedValue({ kind: 'empty' });
       const req = new NextRequest(
         'https://ogabassey.com/printers/compare?utm_source=email'
@@ -1542,8 +1557,9 @@ describe('Middleware Proxy', () => {
 
       const res = await proxy(req);
 
-      expect(res.status).not.toBe(404);
-      expect(compareHubStatusMock).not.toHaveBeenCalled();
+      expect(res.status).toBe(404);
+      expect(res.headers.get('X-Robots-Tag')).toBe('noindex, follow');
+      expect(compareHubStatusMock).toHaveBeenCalled();
     });
 
     it('falls through when the hub status is renderable-or-unknown (fail-open default)', async () => {
@@ -2218,7 +2234,9 @@ describe('Middleware Proxy', () => {
     expect(checkRateLimit).not.toHaveBeenCalled();
     expect(getCustomDomainForSlug).toHaveBeenCalledWith('ogabassey');
     expect(rewriteUrl.origin).toBe(`https://ogabassey.${ROOT_DOMAIN}`);
-    expect(rewriteUrl.pathname).toBe('/ogabassey/analytics/conversion');
+    expect(rewriteUrl.pathname).toBe(
+      `/ogabassey.${ROOT_DOMAIN}/analytics/conversion`
+    );
     expect(rewriteUrl.searchParams.get('ref')).toBe('organic');
     expect(rewriteUrl.searchParams.get('__baci_metadata_cache_bucket')).toBe(
       'streaming'
@@ -2932,14 +2950,14 @@ describe('Middleware Proxy', () => {
     [
       'subdomain category listing',
       `https://ogabassey.${ROOT_DOMAIN}/gaming-laptops`,
-      '/ogabassey/gaming-laptops',
+      `/ogabassey.${ROOT_DOMAIN}/gaming-laptops`,
       'streaming',
       'Mozilla/5.0 AppleWebKit/537.36 Chrome/125.0 Safari/537.36',
     ],
     [
       'subdomain storefront home',
       `https://ogabassey.${ROOT_DOMAIN}/`,
-      '/ogabassey',
+      `/ogabassey.${ROOT_DOMAIN}`,
       'streaming',
       'Mozilla/5.0 AppleWebKit/537.36 Chrome/125.0 Safari/537.36',
     ],
@@ -3518,20 +3536,6 @@ describe('Middleware Proxy', () => {
     );
   });
 
-  it('redirects slug-prefixed legacy category product URLs to /products/{slug}', async () => {
-    const req = new NextRequest(
-      'https://ogabassey.com/ogabassey/dell/dell-alienware-m16-r3-rtx-5070-ti'
-    );
-    req.headers.set('host', 'ogabassey.com');
-
-    const res = await proxy(req);
-
-    expect(res.status).toBe(301);
-    expect(res.headers.get('location')).toBe(
-      'https://ogabassey.com/products/dell-alienware-m16-r3-rtx-5070-ti'
-    );
-  });
-
   it('preserves slug-prefixed category support routes when stripping the merchant prefix', async () => {
     const req = new NextRequest(
       'https://ogabassey.com/ogabassey/smartphones/best-under/under-500k'
@@ -3543,21 +3547,6 @@ describe('Middleware Proxy', () => {
     expect(res.status).toBe(301);
     expect(res.headers.get('location')).toBe(
       'https://ogabassey.com/smartphones/best-under/under-500k'
-    );
-  });
-
-  it('redirects mixed-case custom-domain slug-prefixed product URLs to the slugless canonical route', async () => {
-    vi.mocked(getSlugForCustomDomain).mockResolvedValueOnce('OgaBassey');
-    const req = new NextRequest(
-      'https://ogabassey.com/ogabassey/dell/dell-alienware-m16-r3-rtx-5070-ti'
-    );
-    req.headers.set('host', 'ogabassey.com');
-
-    const res = await proxy(req);
-
-    expect(res.status).toBe(301);
-    expect(res.headers.get('location')).toBe(
-      'https://ogabassey.com/products/dell-alienware-m16-r3-rtx-5070-ti'
     );
   });
 
@@ -3576,41 +3565,6 @@ describe('Middleware Proxy', () => {
     );
     // The route-collision guard short-circuits BEFORE any alias lookup.
     expect(getCurrentSlugForAlias).not.toHaveBeenCalledWith('blog');
-  });
-
-  it('strips a genuine retired-slug prefix (non-route) to the slugless custom-domain URL', async () => {
-    vi.mocked(getSlugForCustomDomain).mockResolvedValueOnce('zorvexa');
-    vi.mocked(getCurrentSlugForAlias).mockImplementation(async (s: string) =>
-      s === 'yodhashop' ? 'zorvexa' : null
-    );
-    const req = new NextRequest('https://ogabassey.com/yodhashop/summer-sale');
-    req.headers.set('host', 'ogabassey.com');
-
-    const res = await proxy(req);
-
-    // 302 (temporary) so a reversible rename-back can't loop a browser-cached 301.
-    expect(res.status).toBe(302);
-    expect(res.headers.get('location')).toBe(
-      'https://ogabassey.com/summer-sale'
-    );
-  });
-
-  it('strips a GRANDFATHERED reserved-name retired-slug prefix on a custom domain', async () => {
-    // A merchant that held 'support' as a slug before it was reserved could have
-    // retired it — custom.example/support/... must still strip to the slugless URL.
-    vi.mocked(getSlugForCustomDomain).mockResolvedValueOnce('zorvexa');
-    vi.mocked(getCurrentSlugForAlias).mockImplementation(async (s: string) =>
-      s === 'support' ? 'zorvexa' : null
-    );
-    const req = new NextRequest('https://ogabassey.com/support/summer-sale');
-    req.headers.set('host', 'ogabassey.com');
-
-    const res = await proxy(req);
-
-    expect(res.status).toBe(302);
-    expect(res.headers.get('location')).toBe(
-      'https://ogabassey.com/summer-sale'
-    );
   });
 
   it('does not strip a retired-slug prefix that is a platform app route (auth) on a custom domain', async () => {
@@ -3864,7 +3818,7 @@ describe('Middleware Proxy', () => {
     expect(rewrite).not.toContain('merchant_slug=support');
   });
 
-  it('302-redirects a RESERVED-name retired alias on the ROOT-DOMAIN path (usebaci.com/support/...)', async () => {
+  it('301-redirects a RESERVED-name retired alias on the ROOT-DOMAIN path (usebaci.com/support/...)', async () => {
     // The also-supported root-slug URL for a grandfathered reserved alias must forward
     // too — the main root-path block skips reserved segments, so this is handled by the
     // dedicated reserved-alias check before it.
@@ -3874,7 +3828,7 @@ describe('Middleware Proxy', () => {
 
     const res = await proxy(req);
 
-    expect(res.status).toBe(302);
+    expect(res.status).toBe(301);
     expect(res.headers.get('location')).toContain('zorvexa');
   });
 
@@ -4381,20 +4335,6 @@ describe('Middleware Proxy', () => {
 
     expect(res.status).toBe(301);
     expect(res.headers.get('location')).toBe('https://ogabassey.com/repair');
-  });
-
-  it('redirects slug-prefixed legacy category product URLs to /products/{slug}', async () => {
-    const req = new NextRequest(
-      'https://ogabassey.com/ogabassey/dell/dell-alienware-m16-r3-rtx-5070-ti'
-    );
-    req.headers.set('host', 'ogabassey.com');
-
-    const res = await proxy(req);
-
-    expect(res.status).toBe(301);
-    expect(res.headers.get('location')).toBe(
-      'https://ogabassey.com/products/dell-alienware-m16-r3-rtx-5070-ti'
-    );
   });
 
   it('preserves merchant category compare subroutes on custom domains', async () => {

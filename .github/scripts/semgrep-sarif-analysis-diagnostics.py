@@ -14,7 +14,7 @@ PREFIXES = (
     "apps/mobile-storefront/app/", "apps/mobile-storefront/hooks/",
     "apps/mobile-storefront/lib/", "apps/mobile-storefront/services/",
     "apps/mobile-storefront/stores/", "packages/shared/", "supabase/migrations/",
-    ".github/workflows/",
+    ".github/workflows/", ".github/actions/semgrep-sarif-routing/",
 )
 SELF_PATH = ".github/scripts/semgrep-sarif-analysis-diagnostics.py"
 PYTHON_TARGETS = frozenset({

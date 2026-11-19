@@ -1,16 +1,25 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { hasCompleteScopedProductSlugs } from '@/app/api/internal/revalidate-products/has-complete-scoped-product-slugs';
 import { enrichProductPurgeEntries } from '@/lib/authoritative-product-purge-enrichment';
 import {
   revalidateProductSlugs,
   revalidateProducts,
 } from '@/lib/cache-revalidation';
+import { getCloudflarePurgeCredentials } from '@/lib/cloudflare-purge-credentials';
+import { delegateStorefrontEdgePurge } from '@/lib/delegate-storefront-edge-purge';
 import { expireProductBlogCacheReliable } from '@/lib/expire-product-blog-cache-reliable';
 import {
   buildInternalProductPurgeEntries,
   collectResolvedProductSlugs,
 } from '@/lib/internal-product-purge-entries';
-import { scheduleStorefrontProductPurge } from '@/lib/storefront-product-purge';
-import { scheduleStorefrontHostnamePurge } from '@/lib/storefront-product-purge-hostnames';
+import {
+  purgeStorefrontProductConfirmed,
+  scheduleStorefrontProductPurge,
+} from '@/lib/storefront-product-purge';
+import {
+  purgeStorefrontHostnameConfirmed,
+  scheduleStorefrontHostnamePurge,
+} from '@/lib/storefront-product-purge-hostnames';
 
 interface ScheduleOrderProductBlogPurgeInput {
   merchantId: string;
@@ -23,6 +32,11 @@ interface ScheduleOrderProductBlogPurgeInput {
    * fallback replaces the product-scoped purge.
    */
   targetSweepIncomplete?: boolean;
+  /**
+   * When true, await confirmed Cloudflare edge eviction and return `false` if
+   * provider confirmation fails (used by background sweep workers).
+   */
+  confirmEdgeEviction?: boolean;
 }
 
 /**
@@ -41,7 +55,8 @@ export async function scheduleOrderProductBlogPurge({
   productIds,
   supabase,
   targetSweepIncomplete = false,
-}: ScheduleOrderProductBlogPurgeInput): Promise<void> {
+  confirmEdgeEviction = false,
+}: ScheduleOrderProductBlogPurgeInput): Promise<boolean> {
   const normalizedProductIds = Array.from(
     new Set(
       productIds
@@ -50,7 +65,7 @@ export async function scheduleOrderProductBlogPurge({
     )
   );
   if (normalizedProductIds.length === 0) {
-    return;
+    return true;
   }
 
   // Enrichment, per-slug revalidation, and blog-cache expiry need only
@@ -60,9 +75,12 @@ export async function scheduleOrderProductBlogPurge({
   // is gated on resolving the slug.
   const products = normalizedProductIds.map((id) => ({ id }));
   let entries: Awaited<ReturnType<typeof enrichProductPurgeEntries>>['entries'];
+  let authoritativeSlugsById: ReadonlyMap<string, string> | undefined;
   let blogPostSlugs: string[];
   let blogPostSlugsIncomplete: boolean;
   let slugs: string[];
+  let enrichmentFailed = false;
+  let needsBroadPdpExpiry = false;
   try {
     const enriched = await enrichProductPurgeEntries(
       supabase,
@@ -70,6 +88,7 @@ export async function scheduleOrderProductBlogPurge({
       products
     );
     entries = enriched.entries;
+    authoritativeSlugsById = enriched.authoritativeSlugsById;
     blogPostSlugs = enriched.blogPostSlugs;
     blogPostSlugsIncomplete =
       enriched.blogPostSlugsIncomplete === true || targetSweepIncomplete;
@@ -84,6 +103,7 @@ export async function scheduleOrderProductBlogPurge({
     // expire the broad merchant product tags (incl. `product-details`) so
     // the first post-purge request cannot refill the edge from a stale
     // snapshot that preceding callers only stale-while-revalidated.
+    enrichmentFailed = true;
     console.warn(
       'Order-related product enrichment failed; continuing with caller hints',
       { merchantId, error }
@@ -92,10 +112,21 @@ export async function scheduleOrderProductBlogPurge({
     blogPostSlugs = [];
     blogPostSlugsIncomplete = true;
     slugs = collectResolvedProductSlugs(products);
-    revalidateProducts(merchantId, undefined, { expireImmediately: true });
+    needsBroadPdpExpiry =
+      revalidateProducts(merchantId, undefined, { expireImmediately: true }) !==
+      true;
   }
   if (entries.length === 0) {
-    return;
+    if (
+      !enrichmentFailed &&
+      revalidateProducts(merchantId, undefined, { expireImmediately: true }) !==
+        true
+    ) {
+      await expireProductBlogCacheReliable(merchantId, {
+        expireWidePdpDetails: true,
+      });
+    }
+    return true;
   }
 
   // Hard-expire the per-slug PDP snapshots before the edge purge below:
@@ -103,9 +134,47 @@ export async function scheduleOrderProductBlogPurge({
   // first post-purge request and re-seed Cloudflare with stale stock. The
   // slugs ride along to the worker-safe expiry so standalone workers (no
   // request context) invalidate the same tags via the internal endpoint.
-  revalidateProductSlugs(merchantId, slugs, { expireImmediately: true });
+  const scopedSlugIdentifiers = Array.from(
+    new Set([...slugs, ...normalizedProductIds])
+  );
+  const slugsRevalidated =
+    revalidateProductSlugs(merchantId, scopedSlugIdentifiers, {
+      expireImmediately: true,
+    }) === true;
+  if (!enrichmentFailed) {
+    if (
+      !slugsRevalidated ||
+      blogPostSlugsIncomplete ||
+      !hasCompleteScopedProductSlugs(
+        products,
+        entries,
+        slugs,
+        authoritativeSlugsById,
+        { allowAssumedUnchangedSlugs: true }
+      )
+    ) {
+      needsBroadPdpExpiry =
+        revalidateProducts(merchantId, undefined, {
+          expireImmediately: true,
+        }) !== true;
+    } else {
+      const scopedRevalidated = revalidateProducts(merchantId, undefined, {
+        expireImmediately: true,
+        omitMerchantWidePdpDetails: true,
+      });
+      if (scopedRevalidated !== true) {
+        needsBroadPdpExpiry =
+          revalidateProducts(merchantId, undefined, {
+            expireImmediately: true,
+          }) !== true;
+      }
+    }
+  }
   const blogCacheExpired = await expireProductBlogCacheReliable(merchantId, {
     productSlugs: slugs,
+    ...(needsBroadPdpExpiry
+      ? { expireWidePdpDetails: true }
+      : { products, slugsUnchanged: true }),
   });
   if (!blogCacheExpired) {
     // The standalone worker path reports hard-expiry failure as `false`
@@ -116,7 +185,7 @@ export async function scheduleOrderProductBlogPurge({
       'Skipped order-related edge purge because blog-cache hard expiry failed',
       { merchantId }
     );
-    return;
+    return false;
   }
 
   let merchantSlug = suppliedMerchantSlug?.trim() || null;
@@ -132,7 +201,7 @@ export async function scheduleOrderProductBlogPurge({
           'Skipped order-related edge purge because merchant slug lookup failed',
           { merchantId, error }
         );
-        return;
+        return false;
       }
       merchantSlug = data?.slug?.trim() || null;
     } catch (error) {
@@ -140,11 +209,41 @@ export async function scheduleOrderProductBlogPurge({
         'Skipped order-related edge purge because merchant slug lookup failed',
         { merchantId, error }
       );
-      return;
+      return false;
     }
   }
   if (!merchantSlug) {
-    return;
+    return true;
+  }
+
+  if (confirmEdgeEviction) {
+    const confirmed = blogPostSlugsIncomplete
+      ? await purgeStorefrontHostnameConfirmed(merchantSlug)
+      : blogPostSlugs.length > 0
+        ? await purgeStorefrontProductConfirmed(merchantSlug, entries, {
+            blogPostSlugs,
+          })
+        : await purgeStorefrontProductConfirmed(merchantSlug, entries);
+    if (confirmed) {
+      return true;
+    }
+    if (!getCloudflarePurgeCredentials()) {
+      // Standalone VPS workers do not hold Cloudflare credentials locally;
+      // delegate the storefront edge purge to the authenticated internal web
+      // route, which runs with Vercel's Cloudflare configuration.
+      return await delegateStorefrontEdgePurge({
+        merchantId,
+        merchantSlug,
+        entries,
+        productIds: normalizedProductIds,
+        authoritativeSlugsById,
+        productSlugs: slugs,
+        blogPostSlugs,
+        purgeWholeStorefront: blogPostSlugsIncomplete,
+        slugsUnchanged: true,
+      });
+    }
+    return false;
   }
 
   if (blogPostSlugsIncomplete) {
@@ -162,4 +261,5 @@ export async function scheduleOrderProductBlogPurge({
     // purge in that case so those pages cannot remain stale until TTL.
     scheduleStorefrontProductPurge(merchantSlug, entries);
   }
+  return true;
 }

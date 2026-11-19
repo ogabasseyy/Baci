@@ -1,8 +1,15 @@
+# Why the shell below stays inline instead of in scripts under .github/scripts: the "Run Jules
+# review" and "Submit Jules review" steps run before any checkout and hold JULES_API_KEY and a
+# pull-requests write token, so scripts from the pull request itself must not run in them. (The
+# gate step runs after a checkout and reads its filter from a committed blob, checked against a
+# pinned digest.) The real steps are covered offline by jules-sunset-contract.test.mjs and
+# jules-findings-gate.test.mjs. Google retires Jules on 2026-12-31 and this workflow goes with
+# it, so splitting it up is not worth the extra trust boundary.
 name: Jules PR Review
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, converted_to_draft]
   issue_comment:
     types: [created]
 
@@ -27,13 +34,19 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  review:
-    name: Jules review
+  window:
+    name: Jules availability window
+    # Backstop only. Google plans to retire Jules on 2026-12-31, so no new review
+    # starts from 2027-01-01 UTC. Until then Jules keeps reviewing; if Google stops
+    # taking new work sooner, the review job gets no answer and gives up after its
+    # own wait limit (JULES_FAST_WAIT_SECONDS / JULES_DEEP_WAIT_SECONDS below).
+    # The date is checked when this job runs; a review admitted just before
+    # January 1 UTC may start later if its runner is queued.
     # Keep automatic fast reviews same-repo only: forked pull_request runs do not receive
     # JULES_API_KEY, so running them would only post noisy fallback reviews instead of useful output.
     if: >-
       (github.event_name == 'pull_request' &&
-      github.event.pull_request.draft == false &&
+      github.event.pull_request.draft == true &&
       github.event.pull_request.head.repo.full_name == github.repository) ||
       (github.event_name == 'issue_comment' &&
       github.event.issue.pull_request &&
@@ -44,7 +57,38 @@ jobs:
       github.event.comment.author_association == 'MEMBER' ||
       github.event.comment.author_association == 'COLLABORATOR'))
     runs-on: ubuntu-24.04
-    timeout-minutes: 360
+    permissions: {}
+    timeout-minutes: 2
+    outputs:
+      enabled: ${{ steps.window.outputs.enabled }}
+    steps:
+      - id: window
+        name: Check Jules service window
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! today=$(date -u +%F); then
+            echo 'Could not read the UTC date; refusing to start a Jules review.' >&2
+            exit 1
+          fi
+          if ! [[ "$today" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+            echo 'Invalid UTC date; refusing to start a Jules review.' >&2
+            exit 1
+          fi
+          if [[ "$today" < '2027-01-01' ]]; then
+            echo 'enabled=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'enabled=false' >> "$GITHUB_OUTPUT"
+            echo 'Google planned to retire Jules on 2026-12-31, so automatic Jules reviews stop from 2027-01-01; no review was started.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  review:
+    name: Jules review
+    needs: [window]
+    if: needs.window.outputs.enabled == 'true'
+    runs-on: ubuntu-24.04
+    # Must stay well above the longest wait below (60 minutes) so the notice still gets posted.
+    timeout-minutes: 90
 
     steps:
       - name: Run Jules review
@@ -59,6 +103,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || '' }}
           JULES_API_KEY: ${{ secrets.JULES_API_KEY }}
+          # How long to wait for Jules before giving up, so a silent Jules cannot hold a runner
+          # (GitHub-hosted jobs are shared, 20 at a time). Fast reviews mostly take 8 to 15
+          # minutes and the slowest of 82 on 2026-11-10/11 to finish took 24, so 30 leaves room.
+          JULES_DEEP_WAIT_SECONDS: 3600
+          JULES_FAST_WAIT_SECONDS: 1800
           PR_LABELS: ${{ toJson(github.event.pull_request.labels) }}
           PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
           REVIEW_MODE: ${{ github.event_name == 'issue_comment' && 'deep' || 'fast' }}
@@ -88,11 +137,11 @@ jobs:
             exit 0
           fi
 
+          # Stop polling well before the job timeout so the fallback review below is still posted.
           if [[ "${REVIEW_MODE}" == "fast" ]]; then
-            poll_deadline_epoch=$(( $(date +%s) + 7200 ))
+            poll_deadline_epoch=$(( $(date +%s) + JULES_FAST_WAIT_SECONDS ))
           else
-            # Stop polling shortly before the 6-hour job timeout so fallback review posting still runs.
-            poll_deadline_epoch=$(( $(date +%s) + 21000 ))
+            poll_deadline_epoch=$(( $(date +%s) + JULES_DEEP_WAIT_SECONDS ))
           fi
 
           if [[ "${REVIEW_MODE}" == "deep" ]]; then
@@ -114,6 +163,12 @@ jobs:
 
           uri_encode() {
             jq -rn --arg value "$1" '$value | @uri'
+          }
+
+          # Text that comes back from the Jules API ends up in the review body. Keep it to one short
+          # line so a line break can never start a "- High:" bullet that the findings gate would read.
+          one_line() {
+            printf '%s' "$1" | tr '\r\n' '  ' | cut -c1-300
           }
 
           curl_common_args=(
@@ -545,7 +600,7 @@ jobs:
 
           session_response="$(jules_api_post_json "https://jules.googleapis.com/v1alpha/sessions" "${session_payload}")"
 
-          session_id="$(jq -r '.id // empty' <<<"${session_response}")"
+          session_id="$(one_line "$(jq -r '.id // empty' <<<"${session_response}")")"
 
           if [[ -z "${session_id}" ]]; then
             cat > "$body_file" <<EOF
@@ -567,7 +622,7 @@ jobs:
             fi
 
             session_status="$(jules_api_get "https://jules.googleapis.com/v1alpha/sessions/${session_id}")"
-            state="$(jq -r '.state // "STATE_UNSPECIFIED"' <<<"${session_status}")"
+            state="$(one_line "$(jq -r '.state // "STATE_UNSPECIFIED"' <<<"${session_status}")")"
 
             case "${state}" in
               COMPLETED|FAILED|AWAITING_USER_FEEDBACK|AWAITING_PLAN_APPROVAL|PAUSED)
@@ -620,18 +675,20 @@ jobs:
           )"
 
           failure_reason="$(
-            jq -r \
-              --argjson activities "${all_activities}" \
-              '
-                [
-                  ($activities | sort_by(.createTime)[])
-                  | select(.sessionFailed.reason != null)
-                  | .sessionFailed.reason
-                ]
-                | map(select(length > 0))
-                | last // empty
-              ' \
-              <<<"{}"
+            one_line "$(
+              jq -r \
+                --argjson activities "${all_activities}" \
+                '
+                  [
+                    ($activities | sort_by(.createTime)[])
+                    | select(.sessionFailed.reason != null)
+                    | .sessionFailed.reason
+                  ]
+                  | map(select(length > 0))
+                  | last // empty
+                ' \
+                <<<"{}"
+            )"
           )"
 
           case "${state}" in
@@ -645,7 +702,7 @@ jobs:
 
           ## Findings
 
-          - low: No actionable review content was returned.
+          - None reported. Jules finished without a review message, so this review is incomplete, not clean.
 
           ## Suggested next steps
 
@@ -663,7 +720,7 @@ jobs:
 
           ## Findings
 
-          - medium: ${failure_reason:-No failure reason was returned by the Activities API.}
+          - None reported. The Jules session failed before it produced a review, so this review is incomplete, not clean. Reason: ${failure_reason:-No failure reason was returned by the Activities API.}
 
           ## Suggested next steps
 
@@ -680,7 +737,7 @@ jobs:
 
           ## Findings
 
-          - medium: The session requires manual intervention before it can finish.
+          - None reported. The session requires manual intervention before it can finish, so this review is incomplete, not clean.
 
           ## Suggested next steps
 
@@ -697,7 +754,7 @@ jobs:
 
           ## Findings
 
-          - low: Final session state was \`${state}\`.
+          - None reported. Jules was still in state \`${state}\` when the workflow stopped waiting, so this review is incomplete, not clean.
 
           ## Suggested next steps
 
@@ -797,6 +854,15 @@ jobs:
           marker="<!-- jules-pr-review mode:${REVIEW_MODE} sha:${reviewed_sha} -->"
 
           if [[ ! -f "${body_file}" ]]; then
+            # Nothing was produced (for example Google stopped taking new Jules sessions). Post this
+            # notice once per pull request and mode, not on every push: its marker names no commit, so
+            # the duplicate check below finds the first notice again on every later push.
+            marker="<!-- jules-pr-review mode:${REVIEW_MODE} notice:no-review-body -->"
+            # Runs before this change posted the same sentence on every push with a commit-scoped
+            # marker; count those too, so pull requests that already carry one do not get another.
+            legacy_marker="<!-- jules-pr-review mode:${REVIEW_MODE} sha:"
+            legacy_sentence="The workflow did not produce a review body"
+            body_file="$RUNNER_TEMP/jules-review-submit-fallback.md"
             cat > "${body_file}" <<EOF
           ${marker}
           ## Jules PR review
@@ -804,6 +870,8 @@ jobs:
           Mode: \`${REVIEW_MODE}\`
 
           The workflow did not produce a review body. Check the workflow logs for the failure point.
+
+          This notice is posted once per pull request and review mode. Later pushes that get no Jules review will not repeat it.
           EOF
           fi
 
@@ -816,11 +884,17 @@ jobs:
             existing_review_id="$(
               jq -r \
                 --arg marker "${marker}" \
+                --arg legacy_marker "${legacy_marker:-}" \
+                --arg legacy_sentence "${legacy_sentence:-}" \
                 '
                   [
                     .[]
                     | select(.user.login == "github-actions[bot]")
-                    | select((.body // "") | contains($marker))
+                    | select(
+                        (.body // "") as $body
+                        | ($body | contains($marker))
+                          or ($legacy_marker != "" and ($body | contains($legacy_marker)) and ($body | contains($legacy_sentence)))
+                      )
                   ]
                   | last
                   | .id // empty
@@ -869,11 +943,31 @@ jobs:
       #   - Low / Minor              → pass (advisory)
       #   - Empty body / workflow noise → pass (matches prior behaviour;
       #     Jules's fast mode emits empty bodies on infra hiccups)
+      - name: Decide whether findings filter is needed
+        id: findings_preflight
+        if: github.event_name == 'pull_request'
+        env:
+          PR_LABELS: ${{ toJson(github.event.pull_request.labels) }}
+        run: |
+          set -euo pipefail
+          if [[ -f "${RUNNER_TEMP}/jules-review.md" ]] && ! echo "${PR_LABELS}" | jq -e '.[] | select(.name == "bypass-ai-gate")' >/dev/null 2>&1; then
+            echo 'needs_filter=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'needs_filter=false' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Checkout findings filter
+        if: github.event_name == 'pull_request' && steps.findings_preflight.outputs.needs_filter == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
       - name: Gate on Jules findings
         if: github.event_name == 'pull_request'
         env:
           RUNNER_TEMP: ${{ runner.temp }}
           PR_LABELS: ${{ toJson(github.event.pull_request.labels) }}
+          EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          WORKFLOW_COMMIT_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           body_file="${RUNNER_TEMP}/jules-review.md"
@@ -889,16 +983,39 @@ jobs:
             exit 0
           fi
 
+          reviewed_sha="$(sed -n 's/^REVIEWED_SHA=//p' "${RUNNER_TEMP}/jules-review-meta.env" 2>/dev/null | tail -n 1 || true)"
+          if [[ ! "${EVENT_HEAD_SHA:-}" =~ ^[0-9a-f]{40}$ || "$reviewed_sha" != "$EVENT_HEAD_SHA" ]]; then
+            echo '::error::Jules reviewed revision does not match this workflow event.'
+            exit 1
+          fi
+
           # 2. Strict Severity Regex: Only match true structured bullet findings (2026 Best Practice)
           # Matches bullet items starting with the severity name, avoiding false-positive triggers from code diffs or conversation text.
           any_severity_re='(^|\n)[[:space:]]*[-*][[:space:]]+(high|critical|major|medium|low|minor)\b[[:space:]]*:'
           any_severity_bold='(^|\n)[[:space:]]*[-*][[:space:]]+\*\*(Severity[: ]*)?(High|Critical|Major|Medium|Low|Minor)([: ]|\s+severity)?\*\*[[:space:]:]*'
+          affirmative_prose_re='\b(I|we)[[:space:]]+(found|identified)[[:space:]]+(a|an|one|two|three|four|five|[0-9]+)[[:space:]]+(high|critical|major|medium|low|minor)([-[:space:]]+severity)?[[:space:]]+([[:alpha:]]+[[:space:]]+){0,3}(issues?|findings?|defects?|vulnerabilit(y|ies))\b'
 
-          if grep -qiE "${any_severity_re}" "${body_file}" || \
-             grep -qiE "${any_severity_bold}" "${body_file}"; then
+          # Jules sometimes labels an explicit absence of findings as a severity bullet.
+          # Remove only its exact standalone sentences, never arbitrary negations.
+          findings_file="${RUNNER_TEMP}/jules-findings-filtered.md"
+          # Retain a sentinel if the next line could continue its bullet.
+          # Read the committed blob, not mutable worktree files, and verify before execution.
+          # After reviewing filter changes, update the digest using:
+          # sha256sum .github/scripts/filter-jules-findings.awk
+          filter="$(mktemp "${RUNNER_TEMP}/jules-filter.XXXXXX")"
+          trap 'rm -f "$filter"' EXIT
+          [[ "${WORKFLOW_COMMIT_SHA:-}" =~ ^[0-9a-f]{40}$ ]] || { echo '::error::Invalid workflow commit.'; exit 1; }
+          git show "${WORKFLOW_COMMIT_SHA}:.github/scripts/filter-jules-findings.awk" > "$filter" || { echo "::error::Missing findings filter."; exit 1; }
+          actual_digest="$(sha256sum "$filter" | cut -d ' ' -f1)"
+          [[ "$actual_digest" == '15adccf0aa68ecba337442a2a71f325ddc5c31faf277a4ddad157cd4df395118' ]] || { echo "::error::Findings filter digest mismatch."; exit 1; }
+          awk -f "$filter" "${body_file}" > "${findings_file}"
+
+          if grep -qiE "${any_severity_re}" "${findings_file}" || \
+             grep -qiE "${any_severity_bold}" "${findings_file}" || \
+             grep -qiE "${affirmative_prose_re}" "${findings_file}"; then
             echo "::error::Jules flagged findings on this PR. All findings must be addressed before merge, or add the 'bypass-ai-gate' label."
             echo "------- Flagged Findings -------"
-            grep -iE -B1 -A4 "${any_severity_re}|${any_severity_bold}" "${body_file}" | head -80 || true
+            grep -iE -B1 -A4 "${any_severity_re}|${any_severity_bold}|${affirmative_prose_re}" "${findings_file}" | head -80 || true
             exit 1
           fi
 

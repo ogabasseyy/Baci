@@ -1,0 +1,23 @@
+import { useCommerce } from '@baci/experience-sdk';
+import { useState } from 'react';
+export default function Store({ route, catalog }) {
+  const commerce = useCommerce();
+  const [n, setN] = useState(0);
+  return (
+    <main>
+      <h1>Synthetic rollback current</h1>
+      <p>{route.canonicalPath}</p>
+      <p>{catalog.products[0].name}</p>
+      <button onClick={() => setN(n + 1)}>Count {n}</button>
+      <nav>
+        {['/', '/collections/all', '/products/device', '/pages/story'].map(
+          (path) => (
+            <button key={path} onClick={() => commerce.navigation.go(path)}>
+              {path}
+            </button>
+          )
+        )}
+      </nav>
+    </main>
+  );
+}

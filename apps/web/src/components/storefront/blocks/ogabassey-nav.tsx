@@ -19,10 +19,10 @@ export interface OgabasseyNavProps {
 export function OgabasseyNav({
   links = [
     { label: 'Home', url: '/' },
-    { label: 'Smart phones', url: '/category/smart-phones' },
-    { label: 'Laptops', url: '/category/laptops' },
-    { label: 'Accessories', url: '/category/accessories' },
-    { label: 'Gaming', url: '/category/gaming' },
+    { label: 'Smart phones', url: '/smartphones' },
+    { label: 'Laptops', url: '/laptops' },
+    { label: 'Accessories', url: '/accessories' },
+    { label: 'Gaming', url: '/gaming' },
     { label: 'About Us', url: '/about' },
     { label: 'Pay In Installments', url: '/pages/installments' },
     { label: 'Sell or Swap Device', url: '/swap' },

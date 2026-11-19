@@ -92,6 +92,9 @@ describe('fetchMerchantBySlug', () => {
 
     const selectArg = merchantsHandler.select.mock.calls[0]?.[0] as string;
     expect(selectArg).toContain('support_email');
+    expect(selectArg).not.toContain('merchant_feature_settings(*)');
+    expect(selectArg).not.toContain('custom_settings');
+    expect(selectArg).toContain('twitter_event_ids');
     expect(selectArg).not.toContain('custom_domain');
     expect(selectArg).not.toContain('legal_entity_name');
     expect(selectArg).not.toContain('registered_address');

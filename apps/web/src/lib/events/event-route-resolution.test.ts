@@ -59,7 +59,7 @@ describe('resolveEventRoute', () => {
         })
       )
     ).toEqual({
-      destinations: ['facebook', 'tiktok', 'ga4', 'snapchat', 'chatgpt'],
+      destinations: ['facebook', 'tiktok', 'ga4', 'snapchat', 'chatgpt', 'x'],
       kind: 'route',
     });
   });
@@ -139,4 +139,10 @@ describe('resolveEventRoute', () => {
       kind: 'dead_letter',
     });
   });
+});
+
+it('treats explicit empty observation targets as no route rather than defaulting to all platforms', () => {
+  expect(
+    resolveEventRoute(event({ data: { event_data: { targets: [] } } }))
+  ).toEqual({ destinations: [], kind: 'no_route' });
 });

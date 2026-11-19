@@ -5,7 +5,8 @@ import { configure as configureReactNativeTestingLibrary } from '@testing-librar
 import React, { type ReactNode } from 'react';
 import { ScrollView, View } from 'react-native';
 
-// The suite runs single-process (`jest --runInBand`, 560+ files). Late files
+// The suite runs on two Jest workers (`maxWorkers` in jest.config.js, 1,800+
+// files), so each worker still works through hundreds of files. Late files
 // execute under accumulated memory/GC pressure that can stall a resolved-promise
 // microtask past React Native Testing Library's 1s default `asyncUtilTimeout`,
 // intermittently timing out `waitFor` assertions (e.g. use-checkout-savings)
@@ -90,6 +91,8 @@ jest.mock('expo-haptics', () => ({
 jest.mock('expo-router', () => ({
   usePathname: jest.fn(() => '/'),
   useIsFocused: jest.fn(() => false),
+  useNavigation: jest.fn(() => ({ addListener: jest.fn(() => jest.fn()) })),
+  useFocusEffect: jest.fn(),
   useRouter: jest.fn(() => ({
     push: jest.fn(),
     replace: jest.fn(),

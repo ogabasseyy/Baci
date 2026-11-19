@@ -2,6 +2,7 @@
 set -euo pipefail
 
 operation="${1:-}"
+release_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 case "$operation" in
   configure-gradle-home)
@@ -30,6 +31,37 @@ case "$operation" in
       ln -s "$HERMESC_SRC" "$HERMESC_DST"
       chmod +x "$HERMESC_DST/linux64-bin/hermesc" 2>/dev/null || true
     fi
+    # GitHub renamed the Hermes archive's root from facebook-hermes-* to
+    # meta-hermes-*. RN 0.86 only strips the former, leaving CMakeLists.txt
+    # one directory too deep. Keep accepting both archive names.
+    HERMES_GRADLE="$GITHUB_WORKSPACE/node_modules/react-native/ReactAndroid/hermes-engine/build.gradle.kts"
+    node - "$HERMES_GRADLE" <<'NODE'
+const fs = require('node:fs');
+const file = process.argv[2];
+const original = 'if (this.path.startsWith("facebook-hermes-")) {';
+const updated = 'if (this.path.startsWith("facebook-hermes-") || this.path.startsWith("meta-hermes-")) {';
+const content = fs.readFileSync(file, 'utf8');
+const count = (text) => content.split(text).length - 1;
+if (count(updated) === 1 && count(original) === 0) process.exit(0);
+if (count(original) !== 1 || count(updated) !== 0) {
+  throw new Error('Unexpected Hermes archive extraction rule');
+}
+// Replace the file atomically: pnpm may hard-link dependency files to its
+// shared store, which must not be modified by this release-only workaround.
+const temporary = `${file}.${process.pid}.tmp`;
+let wroteTemporary = false;
+try {
+  fs.writeFileSync(temporary, content.replace(original, updated), {
+    mode: fs.statSync(file).mode & 0o777,
+    flag: 'wx',
+  });
+  wroteTemporary = true;
+  fs.renameSync(temporary, file);
+  wroteTemporary = false;
+} finally {
+  if (wroteTemporary) fs.rmSync(temporary, { force: true });
+}
+NODE
     ;;
   link-cmdline-tools-latest)
     SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/.android/sdk}}"
@@ -114,6 +146,14 @@ case "$operation" in
     GRADLE_ARGS="$GRADLE_TASKS -x lint -x lintVitalAnalyzeRelease -x test --configure-on-demand --build-cache --max-workers=2 --no-daemon --stacktrace"
     # shellcheck disable=SC2086
     ./gradlew $GRADLE_ARGS
+    if [ "$operation" = build ]; then
+      release_bundle="app/build/outputs/bundle/release/app-release.aab"
+      if [ ! -f "$release_bundle" ]; then
+        echo "::error::Expected the release bundle at $release_bundle after app:bundleRelease" >&2
+        exit 1
+      fi
+      node "$release_script_dir/android-native-library-check.mjs" "$release_bundle"
+    fi
     ;;
   upload-guard)
     CURRENT_MAIN_SHA="$(git ls-remote origin refs/heads/main | cut -f1)"

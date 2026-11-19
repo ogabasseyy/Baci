@@ -105,17 +105,16 @@ BEGIN
     (v_c3, v_m2, 'intent-claim-c3@example.com');
 
   INSERT INTO public.vtu_transactions (
-    id, merchant_id, customer_id, type, network_provider,
-    phone_number, amount, request_reference
+    id, merchant_id, customer_id, type, network_provider, phone_number, amount, request_reference, metadata
   )
   VALUES
-    (v_t1, v_m1, v_c1, 'airtime', 'mtn', '08030000001', 500, 'INTENT-CLAIM-001'),
-    (v_t2, v_m1, v_c1, 'airtime', 'mtn', '08030000001', 500, 'INTENT-CLAIM-002'),
-    (v_t5, v_m1, v_c1, 'airtime', 'mtn', '08030000002', 500, 'INTENT-CLAIM-005'),
-    (v_t6, v_m1, v_c1, 'airtime', 'mtn', '08030000002', 500, 'INTENT-CLAIM-006'),
-    (v_t7, v_m1, v_c1, 'airtime', 'mtn', '08030000002', 500, 'INTENT-CLAIM-007'),
-    (v_t8, v_m1, v_c1, 'airtime', 'mtn', '08030000003', 700, 'INTENT-CLAIM-008'),
-    (v_t9, v_m1, v_c2, 'airtime', 'mtn', '08030000001', 500, 'INTENT-CLAIM-009');
+    (v_t1, v_m1, v_c1, 'airtime', 'mtn', '08030000001', 500, 'INTENT-CLAIM-001', '{"paymentSplit":{"wallet":500,"card":0}}'::jsonb),
+    (v_t2, v_m1, v_c1, 'airtime', 'mtn', '08030000001', 500, 'INTENT-CLAIM-002', '{"paymentSplit":{"wallet":500,"card":0}}'::jsonb),
+    (v_t5, v_m1, v_c1, 'airtime', 'mtn', '08030000002', 500, 'INTENT-CLAIM-005', '{"paymentSplit":{"wallet":500,"card":0}}'::jsonb),
+    (v_t6, v_m1, v_c1, 'airtime', 'mtn', '08030000002', 500, 'INTENT-CLAIM-006', '{"paymentSplit":{"wallet":500,"card":0}}'::jsonb),
+    (v_t7, v_m1, v_c1, 'airtime', 'mtn', '08030000002', 500, 'INTENT-CLAIM-007', '{"paymentSplit":{"wallet":500,"card":0}}'::jsonb),
+    (v_t8, v_m1, v_c1, 'airtime', 'mtn', '08030000003', 700, 'INTENT-CLAIM-008', '{"paymentSplit":{"wallet":700,"card":0}}'::jsonb),
+    (v_t9, v_m1, v_c2, 'airtime', 'mtn', '08030000001', 500, 'INTENT-CLAIM-009', '{"paymentSplit":{"wallet":500,"card":0}}'::jsonb);
 
   -- 1. First claim for a scope records the mapping.
   SELECT * INTO v_claim
@@ -163,13 +162,10 @@ BEGIN
   -- admission is post-dated instead (equivalent ordering).
   UPDATE public.vtu_transactions SET status = 'successful' WHERE id = v_t1;
   INSERT INTO public.vtu_transactions (
-    id, merchant_id, customer_id, type, network_provider,
-    phone_number, amount, request_reference, created_at
+    id, merchant_id, customer_id, type, network_provider, phone_number, amount, request_reference, created_at, metadata
   )
-  VALUES (
-    v_t3, v_m1, v_c1, 'airtime', 'mtn', '08030000001', 500,
-    'INTENT-CLAIM-003', now() + interval '1 hour'
-  );
+  VALUES
+    (v_t3, v_m1, v_c1, 'airtime', 'mtn', '08030000001', 500, 'INTENT-CLAIM-003', now() + interval '1 hour', '{"paymentSplit":{"wallet":500,"card":0}}'::jsonb);
   SELECT * INTO v_claim
   FROM public.claim_vtu_intent(v_k3, 'fp-airtime-500', v_t3, v_m1, v_c1, now() + interval '1 hour', '{}');
   IF v_claim.created IS DISTINCT FROM true
@@ -183,13 +179,10 @@ BEGIN
   -- failure loop — failures rotate keys).
   UPDATE public.vtu_transactions SET status = 'failed' WHERE id = v_t3;
   INSERT INTO public.vtu_transactions (
-    id, merchant_id, customer_id, type, network_provider,
-    phone_number, amount, request_reference, created_at
+    id, merchant_id, customer_id, type, network_provider, phone_number, amount, request_reference, created_at, metadata
   )
-  VALUES (
-    v_t4, v_m1, v_c1, 'airtime', 'mtn', '08030000001', 500,
-    'INTENT-CLAIM-004', now() + interval '1 hour'
-  );
+  VALUES
+    (v_t4, v_m1, v_c1, 'airtime', 'mtn', '08030000001', 500, 'INTENT-CLAIM-004', now() + interval '1 hour', '{"paymentSplit":{"wallet":500,"card":0}}'::jsonb);
   SELECT * INTO v_claim
   FROM public.claim_vtu_intent(v_k4, 'fp-airtime-500', v_t4, v_m1, v_c1, now() + interval '1 hour', '{}');
   IF v_claim.created IS DISTINCT FROM true
@@ -259,12 +252,10 @@ BEGIN
 
   -- 9. Same fingerprint under another merchant is independent too.
   INSERT INTO public.vtu_transactions (
-    id, merchant_id, customer_id, type, network_provider,
-    phone_number, amount, request_reference
-  ) VALUES (
-    'c3c3c3c3-0000-4000-8000-000000000010', v_m2, v_c3, 'airtime',
-    'mtn', '08030000001', 500, 'INTENT-CLAIM-010'
-  );
+    id, merchant_id, customer_id, type, network_provider, phone_number, amount, request_reference, metadata
+  )
+  VALUES
+    ('c3c3c3c3-0000-4000-8000-000000000010', v_m2, v_c3, 'airtime', 'mtn', '08030000001', 500, 'INTENT-CLAIM-010', '{"paymentSplit":{"wallet":500,"card":0}}'::jsonb);
   SELECT * INTO v_claim
   FROM public.claim_vtu_intent(
     v_k9, 'fp-airtime-500',
@@ -286,15 +277,19 @@ BEGIN
     RAISE EXCEPTION 'Spent key must replay (t1/k1), got %', v_claim;
   END IF;
 
-  -- 11. Non-service_role callers are forbidden (in-body gate).
+  -- 11. Callers without a JWT identity are forbidden (in-body
+  -- gate, which runs before any scope logic). Phase 2 (#3694):
+  -- authenticated callers WITH a uid pass the gate and prove scope
+  -- ownership instead (claim_scope_mismatch on foreign scopes —
+  -- see vtu_checkout_write_rpcs.sql C1-C3).
   BEGIN
     PERFORM pg_catalog.set_config(
       'request.jwt.claim.role', 'authenticated', true
     );
     PERFORM public.claim_vtu_intent(v_k2, 'fp-gated', v_t2, v_m1, v_c1, now(), '{}');
-    RAISE EXCEPTION 'Expected forbidden for authenticated role';
+    RAISE EXCEPTION 'Expected forbidden without JWT identity';
   EXCEPTION WHEN OTHERS THEN
-    IF SQLERRM NOT LIKE '%requires service_role%' THEN
+    IF SQLERRM NOT LIKE '%requires authentication%' THEN
       RAISE;
     END IF;
   END;
@@ -302,13 +297,15 @@ BEGIN
     'request.jwt.claim.role', 'service_role', true
   );
 
-  -- 12. Grants: service_role may execute; authenticated may not.
-  IF pg_catalog.has_function_privilege(
+  -- 12. Grants: service_role and authenticated may execute (Phase 2
+  -- grants authenticated; ownership is enforced in-body); anon may
+  -- not.
+  IF NOT pg_catalog.has_function_privilege(
     'authenticated',
     'public.claim_vtu_intent(uuid, text, uuid, uuid, uuid, timestamptz, uuid[])',
     'EXECUTE'
   ) THEN
-    RAISE EXCEPTION 'authenticated must not have EXECUTE on claim_vtu_intent';
+    RAISE EXCEPTION 'authenticated must have EXECUTE on claim_vtu_intent';
   END IF;
   IF NOT pg_catalog.has_function_privilege(
     'service_role',
@@ -323,21 +320,15 @@ BEGIN
   -- concurrent duplicate delayed in preparation must not debit
   -- twice). The claimant admission is explicitly pre-dated.
   INSERT INTO public.vtu_transactions (
-    id, merchant_id, customer_id, type, network_provider,
-    phone_number, amount, request_reference
+    id, merchant_id, customer_id, type, network_provider, phone_number, amount, request_reference, metadata
   )
-  VALUES (
-    v_t10, v_m1, v_c1, 'airtime', 'mtn', '08030000004', 500,
-    'INTENT-CLAIM-011'
-  );
+  VALUES
+    (v_t10, v_m1, v_c1, 'airtime', 'mtn', '08030000004', 500, 'INTENT-CLAIM-011', '{"paymentSplit":{"wallet":500,"card":0}}'::jsonb);
   INSERT INTO public.vtu_transactions (
-    id, merchant_id, customer_id, type, network_provider,
-    phone_number, amount, request_reference, created_at
+    id, merchant_id, customer_id, type, network_provider, phone_number, amount, request_reference, created_at, metadata
   )
-  VALUES (
-    v_t11, v_m1, v_c1, 'airtime', 'mtn', '08030000004', 500,
-    'INTENT-CLAIM-012', now() - interval '1 hour'
-  );
+  VALUES
+    (v_t11, v_m1, v_c1, 'airtime', 'mtn', '08030000004', 500, 'INTENT-CLAIM-012', now() - interval '1 hour', '{"paymentSplit":{"wallet":500,"card":0}}'::jsonb);
   SELECT * INTO v_claim
   FROM public.claim_vtu_intent(v_k10, 'fp-overlap', v_t10, v_m1, v_c1, now(), '{}');
   IF v_claim.created IS DISTINCT FROM true THEN
@@ -376,29 +367,20 @@ BEGIN
   -- keep the T1 < prepare < T2 ordering deterministic under the
   -- frozen single-xact clock.
   INSERT INTO public.vtu_transactions (
-    id, merchant_id, customer_id, type, network_provider,
-    phone_number, amount, request_reference, status,
-    created_at, updated_at, terminal_at
+    id, merchant_id, customer_id, type, network_provider, phone_number, amount, request_reference, status, created_at, updated_at, terminal_at, metadata
   )
-  VALUES (
-    v_t12, v_m1, v_c1, 'airtime', 'mtn', '08030000005', 500,
-    'INTENT-CLAIM-013', 'successful',
-    '2026-10-01 00:00:00+00', '2026-10-20 04:00:00+00',
-    '2026-10-19 12:00:00+00'
-  );
+  VALUES
+    (v_t12, v_m1, v_c1, 'airtime', 'mtn', '08030000005', 500, 'INTENT-CLAIM-013', 'successful', '2026-10-01 00:00:00+00', '2026-10-20 04:00:00+00', '2026-10-19 12:00:00+00', '{"paymentSplit":{"wallet":500,"card":0}}'::jsonb);
   SELECT * INTO v_claim
   FROM public.claim_vtu_intent(v_k12, 'fp-touch', v_t12, v_m1, v_c1, now(), '{}');
   IF v_claim.created IS DISTINCT FROM true THEN
     RAISE EXCEPTION 'Touch setup claim must create, got %', v_claim;
   END IF;
   INSERT INTO public.vtu_transactions (
-    id, merchant_id, customer_id, type, network_provider,
-    phone_number, amount, request_reference, created_at
+    id, merchant_id, customer_id, type, network_provider, phone_number, amount, request_reference, created_at, metadata
   )
-  VALUES (
-    v_t13, v_m1, v_c1, 'airtime', 'mtn', '08030000005', 500,
-    'INTENT-CLAIM-014', '2026-10-19 18:00:00+00'
-  );
+  VALUES
+    (v_t13, v_m1, v_c1, 'airtime', 'mtn', '08030000005', 500, 'INTENT-CLAIM-014', '2026-10-19 18:00:00+00', '{"paymentSplit":{"wallet":500,"card":0}}'::jsonb);
   SELECT * INTO v_claim
   FROM public.claim_vtu_intent(v_k13, 'fp-touch', v_t13, v_m1, v_c1, '2026-10-19 18:00:00+00', '{}');
   IF v_claim.created IS DISTINCT FROM true
@@ -435,13 +417,10 @@ BEGIN
   -- preparation delays its row past terminalization (a row-time
   -- fence would misread the terminal as stale and double-debit).
   INSERT INTO public.vtu_transactions (
-    id, merchant_id, customer_id, type, network_provider,
-    phone_number, amount, request_reference
+    id, merchant_id, customer_id, type, network_provider, phone_number, amount, request_reference, metadata
   )
-  VALUES (
-    v_t14, v_m1, v_c1, 'airtime', 'mtn', '08030000006', 500,
-    'INTENT-CLAIM-015'
-  );
+  VALUES
+    (v_t14, v_m1, v_c1, 'airtime', 'mtn', '08030000006', 500, 'INTENT-CLAIM-015', '{"paymentSplit":{"wallet":500,"card":0}}'::jsonb);
   SELECT * INTO v_claim
   FROM public.claim_vtu_intent(v_k14, 'fp-admit', v_t14, v_m1, v_c1, now(), '{}');
   IF v_claim.created IS DISTINCT FROM true THEN
@@ -451,13 +430,10 @@ BEGIN
   -- Row inserted AFTER the settle (slow preparation), operation
   -- admitted BEFORE it: must join.
   INSERT INTO public.vtu_transactions (
-    id, merchant_id, customer_id, type, network_provider,
-    phone_number, amount, request_reference, created_at
+    id, merchant_id, customer_id, type, network_provider, phone_number, amount, request_reference, created_at, metadata
   )
-  VALUES (
-    v_t15, v_m1, v_c1, 'airtime', 'mtn', '08030000006', 500,
-    'INTENT-CLAIM-016', now() + interval '1 hour'
-  );
+  VALUES
+    (v_t15, v_m1, v_c1, 'airtime', 'mtn', '08030000006', 500, 'INTENT-CLAIM-016', now() + interval '1 hour', '{"paymentSplit":{"wallet":500,"card":0}}'::jsonb);
   SELECT * INTO v_claim
   FROM public.claim_vtu_intent(
     v_k15, 'fp-admit', v_t15, v_m1, v_c1, now() - interval '1 hour', '{}'
@@ -475,15 +451,10 @@ BEGIN
   -- across the fence — even when a post-migration touch makes
   -- updated_at newer than the claiming admission.
   INSERT INTO public.vtu_transactions (
-    id, merchant_id, customer_id, type, network_provider,
-    phone_number, amount, request_reference, status,
-    created_at, updated_at, terminal_at
+    id, merchant_id, customer_id, type, network_provider, phone_number, amount, request_reference, status, created_at, updated_at, terminal_at, metadata
   )
-  VALUES (
-    v_t16, v_m1, v_c1, 'airtime', 'mtn', '08030000007', 500,
-    'INTENT-CLAIM-017', 'successful',
-    '2026-09-01 00:00:00+00', '2026-10-20 04:00:00+00', NULL
-  );
+  VALUES
+    (v_t16, v_m1, v_c1, 'airtime', 'mtn', '08030000007', 500, 'INTENT-CLAIM-017', 'successful', '2026-09-01 00:00:00+00', '2026-10-20 04:00:00+00', NULL, '{"paymentSplit":{"wallet":500,"card":0}}'::jsonb);
   SELECT * INTO v_claim
   FROM public.claim_vtu_intent(
     v_k16, 'fp-legacy', v_t16, v_m1, v_c1, '2026-10-20 03:00:00+00', '{}'
@@ -492,13 +463,10 @@ BEGIN
     RAISE EXCEPTION 'Legacy setup claim must create, got %', v_claim;
   END IF;
   INSERT INTO public.vtu_transactions (
-    id, merchant_id, customer_id, type, network_provider,
-    phone_number, amount, request_reference, created_at
+    id, merchant_id, customer_id, type, network_provider, phone_number, amount, request_reference, created_at, metadata
   )
-  VALUES (
-    v_t17, v_m1, v_c1, 'airtime', 'mtn', '08030000007', 500,
-    'INTENT-CLAIM-018', '2026-10-20 03:30:00+00'
-  );
+  VALUES
+    (v_t17, v_m1, v_c1, 'airtime', 'mtn', '08030000007', 500, 'INTENT-CLAIM-018', '2026-10-20 03:30:00+00', '{"paymentSplit":{"wallet":500,"card":0}}'::jsonb);
   SELECT * INTO v_claim
   FROM public.claim_vtu_intent(
     v_k17, 'fp-legacy', v_t17, v_m1, v_c1, '2026-10-20 03:30:00+00', '{}'
@@ -533,13 +501,10 @@ BEGIN
   -- alone would exclude it and debit twice. Candidates live at
   -- admission join (same-operation overlap, stamp irrelevant).
   INSERT INTO public.vtu_transactions (
-    id, merchant_id, customer_id, type, network_provider,
-    phone_number, amount, request_reference
+    id, merchant_id, customer_id, type, network_provider, phone_number, amount, request_reference, metadata
   )
-  VALUES (
-    v_t18, v_m1, v_c1, 'airtime', 'mtn', '08030000008', 500,
-    'INTENT-CLAIM-019'
-  );
+  VALUES
+    (v_t18, v_m1, v_c1, 'airtime', 'mtn', '08030000008', 500, 'INTENT-CLAIM-019', '{"paymentSplit":{"wallet":500,"card":0}}'::jsonb);
   SELECT * INTO v_claim
   FROM public.claim_vtu_intent(
     v_k18, 'fp-live', v_t18, v_m1, v_c1, '2026-10-20 02:30:00+00', '{}'
@@ -555,13 +520,10 @@ BEGIN
   SET terminal_at = '2026-10-20 02:00:00+00'
   WHERE id = v_t18;
   INSERT INTO public.vtu_transactions (
-    id, merchant_id, customer_id, type, network_provider,
-    phone_number, amount, request_reference
+    id, merchant_id, customer_id, type, network_provider, phone_number, amount, request_reference, metadata
   )
-  VALUES (
-    v_t19, v_m1, v_c1, 'airtime', 'mtn', '08030000008', 500,
-    'INTENT-CLAIM-020'
-  );
+  VALUES
+    (v_t19, v_m1, v_c1, 'airtime', 'mtn', '08030000008', 500, 'INTENT-CLAIM-020', '{"paymentSplit":{"wallet":500,"card":0}}'::jsonb);
   SELECT * INTO v_claim
   FROM public.claim_vtu_intent(
     v_k19, 'fp-live', v_t19, v_m1, v_c1, '2026-10-20 03:00:00+00',
@@ -578,16 +540,10 @@ BEGIN
   -- ABSENT from the live set stays excluded — the snapshot hit
   -- must not over-join genuine repeats.
   INSERT INTO public.vtu_transactions (
-    id, merchant_id, customer_id, type, network_provider,
-    phone_number, amount, request_reference, status,
-    created_at, updated_at, terminal_at
+    id, merchant_id, customer_id, type, network_provider, phone_number, amount, request_reference, status, created_at, updated_at, terminal_at, metadata
   )
-  VALUES (
-    v_t20, v_m1, v_c1, 'airtime', 'mtn', '08030000009', 500,
-    'INTENT-CLAIM-021', 'successful',
-    '2026-09-02 00:00:00+00', '2026-09-02 00:00:00+00',
-    '2026-09-02 00:00:00+00'
-  );
+  VALUES
+    (v_t20, v_m1, v_c1, 'airtime', 'mtn', '08030000009', 500, 'INTENT-CLAIM-021', 'successful', '2026-09-02 00:00:00+00', '2026-09-02 00:00:00+00', '2026-09-02 00:00:00+00', '{"paymentSplit":{"wallet":500,"card":0}}'::jsonb);
   SELECT * INTO v_claim
   FROM public.claim_vtu_intent(
     v_k20, 'fp-stale20', v_t20, v_m1, v_c1, '2026-09-02 00:00:00+00', '{}'
@@ -596,13 +552,10 @@ BEGIN
     RAISE EXCEPTION 'Stale setup claim must create, got %', v_claim;
   END IF;
   INSERT INTO public.vtu_transactions (
-    id, merchant_id, customer_id, type, network_provider,
-    phone_number, amount, request_reference
+    id, merchant_id, customer_id, type, network_provider, phone_number, amount, request_reference, metadata
   )
-  VALUES (
-    v_t21, v_m1, v_c1, 'airtime', 'mtn', '08030000009', 500,
-    'INTENT-CLAIM-022'
-  );
+  VALUES
+    (v_t21, v_m1, v_c1, 'airtime', 'mtn', '08030000009', 500, 'INTENT-CLAIM-022', '{"paymentSplit":{"wallet":500,"card":0}}'::jsonb);
   SELECT * INTO v_claim
   FROM public.claim_vtu_intent(
     v_k21, 'fp-stale20', v_t21, v_m1, v_c1, '2026-10-20 03:00:00+00', '{}'
@@ -636,13 +589,10 @@ BEGIN
   -- resolve like the route; unknown slugs yield an empty set
   -- with the stamp (downstream guards reject them as today).
   INSERT INTO public.vtu_transactions (
-    id, merchant_id, customer_id, type, network_provider,
-    phone_number, amount, request_reference
+    id, merchant_id, customer_id, type, network_provider, phone_number, amount, request_reference, metadata
   )
-  VALUES (
-    v_t22, v_m1, v_c1, 'airtime', 'mtn', '08030000010', 500,
-    'INTENT-CLAIM-023'
-  );
+  VALUES
+    (v_t22, v_m1, v_c1, 'airtime', 'mtn', '08030000010', 500, 'INTENT-CLAIM-023', '{"paymentSplit":{"wallet":500,"card":0}}'::jsonb);
   SELECT * INTO v_claim
   FROM public.claim_vtu_intent(
     v_k22, 'fp-proof', v_t22, v_m1, v_c1, now(), '{}'
@@ -695,6 +645,15 @@ BEGIN
     OR coalesce(cardinality(v_proof.live_transaction_ids), -1) <> 0
   THEN
     RAISE EXCEPTION 'Proof on unknown slug must stamp an empty set, got %', v_proof;
+  END IF;
+  -- Phase 2 (#3694): anon must not execute the claim (in-body
+  -- ownership gate is authenticated-or-service_role only).
+  IF pg_catalog.has_function_privilege(
+    'anon',
+    'public.claim_vtu_intent(uuid, text, uuid, uuid, uuid, timestamptz, uuid[])',
+    'EXECUTE'
+  ) THEN
+    RAISE EXCEPTION 'anon must not have EXECUTE on claim_vtu_intent';
   END IF;
 END;
 $test$;

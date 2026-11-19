@@ -3,7 +3,18 @@
 // (EXDevLauncher undefined) for any suite that imports app code using
 // Crypto without registering its own factory mock. Test files with an
 // explicit jest.mock('expo-crypto', factory) keep their factory.
-const { createHash, randomBytes, randomUUID } = require('node:crypto');
+const { createHash, randomBytes } = require('node:crypto');
+
+// Deterministic UUID sequence: repo rules prohibit random test
+// data, and app code generates UUIDs internally (operation ids,
+// cart client credentials). Counter-based v4 values stay distinct
+// per call yet reproducible on every machine. Suites with an
+// explicit jest.mock('expo-crypto', factory) keep their factory.
+let deterministicUuidCounter = 0;
+function randomUUID() {
+  const suffix = (deterministicUuidCounter++).toString(16).padStart(12, '0');
+  return `00000000-0000-4000-8000-${suffix}`;
+}
 
 // MD2/MD4 are intentionally not advertised: Node's crypto cannot
 // compute them, so advertising them would promise digests this mock

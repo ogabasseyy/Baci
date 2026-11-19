@@ -57,6 +57,7 @@ function toProductIndexCardModel(
     compare_at_price: null,
     condition: product.condition,
     stock: product.stock,
+    manage_stock: product.manage_stock ?? false,
     rating: 0,
     availability: product.availability,
     product_key_specs: product.product_key_specs ?? null,
@@ -93,7 +94,10 @@ export function BrandAuthorityPageContent({
             <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
               {page.heading}
             </h1>
-            <p className="max-w-3xl text-base leading-7 text-store-background-text/70 sm:text-lg">
+            <p
+              className="max-w-3xl text-base leading-7 text-store-background-text/70 sm:text-lg"
+              data-cwv-lcp-copy="authority-hub"
+            >
               {page.intro}
             </p>
             <a

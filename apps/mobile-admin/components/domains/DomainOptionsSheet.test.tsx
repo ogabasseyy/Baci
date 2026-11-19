@@ -1,190 +1,274 @@
 import '@testing-library/jest-dom/vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
-import type { ReactNode } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import DomainOptionsSheet from './DomainOptionsSheet';
-import type { Domain } from './domain-types';
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from '@testing-library/react';
+import { Suspense, startTransition } from 'react';
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 
-const mocks = vi.hoisted(() => ({
-  interactionCallback: null as null | (() => void),
-}));
-
-vi.mock('@/hooks/useTheme', () => ({
-  useTheme: () => ({
-    colors: {
-      background: '#ffffff',
-      border: '#e2e8f0',
-      card: '#f8fafc',
-      error: '#dc2626',
-      errorLight: '#fee2e2',
-      primary: '#2563eb',
-      primaryLight: '#dbeafe',
-      success: '#16a34a',
-      successLight: '#dcfce7',
-      text: '#0f172a',
-      textMuted: '#64748b',
-      textSecondary: '#334155',
-      warning: '#ca8a04',
-      warningLight: '#fef9c3',
-    },
-    shadows: {
-      lg: {},
-    },
-  }),
-}));
-
-vi.mock('@react-native-vector-icons/ionicons', () => ({
-  Ionicons: ({ name }: { name?: string }) => (
-    <span aria-hidden="true" data-icon={name} />
-  ),
-
-  default: ({ name }: { name?: string }) => (
-    <span aria-hidden="true" data-icon={name} />
-  ),
-  __esModule: true,
-}));
-
-vi.mock('react-native-reanimated', () => {
-  const MockAnimatedView = ({ children }: { children?: ReactNode }) => (
-    <div>{children}</div>
-  );
-
-  return {
-    default: {
-      View: MockAnimatedView,
-    },
-    FadeIn: {},
-    FadeOut: {},
-    SlideInDown: {},
-    SlideOutDown: {},
-  };
+let DomainOptionsSheet: typeof import('./DomainOptionsSheet').default;
+beforeAll(async () => {
+  DomainOptionsSheet = (await import('./DomainOptionsSheet')).default;
 });
 
-vi.mock('react-native', () => ({
-  InteractionManager: {
-    runAfterInteractions: (callback: () => void) => {
-      mocks.interactionCallback = callback;
-      return {
-        cancel: () => {
-          mocks.interactionCallback = null;
-        },
-      };
-    },
-  },
-  Modal: ({
-    children,
-    visible,
-  }: {
-    children?: ReactNode;
-    visible?: boolean;
-  }) => (visible ? <div>{children}</div> : null),
-  Pressable: ({
-    accessibilityLabel,
-    children,
-    onPress,
-    style,
-  }: {
-    accessibilityLabel?: string;
-    children?: ReactNode;
-    onPress?: () => void;
-    style?: unknown;
-  }) => {
-    const resolvedStyle =
-      typeof style === 'function' ? style({ pressed: false }) : style;
-    return (
-      <button
-        type="button"
-        aria-label={accessibilityLabel}
-        data-has-style={Boolean(resolvedStyle)}
-        onClick={() => onPress?.()}
-      >
-        {children}
-      </button>
-    );
-  },
-  StyleSheet: {
-    absoluteFillObject: {},
-    create: (styles: Record<string, unknown>) => styles,
-  },
-  StatusBar: () => null,
-  Text: ({ children }: { children?: ReactNode }) => <span>{children}</span>,
-  View: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
-}));
+import { baseDomain, mocks } from './domain-options-sheet.test-support';
+import type { Domain, DomainAction } from './domain-types';
 
-const baseDomain: Domain = {
-  created_at: '2026-05-01T00:00:00Z',
-  domain: 'shop.usebaci.com',
-  domain_type: 'custom',
-  id: 'domain_1',
-  is_primary: false,
-  status: 'pending',
-};
+function sheet(
+  visible: boolean,
+  onClose: () => void,
+  onAction: (action: DomainAction, domain: Domain) => void
+) {
+  return (
+    <DomainOptionsSheet
+      visible={visible}
+      domain={baseDomain}
+      onClose={onClose}
+      onAction={onAction}
+    />
+  );
+}
 
 describe('DomainOptionsSheet', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
   afterEach(() => {
-    mocks.interactionCallback = null;
+    cleanup();
+    mocks.onExit = null;
+    mocks.onDismiss = null;
+    mocks.platform.OS = 'android';
+    vi.useRealTimers();
   });
 
-  it('runs selected action only after close interactions complete', () => {
+  it('waits for the actual exit completion even after the nominal duration', () => {
     const onAction = vi.fn();
     const onClose = vi.fn();
+    const { rerender } = render(sheet(true, onClose, onAction));
+    fireEvent.click(screen.getByRole('button', { name: 'Visit Site' }));
+    rerender(sheet(false, onClose, onAction));
+    vi.advanceTimersByTime(1000);
+    expect(onAction).not.toHaveBeenCalled();
+    expect(mocks.onExit).not.toBeNull();
+    act(() => mocks.onExit?.(true));
+    act(() => vi.runAllTimers());
+    expect(onAction).toHaveBeenCalledWith('visit', baseDomain);
+  });
 
+  it('dispatches once if the post-close frame is dropped', () => {
+    let frame: FrameRequestCallback | undefined;
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      frame = callback;
+      return 7;
+    });
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+    const onAction = vi.fn();
+    const onClose = vi.fn();
+    const { rerender } = render(sheet(true, onClose, onAction));
+    fireEvent.click(screen.getByRole('button', { name: 'Visit Site' }));
+    rerender(sheet(false, onClose, onAction));
+    act(() => mocks.onExit?.(true));
+    act(() => vi.advanceTimersByTime(499));
+    expect(onAction).not.toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(1));
+    expect(onAction).toHaveBeenCalledTimes(1);
+    act(() => frame?.(0));
+    expect(onAction).toHaveBeenCalledTimes(1);
+    vi.unstubAllGlobals();
+  });
+
+  it('on iOS waits for native modal dismissal after animation completion', () => {
+    mocks.platform.OS = 'ios';
+    const onAction = vi.fn();
+    const onClose = vi.fn();
+    const { rerender } = render(sheet(true, onClose, onAction));
+    fireEvent.click(screen.getByRole('button', { name: 'Visit Site' }));
+    rerender(sheet(false, onClose, onAction));
+    act(() => mocks.onExit?.(true));
+    act(() => vi.advanceTimersByTime(1999));
+    expect(onAction).not.toHaveBeenCalled();
+    act(() => mocks.onDismiss?.());
+    expect(onAction).toHaveBeenCalledWith('visit', baseDomain);
+    act(() => vi.advanceTimersByTime(2000));
+    expect(onAction).toHaveBeenCalledTimes(1);
+    expect(
+      screen.queryByText(
+        'The action was cancelled. Open domain options and try again.'
+      )
+    ).not.toBeInTheDocument();
+  });
+
+  it('cancels a pending action and shows recovery when iOS never reports dismissal', () => {
+    mocks.platform.OS = 'ios';
+    const onAction = vi.fn();
+    const onClose = vi.fn();
+    const { rerender } = render(sheet(true, onClose, onAction));
+    fireEvent.click(screen.getByRole('button', { name: 'Visit Site' }));
+    rerender(sheet(false, onClose, onAction));
+    act(() => mocks.onExit?.(true));
+    act(() => vi.advanceTimersByTime(2000));
+    expect(onAction).not.toHaveBeenCalled();
+    expect(
+      screen.getByText(
+        'The action was cancelled. Open domain options and try again.'
+      )
+    ).toBeInTheDocument();
+    act(() => mocks.onDismiss?.());
+    expect(onAction).not.toHaveBeenCalled();
+    rerender(sheet(true, onClose, onAction));
+    expect(
+      screen.queryByText(
+        'The action was cancelled. Open domain options and try again.'
+      )
+    ).not.toBeInTheDocument();
+  });
+
+  it.each([
+    'android',
+    'ios',
+  ])('cancels the action and removes the modal after a cancelled exit on %s', (platform) => {
+    mocks.platform.OS = platform;
+    const onAction = vi.fn();
+    const onClose = vi.fn();
+    const { rerender } = render(sheet(true, onClose, onAction));
+    fireEvent.click(screen.getByRole('button', { name: 'Visit Site' }));
+    rerender(sheet(false, onClose, onAction));
+    act(() => mocks.onExit?.(false));
+    act(() => vi.runAllTimers());
+    expect(onAction).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole('button', { name: 'Close options' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'The action was cancelled. Open domain options and try again.'
+      )
+    ).toBeInTheDocument();
+  });
+
+  it('does not strand an action after a suspended close render is discarded', () => {
+    const onAction = vi.fn();
+    const onClose = vi.fn();
+    const never = new Promise<never>(() => {});
+    const Suspend = () => {
+      throw never;
+    };
+    const { rerender } = render(
+      <Suspense fallback={null}>{sheet(true, onClose, onAction)}</Suspense>
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Visit Site' }));
+    const committedExit = mocks.onExit;
+    act(() => {
+      startTransition(() =>
+        rerender(
+          <Suspense fallback={null}>
+            {sheet(false, onClose, onAction)}
+            <Suspend />
+          </Suspense>
+        )
+      );
+    });
+    rerender(
+      <Suspense fallback={null}>{sheet(false, onClose, onAction)}</Suspense>
+    );
+    act(() => committedExit?.(true));
+    act(() => vi.runAllTimers());
+    expect(onAction).toHaveBeenCalledWith('visit', baseDomain);
+  });
+
+  it('uses the latest callback when the parent rerenders during closing', () => {
+    const first = vi.fn();
+    const latest = vi.fn();
+    const onClose = vi.fn();
     const { rerender } = render(
       <DomainOptionsSheet
         visible
         domain={baseDomain}
         onClose={onClose}
-        onAction={onAction}
+        onAction={first}
       />
     );
-
     fireEvent.click(screen.getByRole('button', { name: 'Visit Site' }));
-    expect(onClose).toHaveBeenCalledTimes(1);
-    expect(onAction).not.toHaveBeenCalled();
-
     rerender(
       <DomainOptionsSheet
         visible={false}
         domain={baseDomain}
         onClose={onClose}
-        onAction={onAction}
+        onAction={first}
       />
     );
+    rerender(
+      <DomainOptionsSheet
+        visible={false}
+        domain={baseDomain}
+        onClose={onClose}
+        onAction={latest}
+      />
+    );
+    act(() => mocks.onExit?.(true));
+    act(() => vi.runAllTimers());
+    expect(first).not.toHaveBeenCalled();
+    expect(latest).toHaveBeenCalledWith('visit', baseDomain);
+  });
 
-    expect(mocks.interactionCallback).not.toBeNull();
-    mocks.interactionCallback?.();
-
-    expect(onAction).toHaveBeenCalledWith('visit', baseDomain);
+  it('ignores a pending action after unmount even if its callback runs late', () => {
+    const onAction = vi.fn();
+    const onClose = vi.fn();
+    const { rerender, unmount } = render(sheet(true, onClose, onAction));
+    fireEvent.click(screen.getByRole('button', { name: 'Visit Site' }));
+    rerender(sheet(false, onClose, onAction));
+    const late = mocks.onExit;
+    unmount();
+    act(() => late?.(true));
+    act(() => vi.runAllTimers());
+    expect(onAction).not.toHaveBeenCalled();
   });
 
   it('keeps only the last selected action when multiple actions are tapped before close applies', () => {
     const onAction = vi.fn();
     const onClose = vi.fn();
 
-    const { rerender } = render(
-      <DomainOptionsSheet
-        visible
-        domain={baseDomain}
-        onClose={onClose}
-        onAction={onAction}
-      />
-    );
+    const { rerender } = render(sheet(true, onClose, onAction));
 
     fireEvent.click(screen.getByRole('button', { name: 'Visit Site' }));
     fireEvent.click(screen.getByRole('button', { name: 'Delete Domain' }));
     expect(onClose).toHaveBeenCalledTimes(2);
 
-    rerender(
-      <DomainOptionsSheet
-        visible={false}
-        domain={baseDomain}
-        onClose={onClose}
-        onAction={onAction}
-      />
-    );
+    rerender(sheet(false, onClose, onAction));
 
-    mocks.interactionCallback?.();
+    act(() => mocks.onExit?.(true));
+    act(() => vi.runAllTimers());
     expect(onAction).toHaveBeenCalledTimes(1);
+    expect(onAction).toHaveBeenCalledWith('delete', baseDomain);
+  });
+
+  it('ignores a prior exit callback after reopening and closing again', () => {
+    const onAction = vi.fn();
+    const onClose = vi.fn();
+    const { rerender } = render(sheet(true, onClose, onAction));
+    fireEvent.click(screen.getByRole('button', { name: 'Visit Site' }));
+    const firstExit = mocks.onExit;
+    rerender(sheet(false, onClose, onAction));
+    rerender(sheet(true, onClose, onAction));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Domain' }));
+    const secondExit = mocks.onExit;
+    rerender(sheet(false, onClose, onAction));
+    act(() => firstExit?.(true));
+    act(() => vi.runAllTimers());
+    expect(onAction).not.toHaveBeenCalled();
+    act(() => secondExit?.(true));
+    act(() => vi.runAllTimers());
     expect(onAction).toHaveBeenCalledWith('delete', baseDomain);
   });
 
@@ -192,45 +276,18 @@ describe('DomainOptionsSheet', () => {
     const onAction = vi.fn();
     const onClose = vi.fn();
 
-    const { rerender } = render(
-      <DomainOptionsSheet
-        visible
-        domain={baseDomain}
-        onClose={onClose}
-        onAction={onAction}
-      />
-    );
+    const { rerender } = render(sheet(true, onClose, onAction));
 
     fireEvent.click(screen.getByRole('button', { name: 'Visit Site' }));
 
-    rerender(
-      <DomainOptionsSheet
-        visible={false}
-        domain={baseDomain}
-        onClose={onClose}
-        onAction={onAction}
-      />
-    );
+    rerender(sheet(false, onClose, onAction));
 
-    rerender(
-      <DomainOptionsSheet
-        visible
-        domain={baseDomain}
-        onClose={onClose}
-        onAction={onAction}
-      />
-    );
+    rerender(sheet(true, onClose, onAction));
 
-    rerender(
-      <DomainOptionsSheet
-        visible={false}
-        domain={baseDomain}
-        onClose={onClose}
-        onAction={onAction}
-      />
-    );
+    rerender(sheet(false, onClose, onAction));
 
-    expect(mocks.interactionCallback).toBeNull();
+    act(() => mocks.onExit?.(true));
+    act(() => vi.runAllTimers());
     expect(onAction).not.toHaveBeenCalled();
   });
 });

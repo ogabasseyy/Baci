@@ -69,19 +69,23 @@ describe('chargeDueCustomerSavingsGoals processing', () => {
 
         return createChain({ data: null, error: null });
       }),
-      rpc: vi.fn().mockResolvedValue({
-        data: [
-          {
-            contribution_id: 'contribution-1',
-            goal_current_amount: '120000',
-            goal_status: 'active',
-            success: true,
-            wallet_balance: '0',
-            wallet_transaction_id: 'wallet-debit-1',
-          },
-        ],
-        error: null,
-      }),
+      rpc: vi.fn(async (name: string) =>
+        name === 'savings_goal_ids_bound_to_primary'
+          ? { data: [], error: null }
+          : {
+              data: [
+                {
+                  contribution_id: 'contribution-1',
+                  goal_current_amount: '120000',
+                  goal_status: 'active',
+                  success: true,
+                  wallet_balance: '0',
+                  wallet_transaction_id: 'wallet-debit-1',
+                },
+              ],
+              error: null,
+            }
+      ),
     };
     const chargeAuthorizationFn = vi.fn().mockResolvedValue({
       data: {
@@ -225,29 +229,38 @@ describe('chargeDueCustomerSavingsGoals processing', () => {
     };
     const creditWalletTopUpFn = vi.fn();
 
-    await expect(
-      chargeDueCustomerSavingsGoals({
-        chargeAuthorizationFn: vi.fn().mockResolvedValue({
-          data: {
-            amount: 2_000_000,
-            currency: 'NGN',
-            gateway_response: 'Approved',
-            message: null,
-            reference: 'SVG-111111111111-2026-05-21',
-            status: 'success',
-          },
-          success: true,
-        }),
-        creditWalletTopUpFn,
-        loadSavedPaymentMethodFn: vi.fn().mockResolvedValue({
-          authorization_code: 'AUTH_saved',
-          provider_customer_email: 'jane@example.com',
-        }),
-        now: new Date('2026-05-21T07:30:00.000Z'),
-        supabase: supabase as unknown as SavingsAutoDebitDatabaseClient,
-      })
-    ).rejects.toThrow('Failed to update savings auto-debit transaction txn-1');
+    const result = await chargeDueCustomerSavingsGoals({
+      chargeAuthorizationFn: vi.fn().mockResolvedValue({
+        data: {
+          amount: 2_000_000,
+          currency: 'NGN',
+          gateway_response: 'Approved',
+          message: null,
+          reference: 'SVG-111111111111-2026-05-21',
+          status: 'success',
+        },
+        success: true,
+      }),
+      creditWalletTopUpFn,
+      loadSavedPaymentMethodFn: vi.fn().mockResolvedValue({
+        authorization_code: 'AUTH_saved',
+        provider_customer_email: 'jane@example.com',
+      }),
+      now: new Date('2026-05-21T07:30:00.000Z'),
+      supabase: supabase as unknown as SavingsAutoDebitDatabaseClient,
+    });
+    // One goal's failure is isolated and reported, never thrown.
+    expect(result).toMatchObject({ failed: 1, processed: 0 });
+    expect(result.results[0]).toMatchObject({
+      status: 'failed',
+      reason: expect.stringContaining(
+        'Failed to update savings auto-debit transaction txn-1'
+      ),
+    });
     expect(creditWalletTopUpFn).not.toHaveBeenCalled();
-    expect(supabase.rpc).not.toHaveBeenCalled();
+    expect(supabase.rpc).not.toHaveBeenCalledWith(
+      'allocate_customer_savings_contribution',
+      expect.anything()
+    );
   });
 });

@@ -7,6 +7,8 @@ import { ShipOnCreditDialog } from '@/components/orders/ShipOnCreditDialog';
 import { ReceiptPreviewModal } from '@/components/ui/ReceiptPreviewModal';
 import { SuccessModal } from '@/components/ui/SuccessModal';
 import type { useOrderDetailsController } from '@/hooks/useOrderDetailsController';
+import { useOrderDetailsGiglExternalWaybill } from '@/hooks/useOrderDetailsGiglExternalWaybill';
+import { getCheckoutGiglPaidShippingFee } from '@/lib/order-checkout-gigl-paid-fee';
 
 type OrderDetailsController = ReturnType<typeof useOrderDetailsController>;
 
@@ -31,6 +33,15 @@ export function OrderDetailsScreenModals({
   controller,
   order,
 }: OrderDetailsScreenModalsProps) {
+  const checkoutPaidShippingFee = getCheckoutGiglPaidShippingFee(order);
+  const externalWaybill = useOrderDetailsGiglExternalWaybill({
+    closeShipmentFlow: controller.closeShipmentFlow,
+    fulfillmentDetails: controller.fulfillmentDetails,
+    orderId: order.id,
+    orderNumber: order.order_number,
+    runAfterShipmentFlowDismissed: controller.runAfterShipmentFlowDismissed,
+    setSuccessModal: controller.setSuccessModal,
+  });
   return (
     <>
       <OrderStatusSheet
@@ -54,6 +65,12 @@ export function OrderDetailsScreenModals({
       <ShipmentFlowSheet
         recoveryOrder={order}
         canUseProvider={controller.providerBookingAvailable}
+        checkoutPaidShippingLabel={
+          checkoutPaidShippingFee === null
+            ? null
+            : controller.formatPrice(checkoutPaidShippingFee)
+        }
+        externalWaybill={externalWaybill}
         fulfillmentDetails={controller.fulfillmentDetails}
         fulfillmentItemIndex={controller.fulfillmentItemIndex}
         giglShipping={controller.giglShipping}
@@ -65,14 +82,19 @@ export function OrderDetailsScreenModals({
             )
         )}
         isSubmitting={controller.isShipmentSubmitting}
-        onClose={controller.closeShipmentFlow}
+        onClose={() => {
+          externalWaybill?.reset();
+          controller.closeShipmentFlow();
+        }}
         onContinueFromDetails={controller.proceedFromFulfillmentDetails}
         onContinueFromMethod={controller.proceedFromShipmentMethod}
         onConfirmSelfFulfillment={() =>
           void controller.handleSubmitSelfFulfillment()
         }
+        onDismissed={controller.handleShipmentFlowDismissed}
         onFulfillmentDetailsChange={controller.updateFulfillmentDetails}
         onModeChange={controller.setPendingShipmentMode}
+        onPresented={() => controller.setShowStatusModal(false)}
         onRiderPhoneChange={controller.setRiderPhone}
         onSelectSavedRider={controller.setRiderPhone}
         onStepBack={controller.handleShipmentFlowBack}

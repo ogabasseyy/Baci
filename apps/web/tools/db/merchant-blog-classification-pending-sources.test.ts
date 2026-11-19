@@ -3,6 +3,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { EXPECTED_PENDING_SOURCES } from './expected-pending-sources.test-support';
+import { replaySqlCheckRegistry } from './replay-sql-check-registry';
 import { supabaseHistoryReplayManifest } from './supabase-history-replay-manifest';
 
 describe('merchant classification migration replay registration', () => {
@@ -13,7 +14,15 @@ describe('merchant classification migration replay registration', () => {
       'utf8'
     );
     expect(workflow).toContain(
-      '--sql-check supabase/tests/merchant_blog_classification_schema_contract.sql'
+      '--sql-check-registry apps/web/tools/db/replay-registry'
+    );
+    expect(
+      replaySqlCheckRegistry.readSuites(
+        root,
+        'apps/web/tools/db/replay-registry'
+      )
+    ).toContain(
+      'supabase/tests/merchant_blog_classification_schema_contract.sql'
     );
     expect(workflow).toContain(
       'run: bash supabase/tests/run-merchant-blog-classification.sh'

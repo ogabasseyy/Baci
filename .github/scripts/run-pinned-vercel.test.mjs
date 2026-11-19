@@ -11,6 +11,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import YAML from 'yaml';
 
 const scriptPath = new URL('run-pinned-vercel.sh', import.meta.url);
 
@@ -45,6 +46,10 @@ cat > "$cli_dir/node_modules/.bin/vercel" <<'VERCEL'
 #!/usr/bin/env bash
 set -euo pipefail
 echo "fake vercel $*"
+if [ "\${TURBO_LOG_ORDER+x}" = x ]; then
+  printf 'log order %s\\n' "$TURBO_LOG_ORDER"
+fi
+exit "\${FAKE_VERCEL_EXIT:-0}"
 VERCEL
 chmod +x "$cli_dir/node_modules/.bin/vercel"
 `,
@@ -54,7 +59,7 @@ chmod +x "$cli_dir/node_modules/.bin/vercel"
   return { binDir, callsFile, runnerTemp, tempDir };
 }
 
-function runScript(runtime, args = ['pull', '--yes']) {
+function runScript(runtime, args = ['pull', '--yes'], env = {}) {
   return spawnSync(scriptPath.pathname, args, {
     cwd: runtime.tempDir,
     env: {
@@ -62,6 +67,7 @@ function runScript(runtime, args = ['pull', '--yes']) {
       PATH: `${runtime.binDir}:${process.env.PATH ?? ''}`,
       RUNNER_TEMP: runtime.runnerTemp,
       VERCEL_CLI_VERSION: '52.0.0',
+      ...env,
     },
     encoding: 'utf8',
   });
@@ -92,6 +98,32 @@ test('installs pinned Vercel CLI into runner temp without pnpm dlx', () => {
     rmSync(runtime.tempDir, { recursive: true, force: true });
   }
 });
+
+for (const exitCode of [0, 42]) {
+  test(`streams production build logs and preserves CLI exit ${exitCode}`, () => {
+    const workflow = YAML.parse(
+      readFileSync(new URL('../workflows/deploy.yml', import.meta.url), 'utf8')
+    );
+    const job = workflow.jobs['deploy-production'];
+    const step = job.steps.find((item) => item.name === 'Build for Vercel');
+    assert.equal(step.env?.TURBO_LOG_ORDER, 'stream');
+    assert.equal(step.run, '.github/scripts/run-pinned-vercel.sh build --yes --prod');
+    assert.equal(step['continue-on-error'], undefined);
+    assert.equal(job['runs-on'], 'baci-deploy');
+    const runtime = makeFakeRuntime();
+    try {
+      const result = runScript(runtime, ['build', '--yes', '--prod'], {
+        ...step.env,
+        FAKE_VERCEL_EXIT: String(exitCode),
+      });
+      assert.equal(result.status, exitCode, result.stderr);
+      assert.match(result.stdout, /fake vercel build --yes --prod/);
+      assert.match(result.stdout, /log order stream/);
+    } finally {
+      rmSync(runtime.tempDir, { recursive: true, force: true });
+    }
+  });
+}
 
 test('reuses the installed CLI for later invocations in the same runner temp', () => {
   const runtime = makeFakeRuntime();

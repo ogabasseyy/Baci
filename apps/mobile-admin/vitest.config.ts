@@ -1,7 +1,8 @@
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
+import { NODE_PROJECT_TEST_GLOB } from './vitest.node-project-tests';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -10,7 +11,15 @@ const require = createRequire(import.meta.url);
 function resolveTestingLibraryReactPath() {
   // Use the package entry instead of an internal dist path to avoid brittle resolution.
   try {
-    return require.resolve('@testing-library/react');
+    // ESM lets Vite apply the app's React aliases. CJS require() would load
+    // the testing library's separate hoisted peer and trigger invalid hooks.
+    const packageJsonPath = require.resolve(
+      '@testing-library/react/package.json'
+    );
+    const metadata = require(packageJsonPath) as { module?: string };
+    if (!metadata.module)
+      throw new Error('Testing Library must publish an ESM entry');
+    return path.resolve(path.dirname(packageJsonPath), metadata.module);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(
@@ -20,23 +29,22 @@ function resolveTestingLibraryReactPath() {
 }
 
 const testingLibraryReactPath = resolveTestingLibraryReactPath();
-const testingLibraryRoot = path.dirname(
-  require.resolve('@testing-library/react/package.json')
+const reactPath = require.resolve('react');
+const reactJsxRuntimePath = require.resolve('react/jsx-runtime');
+const reactJsxDevRuntimePath = require.resolve('react/jsx-dev-runtime');
+const reactDomPath = require.resolve('react-dom');
+const reactDomClientPath = require.resolve('react-dom/client');
+const reactDomTestUtilsPath = require.resolve('react-dom/test-utils');
+const reactNativeWebPackagePath = require.resolve(
+  'react-native-web/package.json'
 );
-const testingLibraryRequire = createRequire(
-  path.join(testingLibraryRoot, 'package.json')
+const reactNativeWebMetadata = require(reactNativeWebPackagePath) as {
+  module: string;
+};
+const reactNativeWebPath = path.resolve(
+  path.dirname(reactNativeWebPackagePath),
+  reactNativeWebMetadata.module
 );
-const reactPath = testingLibraryRequire.resolve('react');
-const reactJsxRuntimePath = testingLibraryRequire.resolve('react/jsx-runtime');
-const reactJsxDevRuntimePath = testingLibraryRequire.resolve(
-  'react/jsx-dev-runtime'
-);
-const reactDomPath = testingLibraryRequire.resolve('react-dom');
-const reactDomClientPath = testingLibraryRequire.resolve('react-dom/client');
-const reactDomTestUtilsPath = testingLibraryRequire.resolve(
-  'react-dom/test-utils'
-);
-const reactNativeWebPath = require.resolve('react-native-web');
 const reactNativePhoneInputMockPath = path.resolve(
   __dirname,
   'test/mocks/react-native-phone-number-input.tsx'
@@ -82,7 +90,10 @@ export default defineConfig({
           '../../packages/shared/src/index.ts'
         ),
       },
-      { find: '@testing-library/react', replacement: testingLibraryReactPath },
+      {
+        find: /^@testing-library\/react$/,
+        replacement: testingLibraryReactPath,
+      },
       { find: /^react$/, replacement: reactPath },
       { find: /^react\/jsx-runtime$/, replacement: reactJsxRuntimePath },
       { find: /^react\/jsx-dev-runtime$/, replacement: reactJsxDevRuntimePath },
@@ -99,7 +110,7 @@ export default defineConfig({
         replacement: reactNativeGooglePlacesMockPath,
       },
       {
-        find: /^@react-native-vector-icons\/(ionicons|fontawesome|feather)\/static$/,
+        find: /^@react-native-vector-icons\/(ionicons|fontawesome|feather)(\/static)?$/,
         replacement: reactNativeVectorIconMockPath,
       },
     ],
@@ -115,7 +126,6 @@ export default defineConfig({
     ],
   },
   test: {
-    environment: 'jsdom',
     globals: true,
     // Keep the Expo/jsdom suite from exhausting fork startup capacity when
     // Turborepo runs package tests concurrently.
@@ -133,5 +143,32 @@ export default defineConfig({
         external: [/expo-linear-gradient/, /react-native\//],
       },
     },
+    // The projects share everything above (`extends: true`); only the
+    // environment and the files differ. Every test file belongs to exactly one
+    // project, chosen by its extension:
+    //  - `jsdom`: `.tsx` and `.jsx` tests (React components).
+    //  - `node`: plain `.ts` and `.js` tests. Creating a jsdom environment took
+    //    most of this suite's worker time, so such a test only gets one when its
+    //    first line says `// @vitest-environment jsdom`. A new one that touches
+    //    `window` or `document` without that line fails with a ReferenceError.
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: 'jsdom',
+          environment: 'jsdom',
+          exclude: [...configDefaults.exclude, NODE_PROJECT_TEST_GLOB],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: 'node',
+          environment: 'node',
+          include: [NODE_PROJECT_TEST_GLOB],
+          exclude: configDefaults.exclude,
+        },
+      },
+    ],
   },
 });

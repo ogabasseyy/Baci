@@ -1,8 +1,31 @@
 import 'server-only';
+import { piggyvestInterestPayoutWalletIdSchema } from '@/schemas/piggyvest-primary-wallet-onboarding';
 import { piggyvestPrimaryWalletRuntimeSchema } from '@/schemas/piggyvest-primary-wallet-runtime';
+import { isPiggyvestFeatureOn } from './piggyvest-feature-on';
 
 export function readPrimaryWalletRuntime(env: NodeJS.ProcessEnv = process.env) {
   return parseRuntime(env, false);
+}
+
+/**
+ * Onboarding reader: the base runtime plus the Ogabassey wallet that
+ * receives main-wallet interest (server-only, never sent to a client).
+ * PiggyVest fixes interest settings at customer creation, so a missing or
+ * malformed id makes onboarding not ready instead of creating a main wallet
+ * that can never be routed. Reads, savings, drain and the GET recheck of
+ * routing-pending wallets (which compares against the payout wallet stored
+ * at creation) never depend on it.
+ */
+export function readPrimaryWalletOnboardingRuntime(
+  env: NodeJS.ProcessEnv = process.env
+) {
+  const runtime = parseRuntime(env, false);
+  const payout = piggyvestInterestPayoutWalletIdSchema.safeParse(
+    env.PIGGYVEST_PRIMARY_INTEREST_PAYOUT_WALLET_ID
+  );
+  return runtime && payout.success
+    ? { runtime, interestPayoutWalletId: payout.data }
+    : null;
 }
 
 /**
@@ -13,6 +36,12 @@ export function readPrimaryWalletRuntime(env: NodeJS.ProcessEnv = process.env) {
  * Only the flag is bypassed; environment binding, credentials, and schema
  * still fail closed, and the reader carries no dispatch handle — callers
  * must only perform lookups with it, never reserve or dispatch.
+ *
+ * The one narrow emergency exception is cancel-to-main of a savings goal: it
+ * returns the customer's own money to their main wallet, so neither this
+ * reader's flag bypass nor the master kill switch ever blocks it. Its only
+ * off switch is PIGGYVEST_GOAL_CANCEL_DISABLED, which refuses NEW cancels
+ * while status, settlement and reconciliation of dispatched cancels continue.
  */
 export function readPrimaryWalletRuntimeDrain(
   env: NodeJS.ProcessEnv = process.env
@@ -21,7 +50,7 @@ export function readPrimaryWalletRuntimeDrain(
 }
 
 function parseRuntime(env: NodeJS.ProcessEnv, drain: boolean) {
-  if (!drain && env.PIGGYVEST_PRIMARY_ENABLED !== 'true') return null;
+  if (!drain && !isPiggyvestFeatureOn('wallet', env)) return null;
   const environment = env.PIGGYVEST_PRIMARY_ENVIRONMENT;
   if (
     (env.VERCEL_ENV === 'production' && environment !== 'production') ||

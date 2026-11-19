@@ -1,12 +1,10 @@
 import { createHash } from 'node:crypto';
-import type { ImeiDeviceCategory } from '@baci/shared/imei';
 import type { SupabaseClient, User } from '@supabase/supabase-js';
 import { parseSickwResponse } from '@/app/api/storefront/imei-check/sickw-parser';
 import type { ImeiCheckResult } from '@/app/api/storefront/imei-check/sickw-parser.types';
-import { getDeviceImage } from '@/lib/device-images';
-import type { createAdminClient } from '@/lib/supabase/admin';
-import { isInsufficientWalletBalanceError } from '@/lib/vtu-fulfillment';
-import { resolveVtuCustomer } from '@/lib/vtu-pending-transaction';
+import { buildSickwLookupData } from '@/lib/imei-sickw-lookup-data';
+import { resolveVtuCustomer } from '@/lib/vtu-customer-resolution';
+import { isInsufficientWalletBalanceError } from '@/lib/wallet-balance-error';
 
 const SICKW_API_URL = 'https://sickw.com/api.php';
 const SICKW_REQUEST_TIMEOUT_MS = 15_000;
@@ -98,106 +96,9 @@ export async function readCustomerWalletBalance({
   return coerceNumber(data?.available_balance);
 }
 
-/** Requires a service-role/admin Supabase client because the RPC is privileged. */
-export async function redeemImeiWalletPayment({
-  amount,
-  customerId,
-  lookupId,
-  merchantId,
-  supabaseAdmin,
-}: {
-  amount: number;
-  customerId: string;
-  lookupId: string;
-  merchantId: string;
-  supabaseAdmin: ReturnType<typeof createAdminClient>;
-}) {
-  const { error } = await supabaseAdmin.rpc('redeem_imei_wallet_payment', {
-    p_amount: amount,
-    p_customer_id: customerId,
-    p_description: `IMEI lookup payment: ${lookupId}`,
-    p_lookup_id: lookupId,
-    p_merchant_id: merchantId,
-  });
-
-  if (error) {
-    throw error;
-  }
-}
-
-/** Atomically debits the wallet and persists a Petrock write-ahead intent. */
-export async function redeemImeiWalletAndBeginProviderSubmission({
-  amount,
-  costUsd,
-  customerId,
-  deviceCategory,
-  feedbackTokenHash,
-  identifierCiphertext,
-  lookupId,
-  merchantId,
-  providerAttemptStartedAt,
-  referenceId,
-  supabaseAdmin,
-}: {
-  amount: number;
-  costUsd: number;
-  customerId: string;
-  deviceCategory?: ImeiDeviceCategory;
-  feedbackTokenHash: string;
-  identifierCiphertext: string;
-  lookupId: string;
-  merchantId: string;
-  providerAttemptStartedAt: string;
-  referenceId: string;
-  supabaseAdmin: ReturnType<typeof createAdminClient>;
-}) {
-  const { error } = await supabaseAdmin.rpc(
-    'redeem_imei_wallet_and_begin_provider_submission',
-    {
-      p_amount: amount,
-      p_cost_usd: costUsd,
-      p_customer_id: customerId,
-      p_description: `Petrock IMEI lookup payment: ${lookupId}`,
-      p_device_category: deviceCategory ?? null,
-      p_feedback_token_hash: feedbackTokenHash,
-      p_identifier_ciphertext: identifierCiphertext,
-      p_lookup_id: lookupId,
-      p_merchant_id: merchantId,
-      p_provider: 'petrock',
-      p_provider_attempt_started_at: providerAttemptStartedAt,
-      p_reference_id: referenceId,
-    }
-  );
-
-  if (error) throw error;
-}
-
-/** Requires a service-role/admin Supabase client because the RPC is privileged. */
-export async function refundImeiWalletPayment({
-  amount,
-  customerId,
-  lookupId,
-  merchantId,
-  supabaseAdmin,
-}: {
-  amount: number;
-  customerId: string;
-  lookupId: string;
-  merchantId: string;
-  supabaseAdmin: ReturnType<typeof createAdminClient>;
-}) {
-  const { error } = await supabaseAdmin.rpc('refund_imei_wallet_payment', {
-    p_amount: amount,
-    p_customer_id: customerId,
-    p_description: `IMEI lookup refund: ${lookupId}`,
-    p_lookup_id: lookupId,
-    p_merchant_id: merchantId,
-  });
-
-  if (error) {
-    throw error;
-  }
-}
+export { redeemImeiWalletAndBeginProviderSubmission } from './redeem-imei-wallet-and-begin-provider-submission';
+export { redeemImeiWalletPayment } from './redeem-imei-wallet-payment';
+export { refundImeiWalletPayment } from './refund-imei-wallet-payment';
 
 export { isInsufficientWalletBalanceError };
 
@@ -257,49 +158,7 @@ export async function requestSickwCheck({
 
   const resultText = normalizeResult(payload.result ?? payload.data ?? payload);
   const parsed = parseSickwResponse(resultText);
-  const device = parsed.device || '';
-  const result: ImeiCheckResult = {
-    imei,
-    device: device || 'Unknown Device',
-    modelNumber: parsed.modelNumber || '',
-    status: parsed.status || 'Unknown',
-    icloud: parsed.icloud || 'Unknown',
-    icloudLock: parsed.icloudLock || 'Unknown',
-    simLock: parsed.simLock || 'Unknown',
-    blacklistStatus: parsed.blacklistStatus || 'Unknown',
-    carrier: parsed.carrier || 'Unknown',
-    deviceImage: getDeviceImage(device),
-    score: parsed.score || 50,
-    activationStatus: parsed.activationStatus,
-    serialNumber: parsed.serialNumber,
-    purchaseDate: parsed.purchaseDate,
-    purchaseCountry: parsed.purchaseCountry,
-    warranty: parsed.warranty,
-    refurbished: parsed.refurbished,
-    demoUnit: parsed.demoUnit,
-    mdmStatus: parsed.mdmStatus,
-    knoxGuardStatus: parsed.knoxGuardStatus,
-    miLockStatus: parsed.miLockStatus,
-    miLostStatus: parsed.miLostStatus,
-    partNumber: parsed.partNumber,
-    repairEligibility: parsed.repairEligibility,
-    gsxCoverage: parsed.gsxCoverage,
-    repairHistory: parsed.repairHistory,
-    replacementHistory: parsed.replacementHistory,
-    esimCompatibility: parsed.esimCompatibility,
-    financeStatus: parsed.financeStatus,
-    knoxEnrollment: parsed.knoxEnrollment,
-    soldBy: parsed.soldBy,
-    wifiMac: parsed.wifiMac,
-    devicePhoto: parsed.devicePhoto,
-    deviceType: parsed.deviceType || 'other',
-    verdict: parsed.verdict || 'Unable to determine device status.',
-    verdictType: parsed.verdictType || 'caution',
-    rawResponse:
-      process.env.NODE_ENV === 'development'
-        ? JSON.stringify(payload)
-        : undefined,
-  };
+  const result = buildSickwLookupData(imei, parsed, payload);
 
   return {
     body: {

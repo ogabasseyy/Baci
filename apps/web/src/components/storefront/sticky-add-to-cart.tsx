@@ -181,6 +181,8 @@ export function StickyAddToCart({
 
   return (
     <div
+      data-sticky-cart-visible={isVisible}
+      inert={!isVisible}
       className={cn(
         'fixed bottom-0 left-0 right-0 z-50 md:hidden',
         'transform transition-transform duration-300 ease-in-out',
@@ -194,7 +196,7 @@ export function StickyAddToCart({
         onClick={scrollToTop}
         className={cn(
           'absolute -top-12 right-4 w-10 h-10 rounded-full',
-          'bg-white shadow-lg border flex items-center justify-center',
+          'bg-store-background text-store-background-text shadow-lg border flex items-center justify-center',
           'transition-opacity duration-200',
           isVisible ? 'opacity-100' : 'opacity-0'
         )}
@@ -204,7 +206,7 @@ export function StickyAddToCart({
       </button>
 
       {/* Sticky bar */}
-      <div className="bg-white border-t shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] safe-area-bottom">
+      <div className="bg-store-background text-store-background-text border-t shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] safe-area-bottom">
         <div className="container px-4 py-3">
           <div className="flex items-center justify-between gap-3">
             {/* Product Info */}

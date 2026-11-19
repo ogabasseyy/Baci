@@ -1,5 +1,6 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { useRef } from 'react';
+import type { TextInputInstance } from 'react-native';
 import {
   ActivityIndicator,
   Pressable,
@@ -39,8 +40,8 @@ export function AddressCard({
   onOpenStatePicker,
   onSave,
 }: AddressCardProps) {
-  const cityRef = useRef<TextInput>(null);
-  const postalCodeRef = useRef<TextInput>(null);
+  const cityRef = useRef<TextInputInstance>(null);
+  const postalCodeRef = useRef<TextInputInstance>(null);
 
   return (
     <View style={[styles.card, { backgroundColor: colors.card }, shadowStyle]}>

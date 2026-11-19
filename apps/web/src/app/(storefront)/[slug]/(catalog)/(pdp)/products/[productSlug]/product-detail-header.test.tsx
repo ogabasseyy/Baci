@@ -50,3 +50,25 @@ describe('ProductDetailHeader', () => {
     expect(screen.queryByText('NGN40000')).toBeNull();
   });
 });
+
+it('keeps the price and title on the surface foreground rather than a dark brand fill', () => {
+  render(
+    <ProductDetailHeader
+      product={
+        {
+          name: 'UBA REDVAULT payment test',
+          description: 'Test only',
+        } as Product
+      }
+      currentPrice={100}
+      currentCompareAtPrice={null}
+      formatCurrency={(value) => `₦${value}`}
+    />
+  );
+  expect(screen.getByText('₦100').style.color).toBe(
+    'var(--store-background-text)'
+  );
+  expect(screen.getByRole('heading').style.color).toBe(
+    'var(--store-background-text)'
+  );
+});

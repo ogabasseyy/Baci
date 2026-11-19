@@ -77,7 +77,6 @@ export default function ProductDetailClient({
   const handleAddToCart = useProductCartSubmission({
     product,
     merchant,
-    currencyCode,
     currentVariantSelection,
     selectedOffer,
     selectedCondition,
@@ -132,7 +131,7 @@ export default function ProductDetailClient({
   // Main render
   return (
     <>
-      <div className="flex flex-col min-h-screen">
+      <div className="flex flex-col min-h-screen bg-store-background text-store-background-text">
         {/* Main Content - Layout provided by Global OgabasseyLayout */}
         <main
           id="main-content"

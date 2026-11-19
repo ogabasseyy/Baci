@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { asRoute } from '@/lib/routes';
 import { cn } from '@/lib/utils';
+import styles from './cookie-consent.module.css';
 import { useCookieConsentController } from './use-cookie-consent-controller';
 
 export { isCookieAllowed } from './is-cookie-allowed';
@@ -33,22 +34,43 @@ export function CookieConsent() {
   return (
     <div
       className={cn(
-        'fixed bottom-4 left-4 right-4 z-50 md:left-1/2 md:right-auto md:-translate-x-1/2 md:max-w-5xl w-full',
+        styles.banner,
         isClosing
           ? 'animate-out fade-out slide-out-to-bottom-4 duration-200'
           : 'animate-in slide-in-from-bottom-4 duration-500',
         'will-change-transform'
       )}
       style={{
+        // Keep the delayed prompt out of document flow even before route CSS.
+        position: 'fixed',
+        bottom: '1rem',
+        left: 'max(1rem, calc((100% - 32rem) / 2))',
+        right: 'max(1rem, calc((100% - 32rem) / 2))',
+        width: 'auto',
+        // Below the cart drawer (z-60), above the mobile footer (z-40):
+        // an open drawer must not be covered by the consent prompt.
+        zIndex: 50,
         contain: 'layout style paint',
       }}
+      data-storefront-cookie-consent
       role="dialog"
       aria-label="Cookie consent"
     >
       <div
+        style={{
+          background:
+            'var(--store-background, hsl(var(--background, 0 0% 100%)))',
+          color:
+            'var(--store-background-text, hsl(var(--foreground, 240 10% 3.9%)))',
+          border:
+            '1px solid var(--store-border, hsl(var(--border, 240 5.9% 90%)))',
+          borderRadius: '1rem',
+          padding: '1rem',
+        }}
         className={cn(
+          styles.panel,
           'bg-background/95 backdrop-blur-xl border border-border/50 shadow-2xl rounded-2xl p-4',
-          'transition-all duration-300 ease-in-out'
+          'transition-[opacity,transform] duration-300 ease-in-out'
         )}
       >
         {hasStorageError && (
@@ -58,34 +80,39 @@ export function CookieConsent() {
           </p>
         )}
         {!showDetails ? (
-          // Simple View - Horizontal Floating Bar
-          <div className="flex flex-col md:flex-row items-center gap-4 md:gap-6">
-            <div className="flex items-center gap-4 flex-1 w-full md:w-auto">
+          // Compact prompt
+          <div
+            className={cn(styles.content, 'flex flex-col items-start gap-3')}
+          >
+            <div className="flex w-full items-start gap-3">
               <div className="hidden sm:flex items-center justify-center size-10 rounded-full bg-primary/10 shrink-0">
                 <Cookie className="size-5 text-primary" />
               </div>
 
               <div className="flex-1 space-y-1">
                 <h3 className="font-semibold text-sm">We value your privacy</h3>
-                <p className="text-sm text-muted-foreground leading-snug">
-                  We use cookies to improve your experience. By using our store,
-                  you agree to our{' '}
-                  <Link
-                    href={asRoute(`${basePath}/privacy`)}
-                    className="underline underline-offset-4 hover:text-white"
-                  >
-                    Read our policy
-                  </Link>
-                </p>
+                <div className="space-y-1 text-sm text-muted-foreground leading-snug">
+                  <p>We use cookies to improve your experience.</p>
+                  <p>
+                    Optional cookies are up to you.{' '}
+                    <Link
+                      href={asRoute(`${basePath}/privacy`)}
+                      prefetch={false}
+                      className="underline underline-offset-4 hover:text-foreground"
+                    >
+                      Read our policy
+                    </Link>
+                  </p>
+                </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 w-full md:w-auto justify-end flex-wrap">
+            <div className="flex w-full flex-wrap items-center justify-end gap-2">
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => setShowDetails(true)}
-                className="text-muted-foreground hover:text-foreground h-9"
+                className="text-muted-foreground hover:text-foreground min-h-11"
                 type="button"
               >
                 Customize
@@ -94,7 +121,7 @@ export function CookieConsent() {
                 variant="outline"
                 size="sm"
                 onClick={acceptNecessary}
-                className="h-9"
+                className="min-h-11"
               >
                 Necessary Only
               </Button>
@@ -102,7 +129,7 @@ export function CookieConsent() {
                 colorRole="primary"
                 size="sm"
                 onClick={acceptAll}
-                className="h-9 px-6 shadow-sm"
+                className="min-h-11 px-6 shadow-sm"
               >
                 Accept All
               </ThemedButton>
@@ -127,7 +154,7 @@ export function CookieConsent() {
               <button
                 type="button"
                 onClick={() => setShowDetails(false)}
-                className="text-muted-foreground hover:text-foreground p-1 rounded-md hover:bg-muted"
+                className="inline-flex min-h-11 min-w-11 items-center justify-center text-muted-foreground hover:text-foreground p-1 rounded-md hover:bg-muted"
                 aria-label="Close details"
               >
                 <X className="size-5" />
@@ -236,7 +263,7 @@ export function CookieConsent() {
                 variant="ghost"
                 size="sm"
                 onClick={() => setShowDetails(false)}
-                className="text-muted-foreground h-9"
+                className="text-muted-foreground min-h-11"
               >
                 Cancel
               </Button>
@@ -244,7 +271,7 @@ export function CookieConsent() {
                 colorRole="primary"
                 size="sm"
                 onClick={savePreferences}
-                className="h-9 px-6"
+                className="min-h-11 px-6"
               >
                 Save Preferences
               </ThemedButton>

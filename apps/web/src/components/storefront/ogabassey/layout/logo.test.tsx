@@ -22,4 +22,11 @@ describe('Logo', () => {
     expect(svg.getAttribute('height')).toBe('24');
     expect(svg.outerHTML).toContain('#000');
   });
+
+  it('supports color="current" to inherit the themed foreground fill', () => {
+    render(<Logo height={24} color="current" />);
+
+    const svg = screen.getByRole('img', { name: 'Ogabassey Logo' });
+    expect(svg.outerHTML).toContain('currentColor');
+  });
 });

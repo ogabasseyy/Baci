@@ -46,12 +46,20 @@ vi.mock('next/image', () => ({
     const imageSrc = String(src);
     const resolvedSrc =
       typeof loader === 'function'
-        ? loader({ src: imageSrc, width: Number(width), quality: Number(quality) })
+        ? loader({
+            src: imageSrc,
+            width: Number(width),
+            quality: Number(quality),
+          })
         : imageSrc;
+    const candidate = (w: number) =>
+      typeof loader === 'function'
+        ? `${loader({ src: imageSrc, width: w, quality: Number(quality) })} ${w}w`
+        : `${imageSrc}?w=${w} ${w}w`;
     return {
       props: {
         src: resolvedSrc,
-        srcSet: `${resolvedSrc} ${String(width)}w`,
+        srcSet: `${candidate(Number(width))}, ${candidate(1920)}`,
         sizes,
         alt,
         loading,
@@ -109,9 +117,8 @@ describe('HeroDesktopGrid', () => {
     expect(
       screen.getByRole('region', { name: 'Featured products' })
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole('heading', { name: 'Samsung Galaxy A27 5G' })
-    ).toBeInTheDocument();
+    expect(screen.getByText('Samsung Galaxy A27 5G')).toBeInTheDocument();
+    expect(screen.queryByRole('heading')).toBeNull();
     expect(screen.getByText('₦50,000')).toBeInTheDocument();
 
     const bigLink = screen.getByRole('link', {
@@ -137,17 +144,28 @@ describe('HeroDesktopGrid', () => {
     expect(sources).toHaveLength(2);
     expect(sources?.[0]).toHaveAttribute('type', 'image/avif');
     expect(sources?.[0]?.getAttribute('srcset')).toBe(
-      'https://cdn.ogabassey.com/image/width=800,quality=70,format=avif/core-assets/products/product-1.avif 800w'
+      '/cdn-image/width=800,quality=70,format=avif/core-assets/products/product-1.avif 800w'
     );
     expect(sources?.[1]).not.toHaveAttribute('type');
     expect(sources?.[1]?.getAttribute('srcset')).toBe(
-      'https://cdn.ogabassey.com/image/width=800,quality=70,format=jpeg/core-assets/products/product-1.avif 800w'
+      '/cdn-image/width=800,quality=70,format=jpeg/core-assets/products/product-1.avif 800w'
     );
     expect(container.innerHTML).not.toContain('format=auto');
 
     const img = container.querySelector('picture img');
     expect(img).toHaveAttribute('loading', 'eager');
     expect(img).toHaveAttribute('fetchpriority', 'high');
+    expect(img).toHaveAttribute(
+      'src',
+      '/cdn-image/width=800,quality=70,format=jpeg/core-assets/products/product-1.avif'
+    );
+    const mobileMuteSource = bigPicture?.querySelector(
+      'source[media="(max-width: 767px)"]'
+    );
+    expect(mobileMuteSource).toHaveAttribute(
+      'srcset',
+      'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='
+    );
   });
 
   it('serves external desktop images with only the fallback source when no AVIF tier exists', () => {
@@ -186,12 +204,11 @@ describe('HeroDesktopGrid', () => {
       '/ogabassey/smartphones/itel-power-80-128gb-4gb'
     );
 
-    expect(
-      screen.getByRole('heading', { name: 'Itel IT2160' })
-    ).toBeInTheDocument();
+    expect(screen.getByText('Itel IT2160')).toBeInTheDocument();
+    expect(screen.queryByRole('heading')).toBeNull();
     // 4th slide must not render (big + 2 side cards only).
     expect(
-      screen.queryByRole('heading', { name: 'Should Not Render' })
+      screen.queryByText('Should Not Render')
     ).not.toBeInTheDocument();
   });
 
@@ -210,9 +227,19 @@ describe('HeroDesktopGrid', () => {
       expect(pictureSources).toHaveLength(2);
       expect(pictureSources[0]).toHaveAttribute('type', 'image/avif');
       expect(pictureSources[1]).not.toHaveAttribute('type');
+
+      const mobileMuteSource = picture.querySelector(
+        'source[media="(max-width: 767px)"]'
+      );
+      expect(mobileMuteSource).toHaveAttribute(
+        'srcset',
+        'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='
+      );
     }
 
-    const sideSources = pictures[1]?.querySelectorAll('source');
+    const sideSources = pictures[1]?.querySelectorAll(
+      'source[media="(min-width: 768px)"]'
+    );
     expect(sideSources?.[0]?.getAttribute('srcset')).toBe(
       'https://cdn.ogabassey.com/image/width=320,quality=70,format=avif/core-assets/products/product-2.avif 320w'
     );
@@ -223,7 +250,7 @@ describe('HeroDesktopGrid', () => {
     const images = Array.from(container.querySelectorAll('picture img'));
     expect(images[1]).toHaveAttribute(
       'src',
-      'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='
+      'https://cdn.ogabassey.com/image/width=320,quality=70,format=jpeg/core-assets/products/product-2.avif'
     );
     expect(images[1]).toHaveAttribute('loading', 'lazy');
   });

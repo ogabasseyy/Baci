@@ -1,5 +1,6 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { useEffect, useRef, useState } from 'react';
+import type { ViewInstance } from 'react-native';
 import {
   ActivityIndicator,
   Pressable,
@@ -63,7 +64,7 @@ export function AddressAutocomplete({
   const isMountedRef = useRef(true);
   const latestQueryRef = useRef(value);
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const wrapperRef = useRef<View>(null);
+  const wrapperRef = useRef<ViewInstance>(null);
 
   useEffect(() => {
     isMountedRef.current = true;

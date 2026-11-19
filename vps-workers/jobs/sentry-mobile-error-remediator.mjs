@@ -1,4 +1,3 @@
-import { pathToFileURL } from 'node:url';
 import { config } from 'dotenv';
 import { runRemediationJobWithGlobalLock } from '../lib/remediation-global-lock.mjs';
 import { runRemediationWorker } from '../lib/remediation-worker.mjs';
@@ -6,6 +5,7 @@ import {
   enrichSentryRemediationCandidate,
   fetchSentryRemediationCandidates,
 } from '../lib/sentry-error-events.mjs';
+import { isEntrypoint } from '../lib/is-entrypoint.mjs';
 
 export function runSentryMobileErrorRemediator({
   autofixRunner,
@@ -59,8 +59,7 @@ async function main(remediationLock) {
 }
 
 if (
-  process.argv[1] &&
-  import.meta.url === pathToFileURL(process.argv[1]).href
+  isEntrypoint(import.meta.url)
 ) {
   config({ path: new URL('../.env', import.meta.url) });
   const exitCode = await runRemediationJobWithGlobalLock({

@@ -28,15 +28,13 @@ if grep -q 'fixFindShadowNodeByTagRaceCondition()' "$UIMANAGER_SRC"; then
   echo "error: UIManager.cpp still gates ownership on the feature flag" >&2
   exit 1
 fi
-# Suite flag-off stays out of the package patch (300-line cap); apply here.
+# Legacy suites need flag-off injection; RN 0.88 owns the root unconditionally.
 python3 "$TOOL_DIR/apply-suite-flag-off.py" "$TEST_SRC"
-if ! grep -q 'Exercise the production default' "$TEST_SRC"; then
-  echo "error: FindShadowNodeByTagTest.cpp is not the flag-disabled suite" >&2
-  exit 1
-fi
-if ! grep -q 'return false;' "$TEST_SRC"; then
-  echo "error: FindShadowNodeByTagTest.cpp must force fixFindShadowNodeByTagRaceCondition() off" >&2
-  exit 1
+if grep -q 'fixFindShadowNodeByTagRaceCondition' "$TEST_SRC"; then
+  if ! grep -q 'Exercise the production default' "$TEST_SRC" || ! grep -q 'return false;' "$TEST_SRC"; then
+    echo "error: legacy ownership suite is not flag-disabled" >&2
+    exit 1
+  fi
 fi
 if ! grep -q 'ConcurrentFindAndCommitStress' "$TEST_SRC"; then
   echo "error: FindShadowNodeByTagTest.cpp is missing ConcurrentFindAndCommitStress" >&2

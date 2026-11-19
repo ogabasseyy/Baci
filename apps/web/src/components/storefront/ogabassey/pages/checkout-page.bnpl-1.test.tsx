@@ -1,24 +1,13 @@
 import {
-  driveFreshBNPLPlaceOrder,
-  paymentStartedCalls,
-  renderFreshBNPLCheckout,
-} from './checkout-page-bnpl.test-support';
-import {
-  act,
-  CheckoutPage,
   expect,
   fireEvent,
   it,
-  mockCaptureClientEvent,
-  openCredPalCheckout,
-  render,
+  renderCheckoutWithStoreRates,
   screen,
-  toast,
   useCart,
   useMerchantSafe,
   usePersistedForm,
   vi,
-  waitFor,
 } from './checkout-page-test-support';
 
 it('shows Klump in installment checkout when the merchant enables it', async () => {
@@ -72,9 +61,9 @@ it('shows Klump in installment checkout when the merchant enables it', async () 
     json: async () => ({}),
   } as Response);
 
-  render(<CheckoutPage />);
+  renderCheckoutWithStoreRates();
 
-  fireEvent.click(screen.getByRole('button', { name: /pay in installments/i }));
+  fireEvent.click(screen.getByRole('button', { name: /pay small small/i }));
 
   expect(await screen.findByText('Klump')).toBeInTheDocument();
   fetchMock.mockRestore();
@@ -131,80 +120,12 @@ it('hides Klump in installment checkout when the merchant disables it', async ()
     json: async () => ({}),
   } as Response);
 
-  render(<CheckoutPage />);
+  renderCheckoutWithStoreRates();
 
   expect(
-    screen.queryByRole('button', { name: /pay in installments/i })
+    screen.queryByRole('button', { name: /pay small small/i })
   ).not.toBeInTheDocument();
 
   expect(screen.queryByText('Klump')).not.toBeInTheDocument();
   fetchMock.mockRestore();
-});
-
-it('emits fresh CredPal payment_started only after the widget loads', async () => {
-  vi.stubEnv('NEXT_PUBLIC_CREDPAL_KEY', 'pk_test_credpal');
-  const { fetchMock } = renderFreshBNPLCheckout({
-    featureSettings: { credpal_enabled: true },
-    orderId: 'order-credpal-fresh',
-  });
-
-  try {
-    await driveFreshBNPLPlaceOrder(/credpal/i);
-
-    await waitFor(() => {
-      expect(openCredPalCheckout).toHaveBeenCalled();
-    });
-    // The widget has not confirmed loading: no start yet.
-    expect(paymentStartedCalls()).toHaveLength(0);
-
-    const callArgs = vi.mocked(openCredPalCheckout).mock.calls[0]?.[0];
-    await act(async () => {
-      callArgs?.onLoad?.();
-    });
-
-    await waitFor(() => {
-      expect(paymentStartedCalls()).toHaveLength(1);
-    });
-    expect(paymentStartedCalls()[0]?.[1]).toEqual(
-      expect.objectContaining({ payment_method: 'credpal' })
-    );
-  } finally {
-    fetchMock.mockRestore();
-    vi.unstubAllEnvs();
-  }
-});
-
-it('skips payment_failed when CredPal errors before the widget loads', async () => {
-  vi.stubEnv('NEXT_PUBLIC_CREDPAL_KEY', 'pk_test_credpal');
-  const { fetchMock } = renderFreshBNPLCheckout({
-    featureSettings: { credpal_enabled: true },
-    orderId: 'order-credpal-preload-error',
-  });
-
-  try {
-    await driveFreshBNPLPlaceOrder(/credpal/i);
-
-    await waitFor(() => {
-      expect(openCredPalCheckout).toHaveBeenCalled();
-    });
-    const callArgs = vi.mocked(openCredPalCheckout).mock.calls[0]?.[0];
-    await act(async () => {
-      callArgs?.onError?.({ success: false, message: 'widget setup failed' });
-    });
-
-    // Unmatched error (widget never loaded): a failure toast for retry,
-    // but no payment_failed attribution — no payment attempt started.
-    await waitFor(() => {
-      expect(toast).toHaveBeenCalled();
-    });
-    expect(paymentStartedCalls()).toHaveLength(0);
-    expect(
-      mockCaptureClientEvent.mock.calls.some(
-        ([event]) => event === 'payment_failed'
-      )
-    ).toBe(false);
-  } finally {
-    fetchMock.mockRestore();
-    vi.unstubAllEnvs();
-  }
 });

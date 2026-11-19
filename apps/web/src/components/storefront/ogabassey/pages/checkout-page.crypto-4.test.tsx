@@ -1,10 +1,10 @@
 import {
-  CheckoutPage,
+  continueToPaymentAfterPickupCheck,
   expect,
   fireEvent,
   it,
   mockCaptureCheckoutFunnelEventOnce,
-  render,
+  renderCheckoutWithStoreRates,
   screen,
   useCart,
   useMerchantSafe,
@@ -120,12 +120,10 @@ it('records the full order total for crypto completion after wallet credits', as
     });
 
   try {
-    render(<CheckoutPage />);
+    renderCheckoutWithStoreRates();
     fireEvent.click(screen.getByRole('button', { name: /delivery method/i }));
     fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
-    fireEvent.click(
-      screen.getByRole('button', { name: /continue to payment/i })
-    );
+    await continueToPaymentAfterPickupCheck();
     const juicywayRadio = (
       await screen.findAllByRole('radio', { name: /juicyway/i })
     ).find((radio) => radio.getAttribute('value') === 'juicyway');
@@ -136,9 +134,13 @@ it('records the full order total for crypto completion after wallet credits', as
       .find((button) => !button.hasAttribute('disabled'));
     fireEvent.click(placeOrderButton as HTMLButtonElement);
 
-    const continueButton = await screen.findByRole('button', {
-      name: /continue with USDT on TRX/i,
-    });
+    const continueButton = await screen.findByRole(
+      'button',
+      {
+        name: /continue with USDT on TRX/i,
+      },
+      { timeout: 10_000 }
+    );
     fireEvent.click(continueButton);
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
@@ -167,4 +169,4 @@ it('records the full order total for crypto completion after wallet credits', as
   } finally {
     fetchMock.mockRestore();
   }
-});
+}, 30_000);

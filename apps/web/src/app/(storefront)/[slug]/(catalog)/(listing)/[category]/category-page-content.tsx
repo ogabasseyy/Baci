@@ -1,4 +1,3 @@
-import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
 import { JsonLd } from '@/components/seo/json-ld';
@@ -8,7 +7,7 @@ import { CategoryHubSections } from '@/components/storefront/ogabassey/seo/categ
 import { getMerchantByIdentifier } from '@/lib/cached-data';
 import type { RawDbProduct } from '@/lib/normalize-product';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
-import { buildRequestScopedStoreUrl, buildStoreUrl } from '@/lib/store-url';
+import { buildStoreUrl } from '@/lib/store-url';
 import {
   buildHubPaginationBasePath,
   resolveCarriedHubSlug,
@@ -38,31 +37,20 @@ import { loadCategoryHubContent } from './load-category-hub-content';
 import { loadFilteredCategoryPageData } from './load-filtered-category-page-data';
 
 interface PageProps {
-  params: Promise<{
-    slug: string;
-    category: string;
-  }>;
+  params: Promise<{ slug: string; category: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
   titleHeading?: 'h1' | 'h2';
   canonicalBaseUrl?: string;
   seoPageName?: string;
-  /**
-   * Curated hub pages pass facet-derived graphics values (not raw query
-   * strings), so the untrusted-request cardinality cap is lifted for them.
-   */
   trustedGraphics?: boolean;
-  /** Curated hub slug; validates hub-token transitions from the hub. */
   hubSlug?: string;
 }
-function renderCategoryNotFoundContent({
-  slug,
+
+function renderCategoryNotFound(
+  slug: string,
   title = 'Category not found',
-  message = 'This category is unavailable or has moved.',
-}: {
-  slug: string;
-  title?: string;
-  message?: string;
-}) {
+  message = 'This category is unavailable or has moved.'
+) {
   return (
     <StorefrontRouteNotFoundContent
       backHref={isDomainIdentifier(slug) ? '/' : `/${slug}`}
@@ -90,17 +78,17 @@ export async function CategoryPageContent({
   }
 
   if (!evaluateStorefrontSlugSafety(category).safe) {
-    return renderCategoryNotFoundContent({ slug });
+    return renderCategoryNotFound(slug);
   }
 
   const currentPage = parseStorefrontPageParam(page);
 
   if (!currentPage) {
-    return renderCategoryNotFoundContent({
+    return renderCategoryNotFound(
       slug,
-      title: 'Category page not found',
-      message: 'This category page is unavailable or has moved.',
-    });
+      'Category page not found',
+      'This category page is unavailable or has moved.'
+    );
   }
 
   const productOffset = (currentPage - 1) * STOREFRONT_PRODUCTS_PER_PAGE;
@@ -117,7 +105,7 @@ export async function CategoryPageContent({
     });
 
   if (!data.isCollection && data.isInactiveCategory) {
-    return renderCategoryNotFoundContent({ slug });
+    return renderCategoryNotFound(slug);
   }
 
   if (
@@ -127,14 +115,17 @@ export async function CategoryPageContent({
     !data.productsQueryFailed &&
     !data.categoryQueryFailed
   ) {
-    return renderCategoryNotFoundContent({ slug });
+    return renderCategoryNotFound(slug);
   }
 
-  const { guidePosts, brandAuthorityEntries } = await loadCategoryHubContent({
-    merchantId: merchant.id,
-    categorySlug: category,
-    categoryData: data,
-  });
+  const { guidePosts, brandAuthorityEntries, hubProducts, compareProducts } =
+    await loadCategoryHubContent({
+      merchantId: merchant.id,
+      categorySlug: category,
+      categoryData: data,
+      storeSlug: slug,
+      isFiltered: selectedGraphics.length > 0,
+    });
 
   const productSlots = getCategoryPageProductSlots(data);
   const products = data.products as unknown as RawDbProduct[];
@@ -150,11 +141,11 @@ export async function CategoryPageContent({
   const pageStartIndex = data.productsArePrePaginated ? 0 : productOffset;
 
   if (!data.productIdsQueryFailed && currentPage > totalPages) {
-    return renderCategoryNotFoundContent({
+    return renderCategoryNotFound(
       slug,
-      title: 'Category page not found',
-      message: 'This category page is unavailable or has moved.',
-    });
+      'Category page not found',
+      'This category page is unavailable or has moved.'
+    );
   }
 
   const categoryName = resolveCategoryPageName(data, category);
@@ -163,6 +154,11 @@ export async function CategoryPageContent({
     category,
     merchant.country
   );
+  const hubNormalizedProducts = hubProducts
+    ? normalizeCategoryPageProducts(hubProducts, category, merchant.country)
+    : data.productsQueryFailed
+      ? []
+      : normalizedProducts;
   const paginatedNormalizedProducts = normalizeCategoryPageProducts(
     productSlots
       .slice(pageStartIndex, pageStartIndex + STOREFRONT_PRODUCTS_PER_PAGE)
@@ -173,7 +169,6 @@ export async function CategoryPageContent({
   const categoryPageProducts = data.productsQueryFailed
     ? paginatedNormalizedProducts
     : normalizedProducts;
-  const categoryPageCurrentPage = currentPage;
   const productsArePrePaginated =
     data.productsArePrePaginated ||
     (data.productsQueryFailed && !data.productIdsQueryFailed);
@@ -182,10 +177,7 @@ export async function CategoryPageContent({
   );
 
   const baseUrl = buildStoreUrl(merchant);
-  const requestScopedBaseUrl = buildRequestScopedStoreUrl(
-    merchant,
-    await headers()
-  );
+  const requestScopedBaseUrl = baseUrl;
   const graphicsHubLinks = await loadGraphicsHubLinks({
     category,
     graphicsOptions,
@@ -193,13 +185,16 @@ export async function CategoryPageContent({
     slug,
     store: merchant,
   });
+  const currencyCode = resolveMerchantCurrencyConfig(merchant).code;
   const hubContent = buildCategoryPageHubModel({
     data,
     categorySlug: category,
     categoryName,
     merchantBusinessName: merchant.business_name,
+    merchantCurrency: currencyCode,
     storeUrl: requestScopedBaseUrl,
-    products: normalizedProducts,
+    products: hubNormalizedProducts,
+    compareProducts,
     ...(graphicsHubLinks.length > 0
       ? { comparisonLinks: graphicsHubLinks }
       : {}),
@@ -222,7 +217,7 @@ export async function CategoryPageContent({
       canonicalCategoryUrl,
       categoryName,
       country: merchant.country,
-      currencyCode: resolveMerchantCurrencyConfig(merchant).code,
+      currencyCode,
       hubContent,
       isCollection: data.isCollection,
       merchantBusinessName: merchant.business_name,
@@ -241,6 +236,7 @@ export async function CategoryPageContent({
 
       <V2ComparisonScope storageNamespace={merchant.id}>
         <OgabasseyCategoryPage
+          prioritizeFirstRowImages={merchant.slug === 'ogabassey'}
           hubSections={<CategoryHubSections hub={hubContent} />}
           hubSlug={resolveCarriedHubSlug({
             graphicsOptions,
@@ -257,7 +253,7 @@ export async function CategoryPageContent({
             canonicalBaseUrl,
             requestScopedBaseUrl,
           })}
-          currentPage={categoryPageCurrentPage}
+          currentPage={currentPage}
           productsArePrePaginated={productsArePrePaginated}
           categoryImage={
             !data.isCollection ? data.category?.image_url : undefined

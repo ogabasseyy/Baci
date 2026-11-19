@@ -19,7 +19,12 @@ describe('ChatGPT Pixel navigation and consent', () => {
   it('preserves the saved measurement choice when leaving a page that mounted the Pixel', () => {
     localStorage.setItem(
       'baci-cookie-consent',
-      JSON.stringify({ analytics: true })
+      JSON.stringify({
+        necessary: true,
+        analytics: true,
+        marketing: false,
+        functional: false,
+      })
     );
     const { unmount } = render(<ChatgptPixel pixelId="pixel-a" />);
     const queue = (window as PixelWindow).oaiq?.q;
@@ -30,7 +35,12 @@ describe('ChatGPT Pixel navigation and consent', () => {
   it('never withdraws saved consent while hydrating a server snapshot', async () => {
     localStorage.setItem(
       'baci-cookie-consent',
-      JSON.stringify({ analytics: true })
+      JSON.stringify({
+        necessary: true,
+        analytics: true,
+        marketing: false,
+        functional: false,
+      })
     );
     const container = document.createElement('div');
     container.innerHTML = renderToString(<ChatgptPixel pixelId="pixel-a" />);
@@ -51,7 +61,12 @@ describe('ChatGPT Pixel navigation and consent', () => {
   it('measures a navigation without withdrawing consent or reinitializing the SDK', () => {
     localStorage.setItem(
       'baci-cookie-consent',
-      JSON.stringify({ analytics: true })
+      JSON.stringify({
+        necessary: true,
+        analytics: true,
+        marketing: false,
+        functional: false,
+      })
     );
     const { rerender } = render(<ChatgptPixel pixelId="pixel-a" />);
     const queue = (window as PixelWindow).oaiq?.q;
@@ -65,7 +80,12 @@ describe('ChatGPT Pixel navigation and consent', () => {
   it('withdraws SDK consent when the user revokes measurement', () => {
     localStorage.setItem(
       'baci-cookie-consent',
-      JSON.stringify({ analytics: true })
+      JSON.stringify({
+        necessary: true,
+        analytics: true,
+        marketing: false,
+        functional: false,
+      })
     );
     render(<ChatgptPixel pixelId="pixel-a" />);
     act(() => {

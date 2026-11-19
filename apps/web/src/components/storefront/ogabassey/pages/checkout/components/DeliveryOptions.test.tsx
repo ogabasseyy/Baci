@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import type { ComponentProps } from 'react';
 import { expect, it, vi } from 'vitest';
 import { DeliveryOptions } from './DeliveryOptions';
@@ -50,6 +50,11 @@ it('shows only the currently selected delivery method details', () => {
     screen.getByRole('heading', { name: 'Main Office Pickup' })
   ).toBeVisible();
   expect(
+    screen.getByText(
+      '1st Floor Taiyelolu Towers, 2 Olaide Tomori St, Ikeja, Lagos'
+    )
+  ).toBeVisible();
+  expect(
     screen.queryByText(/no nearby GIG Logistics pickup station/i)
   ).not.toBeInTheDocument();
   rerender(
@@ -64,4 +69,22 @@ it('shows only the currently selected delivery method details', () => {
   expect(
     screen.getByText(/no nearby GIG Logistics pickup station/i)
   ).toBeVisible();
+});
+
+it('allows retrying store pickup and disables the retry while checking rates', () => {
+  const options = props();
+  const { rerender } = render(<DeliveryOptions {...options} />);
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Refresh pickup availability' })
+  );
+  expect(options.door.onRefreshRates).toHaveBeenCalledOnce();
+  rerender(
+    <DeliveryOptions
+      {...options}
+      door={{ ...options.door, isLoadingQuotes: true }}
+    />
+  );
+  expect(
+    screen.getByRole('button', { name: 'Checking pickup availability…' })
+  ).toBeDisabled();
 });

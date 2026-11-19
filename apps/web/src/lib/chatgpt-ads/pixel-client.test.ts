@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   initializeChatgptPixel,
@@ -21,7 +23,12 @@ describe('ChatGPT browser Pixel', () => {
     expect(queue).toHaveLength(2);
     localStorage.setItem(
       'baci-cookie-consent',
-      JSON.stringify({ analytics: true })
+      JSON.stringify({
+        necessary: true,
+        analytics: true,
+        marketing: false,
+        functional: false,
+      })
     );
     initializeChatgptPixel('pixel-a', true);
     measureChatgptPage('pixel-a');
@@ -37,7 +44,12 @@ describe('ChatGPT browser Pixel', () => {
   it('scopes every browser event to the current merchant pixel', () => {
     localStorage.setItem(
       'baci-cookie-consent',
-      JSON.stringify({ analytics: true })
+      JSON.stringify({
+        necessary: true,
+        analytics: true,
+        marketing: false,
+        functional: false,
+      })
     );
     initializeChatgptPixel('pixel-a', true);
     initializeChatgptPixel('pixel-b', true);

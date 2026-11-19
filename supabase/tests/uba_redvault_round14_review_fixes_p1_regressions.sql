@@ -45,7 +45,6 @@ DECLARE
   v_status text;
   v_claimed boolean;
   v_frozen bigint;
-  v_url text;
 BEGIN
   -- Orders writes must ride the protected path like production writers do.
   INSERT INTO private.uba_redvault_write_context VALUES (pg_catalog.txid_current())
@@ -178,21 +177,23 @@ BEGIN
     RAISE EXCEPTION 'created stale draft was not cleaned up, got %', v_state;
   END IF;
 
-  -- P1 (scoped recovery + split freeze): the customer route context voids
-  -- its own ambiguous claim, and the claim freezes the GIGL retention.
+  -- Scoped recovery parks an ambiguous claim, and the claim freezes GIGL retention.
   PERFORM set_config('request.jwt.claim.role', 'authenticated', true);
   PERFORM set_config('request.jwt.claim.sub', v_user::text, true);
   PERFORM set_config('request.jwt.claims', jsonb_build_object(
     'role', 'authenticated', 'storefront_order_context', 'route',
     'storefront_order_merchant_id', v_merchant::text,
     'storefront_redvault_customer_email', 'redvault-p14@example.com')::text, true);
-  SELECT state, authorization_url INTO v_state, v_url
-  FROM public.reconcile_storefront_redvault_payment_attempt_initialization(v_attempt_rec, 'void');
-  IF v_state <> 'void' THEN
-    RAISE EXCEPTION 'scoped reconcile did not void, got %', v_state;
-  END IF;
-  IF v_url IS NOT NULL THEN
-    RAISE EXCEPTION 'voided attempt kept a URL';
+  BEGIN
+    PERFORM public.reconcile_storefront_redvault_payment_attempt_initialization(v_attempt_rec, 'void');
+    RAISE EXCEPTION 'scoped reconcile voided an uncertain attempt';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'redvault_retirement_unconfirmed' THEN RAISE; END IF;
+  END;
+  SELECT state INTO v_state
+  FROM public.reconcile_storefront_redvault_payment_attempt_initialization(v_attempt_rec, 'indeterminate');
+  IF v_state <> 'indeterminate' THEN
+    RAISE EXCEPTION 'scoped reconcile did not park, got %', v_state;
   END IF;
   PERFORM set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000000', true);
   BEGIN

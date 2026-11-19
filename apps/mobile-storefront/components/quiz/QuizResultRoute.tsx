@@ -7,6 +7,7 @@ import type {
   QuizTerminalContext,
   QuizV2LifecycleStatus,
 } from '@/stores/quiz-recovery-envelope';
+import { QuizGameplayAdFooter } from './QuizGameplayAdFooter';
 import { QuizResultsPanel } from './QuizResultsPanel';
 import type { createQuizStyles } from './QuizScreen.styles';
 import { canPlayAnotherQuizAttempt } from './QuizScreen.utils';
@@ -20,10 +21,13 @@ import {
 type QuizStyles = ReturnType<typeof createQuizStyles>;
 
 interface QuizResultRouteProps {
+  /** A failed pre-start ad warmup also withholds the finished-screen ad. */
+  adsPrewarmFailed?: boolean;
   backHandlerRef?: QuizBackHandlerRef;
   dismissRecovery: (eventId: string) => void;
   events: QuizEvent[];
   expectedUserId: string | null;
+  getCurrentUserId?: () => string | null;
   lifecycle: QuizV2LifecycleStatus;
   onReset: () => void;
   onRetryRecovery: () => void;
@@ -34,10 +38,12 @@ interface QuizResultRouteProps {
 }
 
 export function QuizResultRoute({
+  adsPrewarmFailed = false,
   backHandlerRef,
   dismissRecovery,
   events,
   expectedUserId,
+  getCurrentUserId,
   lifecycle,
   onReset,
   onRetryRecovery,
@@ -72,10 +78,18 @@ export function QuizResultRoute({
   useQuizBackHandler(backHandlerRef, returnToLobby);
   return (
     <QuizResultsPanel
+      adSlot={
+        <QuizGameplayAdFooter
+          active={lifecycle === 'pending_results'}
+          layout="inline"
+          prewarmFailed={adsPrewarmFailed}
+        />
+      }
       allowPendingResultsExit={canPlayAgain}
       eventId={terminalContext?.eventId}
       eventEndsAt={terminalContext?.eventEndsAt}
       expectedUserId={expectedUserId}
+      getCurrentUserId={getCurrentUserId}
       legacyResult={result}
       lifecycle={lifecycle}
       onReturnToQuizList={returnToLobby}

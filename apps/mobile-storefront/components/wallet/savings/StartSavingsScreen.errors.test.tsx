@@ -54,8 +54,12 @@ jest.mock('@/lib/customer-savings', () => ({
 }));
 
 jest.mock('@/stores/auth-store', () => ({
-  useAuthStore: (selector: (state: { merchantId: string | null }) => unknown) =>
-    selector({ merchantId: 'merchant-1' }),
+  useAuthStore: (
+    selector: (state: {
+      merchantId: string | null;
+      user: { id: string } | null;
+    }) => unknown
+  ) => selector({ merchantId: 'merchant-1', user: { id: 'user-1' } }),
 }));
 
 function getSavingsButton(name: string) {
@@ -98,8 +102,7 @@ describe('StartSavingsScreen errors', () => {
       })
     );
     fireEvent.press(getSavingsButton('Continue savings setup'));
-    fireEvent.press(getSavingsButton('Choose savings funding option'));
-    fireEvent.press(getSavingsButton('Continue funding option'));
+    fireEvent.press(getSavingsButton('Create my plan'));
 
     await waitFor(() => {
       expect(Alert.alert).toHaveBeenCalledWith(
@@ -121,7 +124,7 @@ jest.mock('react-native-keyboard-controller', () => {
     KeyboardAwareScrollView: React.forwardRef(
       (
         props: import('react-native').ScrollViewProps,
-        ref: import('react').Ref<import('react-native').ScrollView>
+        ref: import('react').Ref<import('react-native').ScrollViewInstance>
       ) => React.createElement(ScrollView, { ...props, ref })
     ),
   };

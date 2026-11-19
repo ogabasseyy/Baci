@@ -1,4 +1,4 @@
-import { formatMerchantAmount } from '@/lib/format-merchant-currency';
+import { formatMerchantPrice } from '@/lib/format-merchant-currency';
 
 /**
  * Formats an order amount using the currency's own locale conventions
@@ -11,11 +11,7 @@ export function formatOrderDetailsPrice(
   amount: number,
   merchantCurrency: string
 ) {
-  return formatMerchantAmount(
-    amount,
-    { payout_currency: merchantCurrency },
-    { minimumFractionDigits: 0 }
-  );
+  return formatMerchantPrice(amount, { payout_currency: merchantCurrency });
 }
 
 export function parseOrderDetailsCurrencyInput(formattedValue: string) {

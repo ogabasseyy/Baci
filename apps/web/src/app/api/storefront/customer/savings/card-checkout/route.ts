@@ -71,7 +71,11 @@ async function handle(request: NextRequest, method: 'GET' | 'PATCH' | 'POST') {
     ) {
       return denied(403);
     }
-    if (method !== 'GET' && configured.mutationsEnabled !== true)
+    // New checkouts honour the kill switch; refreshing an existing one stays
+    // available so an already-paid checkout can complete.
+    if (method === 'POST' && configured.mutationsEnabled !== true)
+      return denied(503);
+    if (method === 'PATCH' && configured.refreshEnabled !== true)
       return denied(503);
 
     if (method === 'GET') {

@@ -32,7 +32,11 @@ import { fetchAnalyticsPlatformConfig } from '@/lib/analytics/analytics-platform
 import { triggerPurchaseConversion } from '@/lib/trigger-purchase-conversion';
 
 const order = {
-  ad_tracking: { eventId: 'browser-event-1' },
+  ad_tracking: {
+    analyticsConsent: true,
+    marketingConsent: true,
+    eventId: 'browser-event-1',
+  },
   currency: 'NGN',
   id: 'order-1',
   order_items: [],

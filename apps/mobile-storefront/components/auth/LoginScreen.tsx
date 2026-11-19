@@ -15,12 +15,14 @@ export function LoginScreen() {
     dismissAndNavigate,
     email,
     emailError,
+    emailHintGuidance,
     handleAppleSignIn,
     handleBack,
     handleContinue,
     handleGoogleSignIn,
     handlePasswordSignIn,
     handleResendOtp,
+    handleToggleAuthMethod,
     isAppleLoading,
     isGoogleLoading,
     isLoading,
@@ -76,11 +78,13 @@ export function LoginScreen() {
             dismissAndNavigate={dismissAndNavigate}
             email={email}
             emailError={emailError}
+            emailHintGuidance={emailHintGuidance}
             handleAppleSignIn={handleAppleSignIn}
             handleContinue={handleContinue}
             handleGoogleSignIn={handleGoogleSignIn}
             handlePasswordSignIn={handlePasswordSignIn}
             handleResendOtp={handleResendOtp}
+            handleToggleAuthMethod={handleToggleAuthMethod}
             isAppleLoading={isAppleLoading}
             isGoogleLoading={isGoogleLoading}
             isLoading={isLoading}

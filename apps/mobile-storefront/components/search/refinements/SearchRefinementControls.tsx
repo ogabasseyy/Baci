@@ -6,6 +6,7 @@ import {
   type SearchRefinements,
 } from '@baci/shared/lib';
 import { useEffect, useRef, useState } from 'react';
+import type { ScrollViewInstance } from 'react-native';
 import {
   Modal,
   Pressable,
@@ -62,7 +63,7 @@ export function SearchRefinementControls({
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   const { dismissKeyboard } = useKeyboard();
-  const scroll = useRef<ScrollView>(null);
+  const scroll = useRef<ScrollViewInstance>(null);
   const positions = useRef<Record<string, number>>({});
   const group = useRef('category');
   const open = (next: 'filters' | 'sort', focus = 'price') => {

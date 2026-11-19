@@ -24,6 +24,8 @@ export interface QuizEvent {
   resultsPublishedAt?: string | null;
   rulesVersion?: string | null;
   serverNow?: string;
+  /** Device time when `serverNow` arrived, so a reused list keeps an accurate clock. */
+  serverNowReceivedAtMs?: number;
   timePerQuestionSeconds?: number;
   timeZone?: string;
 }

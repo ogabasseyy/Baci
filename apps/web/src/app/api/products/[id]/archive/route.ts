@@ -6,12 +6,15 @@ import {
   revalidateProducts,
 } from '@/lib/cache-revalidation';
 import { checkCsrfProtection } from '@/lib/csrf';
+import { expireProductBlogCache } from '@/lib/expire-product-blog-cache';
 import {
   getMerchantForApiRequest,
   toUserAccess,
 } from '@/lib/get-merchant-for-api-request';
+import { resolveDependentLegacyProductIdentifiers } from '@/lib/resolve-dependent-legacy-product-identifiers';
 import { scheduleProductBlogPurgeAfterResponse } from '@/lib/schedule-product-blog-purge-after-response';
 import { scheduleStorefrontProductPurge } from '@/lib/storefront-product-purge';
+import { scheduleStorefrontHostnamePurge } from '@/lib/storefront-product-purge-hostnames';
 import { resolveProductPurgeCategorySegmentForRow } from '@/lib/storefront-product-purge-urls';
 import { archiveProductRequestSchema } from '@/schemas/archive-product';
 
@@ -108,8 +111,6 @@ export async function PATCH(
     return jsonError('Failed to archive product', 500);
   }
 
-  revalidateProducts(merchantContext.merchantId, product.slug ?? undefined);
-
   // Archiving removes the product from listings AND changes its PDP (the
   // storefront redirects archived slugs), yet nothing else evicts the raised
   // edge TTL — the CDN would keep serving the pre-archive listing/PDP. Evict the
@@ -120,11 +121,36 @@ export async function PATCH(
     // Legacy rows can have a null/blank slug but stay addressable at
     // `/products/<id>`, so fall back to the id for the purge target.
     const purgeSlug = product.slug?.trim() || parsedParams.data.id;
-    // Bust the archived slug's Next product cache BEFORE the edge purge so a
-    // post-purge MISS cannot refill a stale "product still listed" page. Runs
-    // first (needs only the merchant id) so a failed merchant-slug read below
-    // cannot skip it.
-    revalidateProductSlugs(merchantContext.merchantId, [purgeSlug]);
+    const dependentAliases = await resolveDependentLegacyProductIdentifiers(
+      auth.supabase,
+      merchantContext.merchantId,
+      parsedParams.data.id
+    );
+    // Bust the archived slug's, UUID's, and any dependent legacy child aliases'
+    // Next product caches BEFORE the edge purge so a post-purge MISS cannot
+    // refill stale snapshots or obsolete legacy redirects.
+    const slugsExpired =
+      revalidateProductSlugs(
+        merchantContext.merchantId,
+        Array.from(
+          new Set([purgeSlug, product.id, ...dependentAliases.identifiers])
+        ),
+        {
+          expireImmediately: true,
+        }
+      ) === true;
+    const originHardExpired =
+      (slugsExpired &&
+        !dependentAliases.incomplete &&
+        revalidateProducts(merchantContext.merchantId, undefined, {
+          expireImmediately: true,
+          omitMerchantWidePdpDetails: true,
+        }) === true) ||
+      revalidateProducts(merchantContext.merchantId, undefined, {
+        expireImmediately: true,
+      }) === true;
+    const blogExpired =
+      expireProductBlogCache(merchantContext.merchantId) !== false;
     // scheduleStorefrontProductPurge needs the merchant slug (the resolved
     // merchant context only yields its id). Resolve it here; a miss makes the
     // schedule a silent no-op (fail-open).
@@ -133,34 +159,63 @@ export async function PATCH(
       .select('slug')
       .eq('id', merchantContext.merchantId)
       .single<{ slug: string | null }>();
-    const purgeEntries = [
-      {
+    if (!originHardExpired) {
+      console.warn(
+        'Skipped Cloudflare product purge after archive because origin hard expiry failed',
+        { merchantId: merchantContext.merchantId }
+      );
+    } else {
+      const categorySegment = resolveProductPurgeCategorySegmentForRow({
         slug: purgeSlug,
-        categorySegment: resolveProductPurgeCategorySegmentForRow({
+        name: product.name,
+        category: product.category,
+        categories: product.categories,
+        product_categories: product.product_categories,
+      });
+      const extraAliasEntries = Array.from(
+        new Set([product.id, ...dependentAliases.identifiers])
+      )
+        .filter((identifier) => identifier !== purgeSlug)
+        .map((identifier) => ({
+          slug: identifier,
+          categorySegment: null,
+        }));
+      const purgeEntries = [
+        {
           slug: purgeSlug,
-          name: product.name,
-          category: product.category,
-          categories: product.categories,
-          product_categories: product.product_categories,
-        }),
-      },
-    ];
-    // Evict the archived PDP immediately; relationship/category fallback reads
-    // for linked articles are queued below so they cannot delay the response.
-    scheduleStorefrontProductPurge(merchantRow?.slug, purgeEntries);
-    // Keep relationship/category fallback reads out of the archive response.
-    // The product purge is queued after the response and the helper hard-
-    // expires the merchant's related-blog cache before scheduling article URLs.
-    scheduleProductBlogPurgeAfterResponse({
-      supabase: auth.supabase,
-      merchantId: merchantContext.merchantId,
-      merchantSlug: merchantRow?.slug,
-      productIds: [product.id],
-      entries: purgeEntries,
-      categorySlugs: [purgeEntries[0]?.categorySegment],
-      skipProductPurge: true,
-    });
+          categorySegment,
+        },
+        ...extraAliasEntries,
+      ];
+      // Evict the archived PDP, UUID alias, and dependent legacy aliases
+      // immediately; relationship/category fallback reads for linked articles
+      // are queued below so they cannot delay the response.
+      scheduleStorefrontProductPurge(merchantRow?.slug, purgeEntries);
+      if (dependentAliases.incomplete) {
+        if (blogExpired) {
+          scheduleStorefrontHostnamePurge(merchantRow?.slug);
+        } else {
+          console.warn(
+            'Skipped Cloudflare hostname purge after archive because blog cache hard expiry failed',
+            { merchantId: merchantContext.merchantId }
+          );
+        }
+      }
+      // Keep relationship/category fallback reads out of the archive response.
+      // The product purge is queued after the response and the helper hard-
+      // expires the merchant's related-blog cache before scheduling article URLs.
+      scheduleProductBlogPurgeAfterResponse({
+        supabase: auth.supabase,
+        merchantId: merchantContext.merchantId,
+        merchantSlug: merchantRow?.slug,
+        productIds: [product.id],
+        entries: purgeEntries,
+        categorySlugs: [categorySegment],
+        skipProductPurge: true,
+      });
+    }
   } catch (purgeError) {
+    revalidateProducts(merchantContext.merchantId, product.slug ?? undefined);
     console.warn('Skipped Cloudflare product purge after archive', {
       purgeError,
     });

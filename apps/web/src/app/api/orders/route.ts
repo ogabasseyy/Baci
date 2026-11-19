@@ -5,7 +5,7 @@ import {
   computeAgenticOrderTax,
   isTaxComputeUuidError,
 } from '@/lib/agentic/checkout-order-tax';
-import { authenticateApiRequest, hasPermission } from '@/lib/api-auth';
+import { hasPermission } from '@/lib/api-auth';
 import { buildOrderTrackingLink } from '@/lib/build-order-tracking-link';
 import {
   ORDER_BINDING_RPC_NAMES,
@@ -38,6 +38,7 @@ import { computeOrderNegotiationDiscount } from '@/lib/checkout/order-negotiatio
 import { persistReplayedDeliveryMetadata } from '@/lib/checkout/persist-replayed-delivery-metadata';
 import { prepareCheckoutQuoteDestination } from '@/lib/checkout/prepare-checkout-quote-destination';
 import { prepareLoyaltyCheckout } from '@/lib/checkout/prepare-loyalty-checkout';
+import { prepareStorefrontOrderCheckoutContext } from '@/lib/checkout/prepare-storefront-order-checkout-context';
 import { recomputeOfferAssuranceFees } from '@/lib/checkout/recompute-offer-assurance-fees';
 import { rejectDisallowedRedvaultLivePilotOrder } from '@/lib/checkout/redvault-live-pilot-order-gate';
 import { redvaultOrderDraftFulfillment } from '@/lib/checkout/redvault-order-draft-fulfillment';
@@ -96,8 +97,10 @@ import type {
 import { verifyOrderShippingRate } from '@/lib/shipping/merchant-rates/verify-order-shipping-rate';
 import { normalizeMerchantRateOrderAddress } from '@/lib/shipping/normalize-merchant-rate-order-address';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { createPublicClient } from '@/lib/supabase/public';
 import { createClient } from '@/lib/supabase/server';
 import { type OrderCreateInput, orderCreateSchema } from '@/schemas/orders';
+import { authenticateOrderRequest } from './order-request-auth';
 
 function isPayOnDelivery(paymentMethod: string): boolean {
   return paymentMethod === 'pod' || paymentMethod === 'pay_on_delivery';
@@ -442,7 +445,9 @@ export async function POST(request: NextRequest) {
   try {
     // Optional auth: supports web cookies and mobile Bearer tokens, but still
     // allows guest checkout when authentication is absent.
-    const auth = await authenticateApiRequest(request);
+    const orderAuth = await authenticateOrderRequest(request);
+    if (!orderAuth.ok) return orderAuth.response;
+    const { auth, requireRecoveryProof } = orderAuth;
     const supabase = auth.supabase ?? createClient(await cookies());
     const user = auth.user;
     let json: unknown;
@@ -522,6 +527,11 @@ export async function POST(request: NextRequest) {
           'shared_cart'
         );
         return access.error ? true : access.allowed;
+      },
+      {
+        userId: resolvedUserId,
+        paymentMethod: payment_method,
+        requireRecoveryProof,
       }
     );
     if (!cartAuthority.ok) return cartAuthority.response;
@@ -555,7 +565,6 @@ export async function POST(request: NextRequest) {
       const rejection = validateRedvaultRequest({
         merchantId: merchant_id,
         hasVoucherItem,
-        hasSharedCart: Boolean(shared_cart),
         discountCode: body.discount_code,
         useWallet: use_wallet_credit,
         useSavings: use_savings_credit,
@@ -1592,7 +1601,7 @@ export async function POST(request: NextRequest) {
     const requestedSavingsRedemption =
       savingsRedemptionRequested && savingsCurrencySupported;
 
-    const redvaultOrderRpcClient = redvaultRequested
+    const redvaultReplayRpcClient = redvaultRequested
       ? createStorefrontOrderRpcClient({
           redvaultCustomerEmail: customer_email,
           fallbackClient: supabase,
@@ -1605,7 +1614,7 @@ export async function POST(request: NextRequest) {
       : null;
 
     if (redvaultRequested) {
-      if (!redvaultOrderRpcClient) {
+      if (!redvaultReplayRpcClient) {
         return NextResponse.json(
           {
             code: 'REDVAULT_QUOTE_INVALID',
@@ -1619,15 +1628,13 @@ export async function POST(request: NextRequest) {
         use_savings_credit ||
         use_wallet_credit ||
         hasVoucherItem ||
-        shared_cart ||
         (negotiationDiscount?.totalDiscount ?? 0) > 0
       ) {
         return NextResponse.json(
           {
             code: 'REDVAULT_COMBINATION_UNSUPPORTED',
-            error: shared_cart
-              ? 'Choose a different payment method for this shared cart.'
-              : 'REDVAULT cannot be combined with another discount or redemption',
+            error:
+              'REDVAULT cannot be combined with another discount or redemption',
           },
           { status: 400 }
         );
@@ -1643,7 +1650,7 @@ export async function POST(request: NextRequest) {
       }
       try {
         const { data: replayRows, error: replayError } =
-          await redvaultOrderRpcClient.rpc(
+          await redvaultReplayRpcClient.rpc(
             'get_storefront_redvault_checkout_replay',
             { p_checkout_key: requestIdempotencyKey }
           );
@@ -1657,7 +1664,7 @@ export async function POST(request: NextRequest) {
                 merchantId: merchant_id,
                 offerConditions: liveOfferConditions,
                 offerPrices: liveOfferPrices,
-                supabase: redvaultOrderRpcClient,
+                supabase: redvaultReplayRpcClient,
               });
       } catch (error) {
         logger.warn({
@@ -1748,6 +1755,7 @@ export async function POST(request: NextRequest) {
       rateName: string;
       currency: string;
       kind: MerchantRateKind;
+      shippingConfigRevision?: string;
       /**
        * Pickup collection snapshot for a `pickup` rate — persisted durably in
        * orders.shipping_pickup_details so the order retains the collection
@@ -1825,14 +1833,15 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // Service-role client: merchant_shipping_* tables have no anon grants
-      // (the SECURITY DEFINER storefront RPC is the only read path) and this
-      // endpoint serves unauthenticated guest checkouts. The id is
-      // Zod-validated (uuid) and the read is scoped to merchant_id.
+      // Published merchant rates are exposed through the anonymous-safe RPC.
+      // Verification must not depend on a privileged credential or read the
+      // underlying private tables. Recompute the fee and destination as before.
       let rateVerification: Awaited<ReturnType<typeof verifyOrderShippingRate>>;
       try {
         rateVerification = await verifyOrderShippingRate({
-          supabase: createAdminClient(),
+          supabase: createPublicClient({
+            clientInfo: 'baci-order-shipping-rate-verification',
+          }),
           merchantId: merchant_id,
           shippingRateId: body.shipping_rate_id,
           shippingAddress: {
@@ -1921,6 +1930,7 @@ export async function POST(request: NextRequest) {
         rateName: rateVerification.rateName,
         currency: rateVerification.currency,
         kind: rateVerification.kind,
+        shippingConfigRevision: rateVerification.shippingConfigRevision,
         pickupAddress: rateVerification.pickupAddress,
       };
 
@@ -2202,17 +2212,67 @@ export async function POST(request: NextRequest) {
             }
           : orderRpcArgs;
 
-    const orderRpcClient =
-      redvaultOrderRpcClient ??
-      createStorefrontOrderRpcClient({
-        ...(redvaultRequested ? { redvaultCustomerEmail: customer_email } : {}),
-        fallbackClient: supabase,
-        hasCanonicalDeliveryMetadata: Boolean(
-          canonicalDeliveryMethod || canonicalAirportType
-        ),
+    const checkoutContext = prepareStorefrontOrderCheckoutContext({
+      sharedCart: shared_cart,
+      principalId: sharedCartPrincipalId,
+      idempotencyKey: requestIdempotencyKey,
+      checkoutRequestHash,
+      checkoutVariant: redvaultRequested ? 'redvault' : orderVariant,
+      hasQuizVoucherItem: hasVoucherItem,
+      voucherAwardId: quizVoucherAwardIdForOrder,
+      replaySignals: [
+        Boolean(replaySnapshot),
+        isIdempotentMerchantRateReplay,
+        isIdempotentOrderReplay,
+        isIdempotentLocalAirportReplay,
+        isIdempotentOfferOrderReplay,
+        isLegacyIdempotencyReplay,
+      ],
+      isMerchantRateOrder,
+      shippingRateId: body.shipping_rate_id,
+      shippingConfigRevision:
+        verifiedMerchantShippingRate?.shippingConfigRevision,
+      canonicalSubtotal: canonicalOrderSubtotal,
+      shippingFee: verifiedMerchantShippingRate?.amount ?? 0,
+      fulfillmentKind:
+        verifiedMerchantShippingRate?.kind === 'pickup' ? 'pickup' : 'ship',
+      addressCountry:
+        shippingAddressForOrder?.countryCode ||
+        shippingAddressForOrder?.country ||
+        null,
+      addressState: shippingAddressForOrder?.state ?? null,
+      merchantCountry: merchant.country?.trim() || 'NG',
+    });
+    if (!checkoutContext.ok) {
+      logger.warn({
+        message: 'Shared-cart shipping attestation inputs are unavailable',
         merchantId: merchant_id,
-        userId: resolvedUserId,
+        shippingRateId: body.shipping_rate_id ?? null,
+        code: checkoutContext.reason,
       });
+      return NextResponse.json(checkoutContext.response, {
+        status: checkoutContext.status,
+      });
+    }
+
+    const orderRpcClient = createStorefrontOrderRpcClient({
+      ...(redvaultRequested ? { redvaultCustomerEmail: customer_email } : {}),
+      fallbackClient: supabase,
+      hasCanonicalDeliveryMetadata: Boolean(
+        canonicalDeliveryMethod ||
+          canonicalAirportType ||
+          checkoutContext.merchantRateAttestation ||
+          (checkoutContext.enabled && shared_cart && body.shipping_rate_id)
+      ),
+      merchantId: merchant_id,
+      userId: resolvedUserId,
+      ...(checkoutContext.checkoutBinding
+        ? { checkoutBinding: checkoutContext.checkoutBinding }
+        : {}),
+      ...(checkoutContext.merchantRateAttestation
+        ? { merchantRateAttestation: checkoutContext.merchantRateAttestation }
+        : {}),
+    });
     if (redvaultRequested && redvaultQuote) {
       if (merchantResolvedCurrency !== 'NGN') {
         return NextResponse.json(
@@ -2227,6 +2287,7 @@ export async function POST(request: NextRequest) {
         client: orderRpcClient,
         orderRpcArgs: {
           ...orderRpcArgs,
+          ...(checkoutContext.shippingRateMarker ?? {}),
           ...redvaultOrderDraftFulfillment(
             verifiedMerchantShippingRate,
             body.shipping_rate_id
@@ -2236,6 +2297,9 @@ export async function POST(request: NextRequest) {
         customerEmail: customer_email,
         merchantId: merchant_id,
         userId: resolvedUserId,
+        sharedCart: shared_cart
+          ? { binding: shared_cart, principalId: sharedCartPrincipalId }
+          : undefined,
       });
       // The REDVAULT draft reserves inventory through the standard
       // order-creation path. Run the same best-effort product cache
@@ -2307,7 +2371,10 @@ export async function POST(request: NextRequest) {
     // early; inner order rejections keep their message and fall through
     // to the existing mapper below.
     const dispatched = await dispatchOrderCreation({
-      args: orderCreateRpcArgs as Record<string, unknown>,
+      args: {
+        ...(orderCreateRpcArgs as Record<string, unknown>),
+        ...(checkoutContext.shippingRateMarker ?? {}),
+      },
       binding: shared_cart,
       client: orderRpcClient,
       principalId: sharedCartPrincipalId,
@@ -2495,8 +2562,12 @@ export async function POST(request: NextRequest) {
     // Also read shipping_provider back: an idempotent merchant-rate REPLAY
     // whose first attempt failed the post-create stamp needs it to detect the
     // missing-metadata case and re-stamp (see the replay re-stamp block below).
+    // Oxygen checkout requires the signed-in customer and reads its own order
+    // through RLS. Never use the legacy privileged read-back for this flow.
+    const orderCurrencyClient =
+      effectivePaymentMethod === 'oxygen' ? supabase : createAdminClient();
     const { data: orderCurrencyRow, error: orderCurrencyError } =
-      await createAdminClient()
+      await orderCurrencyClient
         .from('orders')
         .select('currency, shipping_provider')
         .eq('id', order.id)

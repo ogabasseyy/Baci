@@ -41,29 +41,6 @@ async function validateReceiptClaimCsrf(request: NextRequest) {
   return await checkCsrfProtection(request);
 }
 
-function isMissingRedeemReceiptClaimV2Function(
-  error: {
-    code?: string | null;
-    message?: string | null;
-  } | null
-) {
-  if (!error) {
-    return false;
-  }
-
-  if (error.code === 'PGRST202' || error.code === '42883') {
-    return true;
-  }
-
-  const message = (error.message ?? '').toLowerCase();
-  return (
-    message.includes('redeem_receipt_claim_v2') &&
-    (message.includes('could not find') ||
-      message.includes('does not exist') ||
-      message.includes('function'))
-  );
-}
-
 async function redeemReceiptClaim({
   source,
   supabase,
@@ -73,18 +50,24 @@ async function redeemReceiptClaim({
   supabase: Pick<SupabaseClient, 'rpc'>;
   tokenHash: string;
 }) {
+  // No legacy fallback, by design: when v2 is missing (pre-migration
+  // database) this fails closed with 500 via the caller instead of
+  // downgrading to the legacy RPC, which skips the verified-email and
+  // binding checks. Redemption is user-initiated and retryable, so the
+  // minutes-long predeploy window degrades to a retryable 500 rather
+  // than an unverified redemption.
   const response = await supabase.rpc('redeem_receipt_claim_v2', {
     p_source: source,
     p_token_hash: tokenHash,
   });
 
-  if (!isMissingRedeemReceiptClaimV2Function(response.error)) {
-    return response;
+  if (response.error) {
+    throw new Error(
+      `Failed to redeem receipt claim: ${response.error.message}`
+    );
   }
 
-  return await supabase.rpc('redeem_receipt_claim', {
-    p_token_hash: tokenHash,
-  });
+  return response;
 }
 
 export async function GET(_request: NextRequest, context: RouteContext) {
@@ -144,16 +127,28 @@ export async function POST(request: NextRequest, context: RouteContext) {
     );
   }
 
+  // Verified-email is enforced before either RPC: the pre-deploy v2
+  // implementation validates only the JWT email, so gating on the missing
+  // function alone would let unverified accounts redeem during the rollout
+  // window. The hardened RPC re-checks as defense in depth.
+  if (!auth.user.email_confirmed_at) {
+    return NextResponse.json(
+      {
+        error: 'Verify your email address before claiming this receipt',
+        code: 'EMAIL_UNVERIFIED',
+      },
+      { status: 403 }
+    );
+  }
+
   try {
-    const { data, error } = await redeemReceiptClaim({
+    // redeemReceiptClaim throws on any RPC error, so only the data
+    // outcome needs handling here.
+    const { data } = await redeemReceiptClaim({
       source: hasBearerAuthorization(request) ? 'app' : 'web',
       supabase: auth.supabase,
       tokenHash: hashReceiptClaimToken(token),
     });
-
-    if (error) {
-      throw new Error(`Failed to redeem receipt claim: ${error.message}`);
-    }
 
     if (!data) {
       return NextResponse.json(
@@ -171,6 +166,16 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     const result = parsedResult.data;
 
+    if (result.status === 'email_unverified') {
+      return NextResponse.json(
+        {
+          error: 'Verify your email address before claiming this receipt',
+          code: 'EMAIL_UNVERIFIED',
+        },
+        { status: 403 }
+      );
+    }
+
     if (result.status === 'not_found') {
       return NextResponse.json(
         { error: 'Receipt claim link not found' },
@@ -186,10 +191,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     if (result.status === 'email_mismatch') {
+      // Manual-order claims redeem invoices and proformas as well as
+      // receipts, and the redeem result carries no document kind: keep the
+      // copy kind-neutral instead of naming the wrong document.
       return NextResponse.json(
         {
           error:
-            'Sign in with the email address that received this receipt link',
+            'Sign in with the email address that received this document link',
         },
         { status: 403 }
       );
@@ -199,6 +207,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
       return NextResponse.json(
         { error: 'Receipt claim link has already been used' },
         { status: 409 }
+      );
+    }
+
+    if (result.status === 'customer_link_failed') {
+      return NextResponse.json(
+        { error: 'This receipt link cannot be linked to your account' },
+        { status: 403 }
       );
     }
 

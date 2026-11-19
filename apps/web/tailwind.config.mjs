@@ -33,6 +33,22 @@ const config = {
     },
     extend: {
       colors: {
+        // Route-scoped CSS builds do not inherit globals.css @theme declarations.
+        // Register merchant tokens here so every scoped entrypoint emits its utilities.
+        'store-primary': 'var(--store-primary, #2a2c6e)',
+        'store-primary-text': 'var(--store-primary-text, #ffffff)',
+        'store-on-primary': 'var(--store-on-primary, #ffffff)',
+        'store-secondary': 'var(--store-secondary, #f3f4f6)',
+        'store-secondary-text': 'var(--store-secondary-text, #111827)',
+        'store-accent': 'var(--store-accent, #2a2c6e)',
+        'store-accent-text': 'var(--store-accent-text, #ffffff)',
+        'store-background': 'var(--store-background, #ffffff)',
+        'store-background-text': 'var(--store-background-text, #111827)',
+        'store-foreground': 'var(--store-foreground, #111827)',
+        'store-border': 'var(--store-border, #e5e7eb)',
+        'store-rating': 'var(--store-rating, #facc15)',
+        'store-option-secondary': 'var(--store-option-secondary, #f3f4f6)',
+
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',

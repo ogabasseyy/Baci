@@ -1,24 +1,20 @@
 import { createClient } from '@supabase/supabase-js';
-import { Feed } from 'feed';
 import { unstable_cache } from 'next/cache';
 import { type NextRequest, NextResponse } from 'next/server';
 import { getAppUrl, getSupabaseAnonKey, getSupabaseUrl } from '@/env';
-import {
-  normalizeBlogFeedPostForFilter,
-  truncateFeedText,
-  xmlSafeFeedImageUrl,
-  xmlSafeFeedPathSegment,
-  xmlSafeFeedUrl,
-} from '@/lib/blog-feed-normalize';
-import { getBlogStructuredDataImageUrls } from '@/lib/blog-structured-data-images';
-import { stripHtml } from '@/lib/blog-utils';
-import {
-  isPublicBlogCategory,
-  isPublicBlogPost,
-} from '@/lib/public-blog-content-quality';
-import { sanitizeForFeed } from '@/lib/sanitize';
-import { stripInvalidXml10Characters } from '@/lib/sanitize-xml-10';
+import { normalizeBlogFeedPostForFilter } from '@/lib/blog-feed-normalize';
+import { isPublicBlogPost } from '@/lib/public-blog-content-quality';
 import { getCurrentSlugForAlias } from '@/lib/slug-alias-cache';
+import {
+  getBlogPostsMerchantCacheTag,
+  getBlogRssMerchantCacheTag,
+  getBlogRssMerchantIdCacheTag,
+} from '@/lib/tenant-cache-tags';
+import {
+  type BlogFeedMerchant,
+  type BlogFeedPost,
+  buildBlogRssFeedXml,
+} from './build-blog-rss-feed';
 
 /**
  * Blog RSS Feed API
@@ -37,28 +33,8 @@ interface RouteParams {
   params: Promise<{ merchantSlug: string }>;
 }
 
-interface BlogPost {
-  id: string;
-  title: string;
-  slug: string;
-  content: string;
-  excerpt: string | null;
-  featured_image_url: string | null;
-  featured_image_variants?: Record<string, unknown> | null;
-  category: string | null;
-  author_name: string | null;
-  published_at: string | null;
-  updated_at: string | null;
-}
-
-interface Merchant {
-  id: string;
-  slug: string;
-  business_name: string;
-  site_description: string | null;
-  logo_url: string | null;
-  custom_domain?: string | null;
-}
+type BlogPost = BlogFeedPost;
+type Merchant = BlogFeedMerchant;
 
 interface MerchantRow extends Merchant {
   domains: Array<{
@@ -119,15 +95,6 @@ function normalizeMerchantIdentifier(identifier: string): string {
   } catch {
     return identifier.trim().toLowerCase();
   }
-}
-
-function parseValidDate(value: string | null | undefined): Date | null {
-  if (!value) {
-    return null;
-  }
-
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 async function getMerchantByColumn(
@@ -292,31 +259,84 @@ async function fetchPublicFeedPosts(
   return publicPosts.slice(0, RSS_PUBLIC_POST_LIMIT);
 }
 
-// Cache RSS feed for 1 hour by canonical merchant id.
-const getCachedFeedByMerchantId = unstable_cache(
-  async (merchantId: string) => {
-    const supabase = getPublicClient();
-    if (!supabase) {
-      throw new Error('Supabase not configured');
-    }
+class FeedMerchantNotFoundError extends Error {}
 
-    const merchant = await getMerchantByColumn(supabase, 'id', merchantId);
+interface CachedMerchantFeedData {
+  merchant: BlogFeedMerchant;
+  posts: BlogFeedPost[];
+}
 
-    if (!merchant) {
-      return null;
-    }
+const MAX_CACHED_FEED_WRAPPERS = 256;
+const cachedFeedFetchers = new Map<
+  string,
+  () => Promise<CachedMerchantFeedData>
+>();
 
-    return {
-      merchant,
-      posts: await fetchPublicFeedPosts(supabase, merchant.id),
-    };
-  },
-  ['blog-rss-feed'],
-  {
-    revalidate: 3600, // 1 hour
-    tags: ['blog-posts', 'blog-rss-feed'],
+// Memoize `unstable_cache` wrappers per merchant ID in a bounded LRU map:
+// - uses Vercel's shared Data Cache (propagating `revalidateTag` across
+//   instances without hitting the 1 MiB remote-cache-handler item limit),
+// - bounds module-scope wrapper allocation to `MAX_CACHED_FEED_WRAPPERS`,
+// - throws `FeedMerchantNotFoundError` when missing so 404s are never cached.
+function getCachedFeedByMerchantId(
+  merchantId: string,
+  merchantSlug: string
+): Promise<CachedMerchantFeedData> {
+  const normalizedMerchantId = merchantId.trim().toLowerCase();
+  const normalizedMerchantSlug = merchantSlug.trim().toLowerCase();
+  const cacheKey = `${normalizedMerchantId}:${normalizedMerchantSlug}`;
+  const existing = cachedFeedFetchers.get(cacheKey);
+  if (existing) {
+    cachedFeedFetchers.delete(cacheKey);
+    cachedFeedFetchers.set(cacheKey, existing);
+    return existing();
   }
-);
+
+  const fetcher = unstable_cache(
+    async () => {
+      const supabase = getPublicClient();
+      if (!supabase) {
+        throw new Error('Supabase not configured');
+      }
+
+      const merchant = await getMerchantByColumn(
+        supabase,
+        'id',
+        normalizedMerchantId
+      );
+
+      if (!merchant) {
+        throw new FeedMerchantNotFoundError('Blog feed merchant not found');
+      }
+
+      return {
+        merchant,
+        posts: await fetchPublicFeedPosts(supabase, merchant.id),
+      };
+    },
+    ['blog-feed-by-merchant-id', normalizedMerchantId, normalizedMerchantSlug],
+    {
+      revalidate: 3600,
+      tags: [
+        'blog-posts',
+        'blog-rss-feed',
+        getBlogPostsMerchantCacheTag(normalizedMerchantId),
+        getBlogRssMerchantIdCacheTag(normalizedMerchantId),
+        ...(normalizedMerchantSlug
+          ? [getBlogRssMerchantCacheTag(normalizedMerchantSlug)]
+          : []),
+      ],
+    }
+  );
+
+  if (cachedFeedFetchers.size >= MAX_CACHED_FEED_WRAPPERS) {
+    const oldestKey = cachedFeedFetchers.keys().next().value;
+    if (oldestKey !== undefined) {
+      cachedFeedFetchers.delete(oldestKey);
+    }
+  }
+  cachedFeedFetchers.set(cacheKey, fetcher);
+  return fetcher();
+}
 
 export async function GET(_request: NextRequest, { params }: RouteParams) {
   try {
@@ -336,107 +356,47 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       return new NextResponse('Blog feed not found', { status: 404 });
     }
 
-    const data = await getCachedFeedByMerchantId(resolvedMerchant.id);
-
-    if (!data) {
-      return new NextResponse('Blog feed not found', { status: 404 });
+    let data: CachedMerchantFeedData;
+    try {
+      data = await getCachedFeedByMerchantId(
+        resolvedMerchant.id,
+        resolvedMerchant.slug
+      );
+    } catch (error) {
+      if (error instanceof FeedMerchantNotFoundError) {
+        return new NextResponse('Blog feed not found', { status: 404 });
+      }
+      throw error;
     }
 
-    const { merchant, posts } = data;
-
-    // Base URL for the merchant's storefront
-    // Use custom domain if available, otherwise fall back to slug-based URL
-    const baseUrl = getAppUrl();
-    const safeMerchantSlug = xmlSafeFeedPathSegment(merchant.slug);
-    const customStoreUrl = merchant.custom_domain
-      ? `https://${merchant.custom_domain}`
-      : null;
-    // A corrupt custom domain must not 500 the whole feed: fall back to the
-    // slug-based store URL instead of letting new URL() throw below.
-    const storeUrl =
-      customStoreUrl && URL.parse(customStoreUrl)
-        ? customStoreUrl
-        : `${baseUrl}/${safeMerchantSlug}`;
-    const feedUrl = new URL(
-      `/api/blog/feed/${safeMerchantSlug}`,
-      storeUrl
-    ).toString();
-
-    const postsWithValidDates = posts.flatMap((post) => {
-      const publishedDate = parseValidDate(post.published_at);
-      return publishedDate ? [{ post, publishedDate }] : [];
+    const rss = buildBlogRssFeedXml({
+      baseUrl: getAppUrl(),
+      merchant: data.merchant,
+      posts: data.posts,
     });
 
-    // Build date for the channel
-    const lastBuildDate =
-      postsWithValidDates.length === 0
-        ? null
-        : (postsWithValidDates[0]?.publishedDate ?? new Date());
-    const feedText = stripInvalidXml10Characters;
-    const safeStoreUrl = xmlSafeFeedUrl(storeUrl);
-    const safeFeedUrl = xmlSafeFeedUrl(feedUrl);
-    const safeBaseUrl = xmlSafeFeedUrl(baseUrl);
-
-    const feed = new Feed({
-      title: feedText(`${merchant.business_name} Blog`),
-      description: feedText(
-        merchant.site_description ||
-          `Latest posts from ${merchant.business_name}`
-      ),
-      id: `${safeStoreUrl}/blog`,
-      link: `${safeStoreUrl}/blog`,
-      language: 'en',
-      image: xmlSafeFeedImageUrl(merchant.logo_url),
-      favicon: `${safeBaseUrl}/favicon.ico`,
-      copyright: feedText(
-        `All rights reserved ${new Date().getFullYear()}, ${merchant.business_name}`
-      ),
-      ...(lastBuildDate ? { updated: lastBuildDate } : {}),
-      generator: 'Baci E-commerce Platform',
-      feedLinks: {
-        rss2: safeFeedUrl,
-      },
-      author: {
-        name: feedText(merchant.business_name),
-        link: safeStoreUrl,
-      },
-    });
-
-    for (const { post, publishedDate } of postsWithValidDates) {
-      const postUrl = `${safeStoreUrl}/blog/${xmlSafeFeedPathSegment(post.slug)}`;
-      const excerpt =
-        post.excerpt || truncateFeedText(stripHtml(post.content || ''), 300);
-
-      const sanitizedContent = sanitizeForFeed(post.content);
-      const imageUrls = getBlogStructuredDataImageUrls(post);
-
-      feed.addItem({
-        title: feedText(post.title),
-        id: postUrl,
-        link: postUrl,
-        description: feedText(excerpt),
-        content: sanitizedContent,
-        author: [
-          {
-            name: feedText(post.author_name || merchant.business_name),
-            link: safeStoreUrl,
-          },
-        ],
-        date: publishedDate,
-        image: xmlSafeFeedImageUrl(imageUrls[0]),
-        category:
-          post.category && isPublicBlogCategory(post.category)
-            ? [{ name: feedText(post.category) }]
-            : undefined,
-      });
-    }
-
-    const rss = feed.rss2();
+    const normalizedRequestIdentifier =
+      normalizeMerchantIdentifier(merchantSlug);
+    const edgeCacheTags = Array.from(
+      new Set([
+        'blog-posts',
+        'blog-rss-feed',
+        getBlogPostsMerchantCacheTag(resolvedMerchant.id),
+        getBlogRssMerchantIdCacheTag(resolvedMerchant.id),
+        ...(normalizedRequestIdentifier
+          ? [getBlogRssMerchantCacheTag(normalizedRequestIdentifier)]
+          : []),
+        ...(data.merchant.slug
+          ? [getBlogRssMerchantCacheTag(data.merchant.slug)]
+          : []),
+      ])
+    );
 
     return new NextResponse(rss, {
       headers: {
         'Content-Type': 'application/rss+xml; charset=utf-8',
         'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=7200',
+        'Vercel-Cache-Tag': edgeCacheTags.join(','),
         'X-Content-Type-Options': 'nosniff',
       },
     });

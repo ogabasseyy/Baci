@@ -81,7 +81,8 @@ describe('runAuditAgenticDvaConsentCutoverCli', () => {
       truncated: true,
     });
     expect(report.states.claiming_payment.entries[0]).toMatchObject({
-      disposition: 'release_stale_no_account_claim',
+      disposition: 'manual_review',
+      reason: 'provider_outcome_unconfirmed',
       session_id: 'agentic_session_1',
     });
     expect(

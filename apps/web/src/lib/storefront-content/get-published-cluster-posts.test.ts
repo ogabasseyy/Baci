@@ -69,6 +69,7 @@ describe('getPublishedClusterPosts', () => {
     expect(mockCacheLife).toHaveBeenCalledWith('blog');
     expect(mockCacheTag).toHaveBeenCalledWith(
       'blog-posts',
+      'blog-content-links-merchant-1',
       'products-merchant-1',
       'features-merchant-1'
     );

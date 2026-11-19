@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 export const eventDeadLetterQuerySchema = z.strictObject({
   destination: z
-    .enum(['facebook', 'ga4', 'snapchat', 'tiktok', 'chatgpt'])
+    .enum(['facebook', 'ga4', 'snapchat', 'tiktok', 'chatgpt', 'x'])
     .optional(),
   error_code: z.string().min(1).max(100).optional(),
   from: z.iso.datetime({ offset: true }).optional(),

@@ -2,7 +2,7 @@
 
 import type React from 'react';
 import { createContext, use, useEffect, useRef, useState } from 'react';
-import { comparisonSnapshotSchema } from '@/schemas/comparison-snapshot';
+import { parseComparisonSnapshot } from './parse-comparison-snapshot';
 import type { Product } from '../types';
 
 interface V2ComparisonContextType {
@@ -42,12 +42,12 @@ function readValidStoredComparisonItems(stored: string): Product[] {
   // the most recent entries, mirroring the live oldest-first eviction.
   const seenProductIds = new Set<string>();
   const deduped = parsed.flatMap((entry) => {
-    const result = comparisonSnapshotSchema.safeParse(entry);
-    if (!result.success) return [];
-    const productKey = String(result.data.id);
+    const item = parseComparisonSnapshot(entry);
+    if (!item) return [];
+    const productKey = String(item.id);
     if (seenProductIds.has(productKey)) return [];
     seenProductIds.add(productKey);
-    return [result.data];
+    return [item];
   });
   return deduped.slice(-COMPARISON_TRAY_CAPACITY);
 }

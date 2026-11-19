@@ -5,6 +5,7 @@ import {
   assertQuoteReceiverMatchesOrder,
   type InternationalQuoteOrder,
 } from '@/lib/shipping/international-quote-order-guard';
+import { readMerchantShippingWalletBalance } from '@/lib/shipping/merchant-shipping-wallet-balance';
 import {
   parseStoredQuoteRequest,
   toQuoteComparableOrderItems,
@@ -140,19 +141,13 @@ export async function loadBoundAdminWalletGiglQuoteResponse(
     return null;
   }
 
-  const { data: wallet, error: walletError } = await supabase.rpc(
-    'get_wallet_summary',
-    { p_merchant_id: merchantId }
-  );
-  if (walletError) {
+  const wallet = await readMerchantShippingWalletBalance(supabase, merchantId);
+  if (!wallet.ok) {
     return NextResponse.json(
       { error: 'Unable to load wallet' },
       { status: 500 }
     );
   }
-  const walletRow = (Array.isArray(wallet) ? wallet[0] : wallet) as {
-    available_balance?: number | string | null;
-  } | null;
   const shippingQuote: ShippingQuote = {
     id: boundQuote.id,
     provider: 'GIGL',
@@ -173,7 +168,7 @@ export async function loadBoundAdminWalletGiglQuoteResponse(
   };
   const funding = calculateAdminWalletFunding(
     shippingQuote.price,
-    Number(walletRow?.available_balance ?? 0)
+    wallet.availableBalance
   );
   // An active reserved/provider_submitting charge already holds funds for this
   // quote — resume booking without requiring available balance again.

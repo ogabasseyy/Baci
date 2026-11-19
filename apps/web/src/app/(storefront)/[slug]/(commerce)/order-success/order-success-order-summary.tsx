@@ -9,26 +9,30 @@ export function OrderSuccessOrderSummary({
   order: OrderData;
 }) {
   return (
-    <div className="text-left bg-gray-50 rounded-2xl p-6 mb-8 border border-gray-100">
-      <div className="flex justify-between items-center mb-4 pb-4 border-b border-gray-200">
-        <span className="text-sm font-medium text-gray-500">Order Number</span>
-        <span className="font-bold text-gray-900">
+    <div className="text-left bg-store-secondary rounded-2xl p-6 mb-8 border border-store-border">
+      <div className="flex justify-between items-center mb-4 pb-4 border-b border-store-border">
+        <span className="text-sm font-medium text-store-secondary-text/60">
+          Order Number
+        </span>
+        <span className="font-bold text-store-secondary-text">
           #{order.order_number || order.id.slice(0, 8)}
         </span>
       </div>
       <div className="space-y-2">
         <div className="flex justify-between items-start">
-          <span className="text-sm font-medium text-gray-500">
+          <span className="text-sm font-medium text-store-secondary-text/60">
             Items ({order.items?.length || 0})
           </span>
-          <span className="font-medium text-gray-900">
+          <span className="font-medium text-store-secondary-text">
             {formatCurrency(order.total)}
           </span>
         </div>
         {order.customer_email && (
           <div className="flex justify-between items-start">
-            <span className="text-sm font-medium text-gray-500">Email</span>
-            <span className="font-medium text-gray-900 truncate max-w-[200px]">
+            <span className="text-sm font-medium text-store-secondary-text/60">
+              Email
+            </span>
+            <span className="font-medium text-store-secondary-text truncate max-w-[200px]">
               {order.customer_email}
             </span>
           </div>

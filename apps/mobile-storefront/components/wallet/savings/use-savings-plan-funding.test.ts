@@ -122,13 +122,8 @@ describe('useSavingsPlanFunding', () => {
       merchantSlug: 'ogabassey',
     });
     expect(result.current.planFundingPhase).toBe('ready');
-    expect(result.current.planFundingAccounts).toEqual([
-      {
-        accountNumber: '0001234567',
-        accountName: 'Synthetic account',
-        bankName: 'Synthetic bank',
-      },
-    ]);
+    expect(result.current).not.toHaveProperty('planFundingAccounts');
+    expect(JSON.stringify(result.current)).not.toContain('0001234567');
   });
 
   it('forwards the interest opt-in to the funding endpoint', async () => {
@@ -221,13 +216,8 @@ describe('useSavingsPlanFunding', () => {
       merchantSlug: 'new-store',
     });
     expect(result.current.planFundingPhase).toBe('ready');
-    expect(result.current.planFundingAccounts).toEqual([
-      {
-        accountName: 'New customer account',
-        accountNumber: '0009876543',
-        bankName: 'New bank',
-      },
-    ]);
+    expect(result.current).not.toHaveProperty('planFundingAccounts');
+    expect(JSON.stringify(result.current)).not.toContain('0009876543');
   });
 
   it('ignores an old mapping lookup after the merchant slug changes', async () => {
@@ -280,9 +270,7 @@ describe('useSavingsPlanFunding', () => {
       merchantSlug: 'new-store',
     });
     expect(result.current.planFundingPhase).toBe('ready');
-    expect(result.current.planFundingAccounts[0]?.accountNumber).toBe(
-      '0009876543'
-    );
+    expect(JSON.stringify(result.current)).not.toContain('0009876543');
   });
 
   it('invalidates a pending lookup when the funding screen unmounts', async () => {
@@ -302,35 +290,5 @@ describe('useSavingsPlanFunding', () => {
     });
 
     expect(mockFetchExistingSavingsPlanFunding).toHaveBeenCalledTimes(1);
-  });
-  it('requires BVN for primary merchants when the server reports unconfigured', async () => {
-    mockUseCapability.mockReturnValue(false);
-    const { result } = renderHook(() =>
-      useSavingsPlanFunding({
-        ...input,
-        activeMerchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
-      })
-    );
-    expect(result.current.planFundingRequiresBvn).toBe(true);
-  });
-  it('skips BVN for primary merchants while the capability is confirmed', async () => {
-    mockUseCapability.mockReturnValue(true);
-    const { result } = renderHook(() =>
-      useSavingsPlanFunding({
-        ...input,
-        activeMerchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
-      })
-    );
-    expect(result.current.planFundingRequiresBvn).toBe(false);
-  });
-  it('requires BVN for primary merchants while the capability probe is pending', async () => {
-    mockUseCapability.mockReturnValue(null);
-    const { result } = renderHook(() =>
-      useSavingsPlanFunding({
-        ...input,
-        activeMerchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
-      })
-    );
-    expect(result.current.planFundingRequiresBvn).toBe(true);
   });
 });

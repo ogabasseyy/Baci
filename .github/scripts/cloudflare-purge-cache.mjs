@@ -21,6 +21,34 @@ export function buildPurgePayload(urls) {
   };
 }
 
+const DNS_HOSTNAME =
+  /^(?=.{1,253}$)(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))+$/;
+
+function assertPurgeableHostname(value) {
+  const hostname = String(value).trim().toLowerCase();
+  if (!DNS_HOSTNAME.test(hostname) || /^\d+(?:\.\d+){3}$/.test(hostname)) {
+    throw new Error(
+      `Cloudflare hostname purge requires a DNS hostname, received ${hostname || '(empty)'}`
+    );
+  }
+  // Any label equal to "cdn" (cdn.example.com and assets.cdn.example.com alike) is refused;
+  // names that merely start with the letters, like cdn-store.example.com, are fine.
+  if (hostname.split('.').includes('cdn')) {
+    throw new Error('Cloudflare hostname purge must never target cdn.* hostnames');
+  }
+  return hostname;
+}
+
+// Hostname purge payload. Only a `hosts` list is ever sent: never `files`, never
+// `purge_everything`. Every hostname is validated here, at the primitive, so no caller can
+// send a cdn.* host, an IP or a wildcard. NOTE: Cloudflare clears ALL cached content for each
+// hostname listed (HTML, same-host assets and API responses), not just pages.
+export function buildHostPurgePayload(hosts) {
+  return {
+    hosts: [...new Set(hosts.map(assertPurgeableHostname))],
+  };
+}
+
 export function chunkPurgeUrls(urls, size = CLOUDFLARE_SINGLE_FILE_PURGE_MAX_OPERATIONS) {
   if (!Number.isInteger(size) || size <= 0) {
     throw new Error('Cloudflare purge chunk size must be a positive integer');
@@ -124,6 +152,42 @@ export async function purgeCloudflareCache({
     `Purged ${uniqueUrls.length} Cloudflare URL(s) from zone ${resolvedZoneId} in ${batches.length} request(s).`
   );
   return { purgedUrls: uniqueUrls, skipped: false, zoneId: resolvedZoneId };
+}
+
+export async function purgeCloudflareHosts({
+  fetchJson = fetchCloudflareJson,
+  hosts,
+  logger = console,
+  token,
+  zoneId,
+  zoneName,
+}) {
+  // Validate and normalize once: the log line, the return value and the request body all
+  // describe the same (lowercased, deduplicated) hostnames.
+  const { hosts: uniqueHosts } = buildHostPurgePayload(hosts ?? []);
+
+  if (!token) {
+    logger.warn('Skipping Cloudflare hostname purge: CLOUDFLARE_API_TOKEN is not set.');
+    return { skipped: true, reason: 'missing-token' };
+  }
+
+  if (uniqueHosts.length === 0) {
+    logger.warn('Skipping Cloudflare hostname purge: no hostnames were provided.');
+    return { skipped: true, reason: 'missing-hosts' };
+  }
+
+  const resolvedZoneId =
+    zoneId || (await discoverZoneId({ fetchJson, token, zoneName }));
+  await fetchJson(`/zones/${resolvedZoneId}/purge_cache`, {
+    body: { hosts: uniqueHosts },
+    method: 'POST',
+    token,
+  });
+
+  logger.log(
+    `Purged ${uniqueHosts.length} Cloudflare hostname(s) (${uniqueHosts.join(', ')}) from zone ${resolvedZoneId}.`
+  );
+  return { hosts: uniqueHosts, skipped: false, zoneId: resolvedZoneId };
 }
 
 async function main() {

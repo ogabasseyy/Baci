@@ -1,4 +1,5 @@
 import { getAppUrl } from '@/env';
+import { getConfiguredAgenticMerchantSlug } from '@/lib/agentic/agentic-merchant-slug';
 import { logger } from '@/lib/logger';
 
 // Keep the probe longer than the buffered chat completion budget so it can
@@ -9,6 +10,7 @@ const SUPPORT_CHAT_FETCH_TIMEOUT_MS = 75_000;
 // generations observed under the 60s route budget.
 const SUPPORT_CHAT_SLOW_RESPONSE_MS = 30_000;
 const SUPPORT_CHAT_SMOKE_PROMPT = 'Best gaming phones';
+const SUPPORT_CHAT_CONVERSATION_PROMPT = 'Can you help me today?';
 
 type AgentCommerceSupportChatHealthStatus = 'attention' | 'ok';
 
@@ -54,38 +56,87 @@ export async function checkAgentCommerceSupportChatHealth(
   const startedAt = now();
 
   try {
-    const response = await fetcher(url, {
-      body: JSON.stringify({
-        messages: [{ content: SUPPORT_CHAT_SMOKE_PROMPT, role: 'user' }],
-      }),
-      cache: 'no-store',
-      headers: {
-        accept: 'text/plain',
-        'content-type': 'application/json',
-      },
-      method: 'POST',
-      signal: AbortSignal.timeout(SUPPORT_CHAT_FETCH_TIMEOUT_MS),
-    });
+    // Exercise both the catalog fast path and the provider-backed conversation
+    // path. Run concurrently so monitoring reflects customer-visible latency.
+    const responses = await Promise.all(
+      [SUPPORT_CHAT_SMOKE_PROMPT, SUPPORT_CHAT_CONVERSATION_PROMPT].map(
+        async (prompt) => {
+          const response = await fetcher(url, {
+            body: JSON.stringify({
+              messages: [{ content: prompt, role: 'user' }],
+            }),
+            cache: 'no-store',
+            headers: {
+              accept: 'text/plain',
+              'content-type': 'application/json',
+            },
+            method: 'POST',
+            signal: AbortSignal.timeout(SUPPORT_CHAT_FETCH_TIMEOUT_MS),
+          });
+          await response.body?.cancel();
+          return response;
+        }
+      )
+    );
     const responseTimeMs = Math.max(0, now() - startedAt);
-    await response.body?.cancel();
 
-    if (!response.ok) {
+    const failed = responses.find((response) => !response.ok);
+    if (failed) {
       return createSupportChatIssueResult({
         issue: {
           code: 'support_chat_unavailable',
-          message: `Support chat returned HTTP ${response.status}.`,
+          message: `Support chat returned HTTP ${failed.status}.`,
         },
         responseTimeMs,
         url,
       });
     }
 
-    if (response.headers.get('x-baci-chat-fallback') === 'static') {
+    if (
+      responses.some(
+        (response) =>
+          response.headers.get('x-baci-chat-fallback') === 'catalog_unavailable'
+      )
+    ) {
+      return createSupportChatIssueResult({
+        issue: {
+          code: 'support_chat_unavailable',
+          message: 'Support chat could not check the catalog.',
+        },
+        responseTimeMs,
+        url,
+      });
+    }
+
+    if (
+      responses.some(
+        (response) => response.headers.get('x-baci-chat-fallback') === 'static'
+      )
+    ) {
       return createSupportChatIssueResult({
         issue: {
           code: 'support_chat_static_fallback',
           message:
             'Support chat returned its static provider-failure fallback.',
+        },
+        responseTimeMs,
+        url,
+      });
+    }
+
+    if (
+      getConfiguredAgenticMerchantSlug() === 'ogabassey' &&
+      (responses[0].headers.get('x-baci-chat-catalog') !== 'checked' ||
+        responses.some(
+          (response) =>
+            response.headers.get('x-baci-santa-merchant-slug') !== 'ogabassey'
+        ))
+    ) {
+      return createSupportChatIssueResult({
+        issue: {
+          code: 'support_chat_unavailable',
+          message:
+            'Support chat could not verify the configured catalog and tenant.',
         },
         responseTimeMs,
         url,

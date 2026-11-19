@@ -40,4 +40,25 @@ describe('buildStorefrontClusterGuideRequest', () => {
       p_search_query: '',
     });
   });
+
+  it('omits gaming and laptops rules when requesting gaming-laptops so SQL pre-filtering stays schema-valid while allowing cross-category promotion', () => {
+    const request = buildStorefrontClusterGuideRequest({
+      pageKind: 'product',
+      categorySlug: 'gaming-laptops',
+      brands: ['ASUS'],
+    });
+    expect(
+      request.p_cluster_rules.some((r) => r.category_slug === 'gaming')
+    ).toBe(false);
+    expect(
+      request.p_cluster_rules.some((r) => r.category_slug === 'laptops')
+    ).toBe(false);
+    expect(
+      request.p_cluster_rules.some((r) => r.category_slug === 'gaming-laptops')
+    ).toBe(true);
+    for (const rule of request.p_cluster_rules) {
+      expect(rule.category_names.length).toBeGreaterThanOrEqual(1);
+      expect(rule.article_tokens.length).toBeGreaterThanOrEqual(1);
+    }
+  });
 });

@@ -113,7 +113,10 @@ export async function drainFailedPaidOrderSideEffectRow({
     }
 
     let gatewayResponse = txn.gateway_response;
-    if (!gatewayResponse) {
+    if (
+      !gatewayResponse ||
+      lacksPaystackSplitEvidence(gateway, gatewayResponse)
+    ) {
       // Bound the in-flight provider read to the remaining pass share so
       // a hung verification cannot overrun the route budget. Aborts
       // surface as transient-unavailable and retry next run.
@@ -262,4 +265,17 @@ export async function drainFailedPaidOrderSideEffectRow({
         drainError instanceof Error ? drainError.message : 'unknown_error',
     };
   }
+}
+
+// Settlement classifies a Paystack sale from the split fields of the verified
+// payload (subaccount and fees_split). A stored payload without them can
+// never be classified, so re-verify: a fresh verification carries both.
+function lacksPaystackSplitEvidence(
+  gateway: string,
+  gatewayResponse: Record<string, unknown>
+): boolean {
+  return (
+    gateway === 'paystack' &&
+    (!('subaccount' in gatewayResponse) || !('fees_split' in gatewayResponse))
+  );
 }

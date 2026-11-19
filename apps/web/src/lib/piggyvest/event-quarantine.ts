@@ -2,7 +2,7 @@ import 'server-only';
 import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import z from 'zod';
-import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
+import type { PiggyvestIntakeClient } from '@/lib/piggyvest/intake-client.types';
 
 /**
  * Durable quarantine for authentic deliveries that must never touch
@@ -44,7 +44,7 @@ export function digestRawBody(rawBody: Uint8Array): string {
 }
 
 export async function recordQuarantineEvent(
-  supabase: PiggyvestIntakeServiceClient,
+  supabase: PiggyvestIntakeClient,
   input: RecordQuarantineEventInput
 ): Promise<RecordQuarantineEventOutcome> {
   // Brand is enforced at the boundary (only the intake edge constructs this

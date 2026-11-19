@@ -1,3 +1,7 @@
+import { AUTHORITY_HUB_LCP_CSS } from './authority-hub-lcp-css';
+import { BLOG_LISTING_LCP_CSS } from './blog-listing-lcp-css';
+import { BLOG_POST_LCP_CSS } from './blog-post-lcp-css';
+import { OGABASSEY_DARK_MODE_LCP_CSS } from './ogabassey-dark-mode-lcp-css';
 import { REPAIR_BOOKING_LCP_CSS } from './repair-booking-lcp-css';
 
 /**
@@ -34,8 +38,10 @@ html:has([data-storefront-shell]) *::after {
   min-height: 100svh;
 }
 
-/* Keep the checker visible beneath its heading, not a viewport of blank space. */
-[data-imei-lcp-hero] [data-cwv-lcp-fold] {
+/* Keep the checker and compare hub visible beneath their headings, not a viewport of blank space. */
+[data-imei-lcp-hero] [data-cwv-lcp-fold],
+[data-compare-hub-chrome] [data-cwv-lcp-fold],
+[data-compare-hub-intro] [data-cwv-lcp-fold] {
   min-height: 0;
 }
 
@@ -66,7 +72,7 @@ html:has([data-storefront-shell]) *::after {
   margin: 0 !important;
 }
 
-${REPAIR_BOOKING_LCP_CSS}
+${REPAIR_BOOKING_LCP_CSS}${AUTHORITY_HUB_LCP_CSS}
 
 [data-cwv-lcp-copy="imei"] {
   color: var(--store-background-text, #111827) !important;
@@ -117,78 +123,18 @@ ${REPAIR_BOOKING_LCP_CSS}
   max-width: 36rem;
 }
 
+${BLOG_LISTING_LCP_CSS}
+
+${BLOG_POST_LCP_CSS}
+
+${OGABASSEY_DARK_MODE_LCP_CSS}
+
 /*
-  Blog listing LCP frame. storefront-blog.css is deferred so this geometry must
-  live on the shared render-blocking sheet or the 400px frame collapses until
-  the Tailwind chunk arrives and restyles LCP.
+  Reserve viewport height on the pending Suspense fallback so the footer stays
+  below the fold while blog posts stream in, then disappears once resolved.
 */
-.ogabassey-blog-lcp-hero {
+[aria-label="Loading blog posts"] {
   min-height: 100svh;
-  background: var(--store-background, #f9fafb);
-  padding: 2rem 1rem 0;
-}
-
-.ogabassey-blog-lcp-hero__inner {
-  margin-left: auto;
-  margin-right: auto;
-  max-width: 1400px;
-}
-
-.ogabassey-blog-lcp-hero__frame {
-  border-radius: 2rem;
-  color: inherit;
-  display: block;
-  height: 400px;
-  margin-bottom: 3rem;
-  overflow: hidden;
-  position: relative;
-  text-decoration: none;
-}
-
-.ogabassey-blog-lcp-hero__copy {
-  bottom: 0;
-  left: 0;
-  padding: 2rem;
-  position: absolute;
-  width: 100%;
-}
-
-.ogabassey-blog-featured-story__media {
-  background: var(--ogabassey-blog-featured-scrim, rgb(17 24 39));
-  inset: 0;
-  position: absolute;
-}
-
-.ogabassey-blog-featured-story__title,
-.ogabassey-blog-featured-story__description,
-.ogabassey-blog-featured-story__date {
-  color: var(--ogabassey-blog-featured-text, #ffffff);
-  text-shadow: 0 2px 18px rgb(0 0 0 / 45%);
-}
-
-.ogabassey-blog-featured-story__title {
-  display: -webkit-box;
-  font-size: 1.875rem;
-  font-weight: 900;
-  -webkit-line-clamp: 3;
-  line-height: 1;
-  margin-bottom: 1rem;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-}
-
-.ogabassey-blog-featured-story__description {
-  display: -webkit-box;
-  -webkit-line-clamp: 4;
-  max-width: 42rem;
-  opacity: 0.82;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-}
-
-.ogabassey-blog-featured-story__date {
-  font-size: 0.875rem;
-  opacity: 0.82;
 }
 
 /*
@@ -237,11 +183,7 @@ body:has([data-compare-hub-intro-resolved]) [data-compare-hub-intro-pending] {
 }
 
 /*
-  PPR static-shell hide/positioning. storefront-core.css is deferred until
-  first input on tuned mobile routes, so without these rules the resume
-  sibling (ShellChromeLoading) stays in flow as "Loading storefront chrome".
-  Keep the same selectors as storefront-core.css; do not eagerly import that
-  329KB sheet on tuned routes.
+  PPR static-shell hide/positioning (matches storefront-core.css).
 */
 .storefront-ppr-static-shell,
 .storefront-ppr-static-shell__content {

@@ -16,6 +16,8 @@ import {
 } from 'lucide-react';
 import type React from 'react';
 import { SafeHtml } from '@/components/ui/safe-html';
+import { StorefrontChatPrivacyDisclosure } from './storefront-chat-privacy-disclosure';
+import { StorefrontChatProviderLinks } from './storefront-chat-provider-links';
 
 // Define props
 interface PrivacyProps {
@@ -107,11 +109,14 @@ export const OgabasseyV2PrivacyPolicy: React.FC<PrivacyProps> = ({ merchant }) =
           providers, payment processors, delivery partners, and support providers
           to run the store and fulfil orders. When you use our ChatGPT app,
           OpenAI processes your conversation under its own privacy terms and
-          sends us the tool inputs needed to answer your request. We do not sell
-          your personal information. When semantic catalog search is enabled,
-          we send product search text to Google Gemini to find matching items.
-          We do not deliberately include account, order, or payment records in
-          those requests.
+          sends us the tool inputs needed to answer your request. For
+          storefront chat, we send your message text and recent conversation
+          context to <StorefrontChatProviderLinks conjunction="or" /> to
+          generate shopping and support replies under each provider&apos;s
+          privacy terms. We do not sell your personal information. When
+          semantic catalog search is enabled, we send product search text to
+          Google Gemini to find matching items. We do not deliberately include
+          account, order, or payment records in those requests.
         </p>
       ) : (
         <p>
@@ -164,10 +169,13 @@ export const OgabasseyV2PrivacyPolicy: React.FC<PrivacyProps> = ({ merchant }) =
                   Ogabassey account search history. Our server processes the
                   tool request to return products; ChatGPT controls the
                   retention of your conversation under OpenAI&apos;s own policy.
-                  When semantic search is enabled, Google may retain the search
-                  request for up to 55 days for abuse monitoring under its
-                  Gemini API terms. Its Paid Tier terms say these requests are
-                  not used to improve Google products.
+                  Storefront chat prompts processed through OpenAI, Meta, or
+                  DeepSeek APIs are retained only as governed by each
+                  provider&apos;s API terms and are not kept in a saved account
+                  search history. When semantic search is enabled, Google may
+                  retain the search request for up to 55 days for abuse
+                  monitoring under its Gemini API terms. Its Paid Tier terms say
+                  these requests are not used to improve Google products.
                 </p>
               </div>
             ),
@@ -249,6 +257,8 @@ export const OgabasseyV2PrivacyPolicy: React.FC<PrivacyProps> = ({ merchant }) =
               </div>
             </>
           )}
+
+          {isOgabassey && <StorefrontChatPrivacyDisclosure />}
 
           <div className="bg-gray-50 rounded-2xl p-8 border border-gray-100 mt-8">
             <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">

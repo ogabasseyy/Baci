@@ -41,6 +41,33 @@ import {
 
 const mockRouterPush = vi.fn();
 
+/** Payment scenarios need a real-shaped successful store-rate check. */
+function renderCheckoutWithStoreRates() {
+  const fetchMock = vi.mocked(globalThis.fetch);
+  const implementation = fetchMock.getMockImplementation();
+  if (!implementation)
+    throw new Error('Configure the payment fetch fixture first');
+  fetchMock.mockImplementation((input, init) => {
+    if (
+      String(input) === '/api/shipping/quotes' &&
+      typeof init?.body === 'string' &&
+      JSON.parse(init.body).merchant_rates_only === true
+    ) {
+      return Promise.resolve(
+        Response.json({ quotes: { all: [], featured: [] } })
+      );
+    }
+    return implementation(input, init);
+  });
+  return render(<CheckoutPage />);
+}
+
+async function continueToPaymentAfterPickupCheck() {
+  const button = screen.getByRole('button', { name: /continue to payment/i });
+  await waitFor(() => expect(button).toBeEnabled());
+  fireEvent.click(button);
+}
+
 function mockCheckoutSubmissionState() {
   vi.mocked(useCart).mockReturnValue({
     cart: [
@@ -90,12 +117,12 @@ function mockCheckoutSubmissionState() {
 }
 
 async function submitPickupPayOnDeliveryOrder() {
-  render(<CheckoutPage />);
+  renderCheckoutWithStoreRates();
 
   fireEvent.click(screen.getByRole('button', { name: /delivery method/i }));
 
   fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
-  fireEvent.click(screen.getByRole('button', { name: /continue to payment/i }));
+  await continueToPaymentAfterPickupCheck();
   fireEvent.click(await screen.findByText(/pay on delivery/i));
   const placeOrderButton = screen
     .getAllByRole('button', { name: /place order/i })
@@ -155,6 +182,7 @@ export {
   captureCheckoutFunnelEventOnce,
   checkoutIdempotency,
   cleanup,
+  continueToPaymentAfterPickupCheck,
   describe,
   expect,
   fireEvent,
@@ -170,6 +198,7 @@ export {
   openCredPalCheckout,
   readCreditDirectPopupMarker,
   render,
+  renderCheckoutWithStoreRates,
   screen,
   submitPickupPayOnDeliveryOrder,
   toast,

@@ -36,7 +36,9 @@ describe('POST /api/attr', () => {
 
   it('sets one cookie per click ID when several are present', async () => {
     const response = await POST(
-      requestFor('fbclid=fb1&ttclid=tt1&gclid=g1&sccid=sc1')
+      requestFor(
+        'fbclid=fb1&ttclid=tt1&gclid=g1&sccid=sc1&marketing_consent=true'
+      )
     );
     const setCookies = response.headers.getSetCookie();
 
@@ -98,4 +100,33 @@ describe('POST /api/attr', () => {
 
     expect(response.status).toBe(400);
   });
+});
+
+it('requires an explicit marketing grant before persisting X attribution', async () => {
+  expect((await POST(requestFor('twclid=landing_click'))).status).toBe(400);
+  const response = await POST(
+    requestFor('twclid=landing_click&marketing_consent=true')
+  );
+  expect(response.status).toBe(204);
+  expect(response.headers.getSetCookie()).toEqual([
+    'baci_twclid=landing_click; Path=/; Max-Age=7776000; SameSite=Lax; Secure',
+  ]);
+  expect((await POST(requestFor('marketing_consent=true'))).status).toBe(400);
+});
+it('requires explicit marketing consent before storing canonical Snapchat attribution', async () => {
+  for (const body of [
+    'sccid=snap_landing',
+    'sccid=snap_landing&marketing_consent=false',
+  ]) {
+    const response = await POST(requestFor(body));
+    expect(response.status).toBe(400);
+    expect(response.headers.getSetCookie()).toEqual([]);
+  }
+  const response = await POST(
+    requestFor('sccid=snap_landing&marketing_consent=true')
+  );
+  expect(response.status).toBe(204);
+  expect(response.headers.getSetCookie()).toEqual([
+    'baci_sccid=snap_landing; Path=/; Max-Age=7776000; SameSite=Lax; Secure',
+  ]);
 });

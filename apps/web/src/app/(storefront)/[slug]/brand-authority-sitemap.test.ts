@@ -15,10 +15,28 @@ vi.mock(
   })
 );
 
+function rawProduct(name: string, brand: string, index = 0) {
+  return {
+    id: `${brand.toLowerCase()}-${index}-${name.toLowerCase().replaceAll(' ', '-')}`,
+    name,
+    brand,
+    price: 100_000,
+    stock: 5,
+    category_slug: 'smartphones',
+  };
+}
+
 describe('getBrandAuthoritySitemapEntries', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockCategory.mockResolvedValue({ id: 'category-1', name: 'Smartphones' });
+    mockCategory.mockImplementation(
+      async (_merchantId: string, categorySlug: string) => {
+        if (categorySlug === 'smartphones') {
+          return { id: 'category-1', name: 'Smartphones' };
+        }
+        return null;
+      }
+    );
   });
 
   it('does not query brand authority inventory for an unpublished store', async () => {
@@ -48,7 +66,16 @@ describe('getBrandAuthoritySitemapEntries', () => {
         return {
           productCount: entry.brandKey === 'samsung' ? 5 : 0,
           latestUpdatedAt: '2026-07-21T00:00:00Z',
-          products: [],
+          products:
+            entry.brandKey === 'samsung'
+              ? [
+                  'Samsung Galaxy S24',
+                  'Samsung Galaxy S25',
+                  'Samsung Galaxy A56',
+                  'Samsung Galaxy A36',
+                  'Samsung Galaxy Z Fold 7',
+                ].map((name, index) => rawProduct(name, 'Samsung', index))
+              : [],
         };
       }
     );
@@ -76,13 +103,13 @@ describe('getBrandAuthoritySitemapEntries', () => {
         products:
           entry.brandKey === 'samsung'
             ? [
-                { name: 'Samsung Galaxy S24' },
-                { name: 'Samsung Galaxy S25' },
-                { name: 'Samsung Galaxy S26' },
-                { name: 'Samsung Galaxy A56' },
-                { name: 'Samsung Galaxy A36' },
-                { name: 'Samsung Galaxy Z Fold 7' },
-              ]
+                'Samsung Galaxy S24',
+                'Samsung Galaxy S25',
+                'Samsung Galaxy S26',
+                'Samsung Galaxy A56',
+                'Samsung Galaxy A36',
+                'Samsung Galaxy Z Fold 7',
+              ].map((name, index) => rawProduct(name, 'Samsung', index))
             : [],
       })
     );
@@ -111,12 +138,12 @@ describe('getBrandAuthoritySitemapEntries', () => {
         products:
           entry.brandKey === 'infinix'
             ? [
-                { name: 'Infinix Hot 70' },
-                { name: 'Infinix Hot 70 Pro' },
-                { name: 'Infinix Note 60' },
-                { name: 'Infinix Note 60 Pro' },
-                { name: 'Infinix Note 60 Pro Plus' },
-              ]
+                'Infinix Hot 70',
+                'Infinix Hot 70 Pro',
+                'Infinix Note 60',
+                'Infinix Note 60 Pro',
+                'Infinix Note 60 Pro Plus',
+              ].map((name, index) => rawProduct(name, 'Infinix', index))
             : [],
       })
     );
@@ -145,12 +172,12 @@ describe('getBrandAuthoritySitemapEntries', () => {
         products:
           entry.brandKey === 'samsung'
             ? [
-                { name: 'Samsung Galaxy S25' },
-                { name: 'Samsung Galaxy S26' },
-                { name: 'Samsung Galaxy A56' },
-                { name: 'Samsung Galaxy Z Fold 7' },
-                { name: 'Samsung Galaxy Z Flip 7' },
-              ]
+                'Samsung Galaxy S25',
+                'Samsung Galaxy S26',
+                'Samsung Galaxy A56',
+                'Samsung Galaxy Z Fold 7',
+                'Samsung Galaxy Z Flip 7',
+              ].map((name, index) => rawProduct(name, 'Samsung', index))
             : [],
       })
     );
@@ -179,12 +206,12 @@ describe('getBrandAuthoritySitemapEntries', () => {
         products:
           entry.brandKey === 'samsung'
             ? [
-                ...Array.from({ length: 48 }, (_, index) => ({
-                  name: `Samsung Other ${index}`,
-                })),
-                { name: 'Galaxy S24' },
-                { name: 'Galaxy S25' },
-                { name: 'Galaxy S26' },
+                ...Array.from({ length: 48 }, (_, index) =>
+                  rawProduct(`Samsung Other ${index}`, 'Samsung', index)
+                ),
+                rawProduct('Galaxy S24', 'Samsung', 48),
+                rawProduct('Galaxy S25', 'Samsung', 49),
+                rawProduct('Galaxy S26', 'Samsung', 50),
               ]
             : [],
       })
@@ -200,6 +227,64 @@ describe('getBrandAuthoritySitemapEntries', () => {
     expect(entries.map((entry) => entry.url)).toEqual([
       'https://store.test/smartphones/brands/samsung',
       'https://store.test/smartphones/brands/samsung/families/galaxy-s',
+    ]);
+  });
+
+  it('emits sitemap entries across multiple supported categories including gaming-laptops and playstation-5', async () => {
+    mockCategory.mockImplementation(
+      async (_merchantId: string, categorySlug: string) => {
+        if (categorySlug === 'gaming-laptops') {
+          return { id: 'category-gaming', name: 'Gaming Laptops' };
+        }
+        if (categorySlug === 'playstation-5') {
+          return { id: 'category-ps5', name: 'PlayStation 5' };
+        }
+        return null;
+      }
+    );
+    mockInventory.mockImplementation(
+      async (
+        _merchant: string,
+        category: string,
+        entry: { brandKey: string }
+      ) => {
+        if (category === 'gaming-laptops' && entry.brandKey === 'asus') {
+          return {
+            productCount: 5,
+            latestUpdatedAt: '2026-08-01T00:00:00Z',
+            products: Array.from({ length: 5 }, (_, index) =>
+              rawProduct(`ROG Strix ${index}`, 'ASUS', index)
+            ),
+          };
+        }
+        if (category === 'playstation-5' && entry.brandKey === 'playstation') {
+          return {
+            productCount: 5,
+            latestUpdatedAt: '2026-08-01T00:00:00Z',
+            products: Array.from({ length: 5 }, (_, index) =>
+              rawProduct(`DualSense ${index}`, 'PlayStation', index)
+            ),
+          };
+        }
+        return {
+          productCount: 0,
+          latestUpdatedAt: null,
+          products: [],
+        };
+      }
+    );
+
+    const { getBrandAuthoritySitemapEntries } = await import(
+      './brand-authority-sitemap'
+    );
+    const entries = await getBrandAuthoritySitemapEntries({
+      merchant: { id: 'merchant-1', slug: 'store', is_published: true },
+      storeUrl: 'https://store.test',
+    } as never);
+
+    expect(entries.map((entry) => entry.url)).toEqual([
+      'https://store.test/gaming-laptops/brands/asus',
+      'https://store.test/playstation-5/brands/playstation',
     ]);
   });
 });

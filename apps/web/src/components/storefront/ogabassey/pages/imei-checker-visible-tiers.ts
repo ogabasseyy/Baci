@@ -1,9 +1,10 @@
 import {
+  filterRuntimeImeiTierKeys,
+  getVisibleImeiServiceTierKeysForDevice,
   type ImeiBrandFilter,
   type ImeiDeviceCategory,
   type ImeiServiceTierKey,
   PUBLIC_IMEI_SERVICE_TIERS,
-  getVisibleImeiServiceTierKeysForDevice,
 } from '@baci/shared/imei';
 
 const PUBLIC_IMEI_SERVICE_TIER_KEYS = new Set<ImeiServiceTierKey>(
@@ -20,21 +21,38 @@ const PUBLIC_IMEI_SERVICE_TIER_KEYS = new Set<ImeiServiceTierKey>(
 export function getVisibleWebImeiServiceTierKeys(
   category: ImeiDeviceCategory,
   brand: ImeiBrandFilter,
-  expanded: boolean
+  expanded: boolean,
+  availableTierKeys: readonly ImeiServiceTierKey[] | null = null
 ): ImeiServiceTierKey[] {
-  return getVisibleImeiServiceTierKeysForDevice(
-    category,
-    brand,
-    expanded
-  ).filter((tierKey) => PUBLIC_IMEI_SERVICE_TIER_KEYS.has(tierKey));
+  const visible = filterRuntimeImeiTierKeys(
+    getVisibleImeiServiceTierKeysForDevice(category, brand, expanded).filter(
+      (tierKey) => PUBLIC_IMEI_SERVICE_TIER_KEYS.has(tierKey)
+    ),
+    availableTierKeys
+  );
+  // If only an advanced check is enabled, show that real check immediately.
+  return !expanded && visible.length === 0
+    ? getVisibleWebImeiServiceTierKeys(category, brand, true, availableTierKeys)
+    : visible;
 }
 
 /** True when expanding "show all services" would reveal extra purchasable checks. */
 export function hasAdditionalWebImeiServiceTierKeys(
   category: ImeiDeviceCategory,
-  brand: ImeiBrandFilter
+  brand: ImeiBrandFilter,
+  availableTierKeys: readonly ImeiServiceTierKey[] | null = null
 ): boolean {
-  const collapsed = getVisibleWebImeiServiceTierKeys(category, brand, false);
-  const expanded = getVisibleWebImeiServiceTierKeys(category, brand, true);
+  const collapsed = getVisibleWebImeiServiceTierKeys(
+    category,
+    brand,
+    false,
+    availableTierKeys
+  );
+  const expanded = getVisibleWebImeiServiceTierKeys(
+    category,
+    brand,
+    true,
+    availableTierKeys
+  );
   return expanded.some((tierKey) => !collapsed.includes(tierKey));
 }

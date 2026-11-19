@@ -8,10 +8,11 @@ function formatChargeDueResponse(
   result: Awaited<ReturnType<typeof chargeDueCustomerSavingsGoals>>
 ) {
   return {
+    errored: result.errored,
     failed: result.failed,
     processed: result.processed,
     skipped: result.skipped,
-    success: true,
+    success: result.errored === 0,
   };
 }
 
@@ -25,7 +26,11 @@ export async function POST(request: Request) {
     const supabase = createServiceClient();
     const result = await chargeDueCustomerSavingsGoals({ supabase });
 
-    return NextResponse.json(formatChargeDueResponse(result));
+    // An unexpected per-goal error fails the run so schedulers alert; ordinary
+    // declines are counted in `failed` and keep it a successful run.
+    return NextResponse.json(formatChargeDueResponse(result), {
+      status: result.errored > 0 ? 500 : 200,
+    });
   } catch (error) {
     const message =
       error instanceof Error

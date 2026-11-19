@@ -4,6 +4,12 @@ import type {
   GiglToken,
 } from './gigl.constants';
 
+/** Decides whether a response means GIG rejected the access token. */
+export type GiglTokenRejectionCheck = (response: Response) => Promise<boolean>;
+
+const isTokenRejectedStatus: GiglTokenRejectionCheck = (response) =>
+  Promise.resolve(response.status === 401 || response.status === 403);
+
 type GiglAccessTokenRequestResult = {
   response: Response;
   tokenData: GiglToken;
@@ -17,7 +23,8 @@ export async function fetchGiglWithAccessToken(
   invalidateCachedToken: (token?: string) => void,
   url: string,
   tokenData: GiglToken,
-  buildRequest: (tokenData: GiglToken) => GiglFetchOptions
+  buildRequest: (tokenData: GiglToken) => GiglFetchOptions,
+  isTokenRejected: GiglTokenRejectionCheck = isTokenRejectedStatus
 ): Promise<GiglAccessTokenRequestResult> {
   const withAccessToken = (options: GiglFetchOptions, token: string) => {
     const headers = new Headers(options.headers);
@@ -35,7 +42,7 @@ export async function fetchGiglWithAccessToken(
     withAccessToken(initialOptions, tokenData.token)
   );
 
-  if (response.status !== 401 && response.status !== 403) {
+  if (!(await isTokenRejected(response))) {
     return {
       response,
       tokenData,

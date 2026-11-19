@@ -3,4 +3,5 @@ export type EventRouteDestination =
   | 'ga4'
   | 'snapchat'
   | 'tiktok'
-  | 'chatgpt';
+  | 'chatgpt'
+  | 'x';

@@ -1,5 +1,7 @@
 # Primary mobile card funding connection
 
+> **Retired.** The server now answers every primary-card `initialize` request, including a replay of a saved record that never learned its operation ID, with `410` and code `PRIMARY_CARD_FUNDING_RETIRED`, before reserving anything. Existing operations still resolve through `status`. A new fund tap reaches `initialize` only after the PiggyVest capability probe reports the merchant as enabled, but a saved record with no operation ID (left by an earlier timed-out `initialize`) replays it without consulting the probe. Builds from this source therefore treat `PRIMARY_CARD_FUNDING_RETIRED` like `PRIMARY_CARD_NOT_READY`: the placeholder is dropped, the merchant-wide capability verdict is left alone, and the regular top-up runs; a saved record that already has an operation ID is kept and rechecked through `status`. Released builds that predate this treat the code as an unconfirmed failure and keep such a placeholder until the app is updated; no money moves, and while the capability probe answers not-ready to them (as it does while PiggyVest stays switched off) they cannot start a new card funding. See `docs/primary-wallet-card-checkout.md`.
+
 The primary merchant's existing wallet/card action now branches in
 `wallet-screen.handlers.ts` to `fund-primary-wallet-card.ts`. Other merchants
 retain generic wallet top-up initialization and confirmation. The hosted

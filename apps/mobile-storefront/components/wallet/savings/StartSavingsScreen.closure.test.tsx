@@ -98,7 +98,5 @@ it.each([
     ).toBeOnTheScreen();
     expect(screen.queryByRole('button', { name: 'Close plan' })).toBeNull();
   }
-  expect(
-    screen.getByText('Funding details are unavailable.')
-  ).toBeOnTheScreen();
+  expect(screen.getByText('Savings status is unavailable.')).toBeOnTheScreen();
 });

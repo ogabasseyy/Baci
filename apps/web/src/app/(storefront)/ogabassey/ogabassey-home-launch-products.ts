@@ -14,6 +14,7 @@ import {
 } from '@/lib/cached-data';
 import { getCachedStorefrontProductsBySlugs } from '@/lib/cached-storefront-products-by-slugs';
 import type { CurrencyConfig } from '@/lib/currency';
+import { preferFirstPartyCdnLeadItem } from '@/lib/prefer-first-party-cdn-lead-item';
 
 /** Newest-created first. ISO timestamps compare lexically by time; missing
  * timestamps sort last. Used only for the launch carousel so its order is
@@ -29,6 +30,11 @@ export function sortByNewestCreated<T>(rows: readonly T[]): T[] {
   });
 }
 
+/**
+ * Selects, orders, and formats the OgaBassey homepage launch carousel products,
+ * applying configured launch pins, fresh-arrival promotion, and first-party CDN
+ * lead preference for Slide 0.
+ */
 export function selectOgabasseyLaunchProducts({
   launchCandidateRows,
   pinnedProductRows,
@@ -50,11 +56,14 @@ export function selectOgabasseyLaunchProducts({
     OGABASSEY_PINNED_LAUNCH_SLUGS,
     OGABASSEY_LAUNCH_PINS_SINCE
   );
-  const launchSubset = selectLaunchProducts(
-    [...pinnedProducts, ...carouselProducts].filter(
-      (product) => Boolean(product.slug) && Boolean(product.image)
+  const launchSubset = preferFirstPartyCdnLeadItem(
+    selectLaunchProducts(
+      [...pinnedProducts, ...carouselProducts].filter(
+        (product) => Boolean(product.slug) && Boolean(product.image)
+      ),
+      { pinned: launchPins, limit: LAUNCH_CAROUSEL_LIMIT }
     ),
-    { pinned: launchPins, limit: LAUNCH_CAROUSEL_LIMIT }
+    (product) => product.image
   );
 
   // Launch items feed the server-built hero slides and home JSON-LD only —

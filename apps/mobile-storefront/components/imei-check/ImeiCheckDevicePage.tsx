@@ -9,13 +9,15 @@ import {
   RECOMMENDED_TIER_BY_DEVICE,
   resolveInputIdentifier,
 } from '@baci/shared/imei';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ImeiCheckerColors } from './imei-check.types';
+import type { ImeiWalletPayView } from './imei-check-form-view';
 import { ImeiCheckFormView } from './imei-check-form-view';
 import {
   getPublicVisibleImeiServiceTierKeys,
   hasAdditionalPublicImeiServiceTierKeys,
 } from './resolve-imei-check-failure';
+import { useImeiRuntimeAvailability } from './use-imei-runtime-availability';
 
 interface ImeiCheckDevicePageProps {
   device: ImeiDeviceCategory;
@@ -25,8 +27,13 @@ interface ImeiCheckDevicePageProps {
   isWalletError: boolean;
   isWalletLoading: boolean;
   walletBalance: number;
+  walletIsStoreCredit?: boolean;
+  walletPay?: ImeiWalletPayView;
+  topUpCardOnly?: boolean;
   onVerify: (tier: ImeiServiceTierKey, imei: string) => void;
   onTopUpWallet: (amount: number) => void;
+  /** The number, or what it must be, changed: drop an invalid-number note. */
+  onEditIdentifier?: () => void;
 }
 
 /**
@@ -42,12 +49,20 @@ export function ImeiCheckDevicePage({
   isWalletError,
   isWalletLoading,
   walletBalance,
+  walletIsStoreCredit,
+  walletPay,
+  topUpCardOnly,
   onVerify,
   onTopUpWallet,
+  onEditIdentifier,
 }: ImeiCheckDevicePageProps) {
   const recommendedTier = RECOMMENDED_TIER_BY_DEVICE[device];
-  const [selectedTier, setSelectedTier] =
-    useState<ImeiServiceTierKey>(recommendedTier);
+  // Nothing is preselected: the customer picks a check before any price is
+  // shown, since a preselected card can sit below the pay button's fold
+  // (Fable walks 15/16). The recommended check only sets the input format.
+  const [selectedTierKey, setSelectedTier] =
+    useState<ImeiServiceTierKey | null>(null);
+  const availability = useImeiRuntimeAvailability(device);
   const [selectedBrand, setSelectedBrand] = useState<ImeiBrandFilter>('apple');
   const [showAllServices, setShowAllServices] = useState(false);
   const [imei, setImei] = useState('');
@@ -56,10 +71,11 @@ export function ImeiCheckDevicePage({
     getVisibleImeiServiceTierKeysForDevice(device, brand, expanded);
   const canToggleServices = hasAdditionalPublicImeiServiceTierKeys(
     deviceTierGetter,
-    selectedBrand
+    selectedBrand,
+    availability.availableTierKeys
   );
   const expandedViewEnabled = canToggleServices && showAllServices;
-  const currentTier = IMEI_SERVICE_TIERS[selectedTier];
+  const currentTier = IMEI_SERVICE_TIERS[selectedTierKey ?? recommendedTier];
   // A "both" tier defers to the device's physical identifier, so a laptop/watch
   // tab never accepts a phone IMEI even when the underlying tier allows either.
   const identifier = resolveInputIdentifier(
@@ -69,30 +85,53 @@ export function ImeiCheckDevicePage({
   const visibleTierKeys = getPublicVisibleImeiServiceTierKeys(
     deviceTierGetter,
     selectedBrand,
-    expandedViewEnabled
+    expandedViewEnabled,
+    availability.availableTierKeys
   );
-  const displayedTierKeys =
-    visibleTierKeys.length > 0 ? visibleTierKeys : [recommendedTier];
+  const displayedTierKeys = visibleTierKeys;
+  const selectedTier =
+    selectedTierKey && displayedTierKeys.includes(selectedTierKey)
+      ? selectedTierKey
+      : null;
+  useEffect(() => {
+    if (selectedTierKey && !displayedTierKeys.includes(selectedTierKey))
+      setSelectedTier(null);
+  }, [displayedTierKeys, selectedTierKey]);
 
   // Switch tiers; if the new tier expects a different identifier (IMEI vs
   // serial) clear the input so stale, wrong-format text never reaches verify.
   // Compare the device-resolved identifiers, not the raw tier ones.
-  const applyTier = (nextTier: ImeiServiceTierKey) => {
+  const applyTier = (nextTier: ImeiServiceTierKey | null) => {
+    // A different check or brand can expect a different number.
+    onEditIdentifier?.();
+    if (!nextTier) {
+      setSelectedTier(null);
+      return;
+    }
     const nextIdentifier = resolveInputIdentifier(
       IMEI_SERVICE_TIERS[nextTier].identifier,
       IMEI_IDENTIFIER_BY_DEVICE[device]
     );
-    if (nextIdentifier !== identifier) {
+    // Only a typed number the next check can't take is cleared: a 15-digit
+    // IMEI typed for Full Report survives a switch to "IMEI or serial"
+    // (Fable walk 15).
+    if (
+      nextIdentifier !== identifier &&
+      normalizeDeviceIdentifier(imei, nextIdentifier) !== imei
+    ) {
       setImei('');
     }
     setSelectedTier(nextTier);
   };
 
   const handleBrandSelect = (brand: ImeiBrandFilter) => {
+    // A different check or brand can expect a different number.
+    onEditIdentifier?.();
     setSelectedBrand(brand);
     const nextCanToggle = hasAdditionalPublicImeiServiceTierKeys(
       deviceTierGetter,
-      brand
+      brand,
+      availability.availableTierKeys
     );
     const nextExpanded = nextCanToggle && showAllServices;
     if (!nextCanToggle && showAllServices) {
@@ -101,29 +140,40 @@ export function ImeiCheckDevicePage({
     const nextVisibleTiers = getPublicVisibleImeiServiceTierKeys(
       deviceTierGetter,
       brand,
-      nextExpanded
+      nextExpanded,
+      availability.availableTierKeys
     );
-    if (!nextVisibleTiers.includes(selectedTier)) {
-      applyTier(nextVisibleTiers[0] ?? recommendedTier);
+    // A chosen check the new view hides is dropped, never swapped for
+    // another one the customer did not pick.
+    if (selectedTier && !nextVisibleTiers.includes(selectedTier)) {
+      applyTier(null);
     }
   };
 
   const handleToggleServices = () => {
     if (!canToggleServices) return;
+    // A different set of checks can expect a different number.
+    onEditIdentifier?.();
     const nextExpanded = !showAllServices;
     setShowAllServices(nextExpanded);
     const nextVisibleTiers = getPublicVisibleImeiServiceTierKeys(
       deviceTierGetter,
       selectedBrand,
-      nextExpanded
+      nextExpanded,
+      availability.availableTierKeys
     );
-    if (!nextVisibleTiers.includes(selectedTier)) {
-      applyTier(nextVisibleTiers[0] ?? recommendedTier);
+    // A chosen check the new view hides is dropped, never swapped for
+    // another one the customer did not pick.
+    if (selectedTier && !nextVisibleTiers.includes(selectedTier)) {
+      applyTier(null);
     }
   };
 
   return (
     <ImeiCheckFormView
+      availabilityFailed={availability.failed}
+      availabilityLoading={availability.loading}
+      onRetryAvailability={availability.retry}
       colors={colors}
       currentTier={currentTier}
       displayedTierKeys={displayedTierKeys}
@@ -139,13 +189,25 @@ export function ImeiCheckDevicePage({
       canToggleServices={canToggleServices}
       showAllServices={expandedViewEnabled}
       walletBalance={walletBalance}
+      walletIsStoreCredit={walletIsStoreCredit}
+      walletPay={walletPay}
+      topUpCardOnly={topUpCardOnly}
       onBrandSelect={handleBrandSelect}
-      onChangeImei={(text) =>
-        setImei(normalizeDeviceIdentifier(text, identifier))
-      }
-      onCheck={() => onVerify(selectedTier, imei)}
-      onClearImei={() => setImei('')}
-      onTierSelect={applyTier}
+      onChangeImei={(text) => {
+        onEditIdentifier?.();
+        setImei(normalizeDeviceIdentifier(text, identifier));
+      }}
+      onCheck={() => {
+        if (selectedTier && displayedTierKeys.includes(selectedTier))
+          onVerify(selectedTier, imei);
+      }}
+      onClearImei={() => {
+        onEditIdentifier?.();
+        setImei('');
+      }}
+      onTierSelect={(tier) => {
+        if (displayedTierKeys.includes(tier)) applyTier(tier);
+      }}
       onTopUpWallet={onTopUpWallet}
       onToggleServices={handleToggleServices}
     />

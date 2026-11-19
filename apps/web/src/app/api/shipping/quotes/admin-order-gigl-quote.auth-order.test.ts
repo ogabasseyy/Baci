@@ -70,14 +70,28 @@ describe('Admin GIGL edge auth and order validation', () => {
     expect(mocks.createAdminClient).not.toHaveBeenCalled();
   });
 
-  it('rejects a non-owner', async () => {
+  it('lets orders.fulfill + orders.edit staff bind a quote for their resolved merchant', async () => {
     mocks.getUserAccess.mockResolvedValue({
       isOwner: false,
       merchantId,
-      permissions: {},
+      permissions: { orders: { fulfill: true, edit: true } },
     });
     const response = await subject({ receiver });
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(200);
+    for (const action of ['fulfill', 'edit']) {
+      expect(mocks.hasPermission).toHaveBeenCalledWith(
+        expect.objectContaining({ isOwner: false, merchantId }),
+        'orders',
+        action
+      );
+    }
+    expect(mocks.bindRpc).toHaveBeenCalledWith(
+      'bind_admin_gigl_quote',
+      expect.objectContaining({
+        p_order_id: orderId,
+        p_merchant_id: merchantId,
+      })
+    );
     expect(mocks.createAdminClient).not.toHaveBeenCalled();
   });
 
@@ -85,6 +99,17 @@ describe('Admin GIGL edge auth and order validation', () => {
     mocks.hasPermission.mockReturnValue(false);
     const response = await subject({ receiver });
     expect(response.status).toBe(403);
+    expect(mocks.createAdminClient).not.toHaveBeenCalled();
+  });
+
+  it('rejects a bind from a caller without orders.edit before the provider call', async () => {
+    mocks.hasPermission.mockImplementation(
+      (_access: unknown, _resource: string, action: string) => action !== 'edit'
+    );
+    const response = await subject({ receiver });
+    expect(response.status).toBe(403);
+    expect(mocks.getProviderQuotes).not.toHaveBeenCalled();
+    expect(mocks.bindRpc).not.toHaveBeenCalled();
     expect(mocks.createAdminClient).not.toHaveBeenCalled();
   });
 

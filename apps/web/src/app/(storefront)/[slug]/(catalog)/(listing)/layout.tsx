@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react';
-import { StorefrontFullStyleLoader } from '@/app/(storefront)/storefront-full-style-loader';
 
 // The shared [slug] layout resolves custom-domain routing with request headers
 // before child listing routes render. Next.js 16 validates route entries
@@ -9,15 +8,10 @@ import { StorefrontFullStyleLoader } from '@/app/(storefront)/storefront-full-st
 // existing Suspense boundaries in products/search/category pages.
 export const unstable_instant = false;
 
-export default function StorefrontFullCssLayout({
+export default function StorefrontListingLayout({
   children,
 }: {
   children: ReactNode;
 }) {
-  return (
-    <>
-      <StorefrontFullStyleLoader />
-      {children}
-    </>
-  );
+  return <>{children}</>;
 }

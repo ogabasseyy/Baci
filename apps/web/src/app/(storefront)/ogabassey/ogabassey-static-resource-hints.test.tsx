@@ -5,7 +5,7 @@ import { OgabasseyStaticResourceHints } from '@/app/(storefront)/ogabassey/ogaba
 import { OGABASSEY_CDN_ORIGIN } from '@/components/storefront/ogabassey/config/storefront-origins';
 
 describe('OgabasseyStaticResourceHints', () => {
-  it('keeps static hints connection-only so viewport image preloads stay owned by markup', () => {
+  it('prefetches DNS without emitting a duplicate late preconnect or image preload', () => {
     const html = renderToString(<OgabasseyStaticResourceHints />);
     const template = document.createElement('template');
     template.innerHTML = html;
@@ -24,7 +24,7 @@ describe('OgabasseyStaticResourceHints', () => {
         link.getAttribute('href') === OGABASSEY_CDN_ORIGIN
     );
     expect(dnsPrefetch).toBeDefined();
-    expect(preconnect).toBeDefined();
+    expect(preconnect).toBeUndefined();
     expect(
       links.filter((link) => link.getAttribute('rel') === 'preload')
     ).toHaveLength(0);

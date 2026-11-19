@@ -1,5 +1,6 @@
-import type { Metadata, Viewport } from 'next';
+import type { Metadata } from 'next';
 import { Suspense } from 'react';
+import { documentViewport } from '@/app/document-viewport';
 import { RootDocumentStyle } from '@/app/root-document-style';
 import { RootDynamicBody } from '@/app/root-dynamic-body';
 import { Toaster } from '@/components/ui/toaster';
@@ -83,22 +84,7 @@ export const metadata: Metadata = {
   },
 };
 
-export const viewport: Viewport = {
-  // Core viewport settings for responsive design
-  width: 'device-width',
-  initialScale: 1,
-  maximumScale: 5, // Allow zoom for accessibility (WCAG 1.4.4)
-  userScalable: true, // Never disable zoom - accessibility requirement
-  // Enable safe area support for notched devices (iPhone, etc.)
-  viewportFit: 'cover',
-  // Theme color for browser chrome (neutral for dashboard/platform)
-  themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
-    { media: '(prefers-color-scheme: dark)', color: '#0F0F0F' },
-  ],
-  // Color scheme support
-  colorScheme: 'light dark',
-};
+export const viewport = documentViewport;
 
 export default function RootLayout({
   children,

@@ -9,6 +9,7 @@ import { useOrderTotals } from './use-order-totals';
 
 interface UseCheckoutFinancialSessionOptions {
   merchant?: {
+    id?: string;
     vat_registration_status?: string | null;
     vat_rate?: number | null;
   } | null;
@@ -26,6 +27,7 @@ interface UseCheckoutFinancialSessionOptions {
   isOrderInFlightRef: { current: boolean };
   merchantSlug?: string;
   pendingCheckoutOrder: PendingCheckoutOrderSnapshot | null;
+  recoverCart?: boolean;
   walletSessionUserId?: string;
   resumeOrderId: string | null;
   preferredGateway: 'credpal' | 'credit_direct' | null;
@@ -48,6 +50,7 @@ export function useCheckoutFinancialSession({
   isOrderInFlightRef,
   merchantSlug,
   pendingCheckoutOrder,
+  recoverCart,
   walletSessionUserId,
   resumeOrderId,
   preferredGateway,
@@ -76,8 +79,10 @@ export function useCheckoutFinancialSession({
     hasAuthenticatedUser,
     hasCheckoutCartItems,
     isOrderInFlightRef,
+    merchantId: merchant?.id,
     merchantSlug,
     pendingCheckoutOrder,
+    recoverCart,
     walletSessionUserId,
     resumeOrderId,
     preferredGateway,

@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { afterEach, expect, it, vi } from 'vitest';
 import { isAnalyticsAllowed } from './analytics-consent';
 
@@ -11,6 +13,7 @@ it.each([
   'not-json',
   '{}',
   '{"analytics":false}',
+  '{"analytics":true}',
   '{"analytics":"true"}',
   '{"analytics":1}',
   'null',
@@ -21,7 +24,12 @@ it.each([
 it('accepts only an explicit stored analytics grant', () => {
   localStorage.setItem(
     'baci-cookie-consent',
-    JSON.stringify({ analytics: true })
+    JSON.stringify({
+      necessary: true,
+      analytics: true,
+      marketing: false,
+      functional: false,
+    })
   );
   expect(isAnalyticsAllowed()).toBe(true);
   localStorage.setItem(

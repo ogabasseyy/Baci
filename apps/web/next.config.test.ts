@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { NextConfig } from 'next';
 import { PHASE_PRODUCTION_BUILD } from 'next/constants';
@@ -42,6 +42,14 @@ describe('next.config core options', () => {
     expect(nextConfig.skipTrailingSlashRedirect).toBe(true);
   });
 
+  it('declares the loopback development origin option exactly once after integration', () => {
+    const source = readFileSync(
+      resolve(process.cwd(), 'next.config.ts'),
+      'utf8'
+    );
+    expect(source.match(/allowedDevOrigins\s*:/g)).toHaveLength(1);
+  });
+
   it('allows the IPv4 loopback host used by the local storefront browser', () => {
     expect(nextConfig.allowedDevOrigins).toContain('127.0.0.1');
   });
@@ -63,6 +71,13 @@ describe('next.config core options', () => {
 
   it('uses the TypeScript CLI so Next can run the TypeScript 7 compiler', () => {
     expect(nextConfig.experimental?.useTypeScriptCli).toBe(true);
+  });
+
+  it('uses the serial native build checker without skipping type errors', () => {
+    expect(nextConfig.typescript).toEqual({
+      tsconfigPath: 'tsconfig.build.json',
+      ignoreBuildErrors: false,
+    });
   });
 
   it('publishes only public PostHog release context envs to the browser bundle', () => {

@@ -1,3 +1,4 @@
+import { parseXEventIds } from '@/lib/x-ads/parse-x-event-ids';
 import { normalizeAnalyticsId } from './analytics-id';
 import type { MerchantWithAnalytics } from './analytics-pixel-provider';
 
@@ -25,6 +26,10 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 }
 
 function hasGrowthIntegrationAccess(merchant: Record<string, unknown>) {
+  // Public snapshots carry a derived hint, never private billing fields.
+  if (typeof merchant.growth_integrations_enabled === 'boolean') {
+    return merchant.growth_integrations_enabled;
+  }
   const premiumFeatures = Array.isArray(merchant.premium_features)
     ? new Set(
         merchant.premium_features
@@ -73,7 +78,7 @@ export function buildMerchantAnalyticsSettings(
   }
 
   const featureSettings = asRecord(merchant.feature_settings);
-  return Object.fromEntries(
+  const identifiers = Object.fromEntries(
     ANALYTICS_ID_KEYS.map((key) => [
       key,
       normalizeAnalyticsId(featureSettings?.[key]) ??
@@ -82,4 +87,9 @@ export function buildMerchantAnalyticsSettings(
           : normalizeAnalyticsId(merchant[key])),
     ])
   ) as MerchantWithAnalytics;
+  const events = parseXEventIds(featureSettings?.twitter_event_ids);
+  return {
+    ...identifiers,
+    ...(events ? { twitter_event_ids: events } : {}),
+  };
 }

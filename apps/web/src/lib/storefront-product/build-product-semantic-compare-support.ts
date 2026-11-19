@@ -1,3 +1,6 @@
+import { brandAuthorityTaxonomy } from '@/lib/storefront-category/brand-authority-taxonomy';
+import { modelFamilyAuthorityTaxonomy } from '@/lib/storefront-category/model-family-authority-taxonomy';
+import { buildCategoryPriceBandCandidates } from '@/lib/storefront-compare/build-category-price-band-candidates';
 import {
   buildProductSupportLinks,
   type CommercialSupportLink,
@@ -7,10 +10,14 @@ import {
   PRODUCT_SCOPED_COMPARE_DISCOVERY_PRODUCT_LIMIT,
 } from '@/lib/storefront-compare/build-compare-discovery-links';
 import { parseCompareSlug } from '@/lib/storefront-compare/compare-slugs';
+import { COMMERCIAL_SUPPORT_PRODUCTS_PER_CATEGORY_LIMIT } from '@/lib/storefront-compare/price-band-taxonomy';
+import { resolveEligibleCategoryHubDestinations } from '@/lib/storefront-content/eligible-hub-destinations';
 import type {
   BuildProductSemanticModelInput,
   ProductSemanticCandidate,
 } from './product-semantic-types';
+
+export const MAX_PRODUCT_SUPPORT_LINKS = 5;
 
 export interface ProductSemanticCompareSupport {
   approvedCompareSlugs: ReadonlySet<string>;
@@ -71,6 +78,7 @@ function getCompareApprovalInventory(input: BuildProductSemanticModelInput) {
 
   return [input.currentProduct, ...input.inventory]
     .filter((product) => product.category_slug === input.categorySlug)
+    .filter((product) => product.has_explicit_slug !== false)
     .filter((product) => {
       if (seenSlugs.has(product.slug)) {
         return false;
@@ -80,6 +88,31 @@ function getCompareApprovalInventory(input: BuildProductSemanticModelInput) {
       return true;
     })
     .slice(0, PRODUCT_SCOPED_COMPARE_DISCOVERY_PRODUCT_LIMIT);
+}
+
+function getDestinationPriceBandInventory(
+  input: BuildProductSemanticModelInput
+) {
+  const sourceInventory = input.priceBandInventory ?? [
+    ...input.inventory,
+    input.currentProduct,
+  ];
+  const seenSlugs = new Set<string>();
+  const hasJunctionCandidates = sourceInventory.some(
+    (product) =>
+      product.category_slugs !== null && product.category_slugs !== undefined
+  );
+
+  return sourceInventory
+    .filter((product) => {
+      if (hasJunctionCandidates && product.category_slugs === null) {
+        return false;
+      }
+      if (seenSlugs.has(product.slug)) return false;
+      seenSlugs.add(product.slug);
+      return true;
+    })
+    .slice(0, COMMERCIAL_SUPPORT_PRODUCTS_PER_CATEGORY_LIMIT);
 }
 
 function extractCategoryCompareSlug(href: string, categorySlug: string) {
@@ -136,6 +169,73 @@ function dedupeLinks(links: CommercialSupportLink[]) {
   });
 }
 
+function buildBrandAndFamilyHubLinks(
+  input: BuildProductSemanticModelInput
+): CommercialSupportLink[] {
+  const hubInventory = input.hubEligibilityInventory ?? [];
+  if (hubInventory.length === 0 || !input.currentProduct.brand) {
+    return [];
+  }
+
+  const matchedBrandEntry = brandAuthorityTaxonomy
+    .getEntries(input.categorySlug)
+    .find((entry) =>
+      brandAuthorityTaxonomy.matchesBrand(
+        entry,
+        input.currentProduct.brand ?? null
+      )
+    );
+
+  if (!matchedBrandEntry) {
+    return [];
+  }
+
+  const eligibleHubs = resolveEligibleCategoryHubDestinations({
+    storeUrl: input.storeUrl,
+    categorySlug: input.categorySlug,
+    products: hubInventory,
+  });
+
+  const matchedBrandHub = eligibleHubs.brandHubs.find(
+    (hub) => hub.brand_key === matchedBrandEntry.brandKey
+  );
+
+  if (!matchedBrandHub) {
+    return [];
+  }
+
+  const links: CommercialSupportLink[] = [
+    { href: matchedBrandHub.href, label: matchedBrandHub.label },
+  ];
+
+  const matchedFamilyHub = eligibleHubs.familyHubs.find((hub) => {
+    if (hub.brand_key !== matchedBrandEntry.brandKey) {
+      return false;
+    }
+    const familyEntry = modelFamilyAuthorityTaxonomy.getEntry(
+      input.categorySlug,
+      hub.brand_key,
+      hub.family_key ?? ''
+    );
+    return Boolean(
+      familyEntry &&
+        modelFamilyAuthorityTaxonomy.matchesProduct(
+          familyEntry,
+          input.currentProduct.name
+        )
+    );
+  });
+
+  if (matchedFamilyHub) {
+    links.push({
+      href: matchedFamilyHub.href,
+      label: matchedFamilyHub.label,
+    });
+  }
+
+  return links;
+}
+
 export function buildProductSemanticCompareSupport(
   input: BuildProductSemanticModelInput
 ): ProductSemanticCompareSupport {
@@ -155,9 +255,16 @@ export function buildProductSemanticCompareSupport(
     normalizedInput.storeUrl,
     normalizedInput.currentProduct
   );
+  const brandAndFamilyHubLinks = buildBrandAndFamilyHubLinks(normalizedInput);
   const supportLinkProducts = compareApprovalInventory;
-  const supportLinks = dedupeLinks([
+  const priceBandCandidates = buildCategoryPriceBandCandidates(
+    normalizedInput.categorySlug,
+    getDestinationPriceBandInventory(normalizedInput),
+    { merchantCurrency: normalizedInput.merchantCurrency }
+  );
+  const rawSupportLinks: CommercialSupportLink[] = [
     buildCategoryHubLink(normalizedInput),
+    ...brandAndFamilyHubLinks,
     ...buildProductSupportLinks({
       approvedCompareSlugs,
       storeUrl: normalizedInput.storeUrl,
@@ -166,16 +273,21 @@ export function buildProductSemanticCompareSupport(
       currentProductPrice: normalizedInput.currentProduct.price,
       includeBrandCompareLink: false,
       products: supportLinkProducts,
+      priceBandCandidates,
+      merchantCurrency: normalizedInput.merchantCurrency,
     }),
-  ]).filter(
-    (link) =>
-      link.href !== currentProductHref &&
-      isApprovedSupportLink({
-        approvedCompareSlugs,
-        categorySlug: normalizedInput.categorySlug,
-        href: link.href,
-      })
-  );
+  ];
+  const supportLinks = dedupeLinks(rawSupportLinks)
+    .filter(
+      (link) =>
+        link.href !== currentProductHref &&
+        isApprovedSupportLink({
+          approvedCompareSlugs,
+          categorySlug: normalizedInput.categorySlug,
+          href: link.href,
+        })
+    )
+    .slice(0, MAX_PRODUCT_SUPPORT_LINKS);
 
   return {
     approvedCompareSlugs,

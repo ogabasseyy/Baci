@@ -2,6 +2,7 @@ import Ionicons from '@react-native-vector-icons/ionicons';
 import Constants from 'expo-constants';
 import { type Href, router } from 'expo-router';
 import { useEffect, useRef } from 'react';
+import type { TextInputInstance } from 'react-native';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HeaderMinimal } from '@/components/storefront/HeaderMinimal';
@@ -16,21 +17,11 @@ import { useCartStore } from '@/stores/cart-store';
 import { useDrawerStore } from '@/stores/drawer-store';
 import { useThemeStore } from '@/stores/theme-store';
 import { getHeaderStyles } from './header.styles';
-
-interface HeaderProps {
-  showSearch?: boolean;
-  onSearchPress?: () => void;
-  isSearchActive?: boolean;
-  searchQuery?: string;
-  onSearchQueryChange?: (text: string) => void;
-  onSearchSubmit?: () => void;
-  onSearchCancel?: () => void;
-  isScrolled?: boolean;
-}
-
-// Background pattern from web (SVG Data URI)
+import type { HeaderProps } from './header.types';
+import { ShortcutTileBackdrop } from './ShortcutTileBackdrop';
 
 export function Header({
+  searchFocusTimer,
   showSearch = true,
   onSearchPress,
   isSearchActive = false,
@@ -39,9 +30,11 @@ export function Header({
   onSearchSubmit,
   onSearchCancel,
   isScrolled = false,
+  useWarmDarkSurface = false,
+  useScallopedSearch = false,
 }: HeaderProps) {
   const insets = useSafeAreaInsets();
-  const searchInputRef = useRef<TextInput>(null);
+  const searchInputRef = useRef<TextInputInstance>(null);
   const itemCount = useCartStore((state) => state.itemCount());
   const openDrawer = useDrawerStore((state) => state.openDrawer);
   const template = getTemplateConfig(CONFIG.BUSINESS_TYPE, CONFIG.TEMPLATE_ID);
@@ -49,14 +42,16 @@ export function Header({
   const { colors } = useTheme();
 
   const styles = getHeaderStyles(colors);
+  const scallopSearch = useScallopedSearch && !isSearchActive;
 
   // Focus the search input when search mode activates (ref-based to avoid autoFocus a11y warning)
   useEffect(() => {
     if (isSearchActive) {
       const timer = setTimeout(() => searchInputRef.current?.focus(), 100);
+      if (searchFocusTimer) searchFocusTimer.current = timer;
       return () => clearTimeout(timer);
     }
-  }, [isSearchActive]);
+  }, [isSearchActive, searchFocusTimer]);
 
   const handleSearchPress = () => {
     if (onSearchPress) {
@@ -79,6 +74,7 @@ export function Header({
         style={[
           styles.eliteContainer,
           isScrolled && { backgroundColor: colors.black },
+          useWarmDarkSurface && { backgroundColor: '#181416' },
           { paddingTop: eliteTopPadding },
           isSanta && { backgroundColor: seasonalTokens.holidayBg },
         ]}
@@ -147,15 +143,25 @@ export function Header({
               <View
                 style={[
                   styles.searchPill,
+                  useWarmDarkSurface && { backgroundColor: colors.muted },
                   isSanta && styles.santaSearchPill,
                   isSearchActive && styles.activeSearchPill,
+                  scallopSearch && { backgroundColor: 'transparent' },
                 ]}
               >
+                {scallopSearch && (
+                  <ShortcutTileBackdrop
+                    color={useWarmDarkSurface ? colors.muted : colors.card}
+                    shortEdgesOnly
+                  />
+                )}
                 <Ionicons
                   name="search-outline"
                   size={20}
                   color={
-                    isSearchActive ? colors.textSecondary : colors.placeholder
+                    isSearchActive || scallopSearch
+                      ? colors.textSecondary
+                      : colors.placeholder
                   }
                 />
                 {!isSearchActive ? (

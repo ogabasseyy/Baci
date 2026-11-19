@@ -2,7 +2,7 @@ import { act, renderHook } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { useCheckoutDeliveryAddressHandlers } from './use-checkout-delivery-address-handlers';
 
-function renderAddressHandlers() {
+function renderAddressHandlers(initialLocality = { city: '', state: '' }) {
   const dependencies = {
     clearInferredLocationDebounce: vi.fn(),
     merchantCountry: 'NG',
@@ -15,13 +15,104 @@ function renderAddressHandlers() {
     setSelectedAddressId: vi.fn(),
     shippingStates: ['Lagos', 'Ogun'],
   };
-  const hook = renderHook(() =>
-    useCheckoutDeliveryAddressHandlers(dependencies)
+  const hook = renderHook(
+    (locality) =>
+      useCheckoutDeliveryAddressHandlers({
+        ...dependencies,
+        newAddressCity: locality.city,
+        newAddressState: locality.state,
+      }),
+    { initialProps: initialLocality }
   );
   return { ...hook, dependencies };
 }
 
 describe('useCheckoutDeliveryAddressHandlers', () => {
+  it.each([
+    'saved',
+    'suggestion',
+  ] as const)('reinfers locality after replacing a %s address without clearing the street first', (source) => {
+    const { result, dependencies, rerender } = renderAddressHandlers();
+    act(() => {
+      if (source === 'saved') {
+        result.current.onSelectAddress({
+          id: 17,
+          label: 'Home',
+          address: '12 Allen Avenue, Ikeja, Lagos',
+          phone: '+2348000000000',
+          isDefault: true,
+        });
+      } else {
+        result.current.onSelectPlace({
+          formattedAddress: '12 Allen Avenue, Ikeja, Lagos',
+          streetNumber: '12',
+          route: 'Allen Avenue',
+          city: 'Ikeja',
+          state: 'Lagos',
+          zip: '',
+          country: 'Nigeria',
+          location: { latitude: 6.6, longitude: 3.3 },
+        });
+      }
+    });
+    rerender({ city: 'Ikeja', state: 'Lagos' });
+    dependencies.setFields.mockClear();
+    dependencies.resetQuotesForAddressChange.mockClear();
+
+    act(() => result.current.onStreetChange('12 New Road, Abeokuta, Ogun'));
+
+    expect(dependencies.setFields).toHaveBeenCalledWith({
+      newAddressStreet: '12 New Road, Abeokuta, Ogun',
+      newAddressCity: '',
+      newAddressState: '',
+      deliveryCoordinates: null,
+    });
+    expect(dependencies.scheduleInferredLocationUpdate).toHaveBeenCalledWith({
+      city: 'Abeokuta',
+      state: 'Ogun',
+    });
+    expect(dependencies.resetQuotesForAddressChange).toHaveBeenCalledOnce();
+  });
+
+  it('preserves restored locality when correcting a street-only address', () => {
+    const { result, dependencies } = renderAddressHandlers({
+      city: 'Ogombo',
+      state: 'Lagos',
+    });
+
+    act(() => result.current.onStreetChange('12 Example Estate Ogombo'));
+
+    expect(dependencies.setFields).toHaveBeenCalledWith({
+      newAddressStreet: '12 Example Estate Ogombo',
+      deliveryCoordinates: null,
+    });
+    expect(dependencies.scheduleInferredLocationUpdate).not.toHaveBeenCalled();
+  });
+
+  it('preserves manually edited locality after a saved-address selection', () => {
+    const { result, dependencies, rerender } = renderAddressHandlers();
+    act(() => {
+      result.current.onSelectAddress({
+        id: 17,
+        label: 'Home',
+        address: '12 Allen Avenue, Ikeja, Lagos',
+        phone: '+2348000000000',
+        isDefault: true,
+      });
+      result.current.onCityChange('Ogombo');
+    });
+    rerender({ city: 'Ogombo', state: 'Lagos' });
+    dependencies.setFields.mockClear();
+
+    act(() => result.current.onStreetChange('12 Example Estate Ogombo'));
+
+    expect(dependencies.setFields).toHaveBeenCalledWith({
+      newAddressStreet: '12 Example Estate Ogombo',
+      deliveryCoordinates: null,
+    });
+    expect(dependencies.scheduleInferredLocationUpdate).not.toHaveBeenCalled();
+  });
+
   it('selects a saved address, clears pending inference and resets quotes', () => {
     const { result, dependencies } = renderAddressHandlers();
 

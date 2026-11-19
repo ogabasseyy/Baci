@@ -78,7 +78,7 @@ it('wires restricted nonce admission, independent verifier and fixed artifact st
   );
   const settings = f.boot.mock.calls.at(-1)?.[0];
   expect(settings.ownerPort).toBe(43104);
-  expect(settings.backgroundWorker).toEqual({ schedule: expect.any(Function) });
+  expect(settings.backgroundWorker).toBeUndefined();
   expect(settings.ownerBridge.consumeNonce).toBe(f.nonce);
   expect(settings.integration.artifactDirectory).toBe(
     '/var/lib/baci-builder/artifacts'
@@ -108,6 +108,18 @@ it('wires restricted nonce admission, independent verifier and fixed artifact st
   await service.close();
   expect(f.close).toHaveBeenCalledOnce();
   expect(f.end).toHaveBeenCalledOnce();
+});
+
+it('installs the scheduler only when the private operator config opts in', async () => {
+  f.boot.mockResolvedValueOnce({ close: f.close });
+  const service = await startProductionBuilder({
+    ...config,
+    backgroundBuilds: true,
+  });
+  expect(f.boot.mock.calls.at(-1)?.[0].backgroundWorker).toEqual({
+    schedule: expect.any(Function),
+  });
+  await service.close();
 });
 
 it('closes the restricted database pool when the stack fails to start', async () => {

@@ -65,6 +65,10 @@ Validate rate-limit behavior through the direct production connection. The
 600-second verifier path and graceful shutdown need qualification against
 every actual proxy and application deadline.
 
+Background finalization requires `"backgroundBuilds": true` in the private
+builder configuration. Leave it absent until the background worker, verifier
+and recovery path are qualified.
+
 Do not activate builder OAuth, owner routes, the runner or delivery merely because
 the local smoke passes. Required reviews, CI, private-draft recovery, data and
 grant inventory, production credentials, rollout and negative ingress tests are

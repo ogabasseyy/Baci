@@ -14,10 +14,15 @@ export function createBuilderDraftApproval(
   return {
     load: loadDraftApproval,
     loadLifecycle: loadLifecycleApproval,
-    async confirm(client: Parameters<typeof loadDraftApproval>[0], id: string) {
+    async confirm(
+      client: Parameters<typeof loadDraftApproval>[0],
+      id: string,
+      signal?: AbortSignal
+    ) {
       const existing = await loadDraftApproval(client, id);
       if (existing.status === 'confirmation-required')
-        await attest(client, id, 'draft');
+        await attest(client, id, 'draft', signal);
+      signal?.throwIfAborted();
       return confirmDraftApply(client, id);
     },
     confirmPublication: unavailable,

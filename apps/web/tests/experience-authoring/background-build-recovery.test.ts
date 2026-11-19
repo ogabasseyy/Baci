@@ -212,6 +212,24 @@ it('reconciles a lost finalize response for the same linked job under RLS', asyn
         { path: 'app.css', mime: 'text/css', bytes: '', digest: hash('') },
       ],
     };
+    const wrongAttempt = await f.owner.supabase.rpc(
+      'experience_finalize_build',
+      { ...args, p_attempt: randomUUID() }
+    );
+    expect(wrongAttempt.error?.message).toContain('BUILD_FAILED');
+    await f.db.pool.query(
+      "UPDATE experience_jobs SET lease_expires_at=clock_timestamp()-interval '1 second' WHERE id=$1",
+      [job]
+    );
+    const expired = await f.owner.supabase.rpc(
+      'experience_finalize_build',
+      args
+    );
+    expect(expired.error?.message).toContain('BUILD_FAILED');
+    await f.db.pool.query(
+      "UPDATE experience_jobs SET lease_expires_at=clock_timestamp()+interval '1 minute' WHERE id=$1",
+      [job]
+    );
     const committed = await f.owner.supabase.rpc(
       'experience_finalize_build',
       args
@@ -242,11 +260,16 @@ it('reconciles a lost finalize response for the same linked job under RLS', asyn
     );
     expect(foreignReplay.error).not.toBeNull();
     expect(foreignReplay.data).toBeNull();
-    const conflict = await f.owner.supabase.rpc('experience_finalize_build', {
-      ...args,
-      p_receipt: hash('other'),
-    });
-    expect(conflict.error?.message).toContain('IDEMPOTENCY_CONFLICT');
+    for (const payload of [
+      { ...args, p_attempt: randomUUID() },
+      { ...args, p_receipt: hash('other') },
+    ]) {
+      const conflict = await f.owner.supabase.rpc(
+        'experience_finalize_build',
+        payload
+      );
+      expect(conflict.error?.message).toContain('IDEMPOTENCY_CONFLICT');
+    }
   } finally {
     await f.close();
   }

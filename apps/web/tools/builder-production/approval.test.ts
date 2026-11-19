@@ -23,7 +23,7 @@ it('requires independent proof before confirming a fresh private draft', async (
   const attest = vi.fn(async () => {});
   const approval = createBuilderDraftApproval(attest);
   await approval.confirm({} as never, 'id');
-  expect(attest).toHaveBeenCalledWith({}, 'id', 'draft');
+  expect(attest).toHaveBeenCalledWith({}, 'id', 'draft', undefined);
   expect(confirmDraftApply).toHaveBeenCalledOnce();
 });
 
@@ -54,5 +54,21 @@ it('refuses publication and mode changes before any mutation', async () => {
   await expect(approval.confirmModeExit({} as never, 'id')).rejects.toThrow(
     'PUBLIC_VERIFIER_NOT_INSTALLED'
   );
+  expect(confirmDraftApply).not.toHaveBeenCalled();
+});
+
+it('forwards cancellation to colocated draft attestation and stops before confirming', async () => {
+  const abort = new AbortController();
+  const end = Error('approval request ended');
+  const attest = vi.fn(async () => abort.abort(end));
+  const approval = createBuilderDraftApproval(attest);
+  const owner = {} as never;
+  const id = '11111111-1111-4111-8111-111111111111';
+  vi.mocked(loadDraftApproval).mockResolvedValueOnce({
+    status: 'confirmation-required',
+  } as never);
+
+  await expect(approval.confirm(owner, id, abort.signal)).rejects.toBe(end);
+  expect(attest).toHaveBeenCalledWith(owner, id, 'draft', abort.signal);
   expect(confirmDraftApply).not.toHaveBeenCalled();
 });

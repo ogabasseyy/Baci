@@ -1,13 +1,9 @@
 // @vitest-environment node
 import { expect, it, vi } from 'vitest';
 
-vi.mock('@/lib/public-serialized-variant-summary', () => ({
-  getPublicSerializedVariantSummariesByProductId: vi.fn(async () => []),
-}));
-
 import { loadOwnerPreviewCatalog } from './catalog-adapter';
 
-function fixture() {
+function fixture(serialized = false, withVariant = false) {
   let allowed = true;
   const product = {
     id: 'p1',
@@ -22,6 +18,8 @@ function fixture() {
     images: [],
     category: 'Phones',
     cost_price: 1,
+    inventory_tracking_policy: serialized ? 'serialized_strict' : 'off',
+    has_variants: withVariant,
   };
   const auth = {
     getUser: vi.fn(async () => ({
@@ -29,15 +27,49 @@ function fixture() {
       error: null,
     })),
   };
-  const rpc = vi.fn(async (name: string) =>
+  const rpc = vi.fn(async (name: string, _args?: unknown) =>
     name === 'experience_authorize_read'
       ? { data: allowed, error: null }
-      : { data: [], error: null }
+      : {
+          data:
+            name === 'experience_owner_serialized_availability_counts'
+              ? [
+                  {
+                    product_id: 'p1',
+                    variant_id: withVariant ? 'v1' : null,
+                    public_available_units: 2,
+                  },
+                ]
+              : name === 'get_storefront_product_variants' && withVariant
+                ? [
+                    {
+                      id: 'v1',
+                      product_id: 'p1',
+                      effective_policy: 'serialized_strict',
+                      available_units: 0,
+                      stock_quantity: 0,
+                    },
+                  ]
+                : [],
+          error: null,
+        }
   );
   const from = vi.fn((table: string) =>
     Object.assign(
       Promise.resolve({
-        data: table === 'products' ? [product] : [],
+        data:
+          table === 'products'
+            ? [product]
+            : withVariant && table === 'product_variants'
+              ? [
+                  {
+                    id: 'v1',
+                    product_id: 'p1',
+                    inventory_tracking_policy: 'inherit',
+                    is_inventory_anchor: false,
+                  },
+                ]
+              : [],
         error: null,
       }),
       {
@@ -120,4 +152,29 @@ it('rejects a connection that is not scoped to the requested merchant', async ()
     loadOwnerPreviewCatalog({ ...f.ctx, identity }, {})
   ).rejects.toThrow('INSUFFICIENT_SCOPE');
   expect(f.from).not.toHaveBeenCalled();
+});
+
+it('loads available serialized units for an unpublished storefront through the owner RPC', async () => {
+  const f = fixture(true);
+  const result = await loadOwnerPreviewCatalog(f.ctx, {});
+  expect(f.rpc).toHaveBeenCalledWith(
+    'experience_owner_serialized_availability_counts',
+    {
+      p_merchant: 'merchant-a',
+      p_connection: null,
+      p_version: null,
+      p_product_ids: ['p1'],
+    }
+  );
+  expect(result?.catalog.products[0]?.available).toBe(true);
+});
+
+it('replaces the public zero-unit count for an unpublished serialized variant', async () => {
+  const f = fixture(true, true);
+  const result = await loadOwnerPreviewCatalog(f.ctx, {});
+  expect(result?.catalog.products[0]).toMatchObject({
+    available: true,
+    requiresVariant: true,
+    variants: [{ id: 'v1', available: true }],
+  });
 });

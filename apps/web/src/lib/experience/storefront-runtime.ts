@@ -20,7 +20,8 @@ export interface ExperienceStorefrontRuntime {
   }): Promise<unknown | null>;
   resolveBoundary(
     merchant: { id: string; slug?: string | null },
-    path: string
+    path: string,
+    signal?: AbortSignal
   ): Promise<ExperienceBoundaryData | null>;
   catalog(
     merchant: { id: string; slug?: string | null },

@@ -8,32 +8,50 @@ import { createPublicOutputReader } from './public-output-reader';
 import { createPublicRenderCache } from './public-render-cache';
 import { createPublicExperienceRuntime } from './public-runtime';
 
+const CANONICAL_LOOKUP_TIMEOUT_MS = 5_000;
+
 /** Read-only production ports; constructing these ports never publishes a store. */
 export function createProductionStorefront(settings: {
   client: SupabaseClient;
   artifactDirectory: string;
   executionOrigin: string;
-  canonicalBase: (slug: string) => string | Promise<string>;
+  canonicalBase: (
+    slug: string,
+    signal?: AbortSignal
+  ) => string | Promise<string>;
   catalogImages?: ReadonlyMap<string, { assetId: string; alt: string }>;
   execute: typeof runLocalQualification;
 }) {
+  const canonicalBase = async (slug: string, requestedSignal?: AbortSignal) => {
+    const deadline = AbortSignal.timeout(CANONICAL_LOOKUP_TIMEOUT_MS);
+    const signal = requestedSignal
+      ? AbortSignal.any([requestedSignal, deadline])
+      : deadline;
+    signal.throwIfAborted();
+    const base = await settings.canonicalBase(slug, signal);
+    signal.throwIfAborted();
+    return base;
+  };
   const artifacts = createDurablePrerenderArtifacts(settings.artifactDirectory);
   const reader = createPublicOutputReader(settings.client);
   const fragments = createPublicRenderCache();
   const runtime = createPublicExperienceRuntime({
     client: settings.client,
     runtimeBase: settings.executionOrigin,
-    canonicalBase: settings.canonicalBase,
+    canonicalBase,
     prerenderDelivery: true,
     catalogImages: settings.catalogImages,
   });
-  const render: Parameters<
-    typeof createProductionPublishedDelivery
-  >[0]['render'] = async (input) => {
+  const render = async (
+    input: Parameters<
+      Parameters<typeof createProductionPublishedDelivery>[0]['render']
+    >[0],
+    signal: AbortSignal
+  ) => {
     const identity = { id: input.merchantId, slug: input.slug };
     const [binding, before] = await Promise.all([
       reader.prerenderBinding(input.slug, input.buildDigest),
-      runtime.resolveBoundary(identity, input.path),
+      runtime.resolveBoundary(identity, input.path, signal),
     ]);
     if (
       !binding ||
@@ -75,7 +93,7 @@ export function createProductionStorefront(settings: {
       return result.html;
     });
     const [after, afterBinding] = await Promise.all([
-      runtime.resolveBoundary(identity, input.path),
+      runtime.resolveBoundary(identity, input.path, signal),
       reader.prerenderBinding(input.slug, input.buildDigest),
     ]);
     if (
@@ -97,12 +115,13 @@ export function createProductionStorefront(settings: {
         headers: { 'Cache-Control': 'no-store' },
       });
     try {
-      const hostOrigin = new URL(await settings.canonicalBase(slug)).origin;
+      const hostOrigin = new URL(await canonicalBase(slug, request.signal))
+        .origin;
       return await createProductionPublishedDelivery({
         reader,
         hostOrigin,
         executionOrigin: settings.executionOrigin,
-        render,
+        render: (input) => render(input, request.signal),
       })(request);
     } catch {
       return new Response('Unavailable', {

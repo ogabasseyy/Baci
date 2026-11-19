@@ -22,7 +22,10 @@ interface Options {
   prerenderDelivery?: boolean;
   client?: SupabaseClient;
   runtimeBase: string;
-  canonicalBase: (slug: string) => string | Promise<string>;
+  canonicalBase: (
+    slug: string,
+    signal?: AbortSignal
+  ) => string | Promise<string>;
   catalogImages?: ReadonlyMap<string, { assetId: string; alt: string }>;
 }
 /** Normal anonymous/RLS reads only; startup remains explicitly uninstalled. */
@@ -158,16 +161,15 @@ export function createPublicExperienceRuntime(
           )
         : null;
     },
-    async resolveBoundary(merchant, path) {
+    async resolveBoundary(merchant, path, signal) {
       const [head, m] = await Promise.all([
         manifest(merchant),
         loadMerchant(merchant.id),
       ]);
       if (!head || !m || !head.hostOrigin) return null;
-      const canonicalBase = (await options.canonicalBase(m.slug)).replace(
-        /\/$/,
-        ''
-      );
+      const canonicalBase = (
+        await options.canonicalBase(m.slug, signal)
+      ).replace(/\/$/, '');
       if (new URL(canonicalBase).origin !== head.hostOrigin) return null;
       if (
         head.capabilities.some(

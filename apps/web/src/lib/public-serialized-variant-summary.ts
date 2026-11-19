@@ -92,7 +92,8 @@ export async function getPublicSerializedVariantSummariesByProductId(
   supabase: SupabaseClient,
   merchantId: string,
   productIds: string[],
-  branchId?: string
+  branchId?: string,
+  fetchCounts = fetchPublicSerializedAvailabilityCounts
 ): Promise<PublicSerializedVariantSummary[]> {
   if (!productIds || productIds.length === 0) {
     return [];
@@ -230,7 +231,7 @@ export async function getPublicSerializedVariantSummariesByProductId(
 
       // Most storefront lists are non-serialized; avoiding the count RPC for
       // those products keeps public HTML rendering out of Supabase timeouts.
-      const rawCounts = await fetchPublicSerializedAvailabilityCounts(
+      const rawCounts = await fetchCounts(
         supabase,
         merchantId,
         serializedProductIds,

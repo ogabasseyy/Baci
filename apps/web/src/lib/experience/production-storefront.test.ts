@@ -65,7 +65,11 @@ beforeEach(() => {
   f.revision = 'synthetic-1';
   vi.clearAllMocks();
 });
-function fixture() {
+function fixture(
+  canonicalBase: Parameters<
+    typeof createProductionStorefront
+  >[0]['canonicalBase'] = async (slug) => `https://merchant.test/${slug}`
+) {
   const execute = vi.fn(async () => ({
     output: {
       format: 'baci-prerender/v1',
@@ -78,7 +82,7 @@ function fixture() {
     client: {} as never,
     artifactDirectory: '/unused-test-only',
     executionOrigin: 'https://output.baci-runtime.test',
-    canonicalBase: async (slug) => `https://merchant.test/${slug}`,
+    canonicalBase,
     execute,
   });
   const request = () =>
@@ -110,4 +114,19 @@ it('denies a render whose publication or catalog changes during isolated executi
     };
   });
   expect((await s.deliver(s.request())).status).toBe(404);
+});
+
+it('cancels the canonical lookup when the delivery request disconnects', async () => {
+  const controller = new AbortController();
+  const canonicalBase = vi.fn(async (slug: string, _signal?: AbortSignal) => {
+    controller.abort();
+    return `https://merchant.test/${slug}`;
+  });
+  const s = fixture(canonicalBase);
+  const request = new Request(s.request(), { signal: controller.signal });
+  const response = await s.deliver(request);
+  expect(canonicalBase.mock.calls[0]?.[1]?.aborted).toBe(true);
+  expect(response.status).toBe(404);
+  expect(response.headers.get('Cache-Control')).toBe('no-store');
+  expect(s.execute).not.toHaveBeenCalled();
 });

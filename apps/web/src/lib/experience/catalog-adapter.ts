@@ -13,7 +13,9 @@ import {
   experienceCatalogSelectionSchema,
 } from '@/schemas/experience-catalog';
 import {
+  type ExperienceContext,
   type OwnerRequestContext,
+  ownerRpcArgs,
   requireExperienceOwner,
 } from './authorization';
 import {
@@ -95,7 +97,7 @@ export function loadExperienceCatalog(
   selection: unknown,
   images: ReadonlyMap<string, { assetId: string; alt: string }> = new Map()
 ): Promise<PublicCatalog | null> {
-  return readCatalog(client, merchant, selection, images, false);
+  return readCatalog(client, merchant, selection, images);
 }
 
 /** Authenticated owner preview may include an unpublished merchant's active catalog. */
@@ -123,7 +125,7 @@ export async function loadOwnerPreviewCatalog(
     },
     selection,
     images,
-    true
+    owner
   );
   await requireExperienceOwner(owner, 'storefront.read');
   return result ? { catalog: result, currency } : null;
@@ -134,8 +136,9 @@ async function readCatalog(
   merchant: ExperienceCatalogMerchant,
   selection: unknown,
   images: ReadonlyMap<string, { assetId: string; alt: string }>,
-  ownerPreview: boolean
+  owner?: ExperienceContext
 ): Promise<PublicCatalog | null> {
+  const ownerPreview = Boolean(owner);
   const input = experienceCatalogSelectionSchema.parse(selection);
   if (!merchant.is_published && !ownerPreview) return null;
   const generation = async () => {
@@ -177,7 +180,18 @@ async function readCatalog(
         getPublicSerializedVariantSummariesByProductId(
           client,
           merchant.id,
-          ids
+          ids,
+          undefined,
+          owner && !merchant.is_published
+            ? async (supabase, _merchantId, productIds) => {
+                const { data, error } = await supabase.rpc(
+                  'experience_owner_serialized_availability_counts',
+                  { ...ownerRpcArgs(owner), p_product_ids: productIds }
+                );
+                if (error) throw Error('CATALOG_UNAVAILABLE');
+                return data;
+              }
+            : undefined
         ),
       ]);
       if (
@@ -217,15 +231,32 @@ async function readCatalog(
               productId: p.id,
               parentStock: getEffectiveProductStock(p),
             }
-          ).map((v) => ({
-            id: v.id,
-            attributes: v.attributes,
-            price_override: v.price_override,
-            stock_quantity: v.stock_quantity,
-            is_purchasable: isProductVariantPurchasable(p.manage_stock, v),
-            effective_policy: v.effective_policy,
-            available_units: v.available_units,
-          })),
+          ).map((v) => {
+            const summary =
+              owner && !merchant.is_published
+                ? summaries.find(
+                    (item) => item.productId === p.id && item.variantId === v.id
+                  )
+                : undefined;
+            const inventory = summary
+              ? {
+                  effective_policy: summary.inventoryTrackingPolicy,
+                  available_units: summary.publicAvailableUnits,
+                }
+              : v;
+            return {
+              id: v.id,
+              attributes: v.attributes,
+              price_override: v.price_override,
+              stock_quantity: v.stock_quantity,
+              is_purchasable: isProductVariantPurchasable(p.manage_stock, {
+                ...v,
+                ...inventory,
+              }),
+              effective_policy: inventory.effective_policy,
+              available_units: inventory.available_units,
+            };
+          }),
         })),
         images,
         ownerPreview

@@ -11,13 +11,13 @@ import {
   type StatusFilterValue,
   type StockFilterValue,
 } from '@/lib/product-list-filters';
-import { PRODUCT_WITH_VARIANTS_QUERY } from '@/lib/product-queries';
 import {
   getEffectiveStock,
   matchesProductStockFilter,
 } from '@/lib/product-stock';
 import type { Product } from '@/lib/products';
-import { sanitizeLikePattern, sanitizeSearchQuery } from '@/lib/sanitize-core';
+import { buildMerchantProductsQuery } from '@/lib/products-server-query';
+import { sanitizeSearchQuery } from '@/lib/sanitize-core';
 
 /**
  * Extract denormalized variant attributes for fast UI rendering
@@ -90,34 +90,15 @@ export async function getProducts(
   const shouldPaginateInDatabase = stock === 'All';
 
   // Build query
-  let query = supabase
-    .from('merchant_products')
-    .select(PRODUCT_WITH_VARIANTS_QUERY, { count: 'exact' })
-    .eq('merchant_id', merchantId)
-    .order('created_at', { ascending: false });
-
-  // Apply filters
-  if (status !== 'All') {
-    query = query.eq('status', status);
-  }
-
-  if (migration !== 'All') {
-    query =
-      migration === 'pending'
-        ? query.or('migration_status.eq.pending,migration_status.is.null')
-        : query.eq('migration_status', migration);
-  }
-
-  if (search?.trim()) {
-    const sanitizedPattern = sanitizeLikePattern(search);
-    query = query.or(
-      `name.ilike.%${sanitizedPattern}%,sku.ilike.%${sanitizedPattern}%,description.ilike.%${sanitizedPattern}%`
-    );
-  }
-
-  if (shouldPaginateInDatabase) {
-    query = query.range(offset, offset + limit - 1);
-  }
+  const query = buildMerchantProductsQuery(supabase, {
+    merchantId,
+    status,
+    migration,
+    search,
+    paginateInDatabase: shouldPaginateInDatabase,
+    offset,
+    limit,
+  });
 
   const { data: productsData, error, count } = await query;
 

@@ -60,6 +60,28 @@ test('page cap does not convert an incomplete scan into absence', async () => {
   );
 });
 
+test('page cap returns already-collected matches when marker was found', async () => {
+  let page = 0;
+  const api = () => {
+    const start = 10_000 - page * 20;
+    page += 1;
+    const items = Array.from({ length: 20 }, (_, index) => ({
+      id: start - index,
+      content: 'other',
+    }));
+    if (page === 1) items[0] = recoveredMessage;
+    return { payload: items };
+  };
+
+  const matches = await findSyntheticMessage({
+    api,
+    path: '/api/v1/accounts/7/conversations/12/messages',
+    token: 'synthetic-token',
+    content: 'synthetic marker',
+  });
+  assert.deepEqual(matches, [recoveredMessage]);
+});
+
 test('lookup deadline aborts an in-flight API page request', async () => {
   let calls = 0;
   await assert.rejects(

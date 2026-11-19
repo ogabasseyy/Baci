@@ -176,6 +176,10 @@ export async function verifyLostAckMessageReconciliation({
         cause: outcome.error,
       });
     }
+    if (outcome.status < 200 || outcome.status >= 300) {
+      lookupController.abort();
+      await settledRecoveryPromise;
+    }
     assert.ok(
       outcome.status >= 200 && outcome.status < 300,
       `Expected successful Chatwoot API status, received ${outcome.status}`

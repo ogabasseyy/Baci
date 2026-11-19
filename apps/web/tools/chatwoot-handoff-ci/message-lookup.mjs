@@ -55,8 +55,10 @@ export async function findSyntheticMessage({
     }
     if (messages.length === 0 || messages.length < PAGE_SIZE) break;
 
-    if (page === MAX_LOOKUP_PAGES - 1)
+    if (page === MAX_LOOKUP_PAGES - 1) {
+      if (matches.length > 0) return matches;
       throw new Error('Chatwoot message lookup reached its page limit');
+    }
     const oldestId = messages.reduce((oldest, message) =>
       Number(message.id) < Number(oldest.id) ? message : oldest
     ).id;

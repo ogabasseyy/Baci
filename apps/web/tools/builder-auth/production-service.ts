@@ -1,6 +1,9 @@
 import { Pool, type PoolConfig } from 'pg';
 import { parseProductionAuthConfig } from './production-config.ts';
-import { verifyProductionAuthDatabaseRole } from './production-role.ts';
+import {
+  authDatabaseDeadlines,
+  verifyProductionAuthDatabaseRole,
+} from './production-role.ts';
 import { deleteExpiredAuthRecords, startAuthRetention } from './retention.ts';
 import { createBuilderAuthRuntime } from './runtime.ts';
 
@@ -27,6 +30,7 @@ export async function startProductionAuthBroker(
       ssl: { rejectUnauthorized: true },
       max: 4,
       connectionTimeoutMillis: 10000,
+      ...authDatabaseDeadlines,
       options: '-c role=baci_builder_auth_storage',
     });
     await verifyProductionAuthDatabaseRole(pool);

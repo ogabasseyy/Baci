@@ -7,6 +7,32 @@ import { createSessionVault } from './session-vault.ts';
 import { createAuthStorage } from './storage.ts';
 import { databaseFixture } from './test-fixtures.ts';
 
+test('discards borrowed clients when a transaction or session lock times out', async () => {
+  const error = Error('Query read timeout');
+  const calls: Array<boolean | undefined> = [];
+  const pool = {
+    connect: async () => ({
+      query: async () => {
+        throw error;
+      },
+      release: (discard?: boolean) => calls.push(discard),
+    }),
+  } as unknown as Pool;
+  const keys = new Map([['k1', randomBytes(32)]]);
+  const storage = createAuthStorage(
+    pool,
+    createSessionVault({ activeKeyId: 'k1', keys }),
+    createOpaqueVault('k1', keys)
+  );
+  const id = randomUUID();
+  await assert.rejects(storage.revoke(id), error);
+  await assert.rejects(
+    storage.withSession(id, 1, async () => assert.fail('unexpected session')),
+    error
+  );
+  assert.deepEqual(calls, [true, true]);
+});
+
 test('sessions save or revoke at capacity without borrowing another pool client', {
   timeout: 30000,
 }, async () => {

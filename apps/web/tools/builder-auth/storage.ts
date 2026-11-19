@@ -57,10 +57,14 @@ async function transaction<T>(
   work: (client: PoolClient) => Promise<T>
 ): Promise<T> {
   const client = await pool.connect();
+  let completed = false;
   try {
-    return await transactionOnClient(client, work);
+    const result = await transactionOnClient(client, work);
+    completed = true;
+    return result;
   } finally {
-    client.release();
+    // A driver timeout can leave the transaction outcome unknown.
+    client.release(!completed);
   }
 }
 async function releaseRefreshLock(client: PoolClient, id: string) {
@@ -180,15 +184,14 @@ export function createAuthStorage(
       }) => Promise<T>
     ): Promise<T> {
       const c = await pool.connect();
-      let locked = false;
+      let locked: boolean | undefined;
       try {
         const lock = await c.query<{ locked: boolean }>(
           "SELECT pg_try_advisory_lock(hashtextextended('baci.builder.refresh.'||$1,0)) AS locked",
           [id]
         );
-        if (!lock.rows[0]?.locked)
-          throw new Error('Connection busy; retry shortly.');
-        locked = true;
+        locked = lock.rows[0]?.locked === true;
+        if (!locked) throw new Error('Connection busy; retry shortly.');
         const r = await c.query(
           `SELECT ${projection} FROM builder_authorization.connections WHERE id=$1`,
           [id]
@@ -259,7 +262,8 @@ export function createAuthStorage(
         });
       } finally {
         if (locked) await releaseRefreshLock(c, id);
-        else c.release();
+        // A timed-out lock query may still have acquired the session lock.
+        else c.release(locked === undefined);
       }
     },
     async putTransaction(idHash: string, browserHash: string, value: unknown) {

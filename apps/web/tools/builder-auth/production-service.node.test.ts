@@ -54,6 +54,8 @@ const safeIdentity = () =>
         storage_unsafe: false,
         storage_memberships: false,
         extra_memberships: false,
+        statement_timeout_ms: 2000,
+        lock_timeout_ms: 1000,
       },
     ],
   });
@@ -94,6 +96,9 @@ test('starts only after broker construction and closes listener before database'
   assert.deepEqual(poolConfig?.ssl, { rejectUnauthorized: true });
   assert.equal(poolConfig?.max, 4);
   assert.equal(poolConfig?.options, '-c role=baci_builder_auth_storage');
+  assert.equal(poolConfig?.statement_timeout, 2000);
+  assert.equal(poolConfig?.lock_timeout, 1000);
+  assert.equal(poolConfig?.query_timeout, 3000);
   assert.deepEqual(service.publicBinding.supabase, config.supabase);
   assert.equal(service.publicBinding.jwks.keys[0].kid, 'fixture');
   assert.equal('d' in service.publicBinding.jwks.keys[0], false);
@@ -114,6 +119,35 @@ test('starts only after broker construction and closes listener before database'
     'listener-close',
     'pool-close',
   ]);
+});
+
+test('refuses a broker database session that does not enforce the deadlines', async () => {
+  const identity = (await safeIdentity()).rows[0];
+  for (const override of [
+    { statement_timeout_ms: 0 },
+    { lock_timeout_ms: 0 },
+  ]) {
+    let closed = false;
+    let started = false;
+    await assert.rejects(
+      startProductionAuthBroker(await fixture(), {
+        createPool: () =>
+          ({
+            query: async () => ({ rows: [{ ...identity, ...override }] }),
+            end: async () => {
+              closed = true;
+            },
+          }) as unknown as Pool,
+        createRuntime: async () => {
+          started = true;
+          throw Error('unexpected');
+        },
+      }),
+      /AUTH_BROKER_STARTUP_FAILED/
+    );
+    assert.equal(closed, true);
+    assert.equal(started, false);
+  }
 });
 
 test('invalid config creates no pool and startup failure closes its pool', async () => {

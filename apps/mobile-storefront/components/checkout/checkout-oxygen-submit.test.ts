@@ -65,15 +65,18 @@ describe('native Oxygen order admission', () => {
     expect(createOrder).not.toHaveBeenCalled();
   });
   it.each([
-    'voucherToken',
-    'voucherAwardId',
-  ])('rejects an unnormalized %s before sending the order', async (key) => {
+    ['voucherToken', ' id '],
+    ['voucherAwardId', 'id'],
+    ['voucher_token', 'id'],
+    ['voucher_award_id', 'id'],
+    ['voucherToken', 0],
+  ])('rejects voucher field %s with value %j before sending the order', async (key, value) => {
     await expect(
       submitOxygenCheckout(
         {
           request: {
             ...request,
-            items: request.items.map((item) => ({ ...item, [key]: 'id' })),
+            items: request.items.map((item) => ({ ...item, [key]: value })),
           },
           checkoutGeneration: 'g',
           isAuthenticated: true,
@@ -86,13 +89,15 @@ describe('native Oxygen order admission', () => {
     expect(admit).not.toHaveBeenCalled();
     expect(createOrder).not.toHaveBeenCalled();
   });
-  it('ignores whitespace-only legacy voucher identifiers', async () => {
+  it('omits whitespace-only voucher identifiers from the order request', async () => {
     const input = {
       ...request,
       items: request.items.map((item) => ({
         ...item,
         voucherToken: '  ',
         voucherAwardId: '\t',
+        voucher_token: '\n',
+        voucher_award_id: ' ',
       })),
     };
     await submitOxygenCheckout(
@@ -105,7 +110,7 @@ describe('native Oxygen order admission', () => {
       },
       { admit, createOrder }
     );
-    expect(createOrder).toHaveBeenCalledTimes(1);
+    expect(createOrder).toHaveBeenCalledWith(request, expect.anything());
   });
   it('preserves a promo code for the server to price before financing', async () => {
     const discounted = { ...request, discount_code: 'SAVE10' };

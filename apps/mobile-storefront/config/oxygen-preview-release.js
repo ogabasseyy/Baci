@@ -1,6 +1,2 @@
-// Metro selects this dependency-free module outside staging development.
-function OxygenPreview() {
-  return null;
-}
-
-module.exports = { OxygenPreview, previewSteps: [] };
+// Metro leaves the fixture route and its loopback configuration out of release.
+module.exports = { OxygenVisualQaRoute: null };

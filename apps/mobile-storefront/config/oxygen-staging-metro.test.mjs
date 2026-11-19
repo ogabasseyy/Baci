@@ -39,7 +39,7 @@ test('other modules and non-staging builds retain normal module resolution', () 
 });
 
 test('resolves the Oxygen preview fixture graph only in staging development', () => {
-  const name = '../components/oxygen-preview/entry';
+  const name = '../components/oxygen-preview/visual-qa-route';
   const staging = { EXPO_PUBLIC_OXYGEN_STAGING: '1' };
   assert.equal(
     resolveOxygenStagingModule(name, { ...staging, NODE_ENV: 'development' }),
@@ -48,10 +48,13 @@ test('resolves the Oxygen preview fixture graph only in staging development', ()
   for (const env of [
     { NODE_ENV: 'production' },
     { ...staging, NODE_ENV: 'production' },
+    { ...staging, NODE_ENV: 'development', EAS_BUILD: '1' },
+    { ...staging, NODE_ENV: 'development', EAS_BUILD_PROFILE: 'development' },
+    { ...staging, NODE_ENV: 'development', CI: 'true' },
   ]) {
     const stub = resolveOxygenStagingModule(name, env);
     assert.ok(stub?.endsWith('oxygen-preview-release.js'));
-    assert.deepEqual(require(stub).previewSteps, []);
+    assert.equal(require(stub).OxygenVisualQaRoute, null);
   }
 });
 

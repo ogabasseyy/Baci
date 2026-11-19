@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react-native';
-import { OxygenVisualQaFixture } from '@/app/oxygen-visual-qa';
+import { OxygenVisualQaFixture } from '@/components/oxygen-preview/visual-qa-route';
 
 jest.mock('expo-router', () => ({
   Stack: { Screen: () => null },

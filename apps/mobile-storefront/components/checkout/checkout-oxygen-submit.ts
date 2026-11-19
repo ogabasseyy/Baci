@@ -12,8 +12,33 @@ type Dependencies = {
   createOrder: typeof createOrder;
 };
 
-function hasNonEmptyVoucherAlias(value: unknown): boolean {
-  return typeof value === 'string' && value.trim().length > 0;
+type OxygenOrderItem = CreateOrderRequest['items'][number] & {
+  voucherToken?: unknown;
+  voucherAwardId?: unknown;
+};
+
+function hasVoucherIdentifier(item: OxygenOrderItem): boolean {
+  return [
+    item.voucher_token,
+    item.voucher_award_id,
+    item.voucherToken,
+    item.voucherAwardId,
+  ].some(
+    (value) =>
+      value !== undefined &&
+      value !== null &&
+      (typeof value !== 'string' || value.trim().length > 0)
+  );
+}
+
+function omitEmptyVoucherFields({
+  voucher_token: _token,
+  voucher_award_id: _awardId,
+  voucherToken: _legacyToken,
+  voucherAwardId: _legacyAwardId,
+  ...item
+}: OxygenOrderItem) {
+  return item;
 }
 
 export async function submitOxygenCheckout(
@@ -30,15 +55,7 @@ export async function submitOxygenCheckout(
     input.request.use_savings_credit ||
     (input.request.wallet_amount ?? 0) > 0 ||
     (input.request.savings_amount ?? 0) > 0 ||
-    input.request.items.some(
-      (item) =>
-        item.voucher_token ||
-        item.voucher_award_id ||
-        ('voucherToken' in item &&
-          hasNonEmptyVoucherAlias(item.voucherToken)) ||
-        ('voucherAwardId' in item &&
-          hasNonEmptyVoucherAlias(item.voucherAwardId))
-    )
+    input.request.items.some(hasVoucherIdentifier)
   ) {
     throw new Error(
       'Oxygen requires a signed-in customer and a cart without vouchers or store credit'
@@ -55,9 +72,15 @@ export async function submitOxygenCheckout(
   };
   // Revalidate after every checkout await and immediately before order mutation.
   const { merchant } = await deps.admit();
-  return deps.createOrder(input.request, {
-    checkoutGeneration: input.checkoutGeneration,
-    analyticsPaymentMethod: 'oxygen',
-    expectedMerchantId: merchant.id,
-  });
+  return deps.createOrder(
+    {
+      ...input.request,
+      items: input.request.items.map(omitEmptyVoucherFields),
+    },
+    {
+      checkoutGeneration: input.checkoutGeneration,
+      analyticsPaymentMethod: 'oxygen',
+      expectedMerchantId: merchant.id,
+    }
+  );
 }

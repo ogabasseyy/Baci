@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS public.order_shipment_booking_failures (
   -- booked_not_saved: the provider booked the parcel but saving it here failed.
   -- unexpected: an error that is not a provider answer (a bug or database fault).
   outcome text NOT NULL CHECK (
-    outcome IN ('not_submitted', 'provider_unconfirmed', 'rejected', 'booked_not_saved', 'unexpected')
+    outcome IN ('not_submitted', 'provider_unconfirmed', 'rejected', 'booked_not_saved', 'booked_unreconciled', 'unexpected')
   ),
   lock_retained boolean NOT NULL DEFAULT false,
   created_at timestamptz NOT NULL DEFAULT now()
@@ -39,10 +39,15 @@ CREATE POLICY "merchant_staff_record_booking_failures"
   ON public.order_shipment_booking_failures
   FOR INSERT TO authenticated
   WITH CHECK (
-    -- Mirrors the booking route: only staff who may fulfil orders can record a
+    -- Mirrors the booking routes: only staff who may fulfil or edit orders can record a
     -- booking failure, so a read-only staff account cannot forge history rows.
-    public.check_staff_permission(
-      (SELECT auth.uid()), merchant_id, 'orders', 'fulfill'
+    (
+      public.check_staff_permission(
+        (SELECT auth.uid()), merchant_id, 'orders', 'fulfill'
+      )
+      OR public.check_staff_permission(
+        (SELECT auth.uid()), merchant_id, 'orders', 'edit'
+      )
     )
     AND EXISTS (
       SELECT 1 FROM public.orders o

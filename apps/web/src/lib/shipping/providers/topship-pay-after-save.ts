@@ -38,7 +38,9 @@ export async function requestTopshipPaymentAfterSave({
     throw new OrderShipmentBookingError(
       `The carrier saved the shipment but could not confirm payment (tracking ${trackingId ?? 'unknown'}). Check the shipment before booking again.`,
       503,
-      BOOKED_SHIPMENT_NOT_SAVED_CODE
+      BOOKED_SHIPMENT_NOT_SAVED_CODE,
+      // Lets wallet reconciliation find the shipment Topship already saved.
+      trackingId ?? undefined
     );
   }
 }

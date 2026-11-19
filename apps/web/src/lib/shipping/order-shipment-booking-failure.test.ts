@@ -280,4 +280,25 @@ describe('bugfix: order-route persistence failure is booked_not_saved', () => {
     );
     expect(shouldReleaseBookingLock(databaseError)).toBe(false);
   });
+
+  it('classifies MERCHANT_WALLET_COMPLETION_FAILED as booked_unreconciled, not rejected', () => {
+    const error = new OrderShipmentBookingError(
+      'wallet completion failed',
+      500,
+      'MERCHANT_WALLET_COMPLETION_FAILED'
+    );
+    expect(classifyBookingFailure(error).outcome).toBe('booked_unreconciled');
+  });
+});
+
+describe('bugfix: no pause is promised when no booking lock was acquired', () => {
+  it('asks the merchant to check the carrier instead of promising a 15-minute pause', () => {
+    const mapped = toBookingFailureResponseError(
+      new Error('GIGL booking timed out'),
+      { lockHeld: false }
+    ) as { message: string; code: string };
+    expect(mapped.code).toBe('SHIPMENT_BOOKING_UNCONFIRMED');
+    expect(mapped.message).not.toMatch(/15 minutes/);
+    expect(mapped.message).toMatch(/check with the carrier/);
+  });
 });

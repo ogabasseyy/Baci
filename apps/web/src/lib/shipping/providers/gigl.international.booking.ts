@@ -56,6 +56,7 @@ export async function bookGiglInternationalShipment(
     typeof giglSchemas.internationalBookingData.parse
   >;
   let trackingNumber!: string;
+  let submitStarted = false;
 
   try {
     const selectedRate = parseSelectedInternationalRateId(
@@ -92,6 +93,8 @@ export async function bookGiglInternationalShipment(
         'GIGL_INTERNATIONAL_DESTINATION_COUNTRY_NOT_FOUND'
       );
     }
+    // Past this point the create POST may have been sent.
+    submitStarted = true;
     const {
       envelope,
       response,
@@ -186,7 +189,15 @@ export async function bookGiglInternationalShipment(
     if (signal.aborted || isGiglAbortError(error)) {
       io.log('warn', 'GIGL international booking timed out', {
         timeoutMs: GIGL_BOOKING_TIMEOUT_MS,
+        submitStarted,
       });
+      if (!submitStarted) {
+        throw new OrderShipmentBookingError(
+          'GIG did not respond before the booking was sent. Nothing was booked; please try again.',
+          504,
+          'GIGL_BOOKING_TIMED_OUT_BEFORE_SUBMIT'
+        );
+      }
       throw new ProviderBookingTimeoutError(
         GIGL_INTERNATIONAL_BOOKING_TIMEOUT_MESSAGE
       );

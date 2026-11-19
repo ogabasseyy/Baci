@@ -30,6 +30,8 @@ describe('requestTopshipPaymentAfterSave', () => {
     expect((failure as Error).message).toContain('tracking T1');
     // The raw transport code stays in the logs, not the merchant-facing text.
     expect((failure as Error).message).not.toContain('ECONNREFUSED');
+    // Wallet reconciliation needs the saved shipment's reference.
+    expect(failure).toMatchObject({ providerReference: 'T1' });
     expect(classifyBookingFailure(failure).outcome).toBe('booked_not_saved');
     expect(shouldReleaseBookingLock(failure)).toBe(false);
     expect(log).toHaveBeenCalledWith(

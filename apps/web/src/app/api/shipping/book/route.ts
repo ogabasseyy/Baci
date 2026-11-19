@@ -200,6 +200,7 @@ export async function POST(request: NextRequest) {
     return bookingSuccessResponse(persisted.shipmentId, result);
   } catch (rawError) {
     console.error('Error booking shipment:', rawError);
+    const lockWasHeld = bookingLockToken !== null;
     if (bookingSupabase && bookingOrderId && bookingMerchantId) {
       // Release first (also for a pre-provider failure that is not on the
       // release list) so the failure row records what cleanup really achieved.
@@ -228,7 +229,9 @@ export async function POST(request: NextRequest) {
         retainBookingLock
       );
     }
-    const error = toBookingFailureResponseError(rawError);
+    const error = toBookingFailureResponseError(rawError, {
+      lockHeld: lockWasHeld,
+    });
     if (error instanceof OrderShipmentBookingError)
       return NextResponse.json(
         { error: error.message, code: error.code },

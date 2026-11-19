@@ -14,7 +14,7 @@ const {
   captureServerEvent: vi.fn(),
   loadCrossRemCatalog: vi.fn(),
   readVersion: vi.fn(),
-  redis: { get: vi.fn(), set: vi.fn() },
+  redis: { get: vi.fn(), set: vi.fn(), eval: vi.fn() },
   warn: vi.fn(),
 }));
 
@@ -45,6 +45,7 @@ describe('CrossRem catalog', () => {
   beforeEach(() => {
     vi.stubEnv('CROSSREM_CATALOG_TOKEN', token);
     vi.stubEnv('VERCEL_ENV', 'preview');
+    vi.stubEnv('VERCEL_DEPLOYMENT_ID', 'dpl_synthetic_snapshot');
     after.mockClear();
     warn.mockClear();
     captureServerEvent.mockReset().mockResolvedValue(true);
@@ -52,6 +53,7 @@ describe('CrossRem catalog', () => {
     readVersion.mockReset().mockResolvedValue(version);
     redis.get.mockReset().mockResolvedValue(null);
     redis.set.mockReset().mockResolvedValue('OK');
+    redis.eval.mockReset().mockResolvedValue(1);
   });
 
   it('warns internally when a partner request reaches an unconfigured token', async () => {
@@ -167,7 +169,9 @@ describe('CrossRem catalog', () => {
     expect(response.status).toBe(503);
     expect(response.headers.has('etag')).toBe(false);
     expect(loadCrossRemCatalog).toHaveBeenCalledOnce();
-    expect(redis.set).not.toHaveBeenCalled();
+    expect(redis.eval.mock.calls.every((call) => call[1].length === 1)).toBe(
+      true
+    );
   });
 
   it('discards a build when the catalog changes during source reads', async () => {
@@ -177,13 +181,21 @@ describe('CrossRem catalog', () => {
     const response = await GET(request(`Bearer ${token}`, etag));
 
     expect(response.status).toBe(503);
-    expect(redis.set).not.toHaveBeenCalled();
+    expect(redis.eval.mock.calls.every((call) => call[1].length === 1)).toBe(
+      true
+    );
   });
 
   it('round-trips a stored snapshot and publishes the new body after a version change', async () => {
     const cache = new Map();
     redis.get.mockImplementation(async (key) => cache.get(key));
-    redis.set.mockImplementation(async (key, value) => cache.set(key, value));
+    redis.eval.mockImplementation(async (_script, keys, args) => {
+      if (keys.length === 3) {
+        cache.set(keys[1], JSON.parse(args[1]));
+        cache.set(keys[2], args[2]);
+      }
+      return 1;
+    });
 
     const initial = await GET(request(`Bearer ${token}`));
     expect(initial.status).toBe(200);
@@ -222,5 +234,60 @@ describe('CrossRem catalog', () => {
     expect(response.status).toBe(503);
     expect(redis.get).not.toHaveBeenCalled();
     expect(loadCrossRemCatalog).not.toHaveBeenCalled();
+  });
+
+  it('bypasses Redis when no deployment scope is configured', async () => {
+    vi.stubEnv('VERCEL_DEPLOYMENT_ID', '');
+    vi.stubEnv('CROSSREM_CATALOG_CACHE_DEPLOYMENT_ID', '');
+    expect((await GET(request(`Bearer ${token}`))).status).toBe(200);
+    expect(redis.get).not.toHaveBeenCalled();
+    expect(redis.set).not.toHaveBeenCalled();
+  });
+
+  it('uses a consistent configured cache scope and isolates different releases', async () => {
+    vi.stubEnv('VERCEL_DEPLOYMENT_ID', '');
+    vi.stubEnv('CROSSREM_CATALOG_CACHE_DEPLOYMENT_ID', 'sandbox-release-a');
+    redis.get.mockResolvedValue({ version, etag });
+    const poll = request(`Bearer ${token}`, etag);
+    expect((await GET(poll)).status).toBe(304);
+    expect((await GET(poll)).status).toBe(304);
+    expect(redis.get.mock.calls[0]?.[0]).toBe(redis.get.mock.calls[1]?.[0]);
+
+    vi.stubEnv('CROSSREM_CATALOG_CACHE_DEPLOYMENT_ID', 'sandbox-release-b');
+    expect((await GET(poll)).status).toBe(304);
+    expect(redis.get.mock.calls[2]?.[0]).not.toBe(redis.get.mock.calls[0]?.[0]);
+  });
+
+  it('makes overlapping misses wait for one revision-checked publication', async () => {
+    const cache = new Map<string, unknown>();
+    redis.get.mockImplementation(async (key) => cache.get(key) ?? null);
+    redis.set.mockImplementation(async (key, value, options) => {
+      if (options?.nx && cache.has(key)) return null;
+      cache.set(key, value);
+      return 'OK';
+    });
+    redis.eval.mockImplementation(async (_script, keys, args) => {
+      if (cache.get(keys[0]) !== args[0]) return 0;
+      if (keys.length === 3) {
+        cache.set(keys[1], JSON.parse(args[1]));
+        cache.set(keys[2], args[2]);
+      }
+      cache.delete(keys[0]);
+      return 1;
+    });
+    const pendingBuild = Promise.withResolvers<typeof snapshot>();
+    loadCrossRemCatalog.mockReturnValueOnce(pendingBuild.promise);
+    const leader = GET(request(`Bearer ${token}`));
+    await vi.waitFor(() => expect(loadCrossRemCatalog).toHaveBeenCalledOnce());
+    const follower = GET(request(`Bearer ${token}`, etag));
+    await vi.waitFor(() => expect(redis.set).toHaveBeenCalledTimes(2));
+    pendingBuild.resolve(snapshot);
+
+    expect((await leader).status).toBe(200);
+    expect((await follower).status).toBe(304);
+    expect(loadCrossRemCatalog).toHaveBeenCalledOnce();
+    expect(
+      redis.eval.mock.calls.filter((call) => call[1].length === 3)
+    ).toHaveLength(1);
   });
 });

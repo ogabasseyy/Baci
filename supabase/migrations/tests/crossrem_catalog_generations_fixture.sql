@@ -28,7 +28,8 @@ CREATE TABLE public.product_feed_images (
   status text,
   is_primary boolean,
   position integer,
-  last_checked_at timestamptz
+  last_checked_at timestamptz,
+  failure_reason text
 );
 CREATE TABLE public.categories (id uuid PRIMARY KEY, merchant_id uuid, name text);
 CREATE TABLE public.domains (id uuid PRIMARY KEY, merchant_id uuid);
@@ -41,6 +42,7 @@ INSERT INTO public.merchants (id, is_published) VALUES
   ('00000000-0000-4000-8000-000000000001', true);
 
 \ir ../20261119162000_crossrem_catalog_generations.sql
+\ir ../20261119163500_crossrem_image_revision_heartbeat.sql
 
 SET ROLE anon;
 DO $$ BEGIN
@@ -75,6 +77,7 @@ BEGIN
     format('INSERT INTO public.product_offers VALUES (%L, %L)', item, pilot),
     format('INSERT INTO public.product_feed_images (id, merchant_id, product_id, status) VALUES (%L, %L, %L, %L)', item, pilot, item, 'verified'),
     format('UPDATE public.product_feed_images SET status = %L WHERE id = %L', 'stale', item),
+    format('UPDATE public.product_feed_images SET failure_reason = %L WHERE id = %L', 'fixture reason', item),
     format('INSERT INTO public.domains VALUES (%L, %L)', item, pilot),
     format('INSERT INTO public.product_categories VALUES (%L, %L)', item, category),
     format('INSERT INTO public.product_key_specs VALUES (%L)', item),

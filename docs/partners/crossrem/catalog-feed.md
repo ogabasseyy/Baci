@@ -8,6 +8,8 @@ Retain the last accepted snapshot and its ETag. Send the validator with `If-None
 
 Baci checks a database revision on each authenticated poll. A cached ETag is usable only for that exact revision and deployment. An unchanged poll can return 304 without fetching the cached body or rebuilding the catalog. On a cache miss or revision change, Baci reads the current source, validates every active binding, and confirms that the revision stayed the same throughout the build. An unresolved binding, unavailable revision, or change during the rebuild returns 503. ETags continue to describe the exact JSON response body.
 
+Redis shares a validated snapshot within one release. Vercel uses its deployment ID. On other hosts, set `CROSSREM_CATALOG_CACHE_DEPLOYMENT_ID` to the same release-specific value across instances and change it on each release. Without either ID the route validates the source per request. One Redis lease holder rebuilds at a time. Concurrent requests wait briefly for the new snapshot and return 503 if it remains unavailable. Baci publishes the ETag and compressed body together. If the body exceeds the cache budget, Baci logs the limit, keeps only the validated ETag and rebuilds when a full response is needed.
+
 The 200 and 304 responses send `Cache-Control: private, no-cache` and `Vary: Authorization`. Private clients can retain snapshots and must revalidate them with Baci before reuse. Shared caches cannot store them. Error responses send `Cache-Control: private, no-store`.
 
 ## Prepare a sandbox snapshot

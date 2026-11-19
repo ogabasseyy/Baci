@@ -126,11 +126,8 @@ export async function commitBumpaProducts({
       );
       const baseSlug =
         generateProductSlug(product.title) || product.externalSourceId;
-      const slug = resolveUniqueSlug(
-        baseSlug,
-        usedSlugs,
-        existingProduct?.slug || null
-      );
+      const existingSlug = existingProduct?.slug?.trim() || null;
+      const slug = resolveUniqueSlug(baseSlug, usedSlugs, existingSlug);
       const payload = {
         merchant_id: merchantId,
         name: product.title,
@@ -165,19 +162,18 @@ export async function commitBumpaProducts({
         const statusChanged =
           existingProduct.status !== undefined &&
           existingProduct.status !== product.status;
-        if (categoryMoved || statusChanged) {
-          // Category moves and active<->draft transitions alter category rails
-          // or dependent archived-child legacy redirects; escalate to a bounded
-          // hostname purge rather than trusting parent-only scoped omission.
+        const slugAssigned = !existingSlug && slug.trim().length > 0;
+        if (categoryMoved || statusChanged || slugAssigned) {
+          // Category moves, status transitions, and assigning a parent's first
+          // slug alter category rails or dependent archived-child redirects;
+          // escalate to a bounded hostname purge rather than scoped omission.
           hasCategoryMove = true;
         }
         const { error: updateError } = await supabase
           .from('products')
           .update(payload)
           .eq('id', existingProduct.id)
-          // Tenant scoping (defense-in-depth): this runs via a service-role
-          // client (RLS bypassed), so scope the mutation to the merchant even
-          // though existingProduct.id was loaded merchant-scoped.
+          // Tenant scoping (defense-in-depth under service-role client).
           .eq('merchant_id', merchantId);
 
         if (updateError) {
@@ -187,7 +183,6 @@ export async function commitBumpaProducts({
         }
 
         updatedProducts += 1;
-        const existingSlug = existingProduct.slug?.trim() || null;
         changedProducts.push({
           slug,
           previousSlug:

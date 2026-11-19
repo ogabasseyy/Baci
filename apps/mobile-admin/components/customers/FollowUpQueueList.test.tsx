@@ -8,6 +8,17 @@ import { FollowUpQueueList } from './FollowUpQueueList';
 const mocks = vi.hoisted(() => ({
   refresh: vi.fn(),
   useFollowUpQueue: vi.fn(),
+  useStaffOrderFollowUps: vi.fn(),
+}));
+
+vi.mock('@/hooks/useAuth', () => ({
+  useAuth: () => ({ user: { id: 'viewer' } }),
+}));
+vi.mock('@/hooks/useStaffOrderFollowUps', () => ({
+  useStaffOrderFollowUps: mocks.useStaffOrderFollowUps,
+}));
+vi.mock('@/components/customers/StaffFollowUpEditor', () => ({
+  StaffFollowUpEditor: () => <div>Open follow-up editor</div>,
 }));
 
 vi.mock('@shopify/flash-list', async () => {
@@ -97,6 +108,10 @@ const defaultProps = {
 describe('FollowUpQueueList', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.useStaffOrderFollowUps.mockReturnValue({
+      isSuccess: false,
+      refetch: vi.fn(),
+    });
     mocks.useFollowUpQueue.mockReturnValue({
       failedOrders: [],
       isFailedOrdersError: false,
@@ -205,6 +220,69 @@ describe('FollowUpQueueList', () => {
     } else {
       expect(defaultProps.renderOrder).not.toHaveBeenCalled();
     }
+  });
+
+  it('shows a teammate’s outcome and next date in the queue and opens the editor', () => {
+    mocks.useFollowUpQueue.mockReturnValue({
+      failedOrders: [
+        {
+          id: 'order-1',
+          created_at: '2026-07-27T08:00:00Z',
+          customer_name: 'Ada',
+        },
+      ],
+      merchant: { id: 'merchant-1' },
+      refresh: mocks.refresh,
+      viewState: { status: 'ready' },
+    });
+    mocks.useStaffOrderFollowUps.mockReturnValue({
+      isSuccess: true,
+      data: {
+        'order-1': {
+          assignee_id: 'teammate',
+          assignee_name: 'Tola',
+          stage: 'waiting',
+          outcome: 'Asked the customer to retry.',
+          follow_up_on: '2026-12-01',
+          revision: 2,
+        },
+      },
+    });
+
+    render(
+      <FollowUpQueueList {...defaultProps} renderOrder={() => <div>Ada</div>} />
+    );
+
+    expect(screen.getByText('Waiting · Tola')).toBeVisible();
+    expect(screen.getByText('Asked the customer to retry.')).toBeVisible();
+    expect(screen.getByText('Follow up on 2026-12-01')).toBeVisible();
+    fireEvent.click(screen.getByText('View follow-up'));
+    expect(screen.getByText('Open follow-up editor')).toBeVisible();
+  });
+
+  it('keeps a claimed follow-up visible after the checkout leaves the source queue', () => {
+    const order = {
+      id: 'order-1',
+      created_at: '2026-07-27T08:00:00Z',
+      customer_name: 'Ada',
+    };
+    mocks.useStaffOrderFollowUps.mockReturnValue({
+      isSuccess: true,
+      openOrders: [order],
+      data: {
+        'order-1': {
+          assignee_id: 'teammate',
+          assignee_name: 'Tola',
+          stage: 'waiting',
+          follow_up_on: '2026-12-01',
+        },
+      },
+    });
+    render(
+      <FollowUpQueueList {...defaultProps} renderOrder={() => <div>Ada</div>} />
+    );
+    expect(screen.getByText('Waiting · Tola')).toBeVisible();
+    expect(screen.getByText('Follow up on 2026-12-01')).toBeVisible();
   });
 
   it('keeps the limit notice visible for a filtered-empty result without Retry', () => {

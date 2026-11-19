@@ -21,7 +21,9 @@ export function FollowUpOrderCard({
 }: FollowUpOrderCardProps) {
   const router = useRouter();
   const { colors, shadows } = useTheme();
-  const errorMessage = getFollowUpStatusLabel(item);
+  const errorMessage = item.staff_follow_up_only
+    ? 'Staff follow-up'
+    : getFollowUpStatusLabel(item);
 
   const displayName = item.customer_name || 'Guest';
   const emailLink = buildMailtoLink(item.customer_email);
@@ -91,12 +93,13 @@ export function FollowUpOrderCard({
           style={[
             styles.errorText,
             {
-              color:
-                (item.oxygen_follow_up_status &&
-                  item.oxygen_follow_up_status !== 'needs_review') ||
-                item.payment_status === 'pending' ||
-                item.payment_status === 'unpaid' ||
-                item.payment_status === 'expired'
+              color: item.staff_follow_up_only
+                ? colors.textSecondary
+                : (item.oxygen_follow_up_status &&
+                      item.oxygen_follow_up_status !== 'needs_review') ||
+                    item.payment_status === 'pending' ||
+                    item.payment_status === 'unpaid' ||
+                    item.payment_status === 'expired'
                   ? colors.warning
                   : colors.error,
             },

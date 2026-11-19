@@ -1,0 +1,238 @@
+import { useState } from 'react';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { AppDatePickerField } from '@/components/ui/AppDatePickerField';
+import { AppSheetModal } from '@/components/ui/AppSheetModal';
+import { SPACING, TYPOGRAPHY } from '@/constants/theme';
+import { useTheme } from '@/hooks/useTheme';
+import { getLocalDateKey } from '@/lib/customers-failed-orders';
+import {
+  STAFF_FOLLOW_UP_LABELS,
+  STAFF_FOLLOW_UP_OUTCOME_LIMIT,
+  type StaffFollowUp,
+  type StaffFollowUpStage,
+  type StaffFollowUpUpdate,
+  staffFollowUpStages,
+} from '@/schemas/staff-follow-up';
+
+interface StaffFollowUpEditorProps {
+  orderId: string;
+  customerName: string;
+  followUp?: StaffFollowUp;
+  viewerId?: string;
+  busy: boolean;
+  onClose: () => void;
+  onClaim: () => Promise<StaffFollowUp>;
+  onSave: (fields: StaffFollowUpUpdate) => Promise<StaffFollowUp>;
+}
+
+export function StaffFollowUpEditor({
+  orderId,
+  customerName,
+  followUp,
+  viewerId,
+  busy,
+  onClose,
+  onClaim,
+  onSave,
+}: StaffFollowUpEditorProps) {
+  const { colors } = useTheme();
+  const [stage, setStage] = useState<StaffFollowUpStage>(
+    followUp?.stage ?? 'needs_follow_up'
+  );
+  const [outcome, setOutcome] = useState(followUp?.outcome ?? '');
+  const [dueOn, setDueOn] = useState(followUp?.follow_up_on ?? null);
+  const [pickingDate, setPickingDate] = useState(false);
+  const [error, setError] = useState('');
+  const canEdit = Boolean(viewerId && followUp?.assignee_id === viewerId);
+
+  const submit = async () => {
+    setError('');
+    try {
+      if (!followUp?.assignee_id) await onClaim();
+      else {
+        await onSave({
+          order_id: orderId,
+          revision: followUp.revision,
+          stage,
+          outcome: outcome.trim(),
+          follow_up_on: stage === 'closed' ? null : dueOn,
+        });
+        onClose();
+      }
+    } catch (failure) {
+      setError(
+        failure instanceof Error
+          ? failure.message
+          : 'Could not save the follow-up.'
+      );
+    }
+  };
+
+  return (
+    <AppSheetModal
+      accessibilityLabel="Staff follow-up"
+      visible
+      onClose={() => {
+        if (!busy) onClose();
+      }}
+      dismissOnBackdropPress={!busy}
+    >
+      <View style={styles.content}>
+        <Text style={[styles.title, { color: colors.text }]}>
+          {customerName}
+        </Text>
+        <Text style={{ color: colors.textSecondary }}>
+          {followUp?.assignee_id
+            ? `Handled by ${followUp.assignee_name}`
+            : 'Unassigned'}
+        </Text>
+        {canEdit ? (
+          <>
+            <View style={styles.stages}>
+              {staffFollowUpStages.map((item) => (
+                <Pressable
+                  key={item}
+                  accessibilityRole="button"
+                  accessibilityState={{
+                    selected: stage === item,
+                    disabled: busy,
+                  }}
+                  disabled={busy}
+                  onPress={() => {
+                    setStage(item);
+                    setPickingDate(false);
+                  }}
+                  style={[
+                    styles.option,
+                    {
+                      borderColor: stage === item ? colors.gold : colors.border,
+                    },
+                  ]}
+                >
+                  <Text style={{ color: colors.text }}>
+                    {STAFF_FOLLOW_UP_LABELS[item]}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            <TextInput
+              accessibilityLabel="What happened"
+              placeholder="What happened?"
+              placeholderTextColor={colors.textSecondary}
+              value={outcome}
+              onChangeText={setOutcome}
+              editable={!busy}
+              maxLength={STAFF_FOLLOW_UP_OUTCOME_LIMIT}
+              multiline
+              style={[
+                styles.note,
+                { color: colors.text, borderColor: colors.border },
+              ]}
+            />
+            {stage !== 'closed' && (
+              <>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => setPickingDate(true)}
+                  disabled={busy}
+                  style={styles.option}
+                >
+                  <Text style={{ color: colors.text }}>
+                    {dueOn
+                      ? `Follow up on ${dueOn}`
+                      : 'Set next follow-up date'}
+                  </Text>
+                </Pressable>
+                {dueOn ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => setDueOn(null)}
+                    disabled={busy}
+                    style={styles.option}
+                  >
+                    <Text style={{ color: colors.text }}>Clear date</Text>
+                  </Pressable>
+                ) : null}
+                {pickingDate && (
+                  <AppDatePickerField
+                    value={dueOn ? new Date(`${dueOn}T12:00:00`) : new Date()}
+                    onClose={() => setPickingDate(false)}
+                    onConfirm={(value) => setDueOn(getLocalDateKey(value))}
+                  />
+                )}
+              </>
+            )}
+          </>
+        ) : (
+          <>
+            <Text style={{ color: colors.text }}>
+              {STAFF_FOLLOW_UP_LABELS[stage]}
+            </Text>
+            {outcome ? (
+              <Text style={{ color: colors.text }}>{outcome}</Text>
+            ) : null}
+            {dueOn ? (
+              <Text style={{ color: colors.text }}>Follow up on {dueOn}</Text>
+            ) : null}
+          </>
+        )}
+        {error ? (
+          <Text accessibilityRole="alert" style={{ color: colors.error }}>
+            {error}
+          </Text>
+        ) : null}
+        <View style={styles.actions}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={onClose}
+            disabled={busy}
+            style={styles.option}
+          >
+            <Text style={{ color: colors.text }}>Close</Text>
+          </Pressable>
+          {viewerId && (!followUp?.assignee_id || canEdit) ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => void submit()}
+              disabled={busy}
+              style={[styles.option, { borderColor: colors.gold }]}
+            >
+              <Text style={{ color: colors.text }}>
+                {canEdit ? 'Save follow-up' : 'Claim follow-up'}
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+      </View>
+    </AppSheetModal>
+  );
+}
+
+const styles = StyleSheet.create({
+  content: { gap: SPACING.md, padding: SPACING.lg },
+  title: {
+    fontSize: TYPOGRAPHY.size.lg,
+    fontFamily: TYPOGRAPHY.fontFamily.bold,
+  },
+  stages: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
+  option: {
+    minHeight: 44,
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'transparent',
+    borderRadius: 8,
+    paddingHorizontal: SPACING.sm,
+  },
+  note: {
+    minHeight: 88,
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: SPACING.sm,
+    textAlignVertical: 'top',
+  },
+  actions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: SPACING.sm,
+  },
+});

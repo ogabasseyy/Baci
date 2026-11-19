@@ -121,7 +121,18 @@ BEGIN
     tracking_events = coalesce((
       SELECT jsonb_agg(
         CASE WHEN fixed.provider_event_key IS NULL THEN entry.event
-          ELSE jsonb_set(entry.event, '{normalized_status}', to_jsonb(fixed.normalized_status))
+          -- Both snapshot shapes: apply-function events (provider_event_key,
+          -- normalized_status) and track-route snapshots (providerEventKey, status).
+          ELSE (
+            CASE WHEN entry.event ? 'status'
+              THEN jsonb_set(entry.event, '{status}', to_jsonb(fixed.normalized_status))
+              ELSE entry.event
+            END
+          ) || CASE
+            WHEN entry.event ? 'normalized_status' OR NOT (entry.event ? 'status')
+              THEN jsonb_build_object('normalized_status', fixed.normalized_status)
+            ELSE '{}'::jsonb
+          END
         END
         ORDER BY entry.ordinality
       )
@@ -129,7 +140,9 @@ BEGIN
         WITH ORDINALITY AS entry(event, ordinality)
       LEFT JOIN fixed_events AS fixed
         ON fixed.shipment_id = shipment.id
-        AND fixed.provider_event_key = entry.event->>'provider_event_key'
+        AND fixed.provider_event_key = coalesce(
+          entry.event->>'provider_event_key', entry.event->>'providerEventKey'
+        )
         -- A key reused in another epoch cannot be told apart in the JSON: skip it.
         AND NOT EXISTS (
           SELECT 1 FROM public.shipment_tracking_events AS other

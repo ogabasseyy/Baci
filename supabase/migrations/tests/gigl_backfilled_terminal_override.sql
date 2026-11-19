@@ -14,6 +14,7 @@ DECLARE
   v_epoch uuid;
   v_status text;
   v_delivered_at timestamptz;
+  v_location text;
 BEGIN
   INSERT INTO public.merchants (id, email, business_name, slug)
   VALUES (v_merchant_id, 'gigl-backfilled-terminal@example.com',
@@ -47,13 +48,14 @@ BEGIN
     WHERE shipment_id = v_shipment_id;
     UPDATE public.shipments
     SET status = v_case.newer_status,
+      current_location = 'NEWER HUB',
       tracking_events = jsonb_build_array(jsonb_build_object(
         'provider_event_key', 'newer-1', 'normalized_status', v_case.newer_status,
         'occurred_at', (now() - interval '2 hours')::text))
     WHERE id = v_shipment_id;
 
     PERFORM public.apply_gigl_tracking_result(
-      v_shipment_id, v_epoch, 'backfill-worker', v_case.terminal, NULL,
+      v_shipment_id, v_epoch, 'backfill-worker', v_case.terminal, 'OLDER LOCATION',
       CASE WHEN v_case.terminal = 'delivered'
         THEN now() - interval '3 hours' END,
       -- The delivered case sends a terminal-only payload (the newer stored scan
@@ -71,8 +73,13 @@ BEGIN
       )
     );
 
-    SELECT status, delivered_at INTO v_status, v_delivered_at
+    SELECT status, delivered_at, current_location
+    INTO v_status, v_delivered_at, v_location
     FROM public.shipments WHERE id = v_shipment_id;
+    IF v_location IS DISTINCT FROM 'NEWER HUB' THEN
+      RAISE EXCEPTION 'a backfilled older % scan must not overwrite the newer location, got %',
+        v_case.terminal, v_location;
+    END IF;
     IF v_status IS DISTINCT FROM v_case.terminal THEN
       RAISE EXCEPTION 'a backfilled older % scan must override a newer % scan, got status %',
         v_case.terminal, v_case.newer_status, v_status;

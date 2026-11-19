@@ -1,6 +1,6 @@
 BEGIN;
 
-SELECT plan(8);
+SELECT plan(9);
 
 CREATE TEMP TABLE repair_fixture (label text PRIMARY KEY, shipment_id uuid);
 
@@ -14,7 +14,7 @@ DECLARE
 BEGIN
   INSERT INTO public.merchants (id, email, business_name, slug)
   VALUES (v_merchant, 'gigl-first-mile-repair@example.com', 'GIGL Repair', 'gigl-first-mile-repair');
-  FOREACH v_label IN ARRAY ARRAY['first_mile', 'genuine', 'terminal', 'then_failed', 'with_sdr', 'with_terminal'] LOOP
+  FOREACH v_label IN ARRAY ARRAY['first_mile', 'genuine', 'terminal', 'then_failed', 'with_sdr', 'with_terminal', 'camel'] LOOP
     INSERT INTO public.orders (merchant_id, order_number, total)
     VALUES (v_merchant, 'GIGL-REPAIR-' || v_label, 1000) RETURNING id INTO v_order;
     INSERT INTO public.shipments (
@@ -50,9 +50,14 @@ BEGIN
         'special scan', '2026-11-09 11:00+00');
     END IF;
     UPDATE public.shipments SET status = CASE v_label WHEN 'terminal' THEN 'delivered' ELSE 'out_for_delivery' END,
-      tracking_events = jsonb_build_array(
-        jsonb_build_object('provider_event_key', v_label || '-a'),
-        jsonb_build_object('provider_event_key', v_label || '-b'))
+      tracking_events = CASE WHEN v_label = 'camel'
+        THEN jsonb_build_array(
+          jsonb_build_object('providerEventKey', v_label || '-a', 'status', 'out_for_delivery'),
+          jsonb_build_object('providerEventKey', v_label || '-b', 'status', 'in_transit'))
+        ELSE jsonb_build_array(
+          jsonb_build_object('provider_event_key', v_label || '-a'),
+          jsonb_build_object('provider_event_key', v_label || '-b'))
+      END
     WHERE id = v_ship;
     IF v_label = 'terminal' THEN
       UPDATE public.shipment_tracking_monitors SET state = 'terminal' WHERE shipment_id = v_ship;
@@ -61,8 +66,10 @@ BEGIN
 END;
 $setup$;
 
-SELECT is(private.repair_gigl_first_mile_out_for_delivery(), 2,
-  'repairs the first-mile and the MSHC-then-failed shipments');
+SELECT is(private.repair_gigl_first_mile_out_for_delivery(), 3,
+  'repairs the first-mile, MSHC-then-failed and camel-case snapshot shipments');
+SELECT is((SELECT tracking_events->0->>'status' FROM public.shipments WHERE id = (SELECT shipment_id FROM repair_fixture WHERE label = 'camel')),
+  'pickup_scheduled', 'a track-route (camel-case) snapshot entry is patched too');
 SELECT is((SELECT status FROM public.shipments WHERE id = (SELECT shipment_id FROM repair_fixture WHERE label = 'then_failed')),
   'failed', 'a failed scan after the demoted MSHC stays failed');
 SELECT is((SELECT status FROM public.shipments WHERE id = (SELECT shipment_id FROM repair_fixture WHERE label = 'first_mile')),

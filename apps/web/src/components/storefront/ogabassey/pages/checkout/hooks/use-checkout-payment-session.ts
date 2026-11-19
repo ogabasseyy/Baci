@@ -133,9 +133,17 @@ export function useCheckoutPaymentSession({
       nextMethod !== method &&
       (nextMethod === 'uba_redvault' || method === 'uba_redvault')
     ) {
-      // A persisted Redvault fence remains authoritative during method
-      // changes; the submit-time recovery resolver alone can clear it.
-      if (pendingCheckoutOrder?.paymentMethod !== 'uba_redvault') {
+      // A persisted Redvault or wallet-funded Credit Direct fence remains
+      // authoritative during method changes; the submit-time recovery resolver
+      // alone can authorize clearing it.
+      const hasWalletCreditDirectFence =
+        pendingCheckoutOrder?.paymentMethod === 'credit_direct' &&
+        Number.isFinite(pendingCheckoutOrder.walletAmountUsed) &&
+        (pendingCheckoutOrder.walletAmountUsed ?? 0) > 0;
+      if (
+        pendingCheckoutOrder?.paymentMethod !== 'uba_redvault' &&
+        !hasWalletCreditDirectFence
+      ) {
         clearPendingCheckoutOrder();
       }
       setRedvaultSummary(null);

@@ -71,6 +71,8 @@ export interface PendingCheckoutOrderSnapshot {
   paymentMethod?: string;
   /** Server-confirmed local debit, retained across balance refresh and retries. */
   walletAmountUsed?: number;
+  /** Committed order failed store-credit projection and must stay fenced. */
+  fundingUnresolved?: boolean;
   orderId: string;
   orderNumber?: string;
   trackingToken?: string;
@@ -160,6 +162,9 @@ function normalizeText(value: string | null | undefined): string {
 }
 
 
+export const unresolvedFundingOrderMessage =
+  'Your previous order has a pending store-credit verification. Please wait for reconciliation or contact support before starting another payment.';
+
 export async function resolvePendingCheckoutOrder({
   pendingOrder,
   merchantId,
@@ -172,6 +177,27 @@ export async function resolvePendingCheckoutOrder({
   shippingRateId,
   fetchImpl = fetch,
 }: ResolvePendingCheckoutOrderOptions): Promise<ResolvePendingCheckoutOrderResult> {
+  if (pendingOrder?.fundingUnresolved && pendingOrder.merchantId === merchantId) {
+    if (pendingOrder.trackingToken && pendingOrder.orderId) {
+      const existing = await fetchFencedOrderState({
+        fetchImpl,
+        merchantSlug,
+        pendingOrder,
+      });
+      if (existing && isPaidOrderState(existing)) {
+        return {
+          reusableOrder: null,
+          clearStoredOrder: true,
+          paidOrder: paidOrderIdentity(pendingOrder, existing),
+        };
+      }
+    }
+    throw new Error(
+      pendingOrder.paymentMethod === 'oxygen'
+        ? oxygenPreviousPaymentUnresolved
+        : unresolvedFundingOrderMessage
+    );
+  }
   const oxygenFence = await resolveOxygenCheckoutFence({
     pendingOrder,
     merchantId,

@@ -3152,6 +3152,51 @@ describe('POST /api/orders — wallet response shape', () => {
     expect(await response.json()).toMatchObject({ code, orderId: 'order-id' });
   });
 
+  it('includes order recovery and committed wallet evidence when pre-gateway projection fails after wallet debit', async () => {
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation(
+      () =>
+        buildMockSupabase({
+          redeem_wallet_for_order: {
+            data: [
+              {
+                success: true,
+                redeemed_amount: 300,
+                new_balance: 200,
+                transaction_id: '99999999-aaaa-bbbb-cccc-dddddddddddd',
+              },
+            ],
+            error: null,
+          },
+        }) as unknown as never
+    );
+    mockRecordPreGatewayRedemption.mockResolvedValueOnce({
+      status: 503,
+      code: 'STORE_CREDIT_RETRY_REQUIRED',
+      message:
+        'Store credit is temporarily busy. Retry the same order shortly.',
+    });
+
+    const request = new NextRequest('http://localhost/api/orders', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...baseOrderPayload,
+        use_wallet_credit: true,
+        wallet_amount: 300,
+      }),
+    });
+
+    const response = await POST(request);
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      code: 'STORE_CREDIT_RETRY_REQUIRED',
+      orderId: 'order-id',
+      orderNumber: 'ORD-123',
+      amountDueToGateway: 700,
+      wallet: { amountUsed: 300, newBalance: 200 },
+    });
+  });
+
   it('partial wallet redemption surfaces wallet { amountUsed, newBalance, transactionId } and residual amountDueToGateway', async () => {
     // Pin the partial-coverage response shape that the mobile checkout's
     // success screen consumes (wallet.amountUsed + amountDueToGateway).

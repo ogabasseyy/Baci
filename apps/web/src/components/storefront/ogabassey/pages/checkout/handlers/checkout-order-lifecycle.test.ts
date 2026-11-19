@@ -339,4 +339,53 @@ describe('runCheckoutOrderLifecycle', () => {
     });
   });
 
+  it('persists an unresolved funding fence when store-credit projection fails after wallet debit', async () => {
+    const input = lifecycleOptions();
+    input.fingerprint = JSON.stringify({
+      useWalletCredit: true,
+      walletAmountUsed: 300,
+    });
+    input.paymentMethod = 'paystack';
+    input.reuse.paymentMethod = 'paystack';
+    vi.mocked(recoverPendingCheckoutOrder).mockResolvedValue({
+      kind: 'submit',
+      pendingOrder: { reusableOrder: null, clearStoredOrder: false },
+    });
+    vi.mocked(submitCheckoutOrder).mockImplementationOnce(async (options) => {
+      options.onCommittedOrderFailure?.({
+        code: 'STORE_CREDIT_REVIEW_REQUIRED',
+        orderId: 'order-committed-1',
+        orderNumber: 'ORD-1',
+        trackingToken: 'tok-1',
+        wallet: { amountUsed: 300, newBalance: 0 },
+        amountDueToGateway: 700,
+      });
+      throw new Error('Store credit requires payment review.');
+    });
+
+    await expect(runCheckoutOrderLifecycle(input)).rejects.toThrow(
+      'Store credit requires payment review.'
+    );
+
+    expect(input.onOrderCreated).not.toHaveBeenCalled();
+    expect(persistPendingCheckoutOrder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderId: 'order-committed-1',
+        orderNumber: 'ORD-1',
+        trackingToken: 'tok-1',
+        paymentMethod: 'paystack',
+        walletAmountUsed: 300,
+        amountDueToGateway: 700,
+        fundingUnresolved: true,
+      })
+    );
+    expect(input.onPendingSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderId: 'order-committed-1',
+        fundingUnresolved: true,
+        walletAmountUsed: 300,
+      })
+    );
+  });
+
 });

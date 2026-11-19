@@ -129,6 +129,36 @@ export async function runCheckoutOrderLifecycle({
   const submitted: SubmittedCheckoutOrder = await submitCheckoutOrder({
     ...submit,
     resolvedPendingOrder: recovery.pendingOrder,
+    onCommittedOrderFailure: (failure) => {
+      const committedWalletUsed = failure.wallet?.amountUsed;
+      const snapshot: PendingCheckoutOrderSnapshot = {
+        orderId: failure.orderId,
+        ...(failure.orderNumber ? { orderNumber: failure.orderNumber } : {}),
+        ...(failure.trackingToken
+          ? { trackingToken: failure.trackingToken }
+          : {}),
+        merchantId: customer.merchantId,
+        customerEmail: customer.email,
+        customerPhone: customer.phone,
+        checkoutFingerprint:
+          committedWalletUsed && committedWalletUsed > 0
+            ? withConfirmedWalletDebit(
+                fingerprint,
+                committedWalletUsed,
+                reuse.pendingOrder?.checkoutFingerprint
+              )
+            : fingerprint,
+        paymentMethod: reuse.paymentMethod,
+        amountDueToGateway: failure.amountDueToGateway ?? fallbackTotal,
+        ...(committedWalletUsed && committedWalletUsed > 0
+          ? { walletAmountUsed: committedWalletUsed }
+          : {}),
+        fundingUnresolved: true,
+        createdAt: new Date().toISOString(),
+      };
+      persistPendingCheckoutOrder(snapshot);
+      onPendingSnapshot(snapshot);
+    },
     onBeforeBoundRedvaultSend: ({ idempotencyKey, orderRequest }) => {
       if (!redvaultReview.enabled) {
         throw new Error(

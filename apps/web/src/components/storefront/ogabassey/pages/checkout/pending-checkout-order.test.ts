@@ -721,6 +721,54 @@ describe('pending-checkout-order', () => {
       clearStoredOrder: true,
     });
   });
+
+  it('blocks creating a replacement invoice while a store-credit projection failure remains unpaid after wallet balance reload', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        id: 'order-committed-1',
+        payment_status: 'unpaid',
+        shipping_status: 'pending',
+        total: 1000,
+      }),
+    } as Response);
+
+    await expect(
+      resolvePendingCheckoutOrder({
+        pendingOrder: {
+          orderId: 'order-committed-1',
+          trackingToken: 'tok-1',
+          merchantId: 'merchant-1',
+          customerEmail: 'john@example.com',
+          customerPhone: '+2348012345678',
+          checkoutFingerprint: JSON.stringify({
+            useWalletCredit: true,
+            walletAmountUsed: 300,
+          }),
+          walletAmountUsed: 300,
+          fundingUnresolved: true,
+          paymentMethod: 'paystack',
+          amountDueToGateway: 700,
+          createdAt: '2026-11-19T00:00:00.000Z',
+        },
+        merchantId: 'merchant-1',
+        merchantSlug: 'ogabassey',
+        customerEmail: 'john@example.com',
+        checkoutFingerprint: JSON.stringify({
+          useWalletCredit: false,
+          walletAmountUsed: 0,
+        }),
+        paymentMethod: 'paystack',
+        shippingProvider: 'GIGL',
+        fetchImpl,
+      })
+    ).rejects.toThrow('pending store-credit verification');
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(String((fetchImpl.mock.calls[0] as unknown[])?.[0])).toContain(
+      '/api/storefront/orders/order-committed-1'
+    );
+  });
 });
 
 describe('abandoned payment validation failures', () => {

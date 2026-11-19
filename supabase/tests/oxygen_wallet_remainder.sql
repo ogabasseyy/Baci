@@ -58,7 +58,7 @@ BEGIN
  PERFORM set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000004',false);
  result:=public.oxygen_runtime('claim',cmd,jsonb_build_object('commandId',cmd));
  PERFORM public.test_assert((result->'context'->>'productAmount')::numeric=30000,'worker books the net invoice');
- state:=jsonb_build_object('applicationReference','10000000-0000-4000-8000-000000000003','bookingReference',booking,'booking',jsonb_build_object('loan_reference',booking,'status','BOOKED','product_amount',50000,'equity_percentage',25,'loan_tenure',1,'total_charges',100),'schedule',jsonb_build_array(jsonb_build_object('amount',100)));
+ state:=jsonb_build_object('applicationReference','10000000-0000-4000-8000-000000000003','bookingReference',booking,'offers',jsonb_build_array(jsonb_build_object('tenure',1,'loanAmount',50000)),'eligibleAmount',50000,'minimumAmount',1000,'maxTenure',12,'booking',jsonb_build_object('loan_reference',booking,'status','BOOKED','product_amount',50000,'equity_percentage',25,'loan_tenure',1,'loan_amount',22500,'total_charges',100),'schedule',jsonb_build_array(jsonb_build_object('amount',100)));
  PERFORM public.test_reject(format('SELECT public.oxygen_runtime(''finish'',%L,%L::jsonb)',cmd,jsonb_build_object('commandId',cmd,'outcome','succeeded','stage','booked','state',state)),'Order amount changed');
  state:=jsonb_set(state,'{booking,product_amount}','30000');
  PERFORM public.oxygen_runtime('finish',cmd,jsonb_build_object('commandId',cmd,'outcome','succeeded','stage','booked','state',state));

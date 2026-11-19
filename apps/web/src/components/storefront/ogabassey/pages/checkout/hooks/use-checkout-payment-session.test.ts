@@ -154,6 +154,26 @@ describe('useCheckoutPaymentSession', () => {
     expect(result.current.method).toBe('uba_redvault');
   });
 
+  it('retains a wallet-funded Credit Direct pending fence when selecting Redvault', () => {
+    const clearPendingCheckoutOrder = vi.fn();
+    const { result } = renderHook(() =>
+      useCheckoutPaymentSession(
+        options({
+          clearPendingCheckoutOrder,
+          pendingCheckoutOrder: {
+            paymentMethod: 'credit_direct',
+            walletAmountUsed: 10000,
+          },
+        }) as never
+      )
+    );
+
+    act(() => result.current.selectMethod('uba_redvault'));
+
+    expect(clearPendingCheckoutOrder).not.toHaveBeenCalled();
+    expect(result.current.method).toBe('uba_redvault');
+  });
+
   it('reloads wallet state when customer identity changes and ignores stale responses', async () => {
     const requests: Array<(response: Response) => void> = [];
     const signals: AbortSignal[] = [];

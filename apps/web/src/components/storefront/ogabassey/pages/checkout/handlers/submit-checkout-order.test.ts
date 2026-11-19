@@ -272,4 +272,45 @@ describe('submitCheckoutOrder', () => {
     ).rejects.toThrow('Failed to create order');
     expect(onVoucherRejected).toHaveBeenCalledWith({});
   });
+
+  it('forwards committed order recovery metadata on store-credit projection failure before throwing', async () => {
+    const onCommittedOrderFailure = vi.fn();
+    await expect(
+      submitCheckoutOrder({
+        resolvedPendingOrder: { reusableOrder: null, clearStoredOrder: false },
+        getIdempotencyKey: async () => 'idempotency-key',
+        orderRequest: orderRequest(),
+        paymentMethod: 'paystack',
+        total: 1000,
+        onVoucherRejected: vi.fn(),
+        onPendingOrderInvalidated: vi.fn(async () => undefined),
+        onShippingRateRejected: vi.fn(),
+        onCommittedOrderFailure,
+        getOrderErrorMessage: getCheckoutOrderErrorMessage,
+        request: vi.fn(async () =>
+          response(
+            {
+              code: 'STORE_CREDIT_RETRY_REQUIRED',
+              error: 'Store credit busy',
+              orderId: 'order-committed-1',
+              orderNumber: 'ORD-1',
+              trackingToken: 'tok-1',
+              amountDueToGateway: 700,
+              wallet: { amountUsed: 300, newBalance: 0 },
+            },
+            503
+          )
+        ),
+      })
+    ).rejects.toThrow('Store credit busy');
+
+    expect(onCommittedOrderFailure).toHaveBeenCalledWith({
+      code: 'STORE_CREDIT_RETRY_REQUIRED',
+      orderId: 'order-committed-1',
+      orderNumber: 'ORD-1',
+      trackingToken: 'tok-1',
+      amountDueToGateway: 700,
+      wallet: { amountUsed: 300, newBalance: 0 },
+    });
+  });
 });

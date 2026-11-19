@@ -3066,6 +3066,20 @@ export async function POST(request: NextRequest) {
             error: projectionFailure.message,
             code: projectionFailure.code,
             orderId: order.id,
+            orderNumber: order.order_number ?? undefined,
+            trackingToken:
+              typeof order.tracking_token === 'string'
+                ? order.tracking_token
+                : undefined,
+            amountDueToGateway,
+            ...(walletAmountUsed > 0 && walletRedemptionResult
+              ? {
+                  wallet: {
+                    amountUsed: walletAmountUsed,
+                    newBalance: walletRedemptionResult.newBalance,
+                  },
+                }
+              : {}),
           },
           { status: projectionFailure.status }
         );

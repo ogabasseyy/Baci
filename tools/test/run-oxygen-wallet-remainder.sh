@@ -18,7 +18,13 @@ done
 psql -Xq -v ON_ERROR_STOP=1 -f supabase/migrations/20261107160000_record_order_store_credit.sql
 if [[ "${1:-}" != '--baseline' ]]; then
  psql -Xq -v ON_ERROR_STOP=1 -f supabase/migrations/20261107161000_oxygen_wallet_remainder_funding.sql
+ psql -Xq -v ON_ERROR_STOP=1 -f supabase/migrations/20261111140000_oxygen_tenure_offers.sql
+ psql -Xq -v ON_ERROR_STOP=1 -f supabase/migrations/20261111141410_oxygen_offer_tenure_consistency.sql
+ psql -Xq -v ON_ERROR_STOP=1 -f supabase/migrations/20261111143604_oxygen_offer_amount_precision.sql
+ psql -Xq -v ON_ERROR_STOP=1 -f supabase/migrations/20261111174500_oxygen_accept_current_offer.sql
  psql -Xq -v ON_ERROR_STOP=1 -f supabase/migrations/20261111181000_preserve_oxygen_order_settlement_paths.sql
+ psql -Xq -v ON_ERROR_STOP=1 -f supabase/migrations/20261111190000_oxygen_preserve_retry_after_eligibility.sql
+ psql -Xq -v ON_ERROR_STOP=1 -f supabase/migrations/20261119030000_reapply_oxygen_accept_saved_plan_financed_basis.sql
 fi
 psql -Xq -v ON_ERROR_STOP=1 -f supabase/tests/oxygen_wallet_remainder.sql
 # Match the live credit-writer lock without waiting or deadlocking admission.
@@ -26,27 +32,27 @@ psql -Xq -v ON_ERROR_STOP=1 -c "BEGIN; SELECT oxygen_private.credit_admission_lo
 lock_pid=$!
 lock_ready=false
 for attempt in {1..40}; do
- if psql -XAtqc "SELECT EXISTS(SELECT 1 FROM pg_locks WHERE locktype='advisory' AND granted)" | rg -qx t; then lock_ready=true; break; fi
+ if psql -XAtqc "SELECT EXISTS(SELECT 1 FROM pg_locks WHERE locktype='advisory' AND granted)" | grep -qx t; then lock_ready=true; break; fi
  sleep 0.02
 done
 if [[ "$lock_ready" != true ]]; then echo 'Credit writer lock was not observed' >&2; exit 1; fi
 if psql -Xq -v ON_ERROR_STOP=1 -c "SELECT set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000003',false); SET ROLE authenticated; SELECT public.oxygen_start_workflow('00000000-0000-4000-8000-000000000017');" >"$fixture_dir/contended.log" 2>&1; then
  echo 'Concurrent wallet writer did not fence Oxygen admission' >&2; exit 1
 fi
-rg -q 'oxygen_credit_check_unavailable' "$fixture_dir/contended.log"
+grep -q 'oxygen_credit_check_unavailable' "$fixture_dir/contended.log"
 wait "$lock_pid"
 # A first workflow held open must likewise stop a concurrent ledger mutation.
 psql -Xq -v ON_ERROR_STOP=1 -c "BEGIN; SELECT set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000003',false); SELECT public.oxygen_start_workflow('00000000-0000-4000-8000-000000000017'); SELECT pg_sleep(1); COMMIT;" >"$fixture_dir/admission.log" &
 lock_pid=$!
 lock_ready=false
 for attempt in {1..40}; do
- if psql -XAtqc "SELECT EXISTS(SELECT 1 FROM pg_locks WHERE locktype='advisory' AND granted)" | rg -qx t; then lock_ready=true; break; fi
+ if psql -XAtqc "SELECT EXISTS(SELECT 1 FROM pg_locks WHERE locktype='advisory' AND granted)" | grep -qx t; then lock_ready=true; break; fi
  sleep 0.02
 done
 if [[ "$lock_ready" != true ]]; then echo 'Oxygen admission lock was not observed' >&2; exit 1; fi
 if psql -Xq -v ON_ERROR_STOP=1 -c "UPDATE public.customer_wallet_transactions SET amount=21000 WHERE source_id='00000000-0000-4000-8000-000000000017';" >"$fixture_dir/contended.log" 2>&1; then
  echo 'Concurrent Oxygen admission did not fence wallet mutation' >&2; exit 1
 fi
-rg -q 'oxygen_credit_check_unavailable' "$fixture_dir/contended.log"
+grep -q 'oxygen_credit_check_unavailable' "$fixture_dir/contended.log"
 wait "$lock_pid"
 echo 'Oxygen wallet remainder PostgreSQL regressions passed.'

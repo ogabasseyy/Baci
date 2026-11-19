@@ -25,10 +25,12 @@ type Provider = {
 };
 /**
  * The lock is shared with the scheduled recovery job, so a cold cache is
- * repopulated by one refresher per lock window. After a failed refresh the
- * lock is kept, so the same window is the failure cooldown.
+ * repopulated by one refresher per lock window. A cold refresh is a partner
+ * login plus a bank request (30s timeout each), so the window leaves headroom
+ * over that 60s worst case. After a failed refresh the lock is kept, and the
+ * failure cooldown is intentionally this same 120s window.
  */
-const REFRESH_LOCK_SECONDS = 60;
+const REFRESH_LOCK_SECONDS = 120;
 const RELEASE_LOCK_IF_OWNED_SCRIPT =
   "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end";
 

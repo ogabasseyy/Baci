@@ -97,7 +97,7 @@ describe('cache-first read for checkout', () => {
     const [lockKey, token] = cache.set.mock.calls[0];
     expect(lockKey).toBe(bankRefreshLockKey('production', 'partner'));
     expect(token).toMatch(UUID);
-    expect(cache.set.mock.calls[0][2]).toEqual({ nx: true, ex: 60 });
+    expect(cache.set.mock.calls[0][2]).toEqual({ nx: true, ex: 120 });
     expect(cache.eval).toHaveBeenCalledWith(
       expect.stringContaining("redis.call('get', KEYS[1]) == ARGV[1]"),
       [lockKey],

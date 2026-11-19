@@ -223,6 +223,23 @@ describe('bugfix: refresh lock fencing and failure cooldown', () => {
     );
   });
 
+  it('claims a lock window that outlasts a cold login plus a bank request', async () => {
+    const cache = redisLike();
+    const provider = { call: vi.fn().mockResolvedValue(providerList) };
+
+    await readOrRefreshSupportedBanks(
+      cache,
+      'production',
+      'partner',
+      () => provider
+    );
+
+    // The partner login and the bank request each allow 30s, so the lock must
+    // not expire before a cold refresh can finish.
+    const options = cache.set.mock.calls[0][2];
+    expect(options?.ex).toBeGreaterThan(30 + 30);
+  });
+
   it('still returns the list when releasing the lock fails', async () => {
     const cache = redisLike();
     cache.eval.mockRejectedValue(new Error('redis unavailable'));

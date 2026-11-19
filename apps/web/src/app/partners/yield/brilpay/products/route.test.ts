@@ -152,6 +152,18 @@ describe('BrilStash feed GET', () => {
     expect(await response.text()).not.toContain('database secret');
   });
 
+  it('preserves sandbox totals when the requested page is past the last row', async () => {
+    dependencies.abortSignal.mockResolvedValueOnce({
+      data: { ...result, products: [], totalCount: 1, totalPages: 1 },
+      error: null,
+    });
+    const response = await GET(request('?page=2&limit=100'));
+    expect(response.status).toBe(200);
+    expect(response.headers.get('x-total-count')).toBe('1');
+    expect(response.headers.get('x-total-pages')).toBe('1');
+    expect(await response.json()).toEqual([]);
+  });
+
   it('returns a safe failure when the read exceeds the local deadline', async () => {
     vi.useFakeTimers();
     try {

@@ -123,6 +123,15 @@ describe('buildBrilStashCatalogue', () => {
     });
   });
 
+  it('exports the canonical product URL without a browser fragment', () => {
+    const productUrl =
+      'https://shop.example.invalid/phone?campaign=pilot#reviews';
+    const { products } = build([{ ...sources[1], productUrl }]);
+    expect(products[0]?.product_url).toBe(
+      'https://shop.example.invalid/phone?campaign=pilot&variantId=new-128&condition=new'
+    );
+  });
+
   it('preserves listing identity when only price changes', () => {
     const changed = build([{ ...sources[1], priceNaira: 365000 }]);
     expect(changed.products).toMatchObject([

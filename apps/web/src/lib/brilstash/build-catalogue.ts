@@ -168,6 +168,7 @@ function projectSource(
 
   const url = parseBrilStashHttpsUrl(source.productUrl);
   if (!url || url.origin !== context.storefrontOrigin) return 'invalid_url';
+  // Fragments are browser-only anchors. The feed uses the canonical PDP URL.
   url.hash = '';
   url.searchParams.delete('variantId');
   url.searchParams.delete('condition');

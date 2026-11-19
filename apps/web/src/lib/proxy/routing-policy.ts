@@ -204,6 +204,8 @@ export function getRouteType(
     return 'auth';
   }
 
+  // The generic API prefix is lowercase. The BrilStash match also excludes
+  // case and trailing-slash variants from storefront routing.
   if (pathname.startsWith('/api') || isBrilStashFeedPath(pathname)) {
     return 'api';
   }

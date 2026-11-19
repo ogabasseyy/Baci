@@ -36,6 +36,8 @@ export async function readBrilStashPage(
     if (!result.success) return UNAVAILABLE;
     const page = result.data;
     if (page.status === 'ok') {
+      // Sandbox pagination preserves the total headers even when the requested
+      // offset has no rows. An empty assortment has its own zero totals.
       const expectedCount = Math.max(
         0,
         Math.min(query.limit, page.totalCount - (query.page - 1) * query.limit)

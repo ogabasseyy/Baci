@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import { StrictMode } from 'react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -58,7 +59,7 @@ function getChatAnchor(container: HTMLElement) {
   return anchor as HTMLElement;
 }
 
-describe('ChatWidget - toggle button', () => {
+describe('ChatWidget - Ekaette ask bar', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
@@ -91,44 +92,42 @@ describe('ChatWidget - toggle button', () => {
     });
   });
 
-  it('renders the toggle button with aria-label "Toggle chat"', () => {
+  it('renders the ask bar as the only closed standard-mode entry point', () => {
     render(<ChatWidget />);
-    const button = screen.getByRole('button', { name: 'Toggle chat' });
-    expect(button).toBeDefined();
-  });
-
-  it('renders the AI badge on the toggle button', () => {
-    render(<ChatWidget />);
-    expect(screen.getByText('AI')).toBeDefined();
+    expect(screen.getByRole('textbox', { name: 'Ask Ekaette' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send question to Ekaette' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Toggle chat' })).not.toBeInTheDocument();
   });
 
   it('does not render chat window when isOpen is false', () => {
     render(<ChatWidget />);
-    expect(screen.queryByText('Ogabassey AI')).toBeNull();
+    expect(screen.queryByText('Ekaette')).toBeNull();
   });
 
-  it('calls setIsOpen when toggle button is clicked', async () => {
+  it('submits the edited ask-bar text into the existing chat', async () => {
     const setIsOpen = vi.fn();
+    const setInput = vi.fn();
+    const handleSend = vi.fn();
     vi.mocked(useOgabasseyChat).mockReturnValue({
       isOpen: false,
       setIsOpen,
       messages: [],
-      input: '',
-      setInput: vi.fn(),
+      input: 'Show me Samsung phones',
+      setInput,
       isLoading: false,
       proactiveMsg: null,
       setProactiveMsg: vi.fn(),
       messagesEndRef: { current: null },
-      handleSend: vi.fn(),
+      handleSend,
       handleSubmit: vi.fn(),
       handleAddSantaWishToCart: vi.fn(),
     });
 
     const user = userEvent.setup();
     render(<ChatWidget />);
-    const button = screen.getByRole('button', { name: 'Toggle chat' });
-    await user.click(button);
+    await user.click(screen.getByRole('button', { name: 'Send question to Ekaette' }));
     expect(setIsOpen).toHaveBeenCalledWith(true);
+    expect(handleSend).toHaveBeenCalledWith('Show me Samsung phones');
   });
 
   it('opens immediately when mounted with openOnMount', async () => {
@@ -153,6 +152,35 @@ describe('ChatWidget - toggle button', () => {
     expect(setIsOpen).toHaveBeenCalledWith(true);
   });
 
+  it('submits a deferred initial draft once, including under Strict Mode', () => {
+    const handleSend = vi.fn();
+    const setIsOpen = vi.fn();
+    vi.mocked(useOgabasseyChat).mockReturnValue({
+      isOpen: false,
+      setIsOpen,
+      messages: [],
+      input: '',
+      setInput: vi.fn(),
+      isLoading: false,
+      proactiveMsg: null,
+      setProactiveMsg: vi.fn(),
+      messagesEndRef: { current: null },
+      handleSend,
+      handleSubmit: vi.fn(),
+      handleAddSantaWishToCart: vi.fn(),
+    });
+
+    render(
+      <StrictMode>
+        <ChatWidget openOnMount initialMessage="Is this available?" />
+      </StrictMode>
+    );
+
+    expect(setIsOpen).toHaveBeenCalledWith(true);
+    expect(handleSend).toHaveBeenCalledTimes(1);
+    expect(handleSend).toHaveBeenCalledWith('Is this available?');
+  });
+
   it('keeps the widget mounted but hidden when cart is open', () => {
     vi.mocked(useCart).mockReturnValue({
       isCartOpen: true,
@@ -165,9 +193,8 @@ describe('ChatWidget - toggle button', () => {
 
     expect(anchor).toHaveClass('ogabassey-chat-anchor--hidden');
     expect(anchor).toHaveAttribute('data-mobile-offset', 'default');
-    expect(
-      screen.getByRole('button', { name: 'Toggle chat' })
-    ).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Ask Ekaette' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Toggle chat' })).not.toBeInTheDocument();
   });
 });
 
@@ -242,7 +269,7 @@ describe('ChatWidget - chat window when open', () => {
     expect(mockRouterPush).not.toHaveBeenCalled();
   });
 
-  it('renders "Ogabassey AI" header when chat is open in standard mode', () => {
+  it('renders "Ekaette" header when chat is open in standard mode', () => {
     vi.mocked(useOgabasseyChat).mockReturnValue({
       isOpen: true,
       setIsOpen: vi.fn(),
@@ -259,7 +286,7 @@ describe('ChatWidget - chat window when open', () => {
     });
 
     render(<ChatWidget />);
-    expect(screen.getByText('Ogabassey AI')).toBeDefined();
+    expect(screen.getByText('Ekaette')).toBeDefined();
   });
 
   it('renders close button inside chat window', () => {

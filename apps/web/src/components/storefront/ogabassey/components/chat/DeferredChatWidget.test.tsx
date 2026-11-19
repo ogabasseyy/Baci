@@ -33,21 +33,20 @@ describe('DeferredChatWidget', () => {
     } as ReturnType<typeof useCart>);
   });
 
-  it('renders the launcher immediately without loading the chat runtime', () => {
+  it('renders one editable ask bar without loading the chat runtime', () => {
     const loadChatWidget = vi.fn().mockResolvedValue({
       ChatWidget: () => <div>Loaded chat runtime</div>,
     });
 
     render(<DeferredChatWidget loadChatWidget={loadChatWidget} />);
 
-    expect(
-      screen.getByRole('button', { name: 'Open AI chat assistant' })
-    ).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Ask Ekaette' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Open AI chat assistant' })).not.toBeInTheDocument();
     expect(loadChatWidget).not.toHaveBeenCalled();
     expect(screen.queryByText('Loaded chat runtime')).not.toBeInTheDocument();
   });
 
-  it('loads the chat runtime only after the launcher is clicked', async () => {
+  it('loads the chat runtime only after the ask bar is submitted', async () => {
     const loadChatWidget = vi.fn().mockResolvedValue({
       ChatWidget: ({ openOnMount }: { openOnMount?: boolean }) => (
         <div>{openOnMount ? 'Loaded chat runtime open' : 'Loaded chat runtime'}</div>
@@ -57,13 +56,82 @@ describe('DeferredChatWidget', () => {
     const user = userEvent.setup();
     render(<DeferredChatWidget loadChatWidget={loadChatWidget} />);
 
-    await user.click(
-      screen.getByRole('button', { name: 'Open AI chat assistant' })
-    );
+    await user.type(screen.getByRole('textbox', { name: 'Ask Ekaette' }), 'Hello');
+    await user.click(screen.getByRole('button', { name: 'Send question to Ekaette' }));
 
     expect(loadChatWidget).toHaveBeenCalledOnce();
     expect(
       await screen.findByText('Loaded chat runtime open')
+    ).toBeInTheDocument();
+  });
+
+  it('hands an edited question into the lazily loaded chat once', async () => {
+    const loadChatWidget = vi.fn().mockResolvedValue({
+      ChatWidget: ({
+        openOnMount,
+        initialMessage,
+      }: {
+        openOnMount?: boolean;
+        initialMessage?: string;
+      }) => (
+        <div>
+          {openOnMount ? 'Loaded chat runtime open' : 'Loaded chat runtime'}
+          {initialMessage ? `: ${initialMessage}` : ''}
+        </div>
+      ),
+    });
+
+    const user = userEvent.setup();
+    render(<DeferredChatWidget loadChatWidget={loadChatWidget} />);
+
+    const ask = screen.getByRole('textbox', { name: 'Ask Ekaette' });
+    await user.type(ask, 'Do you have this phone in stock?');
+    await user.click(screen.getByRole('button', { name: 'Send question to Ekaette' }));
+
+    expect(loadChatWidget).toHaveBeenCalledOnce();
+    expect(
+      await screen.findByText(
+        'Loaded chat runtime open: Do you have this phone in stock?'
+      )
+    ).toBeInTheDocument();
+  });
+
+  it('does not load the chat for a blank question', async () => {
+    const loadChatWidget = vi.fn();
+    const user = userEvent.setup();
+    render(<DeferredChatWidget loadChatWidget={loadChatWidget} />);
+
+    await user.click(screen.getByRole('button', { name: 'Send question to Ekaette' }));
+
+    expect(loadChatWidget).not.toHaveBeenCalled();
+  });
+
+  it('keeps the draft and offers retry when lazy loading fails', async () => {
+    const loadChatWidget = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('chunk unavailable'))
+      .mockResolvedValueOnce({
+        ChatWidget: ({ initialMessage }: { initialMessage?: string }) => (
+          <div>Loaded chat runtime: {initialMessage}</div>
+        ),
+      });
+    const user = userEvent.setup();
+    render(<DeferredChatWidget loadChatWidget={loadChatWidget} />);
+
+    const ask = screen.getByRole('textbox', { name: 'Ask Ekaette' });
+    await user.type(ask, 'Is this in stock?');
+    await user.click(screen.getByRole('button', { name: 'Send question to Ekaette' }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Could not open Ekaette. Your question is saved; try again.'
+    );
+    expect(ask).toHaveValue('Is this in stock?');
+
+    await user.click(screen.getByRole('button', { name: 'Send question to Ekaette' }));
+
+    expect(loadChatWidget).toHaveBeenCalledTimes(2);
+    expect(
+      await screen.findByText('Loaded chat runtime: Is this in stock?')
     ).toBeInTheDocument();
   });
 
@@ -87,9 +155,8 @@ describe('DeferredChatWidget', () => {
     expect(anchor).toHaveAttribute('data-mobile-offset-default', '1rem');
     expect(anchor).toHaveAttribute('data-mobile-offset-product', '1rem');
     expect(anchor).toHaveAttribute('data-mobile-offset-screen', '1rem');
-    expect(
-      screen.getByRole('button', { name: 'Open AI chat assistant' })
-    ).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Ask Ekaette' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Open AI chat assistant' })).not.toBeInTheDocument();
     expect(loadChatWidget).not.toHaveBeenCalled();
   });
 });

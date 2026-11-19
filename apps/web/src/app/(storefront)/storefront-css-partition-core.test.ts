@@ -127,4 +127,15 @@ describe('storefront CSS partitioning (core chrome sheets)', () => {
     const chatLoader = readStorefrontFile('storefront-chat-style-loader.tsx');
     expect(chatLoader).not.toContain('loadStylesheetAfterFirstInput');
   });
+
+  it('keeps the Ekaette ask bar centered at mobile and desktop widths', () => {
+    const chatCss = readStorefrontFile('storefront-chat.css');
+
+    expect(chatCss).toMatch(
+      /\.ogabassey-chat-anchor--ask\s*\{[^}]*left:\s*50%[^}]*right:\s*auto[^}]*transform:\s*translateX\(-50%\)/s
+    );
+    expect(chatCss).toMatch(
+      /@media\s*\(min-width:\s*768px\)[\s\S]*?\.ogabassey-chat-anchor\.ogabassey-chat-anchor--ask\s*\{[^}]*left:\s*50%[^}]*right:\s*auto[^}]*transform:\s*translateX\(-50%\)/s
+    );
+  });
 });

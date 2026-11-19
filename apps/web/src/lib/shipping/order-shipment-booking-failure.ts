@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import { OrderShipmentBookingError } from './order-shipment-booking-utils';
+import { ShippingBookingRejectedError } from './types';
 
 export type BookingFailureOutcome =
   | 'not_submitted'
@@ -101,6 +102,16 @@ export function classifyBookingFailure(
   const message = (
     error instanceof Error ? error.message : String(error)
   ).slice(0, MAX_MESSAGE_LENGTH);
+  if (error instanceof ShippingBookingRejectedError) {
+    // The carrier answered and refused (e.g. a declined payment): a clear
+    // rejection, not an unexpected bug.
+    return {
+      code: 'PROVIDER_REJECTED',
+      message,
+      httpStatus: null,
+      outcome: 'rejected',
+    };
+  }
   if (isProviderNeverReachedError(error)) {
     return {
       code: 'PROVIDER_UNREACHABLE',

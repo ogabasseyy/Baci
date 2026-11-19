@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { OrderShipmentBookingError } from './order-shipment-booking-error';
+import { BOOKED_SHIPMENT_NOT_SAVED_CODE } from './order-shipment-booking-failure';
 
 /**
  * Post-submit guard: re-verifies the order payment state inside the shared
@@ -61,9 +62,12 @@ export async function confirmBookedOrderPaymentPersist({
       'ORDER_NOT_FOUND'
     );
   }
+  // Post-submit: the carrier already booked the parcel, so say so (and keep
+  // the lock) instead of reporting a pre-submit state-check failure.
   throw new OrderShipmentBookingError(
-    'Could not verify this order is still payable for shipment.',
+    'The carrier booked this shipment but we could not verify the order to save it. Check the shipment before booking again.',
     500,
-    'SHIPMENT_BOOKING_STATE_CHECK_FAILED'
+    BOOKED_SHIPMENT_NOT_SAVED_CODE,
+    providerShipmentId || trackingNumber || undefined
   );
 }

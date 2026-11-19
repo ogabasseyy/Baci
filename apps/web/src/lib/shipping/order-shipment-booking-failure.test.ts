@@ -7,6 +7,7 @@ import {
 } from './order-shipment-booking-failure';
 import { shouldReleaseBookingLock } from './order-shipment-booking-lock-errors';
 import { OrderShipmentBookingError } from './order-shipment-booking-utils';
+import { ShippingBookingRejectedError } from './types';
 
 function connectError(code: string): Error {
   return Object.assign(new Error('fetch failed'), { cause: { code } });
@@ -256,5 +257,13 @@ describe('bugfix: order-route persistence failure is booked_not_saved', () => {
       'ORDER_REFUNDED_AFTER_BOOKING'
     );
     expect(classifyBookingFailure(error).outcome).toBe('booked_not_saved');
+  });
+
+  it('classifies a carrier refusal (ShippingBookingRejectedError) as rejected, not unexpected', () => {
+    expect(
+      classifyBookingFailure(
+        new ShippingBookingRejectedError('Payment declined')
+      )
+    ).toMatchObject({ code: 'PROVIDER_REJECTED', outcome: 'rejected' });
   });
 });

@@ -163,6 +163,17 @@ BEGIN
   THEN RAISE EXCEPTION 'pagination did not preserve the payload or inclusive price filter'; END IF;
 END $$;
 RESET ROLE;
+SAVEPOINT renamed_published_slug;
+UPDATE public.products SET slug = 'renamed-after-activation' WHERE slug = 'paged-7';
+SET LOCAL ROLE anon;
+DO $$
+BEGIN
+  IF fixture.read_brilstash_page(repeat('p', 43), 1, 3, 0)->>'status' IS DISTINCT FROM 'unavailable'
+  THEN RAISE EXCEPTION 'slug change on the last page did not block the pull'; END IF;
+END $$;
+ROLLBACK TO SAVEPOINT renamed_published_slug;
+RELEASE SAVEPOINT renamed_published_slug;
+
 SAVEPOINT stock_drop;
 UPDATE public.products SET stock_quantity = 2, stock = 2 WHERE slug = 'paged-7';
 SET LOCAL ROLE anon;

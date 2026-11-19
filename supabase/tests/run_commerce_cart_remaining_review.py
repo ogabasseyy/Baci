@@ -61,6 +61,7 @@ try:
   for name in ['20261015145000_commerce_cart_checkout_complete_vouchers.sql', '20261015150000_commerce_cart_agentic_checkout_economics.sql','20261015151000_commerce_cart_partial_voucher_binding.sql']: sql+='\n'+(root/'supabase/migrations'/name).read_text()
   sql+='\n'+(root/'supabase/migrations/20261015179997_commerce_cart_binding_loyalty_variant.sql').read_text()
   sql+='\n'+(root/'supabase/migrations/20261029143946_commerce_cart_redvault_binding.sql').read_text()
+  sql+='\n'+(root/'supabase/migrations/20261019183000_commerce_cart_default_variant_predicate.sql').read_text()
   # Match the current binder grants from 20261030233000: scoped authenticated
   # routes only; anon and service_role remain unable to call the wrapper.
   sql+="\nREVOKE ALL ON FUNCTION public.create_storefront_order_with_cart_binding(text,uuid,integer,jsonb) FROM PUBLIC,anon,service_role; GRANT EXECUTE ON FUNCTION public.create_storefront_order_with_cart_binding(text,uuid,integer,jsonb) TO authenticated;"
@@ -92,6 +93,7 @@ try:
   sql+='\n'+(root/'supabase/tests/commerce_cart_validated_price_binding.sql').read_text()
  if '--baseline' not in sys.argv: sql+='\n'+(root/'supabase/tests/commerce_cart_mutation_lifetime_cap.sql').read_text()
  if '--baseline' not in sys.argv: sql+='\n'+(root/'supabase/tests/commerce_cart_replace_attachment_identity.sql').read_text()
+ if '--baseline' not in sys.argv: sql+='\n\\i '+str(root/'supabase/tests/commerce_cart_add_chatwoot_actual.sql')
  sql+='\nROLLBACK;'
  r=subprocess.run([str(pg_bin['psql']),'-X','-v','ON_ERROR_STOP=1','-h',str(p/'sock'),'-p','55489','-U','postgres','-d','postgres'],input=sql,text=True,stdout=open('/tmp/cart-sql-review.log','w'),stderr=subprocess.STDOUT,cwd=root)
  print('PASS' if r.returncode==0 else 'FAIL')

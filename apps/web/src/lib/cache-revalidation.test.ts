@@ -33,7 +33,6 @@ import {
   revalidateMerchantFeed,
   revalidateMerchantPublication,
   revalidatePlatformBlog,
-  revalidateProductSlugs,
   revalidateProducts,
   revalidateReviews,
 } from './cache-revalidation';
@@ -205,44 +204,6 @@ describe('cache-revalidation utilities', () => {
         'products'
       );
       expect(mockRevalidateTag).toHaveBeenCalledTimes(12);
-    });
-  });
-
-  describe('revalidateProductSlugs', () => {
-    it('invalidates the per-slug scoped product tag for each slug', () => {
-      revalidateProductSlugs(MERCHANT_ID, ['iphone-15', 'galaxy-s25']);
-
-      expect(mockRevalidateTag).toHaveBeenCalledWith(
-        getProductScopedCacheTag('product', MERCHANT_ID, 'iphone-15'),
-        'products'
-      );
-      expect(mockRevalidateTag).toHaveBeenCalledWith(
-        getProductScopedCacheTag('product', MERCHANT_ID, 'galaxy-s25'),
-        'products'
-      );
-      expect(mockRevalidateTag).toHaveBeenCalledTimes(2);
-    });
-
-    it('deduplicates and skips blank/nullish slugs', () => {
-      revalidateProductSlugs(MERCHANT_ID, [
-        'iphone-15',
-        '  iphone-15  ',
-        '   ',
-        null,
-        undefined,
-      ]);
-
-      expect(mockRevalidateTag).toHaveBeenCalledTimes(1);
-      expect(mockRevalidateTag).toHaveBeenCalledWith(
-        getProductScopedCacheTag('product', MERCHANT_ID, 'iphone-15'),
-        'products'
-      );
-    });
-
-    it('is a no-op for a blank merchant id', () => {
-      revalidateProductSlugs('   ', ['iphone-15']);
-
-      expect(mockRevalidateTag).not.toHaveBeenCalled();
     });
   });
 

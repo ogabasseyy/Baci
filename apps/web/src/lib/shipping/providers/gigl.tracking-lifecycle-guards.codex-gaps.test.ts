@@ -123,3 +123,18 @@ describe('bugfix: an arrival after SDR does not revive the destroyed shipment', 
     expect(arf.event.rawStatus).toBe('ARF');
   });
 });
+
+describe('bugfix: foreign-office arrivals need a matching destination', () => {
+  it.each([
+    ['ARFK', 'LONDON UK', true],
+    ['ARFP', 'ABUJA', false],
+    ['ARFH', 'HOUSTON', true],
+    ['ARFK', 'ABUJA', false],
+  ] as const)('%s with destination %s promotes: %s', (code, dest, promoted) => {
+    const evt = scan(code, null, 12);
+    applyLifecycleGuards([evt], dest, 'LAGOS');
+    expect(evt.event.rawStatus === GIGL_ARRIVED_IN_CITY_RAW_STATUS).toBe(
+      promoted
+    );
+  });
+});

@@ -124,7 +124,9 @@ describe('bugfix: a destroyed shipment (SDR) is never revived by a later MSHC', 
       OBSERVED_AT
     );
     expect(result.status).toBe('failed');
-    expect(result.events.every((e) => e.status === 'failed')).toBe(true);
+    expect(result.events.find((e) => e.rawStatus === 'MSHC')?.status).toBe(
+      'out_for_delivery'
+    );
   });
 });
 
@@ -239,5 +241,25 @@ describe('bugfix: only the first destination scan becomes the inferred arrival',
         (e) => e.rawStatus === GIGL_ARRIVED_IN_CITY_RAW_STATUS
       )
     ).toHaveLength(1);
+  });
+});
+
+describe('bugfix: SDR keeps the aggregate failed without relabelling later events', () => {
+  it('leaves later scans with their own event status so only SDR queues a failure', () => {
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W42',
+        Destination: 'ABUJA',
+        MobileShipmentTrackings: [
+          event('SDR', '10:00:00'),
+          event('MSVC', '11:00:00', { Location: 'IKEJA 2 (IKEJA)' }),
+          event('MSHC', '12:00:00'),
+        ],
+      },
+      'W42',
+      OBSERVED_AT
+    );
+    expect(result.status).toBe('failed');
+    expect(result.events.filter((e) => e.status === 'failed')).toHaveLength(1);
   });
 });

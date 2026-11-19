@@ -17,6 +17,7 @@ import {
 import type { giglSchemas } from './gigl.schemas';
 import { applyLifecycleGuards } from './gigl.tracking-lifecycle-guards';
 import { currentStatusRank } from './gigl.tracking-status-rank';
+import { TERMINAL_STATUSES } from './gigl.tracking-terminal-statuses';
 
 type GiglTrackingShipment = z.input<typeof giglSchemas.trackingShipment>;
 
@@ -194,7 +195,16 @@ export function normalizeGiglTrackingShipment(
     throw new Error('GIGL tracking result has no valid tracking events');
   }
   const hasRecognizedLifecycleEvent = newestRecognized !== undefined;
-  const status = newestRecognized?.recognizedStatus ?? 'pending';
+  const recognizedStatus = newestRecognized?.recognizedStatus ?? 'pending';
+  // SDR (destroyed) stays authoritative for the aggregate status while later
+  // scans keep their own event status (so they queue no failure notification).
+  const destroyed = candidates.some(
+    (candidate) => candidate.providerStatus.trim().toUpperCase() === 'SDR'
+  );
+  const status =
+    destroyed && !TERMINAL_STATUSES.has(recognizedStatus)
+      ? 'failed'
+      : recognizedStatus;
   const deliveredEvent = sortedCandidates.find(
     (candidate) => candidate.recognizedStatus === 'delivered'
   );

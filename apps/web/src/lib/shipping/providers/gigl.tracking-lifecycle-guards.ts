@@ -56,13 +56,18 @@ const EXPLICIT_ARRIVAL_CODES = new Set([
   'ARFFSHD',
   'ARFGFR',
   'ARFGFS',
-  'ARFK',
-  'ARFP',
-  'ARFH',
   // Daily / delayed-pickup scans only occur after reaching the destination.
   'AD',
   'DUBC',
 ]);
+
+// Foreign-office arrivals only count when the shipment is headed to that
+// office's country; for a Nigeria-bound parcel they are the origin leg.
+const FOREIGN_OFFICE_DESTINATIONS: Record<string, RegExp> = {
+  ARFK: /\b(UK|U\.K|UNITED KINGDOM|ENGLAND|LONDON)\b/,
+  ARFP: /\b(UK|U\.K|UNITED KINGDOM|ENGLAND|LONDON)\b/,
+  ARFH: /\b(US|USA|UNITED STATES|HOUSTON|TEXAS)\b/,
+};
 
 // Whole word only, so unrelated text that merely contains DEPART (e.g.
 // DEPARTMENT) cannot suppress an arrival.
@@ -156,6 +161,9 @@ export function applyLifecycleGuards(
     const isArrival =
       !destroyed &&
       (EXPLICIT_ARRIVAL_CODES.has(raw) ||
+        FOREIGN_OFFICE_DESTINATIONS[raw]?.test(
+          (destination ?? '').toUpperCase()
+        ) ||
         (candidate.recognizedStatus === 'in_transit' &&
           // One inferred arrival per shipment; later destination scans stay as is.
           !arrived &&
@@ -167,19 +175,7 @@ export function applyLifecycleGuards(
           (!sameCity || leftDestinationCentre) &&
           matchesDestination(event.location, destination)));
     if (raw === 'SDR') destroyed = true;
-    if (
-      destroyed &&
-      raw !== 'SDR' &&
-      candidate.recognizedStatus !== null &&
-      !TERMINAL_STATUSES.has(candidate.recognizedStatus)
-    ) {
-      // Destroyed blocks every later in-lifecycle scan (MSHC, arrival, transit).
-      // Terminal scans (delivered, returned, cancelled) stay allowed: an admin
-      // closing out a destroyed shipment is a legitimate final state.
-      event.status = 'failed';
-      candidate.recognizedStatus = 'failed';
-      event.rawStatus = candidate.providerStatus;
-    } else if (isArrival) {
+    if (isArrival) {
       arrived = true;
       if (candidate.recognizedStatus === null) {
         event.status = 'in_transit';

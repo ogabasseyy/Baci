@@ -8,6 +8,11 @@ function resolveOxygenStagingModule(moduleName, env) {
     !stagingDevelopment
   )
     return require.resolve('./oxygen-preview-release');
+  if (
+    moduleName === './oxygen-bank-logos' &&
+    (!stagingDevelopment || env.EAS_BUILD || env.EAS_BUILD_PROFILE || env.CI)
+  )
+    return require.resolve('./oxygen-bank-logos-release');
   if (moduleName === 'react-native-splash-motion' && stagingDevelopment)
     return require.resolve('./oxygen-staging-splash');
   return null;

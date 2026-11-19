@@ -54,3 +54,20 @@ test('resolves the Oxygen preview fixture graph only in staging development', ()
     assert.deepEqual(require(stub).previewSteps, []);
   }
 });
+
+test('includes the native bank logos only in the local staging development build', () => {
+  const name = './oxygen-bank-logos';
+  const local = { EXPO_PUBLIC_OXYGEN_STAGING: '1', NODE_ENV: 'development' };
+  assert.equal(resolveOxygenStagingModule(name, local), null);
+  for (const env of [
+    { NODE_ENV: 'development' },
+    { ...local, NODE_ENV: 'production' },
+    { ...local, EAS_BUILD_PROFILE: 'development' },
+    { ...local, EAS_BUILD: '1' },
+    { ...local, CI: 'true' },
+  ]) {
+    const stub = resolveOxygenStagingModule(name, env);
+    assert.ok(stub?.endsWith('oxygen-bank-logos-release.js'));
+    assert.equal(require(stub).oxygenBankLogo('058'), undefined);
+  }
+});

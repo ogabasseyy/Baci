@@ -20,6 +20,13 @@ const DEPARTURE_CODES = new Set([
   'MDSE',
 ]);
 
+// Return-flow scans (return to sender/centre) can occur at the destination
+// centre after a failed delivery; they are not an arrival.
+const RETURN_CODES = new Set(['SRC', 'MRTE', 'SSR', 'MRTD']);
+// Explicit "arrived final destination" scans. AHD ("arrived final destination
+// for home delivery") has no entry in the shared status map.
+const EXPLICIT_ARRIVAL_CODES = new Set(['ARF', 'MAFD', 'AHD']);
+
 // Whole word only, so unrelated text that merely contains DEPART (e.g.
 // DEPARTMENT) cannot suppress an arrival.
 const DEPARTURE_WORD = /\bDEPART(?:ED|ING|URE)?\b/i;
@@ -102,11 +109,10 @@ export function applyLifecycleGuards(
     const { event } = candidate;
     const raw = candidate.providerStatus.trim().toUpperCase();
     const isArrival =
-      // ARF and MAFD are GIG's explicit "arrived final destination" scans.
-      raw === 'ARF' ||
-      raw === 'MAFD' ||
+      EXPLICIT_ARRIVAL_CODES.has(raw) ||
       (candidate.recognizedStatus === 'in_transit' &&
         !DEPARTURE_CODES.has(raw) &&
+        !RETURN_CODES.has(raw) &&
         !DEPARTURE_WORD.test(
           `${raw} ${candidate.scanText || event.description}`
         ) &&
@@ -114,6 +120,10 @@ export function applyLifecycleGuards(
         matchesDestination(event.location, destination));
     if (isArrival) {
       arrived = true;
+      if (candidate.recognizedStatus === null) {
+        event.status = 'in_transit';
+        candidate.recognizedStatus = 'in_transit';
+      }
       event.rawStatus = GIGL_ARRIVED_IN_CITY_RAW_STATUS;
     } else if (raw === 'MSHC' && !arrived && !movedThroughNetwork) {
       if (pickedUp) {

@@ -41,14 +41,24 @@ describe('providerInboxSummarySchema', () => {
       avg_resolution_time: null,
     });
   });
-  it('treats negative or garbage values as no data', () => {
+  it('treats junk time values as no data', () => {
     const parsed = providerInboxSummarySchema.parse({
       ...full,
-      conversations_count: -3,
       avg_first_response_time: 'abc',
     });
-    expect(parsed.conversations_count).toBe(0);
     expect(parsed.avg_first_response_time).toBeNull();
+  });
+  it.each([
+    -3,
+    'abc',
+    '',
+  ])('rejects a corrupt count (%s) instead of showing zero', (bad) => {
+    expect(
+      providerInboxSummarySchema.safeParse({
+        ...full,
+        conversations_count: bad,
+      }).success
+    ).toBe(false);
   });
   it('rejects a payload missing a key instead of reading it as zero', () => {
     const { resolutions_count: _dropped, ...renamed } = full;

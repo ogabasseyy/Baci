@@ -143,6 +143,30 @@ describe('revalidateProductsReliable enrichment path', () => {
     );
   });
 
+  it('forces broad PDP invalidation in-process when { id, slug } omits previousSlug', async () => {
+    const supabase = { from: vi.fn() };
+    const products = [{ id: 'product-id', slug: 'iphone-16' }];
+    mockEnrichProductPurgeEntries.mockResolvedValue({
+      entries: [{ slug: 'iphone-16', categorySegment: 'smartphones' }],
+      resolvedSlugs: ['iphone-16', 'product-id'],
+      authoritativeSlugsById: new Map([['product-id', 'iphone-16']]),
+      blogPostSlugs: [],
+      blogPostSlugsIncomplete: false,
+    });
+
+    await revalidateProductsReliable('merchant-1', {
+      merchantSlug: 'ogabassey',
+      products,
+      supabase: supabase as never,
+    });
+
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      'merchant-1',
+      undefined,
+      { expireImmediately: true }
+    );
+  });
+
   it('skips product and article enrichment for hostname-wide purges', async () => {
     const supabase = { from: vi.fn() };
     const products = [{ id: 'product-id', slug: 'iphone-15' }];

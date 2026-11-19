@@ -38,6 +38,7 @@ export interface DelegateStorefrontEdgePurgeInput {
   merchantSlug: string;
   entries: readonly StorefrontProductPurgeEntry[];
   productIds?: readonly string[];
+  authoritativeSlugsById?: ReadonlyMap<string, string>;
   productSlugs: readonly string[];
   blogPostSlugs: readonly string[];
   purgeWholeStorefront: boolean;
@@ -53,6 +54,7 @@ export async function delegateStorefrontEdgePurge({
   merchantSlug,
   entries,
   productIds = [],
+  authoritativeSlugsById,
   productSlugs,
   blogPostSlugs,
   purgeWholeStorefront,
@@ -112,24 +114,60 @@ export async function delegateStorefrontEdgePurge({
   const normalizedProductIds = Array.from(
     new Set(productIds.map((id) => id.trim()).filter((id) => id.length > 0))
   );
-  const canOmitMerchantWidePdpDetails =
-    productSlugs.length > 0 &&
-    normalizedProductIds.length > 0 &&
-    entries.length <= normalizedProductIds.length;
   const toEntryPayload = (entry: StorefrontProductPurgeEntry) => ({
     slug: entry.slug,
     ...(entry.categorySegment ? { categorySlug: entry.categorySegment } : {}),
   });
-  const delegatedProducts =
-    normalizedProductIds.length > 0
-      ? [
-          ...normalizedProductIds.map((id, index) => ({
-            id,
-            ...(entries[index] ? toEntryPayload(entries[index]) : {}),
-          })),
-          ...entries.slice(normalizedProductIds.length).map(toEntryPayload),
-        ]
-      : entries.map(toEntryPayload);
+  let canOmitMerchantWidePdpDetails = false;
+  let delegatedProducts: Record<string, unknown>[];
+
+  if (normalizedProductIds.length > 0 && authoritativeSlugsById) {
+    const matchedEntryIndices = new Set<number>();
+    let allIdsMatched = true;
+    const idProducts = normalizedProductIds.map((id) => {
+      const authoritativeSlug = authoritativeSlugsById.get(id)?.trim();
+      const matchedIndex = authoritativeSlug
+        ? entries.findIndex((entry) => entry.slug === authoritativeSlug)
+        : -1;
+      if (matchedIndex === -1) {
+        allIdsMatched = false;
+        return authoritativeSlug
+          ? { id, slug: authoritativeSlug, previousSlug: null }
+          : { id };
+      }
+      matchedEntryIndices.add(matchedIndex);
+      return {
+        id,
+        ...toEntryPayload(entries[matchedIndex]),
+        previousSlug: null,
+      };
+    });
+    const unmatchedEntries = entries.filter(
+      (_, index) => !matchedEntryIndices.has(index)
+    );
+    delegatedProducts = [
+      ...idProducts,
+      ...unmatchedEntries.map(toEntryPayload),
+    ];
+    canOmitMerchantWidePdpDetails =
+      productSlugs.length > 0 && allIdsMatched && unmatchedEntries.length === 0;
+  } else if (normalizedProductIds.length === 1 && entries.length === 1) {
+    delegatedProducts = [
+      {
+        id: normalizedProductIds[0],
+        ...toEntryPayload(entries[0]),
+        previousSlug: null,
+      },
+    ];
+    canOmitMerchantWidePdpDetails = productSlugs.length > 0;
+  } else if (normalizedProductIds.length > 0) {
+    delegatedProducts = [
+      ...normalizedProductIds.map((id) => ({ id })),
+      ...entries.map(toEntryPayload),
+    ];
+  } else {
+    delegatedProducts = entries.map(toEntryPayload);
+  }
   try {
     const response = await fetch(endpoint, {
       method: 'POST',

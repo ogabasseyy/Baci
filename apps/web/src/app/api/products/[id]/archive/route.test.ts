@@ -28,6 +28,10 @@ const mocks = vi.hoisted(() => ({
   } | null,
   authenticateApiRequest: vi.fn(),
   checkCsrfProtection: vi.fn(),
+  dependentAliasesResult: {
+    identifiers: [] as string[],
+    incomplete: false,
+  },
   expireProductBlogCache: vi.fn(),
   filters: [] as [string, unknown][],
   getMerchantForApiRequest: vi.fn(),
@@ -38,6 +42,7 @@ const mocks = vi.hoisted(() => ({
   revalidateProducts: vi.fn(),
   revalidateProductSlugs: vi.fn(),
   scheduleProductBlogPurgeAfterResponse: vi.fn(),
+  scheduleStorefrontHostnamePurge: vi.fn(),
   scheduleStorefrontProductPurge: vi.fn(),
   selectArgs: [] as string[],
   supabase: null as unknown,
@@ -66,9 +71,17 @@ vi.mock('@/lib/get-merchant-for-api-request', () => ({
     ...context.staffAccess,
   }),
 }));
+vi.mock('@/lib/resolve-dependent-legacy-product-identifiers', () => ({
+  resolveDependentLegacyProductIdentifiers: () =>
+    Promise.resolve(mocks.dependentAliasesResult),
+}));
 vi.mock('@/lib/storefront-product-purge', () => ({
   scheduleStorefrontProductPurge: (...args: unknown[]) =>
     mocks.scheduleStorefrontProductPurge(...args),
+}));
+vi.mock('@/lib/storefront-product-purge-hostnames', () => ({
+  scheduleStorefrontHostnamePurge: (...args: unknown[]) =>
+    mocks.scheduleStorefrontHostnamePurge(...args),
 }));
 vi.mock('@/lib/schedule-product-blog-purge-after-response', () => ({
   scheduleProductBlogPurgeAfterResponse: (...args: unknown[]) =>
@@ -167,6 +180,10 @@ describe('PATCH /api/products/[id]/archive', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.archiveError = null;
+    mocks.dependentAliasesResult = {
+      identifiers: [],
+      incomplete: false,
+    };
     mocks.archiveResult = {
       id: '123e4567-e89b-42d3-a456-426614174000',
       slug: 'phone-ultra',

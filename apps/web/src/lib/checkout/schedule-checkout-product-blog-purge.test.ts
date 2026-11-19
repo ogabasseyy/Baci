@@ -94,7 +94,7 @@ describe('scheduleCheckoutProductBlogPurge', () => {
     );
     expect(mocks.revalidateProductSlugs).toHaveBeenCalledWith(
       'merchant-1',
-      ['managed-phone', 'serialized-phone'],
+      ['managed-phone', 'serialized-phone', 'managed', 'serialized'],
       { expireImmediately: true }
     );
     expect(mocks.schedule).toHaveBeenCalledWith({

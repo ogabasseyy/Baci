@@ -167,7 +167,12 @@ describe('commitBumpaProducts', () => {
     expect(mockRevalidateProductsReliable).toHaveBeenCalledWith('merchant-1', {
       merchantSlug: 'ogabassey',
       products: [
-        { slug: 'imported-phone', id: 'existing-product', category: 'Phones' },
+        {
+          slug: 'imported-phone',
+          previousSlug: null,
+          id: 'existing-product',
+          category: 'Phones',
+        },
         { slug: 'fresh-phone-2', category: 'Phones' },
       ],
       nextProductSlugs: ['imported-phone', 'fresh-phone-2'],

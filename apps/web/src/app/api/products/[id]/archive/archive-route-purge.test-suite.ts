@@ -13,12 +13,14 @@ type PurgeSuiteOptions = {
   merchantId: string;
   mocks: {
     archiveResult: unknown;
+    dependentAliasesResult: { identifiers: string[]; incomplete: boolean };
     expireProductBlogCache: Mock;
     merchantSlugRow: unknown;
     merchantThrows: boolean;
     revalidateProducts: Mock;
     revalidateProductSlugs: Mock;
     scheduleProductBlogPurgeAfterResponse: Mock;
+    scheduleStorefrontHostnamePurge: Mock;
     scheduleStorefrontProductPurge: Mock;
     selectArgs: string[];
   };
@@ -31,13 +33,19 @@ export function defineArchiveRoutePurgeSuite({
   merchantId,
   mocks,
 }: PurgeSuiteOptions) {
-  it('schedules a purge for the archived product with its category segment', async () => {
+  it('schedules a purge for the archived product with its category segment and UUID alias', async () => {
     const response = await PATCH(makeRequest(), makeContext());
 
     expect(response.status).toBe(200);
     expect(mocks.scheduleStorefrontProductPurge).toHaveBeenCalledWith(
       'test-store',
-      [{ slug: 'phone-ultra', categorySegment: 'smartphones' }]
+      [
+        { slug: 'phone-ultra', categorySegment: 'smartphones' },
+        {
+          slug: '123e4567-e89b-42d3-a456-426614174000',
+          categorySegment: null,
+        },
+      ]
     );
   });
 
@@ -49,10 +57,42 @@ export function defineArchiveRoutePurgeSuite({
       merchantId,
       merchantSlug: 'test-store',
       productIds: ['123e4567-e89b-42d3-a456-426614174000'],
-      entries: [{ slug: 'phone-ultra', categorySegment: 'smartphones' }],
+      entries: [
+        { slug: 'phone-ultra', categorySegment: 'smartphones' },
+        {
+          slug: '123e4567-e89b-42d3-a456-426614174000',
+          categorySegment: null,
+        },
+      ],
       categorySlugs: ['smartphones'],
       skipProductPurge: true,
     });
+  });
+
+  it('includes dependent legacy child aliases in edge purges and escalates incomplete lookups', async () => {
+    mocks.dependentAliasesResult = {
+      identifiers: ['archived-child-slug', 'child-uuid'],
+      incomplete: true,
+    };
+
+    const response = await PATCH(makeRequest(), makeContext());
+
+    expect(response.status).toBe(200);
+    expect(mocks.scheduleStorefrontProductPurge).toHaveBeenCalledWith(
+      'test-store',
+      [
+        { slug: 'phone-ultra', categorySegment: 'smartphones' },
+        {
+          slug: '123e4567-e89b-42d3-a456-426614174000',
+          categorySegment: null,
+        },
+        { slug: 'archived-child-slug', categorySegment: null },
+        { slug: 'child-uuid', categorySegment: null },
+      ]
+    );
+    expect(mocks.scheduleStorefrontHostnamePurge).toHaveBeenCalledWith(
+      'test-store'
+    );
   });
 
   it('reads the category_id join and product_categories junction on the archive select', async () => {
@@ -87,7 +127,13 @@ export function defineArchiveRoutePurgeSuite({
 
     expect(mocks.scheduleStorefrontProductPurge).toHaveBeenCalledWith(
       'test-store',
-      [{ slug: 'phone-ultra', categorySegment: 'smartphones' }]
+      [
+        { slug: 'phone-ultra', categorySegment: 'smartphones' },
+        {
+          slug: '123e4567-e89b-42d3-a456-426614174000',
+          categorySegment: null,
+        },
+      ]
     );
   });
 
@@ -186,6 +232,10 @@ export function defineArchiveRoutePurgeSuite({
     expect(response.status).toBe(200);
     expect(mocks.scheduleStorefrontProductPurge).toHaveBeenCalledWith(null, [
       { slug: 'phone-ultra', categorySegment: 'smartphones' },
+      {
+        slug: '123e4567-e89b-42d3-a456-426614174000',
+        categorySegment: null,
+      },
     ]);
   });
 

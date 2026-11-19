@@ -82,7 +82,7 @@ describe('scheduleOrderProductBlogPurge', () => {
     );
     expect(mockRevalidateSlugs).toHaveBeenCalledWith(
       'merchant-1',
-      ['iphone-15'],
+      ['iphone-15', 'product-1'],
       { expireImmediately: true }
     );
     expect(mockRevalidateSlugs.mock.invocationCallOrder[0]).toBeLessThan(
@@ -205,7 +205,7 @@ describe('scheduleOrderProductBlogPurge', () => {
       expect(mockEnrichProductPurgeEntries).toHaveBeenCalled();
       expect(mockRevalidateSlugs).toHaveBeenCalledWith(
         'merchant-1',
-        ['iphone-15'],
+        ['iphone-15', 'product-1'],
         { expireImmediately: true }
       );
       expect(mockExpireProductBlogCacheReliable).toHaveBeenCalledWith(

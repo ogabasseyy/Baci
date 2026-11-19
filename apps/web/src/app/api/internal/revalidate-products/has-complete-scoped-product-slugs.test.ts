@@ -5,7 +5,10 @@ describe('hasCompleteScopedProductSlugs', () => {
   it('returns true regardless of entry ordering when every entry resolves authoritatively by id', () => {
     expect(
       hasCompleteScopedProductSlugs(
-        [{ id: 'prod-1' }, { id: 'prod-2', slug: 'galaxy-s25' }],
+        [
+          { id: 'prod-1' },
+          { id: 'prod-2', slug: 'galaxy-s25', previousSlug: null },
+        ],
         [
           { slug: 'galaxy-s25', categorySegment: null },
           { slug: 'iphone-15', categorySegment: 'smartphones' },
@@ -58,10 +61,10 @@ describe('hasCompleteScopedProductSlugs', () => {
     ).toBe(false);
   });
 
-  it('requires an authoritative row when a product provides both id and slug', () => {
+  it('requires an authoritative row and tracked previousSlug when a product provides both id and slug', () => {
     expect(
       hasCompleteScopedProductSlugs(
-        [{ id: 'prod-1', slug: 'iphone-15' }],
+        [{ id: 'prod-1', slug: 'iphone-15', previousSlug: null }],
         [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
         ['iphone-15', 'prod-1'],
         new Map()
@@ -75,7 +78,36 @@ describe('hasCompleteScopedProductSlugs', () => {
         ['iphone-15', 'prod-1'],
         new Map([['prod-1', 'iphone-15']])
       )
+    ).toBe(false);
+
+    expect(
+      hasCompleteScopedProductSlugs(
+        [{ id: 'prod-1', slug: 'iphone-15', previousSlug: null }],
+        [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
+        ['iphone-15', 'prod-1'],
+        new Map([['prod-1', 'iphone-15']])
+      )
     ).toBe(true);
+  });
+
+  it('rejects permuted id-to-slug pairings even when the slug multiset matches', () => {
+    expect(
+      hasCompleteScopedProductSlugs(
+        [
+          { id: 'prod-1', slug: 'galaxy-s25', previousSlug: null },
+          { id: 'prod-2', slug: 'iphone-15', previousSlug: null },
+        ],
+        [
+          { slug: 'iphone-15', categorySegment: 'smartphones' },
+          { slug: 'galaxy-s25', categorySegment: 'smartphones' },
+        ],
+        ['iphone-15', 'galaxy-s25', 'prod-1', 'prod-2'],
+        new Map([
+          ['prod-1', 'iphone-15'],
+          ['prod-2', 'galaxy-s25'],
+        ])
+      )
+    ).toBe(false);
   });
 
   it('checks optional previousSlug in entries and resolvedSlugs and falls back when legacy caller slug differs from authoritative slug', () => {

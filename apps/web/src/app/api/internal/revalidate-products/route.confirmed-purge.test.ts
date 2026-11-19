@@ -189,7 +189,7 @@ describe('POST /api/internal/revalidate-products confirmed edge purge', () => {
         confirmEdgeEviction: true,
         omitMerchantWidePdpDetails: true,
         productSlugs: ['iphone-15'],
-        products: [{ id: 'prod-1', slug: 'iphone-15' }],
+        products: [{ id: 'prod-1', slug: 'iphone-15', previousSlug: null }],
       })
     );
 

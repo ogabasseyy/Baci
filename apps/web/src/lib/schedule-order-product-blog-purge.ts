@@ -134,9 +134,13 @@ export async function scheduleOrderProductBlogPurge({
   // first post-purge request and re-seed Cloudflare with stale stock. The
   // slugs ride along to the worker-safe expiry so standalone workers (no
   // request context) invalidate the same tags via the internal endpoint.
+  const scopedSlugIdentifiers = Array.from(
+    new Set([...slugs, ...normalizedProductIds])
+  );
   const slugsRevalidated =
-    revalidateProductSlugs(merchantId, slugs, { expireImmediately: true }) ===
-    true;
+    revalidateProductSlugs(merchantId, scopedSlugIdentifiers, {
+      expireImmediately: true,
+    }) === true;
   if (!enrichmentFailed) {
     if (
       !slugsRevalidated ||
@@ -229,6 +233,7 @@ export async function scheduleOrderProductBlogPurge({
         merchantSlug,
         entries,
         productIds: normalizedProductIds,
+        authoritativeSlugsById,
         productSlugs: slugs,
         blogPostSlugs,
         purgeWholeStorefront: blogPostSlugsIncomplete,

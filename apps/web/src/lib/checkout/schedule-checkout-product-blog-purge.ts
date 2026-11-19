@@ -88,13 +88,14 @@ export async function scheduleCheckoutProductBlogPurge({
   const resolvedProductIds = new Set(
     resolvedProductRows.map((product) => product.id)
   );
+  const scopedIdentifiers = Array.from(
+    new Set([...resolvedSlugs, ...productIds])
+  );
   const slugsRevalidated =
     resolvedSlugs.length > 0 &&
-    revalidateProductSlugs(
-      merchantId,
-      resolvedProductRows.map((row) => row.slug),
-      { expireImmediately: true }
-    ) === true;
+    revalidateProductSlugs(merchantId, scopedIdentifiers, {
+      expireImmediately: true,
+    }) === true;
 
   if (
     slugsRevalidated &&

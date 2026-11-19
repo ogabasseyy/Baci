@@ -14,6 +14,7 @@ import {
 import { resolveDependentLegacyProductIdentifiers } from '@/lib/resolve-dependent-legacy-product-identifiers';
 import { scheduleProductBlogPurgeAfterResponse } from '@/lib/schedule-product-blog-purge-after-response';
 import { scheduleStorefrontProductPurge } from '@/lib/storefront-product-purge';
+import { scheduleStorefrontHostnamePurge } from '@/lib/storefront-product-purge-hostnames';
 import { resolveProductPurgeCategorySegmentForRow } from '@/lib/storefront-product-purge-urls';
 import { archiveProductRequestSchema } from '@/schemas/archive-product';
 
@@ -163,21 +164,35 @@ export async function PATCH(
         { merchantId: merchantContext.merchantId }
       );
     } else {
+      const categorySegment = resolveProductPurgeCategorySegmentForRow({
+        slug: purgeSlug,
+        name: product.name,
+        category: product.category,
+        categories: product.categories,
+        product_categories: product.product_categories,
+      });
+      const extraAliasEntries = Array.from(
+        new Set([product.id, ...dependentAliases.identifiers])
+      )
+        .filter((identifier) => identifier !== purgeSlug)
+        .map((identifier) => ({
+          slug: identifier,
+          categorySegment: null,
+        }));
       const purgeEntries = [
         {
           slug: purgeSlug,
-          categorySegment: resolveProductPurgeCategorySegmentForRow({
-            slug: purgeSlug,
-            name: product.name,
-            category: product.category,
-            categories: product.categories,
-            product_categories: product.product_categories,
-          }),
+          categorySegment,
         },
+        ...extraAliasEntries,
       ];
-      // Evict the archived PDP immediately; relationship/category fallback reads
-      // for linked articles are queued below so they cannot delay the response.
+      // Evict the archived PDP, UUID alias, and dependent legacy aliases
+      // immediately; relationship/category fallback reads for linked articles
+      // are queued below so they cannot delay the response.
       scheduleStorefrontProductPurge(merchantRow?.slug, purgeEntries);
+      if (dependentAliases.incomplete) {
+        scheduleStorefrontHostnamePurge(merchantRow?.slug);
+      }
       // Keep relationship/category fallback reads out of the archive response.
       // The product purge is queued after the response and the helper hard-
       // expires the merchant's related-blog cache before scheduling article URLs.
@@ -187,7 +202,7 @@ export async function PATCH(
         merchantSlug: merchantRow?.slug,
         productIds: [product.id],
         entries: purgeEntries,
-        categorySlugs: [purgeEntries[0]?.categorySegment],
+        categorySlugs: [categorySegment],
         skipProductPurge: true,
       });
     }

@@ -184,8 +184,11 @@ export async function commitBumpaProducts({
         }
 
         updatedProducts += 1;
+        const existingSlug = existingProduct.slug?.trim() || null;
         changedProducts.push({
           slug,
+          previousSlug:
+            existingSlug && existingSlug !== slug ? existingSlug : null,
           id: existingProduct.id,
           category: product.category,
         });
@@ -243,7 +246,8 @@ export async function commitBumpaProducts({
         const nextProductSlugs = Array.from(
           new Set(
             changedProducts
-              .map((product) => product.slug?.trim())
+              .flatMap((product) => [product.slug, product.previousSlug])
+              .map((slug) => slug?.trim())
               .filter((slug): slug is string => Boolean(slug))
           )
         );

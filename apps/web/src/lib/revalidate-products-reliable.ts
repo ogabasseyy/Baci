@@ -31,6 +31,30 @@ interface RevalidateProductsReliableOptions {
 
 const INTERNAL_REVALIDATION_PRODUCT_SLUG_LIMIT = 10_000;
 
+function hasTrackedScopedSlugs(
+  products: readonly InternalRevalidateProductEntry[] | undefined,
+  nextProductSlugs: readonly string[]
+): boolean {
+  if (!products || products.length === 0 || nextProductSlugs.length === 0) {
+    return false;
+  }
+  const slugSet = new Set(nextProductSlugs);
+  for (const product of products) {
+    if (!product.id?.trim()) {
+      return false;
+    }
+    const slug = product.slug?.trim();
+    if (slug && (product.previousSlug === undefined || !slugSet.has(slug))) {
+      return false;
+    }
+    const previousSlug = product.previousSlug?.trim();
+    if (previousSlug && !slugSet.has(previousSlug)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 /**
  * Revalidate a merchant's product caches reliably from ANY execution context.
  *
@@ -157,10 +181,9 @@ export async function revalidateProductsReliable(
               ...(chunkCarriesControlMetadata &&
               !purgeWholeStorefront &&
               merchantSlug &&
-              products &&
-              products.length > 0 &&
               productSlugChunk &&
-              productSlugChunk.length > 0
+              productSlugChunk.length > 0 &&
+              hasTrackedScopedSlugs(products, nextProductSlugs)
                 ? { omitMerchantWidePdpDetails: true }
                 : {}),
               ...(chunkCarriesControlMetadata && purgeWholeStorefront

@@ -6,10 +6,13 @@ import { settlePrimaryWalletCreateFailure } from './primary-wallet-onboarding-fa
 function makeStorage(): PrimaryWalletOnboardingStorage {
   return {
     claim: vi.fn(),
+    refreshUnknown: vi.fn(),
     recordAccepted: vi.fn(),
     recordUncertain: vi.fn().mockResolvedValue(undefined),
-    markNotSent: vi.fn().mockResolvedValue(true),
-    keepForReview: vi.fn(),
+    recordRoutingPending: vi.fn(),
+    recordReview: vi.fn(),
+    recordRejected: vi.fn(),
+    recordOwnershipHold: vi.fn(),
     releaseIntent: vi.fn().mockResolvedValue(true),
   };
 }
@@ -20,9 +23,9 @@ const claimedScope = {
   userId: 'u-1',
   integrationId: 'int-1',
   businessId: 'biz-1',
-  environment: 'test' as const,
+  environment: 'staging' as const,
   intentId: 'intent-1',
-  fenceToken: 1,
+  claimToken: 'claim-1',
 };
 
 describe('settlePrimaryWalletCreateFailure', () => {

@@ -3,13 +3,22 @@ import { settlePrimaryWalletCreateIfNotSent } from './primary-wallet-create-not-
 import { classifyPrimaryWalletCreationDecline } from './primary-wallet-creation-decline';
 import type { PrimaryWalletCustomerLookup } from './primary-wallet-customer-lookup';
 import type {
-  PrimaryWalletIntentRef,
+  PrimaryWalletIntentScope,
   PrimaryWalletOnboardingStorage,
 } from './primary-wallet-onboarding.types';
 
+type ClaimedScope = PrimaryWalletIntentScope & {
+  intentId: string;
+  claimToken: string;
+};
+
 type OnboardingFailureOutcome = {
   status: 'pending' | 'rejected' | 'unavailable';
-  code?: 'NOT_CONFIGURED' | 'INVALID_BVN' | 'STORAGE_UNAVAILABLE';
+  code?:
+    | 'NOT_CONFIGURED'
+    | 'INVALID_BVN'
+    | 'STORAGE_UNAVAILABLE'
+    | 'PROVIDER_UNAVAILABLE';
 };
 
 /**
@@ -24,7 +33,7 @@ export async function settlePrimaryWalletCreateFailure(input: {
   identityRefreshed: boolean;
   lookup: PrimaryWalletCustomerLookup | null | undefined;
   storage: PrimaryWalletOnboardingStorage;
-  claimedScope: PrimaryWalletIntentRef;
+  claimedScope: ClaimedScope;
 }): Promise<OnboardingFailureOutcome> {
   const hasPriorDispatchCustody = input.reclaimed || input.identityRefreshed;
   const notSent = await settlePrimaryWalletCreateIfNotSent({

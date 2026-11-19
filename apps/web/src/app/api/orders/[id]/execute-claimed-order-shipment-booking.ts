@@ -5,7 +5,7 @@ import {
 } from '@/lib/shipping/order-shipment-booking-failure';
 import { clearOrderShipmentBookingLock } from '@/lib/shipping/order-shipment-booking-lock';
 import { shouldReleaseBookingLock } from '@/lib/shipping/order-shipment-booking-lock-errors';
-import { runClaimedOrderWalletOrCheckoutBooking } from '@/lib/shipping/run-claimed-order-wallet-or-checkout-booking';
+import type { runClaimedOrderWalletOrCheckoutBooking } from '@/lib/shipping/run-claimed-order-wallet-or-checkout-booking';
 
 export async function executeClaimedOrderShipmentBooking({
   supabase,
@@ -14,6 +14,7 @@ export async function executeClaimedOrderShipmentBooking({
   existingOrder,
   paymentStatus,
   lockToken,
+  runBooking,
 }: {
   supabase: SupabaseClient;
   merchantId: string;
@@ -21,23 +22,18 @@ export async function executeClaimedOrderShipmentBooking({
   existingOrder: Parameters<typeof runClaimedOrderWalletOrCheckoutBooking>[3];
   paymentStatus: string | null | undefined;
   lockToken: string | null;
+  runBooking: typeof runClaimedOrderWalletOrCheckoutBooking;
 }) {
   let lockReleased = false;
 
   try {
-    return await runClaimedOrderWalletOrCheckoutBooking(
-      supabase,
-      merchantId,
-      orderId,
-      existingOrder,
-      {
-        paymentStatus,
-        lockToken,
-        onLockReleased: () => {
-          lockReleased = true;
-        },
-      }
-    );
+    return await runBooking(supabase, merchantId, orderId, existingOrder, {
+      paymentStatus,
+      lockToken,
+      onLockReleased: () => {
+        lockReleased = true;
+      },
+    });
   } catch (error) {
     // The failure row below is the diagnostic record; keep provider text
     // (waybills, addresses) out of the logs.

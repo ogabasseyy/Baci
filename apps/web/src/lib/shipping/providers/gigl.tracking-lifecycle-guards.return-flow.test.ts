@@ -10,6 +10,7 @@ describe('bugfix: no arrival promotion once the return flow has begun', () => {
     'SRC',
     'SSR',
     'MRTD',
+    'RSR',
   ])('does not rewrite an ARF that follows a %s return scan', (returnCode) => {
     const result = normalizeGiglTrackingShipment(
       {

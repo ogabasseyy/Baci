@@ -42,7 +42,8 @@ const RETURN_CODES = new Set([
 ]);
 // Scans that start the return flow back to the sender: once seen, a later
 // arrival scan is the parcel reaching the sender, not the customer's city.
-const RETURN_FLOW_CODES = new Set(['SRC', 'MRTE', 'SSR', 'MRTD']);
+// RSR: returned shipment received by Operations (GIG's scan-status list).
+const RETURN_FLOW_CODES = new Set(['SRC', 'MRTE', 'SSR', 'MRTD', 'RSR']);
 // Explicit "arrived final destination" scans. AHD ("arrived final destination
 // for home delivery") has no entry in the shared status map.
 const EXPLICIT_ARRIVAL_CODES = new Set([

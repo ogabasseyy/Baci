@@ -244,58 +244,38 @@ describe('bugfix: only the first destination scan becomes the inferred arrival',
   });
 });
 
-describe('bugfix: SDR keeps the aggregate failed without relabelling later events', () => {
-  it('leaves later scans with their own event status so only SDR queues a failure', () => {
+describe('bugfix: same-city districts and Nigeria-bound foreign-office scans', () => {
+  it('does not infer an arrival from a district centre in a same-city shipment', () => {
     const result = normalizeGiglTrackingShipment(
       {
-        Waybill: 'W42',
+        Waybill: 'W45',
         Destination: 'ABUJA',
+        Origin: 'ABUJA',
         MobileShipmentTrackings: [
-          event('SDR', '10:00:00'),
-          event('MSVC', '11:00:00', { Location: 'IKEJA 2 (IKEJA)' }),
-          event('MSHC', '12:00:00'),
+          event('MSVC', '09:00:00', { Location: 'GARKI' }),
+          event('MSVC', '11:00:00', { Location: 'WUSE ABUJA' }),
         ],
       },
-      'W42',
+      'W45',
       OBSERVED_AT
     );
-    expect(result.status).toBe('failed');
-    expect(result.events.filter((e) => e.status === 'failed')).toHaveLength(1);
-  });
-});
-
-describe('bugfix: terminal outcome survives a later progress scan; MSHC keeps its raw code', () => {
-  it('stays delivered when an MSHC follows SHD', () => {
-    const result = normalizeGiglTrackingShipment(
-      {
-        Waybill: 'W43',
-        MobileShipmentTrackings: [
-          event('SHD', '10:00:00'),
-          event('MSHC', '12:00:00'),
-        ],
-      },
-      'W43',
-      OBSERVED_AT
-    );
-    expect(result.status).toBe('delivered');
+    expect(
+      result.events.some((e) => e.rawStatus === GIGL_ARRIVED_IN_CITY_RAW_STATUS)
+    ).toBe(false);
   });
 
-  it('restores the MSHC provider code after the parcel moved through the network', () => {
+  it('keeps a Nigeria-bound ARFK scan recognized as in_transit without an arrival', () => {
     const result = normalizeGiglTrackingShipment(
       {
-        Waybill: 'W44',
+        Waybill: 'W46',
         Destination: 'ABUJA',
-        MobileShipmentTrackings: [
-          event('ARF', '10:00:00', { Location: 'WUSE ABUJA' }),
-          event('MSHC', '12:00:00', {
-            ScanStatusReason: 'RIDER EN ROUTE FOR PICKUP',
-          }),
-        ],
+        MobileShipmentTrackings: [event('ARFK', '09:00:00')],
       },
-      'W44',
+      'W46',
       OBSERVED_AT
     );
-    const mshc = result.events.find((e) => e.timestamp.getUTCHours() === 12);
-    expect(mshc?.rawStatus).toBe('MSHC');
+    expect(result.hasRecognizedLifecycleEvent).toBe(true);
+    expect(result.status).toBe('in_transit');
+    expect(result.events[0]?.rawStatus).toBe('ARFK');
   });
 });

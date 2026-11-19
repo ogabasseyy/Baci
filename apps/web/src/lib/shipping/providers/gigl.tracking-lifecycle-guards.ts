@@ -173,6 +173,9 @@ export function applyLifecycleGuards(
           !DEPARTURE_WORD.test(
             `${raw} ${candidate.scanText || event.description}`
           ) &&
+          // A known same-city shipment never infers by name: a district centre
+          // that omits the city token is not proof the parcel left the city.
+          !originIsDestination &&
           (!sameCity || leftDestinationCentre) &&
           matchesDestination(event.location, destination)));
     if (raw === 'SDR') destroyed = true;

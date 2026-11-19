@@ -46,6 +46,11 @@ const GIGL_STATUS_MAP: Readonly<Record<string, ShipmentTrackingStatus>> = {
   DASH: 'in_transit',
   CLS: 'in_transit',
   ARF: 'in_transit',
+  // Foreign-office arrivals: transit legs unless the destination matches.
+  ARFK: 'in_transit',
+  ARFP: 'in_transit',
+  ARFH: 'in_transit',
+  ARUS: 'in_transit',
   MSHC: 'out_for_delivery',
   WC: 'out_for_delivery',
   OFDU: 'out_for_delivery',

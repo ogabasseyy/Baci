@@ -1,0 +1,72 @@
+import { describe, expect, it } from 'vitest';
+import { normalizeGiglTrackingShipment } from './gigl.tracking-normalizer';
+
+const OBSERVED_AT = new Date('2026-11-10T00:00:00.000Z');
+
+function event(
+  status: string,
+  time: string,
+  extra: Record<string, string> = {}
+) {
+  return {
+    Status: status,
+    DateTimeUtc: `2026-11-09T${time}.000Z`,
+    ...extra,
+  };
+}
+
+describe('bugfix: SDR keeps the aggregate failed without relabelling later events', () => {
+  it('leaves later scans with their own event status so only SDR queues a failure', () => {
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W42',
+        Destination: 'ABUJA',
+        MobileShipmentTrackings: [
+          event('SDR', '10:00:00'),
+          event('MSVC', '11:00:00', { Location: 'IKEJA 2 (IKEJA)' }),
+          event('MSHC', '12:00:00'),
+        ],
+      },
+      'W42',
+      OBSERVED_AT
+    );
+    expect(result.status).toBe('failed');
+    expect(result.events.filter((e) => e.status === 'failed')).toHaveLength(1);
+  });
+});
+
+describe('bugfix: terminal outcome survives a later progress scan; MSHC keeps its raw code', () => {
+  it('stays delivered when an MSHC follows SHD', () => {
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W43',
+        MobileShipmentTrackings: [
+          event('SHD', '10:00:00'),
+          event('MSHC', '12:00:00'),
+        ],
+      },
+      'W43',
+      OBSERVED_AT
+    );
+    expect(result.status).toBe('delivered');
+  });
+
+  it('restores the MSHC provider code after the parcel moved through the network', () => {
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W44',
+        Destination: 'ABUJA',
+        MobileShipmentTrackings: [
+          event('ARF', '10:00:00', { Location: 'WUSE ABUJA' }),
+          event('MSHC', '12:00:00', {
+            ScanStatusReason: 'RIDER EN ROUTE FOR PICKUP',
+          }),
+        ],
+      },
+      'W44',
+      OBSERVED_AT
+    );
+    const mshc = result.events.find((e) => e.timestamp.getUTCHours() === 12);
+    expect(mshc?.rawStatus).toBe('MSHC');
+  });
+});

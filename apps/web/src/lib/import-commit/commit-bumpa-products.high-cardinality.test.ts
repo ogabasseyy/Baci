@@ -200,4 +200,64 @@ describe('commitBumpaProducts high-cardinality purge', () => {
       })
     );
   });
+
+  it('promotes updates that change product status to purgeWholeStorefront so dependent child redirects expire', async () => {
+    const loadQuery = {
+      select: vi.fn(),
+      eq: vi.fn(),
+      order: vi.fn(),
+      range: vi.fn(),
+    };
+    loadQuery.select.mockReturnValue(loadQuery);
+    loadQuery.eq.mockReturnValue(loadQuery);
+    loadQuery.order.mockReturnValue(loadQuery);
+    loadQuery.range.mockResolvedValue({
+      data: [
+        {
+          id: 'existing-product',
+          slug: 'imported-phone',
+          category: 'Phones',
+          status: 'active',
+          external_source: 'bumpa',
+          external_id: 'external-0',
+        },
+      ],
+      error: null,
+    });
+    const updateQuery = { update: vi.fn(), eq: vi.fn() };
+    updateQuery.update.mockReturnValue(updateQuery);
+    updateQuery.eq
+      .mockReturnValueOnce(updateQuery)
+      .mockResolvedValueOnce({ error: null });
+    const merchantsQuery = {
+      select: vi.fn(),
+      eq: vi.fn(),
+      maybeSingle: vi.fn().mockResolvedValue({
+        data: { slug: 'ogabassey' },
+        error: null,
+      }),
+    };
+    merchantsQuery.select.mockReturnValue(merchantsQuery);
+    merchantsQuery.eq.mockReturnValue(merchantsQuery);
+
+    const supabase = {
+      from: vi
+        .fn()
+        .mockReturnValueOnce(loadQuery)
+        .mockReturnValueOnce(updateQuery)
+        .mockReturnValueOnce(merchantsQuery),
+    } as unknown as SupabaseClient;
+
+    await commitBumpaProducts({
+      supabase,
+      merchantId: 'merchant-1',
+      importJobId: 'job-1',
+      products: [{ ...createProduct(0), status: 'draft' }],
+    });
+
+    expect(mockRevalidateProductsReliable).toHaveBeenCalledWith(
+      'merchant-1',
+      expect.objectContaining({ purgeWholeStorefront: true })
+    );
+  });
 });

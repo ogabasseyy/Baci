@@ -24,6 +24,7 @@ interface CommitBumpaProductsInput {
 
 interface ExistingProductRecord {
   category?: string | null;
+  status?: string | null;
   id: string;
   slug: string | null;
   external_id: string | null;
@@ -77,7 +78,7 @@ export async function commitBumpaProducts({
     const end = start + pageSize - 1;
     const { data, error } = await supabase
       .from('products')
-      .select('id, slug, category, external_id, external_source')
+      .select('id, slug, category, status, external_id, external_source')
       .eq('merchant_id', merchantId)
       .order('id', { ascending: true })
       .range(start, end);
@@ -157,15 +158,17 @@ export async function commitBumpaProducts({
       };
 
       if (existingProduct) {
-        if (
+        const categoryMoved =
           existingProduct.category !== undefined &&
           normalizeStorefrontCategoryValue(existingProduct.category) !==
-            normalizeStorefrontCategoryValue(product.category)
-        ) {
-          // Category-fallback blog rails are derived from the post-update
-          // category. A move also invalidates the old category's rail, so use
-          // the bounded hostname purge rather than trying to reconstruct every
-          // old fallback article from the import payload.
+            normalizeStorefrontCategoryValue(product.category);
+        const statusChanged =
+          existingProduct.status !== undefined &&
+          existingProduct.status !== product.status;
+        if (categoryMoved || statusChanged) {
+          // Category moves and active<->draft transitions alter category rails
+          // or dependent archived-child legacy redirects; escalate to a bounded
+          // hostname purge rather than trusting parent-only scoped omission.
           hasCategoryMove = true;
         }
         const { error: updateError } = await supabase

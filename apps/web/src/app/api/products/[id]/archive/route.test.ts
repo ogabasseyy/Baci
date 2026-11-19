@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { defineArchiveRouteAuthorizationSuite } from './archive-route-authorization.test-suite';
+import { createArchiveSupabaseMock } from './archive-route-mocks.test-support';
 import { defineArchiveRoutePurgeSuite } from './archive-route-purge.test-suite';
 import { defineArchiveRouteValidationSuite } from './archive-route-validation.test-suite';
 
@@ -101,61 +102,6 @@ vi.mock('@/lib/storefront-product-purge-urls', () => ({
   },
 }));
 
-function createSupabase() {
-  return {
-    from: vi.fn((table: string) => {
-      if (table === 'merchants') {
-        const merchantQuery = {
-          select: vi.fn(() => merchantQuery),
-          eq: vi.fn(() => merchantQuery),
-          single: vi.fn(() => {
-            if (mocks.merchantThrows) {
-              return Promise.reject(new Error('merchant read failed'));
-            }
-            return Promise.resolve({
-              data: mocks.merchantError ? null : mocks.merchantSlugRow,
-              error: mocks.merchantError,
-            });
-          }),
-        };
-        return merchantQuery;
-      }
-
-      expect(table).toBe('products');
-      const query = {
-        eq: vi.fn((column: string, value: unknown) => {
-          mocks.filters.push([column, value]);
-          return query;
-        }),
-        select: vi.fn((arg?: string) => {
-          if (typeof arg === 'string') mocks.selectArgs.push(arg);
-          return {
-            single: vi.fn(() =>
-              Promise.resolve({
-                data: mocks.archiveError ? null : mocks.archiveResult,
-                error: mocks.archiveError,
-              })
-            ),
-          };
-        }),
-      };
-      return {
-        select: vi.fn(() => ({
-          eq: vi.fn(() => ({
-            eq: vi.fn(() => ({
-              limit: vi.fn().mockResolvedValue({ data: [], error: null }),
-            })),
-          })),
-        })),
-        update: vi.fn((payload: unknown) => {
-          mocks.updatePayload = payload;
-          return query;
-        }),
-      };
-    }),
-  };
-}
-
 import { PATCH } from './route';
 
 function makeRequest(body: unknown = { merchantId: MERCHANT_ONE_ID }) {
@@ -198,7 +144,7 @@ describe('PATCH /api/products/[id]/archive', () => {
     mocks.merchantSlugRow = { slug: 'test-store' };
     mocks.merchantThrows = false;
     mocks.selectArgs.length = 0;
-    mocks.supabase = createSupabase();
+    mocks.supabase = createArchiveSupabaseMock(mocks);
     mocks.updatePayload = null;
     mocks.authenticateApiRequest.mockResolvedValue({
       error: null,

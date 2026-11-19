@@ -14,18 +14,14 @@ import {
 } from '@/lib/payments/ensure-paid-order-inventory-confirmed';
 import { fileInventoryConfirmationFailureReview } from '@/lib/payments/file-inventory-confirmation-review';
 import { buildInventoryConfirmationFailurePayload } from '@/lib/payments/inventory-confirmation-response';
+import { BOOKED_SHIPMENT_NOT_SAVED_CODE } from '@/lib/shipping/booking-failure-constants';
 import { shouldDeferShippedNotificationToGigPickup } from '@/lib/shipping/gigl-shipment-pickup-state';
 import { isFundedCheckoutGiglAddressLocked } from '@/lib/shipping/is-funded-checkout-gigl-address-locked';
-import {
-  claimOrderShipmentBooking,
-  clearOrderShipmentBookingLock,
-} from '@/lib/shipping/order-shipment-booking-lock';
-import { shouldReleaseBookingLock } from '@/lib/shipping/order-shipment-booking-lock-errors';
+import { claimOrderShipmentBooking } from '@/lib/shipping/order-shipment-booking-lock';
 import {
   isShippingProviderCode,
   OrderShipmentBookingError,
 } from '@/lib/shipping/order-shipment-booking-utils';
-import { runClaimedOrderWalletOrCheckoutBooking } from '@/lib/shipping/run-claimed-order-wallet-or-checkout-booking';
 import { orderUpdateSchema } from '@/schemas/orders';
 import { appendCancelledStatusFences } from './append-cancelled-status-fences';
 import { createRacedCancellationRejection } from './create-raced-cancellation-rejection';
@@ -33,7 +29,9 @@ import {
   evaluateOrderCancelledTransition,
   writesNonCancelledStatusValue,
 } from './evaluate-order-cancelled-transition';
+import { executeClaimedOrderShipmentBooking } from './execute-claimed-order-shipment-booking';
 import { mapOrderPatchUpdateError } from './map-order-patch-update-error';
+import { recordBookedOrderUpdateFailure } from './record-booked-order-update-failure';
 
 function isPaidStatusUpdate(value: unknown): value is 'paid' | 'bnpl_approved' {
   return value === 'paid' || value === 'bnpl_approved';
@@ -444,50 +442,27 @@ export async function PATCH(
 
       if (bookingClaim.status === 'claimed') {
         shipmentBookingLockToken = bookingClaim.lockToken;
-
-        try {
-          const booking = await runClaimedOrderWalletOrCheckoutBooking(
-            supabase,
-            merchantId,
-            id,
-            {
-              selected_quote_id: existingOrder.selected_quote_id,
-              shipping_funding_source: existingOrder.shipping_funding_source,
-              shipping_provider: existingOrder.shipping_provider,
-              payment_status: existingOrder.payment_status,
-              payment_method: existingOrder.payment_method,
-            },
-            {
-              paymentStatus: payment_status ?? existingOrder.payment_status,
-              lockToken: shipmentBookingLockToken,
-            }
-          );
-          updates.shipping_provider = booking.provider;
-          updates.selected_quote_id = booking.quoteId;
-          updates.shipment_id = booking.shipmentId;
-          updates.tracking_number = booking.trackingNumber;
-          if (shipmentBookingLockToken) {
-            updates.shipment_booking_lock_token = null;
-            updates.shipment_booking_started_at = null;
-          }
-        } catch (error) {
-          if (shipmentBookingLockToken && shouldReleaseBookingLock(error)) {
-            try {
-              await clearOrderShipmentBookingLock(
-                supabase,
-                merchantId,
-                id,
-                shipmentBookingLockToken
-              );
-            } catch (lockError) {
-              console.error(
-                'Failed to release shipment booking lock after booking error:',
-                lockError
-              );
-            }
-          }
-
-          throw error;
+        const booking = await executeClaimedOrderShipmentBooking({
+          supabase,
+          merchantId,
+          orderId: id,
+          existingOrder: {
+            selected_quote_id: existingOrder.selected_quote_id,
+            shipping_funding_source: existingOrder.shipping_funding_source,
+            shipping_provider: existingOrder.shipping_provider,
+            payment_status: existingOrder.payment_status,
+            payment_method: existingOrder.payment_method,
+          },
+          paymentStatus: payment_status ?? existingOrder.payment_status,
+          lockToken: shipmentBookingLockToken,
+        });
+        updates.shipping_provider = booking.provider;
+        updates.selected_quote_id = booking.quoteId;
+        updates.shipment_id = booking.shipmentId;
+        updates.tracking_number = booking.trackingNumber;
+        if (shipmentBookingLockToken) {
+          updates.shipment_booking_lock_token = null;
+          updates.shipment_booking_started_at = null;
         }
       }
     }
@@ -524,6 +499,22 @@ export async function PATCH(
 
     if (updateError) {
       console.error('Error updating order:', updateError);
+      const bookedReference =
+        typeof updates.tracking_number === 'string'
+          ? updates.tracking_number
+          : typeof updates.shipment_id === 'string'
+            ? updates.shipment_id
+            : undefined;
+      if (updates.shipment_id) {
+        // The carrier already booked the parcel; keep the reason for support.
+        await recordBookedOrderUpdateFailure(
+          supabase,
+          merchantId,
+          id,
+          Boolean(shipmentBookingLockToken),
+          bookedReference
+        );
+      }
       // A raced cancellation owns the row now: answer the terminal 409
       // BEFORE any rollback — restoring the stale pre-cancellation
       // statuses here would reopen the cancelled order after its
@@ -571,6 +562,19 @@ export async function PATCH(
             transactionId: null,
           });
         }
+      }
+      if (updates.shipment_id) {
+        // Say plainly that the parcel exists, so the client can tell this from
+        // a failure before booking and does not simply retry.
+        return NextResponse.json(
+          {
+            error:
+              'The carrier booked this shipment but the order could not be updated to save it. Check the shipment before booking again.',
+            code: BOOKED_SHIPMENT_NOT_SAVED_CODE,
+            trackingNumber: bookedReference,
+          },
+          { status: 500 }
+        );
       }
       const mappedUpdateError = mapOrderPatchUpdateError(updateError);
       if (mappedUpdateError) {

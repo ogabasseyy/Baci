@@ -1,11 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { assertWalletExistingShipmentReusableOrRelease } from './assert-wallet-existing-shipment-reusable';
 import type { BookOrderShipmentResult } from './book-order-shipment';
+import { cleanupWalletFundedFailure } from './book-wallet-funded-failure-cleanup';
 import {
   cleanupPreSubmissionReservation,
   hasActiveMerchantShippingCharge,
 } from './book-wallet-funded-reservation-cleanup';
-import { markBookingLockMustStay } from './booking-lock-must-stay';
 import {
   completePendingWalletExistingShipment,
   readPendingWalletExistingShipment,
@@ -13,14 +13,11 @@ import {
 import {
   beginMerchantShippingChargeSubmission,
   completeMerchantShippingCharge,
-  markMerchantShippingChargeForReconciliation,
-  refundMerchantShippingCharge,
   reserveMerchantShippingCharge,
 } from './merchant-shipping-charge';
 import { shouldReleaseBookingLock } from './order-shipment-booking-lock-errors';
 import { OrderShipmentBookingError } from './order-shipment-booking-utils';
 import { recoverBookedWalletShipment } from './recover-booked-wallet-shipment';
-import { ShippingBookingRejectedError } from './types';
 
 type ReleaseLock = () => Promise<void>;
 type PrepareQuote = () => Promise<string>;
@@ -238,67 +235,15 @@ export async function bookWalletFundedOrderShipment(
     // released even when the RPC error is otherwise ambiguous.
     const definitive =
       !providerSubmissionStarted || shouldReleaseBookingLock(error);
-    if (definitive) {
-      let refunded = true;
-      try {
-        await refundMerchantShippingCharge(
-          supabase,
-          charge.chargeId,
-          token,
-          error instanceof OrderShipmentBookingError
-            ? error.code
-            : 'BOOKING_REJECTED'
-        );
-      } catch (refundError) {
-        // Keep the provider error and the lock: the charge is still reserved,
-        // so hand it to reconciliation rather than inviting a retry.
-        refunded = false;
-        markBookingLockMustStay(error);
-        console.error(
-          'Wallet shipping refund failed after a rejected provider attempt:',
-          refundError
-        );
-        try {
-          await markMerchantShippingChargeForReconciliation(
-            supabase,
-            charge.chargeId,
-            token,
-            'REFUND_FAILED_AFTER_REJECTED_ATTEMPT',
-            undefined
-          );
-        } catch (markError) {
-          console.error(
-            'Wallet shipping reconciliation marking failed:',
-            markError
-          );
-        }
-      }
-      if (refunded && releaseLock) {
-        // A failed release must not replace the provider error, so the routes
-        // can still answer and record the real cause.
-        try {
-          await releaseLock();
-        } catch (releaseError) {
-          console.error(
-            'Failed to release shipment booking lock after a refunded wallet attempt:',
-            releaseError
-          );
-        }
-      }
-    } else {
-      await markMerchantShippingChargeForReconciliation(
-        supabase,
-        charge.chargeId,
-        token,
-        error instanceof OrderShipmentBookingError
-          ? error.code
-          : 'UNKNOWN_PROVIDER_FAILURE',
-        (error instanceof OrderShipmentBookingError ||
-        error instanceof ShippingBookingRejectedError
-          ? error.providerReference
-          : undefined) ?? bookedReference
-      );
-    }
+    await cleanupWalletFundedFailure({
+      supabase,
+      chargeId: charge.chargeId,
+      token,
+      error,
+      definitive,
+      releaseLock,
+      bookedReference,
+    });
     throw error;
   }
 }

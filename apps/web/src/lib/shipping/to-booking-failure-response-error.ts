@@ -25,8 +25,15 @@ export function toBookingFailureResponseError(
       error.code === 'MERCHANT_WALLET_SUBMISSION_FAILED')
   ) {
     // Not a connection problem (a rejected GIG login or a wallet transition):
-    // keep the original message instead of telling the merchant to retry.
-    return error;
+    // keep the original message instead of telling the merchant to retry,
+    // and say so when the lock could not be freed.
+    return options.lockRetained
+      ? new OrderShipmentBookingError(
+          `${error.message} This order is paused for up to 15 minutes; please try again after that.`,
+          error.status,
+          error.code
+        )
+      : error;
   }
   if (outcome === 'not_submitted') {
     if (options.lockRetained) {

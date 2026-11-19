@@ -76,7 +76,10 @@ describe('bugfix: Topship save-shipment refusals and the booking lock', () => {
 
   it('keeps the lock when Topship answers the save with a 5xx (it may have been created)', async () => {
     const { error, release } = await bookWithSaveStatus(500);
-    expect(error).toBeInstanceOf(Error);
+    const { classifyBookingFailure } = await import(
+      './../classify-booking-failure'
+    );
+    expect(classifyBookingFailure(error).outcome).toBe('provider_unconfirmed');
     expect(release).toBe(false);
   });
 

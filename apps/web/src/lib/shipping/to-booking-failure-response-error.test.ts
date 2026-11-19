@@ -114,4 +114,19 @@ describe('bugfix: unreachable response reflects a lock that could not be freed',
     ) as { code: string };
     expect(mapped.code).toBe('PROVIDER_UNREACHABLE');
   });
+
+  it('bugfix: tells the merchant about the pause when a preserved wallet submission failure kept the lock', () => {
+    const original = new OrderShipmentBookingError(
+      'Unable to begin shipment submission.',
+      500,
+      'MERCHANT_WALLET_SUBMISSION_FAILED'
+    );
+    const mapped = toBookingFailureResponseError(original, {
+      walletFunded: true,
+      lockRetained: true,
+    }) as OrderShipmentBookingError;
+    expect(mapped.code).toBe('MERCHANT_WALLET_SUBMISSION_FAILED');
+    expect(mapped.message).toMatch(/Unable to begin shipment submission/);
+    expect(mapped.message).toMatch(/15 minutes/);
+  });
 });

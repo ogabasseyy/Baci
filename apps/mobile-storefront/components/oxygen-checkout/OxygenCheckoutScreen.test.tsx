@@ -290,10 +290,10 @@ describe('saved native Oxygen checkout', () => {
     } as unknown as ReturnType<typeof useOxygenWorkflow>);
     const result = render(<OxygenCheckoutScreen orderId="order" />);
     if (paymentStatus === 'unpaid') {
-      expect(
-        await screen.findByText('Your payment plan is active')
-      ).toBeTruthy();
-      expect(screen.getByText('ORD-STAGING-1')).toBeTruthy();
+      expect(await screen.findByText('Order Confirmed')).toBeTruthy();
+      expect(screen.getByText('#ORD-STAGING-1')).toBeTruthy();
+      expect(screen.getByText('Upfront payment confirmed')).toBeTruthy();
+      expect(screen.queryByText('View Receipt')).toBeNull();
       expect(router.replace).not.toHaveBeenCalled();
       return;
     }

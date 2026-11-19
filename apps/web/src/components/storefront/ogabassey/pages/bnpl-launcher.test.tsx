@@ -14,6 +14,7 @@ import {
 } from './checkout/credit-direct-popup-return';
 import { CHECKOUT_IDEMPOTENCY_STORAGE_KEY } from './checkout/checkout-idempotency';
 import { CHECKOUT_PENDING_ORDER_STORAGE_KEY } from './checkout/pending-checkout-order';
+import { readPendingHandoffEntries } from '@/lib/privacy/pending-handoff.test-support';
 
 const mockClearCart = vi.hoisted(() => vi.fn());
 const mockPush = vi.fn();
@@ -32,6 +33,7 @@ interface TestReactNativeWebViewWindow extends Window {
 
 vi.mock('next/navigation', () => ({
   useRouter: vi.fn(() => mockRouter),
+  usePathname: vi.fn(() => '/checkout/bnpl'),
   useSearchParams: vi.fn(() => mockSearchParams()),
 }));
 
@@ -585,7 +587,7 @@ describe('BnplLauncher', () => {
 
     await waitFor(() => {
       expect(mockPush).toHaveBeenCalledWith(
-        '/order-success?orderId=order-1&reference=credpal-ref-1&type=credpal&trackingToken=track-order-token'
+        '/order-success?orderId=order-1&reference=credpal-ref-1&type=credpal'
       );
     });
   });
@@ -637,7 +639,7 @@ describe('BnplLauncher', () => {
 
     await waitFor(() => {
       expect(mockPush).toHaveBeenCalledWith(
-        '/order-success?orderId=order-1&reference=credpal-ref-1&type=credpal&credpalStatus=success&trackingToken=track-order-token'
+        '/order-success?orderId=order-1&reference=credpal-ref-1&type=credpal&credpalStatus=success'
       );
     });
     expect(mockCaptureCheckoutFunnelEventOnce).not.toHaveBeenCalledWith(
@@ -665,7 +667,7 @@ describe('BnplLauncher', () => {
 
     await waitFor(() => {
       expect(mockPush).toHaveBeenCalledWith(
-        '/order-success?orderId=order-1&reference=credpal-ref-1&type=credpal&credpalStatus=pending&trackingToken=track-order-token'
+        '/order-success?orderId=order-1&reference=credpal-ref-1&type=credpal&credpalStatus=pending'
       );
     });
     expect(mockCaptureCheckoutFunnelEventOnce).not.toHaveBeenCalledWith(
@@ -829,8 +831,9 @@ describe('BnplLauncher', () => {
     });
 
     expect(mockPush).toHaveBeenCalledWith(
-      '/order-success?orderId=order-1&reference=BAC-ABCD12345678&type=klump&trackingToken=tok-123'
+      '/order-success?orderId=order-1&reference=BAC-ABCD12345678&type=klump'
     );
+    expect(readPendingHandoffEntries()).toEqual([['trackingToken', 'tok-123']]);
   });
 
   it.each([
@@ -865,7 +868,7 @@ describe('BnplLauncher', () => {
 
       await waitFor(() => {
         expect(mockPush).toHaveBeenCalledWith(
-          '/order-success?orderId=order-1&reference=BAC-ABCD12345678&type=klump&trackingToken=tok-123'
+          '/order-success?orderId=order-1&reference=BAC-ABCD12345678&type=klump'
         );
       });
       // Attribution is detached from navigation: wait for the lookup to
@@ -918,7 +921,7 @@ describe('BnplLauncher', () => {
 
     await waitFor(() => {
       expect(mockPush).toHaveBeenCalledWith(
-        '/order-success?orderId=order-1&reference=BAC-ABCD12345678&type=klump&trackingToken=tok-123'
+        '/order-success?orderId=order-1&reference=BAC-ABCD12345678&type=klump'
       );
     });
     await waitFor(() => {
@@ -959,7 +962,7 @@ describe('BnplLauncher', () => {
 
     await waitFor(() => {
       expect(mockPush).toHaveBeenCalledWith(
-        '/order-success?orderId=order-1&reference=BAC-ABCD12345678&type=klump&trackingToken=tok-123'
+        '/order-success?orderId=order-1&reference=BAC-ABCD12345678&type=klump'
       );
     });
     expect(
@@ -1056,7 +1059,7 @@ describe('BnplLauncher', () => {
 
       await waitFor(() => {
         expect(mockPush).toHaveBeenCalledWith(
-          '/order-success?orderId=order-1&reference=txn-123&type=credit_direct&trackingToken=tok-123'
+          '/order-success?orderId=order-1&reference=txn-123&type=credit_direct'
         );
       });
       expect(mockOpenCreditDirectCheckout).not.toHaveBeenCalled();
@@ -1178,7 +1181,7 @@ describe('BnplLauncher', () => {
 
       await waitFor(() => {
         expect(mockPush).toHaveBeenCalledWith(
-          '/order-success?orderId=order-1&reference=txn-sdk-success&type=credit_direct&trackingToken=tok-123'
+          '/order-success?orderId=order-1&reference=txn-sdk-success&type=credit_direct'
         );
       });
       expect(mockOpenCreditDirectCheckout).not.toHaveBeenCalled();
@@ -1212,7 +1215,7 @@ describe('BnplLauncher', () => {
 
       await waitFor(() => {
         expect(mockPush).toHaveBeenCalledWith(
-          '/order-success?orderId=order-1&reference=txn-sdk-success&type=credit_direct&trackingToken=tok-123'
+          '/order-success?orderId=order-1&reference=txn-sdk-success&type=credit_direct'
         );
       });
       // The first capture must carry revenue: the once-guard suppresses
@@ -1455,7 +1458,7 @@ describe('BnplLauncher', () => {
 
       await waitFor(() => {
         expect(mockPush).toHaveBeenCalledWith(
-          '/order-success?orderId=order-1&reference=txn-123&type=credit_direct&email=customer%40example.com'
+          '/order-success?orderId=order-1&reference=txn-123&type=credit_direct'
         );
       });
     });
@@ -1490,7 +1493,7 @@ describe('BnplLauncher', () => {
 
       await waitFor(() => {
         expect(mockPush).toHaveBeenCalledWith(
-          '/test-store/order-success?orderId=order-1&reference=txn-123&type=credit_direct&trackingToken=tok-123'
+          '/test-store/order-success?orderId=order-1&reference=txn-123&type=credit_direct'
         );
       });
     });

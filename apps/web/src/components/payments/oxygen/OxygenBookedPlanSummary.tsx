@@ -3,25 +3,41 @@ import { toOxygenMinorUnits } from '@/lib/payments/oxygen/money';
 import type { OxygenProviderState } from '@/schemas/oxygen-runtime';
 import styles from './OxygenBookedPlanSummary.module.css';
 
-const money = (value: number) =>
-  new Intl.NumberFormat('en-NG', {
-    style: 'currency',
-    currency: 'NGN',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value);
+const moneyFormatter = new Intl.NumberFormat('en-NG', {
+  style: 'currency',
+  currency: 'NGN',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+const dateFormatter = new Intl.DateTimeFormat('en-NG', {
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric',
+  timeZone: 'UTC',
+});
+const twoDecimalFormatter = new Intl.NumberFormat('en-US', {
+  useGrouping: false,
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+const money = (value: number) => moneyFormatter.format(value);
 const date = (value: [number, number, number]) =>
-  new Intl.DateTimeFormat('en-NG', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    timeZone: 'UTC',
-  }).format(new Date(Date.UTC(value[0], value[1] - 1, value[2])));
+  dateFormatter.format(new Date(Date.UTC(value[0], value[1] - 1, value[2])));
 
 const toSafeMinorUnits = (amount: number): number | null => {
   if (!Number.isFinite(amount) || amount < 0) return null;
   try {
     return toOxygenMinorUnits(amount, 'NGN');
+  } catch {
+    return null;
+  }
+};
+
+const toDisplayedMinorUnits = (amount: number): number | null => {
+  if (!Number.isFinite(amount) || amount < 0) return null;
+  try {
+    return toOxygenMinorUnits(twoDecimalFormatter.format(amount), 'NGN');
   } catch {
     return null;
   }
@@ -44,9 +60,19 @@ export function OxygenBookedPlanSummary({
       ? (equityMinor + chargesMinor) / 100
       : booking.equity_amount + charges;
   const upfront = booking.total_upfront_payment ?? computedUpfront;
+  const displayedEquityMinor = toDisplayedMinorUnits(booking.equity_amount);
+  const displayedChargesMinor = toDisplayedMinorUnits(charges);
+  const displayedUpfrontMinor = toDisplayedMinorUnits(upfront);
+  const displayedComponentsMatchTotal =
+    displayedEquityMinor !== null &&
+    displayedChargesMinor !== null &&
+    displayedUpfrontMinor !== null
+      ? displayedEquityMinor + displayedChargesMinor === displayedUpfrontMinor
+      : Math.abs(upfront - computedUpfront) < 0.005;
   const showsItemizedUpfront =
-    booking.total_upfront_payment == null ||
-    Math.abs(upfront - computedUpfront) < 0.005;
+    displayedComponentsMatchTotal &&
+    (booking.total_upfront_payment == null ||
+      Math.abs(upfront - computedUpfront) < 0.005);
   const singleRepayment = booking.loan_tenure === 1 || schedule.length === 1;
   const last = schedule.at(-1);
   return (

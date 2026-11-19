@@ -111,6 +111,8 @@ it('does not crash when provider figures contain more than 2 decimal places', ()
     />
   );
   expect(screen.getByText('₦18,987.73')).toBeVisible();
+  expect(screen.getByText('Confirmed provider upfront total')).toBeVisible();
+  expect(screen.queryByText(/₦17,925\.64/)).toBeNull();
 });
 
 it('uses singular labels and Monthly repayment heading for a single repayment', () => {

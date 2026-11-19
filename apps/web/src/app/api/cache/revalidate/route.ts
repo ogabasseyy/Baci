@@ -6,7 +6,6 @@ import {
   hasPermission,
   type UserAccess,
 } from '@/lib/api-auth';
-import { enrichProductPurgeEntries } from '@/lib/authoritative-product-purge-enrichment';
 import { BLOG_LISTING_PAGE_SIZE } from '@/lib/blog-listing-page-size';
 import {
   revalidateBlogPosts,
@@ -14,12 +13,9 @@ import {
   revalidateFeatures,
   revalidateMerchant,
   revalidatePageConfig,
-  revalidateProductSlugs,
-  revalidateProducts,
   revalidateReviews,
 } from '@/lib/cache-revalidation';
 import { checkCsrfProtection } from '@/lib/csrf';
-import { expireProductBlogCache } from '@/lib/expire-product-blog-cache';
 import { getMerchantBlogRevalidationContext } from '@/lib/get-merchant-blog-cache-identifiers';
 import { getMerchantBlogPostCategories } from '@/lib/get-merchant-blog-post-categories';
 import { getMerchantBlogPostSlugs } from '@/lib/get-merchant-blog-post-slugs';
@@ -27,9 +23,8 @@ import {
   getMerchantForApiRequest,
   toUserAccess,
 } from '@/lib/get-merchant-for-api-request';
-import { scheduleStorefrontProductPurge } from '@/lib/storefront-product-purge';
-import { scheduleStorefrontHostnamePurge } from '@/lib/storefront-product-purge-hostnames';
 import { cacheRevalidateRequestSchema } from '@/schemas/cache-revalidate-route';
+import { revalidateProductsTarget } from './revalidate-products-target';
 
 /**
  * Cache Revalidation API
@@ -123,91 +118,15 @@ export async function POST(request: NextRequest) {
     targets.includes('all') || targets.includes(target as (typeof targets)[0]);
 
   if (shouldRevalidate('products')) {
-    revalidateProducts(merchantId);
-    revalidated.push('products');
-
-    // Also evict the affected products' public URLs from Cloudflare when the
-    // caller supplies them. The merchant slug is resolved server-side from the
-    // authenticated merchant (never trusted from the client), so a caller can
-    // only purge its own storefront. Fire-and-forget: a purge is always
-    // survivable, so it never fails the revalidation.
-    if (products && products.length > 0) {
-      try {
-        // Resolve authoritative purge entries (real slug/category URLs for
-        // {id}-only or join-categorized products, plus old-category moves) from
-        // the product ROWS via the shared enrichment used by the internal route
-        // too, and bust the per-slug Next product-detail caches for every
-        // resolved slug. This only needs `merchantId` — NOT the merchant's
-        // Cloudflare-facing slug below — so it must run for EVERY
-        // products-carrying request, independent of whether that slug lookup
-        // succeeds. Fail-open lives inside enrichProductPurgeEntries: any lookup
-        // problem falls back to the caller's flat hints.
-        const {
-          entries,
-          resolvedSlugs,
-          blogPostSlugs,
-          blogPostSlugsIncomplete,
-        } = await enrichProductPurgeEntries(
-          auth.supabase,
-          merchantId,
-          products
-        );
-        // Bust the per-slug Next product-detail caches for every resolved slug
-        // BEFORE scheduling the edge purge below: without this, a Cloudflare
-        // MISS after the purge refills the edge from the still-tagged Next
-        // entry (the PDP snapshot is tagged per-slug, unaffected by the
-        // slug-less revalidateProducts above) until its cacheLife TTL,
-        // defeating it.
-        revalidateProductSlugs(merchantId, resolvedSlugs);
-
-        // The related-product rail is cached under the merchant product tag.
-        // Hard-expire it before a Cloudflare MISS can refill an article from a
-        // stale enrichment snapshot.
-        expireProductBlogCache(merchantId);
-
-        // The Cloudflare edge purge additionally needs the merchant's public
-        // storefront slug (to build the hostnames to purge) — resolve it here
-        // and gate ONLY `scheduleStorefrontProductPurge` on it. A failed/missing
-        // lookup must never skip the Next-layer busting above.
-        const { data: merchantRow, error: merchantLookupError } =
-          await auth.supabase
-            .from('merchants')
-            .select('slug')
-            .eq('id', merchantId)
-            .maybeSingle();
-        if (merchantLookupError) {
-          // Fail-open: log for observability but continue with whatever data
-          // came back — a stale storefront cache self-heals on its TTL, so a
-          // failed purge must never fail the revalidation.
-          console.error(
-            'Failed to resolve merchant slug for Cloudflare product purge (continuing with available data):',
-            { merchantId, error: merchantLookupError }
-          );
-        }
-        const merchantSlug = merchantRow?.slug ?? null;
-        if (merchantSlug) {
-          // The shared scheduler switches to a bounded hostname purge above its
-          // distinct-entry threshold, so it still evicts every affected PDP.
-          if (blogPostSlugsIncomplete) {
-            // The article set may be incomplete (lookup failed, partially
-            // failed, or ran without authoritative inputs): evict the
-            // hostname (a superset of the product purge) rather than
-            // leaving linked rails stale until TTL.
-            scheduleStorefrontHostnamePurge(merchantSlug);
-          } else if (blogPostSlugs.length > 0) {
-            scheduleStorefrontProductPurge(merchantSlug, entries, {
-              blogPostSlugs,
-            });
-          } else {
-            scheduleStorefrontProductPurge(merchantSlug, entries);
-          }
-        }
-      } catch (purgeError) {
-        console.error('Skipped Cloudflare product purge in cache/revalidate:', {
-          merchantId,
-          purgeError,
-        });
-      }
+    const productsExpired = await revalidateProductsTarget({
+      supabase: auth.supabase,
+      merchantId,
+      products,
+    });
+    if (productsExpired) {
+      revalidated.push('products');
+    } else {
+      failedTargets.push('products');
     }
   }
 

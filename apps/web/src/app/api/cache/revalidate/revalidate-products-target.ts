@@ -1,0 +1,138 @@
+import { hasCompleteScopedProductSlugs } from '@/app/api/internal/revalidate-products/has-complete-scoped-product-slugs';
+import { enrichProductPurgeEntries } from '@/lib/authoritative-product-purge-enrichment';
+import {
+  revalidateProductSlugs,
+  revalidateProducts,
+} from '@/lib/cache-revalidation';
+import { expireProductBlogCache } from '@/lib/expire-product-blog-cache';
+import { resolveDependentLegacyProductIdentifiers } from '@/lib/resolve-dependent-legacy-product-identifiers';
+import { scheduleStorefrontProductPurge } from '@/lib/storefront-product-purge';
+import { scheduleStorefrontHostnamePurge } from '@/lib/storefront-product-purge-hostnames';
+
+type PurgeSupabaseClient = Parameters<typeof enrichProductPurgeEntries>[0];
+type PurgeProductsInput = Parameters<typeof enrichProductPurgeEntries>[2];
+
+interface RevalidateProductsTargetInput {
+  supabase: PurgeSupabaseClient;
+  merchantId: string;
+  products?: PurgeProductsInput;
+}
+
+/**
+ * Revalidates Next product caches for `POST /api/cache/revalidate` and, when
+ * product hints are supplied, evicts authoritative storefront URLs after origin
+ * expiry succeeds. Returns `false` when required origin expiry fails.
+ */
+export async function revalidateProductsTarget({
+  supabase,
+  merchantId,
+  products,
+}: RevalidateProductsTargetInput): Promise<boolean> {
+  if (!products || products.length === 0) {
+    return revalidateProducts(merchantId) !== false;
+  }
+
+  try {
+    const {
+      entries,
+      resolvedSlugs,
+      authoritativeSlugsById,
+      blogPostSlugs,
+      blogPostSlugsIncomplete,
+    } = await enrichProductPurgeEntries(supabase, merchantId, products);
+
+    const productIds = products
+      .map((product) => product.id?.trim())
+      .filter((id): id is string => Boolean(id));
+    const dependentAliases =
+      productIds.length > 0
+        ? await resolveDependentLegacyProductIdentifiers(
+            supabase,
+            merchantId,
+            productIds
+          )
+        : { identifiers: [], incomplete: false };
+    const scopedIdentifiers = Array.from(
+      new Set([...resolvedSlugs, ...dependentAliases.identifiers])
+    );
+
+    const slugsRevalidated =
+      revalidateProductSlugs(merchantId, scopedIdentifiers, {
+        expireImmediately: true,
+      }) === true;
+    const blogExpired = expireProductBlogCache(merchantId) !== false;
+
+    const completeScoped =
+      slugsRevalidated &&
+      !blogPostSlugsIncomplete &&
+      !dependentAliases.incomplete &&
+      hasCompleteScopedProductSlugs(
+        products,
+        entries,
+        resolvedSlugs,
+        authoritativeSlugsById
+      );
+
+    let productsExpired =
+      revalidateProducts(merchantId, undefined, {
+        expireImmediately: true,
+        ...(completeScoped ? { omitMerchantWidePdpDetails: true } : {}),
+      }) === true;
+    if (!productsExpired && completeScoped) {
+      productsExpired =
+        revalidateProducts(merchantId, undefined, {
+          expireImmediately: true,
+        }) === true;
+    }
+
+    const { data: merchantRow, error: merchantLookupError } = await supabase
+      .from('merchants')
+      .select('slug')
+      .eq('id', merchantId)
+      .maybeSingle();
+    if (merchantLookupError) {
+      console.error(
+        'Failed to resolve merchant slug for Cloudflare product purge (continuing with available data):',
+        { merchantId, error: merchantLookupError }
+      );
+    }
+
+    const originHardExpired = productsExpired && blogExpired;
+    const merchantSlug = merchantRow?.slug ?? null;
+    if (merchantSlug && originHardExpired) {
+      if (blogPostSlugsIncomplete || dependentAliases.incomplete) {
+        scheduleStorefrontHostnamePurge(merchantSlug);
+      } else {
+        const existingSlugs = new Set(entries.map((entry) => entry.slug));
+        const edgeEntries = [
+          ...entries,
+          ...Array.from(
+            new Set([...productIds, ...dependentAliases.identifiers])
+          )
+            .filter((identifier) => !existingSlugs.has(identifier))
+            .map((identifier) => ({ slug: identifier, categorySegment: null })),
+        ];
+        if (blogPostSlugs.length > 0) {
+          scheduleStorefrontProductPurge(merchantSlug, edgeEntries, {
+            blogPostSlugs,
+          });
+        } else {
+          scheduleStorefrontProductPurge(merchantSlug, edgeEntries);
+        }
+      }
+    }
+
+    return originHardExpired;
+  } catch (purgeError) {
+    const blogExpired = expireProductBlogCache(merchantId) !== false;
+    const recovered =
+      revalidateProducts(merchantId, undefined, {
+        expireImmediately: true,
+      }) !== false;
+    console.error('Skipped Cloudflare product purge in cache/revalidate:', {
+      merchantId,
+      purgeError,
+    });
+    return recovered && blogExpired;
+  }
+}

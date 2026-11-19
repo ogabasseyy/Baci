@@ -80,6 +80,10 @@ export function buildPreviousCategoryPurgeEntries(
       continue;
     }
     entries.push({ slug, categorySegment: oldSegment });
+    const previousSlug = product.previousSlug?.trim();
+    if (previousSlug && previousSlug !== slug) {
+      entries.push({ slug: previousSlug, categorySegment: oldSegment });
+    }
   }
   return entries;
 }

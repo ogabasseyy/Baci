@@ -219,8 +219,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Invalidate product caches after bulk import
-    if (successCount > 0) {
+    // Invalidate draft-only imports cleanly; active imports run scoped immediate
+    // expiry below without wiping unrelated merchant PDPs.
+    if (successCount > 0 && publicPurgeEntries.length === 0) {
       revalidateProducts(merchantId);
     }
 
@@ -230,31 +231,49 @@ export async function POST(request: NextRequest) {
       // An edge purge is always best-effort: its failure must never turn a
       // completed CSV import into an API error.
       try {
-        revalidateProductSlugs(
-          merchantId,
-          publicPurgeEntries.map((entry) => entry.slug)
-        );
+        const slugsExpired =
+          revalidateProductSlugs(
+            merchantId,
+            publicPurgeEntries.map((entry) => entry.slug),
+            { expireImmediately: true }
+          ) === true;
+        const originHardExpired =
+          (slugsExpired &&
+            revalidateProducts(merchantId, undefined, {
+              expireImmediately: true,
+              omitMerchantWidePdpDetails: true,
+            }) === true) ||
+          revalidateProducts(merchantId, undefined, {
+            expireImmediately: true,
+          }) === true;
         // Expire the merchant-scoped related-blog data before an edge MISS can
         // refill a stale article while the deferred lookup is still queued.
         expireProductBlogCache(merchantId);
-        scheduleStorefrontProductPurge(
-          merchantContext.merchantSlug,
-          publicPurgeEntries
-        );
-        scheduleProductBlogPurgeAfterResponse({
-          supabase,
-          merchantId,
-          merchantSlug: merchantContext.merchantSlug,
-          productIds: publicPurgeProductIds,
-          entries: publicPurgeEntries,
-          categorySlugs: publicPurgeEntries.map(
-            (entry) => entry.categorySegment
-          ),
-          // skipProductPurge alone: the core purge ran above, and omitting
-          // skipWhenNoLinkedPosts keeps the scheduler's hostname fallback
-          // when the deferred article lookup fails.
-          skipProductPurge: true,
-        });
+        if (!originHardExpired) {
+          console.warn(
+            'Skipped Cloudflare product purge after bulk import because origin hard expiry failed',
+            { merchantId }
+          );
+        } else {
+          scheduleStorefrontProductPurge(
+            merchantContext.merchantSlug,
+            publicPurgeEntries
+          );
+          scheduleProductBlogPurgeAfterResponse({
+            supabase,
+            merchantId,
+            merchantSlug: merchantContext.merchantSlug,
+            productIds: publicPurgeProductIds,
+            entries: publicPurgeEntries,
+            categorySlugs: publicPurgeEntries.map(
+              (entry) => entry.categorySegment
+            ),
+            // skipProductPurge alone: the core purge ran above, and omitting
+            // skipWhenNoLinkedPosts keeps the scheduler's hostname fallback
+            // when the deferred article lookup fails.
+            skipProductPurge: true,
+          });
+        }
       } catch (purgeError) {
         console.warn('Skipped Cloudflare product purge after bulk import', {
           purgeError,

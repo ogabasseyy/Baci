@@ -33,4 +33,35 @@ describe('bugfix: a tied arrival scan owns the snapshot location even when the l
     );
     expect(result.events[0]?.location).toContain('WUSE ABUJA');
   });
+
+  it("keeps a located terminal scan's own location when an arrival is tied with it", () => {
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W61',
+        Origin: 'LAGOS',
+        Destination: 'ABUJA',
+        MobileShipmentTrackings: [
+          {
+            Status: 'DPC',
+            DateTimeUtc: '2026-11-09T10:00:00.000Z',
+            Location: 'IKEJA 2 (IKEJA)',
+          },
+          {
+            Status: 'ARF',
+            DateTimeUtc: '2026-11-09T12:00:00.000Z',
+            Location: 'WUSE ABUJA (Wuse)',
+          },
+          {
+            Status: 'SHD',
+            DateTimeUtc: '2026-11-09T12:00:00.000Z',
+            Location: 'MAITAMA (Customer address)',
+          },
+        ],
+      },
+      'W61',
+      OBSERVED_AT
+    );
+    expect(result.status).toBe('delivered');
+    expect(result.events[0]?.location).toContain('MAITAMA');
+  });
 });

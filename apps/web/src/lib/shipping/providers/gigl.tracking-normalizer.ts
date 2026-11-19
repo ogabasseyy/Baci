@@ -175,7 +175,14 @@ export function normalizeGiglTrackingShipment(
   // (e.g. MSHC, with or without its own location) must not hide the arrival
   // centre from the same poll.
   const top = sortedCandidates[0];
-  if (top) {
+  // A located terminal scan (e.g. SHD) keeps its own location: that is where
+  // the parcel ended up, not the arrival centre.
+  const topKeepsOwnLocation =
+    top?.event.location !== undefined &&
+    top.event.location !== '' &&
+    top.recognizedStatus !== null &&
+    TERMINAL_STATUSES.has(top.recognizedStatus);
+  if (top && !topKeepsOwnLocation) {
     const tied = sortedCandidates.filter(
       (candidate) =>
         candidate.event.location &&

@@ -11,6 +11,11 @@ type Dependencies = {
   admit: () => Promise<{ merchant: { id: string } }>;
   createOrder: typeof createOrder;
 };
+
+function hasNonEmptyVoucherAlias(value: unknown): boolean {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
 export async function submitOxygenCheckout(
   input: Input,
   dependencies?: Dependencies
@@ -29,8 +34,10 @@ export async function submitOxygenCheckout(
       (item) =>
         item.voucher_token ||
         item.voucher_award_id ||
-        ('voucherToken' in item && item.voucherToken) ||
-        ('voucherAwardId' in item && item.voucherAwardId)
+        ('voucherToken' in item &&
+          hasNonEmptyVoucherAlias(item.voucherToken)) ||
+        ('voucherAwardId' in item &&
+          hasNonEmptyVoucherAlias(item.voucherAwardId))
     )
   ) {
     throw new Error(

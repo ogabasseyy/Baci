@@ -86,6 +86,27 @@ describe('native Oxygen order admission', () => {
     expect(admit).not.toHaveBeenCalled();
     expect(createOrder).not.toHaveBeenCalled();
   });
+  it('ignores whitespace-only legacy voucher identifiers', async () => {
+    const input = {
+      ...request,
+      items: request.items.map((item) => ({
+        ...item,
+        voucherToken: '  ',
+        voucherAwardId: '\t',
+      })),
+    };
+    await submitOxygenCheckout(
+      {
+        request: input,
+        checkoutGeneration: 'g',
+        isAuthenticated: true,
+        hasVoucher: false,
+        hasCredits: false,
+      },
+      { admit, createOrder }
+    );
+    expect(createOrder).toHaveBeenCalledTimes(1);
+  });
   it('preserves a promo code for the server to price before financing', async () => {
     const discounted = { ...request, discount_code: 'SAVE10' };
     await submitOxygenCheckout(

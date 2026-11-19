@@ -5,7 +5,7 @@ import {
   previewSteps,
 } from '../components/oxygen-preview/entry';
 
-// The synthetic iOS preview is tied to the local fixture server.
+// Plain HTTP is only for the exact loopback fixture server in development.
 const OXYGEN_VISUAL_QA_ORIGIN = 'http://127.0.0.1:3198';
 
 export default function OxygenVisualQaRoute() {

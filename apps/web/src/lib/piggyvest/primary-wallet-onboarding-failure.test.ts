@@ -73,6 +73,49 @@ describe('settlePrimaryWalletCreateFailure', () => {
     expect(storage.recordUncertain).toHaveBeenCalledWith(claimedScope);
   });
 
+  it('bugfix (Muse): releases a refreshed BVN decline once a reclaim lookup listed none', async () => {
+    const storage = makeStorage();
+    const outcome = await settlePrimaryWalletCreateFailure({
+      error: new PiggyvestApiError(
+        'PIGGYVEST_REQUEST_ERROR',
+        'Invalid BVN',
+        400,
+        true
+      ),
+      createReturned: false,
+      reclaimed: true,
+      identityRefreshed: true,
+      lookup: { kind: 'none' },
+      storage,
+      claimedScope,
+    });
+
+    expect(outcome).toEqual({ status: 'rejected', code: 'INVALID_BVN' });
+    expect(storage.releaseIntent).toHaveBeenCalledWith(claimedScope);
+    expect(storage.recordUncertain).not.toHaveBeenCalled();
+  });
+
+  it('keeps custody on a refreshed BVN decline whose reclaim lookup found our customer', async () => {
+    const storage = makeStorage();
+    const outcome = await settlePrimaryWalletCreateFailure({
+      error: new PiggyvestApiError(
+        'PIGGYVEST_REQUEST_ERROR',
+        'Invalid BVN',
+        400,
+        true
+      ),
+      createReturned: false,
+      reclaimed: true,
+      identityRefreshed: true,
+      lookup: { kind: 'found', customerId: 'pv-cust-1' },
+      storage,
+      claimedScope,
+    });
+
+    expect(outcome).toEqual({ status: 'pending' });
+    expect(storage.releaseIntent).not.toHaveBeenCalled();
+  });
+
   it('returns STORAGE_UNAVAILABLE if releaseIntent throws', async () => {
     const storage = makeStorage();
     storage.releaseIntent = vi.fn().mockRejectedValue(new Error('db down'));

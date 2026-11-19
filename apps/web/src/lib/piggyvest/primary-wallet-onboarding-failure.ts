@@ -46,10 +46,19 @@ export async function settlePrimaryWalletCreateFailure(input: {
   if (notSent) return notSent;
 
   const decline = classifyPrimaryWalletCreationDecline(input.error);
+  // A BVN decline proves only that THIS request created nothing. The first
+  // attempt after an identity refresh runs no lookup, so the earlier,
+  // ambiguous dispatch may still land a customer: custody (identity fence
+  // and deletion hold) is kept and the answer stays pending. The next
+  // attempt reclaims and looks up; once PiggyVest lists no customer, the
+  // same evidence that releases any reclaim releases this one, so a bad
+  // replacement BVN surfaces as INVALID_BVN instead of pending forever.
+  const refreshedWithoutLookup =
+    input.identityRefreshed && input.lookup == null;
   const keepReclaimable =
     decline === 'interest_routing'
       ? hasPriorDispatchCustody
-      : input.lookup?.kind === 'found' || input.identityRefreshed;
+      : input.lookup?.kind === 'found' || refreshedWithoutLookup;
   if (decline !== null && !keepReclaimable) {
     try {
       if (!(await input.storage.releaseIntent(input.claimedScope)))

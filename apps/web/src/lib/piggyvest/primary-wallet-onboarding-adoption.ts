@@ -36,6 +36,13 @@ export function judgeCreatedCustomer(input: {
   identityRefreshed?: boolean;
 }): CreatedCustomerVerdict {
   const { lookup, created, identityRefreshed } = input;
+  // After an identity refresh, the old and the replacement request share one
+  // third-party identifier, so an existing customer cannot be told apart: it
+  // may be ours from a lost create response, or the earlier dispatch's,
+  // made under the BVN the user replaced. Adopting the wrong one would bind
+  // a wallet to that old BVN, so it is never adopted. The accepted cost: a
+  // lost response after a refresh ends in OWNERSHIP_REVIEW_REQUIRED
+  // (manual review) rather than an automatic adoption.
   if (identityRefreshed && !created.new_customer) return 'foreign';
   if (lookup === null) return created.new_customer ? 'adopt' : 'foreign';
   if (lookup.kind === 'none')

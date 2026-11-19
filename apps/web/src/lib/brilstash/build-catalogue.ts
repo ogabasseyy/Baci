@@ -36,7 +36,6 @@ type SourceFacts = Scope & {
   approvedFacts: ApprovedFacts | null;
   verifiedImages: readonly (string | undefined)[];
   brand?: string;
-  modelNumber?: string;
 };
 
 export type SellableSource = SourceFacts &
@@ -185,7 +184,6 @@ function projectSource(
   if (images.length === 0) return 'missing_images';
 
   const brand = sanitizeText(source.brand ?? '');
-  const modelNumber = sanitizeText(source.modelNumber ?? '');
   const parsed = brilstashProductSchema.safeParse({
     external_id: externalId,
     product_url: url.href,
@@ -196,7 +194,6 @@ function projectSource(
     stock_quantity: units,
     images,
     ...(brand && { brand }),
-    ...(modelNumber && { model_number: modelNumber }),
   });
   if (!parsed.success) return 'invalid_product';
 

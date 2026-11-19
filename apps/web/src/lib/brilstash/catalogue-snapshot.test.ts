@@ -86,6 +86,12 @@ describe('prepareBrilStashSnapshot', () => {
 });
 
 describe('digestBrilStashPayload', () => {
+  it('rejects optional vendor model numbers until there is an approved pilot source', () => {
+    expect(() =>
+      digestBrilStashPayload([{ ...first, model_number: 'unreviewed' }])
+    ).toThrow();
+  });
+
   it('matches the PostgreSQL wire vector for fractional prices, Unicode and escaping', () => {
     const fixture = readFileSync(
       new URL(

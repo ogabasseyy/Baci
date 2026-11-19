@@ -10,7 +10,7 @@ const plainText = z
   .refine((value) => value === value.trim() && !/[<>\p{Cc}]/u.test(value));
 export const brilstashPriceSchema = z
   .number()
-  .positive()
+  .min(0.01)
   .max(Number.MAX_SAFE_INTEGER);
 
 export const brilstashProductSchema = z.strictObject({
@@ -26,7 +26,6 @@ export const brilstashProductSchema = z.strictObject({
     .min(1)
     .max(10),
   brand: plainText.optional(),
-  model_number: plainText.optional(),
 });
 
 export type BrilStashProduct = z.infer<typeof brilstashProductSchema>;

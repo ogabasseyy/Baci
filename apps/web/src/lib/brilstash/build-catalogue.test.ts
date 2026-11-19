@@ -181,6 +181,7 @@ describe('buildBrilStashCatalogue', () => {
     ],
     [{ currency: 'USD' }, 'invalid_price'],
     [{ priceNaira: Number.POSITIVE_INFINITY }, 'invalid_price'],
+    [{ priceNaira: 0.001 }, 'invalid_price'],
     [{ approvedFacts: null }, 'missing_facts'],
     [{ approvedFacts: { ...facts, warranty: '<b></b>' } }, 'missing_facts'],
     [{ productUrl: 'https://elsewhere.example.invalid/p' }, 'invalid_url'],

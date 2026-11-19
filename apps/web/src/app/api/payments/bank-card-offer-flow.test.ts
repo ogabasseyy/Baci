@@ -145,6 +145,7 @@ function setup(
   let checkoutUrl: string | null = null;
   let approved = false;
   let paid = false;
+  let terminalReview = false;
   const refundInsert = vi.fn().mockResolvedValue({ error: null });
   const quote = {
     merchantId,
@@ -208,7 +209,13 @@ function setup(
       case 'claim_bank_card_offer_attempt': {
         const newClaim = !claimed;
         claimed = true;
-        return { data: { claimed: newClaim, reference, checkoutUrl } };
+        return {
+          data: {
+            claimed: newClaim,
+            reference,
+            checkoutUrl: terminalReview ? null : checkoutUrl,
+          },
+        };
       }
       case 'record_bank_card_offer_checkout_url':
         checkoutUrl = args.p_checkout_url;
@@ -242,6 +249,9 @@ function setup(
             ),
           },
         };
+      case 'flag_bank_card_offer_terminal_review':
+        terminalReview = true;
+        return { data: true };
       case 'approve_bank_card_offer_capture':
         approved = args.p_evidence.issuerName === issuerName;
         return { data: approved };
@@ -372,6 +382,53 @@ describe('bank card offer payment handlers', () => {
       'flag_bank_card_offer_initialization_review',
       expect.objectContaining({ p_reference: reference, p_failed: true })
     );
+  });
+
+  it.each([
+    'failed',
+    'abandoned',
+    'cancelled',
+  ])('stops polling and hides the old checkout URL after %s', async (status) => {
+    vi.stubEnv('PAYSTACK_SECRET_KEY', secret);
+    const { data } = setup('035', 'Wema Bank');
+    const input = {
+      merchant_id: merchantId.toUpperCase(),
+      order_id: orderId,
+      payment_method: 'bank_card_offer',
+      currency: 'NGN',
+      customer_email: customerEmail,
+      customer_name: 'Buyer',
+      customer_phone: '08012345678',
+      gateway: 'paystack',
+    };
+    expect((await initialize(request('initialize', input))).status).toBe(200);
+
+    mocks.verify.mockResolvedValue({
+      success: true,
+      data: { ...data, status },
+    });
+    const callback = await verify(request('verify', { reference }));
+    expect(callback.status).toBe(200);
+    await expect(callback.json()).resolves.toMatchObject({
+      success: false,
+      status,
+      orderId,
+    });
+    expect(mocks.rpc).toHaveBeenCalledWith(
+      'flag_bank_card_offer_terminal_review',
+      expect.objectContaining({
+        p_transaction_id: transactionId,
+        p_status: status,
+      })
+    );
+    expect(mocks.rpc).not.toHaveBeenCalledWith(
+      'complete_order_gateway_payment',
+      expect.anything()
+    );
+
+    const repeated = await initialize(request('initialize', input));
+    expect(repeated.status).toBe(202);
+    expect(mocks.initialize).toHaveBeenCalledTimes(1);
   });
 
   it.each([

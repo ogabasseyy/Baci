@@ -109,6 +109,30 @@ BEGIN
   IF v_attempt->>'claimed' <> 'false' OR v_attempt->>'reference' <> v_reference
     OR v_attempt->>'checkoutUrl' <> 'https://checkout.paystack.com/trx/test?state=one%2Btwo&x=1'
   THEN RAISE EXCEPTION 'A retry must replay its existing Paystack reference'; END IF;
+  IF public.flag_bank_card_offer_terminal_review(v_order, v_merchant, v_transaction, 'abandoned')
+    THEN RAISE EXCEPTION 'Shopper scope recorded a terminal provider status'; END IF;
+  PERFORM set_config('request.jwt.claims', jsonb_build_object('role', 'authenticated',
+    'storefront_order_context', 'route', 'storefront_order_merchant_id', v_merchant)::text, true);
+  IF NOT public.flag_bank_card_offer_terminal_review(v_order, v_merchant, v_transaction, 'abandoned')
+    THEN RAISE EXCEPTION 'Unable to review a terminal initialized attempt'; END IF;
+  PERFORM set_config('request.jwt.claims', jsonb_build_object('role', 'authenticated', 'sub', v_user,
+    'storefront_order_context', 'route', 'storefront_order_merchant_id', v_merchant)::text, true);
+  v_attempt := public.claim_bank_card_offer_attempt(v_order, v_merchant, 9500, v_hash, 'test', 100, 0);
+  IF v_attempt->>'claimed' IS DISTINCT FROM 'false' OR v_attempt->>'checkoutUrl' IS NOT NULL
+    THEN RAISE EXCEPTION 'Terminal attempt advertised a stale checkout URL'; END IF;
+  DECLARE v_review_id uuid;
+  BEGIN
+    SELECT id INTO STRICT v_review_id FROM public.reconciliation_review
+      WHERE txn_id = v_transaction AND resolved_at IS NULL;
+    IF public.restore_bank_card_offer_checkout_url(v_review_id, 'https://checkout.paystack.com/trx/test')
+      OR NOT public.retire_bank_card_offer_initialization(v_review_id, 'Paystack confirms this hosted session cannot charge')
+    THEN RAISE EXCEPTION 'Initialized terminal attempt must retire without restoring the old URL'; END IF;
+  END;
+  v_attempt := public.claim_bank_card_offer_attempt(v_order, v_merchant, 9500, v_hash, 'test', 100, 0);
+  IF v_attempt->>'claimed' IS DISTINCT FROM 'true' OR v_attempt->>'reference' = v_reference
+    THEN RAISE EXCEPTION 'Initialized terminal attempt could not be replaced'; END IF;
+  v_reference := v_attempt->>'reference';
+  SELECT id INTO STRICT v_transaction FROM public.transactions WHERE gateway_reference = v_reference;
   BEGIN
     UPDATE public.transactions SET status = 'completed' WHERE id = v_transaction;
     RAISE EXCEPTION 'An unproved bank capture became completed';

@@ -49,7 +49,7 @@ export async function approveBankCardOfferPayment({
     adjustmentsKobo:
       amountKobo - (quote.productSubtotalKobo - quote.discountKobo),
   });
-  if (!verified || verified.kind === 'mismatch') return verified;
+  if (verified?.kind !== 'verified') return verified;
 
   const approval = await client.rpc('approve_bank_card_offer_capture', {
     ...args,

@@ -819,6 +819,12 @@ export async function POST(request: NextRequest) {
           platform_fee: transaction.platform_fee,
         },
       });
+      if (outcome.kind === 'bank_offer_terminal') {
+        return NextResponse.json({
+          code: 'BANK_CARD_OFFER_TERMINAL_REVIEW',
+          status: outcome.status,
+        });
+      }
       if (outcome.kind === 'bank_offer_capture_review') {
         // Acknowledge provider delivery after saving the review. The customer
         // verify endpoint returns 202 for the same pending payment.

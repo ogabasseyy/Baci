@@ -28,6 +28,15 @@ describe('bank card offer configuration', () => {
     ).toBe(true);
   });
 
+  it('canonicalizes merchant UUIDs as PostgreSQL does', () => {
+    expect(
+      bankCardOfferSchema.parse({
+        ...offer,
+        merchantId: offer.merchantId.toUpperCase(),
+      }).merchantId
+    ).toBe(offer.merchantId);
+  });
+
   it.each([1, 9999])('accepts discount bounds %s', (discountBasisPoints) => {
     expect(
       bankCardOfferSchema.safeParse({

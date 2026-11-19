@@ -15,7 +15,7 @@ const kobo = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 export const bankCardOfferSchema = z
   .strictObject({
     id: z.string().regex(/^[a-z][a-z0-9-]{1,63}$/),
-    merchantId: z.uuid(),
+    merchantId: z.uuid().transform((id) => id.toLowerCase()),
     bankCode: z.enum(['035', '232']),
     displayName: nonEmpty,
     verifiedIssuerName: nonEmpty,

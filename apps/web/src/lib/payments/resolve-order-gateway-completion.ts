@@ -58,6 +58,35 @@ export async function resolveOrderGatewayCompletion({
           },
         };
       }
+      if (verified.kind === 'terminal') {
+        const review = await redvaultScopedClient.rpc(
+          'flag_bank_card_offer_terminal_review',
+          {
+            p_order_id: orderId,
+            p_merchant_id: merchantId,
+            p_transaction_id: transactionId,
+            p_status: verified.status,
+          }
+        );
+        if (review.error || review.data !== true) {
+          return {
+            ok: false as const,
+            outcome: {
+              kind: 'completion_failed' as const,
+              error:
+                review.error ??
+                new Error('bank_card_offer_terminal_review_unavailable'),
+            },
+          };
+        }
+        return {
+          ok: false as const,
+          outcome: {
+            kind: 'bank_offer_terminal' as const,
+            status: verified.status,
+          },
+        };
+      }
       if (verified.kind === 'mismatch') {
         const review = await supabase.from('reconciliation_review').insert({
           issue_type: 'payment_match_ambiguous',

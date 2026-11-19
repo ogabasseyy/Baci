@@ -326,8 +326,9 @@ async function verifyPaymentReference(
   // complete_order_gateway_payment RPC, and receipt email / settlement /
   // ad tracking run through the claim-gated outbox — so whichever of verify
   // and the webhook wins the race, every side effect runs exactly once.
-  // `transaction.gateway` is narrowed by verifyGatewayPayment above, which
-  // rejects everything except paystack/korapay.
+  // Standard orders use the verification above. Bank offers enter this
+  // path with the BCO prefix and a Paystack gateway; the finalizer verifies
+  // that reference against the saved offer.
   const finalizeOutcome = await finalizeOrderGatewayPayment({
     actor: `verify:${parsedReference.data}`,
     gateway: transaction.gateway as 'paystack' | 'korapay',
@@ -347,6 +348,16 @@ async function verifyPaymentReference(
     wonTransactionFlip: !isBankOffer && transaction.status !== 'completed',
   });
 
+  if (finalizeOutcome.kind === 'bank_offer_terminal') {
+    return NextResponse.json({
+      success: false,
+      status: finalizeOutcome.status,
+      orderId: transaction.order_id,
+      orderNumber:
+        existingOrder?.order_number ||
+        transaction.gateway_reference.slice(0, 8).toUpperCase(),
+    });
+  }
   if (finalizeOutcome.kind === 'bank_offer_capture_review') {
     return NextResponse.json(
       { code: 'BANK_CARD_OFFER_CAPTURE_REVIEW', status: 'pending' },

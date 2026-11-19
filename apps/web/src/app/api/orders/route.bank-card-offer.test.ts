@@ -62,7 +62,7 @@ it('passes the shopper’s post-discount total to atomic bank-offer checkout', a
         headers: { 'Idempotency-Key': 'bank-offer-expected-total' },
         body: JSON.stringify({
           ...baseOrderPayload,
-          merchant_id: MERCHANT_ID,
+          merchant_id: MERCHANT_ID.toUpperCase(),
           items: [
             { product_id: productId, quantity: 1, price: 100, name: 'Widget' },
           ],

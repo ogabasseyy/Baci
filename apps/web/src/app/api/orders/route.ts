@@ -483,7 +483,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const body = parseResult.data;
+    const parsedOrder = parseResult.data;
+    const body =
+      parsedOrder.payment_method === 'bank_card_offer'
+        ? { ...parsedOrder, merchant_id: parsedOrder.merchant_id.toLowerCase() }
+        : parsedOrder;
 
     const {
       merchant_id,

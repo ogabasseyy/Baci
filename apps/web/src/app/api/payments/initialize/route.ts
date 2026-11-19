@@ -1062,6 +1062,7 @@ export async function POST(request: NextRequest) {
     const retired = retiredGatewayResponse(data.gateway);
     if (retired) return retired;
     if (data.payment_method === 'bank_card_offer') {
+      const merchantId = data.merchant_id.toLowerCase();
       const auth = await authenticateApiRequest(request);
       if (
         !auth.user ||
@@ -1077,12 +1078,12 @@ export async function POST(request: NextRequest) {
       const client = createStorefrontOrderRpcClient({
         fallbackClient: await createServerSupabaseClient(),
         hasCanonicalDeliveryMetadata: false,
-        merchantId: data.merchant_id,
+        merchantId,
         userId: auth.user.id,
       });
       const result = await initializeBankCardOfferCheckout({
         client,
-        merchantId: data.merchant_id,
+        merchantId,
         orderId: data.order_id,
         email: data.customer_email,
         currency: data.currency,

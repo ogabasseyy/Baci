@@ -55,6 +55,7 @@ describe('executeClaimedOrderShipmentBooking', () => {
         existingOrder,
         paymentStatus: 'paid',
         lockToken: 'lock-1',
+        runBooking: runClaimedOrderWalletOrCheckoutBooking,
       })
     ).rejects.toThrow();
 
@@ -87,6 +88,7 @@ describe('executeClaimedOrderShipmentBooking', () => {
       },
       paymentStatus: 'paid',
       lockToken: 'lock-1',
+      runBooking: runClaimedOrderWalletOrCheckoutBooking,
     }).catch((e: unknown) => e);
 
     expect((error as Error).message).not.toMatch(/15 minutes/);

@@ -443,6 +443,86 @@ export class LiveRankIndexEngine {
     }
   }
 
+  private isSubmissionEligible(submission: QuizLiveRankSubmission): boolean {
+    return !(
+      this.controlState.isAttemptBlocked(
+        submission.eventId,
+        submission.attemptId,
+        submission.customerId
+      ) ||
+      this.controlState.isAttemptDisqualified(submission.attemptId) ||
+      this.controlState.isTesterRevoked(submission.eventId, submission.userId)
+    );
+  }
+
+  private recordSubmissionInTxSync(submission: QuizLiveRankSubmission): {
+    accepted: boolean;
+    replacedPreviousBest: boolean;
+  } {
+    if (!this.isSubmissionEligible(submission)) {
+      return { accepted: false, replacedPreviousBest: false };
+    }
+
+    const state = this.loadOrInitEventStateSync(
+      submission.eventId,
+      submission.merchantId
+    );
+    if (state.merchantId === 'unknown') {
+      state.merchantId = submission.merchantId;
+    }
+
+    const candidate: LiveRankEntry = {
+      customerId: submission.customerId,
+      userId: submission.userId,
+      merchantId: submission.merchantId,
+      attemptId: submission.attemptId,
+      leaderboardUsername: submission.leaderboardUsername.trim(),
+      score: submission.score,
+      elapsedMs: submission.elapsedMs,
+      submittedAtMs: submission.submittedAtMs,
+      attemptStatus: submission.attemptStatus,
+    };
+
+    const prev = state.customerCurrentEntry.get(submission.customerId);
+    if (prev) {
+      // Out-of-order / worse second attempt never overwrites a better eligible attempt.
+      if (compareLiveRankKeys(candidate, prev) >= 0) {
+        return { accepted: false, replacedPreviousBest: false };
+      }
+      this.removeEntryFromRanges(state, prev);
+      state.attemptToCustomer.delete(prev.attemptId);
+    }
+
+    this.storage.exec(
+      `INSERT INTO live_submissions (
+        event_id, customer_id, user_id, merchant_id, attempt_id,
+        leaderboard_username, score, elapsed_ms, submitted_at_ms, attempt_status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(event_id, customer_id) DO UPDATE SET
+        attempt_id = excluded.attempt_id,
+        leaderboard_username = excluded.leaderboard_username,
+        score = excluded.score,
+        elapsed_ms = excluded.elapsed_ms,
+        submitted_at_ms = excluded.submitted_at_ms,
+        attempt_status = excluded.attempt_status`,
+      submission.eventId,
+      submission.customerId,
+      submission.userId,
+      submission.merchantId,
+      submission.attemptId,
+      candidate.leaderboardUsername,
+      submission.score,
+      submission.elapsedMs,
+      submission.submittedAtMs,
+      submission.attemptStatus
+    );
+
+    this.insertEntryIntoRanges(state, candidate);
+    state.customerCurrentEntry.set(submission.customerId, candidate);
+    state.attemptToCustomer.set(submission.attemptId, submission.customerId);
+    return { accepted: true, replacedPreviousBest: prev !== undefined };
+  }
+
   /**
    * Records an eligible submission. Stores the player's ordering key ONCE in
    * `live_submissions` (keeping only the best eligible attempt per customer)
@@ -452,77 +532,43 @@ export class LiveRankIndexEngine {
     accepted: boolean;
     replacedPreviousBest: boolean;
   } {
-    if (
-      this.controlState.isAttemptBlocked(
-        submission.eventId,
-        submission.attemptId,
-        submission.customerId
-      ) ||
-      this.controlState.isAttemptDisqualified(submission.attemptId) ||
-      this.controlState.isTesterRevoked(submission.eventId, submission.userId)
-    ) {
+    if (!this.isSubmissionEligible(submission)) {
       return { accepted: false, replacedPreviousBest: false };
     }
+    return this.storage.transactionSync(() =>
+      this.recordSubmissionInTxSync(submission)
+    );
+  }
 
+  /**
+   * Records a batch of submissions in a single SQLite transaction and
+   * optionally publishes the updated range snapshot in the same call.
+   */
+  recordSubmissionsBatch(
+    submissions: readonly QuizLiveRankSubmission[],
+    publishNowMs?: number
+  ): {
+    acceptedCount: number;
+    replacedCount: number;
+    published: LiveRankPublishResult | null;
+  } {
+    if (submissions.length === 0) {
+      return { acceptedCount: 0, replacedCount: 0, published: null };
+    }
     return this.storage.transactionSync(() => {
-      const state = this.loadOrInitEventStateSync(
-        submission.eventId,
-        submission.merchantId
-      );
-      if (state.merchantId === 'unknown') {
-        state.merchantId = submission.merchantId;
+      let acceptedCount = 0;
+      let replacedCount = 0;
+      for (const submission of submissions) {
+        const res = this.recordSubmissionInTxSync(submission);
+        if (res.accepted) acceptedCount += 1;
+        if (res.replacedPreviousBest) replacedCount += 1;
       }
-
-      const candidate: LiveRankEntry = {
-        customerId: submission.customerId,
-        userId: submission.userId,
-        merchantId: submission.merchantId,
-        attemptId: submission.attemptId,
-        leaderboardUsername: submission.leaderboardUsername.trim(),
-        score: submission.score,
-        elapsedMs: submission.elapsedMs,
-        submittedAtMs: submission.submittedAtMs,
-        attemptStatus: submission.attemptStatus,
-      };
-
-      const prev = state.customerCurrentEntry.get(submission.customerId);
-      if (prev) {
-        // Out-of-order / worse second attempt never overwrites a better eligible attempt.
-        if (compareLiveRankKeys(candidate, prev) >= 0) {
-          return { accepted: false, replacedPreviousBest: false };
-        }
-        this.removeEntryFromRanges(state, prev);
-        state.attemptToCustomer.delete(prev.attemptId);
-      }
-
-      this.storage.exec(
-        `INSERT INTO live_submissions (
-          event_id, customer_id, user_id, merchant_id, attempt_id,
-          leaderboard_username, score, elapsed_ms, submitted_at_ms, attempt_status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(event_id, customer_id) DO UPDATE SET
-          attempt_id = excluded.attempt_id,
-          leaderboard_username = excluded.leaderboard_username,
-          score = excluded.score,
-          elapsed_ms = excluded.elapsed_ms,
-          submitted_at_ms = excluded.submitted_at_ms,
-          attempt_status = excluded.attempt_status`,
-        submission.eventId,
-        submission.customerId,
-        submission.userId,
-        submission.merchantId,
-        submission.attemptId,
-        candidate.leaderboardUsername,
-        submission.score,
-        submission.elapsedMs,
-        submission.submittedAtMs,
-        submission.attemptStatus
-      );
-
-      this.insertEntryIntoRanges(state, candidate);
-      state.customerCurrentEntry.set(submission.customerId, candidate);
-      state.attemptToCustomer.set(submission.attemptId, submission.customerId);
-      return { accepted: true, replacedPreviousBest: prev !== undefined };
+      const eventId = submissions[0]?.eventId;
+      const published =
+        publishNowMs !== undefined && eventId
+          ? this.publishSnapshotInTxSync(eventId, publishNowMs)
+          : null;
+      return { acceptedCount, replacedCount, published };
     });
   }
 
@@ -555,107 +601,114 @@ export class LiveRankIndexEngine {
    * nothing changed since the previous version.
    */
   publishSnapshot(eventId: string, nowMs = Date.now()): LiveRankPublishResult {
-    return this.storage.transactionSync(() => {
-      const state = this.loadOrInitEventStateSync(eventId);
-      const dirtyRanges = state.ranges.filter((r) => r.dirty);
-      if (
-        !state.dirtyStructure &&
-        dirtyRanges.length === 0 &&
-        state.deletedRangeIds.size === 0
-      ) {
-        return {
-          version: state.version,
-          published: false,
-          dirtyRangesWritten: 0,
-          totalRanges: state.ranges.length,
-          totalEntries: state.customerCurrentEntry.size,
-          rowsWrittenThisTick: 0,
-          bytesWrittenThisTick: 0,
-        };
-      }
+    return this.storage.transactionSync(() =>
+      this.publishSnapshotInTxSync(eventId, nowMs)
+    );
+  }
 
-      const nextVersion = state.version + 1;
-      let rowsWrittenThisTick = 0;
-      let bytesWrittenThisTick = 0;
-
-      for (const deletedId of state.deletedRangeIds) {
-        const res = this.storage.exec(
-          `DELETE FROM live_rank_ranges WHERE event_id = ? AND range_id = ?`,
-          eventId,
-          deletedId
-        );
-        rowsWrittenThisTick += res.rowsWritten;
-      }
-      state.deletedRangeIds.clear();
-
-      for (const range of dirtyRanges) {
-        range.version = nextVersion;
-        range.dirty = false;
-        const encoded = JSON.stringify(range.entries);
-        bytesWrittenThisTick += encoded.length;
-        const res = this.storage.exec(
-          `INSERT INTO live_rank_ranges (event_id, range_id, entries_json, version)
-           VALUES (?, ?, ?, ?)
-           ON CONFLICT(event_id, range_id) DO UPDATE SET
-             entries_json = excluded.entries_json,
-             version = excluded.version`,
-          eventId,
-          range.rangeId,
-          encoded,
-          nextVersion
-        );
-        rowsWrittenThisTick += res.rowsWritten;
-      }
-
-      let prefixBeforeCount = 0;
-      const rangeMetas: LiveRankRangeMeta[] = [];
-      for (const range of state.ranges) {
-        const first = range.entries[0];
-        const last = range.entries[range.entries.length - 1];
-        if (!first || !last) continue;
-        rangeMetas.push({
-          rangeId: range.rangeId,
-          minKey: toOrderingKey(first),
-          maxKey: toOrderingKey(last),
-          count: range.entries.length,
-          prefixBeforeCount,
-          version: range.version,
-        });
-        prefixBeforeCount += range.entries.length;
-      }
-
-      const manifest: LiveRankManifest = {
-        eventId,
-        merchantId: state.merchantId,
-        version: nextVersion,
-        totalCount: prefixBeforeCount,
-        updatedAtMs: nowMs,
-        ranges: rangeMetas,
-      };
-      const manifestEncoded = JSON.stringify(manifest);
-      bytesWrittenThisTick += manifestEncoded.length;
-      const manifestRes = this.storage.exec(
-        `INSERT INTO live_rank_manifest (event_id, manifest_json)
-         VALUES (?, ?)
-         ON CONFLICT(event_id) DO UPDATE SET manifest_json = excluded.manifest_json`,
-        eventId,
-        manifestEncoded
-      );
-      rowsWrittenThisTick += manifestRes.rowsWritten;
-
-      state.version = nextVersion;
-      state.dirtyStructure = false;
-
+  private publishSnapshotInTxSync(
+    eventId: string,
+    nowMs: number
+  ): LiveRankPublishResult {
+    const state = this.loadOrInitEventStateSync(eventId);
+    const dirtyRanges = state.ranges.filter((r) => r.dirty);
+    if (
+      !state.dirtyStructure &&
+      dirtyRanges.length === 0 &&
+      state.deletedRangeIds.size === 0
+    ) {
       return {
-        version: nextVersion,
-        published: true,
-        dirtyRangesWritten: dirtyRanges.length,
-        totalRanges: rangeMetas.length,
-        totalEntries: prefixBeforeCount,
-        rowsWrittenThisTick,
-        bytesWrittenThisTick,
+        version: state.version,
+        published: false,
+        dirtyRangesWritten: 0,
+        totalRanges: state.ranges.length,
+        totalEntries: state.customerCurrentEntry.size,
+        rowsWrittenThisTick: 0,
+        bytesWrittenThisTick: 0,
       };
-    });
+    }
+
+    const nextVersion = state.version + 1;
+    let rowsWrittenThisTick = 0;
+    let bytesWrittenThisTick = 0;
+
+    for (const deletedId of state.deletedRangeIds) {
+      const res = this.storage.exec(
+        `DELETE FROM live_rank_ranges WHERE event_id = ? AND range_id = ?`,
+        eventId,
+        deletedId
+      );
+      rowsWrittenThisTick += res.rowsWritten;
+    }
+    state.deletedRangeIds.clear();
+
+    for (const range of dirtyRanges) {
+      range.version = nextVersion;
+      range.dirty = false;
+      const encoded = JSON.stringify(range.entries);
+      bytesWrittenThisTick += encoded.length;
+      const res = this.storage.exec(
+        `INSERT INTO live_rank_ranges (event_id, range_id, entries_json, version)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(event_id, range_id) DO UPDATE SET
+           entries_json = excluded.entries_json,
+           version = excluded.version`,
+        eventId,
+        range.rangeId,
+        encoded,
+        nextVersion
+      );
+      rowsWrittenThisTick += res.rowsWritten;
+    }
+
+    let prefixBeforeCount = 0;
+    const rangeMetas: LiveRankRangeMeta[] = [];
+    for (const range of state.ranges) {
+      const first = range.entries[0];
+      const last = range.entries[range.entries.length - 1];
+      if (!first || !last) continue;
+      rangeMetas.push({
+        rangeId: range.rangeId,
+        minKey: toOrderingKey(first),
+        maxKey: toOrderingKey(last),
+        count: range.entries.length,
+        prefixBeforeCount,
+        version: range.version,
+      });
+      prefixBeforeCount += range.entries.length;
+    }
+
+    const manifest: LiveRankManifest = {
+      eventId,
+      merchantId: state.merchantId,
+      version: nextVersion,
+      totalCount: prefixBeforeCount,
+      updatedAtMs: nowMs,
+      ranges: rangeMetas,
+    };
+    const manifestEncoded = JSON.stringify(manifest);
+    bytesWrittenThisTick += manifestEncoded.length;
+    const manifestRes = this.storage.exec(
+      `INSERT INTO live_rank_manifest (event_id, manifest_json)
+       VALUES (?, ?)
+       ON CONFLICT(event_id) DO UPDATE SET manifest_json = excluded.manifest_json`,
+      eventId,
+      manifestEncoded
+    );
+    rowsWrittenThisTick += manifestRes.rowsWritten;
+
+    state.version = nextVersion;
+    state.dirtyStructure = false;
+
+    return {
+      version: nextVersion,
+      published: true,
+      dirtyRangesWritten: dirtyRanges.length,
+      totalRanges: rangeMetas.length,
+      totalEntries: prefixBeforeCount,
+      rowsWrittenThisTick,
+      bytesWrittenThisTick,
+    };
   }
 
   getPublishedManifest(eventId: string): LiveRankManifest | null {

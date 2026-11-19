@@ -157,6 +157,21 @@ Executed Jest on `apps/mobile-storefront/components/quiz/use-quiz-result-polling
 4. **9:00 AM Live 3-Round Demo Harness (Not Executed — Operator Approval & Runbook Only)**:
    - `apps/quiz-room-prototype/bench/k6-9am-demo-rounds.js` + `apps/quiz-room-prototype/scripts/run-9am-demo.sh` orchestrate Round 1 (`10` humans), Round 2 (`10` humans + `490` k6 bots in `room-0000`), and Round 3 (`10` humans + `4,990` k6 bots across `13` rooms with chaos flags), guarded by an exit `trap` that auto-deletes the 1-hour XL temporary Supabase branch and saves `/demo/report?format=json`.
 
+### 1.8 Live 10-Player Nigerian Carrier Probe & Cloudflare DO Alarm/Fan-Out Fix (`2026-11-19`)
+
+Executed the `$0.00` incremental-spend Step 1 field probe (`carrier-probe-weur-1`) on the isolated prototype Worker (`baci-quiz-room-prototype.ogabassey-ai.workers.dev/demo`, `locationHint: 'weur'`, raw telemetry saved at `apps/quiz-room-prototype/bench/reports/demo-20261119-nigeria-10p-final.json`):
+
+- **Verified Field Telemetry (`79` authenticated, deduplicated taps; `0` retries; `0` timeouts)**:
+  - **Self-report verification**: `30` of `79` taps (`38.0%` of taps, `50%` of carrier-tagged cohorts) differed from Cloudflare `request.cf` ASN classification (e.g., iCloud Private Relay `AS13335` & `AS209854` tapping `Airtel`/`MTN`; `MTN AS29465` tapping `Glo`), confirming server-side `request.cf` classification prevented silent carrier skew.
+  - **MTN Nigeria (`AS29465`, `AMS`/`NBO`)**: `54` taps — **`252 ms` p50**, `1,591 ms` p95, `10,889 ms` max, **`92.6% <= 1 s`**, `0` retries/timeouts.
+  - **Airtel Nigeria (`AS36873`, `CDG`)**: `5` taps — **`370 ms` p50**, `2,516 ms` p95, `80.0% <= 1 s`, `0` retries/timeouts.
+  - **iCloud Private Relay / Cloudflare (`AS13335`, `LHR`)**: `10` taps — **`212 ms` p50**, `331 ms` p95, `100.0% <= 1 s`.
+  - **VPN / Proxy (`AS209854`, `ORD`)**: `10` taps — **`368 ms` p50**, `420 ms` p95, `100.0% <= 1 s`.
+  - **Client timeout guidance**: Because Nigerian cellular tails reached `1.6–2.5 s` p95 and `10.9 s` max while keeping `0` retries/timeouts, mobile/web clients should keep answer-submit request timeouts at **`8 s–12 s`** (never aggressive `2 s` aborts).
+- **Cloudflare DO Idle-Alarm & `N+1` Live-Rank Fan-Out Fix**:
+  - Live telemetry caught two amplification bugs in `carrier-probe-weur-1`: (1) `QuizRoomEngine.startAttempt()` armed `nextScoreboardTickMs` before any completion and `onAlarm()` unconditionally re-armed a 2s alarm until `endsAtMs` (waking idle rooms every 2s for 14h); and (2) `onAlarm()` queried all `status = 'submitted'` attempts and `QuizRoomDO` looped `N` `/internal/submit` + `1` `/internal/publish` calls (`N + 1` DO RPCs per tick).
+  - Fixed via demand-driven `room_scoreboard_outbox` in `src/room-do.ts` (arming scoreboard ticks only upon attempt submission and clearing `nextScoreboardTickMs` to `null` once pending outbox rows are drained) and `LiveRankIndexEngine.recordSubmissionsBatch` + `POST /internal/submit-batch` (`1` batched DO call per tick with zero duplicate re-emissions).
+
 ---
 
 ## Section 2: Updated 100,000 & 1,000,000 Live Event Cost Model (From Measured Counters)

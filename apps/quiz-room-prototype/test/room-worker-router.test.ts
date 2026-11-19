@@ -20,6 +20,7 @@ vi.mock('cloudflare:workers', () => ({
 const {
   default: worker,
   QuizRoomDO,
+  LiveRankIndexDO,
   EventCoordinatorDO,
 } = await import('../src/index');
 
@@ -673,6 +674,255 @@ describe('Worker HTTP router (src/index.ts)', () => {
     expect(await okRes.json()).toMatchObject({ status: 'in_progress' });
 
     roomAdapter.close();
+    coordAdapter.close();
+  });
+
+  it('batches QuizRoomDO live scoreboard completions into 1 /internal/submit-batch DO call without duplicate ticks', async () => {
+    const roomAdapter = new NodeSqliteAdapter(':memory:');
+    const rankAdapter = new NodeSqliteAdapter(':memory:');
+    const coordAdapter = new NodeSqliteAdapter(':memory:');
+    const nowMs = Date.now();
+    const startsAtMs = nowMs - 1_000;
+    const endsAtMs = nowMs + 120_000;
+    const rankFetches: string[] = [];
+    let currentAlarm: number | null = null;
+
+    const wrapAdapter = (adapter: NodeSqliteAdapter) => ({
+      sql: {
+        exec: (q: string, ...b: unknown[]) => {
+          const res = adapter.exec(q, ...(b as never[]));
+          return {
+            toArray: () => res.rows,
+            rowsRead: res.rowsRead,
+            rowsWritten: res.rowsWritten,
+          };
+        },
+      },
+      transactionSync: <T>(fn: () => T) => adapter.transactionSync(fn),
+      getAlarm: () => Promise.resolve(currentAlarm),
+      setAlarm: (ms: number | Date) => {
+        currentAlarm = typeof ms === 'number' ? ms : ms.getTime();
+        return Promise.resolve();
+      },
+      deleteAlarm: () => {
+        currentAlarm = null;
+        return Promise.resolve();
+      },
+      deleteAll: () => Promise.resolve(),
+    });
+
+    let liveRankDo!: InstanceType<typeof LiveRankIndexDO>;
+    const workerEnv = {
+      QUIZ_TICKET_SECRET: TICKET_SECRET,
+      QUIZ_JWT_SECRET: JWT_SECRET,
+      QUIZ_INTERNAL_COORDINATOR_SECRET: 'coord-secret-batch',
+      RESULT_SHARD_COUNT: '4',
+      QUIZ_ROOM: createStubNamespace(() => ({ ok: true })),
+      LIVE_RANK_INDEX: {
+        idFromName: (name: string) => name,
+        get: () => ({
+          fetch: (input: string, init?: RequestInit) => {
+            rankFetches.push(new URL(input).pathname);
+            return liveRankDo.fetch(new Request(input, init));
+          },
+        }),
+      },
+      RESULT_SHARD: createStubNamespace(() => ({ ok: true })),
+      EVENT_COORDINATOR: {
+        idFromName: (name: string) => name,
+        get: () => ({
+          fetch: (input: string, init?: RequestInit) =>
+            coordDo.fetch(new Request(input, init)),
+        }),
+      },
+      DEMO_STATE: createStubNamespace(() => ({ ok: true })),
+    };
+
+    liveRankDo = new LiveRankIndexDO(
+      {
+        id: { name: 'evt-batch-1', toString: () => 'r'.repeat(64) },
+        storage: wrapAdapter(rankAdapter),
+      } as never,
+      workerEnv as never
+    );
+    const coordDo = new EventCoordinatorDO(
+      {
+        id: { name: 'evt-batch-1', toString: () => 'c'.repeat(64) },
+        storage: wrapAdapter(coordAdapter),
+      } as never,
+      workerEnv as never
+    );
+    const roomDo = new QuizRoomDO(
+      {
+        id: { name: 'evt-batch-1:room-0000', toString: () => 'q'.repeat(64) },
+        storage: wrapAdapter(roomAdapter),
+      } as never,
+      workerEnv as never
+    );
+
+    await worker.fetch(
+      new Request('https://quiz.example.com/api/quiz/admin/control-state', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer coord-secret-batch' },
+        body: JSON.stringify({
+          eventId: 'evt-batch-1',
+          snapshot: {
+            version: 1,
+            updatedAtMs: nowMs,
+            cancelledEvents: {},
+            blockedAttemptIds: [],
+            blockedCustomerKeys: [],
+            revokedTesterKeys: [],
+            disqualifiedAttemptIds: [],
+            suppressedAttemptIds: [],
+            deletedCustomerIds: [],
+            publishedEvents: {},
+          },
+        }),
+      }),
+      workerEnv as never
+    );
+
+    const answerHash = await quizAnswerKeyHash('opt-a');
+    await roomDo.fetch(
+      new Request('https://room.internal/internal/init', {
+        method: 'POST',
+        body: JSON.stringify({
+          eventId: 'evt-batch-1',
+          merchantId: 'merch-1',
+          mode: 'live',
+          contractVersion: 2,
+          rulesVersion: 'live-v1',
+          questionCount: 2,
+          timePerQuestionSeconds: 10,
+          maxAttempts: 1,
+          startsAtMs,
+          endsAtMs,
+          scoreboardTickMs: 1_000,
+          flushTickMs: 60_000,
+          status: 'active',
+          slots: [1, 2].map((qNum) => ({
+            id: `00000000-0000-4000-8000-${String(qNum).padStart(12, '0')}`,
+            slotIndex: qNum,
+            active: true,
+            variants: [
+              {
+                id: `10000000-0000-4000-8000-${String(qNum).padStart(12, '0')}`,
+                slotId: `00000000-0000-4000-8000-${String(qNum).padStart(12, '0')}`,
+                prompt: `Q${qNum}`,
+                options: [
+                  { id: 'opt-a', label: 'A' },
+                  { id: 'opt-b', label: 'B' },
+                ],
+                answerKeyHash: answerHash,
+                active: true,
+              },
+            ],
+          })),
+        }),
+      })
+    );
+
+    const completePlayer = async (idx: number) => {
+      const ticket: QuizAdmissionTicket = {
+        userId: `u-b-${idx}`,
+        customerId: `c-b-${idx}`,
+        merchantId: 'merch-1',
+        eventId: 'evt-batch-1',
+        roomId: 'evt-batch-1:room-0000',
+        deviceHash: String(idx).padStart(64, '0'),
+        leaderboardUsername: `BatchPlayer${idx}`,
+        expiresAtMs: endsAtMs + 60_000,
+      };
+      const startRes = await roomDo.fetch(
+        new Request('https://room.internal/internal/start', {
+          method: 'POST',
+          body: JSON.stringify({
+            ticket,
+            integrityTier: 'basic',
+            acceptedRulesVersion: 'live-v1',
+            termsAccepted: true,
+            startRequestId: `req-b-${idx}`,
+            appVersion: '1.0',
+            platform: 'web',
+          }),
+        })
+      );
+      let state = (await startRes.json()) as {
+        attemptId: string;
+        question?: { id: string };
+      };
+      for (let q = 0; q < 2; q += 1) {
+        const ansRes = await roomDo.fetch(
+          new Request('https://room.internal/internal/answer', {
+            method: 'POST',
+            body: JSON.stringify({
+              ticket,
+              attemptId: state.attemptId,
+              questionId: state.question?.id ?? '',
+              answer: q < idx ? 'opt-a' : 'opt-b',
+            }),
+          })
+        );
+        state = (await ansRes.json()) as typeof state;
+      }
+    };
+
+    await completePlayer(1);
+    await completePlayer(2);
+
+    // Wait past scoreboardTickMs (1_000ms) and trigger alarm
+    const engine = (
+      roomDo as unknown as {
+        engine: {
+          onAlarm: (ms: number) => Promise<{ scoreboardTicked: boolean }>;
+        };
+      }
+    ).engine;
+    const firstTick = await engine.onAlarm(Date.now() + 2_000);
+    expect(firstTick.scoreboardTicked).toBe(true);
+    expect(rankFetches).toEqual(['/internal/submit-batch']);
+
+    // Second alarm sends 0 duplicate submissions
+    const secondTick = await engine.onAlarm(Date.now() + 5_000);
+    expect(secondTick.scoreboardTicked).toBe(false);
+    expect(rankFetches).toEqual(['/internal/submit-batch']);
+
+    // /api/quiz/leaderboard/live reflects both players from that single batched DO call
+    const bearer = await signBearerJwt(
+      {
+        sub: 'u-b-2',
+        merchantId: 'merch-1',
+        customerId: 'c-b-2',
+        exp: Math.floor((endsAtMs + 3_600_000) / 1000),
+      },
+      JWT_SECRET
+    );
+    const liveRes = await worker.fetch(
+      new Request(
+        'https://quiz.example.com/api/quiz/leaderboard/live?eventId=evt-batch-1',
+        { headers: { Authorization: `Bearer ${bearer}` } }
+      ),
+      workerEnv as never
+    );
+    expect(liveRes.status).toBe(200);
+    const liveJson = (await liveRes.json()) as {
+      participantCount: number;
+      entries: { rank: number; displayName: string; score: number }[];
+    };
+    expect(liveJson.participantCount).toBe(2);
+    expect(liveJson.entries[0]).toMatchObject({
+      rank: 1,
+      displayName: 'BatchPlayer2',
+      score: 2,
+    });
+    expect(rankFetches).toEqual([
+      '/internal/submit-batch',
+      '/internal/leaderboard',
+    ]);
+
+    roomAdapter.close();
+    rankAdapter.close();
     coordAdapter.close();
   });
 });

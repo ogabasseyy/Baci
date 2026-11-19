@@ -445,8 +445,8 @@ describe('QuizRoomEngine gameplay, deadlines, restarts, and SQLite counters', ()
       platform: 'ios',
       nowMs: startsAtMs + 1_000,
     });
-    // Chained alarm should now be MIN(scoreboard_tick=startsAt+3000, ends_at)
-    expect(room.getNextAlarmMs()).toBe(startsAtMs + 3_000);
+    // Demand-driven alarm stays at endsAtMs while zero attempts are submitted
+    expect(room.getNextAlarmMs()).toBe(endsAtMs);
 
     let s2 = room.startAttempt({
       ticket: t2,
@@ -483,14 +483,21 @@ describe('QuizRoomEngine gameplay, deadlines, restarts, and SQLite counters', ()
       });
     }
 
-    // Both finished in exact same elapsedMs = 1000ms (2000-1000 and 2001-1001),
-    // differing by 1ms in submittedAtMs!
-    // Fire alarm at startsAtMs + 3_000 -> flushes batches AND fires scoreboard tick
-    const alarm1 = await room.onAlarm(startsAtMs + 3_000);
+    // Completing Q10 at startsAtMs+2000 armed flushTick (+3000) and scoreboardTick (+4000)
+    expect(room.getNextAlarmMs()).toBe(startsAtMs + 3_000);
+
+    // Fire alarm at startsAtMs + 4_000 -> flushes batches, delivers 2 submissions ONCE, and returns alarm to endsAtMs
+    const alarm1 = await room.onAlarm(startsAtMs + 4_000);
     expect(alarm1.flushedBatches).toBeGreaterThanOrEqual(1);
     expect(alarm1.scoreboardTicked).toBe(true);
     expect(publishedBatchIds.length).toBeGreaterThanOrEqual(1);
-    expect(tickSubmissions[0]).toBe(2);
+    expect(tickSubmissions).toEqual([2]);
+    expect(room.getNextAlarmMs()).toBe(endsAtMs);
+
+    // Subsequent idle tick at startsAtMs + 6_000 does NOT re-emit already-delivered submissions
+    const alarmIdle = await room.onAlarm(startsAtMs + 6_000);
+    expect(alarmIdle.scoreboardTicked).toBe(false);
+    expect(tickSubmissions).toEqual([2]);
 
     const batch = room.getJournalBatch(publishedBatchIds[0] ?? '');
     const b1 = batch?.bundles.find((b) => b.customerId === 'c-tie-1');

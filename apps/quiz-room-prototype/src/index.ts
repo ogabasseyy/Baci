@@ -146,27 +146,38 @@ export class QuizRoomDO extends DurableObject<WorkerEnv> {
         onScoreboardTick: async (tick) => {
           if (!env.LIVE_RANK_INDEX || tick.submissions.length === 0) return;
           const rankStub = getWeurStub(env.LIVE_RANK_INDEX, tick.eventId);
-          for (const s of tick.submissions) {
-            await rankStub.fetch('https://rank.internal/internal/submit', {
+          const submissions: QuizLiveRankSubmission[] = tick.submissions.map(
+            (s) => ({
+              eventId: tick.eventId,
+              merchantId: tick.merchantId,
+              attemptId: s.attemptId,
+              customerId: s.customerId,
+              userId: s.userId,
+              leaderboardUsername: s.leaderboardUsername,
+              score: s.score,
+              elapsedMs: s.elapsedMs,
+              submittedAtMs: s.submittedAtMs,
+              attemptStatus: 'submitted',
+            })
+          );
+          const res = await rankStub.fetch(
+            'https://rank.internal/internal/submit-batch',
+            {
               method: 'POST',
               body: JSON.stringify({
                 eventId: tick.eventId,
-                merchantId: tick.merchantId,
-                attemptId: s.attemptId,
-                customerId: s.customerId,
-                userId: s.userId,
-                leaderboardUsername: s.leaderboardUsername,
-                score: s.score,
-                elapsedMs: s.elapsedMs,
-                submittedAtMs: s.submittedAtMs,
-                attemptStatus: 'submitted',
-              } satisfies QuizLiveRankSubmission),
-            });
+                submissions,
+                publish: true,
+              }),
+            }
+          );
+          if (!res.ok) {
+            throw new QuizRoomError(
+              'QUIZ_LIVE_RANK_SYNC_FAILED',
+              `Live rank batch sync failed (${res.status})`,
+              res.status
+            );
           }
-          await rankStub.fetch('https://rank.internal/internal/publish', {
-            method: 'POST',
-            body: JSON.stringify({ eventId: tick.eventId }),
-          });
         },
       },
     });
@@ -290,6 +301,20 @@ export class LiveRankIndexDO extends DurableObject<WorkerEnv> {
   async fetch(request: Request): Promise<Response> {
     try {
       const url = new URL(request.url);
+      if (
+        request.method === 'POST' &&
+        url.pathname === '/internal/submit-batch'
+      ) {
+        const body = await readJsonBody<{
+          eventId?: string;
+          submissions: readonly QuizLiveRankSubmission[];
+          publish?: boolean;
+        }>(request);
+        const publishNowMs = body.publish === false ? undefined : Date.now();
+        return jsonResponse(
+          this.engine.recordSubmissionsBatch(body.submissions, publishNowMs)
+        );
+      }
       if (request.method === 'POST' && url.pathname === '/internal/submit') {
         const body = await readJsonBody<QuizLiveRankSubmission>(request);
         return jsonResponse(this.engine.recordSubmission(body));

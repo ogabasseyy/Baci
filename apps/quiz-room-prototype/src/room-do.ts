@@ -315,6 +315,10 @@ export class QuizRoomEngine {
         attempt_id TEXT PRIMARY KEY
       ) WITHOUT ROWID;
 
+      CREATE TABLE IF NOT EXISTS room_scoreboard_outbox (
+        attempt_id TEXT PRIMARY KEY
+      ) WITHOUT ROWID;
+
       CREATE TABLE IF NOT EXISTS room_batches (
         batch_id TEXT PRIMARY KEY,
         seq INTEGER NOT NULL,
@@ -423,6 +427,37 @@ export class QuizRoomEngine {
     const minTs = Math.min(...candidates);
     this.storage.setAlarm(minTs);
     return minTs;
+  }
+
+  private enqueueSubmittedAttemptSync(
+    attemptId: string,
+    config: QuizEventConfig,
+    alarmState: RoomAlarmState,
+    nowMs: number
+  ): RoomAlarmState {
+    this.storage.exec(
+      `INSERT INTO room_outbox (attempt_id) VALUES (?) ON CONFLICT(attempt_id) DO NOTHING`,
+      attemptId
+    );
+    if (alarmState.sealed || nowMs >= config.endsAtMs) {
+      return alarmState;
+    }
+    this.storage.exec(
+      `INSERT INTO room_scoreboard_outbox (attempt_id) VALUES (?) ON CONFLICT(attempt_id) DO NOTHING`,
+      attemptId
+    );
+    const updatedAlarm: RoomAlarmState = {
+      ...alarmState,
+      nextFlushTickMs:
+        alarmState.nextFlushTickMs ??
+        nowMs + (config.flushTickMs ?? DEFAULT_FLUSH_TICK_MS),
+      nextScoreboardTickMs:
+        alarmState.nextScoreboardTickMs ??
+        nowMs + (config.scoreboardTickMs ?? DEFAULT_SCOREBOARD_TICK_MS),
+    };
+    this.writeAlarmStateSync(updatedAlarm);
+    this.scheduleNextAlarmSync(config, updatedAlarm);
+    return updatedAlarm;
   }
 
   initialize(config: QuizEventConfig): void {
@@ -714,9 +749,11 @@ export class QuizRoomEngine {
             nowMs,
             attempt.attempt_id
           );
-          this.storage.exec(
-            `INSERT INTO room_outbox (attempt_id) VALUES (?) ON CONFLICT(attempt_id) DO NOTHING`,
-            attempt.attempt_id
+          this.enqueueSubmittedAttemptSync(
+            attempt.attempt_id,
+            config,
+            alarmState,
+            nowMs
           );
           return {
             attemptId: attempt.attempt_id,
@@ -757,9 +794,11 @@ export class QuizRoomEngine {
         submittedAtMs,
         attempt.attempt_id
       );
-      this.storage.exec(
-        `INSERT INTO room_outbox (attempt_id) VALUES (?) ON CONFLICT(attempt_id) DO NOTHING`,
-        attempt.attempt_id
+      this.enqueueSubmittedAttemptSync(
+        attempt.attempt_id,
+        config,
+        alarmState,
+        nowMs
       );
       return {
         attemptId: attempt.attempt_id,
@@ -939,15 +978,6 @@ export class QuizRoomEngine {
         JSON.stringify(plans)
       );
 
-      const updatedAlarm: RoomAlarmState = {
-        ...alarmState,
-        nextScoreboardTickMs:
-          alarmState.nextScoreboardTickMs ??
-          nowMs + (config.scoreboardTickMs ?? DEFAULT_SCOREBOARD_TICK_MS),
-      };
-      this.writeAlarmStateSync(updatedAlarm);
-      this.scheduleNextAlarmSync(config, updatedAlarm);
-
       const createdRow: AttemptRow = {
         attempt_id: attemptId,
         admission_id: admissionId,
@@ -975,7 +1005,7 @@ export class QuizRoomEngine {
       return this.projectAttemptStateSync(
         createdRow,
         config,
-        updatedAlarm,
+        alarmState,
         nowMs,
         false
       );
@@ -1113,18 +1143,12 @@ export class QuizRoomEngine {
           scoreDelta,
           attemptRow.attempt_id
         );
-        this.storage.exec(
-          `INSERT INTO room_outbox (attempt_id) VALUES (?) ON CONFLICT(attempt_id) DO NOTHING`,
-          attemptRow.attempt_id
+        latestAlarmState = this.enqueueSubmittedAttemptSync(
+          attemptRow.attempt_id,
+          config,
+          alarmState,
+          nowMs
         );
-        latestAlarmState = {
-          ...alarmState,
-          nextFlushTickMs:
-            alarmState.nextFlushTickMs ??
-            nowMs + (config.flushTickMs ?? DEFAULT_FLUSH_TICK_MS),
-        };
-        this.writeAlarmStateSync(latestAlarmState);
-        this.scheduleNextAlarmSync(config, latestAlarmState);
         updatedAttempt = {
           ...attemptRow,
           status: 'submitted',
@@ -1700,37 +1724,54 @@ export class QuizRoomEngine {
       alarmState.nextScoreboardTickMs !== null &&
       nowMs >= alarmState.nextScoreboardTickMs
     ) {
-      scoreboardTicked = true;
-      if (this.hooks.onScoreboardTick) {
-        const completed = this.storage.exec<AttemptRow>(
-          `SELECT * FROM room_attempts WHERE status = 'submitted' AND submitted_at_ms IS NOT NULL`
-        ).rows;
-        await this.hooks.onScoreboardTick({
-          eventId: config.eventId,
-          merchantId: config.merchantId,
-          roomId: this.roomId,
-          tickAtMs: nowMs,
-          submissions: completed.map((a) => ({
-            attemptId: a.attempt_id,
-            customerId: a.customer_id,
-            userId: a.user_id,
-            leaderboardUsername: a.leaderboard_username,
-            score: a.score,
-            elapsedMs: Math.max(
-              0,
-              (a.submitted_at_ms ?? nowMs) - a.started_at_ms
-            ),
-            submittedAtMs: a.submitted_at_ms ?? nowMs,
-          })),
-        });
+      const pending = this.storage.exec<AttemptRow>(
+        `SELECT a.*
+         FROM room_scoreboard_outbox o
+         INNER JOIN room_attempts a ON a.attempt_id = o.attempt_id
+         WHERE a.status = 'submitted' AND a.submitted_at_ms IS NOT NULL
+         ORDER BY o.attempt_id ASC`
+      ).rows;
+      if (pending.length > 0) {
+        scoreboardTicked = true;
+        if (this.hooks.onScoreboardTick) {
+          await this.hooks.onScoreboardTick({
+            eventId: config.eventId,
+            merchantId: config.merchantId,
+            roomId: this.roomId,
+            tickAtMs: nowMs,
+            submissions: pending.map((a) => ({
+              attemptId: a.attempt_id,
+              customerId: a.customer_id,
+              userId: a.user_id,
+              leaderboardUsername: a.leaderboard_username,
+              score: a.score,
+              elapsedMs: Math.max(
+                0,
+                (a.submitted_at_ms ?? nowMs) - a.started_at_ms
+              ),
+              submittedAtMs: a.submitted_at_ms ?? nowMs,
+            })),
+          });
+        }
       }
+      const deliveredIds = pending.map((a) => a.attempt_id);
       this.storage.transactionSync(() => {
+        for (const attemptId of deliveredIds) {
+          this.storage.exec(
+            `DELETE FROM room_scoreboard_outbox WHERE attempt_id = ?`,
+            attemptId
+          );
+        }
+        const remainingRow = this.storage.exec<{ c: number }>(
+          `SELECT count(*) AS c FROM room_scoreboard_outbox`
+        ).rows[0];
+        const remaining = Number(remainingRow?.c ?? 0);
         const latest = this.getAlarmStateSync(config);
         if (!latest.sealed) {
           const updated: RoomAlarmState = {
             ...latest,
             nextScoreboardTickMs:
-              nowMs < config.endsAtMs
+              remaining > 0 && nowMs < config.endsAtMs
                 ? nowMs +
                   (config.scoreboardTickMs ?? DEFAULT_SCOREBOARD_TICK_MS)
                 : null,

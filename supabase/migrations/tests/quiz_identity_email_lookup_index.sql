@@ -38,7 +38,10 @@ BEGIN
   END IF;
 
   -- The cap trigger's identity lookup must be able to use the index. Sequential
-  -- scans are discouraged so the assertion does not depend on table size.
+  -- scans are discouraged so the assertion does not depend on table size: this
+  -- proves the index is a usable candidate for the lookup, not that the planner
+  -- picks it at production statistics. The replayed database has too few
+  -- customer rows for an unforced plan to be meaningful.
   SET LOCAL enable_seqscan = off;
   SET LOCAL enable_bitmapscan = off;
   EXECUTE $plan$

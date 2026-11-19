@@ -1,5 +1,6 @@
 import type { Readable } from 'node:stream';
 import { z } from 'zod';
+import { MAX_PUBLIC_OBSERVATION_START_BYTES } from './public-observation-resource-limit';
 
 const startFrame = z.strictObject({
   type: z.literal('start'),
@@ -9,7 +10,8 @@ const startFrame = z.strictObject({
 /** Read one start frame without consuming subsequent host replies. */
 export function readPublicObservationStart(input: Readable): Promise<unknown> {
   return new Promise((resolve, reject) => {
-    let bytes = Buffer.alloc(0);
+    const chunks: Buffer[] = [];
+    let length = 0;
     const timer = setTimeout(() => fail(), 10000);
     const clean = () => {
       clearTimeout(timer);
@@ -24,14 +26,15 @@ export function readPublicObservationStart(input: Readable): Promise<unknown> {
     };
     const onData = (chunk: Buffer | string) => {
       const data = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-      bytes = Buffer.concat([bytes, data]);
-      const end = bytes.indexOf(10);
-      if ((end < 0 && bytes.length > 8388608) || end > 8388608) return fail();
+      const end = data.indexOf(10);
+      length += end < 0 ? data.length : end;
+      if (length > MAX_PUBLIC_OBSERVATION_START_BYTES) return fail();
+      chunks.push(end < 0 ? data : data.subarray(0, end));
       if (end < 0) return;
       try {
         const value: unknown = JSON.parse(
           new TextDecoder('utf-8', { fatal: true }).decode(
-            bytes.subarray(0, end)
+            Buffer.concat(chunks, length)
           )
         );
         if (
@@ -43,7 +46,7 @@ export function readPublicObservationStart(input: Readable): Promise<unknown> {
         const parsed = startFrame.parse(value);
         input.pause();
         clean();
-        const rest = bytes.subarray(end + 1);
+        const rest = data.subarray(end + 1);
         if (rest.length) input.unshift(rest);
         resolve(parsed.payload);
       } catch {

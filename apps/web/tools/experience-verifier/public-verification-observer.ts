@@ -1,6 +1,10 @@
 import { productionOrigin } from '@/lib/experience/production-origins';
 import { runPublicObservationJob } from '../experience-runner/public-observation-executor';
-import { MAX_PUBLIC_OBSERVATION_RESOURCES } from '../experience-runner/public-observation-resource-limit';
+import {
+  MAX_PUBLIC_OBSERVATION_BYTES,
+  MAX_PUBLIC_OBSERVATION_RESOURCES,
+  MAX_PUBLIC_RESOURCE_BYTES,
+} from '../experience-runner/public-observation-resource-limit';
 import type { createPublicVerificationCoordinator } from './public-verification-coordinator';
 
 type Observe = Parameters<
@@ -75,7 +79,7 @@ export function createPublicObservationAdapter(
       throw Error('PUBLIC_OBSERVATION_INPUT_BUDGET');
     const urls = new Set<string>();
     let total = 0;
-    const encoded = resources.map((item) => {
+    for (const item of resources) {
       const url = new URL(item.url);
       if (
         url.protocol !== 'https:' ||
@@ -85,19 +89,14 @@ export function createPublicObservationAdapter(
         url.href !== item.url ||
         urls.has(item.url) ||
         !Buffer.isBuffer(item.bytes) ||
-        item.bytes.length > 2097152
+        item.bytes.length > MAX_PUBLIC_RESOURCE_BYTES
       )
         throw Error('PUBLIC_OBSERVATION_INPUT_INVALID');
       urls.add(item.url);
       total += item.bytes.length;
-      if (total > 5500000) throw Error('PUBLIC_OBSERVATION_INPUT_BUDGET');
-      return {
-        url: item.url,
-        mime: item.mime,
-        bytes: item.bytes.toString('base64'),
-        headers: item.headers,
-      };
-    });
+      if (total > MAX_PUBLIC_OBSERVATION_BYTES)
+        throw Error('PUBLIC_OBSERVATION_INPUT_BUDGET');
+    }
     const payload: Payload = {
       version: 1,
       origin: binding.canonicalBase,
@@ -110,10 +109,13 @@ export function createPublicObservationAdapter(
           : {}),
       },
       expected,
-      resources: encoded,
+      resources: resources.map((item) => ({
+        url: item.url,
+        mime: item.mime,
+        bytes: item.bytes.toString('base64'),
+        headers: item.headers,
+      })),
     };
-    if (Buffer.byteLength(JSON.stringify({ type: 'start', payload })) > 8388608)
-      throw Error('PUBLIC_OBSERVATION_INPUT_BUDGET');
     return (await run({ payload, session: relay, signal })).output;
   };
 }

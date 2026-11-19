@@ -71,7 +71,7 @@ it('assembles an isolated review candidate with exact artifact hashes and a lock
     ])
       symlinkSync(path, join(modules, name), 'dir');
     for (const [service, message] of [
-      ['builder', 'Baci builder could not start.'],
+      ['builder', 'Baci builder startup failed (identity).'],
       ['verifier', 'Baci verifier could not start.'],
       ['runner', 'Baci runner could not start.'],
       ['preflight', 'Runner preflight failed.'],

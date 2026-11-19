@@ -86,7 +86,7 @@ it('passes bounded verified bytes and the restricted relay into the isolated job
   expect(JSON.stringify(input.payload)).not.toContain('anonKey');
 });
 
-it('rejects duplicate resources, mismatched builds and excessive encoded payloads before starting the job', async () => {
+it('rejects duplicate resources, mismatched builds and excessive resource bytes before starting the job', async () => {
   const run = vi.fn();
   const observe = createPublicObservationAdapter(
     'https://project.supabase.co',
@@ -115,10 +115,11 @@ it('rejects duplicate resources, mismatched builds and excessive encoded payload
       frames
     )
   ).rejects.toThrow();
-  const large = Array.from({ length: 5 }, (_, i) => ({
+  const largeBytes = Buffer.alloc(2 * 1024 * 1024);
+  const large = Array.from({ length: 33 }, (_, i) => ({
     ...framework[0],
     url: `https://shop.example/_next/static/${i}.js`,
-    bytes: Buffer.alloc(1500000),
+    bytes: largeBytes,
   }));
   await expect(
     observe(
@@ -132,6 +133,33 @@ it('rejects duplicate resources, mismatched builds and excessive encoded payload
     )
   ).rejects.toThrow();
   expect(run).not.toHaveBeenCalled();
+});
+
+it('admits all 32 performance-sized PNG assets alongside pages and framework files', async () => {
+  const run = vi.fn(async () => ({ output: { synthetic: true } }));
+  const observe = createPublicObservationAdapter(
+    'https://project.supabase.co',
+    run
+  );
+  const png = Buffer.alloc(256 * 1024);
+  const assets = Array.from({ length: 32 }, (_, index) => ({
+    url: `https://runtime.example/published/shop/assets/${index}.png`,
+    mime: 'image/png',
+    bytes: png,
+    securityHeaders: {},
+  }));
+  await expect(
+    observe(
+      binding as never,
+      [...output, ...assets] as never,
+      pages as never,
+      expected as never,
+      vi.fn() as never,
+      framework,
+      frames
+    )
+  ).resolves.toEqual({ synthetic: true });
+  expect(run).toHaveBeenCalledOnce();
 });
 
 it('admits 64 pages and frames with 34 delivery files and 95 framework assets', async () => {

@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { build } from 'esbuild';
 import { expect, it, vi } from 'vitest';
 import { runPublicObservationJob } from './public-observation-executor';
+import { MAX_PUBLIC_OBSERVATION_START_BYTES } from './public-observation-resource-limit';
 
 it('uses one fixed helper job and accepts output only after successful process exit and cleanup', async () => {
   const command = vi.fn(async (_program: string, _args: string[]) => '');
@@ -86,7 +87,7 @@ it('does not start an oversized job or run a job after preparation failure', asy
   await expect(
     runPublicObservationJob(
       {
-        payload: 'x'.repeat(8388609),
+        payload: 'x'.repeat(MAX_PUBLIC_OBSERVATION_START_BYTES + 1),
         session: async () => ({ status: 200, body: '{}' }),
       },
       { command, start }
@@ -125,7 +126,7 @@ it('reconciles the exact prepared observer job when its receipt is lost', async 
   expect(start).not.toHaveBeenCalled();
 });
 
-it('exchanges a start frame and real duplex requests with a separate worker process', async () => {
+it('exchanges a start frame above 8 MiB and real duplex requests with a separate worker process', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'baci-observation-fixture-'));
   try {
     const file = join(dir, 'worker.mjs');
@@ -143,7 +144,10 @@ it('exchanges a start frame and real duplex requests with a separate worker proc
     const start = () => spawn(process.execPath, [file], { stdio: 'pipe' });
     const session = vi.fn(async () => ({ status: 200, body: '{"items":1}' }));
     const result = await runPublicObservationJob(
-      { payload: { synthetic: true }, session },
+      {
+        payload: { synthetic: true, data: 'a'.repeat(11 * 1024 ** 2) },
+        session,
+      },
       { command, start }
     );
     expect(result.output).toEqual({ status: 'synthetic', cart: { items: 1 } });

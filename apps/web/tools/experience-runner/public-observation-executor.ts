@@ -2,6 +2,7 @@ import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { type LinuxRunnerCommand, runCommand } from './linux-runner';
 import { runPublicCartChannel } from './public-cart-channel';
+import { MAX_PUBLIC_OBSERVATION_START_BYTES } from './public-observation-resource-limit';
 
 const helper = '/usr/local/libexec/baci-experience-helper';
 type Request = { url: string; method: 'GET' | 'POST'; body?: string };
@@ -32,7 +33,7 @@ export async function runPublicObservationJob(
   const encoded = JSON.stringify({ type: 'start', payload: input.payload });
   if (
     typeof encoded !== 'string' ||
-    Buffer.byteLength(encoded) > 8 * 1024 * 1024
+    Buffer.byteLength(encoded) > MAX_PUBLIC_OBSERVATION_START_BYTES
   )
     throw Error('PUBLIC_OBSERVATION_INPUT_BUDGET');
   const jobId = `baci-experience-${randomUUID()}`;

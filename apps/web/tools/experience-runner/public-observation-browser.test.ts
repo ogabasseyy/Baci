@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { chromium } from 'playwright-core';
 import { expect, it } from 'vitest';
 import { createPublicCartPolicy } from '../experience-verifier/public-cart-policy';
@@ -11,7 +12,7 @@ import {
   productId,
 } from './public-observation-fixture.test-support';
 
-it('combines rendered routes and actual synthetic commerce into an observation', async () => {
+it('combines rendered routes and synthetic commerce with 32 verified assets', async () => {
   const browser = await chromium.launch({ headless: true });
   const check = createPublicCartPolicy({
     origin,
@@ -31,9 +32,25 @@ it('combines rendered routes and actual synthetic commerce into an observation',
     checkoutSessionId: '55555555-5555-4555-8555-555555555555',
     lines: [{ productId, variantId: null, quantity: 1, available: true }],
   };
+  const payload = fixture();
+  const bytes = Buffer.alloc(256 * 1024);
+  const encoded = bytes.toString('base64');
+  const digest = createHash('sha256').update(bytes).digest('hex');
+  const logo = payload.resources[2];
+  const extraAssets = Object.fromEntries(
+    Array.from({ length: 31 }, (_, index) => [`asset-${index}`, digest])
+  );
+  payload.expected.assets = { logo: digest, ...extraAssets };
+  logo.bytes = encoded;
+  payload.resources.push(
+    ...Object.keys(extraAssets).map((id) => ({
+      ...logo,
+      url: logo.url.replace(/logo$/, id),
+    }))
+  );
   try {
     const result = await observePublicBrowser(
-      fixture(),
+      payload,
       browser,
       async (request) => {
         if (!check(request)) throw Error('DENIED');

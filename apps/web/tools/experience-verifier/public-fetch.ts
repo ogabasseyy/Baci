@@ -1,6 +1,10 @@
 import { Agent } from 'undici';
 import { productionOrigin } from '@/lib/experience/production-origins';
 import {
+  MAX_PUBLIC_FETCH_BYTES,
+  MAX_PUBLIC_RESOURCE_BYTES,
+} from '../experience-runner/public-observation-resource-limit';
+import {
   type PublicDnsLookup,
   publicNetworkSignal,
   readPublicBody,
@@ -143,7 +147,11 @@ export function createBoundPublicFetcher(settings: {
         (bytes) => {
           size += bytes;
           total += bytes;
-          if (size > 2097152 || total > 16777216) throw Error();
+          if (
+            size > MAX_PUBLIC_RESOURCE_BYTES ||
+            total > MAX_PUBLIC_FETCH_BYTES
+          )
+            throw Error();
         }
       );
       return {

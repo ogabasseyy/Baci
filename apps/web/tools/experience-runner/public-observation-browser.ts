@@ -8,7 +8,11 @@ import {
 import { installPublicCartBrowserRoutes } from './public-cart-browser-route';
 import { createPublicCommerceEvidence } from './public-commerce-evidence';
 import { observePublicCommerce } from './public-observation-commerce';
-import { MAX_PUBLIC_OBSERVATION_RESOURCES } from './public-observation-resource-limit';
+import {
+  MAX_PUBLIC_OBSERVATION_BYTES,
+  MAX_PUBLIC_OBSERVATION_RESOURCES,
+  MAX_PUBLIC_RESOURCE_BYTES,
+} from './public-observation-resource-limit';
 import { inspectPublicRoutes } from './public-observation-routes';
 
 const hash = (value: string | Buffer) =>
@@ -45,7 +49,7 @@ const payloadSchema = z.object({
       z.object({
         url: z.url(),
         mime: z.string().max(128),
-        bytes: z.string().max(2796204),
+        bytes: z.string().max(4 * Math.ceil(MAX_PUBLIC_RESOURCE_BYTES / 3)),
         headers: z.record(z.string(), z.string()),
       })
     )
@@ -71,14 +75,18 @@ export async function observePublicBrowser(
     throw Error('PUBLIC_OBSERVATION_INPUT_INVALID');
   const resources = payload.resources.map((resource) => {
     const bytes = Buffer.from(resource.bytes, 'base64');
-    if (bytes.toString('base64') !== resource.bytes || bytes.length > 2097152)
+    if (
+      bytes.toString('base64') !== resource.bytes ||
+      bytes.length > MAX_PUBLIC_RESOURCE_BYTES
+    )
       throw Error('PUBLIC_OBSERVATION_INPUT_INVALID');
     return { ...resource, bytes };
   });
   const unique = new Map(resources.map((item) => [item.url, item]));
   if (
     unique.size !== resources.length ||
-    resources.reduce((n, item) => n + item.bytes.length, 0) > 5500000
+    resources.reduce((n, item) => n + item.bytes.length, 0) >
+      MAX_PUBLIC_OBSERVATION_BYTES
   )
     throw Error('PUBLIC_OBSERVATION_INPUT_INVALID');
   const script = resources.filter(

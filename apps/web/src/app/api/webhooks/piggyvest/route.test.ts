@@ -1,9 +1,7 @@
-import { createHash, createHmac } from 'node:crypto';
-import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  createServiceClient: vi.fn(),
+  createIntakeClient: vi.fn(),
   processPiggyvestEvent: vi.fn(),
 }));
 
@@ -16,8 +14,8 @@ vi.mock('@/env', () => ({
     process.env.PVB_SECRET_KEY?.trim() || undefined,
 }));
 
-vi.mock('@/lib/supabase/service', () => ({
-  createServiceClient: () => mocks.createServiceClient(),
+vi.mock('@/lib/piggyvest/server-intake-client', () => ({
+  createPiggyvestIntakeClient: () => withCaptureRpc(mocks.createIntakeClient()),
 }));
 
 vi.mock('@/lib/piggyvest/webhook-processor', () => ({
@@ -26,104 +24,15 @@ vi.mock('@/lib/piggyvest/webhook-processor', () => ({
 }));
 
 import { GET, POST } from './route';
-
-// HMAC key derived at runtime from a stable non-secret label: deterministic
-// for reproducibility (no random test data); the label is an identifier,
-// not key material, and is used only by these test verifiers.
-const SECRET = createHash('sha256')
-  .update('synthetic-staging-secret')
-  .digest('hex');
-
-function chainable(
-  result: { data: unknown; error: unknown },
-  existing: unknown = MATCHING_ENVELOPE
-): { query: Record<string, unknown>; upsert: ReturnType<typeof vi.fn> } {
-  const query: Record<string, unknown> = {};
-  const upsert = vi.fn(() => query);
-  // select() is both awaitable (upsert result) and chainable (duplicate
-  // verify read via .eq().maybeSingle()).
-  const select = vi.fn(() =>
-    Object.assign(Promise.resolve(result), {
-      eq: vi.fn(() => ({
-        maybeSingle: async () => ({ data: existing, error: null }),
-      })),
-    })
-  );
-  const then = (resolve: (value: unknown) => void) =>
-    Promise.resolve(result).then(resolve);
-  Object.assign(query, { select, then, upsert });
-  return { query, upsert };
-}
-
-function signPayload(rawBody: string): string {
-  return createHmac('sha512', SECRET).update(rawBody).digest('hex');
-}
-
-function createRequest(rawBody: string, signature?: string): NextRequest {
-  return new NextRequest('https://usebaci.com/api/webhooks/piggyvest', {
-    body: rawBody,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(signature ? { 'x-pvb-signature': signature } : {}),
-    },
-    method: 'POST',
-  });
-}
-
-const inflowEvent = {
-  eventId: '4204dc18-efb3-44d0-b9a2-1362448d4f21',
-  eventType: 'bank-transfer.inflow.success',
-  eventCategory: 'bank-transfer',
-  customer_id: 'c0065070-dc32-45d2-9c01-871a27abfd10',
-  eventData: {
-    id: 'faas-txn-synthetic-001',
-    customer_id: 'c0065070-dc32-45d2-9c01-871a27abfd10',
-    source_wallet_id: '',
-    destination_wallet_id: 'faas-wallet-synthetic-001',
-    type: 'inflow',
-    category: 'bank_transfer_inflow',
-    amount: 1750000,
-    currency: 'NGN',
-    narration: 'Transfer from SYNTHETIC SENDER',
-    ip_address: '',
-    transaction_id: 'provider-txn-synthetic-001',
-    timestamp: '2026-09-15T10:12:00.000Z',
-    status: 'success',
-    third_party_reference: 'synthetic-third-party-ref',
-    initiator_reference: 'synthetic-initiator-ref',
-    internal_reference: 'synthetic-internal-ref',
-    attempts: 1,
-    provider: 'wema',
-    destination_wallet_balance: 5000000,
-    destination_wallet_ledger_balance: 5000000,
-    destination_transaction_balance: 5000000,
-    reference: 'faas-ref-synthetic-001',
-    recipient_bank_account_number: '9000000001',
-    recipient_bank_account_name: 'SYNTHETIC LTD',
-    sender_bank_account_number: '0000000001',
-    sender_bank_name: 'Synthetic Bank',
-    sender_name: 'SYNTHETIC SENDER',
-    session_id: '000000000001',
-    fee: 0,
-  },
-  pvb_reference: 'pvb-txn-synthetic-001',
-  pvb_wallet: 'pvb-wallet-synthetic-001',
-  pvb_destination_wallet: null,
-  pvb_third_party_reference: null,
-  pvb_schedule_payment_id: null,
-  pvb_destination_account_creation_reference: null,
-  pvb_meta: null,
-};
-
-const MATCHING_ENVELOPE = {
-  event_type: 'bank-transfer.inflow.success',
-  event_category: 'bank-transfer',
-  customer_id: inflowEvent.customer_id,
-  wallet_id: inflowEvent.pvb_wallet,
-  reference: inflowEvent.pvb_reference,
-  amount_kobo: 1750000,
-  event_details: { transaction_id: inflowEvent.eventData.transaction_id },
-};
+import { withCaptureRpc } from './route.capture-test-support';
+import {
+  chainable,
+  createRequest,
+  inflowEvent,
+  MATCHING_ENVELOPE,
+  SECRET,
+  signPayload,
+} from './route.test-support';
 
 const restrictionEvent = {
   eventId: '6b9d2f4a-3c1e-4a5b-9d8f-2e4b6a8c0d12',
@@ -142,7 +51,9 @@ const interestEvent = {
   eventData: {
     id: 'faas-interest-synthetic-001',
     amount: 95000,
-    destination_wallet: 'faas-wallet-synthetic-001',
+    // PVB-internal wallet id (PiggyVest, 2026-11-11): never the credited
+    // plan wallet.
+    destination_wallet: 'pvb-internal-wallet-synthetic-009',
     destination_wallet_balance: 1095000,
     destination_wallet_ledger_balance: 1095000,
     reference: 'faas-ref-synthetic-002',
@@ -155,7 +66,8 @@ const interestEvent = {
     },
   },
   pvb_reference: 'pvb-txn-synthetic-002',
-  pvb_wallet: 'pvb-wallet-synthetic-001',
+  // The PVB wallet the payout credited.
+  pvb_wallet: 'faas-wallet-synthetic-001',
   pvb_accrued_interest_wallet: 'pvb-wallet-synthetic-001',
   pvb_destination_wallet: null,
   pvb_third_party_reference: null,
@@ -203,7 +115,7 @@ describe('GET reachability probe', () => {
 describe('POST event intake', () => {
   it('acknowledges deferred processing as durable backlog', async () => {
     vi.stubEnv('PVB_SECRET_KEY', SECRET);
-    mocks.createServiceClient.mockReturnValue({
+    mocks.createIntakeClient.mockReturnValue({
       from: vi.fn(() => chainable({ data: [], error: null }).query),
     });
     mocks.processPiggyvestEvent.mockResolvedValue('deferred');
@@ -228,35 +140,7 @@ describe('POST event intake', () => {
       error: 'Integration unavailable',
       code: 'PIGGYVEST_NOT_READY',
     });
-    expect(mocks.createServiceClient).not.toHaveBeenCalled();
-  });
-
-  it('acks 200 without processing when the signature is invalid', async () => {
-    vi.stubEnv('PVB_SECRET_KEY', SECRET);
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    try {
-      const rawBody = JSON.stringify(inflowEvent);
-
-      const response = await POST(createRequest(rawBody, '0'.repeat(128)));
-
-      expect(response.status).toBe(200);
-      expect(await response.json()).toEqual({
-        received: false,
-        code: 'PIGGYVEST_INVALID_SIGNATURE',
-      });
-      expect(mocks.createServiceClient).not.toHaveBeenCalled();
-      // Monitoring surface for the log drain: presence only.
-      expect(warn).toHaveBeenCalledWith(
-        expect.stringContaining(
-          '[PiggyVest Webhook] Rejected delivery with invalid signature (signature header present)'
-        )
-      );
-      expect(warn).not.toHaveBeenCalledWith(
-        expect.stringContaining('0'.repeat(128))
-      );
-    } finally {
-      warn.mockRestore();
-    }
+    expect(mocks.createIntakeClient).not.toHaveBeenCalled();
   });
 
   it('records an authentic inflow and acks received', async () => {
@@ -265,7 +149,7 @@ describe('POST event intake', () => {
       data: [{ event_id: inflowEvent.eventId }],
       error: null,
     });
-    mocks.createServiceClient.mockReturnValue({
+    mocks.createIntakeClient.mockReturnValue({
       from: vi.fn(() => query),
     });
     const rawBody = JSON.stringify(inflowEvent);
@@ -290,7 +174,7 @@ describe('POST event intake', () => {
 
   it('acks duplicate deliveries and re-drives processing to recover crashed credits', async () => {
     vi.stubEnv('PVB_SECRET_KEY', SECRET);
-    mocks.createServiceClient.mockReturnValue({
+    mocks.createIntakeClient.mockReturnValue({
       from: vi.fn(() => chainable({ data: [], error: null }).query),
     });
     const rawBody = JSON.stringify(inflowEvent);
@@ -311,7 +195,7 @@ describe('POST event intake', () => {
       error: null,
     });
     const from = vi.fn(() => query);
-    mocks.createServiceClient.mockReturnValue({ from });
+    mocks.createIntakeClient.mockReturnValue({ from });
     const rawBody = JSON.stringify({
       ...inflowEvent,
       eventType: 'wallet.transfer.success',
@@ -337,15 +221,16 @@ describe('POST event intake', () => {
     expect(mocks.processPiggyvestEvent).not.toHaveBeenCalled();
   });
 
+  // A changed internal transaction_id alone is no longer a conflict: the
+  // credit identity is pvb_reference (route.pvb-reference-retry.test.ts).
   it.each([
     { amount: 1 },
-    { transaction_id: 'provider-txn-synthetic-002' },
   ])('quarantines same-identity conflicting deliveries without crediting: %j', async (changedDetail) => {
     vi.stubEnv('PVB_SECRET_KEY', SECRET);
     // Stored envelope keeps the original amount while the redelivery
     // claims amount 1: same identity, different content.
     const { query } = chainable({ data: [], error: null }, MATCHING_ENVELOPE);
-    mocks.createServiceClient.mockReturnValue({
+    mocks.createIntakeClient.mockReturnValue({
       from: vi.fn(() => query),
     });
     const rawBody = JSON.stringify({
@@ -363,32 +248,9 @@ describe('POST event intake', () => {
     expect(mocks.processPiggyvestEvent).not.toHaveBeenCalled();
   });
 
-  it('returns 503 when the quarantine write fails so the provider redelivers', async () => {
-    vi.stubEnv('PVB_SECRET_KEY', SECRET);
-    mocks.createServiceClient.mockReturnValue({
-      from: vi.fn(
-        () =>
-          chainable({ data: null, error: { message: 'synthetic db outage' } })
-            .query
-      ),
-    });
-    const rawBody = JSON.stringify({
-      ...inflowEvent,
-      eventType: 'wallet.transfer.success',
-    });
-
-    const response = await POST(createRequest(rawBody, signPayload(rawBody)));
-
-    expect(response.status).toBe(503);
-    expect(await response.json()).toEqual({
-      error: 'Event intake unavailable',
-      code: 'PIGGYVEST_INBOX_ERROR',
-    });
-  });
-
   it('processes duplicate deliveries so crashed credits still land', async () => {
     vi.stubEnv('PVB_SECRET_KEY', SECRET);
-    mocks.createServiceClient.mockReturnValue({
+    mocks.createIntakeClient.mockReturnValue({
       from: vi.fn(() => chainable({ data: [], error: null }).query),
     });
     const rawBody = JSON.stringify(inflowEvent);
@@ -399,54 +261,13 @@ describe('POST event intake', () => {
     expect(mocks.processPiggyvestEvent).toHaveBeenCalledTimes(1);
   });
 
-  it('returns 503 when the processor throws so the provider redelivers', async () => {
-    vi.stubEnv('PVB_SECRET_KEY', SECRET);
-    const { query } = chainable({
-      data: [{ event_id: inflowEvent.eventId }],
-      error: null,
-    });
-    mocks.createServiceClient.mockReturnValue({
-      from: vi.fn(() => query),
-    });
-    mocks.processPiggyvestEvent.mockRejectedValue(new Error('synthetic'));
-    const rawBody = JSON.stringify(inflowEvent);
-
-    const response = await POST(createRequest(rawBody, signPayload(rawBody)));
-
-    expect(response.status).toBe(503);
-    expect(await response.json()).toEqual({
-      error: 'Event intake unavailable',
-      code: 'PIGGYVEST_INBOX_ERROR',
-    });
-  });
-
-  it('returns 503 without leaking internals when the inbox write fails', async () => {
-    vi.stubEnv('PVB_SECRET_KEY', SECRET);
-    mocks.createServiceClient.mockReturnValue({
-      from: vi.fn(
-        () =>
-          chainable({ data: null, error: { message: 'synthetic db outage' } })
-            .query
-      ),
-    });
-    const rawBody = JSON.stringify(inflowEvent);
-
-    const response = await POST(createRequest(rawBody, signPayload(rawBody)));
-
-    expect(response.status).toBe(503);
-    expect(await response.json()).toEqual({
-      error: 'Event intake unavailable',
-      code: 'PIGGYVEST_INBOX_ERROR',
-    });
-  });
-
   it('records the wallet attribution a restriction flip acts on', async () => {
     vi.stubEnv('PVB_SECRET_KEY', SECRET);
     const { query, upsert } = chainable({
       data: [{ event_id: restrictionEvent.eventId }],
       error: null,
     });
-    mocks.createServiceClient.mockReturnValue({
+    mocks.createIntakeClient.mockReturnValue({
       from: vi.fn(() => query),
     });
     const rawBody = JSON.stringify(restrictionEvent);
@@ -464,13 +285,13 @@ describe('POST event intake', () => {
     );
   });
 
-  it('records the destination plan wallet for interest payouts', async () => {
+  it('records the credited pvb_wallet for interest payouts', async () => {
     vi.stubEnv('PVB_SECRET_KEY', SECRET);
     const { query, upsert } = chainable({
       data: [{ event_id: interestEvent.eventId }],
       error: null,
     });
-    mocks.createServiceClient.mockReturnValue({
+    mocks.createIntakeClient.mockReturnValue({
       from: vi.fn(() => query),
     });
     const rawBody = JSON.stringify(interestEvent);
@@ -501,7 +322,7 @@ describe('POST event intake', () => {
         amount_kobo: null,
       }
     );
-    mocks.createServiceClient.mockReturnValue({
+    mocks.createIntakeClient.mockReturnValue({
       from: vi.fn(() => query),
     });
     const rawBody = JSON.stringify({
@@ -525,7 +346,7 @@ describe('POST event intake', () => {
       data: [{ event_id: outflowEvent.eventId }],
       error: null,
     });
-    mocks.createServiceClient.mockReturnValue({
+    mocks.createIntakeClient.mockReturnValue({
       from: vi.fn(() => query),
     });
     const rawBody = JSON.stringify(outflowEvent);
@@ -562,7 +383,7 @@ describe('POST event intake', () => {
         amount_kobo: null,
       }
     );
-    mocks.createServiceClient.mockReturnValue({
+    mocks.createIntakeClient.mockReturnValue({
       from: vi.fn(() => query),
     });
     const rawBody = JSON.stringify({

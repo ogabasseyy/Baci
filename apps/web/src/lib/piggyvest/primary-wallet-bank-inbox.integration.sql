@@ -8,6 +8,7 @@
 \ir ../../../../../supabase/migrations/20261008093600_primary_bank_inbox_expiry_drain.sql
 \ir ../../../../../supabase/migrations/20261008093100_primary_inflow_receipt_deletion_detach.sql
 \ir ../../../../../supabase/migrations/20261008093700_primary_bank_inbox_unsettled_deletion_block.sql
+\ir primary-wallet-bank-card-acl.inc.sql
 REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA public,prefunded_card,piggyvest_staging FROM PUBLIC;
 CREATE ROLE baci_primary_bank_intake LOGIN VALID UNTIL '2099-01-01T00:00:00Z';
 CREATE ROLE baci_primary_bank_worker LOGIN VALID UNTIL '2099-01-01T00:00:00Z';

@@ -56,6 +56,31 @@ export interface PublishedClusterPost {
   /** Only supplied by the current, publication-gated classification read. */
   merchant_intent?: MerchantBlogIntent | null;
   merchant_intent_source?: MerchantBlogIntentSource | null;
+  /** Phase 2A-2D semantic metadata v2 fields */
+  id?: string;
+  cluster_category_id?: string | null;
+  cluster_category_slug?: string | null;
+  guide_scope?: string | null;
+  guide_kind?: ContentClusterKind | null;
+  applicable_brands?: string[] | null;
+  metadata_status?: string | null;
+  metadata_source_revision?: string | null;
+  metadata_contract_version?: number | null;
+  eligibility_reason?: string | null;
+  subjects?: Array<{
+    productId: string;
+    subjectRole: 'primary' | 'comparison' | 'product_support';
+    sourceRevision?: string | null;
+  }>;
+}
+
+export interface InferContentClusterContextInput
+  extends Pick<
+    PublishedClusterPost,
+    'category' | 'excerpt' | 'keywords' | 'tags' | 'title'
+  > {
+  merchant_intent?: unknown;
+  merchant_intent_source?: unknown;
 }
 
 export interface InferredContentClusterContext {
@@ -99,8 +124,9 @@ export interface BuildCommercialGuideLinksInput {
 export interface InformationalClusterModel {
   heading: string;
   primaryCategoryLink: { href: string; label: string } | null;
-  commerceLinks: { href: string; label: string }[];
+  commerceLinks: { href: string; label: string; description?: string }[];
   featuredProducts: { href: string; title: string; description: string }[];
+  contextSummary?: string;
 }
 
 export interface InformationalClusterCategoryData {
@@ -121,6 +147,7 @@ export interface InformationalClusterCategoryData {
     is_parent?: boolean | null;
     parent_product_id?: string | null;
     manage_stock?: boolean | null;
+    has_condition_offers?: boolean | null;
   }>;
   fallbackName?: string | null;
   isCollection?: boolean;
@@ -134,6 +161,8 @@ export interface BuildInformationalClusterModelInput {
   /** Test seam only: override pools skip destination verification. Hub links still exact-filter the pool to the override category (the destination counts only exact category membership, never child categories); compare and price-band links trust the caller's destination-verified pool as supplied. Production callers omit this. Without destinationVerified, compare and price-band links are fail-closed (dropped) while hub links still verify live. */
   categoryDataOverride?: InformationalClusterCategoryData | null;
   countryCode?: string | null;
+  merchantCurrency?: string | null;
+  excludedProductSlugs?: ReadonlySet<string>;
 }
 
 export interface BlogClusterCollection {

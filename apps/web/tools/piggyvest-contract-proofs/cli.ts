@@ -35,13 +35,17 @@ Options:
   --journal <file>           mutation journal (default: ~/.baci/piggyvest-contract-proofs/journal.jsonl)
   --evidence-dir <dir>       default: docs/piggyvest-contract-evidence (live modes only)
   --new-attempt              open fresh mutation slots; a plain re-run never resends
+  --proof <id>               run one proof only: p1-p5, p7 or p10 (the S8 first pass); p6 needs a full run;
+                             p7 alone skips the shared scenario, and only p7 may
+                             be combined with --new-attempt
   --help
 
 Environment:
   ${ENV_API_KEY}   sandbox test key (test_key_...); fallback ${ENV_API_KEY_FALLBACK}
   ${ENV_BASE_URL}  optional; must be exactly https://staging.piggyvest.business
   ${ENV_BANK_CODE}, ${ENV_BANK_ACCOUNT}  sandbox bank destination for the bank-outflow step
-  ${ENV_BUSINESS_WALLET}  Ogabassey business SANDBOX wallet id for proof 7 (interest payout target)
+  ${ENV_BUSINESS_WALLET}  Ogabassey business SANDBOX wallet id: proof 7's interest payout target and,
+                 once it reads back bound to no API customer, the house wallet of proofs 3 and 8
 `;
 
 export interface CliIo {

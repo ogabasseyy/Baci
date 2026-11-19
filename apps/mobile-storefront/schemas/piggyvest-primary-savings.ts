@@ -32,6 +32,12 @@ export const PiggyvestPrimarySavingsSchemas = {
       goalId: z.uuid(),
       operationId: z.uuid(),
       amountKobo: z.number().int().positive().max(9999999999),
+      // Single-use proof from the goal PIN verify route; omitted when the
+      // server has not asked for one.
+      pinProof: z
+        .string()
+        .regex(/^[0-9a-f]{64}$/)
+        .optional(),
     })
     .strict(),
   response: z

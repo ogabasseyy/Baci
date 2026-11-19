@@ -3,6 +3,7 @@ import { Client } from 'pg';
 import { primaryWalletCardCustodySchemas as schemas } from '@/schemas/primary-wallet-card-custody';
 import { primaryCardCustodyInboxSchemas as inboxSchemas } from '@/schemas/primary-wallet-card-custody-inbox';
 import { primaryCardTransferProviderSchemas as transferSchemas } from '@/schemas/primary-wallet-card-transfer-provider';
+import { primaryDbLink } from './primary-db-link';
 
 const statements = {
   selectReadyTransfers: {
@@ -28,12 +29,6 @@ const statements = {
     capability: 'primary_card_transfer_worker',
     sql: 'SELECT piggyvest_primary_card.record_transfer($1::uuid,$2::text,$3::uuid,$4::uuid,$5::boolean) AS result',
     count: 3,
-  },
-  requeue: {
-    role: 'transfer',
-    capability: 'primary_card_transfer_worker',
-    sql: 'SELECT piggyvest_primary_card.requeue_transfer($1::uuid,$2::text,$3::uuid,$4::uuid) AS result',
-    count: 2,
   },
   context: {
     role: 'custody',
@@ -96,13 +91,9 @@ export function createPrimaryCardCustodyExecutor(configuration: unknown) {
     const selected = statements[action];
     if (
       'transferOnly' in config &&
-      ![
-        'selectReadyTransfers',
-        'dispatchContext',
-        'claim',
-        'record',
-        'requeue',
-      ].includes(action)
+      !['selectReadyTransfers', 'dispatchContext', 'claim', 'record'].includes(
+        action
+      )
     )
       throw new Error('Custody storage unavailable');
     if (
@@ -131,22 +122,26 @@ export function createPrimaryCardCustodyExecutor(configuration: unknown) {
           ? config.transfer
           : null;
     if (!database) throw new Error('Custody storage unavailable');
+    const link = primaryDbLink(database.login, database.port);
     const client = new Client({
       host: database.host,
       port: database.port,
       database: database.name,
-      user: database.login,
+      user: link.user,
       password: database.password,
-      ssl: { rejectUnauthorized: true, ca: database.certificateAuthority },
+      ssl: {
+        rejectUnauthorized: true,
+        ca: database.certificateAuthority,
+        ...link.tls,
+      },
       connectionTimeoutMillis: 4000,
       query_timeout: 4000,
-      statement_timeout: 2500,
-      lock_timeout: 1500,
-      options: '-c search_path=pg_catalog',
+      ...link.startup,
       application_name: 'baci-primary-card-custody',
     });
     try {
       await client.connect();
+      await link.afterConnect(client);
       const verified = await client.query(verify, [
         'intakeOnly' in config
           ? 'primary_card_signed_intake'

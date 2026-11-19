@@ -84,6 +84,7 @@ describe('normalizeProduct', () => {
     });
 
     expect(result.availability).toBe('InStock');
+    expect(result.manage_stock).toBe(false);
   });
 
   it('treats nullable manage_stock as unmanaged stock', () => {
@@ -95,6 +96,7 @@ describe('normalizeProduct', () => {
     });
 
     expect(result.availability).toBe('InStock');
+    expect(result.manage_stock).toBe(false);
   });
 
   it('treats managed stock with zero quantity as out of stock', () => {
@@ -106,6 +108,7 @@ describe('normalizeProduct', () => {
     });
 
     expect(result.availability).toBe('OutOfStock');
+    expect(result.manage_stock).toBe(true);
   });
 
   it('treats managed stock with positive quantity as in stock', () => {
@@ -117,6 +120,49 @@ describe('normalizeProduct', () => {
     });
 
     expect(result.availability).toBe('InStock');
+    expect(result.manage_stock).toBe(true);
+  });
+
+  it('sets manage_stock: true when raw.manage_stock is true', () => {
+    const result = normalizeProduct({
+      ...baseRawProduct,
+      manage_stock: true,
+    });
+
+    expect(result.manage_stock).toBe(true);
+  });
+
+  it('sets manage_stock: false when raw.manage_stock is false', () => {
+    const result = normalizeProduct({
+      ...baseRawProduct,
+      manage_stock: false,
+    });
+
+    expect(result.manage_stock).toBe(false);
+  });
+
+  it('sets manage_stock: false when raw.manage_stock is null', () => {
+    const result = normalizeProduct({
+      ...baseRawProduct,
+      manage_stock: null,
+    });
+
+    expect(result.manage_stock).toBe(false);
+  });
+
+  it('sets manage_stock: false when raw.manage_stock is undefined', () => {
+    const result = normalizeProduct({
+      ...baseRawProduct,
+      manage_stock: undefined,
+    });
+
+    expect(result.manage_stock).toBe(false);
+  });
+
+  it('sets manage_stock: false when raw.manage_stock is omitted', () => {
+    const result = normalizeProduct(baseRawProduct);
+
+    expect(result.manage_stock).toBe(false);
   });
 
   it('preserves product_key_specs when present', () => {

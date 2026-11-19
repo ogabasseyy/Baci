@@ -1,6 +1,11 @@
 import { fetchWithCsrf } from '@/lib/api-client';
 import { checkoutFingerprintsMatch } from './checkout-fingerprints-match';
 import {
+  clearOrderUnlessOxygenIsUnresolved,
+  oxygenPreviousPaymentUnresolved,
+  resolveOxygenCheckoutFence,
+} from './pending-checkout-oxygen-fence';
+import {
   fetchFencedOrderState,
   isNonReusableOrderState,
   isPaidOrderState,
@@ -8,9 +13,10 @@ import {
   resolveRedvaultCheckoutFence,
   shouldClearStoredOrder,
 } from './pending-checkout-redvault-fence';
-import type { PaymentMethod } from './types';
 import type { RedvaultQuoteSummary } from './components/redvault/RedvaultPaymentOption';
 import type { RedvaultPreparedOrder } from './handlers/redvault-prepared-order-submit';
+
+export { normalizeOrderPaymentMethod } from './normalize-order-payment-method';
 
 export { buildPendingCheckoutFingerprint } from './checkout-fingerprint';
 
@@ -150,35 +156,6 @@ function normalizeText(value: string | null | undefined): string {
   return (value || '').trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
-/**
- * Normalizes checkout payment methods to the persisted order values used for
- * pending-order reuse. Card-backed gateways (`paystack`, `korapay`) are stored
- * as `card`, methods with distinct downstream handling are persisted as-is, and
- * anything else falls back to `pod` for pay-on-delivery compatibility.
- */
-export function normalizeOrderPaymentMethod(
-  paymentMethod: PaymentMethod
-): string {
-  if (paymentMethod === 'paystack' || paymentMethod === 'korapay') {
-    return 'card';
-  }
-
-  if (
-    paymentMethod === 'uba_redvault' ||
-    paymentMethod === 'klump' ||
-    paymentMethod === 'credit_direct' ||
-    paymentMethod === 'credpal' ||
-    paymentMethod === 'invoice' ||
-    paymentMethod === 'juicyway' ||
-    paymentMethod === 'bank_transfer' ||
-    paymentMethod === 'payforme' ||
-    paymentMethod === 'paypal'
-  ) {
-    return paymentMethod;
-  }
-
-  return 'pod';
-}
 
 export async function resolvePendingCheckoutOrder({
   pendingOrder,
@@ -192,6 +169,19 @@ export async function resolvePendingCheckoutOrder({
   shippingRateId,
   fetchImpl = fetch,
 }: ResolvePendingCheckoutOrderOptions): Promise<ResolvePendingCheckoutOrderResult> {
+  const oxygenFence = await resolveOxygenCheckoutFence({
+    pendingOrder,
+    merchantId,
+    merchantSlug,
+    customerEmail,
+    checkoutFingerprint,
+    paymentMethod,
+    shippingProvider,
+    selectedQuoteId,
+    shippingRateId,
+    fetchImpl,
+  });
+  if (oxygenFence) return oxygenFence;
   // REDVAULT entry/exit validates the stored order against the server fence
   // first; a non-REDVAULT submission falls through to the ordinary flow.
   const redvaultFence = await resolveRedvaultCheckoutFence({
@@ -206,6 +196,9 @@ export async function resolvePendingCheckoutOrder({
   if (!pendingOrder) {
     return { reusableOrder: null, clearStoredOrder: false };
   }
+
+  const oxygenOrder =
+    paymentMethod === 'oxygen' || pendingOrder.paymentMethod === 'oxygen';
 
   if (
     !pendingOrder.trackingToken ||
@@ -227,7 +220,7 @@ export async function resolvePendingCheckoutOrder({
   });
 
   if (!existingOrder) {
-    return { reusableOrder: null, clearStoredOrder: true };
+    return clearOrderUnlessOxygenIsUnresolved(oxygenOrder);
   }
 
   // Same paid-fence rule as the REDVAULT branch: the stored order committed
@@ -241,7 +234,7 @@ export async function resolvePendingCheckoutOrder({
   }
 
   if (isNonReusableOrderState(existingOrder)) {
-    return { reusableOrder: null, clearStoredOrder: true };
+    return clearOrderUnlessOxygenIsUnresolved(oxygenOrder);
   }
 
   const mutationFetch = fetchImpl === fetch ? fetchWithCsrf : fetchImpl;
@@ -261,8 +254,17 @@ export async function resolvePendingCheckoutOrder({
   });
 
   if (!reuseResponse.ok) {
+    const failure = await Promise.resolve()
+      .then(() => reuseResponse.json())
+      .catch(() => null);
+    if (failure?.code === 'oxygen_payment_in_progress') {
+      throw new Error('Your Oxygen payment is in progress. Return to your existing application or contact support before paying again.');
+    }
+    if (failure?.code === 'oxygen_previous_payment_unresolved') {
+      throw new Error(oxygenPreviousPaymentUnresolved);
+    }
     if (shouldClearStoredOrder(reuseResponse.status)) {
-      return { reusableOrder: null, clearStoredOrder: true };
+      return clearOrderUnlessOxygenIsUnresolved(oxygenOrder);
     }
 
     throw new Error('Failed to reopen pending checkout order');
@@ -273,7 +275,7 @@ export async function resolvePendingCheckoutOrder({
   };
 
   if (!reusedOrderData.order?.id) {
-    return { reusableOrder: null, clearStoredOrder: true };
+    return clearOrderUnlessOxygenIsUnresolved(oxygenOrder);
   }
 
   return {

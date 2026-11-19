@@ -1,0 +1,4 @@
+export const CONFIG = {
+  MERCHANT_ID: '77777777-7777-4777-8777-777777777777',
+  MERCHANT_SLUG: 'ogabassey',
+};

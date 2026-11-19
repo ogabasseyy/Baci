@@ -6,6 +6,9 @@ export type ImeiPollOutcome =
   | { kind: 'pending'; pollAfterMs: number }
   | { kind: 'retry'; pollAfterMs: number };
 
+const isTransientStatus = (status: number) =>
+  status === 401 || status === 408 || status === 429 || status >= 500;
+
 export async function pollImeiLookup({
   accessToken,
   apiBaseUrl,
@@ -38,6 +41,13 @@ export async function pollImeiLookup({
     }
 
     const data = parsed.data;
+    // A settled lookup always comes back with its lookupId (the cached
+    // result). Without one, an auth, rate-limit or server failure says
+    // nothing about the paid lookup: it keeps polling, so its record and
+    // saved key are not retired before the server reports a final result.
+    if (!data.lookupId && isTransientStatus(response.status)) {
+      return { kind: 'retry', pollAfterMs: 10_000 };
+    }
     if (response.status === 202 && data.status === 'pending' && data.success) {
       return { kind: 'pending', pollAfterMs: data.pollAfterMs ?? 5_000 };
     }

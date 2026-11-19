@@ -221,4 +221,77 @@ describe('buildInformationalClusterModel', () => {
 
     expect(model).toBeNull();
   });
+
+  it('prioritizes products whose model tokens match the article title and slug', async () => {
+    mockLoadScopedInventory.mockResolvedValue({
+      isCollection: false,
+      categoryName: 'Smartphones',
+      products: [
+        {
+          slug: 'iphone-11',
+          name: 'iPhone 11',
+          brand: 'Apple',
+          price: 210_000,
+          category_slug: 'smartphones',
+          condition: 'used',
+          stock: 5,
+        },
+        {
+          slug: 'iphone-17-pro-max',
+          name: 'iPhone 17 Pro Max',
+          brand: 'Apple',
+          price: 1_950_000,
+          category_slug: 'smartphones',
+          condition: 'new',
+          stock: 4,
+        },
+      ],
+    });
+
+    const model = await buildInformationalClusterModel({
+      merchantId: 'merchant-1',
+      merchantSlug: 'ogabassey',
+      storeUrl: 'https://ogabassey.com',
+      post: {
+        ...smartphoneGuidePost,
+        slug: 'iphone-17-pro-max-price-in-nigeria',
+        title: 'iPhone 17 Pro Max Price in Nigeria (2026 Buyer Guide)',
+        tags: ['Apple', 'iPhone 17 Pro Max'],
+      },
+    });
+
+    expect(model?.featuredProducts[0]?.href).toBe(
+      'https://ogabassey.com/smartphones/iphone-17-pro-max'
+    );
+  });
+
+  it('excludes products specified in excludedProductSlugs from featured picks without shrinking commerce link pools', async () => {
+    const model = await buildInformationalClusterModel({
+      merchantId: 'merchant-1',
+      merchantSlug: 'ogabassey',
+      storeUrl: 'https://ogabassey.com',
+      post: smartphoneGuidePost,
+      categoryDataOverride: smartphoneCategoryData,
+      excludedProductSlugs: new Set([
+        'galaxy-a56',
+        'iphone-15',
+        'iphone-17-pro-max',
+      ]),
+    });
+
+    const featuredHrefs = model?.featuredProducts.map((p) => p.href) ?? [];
+    expect(featuredHrefs).not.toContain(
+      'https://ogabassey.com/smartphones/galaxy-a56'
+    );
+    expect(featuredHrefs).not.toContain(
+      'https://ogabassey.com/smartphones/iphone-15'
+    );
+    expect(featuredHrefs.length).toBeGreaterThan(0);
+    expect(model?.commerceLinks.map((link) => link.href)).toEqual(
+      expect.arrayContaining([
+        'https://ogabassey.com/smartphones/compare/iphone-17-pro-max-vs-samsung-galaxy-z-trifold',
+        'https://ogabassey.com/smartphones/compare/apple-vs-samsung',
+      ])
+    );
+  });
 });

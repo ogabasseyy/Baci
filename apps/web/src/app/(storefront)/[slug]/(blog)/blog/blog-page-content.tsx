@@ -164,8 +164,15 @@ export async function BlogPageContent({
           search: effectiveSearchQuery,
         })
       : undefined;
+  const shouldNoIndexBlogListing =
+    currentPage > 1 ||
+    Boolean(effectiveSearchQuery) ||
+    (!isCleanCategoryRoute && Boolean(category));
   const paginationHeadLinks = (
     <>
+      {shouldNoIndexBlogListing ? (
+        <meta name="robots" content="noindex, follow" />
+      ) : null}
       {previousPageUrl ? <link href={previousPageUrl} rel="prev" /> : null}
       {nextPageUrl ? <link href={nextPageUrl} rel="next" /> : null}
     </>

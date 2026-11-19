@@ -1,7 +1,9 @@
+import { createHash } from 'node:crypto';
 import { expect, it, vi } from 'vitest';
 import { createPrimaryWalletSavingsStore } from './primary-wallet-savings-store';
 
 vi.mock('server-only', () => ({}));
+const pinProof = createHash('sha256').update('s5-store-proof').digest('hex');
 const scope = {
   merchantId: '00000000-0000-4000-8000-000000000001',
   customerId: '00000000-0000-4000-8000-000000000002',
@@ -86,12 +88,15 @@ it('releases dispatched holds with fixed SQL after definitive rejection', async 
 it('rejects injected wallet IDs before storage contact', async () => {
   const execute = vi.fn();
   await expect(
-    createPrimaryWalletSavingsStore({ scope, execute }).reserve({
-      goalId: operationId,
-      operationId,
-      amountKobo: 100,
-      sourceWalletId: 'foreign',
-    })
+    createPrimaryWalletSavingsStore({ scope, execute }).reserve(
+      {
+        goalId: operationId,
+        operationId,
+        amountKobo: 100,
+        sourceWalletId: 'foreign',
+      },
+      pinProof
+    )
   ).rejects.toThrow();
   expect(execute).not.toHaveBeenCalled();
 });
@@ -132,4 +137,65 @@ it('adopts pending operations through fixed adoption SQL with a parsed reservati
     'SELECT piggyvest_primary.adopt_pending_savings($1::jsonb,$2::uuid) AS result',
     [JSON.stringify(scope), operationId]
   );
+});
+
+it('reserves and spends the PIN proof through one fixed statement', async () => {
+  const execute = vi
+    .fn()
+    .mockResolvedValue({ rows: [{ result: { status: 'pending' } }] });
+  const request = { goalId: operationId, operationId, amountKobo: 100 };
+  await createPrimaryWalletSavingsStore({ scope, execute }).reserve(
+    request,
+    pinProof
+  );
+  expect(execute).toHaveBeenCalledWith(
+    'SELECT piggyvest_primary.reserve_savings_with_pin($1::jsonb,$2::jsonb,$3::text) AS result',
+    [JSON.stringify(scope), JSON.stringify(request), pinProof]
+  );
+});
+it.each([
+  undefined,
+  'not-hex',
+  'A'.repeat(64),
+])('refuses a reservation without a well-formed PIN proof (%s) before storage contact', async (badProof) => {
+  const execute = vi.fn();
+  await expect(
+    createPrimaryWalletSavingsStore({ scope, execute }).reserve(
+      { goalId: operationId, operationId, amountKobo: 100 },
+      badProof
+    )
+  ).rejects.toThrow();
+  expect(execute).not.toHaveBeenCalled();
+});
+it('returns a PIN refusal from the database as a typed result', async () => {
+  const execute = vi.fn().mockResolvedValue({
+    rows: [{ result: { status: 'pin_refused', reason: 'expired' } }],
+  });
+  await expect(
+    createPrimaryWalletSavingsStore({ scope, execute }).reserve(
+      { goalId: operationId, operationId, amountKobo: 100 },
+      pinProof
+    )
+  ).resolves.toEqual({ status: 'pin_refused', reason: 'expired' });
+});
+it('rejects an unknown PIN refusal reason', async () => {
+  const execute = vi.fn().mockResolvedValue({
+    rows: [{ result: { status: 'pin_refused', reason: 'whatever' } }],
+  });
+  await expect(
+    createPrimaryWalletSavingsStore({ scope, execute }).reserve(
+      { goalId: operationId, operationId, amountKobo: 100 },
+      pinProof
+    )
+  ).rejects.toThrow();
+});
+it('passes an empty proof through so the database can decide for merchants without PIN checking', async () => {
+  const execute = vi
+    .fn()
+    .mockResolvedValue({ rows: [{ result: { status: 'pending' } }] });
+  await createPrimaryWalletSavingsStore({ scope, execute }).reserve(
+    { goalId: operationId, operationId, amountKobo: 100 },
+    ''
+  );
+  expect(execute.mock.calls[0]?.[1]?.[2]).toBe('');
 });

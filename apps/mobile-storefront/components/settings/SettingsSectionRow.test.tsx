@@ -1,5 +1,10 @@
 import { describe, expect, it, jest } from '@jest/globals';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react-native';
 import { Text, View } from 'react-native';
 import { SettingsSectionRow } from './SettingsSectionRow';
 
@@ -48,7 +53,7 @@ describe('SettingsSectionRow', () => {
       />
     );
 
-    expect(screen.getByRole('link', { name: 'Open terms' })).toHaveStyle({
+    expect(screen.getByTestId('settings-row')).toHaveStyle({
       borderBottomColor: '#D1D5DB',
     });
   });
@@ -71,10 +76,15 @@ describe('SettingsSectionRow', () => {
       </View>
     );
 
-    const row = screen.getByRole('button', { name: 'Open account settings' });
-    expect(row).toHaveStyle({
-      flexDirection: 'row',
-      justifyContent: 'space-between',
+    const content = screen.getByTestId('settings-row-content');
+    expect(content).toHaveStyle({ flexDirection: 'row', alignItems: 'center' });
+    // The trailing value sits inside the same row as the label, not below it.
+    expect(within(content).getByText('2.4.1')).toBeOnTheScreen();
+    expect(
+      within(content).getByText('A setting with a long label')
+    ).toBeOnTheScreen();
+    expect(screen.getByTestId('settings-row-right')).toHaveStyle({
+      flexShrink: 0,
     });
     expect(screen.getByText('A setting with a long label')).toBeOnTheScreen();
     expect(
@@ -83,5 +93,25 @@ describe('SettingsSectionRow', () => {
       )
     ).toBeOnTheScreen();
     expect(screen.getByText('2.4.1')).toBeOnTheScreen();
+  });
+
+  it('makes the whole row one accessible element holding the right control', () => {
+    render(
+      <SettingsSectionRow
+        accessibilityLabel="Open help"
+        accessibilityRole="button"
+        icon="help-outline"
+        iconBackgroundColor="#E5E7EB"
+        iconColor="#111827"
+        label="Help"
+        labelColor="#111827"
+        onPress={() => undefined}
+        right={<Text>Chevron</Text>}
+      />
+    );
+
+    const row = screen.getByRole('button', { name: 'Open help' });
+    expect(within(row).getByText('Chevron')).toBeOnTheScreen();
+    expect(row).toHaveStyle({ flex: 1 });
   });
 });

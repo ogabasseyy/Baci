@@ -7,9 +7,12 @@ export async function releaseDirectBookingLock(
   orderId: string,
   lockToken: string | null,
   retainBookingLock: boolean
-): Promise<void> {
-  if (!lockToken || !supabase || retainBookingLock) {
-    return;
+): Promise<boolean> {
+  if (!lockToken || !supabase) {
+    return true;
+  }
+  if (retainBookingLock) {
+    return false;
   }
 
   try {
@@ -19,7 +22,9 @@ export async function releaseDirectBookingLock(
       orderId,
       lockToken
     );
+    return true;
   } catch {
     // The lock is left to expire if cleanup cannot be completed here.
+    return false;
   }
 }

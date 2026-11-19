@@ -122,3 +122,36 @@ describe('readbackPayout', () => {
     expect(sleep).toHaveBeenCalledWith(25);
   });
 });
+
+describe('readbackPayout: the latest successful record', () => {
+  it('returns the record of the read that settled', async () => {
+    const { h, main, business } = await ready();
+    const read = await readbackPayout(h.ctx, main, business);
+    expect(read.record).toMatchObject({ id: main });
+    expect(read.record).toHaveProperty('interest_payout_wallet');
+  });
+
+  it('keeps the last successful record when a later read fails, and none when no read succeeded', async () => {
+    const { h, main, business } = await ready({ maxPolls: 3 });
+    const w = h.mock.sandbox.wallet(main);
+    if (!w) throw new Error('wallet missing');
+    w.payoutHiddenReads = 50; // never settles: every read is spent
+    const original = h.api.wallet.bind(h.api);
+    let reads = 0;
+    h.api.wallet = async (id) => {
+      reads += 1;
+      const call = await original(id);
+      return reads === 1 ? call : { ...call, ok: false, httpStatus: 503 };
+    };
+    const read = await readbackPayout(h.ctx, main, business);
+    expect(read.settled).toBe(false);
+    expect(read.record).toMatchObject({ id: main });
+
+    h.api.wallet = async (id) => ({
+      ...(await original(id)),
+      ok: false,
+      httpStatus: 503,
+    });
+    expect((await readbackPayout(h.ctx, main, business)).record).toBeNull();
+  });
+});

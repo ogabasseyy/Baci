@@ -76,7 +76,10 @@ export class MockLedger {
     ) {
       return fail(`An error occurred processing ${kind} transfer`);
     }
-    if (this.txns.some((t) => t.reference === reference))
+    if (
+      this.host.options.duplicateReference === 'reject' &&
+      this.txns.some((t) => t.reference === reference)
+    )
       return fail('Duplicate reference');
     if (source.balance < amount + (kind === 'bank' ? fee : 0))
       return fail('Insufficient funds');
@@ -152,12 +155,10 @@ export class MockLedger {
     }
   }
 
-  verify(query: URLSearchParams): MockReply {
-    const txn = this.txns.find((t) => t.reference === query.get('reference'));
-    const notFound = fail('Transaction not found', 404);
-    if (!txn) return notFound;
+  /** One status check: the same 404 / pending / settled progression for every booking. */
+  private advance(txn: Txn): 'not_found' | 'pending' | 'success' {
     txn.polls += 1;
-    if (txn.polls <= this.host.options.tsqNotFoundPolls) return notFound;
+    if (txn.polls <= this.host.options.tsqNotFoundPolls) return 'not_found';
     const pendingPolls =
       txn.category === 'bank-outflow'
         ? (this.host.options.tsqPendingPollsBank ??
@@ -166,10 +167,27 @@ export class MockLedger {
     if (txn.polls <= this.host.options.tsqNotFoundPolls + pendingPolls) {
       if (this.host.options.tsqSettleEarly && txn.status === 'pending')
         this.settle(txn);
-      return ok(this.tsqData(txn, 'pending'), 'Transaction status retrieved');
+      return 'pending';
     }
     if (txn.status === 'pending') this.settle(txn);
-    return ok(this.tsqData(txn, 'success'), 'Transaction status retrieved');
+    return 'success';
+  }
+
+  verify(query: URLSearchParams): MockReply {
+    const [txn, ...repeats] = this.txns.filter(
+      (t) => t.reference === query.get('reference')
+    );
+    const notFound = fail('Transaction not found', 404);
+    if (!txn) return notFound;
+    // FIRST-BOOKING SEMANTICS: the reply always describes the first booking
+    // (its id, status and amount). A repeat booked under an accepted duplicate
+    // reference follows the same lifecycle on its own poll count, advanced by
+    // status checks, but its own record is never reported here (the real
+    // provider's choice is unknown; proofs read the repeat from the record list).
+    for (const repeat of repeats) this.advance(repeat);
+    const state = this.advance(txn);
+    if (state === 'not_found') return notFound;
+    return ok(this.tsqData(txn, state), 'Transaction status retrieved');
   }
   private tsqData(txn: Txn, status: string) {
     const base = {
@@ -181,6 +199,7 @@ export class MockLedger {
     return this.host.options.tsqShape === 'docs'
       ? { ...base, recipient: '0123456789', bank: 'Sandbox Bank' }
       : {
+          id: txn.id,
           ...base,
           currency: 'NGN',
           fee: txn.fee,
@@ -259,7 +278,7 @@ export class MockLedger {
       reference: t.id,
       category: t.category,
       third_party_reference: t.reference,
-      customer_id: this.host.wallet(t.source ?? t.destination)?.customerId,
+      customer_id: 'business-00000001', // live sandbox: business id (S12)
       source_wallet: t.source,
       destination_wallet: t.destination,
       narration: 'sandbox',

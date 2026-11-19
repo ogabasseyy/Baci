@@ -4,10 +4,12 @@ import { KeyboardController } from 'react-native-keyboard-controller';
 import AppKeyboardAwareScrollView from '@/components/ui/AppKeyboardAwareScrollView';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors, { BRAND } from '@/constants/Colors';
+import { PiggyvestSlowdownNotice } from '../PiggyvestSlowdownNotice';
 import { StartSavingsForm } from './StartSavingsForm';
 import { StartSavingsModals } from './StartSavingsModals';
 import { startSavingsStyles as styles } from './start-savings.styles';
 import { useStartSavingsController } from './use-start-savings-controller';
+import { WalletPinSheet } from './WalletPinSheet';
 
 export function LegacyStartSavingsScreen() {
   const colorScheme = useColorScheme();
@@ -61,6 +63,7 @@ export function LegacyStartSavingsScreen() {
           />
         }
       >
+        <PiggyvestSlowdownNotice />
         <StartSavingsForm
           onSearchFocusChange={setSearchFocused}
           colors={colors}
@@ -69,6 +72,7 @@ export function LegacyStartSavingsScreen() {
       </AppKeyboardAwareScrollView>
 
       <StartSavingsModals colors={colors} controller={controller} />
+      <WalletPinSheet colors={colors} {...controller.pinSheetProps} />
     </View>
   );
 }

@@ -2,9 +2,9 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   mocks,
-  paymentSettings,
   resetPaymentMethodsScreenMocks,
 } from '@/test/payment-methods-screen';
+import { paymentSettings } from '@/test/payment-methods-screen.fixtures';
 import PaymentMethodsScreen from './payment-methods';
 
 type QueryConfig = {

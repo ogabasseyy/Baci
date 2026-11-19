@@ -2,11 +2,17 @@ import { REDEEMABLE_SAVINGS_STATUSES } from '@/lib/checkout-savings';
 import { supabase } from '@/lib/supabase';
 import { CustomerRowSchema } from '@/lib/validation';
 import { trackEvent } from '@/services/analytics';
-import {
-  readPrimaryFundingAccount,
-  resolveWalletFundingAccount,
-} from './resolve-wallet-funding-account';
+import { readImeiLookupStatuses } from './imei-lookup-statuses';
+import { primaryPendingField } from './primary-pending-field';
+import { resolveWalletFundingAccount } from './resolve-wallet-funding-account';
+import { markHeldImeiCharges } from './wallet-held-imei-charges';
 import { runWithWalletLoadDeadline } from './wallet-load-deadline';
+import {
+  primaryBalanceField,
+  primaryStaleField,
+  primaryUnavailableField,
+  readPrimaryFundingAccountSoon,
+} from './wallet-primary-balance';
 import type {
   Transaction,
   WalletActiveSavingsGoal,
@@ -23,40 +29,20 @@ import {
 } from './wallet-savings-interest';
 import { projectWalletSavingsInterest } from './wallet-savings-interest-projection';
 import { hydrateWalletSavingsProducts } from './wallet-savings-product-hydration';
+import { WALLET_TRANSACTION_FETCH_LIMIT } from './wallet-transaction-limits';
 import {
   coerceDatabaseNumber,
   normalizeWalletTransaction,
 } from './wallet-transaction-normalize';
 
-// The primary provider probe may take up to its 30s network timeout;
-// the wallet load must never wait that long for one funding rail. A
-// stalled probe settles as unknown (surfaced as no account, never a
-// possibly superseded legacy DVA) while the rest of the load
-// proceeds; the next load refetches.
-const PRIMARY_FUNDING_ACCOUNT_TIMEOUT_MS = 5000;
-
-function readPrimaryFundingAccountSoon(merchantId: string, userId: string) {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<
-    Awaited<ReturnType<typeof readPrimaryFundingAccount>>
-  >((resolve) => {
-    timer = setTimeout(
-      () => resolve({ status: 'unavailable' }),
-      PRIMARY_FUNDING_ACCOUNT_TIMEOUT_MS
-    );
-  });
-  return Promise.race([
-    readPrimaryFundingAccount(merchantId, userId).finally(() => {
-      if (timer !== undefined) clearTimeout(timer);
-    }),
-    timeout,
-  ]);
-}
-
-function getEmptyWalletData(loyaltyPoints: unknown = 0): WalletQueryData {
+function getEmptyWalletData(
+  loyaltyPoints: unknown = 0,
+  ownerUnresolved = false
+): WalletQueryData {
   const safeLoyaltyPoints = coerceDatabaseNumber(loyaltyPoints) ?? 0;
   return {
     wallet: {
+      ...(ownerUnresolved ? { owner_unresolved: true as const } : {}),
       active_savings_goal: null,
       balance: 0,
       earnings_available: false,
@@ -86,6 +72,7 @@ export async function fetchWalletDataUnbounded(
   merchantId: string,
   userId: string | null
 ): Promise<WalletQueryData> {
+  const loadStartedAt = Date.now();
   if (!customerId && !userId) {
     return getEmptyWalletData();
   }
@@ -112,7 +99,7 @@ export async function fetchWalletDataUnbounded(
     : [];
 
   if (customerRows.length === 0) {
-    return getEmptyWalletData();
+    return getEmptyWalletData(0, true);
   }
 
   if (customerRows.length > 1) {
@@ -128,7 +115,7 @@ export async function fetchWalletDataUnbounded(
       severity: 'data_integrity',
       userId,
     });
-    return getEmptyWalletData();
+    return getEmptyWalletData(0, true);
   }
 
   const customerRow = customerRows[0];
@@ -145,7 +132,7 @@ export async function fetchWalletDataUnbounded(
         ? (coerceDatabaseNumber(customerValidation.data.loyalty_points) ?? 0)
         : (coerceDatabaseNumber(customerRow.loyalty_points) ?? 0);
 
-    return getEmptyWalletData(safeLoyaltyPoints);
+    return getEmptyWalletData(safeLoyaltyPoints, true);
   }
 
   const walletResult = await supabase
@@ -176,7 +163,7 @@ export async function fetchWalletDataUnbounded(
     supabase
       .from('customer_savings_goals')
       .select(
-        'id, product_id, variant_id, title, product_snapshot, target_amount, current_amount, contribution_amount, contribution_frequency, source_mode, status, maturity_date, products(id, name, images, condition, price)'
+        'id, created_at, product_id, variant_id, title, product_snapshot, target_amount, current_amount, contribution_amount, contribution_frequency, source_mode, status, maturity_date, products(id, name, images, condition, price)'
       )
       .eq('merchant_id', merchantId)
       .eq('customer_id', resolvedCustomerId)
@@ -212,6 +199,7 @@ export async function fetchWalletDataUnbounded(
   } = projectWalletSavingsInterest({
     goals: savingsGoalRows,
     goalInterestKobo: savingsInterest.goalInterestKobo,
+    goalInterestKnown: savingsInterest.goalInterestKnown,
   });
   const activeSavingsGoalRow = getActiveSavingsGoal(projectedSavingsGoalRows);
   const productsByGoalId = await hydrateWalletSavingsProducts(
@@ -249,11 +237,13 @@ export async function fetchWalletDataUnbounded(
   if (walletResult.data?.id) {
     const txResult = await supabase
       .from('customer_wallet_transactions')
-      .select('id, type, amount, description, created_at, source_type')
+      .select(
+        'id, type, amount, description, created_at, source_type, source_id'
+      )
       .eq('wallet_id', walletResult.data.id)
       .eq('merchant_id', merchantId)
       .order('created_at', { ascending: false })
-      .limit(20);
+      .limit(WALLET_TRANSACTION_FETCH_LIMIT);
 
     if (txResult.error) {
       throw txResult.error;
@@ -267,6 +257,12 @@ export async function fetchWalletDataUnbounded(
         }
         return rows;
       }, []);
+      transactionRows = await markHeldImeiCharges(
+        readImeiLookupStatuses(merchantId, resolvedCustomerId),
+        txResult.data,
+        transactionRows,
+        loadStartedAt
+      );
     }
   }
 
@@ -289,6 +285,10 @@ export async function fetchWalletDataUnbounded(
       ...toWalletSavingsInterestEarnings(savingsInterest),
       funding_account: fundingAccountData,
       loyalty_points: safeLoyaltyPoints,
+      ...primaryBalanceField(primaryFunding),
+      ...primaryUnavailableField(primaryFunding),
+      ...primaryStaleField(primaryFunding),
+      ...primaryPendingField(primaryFunding),
       requires_funding_account_consent: fundingAccountData === null,
       savings_balance: safeSavingsBalance,
       savings_goals: savingsGoals,

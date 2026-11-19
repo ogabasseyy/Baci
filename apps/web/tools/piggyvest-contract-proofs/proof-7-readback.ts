@@ -15,6 +15,8 @@ export interface PayoutReadbackResult {
   facts: PayoutReadback | null;
   /** The last readback's data, for the shape record. */
   data: unknown;
+  /** The latest SUCCESSFUL readback, for field-level reads; null if none succeeded. */
+  record: Record<string, unknown> | null;
   httpStatus: number | null;
   /** True once a payout destination field was readable; false if it never appeared in the budget. */
   settled: boolean;
@@ -33,10 +35,14 @@ export async function readbackPayout(
   walletId: string,
   business: string
 ): Promise<PayoutReadbackResult> {
-  const seen: { facts: PayoutReadback | null } = { facts: null };
+  const seen: {
+    facts: PayoutReadback | null;
+    record: Record<string, unknown> | null;
+  } = { facts: null, record: null };
   const read = async () => {
     const call = await ctx.api.wallet(walletId);
     const record = recordOf(call);
+    if (record) seen.record = record;
     const facts = record
       ? analysePayoutReadback(record, business, walletId)
       : null;
@@ -50,6 +56,7 @@ export async function readbackPayout(
   return {
     facts: seen.facts,
     data: polled.value.data,
+    record: seen.record,
     httpStatus: polled.value.httpStatus,
     settled: polled.settled,
     polls: polled.polls,

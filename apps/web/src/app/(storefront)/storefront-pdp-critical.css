@@ -17,7 +17,7 @@
     align-items: center;
     color: color-mix(
       in srgb,
-      var(--store-background-text, #111827) 58%,
+      var(--store-background-text, #111827) 68%,
       transparent
     );
     display: flex;
@@ -114,7 +114,7 @@
   [data-ogabassey-pdp-review-count] {
     color: color-mix(
       in srgb,
-      var(--store-background-text, #111827) 60%,
+      var(--store-background-text, #111827) 68%,
       transparent
     );
     font-size: 0.875rem;

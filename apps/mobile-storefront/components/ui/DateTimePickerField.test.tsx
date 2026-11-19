@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { Modal, Platform } from 'react-native';
+import Colors from '@/constants/Colors';
 import { DateTimePickerField } from './DateTimePickerField';
 
 let mockPickerEventType: 'dismissed' | 'set' = 'set';
@@ -9,8 +10,10 @@ let renderedDisplay: string | undefined;
 let renderedThemeVariant: 'light' | 'dark' | undefined;
 let renderedIs24Hour: boolean | undefined;
 let renderedLocale: string | undefined;
+let renderedAccentColor: string | undefined;
 
 type MockDateTimePickerProps = {
+  accentColor?: string;
   display?: string;
   is24Hour?: boolean;
   locale?: string;
@@ -33,7 +36,9 @@ jest.mock('@react-native-community/datetimepicker', () => {
       display,
       is24Hour,
       locale,
+      accentColor,
     }: MockDateTimePickerProps) => {
+      renderedAccentColor = accentColor;
       renderedThemeVariant = themeVariant;
       renderedDisplay = display;
       renderedIs24Hour = is24Hour;
@@ -68,6 +73,44 @@ describe('DateTimePickerField', () => {
     renderedThemeVariant = undefined;
     renderedIs24Hour = undefined;
     renderedLocale = undefined;
+    renderedAccentColor = undefined;
+  });
+
+  it('shows and picks a 24-hour reminder time when asked', () => {
+    render(
+      <DateTimePickerField
+        accessibilityLabel="Savings reminder time"
+        fallbackDisplay="08:00"
+        label="Reminder time"
+        mode="time"
+        onChangeText={jest.fn()}
+        use24HourTime
+        value="18:30"
+      />
+    );
+
+    expect(screen.getByText('18:30')).toBeOnTheScreen();
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Savings reminder time' })
+    );
+    expect(renderedIs24Hour).toBe(true);
+    expect(renderedLocale).toBe('en-GB');
+  });
+
+  it('tints the native picker with the brand colour, not the system blue', () => {
+    render(
+      <DateTimePickerField
+        accessibilityLabel="Savings start date"
+        fallbackDisplay="YYYY-MM-DD"
+        label="Start date"
+        mode="date"
+        onChangeText={jest.fn()}
+        value="2026-05-22"
+      />
+    );
+
+    fireEvent.press(screen.getByRole('button', { name: 'Savings start date' }));
+    expect(renderedAccentColor).toBe(Colors.light.primary);
   });
 
   it('formats selected time values', () => {

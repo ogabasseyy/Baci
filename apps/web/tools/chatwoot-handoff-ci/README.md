@@ -1,0 +1,17 @@
+# Synthetic Chatwoot handoff check
+
+This disposable GitHub Actions job runs Chatwoot CE v4.19.1 with pinned Postgres and Redis images. It creates one synthetic account, a Web Widget inbox, one AgentBot webhook, one synthetic operator and one synthetic visitor. It uses no real credentials, provider APIs, email delivery, deployment or external account data.
+
+The workflow pulls all container images before Compose creates its internal-only network. No ports are published. `SAFE_FETCH_ALLOW_PRIVATE_NETWORK` is enabled only in this disposable Compose stack so Chatwoot's `SafeFetch` can call the harness service at `http://harness:8787`; the internal-only network has no published or external route. A named volume holds short-lived synthetic access tokens for the Rails seed and Node harness; the workflow removes containers, network and volume in an EXIT trap. The job has a 25 minute bound and cancels superseded runs.
+
+The harness creates synthetic records with the Chatwoot Rails models, then inserts customer-side incoming messages through those models so Chatwoot itself dispatches its normal AgentBot webhook. It uses the account REST API for AgentBot and operator actions. It asserts an AgentBot reply, a bot-authored `pending → open` handoff into the unassigned queue, and no new AgentBot message for five seconds after the matching webhook for a second customer message arrives while the conversation remains open. It then asserts a human-authored reply and a human-authored status transition to `pending` followed by a new AgentBot reply. This is API/model-level testing; it does not run a browser or claim to verify dashboard controls or widget rendering.
+
+The last sequence is an integration policy demonstration: the operator returns a conversation to `pending` through the API; a synthetic customer message follows and the test checks whether the active inbox AgentBot replies. It does not claim that Chatwoot automatically changes the AI assignee back to the AgentBot.
+
+Chatwoot behavior is checked against the tagged v4.19.1 source: `AgentBotListener` delivers incoming message events; `ConversationsController#toggle_status` calls `bot_handoff!` for an AgentBot changing a pending conversation to open; `bot_handoff!` clears AI assignment and opens the conversation. `AccessTokenable` creates an access token after user and bot creation, and the tagged bot endpoint allowlist includes conversation show/status/message operations used here. `SafeFetch` blocks private network access by default, so the isolated test explicitly enables it for callback delivery. Official Docker deployment docs describe the Rails, Sidekiq, Postgres and Redis service setup. The test intentionally does not claim a late-reply race guarantee; exercising race ordering needs a separately controlled test.
+
+Run the dependency-free behavioral and contract tests with:
+
+```sh
+node --test apps/web/tools/chatwoot-handoff-ci/*.test.mjs
+```

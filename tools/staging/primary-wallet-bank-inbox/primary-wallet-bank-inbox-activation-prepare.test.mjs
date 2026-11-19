@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -67,4 +68,60 @@ test('does not accept approval assertions without matching actual database evide
     providerContractProofSha256:'d'.repeat(64),privilegedMigrationProofSha256:'e'.repeat(64),
     exactProductionScopeVerified:true,restrictedCapabilitiesVerified:true,finiteCredentialExpiryVerified:true,rollbackReviewed:true };
   await assert.rejects(preparePrimaryBankActivation({ ...options, operatorProof: proof }), /does not match/);
+}));
+
+test('accepts the exact bank worker capability and rejects grant drift', async () => fixture(async (options, parent) => {
+  const baseline = await preparePrimaryBankActivation(options);
+  const manifest = JSON.parse(await readFile(path.join(baseline.directory, 'manifest.json'), 'utf8'));
+  const databaseInventory = {
+    restricted_inventory: {
+      captured_at: new Date(now).toISOString(),
+      session_is_fixed_login: true, tls: true, login_restricted: true,
+      login_valid_until: options.expiresAt, sole_capability_membership: true,
+      capability_restricted: true, capability_parent_memberships: 1,
+      readiness_reader_restricted: true, schema_usage: true,
+      direct_private_table_privileges: 0, public_bank_rpcs: 0,
+      bank_rpcs_present: true, customer_or_service_bank_execution: 0,
+      effective_primary_rpcs: [
+        'bank_inbox_readiness(p_integration uuid, p_environment text, p_scope jsonb)',
+        'bank_role_safe(p_worker boolean)',
+        'claim_bank_inbox(p_integration uuid, p_environment text, p_scope jsonb, p_command jsonb)',
+        'engine_ready(p_surface text)',
+        'process_bank_inbox(p_integration uuid, p_environment text, p_scope jsonb, p_command jsonb)',
+        'retry_bank_inbox(p_integration uuid, p_environment text, p_scope jsonb, p_command jsonb)',
+      ],
+    },
+    authority_inventory: { exact_enabled_authority_ready: true, financial_actions: false },
+  };
+  const sha = (value) => createHash('sha256').update(value).digest('hex');
+  const prepare = (name, database) => preparePrimaryBankActivation({
+    ...options,
+    outputDirectory: path.join(parent, name),
+    databaseInventory: database,
+    operatorProof: {
+      kind: 'operator_inventory', capturedAt: new Date(now).toISOString(), expiresAt: options.expiresAt,
+      hostInventorySha256: sha(JSON.stringify(hostInventory, null, 2) + '\n'),
+      databaseInventorySha256: sha(JSON.stringify(database, null, 2) + '\n'),
+      candidateBundleSha256: manifest.artifacts['bank-inbox.cjs'],
+      providerContractProofSha256: 'a'.repeat(64), privilegedMigrationProofSha256: 'b'.repeat(64),
+      exactProductionScopeVerified: true, restrictedCapabilitiesVerified: true,
+      finiteCredentialExpiryVerified: true, rollbackReviewed: true,
+    },
+  });
+  const prepared = await prepare('exact', databaseInventory);
+  assert.equal(prepared.operatorEvidenceReviewed, true);
+  assert.equal(prepared.activationAuthorized, false);
+  for (const [name, change] of [
+    ['other-parent', (db) => { db.readiness_reader_restricted = false; }],
+    ['no-parent', (db) => { db.capability_parent_memberships = 0; }],
+    ['multiple-parents', (db) => { db.capability_parent_memberships = 2; }],
+    ['duplicate-rpc', (db) => { db.effective_primary_rpcs[1] = db.effective_primary_rpcs[0]; }],
+    ['missing-rpc', (db) => { db.effective_primary_rpcs.pop(); }],
+    ['overload', (db) => { db.effective_primary_rpcs[0] = 'bank_inbox_readiness(p_scope jsonb)'; }],
+    ['extra-rpc', (db) => { db.effective_primary_rpcs.push('unexpected()'); }],
+  ]) {
+    const database = structuredClone(databaseInventory);
+    change(database.restricted_inventory);
+    await assert.rejects(prepare(name, database), /Operator proof does not match/);
+  }
 }));

@@ -198,6 +198,11 @@ export async function runProof4(ctx: ProofContext): Promise<ProofResult> {
     'bank_outcome',
     bank.outcome
   );
+  if (!bank.call.ok)
+    b.value(
+      'bank_rejection_message',
+      bank.call.message ? redactor.message(bank.call.message) : null
+    );
   const bankWatch = await awaitTerminal(ctx, bank.reference, main);
   b.value('bank_terminal', bankWatch.terminal);
   const afterBank = await settledCounts(ctx, bankWatch.terminal === 'success');

@@ -18,6 +18,8 @@ export async function submitPrimaryWalletSavings(input: {
   scope: unknown;
   request: unknown;
   providerToken: unknown;
+  // Required: no funding reservation exists without a spent PIN proof.
+  pinProof: unknown;
   reconciliationConfiguration?: unknown;
 }) {
   const configuration = piggyvestPrimarySavingsRuntimeSchema.parse(
@@ -26,6 +28,9 @@ export async function submitPrimaryWalletSavings(input: {
   const scope = piggyvestPrimaryWalletStoreSchemas.scope.parse(input.scope);
   const request = piggyvestPrimarySavingsTransferSchemas.request.parse(
     input.request
+  );
+  const pinProof = piggyvestPrimarySavingsTransferSchemas.pinProof.parse(
+    input.pinProof
   );
   const token = piggyvestPrimaryWalletRuntimeSchema.shape.providerToken.parse(
     input.providerToken
@@ -58,7 +63,7 @@ export async function submitPrimaryWalletSavings(input: {
   const result = await submitPrimaryWalletSavingsTransfer(request, {
     ...store,
     reserve: async (selection) => {
-      const result = await store.reserve(selection);
+      const result = await store.reserve(selection, pinProof);
       if (result.status === 'claimed') {
         const reservation =
           piggyvestPrimarySavingsTransferSchemas.reserved.parse(

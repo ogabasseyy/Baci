@@ -31,8 +31,9 @@ describe('proof 5: interest visibility (development evidence)', () => {
     expect(result.values.accrual_edges_default_window).toBe(0);
     expect(answer(result, 'accrual_records_observed')).toBe('no');
     expect(answer(result, 'accrual_edge_shape_observed')).toBe('no');
+    // The live accrual page info (2026-10-31) has no previousCursor.
     expect(result.values.accrual_page_info_fields).toBe(
-      'endCursor,hasNextPage,previousCursor'
+      'endCursor,hasNextPage'
     );
     expect(result.values.interest_rate_nonzero_on_any_wallet).toBe(false);
     expect(answer(result, 'transaction_list_has_interest_rows')).toBe('no');

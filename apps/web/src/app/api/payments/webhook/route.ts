@@ -47,6 +47,7 @@ import { isMerchantInvoicePartialBalanceReview } from '@/lib/payments/is-merchan
 import { normalizeCurrencyCode } from '@/lib/payments/normalize-currency-code';
 import { processMerchantInvoicePartialPayment } from '@/lib/payments/process-merchant-invoice-partial-payment';
 import { processWalletFundedOrderPayment } from '@/lib/payments/process-wallet-funded-order-payment';
+import { recordChatOrderSettlement } from '@/lib/payments/record-chat-order-settlement';
 import { recordOrderUpdateFailureSettlement } from '@/lib/payments/record-order-update-failure-settlement';
 import { scheduleWalletTopUpCreditNotification } from '@/lib/payments/schedule-wallet-top-up-credit-notification';
 import {
@@ -1236,23 +1237,20 @@ export async function POST(request: NextRequest) {
           const platformFee =
             calculatePlatformFee(grossAmount * 100).platformFee / 100;
 
-          await supabase.rpc('record_merchant_settlement', {
-            p_merchant_id: chatOrder.merchant_id,
-            p_source_type: 'order',
-            p_source_id: newOrderId,
-            p_gateway: gateway,
-            p_gateway_reference: reference,
-            p_gross_amount: grossAmount,
-            p_gateway_fee: 0,
-            p_platform_fee: platformFee,
-            p_description: `Chat order payment via ${gateway}`,
-            // Δ-29 / Δ-59: traceability — gateway-side ref lives in metadata
-            // only (chat-order path has no separate BAC-* yet). Review
-            // feedback: key is gateway-prefixed, not hardcoded paystack.
-            p_metadata: { [`${gateway}_reference`]: reference },
+          // Throws on a returned RPC error, so a recorder refusal reaches
+          // the log below instead of passing as success.
+          await recordChatOrderSettlement({
+            gateway,
+            gatewayResponse,
+            grossAmount,
+            merchantId: chatOrder.merchant_id,
+            orderId: newOrderId,
+            platformFee,
+            reference,
+            supabase,
           });
         } catch (settlementErr) {
-          logger.warn({
+          logger.error({
             message: 'Settlement recording failed for chat order',
             error: settlementErr,
           });

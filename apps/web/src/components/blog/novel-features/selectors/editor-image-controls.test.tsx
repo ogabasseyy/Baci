@@ -70,4 +70,63 @@ describe('EditorImageControls', () => {
 
     expect(uploadImage).toHaveBeenCalledWith(file, mockTiptap.view, 7);
   });
+
+  describe('IME composition', () => {
+    const setupChain = () => {
+      const run = vi.fn();
+      const setImage = vi.fn(() => ({ run }));
+      const chain = {
+        focus: () => ({ setImage }),
+      };
+      (mockTiptap as unknown as { chain: () => typeof chain }).chain = () =>
+        chain;
+      return { setImage };
+    };
+
+    it('does not insert the image when Enter confirms composition in the URL input', () => {
+      const { setImage } = setupChain();
+      render(<EditorImageControls editor={{}} />);
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Insert image from URL' })
+      );
+      const input = screen.getByLabelText('Image URL');
+      fireEvent.change(input, {
+        target: { value: 'https://example.com/a.jpg' },
+      });
+
+      expect(
+        fireEvent.keyDown(input, { key: 'Enter', isComposing: true })
+      ).toBe(false);
+      expect(fireEvent.keyDown(input, { key: 'Enter', keyCode: 229 })).toBe(
+        false
+      );
+      expect(setImage).not.toHaveBeenCalled();
+
+      fireEvent.keyDown(input, { key: 'Enter' });
+      expect(setImage).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not insert the image when Enter confirms composition in the caption input', () => {
+      const { setImage } = setupChain();
+      render(<EditorImageControls editor={{}} />);
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Insert image from URL' })
+      );
+      fireEvent.change(screen.getByLabelText('Image URL'), {
+        target: { value: 'https://example.com/a.jpg' },
+      });
+      const caption = screen.getByLabelText('Caption');
+
+      expect(
+        fireEvent.keyDown(caption, { key: 'Enter', isComposing: true })
+      ).toBe(false);
+      expect(fireEvent.keyDown(caption, { key: 'Enter', keyCode: 229 })).toBe(
+        false
+      );
+      expect(setImage).not.toHaveBeenCalled();
+
+      fireEvent.keyDown(caption, { key: 'Enter' });
+      expect(setImage).toHaveBeenCalledTimes(1);
+    });
+  });
 });

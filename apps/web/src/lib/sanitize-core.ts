@@ -199,6 +199,12 @@ export function sanitizeForLog(value: unknown, maxLength = 1000): string {
       return cleanForLog(String(value).slice(0, maxLength));
     }
 
+    if (value instanceof Error) {
+      const name = value.name || 'Error';
+      const formatted = value.message ? `${name}: ${value.message}` : name;
+      return cleanForLog(formatted.slice(0, maxLength));
+    }
+
     const json = JSON.stringify(value);
     return cleanForLog(
       (json === undefined ? String(value) : json).slice(0, maxLength)

@@ -206,7 +206,7 @@ describe('generateMetadata', () => {
       params: Promise.resolve({ slug: 'test' }),
     });
 
-    expect(metadata.title).toBe('About Us | Test Store');
+    expect(metadata.title).toBe('About Us');
     expect(notFound).not.toHaveBeenCalled();
   });
 
@@ -227,7 +227,7 @@ describe('generateMetadata', () => {
       params: Promise.resolve({ slug: 'test' }),
     });
 
-    expect(metadata.title).toBe('About Us | Test Store');
+    expect(metadata.title).toBe('About Us');
     expect(metadata.alternates?.canonical).toBe('https://ogabassey.com/about');
     expect(notFound).not.toHaveBeenCalled();
   });
@@ -249,7 +249,7 @@ describe('generateMetadata', () => {
       params: Promise.resolve({ slug: 'test' }),
     });
 
-    expect(metadata.title).toBe('About Us | Test Store');
+    expect(metadata.title).toBe('About Us');
     expect(metadata.alternates?.canonical).toBe('https://ogabassey.com/about');
     expect(metadata.openGraph?.url).toBe('https://ogabassey.com/about');
   });

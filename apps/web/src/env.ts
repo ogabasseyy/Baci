@@ -8,6 +8,7 @@ import { isNonAgenticWorkerProfile } from '@/lib/is-non-agentic-worker-profile';
 import { buildLlmBearerAuthHeader } from '@/lib/llm-auth';
 import { isNegotiatedCheckoutProofSecretMissing } from '@/lib/quiz/negotiated-checkout-proof-env';
 import { supabaseAgenticJwtPrivateJwkStringSchema } from '@/schemas/supabase-agentic-jwt-private-jwk';
+import { walletPinPepperEnvSchema } from '@/schemas/wallet-pin-pepper';
 
 /**
  * A type-safe and validated way to access environment variables.
@@ -181,6 +182,9 @@ const serverSchema = z
       .string()
       .min(1, 'SUPABASE_SERVICE_ROLE_KEY is required'),
     RECOVERY_CODE_PEPPER: recoveryCodePepperSchema,
+    // Wallet PIN hashing key; unset means no PIN can be set or verified. An
+    // unusable value reads as unset and never fails boot (dark feature).
+    WALLET_PIN_PEPPER: walletPinPepperEnvSchema,
     SUPABASE_JWT_SECRET: optionalTrimmedStringSchema,
     SUPABASE_LEGACY_ANON_JWT: optionalTrimmedStringSchema,
     SUPABASE_AGENTIC_JWT_PRIVATE_JWK: supabaseAgenticJwtPrivateJwkStringSchema,
@@ -669,6 +673,7 @@ const getEnv = (): Partial<z.infer<typeof serverSchema>> &
     ? {
         SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
         RECOVERY_CODE_PEPPER: process.env.RECOVERY_CODE_PEPPER,
+        WALLET_PIN_PEPPER: process.env.WALLET_PIN_PEPPER,
         SUPABASE_JWT_SECRET: process.env.SUPABASE_JWT_SECRET,
         SUPABASE_LEGACY_ANON_JWT: process.env.SUPABASE_LEGACY_ANON_JWT,
         SUPABASE_AGENTIC_JWT_PRIVATE_JWK:

@@ -115,7 +115,7 @@ describe('ShipmentFlowMethodStep', () => {
     expect(screen.getByText('Use Topship')).toBeInTheDocument();
     expect(
       screen.getByText(
-        /book the shipment with Topship using the saved checkout quote/i
+        /book the shipment with Topship using the saved shipping quote/i
       )
     ).toBeInTheDocument();
 

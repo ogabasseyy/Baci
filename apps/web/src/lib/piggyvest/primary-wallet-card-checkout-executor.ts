@@ -1,27 +1,17 @@
 import 'server-only';
 import { Client } from 'pg';
 import { primaryWalletCardCheckoutRuntimeSchema } from '@/schemas/primary-wallet-card-checkout-runtime';
+import { primaryDbLink } from './primary-db-link';
 
+// Card top-up initialization is retired, so there is deliberately no
+// statement for reserve, claim_initialization or record_initialization:
+// the authorizer login only reads existing operations. Their EXECUTE
+// grants are also revoked in the database.
 const statements = {
-  reserve: {
-    role: 'authorizer',
-    sql: 'SELECT piggyvest_primary_card.reserve($1::jsonb,$2::jsonb) AS result',
-    count: 2,
-  },
   read: {
     role: 'authorizer',
     sql: 'SELECT piggyvest_primary_card.read_operation($1::jsonb,$2::uuid) AS result',
     count: 2,
-  },
-  claim: {
-    role: 'authorizer',
-    sql: 'SELECT piggyvest_primary_card.claim_initialization($1::jsonb,$2::uuid) AS result',
-    count: 2,
-  },
-  initialize: {
-    role: 'authorizer',
-    sql: 'SELECT piggyvest_primary_card.record_initialization($1::jsonb,$2::uuid,$3::uuid,$4::jsonb) AS result',
-    count: 4,
   },
   collection: {
     role: 'evidence',
@@ -84,22 +74,26 @@ export function createPrimaryWalletCardCheckoutExecutor(
     )
       throw new Error('Primary card storage unavailable');
     const database = config[statement.role];
+    const link = primaryDbLink(database.login, database.port);
     const client = new Client({
       host: database.host,
       port: database.port,
       database: database.name,
-      user: database.login,
+      user: link.user,
       password: database.password,
-      ssl: { rejectUnauthorized: true, ca: database.certificateAuthority },
+      ssl: {
+        rejectUnauthorized: true,
+        ca: database.certificateAuthority,
+        ...link.tls,
+      },
       connectionTimeoutMillis: 4000,
       query_timeout: 4000,
-      statement_timeout: 2500,
-      lock_timeout: 1500,
-      options: '-c search_path=pg_catalog',
+      ...link.startup,
       application_name: 'baci-primary-card-checkout',
     });
     try {
       await client.connect();
+      await link.afterConnect(client);
       const verified = await client.query(verifySession, [
         `primary_card_${statement.role}`,
       ]);

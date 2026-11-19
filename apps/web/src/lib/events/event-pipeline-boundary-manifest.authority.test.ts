@@ -61,10 +61,13 @@ describe('event pipeline authority importer boundary', () => {
       'apps/web/src/lib/immediate-order/confirmation-email.ts',
       'apps/web/src/app/api/payments/credit-direct/webhook/customer-inventory-failure.ts',
       'apps/web/src/lib/send-manual-order-document.ts',
+      'apps/web/src/lib/feedback/send-feedback-report-email.ts',
+      'apps/web/src/scripts/reconcile-vtu-processing.ts',
+      'apps/web/src/scripts/purge-jumia-self-authorization-discoveries.ts',
+      'apps/web/src/scripts/cleanup-checkout-shipping-recovery-previews.ts',
     ]);
     expect(manifest.authority.serviceImporters).toEqual([
       'apps/web/src/app/api/cron/drain-cache-invalidations/route.ts',
-      'apps/web/src/app/api/cron/gigl-tracking-notifications/route.ts',
       'apps/web/src/app/api/cron/process-redvault-refunds/route.ts',
       'apps/web/src/app/api/analytics/conversion/route.ts',
       'apps/web/src/app/api/events/route.ts',
@@ -77,12 +80,14 @@ describe('event pipeline authority importer boundary', () => {
       'apps/web/src/lib/wallet/server-funding-recovery-hmac-client.ts',
       'apps/web/src/lib/immediate-order/server-completion-hmac-client.ts',
       'apps/web/src/lib/shipping/server-shipping-quote-booking-economics-client.ts',
-      'apps/web/src/lib/piggyvest/server-intake-client.ts',
       'apps/web/src/lib/storefront/server-intake-client.ts',
       'apps/web/src/lib/search/server-analytics-client.ts',
       'apps/web/src/scripts/process-domain-events.ts',
       'apps/web/src/scripts/process-event-deliveries.ts',
       'apps/web/src/scripts/process-merchant-onboarding-emails.ts',
+      'apps/web/src/scripts/process-order-cancellation-side-effects.ts',
+      'apps/web/src/scripts/process-order-notifications.ts',
+      'apps/web/src/scripts/publish-scheduled-posts.ts',
     ]);
     expect(manifest.authority.servicePaths).toEqual([
       ...eventPipelineAuthorityServicePaths,

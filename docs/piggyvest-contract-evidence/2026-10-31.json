@@ -1,0 +1,1671 @@
+{
+  "schema": "piggyvest-contract-evidence/v1",
+  "date": "2026-10-31",
+  "mode": "live-sandbox-mutations",
+  "sandboxHost": "staging.piggyvest.business",
+  "mockData": false,
+  "guards": [
+    "base URL host must be exactly staging.piggyvest.business; API key must be a test key",
+    "dry-run is the default and uses mocks only; live-readonly sends GET only",
+    "mutations need --live-sandbox-mutations, an allowlist of QA customer ids, a journaled intent and a unique reference",
+    "the protected recording account is refused in arguments, requests and responses",
+    "evidence is scanned for ids, emails, phones, BVNs, account numbers, keys and balances before it is written"
+  ],
+  "proofs": [
+    {
+      "proof": "p1",
+      "title": "Create-customer re-POST with returnIfExist=true",
+      "status": "inconclusive",
+      "reason": "re-POST already executed in an earlier run",
+      "findings": [
+        {
+          "id": "lookup_by_identifier_finds_customer",
+          "question": "Can GET /api/v1/customers?third_party_identifier= find the customer?",
+          "answer": "yes"
+        },
+        {
+          "id": "list_echoes_identifier",
+          "question": "Does the customer list row echo third_party_identifier?",
+          "answer": "yes"
+        },
+        {
+          "id": "repost_returns_same_wallet_id",
+          "question": "Does the re-POST return the SAME wallet_id as the original create?",
+          "answer": "unknown",
+          "detail": "slot already executed"
+        },
+        {
+          "id": "repost_returns_same_customer_id",
+          "question": "Does the re-POST return the same customer_id?",
+          "answer": "unknown",
+          "detail": "slot already executed"
+        },
+        {
+          "id": "repost_reports_existing_customer",
+          "question": "Does the re-POST report new_customer:false?",
+          "answer": "unknown",
+          "detail": "slot already executed"
+        },
+        {
+          "id": "create_response_echoes_identifier",
+          "question": "Is third_party_identifier echoed in the create response?",
+          "answer": "unknown",
+          "detail": "slot already executed"
+        },
+        {
+          "id": "default_wallet_is_earliest_created",
+          "question": "Is the default wallet the earliest-created wallet of the customer?",
+          "answer": "unknown"
+        },
+        {
+          "id": "explicit_default_flag_in_wallet_list",
+          "question": "Does the wallet list carry an explicit default/primary flag?",
+          "answer": "no"
+        },
+        {
+          "id": "wallet_retrieve_exposes_customer_binding",
+          "question": "Does GET /wallet/:id expose api_customer_id (owner binding)?",
+          "answer": "unknown"
+        }
+      ],
+      "shapes": [
+        {
+          "name": "GET /customers?third_party_identifier=",
+          "httpStatus": 200,
+          "fields": [
+            {
+              "path": "paginatedPayload",
+              "type": "object"
+            },
+            {
+              "path": "paginatedPayload.edges[]",
+              "type": "array(len=1)"
+            },
+            {
+              "path": "paginatedPayload.edges[].id",
+              "type": "string(ulid)"
+            },
+            {
+              "path": "paginatedPayload.edges[].name",
+              "type": "string(text)"
+            },
+            {
+              "path": "paginatedPayload.edges[].email",
+              "type": "string(email)"
+            },
+            {
+              "path": "paginatedPayload.edges[].phone",
+              "type": "string(digits:13)"
+            },
+            {
+              "path": "paginatedPayload.edges[].slug_id",
+              "type": "string(text)"
+            },
+            {
+              "path": "paginatedPayload.edges[].third_party_identifier",
+              "type": "string(text)"
+            },
+            {
+              "path": "paginatedPayload.edges[].created_at",
+              "type": "string(iso-datetime)"
+            },
+            {
+              "path": "paginatedPayload.pageInfo",
+              "type": "object"
+            },
+            {
+              "path": "paginatedPayload.pageInfo.hasNextPage",
+              "type": "boolean(false)"
+            },
+            {
+              "path": "paginatedPayload.pageInfo.endCursor",
+              "type": "string(iso-datetime)"
+            },
+            {
+              "path": "paginatedPayload.pageInfo.previousCursor",
+              "type": "string(iso-datetime)"
+            }
+          ]
+        },
+        {
+          "name": "GET wallet list (customer_id filter)",
+          "httpStatus": 200,
+          "fields": [
+            {
+              "path": "all_branch_wallet_access",
+              "type": "boolean"
+            },
+            {
+              "path": "total_balance_value_correct",
+              "type": "boolean"
+            },
+            {
+              "path": "total_balance",
+              "type": "integer"
+            },
+            {
+              "path": "total_safelock_balance",
+              "type": "integer"
+            },
+            {
+              "path": "total_safelock_count",
+              "type": "integer"
+            },
+            {
+              "path": "total_wallets",
+              "type": "integer"
+            },
+            {
+              "path": "total_wallets_and_safelock_count",
+              "type": "integer"
+            },
+            {
+              "path": "interest_rate",
+              "type": "integer"
+            },
+            {
+              "path": "paginatedPayload",
+              "type": "object"
+            },
+            {
+              "path": "paginatedPayload.edges[]",
+              "type": "array(len=2)"
+            },
+            {
+              "path": "paginatedPayload.edges[].id",
+              "type": "string(ulid)"
+            },
+            {
+              "path": "paginatedPayload.edges[].business_id",
+              "type": "string(ulid)"
+            },
+            {
+              "path": "paginatedPayload.edges[].branch_id",
+              "type": "string(ulid)"
+            },
+            {
+              "path": "paginatedPayload.edges[].faas_wallet_identifier",
+              "type": "string(ulid)|string(uuid)"
+            },
+            {
+              "path": "paginatedPayload.edges[].currency",
+              "type": "string(enum:NGN)"
+            },
+            {
+              "path": "paginatedPayload.edges[].name",
+              "type": "string(text)"
+            },
+            {
+              "path": "paginatedPayload.edges[].status",
+              "type": "string(enum:active)"
+            },
+            {
+              "path": "paginatedPayload.edges[].auto_payout",
+              "type": "boolean"
+            },
+            {
+              "path": "paginatedPayload.edges[].type",
+              "type": "string(enum:api)"
+            },
+            {
+              "path": "paginatedPayload.edges[].tag",
+              "type": "null|string(text)"
+            },
+            {
+              "path": "paginatedPayload.edges[].is_subaccount",
+              "type": "boolean"
+            },
+            {
+              "path": "paginatedPayload.edges[].parent_wallet_id",
+              "type": "string(ulid)"
+            },
+            {
+              "path": "paginatedPayload.edges[].balance",
+              "type": "integer"
+            },
+            {
+              "path": "paginatedPayload.edges[].ledger_balance",
+              "type": "integer"
+            },
+            {
+              "path": "paginatedPayload.edges[].gradient_color_id",
+              "type": "null"
+            },
+            {
+              "path": "paginatedPayload.edges[].provider_payload",
+              "type": "null|string(text)"
+            },
+            {
+              "path": "paginatedPayload.edges[].auto_withdrawal_destination_type",
+              "type": "null"
+            },
+            {
+              "path": "paginatedPayload.edges[].auto_withdrawal_destination_id",
+              "type": "null"
+            },
+            {
+              "path": "paginatedPayload.edges[].auto_withdrawal_destination_name",
+              "type": "null"
+            },
+            {
+              "path": "paginatedPayload.edges[].auto_withdrawal_destination_code",
+              "type": "null"
+            },
+            {
+              "path": "paginatedPayload.edges[].auto_withdrawal_destination_bank_name",
+              "type": "null"
+            },
+            {
+              "path": "paginatedPayload.edges[].auto_withdrawal_destination_bank_logo",
+              "type": "null"
+            },
+            {
+              "path": "paginatedPayload.edges[].is_frozen",
+              "type": "boolean"
+            },
+            {
+              "path": "paginatedPayload.edges[].api_customer_id",
+              "type": "string(ulid)"
+            },
+            {
+              "path": "paginatedPayload.edges[].bypass_withdrawal_limit_rule",
+              "type": "null"
+            },
+            {
+              "path": "paginatedPayload.edges[].interest_payout_wallet",
+              "type": "null"
+            },
+            {
+              "path": "paginatedPayload.edges[].interest_enabled",
+              "type": "boolean"
+            },
+            {
+              "path": "paginatedPayload.edges[].approval_workflow_id",
+              "type": "null"
+            },
+            {
+              "path": "paginatedPayload.edges[].creation_interest_rate",
+              "type": "integer"
+            },
+            {
+              "path": "paginatedPayload.edges[].current_interest_rate",
+              "type": "integer"
+            },
+            {
+              "path": "paginatedPayload.edges[].created_at",
+              "type": "string(iso-datetime)"
+            },
+            {
+              "path": "paginatedPayload.edges[].updated_at",
+              "type": "string(iso-datetime)"
+            },
+            {
+              "path": "paginatedPayload.edges[].deleted_at",
+              "type": "null"
+            },
+            {
+              "path": "paginatedPayload.edges[].customer_name",
+              "type": "string(text)"
+            },
+            {
+              "path": "paginatedPayload.pageInfo",
+              "type": "object"
+            },
+            {
+              "path": "paginatedPayload.pageInfo.hasNextPage",
+              "type": "boolean(false)"
+            },
+            {
+              "path": "paginatedPayload.pageInfo.endCursor",
+              "type": "string(iso-datetime)"
+            },
+            {
+              "path": "paginatedPayload.pageInfo.previousCursor",
+              "type": "string(iso-datetime)"
+            }
+          ]
+        }
+      ],
+      "values": {
+        "lookup_list_container": "paginatedPayload.edges",
+        "lookup_result_count": 1,
+        "wallet_count": 2,
+        "default_wallet_position_default_order": null,
+        "default_wallet_position_ascending": null,
+        "wallet_list_fields_differing_default_vs_others": null,
+        "adoption_rule": "unconfirmed"
+      },
+      "notes": [
+        "The re-POST slot was already used (accepted); it is never resent. Use --new-attempt to repeat it.",
+        "No create response in this run, so there is no ground truth for the default wallet; position facts omitted.",
+        "adoption_rule: supported only if the identifier lookup finds the customer AND the re-POST returns the wallet_id of this run's own brand-new create (ground truth). A different wallet is not_supported; agreement with only the earliest-created heuristic stays unconfirmed."
+      ]
+    },
+    {
+      "proof": "p2",
+      "title": "Transaction status query (TSQ) for a wallet-to-wallet transfer",
+      "status": "observed",
+      "findings": [
+        {
+          "id": "unknown_reference_is_404",
+          "question": "Does an unknown reference return HTTP 404?",
+          "answer": "yes"
+        },
+        {
+          "id": "tsq_shows_amount",
+          "question": "Does the TSQ response show the amount?",
+          "answer": "yes"
+        },
+        {
+          "id": "tsq_amount_matches_sent",
+          "question": "Does the TSQ amount equal the amount sent (kobo)?",
+          "answer": "yes"
+        },
+        {
+          "id": "tsq_shows_currency",
+          "question": "Does the TSQ response show the currency?",
+          "answer": "no"
+        },
+        {
+          "id": "tsq_shows_fee",
+          "question": "Does the TSQ response show a fee?",
+          "answer": "yes"
+        },
+        {
+          "id": "tsq_shows_status",
+          "question": "Does the TSQ response show a status?",
+          "answer": "yes"
+        },
+        {
+          "id": "tsq_names_source_wallet",
+          "question": "Does the TSQ response name the SOURCE wallet?",
+          "answer": "yes",
+          "detail": "field: source_wallet"
+        },
+        {
+          "id": "tsq_names_destination_wallet",
+          "question": "Does the TSQ response name the DESTINATION wallet?",
+          "answer": "yes",
+          "detail": "field: destination_wallet"
+        },
+        {
+          "id": "existing_typed_tsq_schema_accepts_response",
+          "question": "Does the existing typed TSQ schema accept the live response?",
+          "answer": "no"
+        },
+        {
+          "id": "tsq_found_with_source_wallet_filter",
+          "question": "Is the reference found when narrowed by the source wallet?",
+          "answer": "yes"
+        },
+        {
+          "id": "tsq_found_with_destination_wallet_filter",
+          "question": "Is the reference found when narrowed by the destination wallet?",
+          "answer": "yes"
+        },
+        {
+          "id": "single_transaction_names_both_wallets",
+          "question": "Does GET /transaction/:id name both wallets?",
+          "answer": "yes"
+        },
+        {
+          "id": "single_transaction_shows_fee",
+          "question": "Does GET /transaction/:id show a fee field?",
+          "answer": "yes"
+        }
+      ],
+      "shapes": [
+        {
+          "name": "GET TSQ (unknown reference)",
+          "httpStatus": 404,
+          "fields": [
+            {
+              "path": "status",
+              "type": "boolean(false)"
+            },
+            {
+              "path": "message",
+              "type": "string(text)"
+            },
+            {
+              "path": "data",
+              "type": "object"
+            }
+          ]
+        },
+        {
+          "name": "GET TSQ (immediately after submit)",
+          "httpStatus": 404,
+          "fields": [
+            {
+              "path": "status",
+              "type": "boolean(false)"
+            },
+            {
+              "path": "message",
+              "type": "string(text)"
+            },
+            {
+              "path": "data",
+              "type": "object"
+            },
+            {
+              "path": "data.processing_status",
+              "type": "string(text)"
+            }
+          ]
+        },
+        {
+          "name": "GET TSQ (terminal)",
+          "httpStatus": 200,
+          "fields": [
+            {
+              "path": "id",
+              "type": "string(text)"
+            },
+            {
+              "path": "available_balance",
+              "type": "integer"
+            },
+            {
+              "path": "amount",
+              "type": "integer"
+            },
+            {
+              "path": "fee",
+              "type": "integer"
+            },
+            {
+              "path": "reference",
+              "type": "string(ulid)"
+            },
+            {
+              "path": "category",
+              "type": "string(enum:p2p)"
+            },
+            {
+              "path": "third_party_reference",
+              "type": "string(text)"
+            },
+            {
+              "path": "customer_id",
+              "type": "string(ulid)"
+            },
+            {
+              "path": "source_wallet",
+              "type": "string(ulid)"
+            },
+            {
+              "path": "destination_wallet",
+              "type": "string(ulid)"
+            },
+            {
+              "path": "narration",
+              "type": "string(text)"
+            },
+            {
+              "path": "internal_reference",
+              "type": "string(text)"
+            },
+            {
+              "path": "status",
+              "type": "string(enum:successful)"
+            },
+            {
+              "path": "session_id",
+              "type": "null"
+            },
+            {
+              "path": "meta",
+              "type": "object"
+            },
+            {
+              "path": "meta.source_name",
+              "type": "string(text)"
+            },
+            {
+              "path": "meta.destination_name",
+              "type": "string(text)"
+            },
+            {
+              "path": "meta.source_number",
+              "type": "string(ulid)"
+            },
+            {
+              "path": "meta.destination_number",
+              "type": "string(ulid)"
+            },
+            {
+              "path": "meta.source_bank_name",
+              "type": "string(text)"
+            },
+            {
+              "path": "meta.destination_bank_name",
+              "type": "string(text)"
+            },
+            {
+              "path": "meta.faas_source_number",
+              "type": "string(uuid)"
+            },
+            {
+              "path": "meta.faas_destination_number",
+              "type": "string(ulid)"
+            },
+            {
+              "path": "created_at",
+              "type": "string(iso-datetime)"
+            },
+            {
+              "path": "updated_at",
+              "type": "string(iso-datetime)"
+            },
+            {
+              "path": "source_wallet_balance",
+              "type": "integer"
+            },
+            {
+              "path": "destination_wallet_balance",
+              "type": "integer"
+            }
+          ]
+        },
+        {
+          "name": "GET /transaction/:id (by list row)",
+          "httpStatus": 200,
+          "fields": [
+            {
+              "path": "id",
+              "type": "string(text)"
+            },
+            {
+              "path": "available_balance",
+              "type": "integer"
+            },
+            {
+              "path": "amount",
+              "type": "integer"
+            },
+            {
+              "path": "fee",
+              "type": "integer"
+            },
+            {
+              "path": "reference",
+              "type": "string(ulid)"
+            },
+            {
+              "path": "category",
+              "type": "string(enum:p2p)"
+            },
+            {
+              "path": "third_party_reference",
+              "type": "string(text)"
+            },
+            {
+              "path": "customer_id",
+              "type": "string(ulid)"
+            },
+            {
+              "path": "source_wallet",
+              "type": "string(ulid)"
+            },
+            {
+              "path": "destination_wallet",
+              "type": "string(ulid)"
+            },
+            {
+              "path": "narration",
+              "type": "string(text)"
+            },
+            {
+              "path": "internal_reference",
+              "type": "string(text)"
+            },
+            {
+              "path": "status",
+              "type": "string(enum:successful)"
+            },
+            {
+              "path": "session_id",
+              "type": "null"
+            },
+            {
+              "path": "meta",
+              "type": "object"
+            },
+            {
+              "path": "meta.source_name",
+              "type": "string(text)"
+            },
+            {
+              "path": "meta.destination_name",
+              "type": "string(text)"
+            },
+            {
+              "path": "meta.source_number",
+              "type": "string(ulid)"
+            },
+            {
+              "path": "meta.destination_number",
+              "type": "string(ulid)"
+            },
+            {
+              "path": "meta.source_bank_name",
+              "type": "string(text)"
+            },
+            {
+              "path": "meta.destination_bank_name",
+              "type": "string(text)"
+            },
+            {
+              "path": "meta.faas_source_number",
+              "type": "string(uuid)"
+            },
+            {
+              "path": "meta.faas_destination_number",
+              "type": "string(ulid)"
+            },
+            {
+              "path": "created_at",
+              "type": "string(iso-datetime)"
+            },
+            {
+              "path": "updated_at",
+              "type": "string(iso-datetime)"
+            },
+            {
+              "path": "source_wallet_balance",
+              "type": "integer"
+            },
+            {
+              "path": "destination_wallet_balance",
+              "type": "integer"
+            }
+          ]
+        }
+      ],
+      "values": {
+        "unknown_reference_http_status": 404,
+        "unknown_reference_message": "Transaction Not Found",
+        "transfer_http_status": 202,
+        "transfer_outcome": "accepted",
+        "status_immediately_after_submit": "http_404",
+        "status_sequence": "http_404 > pending > successful",
+        "terminal": "success",
+        "polls_to_terminal": 9,
+        "tsq_field_names": "id,available_balance,amount,fee,reference,category,third_party_reference,customer_id,source_wallet,destination_wallet,narration,internal_reference,status,session_id,meta,created_at,updated_at,source_wallet_balance,destination_wallet_balance"
+      },
+      "notes": []
+    },
+    {
+      "proof": "p3",
+      "title": "Bank deposit into a goal sub-wallet's own virtual account",
+      "status": "observed",
+      "findings": [
+        {
+          "id": "goal_wallet_has_own_virtual_account",
+          "question": "Does the goal sub-wallet have its own virtual account?",
+          "answer": "yes"
+        },
+        {
+          "id": "goal_account_differs_from_main",
+          "question": "Is the goal account number different from the main wallet account number?",
+          "answer": "yes"
+        },
+        {
+          "id": "webhook_names_goal_wallet",
+          "question": "Does the bank-inflow webhook name the goal wallet?",
+          "answer": "unknown",
+          "detail": "The harness has no receiver. Confirm from the durable inbox which field names the credited wallet (pvb_wallet vs eventData.destination_wallet_id); see docs/piggyvest-contract-register.md section 7."
+        },
+        {
+          "id": "credited_to_goal_wallet",
+          "question": "Is the deposit credited to the goal sub-wallet?",
+          "answer": "yes"
+        },
+        {
+          "id": "main_wallet_unchanged",
+          "question": "Is the main wallet balance unchanged by the goal deposit?",
+          "answer": "yes"
+        },
+        {
+          "id": "transaction_list_names_goal_wallet",
+          "question": "Does the goal wallet transaction list show a credit row naming the goal wallet?",
+          "answer": "yes"
+        },
+        {
+          "id": "main_wallet_list_excludes_deposit_row",
+          "question": "Is the deposit row absent from the main wallet transaction list?",
+          "answer": "yes"
+        },
+        {
+          "id": "single_transaction_names_destination_wallet",
+          "question": "Does GET /transaction/:id name the goal wallet as destination?",
+          "answer": "no",
+          "detail": "field: destination_wallet"
+        }
+      ],
+      "shapes": [
+        {
+          "name": "GET /wallet/:id/accounts",
+          "httpStatus": 200,
+          "fields": [
+            {
+              "path": "[]",
+              "type": "array(len=1)"
+            },
+            {
+              "path": "[].account_number",
+              "type": "string(digits:10)"
+            },
+            {
+              "path": "[].account_name",
+              "type": "string(text)"
+            },
+            {
+              "path": "[].bank_name",
+              "type": "string(text)"
+            },
+            {
+              "path": "[].paypoint_name",
+              "type": "null"
+            },
+            {
+              "path": "[].paypoint_id",
+              "type": "null"
+            }
+          ]
+        },
+        {
+          "name": "GET /transaction (goal wallet credit row)",
+          "httpStatus": 200,
+          "fields": [
+            {
+              "path": "id",
+              "type": "string(text)"
+            },
+            {
+              "path": "business_id",
+              "type": "string(ulid)"
+            },
+            {
+              "path": "branch_id",
+              "type": "string(ulid)"
+            },
+            {
+              "path": "wallet_id",
+              "type": "string(ulid)"
+            },
+            {
+              "path": "account_number",
+              "type": "null"
+            },
+            {
+              "path": "schedule_transfer_id",
+              "type": "null"
+            },
+            {
+              "path": "paypoint_id",
+              "type": "null"
+            },
+            {
+              "path": "auto_payout_id",
+              "type": "null"
+            },
+            {
+              "path": "peer_reference_id",
+              "type": "string(ulid)"
+            },
+            {
+              "path": "third_party_reference",
+              "type": "null"
+            },
+            {
+              "path": "provider_reference",
+              "type": "string(ulid)"
+            },
+            {
+              "path": "safe_lock_id",
+              "type": "null"
+            },
+            {
+              "path": "order_id",
+              "type": "null"
+            },
+            {
+              "path": "api_customer_id",
+              "type": "string(ulid)"
+            },
+            {
+              "path": "invoice_id",
+              "type": "null"
+            },
+            {
+              "path": "amount",
+              "type": "integer"
+            },
+            {
+              "path": "is_restricted",
+              "type": "boolean"
+            },
+            {
+              "path": "amount_plus_fees",
+              "type": "integer"
+            },
+            {
+              "path": "status",
+              "type": "string(enum:successful)"
+            },
+            {
+              "path": "type",
+              "type": "string(enum:credit)"
+            },
+            {
+              "path": "category",
+              "type": "string(enum:bank-inflow)"
+            },
+            {
+              "path": "provider",
+              "type": "string(text)"
+            },
+            {
+              "path": "wallet_type",
+              "type": "string(enum:api)"
+            },
+            {
+              "path": "debited_ledger",
+              "type": "boolean"
+            },
+            {
+              "path": "balance",
+              "type": "integer"
+            },
+            {
+              "path": "charge",
+              "type": "integer"
+            },
+            {
+              "path": "provider_charge",
+              "type": "integer"
+            },
+            {
+              "path": "session_id",
+              "type": "string(empty)"
+            },
+            {
+              "path": "meta",
+              "type": "string(text)"
+            },
+            {
+              "path": "description",
+              "type": "string(text)"
+            },
+            {
+              "path": "reason",
+              "type": "null"
+            },
+            {
+              "path": "currency",
+              "type": "string(enum:NGN)"
+            },
+            {
+              "path": "is_eod_withdrawal",
+              "type": "boolean"
+            },
+            {
+              "path": "batch_transaction_id",
+              "type": "null"
+            },
+            {
+              "path": "accrued_interest_wallet",
+              "type": "null"
+            },
+            {
+              "path": "created_at",
+              "type": "string(iso-datetime)"
+            },
+            {
+              "path": "updated_at",
+              "type": "string(iso-datetime)"
+            },
+            {
+              "path": "deleted_at",
+              "type": "null"
+            },
+            {
+              "path": "provider_payload",
+              "type": "string(text)"
+            },
+            {
+              "path": "failure_reason",
+              "type": "null"
+            },
+            {
+              "path": "investment_type",
+              "type": "null"
+            },
+            {
+              "path": "bank_code",
+              "type": "null"
+            }
+          ]
+        },
+        {
+          "name": "GET /transaction/:id (deposit)",
+          "httpStatus": 200,
+          "fields": [
+            {
+              "path": "id",
+              "type": "string(text)"
+            },
+            {
+              "path": "available_balance",
+              "type": "integer"
+            },
+            {
+              "path": "amount",
+              "type": "integer"
+            },
+            {
+              "path": "fee",
+              "type": "integer"
+            },
+            {
+              "path": "reference",
+              "type": "string(ulid)"
+            },
+            {
+              "path": "category",
+              "type": "string(enum:bank-inflow)"
+            },
+            {
+              "path": "third_party_reference",
+              "type": "null"
+            },
+            {
+              "path": "customer_id",
+              "type": "string(ulid)"
+            },
+            {
+              "path": "source_wallet",
+              "type": "string(ulid)"
+            },
+            {
+              "path": "destination_wallet",
+              "type": "string(empty)"
+            },
+            {
+              "path": "narration",
+              "type": "string(text)"
+            },
+            {
+              "path": "internal_reference",
+              "type": "string(text)"
+            },
+            {
+              "path": "status",
+              "type": "string(enum:successful)"
+            },
+            {
+              "path": "session_id",
+              "type": "string(empty)"
+            },
+            {
+              "path": "meta",
+              "type": "object"
+            },
+            {
+              "path": "meta.source_name",
+              "type": "string(text)"
+            },
+            {
+              "path": "meta.source_number",
+              "type": "string(text)"
+            },
+            {
+              "path": "meta.source_bank_name",
+              "type": "string(text)"
+            },
+            {
+              "path": "meta.destination_name",
+              "type": "string(text)"
+            },
+            {
+              "path": "meta.destination_number",
+              "type": "string(digits:10)"
+            },
+            {
+              "path": "meta.destination_bank_name",
+              "type": "string(text)"
+            },
+            {
+              "path": "created_at",
+              "type": "string(iso-datetime)"
+            },
+            {
+              "path": "updated_at",
+              "type": "string(iso-datetime)"
+            },
+            {
+              "path": "source_wallet_balance",
+              "type": "integer"
+            }
+          ]
+        }
+      ],
+      "values": {
+        "goal_account_count": 1,
+        "funding_http_status": 200,
+        "funding_outcome": "accepted",
+        "deposit_row_category": "bank-inflow",
+        "deposit_row_status": "successful",
+        "deposit_fee_kobo_in_record": 0,
+        "deposit_credit_relation": "gross"
+      },
+      "notes": [
+        "Assumption: test funding (POST /transfer/test/funding) stands in for a bank transfer to the virtual account number; PiggyVest exposes no API to push a real transfer to that number."
+      ]
+    },
+    {
+      "proof": "p4",
+      "title": "Withdrawal counter (wallet-to-wallet vs bank outflow)",
+      "status": "inconclusive",
+      "reason": "no sandbox bank destination configured",
+      "findings": [
+        {
+          "id": "w2w_changes_counter",
+          "question": "Does a wallet-to-wallet transfer change withdrawal_count on any wallet?",
+          "answer": "no"
+        },
+        {
+          "id": "bank_outflow_changes_counter",
+          "question": "Does a bank outflow from the main wallet change withdrawal_count?",
+          "answer": "unknown",
+          "detail": "set PVB_PROOF_BANK_CODE and PVB_PROOF_BANK_ACCOUNT to a sandbox destination"
+        }
+      ],
+      "shapes": [],
+      "values": {
+        "baseline_count_main_W1": 0,
+        "baseline_count_goal_W2": 0,
+        "wallets_read": 2,
+        "counter_settle_polls": 15,
+        "w2w_terminal": "success",
+        "w2w_delta_main_W1": 0,
+        "w2w_delta_goal_W2": 0,
+        "counter_scope": "unknown"
+      },
+      "notes": []
+    },
+    {
+      "proof": "p5",
+      "title": "Interest visibility (development evidence only)",
+      "status": "observed",
+      "findings": [
+        {
+          "id": "existing_accrual_schema_accepts_response",
+          "question": "Does the existing typed accrual schema accept the live response?",
+          "answer": "yes"
+        },
+        {
+          "id": "accrual_records_observed",
+          "question": "Are any interest accrual records visible for the QA wallets?",
+          "answer": "no",
+          "detail": "No records exist at 0% sandbox rates; absence is the honest result."
+        },
+        {
+          "id": "accrual_edge_shape_observed",
+          "question": "Was an accrual record shape observed?",
+          "answer": "no"
+        },
+        {
+          "id": "accrual_cursor_advances",
+          "question": "Does the accrual cursor advance across pages?",
+          "answer": "unknown",
+          "detail": "only one page was available, so cursor behaviour could not be tested"
+        },
+        {
+          "id": "transaction_list_cursor_advances",
+          "question": "Does the transaction list cursor advance across pages?",
+          "answer": "yes"
+        },
+        {
+          "id": "transaction_list_has_interest_rows",
+          "question": "Does the transaction list contain interest rows?",
+          "answer": "no"
+        }
+      ],
+      "shapes": [
+        {
+          "name": "GET accrued interest (page)",
+          "httpStatus": 200,
+          "fields": [
+            {
+              "path": "withdrawal_count",
+              "type": "integer"
+            },
+            {
+              "path": "interest_forfeiture_minimum_transactions",
+              "type": "integer"
+            },
+            {
+              "path": "paginatedPayload",
+              "type": "object"
+            },
+            {
+              "path": "paginatedPayload.edges[]",
+              "type": "array(len=0)"
+            },
+            {
+              "path": "paginatedPayload.pageInfo",
+              "type": "object"
+            },
+            {
+              "path": "paginatedPayload.pageInfo.hasNextPage",
+              "type": "boolean(false)"
+            },
+            {
+              "path": "paginatedPayload.pageInfo.endCursor",
+              "type": "null"
+            }
+          ]
+        },
+        {
+          "name": "GET /transaction (page)",
+          "httpStatus": 200,
+          "fields": [
+            {
+              "path": "edges[]",
+              "type": "array(len=3)"
+            },
+            {
+              "path": "edges[].id",
+              "type": "string(text)"
+            },
+            {
+              "path": "edges[].business_id",
+              "type": "string(ulid)"
+            },
+            {
+              "path": "edges[].branch_id",
+              "type": "string(ulid)"
+            },
+            {
+              "path": "edges[].wallet_id",
+              "type": "string(ulid)"
+            },
+            {
+              "path": "edges[].account_number",
+              "type": "null"
+            },
+            {
+              "path": "edges[].schedule_transfer_id",
+              "type": "null"
+            },
+            {
+              "path": "edges[].paypoint_id",
+              "type": "null"
+            },
+            {
+              "path": "edges[].auto_payout_id",
+              "type": "null"
+            },
+            {
+              "path": "edges[].peer_reference_id",
+              "type": "string(ulid)"
+            },
+            {
+              "path": "edges[].third_party_reference",
+              "type": "null|string(text)"
+            },
+            {
+              "path": "edges[].provider_reference",
+              "type": "string(ulid)"
+            },
+            {
+              "path": "edges[].safe_lock_id",
+              "type": "null"
+            },
+            {
+              "path": "edges[].order_id",
+              "type": "null"
+            },
+            {
+              "path": "edges[].api_customer_id",
+              "type": "string(ulid)"
+            },
+            {
+              "path": "edges[].invoice_id",
+              "type": "null"
+            },
+            {
+              "path": "edges[].amount",
+              "type": "integer"
+            },
+            {
+              "path": "edges[].is_restricted",
+              "type": "boolean"
+            },
+            {
+              "path": "edges[].amount_plus_fees",
+              "type": "integer"
+            },
+            {
+              "path": "edges[].status",
+              "type": "string(enum:successful)"
+            },
+            {
+              "path": "edges[].type",
+              "type": "string(enum:credit)|string(enum:debit)"
+            },
+            {
+              "path": "edges[].category",
+              "type": "string(enum:bank-inflow)|string(enum:p2p)"
+            },
+            {
+              "path": "edges[].provider",
+              "type": "string(text)"
+            },
+            {
+              "path": "edges[].wallet_type",
+              "type": "string(enum:api)"
+            },
+            {
+              "path": "edges[].debited_ledger",
+              "type": "boolean"
+            },
+            {
+              "path": "edges[].balance",
+              "type": "integer"
+            },
+            {
+              "path": "edges[].charge",
+              "type": "integer"
+            },
+            {
+              "path": "edges[].provider_charge",
+              "type": "integer"
+            },
+            {
+              "path": "edges[].session_id",
+              "type": "null|string(empty)"
+            },
+            {
+              "path": "edges[].meta",
+              "type": "string(text)"
+            },
+            {
+              "path": "edges[].description",
+              "type": "string(text)"
+            },
+            {
+              "path": "edges[].reason",
+              "type": "null|string(empty)"
+            },
+            {
+              "path": "edges[].currency",
+              "type": "string(enum:NGN)"
+            },
+            {
+              "path": "edges[].is_eod_withdrawal",
+              "type": "boolean"
+            },
+            {
+              "path": "edges[].batch_transaction_id",
+              "type": "null"
+            },
+            {
+              "path": "edges[].accrued_interest_wallet",
+              "type": "null"
+            },
+            {
+              "path": "edges[].created_at",
+              "type": "string(iso-datetime)"
+            },
+            {
+              "path": "edges[].updated_at",
+              "type": "string(iso-datetime)"
+            },
+            {
+              "path": "edges[].deleted_at",
+              "type": "null"
+            },
+            {
+              "path": "edges[].provider_payload",
+              "type": "string(text)"
+            },
+            {
+              "path": "edges[].failure_reason",
+              "type": "null"
+            },
+            {
+              "path": "edges[].investment_type",
+              "type": "null"
+            },
+            {
+              "path": "edges[].bank_code",
+              "type": "null"
+            },
+            {
+              "path": "pageInfo",
+              "type": "object"
+            },
+            {
+              "path": "pageInfo.hasNextPage",
+              "type": "boolean(false)"
+            },
+            {
+              "path": "pageInfo.endCursor",
+              "type": "string(iso-datetime)"
+            },
+            {
+              "path": "pageInfo.previousCursor",
+              "type": "string(iso-datetime)"
+            }
+          ]
+        }
+      ],
+      "values": {
+        "interest_rate_nonzero_on_any_wallet": false,
+        "accrual_edges_default_window": 0,
+        "accrual_page_info_fields": "endCursor,hasNextPage",
+        "accrual_pages_walked": 1,
+        "accrual_edges_per_page": "0",
+        "accrual_differential_edges": 0,
+        "accrual_limit_101_http_status": 200,
+        "transaction_list_pages_walked": 3,
+        "transaction_list_rows_read": 3,
+        "transaction_list_history_complete": true,
+        "transaction_list_interest_rows": 0,
+        "transaction_list_limit_101_http_status": 200
+      },
+      "notes": [
+        "Development evidence only. A real monthly payout observed through the API is a later release check (1 Dec at the earliest); the API-recovery guarantee stays conditional until then."
+      ]
+    },
+    {
+      "proof": "p6",
+      "title": "Fees on deposits and wallet transfers",
+      "status": "observed",
+      "findings": [
+        {
+          "id": "deposit_fee_field_present",
+          "question": "Does the deposit record carry a fee field?",
+          "answer": "yes"
+        },
+        {
+          "id": "transfer_fee_field_present",
+          "question": "Does the wallet-transfer record carry a fee field?",
+          "answer": "yes"
+        },
+        {
+          "id": "transfer_source_debited_exactly_amount",
+          "question": "Is the source wallet debited exactly the transfer amount?",
+          "answer": "yes"
+        },
+        {
+          "id": "transfer_destination_credited_exactly_amount",
+          "question": "Is the destination wallet credited exactly the transfer amount?",
+          "answer": "yes"
+        }
+      ],
+      "shapes": [],
+      "values": {
+        "deposit_fee_kobo": 0,
+        "deposit_credit_relation": "gross",
+        "deposit_fee_borne_by": "not the wallet (credited gross)",
+        "transfer_fee_kobo": 0,
+        "transfer_fee_payer": "none observed",
+        "historical_records_read": 6,
+        "historical_records_with_fee_field": 6,
+        "historical_wallets_unreadable": 0,
+        "historical_fee_values_kobo": "0"
+      },
+      "notes": [
+        "Fee tariffs seen here are sandbox values. Production tariffs and the fee-wallet configuration are separate confirmations."
+      ]
+    },
+    {
+      "proof": "p7",
+      "title": "Main-wallet interest routing at creation",
+      "status": "inconclusive",
+      "reason": "these findings could not be established: goal_without_payout_inherits_business_payout, goal_explicit_readback_names_payout_destination",
+      "findings": [
+        {
+          "id": "customer_create_with_payout_accepted",
+          "question": "Does POST /customers accept enable_interest_accrual=true with interest_payout_wallet set to the business wallet?",
+          "answer": "yes"
+        },
+        {
+          "id": "customer_created_fresh",
+          "question": "Was a new customer created (so the settings were actually applied)?",
+          "answer": "yes"
+        },
+        {
+          "id": "main_wallet_readback_exposes_interest_fields",
+          "question": "Does GET /wallet/:id expose interest or payout settings?",
+          "answer": "yes"
+        },
+        {
+          "id": "main_wallet_readback_names_payout_destination",
+          "question": "Does a readback field equal the payout wallet that was set?",
+          "answer": "yes"
+        },
+        {
+          "id": "main_wallet_accrual_flag_readable",
+          "question": "Is the accrual on/off setting readable?",
+          "answer": "yes"
+        },
+        {
+          "id": "goal_without_payout_created",
+          "question": "Is a goal sub-wallet with its own payout left unset created?",
+          "answer": "no"
+        },
+        {
+          "id": "goal_without_payout_inherits_business_payout",
+          "question": "Does a goal wallet with no payout of its own inherit the customer's business payout wallet?",
+          "answer": "unknown",
+          "detail": "the readback omits a payout destination to compare, so inheritance cannot be determined"
+        },
+        {
+          "id": "goal_explicit_payout_accepted",
+          "question": "Does POST /wallet/sub-account accept interest_payout_wallet?",
+          "answer": "no"
+        },
+        {
+          "id": "goal_explicit_readback_names_payout_destination",
+          "question": "Does the explicit goal wallet readback name that payout wallet?",
+          "answer": "unknown"
+        }
+      ],
+      "shapes": [
+        {
+          "name": "GET /wallet/:id (P7 main wallet)",
+          "httpStatus": 200,
+          "fields": [
+            {
+              "path": "id",
+              "type": "string(ulid)"
+            },
+            {
+              "path": "business_id",
+              "type": "string(ulid)"
+            },
+            {
+              "path": "branch_id",
+              "type": "string(ulid)"
+            },
+            {
+              "path": "faas_wallet_identifier",
+              "type": "string(uuid)"
+            },
+            {
+              "path": "currency",
+              "type": "string(enum:NGN)"
+            },
+            {
+              "path": "name",
+              "type": "string(text)"
+            },
+            {
+              "path": "status",
+              "type": "string(enum:active)"
+            },
+            {
+              "path": "auto_payout",
+              "type": "boolean"
+            },
+            {
+              "path": "type",
+              "type": "string(enum:api)"
+            },
+            {
+              "path": "tag",
+              "type": "null"
+            },
+            {
+              "path": "is_subaccount",
+              "type": "boolean"
+            },
+            {
+              "path": "parent_wallet_id",
+              "type": "string(ulid)"
+            },
+            {
+              "path": "balance",
+              "type": "integer"
+            },
+            {
+              "path": "ledger_balance",
+              "type": "integer"
+            },
+            {
+              "path": "gradient_color_id",
+              "type": "null"
+            },
+            {
+              "path": "provider_payload",
+              "type": "null"
+            },
+            {
+              "path": "auto_withdrawal_destination_type",
+              "type": "null"
+            },
+            {
+              "path": "auto_withdrawal_destination_id",
+              "type": "null"
+            },
+            {
+              "path": "auto_withdrawal_destination_name",
+              "type": "null"
+            },
+            {
+              "path": "auto_withdrawal_destination_code",
+              "type": "null"
+            },
+            {
+              "path": "auto_withdrawal_destination_bank_name",
+              "type": "null"
+            },
+            {
+              "path": "auto_withdrawal_destination_bank_logo",
+              "type": "null"
+            },
+            {
+              "path": "is_frozen",
+              "type": "boolean"
+            },
+            {
+              "path": "api_customer_id",
+              "type": "string(ulid)"
+            },
+            {
+              "path": "bypass_withdrawal_limit_rule",
+              "type": "null"
+            },
+            {
+              "path": "interest_payout_wallet",
+              "type": "string(ulid)"
+            },
+            {
+              "path": "interest_enabled",
+              "type": "boolean"
+            },
+            {
+              "path": "approval_workflow_id",
+              "type": "null"
+            },
+            {
+              "path": "creation_interest_rate",
+              "type": "integer"
+            },
+            {
+              "path": "current_interest_rate",
+              "type": "integer"
+            },
+            {
+              "path": "created_at",
+              "type": "string(iso-datetime)"
+            },
+            {
+              "path": "updated_at",
+              "type": "string(iso-datetime)"
+            },
+            {
+              "path": "deleted_at",
+              "type": "null"
+            },
+            {
+              "path": "split_save[]",
+              "type": "array(len=0)"
+            },
+            {
+              "path": "has_an_active_lien",
+              "type": "boolean"
+            },
+            {
+              "path": "withdrawal_count",
+              "type": "integer"
+            },
+            {
+              "path": "interest_forfeiture_minimum_transactions",
+              "type": "integer"
+            }
+          ]
+        }
+      ],
+      "values": {
+        "create_http_status": 200,
+        "create_outcome": "accepted",
+        "main_wallet_interest_field_names": "auto_payout,interest_payout_wallet,interest_enabled,interest_forfeiture_minimum_transactions",
+        "main_wallet_rate_field_names": "creation_interest_rate,current_interest_rate",
+        "main_wallet_payout_field_paths": "interest_payout_wallet",
+        "main_wallet_accrual_enabled": true,
+        "wallet_list_interest_field_names": "auto_payout,interest_payout_wallet,interest_enabled",
+        "goal_explicit_error_message": "One or more validation errors occurred",
+        "goal_explicit_http_status": 422,
+        "goal_unset_error_message": "One or more validation errors occurred",
+        "interest_routing_verdict": "create_time_routing_verified"
+      },
+      "notes": [
+        "verdict: verified = accepted and readable, so route at creation; rejected or unverifiable = sweep the interest after it lands with a main to Ogabassey wallet-to-wallet transfer (proofs 2 and 4 cover that transfer); unconfirmed = the readback never showed a payout destination field within the polling budget, so re-run before deciding."
+      ]
+    }
+  ],
+  "assumptionsToConfirm": [
+    "GET /api/v1/customers with third_party_identifier returns a list under paginatedPayload.edges, edges, or a bare array (the container found is recorded).",
+    "Customer list rows carry the customer id as customer_id or id.",
+    "GET /api/v1/wallet/:id returns api_customer_id (undocumented); wallet ownership is proven from it and nothing weaker.",
+    "Wallet list rows (orderBy ASC/DESC) carry id, name and created_at; otherwise default-wallet-by-order cannot be judged.",
+    "TSQ for a wallet-to-wallet transfer accepts wallet_id as a filter; its field names for source, destination, fee and currency are unknown until observed.",
+    "TSQ status vocabulary is success|pending|failed while list/single use successful; a 404 may mean unknown OR not yet indexed.",
+    "POST /api/v1/transfer/test/funding is the sandbox stand-in for a bank deposit to a virtual account number; it may lag or not settle (seen on 17 Sep).",
+    "The sandbox accepts a bank outflow to an operator-supplied NUBAN and bank code (PVB_PROOF_BANK_CODE, PVB_PROOF_BANK_ACCOUNT) and settles it.",
+    "withdrawal_count appears on GET /wallet/:id for every wallet and updates within the polling window after a settled outflow.",
+    "Accrual and transaction reads accept limit up to 100 and a cursor; sandbox rates are 0% so no accrual edge may exist to inspect.",
+    "Synthetic QA identities (000-prefixed 11-digit BVN, example.test email) are accepted by the sandbox; the 17 Sep probe accepted an all-zeros BVN.",
+    "POST /customers accepts interest_payout_wallet set to an Ogabassey business sandbox wallet (PVB_PROOF_BUSINESS_WALLET_ID) together with enable_interest_accrual=true; whether GET /wallet/:id can read the payout destination back is unknown.",
+    "POST /wallet/sub-account accepts interest_payout_wallet, and a goal sub-wallet created with no payout of its own may or may not inherit the customer payout wallet.",
+    "Webhook delivery cannot be observed by this harness; the credited-wallet field must be confirmed from the durable inbox."
+  ]
+}

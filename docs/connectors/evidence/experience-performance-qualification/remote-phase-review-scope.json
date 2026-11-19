@@ -1,0 +1,33 @@
+{
+  "main": "29b41494c9cba1ee3c05c7d51ebc0d84909d7a68",
+  "files": [
+    {
+      "path": "apps/web/src/lib/experience/tool-dispatcher.ts",
+      "sha256": "b7bec00443aa52b028ea459a2b7966079b7cc6c51e1c201b497fe17701e1a168"
+    },
+    {
+      "path": "apps/web/src/lib/experience/tool-dispatcher.performance-gate.test.ts",
+      "sha256": "c9d4d922eb3aec728d073aab19ba623050e04dc31d18fef57f272e3864a5fa92"
+    },
+    {
+      "path": "apps/web/src/lib/experience/candidate-performance-qualification.ts",
+      "sha256": "52130565d51a7421f7988c0ea3d182d8d302aa3c46279fd34227869848c9d9c8"
+    },
+    {
+      "path": "apps/web/src/lib/experience/candidate-performance-qualification.test.ts",
+      "sha256": "29233c00fad3b808c6fc49f59b9c699c85612d04c5cd04318d2bab6339b35eb3"
+    },
+    {
+      "path": "apps/web/src/schemas/experience-performance.ts",
+      "sha256": "db1f2a7c994fb532da84832cd9fa0e593956bc0c6dad53696234d4a1796ef604"
+    },
+    {
+      "path": "apps/web/src/schemas/experience-performance-worker.ts",
+      "sha256": "cfe2ba89ebdb18c5efce55e95a0573d41b7af899049fc8838ad8d81a71bf52b4"
+    },
+    {
+      "path": "apps/web/src/schemas/experience-route-path.ts",
+      "sha256": "f16854c283edfe5d015a5cc1d7966a154ac050d527c988dbedfa5b03983b5938"
+    }
+  ]
+}

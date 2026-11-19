@@ -15,7 +15,9 @@ jest.mock('@/lib/wallet-top-up', () => ({
 
 jest.mock('@/lib/logger', () => ({
   createLogger: () => ({
+    debug: jest.fn(),
     error: jest.fn(),
+    warn: jest.fn(),
   }),
 }));
 

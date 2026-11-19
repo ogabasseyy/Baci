@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { POST } from './route.loyalty-bridge.mocks.test-support';
+import {
+  mockIsLoyaltyCodeCurrencyCurrent,
+  POST,
+} from './route.loyalty-bridge.mocks.test-support';
 import {
   LOYALTY_CODE_ROW,
   loyaltyRequest,
@@ -106,5 +109,25 @@ describe('POST /api/orders loyalty-code bridge errors', () => {
     );
     expect(response.status).toBe(400);
     expect((await response.json()).code).toBe('discount_code_invalid');
+  });
+  it('rejects a fixed code whose currency preview is stale before calling the wrapper', async () => {
+    const supabase = await setupLoyaltyBridge({
+      get_storefront_discount_code: { data: [], error: null },
+      get_loyalty_redemption_for_checkout: {
+        data: [LOYALTY_CODE_ROW],
+        error: null,
+      },
+    });
+    // Set after setup, which clears mocks, so the override clearly applies.
+    mockIsLoyaltyCodeCurrencyCurrent.mockResolvedValueOnce(false);
+    const response = await POST(
+      loyaltyRequest({ discount_code: 'RDM-ABCDEF12' })
+    );
+    expect(response.status).toBe(400);
+    expect((await response.json()).code).toBe('discount_code_invalid');
+    expect(supabase.rpc).not.toHaveBeenCalledWith(
+      'create_storefront_order_with_loyalty_code',
+      expect.anything()
+    );
   });
 });

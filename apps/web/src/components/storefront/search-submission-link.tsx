@@ -26,6 +26,7 @@ export function SearchSubmissionLink({
   return (
     <a
       href={`${pathPrefix}/search?q=${encodeURIComponent(truncateSearchSubmissionQuery(query))}`}
+      rel="nofollow"
       className={className}
       onClick={() => recordSearchSubmission(query, pathPrefix, source)}
       onAuxClick={(event) => {

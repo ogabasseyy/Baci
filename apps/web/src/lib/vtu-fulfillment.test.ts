@@ -52,560 +52,11 @@ vi.mock('@/lib/zeptomail', () => ({
   sendEmail: (...args: unknown[]) => mockSendEmail(...args),
 }));
 
-type SupabaseStub = Parameters<
-  typeof fulfillPendingVtuTransaction
->[0]['supabase'];
-
-interface PendingTransactionMockOptions {
-  customerData?: {
-    user_id: string | null;
-    email?: string | null;
-    first_name?: string | null;
-    last_name?: string | null;
-  } | null;
-  currentTransactionData?: Record<string, unknown> | null;
-  existingCustomerCashback?: { balance_after: number } | null;
-  existingMerchantCommission?: { id: string } | null;
-  transactionRow: Record<string, unknown>;
-  rpcImpl?: (
-    name: string,
-    args?: Record<string, unknown>
-  ) => Promise<{ data: unknown; error: unknown }>;
-  merchantData?: {
-    business_name?: string;
-    slug?: string | null;
-    support_email?: string | null;
-  };
-  claimData?: Record<string, unknown> | null;
-  completedGatewayTransactions?: Array<{ status: string }>;
-  emailClaimData?: { id: string } | null;
-  /**
-   * When null, the email-clear RPC resolves null (Codex R97 P2: the row
-   * was reclaimed under a newer lease generation, so our stale clear
-   * must leave the owner's lease untouched).
-   */
-  emailClearData?: { id: string } | null;
-  /**
-   * When null, the email-finalize RPC resolves null (Codex R127 P2:
-   * same stale-generation semantics as the fenced clear — our merge
-   * must revert the outcome keys too).
-   */
-  emailFinalizeData?: { id: string } | null;
-  notificationClaimData?: { id: string } | null;
-  purchaseUpdateData?: { id: string; updated_at?: string } | null;
-  purchaseUpdateErrors?: Array<{ message: string } | null>;
-  /**
-   * When set, the Kuda-fallback marker write resolves with this
-   * matched row (null = zero-match lost race, Codex R97 P1); all
-   * other updates keep purchaseUpdateData. Lets one test lose the
-   * fallback race while the claim/debit/marker succeed.
-   */
-  fallbackMarkerData?: { id: string } | null;
-  /**
-   * When set, pre-vend restore updates resolve as a CAS match ONLY
-   * when the captured `updated_at` token equals this (Codex R65
-   * 6ru4mQ) — otherwise they zero-match like a raced row.
-   */
-  expectedRestoreToken?: string;
-  updateErrors?: {
-    finalMetadata?: { message: string };
-    purchase?: { message: string };
-    submissionMarker?: { message: string };
-    successMetadata?: { message: string };
-  };
-  /**
-   * When set, the settlement-metadata merge re-read (the only
-   * `metadata, updated_at` select) fails with this error (Codex
-   * R103 P2) — every other select is unaffected.
-   */
-  metadataRereadError?: { message: string };
-  /**
-   * Rows returned by the claim_failed_vtu_retry RPC (Codex R114).
-   * Defaults to a successful claim so existing retry tests keep
-   * vending; script a refusal to test the lost-race paths.
-   */
-  retryClaimData?: Record<string, unknown>[] | null;
-  retryClaimError?: { message: string } | null;
-  /**
-   * When set, customer_wallet_transactions reads serve this sequence
-   * (then repeat the last) instead of existingCustomerCashback —
-   * models a refund landing between the retry pre-check and the
-   * post-claim re-read (Codex R114).
-   */
-  ledgerReadSequence?: ({ amount: number } | null)[];
-  updatePayloads?: unknown[];
-}
-
-type PendingTransactionUpdateErrors = NonNullable<
-  PendingTransactionMockOptions['updateErrors']
->;
-type PendingTransactionUpdateError =
-  PendingTransactionUpdateErrors[keyof PendingTransactionUpdateErrors];
-
-function selectUpdateError(
-  payloadRecord: Record<string, unknown>,
-  transactionRow: Record<string, unknown>,
-  updateErrors: NonNullable<PendingTransactionMockOptions['updateErrors']>
-): PendingTransactionUpdateError {
-  if (
-    payloadRecord.status === 'successful' ||
-    payloadRecord.status === 'failed'
-  ) {
-    return updateErrors.purchase;
-  }
-
-  if (transactionRow.status === 'successful') {
-    return updateErrors.successMetadata;
-  }
-
-  return updateErrors.finalMetadata;
-}
-
-function isSubmissionMarkerShaped(payloadRecord: Record<string, unknown>) {
-  const markerMetadata =
-    payloadRecord.metadata && typeof payloadRecord.metadata === 'object'
-      ? (payloadRecord.metadata as Record<string, unknown>)
-      : null;
-  return (
-    !('status' in payloadRecord) &&
-    !('transaction_id' in payloadRecord) &&
-    !('error_message' in payloadRecord) &&
-    markerMetadata !== null &&
-    'providerSubmissionStartedAt' in markerMetadata
-  );
-}
-
-function isClaimOrErrorUpdate(payloadRecord: Record<string, unknown>): boolean {
-  return (
-    payloadRecord.status === 'processing' ||
-    ('error_message' in payloadRecord && !('metadata' in payloadRecord))
-  );
-}
-
-function createAwaitableUpdateChain<T>(
-  result: T,
-  maybeSingle: ReturnType<typeof vi.fn>
-) {
-  const chain = Promise.resolve(result) as Promise<T> & {
-    eq: ReturnType<typeof vi.fn>;
-    is: ReturnType<typeof vi.fn>;
-    maybeSingle: ReturnType<typeof vi.fn>;
-    select: ReturnType<typeof vi.fn>;
-  };
-  chain.eq = vi.fn(() => chain);
-  chain.is = vi.fn(() => chain);
-  chain.maybeSingle = maybeSingle;
-  chain.select = vi.fn(() => chain);
-  return chain;
-}
-
-function findPayloadWithMetadata(
-  payloads: unknown[],
-  predicate: (metadata: Record<string, unknown>) => boolean
-): { metadata: Record<string, unknown> } | undefined {
-  return payloads.find(
-    (payload): payload is { metadata: Record<string, unknown> } => {
-      if (typeof payload !== 'object' || payload === null) {
-        return false;
-      }
-      const metadata = (payload as { metadata?: unknown }).metadata;
-      return (
-        typeof metadata === 'object' &&
-        metadata !== null &&
-        predicate(metadata as Record<string, unknown>)
-      );
-    }
-  );
-}
-
-function createPendingTransactionSupabaseMock({
-  customerData = { user_id: 'user-1' },
-  currentTransactionData,
-  existingCustomerCashback = null,
-  existingMerchantCommission = null,
-  transactionRow,
-  rpcImpl,
-  merchantData = { business_name: 'OgaBassey' },
-  claimData = { id: 'vtu-1' },
-  completedGatewayTransactions = [],
-  emailClaimData = { id: 'vtu-1' },
-  emailClearData = { id: 'vtu-1' },
-  emailFinalizeData = { id: 'vtu-1' },
-  notificationClaimData = { id: 'vtu-1' },
-  purchaseUpdateData = { id: 'vtu-1' },
-  purchaseUpdateErrors,
-  fallbackMarkerData,
-  expectedRestoreToken,
-  updateErrors = {},
-  updatePayloads = [],
-  metadataRereadError,
-  retryClaimData = [
-    {
-      claimed: true,
-      claimed_updated_at: '2026-10-16T00:00:00.000Z',
-      refusal_reason: null,
-    },
-  ],
-  retryClaimError = null,
-  ledgerReadSequence,
-}: PendingTransactionMockOptions): SupabaseStub {
-  let ledgerReadIndex = 0;
-  let purchaseUpdateAttempt = 0;
-  // The first marker-shaped write always takes the submissionMarker
-  // slot (unscripted → success: the normal pre-vend marker). Later
-  // ones take it only while a scripted error stands AND the write is
-  // non-terminal: the marker write retries (R79: 3 attempts), so
-  // failing only the first would let the retry succeed and the test
-  // would vend instead of restoring. Terminal (post-vend)
-  // marker-shaped writes and unscripted runs fall through to
-  // finalMetadata, preserving tests that script a failure for a
-  // post-vend metadata write.
-  let submissionMarkerWriteSeen = false;
-  const claimMaybeSingle = vi.fn().mockResolvedValue({
-    data: claimData,
-    error: null,
-  });
-  const merchantSingle = vi.fn().mockResolvedValue({
-    data: merchantData,
-    error: null,
-  });
-  const customerMaybeSingle = vi.fn().mockResolvedValue({
-    data: customerData,
-    error: null,
-  });
-  const existingCustomerCashbackMaybeSingle = vi.fn().mockResolvedValue({
-    data: existingCustomerCashback,
-    error: null,
-  });
-  const existingMerchantCommissionMaybeSingle = vi.fn().mockResolvedValue({
-    data: existingMerchantCommission,
-    error: null,
-  });
-  const notificationClaimMaybeSingle = vi.fn().mockResolvedValue({
-    data: notificationClaimData,
-    error: null,
-  });
-  const makeMaybeSingleChain = (maybeSingle: ReturnType<typeof vi.fn>) => {
-    const chain = {
-      eq: vi.fn(() => chain),
-      limit: vi.fn(() => chain),
-      maybeSingle,
-      order: vi.fn(() => chain),
-      select: vi.fn(() => chain),
-    };
-    return chain;
-  };
-
-  return {
-    from: vi.fn((table: string) => {
-      if (table === 'vtu_transactions') {
-        return {
-          select: vi.fn((columns?: string) => ({
-            eq: vi.fn().mockReturnValue({
-              single: vi.fn().mockResolvedValue({
-                data:
-                  columns === 'error_message, status' ||
-                  columns ===
-                    'customer_cashback, error_message, merchant_commission, metadata, status, transaction_id' ||
-                  // Pre-refresh re-read shape: kept so the
-                  // concurrent-settlement regression test fails
-                  // against code that does not refresh money columns.
-                  columns === 'error_message, metadata, status, transaction_id'
-                    ? (currentTransactionData ?? transactionRow)
-                    : transactionRow,
-                error: null,
-              }),
-              // Marker read-back verify (Codex R54 6rrFRC): the
-              // scripted marker write truly failed, so the re-read
-              // shows no marker — the error (and the caller's
-              // restore+throw) stands. The settlement merge
-              // re-read (Codex R103 P2) fails when scripted.
-              maybeSingle: vi.fn().mockResolvedValue(
-                columns === 'metadata, updated_at' && metadataRereadError
-                  ? { data: null, error: metadataRereadError }
-                  : {
-                      data: {
-                        metadata:
-                          transactionRow.metadata &&
-                          typeof transactionRow.metadata === 'object'
-                            ? transactionRow.metadata
-                            : {},
-                        status: 'processing',
-                        transaction_id: transactionRow.transaction_id ?? null,
-                      },
-                      error: null,
-                    }
-              ),
-            }),
-          })),
-          update: vi.fn((payload: unknown) => {
-            updatePayloads.push(payload);
-            const payloadRecord =
-              payload && typeof payload === 'object'
-                ? (payload as Record<string, unknown>)
-                : {};
-            const metadataPayload =
-              payloadRecord.metadata &&
-              typeof payloadRecord.metadata === 'object'
-                ? (payloadRecord.metadata as Record<string, unknown>)
-                : null;
-            const isNotificationClaim =
-              metadataPayload?.customerNotificationAttempted === true &&
-              !('customerNotificationSent' in metadataPayload) &&
-              !('paymentPending' in metadataPayload) &&
-              !('status' in payloadRecord);
-            const isRetryReconciliation =
-              payloadRecord.status === 'successful' &&
-              payloadRecord.error_message === null &&
-              !('metadata' in payloadRecord) &&
-              !('transaction_id' in payloadRecord);
-
-            if (isNotificationClaim) {
-              const notificationClaimChain = {
-                eq: vi.fn(() => notificationClaimChain),
-                maybeSingle: notificationClaimMaybeSingle,
-                or: vi.fn(() => notificationClaimChain),
-                select: vi.fn(() => notificationClaimChain),
-              };
-              return notificationClaimChain;
-            }
-
-            if (isRetryReconciliation) {
-              const retryReconciliationChain = {
-                eq: vi.fn(() => retryReconciliationChain),
-                maybeSingle: claimMaybeSingle,
-                select: vi.fn(() => retryReconciliationChain),
-              };
-              return retryReconciliationChain;
-            }
-
-            if (!isClaimOrErrorUpdate(payloadRecord)) {
-              if (
-                expectedRestoreToken !== undefined &&
-                payloadRecord.status === 'pending' &&
-                typeof metadataPayload?.preVendInterruptedAt === 'string'
-              ) {
-                // Token-gated pre-vend restore: captures the CAS
-                // token from the eq chain and matches only on the
-                // expected value (Codex R65 6ru4mQ).
-                let capturedToken: unknown;
-                const restoreChain = createAwaitableUpdateChain(
-                  { data: null, error: null },
-                  vi.fn()
-                );
-                restoreChain.eq = vi.fn((column: string, value: unknown) => {
-                  if (column === 'updated_at') {
-                    capturedToken = value;
-                  }
-                  return restoreChain;
-                });
-                restoreChain.maybeSingle = vi.fn().mockImplementation(() =>
-                  Promise.resolve({
-                    data:
-                      capturedToken === expectedRestoreToken
-                        ? { id: 'vtu-1' }
-                        : null,
-                    error: null,
-                  })
-                );
-                return restoreChain;
-              }
-              let updateError = selectUpdateError(
-                payloadRecord,
-                transactionRow,
-                updateErrors
-              );
-              if (isSubmissionMarkerShaped(payloadRecord)) {
-                const terminalWrite =
-                  payloadRecord.status === 'successful' ||
-                  payloadRecord.status === 'failed';
-                if (
-                  !submissionMarkerWriteSeen ||
-                  (updateErrors.submissionMarker !== undefined &&
-                    !terminalWrite)
-                ) {
-                  updateError = updateErrors.submissionMarker;
-                }
-                submissionMarkerWriteSeen = true;
-              }
-              if (
-                (payloadRecord.status === 'successful' ||
-                  payloadRecord.status === 'failed') &&
-                purchaseUpdateErrors &&
-                purchaseUpdateErrors.length > 0
-              ) {
-                const errorIndex = Math.min(
-                  purchaseUpdateAttempt,
-                  purchaseUpdateErrors.length - 1
-                );
-                updateError = purchaseUpdateErrors[errorIndex] ?? undefined;
-                purchaseUpdateAttempt += 1;
-              }
-
-              const isFallbackMarker =
-                !('status' in payloadRecord) &&
-                metadataPayload?.providerFallback === 'monnify_airtime_to_kuda';
-              const purchaseUpdateMaybeSingle = vi.fn().mockResolvedValue({
-                data: updateError
-                  ? null
-                  : isFallbackMarker && fallbackMarkerData !== undefined
-                    ? fallbackMarkerData
-                    : purchaseUpdateData,
-                error: updateError ?? null,
-              });
-              return createAwaitableUpdateChain(
-                {
-                  data: null,
-                  error: updateError ?? null,
-                },
-                purchaseUpdateMaybeSingle
-              );
-            }
-
-            return createAwaitableUpdateChain(
-              { data: null, error: null },
-              claimMaybeSingle
-            );
-          }),
-        };
-      }
-
-      if (table === 'customer_wallet_transactions') {
-        const ledgerMaybeSingle = ledgerReadSequence
-          ? vi.fn().mockImplementation(() => {
-              const row =
-                ledgerReadSequence[
-                  Math.min(ledgerReadIndex, ledgerReadSequence.length - 1)
-                ];
-              ledgerReadIndex += 1;
-              return Promise.resolve({ data: row, error: null });
-            })
-          : existingCustomerCashbackMaybeSingle;
-        const chain = makeMaybeSingleChain(ledgerMaybeSingle);
-        return {
-          select: vi.fn(() => chain),
-        };
-      }
-
-      if (table === 'wallet_transactions') {
-        const chain = makeMaybeSingleChain(
-          existingMerchantCommissionMaybeSingle
-        );
-        return {
-          select: vi.fn(() => chain),
-        };
-      }
-
-      if (table === 'customers') {
-        return {
-          select: vi.fn().mockReturnValue({
-            eq: vi.fn().mockReturnValue({ maybeSingle: customerMaybeSingle }),
-          }),
-        };
-      }
-
-      if (table === 'transactions') {
-        // Refund-gate evidence lookups: awaitable terminal (no
-        // maybeSingle), one scripted payload per test. Defaults to
-        // no gateway rows — genuinely-charged legacy rows opt in.
-        const terminal = Object.assign(
-          Promise.resolve({
-            data: completedGatewayTransactions,
-            error: null,
-          }),
-          { eq: vi.fn(() => terminal) }
-        );
-        return { select: vi.fn(() => ({ eq: terminal.eq })) };
-      }
-
-      return {
-        select: vi.fn().mockReturnValue({
-          eq: vi.fn().mockReturnValue({ single: merchantSingle }),
-        }),
-      };
-    }),
-    rpc: vi.fn((name: string, args?: Record<string, unknown>) => {
-      if (name === 'claim_vtu_customer_notification_attempt') {
-        return Promise.resolve({
-          data: notificationClaimData
-            ? {
-                ...(transactionRow.metadata &&
-                typeof transactionRow.metadata === 'object'
-                  ? (transactionRow.metadata as Record<string, unknown>)
-                  : {}),
-                customerNotificationAttempted: true,
-              }
-            : null,
-          error: null,
-        });
-      }
-
-      if (name === 'claim_vtu_customer_email_notification_attempt') {
-        return Promise.resolve({
-          data: emailClaimData
-            ? {
-                ...(transactionRow.metadata &&
-                typeof transactionRow.metadata === 'object'
-                  ? (transactionRow.metadata as Record<string, unknown>)
-                  : {}),
-                [String(args?.p_attempt_key)]: true,
-                [`${String(args?.p_attempt_key)}At`]:
-                  '2026-10-15T00:00:00.000Z',
-              }
-            : null,
-          error: null,
-        });
-      }
-
-      if (name === 'clear_vtu_customer_email_notification_attempt') {
-        return Promise.resolve({
-          data: emailClearData
-            ? {
-                ...(transactionRow.metadata &&
-                typeof transactionRow.metadata === 'object'
-                  ? (transactionRow.metadata as Record<string, unknown>)
-                  : {}),
-                [String(args?.p_attempt_key)]: false,
-              }
-            : null,
-          error: null,
-        });
-      }
-
-      if (name === 'finalize_vtu_customer_email_notification_attempt') {
-        return Promise.resolve({
-          data: emailFinalizeData
-            ? {
-                ...(transactionRow.metadata &&
-                typeof transactionRow.metadata === 'object'
-                  ? (transactionRow.metadata as Record<string, unknown>)
-                  : {}),
-                [String(args?.p_attempt_key)]: false,
-                [String(args?.p_sent_key)]: Boolean(args?.p_sent),
-                ...(args?.p_delivery_outcome === 'unknown'
-                  ? {
-                      [`${String(args?.p_sent_key)}DeliveryOutcome`]: 'unknown',
-                    }
-                  : {}),
-              }
-            : null,
-          error: null,
-        });
-      }
-
-      if (name === 'claim_failed_vtu_retry') {
-        return Promise.resolve({
-          data: retryClaimData,
-          error: retryClaimError,
-        });
-      }
-
-      return rpcImpl
-        ? rpcImpl(name, args)
-        : Promise.resolve({ data: null, error: null });
-    }),
-  } as unknown as SupabaseStub;
-}
+import {
+  createPendingTransactionSupabaseMock,
+  findPayloadWithMetadata,
+  type SupabaseStub,
+} from './vtu-fulfillment.test-support';
 
 describe('fulfillPendingVtuTransaction', () => {
   beforeEach(() => {
@@ -3064,6 +2515,7 @@ describe('fulfillPendingVtuTransaction', () => {
         'Monnify rejected the bill payment request. Please verify the details and try again.',
       providerErrorDetail:
         'Monnify API error: 400 Bad Request - Amount must be greater than zero',
+      providerDefiniteFailure: true,
       amount: 1000,
       status: 'failed',
     });
@@ -3167,6 +2619,7 @@ describe('fulfillPendingVtuTransaction', () => {
         'Monnify rejected the bill payment request. Please verify the details and try again.',
       providerErrorDetail:
         'Monnify API error: 400 Bad Request - Amount must be greater than zero',
+      providerDefiniteFailure: true,
       amount: 100,
       status: 'failed',
     });
@@ -3318,6 +2771,7 @@ describe('fulfillPendingVtuTransaction', () => {
         'Monnify rejected the bill payment request. Please verify the details and try again.',
       providerErrorDetail:
         'Monnify API error: 400 Bad Request - Amount must be greater than zero',
+      providerDefiniteFailure: true,
       amount: 100,
       status: 'failed',
     });
@@ -3463,6 +2917,7 @@ describe('fulfillPendingVtuTransaction', () => {
       message: 'Monnify rejected the bill payment request.',
       providerErrorDetail:
         'Monnify API error: 400 Bad Request - Amount must be greater than zero',
+      providerDefiniteFailure: true,
       amount: 100,
       status: 'failed',
     });
@@ -3540,6 +2995,7 @@ describe('fulfillPendingVtuTransaction', () => {
       message: 'Monnify rejected the bill payment request.',
       providerErrorDetail:
         'Monnify API error: 400 Bad Request - Amount must be greater than zero',
+      providerDefiniteFailure: true,
       amount: 100,
       status: 'failed',
     });
@@ -3576,6 +3032,7 @@ describe('fulfillPendingVtuTransaction', () => {
       updatePayloads,
     });
 
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const result = await fulfillPendingVtuTransaction({
       supabase,
       transactionId: 'vtu-1',
@@ -3597,6 +3054,12 @@ describe('fulfillPendingVtuTransaction', () => {
         status: 'failed',
       })
     );
+    // The switch to Kuda was never recorded, so it must not be logged.
+    expect(warnSpy).not.toHaveBeenCalledWith(
+      'Monnify refused airtime; vending through Kuda backup:',
+      expect.anything()
+    );
+    warnSpy.mockRestore();
   });
 
   it('resolves the current row instead of failing it when the fallback marker loses its race', async () => {
@@ -3612,6 +3075,7 @@ describe('fulfillPendingVtuTransaction', () => {
       message: 'Monnify rejected the bill payment request.',
       providerErrorDetail:
         'Monnify API error: 400 Bad Request - Amount must be greater than zero',
+      providerDefiniteFailure: true,
       amount: 100,
       status: 'failed',
     });
@@ -3673,79 +3137,6 @@ describe('fulfillPendingVtuTransaction', () => {
           (payload as { status?: unknown }).status === 'failed'
       )
     ).toEqual([]);
-  });
-
-  it('does not fall back to Kuda airtime for generic Monnify vend failures', async () => {
-    mockMonnifyPurchaseBill.mockResolvedValue({
-      success: false,
-      reference: 'VTU-123',
-      message: 'Monnify business failure',
-      amount: 100,
-      status: 'failed',
-    });
-    mockPurchaseAirtime.mockResolvedValue({
-      success: true,
-      reference: 'VTU-123',
-      message: 'Request successful',
-      transactionId: 'kuda-airtime-1',
-      amount: 100,
-      phoneNumber: '08012345678',
-      provider: 'MTN',
-      status: 'successful',
-    });
-    const updatePayloads: unknown[] = [];
-
-    const supabase = createPendingTransactionSupabaseMock({
-      transactionRow: {
-        id: 'vtu-1',
-        merchant_id: 'merchant-1',
-        customer_id: null,
-        type: 'airtime',
-        network_provider: 'MTN',
-        phone_number: '08012345678',
-        amount: 100,
-        request_reference: 'VTU-123',
-        transaction_id: null,
-        status: 'pending',
-        metadata: {
-          provider: 'monnify',
-          billerCode: 'MTN',
-          productCode: '13',
-          requireValidationRef: false,
-        },
-        error_message: null,
-        merchant_commission: 0,
-        customer_cashback: 0,
-        biller_name: null,
-        biller_item_code: null,
-        customer_identifier: '08012345678',
-      },
-      updatePayloads,
-    });
-
-    const result = await fulfillPendingVtuTransaction({
-      supabase,
-      transactionId: 'vtu-1',
-    });
-
-    expect(mockPurchaseAirtime).not.toHaveBeenCalled();
-    expect(result).toMatchObject({
-      amount: 100,
-      error: VTU_CUSTOMER_FAILURE_MESSAGE,
-      reference: 'VTU-123',
-      status: 'failed',
-    });
-    expect(updatePayloads).toContainEqual(
-      expect.objectContaining({
-        error_message: 'Monnify business failure',
-        metadata: expect.not.objectContaining({
-          fulfillmentProvider: 'kuda',
-          providerFallback: 'monnify_airtime_to_kuda',
-        }),
-        status: 'failed',
-        transaction_id: null,
-      })
-    );
   });
 
   it('routes to Monnify status requery and reconciles status successfully when metadata.provider is monnify', async () => {
@@ -4103,6 +3494,90 @@ describe('fulfillPendingVtuTransaction', () => {
     expect(updatePayloads).toContainEqual(
       expect.objectContaining({
         error_message: 'Request successful. (biller status: k11)',
+        status: 'failed',
+      })
+    );
+  });
+
+  it('clears stale failure diagnostics when reconciling a processing row to successful', async () => {
+    mockCheckTransactionStatus.mockResolvedValueOnce({
+      message: 'Request successful',
+      status: 'successful',
+    });
+    const updatePayloads: unknown[] = [];
+    const supabase = createPendingTransactionSupabaseMock({
+      transactionRow: {
+        id: 'vtu-1',
+        merchant_id: 'merchant-1',
+        customer_id: 'customer-1',
+        type: 'electricity',
+        network_provider: '',
+        phone_number: '08146978921',
+        amount: 1000,
+        request_reference: 'VTU-123',
+        transaction_id: 'kuda-bill-1',
+        status: 'processing',
+        metadata: {
+          providerErrorDetail: 'stale detail',
+          providerResponseCode: '99',
+        },
+        error_message: 'Request successful',
+        merchant_commission: 0,
+        customer_cashback: 0,
+        biller_name: 'EKEDC NG - EKEDC PREPAID',
+        biller_item_code: 'KUD-ELE-EKED-002',
+        customer_identifier: '43901766923',
+        source: 'checkout',
+      },
+      updatePayloads,
+    });
+
+    await fulfillPendingVtuTransaction({ supabase, transactionId: 'vtu-1' });
+
+    const successPayload = updatePayloads.find(
+      (payload) => (payload as { status?: string }).status === 'successful'
+    ) as { metadata: Record<string, unknown> } | undefined;
+    expect(successPayload?.metadata).toBeDefined();
+    expect(successPayload?.metadata).not.toHaveProperty('providerResponseCode');
+    expect(successPayload?.metadata).not.toHaveProperty('providerErrorDetail');
+  });
+
+  it('keeps the requery response code when reconciling a processing row to failed', async () => {
+    mockCheckTransactionStatus.mockResolvedValueOnce({
+      message: 'Vend failed',
+      responseCode: 'D02',
+      status: 'failed',
+    });
+    const updatePayloads: unknown[] = [];
+    const supabase = createPendingTransactionSupabaseMock({
+      transactionRow: {
+        id: 'vtu-1',
+        merchant_id: 'merchant-1',
+        customer_id: 'customer-1',
+        type: 'electricity',
+        network_provider: '',
+        phone_number: '08146978921',
+        amount: 1000,
+        request_reference: 'VTU-123',
+        transaction_id: 'kuda-bill-1',
+        status: 'processing',
+        metadata: {},
+        error_message: 'Request successful',
+        merchant_commission: 0,
+        customer_cashback: 0,
+        biller_name: 'EKEDC NG - EKEDC PREPAID',
+        biller_item_code: 'KUD-ELE-EKED-002',
+        customer_identifier: '43901766923',
+        source: 'checkout',
+      },
+      updatePayloads,
+    });
+
+    await fulfillPendingVtuTransaction({ supabase, transactionId: 'vtu-1' });
+
+    expect(updatePayloads).toContainEqual(
+      expect.objectContaining({
+        metadata: expect.objectContaining({ providerResponseCode: 'D02' }),
         status: 'failed',
       })
     );
@@ -7356,5 +6831,218 @@ describe('isInsufficientWalletBalanceError', () => {
     ).toBe(false);
     expect(isInsufficientWalletBalanceError(null)).toBe(false);
     expect(isInsufficientWalletBalanceError(undefined)).toBe(false);
+  });
+});
+
+describe('PiggyVest-paid VTU rows (pay from the PiggyVest wallet, dark)', () => {
+  const PIGGYVEST_ROW = {
+    id: 'vtu-1',
+    merchant_id: 'merchant-1',
+    customer_id: 'customer-1',
+    type: 'airtime',
+    network_provider: 'MTN',
+    phone_number: '08012345678',
+    amount: 1000,
+    request_reference: 'VTU-123',
+    transaction_id: null,
+    status: 'pending',
+    metadata: {
+      paymentSource: 'piggyvest_wallet',
+      paymentSplit: { card: 0, wallet: 1000 },
+    },
+    error_message: null,
+    merchant_commission: 0,
+    customer_cashback: 0,
+    biller_name: null,
+    biller_item_code: null,
+    customer_identifier: null,
+    source: 'checkout',
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('never vends a PiggyVest-paid row without the payment delivery claim', async () => {
+    const rpcImpl = vi.fn(() => Promise.resolve({ data: null, error: null }));
+    const updatePayloads: unknown[] = [];
+    const supabase = createPendingTransactionSupabaseMock({
+      transactionRow: PIGGYVEST_ROW,
+      rpcImpl,
+      updatePayloads,
+    });
+
+    const result = await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(result).toEqual({
+      amount: 1000,
+      reference: 'VTU-123',
+      status: 'processing',
+    });
+    expect(mockPurchaseAirtime).not.toHaveBeenCalled();
+    expect(rpcImpl).not.toHaveBeenCalled();
+    expect(updatePayloads).toEqual([]);
+  });
+
+  it('vends a claimed PiggyVest-paid row without debiting store credit', async () => {
+    mockPurchaseAirtime.mockResolvedValue({
+      success: true,
+      message: 'ok',
+      transactionId: 'kuda-pv-1',
+      amount: 1000,
+      status: 'successful',
+    });
+    const rpcImpl = vi.fn(() => Promise.resolve({ data: null, error: null }));
+    const supabase = createPendingTransactionSupabaseMock({
+      transactionRow: PIGGYVEST_ROW,
+      rpcImpl,
+    });
+
+    const result = await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+      walletPayClaimed: true,
+    });
+
+    expect(result).toMatchObject({ status: 'successful' });
+    expect(mockPurchaseAirtime).toHaveBeenCalledTimes(1);
+    expect(rpcImpl).not.toHaveBeenCalledWith(
+      'redeem_vtu_wallet_payment',
+      expect.anything()
+    );
+  });
+
+  it('owes a failed vend to the PiggyVest wallet and never credits store credit', async () => {
+    mockPurchaseAirtime.mockResolvedValue({
+      success: false,
+      message: 'Insufficient Balance',
+      status: 'failed',
+    });
+    const rpcImpl = vi.fn(() => Promise.resolve({ data: null, error: null }));
+    const updatePayloads: unknown[] = [];
+    const supabase = createPendingTransactionSupabaseMock({
+      transactionRow: PIGGYVEST_ROW,
+      rpcImpl,
+      updatePayloads,
+    });
+
+    const result = await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+      walletPayClaimed: true,
+    });
+
+    expect(result).toMatchObject({ status: 'failed' });
+    for (const name of [
+      'redeem_vtu_wallet_payment',
+      'reverse_vtu_wallet_payment',
+      'refund_customer_wallet_for_vtu',
+    ])
+      expect(rpcImpl).not.toHaveBeenCalledWith(name, expect.anything());
+    expect(JSON.stringify(updatePayloads)).toContain(
+      '"refundDestination":"piggyvest_wallet"'
+    );
+  });
+
+  it('bugfix: the reconciler settles a processing PiggyVest-paid row without the claim (Codex P1)', async () => {
+    mockMonnifyCheckTransactionStatus.mockResolvedValue({
+      status: 'successful',
+      message: 'success',
+      pin: 'token-1234',
+    });
+    const supabase = createPendingTransactionSupabaseMock({
+      transactionRow: {
+        ...PIGGYVEST_ROW,
+        type: 'electricity',
+        transaction_id: 'monnify-bill-1',
+        status: 'processing',
+        metadata: {
+          ...PIGGYVEST_ROW.metadata,
+          provider: 'monnify',
+          billerCode: 'biller1',
+          productCode: 'product1',
+          monnifyVendReference: 'monnify-vend-1',
+        },
+        biller_name: 'EKEDC',
+        customer_identifier: '43901766923',
+      },
+    });
+
+    const result = await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(mockMonnifyCheckTransactionStatus).toHaveBeenCalledWith(
+      'monnify-vend-1'
+    );
+    expect(result).toMatchObject({ status: 'successful' });
+  });
+
+  it('still holds a plain pending PiggyVest-paid row (never vended) without the claim', async () => {
+    const supabase = createPendingTransactionSupabaseMock({
+      transactionRow: PIGGYVEST_ROW,
+    });
+    const result = await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+    expect(result).toMatchObject({ status: 'processing' });
+    expect(mockPurchaseAirtime).not.toHaveBeenCalled();
+  });
+
+  it('bugfix: a failed PiggyVest-paid row without the claim writes no refund bookkeeping (Muse)', async () => {
+    const rpcImpl = vi.fn(() => Promise.resolve({ data: null, error: null }));
+    const updatePayloads: unknown[] = [];
+    const supabase = createPendingTransactionSupabaseMock({
+      transactionRow: {
+        ...PIGGYVEST_ROW,
+        status: 'failed',
+        error_message: 'This purchase was not paid.',
+      },
+      rpcImpl,
+      updatePayloads,
+    });
+
+    const result = await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(result).toMatchObject({ status: 'failed' });
+    expect(result).not.toHaveProperty('refundedToWallet');
+    expect(updatePayloads).toEqual([]);
+    expect(rpcImpl).not.toHaveBeenCalled();
+  });
+
+  it('never re-vends a failed PiggyVest-paid row on a retry', async () => {
+    const rpcImpl = vi.fn(() => Promise.resolve({ data: null, error: null }));
+    const supabase = createPendingTransactionSupabaseMock({
+      transactionRow: {
+        ...PIGGYVEST_ROW,
+        status: 'failed',
+        error_message: 'Vend failed',
+        metadata: {
+          ...PIGGYVEST_ROW.metadata,
+          refundIssued: true,
+          refundAmount: 1000,
+          refundDestination: 'piggyvest_wallet',
+        },
+      },
+      rpcImpl,
+    });
+
+    const result = await fulfillPendingVtuTransaction({
+      retryFailed: true,
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(result).toMatchObject({ status: 'failed' });
+    expect(mockPurchaseAirtime).not.toHaveBeenCalled();
+    expect(rpcImpl).not.toHaveBeenCalled();
   });
 });

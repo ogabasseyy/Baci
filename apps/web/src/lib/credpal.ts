@@ -32,95 +32,15 @@ export interface CredPalSuccessResponse {
   created_at: string;
 }
 
-// CredPal SDK script URL
-export const CREDPAL_SCRIPT_URL =
-  'https://corporate-loans.obs.sa-brazil-1.myhuaweicloud.com/minifiedJS/index.js';
-
-/**
- * Get CredPal merchant key from environment
- */
+/** CredPal checkout is retired. Retain this API for saved checkout flows. */
 export function getCredPalKey(): string {
-  const key = process.env.NEXT_PUBLIC_CREDPAL_KEY;
-  if (!key) {
-    throw new Error('NEXT_PUBLIC_CREDPAL_KEY environment variable is not set');
-  }
-  return key;
+  throw new Error('CredPal is unavailable');
 }
 
-/**
- * Check if CredPal is available in the browser
- */
-export function isCredPalLoaded(): boolean {
-  return typeof window !== 'undefined' && 'Checkout' in window;
-}
-
-/**
- * Dynamically load the CredPal script
- */
-export function loadCredPalScript(): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (isCredPalLoaded()) {
-      resolve();
-      return;
-    }
-
-    const existingScript = document.querySelector(
-      `script[src="${CREDPAL_SCRIPT_URL}"]`
-    );
-    if (existingScript) {
-      // Script already loading, wait for it
-      existingScript.addEventListener('load', () => resolve());
-      existingScript.addEventListener('error', () =>
-        reject(new Error('Failed to load CredPal script'))
-      );
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.src = CREDPAL_SCRIPT_URL;
-    script.type = 'text/javascript';
-    script.async = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Failed to load CredPal script'));
-    document.head.appendChild(script);
-  });
-}
-
-/**
- * Initialize and open CredPal checkout popup
- */
-export async function openCredPalCheckout(
-  config: CredPalCheckoutConfig
+export function openCredPalCheckout(
+  _config: CredPalCheckoutConfig
 ): Promise<void> {
-  await loadCredPalScript();
-
-  if (!isCredPalLoaded()) {
-    throw new Error('CredPal SDK failed to load');
-  }
-
-  // Access the global Checkout class from the CredPal SDK
-  const Checkout = (
-    window as unknown as {
-      Checkout: new (
-        config: CredPalCheckoutConfig
-      ) => { setup: () => void; open: () => void; close: () => void };
-    }
-  ).Checkout;
-
-  const checkout = new Checkout({
-    key: config.key,
-    amount: config.amount,
-    product: config.product,
-    onClose: config.onClose || (() => console.log('CredPal widget closed')),
-    onLoad: config.onLoad || (() => console.log('CredPal widget loaded')),
-    onError:
-      config.onError || ((error) => console.error('CredPal error:', error)),
-    onSuccess:
-      config.onSuccess || ((data) => console.log('CredPal success:', data)),
-  });
-
-  checkout.setup();
-  checkout.open();
+  return Promise.reject(new Error('CredPal is unavailable'));
 }
 
 /**

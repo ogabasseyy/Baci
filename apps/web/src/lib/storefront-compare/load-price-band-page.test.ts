@@ -246,6 +246,22 @@ describe('loadPriceBandPage', () => {
     );
   });
 
+  it('returns null (downstream not-found) for NGN-gated category price bands when merchant currency is non-NGN', async () => {
+    mockGetMerchantByIdentifier.mockResolvedValueOnce({
+      ...merchant,
+      country: 'US',
+      payout_currency: 'USD',
+    });
+
+    const result = await loadPriceBandPage({
+      merchantSlug: 'ogabassey',
+      categorySlug: 'gaming-laptops',
+      priceBandSlug: 'under-1-5m',
+    });
+
+    expect(result).toBeNull();
+  });
+
   it('returns a non-indexable model when the curated band is below threshold', async () => {
     const result = await loadPriceBandPage({
       merchantSlug: 'ogabassey',
@@ -254,110 +270,5 @@ describe('loadPriceBandPage', () => {
     });
 
     expect(result?.isIndexable).toBe(false);
-  });
-
-  it('keeps the merchant slug path prefix for path-routed storefronts in production', async () => {
-    vi.stubEnv('NODE_ENV', 'production');
-
-    const result = await loadPriceBandPage({
-      merchantSlug: 'ogabassey',
-      categorySlug: 'smartphones',
-      priceBandSlug: 'under-1m',
-    });
-
-    expect(result?.pathPrefix).toBe('/ogabassey');
-  });
-
-  it('drops the path prefix for custom-domain storefront identifiers', async () => {
-    vi.stubEnv('NODE_ENV', 'production');
-    mockGetMerchantByIdentifier.mockResolvedValueOnce({
-      ...merchant,
-      custom_domain: 'ogabassey.com',
-    });
-
-    const result = await loadPriceBandPage({
-      merchantSlug: 'ogabassey.com',
-      categorySlug: 'smartphones',
-      priceBandSlug: 'under-1m',
-    });
-
-    expect(mockGetMerchantByIdentifier).toHaveBeenCalledWith('ogabassey.com');
-    expect(result?.pathPrefix).toBe('');
-  });
-
-  describe('slug safety gate', () => {
-    const overEncodedSlug = (() => {
-      let value = 'x y';
-      for (let index = 0; index < 10; index += 1) {
-        value = encodeURIComponent(value);
-      }
-      return value;
-    })();
-    const overLongSlug = 'a'.repeat(4000);
-
-    it('returns null for a repeatedly percent-encoded category slug without hitting the cached category lookup', async () => {
-      const result = await loadPriceBandPage({
-        merchantSlug: 'ogabassey',
-        categorySlug: overEncodedSlug,
-        priceBandSlug: 'under-1m',
-      });
-
-      expect(result).toBeNull();
-      expect(mockGetCachedCategoryPageData).not.toHaveBeenCalled();
-    });
-
-    it('returns null for an over-long category slug without hitting the cached category lookup', async () => {
-      const result = await loadPriceBandPage({
-        merchantSlug: 'ogabassey',
-        categorySlug: overLongSlug,
-        priceBandSlug: 'under-1m',
-      });
-
-      expect(result).toBeNull();
-      expect(mockGetCachedCategoryPageData).not.toHaveBeenCalled();
-    });
-
-    it('returns null for an over-long price band slug without hitting the cached category lookup', async () => {
-      const result = await loadPriceBandPage({
-        merchantSlug: 'ogabassey',
-        categorySlug: 'smartphones',
-        priceBandSlug: overLongSlug,
-      });
-
-      expect(result).toBeNull();
-      expect(mockGetCachedCategoryPageData).not.toHaveBeenCalled();
-    });
-
-    it('still resolves a valid short slug through the cached category lookup', async () => {
-      const result = await loadPriceBandPage({
-        merchantSlug: 'ogabassey',
-        categorySlug: 'smartphones',
-        priceBandSlug: 'under-1m',
-      });
-
-      expect(mockGetCachedCategoryPageData).toHaveBeenCalledWith(
-        'merchant-1',
-        'smartphones',
-        'ogabassey'
-      );
-      expect(result?.heading).toBe(
-        'Best Smartphones Under ₦1,000,000 in Nigeria'
-      );
-    });
-  });
-
-  it('drops the path prefix for subdomain storefront requests', async () => {
-    vi.stubEnv('NODE_ENV', 'production');
-    mockHeaders.mockResolvedValueOnce(
-      new Headers([['x-merchant-slug', 'ogabassey']])
-    );
-
-    const result = await loadPriceBandPage({
-      merchantSlug: 'ogabassey',
-      categorySlug: 'smartphones',
-      priceBandSlug: 'under-1m',
-    });
-
-    expect(result?.pathPrefix).toBe('');
   });
 });

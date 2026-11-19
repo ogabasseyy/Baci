@@ -11,7 +11,6 @@ import {
   getSavingsButton,
   getSavingsInput,
   getSavingsRadio,
-  openFundingOptions,
   selectSavingsProduct,
   setContributionAmount,
 } from './start-savings-screen.test-utils';
@@ -116,8 +115,12 @@ jest.mock('@/lib/customer-savings', () => ({
 }));
 
 jest.mock('@/stores/auth-store', () => ({
-  useAuthStore: (selector: (state: { merchantId: string | null }) => unknown) =>
-    selector({ merchantId: 'merchant-1' }),
+  useAuthStore: (
+    selector: (state: {
+      merchantId: string | null;
+      user: { id: string } | null;
+    }) => unknown
+  ) => selector({ merchantId: 'merchant-1', user: { id: 'user-1' } }),
 }));
 
 jest.mock('@/lib/clipboard', () => ({
@@ -218,8 +221,30 @@ describe('StartSavingsScreen', () => {
     fireEvent.press(getSavingsButton('Continue savings setup'));
 
     expect(
-      screen.getByText('You must accept the non-withdrawable savings terms.')
+      screen.getByText(
+        'Tick the box to agree that this money stays saved until your goal is done.'
+      )
     ).toBeOnTheScreen();
+  });
+
+  it('clears the tick-the-box message once the terms are ticked', () => {
+    render(<StartSavingsScreen />);
+    selectSavingsProduct();
+    setContributionAmount();
+    fireEvent.press(getSavingsButton('Continue savings setup'));
+    expect(
+      screen.getByText(
+        'Tick the box to agree that this money stays saved until your goal is done.'
+      )
+    ).toBeOnTheScreen();
+
+    acceptSavingsTerms();
+
+    expect(
+      screen.queryByText(
+        'Tick the box to agree that this money stays saved until your goal is done.'
+      )
+    ).toBeNull();
   });
 
   it('creates a manual savings goal via wallet balance', async () => {
@@ -230,10 +255,9 @@ describe('StartSavingsScreen', () => {
     acceptSavingsTerms();
     fireEvent.press(getSavingsButton('Continue savings setup'));
 
-    expect(screen.getByText('Your savings plan')).toBeOnTheScreen();
+    expect(screen.getByText('Check your plan')).toBeOnTheScreen();
 
-    fireEvent.press(getSavingsButton('Choose savings funding option'));
-    fireEvent.press(getSavingsButton('Continue funding option'));
+    fireEvent.press(getSavingsButton('Create my plan'));
 
     await waitFor(() => expect(mockCreateSavingsGoal).toHaveBeenCalledTimes(1));
     expect(mockCreateSavingsGoal).toHaveBeenCalledWith(
@@ -246,122 +270,7 @@ describe('StartSavingsScreen', () => {
       })
     );
     await waitFor(() =>
-      expect(
-        screen.getByText('Savings plan created successfully')
-      ).toBeOnTheScreen()
-    );
-  });
-
-  it('reuses the same initial contribution idempotency key across retries', async () => {
-    mockCreateSavingsGoal
-      .mockRejectedValueOnce(new Error('Temporary network error'))
-      .mockResolvedValueOnce({ goalId: 'goal-1', success: true });
-    render(<StartSavingsScreen />);
-
-    selectSavingsProduct();
-    setContributionAmount();
-    fireEvent.press(getSavingsRadio('Initial contribution Yes'));
-    fireEvent.changeText(
-      getSavingsInput('Initial contribution amount'),
-      '20000'
-    );
-    acceptSavingsTerms();
-    openFundingOptions();
-    fireEvent.press(getSavingsButton('Continue funding option'));
-
-    await waitFor(() => expect(mockCreateSavingsGoal).toHaveBeenCalledTimes(1));
-    await waitFor(() =>
-      expect(getSavingsButton('Continue funding option')).not.toBeDisabled()
-    );
-    fireEvent.press(getSavingsButton('Continue funding option'));
-
-    await waitFor(() => expect(mockCreateSavingsGoal).toHaveBeenCalledTimes(2));
-    const firstCall = mockCreateSavingsGoal.mock.calls[0]?.[0] as {
-      initialContributionIdempotencyKey?: string;
-    };
-    const secondCall = mockCreateSavingsGoal.mock.calls[1]?.[0] as {
-      initialContributionIdempotencyKey?: string;
-    };
-    expect(firstCall.initialContributionIdempotencyKey).toBe(
-      'initial-contribution-key-1'
-    );
-    expect(secondCall.initialContributionIdempotencyKey).toBe(
-      'initial-contribution-key-1'
-    );
-    expect(mockRandomUUID).toHaveBeenCalledTimes(2);
-  });
-
-  it('creates the plan then shows its dedicated account for bank transfer funding', async () => {
-    mockFetchSavingsPlanFunding.mockResolvedValue({
-      status: 'ready',
-      accounts: [
-        {
-          accountNumber: '0001234567',
-          accountName: 'Synthetic account',
-          bankName: 'Synthetic bank',
-        },
-      ],
-    });
-    render(<StartSavingsScreen />);
-
-    selectSavingsProduct();
-    setContributionAmount();
-    acceptSavingsTerms();
-    openFundingOptions();
-
-    fireEvent.press(getSavingsButton('Pay with bank transfer'));
-    fireEvent.press(getSavingsButton('Continue funding option'));
-
-    await waitFor(() => expect(mockCreateSavingsGoal).toHaveBeenCalledTimes(1));
-    expect(mockCreateSavingsGoal).toHaveBeenCalledWith(
-      expect.objectContaining({
-        initialContributionAmount: 0,
-        sourceMode: 'manual',
-      })
-    );
-    await waitFor(() =>
-      expect(screen.getByText('Fund your plan to continue')).toBeOnTheScreen()
-    );
-    fireEvent.changeText(
-      screen.getByLabelText('BVN for plan account'),
-      '00000000000'
-    );
-    fireEvent.press(screen.getByRole('button', { name: 'Show plan account' }));
-
-    await waitFor(() =>
-      expect(mockFetchSavingsPlanFunding).toHaveBeenCalledWith(
-        expect.objectContaining({ bvn: '00000000000', goalId: 'goal-1' })
-      )
-    );
-    await waitFor(() =>
-      expect(screen.getByText('0001234567')).toBeOnTheScreen()
-    );
-  });
-
-  it('creates an auto-debit savings goal with a selected saved card', async () => {
-    render(<StartSavingsScreen />);
-
-    selectSavingsProduct();
-    setContributionAmount();
-    fireEvent.press(getSavingsRadio('Use auto debit for savings'));
-    acceptSavingsTerms();
-    openFundingOptions();
-
-    await waitFor(() =>
-      expect(screen.getByText('Access Bank ending 1234')).toBeOnTheScreen()
-    );
-    fireEvent.press(getSavingsButton('Select Access Bank ending 1234'));
-    fireEvent.press(getSavingsButton('Continue funding option'));
-
-    await waitFor(() => expect(mockCreateSavingsGoal).toHaveBeenCalledTimes(1));
-    expect(mockCreateSavingsGoal).toHaveBeenCalledWith(
-      expect.objectContaining({
-        autoDebitAuthorized: true,
-        initialContributionAmount: 0,
-        productId: 'product-1',
-        savedPaymentMethodId: 'card-1',
-        sourceMode: 'auto_debit',
-      })
+      expect(screen.getByText('Your plan is set')).toBeOnTheScreen()
     );
   });
 });

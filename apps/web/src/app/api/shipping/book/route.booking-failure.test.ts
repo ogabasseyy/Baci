@@ -116,6 +116,7 @@ describe('bugfix: POST /api/shipping/book records the real failure and lock stat
       expect.objectContaining({
         outcome: 'booked_not_saved',
         lock_retained: true,
+        provider_reference: 'GIGL-123',
       }),
     ]);
   });

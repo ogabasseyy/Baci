@@ -67,6 +67,40 @@ describe('wallet-funded shipment orchestration — submission failures', () => {
     expect(release).toHaveBeenCalledOnce();
   });
 
+  it('bugfix: keeps the provider error when freeing the lock fails after a never-reached refund', async () => {
+    const release = vi.fn().mockRejectedValue(new Error('db down'));
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.mocked(charge.reserveMerchantShippingCharge).mockResolvedValue({
+      charge: {
+        chargeId: 'c-release-fail',
+        chargedAmount: 100,
+        balanceAfter: 0,
+        status: 'reserved',
+      },
+      token: 'r'.repeat(64),
+    });
+    const unreachable = new OrderShipmentBookingError(
+      'quote mismatch',
+      409,
+      'SHIPPING_QUOTE_RECEIVER_MISMATCH'
+    );
+    const book = vi.fn().mockRejectedValue(unreachable);
+
+    await expect(
+      bookWalletOrCustomerCheckout(
+        supabaseFixture,
+        'm1',
+        'o1',
+        'q1',
+        'merchant_wallet',
+        book,
+        release
+      )
+    ).rejects.toBe(unreachable);
+
+    expect(release).toHaveBeenCalledOnce();
+  });
+
   it('does not call GIGL when begin submission returns refunded without an RPC error', async () => {
     const release = vi.fn().mockResolvedValue(undefined);
     vi.mocked(charge.reserveMerchantShippingCharge).mockResolvedValue({

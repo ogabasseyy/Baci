@@ -5,12 +5,13 @@ import { recordOrderShipmentBookingFailure } from '@/lib/shipping/record-order-s
 
 /**
  * The carrier booked the parcel but the order update that saves it failed (a
- * raced cancellation or a lost lock token). The lock stays, so record why.
+ * raced cancellation or a lost lock token). The lock stays when one was acquired, so record why.
  */
 export async function recordBookedOrderUpdateFailure(
   supabase: SupabaseClient,
   merchantId: string,
-  orderId: string
+  orderId: string,
+  lockHeld: boolean
 ): Promise<void> {
   await recordOrderShipmentBookingFailure(
     supabase,
@@ -21,6 +22,6 @@ export async function recordBookedOrderUpdateFailure(
       500,
       BOOKED_SHIPMENT_NOT_SAVED_CODE
     ),
-    true
+    lockHeld
   );
 }

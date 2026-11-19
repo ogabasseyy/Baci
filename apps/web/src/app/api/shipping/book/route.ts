@@ -182,9 +182,11 @@ export async function POST(request: NextRequest) {
         new OrderShipmentBookingError(
           `Provider booked ${persisted.trackingNumber ?? 'a shipment'} but saving it failed: ${persisted.error}`,
           persisted.status,
-          BOOKED_SHIPMENT_NOT_SAVED_CODE
+          BOOKED_SHIPMENT_NOT_SAVED_CODE,
+          persisted.trackingNumber ?? undefined
         ),
-        true
+        // Only a lock that was actually acquired can still be held.
+        bookingLockToken !== null
       );
       return NextResponse.json(
         {

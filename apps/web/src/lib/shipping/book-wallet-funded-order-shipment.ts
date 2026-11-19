@@ -242,7 +242,18 @@ export async function bookWalletFundedOrderShipment(
           ? error.code
           : 'BOOKING_REJECTED'
       );
-      if (releaseLock) await releaseLock();
+      if (releaseLock) {
+        // A failed release must not replace the provider error, so the routes
+        // can still answer and record the real cause.
+        try {
+          await releaseLock();
+        } catch (releaseError) {
+          console.error(
+            'Failed to release shipment booking lock after a refunded wallet attempt:',
+            releaseError
+          );
+        }
+      }
     } else {
       await markMerchantShippingChargeForReconciliation(
         supabase,

@@ -500,7 +500,12 @@ export async function PATCH(
       console.error('Error updating order:', updateError);
       if (updates.shipment_id) {
         // The carrier already booked the parcel; keep the reason for support.
-        await recordBookedOrderUpdateFailure(supabase, merchantId, id);
+        await recordBookedOrderUpdateFailure(
+          supabase,
+          merchantId,
+          id,
+          Boolean(shipmentBookingLockToken)
+        );
       }
       // A raced cancellation owns the row now: answer the terminal 409
       // BEFORE any rollback — restoring the stale pre-cancellation

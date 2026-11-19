@@ -9,7 +9,12 @@ describe('recordBookedOrderUpdateFailure', () => {
       from: vi.fn(() => ({ insert })),
     } as unknown as SupabaseClient;
 
-    await recordBookedOrderUpdateFailure(supabase, 'merchant-1', 'order-1');
+    await recordBookedOrderUpdateFailure(
+      supabase,
+      'merchant-1',
+      'order-1',
+      true
+    );
 
     expect(insert).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -30,7 +35,25 @@ describe('recordBookedOrderUpdateFailure', () => {
     } as unknown as SupabaseClient;
 
     await expect(
-      recordBookedOrderUpdateFailure(supabase, 'merchant-1', 'order-1')
+      recordBookedOrderUpdateFailure(supabase, 'merchant-1', 'order-1', true)
     ).resolves.toBeUndefined();
+  });
+
+  it('records lock_retained false when no booking lock was acquired', async () => {
+    const insert = vi.fn().mockResolvedValue({ error: null });
+    const supabase = {
+      from: vi.fn(() => ({ insert })),
+    } as unknown as SupabaseClient;
+
+    await recordBookedOrderUpdateFailure(
+      supabase,
+      'merchant-1',
+      'order-1',
+      false
+    );
+
+    expect(insert).toHaveBeenCalledWith(
+      expect.objectContaining({ lock_retained: false })
+    );
   });
 });

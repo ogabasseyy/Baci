@@ -39,6 +39,10 @@ vi.mock('@/lib/get-merchant-for-api-request', () => ({
 vi.mock('@/lib/authoritative-product-purge-enrichment', () => ({
   enrichProductPurgeEntries: (...args: unknown[]) => mockEnrich(...args),
 }));
+vi.mock('@/lib/resolve-dependent-legacy-product-identifiers', () => ({
+  resolveDependentLegacyProductIdentifiers: () =>
+    Promise.resolve({ identifiers: [], incomplete: false }),
+}));
 vi.mock('@/lib/cache-revalidation', () => ({
   revalidateBlogPosts: vi.fn(),
   revalidateCategories: vi.fn(),

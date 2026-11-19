@@ -5,6 +5,7 @@ import {
   revalidateProducts,
 } from '@/lib/cache-revalidation';
 import { expireProductBlogCache } from '@/lib/expire-product-blog-cache';
+import { resolveDependentLegacyProductIdentifiers } from '@/lib/resolve-dependent-legacy-product-identifiers';
 import { scheduleStorefrontProductPurge } from '@/lib/storefront-product-purge';
 import { scheduleStorefrontHostnamePurge } from '@/lib/storefront-product-purge-hostnames';
 
@@ -40,8 +41,23 @@ export async function revalidateProductsTarget({
       blogPostSlugsIncomplete,
     } = await enrichProductPurgeEntries(supabase, merchantId, products);
 
+    const productIds = products
+      .map((product) => product.id?.trim())
+      .filter((id): id is string => Boolean(id));
+    const dependentAliases =
+      productIds.length > 0
+        ? await resolveDependentLegacyProductIdentifiers(
+            supabase,
+            merchantId,
+            productIds
+          )
+        : { identifiers: [], incomplete: false };
+    const scopedIdentifiers = Array.from(
+      new Set([...resolvedSlugs, ...dependentAliases.identifiers])
+    );
+
     const slugsRevalidated =
-      revalidateProductSlugs(merchantId, resolvedSlugs, {
+      revalidateProductSlugs(merchantId, scopedIdentifiers, {
         expireImmediately: true,
       }) === true;
     const blogExpired = expireProductBlogCache(merchantId) !== false;
@@ -49,6 +65,7 @@ export async function revalidateProductsTarget({
     const completeScoped =
       slugsRevalidated &&
       !blogPostSlugsIncomplete &&
+      !dependentAliases.incomplete &&
       hasCompleteScopedProductSlugs(
         products,
         entries,
@@ -83,14 +100,23 @@ export async function revalidateProductsTarget({
     const originHardExpired = productsExpired && blogExpired;
     const merchantSlug = merchantRow?.slug ?? null;
     if (merchantSlug && originHardExpired) {
-      if (blogPostSlugsIncomplete) {
+      if (blogPostSlugsIncomplete || dependentAliases.incomplete) {
         scheduleStorefrontHostnamePurge(merchantSlug);
-      } else if (blogPostSlugs.length > 0) {
-        scheduleStorefrontProductPurge(merchantSlug, entries, {
-          blogPostSlugs,
-        });
       } else {
-        scheduleStorefrontProductPurge(merchantSlug, entries);
+        const existingSlugs = new Set(entries.map((entry) => entry.slug));
+        const edgeEntries = [
+          ...entries,
+          ...dependentAliases.identifiers
+            .filter((identifier) => !existingSlugs.has(identifier))
+            .map((identifier) => ({ slug: identifier, categorySegment: null })),
+        ];
+        if (blogPostSlugs.length > 0) {
+          scheduleStorefrontProductPurge(merchantSlug, edgeEntries, {
+            blogPostSlugs,
+          });
+        } else {
+          scheduleStorefrontProductPurge(merchantSlug, edgeEntries);
+        }
       }
     }
 

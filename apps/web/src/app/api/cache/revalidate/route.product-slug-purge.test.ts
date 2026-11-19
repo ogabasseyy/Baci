@@ -53,6 +53,10 @@ vi.mock('@/lib/storefront-product-purge-hostnames', () => ({
 vi.mock('@/lib/expire-product-blog-cache', () => ({
   expireProductBlogCache: vi.fn(),
 }));
+vi.mock('@/lib/resolve-dependent-legacy-product-identifiers', () => ({
+  resolveDependentLegacyProductIdentifiers: () =>
+    Promise.resolve({ identifiers: [], incomplete: false }),
+}));
 
 import { getProductScopedCacheTag } from '@/lib/product-cache-tags';
 import { POST } from './route';

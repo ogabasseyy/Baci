@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockEnrich = vi.fn();
+const mockResolveDependentAliases = vi.fn();
 const mockRevalidateProducts = vi.fn();
 const mockRevalidateProductSlugs = vi.fn();
 const mockExpireBlog = vi.fn();
@@ -9,6 +10,10 @@ const mockPurgeHostname = vi.fn();
 
 vi.mock('@/lib/authoritative-product-purge-enrichment', () => ({
   enrichProductPurgeEntries: (...args: unknown[]) => mockEnrich(...args),
+}));
+vi.mock('@/lib/resolve-dependent-legacy-product-identifiers', () => ({
+  resolveDependentLegacyProductIdentifiers: (...args: unknown[]) =>
+    mockResolveDependentAliases(...args),
 }));
 vi.mock('@/lib/cache-revalidation', () => ({
   revalidateProductSlugs: (...args: unknown[]) =>
@@ -45,6 +50,10 @@ describe('revalidateProductsTarget', () => {
     vi.clearAllMocks();
     mockRevalidateProductSlugs.mockReturnValue(true);
     mockRevalidateProducts.mockReturnValue(true);
+    mockResolveDependentAliases.mockResolvedValue({
+      identifiers: [],
+      incomplete: false,
+    });
     mockEnrich.mockResolvedValue({
       entries: [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
       resolvedSlugs: ['iphone-15'],
@@ -128,5 +137,59 @@ describe('revalidateProductsTarget', () => {
       undefined,
       { expireImmediately: true }
     );
+  });
+
+  it('invalidates dependent legacy child identifiers and escalates incomplete alias lookups to broad/hostname purge', async () => {
+    mockResolveDependentAliases.mockResolvedValueOnce({
+      identifiers: ['archived-child-slug', 'child-uuid'],
+      incomplete: false,
+    });
+
+    await expect(
+      revalidateProductsTarget({
+        supabase,
+        merchantId: 'merchant-1',
+        products: [{ id: 'prod-1' }],
+      })
+    ).resolves.toBe(true);
+
+    expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
+      'merchant-1',
+      ['iphone-15', 'archived-child-slug', 'child-uuid'],
+      { expireImmediately: true }
+    );
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      'merchant-1',
+      undefined,
+      { expireImmediately: true, omitMerchantWidePdpDetails: true }
+    );
+    expect(mockPurgeProduct).toHaveBeenCalledWith('ogabassey', [
+      { slug: 'iphone-15', categorySegment: 'smartphones' },
+      { slug: 'archived-child-slug', categorySegment: null },
+      { slug: 'child-uuid', categorySegment: null },
+    ]);
+
+    vi.clearAllMocks();
+    mockRevalidateProductSlugs.mockReturnValue(true);
+    mockRevalidateProducts.mockReturnValue(true);
+    mockResolveDependentAliases.mockResolvedValueOnce({
+      identifiers: ['archived-child-slug'],
+      incomplete: true,
+    });
+
+    await expect(
+      revalidateProductsTarget({
+        supabase,
+        merchantId: 'merchant-1',
+        products: [{ id: 'prod-1' }],
+      })
+    ).resolves.toBe(true);
+
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      'merchant-1',
+      undefined,
+      { expireImmediately: true }
+    );
+    expect(mockPurgeHostname).toHaveBeenCalledWith('ogabassey');
   });
 });

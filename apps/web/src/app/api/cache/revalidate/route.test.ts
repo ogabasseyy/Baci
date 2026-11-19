@@ -97,6 +97,10 @@ vi.mock('@/lib/expire-product-blog-cache', () => ({
   expireProductBlogCache: (...args: unknown[]) =>
     mockExpireProductBlogCache(...args),
 }));
+vi.mock('@/lib/resolve-dependent-legacy-product-identifiers', () => ({
+  resolveDependentLegacyProductIdentifiers: () =>
+    Promise.resolve({ identifiers: [], incomplete: false }),
+}));
 
 // ---- Import handler AFTER mocks ----
 import { getBlogCacheTag } from '@/lib/blog-cache-tags';

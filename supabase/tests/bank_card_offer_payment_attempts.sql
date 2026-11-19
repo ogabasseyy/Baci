@@ -70,6 +70,16 @@ BEGIN
   EXCEPTION WHEN raise_exception THEN
     IF SQLERRM <> 'checkout_idempotency_conflict' THEN RAISE; END IF;
   END;
+  BEGIN
+    -- Give the replay guard an inconsistent saved fixture. The expected
+    -- exception rolls back the fixture update before the payment checks.
+    UPDATE private.bank_card_offer_order_snapshots
+      SET payable_kobo = 9600 WHERE order_id = v_order;
+    PERFORM public.get_bank_card_offer_checkout_replay(v_merchant, 'bank-test-key', v_hash);
+    RAISE EXCEPTION 'An inconsistent bank offer total was replayed';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'bank_card_offer_checkout_mismatch' THEN RAISE; END IF;
+  END;
   v_attempt := public.claim_bank_card_offer_attempt(v_order, v_merchant, 9500, v_hash, 'test', 100, 0);
   v_reference := v_attempt->>'reference';
   IF v_attempt->>'claimed' <> 'true' OR v_reference !~ '^BCO-[0-9a-f]{32}$' THEN
@@ -153,7 +163,7 @@ BEGIN
   IF public.get_bank_card_offer_verification_context(v_order, v_merchant, v_transaction)->>'completedGatewayResponse' IS NOT NULL
     THEN RAISE EXCEPTION 'Pending bank-offer payments must verify against Paystack'; END IF;
   UPDATE public.transactions SET status = 'completed', gateway_response = jsonb_build_object(
-    'reference', v_reference, 'status', 'success', 'amount', 9500, 'domain', 'test', 'id', '42')
+    'reference', v_reference, 'status', 'success', 'amount', 9500.0, 'domain', 'test', 'id', '42')
     WHERE id = v_transaction;
   IF public.get_bank_card_offer_verification_context(v_order, v_merchant, v_transaction)
     #>> '{completedGatewayResponse,reference}' IS DISTINCT FROM v_reference

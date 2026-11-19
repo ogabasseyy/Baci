@@ -121,6 +121,30 @@ describe('REDVAULT Paystack payment gate', () => {
       },
     ],
     [
+      'missing issuer proof',
+      (fixture: PaystackVerifyFixture) => {
+        fixture.data.authorization.bank = '';
+      },
+    ],
+    [
+      'amount',
+      (fixture: PaystackVerifyFixture) => {
+        fixture.data.amount = 1;
+      },
+    ],
+    [
+      'currency',
+      (fixture: PaystackVerifyFixture) => {
+        fixture.data.currency = 'USD';
+      },
+    ],
+    [
+      'reference',
+      (fixture: PaystackVerifyFixture) => {
+        fixture.data.reference = 'other-reference';
+      },
+    ],
+    [
       'customer email',
       (fixture: PaystackVerifyFixture) => {
         fixture.data.customer.email = 'other@example.test';

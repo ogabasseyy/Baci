@@ -90,9 +90,9 @@ import { POST } from './route';
 
 const REFERENCE = 'BAC-VERIFY-1';
 
-function createRequest() {
+function createRequest(reference = REFERENCE) {
   return new NextRequest('http://localhost:3000/api/payments/verify', {
-    body: JSON.stringify({ reference: REFERENCE }),
+    body: JSON.stringify({ reference }),
     headers: { 'Content-Type': 'application/json' },
     method: 'POST',
   });
@@ -263,6 +263,15 @@ describe('POST /api/payments/verify — finalizer outcomes', () => {
     mockCaptureOrHoldRedvaultPayment.mockResolvedValue({
       kind: 'not_redvault',
     });
+  });
+
+  it('rejects a malformed bank offer reference before looking up a transaction', async () => {
+    const response = await POST(createRequest('BCO-invalid'));
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: 'Invalid reference' });
+    expect(mockCreateServiceClient).not.toHaveBeenCalled();
+    expect(mockVerifyPaystack).not.toHaveBeenCalled();
   });
 
   it('returns a pending response instead of a paid signal for a held REDVAULT capture', async () => {

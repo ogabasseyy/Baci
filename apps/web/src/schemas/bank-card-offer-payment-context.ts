@@ -6,7 +6,9 @@ const positiveSafeInteger = z
   .int()
   .positive()
   .max(Number.MAX_SAFE_INTEGER);
-const reference = z.string().regex(/^BCO-[a-f0-9]{32}$/);
+export const bankCardOfferReferenceSchema = z
+  .string()
+  .regex(/^BCO-[a-f0-9]{32}$/);
 
 const savedQuote = z.object({
   merchantId: z.uuid(),
@@ -60,7 +62,7 @@ export const bankCardOfferWebhookTransactionSchema = z.object({
   merchant_id: z.uuid(),
   order_id: z.uuid(),
   gateway: z.literal('paystack'),
-  gateway_reference: reference,
+  gateway_reference: bankCardOfferReferenceSchema,
   // The transaction table stores major units. Normalize PostgREST's
   // numeric or decimal-string projection to exactly representable kobo,
   // then return a major-unit amount for the shared order finalizer.
@@ -74,12 +76,12 @@ export const bankCardOfferWebhookTransactionSchema = z.object({
 
 export const bankCardOfferClaimSchema = z.object({
   claimed: z.boolean(),
-  reference,
+  reference: bankCardOfferReferenceSchema,
   checkoutUrl: bankCardOfferCheckoutUrlSchema.nullable(),
 });
 
 export const bankCardOfferVerificationContextSchema = paymentContext.extend({
-  reference,
+  reference: bankCardOfferReferenceSchema,
   acceptedFilterPolicyHash: z.string().regex(/^[0-9a-f]{64}$/),
   domain: z.enum(['test', 'live']),
   completedGatewayResponse: z

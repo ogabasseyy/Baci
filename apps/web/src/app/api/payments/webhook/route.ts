@@ -71,7 +71,10 @@ import {
   scheduleVoucherPinBackfill,
 } from '@/lib/vtu-voucher-backfill';
 import { sendEmail } from '@/lib/zeptomail';
-import { bankCardOfferWebhookTransactionSchema } from '@/schemas/bank-card-offer-payment-context';
+import {
+  bankCardOfferReferenceSchema,
+  bankCardOfferWebhookTransactionSchema,
+} from '@/schemas/bank-card-offer-payment-context';
 import {
   paystackZeroCandidateReviewGatewayResponseSchema,
   referenceSchema,
@@ -758,7 +761,10 @@ export async function POST(request: NextRequest) {
     // Bank offer captures must pass the shared verification path before any
     // transaction flip or fallback settlement can run.
     if (reference.startsWith('BCO-')) {
-      if (gateway !== 'paystack' || !/^BCO-[a-f0-9]{32}$/.test(reference)) {
+      if (
+        gateway !== 'paystack' ||
+        !bankCardOfferReferenceSchema.safeParse(reference).success
+      ) {
         return NextResponse.json(
           { error: 'Invalid bank offer capture' },
           { status: 400 }

@@ -8,6 +8,7 @@ import { processMerchantInvoicePartialPayment } from '@/lib/payments/process-mer
 import type { GatewayVerificationResult } from '@/lib/payments/types';
 import { getAuthenticatedUser } from '@/lib/supabase/mobile-auth';
 import { createServiceClient } from '@/lib/supabase/service';
+import { bankCardOfferReferenceSchema } from '@/schemas/bank-card-offer-payment-context';
 import { referenceSchema, verifyPaymentBodySchema } from '@/schemas/payments';
 import { getGuestPaymentReferenceSnapshot } from './guest-payment-reference-snapshot';
 import { getSessionlessPaymentReferenceSnapshot } from './sessionless-payment-reference-snapshot';
@@ -40,6 +41,14 @@ async function verifyPaymentReference(
   const parsedReference = referenceSchema.safeParse(reference);
 
   if (!parsedReference.success) {
+    return NextResponse.json({ error: 'Invalid reference' }, { status: 400 });
+  }
+
+  const isBankOfferReference = parsedReference.data.startsWith('BCO-');
+  if (
+    isBankOfferReference &&
+    !bankCardOfferReferenceSchema.safeParse(parsedReference.data).success
+  ) {
     return NextResponse.json({ error: 'Invalid reference' }, { status: 400 });
   }
 
@@ -178,8 +187,7 @@ async function verifyPaymentReference(
     });
   }
   const isBankOffer =
-    parsedReference.data.startsWith('BCO-') &&
-    transaction.gateway === 'paystack';
+    isBankOfferReference && transaction.gateway === 'paystack';
   let gatewayResponse: Record<string, unknown> | undefined;
   // Bank offers verify (or replay stored proof) inside the shared finalizer.
   if (!isBankOffer) {

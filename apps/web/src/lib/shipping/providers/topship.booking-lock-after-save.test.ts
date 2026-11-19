@@ -112,4 +112,37 @@ describe('bugfix: Topship connection failure after the shipment was saved', () =
     });
     expect(shouldReleaseBookingLock(error)).toBe(false);
   });
+
+  it('bugfix: a malformed successful pay-from-wallet answer after save is booked-not-saved with the tracking id', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            { id: 'shipment-1', trackingId: 'T1', pricingTier: 'Premium' },
+          ]),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ unexpected: 'shape' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { TopshipProvider } = await import('./topship');
+    const error = await new TopshipProvider()
+      .bookShipment(request)
+      .catch((e: unknown) => e);
+
+    expect(error).toMatchObject({
+      code: BOOKED_SHIPMENT_NOT_SAVED_CODE,
+      providerReference: 'T1',
+    });
+    expect(shouldReleaseBookingLock(error)).toBe(false);
+  });
 });

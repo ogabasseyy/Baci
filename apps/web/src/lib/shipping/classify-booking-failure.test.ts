@@ -42,4 +42,25 @@ describe('classifyBookingFailure outcomes for booking-state codes', () => {
     );
     expect(classifyBookingFailure(error).outcome).toBe('not_submitted');
   });
+
+  it('classifies a GIG authentication timeout (504) as not_submitted but a bad-credentials failure as rejected', () => {
+    expect(
+      classifyBookingFailure(
+        new OrderShipmentBookingError(
+          'GIGL API authentication timed out',
+          504,
+          'GIGL_AUTHENTICATION_FAILED'
+        )
+      ).outcome
+    ).toBe('not_submitted');
+    expect(
+      classifyBookingFailure(
+        new OrderShipmentBookingError(
+          'GIGL API authentication failed',
+          502,
+          'GIGL_AUTHENTICATION_FAILED'
+        )
+      ).outcome
+    ).toBe('rejected');
+  });
 });

@@ -50,6 +50,10 @@ export function classifyBookingFailure(
       // Nothing was submitted to the carrier.
       return { ...base, outcome: 'not_submitted' };
     }
+    if (error.code === 'GIGL_AUTHENTICATION_FAILED' && error.status === 504) {
+      // The GIG token call timed out, so the booking POST was never sent.
+      return { ...base, outcome: 'not_submitted' };
+    }
     if (error.code === 'MERCHANT_WALLET_COMPLETION_FAILED') {
       // The parcel is booked and saved; only the wallet charge is unfinished.
       return { ...base, outcome: 'booked_unreconciled' };

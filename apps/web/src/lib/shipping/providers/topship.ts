@@ -17,6 +17,7 @@ import type {
 } from '../types';
 import { ShippingBookingRejectedError } from '../types';
 import { BaseShippingProvider } from './base';
+import { parsePaidShipmentAfterSave } from './topship-parse-paid-shipment';
 import { requestTopshipPaymentAfterSave } from './topship-pay-after-save';
 
 // =============================================================================
@@ -883,7 +884,10 @@ export class TopshipProvider extends BaseShippingProvider {
       );
     }
 
-    const paidShipment = this.parseSavedShipment(payResult);
+    const paidShipment = parsePaidShipmentAfterSave(
+      () => this.parseSavedShipment(payResult),
+      savedShipment.trackingId
+    );
 
     return {
       provider: 'TOPSHIP',

@@ -1,6 +1,9 @@
 import { Buffer } from 'node:buffer';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createDvaPostLogoutFinalizerClient } from './dva-postlogout-finalizer-client';
+import {
+  createDvaPostLogoutFinalizerClient,
+  hasDvaPostLogoutFinalizationEvidence,
+} from './dva-postlogout-finalizer-client';
 
 const mocks = vi.hoisted(() => ({
   createClient: vi.fn(() => ({ rpc: vi.fn() })),
@@ -91,5 +94,77 @@ describe('createDvaPostLogoutFinalizerClient', () => {
       })
     ).toThrow();
     expect(mocks.createClient).not.toHaveBeenCalled();
+  });
+});
+
+describe('hasDvaPostLogoutFinalizationEvidence', () => {
+  type ProbeSupabase = Parameters<
+    typeof hasDvaPostLogoutFinalizationEvidence
+  >[0]['supabase'];
+
+  it('returns true only when the evidence RPC confirms recovery availability', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+    await expect(
+      hasDvaPostLogoutFinalizationEvidence({
+        ...validScope,
+        supabase: { rpc } as unknown as ProbeSupabase,
+      })
+    ).resolves.toBe(true);
+    expect(rpc).toHaveBeenCalledWith(
+      'commerce_cart_agentic_dva_recovery_available',
+      expect.objectContaining({
+        p_account_number: validScope.accountNumber,
+        p_merchant_id: validScope.merchantId,
+      })
+    );
+  });
+
+  it('fails closed when account number, session id, or rpc fails or throws', async () => {
+    const rpcFalse = vi.fn().mockResolvedValue({ data: false, error: null });
+    await expect(
+      hasDvaPostLogoutFinalizationEvidence({
+        ...validScope,
+        accountNumber: 'bad',
+        supabase: { rpc: rpcFalse } as unknown as ProbeSupabase,
+      })
+    ).resolves.toBe(false);
+    expect(rpcFalse).not.toHaveBeenCalled();
+
+    await expect(
+      hasDvaPostLogoutFinalizationEvidence({
+        ...validScope,
+        agenticSessionId: 'x'.repeat(257),
+        supabase: { rpc: rpcFalse } as unknown as ProbeSupabase,
+      })
+    ).resolves.toBe(false);
+    expect(rpcFalse).not.toHaveBeenCalled();
+
+    await expect(
+      hasDvaPostLogoutFinalizationEvidence({
+        ...validScope,
+        supabase: {} as unknown as ProbeSupabase,
+      })
+    ).resolves.toBe(false);
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const rpcError = vi
+      .fn()
+      .mockResolvedValue({ data: null, error: { message: 'missing fn' } });
+    await expect(
+      hasDvaPostLogoutFinalizationEvidence({
+        ...validScope,
+        supabase: { rpc: rpcError } as unknown as ProbeSupabase,
+      })
+    ).resolves.toBe(false);
+
+    const rpcThrow = vi.fn().mockRejectedValue(new Error('network error'));
+    await expect(
+      hasDvaPostLogoutFinalizationEvidence({
+        ...validScope,
+        supabase: { rpc: rpcThrow } as unknown as ProbeSupabase,
+      })
+    ).resolves.toBe(false);
+    expect(warnSpy).toHaveBeenCalledTimes(2);
+    warnSpy.mockRestore();
   });
 });

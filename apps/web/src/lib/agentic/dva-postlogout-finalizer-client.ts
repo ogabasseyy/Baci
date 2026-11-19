@@ -30,6 +30,7 @@ export async function hasDvaPostLogoutFinalizationEvidence(input: {
   supabase: SupabaseClient;
 }): Promise<boolean> {
   if (typeof input.supabase.rpc !== 'function') return false;
+  if (!/^\d{10}$/.test(input.accountNumber)) return false;
   if (!input.agenticSessionId || input.agenticSessionId.length > 256)
     return false;
   try {

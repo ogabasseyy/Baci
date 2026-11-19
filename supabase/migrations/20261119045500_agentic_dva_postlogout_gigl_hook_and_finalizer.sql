@@ -223,7 +223,15 @@ DECLARE
     || E'    RAISE EXCEPTION ''cart_order_unauthorized'' USING ERRCODE = ''P0001'';\n  END IF;';
   v_admission_anchor text := E'  PERFORM 1 FROM public.commerce_cart_grants g WHERE g.id=v_session.preparing_grant_id AND g.cart_id=v_session.cart_id AND g.merchant_id=v_session.merchant_id AND g.principal_id=v_session.principal_id AND g.expires_at>now() AND g.created_at+interval ''7 days''>now() AND g.revoked_at IS NULL\n    AND NOT EXISTS(SELECT 1 FROM public.commerce_cart_device_retirements retired WHERE retired.merchant_id=g.merchant_id AND retired.device_principal_id=coalesce(g.device_principal_id,g.principal_id)) FOR UPDATE;\n  IF NOT FOUND THEN RAISE EXCEPTION ''cart_order_unauthorized'' USING ERRCODE=''P0001''; END IF;';
   v_admission_replacement text := E'  IF v_role = ''agentic_dva_finalizer'' THEN\n'
+    || E'    PERFORM 1 FROM public.commerce_cart_grants g\n'
+    || E'      WHERE g.id=v_session.preparing_grant_id\n'
+    || E'        AND g.cart_id=v_session.cart_id\n'
+    || E'        AND g.merchant_id=v_session.merchant_id\n'
+    || E'        AND g.principal_id=v_session.principal_id\n'
+    || E'      FOR UPDATE;\n'
+    || E'    IF NOT FOUND THEN RAISE EXCEPTION ''cart_order_unauthorized'' USING ERRCODE=''P0001''; END IF;\n'
     || E'    PERFORM 1 FROM public.commerce_cart_grants g WHERE g.id=v_session.preparing_grant_id\n'
+    || E'      AND g.cart_id=v_session.cart_id AND g.merchant_id=v_session.merchant_id AND g.principal_id=v_session.principal_id\n'
     || E'      AND (g.expires_at>now() AND g.created_at+interval ''7 days''>now() AND g.revoked_at IS NULL)\n'
     || E'      AND NOT EXISTS(SELECT 1 FROM public.commerce_cart_device_retirements retired\n'
     || E'        WHERE retired.merchant_id=g.merchant_id AND retired.device_principal_id=coalesce(g.device_principal_id,g.principal_id));\n'

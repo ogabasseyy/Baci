@@ -1,10 +1,9 @@
 import type { Href } from 'expo-router';
-import { router } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import { useIsFocused } from 'expo-router/react-navigation';
 import {
   ActivityIndicator,
   Alert,
-  InteractionManager,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -22,7 +21,9 @@ import Colors from '@/constants/Colors';
 import { useMerchant } from '@/hooks';
 import { useAccountLoyaltyPoints } from '@/hooks/use-account-loyalty-points';
 import { useAuthStatus } from '@/hooks/use-auth-guard';
+import { useConfirmSignOut } from '@/hooks/use-confirm-sign-out';
 import { useStorefrontInsets } from '@/hooks/use-storefront-insets';
+import { CONFIG } from '@/lib/config';
 import { type Customer, useAuthStore } from '@/stores/auth-store';
 
 const handleMenuPress = (item: MenuItem): void => {
@@ -39,6 +40,7 @@ const handleMenuPress = (item: MenuItem): void => {
 export default function AccountScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
+  const branded = CONFIG.MERCHANT_SLUG === 'ogabassey';
   const { customer, session } = useAuthStore(
     useShallow((state) => ({
       customer: state.customer,
@@ -74,6 +76,8 @@ export default function AccountScreen() {
     hasCustomerProfile: Boolean(safeCustomer),
   });
 
+  const confirmSignOut = useConfirmSignOut(signOut);
+
   if (!isInitialized) {
     return (
       <View
@@ -92,28 +96,15 @@ export default function AccountScreen() {
   }
 
   if (!authUser) {
-    return null;
+    return isFocused ? (
+      <Redirect
+        href={{
+          pathname: '/auth/login',
+          params: { returnTo: '/(tabs)/account' },
+        }}
+      />
+    ) : null;
   }
-
-  const confirmSignOut = () => {
-    InteractionManager.runAfterInteractions(() => {
-      signOut()
-        .then(() => {
-          router.replace('/');
-        })
-        .catch((err: unknown) => {
-          console.error('Sign-out failed:', err);
-          Alert.alert(
-            'Sign Out Failed',
-            'Unable to complete sign out. Please try again.',
-            [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Retry', onPress: confirmSignOut },
-            ]
-          );
-        });
-    });
-  };
 
   const handleSignOut = () => {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
@@ -138,9 +129,18 @@ export default function AccountScreen() {
           includeBottomInset: false,
         })}
       >
+        {branded && (
+          <Text
+            accessibilityRole="header"
+            style={[styles.heading, { color: colors.text }]}
+          >
+            Account
+          </Text>
+        )}
         {effectiveCustomer ? (
           <ProfileHeader
             customer={effectiveCustomer}
+            branded={branded}
             loyaltyPoints={loyaltyPoints}
           />
         ) : null}
@@ -154,6 +154,7 @@ export default function AccountScreen() {
               items={section.items}
               colors={colors}
               delayIndex={idx}
+              puzzle={branded}
               onItemPress={handleMenuPress}
             />
           ))}
@@ -176,10 +177,6 @@ export default function AccountScreen() {
             Sign Out
           </Text>
         </Pressable>
-
-        <Text style={[styles.version, { color: colors.textSecondary }]}>
-          ENVIRONMENT: PRODUCTION • VERSION 1.0.0
-        </Text>
       </ScrollView>
     </StorefrontScreenShell>
   );
@@ -199,12 +196,11 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
   },
-  version: {
-    textAlign: 'center',
-    fontSize: 10,
-    marginTop: 32,
-    letterSpacing: 2,
-    fontWeight: '700',
-    opacity: 0.4,
+  heading: {
+    fontSize: 28,
+    fontWeight: '800',
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 14,
   },
 });

@@ -6,12 +6,26 @@ import {
   Pressable,
   ScrollView,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AdSlot } from '@/components/ads/AdSlot';
-import { useTheme } from '@/hooks/useTheme';
 import { createQuizLobbyStyles } from './QuizLobby.styles';
+import { QUIZ_STAGE_COLORS } from './quiz-stage-colors';
+
+// Clear space kept between the banner and the sheet (and its close
+// button), per AdMob's accidental-click guidance.
+export const QUIZ_RULES_BANNER_CLEAR_SPACE = 24;
+// Least room the sheet needs to stay usable (header, a rule or two, the
+// action button). With less than this under the banner, the banner is
+// left out instead of squeezing the sheet or painting over the ad.
+export const QUIZ_RULES_SHEET_MIN_HEIGHT = 320;
+// Shortest banner an ad can fill (a standard 320x50 banner). Used to judge
+// whether any banner could fit before the slot mounts and requests an ad.
+export const QUIZ_RULES_BANNER_MIN_HEIGHT = 50;
+// Gap between the top inset and the banner (the banner's `top` offset).
+const QUIZ_RULES_BANNER_TOP_GAP = 16;
 
 interface QuizRulesModalProps {
   eventTitle: string;
@@ -32,13 +46,44 @@ export function QuizRulesModal({
   timePerQuestionSeconds,
   visible,
 }: QuizRulesModalProps) {
-  const { colors } = useTheme();
+  const colors = QUIZ_STAGE_COLORS;
   const styles = createQuizLobbyStyles(colors);
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
+  // The backdrop is the coordinate space of the banner's measured `y`, so
+  // the room under the banner is computed against its own height, not the
+  // window's (they coincide today, but the modal could be inset later).
+  // Window height stands in until the first layout.
+  const [backdropHeight, setBackdropHeight] = useState<number | null>(null);
+  const spaceHeight = backdropHeight ?? windowHeight;
+  // Bottom edge of the banner, measured: the slot's height depends on the
+  // ad it loads, so a fixed share of the screen could let a tall sheet's
+  // close button sit right under the ad.
+  const [bannerBottom, setBannerBottom] = useState<number | null>(null);
+  const roomUnderBanner =
+    bannerBottom === null
+      ? null
+      : spaceHeight - bannerBottom - QUIZ_RULES_BANNER_CLEAR_SPACE;
+  // Before the banner is measured, the shortest possible banner decides
+  // whether any ad could fit, so a slot that can never fit does not mount
+  // and request an ad only to be dropped.
+  const bestCaseRoom =
+    spaceHeight -
+    (insets.top + QUIZ_RULES_BANNER_TOP_GAP + QUIZ_RULES_BANNER_MIN_HEIGHT) -
+    QUIZ_RULES_BANNER_CLEAR_SPACE;
+  const bannerFits =
+    (roomUnderBanner ?? bestCaseRoom) >= QUIZ_RULES_SHEET_MIN_HEIGHT;
+  const sheetMaxHeight =
+    roomUnderBanner === null || !bannerFits ? '75%' : roomUnderBanner;
   const [accepted, setAccepted] = useState(false);
+  const isPlayLocked = requiresAcceptance && !accepted;
 
   useEffect(() => {
-    if (!visible) setAccepted(false);
+    if (visible) return;
+    setAccepted(false);
+    // The next opening measures its own banner: the ad, and so its height,
+    // can differ.
+    setBannerBottom(null);
   }, [visible]);
 
   return (
@@ -50,9 +95,22 @@ export function QuizRulesModal({
       transparent
       visible={visible}
     >
-      <View style={styles.modalBackdrop}>
+      <View
+        onLayout={(event) => setBackdropHeight(event.nativeEvent.layout.height)}
+        style={styles.modalBackdrop}
+        testID="quiz-rules-modal-backdrop"
+      >
         <View
           testID="quiz-rules-modal-banner"
+          onLayout={(event) => {
+            // A dropped banner collapses to zero height: re-measuring it
+            // would shrink bannerBottom, flip bannerFits back to true and
+            // remount the slot in a request/drop loop. Keep the last
+            // measurement while it is dropped.
+            if (!bannerFits) return;
+            const { height, y } = event.nativeEvent.layout;
+            setBannerBottom(y + height);
+          }}
           style={{
             alignItems: 'center',
             left: 0,
@@ -61,14 +119,14 @@ export function QuizRulesModal({
             // Below the status bar / display cutout: the overFullScreen
             // modal draws under system chrome, so a fixed offset would hide
             // the creative and its tap target on tall-inset devices.
-            top: insets.top + 16,
+            top: insets.top + QUIZ_RULES_BANNER_TOP_GAP,
           }}
         >
-          <AdSlot placement="FOOTER_ANCHOR" />
+          {bannerFits ? <AdSlot placement="FOOTER_ANCHOR" /> : null}
         </View>
         <View
           accessibilityViewIsModal
-          style={[styles.rulesSheet, { maxHeight: '75%' }]}
+          style={[styles.rulesSheet, { maxHeight: sheetMaxHeight }]}
         >
           <View style={styles.rulesHeader}>
             <View>
@@ -146,20 +204,28 @@ export function QuizRulesModal({
             </Pressable>
           ) : null}
 
-          <View style={styles.rulesActionBox}>
+          <View
+            style={
+              isPlayLocked ? styles.disabledButtonBox : styles.rulesActionBox
+            }
+          >
             <Pressable
               accessibilityLabel={
                 requiresAcceptance ? 'Accept and play quiz' : 'Close rules'
               }
               accessibilityRole="button"
-              accessibilityState={{
-                disabled: requiresAcceptance && !accepted,
-              }}
-              disabled={requiresAcceptance && !accepted}
+              accessibilityState={{ disabled: isPlayLocked }}
+              disabled={isPlayLocked}
               onPress={requiresAcceptance ? onConfirm : onClose}
               style={styles.primaryButton}
             >
-              <Text style={styles.primaryButtonText}>
+              <Text
+                style={
+                  isPlayLocked
+                    ? styles.disabledButtonText
+                    : styles.primaryButtonText
+                }
+              >
                 {requiresAcceptance ? 'Accept & play' : 'Got it'}
               </Text>
             </Pressable>

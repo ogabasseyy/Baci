@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { OrderItemSnapshot } from '@/components/orders/OrderItemDetailModal';
+import { useDeferredUntilDismissed } from '@/hooks/useDeferredUntilDismissed';
 import type {
   ShipmentCompletionMode,
   ShipmentFlowStep,
@@ -20,6 +21,8 @@ export function useOrderDetailsUiState() {
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [showCreditModal, setShowCreditModal] = useState(false);
   const [showShipmentFlow, setShowShipmentFlow] = useState(false);
+  // Dialogs shown after the shipment sheet closes wait for its modal to go.
+  const shipmentFlowDismissal = useDeferredUntilDismissed();
   const [shipmentFlowStep, setShipmentFlowStep] =
     useState<ShipmentFlowStep>('details');
   const [isShipmentSubmitting, setIsShipmentSubmitting] = useState(false);
@@ -60,6 +63,7 @@ export function useOrderDetailsUiState() {
     creditNotes,
     fulfillmentDetails,
     fulfillmentItemIndex,
+    handleShipmentFlowDismissed: shipmentFlowDismissal.flush,
     isGeneratingReceipt,
     isShipmentSubmitting,
     paymentAmount,
@@ -68,6 +72,7 @@ export function useOrderDetailsUiState() {
     pendingShipmentMode,
     receiptHtml,
     riderPhone,
+    runAfterShipmentFlowDismissed: shipmentFlowDismissal.defer,
     savedRiders,
     selectedOrderItem,
     setCreditNotes,

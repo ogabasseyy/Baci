@@ -11,6 +11,15 @@ import {
 const BASE_URL = 'https://ogabassey.com/smartphones/compare/a-vs-b';
 
 describe('compare schema product helpers', () => {
+  it('retains the known brand for comparison structured data', () => {
+    expect(
+      toProductCompareSchemaProduct(
+        { id: 'a', name: 'Phone', image: '/phone.jpg', brand: ' Google ' },
+        BASE_URL
+      )
+    ).toMatchObject({ brand: 'Google' });
+  });
+
   it('reads plain records and rejects arrays or nullish values', () => {
     expect(getRecord({ id: 'product-1' })).toEqual({ id: 'product-1' });
     expect(getRecord([])).toBeNull();
@@ -198,6 +207,28 @@ describe('compare schema product helpers', () => {
         slug: 'smartphones',
       },
     });
+    expect(
+      toProductCompareSchemaProduct(
+        {
+          id: 'phone-1',
+          name: 'Galaxy S25',
+          brand: `  ${'Samsung '.repeat(15)}  `,
+          image: '/media/galaxy-s25.avif',
+        },
+        BASE_URL
+      )?.brand
+    ).toHaveLength(70);
+    expect(
+      toProductCompareSchemaProduct(
+        {
+          id: 'phone-1',
+          name: 'Galaxy S25',
+          brand: `${'A'.repeat(69)}🇳🇬`,
+          image: '/media/galaxy-s25.avif',
+        },
+        BASE_URL
+      )?.brand
+    ).toBe('A'.repeat(69));
   });
 
   it.each([

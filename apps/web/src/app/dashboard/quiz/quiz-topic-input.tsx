@@ -2,6 +2,7 @@
 
 import { X } from 'lucide-react';
 import { type KeyboardEvent, useId, useState } from 'react';
+import { isImeComposing } from '@/lib/is-ime-composing';
 
 export function QuizTopicInput({
   disabled,
@@ -25,6 +26,10 @@ export function QuizTopicInput({
     setDraft('');
   };
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (isImeComposing(event)) {
+      if (event.key === 'Enter') event.preventDefault();
+      return;
+    }
     if (event.key === 'Enter' || event.key === ',') {
       event.preventDefault();
       addDraft();
@@ -57,7 +62,7 @@ export function QuizTopicInput({
           </span>
         ))}
         <input
-          className="min-w-52 flex-1 bg-transparent px-1 text-sm outline-none focus-visible:outline-none"
+          className="min-w-0 flex-1 basis-40 bg-transparent px-1 text-base outline-none md:text-sm focus-visible:outline-none"
           disabled={disabled}
           id={inputId}
           onBlur={addDraft}

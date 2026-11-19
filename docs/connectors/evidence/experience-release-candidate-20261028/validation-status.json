@@ -1,0 +1,189 @@
+{
+  "base": "225f6a0a69dc0299fd9323c699302da59d75075a",
+  "candidateCommit": null,
+  "reviewed": false,
+  "releaseQualified": false,
+  "checks": {
+    "monorepoLint": {
+      "status": "passed",
+      "tasks": 6,
+      "log": "/tmp/experience-candidate-frozen-static.log"
+    },
+    "monorepoTypecheck": {
+      "status": "passed",
+      "tasks": 8,
+      "log": "/tmp/experience-candidate-frozen-static.log"
+    },
+    "finalTestTypes": {
+      "status": "passed",
+      "log": "/tmp/experience-candidate-final-test-types.log"
+    },
+    "featureUnits": {
+      "status": "passed",
+      "suites": 109,
+      "tests": 274,
+      "log": "/tmp/experience-candidate-feature-unit.log"
+    },
+    "runnerUnits": {
+      "status": "passed",
+      "suites": 37,
+      "tests": 114,
+      "log": "/tmp/experience-candidate-final-runner-post-review.log"
+    },
+    "authority": {
+      "status": "passed",
+      "tests": 13,
+      "log": "/tmp/experience-candidate-authority-staged-recheck.log"
+    },
+    "sqlRls": {
+      "status": "passed",
+      "sqlTests": 6,
+      "dataApiTests": 1,
+      "log": "/tmp/experience-candidate-remaining-diagnostics.log"
+    },
+    "ciContracts": {
+      "status": "passed",
+      "tests": 30,
+      "log": "/tmp/experience-candidate-ci-contracts.log"
+    },
+    "mcpContracts": {
+      "status": "passed",
+      "log": "/tmp/experience-candidate-mcp-contracts.log"
+    },
+    "lifecycleCombined": {
+      "status": "failed-before-targeted-fixes",
+      "passed": 12,
+      "failed": 2,
+      "log": "/tmp/experience-candidate-lifecycle-isolated.log"
+    },
+    "httpLifecycleAfterContractFix": {
+      "status": "passed",
+      "tests": 1,
+      "note": "Asserts missing-metrics publication denial; build/preview/apply and zero public heads preserved."
+    },
+    "rollbackRetention": {
+      "status": "passed",
+      "tests": 1,
+      "durationSeconds": 103.39,
+      "log": "/tmp/experience-candidate-rollback-isolated.log",
+      "evidenceReduced": false,
+      "deadlineIncreased": false
+    },
+    "isolatedMobileBrowser": {
+      "status": "passed",
+      "tests": 4,
+      "log": "/tmp/experience-candidate-isolated-browser.log"
+    },
+    "browserMatrix": {
+      "status": "passed",
+      "tests": 113,
+      "log": "/tmp/experience-candidate-browser-quiet.log",
+      "scope": "Completed before subsequent review fixes; affected unit regressions and production rebuild recorded separately."
+    },
+    "fullMonorepoTest": {
+      "status": "incomplete",
+      "note": "Original attempt stopped after known web failures; isolated fixes and targeted tests do not substitute for complete rerun."
+    },
+    "currentMainOrbitCheckout": {
+      "status": "passed",
+      "profiles": ["desktop-1440", "mobile-390"],
+      "orders": 0,
+      "paymentSubmitted": false,
+      "log": "/tmp/experience-candidate-orbit-final-checkout.log",
+      "evidence": "orbit-checkout/",
+      "finalRebuildVerified": true
+    },
+    "uncontaminatedPerformanceQualification": {
+      "status": "blocked-host-load"
+    },
+    "freeReview": {
+      "status": "partially-reviewed-fixes-applied",
+      "wholeFeatureReviewed": false,
+      "paidCreditsUsed": false
+    },
+    "diagnosticPerformance": {
+      "status": "completed-contaminated",
+      "samples": 24,
+      "failures": 0,
+      "contaminatedSamples": 24,
+      "freshAnonymous": true,
+      "fieldCwvEstablished": false,
+      "evidence": "cwv-final/orbit-rebuild-benchmark.json",
+      "maxFrameLcpFromHostMs": 1833.300048828125,
+      "maxHostLcpMs": 1448,
+      "maxPostFirstPaintCls": 4.62962962962963e-5,
+      "log": "/tmp/experience-candidate-cwv-final.log"
+    },
+    "fullWebTests": {
+      "status": "failed",
+      "passedFiles": 9195,
+      "failedFiles": 10,
+      "skippedFiles": 72,
+      "passedTests": 58068,
+      "failedTests": 16,
+      "skippedTests": 224,
+      "todoTests": 1,
+      "workerErrors": 1,
+      "durationSeconds": 2020.67,
+      "log": "/tmp/experience-candidate-full-web-final.log",
+      "sourceNote": "Review regression tests/fixes were added during this run; it is not a frozen-source qualification. Their fresh isolated rerun passes all 9 cases. Stale connector tool count was subsequently corrected and its test passes."
+    },
+    "postReviewRegressions": {
+      "status": "passed",
+      "tests": 9,
+      "log": "/tmp/experience-candidate-followup-green.log"
+    },
+    "finalWebTypecheck": {
+      "status": "passed",
+      "log": "/tmp/experience-candidate-final-types-cache.log",
+      "scope": "Includes final cache-isolation code and test."
+    },
+    "isolatedTooling": {
+      "status": "partial",
+      "log": "/tmp/experience-candidate-isolated-tooling-checks.log",
+      "passed": [
+        "connector-tools count includes performance-read tool",
+        "postcss integrity including unchanged scaling limit",
+        "sitespeed runner dry-run and other cases (10 tests, separate log)"
+      ],
+      "blocked": [
+        "Reviewed lockfile integrity differs from uncommitted candidate lockfile.",
+        "Two storefront source-authority checks require reviewed committed source."
+      ],
+      "pending": [],
+      "sitespeedLog": "/tmp/experience-candidate-contract-diagnostics.log",
+      "sitespeedFullRunFailure": "Transient disappearing .watchman-cookie file during source hashing; isolated unchanged rerun passed."
+    },
+    "finalReviewFixLint": {
+      "status": "passed",
+      "files": 5,
+      "log": "/tmp/experience-candidate-review-fixes-lint.log"
+    },
+    "isolatedTimeoutRerun": {
+      "status": "passed",
+      "files": 2,
+      "tests": 18,
+      "durationSeconds": 152.49,
+      "log": "/tmp/experience-candidate-timeout-isolated.log",
+      "timeoutsIncreased": false
+    },
+    "finalProductionRebuild": {
+      "status": "passed",
+      "log": "/tmp/experience-candidate-orbit-final-build-retry.log",
+      "includesCurrentReviewFixes": true
+    },
+    "finalReviewUnit": {
+      "status": "passed",
+      "files": 3,
+      "tests": 10,
+      "log": "/tmp/experience-candidate-final-review-unit.log"
+    },
+    "runnerCacheIsolation": {
+      "status": "passed",
+      "regression": "Delimiter-containing merchant/build tuples cannot alias or return another binding.",
+      "redLog": "/tmp/experience-candidate-cache-isolation-red.log",
+      "greenLog": "/tmp/experience-candidate-final-runner-post-review.log",
+      "buildScope": "This small in-memory cache fix followed the final production rebuild/checkout/CWV; those receipts do not claim an immutable whole-source qualification. Orbit uses UUID tenant/build identifiers, and its immutable custom bundle/source are unchanged."
+    }
+  }
+}

@@ -20,7 +20,7 @@ describe('LoginEmailStep', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    jest.spyOn(Linking, 'openURL').mockResolvedValue(true);
+    jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
   });
 
   it('renders code sign-in choices and forwards each action', () => {
@@ -61,6 +61,31 @@ describe('LoginEmailStep', () => {
     expect(onAppleSignIn).toHaveBeenCalledTimes(1);
     expect(Linking.openURL).toHaveBeenCalledWith(TERMS_OF_SERVICE_URL);
     expect(Linking.openURL).toHaveBeenCalledWith(PRIVACY_POLICY_URL);
+  });
+
+  // After signing out from a code sign-in, the email placeholder came back
+  // letter-spaced ("j o h n @ ...") from the recycled code-entry field.
+  it('pins the email field to normal letter spacing', () => {
+    render(
+      <LoginEmailStep
+        authMethod="otp"
+        colors={Colors.light}
+        email=""
+        emailError={null}
+        isAppleLoading={false}
+        isGoogleLoading={false}
+        isLoading={false}
+        onAppleSignIn={onAppleSignIn}
+        onContinue={onContinue}
+        onEmailChange={onEmailChange}
+        onGoogleSignIn={onGoogleSignIn}
+        onToggleAuthMethod={onToggleAuthMethod}
+      />
+    );
+
+    expect(screen.getByPlaceholderText('john@example.com')).toHaveStyle({
+      letterSpacing: 0,
+    });
   });
 
   it('shows masked receipt guidance without prefilling the input', () => {

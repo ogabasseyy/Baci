@@ -1,0 +1,35 @@
+DO $$
+DECLARE w constant uuid:='a0000000-0000-4000-8000-000000000001'; m constant uuid:='a0000000-0000-4000-8000-000000000002'; c constant uuid:='a0000000-0000-4000-8000-000000000003'; o constant uuid:='a0000000-0000-4000-8000-000000000004'; worker constant uuid:='a0000000-0000-4000-8000-000000000005'; app constant uuid:='a0000000-0000-4000-8000-000000000006'; ref constant uuid:='a0000000-0000-4000-8000-000000000007'; result jsonb;
+BEGIN
+ PERFORM set_config('request.jwt.claim.sub',worker::text,true);
+ INSERT INTO public.customers VALUES(c,m);
+ INSERT INTO public.orders VALUES(o,m,c,100,'NGN','oxygen',NULL,'unpaid');
+ INSERT INTO public.oxygen_workflows VALUES(w,m,c,o,'staging','payment_required',1,now());
+ INSERT INTO oxygen_private.runtime_bindings VALUES(m,worker,'staging',true);
+ INSERT INTO oxygen_private.provider_states VALUES(w,jsonb_build_object('applicationReference',app,'bookingReference',ref,'booking',jsonb_build_object('loan_reference',ref,'status','APPROVED','product_amount',100)));
+ IF public.oxygen_general_activation('recover',w,'{}') IS NOT NULL THEN RAISE EXCEPTION 'No activation must remain absent'; END IF;
+ INSERT INTO oxygen_private.general_activations(workflow_id,merchant_id,customer_id,order_id,environment,application_reference,booking_reference,amount,status,ciphertext) VALUES(w,m,c,o,'staging',app,ref,100,'activated','v1.'||repeat('a',16)||'.'||repeat('b',22)||'.'||repeat('c',50));
+ result:=public.oxygen_general_activation('recover',w,'{}');
+ IF result->>'status'<>'activated' THEN RAISE EXCEPTION 'Recovery lost evidence'; END IF;
+ UPDATE public.orders SET payment_status='paid' WHERE id=o;
+ result:=public.oxygen_general_activation('reconcile',w,'{}');
+ IF result->>'reviewRequired'<>'true' OR result->>'orderConfirmed'<>'false' OR (SELECT stage FROM public.oxygen_workflows WHERE id=w)='activated' THEN RAISE EXCEPTION 'Changed order falsely confirmed'; END IF;
+ UPDATE public.orders SET payment_status='unpaid' WHERE id=o;
+ IF public.oxygen_general_activation('reconcile',w,'{}')->>'reviewRequired'<>'true' THEN RAISE EXCEPTION 'Unresolved review bypassed'; END IF;
+ UPDATE oxygen_private.general_activation_reconcile_conflicts SET resolved_at=now() WHERE workflow_id=w;
+ UPDATE public.orders SET cancelled_at=now() WHERE id=o;
+ IF public.oxygen_general_activation('reconcile',w,'{}')->>'reviewRequired'<>'true' THEN RAISE EXCEPTION 'Cancelled order falsely confirmed'; END IF;
+ UPDATE public.orders SET cancelled_at=NULL,payment_status='refunded' WHERE id=o;
+ IF public.oxygen_general_activation('reconcile',w,'{}')->>'reviewRequired'<>'true' THEN RAISE EXCEPTION 'Refunded order falsely confirmed'; END IF;
+ UPDATE public.orders SET payment_status='unpaid',payment_method='paystack' WHERE id=o;
+ IF public.oxygen_general_activation('reconcile',w,'{}')->>'reviewRequired'<>'true' THEN RAISE EXCEPTION 'Changed method falsely confirmed'; END IF;
+ UPDATE public.orders SET payment_method='oxygen' WHERE id=o;
+ UPDATE oxygen_private.general_activation_reconcile_conflicts SET resolved_at=now() WHERE workflow_id=w;
+ UPDATE oxygen_private.provider_states SET state=jsonb_set(state,'{bookingReference}',to_jsonb(gen_random_uuid())) WHERE workflow_id=w;
+ IF public.oxygen_general_activation('reconcile',w,'{}')->>'reviewRequired'<>'true' THEN RAISE EXCEPTION 'Changed reference falsely confirmed'; END IF;
+ UPDATE oxygen_private.provider_states SET state=jsonb_set(state,'{bookingReference}',to_jsonb(ref)) WHERE workflow_id=w;
+ UPDATE oxygen_private.general_activation_reconcile_conflicts SET resolved_at=now() WHERE workflow_id=w;
+ IF public.oxygen_general_activation('reconcile',w,'{}')->>'orderConfirmed'<>'true' THEN RAISE EXCEPTION 'Resolved safe order did not reconcile'; END IF;
+ PERFORM set_config('request.jwt.claim.sub',gen_random_uuid()::text,true);
+ BEGIN PERFORM public.oxygen_general_activation('recover',w,'{}'); RAISE EXCEPTION 'Foreign worker accepted'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;

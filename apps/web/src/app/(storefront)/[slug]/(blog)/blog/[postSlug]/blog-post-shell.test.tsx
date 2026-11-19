@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
+import { BLOG_POST_HERO_IMAGE_SIZES } from '@/components/storefront/ogabassey/config/blog-media';
 
 interface MockImageProps {
   alt: string;
@@ -79,6 +80,23 @@ const header = {
 };
 
 describe('BlogPostShell', () => {
+  it('uses theme-aware surfaces instead of white panels around dark-mode text', () => {
+    render(
+      <BlogPostShell blogHref="/blog" header={header} hero={null}>
+        <p>Article content</p>
+      </BlogPostShell>
+    );
+
+    expect(screen.getByRole('article')).toHaveClass(
+      'bg-card',
+      'text-card-foreground',
+      'border-border'
+    );
+    expect(
+      screen.getByText('Back to Blog').parentElement?.parentElement
+    ).toHaveClass('bg-background', 'border-border');
+  });
+
   it('renders the hero as an LCP preload image without loading/fetchPriority', () => {
     render(
       <BlogPostShell
@@ -98,10 +116,7 @@ describe('BlogPostShell', () => {
     expect(image).toHaveAttribute('data-fetchpriority', '');
     expect(image).toHaveAttribute('data-fill', 'true');
     expect(image).toHaveAttribute('data-quality', '50');
-    expect(image).toHaveAttribute(
-      'data-sizes',
-      '(max-width: 768px) 100vw, (max-width: 1200px) 100vw, 1200px'
-    );
+    expect(image).toHaveAttribute('data-sizes', BLOG_POST_HERO_IMAGE_SIZES);
   });
 
   it('hoists the post title and streams the body region beneath it', () => {

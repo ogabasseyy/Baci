@@ -3,6 +3,7 @@ const BUDGET_CUE =
 const AMOUNT =
   /^\s*(?:(₦|ngn\s*|n(?=\d))\s*)?((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)(?:\s*(million|thousand|[km]))?(?:\s*(naira|ngn|₦))?(?![\p{L}\p{N}_]|[,.]\d)/iu;
 const SYMBOL_CODES: Readonly<Record<string, string>> = {
+  $: 'USD',
   '€': 'EUR',
   '£': 'GBP',
   '₹': 'INR',
@@ -19,10 +20,16 @@ const CURRENCY_CODES = new Set(
 );
 
 /** Identify currency immediately attached to an amount, without converting it. */
-function currencyToken(text: string): CurrencyToken | undefined {
+function currencyToken(
+  text: string,
+  includeNaira = false
+): CurrencyToken | undefined {
   const symbol = /^\s*(\p{Sc})/u.exec(text);
   if (symbol) {
-    if (symbol[1] === '₦') return undefined; // AMOUNT consumes naira.
+    if (symbol[1] === '₦')
+      return includeNaira
+        ? { length: symbol[0].length, code: 'NGN' }
+        : undefined;
     const code = SYMBOL_CODES[symbol[1]];
     return { length: symbol[0].length, code };
   }
@@ -36,16 +43,87 @@ function currencyToken(text: string): CurrencyToken | undefined {
     /^\s+(?:brands?|models?)\b/i.test(text.slice(word[0].length))
   )
     return undefined;
-  if (code === 'NGN') return undefined; // AMOUNT consumes naira.
+  if (code === 'NGN' || code === 'NAIRA')
+    return includeNaira ? { length: word[0].length, code: 'NGN' } : undefined;
   if (CURRENCY_CODES.has(code))
     return {
       length: word[0].length,
       code,
       ambiguous: raw !== code && AMBIGUOUS_WORD_CODES.has(code),
     };
-  if (/^(?:dollars?|pounds?|euros?|yen|yuan|rupees?|kobo)$/i.test(raw))
+  if (
+    /^(?:dollars?|pounds?|euros?|yen|yuan|rupees?|kobo|pesos?|cedis?|dirhams?|francs?|shillings?|won|rands?|dinars?)$/i.test(
+      raw
+    )
+  )
     return { length: word[0].length };
   return undefined;
+}
+
+/** Read adjacent currency qualifiers without consuming product preferences. */
+function suffixCurrencies(text: string): {
+  length: number;
+  tokens: CurrencyToken[];
+  boundaries: number[];
+} {
+  let length = 0;
+  const tokens: CurrencyToken[] = [];
+  const boundaries = [0];
+  for (let count = 0; count <= 4; count++) {
+    const tail = text.slice(length);
+    if (
+      /^\s{0,64}(?:(?:converted|convert)\s{1,32}(?:to|into)|(?:denominated|priced|payable|charged|quoted|listed)\s{1,32}in)\b/iu.test(
+        tail
+      )
+    ) {
+      tokens.push({ length: 0, ambiguous: true });
+      break;
+    }
+    const prefix =
+      /^(?:\s{0,64})(?:[-,;:./–—]{1,3}\s{0,64})?(?:in\s{1,64})?(?:([([])\s{0,64})?/iu.exec(
+        tail
+      );
+    if (!prefix) break;
+    const rest = tail.slice(prefix[0].length);
+    if (/^\s/u.test(rest)) {
+      tokens.push({ length: 0, ambiguous: true });
+      break;
+    }
+    const qualifiedDollar =
+      /^(?:(?:[\p{L}.]{1,20}\s{1,32}){1,3}dollars?\b|[a-z]{1,4}\$)/iu.exec(
+        rest
+      );
+    const token = qualifiedDollar
+      ? { length: qualifiedDollar[0].length }
+      : currencyToken(rest, true);
+    if (!token) break;
+    if (count === 4) {
+      tokens.push({ length: 0, ambiguous: true });
+      break;
+    }
+    let consumed = prefix[0].length + token.length;
+    if (prefix[1]) {
+      const closer = prefix[1] === '(' ? ')' : ']';
+      const closing = /^\s{0,64}[)\]]/u.exec(tail.slice(consumed));
+      if (!closing?.[0].endsWith(closer)) {
+        tokens.push({ length: 0, ambiguous: true });
+        break;
+      }
+      consumed += closing[0].length;
+    }
+    tokens.push(token);
+    length += consumed;
+    boundaries.push(length);
+  }
+  return { length, tokens, boundaries };
+}
+
+function startsBudgetRange(text: string): boolean {
+  const separator = /^\s{0,64}(?:[-–—]|to\b)\s{0,64}/iu.exec(text);
+  if (!separator) return false;
+  const upper = text.slice(separator[0].length);
+  const currency = currencyToken(upper, true);
+  return /^\s{0,64}\d/u.test(upper.slice(currency?.length ?? 0));
 }
 
 function hasAttachedAmbiguousCode(rawAmount: string | undefined): boolean {
@@ -95,6 +173,7 @@ export function analyzeFastCatalogBudget(
   let price: { amount: number; exclusive: boolean } | undefined;
   let hasBudget = false;
   let invalid = false;
+  let hasRange = false;
   let ambiguousMax = false;
   let ambiguousCurrency = false;
   let unsupportedCurrency = false;
@@ -106,7 +185,11 @@ export function analyzeFastCatalogBudget(
     const amountTail = tail.slice(prefixCurrency?.length ?? 0);
     const amount = AMOUNT.exec(amountTail);
     const afterAmount = amount ? amountTail.slice(amount[0].length) : '';
-    const suffixCurrency = amount ? currencyToken(afterAmount) : undefined;
+    const suffix = amount ? suffixCurrencies(afterAmount) : undefined;
+    const range = (suffix?.boundaries ?? [0]).some((boundary) =>
+      startsBudgetRange(afterAmount.slice(boundary))
+    );
+    if (range) hasRange = true;
     const malformedMultiplier = amount
       ? /^\s*(?:million|thousand)[\p{L}\p{N}_]+/iu.exec(afterAmount)
       : null;
@@ -121,16 +204,16 @@ export function analyzeFastCatalogBudget(
     const consumed =
       (prefixCurrency?.length ?? 0) +
       (amount?.[0].length ?? rawAmount?.[0].length ?? 0) +
-      (suffixCurrency?.length ??
-        malformedMultiplier?.[0].length ??
-        rawSuffixCurrency?.length ??
+      (suffix?.length ||
+        malformedMultiplier?.[0].length ||
+        rawSuffixCurrency?.length ||
         0);
     const modelMax = /^max\b/i.test(cue[0]) && isProductModelMax(text, start);
     if (modelMax) {
       if (
         amount &&
         (prefixCurrency ||
-          suffixCurrency ||
+          suffix?.tokens.length ||
           amount[1] ||
           amount[3] ||
           amount[4] ||
@@ -147,8 +230,8 @@ export function analyzeFastCatalogBudget(
     unsupportedCurrency = false;
     const mentionedCurrencies = [
       prefixCurrency,
-      suffixCurrency,
       rawSuffixCurrency,
+      ...(suffix?.tokens ?? []),
     ].filter((token): token is CurrencyToken => !!token);
     if (
       mentionedCurrencies.some((token) => token.ambiguous) ||
@@ -166,6 +249,7 @@ export function analyzeFastCatalogBudget(
     if (wrongCurrency) unsupportedCurrency = true;
     if (
       /^between\b/i.test(cue[0]) ||
+      range ||
       !amount ||
       wrongCurrency ||
       malformedMultiplier
@@ -173,7 +257,7 @@ export function analyzeFastCatalogBudget(
       invalid = true;
       // Keep a range in the query so its lower bound cannot be discarded by a
       // later maximum. Other incomplete cues can be superseded by an answer.
-      if (!/^between\b/i.test(cue[0]))
+      if (!/^between\b/i.test(cue[0]) && !range)
         spans.push({ start, end: start + cue[0].length + consumed });
       continue;
     }
@@ -207,7 +291,7 @@ export function analyzeFastCatalogBudget(
     price,
     searchText: fragments.join(''),
     hasBudget,
-    invalid,
+    invalid: invalid || hasRange,
     ambiguousMax,
     ambiguousCurrency,
     unsupportedCurrency,

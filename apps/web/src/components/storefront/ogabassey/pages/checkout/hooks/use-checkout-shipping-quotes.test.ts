@@ -130,15 +130,16 @@ describe('useCheckoutShippingQuotes', () => {
     expect(result.current.hasResolvedQuotes).toBe(true);
     expect(result.current.isLoadingQuotes).toBe(false);
 
+    mockFetch.mockResolvedValueOnce(response('pickup-station'));
     rerender({ ...restoredInput, deliveryMethod: 'pickup_station' });
-    expect(result.current.hasResolvedQuotes).toBe(true);
-    expect(mockFetch).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(result.current.hasResolvedQuotes).toBe(true));
+    expect(mockFetch).toHaveBeenCalledTimes(3);
   });
   it.each([
-    ['pickup', 'pickup_station'],
-    ['pickup_station', 'pickup_station'],
-    ['door', 'door'],
-  ] as const)('uses %s saved-address delivery with the matching %s carrier preference', async (deliveryMethod, deliveryPreference) => {
+    ['pickup', 'pickup_station', true],
+    ['pickup_station', 'pickup_station', false],
+    ['door', 'door', false],
+  ] as const)('uses %s saved-address delivery with the matching %s carrier preference', async (deliveryMethod, deliveryPreference, merchantRatesOnly) => {
     mockFetch.mockImplementation(async () => response('saved-address'));
     const input = options();
     input.isNewAddressMode = false;
@@ -162,7 +163,44 @@ describe('useCheckoutShippingQuotes', () => {
     );
     expect(JSON.parse(String(mockFetch.mock.calls[0][1]?.body))).toMatchObject({
       deliveryPreference,
-      merchant_rates_only: false,
+      merchant_rates_only: merchantRatesOnly,
+      receiver: { latitude: 6.6, longitude: 3.3 },
+    });
+  });
+
+  it('enforces merchant rates for office pickup even if door preference is provided', async () => {
+    mockFetch.mockImplementation(async () => response('office-pickup-door'));
+    const input = options();
+    input.deliveryMethod = 'pickup';
+    input.deliveryCoordinates = { latitude: 6.6, longitude: 3.3 };
+
+    const { result } = renderHook(() => useCheckoutShippingQuotes(input));
+
+    await waitFor(() =>
+      expect(result.current.shippingQuotes[0]?.id).toBe('office-pickup-door')
+    );
+    mockFetch.mockClear();
+    mockFetch.mockImplementation(async () => response('office-pickup-forced'));
+
+    act(() => {
+      result.current.fetchShippingQuotes(
+        '12 Allen Avenue',
+        'Lagos',
+        'Ikeja',
+        '+2348000000000',
+        'John',
+        'Doe',
+        'john@example.com',
+        'door'
+      );
+    });
+
+    await waitFor(() =>
+      expect(result.current.shippingQuotes[0]?.id).toBe('office-pickup-forced')
+    );
+    expect(JSON.parse(String(mockFetch.mock.calls[0][1]?.body))).toMatchObject({
+      deliveryPreference: 'door',
+      merchant_rates_only: true,
       receiver: { latitude: 6.6, longitude: 3.3 },
     });
   });

@@ -1,4 +1,6 @@
+import { describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
+import { useState } from 'react';
 import Colors from '@/constants/Colors';
 import type { CartItem } from '@/stores/cart-store';
 import AssuranceToggle from './AssuranceToggle';
@@ -56,5 +58,38 @@ describe('AssuranceToggle', () => {
     );
 
     expect(screen.getByText('Device Protection (+5%)')).toBeTruthy();
+    expect(
+      screen.queryByText(/won’t include screen and liquid damage protection/i)
+    ).toBeNull();
+  });
+  it('shows removal feedback and restores protection through the add-back action', () => {
+    function CartLine() {
+      const [enabled, setEnabled] = useState(true);
+      return (
+        <AssuranceToggle
+          item={createItem({ hasAssurance: enabled })}
+          assuranceCost={25000}
+          toggleAssurance={() => setEnabled(!enabled)}
+          formatPrice={(value) => `₦${value}`}
+          colors={Colors.light}
+        />
+      );
+    }
+    render(<CartLine />);
+    expect(
+      screen.queryByText(/won’t include screen and liquid damage protection/i)
+    ).toBeNull();
+    fireEvent.press(screen.getByRole('switch'));
+    expect(
+      screen.getByText(/won’t include screen and liquid damage protection/i)
+    ).toBeTruthy();
+    expect(screen.getByText(/screen protector/)).toBeTruthy();
+    fireEvent.press(screen.getByRole('button', { name: 'Add Assurance back' }));
+    expect(screen.getByRole('switch').props.accessibilityState.checked).toBe(
+      true
+    );
+    expect(
+      screen.queryByText(/won’t include screen and liquid damage protection/i)
+    ).toBeNull();
   });
 });

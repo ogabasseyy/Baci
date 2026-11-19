@@ -69,6 +69,37 @@ Inventory all nonsystem effective ACLs in the real target before approval. The
 fixture's blanket PUBLIC-function revokes are test baseline isolation, **not** a
 production installer or instruction to revoke live grants wholesale.
 
+## Engine readiness gate
+
+After its session check and before any claim, the worker asks
+`piggyvest_primary.engine_ready('bank_inbox')` whether the PiggyVest ledger and
+transfer engine fences are in place. The enforcing check
+(`20261104130900`) replaced the always-not-ready stub (`20261102032905`). It
+answers ready only when the worker login is safe and unexpired, its bank
+authority and integration are enabled and agree on merchant, business and
+environment, the integration's inflow authority is enabled, and the inflow
+ledger objects exist; each gap is listed by a stable code (see the migration
+header). The master kill switch is a web runtime setting and is not part of the
+database check. While any fence is missing the worker claims nothing: stored receipts stay pending exactly as captured, with no
+attempt spent and no lease taken, and credit once after readiness passes. A
+failed or malformed answer counts as not ready. A gated drain returns zero
+counters plus `engineNotReady` (the missing marker ids, never customer data),
+so it is distinguishable from an empty inbox.
+
+The worker capability role holds exactly one membership,
+`piggyvest_primary_readiness_reader` (NOLOGIN, inherit only), which can execute
+`engine_ready` and nothing else. `bank_role_safe` accepts that membership and
+function for the worker only and still rejects any other membership, any reader
+that is itself a member of a role or can log in, and any other effective grant.
+The intake never holds the reader. The rules live in
+`bank_role_violations(login, worker)`, which lists each violation so the SQL
+suite can test them without logging in as the worker.
+
+The bank activation inventory verifies the restricted reader membership and
+the worker's exact six RPC signatures, including `engine_ready(p_surface text)`.
+The paid-interest inventory uses the shared evidence login and has a separate
+grant contract. See [paid-interest preparation](piggyvest-primary-interest-activation-preparation.md).
+
 ## Stable SHA-256 values
 
 ```text

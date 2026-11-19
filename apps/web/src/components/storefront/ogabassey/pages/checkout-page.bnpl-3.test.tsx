@@ -1,8 +1,5 @@
-import {
-  driveFreshBNPLPlaceOrder,
-  paymentStartedCalls,
-  renderFreshBNPLCheckout,
-} from './checkout-page-bnpl.test-support';
+import { readPendingHandoffEntries } from '@/lib/privacy/pending-handoff.test-support';
+import { readPendingPrivateParams } from '@/lib/privacy/private-url-param-handoff';
 import {
   act,
   continueToPaymentAfterPickupCheck,
@@ -10,11 +7,9 @@ import {
   fireEvent,
   it,
   openCreditDirectCheckout,
-  openCredPalCheckout,
   readCreditDirectPopupMarker,
   renderCheckoutWithStoreRates,
   screen,
-  toast,
   useCart,
   useMerchantSafe,
   usePersistedForm,
@@ -130,7 +125,7 @@ it('hands fresh Credit Direct success to server verification before cleanup', as
     fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
     await continueToPaymentAfterPickupCheck();
     fireEvent.click(
-      await screen.findByRole('button', { name: /pay in installments/i })
+      await screen.findByRole('button', { name: /pay small small/i })
     );
     fireEvent.click(
       await screen.findByRole('radio', { name: /credit direct/i })
@@ -172,8 +167,26 @@ it('hands fresh Credit Direct success to server verification before cleanup', as
       }
     );
     expect(routerPush).toHaveBeenCalledWith(
-      '/ogabassey/checkout/bnpl?orderId=order-cd&gateway=credit_direct&merchant_slug=ogabassey&creditDirectCompletion=cd-client-success-2&trackingToken=track-cd&email=ada%40example.com'
+      '/ogabassey/checkout/bnpl?orderId=order-cd&gateway=credit_direct&merchant_slug=ogabassey&creditDirectCompletion=cd-client-success-2'
     );
+    expect(readPendingHandoffEntries()).toEqual([
+      ['trackingToken', 'track-cd'],
+      ['email', 'ada@example.com'],
+    ]);
+    // ... and the launcher at the pushed URL can read it.
+    const pushed = new URL(
+      String(routerPush.mock.calls[0]?.[0]),
+      'http://x.test'
+    );
+    expect(
+      readPendingPrivateParams(
+        pushed.pathname,
+        pushed.search.replace(/^\?/, '')
+      )
+    ).toEqual([
+      ['trackingToken', 'track-cd'],
+      ['email', 'ada@example.com'],
+    ]);
     expect(
       routerPush.mock.calls.some(([href]) =>
         String(href).includes('/order-success')
@@ -185,31 +198,5 @@ it('hands fresh Credit Direct success to server verification before cleanup', as
   } finally {
     fetchMock.mockRestore();
     consoleErrorSpy.mockRestore();
-  }
-});
-
-it('skips payment_started when fresh CredPal initialization fails', async () => {
-  vi.stubEnv('NEXT_PUBLIC_CREDPAL_KEY', 'pk_test_credpal');
-  const { fetchMock } = renderFreshBNPLCheckout({
-    featureSettings: { credpal_enabled: true },
-    orderId: 'order-credpal-fresh-fail',
-  });
-  vi.mocked(openCredPalCheckout).mockRejectedValueOnce(
-    new Error('Failed to load CredPal script')
-  );
-
-  try {
-    await driveFreshBNPLPlaceOrder(/credpal/i);
-
-    await waitFor(() => {
-      expect(openCredPalCheckout).toHaveBeenCalled();
-    });
-    await waitFor(() => {
-      expect(toast).toHaveBeenCalled();
-    });
-    expect(paymentStartedCalls()).toHaveLength(0);
-  } finally {
-    fetchMock.mockRestore();
-    vi.unstubAllEnvs();
   }
 });

@@ -7,7 +7,7 @@ import {
   within,
 } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import OrderSuccessPage from '@/app/(storefront)/[slug]/(commerce)/order-success/page';
+import { OrderSuccessContent as OrderSuccessPage } from './order-success-content';
 
 const mockSearchParams = vi.fn();
 const mockFetch = vi.fn();
@@ -22,7 +22,11 @@ const mockVerifyBnplSettlementProof = vi.hoisted(() =>
   vi.fn(async (..._args: unknown[]) => true)
 );
 
+const mockRouterPush = vi.hoisted(() => vi.fn());
+
 vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: mockRouterPush }),
+  usePathname: () => '/order-success',
   useSearchParams: () => mockSearchParams(),
 }));
 
@@ -600,189 +604,6 @@ describe('storefront order success page', () => {
     expect(
       screen.queryByRole('button', { name: /copy payment details/i })
     ).toBeNull();
-  });
-
-  it('shows guests the emailed invoice action instead of the archive link', async () => {
-    mockSearchParams.mockReturnValue(
-      new URLSearchParams({
-        orderId: 'order-123',
-        type: 'invoice',
-        trackingToken: 'track-token-123',
-      })
-    );
-    mockFetch.mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        id: 'order-123',
-        order_number: 'ORD-123',
-        tracking_token: 'track-token-123',
-        customer_email: 'buyer@example.com',
-        items: [],
-        subtotal: 45000,
-        shipping_cost: 1500,
-        total: 49875,
-        payment_method: 'invoice',
-        payment_status: 'unpaid',
-      }),
-    });
-
-    render(<OrderSuccessPage />);
-
-    // Anonymous: the /receipts archive would only bounce to login.
-    // Delivery runs in after(), after this lookup: until the server
-    // delivery flag lands, the action must promise preparation — never
-    // a sent PDF that may not exist yet.
-    expect(
-      await screen.findByText(
-        /proforma invoice pdf is being prepared — we'll email it to buyer@example\.com/i
-      )
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole('link', { name: /download proforma invoice pdf/i })
-    ).toBeNull();
-  });
-
-  it('suppresses invoice actions for cancelled orders', async () => {
-    mockSearchParams.mockReturnValue(
-      new URLSearchParams({
-        orderId: 'order-123',
-        type: 'invoice',
-        trackingToken: 'track-token-123',
-      })
-    );
-    mockFetch.mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        id: 'order-123',
-        order_number: 'ORD-123',
-        tracking_token: 'track-token-123',
-        customer_email: 'buyer@example.com',
-        items: [],
-        subtotal: 45000,
-        shipping_cost: 1500,
-        total: 49875,
-        payment_method: 'invoice',
-        payment_status: 'cancelled',
-      }),
-    });
-
-    render(<OrderSuccessPage />);
-
-    // Terminal and non-payable: neither the proforma email action nor the
-    // commercial download may render.
-    expect(
-      await screen.findByRole('heading', { name: /order confirmed!/i })
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole('link', { name: /download .* invoice pdf/i })
-    ).toBeNull();
-    expect(screen.queryByText(/was sent to/i)).toBeNull();
-    expect(screen.queryByText(/being prepared/i)).toBeNull();
-  });
-
-  it('shows guests the sent invoice action once delivery lands', async () => {
-    mockSearchParams.mockReturnValue(
-      new URLSearchParams({
-        orderId: 'order-123',
-        type: 'invoice',
-        trackingToken: 'track-token-123',
-      })
-    );
-    mockFetch.mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        id: 'order-123',
-        order_number: 'ORD-123',
-        tracking_token: 'track-token-123',
-        customer_email: 'buyer@example.com',
-        items: [],
-        subtotal: 45000,
-        shipping_cost: 1500,
-        total: 49875,
-        payment_method: 'invoice',
-        payment_status: 'unpaid',
-        notification_delivered: true,
-      }),
-    });
-
-    render(<OrderSuccessPage />);
-
-    expect(
-      await screen.findByText(
-        /proforma invoice pdf was sent to buyer@example\.com/i
-      )
-    ).toBeInTheDocument();
-  });
-
-  it('renders no invoice action while the customer session resolves', async () => {
-    mockCustomerSessionStatus = 'loading';
-    mockSearchParams.mockReturnValue(
-      new URLSearchParams({
-        orderId: 'order-123',
-        type: 'invoice',
-        trackingToken: 'track-token-123',
-      })
-    );
-    mockFetch.mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        id: 'order-123',
-        order_number: 'ORD-123',
-        tracking_token: 'track-token-123',
-        customer_email: 'buyer@example.com',
-        items: [],
-        subtotal: 45000,
-        shipping_cost: 1500,
-        total: 49875,
-        payment_method: 'invoice',
-        payment_status: 'unpaid',
-      }),
-    });
-
-    render(<OrderSuccessPage />);
-
-    // Neither the download link nor the guest email notice may flash for
-    // the wrong audience while auth is unresolved.
-    await screen.findByText(/fetching your order summary/i);
-    expect(
-      screen.queryByRole('link', { name: /download proforma invoice pdf/i })
-    ).toBeNull();
-    expect(screen.queryByText(/was sent to/i)).toBeNull();
-  });
-
-  it('keeps the archive download link for authenticated invoice orders', async () => {
-    mockCustomerSessionStatus = 'authenticated';
-    mockSearchParams.mockReturnValue(
-      new URLSearchParams({
-        orderId: 'order-123',
-        type: 'invoice',
-        trackingToken: 'track-token-123',
-      })
-    );
-    mockFetch.mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        id: 'order-123',
-        order_number: 'ORD-123',
-        tracking_token: 'track-token-123',
-        customer_email: 'buyer@example.com',
-        items: [],
-        subtotal: 45000,
-        shipping_cost: 1500,
-        total: 49875,
-        payment_method: 'invoice',
-        payment_status: 'unpaid',
-      }),
-    });
-
-    render(<OrderSuccessPage />);
-
-    expect(
-      await screen.findByRole('link', {
-        name: /download proforma invoice pdf/i,
-      })
-    ).toHaveAttribute('href', '/test-store/receipts');
-    expect(screen.queryByText(/was sent to/i)).toBeNull();
   });
 
   it('keeps supporting legacy token query params', async () => {

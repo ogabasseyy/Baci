@@ -1,5 +1,6 @@
 import 'server-only';
 import { prefundedCardPublicRuntimeSchemas } from '@/schemas/prefunded-card-public-runtime';
+import { isPiggyvestFeatureOn } from './piggyvest-feature-on';
 import { PREFUNDED_CARD_CUSTOMER_STATEMENTS } from './prefunded-card-customer-statements';
 import { createPrefundedCardPostgresExecutor } from './prefunded-card-postgres-executor';
 import type { PiggyvestProvisioningExecutor } from './provisioning-store.types';
@@ -11,7 +12,8 @@ export function readPrefundedCardPublicRuntime({
   authOrigin: string;
   environment?: NodeJS.ProcessEnv;
 }) {
-  if (environment.PREFUNDED_CARD_PUBLIC_ENABLED !== 'true') return null;
+  if (!isPiggyvestFeatureOn('prefunded_card_contributions', environment))
+    return null;
   try {
     const serialized = environment.PREFUNDED_CARD_PUBLIC_CONFIG;
     if (!serialized || Buffer.byteLength(serialized, 'utf8') > 65_536)

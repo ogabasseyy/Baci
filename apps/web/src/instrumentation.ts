@@ -52,6 +52,10 @@ function getRequestTenantContext(
 export async function register() {
   // Only register in server-side environments (Node.js runtime)
   if (process.env.NEXT_RUNTIME === 'nodejs') {
+    const { registerExperienceStartup } = await import(
+      './instrumentation-experience-boot'
+    );
+    await registerExperienceStartup();
     // Merchant pilot startup gate (own module under the line ceiling).
     const { registerPilotStartupGate } = await import(
       './instrumentation-pilot-boot'

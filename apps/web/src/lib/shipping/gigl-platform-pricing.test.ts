@@ -12,8 +12,44 @@ describe('priceGiglQuote', () => {
     });
   });
 
-  it('ceils fractional kobo charges', () => {
-    expect(priceGiglQuote(1000.01).price).toBe(1100.02);
+  it('rounds the price up to the next whole NGN 100 and lets the margin absorb it', () => {
+    expect(priceGiglQuote(44_091.27)).toEqual({
+      marginBasisPoints: 1000,
+      platformMargin: 4_508.73,
+      price: 48_600,
+      pricingVersion: 'gigl_platform_margin_v1',
+      providerCost: 44_091.27,
+    });
+  });
+
+  it('rounds a fractional kobo charge up to the next NGN 100', () => {
+    const quote = priceGiglQuote(1000.01);
+    expect(quote.price).toBe(1_200);
+    expect(quote.platformMargin).toBe(199.99);
+  });
+
+  it('keeps a price that already lands on a whole NGN 100', () => {
+    expect(priceGiglQuote(95_000).price).toBe(104_500);
+    expect(priceGiglQuote(1_000).price).toBe(1_100);
+  });
+
+  it('rounds one kobo over an NGN 100 boundary up to the next boundary', () => {
+    // 909.10 * 1.1 = 1000.01 -> 1,100
+    const quote = priceGiglQuote(909.1);
+    expect(quote.price).toBe(1_100);
+    expect(quote.platformMargin).toBe(190.9);
+  });
+
+  it('always charges cost + margin, a multiple of NGN 100, with at least 10% margin', () => {
+    for (const cost of [0.01, 1, 99.99, 909.1, 1000.01, 11_585.25, 44_091.27]) {
+      const quote = priceGiglQuote(cost);
+      const priceKobo = Math.round(quote.price * 100);
+      const costKobo = Math.round(quote.providerCost * 100);
+      const marginKobo = Math.round(quote.platformMargin * 100);
+      expect(priceKobo).toBe(costKobo + marginKobo);
+      expect(priceKobo % 10_000).toBe(0);
+      expect(marginKobo * 10).toBeGreaterThanOrEqual(costKobo);
+    }
   });
 
   it('rejects zero and invalid tariffs', () => {

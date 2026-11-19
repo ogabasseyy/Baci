@@ -4,6 +4,24 @@ import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ShipmentFlowSheet } from './ShipmentFlowSheet';
 
+vi.mock('./ShipmentFlowSheetPresence', () => ({
+  ShipmentFlowSheetPresence: ({
+    accessory,
+    children,
+    visible,
+  }: {
+    accessory?: ReactNode;
+    children?: ReactNode;
+    visible: boolean;
+  }) =>
+    visible ? (
+      <section>
+        {children}
+        {accessory}
+      </section>
+    ) : null,
+}));
+
 vi.mock('./CheckoutShippingRecoveryPanel', () => ({
   CheckoutShippingRecoveryPanel: () => null,
 }));
@@ -123,6 +141,7 @@ function gigl(canBook: boolean, error: string | null = null) {
     startTransferPoll: vi.fn(),
     state: error ? ('error' as const) : ('ready' as const),
     updateAddressField: vi.fn(),
+    selectAddressPlace: vi.fn(),
     wallet: {
       availableBalance: canBook ? 11000 : 1000,
       canBook,
@@ -163,7 +182,9 @@ describe('ShipmentFlowSheet manual-order GIG flow', () => {
     const { rerender } = render(
       <ShipmentFlowSheet {...base} giglShipping={gigl(false)} />
     );
-    expect(screen.getByText('Ship with GIG')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /^Ship with GIG/ })
+    ).toBeInTheDocument();
     expect(screen.getByText('₦11,000')).toBeInTheDocument();
     expect(screen.getByText('Self Fulfill')).toBeInTheDocument();
     expect(
@@ -191,7 +212,9 @@ describe('ShipmentFlowSheet manual-order GIG flow', () => {
       />
     );
     expect(screen.getByText('Use Topship')).toBeInTheDocument();
-    expect(screen.queryByText('Ship with GIG')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /^Ship with GIG/ })
+    ).not.toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: 'Book with Topship' })
     ).toBeEnabled();
@@ -207,7 +230,9 @@ describe('ShipmentFlowSheet manual-order GIG flow', () => {
       />
     );
     expect(screen.getByText('Use GIG Logistics')).toBeInTheDocument();
-    expect(screen.queryByText('Ship with GIG')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /^Ship with GIG/ })
+    ).not.toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: 'Book with GIG Logistics' })
     ).toBeEnabled();
@@ -222,7 +247,9 @@ describe('ShipmentFlowSheet manual-order GIG flow', () => {
         providerLabel="GIG Logistics"
       />
     );
-    expect(screen.getByText('Ship with GIG')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /^Ship with GIG/ })
+    ).toBeInTheDocument();
     expect(screen.queryByText('Use GIG Logistics')).not.toBeInTheDocument();
   });
 

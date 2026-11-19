@@ -52,6 +52,8 @@ export function isGiglRuntimeConfigured(): boolean {
 
 export interface GiglToken {
   token: string;
+  /** GIG account user id from `/login` (`Id`); pre-shipments carry it as `UserId`. */
+  userId?: string;
   userChannelCode: string;
   customerType: number;
   expiresAt: number;

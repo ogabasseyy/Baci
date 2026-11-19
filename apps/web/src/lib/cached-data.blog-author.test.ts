@@ -122,6 +122,25 @@ function setupBlogAuthorFetch({
   return { postsBuilder };
 }
 
+function buildAuthorPostRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'post-1',
+    title: 'Bassey Laptop Guide',
+    slug: 'bassey-laptop-guide',
+    excerpt: 'Laptop picks.',
+    featured_image_url: null,
+    featured_image_alt: null,
+    category: 'Laptops',
+    author_name: 'Bassey John',
+    author_title: 'Performance Marketing Specialist',
+    author_bio: 'Bassey writes buying guides.',
+    author_image_url: 'https://cdn.example.com/bassey.jpg',
+    published_at: '2026-03-17T10:00:00.000Z',
+    reading_time_minutes: 4,
+    ...overrides,
+  };
+}
+
 describe('getCachedBlogAuthor', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -134,36 +153,16 @@ describe('getCachedBlogAuthor', () => {
   it('normalizes page input and fetches the author posts with a bounded DB query', async () => {
     const { postsBuilder } = setupBlogAuthorFetch({
       posts: [
-        {
-          id: 'post-1',
-          title: 'Bassey Laptop Guide',
-          slug: 'bassey-laptop-guide',
-          excerpt: 'Laptop picks.',
-          featured_image_url: null,
-          featured_image_alt: null,
-          category: 'Laptops',
-          author_name: 'Bassey John',
-          author_title: 'Performance Marketing Specialist',
-          author_bio: 'Bassey writes buying guides.',
-          author_image_url: 'https://cdn.example.com/bassey.jpg',
-          published_at: '2026-03-17T10:00:00.000Z',
-          reading_time_minutes: 4,
-        },
-        {
+        buildAuthorPostRow(),
+        buildAuthorPostRow({
           id: 'post-2',
           title: 'Bassey Phone Guide',
           slug: 'bassey-phone-guide',
           excerpt: 'Phone picks.',
-          featured_image_url: null,
-          featured_image_alt: null,
           category: 'Smartphones',
-          author_name: 'Bassey John',
-          author_title: 'Performance Marketing Specialist',
-          author_bio: 'Bassey writes buying guides.',
-          author_image_url: 'https://cdn.example.com/bassey.jpg',
           published_at: '2026-03-16T10:00:00.000Z',
           reading_time_minutes: 5,
-        },
+        }),
       ],
     });
 
@@ -223,21 +222,14 @@ describe('getCachedBlogAuthor', () => {
     setupBlogAuthorFetch({
       count: 1,
       posts: [
-        {
+        buildAuthorPostRow({
           id: 'page-3-author-post',
           title: 'Bassey Page 3 Guide',
           slug: 'bassey-page-3-guide',
           excerpt: 'Page 3.',
-          featured_image_url: null,
-          featured_image_alt: null,
-          category: 'Laptops',
-          author_name: 'Bassey John',
-          author_title: 'Performance Marketing Specialist',
-          author_bio: 'Bassey writes buying guides.',
-          author_image_url: 'https://cdn.example.com/bassey.jpg',
           published_at: '2026-03-15T10:00:00.000Z',
           reading_time_minutes: 6,
-        },
+        }),
       ],
     });
 
@@ -251,5 +243,38 @@ describe('getCachedBlogAuthor', () => {
     ]);
     expect(result?.currentPage).toBe(3);
     expect(result?.totalPages).toBeGreaterThanOrEqual(3);
+  });
+
+  it('resolves author profile metadata from the first post in the window with non-empty E-E-A-T fields', async () => {
+    setupBlogAuthorFetch({
+      posts: [
+        buildAuthorPostRow({
+          id: 'post-newest-missing-eeat',
+          title: 'Bassey Newest Guide',
+          slug: 'bassey-newest-guide',
+          author_title: null,
+          author_bio: null,
+          author_image_url: null,
+          published_at: '2026-03-18T10:00:00.000Z',
+        }),
+        buildAuthorPostRow({
+          id: 'post-older-with-eeat',
+          title: 'Bassey Older Guide',
+          slug: 'bassey-older-guide',
+          category: 'Smartphones',
+        }),
+      ],
+    });
+
+    const result = await getCachedBlogAuthor('ogabassey', 'Bassey John', {
+      page: 1,
+    });
+
+    expect(result?.author).toEqual({
+      name: 'Bassey John',
+      title: 'Performance Marketing Specialist',
+      bio: 'Bassey writes buying guides.',
+      imageUrl: 'https://cdn.example.com/bassey.jpg',
+    });
   });
 });

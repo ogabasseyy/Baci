@@ -18,6 +18,7 @@ import { createOrderDetailsReceiptActions } from '@/hooks/createOrderDetailsRece
 import { createOrderDetailsShipmentActions } from '@/hooks/createOrderDetailsShipmentActions';
 import { createOrderDetailsStatusActions } from '@/hooks/createOrderDetailsStatusActions';
 import { handleOrderDetailsProviderBookingError } from '@/hooks/handleOrderDetailsProviderBookingError';
+import { refundEvidenceBlocksChoice } from '@/hooks/orders/refundEvidenceBlocksChoice';
 import { useOrderAuditEvents } from '@/hooks/orders/useOrderAuditEvents';
 import { useAuth } from '@/hooks/useAuth';
 import { useGiglAdminShippingEligibility } from '@/hooks/useGiglAdminShippingEligibility';
@@ -59,7 +60,6 @@ export function useOrderDetailsController() {
   const validatedParams = routeResult.success ? routeResult.data : null;
   const orderId = validatedParams?.id;
   const actionParam = validatedParams?.action;
-
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const { data: order, error, isLoading } = useOrder(orderId ?? '');
@@ -69,11 +69,9 @@ export function useOrderDetailsController() {
     merchantId: order?.merchant_id ?? merchant?.id,
     orderId: order?.id ?? orderId,
   });
-  // Orders stamp their own currency at checkout time (`orders.currency`).
-  // Historical orders can predate a merchant payout-currency change, so the
-  // order's own currency wins; the merchant's current payout currency is
-  // only a fallback for legacy rows without a stamped currency or while the
-  // order hasn't loaded yet.
+  // The order's own stamped currency (`orders.currency`) wins: historical
+  // orders can predate a payout-currency change. The merchant's current payout
+  // currency is only a fallback for legacy rows or while the order loads.
   const orderCurrency = order?.currency || merchant?.payout_currency || 'NGN';
   const currencySymbol = getOrderCurrencySymbol(orderCurrency);
   const updateStatusMutation = useUpdateOrderStatus();
@@ -91,6 +89,7 @@ export function useOrderDetailsController() {
       providerLabel,
       shipmentFlowStep: uiState.shipmentFlowStep,
       showShipmentFlow: uiState.showShipmentFlow,
+      showStatusModal: uiState.showStatusModal,
       userId: user?.id,
     });
 
@@ -178,6 +177,7 @@ export function useOrderDetailsController() {
     queryClient,
     requiresShipmentDetails,
     riderPhone: uiState.riderPhone,
+    runAfterShipmentFlowDismissed: uiState.runAfterShipmentFlowDismissed,
     setFulfillmentDetails: uiState.setFulfillmentDetails,
     setFulfillmentItemIndex: uiState.setFulfillmentItemIndex,
     setIsShipmentSubmitting: uiState.setIsShipmentSubmitting,
@@ -185,7 +185,6 @@ export function useOrderDetailsController() {
     setRiderPhone: uiState.setRiderPhone,
     setShipmentFlowStep: uiState.setShipmentFlowStep,
     setShowShipmentFlow: uiState.setShowShipmentFlow,
-    setShowStatusModal: uiState.setShowStatusModal,
     setSuccessModal: uiState.setSuccessModal,
     shipmentFlowStep: uiState.shipmentFlowStep,
     showShipmentFlow: uiState.showShipmentFlow,
@@ -201,6 +200,7 @@ export function useOrderDetailsController() {
   const statusActions = createOrderDetailsStatusActions({
     openShipmentFlow: shipmentActions.openShipmentFlow,
     order,
+    refundEvidenceBlocksChoice,
     setShowCreditModal: uiState.setShowCreditModal,
     setShowPaymentOptionModal: uiState.setShowPaymentOptionModal,
     setShowStatusModal: uiState.setShowStatusModal,

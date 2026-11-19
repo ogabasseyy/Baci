@@ -66,6 +66,16 @@ describe('dispatchOrderCreationNotifications', () => {
     expect(mockNotifyNewOrder).not.toHaveBeenCalled();
   });
 
+  it.each([
+    'PAID',
+    ' paid ',
+    'Paid',
+  ])('does not create an invoice follow-up for normalized paid status %s', async (paymentStatus) => {
+    await dispatchOrderCreationNotifications(input({ paymentStatus }));
+    expect(mockNotifyNewInvoice).not.toHaveBeenCalled();
+    expect(mockNotifyNewOrder).not.toHaveBeenCalled();
+  });
+
   it('does not create a payment-collection alert when a discount leaves no balance', async () => {
     await dispatchOrderCreationNotifications(
       input({ orderTotal: 0, invoiceBalanceDue: 0 })
@@ -87,6 +97,60 @@ describe('dispatchOrderCreationNotifications', () => {
       'Customer',
       9000,
       { currency: 'NGN', preferenceClient: expect.anything() }
+    );
+  });
+
+  it.each([
+    'payforme',
+    'PayForMe',
+  ])('does not announce an unpaid %s request', async (paymentMethod) => {
+    await dispatchOrderCreationNotifications(
+      input({ paymentMethod, paymentStatus: 'pending' })
+    );
+
+    expect(mockNotifyNewOrder).not.toHaveBeenCalled();
+    expect(mockNotifyNewInvoice).not.toHaveBeenCalled();
+    expect(mockNotifyPaymentReceived).not.toHaveBeenCalled();
+  });
+
+  it('announces a genuinely zero-value Pay for Me order', async () => {
+    await dispatchOrderCreationNotifications(
+      input({
+        paymentMethod: 'payforme',
+        paymentStatus: 'unpaid',
+        orderTotal: 0,
+        invoiceBalanceDue: 0,
+      })
+    );
+    expect(mockNotifyNewOrder).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not announce an unpaid positive-value Pay for Me order after failed wallet finalization', async () => {
+    await dispatchOrderCreationNotifications(
+      input({
+        paymentMethod: 'payforme',
+        paymentStatus: 'unpaid',
+        orderTotal: 15000,
+        invoiceBalanceDue: 0,
+        isWalletFullyPaid: false,
+      })
+    );
+    expect(mockNotifyNewOrder).not.toHaveBeenCalled();
+    expect(mockNotifyPaymentReceived).not.toHaveBeenCalled();
+  });
+
+  it('still announces a pay-on-delivery order at creation', async () => {
+    await dispatchOrderCreationNotifications(
+      input({ paymentMethod: 'pay_on_delivery', paymentStatus: 'pending' })
+    );
+
+    expect(mockNotifyNewOrder).toHaveBeenCalledWith(
+      'merchant-1',
+      'order-1',
+      'ORD-001',
+      'Customer',
+      15000,
+      'NGN'
     );
   });
 
@@ -157,6 +221,38 @@ describe('dispatchOrderCreationNotifications', () => {
       message: 'Push notification failed',
       error: pushError,
     });
+    expect(mockNotifyPaymentReceived).toHaveBeenCalledWith(
+      'merchant-1',
+      15000,
+      'NGN',
+      'ORD-001',
+      'order-1'
+    );
+  });
+
+  it('still notifies the merchant when a Pay for Me order is created already paid or wallet-settled', async () => {
+    await dispatchOrderCreationNotifications(
+      input({
+        paymentMethod: 'payforme',
+        paymentStatus: 'Paid',
+        isWalletFullyPaid: false,
+      })
+    );
+
+    expect(mockNotifyNewOrder).toHaveBeenCalledTimes(1);
+    expect(mockNotifyPaymentReceived).not.toHaveBeenCalled();
+
+    vi.clearAllMocks();
+
+    await dispatchOrderCreationNotifications(
+      input({
+        paymentMethod: 'payforme',
+        paymentStatus: 'pending',
+        isWalletFullyPaid: true,
+      })
+    );
+
+    expect(mockNotifyNewOrder).toHaveBeenCalledTimes(1);
     expect(mockNotifyPaymentReceived).toHaveBeenCalledWith(
       'merchant-1',
       15000,

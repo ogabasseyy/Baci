@@ -8,6 +8,20 @@ import {
 } from './contact.test-support';
 
 describe('live checkout contact step', () => {
+  it('lets guests continue without creating an account or entering a password', async () => {
+    const user = userEvent.setup();
+    render(<ContactHarness initial={validContact} />);
+    expect(
+      screen.queryByRole('checkbox', { name: /save my information/i })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText(/create a password/i)
+    ).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole('button', { name: 'Continue to Delivery' })
+    );
+    expect(screen.getByText('Delivery fields')).toBeVisible();
+  });
   it('explains missing input and focuses the first invalid field', async () => {
     const user = userEvent.setup();
     render(<ContactHarness />);

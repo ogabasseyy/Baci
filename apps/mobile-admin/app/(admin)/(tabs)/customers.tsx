@@ -25,6 +25,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { FollowUpOrderCard } from '@/components/customers/FollowUpOrderCard';
 import { FollowUpQueueList } from '@/components/customers/FollowUpQueueList';
 import { RADIUS, SPACING, TYPOGRAPHY } from '@/constants/theme';
 import { useAdminTabScrollToTop } from '@/hooks/useAdminTabScrollToTop';
@@ -34,7 +35,6 @@ import {
   useCustomers,
 } from '@/hooks/useCustomers';
 import { useDebounce } from '@/hooks/useDebounce';
-import type { FailedOrder } from '@/hooks/useFailedOrders';
 import { useMerchant } from '@/hooks/useMerchant';
 import { useTheme } from '@/hooks/useTheme';
 
@@ -87,159 +87,6 @@ const handleCall = (phone: string) => {
 const handleEmail = (email: string) => {
   Linking.openURL(`mailto:${email}`);
 };
-
-// Failed Order Item component
-interface FailedOrderItemProps {
-  item: FailedOrder;
-  currencySymbol: string;
-  onPress: (item: FailedOrder) => void;
-}
-
-function FailedOrderItem({
-  item,
-  currencySymbol,
-  onPress,
-}: FailedOrderItemProps) {
-  const { colors, shadows } = useTheme();
-  const STATUS_LABELS: Record<string, string> = {
-    bnpl_pending: 'BNPL Drop-off',
-    failed: 'Payment Failed',
-    pending: 'Abandoned Transfer',
-    expired: 'Payment Expired',
-    unpaid: 'Checkout Drop-off',
-  };
-
-  const gatewayMessage =
-    typeof item.gateway_response?.message === 'string' &&
-    item.gateway_response.message.trim() !== ''
-      ? item.gateway_response.message
-      : null;
-  const errorMessage =
-    gatewayMessage ?? STATUS_LABELS[item.payment_status] ?? 'Payment Failed';
-
-  const displayName = item.customer_name || 'Guest';
-  const customerPhone = item.customer_phone?.trim() || null;
-
-  return (
-    <Pressable
-      style={({ pressed }) => [
-        styles.customerCard,
-        { backgroundColor: colors.card, minHeight: 56 },
-        shadows.sm,
-        pressed && { backgroundColor: colors.cardHover },
-      ]}
-      onPress={() => onPress(item)}
-      accessibilityLabel={`Follow up: ${displayName}, ${item.customer_email}, ${formatCurrency(item.total, currencySymbol)}, ${errorMessage}`}
-      accessibilityRole="button"
-      accessibilityHint="View customer or order details"
-    >
-      <View style={[styles.avatar, { backgroundColor: colors.goldLight }]}>
-        <Text style={[styles.avatarText, { color: colors.gold }]}>
-          {getInitials(displayName)}
-        </Text>
-      </View>
-
-      <View style={styles.customerInfo}>
-        <Text
-          style={[styles.customerName, { color: colors.text }]}
-          numberOfLines={1}
-        >
-          {displayName}
-        </Text>
-        <Text
-          style={[styles.customerEmail, { color: colors.textSecondary }]}
-          numberOfLines={1}
-        >
-          {item.customer_email}
-        </Text>
-
-        <Text
-          style={[
-            styles.errorText,
-            {
-              color:
-                item.payment_status === 'pending' ||
-                item.payment_status === 'unpaid' ||
-                item.payment_status === 'expired'
-                  ? colors.warning
-                  : colors.error,
-            },
-          ]}
-          numberOfLines={1}
-        >
-          {formatCurrency(item.total, currencySymbol)} •{' '}
-          {item.attempt_count > 1
-            ? `${item.attempt_count} attempts`
-            : errorMessage}
-        </Text>
-      </View>
-
-      <View style={styles.actionRow}>
-        {customerPhone ? (
-          <>
-            <Pressable
-              style={[
-                styles.miniActionButton,
-                {
-                  backgroundColor: colors.successLight,
-                  minWidth: 44,
-                  minHeight: 44,
-                },
-              ]}
-              onPress={(e) => {
-                e.stopPropagation();
-                handleWhatsApp(customerPhone);
-              }}
-              accessibilityLabel={`Message ${displayName} on WhatsApp`}
-              accessibilityRole="button"
-              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-            >
-              <Ionicons name="logo-whatsapp" size={16} color={colors.success} />
-            </Pressable>
-            <Pressable
-              style={[
-                styles.miniActionButton,
-                {
-                  backgroundColor: colors.backgroundLight,
-                  minWidth: 44,
-                  minHeight: 44,
-                },
-              ]}
-              onPress={(e) => {
-                e.stopPropagation();
-                handleCall(customerPhone);
-              }}
-              accessibilityLabel={`Call ${displayName}`}
-              accessibilityRole="button"
-              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-            >
-              <Ionicons name="call" size={16} color={colors.textSecondary} />
-            </Pressable>
-          </>
-        ) : null}
-        <Pressable
-          style={[
-            styles.miniActionButton,
-            {
-              backgroundColor: colors.primaryLight,
-              minWidth: 44,
-              minHeight: 44,
-            },
-          ]}
-          onPress={(e) => {
-            e.stopPropagation();
-            handleEmail(item.customer_email);
-          }}
-          accessibilityLabel={`Email ${displayName}`}
-          accessibilityRole="button"
-          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-        >
-          <Ionicons name="mail" size={16} color={colors.primary} />
-        </Pressable>
-      </View>
-    </Pressable>
-  );
-}
 
 // Customer Item component
 interface CustomerItemProps {
@@ -485,20 +332,6 @@ export default function CustomersScreen() {
     router.push({ pathname: '/(admin)/customer/[id]', params: { id } });
   };
 
-  const handleFailedOrderPress = (item: FailedOrder) => {
-    if (item.customer_id) {
-      router.push({
-        pathname: '/(admin)/customer/[id]',
-        params: { id: item.customer_id },
-      });
-    } else {
-      router.push({
-        pathname: '/(admin)/order/[id]',
-        params: { id: item.id },
-      });
-    }
-  };
-
   const renderCustomer = ({ item }: ListRenderItemInfo<Customer>) => (
     <CustomerItem
       item={item}
@@ -685,7 +518,9 @@ export default function CustomersScreen() {
             refreshControl={
               <RefreshControl
                 refreshing={isLoading}
-                onRefresh={refetch}
+                onRefresh={() => {
+                  void refetch();
+                }}
                 tintColor={colors.gold}
                 colors={[colors.gold]}
               />
@@ -730,10 +565,14 @@ export default function CustomersScreen() {
           onScroll={handleScroll}
           scrollRef={scrollRef}
           renderOrder={(item, failedOrderCurrencySymbol) => (
-            <FailedOrderItem
+            <FollowUpOrderCard
               item={item}
-              currencySymbol={failedOrderCurrencySymbol}
-              onPress={handleFailedOrderPress}
+              displayTotal={
+                item.total === null
+                  ? 'Amount unavailable'
+                  : formatCurrency(item.total, failedOrderCurrencySymbol)
+              }
+              initials={getInitials(item.customer_name || 'Guest')}
             />
           )}
           searchQuery={searchQuery}
@@ -857,11 +696,6 @@ const styles = StyleSheet.create({
     fontSize: TYPOGRAPHY.size.xs,
     fontFamily: TYPOGRAPHY.fontFamily.regular,
     marginBottom: 4,
-  },
-  errorText: {
-    fontSize: TYPOGRAPHY.size.xs,
-    fontFamily: TYPOGRAPHY.fontFamily.medium,
-    marginTop: 2,
   },
   statsRow: {
     flexDirection: 'row',

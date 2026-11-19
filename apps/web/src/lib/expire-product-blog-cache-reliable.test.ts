@@ -66,30 +66,76 @@ describe('expireProductBlogCacheReliable', () => {
     });
   });
 
-  it('forwards product slugs to the internal route outside a request context', async () => {
+  it('forwards product slugs without omitMerchantWidePdpDetails when products are absent, and includes omitMerchantWidePdpDetails with authoritative products', async () => {
     // Arrange: standalone workers have no Next request store, so the local
     // per-slug revalidation is a no-op and the slugs must ride along.
-    mockRevalidateTag.mockImplementationOnce(() => {
-      throw new Error('missing Next request context');
-    });
+    mockRevalidateTag
+      .mockImplementationOnce(() => {
+        throw new Error('missing Next request context');
+      })
+      .mockImplementationOnce(() => {
+        throw new Error('missing Next request context');
+      });
     const fetchImpl = vi
       .fn()
-      .mockResolvedValue(new Response(null, { status: 204 }));
+      .mockImplementation(() =>
+        Promise.resolve(new Response(null, { status: 204 }))
+      );
 
     // Act
-    const result = await expireProductBlogCacheReliable('merchant-1', {
+    const slugOnlyResult = await expireProductBlogCacheReliable('merchant-1', {
       fetchImpl,
       baseUrl: 'https://app.usebaci.com',
       secret: 'internal-secret',
       productSlugs: ['iphone-15', '  ', null, 'iphone-15'],
     });
+    const scopedResult = await expireProductBlogCacheReliable('merchant-1', {
+      fetchImpl,
+      baseUrl: 'https://app.usebaci.com',
+      secret: 'internal-secret',
+      productSlugs: ['iphone-15'],
+      products: [{ id: 'prod-1' }],
+    });
 
     // Assert
+    expect(slugOnlyResult).toBe(true);
+    expect(scopedResult).toBe(true);
+    const [, slugOnlyRequest] = fetchImpl.mock.calls[0] ?? [];
+    expect(JSON.parse(slugOnlyRequest?.body as string)).toEqual({
+      merchantId: 'merchant-1',
+      expireProductBlogCache: true,
+      productSlugs: ['iphone-15'],
+    });
+    const [, scopedRequest] = fetchImpl.mock.calls[1] ?? [];
+    expect(JSON.parse(scopedRequest?.body as string)).toEqual({
+      merchantId: 'merchant-1',
+      expireProductBlogCache: true,
+      productSlugs: ['iphone-15'],
+      products: [{ id: 'prod-1' }],
+      omitMerchantWidePdpDetails: true,
+    });
+  });
+
+  it('forwards omitMerchantWidePdpDetails: false when expireWidePdpDetails is requested', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(new Response(null, { status: 204 }));
+
+    const result = await expireProductBlogCacheReliable('merchant-1', {
+      fetchImpl,
+      baseUrl: 'https://app.usebaci.com',
+      secret: 'internal-secret',
+      productSlugs: ['iphone-15'],
+      expireWidePdpDetails: true,
+    });
+
     expect(result).toBe(true);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
     const [, request] = fetchImpl.mock.calls[0] ?? [];
     expect(JSON.parse(request?.body as string)).toEqual({
       merchantId: 'merchant-1',
       expireProductBlogCache: true,
+      omitMerchantWidePdpDetails: false,
       productSlugs: ['iphone-15'],
     });
   });

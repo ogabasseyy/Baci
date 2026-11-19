@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { assertWalletExistingShipmentReusableOrRelease } from './assert-wallet-existing-shipment-reusable';
 import type { BookOrderShipmentResult } from './book-order-shipment';
+import { cleanupWalletFundedFailure } from './book-wallet-funded-failure-cleanup';
 import {
   cleanupPreSubmissionReservation,
   hasActiveMerchantShippingCharge,
@@ -12,8 +13,6 @@ import {
 import {
   beginMerchantShippingChargeSubmission,
   completeMerchantShippingCharge,
-  markMerchantShippingChargeForReconciliation,
-  refundMerchantShippingCharge,
   reserveMerchantShippingCharge,
 } from './merchant-shipping-charge';
 import { shouldReleaseBookingLock } from './order-shipment-booking-lock-errors';
@@ -37,7 +36,8 @@ export async function bookWalletFundedOrderShipment(
   prepareQuote?: PrepareQuote,
   readExistingShipment?: ReadExistingShipment
 ): Promise<BookOrderShipmentResult> {
-  // Wallet RPCs enforce merchant-owner or orders.fulfill/orders.edit access.
+  // Wallet RPCs enforce access: a new debit needs the owner or staff with
+  // orders.fulfill AND orders.edit; resuming an existing charge needs either.
   if (!merchantId) {
     throw new OrderShipmentBookingError(
       'Merchant context is required.',
@@ -200,6 +200,8 @@ export async function bookWalletFundedOrderShipment(
     );
   }
   let providerSubmissionStarted = false;
+  // The carrier reference once booked, for reconciliation if completion fails.
+  let bookedReference: string | undefined;
   try {
     const submissionStatus = await beginMerchantShippingChargeSubmission(
       supabase,
@@ -219,6 +221,7 @@ export async function bookWalletFundedOrderShipment(
     }
     providerSubmissionStarted = true;
     const shipment = await book(preparedQuoteId);
+    bookedReference = shipment.providerShipmentId || shipment.trackingNumber;
     await completeMerchantShippingCharge(
       supabase,
       charge.chargeId,
@@ -232,29 +235,15 @@ export async function bookWalletFundedOrderShipment(
     // released even when the RPC error is otherwise ambiguous.
     const definitive =
       !providerSubmissionStarted || shouldReleaseBookingLock(error);
-    if (definitive) {
-      await refundMerchantShippingCharge(
-        supabase,
-        charge.chargeId,
-        token,
-        error instanceof OrderShipmentBookingError
-          ? error.code
-          : 'BOOKING_REJECTED'
-      );
-      if (releaseLock) await releaseLock();
-    } else {
-      await markMerchantShippingChargeForReconciliation(
-        supabase,
-        charge.chargeId,
-        token,
-        error instanceof OrderShipmentBookingError
-          ? error.code
-          : 'UNKNOWN_PROVIDER_FAILURE',
-        error instanceof OrderShipmentBookingError
-          ? error.providerReference
-          : undefined
-      );
-    }
+    await cleanupWalletFundedFailure({
+      supabase,
+      chargeId: charge.chargeId,
+      token,
+      error,
+      definitive,
+      releaseLock,
+      bookedReference,
+    });
     throw error;
   }
 }

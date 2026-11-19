@@ -1,7 +1,7 @@
 /** @vitest-environment node */
 import { renderToReadableStream } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import CartPage from './page';
+import CartPage, { ResolvedCartPage } from './page';
 
 const mocks = vi.hoisted(() => ({
   merchant: vi.fn(),
@@ -39,6 +39,56 @@ describe('cart route streaming', () => {
     mocks.domain.mockResolvedValue({ id: 'merchant-1' });
   });
 
+  it('uses live VAT even when a stale cached merchant snapshot has different settings', async () => {
+    mocks.merchant.mockResolvedValue({
+      id: 'merchant-1',
+      slug: 'ogabassey',
+      vat_registration_status: 'registered',
+      vat_rate: 7.5,
+    });
+    mocks.single.mockResolvedValue({
+      data: { vat_registration_status: 'registered', vat_rate: 5 },
+      error: null,
+    });
+    const page = CartPage({ params: Promise.resolve({ slug: 'ogabassey' }) });
+    const stream = await renderToReadableStream(<main>{page}</main>);
+    await stream.allReady;
+    const html = await new Response(stream).text();
+    expect(html).toContain('Cart VAT');
+    expect(html).toContain('5');
+    expect(html).not.toContain('7.5');
+    expect(mocks.single).toHaveBeenCalledOnce();
+  });
+
+  it('streams before dynamic route params resolve', async () => {
+    const params = Promise.withResolvers<{ slug: string }>();
+    const stream = await renderToReadableStream(
+      <main>{CartPage({ params: params.promise })}</main>,
+      { bootstrapScripts: ['/test-client.js'] }
+    );
+    const reader = stream.getReader();
+    const first = await reader.read();
+    expect(new TextDecoder().decode(first.value)).toContain('Loading cart');
+    mocks.merchant.mockResolvedValue({
+      id: 'merchant-1',
+      vat_registration_status: 'registered',
+      vat_rate: 0,
+    });
+    mocks.single.mockResolvedValue({
+      data: { vat_registration_status: 'registered', vat_rate: 0 },
+      error: null,
+    });
+    params.resolve({ slug: 'ogabassey' });
+    let rest = '';
+    for (;;) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      rest += new TextDecoder().decode(chunk.value);
+    }
+    expect(rest).toContain('Cart VAT');
+    expect(mocks.single).toHaveBeenCalledOnce();
+  });
+
   it('streams a loading boundary while the live VAT query is pending', async () => {
     const vat = Promise.withResolvers<{
       data: { vat_registration_status: string; vat_rate: number };
@@ -71,7 +121,7 @@ describe('cart route streaming', () => {
   it('rejects a missing merchant before fetching VAT settings', async () => {
     mocks.merchant.mockResolvedValue(null);
     await expect(
-      CartPage({ params: Promise.resolve({ slug: 'missing' }) })
+      ResolvedCartPage({ params: Promise.resolve({ slug: 'missing' }) })
     ).rejects.toThrow('not found');
     expect(mocks.single).not.toHaveBeenCalled();
   });

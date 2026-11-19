@@ -115,12 +115,50 @@ describe('ShipmentFlowMethodStep', () => {
     expect(screen.getByText('Use Topship')).toBeInTheDocument();
     expect(
       screen.getByText(
-        /book the shipment with Topship using the saved checkout quote/i
+        /book the shipment with Topship using the saved shipping quote/i
       )
     ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('radio', { name: /Use Topship/i }));
     expect(onModeChange).toHaveBeenCalledWith('provider');
+  });
+
+  it('shows the price the customer paid for a saved checkout GIG quote', () => {
+    render(
+      <ShipmentFlowMethodStep
+        canUseProvider
+        checkoutPaidShippingLabel="₦4,500"
+        onModeChange={vi.fn()}
+        providerLabel="GIG Logistics"
+        selectedMode="provider"
+      />
+    );
+
+    expect(screen.getByText('Use GIG Logistics')).toBeInTheDocument();
+    expect(
+      screen.getByText(/Customer paid ₦4,500 for GIG delivery at checkout\./)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('radio', {
+        name: /Customer paid ₦4,500 for GIG delivery at checkout/,
+      })
+    ).toBeEnabled();
+    // Booking may still need a new price, so the line must not promise reuse.
+    expect(screen.queryByText(/price is reused/)).not.toBeInTheDocument();
+  });
+
+  it('does not claim a customer-paid price when the saved quote is gone', () => {
+    render(
+      <ShipmentFlowMethodStep
+        canUseProvider={false}
+        checkoutPaidShippingLabel="₦4,500"
+        onModeChange={vi.fn()}
+        providerLabel="GIG Logistics"
+        selectedMode="self_fulfillment"
+      />
+    );
+
+    expect(screen.queryByText(/Customer paid/)).not.toBeInTheDocument();
   });
 
   it('disables the provider fallback when the order cannot use a provider quote', () => {

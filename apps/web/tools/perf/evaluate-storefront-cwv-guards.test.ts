@@ -115,14 +115,15 @@ describe('evaluate-storefront-cwv-guards', () => {
     expect(countStorefrontRouteCssImports('pdp', WEB_SRC_DIR)).toBe(4);
   });
 
-  it('rejects untrusted <source srcset> inside <picture> even when <img> and preload origins are allowed', () => {
+  it('rejects untrusted or cross-origin <source srcset> inside <picture> when only same-origin ogabassey.com is allowed', () => {
     const htmlWithUntrustedPictureSource = [
       '<!DOCTYPE html><html><head>',
-      '<link rel="preload" as="image" imageSrcSet="https://cdn.ogabassey.com/hero.avif 640w"/>',
+      '<link rel="preload" as="image" imageSrcSet="/cdn-image/hero.avif 640w"/>',
       '</head><body>',
       '<picture>',
       '<source type="image/avif" srcset="https://untrusted.example.com/hero.avif 384w"/>',
-      '<img src="https://cdn.ogabassey.com/hero.jpg" fetchpriority="high"/>',
+      '<source srcset="https://cdn.ogabassey.com/image/hero.jpg 384w"/>',
+      '<img src="/cdn-image/hero.jpg" fetchpriority="high"/>',
       '</picture>',
       '<picture>',
       '<source type="image/avif" srcset="https://below-fold.example.com/card.avif 384w"/>',
@@ -135,6 +136,9 @@ describe('evaluate-storefront-cwv-guards', () => {
     expect(result.passed).toBe(false);
     expect(result.failures).toContain(
       'Disallowed hero image origin in URL: https://untrusted.example.com/hero.avif'
+    );
+    expect(result.failures).toContain(
+      'Disallowed hero image origin in URL: https://cdn.ogabassey.com/image/hero.jpg'
     );
     expect(result.failures).not.toContain(
       'Disallowed hero image origin in URL: https://below-fold.example.com/card.avif'

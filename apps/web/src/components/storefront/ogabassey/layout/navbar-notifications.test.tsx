@@ -77,4 +77,11 @@ describe('NavbarNotifications', () => {
 
     expect(screen.queryByText('Notifications')).not.toBeInTheDocument();
   });
+
+  it('uses desktop-only relative positioning on the container so mobile anchors to the actions bar', () => {
+    const { container } = render(<NavbarNotifications basePath="/ogabassey" />);
+    const wrapper = container.firstElementChild;
+    expect(wrapper).toHaveClass('md:relative');
+    expect(wrapper?.className.split(' ')).not.toContain('relative');
+  });
 });

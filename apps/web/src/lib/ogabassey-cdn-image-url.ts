@@ -2,6 +2,7 @@ import { DEFAULT_MEDIA_CDN_ORIGIN } from '@/config/cdn';
 
 const OGABASSEY_CDN_HOSTNAME = new URL(DEFAULT_MEDIA_CDN_ORIGIN).hostname;
 const OGABASSEY_IMAGE_TRANSFORM_PREFIX = '/image/';
+const OGABASSEY_SAME_ORIGIN_IMAGE_TRANSFORM_PREFIX = '/cdn-image/';
 const OGABASSEY_PRODUCT_IMAGE_PATH_PREFIX = '/core-assets/products/';
 const OGABASSEY_LEGACY_PRODUCT_IMAGE_PATH_PREFIX = '/products/';
 const TRANSFORMABLE_IMAGE_EXTENSION_PATTERN = /\.(avif|jpe?g|png|webp)$/i;
@@ -143,6 +144,10 @@ export function rewriteOgabasseyTransformUrlFormat(
   url: string,
   format: OgabasseyCdnImageFormat
 ): string | null {
+  if (url.startsWith(OGABASSEY_SAME_ORIGIN_IMAGE_TRANSFORM_PREFIX)) {
+    return rewriteSameOriginTransformUrlFormat(url, format);
+  }
+
   let parsed: URL;
   try {
     parsed = new URL(url);
@@ -176,6 +181,38 @@ export function rewriteOgabasseyTransformUrlFormat(
   );
 
   return `${parsed.origin}${OGABASSEY_IMAGE_TRANSFORM_PREFIX}${rewrittenOptions}${remainder.slice(separatorIndex)}${parsed.search}${parsed.hash}`;
+}
+
+/**
+ * Same-origin `/cdn-image/<options>/<asset>` twin of the absolute rewrite, so
+ * hero sources that are already proxy-backed keep their AVIF tier (and the
+ * proxy's AVIF byte-cap ladder). `auto` is refused: the proxy only accepts
+ * explicit formats.
+ */
+function rewriteSameOriginTransformUrlFormat(
+  url: string,
+  format: OgabasseyCdnImageFormat
+): string | null {
+  if (format === 'auto') {
+    return null;
+  }
+  const remainder = url.slice(
+    OGABASSEY_SAME_ORIGIN_IMAGE_TRANSFORM_PREFIX.length
+  );
+  const separatorIndex = remainder.indexOf('/');
+  if (separatorIndex <= 0) {
+    return null;
+  }
+  const optionsSegment = remainder.slice(0, separatorIndex);
+  if (!TRANSFORM_FORMAT_TOKEN_PATTERN.test(optionsSegment)) {
+    return null;
+  }
+  const rewrittenOptions = optionsSegment.replace(
+    TRANSFORM_FORMAT_TOKEN_REPLACE_PATTERN,
+    `$1$2${format}`
+  );
+
+  return `${OGABASSEY_SAME_ORIGIN_IMAGE_TRANSFORM_PREFIX}${rewrittenOptions}${remainder.slice(separatorIndex)}`;
 }
 
 function isTransformableOgabasseyAssetPath(pathname: string): boolean {

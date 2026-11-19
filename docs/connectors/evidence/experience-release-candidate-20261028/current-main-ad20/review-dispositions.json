@@ -1,0 +1,48 @@
+{
+  "base": "ad20cb5c4974eb303183c5440d35dc1554721a21",
+  "wholeFeatureReviewed": false,
+  "criticalIssues": 0,
+  "reviews": [
+    {
+      "scope": "apps/web/src/hooks",
+      "firstLog": "/tmp/experience-candidate-ad20-review-hooks.ndjson",
+      "followupLog": "/tmp/experience-candidate-ad20-review-hooks-postfix.ndjson",
+      "major": "Reloaded receipt conflict can strand queue. Fixed and covered by three failing-before cases.",
+      "minor": "Settle non-retryable provisioning and expired cookie-epoch exits. Fixed; two failing-before cases plus preserved retryable case."
+    },
+    {
+      "scope": "supabase",
+      "log": "/tmp/experience-candidate-ad20-review-database.ndjson",
+      "issues": 3,
+      "quota": "Fixed with append-only 20261028162326_experience_retry_build_quota.sql, normal-owner regression and exact pending-source registration.",
+      "catalogGeneration": {
+        "disposition": "Proposed guard removal declined; intentional approved freshness policy retained.",
+        "approvedContract": "/Users/mac/Documents/Baci-design-research/2026-10-23-three-thread-alignment/FINAL-PLAN.md:331",
+        "regression": "apps/web/tests/experience-lifecycle/negative.test.ts:8",
+        "evidence": "/tmp/experience-candidate-ad20-private-policies-green.log",
+        "limitation": "Catalog churn invalidates pending approval; busy merchants may need fresh render proof and a new approval. This is disclosed, not represented as an availability fix."
+      },
+      "structuralCoverage": "Expanded foundation assertions for three foundation tables and added later-stage checks for source heads, preview bindings and snapshots. Negative mutations verify disabled RLS and unsafe grants are detected on all six."
+    },
+    {
+      "scope": "apps/web/src/components",
+      "log": "/tmp/experience-candidate-ad20-review-components.ndjson",
+      "issues": 7,
+      "majorFixes": [
+        "Single-flight publication admission, with fresh reads after resolution and sticky withdrawal.",
+        "Bounded initial host launch wait; preserved renewal-based host expiry, private expiry and revocation."
+      ],
+      "minorFixes": [
+        "Rejected product lookup reports safe accessible status and cannot add to cart.",
+        "Loading CSS uses established merchant theme tokens, retaining standalone fallback defaults."
+      ],
+      "trivialFixes": [
+        "Consent panel follows merchant background/text tokens with safe standalone fallback.",
+        "Public state Zod schema moved into app schema directory without changing validation."
+      ],
+      "deferredStyle": "Extracting the focused 184-line shell polling effect into a hook is deferred; no behavior defect was identified and its instance/generation cleanup remains covered."
+    }
+  ],
+  "oldMigrationBytesPreserved": true,
+  "paidCreditsUsed": false
+}

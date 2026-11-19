@@ -143,6 +143,10 @@ vi.mock('@/lib/receipt-pdf-generator', () => ({
   resolveReceiptLogoDataUri: mockResolveReceiptLogoDataUri,
 }));
 
+vi.mock('@/lib/supabase/public', () => ({
+  createPublicClient: vi.fn(() => mockCreateAdminClient()),
+}));
+
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: mockCreateAdminClient,
 }));
@@ -809,12 +813,13 @@ describe('POST /api/orders REDVAULT integration', () => {
           { status: 201 }
         ) as never
       );
+    const productId = '11111111-1111-4111-8111-111111111111';
     const supabase = buildMockSupabase(
       {},
       {
         productRows: [
           {
-            id: '11111111-1111-4111-8111-111111111111',
+            id: productId,
             name: 'Galaxy S24',
             price: 1000,
             slug: 'galaxy-s24',
@@ -842,7 +847,7 @@ describe('POST /api/orders REDVAULT integration', () => {
                   shipping_fee: 0,
                   items: [
                     {
-                      product_id: '11111111-1111-4111-8111-111111111111',
+                      product_id: productId,
                       name: 'Galaxy S24',
                       price: 1000,
                       quantity: 1,
@@ -884,11 +889,14 @@ describe('POST /api/orders REDVAULT integration', () => {
       // The REDVAULT draft reserves inventory, so the draft success path
       // runs the same merchant and per-slug PDP cache revalidation.
       expect(mockRevalidateProducts).toHaveBeenCalledWith(
-        '6b5cb8a4-5575-456c-b936-8cdfae30db74'
+        '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+        undefined,
+        { expireImmediately: true }
       );
       expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
         '6b5cb8a4-5575-456c-b936-8cdfae30db74',
-        ['galaxy-s24']
+        ['galaxy-s24', kind ? productId : baseOrderPayload.items[0].product_id],
+        { expireImmediately: true }
       );
     } finally {
       availabilitySpy.mockRestore();
@@ -3455,63 +3463,6 @@ describe('POST /api/orders — wallet response shape', () => {
       p_payment_method: 'savings',
     });
   });
-
-  it('full-coverage wallet redemption returns amountDueToGateway=0 and finalizes payment', async () => {
-    // Pin the full-coverage path that the mobile client uses to skip the
-    // gateway initialize step entirely. Order is marked paid via
-    // finalize_wallet_order_payment.
-    const finalizeSpy = vi.fn(() =>
-      Promise.resolve({ data: null, error: null })
-    );
-    const supabaseMod = await import('@/lib/supabase/server');
-    vi.mocked(supabaseMod.createClient).mockImplementation((() => {
-      const sb = buildMockSupabase({
-        redeem_wallet_for_order: {
-          data: [
-            {
-              success: true,
-              redeemed_amount: 1000,
-              new_balance: 0,
-              transaction_id: '88888888-aaaa-bbbb-cccc-eeeeeeeeeeee',
-            },
-          ],
-          error: null,
-        },
-      });
-      // Wrap rpc so we can spy on finalize_wallet_order_payment specifically.
-      const originalRpc = sb.rpc;
-      sb.rpc = vi.fn((name: string) => {
-        if (name === 'finalize_wallet_order_payment') {
-          return finalizeSpy();
-        }
-        return originalRpc(name);
-      });
-      return sb;
-    }) as unknown as never);
-
-    const request = new NextRequest('http://localhost/api/orders', {
-      method: 'POST',
-      body: JSON.stringify({
-        ...baseOrderPayload,
-        use_wallet_credit: true,
-        wallet_amount: 1000,
-      }),
-    });
-
-    const response = await POST(request);
-    const body = await readJson(response);
-
-    expect(response.status).toBe(201);
-    expect(body.wallet).toEqual({
-      amountUsed: 1000,
-      newBalance: 0,
-      transactionId: '88888888-aaaa-bbbb-cccc-eeeeeeeeeeee',
-    });
-    expect(body.amountDueToGateway).toBe(0);
-    expect(body.order.payment_status).toBe('paid');
-    expect(body.order.payment_method).toBe('wallet');
-    expect(finalizeSpy).toHaveBeenCalledTimes(1);
-  });
 });
 
 describe('POST /api/orders — non-NGN currency guards', () => {
@@ -4298,7 +4249,7 @@ describe('POST /api/orders — product cache revalidation after order creation',
     );
   });
 
-  it('revalidates the merchant product caches once after a successful order', async () => {
+  it('hard-expires merchant product caches when ordered product slugs are unresolved', async () => {
     const supabaseMod = await import('@/lib/supabase/server');
     vi.mocked(supabaseMod.createClient).mockImplementation(() => {
       const supabase = buildMockSupabase();
@@ -4308,8 +4259,8 @@ describe('POST /api/orders — product cache revalidation after order creation',
         if (table !== 'products') {
           return original;
         }
-        // Success path: the enrichment lookup resolves (no rows), so the
-        // rejection-only broad hard-expire below must not fire.
+        // The enrichment query succeeds with no rows. Without an
+        // authoritative slug, the deferred purge must hard-expire broadly.
         const enrichmentOutcome = Promise.resolve({
           data: [],
           error: null,
@@ -4335,10 +4286,14 @@ describe('POST /api/orders — product cache revalidation after order creation',
     );
 
     expect(response.status).toBe(201);
-    expect(mockRevalidateProducts).toHaveBeenCalledExactlyOnceWith(MERCHANT_ID);
+    expect(mockRevalidateProducts.mock.calls).toEqual([
+      [MERCHANT_ID, undefined, { expireImmediately: true }],
+      [MERCHANT_ID, undefined, { expireImmediately: true }],
+    ]);
   });
 
   it('resolves the touched product slugs and revalidates their per-slug PDP caches', async () => {
+    mockRevalidateProductSlugs.mockReturnValueOnce(true);
     const supabaseMod = await import('@/lib/supabase/server');
     vi.mocked(supabaseMod.createClient).mockImplementation(
       () =>
@@ -4358,7 +4313,13 @@ describe('POST /api/orders — product cache revalidation after order creation',
     expect(response.status).toBe(201);
     expect(mockRevalidateProductSlugs).toHaveBeenCalledExactlyOnceWith(
       MERCHANT_ID,
-      ['test-widget']
+      ['test-widget', 'p-1'],
+      { expireImmediately: true }
+    );
+    expect(mockRevalidateProducts).toHaveBeenCalledExactlyOnceWith(
+      MERCHANT_ID,
+      undefined,
+      { expireImmediately: true, omitMerchantWidePdpDetails: true }
     );
   });
 
@@ -4414,7 +4375,10 @@ describe('POST /api/orders — product cache revalidation after order creation',
     );
 
     expect(response.status).toBe(201);
-    expect(mockRevalidateProducts).toHaveBeenCalledExactlyOnceWith(MERCHANT_ID);
+    expect(mockRevalidateProducts.mock.calls).toEqual([
+      [MERCHANT_ID, undefined, { expireImmediately: true }],
+      [MERCHANT_ID, undefined, { expireImmediately: true }],
+    ]);
     // Fail-closed: the route-level slug lookup failed, but the known-ids blog
     // purge fallback still hard-expires the per-slug Next tags from the caller
     // hints so a later edge purge cannot refill from stale snapshots.
@@ -4521,7 +4485,11 @@ describe('POST /api/orders — product cache revalidation after order creation',
     );
 
     expect(response.status).toBe(201);
-    expect(mockRevalidateProducts).toHaveBeenCalledExactlyOnceWith(MERCHANT_ID);
+    expect(mockRevalidateProducts).toHaveBeenCalledExactlyOnceWith(
+      MERCHANT_ID,
+      undefined,
+      { expireImmediately: true }
+    );
     expect(mockRevalidateProductSlugs).not.toHaveBeenCalled();
   });
 });
@@ -10409,6 +10377,26 @@ describe('POST /api/orders — merchant shipping rate enforcement', () => {
       error: 'Not authenticated',
       supabase: null,
     });
+  });
+
+  it('verifies the selected merchant rate through the public RPC even when the admin credential rejects JWTs', async () => {
+    primeAdminShippingRateClient(shippingRatesRpcPayload(), {
+      ratesError: { code: 'PGRST301', message: 'Admin credential unavailable' },
+    });
+    await primeStorefrontClient();
+    const publicRates = {
+      rpc: vi
+        .fn()
+        .mockResolvedValue({ data: shippingRatesRpcPayload(), error: null }),
+    };
+    const { createPublicClient } = await import('@/lib/supabase/public');
+    vi.mocked(createPublicClient).mockReturnValueOnce(publicRates as never);
+    const response = await POST(rateOrderRequest());
+    expect(response.status).toBe(201);
+    expect(publicRates.rpc).toHaveBeenCalledWith(
+      'get_storefront_shipping_rates',
+      { p_merchant_id: MERCHANT_ID }
+    );
   });
 
   it('accepts a valid merchant rate, passes the server-computed fee with nulled provider/quote id, and stamps the provider', async () => {

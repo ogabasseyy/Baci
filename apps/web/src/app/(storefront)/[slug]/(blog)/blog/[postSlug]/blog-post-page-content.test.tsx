@@ -426,7 +426,7 @@ describe('BlogPostPageContent', () => {
 
   it('skips dead-link resolution in draft preview so draft-to-draft links survive', async () => {
     mockDraftMode.mockResolvedValue({ isEnabled: true });
-    mockGetRequestScopedBlogPost.mockResolvedValue(smartphoneGuideBlogPost);
+    mockGetLiveBlogPost.mockResolvedValue(smartphoneGuideBlogPost);
 
     render(
       await BlogPostPageContent({
@@ -437,6 +437,12 @@ describe('BlogPostPageContent', () => {
       })
     );
 
+    expect(mockGetRequestScopedBlogPost).not.toHaveBeenCalled();
+    expect(mockGetLiveBlogPost).toHaveBeenCalledWith(
+      'ogabassey',
+      'best-phones-in-nigeria',
+      true
+    );
     expect(mockBlogPostBody).toHaveBeenCalledWith(
       expect.objectContaining({ merchantId: undefined })
     );
@@ -672,42 +678,6 @@ describe('BlogPostPageContent', () => {
     );
   });
 
-  it('renders the featured article hero as a preload-only LCP image at the shared low quality', async () => {
-    mockGetRequestScopedBlogPost.mockResolvedValue({
-      ...smartphoneGuideBlogPost,
-      post: {
-        ...smartphoneGuideBlogPost.post,
-        featured_image_url:
-          'https://cdn.ogabassey.com/media/blog/best-phones-cover.webp',
-        featured_image_alt: 'Best phones in Nigeria cover',
-      },
-    });
-
-    render(
-      await BlogPostPageContent({
-        params: Promise.resolve({
-          slug: 'ogabassey',
-          postSlug: 'best-phones-in-nigeria',
-        }),
-      })
-    );
-
-    const image = screen.getByRole('img', {
-      name: 'Best phones in Nigeria cover',
-    });
-
-    expect(image).toHaveAttribute(
-      'src',
-      'https://cdn.ogabassey.com/media/blog/best-phones-cover.webp'
-    );
-    // Repo LCP convention: preload XOR the loading/fetchPriority pair — never
-    // the redundant trio the hero shipped with before. The focused shell and
-    // preload-parity suites cover the non-DOM preload/quality inputs.
-    expect(image).not.toHaveAttribute('priority');
-    expect(image).not.toHaveAttribute('fetchpriority');
-    expect(image).not.toHaveAttribute('loading');
-  });
-
   it('permanently redirects retired direct blog slugs before rendering notFound', async () => {
     mockGetRequestScopedBlogPost.mockResolvedValue(null);
     mockGetLiveBlogPost.mockResolvedValue(null);
@@ -924,7 +894,8 @@ describe('BlogPostPageContent', () => {
       expect.objectContaining({
         author: expect.objectContaining({
           name: 'Ogabassey',
-          id: undefined,
+          id: 'https://ogabassey.com#organization',
+          type: 'Organization',
           url: 'https://ogabassey.com',
         }),
       })

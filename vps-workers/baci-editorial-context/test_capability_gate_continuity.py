@@ -44,7 +44,7 @@ class SquashContinuityTests(unittest.TestCase):
         self.new = self.commit("next reviewed feature")
 
     def git(self, *args):
-        return subprocess.check_output(["git", "-C", str(self.repo), "-c", "user.name=Test", "-c", "user.email=test@example.com", *args], stderr=subprocess.DEVNULL).decode().strip()
+        return subprocess.check_output(["git", "-C", str(self.repo), "-c", "user.name=Test", "-c", "user.email=test@example.com", "-c", "gc.auto=0", "-c", "maintenance.auto=false", *args], stderr=subprocess.DEVNULL).decode().strip()
 
     def write(self, path, content):
         target = self.repo / path
@@ -67,6 +67,10 @@ class SquashContinuityTests(unittest.TestCase):
         self.write("candidate.txt", "new")
         new = self.commit("new descendant")
         return new, base
+
+    def test_fixture_disables_background_git_maintenance(self):
+        self.assertEqual(self.git("config", "--get", "gc.auto"), "0")
+        self.assertEqual(self.git("config", "--get", "maintenance.auto"), "false")
 
     def test_retained_squash_source_with_equivalent_evidence_passes(self):
         self.assertFalse(gate._replacement_revision_ok(self.new, self.old, cwd=self.repo))

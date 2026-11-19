@@ -2,7 +2,9 @@ import type { OrderNotificationRecipientFailureReason } from '@/lib/order-notifi
 
 export type OrderFulfillmentNotificationEventType =
   | 'order_shipped'
-  | 'order_delivered';
+  | 'order_delivered'
+  | 'order_delivery_failed'
+  | 'order_returned';
 
 export type OrderFulfillmentNotificationResult =
   | {

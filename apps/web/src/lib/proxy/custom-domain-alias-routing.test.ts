@@ -24,9 +24,27 @@ describe('custom-domain slug canonicalization', () => {
       '/old-shop/products/iphone',
       context
     );
-    expect(response?.status).toBe(302);
+    expect(response?.status).toBe(301);
     expect(response?.headers.get('location')).toBe(
       'https://shop.example/products/iphone'
+    );
+  });
+
+  it('redirects a current slug prefix on a 2-segment category/product path in 1 hop', () => {
+    const response = runCustomDomainCurrentSlugCanonicalization(
+      new NextRequest('https://ogabassey.com/ogabassey/smartphones/iphone-16'),
+      '/ogabassey/smartphones/iphone-16',
+      {
+        domain: 'ogabassey.com',
+        domainMerchantSlug: 'ogabassey',
+        normalizedRequestHost: 'ogabassey.com',
+        requestHostHadWww: false,
+        domainPathSegments: ['ogabassey', 'smartphones', 'iphone-16'],
+      }
+    );
+    expect(response?.status).toBe(301);
+    expect(response?.headers.get('location')).toBe(
+      'https://ogabassey.com/smartphones/iphone-16'
     );
   });
 
@@ -59,7 +77,7 @@ describe('custom-domain slug canonicalization', () => {
       { ...context, domainPathSegments: ['unlock-orders', 'summer-sale'] }
     );
 
-    expect(response?.status).toBe(302);
+    expect(response?.status).toBe(301);
     expect(response?.headers.get('location')).toBe(
       'https://shop.example/summer-sale'
     );

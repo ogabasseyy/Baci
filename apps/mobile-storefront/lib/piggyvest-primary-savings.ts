@@ -11,6 +11,17 @@ export async function addPiggyvestPrimarySavingsContribution(input: {
   idempotencyKey: string;
   merchantId?: string;
   merchantSlug?: string;
+  /** Reports the rail the operation id was sent on (legacy after fallback). */
+  onRail?: (rail: 'primary' | 'legacy') => void;
+  /** False for an id already bound to primary: it must never reach legacy. */
+  allowLegacyFallback?: boolean;
+  /**
+   * True when the screen advertised the PiggyVest balance for this
+   * contribution: it must never be spent from the legacy wallet instead.
+   */
+  primaryAdvertised?: boolean;
+  /** Single-use PIN proof bound to this goal, operation and amount. */
+  pinProof?: string;
 }) {
   const amountKobo = Math.round(input.amount * 100);
   if (
@@ -23,11 +34,13 @@ export async function addPiggyvestPrimarySavingsContribution(input: {
     goalId: input.goalId,
     operationId: input.idempotencyKey,
     amountKobo,
+    pinProof: input.pinProof,
   });
   // Fresh client per operation: the factory caches the access token in a
   // closure, so a module-level singleton would keep serving the previous
   // user's Bearer [REDACTED] after an account switch.
   const client = createStorefrontCustomerApiClient();
+  input.onRail?.('primary');
   // Pin the submission to the initiating user: without this, an
   // account switch mid-flight sends the new user's Bearer [REDACTED] with
   // the old goal and operation ids, turning a legitimate contribution
@@ -54,6 +67,14 @@ export async function addPiggyvestPrimarySavingsContribution(input: {
     // the contribution through the working legacy flow instead of failing.
     if (!rollbackObservedCapabilityOnNotReady(input.merchantId, error))
       throw error;
+    if (input.primaryAdvertised)
+      throw new Error(
+        "Adding to savings from your wallet isn't available yet. Please try again later."
+      );
+    if (input.allowLegacyFallback === false)
+      throw new Error(
+        'We are checking your earlier contribution. Please try again later.'
+      );
     // The primary POST may have dispatched before the server disabled
     // the rail: legacy dedupes only within its own rail, so retrying
     // there while a primary operation is still pending would debit
@@ -69,6 +90,7 @@ export async function addPiggyvestPrimarySavingsContribution(input: {
       throw new Error(
         'Your contribution is still processing. Check its status before trying again.'
       );
+    input.onRail?.('legacy');
     return addSavingsContribution({
       amount: input.amount,
       goalId: input.goalId,

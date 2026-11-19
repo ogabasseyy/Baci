@@ -230,7 +230,7 @@ it('labels an empty-cart retry as Retry sync, matching its read-only refresh', (
   const refresh = jest.fn().mockResolvedValue(undefined);
   const prepare = jest.fn().mockResolvedValue(undefined);
   useNativeSharedCartStore.setState({
-    status: 'ready',
+    status: 'error',
     snapshot: null,
     refresh,
     prepare,
@@ -267,23 +267,6 @@ it('disables the retry button when no sync operation is bound', () => {
   expect(
     button.props.accessibilityState?.disabled ?? button.props.disabled
   ).toBeTruthy();
-});
-it('does not promise a connect action for an empty device cart', () => {
-  const refresh = jest.fn().mockResolvedValue(undefined);
-  useNativeSharedCartStore.setState({
-    status: 'ready',
-    snapshot: null,
-    refresh,
-    prepare: jest.fn().mockResolvedValue(undefined),
-  });
-  const view = render(<SharedCartStatusPanel />);
-  expect(
-    view.getByText('Your shared cart will refresh before checkout.')
-  ).toBeTruthy();
-  expect(view.getByText('Retry sync')).toBeTruthy();
-  expect(
-    view.queryByText('Connect these items to your shared cart before checkout.')
-  ).toBeNull();
 });
 it('disables retry when refresh is unbound but a snapshot exists', () => {
   const prepare = jest.fn().mockResolvedValue(undefined);

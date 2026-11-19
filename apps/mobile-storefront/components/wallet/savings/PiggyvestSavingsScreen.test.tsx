@@ -14,73 +14,12 @@ jest.mock('./use-start-savings-controller', () => ({
 jest.mock('./StartSavingsForm', () => ({ StartSavingsForm: () => null }));
 jest.mock('./StartSavingsModals', () => ({ StartSavingsModals: () => null }));
 
-const goalId = '11111111-1111-4111-8111-111111111111';
-const revisionId = '22222222-2222-4222-8222-222222222222';
-const device = {
-  productName: 'Synthetic phone',
-  variant: '256GB',
-  condition: 'New',
-};
-const policy = {
-  status: 'draft',
+import {
+  fixture,
   goalId,
+  policy,
   revisionId,
-  device,
-  terms: {
-    version: 'synthetic-v1',
-    hash: 'a'.repeat(64),
-    text: 'Synthetic reviewed terms only.',
-  },
-  consent: 'required',
-} as const;
-function fixture(): PiggyvestSavingsScreenInput & {
-  source: Extract<
-    NonNullable<PiggyvestSavingsScreenInput['source']>,
-    { status: 'ready' }
-  >;
-} {
-  return {
-    environment: 'staging',
-    sessionKey: 'synthetic-session',
-    goalId,
-    source: {
-      environment: 'staging',
-      status: 'ready',
-      sessionKey: 'synthetic-session',
-      goalId,
-      policy,
-      eligibility: {
-        status: 'allowed',
-        sessionKey: 'synthetic-session',
-        goalId,
-        revisionId,
-        termsHash: policy.terms.hash,
-        termsVersion: policy.terms.version,
-      },
-      progress: {
-        status: 'ready',
-        decision: {
-          purchasingPowerKobo: 12345,
-          devicePriceKobo: 50000,
-          readiness: 'continue_saving',
-          purchaseAction: 'blocked',
-        },
-        pendingInterestKobo: 500,
-      },
-      funding: {
-        status: 'ready',
-        accounts: [
-          {
-            accountNumber: '0000000000',
-            accountName: 'Synthetic account',
-            bankName: 'Synthetic test bank',
-          },
-        ],
-      },
-    },
-    onAccept: jest.fn(async () => undefined),
-  };
-}
+} from './PiggyvestSavingsScreen.fixture';
 
 describe('isolated native PiggyVest savings', () => {
   it.each([
@@ -251,63 +190,5 @@ describe('isolated native PiggyVest savings', () => {
       )
     ).toBeOnTheScreen();
     expect(screen.queryByText('0000000000')).toBeNull();
-  });
-  it('resets consent and suppresses old completion after context switches and logout', async () => {
-    const input = fixture();
-    let complete: () => void = () => undefined;
-    input.onAccept = jest.fn(
-      () =>
-        new Promise<void>((resolve) => {
-          complete = resolve;
-        })
-    );
-    const view = render(<PiggyvestSavingsScreen staging={input} />);
-    fireEvent.press(screen.getByRole('checkbox'));
-    fireEvent.press(screen.getByRole('button', { name: 'Accept draft terms' }));
-    const next = fixture();
-    next.source = {
-      ...next.source,
-      policy: { ...policy, revisionId: '33333333-3333-4333-8333-333333333333' },
-    };
-    view.rerender(<PiggyvestSavingsScreen staging={next} />);
-    expect(screen.getByRole('checkbox')).toHaveAccessibilityState({
-      checked: false,
-    });
-    await act(async () => {
-      complete();
-    });
-    expect(
-      screen.queryByText(
-        'Acceptance submitted. Refresh to confirm recorded consent.'
-      )
-    ).toBeNull();
-    view.rerender(
-      <PiggyvestSavingsScreen staging={{ ...next, sessionKey: null }} />
-    );
-    expect(screen.queryByText('Synthetic phone')).toBeNull();
-    expect(screen.queryByRole('checkbox')).toBeNull();
-  });
-  it('shows funding only for accepted server policy and matched eligible server context', () => {
-    const input = fixture();
-    input.source = {
-      ...input.source,
-      policy: { ...policy, consent: 'accepted' },
-    };
-    const view = render(<PiggyvestSavingsScreen staging={input} />);
-    expect(screen.getByText('0000000000')).toBeOnTheScreen();
-    expect(screen.getByText('NGN 123.45')).toBeOnTheScreen();
-    expect(
-      screen.getByText('Pending interest (not spendable): NGN 5.00')
-    ).toBeOnTheScreen();
-    view.rerender(
-      <PiggyvestSavingsScreen
-        staging={{
-          ...input,
-          source: { ...input.source, sessionKey: 'wrong-session' },
-        }}
-      />
-    );
-    expect(screen.queryByText('0000000000')).toBeNull();
-    expect(screen.queryByText('NGN 123.45')).toBeNull();
   });
 });

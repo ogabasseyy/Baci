@@ -6,6 +6,14 @@ import {
   type ModelFamilyPageRouteProps,
   modelFamilyPageRuntime,
 } from './model-family-page-runtime';
+import {
+  type ModelFamilyStaticParam,
+  resolveModelFamilyStaticParams,
+} from './model-family-static-params';
+
+export function generateStaticParams(): Promise<ModelFamilyStaticParam[]> {
+  return resolveModelFamilyStaticParams();
+}
 
 export async function generateMetadata(
   props: ModelFamilyPageRouteProps

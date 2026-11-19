@@ -101,6 +101,8 @@ function createSupabase() {
 describe('bulk import purge ordering', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.revalidateProducts.mockReturnValue(true);
+    mocks.revalidateSlugs.mockReturnValue(true);
     mocks.csrf.mockResolvedValue({ valid: true, response: null });
     mocks.merchant.mockResolvedValue({
       merchantId: 'merchant-1',
@@ -128,6 +130,11 @@ describe('bulk import purge ordering', () => {
     );
 
     expect(response.status).toBe(200);
+    expect(mocks.revalidateSlugs).toHaveBeenCalledWith(
+      'merchant-1',
+      expect.arrayContaining(['product-1', 'product-51']),
+      { expireImmediately: true }
+    );
     expect(mocks.expire).toHaveBeenCalledWith('merchant-1');
     expect(mocks.schedule).toHaveBeenCalledOnce();
     expect(mocks.expire.mock.invocationCallOrder[0]).toBeLessThan(
@@ -139,5 +146,37 @@ describe('bulk import purge ordering', () => {
         productIds: expect.any(Array),
       })
     );
+  });
+
+  it('falls back to broad hard expiry when per-slug expiry fails on bulk import', async () => {
+    mocks.revalidateSlugs.mockReturnValueOnce(false);
+    const supabase = createSupabase();
+    mocks.auth.mockReturnValue(supabase);
+
+    const response = await POST(
+      makeRequest('name,price,category,status\nProduct 1,10,Electronics,active')
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.revalidateProducts).toHaveBeenCalledWith(
+      'merchant-1',
+      undefined,
+      { expireImmediately: true }
+    );
+  });
+
+  it('skips edge purge when both per-slug and broad hard expiry fail on bulk import', async () => {
+    mocks.revalidateSlugs.mockReturnValueOnce(false);
+    mocks.revalidateProducts.mockReturnValueOnce(false);
+    const supabase = createSupabase();
+    mocks.auth.mockReturnValue(supabase);
+
+    const response = await POST(
+      makeRequest('name,price,category,status\nProduct 1,10,Electronics,active')
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.schedule).not.toHaveBeenCalled();
+    expect(mocks.scheduleAfter).not.toHaveBeenCalled();
   });
 });

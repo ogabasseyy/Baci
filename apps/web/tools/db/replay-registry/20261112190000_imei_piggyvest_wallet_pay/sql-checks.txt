@@ -1,0 +1,2 @@
+supabase/tests/piggyvest_imei_wallet_pay_state.sql
+supabase/tests/piggyvest_imei_wallet_pay_access.sql

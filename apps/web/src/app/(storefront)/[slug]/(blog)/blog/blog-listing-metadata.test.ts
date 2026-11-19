@@ -31,6 +31,9 @@ describe('blog listing metadata builder', () => {
     expect(metadata.alternates?.canonical).toBe(
       'https://test-store.usebaci.com/blog'
     );
+    expect(metadata.alternates?.types?.['application/rss+xml']).toBe(
+      'https://test-store.usebaci.com/api/blog/feed/test-store'
+    );
     expect(metadata.description?.length).toBeGreaterThanOrEqual(110);
     expect(metadata.description).toContain(
       'Read the latest tech news, smartphone and laptop reviews'

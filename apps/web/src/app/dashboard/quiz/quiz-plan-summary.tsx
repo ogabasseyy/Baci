@@ -25,8 +25,8 @@ export function QuizPlanSummary({
         Expected play: {durationLabel(questionCount * timePerQuestionSeconds)}.
       </p>
       <p className="mt-1 text-muted-foreground">
-        Universal close: {closesAt || 'Set the launch window.'} Late players get
-        only the time remaining.
+        Universal close: {closesAt ? `${closesAt}.` : 'Set the launch window.'}{' '}
+        Late players get only the time remaining.
       </p>
     </aside>
   );

@@ -1,5 +1,9 @@
 import 'server-only';
 import { primaryWalletBankInboxSchemas as schemas } from '@/schemas/primary-wallet-bank-inbox';
+import {
+  isPiggyvestFeatureOn,
+  piggyvestFeatureState,
+} from './piggyvest-feature-on';
 
 export type PrimaryWalletBankInboxSecrets = {
   webhookSecret: unknown;
@@ -54,12 +58,13 @@ export function readPrimaryWalletBankInboxRuntime(
   // drains already-acknowledged rows through the same credentials-bound
   // config, or a rollback strands provider-acked deposits with no retry
   // path and no local credit.
-  if (
-    mode === 'intake' &&
-    (env.PIGGYVEST_PRIMARY_BANK_INBOX_ENABLED === undefined ||
-      env.PIGGYVEST_PRIMARY_BANK_INBOX_ENABLED === 'false')
-  )
-    return null;
+  // The master kill switch closes intake only; the worker never consults it.
+  // Killed or deliberately off closes intake (null); a malformed value falls
+  // through to the fail-closed throw below. The helper owns the comparison.
+  if (mode === 'intake') {
+    const state = piggyvestFeatureState('bank_inbox', env);
+    if (state === 'killed' || state === 'off') return null;
+  }
   // Retained keys parse in both modes: the outer webhook gate and this
   // intake read the intake runtime, so a rotation key must verify there —
   // worker-only parsing would strand retained-signed retries as invalid.
@@ -105,7 +110,7 @@ export function readPrimaryWalletBankInboxRuntime(
   // only after installing and enabling the drain timer.
   if (
     (mode === 'intake' &&
-      (env.PIGGYVEST_PRIMARY_BANK_INBOX_ENABLED !== 'true' ||
+      (!isPiggyvestFeatureOn('bank_inbox', env) ||
         env.PIGGYVEST_PRIMARY_BANK_INBOX_DRAIN_SCHEDULED !== 'true')) ||
     !parsed.success
   )

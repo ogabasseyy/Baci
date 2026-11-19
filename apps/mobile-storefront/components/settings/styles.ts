@@ -48,11 +48,7 @@ export const styles = StyleSheet.create({
   },
   row: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     minHeight: 72,
-    paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.md,
   },
   rowBorder: {
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -60,12 +56,16 @@ export const styles = StyleSheet.create({
   rowPressed: {
     opacity: 0.7,
   },
-  rowLeft: {
+  rowPressable: {
+    flex: 1,
+  },
+  rowContent: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1,
-    minWidth: 0,
-    marginRight: SPACING.sm,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.md,
+    gap: SPACING.md,
   },
   rowText: {
     flex: 1,
@@ -74,8 +74,8 @@ export const styles = StyleSheet.create({
   rowRight: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'flex-end',
     flexShrink: 0,
-    marginLeft: SPACING.sm,
   },
   rowLabel: {
     fontSize: 15,
@@ -95,7 +95,6 @@ export const styles = StyleSheet.create({
     width: SETTINGS_ICON_SIZE,
     height: SETTINGS_ICON_SIZE,
     borderRadius: SETTINGS_ICON_RADIUS,
-    marginRight: SPACING.sm,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -105,6 +104,8 @@ export const styles = StyleSheet.create({
     letterSpacing: 2,
     fontWeight: '700',
     opacity: 0.4,
+    // Breathing room so the version line does not sit on the last card.
+    marginTop: SPACING.lg,
     paddingBottom: SPACING.sm,
   },
 });

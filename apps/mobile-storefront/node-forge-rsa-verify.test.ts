@@ -62,7 +62,7 @@ function sha256(message: string): string {
 
 describe('security: node-forge CVE-2026-85393 behavior', () => {
   it('rejects the forged nested-DigestAlgorithm signature', () => {
-    expect(forgeRoot.version).toBe('1.4.0');
+    expect(forgeRoot.version).toBe('1.4.1');
     const publicKey = forgedPublicKey();
     const digest = sha256(MESSAGE);
     const forged = forgeUtil.binary.hex.decode(FORGED_S_HEX);

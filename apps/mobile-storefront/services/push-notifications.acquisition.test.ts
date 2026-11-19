@@ -1,3 +1,5 @@
+jest.mock('expo-application', () => ({ nativeBuildVersion: '1' }));
+
 import type { DevicePushToken } from 'expo-notifications';
 
 const mockCalls: string[] = [];

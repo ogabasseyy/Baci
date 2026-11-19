@@ -199,7 +199,7 @@ LANGUAGE sql STABLE SET search_path TO 'public', 'extensions' AS $$
     ) >= similarity_threshold
   ORDER BY similarity_score DESC, p.name
   LIMIT 1;
-$$;
+$$; GRANT EXECUTE ON FUNCTION pg_temp.find_product_search_suggestion_v2_legacy(text, uuid, real) TO PUBLIC;
 
 CREATE FUNCTION pg_temp.assert_suggestion_case(
   p_case text, p_search_term text, p_merchant_id uuid, p_threshold real,
@@ -255,7 +255,7 @@ BEGIN
     END IF;
   END IF;
 END;
-$$;
+$$; GRANT EXECUTE ON FUNCTION pg_temp.assert_suggestion_case(text, text, uuid, real, boolean, text, integer, real) TO PUBLIC;
 
 SET LOCAL ROLE anon;
 SELECT set_config('request.jwt.claim.role', 'anon', true);

@@ -208,4 +208,26 @@ describe('OgabasseyNavbar', () => {
     );
   });
 
+  it('applies icon-link styling to mobile header actions for tap-target compliance', () => {
+    render(<OgabasseyNavbar storeSlug="/ogabassey" />);
+
+    const notificationsButton = screen.getByRole('button', {
+      name: /toggle notifications/i,
+    });
+    const cartLink = screen.getByRole('link', { name: /open cart/i });
+    const accountLink = screen.getByRole('link', { name: 'View account' });
+
+    expect(notificationsButton).toHaveClass('ogabassey-navbar__icon-link');
+    expect(cartLink).toHaveClass('ogabassey-navbar__icon-link');
+    expect(accountLink).toHaveClass('ogabassey-navbar__icon-link');
+  });
+
+  it('caps the mobile navbar logo width with a 4.5rem floor to prevent wrapping and collapse on narrow viewports down to 320px', async () => {
+    const { OGABASSEY_HOME_HEADER_CHROME_CRITICAL_CSS } = await import(
+      '@/app/(storefront)/ogabassey/ogabassey-home-chrome-critical-css'
+    );
+    expect(OGABASSEY_HOME_HEADER_CHROME_CRITICAL_CSS).toContain(
+      '.ogabassey-navbar__logo{height:2.25rem;max-width:clamp(4.5rem,calc(100vw - 15.5rem),18rem);width:auto}'
+    );
+  });
 });

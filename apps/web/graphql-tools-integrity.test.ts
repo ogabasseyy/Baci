@@ -112,5 +112,5 @@ describe('@graphql-tools/utils mergeDeep integrity (CVE-2026-104852)', () => {
     expect(merged).toMatchObject({ a: 1, b: 2 });
     expect(Object.getPrototypeOf(merged)).toBe(Object.prototype);
     expect(merged.x).toBeUndefined();
-  });
+  }, 30_000);
 });

@@ -1,7 +1,6 @@
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import type { BottomTabBarProps } from 'expo-router/js-tabs';
-import { TabActions } from 'expo-router/react-navigation';
 import { useEffect, useRef, useState } from 'react';
 import {
   Platform,
@@ -19,6 +18,7 @@ import Animated, {
 import { getTabBarShadowStyle } from '@/components/navigation/TabBar.shadows';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors, { BRAND } from '@/constants/Colors';
+import { CONFIG } from '@/lib/config';
 import { CustomTabBarItem, type CustomTabOptions } from './CustomTabBarItem';
 import { useWarmTabScreens } from './useWarmTabScreens';
 
@@ -33,7 +33,8 @@ const SCALE_PULSE_SPRING = { damping: 9, stiffness: 220 };
 export function CustomTabBarChrome({
   state,
   descriptors,
-  navigation,
+  emitter,
+  navigateToTab,
   activeRouteName,
   preloadProtectedTabs,
 }: BottomTabBarProps & {
@@ -44,6 +45,7 @@ export function CustomTabBarChrome({
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
+  const branded = CONFIG.MERCHANT_SLUG === 'ogabassey';
 
   const visibleRoutes = state.routes.filter((route) => {
     const { options } = descriptors[route.key] as unknown as {
@@ -85,7 +87,7 @@ export function CustomTabBarChrome({
 
   useWarmTabScreens({
     activeRouteName,
-    navigation,
+    navigateToTab,
     preloadProtectedTabs,
     routes: visibleRoutes,
   });
@@ -128,7 +130,10 @@ export function CustomTabBarChrome({
   });
 
   return (
-    <View style={styles.outerContainer} testID="custom-tab-bar-wrapper">
+    <View
+      style={[styles.outerContainer, branded && styles.brandedContainer]}
+      testID="custom-tab-bar-wrapper"
+    >
       <BlurContainer
         intensity={Platform.OS === 'ios' ? 70 : 85}
         tint={isDark ? 'dark' : 'light'}
@@ -145,6 +150,12 @@ export function CustomTabBarChrome({
             borderColor: isDark
               ? 'rgba(255, 255, 255, 0.15)'
               : 'rgba(0, 0, 0, 0.08)',
+          },
+          branded && {
+            backgroundColor: isDark ? '#21191d' : '#fffafa',
+            borderColor: isDark ? '#69414a' : '#eacbd1',
+            borderWidth: 1,
+            borderRadius: 26,
           },
         ]}
         testID="custom-tab-bar"
@@ -187,7 +198,7 @@ export function CustomTabBarChrome({
               moveCapsule(shouldTriggerFeedback);
             }
 
-            const event = navigation.emit({
+            const event = emitter.emit({
               type: 'tabPress',
               target: route.key,
               canPreventDefault: true,
@@ -199,10 +210,7 @@ export function CustomTabBarChrome({
             }
 
             if (!isActiveRoute) {
-              navigation.dispatch({
-                ...TabActions.jumpTo(route.name, route.params),
-                target: state.key,
-              });
+              navigateToTab(route.key);
             }
 
             if (
@@ -262,6 +270,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     ...getTabBarShadowStyle('native'),
   },
+  brandedContainer: { borderRadius: 26 },
   tabBarContainer: {
     flexDirection: 'row',
     height: 64,

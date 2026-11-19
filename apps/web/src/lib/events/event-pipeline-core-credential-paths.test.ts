@@ -3,7 +3,7 @@ import { eventPipelineCoreCredentialPaths } from './event-pipeline-core-credenti
 
 describe('eventPipelineCoreCredentialPaths', () => {
   it('allows only the audited legacy core credential paths', () => {
-    expect(eventPipelineCoreCredentialPaths).toHaveLength(49);
+    expect(eventPipelineCoreCredentialPaths).toHaveLength(47);
     expect(eventPipelineCoreCredentialPaths).toContainEqual([
       'apps/web/src/app/api/agentic/catalog/lookup/route.ts',
       'apps/web/src/lib/agentic/mutation-request.ts',

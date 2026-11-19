@@ -27,6 +27,18 @@ test('accepts a production configuration for its matching runtime', () => {
   assert.doesNotThrow(() => validateOtaConfig(config(), '2.1.663'));
 });
 
+test('accepts a production configuration built for the SDK 58 native stack', () => {
+  const sdk58 = config();
+  sdk58.runtimeVersion = '2.1.663-ios-sdk58-rn0880';
+  assert.doesNotThrow(() => validateOtaConfig(sdk58, '2.1.663-ios-sdk58-rn0880'));
+});
+
+test('rejects a plain runtime selection for a configuration that emits the SDK 58 runtime', () => {
+  const sdk58 = config();
+  sdk58.runtimeVersion = '2.1.663-ios-sdk58-rn0880';
+  assert.throws(() => validateOtaConfig(sdk58, '2.1.663'), /runtime/i);
+});
+
 test('rejects an update built for a different iOS runtime', () => {
   assert.throws(() => validateOtaConfig(config(), '2.1.662'), /runtime/i);
 });

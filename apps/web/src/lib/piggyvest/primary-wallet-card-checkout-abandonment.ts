@@ -72,18 +72,21 @@ export async function runPrimaryCardCheckoutAbandonment(input: {
   totals.selected = selected.length;
   for (const candidate of selected) {
     input.signal?.throwIfAborted();
+    // The deadline fields belong to the storage scope only; the provider
+    // parses a strict intent and rejects them.
+    const { expiresAt, callbackUrl, ...intent } = candidate;
     const scope = JSON.stringify({
-      environment: candidate.environment,
-      integrationId: candidate.integrationId,
-      merchantId: candidate.merchantId,
-      customerId: candidate.customerId,
-      userId: candidate.userId,
-      businessId: candidate.businessId,
-      email: candidate.email,
-      expiresAt: candidate.expiresAt,
-      callbackUrl: candidate.callbackUrl,
+      environment: intent.environment,
+      integrationId: intent.integrationId,
+      merchantId: intent.merchantId,
+      customerId: intent.customerId,
+      userId: intent.userId,
+      businessId: intent.businessId,
+      email: intent.email,
+      expiresAt,
+      callbackUrl,
     });
-    const verification = await input.provider.verify(candidate);
+    const verification = await input.provider.verify(intent);
     if (verification.outcome === 'abandoned') {
       schemas.acknowledgement.parse(
         await input.execute('abandonment', [scope, candidate.operationId])

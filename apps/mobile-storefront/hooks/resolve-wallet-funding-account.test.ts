@@ -53,6 +53,35 @@ it('displays the confirmed PiggyVest account rather than the legacy account', as
   });
 });
 
+it('carries the PiggyVest balance (kobo) on the ready settlement', async () => {
+  read.mockResolvedValue({
+    account: primaryAccount,
+    balanceKobo: 123456,
+    requiresConsent: false,
+    provisioningStatus: 'ready',
+  });
+  await expect(readPrimaryFundingAccount(merchantId, userId)).resolves.toEqual({
+    status: 'ready',
+    account: primaryAccount,
+    balanceKobo: 123456,
+  });
+});
+
+it('drops the balance when the session switches mid-flight', async () => {
+  read.mockImplementation(async () => {
+    mockUserId = 'someone-else';
+    return {
+      account: primaryAccount,
+      balanceKobo: 123456,
+      requiresConsent: false,
+      provisioningStatus: 'ready',
+    };
+  });
+  await expect(readPrimaryFundingAccount(merchantId, userId)).resolves.toEqual({
+    status: 'unavailable',
+  });
+});
+
 it('settles failed reads as unavailable instead of throwing the wallet load', async () => {
   read.mockRejectedValue(new Error('Unavailable'));
   await expect(readPrimaryFundingAccount(merchantId, userId)).resolves.toEqual({
@@ -154,7 +183,11 @@ it('never shows the previous users account after an account switch', async () =>
   });
   mockUserId = 'user-a';
   const first = await readPrimaryFundingAccount(merchant, 'user-a');
-  expect(first).toEqual({ status: 'ready', account: primaryAccount });
+  expect(first).toEqual({
+    status: 'ready',
+    account: primaryAccount,
+    balanceKobo: null,
+  });
   // User B loads after the switch: the cached verdict carries no snapshot,
   // so B's load re-reads under B's session instead of reusing A's account.
   read.mockResolvedValueOnce({
@@ -165,7 +198,11 @@ it('never shows the previous users account after an account switch', async () =>
   mockUserId = 'user-b';
   const second = await readPrimaryFundingAccount(merchant, 'user-b');
   expect(read).toHaveBeenLastCalledWith(merchant, 'user-b');
-  expect(second).toEqual({ status: 'ready', account: accountB });
+  expect(second).toEqual({
+    status: 'ready',
+    account: accountB,
+    balanceKobo: null,
+  });
   expect(resolveWalletFundingAccount(legacy, second)).toEqual({
     account_name: 'User B',
     account_number: '0222222222',

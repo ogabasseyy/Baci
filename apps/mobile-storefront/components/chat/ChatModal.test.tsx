@@ -1,13 +1,8 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { render, screen } from '@testing-library/react-native';
 import type { ReactNode, RefObject } from 'react';
-import {
-  Modal,
-  Platform,
-  StyleSheet,
-  type TextInput,
-  type ViewProps,
-} from 'react-native';
+import type { TextInputInstance } from 'react-native';
+import { Modal, Platform, StyleSheet, type ViewProps } from 'react-native';
 import { ChatModal } from './ChatModal';
 import type { ChatMessage } from './types';
 
@@ -111,7 +106,7 @@ function renderChatModal() {
       input=""
       isLoading={false}
       flatListRef={{ current: null }}
-      inputRef={{ current: null } as RefObject<TextInput | null>}
+      inputRef={{ current: null } as RefObject<TextInputInstance | null>}
       onClose={jest.fn()}
       onSend={jest.fn()}
       onChangeInput={jest.fn()}
@@ -187,7 +182,7 @@ describe('ChatModal', () => {
         input=""
         isLoading={false}
         flatListRef={{ current: null }}
-        inputRef={{ current: null } as RefObject<TextInput | null>}
+        inputRef={{ current: null } as RefObject<TextInputInstance | null>}
         onClose={jest.fn()}
         onSend={jest.fn()}
         onChangeInput={jest.fn()}

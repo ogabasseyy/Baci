@@ -1,6 +1,6 @@
 import { render } from '@testing-library/react-native';
 import type { RefObject } from 'react';
-import type { ScrollView, View } from 'react-native';
+import type { ScrollViewInstance, ViewInstance } from 'react-native';
 import {
   STEPPER_STACK_HEIGHT,
   useIntentScrollIntoView,
@@ -19,18 +19,20 @@ jest.mock('react-native-safe-area-context', () => ({
 }));
 
 // A card whose measureInWindow synchronously reports the given window Y.
-function cardAt(cardTop: number): RefObject<View | null> {
+function cardAt(cardTop: number): RefObject<ViewInstance | null> {
   return {
     current: {
       measureInWindow: (
         cb: (x: number, y: number, w: number, h: number) => void
       ) => cb(0, cardTop, 320, 80),
     },
-  } as unknown as RefObject<View | null>;
+  } as unknown as RefObject<ViewInstance | null>;
 }
 
-function scrollWith(scrollTo: jest.Mock): RefObject<ScrollView | null> {
-  return { current: { scrollTo } } as unknown as RefObject<ScrollView | null>;
+function scrollWith(scrollTo: jest.Mock): RefObject<ScrollViewInstance | null> {
+  return {
+    current: { scrollTo },
+  } as unknown as RefObject<ScrollViewInstance | null>;
 }
 
 type HookParams = Parameters<typeof useIntentScrollIntoView>[0];

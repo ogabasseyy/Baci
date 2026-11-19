@@ -159,9 +159,7 @@ it('mounts all five actual controllers without recursive guard reads and blocks 
   expect(screen.getByRole('button', { name: 'Close plan' })).toBeDisabled();
   expect(close).not.toHaveBeenCalled();
   expect(scheduleSubmit).toHaveBeenCalledTimes(1);
-  expect(
-    screen.getByText('Funding details are unavailable.')
-  ).toBeOnTheScreen();
+  expect(screen.getByText('Savings status is unavailable.')).toBeOnTheScreen();
 });
 
 it('keeps schedule mounted while closure is pending and preserves closure recovery after acknowledgement loss', async () => {

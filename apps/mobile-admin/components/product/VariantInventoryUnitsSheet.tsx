@@ -224,7 +224,7 @@ export function VariantInventoryUnitsSheet({
                 size="small"
                 style={{ marginVertical: SPACING.md }}
               />
-            ) : null
+            ) : undefined
           }
         />
       )}

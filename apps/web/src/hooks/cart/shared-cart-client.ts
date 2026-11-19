@@ -3,15 +3,23 @@ import type {
   CartInputLine,
   CartSnapshot,
 } from '@baci/shared/cart';
+
+import {
+  AttemptAdmissionDenied,
+  type AttemptPolicy,
+} from '@/lib/api-attempt-policy';
 import { fetchWithCsrf } from '@/lib/api-client';
+import { writeCartSessionHint } from './cart-session-hint';
 import {
   isCartSessionRetiring,
   runBoundedCartSessionWrite,
 } from './cart-session-write-fence';
 import { cartClientCredentialHeaders } from './client-credential';
 import {
+  clearCartDeviceSessionActive,
   ensureCartDeviceRevocationCleared,
   isCartDeviceRevocationPending,
+  markCartDeviceSessionActive,
 } from './shared-cart-session-revoke-client';
 
 export * from './shared-cart-client-support';
@@ -138,10 +146,20 @@ async function requestCreateSharedCart(
   }
   const body = await readBody(response);
   if (response.ok && body && isSnapshot(body.cart)) {
+    const cart = body.cart as CartSnapshot;
+    const isActive = cart.state === 'active' && cart.lines.length > 0;
+    writeCartSessionHint(cart.merchantId, isActive ? '1' : '0');
+    if (merchantSlug) {
+      if (isActive) {
+        markCartDeviceSessionActive(merchantSlug);
+      } else {
+        clearCartDeviceSessionActive(merchantSlug);
+      }
+    }
     return {
       ok: true,
       replayed: body.replayed === true,
-      snapshot: body.cart as CartSnapshot,
+      snapshot: cart,
       warnings: warningsOf(body),
     };
   }
@@ -157,12 +175,13 @@ export interface SendSharedCartCommandInput {
 
 export function sendSharedCartCommand(
   input: SendSharedCartCommandInput,
-  merchantSlug?: string | null
+  merchantSlug?: string | null,
+  policy?: AttemptPolicy<string>
 ): Promise<SharedCartMutationResult> {
   return runBoundedCartSessionWrite(
     merchantSlug,
     UNAVAILABLE_FETCH,
-    (signal) => requestSharedCartCommand(input, merchantSlug, signal),
+    (signal) => requestSharedCartCommand(input, merchantSlug, signal, policy),
     undefined,
     isCartDeviceRevocationPending(merchantSlug)
       ? (signal) => ensureCartDeviceRevocationCleared(merchantSlug, signal)
@@ -173,7 +192,8 @@ export function sendSharedCartCommand(
 async function requestSharedCartCommand(
   input: SendSharedCartCommandInput,
   merchantSlug?: string | null,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  policy?: AttemptPolicy<string>
 ): Promise<SharedCartMutationResult> {
   if (isCartSessionRetiring(merchantSlug)) return UNAVAILABLE_FETCH;
   if (isCartDeviceRevocationPending(merchantSlug)) {
@@ -181,28 +201,50 @@ async function requestSharedCartCommand(
   }
   let response: Response;
   try {
-    response = await fetchWithCsrf(
-      cartRoute('/api/storefront/cart/commands', merchantSlug),
-      {
-        body: JSON.stringify({
-          command: input.command,
-          expectedVersion: input.expectedVersion,
-          operationId: input.operationId,
-        }),
-        headers: { 'Content-Type': 'application/json' },
-        method: 'POST',
-        signal,
-      }
-    );
-  } catch {
+    const url = cartRoute('/api/storefront/cart/commands', merchantSlug);
+    const options: RequestInit = {
+      signal,
+      body: JSON.stringify({
+        command: input.command,
+        expectedVersion: input.expectedVersion,
+        operationId: input.operationId,
+      }),
+      headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+    };
+    response = await (policy
+      ? fetchWithCsrf(url, options, policy)
+      : fetchWithCsrf(url, options));
+  } catch (error) {
+    if (policy && error instanceof AttemptAdmissionDenied)
+      return {
+        ok: false,
+        code: 'unauthorized',
+        snapshot: null,
+        retryable: false,
+        admissionDenied: true,
+        denialCode: error.code,
+        attempted: error.attempted,
+        priorOutcome: error.priorOutcome,
+      };
     return UNAVAILABLE_FETCH;
   }
   const body = await readBody(response);
   if (response.ok && body && isSnapshot(body.cart)) {
+    const cart = body.cart as CartSnapshot;
+    const isActive = cart.state === 'active' && cart.lines.length > 0;
+    writeCartSessionHint(cart.merchantId, isActive ? '1' : '0');
+    if (merchantSlug) {
+      if (isActive) {
+        markCartDeviceSessionActive(merchantSlug);
+      } else {
+        clearCartDeviceSessionActive(merchantSlug);
+      }
+    }
     return {
       ok: true,
       replayed: body.replayed === true,
-      snapshot: body.cart as CartSnapshot,
+      snapshot: cart,
       warnings: warningsOf(body),
     };
   }

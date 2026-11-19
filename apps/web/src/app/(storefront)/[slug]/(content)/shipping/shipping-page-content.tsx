@@ -9,7 +9,7 @@ interface PageProps {
 
 export async function ShippingPageContent({ params }: PageProps) {
   const { slug } = await params;
-  const context = await getTrustRouteContext(slug, { requestScopedUrl: true });
+  const context = await getTrustRouteContext(slug);
 
   if (!context) {
     notFound();

@@ -1,6 +1,7 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
+import type { TextInputInstance } from 'react-native';
 import {
   Keyboard,
   Pressable,
@@ -22,10 +23,11 @@ import Colors from '@/constants/Colors';
 import { MIN_SEARCH_QUERY_LENGTH } from '@/constants/search';
 import { useCategories, useDebounce, useProducts } from '@/hooks';
 import { useSearchStorage } from '@/hooks/use-search-storage';
-import type { Product } from '@/types/product';
 import { searchOverlayStyles as styles } from './SearchOverlay.styles';
 import { SearchOverlayEmptyState } from './SearchOverlayEmptyState';
 import { SearchOverlayResults } from './SearchOverlayResults';
+import { useProductSearchNavigation } from './search/use-product-search-navigation';
+import { useSearchNavigationGuard } from './search/use-search-navigation-guard';
 
 interface SearchOverlayProps {
   isVisible: boolean;
@@ -42,7 +44,7 @@ export function SearchOverlay({
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme as 'light' | 'dark'];
   const router = useRouter();
-  const inputRef = useRef<TextInput>(null);
+  const inputRef = useRef<TextInputInstance>(null);
 
   const [query, setQuery] = useState(initialQuery);
   const debouncedQuery = useDebounce(query, 300);
@@ -74,11 +76,17 @@ export function SearchOverlay({
     }
   };
 
-  const handleProductPress = (product: Product) => {
-    saveSearch(query.trim() || product.name);
-    onClose();
-    router.push(`/product/${product.slug}`);
-  };
+  const handleProductPress = useProductSearchNavigation({
+    isVisible,
+    query: query,
+    saveSearch,
+    onClose,
+    onNavigate: (product) => router.push(`/product/${product.slug}`),
+  });
+  const navigateCategorySafely = useSearchNavigationGuard({
+    isVisible,
+    invalidationKey: query,
+  });
 
   const handleSuggestionPress = (suggestion: string) => {
     setQuery(suggestion);
@@ -86,8 +94,10 @@ export function SearchOverlay({
   };
 
   const handleCategoryPress = (slug: string) => {
-    onClose();
-    router.push({ pathname: '/category/[slug]', params: { slug } });
+    void navigateCategorySafely(() => {
+      onClose();
+      router.push({ pathname: '/category/[slug]', params: { slug } });
+    });
   };
 
   if (!isVisible) return null;

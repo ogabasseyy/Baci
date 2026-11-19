@@ -11,13 +11,24 @@ export function client(
     assignmentRequestError?: Error | null;
     assignmentRequestRows?: Row[];
     assignmentRequestSingle?: Row | null;
+    accountRpcError?: Error;
     insertError?: Error;
     rpcError?: Error;
   } = {}
 ) {
-  const rpc = vi
-    .fn()
-    .mockResolvedValue({ data: null, error: options.rpcError ?? null });
+  // get_merchant_wallet_funding_account serves the safe account projection
+  // (getMerchantWalletAccount / requestMerchantWalletAccount); every other RPC
+  // keeps the shared rpcError outcome.
+  const rpc = vi.fn(async (name: string) =>
+    name === 'get_merchant_wallet_funding_account'
+      ? options.accountRpcError
+        ? { data: null, error: options.accountRpcError }
+        : {
+            data: rows.map((row) => ({ currency: 'NGN', ...row })),
+            error: null,
+          }
+      : { data: null, error: options.rpcError ?? null }
+  );
   const accountChain: Record<string, unknown> = {};
   const requestChain: Record<string, unknown> = {};
   let maybeCalls = 0;

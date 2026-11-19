@@ -10,6 +10,7 @@ import {
   readMappingRow,
   snapshotForRow,
 } from './plan-wallets';
+import { matchesProviderWalletName } from './provider-wallet-name';
 import { createPiggyvestWallet, listPiggyvestWallets } from './wallets';
 
 /**
@@ -28,6 +29,9 @@ import { createPiggyvestWallet, listPiggyvestWallets } from './wallets';
  *   by deterministic name during support).
  * - A create POST that times out means UNKNOWN, never failed (observed
  *   live on staging: the wallet was minted despite our 30s timeout).
+ * - PiggyVest rewrites the names it is given (sandbox: `-` removed), so
+ *   reconciliation compares letters and digits only, and more than one
+ *   match fails closed instead of picking a wallet.
  * - Provider customer provisioning uses synthetic KYC only behind the
  *   staging flag, which refuses production unconditionally. No real KYC
  *   and no provider secrets cross this module's logs.
@@ -57,7 +61,16 @@ async function reconcileExistingWallet(
   const edges = await listPiggyvestWallets(config, {
     customerId: piggyvestCustomerId,
   });
-  return edges.find((edge) => edge.name === subaccountName)?.id ?? null;
+  const matches = edges.filter((edge) =>
+    matchesProviderWalletName(edge.name, subaccountName)
+  );
+  if (matches.length > 1) {
+    throw new PiggyvestApiError(
+      'PIGGYVEST_REQUEST_ERROR',
+      'More than one provider wallet matches the plan wallet name'
+    );
+  }
+  return matches[0]?.id ?? null;
 }
 
 export async function ensurePlanWallet(

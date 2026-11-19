@@ -5,6 +5,19 @@ import { signScopedSupabaseJwt } from '@/lib/supabase/scoped-jwt';
 
 const STOREFRONT_ORDER_CONTEXT_TTL_SECONDS = 5 * 60;
 
+import type {
+  StorefrontCheckoutBinding,
+  StorefrontMerchantRateAttestation,
+} from './storefront-order-claim-types';
+import { validateCheckoutBinding } from './validate-checkout-binding';
+import { validateMerchantRateAttestation } from './validate-merchant-rate-attestation';
+
+export type {
+  StorefrontCheckoutBinding,
+  StorefrontCheckoutVariant,
+  StorefrontMerchantRateAttestation,
+} from './storefront-order-claim-types';
+
 /**
  * Creates the short-lived server context used by storefront order RPCs.
  *
@@ -19,6 +32,8 @@ export function createStorefrontOrderRpcClient({
   merchantId,
   userId,
   redvaultCustomerEmail,
+  merchantRateAttestation,
+  checkoutBinding,
   now = new Date(),
 }: {
   fallbackClient: SupabaseClient;
@@ -26,12 +41,45 @@ export function createStorefrontOrderRpcClient({
   merchantId: string;
   userId: string | null;
   redvaultCustomerEmail?: string;
+  /** Supplied only after the server verified the selected merchant rate. */
+  merchantRateAttestation?: StorefrontMerchantRateAttestation;
+  /** Supplied only after server-side shared-cart authority and request hash validation. */
+  checkoutBinding?: StorefrontCheckoutBinding;
   now?: Date;
 }): SupabaseClient {
   const normalizedMerchantId = merchantId.trim();
   if (!normalizedMerchantId) {
     throw new Error('Storefront order merchant context is required');
   }
+  const validatedCheckoutBinding =
+    checkoutBinding !== undefined
+      ? validateCheckoutBinding(checkoutBinding)
+      : undefined;
+  const validatedMerchantRateAttestation =
+    merchantRateAttestation !== undefined
+      ? validatedCheckoutBinding === undefined
+        ? (() => {
+            throw new Error(
+              'Merchant rate attestation requires a checkout binding'
+            );
+          })()
+        : validateMerchantRateAttestation({
+            merchantId: normalizedMerchantId,
+            attestation: merchantRateAttestation,
+            checkoutBinding: validatedCheckoutBinding,
+            hasCanonicalDeliveryMetadata,
+          })
+      : undefined;
+  if (
+    validatedCheckoutBinding?.delivery_mode === 'merchant_rate' &&
+    validatedMerchantRateAttestation === undefined
+  ) {
+    throw new Error(
+      'merchant_rate checkout binding requires a rate attestation'
+    );
+  }
+  const scopedMerchantId =
+    validatedMerchantRateAttestation?.merchant_id ?? normalizedMerchantId;
 
   try {
     const issuedAt = Math.floor(now.getTime() / 1000);
@@ -41,11 +89,18 @@ export function createStorefrontOrderRpcClient({
       iat: issuedAt,
       role: 'authenticated',
       storefront_order_context: 'route',
-      storefront_order_merchant_id: normalizedMerchantId,
+      storefront_order_merchant_id: scopedMerchantId,
     };
 
     if (hasCanonicalDeliveryMetadata) {
       payload.storefront_order_hash_version = 2;
+    }
+    if (validatedMerchantRateAttestation) {
+      payload.storefront_merchant_rate_attestation =
+        validatedMerchantRateAttestation;
+    }
+    if (validatedCheckoutBinding) {
+      payload.storefront_checkout_binding = validatedCheckoutBinding;
     }
 
     if (userId) {

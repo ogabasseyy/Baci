@@ -37,8 +37,13 @@ describe('mobile admin Android edge-to-edge dependency guard', () => {
   it('keeps Hermes precompiled while React Native is built from source', () => {
     const reactNativeBuild = readFileSync(reactNativeAndroidBuildPath, 'utf8');
 
+    const hermesProperties = readFileSync(
+      path.join(reactNativeRoot, 'sdks/hermes-engine/version.properties'), 'utf8'
+    );
+    const hermesVersion = hermesProperties.match(/^HERMES_VERSION_NAME=(.+)$/m)?.[1];
+    expect(hermesVersion).toBeTruthy();
     expect(reactNativeBuild).toContain(
-      'compileOnly("com.facebook.hermes:hermes-android:250829098.0.16")'
+      `compileOnly("com.facebook.hermes:hermes-android:${hermesVersion}")`
     );
     expect(reactNativeBuild).not.toContain(
       'compileOnly(project(":packages:react-native:ReactAndroid:hermes-engine"))'
@@ -53,32 +58,20 @@ describe('mobile admin Android edge-to-edge dependency guard', () => {
     expect(statusBarModule).not.toContain('statusBarColor');
   });
 
-  it('preserves StatusBar color and translucency behavior below Android 15', () => {
-    const statusBarModule = readReactNativeSource(
-      'modules/statusbar/StatusBarModule.kt'
-    );
-
-    expect(statusBarModule).toContain(
-      'Build.VERSION.SDK_INT < Build.VERSION_CODES.VANILLA_ICE_CREAM'
-    );
-    expect(statusBarModule).toContain('} ?: "black"');
-    expect(statusBarModule).toContain('getStatusBarColorCompat()');
-    expect(statusBarModule).toContain(
-      'setStatusBarColorCompat(animator.animatedValue as Int)'
-    );
-    expect(statusBarModule).toContain('setStatusBarColorCompat(color)');
-    expect(statusBarModule).toContain(
-      'activity.window?.setStatusBarTranslucency(translucent)'
-    );
+  it('uses the upstream StatusBar API without the removed color and translucency methods', () => {
+    const source = readReactNativeSource('modules/statusbar/StatusBarModule.kt');
+    expect(source).not.toMatch(/override fun (setColor|setTranslucent)\(/);
+    expect(source).toContain('override fun setHidden');
+    expect(source).toContain('override fun setStyle');
   });
 
-  it('removes deprecated system-bar colors and cutout modes from WindowUtil', () => {
+  it('preserves legacy cutout support without deprecated system-bar colors', () => {
     const windowUtil = readReactNativeSource('views/view/WindowUtil.kt');
 
+    expect(windowUtil).toMatch(/VERSION_CODES\.P[\s\S]*LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES/);
     for (const deprecatedToken of [
       'statusBarColor',
       'navigationBarColor',
-      'LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES',
       'LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT',
     ]) {
       expect(windowUtil).not.toContain(deprecatedToken);

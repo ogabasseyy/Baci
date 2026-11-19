@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import {
   chmod,
+  link,
   mkdir,
   mkdtemp,
   open,
@@ -139,6 +140,7 @@ describe('cloudflare evidence lock guard', () => {
             },
           };
         },
+        link,
         remove: (path) => rm(path, { force: true }),
       })
     ).rejects.toThrow(`${failure.replace('File', '').toLowerCase()} failed`);

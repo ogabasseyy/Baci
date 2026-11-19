@@ -3,8 +3,10 @@ import { getBlogContentLinksCacheTag } from '@/lib/blog-content-link-cache-tags'
 import { getPublicSupabaseClient } from '@/lib/cached-data';
 import { getCachedProductCanonicalPaths } from '@/lib/cached-product-canonical-paths';
 import { getCachedStorefrontProductSlugResolution } from '@/lib/cached-storefront-product-slug-resolution';
+import { getProductLegacyRedirectCacheTag } from '@/lib/product-cache-tags';
 import { isPublicBlogPost } from '@/lib/public-blog-content-quality';
 import { applyPublicBlogSqlFilters } from '@/lib/public-blog-sql-filters';
+import { resolveCapacityVariantProductPaths } from '@/lib/resolve-capacity-variant-product-paths';
 import { getProductUrl } from '@/lib/seo-utils';
 import type { StorefrontContentLinkRewrites } from '@/lib/storefront-content-link-rewriting';
 import { UUID_SHAPED_PRODUCT_IDENTIFIER_REGEX } from '@/lib/storefront-content-link-targets';
@@ -202,6 +204,7 @@ export async function getCachedContentLinkRewrites(
     getBlogContentLinksCacheTag(merchantId),
     'blog-content-links',
     'product-legacy-redirect',
+    getProductLegacyRedirectCacheTag(merchantId),
     `products-${merchantId}`,
     `categories-${merchantId}`
   );
@@ -240,6 +243,13 @@ export async function getCachedContentLinkRewrites(
     productPaths[candidate] = path;
   }
 
+  const capacityVariantPaths = await resolveCapacityVariantProductPaths(
+    merchantId,
+    slugCandidates,
+    productPaths
+  );
+  Object.assign(productPaths, capacityVariantPaths);
+
   // Active products linked by UUID: canonical path of their real slug.
   const activeUuidSlugs = Array.from(new Set(activeSlugByUuid.values())).filter(
     (slug) => !Object.hasOwn(productPaths, slug)
@@ -255,9 +265,7 @@ export async function getCachedContentLinkRewrites(
       : Object.hasOwn(activeUuidPaths, slug)
         ? activeUuidPaths[slug]
         : undefined;
-    if (slugPath) {
-      productPaths[uuid] = slugPath;
-    }
+    if (slugPath) productPaths[uuid] = slugPath;
   }
 
   // Stored category slugs can be legacy aliases (phones, laptop, ...) that

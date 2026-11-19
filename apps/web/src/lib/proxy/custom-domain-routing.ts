@@ -27,6 +27,7 @@ import {
 } from '@/lib/proxy/routing-policy';
 import { runStorefrontPreflight } from '@/lib/proxy/storefront-preflight';
 import { buildLegacyTermsAliasRedirectResponse } from '@/lib/proxy/terms-redirects';
+import { applyOwnedOxygenDocumentPolicy } from './oxygen-owned-document';
 
 function decorate(
   response: NextResponse,
@@ -58,7 +59,7 @@ function customHeaders(
 }
 
 /** Owns every validated custom-domain request, preserving the former branch order. */
-export async function runCustomDomainRouting(
+async function runCustomDomainRoutingInternal(
   request: NextRequest,
   pathname: string,
   hostname: string,
@@ -71,12 +72,6 @@ export async function runCustomDomainRouting(
     normalizedRequestHost,
     requestHostHadWww,
   } = context;
-  const aliasResponse = await runCustomDomainAliasRouting(
-    request,
-    pathname,
-    context
-  );
-  if (aliasResponse) return aliasResponse;
   if (pathname === '/favicon.ico')
     return buildStorefrontFaviconRewriteResponse({
       request,
@@ -168,20 +163,51 @@ export async function runCustomDomainRouting(
     );
   }
   if (pathname.endsWith('.md') && domainMerchantSlug) {
+    const aliasResponse = await runCustomDomainAliasRouting(
+      request,
+      pathname,
+      context
+    );
+    if (aliasResponse) return aliasResponse;
+
     const url = request.nextUrl.clone();
     url.pathname = toLlmApiPath(pathname, domainMerchantSlug);
     return NextResponse.rewrite(url, {
       request: { headers: customHeaders(request, context) },
     });
   }
+  let pdpConfirmedLive = false;
   const preflight = await runStorefrontPreflight({
     request,
     pathname,
     hostname,
     userAgent,
     merchantIdentifier: domainMerchantSlug ?? domain,
+    onPdpConfirmedLive: () => {
+      pdpConfirmedLive = true;
+    },
   });
-  if (preflight) return preflight;
+  if (preflight) {
+    const aliasResponse = await runCustomDomainAliasRouting(
+      request,
+      pathname,
+      context
+    );
+    if (aliasResponse) return aliasResponse;
+    return preflight;
+  }
+
+  // Only skip retired-alias lookup when preflight positively confirmed a live
+  // 2-segment PDP; unchecked paths (e.g. /old-shop/cart) and fail-open null
+  // outcomes still run alias routing.
+  if (!pdpConfirmedLive) {
+    const aliasResponse = await runCustomDomainAliasRouting(
+      request,
+      pathname,
+      context
+    );
+    if (aliasResponse) return aliasResponse;
+  }
   const url = request.nextUrl.clone();
   url.pathname = `/${domain}${pathname}`;
   if (
@@ -200,5 +226,29 @@ export async function runCustomDomainRouting(
     pathname,
     hostname,
     userAgent
+  );
+}
+
+export async function runCustomDomainRouting(
+  request: NextRequest,
+  pathname: string,
+  hostname: string,
+  userAgent: string,
+  context: CustomDomainContext
+): Promise<NextResponse> {
+  const response = await runCustomDomainRoutingInternal(
+    request,
+    pathname,
+    hostname,
+    userAgent,
+    context
+  );
+  return applyOwnedOxygenDocumentPolicy(
+    response,
+    request,
+    pathname,
+    hostname,
+    userAgent,
+    context.domainMerchantSlug
   );
 }

@@ -121,6 +121,52 @@ describe('extractBlogFaqItems', () => {
       },
     ]);
   });
+
+  it('extracts FAQ items when the heading includes contextual topic suffixes or People Also Ask', () => {
+    const items = extractBlogFaqItems(`
+      <h2>Frequently Asked Questions About Tecno Camon Slim</h2>
+      <h3>Is the Tecno Camon Slim available in 5G in Nigeria?</h3>
+      <p>Yes, buyers can choose between the 4G and 5G variants depending on local carrier support and budget.</p>
+    `);
+    const paaItems = extractBlogFaqItems(`
+      <h2>People Also Ask</h2>
+      <h3>Does the Tecno Camon Slim support fast charging?</h3>
+      <p>Yes, it supports 45W wired fast charging out of the box for Nigerian power conditions.</p>
+    `);
+
+    expect(items).toEqual([
+      {
+        question: 'Is the Tecno Camon Slim available in 5G in Nigeria?',
+        answer:
+          'Yes, buyers can choose between the 4G and 5G variants depending on local carrier support and budget.',
+      },
+    ]);
+    expect(paaItems).toEqual([
+      {
+        question: 'Does the Tecno Camon Slim support fast charging?',
+        answer:
+          'Yes, it supports 45W wired fast charging out of the box for Nigerian power conditions.',
+      },
+    ]);
+  });
+
+  it('continues scanning later FAQ headings when an earlier People Also Ask section has no valid Q&A blocks', () => {
+    const items = extractBlogFaqItems(`
+      <h2>People Also Ask</h2>
+      <p>Introductory note without question subheadings.</p>
+      <h2>Frequently Asked Questions</h2>
+      <h3>How long does Tecno Camon Slim battery last?</h3>
+      <p>The 5200mAh silicon-carbon battery easily lasts a full day of mixed 4G and 5G use.</p>
+    `);
+
+    expect(items).toEqual([
+      {
+        question: 'How long does Tecno Camon Slim battery last?',
+        answer:
+          'The 5200mAh silicon-carbon battery easily lasts a full day of mixed 4G and 5G use.',
+      },
+    ]);
+  });
 });
 
 describe('generateFaqPageSchema', () => {

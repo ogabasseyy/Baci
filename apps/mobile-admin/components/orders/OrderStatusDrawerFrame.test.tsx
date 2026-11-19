@@ -9,6 +9,11 @@ const windowDimensionsMock = vi.hoisted(() => ({
   width: 390,
 }));
 
+const sheetMethods = vi.hoisted(() => ({
+  close: vi.fn(),
+  snapToIndex: vi.fn(),
+}));
+
 vi.mock('@react-native-vector-icons/ionicons', () => ({
   Ionicons: ({ name }: { name: string }) => <span>{name}</span>,
   default: ({ name }: { name: string }) => <span>{name}</span>,
@@ -36,8 +41,10 @@ vi.mock('@gorhom/bottom-sheet', () => ({
     keyboardBehavior,
     onChange,
     onClose,
+    ref,
     snapPoints,
   }: {
+    ref?: { current: unknown };
     android_keyboardInputMode?: string;
     backdropComponent?: (props: Record<string, unknown>) => ReactNode;
     children?: ReactNode;
@@ -49,31 +56,34 @@ vi.mock('@gorhom/bottom-sheet', () => ({
     onChange?: (index: number) => void;
     onClose?: () => void;
     snapPoints?: number[];
-  }) => (
-    <section
-      aria-label="gorhom-status-drawer"
-      data-android-keyboard-input-mode={android_keyboardInputMode ?? ''}
-      data-has-container-layout-state={String(Boolean(containerLayoutState))}
-      data-dynamic-sizing={String(Boolean(enableDynamicSizing))}
-      data-index={index}
-      data-keyboard-behavior={keyboardBehavior ?? ''}
-      data-pan-down-close={String(Boolean(enablePanDownToClose))}
-      data-snap-points={snapPoints?.join(',') ?? ''}
-    >
-      {BackdropComponent?.({})}
-      {children}
-      <button
-        aria-label="Pan status drawer down"
-        onClick={onClose}
-        type="button"
-      />
-      <button
-        aria-label="Move status drawer to open index"
-        onClick={() => onChange?.(0)}
-        type="button"
-      />
-    </section>
-  ),
+  }) => {
+    if (ref) ref.current = sheetMethods;
+    return (
+      <section
+        aria-label="gorhom-status-drawer"
+        data-android-keyboard-input-mode={android_keyboardInputMode ?? ''}
+        data-has-container-layout-state={String(Boolean(containerLayoutState))}
+        data-dynamic-sizing={String(Boolean(enableDynamicSizing))}
+        data-index={index}
+        data-keyboard-behavior={keyboardBehavior ?? ''}
+        data-pan-down-close={String(Boolean(enablePanDownToClose))}
+        data-snap-points={snapPoints?.join(',') ?? ''}
+      >
+        {BackdropComponent?.({})}
+        {children}
+        <button
+          aria-label="Pan status drawer down"
+          onClick={onClose}
+          type="button"
+        />
+        <button
+          aria-label="Move status drawer to open index"
+          onClick={() => onChange?.(0)}
+          type="button"
+        />
+      </section>
+    );
+  },
   BottomSheetBackdrop: ({
     onPress,
     pressBehavior,
@@ -199,6 +209,60 @@ describe('OrderStatusDrawerFrame', () => {
   beforeEach(() => {
     windowDimensionsMock.height = 844;
     windowDimensionsMock.width = 390;
+    sheetMethods.close.mockClear();
+    sheetMethods.snapToIndex.mockClear();
+  });
+
+  it('slides the drawer closed instead of removing it instantly when hidden', () => {
+    const props = {
+      closeLabel: 'Close status sheet',
+      colors,
+      onClose: vi.fn(),
+      title: 'Update Order Status',
+    };
+    const { rerender } = render(
+      <OrderStatusDrawerFrame {...props} visible={true}>
+        <span>Status rows</span>
+      </OrderStatusDrawerFrame>
+    );
+
+    rerender(
+      <OrderStatusDrawerFrame {...props} visible={false}>
+        <span>Status rows</span>
+      </OrderStatusDrawerFrame>
+    );
+
+    expect(sheetMethods.close).toHaveBeenCalled();
+    expect(screen.getByLabelText('gorhom-status-drawer')).toBeInTheDocument();
+  });
+
+  it('removes the drawer once its close animation finishes', () => {
+    const onClose = vi.fn();
+    const props = {
+      closeLabel: 'Close status sheet',
+      colors,
+      onClose,
+      title: 'Update Order Status',
+    };
+    const { rerender } = render(
+      <OrderStatusDrawerFrame {...props} visible={true}>
+        <span>Status rows</span>
+      </OrderStatusDrawerFrame>
+    );
+    rerender(
+      <OrderStatusDrawerFrame {...props} visible={false}>
+        <span>Status rows</span>
+      </OrderStatusDrawerFrame>
+    );
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Pan status drawer down' })
+    );
+
+    expect(
+      screen.queryByLabelText('gorhom-status-drawer')
+    ).not.toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it('renders no overlay while hidden so the order screen remains touchable', () => {

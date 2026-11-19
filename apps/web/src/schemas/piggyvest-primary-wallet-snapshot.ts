@@ -2,6 +2,8 @@ import { z } from 'zod';
 import { piggyvestProviderIdSchema } from './piggyvest-provider-id';
 
 export const piggyvestPrimaryWalletSnapshotSchemas = {
+  // has_onboarding(jsonb): exactly one boolean row, nothing else.
+  presence: z.array(z.strictObject({ result: z.boolean() })).length(1),
   mapping: z
     .strictObject({
       providerWalletId: piggyvestProviderIdSchema,

@@ -36,11 +36,11 @@ function setup() {
 }
 
 describe('immediate quiz duration', () => {
-  it('defaults to the exact play duration and supports sub-minute tests', () => {
+  it('defaults short test quizzes to a 15-minute window and supports sub-minute overrides', () => {
     const onGenerate = setup();
     expect(
       screen.getByLabelText(/total quiz duration \(seconds\)/i)
-    ).toHaveValue(20);
+    ).toHaveValue(900);
     fireEvent.change(
       screen.getByLabelText(/total quiz duration \(seconds\)/i),
       { target: { value: '25' } }
@@ -71,21 +71,24 @@ describe('immediate quiz duration', () => {
 
   it('updates an untouched duration as questions change, but preserves a manual duration', () => {
     setup();
+    fireEvent.change(screen.getByLabelText(/time per question/i), {
+      target: { value: '60' },
+    });
     fireEvent.change(screen.getByLabelText(/questions per topic/i), {
-      target: { value: '3' },
+      target: { value: '10' },
     });
     expect(
       screen.getByLabelText(/total quiz duration \(seconds\)/i)
-    ).toHaveValue(60);
+    ).toHaveValue(1200);
     fireEvent.change(
       screen.getByLabelText(/total quiz duration \(seconds\)/i),
-      { target: { value: '90' } }
+      { target: { value: '1300' } }
     );
     fireEvent.change(screen.getByLabelText(/questions per topic/i), {
-      target: { value: '2' },
+      target: { value: '9' },
     });
     expect(
       screen.getByLabelText(/total quiz duration \(seconds\)/i)
-    ).toHaveValue(90);
+    ).toHaveValue(1300);
   });
 });

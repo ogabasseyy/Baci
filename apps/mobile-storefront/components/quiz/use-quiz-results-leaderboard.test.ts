@@ -166,7 +166,7 @@ describe('useQuizResultsLeaderboard', () => {
 
     act(() => listeners[0]?.('background'));
     await act(async () => {
-      jest.advanceTimersByTime(5_000);
+      jest.advanceTimersByTime(12_000);
       await Promise.resolve();
     });
     expect(fetchQuizLiveLeaderboard).toHaveBeenCalledTimes(1);
@@ -206,7 +206,7 @@ describe('useQuizResultsLeaderboard', () => {
       await Promise.resolve();
     });
 
-    // One immediate load plus one five-second refresh per minute. The route
+    // One immediate load plus one ten-second refresh per minute. The route
     // has a dedicated bucket, so several players can share an IP safely.
     expect(
       jest.mocked(fetchQuizLiveLeaderboard).mock.calls.length

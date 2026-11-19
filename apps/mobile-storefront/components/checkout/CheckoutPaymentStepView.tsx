@@ -1,4 +1,5 @@
 import { useRef } from 'react';
+import type { ScrollViewInstance } from 'react-native';
 import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
@@ -14,6 +15,7 @@ import {
 import { RedvaultPaymentChoice } from '@/components/checkout/redvault/RedvaultPaymentChoice';
 import type Colors from '@/constants/Colors';
 import { checkoutScreenViewStyles as styles } from './CheckoutScreenView.styles';
+import { walletTransferDescriptionOverride } from './wallet-transfer-description-override';
 
 type ColorsScheme = (typeof Colors)['light'];
 
@@ -40,6 +42,9 @@ interface CheckoutPaymentStepViewProps {
   total: number;
   walletBalance: number;
   walletFundedBankTransferOptionEnabled: boolean;
+  /** Ogabassey pilot, verdict unknown: say it's being checked. */
+  walletFundedBankTransferChecking?: boolean;
+  walletIsStoreCredit?: boolean;
   walletSelection: PaymentMethodSelectorProps['walletSelection'];
 }
 
@@ -66,12 +71,14 @@ export function CheckoutPaymentStepView({
   total,
   walletBalance,
   walletFundedBankTransferOptionEnabled,
+  walletFundedBankTransferChecking = false,
+  walletIsStoreCredit,
   walletSelection,
 }: CheckoutPaymentStepViewProps) {
   // Owns the payment-step ScrollView + a live scroll offset so the intent
   // accordion can scroll the just-selected card back into view when a sibling
   // card collapses. Kept in a ref (not state) to avoid re-renders on scroll.
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<ScrollViewInstance>(null);
   const scrollOffsetRef = useRef(0);
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     scrollOffsetRef.current = event.nativeEvent.contentOffset.y;
@@ -117,9 +124,14 @@ export function CheckoutPaymentStepView({
         orderTotal={total}
         enabledMethods={availablePaymentMethods}
         hiddenMethods={hiddenPaymentMethods}
-        initiallyCollapsed
+        // Coming back from Review remounts the step: keep any chosen method
+        // visible, including a wallet-only or savings-only payment.
+        initiallyCollapsed={
+          !selectedPayment && !walletSelection?.use && !savingsSelection?.use
+        }
         walletMode="orders"
         walletBalance={walletBalance}
+        walletIsStoreCredit={walletIsStoreCredit}
         walletOrderTotal={total}
         walletSelection={walletSelection}
         onWalletToggle={onWalletToggle}
@@ -140,14 +152,10 @@ export function CheckoutPaymentStepView({
             ? { bank_transfer: 'Bank transfer to wallet' }
             : undefined
         }
-        methodDescriptionOverrides={
-          walletFundedBankTransferOptionEnabled
-            ? {
-                bank_transfer:
-                  'A permanent account number will be created for you which you can use for future purchases. We apply it to this order automatically.',
-              }
-            : undefined
-        }
+        methodDescriptionOverrides={walletTransferDescriptionOverride(
+          walletFundedBankTransferOptionEnabled,
+          walletFundedBankTransferChecking
+        )}
         paymentScrollRef={scrollRef}
         paymentScrollOffsetRef={scrollOffsetRef}
       />

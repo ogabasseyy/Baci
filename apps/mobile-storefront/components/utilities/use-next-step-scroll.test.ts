@@ -1,17 +1,15 @@
 import { jest } from '@jest/globals';
 import { renderHook } from '@testing-library/react-native';
 import type { RefObject } from 'react';
-import { InteractionManager, type ScrollView } from 'react-native';
+import type { ScrollViewInstance } from 'react-native';
 import { SPACING } from '@/constants/Colors';
 import { useNextStepScroll } from './use-next-step-scroll';
 
-type InteractionHandle = {
-  cancel: jest.Mock;
-  run: () => void;
-};
-
-const mockRunAfterInteractions =
-  jest.fn<(callback: () => void) => InteractionHandle>();
+const originalIdle = global.requestIdleCallback;
+const originalCancelIdle = global.cancelIdleCallback;
+const idleCallbacks = new Map<number, () => void>();
+const mockRequestIdle = jest.fn<typeof requestIdleCallback>();
+const mockCancelIdle = jest.fn<typeof cancelIdleCallback>();
 
 type FrameCallback = Parameters<typeof requestAnimationFrame>[0];
 
@@ -36,22 +34,25 @@ describe('useNextStepScroll', () => {
         frameCallbacks.delete(frameId);
       }
     });
-    jest
-      .spyOn(InteractionManager, 'runAfterInteractions')
-      .mockImplementation((callback) => {
-        const handle = mockRunAfterInteractions(callback as () => void);
-        return handle as unknown as ReturnType<
-          typeof InteractionManager.runAfterInteractions
-        >;
-      });
-    mockRunAfterInteractions.mockImplementation((callback) => ({
-      cancel: jest.fn(),
-      run: callback,
-    }));
+    idleCallbacks.clear();
+    global.requestIdleCallback = mockRequestIdle;
+    global.cancelIdleCallback = mockCancelIdle;
+    mockRequestIdle.mockImplementation((callback) => {
+      const handle = idleCallbacks.size + 1;
+      idleCallbacks.set(handle, () =>
+        callback({ didTimeout: false, timeRemaining: () => 50 })
+      );
+      return handle;
+    });
+    mockCancelIdle.mockImplementation((handle) => {
+      if (typeof handle === 'number') idleCallbacks.delete(handle);
+    });
   });
 
   afterEach(() => {
     jest.restoreAllMocks();
+    global.requestIdleCallback = originalIdle;
+    global.cancelIdleCallback = originalCancelIdle;
   });
 
   function createScrollRef() {
@@ -59,7 +60,7 @@ describe('useNextStepScroll', () => {
       current: {
         scrollTo: jest.fn(),
       },
-    } as unknown as RefObject<ScrollView | null>;
+    } as unknown as RefObject<ScrollViewInstance | null>;
   }
 
   it('coalesces repeated calls into one deferred scroll with the latest y value', () => {
@@ -75,10 +76,10 @@ describe('useNextStepScroll', () => {
     expect(requestAnimationFrame).toHaveBeenCalledTimes(1);
 
     frameCallbacks.get(1)?.(0);
-    const interaction = mockRunAfterInteractions.mock.results[0]?.value as {
-      run: () => void;
-    };
-    interaction.run();
+    expect(mockRequestIdle).toHaveBeenCalledWith(expect.any(Function), {
+      timeout: 500,
+    });
+    idleCallbacks.get(1)?.();
 
     expect(scrollViewRef.current?.scrollTo).toHaveBeenCalledWith({
       animated: true,
@@ -87,14 +88,9 @@ describe('useNextStepScroll', () => {
     expect(onScrolled).toHaveBeenCalledTimes(1);
   });
 
-  it('cancels pending frame and interaction callbacks on unmount', () => {
+  it('cancels pending frame and idle callbacks on unmount', () => {
     const scrollViewRef = createScrollRef();
     const onScrolled = jest.fn();
-    const interactionCancel = jest.fn();
-    mockRunAfterInteractions.mockReturnValueOnce({
-      cancel: interactionCancel,
-      run: jest.fn(),
-    });
     const { result, unmount } = renderHook(() =>
       useNextStepScroll(scrollViewRef, onScrolled)
     );
@@ -104,11 +100,11 @@ describe('useNextStepScroll', () => {
     unmount();
 
     expect(cancelAnimationFrame).not.toHaveBeenCalled();
-    expect(interactionCancel).toHaveBeenCalledTimes(1);
+    expect(mockCancelIdle).toHaveBeenCalledWith(1);
     expect(scrollViewRef.current?.scrollTo).not.toHaveBeenCalled();
   });
 
-  it('cancels a queued animation frame when unmounted before scheduling interactions', () => {
+  it('cancels a queued animation frame when unmounted before scheduling idle work', () => {
     const scrollViewRef = createScrollRef();
     const { result, unmount } = renderHook(() =>
       useNextStepScroll(scrollViewRef, jest.fn())
@@ -118,7 +114,7 @@ describe('useNextStepScroll', () => {
     unmount();
 
     expect(cancelAnimationFrame).toHaveBeenCalledWith(1);
-    expect(mockRunAfterInteractions).not.toHaveBeenCalled();
+    expect(mockRequestIdle).not.toHaveBeenCalled();
     expect(scrollViewRef.current?.scrollTo).not.toHaveBeenCalled();
   });
 
@@ -132,10 +128,7 @@ describe('useNextStepScroll', () => {
 
     result.current(testInput);
     frameCallbacks.get(1)?.(0);
-    const interaction = mockRunAfterInteractions.mock.results[0]?.value as {
-      run: () => void;
-    };
-    interaction.run();
+    idleCallbacks.get(1)?.();
 
     expect(scrollViewRef.current?.scrollTo).toHaveBeenCalledWith({
       animated: true,
@@ -147,7 +140,7 @@ describe('useNextStepScroll', () => {
     // Use a null ref directly to exercise the ref-unavailable edge case.
     const scrollViewRef = {
       current: null,
-    } as RefObject<ScrollView | null>;
+    } as RefObject<ScrollViewInstance | null>;
     const onScrolled = jest.fn();
     const { result } = renderHook(() =>
       useNextStepScroll(scrollViewRef, onScrolled)
@@ -155,11 +148,48 @@ describe('useNextStepScroll', () => {
 
     result.current(100);
     frameCallbacks.get(1)?.(0);
-    const interaction = mockRunAfterInteractions.mock.results[0]?.value as {
-      run: () => void;
-    };
-    interaction.run();
+    idleCallbacks.get(1)?.();
 
     expect(onScrolled).not.toHaveBeenCalled();
+  });
+  it('falls back to a cancellable timer when idle callbacks are unavailable', () => {
+    jest.useFakeTimers();
+    Object.defineProperty(global, 'requestIdleCallback', {
+      configurable: true,
+      writable: true,
+      value: undefined,
+    });
+    const scrollViewRef = createScrollRef();
+    const { result } = renderHook(() =>
+      useNextStepScroll(scrollViewRef, jest.fn())
+    );
+    result.current(100);
+    frameCallbacks.get(1)?.(0);
+    jest.runOnlyPendingTimers();
+    expect(scrollViewRef.current?.scrollTo).toHaveBeenCalledTimes(1);
+    result.current(200);
+    frameCallbacks.get(2)?.(0);
+    jest.runOnlyPendingTimers();
+    expect(scrollViewRef.current?.scrollTo).toHaveBeenCalledTimes(2);
+    jest.useRealTimers();
+  });
+
+  it('cancels the fallback timer on unmount', () => {
+    jest.useFakeTimers();
+    Object.defineProperty(global, 'requestIdleCallback', {
+      configurable: true,
+      writable: true,
+      value: undefined,
+    });
+    const scrollViewRef = createScrollRef();
+    const { result, unmount } = renderHook(() =>
+      useNextStepScroll(scrollViewRef, jest.fn())
+    );
+    result.current(100);
+    frameCallbacks.get(1)?.(0);
+    unmount();
+    jest.runOnlyPendingTimers();
+    expect(scrollViewRef.current?.scrollTo).not.toHaveBeenCalled();
+    jest.useRealTimers();
   });
 });

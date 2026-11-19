@@ -35,9 +35,9 @@ vi.mock('next/navigation', () => ({
 
 const {
   default: ImeiCheckPage,
+  generateMetadata,
   generateStaticParams,
   ImeiCheckResolvedContent,
-  metadata,
 } = await import('./page');
 
 describe('ImeiCheckPage', () => {
@@ -106,12 +106,59 @@ describe('ImeiCheckPage', () => {
     expect(screen.getByText('IMEI checker UI')).toBeInTheDocument();
   });
 
-  it('uses a verification-focused meta description', () => {
+  it('uses a verification-focused meta description and self-referencing canonical', async () => {
+    vi.mocked(getCachedMerchant).mockResolvedValue({
+      slug: 'ogabassey',
+      template_id: 'ogabassey',
+    } as unknown as Awaited<ReturnType<typeof getCachedMerchant>>);
+
+    const metadata = await generateMetadata({
+      params: Promise.resolve({ slug: 'ogabassey' }),
+    });
+
     expect(metadata.description).toContain('device identity');
+    expect(metadata.alternates).toEqual({
+      canonical: 'https://ogabassey.usebaci.com/imei-check',
+    });
   });
 
-  it('uses an absolute title so the platform suffix cannot leak onto the storefront', () => {
+  it('uses an absolute title so the platform suffix cannot leak onto the storefront', async () => {
+    vi.mocked(getCachedMerchant).mockResolvedValue({
+      slug: 'ogabassey',
+      template_id: 'ogabassey',
+    } as unknown as Awaited<ReturnType<typeof getCachedMerchant>>);
+
+    const metadata = await generateMetadata({
+      params: Promise.resolve({ slug: 'ogabassey' }),
+    });
+
     expect(metadata.title).toEqual({ absolute: 'IMEI Check' });
+  });
+
+  it('uses custom domain for canonical when available', async () => {
+    vi.mocked(getCachedMerchant).mockResolvedValue({
+      slug: 'ogabassey',
+      custom_domain: 'ogabassey.com',
+      template_id: 'ogabassey',
+    } as unknown as Awaited<ReturnType<typeof getCachedMerchant>>);
+
+    const metadata = await generateMetadata({
+      params: Promise.resolve({ slug: 'ogabassey' }),
+    });
+
+    expect(metadata.alternates).toEqual({
+      canonical: 'https://ogabassey.com/imei-check',
+    });
+  });
+
+  it('returns fallback metadata when store is not found or non-ogabassey', async () => {
+    vi.mocked(getCachedMerchant).mockResolvedValue(null);
+
+    const metadata = await generateMetadata({
+      params: Promise.resolve({ slug: 'missing' }),
+    });
+
+    expect(metadata).toEqual({ title: 'Store Not Found' });
   });
 
   it('throws notFound for non-ogabassey templates', async () => {

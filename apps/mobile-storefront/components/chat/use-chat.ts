@@ -9,7 +9,8 @@ import {
   useRef,
   useState,
 } from 'react';
-import { Platform, type TextInput } from 'react-native';
+import type { TextInputInstance } from 'react-native';
+import { Platform } from 'react-native';
 import { useShallow } from 'zustand/react/shallow';
 import { CONFIG } from '@/lib/config';
 import { createLogger } from '@/lib/logger';
@@ -188,7 +189,7 @@ export function useChat(santaMode: boolean) {
   const [isLoading, setIsLoading] = useState(false);
 
   const flatListRef = useRef<FlashListRef<ChatMessage>>(null);
-  const inputRef = useRef<TextInput>(null);
+  const inputRef = useRef<TextInputInstance>(null);
   const _msgCounter = useRef(0);
 
   const scrollToBottom = () => {

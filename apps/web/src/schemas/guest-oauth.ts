@@ -31,6 +31,8 @@ export const guestOAuthGrantSchema = z.object({
   resource: z.string(),
   expiresAt: z.number(),
   revoked: z.boolean(),
+  connectionRenewable: z.literal(true).optional(),
+  cartExpiresAt: z.number().finite().optional(),
   refreshHash: z.string(),
   refreshSigningKey: z
     .string()
@@ -46,7 +48,7 @@ export const guestOAuthGrantSchema = z.object({
       recoverUntil: z.number(),
     })
     .optional(),
-  tokenGenerations: z.number().int().min(0).max(1024).default(0),
+  tokenGenerations: z.number().int().min(0).max(0xffff_ffff).default(0),
   cartToken: z.string().regex(/^[a-f0-9]{64}$/),
   cartInitialized: z.boolean(),
 });
@@ -82,6 +84,7 @@ export const guestOAuthAccessRecordSchema = guestOAuthTokenRecordSchema.extend({
 });
 export const guestOAuthCodeRecordSchema = z.object({
   request: guestOAuthAuthorizationSchema,
+  connectionRenewable: z.literal(true).optional(),
   used: z.boolean(),
 });
 export const guestOAuthConsentRecordSchema = guestOAuthCodeRecordSchema.extend({

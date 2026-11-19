@@ -3,6 +3,7 @@ import { getBlogContentLinksCacheTag } from '@/lib/blog-content-link-cache-tags'
 import { getPublicSupabaseClient } from '@/lib/cached-data';
 import { getCachedProductCanonicalPaths } from '@/lib/cached-product-canonical-paths';
 import { getCachedStorefrontProductSlugResolution } from '@/lib/cached-storefront-product-slug-resolution';
+import { getProductLegacyRedirectCacheTag } from '@/lib/product-cache-tags';
 import { isPublicBlogPost } from '@/lib/public-blog-content-quality';
 import { applyPublicBlogSqlFilters } from '@/lib/public-blog-sql-filters';
 import { resolveCapacityVariantProductPaths } from '@/lib/resolve-capacity-variant-product-paths';
@@ -203,6 +204,7 @@ export async function getCachedContentLinkRewrites(
     getBlogContentLinksCacheTag(merchantId),
     'blog-content-links',
     'product-legacy-redirect',
+    getProductLegacyRedirectCacheTag(merchantId),
     `products-${merchantId}`,
     `categories-${merchantId}`
   );

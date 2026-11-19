@@ -19,6 +19,10 @@ type PaymentState = ReturnType<typeof useUtilityPayment>;
 const mockChargeWalletForVtu =
   jest.fn<(...args: unknown[]) => Promise<unknown>>();
 
+// Live until the charge is in flight, then off screen; before it the customer is still
+// here (a check after the retained-key lookup must not stop the purchase).
+const liveUntilCharge = () => mockChargeWalletForVtu.mock.calls.length === 0;
+
 jest.mock('@/lib/vtu-checkout', () => {
   const actual =
     jest.requireActual<typeof import('@/lib/vtu-checkout')>(
@@ -278,7 +282,7 @@ describe('data stale success replay', () => {
       onSuccess,
       resetWalletIdempotencyKey,
       refetchWallet,
-      getIsActive: () => false,
+      getIsActive: liveUntilCharge,
     });
 
     // Back-navigated mid-flight: no UI on the gone screen, and the key
@@ -335,7 +339,7 @@ describe('data stale success replay', () => {
     await runPurchase({
       resetWalletIdempotencyKey,
       refetchWallet,
-      getIsActive: () => false,
+      getIsActive: liveUntilCharge,
     });
 
     expect(resetWalletIdempotencyKey).not.toHaveBeenCalled();
@@ -352,7 +356,7 @@ describe('data stale success replay', () => {
     await runPurchase({
       resetWalletIdempotencyKey,
       refetchWallet,
-      getIsActive: () => false,
+      getIsActive: liveUntilCharge,
     });
 
     expect(resetWalletIdempotencyKey).not.toHaveBeenCalled();
@@ -380,7 +384,7 @@ describe('data stale success replay', () => {
       resetWalletIdempotencyKey,
       invalidateWallets,
       isSubmittingOwnerCurrent: () => false,
-      getIsActive: () => false,
+      getIsActive: liveUntilCharge,
     });
 
     expect(onSuccess).not.toHaveBeenCalled();

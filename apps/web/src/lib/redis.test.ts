@@ -13,6 +13,8 @@ describe('getRedis', () => {
     vi.resetModules();
     delete process.env.UPSTASH_REDIS_REST_URL;
     delete process.env.UPSTASH_REDIS_REST_TOKEN;
+    delete process.env.BACI_RATE_LIMIT_KV_REST_API_URL;
+    delete process.env.BACI_RATE_LIMIT_KV_REST_API_TOKEN;
   });
 
   it('returns null when env vars are missing', async () => {
@@ -38,6 +40,28 @@ describe('getRedis', () => {
     const { getRedis } = await import('./redis');
     const redis = getRedis();
     expect(redis).not.toBeNull();
+  });
+
+  it('uses the replacement resource when both configurations exist', async () => {
+    const { Redis } = await import('@upstash/redis');
+    process.env.UPSTASH_REDIS_REST_URL = 'https://old.upstash.io';
+    process.env.UPSTASH_REDIS_REST_TOKEN = 'old-token';
+    process.env.BACI_RATE_LIMIT_KV_REST_API_URL = 'https://new.upstash.io';
+    process.env.BACI_RATE_LIMIT_KV_REST_API_TOKEN = 'new-token';
+    const { getRedis } = await import('./redis');
+    getRedis();
+    expect(Redis).toHaveBeenLastCalledWith({
+      url: 'https://new.upstash.io',
+      token: 'new-token',
+    });
+  });
+
+  it('does not combine an incomplete replacement with old credentials', async () => {
+    process.env.UPSTASH_REDIS_REST_URL = 'https://old.upstash.io';
+    process.env.UPSTASH_REDIS_REST_TOKEN = 'old-token';
+    process.env.BACI_RATE_LIMIT_KV_REST_API_URL = 'https://new.upstash.io';
+    const { getRedis } = await import('./redis');
+    expect(getRedis()).toBeNull();
   });
 
   it('returns the same instance on subsequent calls (singleton)', async () => {

@@ -3,6 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   connect: vi.fn(),
   reconcile: vi.fn(),
+  configuration: vi.fn(),
+  refreshBanks: vi.fn(),
+  readBanks: vi.fn(),
+  getRedis: vi.fn(),
 }));
 vi.mock('server-only', () => ({}));
 vi.mock('@/lib/payments/oxygen/runtime-connection', () => ({
@@ -11,6 +15,14 @@ vi.mock('@/lib/payments/oxygen/runtime-connection', () => ({
 vi.mock('@/lib/payments/oxygen/runtime-reconciliation', () => ({
   reconcileOxygenCallbacks: mocks.reconcile,
 }));
+vi.mock('@/lib/payments/oxygen/runtime-configuration', () => ({
+  readOxygenRuntimeConfiguration: mocks.configuration,
+}));
+vi.mock('@/lib/payments/oxygen/supported-bank-cache', () => ({
+  refreshSupportedBanks: mocks.refreshBanks,
+  readSupportedBanks: mocks.readBanks,
+}));
+vi.mock('@/lib/redis', () => ({ getRedis: mocks.getRedis }));
 
 import { OXYGEN_CALLBACK_DURATION_MS } from '@/lib/payments/oxygen/reconciliation-budget';
 import { GET, maxDuration } from './route';

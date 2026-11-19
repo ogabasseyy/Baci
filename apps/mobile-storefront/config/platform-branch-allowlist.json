@@ -214,6 +214,10 @@
       "justification": "Reviewed Android-only list virtualization setting."
     },
     {
+      "path": "components/ui/Toast.tsx",
+      "justification": "Triggers imperative AccessibilityInfo announcements only on iOS because iOS VoiceOver ignores accessibilityLiveRegion, while Android and web rely on declarative live regions."
+    },
+    {
       "path": "constants/Colors.ts",
       "justification": "Reviewed platform-specific shadow tokens: web uses CSS box-shadow strings while native platforms preserve React Native shadow properties."
     },
@@ -324,6 +328,10 @@
     {
       "path": "lib/pending-vtu-idempotency-store.ts",
       "justification": "Reviewed web-only MMKV Map-fallback durability probe (Codex R125 P1): Platform.OS web gate with localStorage access check so a non-durable web write reports failure and the pre-POST guard refuses; native always durable. Covered by blocked/accessible regression tests."
+    },
+    {
+      "path": "components/wallet-pay/wallet-pay-purchase-keys.ts",
+      "justification": "Reviewed web-only cross-tab lock (navigator.locks) so two browser tabs never mint two wallet-pay keys for one purchase; native runs one JS runtime."
     }
   ],
   "knownForbiddenPatterns": []

@@ -16,9 +16,9 @@ export const publicationMigrations = [
   '20261023032000_builder_publication_erasure.sql',
   '20261023034501_builder_canonical_publication_slug.sql',
 ];
-export async function publicationFixture() {
+export async function publicationFixture(options: { local?: boolean } = {}) {
   const db = await draftFixture({
-    local: process.env.BACI_BUILDER_LOCAL_PG === '1',
+    local: options.local ?? process.env.BACI_BUILDER_LOCAL_PG === '1',
     asyncEdits: true,
   });
   try {

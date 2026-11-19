@@ -67,6 +67,7 @@ interface PaymentStepProps {
     | null
     | undefined;
   user: { id: string } | null | undefined;
+  oxygenAllowed?: boolean;
   remainingAmount: number;
   orderAmount: number;
   currency?: string;
@@ -93,6 +94,7 @@ export function PaymentStep({
   setCurrentStep,
   merchant,
   user,
+  oxygenAllowed = false,
   remainingAmount,
   orderAmount,
   currency = 'NGN',
@@ -118,6 +120,7 @@ export function PaymentStep({
   const redvaultHasEligibleItems = redvaultSummary?.eligibleSubtotalKobo !== 0;
   const hasAvailableSelectedPaymentMethod = isPaymentMethodAvailable({
     paymentMethod,
+    oxygenAllowed,
     paystackCheckoutAvailable,
     korapayCheckoutAvailable,
     bankTransferCheckoutAvailable,
@@ -129,6 +132,7 @@ export function PaymentStep({
   });
   const oxygenEligible = isPaymentMethodAvailable({
     paymentMethod: 'oxygen',
+    oxygenAllowed,
     paystackCheckoutAvailable,
     korapayCheckoutAvailable,
     bankTransferCheckoutAvailable,
@@ -144,6 +148,7 @@ export function PaymentStep({
     payableAmount: remainingAmount,
   });
   const hasInstallmentOptions = hasAnyInstallmentOption({
+    oxygenAllowed,
     featureSettings: merchant?.feature_settings,
     currency,
     orderAmount,

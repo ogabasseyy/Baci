@@ -1,12 +1,6 @@
-import {
-  act,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest';
+import { expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ fetch: vi.fn(), capture: vi.fn() }));
 vi.mock('@/lib/api-client', () => ({ fetchWithCsrf: mocks.fetch }));
@@ -24,25 +18,10 @@ vi.mock('@/lib/posthog/capture-client-event', () => ({
 }));
 
 import { OxygenProviderFlow } from './OxygenProviderFlow';
+import { installOxygenOtpTestEnvironment } from './oxygen-otp-test-environment.test-support';
 import { readPhoneOtpSend } from './phone-otp-window';
 
-beforeAll(() => {
-  vi.stubGlobal(
-    'ResizeObserver',
-    class {
-      observe = vi.fn();
-      unobserve = vi.fn();
-      disconnect = vi.fn();
-    }
-  );
-});
-afterAll(() => vi.unstubAllGlobals());
-// input-otp schedules selection synchronization up to 50ms after mounting.
-afterEach(async () => {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 60));
-  });
-});
+installOxygenOtpTestEnvironment();
 
 it('clears a stale request error after a successful status refresh', async () => {
   const id = '60000000-0000-4000-8000-000000000001';

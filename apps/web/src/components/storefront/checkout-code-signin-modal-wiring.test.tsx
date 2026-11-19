@@ -36,12 +36,12 @@ it.each([
         checkoutUrl="/shop/checkout?resume=1"
       />
     );
-  const signIn = screen.getByRole(variant === 'generic' ? 'tab' : 'button', {
-    name: 'Sign In',
-  });
-  if (variant === 'generic')
-    fireEvent.mouseDown(signIn, { button: 0, ctrlKey: false });
-  else fireEvent.click(signIn);
+  if (variant === 'generic') {
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Sign In' }), {
+      button: 0,
+      ctrlKey: false,
+    });
+  }
   fireEvent.click(
     screen.getByRole('button', { name: 'Complete code verification' })
   );

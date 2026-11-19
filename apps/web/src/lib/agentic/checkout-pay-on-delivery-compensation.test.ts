@@ -126,7 +126,7 @@ describe('pay-on-delivery finalization compensation', () => {
     expect(mocks.loggerError).toHaveBeenCalledWith(
       expect.objectContaining({
         error: expect.objectContaining({
-          cancellationError: '{}',
+          cancellationError: 'Error: cancel threw',
         }),
         message: 'Pay-on-delivery finalization failed after order creation',
       })

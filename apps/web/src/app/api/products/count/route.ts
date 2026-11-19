@@ -1,40 +1,68 @@
-import { cookies } from 'next/headers';
+import { cacheLife, cacheTag } from 'next/cache';
 import { type NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createAnonClient } from '@/lib/supabase/anon';
+import { merchantIdSchema } from '@/schemas/products-count';
+
+async function getCachedMerchantProductCount(
+  merchantId: string
+): Promise<number> {
+  'use cache';
+
+  cacheLife('products');
+  cacheTag('products', `products-${merchantId}`);
+
+  const supabase = createAnonClient();
+  const { data: count, error } = await supabase.rpc(
+    'get_merchant_product_count',
+    {
+      merchant_id_param: merchantId,
+    }
+  );
+
+  if (error) throw error;
+  return count || 0;
+}
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
-  const merchantId = searchParams.get('merchant_id');
+  const rawMerchantId = searchParams.get('merchant_id');
 
-  if (!merchantId) {
+  if (!rawMerchantId) {
     return NextResponse.json(
       { error: 'Missing merchant_id parameter' },
       { status: 400 }
     );
   }
 
-  try {
-    const cookieStore = await cookies();
-    const supabase = createClient(cookieStore);
-
-    const { data: count, error } = await supabase.rpc(
-      'get_merchant_product_count',
-      {
-        merchant_id_param: merchantId,
-      }
+  const parsedMerchantId = merchantIdSchema.safeParse(rawMerchantId);
+  if (!parsedMerchantId.success) {
+    return NextResponse.json(
+      { error: 'Invalid merchant_id parameter' },
+      { status: 400 }
     );
+  }
+  const merchantId = parsedMerchantId.data;
 
-    if (error) throw error;
+  try {
+    const count = await getCachedMerchantProductCount(merchantId);
 
     // Determine recommended search method based on count
     const THRESHOLD = 500;
-    const recommendedMethod = (count || 0) > THRESHOLD ? 'server' : 'client';
+    const recommendedMethod = count > THRESHOLD ? 'server' : 'client';
 
-    return NextResponse.json({
-      count: count || 0,
-      recommendedMethod,
-      threshold: THRESHOLD,
-    });
+    return NextResponse.json(
+      {
+        count,
+        recommendedMethod,
+        threshold: THRESHOLD,
+      },
+      {
+        headers: {
+          'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
+          'Vercel-Cache-Tag': `products,products-${merchantId}`,
+        },
+      }
+    );
   } catch (error) {
     console.error('Product count error:', error);
     return NextResponse.json(

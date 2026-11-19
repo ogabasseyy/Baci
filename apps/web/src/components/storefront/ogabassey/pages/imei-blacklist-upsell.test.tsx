@@ -268,13 +268,16 @@ describe('blacklist result upsell', () => {
     );
     mocks.customerId = 'another-customer';
     view.rerender(<OgabasseyImeiChecker />);
+    expect(screen.queryByRole('heading', { name: result.device })).toBeNull();
+    mocks.check.mockResolvedValue(success());
+    fireEvent.click(screen.getByRole('button', { name: 'Run SIM Lock' }));
     await waitFor(() => expect(upsell()).toBeEnabled());
     mocks.check.mockResolvedValue(
       success({ ...result, blacklistStatus: 'Clean' })
     );
     fireEvent.click(upsell());
     await screen.findByText('Blacklist Status');
-    expect(mocks.check).toHaveBeenCalledTimes(3);
-    expect(mocks.check.mock.calls[2][3]).not.toBe(mocks.check.mock.calls[1][3]);
+    expect(mocks.check).toHaveBeenCalledTimes(4);
+    expect(mocks.check.mock.calls[3][3]).not.toBe(mocks.check.mock.calls[1][3]);
   });
 });

@@ -15,7 +15,8 @@ import { escapeXml } from '@/lib/xml-utils';
 export function resolveOfferFeedImages(
   images: unknown,
   manifest: FeedImageManifestEntry[],
-  claimedUrls: ReadonlySet<string> = new Set()
+  claimedUrls: ReadonlySet<string> = new Set(),
+  renderXml = true
 ) {
   let entries = manifest.filter(
     (entry) =>
@@ -46,12 +47,14 @@ export function resolveOfferFeedImages(
   if (!imageUrl) return null;
   return {
     imageUrl,
-    additionalImagesXml: [...new Set(resolveGmcAdditionalImages(entries))]
-      .filter((url) => url !== imageUrl)
-      .map(
-        (url) =>
-          `        <g:additional_image_link>${escapeXml(url)}</g:additional_image_link>`
-      )
-      .join('\n'),
+    additionalImagesXml: renderXml
+      ? [...new Set(resolveGmcAdditionalImages(entries))]
+          .filter((url) => url !== imageUrl)
+          .map(
+            (url) =>
+              `        <g:additional_image_link>${escapeXml(url)}</g:additional_image_link>`
+          )
+          .join('\n')
+      : '',
   };
 }

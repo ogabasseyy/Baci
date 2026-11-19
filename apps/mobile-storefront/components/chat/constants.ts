@@ -12,6 +12,7 @@ import { resolveApiBaseUrl } from '@/lib/api-url';
  * - Auth screens (user not yet engaged)
  * - Order success (celebration screen, CTAs prominent)
  * - Modal screens (overlay stacking issues)
+ * - The wallet and savings setup (it covered amounts and the main button)
  */
 export const HIDDEN_ROUTES = [
   '/checkout',
@@ -29,7 +30,29 @@ export const HIDDEN_ROUTES = [
   '/search',
   '/account',
   '/quiz',
+  // The Wallet PIN pad and its button sit where the chat button floats; the
+  // rest of Settings keeps chat for help.
+  '/settings/wallet-pin',
 ];
+
+/**
+ * Whole sections hidden by exact path or anything under it (never a sibling
+ * such as '/wallet-promo'). The wallet, savings setup included: the button
+ * covered the amounts in Wallet activity and the savings form's main button
+ * (owner, 2026-11-17).
+ */
+export const HIDDEN_ROUTE_TREES = ['/wallet'];
+
+/** True when the chat button stays hidden on this screen. */
+export function isChatHiddenRoute(pathname: string | null | undefined) {
+  if (!pathname) return false;
+  return (
+    HIDDEN_ROUTES.some((route) => pathname.startsWith(route)) ||
+    HIDDEN_ROUTE_TREES.some(
+      (tree) => pathname === tree || pathname.startsWith(`${tree}/`)
+    )
+  );
+}
 
 // H24 note: These are intentionally static — used only for FAB initial position
 // and PanResponder snap targets set once in useRef. Dynamic checks (e.g. nudge

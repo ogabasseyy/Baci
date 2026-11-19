@@ -49,6 +49,7 @@ const client = {} as unknown as PiggyvestIntakeClient;
 function queueDeps(stored: PiggyvestClaimedCapture) {
   const state = { attempts: 0, status: 'pending' as string };
   const deps: DrainDeps = {
+    renew: async () => true,
     claim: async () => {
       if (state.status !== 'pending') return [];
       state.attempts += 1;

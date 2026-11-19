@@ -131,6 +131,32 @@ describe('storefrontShippingRatesPayloadSchema', () => {
     expect(result.merchantCountry).toBe('in');
   });
 
+  it('preserves large bigint revisions as exact decimal strings', () => {
+    const result = storefrontShippingRatesPayloadSchema.parse({
+      ...validPayload,
+      shipping_config_revision: '9223372036854775807',
+    });
+
+    expect(result.shippingConfigRevision).toBe('9223372036854775807');
+  });
+
+  it.each([
+    42,
+    '0',
+    '-1',
+    ' 42',
+    '42 ',
+    '1.0',
+    'invalid',
+  ])('rejects malformed or non-string shipping config revision %s', (shipping_config_revision) => {
+    expect(
+      storefrontShippingRatesPayloadSchema.safeParse({
+        ...validPayload,
+        shipping_config_revision,
+      }).success
+    ).toBe(false);
+  });
+
   it('omits merchant currency fields for blank / non-string RPC values', () => {
     const result = storefrontShippingRatesPayloadSchema.parse({
       ...validPayload,
@@ -190,6 +216,7 @@ describe('parseStorefrontShippingRatesPayload', () => {
     const result = parseStorefrontShippingRatesPayload(validPayload);
 
     expect(result.rates).toHaveLength(1);
+    expect(result.shippingConfigRevision).toBeUndefined();
   });
 });
 

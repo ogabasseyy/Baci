@@ -41,6 +41,19 @@ test('the repository satisfies the storefront release gate', () => {
   assert.deepEqual(collectGateFailures(repository), []);
 });
 
+test('TestFlight-only runs use separate cancellation and job queues', () => {
+  const workflow = repository.readFile(IOS_RELEASE);
+  const submitWorkflow = repository.readFile('.github/workflows/ios-storefront-submit.yml');
+  const testflightRun = "github.event_name == 'workflow_dispatch' && inputs.testflight_only";
+  assert.ok(workflow.includes("group: ios-storefront-release-${{ github.ref }}${{ (" + testflightRun + ") && '-testflight' || '' }}"));
+  assert.ok(readJob(workflow, 'build-and-submit').includes("group: ${{ (" + testflightRun + ") && 'ios-storefront-testflight-upload' || 'ios-storefront-app-store-submission' }}"));
+  assert.match(readJob(submitWorkflow, 'submit'), /group: ios-storefront-app-store-submission/);
+  assert.match(
+    workflow,
+    /testflight_only:\n\s+description: 'Upload to TestFlight without submitting for App Review'\n\s+required: false\n\s+default: false\n\s+type: boolean/
+  );
+});
+
 test('the gate fails when a new PiggyVest mobile file lacks a server-off test', () => {
   const failures = collectGateFailures(withFiles({ [PIN_SHEET]: 'export function WalletPinSheet() {}' }));
   assert.deepEqual(failures, [
@@ -199,7 +212,7 @@ test('CI must run every gate test, unconditionally, in its changes job', () => {
   assert.deepEqual(collectGateFailures(withFiles({ [CI]: ci.replace(`${step}\n`, '') })), [
     `${CI} must run the "Test storefront release gate" step in its changes job`,
   ]);
-  const jobSkipped = ci.replace('  changes:\n    runs-on: ubuntu-24.04\n', "  changes:\n    if: github.event_name == 'push'\n    runs-on: ubuntu-24.04\n");
+  const jobSkipped = ci.replace('  changes:\n', "  changes:\n    if: github.event_name == 'push'\n");
   assert.notEqual(jobSkipped, ci, 'fixture must add a job condition');
   assert.deepEqual(collectGateFailures(withFiles({ [CI]: jobSkipped })), [`${CI} changes job must run unconditionally`]);
 });

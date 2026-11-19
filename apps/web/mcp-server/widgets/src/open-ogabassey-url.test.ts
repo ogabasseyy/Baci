@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { afterEach, expect, it, vi } from 'vitest';
 import { openOgabasseyUrl } from './open-ogabassey-url';
 import { widgetHost } from './widget-host';

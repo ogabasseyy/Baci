@@ -11,20 +11,19 @@ import { createStorefrontDraftService } from '@/lib/website-builder/create-draft
 import { createPrivateHome } from '@/lib/website-builder/create-private-home';
 import { commitDraft } from '@/lib/website-builder/private-drafts';
 import { getStorefrontStatus } from '@/lib/website-builder/read-storefront';
+import { lifecycleFixture } from '../../tests/experience-lifecycle/sql.test-support';
 import { startDraftApi } from '../builder-auth/draft-api-fixture.ts';
-import { draftFixture } from '../builder-auth/draft-fixture.ts';
 import { verifyAuthenticatedAsyncEdit } from './authenticated-async-edit.test-support';
 import { verifyAuthenticatedGateway } from './authenticated-gateway.test-support';
-import {
-  installPreviewProjectionFixture,
-  verifyPrivatePreview,
-} from './preview-gateway.test-support';
+import { verifyPrivatePreview } from './preview-gateway.test-support';
 
 it('same signed builder token: empty consent → real RLS create → fresh target → authenticated status/edit', async () => {
-  const db = await draftFixture({ asyncEdits: true });
+  const db = await lifecycleFixture(
+    false,
+    process.env.BACI_BUILDER_LOCAL_PG === '1'
+  );
   let api: Awaited<ReturnType<typeof startDraftApi>> | undefined;
   try {
-    await installPreviewProjectionFixture(db.pool);
     const actor = randomUUID();
     const connection = randomUUID();
     await db.pool.query('INSERT INTO auth.users VALUES($1)', [actor]);
@@ -152,10 +151,16 @@ it('same signed builder token: empty consent → real RLS create → fresh targe
       expect(edited.version).not.toBe(created.version);
     // An old client using the original public identity RPC also gets private reconciliation.
     const oldConfig = (
-      await db.pool.query('SELECT draft_config FROM builder_page_drafts')
+      await db.pool.query(
+        'SELECT draft_config FROM builder_page_drafts WHERE merchant_id=$1',
+        [created.storefrontId]
+      )
     ).rows[0].draft_config;
     const stamp = (
-      await db.pool.query('SELECT updated_at::text AS stamp FROM merchants')
+      await db.pool.query(
+        'SELECT updated_at::text AS stamp FROM merchants WHERE id=$1',
+        [created.storefrontId]
+      )
     ).rows[0].stamp;
     const rename = await ctx.supabase.rpc('update_merchant_identity_settings', {
       p_merchant_id: created.storefrontId,
@@ -165,7 +170,10 @@ it('same signed builder token: empty consent → real RLS create → fresh targe
     expect(rename.error).toBeNull();
     expect(rename.data).not.toBeNull();
     const renamed = (
-      await db.pool.query('SELECT draft_config FROM builder_page_drafts')
+      await db.pool.query(
+        'SELECT draft_config FROM builder_page_drafts WHERE merchant_id=$1',
+        [created.storefrontId]
+      )
     ).rows[0].draft_config;
     expect(JSON.stringify(renamed)).not.toContain('Journey Store');
     // The edited title was independently authored, so an identity rename must preserve it.
@@ -178,7 +186,8 @@ it('same signed builder token: empty consent → real RLS create → fresh targe
     expect(
       (
         await db.pool.query(
-          'SELECT published_config,is_published FROM page_configs'
+          'SELECT published_config,is_published FROM page_configs WHERE merchant_id=$1',
+          [created.storefrontId]
         )
       ).rows[0]
     ).toEqual({ published_config: null, is_published: false });

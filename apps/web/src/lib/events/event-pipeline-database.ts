@@ -2,7 +2,10 @@ import { eventPipelineAdminImporters } from '@/lib/events/event-pipeline-authori
 import { eventPipelineAuthorityServicePaths } from '@/lib/events/event-pipeline-authority-service-paths';
 import { eventPipelineCartCredentialPaths } from '@/lib/events/event-pipeline-cart-credential-paths';
 import { eventPipelineChatCredentialPaths } from '@/lib/events/event-pipeline-chat-credential-paths';
+import { eventPipelineChatPushCredentialPaths } from '@/lib/events/event-pipeline-chat-push-credential-paths';
+import { eventPipelineChatwootCartCredentialPaths } from '@/lib/events/event-pipeline-chatwoot-cart-credential-paths';
 import { eventPipelineCredentialPaths } from '@/lib/events/event-pipeline-credential-paths';
+import { eventPipelineFeedbackCredentialPaths } from '@/lib/events/event-pipeline-feedback-credential-paths';
 // biome-ignore format: compact import preserves the 300-line verifier gate.
 import { eventPipelineFrozenRoutes, frozenEventPipelineAuthoritySources } from '@/lib/events/event-pipeline-frozen-authority-sources';
 import { EVENT_PIPELINE_FUNCTION_NAMES } from '@/lib/events/event-pipeline-function-names';
@@ -19,11 +22,9 @@ import { eventPipelineRedvaultCredentialPaths } from '@/lib/events/event-pipelin
 import { eventPipelineRepairPickupCredentialPaths } from '@/lib/events/event-pipeline-repair-pickup-credential-paths';
 import { eventPipelineShippingCredentialPaths } from '@/lib/events/event-pipeline-shipping-credential-paths';
 import { socialDeliveryProjections } from '@/lib/events/event-pipeline-social-projections';
-import {
-  eventPipelineAdminAdjacentFunctions,
-  eventPipelineExpenseCleanupAdjacentFunctions,
-  eventPipelineVpsRuntimeCallers,
-} from '@/lib/events/event-pipeline-vps-runtime-callers';
+import { vpsCronWorkerAuthority } from '@/lib/events/event-pipeline-vps-cron-worker-paths';
+// biome-ignore format: compact import preserves the 300-line verifier gate.
+import { eventPipelineAdminAdjacentFunctions, eventPipelineExpenseCleanupAdjacentFunctions, eventPipelineVpsRuntimeCallers } from '@/lib/events/event-pipeline-vps-runtime-callers';
 import { eventPipelineVtuReplayAdminPaths } from '@/lib/events/event-pipeline-vtu-replay-admin-paths';
 import type { Database, Json } from '@/types/supabase';
 
@@ -133,9 +134,10 @@ export const EVENT_PIPELINE_BOUNDARY = {
     ...eventPipelineExpenseCleanupAdjacentFunctions,
   ],
   authority: {
-    adminImporters: eventPipelineAdminImporters,
     // biome-ignore format: compact spread preserves the 300-line runtime ceiling.
-    adminPaths: [...eventPipelineGatewayCronAdminPaths, ...eventPipelineVtuReplayAdminPaths, ...onboardingEmailWorkerAuthority.adminPaths],
+    adminImporters: [...eventPipelineAdminImporters, ...vpsCronWorkerAuthority.adminImporters],
+    // biome-ignore format: compact spread preserves the 300-line runtime ceiling.
+    adminPaths: [...eventPipelineGatewayCronAdminPaths, ...eventPipelineVtuReplayAdminPaths, ...onboardingEmailWorkerAuthority.adminPaths, ...vpsCronWorkerAuthority.adminPaths],
     bareClientImporters: [
       ...Object.keys(eventPipelineFrozenRoutes),
       'apps/web/src/app/api/analytics/conversion/route.ts',
@@ -144,7 +146,7 @@ export const EVENT_PIPELINE_BOUNDARY = {
       'apps/web/src/lib/merchant-feature-gates.ts',
     ],
     // biome-ignore format: compact spread preserves the 300-line runtime ceiling.
-    credentialPaths: [...eventPipelineCartCredentialPaths, ...eventPipelineCredentialPaths, ...eventPipelineImmediateOrderCredentialPaths, ...eventPipelineJumiaCredentialPaths, ...eventPipelinePiggyvestCredentialPaths, ...eventPipelineRepairPickupCredentialPaths, ...eventPipelineRedvaultCredentialPaths, ...eventPipelineShippingCredentialPaths, ...eventPipelineChatCredentialPaths, ...eventPipelinePaystackRefundCredentialPaths, ...eventPipelineGatewayCronCredentialPaths, ...eventPipelineManualOrderDocumentCredentialPaths, ...onboardingEmailWorkerAuthority.credentialPaths],
+    credentialPaths: [...eventPipelineCartCredentialPaths, ...eventPipelineChatwootCartCredentialPaths, ...eventPipelineCredentialPaths, ...eventPipelineImmediateOrderCredentialPaths, ...eventPipelineJumiaCredentialPaths, ...eventPipelinePiggyvestCredentialPaths, ...eventPipelineRepairPickupCredentialPaths, ...eventPipelineRedvaultCredentialPaths, ...eventPipelineShippingCredentialPaths, ...eventPipelineChatCredentialPaths, ...eventPipelinePaystackRefundCredentialPaths, ...eventPipelineGatewayCronCredentialPaths, ...eventPipelineManualOrderDocumentCredentialPaths, ...eventPipelineFeedbackCredentialPaths, ...onboardingEmailWorkerAuthority.credentialPaths, ...eventPipelineChatPushCredentialPaths, ...vpsCronWorkerAuthority.credentialPaths],
     // biome-ignore format: compact spread preserves the 300-line runtime ceiling.
     factoryModules: ['apps/web/src/lib/supabase/admin.ts', 'apps/web/src/lib/supabase/server.ts', 'apps/web/src/lib/supabase/service.ts'],
     legacySdkImporters: eventPipelineLegacySdkImporters,
@@ -176,11 +178,11 @@ export const EVENT_PIPELINE_BOUNDARY = {
       'apps/web/src/scripts/process-domain-events.ts',
       'apps/web/src/scripts/process-event-deliveries.ts',
       onboardingEmailWorkerAuthority.worker,
+      ...vpsCronWorkerAuthority.serviceImporters,
     ],
     servicePaths: eventPipelineAuthorityServicePaths,
-    operationalServiceImporters: [
-      'apps/web/src/scripts/reconcile-paystack-unmatched-partial.ts',
-    ],
+    // biome-ignore format: compact list preserves the 300-line module gate.
+    operationalServiceImporters: ['apps/web/src/scripts/reconcile-paystack-unmatched-partial.ts'],
   },
   callers: runtimeCallers,
   frozenAuthoritySources: frozenEventPipelineAuthoritySources,

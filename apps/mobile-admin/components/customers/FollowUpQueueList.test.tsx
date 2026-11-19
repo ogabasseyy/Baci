@@ -2,6 +2,7 @@ import '@testing-library/jest-dom/vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import type React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { GroupedFailedOrderListItem } from '@/lib/customers-failed-orders';
 import { FollowUpQueueList } from './FollowUpQueueList';
 
 const mocks = vi.hoisted(() => ({
@@ -15,10 +16,16 @@ vi.mock('@shopify/flash-list', async () => {
     FlashList: ({
       data,
       ListEmptyComponent,
+      ListHeaderComponent,
       refreshControl,
+      renderItem,
     }: {
-      data?: unknown[] | null;
+      data?: GroupedFailedOrderListItem[] | null;
+      renderItem: (info: {
+        item: GroupedFailedOrderListItem;
+      }) => React.ReactNode;
       ListEmptyComponent?: React.ReactNode;
+      ListHeaderComponent?: React.ReactNode;
       refreshControl?: React.ReactNode;
     }) => {
       const refreshProps = React.isValidElement(refreshControl)
@@ -31,6 +38,7 @@ vi.mock('@shopify/flash-list', async () => {
       return React.createElement(
         React.Fragment,
         null,
+        ListHeaderComponent,
         React.createElement(
           'button',
           {
@@ -41,7 +49,11 @@ vi.mock('@shopify/flash-list', async () => {
           },
           'Refresh follow-ups'
         ),
-        data && data.length > 0 ? null : ListEmptyComponent
+        data?.length
+          ? data
+              .filter((item) => item.type !== 'header')
+              .map((item) => renderItem({ item }))
+          : ListEmptyComponent
       );
     },
   };
@@ -162,5 +174,82 @@ describe('FollowUpQueueList', () => {
 
     expect(screen.getByText('No matching follow-ups')).toBeTruthy();
     expect(screen.queryByText('No issues')).toBeNull();
+  });
+
+  it.each([
+    [' ord-002 ', true],
+    ['8012345678', true],
+    ['+234 (801) 234-5678', true],
+    ['234', false],
+  ])('matches a guest follow-up search for %s (%s)', (searchQuery, matched) => {
+    const order = {
+      id: 'order-2',
+      created_at: '2026-07-27T08:00:00Z',
+      customer_name: 'Guest',
+      customer_email: '',
+      customer_phone: '+2348012345678',
+      order_number: 'ORD-002',
+    };
+    mocks.useFollowUpQueue.mockReturnValue({
+      failedOrders: [order],
+      isFailedOrdersError: false,
+      isRefreshing: false,
+      refresh: mocks.refresh,
+      viewState: { status: 'ready' },
+    });
+
+    render(<FollowUpQueueList {...defaultProps} searchQuery={searchQuery} />);
+
+    if (matched) {
+      expect(defaultProps.renderOrder).toHaveBeenCalledWith(order, '₦');
+    } else {
+      expect(defaultProps.renderOrder).not.toHaveBeenCalled();
+    }
+  });
+
+  it('keeps the limit notice visible for a filtered-empty result without Retry', () => {
+    mocks.useFollowUpQueue.mockReturnValue({
+      failedOrders: [
+        {
+          id: 'order-1',
+          created_at: '2026-07-27T08:00:00Z',
+          customer_name: 'Ada',
+          customer_email: '',
+        },
+      ],
+      isFailedOrdersError: false,
+      isFollowUpLimited: true,
+      isRefreshing: false,
+      refresh: mocks.refresh,
+      viewState: { status: 'ready' },
+    });
+    render(<FollowUpQueueList {...defaultProps} searchQuery="no-match" />);
+    expect(screen.getByText(/This queue has reached its limit/)).toBeTruthy();
+    expect(
+      screen.queryByRole('button', { name: 'Retry loading follow-ups' })
+    ).toBeNull();
+  });
+
+  it('keeps the partial-results warning visible when search filters out loaded rows', () => {
+    mocks.useFollowUpQueue.mockReturnValue({
+      failedOrders: [
+        {
+          id: 'order-1',
+          created_at: '2026-07-27T08:00:00Z',
+          customer_email: 'ada@example.test',
+          customer_name: 'Ada',
+        },
+      ],
+      isFailedOrdersError: true,
+      isRefreshing: false,
+      refresh: mocks.refresh,
+      viewState: { status: 'ready' },
+    });
+    render(<FollowUpQueueList {...defaultProps} searchQuery="no-match" />);
+    expect(
+      screen.getByText(
+        "Some follow-ups couldn't be loaded or may be out of date."
+      )
+    ).toBeTruthy();
   });
 });

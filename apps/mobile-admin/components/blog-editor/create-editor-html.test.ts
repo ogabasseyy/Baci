@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { describe, expect, it } from 'vitest';
 import { DARK_COLORS, LIGHT_COLORS } from '@/constants/theme';
 import {

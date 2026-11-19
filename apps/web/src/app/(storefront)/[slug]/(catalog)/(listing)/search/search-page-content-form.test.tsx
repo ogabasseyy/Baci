@@ -95,7 +95,11 @@ function createSearchProducts(count: number): NormalizedProduct[] {
   })) as NormalizedProduct[];
 }
 
-function mockStorefrontContext(slug = 'ogabassey', isPublished = true) {
+function mockStorefrontContext(
+  slug = 'ogabassey',
+  isPublished = true,
+  template = slug === 'ogabassey' ? 'ogabassey' : 'standard'
+) {
   mockHeaders.mockResolvedValue(
     new Headers([
       ['host', 'proxy.internal'],
@@ -106,6 +110,7 @@ function mockStorefrontContext(slug = 'ogabassey', isPublished = true) {
   vi.mocked(getRequestScopedMerchant).mockResolvedValue({
     id: 'merchant-1',
     slug,
+    template_id: template,
     custom_domain: null,
     business_name: slug === 'ogabassey' ? 'Ogabassey' : 'Other store',
     payout_currency: 'NGN',
@@ -122,8 +127,25 @@ describe('SearchPageContent', () => {
     mockNotFound.mockReset();
   });
 
-  it('renders a prefilled in-page search form', async () => {
-    mockStorefrontContext();
+  it('uses the navbar search for another merchant using the Ogabassey template', async () => {
+    mockStorefrontContext('other', true, 'ogabassey');
+    mockGetStorefrontSearchProducts.mockResolvedValueOnce({
+      count: 1,
+      didYouMean: null,
+      products: createSearchProducts(1),
+      productIds: [],
+      query: 'iphone',
+    });
+    render(
+      (await SearchPageContent(
+        createSearchPageProps({ q: 'iphone' })
+      )) as React.ReactElement
+    );
+    expect(screen.queryByRole('form', { name: 'Edit search' })).toBeNull();
+  });
+
+  it('renders a prefilled in-page search form for other stores', async () => {
+    mockStorefrontContext('other');
     mockGetStorefrontSearchProducts.mockResolvedValueOnce({
       count: 45,
       didYouMean: null,
@@ -139,8 +161,28 @@ describe('SearchPageContent', () => {
     );
 
     const form = screen.getByRole('form', { name: 'Edit search' });
-    expect(form).toHaveAttribute('action', '/ogabassey/search');
+    expect(form).toHaveAttribute('action', '/other/search');
     expect(screen.getByLabelText('Search products')).toHaveValue('iphone');
+  });
+
+  it('uses the current merchant results for suggestions on a non-Ogabassey storefront', async () => {
+    mockStorefrontContext('other');
+    mockGetStorefrontSearchProducts.mockResolvedValueOnce({
+      count: 1,
+      didYouMean: null,
+      products: [{ ...createSearchProducts(1)[0], condition: 'used' }],
+      productIds: [],
+      query: 'iphone',
+    });
+    render(
+      (await SearchPageContent(
+        createSearchPageProps({ q: 'iphone' })
+      )) as React.ReactElement
+    );
+    fireEvent.focus(screen.getByRole('searchbox'));
+    expect(
+      screen.getByRole('link', { name: 'Used iphone' })
+    ).toBeInTheDocument();
   });
 
   it.each([
@@ -169,7 +211,9 @@ describe('SearchPageContent', () => {
           createSearchPageProps({ q: 'iphone' })
         )) as React.ReactElement
       );
-      fireEvent.focus(screen.getByLabelText('Search products'));
+      if (!present) fireEvent.focus(screen.getByLabelText('Search products'));
+      else
+        expect(screen.queryByRole('form', { name: 'Edit search' })).toBeNull();
 
       if (present) {
         expect(
@@ -188,104 +232,5 @@ describe('SearchPageContent', () => {
         delete process.env.BACI_AGENTIC_MERCHANT_SLUG;
       else process.env.BACI_AGENTIC_MERCHANT_SLUG = prevTenant;
     }
-  });
-
-  it('hides search assistance on an unpublished configured tenant', async () => {
-    const prevFlag = process.env.STOREFRONT_SEARCH_ASSIST_ENABLED;
-    const prevTenant = process.env.BACI_AGENTIC_MERCHANT_SLUG;
-    process.env.STOREFRONT_SEARCH_ASSIST_ENABLED = 'true';
-    process.env.BACI_AGENTIC_MERCHANT_SLUG = 'ogabassey';
-    try {
-      // The chat resolver rejects unpublished merchants, so advertising the
-      // entry point would end every attempt in a 503.
-      mockStorefrontContext('ogabassey', false);
-      mockGetStorefrontSearchProducts.mockResolvedValueOnce({
-        count: 45,
-        didYouMean: null,
-        products: createSearchProducts(20),
-        productIds: [],
-        query: 'iphone',
-      });
-
-      render(
-        (await SearchPageContent(
-          createSearchPageProps({ q: 'iphone' })
-        )) as React.ReactElement
-      );
-      fireEvent.focus(screen.getByLabelText('Search products'));
-
-      expect(
-        screen.queryByRole('button', { name: 'Ask about this search' })
-      ).toBeNull();
-    } finally {
-      if (prevFlag === undefined)
-        delete process.env.STOREFRONT_SEARCH_ASSIST_ENABLED;
-      else process.env.STOREFRONT_SEARCH_ASSIST_ENABLED = prevFlag;
-      if (prevTenant === undefined)
-        delete process.env.BACI_AGENTIC_MERCHANT_SLUG;
-      else process.env.BACI_AGENTIC_MERCHANT_SLUG = prevTenant;
-    }
-  });
-
-  it('renders the search form against the custom-domain route', async () => {
-    mockHeaders.mockResolvedValue(
-      new Headers([
-        ['host', 'shop.example.ng'],
-        ['x-custom-domain', 'shop.example.ng'],
-        ['x-pathname', '/search'],
-      ])
-    );
-    vi.mocked(getRequestScopedMerchant).mockResolvedValue({
-      id: 'merchant-1',
-      slug: 'ogabassey',
-      custom_domain: 'shop.example.ng',
-      business_name: 'Ogabassey',
-      payout_currency: 'NGN',
-    } as never);
-    mockGetStorefrontSearchProducts.mockResolvedValueOnce({
-      count: 1,
-      didYouMean: null,
-      products: createSearchProducts(1),
-      productIds: [],
-      query: 'iphone',
-    });
-
-    render(
-      (await SearchPageContent(
-        createSearchPageProps({ q: 'iphone' })
-      )) as React.ReactElement
-    );
-
-    expect(screen.getByRole('form', { name: 'Edit search' })).toHaveAttribute(
-      'action',
-      '/search'
-    );
-  });
-
-  it('renders a distinct error state when the search fails', async () => {
-    mockStorefrontContext();
-    mockGetStorefrontSearchProducts.mockRejectedValueOnce(
-      new Error('search rpc down')
-    );
-
-    render(
-      (await SearchPageContent(
-        createSearchPageProps({ q: 'iphone' })
-      )) as React.ReactElement
-    );
-
-    expect(
-      screen.getByRole('heading', { name: /temporarily unavailable/i })
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole('heading', { name: /no products found/i })
-    ).not.toBeInTheDocument();
-    // Retry is a route refresh (re-executes the search), not a link to the
-    // identical URL, which would reuse the cached error route.
-    expect(
-      screen.getByRole('button', { name: /try again/i })
-    ).toBeInTheDocument();
-    // The submitted query survives the failure for editing and retry.
-    expect(screen.getByLabelText('Search products')).toHaveValue('iphone');
   });
 });

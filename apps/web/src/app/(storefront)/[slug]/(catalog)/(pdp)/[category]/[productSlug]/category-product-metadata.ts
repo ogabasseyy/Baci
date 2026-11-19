@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { getBrandMatchedTwitterHandle } from '@/lib/brand-matched-twitter-handle';
 import type { CachedMerchant } from '@/lib/cached-data';
+import { getDurableProductSeoText } from '@/lib/get-durable-product-seo-text';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import {
   generateMetaDescription,
@@ -8,7 +9,6 @@ import {
   getValidatedProductUrl,
 } from '@/lib/seo-utils';
 import { buildStorefrontMetadataTitle } from '@/lib/storefront-metadata-title';
-import { stripVolatileProductPriceSentences } from '@/lib/storefront-product-description';
 import { buildProductPriceSeoCopy } from '@/lib/storefront-product-price-seo';
 import { normalizeSeoProductText } from '@/lib/storefront-product-slug-disambiguation';
 import { getStorefrontProductSocialMetadata } from '@/lib/storefront-product-social-metadata';
@@ -20,16 +20,19 @@ import {
 } from '@/lib/storefront-seo-defaults';
 import { mergeStorefrontSmartAppBannerOther } from '@/lib/storefront-smart-app-banner-metadata';
 import type { LcpRouteProduct } from './category-product-lcp-projection';
+import { resolveServerPdpRouteSelectionStatus } from './critical-variant-selection';
 
 export function buildCategoryProductMetadata({
   baseUrl,
   merchant,
   product,
+  searchParams,
   storeSlug,
 }: {
   baseUrl: string;
   merchant: CachedMerchant;
   product: LcpRouteProduct;
+  searchParams?: Record<string, string | string[] | undefined>;
   storeSlug: string;
 }): Metadata {
   const canonicalUrl = getValidatedProductUrl(product, baseUrl, merchant.slug);
@@ -46,13 +49,14 @@ export function buildCategoryProductMetadata({
     currency,
     country: merchant.country,
   });
-  const productDescription = stripVolatileProductPriceSentences(
-    product.description
-  );
-  const productMetaDescription = normalizeSeoProductText(
-    stripVolatileProductPriceSentences(product.meta_description),
-    product
-  );
+  const productDescription = getDurableProductSeoText({
+    text: product.description,
+    product,
+  });
+  const productMetaDescription = getDurableProductSeoText({
+    text: product.meta_description,
+    product,
+  });
   const generatedSeoDescription = normalizeSeoProductText(
     priceSeoCopy.description,
     product
@@ -74,10 +78,10 @@ export function buildCategoryProductMetadata({
     product,
     currency
   );
-  const normalizedProductMetaTitle = normalizeSeoProductText(
-    product.meta_title,
-    product
-  );
+  const normalizedProductMetaTitle = getDurableProductSeoText({
+    text: product.meta_title,
+    product,
+  });
   const normalizedGeneratedTitle = normalizeSeoProductText(
     priceSeoCopy.title,
     product
@@ -86,6 +90,7 @@ export function buildCategoryProductMetadata({
     normalizedProductMetaTitle || normalizedGeneratedTitle;
   const { metadataTitle, title: metadataTitleText } =
     buildStorefrontMetadataTitle({
+      dropSuffixWhenTooLong: true,
       title: metadataTitleSource,
       suffix: merchantDisplayName,
       fallback:
@@ -106,6 +111,14 @@ export function buildCategoryProductMetadata({
       canonicalUrl,
     })
   );
+  const selectionStatus = searchParams
+    ? resolveServerPdpRouteSelectionStatus({
+        product,
+        offers: product.offers,
+        searchParams,
+      })
+    : { hasMissingRouteSelection: false };
+  const shouldIndex = robots.index && !selectionStatus.hasMissingRouteSelection;
   const baseRobots = getIndexableRobotsMetadata();
   const baseGoogleBot =
     typeof baseRobots === 'object' &&
@@ -121,9 +134,9 @@ export function buildCategoryProductMetadata({
     alternates: { canonical: canonicalUrl },
     robots: {
       ...(typeof baseRobots === 'object' ? baseRobots : {}),
-      index: robots.index,
+      index: shouldIndex,
       follow: true,
-      googleBot: { ...baseGoogleBot, index: robots.index, follow: true },
+      googleBot: { ...baseGoogleBot, index: shouldIndex, follow: true },
     },
     openGraph: {
       title: metadataTitleText,

@@ -716,3 +716,31 @@ describe('reconcileProcessingVtuTransactions', () => {
     });
   });
 });
+
+describe('afterReconcile', () => {
+  it('runs once after the page, handed the same fulfil operation the reconciliation uses', async () => {
+    const supabase = createSupabase({
+      dataQuery: createProcessingQuery({ data: [] }),
+    });
+    const afterReconcile = vi.fn(async () => {});
+
+    await reconcileProcessingVtuTransactions({
+      deadlineMs: Date.now() + 3_600_000,
+      supabase: supabase as never,
+      afterReconcile,
+    });
+
+    expect(afterReconcile).toHaveBeenCalledTimes(1);
+    const [fulfil] = afterReconcile.mock.calls[0] as unknown as [
+      (input: unknown) => Promise<unknown>,
+    ];
+    fulfillPendingVtuTransactionMock.mockResolvedValue({ status: 'done' });
+    const input = {
+      supabase: {},
+      transactionId: 'txn-1',
+      walletPayClaimed: true,
+    };
+    await expect(fulfil(input)).resolves.toEqual({ status: 'done' });
+    expect(fulfillPendingVtuTransactionMock).toHaveBeenCalledWith(input);
+  });
+});

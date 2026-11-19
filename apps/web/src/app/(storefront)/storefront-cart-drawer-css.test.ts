@@ -39,6 +39,13 @@ it('keeps cart styles in the persistent storefront route layout', async () => {
     '.py-3\\.5',
     '.shadow-lg',
     '.z-80',
+    '.max-h-\\[90dvh\\]',
+    '.bg-\\[var\\(--store-surface\\,var\\(--store-background\\)\\)\\]',
+    '.file\\:mr-4',
+    '.size-12',
+    '.tabular-nums',
+    '.size-7',
+    '.has-disabled\\:opacity-50',
   ]) {
     const rules: string[] = [];
     css.walkRules(selector, (rule) => {

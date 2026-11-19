@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { CHECKOUT_AUTH_CHANGED } from '@/components/storefront/checkout-auth-notification';
 import { createClient } from '@/lib/supabase/client';
 
 /**
@@ -17,6 +18,7 @@ export type StorefrontCustomerSessionStatus =
 
 interface StorefrontSessionResponse {
   authenticated?: boolean;
+  user?: { id?: string } | null;
 }
 
 // A dropped connection can leave the session fetch hanging (stalled, not
@@ -28,7 +30,7 @@ const SESSION_REQUEST_TIMEOUT_MS = 12_000;
 async function fetchSessionAuthenticated(
   merchantSlug: string,
   signal: AbortSignal
-): Promise<boolean> {
+): Promise<{ authenticated: boolean; accountId: string | null }> {
   const response = await fetch(
     `/api/storefront/auth/session?merchantSlug=${encodeURIComponent(merchantSlug)}`,
     // Combine the supersede/unmount controller with a hard timeout so neither a
@@ -41,10 +43,13 @@ async function fetchSessionAuthenticated(
     }
   );
   if (!response.ok) {
-    return false;
+    return { authenticated: false, accountId: null };
   }
   const data = (await response.json()) as StorefrontSessionResponse | null;
-  return Boolean(data?.authenticated);
+  return {
+    authenticated: Boolean(data?.authenticated),
+    accountId: typeof data?.user?.id === 'string' ? data.user.id : null,
+  };
 }
 
 // Module scope so the try/catch stays out of the effect body, where it would
@@ -53,11 +58,11 @@ async function fetchSessionAuthenticated(
 async function loadSessionAuthenticated(
   merchantSlug: string,
   signal: AbortSignal
-): Promise<boolean> {
+): Promise<{ authenticated: boolean; accountId: string | null }> {
   try {
     return await fetchSessionAuthenticated(merchantSlug, signal);
   } catch {
-    return false;
+    return { authenticated: false, accountId: null };
   }
 }
 
@@ -137,14 +142,18 @@ export function useStorefrontCustomerSession(
       advanceRevision();
       setStatus('loading');
       const pending = loadSessionAuthenticated(merchantSlug, controller.signal);
-      pendingRef.current = pending;
-      void pending.then((authenticated) => {
+      pendingRef.current = pending.then((result) => result.authenticated);
+      void pending.then(({ authenticated, accountId: resolvedAccountId }) => {
         if (controller.signal.aborted) {
           return;
         }
         setStatus(authenticated ? 'authenticated' : 'guest');
+        setAccountId(resolvedAccountId);
       });
     };
+
+    // Email-code verification writes the session on the server and does not emit a browser auth event.
+    window.addEventListener(CHECKOUT_AUTH_CHANGED, runLoad);
 
     // Initial evaluation on mount / merchant change.
     runLoad();
@@ -167,6 +176,7 @@ export function useStorefrontCustomerSession(
 
     return () => {
       activeController?.abort();
+      window.removeEventListener(CHECKOUT_AUTH_CHANGED, runLoad);
       subscription.unsubscribe();
     };
   }, [merchantSlug]);

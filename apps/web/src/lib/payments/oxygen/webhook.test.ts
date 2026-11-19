@@ -50,6 +50,17 @@ describe('Oxygen webhook contract', () => {
       deduplicationKey: 'transaction:txn-example-001',
     });
   });
+  it.each([
+    ['split_payment', 'transaction-split_payment:txn-example-001'],
+    ['repayment_setup', 'transaction-repayment_setup:txn-example-001'],
+    ['loan_repayment', 'transaction-loan_repayment:txn-example-001'],
+    ['transaction', 'transaction:txn-example-001'],
+  ])('reconciles %s without discarding a different type that reuses its reference', (webhook_type, deduplicationKey) => {
+    expect(parseOxygenWebhook({ ...transaction, webhook_type })).toEqual({
+      ...parseOxygenWebhook(transaction),
+      deduplicationKey,
+    });
+  });
   it('uses the settlement payout rather than the unrelated partner-wide activation audit', () => {
     expect(parseOxygenWebhook(settlement)).toMatchObject({
       kind: 'settlement',
@@ -198,4 +209,41 @@ it('deduplicates identical address hints without collapsing changed status or ap
     action: 'reconcile_kyc',
   });
   expect(first?.deduplicationKey).not.toContain(base.phone_number);
+});
+
+it.each([
+  true,
+  false,
+])('accepts the documented selfie callback (%s) as a scoped KYC hint', (selfie) => {
+  const event = parseOxygenWebhook({
+    webhook_type: 'selfie_status_update',
+    phone_number: '2348000000000',
+    loan_request_reference: 'application-1',
+    selfie,
+  });
+  expect(event).toMatchObject({
+    kind: 'selfie',
+    applicationReference: 'application-1',
+    selfieConfirmed: selfie,
+    action: 'reconcile_kyc',
+  });
+});
+
+it('separates selfie callback keys by application and confirmation outcome', () => {
+  const body = {
+    webhook_type: 'selfie_status_update',
+    phone_number: '2348000000000',
+    loan_request_reference: 'application-1',
+    selfie: true,
+  };
+  const key = parseOxygenWebhook(body)?.deduplicationKey;
+  expect(key).toBeTruthy();
+  expect(parseOxygenWebhook(body)?.deduplicationKey).toBe(key);
+  expect(
+    parseOxygenWebhook({ ...body, selfie: false })?.deduplicationKey
+  ).not.toBe(key);
+  expect(
+    parseOxygenWebhook({ ...body, loan_request_reference: 'application-2' })
+      ?.deduplicationKey
+  ).not.toBe(key);
 });

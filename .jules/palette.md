@@ -175,3 +175,16 @@
 **Learning:** When a password toggle uses `aria-pressed`, tests should assert both the state transition and the stable accessible name so future visible/icon refactors do not regress the APG toggle-button contract.
 **Action:** Keep `aria-label="Show password"` stable across visibility toggles, bind `aria-pressed` to the current state, and hide decorative Eye/EyeOff icons from assistive technologies when the button already has an explicit accessible name.
 **Source:** WAI-ARIA APG button pattern, verified 2026-07-01.
+## 2025-02-23 — Use assertive live regions for React Native alert roles
+**Learning:** In React Native, `accessibilityRole="alert"` corresponds to the assertive live region behavior. The value `"status"` is not a valid `accessibilityRole`.
+**Action:** When adding error feedback banners, use `accessibilityRole="alert"` and `accessibilityLiveRegion="assertive"`. Do not use `"status"`.
+**Source:** Codebase standards for dynamic error feedback
+## 2025-02-18 — aria-busy on Auth Submission Buttons
+**Learning:** Submit buttons managing async operations like sign-in often miss the aria-busy attribute when disabling themselves during loading, depriving screen readers of clear state feedback.
+**Action:** When disabling buttons for loading state, always bind aria-busy to the same loading boolean.
+**Source:** WCAG 4.1.2 Name, Role, Value
+
+## 2025-02-05 — Prevent Double SR Announcements in RN Toasts
+**Learning:** Using manual `AccessibilityInfo.announceForAccessibility` alongside declarative `accessibilityLiveRegion` causes double announcements on Android, whereas iOS VoiceOver ignores `accessibilityLiveRegion`. Also, `accessibilityRole="alert"` already implies assertive priority while `accessibilityLiveRegion` controls announcement urgency (`assertive` for `error`, `polite` for non-error notifications).
+**Action:** Pair `accessibilityRole="alert"` with variant-appropriate `accessibilityLiveRegion` (`assertive` for errors, `polite` otherwise) for Android and web, and call `AccessibilityInfo.announceForAccessibility` only on iOS (`Platform.OS === 'ios'`) whenever a visible toast has non-empty text (including `duration={0}`).
+**Source:** React Native Accessibility Docs

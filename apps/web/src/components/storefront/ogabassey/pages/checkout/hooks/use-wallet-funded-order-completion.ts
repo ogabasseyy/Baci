@@ -1,6 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { stashPrivateParamsForNavigation } from '@/lib/privacy/private-url-param-handoff';
 import { asRoute } from '@/lib/routes';
 import { captureCheckoutPaymentCompleted } from '../capture-checkout-payment-completed';
 import { clearCheckoutIdempotencyKey } from '../checkout-idempotency';
@@ -16,12 +17,14 @@ export function useWalletFundedOrderCompletion({
   clearCheckoutSession,
   clearPendingCheckoutOrder,
   getHref,
+  merchantSlug,
   paymentMethod,
 }: {
   clearCart: () => void;
   clearCheckoutSession: () => void;
   clearPendingCheckoutOrder: () => void;
   getHref: (path: string) => string;
+  merchantSlug: string | undefined;
   paymentMethod: string;
 }) {
   const router = useRouter();
@@ -50,7 +53,14 @@ export function useWalletFundedOrderCompletion({
     if (trackingToken) {
       successQuery.set('trackingToken', trackingToken);
     }
-    router.push(asRoute(getHref(`/order-success?${successQuery.toString()}`)));
+    router.push(
+      asRoute(
+        stashPrivateParamsForNavigation(
+          getHref(`/order-success?${successQuery.toString()}`),
+          merchantSlug
+        )
+      )
+    );
     setTimeout(clearCart, 500);
   };
 }

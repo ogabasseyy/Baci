@@ -24,15 +24,18 @@ export interface ImeiCapabilitiesConfiguration {
  * snapshot and payment boundary before charging; discovery does not promise
  * provider availability or database provisioning and performs no database I/O.
  */
-export function getAvailableImeiTierKeys({
-  configuration,
-  device,
-  clientCapabilities,
-}: {
+type CapabilitiesInput = {
   configuration: ImeiCapabilitiesConfiguration;
   device?: ImeiDeviceCategory;
   clientCapabilities: readonly string[];
-}): ImeiServiceTierKey[] {
+};
+
+/** Each advertised check with the provider POST would select for it. */
+function advertisedImeiTiers({
+  configuration,
+  device,
+  clientCapabilities,
+}: CapabilitiesInput): { tierKey: ImeiServiceTierKey; provider: string }[] {
   if (
     !configuration.getImeiHashSalt() ||
     Buffer.byteLength(configuration.getAccessSigningSecret() ?? '') < 32
@@ -49,13 +52,13 @@ export function getAvailableImeiTierKeys({
       configuration.getImeiIdentifierEncryptionKey()
   );
   const sickwConfigured = Boolean(configuration.getSickwApiKey());
-  return PUBLIC_IMEI_SERVICE_TIERS.filter((tierKey) => {
+  return PUBLIC_IMEI_SERVICE_TIERS.flatMap((tierKey) => {
     const tier = IMEI_SERVICE_TIERS[tierKey];
     if (
       disabled.has(tierKey) ||
       (device && !tier.deviceCategories.some((category) => category === device))
     ) {
-      return false;
+      return [];
     }
     const binding = resolveImeiProviderBinding({
       clientSupportsAsync: clientCapabilities.includes('imei-async-v1'),
@@ -65,9 +68,30 @@ export function getAvailableImeiTierKeys({
       tier,
       tierKey,
     });
-    if (!binding) return false;
+    if (!binding) return [];
     // Match POST's selected provider exactly. Missing Petrock configuration
     // cannot advertise a Sickw fallback that POST would never select.
-    return binding.provider === 'petrock' ? petrockConfigured : sickwConfigured;
+    const configured =
+      binding.provider === 'petrock' ? petrockConfigured : sickwConfigured;
+    return configured ? [{ tierKey, provider: binding.provider }] : [];
   });
+}
+
+export function getAvailableImeiTierKeys(
+  input: CapabilitiesInput
+): ImeiServiceTierKey[] {
+  return advertisedImeiTiers(input).map(({ tierKey }) => tierKey);
+}
+
+/**
+ * The advertised checks the savings wallet can pay for: wallet pay only
+ * accepts Sickw-run checks, and which checks Petrock runs is server
+ * configuration the app can't see, so the server says it here.
+ */
+export function getWalletPayableImeiTierKeys(
+  input: CapabilitiesInput
+): ImeiServiceTierKey[] {
+  return advertisedImeiTiers(input)
+    .filter(({ provider }) => provider === 'sickw')
+    .map(({ tierKey }) => tierKey);
 }

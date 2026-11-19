@@ -14,6 +14,9 @@ jest.mock('@/lib/wallet-pin-api', () => ({ submitWalletPin: jest.fn() }));
 jest.mock('@/lib/wallet-pin-change-api', () => ({
   changeWalletPin: jest.fn(),
 }));
+jest.mock('expo-router/react-navigation', () => ({
+  usePreventRemove: jest.fn(),
+}));
 jest.mock('expo-router', () => {
   const { Text } = jest.requireActual('react-native');
   return {

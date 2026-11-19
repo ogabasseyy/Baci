@@ -1,11 +1,17 @@
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
-import { Alert } from 'react-native';
+import { act, render, screen, waitFor } from '@testing-library/react-native';
+import { router } from 'expo-router';
 import { submitWalletPin } from '@/lib/wallet-pin-api';
 import { changeWalletPin } from '@/lib/wallet-pin-change-api';
 import { WalletPinSettingsScreen } from './WalletPinSettingsScreen';
+import {
+  enterPin,
+  enterStep,
+  pressButton as press,
+} from './wallet-pin-settings.test-support';
 
 const mockRefresh = jest.fn();
 const mockSignOut = jest.fn();
+const mockNavigation = { addListener: () => () => undefined };
 let mockGate: { state: string; status: unknown; refresh: () => void };
 
 jest.mock('./use-wallet-pin-settings-gate', () => ({
@@ -15,12 +21,16 @@ jest.mock('@/lib/wallet-pin-api', () => ({ submitWalletPin: jest.fn() }));
 jest.mock('@/lib/wallet-pin-change-api', () => ({
   changeWalletPin: jest.fn(),
 }));
+jest.mock('expo-router/react-navigation', () => ({
+  usePreventRemove: jest.fn(),
+}));
 jest.mock('expo-router', () => {
   const { Text } = jest.requireActual('react-native');
   return {
+    router: { back: jest.fn(), replace: jest.fn(), canGoBack: jest.fn() },
     Redirect: ({ href }: { href: string }) => <Text>{`redirect:${href}`}</Text>,
     Stack: { Screen: () => null },
-    useNavigation: () => ({ addListener: () => () => undefined }),
+    useNavigation: () => mockNavigation,
   };
 });
 jest.mock('@/hooks/use-auth-guard', () => ({
@@ -55,12 +65,22 @@ const status = (over: object = {}) => ({
 const ready = (over: object = {}) => {
   mockGate = { state: 'ready', status: status(over), refresh: mockRefresh };
 };
-const type = (label: string, value: string) =>
-  fireEvent.changeText(screen.getByLabelText(label), value);
-const press = (name: string) =>
-  fireEvent.press(screen.getByRole('button', { name }));
 const serverError = (code: string, message: string) =>
   Object.assign(new Error(message), { code });
+
+const ACTION = { set: 'Save PIN', change: 'Change PIN', reset: 'Reset PIN' };
+
+/** Walks every step for the mode and saves, waiting for the answer. */
+async function saveFlow(
+  mode: 'set' | 'change' | 'reset',
+  next = '5678',
+  current = '1234'
+) {
+  if (mode === 'change') enterStep(current);
+  enterStep(next);
+  enterPin(next);
+  await act(async () => press(ACTION[mode]));
+}
 
 describe('WalletPinSettingsScreen', () => {
   beforeEach(() => {
@@ -68,88 +88,107 @@ describe('WalletPinSettingsScreen', () => {
     ready();
   });
 
-  it('set success calls the API once, clears fields and re-reads status', async () => {
+  it('set success calls the API once and shows the saved state, not an alert', async () => {
     set.mockResolvedValue(undefined);
     render(<WalletPinSettingsScreen />);
-    type('New PIN', '1234');
-    type('Confirm PIN', '1234');
-    await act(async () => press('Save PIN'));
+    await saveFlow('set', '1234');
     expect(set).toHaveBeenCalledTimes(1);
     expect(set).toHaveBeenCalledWith('set', '1234', 'user-1');
-    expect(screen.getByText('Your wallet PIN has been saved.')).toBeTruthy();
-    expect(screen.getByLabelText('New PIN').props.value).toBe('');
-    // The form moves to change mode once a PIN exists.
-    expect(screen.getByLabelText('Confirm new PIN').props.value).toBe('');
+    expect(screen.getByRole('header', { name: 'PIN set' })).toBeTruthy();
+    expect(
+      screen.getByText('You’ll use it whenever money leaves your wallet.')
+    ).toBeTruthy();
+    expect(screen.queryByText('1234')).toBeNull();
+    expect(router.back).not.toHaveBeenCalled();
   });
 
-  it('shows the success notice first and only refreshes the gate once it is dismissed', async () => {
-    const alert = jest
-      .spyOn(Alert, 'alert')
-      .mockImplementation(() => undefined);
+  it.each([
+    ['set', {}, 'PIN set'],
+    ['change', { hasPin: true }, 'PIN changed'],
+    ['reset', { hasPin: true, resetRequired: true }, 'PIN reset'],
+  ] as const)('%s success confirms and refreshes, then Done goes back', async (mode, over, title) => {
+    ready(over);
     set.mockResolvedValue(undefined);
+    change.mockResolvedValue(undefined);
+    (router.canGoBack as jest.Mock).mockReturnValue(true);
     render(<WalletPinSettingsScreen />);
-    type('New PIN', '1234');
-    type('Confirm PIN', '1234');
-    await act(async () => press('Save PIN'));
-    expect(alert).toHaveBeenCalledTimes(1);
-    expect(alert.mock.calls[0][0]).toBe('Your wallet PIN has been saved.');
-    expect(mockRefresh).not.toHaveBeenCalled();
-    const buttons = alert.mock.calls[0][2] ?? [];
-    expect(buttons.map((b) => b.text)).toEqual(['OK']);
-    buttons[0].onPress?.();
-    expect(mockRefresh).toHaveBeenCalledTimes(1);
+    await saveFlow(mode);
+    expect(screen.getByRole('header', { name: title })).toBeTruthy();
+    // Refreshed as soon as it saves, so any way out (Back, a swipe) leaves
+    // Settings with the new status; Done refreshes again on the way out.
+    await waitFor(() => expect(mockRefresh).toHaveBeenCalledTimes(1));
+    expect(router.back).not.toHaveBeenCalled();
+    press('Done');
+    expect(router.back).toHaveBeenCalledTimes(1);
+    expect(router.replace).not.toHaveBeenCalled();
+    expect(mockRefresh).toHaveBeenCalledTimes(2);
   });
 
-  it('change success sends both PINs and reports it', async () => {
+  it('change sends the current and new PIN together', async () => {
     ready({ hasPin: true });
     change.mockResolvedValue(undefined);
     render(<WalletPinSettingsScreen />);
-    type('Current PIN', '1234');
-    type('New PIN', '5678');
-    type('Confirm new PIN', '5678');
-    await act(async () => press('Change PIN'));
+    await saveFlow('change', '5678', '1234');
     expect(change).toHaveBeenCalledWith(
       { currentPin: '1234', newPin: '5678' },
       'user-1'
     );
-    expect(screen.getByText('Your wallet PIN has been changed.')).toBeTruthy();
-    expect(screen.getByLabelText('Current PIN').props.value).toBe('');
   });
 
-  it('reset success uses the reset call', async () => {
-    ready({ hasPin: true, resetRequired: true });
+  it('falls back to Settings when there is no history', async () => {
     set.mockResolvedValue(undefined);
+    (router.canGoBack as jest.Mock).mockReturnValue(false);
     render(<WalletPinSettingsScreen />);
-    type('New PIN', '2468');
-    type('Confirm PIN', '2468');
-    await act(async () => press('Reset PIN'));
-    expect(set).toHaveBeenCalledWith('reset', '2468', 'user-1');
-    expect(screen.getByText('Your wallet PIN has been reset.')).toBeTruthy();
+    await saveFlow('set');
+    press('Done');
+    expect(router.replace).toHaveBeenCalledWith('/settings');
+    expect(router.back).not.toHaveBeenCalled();
   });
 
-  it('PIN_INCORRECT shows the server message and clears the fields', async () => {
+  it.each([
+    'throw',
+    'reject',
+  ] as const)('still navigates away when the background status refresh %ss', async (failureMode) => {
+    set.mockResolvedValue(undefined);
+    (router.canGoBack as jest.Mock).mockReturnValue(true);
+    if (failureMode === 'throw') {
+      mockRefresh.mockImplementation(() => {
+        throw new Error('offline');
+      });
+    } else {
+      mockRefresh.mockRejectedValue(new Error('offline'));
+    }
+    render(<WalletPinSettingsScreen />);
+    await saveFlow('set');
+    await act(async () => {
+      expect(() => press('Done')).not.toThrow();
+      await Promise.resolve();
+    });
+    expect(router.back).toHaveBeenCalledTimes(1);
+  });
+
+  it('PIN_INCORRECT shows the server message and starts again at the current PIN', async () => {
     ready({ hasPin: true });
     change.mockRejectedValue(
       serverError('PIN_INCORRECT', 'That PIN is not right.')
     );
     render(<WalletPinSettingsScreen />);
-    type('Current PIN', '1111');
-    type('New PIN', '5678');
-    type('Confirm new PIN', '5678');
-    await act(async () => press('Change PIN'));
+    await saveFlow('change', '5678', '1111');
     expect(screen.getByRole('alert')).toBeTruthy();
     expect(screen.getByText('That PIN is not right.')).toBeTruthy();
-    for (const l of ['Current PIN', 'New PIN', 'Confirm new PIN'])
-      expect(screen.getByLabelText(l).props.value).toBe('');
+    expect(
+      screen.getByRole('header', { name: 'Enter your current PIN' })
+    ).toBeTruthy();
+    expect(
+      screen.getByLabelText('Enter your current PIN, 0 of 6 digits entered')
+    ).toBeTruthy();
     expect(change).toHaveBeenCalledTimes(1);
   });
 
   it('falls back to a plain message for an unnamed failure', async () => {
     set.mockRejectedValue('boom');
     render(<WalletPinSettingsScreen />);
-    type('New PIN', '1234');
-    type('Confirm PIN', '1234');
-    await act(async () => press('Save PIN'));
+    await saveFlow('set');
     expect(
       screen.getByText('Something went wrong. Please try again.')
     ).toBeTruthy();
@@ -158,10 +197,10 @@ describe('WalletPinSettingsScreen', () => {
   it('PIN_ALREADY_SET switches to change mode and re-reads status', async () => {
     set.mockRejectedValue(serverError('PIN_ALREADY_SET', 'already'));
     render(<WalletPinSettingsScreen />);
-    type('New PIN', '1234');
-    type('Confirm PIN', '1234');
-    await act(async () => press('Save PIN'));
-    expect(screen.getByText('Change your PIN')).toBeTruthy();
+    await saveFlow('set');
+    expect(
+      screen.getByRole('header', { name: 'Enter your current PIN' })
+    ).toBeTruthy();
     expect(mockRefresh).toHaveBeenCalled();
   });
 
@@ -169,56 +208,24 @@ describe('WalletPinSettingsScreen', () => {
     ready({ hasPin: true });
     change.mockRejectedValue(serverError('PIN_NOT_SET', 'none'));
     render(<WalletPinSettingsScreen />);
-    type('Current PIN', '1234');
-    type('New PIN', '5678');
-    type('Confirm new PIN', '5678');
-    await act(async () => press('Change PIN'));
-    expect(screen.getByText('Set a wallet PIN')).toBeTruthy();
+    await saveFlow('change');
+    expect(
+      screen.getByRole('header', { name: 'Choose a wallet PIN' })
+    ).toBeTruthy();
   });
 
   it('PIN_RESET_REQUIRED switches to reset mode', async () => {
     ready({ hasPin: true });
     change.mockRejectedValue(serverError('PIN_RESET_REQUIRED', 'reset'));
     render(<WalletPinSettingsScreen />);
-    type('Current PIN', '1234');
-    type('New PIN', '5678');
-    type('Confirm new PIN', '5678');
-    await act(async () => press('Change PIN'));
-    expect(screen.getByText('Reset your PIN')).toBeTruthy();
-  });
-
-  it('REAUTHENTICATION_REQUIRED guides to sign out; signOut only after confirm', async () => {
-    ready({ hasPin: true, resetRequired: true });
-    set.mockRejectedValue(
-      serverError(
-        'REAUTHENTICATION_REQUIRED',
-        'Please sign in again to continue.'
-      )
-    );
-    const alert = jest
-      .spyOn(Alert, 'alert')
-      .mockImplementation(() => undefined);
-    render(<WalletPinSettingsScreen />);
-    type('New PIN', '2468');
-    type('Confirm PIN', '2468');
-    await act(async () => press('Reset PIN'));
+    await saveFlow('change');
     expect(
-      screen.getByText(
-        'For your security, please sign out and sign in again, then come back to reset your PIN.'
-      )
+      screen.getByRole('header', { name: 'Choose a new PIN' })
     ).toBeTruthy();
-    press('Sign out');
-    expect(mockSignOut).not.toHaveBeenCalled();
-    expect(alert.mock.calls[0][0]).toBe('Sign out?');
-    const buttons = alert.mock.calls[0][2] ?? [];
-    expect(buttons.map((b) => b.text)).toEqual(['Cancel', 'Sign out']);
-    buttons[0].onPress?.();
-    expect(mockSignOut).not.toHaveBeenCalled();
-    buttons[1].onPress?.();
-    expect(mockSignOut).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('Forgot your PIN?')).toBeNull();
   });
 
-  it('a double tap sends one request', async () => {
+  it('a double tap sends one request and the pad stays locked while saving', async () => {
     let resolve: () => void = () => undefined;
     set.mockImplementation(
       () =>
@@ -227,24 +234,19 @@ describe('WalletPinSettingsScreen', () => {
         })
     );
     render(<WalletPinSettingsScreen />);
-    type('New PIN', '1234');
-    type('Confirm PIN', '1234');
-    press('Save PIN');
+    enterStep('1234');
+    enterPin('1234');
     press('Save PIN');
     expect(set).toHaveBeenCalledTimes(1);
     expect(
-      screen.getByRole('button', { name: 'Save PIN' }).props.accessibilityState
-        .disabled
-    ).toBe(true);
+      screen.getByRole('button', { name: 'Continue' }).props.accessibilityState
+    ).toEqual({ disabled: true, busy: true });
+    press('Continue');
+    enterPin('1');
+    expect(
+      screen.getByLabelText('Choose a wallet PIN, 0 of 6 digits entered')
+    ).toBeTruthy();
+    expect(set).toHaveBeenCalledTimes(1);
     await act(async () => resolve());
-  });
-
-  it('keeps no PIN text in any field after submit', async () => {
-    set.mockResolvedValue(undefined);
-    render(<WalletPinSettingsScreen />);
-    type('New PIN', '1234');
-    type('Confirm PIN', '1234');
-    await act(async () => press('Save PIN'));
-    expect(screen.queryByDisplayValue('1234')).toBeNull();
   });
 });

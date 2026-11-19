@@ -69,9 +69,7 @@ test('typecheck runs one compiler at a time so the web program never overlaps an
   for (const call of turboCalls) assert.match(call, /--concurrency=1\b/);
 });
 
-test('every workspace package with a typecheck script also defines typecheck:ci', async () => {
-  // `turbo typecheck:ci` only runs packages that define the script, so a package
-  // that has `typecheck` but not `typecheck:ci` silently drops out of CI.
+async function workspacePackages() {
   const { packages } = YAML.parse(await readFile('pnpm-workspace.yaml', 'utf8'));
   const dirs = [];
   for (const pattern of packages) {
@@ -84,15 +82,33 @@ test('every workspace package with a typecheck script also defines typecheck:ci'
       if (entry.isDirectory()) dirs.push(`${base}/${entry.name}`);
     }
   }
-  const missing = [];
+  const found = [];
   for (const dir of dirs) {
-    let pkg;
     try {
-      pkg = JSON.parse(await readFile(`${dir}/package.json`, 'utf8'));
+      found.push({ dir, pkg: JSON.parse(await readFile(`${dir}/package.json`, 'utf8')) });
     } catch {
-      continue;
+      // Not a package directory.
     }
-    if (pkg.scripts?.typecheck && !pkg.scripts['typecheck:ci']) missing.push(pkg.name);
   }
+  return found;
+}
+
+test('every workspace package with a typecheck script also defines typecheck:ci', async () => {
+  // `turbo typecheck:ci` only runs packages that define the script, so a package
+  // that has `typecheck` but not `typecheck:ci` silently drops out of CI.
+  const missing = (await workspacePackages())
+    .filter(({ pkg }) => pkg.scripts?.typecheck && !pkg.scripts['typecheck:ci'])
+    .map(({ pkg }) => pkg.name);
   assert.deepEqual(missing, []);
+});
+
+test('only the @baci/web main program emits the typecheck budget diagnostics', async () => {
+  // The step summary greps the whole log for `--extendedDiagnostics` output and
+  // labels it as the @baci/web main program; a second flag would mix programs.
+  const flagged = (await workspacePackages()).flatMap(({ pkg }) =>
+    Object.entries(pkg.scripts ?? {})
+      .filter(([, command]) => command.includes('--extendedDiagnostics'))
+      .map(([name]) => `${pkg.name}#${name}`)
+  );
+  assert.deepEqual(flagged, ['@baci/web#typecheck:ci']);
 });

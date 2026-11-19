@@ -5,6 +5,7 @@ import {
   oxygenBankProviderListSchema,
 } from '@/schemas/oxygen-bank-details';
 import type { OxygenEnvironment } from './environment';
+import { bankRefreshLockKey } from './supported-bank-refresh-lock';
 
 type Bank = { name: string; code: string };
 type Cache = {
@@ -23,8 +24,9 @@ type Provider = {
   call(operation: 'banks', input: Record<string, unknown>): Promise<unknown>;
 };
 /**
- * A cold cache is repopulated at most once per lock window. After a failed
- * refresh the lock is kept, so the same window is the failure cooldown.
+ * The lock is shared with the scheduled recovery job, so a cold cache is
+ * repopulated by one refresher per lock window. After a failed refresh the
+ * lock is kept, so the same window is the failure cooldown.
  */
 const REFRESH_LOCK_SECONDS = 60;
 const RELEASE_LOCK_IF_OWNED_SCRIPT =
@@ -33,10 +35,6 @@ const RELEASE_LOCK_IF_OWNED_SCRIPT =
 function key(environment: OxygenEnvironment, partner: string) {
   const digest = createHash('sha256').update(partner).digest('hex');
   return `oxygen:supported-banks:${environment}:${digest}:v1`;
-}
-
-function lockKey(environment: OxygenEnvironment, partner: string) {
-  return `${key(environment, partner)}:refresh-lock`;
 }
 
 export async function readSupportedBanks(
@@ -97,7 +95,7 @@ export async function readOrRefreshSupportedBanks(
   const cached = await readSupportedBanks(cache, environment, partner);
   if (cached) return cached;
 
-  const lock = lockKey(environment, partner);
+  const lock = bankRefreshLockKey(environment, partner);
   // A per-claim token fences the release: a refresh that outlives the lock TTL
   // must not delete the lock a later request has since claimed.
   const token = randomUUID();

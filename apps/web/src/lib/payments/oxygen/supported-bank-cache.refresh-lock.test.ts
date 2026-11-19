@@ -4,6 +4,7 @@ const logger = vi.hoisted(() => ({ error: vi.fn() }));
 vi.mock('@/lib/logger', () => ({ logger }));
 
 import { readOrRefreshSupportedBanks } from './supported-bank-cache';
+import { bankRefreshLockKey } from './supported-bank-refresh-lock';
 
 const bank = { name: 'Example Bank', code: '001' };
 
@@ -17,7 +18,7 @@ describe('bugfix: refresh lock fencing and failure cooldown', () => {
     const store = new Map<string, unknown>();
     return {
       store,
-      lockKey: () => [...store.keys()].find((k) => k.endsWith(':refresh-lock')),
+      lockKey: () => bankRefreshLockKey('production', 'partner'),
       get: vi.fn(async (k: string) => store.get(k) ?? null),
       set: vi.fn(
         async (k: string, v: unknown, o?: { nx?: boolean; ex?: number }) => {
@@ -40,7 +41,7 @@ describe('bugfix: refresh lock fencing and failure cooldown', () => {
     const provider = {
       call: vi.fn(async () => {
         // The 60s lock expired mid-refresh and another request claimed a new one.
-        const lock = cache.lockKey() as string;
+        const lock = cache.lockKey();
         cache.store.delete(lock);
         await cache.set(lock, 'successor-token', { nx: true, ex: 60 });
         return providerList;
@@ -56,7 +57,7 @@ describe('bugfix: refresh lock fencing and failure cooldown', () => {
       )
     ).toEqual([bank]);
 
-    expect(cache.store.get(cache.lockKey() as string)).toBe('successor-token');
+    expect(cache.store.get(cache.lockKey())).toBe('successor-token');
   });
 
   it('keeps the lock after a failed refresh so the lock window is the cooldown', async () => {
@@ -78,7 +79,7 @@ describe('bugfix: refresh lock fencing and failure cooldown', () => {
 
     expect(provider.call).toHaveBeenCalledTimes(1);
     expect(cache.eval).not.toHaveBeenCalled();
-    expect(cache.lockKey()).toBeDefined();
+    expect(cache.store.has(cache.lockKey())).toBe(true);
   });
 
   it('retries the provider once the failure cooldown has expired', async () => {
@@ -98,11 +99,11 @@ describe('bugfix: refresh lock fencing and failure cooldown', () => {
       );
 
     expect(await read()).toBeNull();
-    cache.store.delete(cache.lockKey() as string); // the lock TTL elapsing
+    cache.store.delete(cache.lockKey()); // the lock TTL elapsing
 
     expect(await read()).toEqual([bank]);
     expect(provider.call).toHaveBeenCalledTimes(2);
-    expect(cache.lockKey()).toBeUndefined();
+    expect(cache.store.has(cache.lockKey())).toBe(false);
   });
 
   it('logs a failed refresh without the provider error text', async () => {
@@ -130,6 +131,25 @@ describe('bugfix: refresh lock fencing and failure cooldown', () => {
       })
     );
     expect(JSON.stringify(logger.error.mock.calls)).not.toContain('sk_live_x');
+  });
+
+  it('does not call the provider while the scheduled recovery job holds the lock', async () => {
+    const cache = redisLike();
+    // The cron route claims the same key with its own token before checkout runs.
+    cache.store.set(cache.lockKey(), 'cron-token');
+    const provider = { call: vi.fn().mockResolvedValue(providerList) };
+
+    expect(
+      await readOrRefreshSupportedBanks(
+        cache,
+        'production',
+        'partner',
+        () => provider
+      )
+    ).toBeNull();
+
+    expect(provider.call).not.toHaveBeenCalled();
+    expect(cache.store.get(cache.lockKey())).toBe('cron-token');
   });
 
   it('still returns the list when releasing the lock fails', async () => {

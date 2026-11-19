@@ -4,6 +4,7 @@ import {
   readSupportedBanks,
   refreshSupportedBanks,
 } from './supported-bank-cache';
+import { bankRefreshLockKey } from './supported-bank-refresh-lock';
 
 const bank = { name: 'Example Bank', code: '001' };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -94,7 +95,7 @@ describe('cache-first read for checkout', () => {
     ).toEqual([bank]);
 
     const [lockKey, token] = cache.set.mock.calls[0];
-    expect(lockKey).toMatch(/:refresh-lock$/);
+    expect(lockKey).toBe(bankRefreshLockKey('production', 'partner'));
     expect(token).toMatch(UUID);
     expect(cache.set.mock.calls[0][2]).toEqual({ nx: true, ex: 60 });
     expect(cache.eval).toHaveBeenCalledWith(

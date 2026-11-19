@@ -134,7 +134,7 @@ describe('commitBumpaProducts revalidation', () => {
       products: [
         {
           slug: 'imported-phone',
-          previousSlug: null,
+          previousSlug: 'imported-phone',
           id: 'existing-product',
           category: 'Phones',
         },

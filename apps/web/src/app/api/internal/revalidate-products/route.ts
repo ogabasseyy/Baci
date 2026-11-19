@@ -15,6 +15,7 @@ import { dispatchStorefrontProductPurge } from './dispatch-storefront-purge';
 import { flushOriginCacheRevalidations } from './flush-origin-cache-revalidations';
 import { hardExpireOriginCaches } from './hard-expire-origin-caches';
 import { hasCompleteScopedProductSlugs } from './has-complete-scoped-product-slugs';
+import { mergeDependentAliasTargets } from './merge-dependent-alias-targets';
 import { resolveAuthoritativeMerchantSlug } from './resolve-authoritative-merchant-slug';
 import { revalidateWithoutProducts } from './revalidate-without-products';
 
@@ -70,6 +71,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     purgeWholeStorefront,
     expireProductBlogCache: shouldExpireProductBlogCache,
     omitMerchantWidePdpDetails: callerOmitMerchantWidePdpDetails,
+    slugsUnchanged,
     blogPostSlugs: callerBlogPostSlugs,
     confirmEdgeEviction,
   } = parsed.data;
@@ -78,10 +80,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const hasExplicitProductSlugs = Boolean(productSlugs?.length);
   const hasProducts = Boolean(products?.length);
 
-  // The internal Bearer secret authorizes this endpoint, but `merchantSlug` is
-  // still only caller-supplied routing data. Validate it BEFORE mutating any
-  // origin caches so a mismatched slug fails fast. The public client is
-  // intentional: this route needs only `merchants.slug` and never service-role.
+  // Validate caller-supplied `merchantSlug` under anon RLS before mutating origin caches.
   const needsStorefrontPurge = Boolean(
     merchantSlug && (purgeWholeStorefront || hasProducts)
   );
@@ -117,14 +116,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
   }
 
-  // Hard-expire every slug chunk immediately so SWR cannot re-seed the edge.
   const explicitSlugsRevalidated =
     hasExplicitProductSlugs &&
     revalidateProductSlugs(merchantId, productSlugs ?? [], {
       expireImmediately: true,
     }) === true;
-
-  // Trusted internal callers (INTERNAL_API_SECRET) pass pre-validated slug chunks here.
   if (
     !revalidateWithoutProducts({
       merchantId,
@@ -142,18 +138,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     let revalidatedDeferredProducts = false;
     try {
       if (purgeWholeStorefront) {
-        // Whole-storefront purges skip article lookups and bust caller hints;
-        // hard-expire when a hostname purge follows so SWR cannot re-seed CF.
         const hintSlugs = collectResolvedProductSlugs(products);
-        if (authoritativeMerchantSlug) {
-          revalidateProductSlugs(merchantId, hintSlugs, {
-            expireImmediately: true,
-          });
-        } else {
-          revalidateProductSlugs(merchantId, hintSlugs);
-        }
+        revalidateProductSlugs(
+          merchantId,
+          hintSlugs,
+          authoritativeMerchantSlug ? { expireImmediately: true } : undefined
+        );
       } else {
-        // Resolve authoritative active product rows under anon RLS (no service role).
         const purgeClient =
           supabase ??
           createPublicClient({
@@ -166,26 +157,33 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           blogPostSlugs,
           blogPostSlugsIncomplete,
         } = await enrichProductPurgeEntries(purgeClient, merchantId, products);
-        // Hard-expire per-slug PDP tags before edge purging so SWR cannot re-seed CF.
-        const bustSlugs = Array.from(
-          new Set([...(productSlugs ?? []), ...resolvedSlugs])
-        );
+        const mergedAliases = await mergeDependentAliasTargets({
+          supabase: purgeClient,
+          merchantId,
+          products,
+          entries,
+          slugs: Array.from(
+            new Set([...(productSlugs ?? []), ...resolvedSlugs])
+          ),
+        });
         const bustSlugsRevalidated =
           (authoritativeMerchantSlug
-            ? revalidateProductSlugs(merchantId, bustSlugs, {
+            ? revalidateProductSlugs(merchantId, mergedAliases.slugs, {
                 expireImmediately: true,
               })
-            : revalidateProductSlugs(merchantId, bustSlugs)) === true;
+            : revalidateProductSlugs(merchantId, mergedAliases.slugs)) === true;
         const scopedOptions =
           callerOmitMerchantWidePdpDetails === true &&
           explicitSlugsRevalidated &&
           bustSlugsRevalidated &&
           !blogPostSlugsIncomplete &&
+          !mergedAliases.incomplete &&
           hasCompleteScopedProductSlugs(
             products,
             entries,
             resolvedSlugs,
-            authoritativeSlugsById
+            authoritativeSlugsById,
+            { allowAssumedUnchangedSlugs: slugsUnchanged === true }
           )
             ? { omitMerchantWidePdpDetails: true }
             : undefined;
@@ -208,9 +206,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           }
           edgePurged = await dispatchStorefrontProductPurge({
             merchantSlug: authoritativeMerchantSlug,
-            entries,
+            entries: mergedAliases.entries,
             blogPostSlugs: mergedBlogPostSlugs,
-            blogPostSlugsIncomplete,
+            blogPostSlugsIncomplete:
+              blogPostSlugsIncomplete || mergedAliases.incomplete,
             confirmEdgeEviction: Boolean(confirmEdgeEviction),
           });
         } else if (

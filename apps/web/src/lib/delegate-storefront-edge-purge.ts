@@ -42,6 +42,7 @@ export interface DelegateStorefrontEdgePurgeInput {
   productSlugs: readonly string[];
   blogPostSlugs: readonly string[];
   purgeWholeStorefront: boolean;
+  slugsUnchanged?: boolean;
 }
 
 /**
@@ -58,6 +59,7 @@ export async function delegateStorefrontEdgePurge({
   productSlugs,
   blogPostSlugs,
   purgeWholeStorefront,
+  slugsUnchanged = false,
 }: DelegateStorefrontEdgePurgeInput): Promise<boolean> {
   let secret: string | undefined;
   let baseUrl: string | undefined;
@@ -186,7 +188,10 @@ export async function delegateStorefrontEdgePurge({
           ? { purgeWholeStorefront: true }
           : {
               ...(canOmitMerchantWidePdpDetails
-                ? { omitMerchantWidePdpDetails: true }
+                ? {
+                    omitMerchantWidePdpDetails: true,
+                    ...(slugsUnchanged ? { slugsUnchanged: true } : {}),
+                  }
                 : {}),
               ...(normalizedBlogPostSlugs.length > 0
                 ? { blogPostSlugs: normalizedBlogPostSlugs }

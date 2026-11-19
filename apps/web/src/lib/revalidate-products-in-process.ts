@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { hasCompleteScopedProductSlugs } from '@/app/api/internal/revalidate-products/has-complete-scoped-product-slugs';
+import { mergeDependentAliasTargets } from '@/app/api/internal/revalidate-products/merge-dependent-alias-targets';
 import { enrichProductPurgeEntries } from '@/lib/authoritative-product-purge-enrichment';
 import {
   revalidateProductSlugs,
@@ -72,6 +73,7 @@ export async function revalidateProductsInProcess({
   let authoritativeSlugsById: ReadonlyMap<string, string> | undefined;
   let blogPostSlugs: string[] = [];
   let blogPostSlugsIncomplete = false;
+  let dependentAliasesIncomplete = false;
 
   if (supabase && products && hasProducts && !purgeWholeStorefront) {
     try {
@@ -80,13 +82,21 @@ export async function revalidateProductsInProcess({
         merchantId,
         products
       );
-      resolvedSlugs = Array.from(
-        new Set([...resolvedSlugs, ...enriched.resolvedSlugs])
-      );
-      purgeEntries = enriched.entries;
       authoritativeSlugsById = enriched.authoritativeSlugsById;
       blogPostSlugs = enriched.blogPostSlugs;
       blogPostSlugsIncomplete = enriched.blogPostSlugsIncomplete;
+      const mergedAliases = await mergeDependentAliasTargets({
+        supabase,
+        merchantId,
+        products,
+        entries: enriched.entries,
+        slugs: Array.from(
+          new Set([...resolvedSlugs, ...enriched.resolvedSlugs])
+        ),
+      });
+      resolvedSlugs = mergedAliases.slugs;
+      purgeEntries = mergedAliases.entries;
+      dependentAliasesIncomplete = mergedAliases.incomplete;
     } catch (error) {
       blogPostSlugsIncomplete = true;
       console.warn(
@@ -122,6 +132,7 @@ export async function revalidateProductsInProcess({
     const scopedComplete =
       slugsRevalidated &&
       !blogPostSlugsIncomplete &&
+      !dependentAliasesIncomplete &&
       Boolean(
         products &&
           hasCompleteScopedProductSlugs(
@@ -159,7 +170,7 @@ export async function revalidateProductsInProcess({
     } else {
       scheduleStorefrontProductPurge(merchantSlug, purgeEntries);
     }
-    if (blogPostSlugsIncomplete) {
+    if (blogPostSlugsIncomplete || dependentAliasesIncomplete) {
       scheduleStorefrontHostnamePurge(merchantSlug);
     }
     return;

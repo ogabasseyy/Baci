@@ -8,6 +8,7 @@ const mockEnrichProductPurgeEntries = vi.fn();
 const mockCreatePublicClient = vi.fn();
 const mockScheduleStorefrontProductPurge = vi.fn();
 const mockScheduleStorefrontHostnamePurge = vi.fn();
+const mockResolveDependentAliases = vi.fn();
 
 vi.mock('@/env', () => ({
   getInternalApiSecret: () => mockGetInternalApiSecret(),
@@ -20,6 +21,10 @@ vi.mock('@/lib/cache-revalidation', () => ({
 vi.mock('@/lib/authoritative-product-purge-enrichment', () => ({
   enrichProductPurgeEntries: (...args: unknown[]) =>
     mockEnrichProductPurgeEntries(...args),
+}));
+vi.mock('@/lib/resolve-dependent-legacy-product-identifiers', () => ({
+  resolveDependentLegacyProductIdentifiers: (...args: unknown[]) =>
+    mockResolveDependentAliases(...args),
 }));
 vi.mock('@/lib/expire-product-blog-cache', () => ({
   expireProductBlogCache: vi.fn(),
@@ -63,6 +68,10 @@ describe('POST /api/internal/revalidate-products scoped fallback guards', () => 
     vi.clearAllMocks();
     mockGetInternalApiSecret.mockReturnValue(SECRET);
     mockRevalidateProductSlugs.mockReturnValue(true);
+    mockResolveDependentAliases.mockResolvedValue({
+      identifiers: [],
+      incomplete: false,
+    });
     mockCreatePublicClient.mockReturnValue({
       from: () => ({
         select: () => ({
@@ -211,33 +220,26 @@ describe('POST /api/internal/revalidate-products scoped fallback guards', () => 
       blogPostSlugsIncomplete: false,
     });
 
-    const okRes = await POST(
-      makeRequest({
-        merchantId: MERCHANT_ID,
-        expireProductBlogCache: true,
-        productSlugs: ['iphone-15'],
-        omitMerchantWidePdpDetails: true,
-        products: [{ id: 'prod-1' }],
-      })
-    );
+    const body = {
+      merchantId: MERCHANT_ID,
+      expireProductBlogCache: true,
+      productSlugs: ['iphone-15'],
+      omitMerchantWidePdpDetails: true,
+      products: [{ id: 'prod-1' }],
+    };
+    const okRes = await POST(makeRequest(body));
     expect(okRes.status).toBe(200);
     expect(mockRevalidateProducts).toHaveBeenCalledWith(
       MERCHANT_ID,
       undefined,
-      { expireImmediately: true }
+      {
+        expireImmediately: true,
+      }
     );
 
     mockRevalidateProductSlugs.mockReturnValueOnce(false);
     mockRevalidateProducts.mockReturnValueOnce(false);
-    const failRes = await POST(
-      makeRequest({
-        merchantId: MERCHANT_ID,
-        expireProductBlogCache: true,
-        productSlugs: ['iphone-15'],
-        omitMerchantWidePdpDetails: true,
-        products: [{ id: 'prod-1' }],
-      })
-    );
+    const failRes = await POST(makeRequest(body));
     expect(failRes.status).toBe(500);
   });
 
@@ -256,5 +258,42 @@ describe('POST /api/internal/revalidate-products scoped fallback guards', () => 
       })
     );
     expect(res.status).toBe(500);
+  });
+
+  it('escalates incomplete dependent legacy alias lookups to broad and hostname purge', async () => {
+    mockEnrichProductPurgeEntries.mockResolvedValueOnce({
+      entries: [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
+      resolvedSlugs: ['iphone-15', 'prod-1'],
+      authoritativeSlugsById: new Map([['prod-1', 'iphone-15']]),
+      blogPostSlugs: [],
+      blogPostSlugsIncomplete: false,
+    });
+    mockResolveDependentAliases.mockResolvedValueOnce({
+      identifiers: ['archived-child'],
+      incomplete: true,
+    });
+
+    const res = await POST(
+      makeRequest({
+        merchantId: MERCHANT_ID,
+        merchantSlug: 'ogabassey',
+        productSlugs: ['iphone-15'],
+        omitMerchantWidePdpDetails: true,
+        products: [
+          { id: 'prod-1', slug: 'iphone-15', previousSlug: 'iphone-15' },
+        ],
+      })
+    );
+    expect(res.status).toBe(200);
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      MERCHANT_ID,
+      undefined,
+      {
+        expireImmediately: true,
+      }
+    );
+    expect(mockScheduleStorefrontHostnamePurge).toHaveBeenCalledWith(
+      'ogabassey'
+    );
   });
 });

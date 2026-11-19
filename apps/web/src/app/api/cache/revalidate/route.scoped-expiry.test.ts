@@ -146,7 +146,9 @@ describe('POST /api/cache/revalidate scoped PDP hard-expiry', () => {
     const response = await POST(
       makeRequest({
         targets: ['products'],
-        products: [{ id: 'prod-1' }],
+        products: [
+          { id: 'prod-1', slug: 'iphone-15', previousSlug: 'iphone-15' },
+        ],
       })
     );
 
@@ -170,7 +172,9 @@ describe('POST /api/cache/revalidate scoped PDP hard-expiry', () => {
     const response = await POST(
       makeRequest({
         targets: ['products'],
-        products: [{ id: 'prod-1' }],
+        products: [
+          { id: 'prod-1', slug: 'iphone-15', previousSlug: 'iphone-15' },
+        ],
       })
     );
 
@@ -204,7 +208,9 @@ describe('POST /api/cache/revalidate scoped PDP hard-expiry', () => {
     const response = await POST(
       makeRequest({
         targets: ['products'],
-        products: [{ id: 'prod-1' }],
+        products: [
+          { id: 'prod-1', slug: 'iphone-15', previousSlug: 'iphone-15' },
+        ],
       })
     );
 
@@ -230,7 +236,9 @@ describe('POST /api/cache/revalidate scoped PDP hard-expiry', () => {
     const response = await POST(
       makeRequest({
         targets: ['products'],
-        products: [{ id: 'prod-1' }],
+        products: [
+          { id: 'prod-1', slug: 'iphone-15', previousSlug: 'iphone-15' },
+        ],
       })
     );
 

@@ -185,8 +185,7 @@ export async function commitBumpaProducts({
         updatedProducts += 1;
         changedProducts.push({
           slug,
-          previousSlug:
-            existingSlug && existingSlug !== slug ? existingSlug : null,
+          previousSlug: existingSlug,
           id: existingProduct.id,
           category: product.category,
         });

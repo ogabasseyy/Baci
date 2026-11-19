@@ -43,6 +43,10 @@ vi.mock('@/lib/get-published-blog-post-slugs-for-products', () => ({
   getPublishedBlogPostSlugsForProducts: () =>
     Promise.resolve({ slugs: [], incomplete: false }),
 }));
+vi.mock('@/lib/resolve-dependent-legacy-product-identifiers', () => ({
+  resolveDependentLegacyProductIdentifiers: () =>
+    Promise.resolve({ identifiers: [], incomplete: false }),
+}));
 
 import { POST } from './route';
 
@@ -189,7 +193,9 @@ describe('POST /api/internal/revalidate-products confirmed edge purge', () => {
         confirmEdgeEviction: true,
         omitMerchantWidePdpDetails: true,
         productSlugs: ['iphone-15'],
-        products: [{ id: 'prod-1', slug: 'iphone-15', previousSlug: null }],
+        products: [
+          { id: 'prod-1', slug: 'iphone-15', previousSlug: 'iphone-15' },
+        ],
       })
     );
 

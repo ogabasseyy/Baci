@@ -28,6 +28,8 @@ interface ReliableBlogCacheExpiryOptions {
    * invalidation.
    */
   products?: readonly InternalRevalidateProductEntry[];
+  /** Only for order/stock-only callers where product slugs cannot rename. */
+  slugsUnchanged?: boolean;
   /**
    * Forward `omitMerchantWidePdpDetails: false` in the worker fallback so the
    * internal route also hard-expires merchant-wide PDP details when local
@@ -101,6 +103,7 @@ export async function expireProductBlogCacheReliable(
                   productSlugs: forwardedSlugs,
                   products: options.products,
                   omitMerchantWidePdpDetails: true,
+                  ...(options.slugsUnchanged ? { slugsUnchanged: true } : {}),
                 }
               : forwardedSlugs.length > 0
                 ? { productSlugs: forwardedSlugs }

@@ -149,7 +149,8 @@ export async function scheduleOrderProductBlogPurge({
         products,
         entries,
         slugs,
-        authoritativeSlugsById
+        authoritativeSlugsById,
+        { allowAssumedUnchangedSlugs: true }
       )
     ) {
       needsBroadPdpExpiry =
@@ -171,7 +172,9 @@ export async function scheduleOrderProductBlogPurge({
   }
   const blogCacheExpired = await expireProductBlogCacheReliable(merchantId, {
     productSlugs: slugs,
-    ...(needsBroadPdpExpiry ? { expireWidePdpDetails: true } : { products }),
+    ...(needsBroadPdpExpiry
+      ? { expireWidePdpDetails: true }
+      : { products, slugsUnchanged: true }),
   });
   if (!blogCacheExpired) {
     // The standalone worker path reports hard-expiry failure as `false`
@@ -237,6 +240,7 @@ export async function scheduleOrderProductBlogPurge({
         productSlugs: slugs,
         blogPostSlugs,
         purgeWholeStorefront: blogPostSlugsIncomplete,
+        slugsUnchanged: true,
       });
     }
     return false;

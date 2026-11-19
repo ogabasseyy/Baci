@@ -122,6 +122,7 @@ describe('scheduleOrderProductBlogPurge confirmed edge eviction', () => {
       productSlugs: ['iphone-15'],
       blogPostSlugs: ['iphone-guide'],
       purgeWholeStorefront: false,
+      slugsUnchanged: true,
     });
   });
 

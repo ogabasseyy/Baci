@@ -2,22 +2,39 @@ import { describe, expect, it } from 'vitest';
 import { hasCompleteScopedProductSlugs } from './has-complete-scoped-product-slugs';
 
 describe('hasCompleteScopedProductSlugs', () => {
-  it('returns true regardless of entry ordering when every entry resolves authoritatively by id', () => {
+  it('requires non-empty previousSlug by default and accepts id-only or null previousSlug only with allowAssumedUnchangedSlugs', () => {
+    const entries = [
+      { slug: 'galaxy-s25', categorySegment: null },
+      { slug: 'iphone-15', categorySegment: 'smartphones' },
+    ];
+    const resolvedSlugs = ['galaxy-s25', 'iphone-15', 'prod-1'];
+    const authoritative = new Map([
+      ['prod-1', 'iphone-15'],
+      ['prod-2', 'galaxy-s25'],
+    ]);
+
     expect(
       hasCompleteScopedProductSlugs(
         [
           { id: 'prod-1' },
           { id: 'prod-2', slug: 'galaxy-s25', previousSlug: null },
         ],
+        entries,
+        resolvedSlugs,
+        authoritative
+      )
+    ).toBe(false);
+
+    expect(
+      hasCompleteScopedProductSlugs(
         [
-          { slug: 'galaxy-s25', categorySegment: null },
-          { slug: 'iphone-15', categorySegment: 'smartphones' },
+          { id: 'prod-1' },
+          { id: 'prod-2', slug: 'galaxy-s25', previousSlug: null },
         ],
-        ['galaxy-s25', 'iphone-15', 'prod-1'],
-        new Map([
-          ['prod-1', 'iphone-15'],
-          ['prod-2', 'galaxy-s25'],
-        ])
+        entries,
+        resolvedSlugs,
+        authoritative,
+        { allowAssumedUnchangedSlugs: true }
       )
     ).toBe(true);
   });
@@ -61,12 +78,15 @@ describe('hasCompleteScopedProductSlugs', () => {
     ).toBe(false);
   });
 
-  it('requires an authoritative row and tracked previousSlug when a product provides both id and slug', () => {
+  it('requires an authoritative row and non-empty previousSlug when a product provides id and slug', () => {
     expect(
       hasCompleteScopedProductSlugs(
-        [{ id: 'prod-1', slug: 'iphone-15', previousSlug: null }],
-        [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
-        ['iphone-15', 'prod-1'],
+        [{ id: 'prod-1', slug: 'iphone-15', previousSlug: 'iphone-14' }],
+        [
+          { slug: 'iphone-15', categorySegment: 'smartphones' },
+          { slug: 'iphone-14', categorySegment: 'smartphones' },
+        ],
+        ['iphone-15', 'iphone-14', 'prod-1'],
         new Map()
       )
     ).toBe(false);
@@ -87,6 +107,18 @@ describe('hasCompleteScopedProductSlugs', () => {
         ['iphone-15', 'prod-1'],
         new Map([['prod-1', 'iphone-15']])
       )
+    ).toBe(false);
+
+    expect(
+      hasCompleteScopedProductSlugs(
+        [{ id: 'prod-1', slug: 'iPhone-15', previousSlug: 'iPhone-14' }],
+        [
+          { slug: 'iphone-15', categorySegment: 'smartphones' },
+          { slug: 'iphone-14', categorySegment: 'smartphones' },
+        ],
+        ['iphone-15', 'iphone-14', 'prod-1'],
+        new Map([['prod-1', 'iphone-15']])
+      )
     ).toBe(true);
   });
 
@@ -94,10 +126,12 @@ describe('hasCompleteScopedProductSlugs', () => {
     expect(
       hasCompleteScopedProductSlugs(
         [
-          { id: 'prod-1', slug: 'galaxy-s25', previousSlug: null },
-          { id: 'prod-2', slug: 'iphone-15', previousSlug: null },
+          { id: 'prod-1', slug: 'galaxy-s25', previousSlug: 'galaxy-s24' },
+          { id: 'prod-2', slug: 'iphone-15', previousSlug: 'iphone-14' },
         ],
         [
+          { slug: 'galaxy-s24', categorySegment: 'smartphones' },
+          { slug: 'iphone-14', categorySegment: 'smartphones' },
           { slug: 'iphone-15', categorySegment: 'smartphones' },
           { slug: 'galaxy-s25', categorySegment: 'smartphones' },
         ],

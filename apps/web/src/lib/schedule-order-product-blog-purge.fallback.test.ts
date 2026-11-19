@@ -186,7 +186,11 @@ describe('scheduleOrderProductBlogPurge fallback and error handling', () => {
       expect(mockRevalidateSlugs).toHaveBeenCalled();
       expect(mockExpireProductBlogCacheReliable).toHaveBeenCalledWith(
         'merchant-1',
-        { productSlugs: ['iphone-15'], products: [{ id: 'product-1' }] }
+        {
+          productSlugs: ['iphone-15'],
+          products: [{ id: 'product-1' }],
+          slugsUnchanged: true,
+        }
       );
       expect(maybeSingle).not.toHaveBeenCalled();
       expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();

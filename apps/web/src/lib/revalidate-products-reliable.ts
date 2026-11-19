@@ -38,17 +38,19 @@ function hasTrackedScopedSlugs(
   if (!products || products.length === 0 || nextProductSlugs.length === 0) {
     return false;
   }
-  const slugSet = new Set(nextProductSlugs);
+  const slugSet = new Set(
+    nextProductSlugs.map((slug) => slug.trim().toLowerCase())
+  );
   for (const product of products) {
     if (!product.id?.trim()) {
       return false;
     }
-    const slug = product.slug?.trim();
-    if (slug && (product.previousSlug === undefined || !slugSet.has(slug))) {
+    const slug = product.slug?.trim().toLowerCase();
+    const previousSlug = product.previousSlug?.trim().toLowerCase();
+    if (!previousSlug || !slugSet.has(previousSlug)) {
       return false;
     }
-    const previousSlug = product.previousSlug?.trim();
-    if (previousSlug && !slugSet.has(previousSlug)) {
+    if (slug && !slugSet.has(slug)) {
       return false;
     }
   }

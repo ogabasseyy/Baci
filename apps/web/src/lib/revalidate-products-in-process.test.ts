@@ -15,6 +15,10 @@ vi.mock('@/lib/cache-revalidation', () => ({
 vi.mock('@/lib/authoritative-product-purge-enrichment', () => ({
   enrichProductPurgeEntries: (...args: unknown[]) => mockEnrich(...args),
 }));
+vi.mock('@/lib/resolve-dependent-legacy-product-identifiers', () => ({
+  resolveDependentLegacyProductIdentifiers: () =>
+    Promise.resolve({ identifiers: [], incomplete: false }),
+}));
 vi.mock('@/lib/expire-product-blog-cache', () => ({
   expireProductBlogCache: (...args: unknown[]) => mockExpireBlog(...args),
 }));
@@ -83,7 +87,9 @@ describe('revalidateProductsInProcess', () => {
     await revalidateProductsInProcess({
       merchantId: 'merchant-1',
       merchantSlug: 'ogabassey',
-      products: [{ id: 'prod-1' }],
+      products: [
+        { id: 'prod-1', slug: 'iphone-15', previousSlug: 'iphone-15' },
+      ],
       nextProductSlugs: [],
       supabase: {} as never,
     });
@@ -96,7 +102,31 @@ describe('revalidateProductsInProcess', () => {
     );
     expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
       'merchant-1',
-      ['prod-1', 'iphone-15'],
+      ['iphone-15', 'prod-1'],
+      { expireImmediately: true }
+    );
+  });
+
+  it('hard-expires merchant-wide PDP details when an ID-only product lacks previousSlug evidence', async () => {
+    mockEnrich.mockResolvedValue({
+      entries: [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
+      resolvedSlugs: ['iphone-15'],
+      authoritativeSlugsById: new Map([['prod-1', 'iphone-15']]),
+      blogPostSlugs: [],
+      blogPostSlugsIncomplete: false,
+    });
+
+    await revalidateProductsInProcess({
+      merchantId: 'merchant-1',
+      merchantSlug: 'ogabassey',
+      products: [{ id: 'prod-1' }],
+      nextProductSlugs: [],
+      supabase: {} as never,
+    });
+
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      'merchant-1',
+      undefined,
       { expireImmediately: true }
     );
   });

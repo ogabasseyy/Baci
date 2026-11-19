@@ -70,7 +70,9 @@ describe('revalidateProductsTarget', () => {
       revalidateProductsTarget({
         supabase,
         merchantId: 'merchant-1',
-        products: [{ id: 'prod-1' }],
+        products: [
+          { id: 'prod-1', slug: 'iphone-15', previousSlug: 'iphone-15' },
+        ],
       })
     ).resolves.toBe(true);
 
@@ -89,6 +91,23 @@ describe('revalidateProductsTarget', () => {
     expect(mockPurgeProduct).toHaveBeenCalledOnce();
   });
 
+  it('uses broad expiry directly when previousSlug is missing', async () => {
+    await expect(
+      revalidateProductsTarget({
+        supabase,
+        merchantId: 'merchant-1',
+        products: [{ id: 'prod-1' }],
+      })
+    ).resolves.toBe(true);
+
+    expect(mockRevalidateProducts).toHaveBeenCalledTimes(1);
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      'merchant-1',
+      undefined,
+      { expireImmediately: true }
+    );
+  });
+
   it('returns false and withholds edge purge when origin hard expiry stays false', async () => {
     mockRevalidateProducts.mockReturnValue(false);
 
@@ -96,7 +115,9 @@ describe('revalidateProductsTarget', () => {
       revalidateProductsTarget({
         supabase,
         merchantId: 'merchant-1',
-        products: [{ id: 'prod-1' }],
+        products: [
+          { id: 'prod-1', slug: 'iphone-15', previousSlug: 'iphone-15' },
+        ],
       })
     ).resolves.toBe(false);
 
@@ -149,7 +170,9 @@ describe('revalidateProductsTarget', () => {
       revalidateProductsTarget({
         supabase,
         merchantId: 'merchant-1',
-        products: [{ id: 'prod-1' }],
+        products: [
+          { id: 'prod-1', slug: 'iphone-15', previousSlug: 'iphone-15' },
+        ],
       })
     ).resolves.toBe(true);
 
@@ -181,7 +204,9 @@ describe('revalidateProductsTarget', () => {
       revalidateProductsTarget({
         supabase,
         merchantId: 'merchant-1',
-        products: [{ id: 'prod-1' }],
+        products: [
+          { id: 'prod-1', slug: 'iphone-15', previousSlug: 'iphone-15' },
+        ],
       })
     ).resolves.toBe(true);
 

@@ -148,4 +148,58 @@ describe('assertKudaBillItemPriceCurrent when Kuda is unavailable', () => {
       ).rejects.toThrow(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
     });
   });
+
+  describe('bugfix: Baci meter items made a package-less Kuda answer look good', () => {
+    const fixedMeterTopUp = {
+      amount: 5000,
+      isAmountFixed: true,
+      itemCode: 'KUD-ELE-AEDC-FIXED-5000',
+      itemCurrencySymbol: 'NGN',
+      itemFee: 0,
+      itemName: 'AEDC fixed top-up',
+    };
+    const aedc = (billItems: unknown[]) => ({
+      billerId: 'aedc',
+      billerName: 'AEDC',
+      billerType: 'Electricity',
+      categoryId: 'electricity',
+      categoryName: 'Electricity',
+      billItems,
+    });
+    const purchase = {
+      amount: 5000,
+      billItemIdentifier: 'KUD-ELE-AEDC-FIXED-5000',
+      billerName: 'AEDC',
+      type: 'electricity',
+    };
+
+    it('asks Kuda for its own answer, without Baci meter items', async () => {
+      mockGetBillersByCategory.mockResolvedValue([aedc([fixedMeterTopUp])]);
+
+      await assertKudaBillItemPriceCurrent(purchase);
+
+      expect(mockGetBillersByCategory).toHaveBeenCalledWith('electricity', {
+        addElectricityMeterItems: false,
+      });
+    });
+
+    it('keeps the last good electricity list when Kuda lists no packages', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-11-17T10:00:00Z'));
+      mockGetBillersByCategory.mockResolvedValue([aedc([fixedMeterTopUp])]);
+      await assertKudaBillItemPriceCurrent(purchase);
+      vi.setSystemTime(new Date('2026-11-17T12:00:00Z'));
+      mockGetBillersByCategory.mockResolvedValue([aedc([])]);
+
+      await expect(
+        assertKudaBillItemPriceCurrent(purchase)
+      ).resolves.toBeUndefined();
+      expect(mockLoggerWarn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'Kuda price list came back without packages',
+          type: 'electricity',
+        })
+      );
+    });
+  });
 });

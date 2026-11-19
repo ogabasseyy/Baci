@@ -1,6 +1,7 @@
 import {
   isKudaElectricityMeterItemCode,
   stripProviderNames,
+  withKudaElectricityBillItems,
 } from '@baci/shared/lib';
 import type { Biller } from './kuda';
 import {
@@ -59,7 +60,9 @@ async function loadPriceList(type: string): Promise<Biller[] | null> {
 
   let billers: Biller[];
   try {
-    billers = await getBillersByCategory(type);
+    billers = await getBillersByCategory(type, {
+      addElectricityMeterItems: false,
+    });
   } catch (error) {
     lastFailedFetchAt.set(type, now);
     logger.warn({
@@ -80,6 +83,12 @@ async function loadPriceList(type: string): Promise<Biller[] | null> {
       type,
     });
     return lastGood;
+  }
+
+  // The meter products are added only after the check above, so Baci's own
+  // filler never makes a package-less Kuda answer replace a good list.
+  if (type === 'electricity') {
+    billers = withKudaElectricityBillItems(billers);
   }
 
   lastFailedFetchAt.delete(type);

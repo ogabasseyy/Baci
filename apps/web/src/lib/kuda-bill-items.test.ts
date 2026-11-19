@@ -163,7 +163,8 @@ describe('mapKudaBillItems', () => {
         },
       ]);
 
-      expect(items?.map((item) => item.itemCode)).toEqual(['ok']);
+      // One list shares one unit: the plain item is in doubt too.
+      expect(items).toBeUndefined();
       expect(mockLoggerWarn).toHaveBeenCalledWith(
         expect.objectContaining({ itemCode: 'flip', rawAmount: 9500 })
       );
@@ -208,6 +209,86 @@ describe('mapKudaBillItems', () => {
         ]) ?? [];
 
       expect(item?.itemCode).toBe('open');
+    });
+  });
+
+  describe('bugfix: a naira list with unnamed plans priced at ₦10 and up', () => {
+    beforeEach(() => {
+      mockLoggerWarn.mockClear();
+    });
+
+    it('drops every fixed price in a list where one price looks like naira', () => {
+      // A data list sent in naira: "1GB Monthly Plan" at 1000 would map to
+      // ₦10 and pass the under-₦10 check; its ₦100 sibling gives the unit away.
+      const items = mapKudaBillItems([
+        {
+          itemCode: '1gb',
+          itemName: '1GB Monthly Plan',
+          amount: 1000,
+          isFixedPrice: true,
+        },
+        {
+          itemCode: '100mb',
+          itemName: '100MB Daily Plan',
+          amount: 100,
+          isFixedPrice: true,
+        },
+        {
+          itemCode: 'open',
+          itemName: 'Top up',
+          amount: 0,
+          isFixedPrice: false,
+        },
+      ]);
+
+      expect(items?.map((item) => item.itemCode)).toEqual(['open']);
+      expect(mockLoggerWarn).toHaveBeenCalledWith(
+        expect.objectContaining({ droppedFixedItems: 2 })
+      );
+    });
+
+    it('keeps a normal kobo list whole', () => {
+      const items = mapKudaBillItems([
+        {
+          itemCode: '1gb',
+          itemName: '1GB Monthly Plan',
+          amount: 100000,
+          isFixedPrice: true,
+        },
+        {
+          itemCode: '100mb',
+          itemName: '100MB Daily Plan',
+          amount: 10000,
+          isFixedPrice: true,
+        },
+      ]);
+
+      expect(items?.map((item) => item.amount)).toEqual([1000, 100]);
+      expect(mockLoggerWarn).not.toHaveBeenCalled();
+    });
+
+    it('checks each nested list on its own', () => {
+      const [biller] =
+        mapKudaBillItems([
+          {
+            itemCode: 'group',
+            itemName: 'Group',
+            amount: 0,
+            isFixedPrice: false,
+            billItems: [
+              {
+                itemCode: 'cheap',
+                itemName: 'A',
+                amount: 100,
+                isFixedPrice: true,
+              },
+            ],
+          },
+          { itemCode: 'ok', itemName: 'B', amount: 100000, isFixedPrice: true },
+        ]) ?? [];
+
+      expect(biller?.itemCode).toBe('group');
+      expect(biller?.billItems).toBeUndefined();
     });
   });
 });

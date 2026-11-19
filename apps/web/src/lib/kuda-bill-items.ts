@@ -69,22 +69,10 @@ function koboToNaira(value: number | string | undefined) {
   return Math.round(toNumber(value)) / 100;
 }
 
-function warnIfUnitLooksWrong(
-  rawAmount: number,
-  isAmountFixed: boolean,
-  itemCode: string
-) {
-  if (
-    isAmountFixed &&
-    rawAmount > 0 &&
-    rawAmount < IMPLAUSIBLE_FIXED_PRICE_KOBO
-  ) {
-    logger.warn({
-      message: 'Kuda bill item price looks like naira, not kobo',
-      itemCode,
-      rawAmount,
-    });
-  }
+function isImplausiblyCheap(rawAmount: number, isAmountFixed: boolean) {
+  return (
+    isAmountFixed && rawAmount > 0 && rawAmount < IMPLAUSIBLE_FIXED_PRICE_KOBO
+  );
 }
 
 /**
@@ -105,7 +93,7 @@ function nairaPriceInName(itemName: string): number | undefined {
  * Whether Kuda sent this fixed price in naira: the raw amount equals the
  * naira price the item's own name states (e.g. StarTimes "...9500NGN" sent
  * as 9500 instead of 950000). Mapping it as kobo would sell it 100x too
- * cheap and then charge 100x when buying, so such an item is dropped.
+ * cheap and then charge 100x when buying.
  */
 function sentInNaira(
   rawAmount: number,
@@ -116,7 +104,13 @@ function sentInNaira(
   return isAmountFixed && namePrice !== undefined && rawAmount === namePrice;
 }
 
-function mapBillItem(raw: unknown): BillItem | null {
+interface MappedBillItem {
+  item: BillItem;
+  /** This fixed price suggests Kuda sent the list in naira, not kobo. */
+  unitInDoubt: boolean;
+}
+
+function mapBillItem(raw: unknown): MappedBillItem | null {
   if (!raw || typeof raw !== 'object') {
     return null;
   }
@@ -149,17 +143,19 @@ function mapBillItem(raw: unknown): BillItem | null {
   if (isAmountFixed && !Number.isFinite(toNumber(rawAmount, Number.NaN))) {
     return null;
   }
-  warnIfUnitLooksWrong(toNumber(rawAmount), isAmountFixed, itemCode);
-  if (sentInNaira(toNumber(rawAmount), isAmountFixed, itemName)) {
+  const amountValue = toNumber(rawAmount);
+  const unitInDoubt =
+    isImplausiblyCheap(amountValue, isAmountFixed) ||
+    sentInNaira(amountValue, isAmountFixed, itemName);
+  if (unitInDoubt) {
     logger.warn({
-      message: 'Kuda bill item price matches its name in naira, not kobo',
+      message: 'Kuda bill item price looks like naira, not kobo',
       itemCode,
-      rawAmount: toNumber(rawAmount),
+      rawAmount: amountValue,
     });
-    return null;
   }
 
-  return {
+  const mapped: BillItem = {
     itemCode,
     itemName,
     amount: koboToNaira(rawAmount),
@@ -169,9 +165,17 @@ function mapBillItem(raw: unknown): BillItem | null {
     itemFee: koboToNaira(item.ItemFee ?? item.itemFee),
     billItems: mapKudaBillItems(item.BillItems ?? item.billItems),
   };
+  return { item: mapped, unitInDoubt };
 }
 
-/** Map Kuda's raw bill items (either casing) to our bill items. */
+/**
+ * Map Kuda's raw bill items (either casing) to our bill items. One list
+ * shares one unit, so if any fixed price in it suggests naira (under ₦10 as
+ * kobo, or equal to the naira price in its own name), every fixed-price item
+ * in that list is dropped: a naira list would otherwise show and confirm
+ * prices 100x too low (e.g. "1GB Monthly Plan" sent as 1000 → ₦10) and then
+ * charge 100x on purchase. Open-amount items stay, since they carry no price.
+ */
 export function mapKudaBillItems(
   rawItems: unknown[] | undefined
 ): BillItem[] | undefined {
@@ -179,9 +183,20 @@ export function mapKudaBillItems(
     return undefined;
   }
 
-  const billItems = rawItems
+  const mapped = rawItems
     .map((rawItem) => mapBillItem(rawItem))
-    .filter((item): item is BillItem => item !== null);
+    .filter((entry): entry is MappedBillItem => entry !== null);
+  const listUnitInDoubt = mapped.some((entry) => entry.unitInDoubt);
+  if (listUnitInDoubt) {
+    logger.warn({
+      message: 'Kuda bill item list dropped: its prices look like naira',
+      droppedFixedItems: mapped.filter((entry) => entry.item.isAmountFixed)
+        .length,
+    });
+  }
+  const billItems = mapped
+    .map((entry) => entry.item)
+    .filter((item) => !(listUnitInDoubt && item.isAmountFixed));
 
   return billItems.length > 0 ? billItems : undefined;
 }

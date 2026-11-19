@@ -41,7 +41,9 @@ describe('assertKudaBillItemPriceCurrent', () => {
       await expect(
         assertKudaBillItemPriceCurrent({ ...superPackage, amount: 950000 })
       ).rejects.toThrow(KUDA_BILL_PRICE_CHANGED_MESSAGE);
-      expect(mockGetBillersByCategory).toHaveBeenCalledWith('cable_tv');
+      expect(mockGetBillersByCategory).toHaveBeenCalledWith('cable_tv', {
+        addElectricityMeterItems: false,
+      });
     });
   });
 

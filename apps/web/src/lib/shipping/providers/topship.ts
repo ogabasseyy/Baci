@@ -3,6 +3,7 @@
  * Aggregator that provides access to multiple carriers (DHL, FedEx, etc.)
  */
 
+import { OrderShipmentBookingError } from '../order-shipment-booking-utils';
 import { quoteProviderFailure } from '../quote-provider-failure';
 import { mapTopshipStatus } from '../status-mapper';
 import type {
@@ -670,9 +671,19 @@ export class TopshipProvider extends BaseShippingProvider {
         status: response.status,
         error: this.getErrorMessage(result) || String(result),
       });
-      throw new Error(
-        this.getErrorMessage(result) || 'Failed to create Topship shipment'
-      );
+      const refusalMessage =
+        this.getErrorMessage(result) || 'Failed to create Topship shipment';
+      if (response.status >= 400 && response.status < 500) {
+        // A clear refusal: Topship created nothing, so the lock can be freed
+        // and the merchant sees the reason instead of a generic 500.
+        throw new OrderShipmentBookingError(
+          refusalMessage,
+          422,
+          'TOPSHIP_SAVE_REJECTED'
+        );
+      }
+      // A 5xx may or may not have created the shipment: stay locked.
+      throw new Error(refusalMessage);
     }
 
     throw new Error('Failed to create Topship shipment');

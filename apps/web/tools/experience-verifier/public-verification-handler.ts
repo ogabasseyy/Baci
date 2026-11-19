@@ -9,6 +9,7 @@ const message = experienceOwnerWireSchemas['verifier-public/v1'];
 export function createPublicVerificationHandler(settings: {
   key: Uint8Array;
   now?: () => number;
+  reserveOwnerWork?(ownerId: string): (() => void) | null;
   consumeNonce(nonce: string, expiresAt: number): Promise<boolean>;
   resolveUserClient(
     token: string,
@@ -66,9 +67,15 @@ export function createPublicVerificationHandler(settings: {
       const user = await client.auth.getUser(parsed.data.accessToken);
       if (user.error || !user.data.user) return reply(403);
       request.signal.throwIfAborted();
-      await settings.verify(client, parsed.data.approvalId, request.signal);
-      request.signal.throwIfAborted();
-      return reply(204);
+      const release = settings.reserveOwnerWork?.(user.data.user.id);
+      if (release === null) return reply(429);
+      try {
+        await settings.verify(client, parsed.data.approvalId, request.signal);
+        request.signal.throwIfAborted();
+        return reply(204);
+      } finally {
+        release?.();
+      }
     } catch {
       return reply(403);
     }

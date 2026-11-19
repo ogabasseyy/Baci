@@ -4,6 +4,7 @@ vi.mock('./authorization', () => ({
   requireExperienceOwner: vi.fn(async (ctx) => ctx),
 }));
 
+import { requireExperienceOwner } from './authorization';
 import { readExperienceOperation } from './build-service';
 
 it('returns the database-computed expired status for an unfinished job', async () => {
@@ -50,4 +51,32 @@ it('returns the retained build identity for a finalized owner job', async () => 
   await expect(
     readExperienceOperation(context as never, 'job')
   ).rejects.toThrow('BUILD_FAILED');
+});
+
+it('withholds unfinished job status if the owner grant is revoked while reading it', async () => {
+  const reauthorize = vi.mocked(requireExperienceOwner);
+  const context = {
+    merchantId: 'merchant',
+    supabase: {
+      rpc: vi.fn(async () => {
+        reauthorize.mockRejectedValueOnce(Error('NOT_FOUND'));
+        return {
+          data: {
+            id: 'job',
+            status: 'running',
+            expires_at: '2099-01-01T00:00:00Z',
+          },
+          error: null,
+        };
+      }),
+    },
+  };
+  try {
+    await expect(
+      readExperienceOperation(context as never, 'job')
+    ).rejects.toThrow('NOT_FOUND');
+  } finally {
+    reauthorize.mockReset();
+    reauthorize.mockImplementation(async (ctx) => ctx as never);
+  }
 });

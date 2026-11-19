@@ -43,6 +43,8 @@ export async function readExperienceOperation(
     buildId?: string;
     buildDigest?: string;
   };
+  // Check the stored grant again after the independent job read.
+  await requireExperienceOwner(ctx, 'storefront.read');
   if (job.status !== 'finalized') return job;
   const parsed = z
     .object({
@@ -51,7 +53,6 @@ export async function readExperienceOperation(
     })
     .safeParse(job);
   if (!parsed.success) throw Error('BUILD_FAILED');
-  await requireExperienceOwner(ctx, 'storefront.read');
   return {
     ...job,
     ...parsed.data,

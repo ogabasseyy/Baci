@@ -59,7 +59,11 @@ That filter resets on restart and is not shared between replicas; the existing
 durable verifier and preview nonce checks remain authoritative. A replay
 rejected by the early filter receives an admission denial, and the filter
 fails closed at capacity. This does not qualify the 600-second downstream work
-deadline or replace production ingress and load testing.
+deadline or replace production ingress and load testing. On the verifier,
+attestation and public verification share two long-running work slots, with
+at most one per authenticated owner across both operations. Busy requests
+receive 429. Slots stay reserved until work settles, even on disconnect.
+Verify the remaining capacity and deadlines on the deployed topology.
 
 `owner-internal-node.ts` provides a separate loopback-only owner listener.
 The production composition requires a distinct configured owner port and does

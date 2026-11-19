@@ -1,5 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { expect, it, vi } from 'vitest';
+import { createVerifierAttestationHandler } from './attestation-handler';
+import { createOwnerVerificationSlots } from './owner-verification-slots';
 import { createPublicVerificationHandler } from './public-verification-handler';
 
 const key = Buffer.alloc(32, 7);
@@ -108,4 +110,100 @@ it('does not expose internal errors or accept other paths', async () => {
       )
     ).status
   ).toBe(404);
+});
+
+it('shares slow verification capacity across signed owner operations', async () => {
+  const reserveOwnerWork = createOwnerVerificationSlots();
+  const slow = Promise.withResolvers<void>();
+  const started = Promise.withResolvers<void>();
+  const publicSlow = Promise.withResolvers<void>();
+  const publicStarted = Promise.withResolvers<void>();
+  const shared = {
+    key,
+    now: () => now,
+    consumeNonce: async () => true,
+    resolveUserClient: async (token: string) =>
+      ({
+        auth: {
+          getUser: async () => ({
+            data: { user: { id: token.split('.')[0] } },
+            error: null,
+          }),
+        },
+      }) as never,
+    reserveOwnerWork,
+  };
+  const attest = createVerifierAttestationHandler({
+    ...shared,
+    attest: async () => {
+      started.resolve();
+      return slow.promise;
+    },
+  });
+  const publicVerify = createPublicVerificationHandler({
+    ...shared,
+    verify: vi
+      .fn(async () => {})
+      .mockImplementationOnce(async () => {
+        publicStarted.resolve();
+        await publicSlow.promise;
+      }),
+  });
+  const attestationBody = JSON.stringify({ ...body, kind: 'draft' });
+  const pending = attest(
+    new Request('https://verifier.baci-internal.invalid/v1/attest', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-baci-verifier-signature': createHmac('sha256', key)
+          .update(`verifier-attest/v1\n${attestationBody}`)
+          .digest('hex'),
+      },
+      body: attestationBody,
+    })
+  );
+  try {
+    await started.promise;
+    expect(
+      (
+        await publicVerify(
+          request({
+            ...body,
+            nonce: 'b'.repeat(64),
+            accessToken: 'synthetic.new.token',
+          })
+        )
+      ).status
+    ).toBe(429);
+    const secondOwner = publicVerify(
+      request({
+        ...body,
+        nonce: 'c'.repeat(64),
+        accessToken: 'another.jwt.token',
+      })
+    );
+    await publicStarted.promise;
+    try {
+      expect(
+        (
+          await publicVerify(
+            request({
+              ...body,
+              nonce: 'e'.repeat(64),
+              accessToken: 'third.jwt.token',
+            })
+          )
+        ).status
+      ).toBe(429);
+    } finally {
+      publicSlow.resolve();
+      expect((await secondOwner).status).toBe(204);
+    }
+  } finally {
+    slow.resolve();
+    await pending;
+  }
+  expect(
+    (await publicVerify(request({ ...body, nonce: 'd'.repeat(64) }))).status
+  ).toBe(204);
 });

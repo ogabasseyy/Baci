@@ -17,6 +17,7 @@ import { createIndependentBuildVerifier } from './build-verifier';
 import { createVerifierCaptureHandler } from './capture-handler';
 import { startVerifierListener } from './listener';
 import { createVerifierNonceStore } from './nonce-store';
+import { createOwnerVerificationSlots } from './owner-verification-slots';
 import { createPublicVerificationCoordinator } from './public-verification-coordinator';
 import { createPublicVerificationHandler } from './public-verification-handler';
 import { createVerifierWorkerResolver } from './worker-resolver';
@@ -85,11 +86,13 @@ export async function startVerifierService(settings: {
       return createApprovalCapture(worker)(client, binding, signal);
     },
   });
+  const reserveOwnerWork = createOwnerVerificationSlots();
   const handler = createVerifierAttestationHandler({
     key: settings.key,
     consumeNonce,
     resolveUserClient,
     attest: verifier.attest,
+    reserveOwnerWork,
   });
   const buildHandler = createVerifierBuildHandler({
     key: settings.key,
@@ -115,6 +118,7 @@ export async function startVerifierService(settings: {
         key: settings.key,
         consumeNonce,
         resolveUserClient,
+        reserveOwnerWork,
         verify: async (owner, id, signal) => {
           if (!settings.publicVerification)
             throw Error('PUBLIC_VERIFIER_NOT_INSTALLED');

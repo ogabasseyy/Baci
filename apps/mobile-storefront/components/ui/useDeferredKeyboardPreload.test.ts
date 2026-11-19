@@ -14,13 +14,17 @@ describe('useDeferredKeyboardPreload', () => {
   let pendingFrames: Map<number, FrameRequestCallback>;
   const cancelIdleCallbackMock = jest.fn();
 
+  const flushNextAnimationFrameBatch = () => {
+    const batch = [...pendingFrames.entries()];
+    pendingFrames.clear();
+    for (const [, callback] of batch) {
+      callback(0);
+    }
+  };
+
   const flushAnimationFrames = () => {
     while (pendingFrames.size > 0) {
-      const batch = [...pendingFrames.entries()];
-      pendingFrames.clear();
-      for (const [, callback] of batch) {
-        callback(0);
-      }
+      flushNextAnimationFrameBatch();
     }
   };
 
@@ -84,7 +88,10 @@ describe('useDeferredKeyboardPreload', () => {
     rerender({ ready: true });
     expect(global.requestIdleCallback).not.toHaveBeenCalled();
 
-    act(() => flushAnimationFrames());
+    act(() => flushNextAnimationFrameBatch());
+    expect(global.requestIdleCallback).not.toHaveBeenCalled();
+
+    act(() => flushNextAnimationFrameBatch());
     expect(global.requestIdleCallback).toHaveBeenCalledWith(
       expect.any(Function),
       { timeout: 1200 }

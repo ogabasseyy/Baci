@@ -12,13 +12,17 @@ let nextFrameId = 0;
 let pendingFrames = new Map<number, FrameRequestCallback>();
 const cancelIdleCallbackMock = jest.fn();
 
+function flushNextAnimationFrameBatch() {
+  const batch = [...pendingFrames.entries()];
+  pendingFrames.clear();
+  for (const [, callback] of batch) {
+    callback(0);
+  }
+}
+
 function flushAnimationFrames() {
   while (pendingFrames.size > 0) {
-    const batch = [...pendingFrames.entries()];
-    pendingFrames.clear();
-    for (const [, callback] of batch) {
-      callback(0);
-    }
+    flushNextAnimationFrameBatch();
   }
 }
 
@@ -83,7 +87,10 @@ describe('AppKeyboardProvider', () => {
         <Text>Storefront app</Text>
       </AppKeyboardProvider>
     );
-    act(() => flushAnimationFrames());
+    act(() => flushNextAnimationFrameBatch());
+    expect(global.requestIdleCallback).not.toHaveBeenCalled();
+
+    act(() => flushNextAnimationFrameBatch());
 
     expect(global.requestIdleCallback).toHaveBeenCalledWith(
       expect.any(Function),

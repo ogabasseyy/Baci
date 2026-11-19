@@ -29,9 +29,9 @@ BEGIN
     v_item := gen_random_uuid();
     v_attempt := gen_random_uuid();
     INSERT INTO public.orders (id, merchant_id, order_number, currency, payment_method,
-      payment_status, customer_email, total, discount_amount)
+      payment_status, customer_email, total, discount_amount, tax_basis)
     VALUES (v_order, v_merchant, 'BANK-OFFER-' || v_bank, 'NGN', 'bank_card_offer',
-      'unpaid', 'BUYER@example.test', 190, 10);
+      'unpaid', 'BUYER@example.test', 190, 10, 'exclusive');
     INSERT INTO public.order_items (id, order_id, product_id, name, price, quantity)
       VALUES (v_item, v_order, v_product, 'Fixture Phone', 100, 2);
     v_quote := jsonb_build_object(
@@ -50,6 +50,20 @@ BEGIN
       IF SQLERRM <> 'bank_card_offer_allocation_mismatch' THEN RAISE; END IF;
     END;
 
+    BEGIN
+      UPDATE public.orders SET total = 191 WHERE id = v_order;
+      PERFORM private.record_bank_card_offer_order(v_order, v_merchant, v_quote);
+      RAISE EXCEPTION 'Expected the inconsistent order total to fail';
+    EXCEPTION WHEN raise_exception THEN
+      IF SQLERRM <> 'bank_card_offer_order_total_mismatch' THEN RAISE; END IF;
+    END;
+
+    UPDATE public.orders
+      SET shipping_fee = 2, gift_wrapping_fee = 3, tax_amount = 4, tax_basis = 'exclusive',
+          total = 200
+      WHERE id = v_order;
+    UPDATE public.order_items SET assurance_fee = 1 WHERE id = v_item;
+
     PERFORM private.record_bank_card_offer_order(v_order, v_merchant, v_quote);
     PERFORM private.record_bank_card_offer_order(v_order, v_merchant, v_quote);
     BEGIN
@@ -63,12 +77,12 @@ BEGIN
     INSERT INTO public.transactions (id, merchant_id, order_id, transaction_type,
       amount, currency, gateway, gateway_reference)
       VALUES (v_attempt, v_merchant, v_order, 'payment',
-        190, 'NGN', 'paystack', 'BANK-OFFER-TEST-' || v_bank);
+        200, 'NGN', 'paystack', 'BANK-OFFER-TEST-' || v_bank);
 
     SELECT quote, amount_kobo, customer_email, reference INTO STRICT v_context
       FROM private.read_bank_card_offer_payment_context(v_order, v_merchant, v_attempt);
     IF v_context.quote IS DISTINCT FROM v_quote
-      OR v_context.amount_kobo <> 19000
+      OR v_context.amount_kobo <> 20000
       OR v_context.customer_email <> 'buyer@example.test'
       OR v_context.reference <> 'BANK-OFFER-TEST-' || v_bank
       OR v_context.quote #>> '{allocations,0,unitNetAmountsKobo,1}' <> '9500'
@@ -80,7 +94,14 @@ BEGIN
     )) THEN
       RAISE EXCEPTION 'Verification context leaked to another merchant';
     END IF;
-    UPDATE public.transactions SET amount = 200 WHERE id = v_attempt;
+    UPDATE public.orders SET total = 201 WHERE id = v_order;
+    IF EXISTS (SELECT 1 FROM private.read_bank_card_offer_payment_context(
+      v_order, v_merchant, v_attempt
+    )) THEN
+      RAISE EXCEPTION 'Verification accepted an order total that changed after checkout';
+    END IF;
+    UPDATE public.orders SET total = 200 WHERE id = v_order;
+    UPDATE public.transactions SET amount = 201 WHERE id = v_attempt;
     IF EXISTS (SELECT 1 FROM private.read_bank_card_offer_payment_context(
       v_order, v_merchant, v_attempt
     )) THEN

@@ -1,4 +1,5 @@
 import 'server-only';
+import { createHash } from 'node:crypto';
 import { allocateRedvaultRefund } from '@baci/shared/lib';
 import {
   createPaystackCardOfferMetadata,
@@ -20,14 +21,38 @@ type BankCardOfferAttempt = {
   reference: string;
 };
 
+export function hashBankCardOfferFilter(
+  policy: BankCardOfferQuote['paymentPolicy']
+) {
+  const metadata = createPaystackCardOfferMetadata({
+    ...policy,
+    cardBrands: [...policy.cardBrands].sort(),
+  });
+  return createHash('sha256')
+    .update(
+      JSON.stringify({ version: 1, metadata, issuerName: policy.issuerName })
+    )
+    .digest('hex');
+}
+
 export function bankCardOfferAuthorization(attempt: BankCardOfferAttempt) {
-  return createPaystackCardOfferMetadata(attempt.quote.paymentPolicy);
+  const policy = attempt.quote.paymentPolicy;
+  if (attempt.acceptedFilterPolicyHash !== hashBankCardOfferFilter(policy)) {
+    throw new Error('Bank offer filter does not match the saved attempt');
+  }
+  return createPaystackCardOfferMetadata(policy);
 }
 
 export function verifyBankCardOfferAttempt(
   attempt: BankCardOfferAttempt,
   verifyResponse: unknown
 ) {
+  if (
+    attempt.acceptedFilterPolicyHash !==
+    hashBankCardOfferFilter(attempt.quote.paymentPolicy)
+  ) {
+    return null;
+  }
   return verifyPaystackCardOffer({
     acceptedFilterPolicyHash: attempt.acceptedFilterPolicyHash,
     cardBrands: attempt.quote.paymentPolicy.cardBrands,

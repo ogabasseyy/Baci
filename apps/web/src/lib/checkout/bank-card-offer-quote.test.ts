@@ -3,6 +3,7 @@ import type { BankCardOffer } from '@/schemas/bank-card-offer';
 import {
   bankCardOfferAuthorization,
   calculateBankCardOfferMerchandiseRefund,
+  hashBankCardOfferFilter,
   verifyBankCardOfferAttempt,
 } from './bank-card-offer-payment';
 import { quoteBankCardOffer } from './bank-card-offer-quote';
@@ -64,8 +65,16 @@ describe('bank card offer quotes', () => {
     ).toBe(9501);
   });
 
-  it('uses the original issuer, networks and payable total after offer edits', () => {
-    const mutableOffer = { ...offer, cardBrands: [...offer.cardBrands] };
+  it.each([
+    ['035', 'Wema Bank', '232', 'Sterling Bank'],
+    ['232', 'Sterling Bank', '035', 'Wema Bank'],
+  ] as const)('verifies the booked %s issuer and refund after offer edits', (bankCode, issuerName, otherCode, otherIssuerName) => {
+    const mutableOffer = {
+      ...offer,
+      bankCode,
+      verifiedIssuerName: issuerName,
+      cardBrands: [...offer.cardBrands],
+    };
     const quote = quoteBankCardOffer({
       offer: mutableOffer,
       merchantId,
@@ -75,18 +84,19 @@ describe('bank card offer quotes', () => {
     if (!quote) throw new Error('Expected an eligible order');
     const attempt = {
       quote,
-      acceptedFilterPolicyHash: 'f'.repeat(64),
+      acceptedFilterPolicyHash: hashBankCardOfferFilter(quote.paymentPolicy),
       amountKobo: 22_500,
       currency: 'NGN' as const,
       customerEmail: 'buyer@example.test',
       domain: 'test' as const,
       reference: 'offer-test-1',
     };
-    mutableOffer.verifiedIssuerName = 'Different Bank';
+    mutableOffer.verifiedIssuerName =
+      bankCode === '035' ? 'Sterling Bank' : 'Wema Bank';
     mutableOffer.cardBrands.splice(0, 1, 'mastercard');
     mutableOffer.enabled = false;
     expect(bankCardOfferAuthorization(attempt).custom_filters).toEqual({
-      banks: ['035'],
+      banks: [bankCode],
       card_brands: ['visa'],
     });
     const verifiedData = {
@@ -96,14 +106,26 @@ describe('bank card offer quotes', () => {
       domain: attempt.domain,
       reference: attempt.reference,
       channel: 'card',
-      authorization: { bank: 'Wema Bank', brand: 'visa', channel: 'card' },
+      authorization: { bank: issuerName, brand: 'visa', channel: 'card' },
       id: 42,
       status: 'success',
       paid_at: '2026-11-28T12:00:00Z',
     };
     expect(
+      verifyBankCardOfferAttempt(
+        {
+          ...attempt,
+          quote: {
+            ...quote,
+            paymentPolicy: { ...quote.paymentPolicy, bankCode: otherCode },
+          },
+        },
+        { status: true, data: verifiedData }
+      )
+    ).toBeNull();
+    expect(
       verifyBankCardOfferAttempt(attempt, { status: true, data: verifiedData })
-    ).toMatchObject({ issuerName: 'Wema Bank', amountKobo: 22_500 });
+    ).toMatchObject({ issuerName, amountKobo: 22_500 });
     expect(
       verifyBankCardOfferAttempt(attempt, {
         status: true,
@@ -117,7 +139,7 @@ describe('bank card offer quotes', () => {
           ...verifiedData,
           authorization: {
             ...verifiedData.authorization,
-            bank: 'Sterling Bank',
+            bank: otherIssuerName,
           },
         },
       })
@@ -126,6 +148,8 @@ describe('bank card offer quotes', () => {
 
   it.each([
     { enabled: false },
+    { startsAt: 'invalid' },
+    { endsAt: 'invalid' },
     { startsAt: '2026-11-28T00:00:00+01:00' },
     { endsAt: '2026-11-27T12:00:00+01:00' },
     { eligibleProductIds: [] },

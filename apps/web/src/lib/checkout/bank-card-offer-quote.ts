@@ -30,12 +30,16 @@ export function quoteBankCardOffer({
   items: readonly CatalogLine[];
   now: number;
 }) {
+  const startsAt = Date.parse(offer.startsAt);
+  const endsAt = Date.parse(offer.endsAt);
   if (
     !offer.enabled ||
     offer.merchantId !== merchantId ||
     !Number.isFinite(now) ||
-    now < Date.parse(offer.startsAt) ||
-    now >= Date.parse(offer.endsAt)
+    !Number.isFinite(startsAt) ||
+    !Number.isFinite(endsAt) ||
+    now < startsAt ||
+    now >= endsAt
   ) {
     return null;
   }

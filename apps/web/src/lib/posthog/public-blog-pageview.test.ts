@@ -2,6 +2,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  capturePublicBlogInteraction,
   capturePublicBlogPageview,
   resetPublicBlogPageviewDedupe,
   resetPublicBlogPageviewDedupeForTests,
@@ -321,6 +322,30 @@ describe('resolvePublicBlogPageviewAttribution', () => {
       $referring_domain: 'www.google.com',
       utm_source: 'google',
       utm_medium: 'cpc',
+    });
+  });
+
+  it('captures interactions when given a relative currentUrl without throwing', () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(async () =>
+      Promise.resolve(new Response(null))
+    );
+    vi.stubGlobal('navigator', { userAgent: 'Mozilla/5.0' });
+    vi.stubGlobal('fetch', fetch);
+    vi.stubGlobal('location', undefined);
+    stubStorage();
+
+    capturePublicBlogInteraction(
+      'tecno_camon_slim_order_here_clicked',
+      { NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN: 'ph_public' },
+      '/ogabassey/blog/tecno?utm_source=ig'
+    );
+
+    expect(parseFetchBody(fetch)).toMatchObject({
+      event: 'tecno_camon_slim_order_here_clicked',
+      properties: {
+        $current_url: 'https://usebaci.com/ogabassey/blog/tecno',
+        utm_source: 'ig',
+      },
     });
   });
 });

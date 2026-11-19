@@ -1,9 +1,10 @@
 'use client';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { useOtpResendCooldown } from '@/components/ui/otp-verification/use-otp-resend-cooldown';
 import { useCustomerAuth } from '@/contexts/customer-auth-context';
 import { useMerchant } from '@/hooks/use-merchant-client';
+import { usePrivateSearchParamsState } from '@/hooks/use-private-search-params';
 import { useReceiptClaimLoginHint } from '@/hooks/use-receipt-claim-login-hint';
 import {
   CUSTOMER_OTP_RESEND_COOLDOWN_SECONDS,
@@ -15,7 +16,9 @@ import { asRoute } from '@/lib/routes';
 
 export function useCustomerLoginForm() {
   const router = useRouter();
-  const searchParams = useSearchParams();
+  // `isReady` is false while hydrating a reloaded link, before the stashed
+  // redirect target and email are readable.
+  const { searchParams, isReady } = usePrivateSearchParamsState();
   const redirectTo = sanitizeRedirect(searchParams.get('redirect'));
   const prefillEmail = sanitizeCustomerLoginEmailPrefill(
     searchParams.get('email')
@@ -32,7 +35,18 @@ export function useCustomerLoginForm() {
   } = useCustomerAuth();
 
   const [email, setEmail] = useState(prefillEmail);
-  const emailHint = useReceiptClaimLoginHint(redirectTo, prefillEmail);
+  // Seed the field once the stashed email is readable (render-time, no effect),
+  // so a reloaded link still prefills although the hydrating render had none.
+  const [prefillSeeded, setPrefillSeeded] = useState(isReady);
+  if (isReady && !prefillSeeded) {
+    setPrefillSeeded(true);
+    // Never replace an address the shopper already typed.
+    setEmail((typed) => typed || prefillEmail);
+  }
+  const emailHint = useReceiptClaimLoginHint(
+    isReady ? redirectTo : null,
+    prefillEmail
+  );
   const [editingEmail, setEditingEmail] = useState(false);
   const [code, setCode] = useState(['', '', '', '', '', '']);
   const [error, setError] = useState('');
@@ -56,10 +70,10 @@ export function useCustomerLoginForm() {
 
   // Redirect if already authenticated
   useEffect(() => {
-    if (!authLoading && isAuthenticated) {
+    if (isReady && !authLoading && isAuthenticated) {
       router.push(asRoute(redirectTo));
     }
-  }, [authLoading, isAuthenticated, router, redirectTo]);
+  }, [isReady, authLoading, isAuthenticated, router, redirectTo]);
 
   const handleSendCode = async (e: React.FormEvent) => {
     e.preventDefault();

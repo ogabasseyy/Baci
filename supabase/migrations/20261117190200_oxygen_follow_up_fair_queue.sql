@@ -1,0 +1,112 @@
+-- Share bounded queue capacity between urgent and routine follow-ups.
+-- Preserve claim freshness and surface every incompatible booked-loan payment state.
+-- Merchant-facing projection only: never return provider state, credentials,
+-- account details, links or raw responses. Contact/order fields remain under
+-- the existing orders RLS policy and are fetched separately by the app.
+CREATE OR REPLACE FUNCTION public.oxygen_follow_up_candidates(p_merchant_id uuid)
+RETURNS TABLE (order_id uuid, follow_up_status text, last_activity_at timestamptz)
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '' AS $$
+BEGIN
+  IF auth.uid() IS NULL OR p_merchant_id IS NULL
+    OR public.has_merchant_access(p_merchant_id) IS NOT TRUE THEN
+    RAISE EXCEPTION 'Merchant access required' USING ERRCODE = '42501';
+  END IF;
+
+  RETURN QUERY
+  WITH relevant_orders AS (
+    SELECT w.order_id AS id FROM public.oxygen_workflows w
+    WHERE w.merchant_id = p_merchant_id AND w.environment = 'production'
+    UNION
+    SELECT o.id FROM public.orders o
+    WHERE o.merchant_id = p_merchant_id AND o.payment_method = 'oxygen'
+      AND o.created_at >= now() - interval '90 days'
+  ), candidates AS (
+    SELECT o.id, o.created_at, o.payment_status, o.payment_method, o.cancelled_at,
+      w.id AS workflow_id, w.stage, coalesce(s.state, '{}'::jsonb) AS state,
+      greatest(coalesce(w.updated_at, o.created_at), coalesce(o.updated_at, o.created_at), pending.last_started_at) AS activity_at,
+      coalesce(pending.indeterminate, false) AS indeterminate,
+      coalesce(pending.in_flight, false) AS in_flight,
+      coalesce(w.stage IN ('booked','approval_required','payment_required','ready_for_activation','activated')
+        OR s.state ? 'bookingReference' OR s.state ? 'booking'
+        OR EXISTS (SELECT 1 FROM oxygen_private.provider_reference_history h
+          WHERE h.workflow_id = w.id AND h.booking_reference IS NOT NULL), false) AS has_booking,
+      EXISTS (
+        SELECT 1 FROM oxygen_private.commands c
+        JOIN oxygen_private.provider_reference_history r ON r.command_id = c.id AND r.workflow_id = c.workflow_id
+        WHERE c.workflow_id = w.id AND c.status = 'succeeded'
+          AND c.command->>'action' = 'submit_address'
+          AND r.booking_reference::text = s.state->>'bookingReference'
+      ) AS address_submitted
+    FROM relevant_orders relevant
+    JOIN public.orders o ON o.id = relevant.id
+    LEFT JOIN public.oxygen_workflows w ON w.order_id = o.id
+      AND w.merchant_id = o.merchant_id AND w.customer_id = o.customer_id
+    LEFT JOIN oxygen_private.provider_states s ON s.workflow_id = w.id
+    LEFT JOIN LATERAL (
+      SELECT bool_or(c.status = 'indeterminate') AS indeterminate,
+        bool_or(c.status IN ('queued', 'executing')) AS in_flight,
+        max(CASE WHEN c.status = 'executing' THEN coalesce(c.started_at, c.created_at)
+          ELSE c.created_at END) FILTER (WHERE c.status IN ('queued', 'executing')) AS last_started_at
+      FROM oxygen_private.commands c
+      WHERE c.workflow_id = w.id AND c.status IN ('queued', 'executing', 'indeterminate')
+    ) pending ON true
+    WHERE o.merchant_id = p_merchant_id AND (o.payment_method = 'oxygen' OR w.id IS NOT NULL)
+      AND (w.id IS NOT NULL OR (
+        o.recorded_by_user_id IS NULL AND o.external_source IS NULL AND o.import_job_id IS NULL
+        AND (o.source IS NULL OR o.source NOT IN ('physical','instagram','whatsapp','facebook','tiktok','jumia','jiji','konga','manual','staff_entry'))
+      ))
+      AND (w.id IS NULL OR w.environment = 'production')
+  ), classified AS (
+    SELECT c.*,
+      (c.stage = 'reconciliation_required' OR c.indeterminate OR
+        (c.workflow_id IS NOT NULL AND c.has_booking AND
+          (c.payment_method IS DISTINCT FROM 'oxygen' OR c.cancelled_at IS NOT NULL
+            OR (c.stage IS DISTINCT FROM 'activated' AND c.payment_status IS DISTINCT FROM 'unpaid')
+            OR (c.stage = 'activated' AND coalesce(c.payment_status, '') NOT IN ('unpaid','paid'))))) AS urgent_review,
+      CASE
+        WHEN c.stage = 'reconciliation_required' OR c.indeterminate OR c.in_flight THEN 'needs_review'
+        WHEN c.workflow_id IS NOT NULL AND c.payment_method IS DISTINCT FROM 'oxygen' THEN 'needs_review'
+        WHEN c.has_booking AND (c.cancelled_at IS NOT NULL
+          OR (c.stage IS DISTINCT FROM 'activated' AND c.payment_status IS DISTINCT FROM 'unpaid')
+          OR (c.stage = 'activated' AND coalesce(c.payment_status, '') NOT IN ('unpaid','paid')))
+          THEN 'needs_review'
+        WHEN c.payment_status IN ('failed','expired') OR c.state->>'eligibilityStatus' = 'failed'
+          OR (c.state->>'eligibilityStatus' = 'completed' AND c.state->>'eligible' = 'false') THEN 'needs_review'
+        WHEN c.payment_status = 'bnpl_approved' AND
+          (c.stage NOT IN ('payment_required','ready_for_activation') OR c.state->'booking'->>'status' IS DISTINCT FROM 'APPROVED') THEN 'needs_review'
+        WHEN c.stage IN ('payment_required','ready_for_activation')
+          THEN CASE WHEN c.state->'booking'->>'status' = 'APPROVED' THEN 'approved_pending' ELSE 'needs_review' END
+        WHEN c.state->'booking'->>'status' = 'APPROVED' THEN 'needs_review'
+        WHEN c.state->>'eligibilityStatus' = 'pending'
+          OR c.state->'kyc'->>'address_status' = 'PROCESSING'
+          OR c.state->'kyc'->>'bank_status' = 'PROCESSING'
+          OR c.state->'kyc'->>'selfie_status' = 'PROCESSING'
+          OR c.state->'kyc'->>'bvn_status' = 'PROCESSING'
+          OR c.state->'kyc'->>'nin_status' = 'PROCESSING'
+          OR c.state->'kyc'->>'phone_status' = 'PROCESSING'
+          OR (c.stage = 'booked' AND c.address_submitted) THEN 'oxygen_processing'
+        WHEN c.stage = 'booked' AND c.state->'kyc'->>'address_status' IS DISTINCT FROM 'NOT_DONE' THEN 'needs_review'
+        WHEN c.workflow_id IS NULL OR c.stage IN ('application_required','eligibility_required','kyc_required','plan_required','booked','approval_required') THEN 'customer_action'
+        ELSE 'needs_review'
+      END AS status
+    FROM candidates c
+  )
+  SELECT c.id, c.status, c.activity_at
+  FROM classified c
+  WHERE (c.stage IS DISTINCT FROM 'activated' OR c.urgent_review)
+    AND (
+      (c.cancelled_at IS NULL AND c.payment_status IN ('pending','unpaid','bnpl_pending','bnpl_approved','failed','expired'))
+      OR c.urgent_review
+    )
+    AND (c.created_at >= now() - interval '90 days' OR c.urgent_review)
+    AND (c.activity_at < now() - interval '30 minutes' OR c.urgent_review)
+  ORDER BY row_number() OVER (PARTITION BY coalesce(c.urgent_review, false)
+    ORDER BY c.activity_at DESC, c.id), coalesce(c.urgent_review, false) DESC
+  LIMIT 250;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.oxygen_follow_up_candidates(uuid) FROM PUBLIC, anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.oxygen_follow_up_candidates(uuid) TO authenticated;
+COMMENT ON FUNCTION public.oxygen_follow_up_candidates(uuid) IS
+  'Merchant-scoped, bounded Oxygen follow-up categories; contains no provider secrets or financial details.';

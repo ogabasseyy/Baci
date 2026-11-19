@@ -13,6 +13,18 @@ BEGIN
   IF private.brilstash_payload_has_wire_shape(
     '[{"external_id":"invalid-port","product_url":"https://shop.example.invalid:65536/phone","title":"Phone","description":"Phone","category":"Phones","price_naira":365000,"stock_quantity":0,"images":[{"url":"https://media.example.invalid/approved"}]}]'::jsonb
   ) THEN RAISE EXCEPTION 'out-of-range product URL port was accepted'; END IF;
+  IF private.brilstash_image_url_key('https://CDN.example.invalid:00443?width=42')
+      IS DISTINCT FROM 'https://cdn.example.invalid/?width=42'
+    OR private.brilstash_image_url_key('https://CDN.example.invalid:8443/file.jpg')
+      IS DISTINCT FROM 'https://cdn.example.invalid:8443/file.jpg'
+    OR private.brilstash_image_url_key('https://cdn.example.invalid:65536/image.jpg') IS NOT NULL
+    OR private.brilstash_image_url_key('https://user@cdn.example.invalid/image.jpg') IS NOT NULL
+    OR private.brilstash_image_url_key('https://cdn.example.invalid/image.jpg#crop') IS NOT NULL
+    OR private.brilstash_image_url_key('https://-cdn.example.invalid/image.jpg') IS NOT NULL
+    OR private.brilstash_expected_verified_images(
+      '["https://cdn.example.invalid/image.jpg","https://cdn.example.invalid:65536/image.jpg"]'
+    ) IS NOT NULL
+  THEN RAISE EXCEPTION 'BrilStash staging image URL authority diverged'; END IF;
 END $$;
 UPDATE private.brilstash_listings SET retired_at = now(), pilot_slot = NULL
 WHERE external_id = 'wrong-tenant';
@@ -141,6 +153,11 @@ BEGIN
   IF current_setting('fixture.activation_clock_step', true) = 'first' THEN
     PERFORM set_config('fixture.activation_clock_step', 'second', true);
   ELSIF current_setting('fixture.activation_clock_step', true) = 'second' THEN
+    IF current_setting('fixture.expire_activation_after_update', true) IS DISTINCT FROM 'yes' THEN
+      RETURN base_time + interval '5 minutes';
+    END IF;
+    PERFORM set_config('fixture.activation_clock_step', 'third', true);
+  ELSIF current_setting('fixture.activation_clock_step', true) = 'third' THEN
     RETURN base_time + interval '5 minutes';
   END IF;
   RETURN base_time;

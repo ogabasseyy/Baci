@@ -34,14 +34,18 @@ INSERT INTO public.product_feed_images (
 SELECT gen_random_uuid(), merchant_id, id, 'verified', 'https://MEDIA.example.invalid:443/approved',
   true, 1, 'https://MEDIA.example.invalid:443/approved'
 FROM public.products WHERE slug LIKE 'paged-%';
-UPDATE public.products SET images = images || '["https://media.example.invalid/secondary"]'::jsonb
+UPDATE public.products
+SET images = images || '["https://media.example.invalid/approved","https://media.example.invalid/secondary"]'::jsonb
 WHERE slug = 'paged-1';
 INSERT INTO public.product_feed_images (
   id, merchant_id, product_id, status, verified_url, is_primary, position, source_url
 )
-SELECT gen_random_uuid(), merchant_id, id, 'verified', 'https://media.example.invalid/secondary',
-  false, 2, 'https://media.example.invalid/secondary'
-FROM public.products WHERE slug = 'paged-1';
+SELECT gen_random_uuid(), merchant_id, id, 'verified', new_image.url,
+  false, new_image.position, new_image.url
+FROM public.products
+CROSS JOIN (VALUES ('https://media.example.invalid/approved', 2),
+  ('https://media.example.invalid/secondary', 3)) new_image(url, position)
+WHERE slug = 'paged-1';
 INSERT INTO private.brilstash_listings (
   id, installation_id, source_kind, source_id, parent_product_id, external_id, pilot_slot, reviewed_identity
 )
@@ -72,10 +76,9 @@ BEGIN
     'product_url', 'https://shop.example.invalid/products/' || (item->>'slug'),
     'description', 'Condition: New. Specifications: Fixture specification. Box contents: Phone only. Warranty: 30 days.', 'category', item->>'partnerCategory',
     'price_naira', item->'priceNaira', 'stock_quantity', item->'inventory'->'units',
-    'images', (
-      SELECT jsonb_agg(jsonb_build_object('url', url) ORDER BY ord)
-      FROM jsonb_array_elements_text(item->'verifiedImages') WITH ORDINALITY AS images(url, ord)
-    )
+    'images', CASE WHEN item->>'externalId' = 'paged-1' THEN
+      '[{"url":"https://MEDIA.example.invalid:443/approved"},{"url":"https://media.example.invalid/secondary"}]'::jsonb
+      ELSE '[{"url":"https://MEDIA.example.invalid:443/approved"}]'::jsonb END
   ) ORDER BY item->>'externalId') INTO payload
   FROM jsonb_array_elements(read_result->'rows') item;
   -- Compute the fixture digest outside the builder session.
@@ -194,6 +197,16 @@ BEGIN
   evidence := public.record_brilstash_fresh_installation(
     installation, 'fixture-paged', 'Local fresh fixture', false, false, 0, true
   );
+  BEGIN
+    PERFORM set_config('fixture.expire_activation_after_update', 'yes', true);
+    PERFORM set_config('fixture.activation_clock_step', 'first', true);
+    PERFORM public.activate_first_brilstash_snapshot(
+      installation, candidate, (statement_timestamp() AT TIME ZONE 'Africa/Lagos')::date, evidence, approval
+    );
+    RAISE EXCEPTION 'activation committed after evidence expired in the final display recheck';
+  EXCEPTION WHEN check_violation THEN
+    IF SQLERRM <> 'BrilStash activation window, evidence or freshness ended' THEN RAISE; END IF;
+  END;
   IF public.activate_first_brilstash_snapshot(
     installation, candidate, (statement_timestamp() AT TIME ZONE 'Africa/Lagos')::date, evidence, approval
   ) IS DISTINCT FROM candidate THEN

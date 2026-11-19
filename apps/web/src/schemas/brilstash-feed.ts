@@ -1,5 +1,8 @@
 import { z } from 'zod';
-import { parseBrilStashHttpsUrl } from '../lib/brilstash/parse-https-url';
+import {
+  brilStashImageUrlKey,
+  parseBrilStashHttpsUrl,
+} from '../lib/brilstash/parse-https-url';
 
 const httpsUrl = z
   .string()
@@ -22,7 +25,11 @@ export const brilstashProductSchema = z.strictObject({
   price_naira: brilstashPriceSchema,
   stock_quantity: z.int().nonnegative(),
   images: z
-    .array(z.strictObject({ url: httpsUrl }))
+    .array(
+      z.strictObject({
+        url: z.string().refine((url) => brilStashImageUrlKey(url) !== null),
+      })
+    )
     .min(1)
     .max(10),
   brand: plainText.optional(),

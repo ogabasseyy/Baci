@@ -179,7 +179,7 @@ describe('buildBrilStashCatalogue', () => {
       build([
         {
           ...sources[0],
-          verifiedImages: ['http://invalid.example/a', images[0], ...images],
+          verifiedImages: [images[0], ...images],
         },
       ]).products[0]?.images
     ).toEqual(images.slice(0, 10).map((url) => ({ url })));
@@ -194,6 +194,7 @@ describe('buildBrilStashCatalogue', () => {
         verifiedImages: [
           provisioned,
           provisioned,
+          'https://images.example.invalid/phone.jpg',
           'https://images.example.invalid/secondary.jpg',
         ],
       },
@@ -203,6 +204,20 @@ describe('buildBrilStashCatalogue', () => {
       { url: provisioned },
       { url: 'https://images.example.invalid/secondary.jpg' },
     ]);
+  });
+
+  it('rejects a source with a malformed verified URL even if other images are valid', () => {
+    expect(
+      build([
+        {
+          ...sources[0],
+          verifiedImages: [
+            ...sources[0].verifiedImages,
+            'https://images.example.invalid:65536/bad.jpg',
+          ],
+        },
+      ]).rejected
+    ).toEqual([{ sourceRef: 'product:accessory', code: 'missing_images' }]);
   });
 
   it.each([

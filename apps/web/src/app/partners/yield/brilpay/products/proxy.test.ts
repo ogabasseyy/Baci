@@ -1,6 +1,9 @@
 import { NextRequest } from 'next/server';
 import { expect, it, vi } from 'vitest';
-import { getCustomDomainForSlug } from '@/lib/domain-cache-simple';
+import {
+  getCustomDomainForSlug,
+  getSlugForCustomDomain,
+} from '@/lib/domain-cache-simple';
 import { getRouteType } from '@/lib/proxy/routing-policy';
 import { runSlugRoutingStage } from '@/lib/proxy/slug-routing';
 import { getCurrentSlugForAlias } from '@/lib/slug-alias-cache';
@@ -42,8 +45,13 @@ const path = '/partners/yield/brilpay/products';
 const query = '?page=1&limit=100&min_price=0';
 const credential = 'k'.repeat(43);
 
-it('preserves the exact platform path, query and credential through normal proxy routing', async () => {
-  vi.stubEnv('BRILSTASH_FEED_HOST', 'usebaci.com');
+it.each([
+  'usebaci.com',
+  'feed.usebaci.com',
+  'feed.example.invalid',
+])('preserves the exact path, query and credential on %s', async (host) => {
+  vi.clearAllMocks();
+  vi.stubEnv('BRILSTASH_FEED_HOST', host);
   vi.stubEnv('BRILSTASH_FEED_INGRESS_KEY', 'a'.repeat(64));
   vi.stubEnv('BRILSTASH_FEED_ENV', 'live');
   vi.stubEnv('BRILSTASH_SUPABASE_PROJECT_REF', 'synthetic');
@@ -53,16 +61,18 @@ it('preserves the exact platform path, query and credential through normal proxy
     expect(
       config.matcher.some((pattern) => new RegExp(`^${pattern}$`).test(path))
     ).toBe(true);
-    const request = new NextRequest(`https://usebaci.com${path}${query}`, {
-      headers: { host: 'usebaci.com', authorization: `Bearer ${credential}` },
+    const request = new NextRequest(`https://${host}${path}${query}`, {
+      headers: { host, authorization: `Bearer ${credential}` },
     });
     vi.mocked(getCustomDomainForSlug).mockResolvedValue(
       'merchant.example.invalid'
     );
     vi.mocked(getCurrentSlugForAlias).mockResolvedValue('another-merchant');
+    vi.mocked(getSlugForCustomDomain).mockResolvedValue('merchant');
     const routed = await proxy(request);
     expect(getCurrentSlugForAlias).not.toHaveBeenCalled();
     expect(getCustomDomainForSlug).not.toHaveBeenCalled();
+    expect(getSlugForCustomDomain).not.toHaveBeenCalled();
     expect(routed.headers.get('location')).toBeNull();
     expect(routed.headers.get('x-middleware-rewrite')).toBeNull();
     expect(routed.headers.get('x-middleware-next')).toBe('1');

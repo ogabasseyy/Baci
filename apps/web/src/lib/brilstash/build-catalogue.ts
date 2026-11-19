@@ -6,7 +6,10 @@ import {
 } from '../../schemas/brilstash-feed';
 import { isStorefrontProductVariantPublic } from '../is-storefront-product-variant-public';
 import { sanitizeText } from '../sanitize-core';
-import { parseBrilStashHttpsUrl } from './parse-https-url';
+import {
+  brilStashImageUrlKey,
+  parseBrilStashHttpsUrl,
+} from './parse-https-url';
 
 type Scope = { merchantId: string; installationId: string };
 type BuildContext = Scope & { storefrontOrigin: string };
@@ -103,18 +106,13 @@ function resolveStock(inventory: Inventory): number | null {
 }
 
 function resolveImages(verifiedImages: SourceFacts['verifiedImages']) {
-  const urls = new Set<string>();
+  const urls = new Map<string, string>();
   for (const value of verifiedImages) {
-    if (!value) continue;
-    const url = parseBrilStashHttpsUrl(value);
-    // Staging checks image URLs against the exact verified manifest. The
-    // storefront hostname check applies to product_url only.
-    // Fragmented inputs must be corrected and re-verified at their source.
-    if (!url || url.hash) continue;
-    urls.add(value);
-    if (urls.size === 10) break;
+    const key = value ? brilStashImageUrlKey(value) : null;
+    if (!value || key === null) return [];
+    if (urls.size < 10 && !urls.has(key)) urls.set(key, value);
   }
-  return Array.from(urls, (url) => ({ url }));
+  return Array.from(urls.values(), (url) => ({ url }));
 }
 
 function buildDescription(conditionLabel: string, facts: ApprovedFacts | null) {

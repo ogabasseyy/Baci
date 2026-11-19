@@ -31,6 +31,8 @@ describe('BrilStash product contract', () => {
       })),
     },
     { images: [{ url: 'http://images.example.invalid/p.jpg' }] },
+    { images: [{ url: 'https://images.example.invalid:65536/p.jpg' }] },
+    { images: [{ url: 'https://images.example.invalid/p.jpg#crop' }] },
     { product_url: 'https://user:pass@shop.example.invalid/p' },
     { internal_merchant_id: 'private' },
     { description: '<b>Phone</b>' },

@@ -1,5 +1,8 @@
 import { expect, it } from 'vitest';
-import { parseBrilStashHttpsUrl } from './parse-https-url';
+import {
+  brilStashImageUrlKey,
+  parseBrilStashHttpsUrl,
+} from './parse-https-url';
 
 it('accepts an absolute HTTPS URL with query and fragment intact', () => {
   const value = 'https://shop.example.invalid/phone?condition=new#details';
@@ -16,4 +19,22 @@ it.each([
   'https://shop.example.invalid\\path',
 ])('rejects an unsupported URL %s', (value) => {
   expect(parseBrilStashHttpsUrl(value)).toBeNull();
+});
+
+it('normalizes verified image authorities without modifying the path or query', () => {
+  expect(
+    brilStashImageUrlKey('https://CDN.example.invalid:00443?width=42')
+  ).toBe('https://cdn.example.invalid/?width=42');
+  expect(
+    brilStashImageUrlKey('https://CDN.example.invalid:8443/file.jpg')
+  ).toBe('https://cdn.example.invalid:8443/file.jpg');
+});
+
+it.each([
+  'https://cdn.example.invalid:65536/image.jpg',
+  'https://user@cdn.example.invalid/image.jpg',
+  'https://cdn.example.invalid/image.jpg#crop',
+  'https://-cdn.example.invalid/image.jpg',
+])('rejects an unsupported verified image URL %s', (value) => {
+  expect(brilStashImageUrlKey(value)).toBeNull();
 });

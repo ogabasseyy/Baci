@@ -1,8 +1,5 @@
 import 'server-only';
-import {
-  lookupPrimaryWalletCustomer,
-  type PrimaryWalletCustomerLookup,
-} from './primary-wallet-customer-lookup';
+import type { PrimaryWalletCustomerLookup } from './primary-wallet-customer-lookup';
 import type {
   PrimaryWalletIntentScope,
   PrimaryWalletOnboardingStorage,
@@ -26,17 +23,16 @@ import { emitPiggyvestWebhookAlert } from './webhook-alerts';
  *   returnIfExist may have matched another identity, or the listing may lag
  *   a just-created customer: never adopted, and the intent stays reclaimable
  *   so a later lookup decides.
- * - `refreshed_existing`: an existing customer after an identity refresh, or
- *   a new one the post-create check could not confirm as the only customer
- *   under our identifier (confirmRefreshedAdoption). Never adopted, but it
- *   may hold a live DVA, so its ids are kept for review and closure.
+ * - `refreshed_review`: any customer created or returned after an identity
+ *   refresh. Never adopted automatically; its ids are kept for review and
+ *   closure, since it may hold a live DVA.
  */
 export type CreatedCustomerVerdict =
   | 'adopt'
   | 'foreign'
   | 'duplicate'
   | 'unproven'
-  | 'refreshed_existing';
+  | 'refreshed_review';
 
 export function judgeCreatedCustomer(input: {
   lookup: PrimaryWalletCustomerLookup | null;
@@ -44,14 +40,14 @@ export function judgeCreatedCustomer(input: {
   identityRefreshed?: boolean;
 }): CreatedCustomerVerdict {
   const { lookup, created, identityRefreshed } = input;
-  // After an identity refresh, the old and the replacement request share one
-  // third-party identifier, so an existing customer cannot be told apart: it
-  // may be ours from a lost create response, or the earlier dispatch's,
-  // made under the BVN the user replaced. Adopting the wrong one would bind
-  // a wallet to that old BVN, so it is never adopted. The accepted cost: a
-  // lost response after a refresh ends in OWNERSHIP_REVIEW_REQUIRED
-  // (manual review) rather than an automatic adoption.
-  if (identityRefreshed && !created.new_customer) return 'refreshed_existing';
+  // After an identity refresh, the earlier, ambiguous dispatch under the
+  // replaced BVN may still land at any time, and the old and replacement
+  // requests share one third-party identifier. No listing, before or after
+  // the create, can prove it never will, so nothing created or returned
+  // after a refresh is adopted automatically: its ids are kept and the
+  // intent goes to ownership review (OWNERSHIP_REVIEW_REQUIRED). The
+  // accepted cost is a manual review for every refreshed onboarding.
+  if (identityRefreshed) return 'refreshed_review';
   if (lookup === null) return created.new_customer ? 'adopt' : 'foreign';
   if (lookup.kind === 'none')
     return created.new_customer ? 'adopt' : 'unproven';
@@ -59,33 +55,6 @@ export function judgeCreatedCustomer(input: {
   if (lookup.kind !== 'found') return 'foreign';
   if (created.new_customer) return 'duplicate';
   return created.customer_id === lookup.customerId ? 'adopt' : 'foreign';
-}
-
-/**
- * After an identity refresh, the earlier dispatch under the replaced BVN may
- * land at the same time as the replacement create, and PiggyVest can report
- * a new customer even when another exists under our identifier. So a new
- * customer is adopted only when PiggyVest's own listing, read after the
- * create, shows it as the one customer under our identifier. Anything else
- * (another customer, several, an empty or incomplete listing) is kept for
- * review with its ids. Claims without a refresh are returned unchanged.
- */
-export async function confirmRefreshedAdoption(input: {
-  verdict: CreatedCustomerVerdict;
-  identityRefreshed: boolean;
-  createdCustomerId: string;
-  thirdPartyIdentifier: string;
-  findCustomers: (thirdPartyIdentifier: string) => Promise<unknown>;
-}): Promise<CreatedCustomerVerdict> {
-  if (input.verdict !== 'adopt' || !input.identityRefreshed)
-    return input.verdict;
-  const after = await lookupPrimaryWalletCustomer({
-    thirdPartyIdentifier: input.thirdPartyIdentifier,
-    findCustomers: input.findCustomers,
-  });
-  return after.kind === 'found' && after.customerId === input.createdCustomerId
-    ? 'adopt'
-    : 'refreshed_existing';
 }
 
 /**

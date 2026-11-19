@@ -121,13 +121,16 @@ describe('keepCreatedWalletForReview', () => {
 });
 
 describe('judgeCreatedCustomer after an identity refresh', () => {
-  it('bugfix (Codex P1): returns refreshed_existing so the ids are kept for review', () => {
+  it.each([
+    true,
+    false,
+  ])('bugfix (Codex P1): returns refreshed_review (new_customer=%s) so the ids are kept for review', (newCustomer) => {
     expect(
       judgeCreatedCustomer({
         lookup: null,
-        created: { customer_id: 'x', new_customer: false },
+        created: { customer_id: 'x', new_customer: newCustomer },
         identityRefreshed: true,
       })
-    ).toBe('refreshed_existing');
+    ).toBe('refreshed_review');
   });
 });

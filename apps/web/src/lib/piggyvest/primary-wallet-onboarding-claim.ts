@@ -19,9 +19,9 @@ import type {
  * a wallet to the wrong BVN. Only when PiggyVest's own listing for this
  * account's identifier (not BVN-based) is complete and empty may the
  * database re-fingerprint the intent, and only while it is unresolved,
- * walletless and unreviewed. That claim is fresh (reclaimed:false), so an
- * existing-customer answer to the create that follows is foreign, never
- * adopted. Any other lookup answer keeps the conflict for review.
+ * walletless and unreviewed. Whatever customer the create that follows
+ * returns, new or existing, is judged refreshed_review: never adopted, its
+ * ids kept for ownership review. Any other lookup answer keeps the conflict.
  */
 export async function claimPrimaryWalletOnboarding(input: {
   storage: PrimaryWalletOnboardingStorage;

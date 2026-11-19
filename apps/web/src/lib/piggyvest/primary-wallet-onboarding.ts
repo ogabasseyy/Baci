@@ -18,7 +18,6 @@ import type {
 } from './primary-wallet-onboarding.types';
 import {
   alertOwnershipReview,
-  confirmRefreshedAdoption,
   judgeCreatedCustomer,
   keepCreatedWalletForReview,
 } from './primary-wallet-onboarding-adoption';
@@ -156,16 +155,10 @@ export async function onboardPiggyvestPrimaryWallet(
     // (judgeCreatedCustomer); an explicit existing-customer answer that is
     // not is an ownership verdict, so it is terminally rejected and a retry
     // can never adopt it behind the reviewer's back.
-    const verdict = await confirmRefreshedAdoption({
-      verdict: judgeCreatedCustomer({
-        lookup,
-        created: result.data,
-        identityRefreshed: claim.identityRefreshed === true,
-      }),
+    const verdict = judgeCreatedCustomer({
+      lookup,
+      created: result.data,
       identityRefreshed: claim.identityRefreshed === true,
-      createdCustomerId: result.data.customer_id,
-      thirdPartyIdentifier: providerRequest.third_party_identifier,
-      findCustomers: input.findCustomers,
     });
     if (verdict === 'foreign') {
       await input.storage.recordRejected(claimedScope);
@@ -176,11 +169,11 @@ export async function onboardPiggyvestPrimaryWallet(
       await input.storage.recordUncertain(claimedScope);
       return { status: 'pending' };
     }
-    if (verdict === 'duplicate' || verdict === 'refreshed_existing') {
+    if (verdict === 'duplicate' || verdict === 'refreshed_review') {
       alertOwnershipReview(
         verdict === 'duplicate'
           ? 'duplicate provider customer'
-          : 'unconfirmed customer after identity refresh',
+          : 'customer created after identity refresh',
         claim.intentId
       );
       const kept = await keepCreatedWalletForReview({

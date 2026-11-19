@@ -68,6 +68,24 @@ export async function refreshSupportedBanks(
   return banks;
 }
 
+const PROVIDER_OUTCOMES = new Set(['not_sent', 'rejected', 'indeterminate']);
+
+/**
+ * Triage fields for a failed refresh. Never the error message, the provider
+ * response or the diagnostic: only the error class and, for a provider
+ * failure, its fixed outcome (not_sent, rejected or indeterminate).
+ */
+function describeRefreshFailure(error: unknown) {
+  if (!(error instanceof Error)) return { errorName: 'UnknownError' };
+  const outcome = 'outcome' in error ? error.outcome : undefined;
+  return {
+    errorName: error.name,
+    ...(typeof outcome === 'string' && PROVIDER_OUTCOMES.has(outcome)
+      ? { outcome }
+      : {}),
+  };
+}
+
 /** Delete the lock only while it still holds our token, never a successor's. */
 async function releaseRefreshLock(
   cache: LockCache,
@@ -103,7 +121,11 @@ export async function readOrRefreshSupportedBanks(
     nx: true,
     ex: REFRESH_LOCK_SECONDS,
   });
-  if (!claimed) return null;
+  if (!claimed) {
+    // The lock holder may have written the list since our first read; look
+    // once more so a contended request is not told "unavailable" for nothing.
+    return readSupportedBanks(cache, environment, partner);
+  }
 
   let refreshFailed = false;
   try {
@@ -117,13 +139,12 @@ export async function readOrRefreshSupportedBanks(
     return await refreshSupportedBanks(cache, provider, environment, partner);
   } catch (error) {
     // Keep the lock: its remaining TTL is the cooldown, so an Oxygen outage is
-    // not retried by every checkout miss. Log the class only, never the
-    // provider response or message.
+    // not retried by every checkout miss.
     refreshFailed = true;
     logger.error({
       message: 'Oxygen supported-bank refresh failed',
       environment,
-      errorName: error instanceof Error ? error.name : 'UnknownError',
+      ...describeRefreshFailure(error),
     });
     return null;
   } finally {

@@ -112,3 +112,14 @@ test('only the @baci/web main program emits the typecheck budget diagnostics', a
   );
   assert.deepEqual(flagged, ['@baci/web#typecheck:ci']);
 });
+
+test('the CI program excludes test files while the full typecheck keeps them', async () => {
+  const ci = JSON.parse(await readFile('apps/web/tsconfig.ci.json', 'utf8'));
+  assert.equal(ci.extends, './tsconfig.json');
+  for (const pattern of ['src/**/*.test.ts', 'src/**/*.test.tsx', 'src/**/*.spec.ts', 'src/**/*.spec.tsx']) {
+    assert.ok(ci.exclude.includes(pattern), `tsconfig.ci.json must exclude ${pattern}`);
+  }
+  const web = JSON.parse(await readFile('apps/web/package.json', 'utf8'));
+  assert.match(web.scripts['typecheck:ci'], /tsc --noEmit -p tsconfig\.ci\.json\b/);
+  assert.doesNotMatch(web.scripts.typecheck, /tsconfig\.ci\.json/);
+});

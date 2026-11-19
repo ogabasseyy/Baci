@@ -152,6 +152,77 @@ describe('bugfix: refresh lock fencing and failure cooldown', () => {
     expect(cache.store.get(cache.lockKey())).toBe('cron-token');
   });
 
+  it('returns the list the lock holder wrote while this request was losing the race', async () => {
+    const cache = redisLike();
+    cache.get
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ banks: [bank] });
+    cache.store.set(cache.lockKey(), 'holder-token');
+    const provider = { call: vi.fn().mockResolvedValue(providerList) };
+
+    expect(
+      await readOrRefreshSupportedBanks(
+        cache,
+        'production',
+        'partner',
+        () => provider
+      )
+    ).toEqual([bank]);
+
+    expect(provider.call).not.toHaveBeenCalled();
+    expect(cache.store.get(cache.lockKey())).toBe('holder-token');
+  });
+
+  it('logs the provider failure outcome without its message or diagnostic', async () => {
+    logger.error.mockClear();
+    const cache = redisLike();
+    const failure = Object.assign(
+      new Error('Oxygen request could not be confirmed'),
+      {
+        outcome: 'not_sent',
+        diagnostic: { body: 'sk_live_diag' },
+      }
+    );
+    const provider = { call: vi.fn().mockRejectedValue(failure) };
+
+    await readOrRefreshSupportedBanks(
+      cache,
+      'production',
+      'partner',
+      () => provider
+    );
+
+    expect(logger.error).toHaveBeenCalledWith({
+      message: 'Oxygen supported-bank refresh failed',
+      environment: 'production',
+      errorName: 'Error',
+      outcome: 'not_sent',
+    });
+    expect(JSON.stringify(logger.error.mock.calls)).not.toContain(
+      'sk_live_diag'
+    );
+  });
+
+  it('ignores an unrecognised outcome value when logging a failed refresh', async () => {
+    logger.error.mockClear();
+    const cache = redisLike();
+    const failure = Object.assign(new Error('x'), {
+      outcome: 'free text body',
+    });
+    const provider = { call: vi.fn().mockRejectedValue(failure) };
+
+    await readOrRefreshSupportedBanks(
+      cache,
+      'production',
+      'partner',
+      () => provider
+    );
+
+    expect(JSON.stringify(logger.error.mock.calls)).not.toContain(
+      'free text body'
+    );
+  });
+
   it('still returns the list when releasing the lock fails', async () => {
     const cache = redisLike();
     cache.eval.mockRejectedValue(new Error('redis unavailable'));

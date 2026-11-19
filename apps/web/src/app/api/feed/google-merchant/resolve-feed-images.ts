@@ -21,7 +21,8 @@ function buildAdditionalImagesXml(urls: string[]) {
 
 export function resolveFeedImages(
   entries: FeedImageManifestEntry[],
-  excludeUrls: ReadonlySet<string> = new Set()
+  excludeUrls: ReadonlySet<string> = new Set(),
+  renderXml = true
 ): ResolvedFeedImages | null {
   const primaryImageUrl = resolveGmcPrimaryImage(entries, excludeUrls);
 
@@ -31,10 +32,12 @@ export function resolveFeedImages(
 
   return {
     primaryImageUrl,
-    additionalImagesXml: buildAdditionalImagesXml(
-      resolveGmcAdditionalImages(entries, excludeUrls).filter(
-        (url) => url !== primaryImageUrl
-      )
-    ),
+    additionalImagesXml: renderXml
+      ? buildAdditionalImagesXml(
+          resolveGmcAdditionalImages(entries, excludeUrls).filter(
+            (url) => url !== primaryImageUrl
+          )
+        )
+      : '',
   };
 }

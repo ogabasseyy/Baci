@@ -29,6 +29,11 @@ export interface AuthoritativeProductPurgeEnrichment {
    * purge so a CF MISS cannot refill from stale Next-cached product data.
    */
   resolvedSlugs: string[];
+  /**
+   * Authoritative row slugs keyed by product ID, populated when the DB row
+   * lookup resolved a non-empty slug for that ID.
+   */
+  authoritativeSlugsById?: ReadonlyMap<string, string>;
   /** Published article slugs whose related-product rail embeds these products. */
   blogPostSlugs: string[];
   /**
@@ -191,6 +196,7 @@ export async function enrichProductPurgeEntries(
       products,
       authoritativeSlugsById
     ),
+    authoritativeSlugsById,
     blogPostSlugs,
     blogPostSlugsIncomplete,
   };

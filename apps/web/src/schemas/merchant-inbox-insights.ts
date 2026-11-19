@@ -9,10 +9,7 @@ export type MerchantInboxInsightDays =
 export const merchantInboxInsightsQuerySchema = z.object({
   days: z.coerce
     .number()
-    .int()
-    .refine((value) =>
-      (MERCHANT_INBOX_INSIGHT_DAYS as readonly number[]).includes(value)
-    )
+    .pipe(z.union([z.literal(7), z.literal(30), z.literal(90)]))
     .default(7),
 });
 

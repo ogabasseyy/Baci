@@ -37,9 +37,13 @@ export function forfeitDriverPorts(input: {
   // PIGGYVEST_INTEREST_WALLET_ID: the deployment's own record of
   // Ogabassey's interest wallet; it must match the database's.
   expectedDestinationWalletId: string | null;
-  // PIGGYVEST_INTEREST_WALLET_OWNER_ID: the PiggyVest customer that owns
-  // Ogabassey's interest wallet; the wallet must belong to exactly it.
+  // PIGGYVEST_INTEREST_WALLET_OWNER_ID: set only for a customer-owned
+  // interest wallet, which must then belong to exactly that customer. Unset
+  // means the interest wallet is Ogabassey's business wallet (no customer).
   expectedDestinationOwnerId: string | null;
+  // PIGGYVEST_PRIMARY_INTEREST_PAYOUT_WALLET_ID: bound in business-wallet
+  // mode so business-owned forfeits can only target the main interest payout wallet.
+  expectedPrimaryInterestPayoutWalletId?: string | null;
 }): Ports {
   const { provider, evidence, operationId } = input;
   // Never fails the caller: an unacknowledged page is simply sent again.
@@ -82,14 +86,30 @@ export function forfeitDriverPorts(input: {
       // PIGGYVEST_INTEREST_WALLET_ID (two independent settings, so one typo
       // can not redirect interest), and PiggyVest must confirm it is an
       // active NGN wallet in this business and not the customer's.
+      // Ownership is proven one of two ways, chosen by the deployment: with
+      // PIGGYVEST_INTEREST_WALLET_OWNER_ID set, the wallet must belong to
+      // exactly that PiggyVest customer; unset, it must be a business-owned
+      // wallet (no API customer at all), as the main-wallet interest payout
+      // wallet is. A configured owner never accepts a business wallet.
+      const businessPayoutWalletMatches =
+        input.expectedPrimaryInterestPayoutWalletId != null &&
+        forfeit.destinationWalletId ===
+          input.expectedPrimaryInterestPayoutWalletId;
+      const ownerOk =
+        input.expectedDestinationOwnerId === null
+          ? wallet.api_customer_id === null && businessPayoutWalletMatches
+          : wallet.api_customer_id === input.expectedDestinationOwnerId;
       const ours =
         input.expectedDestinationWalletId !== null &&
         forfeit.destinationWalletId === input.expectedDestinationWalletId &&
         wallet.id === forfeit.destinationWalletId &&
         wallet.business_id === forfeit.businessId &&
-        input.expectedDestinationOwnerId !== null &&
-        wallet.api_customer_id === input.expectedDestinationOwnerId &&
+        ownerOk &&
         wallet.api_customer_id !== forfeit.providerCustomerId &&
+        forfeit.destinationWalletId !== forfeit.sourceWalletId &&
+        // Deny by default: a wallet without a type is never assumed safe.
+        wallet.type !== undefined &&
+        wallet.type.toLowerCase() !== 'settlement' &&
         wallet.currency === 'NGN' &&
         wallet.status === 'active';
       if (!ours) return false;

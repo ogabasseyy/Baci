@@ -22,5 +22,6 @@ export function delegatedCartValue(
         ? { cartId: shared.cartId, version: shared.version }
         : null,
     refreshSharedCart: shared.refreshSharedCart,
+    ensureSharedCartSession: shared.ensureCartSession,
   };
 }

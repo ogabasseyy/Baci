@@ -10,7 +10,7 @@ import {
   getValidatedInternalAuthMethod,
   INTERNAL_AUTH_HEADER,
 } from '@/lib/internal-auth-header';
-import { getProductSlugSetCacheTag } from '@/lib/product-cache-tags';
+import { buildProductCanonicalPreflightCacheTagHeader } from '@/lib/product-cache-tags';
 import { UNKNOWN_STOREFRONT_FAIL_OPEN_REASON } from '@/lib/storefront-internal-preflight';
 import {
   buildStorefrontPdpCanonicalPath,
@@ -83,12 +83,12 @@ function toVerdictResponse(
           // Two purge paths (comma = tag separator): product mutations purge
           // `product-slug-set-${merchantId}` via revalidateProducts, and
           // CATEGORY slug changes — which move a product's canonical path
-          // without any slug-set mutation — purge the same global
-          // `product-canonical-redirect` tag the underlying 'use cache'
-          // lookup carries and revalidateCategories invalidates.
-          'Vercel-Cache-Tag': `${getProductSlugSetCacheTag(
-            cacheTagMerchantId
-          )},product-canonical-redirect`,
+          // without any slug-set mutation — purge the merchant-scoped
+          // `product-canonical-redirect-${merchantId}` tag (kept alongside the
+          // legacy `product-canonical-redirect` tag) that the underlying
+          // 'use cache' lookup carries and revalidateCategories invalidates.
+          'Vercel-Cache-Tag':
+            buildProductCanonicalPreflightCacheTagHeader(cacheTagMerchantId),
         }
       : NO_STORE,
   });

@@ -8,11 +8,11 @@ import {
   merchantInboxReplyResponseSchema,
   merchantInboxThreadResponseSchema,
 } from '@/schemas/merchant-inbox';
+import type { MerchantInboxInsightDays } from '@/schemas/merchant-inbox-insights-query';
 import {
-  type MerchantInboxInsightDays,
   type MerchantInboxInsights,
   merchantInboxInsightsResponseSchema,
-} from '@/schemas/merchant-inbox-insights';
+} from '@/schemas/merchant-inbox-insights-response';
 
 export type MerchantInboxApiErrorCode =
   | 'unauthorized'

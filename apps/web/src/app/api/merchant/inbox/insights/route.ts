@@ -5,7 +5,7 @@ import {
   merchantInboxJson,
   resolveMerchantInboxRequest,
 } from '@/lib/chatwoot/merchant-inbox-request';
-import { merchantInboxInsightsQuerySchema } from '@/schemas/merchant-inbox-insights';
+import { merchantInboxInsightsQuerySchema } from '@/schemas/merchant-inbox-insights-query';
 
 /** Conversation totals and reply times for the signed-in merchant's chat. */
 export async function GET(request: NextRequest) {

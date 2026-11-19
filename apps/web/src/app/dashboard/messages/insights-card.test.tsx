@@ -61,4 +61,10 @@ describe('InsightsCard', () => {
       'Insights are temporarily unavailable.'
     );
   });
+
+  it('shows a loading status while the insights are pending', () => {
+    mocks.fetchInsights.mockReturnValue(new Promise(() => {}));
+    render(<InsightsCard />);
+    expect(screen.getByRole('status')).toHaveTextContent('Loading insights…');
+  });
 });

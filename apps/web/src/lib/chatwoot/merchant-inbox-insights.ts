@@ -1,10 +1,8 @@
 import 'server-only';
 
-import {
-  type MerchantInboxInsightDays,
-  type MerchantInboxInsights,
-  providerInboxSummarySchema,
-} from '@/schemas/merchant-inbox-insights';
+import { providerInboxSummarySchema } from '@/schemas/merchant-inbox-insights-provider';
+import type { MerchantInboxInsightDays } from '@/schemas/merchant-inbox-insights-query';
+import type { MerchantInboxInsights } from '@/schemas/merchant-inbox-insights-response';
 import type { MerchantInboxBinding } from './merchant-inbox-config';
 
 const REQUEST_TIMEOUT_MS = 8_000;

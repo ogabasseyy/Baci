@@ -1,18 +1,5 @@
 import { z } from 'zod';
 
-/** Reporting windows the Messages page offers, in days. */
-export const MERCHANT_INBOX_INSIGHT_DAYS = [7, 30, 90] as const;
-
-export type MerchantInboxInsightDays =
-  (typeof MERCHANT_INBOX_INSIGHT_DAYS)[number];
-
-export const merchantInboxInsightsQuerySchema = z.object({
-  days: z.coerce
-    .number()
-    .pipe(z.union([z.literal(7), z.literal(30), z.literal(90)]))
-    .default(7),
-});
-
 // Every key is required, so a fork that renamed or dropped one reads as
 // unreadable (503), never as zeros. Times may be null (nothing to average) and
 // arrive as numbers or numeric strings; negatives and junk time values read as no data, but a corrupt count is
@@ -47,26 +34,4 @@ export const providerInboxSummarySchema = z.object({
   resolutions_count: count,
   avg_first_response_time: seconds,
   avg_resolution_time: seconds,
-});
-
-export type MerchantInboxInsights = {
-  days: MerchantInboxInsightDays;
-  conversations: number;
-  customerMessages: number;
-  storeReplies: number;
-  resolved: number;
-  /** Seconds; null when there is nothing to average yet. */
-  avgFirstResponseSeconds: number | null;
-  avgResolutionSeconds: number | null;
-};
-
-/** Baci's own insights response, validated again in the browser. */
-export const merchantInboxInsightsResponseSchema = z.object({
-  days: z.union([z.literal(7), z.literal(30), z.literal(90)]),
-  conversations: z.number().int().nonnegative(),
-  customerMessages: z.number().int().nonnegative(),
-  storeReplies: z.number().int().nonnegative(),
-  resolved: z.number().int().nonnegative(),
-  avgFirstResponseSeconds: z.number().int().nonnegative().nullable(),
-  avgResolutionSeconds: z.number().int().nonnegative().nullable(),
 });

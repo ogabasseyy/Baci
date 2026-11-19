@@ -8,23 +8,15 @@ import { cn } from '@/lib/utils';
 import {
   MERCHANT_INBOX_INSIGHT_DAYS,
   type MerchantInboxInsightDays,
-  type MerchantInboxInsights,
-} from '@/schemas/merchant-inbox-insights';
+} from '@/schemas/merchant-inbox-insights-query';
+import type { MerchantInboxInsights } from '@/schemas/merchant-inbox-insights-response';
 import { formatInsightDuration } from './insights-format';
+import { InsightsStat as Stat } from './insights-stat';
 
 type State =
   | { status: 'loading' }
   | { status: 'error' }
   | { status: 'ready'; insights: MerchantInboxInsights };
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="text-2xl font-semibold tabular-nums">{value}</dd>
-    </div>
-  );
-}
 
 /** Chat totals and reply times for the Messages page. */
 export function InsightsCard() {

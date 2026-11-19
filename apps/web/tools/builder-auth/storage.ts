@@ -38,22 +38,42 @@ const parseConnection = (row: unknown) => {
     revokedAt: c.revokedAt ? new Date(c.revokedAt).toISOString() : null,
   };
 };
+async function transactionOnClient<T>(
+  client: PoolClient,
+  work: (client: PoolClient) => Promise<T>
+): Promise<T> {
+  await client.query('BEGIN');
+  try {
+    const result = await work(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  }
+}
 async function transaction<T>(
   pool: Pool,
   work: (client: PoolClient) => Promise<T>
 ): Promise<T> {
-  const c = await pool.connect();
+  const client = await pool.connect();
   try {
-    await c.query('BEGIN');
-    const result = await work(c);
-    await c.query('COMMIT');
-    return result;
-  } catch (error) {
-    await c.query('ROLLBACK');
-    throw error;
+    return await transactionOnClient(client, work);
   } finally {
-    c.release();
+    client.release();
   }
+}
+async function releaseRefreshLock(client: PoolClient, id: string) {
+  try {
+    await client.query(
+      "SELECT pg_advisory_unlock(hashtextextended('baci.builder.refresh.'||$1,0))",
+      [id]
+    );
+  } catch (error) {
+    client.release(true);
+    throw error;
+  }
+  client.release();
 }
 export function createAuthStorage(
   pool: Pool,
@@ -190,8 +210,10 @@ export function createAuthStorage(
           [id]
         );
         if (!s.rows[0]) throw new Error('Reconnect Baci to continue.');
+        // The advisory lock already reserves this pool client. Keep persistence
+        // on it so concurrent refreshes never wait for an extra client.
         const revoke = () =>
-          transaction(pool, (client) =>
+          transactionOnClient(c, (client) =>
             revokeGrant(client, grant.providerGrantId)
           );
         let tokens: UpstreamTokens;
@@ -218,7 +240,7 @@ export function createAuthStorage(
               throw new Error('Reconnect Baci to continue.');
           },
           save: async (tokens) => {
-            await transaction(pool, async (client) => {
+            await transactionOnClient(c, async (client) => {
               const current = await client.query(
                 "SELECT id FROM builder_authorization.connections WHERE id=$1 AND grant_version=$2 AND status='active' AND expires_at>now() FOR UPDATE",
                 [id, version]
@@ -236,15 +258,8 @@ export function createAuthStorage(
           revoke,
         });
       } finally {
-        try {
-          if (locked)
-            await c.query(
-              "SELECT pg_advisory_unlock(hashtextextended('baci.builder.refresh.'||$1,0))",
-              [id]
-            );
-        } finally {
-          c.release();
-        }
+        if (locked) await releaseRefreshLock(c, id);
+        else c.release();
       }
     },
     async putTransaction(idHash: string, browserHash: string, value: unknown) {

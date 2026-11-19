@@ -14,8 +14,10 @@ import {
   cartLine,
   MERCHANT_ID,
   product,
+  resetCartSessionHintForTests,
   SLUG,
   snapshot,
+  writeCartSessionHint,
 } from './shared-cart-provisioning.test-support';
 import { useSharedCart } from './use-shared-cart';
 
@@ -28,10 +30,15 @@ vi.mock('./shared-cart-client', () => ({
 }));
 
 describe('useSharedCart legacy import', () => {
-  afterEach(() => vi.useRealTimers());
+  afterEach(() => {
+    resetCartSessionHintForTests();
+    vi.useRealTimers();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     window.localStorage.clear();
+    resetCartSessionHintForTests();
+    writeCartSessionHint(MERCHANT_ID, '1');
     vi.mocked(fetchSharedCartProducts).mockResolvedValue(new Map());
   });
 

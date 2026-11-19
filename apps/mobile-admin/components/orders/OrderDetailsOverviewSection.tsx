@@ -6,7 +6,7 @@ import type { OrderSourceInfo } from './order-details.types';
 
 interface OrderDetailsOverviewSectionProps {
   colors: ThemeColors;
-  createdAtLabel: string;
+  placedOnLabel: string;
   customerEmail: string;
   customerName: string;
   customerPhone: string | null;
@@ -31,7 +31,7 @@ interface OrderDetailsOverviewSectionProps {
 
 export function OrderDetailsOverviewSection({
   colors,
-  createdAtLabel,
+  placedOnLabel,
   customerEmail,
   customerName,
   customerPhone,
@@ -57,7 +57,7 @@ export function OrderDetailsOverviewSection({
     <View>
       <OrderDetailsStatusCard
         colors={colors}
-        createdAtLabel={createdAtLabel}
+        placedOnLabel={placedOnLabel}
         recordedByName={recordedByName}
         shippingColor={shippingColor}
         shippingConfig={shippingConfig}

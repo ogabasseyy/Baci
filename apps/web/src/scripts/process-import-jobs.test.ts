@@ -164,3 +164,55 @@ describe('runProcessImportJobsCli', () => {
     expect(mocks.processImportJobQueue).not.toHaveBeenCalled();
   });
 });
+
+describe('process-import-jobs production env validation', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.unstubAllEnvs();
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('GITHUB_ACTIONS', 'false');
+    vi.stubEnv('QUIZ_PHASE', '1a');
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://supabase.example.com');
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'anon-key');
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'service-role-key');
+    delete process.env.QUIZ_RPC_SERVER_SECRET;
+    delete process.env.SUPABASE_JWT_SECRET;
+    delete process.env.SUPABASE_AGENTIC_JWT_PRIVATE_JWK;
+    delete process.env.BACI_WORKER_PROFILE;
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+    vi.resetModules();
+  });
+
+  it('succeeds in production phase 1a without QUIZ_RPC_SERVER_SECRET when BACI_WORKER_PROFILE is import-jobs', async () => {
+    vi.stubEnv('BACI_WORKER_PROFILE', 'import-jobs');
+    vi.doUnmock('@/env');
+    vi.doMock('@/lib/supabase/service', () => ({
+      createServiceClient: vi.fn(() => ({ service: true })),
+    }));
+    vi.doMock('@/lib/import-jobs/process-import-job', () => ({
+      processImportJobById: vi.fn(),
+      processImportJobQueue: vi.fn().mockResolvedValue([]),
+    }));
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    const { runProcessImportJobsCli: runWithRealEnv } = await import(
+      './process-import-jobs'
+    );
+
+    await expect(runWithRealEnv()).resolves.toBe(0);
+  });
+
+  it('fails in production phase 1a without QUIZ_RPC_SERVER_SECRET when BACI_WORKER_PROFILE is missing (web runtime)', async () => {
+    vi.stubEnv('SUPABASE_JWT_SECRET', 'jwt-secret');
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.doUnmock('@/env');
+
+    await expect(import('./process-import-jobs')).rejects.toThrow(
+      /QUIZ_RPC_SERVER_SECRET is required in production for negotiated checkout proofs/
+    );
+  });
+});

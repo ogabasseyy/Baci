@@ -8,6 +8,7 @@ import type { createGoalCancelStore } from './goal-cancel-store';
 import {
   readGoalInterestWalletId,
   readGoalInterestWalletOwnerId,
+  readPrimaryInterestPayoutWalletId,
 } from './goal-interest-wallet-env';
 
 type Store = ReturnType<typeof createGoalCancelStore>;
@@ -41,6 +42,8 @@ export async function sweepGoalCancelForfeit(input: {
         operationId,
         expectedDestinationWalletId: readGoalInterestWalletId(),
         expectedDestinationOwnerId: readGoalInterestWalletOwnerId(),
+        expectedPrimaryInterestPayoutWalletId:
+          readPrimaryInterestPayoutWalletId(),
       })
     );
   } catch {

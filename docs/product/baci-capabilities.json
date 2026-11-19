@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-18T05:21:00+00:00",
-  "source_revision": "7f3cba94621777d942ece0abfb5155e049aeace1",
-  "evidence_digest": "4135de9c209cfd10b3eb6bba1353880c31fdd438232b82f7e3c79ec61f3c9078",
-  "claims_digest": "dbf898ef41c81ccd45fd40c6470efc41c52b20e583e730898ce675cf3f39f292",
-  "review_scope": "Source evidence only. Preserves current main’s OAuth, cart retention and notices, payment reconciliation, merchant protocols and Oxygen pilot boundaries. Full-code storefront MCP remains disabled by default. Owner approval, evidence and public-verification schemas retain their existing validation. Direct local admission, source adoption, rollback and simulated commerce tests cover authority boundaries. Hosted qualification and activation remain separate.",
+  "reviewed_at": "2026-11-19T02:49:21Z",
+  "source_revision": "344310606416629945a840de1c708ad68d76de35",
+  "evidence_digest": "b47363a8891aca4e5c207d1326b8208458d69e42e34311ca4478e3da0218f00b",
+  "claims_digest": "11c306e38734c51d82c419347fbb8177b781e425dd599bb1ae3331ab3115c4a3",
+  "review_scope": "Source evidence only. Preserves current main\u2019s OAuth, cart retention and notices, payment reconciliation, merchant protocols and Oxygen pilot boundaries. Full-code storefront MCP remains disabled by default. Owner approval, evidence and public-verification schemas retain their existing validation. Direct local admission, source adoption, rollback and simulated commerce tests cover authority boundaries. Hosted qualification and activation remain separate.",
   "capabilities": [
     {
       "id": "payments",
@@ -148,12 +148,29 @@
       "id": "followups",
       "title": "Customer follow-up workflows",
       "status": "code_evidenced",
-      "claim": "Baci mobile-admin implements a customer follow-up queue for failed and stale unpaid checkouts and related order follow-up actions.",
-      "limitations": "This is an operational queue, not evidence of customer groups, full CRM segmentation or guaranteed recovery. Query bounds and contact permissions apply.",
+      "claim": "Baci mobile-admin implements a customer follow-up queue for failed and stale unpaid checkouts, including categorized Oxygen applications, with related order follow-up actions.",
+      "limitations": "This is an operational queue, not automatic customer outreach or evidence of full CRM segmentation or guaranteed recovery. Query bounds and contact permissions apply; Oxygen availability and rollout remain separately controlled.",
       "source_refs": [
         "apps/mobile-admin/components/customers/FollowUpQueueList.tsx",
         "apps/mobile-admin/hooks/useFollowUpQueue.ts",
-        "apps/mobile-admin/hooks/useFailedOrders.ts"
+        "apps/mobile-admin/hooks/useFailedOrders.ts",
+        "apps/mobile-admin/hooks/useOxygenFollowUps.ts",
+        "apps/mobile-admin/hooks/fetchOxygenFollowUps.ts",
+        "apps/mobile-admin/components/customers/FollowUpOrderCard.tsx",
+        "apps/mobile-admin/lib/follow-up-status.ts",
+        "apps/mobile-admin/app/(admin)/(tabs)/customers.tsx",
+        "supabase/migrations/20261117190000_oxygen_follow_up.sql",
+        "supabase/migrations/20261117190100_oxygen_follow_up_recovery_guards.sql",
+        "supabase/migrations/20261117190200_oxygen_follow_up_fair_queue.sql",
+        "supabase/migrations/20261117185800_oxygen_follow_up_index_retry.sql",
+        "supabase/migrations/20261117190300_oxygen_follow_up_activation_state.sql",
+        "supabase/migrations/20261117190400_oxygen_follow_up_reconciled_approval.sql",
+        "supabase/migrations/20261117190500_oxygen_follow_up_terminal_outcomes.sql",
+        "supabase/migrations/20261118141000_oxygen_follow_up_failed_orphans.sql",
+        "supabase/migrations/20261118154500_oxygen_follow_up_eligibility_capacity.sql",
+        "apps/mobile-admin/schemas/oxygen-follow-up.ts",
+        "apps/mobile-admin/lib/customers-failed-orders.ts",
+        "apps/mobile-admin/app/(admin)/(tabs)/_layout.tsx"
       ]
     },
     {

@@ -99,7 +99,9 @@ describe('GET /api/internal/blog-listing-status/[identifier]', () => {
       's-maxage=300, stale-while-revalidate=3600'
     );
     expect(response.headers.get('Vary')).toBe('x-baci-internal-auth');
-    expect(response.headers.get('Vercel-Cache-Tag')).toBe('blog-posts');
+    expect(response.headers.get('Vercel-Cache-Tag')).toBe(
+      'blog-listing-status-ogabassey'
+    );
   });
 
   it('keeps the NOOP verdict no-store under legacy Bearer auth', async () => {

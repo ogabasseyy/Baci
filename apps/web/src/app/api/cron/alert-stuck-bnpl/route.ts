@@ -1,47 +1,31 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { getCronSecret } from '@/env';
 import { constantTimeEqual } from '@/lib/constant-time-equal';
-import { formatCurrency, notifyMerchant } from '@/lib/expo-push';
+import { notifyMerchant } from '@/lib/expo-push';
 import { logger } from '@/lib/logger';
 import { fileStuckCreditDirectReviews } from '@/lib/payments/file-stuck-credit-direct-review';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { getStuckBnplSignals } from './get-stuck-bnpl-signals';
+import { loadBnplTransactionEvidence } from './load-bnpl-transaction-evidence';
+import {
+  buildStuckBnplAlert,
+  type StuckBnplOrderRow,
+} from './stuck-bnpl-alert';
 import { STUCK_BNPL_CONFIG } from './stuck-bnpl-config';
 
 // pending/unpaid only prove the customer PICKED a BNPL method at checkout;
 // require provider-session evidence (a persisted transaction/session
 // reference in notes) so plain abandoned carts — which cleanup-orders
 // reclassifies at 72h — don't page merchants at 24h.
+// Credit Direct bnpl_pending is deliberately retained for the existing ops
+// recovery queue even if legacy notes were lost. This is not proof of provider
+// contact and never qualifies an order for a merchant push by itself.
 const STATUSES_REQUIRING_PROVIDER_EVIDENCE = new Set(['pending', 'unpaid']);
 
-interface StuckBnplOrderRow {
-  id: string;
-  order_number: string | null;
-  merchant_id: string;
-  total: number | string | null;
-  payment_method: string | null;
-  payment_status: string | null;
-  updated_at: string;
-  notes: string | null;
-}
-
-function hasProviderTransactionReference(notes: string | null) {
-  return Boolean(notes && /transactionid/i.test(notes));
-}
-
-function hasProviderCheckoutEvidence(notes: string | null) {
-  return Boolean(
-    hasProviderTransactionReference(notes) ||
-      (notes && /creditdirectclientcompletedat/i.test(notes))
-  );
-}
-
-function getStuckAgeDays(lastMovementAt: string, now: Date) {
-  const lastMovement = new Date(lastMovementAt).getTime();
-  if (!Number.isFinite(lastMovement)) return 0;
-  return Math.max(0, Math.floor((now.getTime() - lastMovement) / 86_400_000));
-}
-
 // Alerts merchants and queues Credit Direct orders missing provider confirmation.
+// Response contract: stuckOrders/alertOrders count merchant alert candidates;
+// reviewOnlyOrders counts retained orders not selected for a merchant alert.
+// Only Credit Direct orders are durably filed in the recovery queue here.
 export async function GET(request: NextRequest) {
   try {
     const authHeader = request.headers.get('authorization');
@@ -104,57 +88,50 @@ export async function GET(request: NextRequest) {
     // pending transaction row before the customer even opens the provider
     // popup, so treating those as evidence would re-admit plain abandoned
     // carts.
-    const evidenceCandidates = scannedOrders.filter(
-      (order) =>
-        STATUSES_REQUIRING_PROVIDER_EVIDENCE.has(order.payment_status || '') &&
-        !hasProviderCheckoutEvidence(order.notes)
+    const signalsByOrderId = new Map(
+      scannedOrders.map((order) => [order.id, getStuckBnplSignals(order)])
     );
-    const orderIdsWithTransactionEvidence = new Set<string>();
-    const transactionEvidenceReferences = new Map<string, string>();
-    let transactionEvidenceLookupFailed = false;
-    if (evidenceCandidates.length > 0) {
-      const { data: transactionRows, error: transactionError } = await supabase
-        .from('transactions')
-        .select('order_id, status, gateway_reference')
-        .in(
-          'order_id',
-          evidenceCandidates.map((order) => order.id)
-        );
-      if (transactionError) {
-        transactionEvidenceLookupFailed = true;
-        logger.warn({
-          message:
-            'Stuck-BNPL scan could not check transaction evidence; pending/unpaid orders without notes evidence are skipped this run',
-          error: transactionError,
-        });
-      } else {
-        for (const row of (transactionRows ?? []) as Array<{
-          gateway_reference: string | null;
-          order_id: string;
-          status: string | null;
-        }>) {
-          if (row.status !== 'processing' && row.status !== 'completed') {
-            continue;
-          }
-          orderIdsWithTransactionEvidence.add(row.order_id);
-          const reference = row.gateway_reference?.trim();
-          if (reference && !transactionEvidenceReferences.has(row.order_id)) {
-            transactionEvidenceReferences.set(row.order_id, reference);
-          }
-        }
-      }
+    const evidenceCandidates = scannedOrders.filter((order) => {
+      const signals = signalsByOrderId.get(order.id);
+      const requiresEvidence =
+        STATUSES_REQUIRING_PROVIDER_EVIDENCE.has(order.payment_status || '') ||
+        (order.payment_status === 'bnpl_pending' &&
+          signals?.provider !== 'credit_direct');
+      return requiresEvidence && !signals?.hasCheckoutEvidence;
+    });
+    const ordersWithoutCheckoutEvidence = new Set(
+      evidenceCandidates.map((order) => order.id)
+    );
+    const {
+      progressedOrderIds: orderIdsWithTransactionEvidence,
+      referencesByOrderId: transactionEvidenceReferences,
+      lookupFailed: transactionEvidenceLookupFailed,
+    } = await loadBnplTransactionEvidence(supabase, signalsByOrderId);
+    if (transactionEvidenceLookupFailed) {
+      // Reject an incomplete read before recovery writes or pushes. Retrying
+      // this failure cannot resend a notification emitted by this attempt.
+      // Mixed scans also hold approved candidates; subsequent scheduled or
+      // manual invocations rescan all currently eligible orders.
+      return NextResponse.json(
+        {
+          error: 'Failed to complete BNPL evidence scan',
+          code: 'BNPL_EVIDENCE_INCOMPLETE',
+        },
+        { status: 503 }
+      );
     }
 
     const orders = scannedOrders.filter(
       (order) =>
-        !STATUSES_REQUIRING_PROVIDER_EVIDENCE.has(order.payment_status || '') ||
-        hasProviderCheckoutEvidence(order.notes) ||
+        !ordersWithoutCheckoutEvidence.has(order.id) ||
         orderIdsWithTransactionEvidence.has(order.id)
     );
 
     const reviewFailures = await fileStuckCreditDirectReviews(
       supabase,
-      orders.filter((order) => order.payment_method === 'credit_direct'),
+      orders.filter(
+        (order) => signalsByOrderId.get(order.id)?.provider === 'credit_direct'
+      ),
       transactionEvidenceReferences
     );
 
@@ -162,29 +139,52 @@ export async function GET(request: NextRequest) {
     // launcher flow writes no notes reference, so a stuck CredPal order is
     // indistinguishable from an abandoned cart. Surface the dropped set to
     // ops logs instead of paging merchants with unavoidable false positives.
+    // Recovering that indistinguishable set requires authoritative CredPal
+    // status reconciliation, a separate provider integration; do not manufacture
+    // confirmation from pending rows in this notification scan.
     const weakEvidenceDropped = evidenceCandidates.filter(
       (order) => !orderIdsWithTransactionEvidence.has(order.id)
     );
     if (!transactionEvidenceLookupFailed && weakEvidenceDropped.length > 0) {
       logger.warn({
         message:
-          'Stuck-BNPL scan dropped pending/unpaid BNPL orders without provider evidence (possible stuck CredPal)',
+          'Stuck-BNPL scan dropped orders without provider checkout evidence',
         droppedCount: weakEvidenceDropped.length,
         orderIds: weakEvidenceDropped.slice(0, 10).map((order) => order.id),
       });
     }
 
-    if (orders.length === 0) {
+    // Page merchants only for orders that show the customer got through the
+    // provider. Session-only Credit Direct orders stay in the ops review
+    // queue above but are overwhelmingly abandoned applications.
+    const alertOrders = orders.filter(
+      (order) =>
+        signalsByOrderId.get(order.id)?.shouldAlert ||
+        orderIdsWithTransactionEvidence.has(order.id)
+    );
+    const sessionOnlyOrders = orders.length - alertOrders.length;
+    if (sessionOnlyOrders > 0) {
+      logger.info({
+        message:
+          'Stuck-BNPL scan left session-only orders out of the merchant alert (no approval or completion signal)',
+        sessionOnlyOrders,
+      });
+    }
+
+    if (alertOrders.length === 0) {
       return NextResponse.json({
         success: true,
         stuckOrders: 0,
+        alertOrders: 0,
+        reviewOnlyOrders: sessionOnlyOrders,
         merchants: 0,
         merchantsNotified: 0,
+        ...(reviewFailures.length > 0 && { reviewFailures }),
       });
     }
 
     const ordersByMerchant = new Map<string, StuckBnplOrderRow[]>();
-    for (const order of orders) {
+    for (const order of alertOrders) {
       const merchantOrders = ordersByMerchant.get(order.merchant_id);
       if (merchantOrders) {
         merchantOrders.push(order);
@@ -206,40 +206,24 @@ export async function GET(request: NextRequest) {
         merchantEntries
           .slice(index, index + STUCK_BNPL_CONFIG.notificationConcurrency)
           .map(async ([merchantId, merchantOrders]) => {
-            const totalAmount = merchantOrders.reduce(
-              (sum, order) => sum + (Number(order.total) || 0),
-              0
-            );
-            const withProviderReference = merchantOrders.filter((order) =>
-              hasProviderTransactionReference(order.notes)
-            ).length;
-            const oldest = merchantOrders[0];
-            const oldestAgeDays = getStuckAgeDays(oldest.updated_at, now);
-            const orderCount = merchantOrders.length;
+            const alert = buildStuckBnplAlert(merchantOrders, now);
 
             logger.warn({
               message: 'BNPL orders stuck awaiting provider confirmation',
               merchantId,
-              stuckOrderCount: orderCount,
-              totalAmount,
-              withProviderReference,
-              oldestOrderId: oldest.id,
-              oldestOrderNumber: oldest.order_number,
-              oldestAgeDays,
+              stuckOrderCount: alert.orderCount,
+              totalAmount: alert.totalAmount,
+              oldestOrderId: alert.oldest.id,
+              oldestOrderNumber: alert.oldest.order_number,
+              oldestAgeDays: alert.oldestAgeDays,
             });
 
             try {
               const result = await notifyMerchant(
                 merchantId,
-                '⚠️ BNPL orders need attention',
-                `${orderCount} BNPL order${orderCount === 1 ? '' : 's'} totalling ${formatCurrency(totalAmount)} ${orderCount === 1 ? 'is' : 'are'} still awaiting payment confirmation after 24h. Oldest: #${oldest.order_number || oldest.id.slice(0, 8)} (stuck ${oldestAgeDays} day${oldestAgeDays === 1 ? '' : 's'}).`,
-                {
-                  type: 'stuck_bnpl_alert',
-                  stuck_order_count: orderCount,
-                  total_amount: totalAmount,
-                  with_provider_reference: withProviderReference,
-                  oldest_order_id: oldest.id,
-                },
+                alert.title,
+                alert.body,
+                alert.data,
                 'orders'
               );
 
@@ -272,7 +256,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      stuckOrders: orders.length,
+      stuckOrders: alertOrders.length,
+      alertOrders: alertOrders.length,
+      reviewOnlyOrders: sessionOnlyOrders,
       merchants: ordersByMerchant.size,
       merchantsNotified,
       ...(reviewFailures.length > 0 && { reviewFailures }),

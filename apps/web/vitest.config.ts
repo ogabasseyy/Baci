@@ -159,6 +159,8 @@ export default defineConfig({
       'tests/experience-browser/**/*.test.ts',
       // These node:test suites run in the dedicated synthetic handoff workflow.
       'tools/chatwoot-handoff-ci/*.test.mjs',
+      // node:test suite for the dashboard CSP checker; vitest finds no suite in it.
+      'tools/qa/check-dashboard-csp.test.mjs',
       // Whole-repository scans: CI runs them in their own job (vitest.repository-scans.ts).
       ...repositoryScanExcludes(),
     ],

@@ -16,11 +16,14 @@ it.runIf(process.env.VERIFY_CROSSREM_LIVE_FEED === '1')(
     const response = await fetch(
       'https://ogabassey.com/feeds/google-merchant.xml',
       {
-        redirect: 'error',
+        redirect: 'manual',
         signal: AbortSignal.timeout(20_000),
       }
     );
-    expect(response.status).toBe(200);
+    expect(
+      response.status,
+      'The pinned Google feed URL did not return 200. Check the canonical URL and upstream feed health.'
+    ).toBe(200);
     const parser = new XMLParser({
       parseTagValue: false,
       isArray: (_tag, path) => path === 'rss.channel.item',

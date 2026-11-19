@@ -31,7 +31,7 @@ Run the read-only live acceptance test to compare every active pinned ID, produc
 VERIFY_CROSSREM_LIVE_FEED=1 pnpm --dir apps/web exec vitest run src/app/api/partners/v1/catalog/catalog-bindings.live.test.ts
 ```
 
-Rerun once after a timeout or temporary upstream error. If the public XML redirects, confirm the correct canonical feed URL before updating the test. For persistent listing mismatches, use the reported sample IDs to check Google listing mode, product links, verified images and condition before changing a binding.
+Rerun once after a timeout or temporary upstream error. If the public XML redirects, the test reports the status without following the redirect. Confirm the correct canonical feed URL before updating the test. Run the parity check before a Google listing mode change to record the current import IDs, then recheck it after the change to detect divergence from the pinned CrossRem IDs. For persistent listing mismatches, use the reported sample IDs to check Google listing mode, product links, verified images and condition before changing a binding.
 
 ## Verification on 19 November 2026
 

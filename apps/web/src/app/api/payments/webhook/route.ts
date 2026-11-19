@@ -758,25 +758,46 @@ export async function POST(request: NextRequest) {
     // Bank offer captures must pass the shared verification path before any
     // transaction flip or fallback settlement can run.
     if (reference.startsWith('BCO-')) {
+      if (gateway !== 'paystack' || !/^BCO-[a-f0-9]{32}$/.test(reference)) {
+        return NextResponse.json(
+          { error: 'Invalid bank offer capture' },
+          { status: 400 }
+        );
+      }
       const row = await supabase
         .from('transactions')
         .select(
           'id, merchant_id, order_id, gateway, gateway_reference, amount, platform_fee'
         )
         .eq('gateway_reference', reference)
-        .single();
-      const match = bankCardOfferWebhookTransactionSchema.safeParse(row.data);
+        .maybeSingle();
       if (row.error) {
         return NextResponse.json(
           { error: 'Bank offer capture lookup unavailable' },
           { status: 503 }
         );
       }
-      if (
-        !match.success ||
-        match.data.gateway_reference !== reference ||
-        gateway !== 'paystack'
-      ) {
+      if (!row.data) {
+        const { error } = await supabase.from('reconciliation_review').insert({
+          issue_type: 'payment_match_zero_candidates',
+          paystack_ref: reference,
+          reason:
+            'Signed bank-offer charge webhook did not match a saved payment attempt',
+          metadata: { source: 'bank_card_offer_webhook' },
+        });
+        if (error && error.code !== POSTGRES_UNIQUE_VIOLATION) {
+          return NextResponse.json(
+            { error: 'Payment reconciliation review unavailable' },
+            { status: 503 }
+          );
+        }
+        return NextResponse.json({
+          code: 'PAYSTACK_PAYMENT_MATCH_ZERO_CANDIDATES',
+          status: 'pending',
+        });
+      }
+      const match = bankCardOfferWebhookTransactionSchema.safeParse(row.data);
+      if (!match.success || match.data.gateway_reference !== reference) {
         return NextResponse.json(
           { error: 'Invalid bank offer capture' },
           { status: 400 }
@@ -802,6 +823,8 @@ export async function POST(request: NextRequest) {
         wonTransactionFlip: false,
       });
       if (outcome.kind === 'bank_offer_capture_review') {
+        // Acknowledge provider delivery after saving the review. The customer
+        // verify endpoint returns 202 for the same pending payment.
         return NextResponse.json({
           code: 'BANK_CARD_OFFER_CAPTURE_REVIEW',
           status: 'pending',

@@ -29,7 +29,7 @@ vi.mock('@/lib/go54', () => ({
   registerDomain: vi.fn(),
 }));
 vi.mock('@/env', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/env')>()),
+  ...((await importOriginal()) as Record<string, unknown>),
   env: {
     get PAYSTACK_SECRET_KEY() {
       return process.env.PAYSTACK_SECRET_KEY;
@@ -39,7 +39,7 @@ vi.mock('@/env', async (importOriginal) => ({
   getSupabaseAnonKey: () => 'synthetic',
 }));
 vi.mock('next/server', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('next/server')>()),
+  ...((await importOriginal()) as Record<string, unknown>),
   after: vi.fn(),
 }));
 vi.mock('@/lib/api-auth', () => ({
@@ -136,7 +136,11 @@ const order = {
   updated_at: '2026-11-27T10:00:00Z',
 };
 
-function setup(bankCode: '035' | '232', issuerName: string) {
+function setup(
+  bankCode: '035' | '232',
+  issuerName: string,
+  lookup?: { data: null; error: { code: string } | null }
+) {
   let claimed = false;
   let checkoutUrl: string | null = null;
   let approved = false;
@@ -288,8 +292,20 @@ function setup(bankCode: '035' | '232', issuerName: string) {
         data: [{ order_id: orderId, transaction_id: transactionId }],
         error: null,
       }),
-      single: vi.fn().mockResolvedValue({ data: row, error: null }),
-      maybeSingle: vi.fn().mockResolvedValue({ data: row, error: null }),
+      single: vi
+        .fn()
+        .mockResolvedValue(
+          table === 'transactions' && lookup
+            ? lookup
+            : { data: row, error: null }
+        ),
+      maybeSingle: vi
+        .fn()
+        .mockResolvedValue(
+          table === 'transactions' && lookup
+            ? lookup
+            : { data: row, error: null }
+        ),
       order: vi.fn(async () => ({
         data: filters.transaction_type === 'payment' ? [transaction] : [],
         error: null,
@@ -302,6 +318,35 @@ function setup(bankCode: '035' | '232', issuerName: string) {
 }
 
 describe('bank card offer payment handlers', () => {
+  it.each([
+    { error: null, status: 200 },
+    { error: { code: '57014' }, status: 503 },
+  ])('distinguishes a missing signed capture from a lookup outage ($status)', async ({
+    error,
+    status,
+  }) => {
+    vi.stubEnv('PAYSTACK_SECRET_KEY', secret);
+    const { refundInsert } = setup('035', 'Wema Bank', { data: null, error });
+    const response = await webhook(
+      request('webhook', { event: 'charge.success', data: { reference } }, true)
+    );
+    expect(response.status).toBe(status);
+    if (error) {
+      expect(refundInsert).not.toHaveBeenCalled();
+    } else {
+      await expect(response.json()).resolves.toMatchObject({
+        code: 'PAYSTACK_PAYMENT_MATCH_ZERO_CANDIDATES',
+      });
+      expect(refundInsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          issue_type: 'payment_match_zero_candidates',
+          paystack_ref: reference,
+        })
+      );
+    }
+    expect(mocks.verify).not.toHaveBeenCalled();
+  });
+
   it('opens a recovery review for an uncertain initialization without another provider call', async () => {
     vi.stubEnv('PAYSTACK_SECRET_KEY', secret);
     setup('035', 'Wema Bank');

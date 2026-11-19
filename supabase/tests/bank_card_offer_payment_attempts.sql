@@ -48,6 +48,19 @@ BEGIN
   END IF;
   PERFORM set_config('request.jwt.claims', jsonb_build_object('role', 'authenticated', 'sub', v_user,
     'storefront_order_context', 'route', 'storefront_order_merchant_id', v_merchant)::text, true);
+  PERFORM set_config('request.jwt.claims', jsonb_build_object('role', 'authenticated', 'sub', gen_random_uuid(),
+    'storefront_order_context', 'route', 'storefront_order_merchant_id', v_merchant)::text, true);
+  IF public.get_bank_card_offer_checkout_context(v_order, v_merchant) IS NOT NULL THEN
+    RAISE EXCEPTION 'A different signed customer should not read the attempt context';
+  END IF;
+  BEGIN
+    PERFORM public.claim_bank_card_offer_attempt(v_order, v_merchant, 9500, v_hash, 'test', 100, 0);
+    RAISE EXCEPTION 'A different signed customer could claim the attempt';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'bank_card_offer_attempt_unavailable' THEN RAISE; END IF;
+  END;
+  PERFORM set_config('request.jwt.claims', jsonb_build_object('role', 'authenticated', 'sub', v_user,
+    'storefront_order_context', 'route', 'storefront_order_merchant_id', v_merchant)::text, true);
   IF public.get_bank_card_offer_checkout_replay(v_merchant, 'bank-test-key', v_hash)->>'id' IS DISTINCT FROM v_order::text THEN
     RAISE EXCEPTION 'Checkout replay should return the saved order';
   END IF;

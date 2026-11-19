@@ -2414,12 +2414,6 @@ export async function POST(request: NextRequest) {
             body.shipping_rate_id
           ),
           p_checkout_request_hash: bankCardOfferRequestHash,
-          // This field carries the total before applying the selected bank offer.
-          p_expected_total:
-            typeof body.expected_total === 'number'
-              ? (Math.round(body.expected_total * 100) - quote.discountKobo) /
-                100
-              : null,
         },
         quote,
         userId: resolvedUserId,

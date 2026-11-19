@@ -13,11 +13,11 @@ type ClaimedBookingRunner = (
   merchantId: string,
   orderId: string,
   existingOrder: {
-    selected_quote_id?: string | null;
-    shipping_funding_source?: string | null;
-    shipping_provider?: string | null;
-    payment_status?: string | null;
-    payment_method?: string | null;
+    selected_quote_id: string | null;
+    shipping_funding_source: 'customer_checkout' | 'merchant_wallet' | null;
+    shipping_provider: string | null;
+    payment_status: string | null;
+    payment_method: string | null;
   },
   options: {
     paymentStatus: string | null | undefined;

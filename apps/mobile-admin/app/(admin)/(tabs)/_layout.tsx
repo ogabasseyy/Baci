@@ -1,8 +1,9 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { Tabs } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
+import { FeedbackLauncher } from '@/components/feedback/FeedbackLauncher';
 import { AdminFloatingTabBar } from '@/components/navigation/AdminFloatingTabBar';
-import { useFailedOrders } from '@/hooks/useFailedOrders';
+import { useFollowUpQueue } from '@/hooks/useFollowUpQueue';
 import { useTheme } from '@/hooks/useTheme';
 
 export const unstable_settings = { initialRouteName: 'index' };
@@ -12,7 +13,7 @@ export default function TabLayout() {
     console.log('[TabLayout] Rendering Debug View');
   }
   const { colors } = useTheme();
-  const { data: failedOrders } = useFailedOrders();
+  const { failedOrders } = useFollowUpQueue();
   const failedCount = failedOrders?.length ?? 0;
 
   return (
@@ -103,6 +104,7 @@ export default function TabLayout() {
 
         <Tabs.Screen name="settings" options={{ href: null }} />
       </Tabs>
+      <FeedbackLauncher />
     </View>
   );
 }

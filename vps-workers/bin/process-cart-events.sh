@@ -5,4 +5,5 @@ if [ "$#" -gt 1 ] || { [ "$#" -eq 1 ] && [ "$1" != "--once" ] && [ "$1" != "--lo
   echo "[cart-events] Usage: process-cart-events.sh [--once|--loop]" >&2
   exit 1
 fi
+export BACI_WORKER_PROFILE="${BACI_WORKER_PROFILE:-cart-events}"
 exec "$SCRIPT_DIR/run-web-script.sh" cart-events src/scripts/process-cart-events.ts "$@"

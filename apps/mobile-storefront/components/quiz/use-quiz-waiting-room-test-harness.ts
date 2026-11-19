@@ -1,3 +1,4 @@
+import { afterEach, beforeEach, jest } from '@jest/globals';
 import type { QuizEvent } from '@/services/quiz-types';
 
 // Shared builders for the waiting-room suites (core, interstitial request,
@@ -23,4 +24,19 @@ export function createDeferred<T>() {
     resolve = resolvePromise;
   });
   return { promise, resolve };
+}
+
+/**
+ * Pins the random kickoff offset to zero for a suite, so the refresh at
+ * countdown zero fires at once instead of somewhere in the 3 s spread.
+ */
+export function pinKickoffOffsetToZero() {
+  const spyOnRandom = () => jest.spyOn(Math, 'random');
+  let randomSpy: ReturnType<typeof spyOnRandom>;
+  beforeEach(() => {
+    randomSpy = spyOnRandom().mockReturnValue(0);
+  });
+  afterEach(() => {
+    randomSpy.mockRestore();
+  });
 }

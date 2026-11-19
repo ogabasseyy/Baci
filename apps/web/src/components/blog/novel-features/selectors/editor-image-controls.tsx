@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent } from '@/components/ui/popover';
+import { isImeComposing } from '@/lib/is-ime-composing';
 import { sanitizeUrl } from '@/lib/sanitize-core';
 import { getTiptap } from '../utils/tiptap';
 
@@ -163,6 +164,7 @@ export function EditorImageControls({
                   onKeyDown={(event) => {
                     if (event.key === 'Enter') {
                       event.preventDefault();
+                      if (isImeComposing(event)) return;
                       insertImageFromUrl();
                     }
                   }}
@@ -183,6 +185,7 @@ export function EditorImageControls({
               onKeyDown={(event) => {
                 if (event.key === 'Enter') {
                   event.preventDefault();
+                  if (isImeComposing(event)) return;
                   if (mode === 'insert') insertImageFromUrl();
                   else updateCaption();
                 }

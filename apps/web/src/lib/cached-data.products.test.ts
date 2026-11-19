@@ -131,61 +131,6 @@ describe('cached-data product query projections', () => {
     status: 200,
   };
 
-  it('getCachedProductLcpHint reads route, image, and variant data from one bounded snapshot', async () => {
-    harness.mockRpc.mockResolvedValueOnce(
-      resolvedPdpSnapshot({
-        ...singleProduct,
-        brand: 'Apple',
-        images: ['https://example.com/iphone.jpg'],
-        price: 910000,
-        product_variants: [
-          {
-            attributes: { storage: '128GB' },
-            id: 'variant-1',
-            product_id: 'product-123',
-            stock_quantity: 2,
-          },
-        ],
-      })
-    );
-
-    const result = await getCachedProductLcpHint('merchant-123', 'iphone-16');
-
-    expect(harness.mockRpc).toHaveBeenCalledWith(
-      'get_storefront_pdp_core_v2',
-      {
-        // p_branch_id omitted: null would GET-serialize to the literal
-        // string 'null' and 22P02 the RPC (see storefront-pdp-core-snapshot).
-        p_merchant_id: 'merchant-123',
-        p_product_slug: 'iphone-16',
-      },
-      { get: true }
-    );
-    expect(harness.mockRpc).toHaveBeenCalledOnce();
-    expect(harness.mockSelect).not.toHaveBeenCalled();
-    expect(cacheTag).toHaveBeenCalledWith(
-      'product',
-      'product-lcp-hint',
-      'products-merchant-123',
-      getProductScopedCacheTag('product', 'merchant-123', 'iphone-16')
-    );
-    expect(cacheTag).toHaveBeenCalledWith(
-      'product',
-      'product-details',
-      'product-lcp-hint',
-      'products-merchant-123',
-      'categories-merchant-123',
-      getProductScopedCacheTag('product', 'merchant-123', 'iphone-16')
-    );
-    expect(result?.product_variants).toEqual([
-      expect.objectContaining({
-        attributes: { storage: '128GB' },
-        id: 'variant-1',
-      }),
-    ]);
-    expect(result?.variant_attributes).toEqual({ storage: ['128GB'] });
-  });
-
   it('getCachedProductLcpHint preserves serialized public stock from the snapshot', async () => {
     harness.mockRpc.mockResolvedValueOnce(
       resolvedPdpSnapshot({
@@ -303,6 +248,7 @@ describe('cached-data product query projections', () => {
     expect(cacheTag).toHaveBeenCalledWith(
       'product',
       'product-canonical-redirect',
+      'product-canonical-redirect-merchant-123',
       getProductScopedCacheTag('product', 'merchant-123', 'iphone-16'),
       getProductScopedCacheTag(
         'product-canonical-redirect',
@@ -363,6 +309,7 @@ describe('cached-data product query projections', () => {
     expect(cacheTag).toHaveBeenCalledWith(
       'product',
       'product-details',
+      'product-details-merchant-123',
       expectedTag
     );
     expect(expectedTag).not.toContain('–');

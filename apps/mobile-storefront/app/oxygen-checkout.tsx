@@ -9,7 +9,11 @@ import { OxygenAction } from '@/components/oxygen-checkout/oxygen-presentation';
 export default function OxygenCheckoutRoute() {
   const colors = useOxygenColors();
   const { orderId } = useLocalSearchParams<{ orderId?: string | string[] }>();
-  const parsed = z.uuid().safeParse(orderId);
+  const parsed = z
+    .uuid()
+    .safeParse(
+      Array.isArray(orderId) && orderId.length === 1 ? orderId[0] : orderId
+    );
   return parsed.success ? (
     <OxygenCheckoutScreen orderId={parsed.data} />
   ) : (
@@ -23,7 +27,9 @@ export default function OxygenCheckoutRoute() {
       }}
     >
       <Text style={{ color: colors.text }}>
-        Open a saved Oxygen order from your order history.
+        {orderId
+          ? 'This Oxygen checkout link is invalid.'
+          : 'Open a saved Oxygen order from your order history.'}
       </Text>
       <OxygenAction
         label="View my orders"

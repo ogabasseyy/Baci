@@ -4,9 +4,9 @@ import { readOxygenMobileCapabilities } from '@/lib/payments/oxygen/mobile-capab
 import type { OxygenRuntimeRpc } from '@/lib/payments/oxygen/runtime-service';
 import type { OrderCreateInput } from '@/schemas/orders';
 
-// A mobile bearer request must remain gated even if it supplies a web source.
-// Cookie web checkout keeps its existing unpaid-order path; Oxygen workflow
-// creation separately verifies the signed-in owner and merchant rollout.
+// The native staging gate covers every Bearer Oxygen order regardless of source.
+// Existing web checkout uses cookies to save an unpaid order. Its separate
+// Oxygen workflow entrypoint verifies the signed-in owner and merchant rollout.
 function isMobileOxygenOrder(
   request: Request,
   paymentMethod: string,

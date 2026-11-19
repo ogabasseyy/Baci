@@ -47,10 +47,11 @@ by the cutover for both `anon` and `authenticated`.
    rollout or explicitly accept that old clients will fail product-cost queries.
    This change does not add a gate or silently force an update.
 4. Obtain explicit production approval for the column-grant change and its old
-   client impact. Promote the cutover body into a separately reviewed, registered,
-   timestamped Supabase migration using the normal migration/ledger process.
-   The provided operation is a transaction-safe rehearsal/emergency entry point,
-   not a substitute for recording applied schema history.
+   client impact. Only then merge/apply the separately staged migration
+   `20261110150200_restrict_shopper_product_costs.sql` through the normal migration
+   and ledger process. Do not merge this activation draft with the compatibility
+   release. The operation remains a transaction-safe rehearsal/emergency entry
+   point, not a substitute for recording applied schema history.
 5. Run the cutover only after those gates. The operation requires the operator
    acknowledgement setting below and rolls back if inherited grants still expose
    cost. It revokes table-level SELECT **and** explicit cost-column SELECT from
@@ -87,10 +88,10 @@ application authorization mechanism. Never test on production fixtures.
 - No table-level SELECT or cost-column grant remains for PUBLIC/anon/authenticated.
   Check `has_column_privilege` for both client roles to catch inherited grants.
 
-After activation, the stage-1 test in
-`supabase/tests/products_cost_price_anon_containment.sql` must no longer assert
-that authenticated cost SELECT is retained. The separately registered cutover
-migration must change that assertion and keep the role regression suite active.
+The activation migration updates
+`supabase/tests/products_cost_price_anon_containment.sql` to reject both shopper
+roles and adds `product_cost_cutover_grants.sql` as a permanent grant guard.
+Keep the role regression suite active after activation.
 Future product columns need deliberate public SELECT grants and, when needed,
 an explicit view refresh. Never restore blanket table SELECT to fix a missing
 column or an outdated client.

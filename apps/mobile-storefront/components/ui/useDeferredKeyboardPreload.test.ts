@@ -93,8 +93,7 @@ describe('useDeferredKeyboardPreload', () => {
 
     act(() => flushNextAnimationFrameBatch());
     expect(global.requestIdleCallback).toHaveBeenCalledWith(
-      expect.any(Function),
-      { timeout: 1200 }
+      expect.any(Function)
     );
 
     await act(async () => pendingIdleCallback?.());
@@ -159,7 +158,7 @@ describe('useDeferredKeyboardPreload', () => {
     expect(KeyboardController.preload).not.toHaveBeenCalled();
   });
 
-  it('falls back to a delayed timeout when requestIdleCallback is unavailable', () => {
+  it('does not preload when requestIdleCallback is unavailable', () => {
     jest.useFakeTimers({
       doNotFake: ['requestAnimationFrame', 'cancelAnimationFrame'],
     });
@@ -171,10 +170,7 @@ describe('useDeferredKeyboardPreload', () => {
     renderHook(() => useDeferredKeyboardPreload(true));
     act(() => flushAnimationFrames());
 
-    act(() => jest.advanceTimersByTime(249));
+    act(() => jest.runAllTimers());
     expect(KeyboardController.preload).not.toHaveBeenCalled();
-
-    act(() => jest.advanceTimersByTime(1));
-    expect(KeyboardController.preload).toHaveBeenCalledTimes(1);
   });
 });

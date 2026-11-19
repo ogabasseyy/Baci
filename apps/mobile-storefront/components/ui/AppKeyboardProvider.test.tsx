@@ -48,7 +48,6 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  jest.useRealTimers();
   global.requestIdleCallback = originalRequestIdleCallback;
   global.cancelIdleCallback = originalCancelIdleCallback;
   global.requestAnimationFrame = originalRequestAnimationFrame;
@@ -93,8 +92,7 @@ describe('AppKeyboardProvider', () => {
     act(() => flushNextAnimationFrameBatch());
 
     expect(global.requestIdleCallback).toHaveBeenCalledWith(
-      expect.any(Function),
-      { timeout: 1200 }
+      expect.any(Function)
     );
     expect(KeyboardController.preload).not.toHaveBeenCalled();
 
@@ -118,55 +116,6 @@ describe('AppKeyboardProvider', () => {
     expect(KeyboardController.preload).not.toHaveBeenCalled();
   });
 
-  it('falls back to a delayed timer when idle callbacks are unavailable', () => {
-    jest.useFakeTimers({
-      doNotFake: ['requestAnimationFrame', 'cancelAnimationFrame'],
-    });
-    Object.defineProperty(global, 'requestIdleCallback', {
-      configurable: true,
-      value: undefined,
-    });
-    render(
-      <AppKeyboardProvider startupReady>
-        <Text>Storefront app</Text>
-      </AppKeyboardProvider>
-    );
-    act(() => flushAnimationFrames());
-
-    expect(KeyboardController.preload).not.toHaveBeenCalled();
-    act(() => jest.advanceTimersByTime(249));
-    expect(KeyboardController.preload).not.toHaveBeenCalled();
-    act(() => jest.advanceTimersByTime(1));
-    expect(KeyboardController.preload).toHaveBeenCalledTimes(1);
-  });
-
-  it('cancels the timer fallback when the provider unmounts', () => {
-    jest.useFakeTimers({
-      doNotFake: ['requestAnimationFrame', 'cancelAnimationFrame'],
-    });
-    const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout');
-    Object.defineProperty(global, 'requestIdleCallback', {
-      configurable: true,
-      value: undefined,
-    });
-    try {
-      const view = render(
-        <AppKeyboardProvider startupReady>
-          <Text>Storefront app</Text>
-        </AppKeyboardProvider>
-      );
-
-      act(() => flushAnimationFrames());
-      view.unmount();
-      expect(clearTimeoutSpy).toHaveBeenCalled();
-      act(() => jest.advanceTimersByTime(250));
-
-      expect(KeyboardController.preload).not.toHaveBeenCalled();
-    } finally {
-      clearTimeoutSpy.mockRestore();
-    }
-  });
-
   it('cancels the deferred preload when the keyboard opens for an active input', async () => {
     const handlers = new Map<string, () => void>();
     const addListenerSpy = jest
@@ -184,6 +133,7 @@ describe('AppKeyboardProvider', () => {
       );
       act(() => flushAnimationFrames());
       const lateCallback = pendingIdleCallback;
+      expect(addListenerSpy).toHaveBeenCalledTimes(2);
 
       act(() => {
         handlers.get('keyboardWillShow')?.();

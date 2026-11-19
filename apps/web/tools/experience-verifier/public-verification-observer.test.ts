@@ -133,3 +133,34 @@ it('rejects duplicate resources, mismatched builds and excessive encoded payload
   ).rejects.toThrow();
   expect(run).not.toHaveBeenCalled();
 });
+
+it('admits 64 pages and frames with 34 delivery files and 95 framework assets', async () => {
+  const run = vi.fn(async () => ({ output: { synthetic: true } }));
+  const observe = createPublicObservationAdapter(
+    'https://project.supabase.co',
+    run
+  );
+  await expect(
+    observe(
+      binding as never,
+      Array.from({ length: 34 }, (_, index) => ({
+        ...output[0],
+        url: `https://runtime.example/published/shop/file-${index}`,
+      })) as never,
+      Array.from({ length: 64 }, (_, index) => ({
+        ...pages[0],
+        canonical: `https://shop.example/page-${index}`,
+      })) as never,
+      expected as never,
+      vi.fn() as never,
+      Array.from({ length: 95 }, (_, index) => ({
+        ...framework[0],
+        url: `https://shop.example/_next/static/chunk-${index}.js`,
+      })),
+      Array.from({ length: 64 }, (_, index) => ({
+        ...frames[0],
+        url: `https://runtime.example/published/shop/index.html?path=%2Fpage-${index}`,
+      }))
+    )
+  ).resolves.toEqual({ synthetic: true });
+});

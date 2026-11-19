@@ -6,6 +6,7 @@ import {
   type OwnerRequestContext,
   requireExperienceOwner,
 } from '@/lib/experience/authorization';
+import { RunnerCapacityError } from '../experience-runner/runner-transport';
 import type { createVerifierCaptureWorker } from './capture-worker';
 
 const message = z.strictObject({
@@ -103,7 +104,8 @@ export function createVerifierCaptureHandler(settings: {
       return Response.json(result, {
         headers: { 'Cache-Control': 'no-store' },
       });
-    } catch {
+    } catch (error) {
+      if (error instanceof RunnerCapacityError) return reply(429);
       return reply(403);
     }
   };

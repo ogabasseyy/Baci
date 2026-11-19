@@ -8,6 +8,7 @@ import {
 import { installPublicCartBrowserRoutes } from './public-cart-browser-route';
 import { createPublicCommerceEvidence } from './public-commerce-evidence';
 import { observePublicCommerce } from './public-observation-commerce';
+import { MAX_PUBLIC_OBSERVATION_RESOURCES } from './public-observation-resource-limit';
 import { inspectPublicRoutes } from './public-observation-routes';
 
 const hash = (value: string | Buffer) =>
@@ -49,7 +50,7 @@ const payloadSchema = z.object({
       })
     )
     .min(1)
-    .max(256),
+    .max(MAX_PUBLIC_OBSERVATION_RESOURCES),
 });
 type Request = { url: string; method: 'GET' | 'POST'; body?: string };
 

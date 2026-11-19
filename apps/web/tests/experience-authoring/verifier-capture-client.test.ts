@@ -2,6 +2,7 @@ import { expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
 
+import { RunnerCapacityError } from '../../tools/experience-runner/runner-transport';
 import { createVerifierCaptureClient } from '../../tools/experience-verifier/capture-client';
 import { createVerifierCaptureHandler } from '../../tools/experience-verifier/capture-handler';
 import { startVerifierListener } from '../../tools/experience-verifier/listener';
@@ -22,6 +23,7 @@ it('returns owner-bound capture metadata through the signed loopback boundary', 
     buildDigest: 'a'.repeat(64),
     previewUrl: `https://builder.baci.test/builder/experience/preview?merchant=${id}&build=${id}&routeId=home`,
   }));
+  worker.mockRejectedValueOnce(new RunnerCapacityError());
   const handler = createVerifierCaptureHandler({
     key,
     consumeNonce: async () => true,
@@ -62,7 +64,17 @@ it('returns owner-bound capture metadata through the signed loopback boundary', 
       'synthetic.token',
       expect.any(AbortSignal)
     );
-    expect(worker).toHaveBeenCalledOnce();
+    expect(worker).toHaveBeenCalledTimes(2);
+    expect(worker).toHaveBeenNthCalledWith(1, expect.anything(), {
+      buildId: id,
+      routeId: 'home',
+      idempotencyKey: id,
+    });
+    expect(worker).toHaveBeenNthCalledWith(2, expect.anything(), {
+      buildId: id,
+      routeId: 'home',
+      idempotencyKey: id,
+    });
     worker.mockResolvedValueOnce({
       evidenceId: id,
       buildId: id,

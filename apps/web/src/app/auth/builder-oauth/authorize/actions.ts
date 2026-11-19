@@ -26,8 +26,17 @@ export async function decideBuilderOAuthAuthorization(formData: FormData) {
   if (!parsed.success) notFound();
   const { authorizationId, decision } = parsed.data;
   const oauth = supabase.auth.oauth;
-  const consent = await readBuilderConsent(oauth, authorizationId, user.id);
-  if (consent?.kind !== 'pending') notFound();
+  const consent = await readBuilderConsent(
+    oauth,
+    authorizationId,
+    user.id,
+    true
+  );
+  if (!consent) notFound();
+  if (consent.kind === 'approved') {
+    if (decision !== 'approve') notFound();
+    redirect(consent.destination);
+  }
 
   const options = { skipBrowserRedirect: true };
   const { data, error } =

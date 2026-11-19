@@ -160,9 +160,12 @@ it('resumes an already-approved GoTrue request through the dedicated callback wi
     data: { redirect_url: destination },
     error: null,
   });
-  await expect(page()).rejects.toThrow(destination);
-  await expect(decision('approve')).rejects.toThrow('not-found');
+  await expect(page()).resolves.toBeDefined();
+  expect(redirect).not.toHaveBeenCalled();
+  await expect(decision('deny')).rejects.toThrow('not-found');
+  await expect(decision('approve')).rejects.toThrow(destination);
   expect(approveAuthorization).not.toHaveBeenCalled();
+  expect(denyAuthorization).not.toHaveBeenCalled();
 });
 
 it.each([

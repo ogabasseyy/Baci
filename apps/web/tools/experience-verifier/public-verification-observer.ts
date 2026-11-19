@@ -1,5 +1,6 @@
 import { productionOrigin } from '@/lib/experience/production-origins';
 import { runPublicObservationJob } from '../experience-runner/public-observation-executor';
+import { MAX_PUBLIC_OBSERVATION_RESOURCES } from '../experience-runner/public-observation-resource-limit';
 import type { createPublicVerificationCoordinator } from './public-verification-coordinator';
 
 type Observe = Parameters<
@@ -70,7 +71,8 @@ export function createPublicObservationAdapter(
       ...framework,
       ...frames,
     ];
-    if (resources.length > 256) throw Error('PUBLIC_OBSERVATION_INPUT_BUDGET');
+    if (resources.length > MAX_PUBLIC_OBSERVATION_RESOURCES)
+      throw Error('PUBLIC_OBSERVATION_INPUT_BUDGET');
     const urls = new Set<string>();
     let total = 0;
     const encoded = resources.map((item) => {

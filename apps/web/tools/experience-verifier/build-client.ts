@@ -1,6 +1,5 @@
 import { createHmac, randomBytes } from 'node:crypto';
 import { request } from 'node:http';
-import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
 import type { BuilderIdentity } from '@/lib/builder-connector/types';
 import {
@@ -10,6 +9,7 @@ import {
 import type { VerifierReceipt } from '@/lib/experience/local-build-supervisor-types';
 import { hasExactVerifierEvidence } from '@/lib/experience/verifier-evidence-replay';
 import { BUILD_VERIFIER_CALL_TIMEOUT_MS } from './build-deadline';
+import { retryVerifierBusy } from './verifier-backpressure';
 
 const receiptSchema = z.strictObject({
   merchantId: z.uuid(),
@@ -83,13 +83,7 @@ export function createVerifierBuildClient(settings: {
         req.end(body);
       }).catch(() => 503);
     };
-    const retryUntil = Date.now() + 75_000;
-    let status = await send();
-    while (status === 429 && Date.now() < retryUntil && !signal.aborted) {
-      await delay(2_000, undefined, { signal }).catch(() => undefined);
-      if (signal.aborted) break;
-      status = await send();
-    }
+    const status = await retryVerifierBusy(send, 429, signal);
     if (status === 429) throw Error('VERIFIER_BUSY');
     if (status === 503 && !ctx.signal?.aborted) {
       await requireExperienceOwner(ctx);

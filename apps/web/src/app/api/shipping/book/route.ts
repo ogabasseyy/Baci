@@ -201,7 +201,12 @@ export async function POST(request: NextRequest) {
   } catch (rawError) {
     console.error('Error booking shipment:', rawError);
     if (bookingSupabase && bookingOrderId && bookingMerchantId) {
-      if (bookingLockToken && shouldReleaseBookingLock(rawError)) {
+      // Release first (also for a pre-provider failure that is not on the
+      // release list) so the failure row records what cleanup really achieved.
+      if (
+        bookingLockToken &&
+        (!retainBookingLock || shouldReleaseBookingLock(rawError))
+      ) {
         // Record what cleanup really achieved, not the intended policy.
         const released = await releaseDirectBookingLock(
           bookingSupabase,

@@ -45,8 +45,11 @@ export class ProviderBookingTimeoutError extends Error {
 
 export const BOOKED_SHIPMENT_NOT_SAVED_CODE = 'BOOKED_SHIPMENT_NOT_SAVED';
 
-/** True when the connection to the provider never opened, so nothing was booked. */
-export function isProviderNeverReachedError(error: unknown): boolean {
+/** Errors the provider-call boundary proved never opened a connection. */
+const providerNeverReachedErrors = new WeakSet<object>();
+
+/** True when the error's cause chain shows a connection that never opened. */
+export function hasNeverReachedCause(error: unknown): boolean {
   // Node's fetch wraps the system error in `cause`, sometimes one level deeper.
   let current: unknown = error;
   for (
@@ -62,6 +65,30 @@ export function isProviderNeverReachedError(error: unknown): boolean {
     current = cause;
   }
   return false;
+}
+
+/**
+ * Tag an error thrown by the provider booking call itself. Only tagged errors
+ * count as "never reached": a database or other connection failure that
+ * happens after the carrier booked the parcel must keep the lock.
+ */
+export function tagProviderCallError(error: unknown): void {
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    hasNeverReachedCause(error)
+  ) {
+    providerNeverReachedErrors.add(error);
+  }
+}
+
+/** True when the provider-call boundary proved the connection never opened. */
+export function isProviderNeverReachedError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    providerNeverReachedErrors.has(error)
+  );
 }
 
 /** A call that may have reached GIG but never answered (also when wrapped). */

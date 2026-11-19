@@ -1,5 +1,7 @@
 import type { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { tagProviderCallError } from '@/lib/shipping/order-shipment-booking-failure';
+import { OrderShipmentBookingError } from '@/lib/shipping/order-shipment-booking-utils';
 import {
   buildBookingRequest,
   buildSupabaseMock,
@@ -30,7 +32,12 @@ vi.mock('@/lib/shipping', () => ({
 }));
 
 function unreachableError() {
-  return Object.assign(new Error('fetch failed'), { code: 'ECONNREFUSED' });
+  // shippingService is mocked, so tag the error as the real service would.
+  const error = Object.assign(new Error('fetch failed'), {
+    code: 'ECONNREFUSED',
+  });
+  tagProviderCallError(error);
+  return error;
 }
 
 describe('bugfix: POST /api/shipping/book records the real failure and lock state', () => {
@@ -105,6 +112,29 @@ describe('bugfix: POST /api/shipping/book records the real failure and lock stat
     expect(failureInsertPayloads).toEqual([
       expect.objectContaining({
         outcome: 'booked_not_saved',
+        lock_retained: true,
+      }),
+    ]);
+  });
+
+  it('bugfix: records lock_retained true when the final cleanup fails for a pre-provider refusal that is not on the release list', async () => {
+    mockCreateClient.mockReturnValue(
+      buildSupabaseMock({ lockReleaseError: { message: 'db down' } })
+    );
+    mockBookShipment.mockRejectedValue(
+      new OrderShipmentBookingError(
+        'Quote does not belong to this order',
+        409,
+        'DOMESTIC_QUOTE_ORDER_MISMATCH'
+      )
+    );
+    const { POST } = await import('./route');
+
+    await POST(buildBookingRequest() as NextRequest);
+
+    expect(failureInsertPayloads).toEqual([
+      expect.objectContaining({
+        error_code: 'DOMESTIC_QUOTE_ORDER_MISMATCH',
         lock_retained: true,
       }),
     ]);

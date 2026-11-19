@@ -3,14 +3,18 @@ import {
   classifyBookingFailure,
   ProviderBookingTimeoutError,
   recordOrderShipmentBookingFailure,
+  tagProviderCallError,
   toBookingFailureResponseError,
 } from './order-shipment-booking-failure';
 import { shouldReleaseBookingLock } from './order-shipment-booking-lock-errors';
 import { OrderShipmentBookingError } from './order-shipment-booking-utils';
 import { ShippingBookingRejectedError } from './types';
 
+/** A connection error as the provider-call boundary hands it on (tagged). */
 function connectError(code: string): Error {
-  return Object.assign(new Error('fetch failed'), { cause: { code } });
+  const error = Object.assign(new Error('fetch failed'), { cause: { code } });
+  tagProviderCallError(error);
+  return error;
 }
 
 describe('classifyBookingFailure', () => {
@@ -146,11 +150,11 @@ describe('toBookingFailureResponseError', () => {
   });
 
   it('bugfix: does not name GIG when an unreachable carrier may be Topship', () => {
-    const result = toBookingFailureResponseError(
-      Object.assign(new TypeError('fetch failed'), {
-        cause: { code: 'ECONNREFUSED' },
-      })
-    );
+    const unreachable = Object.assign(new TypeError('fetch failed'), {
+      cause: { code: 'ECONNREFUSED' },
+    });
+    tagProviderCallError(unreachable);
+    const result = toBookingFailureResponseError(unreachable);
     expect((result as Error).message).not.toMatch(/GIG/);
     expect((result as Error).message).toMatch(/shipping carrier/);
   });
@@ -175,12 +179,11 @@ describe('bugfix: review follow-ups', () => {
         cause: { code: 'ECONNREFUSED' },
       }),
     });
+    const direct = Object.assign(new Error('boom'), { code: 'ENOTFOUND' });
+    tagProviderCallError(deep);
+    tagProviderCallError(direct);
     expect(classifyBookingFailure(deep).outcome).toBe('not_submitted');
-    expect(
-      classifyBookingFailure(
-        Object.assign(new Error('boom'), { code: 'ENOTFOUND' })
-      ).outcome
-    ).toBe('not_submitted');
+    expect(classifyBookingFailure(direct).outcome).toBe('not_submitted');
   });
 
   it('sends wallet-funded merchants to support instead of promising a retry', () => {
@@ -232,6 +235,7 @@ describe('bugfix: wallet-funded unreachable booking asks for a new quote', () =>
     const error = Object.assign(new Error('connect ECONNREFUSED'), {
       code: 'ECONNREFUSED',
     });
+    tagProviderCallError(error);
     const mapped = toBookingFailureResponseError(error, {
       walletFunded: true,
     }) as { message: string; code?: string };
@@ -265,5 +269,15 @@ describe('bugfix: order-route persistence failure is booked_not_saved', () => {
         new ShippingBookingRejectedError('Payment declined')
       )
     ).toMatchObject({ code: 'PROVIDER_REJECTED', outcome: 'rejected' });
+  });
+
+  it('bugfix: a connection failure that did not come from the provider call (e.g. a database fetch after booking) is not "never reached"', () => {
+    const databaseError = Object.assign(new Error('fetch failed'), {
+      cause: { code: 'ECONNREFUSED' },
+    });
+    expect(classifyBookingFailure(databaseError).outcome).not.toBe(
+      'not_submitted'
+    );
+    expect(shouldReleaseBookingLock(databaseError)).toBe(false);
   });
 });

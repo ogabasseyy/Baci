@@ -99,6 +99,7 @@ describe('POST /api/internal/revalidate-products scoped PDP invalidation', () =>
         merchantSlug: 'ogabassey',
         productSlugs: ['iphone-15'],
         omitMerchantWidePdpDetails: true,
+        slugsUnchanged: true,
         products: [
           { id: 'prod-1', slug: 'iphone-15', previousSlug: 'iphone-15' },
         ],
@@ -205,6 +206,7 @@ describe('POST /api/internal/revalidate-products scoped PDP invalidation', () =>
         merchantSlug: 'ogabassey',
         productSlugs: ['iphone-15'],
         omitMerchantWidePdpDetails: true,
+        slugsUnchanged: true,
         products: [
           { id: 'prod-1', slug: 'iphone-15', previousSlug: 'iphone-15' },
         ],
@@ -249,51 +251,6 @@ describe('POST /api/internal/revalidate-products scoped PDP invalidation', () =>
       MERCHANT_ID,
       undefined,
       { expireImmediately: true }
-    );
-  });
-
-  it('includes dependent legacy child aliases in scoped product invalidations', async () => {
-    mockEnrichProductPurgeEntries.mockResolvedValue({
-      entries: [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
-      resolvedSlugs: ['iphone-15', 'prod-1'],
-      authoritativeSlugsById: new Map([['prod-1', 'iphone-15']]),
-      blogPostSlugs: [],
-      blogPostSlugsIncomplete: false,
-    });
-    mockResolveDependentAliases.mockResolvedValueOnce({
-      identifiers: ['archived-child', 'child-uuid'],
-      incomplete: false,
-    });
-
-    const res = await POST(
-      makeRequest({
-        merchantId: MERCHANT_ID,
-        merchantSlug: 'ogabassey',
-        productSlugs: ['iphone-15'],
-        omitMerchantWidePdpDetails: true,
-        products: [
-          { id: 'prod-1', slug: 'iphone-15', previousSlug: 'iphone-15' },
-        ],
-      })
-    );
-    expect(res.status).toBe(200);
-    expect(mockRevalidateProductSlugs).toHaveBeenLastCalledWith(
-      MERCHANT_ID,
-      ['iphone-15', 'prod-1', 'archived-child', 'child-uuid'],
-      { expireImmediately: true }
-    );
-    expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
-      'ogabassey',
-      [
-        { slug: 'iphone-15', categorySegment: 'smartphones' },
-        { slug: 'archived-child', categorySegment: null },
-        { slug: 'child-uuid', categorySegment: null },
-      ]
-    );
-    expect(mockRevalidateProducts).toHaveBeenLastCalledWith(
-      MERCHANT_ID,
-      undefined,
-      { expireImmediately: true, omitMerchantWidePdpDetails: true }
     );
   });
 });

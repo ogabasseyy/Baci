@@ -166,6 +166,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             new Set([...(productSlugs ?? []), ...resolvedSlugs])
           ),
         });
+        const aliasesIncomplete =
+          mergedAliases.incomplete ||
+          (slugsUnchanged !== true &&
+            (callerOmitMerchantWidePdpDetails === true ||
+              products.some((p) => Boolean(p.previousSlug?.trim()))));
         const bustSlugsRevalidated =
           (authoritativeMerchantSlug
             ? revalidateProductSlugs(merchantId, mergedAliases.slugs, {
@@ -177,7 +182,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           explicitSlugsRevalidated &&
           bustSlugsRevalidated &&
           !blogPostSlugsIncomplete &&
-          !mergedAliases.incomplete &&
+          !aliasesIncomplete &&
           hasCompleteScopedProductSlugs(
             products,
             entries,
@@ -209,7 +214,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             entries: mergedAliases.entries,
             blogPostSlugs: mergedBlogPostSlugs,
             blogPostSlugsIncomplete:
-              blogPostSlugsIncomplete || mergedAliases.incomplete,
+              blogPostSlugsIncomplete || aliasesIncomplete,
             confirmEdgeEviction: Boolean(confirmEdgeEviction),
           });
         } else if (
@@ -255,14 +260,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
   }
 
-  // Structural purges evict the authoritative merchant hostname via bounded purge.
   if (purgeWholeStorefront && authoritativeMerchantSlug) {
     try {
       if (
-        !hardExpireOriginCaches({
-          merchantId,
-          edgePurgeTarget: 'hostname',
-        })
+        !hardExpireOriginCaches({ merchantId, edgePurgeTarget: 'hostname' })
       ) {
         return failedExpiryResponse();
       }

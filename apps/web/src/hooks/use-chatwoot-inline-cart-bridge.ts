@@ -262,6 +262,7 @@ export function useChatwootInlineCartBridge(
           state: message.data.state,
           storeSlug,
           snapshot: authorized.snapshot,
+          authorizedCartId: authorized.cartId,
           requestedCartRef,
           getCurrentCartRef: () => latestState.current.sharedCartRef ?? null,
           isCurrent: () =>

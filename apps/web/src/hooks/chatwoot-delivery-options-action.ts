@@ -21,6 +21,7 @@ interface HandleChatwootDeliveryOptionsActionInput {
   state: string;
   storeSlug: string;
   snapshot: CartSnapshot;
+  authorizedCartId: string;
   requestedCartRef: CartRef;
   getCurrentCartRef: () => CartRef;
   isCurrent: () => boolean;
@@ -41,12 +42,16 @@ export async function handleChatwootDeliveryOptionsAction({
   state,
   storeSlug,
   snapshot,
+  authorizedCartId,
   requestedCartRef,
   getCurrentCartRef,
   isCurrent,
   postResult,
 }: HandleChatwootDeliveryOptionsActionInput): Promise<void> {
-  if (snapshot.estimatedTotals) {
+  if (
+    snapshot.estimatedTotals ||
+    authorizedCartId !== requestedCartRef?.cartId
+  ) {
     postUnavailable(requestId, postResult);
     return;
   }

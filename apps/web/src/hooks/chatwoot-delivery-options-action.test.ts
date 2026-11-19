@@ -45,6 +45,7 @@ function input(
     state: 'Lagos',
     storeSlug: 'store',
     snapshot,
+    authorizedCartId: 'cart-1',
     requestedCartRef: cartRef,
     getCurrentCartRef: () => cartRef,
     isCurrent: () => true,
@@ -144,6 +145,20 @@ describe('handleChatwootDeliveryOptionsAction', () => {
     await handleChatwootDeliveryOptionsAction(action);
 
     expect(action.postResult).toHaveBeenCalledWith({
+      requestId: 'delivery-0001',
+      status: 'unavailable',
+    });
+  });
+
+  it('bugfix: reports unavailable without a request when the session cart is not the widget cart', async () => {
+    const postResult = vi.fn();
+
+    await handleChatwootDeliveryOptionsAction(
+      input({ authorizedCartId: 'other-cart', postResult })
+    );
+
+    expect(mocks.postChatwootBridgeJson).not.toHaveBeenCalled();
+    expect(postResult).toHaveBeenCalledWith({
       requestId: 'delivery-0001',
       status: 'unavailable',
     });

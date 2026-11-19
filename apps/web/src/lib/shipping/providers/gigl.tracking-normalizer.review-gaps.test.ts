@@ -61,4 +61,30 @@ describe('bugfix: SDR, international arrivals and equal-time location', () => {
     );
     expect(result.events[0]?.location).toBe('WUSE ABUJA');
   });
+
+  it.each([
+    ['DPC first', ['DPC', 'ARF']],
+    ['ARF first', ['ARF', 'DPC']],
+  ] as const)('uses the tied arrival location, not an away scan (%s)', (_name, order) => {
+    const locations: Record<string, string> = {
+      DPC: 'IKEJA 2 (IKEJA)',
+      ARF: 'WUSE ABUJA',
+    };
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W33',
+        Destination: 'ABUJA',
+        Origin: 'LAGOS',
+        MobileShipmentTrackings: [
+          event('MSHC', '11:00:00'),
+          ...order.map((code) =>
+            event(code, '11:00:00', { Location: locations[code] })
+          ),
+        ],
+      },
+      'W33',
+      OBSERVED_AT
+    );
+    expect(result.events[0]?.location).toBe('WUSE ABUJA');
+  });
 });

@@ -34,6 +34,9 @@ const EXPLICIT_ARRIVAL_CODES = new Set([
   // International final-destination arrivals (terminal pickup, home delivery).
   'IAFDSC',
   'IAFDHD',
+  'ARFGH',
+  'ARFFSTP',
+  'ARFFSHD',
 ]);
 
 // Whole word only, so unrelated text that merely contains DEPART (e.g.

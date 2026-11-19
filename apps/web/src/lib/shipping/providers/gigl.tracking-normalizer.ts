@@ -5,7 +5,10 @@ import { createHash } from 'node:crypto';
 // graph to exactly what the poller executes.
 import { mapKnownGiglStatus } from '@baci/shared/lib/gigl-tracking-status';
 import type { z } from 'zod';
-import { GIGL_PICKUP_EN_ROUTE_RAW_STATUS } from '@/lib/shipping/gigl-tracking-notification-policy-matrix';
+import {
+  GIGL_ARRIVED_IN_CITY_RAW_STATUS,
+  GIGL_PICKUP_EN_ROUTE_RAW_STATUS,
+} from '@/lib/shipping/gigl-tracking-notification-policy-matrix';
 import type { TrackingEvent, TrackingResult } from '../types';
 import {
   GIGL_TRACKING_MAX_FUTURE_SKEW_MS,
@@ -171,11 +174,17 @@ export function normalizeGiglTrackingShipment(
   // without one (e.g. MSHC) must not hide the located scan from the same poll.
   const top = sortedCandidates[0];
   if (top && !top.event.location) {
-    const located = sortedCandidates.find(
+    const tied = sortedCandidates.filter(
       (candidate) =>
         candidate.event.location &&
         candidate.event.timestamp.getTime() === top.event.timestamp.getTime()
     );
+    // Prefer the tied arrival scan: its location is the current one.
+    const located =
+      tied.find(
+        (candidate) =>
+          candidate.event.rawStatus === GIGL_ARRIVED_IN_CITY_RAW_STATUS
+      ) ?? tied[0];
     if (located) top.event.location = located.event.location;
   }
   const newestRecognized = sortedCandidates.find(

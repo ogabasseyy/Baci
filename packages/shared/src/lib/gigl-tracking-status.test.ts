@@ -9,6 +9,7 @@ describe('mapKnownGiglStatus', () => {
     ['WC', 'out_for_delivery'],
     ['SHD', 'delivered'],
     ['MSCC', 'cancelled'],
+    ['ARF', 'in_transit'],
     ['MRTE', 'in_transit'],
     ['SRHUB', 'returned'],
     ['DASH', 'in_transit'],

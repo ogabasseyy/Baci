@@ -42,11 +42,16 @@ export function resolveAggregate(
   );
   const recognizedStatus = toStatus(newestRecognized?.recognizedStatus);
   const sdrScans = sortedCandidates.filter(isSdr);
+  const newestSdrAt = sdrScans[0]?.event.timestamp.getTime();
+  // Only terminal scans strictly newer than the newest SDR can outlive it;
+  // precedence is applied after that fence.
   const bestTerminal = sortedCandidates
     .filter(
       (candidate) =>
         candidate.recognizedStatus !== null &&
-        TERMINAL_STATUSES.has(candidate.recognizedStatus)
+        TERMINAL_STATUSES.has(candidate.recognizedStatus) &&
+        (newestSdrAt === undefined ||
+          candidate.event.timestamp.getTime() > newestSdrAt)
     )
     .reduce<Guardable | undefined>(
       (best, candidate) =>
@@ -56,13 +61,7 @@ export function resolveAggregate(
           : best,
       undefined
     );
-  const newestSdrAt = sdrScans[0]?.event.timestamp.getTime();
-  const terminalWins =
-    bestTerminal !== undefined &&
-    !(
-      newestSdrAt !== undefined &&
-      newestSdrAt > bestTerminal.event.timestamp.getTime()
-    );
+  const terminalWins = bestTerminal !== undefined;
   if (terminalWins) {
     return {
       status: toStatus(bestTerminal.recognizedStatus),

@@ -101,4 +101,17 @@ describe('resolveAggregate', () => {
     expect(result.status).toBe('delivered');
     expect(result.lead).toBe(shd);
   });
+
+  it('ignores a terminal scan older than the SDR even when it outranks a newer terminal', () => {
+    const result = resolveAggregate(
+      newestFirst(
+        scan('MSCP', 'cancelled', 9),
+        scan('SDR', 'failed', 10),
+        scan('SHD', 'delivered', 11)
+      )
+    );
+    expect(result.status).toBe('delivered');
+    // Already the newest scan, so no reorder is needed.
+    expect(result.lead).toBeUndefined();
+  });
 });

@@ -1,6 +1,5 @@
 // Chatwoot's list-messages `before` cursor endpoint returns messages in
 // descending id order (newest first) with a `before=<oldest id>` cursor.
-const PAGE_SIZE = 20;
 const MAX_LOOKUP_PAGES = 20;
 const LOOKUP_DEADLINE_MS = 15_000;
 
@@ -11,6 +10,7 @@ export async function findSyntheticMessage({
   content,
   timeoutMs = LOOKUP_DEADLINE_MS,
   signal,
+  onUnexpectedCandidateShape,
 }) {
   const matches = [];
   let before;
@@ -49,17 +49,14 @@ export async function findSyntheticMessage({
       if (isOutgoing && senderType === 'user') {
         matches.push(message);
       } else {
-        console.warn(
-          'Ignoring Chatwoot candidate message with unexpected shape',
-          {
-            id: message.id,
-            message_type: message.message_type,
-            sender_type: message.sender?.type ?? message.sender_type ?? null,
-          }
-        );
+        onUnexpectedCandidateShape?.({
+          id: message.id,
+          message_type: message.message_type,
+          sender_type: message.sender?.type ?? message.sender_type ?? null,
+        });
       }
     }
-    if (messages.length === 0 || messages.length < PAGE_SIZE) break;
+    if (messages.length === 0) break;
 
     if (page === MAX_LOOKUP_PAGES - 1)
       throw new Error('Chatwoot message lookup reached its page limit');

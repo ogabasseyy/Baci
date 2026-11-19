@@ -145,13 +145,13 @@ test('transient DNS cause code wrapped in TypeError triggers reconciliation with
   assert.equal(sends, 1);
 });
 
-test('nested cause transport code triggers reconciliation without retry', async () => {
+test('UND_ERR_HEADERS_TIMEOUT cause code triggers reconciliation without retry', async () => {
   let sends = 0;
   const result = await reconcileAmbiguousSend({
     send: () => {
       sends += 1;
       throw Object.assign(new TypeError('network'), {
-        cause: new Error('wrapped', { cause: { code: 'ECONNRESET' } }),
+        cause: { code: 'UND_ERR_HEADERS_TIMEOUT' },
       });
     },
     lookup: () => [recoveredMessage],

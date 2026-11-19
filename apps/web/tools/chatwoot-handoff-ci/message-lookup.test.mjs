@@ -9,7 +9,7 @@ const recoveredMessage = {
   sender: { type: 'user' },
 };
 
-test('paginates backward until the synthetic marker is found', async () => {
+test('paginates backward until an empty page and finds the synthetic marker', async () => {
   const paths = [];
   const api = (path) => {
     paths.push(path);
@@ -20,7 +20,8 @@ test('paginates backward until the synthetic marker is found', async () => {
           content: `other ${index}`,
         })),
       };
-    return { payload: [recoveredMessage] };
+    if (paths.length === 2) return { payload: [recoveredMessage] };
+    return { payload: [] };
   };
 
   const matches = await findSyntheticMessage({
@@ -34,6 +35,45 @@ test('paginates backward until the synthetic marker is found', async () => {
   assert.deepEqual(paths, [
     '/api/v1/accounts/7/conversations/12/messages',
     '/api/v1/accounts/7/conversations/12/messages?before=81',
+    '/api/v1/accounts/7/conversations/12/messages?before=42',
+  ]);
+});
+
+test('continues past a short page to detect duplicates on later pages', async () => {
+  const paths = [];
+  const warnings = [];
+  const api = (path) => {
+    paths.push(path);
+    if (paths.length === 1)
+      return {
+        payload: [
+          { ...recoveredMessage, id: 50 },
+          {
+            id: 49,
+            content: 'synthetic marker',
+            message_type: 0,
+            sender: { type: 'contact' },
+          },
+        ],
+      };
+    if (paths.length === 2) return { payload: [recoveredMessage] };
+    return { payload: [] };
+  };
+
+  const matches = await findSyntheticMessage({
+    api,
+    path: '/api/v1/accounts/7/conversations/12/messages',
+    token: 'synthetic-token',
+    content: 'synthetic marker',
+    onUnexpectedCandidateShape: (details) => warnings.push(details),
+  });
+
+  assert.equal(matches.length, 2);
+  assert.equal(warnings.length, 1);
+  assert.deepEqual(paths, [
+    '/api/v1/accounts/7/conversations/12/messages',
+    '/api/v1/accounts/7/conversations/12/messages?before=49',
+    '/api/v1/accounts/7/conversations/12/messages?before=42',
   ]);
 });
 

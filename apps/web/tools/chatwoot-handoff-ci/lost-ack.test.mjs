@@ -43,9 +43,18 @@ async function startLoopbackProvider({ status = 200, resetPost = false } = {}) {
       new URL(request.url, 'http://127.0.0.1').pathname.endsWith('/messages')
     ) {
       counts.lists += 1;
+      const beforeParam = new URL(
+        request.url,
+        'http://127.0.0.1'
+      ).searchParams.get('before');
+      const beforeId = beforeParam ? Number(beforeParam) : null;
+      const pagePayload =
+        beforeId === null
+          ? messages
+          : messages.filter((message) => Number(message.id) < beforeId);
       response
         .writeHead(200, { 'content-type': 'application/json' })
-        .end(JSON.stringify({ payload: messages }));
+        .end(JSON.stringify({ payload: pagePayload }));
       return;
     }
     response.writeHead(404).end();
@@ -112,7 +121,7 @@ test('local loopback fault proxy drops a successful response and reconciles one 
     assert.equal(result.postCount, 1);
     assert.equal(provider.counts.posts, 1);
     assert.equal(provider.messages.length, 1);
-    assert.equal(provider.counts.lists, 1);
+    assert.equal(provider.counts.lists, 2);
     await assertFaultProxyClosed(faultBase);
   } finally {
     await provider.close();

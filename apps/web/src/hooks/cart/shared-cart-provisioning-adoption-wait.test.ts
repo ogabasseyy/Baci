@@ -1,6 +1,10 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  resetCartSessionHintForTests,
+  writeCartSessionHint,
+} from './cart-session-hint';
+import {
   bootstrapSharedCart,
   createSharedCart,
   fetchSharedCartProducts,
@@ -35,10 +39,15 @@ function renderCart() {
 }
 
 describe('useSharedCart host request during initial adoption', () => {
-  afterEach(() => vi.useRealTimers());
+  afterEach(() => {
+    vi.useRealTimers();
+    resetCartSessionHintForTests();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     window.localStorage.clear();
+    resetCartSessionHintForTests();
+    writeCartSessionHint(MERCHANT_ID, '1');
     vi.mocked(fetchSharedCartProducts).mockResolvedValue(new Map());
     vi.mocked(sendSharedCartCommand).mockResolvedValue({
       code: 'temporarily_unavailable',

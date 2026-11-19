@@ -81,6 +81,12 @@ function isSdr(candidate: Guardable): number {
   return candidate.providerStatus.trim().toUpperCase() === 'SDR' ? 1 : 0;
 }
 
+function isReturnFlow(candidate: Guardable): number {
+  return RETURN_FLOW_CODES.has(candidate.providerStatus.trim().toUpperCase())
+    ? 1
+    : 0;
+}
+
 function placeWords(value: string | undefined): string[] {
   return (value ?? '')
     .split('(')[0]
@@ -146,6 +152,8 @@ export function applyLifecycleGuards(
       a.event.timestamp.getTime() - b.event.timestamp.getTime() ||
       // A same-time SDR is processed first so it fences the other tied scans.
       isSdr(b) - isSdr(a) ||
+      // A same-time return scan is processed before any arrival so it fences it.
+      isReturnFlow(b) - isReturnFlow(a) ||
       isMshc(a) - isMshc(b) ||
       // Tied scans: movement away from the destination first, so the result
       // does not depend on payload order.

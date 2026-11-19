@@ -165,8 +165,9 @@ export function applyLifecycleGuards(
       candidate.recognizedStatus !== null &&
       !TERMINAL_STATUSES.has(candidate.recognizedStatus)
     ) {
-      // Destroyed is final: no later non-terminal scan (MSHC, arrival, transit)
-      // may move the shipment back into the lifecycle.
+      // Destroyed blocks every later in-lifecycle scan (MSHC, arrival, transit).
+      // Terminal scans (delivered, returned, cancelled) stay allowed: an admin
+      // closing out a destroyed shipment is a legitimate final state.
       event.status = 'failed';
       candidate.recognizedStatus = 'failed';
       event.rawStatus = candidate.providerStatus;

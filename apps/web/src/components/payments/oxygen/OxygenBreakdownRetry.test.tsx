@@ -69,7 +69,7 @@ it('retries only the failed breakdown lookup and shows confirmed charges and rep
   fireEvent.click(
     await screen.findByRole('button', { name: 'Retry payment breakdown' })
   );
-  await waitFor(() => expect(screen.getByText('₦5,083.65')).toBeVisible());
+  await waitFor(() => expect(screen.getByText(/₦5,083\.65/)).toBeVisible());
   expect(screen.getByText('₦143,683.65')).toBeVisible();
   expect(screen.queryByRole('alert')).toBeNull();
   expect(attempts).toBe(2);

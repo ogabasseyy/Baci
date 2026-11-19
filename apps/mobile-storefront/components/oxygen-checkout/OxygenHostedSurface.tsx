@@ -1,10 +1,10 @@
 import type { OxygenMobileCapabilities } from '@baci/shared/oxygen';
-import Ionicons from '@react-native-vector-icons/ionicons';
 import { useEffect, useRef, useState } from 'react';
-import { AppState, Linking, Pressable, Text, View } from 'react-native';
+import { AppState, Linking, Platform, Text, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { useCameraPermission } from '@/components/bnpl-checkout/use-camera-permission';
 import { useOxygenColors } from './OxygenFormPrimitives';
+import { OxygenHostedHeader } from './OxygenHostedHeader';
 import { OxygenSelfieRecovery } from './OxygenSelfieRecovery';
 import {
   createOxygenStatusRefresher,
@@ -45,6 +45,8 @@ function HostedSurface({
   onRenew,
 }: OxygenHostedSurfaceProps) {
   const colors = useOxygenColors();
+  // Android WebView can default-allow when its JS policy callback times out.
+  const embedded = Platform.OS === 'ios';
   const [error, setError] = useState('');
   const [pageLoaded, setPageLoaded] = useState(false);
   const loadFailed = useRef(false);
@@ -139,36 +141,7 @@ function HostedSurface({
   }
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: 12,
-          padding: 12,
-          borderBottomWidth: 1,
-          borderColor: colors.border,
-        }}
-      >
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Return to saved progress"
-          onPress={onExit}
-          style={{
-            width: 44,
-            height: 44,
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <Ionicons name="arrow-back" size={24} color={colors.text} />
-        </Pressable>
-        <Text
-          accessibilityRole="header"
-          style={{ color: colors.text, fontSize: 20, fontWeight: '600' }}
-        >
-          {kind === 'selfie' ? 'Verify it’s you' : 'Secure payment'}
-        </Text>
-      </View>
+      <OxygenHostedHeader kind={kind} onExit={onExit} />
       {kind === 'selfie' && (sessionExpired || renewing) && (
         <OxygenSelfieRecovery
           renewing={renewing}
@@ -213,81 +186,110 @@ function HostedSurface({
             />
           </View>
         )}
-      {allowed && active && foreground && !sessionExpired && !renewing && (
-        <WebView
-          testID="oxygen-hosted"
-          source={{ uri: url }}
-          style={{ flex: 1 }}
-          // WebView sends whitelist misses to Linking before our callback.
-          // Route every navigation through the exact-origin check below.
-          originWhitelist={['*']}
-          sharedCookiesEnabled={false}
-          thirdPartyCookiesEnabled={false}
-          incognito
-          javaScriptCanOpenWindowsAutomatically={false}
-          setSupportMultipleWindows
-          mediaCapturePermissionGrantType="prompt"
-          allowsInlineMediaPlayback
-          mediaPlaybackRequiresUserAction={kind !== 'selfie'}
-          onShouldStartLoadWithRequest={(request) =>
-            decideOxygenHostedNavigation(request.url, kind, capabilities) ===
-            'allow'
-          }
-          onOpenWindow={(event) => {
-            const target = event.nativeEvent.targetUrl;
-            const message =
-              'This external page is unavailable. Return to saved progress for an update.';
-            if (
-              decideOxygenHostedNavigation(target, kind, capabilities, true) ===
-              'external'
-            ) {
-              setError('');
-              void Linking.openURL(target).catch(() => setError(message));
-            } else {
-              setError(message);
+      {allowed &&
+        !embedded &&
+        active &&
+        foreground &&
+        !sessionExpired &&
+        !renewing && (
+          <View style={{ padding: 16 }}>
+            <OxygenAction
+              label="Continue in browser"
+              onPress={() => {
+                setError('');
+                void Linking.openURL(url).catch(() =>
+                  setError(
+                    'The provider page could not open. Your progress is saved.'
+                  )
+                );
+              }}
+            />
+          </View>
+        )}
+      {allowed &&
+        embedded &&
+        active &&
+        foreground &&
+        !sessionExpired &&
+        !renewing && (
+          <WebView
+            testID="oxygen-hosted"
+            source={{ uri: url }}
+            style={{ flex: 1 }}
+            // WebView sends whitelist misses to Linking before our callback.
+            // Keep iOS navigation in the decision-handler path below.
+            originWhitelist={['*']}
+            sharedCookiesEnabled={false}
+            thirdPartyCookiesEnabled={false}
+            incognito
+            javaScriptCanOpenWindowsAutomatically={false}
+            setSupportMultipleWindows
+            mediaCapturePermissionGrantType="prompt"
+            allowsInlineMediaPlayback
+            mediaPlaybackRequiresUserAction={kind !== 'selfie'}
+            onShouldStartLoadWithRequest={(request) =>
+              decideOxygenHostedNavigation(request.url, kind, capabilities) ===
+              'allow'
             }
-          }}
-          onMessage={() => {
-            if (kind !== 'selfie') requestRefresh();
-          }}
-          onLoadStart={() => {
-            loadFailed.current = false;
-          }}
-          onLoadEnd={(event) => {
-            if (kind !== 'selfie') requestRefresh();
-            else if (
-              !loadFailed.current &&
-              decideOxygenHostedNavigation(
-                event.nativeEvent.url,
-                kind,
-                capabilities
-              ) === 'allow'
-            ) {
-              if (!pageLoaded) recordOxygenSelfieDiagnostic('page_loaded');
-              setPageLoaded(true);
-            }
-          }}
-          onNavigationStateChange={() => {
-            if (kind !== 'selfie') requestRefresh();
-          }}
-          onError={() => {
-            if (kind === 'selfie')
-              recordOxygenSelfieDiagnostic('page_load_failed');
-            loadFailed.current = true;
-            setError(
-              'The provider page could not load. Your progress is saved.'
-            );
-          }}
-          onHttpError={() => {
-            if (kind === 'selfie')
-              recordOxygenSelfieDiagnostic('page_http_failed');
-            loadFailed.current = true;
-            setError(
-              'The provider link may have expired. Return to saved progress for an update.'
-            );
-          }}
-        />
-      )}
+            onOpenWindow={(event) => {
+              const target = event.nativeEvent.targetUrl;
+              const message =
+                'This external page is unavailable. Return to saved progress for an update.';
+              if (
+                decideOxygenHostedNavigation(
+                  target,
+                  kind,
+                  capabilities,
+                  true
+                ) === 'external'
+              ) {
+                setError('');
+                void Linking.openURL(target).catch(() => setError(message));
+              } else {
+                setError(message);
+              }
+            }}
+            onMessage={() => {
+              if (kind !== 'selfie') requestRefresh();
+            }}
+            onLoadStart={() => {
+              loadFailed.current = false;
+            }}
+            onLoadEnd={(event) => {
+              if (kind !== 'selfie') requestRefresh();
+              else if (
+                !loadFailed.current &&
+                decideOxygenHostedNavigation(
+                  event.nativeEvent.url,
+                  kind,
+                  capabilities
+                ) === 'allow'
+              ) {
+                if (!pageLoaded) recordOxygenSelfieDiagnostic('page_loaded');
+                setPageLoaded(true);
+              }
+            }}
+            onNavigationStateChange={() => {
+              if (kind !== 'selfie') requestRefresh();
+            }}
+            onError={() => {
+              if (kind === 'selfie')
+                recordOxygenSelfieDiagnostic('page_load_failed');
+              loadFailed.current = true;
+              setError(
+                'The provider page could not load. Your progress is saved.'
+              );
+            }}
+            onHttpError={() => {
+              if (kind === 'selfie')
+                recordOxygenSelfieDiagnostic('page_http_failed');
+              loadFailed.current = true;
+              setError(
+                'The provider link may have expired. Return to saved progress for an update.'
+              );
+            }}
+          />
+        )}
     </View>
   );
 }

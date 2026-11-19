@@ -4,6 +4,18 @@ import { type CartItem, useCartStore } from '@/stores/cart-store';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
 import { clearAndPersistCheckoutCart } from './checkout-cart-persistence';
 
+function cartLineValue(item: CartItem) {
+  return JSON.stringify(item, (_key, value: unknown) =>
+    value && typeof value === 'object' && !Array.isArray(value)
+      ? Object.fromEntries(
+          Object.entries(value).sort(([left], [right]) =>
+            left.localeCompare(right)
+          )
+        )
+      : value
+  );
+}
+
 export async function completeOxygenCheckout({
   clearCart,
   generation,
@@ -27,7 +39,13 @@ export async function completeOxygenCheckout({
     !shared.enabled &&
     live.checkoutGeneration === generation &&
     live.items.length === itemsSnapshot.length &&
-    live.items.every((item, index) => item === itemsSnapshot[index])
+    live.items.every((item, index) => {
+      const submitted = itemsSnapshot[index];
+      return (
+        submitted !== undefined &&
+        cartLineValue(item) === cartLineValue(submitted)
+      );
+    })
   ) {
     await clearAndPersistCheckoutCart(clearCart);
   }

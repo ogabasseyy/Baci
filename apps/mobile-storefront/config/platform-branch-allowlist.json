@@ -20,6 +20,10 @@
       "path": "components/oxygen-checkout/OxygenBirthDateInput.tsx",
       "justification": "Reviewed native monospace selection to align the editable birth date with its fixed-width format guide."
     },
+    {
+      "path": "components/oxygen-checkout/OxygenHostedSurface.tsx",
+      "justification": "Use the system browser on Android to avoid the native WebView allowing navigation when its JavaScript decision times out."
+    },
     "components/quiz/QuizPrizeCheckoutSimulationScreen.tsx",
     {
       "path": "components/checkout/CheckoutScreenView.styles.ts",

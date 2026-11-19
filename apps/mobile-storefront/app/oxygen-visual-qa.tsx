@@ -1,7 +1,9 @@
 import { Redirect, Stack, useLocalSearchParams } from 'expo-router';
-import { previewSteps } from '@/components/oxygen-preview/fixtures';
-import { OxygenPreview } from '@/components/oxygen-preview/OxygenPreview';
 import { Text, View } from '@/components/Themed';
+import {
+  OxygenPreview,
+  previewSteps,
+} from '../components/oxygen-preview/entry';
 
 // The synthetic iOS preview is tied to the local fixture server.
 const OXYGEN_VISUAL_QA_ORIGIN = 'http://127.0.0.1:3198';

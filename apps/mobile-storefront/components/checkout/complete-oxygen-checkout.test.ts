@@ -54,6 +54,18 @@ it('persists the emptied submitted cart before opening the pending order', async
   });
 });
 
+it('clears the submitted generation when its items are rehydrated with identical values', async () => {
+  jest.mocked(useCartStore.getState).mockReturnValue({
+    ...localCart,
+    items: args.itemsSnapshot.map((item) => ({ ...item })),
+  });
+
+  await completeOxygenCheckout(args);
+
+  expect(clearAndPersistCheckoutCart).toHaveBeenCalledWith(args.clearCart);
+  expect(router.replace).toHaveBeenCalledTimes(1);
+});
+
 it.each([
   { checkoutGeneration: 'new-generation' },
   { items: [{ ...cartItem, quantity: 2 }] },

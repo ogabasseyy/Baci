@@ -37,3 +37,20 @@ test('other modules and non-staging builds retain normal module resolution', () 
     null
   );
 });
+
+test('resolves the Oxygen preview fixture graph only in staging development', () => {
+  const name = '../components/oxygen-preview/entry';
+  const staging = { EXPO_PUBLIC_OXYGEN_STAGING: '1' };
+  assert.equal(
+    resolveOxygenStagingModule(name, { ...staging, NODE_ENV: 'development' }),
+    null
+  );
+  for (const env of [
+    { NODE_ENV: 'production' },
+    { ...staging, NODE_ENV: 'production' },
+  ]) {
+    const stub = resolveOxygenStagingModule(name, env);
+    assert.ok(stub?.endsWith('oxygen-preview-release.js'));
+    assert.deepEqual(require(stub).previewSteps, []);
+  }
+});

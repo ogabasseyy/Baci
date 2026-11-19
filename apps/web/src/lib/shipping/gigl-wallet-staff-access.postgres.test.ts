@@ -195,6 +195,74 @@ describe.skipIf(process.env.BACI_SHIPPING_QUOTE_POSTGRES !== '1')(
           ${actor(ownerId)} ${bind} ${bound}`);
         expect(out.at(-1)).toBe('merchant_wallet');
       });
+
+      // The quote builder (readContactText) and this compare must read the
+      // stored contact identically: JSON strings and numbers only, blanks
+      // removed with btrim (ASCII spaces only).
+      const quoted = (contact: object) => ({
+        name: 'Ada',
+        phone: '08000000000',
+        address: '12 Test Street',
+        city: 'Ikeja',
+        state: 'Lagos',
+        ...contact,
+      });
+      const storeAddress = (address: object) =>
+        `UPDATE public.orders SET customer_name='Ada', customer_phone='08000000000',
+          shipping_address='${JSON.stringify(address)}'::jsonb WHERE id='${bindOrderId}';`;
+      const quoteReceiver = (value: object) => {
+        const json = `'${JSON.stringify(value)}'::jsonb`;
+        return `UPDATE public.shipping_quotes SET quote_request = jsonb_set(quote_request, '{receiver}', ${json}) WHERE id='${bindQuoteId}';
+          UPDATE public.shipping_quote_attestations SET quote_request = jsonb_set(quote_request, '{receiver}', ${json}) WHERE quote_id='${bindQuoteId}';
+          SELECT 1;`;
+      };
+      const bindReceiver = (value: object) =>
+        `SELECT available_balance FROM public.bind_admin_gigl_quote('${bindOrderId}','${merchantId}','${bindQuoteId}','${JSON.stringify(value)}'::jsonb);`;
+
+      it('binds when the stored phone is a JSON number that matches the quoted receiver text', () => {
+        const numeric = quoted({ phone: '8012345678' });
+        const out = run(`RESET ROLE;
+          ${storeAddress({ ...numeric, phone: 8012345678 })}
+          UPDATE public.orders SET customer_phone='09099999999' WHERE id='${bindOrderId}';
+          ${quoteReceiver(numeric)}
+          ${actor(ownerId)} ${bindReceiver(numeric)} ${bound}`);
+        expect(out.at(-1)).toBe('merchant_wallet');
+      });
+
+      it.each([
+        ['boolean', true],
+        ['object', { digits: '08000000000' }],
+        ['array', ['08000000000']],
+      ])('ignores a %s stored phone and uses customer_phone like the builder', (_label, phone) => {
+        const out = run(`RESET ROLE;
+          ${storeAddress(quoted({ phone }))}
+          ${actor(ownerId)} ${bind} ${bound}`);
+        expect(out.at(-1)).toBe('merchant_wallet');
+      });
+
+      it('ignores an object stored name and uses customer_name like the builder', () => {
+        const out = run(`RESET ROLE;
+          ${storeAddress(quoted({ name: { first: 'Ada' } }))}
+          ${actor(ownerId)} ${bind} ${bound}`);
+        expect(out.at(-1)).toBe('merchant_wallet');
+      });
+
+      it('binds when the stored phone has a trailing tab that the receiver keeps', () => {
+        const tabbed = quoted({ phone: '08000000000\t' });
+        const out = run(`RESET ROLE;
+          ${storeAddress(tabbed)}
+          ${quoteReceiver(tabbed)}
+          ${actor(ownerId)} ${bindReceiver(tabbed)} ${bound}`);
+        expect(out.at(-1)).toBe('merchant_wallet');
+      });
+
+      it('refuses when the receiver stripped a tab that btrim keeps on the stored phone', () => {
+        expect(() =>
+          run(`RESET ROLE;
+            ${storeAddress(quoted({ phone: '08000000000\t' }))}
+            ${actor(ownerId)} ${bind}`)
+        ).toThrow(/stale_order_quote_inputs/);
+      });
     });
 
     it('lets the owner and orders.fulfill + orders.edit staff bind the attested quote', () => {

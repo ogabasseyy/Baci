@@ -1,8 +1,13 @@
 -- Fix: bind_admin_gigl_quote 409 stale_order_quote_inputs on orders whose
 -- shipping_address has no name/phone. The quote receiver falls back to
 -- orders.customer_name / customer_phone (build-order-gigl-quote-request.ts
--- readAddress), so the stale-input compare must resolve the order side the
--- same way. Everything else is identical to 20261031130200.
+-- readContactText), so the stale-input compare must resolve the order side the
+-- same way: a stored shipping_address name/phone counts only when it is a JSON
+-- string or number (a number compares as the text ->> returns; null, boolean,
+-- object and array values are ignored), blanks are removed with btrim (ASCII
+-- spaces only) and a blank falls back to the customer columns. The TypeScript
+-- builder applies the identical rules. Everything else is identical to
+-- 20261031130200.
 CREATE OR REPLACE FUNCTION public.bind_admin_gigl_quote(
   p_order_id uuid,
   p_merchant_id uuid,
@@ -105,8 +110,21 @@ BEGIN
            THEN to_jsonb(round((btrim(COALESCE(v_order.shipping_address, '{}'::jsonb) ->> 'longitude'))::numeric, 6))
            ELSE to_jsonb(btrim(COALESCE(v_order.shipping_address, '{}'::jsonb) ->> 'longitude'))
          END,
-         'name', COALESCE(NULLIF(btrim(COALESCE(v_order.shipping_address, '{}'::jsonb) ->> 'name'), ''), NULLIF(btrim(v_order.customer_name), '')),
-         'phone', COALESCE(NULLIF(btrim(COALESCE(v_order.shipping_address, '{}'::jsonb) ->> 'phone'), ''), NULLIF(btrim(v_order.customer_phone), ''), ''),
+         'name', COALESCE(
+           NULLIF(btrim(CASE
+             WHEN jsonb_typeof(COALESCE(v_order.shipping_address, '{}'::jsonb) -> 'name') IN ('string', 'number')
+             THEN COALESCE(v_order.shipping_address, '{}'::jsonb) ->> 'name'
+           END), ''),
+           NULLIF(btrim(v_order.customer_name), '')
+         ),
+         'phone', COALESCE(
+           NULLIF(btrim(CASE
+             WHEN jsonb_typeof(COALESCE(v_order.shipping_address, '{}'::jsonb) -> 'phone') IN ('string', 'number')
+             THEN COALESCE(v_order.shipping_address, '{}'::jsonb) ->> 'phone'
+           END), ''),
+           NULLIF(btrim(v_order.customer_phone), ''),
+           ''
+         ),
          'state', NULLIF(btrim(COALESCE(v_order.shipping_address, '{}'::jsonb) ->> 'state'), '')
        )
      ) IS DISTINCT FROM jsonb_strip_nulls(

@@ -175,6 +175,9 @@ export async function createFinalizationOrder(
   return { ok: true, orderId };
 }
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 function isSharedCartBinding(value: unknown): value is {
   cart_id: string;
   cart_version: number;
@@ -185,8 +188,14 @@ function isSharedCartBinding(value: unknown): value is {
   const binding = value as Record<string, unknown>;
   return (
     typeof binding.cart_id === 'string' &&
+    UUID_RE.test(binding.cart_id) &&
     typeof binding.checkout_session_id === 'string' &&
+    UUID_RE.test(binding.checkout_session_id) &&
+    typeof binding.cart_version === 'number' &&
     Number.isSafeInteger(binding.cart_version) &&
-    Number.isSafeInteger(binding.checkout_generation)
+    binding.cart_version >= 1 &&
+    typeof binding.checkout_generation === 'number' &&
+    Number.isSafeInteger(binding.checkout_generation) &&
+    binding.checkout_generation >= 1
   );
 }

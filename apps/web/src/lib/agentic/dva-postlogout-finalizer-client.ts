@@ -46,8 +46,16 @@ export async function hasDvaPostLogoutFinalizationEvidence(input: {
         p_session_id: input.binding.checkout_session_id,
       }
     );
-    return !error && data === true;
-  } catch {
+    if (error) {
+      console.warn('dva_postlogout_evidence_probe_error', error.message);
+      return false;
+    }
+    return data === true;
+  } catch (caughtError) {
+    console.warn(
+      'dva_postlogout_evidence_probe_threw',
+      caughtError instanceof Error ? caughtError.message : String(caughtError)
+    );
     return false;
   }
 }

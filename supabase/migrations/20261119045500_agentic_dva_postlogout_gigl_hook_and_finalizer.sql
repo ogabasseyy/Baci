@@ -11,29 +11,33 @@ BEGIN
     NOREPLICATION NOBYPASSRLS;
 END;
 $roles$;
--- The same CREATEROLE migration principal creates this role above, so it has
--- the ADMIN option needed to reassert the fresh role's non-login state.
+-- Clear any password on the newly created NOLOGIN role; NOLOGIN above already
+-- enforces the non-login state without relying on connection limits.
 ALTER ROLE agentic_dva_finalizer CONNECTION LIMIT -1 PASSWORD NULL;
 COMMENT ON ROLE agentic_dva_finalizer IS
   'Dormant signed PostgREST capability for evidence-bound post-logout DVA finalization';
 GRANT USAGE ON SCHEMA public TO agentic_dva_finalizer;
 
--- Add the exact path before the existing GIGL-only early return. No role
--- membership is granted here, so a JWT cannot yet reach this branch.
+-- Extend the installed request_role IF/ELSIF hook chain while preserving all
+-- reload canaries and existing worker branches. No authenticator membership is
+-- granted here, so a JWT cannot yet reach the agentic_dva_finalizer branch.
 DO $$
 DECLARE
   v_signature constant text := 'public.enforce_gigl_tracking_worker_request_scope()';
   v_definition text := pg_get_functiondef(v_signature::regprocedure);
-  v_anchor text := E'  IF auth.role() IS DISTINCT FROM ''gigl_tracking_worker'' THEN\n    RETURN;\n  END IF;';
-  v_replacement text := E'  IF auth.role() = ''agentic_dva_finalizer'' THEN\n'
-    || E'    IF request_method IS DISTINCT FROM ''POST''\n'
-    || E'      OR request_path IS DISTINCT FROM ''/rpc/create_storefront_order_with_cart_binding'' THEN\n'
-    || E'      RAISE EXCEPTION ''agentic DVA finalizer request is outside its capability scope'' USING ERRCODE = ''42501'';\n'
-    || E'    END IF;\n'
-    || E'    RETURN;\n'
-    || E'  END IF;\n'
-    || E'  IF auth.role() IS DISTINCT FROM ''gigl_tracking_worker'' THEN\n    RETURN;\n  END IF;';
+  v_anchor text := 'IF request_role = ''commerce_cart_quota'' THEN';
+  v_replacement text := $scope$IF request_role = 'agentic_dva_finalizer' THEN
+    -- agentic_dva_finalizer_request_scope_v1
+    IF request_method IS DISTINCT FROM 'POST'
+      OR request_path IS DISTINCT FROM '/rpc/create_storefront_order_with_cart_binding' THEN
+      RAISE EXCEPTION 'agentic DVA finalizer request is outside its capability scope'
+        USING ERRCODE = '42501';
+    END IF;
+  ELSIF request_role = 'commerce_cart_quota' THEN$scope$;
 BEGIN
+  IF position('-- agentic_dva_finalizer_request_scope_v1' IN v_definition) > 0 THEN
+    RETURN;
+  END IF;
   IF (length(v_definition) - length(replace(v_definition, v_anchor, ''))) / length(v_anchor) <> 1 THEN
     RAISE EXCEPTION 'GIGL hook finalizer anchor changed';
   END IF;

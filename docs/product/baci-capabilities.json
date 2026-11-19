@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-19T08:58:04+00:00",
-  "source_revision": "84b102f4dd49ddb2659f933e36a2de6b728c105b",
-  "evidence_digest": "c2c3c6b8f5bd5f07b26a890076514cdd2d29bfbbca32a48a1405b37328307d6c",
-  "claims_digest": "a21183108ef9b65f0ef0fc1563091f20f1fb50fd22dbdaac2d6dd6459984d417",
+  "reviewed_at": "2026-11-19T09:15:01+00:00",
+  "source_revision": "0a9c42e85707ae61bbb54f599b823ebfaac8ef8a",
+  "evidence_digest": "f1c96c08ac28da5aed77dfaf2b569ff50db84349c5da11b6447cd85be075098f",
+  "claims_digest": "9e32ab64df83cfb8f727f8a24bc4889edc7aa333004eabd22ba826bb23e13072",
   "review_scope": "Source evidence only. Preserves current main\u2019s OAuth, cart retention and notices, payment reconciliation, merchant protocols and Oxygen pilot boundaries. Full-code storefront MCP remains disabled by default. Owner approval, evidence and public-verification schemas retain their existing validation. Direct local admission, source adoption, rollback and simulated commerce tests cover authority boundaries. Hosted qualification and activation remain separate.",
   "capabilities": [
     {
@@ -238,7 +238,7 @@
       "id": "custom-storefront-mcp",
       "title": "Full-code storefront MCP foundations",
       "status": "code_evidenced",
-      "claim": "Baci source implements custom React/CSS storefront upload, isolated build/prerender, inspection and private preview through MCP builder ports, reusing its commerce engine. When explicitly enabled in private operator configuration, the hosted candidate runs builds in a durable background worker and exposes their status through MCP.",
+      "claim": "Baci source implements custom React/CSS storefront upload, isolated build/prerender, inspection and private preview through MCP builder ports, reusing its commerce engine. When explicitly enabled in private operator configuration, the hosted candidate runs builds in a durable background worker and exposes their status through MCP. The candidate retains independently verified renderer output in PostgreSQL before finalizing a full-code build.",
       "limitations": "Production composition is explicitly uninstalled/disabled by default. Local synthetic proofs are not deployed ChatGPT availability, merchant activation, permission to publish or CWV qualification. Existing auth/RLS, entitlement, owner approval and performance/private-apply gates still apply. Real runner/HTTPS delivery and scoped verifier provisioning require separate qualification and authorized rollout.",
       "source_refs": [
         "apps/web/builder-mcp-server/registry.ts",
@@ -247,7 +247,8 @@
         "apps/web/tools/experience-runner/preview-delivery.ts",
         "docs/connectors/experience-runner-delivery-qualification.md",
         "docs/connectors/builder-background-finalization.md",
-        "apps/web/tools/builder-production/production-start.ts"
+        "apps/web/tools/builder-production/production-start.ts",
+        "supabase/migrations/20261119103000_experience_verified_renderer_storage.sql"
       ]
     },
     {

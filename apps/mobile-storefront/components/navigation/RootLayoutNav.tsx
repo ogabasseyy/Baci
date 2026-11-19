@@ -64,7 +64,6 @@ interface RootLayoutNavProps {
   adTrackingReady?: boolean;
   persistenceEnabled?: boolean;
   shouldResumeNavigation?: boolean;
-  startupReady?: boolean;
   trackingExplainer?: {
     visible: boolean;
     onContinue: () => void;
@@ -77,7 +76,6 @@ export function RootLayoutNav({
   adTrackingReady = true,
   persistenceEnabled = true,
   shouldResumeNavigation = false,
-  startupReady = false,
   trackingExplainer,
 }: RootLayoutNavProps) {
   const rootNavigationState = useRootNavigationState();
@@ -111,7 +109,7 @@ export function RootLayoutNav({
         >
           <NavigationBarStyleProvider rootStyle={rootNavigationBarStyle}>
             <SafeAreaProvider>
-              <AppKeyboardProvider startupReady={startupReady}>
+              <AppKeyboardProvider>
                 <ThemeProvider
                   value={
                     colorScheme === 'dark'

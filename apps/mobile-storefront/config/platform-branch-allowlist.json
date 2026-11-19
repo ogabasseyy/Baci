@@ -1,10 +1,6 @@
 {
   "platformBranches": [
     {
-      "path": "components/ui/useDeferredKeyboardPreload.ts",
-      "justification": "Schedule optional idle keyboard preload on iOS only. Android and web implementations do no native preload work."
-    },
-    {
       "path": "app/cart.tsx",
       "justification": "Reviewed existing cart haptics and list virtualization platform behavior."
     },

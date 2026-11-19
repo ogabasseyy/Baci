@@ -64,13 +64,11 @@ jest.mock('@/components/navigation/RootLayoutNav', () => ({
     adTrackingReady,
     persistenceEnabled,
     shouldResumeNavigation,
-    startupReady,
     onFirstLayout,
   }: {
     adTrackingReady?: boolean;
     persistenceEnabled: boolean;
     shouldResumeNavigation?: boolean;
-    startupReady?: boolean;
     onFirstLayout?: () => void;
   }) => {
     const { useEffect } = jest.requireActual<typeof import('react')>('react');
@@ -88,19 +86,16 @@ jest.mock('@/components/navigation/RootLayoutNav', () => ({
     }, []);
 
     return (
-      <>
-        <Text
-          onLayout={onFirstLayout}
-          accessibilityLabel="Store navigation"
-          accessibilityRole="text"
-          testID="root-layout-nav"
-        >
-          adTracking:{String(adTrackingReady)};persistence:
-          {String(persistenceEnabled)};resume:
-          {String(shouldResumeNavigation)}
-        </Text>
-        <Text testID="root-layout-startup">{String(startupReady)}</Text>
-      </>
+      <Text
+        onLayout={onFirstLayout}
+        accessibilityLabel="Store navigation"
+        accessibilityRole="text"
+        testID="root-layout-nav"
+      >
+        adTracking:{String(adTrackingReady)};persistence:
+        {String(persistenceEnabled)};resume:
+        {String(shouldResumeNavigation)}
+      </Text>
     );
   },
 }));

@@ -124,22 +124,6 @@ jest.mock('@/components/ConnectivityBanner', () => ({
   ConnectivityBanner: () => <MockText>connectivity-banner</MockText>,
 }));
 
-jest.mock('@/components/ui/AppKeyboardProvider', () => ({
-  __esModule: true,
-  default: ({
-    children,
-    startupReady,
-  }: {
-    children?: React.ReactNode;
-    startupReady?: boolean;
-  }) => (
-    <MockView testID="app-keyboard-provider">
-      <MockText>keyboard-startup:{String(startupReady)}</MockText>
-      {children}
-    </MockView>
-  ),
-}));
-
 jest.mock('@/components/chat/ChatWidget', () => ({
   ChatWidget: ({ bottomOffset }: { bottomOffset: number }) => (
     <MockText>{`chat-widget:${bottomOffset}`}</MockText>
@@ -207,10 +191,7 @@ describe('RootLayoutNav', () => {
     setPlatformOS(originalPlatformOS);
   });
 
-  registerRootLayoutNavStartupTests({
-    RootLayoutNav,
-    queryProvider: mockQueryProvider,
-  });
+  registerRootLayoutNavStartupTests({ RootLayoutNav });
 
   it('waits for router readiness after the shell lays out before reporting startup layout', async () => {
     mockRootNavigationState = undefined;
@@ -263,6 +244,14 @@ describe('RootLayoutNav', () => {
     expect(screen.getByText('connectivity-banner')).toBeTruthy();
   });
 
+  it('passes persistence settings through to the query provider', () => {
+    render(<RootLayoutNav persistenceEnabled={false} />);
+
+    expect(mockQueryProvider).toHaveBeenCalledWith(
+      expect.objectContaining({ persistenceEnabled: false })
+    );
+  });
+
   it('applies the root Android navigation bar style', async () => {
     setPlatformOS('android');
 
@@ -271,6 +260,14 @@ describe('RootLayoutNav', () => {
     await waitFor(() => {
       expect(mockSetNavigationBarStyle).toHaveBeenLastCalledWith('dark');
     });
+  });
+
+  it('surfaces provider failures deterministically', () => {
+    mockQueryProvider.mockImplementation(() => {
+      throw new Error('query provider failed');
+    });
+
+    expect(() => render(<RootLayoutNav />)).toThrow('query provider failed');
   });
 
   it('does not render ConnectivityBanner when the template sets connectivityBanner to false', () => {

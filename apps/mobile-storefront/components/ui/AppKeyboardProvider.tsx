@@ -1,18 +1,15 @@
 import type { ReactNode } from 'react';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
-import { useDeferredKeyboardPreload } from './useDeferredKeyboardPreload';
 
 interface AppKeyboardProviderProps {
   children: ReactNode;
-  startupReady?: boolean;
 }
 
 export default function AppKeyboardProvider({
   children,
-  startupReady = false,
 }: AppKeyboardProviderProps) {
-  useDeferredKeyboardPreload(startupReady);
-
+  // Avoid launch-time UIKit work and the hidden responder's Spotlight flash
+  // on the pinned controller version. The first input opens the keyboard.
   return (
     <KeyboardProvider
       navigationBarTranslucent

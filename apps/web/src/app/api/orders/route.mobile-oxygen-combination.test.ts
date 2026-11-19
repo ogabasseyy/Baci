@@ -1,10 +1,24 @@
-import { beforeEach, expect, it } from 'vitest';
+import { beforeEach, expect, it, vi } from 'vitest';
 import {
   createOrderRequest,
   getLatestRpc,
+  MERCHANT_ID,
   POST,
   resetOrderRouteMocks,
 } from './route.transaction-discount-fixtures.test-support';
+
+vi.mock('@/lib/payments/oxygen/mobile-capabilities', () => ({
+  readOxygenMobileCapabilities: vi.fn(async () => ({
+    ok: true,
+    capabilities: { mobileEnabled: true, merchant: { id: MERCHANT_ID } },
+  })),
+}));
+vi.mock('@/lib/loyalty/server-resolver-client', () => ({
+  createLoyaltyResolverServiceClient: () => ({
+    rpc: vi.fn().mockResolvedValue({ data: [], error: null }),
+  }),
+}));
+vi.mock('@/lib/supabase/anon', () => ({ createAnonClient: () => ({}) }));
 
 beforeEach(() => resetOrderRouteMocks('bc1b9fb3-697a-4b87-815b-06423f732d3c'));
 
@@ -37,4 +51,36 @@ it.each([
     code: 'OXYGEN_MOBILE_COMBINATION_UNSUPPORTED',
   });
   expect(getLatestRpc()).not.toHaveBeenCalled();
+});
+
+it('requires a voucher-like discount string to resolve to a valid merchant discount before creating a mobile Oxygen order', async () => {
+  const rpc = getLatestRpc();
+  rpc.mockResolvedValue({ data: [], error: null });
+  const response = await POST(
+    createOrderRequest({
+      payment_method: 'oxygen',
+      discount_code: 'submitted-voucher',
+    })
+  );
+
+  expect(response.status).toBe(400);
+  await expect(response.json()).resolves.toMatchObject({
+    code: 'discount_code_invalid',
+  });
+  expect(rpc).toHaveBeenCalledWith(
+    'get_storefront_discount_code',
+    expect.anything()
+  );
+  expect(rpc).not.toHaveBeenCalledWith(
+    'create_storefront_order_with_discount_code',
+    expect.anything()
+  );
+  expect(rpc).not.toHaveBeenCalledWith(
+    'create_storefront_order',
+    expect.anything()
+  );
+  expect(rpc).not.toHaveBeenCalledWith(
+    'create_storefront_order_with_quiz_voucher',
+    expect.anything()
+  );
 });

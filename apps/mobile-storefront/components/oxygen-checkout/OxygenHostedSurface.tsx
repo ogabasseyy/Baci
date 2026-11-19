@@ -14,6 +14,9 @@ import {
 import { OxygenAction } from './oxygen-presentation';
 import { recordOxygenSelfieDiagnostic } from './oxygen-selfie-diagnostics';
 
+const statusUnavailable =
+  'Your progress is saved. Status is temporarily unavailable.';
+
 export interface OxygenHostedSurfaceProps {
   url: string;
   kind: OxygenHostedKind;
@@ -48,6 +51,7 @@ function HostedSurface({
 }: OxygenHostedSurfaceProps) {
   const colors = useOxygenColors();
   const [error, setError] = useState('');
+  const [autoPaused, setAutoPaused] = useState(false);
   const [phase, setPhase] = useState<'opening' | 'checking' | null>(null);
   const openingBrowser = useRef(false);
   const refreshCallback = useRef(onRefresh);
@@ -67,11 +71,13 @@ function HostedSurface({
     let timer: ReturnType<typeof setInterval> | undefined;
     function refresh() {
       if (openingBrowser.current) return;
-      void refreshState
-        .refresh()
-        .catch(() =>
-          setError('Your progress is saved. Status is temporarily unavailable.')
-        );
+      void refreshState.refresh().then(
+        () => setAutoPaused(refreshState.isPaused()),
+        () => {
+          setAutoPaused(true);
+          setError(statusUnavailable);
+        }
+      );
     }
     const interval = kind === 'selfie' ? 15000 : 5000;
     if (AppState.currentState === 'active')
@@ -79,6 +85,10 @@ function HostedSurface({
     const listener = AppState.addEventListener('change', (state) => {
       clearInterval(timer);
       if (state === 'active') {
+        if (!openingBrowser.current) {
+          refreshState.start();
+          setError('');
+        }
         refresh();
         timer = setInterval(refresh, interval);
       }
@@ -89,6 +99,25 @@ function HostedSurface({
       listener.remove();
     };
   }, [available, kind, refreshState]);
+
+  async function checkStatus() {
+    setPhase('checking');
+    setError('');
+    setAutoPaused(false);
+    refreshState.start();
+    try {
+      await withTimeout(
+        refreshState.refresh(),
+        8000,
+        'Oxygen status timed out'
+      );
+    } catch {
+      setAutoPaused(true);
+      setError(statusUnavailable);
+    } finally {
+      setPhase(null);
+    }
+  }
 
   async function openBrowser() {
     if (!available || openingBrowser.current) return;
@@ -102,14 +131,7 @@ function HostedSurface({
       if (result.type === 'opened') return; // Android refreshes on app foreground.
       // iOS Safari reports dismissal. A dismissal only prompts a server read.
       if (kind === 'selfie') recordOxygenSelfieDiagnostic('browser_returned');
-      setPhase('checking');
-      await withTimeout(
-        refreshState.refresh(),
-        8000,
-        'Oxygen status timed out'
-      ).catch(() =>
-        setError('Your progress is saved. Status is temporarily unavailable.')
-      );
+      await checkStatus();
     } catch {
       if (kind === 'selfie')
         recordOxygenSelfieDiagnostic('browser_open_failed');
@@ -160,6 +182,14 @@ function HostedSurface({
               disabled={phase !== null}
               onPress={() => void openBrowser()}
             />
+            {autoPaused ? (
+              <OxygenAction
+                label="Check status"
+                secondary
+                disabled={phase !== null}
+                onPress={() => void checkStatus()}
+              />
+            ) : null}
           </>
         ) : null}
         {error ? (

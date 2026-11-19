@@ -38,6 +38,9 @@ export function createOxygenStatusRefresher(
   let busy = false;
   let stopped = false;
   return {
+    isPaused() {
+      return stopped || attempts >= maxAttempts;
+    },
     async refresh() {
       if (stopped || busy || attempts >= maxAttempts) return;
       busy = true;
@@ -56,6 +59,7 @@ export function createOxygenStatusRefresher(
     },
     start() {
       stopped = false;
+      attempts = 0;
     },
   };
 }

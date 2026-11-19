@@ -96,6 +96,28 @@ it('checks server status when Android returns from a Custom Tab', async () => {
   expect(props.onRefresh).toHaveBeenCalledTimes(1);
 });
 
+it('checks server status after returning even if automatic reads were exhausted', async () => {
+  jest.useFakeTimers();
+  try {
+    const props = defaults();
+    render(<OxygenHostedSurface {...props} />);
+    for (let index = 0; index < 9; index++) {
+      await act(async () => jest.advanceTimersByTime(5000));
+    }
+    expect(props.onRefresh).toHaveBeenCalledTimes(8);
+    expect(screen.getByRole('button', { name: 'Check status' })).toBeEnabled();
+
+    openBrowser.mockResolvedValueOnce({
+      type: WebBrowser.WebBrowserResultType.DISMISS,
+    });
+    await act(async () => continueToOxygen());
+    expect(props.onRefresh).toHaveBeenCalledTimes(9);
+    expect(screen.queryByRole('button', { name: 'Check status' })).toBeNull();
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
 it.each([
   'http://pay.example/checkout',
   'https://pay.example.invalid/checkout',

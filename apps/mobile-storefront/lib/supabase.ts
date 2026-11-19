@@ -39,6 +39,8 @@ function getExpoExtraConfig(): ExpoExtraConfig {
 
 const expoExtra = getExpoExtraConfig();
 const oxygenStagingProfile = getOxygenStagingProfile();
+if (process.env.EXPO_PUBLIC_OXYGEN_STAGING === '1' && !oxygenStagingProfile)
+  throw new Error('Install the Oxygen staging profile before opening Supabase');
 const supabaseUrl =
   oxygenStagingProfile?.authBaseUrl ||
   process.env.EXPO_PUBLIC_SUPABASE_URL ||

@@ -176,6 +176,7 @@ describe('saved native Oxygen checkout', () => {
     });
     await act(async () => fireEvent.press(retry));
     expect(screen.queryByText('See payment breakdown')).toBeNull();
+    expect(screen.getByText('Oxygen is temporarily unavailable')).toBeTruthy();
     await act(async () =>
       fireEvent.press(
         screen.getByRole('button', { name: 'Check for an update' })
@@ -190,6 +191,7 @@ describe('saved native Oxygen checkout', () => {
     const retry = await screen.findByRole('button', {
       name: 'Check for an update',
     });
+    expect(screen.getByText('Oxygen is temporarily unavailable')).toBeTruthy();
     await act(async () => fireEvent.press(retry));
     expect(refresh).toHaveBeenCalledTimes(1);
     expect(await screen.findByText('Saved workflow')).toBeTruthy();

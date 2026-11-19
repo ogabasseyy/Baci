@@ -5,9 +5,11 @@ import { OxygenButton, useOxygenColors } from './OxygenFormPrimitives';
 
 export function OxygenWorkflowError({
   busy,
+  capabilityUnavailable,
   onRefresh,
 }: {
   busy: boolean;
+  capabilityUnavailable: boolean;
   onRefresh: () => void;
 }) {
   const colors = useOxygenColors();
@@ -26,7 +28,9 @@ export function OxygenWorkflowError({
           textAlign: 'center',
         }}
       >
-        We couldn’t confirm this step
+        {capabilityUnavailable
+          ? 'Oxygen is temporarily unavailable'
+          : 'We couldn’t confirm this step'}
       </Text>
       <Text
         style={{

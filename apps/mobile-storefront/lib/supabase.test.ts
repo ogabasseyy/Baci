@@ -130,7 +130,17 @@ describe('storefront supabase client config', () => {
     delete process.env.EXPO_PUBLIC_SUPABASE_URL;
     delete process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
     delete process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+    delete process.env.EXPO_PUBLIC_OXYGEN_STAGING;
     delete (globalThis as { window?: unknown }).window;
+  });
+
+  it('refuses to initialize the auth client before staging startup', async () => {
+    process.env.EXPO_PUBLIC_OXYGEN_STAGING = '1';
+
+    await expect(import('./supabase')).rejects.toThrow(
+      'Install the Oxygen staging profile before opening Supabase'
+    );
+    expect(mockState.createClient).not.toHaveBeenCalled();
   });
 
   it('falls back to expo extra publishable config when EXPO_PUBLIC env vars are empty', async () => {

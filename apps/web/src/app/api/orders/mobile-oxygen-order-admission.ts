@@ -31,6 +31,8 @@ export function rejectMobileOxygenCreditCombination(
 ): NextResponse | null {
   if (!isMobileOxygenOrder(request, order.payment_method, order.source))
     return null;
+  // Checkout may apply a server-validated merchant or loyalty discount.
+  // Prize vouchers require a voucher-bearing line and use a separate RPC.
   if (
     !hasVoucherItem &&
     !order.use_wallet_credit &&

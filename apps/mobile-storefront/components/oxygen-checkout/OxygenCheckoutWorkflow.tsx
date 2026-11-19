@@ -41,8 +41,10 @@ export function OxygenCheckoutWorkflow({
   const [selfieRetryAttempt, setSelfieRetryAttempt] = useState(0);
   const capabilitiesReady =
     Boolean(capabilities) && workflow.capabilitiesVerified;
+  const capabilityUnavailable = !capabilities && !workflow.busy;
   const showRecovery =
     Boolean(workflow.error) ||
+    capabilityUnavailable ||
     refreshing === 'recovery' ||
     (Boolean(workflow.snapshot) && !workflow.busy && !capabilitiesReady);
   const activated = workflow.snapshot?.stage === 'activated';
@@ -102,6 +104,7 @@ export function OxygenCheckoutWorkflow({
         {showRecovery ? (
           <OxygenWorkflowError
             busy={workflow.busy || Boolean(refreshing)}
+            capabilityUnavailable={capabilityUnavailable}
             onRefresh={() => void refresh()}
           />
         ) : null}

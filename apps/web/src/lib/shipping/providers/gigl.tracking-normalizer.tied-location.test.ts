@@ -64,4 +64,37 @@ describe('bugfix: a tied arrival scan owns the snapshot location even when the l
     expect(result.status).toBe('delivered');
     expect(result.events[0]?.location).toContain('MAITAMA');
   });
+
+  it('gives the same snapshot location whether or not an unrelated later scan is added', () => {
+    const base = [
+      {
+        Status: 'DPC',
+        DateTimeUtc: '2026-11-09T10:00:00.000Z',
+        Location: 'IKEJA 2 (IKEJA)',
+      },
+      {
+        Status: 'ARF',
+        DateTimeUtc: '2026-11-09T11:00:00.000Z',
+        Location: 'WUSE ABUJA (Wuse)',
+      },
+      { Status: 'SHD', DateTimeUtc: '2026-11-09T11:00:00.000Z' },
+    ];
+    const run = (extra: Record<string, string>[]) =>
+      normalizeGiglTrackingShipment(
+        {
+          Waybill: 'W62',
+          Origin: 'LAGOS',
+          Destination: 'ABUJA',
+          MobileShipmentTrackings: [...base, ...extra].map((e) => ({ ...e })),
+        },
+        'W62',
+        OBSERVED_AT
+      ).events[0]?.location;
+    const without = run([]);
+    const withLater = run([
+      { Status: 'MSVC', DateTimeUtc: '2026-11-09T12:00:00.000Z' },
+    ]);
+    expect(without).toContain('WUSE ABUJA');
+    expect(withLater).toBe(without);
+  });
 });

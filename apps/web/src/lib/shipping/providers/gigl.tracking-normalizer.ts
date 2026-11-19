@@ -171,10 +171,18 @@ export function normalizeGiglTrackingShipment(
       right.event.timestamp.getTime() - left.event.timestamp.getTime() ||
       currentStatusRank(right) - currentStatusRank(left)
   );
+  if (sortedCandidates.length === 0) {
+    throw new Error('GIGL tracking result has no valid tracking events');
+  }
+  const hasRecognizedLifecycleEvent = sortedCandidates.some(
+    (candidate) => candidate.recognizedStatus !== null
+  );
+  const { status, lead } = resolveAggregate(sortedCandidates);
   // The worker reads the current location from events[0]; a same-time scan
   // (e.g. MSHC, with or without its own location) must not hide the arrival
   // centre from the same poll.
-  const top = sortedCandidates[0];
+  // The event that will lead the list (see resolveAggregate) owns the snapshot.
+  const top = lead ?? sortedCandidates[0];
   // A located leader keeps its own location (terminal, failed...) except the
   // generic MSHC, whose hub is not where the parcel is: the arrival wins there.
   const topKeepsOwnLocation =
@@ -195,13 +203,6 @@ export function normalizeGiglTrackingShipment(
     );
     if (located && located !== top) top.event.location = located.event.location;
   }
-  if (sortedCandidates.length === 0) {
-    throw new Error('GIGL tracking result has no valid tracking events');
-  }
-  const hasRecognizedLifecycleEvent = sortedCandidates.some(
-    (candidate) => candidate.recognizedStatus !== null
-  );
-  const { status, lead } = resolveAggregate(sortedCandidates);
   const deliveredEvent = sortedCandidates.find(
     (candidate) => candidate.recognizedStatus === 'delivered'
   );

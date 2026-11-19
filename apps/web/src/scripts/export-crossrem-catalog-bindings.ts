@@ -25,13 +25,17 @@ export async function exportCrossRemCatalogBindings(merchantId: string) {
     if (resolveMerchantCurrencyConfig(merchant).code !== 'NGN') {
       throw new CatalogExportError('CrossRem catalog pricing requires NGN.');
     }
+    if (merchant.gmc_variants_enabled === false) {
+      throw new CatalogExportError(
+        'CrossRem binding exports require a SKU-expanded Google Merchant feed.'
+      );
+    }
 
     exportStep = 'read the public merchant catalog';
     const data = await getGoogleMerchantFeedData(merchant.id, merchant.slug);
     exportStep = 'render Google listing candidates from a nonempty catalog';
     const rows = collectGoogleMerchantListings(
       data.products,
-      // Import candidates keep the source's actual Google g:ids.
       merchant,
       buildMerchantBaseUrl({
         slug: data.slug,

@@ -17,9 +17,16 @@ The Ogabassey baseline includes 4,501 Google listing IDs. The Riversong Vision 2
 
 
 Run from the repository root. The command reads the configured merchant's public feed data and writes candidate bindings to standard output.
+The exporter requires SKU-expanded Google mode. It stops before reading the catalog in family mode because those Google IDs represent a different import baseline.
 
 ```sh
 pnpm --dir apps/web exec tsx src/scripts/export-crossrem-catalog-bindings.ts <merchant-uuid>
+```
+
+Run the read-only live acceptance test to compare every active pinned ID, product, SKU, offer and Google condition against the public XML. The normal CI suite runs the pinned-count, uniqueness and fixture parity checks without calling the public site.
+
+```sh
+VERIFY_CROSSREM_LIVE_FEED=1 pnpm --dir apps/web exec vitest run src/app/api/partners/v1/catalog/catalog-bindings.live.test.ts
 ```
 
 ## Verification on 19 November 2026

@@ -37,7 +37,7 @@ const VALID_MERCHANT_ID = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
 const seedResult = {
   bindings: [
     {
-      listingId: 'prod-1',
+      listingId: 'var-1',
       productId: 'prod-1',
       variantId: 'var-1',
       condition: 'new' as const,
@@ -54,7 +54,7 @@ describe('exportCrossRemCatalogBindings', () => {
       slug: 'ogabassey',
       country: 'NG',
       payout_currency: 'NGN',
-      gmc_variants_enabled: false,
+      gmc_variants_enabled: true,
     });
     mocks.getGoogleMerchantFeedData.mockResolvedValue({
       slug: 'ogabassey',
@@ -106,14 +106,28 @@ describe('exportCrossRemCatalogBindings', () => {
     ).rejects.toThrow('no eligible Google listings');
   });
 
-  it('preserves Google family mode and returns unresolved Google IDs', async () => {
+  it('rejects family-mode sources before reading or exporting the catalog', async () => {
+    mocks.resolveFeedMerchant.mockResolvedValueOnce({
+      id: VALID_MERCHANT_ID,
+      slug: 'ogabassey',
+      country: 'NG',
+      payout_currency: 'NGN',
+      gmc_variants_enabled: false,
+    });
+    await expect(exportCrossRemCatalogBindings(VALID_MERCHANT_ID)).rejects.toThrow(
+      'CrossRem binding exports require a SKU-expanded Google Merchant feed.'
+    );
+    expect(mocks.getGoogleMerchantFeedData).not.toHaveBeenCalled();
+  });
+
+  it('exports in SKU-expanded mode and returns unresolved Google IDs', async () => {
     const result = await exportCrossRemCatalogBindings(VALID_MERCHANT_ID);
 
     expect(mocks.collectGoogleMerchantListings).toHaveBeenCalledWith(
       [{ id: 'prod-1' }],
       expect.objectContaining({
         id: VALID_MERCHANT_ID,
-        gmc_variants_enabled: false,
+        gmc_variants_enabled: true,
       }),
       'https://ogabassey.com',
       {}

@@ -37,6 +37,7 @@ vi.mock('@/env', () => ({
 
 vi.mock('@/lib/api-auth', () => ({
   authenticateApiRequest: vi.fn(),
+  hasBearerAuthScheme: vi.fn(() => false),
   hasPermission: vi.fn(() => true),
 }));
 

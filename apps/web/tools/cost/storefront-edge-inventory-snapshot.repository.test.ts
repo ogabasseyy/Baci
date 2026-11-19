@@ -18,9 +18,9 @@ it('binds the checked-in inventory snapshot to current committed source content'
   expect(result).toEqual({
     validationKind: 'repository_snapshot',
     snapshotSha256:
-      'e64ef643e29395aa009f4c2ec95868a48ac6cfaecde3514af567d66ba437216b',
+      'a4ee48c32de0dd3bd3db37c4508bbaee47c1ca738f3383435a58c7aa73df0d4a',
     validatedSourceSha: expect.stringMatching(/^[a-f0-9]{40}$/),
-    rowCount: 648,
+    rowCount: 649,
   });
 });
 
@@ -134,10 +134,10 @@ it('keeps Chatwoot context endpoints on the dynamic origin', async () => {
       'apps/web/src/app/api/storefront/chatwoot/context/'
     )
   );
-  expect(rows).toHaveLength(3);
   expect(rows.map((row) => row.routePattern).sort()).toEqual([
     '/api/storefront/chatwoot/context/authorize',
     '/api/storefront/chatwoot/context/challenge',
+    '/api/storefront/chatwoot/context/delivery-options',
     '/api/storefront/chatwoot/context/verify',
   ]);
   expect(rows.every((row) => row.decision === 'origin_dynamic')).toBe(true);

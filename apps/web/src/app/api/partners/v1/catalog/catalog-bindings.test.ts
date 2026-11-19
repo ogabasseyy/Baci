@@ -21,7 +21,9 @@ describe('CrossRem catalog configuration', () => {
     expect(new Set(bindings.map((row) => row.listingId)).size).toBe(
       bindings.length
     );
-    expect(new Set(active.map(sellableIdentityKey)).size).toBe(active.length);
+    expect(new Set(bindings.map(sellableIdentityKey)).size).toBe(
+      bindings.length
+    );
   });
 
   it('uses an empty baseline if validation fails so the route can return 503', async () => {

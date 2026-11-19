@@ -126,4 +126,16 @@ describe('CrossRem catalog projection', () => {
       )
     ).toThrow('Duplicate CrossRem listing ID');
   });
+
+  it('rejects re-keying a retired sellable identity', () => {
+    expect(() =>
+      projectCatalog(
+        [row],
+        [
+          { ...binding, retired: true },
+          { ...binding, listingId: 'new-key' },
+        ]
+      )
+    ).toThrow('Duplicate CrossRem sellable item');
+  });
 });

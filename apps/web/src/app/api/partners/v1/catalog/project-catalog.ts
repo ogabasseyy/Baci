@@ -82,7 +82,7 @@ export function projectCatalog(
   }
 
   const listingIds = new Set<string>();
-  const activeIdentities = new Set<string>();
+  const boundIdentities = new Set<string>();
   return bindings
     .flatMap((binding) => {
       if (listingIds.has(binding.listingId)) {
@@ -90,12 +90,12 @@ export function projectCatalog(
       }
       listingIds.add(binding.listingId);
 
-      if (binding.retired) return [];
       const key = sellableIdentityKey(binding);
-      if (activeIdentities.has(key)) {
+      if (boundIdentities.has(key)) {
         throw new Error('Duplicate CrossRem sellable item');
       }
-      activeIdentities.add(key);
+      boundIdentities.add(key);
+      if (binding.retired) return [];
       const row = rowsByIdentity.get(key);
       return row ? [toListing(row, binding)] : [];
     })

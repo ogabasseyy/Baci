@@ -88,6 +88,14 @@ function isReturnFlow(candidate: Guardable): number {
     : 0;
 }
 
+function locatedExplicitArrival(candidate: Guardable): number {
+  return EXPLICIT_ARRIVAL_CODES.has(
+    candidate.providerStatus.trim().toUpperCase()
+  ) && placeWords(candidate.event.location).length > 0
+    ? 1
+    : 0;
+}
+
 function placeWords(value: string | undefined): string[] {
   return (value ?? '')
     .split('(')[0]
@@ -155,6 +163,9 @@ export function applyLifecycleGuards(
       isSdr(b) - isSdr(a) ||
       // A same-time return scan is processed before any arrival so it fences it.
       isReturnFlow(b) - isReturnFlow(a) ||
+      // Tied explicit arrivals: the located one takes the arrival status, so its
+      // centre can become the snapshot location whatever the payload order.
+      locatedExplicitArrival(b) - locatedExplicitArrival(a) ||
       isMshc(a) - isMshc(b) ||
       // Tied scans: movement away from the destination first, so the result
       // does not depend on payload order.
@@ -179,6 +190,9 @@ export function applyLifecycleGuards(
       !destroyed &&
       !returning &&
       !arrived &&
+      // A mapped reason that says failed/delivered/returned is not an arrival.
+      (candidate.recognizedStatus === null ||
+        candidate.recognizedStatus === 'in_transit') &&
       (EXPLICIT_ARRIVAL_CODES.has(raw) ||
         FOREIGN_OFFICE_DESTINATIONS[raw]?.test(
           (destination ?? '').toUpperCase()

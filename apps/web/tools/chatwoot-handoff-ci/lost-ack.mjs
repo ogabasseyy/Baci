@@ -22,6 +22,16 @@ export async function verifyLostAckMessageReconciliation({
   const path = messagesPath(seed.account_id, seed.conversation_id);
   const content = `Synthetic lost-ack message ${randomUUID()}`;
   const upstream = new URL(upstreamBase);
+  assert.equal(
+    upstream.protocol,
+    'http:',
+    'Expected http upstream base for loopback fault proxy'
+  );
+  assert.equal(
+    upstream.pathname,
+    '/',
+    'Expected root upstream base path for loopback fault proxy'
+  );
   let postCount = 0;
   let providerStatus;
   let resolveProviderOutcome;
@@ -156,7 +166,11 @@ export async function verifyLostAckMessageReconciliation({
     );
     assert.equal(recovered.result.content, content);
     assert.equal(postCount, 1, 'reconciled send must not be resent');
-    return { providerStatus, matches: 1, postCount };
+    return {
+      providerStatus,
+      matches: recovered.recovered ? 1 : 0,
+      postCount,
+    };
   } finally {
     for (const request of activeRequests) request.destroy();
     await new Promise((resolve, reject) =>

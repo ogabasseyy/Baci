@@ -38,7 +38,10 @@ async function startLoopbackProvider({ status = 200, resetPost = false } = {}) {
       return;
     }
 
-    if (request.method === 'GET' && request.url.endsWith('/messages')) {
+    if (
+      request.method === 'GET' &&
+      new URL(request.url, 'http://127.0.0.1').pathname.endsWith('/messages')
+    ) {
       counts.lists += 1;
       response
         .writeHead(200, { 'content-type': 'application/json' })

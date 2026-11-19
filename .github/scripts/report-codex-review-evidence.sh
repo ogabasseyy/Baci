@@ -22,18 +22,33 @@ comments=$(mktemp "${RUNNER_TEMP:?}/codex-review.XXXXXXXX")
 confirm=$(mktemp "${RUNNER_TEMP:?}/codex-review.XXXXXXXX")
 trap 'rm -f "$comments" "$confirm"' EXIT
 # Codex publishes its review-state summary as a PR issue comment rather than
-# a pull-request review object; leave unparsed shapes pending rather than guessing.
-gh api --paginate --slurp "repos/$repo/issues/$pr/comments?per_page=100" > "$comments"
-result=$(node .github/scripts/codex-review-evidence-cli.mjs "$comments" "$head")
-gh api --paginate --slurp "repos/$repo/issues/$pr/comments?per_page=100" > "$confirm"
+# a pull-request review object; leave transient fetch/parse errors pending
+# cleanly instead of failing this advisory workflow.
+if ! gh api --paginate --slurp "repos/$repo/issues/$pr/comments?per_page=100" > "$comments"; then
+  echo 'Codex comment retrieval failed; leaving the advisory status pending.'
+  exit 0
+fi
+if ! result=$(node .github/scripts/codex-review-evidence-cli.mjs "$comments" "$head"); then
+  echo 'Codex comment evaluation failed; leaving the advisory status pending.'
+  exit 0
+fi
+if ! gh api --paginate --slurp "repos/$repo/issues/$pr/comments?per_page=100" > "$confirm"; then
+  echo 'Codex confirmation retrieval failed; leaving the advisory status pending.'
+  exit 0
+fi
 # Validate the second response too, then compare only authoritative app
 # comments so an unrelated discussion cannot strand the observation.
-node .github/scripts/codex-review-evidence-cli.mjs "$confirm" "$head" >/dev/null
+if ! node .github/scripts/codex-review-evidence-cli.mjs "$confirm" "$head" >/dev/null; then
+  echo 'Codex confirmation evaluation failed; leaving the advisory status pending.'
+  exit 0
+fi
 projection() {
   node .github/scripts/codex-review-evidence-cli.mjs --project "$1"
 }
-first_projection=$(projection "$comments")
-second_projection=$(projection "$confirm")
+if ! first_projection=$(projection "$comments") || ! second_projection=$(projection "$confirm"); then
+  echo 'Codex projection failed; leaving the advisory status pending.'
+  exit 0
+fi
 if [[ "$first_projection" != "$second_projection" ]]; then
   echo 'Codex comments changed during observation; leaving the status pending.'
   exit 0

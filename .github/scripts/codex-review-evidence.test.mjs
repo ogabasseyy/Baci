@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { classifyCodexReview } from './codex-review-evidence.mjs';
 
@@ -26,10 +27,19 @@ test('requires an actual completed clean review of the current commit', () => {
   assert.equal(classifyCodexReview([comment(code({ has_unresolved_findings: null }))], head), 'unavailable');
 });
 
-test('distinguishes unresolved findings from reviewed and resolved findings', () => {
+test('treats any-findings summaries as non-clean unless both finding flags are false', () => {
   assert.equal(classifyCodexReview([comment(code({ has_any_findings: true, has_unresolved_findings: true }))], head), 'findings');
-  assert.equal(classifyCodexReview([comment(code({ has_any_findings: true, has_unresolved_findings: false }))], head), 'clean');
+  assert.equal(classifyCodexReview([comment(code({ has_any_findings: true, has_unresolved_findings: false }))], head), 'findings');
   assert.equal(classifyCodexReview([comment(code({ has_any_findings: false, has_unresolved_findings: true }))], head), 'unavailable');
+});
+
+test('keeps workflow BOT_USER_ID synchronized with codex-review-evidence.mjs', () => {
+  const workflow = readFileSync('.github/workflows/codex-review-evidence.yml', 'utf8');
+  const script = readFileSync('.github/scripts/codex-review-evidence.mjs', 'utf8');
+  const scriptBotId = script.match(/const BOT_USER_ID = (\d+);/)?.[1];
+  assert.ok(scriptBotId);
+  assert.ok(workflow.includes(`id != ${scriptBotId}`));
+  assert.ok(workflow.includes(`id == ${scriptBotId}`));
 });
 
 test('rejects spoofed, malformed or ambiguous summaries', () => {

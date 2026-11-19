@@ -44,5 +44,5 @@ export function classifyCodexReview(comments, head) {
   if (review.status !== 'completed' || typeof review.has_any_findings !== 'boolean' ||
       typeof review.has_unresolved_findings !== 'boolean' ||
       (!review.has_any_findings && review.has_unresolved_findings)) return 'unavailable';
-  return review.has_unresolved_findings ? 'findings' : 'clean';
+  return review.has_unresolved_findings || review.has_any_findings ? 'findings' : 'clean';
 }

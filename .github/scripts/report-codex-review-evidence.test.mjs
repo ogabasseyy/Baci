@@ -59,6 +59,7 @@ test('sets pending before reporting a current clean review', () => {
 test('does not report clean if comment retrieval fails or the head changes', () => {
   for (const args of [{ failComments: true }, { failProjection: true }, { changedHead: true }, { changedComments: true }]) {
     const result = run(args);
+    assert.equal(result.status, 0, result.stderr);
     assert.match(result.statuses, /state=pending/);
     assert.doesNotMatch(result.statuses, /state=success/);
   }

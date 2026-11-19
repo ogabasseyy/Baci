@@ -58,13 +58,17 @@ export function FeedbackForm({
   const [message, setMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const canSend = message.trim().length > 0 && !isSending;
+  // Without the active store the server would have to guess which one to file
+  // the report under, so Send waits until the store has loaded.
+  const merchantId = merchant?.id ?? null;
+  const canSend =
+    message.trim().length > 0 && !isSending && merchantId !== null;
 
   const handleSend = async () => {
-    if (!canSend) return;
+    if (!(canSend && merchantId)) return;
     setIsSending(true);
     setError(null);
-    const failure = await submitFeedback(message, screen, merchant?.id ?? null);
+    const failure = await submitFeedback(message, screen, merchantId);
     setIsSending(false);
     if (failure) {
       setError(failure);

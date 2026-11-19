@@ -2,7 +2,8 @@ import '@testing-library/jest-dom/vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockSend, mockCollect } = vi.hoisted(() => ({
+const { mockSend, mockCollect, merchantState } = vi.hoisted(() => ({
+  merchantState: { merchant: { id: 'merchant-1' } as { id: string } | null },
   mockSend: vi.fn(),
   mockCollect: vi.fn(),
 }));
@@ -13,7 +14,7 @@ vi.mock('@/lib/feedback-report', () => ({
 }));
 
 vi.mock('@/hooks/useMerchant', () => ({
-  useMerchant: () => ({ merchant: { id: 'merchant-1' } }),
+  useMerchant: () => ({ merchant: merchantState.merchant }),
 }));
 
 vi.mock('@/hooks/useTheme', () => ({
@@ -53,6 +54,7 @@ const sendButton = () => screen.getByRole('button', { name: 'Send' });
 beforeEach(() => {
   mockSend.mockReset();
   mockCollect.mockReset();
+  merchantState.merchant = { id: 'merchant-1' };
   mockCollect.mockReturnValue({ screen: '/orders', platform: 'ios' });
 });
 
@@ -68,6 +70,17 @@ describe('FeedbackForm', () => {
 
     renderForm({ showTitle: false });
     expect(screen.queryByRole('heading')).not.toBeInTheDocument();
+  });
+
+  it('keeps Send disabled until the active store has loaded', () => {
+    merchantState.merchant = null;
+    renderForm();
+
+    fireEvent.change(messageBox(), { target: { value: 'Orders froze' } });
+    fireEvent.click(sendButton());
+
+    expect(sendButton()).toHaveAttribute('aria-disabled', 'true');
+    expect(mockSend).not.toHaveBeenCalled();
   });
 
   it('keeps Send disabled until a non-blank message is typed', () => {

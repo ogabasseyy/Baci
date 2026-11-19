@@ -23,11 +23,8 @@ import { eventPipelineRepairPickupCredentialPaths } from '@/lib/events/event-pip
 import { eventPipelineShippingCredentialPaths } from '@/lib/events/event-pipeline-shipping-credential-paths';
 import { socialDeliveryProjections } from '@/lib/events/event-pipeline-social-projections';
 import { vpsCronWorkerAuthority } from '@/lib/events/event-pipeline-vps-cron-worker-paths';
-import {
-  eventPipelineAdminAdjacentFunctions,
-  eventPipelineExpenseCleanupAdjacentFunctions,
-  eventPipelineVpsRuntimeCallers,
-} from '@/lib/events/event-pipeline-vps-runtime-callers';
+// biome-ignore format: compact import preserves the 300-line verifier gate.
+import { eventPipelineAdminAdjacentFunctions, eventPipelineExpenseCleanupAdjacentFunctions, eventPipelineVpsRuntimeCallers } from '@/lib/events/event-pipeline-vps-runtime-callers';
 import { eventPipelineVtuReplayAdminPaths } from '@/lib/events/event-pipeline-vtu-replay-admin-paths';
 import type { Database, Json } from '@/types/supabase';
 

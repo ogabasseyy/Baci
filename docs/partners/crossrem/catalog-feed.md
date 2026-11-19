@@ -1,0 +1,69 @@
+# CrossRem catalog feed v1
+
+`GET /api/partners/v1/catalog` returns one complete JSON snapshot for the configured merchant. Send `Authorization: Bearer <token>`. Generate at least 32 random bytes and encode them as unpadded base64url for `CROSSREM_CATALOG_TOKEN` in each approved environment.
+
+The response includes `schema_version: 1`, `currency: "NGN"` and `listings`. Each listing has the existing `listing_id`, the exact Baci product and optional variant or offer ID, title, image and product URLs, product type, brand, condition and condition label, availability and prices in kobo. Always read `condition` directly rather than inferring it from `product_url` query params (which normalize offer conditions such as `uk_used` to `used`). The `base_price_minor` field is the current Ogabassey merchandise price for the exact item. CrossRem displays `price_minor`, which is the base plus 6%, rounded to the nearest kobo. Protection and delivery are excluded from both prices. Missing brand or category data is represented by null. Legacy categories can have a label without a stable category key.
+
+Retain the last accepted snapshot and its ETag. Send the validator with `If-None-Match`. On HTTP 304, retain the current catalog. On HTTP 200, validate the full response before replacing it. An ID missing from a complete snapshot can be deactivated. On any error, retain the previous catalog and retry according to the agreed sync schedule.
+
+Baci checks that the current snapshot is complete before hashing the exact response body. This ensures a conditional request still returns 503 when a binding is unresolved. The ETag saves transfer and importer work on an unchanged snapshot. The server still builds it from the cached feed source on each authenticated poll.
+
+The 200 and 304 responses send `Cache-Control: private, no-cache` and `Vary: Authorization`. Private clients can retain snapshots and must revalidate them with Baci before reuse. Shared caches cannot store them. Error responses send `Cache-Control: private, no-store`.
+
+## Prepare a sandbox snapshot
+
+1. The repository pins the Ogabassey merchant UUID and the Google listing baseline in `ogabassey-listing-bindings.json`. For a synthetic sandbox, use an isolated copy with the synthetic merchant and equivalent fixture bindings.
+2. Seed the versioned bindings using Google Merchant's `g:id` and the exact Baci product, variant or condition offer that each entry identifies. Run the exporter with the environment's public Supabase configuration to generate candidates from the merchant's current Google feed settings. Review the exporter's `unresolved_listing_ids` before seeding and skip IDs whose identity cannot be confirmed. Review family IDs against the exact SKU in the Google product link. Use the current public feed as the baseline and spot-check CrossRem's stored IDs before resuming sync.
+3. Review the assortment and merchandise prices. Keep the ID bound to the same sellable item through price and title updates. Mark withdrawn IDs as retired and retain their binding. Add a new entry for a different sellable item.
+4. Call the sandbox endpoint and check the exact listing IDs, prices and condition labels. Repeat with the returned ETag and expect 304. Remove a required fixture from the source without retiring it in the bindings and expect 503. Apply the same checks to the approved production assortment before enabling sync.
+
+The Ogabassey baseline includes 4,501 Google listing IDs. The Riversong Vision 20S 20000mAh keeps its original ID and uses the merchant-confirmed New condition when the source condition is blank. The public Ogabassey feed used SKU-expanded mode when we validated the baseline on 19 November 2026. CrossRem stores and joins on the pinned `listing_id` from that baseline. A later Google toggle to family mode does not change a pinned ID. A family ID captured in a future migration stays bound to the exact SKU identified by its Google product link, even when Google starts showing a different representative SKU. Confirm that CrossRem's stored keys match the pinned IDs in the hosted sandbox before resuming sync. The endpoint returns 401 for missing, invalid, or unusable credentials. After authentication, it returns 503 if bindings are missing or any active binding cannot resolve uniquely. This protects CrossRem's previous catalog from an incomplete snapshot. For a confirmed withdrawal, mark the binding retired. The next complete snapshot omits its ID and CrossRem can deactivate it. Baci builds the snapshot per request from Google's cached source data. Partner HTTP responses are private.
+
+
+Run from the repository root. The command reads the configured merchant's public feed data and writes candidate bindings to standard output.
+The exporter requires SKU-expanded Google mode. It stops before reading the catalog in family mode because those Google IDs represent a different import baseline.
+
+```sh
+pnpm --dir apps/web exec tsx src/scripts/export-crossrem-catalog-bindings.ts <merchant-uuid>
+```
+
+Run the read-only live acceptance test to compare every active pinned ID, product, SKU, offer and Google condition against the public XML. The normal CI suite runs the pinned-count, uniqueness and fixture parity checks without calling the public site.
+
+```sh
+VERIFY_CROSSREM_LIVE_FEED=1 pnpm --dir apps/web exec vitest run src/app/api/partners/v1/catalog/catalog-bindings.live.test.ts
+```
+
+Rerun once after a timeout or temporary upstream error. If the public XML redirects, the test reports the status without following the redirect. Confirm the correct canonical feed URL before updating the test. Run the parity check before a Google listing mode change to record the current import IDs, then recheck it after the change to detect divergence from the pinned CrossRem IDs. For persistent listing mismatches, use the reported sample IDs to check Google listing mode, product links, verified images and condition before changing a binding.
+
+## Verification on 19 November 2026
+
+The feed ran through Baci's Next.js HTTP route on loopback with a temporary credential and read-only public catalog access. Requests without the credential returned 401, including conditional requests. An authenticated request returned 200 and the full snapshot. A repeat with its ETag returned 304.
+
+All 4,501 served IDs and base prices matched the live Google Merchant feed. Each CrossRem selling price was 106% of the corresponding base price, rounded to the nearest kobo. Every listing included brand, condition, product type, availability and a false protection flag.
+
+This check covers Baci's feed and its HTTP contract. CrossRem's own importer and sandbox access still need partner-side verification. The hosted cache headers should be checked when the sandbox endpoint is provisioned.
+
+### Catalog metadata corrections
+
+Use the publisher as the brand fallback for these game listings when the product has no source brand.
+
+| Game | Publisher and source |
+| --- | --- |
+| Hogwarts Legacy | [WB Games](https://www.nintendo.com/us/store/products/hogwarts-legacy-switch-2/) |
+| Cyberpunk 2077: Ultimate Edition | [CD PROJEKT RED](https://ec.nintendo.com/AU/en/titles/70010000095548) |
+| The Blood of Dawnwalker | [Bandai Namco Entertainment](https://store.playstation.com/en-in/concept/10013855) |
+| HITMAN World of Assassination – Signature Edition | [IO Interactive](https://www.nintendo.com/au/games/nintendo-switch-2/hitman-world-of-assassination-signature-edition/) |
+| The Last of Us Part I | [Sony Interactive Entertainment](https://www.playstation.com/en-us/games/the-last-of-us-part-i/) |
+| Directive 8020 | [Supermassive Games](https://www.playstation.com/en-us/games/directive-8020/) |
+
+
+### Sandbox operator checks
+
+- Verify that CrossRem deactivates IDs omitted from a complete 200 snapshot, retains its last catalog on 503, and reuses the previous snapshot on 304.
+- Baci Commerce Operations owns the [hourly production alert](https://eu.posthog.com/project/202711/alerts?alert_type=insights&alert_id=01a1f253-1cf2-0000-3a0f-280633e9e51c) for authenticated 503s. It watches `crossrem_catalog_snapshot_unavailable` and alerts the owner when the hourly count exceeds zero. Verify receipt with a sandbox-only alert before enabling partner sync. The event carries the environment and no request data.
+- Confirm the partner's poll interval and measure both 200 and 304 response times at that interval in the hosted sandbox. Use the agreed retry schedule after 503.
+- Triage from server logs. The `CrossRem snapshot incomplete` warning gives the missing count and sampled listing IDs. Check the catalog, source condition, and image eligibility against those IDs.
+- For invalid prices or duplicate bindings, the projection warning identifies the affected listing ID.
+- A single unresolved binding blocks snapshot replacement. If the log says `CrossRem catalog is unconfigured`, check the baseline JSON and rerun the binding tests. If partner requests return 401 and the server logs `CrossRem catalog credential is unconfigured`, check the deployment's credential configuration before requesting a retry.
+- Fix transient source failures before retrying a sync. For a confirmed withdrawal, retain the original binding with `retired: true`, review and deploy the change, then verify a 200 snapshot omits only the intended retired IDs.
+- When the last listing is deliberately retired, verify 200 with an empty listings array and confirm the sandbox importer deactivates the remaining listings.

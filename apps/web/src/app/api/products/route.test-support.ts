@@ -19,7 +19,10 @@ vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
   revalidateTag: vi.fn(),
 }));
-vi.mock('@/lib/cache-revalidation', () => ({ revalidateProducts: vi.fn() }));
+vi.mock('@/lib/cache-revalidation', () => ({
+  revalidateProductSlugs: vi.fn().mockReturnValue(true),
+  revalidateProducts: vi.fn().mockReturnValue(true),
+}));
 
 const mockScheduleStorefrontProductPurge = vi.fn();
 const mockGenerateProductSlug = vi.hoisted(() =>

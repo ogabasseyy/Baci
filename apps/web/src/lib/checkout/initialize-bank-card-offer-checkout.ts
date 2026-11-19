@@ -70,13 +70,16 @@ export async function initializeBankCardOfferCheckout({
       p_reference: reference,
       p_failed: failed,
     });
-  if (!claimed) {
-    if (checkoutUrl)
-      return { kind: 'initialized', reference, checkoutUrl } as const;
-    const flagged = await review(false);
+  async function requestReview(immediate: boolean) {
+    const flagged = await review(immediate);
     if (flagged.error)
       throw new Error('Unable to record bank offer initialization review');
     return { kind: 'pending', reference } as const;
+  }
+  if (!claimed) {
+    if (checkoutUrl)
+      return { kind: 'initialized', reference, checkoutUrl } as const;
+    return requestReview(false);
   }
   const root = process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'usebaci.com';
   const protocol =
@@ -102,10 +105,7 @@ export async function initializeBankCardOfferCheckout({
   } catch {
     // Paystack may have accepted the initialization. Send the same reference
     // to operations without opening a second provider session.
-    const flagged = await review(true);
-    if (flagged.error)
-      throw new Error('Unable to record bank offer initialization review');
-    return { kind: 'pending', reference } as const;
+    return requestReview(true);
   }
 
   async function save() {
@@ -115,15 +115,19 @@ export async function initializeBankCardOfferCheckout({
         p_reference: reference,
         p_checkout_url: url,
       });
-      return !result.error && result.data === true;
+      return result.error
+        ? 'unavailable'
+        : result.data === true
+          ? 'saved'
+          : 'rejected';
     } catch {
-      return false;
+      return 'unavailable';
     }
   }
-  if (!(await save()) && !(await save())) {
-    // The next retry also checks for an orphaned reference, so this
-    // review write can be best-effort after returning a usable URL.
-    await Promise.resolve(review(true)).catch(() => undefined);
-  }
+  let saved = await save();
+  if (saved === 'unavailable') saved = await save();
+  // A refused or unconfirmed write does not establish that this URL is
+  // usable for the saved attempt. Reconcile the existing reference first.
+  if (saved !== 'saved') return requestReview(true);
   return { kind: 'initialized', reference, checkoutUrl: url } as const;
 }

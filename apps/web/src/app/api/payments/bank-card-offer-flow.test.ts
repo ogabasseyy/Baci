@@ -139,7 +139,8 @@ const order = {
 function setup(
   bankCode: '035' | '232',
   issuerName: string,
-  lookup?: { data: null; error: { code: string } | null }
+  lookup?: { data: null; error: { code: string } | null },
+  saveCheckoutUrl = true
 ) {
   let claimed = false;
   let checkoutUrl: string | null = null;
@@ -218,6 +219,7 @@ function setup(
         };
       }
       case 'record_bank_card_offer_checkout_url':
+        if (!saveCheckoutUrl) return { data: false };
         checkoutUrl = args.p_checkout_url;
         return { data: true };
       case 'get_bank_card_offer_webhook_transaction':
@@ -372,10 +374,15 @@ describe('bank card offer payment handlers', () => {
     expect(mocks.verify).not.toHaveBeenCalled();
   });
 
-  it('opens a recovery review for an uncertain initialization without another provider call', async () => {
+  it.each([
+    'provider timeout',
+    'save rejected',
+  ] as const)('opens a recovery review after %s without another provider call', async (failure) => {
     vi.stubEnv('PAYSTACK_SECRET_KEY', secret);
-    setup('035', 'Wema Bank');
-    mocks.initialize.mockRejectedValueOnce(new Error('Connection closed'));
+    setup('035', 'Wema Bank', undefined, failure !== 'save rejected');
+    if (failure === 'provider timeout') {
+      mocks.initialize.mockRejectedValueOnce(new Error('Connection closed'));
+    }
     const input = {
       merchant_id: merchantId,
       order_id: orderId,
@@ -393,6 +400,11 @@ describe('bank card offer payment handlers', () => {
       'flag_bank_card_offer_initialization_review',
       expect.objectContaining({ p_reference: reference, p_failed: true })
     );
+    expect(
+      mocks.rpc.mock.calls.filter(
+        ([name]) => name === 'record_bank_card_offer_checkout_url'
+      )
+    ).toHaveLength(failure === 'save rejected' ? 1 : 0);
   });
 
   it.each([
@@ -497,6 +509,16 @@ describe('bank card offer payment handlers', () => {
         metadata: { source: 'bank_card_offer_capture' },
       })
     );
+    mocks.verify.mockResolvedValue({
+      success: true,
+      data: { ...data, reference: 'different-reference' },
+    });
+    const mismatchedReference = await verify(request('verify', { reference }));
+    expect(mismatchedReference.status).toBe(202);
+    await expect(mismatchedReference.json()).resolves.toMatchObject({
+      code: 'BANK_CARD_OFFER_CAPTURE_REVIEW',
+    });
+
     mocks.verify.mockResolvedValue({ success: false, code: 'NETWORK_ERROR' });
     expect(
       (

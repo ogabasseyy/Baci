@@ -11,10 +11,11 @@ export async function verifyBankCardOfferPaystack(
   const response = await verifyTransaction(attempt.reference, undefined, {
     textIds: true,
   });
-  if (!response.success || response.data.reference !== attempt.reference)
-    return null;
+  if (!response.success) return null;
   const { data } = response;
   const status = String(data.status);
+  if (data.reference !== attempt.reference)
+    return status === 'success' ? ({ kind: 'mismatch' } as const) : null;
   if (status !== 'success') {
     // A terminal status starts operator review for the same reference.
     // Only a successful capture can establish and approve the amount paid.

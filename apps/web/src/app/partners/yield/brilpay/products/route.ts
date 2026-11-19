@@ -26,8 +26,8 @@ export async function GET(request: Request): Promise<Response> {
     return fail(503, 'Catalogue unavailable', 'FEED_UNAVAILABLE');
 
   const url = new URL(request.url);
-  // This pins the Next.js ingress. The DB reader independently authenticates
-  // the bearer and checks admission, freshness, and catalogue eligibility.
+  // Host is client-supplied routing input. Tenant isolation and authentication
+  // are enforced by the DB reader's installation bearer and eligibility checks.
   const host = request.headers.get('host') ?? url.host;
   if (host.toLowerCase() !== deployment.host)
     return fail(404, 'Not found', 'NOT_FOUND');
@@ -35,6 +35,8 @@ export async function GET(request: Request): Promise<Response> {
   const bearer = parseBrilStashBearer(request.headers.get('authorization'));
   if (!bearer) return fail(401, 'Invalid partner credential', 'UNAUTHORIZED');
 
+  // The live contract accepts any limit that fits the entire assortment
+  // on one page. The separate handoff probe always uses the default limit.
   const query = parseBrilStashFeedQuery(url.searchParams);
   if (
     !query ||

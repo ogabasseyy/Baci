@@ -53,3 +53,20 @@ it('rejects missing files, directories, oversized files, and invalid JSON', asyn
     );
   }
 });
+
+it('accepts a valid JSON file at the byte limit and rejects one extra byte', async () => {
+  const boundary = join(directory, 'boundary.json');
+  const body = JSON.stringify({
+    payload: 'x'.repeat(262144 - '{"payload":""}'.length),
+  });
+  expect(Buffer.byteLength(body)).toBe(262144);
+  await writeFile(boundary, body);
+  await expect(readBrilStashCliInput([boundary])).resolves.toEqual({
+    input: JSON.parse(body),
+    apply: false,
+  });
+  await writeFile(boundary, `${body}\n`);
+  await expect(readBrilStashCliInput([boundary])).rejects.toThrow(
+    'Unable to read BrilStash input file'
+  );
+});

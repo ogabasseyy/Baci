@@ -116,6 +116,8 @@ describe('BrilStash feed GET', () => {
   it.each([
     ['?page=1&limit=6', 400],
     ['?page=1&limit=7', 200],
+    ['?page=1&limit=8', 200],
+    ['?page=1&limit=100', 200],
     ['?page=2', 400],
     ['?min_price=1', 400],
   ])('enforces the live single-page contract for %s', async (query, status) => {

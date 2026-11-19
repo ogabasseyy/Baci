@@ -1,4 +1,32 @@
-import { readFile, stat } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { open } from 'node:fs/promises';
+
+const MAX_INPUT_BYTES = 262144;
+
+async function readInputFile(path: string): Promise<unknown> {
+  const file = await open(path, constants.O_RDONLY | constants.O_NONBLOCK);
+  try {
+    const info = await file.stat();
+    if (!info.isFile() || info.size > MAX_INPUT_BYTES)
+      throw new Error('Invalid input size');
+
+    // The file can grow after stat. Read at most one byte past the limit.
+    const chunks: Buffer[] = [];
+    let bytes = 0;
+    for await (const chunk of file.createReadStream({
+      start: 0,
+      end: MAX_INPUT_BYTES,
+      autoClose: false,
+    })) {
+      bytes += chunk.length;
+      if (bytes > MAX_INPUT_BYTES) throw new Error('Invalid input size');
+      chunks.push(chunk);
+    }
+    return JSON.parse(Buffer.concat(chunks, bytes).toString('utf8'));
+  } finally {
+    await file.close();
+  }
+}
 
 export async function readBrilStashCliInput(args: string[]) {
   const [inputFile, applyFlag] = args;
@@ -13,10 +41,7 @@ export async function readBrilStashCliInput(args: string[]) {
 
   let input: unknown;
   try {
-    const info = await stat(inputFile);
-    if (!info.isFile() || info.size > 262144)
-      throw new Error('Invalid input size');
-    input = JSON.parse(await readFile(inputFile, 'utf8'));
+    input = await readInputFile(inputFile);
   } catch {
     throw new Error('Unable to read BrilStash input file');
   }

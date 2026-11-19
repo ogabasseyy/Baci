@@ -78,6 +78,20 @@ describe('follow-up status label', () => {
     ).toBe('Paid');
   });
 
+  it.each([
+    ['paystack', 'Paystack · Checkout Drop-off'],
+    ['bank_transfer', 'Bank Transfer · Checkout Drop-off'],
+    ['', 'Checkout Drop-off'],
+  ])('labels a pending checkout with recorded method "%s"', (payment_method, label) => {
+    expect(
+      getFollowUpStatusLabel({
+        ...order,
+        payment_method,
+        payment_status: 'pending',
+      })
+    ).toBe(label);
+  });
+
   it('preserves generic attempt and gateway messages', () => {
     expect(getFollowUpStatusLabel({ ...order, attempt_count: 2 })).toBe(
       '2 attempts'

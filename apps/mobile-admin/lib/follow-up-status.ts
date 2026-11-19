@@ -9,13 +9,15 @@ const OXYGEN_LABELS: Record<OxygenFollowUpStatus, string> = {
   needs_review: 'Oxygen · Review needed',
 };
 
+const CHECKOUT_DROP_OFF = 'Checkout Drop-off';
+
 const PAYMENT_LABELS: Record<string, string> = {
   bnpl_pending: 'BNPL Drop-off',
   bnpl_approved: 'BNPL Approved',
   failed: 'Payment Failed',
-  pending: 'Abandoned Transfer',
+  pending: CHECKOUT_DROP_OFF,
   expired: 'Payment Expired',
-  unpaid: 'Checkout Drop-off',
+  unpaid: CHECKOUT_DROP_OFF,
   paid: 'Paid',
   refunded: 'Refunded',
   cancelled: 'Cancelled',
@@ -37,8 +39,8 @@ const METHOD_DETAIL_BY_STATUS: Partial<
 > = {
   bnpl_pending: 'Drop-off',
   bnpl_approved: 'Approved',
-  unpaid: 'Checkout Drop-off',
-  pending: 'Checkout Drop-off',
+  unpaid: CHECKOUT_DROP_OFF,
+  pending: CHECKOUT_DROP_OFF,
   failed: 'Payment Failed',
   expired: 'Payment Expired',
 };

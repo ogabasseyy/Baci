@@ -4,11 +4,14 @@ import { type CartSnapshot, cartLineIdentity } from '@baci/shared/cart';
 
 import type { Product } from '@/lib/products';
 
+import { shouldSkipEmptyGuestCartFetch } from './cart-hydration-gate';
+import { writeCartSessionHint } from './cart-session-hint';
 import {
   fetchSharedCartProducts,
   fetchSharedCartSnapshot,
 } from './shared-cart-client';
 import { FETCH_COALESCE_MS } from './shared-cart-hook-support';
+import { isTerminalCart } from './shared-cart-queue';
 import type { SharedCartRuntime } from './use-shared-cart-runtime';
 
 export function createCartSnapshotActions(context: SharedCartRuntime) {
@@ -90,6 +93,17 @@ export function createCartSnapshotActions(context: SharedCartRuntime) {
     // deferred adopt would double-fetch and dispatch a bare poll
     // snapshot before the link (import, hydration, send-ready) runs.
     if (adoptOutcomeRef.current === 'unknown') return;
+    if (
+      !force &&
+      stateRef.current.cartId === null &&
+      shouldSkipEmptyGuestCartFetch({
+        merchantId: optionsRef.current.merchantId,
+        merchantSlug: optionsRef.current.merchantSlug,
+        cachedCount: stateRef.current.display.length,
+      })
+    ) {
+      return;
+    }
     if (!force && Date.now() - lastFetchRef.current < FETCH_COALESCE_MS) return;
     // Claim the coalescing window before the read starts. Returning to a
     // tab fires visibilitychange and focus together; marking the window
@@ -109,6 +123,12 @@ export function createCartSnapshotActions(context: SharedCartRuntime) {
       return;
     }
     lastFetchRef.current = Date.now();
+    if (!isTerminalCart(result.snapshot)) {
+      writeCartSessionHint(
+        optionsRef.current.merchantId,
+        result.snapshot.lines.length > 0 ? '1' : '0'
+      );
+    }
     dispatch({
       generation,
       snapshot: result.snapshot,

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { cacheLife, cacheTag } from 'next/cache';
 import { getPublicSupabaseClient } from '@/lib/public-supabase-client';
+import { buildResolvedMerchantScopeTags } from '@/lib/tenant-cache-tags';
 import { isValidMerchantIdentifier } from '@/lib/validation';
 import type {
   StorefrontDatabase,
@@ -80,9 +81,7 @@ async function getCachedCompareMerchant(
   cacheTag(
     `features-${merchant.id}`,
     `merchant-${merchant.slug}`,
-    ...(merchant.custom_domain
-      ? [`domain-${merchant.custom_domain.toLowerCase()}`]
-      : [])
+    ...buildResolvedMerchantScopeTags(merchant)
   );
   return merchant;
 }

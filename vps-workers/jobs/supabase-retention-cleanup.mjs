@@ -14,6 +14,53 @@ const DEFAULT_CRON_RETENTION = '14 days';
 const DEFAULT_PG_NET_RETENTION = '1 day';
 const DEFAULT_EVENT_QUEUE_ARCHIVE_RETENTION = '30 days';
 const DEFAULT_EVENT_DELIVERY_ATTEMPT_RETENTION = '30 days';
+const DEFAULT_RETENTION_BATCH_SIZE = 2000;
+const DEFAULT_MAX_RETENTION_PASSES = 20;
+
+async function cleanupDatabaseRetentionInPasses({
+  batchSize = DEFAULT_RETENTION_BATCH_SIZE,
+  maxPasses = DEFAULT_MAX_RETENTION_PASSES,
+  params,
+  supabase,
+}) {
+  const totals = {
+    analytics_events_deleted: 0,
+    cron_job_run_details_deleted: 0,
+    pg_net_responses_deleted: 0,
+  };
+
+  for (let pass = 0; pass < maxPasses; pass += 1) {
+    const { data, error } = await supabase.rpc(
+      'cleanup_database_retention',
+      params
+    );
+
+    if (error) {
+      throw new Error(
+        `Supabase retention cleanup failed: ${error.message || error}`
+      );
+    }
+
+    const row = data?.[0] ?? {};
+    const analyticsDeleted = Number(row.analytics_events_deleted ?? 0);
+    const cronDeleted = Number(row.cron_job_run_details_deleted ?? 0);
+    const pgNetDeleted = Number(row.pg_net_responses_deleted ?? 0);
+
+    totals.analytics_events_deleted += analyticsDeleted;
+    totals.cron_job_run_details_deleted += cronDeleted;
+    totals.pg_net_responses_deleted += pgNetDeleted;
+
+    if (
+      analyticsDeleted < batchSize &&
+      cronDeleted < batchSize &&
+      pgNetDeleted < batchSize
+    ) {
+      break;
+    }
+  }
+
+  return totals;
+}
 
 function resolveRetention(envValue, fallback) {
   return typeof envValue === 'string' && envValue.trim()
@@ -56,16 +103,10 @@ export async function runSupabaseRetentionCleanup({
     ),
   };
 
-  const { data, error } = await supabase.rpc(
-    'cleanup_database_retention',
-    params
-  );
-
-  if (error) {
-    throw new Error(
-      `Supabase retention cleanup failed: ${error.message || error}`
-    );
-  }
+  const result = await cleanupDatabaseRetentionInPasses({
+    params,
+    supabase,
+  });
 
   const { data: eventPipelineDeleted, error: eventPipelineError } =
     await supabase.rpc('cleanup_domain_event_pipeline_v1', {
@@ -83,12 +124,6 @@ export async function runSupabaseRetentionCleanup({
       `Event pipeline retention cleanup failed: ${eventPipelineError.message || eventPipelineError}`
     );
   }
-
-  const result = data?.[0] ?? {
-    analytics_events_deleted: 0,
-    cron_job_run_details_deleted: 0,
-    pg_net_responses_deleted: 0,
-  };
 
   const eventPipelineResult = eventPipelineDeleted?.[0] ?? {
     delivery_attempts_deleted: 0,
@@ -108,8 +143,7 @@ export async function runSupabaseRetentionCleanup({
   };
 }
 
-const isMain =
-  isEntrypoint(import.meta.url);
+const isMain = isEntrypoint(import.meta.url);
 
 if (isMain) {
   try {

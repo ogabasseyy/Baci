@@ -67,6 +67,16 @@ for (const [wrapper, label, script] of [
     'agentic-commerce-health',
     'src/scripts/agentic-commerce-health.ts',
   ],
+  [
+    'purge-jumia-self-authorization-discoveries.sh',
+    'purge-jumia-self-authorization-discoveries',
+    'src/scripts/purge-jumia-self-authorization-discoveries.ts',
+  ],
+  [
+    'cleanup-checkout-shipping-recovery-previews.sh',
+    'cleanup-checkout-shipping-recovery-previews',
+    'src/scripts/cleanup-checkout-shipping-recovery-previews.ts',
+  ],
 ]) {
   test(`${wrapper} delegates directly to its web script`, () => {
     const source = readFileSync(join(directory, wrapper), 'utf8');

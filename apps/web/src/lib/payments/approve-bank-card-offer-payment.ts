@@ -1,7 +1,6 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { verifyBankCardOfferAttempt } from '@/lib/checkout/bank-card-offer-payment';
-import { verifyTransaction } from '@/lib/paystack';
+import { verifyBankCardOfferPaystack } from '@/lib/checkout/verify-bank-card-offer-paystack';
 import { bankCardOfferVerificationContextSchema } from '@/schemas/bank-card-offer-payment-context';
 
 export async function approveBankCardOfferPayment({
@@ -36,25 +35,18 @@ export async function approveBankCardOfferPayment({
     return null;
   }
   const { amountKobo, quote } = context.data;
-  const result = await verifyTransaction(reference, undefined, {
-    textIds: true,
+  const verified = await verifyBankCardOfferPaystack({
+    ...context.data,
+    currency: 'NGN',
+    adjustmentsKobo:
+      amountKobo - (quote.productSubtotalKobo - quote.discountKobo),
   });
-  if (!result.success) return null;
-  const evidence = verifyBankCardOfferAttempt(
-    {
-      ...context.data,
-      currency: 'NGN',
-      adjustmentsKobo:
-        amountKobo - (quote.productSubtotalKobo - quote.discountKobo),
-    },
-    { status: true, data: result.data }
-  );
-  if (!evidence) return null;
+  if (!verified) return null;
 
   const approval = await client.rpc('approve_bank_card_offer_capture', {
     ...args,
-    p_evidence: evidence,
+    p_evidence: verified.evidence,
   });
   if (approval.error || approval.data !== true) return null;
-  return { ...result.data };
+  return verified.gatewayResponse;
 }

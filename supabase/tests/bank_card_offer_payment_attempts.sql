@@ -28,9 +28,10 @@ BEGIN
   INSERT INTO public.products (id, merchant_id, name, slug, price, status)
     VALUES (v_product, v_merchant, 'Fixture Phone', 'bank-attempt-phone', 100, 'active');
   INSERT INTO public.orders (id, merchant_id, customer_id, order_number, currency, payment_method,
-    payment_status, shipping_status, customer_email, total, discount_amount, tax_basis)
+    payment_status, shipping_status, customer_email, total, discount_amount, tax_basis,
+    checkout_idempotency_key, checkout_request_hash)
     VALUES (v_order, v_merchant, v_customer, 'BANK-OFFER-ATTEMPT', 'NGN', 'bank_card_offer',
-      'unpaid', 'pending', 'bank-attempt-buyer@example.test', 95, 5, 'exclusive');
+      'unpaid', 'pending', 'bank-attempt-buyer@example.test', 95, 5, 'exclusive', 'bank-test-key', v_hash);
   INSERT INTO public.order_items (id, order_id, product_id, name, price, quantity)
     VALUES (v_item, v_order, v_product, 'Fixture Phone', 100, 1);
   v_quote := jsonb_build_object('merchantId', v_merchant, 'discountKobo', 500,
@@ -47,6 +48,15 @@ BEGIN
   END IF;
   PERFORM set_config('request.jwt.claims', jsonb_build_object('role', 'authenticated', 'sub', v_user,
     'storefront_order_context', 'route', 'storefront_order_merchant_id', v_merchant)::text, true);
+  IF public.get_bank_card_offer_checkout_replay(v_merchant, 'bank-test-key', v_hash)->>'id' IS DISTINCT FROM v_order::text THEN
+    RAISE EXCEPTION 'Checkout replay should return the saved order';
+  END IF;
+  BEGIN
+    PERFORM public.get_bank_card_offer_checkout_replay(v_merchant, 'bank-test-key', repeat('b', 64));
+    RAISE EXCEPTION 'A different bank checkout body replayed the old order';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'checkout_idempotency_conflict' THEN RAISE; END IF;
+  END;
   v_attempt := public.claim_bank_card_offer_attempt(v_order, v_merchant, 9500, v_hash, 'test', 100, 0);
   v_reference := v_attempt->>'reference';
   IF v_attempt->>'claimed' <> 'true' OR v_reference !~ '^BCO-[0-9a-f]{32}$' THEN

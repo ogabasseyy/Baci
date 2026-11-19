@@ -231,6 +231,30 @@ describe('bank card offer quotes', () => {
     });
   });
 
+  it('matches uppercase catalog UUIDs and preserves integer kobo for decimal prices', () => {
+    expect(
+      quoteBankCardOffer({
+        offer: { ...offer, eligibleProductIds: [productId.toUpperCase()] },
+        merchantId,
+        items: [
+          {
+            ...items[0],
+            productId: productId.toUpperCase(),
+            unitPriceKobo: 1999,
+            quantity: 1,
+          },
+        ],
+        now,
+      })
+    ).toMatchObject({
+      productSubtotalKobo: 1999,
+      discountKobo: 100,
+      allocations: [
+        { productId, unitPriceKobo: 1999, unitNetAmountsKobo: [1899] },
+      ],
+    });
+  });
+
   it('rejects a discount that rounds to the whole merchandise total', () => {
     expect(
       quoteBankCardOffer({

@@ -12,8 +12,9 @@ export async function verifyBankCardOfferPaystack(
     textIds: true,
   });
   if (!response.success) return null;
-  return verifyBankCardOfferAttempt(attempt, {
+  const evidence = verifyBankCardOfferAttempt(attempt, {
     status: true,
     data: response.data,
   });
+  return evidence ? { evidence, gatewayResponse: { ...response.data } } : null;
 }

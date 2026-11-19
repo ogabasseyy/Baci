@@ -44,7 +44,9 @@ export function quoteBankCardOffer({
     return null;
   }
 
-  const eligibleProducts = new Set(offer.eligibleProductIds);
+  const eligibleProducts = new Set(
+    offer.eligibleProductIds.map((id) => id.toLowerCase())
+  );
   const itemIds = new Set<string>();
   let units = 0;
   let productSubtotal = 0n;
@@ -69,7 +71,8 @@ export function quoteBankCardOffer({
     units += item.quantity;
     const subtotal = BigInt(item.unitPriceKobo) * BigInt(item.quantity);
     productSubtotal += subtotal;
-    if (eligibleProducts.has(item.productId)) eligibleSubtotal += subtotal;
+    if (eligibleProducts.has(item.productId.toLowerCase()))
+      eligibleSubtotal += subtotal;
   }
 
   const productSubtotalKobo = safeAmount(productSubtotal);
@@ -86,7 +89,7 @@ export function quoteBankCardOffer({
   let eligibleValue = 0n;
   let allocatedDiscount = 0n;
   const allocations = items.map((item) => {
-    const eligible = eligibleProducts.has(item.productId);
+    const eligible = eligibleProducts.has(item.productId.toLowerCase());
     const unitNetAmountsKobo = Array.from({ length: item.quantity }, () => {
       if (!eligible) return item.unitPriceKobo;
       eligibleValue += BigInt(item.unitPriceKobo);
@@ -96,7 +99,11 @@ export function quoteBankCardOffer({
       allocatedDiscount = next;
       return item.unitPriceKobo - Number(unitDiscount);
     });
-    return { ...item, unitNetAmountsKobo };
+    return {
+      ...item,
+      productId: item.productId.toLowerCase(),
+      unitNetAmountsKobo,
+    };
   });
 
   return {

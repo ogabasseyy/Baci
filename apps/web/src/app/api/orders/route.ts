@@ -78,6 +78,7 @@ import {
 } from '@/lib/immediate-order-notification';
 import { logger } from '@/lib/logger';
 import { getMerchantFeatureAccess } from '@/lib/merchant-feature-gates';
+import { isMajorAmountRepresentable } from '@/lib/money/is-major-amount-representable';
 import { ORDER_WITH_ITEMS_QUERY } from '@/lib/order-queries';
 import { recordPreGatewayRedemption } from '@/lib/payments/record-pre-gateway-redemption';
 import {
@@ -554,6 +555,9 @@ export async function POST(request: NextRequest) {
       if (invalidKeyResponse) return invalidKeyResponse;
     }
     const bankCardOfferRequested = payment_method === 'bank_card_offer';
+    const bankCardOfferRequestHash = bankCardOfferRequested
+      ? createHash('sha256').update(JSON.stringify(body)).digest('hex')
+      : null;
     const bankCardOffer = bankCardOfferRequested
       ? BANK_CARD_OFFERS.find(
           (offer) =>
@@ -564,7 +568,7 @@ export async function POST(request: NextRequest) {
       : undefined;
     if (
       bankCardOfferRequested &&
-      (!bankCardOffer ||
+      (!body.bank_card_offer_id ||
         !resolvedUserId ||
         user?.email?.trim().toLowerCase() !==
           customer_email.trim().toLowerCase() ||
@@ -584,6 +588,52 @@ export async function POST(request: NextRequest) {
         },
         { status: 409 }
       );
+    }
+    if (bankCardOfferRequestHash && requestIdempotencyKey && resolvedUserId) {
+      const scopedClient = createStorefrontOrderRpcClient({
+        fallbackClient: supabase,
+        hasCanonicalDeliveryMetadata: false,
+        merchantId: merchant_id,
+        userId: resolvedUserId,
+      });
+      const replay = await scopedClient.rpc(
+        'get_bank_card_offer_checkout_replay',
+        {
+          p_merchant_id: merchant_id,
+          p_key: requestIdempotencyKey,
+          p_hash: bankCardOfferRequestHash,
+        }
+      );
+      if (replay.error) {
+        const conflict =
+          replay.error.message === 'checkout_idempotency_conflict';
+        return NextResponse.json(
+          {
+            code: conflict
+              ? 'CHECKOUT_IDEMPOTENCY_CONFLICT'
+              : 'BANK_CARD_OFFER_REPLAY_UNAVAILABLE',
+            error: conflict
+              ? 'This checkout key has already been used for a different order'
+              : 'Unable to load this bank card offer order',
+          },
+          { status: conflict ? 409 : 503 }
+        );
+      }
+      if (replay.data) {
+        return NextResponse.json(
+          { order: replay.data, idempotency: { replayed: true } },
+          { headers: { 'x-idempotency-replayed': 'true' } }
+        );
+      }
+      if (!bankCardOffer) {
+        return NextResponse.json(
+          {
+            code: 'BANK_CARD_OFFER_UNAVAILABLE',
+            error: 'Bank card offer unavailable for this checkout',
+          },
+          { status: 409 }
+        );
+      }
     }
     const verifiedQuizVoucherAwardIdsByIndex = new Map<number, string>();
     if (payment_method === 'uba_redvault') {
@@ -2311,6 +2361,21 @@ export async function POST(request: NextRequest) {
         : {}),
     });
     if (bankCardOfferRequested && bankCardOffer && resolvedUserId) {
+      if (
+        orderItemsRpcPayload.some(
+          (item) => !isMajorAmountRepresentable(item.price, 'NGN')
+        ) ||
+        (typeof body.expected_total === 'number' &&
+          !isMajorAmountRepresentable(body.expected_total, 'NGN'))
+      ) {
+        return NextResponse.json(
+          {
+            code: 'BANK_CARD_OFFER_AMOUNT_INVALID',
+            error: 'Bank card offer amounts must use whole kobo',
+          },
+          { status: 409 }
+        );
+      }
       const quote = quoteBankCardOffer({
         offer: bankCardOffer,
         merchantId: merchant_id,
@@ -2328,7 +2393,7 @@ export async function POST(request: NextRequest) {
         discountCodeId ||
         loyaltyRedemptionId ||
         requestedSavingsRedemption ||
-        !checkoutRequestHash
+        !bankCardOfferRequestHash
       ) {
         return NextResponse.json(
           {
@@ -2343,10 +2408,17 @@ export async function POST(request: NextRequest) {
         orderArgs: {
           ...orderRpcArgs,
           ...(checkoutContext.shippingRateMarker ?? {}),
-          // Bind retries to this offer, including a switch between banks.
-          p_checkout_request_hash: createHash('sha256')
-            .update(JSON.stringify([checkoutRequestHash, bankCardOffer.id]))
-            .digest('hex'),
+          ...redvaultOrderDraftFulfillment(
+            verifiedMerchantShippingRate,
+            body.shipping_rate_id
+          ),
+          p_checkout_request_hash: bankCardOfferRequestHash,
+          // This field carries the total before applying the selected bank offer.
+          p_expected_total:
+            typeof body.expected_total === 'number'
+              ? (Math.round(body.expected_total * 100) - quote.discountKobo) /
+                100
+              : null,
         },
         quote,
         userId: resolvedUserId,
@@ -2366,6 +2438,24 @@ export async function POST(request: NextRequest) {
         );
       }
       const replayed = result.data.idempotency_replayed === true;
+      if (!replayed) {
+        try {
+          await scheduleCheckoutProductBlogPurge({
+            merchantId: merchant_id,
+            merchantSlug: merchant.slug,
+            orderId: typeof result.data.id === 'string' ? result.data.id : null,
+            orderItems: orderItemsPayload,
+            supabase,
+          });
+        } catch (error) {
+          logger.error({
+            message:
+              'Failed to revalidate product caches after bank offer order creation',
+            merchantId: merchant_id,
+            error,
+          });
+        }
+      }
       return NextResponse.json(
         {
           order: result.data,

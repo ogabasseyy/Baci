@@ -294,7 +294,6 @@
 .campaignDate {
   display: block;
   margin-top: 1rem;
-  color: #fecdd3;
   font-weight: 600;
 }
 
@@ -311,16 +310,15 @@
   display: grid;
   min-inline-size: clamp(3.15rem, 10vw, 4.25rem);
   padding: 0.35rem;
-  border: 1px solid #5b333b;
+  border: 1px solid var(--store-border);
   border-radius: 0.6rem;
-  background: #1d0e12;
-  color: #fecdd3;
+  background: var(--store-secondary);
+  color: var(--store-secondary-text);
   text-align: center;
   font-size: 0.72rem;
 }
 
 .countdownValue {
-  color: #fff;
   font-size: clamp(1.25rem, 3vw, 1.85rem);
   font-weight: 800;
   font-variant-numeric: tabular-nums;

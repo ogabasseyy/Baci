@@ -1,10 +1,10 @@
 'use client';
 
-import { OGABASSEY_BLACK_FRIDAY_DATE } from '@baci/shared';
 import { useSyncExternalStore } from 'react';
+import { BLACK_FRIDAY_LAUNCH } from './black-friday-launch';
 import styles from './ogabassey-black-friday-page.module.css';
 
-const launchTime = Date.parse(`${OGABASSEY_BLACK_FRIDAY_DATE}T00:00:00+01:00`);
+const launchTime = Date.parse(BLACK_FRIDAY_LAUNCH);
 const units = [
   { label: 'Days', seconds: 86_400, modulus: Number.POSITIVE_INFINITY },
   { label: 'Hours', seconds: 3_600, modulus: 24 },

@@ -14,6 +14,22 @@ const { getBlackFridayProducts } = vi.hoisted(() => ({
   getBlackFridayProducts: vi.fn(),
 }));
 
+vi.mock('@/assets/campaigns/black-friday-2026-hero-384.webp', () => ({
+  default: {
+    src: '/_next/static/media/black-friday-2026-hero-384.test.webp',
+    width: 384,
+    height: 192,
+  },
+}));
+
+vi.mock('@/assets/campaigns/black-friday-2026-hero-768.webp', () => ({
+  default: {
+    src: '/_next/static/media/black-friday-2026-hero-768.test.webp',
+    width: 768,
+    height: 384,
+  },
+}));
+
 vi.mock('@/lib/ogabassey-black-friday', () => ({ getBlackFridayProducts }));
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
@@ -59,11 +75,14 @@ describe('Black Friday storefront page', () => {
       screen.getByRole('region', { name: 'Black Friday offers' })
     ).toContainElement(document.getElementById('black-friday-offers'));
     expect(screen.getByRole('heading', { name: 'Black Friday' })).toBeVisible();
-    expect(screen.getByText('Friday, 27 November 2026')).toBeVisible();
+    expect(screen.getByText('Friday, 27 November 2026')).toHaveAttribute(
+      'datetime',
+      '2026-11-27T00:00:00+01:00'
+    );
     expect(screen.getByRole('timer')).toHaveTextContent('01Hours');
     expect(document.querySelector('header img')).toHaveAttribute(
       'src',
-      '/campaigns/black-friday-2026-hero-768.webp'
+      '/_next/static/media/black-friday-2026-hero-768.test.webp'
     );
     expect(
       screen.getByRole('region', { name: 'Black Friday offers' })

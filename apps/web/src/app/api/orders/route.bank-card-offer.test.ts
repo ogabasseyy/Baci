@@ -31,7 +31,16 @@ vi.mock('@/config/bank-card-offers', () => ({
   ],
 }));
 
-it('passes the shopper’s post-discount total to atomic bank-offer checkout', async () => {
+it.each([
+  { quantity: 1, expectedTotal: 95, status: 201 },
+  { quantity: 10_001, expectedTotal: 95, status: 409 },
+  { quantity: 1, expectedTotal: undefined, status: 409 },
+  { quantity: 1, expectedTotal: 100, status: 409 },
+])('handles bank-offer checkout with quantity $quantity and expected total $expectedTotal', async ({
+  quantity,
+  expectedTotal,
+  status,
+}) => {
   primeAdminOrderCurrencyRead();
   vi.stubEnv('QUIZ_RPC_SERVER_SECRET', 'synthetic-order-test-proof');
   try {
@@ -64,16 +73,29 @@ it('passes the shopper’s post-discount total to atomic bank-offer checkout', a
           ...baseOrderPayload,
           merchant_id: MERCHANT_ID.toUpperCase(),
           items: [
-            { product_id: productId, quantity: 1, price: 100, name: 'Widget' },
+            { product_id: productId, quantity, price: 100, name: 'Widget' },
           ],
-          subtotal: 100,
-          expected_total: 95,
+          subtotal: 100 * quantity,
+          expected_total: expectedTotal,
           payment_method: 'bank_card_offer',
           bank_card_offer_id: 'black-friday',
         }),
       })
     );
-    expect(res.status, await res.text()).toBe(201);
+    const response = await res.json();
+    expect(res.status, JSON.stringify(response)).toBe(status);
+    if (status === 409) {
+      expect(response.code).toBe(
+        expectedTotal === undefined || expectedTotal === 100
+          ? 'BANK_CARD_OFFER_TOTAL_MISMATCH'
+          : 'BANK_CARD_OFFER_UNAVAILABLE'
+      );
+      expect(supabase.rpc).not.toHaveBeenCalledWith(
+        'create_storefront_bank_card_offer_order',
+        expect.anything()
+      );
+      return;
+    }
     expect(supabase.rpc).toHaveBeenCalledWith(
       'create_storefront_bank_card_offer_order',
       expect.objectContaining({

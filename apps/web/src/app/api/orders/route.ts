@@ -2366,12 +2366,13 @@ export async function POST(request: NextRequest) {
         : {}),
     });
     if (bankCardOfferRequested && bankCardOffer && resolvedUserId) {
+      const expectedTotal = body.expected_total;
       if (
         orderItemsRpcPayload.some(
           (item) => !isMajorAmountRepresentable(item.price, 'NGN')
         ) ||
-        (typeof body.expected_total === 'number' &&
-          !isMajorAmountRepresentable(body.expected_total, 'NGN'))
+        (typeof expectedTotal === 'number' &&
+          !isMajorAmountRepresentable(expectedTotal, 'NGN'))
       ) {
         return NextResponse.json(
           {
@@ -2381,17 +2382,26 @@ export async function POST(request: NextRequest) {
           { status: 409 }
         );
       }
-      const quote = quoteBankCardOffer({
-        offer: bankCardOffer,
-        merchantId: merchant_id,
-        now: Date.now(),
-        items: orderItemsRpcPayload.map((item) => ({
-          itemId: String(item.__baci_line_ordinal),
-          productId: item.product_id ?? '',
-          unitPriceKobo: Math.round(item.price * 100),
-          quantity: item.quantity,
-        })),
-      });
+      let quote: ReturnType<typeof quoteBankCardOffer> = null;
+      try {
+        quote = quoteBankCardOffer({
+          offer: bankCardOffer,
+          merchantId: merchant_id,
+          now: Date.now(),
+          items: orderItemsRpcPayload.map((item) => ({
+            itemId: String(item.__baci_line_ordinal),
+            productId: item.product_id ?? '',
+            unitPriceKobo: Math.round(item.price * 100),
+            quantity: item.quantity,
+          })),
+        });
+      } catch (error) {
+        logger.warn({
+          message: 'Unable to quote bank card offer checkout',
+          merchantId: merchant_id,
+          error,
+        });
+      }
       if (
         merchantResolvedCurrency !== 'NGN' ||
         !quote ||
@@ -2404,6 +2414,25 @@ export async function POST(request: NextRequest) {
           {
             code: 'BANK_CARD_OFFER_UNAVAILABLE',
             error: 'Bank card offer unavailable for this checkout',
+          },
+          { status: 409 }
+        );
+      }
+      const payableKobo =
+        quote.productSubtotalKobo -
+        quote.discountKobo +
+        Math.round(
+          (effectiveShippingFee + orderTaxAmount + giftWrappingFeeValue) * 100
+        );
+      if (
+        typeof expectedTotal !== 'number' ||
+        !Number.isSafeInteger(payableKobo) ||
+        Math.round(expectedTotal * 100) !== payableKobo
+      ) {
+        return NextResponse.json(
+          {
+            code: 'BANK_CARD_OFFER_TOTAL_MISMATCH',
+            error: 'Confirm the updated bank card offer total and try again',
           },
           { status: 409 }
         );

@@ -29,8 +29,10 @@ it('disposes old scope and refreshes once on foreground with no timers', async (
     instances.push(instance);
     return instance as unknown as OxygenWorkflowController;
   };
+  const hostedHandlesForeground = { current: false };
   const hook = renderHook(
-    ({ id }: { id: string }) => useOxygenWorkflow(id, factory),
+    ({ id }: { id: string }) =>
+      useOxygenWorkflow(id, factory, hostedHandlesForeground),
     {
       initialProps: { id: 'one' },
     }
@@ -41,6 +43,18 @@ it('disposes old scope and refreshes once on foreground with no timers', async (
     onChange('active');
   });
   expect(instances[0].refresh).toHaveBeenCalledTimes(1);
+  hostedHandlesForeground.current = true;
+  await act(async () => {
+    onChange('background');
+    onChange('active');
+  });
+  expect(instances[0].refresh).toHaveBeenCalledTimes(1);
+  hostedHandlesForeground.current = false;
+  await act(async () => {
+    onChange('background');
+    onChange('active');
+  });
+  expect(instances[0].refresh).toHaveBeenCalledTimes(2);
   hook.rerender({ id: 'two' });
   expect(instances[0].dispose).toHaveBeenCalledTimes(1);
   hook.unmount();

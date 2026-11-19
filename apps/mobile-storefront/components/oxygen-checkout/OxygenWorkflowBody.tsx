@@ -3,7 +3,7 @@ import type {
   OxygenRuntimeSnapshot,
   OxygenTransientFile,
 } from '@baci/shared/oxygen';
-import { useState } from 'react';
+import { type RefObject, useState } from 'react';
 import { Text, View } from 'react-native';
 import type { OxygenClient } from '@/services/oxygen/client';
 import { resendOxygenPhoneCode } from '@/services/oxygen/resend-phone-code';
@@ -33,6 +33,7 @@ import { useOxygenInitialNin } from './use-oxygen-initial-nin';
 import { useOxygenPhoneMarker } from './use-oxygen-phone-marker';
 export function OxygenWorkflowBody({
   focused,
+  hostedHandlesForeground,
   onViewOrders,
   snapshot,
   client,
@@ -45,6 +46,7 @@ export function OxygenWorkflowBody({
   prefill,
 }: {
   focused: boolean;
+  hostedHandlesForeground?: RefObject<boolean>;
   onViewOrders: () => void;
   snapshot: OxygenRuntimeSnapshot;
   client: OxygenClient;
@@ -251,6 +253,7 @@ export function OxygenWorkflowBody({
           kind={hosted}
           capabilities={capabilities}
           active
+          handlesForeground={hostedHandlesForeground}
           onRefresh={refresh}
           onExit={close}
           sessionExpired={hosted === 'selfie' && renewal.expired}

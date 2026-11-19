@@ -17,7 +17,8 @@ it.each([
   'payment',
 ] as const)('opens %s in a full-screen native surface with a working system back action', (kind) => {
   const onExit = jest.fn();
-  render(
+  const handlesForeground = { current: false };
+  const rendered = render(
     <OxygenHostedModal
       url="https://provider.example/flow"
       kind={kind}
@@ -26,6 +27,7 @@ it.each([
         selfieOrigins: ['https://provider.example'],
       }}
       active
+      handlesForeground={handlesForeground}
       onRefresh={jest.fn()}
       onExit={onExit}
     />
@@ -33,7 +35,10 @@ it.each([
   const modal = screen.UNSAFE_getByType(Modal);
   expect(modal.props.presentationStyle).toBe('fullScreen');
   expect(modal.props.visible).toBe(true);
+  expect(handlesForeground.current).toBe(true);
   expect(screen.getByText('Provider camera page')).toBeTruthy();
   act(() => modal.props.onRequestClose());
   expect(onExit).toHaveBeenCalledTimes(1);
+  rendered.unmount();
+  expect(handlesForeground.current).toBe(false);
 });

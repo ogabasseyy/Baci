@@ -15,6 +15,7 @@ export async function submitOxygenCheckout(
   input: Input,
   dependencies?: Dependencies
 ) {
+  // This client check provides early feedback. POST /api/orders enforces admission.
   if (
     !input.isAuthenticated ||
     input.hasVoucher ||

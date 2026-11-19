@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { type RefObject, useEffect, useState } from 'react';
 import { AppState } from 'react-native';
 import type {
   OxygenWorkflowController,
@@ -13,7 +13,8 @@ export function configureOxygenWorkflowFactory(value: WorkflowFactory) {
 }
 export function useOxygenWorkflow(
   orderId: string,
-  create: WorkflowFactory | null = factory
+  create: WorkflowFactory | null = factory,
+  hostedHandlesForeground?: RefObject<boolean>
 ) {
   const [state, setState] = useState<OxygenWorkflowState>({
     snapshot: null,
@@ -33,7 +34,13 @@ export function useOxygenWorkflow(
     void workflow.initialize();
     let previous = AppState.currentState;
     const subscription = AppState.addEventListener('change', (next) => {
-      if (next === 'active' && previous !== 'active') void workflow.refresh();
+      // The hosted surface owns return checks while its browser can be open.
+      if (
+        next === 'active' &&
+        previous !== 'active' &&
+        !hostedHandlesForeground?.current
+      )
+        void workflow.refresh();
       previous = next;
     });
     // Reads are explicit and bounded; no background timer or mutation retries.
@@ -42,7 +49,7 @@ export function useOxygenWorkflow(
       subscription.remove();
       workflow.dispose();
     };
-  }, [orderId, create]);
+  }, [orderId, create, hostedHandlesForeground]);
   return {
     ...state,
     controller,

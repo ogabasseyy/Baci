@@ -31,7 +31,12 @@ export function OxygenCheckoutWorkflow({
   };
 }) {
   const focused = useIsFocused();
-  const workflow = useOxygenWorkflow(orderId, context.session.workflow);
+  const hostedHandlesForeground = useRef(false);
+  const workflow = useOxygenWorkflow(
+    orderId,
+    context.session.workflow,
+    hostedHandlesForeground
+  );
   const completion = useOxygenOtpCompletion(workflow.snapshot);
   const routed = useRef(false);
   const [refreshing, setRefreshing] = useState<false | 'progress' | 'recovery'>(
@@ -132,6 +137,7 @@ export function OxygenCheckoutWorkflow({
             >
               <OxygenWorkflowBody
                 focused={focused}
+                hostedHandlesForeground={hostedHandlesForeground}
                 selfieRetryAttempt={selfieRetryAttempt}
                 onViewOrders={() => router.push('/orders')}
                 prefill={context.prefill}

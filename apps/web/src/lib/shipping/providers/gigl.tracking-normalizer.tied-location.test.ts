@@ -79,13 +79,13 @@ describe('bugfix: a tied arrival scan owns the snapshot location even when the l
       },
       { Status: 'SHD', DateTimeUtc: '2026-11-09T11:00:00.000Z' },
     ];
-    const run = (extra: Record<string, string>[]) =>
+    const run = (extra: { Status: string; DateTimeUtc: string }[]) =>
       normalizeGiglTrackingShipment(
         {
           Waybill: 'W62',
           Origin: 'LAGOS',
           Destination: 'ABUJA',
-          MobileShipmentTrackings: [...base, ...extra].map((e) => ({ ...e })),
+          MobileShipmentTrackings: [...base, ...extra],
         },
         'W62',
         OBSERVED_AT

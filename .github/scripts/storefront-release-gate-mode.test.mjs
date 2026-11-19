@@ -53,7 +53,7 @@ test('iOS release reports TestFlight-only, submitted, and slot-occupied outcomes
   assert.match(runSummary({ outcome: 'failure' }), /App Store submission failed/);
   assert.match(runSummary({ outcome: 'cancelled' }), /App Store submission was cancelled/);
   assert.match(
-    runSummary({ outcome: 'success', testflightOnly: true }),
+    runSummary({ outcome: 'skipped', testflightOnly: true }),
     /TestFlight build only\. App Store submission was intentionally skipped/
   );
   assert.match(

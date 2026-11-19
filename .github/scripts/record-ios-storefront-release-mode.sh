@@ -9,6 +9,8 @@ elif [[ "${SUBMISSION_OUTCOME:-}" == "failure" ]]; then
   echo 'The TestFlight upload completed, but App Store submission failed. Inspect the Fastlane submit logs.' >> "$GITHUB_STEP_SUMMARY"
 elif [[ "${SUBMISSION_OUTCOME:-}" == "cancelled" ]]; then
   echo 'The TestFlight upload completed, but App Store submission was cancelled. Inspect the workflow run before retrying.' >> "$GITHUB_STEP_SUMMARY"
+elif [[ "${SUBMISSION_OUTCOME:-}" == "skipped" ]]; then
+  echo 'The TestFlight upload completed, but App Store submission did not start. Inspect the workflow run before retrying.' >> "$GITHUB_STEP_SUMMARY"
 elif [[ "${SUBMISSION_RESULT:-}" == "submitted" ]]; then
   echo 'This run uploaded the iOS build and submitted it for App Store review.' >> "$GITHUB_STEP_SUMMARY"
 elif [[ "${SUBMISSION_RESULT:-}" == "skipped" ]]; then

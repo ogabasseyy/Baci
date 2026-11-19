@@ -1,4 +1,5 @@
 import { router } from 'expo-router';
+import { logger } from '@/lib/logger';
 import type { CartCheckoutBinding } from '@/schemas/cart-checkout-binding';
 import { type CartItem, useCartStore } from '@/stores/cart-store';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
@@ -34,7 +35,14 @@ export async function completeOxygenCheckout({
   if (sharedCartBinding) {
     // The bound order already consumed its cart atomically on the server.
     // Never send a second clear that could target a new server cart.
-    void shared.refresh?.().catch(() => undefined);
+    void shared
+      .refresh?.()
+      .catch(() =>
+        logger.warn(
+          'Checkout',
+          'Shared cart refresh failed after saving the Oxygen order'
+        )
+      );
   } else if (
     !shared.enabled &&
     live.checkoutGeneration === generation &&

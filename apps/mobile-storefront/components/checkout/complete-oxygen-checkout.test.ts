@@ -1,4 +1,5 @@
 import { router } from 'expo-router';
+import { logger } from '@/lib/logger';
 import { useCartStore } from '@/stores/cart-store';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
 import { clearAndPersistCheckoutCart } from './checkout-cart-persistence';
@@ -29,6 +30,12 @@ const localCart = {
 const localMode = { enabled: false } as ReturnType<
   typeof useNativeSharedCartStore.getState
 >;
+const sharedCartBinding = {
+  cart_id: 'cart',
+  cart_version: 1,
+  checkout_generation: 1,
+  checkout_session_id: 'session',
+};
 beforeEach(() => {
   jest.resetAllMocks();
   jest.mocked(useCartStore.getState).mockReturnValue(localCart);
@@ -87,14 +94,33 @@ it('refreshes a bound cart already finalized by the server', async () => {
   });
   await completeOxygenCheckout({
     ...args,
-    sharedCartBinding: {
-      cart_id: 'cart',
-      cart_version: 1,
-      checkout_generation: 1,
-      checkout_session_id: 'session',
-    },
+    sharedCartBinding,
   });
   expect(refresh).toHaveBeenCalledTimes(1);
   expect(clearAndPersistCheckoutCart).not.toHaveBeenCalled();
   expect(router.replace).toHaveBeenCalledTimes(1);
+});
+
+it('records an unsuccessful refresh and opens the saved order without clearing the shared cart', async () => {
+  const warn = jest.spyOn(logger, 'warn').mockImplementation(() => undefined);
+  const refresh = jest.fn().mockRejectedValue(new Error('Offline'));
+  jest.mocked(useNativeSharedCartStore.getState).mockReturnValue({
+    ...localMode,
+    enabled: true,
+    refresh,
+  });
+  try {
+    await completeOxygenCheckout({ ...args, sharedCartBinding });
+    expect(warn).toHaveBeenCalledWith(
+      'Checkout',
+      'Shared cart refresh failed after saving the Oxygen order'
+    );
+    expect(clearAndPersistCheckoutCart).not.toHaveBeenCalled();
+    expect(router.replace).toHaveBeenCalledWith({
+      pathname: '/oxygen-checkout',
+      params: { orderId: args.orderId },
+    });
+  } finally {
+    warn.mockRestore();
+  }
 });

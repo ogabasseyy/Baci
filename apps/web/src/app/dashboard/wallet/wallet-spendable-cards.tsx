@@ -37,7 +37,7 @@ export function WalletSpendableCards({ spendable, formatMoney }: Props) {
         </CardHeader>
         <CardContent>
           <p className="text-xs text-muted-foreground">
-            Card and Paystack sales are already paid straight to your bank. They
+            Paystack order sales are already paid straight to your bank. They
             are shown for your records only and cannot be spent or withdrawn
             from this wallet.
           </p>

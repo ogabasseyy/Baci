@@ -62,7 +62,10 @@ export function createProductionPublishedDelivery(config: {
         throw Error('NOT_FOUND');
       const [, slug, buildDigest, path] = match;
       if (path !== 'index.html' && url.search) throw Error('NOT_FOUND');
-      const head = await config.reader.manifest(slug);
+      const databaseSignal = () =>
+        AbortSignal.any([request.signal, AbortSignal.timeout(5_000)]);
+      const initialSignal = databaseSignal();
+      const head = await config.reader.manifest(slug, initialSignal);
       if (
         !head ||
         head.buildDigest !== buildDigest ||
@@ -70,7 +73,12 @@ export function createProductionPublishedDelivery(config: {
       )
         throw Error('NOT_FOUND');
       const read = async (filePath: string) => {
-        const file = await config.reader.read(slug, buildDigest, filePath);
+        const file = await config.reader.read(
+          slug,
+          buildDigest,
+          filePath,
+          initialSignal
+        );
         if (!file) throw Error('NOT_FOUND');
         let bytes = Buffer.from(file.bytes);
         if (filePath === 'app.css') {
@@ -131,7 +139,7 @@ export function createProductionPublishedDelivery(config: {
       }
       // Recheck all output after awaits, including static bytes, not just documents.
       if (
-        JSON.stringify(await config.reader.manifest(slug)) !==
+        JSON.stringify(await config.reader.manifest(slug, databaseSignal())) !==
         JSON.stringify(head)
       )
         throw Error('NOT_FOUND');

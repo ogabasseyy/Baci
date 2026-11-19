@@ -49,9 +49,10 @@ export function createProductionStorefront(settings: {
     signal: AbortSignal
   ) => {
     const identity = { id: input.merchantId, slug: input.slug };
+    const beforeSignal = AbortSignal.any([signal, AbortSignal.timeout(5_000)]);
     const [binding, before] = await Promise.all([
-      reader.prerenderBinding(input.slug, input.buildDigest),
-      runtime.resolveBoundary(identity, input.path, signal),
+      reader.prerenderBinding(input.slug, input.buildDigest, beforeSignal),
+      runtime.resolveBoundary(identity, input.path, beforeSignal),
     ]);
     if (
       !binding ||
@@ -97,9 +98,10 @@ export function createProductionStorefront(settings: {
       },
       signal
     );
+    const afterSignal = AbortSignal.any([signal, AbortSignal.timeout(5_000)]);
     const [after, afterBinding] = await Promise.all([
-      runtime.resolveBoundary(identity, input.path, signal),
-      reader.prerenderBinding(input.slug, input.buildDigest),
+      runtime.resolveBoundary(identity, input.path, afterSignal),
+      reader.prerenderBinding(input.slug, input.buildDigest, afterSignal),
     ]);
     if (
       !after ||

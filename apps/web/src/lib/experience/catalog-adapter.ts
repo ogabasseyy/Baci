@@ -95,9 +95,10 @@ export function loadExperienceCatalog(
   client: SupabaseClient,
   merchant: ExperienceCatalogMerchant,
   selection: unknown,
-  images: ReadonlyMap<string, { assetId: string; alt: string }> = new Map()
+  images: ReadonlyMap<string, { assetId: string; alt: string }> = new Map(),
+  signal?: AbortSignal
 ): Promise<PublicCatalog | null> {
-  return readCatalog(client, merchant, selection, images);
+  return readCatalog(client, merchant, selection, images, undefined, signal);
 }
 
 /** Authenticated owner preview may include an unpublished merchant's active catalog. */
@@ -136,17 +137,18 @@ async function readCatalog(
   merchant: ExperienceCatalogMerchant,
   selection: unknown,
   images: ReadonlyMap<string, { assetId: string; alt: string }>,
-  owner?: ExperienceContext
+  owner?: ExperienceContext,
+  signal?: AbortSignal
 ): Promise<PublicCatalog | null> {
   const ownerPreview = Boolean(owner);
   const input = experienceCatalogSelectionSchema.parse(selection);
   if (!merchant.is_published && !ownerPreview) return null;
   const generation = async () => {
-    const r = await client
+    const query = client
       .from('experience_catalog_generations')
       .select('generation')
-      .eq('merchant_id', merchant.id)
-      .maybeSingle();
+      .eq('merchant_id', merchant.id);
+    const r = await (signal ? query.abortSignal(signal) : query).maybeSingle();
     if (r.error) throw Error('CATALOG_UNAVAILABLE');
     return r.data ? String(r.data.generation) : null;
   };
@@ -167,7 +169,7 @@ async function readCatalog(
         query = query.eq('product_categories.category_id', input.categoryId);
       if (input.productId) query = query.eq('id', input.productId);
       if (input.productSlug) query = query.eq('slug', input.productSlug);
-      const r = await query;
+      const r = await (signal ? query.abortSignal(signal) : query);
       if (r.error) throw Error('CATALOG_UNAVAILABLE');
       const products = r.data ?? [];
       if (!products.length)
@@ -175,8 +177,11 @@ async function readCatalog(
       const ids = products.map((p) => p.id);
       // The public RPC excludes inventory anchors. Anonymous RLS deliberately
       // hides private variant metadata; it must not become a visibility join.
+      const variantQuery = client.rpc('get_storefront_product_variants', {
+        p_product_ids: ids,
+      });
       const [variants, summaries] = await Promise.all([
-        client.rpc('get_storefront_product_variants', { p_product_ids: ids }),
+        signal ? variantQuery.abortSignal(signal) : variantQuery,
         getPublicSerializedVariantSummariesByProductId(
           client,
           merchant.id,
@@ -191,7 +196,8 @@ async function readCatalog(
                 if (error) throw Error('CATALOG_UNAVAILABLE');
                 return data;
               }
-            : undefined
+            : undefined,
+          signal
         ),
       ]);
       if (

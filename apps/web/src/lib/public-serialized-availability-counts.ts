@@ -16,22 +16,27 @@ export async function fetchPublicSerializedAvailabilityCounts(
   supabase: SupabaseClient,
   merchantId: string,
   productIds: string[],
-  branchId?: string
+  branchId?: string,
+  signal?: AbortSignal
 ): Promise<unknown> {
   const fetchCounts = () => {
-    const query = supabase
-      .rpc('get_public_serialized_variant_availability_counts', {
+    const rpc = supabase.rpc(
+      'get_public_serialized_variant_availability_counts',
+      {
         p_merchant_id: merchantId,
         p_product_ids: productIds,
         p_branch_id: branchId || null,
-      })
-      .overrideTypes<unknown, { merge: false }>();
-
+      }
+    );
+    const query = (signal ? rpc.abortSignal(signal) : rpc).overrideTypes<
+      unknown,
+      { merge: false }
+    >();
     return typeof query.retry === 'function' ? query.retry(false) : query;
   };
 
   let { data, error } = await fetchCounts();
-  if (isTimeoutError(error)) {
+  if (!signal?.aborted && isTimeoutError(error)) {
     ({ data, error } = await fetchCounts());
   }
   if (error) {

@@ -93,7 +93,8 @@ export async function getPublicSerializedVariantSummariesByProductId(
   merchantId: string,
   productIds: string[],
   branchId?: string,
-  fetchCounts = fetchPublicSerializedAvailabilityCounts
+  fetchCounts = fetchPublicSerializedAvailabilityCounts,
+  signal?: AbortSignal
 ): Promise<PublicSerializedVariantSummary[]> {
   if (!productIds || productIds.length === 0) {
     return [];
@@ -109,12 +110,15 @@ export async function getPublicSerializedVariantSummariesByProductId(
   const results = await Promise.all(
     chunks.map(async (chunk) => {
       // Fetch products' tracking policies
-      const { data: products, error: productsError } = await supabase
+      const productQuery = supabase
         .from('products')
         .select('id, inventory_tracking_policy, has_variants, status')
         .eq('merchant_id', merchantId)
         .in('id', chunk)
         .returns<ProductInventoryPolicyRow[]>();
+      const { data: products, error: productsError } = await (signal
+        ? productQuery.abortSignal(signal)
+        : productQuery);
 
       if (productsError) {
         throw productsError;
@@ -130,7 +134,7 @@ export async function getPublicSerializedVariantSummariesByProductId(
       const activeProductIds = activeProducts.map((product) => product.id);
 
       // Fetch variants' tracking policies (including the anchor variant)
-      const { data: variants, error: variantsError } = await supabase
+      const variantQuery = supabase
         .from('product_variants')
         .select(
           'id, product_id, inventory_tracking_policy, is_inventory_anchor'
@@ -138,6 +142,9 @@ export async function getPublicSerializedVariantSummariesByProductId(
         .eq('merchant_id', merchantId)
         .in('product_id', activeProductIds)
         .returns<ProductVariantInventoryPolicyRow[]>();
+      const { data: variants, error: variantsError } = await (signal
+        ? variantQuery.abortSignal(signal)
+        : variantQuery);
 
       if (variantsError) {
         throw variantsError;
@@ -235,7 +242,8 @@ export async function getPublicSerializedVariantSummariesByProductId(
         supabase,
         merchantId,
         serializedProductIds,
-        branchId
+        branchId,
+        signal
       );
 
       const counts = Array.isArray(rawCounts)

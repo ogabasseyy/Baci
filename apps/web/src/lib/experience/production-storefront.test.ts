@@ -3,6 +3,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 
 const f = vi.hoisted(() => ({
   active: true,
+  signals: [] as Array<AbortSignal | undefined>,
   revision: 'synthetic-1',
   head: {
     merchantId: 'synthetic-merchant',
@@ -17,29 +18,50 @@ vi.mock('../../../tools/experience-runner/durable-prerender-artifacts', () => ({
 }));
 vi.mock('./public-output-reader', () => ({
   createPublicOutputReader: () => ({
-    manifest: async (slug: string) =>
-      f.active && slug === 'qa1' ? f.head : null,
-    prerenderBinding: async () =>
-      f.active
+    manifest: async (slug: string, signal?: AbortSignal) => {
+      f.signals.push(signal);
+      return f.active && slug === 'qa1' ? f.head : null;
+    },
+    prerenderBinding: async (
+      _slug: string,
+      _build: string,
+      signal?: AbortSignal
+    ) => {
+      f.signals.push(signal);
+      return f.active
         ? {
             merchantId: f.head.merchantId,
             buildId: 'synthetic-build',
             buildDigest: f.head.buildDigest,
             sourceDigest: 'b'.repeat(64),
           }
-        : null,
-    read: async (_slug: string, _digest: string, path: string) => ({
-      path,
-      mime: path === 'app.js' ? 'text/javascript' : 'text/css',
-      bytes: Buffer.from(path === 'app.js' ? 'export{}' : ''),
-      digest: 'c'.repeat(64),
-    }),
+        : null;
+    },
+    read: async (
+      _slug: string,
+      _digest: string,
+      path: string,
+      signal?: AbortSignal
+    ) => {
+      f.signals.push(signal);
+      return {
+        path,
+        mime: path === 'app.js' ? 'text/javascript' : 'text/css',
+        bytes: Buffer.from(path === 'app.js' ? 'export{}' : ''),
+        digest: 'c'.repeat(64),
+      };
+    },
   }),
 }));
 vi.mock('./public-runtime', () => ({
   createPublicExperienceRuntime: () => ({
-    resolveBoundary: async () =>
-      f.active
+    resolveBoundary: async (
+      _identity: unknown,
+      _path: string,
+      signal?: AbortSignal
+    ) => {
+      f.signals.push(signal);
+      return f.active
         ? {
             manifest: f.head,
             bootstrap: {
@@ -54,7 +76,8 @@ vi.mock('./public-runtime', () => ({
               capabilities: [],
             },
           }
-        : null,
+        : null;
+    },
   }),
 }));
 
@@ -62,6 +85,7 @@ import { createProductionStorefront } from './production-storefront';
 
 beforeEach(() => {
   f.active = true;
+  f.signals.length = 0;
   f.revision = 'synthetic-1';
   vi.clearAllMocks();
 });
@@ -160,4 +184,15 @@ it('aborts the runner for an uncached delivery when its last request disconnects
   controller.abort();
   expect((await response).status).toBe(404);
   expect(signal?.aborted).toBe(true);
+});
+
+it('ties every delivery database operation to the request lifetime', async () => {
+  const s = fixture();
+  const controller = new AbortController();
+  const request = new Request(s.request(), { signal: controller.signal });
+  expect((await s.deliver(request)).status).toBe(200);
+  expect(f.signals.length).toBeGreaterThanOrEqual(8);
+  expect(f.signals.every((signal) => signal?.aborted === false)).toBe(true);
+  controller.abort();
+  expect(f.signals.every((signal) => signal?.aborted === true)).toBe(true);
 });

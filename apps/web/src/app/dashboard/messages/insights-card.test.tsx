@@ -29,6 +29,8 @@ describe('InsightsCard', () => {
     render(<InsightsCard />);
     expect(await screen.findByText('9')).toBeInTheDocument();
     expect(screen.getByText('31')).toBeInTheDocument();
+    expect(screen.getByText('Your replies')).toBeInTheDocument();
+    expect(screen.getByText('22')).toBeInTheDocument();
     expect(screen.getByText('12 min')).toBeInTheDocument();
     expect(screen.getByText('—')).toBeInTheDocument();
     expect(mocks.fetchInsights).toHaveBeenCalledWith(7);

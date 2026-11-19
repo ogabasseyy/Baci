@@ -81,6 +81,10 @@ export function InsightsCard() {
             label="Customer messages"
             value={String(state.insights.customerMessages)}
           />
+          <Stat
+            label="Your replies"
+            value={String(state.insights.storeReplies)}
+          />
           <Stat label="Resolved" value={String(state.insights.resolved)} />
           <Stat
             label="First reply time"

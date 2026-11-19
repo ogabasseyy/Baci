@@ -1,55 +1,6 @@
-import type { OxygenRuntimeSnapshot } from '@baci/shared/oxygen';
-import type { OxygenClient } from './client';
 import { OxygenClientError } from './errors';
-import { OxygenIntentJournal } from './journal';
-import { createOxygenWorkflow } from './workflow';
+import { id, scope, setup, snapshot } from './workflow.test-support';
 
-const id = '11111111-1111-4111-8111-111111111111';
-const scope = {
-  storageKey: 'staging',
-  userId: id,
-  merchantId: id,
-  orderId: id,
-};
-const snapshot: OxygenRuntimeSnapshot = {
-  workflowId: id,
-  stage: 'application_required',
-  version: 1,
-  environment: 'staging',
-  executionEnabled: true,
-  state: {},
-  approvalOtpReady: false,
-  activationEnabled: false,
-  settlementEnabled: false,
-  checkoutPhone: '',
-  checkoutAddress: {},
-};
-function setup() {
-  let stored: string | null = null;
-  const storage = {
-    getItem: jest.fn(async () => stored),
-    setItem: jest.fn(async (_key: string, value: string) => {
-      stored = value;
-    }),
-    removeItem: jest.fn(async () => {
-      stored = null;
-    }),
-  };
-  const client = {
-    capabilities: jest.fn().mockResolvedValue({ mobileEnabled: false }),
-    createOrResume: jest.fn().mockResolvedValue({ id, version: 1 }),
-    snapshot: jest.fn().mockResolvedValue(snapshot),
-    action: jest.fn().mockResolvedValue(snapshot),
-    approvalWindow: jest.fn().mockResolvedValue({ window: null }),
-  };
-  const journal = new OxygenIntentJournal(storage, scope);
-  const controller = createOxygenWorkflow({
-    client: client as unknown as OxygenClient,
-    journal,
-    key: () => id,
-  });
-  return { client, journal, storage, controller };
-}
 it('durable write failure prevents dispatch', async () => {
   const { storage, controller, client } = setup();
   storage.setItem.mockRejectedValueOnce(new Error('disk'));

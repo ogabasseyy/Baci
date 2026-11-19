@@ -100,10 +100,8 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { createPublicClient } from '@/lib/supabase/public';
 import { createClient } from '@/lib/supabase/server';
 import { type OrderCreateInput, orderCreateSchema } from '@/schemas/orders';
-import {
-  rejectMobileOxygenCreditCombination,
-  rejectUnavailableMobileOxygenOrder,
-} from './mobile-oxygen-order-admission';
+import { rejectMobileOxygenCreditCombination } from './mobile-oxygen-order-admission';
+import { resolveOrderCreationMerchant } from './order-creation-merchant';
 import { authenticateOrderRequest } from './order-request-auth';
 
 function isPayOnDelivery(paymentMethod: string): boolean {
@@ -974,35 +972,14 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Fetch merchant to verify it exists (include business_name, slug for email)
-    const { data: merchant, error: merchantFetchError } = await supabase
-      .from('merchants')
-      .select(
-        'id, phone, rider_phone_number, business_name, business_address, slug, support_email, email_sender_name, email, tax_identification_number, cac_rc_number, plan_tier, vat_registration_status, vat_rate, registered_address, support_phone, logo_url, legal_entity_name, brand_colors, bank_code, bank_account_number, bank_name, bank_account_name, social_media, pages, payout_currency, country'
-      )
-      .eq('id', merchant_id)
-      .single();
-
-    if (merchantFetchError || !merchant) {
-      logger.error({
-        message: 'Failed to fetch merchant for order creation',
-        error: merchantFetchError,
-      });
-      return NextResponse.json(
-        { error: 'Merchant not found' },
-        { status: 404 }
-      );
-    }
-
-    const oxygenAdmission = await rejectUnavailableMobileOxygenOrder({
+    const merchantResult = await resolveOrderCreationMerchant({
       request,
-      client: supabase,
-      merchant,
+      supabase,
+      order: body,
       userId: resolvedUserId,
-      paymentMethod: payment_method,
-      source,
     });
-    if (oxygenAdmission) return oxygenAdmission;
+    if (!merchantResult.ok) return merchantResult.response;
+    const { merchant } = merchantResult;
 
     // Canonical merchant currency (payout_currency -> country -> NGN). The
     // order-create RPC stamps orders.currency the same way, so this is the

@@ -31,7 +31,11 @@ export type ShippingProviderCode = (typeof SHIPPING_PROVIDER_CODES)[number];
  * timeout or transport error, this means the caller can safely allow a retry.
  */
 export class ShippingBookingRejectedError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    /** Carrier reference when a shipment already exists at the carrier. */
+    readonly providerReference?: string
+  ) {
     super(message);
     this.name = 'ShippingBookingRejectedError';
   }

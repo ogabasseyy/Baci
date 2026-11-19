@@ -205,8 +205,21 @@ export async function resolveMerchantZohoCampaignConfig({
     };
   }
 
+  const { data: storedRefreshToken, error: tokenError } = await supabase.rpc(
+    'get_merchant_zoho_refresh_token',
+    { p_merchant_id: merchantId }
+  );
+  if (tokenError) {
+    console.error('Failed to load merchant Zoho Campaigns token', {
+      error: tokenError.message,
+      merchantId,
+    });
+    throw tokenError;
+  }
+  const refreshToken = normalizeString(storedRefreshToken);
+
   const missingSettings = [
-    ['refreshToken', settings.refreshToken],
+    ['refreshToken', refreshToken],
     ['listKey', settings.listKey],
     ['fromEmail', settings.fromEmail],
   ]
@@ -233,7 +246,7 @@ export async function resolveMerchantZohoCampaignConfig({
       fromEmail: settings.fromEmail,
       fromName: settings.fromName ?? brand.brandName,
       listKey: settings.listKey,
-      refreshToken: settings.refreshToken,
+      refreshToken,
       topicId: settings.topicId ?? config.topicId,
     },
     status: 'configured',

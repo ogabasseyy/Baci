@@ -1,6 +1,7 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { Tabs } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
+import { FeedbackLauncher } from '@/components/feedback/FeedbackLauncher';
 import { AdminFloatingTabBar } from '@/components/navigation/AdminFloatingTabBar';
 import { useFollowUpQueue } from '@/hooks/useFollowUpQueue';
 import { useTheme } from '@/hooks/useTheme';
@@ -103,6 +104,7 @@ export default function TabLayout() {
 
         <Tabs.Screen name="settings" options={{ href: null }} />
       </Tabs>
+      <FeedbackLauncher />
     </View>
   );
 }

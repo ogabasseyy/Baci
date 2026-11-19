@@ -185,14 +185,21 @@ export async function loadBoundAdminWalletGiglQuoteResponse(
   }
   // An active reserved/provider_submitting charge already holds funds for this
   // quote — resume booking without requiring available balance again.
-  const canBook = hasActiveCharge || funding.canBook;
+  // A revoked platform reservation is released as refunded (no debit) by the
+  // reserve RPC, so only wallet reservations, or platform ones whose flag is
+  // still on, count as holding funds.
+  const holdsFunds =
+    hasActiveCharge &&
+    (latestCharge?.funding_source !== 'platform' ||
+      funding.paidByBaci === true);
+  const canBook = holdsFunds || funding.canBook;
   // Expired quotes with an in-flight/booked charge must not bounce the mobile
   // confirmation gate into a refresh loop — recovery books the same quote.
-  const boundChargeRecovery = hasActiveCharge && isExpired;
+  const boundChargeRecovery = holdsFunds && isExpired;
   return NextResponse.json({
     quote: toAdminPublicQuote(shippingQuote),
     availableBalance: funding.availableBalance,
-    shortfall: hasActiveCharge ? 0 : funding.shortfall,
+    shortfall: holdsFunds ? 0 : funding.shortfall,
     canBook,
     ...(funding.paidByBaci ? { paidByBaci: true } : {}),
     ...(boundChargeRecovery ? { boundChargeRecovery: true } : {}),

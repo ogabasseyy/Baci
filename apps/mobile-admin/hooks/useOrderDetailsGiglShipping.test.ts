@@ -3,6 +3,12 @@
 import { renderHook } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
+type HookInput = Parameters<typeof useOrderDetailsGiglShipping>[0];
+const buildMerchant = (overrides: Partial<HookInput['merchant']> = {}) =>
+  ({ user_id: 'owner-1', ...overrides }) as unknown as HookInput['merchant'];
+const buildOrder = (overrides: Record<string, unknown> = {}) =>
+  ({ id: 'order-1', ...overrides }) as unknown as HookInput['order'];
+
 const shippingHook = vi.hoisted(() => vi.fn());
 const prefetchHook = vi.hoisted(() => vi.fn(() => 'preview-scope'));
 vi.mock('@/hooks/orders/useOrderGiglShipping', () => ({
@@ -36,7 +42,7 @@ describe('useOrderDetailsGiglShipping', () => {
     const { result } = renderHook(() =>
       useOrderDetailsGiglShipping({
         giglEligible: true,
-        merchant: { user_id: 'owner-1' } as never,
+        merchant: buildMerchant(),
         order,
         pendingShipmentMode: 'provider',
         providerLabel: null,
@@ -57,8 +63,8 @@ describe('useOrderDetailsGiglShipping', () => {
     const { result } = renderHook(() =>
       useOrderDetailsGiglShipping({
         giglEligible: true,
-        merchant: { user_id: 'owner-1' } as never,
-        order: { id: 'order-1' } as never,
+        merchant: buildMerchant(),
+        order: buildOrder(),
         pendingShipmentMode: 'provider',
         providerLabel: null,
         shipmentFlowStep: 'method',
@@ -86,7 +92,7 @@ describe('useOrderDetailsGiglShipping', () => {
     const { result } = renderHook(() =>
       useOrderDetailsGiglShipping({
         giglEligible: true,
-        merchant: { user_id: 'owner-1' } as never,
+        merchant: buildMerchant(),
         order,
         pendingShipmentMode: 'self_fulfillment',
         providerLabel: null,
@@ -113,8 +119,8 @@ describe('useOrderDetailsGiglShipping', () => {
     const { result } = renderHook(() =>
       useOrderDetailsGiglShipping({
         giglEligible: true,
-        merchant: { user_id: 'owner-1' } as never,
-        order: { id: 'order-1' } as never,
+        merchant: buildMerchant(),
+        order: buildOrder(),
         pendingShipmentMode: 'self_fulfillment',
         providerLabel: null,
         shipmentFlowStep: 'method',
@@ -131,7 +137,7 @@ describe('useOrderDetailsGiglShipping', () => {
 
   it('starts the quote request after provider fulfillment is selected', () => {
     shippingHook.mockReturnValue({ quote: null });
-    const order = { id: 'order-1' } as never;
+    const order = buildOrder();
     type ShipmentModeProps = {
       pendingShipmentMode: 'provider' | 'self_fulfillment';
     };
@@ -139,7 +145,7 @@ describe('useOrderDetailsGiglShipping', () => {
       ({ pendingShipmentMode }: ShipmentModeProps) =>
         useOrderDetailsGiglShipping({
           giglEligible: true,
-          merchant: { user_id: 'owner-1' } as never,
+          merchant: buildMerchant(),
           order,
           pendingShipmentMode,
           providerLabel: null,
@@ -168,13 +174,13 @@ describe('useOrderDetailsGiglShipping', () => {
     const { result } = renderHook(() =>
       useOrderDetailsGiglShipping({
         giglEligible: true,
-        merchant: { user_id: 'owner-1' } as never,
-        order: {
+        merchant: buildMerchant(),
+        order: buildOrder({
           id: 'order-1',
           selected_quote_id: 'quote-topship',
           shipping_provider: 'TOPSHIP',
           shipping_funding_source: 'customer_checkout',
-        } as never,
+        }),
         pendingShipmentMode: 'provider',
         providerLabel: 'Topship',
         shipmentFlowStep: 'method',
@@ -198,13 +204,13 @@ describe('useOrderDetailsGiglShipping', () => {
     const { result } = renderHook(() =>
       useOrderDetailsGiglShipping({
         giglEligible: true,
-        merchant: { user_id: 'owner-1' } as never,
-        order: {
+        merchant: buildMerchant(),
+        order: buildOrder({
           id: 'order-1',
           selected_quote_id: 'quote-gigl',
           shipping_provider: 'GIGL',
           shipping_funding_source: 'merchant_wallet',
-        } as never,
+        }),
         pendingShipmentMode: 'provider',
         providerLabel: 'GIG Logistics',
         shipmentFlowStep: 'method',
@@ -231,8 +237,8 @@ describe('useOrderDetailsGiglShipping', () => {
     const { result } = renderHook(() =>
       useOrderDetailsGiglShipping({
         giglEligible: true,
-        merchant: { user_id: 'owner-1' } as never,
-        order: {
+        merchant: buildMerchant(),
+        order: buildOrder({
           id: '0e3036b3-0e2f-4f6f-a8a6-dd5c22853bd8',
           payment_method: 'credit_direct',
           payment_status: 'paid',
@@ -241,7 +247,7 @@ describe('useOrderDetailsGiglShipping', () => {
           shipping_funding_source: null,
           shipping_provider: 'GIGL',
           tracking_number: null,
-        } as never,
+        }),
         pendingShipmentMode: 'provider',
         providerLabel: 'GIG Logistics',
         shipmentFlowStep: 'method',

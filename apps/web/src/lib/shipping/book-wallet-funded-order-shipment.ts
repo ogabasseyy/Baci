@@ -19,6 +19,7 @@ import {
 import { shouldReleaseBookingLock } from './order-shipment-booking-lock-errors';
 import { OrderShipmentBookingError } from './order-shipment-booking-utils';
 import { recoverBookedWalletShipment } from './recover-booked-wallet-shipment';
+import { ShippingBookingRejectedError } from './types';
 
 type ReleaseLock = () => Promise<void>;
 type PrepareQuote = () => Promise<string>;
@@ -262,7 +263,8 @@ export async function bookWalletFundedOrderShipment(
         error instanceof OrderShipmentBookingError
           ? error.code
           : 'UNKNOWN_PROVIDER_FAILURE',
-        error instanceof OrderShipmentBookingError
+        error instanceof OrderShipmentBookingError ||
+          error instanceof ShippingBookingRejectedError
           ? error.providerReference
           : undefined
       );

@@ -11,7 +11,8 @@ export async function recordBookedOrderUpdateFailure(
   supabase: SupabaseClient,
   merchantId: string,
   orderId: string,
-  lockHeld: boolean
+  lockHeld: boolean,
+  providerReference?: string
 ): Promise<void> {
   await recordOrderShipmentBookingFailure(
     supabase,
@@ -20,7 +21,8 @@ export async function recordBookedOrderUpdateFailure(
     new OrderShipmentBookingError(
       'The carrier booked this shipment but the order could not be updated to save it. Check the shipment before booking again.',
       500,
-      BOOKED_SHIPMENT_NOT_SAVED_CODE
+      BOOKED_SHIPMENT_NOT_SAVED_CODE,
+      providerReference
     ),
     lockHeld
   );

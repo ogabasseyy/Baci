@@ -56,4 +56,23 @@ describe('recordBookedOrderUpdateFailure', () => {
       expect.objectContaining({ lock_retained: false })
     );
   });
+
+  it('stores the carrier reference when one is available', async () => {
+    const insert = vi.fn().mockResolvedValue({ error: null });
+    const supabase = {
+      from: vi.fn(() => ({ insert })),
+    } as unknown as SupabaseClient;
+
+    await recordBookedOrderUpdateFailure(
+      supabase,
+      'merchant-1',
+      'order-1',
+      true,
+      'GIGL-123'
+    );
+
+    expect(insert).toHaveBeenCalledWith(
+      expect.objectContaining({ provider_reference: 'GIGL-123' })
+    );
+  });
 });

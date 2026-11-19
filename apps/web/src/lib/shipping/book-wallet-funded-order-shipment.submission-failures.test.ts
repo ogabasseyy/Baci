@@ -13,6 +13,7 @@ import { supabaseFixture } from './book-wallet-funded-order-shipment.test-suppor
 import { bookWalletOrCustomerCheckout } from './book-wallet-or-customer-checkout';
 import * as charge from './merchant-shipping-charge';
 import { OrderShipmentBookingError } from './order-shipment-booking-utils';
+import { ShippingBookingRejectedError } from './types';
 
 describe('wallet-funded shipment orchestration — submission failures', () => {
   beforeEach(() => {
@@ -99,6 +100,43 @@ describe('wallet-funded shipment orchestration — submission failures', () => {
     ).rejects.toBe(unreachable);
 
     expect(release).toHaveBeenCalledOnce();
+  });
+
+  it('bugfix: passes the carrier reference of a Topship payment refusal to wallet reconciliation', async () => {
+    vi.mocked(charge.reserveMerchantShippingCharge).mockResolvedValue({
+      charge: {
+        chargeId: 'c-topship-ref',
+        chargedAmount: 100,
+        balanceAfter: 0,
+        status: 'reserved',
+      },
+      token: 't'.repeat(64),
+    });
+    const book = vi
+      .fn()
+      .mockRejectedValue(new ShippingBookingRejectedError('refused', 'T1'));
+
+    await expect(
+      bookWalletOrCustomerCheckout(
+        supabaseFixture,
+        'm1',
+        'o1',
+        'q1',
+        'merchant_wallet',
+        book,
+        vi.fn()
+      )
+    ).rejects.toBeInstanceOf(ShippingBookingRejectedError);
+
+    expect(
+      charge.markMerchantShippingChargeForReconciliation
+    ).toHaveBeenCalledWith(
+      expect.anything(),
+      'c-topship-ref',
+      't'.repeat(64),
+      'UNKNOWN_PROVIDER_FAILURE',
+      'T1'
+    );
   });
 
   it('does not call GIGL when begin submission returns refunded without an RPC error', async () => {

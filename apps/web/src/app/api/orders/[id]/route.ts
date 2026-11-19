@@ -14,6 +14,7 @@ import {
 } from '@/lib/payments/ensure-paid-order-inventory-confirmed';
 import { fileInventoryConfirmationFailureReview } from '@/lib/payments/file-inventory-confirmation-review';
 import { buildInventoryConfirmationFailurePayload } from '@/lib/payments/inventory-confirmation-response';
+import { BOOKED_SHIPMENT_NOT_SAVED_CODE } from '@/lib/shipping/booking-failure-constants';
 import { shouldDeferShippedNotificationToGigPickup } from '@/lib/shipping/gigl-shipment-pickup-state';
 import { isFundedCheckoutGiglAddressLocked } from '@/lib/shipping/is-funded-checkout-gigl-address-locked';
 import { claimOrderShipmentBooking } from '@/lib/shipping/order-shipment-booking-lock';
@@ -498,13 +499,20 @@ export async function PATCH(
 
     if (updateError) {
       console.error('Error updating order:', updateError);
+      const bookedReference =
+        typeof updates.tracking_number === 'string'
+          ? updates.tracking_number
+          : typeof updates.shipment_id === 'string'
+            ? updates.shipment_id
+            : undefined;
       if (updates.shipment_id) {
         // The carrier already booked the parcel; keep the reason for support.
         await recordBookedOrderUpdateFailure(
           supabase,
           merchantId,
           id,
-          Boolean(shipmentBookingLockToken)
+          Boolean(shipmentBookingLockToken),
+          bookedReference
         );
       }
       // A raced cancellation owns the row now: answer the terminal 409
@@ -554,6 +562,19 @@ export async function PATCH(
             transactionId: null,
           });
         }
+      }
+      if (updates.shipment_id) {
+        // Say plainly that the parcel exists, so the client can tell this from
+        // a failure before booking and does not simply retry.
+        return NextResponse.json(
+          {
+            error:
+              'The carrier booked this shipment but the order could not be updated to save it. Check the shipment before booking again.',
+            code: BOOKED_SHIPMENT_NOT_SAVED_CODE,
+            trackingNumber: bookedReference,
+          },
+          { status: 500 }
+        );
       }
       const mappedUpdateError = mapOrderPatchUpdateError(updateError);
       if (mappedUpdateError) {

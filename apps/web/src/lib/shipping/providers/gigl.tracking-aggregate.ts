@@ -1,8 +1,9 @@
+import type { TrackingResult } from '../types';
 import type { Guardable } from './gigl.tracking-status-rank';
 import { TERMINAL_STATUSES } from './gigl.tracking-terminal-statuses';
 
 type Aggregate = {
-  status: Guardable['event']['status'];
+  status: TrackingResult['status'];
   /** Event that must lead the list: the worker reads the snapshot location from events[0]. */
   lead: Guardable | undefined;
 };

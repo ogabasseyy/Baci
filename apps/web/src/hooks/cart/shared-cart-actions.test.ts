@@ -1,17 +1,21 @@
-import type { CartLine, CartSnapshot } from '@baci/shared/cart';
-
+import type { CartSnapshot } from '@baci/shared/cart';
 import { act, renderHook, waitFor } from '@testing-library/react';
-
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-
-import type { Product } from '@/lib/products';
-
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   fetchSharedCartProducts,
   fetchSharedCartSnapshot,
   sendSharedCartCommand,
 } from './shared-cart-client';
-
+import {
+  CART_ID,
+  cartLine,
+  MERCHANT_ID,
+  mockAdopted,
+  product,
+  resetCartSessionHintForTests,
+  SLUG,
+  snapshot,
+} from './shared-cart-provisioning.test-support';
 import { useSharedCart } from './use-shared-cart';
 
 vi.mock('./shared-cart-client', () => ({
@@ -22,76 +26,15 @@ vi.mock('./shared-cart-client', () => ({
   sendSharedCartCommand: vi.fn(),
 }));
 
-const MERCHANT_ID = '11111111-1111-4111-8111-111111111111';
-
-const SLUG = 'ogabassey';
-
-const CART_ID = '22222222-2222-4222-8222-222222222222';
-
-function product(overrides: Record<string, unknown> = {}): Product {
-  return {
-    brand: 'Brand',
-    description: '',
-    gtin: '',
-    id: 'prod-1',
-    image: '/prod-1.png',
-    imageHint: 'product',
-    imageLarge: '/prod-1-large.png',
-    manage_stock: false,
-    mpn: '',
-    name: 'Phone',
-    price: 100,
-    slug: 'phone',
-    status: 'active',
-    stock: 10,
-    ...overrides,
-  } as Product;
-}
-
-function cartLine(overrides: Record<string, unknown> = {}): CartLine {
-  return {
-    id: 'line-1',
-    item: { productId: 'prod-1' },
-    lineTotalMinor: 10000,
-    quantity: 1,
-    unitPriceMinor: 10000,
-    ...overrides,
-  } as CartLine;
-}
-
-function snapshot(overrides: Record<string, unknown> = {}): CartSnapshot {
-  const lines = (overrides.lines as CartLine[] | undefined) ?? [cartLine()];
-  const subtotalMinor = lines.reduce(
-    (sum, line) => sum + line.lineTotalMinor,
-    0
-  );
-  return {
-    cartId: CART_ID,
-    currency: 'NGN',
-    estimatedTotals: false,
-    expiresAt: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
-    lines,
-    merchantId: MERCHANT_ID,
-    state: 'active',
-    subtotalMinor,
-    totalMinor: subtotalMinor,
-    version: 3,
-    ...overrides,
-  } as CartSnapshot;
-}
-
-function mockAdopted(version = 3, lines: CartLine[] = [cartLine()]) {
-  vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({
-    ok: true,
-    snapshot: snapshot({ lines, version }),
-    warnings: [],
-  });
-}
-
 describe('useSharedCart actions', () => {
+  afterEach(() => {
+    resetCartSessionHintForTests();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     window.localStorage.clear();
+    resetCartSessionHintForTests();
     vi.mocked(fetchSharedCartProducts).mockResolvedValue(new Map());
     mockAdopted();
   });

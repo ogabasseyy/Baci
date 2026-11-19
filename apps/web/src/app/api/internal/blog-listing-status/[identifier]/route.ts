@@ -8,6 +8,7 @@ import {
   getValidatedInternalAuthMethod,
   INTERNAL_AUTH_HEADER,
 } from '@/lib/internal-auth-header';
+import { getBlogListingStatusCacheTag } from '@/lib/tenant-cache-tags';
 import {
   internalBlogListingStatusQuerySchema,
   internalSlugSetParamsSchema,
@@ -21,14 +22,14 @@ const NO_STORE = { 'Cache-Control': 'no-store' } as const;
 // normally": no redirect, no notFound) is cached — it is self-healing (the
 // route still clamps/404s a since-changed listing itself). Redirect, notFound,
 // and fail-open verdicts stay no-store so a changed page count or category is
-// never sticky for the TTL window. The `Vercel-Cache-Tag` is the broad
-// `blog-posts` tag — the one `revalidateBlogPosts` invalidates on every blog
-// mutation and that the underlying `'use cache'` resolver also carries — so
-// any post/category change purges these CDN entries immediately.
+// never sticky for the TTL window. The `Vercel-Cache-Tag` matches the
+// identifier-scoped `blog-listing-status-${identifier}` tag invalidated by
+// `revalidateBlogPosts` and carried by `getCachedStorefrontBlogListingStatus`,
+// so any post/category change purges this tenant's CDN entries immediately
+// without busting unrelated storefronts.
 const PREFLIGHT_CACHE = {
   'Cache-Control': 's-maxage=300, stale-while-revalidate=3600',
   Vary: INTERNAL_AUTH_HEADER,
-  'Vercel-Cache-Tag': 'blog-posts',
 } as const;
 // Typed against the shared contract so a shape change fails at compile time.
 const FAIL_OPEN: BlogListingStatusBody = {
@@ -104,7 +105,12 @@ export async function GET(
       status: 200,
       headers:
         allowEdgeCache && isCacheableNoopVerdict(result)
-          ? PREFLIGHT_CACHE
+          ? {
+              ...PREFLIGHT_CACHE,
+              'Vercel-Cache-Tag': getBlogListingStatusCacheTag(
+                params.data.identifier
+              ),
+            }
           : NO_STORE,
     });
   } catch (error) {

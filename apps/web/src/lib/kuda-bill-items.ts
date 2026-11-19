@@ -87,6 +87,35 @@ function warnIfUnitLooksWrong(
   }
 }
 
+/**
+ * A naira price written into the item name, e.g. "9500NGN", "NGN 9,500",
+ * "N9500" or "₦9,500".
+ */
+const NAIRA_PRICE_IN_NAME =
+  /(?:₦|NGN\s?|(?<![A-Za-z])N)(\d[\d,]*)(?![\d,])|(?<![\d,])(\d[\d,]*)\s?(?:NGN|naira)\b/i;
+
+function nairaPriceInName(itemName: string): number | undefined {
+  const match = NAIRA_PRICE_IN_NAME.exec(itemName);
+  const digits = (match?.[1] ?? match?.[2])?.replace(/,/g, '');
+  const price = digits ? Number(digits) : Number.NaN;
+  return Number.isFinite(price) && price > 0 ? price : undefined;
+}
+
+/**
+ * Whether Kuda sent this fixed price in naira: the raw amount equals the
+ * naira price the item's own name states (e.g. StarTimes "...9500NGN" sent
+ * as 9500 instead of 950000). Mapping it as kobo would sell it 100x too
+ * cheap and then charge 100x when buying, so such an item is dropped.
+ */
+function sentInNaira(
+  rawAmount: number,
+  isAmountFixed: boolean,
+  itemName: string
+): boolean {
+  const namePrice = nairaPriceInName(itemName);
+  return isAmountFixed && namePrice !== undefined && rawAmount === namePrice;
+}
+
 function mapBillItem(raw: unknown): BillItem | null {
   if (!raw || typeof raw !== 'object') {
     return null;
@@ -121,6 +150,14 @@ function mapBillItem(raw: unknown): BillItem | null {
     return null;
   }
   warnIfUnitLooksWrong(toNumber(rawAmount), isAmountFixed, itemCode);
+  if (sentInNaira(toNumber(rawAmount), isAmountFixed, itemName)) {
+    logger.warn({
+      message: 'Kuda bill item price matches its name in naira, not kobo',
+      itemCode,
+      rawAmount: toNumber(rawAmount),
+    });
+    return null;
+  }
 
   return {
     itemCode,

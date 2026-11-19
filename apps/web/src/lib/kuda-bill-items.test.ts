@@ -140,4 +140,74 @@ describe('mapKudaBillItems', () => {
       expect(mockLoggerWarn).not.toHaveBeenCalled();
     });
   });
+
+  describe('bugfix: a list sent in naira slipped past the under-₦10 check', () => {
+    beforeEach(() => {
+      mockLoggerWarn.mockClear();
+    });
+
+    it.each([
+      'StarTimes DTT SUPER MONTHLY 9500NGN',
+      'DStv Compact NGN 9,500',
+      'Bouquet N9500 monthly',
+      'Bouquet ₦9,500',
+      'Bouquet 9500 naira',
+    ])('drops "%s" when Kuda sends 9500 instead of 950000', (name) => {
+      const items = mapKudaBillItems([
+        { itemCode: 'flip', itemName: name, amount: 9500, isFixedPrice: true },
+        {
+          itemCode: 'ok',
+          itemName: 'Plain',
+          amount: 100000,
+          isFixedPrice: true,
+        },
+      ]);
+
+      expect(items?.map((item) => item.itemCode)).toEqual(['ok']);
+      expect(mockLoggerWarn).toHaveBeenCalledWith(
+        expect.objectContaining({ itemCode: 'flip', rawAmount: 9500 })
+      );
+    });
+
+    it('keeps the item when the price is in kobo as expected', () => {
+      const [item] =
+        mapKudaBillItems([
+          {
+            itemCode: 'st',
+            itemName: 'StarTimes DTT SUPER MONTHLY 9500NGN',
+            amount: 950000,
+            isFixedPrice: true,
+          },
+        ]) ?? [];
+
+      expect(item?.amount).toBe(9500);
+      expect(mockLoggerWarn).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      'MTN 1GB Monthly Plan (30 Days)',
+      'Airtel 1.5TB Data (1 Year)',
+      'Nightly Plan 100GB',
+    ])('ignores names without a naira price ("%s")', (name) => {
+      const items = mapKudaBillItems([
+        { itemCode: 'x', itemName: name, amount: 100000, isFixedPrice: true },
+      ]);
+
+      expect(items?.[0]?.amount).toBe(1000);
+    });
+
+    it('leaves open-amount items alone even when the name has a price', () => {
+      const [item] =
+        mapKudaBillItems([
+          {
+            itemCode: 'open',
+            itemName: 'Top up N500',
+            amount: 500,
+            isFixedPrice: false,
+          },
+        ]) ?? [];
+
+      expect(item?.itemCode).toBe('open');
+    });
+  });
 });

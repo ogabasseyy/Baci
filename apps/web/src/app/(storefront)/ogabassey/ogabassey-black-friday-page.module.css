@@ -290,3 +290,37 @@
     margin-bottom: 0;
   }
 }
+
+.campaignDate {
+  display: block;
+  margin-top: 1rem;
+  font-weight: 600;
+}
+
+.countdown {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: clamp(0.35rem, 1vw, 0.65rem);
+  min-block-size: 4.5rem;
+  margin-top: 0.65rem;
+}
+
+.countdownUnit {
+  display: grid;
+  min-inline-size: clamp(3.15rem, 10vw, 4.25rem);
+  padding: 0.35rem;
+  border: 1px solid var(--store-border);
+  border-radius: 0.6rem;
+  background: var(--store-secondary);
+  color: var(--store-secondary-text);
+  text-align: center;
+  font-size: 0.72rem;
+}
+
+.countdownValue {
+  font-size: clamp(1.25rem, 3vw, 1.85rem);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}

@@ -19,6 +19,7 @@ export function readChatwootCommerceMessage(
     'baci-cart-quantity:',
     'baci-cart-request:',
     'baci-checkout-review-request:',
+    'baci-delivery-options-request:',
     'baci-product-request:',
     'baci-cart-add:',
   ];

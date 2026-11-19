@@ -24,6 +24,7 @@ interface CommitBumpaProductsInput {
 
 interface ExistingProductRecord {
   category?: string | null;
+  status?: string | null;
   id: string;
   slug: string | null;
   external_id: string | null;
@@ -77,7 +78,7 @@ export async function commitBumpaProducts({
     const end = start + pageSize - 1;
     const { data, error } = await supabase
       .from('products')
-      .select('id, slug, category, external_id, external_source')
+      .select('id, slug, category, status, external_id, external_source')
       .eq('merchant_id', merchantId)
       .order('id', { ascending: true })
       .range(start, end);
@@ -125,11 +126,8 @@ export async function commitBumpaProducts({
       );
       const baseSlug =
         generateProductSlug(product.title) || product.externalSourceId;
-      const slug = resolveUniqueSlug(
-        baseSlug,
-        usedSlugs,
-        existingProduct?.slug || null
-      );
+      const existingSlug = existingProduct?.slug?.trim() || null;
+      const slug = resolveUniqueSlug(baseSlug, usedSlugs, existingSlug);
       const payload = {
         merchant_id: merchantId,
         name: product.title,
@@ -157,24 +155,25 @@ export async function commitBumpaProducts({
       };
 
       if (existingProduct) {
-        if (
+        const categoryMoved =
           existingProduct.category !== undefined &&
           normalizeStorefrontCategoryValue(existingProduct.category) !==
-            normalizeStorefrontCategoryValue(product.category)
-        ) {
-          // Category-fallback blog rails are derived from the post-update
-          // category. A move also invalidates the old category's rail, so use
-          // the bounded hostname purge rather than trying to reconstruct every
-          // old fallback article from the import payload.
+            normalizeStorefrontCategoryValue(product.category);
+        const statusChanged =
+          existingProduct.status !== undefined &&
+          existingProduct.status !== product.status;
+        const slugAssigned = !existingSlug && slug.trim().length > 0;
+        if (categoryMoved || statusChanged || slugAssigned) {
+          // Category moves, status transitions, and assigning a parent's first
+          // slug alter category rails or dependent archived-child redirects;
+          // escalate to a bounded hostname purge rather than scoped omission.
           hasCategoryMove = true;
         }
         const { error: updateError } = await supabase
           .from('products')
           .update(payload)
           .eq('id', existingProduct.id)
-          // Tenant scoping (defense-in-depth): this runs via a service-role
-          // client (RLS bypassed), so scope the mutation to the merchant even
-          // though existingProduct.id was loaded merchant-scoped.
+          // Tenant scoping (defense-in-depth under service-role client).
           .eq('merchant_id', merchantId);
 
         if (updateError) {
@@ -186,6 +185,7 @@ export async function commitBumpaProducts({
         updatedProducts += 1;
         changedProducts.push({
           slug,
+          previousSlug: existingSlug,
           id: existingProduct.id,
           category: product.category,
         });
@@ -243,7 +243,8 @@ export async function commitBumpaProducts({
         const nextProductSlugs = Array.from(
           new Set(
             changedProducts
-              .map((product) => product.slug?.trim())
+              .flatMap((product) => [product.slug, product.previousSlug])
+              .map((slug) => slug?.trim())
               .filter((slug): slug is string => Boolean(slug))
           )
         );

@@ -689,7 +689,10 @@ jobs:
         run: |
           node --test ci_scripts/quality-gate-affected-base.test.mjs ci_scripts/quality-gate-affected-base.change-set.test.mjs ci_scripts/quality-gate-affected-base.nested.test.mjs ci_scripts/quality-gate-affected-base.turbo.test.mjs ci_scripts/quality-gate-ci-wiring.test.mjs ci_scripts/quality-gate-docs.test.mjs ci_scripts/resolve-turbo-cmd.test.mjs
           bash .claude/hooks/quality-gate-affected-scope.test.sh
+          bash .claude/hooks/quality-gate.test.sh
+          bash .claude/hooks/quality-gate-environment.test.sh
           bash .codex/hooks/quality-gate-affected-scope.test.sh
+          bash .codex/hooks/quality-gate.test.sh
       - name: Run CI Test Planner Unit Tests
         if: needs.changes.outputs.web == 'true'
         run: node --test .github/scripts/resolve-ci-test-plan.test.mjs .github/scripts/resolve-ci-test-plan-config.test.mjs .github/scripts/quiz-production-approval-workflow.test.mjs

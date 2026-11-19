@@ -181,6 +181,23 @@ describe('CrossRem catalog source', () => {
     expect(mocks.getFeedData).not.toHaveBeenCalled();
   });
 
+  it('logs the failed source stage without logging the underlying error', async () => {
+    const error = new Error('private source details');
+    mocks.resolveMerchant.mockRejectedValueOnce(error);
+    await expect(loadCrossRemCatalog()).rejects.toBe(error);
+    expect(mocks.warn).toHaveBeenNthCalledWith(1, {
+      message: 'CrossRem merchant lookup failed',
+      merchantId: 'ogabassey-id',
+    });
+
+    mocks.getFeedData.mockRejectedValueOnce(error);
+    await expect(loadCrossRemCatalog()).rejects.toBe(error);
+    expect(mocks.warn).toHaveBeenNthCalledWith(2, {
+      message: 'CrossRem catalog source read failed',
+      merchantId: 'ogabassey-id',
+    });
+  });
+
   it('fails before reading when the bindings have yet to be supplied', async () => {
     mocks.bindings.length = 0;
     await expect(loadCrossRemCatalog()).rejects.toThrow(

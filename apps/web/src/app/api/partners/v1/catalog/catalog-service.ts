@@ -19,7 +19,12 @@ export async function loadCrossRemCatalog() {
     throw new Error('CrossRem catalog is unconfigured');
   }
 
-  const merchant = await resolveFeedMerchant(merchantId, false);
+  const merchant = await resolveFeedMerchant(merchantId, false).catch(
+    (error: unknown) => {
+      logger.warn({ message: 'CrossRem merchant lookup failed', merchantId });
+      throw error;
+    }
+  );
   const currency = resolveMerchantCurrencyConfig(merchant).code;
   if (merchant.id !== merchantId || currency !== 'NGN') {
     logger.warn({
@@ -44,7 +49,10 @@ export async function loadCrossRemCatalog() {
   const data = await getCachedGoogleMerchantFeedData(
     merchant.id,
     merchant.slug
-  );
+  ).catch((error: unknown) => {
+    logger.warn({ message: 'CrossRem catalog source read failed', merchantId });
+    throw error;
+  });
   const rows = collectGoogleMerchantListings(
     data.products,
     // Resolve the pinned SKU even when Google selects a different family row.

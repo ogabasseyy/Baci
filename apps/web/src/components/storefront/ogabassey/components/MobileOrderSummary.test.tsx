@@ -35,6 +35,21 @@ vi.mock('@/hooks/use-currency', () => ({
 }));
 
 describe('MobileOrderSummary', () => {
+  it('uses the merchant contrast token for the wallet switch thumb', () => {
+    render(<MobileOrderSummary cart={[]} cartTotal={1000} deliveryCost={0} deliveryMethod={null} giftWrappingCost={0} payWithWallet remainingAmount={0} walletAmountUsed={1000} walletBalance={1000} showWalletControl setPayWithWallet={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: /show order summary/i }));
+    const walletSwitch = screen.getByRole('switch', { name: 'Use wallet credit' });
+    expect(walletSwitch.firstElementChild).toHaveClass('bg-store-primary-text');
+  });
+  it('uses the storefront foreground for the unchecked wallet thumb', () => {
+    render(<MobileOrderSummary cart={[]} cartTotal={1000} deliveryCost={0} deliveryMethod={null} giftWrappingCost={0} payWithWallet={false} remainingAmount={1000} walletAmountUsed={0} walletBalance={1000} showWalletControl setPayWithWallet={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: /show order summary/i }));
+    expect(screen.getByRole('switch', { name: 'Use wallet credit' }).firstElementChild).toHaveClass('bg-store-background-text');
+  });
+  it('uses the saved order currency when one is supplied', () => {
+    render(<MobileOrderSummary cart={[]} cartTotal={1000} deliveryCost={0} deliveryMethod={null} giftWrappingCost={0} payWithWallet={false} remainingAmount={1000} walletAmountUsed={0} walletBalance={0} currency="USD" />);
+    expect(screen.getByRole('button', { name: /show order summary/i })).toHaveTextContent('$1,000');
+  });
   it('starts collapsed and toggles the breakdown open and closed', () => {
     render(<MobileOrderSummary cart={[]} cartTotal={1000} deliveryCost={0} deliveryMethod="pickup" giftWrappingCost={0} payWithWallet={false} remainingAmount={1000} walletAmountUsed={0} walletBalance={0} />);
     const toggle = screen.getByRole('button', { name: /show order summary/i });
@@ -44,6 +59,12 @@ describe('MobileOrderSummary', () => {
     expect(screen.getByText('Subtotal')).toBeVisible();
     fireEvent.click(toggle);
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  });
+  it('collapses the expanded summary when the customer taps elsewhere in checkout', () => {
+    render(<><button type="button">Continue checkout</button><MobileOrderSummary cart={[]} cartTotal={1000} deliveryCost={0} deliveryMethod={null} giftWrappingCost={0} payWithWallet={false} remainingAmount={1000} walletAmountUsed={0} walletBalance={0} /></>);
+    fireEvent.click(screen.getByRole('button', { name: /show order summary/i }));
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Continue checkout' }));
+    expect(screen.getByRole('button', { name: /show order summary/i })).toHaveAttribute('aria-expanded', 'false');
   });
   it('itemizes the tax included in the Home Makeover payable total', () => {
     render(<MobileOrderSummary cart={[]} cartTotal={7000} deliveryCost={3522} deliveryMethod="door" giftWrappingCost={0} payWithWallet={false} remainingAmount={11047} walletAmountUsed={0} walletBalance={0} taxAmount={525} />);

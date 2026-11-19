@@ -66,7 +66,9 @@ function fixture({
 
 function expectedWorkerSha(context) {
   const refresh = capability.steps.find(
-    (step) => step.run === 'bash .github/scripts/refresh-gigl-cutover-latch.sh'
+    (step) =>
+      step.run ===
+      'bash vps-workers/release/run-as-worker.sh .github/scripts/refresh-gigl-cutover-latch.sh'
   );
   assert.ok(refresh, 'the capability job must use the locked refresh helper');
   return evaluate(refresh.env.BACI_EXPECTED_APP_SHA, context);

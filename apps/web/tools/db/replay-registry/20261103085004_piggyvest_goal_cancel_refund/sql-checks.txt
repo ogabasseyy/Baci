@@ -1,0 +1,10 @@
+supabase/tests/piggyvest_goal_cancel.sql
+supabase/tests/piggyvest_goal_cancel_issue.sql
+supabase/tests/piggyvest_goal_cancel_pin.sql
+supabase/tests/piggyvest_goal_cancel_dispatch.sql
+supabase/tests/piggyvest_goal_cancel_release.sql
+supabase/tests/piggyvest_goal_cancel_settle.sql
+supabase/tests/piggyvest_goal_cancel_review.sql
+supabase/tests/piggyvest_goal_cancel_references.sql
+supabase/tests/piggyvest_goal_cancel_interest.sql
+supabase/tests/piggyvest_goal_cancel_residual.sql

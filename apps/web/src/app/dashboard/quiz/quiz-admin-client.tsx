@@ -170,7 +170,7 @@ export function QuizAdminClient({
     <div className="mx-auto flex max-w-6xl flex-col gap-6">
       <header>
         <p className="text-sm font-medium text-muted-foreground">
-          Gemma quiz generation
+          AI quiz generator
         </p>
         <h1 className="mt-2 text-3xl font-semibold">Quiz</h1>
         <p className="mt-2 text-sm text-muted-foreground">

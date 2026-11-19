@@ -26,6 +26,7 @@ interface SearchPageFormProps {
   refinements?: SearchRefinements;
   suggestionProducts?: SearchSuggestionProduct[];
   assistEnabled?: boolean;
+  suggestionsOnly?: boolean;
 }
 
 export function SearchPageForm({
@@ -36,6 +37,7 @@ export function SearchPageForm({
   refinements,
   suggestionProducts = [],
   assistEnabled = false,
+  suggestionsOnly = false,
 }: SearchPageFormProps) {
   const draft = useSearchQueryDraft();
   const [localQuery, setLocalQuery] = useState(defaultQuery);
@@ -88,57 +90,59 @@ export function SearchPageForm({
           setFocused(false);
       }}
     >
-      <form
-        method="get"
-        action={action}
-        aria-label="Edit search"
-        onSubmit={handleSubmit}
-        className="flex gap-2"
-      >
-        <label htmlFor="search-page-input" className="sr-only">
-          Search products
-        </label>
-        <input
-          id="search-page-input"
-          name="q"
-          type="search"
-          value={query}
-          placeholder="Search or ask a question…"
-          maxLength={STOREFRONT_SEARCH_MAX_QUERY_LENGTH}
-          autoComplete="off"
-          aria-invalid={error !== null}
-          aria-describedby={error === null ? undefined : 'search-page-error'}
-          onChange={(event) => {
-            setQuery(event.target.value);
-            setError(null);
-          }}
-          className="min-w-0 flex-1 rounded-xl border-2 border-store-primary bg-store-background px-4 py-2.5 text-sm text-store-background-text placeholder:text-store-background-text/40 focus:border-store-primary focus:outline-hidden"
-        />
-        <button
-          type="submit"
-          className="shrink-0 rounded-xl bg-store-primary px-4 py-2.5 text-sm font-semibold text-store-primary-text transition hover:opacity-90"
+      {!suggestionsOnly && (
+        <form
+          method="get"
+          action={action}
+          aria-label="Edit search"
+          onSubmit={handleSubmit}
+          className="flex gap-2"
         >
-          Search
-        </button>
-      </form>
+          <label htmlFor="search-page-input" className="sr-only">
+            Search products
+          </label>
+          <input
+            id="search-page-input"
+            name="q"
+            type="search"
+            value={query}
+            placeholder="Search or ask a question…"
+            maxLength={STOREFRONT_SEARCH_MAX_QUERY_LENGTH}
+            autoComplete="off"
+            aria-invalid={error !== null}
+            aria-describedby={error === null ? undefined : 'search-page-error'}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              setError(null);
+            }}
+            className="min-w-0 flex-1 rounded-xl border-2 border-store-primary bg-store-background px-4 py-2.5 text-sm text-store-background-text placeholder:text-store-background-text/40 focus:border-store-primary focus:outline-hidden"
+          />
+          <button
+            type="submit"
+            className="shrink-0 rounded-xl bg-store-primary px-4 py-2.5 text-sm font-semibold text-store-primary-text transition hover:opacity-90"
+          >
+            Search
+          </button>
+        </form>
+      )}
       {focused && refinements && (
-        <>
-          <SearchAssistance
-            query={query}
-            resultQuery={defaultQuery}
-            products={suggestionProducts}
-            criteria={refinements}
-            basePath={action}
-            currency={currency}
-          />
-          <AssistedSearchSuggestions
-            query={query}
-            resultQuery={defaultQuery}
-            enabled={assistEnabled}
-            criteria={refinements}
-            basePath={action}
-          />
-        </>
+        <SearchAssistance
+          query={query}
+          resultQuery={defaultQuery}
+          products={suggestionProducts}
+          criteria={refinements}
+          basePath={action}
+          currency={currency}
+        />
+      )}
+      {(focused || suggestionsOnly) && refinements && (
+        <AssistedSearchSuggestions
+          query={query}
+          resultQuery={defaultQuery}
+          enabled={assistEnabled}
+          criteria={refinements}
+          basePath={action}
+        />
       )}
       {error === null ? null : (
         <p
@@ -147,6 +151,7 @@ export function SearchPageForm({
           className="mt-2 text-sm text-store-background-text/70"
         >
           {error}
+          {suggestionsOnly && ' Use the search bar to update your search.'}
         </p>
       )}
     </div>

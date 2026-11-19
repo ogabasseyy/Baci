@@ -1,5 +1,7 @@
 # Plan: Map Petrock (DHRU Fusion Pro) onto the Baci IMEI checker — richer checks + a clean carrier-unlock funnel
 
+> Historical integration plan. See [current contract](./petrock-current-contract.md) and [customer service map](./catalog-review-20261025/customer-service-map.md) for the 2026-10-25 supplier-contract corrections and current catalog baselines.
+
 > Execution-ready revision. Every earlier "corrected later" note has been folded into the body — read top-to-bottom, no supersession section. Reviewed twice (external agent + Fable meta-review); all blocking findings incorporated.
 
 ## Context

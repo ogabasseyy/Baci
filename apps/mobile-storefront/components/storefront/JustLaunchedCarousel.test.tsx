@@ -71,6 +71,27 @@ describe('JustLaunchedCarousel', () => {
     expect(mockPush).toHaveBeenCalledWith('/product/samsung-galaxy-a27-5g');
   });
 
+  describe('bugfix: heading unreadable on the dark Elite backdrop', () => {
+    it('draws the section on an opaque themed surface', () => {
+      mockUsePinned.mockReturnValue({ data: [a27] });
+      mockUseProducts.mockReturnValue({
+        products: [xiaomi, a27],
+        isLoading: false,
+        isError: false,
+      });
+
+      render(<JustLaunchedCarousel />);
+
+      const surface = screen.getByTestId('just-launched-surface');
+      const style = Object.assign(
+        {},
+        ...[surface.props.style].flat(Number.POSITIVE_INFINITY)
+      ) as { backgroundColor?: string };
+      // The harness theme's opaque background token.
+      expect(style.backgroundColor).toBe('#ffffff');
+    });
+  });
+
   it('bounds Android decoding and requests iOS early resizing for launch images', () => {
     mockUseProducts.mockReturnValue({
       products: [xiaomi],
@@ -98,7 +119,7 @@ describe('JustLaunchedCarousel', () => {
       id: 'new-xiaomi',
       slug: 'xiaomi-18-ultra',
       name: 'Xiaomi 18 Ultra',
-      created_at: '2026-06-24T08:00:00.000Z',
+      created_at: '2026-10-30T08:00:00.000Z',
     };
     mockUsePinned.mockReturnValue({ data: [a27] });
     mockUseProducts.mockReturnValue({

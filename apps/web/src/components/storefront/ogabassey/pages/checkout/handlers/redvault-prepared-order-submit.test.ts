@@ -156,7 +156,9 @@ describe('submitRedvaultPreparedOrder', () => {
   });
 
   it('cancels a stale prepared order and continues with a fresh one', async () => {
-    mockFetch.mockResolvedValueOnce(new Response('{}', { status: 200 }));
+    mockFetch.mockResolvedValueOnce(
+      new Response('{"success":true,"cancelled":true}', { status: 200 })
+    );
     const options = buildOptions({
       redvaultOrderReady: preparedOrder({
         checkoutFingerprint: 'fingerprint-old',

@@ -108,6 +108,12 @@ function merchantIdentityUpdateError(message: string): Error {
     );
   }
 
+  if (message.includes('invalid_support_phone')) {
+    return new Error(
+      'Enter the full phone number with its country code, for example +234 801 234 5678.'
+    );
+  }
+
   if (message.includes('merchant_settings_conflict')) {
     return new Error(
       'These settings changed elsewhere. Reopen the page and try again.'

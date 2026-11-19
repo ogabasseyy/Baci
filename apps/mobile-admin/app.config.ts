@@ -205,9 +205,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       'expo-build-properties',
       {
         android: {
-          compileSdkVersion: 36,
+          compileSdkVersion: 37,
           targetSdkVersion: 36,
-          buildToolsVersion: '36.0.0',
+          buildToolsVersion: '37.0.0',
           enableMinifyInReleaseBuilds: true,
           enableShrinkResourcesInReleaseBuilds: true,
         },

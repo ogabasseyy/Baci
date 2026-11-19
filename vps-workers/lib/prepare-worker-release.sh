@@ -7,6 +7,7 @@ cleanup_worker_staging() {
 # Populates STAGING_DIR and NODE_BIN for deploy.sh. Source this helper before
 # calling the function, and call it before installing services or crontab.
 prepare_worker_release() {
+  refuse_isolated_worker_host || exit 1
   STAGING_DIR="${REMOTE_DIR}.deploy-${APP_SHA}-$$"
   trap cleanup_worker_staging EXIT
 

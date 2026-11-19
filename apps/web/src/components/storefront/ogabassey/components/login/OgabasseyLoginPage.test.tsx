@@ -5,10 +5,14 @@ import { OgabasseyLoginPage } from './OgabasseyLoginPage';
 // Mock next/navigation
 const mockPush = vi.fn();
 const mockRouter = { push: mockPush };
-const mockSearchParams = new URLSearchParams();
+let mockSearchParams = new URLSearchParams();
+const setSearchParams = (values: Record<string, string> = {}) => {
+  mockSearchParams = new URLSearchParams(values);
+};
 
 vi.mock('next/navigation', () => ({
   useRouter: vi.fn(() => mockRouter),
+  usePathname: vi.fn(() => '/account/login'),
   useSearchParams: vi.fn(() => mockSearchParams),
 }));
 
@@ -104,7 +108,19 @@ describe('OgabasseyLoginPage', () => {
       handleAppleSignIn: vi.fn(),
       codeInputRefs: { current: [] },
     });
-    mockSearchParams.get = vi.fn(() => null);
+    setSearchParams();
+  });
+
+  it.each([
+    { isVerifying: true, verified: false },
+    { isVerifying: false, verified: true },
+  ])('does not bypass the server-confirmed OTP transition: %o', (state) => {
+    const defaults = mockUseOgabasseyLogin();
+    mockUseOgabasseyLogin.mockReturnValue({ ...defaults, ...state, isCodeSent: true });
+    mockUseCustomerAuth.mockReturnValue({ isAuthenticated: true, isLoading: false });
+    render(<OgabasseyLoginPage />);
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(screen.getByTestId('otp-form')).toBeInTheDocument();
   });
 
   describe('Loading states', () => {
@@ -171,7 +187,7 @@ describe('OgabasseyLoginPage', () => {
         isAuthenticated: true,
         isLoading: false,
       });
-      mockSearchParams.get = vi.fn(() => null);
+      setSearchParams();
 
       // Act
       render(<OgabasseyLoginPage />);
@@ -187,7 +203,7 @@ describe('OgabasseyLoginPage', () => {
         isAuthenticated: true,
         isLoading: false,
       });
-      mockSearchParams.get = vi.fn(() => '/account/orders');
+      setSearchParams({ redirect: '/account/orders' });
 
       // Act
       render(<OgabasseyLoginPage />);
@@ -230,9 +246,7 @@ describe('OgabasseyLoginPage', () => {
   describe('Email form view', () => {
     it('passes a sanitized email hint to the login hook', () => {
       // Arrange
-      mockSearchParams.get = vi.fn((key) =>
-        key === 'email' ? '  BasseyBJohn@Yahoo.CO.UK  ' : null
-      );
+      setSearchParams({ email: '  BasseyBJohn@Yahoo.CO.UK  ' });
 
       // Act
       render(<OgabasseyLoginPage />);
@@ -252,9 +266,7 @@ describe('OgabasseyLoginPage', () => {
         })
       );
       vi.stubGlobal('fetch', fetchMock);
-      mockSearchParams.get = vi.fn((key) =>
-        key === 'redirect' ? '/receipts/claim/token_123' : null
-      );
+      setSearchParams({ redirect: '/receipts/claim/token_123' });
       mockUseOgabasseyLogin.mockReturnValue({
         email: '',
         code: ['', '', '', '', '', ''],
@@ -305,9 +317,7 @@ describe('OgabasseyLoginPage', () => {
           : new Response(JSON.stringify({}), { status: 200 })
       );
       vi.stubGlobal('fetch', fetchMock);
-      mockSearchParams.get = vi.fn((key) =>
-        key === 'redirect' ? '/receipts/claim/token_123' : null
-      );
+      setSearchParams({ redirect: '/receipts/claim/token_123' });
 
       const { rerender } = render(<OgabasseyLoginPage />);
 
@@ -319,9 +329,7 @@ describe('OgabasseyLoginPage', () => {
         ).toBeInTheDocument();
       });
 
-      mockSearchParams.get = vi.fn((key) =>
-        key === 'redirect' ? '/receipts/claim/token_456' : null
-      );
+      setSearchParams({ redirect: '/receipts/claim/token_456' });
       rerender(<OgabasseyLoginPage />);
 
       await waitFor(() => {
@@ -571,7 +579,7 @@ describe('OgabasseyLoginPage', () => {
     it('passes redirectTo from searchParams to useOgabasseyLogin', () => {
       // Arrange
       const redirectPath = '/account/orders';
-      mockSearchParams.get = vi.fn(() => redirectPath);
+      setSearchParams({ redirect: redirectPath });
       mockUseMerchant.mockReturnValue({ loading: false });
       mockUseCustomerAuth.mockReturnValue({
         isAuthenticated: false,
@@ -590,7 +598,7 @@ describe('OgabasseyLoginPage', () => {
 
     it('passes default /account redirectTo when no redirect param in URL', () => {
       // Arrange
-      mockSearchParams.get = vi.fn(() => null);
+      setSearchParams();
       mockUseMerchant.mockReturnValue({ loading: false });
       mockUseCustomerAuth.mockReturnValue({
         isAuthenticated: false,

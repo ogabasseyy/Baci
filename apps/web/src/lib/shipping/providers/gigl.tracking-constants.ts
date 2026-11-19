@@ -17,4 +17,8 @@ export const GIGL_TRACKING_BATCH_TIMEOUT_MS =
     GIGL_TRACKING_BATCH_TIMEOUT_MAX_MS
   ) || 15_000;
 export const GIGL_STOREFRONT_TRACKING_TIMEOUT_MS = 5_000;
+// /get/preshipment answers with one waybill's booking record; anything near
+// these bounds is not a single booking and is never attested.
+export const GIGL_PRESHIPMENT_RESPONSE_MAX_BYTES = 256 * 1_024;
+export const GIGL_PRESHIPMENT_MAX_RECORDS = 20;
 export const GIGL_STOREFRONT_TRACKING_LEASE_MS = 15_000;

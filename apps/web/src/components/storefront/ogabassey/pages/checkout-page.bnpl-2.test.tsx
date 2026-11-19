@@ -5,13 +5,12 @@ import {
 } from './checkout-page-bnpl.test-support';
 import {
   act,
-  CheckoutPage,
   expect,
   fireEvent,
   it,
   mockCaptureClientEvent,
   openCreditDirectCheckout,
-  render,
+  renderCheckoutWithStoreRates,
   screen,
   toast,
   useAuthSafe,
@@ -94,11 +93,9 @@ it('hides Klump when wallet credit is auto-applied', async () => {
     });
 
   try {
-    render(<CheckoutPage />);
+    renderCheckoutWithStoreRates();
 
-    fireEvent.click(
-      screen.getByRole('button', { name: /pay in installments/i })
-    );
+    fireEvent.click(screen.getByRole('button', { name: /pay small small/i }));
 
     await waitFor(() => {
       expect(

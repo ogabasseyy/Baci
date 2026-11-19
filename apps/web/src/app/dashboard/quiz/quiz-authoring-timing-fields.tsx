@@ -33,7 +33,7 @@ export function QuizAuthoringTimingFields({
       <label className="grid gap-2 text-sm font-medium">
         Launch timing
         <select
-          className="h-11 rounded-md border bg-background px-3"
+          className="h-11 min-w-0 rounded-md border bg-background px-3 text-base md:text-sm"
           value={timingKind}
           onChange={(event) =>
             onTimingKindChange(
@@ -49,7 +49,7 @@ export function QuizAuthoringTimingFields({
         <label className="grid gap-2 text-sm font-medium">
           Total quiz duration (seconds)
           <input
-            className="h-11 rounded-md border bg-background px-3"
+            className="h-11 min-w-0 rounded-md border bg-background px-3 text-base md:text-sm"
             min={1}
             max={QUIZ_AUTHORING_MAX_DURATION_SECONDS}
             step={1}
@@ -83,7 +83,7 @@ export function QuizAuthoringTimingFields({
           <label className="grid gap-2 text-sm font-medium">
             Scheduled start ({QUIZ_DEFAULT_TIME_ZONE})
             <input
-              className="h-11 rounded-md border bg-background px-3"
+              className="h-11 min-w-0 rounded-md border bg-background px-3 text-base md:text-sm"
               type="datetime-local"
               value={scheduledStart}
               onChange={(event) => onScheduledStartChange(event.target.value)}
@@ -92,7 +92,7 @@ export function QuizAuthoringTimingFields({
           <label className="grid gap-2 text-sm font-medium">
             Universal end ({QUIZ_DEFAULT_TIME_ZONE})
             <input
-              className="h-11 rounded-md border bg-background px-3"
+              className="h-11 min-w-0 rounded-md border bg-background px-3 text-base md:text-sm"
               type="datetime-local"
               value={scheduledEnd}
               onChange={(event) => onScheduledEndChange(event.target.value)}

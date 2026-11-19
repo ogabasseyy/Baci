@@ -1,19 +1,11 @@
 name: iOS Storefront Production Release
 
 on:
+  # Storefront release gate: while .github/storefront-release-gate.json exists,
+  # a store release starts only from an owner tag or a manual dispatch, never
+  # from a push to main. docs/runbooks/storefront-release-gate.md records the
+  # push trigger to restore when the gate ends.
   push:
-    branches:
-      - main
-    paths:
-      - 'apps/mobile-storefront/**'
-      - 'packages/shared/**'
-      - 'package.json'
-      - 'pnpm-workspace.yaml'
-      - '.npmrc'
-      # pnpm patches ship native code (e.g. expo-modules-jsi); a patch or
-      # lockfile-only change must still trigger a release build.
-      - 'patches/**'
-      - 'pnpm-lock.yaml'
     tags:
       - 'v*-storefront-ios'
   workflow_dispatch:
@@ -22,9 +14,14 @@ on:
         description: 'iOS build number override (leave empty for auto)'
         required: false
         type: string
+      testflight_only:
+        description: 'Upload to TestFlight without submitting for App Review'
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
-  group: ios-storefront-release-${{ github.ref }}
+  group: ios-storefront-release-${{ github.ref }}${{ (github.event_name == 'workflow_dispatch' && inputs.testflight_only) && '-testflight' || '' }}
   cancel-in-progress: true
 
 permissions:
@@ -53,16 +50,32 @@ jobs:
     # with ios-storefront-submit.yml so the two submission paths can never race
     # to cancel the same review or rename the same version. This is job-level on
     # purpose: the workflow-level group above keeps cancelling superseded
-    # release builds, which this must not undo.
+    # release builds, which this must not undo. TestFlight-only uploads use
+    # their own queue so they cannot replace a pending production submission.
     concurrency:
-      group: ios-storefront-app-store-submission
+      group: ${{ (github.event_name == 'workflow_dispatch' && inputs.testflight_only) && 'ios-storefront-testflight-upload' || 'ios-storefront-app-store-submission' }}
       cancel-in-progress: false
 
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # Full history, so the next step can confirm the commit is on main.
+          fetch-depth: 0
           persist-credentials: false
+
+      # Storefront release gate: a store release ships only a commit that is
+      # already on main, so it passed review and the gate's CI check. This
+      # runs before anything else; docs/runbooks/storefront-release-gate.md.
+      - name: Refuse release sources that are not on main
+        env:
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if ! git merge-base --is-ancestor "$RELEASE_SHA" refs/remotes/origin/main; then
+            echo '::error::This release commit is not on main. Store releases ship only reviewed commits from main; see docs/runbooks/storefront-release-gate.md.' >&2
+            exit 1
+          fi
 
       - name: Select Xcode ${{ env.XCODE_VERSION }}
         run: sudo xcode-select -s "/Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer"
@@ -310,10 +323,11 @@ jobs:
       # gate is now driven by the App Store's actual live state via the
       # `ios-live-build-sync` cron reconciler (App Store Connect API).
       - name: Submit to App Store for review
+        id: submit
         # !cancelled() drops the implicit success() so a transient failure of the
         # preceding artifact-upload step can't skip submission once the build is
         # already on TestFlight; gate purely on the fastlane release outcome.
-        if: ${{ !cancelled() && steps.fastlane_release.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.fastlane_release.outcome == 'success' && !(github.event_name == 'workflow_dispatch' && inputs.testflight_only) }}
         working-directory: ${{ env.WORKING_DIR }}
         env:
           CI: '1'
@@ -336,6 +350,16 @@ jobs:
           # replace lives in ios-storefront-submit.yml, whose run is never
           # cancelled by a competing one.
         run: bundle exec fastlane ios submit
+
+      - name: Record release mode
+        if: ${{ always() && steps.fastlane_release.outcome == 'success' }}
+        env:
+          TESTFLIGHT_UPLOAD_COMPLETED: 'true'
+          TESTFLIGHT_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.testflight_only }}
+          SUBMISSION_OUTCOME: ${{ steps.submit.outcome }}
+          SUBMISSION_RESULT: ${{ steps.submit.outputs.app_store_submission }}
+        run: |
+          bash "${{ github.workspace }}/.github/scripts/record-ios-storefront-release-mode.sh"
 
       - name: Clean up secrets
         if: always()

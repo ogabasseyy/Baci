@@ -1,7 +1,13 @@
 import { z } from 'zod';
 
+const responseEnvelope = {
+  status: z.literal('success').optional(),
+  code: z.coerce.number().int().min(200).max(299).optional(),
+};
+
 export const petrockAccountResponseSchema = z
   .object({
+    ...responseEnvelope,
     data: z
       .object({
         balance: z.coerce.number(),
@@ -47,6 +53,7 @@ export const petrockProductSchema = z
 
 export const petrockProductsResponseSchema = z
   .object({
+    ...responseEnvelope,
     data: z
       .object({
         categories: z
@@ -60,17 +67,32 @@ export const petrockProductsResponseSchema = z
   })
   .loose();
 
-const petrockOrderIdSchema = z.coerce.string().trim().min(1);
-
-export const petrockOrderStatusSchema = z.enum([
-  'new',
-  'in-process',
-  'success',
-  'reject',
+const petrockOrderIdSchema = z.union([
+  z.string().trim().min(1),
+  z.number().int().positive().transform(String),
 ]);
+
+export const petrockOrderStatusSchema = z
+  .enum([
+    'new',
+    'pre-checking',
+    'accepted',
+    'in-process',
+    'pending',
+    'verify',
+    'success',
+    'rejected',
+    'reject',
+  ])
+  .transform((status): 'new' | 'in-process' | 'success' | 'reject' => {
+    if (status === 'success' || status === 'new') return status;
+    if (status === 'reject' || status === 'rejected') return 'reject';
+    return 'in-process';
+  });
 
 export const petrockSubmitOrderResponseSchema = z
   .object({
+    ...responseEnvelope,
     data: z
       .array(
         z.array(
@@ -88,13 +110,26 @@ export const petrockSubmitOrderResponseSchema = z
 
 export const petrockOrderResponseSchema = z
   .object({
+    ...responseEnvelope,
     data: z
       .object({
-        order_uuid: petrockOrderIdSchema,
+        order_uuid: petrockOrderIdSchema.optional(),
         reference_id: z.coerce.string().optional(),
-        replay: z.string().optional().default(''),
+        replay: z.preprocess(
+          (value) => (value === null ? undefined : value),
+          z.string().optional().default('')
+        ),
         status: petrockOrderStatusSchema,
       })
       .loose(),
   })
-  .loose();
+  .loose()
+  .refine(
+    (response) =>
+      response.data.status !== 'success' ||
+      response.data.replay.trim().length > 0,
+    {
+      message: 'A completed Petrock order must include a result',
+      path: ['data', 'replay'],
+    }
+  );

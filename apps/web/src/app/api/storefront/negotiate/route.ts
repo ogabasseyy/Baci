@@ -22,9 +22,6 @@ const DISCOUNT_TIERS = {
   3: COUNTER_NEGOTIATION_DISCOUNT_STEPS[2], // 2% hard floor on third attempt (final offer)
 };
 
-// Minimum profit margin (don't go below this)
-const MIN_PROFIT_MARGIN = 0.1; // 10%
-
 interface NegotiationResult {
   status: 'accepted' | 'counter' | 'rejected' | 'final';
   counterOffer?: number;
@@ -46,7 +43,7 @@ export async function POST(request: NextRequest) {
     // Fetch product details
     const { data: product, error: productError } = await supabase
       .from('products')
-      .select('id, name, brand, price, cost_price, merchant_id')
+      .select('id, name, brand, price, merchant_id')
       .eq('id', validatedData.productId)
       .eq('merchant_id', validatedData.merchantId)
       .eq('status', 'active')
@@ -80,21 +77,48 @@ export async function POST(request: NextRequest) {
       });
 
     const originalPrice = product.price;
-    const costPrice = product.cost_price || originalPrice * 0.6; // Estimate 40% margin if no cost
-    // Auto-accept floor: never below cost margin, and never deeper than the
-    // shared 2% auto-negotiation cap.
-    const minAcceptablePrice = Math.max(
-      costPrice * (1 + MIN_PROFIT_MARGIN),
-      originalPrice * (1 - MAX_AUTO_NEGOTIATION_DISCOUNT_RATE)
-    );
-
-    const attemptNumber = validatedData.attemptNumber;
-    const offeredPrice = validatedData.offeredPrice;
-
     const isNegotiable = isProductNegotiable({
       brand: product.brand,
       name: product.name,
     });
+
+    // Auto-accept floor: never below cost margin, and never deeper than the
+    // shared 2% auto-negotiation cap. products.cost_price is not readable by
+    // shoppers, so the database computes the cost-based part and returns only
+    // the floor. Fail closed: without it we could accept a below-cost offer.
+    // Only negotiable products need the floor, so a missing RPC cannot break
+    // the non-negotiable 'best price' path.
+    let minAcceptablePrice = originalPrice;
+    if (isNegotiable) {
+      const { data: costFloor, error: costFloorError } = await supabase.rpc(
+        'get_negotiation_cost_floor_price',
+        { p_product_id: product.id, p_merchant_id: product.merchant_id }
+      );
+      const costFloorPrice = Number(costFloor);
+      if (
+        costFloorError ||
+        costFloor == null ||
+        !Number.isFinite(costFloorPrice)
+      ) {
+        console.error(
+          costFloorError
+            ? 'Negotiation cost floor lookup error:'
+            : 'Negotiation cost floor unavailable (product inactive or RPC returned no value)',
+          costFloorError ?? { productId: product.id }
+        );
+        return NextResponse.json(
+          { error: 'Failed to process negotiation' },
+          { status: 500 }
+        );
+      }
+      minAcceptablePrice = Math.max(
+        costFloorPrice,
+        originalPrice * (1 - MAX_AUTO_NEGOTIATION_DISCOUNT_RATE)
+      );
+    }
+
+    const attemptNumber = validatedData.attemptNumber;
+    const offeredPrice = validatedData.offeredPrice;
 
     let result: NegotiationResult;
 

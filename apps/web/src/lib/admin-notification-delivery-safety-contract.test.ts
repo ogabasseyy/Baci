@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -28,6 +28,9 @@ const pushDispatch = read(
 const workerSource = `${worker}\n${pushDispatch}`;
 const runner = read(
   'supabase/functions/process-scheduled-notifications/index.ts'
+);
+const workerOutcome = read(
+  'supabase/functions/_shared/scheduled-notification-worker-outcome.ts'
 );
 
 describe('scheduled notification delivery safety contract', () => {
@@ -78,7 +81,51 @@ describe('scheduled notification delivery safety contract', () => {
   it('records retry and execution failures instead of reporting them as success', () => {
     expect(runner).toContain("p_status: 'failed'");
     expect(runner).toContain('recordWorkerFailure');
-    expect(runner).toContain('notification_retry');
+    expect(runner).toContain(
+      "from '../_shared/scheduled-notification-worker-outcome.ts'"
+    );
+    expect(runner).toContain('getScheduledNotificationWorkerOutcome(results)');
+    expect(runner).toContain('{ status: outcome.httpStatus }');
+    expect(workerOutcome).toContain("? 'notification_retry'");
+    expect(workerOutcome).toContain("'notification_delivery_failed'");
     expect(followUp).toContain('last_failed_at > coalesce');
+  });
+
+  it('runs the web suite, which holds the worker behaviour tests, whenever the worker changes', () => {
+    const filters = read('.github/filters/ci.yml');
+    const webStart = filters.indexOf('\nweb:\n');
+    expect(webStart).toBeGreaterThanOrEqual(0);
+    const nextGroup = filters.slice(webStart + 6).search(/\n[a-z_]+:\n/);
+    const webPaths = filters.slice(
+      webStart,
+      nextGroup < 0 ? undefined : webStart + 6 + nextGroup
+    );
+    for (const path of [
+      'supabase/functions/_shared/scheduled-notification*',
+      'supabase/functions/process-scheduled-notifications/**',
+    ])
+      expect(webPaths).toContain(`  - '${path}'\n`);
+    // The CI workflow tests parse this group as one unbroken run of list
+    // items, so an interior comment silently truncates what they can see.
+    expect(webPaths).not.toMatch(/\n\s*#/);
+    for (const suite of [
+      'admin-notification-batch-isolation.test.ts',
+      'admin-notification-batch-unidentifiable-claim.test.ts',
+      'admin-notification-test-support.test.ts',
+      'admin-notification-worker-outcome.test.ts',
+    ])
+      expect(read(`apps/web/src/lib/${suite}`)).toContain(
+        'supabase/functions/_shared/scheduled-notification'
+      );
+    // Every new worker module keeps a colocated test next to it.
+    for (const module of [
+      'scheduled-notification-delivery.test-support',
+      'scheduled-notification-worker-outcome',
+    ])
+      expect(
+        existsSync(
+          resolve(root, `supabase/functions/_shared/${module}.test.ts`)
+        )
+      ).toBe(true);
   });
 });

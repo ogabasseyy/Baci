@@ -1,6 +1,6 @@
 import { IMEI_SERVICE_TIERS, type ImeiServiceTierKey } from '@baci/shared/imei';
-import { getTierIcon } from './imei-checker-tier-icons';
 import type { LucideIcon } from 'lucide-react';
+import { getTierIcon } from './imei-checker-tier-icons';
 
 const currencyFormatter = new Intl.NumberFormat('en-NG', {
   currency: 'NGN',
@@ -33,7 +33,7 @@ export function getDisplayTier(tierKey: ImeiServiceTierKey): DisplayImeiTier {
     features: tier.features,
     icon: getTierIcon(tierKey),
     id: tierKey,
-    name: tier.name,
+    name: tierKey === 'activation' ? 'Activation check' : tier.name,
     price: tier.price,
     priceDisplay: currencyFormatter.format(tier.price),
     recommended: 'recommended' in tier ? tier.recommended : undefined,

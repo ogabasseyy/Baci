@@ -78,8 +78,6 @@ export function PiggyvestSavingsScreen({
           pendingInterestKobo: savings.pendingInterestKobo,
         }
       : null;
-  const funding = allowed ? source.funding : null;
-  const accounts = funding?.status === 'ready' ? funding.accounts : null;
   const loadingDraft = view?.status === 'loading';
   return (
     <ScrollView
@@ -255,31 +253,6 @@ export function PiggyvestSavingsScreen({
                 : money(ready.pendingInterestKobo)}
             </Text>
           </>
-        )}
-      </View>
-      <View style={[styles.section, { borderColor: colors.border }]}>
-        <Text
-          accessibilityRole="header"
-          style={[styles.label, { color: colors.text }]}
-        >
-          Funding details
-        </Text>
-        {accounts ? (
-          accounts.map((account) => (
-            <View key={JSON.stringify(account)}>
-              <Text style={{ color: colors.text }}>{account.bankName}</Text>
-              <Text style={{ color: colors.text }}>{account.accountName}</Text>
-              <Text style={{ color: colors.text }}>
-                {account.accountNumber}
-              </Text>
-            </View>
-          ))
-        ) : (
-          <Text accessibilityLiveRegion="polite" style={{ color: colors.text }}>
-            {draft && funding?.status === 'pending'
-              ? 'Funding details are pending confirmation.'
-              : 'Funding details are unavailable.'}
-          </Text>
         )}
       </View>
     </ScrollView>

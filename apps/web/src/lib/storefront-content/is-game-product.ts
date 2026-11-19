@@ -1,8 +1,7 @@
+import { GAME_CATEGORY_PATTERN } from '@/config/storefront-game-category';
 import type { BuildCommercialGuideLinksContext } from './content-cluster-types';
 import { isProductVariantColorToken } from './is-product-variant-color-token';
 
-const GAME_CATEGORY_PATTERN =
-  /^(?:(?:portable-)?gaming|playstation-[45]|nintendo-switch(?:-2)?|xbox)$/u;
 const GAME_HARDWARE_MARKERS = new Set([
   'adapter',
   'cable',

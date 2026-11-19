@@ -1,15 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { recoverPendingCheckoutOrder } from './recover-pending-checkout-order';
-import { submitCheckoutOrder } from './submit-checkout-order';
+import { captureCheckoutFunnelEventOnce } from '@/lib/posthog/capture-checkout-funnel-event';
 import { persistPendingCheckoutOrder } from '../persist-pending-checkout-order';
 import { runCheckoutOrderLifecycle } from './checkout-order-lifecycle';
-import { captureCheckoutFunnelEventOnce } from '@/lib/posthog/capture-checkout-funnel-event';
+import { recoverPendingCheckoutOrder } from './recover-pending-checkout-order';
+import { submitCheckoutOrder } from './submit-checkout-order';
 
 vi.mock('./recover-pending-checkout-order', () => ({
   recoverPendingCheckoutOrder: vi.fn(),
 }));
 vi.mock('./submit-checkout-order', async (importOriginal) => {
-  const original = await importOriginal<typeof import('./submit-checkout-order')>();
+  const original =
+    await importOriginal<typeof import('./submit-checkout-order')>();
   return { ...original, submitCheckoutOrder: vi.fn() };
 });
 vi.mock('../persist-pending-checkout-order', () => ({
@@ -142,6 +143,52 @@ describe('runCheckoutOrderLifecycle', () => {
       'review-ready',
       'released',
     ]);
+  });
+
+  it('stores the reviewed shared-cart identity with the UBA order', async () => {
+    vi.mocked(recoverPendingCheckoutOrder).mockResolvedValue({
+      kind: 'submit',
+      pendingOrder: { reusableOrder: null, clearStoredOrder: false },
+    });
+    vi.mocked(submitCheckoutOrder).mockResolvedValue({
+      order: {
+        id: 'order-1',
+        tracking_token: 'proof',
+        currency: 'NGN',
+        total: 102.5,
+      },
+      wallet: null,
+      amountDueToGateway: 102.5,
+      redvaultSummary: {
+        productSubtotalKobo: 10_000,
+        eligibleSubtotalKobo: 10_000,
+        ineligibleSubtotalKobo: 0,
+        discountKobo: 500,
+        assuranceFeeKobo: 0,
+        taxKobo: 750,
+        shippingKobo: 0,
+        giftWrappingKobo: 0,
+        payableKobo: 10_250,
+        mixedBasket: false,
+      },
+    });
+    const options = lifecycleOptions();
+    options.submit.orderRequest = {
+      shared_cart: { cart_id: 'reviewed-cart' },
+    } as never;
+    options.redvaultReview.enabled = true;
+    await runCheckoutOrderLifecycle(options);
+
+    expect(options.redvaultReview.setReady).toHaveBeenCalledWith(
+      expect.objectContaining({ cartId: 'reviewed-cart', orderId: 'order-1' })
+    );
+    expect(persistPendingCheckoutOrder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        redvaultReview: expect.objectContaining({
+          ready: expect.objectContaining({ cartId: 'reviewed-cart' }),
+        }),
+      })
+    );
   });
 
   it('returns server order currency, gateway amount, and billing address for payment initialization', async () => {

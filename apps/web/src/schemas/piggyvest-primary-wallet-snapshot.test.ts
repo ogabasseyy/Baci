@@ -23,6 +23,23 @@ describe('primary wallet snapshot schemas', () => {
       }).success
     ).toBe(false);
   });
+  it('accepts exactly one boolean onboarding presence row', () => {
+    expect(schemas.presence.parse([{ result: false }])).toEqual([
+      { result: false },
+    ]);
+    expect(schemas.presence.parse([{ result: true }])).toEqual([
+      { result: true },
+    ]);
+  });
+  it.each([
+    ['no row', []],
+    ['two rows', [{ result: false }, { result: false }]],
+    ['a null result', [{ result: null }]],
+    ['a string result', [{ result: 'false' }]],
+    ['an extra column', [{ result: false, intentId: 'leak' }]],
+  ])('rejects onboarding presence with %s', (_label, rows) => {
+    expect(schemas.presence.safeParse(rows).success).toBe(false);
+  });
   it('retains leading zeros in valid bank account numbers', () => {
     expect(
       schemas.accounts.parse([

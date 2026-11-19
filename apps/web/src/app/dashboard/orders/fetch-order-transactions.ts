@@ -23,7 +23,7 @@ export async function fetchOrderTransactions({
   const { data: transactions, error: transactionsError } = await supabase
     .from('transactions')
     .select(
-      'id, gateway_reference, transaction_type, status, amount, currency, gateway, created_at'
+      'id, gateway_reference, transaction_type, status, amount, currency, gateway, created_at, payment_transaction_id:metadata->>payment_transaction_id, provider_refund_status:metadata->>provider_refund_status, provider_refund_id:metadata->>provider_refund_id, refund_method:metadata->>method'
     )
     .eq('merchant_id', merchantId)
     .eq('order_id', orderId)

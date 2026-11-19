@@ -109,6 +109,7 @@ export default function ForgotPasswordScreen() {
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Email Address</Text>
             <TextInput
+              accessibilityLabel="Email Address"
               style={styles.input}
               placeholder="your@email.com"
               placeholderTextColor={colors.placeholder}

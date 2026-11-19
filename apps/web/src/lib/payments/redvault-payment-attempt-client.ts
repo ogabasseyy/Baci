@@ -140,9 +140,10 @@ export function createRedvaultPaymentAttemptClient({
     async claimInitialization(attemptId: string): Promise<{
       attempt: RedvaultReservedAttempt;
       claimed: boolean;
+      fresh: boolean;
     }> {
       const { data, error } = await client.rpc(
-        'claim_storefront_redvault_payment_attempt_initialization_v3' as never,
+        'claim_storefront_redvault_payment_attempt_initialization_v4' as never,
         { p_attempt_id: attemptId } as never
       );
       const row = firstRow(data);
@@ -151,11 +152,17 @@ export function createRedvaultPaymentAttemptClient({
         error ||
         !attempt ||
         !row ||
-        typeof row.initialization_claimed !== 'boolean'
+        typeof row.initialization_claimed !== 'boolean' ||
+        typeof row.initialization_fresh !== 'boolean' ||
+        row.initialization_fresh !== row.initialization_claimed
       ) {
         throw new Error(error?.message ?? 'Unable to claim REDVAULT checkout');
       }
-      return { attempt, claimed: row.initialization_claimed };
+      return {
+        attempt,
+        claimed: row.initialization_claimed,
+        fresh: row.initialization_fresh,
+      };
     },
     async markIndeterminate(attemptId: string): Promise<void> {
       const { error } = await client.rpc(

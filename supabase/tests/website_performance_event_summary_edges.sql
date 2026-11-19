@@ -128,6 +128,7 @@ BEGIN
   END IF;
 END;
 $$;
+GRANT EXECUTE ON FUNCTION pg_temp.assert_website_summary_edge(timestamp with time zone, timestamp with time zone, jsonb) TO PUBLIC; -- called after SET ROLE
 
 SET LOCAL ROLE service_role;
 SELECT pg_temp.assert_website_summary_edge(

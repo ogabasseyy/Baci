@@ -1,24 +1,16 @@
 'use client';
 
-import type { Product } from '@/lib/products';
+import type { AnalyticsProduct } from '@/lib/analytics/analytics-product';
 import { sendFacebookPixelEvent } from './analytics/facebook-pixel-client';
+import { type EcommerceItem, productToItem } from './analytics/product-to-item';
 import { trackCartView } from './analytics/track-cart-view';
 import { trackSocialFunnel } from './analytics/track-social-funnel';
 import { isAnalyticsAllowed } from './analytics-consent';
 import { facebookCatalogEvent } from './facebook-catalog-event';
+import { sanitizeTrackingUrl } from './privacy/sanitize-tracking-url';
 import { measureXEvent } from './x-ads/pixel-client';
 
 // Types for analytics events
-interface EcommerceItem {
-  item_id: string;
-  item_name: string;
-  item_category?: string;
-  item_brand?: string;
-  price: number;
-  quantity?: number;
-  item_variant?: string;
-}
-
 interface ViewItemParams {
   currency: string;
   value: number;
@@ -44,26 +36,6 @@ interface PurchaseParams {
 
 // Check if analytics cookies are allowed
 export { isAnalyticsAllowed } from './analytics-consent';
-
-// Convert product to ecommerce item format
-function productToItem(
-  product: Product,
-  quantity: number = 1,
-  variant?: string
-): EcommerceItem {
-  // Use joined categories.name from category_id, fallback to legacy TEXT field
-  const categoryName =
-    product.categories?.name || product.category || undefined;
-
-  return {
-    item_id: product.id,
-    item_name: product.name,
-    item_category: categoryName,
-    price: product.price,
-    quantity,
-    item_variant: variant,
-  };
-}
 
 // GA4 Event Tracking
 function sendGA4Event(eventName: string, params: object) {
@@ -95,7 +67,7 @@ export const analytics = {
   pageView: (url: string, title?: string) => {
     // GA4 - page_view is automatic with gtag.js, but can be manual
     sendGA4Event('page_view', {
-      page_location: url,
+      page_location: sanitizeTrackingUrl(url),
       page_title: title,
     });
 
@@ -105,7 +77,7 @@ export const analytics = {
 
   // View product details
   viewItem: (
-    product: Product,
+    product: AnalyticsProduct,
     currency: string = 'USD',
     eventId: string = crypto.randomUUID()
   ) => {
@@ -162,7 +134,7 @@ export const analytics = {
 
   // Add to cart
   addToCart: (
-    product: Product,
+    product: AnalyticsProduct,
     quantity: number = 1,
     currency: string = 'USD',
     variant?: string,
@@ -211,7 +183,7 @@ export const analytics = {
 
   // Remove from cart
   removeFromCart: (
-    product: Product,
+    product: AnalyticsProduct,
     quantity: number = 1,
     currency: string = 'USD'
   ) => {
@@ -226,7 +198,7 @@ export const analytics = {
 
   // View cart / Begin checkout
   beginCheckout: (
-    products: Array<{ product: Product; quantity: number }>,
+    products: Array<{ product: AnalyticsProduct; quantity: number }>,
     currency: string = 'USD',
     eventId: string = crypto.randomUUID()
   ) => {
@@ -303,7 +275,7 @@ export const analytics = {
   // Purchase complete
   purchase: (
     orderId: string,
-    products: Array<{ product: Product; quantity: number }>,
+    products: Array<{ product: AnalyticsProduct; quantity: number }>,
     total: number,
     currency: string = 'USD',
     tax?: number,
@@ -348,7 +320,7 @@ export const analytics = {
   viewItemList: (
     listId: string,
     listName: string,
-    products: Product[],
+    products: AnalyticsProduct[],
     _currency: string = 'USD'
   ) => {
     const items = products.map((product, index) => ({
@@ -374,7 +346,7 @@ export const analytics = {
 
   // Click on product in list
   selectItem: (
-    product: Product,
+    product: AnalyticsProduct,
     listId?: string,
     listName?: string,
     index?: number
@@ -392,7 +364,7 @@ export const analytics = {
   },
 
   // Add to wishlist
-  addToWishlist: (product: Product, currency: string = 'USD') => {
+  addToWishlist: (product: AnalyticsProduct, currency: string = 'USD') => {
     sendGA4Event('add_to_wishlist', {
       currency,
       value: product.price,

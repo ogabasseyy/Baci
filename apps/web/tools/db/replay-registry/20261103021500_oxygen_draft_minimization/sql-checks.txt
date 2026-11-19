@@ -1,0 +1,1 @@
+supabase/tests/oxygen_submitted_draft_minimization.sql

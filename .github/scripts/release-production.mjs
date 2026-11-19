@@ -5,12 +5,11 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { acquireReleaseLock, assertLiveDeployment, coordinateRelease, IN_FLIGHT_RUN_STATUSES, releaseLockPath, selectCoordinatedRun } from './coordinate-production-release.mjs';
 import { assertCanonicalOriginPushUrls, assertCleanWorkerDeployEnv, CANONICAL_REPOSITORY, originRepoSlug } from './release-remote-validation.mjs';
-import { createRunner, runWorkerDeploy } from './release-subprocess.mjs';
+import { createRunner } from './release-subprocess.mjs';
 import { parseRecoveryReleaseApproval, recoveryReconciliationDispatchFields } from './recovery-release-approval.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const repository = CANONICAL_REPOSITORY;
-const workerHost = 'bassey@82.29.190.219';
 const coordinationId = randomUUID();
 const { command, gh, vercelApi } = createRunner(root);
 
@@ -50,14 +49,11 @@ export function assertVercelAccess(readAlias = readServingDeploymentId) {
   }
 }
 
-// Covers the sequential job allowance (10 + 80 + 10 + 150 = 250 min:
-// vps-drain-readiness, db-migrations, gigl-worker-capability,
-// deploy-production) plus queue and environment-approval slack, so
+// Covers the sequential job allowance (45 + 10 + 80 + 10 + 240 = 385 min:
+// vps-worker-sync, vps-drain-readiness, db-migrations,
+// gigl-worker-capability, deploy-production) plus queue and approval slack, so
 // a healthy slow release is never abandoned while it may publish.
-export const RUN_WATCH_TIMEOUT_MS = 330 * 60 * 1000;
-// Worker deploy + verify steps are single-digit minutes when healthy;
-// 30 minutes bounds a hung deploy.sh or SSH session loudly.
-export const WORKER_STEP_TIMEOUT_MS = 30 * 60 * 1000;
+export const RUN_WATCH_TIMEOUT_MS = 465 * 60 * 1000;
 
 export async function waitForRunCompletion(runId, readStatus, options = {}) {
   const { pollMs = 10000, timeoutMs = RUN_WATCH_TIMEOUT_MS, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)), onWait = null } = options;
@@ -213,12 +209,6 @@ async function main() {
       listRuns: async () => [...IN_FLIGHT_RUN_STATUSES]
         .flatMap(status => readRuns(`status=${status}`, true)),
       listCoordinatedRuns: async () => readRuns('event=workflow_dispatch', true),
-      // Generous explicit bounds so a hung deploy or SSH session
-      // fails loudly instead of wedging the operator session forever
-      // with the lock held; healthy runs take single-digit minutes.
-      updateWorkers: async () => runWorkerDeploy(() => command('bash', ['vps-workers/deploy.sh'], false, { timeoutMs: WORKER_STEP_TIMEOUT_MS })),
-      verifyWorkers: async commit => command('ssh', ['-o', 'BatchMode=yes', workerHost,
-        `BACI_EXPECTED_APP_SHA=${commit} bash /home/bassey/baci-workers/bin/verify-gigl-direct-workers-installed.sh --skip-live-smoke`], false, { timeoutMs: WORKER_STEP_TIMEOUT_MS }),
       dispatch: async commit => gh(['workflow', 'run', 'deploy.yml', '--repo', repository, '--ref', 'main',
         '-f', `coordination_id=${coordinationId}`, '-f', `expected_release_sha=${commit}`,
         ...recoveryReconciliationDispatchFields(reconcileLegacy)]),
@@ -266,7 +256,7 @@ async function main() {
   } catch (error) {
     if (shouldHoldReleaseLock(error)) {
       holdLock = true;
-      process.stderr.write(`indeterminate dispatch outcome; release lock held at ${lockPath} — reconcile existing runs before removing it\n`);
+      process.stderr.write(`indeterminate release outcome; release lock held at ${lockPath} — reconcile existing runs and workers before removing it\n`);
     }
     throw error;
   } finally {

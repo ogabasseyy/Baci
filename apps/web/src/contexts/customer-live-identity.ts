@@ -1,3 +1,5 @@
+import { broadcastCustomerIdentityInvalidation } from './customer-identity-invalidation';
+
 /**
  * Live customer identity, published synchronously at every auth
  * mutation (Codex R95 P1). Context state reaches consumers only
@@ -11,6 +13,16 @@
  * Focused module so the holder does not grow the already-oversized
  * auth context: the context publishes, settlement readers consume.
  */
+const identityListeners = new Set<() => void>();
+
+/** Subscribe to all committed customer identity publications. */
+export function subscribeCustomerIdentityChange(
+  listener: () => void
+): () => void {
+  identityListeners.add(listener);
+  return () => identityListeners.delete(listener);
+}
+
 let liveCustomerIdentity: {
   customerId: string | null;
   merchantSlug: string | null;
@@ -37,6 +49,21 @@ export function publishCustomerIdentity(
     merchantSlug,
     userId: user?.id ?? null,
   };
+  invalidateCustomerIdentityObservers(merchantSlug);
+}
+
+/** Hide account-scoped views as soon as a server session may have changed. */
+export function invalidateCustomerIdentityObservers(
+  merchantSlug: string | null
+): void {
+  for (const listener of identityListeners) {
+    try {
+      listener();
+    } catch {
+      /* A consumer must not interrupt auth state changes. */
+    }
+  }
+  broadcastCustomerIdentityInvalidation(merchantSlug);
 }
 
 /**

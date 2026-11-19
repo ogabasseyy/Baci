@@ -17,14 +17,27 @@ const tenantLimiters = new Map<string, Ratelimit>();
 // paging once.
 let warnedRedisUnavailable = false;
 let warnedRedisError = false;
+let warnedRedisTimeout = false;
 
 export type TenantRateLimitVerdict = 'allowed' | 'denied' | 'unavailable';
+type TenantRateLimitConfig = { maxRequests: number; windowMs: number };
 
 export async function checkTenantRateLimit(
   namespace: string,
   tenantId: string,
-  config: { maxRequests: number; windowMs: number }
+  config: TenantRateLimitConfig
 ): Promise<TenantRateLimitVerdict> {
+  return (await checkTenantRateLimitDetailed(namespace, tenantId, config))
+    .verdict;
+}
+
+// Same check, plus the limiter's reset time (epoch ms) on a denial so a
+// caller can send an exact Retry-After.
+export async function checkTenantRateLimitDetailed(
+  namespace: string,
+  tenantId: string,
+  config: TenantRateLimitConfig
+): Promise<{ verdict: TenantRateLimitVerdict; resetAt?: number }> {
   const redis = getRedis();
   if (!redis) {
     if (!warnedRedisUnavailable) {
@@ -35,7 +48,7 @@ export async function checkTenantRateLimit(
         tenantId,
       });
     }
-    return 'unavailable';
+    return { verdict: 'unavailable' };
   }
 
   const windowSeconds = `${Math.ceil(config.windowMs / 1000)} s` as const;
@@ -60,9 +73,23 @@ export async function checkTenantRateLimit(
         namespace,
         tenantId,
       });
-      return 'denied';
+      return { verdict: 'denied', resetAt: result.reset };
     }
-    return 'allowed';
+    // Upstash resolves { success: true, reason: 'timeout' } when Redis stalls
+    // past its timeout: a fail-OPEN verdict that never charged the budget.
+    // Treat it as an outage so every caller denies closed.
+    if (result.reason === 'timeout') {
+      if (!warnedRedisTimeout) {
+        warnedRedisTimeout = true;
+        logger.warn({
+          message: 'Tenant rate limit timed out; denying closed',
+          namespace,
+          tenantId,
+        });
+      }
+      return { verdict: 'unavailable' };
+    }
+    return { verdict: 'allowed' };
   } catch {
     if (!warnedRedisError) {
       warnedRedisError = true;
@@ -72,6 +99,6 @@ export async function checkTenantRateLimit(
         tenantId,
       });
     }
-    return 'unavailable';
+    return { verdict: 'unavailable' };
   }
 }

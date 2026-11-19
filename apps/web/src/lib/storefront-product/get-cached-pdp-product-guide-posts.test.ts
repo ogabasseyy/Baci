@@ -113,7 +113,9 @@ describe('getCachedPdpProductGuidePosts', () => {
     expect(mocks.cacheLife).toHaveBeenCalledWith('blog');
     expect(mocks.cacheTag).toHaveBeenCalledWith(
       'blog-posts',
+      'blog-content-links-merchant-1',
       'products-merchant-1',
+      'features-merchant-1',
       'published-product-guide-posts-merchant-1-product-1'
     );
   });

@@ -1,11 +1,11 @@
 import {
   act,
-  CheckoutPage,
+  continueToPaymentAfterPickupCheck,
   expect,
   fireEvent,
   it,
   mockCaptureCheckoutFunnelEventOnce,
-  render,
+  renderCheckoutWithStoreRates,
   screen,
   useCart,
   useMerchantSafe,
@@ -125,10 +125,10 @@ it('abandons a DVA confirmation when the modal closes mid-verification', async (
   } as unknown as ReturnType<typeof useMerchantSafe>);
   vi.mocked(usePersistedForm).mockReturnValue(paymentForm);
 
-  render(<CheckoutPage />);
+  renderCheckoutWithStoreRates();
   fireEvent.click(screen.getByRole('button', { name: /delivery method/i }));
   fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
-  fireEvent.click(screen.getByRole('button', { name: /continue to payment/i }));
+  await continueToPaymentAfterPickupCheck();
   const paymentRadio = screen
     .getAllByRole('radio', { name: /bank transfer/i })
     .find((radio) => radio.getAttribute('value') === 'bank_transfer');

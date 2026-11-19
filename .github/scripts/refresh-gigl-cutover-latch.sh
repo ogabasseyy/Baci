@@ -13,8 +13,9 @@ expected_sha="${BACI_EXPECTED_APP_SHA:-}"
 [[ "$expected_sha" =~ ^[0-9a-f]{40}$ ]] || fail "BACI_EXPECTED_APP_SHA must be an explicit lowercase 40-character SHA."
 [ "$#" -eq 0 ] || fail "This helper accepts environment configuration only."
 remote_dir="${VPS_WORKER_REMOTE_DIR:-/home/bassey/baci-workers}"
-# Test-only isolation; production always shares the deploy.sh promotion lock.
-deploy_lock="${BACI_GIGL_LATCH_TEST_DEPLOY_LOCK:-/tmp/baci-workers-deploy.lock}"
+# Isolated releases share the worker release lock (run-as-worker.sh sets it);
+# the legacy default is the deploy.sh promotion lock. The TEST name isolates tests.
+deploy_lock="${BACI_GIGL_LATCH_TEST_DEPLOY_LOCK:-${BACI_WORKER_DEPLOY_LOCK:-/tmp/baci-workers-deploy.lock}}"
 # The canonical poll allows 120 seconds plus 30 seconds termination grace.
 lock_wait="${BACI_GIGL_LATCH_LOCK_WAIT_SECONDS:-180}"
 [[ "$lock_wait" =~ ^[1-9][0-9]{0,2}$ ]] && [ "$lock_wait" -le 300 ] ||
@@ -72,7 +73,8 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 umask 077
 temporary_latch="$(mktemp "$remote_dir/.gigl-capability-smoke-ok.XXXXXX")"
-chmod 600 "$temporary_latch"
+# Group/ACL-readable: the deploy runner's latch check reads it as another user.
+chmod 640 "$temporary_latch"
 printf '%s:%s:%s\n' "${identity_after%% *}" "$expected_sha" "${identity_after#* }" > "$temporary_latch"
 mv -f -- "$temporary_latch" "$latch"
 temporary_latch=""

@@ -1,10 +1,10 @@
 import {
-  CheckoutPage,
+  continueToPaymentAfterPickupCheck,
   expect,
   fireEvent,
   it,
   mockCaptureCheckoutFunnelEventOnce,
-  render,
+  renderCheckoutWithStoreRates,
   screen,
   useCart,
   useMerchantSafe,
@@ -95,22 +95,20 @@ it('defers invoice_generated to the success page for a zero-due invoice order', 
     });
 
   try {
-    render(<CheckoutPage />);
+    renderCheckoutWithStoreRates();
     fireEvent.click(screen.getByRole('button', { name: /delivery method/i }));
     fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
+    await continueToPaymentAfterPickupCheck();
     fireEvent.click(
-      screen.getByRole('button', { name: /continue to payment/i })
-    );
-    fireEvent.click(
-      screen.getByRole('button', { name: /get a proforma invoice/i })
+      screen.getByRole('button', { name: /create proforma invoice/i })
     );
     const invoiceRadio = (
-      await screen.findAllByRole('radio', { name: /get a proforma invoice/i })
+      await screen.findAllByRole('radio', { name: /create proforma invoice/i })
     ).find((radio) => radio.getAttribute('value') === 'invoice');
     expect(invoiceRadio).toBeDefined();
     fireEvent.click(invoiceRadio as HTMLInputElement);
-    // The invoice submit button shares its label with the invoice tab;
-    // the tab carries aria-pressed, the submit button does not.
+    // The invoice submit button in the payment step keeps its own label;
+    // the schedule tab carries aria-pressed, the submit button does not.
     const placeOrderButton = screen
       .getAllByRole('button', { name: 'Get a Proforma Invoice' })
       .find(

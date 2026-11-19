@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import type { DomainEventV1 } from '@baci/shared/contracts';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { getAdTrackingData } from '@/lib/ad-tracking-cookies';

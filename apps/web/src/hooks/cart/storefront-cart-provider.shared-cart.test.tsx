@@ -1,8 +1,6 @@
-import type { CartLine, CartSnapshot } from '@baci/shared/cart';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Product } from '@/lib/products';
 import { useCart } from './cart-context';
 import { clearCartStorage } from './cart-persistence';
 import {
@@ -13,6 +11,17 @@ import {
   sendSharedCartCommand,
 } from './shared-cart-client';
 import { StorefrontCartProvider } from './storefront-cart-provider';
+import {
+  PROVIDER_CART_ID as CART_ID,
+  makeProviderCartLine as cartLine,
+  createLocalStorageMock,
+  PROVIDER_MERCHANT_ID as MERCHANT_ID,
+  mockAdoptedProviderCart as mockAdopted,
+  makeProviderProduct as product,
+  resetCartSessionHintForTests,
+  PROVIDER_SLUG as SLUG,
+  makeProviderSnapshot as snapshot,
+} from './storefront-cart-provider.test-support';
 
 vi.mock('@/lib/logger', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -32,89 +41,9 @@ vi.mock('./shared-cart-client', () => ({
   sendSharedCartCommand: vi.fn(),
 }));
 
-const localStorageMock = (() => {
-  let store: Record<string, string> = {};
-  return {
-    getItem: (key: string) => store[key] || null,
-    setItem: (key: string, value: string) => {
-      store[key] = value.toString();
-    },
-    removeItem: (key: string) => {
-      delete store[key];
-    },
-    clear: () => {
-      store = {};
-    },
-  };
-})();
-
+const localStorageMock = createLocalStorageMock();
 Object.defineProperty(window, 'localStorage', { value: localStorageMock });
 global.fetch = vi.fn();
-
-const MERCHANT_ID = '11111111-1111-4111-8111-111111111111';
-const SLUG = 'ogabassey';
-const CART_ID = '22222222-2222-4222-8222-222222222222';
-
-function product(overrides: Record<string, unknown> = {}): Product {
-  return {
-    brand: 'Brand',
-    description: '',
-    gtin: '',
-    id: 'prod-1',
-    image: '/prod-1.png',
-    imageHint: 'product',
-    imageLarge: '/prod-1-large.png',
-    manage_stock: false,
-    merchant_id: MERCHANT_ID,
-    mpn: '',
-    name: 'Phone',
-    price: 100,
-    slug: 'phone',
-    status: 'active',
-    stock: 10,
-    ...overrides,
-  } as Product;
-}
-
-function cartLine(overrides: Record<string, unknown> = {}): CartLine {
-  return {
-    id: 'line-1',
-    item: { productId: 'prod-1' },
-    lineTotalMinor: 10000,
-    quantity: 1,
-    unitPriceMinor: 10000,
-    ...overrides,
-  } as CartLine;
-}
-
-function snapshot(overrides: Record<string, unknown> = {}): CartSnapshot {
-  const lines = (overrides.lines as CartLine[] | undefined) ?? [cartLine()];
-  const subtotalMinor = lines.reduce(
-    (sum, line) => sum + line.lineTotalMinor,
-    0
-  );
-  return {
-    cartId: CART_ID,
-    currency: 'NGN',
-    estimatedTotals: false,
-    expiresAt: '2026-10-19T04:00:00.000Z',
-    lines,
-    merchantId: MERCHANT_ID,
-    state: 'active',
-    subtotalMinor,
-    totalMinor: subtotalMinor,
-    version: 3,
-    ...overrides,
-  } as CartSnapshot;
-}
-
-function mockAdopted(lines: CartLine[] = [cartLine()], version = 3) {
-  vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({
-    ok: true,
-    snapshot: snapshot({ lines, version }),
-    warnings: [],
-  });
-}
 
 function delegatedWrapper(extra: Record<string, unknown> = {}) {
   return function Wrapper({ children }: { children: ReactNode }) {
@@ -142,6 +71,7 @@ function validateCalls(): string[] {
 describe('StorefrontCartProvider shared-cart delegation', () => {
   beforeEach(() => {
     localStorageMock.clear();
+    resetCartSessionHintForTests();
     vi.clearAllMocks();
     vi.mocked(fetchSharedCartProducts).mockResolvedValue(new Map());
     vi.mocked(global.fetch).mockResolvedValue(
@@ -150,6 +80,7 @@ describe('StorefrontCartProvider shared-cart delegation', () => {
   });
 
   afterEach(() => {
+    resetCartSessionHintForTests();
     vi.useRealTimers();
   });
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   clearObservedPiggyvestPrimaryCapability,
+  msUntilNegativeCapabilityExpires,
   NEGATIVE_CAPABILITY_TTL_MS,
   observePiggyvestPrimaryCapability,
   readObservedPiggyvestPrimaryCapability,
@@ -14,12 +15,32 @@ import { piggyvestPrimaryWalletApi } from './piggyvest-primary-wallet';
  * treat it as authoritative permission to use the working legacy flows
  * for that call. Only the base code is cacheable (see below): the
  * feature codes describe independently configured runtimes.
+ *
+ * PRIMARY_CARD_FUNDING_RETIRED is the card feature's permanent form: the
+ * server answers every card initialize with it before reserving anything,
+ * so a saved placeholder with no operation ID is released and the regular
+ * top-up runs, exactly as for PRIMARY_CARD_NOT_READY.
  */
 const PRIMARY_NOT_READY_CODES = new Set([
   'PIGGYVEST_NOT_READY',
   'PRIMARY_CARD_NOT_READY',
+  'PRIMARY_CARD_FUNDING_RETIRED',
   'SAVINGS_NOT_READY',
 ]);
+const PRIMARY_WALLET_REVIEW_CODES = new Set([
+  'OWNERSHIP_REVIEW_REQUIRED',
+  'INTEREST_ROUTING_REVIEW_REQUIRED',
+]);
+
+export function isPrimaryWalletReviewRequired(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    typeof (error as { code?: unknown }).code === 'string' &&
+    PRIMARY_WALLET_REVIEW_CODES.has((error as { code: string }).code)
+  );
+}
 
 export function isPrimaryWalletNotReady(error: unknown): boolean {
   return (
@@ -98,6 +119,8 @@ export interface PiggyvestPrimaryCapabilitySnapshot {
   account?: Awaited<
     ReturnType<typeof piggyvestPrimaryWalletApi.read>
   >['account'];
+  /** PiggyVest main-wallet balance in kobo, alongside `account`. */
+  balanceKobo?: number | null;
 }
 
 const inflight = new Map<string, Promise<PiggyvestPrimaryCapabilitySnapshot>>();
@@ -179,8 +202,18 @@ async function sharedProbe(
       // boolean escapes, so there is nothing to leak across users.
       const snapshot = await piggyvestPrimaryWalletApi.read(merchantId, userId);
       observePiggyvestPrimaryCapability(merchantId, true);
-      return { available: true, account: snapshot.account };
+      return {
+        available: true,
+        account: snapshot.account,
+        balanceKobo: snapshot.balanceKobo,
+      };
     } catch (error) {
+      if (isPrimaryWalletReviewRequired(error)) {
+        // Review codes prove this merchant is primary-enabled, but the
+        // response has no account snapshot to retain or share.
+        observePiggyvestPrimaryCapability(merchantId, true);
+        return { available: true };
+      }
       if (isProfileVerificationRequired(error)) {
         // The wallet GET emits this 409 only after the runtime check
         // passes, so it proves the merchant is primary-enabled even
@@ -239,17 +272,18 @@ export function usePiggyvestPrimaryCapability(
       (result) => {
         if (!active) return;
         setAvailable(result);
+        // Re-probe at the cached ruling-out's real expiry, not a full TTL.
         if (result === false)
           refreshTimer = setTimeout(() => {
             if (active) setRevision((value) => value + 1);
-          }, NEGATIVE_CAPABILITY_TTL_MS);
+          }, msUntilNegativeCapabilityExpires(merchantId) ??
+            NEGATIVE_CAPABILITY_TTL_MS);
       },
       () => {
-        // Ambiguous probe failure (timeout, network): stay unknown instead
-        // of reporting false, so an observed merchant keeps its primary
-        // routing and financial actions wait for a confirmed verdict
-        // rather than misrouting through legacy — and reprobe so a
-        // mounted screen recovers without remount.
+        // Ambiguous probe failure (timeout, network): stay unknown, not
+        // false, so an observed merchant keeps primary routing and money
+        // waits for a confirmed verdict rather than misrouting through
+        // legacy — and reprobe so a mounted screen recovers unremounted.
         if (!active) return;
         setAvailable(null);
         refreshTimer = setTimeout(() => {

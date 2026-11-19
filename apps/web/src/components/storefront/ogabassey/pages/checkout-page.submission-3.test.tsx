@@ -1,11 +1,11 @@
 import {
-  CheckoutPage,
   cleanup,
+  continueToPaymentAfterPickupCheck,
   expect,
   fireEvent,
   it,
   mockCaptureClientEvent,
-  render,
+  renderCheckoutWithStoreRates,
   screen,
   useCart,
   useMerchantSafe,
@@ -110,12 +110,10 @@ it('stamps retried gateway starts with each issued reference', async () => {
   });
 
   const drivePaystackPlaceOrder = async () => {
-    render(<CheckoutPage />);
+    renderCheckoutWithStoreRates();
     fireEvent.click(screen.getByRole('button', { name: /delivery method/i }));
     fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
-    fireEvent.click(
-      screen.getByRole('button', { name: /continue to payment/i })
-    );
+    await continueToPaymentAfterPickupCheck();
     const gatewayRadio = (
       await screen.findAllByRole('radio', { name: /paystack/i })
     ).find((radio) => radio.getAttribute('value') === 'paystack');

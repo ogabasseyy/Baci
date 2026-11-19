@@ -55,14 +55,12 @@ describe('useWarmTabScreens', () => {
   it('does not preload public tabs from the tab chrome', () => {
     const { frameCallbacks, requestFrameSpy, cancelFrameSpy } =
       mockFrameScheduler();
-    const navigation = {
-      dispatch: jest.fn(),
-    } as unknown as BottomTabBarProps['navigation'];
+    const navigateToTab = jest.fn();
 
     renderHook(() =>
       useWarmTabScreens({
         activeRouteName: 'index',
-        navigation,
+        navigateToTab,
         preloadProtectedTabs: false,
         routes: [
           createRoute('index'),
@@ -73,12 +71,12 @@ describe('useWarmTabScreens', () => {
       })
     );
 
-    expect(navigation.dispatch).not.toHaveBeenCalled();
+    expect(navigateToTab).not.toHaveBeenCalled();
 
     flushFrames(frameCallbacks);
     jest.runOnlyPendingTimers();
 
-    expect(navigation.dispatch).not.toHaveBeenCalled();
+    expect(navigateToTab).not.toHaveBeenCalled();
 
     requestFrameSpy.mockRestore();
     cancelFrameSpy.mockRestore();
@@ -87,14 +85,12 @@ describe('useWarmTabScreens', () => {
   it('does not preload protected tabs when preloadProtectedTabs is true', () => {
     const { frameCallbacks, requestFrameSpy, cancelFrameSpy } =
       mockFrameScheduler();
-    const navigation = {
-      dispatch: jest.fn(),
-    } as unknown as BottomTabBarProps['navigation'];
+    const navigateToTab = jest.fn();
 
     renderHook(() =>
       useWarmTabScreens({
         activeRouteName: 'index',
-        navigation,
+        navigateToTab,
         preloadProtectedTabs: true,
         routes: [createRoute('index'), createRoute('wallet')],
       })
@@ -103,7 +99,7 @@ describe('useWarmTabScreens', () => {
     flushFrames(frameCallbacks);
     jest.runOnlyPendingTimers();
 
-    expect(navigation.dispatch).not.toHaveBeenCalled();
+    expect(navigateToTab).not.toHaveBeenCalled();
 
     requestFrameSpy.mockRestore();
     cancelFrameSpy.mockRestore();

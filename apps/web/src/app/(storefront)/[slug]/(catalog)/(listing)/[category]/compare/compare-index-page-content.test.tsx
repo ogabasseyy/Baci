@@ -7,8 +7,15 @@ vi.mock('next/link', () => ({
   default: ({
     children,
     href,
-  }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { href: string }) => (
-    <a href={href}>{children}</a>
+    prefetch: _prefetch,
+    ...props
+  }: React.AnchorHTMLAttributes<HTMLAnchorElement> & {
+    href: string;
+    prefetch?: boolean;
+  }) => (
+    <a href={href} {...props}>
+      {children}
+    </a>
   ),
 }));
 
@@ -35,22 +42,39 @@ describe('CompareIndexPageContent', () => {
       />
     );
 
-    expect(
-      screen.getByRole('heading', { name: 'Smartphones comparisons' })
-    ).toBeInTheDocument();
+    const heading = screen.getByRole('heading', {
+      name: 'Smartphones comparisons',
+    });
+    const intro = screen.getByText(/available from Demo Store/i);
+    expect(heading).toBeInTheDocument();
+    expect(heading).toHaveAttribute('data-cwv-lcp-copy', 'compare');
     expect(screen.getByRole('main')).toHaveClass(
       'bg-store-background',
       'text-store-background-text'
     );
-    expect(screen.getByText(/available from Demo Store/i)).toBeInTheDocument();
+    expect(intro).toBeInTheDocument();
+    expect(intro).toHaveAttribute('data-cwv-lcp-copy', 'authority-hub');
     expect(
-      screen.getByRole('link', {
+      screen.getByRole('heading', {
+        level: 2,
+        name: 'Available Smartphones comparisons',
+      })
+    ).toHaveClass('sr-only');
+    expect(
+      screen.getByRole('heading', {
+        level: 3,
         name: 'Compare Google Pixel 8 with Xiaomi 13T',
       })
-    ).toHaveAttribute(
+    ).toBeInTheDocument();
+    const compareLink = screen.getByRole('link', {
+      name: 'Compare Google Pixel 8 with Xiaomi 13T',
+    });
+    expect(compareLink).toHaveAttribute(
       'href',
       '/smartphones/compare/google-pixel-8-vs-xiaomi-13t'
     );
+    expect(compareLink).toHaveClass('after:absolute', 'after:inset-0');
+    expect(screen.getByRole('article')).toHaveClass('relative');
   });
 
   it('keeps empty category hubs useful without dead comparison links', () => {

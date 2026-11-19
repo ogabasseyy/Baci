@@ -11,6 +11,18 @@ const mocks = vi.hoisted(() => ({
   hasPostHogBrowserInitialized: vi.fn(() => false),
   initializePostHogBrowser: vi.fn(),
   resetPublicBlogPageviewDedupe: vi.fn(),
+  resolvePublicBlogPageviewAttribution: vi.fn<
+    () => {
+      $referrer: string;
+      $referring_domain: string;
+      utm_source?: string;
+      utm_medium?: string;
+      utm_campaign?: string;
+    } | null
+  >(() => ({
+    $referrer: '$direct',
+    $referring_domain: '$direct',
+  })),
 }));
 
 vi.mock('next/navigation', () => ({
@@ -30,6 +42,8 @@ vi.mock('@/lib/posthog/browser', () => ({
 vi.mock('@/lib/posthog/public-blog-pageview', () => ({
   capturePublicBlogPageview: mocks.capturePublicBlogPageview,
   resetPublicBlogPageviewDedupe: mocks.resetPublicBlogPageviewDedupe,
+  resolvePublicBlogPageviewAttribution:
+    mocks.resolvePublicBlogPageviewAttribution,
 }));
 
 describe('PostHogPageviewTracker', () => {
@@ -42,6 +56,11 @@ describe('PostHogPageviewTracker', () => {
     mocks.hasPostHogBrowserInitialized.mockReturnValue(false);
     mocks.initializePostHogBrowser.mockClear();
     mocks.resetPublicBlogPageviewDedupe.mockClear();
+    mocks.resolvePublicBlogPageviewAttribution.mockClear();
+    mocks.resolvePublicBlogPageviewAttribution.mockReturnValue({
+      $referrer: '$direct',
+      $referring_domain: '$direct',
+    });
     window.history.replaceState(null, '', '/');
   });
 
@@ -145,9 +164,86 @@ describe('PostHogPageviewTracker', () => {
       );
     });
     expect(mocks.capturePostHogPageview).toHaveBeenCalledWith(
-      'http://localhost:3000/ogabassey/blog/phone-guide'
+      'http://localhost:3000/ogabassey/blog/phone-guide',
+      {
+        $referrer: '$direct',
+        $referring_domain: '$direct',
+      }
     );
     expect(mocks.capturePublicBlogPageview).not.toHaveBeenCalled();
+  });
+
+  it('gates initialized blog pageviews on analytics consent and captures after consent is granted', async () => {
+    mocks.hasPostHogBrowserInitialized.mockReturnValue(true);
+    mocks.resolvePublicBlogPageviewAttribution.mockReturnValue(null);
+    pathname = '/ogabassey/blog/phone-guide';
+    window.history.replaceState(null, '', pathname);
+
+    render(<PostHogPageviewTracker />);
+
+    await waitFor(() => {
+      expect(mocks.initializePostHogBrowser).toHaveBeenCalledWith(
+        expect.objectContaining({
+          NODE_ENV: expect.any(String),
+        }),
+        console,
+        {
+          lightweight: true,
+          pathname: '/ogabassey/blog/phone-guide',
+          hostname: 'localhost',
+        }
+      );
+    });
+    expect(mocks.capturePostHogPageview).not.toHaveBeenCalled();
+
+    mocks.resolvePublicBlogPageviewAttribution.mockReturnValue({
+      $referrer: '$direct',
+      $referring_domain: '$direct',
+    });
+    window.dispatchEvent(new Event('cookie-consent-updated'));
+
+    await waitFor(() => {
+      expect(mocks.capturePostHogPageview).toHaveBeenCalledWith(
+        'http://localhost:3000/ogabassey/blog/phone-guide',
+        {
+          $referrer: '$direct',
+          $referring_domain: '$direct',
+        }
+      );
+    });
+  });
+
+  it('preserves attribution on the initialized blog path', async () => {
+    mocks.hasPostHogBrowserInitialized.mockReturnValue(true);
+    const attribution = {
+      $referrer: 'https://google.com',
+      $referring_domain: 'google.com',
+      utm_source: 'newsletter',
+    };
+    mocks.resolvePublicBlogPageviewAttribution.mockReturnValue(attribution);
+    pathname = '/ogabassey/blog/phone-guide';
+    searchParams = new URLSearchParams('utm_source=newsletter');
+    window.history.replaceState(null, '', `${pathname}?${searchParams}`);
+
+    render(<PostHogPageviewTracker />);
+
+    await waitFor(() => {
+      expect(mocks.capturePostHogPageview).toHaveBeenCalledWith(
+        'http://localhost:3000/ogabassey/blog/phone-guide?utm_source=newsletter',
+        attribution
+      );
+    });
+    expect(mocks.initializePostHogBrowser).toHaveBeenCalledWith(
+      expect.objectContaining({
+        NODE_ENV: expect.any(String),
+      }),
+      console,
+      {
+        lightweight: true,
+        pathname: '/ogabassey/blog/phone-guide',
+        hostname: 'localhost',
+      }
+    );
   });
 
   it('clears public blog dedupe before reconfiguring the initialized client on non-blog pages', async () => {

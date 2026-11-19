@@ -30,12 +30,12 @@ const runtimeSchedulerPath = join(
 );
 
 describe('bugfix: expo-modules-jsi Xcode 26.2 abs-ambiguity archive failure', () => {
-  it('keeps the resolved Expo 57 package patched or on the upstream fix', () => {
+  it('keeps the resolved Expo 58 package patched or on the upstream fix', () => {
     // Expo scene support resolves the upstream factory ownership fix.
     const pkg = JSON.parse(readFileSync(jsiPackageJsonPath, 'utf8')) as {
       version?: string;
     };
-    expect(pkg.version).toBe('57.1.2');
+    expect(pkg.version).toBe('58.0.19');
   });
 
   it('applies the Double.magnitude guard and never the ambiguous abs() call', () => {
@@ -64,7 +64,7 @@ describe('bugfix: expo-modules-jsi Xcode 26.2 abs-ambiguity archive failure', ()
     expect(source).not.toMatch(/SWIFT_RETURNS_RETAINED\s+RuntimeScheduler/);
   });
 
-  it('keeps the storefront React Native 0.86.2 platform patch registered', () => {
+  it('keeps the storefront React Native 0.88.0 platform patch registered', () => {
     const workspaceConfig = readFileSync(
       join(__dirname, '../../pnpm-workspace.yaml'),
       'utf8'
@@ -75,10 +75,10 @@ describe('bugfix: expo-modules-jsi Xcode 26.2 abs-ambiguity archive failure', ()
     );
     const reactNativePatchPath = join(
       __dirname,
-      '../../patches/react-native@0.86.2.patch'
+      '../../patches/react-native@0.88.0.patch'
     );
     const reactNativePatchHash = lockfile.match(
-      /^ {2}react-native@0\.86\.2: ([a-f0-9]{64})$/m
+      /^ {2}react-native@0\.88\.0: ([a-f0-9]{64})$/m
     )?.[1];
     const storefrontImporterStart = lockfile.indexOf(
       '  apps/mobile-storefront:'
@@ -89,15 +89,15 @@ describe('bugfix: expo-modules-jsi Xcode 26.2 abs-ambiguity archive failure', ()
     );
 
     expect(workspaceConfig).toContain(
-      'react-native@0.86.2: patches/react-native@0.86.2.patch'
+      'react-native@0.88.0: patches/react-native@0.88.0.patch'
     );
     expect(reactNativePatchHash).toMatch(/^[a-f0-9]{64}$/);
     expect(
       lockfile.slice(storefrontImporterStart, storefrontImporterEnd)
-    ).toContain(`version: 0.86.2(patch_hash=${reactNativePatchHash})`);
+    ).toContain(`version: 0.88.0(patch_hash=${reactNativePatchHash})`);
     expect(existsSync(reactNativePatchPath)).toBe(true);
     expect(readFileSync(reactNativePatchPath, 'utf8')).toContain(
-      'StatusBarModule.kt'
+      'WindowUtil.kt'
     );
   });
 });

@@ -2,6 +2,7 @@
 -- No provider calls or hosted data are involved.
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
+\ir pgtap_public_execute.sql
 SET LOCAL search_path = public, extensions;
 SELECT plan(13);
 SELECT pg_catalog.set_config(

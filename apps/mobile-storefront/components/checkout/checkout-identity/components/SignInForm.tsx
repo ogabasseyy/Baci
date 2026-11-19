@@ -1,3 +1,4 @@
+import type { TextInputInstance } from 'react-native';
 /**
  * SignInForm Component
  *
@@ -10,7 +11,6 @@
  */
 
 import { useRef } from 'react';
-import type { TextInput } from 'react-native';
 import type { CheckoutIdentityTheme } from '../colors';
 import { useSignInForm } from '../hooks';
 import type { SignInFormProps } from '../types';
@@ -39,7 +39,7 @@ export function SignInForm({
   showSocialButtons = true,
   theme,
 }: ThemedSignInFormProps) {
-  const passwordInputRef = useRef<TextInput>(null);
+  const passwordInputRef = useRef<TextInputInstance>(null);
   const {
     control,
     errors,

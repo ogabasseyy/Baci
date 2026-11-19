@@ -5,6 +5,7 @@ BEGIN
   IF value IS DISTINCT FROM true THEN RAISE EXCEPTION 'Assertion failed: %', label; END IF;
 END;
 $$;
+GRANT EXECUTE ON FUNCTION pg_temp.assert_true(boolean, text) TO PUBLIC; -- called after SET ROLE
 CREATE FUNCTION pg_temp.expect_error(command text, expected_state text) RETURNS void LANGUAGE plpgsql AS $$
 BEGIN
   BEGIN
@@ -16,6 +17,7 @@ BEGIN
   RAISE EXCEPTION 'Expected SQLSTATE %', expected_state;
 END;
 $$;
+GRANT EXECUTE ON FUNCTION pg_temp.expect_error(text, text) TO PUBLIC; -- called after SET ROLE
 
 \set merchant_a 'd1000000-0000-4000-8000-000000000001'
 \set merchant_b 'd1000000-0000-4000-8000-000000000002'

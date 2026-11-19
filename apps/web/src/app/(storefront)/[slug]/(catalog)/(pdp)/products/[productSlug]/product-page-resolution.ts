@@ -8,6 +8,7 @@ import {
   getRequestScopedMerchant,
   sanitizeLookupLogValue,
 } from '@/lib/cached-data';
+import { loadFreshExperienceProduct } from '@/lib/experience/fresh-product';
 import type { Product } from '@/lib/products';
 import { asRoute } from '@/lib/routes';
 import { getProductUrl } from '@/lib/seo-utils';
@@ -136,6 +137,9 @@ export async function getProductCached(
     );
     return null;
   }
+  const experience = await loadFreshExperienceProduct(merchant, productSlug);
+  if (experience.active)
+    return { merchant: experience.merchant, product: experience.product };
   const detailedProduct = await getCachedProductWithDetails(
     merchant.id,
     productSlug

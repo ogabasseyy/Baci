@@ -1,5 +1,6 @@
 import 'server-only';
 import { primaryWalletCardCheckoutRuntimeSchema } from '@/schemas/primary-wallet-card-checkout-runtime';
+import { isPiggyvestFeatureOn } from './piggyvest-feature-on';
 
 export function readPrimaryWalletCardCheckoutRuntime(
   env: NodeJS.ProcessEnv = process.env,
@@ -31,7 +32,7 @@ function parseRuntime(env: NodeJS.ProcessEnv, now: number, drain: boolean) {
   // scheduled must resolve even after the rail is stood down.
   if (
     !drain &&
-    (env.PIGGYVEST_PRIMARY_CARD_ENABLED !== 'true' ||
+    (!isPiggyvestFeatureOn('card_checkout', env) ||
       env.PIGGYVEST_PRIMARY_CARD_TRANSFER_SCHEDULED !== 'true' ||
       env.PIGGYVEST_PRIMARY_CARD_CUSTODY_SCHEDULED !== 'true')
   )

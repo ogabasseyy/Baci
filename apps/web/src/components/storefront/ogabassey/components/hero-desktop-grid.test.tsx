@@ -117,9 +117,8 @@ describe('HeroDesktopGrid', () => {
     expect(
       screen.getByRole('region', { name: 'Featured products' })
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole('heading', { name: 'Samsung Galaxy A27 5G' })
-    ).toBeInTheDocument();
+    expect(screen.getByText('Samsung Galaxy A27 5G')).toBeInTheDocument();
+    expect(screen.queryByRole('heading')).toBeNull();
     expect(screen.getByText('₦50,000')).toBeInTheDocument();
 
     const bigLink = screen.getByRole('link', {
@@ -145,11 +144,11 @@ describe('HeroDesktopGrid', () => {
     expect(sources).toHaveLength(2);
     expect(sources?.[0]).toHaveAttribute('type', 'image/avif');
     expect(sources?.[0]?.getAttribute('srcset')).toBe(
-      'https://cdn.ogabassey.com/image/width=800,quality=70,format=avif/core-assets/products/product-1.avif 800w'
+      '/cdn-image/width=800,quality=70,format=avif/core-assets/products/product-1.avif 800w'
     );
     expect(sources?.[1]).not.toHaveAttribute('type');
     expect(sources?.[1]?.getAttribute('srcset')).toBe(
-      'https://cdn.ogabassey.com/image/width=800,quality=70,format=jpeg/core-assets/products/product-1.avif 800w'
+      '/cdn-image/width=800,quality=70,format=jpeg/core-assets/products/product-1.avif 800w'
     );
     expect(container.innerHTML).not.toContain('format=auto');
 
@@ -158,7 +157,7 @@ describe('HeroDesktopGrid', () => {
     expect(img).toHaveAttribute('fetchpriority', 'high');
     expect(img).toHaveAttribute(
       'src',
-      'https://cdn.ogabassey.com/image/width=800,quality=70,format=jpeg/core-assets/products/product-1.avif'
+      '/cdn-image/width=800,quality=70,format=jpeg/core-assets/products/product-1.avif'
     );
     const mobileMuteSource = bigPicture?.querySelector(
       'source[media="(max-width: 767px)"]'
@@ -205,12 +204,11 @@ describe('HeroDesktopGrid', () => {
       '/ogabassey/smartphones/itel-power-80-128gb-4gb'
     );
 
-    expect(
-      screen.getByRole('heading', { name: 'Itel IT2160' })
-    ).toBeInTheDocument();
+    expect(screen.getByText('Itel IT2160')).toBeInTheDocument();
+    expect(screen.queryByRole('heading')).toBeNull();
     // 4th slide must not render (big + 2 side cards only).
     expect(
-      screen.queryByRole('heading', { name: 'Should Not Render' })
+      screen.queryByText('Should Not Render')
     ).not.toBeInTheDocument();
   });
 

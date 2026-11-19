@@ -6,7 +6,12 @@ import { applySupabaseReplaySql } from './apply-supabase-replay-sql';
 import { canonicalJsonValue } from './canonical-json-value';
 import { createSupabaseReplayProjectId } from './create-supabase-replay-project-id';
 import { createSupabaseReplaySqlApplier } from './create-supabase-replay-sql-applier';
+import {
+  diagnoseReplayDisconnect,
+  withCleanupDiagnostics,
+} from './diagnose-replay-disconnect';
 import { generateSupabaseReplayTypes } from './generate-supabase-replay-types';
+import { parseReplayCliArguments } from './parse-replay-cli-arguments';
 import * as ownershipTools from './replay-project-ownership';
 import { replayRepository } from './replay-repository-root';
 import { runSupabaseReplayStage } from './run-supabase-replay-stage';
@@ -24,16 +29,10 @@ import type {
 import {
   assertSupabaseReplayDatabaseUrl,
   createSupabaseReplayDatabaseEnvironment,
-  parseSupabaseReplayArguments,
   readSupabaseReplayDatabaseUrl,
 } from './supabase-replay-contract';
 import type * as resourceTools from './supabase-replay-expected-resources';
 
-type ReplayFailureWithDiagnostics = Error & {
-  replayDiagnostics: {
-    cleanup: ownershipTools.ReplayProjectCleanupResult;
-  };
-};
 export type SupabaseReplayOptions = {
   comparisonMode: SupabaseHistoryEffectComparisonMode;
   mode: SupabaseHistoryReplayMode;
@@ -50,18 +49,6 @@ const hasResources = (value: resourceTools.ObservedSupabaseReplayResources) =>
   value.containers.length > 0 ||
   value.networks.length > 0 ||
   value.volumes.length > 0;
-function withCleanupDiagnostics(
-  failure: unknown,
-  cleanup: ownershipTools.ReplayProjectCleanupResult | undefined
-): unknown {
-  if (cleanup?.resourceReadiness !== 'anomalous') return failure;
-  const primary =
-    failure instanceof Error ? failure : new Error('Supabase replay failed');
-  return Object.assign(new Error(primary.message, { cause: primary }), {
-    name: primary.name,
-    replayDiagnostics: { cleanup },
-  }) as ReplayFailureWithDiagnostics;
-}
 export async function runSupabaseHistoryReplay(
   options: SupabaseReplayOptions,
   dependencies?: ReplayRuntimeDependencies
@@ -252,7 +239,13 @@ export async function runSupabaseHistoryReplay(
       await output.create(canonicalJsonValue(receipt), { mode: 0o600 });
     }
   } catch (error) {
-    failure = error;
+    failure = await diagnoseReplayDisconnect(
+      error,
+      projectId,
+      expected,
+      () => runtime.inspectResources(projectId, run),
+      run
+    );
   }
   let cleanupFailed = false;
   let cleanupResult: ownershipTools.ReplayProjectCleanupResult | undefined;
@@ -289,7 +282,7 @@ if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
-  runSupabaseHistoryReplay(parseSupabaseReplayArguments(process.argv.slice(2)))
+  runSupabaseHistoryReplay(parseReplayCliArguments(process.argv.slice(2)))
     .then((receipt) => process.stdout.write(canonicalJsonValue(receipt)))
     .catch((error: unknown) => {
       process.stderr.write(

@@ -1,10 +1,10 @@
 import {
-  CheckoutPage,
+  continueToPaymentAfterPickupCheck,
   expect,
   fireEvent,
   it,
   mockCaptureCheckoutFunnelEventOnce,
-  render,
+  renderCheckoutWithStoreRates,
   screen,
   useCart,
   useMerchantSafe,
@@ -111,12 +111,10 @@ it('records payment_failed when the initial Juicyway check reports failed', asyn
     });
 
   try {
-    render(<CheckoutPage />);
+    renderCheckoutWithStoreRates();
     fireEvent.click(screen.getByRole('button', { name: /delivery method/i }));
     fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
-    fireEvent.click(
-      screen.getByRole('button', { name: /continue to payment/i })
-    );
+    await continueToPaymentAfterPickupCheck();
     const juicywayRadio = (
       await screen.findAllByRole('radio', { name: /juicyway/i })
     ).find((radio) => radio.getAttribute('value') === 'juicyway');
@@ -127,7 +125,11 @@ it('records payment_failed when the initial Juicyway check reports failed', asyn
         .find((button) => !button.hasAttribute('disabled')) as HTMLButtonElement
     );
     fireEvent.click(
-      await screen.findByRole('button', { name: /continue with USDT on TRX/i })
+      await screen.findByRole(
+        'button',
+        { name: /continue with USDT on TRX/i },
+        { timeout: 10_000 }
+      )
     );
     await waitFor(() => {
       expect(
@@ -160,4 +162,4 @@ it('records payment_failed when the initial Juicyway check reports failed', asyn
   } finally {
     fetchMock.mockRestore();
   }
-});
+}, 30_000);

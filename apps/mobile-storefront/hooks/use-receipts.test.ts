@@ -19,7 +19,12 @@ jest.mock('@/lib/config', () => ({
 }));
 
 jest.mock('@/lib/logger', () => ({
-  createLogger: () => ({ info: jest.fn(), warn: jest.fn() }),
+  createLogger: () => ({
+    info: jest.fn(),
+    warn: jest.fn(),
+    debug: jest.fn(),
+    error: jest.fn(),
+  }),
 }));
 
 jest.mock('@/lib/supabase', () => ({

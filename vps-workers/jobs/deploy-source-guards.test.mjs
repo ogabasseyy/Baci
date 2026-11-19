@@ -84,6 +84,10 @@ exit 73
       `#!/usr/bin/env bash
 touch "\${TEST_SSH_MARKER}"
 case "$*" in
+  *"/srv/baci-worker/current"*)
+    echo legacy
+    exit 0
+    ;;
   *".config/baci/remediation.disabled"*)
     echo enabled
     exit 0

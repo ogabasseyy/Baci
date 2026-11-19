@@ -1,13 +1,23 @@
 import { useState } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import {
   isHostedStagingTestPaymentsEnabled,
   isHostedStagingWalletTopUpBlocked,
 } from '@/lib/is-hosted-staging-wallet-top-up-blocked';
+import { getQuickAmountOptions } from './get-quick-amount-options';
+import { SavingsContributionProgress } from './SavingsContributionProgress';
+import { SavingsQuickAmounts } from './SavingsQuickAmounts';
+import { SavingsSheetTextInput } from './SavingsSheetTextInput';
+import { useWalletPrimaryReady } from './WalletPrimaryContext';
 import { WalletSavingsContributionButton } from './WalletSavingsContributionButton';
 import { walletSavingsProgressModalStyles as styles } from './wallet-savings-progress-modal.styles';
+
+/** Width for the big amount: about one 38pt bold digit per character. */
+function amountFieldWidth(shown: string) {
+  return Math.max(60, shown.length * 24 + 8);
+}
 
 type WalletSavingsContributionFlowProps = {
   addAmount: string;
@@ -32,8 +42,14 @@ export function WalletSavingsContributionFlow({
   remainingAmount,
   walletBalance,
 }: WalletSavingsContributionFlowProps) {
+  const primaryReady = useWalletPrimaryReady();
   const [isFundFocused, setIsFundFocused] = useState(false);
+  // The amount starts empty: the customer types one or taps Max.
   const amount = Number(addAmount);
+  const quickAmounts = getQuickAmountOptions({
+    available: walletBalance,
+    remaining: remainingAmount,
+  });
   const hasAmount = addAmount.trim().length > 0;
   const invalidAmount =
     hasAmount &&
@@ -42,115 +58,161 @@ export function WalletSavingsContributionFlow({
   const needsFunding =
     walletBalance <= 0 || (validAmount && amount > walletBalance);
   const isBusy = isAdding || isFundPending;
-  const usesPlanFunding = isHostedStagingTestPaymentsEnabled();
-  const topUpBlocked = !usesPlanFunding && isHostedStagingWalletTopUpBlocked();
+  // PiggyVest main wallet: money arrives by bank transfer into the wallet,
+  // never through a card payment, so the staging card-top-up switches
+  // do not apply.
+  const usesPlanFunding = !primaryReady && isHostedStagingTestPaymentsEnabled();
+  const topUpBlocked =
+    !primaryReady && !usesPlanFunding && isHostedStagingWalletTopUpBlocked();
   const guidance = invalidAmount
     ? amount > remainingAmount
       ? `This plan only needs ${formatNgnCurrency(remainingAmount)} more. Enter a smaller amount.`
       : 'Enter an amount greater than zero.'
     : needsFunding
-      ? usesPlanFunding
-        ? 'Use the plan transfer details for this staging goal. Do not send a real bank transfer; approved operators run test funding.'
-        : topUpBlocked
-          ? 'Wallet top-ups are disabled in this hosted staging preview. You can add to this plan when the wallet already has funds.'
-          : 'Fund your wallet to add this amount to savings.'
+      ? primaryReady
+        ? 'Add money to your savings wallet to save this amount.'
+        : usesPlanFunding
+          ? 'Add money to your wallet to save this amount. This is a staging preview, so do not send real money.'
+          : topUpBlocked
+            ? 'Wallet top-ups are disabled in this hosted staging preview. You can add to this plan when the wallet already has funds.'
+            : 'Add money to your wallet to save this amount.'
       : validAmount
-        ? `Move ${formatNgnCurrency(amount)} from your wallet into this plan.`
+        ? null
         : 'Enter an amount to move from your wallet into this plan.';
 
+  const shownAmount = addAmount
+    .replace(/\D/g, '')
+    .replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   return (
-    <View style={styles.addSection}>
-      <Text style={[styles.sectionLabel, { color: colors.text }]}>
-        Amount to add from wallet
-      </Text>
+    <View>
+      {/* While the cover is up, screen readers skip the controls under it. */}
       <View
-        style={[
-          styles.amountInput,
-          {
-            backgroundColor: colors.card,
-            borderColor: colors.border,
-          },
-        ]}
+        style={styles.addSection}
+        accessibilityElementsHidden={isAdding}
+        importantForAccessibility={isAdding ? 'no-hide-descendants' : 'auto'}
       >
-        <Text style={[styles.amountPrefix, { color: colors.text }]}>₦</Text>
-        <TextInput
-          accessibilityLabel="Savings top-up amount"
-          value={addAmount
-            .replace(/\D/g, '')
-            .replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-          editable={!isBusy}
-          onChangeText={(text) => onAddAmountChange(text.replace(/\D/g, ''))}
-          keyboardType="number-pad"
-          placeholder="0"
-          placeholderTextColor={colors.placeholder}
-          style={[styles.amountInputField, { color: colors.text }]}
+        {/* The amount is the hero: big and centred, with what the wallet holds. */}
+        <View style={styles.amountHero}>
+          <View style={styles.amountHeroRow}>
+            <Text style={[styles.amountPrefix, { color: colors.text }]}>₦</Text>
+            <SavingsSheetTextInput
+              accessibilityLabel="Savings top-up amount"
+              value={shownAmount}
+              editable={!isBusy}
+              onChangeText={(text) => {
+                onAddAmountChange(text.replace(/\D/g, ''));
+              }}
+              keyboardType="number-pad"
+              placeholder="0"
+              placeholderTextColor={colors.placeholder}
+              // iOS doesn't widen a text field when a chip sets its value, so
+              // the width follows the shown digits (never clipped as "₦5,0…").
+              style={[
+                styles.amountInputField,
+                { color: colors.text, minWidth: amountFieldWidth(shownAmount) },
+              ]}
+            />
+          </View>
+          <Text style={[styles.walletHint, { color: colors.textSecondary }]}>
+            {`${formatNgnCurrency(walletBalance)} available in ${
+              primaryReady ? 'savings wallet' : 'wallet'
+            }`}
+          </Text>
+        </View>
+        <SavingsQuickAmounts
+          colors={colors}
+          disabled={isBusy}
+          onSelect={(value) => {
+            onAddAmountChange(String(value));
+          }}
+          options={quickAmounts}
+          selectedAmount={amount}
         />
-      </View>
-      <Text style={[styles.walletHint, { color: colors.textSecondary }]}>
-        Available in wallet: {formatNgnCurrency(walletBalance)}
-      </Text>
-      <Text
-        accessibilityRole="text"
-        style={[
-          styles.contributionGuidance,
-          { color: invalidAmount ? colors.error : colors.textSecondary },
-        ]}
-      >
-        {guidance}
-      </Text>
-      {!invalidAmount ? (
-        needsFunding ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={
-              usesPlanFunding
-                ? 'Open savings bank transfer details'
-                : 'Continue to payment'
-            }
-            accessibilityState={{
-              disabled: !validAmount || isBusy || topUpBlocked,
-              busy: isFundPending,
-            }}
-            disabled={!validAmount || isBusy || topUpBlocked}
-            onFocus={() => setIsFundFocused(true)}
-            onBlur={() => setIsFundFocused(false)}
-            onPress={onFundWallet}
+        {guidance ? (
+          <Text
+            accessibilityRole="text"
             style={[
-              styles.primaryButton,
-              {
-                backgroundColor: colors.primary,
-              },
-              isFundFocused && {
-                borderColor: colors.primaryForeground,
-                borderWidth: 2,
-              },
-              (!validAmount || isBusy || topUpBlocked) && styles.disabledButton,
+              styles.contributionGuidance,
+              { color: invalidAmount ? colors.error : colors.textSecondary },
             ]}
           >
-            <Text
+            {guidance}
+          </Text>
+        ) : null}
+        {!invalidAmount ? (
+          needsFunding ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={
+                topUpBlocked
+                  ? 'Wallet funding unavailable'
+                  : primaryReady
+                    ? 'Add money to wallet'
+                    : usesPlanFunding
+                      ? 'Add money for savings'
+                      : 'Continue to payment'
+              }
+              accessibilityState={{
+                disabled: !validAmount || isBusy || topUpBlocked,
+                busy: isFundPending,
+              }}
+              disabled={!validAmount || isBusy || topUpBlocked}
+              onFocus={() => setIsFundFocused(true)}
+              onBlur={() => setIsFundFocused(false)}
+              onPress={onFundWallet}
               style={[
-                styles.primaryButtonText,
+                styles.primaryButton,
                 {
-                  color: colors.primaryForeground,
+                  backgroundColor: topUpBlocked ? colors.muted : colors.primary,
                 },
+                isFundFocused && {
+                  borderColor: colors.primaryForeground,
+                  borderWidth: 2,
+                },
+                (!validAmount || isBusy || topUpBlocked) &&
+                  styles.disabledButton,
               ]}
             >
-              {isFundPending
-                ? usesPlanFunding
-                  ? 'Opening transfer details...'
-                  : 'Opening payment...'
-                : usesPlanFunding
-                  ? 'View bank transfer details'
-                  : 'Continue to payment'}
-            </Text>
-          </Pressable>
-        ) : (
-          <WalletSavingsContributionButton
-            disabled={!validAmount}
-            isAdding={isAdding}
-            onPress={onAddSavings}
-          />
-        )
+              <Text
+                style={[
+                  styles.primaryButtonText,
+                  {
+                    color: topUpBlocked
+                      ? colors.textSecondary
+                      : colors.primaryForeground,
+                  },
+                ]}
+              >
+                {topUpBlocked
+                  ? 'Wallet funding unavailable'
+                  : primaryReady
+                    ? 'Add money'
+                    : isFundPending
+                      ? usesPlanFunding
+                        ? 'Opening wallet funding...'
+                        : 'Opening payment...'
+                      : usesPlanFunding
+                        ? 'Add money'
+                        : 'Continue to payment'}
+              </Text>
+            </Pressable>
+          ) : (
+            <WalletSavingsContributionButton
+              amount={validAmount ? amount : undefined}
+              colors={colors}
+              disabled={!validAmount}
+              isAdding={isAdding}
+              onPress={onAddSavings}
+            />
+          )
+        ) : null}
+      </View>
+      {/* From the tap, through the PIN, until the transfer settles. */}
+      {isAdding ? (
+        <SavingsContributionProgress
+          amount={validAmount ? amount : undefined}
+          colors={colors}
+        />
       ) : null}
     </View>
   );

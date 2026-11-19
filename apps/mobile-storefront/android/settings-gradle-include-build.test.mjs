@@ -51,3 +51,19 @@ includeBuild(expoAutolinking.reactNative) {
     1
   );
 });
+
+test('SDK 58 uses the version-aligned Hermes binary while compiling patched ReactAndroid', () => {
+  for (const contents of [
+    settingsGradle,
+    ensureReactNativeFromSourceSettings(settingsGradle),
+  ]) {
+    assert.doesNotMatch(
+      contents,
+      /substitute\(module\("com\.facebook\.react:hermes-(?:android|engine)"\)\)/
+    );
+    assert.match(
+      contents,
+      /substitute\(module\("com\.facebook\.react:react-android"\)\)/
+    );
+  }
+});

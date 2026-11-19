@@ -76,6 +76,36 @@ afterEach(() => {
 });
 
 describe('useCheckoutPaymentExecution', () => {
+  it('offers eligible UBA payment when a shared cart is active', () => {
+    const options = createOptions();
+    options.cart.sharedCartEnabled = true;
+    options.cart.sharedCartRef = { cartId: 'cart', version: 1 };
+    mocks.useRedvault.mockReturnValue({
+      availability: { available: true, reason: 'public_product_test' },
+    });
+    const { result } = renderHook(() => useCheckoutPaymentExecution(options));
+    expect(result.current.redvaultAvailable).toBe(true);
+    expect(
+      vi.mocked(useCheckoutOrderSubmission).mock.calls[0]?.[0].payment
+        .redvaultAvailable
+    ).toBe(true);
+  });
+  it('keeps the prepared UBA option visible after its completed shared cart empties', () => {
+    const options = createOptions();
+    options.cart.sharedCartEnabled = true;
+    options.cart.sharedCartRef = null;
+    options.cart.checkoutCart = [];
+    options.payment.session.method = 'uba_redvault';
+    options.payment.session.redvault = {
+      orderReady: { orderId: 'order' },
+    } as never;
+    const { result } = renderHook(() => useCheckoutPaymentExecution(options));
+    expect(result.current.redvaultAvailable).toBe(true);
+    expect(
+      vi.mocked(useCheckoutOrderSubmission).mock.calls[0]?.[0].payment
+        .redvaultAvailable
+    ).toBe(true);
+  });
   it('composes fresh checkout resources, authenticated resolution, and overlay sessions', async () => {
     const options = createOptions();
     const { result } = renderHook(() => useCheckoutPaymentExecution(options));
@@ -161,22 +191,11 @@ describe('useCheckoutPaymentExecution', () => {
     expect(completion).toBeTypeOf('function');
     act(() => completion?.(payload));
 
-    expect(mocks.captureCompleted).toHaveBeenCalledWith({
-      currency: 'NGN',
-      orderId: 'order-paid-1',
-      orderNumber: 'ORD-1',
-      paymentMethod: 'bank_transfer',
-      reference: 'intent-1',
-      total: 5000,
-    });
-    expect(options.attempt.clearPendingCheckoutOrder).toHaveBeenCalledOnce();
-    expect(mocks.clearIdempotencyKey).toHaveBeenCalledWith('fingerprint-1');
-    expect(options.form.session.clear).toHaveBeenCalledOnce();
+    // The paid-callback behaviour (capture, cleanup, hand-off, cart clear) is
+    // covered in use-wallet-funded-order-completion.test.ts.
     expect(mocks.push).toHaveBeenCalledWith(
-      '/shop/order-success?orderId=order-paid-1&wallet=true&trackingToken=paid-track-1'
+      '/shop/order-success?orderId=order-paid-1&wallet=true'
     );
-    act(() => vi.advanceTimersByTime(500));
-    expect(options.cart.clearCart).toHaveBeenCalledOnce();
   });
 
   it.each([

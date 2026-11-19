@@ -127,15 +127,19 @@ describe('paid checkout shipping recovery route', () => {
     expect((await request()).status).toBe(403);
     expect(mocks.rpc).not.toHaveBeenCalled();
   });
-  it('requires owner and fulfillment/edit authorization', async () => {
-    mocks.access.mockResolvedValue({ isOwner: false, merchantId });
-    expect((await request()).status).toBe(403);
-    mocks.access.mockResolvedValue({ isOwner: true, merchantId });
-    mocks.permission.mockImplementation(
-      (_a: unknown, _r: string, permission: string) => permission !== 'edit'
-    );
+  it('requires merchant access with orders.fulfill and orders.edit authorization', async () => {
+    for (const missing of ['fulfill', 'edit']) {
+      mocks.permission.mockImplementation(
+        (_a: unknown, _r: string, permission: string) => permission !== missing
+      );
+      expect((await request()).status).toBe(403);
+    }
+    expect(mocks.rpc).not.toHaveBeenCalled();
+    mocks.permission.mockReturnValue(true);
+    mocks.access.mockResolvedValue({ isOwner: true, merchantId: null });
     expect((await request()).status).toBe(403);
     expect(mocks.quotes).not.toHaveBeenCalled();
+    expect(merchantId).toBe(context.order.merchant_id);
   });
   it.each([
     { ...receiver, latitude: undefined },

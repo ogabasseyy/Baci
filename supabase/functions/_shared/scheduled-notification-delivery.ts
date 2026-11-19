@@ -1,10 +1,6 @@
 import type { ScheduledNotification } from './scheduled-notification.ts';
-import { requiresPushOutcomeReview } from './scheduled-notification-push-outcome-review.ts';
 import { sendPushTokens } from './scheduled-notification-push-dispatch.ts';
-import {
-  isWithinQuietHours,
-  parseExpoTicketResults,
-} from './scheduled-notification-push-utils.ts';
+import { requiresPushOutcomeReview } from './scheduled-notification-push-outcome-review.ts';
 import {
   NotificationClaimLostError,
   parseRecipientPageIds,
@@ -13,6 +9,7 @@ import {
   type ScheduledNotificationWorkerClient,
 } from './scheduled-notification-rpc.ts';
 import { scheduledNotificationWorker } from './scheduled-notification-worker.ts';
+import type { ScheduledNotificationResultStatus } from './scheduled-notification-worker-outcome.ts';
 
 const {
   isExpired,
@@ -22,7 +19,19 @@ const {
 } = scheduledNotificationWorker;
 const RECIPIENT_PAGE_SIZE = 500;
 
-type Outcome = 'sent' | 'retry' | 'expired' | 'deferred';
+type Outcome = Exclude<ScheduledNotificationResultStatus, 'failed'>;
+type FailureCode =
+  | 'expired_finalization_failed'
+  | 'malformed_claim_retry_finalization_failed'
+  | 'retry_finalization_failed'
+  | 'unidentifiable_claim_skipped';
+type ClaimResult = {
+  failure?: FailureCode;
+  /** Absent only when the claim carried no usable identity. */
+  id?: string;
+  recipients?: number;
+  status: ScheduledNotificationResultStatus;
+};
 
 class NotificationExpiredError extends Error {
   constructor() {
@@ -99,45 +108,80 @@ async function finalize(
     p_notification_id: notification.id,
     p_outcome: outcome,
   });
-  if (data !== true)
-    throw new Error('Notification finalization lost its claim');
+  if (data !== true) throw new NotificationClaimLostError();
+}
+
+/**
+ * Finalizes inside a claim's error path without letting a finalization
+ * failure abort the rest of the batch. A lost claim is fenced (no result, no
+ * second finalization); any other failure becomes an explicit failed result.
+ */
+async function finalizeOrReportFailure(
+  client: ScheduledNotificationWorkerClient,
+  notification: Pick<ScheduledNotification, 'id' | 'delivery_claim_token'>,
+  outcome: 'expired' | 'retry',
+  failure: FailureCode,
+  error?: string
+): Promise<ClaimResult | null> {
+  try {
+    await finalize(client, notification, outcome, error);
+    return { id: notification.id, status: outcome };
+  } catch (finalizeError) {
+    if (finalizeError instanceof NotificationClaimLostError) return null;
+    return reportFinalizationFailure(notification.id, outcome, failure);
+  }
+}
+
+/** Logs only fixed fields: raw RPC or provider error text never reaches logs. */
+function reportFinalizationFailure(
+  notificationId: string,
+  outcome: 'expired' | 'retry',
+  failure: FailureCode
+): ClaimResult {
+  console.error('Scheduled notification finalization failed', {
+    failure,
+    notificationId,
+    outcome,
+  });
+  return { failure, id: notificationId, status: 'failed' };
 }
 
 export async function processScheduledNotificationClaims(
   client: ScheduledNotificationWorkerClient,
   claimed: unknown[]
 ) {
-  const results: Array<{ id: string; recipients?: number; status: Outcome }> =
-    [];
+  const results: ClaimResult[] = [];
   for (const value of claimed) {
     let notification: ScheduledNotification;
     try {
       notification = parseClaimedNotification(value);
     } catch (parseError) {
       const identity = parseMalformedClaimIdentity(value);
-      if (!identity) throw parseError;
-      try {
-        await finalize(
-          client,
-          identity,
-          'retry',
-          parseError instanceof Error
-            ? parseError.message
-            : 'Claim RPC returned a malformed scheduled notification'
-        );
-        results.push({ id: identity.id, status: 'retry' });
-      } catch (error) {
-        if (error instanceof NotificationClaimLostError) continue;
-        throw error;
+      if (!identity) {
+        // Nothing identifies the row, so it cannot be finalized; its lease
+        // expires on its own. Report it and keep the rest of the batch.
+        const failure = 'unidentifiable_claim_skipped';
+        console.error('Scheduled notification claim could not be identified', {
+          failure,
+        });
+        results.push({ failure, status: 'failed' });
+        continue;
       }
+      const malformedResult = await finalizeOrReportFailure(
+        client,
+        identity,
+        'retry',
+        'malformed_claim_retry_finalization_failed',
+        parseError instanceof Error
+          ? parseError.message
+          : 'Claim RPC returned a malformed scheduled notification'
+      );
+      if (malformedResult) results.push(malformedResult);
       continue;
     }
     try {
-      if (isExpired(notification)) {
-        await finalize(client, notification, 'expired');
-        results.push({ id: notification.id, status: 'expired' });
-        continue;
-      }
+      // Pre-delivery expiry shares the single expired-finalization path below.
+      throwIfExpired(notification);
       const { hasDeferredPushes, recipients } = await deliverPages(
         client,
         notification
@@ -171,18 +215,24 @@ export async function processScheduledNotificationClaims(
       results.push({ id: notification.id, recipients, status: 'sent' });
     } catch (error) {
       if (error instanceof NotificationClaimLostError) continue;
-      if (error instanceof NotificationExpiredError) {
-        await finalize(client, notification, 'expired');
-        results.push({ id: notification.id, status: 'expired' });
-        continue;
-      }
-      await finalize(
-        client,
-        notification,
-        'retry',
-        error instanceof Error ? error.message : 'Notification delivery failed'
-      );
-      results.push({ id: notification.id, status: 'retry' });
+      const failureResult =
+        error instanceof NotificationExpiredError
+          ? await finalizeOrReportFailure(
+              client,
+              notification,
+              'expired',
+              'expired_finalization_failed'
+            )
+          : await finalizeOrReportFailure(
+              client,
+              notification,
+              'retry',
+              'retry_finalization_failed',
+              error instanceof Error
+                ? error.message
+                : 'Notification delivery failed'
+            );
+      if (failureResult) results.push(failureResult);
     }
   }
   return results;

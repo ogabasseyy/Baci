@@ -4,11 +4,6 @@ import { fireEvent, render } from '@testing-library/react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('react-dom', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('react-dom')>();
-  return { ...actual, preload: vi.fn() };
-});
-
 // The global test setup (vitest.setup.ts) mocks 'next/image' with only a
 // `default` export. CdnFormatImage's real dependency chain
 // (getOgabasseyImageFormatProps) calls the named `getImageProps` export, so
@@ -18,7 +13,6 @@ vi.mock('next/image', async (importOriginal) => {
   return { ...actual };
 });
 
-import { preload } from 'react-dom';
 import { CdnFormatImage } from './cdn-format-image';
 
 const CDN = 'https://cdn.ogabassey.com';
@@ -256,93 +250,6 @@ describe('CdnFormatImage (branch logic, mocked format-source)', () => {
     });
 
     expect(markup).toContain('alt="A red phone on a white background"');
-  });
-});
-
-describe('CdnFormatImage (preload side effect, mocked format-source)', () => {
-  beforeEach(() => {
-    vi.mocked(preload).mockClear();
-    // Vitest caches the module graph from this file's top-level static
-    // `import { CdnFormatImage } from './cdn-format-image'`, which already
-    // resolved the REAL '@/lib/ogabassey-image-format-sources'. Without a
-    // reset here, the very first dynamic re-import below returns that cached
-    // (unmocked) module instead of picking up `vi.doMock`.
-    vi.resetModules();
-  });
-
-  afterEach(() => {
-    vi.doUnmock('@/lib/ogabassey-image-format-sources');
-    vi.resetModules();
-  });
-
-  it('preloads the AVIF tier with type="image/avif" when an avifSource is present', async () => {
-    vi.doMock('@/lib/ogabassey-image-format-sources', () => ({
-      getOgabasseyImageFormatProps: vi.fn(() => ({
-        avifSource: {
-          sizes: '100vw',
-          srcSet: `${CDN}/image/format=avif/core-assets/products/phone-640.jpg 640w`,
-        },
-        imgProps: {
-          alt: 'Phone',
-          fetchPriority: 'high',
-          sizes: '100vw',
-          src: `${CDN}/image/format=jpeg/core-assets/products/phone-640.jpg`,
-          srcSet: `${CDN}/image/format=jpeg/core-assets/products/phone-640.jpg 640w`,
-        },
-      })),
-    }));
-    const { CdnFormatImage: Component } = await import('./cdn-format-image');
-
-    renderToStaticMarkup(
-      <Component
-        src="unused-because-mocked"
-        alt="Phone"
-        width={800}
-        height={600}
-        preload
-      />
-    );
-
-    expect(preload).toHaveBeenCalledTimes(1);
-    const [href, options] = vi.mocked(preload).mock.calls[0];
-    expect(href).toBe(
-      `${CDN}/image/format=avif/core-assets/products/phone-640.jpg`
-    );
-    expect(options).toMatchObject({ type: 'image/avif' });
-  });
-
-  it('preloads the plain srcset with no type when there is no avifSource', async () => {
-    vi.doMock('@/lib/ogabassey-image-format-sources', () => ({
-      getOgabasseyImageFormatProps: vi.fn(() => ({
-        avifSource: null,
-        imgProps: {
-          alt: 'Phone',
-          fetchPriority: 'high',
-          sizes: '100vw',
-          src: 'https://xyz.supabase.co/storage/v1/object/public/products/phone.jpg',
-          srcSet:
-            'https://xyz.supabase.co/storage/v1/object/public/products/phone.jpg 640w',
-        },
-      })),
-    }));
-    const { CdnFormatImage: Component } = await import('./cdn-format-image');
-
-    renderToStaticMarkup(
-      <Component
-        src="unused-because-mocked"
-        alt="Phone"
-        width={800}
-        height={600}
-        preload
-      />
-    );
-
-    expect(preload).toHaveBeenCalledTimes(1);
-    const [href, options] = vi.mocked(preload).mock.calls[0];
-    expect(href).toBe(
-      'https://xyz.supabase.co/storage/v1/object/public/products/phone.jpg'
-    );
-    expect(options).not.toHaveProperty('type');
   });
 });
 

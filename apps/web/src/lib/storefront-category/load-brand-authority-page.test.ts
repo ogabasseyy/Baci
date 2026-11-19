@@ -49,6 +49,7 @@ function makeProduct(index: number, brand = 'Samsung') {
     price: 100_000 + index,
     condition: 'new',
     stock: 2,
+    manage_stock: true,
     availability: 'InStock' as const,
     has_condition_offers: false,
     product_key_specs: null,

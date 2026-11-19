@@ -43,14 +43,16 @@ vi.mock('colord', () => ({ extend: vi.fn() }));
 
 vi.mock('./settings-utils', () => {
   const z = require('zod');
+  const settingsSchema = z.object({
+    business_name: z.string().min(2),
+    country: z.string().min(2),
+    site_description: z.string().default(''),
+    support_email: z.string().default(''),
+    support_phone: z.string().default(''),
+  });
   return {
-    settingsSchema: z.object({
-      business_name: z.string().min(2),
-      country: z.string().min(2),
-      site_description: z.string().default(''),
-      support_email: z.string().default(''),
-      support_phone: z.string().default(''),
-    }),
+    createSettingsSchema: () => settingsSchema,
+    settingsSchema,
     extractColorsFromImage: vi.fn(),
     sanitizeSocialMedia: (socialMedia: Record<string, string>) => socialMedia,
   };

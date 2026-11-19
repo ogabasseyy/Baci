@@ -30,75 +30,12 @@ vi.mock('@/lib/email-templates', () => ({
   generateOrderConfirmationText: generateTextMock,
 }));
 
+import { buildScriptExecutors } from '@/scripts/reconcile-paystack-dva-executors';
 import {
-  buildScriptExecutors,
-  type RichOrder,
-} from '@/scripts/reconcile-paystack-dva-executors';
-
-function richOrder(overrides: Partial<RichOrder> = {}): RichOrder {
-  return {
-    id: 'order-1',
-    merchant_id: 'merchant-1',
-    payment_status: 'paid',
-    tax_basis: 'exclusive',
-    subtotal: 1000,
-    shipping_fee: 50,
-    gift_wrapping_fee: 0,
-    tax_amount: 75,
-    discount_amount: 0,
-    total: 1125,
-    customer_email: 'buyer@example.com',
-    customer_name: 'Buyer Name',
-    customer_id: 'cust-1',
-    customer_phone: '+2348000000000',
-    order_number: 'ORD-1',
-    shipping_address: { address: '1 Lekki', city: 'Lagos', state: 'Lagos' },
-    order_items: [],
-    ...overrides,
-  };
-}
-
-const merchantDetails = {
-  business_name: 'Ogabassey',
-  slug: 'ogabassey',
-  support_email: 'support@ogabassey.com',
-  email_sender_name: 'Ogabassey',
-  email: 'support@ogabassey.com',
-  tax_identification_number: null,
-  cac_rc_number: null,
-};
-
-const defaultArgs = () => ({
-  // Supabase mock: rpc is the only method actually called by settlementExecutor
-  supabase: {
-    rpc: vi.fn().mockResolvedValue({ error: null }),
-  } as never,
-  richOrder: richOrder(),
-  order: {
-    id: 'order-1',
-    merchant_id: 'merchant-1',
-    payment_status: 'paid' as const,
-    tax_basis: 'exclusive' as const,
-    subtotal: 1000,
-    shipping_fee: 50,
-    gift_wrapping_fee: 0,
-    tax_amount: 75,
-    discount_amount: 0,
-    total: 1125,
-  },
-  transaction: {
-    id: 'txn-1',
-    order_id: 'order-1',
-    merchant_id: 'merchant-1',
-    gateway_reference: 'BAC-XYZ',
-    amount: 1125,
-  },
-  paystackReference: '100000000',
+  defaultArgs,
   merchantDetails,
-  merchantFetchError: null as unknown,
-  rawPlatformFee: 25,
-  actor: 'script:test',
-});
+  richOrder,
+} from './reconcile-paystack-dva-executors.test-support';
 
 describe('buildScriptExecutors', () => {
   beforeEach(() => {
@@ -183,75 +120,6 @@ describe('buildScriptExecutors', () => {
         'merchant-1',
         expect.objectContaining({ id: 'order-1', total: 1125 })
       );
-    });
-  });
-
-  describe('merchant_settlement', () => {
-    it('passes the gateway_reference as BAC-* (Δ-22 invariant) and metadata.paystack_reference', async () => {
-      const args = defaultArgs();
-      const ex = buildScriptExecutors(args);
-      await ex.merchant_settlement!(stepCtx);
-      expect(args.supabase.rpc).toHaveBeenCalledWith(
-        'record_merchant_settlement',
-        expect.objectContaining({
-          p_gateway: 'paystack',
-          p_gateway_reference: 'BAC-XYZ',
-          p_metadata: expect.objectContaining({
-            paystack_reference: '100000000',
-          }),
-        })
-      );
-    });
-
-    it('falls back to paystackReference when transaction.gateway_reference is null', async () => {
-      const args = {
-        ...defaultArgs(),
-        transaction: {
-          ...defaultArgs().transaction,
-          gateway_reference: null,
-        },
-      };
-      const ex = buildScriptExecutors(args);
-      await ex.merchant_settlement!(stepCtx);
-      expect(args.supabase.rpc).toHaveBeenCalledWith(
-        'record_merchant_settlement',
-        expect.objectContaining({ p_gateway_reference: '100000000' })
-      );
-    });
-
-    it('preserves legitimate zero rawPlatformFee instead of falling back (Δ-94 mirror)', async () => {
-      const args = { ...defaultArgs(), rawPlatformFee: 0 };
-      const ex = buildScriptExecutors(args);
-      await ex.merchant_settlement!(stepCtx);
-      expect(args.supabase.rpc).toHaveBeenCalledWith(
-        'record_merchant_settlement',
-        expect.objectContaining({ p_platform_fee: 0 })
-      );
-      expect(calculatePlatformFeeMock).not.toHaveBeenCalled();
-    });
-
-    it('falls back to calculatePlatformFee when rawPlatformFee is null', async () => {
-      calculatePlatformFeeMock.mockReturnValueOnce({
-        platformFee: 2050,
-        baseAmount: 0,
-      });
-      const args = { ...defaultArgs(), rawPlatformFee: null };
-      const ex = buildScriptExecutors(args);
-      await ex.merchant_settlement!(stepCtx);
-      expect(calculatePlatformFeeMock).toHaveBeenCalled();
-      expect(args.supabase.rpc).toHaveBeenCalledWith(
-        'record_merchant_settlement',
-        expect.objectContaining({ p_platform_fee: 20.5 })
-      );
-    });
-
-    it('throws when the settlement RPC errors', async () => {
-      const args = defaultArgs();
-      (args.supabase.rpc as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-        error: { message: 'permission denied' },
-      });
-      const ex = buildScriptExecutors(args);
-      await expect(ex.merchant_settlement!(stepCtx)).rejects.toThrow(/permission denied/);
     });
   });
 

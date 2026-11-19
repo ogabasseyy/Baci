@@ -17,6 +17,9 @@ interface ProductIndexCardProps {
   footer?: ReactNode;
   /** Opt in only for a measured first-screen LCP candidate. */
   imagePriority?: boolean;
+  headingLevel?: 'h2' | 'h3';
+  posInSet?: number;
+  setSize?: number;
 }
 
 function hasRenderableImage(image?: string | null) {
@@ -88,7 +91,11 @@ export function ProductIndexCard({
   modern = false,
   footer,
   imagePriority = false,
+  headingLevel = 'h3',
+  posInSet,
+  setSize,
 }: ProductIndexCardProps) {
+  const HeadingTag = headingLevel;
   const productPath = `${pathPrefix}${getProductUrl({
     id: product.id,
     name: product.name,
@@ -127,6 +134,8 @@ export function ProductIndexCard({
 
   return (
     <article
+      aria-posinset={posInSet}
+      aria-setsize={setSize}
       className={
         modern
           ? 'flex h-full flex-col overflow-hidden rounded-2xl border border-store-background-text/10 bg-store-background'
@@ -136,6 +145,7 @@ export function ProductIndexCard({
       <Link
         href={asRoute(searchProductPath)}
         prefetch={false}
+        rel={matchParams.size > 0 ? 'nofollow' : undefined}
         className={modern ? 'block flex-1' : 'block h-full'}
       >
         <div className="relative aspect-square bg-store-background-text/5">
@@ -178,7 +188,7 @@ export function ProductIndexCard({
                 {product.category}
               </p>
             )}
-            <h2
+            <HeadingTag
               className={
                 modern
                   ? 'min-h-10 line-clamp-2 text-sm font-medium text-store-background-text'
@@ -186,7 +196,7 @@ export function ProductIndexCard({
               }
             >
               {product.name}
-            </h2>
+            </HeadingTag>
           </div>
 
           <div className="flex items-center justify-between gap-3">
@@ -213,6 +223,7 @@ export function ProductIndexCard({
           <Link
             prefetch={false}
             href={asRoute(searchProductPath)}
+            rel={matchParams.size > 0 ? 'nofollow' : undefined}
             aria-label={`Choose ${product.name} to buy`}
             className="flex min-h-11 min-w-11 items-center justify-center rounded-lg bg-store-background-text/5 px-2 text-xs font-medium text-store-background-text"
           >

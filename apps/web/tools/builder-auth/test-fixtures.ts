@@ -4,6 +4,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { setTimeout as delay } from 'node:timers/promises';
 import { Pool, type PoolConfig } from 'pg';
+import { builderCiDockerArgs } from './ci-container-labels.mjs';
 import { startLocalPostgresFixture } from './local-postgres-fixture.ts';
 import { createOpaqueVault } from './opaque-vault.ts';
 import { createSessionVault } from './session-vault.ts';
@@ -48,6 +49,7 @@ export async function databaseFixture(options: { local?: boolean } = {}) {
         'run',
         '--rm',
         '-d',
+        ...builderCiDockerArgs(),
         '--name',
         name,
         '-p',

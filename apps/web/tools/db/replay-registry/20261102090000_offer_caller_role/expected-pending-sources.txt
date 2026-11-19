@@ -1,0 +1,1 @@
+58bc8689cf5f72fd459f99e59490a2254f52b98555ad5a2e0509ee875d0fc483 20261102090000_harden_offer_authority_caller_role.sql

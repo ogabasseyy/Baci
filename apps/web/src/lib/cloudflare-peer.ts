@@ -157,7 +157,8 @@ function dottedIpv4(value: bigint): string {
  * Embedded IPv4 of a NAT64-translated address, or null. The
  * well-known prefix 64:ff9b::/96 (RFC 6052) carries the IPv4 in the
  * final 32 bits; the local-use 64:ff9b:1::/48 (RFC 8215) embeds it
- * at bits 48-79. Behind carrier NAT64 — a common mobile path —
+ * across bits 48-63 and 72-87, around the reserved zero octet.
+ * Behind carrier NAT64 — a common mobile path —
  * distinct shoppers differ only in that embedded address, so the
  * one-subscriber-per-/64 assumption is false for these prefixes.
  */
@@ -166,7 +167,11 @@ function nat64EmbeddedIpv4(value: bigint): string | null {
     return dottedIpv4(value & 0xffffffffn);
   }
   if (value >> 80n === 0x64ff9b0001n) {
-    return dottedIpv4((value >> 48n) & 0xffffffffn);
+    const reservedOctet = (value >> 56n) & 0xffn;
+    if (reservedOctet !== 0n) return null;
+    const upper = (value >> 64n) & 0xffffn;
+    const lower = (value >> 40n) & 0xffffn;
+    return dottedIpv4((upper << 16n) | lower);
   }
   return null;
 }

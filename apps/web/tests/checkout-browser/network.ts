@@ -1,4 +1,5 @@
 import { test as base, expect } from '@playwright/test';
+import { isChatwootBridgeFixtureRequest } from './chatwoot-bridge-request-allowlist';
 import { isFixtureAssetRequest } from './request-allowlist';
 import { order } from './setup';
 
@@ -23,11 +24,31 @@ export const test = base.extend<{
       let manualApi403ConsoleCount = 0;
       let manualApi404ConsoleCount = 0;
       let manualCheckoutFlowVisited = false;
+      let chatwootBridgeFixtureVisited = false;
       let manualCheckoutProviderErrorCount = 0;
       let manualCheckout503ConsoleCount = 0;
+      let redvaultSharedPickupVisited = false;
+      let redvaultEmptyQuote400Count = 0;
+      let redvaultLostResponseScenario = false;
+      let redvaultLostCheckoutErrors = 0;
+      let redvaultLostNetworkErrors = 0;
       const remainingAllowedErrors = [...allowedConsoleErrors];
-      page.on('framenavigated', () => {
-        const qaScenario = new URL(page.url()).searchParams.get('qa');
+      const configuredHarnessPort = Number(
+        process.env.CHECKOUT_BROWSER_PORT?.trim() || 3217
+      );
+      const harnessPort =
+        Number.isInteger(configuredHarnessPort) &&
+        configuredHarnessPort >= 1 &&
+        configuredHarnessPort <= 65535
+          ? configuredHarnessPort
+          : 3217;
+      const harnessOrigin = new URL(`http://127.0.0.1:${harnessPort}`).origin;
+      page.on('framenavigated', (frame) => {
+        if (frame !== page.mainFrame()) return;
+        const navigatedUrl = new URL(frame.url());
+        chatwootBridgeFixtureVisited =
+          navigatedUrl.pathname === '/chatwoot-bridge';
+        const qaScenario = navigatedUrl.searchParams.get('qa');
         if (qaScenario === 'payment-retry') paymentRetryScenario = true;
         if (
           qaScenario === 'manual-api-integration' ||
@@ -38,6 +59,13 @@ export const test = base.extend<{
           manualApiIntegrationVisited = true;
         if (qaScenario === 'manual-checkout-flow')
           manualCheckoutFlowVisited = true;
+        if (qaScenario === 'redvault-shared-pickup')
+          redvaultSharedPickupVisited = true;
+        if (
+          qaScenario === 'redvault-shared-pickup' &&
+          new URL(page.url()).searchParams.has('lost')
+        )
+          redvaultLostResponseScenario = true;
       });
       const manualApiScenario = () =>
         [
@@ -50,6 +78,26 @@ export const test = base.extend<{
         if (message.type() !== 'error') return;
         const expectedIndex = remainingAllowedErrors.indexOf(message.text());
         if (expectedIndex >= 0) remainingAllowedErrors.splice(expectedIndex, 1);
+        else if (
+          redvaultSharedPickupVisited &&
+          redvaultEmptyQuote400Count < 3 &&
+          /Failed to load resource:.*400/.test(message.text())
+        )
+          redvaultEmptyQuote400Count++;
+        else if (
+          redvaultLostResponseScenario &&
+          redvaultLostCheckoutErrors < 1 &&
+          message.text().startsWith('Checkout error: TypeError:')
+        )
+          redvaultLostCheckoutErrors++;
+        else if (
+          redvaultLostResponseScenario &&
+          redvaultLostNetworkErrors < 2 &&
+          /Failed to load resource:.*(ERR_FAILED|Load failed|CFNetwork)/.test(
+            message.text()
+          )
+        )
+          redvaultLostNetworkErrors++;
         else if (
           manualApiIntegrationVisited &&
           manualApi400ConsoleCount < 5 &&
@@ -127,6 +175,15 @@ export const test = base.extend<{
           request.method() === 'GET' &&
           url.pathname === `/api/storefront/orders/${order.id}`;
         if (
+          isChatwootBridgeFixtureRequest({
+            url: request.url(),
+            method: request.method(),
+            harnessOrigin,
+            fixtureVisited: chatwootBridgeFixtureVisited,
+          })
+        )
+          return route.continue();
+        if (
           manualApiScenario() &&
           url.origin === new URL(page.url()).origin &&
           (manualApiMethods[url.pathname]?.includes(request.method()) ||
@@ -141,6 +198,8 @@ export const test = base.extend<{
         const responses: Record<string, unknown> = {
           '/api/cart/validate': { invalidProductIds: [], priceChanges: [] },
           '/api/csrf': { token: 'fixture-csrf-token' },
+          // Funnel analytics (begin_checkout) are stubbed, never stored.
+          '/api/events': { success: true },
           '/api/storefront/auth/session': { authenticated: false },
           '/api/storefront/imei-remediation/orders': {
             orders: [

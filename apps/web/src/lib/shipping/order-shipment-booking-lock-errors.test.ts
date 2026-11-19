@@ -24,6 +24,7 @@ describe('shouldReleaseBookingLock', () => {
   it('releases locks for pre-provider quote and origin failures', () => {
     for (const code of [
       'NO_SHIPPABLE_ITEMS',
+      'DOMESTIC_QUOTE_ORDER_MISMATCH',
       'QUOTE_REFRESH_PERSIST_FAILED',
       'QUOTE_ORDER_MISMATCH',
       'QUOTE_METADATA_LOOKUP_FAILED',
@@ -35,6 +36,7 @@ describe('shouldReleaseBookingLock', () => {
       'MERCHANT_LOOKUP_FAILED',
       'MERCHANT_SENDER_REQUIRED',
       'MERCHANT_ORIGIN_MISSING',
+      'MERCHANT_SENDER_PHONE_INVALID',
       'INTERNATIONAL_QUOTE_SENDER_MISSING',
       'SHIPPING_QUOTE_RECEIVER_MISMATCH',
       'SHIPPING_QUOTE_ITEMS_MISMATCH',
@@ -42,6 +44,7 @@ describe('shouldReleaseBookingLock', () => {
       'MERCHANT_WALLET_BOOKED_SHIPMENT_MISSING',
       'GIGL_STATION_RESOLUTION_FAILED',
       'GIGL_AUTHENTICATION_FAILED',
+      'GIGL_COST_EXCEEDS_CUSTOMER_PAID',
     ]) {
       expect(
         shouldReleaseBookingLock(
@@ -49,5 +52,19 @@ describe('shouldReleaseBookingLock', () => {
         )
       ).toBe(true);
     }
+  });
+
+  it('releases the lock when GIG booking is refused before submission because shipping is not prepaid', () => {
+    // A Credit Direct order with no funding source is refused before GIG is
+    // called; keeping the lock left the order stuck as "in progress".
+    expect(
+      shouldReleaseBookingLock(
+        new OrderShipmentBookingError(
+          'GIGL shipping must be prepaid at checkout or funded from the merchant wallet before booking.',
+          400,
+          'GIGL_REQUIRES_PREPAID_OR_WALLET'
+        )
+      )
+    ).toBe(true);
   });
 });

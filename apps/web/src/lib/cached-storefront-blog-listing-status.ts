@@ -12,6 +12,7 @@ import {
   getMerchantStrict,
 } from '@/lib/cached-data';
 import { toSafeInternalRedirectPath } from '@/lib/safe-internal-redirect-path';
+import { getBlogPostsMerchantCacheTag } from '@/lib/tenant-cache-tags';
 
 /**
  * Serializable status body for the blog **listing** routes, resolved before
@@ -218,6 +219,7 @@ export async function getCachedStorefrontBlogListingStatus(
   if (!merchant?.is_published) {
     return { ...NOOP, unpublishedStorefront: true };
   }
+  cacheTag(getBlogPostsMerchantCacheTag(merchant.id));
 
   switch (intent.kind) {
     case 'category-query':

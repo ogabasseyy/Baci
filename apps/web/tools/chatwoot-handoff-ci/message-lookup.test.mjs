@@ -60,7 +60,7 @@ test('page cap does not convert an incomplete scan into absence', async () => {
   );
 });
 
-test('page cap returns already-collected matches when marker was found', async () => {
+test('page cap fails closed even when an earlier page collected a match', async () => {
   let page = 0;
   const api = () => {
     const start = 10_000 - page * 20;
@@ -73,13 +73,15 @@ test('page cap returns already-collected matches when marker was found', async (
     return { payload: items };
   };
 
-  const matches = await findSyntheticMessage({
-    api,
-    path: '/api/v1/accounts/7/conversations/12/messages',
-    token: 'synthetic-token',
-    content: 'synthetic marker',
-  });
-  assert.deepEqual(matches, [recoveredMessage]);
+  await assert.rejects(
+    findSyntheticMessage({
+      api,
+      path: '/api/v1/accounts/7/conversations/12/messages',
+      token: 'synthetic-token',
+      content: 'synthetic marker',
+    }),
+    /page limit/
+  );
 });
 
 test('lookup deadline aborts an in-flight API page request', async () => {

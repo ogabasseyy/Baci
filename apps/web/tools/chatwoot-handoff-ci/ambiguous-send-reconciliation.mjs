@@ -21,16 +21,27 @@ const FETCH_NETWORK_TYPEERROR_MESSAGES = new Set([
   'NetworkError when attempting to fetch resource.',
 ]);
 
+function hasTransportErrorCode(error) {
+  const seen = new Set();
+  let current = error;
+  while (current && typeof current === 'object' && !seen.has(current)) {
+    seen.add(current);
+    if (TRANSPORT_ERROR_CODES.has(current.code)) return true;
+    current = current.cause;
+  }
+  return false;
+}
+
 function isAmbiguousTransportError(error) {
   if (error?.name === 'AbortError' || error?.name === 'TimeoutError')
     return true;
   if (error instanceof TypeError) {
     return (
       FETCH_NETWORK_TYPEERROR_MESSAGES.has(error.message) ||
-      TRANSPORT_ERROR_CODES.has(error?.cause?.code)
+      hasTransportErrorCode(error)
     );
   }
-  return TRANSPORT_ERROR_CODES.has(error?.code ?? error?.cause?.code);
+  return hasTransportErrorCode(error);
 }
 
 /** Test-harness recovery policy: resolve only a unique visible effect. An

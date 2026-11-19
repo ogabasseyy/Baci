@@ -24,6 +24,23 @@ test('a unique lookup match reconciles an ambiguous send without retry', async (
   assert.equal(sends, 1);
 });
 
+test('nested cause transport code triggers reconciliation without retry', async () => {
+  let sends = 0;
+  const result = await reconcileAmbiguousSend({
+    send: () => {
+      sends += 1;
+      throw Object.assign(new TypeError('network'), {
+        cause: new Error('wrapped', { cause: { code: 'ECONNRESET' } }),
+      });
+    },
+    lookup: () => [recoveredMessage],
+  });
+
+  assert.equal(result.recovered, true);
+  assert.equal(result.result, recoveredMessage);
+  assert.equal(sends, 1);
+});
+
 test('an empty lookup leaves the send outcome unknown and does not retry', async () => {
   let sends = 0;
   await assert.rejects(
@@ -118,6 +135,23 @@ test('transient DNS cause code wrapped in TypeError triggers reconciliation with
       sends += 1;
       throw Object.assign(new TypeError('network'), {
         cause: { code: 'EAI_AGAIN' },
+      });
+    },
+    lookup: () => [recoveredMessage],
+  });
+
+  assert.equal(result.recovered, true);
+  assert.equal(result.result, recoveredMessage);
+  assert.equal(sends, 1);
+});
+
+test('nested cause transport code triggers reconciliation without retry', async () => {
+  let sends = 0;
+  const result = await reconcileAmbiguousSend({
+    send: () => {
+      sends += 1;
+      throw Object.assign(new TypeError('network'), {
+        cause: new Error('wrapped', { cause: { code: 'ECONNRESET' } }),
       });
     },
     lookup: () => [recoveredMessage],

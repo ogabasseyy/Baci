@@ -122,6 +122,7 @@ export async function verifyLostAckMessageReconciliation({
           token: seed.human_token,
           content,
           timeoutMs: Math.max(remainingMs, 1),
+          signal: lookupController.signal,
         });
         if (
           lookupController.signal.aborted ||

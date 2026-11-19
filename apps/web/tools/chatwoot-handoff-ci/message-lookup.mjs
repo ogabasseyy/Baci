@@ -1,5 +1,5 @@
-// Chatwoot's list-messages `before` cursor endpoint returns at most 20
-// messages per page in ascending order.
+// Chatwoot's list-messages `before` cursor endpoint returns messages in
+// descending id order (newest first) with a `before=<oldest id>` cursor.
 const PAGE_SIZE = 20;
 const MAX_LOOKUP_PAGES = 20;
 const LOOKUP_DEADLINE_MS = 15_000;
@@ -10,6 +10,7 @@ export async function findSyntheticMessage({
   token,
   content,
   timeoutMs = LOOKUP_DEADLINE_MS,
+  signal,
 }) {
   const matches = [];
   let before;
@@ -17,14 +18,19 @@ export async function findSyntheticMessage({
   const seenCursors = new Set();
 
   for (let page = 0; page < MAX_LOOKUP_PAGES; page += 1) {
+    if (signal?.aborted) throw signal.reason ?? new Error('Lookup aborted');
     const remainingMs = deadline - Date.now();
     if (remainingMs <= 0)
       throw new Error('Chatwoot message lookup exceeded its time limit');
     const url = new URL(path, 'http://chatwoot.invalid');
     if (before) url.searchParams.set('before', before);
+    const timeoutSignal = AbortSignal.timeout(Math.min(remainingMs, 10_000));
+    const requestSignal = signal
+      ? AbortSignal.any([signal, timeoutSignal])
+      : timeoutSignal;
     const messages = (
       await api(`${url.pathname}${url.search}`, token, {
-        signal: AbortSignal.timeout(Math.min(remainingMs, 10_000)),
+        signal: requestSignal,
       })
     ).payload;
     if (!Array.isArray(messages))
@@ -55,10 +61,8 @@ export async function findSyntheticMessage({
     }
     if (messages.length === 0 || messages.length < PAGE_SIZE) break;
 
-    if (page === MAX_LOOKUP_PAGES - 1) {
-      if (matches.length > 0) return matches;
+    if (page === MAX_LOOKUP_PAGES - 1)
       throw new Error('Chatwoot message lookup reached its page limit');
-    }
     const oldestId = messages.reduce((oldest, message) =>
       Number(message.id) < Number(oldest.id) ? message : oldest
     ).id;

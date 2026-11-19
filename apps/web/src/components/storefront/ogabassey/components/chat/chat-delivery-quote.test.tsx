@@ -59,7 +59,7 @@ describe('ChatDeliveryQuote', () => {
 
   it('shows visible keyboard focus styling on private delivery actions', async () => {
     const submitRef = { current: null as (() => void) | null };
-    render(<ChatDeliveryQuote cartKey="cart-v1" input="Delivery to Lagos" setInput={vi.fn()} submitRef={submitRef} onComposerLockChange={vi.fn()} onClose={vi.fn()} />);
+    render(<ChatDeliveryQuote estimateUrl="/api/chat/delivery-estimate" cartKey="cart-v1" input="Delivery to Lagos" setInput={vi.fn()} submitRef={submitRef} onComposerLockChange={vi.fn()} onClose={vi.fn()} />);
     const checkState = screen.getByRole('button', { name: 'Check state' });
     const cancel = screen.getByRole('button', { name: 'Cancel' });
     expect(checkState).toHaveClass('focus-visible:ring-2', 'focus-visible:ring-store-primary');

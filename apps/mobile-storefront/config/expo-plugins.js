@@ -16,6 +16,9 @@ function createExpoPlugins({
         source: './assets/splash-scene/native-splash.json',
         background: '#20000b',
         width: 420,
+        // Fill the whole screen (cropping the scene's edges) instead of a
+        // framed box at 90% of the screen.
+        fit: 'cover',
         loop: false,
       },
     ],

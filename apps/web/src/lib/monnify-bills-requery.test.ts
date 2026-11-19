@@ -181,3 +181,36 @@ describe('Monnify bill requery', () => {
     );
   });
 });
+
+describe('bugfix: requery failures keep the Monnify response code', () => {
+  it('returns the shape-checked code on a failed requery', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        requestSuccessful: false,
+        responseCode: 'D02',
+        responseMessage: 'Vend failed',
+      }),
+    });
+
+    const result = await checkTransactionStatus('MFBP-MDR-1');
+
+    expect(result).toMatchObject({ status: 'failed', responseCode: 'D02' });
+  });
+
+  it('drops a phone-shaped code on a failed requery', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        requestSuccessful: false,
+        responseCode: '08031234567',
+        responseMessage: 'Vend failed',
+      }),
+    });
+
+    const result = await checkTransactionStatus('MFBP-MDR-1');
+
+    expect(result.status).toBe('failed');
+    expect(result.responseCode).toBeUndefined();
+  });
+});

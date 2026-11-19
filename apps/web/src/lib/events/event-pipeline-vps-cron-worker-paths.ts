@@ -27,6 +27,10 @@ const publishReval =
   'apps/web/src/app/api/cron/publish-scheduled-posts/publish-scheduled-posts-revalidation.ts';
 
 const vtuScript = 'apps/web/src/scripts/reconcile-vtu-processing.ts';
+const purgeJumiaScript =
+  'apps/web/src/scripts/purge-jumia-self-authorization-discoveries.ts';
+const cleanupPreviewsScript =
+  'apps/web/src/scripts/cleanup-checkout-shipping-recovery-previews.ts';
 const vtuReconcile = 'apps/web/src/lib/vtu-processing-reconciliation.ts';
 const vtuFulfill = 'apps/web/src/lib/vtu-fulfillment.ts';
 
@@ -37,7 +41,7 @@ const admin = 'apps/web/src/lib/supabase/admin.ts';
 const env = 'apps/web/src/env.ts';
 
 export const vpsCronWorkerAuthority = {
-  adminImporters: [vtuScript],
+  adminImporters: [vtuScript, purgeJumiaScript, cleanupPreviewsScript],
   serviceImporters: [cancelScript, notifyScript, publishScript],
   adminPaths: [
     [agenticScript, agenticRoute, admin],
@@ -88,5 +92,7 @@ export const vpsCronWorkerAuthority = {
     [vtuScript, vtuReconcile, vtuFulfill, env],
     [vtuScript, vtuReconcile, vtuFulfill, expoPush, env],
     [vtuScript, vtuReconcile, vtuFulfill, zepto, env],
+    [purgeJumiaScript, admin, env],
+    [cleanupPreviewsScript, admin, env],
   ],
 } as const;

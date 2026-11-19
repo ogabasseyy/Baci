@@ -31,4 +31,20 @@ describe('postChatwootInlineCartActionFailure', () => {
       ],
     ]);
   });
+
+  it('returns a failed add result for an invalid context', () => {
+    const post = vi.fn();
+
+    postChatwootInlineCartActionFailure({
+      event: 'baci-cart-add',
+      requestId: 'add-request-01',
+      post,
+    });
+
+    expect(post).toHaveBeenCalledWith('baci-cart-add-result:', {
+      requestId: 'add-request-01',
+      accepted: false,
+      code: 'invalid_context',
+    });
+  });
 });

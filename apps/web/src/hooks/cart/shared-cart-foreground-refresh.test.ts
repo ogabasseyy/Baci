@@ -2,7 +2,11 @@ import type { CartLine, CartSnapshot } from '@baci/shared/cart';
 
 import { act, renderHook } from '@testing-library/react';
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  resetCartSessionHintForTests,
+  writeCartSessionHint,
+} from './cart-session-hint';
 
 import {
   fetchSharedCartProducts,
@@ -46,9 +50,12 @@ function snapshot(): CartSnapshot {
 }
 
 describe('useSharedCart foreground refresh', () => {
+  afterEach(() => resetCartSessionHintForTests());
   beforeEach(() => {
     vi.clearAllMocks();
     window.localStorage.clear();
+    resetCartSessionHintForTests();
+    writeCartSessionHint(MERCHANT_ID, '1');
     vi.mocked(fetchSharedCartProducts).mockResolvedValue(new Map());
     vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({
       ok: true,

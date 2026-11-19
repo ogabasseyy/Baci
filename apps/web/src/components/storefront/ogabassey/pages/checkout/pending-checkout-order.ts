@@ -73,6 +73,8 @@ export interface PendingCheckoutOrderSnapshot {
   walletAmountUsed?: number;
   /** Committed order failed store-credit projection and must stay fenced. */
   fundingUnresolved?: boolean;
+  /** Retryable contention (STORE_CREDIT_RETRY_REQUIRED); same-order recovery allowed. */
+  fundingRetryable?: boolean;
   orderId: string;
   orderNumber?: string;
   trackingToken?: string;
@@ -178,18 +180,77 @@ export async function resolvePendingCheckoutOrder({
   fetchImpl = fetch,
 }: ResolvePendingCheckoutOrderOptions): Promise<ResolvePendingCheckoutOrderResult> {
   if (pendingOrder?.fundingUnresolved && pendingOrder.merchantId === merchantId) {
+    let existingOrder: Awaited<ReturnType<typeof fetchFencedOrderState>> = null;
     if (pendingOrder.trackingToken && pendingOrder.orderId) {
-      const existing = await fetchFencedOrderState({
+      existingOrder = await fetchFencedOrderState({
         fetchImpl,
         merchantSlug,
         pendingOrder,
       });
-      if (existing && isPaidOrderState(existing)) {
+      if (existingOrder && isPaidOrderState(existingOrder)) {
         return {
           reusableOrder: null,
           clearStoredOrder: true,
-          paidOrder: paidOrderIdentity(pendingOrder, existing),
+          paidOrder: paidOrderIdentity(pendingOrder, existingOrder),
         };
+      }
+    }
+    const canRetryStoreCredit =
+      pendingOrder.fundingRetryable === true &&
+      pendingOrder.paymentMethod !== 'oxygen' &&
+      Boolean(pendingOrder.trackingToken) &&
+      normalizeText(pendingOrder.customerEmail) ===
+        normalizeText(customerEmail) &&
+      checkoutFingerprintsMatch(
+        pendingOrder.checkoutFingerprint,
+        checkoutFingerprint,
+        pendingOrder.walletAmountUsed
+      ) &&
+      existingOrder != null &&
+      !isNonReusableOrderState(existingOrder);
+    if (canRetryStoreCredit) {
+      const mutationFetch = fetchImpl === fetch ? fetchWithCsrf : fetchImpl;
+      const retryResponse = await mutationFetch('/api/orders/reuse', {
+        method: 'POST',
+        body: JSON.stringify({
+          order_id: pendingOrder.orderId,
+          tracking_token: pendingOrder.trackingToken,
+          merchant_id: merchantId,
+          customer_email: customerEmail,
+          payment_method: paymentMethod,
+          shipping_provider: shippingProvider,
+          selected_quote_id: selectedQuoteId || undefined,
+          shipping_rate_id: shippingRateId || undefined,
+          retry_store_credit: true,
+        }),
+      });
+      if (retryResponse.ok) {
+        const retried = (await retryResponse.json()) as {
+          order?: ReusedCheckoutOrder;
+          amountDueToGateway?: number;
+        };
+        if (retried.order?.id) {
+          return {
+            reusableOrder: {
+              order: retried.order,
+              amountDueToGateway:
+                typeof retried.amountDueToGateway === 'number'
+                  ? retried.amountDueToGateway
+                  : (pendingOrder.amountDueToGateway ??
+                    Number(existingOrder?.total || 0)),
+            },
+            clearStoredOrder: false,
+          };
+        }
+      } else {
+        const retryFailure = await Promise.resolve()
+          .then(() => retryResponse.json())
+          .catch(() => null);
+        if (retryFailure?.code === 'STORE_CREDIT_RETRY_REQUIRED') {
+          throw new Error(
+            'Store credit is temporarily busy. Retry the same order shortly.'
+          );
+        }
       }
     }
     throw new Error(

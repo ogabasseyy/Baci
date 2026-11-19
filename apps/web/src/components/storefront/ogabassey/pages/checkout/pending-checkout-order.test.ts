@@ -782,4 +782,78 @@ describe('abandoned payment validation failures', () => {
     })).rejects.toThrow('Failed to reopen pending checkout order');
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
+
+  it('recovers a retryable STORE_CREDIT_RETRY_REQUIRED checkpoint via same-order reuse with retry_store_credit', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          id: 'order-retry-1',
+          payment_status: 'unpaid',
+          shipping_status: 'pending',
+          total: 1000,
+        }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          order: {
+            id: 'order-retry-1',
+            order_number: 'ORD-R1',
+            tracking_token: 'tok-r1',
+          },
+          amountDueToGateway: 700,
+        }),
+      } as Response);
+
+    const result = await resolvePendingCheckoutOrder({
+      pendingOrder: {
+        orderId: 'order-retry-1',
+        trackingToken: 'tok-r1',
+        merchantId: 'merchant-1',
+        customerEmail: 'john@example.com',
+        customerPhone: '+2348012345678',
+        checkoutFingerprint: JSON.stringify({
+          useWalletCredit: true,
+          walletAmountUsed: 300,
+        }),
+        walletAmountUsed: 300,
+        fundingUnresolved: true,
+        fundingRetryable: true,
+        paymentMethod: 'paystack',
+        amountDueToGateway: 700,
+        createdAt: '2026-11-19T00:00:00.000Z',
+      },
+      merchantId: 'merchant-1',
+      merchantSlug: 'ogabassey',
+      customerEmail: 'john@example.com',
+      checkoutFingerprint: JSON.stringify({
+        useWalletCredit: true,
+        walletAmountUsed: 300,
+      }),
+      paymentMethod: 'paystack',
+      shippingProvider: 'GIGL',
+      fetchImpl,
+    });
+
+    expect(result).toEqual({
+      reusableOrder: {
+        order: {
+          id: 'order-retry-1',
+          order_number: 'ORD-R1',
+          tracking_token: 'tok-r1',
+        },
+        amountDueToGateway: 700,
+      },
+      clearStoredOrder: false,
+    });
+    expect(String((fetchImpl.mock.calls[1] as unknown[])?.[0])).toBe(
+      '/api/orders/reuse'
+    );
+    const body = JSON.parse(
+      String((fetchImpl.mock.calls[1] as [unknown, RequestInit])[1].body)
+    );
+    expect(body.retry_store_credit).toBe(true);
+  });
 });

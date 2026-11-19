@@ -6,7 +6,10 @@ import {
 } from '@baci/shared/contracts';
 import { captureCheckoutFunnelEventOnce } from '@/lib/posthog/capture-checkout-funnel-event';
 import { buildCheckoutBillingAddress } from '../build-checkout-billing-address';
-import { withConfirmedWalletDebit } from '../checkout-fingerprints-match';
+import {
+  buildCommittedFailureCheckoutSnapshot,
+  buildCreatedOrderCheckoutSnapshot,
+} from './build-committed-failure-snapshot';
 import type { RedvaultQuoteSummary } from '../components/redvault/RedvaultPaymentOption';
 import type { PendingCheckoutOrderSnapshot } from '../pending-checkout-order';
 import { persistPendingCheckoutOrder } from '../persist-pending-checkout-order';
@@ -130,32 +133,16 @@ export async function runCheckoutOrderLifecycle({
     ...submit,
     resolvedPendingOrder: recovery.pendingOrder,
     onCommittedOrderFailure: (failure) => {
-      const committedWalletUsed = failure.wallet?.amountUsed;
-      const snapshot: PendingCheckoutOrderSnapshot = {
-        orderId: failure.orderId,
-        ...(failure.orderNumber ? { orderNumber: failure.orderNumber } : {}),
-        ...(failure.trackingToken
-          ? { trackingToken: failure.trackingToken }
-          : {}),
+      const snapshot = buildCommittedFailureCheckoutSnapshot({
+        failure,
         merchantId: customer.merchantId,
         customerEmail: customer.email,
         customerPhone: customer.phone,
-        checkoutFingerprint:
-          committedWalletUsed && committedWalletUsed > 0
-            ? withConfirmedWalletDebit(
-                fingerprint,
-                committedWalletUsed,
-                reuse.pendingOrder?.checkoutFingerprint
-              )
-            : fingerprint,
+        fingerprint,
+        previousFingerprint: reuse.pendingOrder?.checkoutFingerprint,
         paymentMethod: reuse.paymentMethod,
-        amountDueToGateway: failure.amountDueToGateway ?? fallbackTotal,
-        ...(committedWalletUsed && committedWalletUsed > 0
-          ? { walletAmountUsed: committedWalletUsed }
-          : {}),
-        fundingUnresolved: true,
-        createdAt: new Date().toISOString(),
-      };
+        fallbackTotal,
+      });
       persistPendingCheckoutOrder(snapshot);
       onPendingSnapshot(snapshot);
     },
@@ -226,16 +213,9 @@ export async function runCheckoutOrderLifecycle({
     // Telemetry is best-effort; it must not prevent fencing a created order.
   }
 
-  const billingAddress = buildCheckoutBillingAddress(
-    shippingAddress.address,
-    shippingAddress.city,
-    shippingAddress.state,
-    merchantCountry
-  );
+  const billingAddress = buildCheckoutBillingAddress(shippingAddress.address, shippingAddress.city, shippingAddress.state, merchantCountry);
   const ready = {
-    ...(submit.orderRequest.shared_cart
-      ? { cartId: submit.orderRequest.shared_cart.cart_id }
-      : {}),
+    ...(submit.orderRequest.shared_cart ? { cartId: submit.orderRequest.shared_cart.cart_id } : {}),
     billingAddress,
     customerEmail: customer.email,
     customerName: redvaultReview.customerName,
@@ -247,29 +227,22 @@ export async function runCheckoutOrderLifecycle({
     total: order.total ?? fallbackTotal,
     orderNumber: createdOrderNumber,
   };
-  const previousOrder = reuse.pendingOrder?.orderId === order.id ? reuse.pendingOrder : undefined;
-  const walletAmountUsed = wallet?.amountUsed ?? previousOrder?.walletAmountUsed;
-  const snapshot: PendingCheckoutOrderSnapshot = {
-    orderId: order.id,
-    orderNumber: order.order_number,
-    trackingToken: order.tracking_token,
+  const snapshot = buildCreatedOrderCheckoutSnapshot({
+    order,
+    walletAmountUsed: wallet?.amountUsed,
     merchantId: customer.merchantId,
     customerEmail: customer.email,
     customerPhone: customer.phone,
-    checkoutFingerprint:
-      walletAmountUsed && walletAmountUsed > 0 &&
-      (reuse.paymentMethod === 'credit_direct' || reuse.paymentMethod === 'oxygen')
-        ? withConfirmedWalletDebit(fingerprint, walletAmountUsed, previousOrder?.checkoutFingerprint)
-        : fingerprint,
+    fingerprint,
     paymentMethod: reuse.paymentMethod,
     amountDueToGateway,
-    ...(walletAmountUsed && walletAmountUsed > 0 ? { walletAmountUsed } : {}),
-    createdAt: new Date().toISOString(),
-    ...(redvaultReview.enabled &&
-    submit.orderRequest.shared_cart &&
-    submitted.redvaultSummary
-      ? {
-          redvaultReview: {
+    previousOrder:
+      reuse.pendingOrder?.orderId === order.id ? reuse.pendingOrder : undefined,
+    redvaultRecovery:
+      redvaultReview.enabled &&
+      submit.orderRequest.shared_cart &&
+      submitted.redvaultSummary
+        ? {
             ready,
             summary: submitted.redvaultSummary,
             ...(attemptFence
@@ -280,10 +253,9 @@ export async function runCheckoutOrderLifecycle({
                   },
                 }
               : {}),
-          },
-        }
-      : {}),
-  };
+          }
+        : undefined,
+  });
   if (
     attemptedKey &&
     (!attemptFence ||

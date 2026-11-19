@@ -17,6 +17,7 @@ import {
   readReuseQuoteValidationContext,
 } from './quote-validation-context';
 import { restampMerchantRateOnReuse } from './restamp-merchant-rate';
+import { retryOrderStoreCreditProjection } from './retry-store-credit-projection';
 import {
   getSafeReuseOrderErrorMessage,
   isExpectedReuseOrderError,
@@ -225,7 +226,23 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({ order });
+    let amountDueToGateway: number | undefined;
+    if (parsed.data.retry_store_credit) {
+      const projectionResult = await retryOrderStoreCreditProjection({
+        supabase,
+        orderId: order.id,
+        orderTotal: Number(order.total ?? 0),
+      });
+      if ('response' in projectionResult) {
+        return projectionResult.response;
+      }
+      amountDueToGateway = projectionResult.amountDueToGateway;
+    }
+
+    return NextResponse.json({
+      order,
+      ...(amountDueToGateway !== undefined ? { amountDueToGateway } : {}),
+    });
   } catch (error) {
     console.warn('POST /api/orders/reuse failed', {
       message: getSafeReuseOrderErrorMessage(

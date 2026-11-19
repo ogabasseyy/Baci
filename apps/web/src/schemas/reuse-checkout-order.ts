@@ -32,6 +32,9 @@ export const reuseCheckoutOrderSchema = z.object({
     .nullable()
     .optional()
     .transform((val) => (val ? sanitizeText(val) : val)),
+  // Retry pre-gateway store-credit projection on an order whose wallet/savings
+  // debit committed but projection hit transient lock contention (503).
+  retry_store_credit: z.boolean().optional(),
 });
 
 export type ReuseCheckoutOrderInput = z.infer<typeof reuseCheckoutOrderSchema>;

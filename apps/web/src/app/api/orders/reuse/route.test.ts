@@ -352,4 +352,164 @@ describe('POST /api/orders/reuse', () => {
       code: 'serialized_inventory_unavailable',
     });
   });
+
+  it('retries store-credit projection on reusable order when retry_store_credit is true', async () => {
+    mockRpc.mockImplementation(async (fnName: string) => {
+      if (fnName === 'get_storefront_order_quote_validation_context') {
+        return {
+          data: {
+            selected_quote_id: null,
+            shipping_fee: 0,
+            shipping_provider: null,
+            shipping_address: null,
+            order_items: [],
+          },
+          error: null,
+        };
+      }
+      if (fnName === 'prepare_storefront_order_for_checkout') {
+        return {
+          data: {
+            id: 'order-123',
+            order_number: 'ORD-123',
+            tracking_token: 'tracking-token-123',
+            total: 10000,
+          },
+          error: null,
+        };
+      }
+      if (fnName === 'record_order_store_credit') {
+        return { data: { wallet: 3000, savings: 0 }, error: null };
+      }
+      return { data: null, error: null };
+    });
+
+    vi.mocked(createClient).mockReturnValue({
+      rpc: mockRpc,
+      from: (table: string) => ({
+        select: () => ({
+          eq: () => {
+            if (table === 'customer_wallet_transactions') {
+              return {
+                eq: () => ({
+                  eq: () => ({
+                    eq: async () => ({
+                      data: [{ amount: 3000 }],
+                      error: null,
+                    }),
+                  }),
+                }),
+              };
+            }
+            return Promise.resolve({ data: [], error: null });
+          },
+        }),
+      }),
+    } as never);
+
+    const request = new NextRequest('http://localhost/api/orders/reuse', {
+      method: 'POST',
+      body: JSON.stringify({
+        order_id: '4dc0ee52-d9c4-406a-b6ca-80c84eef6a8f',
+        merchant_id: 'e6e2e46c-5e3c-40c1-b0ae-832d6d20f0a2',
+        tracking_token: 'tracking-token-123',
+        customer_email: 'john@example.com',
+        payment_method: 'paystack',
+        retry_store_credit: true,
+      }),
+    });
+
+    const response = await POST(request);
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data).toEqual({
+      order: {
+        id: 'order-123',
+        order_number: 'ORD-123',
+        tracking_token: 'tracking-token-123',
+        total: 10000,
+      },
+      amountDueToGateway: 7000,
+    });
+    expect(mockRpc).toHaveBeenCalledWith('record_order_store_credit', {
+      p_order_id: 'order-123',
+    });
+  });
+
+  it('propagates 503 STORE_CREDIT_RETRY_REQUIRED when store credit lock contention persists on retry', async () => {
+    mockRpc.mockImplementation(async (fnName: string) => {
+      if (fnName === 'get_storefront_order_quote_validation_context') {
+        return {
+          data: {
+            selected_quote_id: null,
+            shipping_fee: 0,
+            shipping_provider: null,
+            shipping_address: null,
+            order_items: [],
+          },
+          error: null,
+        };
+      }
+      if (fnName === 'prepare_storefront_order_for_checkout') {
+        return {
+          data: {
+            id: 'order-123',
+            order_number: 'ORD-123',
+            tracking_token: 'tracking-token-123',
+            total: 10000,
+          },
+          error: null,
+        };
+      }
+      if (fnName === 'record_order_store_credit') {
+        return {
+          data: null,
+          error: { code: '40001', message: 'Store credit retry required' },
+        };
+      }
+      return { data: null, error: null };
+    });
+
+    vi.mocked(createClient).mockReturnValue({
+      rpc: mockRpc,
+      from: (table: string) => ({
+        select: () => ({
+          eq: () => {
+            if (table === 'customer_wallet_transactions') {
+              return {
+                eq: () => ({
+                  eq: () => ({
+                    eq: async () => ({
+                      data: [{ amount: 3000 }],
+                      error: null,
+                    }),
+                  }),
+                }),
+              };
+            }
+            return Promise.resolve({ data: [], error: null });
+          },
+        }),
+      }),
+    } as never);
+
+    const request = new NextRequest('http://localhost/api/orders/reuse', {
+      method: 'POST',
+      body: JSON.stringify({
+        order_id: '4dc0ee52-d9c4-406a-b6ca-80c84eef6a8f',
+        merchant_id: 'e6e2e46c-5e3c-40c1-b0ae-832d6d20f0a2',
+        tracking_token: 'tracking-token-123',
+        customer_email: 'john@example.com',
+        payment_method: 'paystack',
+        retry_store_credit: true,
+      }),
+    });
+
+    const response = await POST(request);
+    const data = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(data).toMatchObject({ code: 'STORE_CREDIT_RETRY_REQUIRED' });
+  });
 });

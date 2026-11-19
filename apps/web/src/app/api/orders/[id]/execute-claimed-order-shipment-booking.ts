@@ -39,7 +39,13 @@ export async function executeClaimedOrderShipmentBooking({
       }
     );
   } catch (error) {
-    console.error('Shipment booking failed:', error);
+    // The failure row below is the diagnostic record; keep provider text
+    // (waybills, addresses) out of the logs.
+    console.error('Shipment booking failed:', {
+      orderId,
+      errorName: error instanceof Error ? error.name : typeof error,
+      code: (error as { code?: unknown } | null)?.code,
+    });
     if (lockToken && !lockReleased && shouldReleaseBookingLock(error)) {
       try {
         await clearOrderShipmentBookingLock(

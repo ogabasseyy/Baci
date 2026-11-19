@@ -45,6 +45,8 @@ const RELEASEABLE_BOOKING_ERROR_CODES = new Set([
   'GIGL_INTERNATIONAL_RATE_INVALID',
   'GIGL_BOOKING_VALIDATION_FAILED',
   'GIGL_AUTHENTICATION_FAILED',
+  // Refused before any provider call: the quote belongs to another order.
+  'DOMESTIC_QUOTE_ORDER_MISMATCH',
   // Topship refused the save (4xx), so nothing was created.
   'TOPSHIP_SAVE_REJECTED',
   // The shared GIG deadline expired before the booking POST was sent.

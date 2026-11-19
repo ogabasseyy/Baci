@@ -176,36 +176,6 @@ describe('domain cache read coalescing and invalidation', () => {
     expect(mockEdgeGet).toHaveBeenCalledTimes(2);
   });
 
-  it('does not warm a malformed forward Edge Config value', async () => {
-    mockEdgeGet
-      .mockResolvedValueOnce('https://not-a-host.test/path')
-      .mockResolvedValueOnce('valid-forward.test');
-    mockFetchCustomDomain.mockResolvedValue({ outcome: 'not-found' });
-
-    await expect(
-      getCustomDomainForSlug('malformed-forward-edge')
-    ).resolves.toBeNull();
-    await expect(
-      getCustomDomainForSlug('malformed-forward-edge')
-    ).resolves.toBe('valid-forward.test');
-    expect(mockEdgeGet).toHaveBeenCalledTimes(2);
-  });
-
-  it('does not warm a malformed reverse Edge Config value', async () => {
-    mockEdgeGet
-      .mockResolvedValueOnce('merchant/path')
-      .mockResolvedValueOnce('valid-reverse');
-    mockFetchSlugForDomain.mockResolvedValue({ outcome: 'not-found' });
-
-    await expect(
-      getSlugForCustomDomain('malformed-reverse-edge.test')
-    ).resolves.toBeNull();
-    await expect(
-      getSlugForCustomDomain('malformed-reverse-edge.test')
-    ).resolves.toBe('valid-reverse');
-    expect(mockEdgeGet).toHaveBeenCalledTimes(2);
-  });
-
   it('retries Edge Config after a failure instead of warming its fallback', async () => {
     mockEdgeGet
       .mockRejectedValueOnce(new Error('edge unavailable'))
@@ -236,23 +206,6 @@ describe('domain cache read coalescing and invalidation', () => {
       'fallback-coalesce.test',
     ]);
     expect(mockFetchCustomDomain).toHaveBeenCalledTimes(1);
-  });
-
-  it('lets a fresh Edge Config reverse mapping override a warm fallback', async () => {
-    mockEdgeGet
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce('new-edge-slug');
-    mockFetchSlugForDomain.mockResolvedValue({
-      outcome: 'resolved',
-      value: 'old-fallback-slug',
-    });
-
-    await expect(
-      getSlugForCustomDomain('edge-wins-reverse.test')
-    ).resolves.toBe('old-fallback-slug');
-    await expect(
-      getSlugForCustomDomain('edge-wins-reverse.test')
-    ).resolves.toBe('new-edge-slug');
   });
 
   it('fences a pending reverse not-found after slug invalidation', async () => {

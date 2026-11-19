@@ -63,9 +63,13 @@ export async function verifyLostAckMessageReconciliation({
     providerRequest.setTimeout(8_000, () =>
       providerRequest.destroy(new Error('Chatwoot upstream request timed out'))
     );
-    clientRequest.once('aborted', () =>
-      providerRequest.destroy(new Error('Caller aborted the Chatwoot request'))
-    );
+    clientRequest.once('close', () => {
+      if (!clientRequest.complete) {
+        providerRequest.destroy(
+          new Error('Caller aborted the Chatwoot request')
+        );
+      }
+    });
     providerRequest.on('error', (error) => {
       resolveProviderOutcome({ error });
       clientResponse.destroy(error);
@@ -92,15 +96,26 @@ export async function verifyLostAckMessageReconciliation({
         body: { content, message_type: 'outgoing', private: false },
         base: faultBase,
       });
-    const recovery = reconcileAmbiguousSend({
-      send: post,
-      lookup: () =>
-        findSyntheticMessage({
+    const lookupWithVisibilityPoll = async () => {
+      const deadline = Date.now() + 15_000;
+      while (true) {
+        const remainingMs = deadline - Date.now();
+        const matches = await findSyntheticMessage({
           api,
           path,
           token: seed.human_token,
           content,
-        }),
+          timeoutMs: Math.max(remainingMs, 1),
+        });
+        if (matches.length > 0 || Date.now() >= deadline - 300) {
+          return matches;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+    };
+    const recovery = reconcileAmbiguousSend({
+      send: post,
+      lookup: lookupWithVisibilityPoll,
     });
     const settledRecoveryPromise = recovery.then(
       (value) => ({ value }),
@@ -121,11 +136,11 @@ export async function verifyLostAckMessageReconciliation({
       }),
     ]);
     clearTimeout(timeout);
-    assert.equal(
-      outcome.error,
-      undefined,
-      'Chatwoot must return an API response'
-    );
+    if (outcome.error) {
+      throw new Error('Chatwoot must return an API response', {
+        cause: outcome.error,
+      });
+    }
     assert.ok(
       outcome.status >= 200 && outcome.status < 300,
       `Expected successful Chatwoot API status, received ${outcome.status}`

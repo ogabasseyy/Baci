@@ -45,6 +45,10 @@ export async function reconcileAmbiguousSend({ send, lookup }) {
         { cause: lookupError }
       );
     }
+    if (!Array.isArray(matches))
+      throw new Error(
+        'Chatwoot send outcome remains unknown because lookup returned an invalid result; request was not retried'
+      );
     if (matches.length === 1) return { result: matches[0], recovered: true };
     if (matches.length > 1)
       throw new Error(

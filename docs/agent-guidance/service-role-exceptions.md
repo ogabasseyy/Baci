@@ -141,7 +141,12 @@ Authentication, CSRF validation, Zod validation, merchant resolution through
 `getMerchantForApiRequest`, the per-user rate limit and the RLS-scoped insert of
 the report must all succeed before the sender runs. The report is stored only
 with the caller's own session. The recipient is the fixed `FEEDBACK_INBOX_EMAIL`
-constant; request input never selects a recipient, tenant or sender. Each send
+constant; request input never selects a recipient or sender. The request may
+name the store the app is showing (`merchantId`; owner-approved on 2026-11-19 in
+the same PR #3852 conversation, after Codex flagged the original wording). That
+value confers no authority: `getMerchantForApiRequest` must confirm the caller
+owns or is staff of that store, and an inaccessible store is refused before any
+insert or send. Each send
 is a single bounded attempt so a slow provider cannot time out the client after
 the report is saved.
 

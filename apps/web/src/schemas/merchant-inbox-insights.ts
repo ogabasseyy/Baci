@@ -13,23 +13,19 @@ export const merchantInboxInsightsQuerySchema = z.object({
     .default(7),
 });
 
-// The provider sends counts as numbers and times as numbers, numeric strings
-// or null (no data yet). Anything else reads as "no data", never a guess.
-const count = z
-  .union([z.number(), z.string()])
-  .nullish()
-  .transform((value) => {
-    const parsed = Number(value);
-    return value != null && Number.isFinite(parsed) && parsed >= 0
-      ? Math.trunc(parsed)
-      : 0;
-  });
+// Every key is required, so a fork that renamed or dropped one reads as
+// unreadable (503), never as zeros. Times may be null (nothing to average) and
+// arrive as numbers or numeric strings; negatives and junk read as no data.
+const count = z.union([z.number(), z.string()]).transform((value) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.trunc(parsed) : 0;
+});
 
 const seconds = z
   .union([z.number(), z.string()])
-  .nullish()
+  .nullable()
   .transform((value) => {
-    if (value == null || value === '') return null;
+    if (value === null || value === '') return null;
     const parsed = Number(value);
     return Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed) : null;
   });

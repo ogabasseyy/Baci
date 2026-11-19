@@ -3,7 +3,7 @@ export function formatInsightDuration(seconds: number | null): string {
   if (seconds === null) return '—';
   const whole = Math.round(seconds);
   if (whole < 60) return `${whole}s`;
-  const minutes = Math.round(whole / 60);
+  const minutes = Math.floor(whole / 60);
   if (minutes < 60) return `${minutes} min`;
   const hours = Math.floor(minutes / 60);
   if (hours < 24) {

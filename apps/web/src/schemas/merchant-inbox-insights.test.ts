@@ -21,30 +21,42 @@ describe('merchantInboxInsightsQuerySchema', () => {
   });
 });
 
+const full = {
+  conversations_count: 12,
+  incoming_messages_count: '40',
+  outgoing_messages_count: 30,
+  resolutions_count: 5,
+  avg_first_response_time: '95.6',
+  avg_resolution_time: null,
+};
+
 describe('providerInboxSummarySchema', () => {
-  it('reads numbers and numeric strings, and treats missing data as empty', () => {
-    const parsed = providerInboxSummarySchema.parse({
-      conversations_count: 12,
-      incoming_messages_count: '40',
-      outgoing_messages_count: null,
-      avg_first_response_time: '95.6',
-      avg_resolution_time: null,
-    });
-    expect(parsed).toEqual({
+  it('reads numbers and numeric strings, with null times as no data', () => {
+    expect(providerInboxSummarySchema.parse(full)).toEqual({
       conversations_count: 12,
       incoming_messages_count: 40,
-      outgoing_messages_count: 0,
-      resolutions_count: 0,
+      outgoing_messages_count: 30,
+      resolutions_count: 5,
       avg_first_response_time: 96,
       avg_resolution_time: null,
     });
   });
   it('treats negative or garbage values as no data', () => {
     const parsed = providerInboxSummarySchema.parse({
+      ...full,
       conversations_count: -3,
       avg_first_response_time: 'abc',
     });
     expect(parsed.conversations_count).toBe(0);
     expect(parsed.avg_first_response_time).toBeNull();
+  });
+  it('rejects a payload missing a key instead of reading it as zero', () => {
+    const { resolutions_count: _dropped, ...renamed } = full;
+    expect(
+      providerInboxSummarySchema.safeParse({
+        ...renamed,
+        resolved_conversations_count: 5,
+      }).success
+    ).toBe(false);
   });
 });

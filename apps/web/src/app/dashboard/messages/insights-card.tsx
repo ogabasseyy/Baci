@@ -70,7 +70,7 @@ export function InsightsCard() {
       {state.status === 'ready' ? (
         <dl
           className={cn(
-            'mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5'
+            'mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6'
           )}
         >
           <Stat

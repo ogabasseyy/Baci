@@ -33,6 +33,7 @@ import {
 import { checkNewMerchantDelivery } from './new-merchant-delivery.test-support';
 import { startNewMerchantMcp } from './new-merchant-mcp.test-support';
 import { setupNewMerchantRunner } from './new-merchant-runner.test-support';
+import { setupPublishedRendererPool } from './published-renderer-pool.test-support';
 import { syntheticOAuth } from './synthetic-oauth.test-support';
 
 it('links a new synthetic user and creates a private merchant through MCP under RLS', async () => {
@@ -42,6 +43,9 @@ it('links a new synthetic user and creates a private merchant through MCP under 
     | Awaited<ReturnType<typeof startProductionBuilderStack>>
     | undefined;
   let runner: Awaited<ReturnType<typeof setupNewMerchantRunner>> | undefined;
+  let rendererPool:
+    | Awaited<ReturnType<typeof setupPublishedRendererPool>>
+    | undefined;
   let commerceApi: Awaited<ReturnType<typeof startCommerceDataApi>> | undefined;
   try {
     if (process.env.BACI_LOCAL_COMBINED_COMMERCE_TEST === '1') {
@@ -62,7 +66,15 @@ it('links a new synthetic user and creates a private merchant through MCP under 
     const oauth = await syntheticOAuth(newUser, dir, null);
     const initialToken = await oauth.refresh();
     runner = await setupNewMerchantRunner(newUser);
-    const mcp = await startNewMerchantMcp(f, oauth, runner, dir, initialToken);
+    rendererPool = await setupPublishedRendererPool(f);
+    const mcp = await startNewMerchantMcp(
+      f,
+      oauth,
+      runner,
+      dir,
+      initialToken,
+      rendererPool.read
+    );
     stack = mcp.stack;
     const { call, background } = mcp;
     expect(await call('list_storefronts', {})).toMatchObject({
@@ -229,6 +241,7 @@ it('links a new synthetic user and creates a private merchant through MCP under 
   } finally {
     await stack?.close();
     await runner?.close();
+    await rendererPool?.close();
     await commerceApi?.close();
     clients.owner = undefined;
     rmSync(dir, { recursive: true, force: true });

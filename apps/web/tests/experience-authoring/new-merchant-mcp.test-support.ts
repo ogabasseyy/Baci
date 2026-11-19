@@ -5,6 +5,7 @@ import { startProductionBuilderStack } from '@/lib/experience/production-builder
 import { createLinkedSessionService } from '../../tools/builder-auth/session-service';
 import type { experienceDataFixture } from './data-fixture.test-support';
 import type { setupNewMerchantRunner } from './new-merchant-runner.test-support';
+import type { setupPublishedRendererPool } from './published-renderer-pool.test-support';
 import type { syntheticOAuth } from './synthetic-oauth.test-support';
 
 async function unusedPort() {
@@ -25,7 +26,10 @@ export async function startNewMerchantMcp(
   oauth: Awaited<ReturnType<typeof syntheticOAuth>>,
   runner: Awaited<ReturnType<typeof setupNewMerchantRunner>>,
   dir: string,
-  initialToken: string
+  initialToken: string,
+  readPublishedRenderer: Awaited<
+    ReturnType<typeof setupPublishedRendererPool>
+  >['read']
 ) {
   const actorId = f.otherActorId;
   let token = initialToken;
@@ -86,6 +90,7 @@ export async function startNewMerchantMcp(
         artifactDirectory: dir,
         canonicalBase: (slug) => `https://${slug}.synthetic.test`,
         publicClient: f.anonymous,
+        readPublishedRenderer,
         approval: {
           load: vi.fn(),
           confirm: vi.fn(),

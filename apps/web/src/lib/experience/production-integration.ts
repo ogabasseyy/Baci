@@ -40,6 +40,9 @@ export function createProductionExperienceIntegration(settings: {
     signal?: AbortSignal
   ) => string | Promise<string>;
   publicClient: SupabaseClient;
+  readPublishedRenderer?: Parameters<
+    typeof createProductionStorefront
+  >[0]['readPublishedRenderer'];
   catalogImages?: ReadonlyMap<string, { assetId: string; alt: string }>;
   authenticate: ExperienceCompositionSettings['authenticate'];
   resolveUserClient: ExperienceCompositionSettings['dispatcher']['resolveUserClient'];
@@ -154,6 +157,7 @@ export function createProductionExperienceIntegration(settings: {
         previewExecute: execute.withSignal,
         build: {
           ...settings.build,
+          verifiedRendererStorage: Boolean(settings.readPublishedRenderer),
           hostOrigin: canonicalOrigin,
           previewOrigin,
           execute,
@@ -187,6 +191,7 @@ export function createProductionExperienceIntegration(settings: {
   };
   const published = createProductionStorefront({
     client: settings.publicClient,
+    readPublishedRenderer: settings.readPublishedRenderer,
     artifactDirectory: settings.artifactDirectory,
     executionOrigin: settings.executionOrigin,
     canonicalBase: settings.canonicalBase,

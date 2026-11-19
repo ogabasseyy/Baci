@@ -18,6 +18,8 @@ const valid = () => ({
   },
   previewDatabaseUrl:
     'postgresql://baci_owner_preview_login:secret@db.example.com:5432/postgres',
+  rendererDatabaseUrl:
+    'postgresql://baci_experience_renderer_reader_login:secret@db.example.com:5432/postgres',
   hostOrigin: 'https://preview.example.com',
   executionOrigin: 'https://execution.other-example.com',
   rootDomain: 'example.com',
@@ -37,6 +39,8 @@ describe('private builder operator configuration', () => {
 
   it.each([
     { backgroundBuilds: false },
+    { rendererDatabaseUrl: undefined },
+    { rendererDatabaseUrl: valid().previewDatabaseUrl },
     { verifierPort: 43100 },
     { authPort: 43100 },
     { ownerPort: 43100 },

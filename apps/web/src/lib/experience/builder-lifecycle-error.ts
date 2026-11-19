@@ -3,6 +3,7 @@ type BuilderLifecyclePhase =
   | 'private-config'
   | 'configuration'
   | 'nonce-store'
+  | 'renderer-store'
   | 'stack'
   | 'host'
   | 'mcp-listener'

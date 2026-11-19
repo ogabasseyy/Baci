@@ -54,13 +54,13 @@ grant it privileges in its current state.
 
 ## Baci boot and database boundaries
 
-Use `createProductionExperienceIntegration` with the established connector authenticator, normal user-client resolver, normal anonymous public client, trusted canonical merchant-domain resolver, owner bootstrap reader, scoped evidence verifier/recorder, retained artifact directory and normal owner-intent/approval callbacks. Do not supply a service-role client or accept merchant identity/approval/renderer bytes from MCP arguments.
+Use `createProductionExperienceIntegration` with the established connector authenticator, normal user-client resolver, normal anonymous public client, trusted canonical merchant-domain resolver, owner bootstrap reader, scoped evidence verifier/recorder, restricted published-renderer reader, legacy artifact directory and normal owner-intent/approval callbacks. Do not supply a service-role client or accept merchant identity/approval/renderer bytes from MCP arguments.
 
 The evidence-recording role must have only the existing scoped verifier operations; separately qualify provisioning and RLS ownership/staff/anonymous behavior against the real schema. Local fixture SQL is not a hosted migration installer. Migrations remain append-only and require a separately authorized deployment step.
 
 Explicitly register `configureProductionExperienceBoot(integration.composition)` in every MCP/web worker that requires these ports, then await normal startup registration. No environment discovery or activation is automatic. Retain all existing feature flags, account-link and private-apply/performance gates. Merely constructing the integration must perform no tenant reads or runner calls.
 
-The initial design is one process with an owned persistent volume. Companion output has integrity checks and bounded retention. Private tickets are process-local and intentionally fail closed after a restart. Qualify those restart semantics; do not put independent workers behind a load balancer and assume their in-memory tickets/replay state are shared. HA/distributed replay storage is a separate rollout prerequisite.
+The candidate keeps new renderers in PostgreSQL with their independent evidence. Finalization requires the exact renderer before committing the build. Existing file-backed builds continue to read their matching renderer from the owned volume. Preserve that volume when rehearsing recovery or rollback. Private tickets are process-local and intentionally fail closed after a restart. Qualify those restart semantics; do not put independent workers behind a load balancer and assume their in-memory tickets/replay state are shared. HA/distributed replay storage is a separate rollout prerequisite.
 
 ## Required host acceptance evidence
 

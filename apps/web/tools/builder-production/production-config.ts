@@ -27,6 +27,7 @@ const schema = z.strictObject({
     toolchainDigest: z.string().regex(/^[a-f0-9]{64}$/),
   }),
   previewDatabaseUrl: z.string().min(1).max(4096),
+  rendererDatabaseUrl: z.string().min(1).max(4096),
   hostOrigin: z.string().max(1000),
   executionOrigin: z.string().max(1000),
   rootDomain: z.string().min(1).max(253),
@@ -35,6 +36,22 @@ const schema = z.strictObject({
     anonKey: z.string().max(8192),
   }),
 });
+
+function restrictedDatabaseUrl(value: string, login: string): URL {
+  const url = new URL(value);
+  if (
+    url.protocol !== 'postgresql:' ||
+    decodeURIComponent(url.username) !== login ||
+    !url.password ||
+    !url.hostname ||
+    (url.port !== '' && url.port !== '5432') ||
+    url.pathname !== '/postgres' ||
+    url.search ||
+    url.hash
+  )
+    throw Error();
+  return url;
+}
 
 /** Private operator input only. No request-selected paths, identities or keys. */
 export function parseBuilderProductionConfig(input: unknown) {
@@ -59,18 +76,15 @@ export function parseBuilderProductionConfig(input: unknown) {
       ]).size !== 4
     )
       throw Error();
-    const db = new URL(config.previewDatabaseUrl);
-    if (
-      db.protocol !== 'postgresql:' ||
-      decodeURIComponent(db.username) !== 'baci_owner_preview_login' ||
-      !db.password ||
-      !db.hostname ||
-      (db.port !== '' && db.port !== '5432') ||
-      db.pathname !== '/postgres' ||
-      db.search ||
-      db.hash
-    )
-      throw Error();
+    const previewDatabase = restrictedDatabaseUrl(
+      config.previewDatabaseUrl,
+      'baci_owner_preview_login'
+    );
+    const rendererDatabase = restrictedDatabaseUrl(
+      config.rendererDatabaseUrl,
+      'baci_experience_renderer_reader_login'
+    );
+    if (previewDatabase.host !== rendererDatabase.host) throw Error();
     const supabase = new URL(config.supabase.url);
     if (
       supabase.protocol !== 'https:' ||

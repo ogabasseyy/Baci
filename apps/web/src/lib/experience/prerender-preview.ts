@@ -12,8 +12,10 @@ import {
 import type { PreviewVault } from './preview-service';
 import { createPrivatePrerenderDocument } from './private-prerender-document';
 import { buildPublicBootstrap } from './public-bootstrap';
+import { readVerifiedPrerender } from './read-verified-prerender';
 export interface PrerenderPreviewOptions {
   artifacts: LocalPrerenderArtifacts;
+  verifiedRendererStorage?: boolean;
   executionOrigin?: string;
   previewOrigin?: string;
   bootstrap(
@@ -42,12 +44,16 @@ export async function consumePrerenderPreview(
   signal?: AbortSignal
 ) {
   signal?.throwIfAborted();
-  const renderer = options.artifacts.read({
+  const binding = {
     merchantId: ctx.merchantId,
     buildId: input.buildId,
     buildDigest: input.buildDigest,
     sourceDigest: sourceDigest(input.manifest),
-  });
+  };
+  const managedRenderer = options.verifiedRendererStorage
+    ? await readVerifiedPrerender(ctx, binding, signal)
+    : null;
+  const renderer = managedRenderer ?? options.artifacts.read(binding);
   let bootstrap: PublicBootstrap | undefined;
   const launch = await vault.consumePrerender(
     ctx.actorUserId,

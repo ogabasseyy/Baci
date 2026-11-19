@@ -59,6 +59,7 @@ export async function runExperienceBuild(
       previewOrigin: deps.previewOrigin,
       profile: deps.profile,
       artifacts: deps.prerenderArtifacts,
+      verifiedRendererStorage: deps.verifiedRendererStorage,
       execute,
     });
   if (job.status !== 'queued' || Date.parse(job.expires_at) <= Date.now())
@@ -246,6 +247,7 @@ export async function runExperienceBuild(
       sourceDigest: job.source_digest,
       candidate,
       receiptDigest,
+      verifiedRendererStorage: deps.verifiedRendererStorage,
     });
     const performanceStatus = await retainBuildPerformanceReport(
       ctx,
@@ -258,7 +260,7 @@ export async function runExperienceBuild(
       performance,
       deps.performanceReports
     );
-    if (prepared && deps.prerenderArtifacts) {
+    if (prepared && deps.prerenderArtifacts && !deps.verifiedRendererStorage) {
       await requireExperienceOwner(ctx);
       deps.prerenderArtifacts.retain({
         merchantId: ctx.merchantId,

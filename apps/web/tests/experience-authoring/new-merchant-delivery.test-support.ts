@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { readdirSync } from 'node:fs';
 import type { PublicBootstrap } from '@baci/shared/experience';
 import { expect } from 'vitest';
 import { z } from 'zod';
@@ -117,6 +118,9 @@ export async function checkNewMerchantDelivery({
     const deliveredHtml = await delivered.text();
     expect(deliveredHtml).toContain('New synthetic store');
     expect(deliveredHtml).toContain('Synthetic New Merchant Device');
+    expect(
+      readdirSync(dir).some((name) => /^[a-f0-9]{64}\.json$/.test(name))
+    ).toBe(false);
     if (process.env.BACI_LOCAL_PREVIEW_BROWSER_TEST === '1') {
       const activeStack = stack;
       if (!activeStack) throw Error('LOCAL_STACK_MISSING');
@@ -142,6 +146,13 @@ export async function checkNewMerchantDelivery({
         storefrontId,
         buildId
       );
+      const publishedDocument = await stack.deliver(
+        new Request(
+          `https://output.synthetic-output.test/published/${publicHead.slug}/${publicHead.digest}/index.html`
+        )
+      );
+      expect(publishedDocument.status).toBe(200);
+      expect(await publishedDocument.text()).toContain(productName);
       const gateway = await startPublishedGateway(
         createPublicOutputReader(f.anonymous),
         'https://synthetic.synthetic.test'

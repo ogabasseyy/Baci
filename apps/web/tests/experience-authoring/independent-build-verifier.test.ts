@@ -129,7 +129,11 @@ it('records only after independent recompilation and browser qualification', asy
   ).toHaveLength(2);
   expect(f.qualify).toHaveBeenCalledOnce();
   expect(x.record).toHaveBeenCalledWith(
-    expect.objectContaining({ merchantId: id, buildDigest: digest })
+    expect.objectContaining({ merchantId: id, buildDigest: digest }),
+    expect.objectContaining({
+      javascript: expect.any(String),
+      digest: expect.any(String),
+    })
   );
 });
 it('does not record if the merchant domain changes during qualification', async () => {

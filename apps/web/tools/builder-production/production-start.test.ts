@@ -5,6 +5,7 @@ const f = vi.hoisted(() => ({
   poolConfig: vi.fn(),
   close: vi.fn(async () => {}),
   nonce: vi.fn(async () => true),
+  readRenderer: vi.fn(async () => null),
   boot: vi.fn(),
   client: {},
   attest: vi.fn((_settings: { key: Uint8Array; fetch?: typeof fetch }) =>
@@ -34,6 +35,10 @@ vi.mock('../experience-verifier/loopback-forwarder', () => ({
 vi.mock('@/lib/experience/verifier-attestation-client', () => ({
   createVerifierAttestationClient: f.attest,
 }));
+vi.mock('./published-renderer-reader', async (original) => ({
+  ...(await original<typeof import('./published-renderer-reader')>()),
+  createPublishedRendererReader: async () => f.readRenderer,
+}));
 vi.mock('./boot', () => ({ startProductionBuilderFromPrivateConfig: f.boot }));
 
 import { startProductionBuilder } from './production-start';
@@ -55,6 +60,8 @@ const config = {
   },
   previewDatabaseUrl:
     'postgresql://baci_owner_preview_login:secret@db.example.com:5432/postgres',
+  rendererDatabaseUrl:
+    'postgresql://baci_experience_renderer_reader_login:secret@db.example.com:5432/postgres',
   hostOrigin: 'https://preview.example.com',
   executionOrigin: 'https://execution.other-example.com',
   rootDomain: 'example.com',
@@ -84,6 +91,7 @@ it('wires restricted nonce admission, independent verifier and fixed artifact st
     '/var/lib/baci-builder/artifacts'
   );
   expect(settings.integration.publicClient).toBe(f.client);
+  expect(settings.integration.readPublishedRenderer).toBe(f.readRenderer);
   expect(settings.verifierKey).toEqual(Buffer.alloc(32, 1));
   expect(f.attest).toHaveBeenCalledWith({
     key: Buffer.alloc(32, 1),
@@ -107,7 +115,7 @@ it('wires restricted nonce admission, independent verifier and fixed artifact st
   ).rejects.toThrow('PUBLIC_VERIFIER_NOT_INSTALLED');
   await service.close();
   expect(f.close).toHaveBeenCalledOnce();
-  expect(f.end).toHaveBeenCalledOnce();
+  expect(f.end).toHaveBeenCalledTimes(2);
 });
 
 it('installs the scheduler only when the private operator config opts in', async () => {
@@ -129,5 +137,5 @@ it('closes the restricted database pool when the stack fails to start', async ()
     message: 'BUILDER_STARTUP_FAILED',
     phase: 'stack',
   });
-  expect(f.end).toHaveBeenCalledOnce();
+  expect(f.end).toHaveBeenCalledTimes(2);
 });

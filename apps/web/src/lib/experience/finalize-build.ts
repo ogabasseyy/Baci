@@ -35,6 +35,7 @@ export interface AcceptedPrivateBuild {
   sourceDigest: string;
   candidate: CompiledCandidate;
   receiptDigest: string;
+  verifiedRendererStorage?: boolean;
 }
 export async function finalizeExperienceBuild(
   inputCtx: OwnerRequestContext,
@@ -60,7 +61,10 @@ export async function finalizeExperienceBuild(
     },
   ];
   inputCtx.signal?.throwIfAborted();
-  const r = await ctx.supabase.rpc('experience_finalize_build', {
+  const operation = accepted.verifiedRendererStorage
+    ? 'experience_finalize_prerender_build'
+    : 'experience_finalize_build';
+  const r = await ctx.supabase.rpc(operation, {
     ...ownerRpcArgs(ctx),
     p_job: v.jobId,
     p_attempt: accepted.attemptNonce,

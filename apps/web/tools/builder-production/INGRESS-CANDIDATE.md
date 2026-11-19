@@ -65,6 +65,16 @@ Validate rate-limit behavior through the direct production connection. The
 600-second verifier path and graceful shutdown need qualification against
 every actual proxy and application deadline.
 
+The builder also requires a private `rendererDatabaseUrl` for the same
+PostgreSQL host as `previewDatabaseUrl`. Use [the restricted login provisioner](./provision-renderer-reader-login.sql)
+to create `baci_experience_renderer_reader_login` with only the
+`baci_experience_renderer_reader` role after the renderer migration. The connection uses verified TLS,
+and the role can resolve renderer bytes only for the exact current published
+binding. The independent verifier stores new renderer bytes with its
+evidence, and linked owners read through their normal data API authority.
+Keep the existing artifact volume available for legacy builds and recovery
+until all protected rollback targets have durable renderer evidence.
+
 Background finalization requires `"backgroundBuilds": true` in the private
 builder configuration. Leave it absent until the background worker, verifier
 and recovery path are qualified.

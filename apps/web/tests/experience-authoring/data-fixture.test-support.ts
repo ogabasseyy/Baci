@@ -80,6 +80,8 @@ export async function experienceDataFixture(
       '20261114023420_experience_background_recovery_terminal.sql',
       '20261114024007_experience_finalize_live_lease.sql',
       '20261114041600_experience_job_effective_status.sql',
+      '20261025220000_experience_public_prerender_binding.sql',
+      '20261119103000_experience_verified_renderer_storage.sql',
     ])
       await f.pool.query(
         readFileSync(

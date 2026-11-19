@@ -107,6 +107,7 @@ function createPrerenderPipeline(
   );
   const prerender = {
     artifacts,
+    verifiedRendererStorage: settings.build.verifiedRendererStorage,
     bootstrap: settings.bootstrap,
     execute: settings.build.execute,
     executeWithSignal: settings.previewExecute,

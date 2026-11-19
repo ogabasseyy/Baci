@@ -29,6 +29,7 @@ export type ExperienceBuildDependencies = {
   profile?: 'production';
   previewOrigin?: string;
   prerenderArtifacts?: LocalPrerenderArtifacts;
+  verifiedRendererStorage?: boolean;
   key: Uint8Array;
   toolchainDigest: string;
   hostOrigin: string;

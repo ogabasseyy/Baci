@@ -12,10 +12,16 @@ import { createVerifierLoopbackForwarder } from '../experience-verifier/loopback
 import { createBuilderDraftApproval } from './approval';
 import { startProductionBuilderFromPrivateConfig } from './boot';
 import { parseBuilderProductionConfig } from './production-config';
+import {
+  createPublishedRendererReader,
+  rendererDatabaseDeadlines,
+} from './published-renderer-reader';
 
 /** Private operator startup. No public listener is bound here. */
 export async function startProductionBuilder(input: unknown) {
   let pool: Pool | undefined;
+  let rendererPool: Pool | undefined;
+  const closePools = () => Promise.all([pool?.end(), rendererPool?.end()]);
   let phase: ConstructorParameters<typeof BuilderLifecycleError>[1] =
     'configuration';
   try {
@@ -31,6 +37,16 @@ export async function startProductionBuilder(input: unknown) {
     const consumeNonce = await createOwnerPreviewNonceStore(pool, {
       requireDeadlines: true,
     });
+    phase = 'renderer-store';
+    rendererPool = new Pool({
+      connectionString: config.rendererDatabaseUrl,
+      ssl: { rejectUnauthorized: true },
+      max: 4,
+      ...rendererDatabaseDeadlines,
+      options: '-c role=baci_experience_renderer_reader',
+    });
+    const readPublishedRenderer =
+      await createPublishedRendererReader(rendererPool);
     const forwardAttestation = createVerifierLoopbackForwarder(
       config.verifierPort
     );
@@ -58,6 +74,7 @@ export async function startProductionBuilder(input: unknown) {
         hostOrigin: config.hostOrigin,
         executionOrigin: config.executionOrigin,
         artifactDirectory: config.artifactDirectory,
+        readPublishedRenderer,
         publicClient: createClient(
           config.supabase.url,
           config.supabase.anonKey,
@@ -98,12 +115,12 @@ export async function startProductionBuilder(input: unknown) {
           try {
             await service.close();
           } catch (error) {
-            await pool?.end().catch(() => undefined);
+            await closePools().catch(() => undefined);
             if (error instanceof BuilderLifecycleError) throw error;
             throw new BuilderLifecycleError('BUILDER_SHUTDOWN_FAILED', 'stack');
           }
           try {
-            await pool?.end();
+            await closePools();
           } catch {
             throw new BuilderLifecycleError(
               'BUILDER_SHUTDOWN_FAILED',
@@ -115,7 +132,7 @@ export async function startProductionBuilder(input: unknown) {
       },
     };
   } catch (error) {
-    await pool?.end().catch(() => undefined);
+    await closePools().catch(() => undefined);
     if (error instanceof BuilderLifecycleError) throw error;
     throw new BuilderLifecycleError('BUILDER_STARTUP_FAILED', phase);
   }

@@ -112,7 +112,12 @@ export async function startCombinedStorefrontServer(
             '/api/storefront/experience/launch',
             '/api/storefront/experience/catalog',
             '/api/storefront/cart',
+            '/api/storefront/cart/bootstrap',
+            '/api/storefront/cart/commands',
+            '/api/storefront/cart/continuity',
+            '/api/storefront/cart/checkout',
             '/api/shipping/quotes',
+            '/synthetic',
             '/synthetic/checkout',
           ]) {
             await fetch(`http://127.0.0.1:${port}${path}`, {

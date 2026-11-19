@@ -10,6 +10,7 @@ import {
   requireExperienceOwner,
 } from '@/lib/experience/authorization';
 import { assertCandidatePerformanceBudget } from '@/lib/experience/candidate-performance-budget';
+import type { CompiledCandidate } from '@/lib/experience/compiled-candidate';
 import type { VerifierReceipt } from '@/lib/experience/local-build-supervisor-types';
 import {
   productionDeliveryOrigins,
@@ -47,7 +48,7 @@ export function createIndependentBuildVerifier(settings: {
   ): string | Promise<string>;
   previewOrigin: string;
   executionOrigin: string;
-  record(receipt: VerifierReceipt): Promise<void>;
+  record(receipt: VerifierReceipt, renderer: CompiledCandidate): Promise<void>;
 }) {
   return async (
     inputCtx: OwnerRequestContext,
@@ -199,7 +200,7 @@ export function createIndependentBuildVerifier(settings: {
     signal?.throwIfAborted();
     const receipt = { merchantId: ctx.merchantId, ...input };
     try {
-      await settings.record(receipt);
+      await settings.record(receipt, first.renderer);
     } catch (error) {
       if (
         typeof error !== 'object' ||

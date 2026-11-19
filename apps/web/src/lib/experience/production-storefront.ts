@@ -1,8 +1,10 @@
 import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createDurablePrerenderArtifacts } from '../../../tools/experience-runner/durable-prerender-artifacts';
+import type { PrerenderBinding } from '../../../tools/experience-runner/prerender-artifacts';
 import { createProductionPublishedDelivery } from '../../../tools/experience-runner/published-delivery';
 import type { createRunnerExecutor } from '../../../tools/experience-runner/runner-transport';
+import type { CompiledCandidate } from './compiled-candidate';
 import { createPrivatePrerenderDocument } from './private-prerender-document';
 import { createPublicOutputReader } from './public-output-reader';
 import { createPublicRenderCache } from './public-render-cache';
@@ -19,6 +21,11 @@ export function createProductionStorefront(settings: {
     slug: string,
     signal?: AbortSignal
   ) => string | Promise<string>;
+  readPublishedRenderer?(
+    slug: string,
+    binding: PrerenderBinding,
+    signal: AbortSignal
+  ): Promise<CompiledCandidate | null>;
   catalogImages?: ReadonlyMap<string, { assetId: string; alt: string }>;
   execute: ReturnType<typeof createRunnerExecutor>['withSignal'];
 }) {
@@ -61,13 +68,19 @@ export function createProductionStorefront(settings: {
       before.manifest.buildDigest !== input.buildDigest
     )
       throw Error('NOT_FOUND');
-    const renderer = artifacts.read(binding);
     const key = createHash('sha256')
       .update(JSON.stringify([binding, before.manifest, before.bootstrap]))
       .digest('hex');
     const markup = await fragments.read(
       key,
       async (renderSignal) => {
+        const managed = await settings.readPublishedRenderer?.(
+          input.slug,
+          binding,
+          renderSignal
+        );
+        renderSignal.throwIfAborted();
+        const renderer = managed ?? artifacts.read(binding);
         const result = (
           await settings.execute(
             'prerender',

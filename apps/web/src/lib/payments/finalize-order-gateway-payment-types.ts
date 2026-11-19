@@ -7,8 +7,8 @@ export interface FinalizeOrderGatewayPaymentArgs {
   orderId: string;
   gateway: 'juicyway' | 'paystack' | 'korapay';
   reference: string;
-  gatewayResponse: Record<string, unknown>;
-  wonTransactionFlip: boolean;
+  gatewayResponse?: Record<string, unknown>;
+  wonTransactionFlip?: boolean;
   actor: string;
   scheduleAfter: (task: () => Promise<void>) => void;
   // Aborts the awaited network leg (the paid-email send) when the caller

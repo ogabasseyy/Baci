@@ -177,138 +177,148 @@ async function verifyPaymentReference(
       finalizationOutcome: 'completed',
     });
   }
-  const storedGatewayResponse = transaction.gateway_response;
-  const hasStoredGatewayResponse =
-    storedGatewayResponse !== null &&
-    typeof storedGatewayResponse === 'object' &&
-    !Array.isArray(storedGatewayResponse);
-  const isLocallyFinalizedOrderPayment =
-    isSupportedOrderGateway &&
-    transaction.status === 'completed' &&
-    existingOrder?.payment_status === 'paid' &&
-    hasStoredGatewayResponse;
-  const verification: GatewayVerificationResult = isLocallyFinalizedOrderPayment
-    ? {
-        gatewayResponse: storedGatewayResponse as Record<string, unknown>,
-        status: 'success',
-        success: true,
-      }
-    : await verifyGatewayPayment(transaction.gateway, parsedReference.data);
+  const isBankOffer =
+    parsedReference.data.startsWith('BCO-') &&
+    transaction.gateway === 'paystack';
+  let gatewayResponse: Record<string, unknown> | undefined;
+  // Bank offers verify (or replay stored proof) inside the shared finalizer.
+  if (!isBankOffer) {
+    const storedGatewayResponse = transaction.gateway_response;
+    const hasStoredGatewayResponse =
+      storedGatewayResponse !== null &&
+      typeof storedGatewayResponse === 'object' &&
+      !Array.isArray(storedGatewayResponse);
+    const isLocallyFinalizedOrderPayment =
+      isSupportedOrderGateway &&
+      transaction.status === 'completed' &&
+      existingOrder?.payment_status === 'paid' &&
+      hasStoredGatewayResponse;
+    const verification: GatewayVerificationResult =
+      isLocallyFinalizedOrderPayment
+        ? {
+            gatewayResponse: storedGatewayResponse as Record<string, unknown>,
+            status: 'success',
+            success: true,
+          }
+        : await verifyGatewayPayment(transaction.gateway, parsedReference.data);
 
-  if (!verification.success) {
-    logger.warn({
-      message: 'Payment verification failed',
-      reference: parsedReference.data,
-      gateway: transaction.gateway,
-      error: verification.error,
-      code: verification.code,
-    });
-    return NextResponse.json(
-      {
-        success: false,
-        status: 'pending',
+    if (!verification.success) {
+      logger.warn({
+        message: 'Payment verification failed',
+        reference: parsedReference.data,
+        gateway: transaction.gateway,
         error: verification.error,
+        code: verification.code,
+      });
+      return NextResponse.json(
+        {
+          success: false,
+          status: 'pending',
+          error: verification.error,
+          orderNumber:
+            existingOrder?.order_number ||
+            transaction.gateway_reference.slice(0, 8).toUpperCase(),
+        },
+        { status: 400 }
+      );
+    }
+
+    if (verification.status !== 'success') {
+      // Terminal provider outcome (failed/cancelled/abandoned): carry the
+      // trusted order identity resolved from the reference's transaction
+      // row so clients can attribute this envelope to their order instead
+      // of treating it as transient and confirming a payment that cannot
+      // settle.
+      return NextResponse.json({
+        success: false,
+        status: verification.status,
+        orderId: transaction.order_id,
         orderNumber:
           existingOrder?.order_number ||
           transaction.gateway_reference.slice(0, 8).toUpperCase(),
-      },
-      { status: 400 }
+      });
+    }
+
+    // Verify the gateway-confirmed amount matches our stored transaction amount
+    // (mirrors the webhook's amount/currency checks to prevent partial-pay exploits)
+    const verifiedAmount = getVerifiedAmount(
+      transaction.gateway,
+      verification.gatewayResponse
     );
-  }
 
-  if (verification.status !== 'success') {
-    // Terminal provider outcome (failed/cancelled/abandoned): carry the
-    // trusted order identity resolved from the reference's transaction
-    // row so clients can attribute this envelope to their order instead
-    // of treating it as transient and confirming a payment that cannot
-    // settle.
-    return NextResponse.json({
-      success: false,
-      status: verification.status,
-      orderId: transaction.order_id,
-      orderNumber:
-        existingOrder?.order_number ||
-        transaction.gateway_reference.slice(0, 8).toUpperCase(),
-    });
-  }
-
-  // Verify the gateway-confirmed amount matches our stored transaction amount
-  // (mirrors the webhook's amount/currency checks to prevent partial-pay exploits)
-  const verifiedAmount = getVerifiedAmount(
-    transaction.gateway,
-    verification.gatewayResponse
-  );
-
-  if (verifiedAmount) {
-    const transactionAmount = Number(transaction.amount) || 0;
-    if (Math.abs(verifiedAmount.amount - transactionAmount) > 0.01) {
-      logger.error({
-        message: 'Payment verify route amount mismatch',
-        reference: parsedReference.data,
-        gateway: transaction.gateway,
-        expected: transactionAmount,
-        received: verifiedAmount.amount,
-      });
-      // Permanent for this attempt: the provider-confirmed amount differs
-      // from the stored transaction, so this reference can never settle
-      // the order. Same machine-code contract as the 404/409 envelopes.
-      return NextResponse.json(
-        {
-          error: 'Payment amount mismatch',
-          code: 'amount_mismatch',
+    if (verifiedAmount) {
+      const transactionAmount = Number(transaction.amount) || 0;
+      if (Math.abs(verifiedAmount.amount - transactionAmount) > 0.01) {
+        logger.error({
+          message: 'Payment verify route amount mismatch',
           reference: parsedReference.data,
-        },
-        { status: 400 }
-      );
+          gateway: transaction.gateway,
+          expected: transactionAmount,
+          received: verifiedAmount.amount,
+        });
+        // Permanent for this attempt: the provider-confirmed amount differs
+        // from the stored transaction, so this reference can never settle
+        // the order. Same machine-code contract as the 404/409 envelopes.
+        return NextResponse.json(
+          {
+            error: 'Payment amount mismatch',
+            code: 'amount_mismatch',
+            reference: parsedReference.data,
+          },
+          { status: 400 }
+        );
+      }
+
+      const expectedCurrency =
+        typeof transaction.currency === 'string' ? transaction.currency : null;
+      if (
+        expectedCurrency &&
+        verifiedAmount.currency &&
+        expectedCurrency.toUpperCase() !== verifiedAmount.currency.toUpperCase()
+      ) {
+        logger.error({
+          message: 'Payment verify route currency mismatch',
+          reference: parsedReference.data,
+          gateway: transaction.gateway,
+          expected: expectedCurrency,
+          received: verifiedAmount.currency,
+        });
+        // Permanent for this attempt, like the amount mismatch above.
+        return NextResponse.json(
+          {
+            error: 'Payment currency mismatch',
+            code: 'currency_mismatch',
+            reference: parsedReference.data,
+          },
+          { status: 400 }
+        );
+      }
     }
 
-    const expectedCurrency =
-      typeof transaction.currency === 'string' ? transaction.currency : null;
-    if (
-      expectedCurrency &&
-      verifiedAmount.currency &&
-      expectedCurrency.toUpperCase() !== verifiedAmount.currency.toUpperCase()
-    ) {
-      logger.error({
-        message: 'Payment verify route currency mismatch',
+    const merchantInvoicePartialPayment =
+      await processMerchantInvoicePartialPayment({
+        gateway: transaction.gateway as 'korapay' | 'paystack',
+        gatewayResponse: verification.gatewayResponse,
         reference: parsedReference.data,
-        gateway: transaction.gateway,
-        expected: expectedCurrency,
-        received: verifiedAmount.currency,
-      });
-      // Permanent for this attempt, like the amount mismatch above.
-      return NextResponse.json(
-        {
-          error: 'Payment currency mismatch',
-          code: 'currency_mismatch',
-          reference: parsedReference.data,
+        supabase,
+        transaction: {
+          amount: transaction.amount,
+          currency: transaction.currency,
+          gateway_reference: transaction.gateway_reference,
+          id: transaction.id,
+          merchant_id: transaction.merchant_id,
+          metadata: transaction.metadata,
+          order_id: transaction.order_id,
+          platform_fee: transaction.platform_fee,
         },
-        { status: 400 }
-      );
+      });
+    if (merchantInvoicePartialPayment.kind !== 'none') {
+      return NextResponse.json(merchantInvoicePartialPayment.body, {
+        status: merchantInvoicePartialPayment.status,
+      });
     }
-  }
 
-  const merchantInvoicePartialPayment =
-    await processMerchantInvoicePartialPayment({
-      gateway: transaction.gateway as 'korapay' | 'paystack',
-      gatewayResponse: verification.gatewayResponse,
-      reference: parsedReference.data,
-      supabase,
-      transaction: {
-        amount: transaction.amount,
-        currency: transaction.currency,
-        gateway_reference: transaction.gateway_reference,
-        id: transaction.id,
-        merchant_id: transaction.merchant_id,
-        metadata: transaction.metadata,
-        order_id: transaction.order_id,
-        platform_fee: transaction.platform_fee,
-      },
-    });
-  if (merchantInvoicePartialPayment.kind !== 'none') {
-    return NextResponse.json(merchantInvoicePartialPayment.body, {
-      status: merchantInvoicePartialPayment.status,
-    });
+    gatewayResponse = verification.gatewayResponse;
   }
 
   // Shared finalizer with the gateway webhook and the reconcile cron: the
@@ -321,7 +331,7 @@ async function verifyPaymentReference(
   const finalizeOutcome = await finalizeOrderGatewayPayment({
     actor: `verify:${parsedReference.data}`,
     gateway: transaction.gateway as 'paystack' | 'korapay',
-    gatewayResponse: verification.gatewayResponse,
+    gatewayResponse,
     orderId: transaction.order_id,
     reference: parsedReference.data,
     scheduleAfter: (task) => after(task),
@@ -334,7 +344,7 @@ async function verifyPaymentReference(
       order_id: transaction.order_id,
       platform_fee: transaction.platform_fee,
     },
-    wonTransactionFlip: transaction.status !== 'completed',
+    wonTransactionFlip: !isBankOffer && transaction.status !== 'completed',
   });
 
   if (finalizeOutcome.kind === 'bank_offer_capture_review') {

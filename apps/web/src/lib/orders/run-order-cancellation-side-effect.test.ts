@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   DeferredError,
   DeliveryUncertainError,
+  PartialCancellationRefundError,
   runOrderCancellationSideEffect,
 } from './run-order-cancellation-side-effect';
 
@@ -63,6 +64,27 @@ describe('runOrderCancellationSideEffect', () => {
       })
     ).resolves.toBe('completed');
     expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('persists accepted refund IDs with the retryable failure', async () => {
+    const supabase = client({ current_status: 'claimed', we_won: true });
+    await expect(
+      runOrderCancellationSideEffect({
+        execute: vi
+          .fn()
+          .mockRejectedValue(new PartialCancellationRefundError([42])),
+        orderId: 'order-1',
+        step: 'refund',
+        supabase: supabase as never,
+      })
+    ).resolves.toBe('failed');
+    expect(supabase.rpc).toHaveBeenLastCalledWith(
+      'finish_order_cancellation_side_effect',
+      expect.objectContaining({
+        p_status: 'failed',
+        p_result: { refundIds: [42] },
+      })
+    );
   });
 
   it('defers provider-awaiting work without failing it', async () => {

@@ -82,4 +82,8 @@ export const bankCardOfferVerificationContextSchema = paymentContext.extend({
   reference,
   acceptedFilterPolicyHash: z.string().regex(/^[0-9a-f]{64}$/),
   domain: z.enum(['test', 'live']),
+  completedGatewayResponse: z
+    .record(z.string(), z.unknown())
+    .nullable()
+    .optional(),
 });

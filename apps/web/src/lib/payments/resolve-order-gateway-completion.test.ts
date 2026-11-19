@@ -78,6 +78,7 @@ describe('gateway completion routing', () => {
       completion,
       redvaultDuplicate: false,
       redvaultInventoryConfirmed: true,
+      verifiedGatewayResponse: input.gatewayResponse,
     });
     expect(mocks.complete).not.toHaveBeenCalled();
   });

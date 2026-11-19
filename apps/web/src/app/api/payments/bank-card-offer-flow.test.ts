@@ -236,6 +236,7 @@ function setup(
             reference,
             amountKobo: 9500,
             customerEmail,
+            completedGatewayResponse: paid ? data : null,
             acceptedFilterPolicyHash: hashBankCardOfferFilter(
               quote.paymentPolicy
             ),
@@ -439,6 +440,7 @@ describe('bank card offer payment handlers', () => {
     const callCallback = () => verify(request('verify', { reference }));
     const callWebhook = () =>
       webhook(request('webhook', { event: 'charge.success', data }, true));
+    const providerCallsBeforeSuccess = mocks.verify.mock.calls.length;
     const callback = bankCode === '035' ? await callCallback() : null;
     const delivered = await callWebhook();
     expect(delivered.status, await delivered.clone().text()).toBe(200);
@@ -450,6 +452,11 @@ describe('bank card offer payment handlers', () => {
       success: true,
       finalizationOutcome: 'completed',
     });
+    expect(mocks.verify).toHaveBeenCalledTimes(providerCallsBeforeSuccess + 1);
+    mocks.verify.mockResolvedValue({ success: false, code: 'NETWORK_ERROR' });
+    expect((await callCallback()).status).toBe(200);
+    expect((await callWebhook()).status).toBe(200);
+    expect(mocks.verify).toHaveBeenCalledTimes(providerCallsBeforeSuccess + 1);
     expect(mocks.rpc).toHaveBeenCalledWith(
       'approve_bank_card_offer_capture',
       expect.objectContaining({

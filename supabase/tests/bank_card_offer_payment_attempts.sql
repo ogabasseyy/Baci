@@ -126,7 +126,14 @@ BEGIN
     jsonb_set(v_evidence, '{issuerName}', '"Sterling Bank"'))
     OR NOT public.approve_bank_card_offer_capture(v_order, v_merchant, v_transaction, v_evidence)
   THEN RAISE EXCEPTION 'Only an exact verified capture should be approved'; END IF;
-  UPDATE public.transactions SET status = 'completed' WHERE id = v_transaction;
+  IF public.get_bank_card_offer_verification_context(v_order, v_merchant, v_transaction)->>'completedGatewayResponse' IS NOT NULL
+    THEN RAISE EXCEPTION 'Pending bank-offer payments must verify against Paystack'; END IF;
+  UPDATE public.transactions SET status = 'completed', gateway_response = jsonb_build_object(
+    'reference', v_reference, 'status', 'success', 'amount', 9500, 'domain', 'test', 'id', '42')
+    WHERE id = v_transaction;
+  IF public.get_bank_card_offer_verification_context(v_order, v_merchant, v_transaction)
+    #>> '{completedGatewayResponse,reference}' IS DISTINCT FROM v_reference
+  THEN RAISE EXCEPTION 'Completed capture could not replay its approved evidence'; END IF;
   UPDATE public.orders SET payment_status = 'paid' WHERE id = v_order;
 
   BEGIN

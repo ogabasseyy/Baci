@@ -5,7 +5,10 @@ import { handlePaystackCancellationRefundFailure } from '@/lib/orders/handle-pay
 import { quarantineRefund } from '@/lib/orders/quarantine-order-cancellation-refund';
 import { recordPaystackCancellationRefund } from '@/lib/orders/record-paystack-cancellation-refund';
 import { tryResetCancellationSideEffectAttempts } from '@/lib/orders/reset-cancellation-side-effect-attempts';
-import { DeferredError } from './run-order-cancellation-side-effect';
+import {
+  DeferredError,
+  PartialCancellationRefundError,
+} from './run-order-cancellation-side-effect';
 
 // Worst-case sizing for one refund leg: the provider POST may take up
 // to 30s (mirroring the transport worst-case precedent), and the
@@ -198,6 +201,6 @@ export async function initiatePaystackCancellationRefunds({
     });
   }
   if (bankOfferLookupUnavailable)
-    throw new Error('Unable to verify bank card offer refund capture');
+    throw new PartialCancellationRefundError(refundIds);
   return refundIds;
 }

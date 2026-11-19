@@ -146,7 +146,10 @@ describe('cancellation refund accepted-refund safety', () => {
         step: 'refund',
         supabase: { from, rpc } as never,
       })
-    ).rejects.toThrow('Unable to verify bank card offer refund capture');
+    ).rejects.toMatchObject({
+      message: 'Unable to verify bank card offer refund capture',
+      refundIds: [42],
+    });
     expect(mocks.initiateRefund).toHaveBeenCalledTimes(1);
     expect(mocks.initiateRefund).toHaveBeenCalledWith(
       'regular-fixture',

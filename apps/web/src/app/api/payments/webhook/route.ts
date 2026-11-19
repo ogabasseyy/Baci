@@ -806,7 +806,6 @@ export async function POST(request: NextRequest) {
       const outcome = await finalizeOrderGatewayPayment({
         actor: `webhook:${reference}`,
         gateway,
-        gatewayResponse: {},
         orderId: transaction.order_id,
         reference,
         scheduleAfter: (task) => after(task),
@@ -819,7 +818,6 @@ export async function POST(request: NextRequest) {
           order_id: transaction.order_id,
           platform_fee: transaction.platform_fee,
         },
-        wonTransactionFlip: false,
       });
       if (outcome.kind === 'bank_offer_capture_review') {
         // Acknowledge provider delivery after saving the review. The customer

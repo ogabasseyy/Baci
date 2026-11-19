@@ -16,6 +16,14 @@ interface ClaimResult {
 
 export class DeliveryUncertainError extends Error {}
 
+// Keep accepted refund IDs on the failed attempt for reconciliation. The
+// retry still reads authoritative payment/refund rows before sending anything.
+export class PartialCancellationRefundError extends Error {
+  constructor(public readonly refundIds: number[]) {
+    super('Unable to verify bank card offer refund capture');
+  }
+}
+
 // Thrown when the step cannot advance until provider reconciliation moves
 // (e.g. a refund leg is still pending at Paystack). Unlike a failure this
 // consumes no retry attempt: the drain reselects deferred rows until the
@@ -68,6 +76,9 @@ export async function runOrderCancellationSideEffect({
         : error instanceof DeferredError
           ? 'deferred'
           : 'failed';
+    if (error instanceof PartialCancellationRefundError) {
+      result = { refundIds: error.refundIds };
+    }
     errorMessage = error instanceof Error ? error.message : String(error);
   }
 

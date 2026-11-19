@@ -34,6 +34,14 @@ export async function approveBankCardOfferPayment({
   ) {
     return null;
   }
+  // The database only returns this payload for a completed transaction
+  // tied to the same saved offer and its persisted approval evidence.
+  if (context.data.completedGatewayResponse) {
+    return {
+      kind: 'verified',
+      gatewayResponse: context.data.completedGatewayResponse,
+    } as const;
+  }
   const { amountKobo, quote } = context.data;
   const verified = await verifyBankCardOfferPaystack({
     ...context.data,

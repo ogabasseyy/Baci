@@ -29,7 +29,7 @@ export async function finalizeOrderGatewayPayment({
   gateway,
   reference,
   gatewayResponse,
-  wonTransactionFlip,
+  wonTransactionFlip: externalTransactionFlip = false,
   actor,
   scheduleAfter,
   signal,
@@ -50,6 +50,11 @@ export async function finalizeOrderGatewayPayment({
   });
   if (!result.ok) return result.outcome;
   const completion = result.completion;
+  // Bank offers flip inside completion itself, never before verification.
+  const wonTransactionFlip =
+    'atomicTransactionFlip' in result
+      ? result.atomicTransactionFlip
+      : externalTransactionFlip;
 
   const blockedOutcome = await fileBlockedOrderPaymentReview({
     completion,
@@ -206,10 +211,7 @@ export async function finalizeOrderGatewayPayment({
     emailMaxAttemptsPerSender,
     externalGatewayReference: reference,
     fallbackDeadlineMs,
-    gatewayResponse:
-      'verifiedGatewayResponse' in result
-        ? result.verifiedGatewayResponse
-        : gatewayResponse,
+    gatewayResponse: result.verifiedGatewayResponse,
     order: richOrder,
     scheduleAfter,
     settlementGateway: gateway,

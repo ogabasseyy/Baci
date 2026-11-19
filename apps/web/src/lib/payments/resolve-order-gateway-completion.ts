@@ -20,7 +20,7 @@ export async function resolveOrderGatewayCompletion({
   actor: string;
   expectedOutstandingMinor?: number | null;
   gateway: 'juicyway' | 'paystack' | 'korapay';
-  gatewayResponse: Record<string, unknown>;
+  gatewayResponse?: Record<string, unknown>;
   merchantId: string;
   orderId: string;
   reference: string;
@@ -105,6 +105,16 @@ export async function resolveOrderGatewayCompletion({
         redvaultDuplicate: false,
         redvaultInventoryConfirmed: false,
         verifiedGatewayResponse: verified.gatewayResponse,
+        atomicTransactionFlip: result.completion.already_completed === false,
+      };
+    }
+    if (!gatewayResponse) {
+      return {
+        ok: false as const,
+        outcome: {
+          kind: 'completion_failed' as const,
+          error: new Error('missing_gateway_response'),
+        },
       };
     }
     const capture = await captureOrHoldRedvaultPayment({
@@ -186,6 +196,7 @@ export async function resolveOrderGatewayCompletion({
             completion,
             redvaultDuplicate: approved.duplicate,
             redvaultInventoryConfirmed: approved.inventoryConfirmed,
+            verifiedGatewayResponse: gatewayResponse,
           };
         }
         await fileRedvaultInventoryConfirmationReview({
@@ -227,5 +238,6 @@ export async function resolveOrderGatewayCompletion({
     ...result,
     redvaultDuplicate: false,
     redvaultInventoryConfirmed: false,
+    verifiedGatewayResponse: gatewayResponse,
   };
 }

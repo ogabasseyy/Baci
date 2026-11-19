@@ -164,6 +164,11 @@
     min-height: 3.5rem;
   }
 
+  [data-ogabassey-pdp-commerce-quantity] button:focus-visible {
+    outline: 2px solid var(--store-primary, #d62027);
+    outline-offset: -4px;
+  }
+
   [data-ogabassey-pdp-commerce-quantity] button:first-child {
     border-right: 1px solid
       color-mix(in srgb, var(--store-primary, #d62027) 15%, transparent);
@@ -195,10 +200,10 @@
   [data-ogabassey-pdp-commerce-in-cart-label] {
     color: color-mix(
       in srgb,
-      var(--store-background-text, #111827) 52%,
+      var(--store-background-text, #111827) 70%,
       transparent
     );
-    font-size: 0.625rem;
+    font-size: 0.6875rem;
     font-weight: 700;
     letter-spacing: 0.05em;
     text-transform: uppercase;

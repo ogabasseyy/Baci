@@ -9,7 +9,7 @@ import {
 } from '@/lib/checkout/cart-entitlement-sanitizer';
 import { DEFAULT_ASSURANCE_RATE } from '@/lib/checkout/constants';
 import { asRoute } from '@/lib/routes';
-import { getCartItemConditionBadge } from '../components/cart-item-badge-style';
+import { getCartItemConditionBadge } from '../components/cart-item-condition-badge';
 import { CartVariantDetails } from '../components/cart-variant-details';
 import { CartAssuranceRow } from './cart-assurance-row';
 import { CartPageNegotiationIcon } from './cart-page-negotiation-icon';

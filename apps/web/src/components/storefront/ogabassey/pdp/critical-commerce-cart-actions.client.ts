@@ -81,7 +81,8 @@ export function useCriticalCommerceCartActions({
       return;
     }
 
-    updateQuantity?.(targetCartItemId, quantityInCart + 1, targetVariantId);
+    // Increment via `addToCart` so live product stock/offer caps refresh before merging.
+    addToCart(productForCart, 1, cartAddOptions);
   }
 
   function handleDecrementCartQuantity() {

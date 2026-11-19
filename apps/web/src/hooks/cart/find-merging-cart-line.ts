@@ -27,6 +27,11 @@ import {
  * and shared carts (where `cartItemId` is a server UUID or `temp:` id and
  * lines match by canonical `cartLineIdentity` + attachment lane).
  */
+function readStringProp(source: object, key: string): string | undefined {
+  const value: unknown = Reflect.get(source, key);
+  return typeof value === 'string' ? value : undefined;
+}
+
 export function findMergingCartLineIndex(
   cart: CartItem[],
   product: Product,
@@ -48,17 +53,11 @@ export function findMergingCartLineIndex(
         }
       : options;
   const cartItemId = generateCartItemId(product.id, normalizedOptions);
-  const productRecord = product as unknown as Record<string, unknown>;
   const voucherToken =
     normalizedOptions?.quizVoucherToken ??
-    (typeof productRecord.quizVoucherToken === 'string'
-      ? productRecord.quizVoucherToken
-      : undefined);
+    readStringProp(product, 'quizVoucherToken');
   const voucherAwardId =
-    normalizedOptions?.quizAwardId ??
-    (typeof productRecord.quizAwardId === 'string'
-      ? productRecord.quizAwardId
-      : undefined);
+    normalizedOptions?.quizAwardId ?? readStringProp(product, 'quizAwardId');
   const sharedIdentityKey = normalizedOptions?.offerId
     ? null
     : cartLineIdentity(
@@ -77,7 +76,7 @@ export function findMergingCartLineIndex(
 
   return cart.findIndex((item) => {
     if (item.cartItemId === cartItemId) return true;
-    const sharedCandidate = item as Partial<SharedCartDisplayItem>;
+    const sharedCandidate: Partial<SharedCartDisplayItem> = item;
     const isSharedCartLine =
       typeof sharedCandidate.serverLineId === 'string' ||
       (typeof sharedCandidate.pendingTempId === 'string' &&
@@ -89,7 +88,7 @@ export function findMergingCartLineIndex(
       sharedIdentityKey !== null &&
       !item.offerId &&
       cartLineIdentity(cartItemToIdentity(item)) === sharedIdentityKey &&
-      displayLineMatchesAddLane(item as SharedCartDisplayItem, {
+      displayLineMatchesAddLane(item, {
         voucherToken,
         voucherAwardId,
       })

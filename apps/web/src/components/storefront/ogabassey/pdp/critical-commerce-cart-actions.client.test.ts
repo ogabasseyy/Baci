@@ -113,10 +113,10 @@ describe('useCriticalCommerceCartActions', () => {
     act(() => {
       result.current.handleIncrementCartQuantity();
     });
-    expect(cartMocks.updateQuantity).toHaveBeenCalledWith(
-      'simple-1::condition=new',
-      3,
-      undefined
+    expect(cartMocks.addToCart).toHaveBeenCalledWith(
+      productForCart,
+      1,
+      expect.objectContaining({ condition: 'new' })
     );
 
     act(() => {
@@ -185,7 +185,7 @@ describe('useCriticalCommerceCartActions', () => {
         productForCart: {
           ...productForCart,
           minimum_order_quantity: 2,
-        } as never,
+        },
         quantity: 2,
       })
     );

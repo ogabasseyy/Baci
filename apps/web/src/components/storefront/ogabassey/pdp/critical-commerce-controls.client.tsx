@@ -24,7 +24,6 @@ export function OgabasseyPdpCriticalCommerceControls({
     handleIncrementCartQuantity,
     isAtMaxQuantity,
     isAtMinCartQuantity,
-    productForCart,
     quantityInCart,
   } = useOgabasseyPdpCriticalCommerce();
   const blockerHintId = useId();
@@ -32,9 +31,7 @@ export function OgabasseyPdpCriticalCommerceControls({
   // something the shopper can fix, so the button stays tappable and the
   // tap explains what to choose instead of doing nothing.
   const isSoldOut = addToCartBlocker?.kind === 'out-of-stock';
-  const removeOnDecrement =
-    isAtMinCartQuantity ??
-    quantityInCart <= Math.max(1, productForCart?.minimum_order_quantity ?? 1);
+  const removeOnDecrement = isAtMinCartQuantity;
 
   return (
     <div

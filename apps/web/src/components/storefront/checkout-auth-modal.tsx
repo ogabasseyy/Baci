@@ -29,8 +29,7 @@ export function CheckoutAuthModal({
     typeof window !== 'undefined' &&
     supportsCheckoutSocialSignIn(
       window.location.hostname,
-      process.env.NODE_ENV === 'production',
-      merchant?.custom_domain
+      process.env.NODE_ENV === 'production'
     )
       ? `${window.location.pathname}${window.location.search}`
       : undefined;

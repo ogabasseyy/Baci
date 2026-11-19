@@ -66,6 +66,9 @@ export function CartAssuranceRow({
                 <span className="ml-1 text-store-primary font-semibold">
                   +₦{assuranceCost.toLocaleString('en-NG')}
                 </span>
+                <span className="block text-[10px] text-store-background-text/60 whitespace-normal">
+                  Optional · included in total · uncheck to remove
+                </span>
               </>
             ) : (
               `Device Protection (+${assuranceRateLabel})`

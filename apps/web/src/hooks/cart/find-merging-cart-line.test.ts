@@ -236,5 +236,37 @@ describe('findMergingCartLineIndex', () => {
         condition: 'new',
       })
     ).toBe(0);
+
+    expect(
+      findMergingCartLineIndex(
+        [{ ...sharedServerLine, quizVoucherToken: 'quiz-1' }],
+        product,
+        { condition: 'new' }
+      )
+    ).toBe(-1);
+
+    expect(
+      findMergingCartLineIndex(
+        [{ ...sharedServerLine, offerId: 'offer-1' }],
+        product,
+        { condition: 'new' }
+      )
+    ).toBe(-1);
+
+    expect(
+      findMergingCartLineIndex([sharedServerLine], product, {
+        condition: 'new',
+        color: 'Silver',
+        storage: '1TB',
+        variantId: 'v-other',
+      })
+    ).toBe(-1);
+
+    expect(
+      findMergingCartLineIndex([sharedServerLine], product, {
+        condition: 'new',
+        offerId: 'offer-1',
+      })
+    ).toBe(-1);
   });
 });

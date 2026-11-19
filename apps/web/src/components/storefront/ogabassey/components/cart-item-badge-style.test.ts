@@ -1,11 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import {
-  getCartItemConditionBadge,
-  resolveCartColorChipStyle,
-} from './cart-item-badge-style';
+import { resolveCartColorChipStyle } from './cart-item-badge-style';
 
 describe('resolveCartColorChipStyle', () => {
-  it('prioritizes chromatic names before titanium or natural keywords', () => {
+  it('prioritizes chromatic names before titanium, midnight, or natural keywords', () => {
     expect(resolveCartColorChipStyle('Blue Titanium')).toEqual({
       backgroundColor: '#dbeafe',
       color: '#1e40af',
@@ -20,6 +17,21 @@ describe('resolveCartColorChipStyle', () => {
       backgroundColor: '#e5e7eb',
       color: '#1f2937',
       borderColor: '#9ca3af',
+    });
+    expect(resolveCartColorChipStyle('Midnight Green')).toEqual({
+      backgroundColor: '#dcfce7',
+      color: '#166534',
+      borderColor: '#86efac',
+    });
+    expect(resolveCartColorChipStyle('Cosmic Orange')).toEqual({
+      backgroundColor: '#ffedd5',
+      color: '#9a3412',
+      borderColor: '#fdba74',
+    });
+    expect(resolveCartColorChipStyle('Rose Gold')).toEqual({
+      backgroundColor: '#fce7f3',
+      color: '#9d174d',
+      borderColor: '#f9a8d4',
     });
   });
 
@@ -58,25 +70,5 @@ describe('resolveCartColorChipStyle', () => {
       color: '#ffffff',
       borderColor: '#123456',
     });
-  });
-});
-
-describe('getCartItemConditionBadge', () => {
-  it('returns themed badge classes for canonical conditions', () => {
-    expect(getCartItemConditionBadge({ condition: 'new' })).toEqual({
-      label: 'New',
-      badgeClassName: 'bg-store-background-text text-store-background',
-    });
-    expect(
-      getCartItemConditionBadge({ variantAttributes: { condition: 'open_box' } })
-    ).toEqual({
-      label: 'Open Box',
-      badgeClassName: 'bg-store-primary text-store-primary-text',
-    });
-    expect(getCartItemConditionBadge({ condition: 'used' })).toEqual({
-      label: 'Used',
-      badgeClassName: 'bg-store-background-text/80 text-store-background',
-    });
-    expect(getCartItemConditionBadge({})).toBeNull();
   });
 });

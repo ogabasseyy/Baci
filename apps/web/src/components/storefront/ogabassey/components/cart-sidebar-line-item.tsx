@@ -21,7 +21,7 @@ import { DEFAULT_ASSURANCE_RATE } from '@/lib/checkout/constants';
 import { asRoute } from '@/lib/routes';
 import { getStorefrontProductHref } from '@/lib/storefront-product-href';
 import { CartAssuranceRow } from '../pages/cart-assurance-row';
-import { getCartItemConditionBadge } from './cart-item-badge-style';
+import { getCartItemConditionBadge } from './cart-item-condition-badge';
 import { CartVariantDetails } from './cart-variant-details';
 
 export function CartSidebarLineItem({

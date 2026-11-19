@@ -36,8 +36,7 @@ export function CheckoutIdentityModal({
     typeof window !== 'undefined' &&
     supportsCheckoutSocialSignIn(
       window.location.hostname,
-      process.env.NODE_ENV === 'production',
-      merchant?.custom_domain
+      process.env.NODE_ENV === 'production'
     );
   const { checkoutUrl: normalizedCheckoutUrl } =
     buildCheckoutIdentityRoutes(checkoutUrl);

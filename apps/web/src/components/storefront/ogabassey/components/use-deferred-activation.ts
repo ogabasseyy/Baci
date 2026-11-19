@@ -150,8 +150,8 @@ export function useDeferredActivation({
     };
     const handlePointerDown = (event: Event) => {
       const pointerType =
-        'pointerType' in event
-          ? (event as PointerEvent).pointerType
+        typeof PointerEvent !== 'undefined' && event instanceof PointerEvent
+          ? event.pointerType
           : undefined;
       if (pointerType === 'touch') {
         markTouchInteraction();

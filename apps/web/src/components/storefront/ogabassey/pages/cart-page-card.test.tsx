@@ -90,6 +90,7 @@ describe('CartPageCard', () => {
     );
 
     expect(screen.getByText('iPhone 15 Pro Max')).toBeInTheDocument();
+    expect(screen.getAllByText('New').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('2')).toBeInTheDocument();
     expect(screen.getByText('₦3,000,000')).toBeInTheDocument();
   });
@@ -203,5 +204,24 @@ describe('CartPageCard', () => {
     );
 
     expect(screen.queryByText('Ogabassey Assurance')).not.toBeInTheDocument();
+  });
+
+  it('hides the crossed-out price for pending or rejected negotiations', () => {
+    const onOpenItemNegotiation = vi.fn();
+    render(
+      <CartPageCard
+        basePath="/ogabassey"
+        hasPriceNegotiation={true}
+        item={{
+          ...sampleItem,
+          negotiatedPrice: 1400000,
+          negotiationStatus: 'pending',
+        }}
+        onOpenItemNegotiation={onOpenItemNegotiation}
+      />
+    );
+
+    expect(screen.getAllByText('₦3,000,000')).toHaveLength(1);
+    expect(screen.queryByText('₦2,800,000')).not.toBeInTheDocument();
   });
 });

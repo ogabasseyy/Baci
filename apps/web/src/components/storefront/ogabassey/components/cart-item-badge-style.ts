@@ -1,15 +1,7 @@
-import { canonicalizeCommerceVariantAxis } from '@baci/shared/lib/commerce-variant-axis';
-import { formatCanonicalProductConditionLabel } from '@baci/shared/lib/product-condition';
-
-export interface VariantDetailsItem {
-  condition?: string;
-  selectedColor?: string;
-  selectedColorValue?: string;
-  selectedStorage?: string;
-  secondaryColor?: string;
-  variantAttributes?: Record<string, string>;
-}
-
+/**
+ * Resolves theme-independent swatch colors for a cart line item's selected
+ * colour variant, giving chromatic names priority over dark/metallic modifiers.
+ */
 export function resolveCartColorChipStyle(
   name: string,
   explicitValue?: string
@@ -32,12 +24,16 @@ export function resolveCartColorChipStyle(
   }
 
   const lower = name.toLowerCase();
+  const hasChromaticWord =
+    /\b(green|blue|purple|violet|lavender|pink|rose|red|coral|orange|yellow|gold|desert|teal|mint)\b/.test(
+      lower
+    );
 
   if (
     lower.includes('black') ||
     lower.includes('obsidian') ||
-    lower.includes('midnight') ||
-    lower.includes('graphite')
+    (!hasChromaticWord &&
+      (lower.includes('midnight') || lower.includes('graphite')))
   ) {
     return {
       backgroundColor: '#1f2937',
@@ -63,11 +59,25 @@ export function resolveCartColorChipStyle(
       borderColor: '#cbd5e1',
     };
   }
-  if (lower.includes('yellow') || lower.includes('orange')) {
+  if (lower.includes('orange')) {
+    return {
+      backgroundColor: '#ffedd5',
+      color: '#9a3412',
+      borderColor: '#fdba74',
+    };
+  }
+  if (lower.includes('yellow')) {
     return {
       backgroundColor: '#fef08a',
       color: '#854d0e',
       borderColor: '#facc15',
+    };
+  }
+  if (lower.includes('pink') || lower.includes('rose')) {
+    return {
+      backgroundColor: '#fce7f3',
+      color: '#9d174d',
+      borderColor: '#f9a8d4',
     };
   }
   if (lower.includes('gold') || lower.includes('desert')) {
@@ -111,13 +121,6 @@ export function resolveCartColorChipStyle(
       borderColor: '#86efac',
     };
   }
-  if (lower.includes('pink') || lower.includes('rose')) {
-    return {
-      backgroundColor: '#fce7f3',
-      color: '#9d174d',
-      borderColor: '#f9a8d4',
-    };
-  }
   if (lower.includes('red') || lower.includes('coral')) {
     return {
       backgroundColor: '#fee2e2',
@@ -143,32 +146,4 @@ export function resolveCartColorChipStyle(
     color: '#27272a',
     borderColor: '#cbd5e1',
   };
-}
-
-export function getCartItemConditionBadge(
-  item: VariantDetailsItem
-): { label: string; badgeClassName: string } | null {
-  const attributes: Record<string, string> = {};
-  for (const [key, value] of Object.entries(item.variantAttributes ?? {})) {
-    const axis = canonicalizeCommerceVariantAxis(key);
-    if (axis && typeof value === 'string' && value.trim()) {
-      attributes[axis] = value.trim();
-    }
-  }
-  const rawCondition =
-    (typeof item.condition === 'string' ? item.condition.trim() : '') ||
-    attributes.condition;
-  if (!rawCondition) return null;
-
-  const label =
-    formatCanonicalProductConditionLabel(rawCondition) || rawCondition;
-  const normalized = label.toLowerCase();
-  const badgeClassName =
-    normalized === 'new'
-      ? 'bg-store-background-text text-store-background'
-      : normalized === 'open box'
-        ? 'bg-store-primary text-store-primary-text'
-        : 'bg-store-background-text/80 text-store-background';
-
-  return { label, badgeClassName };
 }

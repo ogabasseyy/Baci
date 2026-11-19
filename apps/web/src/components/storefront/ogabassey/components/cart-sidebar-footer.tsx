@@ -64,7 +64,7 @@ export function CartSidebarFooter({
         {checkoutError && (
           <p
             role="alert"
-            className="text-xs text-red-600 font-medium text-center mt-2"
+            className="text-xs text-[var(--store-danger-text,hsl(var(--destructive)))] font-medium text-center mt-2"
           >
             {checkoutError}
           </p>

@@ -9,6 +9,7 @@
 @source not "../../**/*.test.tsx";
 @source "../../components/storefront/ogabassey/components/CartSidebar.tsx";
 @source "../../components/storefront/ogabassey/components/cart-item-badge-style.ts";
+@source "../../components/storefront/ogabassey/components/cart-item-condition-badge.ts";
 @source "../../components/storefront/ogabassey/components/CheckoutIdentityModal.tsx";
 @source "../../components/storefront/checkout-code-signin.tsx";
 @source "../../components/storefront/ogabassey/components/cart-sidebar-*.tsx";

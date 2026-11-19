@@ -143,10 +143,10 @@ describe('OgabasseyPdpCriticalCommerceClient', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: /increase quantity/i }));
-    expect(cartMocks.updateQuantity).toHaveBeenCalledWith(
-      'product-1::condition=used',
-      2,
-      undefined
+    expect(cartMocks.addToCart).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'product-1' }),
+      1,
+      expect.objectContaining({ condition: 'used' })
     );
 
     fireEvent.click(
@@ -240,91 +240,6 @@ describe('OgabasseyPdpCriticalCommerceClient', () => {
       1,
       undefined
     );
-  });
-
-  it('caps in-cart quantity increments at managed stock', () => {
-    cartMocks.cart = [
-      {
-        cartItemId: 'product-1::condition=used',
-        condition: 'used',
-        id: 'product-1',
-        quantity: 2,
-      },
-    ];
-    render(
-      <OgabasseyPdpCriticalCommerceClient
-        cartHref="/cart"
-        cartProduct={{
-          ...cartProduct,
-          stock: 2,
-        }}
-        productName={cartProduct.name}
-        variantCount={1}
-      />
-    );
-
-    const increaseButton = screen.getByRole('button', {
-      name: /increase quantity/i,
-    });
-    const decreaseButton = screen.getByRole('button', {
-      name: /decrease quantity/i,
-    });
-
-    expect(screen.getByText('2')).toBeInTheDocument();
-    expect(increaseButton).toBeDisabled();
-
-    fireEvent.click(decreaseButton);
-    expect(cartMocks.updateQuantity).toHaveBeenCalledWith(
-      'product-1::condition=used',
-      1,
-      undefined
-    );
-  });
-
-  it('blocks cart additions when managed stock is exhausted', () => {
-    render(
-      <OgabasseyPdpCriticalCommerceClient
-        cartHref="/cart"
-        cartProduct={{
-          ...cartProduct,
-          stock: 0,
-        }}
-        productName={cartProduct.name}
-        variantCount={1}
-      />
-    );
-
-    const addButton = screen.getByRole('button', { name: /add to cart/i });
-    expect(addButton).toBeDisabled();
-
-    fireEvent.click(addButton);
-
-    expect(cartMocks.addToCart).not.toHaveBeenCalled();
-    expect(cartMocks.setIsCartOpen).not.toHaveBeenCalled();
-  });
-
-  it('keeps stock-zero products unlimited when stock management is disabled', () => {
-    const unmanagedProduct = {
-      ...cartProduct,
-      manage_stock: false,
-      stock: 0,
-    };
-
-    render(
-      <OgabasseyPdpCriticalCommerceClient
-        cartHref="/cart"
-        cartProduct={unmanagedProduct}
-        productName={cartProduct.name}
-        variantCount={1}
-      />
-    );
-
-    fireEvent.click(screen.getByRole('button', { name: /add to cart/i }));
-
-    expect(cartMocks.addToCart).toHaveBeenCalledWith(unmanagedProduct, 1, {
-      condition: 'used',
-    });
-    expect(cartMocks.setIsCartOpen).not.toHaveBeenCalled();
   });
 
   it('renders the live summary price in NGN by default', () => {

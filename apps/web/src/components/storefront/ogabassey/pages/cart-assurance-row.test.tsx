@@ -19,8 +19,8 @@ describe('CartAssuranceRow', () => {
     expect(screen.getByText('Screen & Liquid Damage')).toBeInTheDocument();
     expect(screen.getByText('+₦2,000')).toBeInTheDocument();
     expect(
-      screen.queryByText('Optional. Included in total; uncheck to remove.')
-    ).not.toBeInTheDocument();
+      screen.getByText('Optional · included in total · uncheck to remove')
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByRole('checkbox'));
     expect(onToggle).toHaveBeenCalledWith('ci-1');
   });

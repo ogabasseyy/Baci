@@ -8,7 +8,7 @@ import { isProductNegotiable } from '@baci/shared/lib';
 import { Check, HandCoins, Minus, Plus, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { CartAssuranceRow } from './cart-assurance-row';
-import { getCartItemConditionBadge } from '../components/cart-item-badge-style';
+import { getCartItemConditionBadge } from '../components/cart-item-condition-badge';
 import { CartVariantDetails } from '../components/cart-variant-details';
 import { DEFAULT_ASSURANCE_RATE } from '@/lib/checkout/constants';
 import {
@@ -50,7 +50,6 @@ export function CartPageCard({
 
   return (
     <div
-      key={item.cartItemId}
       className="bg-store-background p-4 rounded-2xl shadow-xs border border-store-border relative overflow-hidden transition-all md:hover:shadow-md active:scale-[0.99] md:active:scale-100 touch-manipulation"
     >
       <div className="flex gap-3.5 md:gap-4 items-start">
@@ -158,7 +157,9 @@ export function CartPageCard({
                 <div className="font-bold text-store-primary text-sm md:text-lg whitespace-nowrap">
                   Free gift
                 </div>
-              ) : item.negotiatedPrice ? (
+              ) : item.negotiatedPrice &&
+                item.negotiationStatus !== 'pending' &&
+                item.negotiationStatus !== 'rejected' ? (
                 <div className="flex flex-col items-end leading-tight">
                   <span className="text-[10px] text-store-background-text/45 line-through decoration-store-primary/40 whitespace-nowrap">
                     ₦{(item.price * item.quantity).toLocaleString()}

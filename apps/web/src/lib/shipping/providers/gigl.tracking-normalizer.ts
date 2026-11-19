@@ -167,6 +167,17 @@ export function normalizeGiglTrackingShipment(
       right.event.timestamp.getTime() - left.event.timestamp.getTime() ||
       currentStatusRank(right) - currentStatusRank(left)
   );
+  // The worker reads the current location from events[0]; a same-time scan
+  // without one (e.g. MSHC) must not hide the located scan from the same poll.
+  const top = sortedCandidates[0];
+  if (top && !top.event.location) {
+    const located = sortedCandidates.find(
+      (candidate) =>
+        candidate.event.location &&
+        candidate.event.timestamp.getTime() === top.event.timestamp.getTime()
+    );
+    if (located) top.event.location = located.event.location;
+  }
   const newestRecognized = sortedCandidates.find(
     (candidate) => candidate.recognizedStatus !== null
   );

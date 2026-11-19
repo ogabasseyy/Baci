@@ -26,6 +26,11 @@ export function currentStatusRank(candidate: Guardable): number {
   if (status !== null && TERMINAL_STATUSES.has(status)) {
     return 6;
   }
+  // SDR is "shipment destroyed", not a failed attempt: a same-time MSHC is not
+  // a retry, so the destroyed state must stay visible.
+  if (candidate.providerStatus.trim().toUpperCase() === 'SDR') {
+    return 6;
+  }
   if (status === 'pickup_scheduled') {
     return isMshc(candidate) ? 3 : 2;
   }

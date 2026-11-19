@@ -31,7 +31,7 @@ describe('currentStatusRank', () => {
 
   it('lets a retry MSHC outrank a same-time failed scan (retry after a failed attempt)', () => {
     expect(currentStatusRank(scan('MSHC', 'out_for_delivery'))).toBeGreaterThan(
-      currentStatusRank(scan('SDR', 'failed'))
+      currentStatusRank(scan('DELIVERY_FAILED', 'failed'))
     );
   });
 

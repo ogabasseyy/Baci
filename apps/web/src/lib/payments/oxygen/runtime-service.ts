@@ -58,7 +58,9 @@ export async function readOxygenSnapshot(
   id: string
 ): Promise<OxygenRuntimeSnapshot> {
   return oxygenRuntimeSnapshotSchema.parse(
-    await oxygenRuntimeRpc(client, 'status', id)
+    await oxygenRuntimeRpc(client, 'status', id, {
+      includeEligibilityFailureReason: true,
+    })
   );
 }
 export async function performOxygenAction(

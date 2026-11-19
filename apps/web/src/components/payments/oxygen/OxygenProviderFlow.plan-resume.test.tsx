@@ -153,7 +153,7 @@ it('shows the booked breakdown before the address form and keeps acceptance sepa
   });
   render(<OxygenProviderFlow orderId={id} />);
   expect(
-    await screen.findByRole('heading', { name: 'Your payment breakdown' })
+    await screen.findByRole('heading', { name: 'Review your payment plan' })
   ).toBeVisible();
   expect(
     screen.queryByRole('button', { name: 'Continue verification' })

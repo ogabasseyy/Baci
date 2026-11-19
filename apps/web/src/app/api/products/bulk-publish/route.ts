@@ -11,8 +11,10 @@ import {
   getMerchantForApiRequest,
   toUserAccess,
 } from '@/lib/get-merchant-for-api-request';
+import { resolveDependentLegacyProductIdentifiers } from '@/lib/resolve-dependent-legacy-product-identifiers';
 import { scheduleProductBlogPurgeAfterResponse } from '@/lib/schedule-product-blog-purge-after-response';
 import { scheduleStorefrontProductPurge } from '@/lib/storefront-product-purge';
+import { scheduleStorefrontHostnamePurge } from '@/lib/storefront-product-purge-hostnames';
 import {
   type ProductPurgeCategoryRow,
   resolveProductPurgeCategorySegmentForRow,
@@ -95,9 +97,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Invalidate product caches after bulk publish
-    revalidateProducts(merchantId);
-
     // Draft rows deleted above were never public and intentionally do not add
     // edge purge targets. Every returned update is now active, so it needs a
     // PDP/listing purge using the row's canonical category resolution.
@@ -118,10 +117,41 @@ export async function POST(request: NextRequest) {
       // Bust the per-slug Next entries before a Cloudflare MISS can repopulate
       // from them. The purge is best-effort and cannot change a publish result.
       try {
-        revalidateProductSlugs(
+        const updatedProductIds = (updatedProducts ?? [])
+          .map((product) => product.id?.trim())
+          .filter((id): id is string => Boolean(id));
+        const allPublishedHaveExplicitSlug =
+          (updatedProducts ?? []).length > 0 &&
+          (updatedProducts ?? []).every((product) =>
+            Boolean(product.slug?.trim() && product.id?.trim())
+          );
+        const dependentAliases = await resolveDependentLegacyProductIdentifiers(
+          supabase,
           merchantId,
-          publicPurgeEntries.map((entry) => entry.slug)
+          updatedProductIds
         );
+        const slugIdentifiers = Array.from(
+          new Set([
+            ...publicPurgeEntries.map((entry) => entry.slug),
+            ...updatedProductIds,
+            ...dependentAliases.identifiers,
+          ])
+        );
+        const slugsExpired =
+          revalidateProductSlugs(merchantId, slugIdentifiers, {
+            expireImmediately: true,
+          }) === true;
+        const originHardExpired =
+          (slugsExpired &&
+            allPublishedHaveExplicitSlug &&
+            !dependentAliases.incomplete &&
+            revalidateProducts(merchantId, undefined, {
+              expireImmediately: true,
+              omitMerchantWidePdpDetails: true,
+            }) === true) ||
+          revalidateProducts(merchantId, undefined, {
+            expireImmediately: true,
+          }) === true;
         // Relationship/category fallback reads can span many pages. Queue the
         // article enrichment after the response so publishing cannot time out
         // after the database update has already committed.
@@ -130,27 +160,64 @@ export async function POST(request: NextRequest) {
         // product snapshot. The post-response enrichment also expires this
         // tag, but it runs in a separate task and therefore cannot protect the
         // purge scheduled immediately below.
-        expireProductBlogCache(merchantId);
-        scheduleStorefrontProductPurge(
-          merchantContext.merchantSlug,
-          publicPurgeEntries
-        );
-        scheduleProductBlogPurgeAfterResponse({
-          supabase,
-          merchantId,
-          merchantSlug: merchantContext.merchantSlug,
-          productIds: (updatedProducts ?? []).map((product) => product.id),
-          entries: publicPurgeEntries,
-          categorySlugs: publicPurgeEntries.map(
-            (entry) => entry.categorySegment
-          ),
-          skipProductPurge: true,
-        });
+        const blogExpired = expireProductBlogCache(merchantId) !== false;
+        if (!originHardExpired) {
+          console.warn(
+            'Skipped Cloudflare product purge after bulk publish because origin hard expiry failed',
+            { merchantId }
+          );
+        } else if (dependentAliases.incomplete) {
+          if (blogExpired) {
+            scheduleStorefrontHostnamePurge(merchantContext.merchantSlug);
+          } else {
+            console.warn(
+              'Skipped Cloudflare hostname purge after bulk publish because blog cache hard expiry failed',
+              { merchantId }
+            );
+          }
+        } else {
+          const seenEdgeSlugs = new Set(
+            publicPurgeEntries
+              .map((entry) => entry.slug.trim().toLowerCase())
+              .filter(Boolean)
+          );
+          const aliasEdgeEntries: StorefrontProductPurgeEntry[] = [
+            ...updatedProductIds,
+            ...dependentAliases.identifiers,
+          ]
+            .map((identifier) => identifier.trim())
+            .filter((identifier) => {
+              const key = identifier.toLowerCase();
+              if (!key || seenEdgeSlugs.has(key)) return false;
+              seenEdgeSlugs.add(key);
+              return true;
+            })
+            .map((identifier) => ({ slug: identifier, categorySegment: null }));
+          const edgeEntries = [...publicPurgeEntries, ...aliasEdgeEntries];
+          scheduleStorefrontProductPurge(
+            merchantContext.merchantSlug,
+            edgeEntries
+          );
+          scheduleProductBlogPurgeAfterResponse({
+            supabase,
+            merchantId,
+            merchantSlug: merchantContext.merchantSlug,
+            productIds: (updatedProducts ?? []).map((product) => product.id),
+            entries: edgeEntries,
+            categorySlugs: publicPurgeEntries.map(
+              (entry) => entry.categorySegment
+            ),
+            skipProductPurge: true,
+          });
+        }
       } catch (purgeError) {
+        revalidateProducts(merchantId, undefined, { expireImmediately: true });
         console.warn('Skipped Cloudflare product purge after bulk publish', {
           purgeError,
         });
       }
+    } else {
+      revalidateProducts(merchantId);
     }
 
     return NextResponse.json({

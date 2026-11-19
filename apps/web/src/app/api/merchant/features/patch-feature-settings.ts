@@ -10,7 +10,9 @@ import {
   preserveZohoCampaignSecretCustomSettings,
   redactMerchantFeatureSettingsResponse,
 } from '@/lib/merchant-feature-settings-redaction';
+import { extractZohoCampaignSecrets } from '@/lib/zoho-campaign-secret-settings';
 import { merchantFeatureSettingsPatchSchema } from '@/schemas/merchant-features';
+import { attachIntegrationSecretPresence } from './attach-integration-secret-presence';
 import type { MerchantFeatureCacheRevalidator } from './feature-settings-handler-utils';
 import {
   hasNonEmptyGrowthIntegrationSetting,
@@ -23,6 +25,7 @@ import {
 } from './merchant-feature-settings-contract';
 import { parseMerchantFeatureSettingsPatchBody } from './parse-feature-settings-patch-body';
 import { resolveFeatureSettingsAccess } from './resolve-feature-settings-access';
+import { saveZohoRefreshToken } from './save-zoho-refresh-token';
 
 export function createPatchFeatureSettings(
   revalidateMerchantFeatureCaches: MerchantFeatureCacheRevalidator
@@ -128,6 +131,25 @@ export function createPatchFeatureSettings(
             existingSettings?.custom_settings
           );
       }
+      let zohoRefreshToken: string | null | undefined;
+      if ('custom_settings' in sanitizedUpdates) {
+        const extracted = extractZohoCampaignSecrets(
+          sanitizedUpdates.custom_settings
+        );
+        sanitizedUpdates.custom_settings = extracted.customSettings;
+        zohoRefreshToken = extracted.refreshToken;
+      }
+      const zohoSave = await saveZohoRefreshToken(
+        auth.supabase,
+        access.merchantId,
+        zohoRefreshToken
+      );
+      if (!zohoSave.ok) {
+        return jsonNoStore(
+          { error: 'Failed to update settings' },
+          { status: zohoSave.status }
+        );
+      }
       const settingsPayload = {
         ...sanitizedUpdates,
         updated_at: new Date().toISOString(),
@@ -165,7 +187,18 @@ export function createPatchFeatureSettings(
         );
       }
       revalidateMerchantFeatureCaches(access.merchantId, sanitizedUpdates);
-      return jsonNoStore(redactMerchantFeatureSettingsResponse(settings));
+      const withPresence = await attachIntegrationSecretPresence(
+        auth.supabase,
+        access.merchantId,
+        settings
+      );
+      if (!withPresence) {
+        return jsonNoStore(
+          { error: 'Failed to update settings' },
+          { status: 500 }
+        );
+      }
+      return jsonNoStore(redactMerchantFeatureSettingsResponse(withPresence));
     } catch (error) {
       console.error('Feature settings PATCH error:', error);
       return jsonNoStore({ error: 'Internal server error' }, { status: 500 });

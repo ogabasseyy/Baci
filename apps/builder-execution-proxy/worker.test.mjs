@@ -186,3 +186,48 @@ test('keeps private output CORS scoped to the opaque sandbox', async (t) => {
   );
   assert.equal(publicAsset.headers.get('Access-Control-Allow-Origin'), '*');
 });
+
+test('serves private and published documents only with the expected opaque sandbox policy', async (t) => {
+  const contentSecurityPolicy = "default-src 'none'; sandbox allow-scripts";
+  const fetch = t.mock.method(
+    globalThis,
+    'fetch',
+    async () =>
+      new Response('synthetic HTML', {
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Content-Security-Policy': contentSecurityPolicy,
+        },
+      })
+  );
+  for (const path of [
+    `/resource/${ticket}/index.html`,
+    `/published/example/${digest}/index.html?path=%2Fsample`,
+  ]) {
+    const accepted = await worker.fetch(request(path), env);
+    assert.equal(accepted.status, 200);
+    assert.equal(
+      accepted.headers.get('Content-Security-Policy'),
+      contentSecurityPolicy
+    );
+    assert.equal(await accepted.text(), 'synthetic HTML');
+    for (const policy of [
+      "default-src 'none'",
+      'sandbox allow-scripts allow-same-origin',
+      'sandbox allow-scripts; sandbox allow-scripts',
+    ]) {
+      fetch.mock.mockImplementationOnce(
+        async () =>
+          new Response('synthetic HTML', {
+            headers: {
+              'Content-Type': 'text/html',
+              'Content-Security-Policy': policy,
+            },
+          })
+      );
+      const denied = await worker.fetch(request(path), env);
+      assert.equal(denied.status, 502);
+      assert.equal(await denied.text(), '');
+    }
+  }
+});

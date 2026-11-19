@@ -42,6 +42,26 @@ function isDeliveryPath(url) {
   );
 }
 
+function hasDocumentSandbox(response) {
+  const contentType = response.headers.get('content-type')?.split(';')[0];
+  const policy = response.headers.get('content-security-policy');
+  if (
+    contentType?.trim().toLowerCase() !== 'text/html' ||
+    !policy ||
+    policy.includes(',')
+  )
+    return false;
+  const sandbox = policy
+    .split(';')
+    .map((directive) => directive.trim().toLowerCase().split(/\s+/))
+    .filter(([directive]) => directive === 'sandbox');
+  return (
+    sandbox.length === 1 &&
+    sandbox[0].length === 2 &&
+    sandbox[0][1] === 'allow-scripts'
+  );
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -87,6 +107,13 @@ export default {
         await response.body?.cancel();
         if (response.status === 404) return unavailable(404);
         return unavailable(response.status === 503 ? 503 : 502);
+      }
+      if (
+        url.pathname.endsWith('/index.html') &&
+        !hasDocumentSandbox(response)
+      ) {
+        await response.body?.cancel();
+        return unavailable(502);
       }
       const output = new Headers({ 'Cache-Control': 'private, no-store' });
       for (const name of deliveryHeaders) {

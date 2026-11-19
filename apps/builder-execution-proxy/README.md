@@ -6,8 +6,9 @@ is `ogabassey-ai.workers.dev`, separate from Baci and Ogabassey merchant sites.
 Sibling Workers share the account's cookie site, so this proxy forwards no
 cookies or browser credentials and emits no cookies. The paired Baci delivery
 change also sends `sandbox allow-scripts` on HTML responses, including direct
-navigation. Deploy delivery and its matching public verifier together. Do not
-use this Worker with an older delivery service that lacks that policy. Real
+navigation. The Worker returns a gateway error if an HTML document lacks the
+expected opaque sandbox policy. Deploy delivery and its matching public
+verifier together. Real
 Chromium and WebKit regressions verify that scripts, styles and embedded
 messages still work while shared-domain cookie writes are blocked.
 
@@ -35,7 +36,9 @@ Configure a dedicated 32-byte random base64url origin secret in the Worker
 `EXECUTION_ORIGIN_KEY` binding and the Caddy service environment
 `BACI_EXECUTION_ORIGIN_KEY`. Use the output-only Caddy vhost candidate. It
 requires the secret before forwarding, strips credentials, and fixes the
-upstream Host to the browser execution host. Set the builder service
+upstream Host to the browser execution host. Only published index documents
+can carry a query through Caddy. The Worker and delivery listener validate the
+route value. Set the builder service
 execution origin to the same canonical Worker URL. This arrangement requires
 a valid certificate and DNS-only record for the fixed upstream hostname so
 the Worker no-store subrequest reaches Contabo directly. The runtime environment placeholder keeps the origin key out of adapted

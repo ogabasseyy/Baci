@@ -102,6 +102,14 @@ def smoke(root, backend_port, secret, dead=False):
             }
             assert request('/internal/owner/preview', '-H', f'{KEY_HEADER}: {KEY}')[-1] == '404'
             assert request(PATH, '-H', f'{KEY_HEADER}: {KEY}', '-X', 'POST')[-1] == '404'
+            published = '/published/example/' + 'a' * 64
+            published_route = published + '/index.html?path=%2Fproducts%2Fsample'
+            body, status = request(published_route, '-H', f'{KEY_HEADER}: {KEY}')
+            assert status == '200'
+            assert json.loads(body)['path'] == published_route
+            assert request(PATH + '?path=%2F', '-H', f'{KEY_HEADER}: {KEY}')[-1] == '404'
+            assert request(published + '/app.js?path=%2F', '-H',
+                           f'{KEY_HEADER}: {KEY}')[-1] == '404'
             for malformed in (
                 '/resource/invalid/index.html',
                 '/resource/' + 'b' * 64 + '/other.js',

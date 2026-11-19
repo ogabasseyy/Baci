@@ -61,19 +61,3 @@ builder-mcp.usebaci.com {
 		respond 404
 	}
 }
-
-{$BACI_EXECUTION_HOST} {
-	@output {
-		method GET
-		path /resource/* /published/*
-	}
-	handle @output {
-		reverse_proxy 127.0.0.1:{$BACI_DELIVERY_PORT} {
-			header_up Host {$BACI_EXECUTION_HOST}
-			header_up X-Forwarded-For {remote_host}
-		}
-	}
-	handle {
-		respond 404
-	}
-}

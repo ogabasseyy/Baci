@@ -1,17 +1,20 @@
 # Contabo ingress candidate
 
-`Caddyfile.candidate` is an uninstalled, unreviewed candidate, not a production
-configuration or permission to open ports. Its four hostnames must be distinct,
-operator-reserved, and matched to the private builder configuration. The delivery
-host must also satisfy the existing separate-registrable-domain constraint.
-Use bare DNS hostnames in the three host variables. Set the auth host to
+`Caddyfile.candidate` contains the auth, public MCP and owner vhosts. Use bare
+DNS hostnames for `BACI_AUTH_HOST` and `BACI_OWNER_HOST`. Set the auth host to
 `builder-auth.usebaci.com`. The public MCP host is fixed to
-`builder-mcp.usebaci.com` and terminates TLS directly at Contabo.
-Each port variable must match its corresponding configured loopback listener.
+`builder-mcp.usebaci.com` and terminates TLS directly at Contabo. Each port
+variable must match its corresponding configured loopback listener.
+
+Combine those vhosts with the output-only site from the
+[execution proxy candidate](../../../builder-execution-proxy/Caddyfile.candidate).
+Retain one global log filter when assembling the configuration. The output
+origin requires the Worker origin key, and browser execution uses the
+separate Workers hostname.
 
 The auth and public MCP hosts forward only their fixed paths. The owner host
 requires a client certificate trusted by a dedicated owner CA, and forwards only
-the three owner paths. The execution host serves only GET output paths.
+the three owner paths.
 The owner vhost sends a fixed `owner.baci-internal.invalid` Host to the loopback listener.
 It is an internal protocol identifier. Owner HTTPS traffic dials the configured
 mutual TLS origin, and public MCP listens on `builder-mcp.usebaci.com`. Caddy

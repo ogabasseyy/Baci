@@ -47,6 +47,7 @@ python3 apps/web/tools/builder-production/ingress-candidate-check.py
 ```
 
 The tests run disposable loopback HTTPS using the candidate MCP vhost and
-the assembled four-vhost candidate. They check metadata forwarding, request
-bodies, no-store, exact paths, host isolation and owner certificate admission.
+the assembled four-vhost candidate, including the Worker-authenticated
+output origin. They check metadata forwarding, request bodies, no-store, exact
+paths, host isolation, the origin key and owner certificate admission.
 Production DNS, TLS, firewall, OAuth and release gates remain pending.

@@ -15,6 +15,13 @@ import threading
 import time
 
 
+OUTPUT_ORIGIN = 'builder-output-origin.usebaci.com'
+EXECUTION_HOST = 'baci-builder-output.ogabassey-ai.workers.dev'
+ORIGIN_KEY = 's' * 43
+OUTPUT_RESOURCE = '/resource/' + 'c' * 64 + '/index.html'
+ORIGIN_HEADER = f'X-Baci-Execution-Origin-Key: {ORIGIN_KEY}'
+
+
 def port():
     with socket.socket() as sock:
         sock.bind(('127.0.0.1', 0))
@@ -55,17 +62,20 @@ def main():
             servers.append(server)
             threading.Thread(target=server.serve_forever, daemon=True).start()
             env[f'BACI_{label}_PORT'] = str(server.server_port)
-        names = {'BACI_AUTH_HOST': 'auth.localhost', 'BACI_OWNER_HOST': 'owner.localhost', 'BACI_EXECUTION_HOST': 'output.localhost'}
+        names = {'BACI_AUTH_HOST': 'auth.localhost', 'BACI_OWNER_HOST': 'owner.localhost'}
         for name, host in names.items():
             env[name] = f'https://{host}:{proxy_port}'
-        # Keep the actual downstream delivery Host when using a test site URL.
         text = Path(__file__).with_name('Caddyfile.candidate').read_text()
         text = text.replace('\tadmin off', '\tadmin off\n\tauto_https disable_redirects\n\tskip_install_trust\n\tdefault_bind 127.0.0.1')
-        for variable in ('BACI_AUTH_HOST', 'BACI_EXECUTION_HOST'):
-            text = text.replace('{$' + variable + '} {', '{$' + variable + '} {\n  tls internal', 1)
+        assert 'BACI_EXECUTION_HOST' not in text, 'An independent direct output vhost remains configured'
+        output_candidate = Path(__file__).resolve().parents[3] / 'builder-execution-proxy' / 'Caddyfile.candidate'
+        _, site, output_vhost = output_candidate.read_text().partition(f'{OUTPUT_ORIGIN} {{')
+        assert site, 'Missing execution origin vhost'
+        env['BACI_EXECUTION_ORIGIN_KEY'] = ORIGIN_KEY
+        text += f'\nhttps://{OUTPUT_ORIGIN}:{proxy_port} {{\n\ttls internal' + output_vhost
+        text = text.replace('{$BACI_AUTH_HOST} {', '{$BACI_AUTH_HOST} {\n  tls internal', 1)
         text = text.replace('builder-mcp.usebaci.com {', f'https://builder-mcp.usebaci.com:{proxy_port} {{\n\ttls internal', 1)
         text = text.replace('\ttls {\n\t\tclient_auth', '\ttls internal {\n\t\tclient_auth', 1)
-        text = text.replace('header_up Host {$BACI_EXECUTION_HOST}', 'header_up Host output.localhost')
         config = root / 'Caddyfile'
         config.write_text(text)
         log = (root / 'caddy.log').open('w+')
@@ -88,8 +98,12 @@ def main():
             assert curl('auth.localhost', '/internal/owner/preview').stdout.endswith('\n404')
             assert curl('builder-mcp.usebaci.com', '/builder/mcp', '-H', 'X-Forwarded-For: 198.51.100.1').stdout.startswith('MCP|builder-mcp.usebaci.com|127.0.0.1\n200')
             assert curl('builder-mcp.usebaci.com', '/internal/owner/preview').stdout.endswith('\n404')
-            assert curl('output.localhost', '/resource/synthetic').stdout.startswith('DELIVERY|output.localhost|127.0.0.1\n200')
-            assert curl('output.localhost', '/resource/synthetic', '-X', 'POST').stdout.endswith('\n404')
+            assert curl('auth.localhost', OUTPUT_RESOURCE).stdout.endswith('\n404')
+            assert curl('builder-mcp.usebaci.com', OUTPUT_RESOURCE).stdout.endswith('\n404')
+            assert curl(OUTPUT_ORIGIN, OUTPUT_RESOURCE).stdout.endswith('\n404')
+            accepted = curl(OUTPUT_ORIGIN, OUTPUT_RESOURCE, '-H', ORIGIN_HEADER)
+            assert accepted.stdout.startswith(f'DELIVERY|{EXECUTION_HOST}|127.0.0.1\n200')
+            assert curl(OUTPUT_ORIGIN, OUTPUT_RESOURCE, '-H', ORIGIN_HEADER, '-X', 'POST').stdout.endswith('\n404')
             assert curl('owner.localhost', '/internal/owner/preview').returncode != 0
             assert curl('owner.localhost', '/internal/owner/preview', '--cert', str(rogue), '--key', str(rogue_key)).returncode != 0
             confused = curl('auth.localhost', '/internal/owner/preview', '-H', 'Host: owner.localhost')
@@ -102,9 +116,8 @@ def main():
                 server.server_close()
             callback = '/upstream/callback?code=synthetic-code-sensitive&state=synthetic-state-sensitive'
             referer = 'synthetic-reference-sensitive'
-            ticket = 'c' * 64
             assert curl('auth.localhost', callback, '-H', f'Referer: https://usebaci.com/?value={referer}').stdout.endswith('\n502')
-            assert curl('output.localhost', f'/resource/{ticket}/index.html').stdout.endswith('\n502')
+            assert curl(OUTPUT_ORIGIN, OUTPUT_RESOURCE, '-H', ORIGIN_HEADER).stdout.endswith('\n502')
             log.seek(0)
             runtime = [json.loads(line) for line in log if line.startswith('{')]
             failures = [record for record in runtime if record.get('logger') == 'http.log.error']
@@ -112,7 +125,7 @@ def main():
             assert all('headers' not in event['request'] and 'uri' not in event['request']
                        for event in failures)
             logs = json.dumps(runtime)
-            assert all(marker not in logs for marker in (callback, referer, ticket, 'synthetic-code-sensitive', 'synthetic-state-sensitive'))
+            assert all(marker not in logs for marker in (callback, referer, OUTPUT_RESOURCE, ORIGIN_KEY, 'synthetic-code-sensitive', 'synthetic-state-sensitive'))
             print('Synthetic HTTPS routing, owner mTLS and runtime log checks passed.')
         finally:
             process.terminate()

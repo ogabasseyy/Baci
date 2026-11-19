@@ -18,13 +18,16 @@ import {
 } from './storage-batch';
 
 const log = createLogger('Storage');
+const installedProfile = getOxygenStagingProfile();
+if (process.env.EXPO_PUBLIC_OXYGEN_STAGING === '1' && !installedProfile)
+  throw new Error('Install the Oxygen staging profile before opening storage');
 
 // Safe instantiation of high-performance MMKV storage (native only, guarded against Web/SSR/Go failures)
 let mmkvStorage: ReturnType<typeof createMMKV> | null = null;
 try {
   if (Platform.OS !== 'web' && process.env.NODE_ENV !== 'test') {
     mmkvStorage = createMMKV({
-      id: getOxygenStagingProfile()?.storagePrefix ?? 'baci-storefront-storage',
+      id: installedProfile?.storagePrefix ?? 'baci-storefront-storage',
     });
   }
 } catch (error) {

@@ -144,3 +144,33 @@ it('recovers from one transient probe failure while connectivity stays online', 
     jest.useRealTimers();
   }
 });
+
+it('checks staging directly when reachability stays unknown', async () => {
+  jest.useFakeTimers();
+  try {
+    jest.mocked(NetInfo.addEventListener).mockImplementationOnce((next) => {
+      next({ isConnected: true, isInternetReachable: null } as NetInfoState);
+      return () => {};
+    });
+    const { result } = renderHook(() => useOxygenCheckoutAvailability([]));
+    expect(result.current.disabledReason).toContain('Checking');
+    await act(async () => jest.advanceTimersByTime(2000));
+    expect(mockCapabilities).toHaveBeenCalledTimes(1);
+    expect(result.current.disabledReason).toBeUndefined();
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
+it('leaves the checking state when the availability request hangs', async () => {
+  jest.useFakeTimers();
+  try {
+    mockCapabilities.mockReturnValue(new Promise(() => {}));
+    const { result } = renderHook(() => useOxygenCheckoutAvailability([]));
+    await act(async () => {});
+    await act(async () => jest.advanceTimersByTime(10000));
+    expect(result.current.disabledReason).toContain('unavailable');
+  } finally {
+    jest.useRealTimers();
+  }
+});

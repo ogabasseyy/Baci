@@ -1,3 +1,4 @@
+import { withTimeout } from '@baci/shared';
 import NetInfo from '@react-native-community/netinfo';
 import { useEffect, useState } from 'react';
 import { getOxygenStagingProfile } from '@/lib/oxygen-staging-profile';
@@ -44,31 +45,36 @@ export function useOxygenCheckoutAvailability(items: CartItem[]) {
     setReadiness(null);
     if (!scope) return;
     let probe = 0;
+    let delayedProbe: ReturnType<typeof setTimeout> | undefined;
     let previousState: 'unknown' | 'online' | 'offline' | undefined;
     let retry: ReturnType<typeof setTimeout> | undefined;
 
     const checkReadiness = (currentProbe: number, canRetry: boolean) => {
       setReadiness(null);
-      void Promise.resolve()
-        .then(() => oxygenNativeSession().capabilities(true))
-        .then(
-          () => {
-            if (currentProbe === probe)
-              setReadiness({ scope, reason: undefined });
-          },
-          () => {
-            if (currentProbe !== probe) return;
-            setReadiness({ scope, reason: unavailable });
-            if (canRetry) {
-              retry = setTimeout(
-                () => checkReadiness(currentProbe, false),
-                2000
-              );
-            }
+      void withTimeout(
+        Promise.resolve().then(() => oxygenNativeSession().capabilities(true)),
+        8000,
+        unavailable
+      ).then(
+        () => {
+          if (currentProbe === probe)
+            setReadiness({ scope, reason: undefined });
+        },
+        () => {
+          if (currentProbe !== probe) return;
+          setReadiness({ scope, reason: unavailable });
+          if (canRetry) {
+            retry = setTimeout(() => checkReadiness(currentProbe, false), 2000);
           }
-        );
+        }
+      );
     };
 
+    const scheduleUnknownProbe = () => {
+      const currentProbe = ++probe;
+      delayedProbe = setTimeout(() => checkReadiness(currentProbe, true), 1500);
+    };
+    scheduleUnknownProbe();
     const unsubscribe = NetInfo.addEventListener((state) => {
       const network =
         state.isConnected === false || state.isInternetReachable === false
@@ -79,15 +85,20 @@ export function useOxygenCheckoutAvailability(items: CartItem[]) {
       if (network === previousState) return;
       previousState = network;
       clearTimeout(retry);
+      clearTimeout(delayedProbe);
       const currentProbe = ++probe;
       if (network === 'online') checkReadiness(currentProbe, true);
       else if (network === 'offline')
         setReadiness({ scope, reason: unavailable });
-      else setReadiness(null);
+      else {
+        setReadiness(null);
+        scheduleUnknownProbe();
+      }
     });
     return () => {
       ++probe;
       clearTimeout(retry);
+      clearTimeout(delayedProbe);
       unsubscribe();
     };
   }, [scope]);

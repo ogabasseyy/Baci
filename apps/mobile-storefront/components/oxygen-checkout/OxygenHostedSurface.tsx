@@ -65,8 +65,9 @@ function HostedSurface({
     refreshState.start();
     return () => refreshState.stop();
   }, [refreshState]);
-  const allowed =
-    decideOxygenHostedNavigation(url, kind, capabilities) === 'allow';
+  const allows = (target: string) =>
+    decideOxygenHostedNavigation(target, kind, capabilities) === 'allow';
+  const allowed = allows(url);
   const camera = useCameraPermission(
     allowed &&
       active &&
@@ -227,10 +228,7 @@ function HostedSurface({
             mediaCapturePermissionGrantType="prompt"
             allowsInlineMediaPlayback
             mediaPlaybackRequiresUserAction={kind !== 'selfie'}
-            onShouldStartLoadWithRequest={(request) =>
-              decideOxygenHostedNavigation(request.url, kind, capabilities) ===
-              'allow'
-            }
+            onShouldStartLoadWithRequest={(request) => allows(request.url)}
             onOpenWindow={(event) => {
               const target = event.nativeEvent.targetUrl;
               const message =
@@ -249,28 +247,23 @@ function HostedSurface({
                 setError(message);
               }
             }}
-            onMessage={() => {
-              if (kind !== 'selfie') requestRefresh();
+            onMessage={({ nativeEvent }) => {
+              if (kind !== 'selfie' && allows(nativeEvent.url))
+                requestRefresh();
             }}
             onLoadStart={() => {
               loadFailed.current = false;
             }}
             onLoadEnd={(event) => {
+              if (!allows(event.nativeEvent.url)) return;
               if (kind !== 'selfie') requestRefresh();
-              else if (
-                !loadFailed.current &&
-                decideOxygenHostedNavigation(
-                  event.nativeEvent.url,
-                  kind,
-                  capabilities
-                ) === 'allow'
-              ) {
+              else if (!loadFailed.current) {
                 if (!pageLoaded) recordOxygenSelfieDiagnostic('page_loaded');
                 setPageLoaded(true);
               }
             }}
-            onNavigationStateChange={() => {
-              if (kind !== 'selfie') requestRefresh();
+            onNavigationStateChange={(navigation) => {
+              if (kind !== 'selfie' && allows(navigation.url)) requestRefresh();
             }}
             onError={() => {
               if (kind === 'selfie')

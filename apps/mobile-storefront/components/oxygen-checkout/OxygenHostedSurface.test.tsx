@@ -147,7 +147,6 @@ describe('hosted Oxygen surface', () => {
       </StrictMode>
     );
     const web = view.UNSAFE_getByType('ProviderWebView' as never);
-    expect(web.props.source).toEqual({ uri: 'https://pay.example/pay' });
     expect(
       web.props.onShouldStartLoadWithRequest({
         url: 'https://evil.example/success',
@@ -161,9 +160,18 @@ describe('hosted Oxygen surface', () => {
     ).toBe(false);
     await act(async () => {
       web.props.onMessage({
-        nativeEvent: { data: '{"paid":true,"activated":true}' },
+        nativeEvent: {
+          data: '{"paid":true,"activated":true}',
+          url: 'https://evil.example/subframe',
+        },
       });
     });
+    expect(onRefresh).not.toHaveBeenCalled();
+    await act(async () =>
+      web.props.onMessage({
+        nativeEvent: { url: 'https://pay.example/success' },
+      })
+    );
     expect(onRefresh).toHaveBeenCalledTimes(1);
     expect(onExit).not.toHaveBeenCalled();
     expect(

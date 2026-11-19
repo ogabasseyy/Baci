@@ -139,3 +139,19 @@ test('opens the native storage file scoped to the installed staging identity', a
     jest.dontMock('react-native-mmkv');
   }
 });
+
+test('fails closed if storage is imported before the staging profile is installed', async () => {
+  process.env = { ...env };
+  const createMMKV = jest.fn();
+  try {
+    jest.doMock('react-native-mmkv', () => ({ createMMKV }));
+    await jest.isolateModulesAsync(async () => {
+      await expect(import('./storage')).rejects.toThrow(
+        'Install the Oxygen staging profile before opening storage'
+      );
+    });
+    expect(createMMKV).not.toHaveBeenCalled();
+  } finally {
+    jest.dontMock('react-native-mmkv');
+  }
+});

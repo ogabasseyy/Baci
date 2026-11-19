@@ -130,6 +130,36 @@ describe('settleReplayResult', () => {
     });
   });
 
+  it.each([
+    200, 503,
+  ])('defers unavailable legacy configuration at status %s even at the attempt limit', async (status) => {
+    await expect(
+      settled({ status, legacyIntakeUnavailable: true }, false, {
+        ...stored,
+        attempts: MAX_DRAIN_ATTEMPTS,
+      })
+    ).resolves.toEqual({
+      outcome: 'retried',
+      state: 'deferred',
+      error: 'LEGACY_INTAKE_UNAVAILABLE',
+    });
+  });
+
+  it.each([
+    200, 503,
+  ])('defers unavailable primary inflow configuration at status %s even at the attempt limit', async (status) => {
+    await expect(
+      settled({ status, primaryInflowUnavailable: true }, false, {
+        ...stored,
+        attempts: MAX_DRAIN_ATTEMPTS,
+      })
+    ).resolves.toEqual({
+      outcome: 'retried',
+      state: 'deferred',
+      error: 'PRIMARY_INFLOW_UNAVAILABLE',
+    });
+  });
+
   it('dead-letters only after the attempt budget is spent', async () => {
     const exhausted = { ...stored, attempts: MAX_DRAIN_ATTEMPTS };
     await expect(settled({ status: 500 }, false, exhausted)).resolves.toEqual({

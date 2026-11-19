@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { resetQuizV2RuntimeCheckForTests } from '@/app/api/quiz/_shared/quiz-v2-contract';
 import { requireQuizUser } from '@/app/api/quiz/_shared/route-auth';
 import { createQuizResultClaimToken } from '@/lib/quiz/quiz-result-claim';
 import { GET } from './route';
@@ -71,6 +72,7 @@ function authenticated(
 }
 
 beforeEach(() => {
+  resetQuizV2RuntimeCheckForTests();
   vi.clearAllMocks();
   vi.mocked(createQuizResultClaimToken).mockReturnValue('signed-claim');
 });

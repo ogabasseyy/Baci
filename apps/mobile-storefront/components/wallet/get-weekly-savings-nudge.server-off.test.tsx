@@ -11,9 +11,9 @@ it('spreads the remaining goal amount across the actual time to maturity', () =>
     })
   ).toEqual({
     amountPerWeek: 25000,
-    label: expect.stringMatching(
-      /^Save about ₦25,000 a week to reach this by /
-    ),
+    due: false,
+    endsOn: '3 Dec 2026',
+    label: expect.stringMatching(/^₦25,000 a week to finish by /),
     weeks: 4,
   });
 });
@@ -29,7 +29,9 @@ it('shows the full amount due when the goal deadline is less than a week away', 
     getWeeklySavingsNudge({ maturityDate: '2026-11-06', now, remaining: 7000 })
   ).toEqual({
     amountPerWeek: 7000,
-    label: expect.stringMatching(/^Save ₦7,000 by /),
+    due: true,
+    endsOn: '6 Nov 2026',
+    label: expect.stringMatching(/^₦7,000 due by /),
     weeks: 1,
   });
 });

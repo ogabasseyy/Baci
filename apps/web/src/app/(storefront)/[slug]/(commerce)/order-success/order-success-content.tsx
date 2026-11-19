@@ -2,12 +2,12 @@
 
 import { Loader2, Star } from 'lucide-react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { GoogleCustomerReviews } from '@/components/analytics/google-customer-reviews';
 import { useStorefrontCustomerSession } from '@/components/storefront/ogabassey/pages/checkout/hooks/use-storefront-customer-session';
 import { useCurrencyWithCountry } from '@/hooks/use-currency';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
+import { usePrivateSearchParamsState } from '@/hooks/use-private-search-params';
 import { BACI_GOOGLE_REVIEW_URL } from '@/lib/post-purchase-actions';
 import { asRoute } from '@/lib/routes';
 import {
@@ -25,6 +25,7 @@ import {
   resolveInvoicePresentation,
 } from './order-success-presentation';
 import { OrderSuccessStatusIcon } from './order-success-status-icon';
+import { OrderSuccessTrackLink } from './order-success-track-link';
 import { useBnplSettlement } from './use-bnpl-settlement';
 import { useInvoiceGeneratedCapture } from './use-invoice-generated-capture';
 import { usePayformeHandoffRefresh } from './use-payforme-handoff-refresh';
@@ -33,7 +34,9 @@ import { usePayformeHandoffRefresh } from './use-payforme-handoff-refresh';
 const DELIVERY_ESTIMATE_MS = 5 * 24 * 60 * 60 * 1000;
 
 export function OrderSuccessContent() {
-  const searchParams = useSearchParams();
+  // `isReady` is false while hydrating a reloaded link, before the stashed
+  // order id/token are readable; showing "order not found" then is wrong.
+  const { searchParams, isReady } = usePrivateSearchParamsState();
   const orderId = searchParams.get('orderId');
   const orderToken =
     searchParams.get('trackingToken') || searchParams.get('token');
@@ -70,7 +73,7 @@ export function OrderSuccessContent() {
       : `${basePath || ''}${path === '/' ? '' : path}`;
 
   useEffect(() => {
-    if (!orderId) {
+    if (!isReady || !orderId) {
       return;
     }
 
@@ -106,7 +109,7 @@ export function OrderSuccessContent() {
     return () => {
       cancelled = true;
     };
-  }, [orderId, merchant?.slug, orderToken, lookupEmail]);
+  }, [isReady, orderId, merchant?.slug, orderToken, lookupEmail]);
 
   useBnplSettlement({
     checkoutType: _type,
@@ -121,7 +124,7 @@ export function OrderSuccessContent() {
   });
 
   // Without an order id there is nothing to fetch, so we are never loading.
-  const isLoading = loading && Boolean(orderId);
+  const isLoading = !isReady || (loading && Boolean(orderId));
   const hasValidatedOrder = Boolean(order);
   const hasRecoveryState = !isLoading && !hasValidatedOrder;
   const { isCancelled, isInvoice, isInvoiceMethod } =
@@ -260,16 +263,15 @@ export function OrderSuccessContent() {
                 View My Orders
               </Link>
             ) : hasValidatedOrder && order?.tracking_token ? (
-              <Link
-                href={asRoute(
-                  getHref(
-                    `/track-order?token=${encodeURIComponent(order.tracking_token)}`
-                  )
+              <OrderSuccessTrackLink
+                slug={merchant?.slug}
+                href={getHref(
+                  `/track-order?token=${encodeURIComponent(order.tracking_token)}`
                 )}
                 className="inline-flex items-center justify-center gap-2 px-6 py-4 bg-store-background text-store-background-text font-bold rounded-xl border border-store-border hover:bg-store-secondary hover:text-store-secondary-text transition-colors w-full"
               >
                 Track My Order
-              </Link>
+              </OrderSuccessTrackLink>
             ) : null}
 
             {hasValidatedOrder && (

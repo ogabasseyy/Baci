@@ -1,7 +1,10 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
+import { usePrivateSearchParamsState } from '@/hooks/use-private-search-params';
+import { asRoute } from '@/lib/routes';
+import { stashPrivateParamsForNavigation } from '@/lib/privacy/private-url-param-handoff';
 import {
   ShieldCheck,
   AlertCircle,
@@ -13,116 +16,17 @@ import {
 } from 'lucide-react';
 import { useMerchant } from '@/hooks/use-merchant-client';
 
-const CHAIN_LABELS: Record<string, string> = {
-  TRX: 'Tron (TRC-20)',
-  ETH: 'Ethereum (ERC-20)',
-  MATIC: 'Polygon',
-  AVAXC: 'Avalanche C-Chain',
-};
-
-interface CryptoPaymentData {
-  address: string;
-  chain: string;
-  currency: string;
-  amount: number;
-  confirmation_time: string;
-  orderId: string;
-  reference: string;
-  paymentId: string;
-  qrcode?: string;
-  trackingToken?: string | null;
-}
-
-type CryptoStatus =
-  | 'loading'
-  | 'ready'
-  | 'verifying'
-  | 'confirmed'
-  | 'failed'
-  | 'error';
-
-interface CryptoInitRequest {
-  merchantId?: string;
-  orderId: string;
-  amount: string;
-  customerEmail: string;
-  customerName: string;
-  customerPhone: string;
-  cryptoChain: string;
-  cryptoCurrency: string;
-  trackingToken: string | null;
-}
-
-interface CryptoInitHandlers {
-  setStatus: (status: CryptoStatus) => void;
-  setErrorMessage: (message: string | null) => void;
-  setCryptoData: (data: CryptoPaymentData | null) => void;
-}
-
-// Module-scope helper: throw-inside-try and the loading-state bookkeeping live
-// here so the component body stays compilable by React Compiler.
-async function initializeCryptoPayment(
-  request: CryptoInitRequest,
-  { setStatus, setErrorMessage, setCryptoData }: CryptoInitHandlers,
-) {
-  try {
-    setStatus('loading');
-    setErrorMessage(null);
-
-    const res = await fetch('/api/payments/initialize', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        merchant_id: request.merchantId,
-        order_id: request.orderId,
-        currency: 'NGN',
-        customer_email: request.customerEmail,
-        customer_name: request.customerName,
-        customer_phone: request.customerPhone,
-        gateway: 'juicyway',
-        crypto_chain: request.cryptoChain,
-        crypto_currency: request.cryptoCurrency,
-      }),
-    });
-
-    if (!res.ok) {
-      const errorData = await res.json();
-      throw new Error(
-        errorData.details || errorData.error || 'Payment initialization failed'
-      );
-    }
-
-    const result = await res.json();
-
-    if (result.success && result.crypto_payment) {
-      setCryptoData({
-        address: result.crypto_payment.address,
-        chain: result.crypto_payment.chain,
-        currency: result.crypto_payment.currency,
-        amount: result.crypto_payment.amount / 100,
-        confirmation_time: result.crypto_payment.confirmation_time,
-        orderId: request.orderId,
-        reference: result.reference,
-        paymentId: result.crypto_payment.payment_id || '',
-        qrcode: result.crypto_payment.qrcode,
-        trackingToken: request.trackingToken,
-      });
-      setStatus('ready');
-    } else {
-      throw new Error('Failed to generate crypto payment address');
-    }
-  } catch (error) {
-    console.error('Crypto payment init error:', error);
-    setStatus('error');
-    setErrorMessage(
-      error instanceof Error ? error.message : 'Failed to initialize crypto payment'
-    );
-  }
-}
+import { CHAIN_LABELS } from './crypto-chain-labels';
+import { writeTextToClipboard } from './write-text-to-clipboard';
+import {
+  type CryptoPaymentData,
+  type CryptoStatus,
+  initializeCryptoPayment,
+} from './crypto-checkout-init';
 
 export function CryptoCheckoutPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
+  const { searchParams, isReady } = usePrivateSearchParamsState();
   const { merchant, loading } = useMerchant();
 
   const orderId = searchParams.get('orderId');
@@ -142,6 +46,9 @@ export function CryptoCheckoutPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [cryptoData, setCryptoData] = useState<CryptoPaymentData | null>(null);
   const [copiedText, setCopiedText] = useState<string | null>(null);
+  // Bumped by "Try Again" so the initialization re-runs in place (a reload
+  // would lose customer details held only in page memory).
+  const [attempt, setAttempt] = useState(0);
 
   const pollingRef = useRef<{
     intervalId: ReturnType<typeof setInterval> | null;
@@ -149,29 +56,18 @@ export function CryptoCheckoutPage() {
   }>({ intervalId: null, attempts: 0 });
 
   const copyToClipboard = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopiedText(text);
-      setTimeout(() => setCopiedText(null), 2000);
-    } catch {
-      // Fallback for older browsers
-      const textarea = document.createElement('textarea');
-      textarea.value = text;
-      document.body.appendChild(textarea);
-      textarea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textarea);
-      setCopiedText(text);
-      setTimeout(() => setCopiedText(null), 2000);
-    }
+    await writeTextToClipboard(text);
+    setCopiedText(text);
+    setTimeout(() => setCopiedText(null), 2000);
   };
 
   // Initialize payment on mount; the missing-params error is derived during
   // render instead of being set synchronously from this effect.
   useEffect(() => {
-    if (loading) return;
+    if (loading || !isReady) return;
     if (!orderId || !amount) return;
 
+    let current = true;
     initializeCryptoPayment(
       {
         merchantId: merchant?.id,
@@ -184,8 +80,12 @@ export function CryptoCheckoutPage() {
         cryptoCurrency,
         trackingToken,
       },
-      { setStatus, setErrorMessage, setCryptoData }
+      { setStatus, setErrorMessage, setCryptoData },
+      () => current
     );
+    return () => {
+      current = false;
+    };
   }, [
     orderId,
     amount,
@@ -199,6 +99,8 @@ export function CryptoCheckoutPage() {
     merchantSlugParam,
     trackingToken,
     loading,
+    isReady,
+    attempt,
   ]);
 
   const verifyCryptoPayment = async () => {
@@ -240,7 +142,14 @@ export function CryptoCheckoutPage() {
       if (cryptoData?.trackingToken) {
         successQuery.set('trackingToken', cryptoData.trackingToken);
       }
-      router.push(`/${slug}/order-success?${successQuery.toString()}`);
+      router.push(
+        asRoute(
+          stashPrivateParamsForNavigation(
+            `/${slug}/order-success?${successQuery.toString()}`,
+            slug
+          )
+        )
+      );
     };
 
     // Poll every 10 seconds, max 30 attempts (5 minutes)
@@ -300,7 +209,7 @@ export function CryptoCheckoutPage() {
     };
   }, []);
 
-  const missingOrderParams = !loading && (!orderId || !amount);
+  const missingOrderParams = !loading && isReady && (!orderId || !amount);
 
   if (status === 'error' || missingOrderParams) {
     return (
@@ -317,7 +226,7 @@ export function CryptoCheckoutPage() {
           </p>
           <button
             type="button"
-            onClick={() => window.location.reload()}
+            onClick={() => setAttempt((count) => count + 1)}
             className="w-full py-3 bg-gray-900 text-white rounded-lg font-medium hover:bg-gray-800 transition-colors"
           >
             Try Again

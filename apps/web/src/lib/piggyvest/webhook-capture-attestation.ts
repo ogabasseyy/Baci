@@ -36,3 +36,13 @@ export function isPiggyvestCaptureDrainEnabled(
 ): boolean {
   return env[PIGGYVEST_CAPTURE_DRAIN_ENABLED_ENV] === 'true';
 }
+
+/** Optional legacy replay; dark unless explicitly enabled on the worker. */
+export const PIGGYVEST_CAPTURE_LEGACY_REPLAY_ENV =
+  'PIGGYVEST_WEBHOOK_CAPTURE_LEGACY_REPLAY_ENABLED';
+
+export function isPiggyvestCaptureLegacyReplayEnabled(
+  env: NodeJS.ProcessEnv
+): boolean {
+  return env[PIGGYVEST_CAPTURE_LEGACY_REPLAY_ENV] === 'true';
+}

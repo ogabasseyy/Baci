@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -28,7 +30,6 @@ const runtimeRouteManifest = [
   '(catalog)/(pdp)/[category]/[productSlug]/page.tsx',
   '(catalog)/(pdp)/[category]/[productSlug]/loading.tsx',
   '(blog)/blog/page.tsx',
-  '(blog)/blog/loading.tsx',
   '(blog)/blog/[postSlug]/page.tsx',
   '(blog)/blog/[postSlug]/loading.tsx',
   '(content)/loading.tsx',
@@ -241,14 +242,14 @@ describe('storefront route groups', () => {
   });
 
   it('keeps root blog listing outside a route-family loading boundary', () => {
-    // A group-level (blog)/loading.tsx would replace crawlable listing HTML
-    // with a family skeleton. The leaf (blog)/blog/loading.tsx owns first
-    // paint for /blog the same way compare/IMEI leaf loading files do.
+    // Neither (blog)/loading.tsx nor (blog)/blog/loading.tsx should wrap
+    // <BlogListingCommittedLcpHero /> in an outer Suspense fallback; page.tsx
+    // owns its inner <Suspense fallback={<BlogListingFallback />}> boundary.
     expect(existsSync(resolve(slugDirectory, '(blog)/loading.tsx'))).toBe(
       false
     );
     expect(existsSync(resolve(slugDirectory, '(blog)/blog/loading.tsx'))).toBe(
-      true
+      false
     );
   });
 

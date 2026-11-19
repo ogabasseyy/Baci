@@ -21,10 +21,21 @@ export function mapStorefrontProduct(p: RawDbProduct) {
     stock_quantity: p.stock_quantity,
     low_stock_threshold: p.low_stock_threshold,
   });
+  const hasProjectedInStock =
+    typeof p.advertised_price === 'number' && p.availability === 'InStock';
+  const availability = hasProjectedInStock
+    ? 'in_stock'
+    : agentAvailability.availability;
+  const isPurchasable = hasProjectedInStock
+    ? true
+    : agentAvailability.is_purchasable;
+  const quantityAvailable = hasProjectedInStock
+    ? Math.max(agentAvailability.quantity_available ?? 0, 1)
+    : agentAvailability.quantity_available;
 
   type ImageInput = string | { url?: string; alt?: string; order?: number };
   const rawImages = (p.images as ImageInput[]) || [];
-  const processedImages = rawImages.map((img, index) => {
+  const baseImages = rawImages.map((img, index) => {
     if (typeof img === 'string') {
       return { url: img, alt: normalized.name, order: index };
     }
@@ -35,6 +46,18 @@ export function mapStorefrontProduct(p: RawDbProduct) {
       order: img.order ?? index,
     };
   });
+  const advertisedImage =
+    typeof p.advertised_image === 'string' && p.advertised_image.trim()
+      ? p.advertised_image.trim()
+      : undefined;
+  const processedImages = advertisedImage
+    ? [
+        { url: advertisedImage, alt: normalized.name, order: 0 },
+        ...baseImages
+          .filter((img) => img.url !== advertisedImage)
+          .map((img, index) => ({ ...img, order: index + 1 })),
+      ]
+    : baseImages;
 
   return {
     id: normalized.id,
@@ -51,10 +74,10 @@ export function mapStorefrontProduct(p: RawDbProduct) {
     image: normalized.image,
     imageLarge: normalized.imageLarge,
     rating: normalized.rating,
-    availability: agentAvailability.availability,
+    availability,
     inventory_policy: agentAvailability.inventory_policy,
-    is_purchasable: agentAvailability.is_purchasable,
-    quantity_available: agentAvailability.quantity_available,
+    is_purchasable: isPurchasable,
+    quantity_available: quantityAvailable,
     category: normalized.category,
     category_slug: normalized.category_slug,
     brand: normalized.brand || '',

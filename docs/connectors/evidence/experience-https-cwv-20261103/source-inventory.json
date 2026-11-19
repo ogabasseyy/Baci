@@ -1,0 +1,65 @@
+{
+  "base": "7a2f3cc9b1f610d33b5c6da49147166f814e2404",
+  "files": [
+    {
+      "path": "apps/web/experience-runtime/build.mjs",
+      "sha256": "efa3203bc2f211d3c15090ebbd08c83abbd8b9e973b2be474e68c63db08efd14"
+    },
+    {
+      "path": "apps/web/src/lib/experience/candidate-performance-measurement.test.ts",
+      "sha256": "6250158462e386dcd660b32c5c357f37284d126a01b26d76d5a2e2d6f72086d2"
+    },
+    {
+      "path": "apps/web/src/lib/experience/candidate-performance-measurement.ts",
+      "sha256": "3be92e6f19a9078df3d9d98746e666a7a27784e9c7edba135ebf235a3a2173d6"
+    },
+    {
+      "path": "apps/web/src/schemas/experience-performance-worker.ts",
+      "sha256": "8bfe066651fcad71dac4101131e02e24565c0ffdb2314f4c2ccb22d77ae13d41"
+    },
+    {
+      "path": "apps/web/src/schemas/experience-performance.ts",
+      "sha256": "2d1131ce1ffba70e2e51fddd32276c3d62d47bf7e6596b6e42dff7c6b63f2510"
+    },
+    {
+      "path": "apps/web/tests/experience-browser/production-https-performance.test.ts",
+      "sha256": "b2cd139ce11c66d5756bf4f70640aa2bbc34ef9a2a7403fe394869fc999c533a"
+    },
+    {
+      "path": "apps/web/tools/experience-runner/performance-harness.test.ts",
+      "sha256": "48a97990fdfd4396f6c294744cd7c09c9c568b2d4a8b5a8f81e7cbc1e576055c"
+    },
+    {
+      "path": "apps/web/tools/experience-runner/performance-harness.ts",
+      "sha256": "37d02d2cef4ee3b0edc1c2e4d6e426d14b7dabbc9e29ee44bb48f741a6027f18"
+    },
+    {
+      "path": "apps/web/tools/experience-runner/performance-origins.test.ts",
+      "sha256": "07e8556c8e352b0745d848bd6cbaf2296ad1cd755eafc2c7011a615aa4554298"
+    },
+    {
+      "path": "apps/web/tools/experience-runner/performance-origins.ts",
+      "sha256": "fd0f082bf80274d41d155d6cca2dc37f6a34d59e04f5a1a684dec6797d6f0d75"
+    },
+    {
+      "path": "apps/web/tools/experience-runner/performance-tls.ts",
+      "sha256": "c9570946fdf593d3be772798a830d5f8ce7026d9a3e20874d7f3374af42fa38b"
+    },
+    {
+      "path": "apps/web/tools/experience-runner/performance-tunnel.test.ts",
+      "sha256": "c40d4b893b8274f67ea90d510717bdd01ac7d900dafeb5e1ccfda7d26ce399b0"
+    },
+    {
+      "path": "apps/web/tools/experience-runner/performance-tunnel.ts",
+      "sha256": "f09e384ba6f772778c96c359afceb65d0eb7cb8845ba25647da90eda28b05cc0"
+    },
+    {
+      "path": "apps/web/tools/experience-runner/performance-worker.test.ts",
+      "sha256": "76f0e18411c348ea4e1d2d67ec806fabefe3f9ab76121af067cbd185fd075d40"
+    },
+    {
+      "path": "apps/web/tools/experience-runner/performance-worker.ts",
+      "sha256": "f540da396d87eae249e1869b072c0e2da21679054e503e878b99bef405bbf13b"
+    }
+  ]
+}

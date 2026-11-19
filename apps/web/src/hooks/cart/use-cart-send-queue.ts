@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { reportCartCookieStorageFailure } from './cart-cookie-storage-failure';
 import { isCartCookieEpochCurrent } from './cart-cross-tab-lock';
+import { createExperienceQueueObserver } from './experience-queue-observer';
 import {
   fetchSharedCartSnapshot,
   sendSharedCartCommand,
@@ -41,14 +42,14 @@ export function useCartSendQueue(
     hydrateMissing,
     ensureCart,
     finishImportOp,
+    experienceEntriesRef,
   } = context;
   // One per-cart send queue: strict head-of-line order, one in flight.
   // biome-ignore lint/correctness/useExhaustiveDependencies: ensureCart and finishImportOp close over refs and stable dispatch only; the queue state drives re-runs.
   useEffect(() => {
     if (!enabled || linkPhase !== 'ready') return;
     const generation = sessionGeneration;
-    // Settle import ops the reducer dropped without a sender-visible outcome
-    // so the import never sticks at pending with edits gated behind it.
+    // Settle import operations already removed by the reducer.
     if (importOpIdsRef.current.size > 0) {
       const queued = new Set(state.queue.map((entry) => entry.operationId));
       for (const operationId of [...importOpIdsRef.current]) {
@@ -88,15 +89,25 @@ export function useCartSendQueue(
         (entry) => entry.operationId === head.operationId
       );
       if (pending?.state !== 'queued') return;
+      const experience = experienceEntriesRef?.current.get(pending.operationId);
+      const observer = createExperienceQueueObserver(experience, {
+        generation,
+        operationId: pending.operationId,
+        isCurrent: () => generationRef.current === generation,
+        dispatch,
+      });
+      if (!observer.admit()) return;
+
       if (
         !current.cartId ||
         !current.confirmed ||
         isTerminalCart(current.confirmed)
       ) {
         const ensured = await ensureCart();
+        if (!observer.admit()) return;
         if (generationRef.current !== generation || ensured === null) return;
         if (!ensured.ok) {
-          // Surface the provisioning failure on the head entry for retry.
+          if (!ensured.retryable) experience?.deny();
           dispatch({
             code: ensured.code,
             generation,
@@ -106,10 +117,11 @@ export function useCartSendQueue(
           });
           return;
         }
-        // ensureCart adopted; the state update re-runs this effect.
         return;
       }
-      const command = buildCommand(pending.intent, current);
+      if (experience && !(await observer.prepare(current.confirmed))) return;
+      const command =
+        experience?.envelope?.command ?? buildCommand(pending.intent, current);
       if (!command) {
         if (
           (pending.intent.kind === 'set_quantity' ||
@@ -117,7 +129,6 @@ export function useCartSendQueue(
           pending.intent.target.kind === 'identity' &&
           current.importStatus === 'pending'
         ) {
-          // The import may still deliver this line; wait for it.
           return;
         }
         dispatch({
@@ -153,18 +164,26 @@ export function useCartSendQueue(
       // the queue head so a completed cart adopts without mutating, while later
       // user actions remain queued behind this clear barrier.
       if (pending.intent.kind === 'clear' && (await adoptIfTerminal())) return;
-      if (!isCartCookieEpochCurrent(cookieEpoch, context.merchantSlug)) return;
-      const result = await sendSharedCartCommand(
-        {
-          command,
-          expectedVersion:
-            pending.intent.kind === 'replace'
-              ? pending.intent.expectedVersion
-              : current.confirmed.version,
-          operationId: pending.operationId,
-        },
-        optionsRef.current.merchantSlug
-      );
+      if (!isCartCookieEpochCurrent(cookieEpoch, context.merchantSlug)) {
+        if (experience) observer.cancel?.();
+        return;
+      }
+      const envelope = experience?.envelope ?? {
+        command,
+        expectedVersion:
+          pending.intent.kind === 'replace'
+            ? pending.intent.expectedVersion
+            : current.confirmed.version,
+        operationId: pending.operationId,
+      };
+      const result = await (experience
+        ? sendSharedCartCommand(
+            envelope,
+            optionsRef.current.merchantSlug,
+            experience.policy
+          )
+        : sendSharedCartCommand(envelope, optionsRef.current.merchantSlug));
+      if (!observer.finish(result)) return;
       if (generationRef.current !== generation) return;
       if (result.ok) {
         dispatch({

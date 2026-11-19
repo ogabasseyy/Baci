@@ -2,7 +2,7 @@ Preview-selected financial-institution marks, used only for identifying the name
 
 altbank-generated: AI-generated black-background adaptation of the logo image supplied by the user; not an official brand asset.
 
-citibank, heritage, jaiz, premium, standard, suntrust, coronation, palmpay, kongapay: pinned from https://github.com/Nigerian-Bank-Logos/ng-bank-logos/tree/d564612d7f439ac129c8b4fe64828a33f28811e3 (repository license in ../../bank-logos/LICENSE.txt).
+citibank, heritage, jaiz, premium, standard, suntrust, coronation, palmpay, kongapay: pinned from https://github.com/Nigerian-Bank-Logos/ng-bank-logos/tree/d564612d7f439ac129c8b4fe64828a33f28811e3 (repository license in ../../../src/assets/bank-logos/LICENSE.txt).
 
 piggyvest-symbol: https://www.piggyvest.com/piggyvests.svg (converted to PNG for rendering).
 cowrywise-symbol: https://cdn.cowrywise.com/images/brand/platform-icons/android.png.

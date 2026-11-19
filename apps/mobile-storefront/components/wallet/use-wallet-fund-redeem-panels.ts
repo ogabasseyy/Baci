@@ -68,6 +68,7 @@ export function useWalletFundRedeemPanels({
     });
   const handleRedeemPoints = () =>
     redeemWalletPoints({
+      activeMerchantId,
       clearRedeemPoints: () => setRedeemPoints(''),
       closeRedeemPanel: () => setShowRedeemPanel(false),
       customerId: customer?.id,

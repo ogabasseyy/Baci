@@ -1,19 +1,5 @@
-import {
-  act,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from '@testing-library/react';
-import {
-  afterAll,
-  afterEach,
-  beforeAll,
-  beforeEach,
-  expect,
-  it,
-  vi,
-} from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { beforeEach, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ fetch: vi.fn() }));
 vi.mock('@/lib/api-client', () => ({ fetchWithCsrf: mocks.fetch }));
@@ -22,24 +8,9 @@ vi.mock('@/lib/posthog/capture-client-event', () => ({
 }));
 
 import { OxygenProviderFlow } from './OxygenProviderFlow';
+import { installOxygenOtpTestEnvironment } from './oxygen-otp-test-environment.test-support';
 
-beforeAll(() =>
-  vi.stubGlobal(
-    'ResizeObserver',
-    class {
-      observe() {}
-      unobserve() {}
-      disconnect() {}
-    }
-  )
-);
-afterAll(() => vi.unstubAllGlobals());
-// input-otp schedules selection synchronization up to 50ms after input changes.
-afterEach(async () => {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 60));
-  });
-});
+installOxygenOtpTestEnvironment();
 beforeEach(() => {
   mocks.fetch.mockReset();
 });
@@ -83,7 +54,13 @@ it('resumes an unclaimed approval with its original key and no second OTP reques
     version: 8,
     environment: 'staging',
     executionEnabled: true,
-    state: plan(ref25, 25).state,
+    state: {
+      ...plan(ref25, 25).state,
+      eligibleAmount: 400000,
+      minimumAmount: 10000,
+      maxTenure: 3,
+      offers: [{ tenure: 3, loanAmount: 400000 }],
+    },
     approvalOtpReady: true,
     pending: {
       action: 'approve_booking',

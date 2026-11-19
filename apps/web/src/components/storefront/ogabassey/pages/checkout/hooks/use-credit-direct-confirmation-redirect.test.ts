@@ -6,6 +6,7 @@ import { clearCheckoutIdempotencyKey } from '../checkout-idempotency';
 import { clearCreditDirectPopupMarker } from '../credit-direct-popup-return';
 import { CHECKOUT_PENDING_ORDER_STORAGE_KEY } from '../pending-checkout-order';
 import { useCreditDirectConfirmationRedirect } from './use-credit-direct-confirmation-redirect';
+import { readPendingHandoffEntries } from '@/lib/privacy/pending-handoff.test-support';
 
 vi.mock('../capture-bnpl-payment-completed', () => ({
   captureBnplPaymentCompleted: vi.fn(),
@@ -35,6 +36,7 @@ function options(overrides = {}) {
     trackingToken: 'track-1',
     lookupEmail: null,
     orderSuccessBasePath: '/test-store/order-success',
+    merchantSlug: 'test-store',
     router: router(),
     ...overrides,
   };
@@ -83,8 +85,9 @@ describe('useCreditDirectConfirmationRedirect', () => {
     expect(clearCheckoutIdempotencyKey).toHaveBeenCalledWith('fp-1');
     expect(clearCreditDirectPopupMarker).toHaveBeenCalledWith('order-1');
     expect(push).toHaveBeenCalledWith(
-      '/test-store/order-success?orderId=order-1&reference=txn-1&type=credit_direct&trackingToken=track-1'
+      '/test-store/order-success?orderId=order-1&reference=txn-1&type=credit_direct'
     );
+    expect(readPendingHandoffEntries()).toEqual([['trackingToken', 'track-1']]);
   });
 
   it('passes the lookup email when no tracking token exists', () => {
@@ -101,8 +104,11 @@ describe('useCreditDirectConfirmationRedirect', () => {
     );
 
     expect(push).toHaveBeenCalledWith(
-      '/test-store/order-success?orderId=order-1&reference=txn-1&type=credit_direct&email=guest%40example.com'
+      '/test-store/order-success?orderId=order-1&reference=txn-1&type=credit_direct'
     );
+    expect(readPendingHandoffEntries()).toEqual([
+      ['email', 'guest@example.com'],
+    ]);
   });
 
   it('does nothing before the confirmed phase', () => {

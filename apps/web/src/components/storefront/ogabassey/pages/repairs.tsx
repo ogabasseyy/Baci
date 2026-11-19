@@ -181,13 +181,10 @@ export function OgabasseyV2Repairs({
             </div>
             <div className="flex-1 text-center md:text-left">
               <h3 className="text-2xl font-bold mb-2 text-store-background-text">
-                Preventative Care is Free
+                Device Maintenance
               </h3>
               <p className="text-store-background-text/65 text-sm md:text-base max-w-2xl leading-relaxed">
-                Often, a "broken" charging port is just dirty. Visit us for a{' '}
-                <strong>free cleaning service</strong>. We'll clear out dust and
-                lint from your speakers and ports to restore performance
-                instantly.
+                A charging or speaker issue may need cleaning or further inspection. Contact our team to confirm maintenance options, availability and pricing before visiting.
               </p>
             </div>
             <div className="shrink-0">

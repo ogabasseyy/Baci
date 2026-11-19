@@ -2,6 +2,7 @@ import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import type { Graph, Thing } from 'schema-dts';
 import { JsonLd } from '@/components/seo/json-ld';
+import { ExperienceServerBoundary } from '@/components/storefront/experience/experience-server-boundary';
 import { loadUnpublishedStorefront } from '@/components/storefront/unpublished-storefront';
 import { getRequestScopedMerchant } from '@/lib/cached-data';
 import type { JsonLdStructuredData } from '@/lib/json-ld-types';
@@ -115,10 +116,16 @@ export async function StorefrontPageContent({
       : null;
 
   return (
-    <>
-      {storefrontGraphSchema && <JsonLd data={storefrontGraphSchema} />}
+    <ExperienceServerBoundary
+      merchant={merchant}
+      path={'/'}
+      fallback={
+        <>
+          {storefrontGraphSchema && <JsonLd data={storefrontGraphSchema} />}
 
-      <StorefrontContent merchant={merchant} />
-    </>
+          <StorefrontContent merchant={merchant} />
+        </>
+      }
+    />
   );
 }

@@ -6,6 +6,7 @@ import { resolveCartApiOrigin } from '@/lib/cart/api-origin';
 import {
   nativeCartAccountsEnabled,
   nativeCartEnabled,
+  nativeCartRealtimeEnabled,
 } from '@/lib/cart/enrollment';
 import { CONFIG } from '@/lib/config';
 import { useAuthStore } from '@/stores/auth-store';
@@ -28,6 +29,12 @@ export function SharedCartBridge() {
     accountsEnabled:
       !isPlaceholderData &&
       nativeCartAccountsEnabled(merchant, {
+        merchantId: CONFIG.MERCHANT_ID,
+        merchantSlug: CONFIG.MERCHANT_SLUG,
+      }),
+    realtimeEnabled:
+      !isPlaceholderData &&
+      nativeCartRealtimeEnabled(merchant, {
         merchantId: CONFIG.MERCHANT_ID,
         merchantSlug: CONFIG.MERCHANT_SLUG,
       }),

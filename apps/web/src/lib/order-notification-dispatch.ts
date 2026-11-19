@@ -27,15 +27,32 @@ export interface OrderCreationNotificationInput {
  * Invoice alerts are only for an unpaid invoice with a positive balance. The
  * route still sends the invoice email for zero-value invoices, but those do
  * not create a payment-collection follow-up item.
+ *
+ * A Pay for Me order is only a request for someone else to pay: nothing has
+ * been bought yet and most requests are never paid. It must not ping the
+ * merchant as a new order; the paid-order finalizer sends the new-order and
+ * payment pushes once the payer actually pays.
  */
 export async function dispatchOrderCreationNotifications(
   input: OrderCreationNotificationInput
 ): Promise<void> {
-  const isInvoiceCreation = input.paymentMethod === 'invoice';
+  const paymentMethod = input.paymentMethod.trim().toLowerCase();
+  const paymentStatus = input.paymentStatus?.trim().toLowerCase();
+  const isInvoiceCreation = paymentMethod === 'invoice';
+  // Redeemed credit can leave a zero residual even when finalization failed.
+  // Only an actually zero-value order bypasses the unpaid-request suppression.
+  const isUnpaidPayForMeRequest =
+    paymentMethod === 'payforme' &&
+    input.orderTotal > 0 &&
+    !input.isWalletFullyPaid &&
+    paymentStatus !== 'paid';
+  if (isUnpaidPayForMeRequest) {
+    return;
+  }
 
   try {
     const invoiceNeedsFollowUp =
-      input.invoiceBalanceDue > 0 && input.paymentStatus !== 'paid';
+      input.invoiceBalanceDue > 0 && paymentStatus !== 'paid';
     const pushResult = isInvoiceCreation
       ? invoiceNeedsFollowUp
         ? await notifyNewInvoice(

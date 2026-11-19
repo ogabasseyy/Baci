@@ -1,0 +1,188 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+const mocks = vi.hoisted(() => ({
+  ChatwootCommerceContextError: class ChatwootCommerceContextError extends Error {
+    constructor(readonly code: string) {
+      super(code);
+    }
+  },
+  checkCartQuota: vi.fn(async () => ({ allowed: true })),
+  checkCsrfProtection: vi.fn(async () => ({ valid: true })),
+  createCartScopedClient: vi.fn(),
+  getCart: vi.fn(),
+  loadChatwootCartContext: vi.fn(),
+  loadLiveGrantOperations: vi.fn(),
+  readCartJsonBody: vi.fn(),
+  rpc: vi.fn(),
+  renewChatwootSessionCapability: vi.fn(),
+  upgradeLegacySessionPrincipal: vi.fn(),
+  verifyChatwootSessionCapability: vi.fn(),
+}));
+
+vi.mock('@/lib/cart/request-context', () => ({
+  readCartJsonBody: mocks.readCartJsonBody,
+}));
+vi.mock('@/lib/cart/request-quota', () => ({
+  checkCartQuota: mocks.checkCartQuota,
+}));
+vi.mock('@/lib/cart/scoped-client', () => ({
+  createCartScopedClient: mocks.createCartScopedClient,
+}));
+vi.mock('@/lib/cart/service', () => ({ getCart: mocks.getCart }));
+vi.mock('@/lib/cart/grant-operations', () => ({
+  loadLiveGrantOperations: mocks.loadLiveGrantOperations,
+  upgradeLegacySessionPrincipal: mocks.upgradeLegacySessionPrincipal,
+}));
+vi.mock('@/lib/chatwoot/cart-context', () => ({
+  loadChatwootCartContext: mocks.loadChatwootCartContext,
+}));
+vi.mock('@/lib/chatwoot/commerce-context', () => ({
+  ChatwootCommerceContextError: mocks.ChatwootCommerceContextError,
+  hashCartSessionProof: vi.fn(() => 'a'.repeat(64)),
+  renewChatwootSessionCapability: mocks.renewChatwootSessionCapability,
+  verifyChatwootSessionCapability: mocks.verifyChatwootSessionCapability,
+}));
+vi.mock('@/lib/csrf', () => ({
+  checkCsrfProtection: mocks.checkCsrfProtection,
+}));
+
+import { POST } from './route';
+
+import {
+  binding,
+  body,
+  cartId,
+  merchantId,
+  principal,
+  request,
+  state,
+} from './route.test-support';
+
+function arrange(input: unknown = body, cartVersion = 12) {
+  mocks.readCartJsonBody.mockResolvedValue({ ok: true, body: input });
+  mocks.loadChatwootCartContext.mockResolvedValue({
+    ok: true,
+    binding,
+    cart: {
+      cartId,
+      merchantId,
+      version: cartVersion,
+      expiresAt: '2026-11-30T00:00:00.000Z',
+      lines: [],
+    },
+    principal,
+    state: { ...state, cartVersion },
+  });
+  mocks.verifyChatwootSessionCapability.mockResolvedValue({
+    conversationId: 905,
+    sessionExpiresAt: 1_799_000_000,
+  });
+  mocks.rpc.mockReset().mockResolvedValue({
+    data: { ok: false, code: 'invalid_item' },
+  });
+  mocks.createCartScopedClient.mockReturnValue({ rpc: mocks.rpc });
+  mocks.upgradeLegacySessionPrincipal.mockResolvedValue(principal);
+  mocks.loadLiveGrantOperations.mockResolvedValue({
+    allowedOperations: ['add'],
+    grantExpiresAt: '2026-11-20T00:00:00.000Z',
+  });
+}
+
+afterEach(() => {
+  vi.clearAllMocks();
+});
+
+describe('Chatwoot shared-cart add route failure mapping', () => {
+  it('returns quota exhaustion before canonical cart mutation', async () => {
+    arrange();
+    mocks.checkCartQuota.mockResolvedValueOnce({ allowed: false });
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(429);
+    expect(mocks.createCartScopedClient).not.toHaveBeenCalled();
+  });
+  it('maps a cart RPC authorization rejection to forbidden', async () => {
+    arrange();
+    mocks.rpc.mockResolvedValueOnce({
+      data: { ok: false, code: 'unauthorized' },
+    });
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      accepted: false,
+      code: 'forbidden',
+    });
+  });
+  it('maps a version conflict to a refresh-required response', async () => {
+    arrange();
+    mocks.rpc.mockResolvedValueOnce({
+      data: { ok: false, code: 'version_conflict' },
+    });
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      accepted: false,
+      code: 'refresh_required',
+    });
+  });
+  it('preserves a locked cart as a distinct checkout response', async () => {
+    arrange();
+    mocks.rpc.mockResolvedValueOnce({
+      data: { ok: false, code: 'cart_locked' },
+    });
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      accepted: false,
+      code: 'cart_locked',
+    });
+  });
+  it.each([
+    'expired',
+    'not_found',
+  ])('maps %s to an expired-cart response', async (code) => {
+    arrange();
+    mocks.rpc.mockResolvedValueOnce({ data: { ok: false, code } });
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(410);
+    await expect(response.json()).resolves.toEqual({
+      accepted: false,
+      code: 'cart_expired',
+    });
+  });
+  it('preserves an idempotency conflict as a distinct 409 result', async () => {
+    arrange();
+    mocks.rpc.mockResolvedValueOnce({
+      data: { ok: false, code: 'idempotency_conflict' },
+    });
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      accepted: false,
+      code: 'idempotency_conflict',
+    });
+  });
+  it('maps a server-resolved unavailable catalog item to not_addable', async () => {
+    arrange();
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      accepted: false,
+      code: 'not_addable',
+    });
+    expect(mocks.createCartScopedClient).toHaveBeenCalledOnce();
+  });
+});

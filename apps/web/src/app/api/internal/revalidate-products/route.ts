@@ -9,10 +9,11 @@ import { constantTimeEqual } from '@/lib/constant-time-equal';
 import { expireProductBlogCache } from '@/lib/expire-product-blog-cache';
 import { collectResolvedProductSlugs } from '@/lib/internal-product-purge-entries';
 import { logger } from '@/lib/logger';
-import { scheduleStorefrontProductPurge } from '@/lib/storefront-product-purge';
-import { scheduleStorefrontHostnamePurge } from '@/lib/storefront-product-purge-hostnames';
 import { createPublicClient } from '@/lib/supabase/public';
 import { internalRevalidateProductsBodySchema } from '@/schemas/internal-revalidate-products-route';
+import { dispatchStorefrontHostnamePurge } from './dispatch-storefront-hostname-purge';
+import { dispatchStorefrontProductPurge } from './dispatch-storefront-purge';
+import { flushOriginCacheRevalidations } from './flush-origin-cache-revalidations';
 
 function normalizeMerchantSlug(value: string): string {
   return value.trim().toLowerCase();
@@ -72,7 +73,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     products,
     purgeWholeStorefront,
     expireProductBlogCache: shouldExpireProductBlogCache,
+    blogPostSlugs: callerBlogPostSlugs,
+    confirmEdgeEviction,
   } = parsed.data;
+  let edgePurged = false;
 
   // Runs in a route context, so revalidateTag works here (unlike the CLI worker).
   if (shouldExpireProductBlogCache) {
@@ -232,18 +236,19 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           revalidateProducts(merchantId, undefined, {
             expireImmediately: true,
           });
-          if (blogPostSlugsIncomplete) {
-            // The article lookup totally failed: the affected article URLs
-            // are unknown, so evict the hostname (a superset of the product
-            // purge) rather than leaving linked rails stale until TTL.
-            scheduleStorefrontHostnamePurge(authoritativeMerchantSlug);
-          } else if (blogPostSlugs.length > 0) {
-            scheduleStorefrontProductPurge(authoritativeMerchantSlug, entries, {
-              blogPostSlugs,
-            });
-          } else {
-            scheduleStorefrontProductPurge(authoritativeMerchantSlug, entries);
+          const mergedBlogPostSlugs = Array.from(
+            new Set([...(callerBlogPostSlugs ?? []), ...blogPostSlugs])
+          );
+          if (confirmEdgeEviction) {
+            await flushOriginCacheRevalidations();
           }
+          edgePurged = await dispatchStorefrontProductPurge({
+            merchantSlug: authoritativeMerchantSlug,
+            entries,
+            blogPostSlugs: mergedBlogPostSlugs,
+            blogPostSlugsIncomplete,
+            confirmEdgeEviction: Boolean(confirmEdgeEviction),
+          });
         }
       }
     } catch (purgeError) {
@@ -259,12 +264,28 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // purge rather than a partial URL list. The hostname comes only from the
   // merchant-id lookup above, never directly from the request body.
   if (purgeWholeStorefront && authoritativeMerchantSlug) {
-    // Expire the merchant-scoped article enrichment before the hostname purge
-    // can trigger a MISS and refill Cloudflare with stale product data.
-    expireProductBlogCache(merchantId);
-    revalidateProducts(merchantId, undefined, { expireImmediately: true });
-    scheduleStorefrontHostnamePurge(authoritativeMerchantSlug);
+    try {
+      // Expire the merchant-scoped article enrichment before the hostname purge
+      // can trigger a MISS and refill Cloudflare with stale product data.
+      expireProductBlogCache(merchantId);
+      revalidateProducts(merchantId, undefined, { expireImmediately: true });
+      if (confirmEdgeEviction) {
+        await flushOriginCacheRevalidations();
+      }
+      edgePurged = await dispatchStorefrontHostnamePurge(
+        authoritativeMerchantSlug,
+        Boolean(confirmEdgeEviction)
+      );
+    } catch (purgeError) {
+      logger.error({
+        message: 'Skipped Cloudflare hostname purge in revalidate-products',
+        error: purgeError,
+      });
+    }
   }
 
-  return NextResponse.json({ ok: true }, { status: 200 });
+  return NextResponse.json(
+    confirmEdgeEviction ? { ok: true, edgePurged } : { ok: true },
+    { status: 200 }
+  );
 }

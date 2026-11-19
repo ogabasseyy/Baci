@@ -1,7 +1,11 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { useSyncExternalStore } from 'react';
-import { beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { CookieLockHarness } from './cart-cross-tab-lock.test-support';
+import {
+  resetCartSessionHintForTests,
+  writeCartSessionHint,
+} from './cart-session-hint';
 import { runCartSessionTransition } from './cart-session-write-fence';
 import { saveCartToStorage } from './cart-storage';
 import {
@@ -33,9 +37,12 @@ vi.mock('./shared-cart-client', () => ({
   fetchSharedCartSnapshot: vi.fn(),
   sendSharedCartCommand: vi.fn(),
 }));
+afterEach(() => resetCartSessionHintForTests());
 beforeEach(() => {
   vi.clearAllMocks();
   window.localStorage.clear();
+  resetCartSessionHintForTests();
+  writeCartSessionHint(MERCHANT_ID, '1');
   vi.mocked(fetchSharedCartProducts).mockResolvedValue(new Map());
   vi.mocked(bootstrapSharedCart).mockResolvedValue({ ok: true });
   vi.mocked(createSharedCart).mockResolvedValue({

@@ -1,7 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import type React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { STOREFRONT_CRAWL_DISCOVERY_PRODUCT_PAGE_LIMIT } from '@/lib/storefront-pagination';
 
 const {
   mockGenerateBreadcrumbSchema,
@@ -71,7 +70,10 @@ vi.mock('@/lib/seo-utils', () => ({
 vi.mock('@/lib/store-url', () => ({
   buildStoreUrl: () => 'https://store.example.com',
 }));
-vi.mock('@/lib/validation', () => ({ isValidMerchantIdentifier: () => true }));
+vi.mock('@/lib/validation', () => ({
+  isDomainIdentifier: (value: string) => value.includes('.'),
+  isValidMerchantIdentifier: () => true,
+}));
 vi.mock('./product-index-card', () => ({
   ProductIndexCard: ({
     formattedPrice,
@@ -278,9 +280,9 @@ describe('ProductsPageContent', () => {
       expect.objectContaining({
         ariaLabel: 'Products pagination',
         basePath: '/demo-store/products',
-        crawlDiscoveryAllPagesThreshold:
-          STOREFRONT_CRAWL_DISCOVERY_PRODUCT_PAGE_LIMIT,
+        crawlDiscoveryAllPagesThreshold: 20,
         crawlDiscoveryLabel: 'Browse product index pages',
+        crawlDiscoveryMaxLinks: 24,
         crawlDiscoveryPageLabel: 'Products page',
         currentPage: 1,
         totalPages: 64,
@@ -288,3 +290,11 @@ describe('ProductsPageContent', () => {
     );
   });
 });
+
+vi.mock(
+  '@/components/storefront/experience/experience-server-boundary',
+  () => ({
+    ExperienceServerBoundary: ({ fallback }: { fallback: React.ReactNode }) =>
+      fallback,
+  })
+);

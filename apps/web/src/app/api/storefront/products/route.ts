@@ -1,10 +1,10 @@
 import { formatSupabaseErrorLog } from '@baci/shared/lib';
 import { createClient as createStaticClient } from '@supabase/supabase-js';
 import { unstable_cache } from 'next/cache';
-import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAnonKey, getSupabaseUrl } from '@/env';
 import { getPrimaryProductImage } from '@/lib/product-image';
+import { projectStandardListingRows } from '@/lib/project-standard-listing-rows';
 import { storefrontProductFilters } from '@/lib/storefront-product-filters';
 import {
   buildStorefrontProductsCacheKeyParts,
@@ -15,9 +15,13 @@ import {
   searchStorefrontProducts,
   toStorefrontSearchSort,
 } from '@/lib/storefront-search';
-import { createClient } from '@/lib/supabase/server';
+import { createAnonClient } from '@/lib/supabase/anon';
 import { storefrontProductsQuerySchema } from '@/schemas/storefront-products-query';
 import type { StorefrontProductsQuery } from '@/schemas/storefront-products-query.types';
+import {
+  fetchProductRowsByIds,
+  fetchProductsByIds,
+} from './storefront-products-by-ids';
 import {
   type RawStorefrontProductRow,
   storefrontProductsRouteData,
@@ -25,7 +29,6 @@ import {
 
 type ProductFilters = StorefrontProductsQuery;
 
-const PRODUCT_ID_FETCH_CHUNK_SIZE = 100;
 const IN_MEMORY_FILTER_MIN_PAGE_SIZE = 48;
 const IN_MEMORY_FILTER_MAX_PAGE_SIZE = 200;
 const IN_MEMORY_FILTER_PAGE_SIZE_MULTIPLIER = 4;
@@ -37,7 +40,11 @@ function hasInMemoryStorefrontFilters(filters: ProductFilters): boolean {
       !storefrontProductFilters.isAllFilter(filters.category)) ||
       (filters.brand && !storefrontProductFilters.isAllFilter(filters.brand)) ||
       (filters.condition &&
-        !storefrontProductFilters.isAllFilter(filters.condition))
+        !storefrontProductFilters.isAllFilter(filters.condition)) ||
+      filters.min_price !== undefined ||
+      filters.max_price !== undefined ||
+      filters.sort === 'price-asc' ||
+      filters.sort === 'price-desc'
   );
 }
 
@@ -141,12 +148,24 @@ function createCachedProductsFetcher(
           }
         }
 
-        if (filters.min_price !== undefined) {
-          query = query.gte('price', filters.min_price);
-        }
-
-        if (filters.max_price !== undefined) {
-          query = query.lte('price', filters.max_price);
+        if (
+          filters.min_price !== undefined ||
+          filters.max_price !== undefined
+        ) {
+          const priceClauses: string[] = [];
+          if (filters.min_price !== undefined) {
+            priceClauses.push(`price.gte.${filters.min_price}`);
+          }
+          if (filters.max_price !== undefined) {
+            priceClauses.push(`price.lte.${filters.max_price}`);
+          }
+          const parentPriceClause =
+            priceClauses.length > 1
+              ? `and(${priceClauses.join(',')})`
+              : priceClauses[0];
+          query = query.or(
+            `${parentPriceClause},has_variants.eq.true,variant_model.eq.sku_matrix`
+          );
         }
 
         if (filters.has_images) {
@@ -202,8 +221,16 @@ function createCachedProductsFetcher(
         const pageSize = getInMemoryFilterPageSize(targetProductCount);
         const filteredProducts: RawStorefrontProductRow[] = [];
         let offset = 0;
+        const needsProjectionBeforeLimit =
+          filters.sort === 'price-asc' ||
+          filters.sort === 'price-desc' ||
+          filters.min_price !== undefined ||
+          filters.max_price !== undefined;
+        const targetCandidateCount = needsProjectionBeforeLimit
+          ? IN_MEMORY_FILTER_DEFAULT_TARGET
+          : targetProductCount;
 
-        while (filteredProducts.length < targetProductCount) {
+        while (filteredProducts.length < targetCandidateCount) {
           const rangeTo = offset + pageSize - 1;
           const requestedCandidateCount = rangeTo - offset + 1;
           const products = await fetchProductRows({
@@ -220,13 +247,35 @@ function createCachedProductsFetcher(
 
           offset += requestedCandidateCount;
         }
-        return filteredProducts
+
+        // When in-memory filters or price sort are active, candidate selection is
+        // evaluated across up to IN_MEMORY_FILTER_DEFAULT_TARGET (1000) candidates.
+        const projected = await projectStandardListingRows(
+          merchantId,
+          filteredProducts,
+          {
+            condition: filters.condition,
+            minPrice: filters.min_price,
+            maxPrice: filters.max_price,
+            sort: filters.sort,
+          }
+        );
+        return projected
           .slice(0, targetProductCount)
           .map(storefrontProductsRouteData.mapProduct);
       }
 
       const products = await fetchProductRows();
-      return products.map(storefrontProductsRouteData.mapProduct);
+      const projected = await projectStandardListingRows(merchantId, products, {
+        condition: filters.condition,
+        minPrice: filters.min_price,
+        maxPrice: filters.max_price,
+        sort: filters.sort,
+      });
+      const finalProducts = filters.limit
+        ? projected.slice(0, filters.limit)
+        : projected;
+      return finalProducts.map(storefrontProductsRouteData.mapProduct);
     },
     cacheKeyParts,
     {
@@ -234,56 +283,6 @@ function createCachedProductsFetcher(
       tags: buildStorefrontProductsCacheTags(merchantId),
     }
   );
-}
-
-async function fetchProductsByIds(
-  merchantId: string,
-  ids: string[],
-  options: { compact?: boolean } = {}
-) {
-  const products = await fetchProductRowsByIds(merchantId, ids, options);
-
-  return products.map(storefrontProductsRouteData.mapProduct);
-}
-
-async function fetchProductRowsByIds(
-  merchantId: string,
-  ids: string[],
-  options: { compact?: boolean } = {}
-) {
-  if (ids.length === 0) {
-    return [];
-  }
-
-  const cookieStore = await cookies();
-  const supabase = createClient(cookieStore);
-  const selectColumns: string =
-    options.compact === false
-      ? storefrontProductsRouteData.STOREFRONT_PRODUCTS_SELECT
-      : storefrontProductsRouteData.STOREFRONT_PRODUCTS_COMPACT_SELECT;
-
-  const products: RawStorefrontProductRow[] = [];
-  for (
-    let index = 0;
-    index < ids.length;
-    index += PRODUCT_ID_FETCH_CHUNK_SIZE
-  ) {
-    const idChunk = ids.slice(index, index + PRODUCT_ID_FETCH_CHUNK_SIZE);
-    const result = (await supabase
-      .from('products')
-      .select(selectColumns)
-      .eq('merchant_id', merchantId)
-      .eq('status', 'active')
-      .in('id', idChunk)) as {
-      data: RawStorefrontProductRow[] | null;
-      error: unknown;
-    };
-
-    if (result.error) throw result.error;
-    products.push(...(result.data || []));
-  }
-
-  return products;
 }
 
 function hasActiveStorefrontFilter(value: string | undefined) {
@@ -413,8 +412,7 @@ export async function GET(request: NextRequest) {
       // Page ranked candidates when filters run in memory. search_products_v2
       // caps each page at 100, so filtered storefront responses must not stop at
       // a fixed pre-filter candidate window.
-      const cookieStore = await cookies();
-      const supabase = createClient(cookieStore);
+      const supabase = createAnonClient();
       const requestedLimit = limit ?? 20;
       const searchSort = searchParams.has('sort')
         ? toStorefrontSearchSort(sort)
@@ -467,6 +465,12 @@ export async function GET(request: NextRequest) {
             products: [],
             didYouMean,
             count: dbCount ?? 0,
+            pagination: {
+              hasMore: false,
+              totalCount: dbCount ?? 0,
+              limit: requestedLimit,
+              offset: offset ?? 0,
+            },
           },
           {
             headers: {
@@ -500,18 +504,43 @@ export async function GET(request: NextRequest) {
           (order.get(String(b.id)) ?? Number.MAX_SAFE_INTEGER)
       );
       const visibleOffset = usesInMemoryFilters ? (offset ?? 0) : 0;
-      const visibleProducts = filteredRows
+      const projectedRows = await projectStandardListingRows(
+        merchantId,
+        filteredRows,
+        {
+          condition,
+          minPrice: min_price,
+          maxPrice: max_price,
+          sort: searchSort,
+        }
+      );
+      const visibleProducts = projectedRows
         .slice(visibleOffset, visibleOffset + requestedLimit)
         .map(storefrontProductsRouteData.mapProduct);
+      const droppedByProjection = Math.max(
+        0,
+        filteredRows.length - projectedRows.length
+      );
       const responseCount = usesInMemoryFilters
-        ? filteredRows.length
-        : (dbCount ?? filteredRows.length);
+        ? projectedRows.length
+        : Math.max(
+            projectedRows.length,
+            (dbCount ?? projectedRows.length) - droppedByProjection
+          );
+      const effectiveOffset = offset ?? 0;
+      const hasMore = effectiveOffset + requestedLimit < responseCount;
 
       return NextResponse.json(
         {
           products: visibleProducts,
           didYouMean,
           count: responseCount,
+          pagination: {
+            hasMore,
+            totalCount: responseCount,
+            limit: requestedLimit,
+            offset: effectiveOffset,
+          },
         },
         {
           headers: {

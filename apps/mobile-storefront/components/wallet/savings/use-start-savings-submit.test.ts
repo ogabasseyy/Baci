@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { act, renderHook } from '@testing-library/react-native';
 import { Alert } from 'react-native';
+import { useAuthStore } from '@/stores/auth-store';
 import { useStartSavingsSubmit } from './use-start-savings-submit';
 import { createInput } from './use-start-savings-submit.test-utils';
 
@@ -57,6 +58,7 @@ jest.mock('@/services/savings-reminder-notifications', () => ({
 
 describe('useStartSavingsSubmit', () => {
   beforeEach(() => {
+    useAuthStore.setState({ user: { id: 'user-a' } } as never);
     jest.clearAllMocks();
     jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
     mockRandomUUID.mockReturnValue('initial-key-1');

@@ -8,6 +8,7 @@ export function delegatedCartValue(
 ): Partial<CartContextType> {
   if (!delegated) return {};
   return {
+    experienceCommandPort: shared.experienceCommandPort,
     syncStatus: shared.syncStatus,
     syncError: shared.syncError,
     retryPendingSync: shared.retryPendingSync,
@@ -21,5 +22,6 @@ export function delegatedCartValue(
         ? { cartId: shared.cartId, version: shared.version }
         : null,
     refreshSharedCart: shared.refreshSharedCart,
+    ensureSharedCartSession: shared.ensureCartSession,
   };
 }

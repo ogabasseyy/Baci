@@ -58,11 +58,15 @@ async function initialize(input: UsdtFundingInput) {
   }
 }
 
-async function status(reference: string, merchantSlug: string) {
+async function status(
+  reference: string,
+  merchantSlug: string,
+  options?: { signal?: AbortSignal }
+) {
   try {
     const response = await fetchWithCsrf(
       `/api/storefront/customer/wallet/top-up/usdt/${encodeURIComponent(reference)}?merchantSlug=${encodeURIComponent(merchantSlug)}`,
-      { method: 'GET' }
+      { method: 'GET', signal: options?.signal }
     );
     const data = record(await response.json());
     if (response.ok && data?.success === true) {

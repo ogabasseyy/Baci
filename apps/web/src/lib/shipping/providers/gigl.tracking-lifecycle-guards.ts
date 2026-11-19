@@ -160,14 +160,15 @@ export function applyLifecycleGuards(
     const { event } = candidate;
     const raw = candidate.providerStatus.trim().toUpperCase();
     const isArrival =
+      // One arrival per shipment: only the first explicit or inferred arrival
+      // is rewritten to the synthetic status.
       !destroyed &&
+      !arrived &&
       (EXPLICIT_ARRIVAL_CODES.has(raw) ||
         FOREIGN_OFFICE_DESTINATIONS[raw]?.test(
           (destination ?? '').toUpperCase()
         ) ||
         (candidate.recognizedStatus === 'in_transit' &&
-          // One inferred arrival per shipment; later destination scans stay as is.
-          !arrived &&
           !DEPARTURE_CODES.has(raw) &&
           !RETURN_CODES.has(raw) &&
           !DEPARTURE_WORD.test(

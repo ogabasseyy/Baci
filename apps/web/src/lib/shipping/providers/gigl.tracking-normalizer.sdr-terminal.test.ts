@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { GIGL_ARRIVED_IN_CITY_RAW_STATUS } from '../gigl-tracking-notification-policy-matrix';
 import { normalizeGiglTrackingShipment } from './gigl.tracking-normalizer';
 
 const OBSERVED_AT = new Date('2026-11-10T00:00:00.000Z');
@@ -68,5 +69,26 @@ describe('bugfix: terminal outcome survives a later progress scan; MSHC keeps it
     );
     const mshc = result.events.find((e) => e.timestamp.getUTCHours() === 12);
     expect(mshc?.rawStatus).toBe('MSHC');
+  });
+});
+
+describe('bugfix: only the first explicit arrival is rewritten', () => {
+  it('rewrites a single event when two ARF scans are reported', () => {
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W47',
+        MobileShipmentTrackings: [
+          event('ARF', '10:00:00'),
+          event('ARF', '12:00:00'),
+        ],
+      },
+      'W47',
+      OBSERVED_AT
+    );
+    expect(
+      result.events.filter(
+        (e) => e.rawStatus === GIGL_ARRIVED_IN_CITY_RAW_STATUS
+      )
+    ).toHaveLength(1);
   });
 });

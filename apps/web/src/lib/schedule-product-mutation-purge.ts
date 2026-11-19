@@ -17,6 +17,8 @@ interface ScheduleProductMutationPurgeInput {
   merchantSlug: string | null | undefined;
   productIds: readonly string[];
   entries: readonly StorefrontProductPurgeEntry[];
+  dependentProductIdentifiers?: readonly string[];
+  dependentAliasesIncomplete?: boolean;
   blogPostSlugs?: readonly string[];
   blogPostIds?: readonly string[];
   purgeWholeStorefront?: boolean;
@@ -33,6 +35,8 @@ export function scheduleProductMutationPurge({
   merchantSlug,
   productIds,
   entries,
+  dependentProductIdentifiers = [],
+  dependentAliasesIncomplete = false,
   blogPostSlugs,
   blogPostIds,
   purgeWholeStorefront,
@@ -44,7 +48,11 @@ export function scheduleProductMutationPurge({
   const slugsExpired =
     revalidateProductSlugs(
       merchantId,
-      [...entries.map((entry) => entry.slug), ...productIds],
+      [
+        ...entries.map((entry) => entry.slug),
+        ...productIds,
+        ...dependentProductIdentifiers,
+      ],
       {
         expireImmediately: true,
       }
@@ -72,6 +80,7 @@ export function scheduleProductMutationPurge({
 
   const scopedListingsExpired =
     !purgeWholeStorefront &&
+    !dependentAliasesIncomplete &&
     slugsExpired &&
     revalidateProducts(merchantId, undefined, {
       expireImmediately: true,

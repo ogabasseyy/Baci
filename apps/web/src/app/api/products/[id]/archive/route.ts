@@ -11,6 +11,7 @@ import {
   getMerchantForApiRequest,
   toUserAccess,
 } from '@/lib/get-merchant-for-api-request';
+import { resolveDependentLegacyProductIdentifiers } from '@/lib/resolve-dependent-legacy-product-identifiers';
 import { scheduleProductBlogPurgeAfterResponse } from '@/lib/schedule-product-blog-purge-after-response';
 import { scheduleStorefrontProductPurge } from '@/lib/storefront-product-purge';
 import { resolveProductPurgeCategorySegmentForRow } from '@/lib/storefront-product-purge-urls';
@@ -119,16 +120,27 @@ export async function PATCH(
     // Legacy rows can have a null/blank slug but stay addressable at
     // `/products/<id>`, so fall back to the id for the purge target.
     const purgeSlug = product.slug?.trim() || parsedParams.data.id;
-    // Bust the archived slug's Next product cache BEFORE the edge purge so a
-    // post-purge MISS cannot refill a stale "product still listed" page. Runs
-    // first (needs only the merchant id) so a failed merchant-slug read below
-    // cannot skip it.
+    const dependentAliases = await resolveDependentLegacyProductIdentifiers(
+      auth.supabase,
+      merchantContext.merchantId,
+      parsedParams.data.id
+    );
+    // Bust the archived slug's, UUID's, and any dependent legacy child aliases'
+    // Next product caches BEFORE the edge purge so a post-purge MISS cannot
+    // refill stale snapshots or obsolete legacy redirects.
     const slugsExpired =
-      revalidateProductSlugs(merchantContext.merchantId, [purgeSlug], {
-        expireImmediately: true,
-      }) === true;
+      revalidateProductSlugs(
+        merchantContext.merchantId,
+        Array.from(
+          new Set([purgeSlug, product.id, ...dependentAliases.identifiers])
+        ),
+        {
+          expireImmediately: true,
+        }
+      ) === true;
     const originHardExpired =
       (slugsExpired &&
+        !dependentAliases.incomplete &&
         revalidateProducts(merchantContext.merchantId, undefined, {
           expireImmediately: true,
           omitMerchantWidePdpDetails: true,

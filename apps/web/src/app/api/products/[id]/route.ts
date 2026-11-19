@@ -26,6 +26,7 @@ import {
   normalizeProductVariantModel,
 } from '@/lib/product-variant-model';
 import type { Product, ProductVariant } from '@/lib/products';
+import { resolveDependentLegacyProductIdentifiers } from '@/lib/resolve-dependent-legacy-product-identifiers';
 import { sanitizeHtml } from '@/lib/sanitize';
 import { sanitizeText } from '@/lib/sanitize-core';
 import { sanitizeSchemaMarkup } from '@/lib/sanitize-json-ld';
@@ -885,7 +886,7 @@ export async function PUT(
     }
 
     // Evict the Cloudflare-fronted public URLs the edit can change (fire-and-forget).
-    scheduleUpdatedProductPurge({
+    await scheduleUpdatedProductPurge({
       supabase,
       id,
       merchantId,
@@ -1001,6 +1002,12 @@ export async function DELETE(
       });
     }
 
+    const dependentAliases = await resolveDependentLegacyProductIdentifiers(
+      supabase,
+      merchantId,
+      id
+    );
+
     // Keep the delete itself lean — the purge inputs were pre-read above.
     const { error: deleteError } = await supabase
       .from('products')
@@ -1017,7 +1024,7 @@ export async function DELETE(
     }
 
     // Evict the removed product's public URLs (fire-and-forget).
-    scheduleDeletedProductPurge({
+    await scheduleDeletedProductPurge({
       supabase,
       id,
       merchantId,
@@ -1026,6 +1033,7 @@ export async function DELETE(
         typeof scheduleDeletedProductPurge
       >[0]['deletedProduct'],
       preReadError,
+      dependentAliases,
       linkedBlogPostIds,
       incompleteBlogSnapshot,
     });

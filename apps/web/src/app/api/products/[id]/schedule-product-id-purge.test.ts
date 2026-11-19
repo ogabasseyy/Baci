@@ -2,9 +2,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockRevalidateProducts = vi.fn();
 const mockScheduleProductMutationPurge = vi.fn();
+const mockResolveDependentAliases = vi.fn();
 
 vi.mock('@/lib/cache-revalidation', () => ({
   revalidateProducts: (...args: unknown[]) => mockRevalidateProducts(...args),
+}));
+vi.mock('@/lib/resolve-dependent-legacy-product-identifiers', () => ({
+  resolveDependentLegacyProductIdentifiers: (...args: unknown[]) =>
+    mockResolveDependentAliases(...args),
 }));
 vi.mock('@/lib/schedule-product-mutation-purge', () => ({
   scheduleProductMutationPurge: (...args: unknown[]) =>
@@ -23,10 +28,14 @@ const supabase = {} as Parameters<
 describe('schedule-product-id-purge', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockResolveDependentAliases.mockResolvedValue({
+      identifiers: ['child-1', 'old-alias'],
+      incomplete: false,
+    });
   });
 
-  it('schedules current and prior update entries without calling revalidateProducts directly', () => {
-    scheduleUpdatedProductPurge({
+  it('schedules current and prior update entries without calling revalidateProducts directly', async () => {
+    await scheduleUpdatedProductPurge({
       supabase,
       id: 'prod-1',
       merchantId: 'merchant-1',
@@ -54,11 +63,13 @@ describe('schedule-product-id-purge', () => {
         { slug: 'new-slug', categorySegment: 'smartphones' },
         { slug: 'old-slug', categorySegment: 'electronics' },
       ],
+      dependentProductIdentifiers: ['child-1', 'old-alias'],
+      dependentAliasesIncomplete: false,
     });
     expect(mockRevalidateProducts).not.toHaveBeenCalled();
   });
 
-  it('falls back to immediate revalidateProducts when update scheduling throws', () => {
+  it('falls back to immediate revalidateProducts when update scheduling throws', async () => {
     const warnSpy = vi
       .spyOn(console, 'warn')
       .mockImplementation(() => undefined);
@@ -67,7 +78,7 @@ describe('schedule-product-id-purge', () => {
         throw new Error('boom');
       });
 
-      scheduleUpdatedProductPurge({
+      await scheduleUpdatedProductPurge({
         supabase,
         id: 'prod-1',
         merchantId: 'merchant-1',
@@ -86,12 +97,12 @@ describe('schedule-product-id-purge', () => {
     }
   });
 
-  it('schedules whole-storefront fallback when deleted pre-read row is missing and hard-expires on throw', () => {
+  it('schedules whole-storefront fallback when deleted pre-read row is missing and hard-expires on throw', async () => {
     const warnSpy = vi
       .spyOn(console, 'warn')
       .mockImplementation(() => undefined);
     try {
-      scheduleDeletedProductPurge({
+      await scheduleDeletedProductPurge({
         supabase,
         id: 'prod-1',
         merchantId: 'merchant-1',
@@ -116,7 +127,7 @@ describe('schedule-product-id-purge', () => {
       mockScheduleProductMutationPurge.mockImplementationOnce(() => {
         throw new Error('boom');
       });
-      scheduleDeletedProductPurge({
+      await scheduleDeletedProductPurge({
         supabase,
         id: 'prod-1',
         merchantId: 'merchant-1',

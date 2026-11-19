@@ -1,4 +1,8 @@
 import { revalidateProducts } from '@/lib/cache-revalidation';
+import {
+  type DependentLegacyProductIdentifiers,
+  resolveDependentLegacyProductIdentifiers,
+} from '@/lib/resolve-dependent-legacy-product-identifiers';
 import { scheduleProductMutationPurge } from '@/lib/schedule-product-mutation-purge';
 import {
   resolveProductPurgeCategorySegmentForRow,
@@ -34,6 +38,7 @@ interface ScheduleDeletedProductPurgeInput {
   merchantSlug: string | null | undefined;
   deletedProduct: ProductPurgeRow | null;
   preReadError: unknown;
+  dependentAliases?: DependentLegacyProductIdentifiers;
   linkedBlogPostIds: string[];
   incompleteBlogSnapshot: boolean;
 }
@@ -43,14 +48,14 @@ interface ScheduleDeletedProductPurgeInput {
  * update purge without touching unrelated merchant PDPs; fall back to
  * immediate merchant-wide revalidation only if scheduling throws.
  */
-export function scheduleUpdatedProductPurge({
+export async function scheduleUpdatedProductPurge({
   supabase,
   id,
   merchantId,
   merchantSlug,
   existingProduct,
   updatedProduct,
-}: ScheduleUpdatedProductPurgeInput): void {
+}: ScheduleUpdatedProductPurgeInput): Promise<void> {
   try {
     const nextSlug = updatedProduct.slug?.trim() || id;
     const previousSlug = existingProduct.slug?.trim() || id;
@@ -75,21 +80,26 @@ export function scheduleUpdatedProductPurge({
       category: existingProduct.category,
       ...immutableJoins,
     });
-    if (
+    const routeChanged =
       previousSlug !== nextSlug ||
-      (previousCategorySegment ?? '') !== (nextCategorySegment ?? '')
-    ) {
+      (previousCategorySegment ?? '') !== (nextCategorySegment ?? '');
+    if (routeChanged) {
       productPurgeEntries.push({
         slug: previousSlug,
         categorySegment: previousCategorySegment,
       });
     }
+    const dependentAliases = routeChanged
+      ? await resolveDependentLegacyProductIdentifiers(supabase, merchantId, id)
+      : { identifiers: [], incomplete: false };
     scheduleProductMutationPurge({
       supabase,
       merchantId,
       merchantSlug,
       productIds: [updatedProduct.id],
       entries: productPurgeEntries,
+      dependentProductIdentifiers: dependentAliases.identifiers,
+      dependentAliasesIncomplete: dependentAliases.incomplete,
     });
   } catch (purgeError) {
     revalidateProducts(merchantId, updatedProduct.slug ?? undefined, {
@@ -106,16 +116,17 @@ export function scheduleUpdatedProductPurge({
  * expanding to a whole-storefront purge when pre-read metadata is incomplete
  * and falling back to immediate merchant-wide revalidation only on error.
  */
-export function scheduleDeletedProductPurge({
+export async function scheduleDeletedProductPurge({
   supabase,
   id,
   merchantId,
   merchantSlug,
   deletedProduct,
   preReadError,
+  dependentAliases,
   linkedBlogPostIds,
   incompleteBlogSnapshot,
-}: ScheduleDeletedProductPurgeInput): void {
+}: ScheduleDeletedProductPurgeInput): Promise<void> {
   try {
     if (deletedProduct) {
       const purgeSlug = deletedProduct.slug?.trim() || id;
@@ -131,12 +142,21 @@ export function scheduleDeletedProductPurge({
           }),
         },
       ];
+      const resolvedAliases =
+        dependentAliases ??
+        (await resolveDependentLegacyProductIdentifiers(
+          supabase,
+          merchantId,
+          id
+        ));
       scheduleProductMutationPurge({
         supabase,
         merchantId,
         merchantSlug,
         productIds: [id],
         entries: purgeEntries,
+        dependentProductIdentifiers: resolvedAliases.identifiers,
+        dependentAliasesIncomplete: resolvedAliases.incomplete,
         blogPostIds: linkedBlogPostIds,
         purgeWholeStorefront: incompleteBlogSnapshot,
       });

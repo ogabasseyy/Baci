@@ -127,6 +127,13 @@ function createSupabase() {
         }),
       };
       return {
+        select: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              limit: vi.fn().mockResolvedValue({ data: [], error: null }),
+            })),
+          })),
+        })),
         update: vi.fn((payload: unknown) => {
           mocks.updatePayload = payload;
           return query;
@@ -217,7 +224,7 @@ describe('PATCH /api/products/[id]/archive', () => {
     expect(mocks.filters).toContainEqual(['merchant_id', MERCHANT_ONE_ID]);
     expect(mocks.revalidateProductSlugs).toHaveBeenCalledWith(
       MERCHANT_ONE_ID,
-      ['phone-ultra'],
+      ['phone-ultra', '123e4567-e89b-42d3-a456-426614174000'],
       { expireImmediately: true }
     );
     expect(mocks.revalidateProducts).toHaveBeenCalledWith(

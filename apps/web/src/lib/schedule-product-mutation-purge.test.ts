@@ -219,4 +219,48 @@ describe('scheduleProductMutationPurge', () => {
       skipProductPurge: true,
     });
   });
+
+  it('includes dependent legacy child identifiers and falls back to broad PDP expiry when incomplete', () => {
+    const entries = [{ slug: 'new-phone', categorySegment: 'smartphones' }];
+
+    scheduleProductMutationPurge({
+      supabase: {} as never,
+      merchantId: 'merchant-1',
+      merchantSlug: 'test-store',
+      productIds: ['parent-1'],
+      entries,
+      dependentProductIdentifiers: ['child-1', 'old-variant-slug'],
+      dependentAliasesIncomplete: false,
+    });
+
+    expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
+      'merchant-1',
+      ['new-phone', 'parent-1', 'child-1', 'old-variant-slug'],
+      { expireImmediately: true }
+    );
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      'merchant-1',
+      undefined,
+      { expireImmediately: true, omitMerchantWidePdpDetails: true }
+    );
+
+    vi.clearAllMocks();
+    mockRevalidateProducts.mockReturnValue(true);
+    mockRevalidateProductSlugs.mockReturnValue(true);
+
+    scheduleProductMutationPurge({
+      supabase: {} as never,
+      merchantId: 'merchant-1',
+      merchantSlug: 'test-store',
+      productIds: ['parent-1'],
+      entries,
+      dependentAliasesIncomplete: true,
+    });
+
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      'merchant-1',
+      undefined,
+      { expireImmediately: true }
+    );
+  });
 });

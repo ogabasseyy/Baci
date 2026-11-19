@@ -96,7 +96,7 @@ export function defineArchiveRoutePurgeSuite({
 
     expect(mocks.revalidateProductSlugs).toHaveBeenCalledWith(
       merchantId,
-      ['phone-ultra'],
+      ['phone-ultra', '123e4567-e89b-42d3-a456-426614174000'],
       { expireImmediately: true }
     );
     expect(mocks.revalidateProducts).toHaveBeenCalledWith(
@@ -169,7 +169,7 @@ export function defineArchiveRoutePurgeSuite({
       expect(response.status).toBe(200);
       expect(mocks.revalidateProductSlugs).toHaveBeenCalledWith(
         merchantId,
-        ['phone-ultra'],
+        ['phone-ultra', '123e4567-e89b-42d3-a456-426614174000'],
         { expireImmediately: true }
       );
       expect(mocks.scheduleStorefrontProductPurge).not.toHaveBeenCalled();

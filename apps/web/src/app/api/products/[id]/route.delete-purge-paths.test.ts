@@ -188,7 +188,8 @@ describe('DELETE /api/products/[id] storefront purge paths', () => {
     });
 
     expect(res.status).toBe(200);
-    expect(productOps).toEqual(['select', 'delete']);
+    expect(productOps[0]).toBe('select');
+    expect(productOps.indexOf('delete')).toBeGreaterThan(0);
     expect(
       productSelectArgs.some((arg) =>
         arg.includes('categories:category_id(slug, is_active)')

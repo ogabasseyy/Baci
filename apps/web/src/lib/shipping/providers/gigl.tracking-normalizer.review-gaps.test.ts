@@ -144,3 +144,21 @@ describe('bugfix: tied out-for-delivery scan outranks tied in-transit', () => {
     expect(result.status).toBe('out_for_delivery');
   });
 });
+
+describe('bugfix: any later scan after SDR keeps the shipment failed', () => {
+  it.each(['ARF', 'MSVC'])('keeps failed when %s follows SDR', (code) => {
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W37',
+        Destination: 'ABUJA',
+        MobileShipmentTrackings: [
+          event('SDR', '10:00:00'),
+          event(code, '12:00:00', { Location: 'WUSE ABUJA' }),
+        ],
+      },
+      'W37',
+      OBSERVED_AT
+    );
+    expect(result.status).toBe('failed');
+  });
+});

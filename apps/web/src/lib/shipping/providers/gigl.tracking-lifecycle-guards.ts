@@ -159,7 +159,14 @@ export function applyLifecycleGuards(
           (!sameCity || leftDestinationCentre) &&
           matchesDestination(event.location, destination)));
     if (raw === 'SDR') destroyed = true;
-    if (raw === 'MSHC' && destroyed) {
+    if (
+      destroyed &&
+      raw !== 'SDR' &&
+      candidate.recognizedStatus !== null &&
+      !TERMINAL_STATUSES.has(candidate.recognizedStatus)
+    ) {
+      // Destroyed is final: no later non-terminal scan (MSHC, arrival, transit)
+      // may move the shipment back into the lifecycle.
       event.status = 'failed';
       candidate.recognizedStatus = 'failed';
       event.rawStatus = candidate.providerStatus;

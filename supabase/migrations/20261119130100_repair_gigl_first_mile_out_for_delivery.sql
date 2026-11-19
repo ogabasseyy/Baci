@@ -3,10 +3,11 @@
 -- Only MSHC scans that precede every other movement scan are touched, and only
 -- shipments with no genuine out_for_delivery event; terminal shipments and
 -- notification history are left alone. Idempotent: a second run matches nothing.
--- Residual scope (by design): an MSHC tied to a movement scan's timestamp, and
--- terminal shipments, are not rewritten. the JSON patch joins on (shipment, key) and
--- fixed_events holds only active-epoch rows, one per key, so it cannot fan out;
--- status candidates are limited to the active epoch.
+-- Residual scope (by design): histories with a terminal event or an SDR scan,
+-- an MSHC tied to a movement scan's timestamp, and terminal shipments are not
+-- rewritten. The JSON patch joins on (shipment, key); fixed_events holds only
+-- active-epoch rows, one per key, so it cannot fan out; status candidates are
+-- limited to the active epoch.
 CREATE OR REPLACE FUNCTION private.repair_gigl_first_mile_out_for_delivery()
 RETURNS integer
 LANGUAGE plpgsql
@@ -70,6 +71,18 @@ BEGIN
         AND genuine.normalized_status = 'out_for_delivery'
         AND genuine.tracking_epoch_id = fm.tracking_epoch_id
         AND genuine.id NOT IN (SELECT id FROM first_mile)
+    )
+    -- Out of scope by design: histories with a terminal event (monitor state,
+    -- delivered_at and refunds belong to the apply function) or an SDR (its
+    -- fence outlives later scans); the normal poller owns those.
+    AND NOT EXISTS (
+      SELECT 1 FROM public.shipment_tracking_events AS special
+      WHERE special.shipment_id = fm.shipment_id
+        AND special.tracking_epoch_id = fm.tracking_epoch_id
+        AND (
+          special.normalized_status IN ('delivered', 'cancelled', 'returned')
+          OR upper(special.raw_status) = 'SDR'
+        )
     )
   ), fixed_events AS (
     UPDATE public.shipment_tracking_events AS event

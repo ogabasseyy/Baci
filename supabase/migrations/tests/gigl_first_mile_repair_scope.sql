@@ -1,6 +1,6 @@
 BEGIN;
 
-SELECT plan(6);
+SELECT plan(8);
 
 CREATE TEMP TABLE repair_fixture (label text PRIMARY KEY, shipment_id uuid);
 
@@ -14,7 +14,7 @@ DECLARE
 BEGIN
   INSERT INTO public.merchants (id, email, business_name, slug)
   VALUES (v_merchant, 'gigl-first-mile-repair@example.com', 'GIGL Repair', 'gigl-first-mile-repair');
-  FOREACH v_label IN ARRAY ARRAY['first_mile', 'genuine', 'terminal', 'then_failed'] LOOP
+  FOREACH v_label IN ARRAY ARRAY['first_mile', 'genuine', 'terminal', 'then_failed', 'with_sdr', 'with_terminal'] LOOP
     INSERT INTO public.orders (merchant_id, order_number, total)
     VALUES (v_merchant, 'GIGL-REPAIR-' || v_label, 1000) RETURNING id INTO v_order;
     INSERT INTO public.shipments (
@@ -38,6 +38,17 @@ BEGIN
        CASE v_label WHEN 'genuine' THEN 'MSHC' WHEN 'then_failed' THEN 'DELIVERY_FAILED' ELSE 'DPC' END,
        CASE v_label WHEN 'genuine' THEN 'out_for_delivery' WHEN 'then_failed' THEN 'failed' ELSE 'in_transit' END,
        'scan b', '2026-11-09 12:00+00');
+    -- with_sdr / with_terminal: histories the repair deliberately leaves alone.
+    IF v_label IN ('with_sdr', 'with_terminal') THEN
+      INSERT INTO public.shipment_tracking_events (
+        shipment_id, tracking_epoch_id, tracking_number, provider,
+        provider_event_key, raw_status, normalized_status, description, occurred_at
+      ) VALUES (
+        v_ship, v_epoch, 'GIGL-REPAIR-' || v_label, 'GIGL', v_label || '-x',
+        CASE v_label WHEN 'with_sdr' THEN 'SDR' ELSE 'SHD' END,
+        CASE v_label WHEN 'with_sdr' THEN 'failed' ELSE 'delivered' END,
+        'special scan', '2026-11-09 11:00+00');
+    END IF;
     UPDATE public.shipments SET status = CASE v_label WHEN 'terminal' THEN 'delivered' ELSE 'out_for_delivery' END,
       tracking_events = jsonb_build_array(
         jsonb_build_object('provider_event_key', v_label || '-a'),
@@ -60,6 +71,10 @@ SELECT is((SELECT normalized_status FROM public.shipment_tracking_events WHERE p
   'pickup_scheduled', 'the first-mile MSHC event is reset');
 SELECT is((SELECT status FROM public.shipments WHERE id = (SELECT shipment_id FROM repair_fixture WHERE label = 'genuine')),
   'out_for_delivery', 'a genuine delivery run is left alone');
+SELECT is((SELECT status FROM public.shipments WHERE id = (SELECT shipment_id FROM repair_fixture WHERE label = 'with_sdr')),
+  'out_for_delivery', 'a history with an SDR is left to the normal poller');
+SELECT is((SELECT status FROM public.shipments WHERE id = (SELECT shipment_id FROM repair_fixture WHERE label = 'with_terminal')),
+  'out_for_delivery', 'a history with a terminal event is left to the normal poller');
 SELECT is(private.repair_gigl_first_mile_out_for_delivery(), 0,
   'a second run repairs nothing (idempotent; terminal shipment untouched)');
 

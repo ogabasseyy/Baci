@@ -56,11 +56,14 @@ BEGIN
       v_shipment_id, v_epoch, 'backfill-worker', v_case.terminal, NULL,
       CASE WHEN v_case.terminal = 'delivered'
         THEN now() - interval '3 hours' END,
-      jsonb_build_array(
-        jsonb_build_object(
+      -- The delivered case sends a terminal-only payload (the newer stored scan
+      -- is not repeated), so delivered_at cannot lean on a newer incoming scan.
+      CASE WHEN v_case.terminal = 'delivered' THEN '[]'::jsonb
+        ELSE jsonb_build_array(jsonb_build_object(
           'provider_event_key', 'newer-1', 'raw_status', 'MSVC',
           'normalized_status', v_case.newer_status, 'description', 'Newer scan',
-          'occurred_at', (now() - interval '2 hours')::text),
+          'occurred_at', (now() - interval '2 hours')::text))
+      END || jsonb_build_array(
         jsonb_build_object(
           'provider_event_key', 'terminal-1', 'raw_status', v_case.raw_code,
           'normalized_status', v_case.terminal, 'description', 'Terminal scan',
@@ -83,6 +86,41 @@ BEGIN
       RAISE EXCEPTION 'a backfilled older delivery must set delivered_at and queue its notification';
     END IF;
   END LOOP;
+
+  -- A newer stored SDR fences an older backfilled terminal scan.
+  INSERT INTO public.orders (merchant_id, order_number, total)
+  VALUES (v_merchant_id, 'GIGL-BACKFILL-sdr', 1000) RETURNING id INTO v_order_id;
+  INSERT INTO public.shipments (
+    order_id, merchant_id, provider, tracking_number,
+    sender_address, receiver_address, items
+  ) VALUES (
+    v_order_id, v_merchant_id, 'GIGL', 'GIGL-BACKFILL-sdr',
+    '{}'::jsonb, '{}'::jsonb, '[]'::jsonb
+  ) RETURNING id INTO v_shipment_id;
+  SELECT tracking_epoch_id INTO v_epoch
+  FROM public.shipment_tracking_monitors WHERE shipment_id = v_shipment_id;
+  UPDATE public.shipment_tracking_monitors
+  SET locked_at = now(), locked_by = 'backfill-worker',
+    notification_events_not_before = now() - interval '1 day'
+  WHERE shipment_id = v_shipment_id;
+  UPDATE public.shipments
+  SET status = 'failed',
+    tracking_events = jsonb_build_array(jsonb_build_object(
+      'provider_event_key', 'sdr-1', 'raw_status', 'SDR',
+      'normalized_status', 'failed',
+      'occurred_at', (now() - interval '2 hours')::text))
+  WHERE id = v_shipment_id;
+  PERFORM public.apply_gigl_tracking_result(
+    v_shipment_id, v_epoch, 'backfill-worker', 'delivered', NULL, NULL,
+    jsonb_build_array(jsonb_build_object(
+      'provider_event_key', 'terminal-1', 'raw_status', 'SHD',
+      'normalized_status', 'delivered', 'description', 'Terminal scan',
+      'occurred_at', (now() - interval '3 hours')::text))
+  );
+  SELECT status INTO v_status FROM public.shipments WHERE id = v_shipment_id;
+  IF v_status IS DISTINCT FROM 'failed' THEN
+    RAISE EXCEPTION 'a newer stored SDR must fence an older backfilled terminal scan, got %', v_status;
+  END IF;
 END;
 $test$;
 

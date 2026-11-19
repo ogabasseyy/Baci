@@ -3,6 +3,8 @@
 -- 2. Let a backfilled older terminal scan (delivered, cancelled, returned)
 --    override a newer stored progress scan, as the normalizer already does, so
 --    its status, delivered_at and notification stay consistent.
+--    A newer stored SDR still fences an older backfilled terminal scan (the
+--    normalizer's rule), and a backfilled delivery records delivered_at.
 --    Intended for all three terminal kinds: they outrank failed and progress
 --    scans in the canonical rank (failed 5, delivered 6, cancelled/returned 7),
 --    so an older cancelled also beats a newer failed or out_for_delivery.
@@ -39,8 +41,29 @@ DECLARE
     E'    WHEN p_status IN (''delivered'', ''cancelled'', ''returned'')\n'
     || E'      AND v_current_status IS NOT NULL\n'
     || E'      AND v_current_status NOT IN (''delivered'', ''cancelled'', ''returned'')\n'
+    || E'      AND NOT EXISTS (\n'
+    || E'        SELECT 1\n'
+    || E'        FROM jsonb_array_elements(\n'
+    || E'          coalesce(v_existing_tracking_events, ''[]''::jsonb)\n'
+    || E'        ) AS sdr(event)\n'
+    || E'        WHERE upper(coalesce(sdr.event->>''raw_status'', sdr.event->>''rawStatus'', '''')) = ''SDR''\n'
+    || E'          AND private.try_parse_gigl_tracking_timestamp(\n'
+    || E'            coalesce(sdr.event->>''occurred_at'', sdr.event->>''timestamp'')\n'
+    || E'          ) > coalesce(v_latest_status_event_at, ''-infinity''::timestamptz)\n'
+    || E'      )\n'
     || E'      THEN p_status\n'
     || v_anchor2;
+  v_anchor3 constant text :=
+    E'      v_latest_persisted_event_at IS NULL\n'
+    || E'      OR v_latest_incoming_event_at IS NULL\n'
+    || E'      OR v_latest_incoming_event_at >= v_latest_persisted_event_at\n'
+    || E'    );\n';
+  v_replacement3 constant text :=
+    E'      v_latest_persisted_event_at IS NULL\n'
+    || E'      OR v_latest_incoming_event_at IS NULL\n'
+    || E'      OR v_latest_incoming_event_at >= v_latest_persisted_event_at\n'
+    || E'      OR v_effective_status = ''delivered''\n'
+    || E'    );\n';
   v_original text;
   v_patched text;
 BEGIN
@@ -56,8 +79,15 @@ BEGIN
      <> length(v_anchor2) THEN
     RAISE EXCEPTION 'apply_gigl_tracking_result terminal anchor must occur exactly once';
   END IF;
+  IF length(v_original) - length(replace(v_original, v_anchor3, ''))
+     <> length(v_anchor3) THEN
+    RAISE EXCEPTION 'apply_gigl_tracking_result delivery anchor must occur exactly once';
+  END IF;
   v_patched := replace(
-    replace(v_original, v_anchor, v_replacement), v_anchor2, v_replacement2
+    replace(
+      replace(v_original, v_anchor, v_replacement), v_anchor2, v_replacement2
+    ),
+    v_anchor3, v_replacement3
   );
   IF v_patched = v_original THEN
     RAISE EXCEPTION 'apply_gigl_tracking_result patch changed nothing';

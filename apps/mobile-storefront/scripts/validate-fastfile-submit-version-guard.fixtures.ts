@@ -121,7 +121,7 @@ lane :submit do
   build_number = ENV["SUBMIT_BUILD_NUMBER"].to_s.strip
   app_version = ENV["SUBMIT_APP_VERSION"].to_s.strip
 
-  if build_number.empty? || app_version.empty?
+  if build_number.empty? || app_version.empty? || build_number == 'latest'
     UI.user_error!("SUBMIT_BUILD_NUMBER and SUBMIT_APP_VERSION are required")
   end
 

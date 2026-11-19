@@ -78,11 +78,11 @@ function validateFastfileSubmitVersionGuard(fastfileSource, versionSlotSource) {
   const guardIndex = submitLane.indexOf('app_store_version_slot_ready?');
   const changelogIndex = submitLane.indexOf('set_changelog(');
   const explicitBuildIndex = submitLane.indexOf(
-    'if build_number.empty? || app_version.empty?'
+    "if build_number.empty? || app_version.empty? || build_number == 'latest'"
   );
   const explicitBuildGuard = extractIndentedBlock(
     submitLane,
-    /^\s*if build_number\.empty\? \|\| app_version\.empty\?\s*$/,
+    /^\s*if build_number\.empty\? \|\| app_version\.empty\? \|\| build_number == 'latest'\s*$/,
     'end'
   );
 

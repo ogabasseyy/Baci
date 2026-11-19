@@ -7,13 +7,20 @@ const { VALID_FASTFILE, VALID_SLOT } = submitVersionGuardFixtures;
 describe('manual App Store submissions must pin the tested build', () => {
   it('rejects a submit lane that permits an unpinned latest build', () => {
     const allowsEmptySelection = VALID_FASTFILE.replace(
-      'if build_number.empty? || app_version.empty?',
+      "if build_number.empty? || app_version.empty? || build_number == 'latest'",
       'if build_number.empty? ^ app_version.empty?'
     );
 
     expect(
       validateFastfileSubmitVersionGuard(allowsEmptySelection, VALID_SLOT)
     ).toContain(
+      'Fastfile: submit lane must reject an empty build number or app version before slot checks so a concurrent upload cannot change which build is submitted'
+    );
+  });
+
+  it('rejects a submit lane that accepts the Fastlane latest selector', () => {
+    const acceptsLatest = VALID_FASTFILE.replace(" || build_number == 'latest'", '');
+    expect(validateFastfileSubmitVersionGuard(acceptsLatest, VALID_SLOT)).toContain(
       'Fastfile: submit lane must reject an empty build number or app version before slot checks so a concurrent upload cannot change which build is submitted'
     );
   });

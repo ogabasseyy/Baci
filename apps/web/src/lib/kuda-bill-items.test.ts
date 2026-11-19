@@ -291,4 +291,53 @@ describe('mapKudaBillItems', () => {
       expect(biller?.billItems).toBeUndefined();
     });
   });
+
+  describe('robustness: grouped figures and incidental "N" text', () => {
+    beforeEach(() => {
+      mockLoggerWarn.mockClear();
+    });
+
+    it('reads a comma-grouped kobo amount', () => {
+      const [item] =
+        mapKudaBillItems([
+          {
+            itemCode: 'st',
+            itemName: 'StarTimes DTT SUPER MONTHLY',
+            amount: '950,000',
+            isFixedPrice: true,
+          },
+        ]) ?? [];
+
+      expect(item?.amount).toBe(9500);
+    });
+
+    it.each([
+      'MTN 1GB Monthly Plan',
+      'MTN100 Bonus Plan',
+      'Plan NG500 bundle',
+    ])('does not read "%s" as a naira price', (name) => {
+      const items = mapKudaBillItems([
+        { itemCode: 'x', itemName: name, amount: 100, isFixedPrice: false },
+        { itemCode: 'y', itemName: name, amount: 100000, isFixedPrice: true },
+      ]);
+
+      expect(items?.map((item) => item.itemCode)).toEqual(['x', 'y']);
+      expect(mockLoggerWarn).not.toHaveBeenCalled();
+    });
+
+    it('treats a bare "N" followed by digits as a naira price on purpose', () => {
+      // "Plan N100" sent as 100 matches its own stated price: the list is in
+      // doubt, so its fixed prices are dropped (fail closed, never undercharged).
+      const items = mapKudaBillItems([
+        {
+          itemCode: 'p',
+          itemName: 'Plan N100',
+          amount: 100,
+          isFixedPrice: true,
+        },
+      ]);
+
+      expect(items).toBeUndefined();
+    });
+  });
 });

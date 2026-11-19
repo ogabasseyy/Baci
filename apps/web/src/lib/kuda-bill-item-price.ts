@@ -251,7 +251,9 @@ export async function assertKudaBillItemPriceCurrent({
   }
   // Under a named biller one of its listings must match; with no biller
   // named, every listing must agree, so the cheapest of two billers' prices
-  // can never pass for the other.
+  // can never pass for the other. Current web and mobile checkouts always
+  // send the biller name shown in the billers list, so the strict branch
+  // only meets older clients, which get "refresh" rather than a wrong price.
   const isCurrent = billerName
     ? plausible.some((item) => priceMatches(item, amount))
     : plausible.every((item) => priceMatches(item, amount));

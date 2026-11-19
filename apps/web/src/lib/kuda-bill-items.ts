@@ -48,7 +48,8 @@ function toNumber(value: number | string | undefined, fallback = 0) {
   }
 
   if (typeof value === 'string') {
-    const parsed = Number(value);
+    // Tolerate grouped figures such as "950,000" or "950 000".
+    const parsed = Number(value.replace(/[,\s]/g, ''));
     return Number.isFinite(parsed) ? parsed : fallback;
   }
 
@@ -62,8 +63,10 @@ function toNumber(value: number | string | undefined, fallback = 0) {
  * Kuda to buy. Without this, customers saw and paid 100x the price.
  * Every list shares this unit; Kuda's airtime items are all open-amount
  * (amount 0) in production on 2026-11-17, so the conversion leaves them as
- * they were. No production item had a non-zero ItemFee that day (fees are
- * display-only), so the fee conversion follows the documented amount unit.
+ * they were. ItemFee is converted with the same unit as Amount. The fee is
+ * never charged or sent to Kuda (purchases send only Amount), so a wrong fee
+ * unit could only mis-display it; the first non-zero fee seen in production
+ * should still be checked against Kuda's own figure.
  */
 function koboToNaira(value: number | string | undefined) {
   return Math.round(toNumber(value)) / 100;

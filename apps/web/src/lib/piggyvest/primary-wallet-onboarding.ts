@@ -5,8 +5,6 @@ import {
   piggyvestPrimaryWalletOnboardingConfigurationSchema,
   piggyvestPrimaryWalletOnboardingSchema,
 } from '@/schemas/piggyvest-primary-wallet-onboarding';
-import { settlePrimaryWalletCreateIfNotSent } from './primary-wallet-create-not-sent';
-import { classifyPrimaryWalletCreationDecline } from './primary-wallet-creation-decline';
 import {
   lookupPrimaryWalletCustomer,
   type PrimaryWalletCustomerLookup,
@@ -24,6 +22,7 @@ import {
   keepCreatedWalletForReview,
 } from './primary-wallet-onboarding-adoption';
 import { claimPrimaryWalletOnboarding } from './primary-wallet-onboarding-claim';
+import { settlePrimaryWalletCreateFailure } from './primary-wallet-onboarding-failure';
 import { primaryWalletOnboardingFingerprints } from './primary-wallet-onboarding-fingerprint';
 import { emitPiggyvestWebhookAlert } from './webhook-alerts';
 
@@ -253,52 +252,14 @@ export async function onboardPiggyvestPrimaryWallet(
       ? { status: 'pending' }
       : { status: 'unavailable', code: 'STORAGE_UNAVAILABLE' };
   } catch (error) {
-    // Both a reclaimed retry and an identity-refreshed attempt follow an
-    // earlier ambiguous dispatch whose create may still land, so neither may
-    // release the intent and lose custody/identity-fence protection.
-    const hasPriorDispatchCustody =
-      claim.reclaimed === true || claim.identityRefreshed === true;
-    // Credentials rejected or relay refused: fail fast, never "pending".
-    const notSent = await settlePrimaryWalletCreateIfNotSent({
+    return settlePrimaryWalletCreateFailure({
       error,
       createReturned,
-      reclaimed: hasPriorDispatchCustody,
+      reclaimed: claim.reclaimed === true,
+      identityRefreshed: claim.identityRefreshed === true,
+      lookup,
       storage: input.storage,
       claimedScope,
     });
-    if (notSent) return notSent;
-    // A decline that names the interest settings is our configured payout
-    // wallet being refused, never the customer's BVN. On a fresh claim it
-    // proves nothing was created, so the intent is released for a corrected
-    // request. On a reclaimed or identity-refreshed claim it proves only that
-    // THIS attempt created nothing: the earlier dispatch may have created the
-    // customer, so the intent stays reclaimable and a later retry can adopt
-    // it. A BVN decline is released so a corrected BVN can be claimed, unless
-    // the lookup found our customer: releasing would make the next attempt a
-    // fresh claim that refuses it. Every other throw stays ambiguous.
-    const decline = classifyPrimaryWalletCreationDecline(error);
-    const keepReclaimable =
-      decline === 'interest_routing'
-        ? hasPriorDispatchCustody
-        : lookup?.kind === 'found' || claim.identityRefreshed === true;
-    if (decline !== null && !keepReclaimable) {
-      try {
-        if (!(await input.storage.releaseIntent(claimedScope)))
-          return { status: 'unavailable', code: 'STORAGE_UNAVAILABLE' };
-      } catch {
-        return { status: 'unavailable', code: 'STORAGE_UNAVAILABLE' };
-      }
-      return decline === 'interest_routing'
-        ? { status: 'unavailable', code: 'NOT_CONFIGURED' }
-        : { status: 'rejected', code: 'INVALID_BVN' };
-    }
-    try {
-      await input.storage.recordUncertain(claimedScope);
-    } catch {
-      return { status: 'unavailable', code: 'STORAGE_UNAVAILABLE' };
-    }
-    return decline === 'interest_routing'
-      ? { status: 'unavailable', code: 'NOT_CONFIGURED' }
-      : { status: 'pending' };
   }
 }

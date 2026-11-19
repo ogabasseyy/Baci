@@ -29,6 +29,13 @@ export const eventPipelineChatwootCartCredentialPaths = [
     environment,
   ],
   [
+    'apps/web/src/app/api/storefront/chatwoot/context/delivery-options/route.ts',
+    cartContext,
+    cartClient,
+    signingMaterial,
+    environment,
+  ],
+  [
     // Quantity edits call the scoped cart client directly after the same
     // proof-bound Chatwoot session checks as the routes above.
     'apps/web/src/app/api/storefront/chatwoot/cart/quantity/route.ts',

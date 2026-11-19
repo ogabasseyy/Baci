@@ -34,7 +34,8 @@ export function redactMerchantFeatureSettingsResponse<T>(settings: T): T {
   for (const key of INTEGRATION_SECRET_FIELDS) {
     if (!(key in safe)) continue;
     safe[`${key}_configured`] =
-      typeof safe[key] === 'string' && safe[key].trim().length > 0;
+      safe[`${key}_configured`] === true ||
+      (typeof safe[key] === 'string' && safe[key].trim().length > 0);
     safe[key] = null;
   }
   if (!isRecord(settings.custom_settings)) return safe as T;

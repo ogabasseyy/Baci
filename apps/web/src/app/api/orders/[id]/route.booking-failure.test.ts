@@ -301,7 +301,6 @@ describe('PATCH shipped: booking failure responses and lock state', () => {
       customer_id: null,
       selected_quote_id: 'quote-1',
       shipping_provider: 'GIGL',
-      shipping_funding_source: 'merchant_wallet',
       tracking_number: null,
       shipment_id: null,
     };

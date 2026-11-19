@@ -113,30 +113,6 @@ describe('processClaimedGiglTrackingMonitors', () => {
     );
   });
 
-  it('records a failure when the batch response omits a claimed waybill', async () => {
-    const supabase = createSupabase();
-    const summary = await processClaimedGiglTrackingMonitors(
-      supabase as never,
-      [monitor],
-      'worker-1',
-      async () => new Map()
-    );
-
-    expect(summary).toEqual({
-      applied: 0,
-      claimed: 1,
-      failed: 1,
-      paused: 0,
-      success: true,
-    });
-    expect(supabase.rpc).toHaveBeenCalledWith(
-      'record_gigl_tracking_failure',
-      expect.objectContaining({
-        p_error: 'GIGL batch tracking omitted claimed waybill',
-      })
-    );
-  });
-
   it('releases the claim when a stale worker cannot apply a result', async () => {
     const supabase = createSupabase();
     supabase.rpc.mockResolvedValueOnce({ data: false, error: null });

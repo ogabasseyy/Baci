@@ -1,4 +1,10 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -305,5 +311,30 @@ describe('OnboardingForm', () => {
         screen.queryByText('Business name must be at least 2 characters.')
       ).not.toBeInTheDocument();
     });
+  });
+
+  it('does not run step validation when Enter confirms IME composition', async () => {
+    render(<OnboardingForm />);
+
+    const nameInput = screen.getByRole('textbox', { name: /business name/i });
+
+    expect(
+      fireEvent.keyDown(nameInput, { key: 'Enter', isComposing: true })
+    ).toBe(false);
+    expect(fireEvent.keyDown(nameInput, { key: 'Enter', keyCode: 229 })).toBe(
+      false
+    );
+    // Give a (wrongly) triggered async validation a chance to surface.
+    await act(async () => {});
+    expect(
+      screen.queryByText('Please select a business type.')
+    ).not.toBeInTheDocument();
+
+    // A plain Enter advances via handleNext, which validates step 1.
+    fireEvent.keyDown(nameInput, { key: 'Enter' });
+
+    expect(
+      await screen.findByText('Please select a business type.')
+    ).toBeInTheDocument();
   });
 });

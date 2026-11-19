@@ -179,3 +179,7 @@
 **Learning:** In React Native, `accessibilityRole="alert"` corresponds to the assertive live region behavior. The value `"status"` is not a valid `accessibilityRole`.
 **Action:** When adding error feedback banners, use `accessibilityRole="alert"` and `accessibilityLiveRegion="assertive"`. Do not use `"status"`.
 **Source:** Codebase standards for dynamic error feedback
+## 2025-02-18 — aria-busy on Auth Submission Buttons
+**Learning:** Submit buttons managing async operations like sign-in often miss the aria-busy attribute when disabling themselves during loading, depriving screen readers of clear state feedback.
+**Action:** When disabling buttons for loading state, always bind aria-busy to the same loading boolean.
+**Source:** WCAG 4.1.2 Name, Role, Value

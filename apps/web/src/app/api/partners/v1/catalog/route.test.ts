@@ -1,22 +1,37 @@
+import { createHash } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GET } from './route';
 
-const { after, captureServerEvent, loadCrossRemCatalog, warn } = vi.hoisted(
-  () => ({
-    after: vi.fn<(callback: () => Promise<unknown>) => void>(),
-    captureServerEvent: vi.fn(),
-    loadCrossRemCatalog: vi.fn(),
-    warn: vi.fn(),
-  })
-);
+const {
+  after,
+  captureServerEvent,
+  loadCrossRemCatalog,
+  readVersion,
+  redis,
+  warn,
+} = vi.hoisted(() => ({
+  after: vi.fn<(callback: () => Promise<unknown>) => void>(),
+  captureServerEvent: vi.fn(),
+  loadCrossRemCatalog: vi.fn(),
+  readVersion: vi.fn(),
+  redis: { get: vi.fn(), set: vi.fn() },
+  warn: vi.fn(),
+}));
 
 vi.mock('next/server', () => ({ after }));
 vi.mock('@/lib/logger', () => ({ logger: { warn } }));
 vi.mock('@/lib/posthog/server', () => ({ captureServerEvent }));
 vi.mock('./catalog-service', () => ({ loadCrossRemCatalog }));
+vi.mock('./catalog-version', () => ({
+  readCrossRemCatalogVersion: readVersion,
+}));
+vi.mock('@/lib/redis', () => ({ getRedis: () => redis }));
 
 const token = 'synthetic-crossrem-access-token-qa-test-0001';
 const snapshot = { listings: [{ id: 'google-listed-variant' }] };
+const version = '10000000-0000-4000-8000-000000000001';
+const nextVersion = '10000000-0000-4000-8000-000000000002';
+const etag = `"${createHash('sha256').update(JSON.stringify(snapshot)).digest('hex')}"`;
 
 function request(authorization?: string, ifNoneMatch?: string) {
   const headers = new Headers();
@@ -34,6 +49,9 @@ describe('CrossRem catalog', () => {
     warn.mockClear();
     captureServerEvent.mockReset().mockResolvedValue(true);
     loadCrossRemCatalog.mockReset().mockResolvedValue(snapshot);
+    readVersion.mockReset().mockResolvedValue(version);
+    redis.get.mockReset().mockResolvedValue(null);
+    redis.set.mockReset().mockResolvedValue('OK');
   });
 
   it('warns internally when a partner request reaches an unconfigured token', async () => {
@@ -126,5 +144,83 @@ describe('CrossRem catalog', () => {
       'crossrem_catalog_snapshot_unavailable',
       { deployment_environment: 'preview' }
     );
+  });
+
+  it('answers an unchanged poll using only the version and published validator', async () => {
+    redis.get.mockResolvedValueOnce({ version, etag });
+    const response = await GET(request(`Bearer ${token}`, `W/${etag}`));
+
+    expect(response.status).toBe(304);
+    expect(await response.text()).toBe('');
+    expect(response.headers.get('etag')).toBe(etag);
+    expect(readVersion).toHaveBeenCalledTimes(1);
+    expect(redis.get).toHaveBeenCalledTimes(1);
+    expect(loadCrossRemCatalog).not.toHaveBeenCalled();
+  });
+
+  it('rebuilds a changed version and returns 503 for an incomplete snapshot even with a wildcard', async () => {
+    readVersion.mockResolvedValue(nextVersion);
+    redis.get.mockResolvedValueOnce({ version, etag });
+    loadCrossRemCatalog.mockRejectedValue(new Error('Incomplete catalog'));
+    const response = await GET(request(`Bearer ${token}`, '*'));
+
+    expect(response.status).toBe(503);
+    expect(response.headers.has('etag')).toBe(false);
+    expect(loadCrossRemCatalog).toHaveBeenCalledOnce();
+    expect(redis.set).not.toHaveBeenCalled();
+  });
+
+  it('discards a build when the catalog changes during source reads', async () => {
+    readVersion
+      .mockResolvedValueOnce(version)
+      .mockResolvedValueOnce(nextVersion);
+    const response = await GET(request(`Bearer ${token}`, etag));
+
+    expect(response.status).toBe(503);
+    expect(redis.set).not.toHaveBeenCalled();
+  });
+
+  it('round-trips a stored snapshot and publishes the new body after a version change', async () => {
+    const cache = new Map();
+    redis.get.mockImplementation(async (key) => cache.get(key));
+    redis.set.mockImplementation(async (key, value) => cache.set(key, value));
+
+    const initial = await GET(request(`Bearer ${token}`));
+    expect(initial.status).toBe(200);
+    expect(await initial.json()).toEqual(snapshot);
+
+    const cached = await GET(request(`Bearer ${token}`));
+    expect(cached.status).toBe(200);
+    expect(await cached.json()).toEqual(snapshot);
+    expect(loadCrossRemCatalog).toHaveBeenCalledTimes(1);
+
+    const changed = { listings: [{ id: 'new-listing' }] };
+    readVersion.mockResolvedValue(nextVersion);
+    loadCrossRemCatalog.mockResolvedValueOnce(changed);
+    const fresh = await GET(request(`Bearer ${token}`, etag));
+    expect(fresh.status).toBe(200);
+    expect(await fresh.json()).toEqual(changed);
+    expect(fresh.headers.get('etag')).not.toBe(etag);
+    expect(cache.size).toBe(2);
+  });
+
+  it('falls back to validation when Redis or its stored body is unavailable', async () => {
+    redis.get
+      .mockResolvedValueOnce({ version, etag })
+      .mockResolvedValueOnce('invalid');
+    expect((await GET(request(`Bearer ${token}`))).status).toBe(200);
+    expect(loadCrossRemCatalog).toHaveBeenCalledTimes(1);
+
+    redis.get.mockRejectedValueOnce(new Error('cache unavailable'));
+    expect((await GET(request(`Bearer ${token}`, etag))).status).toBe(304);
+    expect(loadCrossRemCatalog).toHaveBeenCalledTimes(2);
+  });
+
+  it('returns 503 when it cannot confirm the current version', async () => {
+    readVersion.mockRejectedValueOnce(new Error('version unavailable'));
+    const response = await GET(request(`Bearer ${token}`, etag));
+    expect(response.status).toBe(503);
+    expect(redis.get).not.toHaveBeenCalled();
+    expect(loadCrossRemCatalog).not.toHaveBeenCalled();
   });
 });

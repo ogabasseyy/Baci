@@ -58,39 +58,7 @@ export const ollamaAgenticChatTools: OllamaChatTool[] = [
       description: TOOL_DESCRIPTIONS.createVirtualAccount,
       parameters: {
         type: 'object',
-        required: ['amount', 'customerEmail', 'customerName', 'items'],
-        properties: {
-          amount: {
-            ...NUMBER_SCHEMA,
-            description: 'Total amount in the storefront currency',
-          },
-          customerEmail: {
-            ...STRING_SCHEMA,
-            description: 'Customer email address',
-          },
-          customerName: {
-            ...STRING_SCHEMA,
-            description: 'Customer full name',
-          },
-          customerPhone: {
-            ...STRING_SCHEMA,
-            description: 'Optional customer phone number',
-          },
-          items: {
-            type: 'array',
-            description: 'Items being purchased',
-            items: {
-              type: 'object',
-              required: ['productId', 'name', 'price', 'quantity'],
-              properties: {
-                productId: STRING_SCHEMA,
-                name: STRING_SCHEMA,
-                price: NUMBER_SCHEMA,
-                quantity: NUMBER_SCHEMA,
-              },
-            },
-          },
-        },
+        properties: {},
       },
     },
   },

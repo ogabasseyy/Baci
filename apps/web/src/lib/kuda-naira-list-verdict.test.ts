@@ -10,6 +10,7 @@ describe('looksLikeNairaPricedList', () => {
       belowFloor: 7,
       fixedPrices: 9,
       isNaira: true,
+      tooFewToJudge: false,
     });
   });
 
@@ -34,6 +35,7 @@ describe('looksLikeNairaPricedList', () => {
       belowFloor: 1,
       fixedPrices: 30,
       isNaira: false,
+      tooFewToJudge: false,
     });
   });
 
@@ -51,15 +53,33 @@ describe('looksLikeNairaPricedList', () => {
       belowFloor: 0,
       fixedPrices: 5,
       isNaira: false,
+      tooFewToJudge: false,
     });
   });
 
-  it('does not judge an answer with too few fixed prices', () => {
-    expect(looksLikeNairaPricedList([100, 200, 500, 1000])).toEqual({
-      belowFloor: 4,
-      fixedPrices: 4,
-      isNaira: false,
+  describe('bugfix: a small naira-priced answer could never be told from kobo', () => {
+    it.each([
+      [1, [500000]],
+      [2, [500000, 950000]],
+      [4, [100, 200, 500, 1000]],
+    ])('marks an answer with %i fixed price(s) as too few to judge', (count, prices) => {
+      // One package sent as 5000 (naira) reads as ₦50 and passes every other
+      // check, so a small answer cannot establish its unit.
+      expect(looksLikeNairaPricedList(prices)).toMatchObject({
+        fixedPrices: count,
+        tooFewToJudge: true,
+      });
     });
-    expect(looksLikeNairaPricedList([]).isNaira).toBe(false);
+
+    it('does not mark an answer with no fixed prices, or with five or more', () => {
+      expect(looksLikeNairaPricedList([])).toMatchObject({
+        fixedPrices: 0,
+        isNaira: false,
+        tooFewToJudge: false,
+      });
+      expect(
+        looksLikeNairaPricedList([500000, 500000, 500000, 500000, 500000])
+      ).toMatchObject({ isNaira: false, tooFewToJudge: false });
+    });
   });
 });

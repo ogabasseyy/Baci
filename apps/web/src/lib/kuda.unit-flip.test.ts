@@ -98,6 +98,51 @@ describe('getBillersByType unit check', () => {
     });
   });
 
+  describe('bugfix: a small naira-priced answer passed as kobo', () => {
+    it('refuses an answer with only a few fixed prices, whose unit cannot be told', async () => {
+      const { getBillersByType } = await import('./kuda');
+      // One package whose real price is ₦5000, sent as 5000: read as kobo it
+      // is ₦50, above the purchase floor, so only its size gives it away.
+      mockBillersResponse([
+        { name: 'STAKE NG', billItems: unnamedPlans('STK', [5000, 10000]) },
+      ]);
+
+      await expect(getBillersByType('CableTv')).rejects.toThrow(
+        'Bill prices could not be confirmed as kobo'
+      );
+    });
+
+    it('still serves open-amount items, however few, including electricity meter items', async () => {
+      const { getBillersByType } = await import('./kuda');
+      mockBillersResponse([
+        {
+          name: 'EKEDC NG',
+          billItems: [
+            {
+              kudaIdentifier: 'KUD-ELE-EKED-002',
+              name: 'EKEDC PREPAID',
+              amount: 0,
+              isFixedPrice: false,
+            },
+            {
+              kudaIdentifier: 'KUD-ELE-EKED-001',
+              name: 'EKEDC POSTPAID',
+              amount: 0,
+              isFixedPrice: false,
+            },
+          ],
+        },
+      ]);
+
+      const [biller] = await getBillersByType('Electricity');
+
+      expect(biller.billItems?.map((item) => item.itemCode)).toEqual([
+        'KUD-ELE-EKED-002',
+        'KUD-ELE-EKED-001',
+      ]);
+    });
+  });
+
   it('returns kobo-priced plans converted to naira', async () => {
     const { getBillersByType } = await import('./kuda');
     mockBillersResponse([

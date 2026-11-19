@@ -41,6 +41,34 @@ describe('assertKudaBillListInKobo', () => {
     expect(mockLoggerError).not.toHaveBeenCalled();
   });
 
+  describe('bugfix: a small naira-priced answer passed as kobo', () => {
+    it.each([
+      [[500000]],
+      [[500000, 950000]],
+      [[100, 200, 500, 1000]],
+    ])('refuses an answer with only %j fixed prices and says why', (prices) => {
+      expect(() => assertKudaBillListInKobo(prices, 'Betting')).toThrow(
+        'Bill prices could not be confirmed as kobo'
+      );
+      expect(mockLoggerError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          billTypeName: 'Betting',
+          fixedPrices: prices.length,
+          message: expect.stringContaining('too few fixed prices'),
+        })
+      );
+    });
+  });
+
+  it('accepts an answer with five kobo-priced fixed prices', () => {
+    expect(() =>
+      assertKudaBillListInKobo(
+        [500000, 600000, 700000, 800000, 900000],
+        'CableTv'
+      )
+    ).not.toThrow();
+  });
+
   it('accepts an empty answer', () => {
     expect(() => assertKudaBillListInKobo([], 'CableTv')).not.toThrow();
   });

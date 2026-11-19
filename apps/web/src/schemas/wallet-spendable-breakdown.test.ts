@@ -30,4 +30,8 @@ describe('walletSpendableBreakdownRowsSchema', () => {
       schema.safeParse([{ ...row, spendable_balance: '9'.repeat(400) }]).success
     ).toBe(false);
   });
+
+  it('fails closed when more than one wallet row is returned', () => {
+    expect(schema.safeParse([row, row]).success).toBe(false);
+  });
 });

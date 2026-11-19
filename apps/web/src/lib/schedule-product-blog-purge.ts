@@ -138,7 +138,7 @@ export async function scheduleProductBlogPurge({
           }
         : {}),
     });
-    if (needsBroadPdpExpiry && !blogExpired) {
+    if (!blogExpired) {
       return;
     }
 

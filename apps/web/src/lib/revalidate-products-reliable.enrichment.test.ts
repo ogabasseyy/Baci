@@ -196,4 +196,32 @@ describe('revalidateProductsReliable enrichment path', () => {
     );
     expect(mockExpireProductBlogCache).toHaveBeenCalledWith('merchant-1');
   });
+
+  it('falls back to HTTP and withholds in-process edge purge when expireProductBlogCache returns false', async () => {
+    const supabase = { from: vi.fn() };
+    const products = [
+      { id: 'product-id', slug: 'iphone-15', previousSlug: null },
+    ];
+    mockEnrichProductPurgeEntries.mockResolvedValue({
+      entries: [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
+      resolvedSlugs: ['iphone-15', 'product-id'],
+      authoritativeSlugsById: new Map([['product-id', 'iphone-15']]),
+      blogPostSlugs: [],
+      blogPostSlugsIncomplete: false,
+    });
+    mockExpireProductBlogCache.mockReturnValueOnce(false);
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: true } as Response);
+
+    await revalidateProductsReliable('merchant-1', {
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      merchantSlug: 'ogabassey',
+      products,
+      nextProductSlugs: ['iphone-15'],
+      supabase: supabase as never,
+    });
+
+    expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
+    expect(mockScheduleStorefrontHostnamePurge).not.toHaveBeenCalled();
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
 });

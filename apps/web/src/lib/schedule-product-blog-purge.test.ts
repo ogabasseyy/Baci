@@ -268,4 +268,21 @@ describe('scheduleProductBlogPurge', () => {
     expect(mockSchedule).not.toHaveBeenCalled();
     expect(mockHostnamePurge).toHaveBeenCalledWith('store');
   });
+
+  it('aborts article purges when blog-cache expiry fails even with skipProductPurge', async () => {
+    mockExpire.mockResolvedValueOnce(false);
+    mockLookup.mockResolvedValue({ slugs: ['pixel-guide'], incomplete: false });
+
+    await scheduleProductBlogPurge({
+      supabase,
+      merchantId: 'merchant-1',
+      merchantSlug: 'store',
+      productIds: ['product-1'],
+      entries,
+      skipProductPurge: true,
+    });
+
+    expect(mockSchedule).not.toHaveBeenCalled();
+    expect(mockHostnamePurge).not.toHaveBeenCalled();
+  });
 });

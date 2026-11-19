@@ -50,7 +50,9 @@ export async function revalidateProductsInProcess({
       ) {
         throw new Error('Merchant-wide product hard expiry failed');
       }
-      expireProductBlogCache(merchantId);
+      if (expireProductBlogCache(merchantId) === false) {
+        throw new Error('Product blog cache hard expiry failed');
+      }
       scheduleStorefrontHostnamePurge(merchantSlug);
       return;
     }
@@ -104,7 +106,9 @@ export async function revalidateProductsInProcess({
     revalidateProductSlugs(merchantId, resolvedSlugs, {
       expireImmediately: true,
     });
-    expireProductBlogCache(merchantId);
+    if (expireProductBlogCache(merchantId) === false) {
+      throw new Error('Product blog cache hard expiry failed');
+    }
     scheduleStorefrontHostnamePurge(merchantSlug);
     return;
   }
@@ -145,7 +149,9 @@ export async function revalidateProductsInProcess({
       throw new Error('Merchant-wide product hard expiry failed');
     }
 
-    expireProductBlogCache(merchantId);
+    if (expireProductBlogCache(merchantId) === false) {
+      throw new Error('Product blog cache hard expiry failed');
+    }
     if (blogPostSlugs.length > 0) {
       scheduleStorefrontProductPurge(merchantSlug, purgeEntries, {
         blogPostSlugs,

@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import {
   chmodSync,
+  existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   writeFileSync,
@@ -75,15 +77,24 @@ function commit(cwd, name) {
   return git(cwd, 'rev-parse', 'HEAD');
 }
 
-function setup() {
+// `partial: true` clones the work repo with a blob filter, so origin is a
+// promisor remote and git may demand-fetch missing objects from it.
+function setup({ partial = false } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'behind-base-'));
   const remote = join(root, 'remote.git');
   git(root, 'init', '-q', '--bare', '-b', 'main', remote);
+  git(remote, 'config', 'uploadpack.allowFilter', 'true');
+  git(remote, 'config', 'uploadpack.allowAnySHA1InWant', 'true');
+  const seed = join(root, 'seed');
+  git(root, 'clone', '-q', remote, seed);
+  git(seed, 'checkout', '-q', '-b', 'main');
+  commit(seed, 'base');
+  git(seed, 'push', '-q', 'origin', 'main');
   const work = join(root, 'work');
-  git(root, 'clone', '-q', remote, work);
-  git(work, 'checkout', '-q', '-b', 'main');
-  commit(work, 'base');
-  git(work, 'push', '-q', 'origin', 'main');
+  const cloneArgs = partial
+    ? ['--filter=blob:none', `file://${remote}`]
+    : [remote];
+  git(root, 'clone', '-q', ...cloneArgs, work);
   git(work, 'remote', 'set-head', 'origin', 'main');
   git(work, 'checkout', '-q', '-b', 'feature');
   const featureSha = commit(work, 'feature');
@@ -115,25 +126,156 @@ function fakeSsh(root, name) {
   return { script, log };
 }
 
-function runHookWith(work, featureSha, env) {
+function runHookWith(
+  work,
+  featureSha,
+  env,
+  input = pushInput({ branch: 'feature', sha: featureSha })
+) {
   return spawnSync('sh', ['-c', behindBaseScript()], {
     cwd: work,
     encoding: 'utf8',
     env: { ...gitEnv, ...env },
-    input: `refs/heads/feature ${featureSha} refs/heads/feature ${'0'.repeat(40)}\n`,
+    input,
     timeout: 30_000,
   });
+}
+
+const ZERO_SHA = '0'.repeat(40);
+
+/** One pre-push stdin line per pushed `{ branch, sha }` (new remote branches). */
+function pushInput(...pushes) {
+  return pushes
+    .map(
+      ({ branch, sha }) =>
+        `refs/heads/${branch} ${sha} refs/heads/${branch} ${ZERO_SHA}\n`
+    )
+    .join('');
+}
+
+// Runs the hook under the TEST's own hard deadline: on a regression (an
+// unbounded wait) the whole process group is killed, so neither the hook nor
+// a git child keeps this suite (and the CI job) alive. Resolves once the
+// hook's stdio has closed, so a stray child still holding the hook's pipes
+// shows up as a late `elapsedMs`, not a silent pass.
+function runHookBounded(work, input, { env = {}, killAfterMs = 90_000 } = {}) {
+  return new Promise((resolve) => {
+    const startedAt = Date.now();
+    const child = spawn('sh', ['-c', behindBaseScript()], {
+      cwd: work,
+      env: { ...gitEnv, ...env },
+      detached: true,
+    });
+    let stdout = '';
+    let stderr = '';
+    const finish = (result) =>
+      resolve({ stdout, stderr, elapsedMs: Date.now() - startedAt, ...result });
+    const timer = setTimeout(() => {
+      try {
+        process.kill(-child.pid, 'SIGKILL');
+      } catch {
+        child.kill('SIGKILL');
+      }
+      finish({ status: null, timedOut: true });
+    }, killAfterMs);
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk;
+    });
+    child.on('close', (status) => {
+      clearTimeout(timer);
+      finish({ status, timedOut: false });
+    });
+    child.stdin.end(input);
+  });
+}
+
+const realGit = execFileSync('sh', ['-c', 'command -v git'], {
+  encoding: 'utf8',
+}).trim();
+
+// A `git` ahead of the real one on PATH. It records every `ls-remote` call
+// (call number in $n) and runs `onLsRemote` before delegating, so a test can
+// count remote reads or make one of them slow or stuck.
+function gitShim(root, onLsRemote = ':') {
+  const dir = join(root, 'shim');
+  mkdirSync(dir);
+  const log = join(root, 'ls-remote.log');
+  writeFileSync(
+    join(dir, 'git'),
+    `#!/bin/sh
+for arg in "$@"; do
+  if [ "$arg" = ls-remote ]; then
+    echo "$*" >> "${log}"
+    n=$(wc -l < "${log}" | tr -d ' ')
+    ${onLsRemote}
+    break
+  fi
+done
+exec "${realGit}" "$@"
+`
+  );
+  chmodSync(join(dir, 'git'), 0o755);
+  const lsRemoteCalls = () =>
+    existsSync(log) ? readFileSync(log, 'utf8').split('\n').filter(Boolean).length : 0;
+  return { dir, lsRemoteCalls };
+}
+
+// An `ssh` that records its pid and never answers, ignoring every timeout
+// option it is given: a stand-in for a stall during DNS/TCP/TLS or SSH setup
+// that http.lowSpeed*, ConnectTimeout and ServerAlive* cannot end.
+function hangingSsh(root) {
+  const pidLog = join(root, 'ssh.pids');
+  writeFileSync(join(root, 'ssh'), `#!/bin/sh\necho $$ >> "${pidLog}"\nexec sleep 600\n`);
+  chmodSync(join(root, 'ssh'), 0o755);
+  const pids = () =>
+    existsSync(pidLog)
+      ? readFileSync(pidLog, 'utf8').split('\n').filter(Boolean).map(Number)
+      : [];
+  return { pids };
+}
+
+const isAlive = (pid) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+async function allGone(pids, timeoutMs = 5_000) {
+  const until = Date.now() + timeoutMs;
+  while (pids.some(isAlive) && Date.now() < until) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  return !pids.some(isAlive);
+}
+
+// GIT_NO_LAZY_FETCH (the switch that keeps local lookups from demand-fetching
+// from a promisor remote) exists from Git 2.44.
+function gitSupportsNoLazyFetch() {
+  const match = /(\d+)\.(\d+)/.exec(git('.', '--version'));
+  return Boolean(match) && (Number(match[1]) > 2 || (Number(match[1]) === 2 && Number(match[2]) >= 44));
 }
 
 /** Fixtures for running the live behind-base hook against throwaway repos. */
 export const behindBaseFixture = {
   advanceRemoteMain,
+  allGone,
   behindBaseScript,
   commit,
   fakeSsh,
   git,
   gitEnv,
+  gitShim,
+  gitSupportsNoLazyFetch,
+  hangingSsh,
+  pushInput,
   runHook,
+  runHookBounded,
   runHookWith,
   setup,
 };

@@ -82,7 +82,7 @@ jobs:
       - name: Test pilot change-detection contract
         run: node --test .github/scripts/pilot-change-detection-contract.test.mjs
       - name: Test pre-push behind-base guard
-        run: node --test .github/scripts/lefthook-behind-base.test.mjs
+        run: node --test .github/scripts/lefthook-behind-base.test.mjs .github/scripts/lefthook-behind-base-bounds.test.mjs
       # Unfiltered on purpose; see docs/runbooks/storefront-release-gate.md.
       - name: Test storefront release gate
         run: node --test .github/scripts/storefront-release-gate.test.mjs .github/scripts/storefront-release-gate-mode.test.mjs .github/scripts/storefront-release-gate-dispatch.test.mjs .github/scripts/storefront-release-gate-references.test.mjs .github/scripts/storefront-release-gate-scripts.test.mjs .github/scripts/storefront-release-gate-steps.test.mjs .github/scripts/storefront-release-gate-git.test.mjs .github/scripts/storefront-release-gate-server-off.test.mjs .github/scripts/storefront-release-gate-workflows.test.mjs

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { join } from 'node:path';
@@ -12,7 +12,9 @@ const {
   fakeSsh,
   git,
   gitEnv,
+  pushInput,
   runHook,
+  runHookBounded,
   runHookWith,
   setup,
 } = behindBaseFixture;
@@ -36,7 +38,10 @@ test('blocks a branch behind base commits that were never fetched locally', () =
     const result = runHook(work, featureSha);
     assert.equal(result.status, 1);
     assert.match(result.stdout, /behind origin\/main/);
-    assert.match(result.stdout, /git fetch origin main/);
+    assert.match(
+      result.stdout,
+      /git fetch origin \+refs\/heads\/main:refs\/remotes\/origin\/main/
+    );
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -87,46 +92,19 @@ test(
   try {
     const { port } = server.address();
     git(work, 'remote', 'set-url', 'origin', `http://127.0.0.1:${port}/repo.git`);
-    const startedAt = Date.now();
-    // Own the deadline: on a regression, kill the hook's whole process group
-    // so neither it nor a git child keeps this suite (and the CI job) alive.
-    const result = await new Promise((resolve) => {
-      const child = spawn('sh', ['-c', behindBaseScript()], {
-        cwd: work,
-        env: gitEnv,
-        detached: true,
-      });
-      let stdout = '';
-      const deadline = AbortSignal.timeout(STALLED_REMOTE_DEADLINE_MS);
-      const onDeadline = () => {
-        try {
-          process.kill(-child.pid, 'SIGKILL');
-        } catch {
-          child.kill('SIGKILL');
-        }
-        resolve({ status: null, stdout, timedOut: true });
-      };
-      deadline.addEventListener('abort', onDeadline, { once: true });
-      child.stdout.on('data', (chunk) => {
-        stdout += chunk;
-      });
-      child.on('close', (status) => {
-        deadline.removeEventListener('abort', onDeadline);
-        resolve({ status, stdout, timedOut: false });
-      });
-      child.stdin.end(
-        `refs/heads/feature ${featureSha} refs/heads/feature ${'0'.repeat(40)}\n`
-      );
-    });
-    const elapsedMs = Date.now() - startedAt;
+    const { status, stdout, timedOut, elapsedMs } = await runHookBounded(
+      work,
+      pushInput({ branch: 'feature', sha: featureSha }),
+      { killAfterMs: STALLED_REMOTE_DEADLINE_MS }
+    );
 
     assert.equal(
-      result.timedOut,
+      timedOut,
       false,
       `hook still waiting on a stalled remote after ${elapsedMs}ms`
     );
-    assert.equal(result.status, 0);
-    assert.match(result.stdout, /skipping behind-base check/);
+    assert.equal(status, 0);
+    assert.match(stdout, /skipping behind-base check/);
   } finally {
     server.closeAllConnections();
     server.close();

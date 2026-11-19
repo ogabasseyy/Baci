@@ -3,12 +3,12 @@ UPDATE public.products SET manage_stock = NULL WHERE slug = 'paged-7';
 SET LOCAL ROLE anon;
 DO $$
 BEGIN
-  IF fixture.read_brilstash_page(repeat('p', 43), 1, 3, 0)->>'status' IS DISTINCT FROM 'ok'
-  THEN RAISE EXCEPTION 'a finite quantity with default-null management was blocked'; END IF;
+  IF fixture.read_brilstash_page(repeat('p', 43), 1, 3, 0)->>'status' IS DISTINCT FROM 'unavailable'
+  THEN RAISE EXCEPTION 'the feed advertised units that checkout does not decrement when management is null'; END IF;
 END $$;
 RESET ROLE;
 -- Checkout decrements stock_quantity, so legacy stock cannot replace a missing quantity.
-UPDATE public.products SET stock_quantity = NULL WHERE slug = 'paged-7';
+UPDATE public.products SET manage_stock = true, stock_quantity = NULL WHERE slug = 'paged-7';
 SET LOCAL ROLE anon;
 DO $$
 BEGIN
@@ -40,6 +40,21 @@ BEGIN
 END $$;
 ROLLBACK TO SAVEPOINT offer_hidden_by_parent;
 RELEASE SAVEPOINT offer_hidden_by_parent;
+
+SAVEPOINT offer_on_serialized_policy;
+DO $$
+DECLARE policy text;
+BEGIN
+  FOREACH policy IN ARRAY ARRAY['serialized_strict', 'serialized_then_unlimited'] LOOP
+    UPDATE public.products SET inventory_tracking_policy = policy WHERE slug = 'paged-2';
+    SET LOCAL ROLE anon;
+    IF fixture.read_brilstash_page(repeat('p', 43), 1, 3, 0)->>'status' IS DISTINCT FROM 'unavailable'
+    THEN RAISE EXCEPTION 'an active condition offer bypassed % checkout policy', policy; END IF;
+    RESET ROLE;
+  END LOOP;
+END $$;
+ROLLBACK TO SAVEPOINT offer_on_serialized_policy;
+RELEASE SAVEPOINT offer_on_serialized_policy;
 
 SAVEPOINT stock_drop;
 UPDATE public.products SET stock_quantity = 2, stock = 2 WHERE slug = 'paged-7';

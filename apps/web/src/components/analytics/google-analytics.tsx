@@ -3,6 +3,13 @@
 import Script from 'next/script';
 import { useEffect, useState } from 'react';
 import { applyStoredConsent, initializeConsentMode } from '@/lib/consent-mode';
+import { TRACKING_URL_INLINE_SANITIZER } from '@/lib/privacy/tracking-url-inline-sanitizer';
+
+// Google tag ids gtag.js accepts: G- (GA4), GT- (Google tag), AW- (Google Ads)
+// and DC- (Floodlight), then letters, digits and hyphens only. The settings
+// field is free text, so anything else (quotes, backticks, spaces, legacy UA-)
+// is never put into the inline script.
+const GOOGLE_TAG_ID_PATTERN = /^(?:G|GT|AW|DC)-[A-Za-z0-9-]{3,40}$/;
 
 interface GoogleAnalyticsProps {
   measurementId: string;
@@ -54,8 +61,18 @@ export function GoogleAnalytics({ measurementId }: GoogleAnalyticsProps) {
     };
   }, []);
 
+  const isValidId = GOOGLE_TAG_ID_PATTERN.test(measurementId);
+  useEffect(() => {
+    // Silent for an unset id; a set but malformed id is a misconfiguration.
+    if (measurementId && !isValidId) {
+      console.warn(
+        'GoogleAnalytics: measurement id is not a Google tag id (expected G-, GT-, AW- or DC- followed by letters, digits and hyphens); analytics is disabled.'
+      );
+    }
+  }, [measurementId, isValidId]);
+
   // Don't render scripts until consent mode is initialized
-  if (!measurementId || !isInitialized) {
+  if (!isValidId || !isInitialized) {
     return null;
   }
 
@@ -70,11 +87,14 @@ export function GoogleAnalytics({ measurementId }: GoogleAnalyticsProps) {
         {`
           window.dataLayer = window.dataLayer || [];
           function gtag(){dataLayer.push(arguments);}
+          ${TRACKING_URL_INLINE_SANITIZER}
           gtag('js', new Date());
 
-          // Configure GA4 with enhanced measurement
-          gtag('config', '${measurementId}', {
-            page_location: window.location.href,
+          // Configure GA4 with enhanced measurement. The page address and
+          // referrer are sent without order tokens or shopper details.
+          gtag('config', ${JSON.stringify(measurementId)}, {
+            page_location: baciSanitizeUrl(window.location.href),
+            page_referrer: baciSanitizeUrl(document.referrer) || undefined,
             page_title: document.title,
             // Enable URL passthrough for better attribution without cookies
             url_passthrough: true,

@@ -9,14 +9,8 @@ import {
   useEffect,
   useRef,
 } from 'react';
-import {
-  ActivityIndicator,
-  RefreshControl,
-  type StyleProp,
-  View,
-  type ViewStyle,
-} from 'react-native';
-import Animated, { type ScrollHandlerProcessed } from 'react-native-reanimated';
+import { ActivityIndicator, RefreshControl, View } from 'react-native';
+import Animated from 'react-native-reanimated';
 import { AdSlot } from '@/components/ads/AdSlot';
 import { BlockRenderer } from '@/components/storefront/BlockRenderer';
 import { FilterBar } from '@/components/storefront/FilterBar';
@@ -29,38 +23,29 @@ import { useTheme } from '@/hooks/useTheme';
 import { CONFIG } from '@/lib/config';
 import { getTemplateConfig } from '@/lib/templates';
 import type { Block, ProductGridBlock } from '@/types/blocks';
-import type { Product } from '@/types/product';
+import { HomeCategoryDiscovery } from './HomeCategoryDiscovery';
 import { HomeFeedEmptyState } from './HomeFeedEmptyState';
 import { HomeFeedListItemView } from './HomeFeedListItemView';
 import { HomeFeedSectionTitle } from './HomeFeedSectionTitle';
+import { HomeImpactCarousel } from './HomeImpactCarousel';
 import { getHomeFeedSlices } from './home-feed-ad-owners';
+import type {
+  HomeFeedListItem,
+  HomeFeedListProps,
+} from './home-feed-list.types';
+import { buildHomeFeedItems } from './home-feed-list-items';
+import { useHomeBlackFridayHero } from './use-home-black-friday-hero';
 import { useHomeProductFeed } from './use-home-product-feed';
 
-export type HomeFeedListItem =
-  | { kind: 'product'; product: Product }
-  | { kind: 'product-list-end'; id: string };
+export type { HomeFeedListItem } from './home-feed-list.types';
 
 const AnimatedFlashList = Animated.createAnimatedComponent(
   FlashList as ComponentType<FlashListProps<HomeFeedListItem>>
 );
 
-interface HomeFeedListProps {
-  blocks: Block[];
-  primaryProductGridIndex: number;
-  selectedCategoryId: string | null;
-  onCategorySelect: (id: string | null) => void;
-  onScroll: ScrollHandlerProcessed<Record<string, unknown>>;
-  isSearchOpen: boolean;
-  refreshing: boolean;
-  onRefresh: () => void;
-  primaryColor: string;
-  resolvedHeaderHeight: number;
-  contentBottomPadding: number;
-  blockWrapperStyle?: StyleProp<ViewStyle>;
-}
-
 export function HomeFeedList({
   blocks,
+  nextDrop = false,
   primaryProductGridIndex,
   selectedCategoryId,
   onCategorySelect,
@@ -100,6 +85,7 @@ export function HomeFeedList({
     enabled: hasPrimaryGrid,
     selectedCategoryId,
     variant: template.cardVariant,
+    initialViewMode: nextDrop ? 'list' : 'grid',
     limit,
   });
 
@@ -111,18 +97,27 @@ export function HomeFeedList({
   }, [feedResetKey]);
 
   const numColumns = currentVariant === 'grid' ? 2 : 1;
-  // HOME_STRIP and PRODUCT_GRID_MPU are each one logical slot for the
-  // whole page: slice page-unique blocks and elect the owners across both
-  // slices (see home-feed-ad-owners) so repeated blocks cannot each claim
-  // one slot.
   const {
     footerBlocks,
     headerBlocks,
     heroAdOwnerBlockId,
     launchAdOwnerBlockId,
   } = getHomeFeedSlices({ blocks, hasPrimaryGrid, primaryProductGridIndex });
-  const renderAfterCategoryRail = (block: Block) =>
-    block.type === 'CategoryRail' ? (
+  const { nextDropHero, blackFridayHeroProps } = useHomeBlackFridayHero(
+    headerBlocks,
+    nextDrop
+  );
+
+  const shoppingStories = !isSearchOpen && (
+    <>
+      <HomeCategoryDiscovery />
+      <HomeImpactCarousel />
+    </>
+  );
+  const renderAfterHomeBlock = (block: Block) =>
+    nextDrop ? (
+      block === nextDropHero && shoppingStories
+    ) : block.type === 'CategoryRail' ? (
       <HomeServiceCards placement="belowUtility" />
     ) : null;
 
@@ -147,27 +142,20 @@ export function HomeFeedList({
       index={index}
       target={target}
       currentVariant={currentVariant}
+      neutralPrice={nextDrop}
       onProductDataEndReached={handleProductDataEndReached}
     />
   );
 
   const handleEndReached = () => {
-    // Backup trigger for layouts without post-grid blocks; the sentinel handles
-    // the common case before footer content extends the measured list end.
     handleProductDataEndReached();
   };
 
-  const visibleFeedProducts = hasPrimaryGrid ? feedProducts : [];
-  const feedItems: HomeFeedListItem[] = visibleFeedProducts.map((product) => ({
-    kind: 'product',
-    product,
-  }));
-  if (visibleFeedProducts.length > 0 && hasMore) {
-    feedItems.push({
-      kind: 'product-list-end',
-      id: `home-feed-product-list-end-${feedResetKey}`,
-    });
-  }
+  const feedItems = buildHomeFeedItems(
+    hasPrimaryGrid ? feedProducts : [],
+    hasMore,
+    feedResetKey
+  );
 
   const listHeader = (
     <View>
@@ -175,12 +163,18 @@ export function HomeFeedList({
         testID="home-feed-header-spacer"
         style={{ height: resolvedHeaderHeight }}
       />
+      {nextDrop && !isSearchOpen && (
+        <HomeServiceCards placement="underSearch" />
+      )}
+      {nextDrop && !nextDropHero && shoppingStories}
       <BlockRenderer
         blocks={headerBlocks}
+        {...blackFridayHeroProps}
+        nextDropHeroBlockId={nextDropHero?.props.id}
         selectedCategoryId={selectedCategoryId}
         onCategorySelect={onCategorySelect}
         blockWrapperStyle={blockWrapperStyle}
-        renderAfterBlock={renderAfterCategoryRail}
+        renderAfterBlock={renderAfterHomeBlock}
         // Search covers the feed with a full-screen scrim; withhold the
         // home ad placements so no obscured delivery is requested.
         suppressAds={isSearchOpen}
@@ -193,7 +187,7 @@ export function HomeFeedList({
           {blockTitle ? (
             <HomeFeedSectionTitle colors={colors} title={blockTitle} />
           ) : null}
-          <FilterBar {...filterBarProps} />
+          <FilterBar {...filterBarProps} useBrandRed={nextDrop} />
         </>
       ) : null}
     </View>
@@ -221,7 +215,7 @@ export function HomeFeedList({
         selectedCategoryId={selectedCategoryId}
         onCategorySelect={onCategorySelect}
         blockWrapperStyle={blockWrapperStyle}
-        renderAfterBlock={renderAfterCategoryRail}
+        renderAfterBlock={renderAfterHomeBlock}
         suppressAds={isSearchOpen}
         autoplayPaused={isSearchOpen}
         heroAdOwnerBlockId={heroAdOwnerBlockId}
@@ -249,7 +243,9 @@ export function HomeFeedList({
       isFetching={isFetching}
       isRetrying={isRetrying}
       onRetry={handleRetry}
-      skeleton={<ProductGridSkeleton count={4} />}
+      skeleton={
+        <ProductGridSkeleton count={4} fullWidth={currentVariant === 'list'} />
+      }
     />
   ) : null;
 

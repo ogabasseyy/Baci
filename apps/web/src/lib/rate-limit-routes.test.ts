@@ -24,20 +24,40 @@ describe('rate-limit route matching', () => {
     ).toBe(50);
   });
 
-  it('keeps quiz writes and active-attempt recovery on the default bucket', () => {
+  it('gives quiz answers, recovery, events and attestation their own buckets', () => {
+    expect(getRateLimitConfig('/api/quiz/attempts/attempt-1/answers')).toEqual({
+      config: { maxRequests: 120, windowMs: 60_000 },
+      pattern: '/api/quiz/attempts/:attemptId/answers',
+    });
+    expect(getRateLimitConfig('/api/quiz/attempts/active')).toEqual({
+      config: { maxRequests: 60, windowMs: 60_000 },
+      pattern: '/api/quiz/attempts/active',
+    });
+    expect(getRateLimitConfig('/api/quiz/events').pattern).toBe(
+      '/api/quiz/events'
+    );
+    expect(getRateLimitConfig('/api/quiz/attestation/challenge').pattern).toBe(
+      '/api/quiz/attestation'
+    );
+    // The answers pattern is exact: a deeper path is not an answer write.
     expect(
-      getRateLimitConfig('/api/quiz/attempts/attempt-1/answers').config
-        .maxRequests
-    ).toBe(50);
+      getRateLimitConfig('/api/quiz/attempts/attempt-1/answers/extra').pattern
+    ).toBe('default');
+  });
+
+  it('leaves room for shoppers who share a carrier address to sign in', () => {
     expect(
-      getRateLimitConfig('/api/quiz/attempts/active').config.maxRequests
-    ).toBe(50);
+      getRateLimitConfig('/api/storefront/auth/send-code').config.maxRequests
+    ).toBe(20);
+    expect(
+      getRateLimitConfig('/api/storefront/auth/verify-code').config.maxRequests
+    ).toBe(30);
   });
 
   it('uses the most specific static prefix when no dynamic route matches', () => {
-    expect(
-      getRateLimitConfig('/api/storefront/auth/verify-code').config.maxRequests
-    ).toBe(5);
+    expect(getRateLimitConfig('/api/storefront/auth/verify-code').pattern).toBe(
+      '/api/storefront/auth/verify-code'
+    );
     expect(
       getRateLimitConfig('/api/storefront/products').config.maxRequests
     ).toBe(100);
@@ -47,6 +67,17 @@ describe('rate-limit route matching', () => {
     expect(getRateLimitConfig('/api/search/assist')).toMatchObject({
       pattern: '/api/search/assist',
       config: { maxRequests: 5, windowMs: 60_000 },
+    });
+  });
+
+  it('caps the anonymous swap device check and fails closed without Redis', () => {
+    expect(getRateLimitConfig('/api/ai/grade-device')).toMatchObject({
+      pattern: '/api/ai/grade-device',
+      config: {
+        maxRequests: 5,
+        windowMs: 60_000,
+        failClosedWithoutRedis: true,
+      },
     });
   });
 
@@ -82,6 +113,15 @@ describe('rate-limit route matching', () => {
         pattern: '/api/storefront/cart/handoff',
       });
     }
+  });
+
+  it('gives Chatwoot delivery estimates a tighter public IP budget', () => {
+    expect(
+      getRateLimitConfig('/api/storefront/chatwoot/context/delivery-options')
+    ).toMatchObject({
+      pattern: '/api/storefront/chatwoot/context/delivery-options',
+      config: { maxRequests: 30, windowMs: 60_000 },
+    });
   });
 
   it('bounds unauthenticated legacy bridge traffic per token bucket', () => {

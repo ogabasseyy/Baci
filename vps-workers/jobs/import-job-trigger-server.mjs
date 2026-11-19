@@ -110,6 +110,7 @@ export function spawnImportJobWorker({
         ...process.env,
         ...env,
         ...buildTriggerMetadataEnv(payload),
+        BACI_WORKER_PROFILE: 'import-jobs',
         NODE_ENV: 'production',
       },
       stdio: 'ignore',
@@ -292,9 +293,7 @@ export function startImportJobTriggerServer({
   return server;
 }
 
-if (
-  isEntrypoint(import.meta.url)
-) {
+if (isEntrypoint(import.meta.url)) {
   config({ path: fileURLToPath(new URL('../.env', import.meta.url)) });
   startImportJobTriggerServer();
 }

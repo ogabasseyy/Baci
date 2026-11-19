@@ -61,6 +61,12 @@ const WEB_CRON_CONFIG = new Map([
     { method: 'GET', timeoutMs: 6 * 60_000 },
   ],
   [
+    // PiggyVest wallet pay drain: settles, delivers and refunds payments a
+    // customer request left behind. Not configured = a 200 no-op.
+    '/api/cron/piggyvest-wallet-pay-drain',
+    { method: 'GET', timeoutMs: 6 * 60_000 },
+  ],
+  [
     // Read-only PiggyVest degraded-health check (counts only); inert until
     // PIGGYVEST_DEGRADED_ALERTS_ENABLED=true. Two short reads, so 2 minutes.
     '/api/cron/piggyvest-degraded-health',
@@ -99,6 +105,29 @@ function formatBodyPreview(body) {
     return body;
   }
   return `${body.slice(0, RESPONSE_PREVIEW_LIMIT)}... [truncated]`;
+}
+
+function parseJsonObject(body) {
+  try {
+    const parsed = JSON.parse(body);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? parsed
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function isIdleCacheInvalidationResponse({ pathname, status, bodyPayload }) {
+  return (
+    pathname === '/api/cron/drain-cache-invalidations' &&
+    status === 200 &&
+    bodyPayload !== null &&
+    bodyPayload.claimed === 0 &&
+    bodyPayload.completed === 0 &&
+    bodyPayload.failed === 0 &&
+    bodyPayload.deadLettersPresent === false
+  );
 }
 
 function throwWebCronRequestError({ error, path, timeoutMs }) {
@@ -193,17 +222,14 @@ export async function runWebCron({
     throwWebCronRequestError({ error, path, timeoutMs });
   }
 
+  const pathname = new URL(url).pathname;
+  const bodyPayload = parseJsonObject(body);
+
   if (!response.ok) {
     const preview = formatBodyPreview(body);
-    let bodyPayload;
-    try {
-      bodyPayload = JSON.parse(body);
-    } catch {
-      bodyPayload = null;
-    }
     if (
       allowCacheDeadLetter &&
-      new URL(url).pathname === '/api/cron/drain-cache-invalidations' &&
+      pathname === '/api/cron/drain-cache-invalidations' &&
       response.status === 503 &&
       bodyPayload?.code === CACHE_INVALIDATION_DEAD_LETTER_CODE
     ) {
@@ -214,7 +240,18 @@ export async function runWebCron({
     );
   }
 
-  logger.log(`[run-web-cron] ${path} completed with HTTP ${response.status}`);
+  // run-cache-invalidation-cron.mjs atomically updates state/cache-invalidations.json
+  // (nextAllowedAt) on every 2-minute sweep, preserving scheduler liveness
+  // observability without writing 21,600 idle stdout lines/month.
+  if (
+    !isIdleCacheInvalidationResponse({
+      pathname,
+      status: response.status,
+      bodyPayload,
+    })
+  ) {
+    logger.log(`[run-web-cron] ${path} completed with HTTP ${response.status}`);
+  }
   return { status: response.status, body };
 }
 

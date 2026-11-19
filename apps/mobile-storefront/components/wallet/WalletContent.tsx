@@ -8,9 +8,11 @@ import { useWalletCreditWatch } from '@/hooks/use-wallet-credit-watch';
 import { isPrimaryWallet } from './is-primary-wallet';
 import { PiggyvestSlowdownNotice } from './PiggyvestSlowdownNotice';
 import { renderWalletSavingsSheetStep } from './render-wallet-savings-sheet-step';
+import { SavingsToast } from './savings/SavingsToast';
 import { useSavingsDeviceSwap } from './use-savings-device-swap';
 import { useWalletPrimaryUnknown } from './use-wallet-primary-unknown';
 import { WalletActionsRow } from './WalletActionsRow';
+import { WalletActivitySection } from './WalletActivitySection';
 import { WalletFundModal } from './WalletFundModal';
 import { WalletHeroSection } from './WalletHeroSection';
 import { WalletInlineNotices } from './WalletInlineNotices';
@@ -18,7 +20,6 @@ import { WalletPrimaryContext } from './WalletPrimaryContext';
 import { WalletRedeemPanel } from './WalletRedeemPanel';
 import { WalletSavingsPlanCardWithSetup } from './WalletSavingsPlanCardWithSetup';
 import { WalletSavingsProgressModal } from './WalletSavingsProgressModal';
-import { WalletTransactionHistory } from './WalletTransactionHistory';
 import type { WalletContentProps } from './wallet-content-props.types';
 
 export type { WalletContentProps } from './wallet-content-props.types';
@@ -174,7 +175,7 @@ export function WalletContent(props: WalletContentProps) {
             redeemPoints={redeemPoints}
           />
         ) : null}
-        <WalletTransactionHistory {...props} />
+        <WalletActivitySection {...props} />
       </AppKeyboardAwareScrollView>
       <WalletSavingsProgressModal
         addAmount={savingsContributionAmount}
@@ -182,6 +183,9 @@ export function WalletContent(props: WalletContentProps) {
         goal={activeSavingsGoal}
         isAdding={isAddingSavingsContribution}
         hasPendingContribution={props.hasPendingSavingsContribution}
+        isCheckingContribution={props.isCheckingSavingsContribution}
+        isContributionRetry={props.isSavingsContributionRetry}
+        onCheckContribution={props.onCheckSavingsContribution}
         walletUpdatedAt={props.walletUpdatedAt}
         isFundPending={isFundPending}
         onAddAmountChange={onChangeSavingsContributionAmount}
@@ -216,6 +220,7 @@ export function WalletContent(props: WalletContentProps) {
       />
       <WalletFundModal {...props} creditWatch={creditWatch} />
       {savingsSheetOpen ? null : props.pinPrompt}
+      <SavingsToast />
     </WalletPrimaryContext.Provider>
   );
 }

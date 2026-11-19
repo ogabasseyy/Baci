@@ -1,6 +1,12 @@
 import '@testing-library/jest-dom/vitest';
 import type { ReactNode } from 'react';
 import { vi } from 'vitest';
+import {
+  PAYMENT_METHODS_THEME_BASE_COLORS,
+  paymentSettings,
+} from './payment-methods-screen.fixtures';
+
+export { paymentSettings };
 
 type QueryConfig = {
   queryFn: () => Promise<unknown>;
@@ -63,6 +69,7 @@ const hoistedMocks = vi.hoisted(() => ({
   update: vi.fn(),
   setQueryData: vi.fn(),
   single: vi.fn(),
+  textOnPrimary: '#ffffff',
   useMerchantResult: {
     isLoading: false,
     merchant: { id: 'merchant-1' },
@@ -122,19 +129,8 @@ vi.mock('@tanstack/react-query', () => ({
 vi.mock('@/hooks/useTheme', () => ({
   useTheme: () => ({
     colors: {
-      background: '#ffffff',
-      border: '#e2e8f0',
-      card: '#f8fafc',
-      cardHover: '#f1f5f9',
-      info: '#2563eb',
-      infoLight: '#eff6ff',
-      notification: '#dc2626',
-      primary: '#2563eb',
-      success: '#16a34a',
-      successLight: '#dcfce7',
-      text: '#0f172a',
-      textMuted: '#64748b',
-      textSecondary: '#334155',
+      ...PAYMENT_METHODS_THEME_BASE_COLORS,
+      textOnPrimary: mocks.textOnPrimary,
     },
     isDark: false,
     shadows: { sm: {} },
@@ -217,31 +213,38 @@ vi.mock('react-native', () => ({
       type="checkbox"
     />
   ),
-  Text: ({ children }: { children?: ReactNode }) => <span>{children}</span>,
+  Text: ({
+    children,
+    style,
+  }: {
+    children?: ReactNode;
+    style?: Record<string, unknown> | Array<Record<string, unknown> | false>;
+  }) => {
+    const resolvedStyle = Array.isArray(style)
+      ? Object.assign({}, ...style.filter(Boolean))
+      : style;
+    const color =
+      typeof resolvedStyle?.color === 'string'
+        ? resolvedStyle.color
+        : undefined;
+    return <span data-color={color}>{children}</span>;
+  },
   View: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
 }));
 
 vi.mock('@react-native-vector-icons/ionicons', async () => {
   const { Text } = await import('react-native');
-  const MockIonicon = () => <Text>icon</Text>;
+  const MockIonicon = ({ color, name }: { color?: string; name?: string }) => (
+    <span data-icon-color={color} data-icon-name={name}>
+      <Text>icon</Text>
+    </span>
+  );
   return {
     Ionicons: MockIonicon,
     default: MockIonicon,
     __esModule: true,
   };
 });
-
-export const paymentSettings = {
-  id: 'settings-1',
-  merchant_id: 'merchant-1',
-  paystack_enabled: true,
-  korapay_enabled: true,
-  credit_direct_enabled: false,
-  credpal_enabled: false,
-  pay_on_delivery_enabled: true,
-  juicyway_enabled: false,
-  klump_enabled: true,
-};
 
 export function resetPaymentMethodsScreenMocks() {
   mocks.alert.mockReset();
@@ -261,13 +264,13 @@ export function resetPaymentMethodsScreenMocks() {
   mocks.update.mockReset();
   mocks.setQueryData.mockReset();
   mocks.single.mockReset();
+  mocks.textOnPrimary = '#ffffff';
   mocks.useMerchantResult = {
     isLoading: false,
     merchant: { id: 'merchant-1' },
     error: null,
   };
   mocks.useQuery.mockReset();
-  mocks.update.mockReset();
   mocks.single.mockResolvedValue({ data: paymentSettings, error: null });
   mocks.eq.mockImplementation((column: string) =>
     column === 'id' ? { eq: mocks.eq } : { error: null, single: mocks.single }

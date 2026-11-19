@@ -17,6 +17,9 @@ export async function authorizeChatwootBridgeSession(
   );
   if (
     value.authorized !== true ||
+    typeof value.cartId !== 'string' ||
+    value.cartId.length === 0 ||
+    value.cartId.length > 128 ||
     typeof value.conversationId !== 'number' ||
     !Number.isSafeInteger(value.conversationId) ||
     typeof value.sessionExpiresAt !== 'number' ||
@@ -28,7 +31,13 @@ export async function authorizeChatwootBridgeSession(
   }
   return {
     conversationId: value.conversationId,
+    cartId: value.cartId,
     sessionExpiresAt: value.sessionExpiresAt,
     snapshot: snapshot.data,
+    ...(typeof value.sessionToken === 'string' &&
+    value.sessionToken.length > 0 &&
+    value.sessionToken.length <= 12_000
+      ? { sessionToken: value.sessionToken }
+      : {}),
   };
 }

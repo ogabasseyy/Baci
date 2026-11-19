@@ -1,4 +1,3 @@
-import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
 import { JsonLd } from '@/components/seo/json-ld';
@@ -8,7 +7,7 @@ import { CategoryHubSections } from '@/components/storefront/ogabassey/seo/categ
 import { getMerchantByIdentifier } from '@/lib/cached-data';
 import type { RawDbProduct } from '@/lib/normalize-product';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
-import { buildRequestScopedStoreUrl, buildStoreUrl } from '@/lib/store-url';
+import { buildStoreUrl } from '@/lib/store-url';
 import {
   buildHubPaginationBasePath,
   resolveCarriedHubSlug,
@@ -178,10 +177,7 @@ export async function CategoryPageContent({
   );
 
   const baseUrl = buildStoreUrl(merchant);
-  const requestScopedBaseUrl = buildRequestScopedStoreUrl(
-    merchant,
-    await headers()
-  );
+  const requestScopedBaseUrl = baseUrl;
   const graphicsHubLinks = await loadGraphicsHubLinks({
     category,
     graphicsOptions,

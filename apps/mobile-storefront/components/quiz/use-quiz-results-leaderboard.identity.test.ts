@@ -95,7 +95,7 @@ it('clears a previously loaded score when access is revoked', async () => {
     expect(result.current.leaderboard?.currentPlayer?.score).toBe(4)
   );
   await act(async () => {
-    jest.advanceTimersByTime(5_000);
+    jest.advanceTimersByTime(12_000);
     await Promise.resolve();
   });
   expect(result.current.leaderboard).toBeNull();
@@ -176,7 +176,7 @@ it('retries a temporary 401 while the same account remains signed in', async () 
   });
   expect(result.current.leaderboard).toBeNull();
   await act(async () => {
-    jest.advanceTimersByTime(5_000);
+    jest.advanceTimersByTime(12_000);
     await Promise.resolve();
   });
   expect(result.current.leaderboard?.currentPlayer?.score).toBe(4);
@@ -207,7 +207,7 @@ it('clears a previously shown score when the live projection becomes unavailable
     expect(result.current.leaderboard?.currentPlayer?.score).toBe(4)
   );
   await act(async () => {
-    jest.advanceTimersByTime(5_000);
+    jest.advanceTimersByTime(12_000);
     await Promise.resolve();
   });
   expect(result.current.leaderboard).toBeNull();

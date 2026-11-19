@@ -53,6 +53,7 @@ function createSupabase({
 describe('scheduleCheckoutProductBlogPurge', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.revalidateProductSlugs.mockReturnValue(true);
   });
 
   it('purges managed and serialized products after checkout stock changes', async () => {
@@ -86,11 +87,16 @@ describe('scheduleCheckoutProductBlogPurge', () => {
       supabase,
     });
 
-    expect(mocks.revalidateProducts).toHaveBeenCalledWith('merchant-1');
-    expect(mocks.revalidateProductSlugs).toHaveBeenCalledWith('merchant-1', [
-      'managed-phone',
-      'serialized-phone',
-    ]);
+    expect(mocks.revalidateProducts).toHaveBeenCalledWith(
+      'merchant-1',
+      undefined,
+      { expireImmediately: true, omitMerchantWidePdpDetails: true }
+    );
+    expect(mocks.revalidateProductSlugs).toHaveBeenCalledWith(
+      'merchant-1',
+      ['managed-phone', 'serialized-phone', 'managed', 'serialized'],
+      { expireImmediately: true }
+    );
     expect(mocks.schedule).toHaveBeenCalledWith({
       merchantId: 'merchant-1',
       merchantSlug: 'ogabassey',
@@ -115,7 +121,11 @@ describe('scheduleCheckoutProductBlogPurge', () => {
       supabase,
     });
 
-    expect(mocks.revalidateProducts).toHaveBeenCalledWith('merchant-1');
+    expect(mocks.revalidateProducts).toHaveBeenCalledWith(
+      'merchant-1',
+      undefined,
+      { expireImmediately: true }
+    );
     expect(mocks.revalidateProductSlugs).not.toHaveBeenCalled();
     expect(mocks.schedule).toHaveBeenCalledWith({
       merchantId: 'merchant-1',

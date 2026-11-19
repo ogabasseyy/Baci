@@ -39,6 +39,7 @@ describe('revalidateProductsReliable enrichment path', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRevalidateProducts.mockReturnValue(undefined);
+    mockRevalidateProductSlugs.mockReturnValue(true);
   });
 
   it('forwards linked blog slugs on the in-process import purge path', async () => {
@@ -47,6 +48,7 @@ describe('revalidateProductsReliable enrichment path', () => {
     mockEnrichProductPurgeEntries.mockResolvedValue({
       entries: [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
       resolvedSlugs: ['iphone-15'],
+      authoritativeSlugsById: new Map([['product-id', 'iphone-15']]),
       blogPostSlugs: ['iphone-15-buying-guide'],
     });
 
@@ -69,7 +71,10 @@ describe('revalidateProductsReliable enrichment path', () => {
     );
     expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
       'ogabassey',
-      [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
+      [
+        { slug: 'iphone-15', categorySegment: 'smartphones' },
+        { slug: 'product-id', categorySegment: null },
+      ],
       { blogPostSlugs: ['iphone-15-buying-guide'] }
     );
     expect(mockExpireProductBlogCache).toHaveBeenCalledWith('merchant-1');
@@ -128,11 +133,43 @@ describe('revalidateProductsReliable enrichment path', () => {
 
     expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
       'ogabassey',
-      [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
+      [
+        { slug: 'iphone-15', categorySegment: 'smartphones' },
+        { slug: 'product-id', categorySegment: null },
+      ],
       { blogPostSlugs: ['known-guide'] }
     );
     expect(mockScheduleStorefrontHostnamePurge).toHaveBeenCalledWith(
       'ogabassey'
+    );
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      'merchant-1',
+      undefined,
+      { expireImmediately: true }
+    );
+  });
+
+  it('forces broad PDP invalidation in-process when { id, slug } omits previousSlug', async () => {
+    const supabase = { from: vi.fn() };
+    const products = [{ id: 'product-id', slug: 'iphone-16' }];
+    mockEnrichProductPurgeEntries.mockResolvedValue({
+      entries: [{ slug: 'iphone-16', categorySegment: 'smartphones' }],
+      resolvedSlugs: ['iphone-16', 'product-id'],
+      authoritativeSlugsById: new Map([['product-id', 'iphone-16']]),
+      blogPostSlugs: [],
+      blogPostSlugsIncomplete: false,
+    });
+
+    await revalidateProductsReliable('merchant-1', {
+      merchantSlug: 'ogabassey',
+      products,
+      supabase: supabase as never,
+    });
+
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      'merchant-1',
+      undefined,
+      { expireImmediately: true }
     );
   });
 
@@ -154,10 +191,43 @@ describe('revalidateProductsReliable enrichment path', () => {
       ['iphone-15', 'product-id'],
       { expireImmediately: true }
     );
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      'merchant-1',
+      undefined,
+      { expireImmediately: true }
+    );
     expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
     expect(mockScheduleStorefrontHostnamePurge).toHaveBeenCalledWith(
       'ogabassey'
     );
     expect(mockExpireProductBlogCache).toHaveBeenCalledWith('merchant-1');
+  });
+
+  it('falls back to HTTP and withholds in-process edge purge when expireProductBlogCache returns false', async () => {
+    const supabase = { from: vi.fn() };
+    const products = [
+      { id: 'product-id', slug: 'iphone-15', previousSlug: null },
+    ];
+    mockEnrichProductPurgeEntries.mockResolvedValue({
+      entries: [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
+      resolvedSlugs: ['iphone-15', 'product-id'],
+      authoritativeSlugsById: new Map([['product-id', 'iphone-15']]),
+      blogPostSlugs: [],
+      blogPostSlugsIncomplete: false,
+    });
+    mockExpireProductBlogCache.mockReturnValueOnce(false);
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: true } as Response);
+
+    await revalidateProductsReliable('merchant-1', {
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      merchantSlug: 'ogabassey',
+      products,
+      nextProductSlugs: ['iphone-15'],
+      supabase: supabase as never,
+    });
+
+    expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
+    expect(mockScheduleStorefrontHostnamePurge).not.toHaveBeenCalled();
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 });

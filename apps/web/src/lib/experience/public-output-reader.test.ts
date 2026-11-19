@@ -57,7 +57,7 @@ it.each([
         capabilities: [],
       });
     }
-    expect(String(input)).toMatch(new RegExp(`/${rpcName}$`));
+    expect(String(input).endsWith(`/${rpcName}`)).toBe(true);
     const signal = init?.signal;
     started.resolve(signal);
     if (!signal) return new Response(null, { status: 500 });

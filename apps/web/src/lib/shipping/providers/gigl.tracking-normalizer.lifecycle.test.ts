@@ -40,12 +40,12 @@ describe('bugfix: MSHC after an explicit out-for-delivery scan is not demoted to
 });
 
 describe('bugfix: MSHC retry after a failed delivery attempt is not demoted to pickup', () => {
-  it('keeps out_for_delivery for SDR followed by MSHC with no earlier transit scans', () => {
+  it('keeps out_for_delivery for a failed attempt followed by MSHC with no earlier transit scans', () => {
     const result = normalizeGiglTrackingShipment(
       {
         Waybill: 'W13',
         MobileShipmentTrackings: [
-          event('SDR', '10:00:00'),
+          event('FAILED', '10:00:00'),
           event('MSHC', '11:00:00'),
         ],
       },

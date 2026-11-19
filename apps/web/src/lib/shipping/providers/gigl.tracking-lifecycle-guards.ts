@@ -122,6 +122,8 @@ export function applyLifecycleGuards(
   let arrived = false;
   let movedThroughNetwork = false;
   let pickedUp = false;
+  // SDR ("Shipment Destroyed") is final: a later or same-time MSHC cannot revive it.
+  let destroyed = false;
   // Same-city shipments: only a scan away from the destination name proves
   // the parcel left the origin centre (repeat origin scans prove nothing).
   let leftDestinationCentre = false;
@@ -138,7 +140,12 @@ export function applyLifecycleGuards(
         ) &&
         (!sameCity || leftDestinationCentre) &&
         matchesDestination(event.location, destination));
-    if (isArrival) {
+    if (raw === 'SDR') destroyed = true;
+    if (raw === 'MSHC' && destroyed) {
+      event.status = 'failed';
+      candidate.recognizedStatus = 'failed';
+      event.rawStatus = candidate.providerStatus;
+    } else if (isArrival) {
       arrived = true;
       if (candidate.recognizedStatus === null) {
         event.status = 'in_transit';

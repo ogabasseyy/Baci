@@ -109,3 +109,21 @@ describe('bugfix: SDR, international arrivals and equal-time location', () => {
     expect(result.events[0]?.location).toBe('IKEJA 2 (IKEJA)');
   });
 });
+
+describe('bugfix: a destroyed shipment (SDR) is never revived by a later MSHC', () => {
+  it('keeps failed when MSHC arrives after SDR', () => {
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W35',
+        MobileShipmentTrackings: [
+          event('SDR', '10:00:00'),
+          event('MSHC', '12:00:00'),
+        ],
+      },
+      'W35',
+      OBSERVED_AT
+    );
+    expect(result.status).toBe('failed');
+    expect(result.events.every((e) => e.status === 'failed')).toBe(true);
+  });
+});

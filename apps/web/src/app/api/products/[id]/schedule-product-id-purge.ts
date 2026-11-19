@@ -18,6 +18,7 @@ interface ProductPurgeRow {
   slug?: string | null;
   name?: string | null;
   category?: string | null;
+  status?: string | null;
   categories?: unknown;
   product_categories?: unknown;
 }
@@ -29,6 +30,7 @@ interface ScheduleUpdatedProductPurgeInput {
   merchantSlug: string | null | undefined;
   existingProduct: ProductPurgeRow;
   updatedProduct: ProductPurgeRow & { id: string };
+  statusUpdated?: boolean;
 }
 
 interface ScheduleDeletedProductPurgeInput {
@@ -55,6 +57,7 @@ export async function scheduleUpdatedProductPurge({
   merchantSlug,
   existingProduct,
   updatedProduct,
+  statusUpdated = false,
 }: ScheduleUpdatedProductPurgeInput): Promise<void> {
   try {
     const nextSlug = updatedProduct.slug?.trim() || id;
@@ -89,9 +92,19 @@ export async function scheduleUpdatedProductPurge({
         categorySegment: previousCategorySegment,
       });
     }
-    const dependentAliases = routeChanged
-      ? await resolveDependentLegacyProductIdentifiers(supabase, merchantId, id)
-      : { identifiers: [], incomplete: false };
+    const statusChanged =
+      existingProduct.status !== undefined &&
+      updatedProduct.status !== undefined
+        ? existingProduct.status !== updatedProduct.status
+        : statusUpdated;
+    const dependentAliases =
+      routeChanged || statusChanged
+        ? await resolveDependentLegacyProductIdentifiers(
+            supabase,
+            merchantId,
+            id
+          )
+        : { identifiers: [], incomplete: false };
     scheduleProductMutationPurge({
       supabase,
       merchantId,

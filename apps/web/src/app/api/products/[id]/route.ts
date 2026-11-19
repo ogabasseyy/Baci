@@ -274,7 +274,7 @@ export async function PUT(
         // from the OLD data with the full PR #2914 precedence (active direct
         // join → active junction → legacy text). None of these are writable in this handler,
         // so they are also the product's current joined/junction categories.
-        'id, name, description, brand, color, slug, category, condition, condition_detail, has_variants, variant_model, categories:category_id(slug, is_active), product_categories(category_id, categories(slug, is_active))'
+        'id, name, description, brand, color, slug, category, status, condition, condition_detail, has_variants, variant_model, categories:category_id(slug, is_active), product_categories(category_id, categories(slug, is_active))'
       )
       .eq('id', id)
       .eq('merchant_id', merchantId)
@@ -893,6 +893,7 @@ export async function PUT(
       merchantSlug: merchantContext.merchantSlug,
       existingProduct,
       updatedProduct,
+      statusUpdated: updates.status !== undefined,
     });
 
     // Pre-warm the CDN image-transform cache for the product's images so the

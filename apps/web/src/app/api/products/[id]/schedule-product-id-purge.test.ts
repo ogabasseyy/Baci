@@ -147,4 +147,43 @@ describe('schedule-product-id-purge', () => {
       warnSpy.mockRestore();
     }
   });
+
+  it('resolves dependent legacy aliases when status changes without a URL change', async () => {
+    await scheduleUpdatedProductPurge({
+      supabase,
+      id: 'prod-1',
+      merchantId: 'merchant-1',
+      merchantSlug: 'ogabassey',
+      existingProduct: {
+        id: 'prod-1',
+        slug: 'phone',
+        name: 'Phone',
+        category: 'Smartphones',
+        status: 'active',
+      },
+      updatedProduct: {
+        id: 'prod-1',
+        slug: 'phone',
+        name: 'Phone',
+        category: 'Smartphones',
+        status: 'draft',
+      },
+      statusUpdated: true,
+    });
+
+    expect(mockResolveDependentAliases).toHaveBeenCalledWith(
+      supabase,
+      'merchant-1',
+      'prod-1'
+    );
+    expect(mockScheduleProductMutationPurge).toHaveBeenCalledWith({
+      supabase,
+      merchantId: 'merchant-1',
+      merchantSlug: 'ogabassey',
+      productIds: ['prod-1'],
+      entries: [{ slug: 'phone', categorySegment: 'smartphones' }],
+      dependentProductIdentifiers: ['child-1', 'old-alias'],
+      dependentAliasesIncomplete: false,
+    });
+  });
 });

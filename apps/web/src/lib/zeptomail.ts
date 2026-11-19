@@ -1,6 +1,8 @@
 import { getZeptoMailFromDomain, getZeptoMailToken } from '@/env';
 import { getActiveMerchantSendingDomain } from '@/lib/merchant-sending-domain';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { isValidEmail } from '@/lib/zeptomail-email-address';
+import { logZeptoMailSendFailure } from '@/lib/zeptomail-error-log';
 import {
   isRetryableError,
   RETRY_CONFIG,
@@ -94,27 +96,6 @@ async function resolveSenderAddress(
   };
 }
 
-/**
- * Validate email address format
- * Uses length limit and simpler pattern to prevent ReDoS
- */
-function isValidEmail(email: string): boolean {
-  // Limit length to prevent ReDoS attacks
-  if (!email || email.length > 254) return false;
-
-  // Simple email validation - avoids complex patterns that can cause backtracking
-  const atIndex = email.indexOf('@');
-  if (atIndex < 1 || atIndex === email.length - 1) return false;
-
-  const dotIndex = email.lastIndexOf('.');
-  if (dotIndex < atIndex + 2 || dotIndex === email.length - 1) return false;
-
-  // No whitespace allowed
-  if (/\s/.test(email)) return false;
-
-  return true;
-}
-
 function normalizeRuntimeRecipientEmail(email: unknown): string | null {
   if (typeof email !== 'string') {
     return null;
@@ -158,6 +139,9 @@ interface SendEmailParams {
   // cron phases pass 1 and let the next tick retry instead of burning
   // the phase on in-process retries.
   maxAttemptsPerSender?: number;
+  // Log only the provider error code (never its message or details) for
+  // call graphs that must keep provider bodies out of logs.
+  redactProviderErrorLog?: boolean;
 }
 
 interface EmailAttachment {
@@ -376,6 +360,7 @@ export async function sendEmail({
   resetTransportDispatch,
   fallbackDeadlineMs,
   maxAttemptsPerSender = RETRY_CONFIG.maxRetries + 1,
+  redactProviderErrorLog = false,
 }: SendEmailParams): Promise<EmailResult> {
   const sender = await resolveSenderAddress(
     emailType,
@@ -487,7 +472,7 @@ export async function sendEmail({
   const totalAttempts = outcome.attempts;
   const finalSenderAddress = outcome.finalSenderAddress;
 
-  console.error('ZeptoMail email error:', JSON.stringify(lastError));
+  logZeptoMailSendFailure(lastError, redactProviderErrorLog);
   await updateEmailAttempts(auditIds, {
     status: 'failed',
     attempt_count: totalAttempts,

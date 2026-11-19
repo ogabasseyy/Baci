@@ -25,7 +25,21 @@ const DEPARTURE_CODES = new Set([
 
 // Return-flow and exception scans (damage, claims) can occur at the destination
 // centre after a failed delivery; they are not an arrival.
-const RETURN_CODES = new Set(['SRC', 'MRTE', 'SSR', 'MRTD', 'DASH', 'CLS']);
+const RETURN_CODES = new Set([
+  'SRC',
+  'MRTE',
+  'SSR',
+  'MRTD',
+  'DASH',
+  'CLS',
+  // Delay, customs and transfer scans are not arrivals either.
+  'DLD',
+  'CLC',
+  'UCC',
+  'GOP',
+  'TRO',
+  'SRIC',
+]);
 // Explicit "arrived final destination" scans. AHD ("arrived final destination
 // for home delivery") has no entry in the shared status map.
 const EXPLICIT_ARRIVAL_CODES = new Set([

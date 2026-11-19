@@ -98,3 +98,19 @@ describe('bugfix: IDK/IDH departures and Go Faster arrivals', () => {
     expect(evt.event.rawStatus).toBe(GIGL_ARRIVED_IN_CITY_RAW_STATUS);
   });
 });
+
+describe('bugfix: delay, customs and transfer scans are not arrivals', () => {
+  it.each([
+    'DLD',
+    'CLC',
+    'UCC',
+    'GOP',
+    'TRO',
+    'SRIC',
+  ])('does not infer an arrival from the %s scan at the destination centre', (code) => {
+    const away = scan('MSVC', 'in_transit', 9, 'IKEJA');
+    const evt = scan(code, 'in_transit', 12, 'WUSE ABUJA');
+    applyLifecycleGuards([away, evt], 'ABUJA', 'LAGOS');
+    expect(evt.event.rawStatus).toBe(code);
+  });
+});

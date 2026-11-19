@@ -183,6 +183,23 @@ EXCEPTION WHEN check_violation THEN
 END $$;
 ROLLBACK TO SAVEPOINT changed_promotion_display;
 RELEASE SAVEPOINT changed_promotion_display;
+SAVEPOINT changed_promotion_domain;
+UPDATE public.domains SET merchant_id = '20000000-0000-4000-8000-000000000002'
+WHERE domain = 'shop.example.invalid';
+SET LOCAL ROLE authenticated;
+DO $$
+BEGIN
+  PERFORM public.promote_brilstash_snapshot(
+    '30000000-0000-4000-8000-000000000001', '70000000-0000-4000-8000-000000000002',
+    (statement_timestamp() AT TIME ZONE 'Africa/Lagos')::date,
+    current_setting('fixture.closure_revision')::bigint
+  );
+  RAISE EXCEPTION 'promotion accepted a storefront transferred to another merchant';
+EXCEPTION WHEN check_violation THEN
+  IF SQLERRM <> 'BrilStash staged display data changed' THEN RAISE; END IF;
+END $$;
+ROLLBACK TO SAVEPOINT changed_promotion_domain;
+RELEASE SAVEPOINT changed_promotion_domain;
 
 SET LOCAL ROLE authenticated;
 DO $$

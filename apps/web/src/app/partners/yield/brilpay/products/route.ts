@@ -90,6 +90,12 @@ export async function GET(request: NextRequest): Promise<Response> {
         requestId,
       });
       return fail(503, 'Catalogue unavailable', 'FEED_UNAVAILABLE');
+    case 'ingress_unavailable':
+      logger.warn({
+        message: 'BrilStash database ingress verification failed',
+        requestId,
+      });
+      return fail(503, 'Catalogue unavailable', 'FEED_UNAVAILABLE');
     case 'misconfigured':
       logger.warn({
         message: 'BrilStash feed ingress signing key is misconfigured',

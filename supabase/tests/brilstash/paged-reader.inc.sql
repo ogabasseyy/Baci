@@ -14,7 +14,7 @@ INSERT INTO public.products (
 )
 SELECT ('41000000-0000-4000-8000-00000000000' || n)::uuid,
   '20000000-0000-4000-8000-000000000001', 'active', 'Fixture ' || n, 'paged-' || n,
-  '50000000-0000-4000-8000-000000000001', 'new', 50000 + n * 70000, '["https://media.example.invalid/approved"]'::jsonb,
+  '50000000-0000-4000-8000-000000000001', 'new', 50000 + n * 70000, '["https://MEDIA.example.invalid:443/approved"]'::jsonb,
   false, false, n, n, true, 'off'
 FROM generate_series(1, 7) n;
 -- An internal inventory anchor does not change a simple listing into a
@@ -31,8 +31,8 @@ WHERE slug = 'paged-1';
 INSERT INTO public.product_feed_images (
   id, merchant_id, product_id, status, verified_url, is_primary, position, source_url
 )
-SELECT gen_random_uuid(), merchant_id, id, 'verified', 'https://media.example.invalid/approved',
-  true, 1, 'https://media.example.invalid/approved'
+SELECT gen_random_uuid(), merchant_id, id, 'verified', 'https://MEDIA.example.invalid:443/approved',
+  true, 1, 'https://MEDIA.example.invalid:443/approved'
 FROM public.products WHERE slug LIKE 'paged-%';
 INSERT INTO private.brilstash_listings (
   id, installation_id, source_kind, source_id, parent_product_id, external_id, pilot_slot, reviewed_identity
@@ -64,7 +64,7 @@ BEGIN
     'product_url', 'https://shop.example.invalid/products/' || (item->>'slug'),
     'description', 'Condition: New. Specifications: Fixture specification. Box contents: Phone only. Warranty: 30 days.', 'category', item->>'partnerCategory',
     'price_naira', item->'priceNaira', 'stock_quantity', item->'inventory'->'units',
-    'images', jsonb_build_array(jsonb_build_object('url', 'https://media.example.invalid/approved'))
+    'images', jsonb_build_array(jsonb_build_object('url', 'https://MEDIA.example.invalid:443/approved'))
   ) ORDER BY item->>'externalId') INTO payload
   FROM jsonb_array_elements(read_result->'rows') item;
   -- Compute the fixture digest outside the builder session.

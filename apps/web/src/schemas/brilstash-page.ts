@@ -15,6 +15,7 @@ export const brilStashPageResultSchema = z.discriminatedUnion('status', [
     payloadDigest: z.string().regex(/^[a-f0-9]{64}$/),
   }),
   z.strictObject({ status: z.literal('unauthorized') }),
+  z.strictObject({ status: z.literal('ingress_unavailable') }),
   z.strictObject({ status: z.literal('invalid_query') }),
   z.strictObject({ status: z.literal('unavailable') }),
 ]);

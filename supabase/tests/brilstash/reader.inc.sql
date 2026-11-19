@@ -7,9 +7,9 @@ SET LOCAL ROLE anon;
 DO $$
 DECLARE result jsonb;
 BEGIN
-  IF public.read_brilstash_page(repeat('k', 43), 1, 100, 0)->>'status' IS DISTINCT FROM 'unauthorized'
-    OR fixture.read_brilstash_page(repeat('k', 43), 1, 100, 0, repeat('z', 43))->>'status' IS DISTINCT FROM 'unauthorized'
-    OR fixture.read_brilstash_page(repeat('k', 43), 1, 100, 0, NULL, 16)->>'status' IS DISTINCT FROM 'unauthorized'
+  IF public.read_brilstash_page(repeat('k', 43), 1, 100, 0)->>'status' IS DISTINCT FROM 'ingress_unavailable'
+    OR fixture.read_brilstash_page(repeat('k', 43), 1, 100, 0, repeat('z', 43))->>'status' IS DISTINCT FROM 'ingress_unavailable'
+    OR fixture.read_brilstash_page(repeat('k', 43), 1, 100, 0, NULL, 16)->>'status' IS DISTINCT FROM 'ingress_unavailable'
   THEN RAISE EXCEPTION 'the reader accepted an absent, misbound, or expired ingress proof'; END IF;
   result := fixture.read_brilstash_page(repeat('k', 43), 1, 100, 0);
   IF result->>'status' IS DISTINCT FROM 'ok'
@@ -42,6 +42,18 @@ BEGIN
 END $$;
 RESET ROLE;
 UPDATE public.products SET status = 'active' WHERE slug = 'fixture-phone';
+
+SAVEPOINT reassigned_domain;
+UPDATE public.domains SET merchant_id = '20000000-0000-4000-8000-000000000002'
+WHERE domain = 'shop.example.invalid';
+SET LOCAL ROLE anon;
+DO $$
+BEGIN
+  IF fixture.read_brilstash_page(repeat('k', 43), 1, 100, 0)->>'status' IS DISTINCT FROM 'unavailable'
+  THEN RAISE EXCEPTION 'an active generation served a storefront reassigned to another merchant'; END IF;
+END $$;
+ROLLBACK TO SAVEPOINT reassigned_domain;
+RELEASE SAVEPOINT reassigned_domain;
 
 SAVEPOINT serialized_stock;
 UPDATE public.products SET inventory_tracking_policy = 'serialized_strict' WHERE slug = 'fixture-phone';

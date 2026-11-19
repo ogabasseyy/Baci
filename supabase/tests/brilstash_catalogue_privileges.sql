@@ -40,6 +40,6 @@ BEGIN
     THEN RAISE EXCEPTION 'Unexpected EXECUTE exposure for %', routine.proname; END IF;
   END LOOP;
 
-  IF public.read_brilstash_page(repeat('0', 43), 1, 100, 0) IS DISTINCT FROM '{"status":"unauthorized"}'::jsonb
+  IF public.read_brilstash_page(repeat('0', 43), 1, 100, 0) IS DISTINCT FROM '{"status":"ingress_unavailable"}'::jsonb
   THEN RAISE EXCEPTION 'An unrecognized credential received a catalogue verdict'; END IF;
 END $$;

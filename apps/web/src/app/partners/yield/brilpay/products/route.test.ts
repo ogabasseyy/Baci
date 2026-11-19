@@ -225,6 +225,24 @@ describe('BrilStash feed GET', () => {
     expect(dependencies.rpc).not.toHaveBeenCalled();
   });
 
+  it('treats a database ingress failure as an outage with a safe diagnostic', async () => {
+    dependencies.abortSignal.mockResolvedValueOnce({
+      data: { status: 'ingress_unavailable' },
+      error: null,
+    });
+    const response = await GET(request());
+
+    expect(response.status).toBe(503);
+    expect(dependencies.warn).toHaveBeenCalledWith({
+      message: 'BrilStash database ingress verification failed',
+      requestId: response.headers.get('x-request-id'),
+    });
+    expect(await response.json()).toEqual({
+      error: 'Catalogue unavailable',
+      code: 'FEED_UNAVAILABLE',
+    });
+  });
+
   it.each([
     [{ data: { status: 'unauthorized' }, error: null }, 401],
     [{ data: { status: 'invalid_query' }, error: null }, 400],

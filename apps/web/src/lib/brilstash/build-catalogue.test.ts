@@ -154,6 +154,20 @@ describe('buildBrilStashCatalogue', () => {
     ).toEqual(images.slice(0, 10).map((url) => ({ url })));
   });
 
+  it('retains the exact verified URL while deduplicating equivalent images', () => {
+    const provisioned = 'https://IMAGES.example.invalid:443/phone.jpg';
+    const { products } = build([
+      {
+        ...sources[0],
+        verifiedImages: [
+          provisioned,
+          'https://images.example.invalid/phone.jpg',
+        ],
+      },
+    ]);
+    expect(products[0]?.images).toEqual([{ url: provisioned }]);
+  });
+
   it.each([
     [{ merchantId: 'other' }, 'wrong_scope'],
     [{ installationId: 'other' }, 'wrong_scope'],

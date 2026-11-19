@@ -72,6 +72,7 @@ $$;
 \ir ../migrations/20261119023000_brilstash_generation_and_binding_guards.sql
 \ir ../migrations/20261119023100_brilstash_require_ingress_proof.sql
 \ir ../migrations/20261119121800_brilstash_bind_payload_display.sql
+\ir ../migrations/20261119121900_brilstash_revalidate_storefront_and_ingress.sql
 \ir brilstash_catalogue_privileges.sql
 \ir brilstash_catalogue_digest.sql
 CREATE SCHEMA fixture;
@@ -109,6 +110,15 @@ INSERT INTO public.merchants VALUES ('20000000-0000-4000-8000-000000000001', tru
 INSERT INTO public.domains VALUES
   ('20000000-0000-4000-8000-000000000001', 'shop.example.invalid', 'active'),
   ('20000000-0000-4000-8000-000000000002', 'other.example.invalid', 'active');
+DO $$
+BEGIN
+  IF private.brilstash_host_belongs_to_merchant(
+    '20000000-0000-4000-8000-000000000001', 'www.shop.example.invalid'
+  ) IS DISTINCT FROM true OR private.brilstash_host_belongs_to_merchant(
+    '20000000-0000-4000-8000-000000000001', 'www.other.example.invalid'
+  ) IS DISTINCT FROM false THEN RAISE EXCEPTION 'product URL ownership diverged from storefront www routing'; END IF;
+END $$;
+
 INSERT INTO private.brilstash_installations (id, merchant_id, partner_identity)
 VALUES ('30000000-0000-4000-8000-000000000001', '20000000-0000-4000-8000-000000000001', 'fixture-one'),
   ('30000000-0000-4000-8000-000000000002', '20000000-0000-4000-8000-000000000002', 'fixture-two');

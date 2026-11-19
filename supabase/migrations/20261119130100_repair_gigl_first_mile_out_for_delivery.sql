@@ -4,9 +4,9 @@
 -- shipments with no genuine out_for_delivery event; terminal shipments and
 -- notification history are left alone. Idempotent: a second run matches nothing.
 -- Residual scope (by design): an MSHC tied to a movement scan's timestamp, and
--- terminal shipments, are not rewritten. provider_event_key is unique per
--- shipment in tracking_events (the apply function dedupes on it), so the JSON
--- patch joins on (shipment, key).
+-- terminal shipments, are not rewritten. the JSON patch joins on (shipment, key) and
+-- fixed_events holds only active-epoch rows, one per key, so it cannot fan out;
+-- status candidates are limited to the active epoch.
 WITH movement AS (
   SELECT event.shipment_id, event.tracking_epoch_id,
     min(event.occurred_at) AS first_movement_at
@@ -18,7 +18,7 @@ WITH movement AS (
     )
   GROUP BY event.shipment_id, event.tracking_epoch_id
 ), first_mile AS (
-  SELECT event.id, event.shipment_id, event.provider_event_key,
+  SELECT event.id, event.shipment_id, event.tracking_epoch_id, event.provider_event_key,
     CASE WHEN EXISTS (
       SELECT 1 FROM public.shipment_tracking_events AS pickup
       WHERE pickup.shipment_id = event.shipment_id
@@ -53,13 +53,16 @@ WITH movement AS (
   SET normalized_status = fm.fixed_status
   FROM first_mile AS fm
   WHERE event.id = fm.id AND fm.shipment_id IN (SELECT shipment_id FROM repairable)
-  RETURNING event.shipment_id, event.provider_event_key, event.normalized_status
+  RETURNING event.shipment_id, event.tracking_epoch_id, event.provider_event_key, event.normalized_status
 ), new_status AS (
   SELECT shipment.id AS shipment_id,
     (SELECT candidate.status FROM (
        SELECT event.normalized_status AS status
        FROM public.shipment_tracking_events AS event
        WHERE event.shipment_id = shipment.id
+         AND event.tracking_epoch_id = (
+           SELECT max(fm0.tracking_epoch_id::text)::uuid FROM first_mile AS fm0
+           WHERE fm0.shipment_id = shipment.id)
          AND event.id NOT IN (SELECT id FROM first_mile WHERE shipment_id = shipment.id)
        UNION ALL
        SELECT fm.fixed_status FROM first_mile AS fm WHERE fm.shipment_id = shipment.id

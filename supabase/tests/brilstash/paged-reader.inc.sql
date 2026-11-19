@@ -17,6 +17,10 @@ SELECT ('41000000-0000-4000-8000-00000000000' || n)::uuid,
   '50000000-0000-4000-8000-000000000001', 'new', 50000 + n * 70000, '["https://MEDIA.example.invalid.:443/approved"]'::jsonb,
   false, false, n, n, true, 'off'
 FROM generate_series(1, 7) n;
+UPDATE public.products SET has_condition_offers = true WHERE slug = 'paged-2';
+INSERT INTO public.product_offers (id, merchant_id, product_id, condition, status, price, stock_quantity, images)
+SELECT '43000000-0000-4000-8000-000000000002', merchant_id, id, 'used', 'active', price, stock_quantity, images
+FROM public.products WHERE slug = 'paged-2';
 -- An internal inventory anchor does not change a simple listing into a
 -- variant listing. The simple listing must still stage, activate, and serve.
 INSERT INTO public.product_variants (
@@ -50,7 +54,9 @@ INSERT INTO private.brilstash_listings (
   id, installation_id, source_kind, source_id, parent_product_id, external_id, pilot_slot, reviewed_identity
 )
 SELECT ('61000000-0000-4000-8000-00000000000' || n)::uuid, '30000000-0000-4000-8000-000000000003',
-  'product', product_id, product_id, 'paged-' || n, n, '{"condition":"new"}'::jsonb
+  CASE WHEN n = 2 THEN 'offer' ELSE 'product' END,
+  CASE WHEN n = 2 THEN '43000000-0000-4000-8000-000000000002'::uuid ELSE product_id END,
+  product_id, 'paged-' || n, n, jsonb_build_object('condition', CASE WHEN n = 2 THEN 'used' ELSE 'new' END)
 FROM generate_series(1, 7) n
 CROSS JOIN LATERAL (SELECT ('41000000-0000-4000-8000-00000000000' || n)::uuid AS product_id) fixture;
 INSERT INTO private.brilstash_listing_facts (
@@ -73,8 +79,11 @@ BEGIN
   THEN RAISE EXCEPTION 'inventory anchor hid a simple listing'; END IF;
   SELECT jsonb_agg(jsonb_build_object(
     'external_id', item->>'externalId', 'title', item->>'name',
-    'product_url', 'https://shop.example.invalid/products/' || (item->>'slug'),
-    'description', 'Condition: New. Specifications: Fixture specification. Box contents: Phone only. Warranty: 30 days.', 'category', item->>'partnerCategory',
+    'product_url', 'https://shop.example.invalid/products/' || (item->>'slug') ||
+      CASE WHEN item->>'kind' = 'offer' THEN '?offer_id=' || (item->>'id') || '&condition=used' ELSE '' END,
+    'description', 'Condition: ' || CASE WHEN item->>'kind' = 'offer' THEN 'Used' ELSE 'New' END ||
+      '. Specifications: Fixture specification. Box contents: Phone only. Warranty: 30 days.',
+    'category', item->>'partnerCategory',
     'price_naira', item->'priceNaira', 'stock_quantity', item->'inventory'->'units',
     'images', CASE WHEN item->>'externalId' = 'paged-1' THEN
       '[{"url":"https://MEDIA.example.invalid.:443/approved"},{"url":"https://media.example.invalid/secondary"}]'::jsonb
@@ -255,6 +264,17 @@ BEGIN
 END $$;
 ROLLBACK TO SAVEPOINT renamed_published_slug;
 RELEASE SAVEPOINT renamed_published_slug;
+
+SAVEPOINT offer_hidden_by_parent;
+UPDATE public.products SET condition = 'UK-Used' WHERE slug = 'paged-2';
+SET LOCAL ROLE anon;
+DO $$
+BEGIN
+  IF fixture.read_brilstash_page(repeat('p', 43), 1, 3, 0)->>'status' IS DISTINCT FROM 'unavailable'
+  THEN RAISE EXCEPTION 'an offer hidden by the parent condition remained in the active feed'; END IF;
+END $$;
+ROLLBACK TO SAVEPOINT offer_hidden_by_parent;
+RELEASE SAVEPOINT offer_hidden_by_parent;
 
 SAVEPOINT stock_drop;
 UPDATE public.products SET stock_quantity = 2, stock = 2 WHERE slug = 'paged-7';

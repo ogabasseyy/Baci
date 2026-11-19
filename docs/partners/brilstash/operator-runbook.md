@@ -70,3 +70,4 @@ Confirm category labels, NGN precision, bearer and request deadline behavior, sa
 - `20261119122200_brilstash_guard_drain_abort_freshness.sql` keeps admission closed if the old generation cannot pass the read freshness check through the protected period and upcoming scheduled pull.
 - `20261119122300_brilstash_pin_activation_prerequisites.sql` enforces the verified image sequence, qualified drain policy and five-minute first-activation evidence window. Restage and approve any candidate whose image sequence no longer passes the authoritative check.
 - `20261119122400_brilstash_align_image_identity_and_activation_clock.sql` shares image deduplication rules with the builder and rechecks freshness and evidence after the last activation write.
+- `20261119122600_brilstash_require_selectable_offer_condition.sql` blocks the feed if an approved condition offer becomes hidden on the storefront because its normalized condition matches its parent.

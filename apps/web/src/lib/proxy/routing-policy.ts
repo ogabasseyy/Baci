@@ -46,6 +46,10 @@ export function normalizePathnameForCompare(pathname: string): string {
   return (pathname.replace(/\/+$/g, '') || '/').toLowerCase();
 }
 
+export function isBrilStashFeedPath(pathname: string): boolean {
+  return normalizePathnameForCompare(pathname) === BRILSTASH_FEED_PATH;
+}
+
 export function getNestedProductSubrouteSegment(
   pathname: string,
   hostname: string | undefined,
@@ -200,7 +204,7 @@ export function getRouteType(
     return 'auth';
   }
 
-  if (pathname === BRILSTASH_FEED_PATH || pathname.startsWith('/api')) {
+  if (pathname.startsWith('/api') || isBrilStashFeedPath(pathname)) {
     return 'api';
   }
 

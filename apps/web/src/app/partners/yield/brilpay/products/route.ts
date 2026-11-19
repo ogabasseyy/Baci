@@ -26,6 +26,7 @@ export async function GET(request: Request): Promise<Response> {
     return fail(503, 'Catalogue unavailable', 'FEED_UNAVAILABLE');
 
   const url = new URL(request.url);
+  // The registered endpoint and ingress use the same bare canonical Host.
   const host = request.headers.get('host') ?? url.host;
   if (host.toLowerCase() !== deployment.host)
     return fail(404, 'Not found', 'NOT_FOUND');

@@ -1,6 +1,8 @@
 import { NextRequest } from 'next/server';
 import { expect, it, vi } from 'vitest';
 import { getCustomDomainForSlug } from '@/lib/domain-cache-simple';
+import { getRouteType } from '@/lib/proxy/routing-policy';
+import { runSlugRoutingStage } from '@/lib/proxy/slug-routing';
 import { getCurrentSlugForAlias } from '@/lib/slug-alias-cache';
 import { config, proxy } from '@/proxy';
 import { GET } from './route';
@@ -78,4 +80,28 @@ it('preserves the exact platform path, query and credential through normal proxy
   } finally {
     vi.unstubAllEnvs();
   }
+});
+
+it.each([
+  `${path}/`,
+  '/PARTNERS/Yield/BrilPay/Products',
+])('keeps %s out of storefront routing', async (variant) => {
+  vi.clearAllMocks();
+  const request = new NextRequest(`https://usebaci.com${variant}${query}`, {
+    headers: { host: 'usebaci.com', authorization: `Bearer ${credential}` },
+  });
+  expect(getRouteType(variant)).toBe('api');
+  expect(
+    await runSlugRoutingStage(request, variant, 'usebaci.com', '')
+  ).toBeNull();
+
+  const routed = await proxy(request);
+  const location = routed.headers.get('location');
+  if (location) {
+    expect(new URL(location).origin).toBe(request.nextUrl.origin);
+  }
+  expect(routed.headers.get('x-middleware-rewrite')).toBeNull();
+  expect(getCurrentSlugForAlias).not.toHaveBeenCalled();
+  expect(getCustomDomainForSlug).not.toHaveBeenCalled();
+  expect(dependencies.rpc).not.toHaveBeenCalled();
 });

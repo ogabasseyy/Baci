@@ -23,6 +23,61 @@ describe('follow-up status label', () => {
     ).toBe(expected);
   });
 
+  it.each([
+    ['credit_direct', 'Credit Direct · Drop-off'],
+    ['credit-direct', 'Credit Direct · Drop-off'],
+    ['oxygen', 'Oxygen · Drop-off'],
+    ['bnpl', 'BNPL Drop-off'],
+  ])('names the known lender for a %s drop-off', (payment_method, label) => {
+    expect(
+      getFollowUpStatusLabel({
+        ...order,
+        payment_method,
+        payment_status: 'bnpl_pending',
+      })
+    ).toBe(label);
+  });
+
+  it('keeps the lender visible alongside attempt counts and gateway messages', () => {
+    const pending: FailedOrder = {
+      ...order,
+      payment_method: 'credit_direct',
+      payment_status: 'bnpl_pending',
+    };
+    expect(getFollowUpStatusLabel({ ...pending, attempt_count: 2 })).toBe(
+      'Credit Direct · 2 attempts'
+    );
+    expect(
+      getFollowUpStatusLabel({
+        ...pending,
+        gateway_response: { message: 'Declined by issuer' },
+      })
+    ).toBe('Credit Direct · Declined by issuer');
+  });
+
+  it.each([
+    ['paystack', 'Paystack · Checkout Drop-off'],
+    ['card', 'Card · Checkout Drop-off'],
+    ['bank_transfer', 'Bank Transfer · Checkout Drop-off'],
+    ['credit_direct', 'Credit Direct · Checkout Drop-off'],
+    ['unknown_method', 'Checkout Drop-off'],
+  ])('labels an unpaid checkout using its saved %s method', (payment_method, label) => {
+    expect(getFollowUpStatusLabel({ ...order, payment_method })).toBe(label);
+  });
+
+  it('keeps terminal status labels and labels approved financing', () => {
+    const creditDirect = { ...order, payment_method: 'credit_direct' };
+    expect(
+      getFollowUpStatusLabel({
+        ...creditDirect,
+        payment_status: 'bnpl_approved',
+      })
+    ).toBe('Credit Direct · Approved');
+    expect(
+      getFollowUpStatusLabel({ ...creditDirect, payment_status: 'paid' })
+    ).toBe('Paid');
+  });
+
   it('preserves generic attempt and gateway messages', () => {
     expect(getFollowUpStatusLabel({ ...order, attempt_count: 2 })).toBe(
       '2 attempts'

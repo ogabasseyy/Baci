@@ -101,7 +101,7 @@ export function FollowUpOrderCard({
                   : colors.error,
             },
           ]}
-          numberOfLines={item.oxygen_follow_up_status ? 2 : 1}
+          numberOfLines={2}
         >
           {displayTotal} • {errorMessage}
         </Text>

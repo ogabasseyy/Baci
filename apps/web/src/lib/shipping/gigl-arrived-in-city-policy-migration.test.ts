@@ -6,7 +6,7 @@ import { GIGL_ARRIVED_IN_CITY_RAW_STATUS } from './gigl-tracking-notification-po
 
 const MIGRATION = resolve(
   dirname(fileURLToPath(import.meta.url)),
-  '../../../../../supabase/migrations/20261109130000_gigl_arrived_in_city_notification.sql'
+  '../../../../../supabase/migrations/20261119100000_gigl_arrived_in_city_notification.sql'
 );
 
 describe('arrived-in-city policy rows', () => {

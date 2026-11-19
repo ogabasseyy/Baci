@@ -1,5 +1,6 @@
 import type { MerchantData, StaffAccess } from '@/hooks/merchant/types';
 import { isRepairsBusinessType } from '@/lib/repairs/repairs-feature';
+import { isAgenticTenantVisible } from './agentic-tenant-navigation';
 import type { DashboardNavItem } from './dashboard-nav-items';
 import { isSantaCampaignVisible } from './santa-navigation';
 
@@ -52,7 +53,7 @@ function canShowNavItem(
   // Customer chat is live for the configured agentic tenant only for now.
   if (
     item.label === 'Messages' &&
-    !isSantaCampaignVisible(ctx.merchant?.slug, ctx.agenticMerchantSlug)
+    !isAgenticTenantVisible(ctx.merchant?.slug, ctx.agenticMerchantSlug)
   ) {
     return false;
   }

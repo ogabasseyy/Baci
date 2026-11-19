@@ -7,6 +7,7 @@ import { fetchMerchantInboxInsights } from '@/lib/merchant-inbox-api';
 import { cn } from '@/lib/utils';
 import {
   MERCHANT_INBOX_INSIGHT_DAYS,
+  type MerchantInboxInsightDays,
   type MerchantInboxInsights,
 } from '@/schemas/merchant-inbox-insights';
 import { formatInsightDuration } from './insights-format';
@@ -27,7 +28,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 /** Chat totals and reply times for the Messages page. */
 export function InsightsCard() {
-  const [days, setDays] = useState<number>(7);
+  const [days, setDays] = useState<MerchantInboxInsightDays>(7);
   const [state, setState] = useState<State>({ status: 'loading' });
 
   useEffect(() => {

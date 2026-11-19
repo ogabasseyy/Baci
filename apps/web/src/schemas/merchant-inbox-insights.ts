@@ -3,6 +3,9 @@ import { z } from 'zod';
 /** Reporting windows the Messages page offers, in days. */
 export const MERCHANT_INBOX_INSIGHT_DAYS = [7, 30, 90] as const;
 
+export type MerchantInboxInsightDays =
+  (typeof MERCHANT_INBOX_INSIGHT_DAYS)[number];
+
 export const merchantInboxInsightsQuerySchema = z.object({
   days: z.coerce
     .number()
@@ -45,7 +48,7 @@ export const providerInboxSummarySchema = z.object({
 });
 
 export type MerchantInboxInsights = {
-  days: number;
+  days: MerchantInboxInsightDays;
   conversations: number;
   customerMessages: number;
   storeReplies: number;
@@ -57,7 +60,7 @@ export type MerchantInboxInsights = {
 
 /** Baci's own insights response, validated again in the browser. */
 export const merchantInboxInsightsResponseSchema = z.object({
-  days: z.number().int().positive(),
+  days: z.union([z.literal(7), z.literal(30), z.literal(90)]),
   conversations: z.number().int().nonnegative(),
   customerMessages: z.number().int().nonnegative(),
   storeReplies: z.number().int().nonnegative(),

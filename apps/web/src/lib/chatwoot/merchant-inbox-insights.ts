@@ -1,6 +1,7 @@
 import 'server-only';
 
 import {
+  type MerchantInboxInsightDays,
   type MerchantInboxInsights,
   providerInboxSummarySchema,
 } from '@/schemas/merchant-inbox-insights';
@@ -16,7 +17,7 @@ const SECONDS_PER_DAY = 86_400;
  */
 export async function getMerchantInboxInsights(
   binding: MerchantInboxBinding,
-  input: { days: number; now?: number }
+  input: { days: MerchantInboxInsightDays; now?: number }
 ): Promise<{ ok: true; insights: MerchantInboxInsights } | { ok: false }> {
   const until = Math.floor((input.now ?? Date.now()) / 1000);
   const url = new URL(

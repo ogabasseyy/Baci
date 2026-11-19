@@ -9,6 +9,7 @@ import {
   merchantInboxThreadResponseSchema,
 } from '@/schemas/merchant-inbox';
 import {
+  type MerchantInboxInsightDays,
   type MerchantInboxInsights,
   merchantInboxInsightsResponseSchema,
 } from '@/schemas/merchant-inbox-insights';
@@ -164,7 +165,7 @@ export async function sendMerchantInboxReply(
 }
 
 export async function fetchMerchantInboxInsights(
-  days: number
+  days: MerchantInboxInsightDays
 ): Promise<
   { ok: true; insights: MerchantInboxInsights } | MerchantInboxApiFailure
 > {

@@ -67,7 +67,7 @@ overrides:
   uuid@>=12 <12.0.1: 12.0.1
   uuid@>=13 <13.0.1: 13.0.1
   ip-address: 10.7.4
-  next: 16.4.1
+  next: 16.4.5
   flatted: 3.4.2
   lodash: 4.18.1
   lodash-es: 4.18.1
@@ -184,7 +184,7 @@ patchedDependencies:
   expo-modules-core@58.0.26: c082040ee061268796b5229134d4bd49ed322fb7fb8f640b0d72b8632d7e70ee
   katex@0.16.47: 7166083cf0032283d3218aa2ca6965514bf007a34779e1bb79881140af29f039
   lottie-react-native@7.5.0: 53426a69edb6a25ca9b3757bd8b74ecf347b8426f1d3fd343e054ca7e1612628
-  next@16.4.1: 0679e0c29945fc606732a859cafe5301630cc84a4335a89f2a84e53dcf9b0891
+  next@16.4.5: 40b78f866f111b002897a726e880ff28f872c89af6b2e50224ba98bd60112da3
   novel@1.0.2: 5ec4c401d7f2d2d623fd40bbbc680e8d9630f827d499abe97d0871041e9fe113
   react-native-fbsdk-next@13.4.3: 92c318310a4381b513dfd038bb292a3bdb8bd3ca2b68aa3202a9e627511641bb
   react-native-mmkv@4.3.1: e8c08c441cf95f6e1d5a652a4f1e0c87fd9686773657d2bfee28ef7825ee07e2
@@ -207,8 +207,8 @@ importers:
         specifier: ^2.5.0
         version: 2.5.0
       '@next/env':
-        specifier: 16.4.1
-        version: 16.4.1
+        specifier: 16.4.5
+        version: 16.4.5
       '@typescript/typescript6':
         specifier: ~6.0.2
         version: 6.0.2
@@ -222,8 +222,8 @@ importers:
         specifier: ^2.1.9
         version: 2.1.9
       next:
-        specifier: 16.4.1
-        version: 16.4.1(patch_hash=0679e0c29945fc606732a859cafe5301630cc84a4335a89f2a84e53dcf9b0891)(@babel/core@7.29.6(supports-color@10.2.2))(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@26.5.1)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+        specifier: 16.4.5
+        version: 16.4.5(patch_hash=40b78f866f111b002897a726e880ff28f872c89af6b2e50224ba98bd60112da3)(@babel/core@7.29.6(supports-color@10.2.2))(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@26.5.1)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       tailwindcss:
         specifier: ^4.3.1
         version: 4.3.1
@@ -918,7 +918,7 @@ importers:
         version: 1.9.1
       '@posthog/nextjs-config':
         specifier: ^1.9.68
-        version: 1.9.68(next@16.4.1(patch_hash=0679e0c29945fc606732a859cafe5301630cc84a4335a89f2a84e53dcf9b0891)(@babel/core@7.29.6(supports-color@10.2.2))(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@24.13.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(webpack@5.107.2(csso@5.0.5)(esbuild@0.28.1)(lightningcss@1.33.0)(postcss@8.5.23))
+        version: 1.9.68(next@16.4.5(patch_hash=40b78f866f111b002897a726e880ff28f872c89af6b2e50224ba98bd60112da3)(@babel/core@7.29.6(supports-color@10.2.2))(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@24.13.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(webpack@5.107.2(csso@5.0.5)(esbuild@0.28.1)(lightningcss@1.33.0)(postcss@8.5.23))
       '@puckeditor/core':
         specifier: 0.21.2
         version: 0.21.2(@floating-ui/dom@1.7.6)(@types/react-dom@19.2.3(@types/react@19.3.0))(@types/react@19.3.0)(immer@11.1.8)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(use-sync-external-store@1.6.0(react@19.2.3))
@@ -1074,7 +1074,7 @@ importers:
         version: 1.38.0
       '@vercel/edge-config':
         specifier: ^1.4.3
-        version: 1.4.3(@opentelemetry/api@1.9.1)(next@16.4.1(patch_hash=0679e0c29945fc606732a859cafe5301630cc84a4335a89f2a84e53dcf9b0891)(@babel/core@7.29.6(supports-color@10.2.2))(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@24.13.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3))
+        version: 1.4.3(@opentelemetry/api@1.9.1)(next@16.4.5(patch_hash=40b78f866f111b002897a726e880ff28f872c89af6b2e50224ba98bd60112da3)(@babel/core@7.29.6(supports-color@10.2.2))(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@24.13.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3))
       '@vercel/functions':
         specifier: ^3.7.5
         version: 3.7.5(ws@8.21.0)
@@ -1163,8 +1163,8 @@ importers:
         specifier: 5.1.16
         version: 5.1.16
       next:
-        specifier: 16.4.1
-        version: 16.4.1(patch_hash=0679e0c29945fc606732a859cafe5301630cc84a4335a89f2a84e53dcf9b0891)(@babel/core@7.29.6(supports-color@10.2.2))(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@24.13.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+        specifier: 16.4.5
+        version: 16.4.5(patch_hash=40b78f866f111b002897a726e880ff28f872c89af6b2e50224ba98bd60112da3)(@babel/core@7.29.6(supports-color@10.2.2))(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@24.13.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
       next-themes:
         specifier: ^0.4.6
         version: 0.4.6(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
@@ -3816,57 +3816,57 @@ packages:
       '@types/react-native': '*'
       react-native: 0.88.0
 
-  '@next/env@16.4.1':
-    resolution: {integrity: sha512-5sUUrrSvs/2/2LnLoesybMGx12EtPB46fdZ6RhAw0XDGSPxU2LFyQBB7yuEiOFFJPKmBY6+q2jTr1/AMbnp0/g==}
+  '@next/env@16.4.5':
+    resolution: {integrity: sha512-JwSPwpdkZL5VMl2jA/q+JI8MZdweAL3xmw5/tb9y/TLtmS0YXZnmYDzSihwk8xTj1OL+WM53gTqaj96yuLp6Xw==}
 
-  '@next/swc-darwin-arm64@16.4.1':
-    resolution: {integrity: sha512-U+hQ5Gj3fpzf4fveTIF3dpUFYhaSW8vHhdAnbiIomzXzg7boreYFgBqprepXFtW4sw+aTttiNmg0gew/iFNhbg==}
+  '@next/swc-darwin-arm64@16.4.5':
+    resolution: {integrity: sha512-W5TniBzWKASbNNwHZ/S/f1MxQUXU/LdjklVMWA0Ujbfl7SZnUzFls45hO0i/sF7Bx1jJBWp7WWmoQajXtX/O8A==}
     engines: {node: '>= 10'}
     cpu: [arm64]
     os: [darwin]
 
-  '@next/swc-darwin-x64@16.4.1':
-    resolution: {integrity: sha512-/hqC3V1XLUjhMASf/WridKdO9FXoEgN3HBWmtKbj00MPgnltutfraWJ3bYTpCRIgEIpbjJyOVLpYgAhh/BkdcQ==}
+  '@next/swc-darwin-x64@16.4.5':
+    resolution: {integrity: sha512-uWq4qkHapBDS1oFltWS4YxTb9pLHAtLNcpbuK6SmRsebLYZqpBML/j/C0op+50JYGTpZgVL/DWNt/6oWlamrrw==}
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [darwin]
 
-  '@next/swc-linux-arm64-gnu@16.4.1':
-    resolution: {integrity: sha512-GHzncHbcaS9g95kcvTNtKQW3aCLoR+xc3Jm7qrkpk1R+D2BjMHIPyvQGRPKCdMX95BsH/421jBUK06q9tEwzjw==}
+  '@next/swc-linux-arm64-gnu@16.4.5':
+    resolution: {integrity: sha512-FdRcyOx5u5P51mlAqLB9EXdd8jZO5fsdHtk4BAQSkqOywCsbTNN/rmw+jO7pnmjNdAtu2AG46NzbCL2FPDrrgw==}
     engines: {node: '>= 10'}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
 
-  '@next/swc-linux-arm64-musl@16.4.1':
-    resolution: {integrity: sha512-1SuJyDxW/PR9dHJat/ZRgcYLhuSZ+1psP4DlKb2tKIuXbjygqpLrJWRSq+onZQBv8LcmU67EIrmb6c3XTaJLjw==}
+  '@next/swc-linux-arm64-musl@16.4.5':
+    resolution: {integrity: sha512-cyvmmgtRXR8aGVT86wi9Py53IlfyCx7P2fZxuAXAoTummDnhKtUyjrMeXfapqp4qgD+gT5RqyGD/VfA16jEK7Q==}
     engines: {node: '>= 10'}
     cpu: [arm64]
     os: [linux]
     libc: [musl]
 
-  '@next/swc-linux-x64-gnu@16.4.1':
-    resolution: {integrity: sha512-Istng1hMGp9TGO4lUqeKLd70MPN/OOkucVTP2Nmj+gLkwBgmPqUw8CJYBCC7nbl/B/23bBCcjCI5Hsh6hazC1A==}
+  '@next/swc-linux-x64-gnu@16.4.5':
+    resolution: {integrity: sha512-hPc+Fl+N22DAvqZHq559NmamXboOX5Lu8I5Wl0DezfrhTk1Zz21NQeYoZDmNI/NjTcrdsVxM72Fzn2lI+Q+vAw==}
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
 
-  '@next/swc-linux-x64-musl@16.4.1':
-    resolution: {integrity: sha512-aSC9wMNiZRRFVpPkPWBzRwLQxIGm/CiQcXyFF1XNcgodb+uMxdk7aSSGGpDXCbnvZdf4itjHxpOd5h7i7zaiYw==}
+  '@next/swc-linux-x64-musl@16.4.5':
+    resolution: {integrity: sha512-gbACYE8IP/jlprNTpiWXHb8N9CofOzpnEwH2SrIz1dUbiJf1FbDssDupCAPeP1Taxe8mgG20sGZamJI7KFOdZw==}
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [linux]
     libc: [musl]
 
-  '@next/swc-win32-arm64-msvc@16.4.1':
-    resolution: {integrity: sha512-t/myvwFDlypMUjRvbBf8qLPyuaB0iXYYdBtwMt6DM6f+60wtGr4bSYholdPqNeV5VUXZhrpMwfza829kmhS3iA==}
+  '@next/swc-win32-arm64-msvc@16.4.5':
+    resolution: {integrity: sha512-+8gj++ZMo8H20Xh2ijjNqyFk5LPLw0AC4Fs4Tq/G94rjjQXhOjN4jgSWsWKPFsyY26hfIeemJIwKtMxOsp5GBA==}
     engines: {node: '>= 10'}
     cpu: [arm64]
     os: [win32]
 
-  '@next/swc-win32-x64-msvc@16.4.1':
-    resolution: {integrity: sha512-6ICqPo9awCkrtYNPhwkx1uU7rlFWrZRrIboDHS2LU+jv088UBYQtmJ25h6pCp27/+FZjF6BQ4Te4ErugyMeuBg==}
+  '@next/swc-win32-x64-msvc@16.4.5':
+    resolution: {integrity: sha512-qNZj66pYXnaWLiF9R9GUbfBdrCv7kC6TaZfIwB2KH5WPc/8pEM3nVOj8hpQhWJU8S94rlH5MPDcX15+RrgUhiw==}
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [win32]
@@ -4360,7 +4360,7 @@ packages:
     resolution: {integrity: sha512-MmzSrompIThnnrDArCKIOBZuD/b3RErH48ZJyzAuX+WfJTiHBjjTMvGWzr+qlIn8jCyJoglSygAwYVG8lJXybg==}
     engines: {node: ^20.20.0 || >=22.22.0}
     peerDependencies:
-      next: 16.4.1
+      next: 16.4.5
 
   '@posthog/plugin-utils@1.1.2':
     resolution: {integrity: sha512-CS/14cMmny9NN/LHAb4QZdW3TfxhbKzsfyVYMCjsRdE0IKMTrXMr0cPRZxwczsN6VnWvVoy2Dd5wcG6RrIjlYA==}
@@ -6741,7 +6741,7 @@ packages:
     deprecated: This package has been renamed to @vercel/global-config. Install @vercel/global-config instead.
     peerDependencies:
       '@opentelemetry/api': ^1.7.0
-      next: 16.4.1
+      next: 16.4.5
     peerDependenciesMeta:
       '@opentelemetry/api':
         optional: true
@@ -10825,8 +10825,8 @@ packages:
       react: ^16.8 || ^17 || ^18 || ^19 || ^19.0.0-rc
       react-dom: ^16.8 || ^17 || ^18 || ^19 || ^19.0.0-rc
 
-  next@16.4.1:
-    resolution: {integrity: sha512-uc657V62E34fOI6W5NtG9IzwsPcms0Z60grz2MJGtglgD+pTFnNt4Yw2PzaU622tfX4vhrDgLZzicE2YlhI20Q==}
+  next@16.4.5:
+    resolution: {integrity: sha512-rmdfsWosjTUO+6R0S3KokoIk6Kj0sWDRTe86tZHdqaWH/oXq/udX3/4xb+YQi7aWbyEFoglDU54kaifLCdXbBw==}
     engines: {node: '>=20.9.0'}
     hasBin: true
     peerDependencies:
@@ -16869,30 +16869,30 @@ snapshots:
     transitivePeerDependencies:
       - '@types/react'
 
-  '@next/env@16.4.1': {}
+  '@next/env@16.4.5': {}
 
-  '@next/swc-darwin-arm64@16.4.1':
+  '@next/swc-darwin-arm64@16.4.5':
     optional: true
 
-  '@next/swc-darwin-x64@16.4.1':
+  '@next/swc-darwin-x64@16.4.5':
     optional: true
 
-  '@next/swc-linux-arm64-gnu@16.4.1':
+  '@next/swc-linux-arm64-gnu@16.4.5':
     optional: true
 
-  '@next/swc-linux-arm64-musl@16.4.1':
+  '@next/swc-linux-arm64-musl@16.4.5':
     optional: true
 
-  '@next/swc-linux-x64-gnu@16.4.1':
+  '@next/swc-linux-x64-gnu@16.4.5':
     optional: true
 
-  '@next/swc-linux-x64-musl@16.4.1':
+  '@next/swc-linux-x64-musl@16.4.5':
     optional: true
 
-  '@next/swc-win32-arm64-msvc@16.4.1':
+  '@next/swc-win32-arm64-msvc@16.4.5':
     optional: true
 
-  '@next/swc-win32-x64-msvc@16.4.1':
+  '@next/swc-win32-x64-msvc@16.4.5':
     optional: true
 
   '@noble/hashes@2.4.0': {}
@@ -17212,12 +17212,12 @@ snapshots:
     dependencies:
       '@posthog/types': 1.400.0
 
-  '@posthog/nextjs-config@1.9.68(next@16.4.1(patch_hash=0679e0c29945fc606732a859cafe5301630cc84a4335a89f2a84e53dcf9b0891)(@babel/core@7.29.6(supports-color@10.2.2))(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@24.13.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(webpack@5.107.2(csso@5.0.5)(esbuild@0.28.1)(lightningcss@1.33.0)(postcss@8.5.23))':
+  '@posthog/nextjs-config@1.9.68(next@16.4.5(patch_hash=40b78f866f111b002897a726e880ff28f872c89af6b2e50224ba98bd60112da3)(@babel/core@7.29.6(supports-color@10.2.2))(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@24.13.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(webpack@5.107.2(csso@5.0.5)(esbuild@0.28.1)(lightningcss@1.33.0)(postcss@8.5.23))':
     dependencies:
       '@posthog/cli': 0.7.33
       '@posthog/plugin-utils': 1.1.2
       '@posthog/webpack-plugin': 1.5.24(webpack@5.107.2(csso@5.0.5)(esbuild@0.28.1)(lightningcss@1.33.0)(postcss@8.5.23))
-      next: 16.4.1(patch_hash=0679e0c29945fc606732a859cafe5301630cc84a4335a89f2a84e53dcf9b0891)(@babel/core@7.29.6(supports-color@10.2.2))(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@24.13.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+      next: 16.4.5(patch_hash=40b78f866f111b002897a726e880ff28f872c89af6b2e50224ba98bd60112da3)(@babel/core@7.29.6(supports-color@10.2.2))(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@24.13.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
       semver: 7.8.4
     transitivePeerDependencies:
       - webpack
@@ -19812,12 +19812,12 @@ snapshots:
 
   '@vercel/edge-config-fs@0.1.0': {}
 
-  '@vercel/edge-config@1.4.3(@opentelemetry/api@1.9.1)(next@16.4.1(patch_hash=0679e0c29945fc606732a859cafe5301630cc84a4335a89f2a84e53dcf9b0891)(@babel/core@7.29.6(supports-color@10.2.2))(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@24.13.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3))':
+  '@vercel/edge-config@1.4.3(@opentelemetry/api@1.9.1)(next@16.4.5(patch_hash=40b78f866f111b002897a726e880ff28f872c89af6b2e50224ba98bd60112da3)(@babel/core@7.29.6(supports-color@10.2.2))(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@24.13.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3))':
     dependencies:
       '@vercel/edge-config-fs': 0.1.0
     optionalDependencies:
       '@opentelemetry/api': 1.9.1
-      next: 16.4.1(patch_hash=0679e0c29945fc606732a859cafe5301630cc84a4335a89f2a84e53dcf9b0891)(@babel/core@7.29.6(supports-color@10.2.2))(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@24.13.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+      next: 16.4.5(patch_hash=40b78f866f111b002897a726e880ff28f872c89af6b2e50224ba98bd60112da3)(@babel/core@7.29.6(supports-color@10.2.2))(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@24.13.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
 
   '@vercel/functions@3.7.5(ws@8.21.0)':
     dependencies:
@@ -25076,9 +25076,9 @@ snapshots:
       react: 19.2.3
       react-dom: 19.2.3(react@19.2.3)
 
-  next@16.4.1(patch_hash=0679e0c29945fc606732a859cafe5301630cc84a4335a89f2a84e53dcf9b0891)(@babel/core@7.29.6(supports-color@10.2.2))(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@24.13.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3):
+  next@16.4.5(patch_hash=40b78f866f111b002897a726e880ff28f872c89af6b2e50224ba98bd60112da3)(@babel/core@7.29.6(supports-color@10.2.2))(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@24.13.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3):
     dependencies:
-      '@next/env': 16.4.1
+      '@next/env': 16.4.5
       '@swc/helpers': 0.5.23
       baseline-browser-mapping: 2.11.23
       caniuse-lite: 1.0.30001810
@@ -25087,14 +25087,14 @@ snapshots:
       react-dom: 19.2.3(react@19.2.3)
       styled-jsx: 5.1.6(@babel/core@7.29.6(supports-color@10.2.2))(react@19.2.3)
     optionalDependencies:
-      '@next/swc-darwin-arm64': 16.4.1
-      '@next/swc-darwin-x64': 16.4.1
-      '@next/swc-linux-arm64-gnu': 16.4.1
-      '@next/swc-linux-arm64-musl': 16.4.1
-      '@next/swc-linux-x64-gnu': 16.4.1
-      '@next/swc-linux-x64-musl': 16.4.1
-      '@next/swc-win32-arm64-msvc': 16.4.1
-      '@next/swc-win32-x64-msvc': 16.4.1
+      '@next/swc-darwin-arm64': 16.4.5
+      '@next/swc-darwin-x64': 16.4.5
+      '@next/swc-linux-arm64-gnu': 16.4.5
+      '@next/swc-linux-arm64-musl': 16.4.5
+      '@next/swc-linux-x64-gnu': 16.4.5
+      '@next/swc-linux-x64-musl': 16.4.5
+      '@next/swc-win32-arm64-msvc': 16.4.5
+      '@next/swc-win32-x64-msvc': 16.4.5
       '@opentelemetry/api': 1.9.1
       '@playwright/test': 1.63.0
       babel-plugin-react-compiler: 1.0.0
@@ -25104,9 +25104,9 @@ snapshots:
       - '@types/node'
       - babel-plugin-macros
 
-  next@16.4.1(patch_hash=0679e0c29945fc606732a859cafe5301630cc84a4335a89f2a84e53dcf9b0891)(@babel/core@7.29.6(supports-color@10.2.2))(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@26.5.1)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0):
+  next@16.4.5(patch_hash=40b78f866f111b002897a726e880ff28f872c89af6b2e50224ba98bd60112da3)(@babel/core@7.29.6(supports-color@10.2.2))(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@26.5.1)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0):
     dependencies:
-      '@next/env': 16.4.1
+      '@next/env': 16.4.5
       '@swc/helpers': 0.5.23
       baseline-browser-mapping: 2.11.23
       caniuse-lite: 1.0.30001810
@@ -25115,14 +25115,14 @@ snapshots:
       react-dom: 19.3.0(react@19.3.0)
       styled-jsx: 5.1.6(@babel/core@7.29.6(supports-color@10.2.2))(react@19.3.0)
     optionalDependencies:
-      '@next/swc-darwin-arm64': 16.4.1
-      '@next/swc-darwin-x64': 16.4.1
-      '@next/swc-linux-arm64-gnu': 16.4.1
-      '@next/swc-linux-arm64-musl': 16.4.1
-      '@next/swc-linux-x64-gnu': 16.4.1
-      '@next/swc-linux-x64-musl': 16.4.1
-      '@next/swc-win32-arm64-msvc': 16.4.1
-      '@next/swc-win32-x64-msvc': 16.4.1
+      '@next/swc-darwin-arm64': 16.4.5
+      '@next/swc-darwin-x64': 16.4.5
+      '@next/swc-linux-arm64-gnu': 16.4.5
+      '@next/swc-linux-arm64-musl': 16.4.5
+      '@next/swc-linux-x64-gnu': 16.4.5
+      '@next/swc-linux-x64-musl': 16.4.5
+      '@next/swc-win32-arm64-msvc': 16.4.5
+      '@next/swc-win32-x64-msvc': 16.4.5
       '@opentelemetry/api': 1.9.1
       '@playwright/test': 1.63.0
       babel-plugin-react-compiler: 1.0.0

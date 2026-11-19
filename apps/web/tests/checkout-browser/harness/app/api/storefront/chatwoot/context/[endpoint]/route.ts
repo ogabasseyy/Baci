@@ -65,6 +65,7 @@ export async function POST(
 
   return validatedJson({
     authorized: true,
+    cartId: 'fixture_cart_id_123456',
     conversationId: 905,
     sessionExpiresAt: Math.floor(Date.now() / 1000) + 60,
     cartSnapshot: {

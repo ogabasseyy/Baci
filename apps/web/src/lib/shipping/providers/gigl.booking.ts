@@ -1,3 +1,8 @@
+import { hasNeverReachedCause } from '../never-reached-cause';
+import {
+  GIGL_BOOKING_TIMEOUT_MESSAGE,
+  ProviderBookingTimeoutError,
+} from '../order-shipment-booking-failure';
 import { OrderShipmentBookingError } from '../order-shipment-booking-utils';
 import type { BookingRequest, ShipmentBookingResult } from '../types';
 import type { GiglApiClient } from './gigl.auth';
@@ -50,6 +55,7 @@ export async function bookGiglShipment(
   const vehicleType =
     selectedRate.vehicleType ?? getVehicleTypeForWeight(totalWeight);
 
+  let submitStarted = false;
   try {
     let tokenData: Awaited<ReturnType<GiglApiClient['getApiToken']>>;
     try {
@@ -134,6 +140,9 @@ export async function bookGiglShipment(
       );
     }
 
+    // Past this point the carrier POST may have been sent, so a timeout is
+    // unconfirmed; before it, nothing was submitted and the lock can be freed.
+    submitStarted = true;
     const bookingTokenData = apiClient.currentToken ?? tokenData;
     const { envelope, response } =
       await apiClient.safeFetchEnvelopeWithAccessToken(
@@ -263,8 +272,26 @@ export async function bookGiglShipment(
     if (signal.aborted || isGiglAbortError(error)) {
       io.log('warn', 'GIGL booking timed out', {
         timeoutMs: GIGL_BOOKING_TIMEOUT_MS,
+        submitStarted,
       });
-      throw new Error('GIGL booking timed out');
+      if (!submitStarted) {
+        throw new OrderShipmentBookingError(
+          'GIG did not respond before the booking was sent. Nothing was booked; please try again.',
+          504,
+          'GIGL_BOOKING_TIMED_OUT_BEFORE_SUBMIT'
+        );
+      }
+      throw new ProviderBookingTimeoutError(GIGL_BOOKING_TIMEOUT_MESSAGE);
+    }
+    if (submitStarted && !hasNeverReachedCause(error)) {
+      // The booking POST may have created the shipment, so an unreadable
+      // answer or a mid-request network failure is unconfirmed, not unexpected.
+      io.log('error', 'GIGL booking answer could not be used', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw new ProviderBookingTimeoutError(
+        error instanceof Error ? error.message : GIGL_BOOKING_TIMEOUT_MESSAGE
+      );
     }
 
     throw error;

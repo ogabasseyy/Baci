@@ -10,6 +10,7 @@ import { handleChatwootInlineProductLookup } from '@/components/storefront/ogaba
 import { useCart } from '@/hooks/cart';
 import { evaluateChatwootActionCartFreshness } from './chatwoot-action-cart-freshness';
 import { createChatwootActionGenerations } from './chatwoot-action-generations';
+import { handleChatwootDeliveryOptionsAction } from './chatwoot-delivery-options-action';
 import { isChatwootInlineActionEvent } from './chatwoot-inline-action-event';
 import { createChatwootInlineActionContext } from './chatwoot-inline-cart-action-context';
 import { postChatwootInlineCartActionFailure } from './chatwoot-inline-cart-action-failure';
@@ -250,6 +251,24 @@ export function useChatwootInlineCartBridge(
           sessionToken: actionSessionToken,
           slug: message.data.slug,
           storeSlug,
+        });
+        return;
+      }
+      if (message.event === 'baci-delivery-options-request') {
+        await handleChatwootDeliveryOptionsAction({
+          requestId,
+          conversationId,
+          sessionToken: actionSessionToken,
+          state: message.data.state,
+          storeSlug,
+          snapshot: authorized.snapshot,
+          authorizedCartId: authorized.cartId,
+          requestedCartRef,
+          getCurrentCartRef: () => latestState.current.sharedCartRef ?? null,
+          isCurrent: () =>
+            actionContext.isCurrentAction() && sessionExpiresAt > Date.now(),
+          postResult: (result) =>
+            post(target, 'baci-delivery-options-result:', result),
         });
         return;
       }

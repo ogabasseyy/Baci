@@ -813,12 +813,13 @@ describe('POST /api/orders REDVAULT integration', () => {
           { status: 201 }
         ) as never
       );
+    const productId = '11111111-1111-4111-8111-111111111111';
     const supabase = buildMockSupabase(
       {},
       {
         productRows: [
           {
-            id: '11111111-1111-4111-8111-111111111111',
+            id: productId,
             name: 'Galaxy S24',
             price: 1000,
             slug: 'galaxy-s24',
@@ -846,7 +847,7 @@ describe('POST /api/orders REDVAULT integration', () => {
                   shipping_fee: 0,
                   items: [
                     {
-                      product_id: '11111111-1111-4111-8111-111111111111',
+                      product_id: productId,
                       name: 'Galaxy S24',
                       price: 1000,
                       quantity: 1,
@@ -888,11 +889,14 @@ describe('POST /api/orders REDVAULT integration', () => {
       // The REDVAULT draft reserves inventory, so the draft success path
       // runs the same merchant and per-slug PDP cache revalidation.
       expect(mockRevalidateProducts).toHaveBeenCalledWith(
-        '6b5cb8a4-5575-456c-b936-8cdfae30db74'
+        '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+        undefined,
+        { expireImmediately: true }
       );
       expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
         '6b5cb8a4-5575-456c-b936-8cdfae30db74',
-        ['galaxy-s24']
+        ['galaxy-s24', kind ? productId : baseOrderPayload.items[0].product_id],
+        { expireImmediately: true }
       );
     } finally {
       availabilitySpy.mockRestore();
@@ -4245,7 +4249,7 @@ describe('POST /api/orders — product cache revalidation after order creation',
     );
   });
 
-  it('revalidates the merchant product caches once after a successful order', async () => {
+  it('hard-expires merchant product caches when ordered product slugs are unresolved', async () => {
     const supabaseMod = await import('@/lib/supabase/server');
     vi.mocked(supabaseMod.createClient).mockImplementation(() => {
       const supabase = buildMockSupabase();
@@ -4255,8 +4259,8 @@ describe('POST /api/orders — product cache revalidation after order creation',
         if (table !== 'products') {
           return original;
         }
-        // Success path: the enrichment lookup resolves (no rows), so the
-        // rejection-only broad hard-expire below must not fire.
+        // The enrichment query succeeds with no rows. Without an
+        // authoritative slug, the deferred purge must hard-expire broadly.
         const enrichmentOutcome = Promise.resolve({
           data: [],
           error: null,
@@ -4282,10 +4286,14 @@ describe('POST /api/orders — product cache revalidation after order creation',
     );
 
     expect(response.status).toBe(201);
-    expect(mockRevalidateProducts).toHaveBeenCalledExactlyOnceWith(MERCHANT_ID);
+    expect(mockRevalidateProducts.mock.calls).toEqual([
+      [MERCHANT_ID, undefined, { expireImmediately: true }],
+      [MERCHANT_ID, undefined, { expireImmediately: true }],
+    ]);
   });
 
   it('resolves the touched product slugs and revalidates their per-slug PDP caches', async () => {
+    mockRevalidateProductSlugs.mockReturnValueOnce(true);
     const supabaseMod = await import('@/lib/supabase/server');
     vi.mocked(supabaseMod.createClient).mockImplementation(
       () =>
@@ -4305,7 +4313,13 @@ describe('POST /api/orders — product cache revalidation after order creation',
     expect(response.status).toBe(201);
     expect(mockRevalidateProductSlugs).toHaveBeenCalledExactlyOnceWith(
       MERCHANT_ID,
-      ['test-widget']
+      ['test-widget', 'p-1'],
+      { expireImmediately: true }
+    );
+    expect(mockRevalidateProducts).toHaveBeenCalledExactlyOnceWith(
+      MERCHANT_ID,
+      undefined,
+      { expireImmediately: true, omitMerchantWidePdpDetails: true }
     );
   });
 
@@ -4361,7 +4375,10 @@ describe('POST /api/orders — product cache revalidation after order creation',
     );
 
     expect(response.status).toBe(201);
-    expect(mockRevalidateProducts).toHaveBeenCalledExactlyOnceWith(MERCHANT_ID);
+    expect(mockRevalidateProducts.mock.calls).toEqual([
+      [MERCHANT_ID, undefined, { expireImmediately: true }],
+      [MERCHANT_ID, undefined, { expireImmediately: true }],
+    ]);
     // Fail-closed: the route-level slug lookup failed, but the known-ids blog
     // purge fallback still hard-expires the per-slug Next tags from the caller
     // hints so a later edge purge cannot refill from stale snapshots.
@@ -4468,7 +4485,11 @@ describe('POST /api/orders — product cache revalidation after order creation',
     );
 
     expect(response.status).toBe(201);
-    expect(mockRevalidateProducts).toHaveBeenCalledExactlyOnceWith(MERCHANT_ID);
+    expect(mockRevalidateProducts).toHaveBeenCalledExactlyOnceWith(
+      MERCHANT_ID,
+      undefined,
+      { expireImmediately: true }
+    );
     expect(mockRevalidateProductSlugs).not.toHaveBeenCalled();
   });
 });

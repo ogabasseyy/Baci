@@ -24,6 +24,7 @@ describe('shouldReleaseBookingLock', () => {
   it('releases locks for pre-provider quote and origin failures', () => {
     for (const code of [
       'NO_SHIPPABLE_ITEMS',
+      'DOMESTIC_QUOTE_ORDER_MISMATCH',
       'QUOTE_REFRESH_PERSIST_FAILED',
       'QUOTE_ORDER_MISMATCH',
       'QUOTE_METADATA_LOOKUP_FAILED',

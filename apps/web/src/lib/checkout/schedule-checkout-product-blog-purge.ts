@@ -38,8 +38,6 @@ export async function scheduleCheckoutProductBlogPurge({
   orderItems: readonly CheckoutOrderItem[];
   supabase: SupabaseClient;
 }): Promise<void> {
-  revalidateProducts(merchantId);
-
   const productIds = Array.from(
     new Set(
       orderItems
@@ -47,7 +45,10 @@ export async function scheduleCheckoutProductBlogPurge({
         .filter((id): id is string => Boolean(id))
     )
   );
-  if (productIds.length === 0) return;
+  if (productIds.length === 0) {
+    revalidateProducts(merchantId, undefined, { expireImmediately: true });
+    return;
+  }
 
   let productRows: ProductPolicyRow[] | null;
   try {
@@ -62,6 +63,7 @@ export async function scheduleCheckoutProductBlogPurge({
     }
     productRows = result.data;
   } catch (lookupError) {
+    revalidateProducts(merchantId, undefined, { expireImmediately: true });
     // A rejected products read must schedule the same known-ids fallback
     // as an `{ error }` result; otherwise the purge is skipped entirely.
     scheduleOrderProductBlogPurgeAfterResponse({
@@ -80,14 +82,33 @@ export async function scheduleCheckoutProductBlogPurge({
   }
 
   const resolvedProductRows = productRows ?? [];
-  revalidateProductSlugs(
-    merchantId,
-    resolvedProductRows.map((row) => row.slug)
-  );
-
+  const resolvedSlugs = resolvedProductRows
+    .map((row) => row.slug?.trim())
+    .filter((slug): slug is string => Boolean(slug));
   const resolvedProductIds = new Set(
     resolvedProductRows.map((product) => product.id)
   );
+  const scopedIdentifiers = Array.from(
+    new Set([...resolvedSlugs, ...productIds])
+  );
+  const slugsRevalidated =
+    resolvedSlugs.length > 0 &&
+    revalidateProductSlugs(merchantId, scopedIdentifiers, {
+      expireImmediately: true,
+    }) === true;
+
+  if (
+    slugsRevalidated &&
+    resolvedProductIds.size === productIds.length &&
+    resolvedSlugs.length === productIds.length
+  ) {
+    revalidateProducts(merchantId, undefined, {
+      expireImmediately: true,
+      omitMerchantWidePdpDetails: true,
+    });
+  } else {
+    revalidateProducts(merchantId, undefined, { expireImmediately: true });
+  }
   const productsNeedingVariantLookup = new Set(
     resolvedProductRows
       .filter((product) => !isInventoryTrackedProduct(product))

@@ -23,7 +23,10 @@ export function getProductScopedCacheTag(
   merchantId: string,
   productSlug: string
 ): string {
-  const rawTag = `${scope}-${merchantId}-${productSlug}`;
+  const normalizedScope = normalizeCacheTagPart(scope);
+  const normalizedMerchantId = normalizeCacheTagPart(merchantId);
+  const normalizedProductSlug = normalizeCacheTagPart(productSlug);
+  const rawTag = `${normalizedScope}-${normalizedMerchantId}-${normalizedProductSlug}`;
 
   if (
     rawTag.length <= MAX_CACHE_TAG_LENGTH &&
@@ -34,9 +37,7 @@ export function getProductScopedCacheTag(
 
   const digest = createHash('sha256')
     .update(
-      `${normalizeCacheTagPart(scope)}\0${normalizeCacheTagPart(
-        merchantId
-      )}\0${normalizeCacheTagPart(productSlug)}`
+      `${normalizedScope}\0${normalizedMerchantId}\0${normalizedProductSlug}`
     )
     .digest('hex')
     .slice(0, CACHE_TAG_HASH_LENGTH);
@@ -75,6 +76,14 @@ export function getProductLegacyRedirectCacheTag(merchantId: string): string {
   return `product-legacy-redirect-${merchantId}`;
 }
 
+/**
+ * Builds cache tags for `getCachedStorefrontPdpCore`.
+ *
+ * Intentionally omits `products-${merchantId}` so single-product and order
+ * mutations do not evict unrelated PDPs; sibling PDP related-product rails
+ * refresh within the ~300s `products` cacheLife window, while store-wide
+ * `revalidateProducts(merchantId)` still busts `product-details-${merchantId}`.
+ */
 export function buildStorefrontPdpCoreCacheTags(
   merchantId: string,
   productSlug: string
@@ -84,7 +93,6 @@ export function buildStorefrontPdpCoreCacheTags(
     'product-details',
     getProductDetailsCacheTag(merchantId),
     'product-lcp-hint',
-    `products-${merchantId}`,
     `categories-${merchantId}`,
     getProductScopedCacheTag('product', merchantId, productSlug),
   ];
@@ -97,7 +105,7 @@ export function buildProductLcpHintCacheTags(
   return [
     'product',
     'product-lcp-hint',
-    `products-${merchantId}`,
+    getProductDetailsCacheTag(merchantId),
     getProductScopedCacheTag('product', merchantId, productSlug),
   ];
 }

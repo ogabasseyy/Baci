@@ -1,17 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getAppUrl, getInternalApiSecret } from '@/env';
-import { enrichProductPurgeEntries } from '@/lib/authoritative-product-purge-enrichment';
-import {
-  revalidateProductSlugs,
-  revalidateProducts,
-} from '@/lib/cache-revalidation';
-import { expireProductBlogCache } from '@/lib/expire-product-blog-cache';
-import {
-  buildInternalProductPurgeEntries,
-  collectResolvedProductSlugs,
-} from '@/lib/internal-product-purge-entries';
-import { scheduleStorefrontProductPurge } from '@/lib/storefront-product-purge';
-import { scheduleStorefrontHostnamePurge } from '@/lib/storefront-product-purge-hostnames';
+import { revalidateProductsInProcess } from '@/lib/revalidate-products-in-process';
 import type { InternalRevalidateProductEntry } from '@/schemas/internal-revalidate-products-route';
 
 interface RevalidateProductsReliableOptions {
@@ -41,6 +30,32 @@ interface RevalidateProductsReliableOptions {
 }
 
 const INTERNAL_REVALIDATION_PRODUCT_SLUG_LIMIT = 10_000;
+
+function hasTrackedScopedSlugs(
+  products: readonly InternalRevalidateProductEntry[] | undefined,
+  nextProductSlugs: readonly string[]
+): boolean {
+  if (!products || products.length === 0 || nextProductSlugs.length === 0) {
+    return false;
+  }
+  const slugSet = new Set(
+    nextProductSlugs.map((slug) => slug.trim().toLowerCase())
+  );
+  for (const product of products) {
+    if (!product.id?.trim()) {
+      return false;
+    }
+    const slug = product.slug?.trim().toLowerCase();
+    const previousSlug = product.previousSlug?.trim().toLowerCase();
+    if (!previousSlug || !slugSet.has(previousSlug)) {
+      return false;
+    }
+    if (slug && !slugSet.has(slug)) {
+      return false;
+    }
+  }
+  return true;
+}
 
 /**
  * Revalidate a merchant's product caches reliably from ANY execution context.
@@ -76,100 +91,15 @@ export async function revalidateProductsReliable(
         .filter((slug) => slug.length > 0)
     )
   );
-  const shouldPurgeProducts = Boolean(
-    merchantSlug && !purgeWholeStorefront && products && products.length > 0
-  );
-
   try {
-    if (revalidateProducts(merchantId) === false) {
-      throw new Error('Product cache revalidation requires a request context');
-    }
-    // In-process revalidation succeeded (we had a Next store context), so the
-    // Cloudflare purge can be scheduled in-process too (scheduleStorefrontProductPurge
-    // is guarded and never throws). Return before the HTTP fallback.
-    // Per-slug Next cache busting needs only merchantId — run it for every
-    // products-carrying call, decoupled from the merchant-slug-gated Cloudflare
-    // purge (a failed slug lookup must not skip the Next-layer bust).
-    if ((products && products.length > 0) || nextProductSlugs.length > 0) {
-      let resolvedSlugs =
-        nextProductSlugs.length > 0
-          ? nextProductSlugs
-          : products
-            ? collectResolvedProductSlugs(products)
-            : [];
-      let purgeEntries = buildInternalProductPurgeEntries(products ?? []);
-      let blogPostSlugs: string[] = [];
-      let blogPostSlugsIncomplete = false;
-
-      if (
-        supabase &&
-        products &&
-        products.length > 0 &&
-        !purgeWholeStorefront
-      ) {
-        try {
-          const enriched = await enrichProductPurgeEntries(
-            supabase,
-            merchantId,
-            products
-          );
-          resolvedSlugs = Array.from(
-            new Set([...resolvedSlugs, ...enriched.resolvedSlugs])
-          );
-          purgeEntries = enriched.entries;
-          blogPostSlugs = enriched.blogPostSlugs;
-          blogPostSlugsIncomplete = enriched.blogPostSlugsIncomplete;
-        } catch (error) {
-          // A rejected enrichment leaves the article set unknown: flag it so
-          // the edge operation below escalates instead of purging only the
-          // product URLs while linked articles keep stale data.
-          blogPostSlugsIncomplete = true;
-          console.warn(
-            'Failed to enrich in-process product purge (continuing with caller hints)',
-            { merchantId, error }
-          );
-        }
-      }
-
-      // Hard-expire when an edge purge follows in-process (product purge or
-      // whole-storefront hostname purge): SWR would serve the pre-mutation
-      // snapshot to the first post-purge request and re-seed the edge.
-      if ((shouldPurgeProducts || purgeWholeStorefront) && merchantSlug) {
-        revalidateProductSlugs(merchantId, resolvedSlugs, {
-          expireImmediately: true,
-        });
-      } else {
-        revalidateProductSlugs(merchantId, resolvedSlugs);
-      }
-
-      if (shouldPurgeProducts && merchantSlug) {
-        // Expire the merchant-scoped related-blog enrichment before the edge
-        // purge so a MISS cannot repopulate an article with stale product data.
-        expireProductBlogCache(merchantId);
-        if (blogPostSlugs.length > 0) {
-          scheduleStorefrontProductPurge(merchantSlug, purgeEntries, {
-            blogPostSlugs,
-          });
-        } else {
-          scheduleStorefrontProductPurge(merchantSlug, purgeEntries);
-        }
-        if (blogPostSlugsIncomplete) {
-          // The known article URLs were purged above, but the set is
-          // partial: evict the hostname (a superset) so the unknown
-          // remainder cannot keep pre-mutation data until TTL.
-          scheduleStorefrontHostnamePurge(merchantSlug);
-        }
-      }
-    }
-
-    if (purgeWholeStorefront && merchantSlug) {
-      // Hostname-wide purges can immediately refill any cached article rail.
-      // Hard-expire the merchant-scoped enrichment first, just as the
-      // per-product path does, so structural/import purges cannot re-seed the
-      // edge with a stale product snapshot.
-      expireProductBlogCache(merchantId);
-      scheduleStorefrontHostnamePurge(merchantSlug);
-    }
+    await revalidateProductsInProcess({
+      merchantId,
+      merchantSlug,
+      products,
+      nextProductSlugs,
+      supabase,
+      purgeWholeStorefront,
+    });
     return;
   } catch {
     // No store context (standalone worker) — fall back to the HTTP endpoint,
@@ -249,6 +179,14 @@ export async function revalidateProductsReliable(
                 : {}),
               ...(productSlugChunk && productSlugChunk.length > 0
                 ? { productSlugs: productSlugChunk }
+                : {}),
+              ...(chunkCarriesControlMetadata &&
+              !purgeWholeStorefront &&
+              merchantSlug &&
+              productSlugChunk &&
+              productSlugChunk.length > 0 &&
+              hasTrackedScopedSlugs(products, nextProductSlugs)
+                ? { omitMerchantWidePdpDetails: true }
                 : {}),
               ...(chunkCarriesControlMetadata && purgeWholeStorefront
                 ? { purgeWholeStorefront: true }

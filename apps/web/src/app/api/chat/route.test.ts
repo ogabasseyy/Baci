@@ -627,14 +627,7 @@ describe('POST /api/chat', () => {
 
   it('blocks repeated side-effecting Ollama tool execution after an order is created', async () => {
     // Arrange
-    const args = {
-      amount: 50_000,
-      customerEmail: 'buyer@example.com',
-      customerName: 'Buyer',
-      items: [
-        { productId: 'p1', name: 'iPhone 11', price: 50_000, quantity: 1 },
-      ],
-    };
+    const args = {};
     ollamaBaseUrl = 'https://ollama.example.com';
     ollamaExecuteDuplicateVirtualAccount = true;
     vi.mocked(createVirtualAccountSchema.parse).mockReturnValue(args);

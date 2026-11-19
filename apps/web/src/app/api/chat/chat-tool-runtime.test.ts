@@ -60,28 +60,14 @@ describe('chat tool runtime', () => {
 
   it('passes session-scoped tools to the AI SDK Gemini path', async () => {
     const tools = createAiSdkAgenticChatTools('session-1');
-    const response = await tools.createVirtualAccount.execute({
-      amount: 150000,
-      customerEmail: 'buyer@example.com',
-      customerName: 'Buyer',
-      items: [
-        { productId: 'p1', name: 'iPhone 11', price: 150000, quantity: 1 },
-      ],
-    });
+    const response = await tools.createVirtualAccount.execute({});
 
     expect(JSON.parse(response)).toEqual({
       success: false,
       error: 'Unavailable',
     });
     expect(mocks.handleCreateVirtualAccount).toHaveBeenCalledWith(
-      {
-        amount: 150000,
-        customerEmail: 'buyer@example.com',
-        customerName: 'Buyer',
-        items: [
-          { productId: 'p1', name: 'iPhone 11', price: 150000, quantity: 1 },
-        ],
-      },
+      {},
       'session-1'
     );
   });

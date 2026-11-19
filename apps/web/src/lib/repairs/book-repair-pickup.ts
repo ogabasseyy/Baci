@@ -259,7 +259,8 @@ export async function bookRepairPickup(
       );
       if (released) {
         return pickupFailure(
-          error.code === 'GIGL_BOOKING_VALIDATION_FAILED'
+          (error as { code?: unknown }).code ===
+            'GIGL_BOOKING_VALIDATION_FAILED'
             ? 'provider_rejected'
             : 'booking_failed'
         );

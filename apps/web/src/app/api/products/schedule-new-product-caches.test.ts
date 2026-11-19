@@ -1,14 +1,16 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   prewarm: vi.fn(),
   purge: vi.fn(),
   revalidate: vi.fn(),
+  revalidateSlugs: vi.fn(),
   resolveCategory: vi.fn(() => 'electronics'),
 }));
 
 vi.mock('@/lib/cache-revalidation', () => ({
   revalidateProducts: mocks.revalidate,
+  revalidateProductSlugs: mocks.revalidateSlugs,
 }));
 vi.mock('@/lib/schedule-product-image-prewarm', () => ({
   scheduleProductImageTransformsPrewarm: mocks.prewarm,
@@ -23,6 +25,11 @@ vi.mock('@/lib/storefront-product-purge-urls', () => ({
 import { scheduleNewProductCaches } from './schedule-new-product-caches';
 
 describe('scheduleNewProductCaches', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.revalidateSlugs.mockReturnValue(true);
+  });
+
   it('revalidates, purges the canonical PDP, and prewarms every new product image', () => {
     const images = [{ url: 'https://cdn.example/product.jpg' }];
 
@@ -36,11 +43,38 @@ describe('scheduleNewProductCaches', () => {
       images,
     });
 
-    expect(mocks.revalidate).toHaveBeenCalledWith('merchant-1', 'new-product');
+    expect(mocks.revalidateSlugs).toHaveBeenCalledWith(
+      'merchant-1',
+      ['new-product'],
+      { expireImmediately: true }
+    );
+    expect(mocks.revalidate).toHaveBeenCalledWith('merchant-1', 'new-product', {
+      expireImmediately: true,
+      omitMerchantWidePdpDetails: true,
+    });
     expect(mocks.purge).toHaveBeenCalledWith('merchant-store', [
       { slug: 'new-product', categorySegment: 'electronics' },
     ]);
     expect(mocks.prewarm).toHaveBeenCalledWith(images);
+  });
+
+  it('falls back to merchant-wide invalidation when scoped slug expiry fails', () => {
+    mocks.revalidateSlugs.mockReturnValueOnce(false);
+
+    scheduleNewProductCaches({
+      merchantId: 'merchant-1',
+      merchantSlug: 'merchant-store',
+      productId: 'product-1',
+      slug: ' ',
+      name: 'New Product',
+      category: null,
+      images: [],
+    });
+
+    expect(mocks.revalidate).toHaveBeenLastCalledWith('merchant-1', undefined, {
+      expireImmediately: true,
+      omitMerchantWidePdpDetails: false,
+    });
   });
 
   it('uses the created id when the generated slug is blank', () => {
@@ -54,6 +88,15 @@ describe('scheduleNewProductCaches', () => {
       images: [],
     });
 
+    expect(mocks.revalidate).toHaveBeenLastCalledWith('merchant-1', undefined, {
+      expireImmediately: true,
+      omitMerchantWidePdpDetails: true,
+    });
+    expect(mocks.revalidateSlugs).toHaveBeenCalledWith(
+      'merchant-1',
+      ['product-1'],
+      { expireImmediately: true }
+    );
     expect(mocks.purge).toHaveBeenLastCalledWith(undefined, [
       { slug: 'product-1', categorySegment: 'electronics' },
     ]);
@@ -94,5 +137,33 @@ describe('scheduleNewProductCaches', () => {
         images: [],
       })
     ).not.toThrow();
+  });
+
+  it('skips edge purge when origin expiry and broad fallback both fail', () => {
+    const warnSpy = vi
+      .spyOn(console, 'warn')
+      .mockImplementation(() => undefined);
+    try {
+      mocks.revalidate.mockReturnValue(false);
+
+      scheduleNewProductCaches({
+        merchantId: 'merchant-1',
+        merchantSlug: 'merchant-store',
+        productId: 'product-1',
+        slug: 'new-product',
+        name: 'New Product',
+        category: 'Electronics',
+        images: [],
+      });
+
+      expect(mocks.revalidate).toHaveBeenCalledWith(
+        'merchant-1',
+        'new-product',
+        { expireImmediately: true }
+      );
+      expect(mocks.purge).not.toHaveBeenCalled();
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 });

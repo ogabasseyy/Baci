@@ -50,11 +50,12 @@ BEGIN
       AND (movement.first_movement_at IS NULL OR event.occurred_at < movement.first_movement_at)
   ), repairable AS (
     SELECT fm.shipment_id FROM first_mile AS fm
-    GROUP BY fm.shipment_id
+    GROUP BY fm.shipment_id, fm.tracking_epoch_id
     HAVING NOT EXISTS (
       SELECT 1 FROM public.shipment_tracking_events AS genuine
       WHERE genuine.shipment_id = fm.shipment_id
         AND genuine.normalized_status = 'out_for_delivery'
+        AND genuine.tracking_epoch_id = fm.tracking_epoch_id
         AND genuine.id NOT IN (SELECT id FROM first_mile)
     )
   ), fixed_events AS (
@@ -70,9 +71,11 @@ BEGIN
          FROM public.shipment_tracking_events AS event
          WHERE event.shipment_id = shipment.id
            AND event.tracking_epoch_id = (
-             SELECT max(fm0.tracking_epoch_id::text)::uuid FROM first_mile AS fm0
-             WHERE fm0.shipment_id = shipment.id)
-           AND event.id NOT IN (SELECT id FROM first_mile WHERE shipment_id = shipment.id)
+           SELECT monitor.tracking_epoch_id
+           FROM public.shipment_tracking_monitors AS monitor
+           WHERE monitor.shipment_id = shipment.id AND monitor.state = 'active'
+           LIMIT 1)
+         AND event.id NOT IN (SELECT id FROM first_mile WHERE shipment_id = shipment.id)
          UNION ALL
          SELECT fm.fixed_status FROM first_mile AS fm WHERE fm.shipment_id = shipment.id
        ) AS candidate
@@ -95,6 +98,12 @@ BEGIN
       LEFT JOIN fixed_events AS fixed
         ON fixed.shipment_id = shipment.id
         AND fixed.provider_event_key = entry.event->>'provider_event_key'
+        -- A key reused in another epoch cannot be told apart in the JSON: skip it.
+        AND NOT EXISTS (
+          SELECT 1 FROM public.shipment_tracking_events AS other
+          WHERE other.shipment_id = fixed.shipment_id
+            AND other.provider_event_key = fixed.provider_event_key
+            AND other.tracking_epoch_id <> fixed.tracking_epoch_id)
     ), shipment.tracking_events),
     updated_at = now()
   FROM new_status

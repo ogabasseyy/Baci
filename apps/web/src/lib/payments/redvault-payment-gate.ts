@@ -36,33 +36,6 @@ export function createRedvaultPaystackMetadata(bankCode: string) {
   });
 }
 
-export function evaluateRedvaultCapture({
-  capture,
-  expectedAmountKobo,
-  expectedCurrency,
-  expectedReference,
-}: {
-  capture: RedvaultProviderCapture;
-  expectedAmountKobo: number;
-  expectedCurrency: string;
-  expectedReference: string;
-}): 'approved' | 'held' {
-  if (
-    capture.status !== 'success' ||
-    capture.reference !== expectedReference ||
-    capture.amount !== expectedAmountKobo ||
-    capture.currency.toUpperCase() !== expectedCurrency.toUpperCase() ||
-    capture.authorization?.channel !== 'card' ||
-    !REDVAULT_CARD_BRANDS.includes(
-      capture.authorization?.brand?.toLowerCase() as (typeof REDVAULT_CARD_BRANDS)[number]
-    )
-  ) {
-    return 'held';
-  }
-
-  return 'held';
-}
-
 export type RedvaultVerifiedPaymentEvidence = PaystackVerifiedCardEvidence;
 
 export function createRedvaultVerifiedPaymentEvidence(

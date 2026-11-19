@@ -129,6 +129,16 @@ BEGIN
   UPDATE public.transactions SET status = 'completed' WHERE id = v_transaction;
   UPDATE public.orders SET payment_status = 'paid' WHERE id = v_order;
 
+  BEGIN
+    INSERT INTO public.transactions (id, order_id, merchant_id, transaction_type, amount,
+      currency, status, gateway, gateway_reference)
+    VALUES (gen_random_uuid(), v_order, v_merchant, 'payment', 95,
+      'NGN', 'completed', 'paystack', 'BANK-OFFER-FALLBACK-FIXTURE');
+    RAISE EXCEPTION 'A snapshotted bank offer accepted a second payment leg';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'bank_card_offer_payment_not_verified' THEN RAISE; END IF;
+  END;
+
   IF NOT public.bank_card_offer_refund_capture_matches(v_order, v_merchant, v_transaction, v_reference, 9500)
     OR public.bank_card_offer_refund_capture_matches(v_order, v_merchant, v_transaction, v_reference, 10000)
   THEN RAISE EXCEPTION 'Refund must use the discounted capture'; END IF;

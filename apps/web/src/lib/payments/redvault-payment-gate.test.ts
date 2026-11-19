@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   createRedvaultPaystackMetadata,
   createRedvaultVerifiedPaymentEvidence,
-  evaluateRedvaultCapture,
 } from './redvault-payment-gate';
 
 type PaystackVerifyFixture = {
@@ -55,46 +54,6 @@ describe('REDVAULT Paystack payment gate', () => {
     expect(() => createRedvaultPaystackMetadata('0333')).toThrow(
       'not configured'
     );
-  });
-
-  it('holds a successful matching card capture when issuer proof is absent', () => {
-    expect(
-      evaluateRedvaultCapture({
-        capture: {
-          amount: 9500,
-          authorization: { brand: 'visa', channel: 'card' },
-          currency: 'NGN',
-          reference: 'RV-1',
-          status: 'success',
-        },
-        expectedAmountKobo: 9500,
-        expectedCurrency: 'NGN',
-        expectedReference: 'RV-1',
-      })
-    ).toBe('held');
-  });
-
-  it.each([
-    ['amount', { amount: 1 }],
-    ['currency', { currency: 'USD' }],
-    ['reference', { reference: 'wrong' }],
-    ['method switch', { authorization: { brand: 'visa', channel: 'bank' } }],
-  ])('holds a stale or invalid %s capture', (_label, override) => {
-    expect(
-      evaluateRedvaultCapture({
-        capture: {
-          amount: 9500,
-          authorization: { brand: 'visa', channel: 'card' },
-          currency: 'NGN',
-          reference: 'RV-1',
-          status: 'success',
-          ...override,
-        },
-        expectedAmountKobo: 9500,
-        expectedCurrency: 'NGN',
-        expectedReference: 'RV-1',
-      })
-    ).toBe('held');
   });
 
   it('normalizes only matching server-verified Paystack card evidence', () => {

@@ -19,12 +19,17 @@ function conflictedFixture() {
 describe('primary wallet onboarding: retry with new details after an unresolved attempt', () => {
   it('re-fingerprints the intent and creates fresh once PiggyVest lists no customer', async () => {
     const input = conflictedFixture();
-    input.findCustomers.mockResolvedValue(customerListing([]));
+    // Before the refresh: none. After the create: exactly the new customer.
+    input.findCustomers
+      .mockResolvedValueOnce(customerListing([]))
+      .mockResolvedValueOnce(customerListing(['customer-fixture']));
     expect(await onboardPiggyvestPrimaryWallet(input)).toEqual({
       status: 'pending',
     });
     expect(input.storage.claim).toHaveBeenCalledTimes(2);
-    expect(input.findCustomers).toHaveBeenCalledExactlyOnceWith(
+    expect(input.findCustomers).toHaveBeenCalledTimes(2);
+    expect(input.findCustomers).toHaveBeenNthCalledWith(
+      1,
       THIRD_PARTY_IDENTIFIER
     );
     // Refreshed under today's fingerprint, never the legacy one.
@@ -48,6 +53,31 @@ describe('primary wallet onboarding: retry with new details after an unresolved 
         claimToken: 'refreshed-claim',
       })
     );
+  });
+
+  it.each([
+    ['lists no customer yet', customerListing([])],
+    [
+      'lists the old-BVN customer too',
+      customerListing(['customer-fixture', 'old-bvn-customer']),
+    ],
+    ['lists only another customer', customerListing(['old-bvn-customer'])],
+  ])('bugfix (Codex P1): keeps a new customer for review when the post-create check %s', async (_label, afterCreate) => {
+    const input = conflictedFixture();
+    input.findCustomers
+      .mockResolvedValueOnce(customerListing([]))
+      .mockResolvedValueOnce(afterCreate);
+    expect(await onboardPiggyvestPrimaryWallet(input)).toEqual({
+      status: 'conflict',
+      code: 'OWNERSHIP_REVIEW_REQUIRED',
+    });
+    expect(input.storage.recordReview).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        providerCustomerId: 'customer-fixture',
+        providerWalletId: 'wallet-fixture',
+      })
+    );
+    expect(input.storage.recordAccepted).not.toHaveBeenCalled();
   });
 
   it('treats an existing-customer answer after the refresh as foreign, never adopting it', async () => {

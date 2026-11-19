@@ -73,7 +73,7 @@ describe('settlePrimaryWalletCreateFailure', () => {
     expect(storage.recordUncertain).toHaveBeenCalledWith(claimedScope);
   });
 
-  it('bugfix (Muse): releases a refreshed BVN decline once a reclaim lookup listed none', async () => {
+  it('bugfix (Codex P1): keeps custody on a refreshed BVN decline even after a reclaim lookup listed none', async () => {
     const storage = makeStorage();
     const outcome = await settlePrimaryWalletCreateFailure({
       error: new PiggyvestApiError(
@@ -90,9 +90,9 @@ describe('settlePrimaryWalletCreateFailure', () => {
       claimedScope,
     });
 
-    expect(outcome).toEqual({ status: 'rejected', code: 'INVALID_BVN' });
-    expect(storage.releaseIntent).toHaveBeenCalledWith(claimedScope);
-    expect(storage.recordUncertain).not.toHaveBeenCalled();
+    expect(outcome).toEqual({ status: 'pending' });
+    expect(storage.releaseIntent).not.toHaveBeenCalled();
+    expect(storage.recordUncertain).toHaveBeenCalledWith(claimedScope);
   });
 
   it('keeps custody on a refreshed BVN decline whose reclaim lookup found our customer', async () => {

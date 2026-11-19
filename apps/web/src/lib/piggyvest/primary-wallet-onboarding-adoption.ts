@@ -1,5 +1,8 @@
 import 'server-only';
-import type { PrimaryWalletCustomerLookup } from './primary-wallet-customer-lookup';
+import {
+  lookupPrimaryWalletCustomer,
+  type PrimaryWalletCustomerLookup,
+} from './primary-wallet-customer-lookup';
 import type {
   PrimaryWalletIntentScope,
   PrimaryWalletOnboardingStorage,
@@ -23,9 +26,10 @@ import { emitPiggyvestWebhookAlert } from './webhook-alerts';
  *   returnIfExist may have matched another identity, or the listing may lag
  *   a just-created customer: never adopted, and the intent stays reclaimable
  *   so a later lookup decides.
- * - `refreshed_existing`: an existing customer after an identity refresh.
- *   Never adopted, but it may hold a live DVA under our identifier, so its
- *   ids are kept for review and closure like a duplicate's.
+ * - `refreshed_existing`: an existing customer after an identity refresh, or
+ *   a new one the post-create check could not confirm as the only customer
+ *   under our identifier (confirmRefreshedAdoption). Never adopted, but it
+ *   may hold a live DVA, so its ids are kept for review and closure.
  */
 export type CreatedCustomerVerdict =
   | 'adopt'
@@ -55,6 +59,33 @@ export function judgeCreatedCustomer(input: {
   if (lookup.kind !== 'found') return 'foreign';
   if (created.new_customer) return 'duplicate';
   return created.customer_id === lookup.customerId ? 'adopt' : 'foreign';
+}
+
+/**
+ * After an identity refresh, the earlier dispatch under the replaced BVN may
+ * land at the same time as the replacement create, and PiggyVest can report
+ * a new customer even when another exists under our identifier. So a new
+ * customer is adopted only when PiggyVest's own listing, read after the
+ * create, shows it as the one customer under our identifier. Anything else
+ * (another customer, several, an empty or incomplete listing) is kept for
+ * review with its ids. Claims without a refresh are returned unchanged.
+ */
+export async function confirmRefreshedAdoption(input: {
+  verdict: CreatedCustomerVerdict;
+  identityRefreshed: boolean;
+  createdCustomerId: string;
+  thirdPartyIdentifier: string;
+  findCustomers: (thirdPartyIdentifier: string) => Promise<unknown>;
+}): Promise<CreatedCustomerVerdict> {
+  if (input.verdict !== 'adopt' || !input.identityRefreshed)
+    return input.verdict;
+  const after = await lookupPrimaryWalletCustomer({
+    thirdPartyIdentifier: input.thirdPartyIdentifier,
+    findCustomers: input.findCustomers,
+  });
+  return after.kind === 'found' && after.customerId === input.createdCustomerId
+    ? 'adopt'
+    : 'refreshed_existing';
 }
 
 /**

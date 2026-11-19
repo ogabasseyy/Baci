@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-19T11:45:26+00:00",
-  "source_revision": "cd480ce78466243ab154c06badb3b56112b86a67",
-  "evidence_digest": "2de4d81b4802a0e9b50971f393429ae6f5828f24cd22e2d62449296ef24ebc71",
-  "claims_digest": "2deb149613446abbf524ebe6b679d7ee09beb386681aa08e6de5fe9b10f67935",
+  "reviewed_at": "2026-11-19T19:10:02+00:00",
+  "source_revision": "e0c17f4ec42da10676b70f398a0a64fc9172f325",
+  "evidence_digest": "7ce74848259db1ae8940657fd1811fdd712dd574f844e8df623eb6d513aaf45c",
+  "claims_digest": "0489532d22f90f6d313beed1bcd277d0db111374414de5838bbbe5e7abc8b3dd",
   "review_scope": "Source evidence only. Preserves current main\u2019s OAuth, cart retention and notices, payment reconciliation, merchant protocols and Oxygen pilot boundaries. Full-code storefront MCP remains disabled by default. Owner approval, evidence and public-verification schemas retain their existing validation. Direct local admission, source adoption, rollback and simulated commerce tests cover authority boundaries. Hosted qualification and activation remain separate.",
   "capabilities": [
     {
@@ -148,11 +148,13 @@
       "id": "followups",
       "title": "Customer follow-up workflows",
       "status": "code_evidenced",
-      "claim": "Baci mobile-admin implements a customer follow-up queue for failed and stale unpaid checkouts, including categorized Oxygen applications, with related order follow-up actions.",
+      "claim": "Baci mobile-admin implements a customer follow-up queue for failed and stale unpaid checkouts, including categorized Oxygen applications. Merchant staff can claim an entry, record a stage and the latest outcome, and set the next follow-up date.",
       "limitations": "This is an operational queue, not automatic customer outreach or evidence of full CRM segmentation or guaranteed recovery. Query bounds and contact permissions apply; Oxygen availability and rollout remain separately controlled.",
       "source_refs": [
         "apps/mobile-admin/components/customers/FollowUpQueueList.tsx",
         "apps/mobile-admin/hooks/useFollowUpQueue.ts",
+        "apps/mobile-admin/hooks/useStaffOrderFollowUps.ts",
+        "supabase/migrations/20261119210000_staff_order_follow_ups.sql",
         "apps/mobile-admin/hooks/useFailedOrders.ts",
         "apps/mobile-admin/hooks/useOxygenFollowUps.ts",
         "apps/mobile-admin/hooks/fetchOxygenFollowUps.ts",
@@ -163,8 +165,6 @@
         "supabase/migrations/20261117190100_oxygen_follow_up_recovery_guards.sql",
         "supabase/migrations/20261117190200_oxygen_follow_up_fair_queue.sql",
         "supabase/migrations/20261117185800_oxygen_follow_up_index_retry.sql",
-        "supabase/migrations/20261117190300_oxygen_follow_up_activation_state.sql",
-        "supabase/migrations/20261117190400_oxygen_follow_up_reconciled_approval.sql",
         "supabase/migrations/20261117190500_oxygen_follow_up_terminal_outcomes.sql",
         "supabase/migrations/20261118141000_oxygen_follow_up_failed_orphans.sql",
         "supabase/migrations/20261118154500_oxygen_follow_up_eligibility_capacity.sql",

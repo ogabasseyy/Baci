@@ -280,7 +280,7 @@ export async function onboardPiggyvestPrimaryWallet(
     const keepReclaimable =
       decline === 'interest_routing'
         ? hasPriorDispatchCustody
-        : lookup?.kind === 'found';
+        : lookup?.kind === 'found' || claim.identityRefreshed === true;
     if (decline !== null && !keepReclaimable) {
       try {
         if (!(await input.storage.releaseIntent(claimedScope)))

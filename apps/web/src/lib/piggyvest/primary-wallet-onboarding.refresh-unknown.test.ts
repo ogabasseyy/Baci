@@ -223,4 +223,24 @@ describe('primary wallet onboarding: retry with new details after an unresolved 
     );
     expect(input.storage.releaseIntent).not.toHaveBeenCalled();
   });
+
+  it('keeps custody on a BVN decline during an identity-refreshed attempt', async () => {
+    const { PiggyvestApiError } = await import('./client');
+    const input = conflictedFixture();
+    input.findCustomers.mockResolvedValue(customerListing([]));
+    input.createCustomer.mockRejectedValue(
+      new PiggyvestApiError('PIGGYVEST_REQUEST_ERROR', 'Invalid BVN', 400, true)
+    );
+
+    expect(await onboardPiggyvestPrimaryWallet(input)).toEqual({
+      status: 'pending',
+    });
+    expect(input.storage.recordUncertain).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        intentId: 'refreshed-intent',
+        claimToken: 'refreshed-claim',
+      })
+    );
+    expect(input.storage.releaseIntent).not.toHaveBeenCalled();
+  });
 });

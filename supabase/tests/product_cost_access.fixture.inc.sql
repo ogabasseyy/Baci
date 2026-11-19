@@ -24,7 +24,7 @@ VALUES
   'cost-fixture-5@example.invalid', 'Suspended staff', 'accountant',
   '{"products":{"view":true}}', 'suspended'),
  ('ca570000-0000-4000-8000-000000000101', 'ca570000-0000-4000-8000-000000000007',
-  'cost-fixture-7@example.invalid', 'Analytics-only staff', 'analyst',
+  'cost-fixture-7@example.invalid', 'Analytics-only staff', 'accountant',
   '{"analytics":{"view":true},"products":{"view":false},"full_access":{"all":false}}', 'active'),
  ('ca570000-0000-4000-8000-000000000101', 'ca570000-0000-4000-8000-000000000008',
   'cost-fixture-8@example.invalid', 'Order-edit-only staff', 'fulfillment',

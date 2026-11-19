@@ -54,7 +54,7 @@ describe('scheduleCheckoutProductBlogPurge scoped invalidation', () => {
 
     expect(mocks.revalidateProductSlugs).toHaveBeenCalledWith(
       'merchant-1',
-      ['managed-phone'],
+      ['managed-phone', 'managed', 'missing'],
       { expireImmediately: true }
     );
     expect(mocks.revalidateProducts).toHaveBeenCalledWith(
@@ -80,7 +80,7 @@ describe('scheduleCheckoutProductBlogPurge scoped invalidation', () => {
 
     expect(mocks.revalidateProductSlugs).toHaveBeenCalledWith(
       'merchant-1',
-      ['managed-phone'],
+      ['managed-phone', 'managed'],
       { expireImmediately: true }
     );
     expect(mocks.revalidateProducts).toHaveBeenCalledWith(

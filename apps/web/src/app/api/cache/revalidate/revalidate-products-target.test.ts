@@ -188,6 +188,7 @@ describe('revalidateProductsTarget', () => {
     );
     expect(mockPurgeProduct).toHaveBeenCalledWith('ogabassey', [
       { slug: 'iphone-15', categorySegment: 'smartphones' },
+      { slug: 'prod-1', categorySegment: null },
       { slug: 'archived-child-slug', categorySegment: null },
       { slug: 'child-uuid', categorySegment: null },
     ]);

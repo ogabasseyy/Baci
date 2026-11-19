@@ -106,7 +106,9 @@ export async function revalidateProductsTarget({
         const existingSlugs = new Set(entries.map((entry) => entry.slug));
         const edgeEntries = [
           ...entries,
-          ...dependentAliases.identifiers
+          ...Array.from(
+            new Set([...productIds, ...dependentAliases.identifiers])
+          )
             .filter((identifier) => !existingSlugs.has(identifier))
             .map((identifier) => ({ slug: identifier, categorySegment: null })),
         ];

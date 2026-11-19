@@ -244,6 +244,20 @@ describe('POST /api/products/bulk-publish purge ordering', () => {
     expect(mockScheduleStorefrontHostnamePurge).toHaveBeenCalledWith(
       'test-store'
     );
+
+    mockScheduleStorefrontHostnamePurge.mockClear();
+    aliasQuery.limit.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'db timeout' },
+    });
+    mockExpireProductBlogCache.mockReturnValueOnce(false);
+    const failedBlogRes = await POST(
+      new NextRequest('http://localhost/api/products/bulk-publish', {
+        method: 'POST',
+      })
+    );
+    expect(failedBlogRes.status).toBe(200);
+    expect(mockScheduleStorefrontHostnamePurge).not.toHaveBeenCalled();
   });
 
   it('retains broad PDP expiry when a published product has a blank slug', async () => {
@@ -256,12 +270,11 @@ describe('POST /api/products/bulk-publish purge ordering', () => {
       in: vi.fn(() => aliasQuery),
       limit: vi.fn().mockResolvedValue({ data: [], error: null }),
     };
+    const getUser = vi
+      .fn()
+      .mockResolvedValue({ data: { user: { id: 'user-1' } } });
     mockCreateClient.mockReturnValue({
-      auth: {
-        getUser: vi
-          .fn()
-          .mockResolvedValue({ data: { user: { id: 'user-1' } } }),
-      },
+      auth: { getUser },
       from: vi.fn(() => ({
         select: vi.fn(() => aliasQuery),
         delete: vi.fn().mockReturnValue(deleteQuery),
@@ -279,9 +292,7 @@ describe('POST /api/products/bulk-publish purge ordering', () => {
     expect(mockRevalidateProducts).toHaveBeenCalledWith(
       'merchant-1',
       undefined,
-      {
-        expireImmediately: true,
-      }
+      { expireImmediately: true }
     );
   });
 });

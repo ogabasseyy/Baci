@@ -192,6 +192,7 @@ describe('POST /api/cache/revalidate scoped PDP hard-expiry', () => {
     );
     expect(mockPurgeProduct).toHaveBeenCalledWith('ogabassey', [
       { slug: 'iphone-15', categorySegment: 'smartphones' },
+      { slug: 'prod-1', categorySegment: null },
     ]);
   });
 

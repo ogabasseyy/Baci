@@ -33,6 +33,8 @@ vi.mock('@/lib/logger', () => ({
   logger: { error: vi.fn(), warn: vi.fn() },
 }));
 
+import { enrichProductPurgeEntries } from '@/lib/authoritative-product-purge-enrichment';
+import { createPublicClient } from '@/lib/supabase/public';
 import { POST } from './route';
 
 function request(body: unknown) {
@@ -52,6 +54,7 @@ function request(body: unknown) {
 describe('internal product revalidation blog expiry', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockRevalidateProducts.mockReset();
     mockRevalidateProductSlugs.mockReturnValue(true);
   });
 
@@ -194,5 +197,42 @@ describe('internal product revalidation blog expiry', () => {
     await expect(response.json()).resolves.toEqual({
       error: 'Failed to expire merchant-wide product caches',
     });
+  });
+
+  it('expires origin product caches in blog-cache mode when merchantSlug verification fails', async () => {
+    vi.mocked(createPublicClient).mockReturnValueOnce({
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            maybeSingle: () =>
+              Promise.resolve({ data: { slug: 'ogabassey' }, error: null }),
+          }),
+        }),
+      }),
+    } as never);
+    vi.mocked(enrichProductPurgeEntries).mockResolvedValueOnce({
+      entries: [{ slug: 'iphone-15', categorySegment: null }],
+      resolvedSlugs: ['iphone-15', 'prod-1'],
+      authoritativeSlugsById: new Map([['prod-1', 'iphone-15']]),
+      blogPostSlugs: [],
+      blogPostSlugsIncomplete: false,
+    });
+
+    const response = await POST(
+      request({
+        merchantId: 'merchant-1',
+        merchantSlug: 'wrong-slug',
+        expireProductBlogCache: true,
+        products: [{ id: 'prod-1', slug: 'iphone-15' }],
+      })
+    );
+
+    expect(response.status).toBe(400);
+    expect(mockExpireProductBlogCache).toHaveBeenCalledWith('merchant-1');
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      'merchant-1',
+      undefined,
+      { expireImmediately: true }
+    );
   });
 });

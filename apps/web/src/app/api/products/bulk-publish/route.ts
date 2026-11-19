@@ -160,14 +160,21 @@ export async function POST(request: NextRequest) {
         // product snapshot. The post-response enrichment also expires this
         // tag, but it runs in a separate task and therefore cannot protect the
         // purge scheduled immediately below.
-        expireProductBlogCache(merchantId);
+        const blogExpired = expireProductBlogCache(merchantId) !== false;
         if (!originHardExpired) {
           console.warn(
             'Skipped Cloudflare product purge after bulk publish because origin hard expiry failed',
             { merchantId }
           );
         } else if (dependentAliases.incomplete) {
-          scheduleStorefrontHostnamePurge(merchantContext.merchantSlug);
+          if (blogExpired) {
+            scheduleStorefrontHostnamePurge(merchantContext.merchantSlug);
+          } else {
+            console.warn(
+              'Skipped Cloudflare hostname purge after bulk publish because blog cache hard expiry failed',
+              { merchantId }
+            );
+          }
         } else {
           const seenEdgeSlugs = new Set(
             publicPurgeEntries

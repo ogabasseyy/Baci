@@ -169,7 +169,7 @@ export async function POST(request: NextRequest) {
         // The immediate purge can refill related articles from the edge before
         // the post-response enrichment runs, so expire the merchant-scoped blog
         // data before scheduling the Cloudflare purge.
-        expireProductBlogCache(merchantId);
+        const blogExpired = expireProductBlogCache(merchantId) !== false;
         // Keep paginated article fallback reads out of the mutation response.
         // The after-response helper hard-expires the related-blog cache before
         // scheduling any linked article URLs.
@@ -179,7 +179,14 @@ export async function POST(request: NextRequest) {
             { merchantId }
           );
         } else if (dependentAliases.incomplete) {
-          scheduleStorefrontHostnamePurge(merchantContext.merchantSlug);
+          if (blogExpired) {
+            scheduleStorefrontHostnamePurge(merchantContext.merchantSlug);
+          } else {
+            console.warn(
+              'Skipped Cloudflare hostname purge after bulk update because blog cache hard expiry failed',
+              { merchantId }
+            );
+          }
         } else {
           const seenEdgeSlugs = new Set(
             purgeEntries

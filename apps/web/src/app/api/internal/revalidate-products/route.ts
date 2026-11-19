@@ -219,7 +219,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           });
         } else if (
           !shouldExpireProductBlogCache ||
-          callerOmitMerchantWidePdpDetails === true
+          callerOmitMerchantWidePdpDetails !== false
         ) {
           const opts = shouldExpireProductBlogCache
             ? { ...scopedOptions, expireImmediately: true }
@@ -241,7 +241,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         !purgeWholeStorefront &&
         !revalidatedDeferredProducts &&
         (!shouldExpireProductBlogCache ||
-          callerOmitMerchantWidePdpDetails === true) &&
+          callerOmitMerchantWidePdpDetails !== false) &&
         revalidateProducts(merchantId, undefined, {
           expireImmediately: true,
         }) === false

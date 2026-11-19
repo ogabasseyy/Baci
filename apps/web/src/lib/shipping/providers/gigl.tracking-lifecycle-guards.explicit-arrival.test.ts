@@ -49,4 +49,45 @@ describe('bugfix: explicit arrival codes and tied or mapped scans', () => {
     );
     expect(arrival?.location).toContain('WUSE ABUJA');
   });
+
+  it('recognises an RSR-only poll so monitoring is not paused', () => {
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W92',
+        MobileShipmentTrackings: [{ Status: 'RSR', DateTimeUtc: T }],
+      },
+      'W92',
+      OBSERVED_AT
+    );
+    expect(result.hasRecognizedLifecycleEvent).toBe(true);
+  });
+
+  it.each([
+    ['location-less first', ['plain', 'located']],
+    ['located first', ['located', 'plain']],
+  ])('gives the located foreign-office arrival the synthetic status when two tie (%s)', (_label, order) => {
+    const scans = {
+      plain: { Status: 'ARFK', DateTimeUtc: T },
+      located: {
+        Status: 'ARFK',
+        DateTimeUtc: T,
+        Location: 'HEATHROW LONDON (UK)',
+      },
+    };
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W93',
+        Destination: 'LONDON',
+        MobileShipmentTrackings: order.map(
+          (key) => scans[key as 'plain' | 'located']
+        ),
+      },
+      'W93',
+      OBSERVED_AT
+    );
+    const arrival = result.events.find(
+      (e) => e.rawStatus === GIGL_ARRIVED_IN_CITY_RAW_STATUS
+    );
+    expect(arrival?.location).toContain('HEATHROW');
+  });
 });

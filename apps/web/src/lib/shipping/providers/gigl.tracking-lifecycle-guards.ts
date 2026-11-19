@@ -27,6 +27,7 @@ const DEPARTURE_CODES = new Set([
 // centre after a failed delivery; they are not an arrival.
 const RETURN_CODES = new Set([
   'SRC',
+  'RSR',
   'MRTE',
   'SSR',
   'MRTD',
@@ -88,12 +89,15 @@ function isReturnFlow(candidate: Guardable): number {
     : 0;
 }
 
-function locatedExplicitArrival(candidate: Guardable): number {
-  return EXPLICIT_ARRIVAL_CODES.has(
-    candidate.providerStatus.trim().toUpperCase()
-  ) && placeWords(candidate.event.location).length > 0
-    ? 1
-    : 0;
+function locatedExplicitArrival(
+  candidate: Guardable,
+  destination: string | undefined
+): number {
+  const raw = candidate.providerStatus.trim().toUpperCase();
+  const explicit =
+    EXPLICIT_ARRIVAL_CODES.has(raw) ||
+    FOREIGN_OFFICE_DESTINATIONS[raw]?.test((destination ?? '').toUpperCase());
+  return explicit && placeWords(candidate.event.location).length > 0 ? 1 : 0;
 }
 
 function placeWords(value: string | undefined): string[] {
@@ -165,7 +169,8 @@ export function applyLifecycleGuards(
       isReturnFlow(b) - isReturnFlow(a) ||
       // Tied explicit arrivals: the located one takes the arrival status, so its
       // centre can become the snapshot location whatever the payload order.
-      locatedExplicitArrival(b) - locatedExplicitArrival(a) ||
+      locatedExplicitArrival(b, destination) -
+        locatedExplicitArrival(a, destination) ||
       isMshc(a) - isMshc(b) ||
       // Tied scans: movement away from the destination first, so the result
       // does not depend on payload order.

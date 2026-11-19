@@ -13,6 +13,7 @@ describe('mapKnownGiglStatus', () => {
     ['ARFK', 'in_transit'],
     ['ARUS', 'in_transit'],
     ['MRTE', 'in_transit'],
+    ['RSR', 'in_transit'],
     ['SRHUB', 'returned'],
     ['DASH', 'in_transit'],
     ['SDR', 'failed'],

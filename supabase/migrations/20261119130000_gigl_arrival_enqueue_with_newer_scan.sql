@@ -1,5 +1,9 @@
--- Queue the customer "arrived in your city" update even when a newer scan
--- shares the poll (aggregate status moves past in_transit). In-place patch of
+-- 1. Queue the customer "arrived in your city" update even when a newer scan
+--    shares the poll (aggregate status moves past in_transit).
+-- 2. Let a backfilled older terminal scan (delivered, cancelled, returned)
+--    override a newer stored progress scan, as the normalizer already does, so
+--    its status, delivered_at and notification stay consistent.
+-- In-place patch of
 -- the LIVE apply function (20261102053320 pattern), so the 20260904190550,
 -- 20260905140000 and 20261102053320 changes survive; CREATE OR REPLACE keeps
 -- the owner and grants. Any drift in the anchor fails this migration loudly.
@@ -17,6 +21,18 @@ DECLARE
     || E'          AND v_effective_status IN (''in_transit'', ''out_for_delivery'')\n'
     || E'        )\n'
     || E'      )\n';
+  v_anchor2 constant text :=
+    E'    WHEN v_current_status IS NOT NULL\n'
+    || E'      AND v_latest_persisted_event_at IS NOT NULL\n'
+    || E'      AND v_latest_status_event_at IS NOT NULL\n'
+    || E'      AND v_latest_status_event_at < v_latest_persisted_status_event_at\n'
+    || E'      THEN v_current_status\n';
+  v_replacement2 constant text :=
+    E'    WHEN p_status IN (''delivered'', ''cancelled'', ''returned'')\n'
+    || E'      AND v_current_status IS NOT NULL\n'
+    || E'      AND v_current_status NOT IN (''delivered'', ''cancelled'', ''returned'')\n'
+    || E'      THEN p_status\n'
+    || v_anchor2;
   v_original text;
   v_patched text;
 BEGIN
@@ -28,7 +44,13 @@ BEGIN
      <> length(v_anchor) THEN
     RAISE EXCEPTION 'apply_gigl_tracking_result anchor must occur exactly once';
   END IF;
-  v_patched := replace(v_original, v_anchor, v_replacement);
+  IF length(v_original) - length(replace(v_original, v_anchor2, ''))
+     <> length(v_anchor2) THEN
+    RAISE EXCEPTION 'apply_gigl_tracking_result terminal anchor must occur exactly once';
+  END IF;
+  v_patched := replace(
+    replace(v_original, v_anchor, v_replacement), v_anchor2, v_replacement2
+  );
   IF v_patched = v_original THEN
     RAISE EXCEPTION 'apply_gigl_tracking_result patch changed nothing';
   END IF;

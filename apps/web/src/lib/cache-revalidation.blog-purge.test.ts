@@ -106,12 +106,24 @@ describe('revalidateBlogPosts Cloudflare purge', () => {
 
     const act = () =>
       revalidateBlogPosts({
+        merchantId: 'merchant-1',
         identifiers: ['ogabassey'],
         postSlugs: ['test-post'],
       });
 
     expect(act).not.toThrow();
-    expect(mockRevalidateTag).toHaveBeenCalledWith('blog-posts', 'merchant');
+    expect(mockRevalidateTag).not.toHaveBeenCalledWith(
+      'blog-posts',
+      'merchant'
+    );
+    expect(mockRevalidateTag).toHaveBeenCalledWith(
+      'blog-posts-merchant-1',
+      'merchant'
+    );
+    expect(mockRevalidateTag).toHaveBeenCalledWith(
+      'blog-identifier-ogabassey',
+      'merchant'
+    );
     expect(mockRevalidatePath).toHaveBeenCalledWith('/ogabassey/blog');
     expect(mockPurgeCloudflareUrls).not.toHaveBeenCalled();
     expect(warnSpy).toHaveBeenCalledWith(

@@ -12,9 +12,12 @@ import { logger } from '@/lib/logger';
 import { productCacheRevalidation } from '@/lib/product-cache-revalidation';
 
 describe('productCacheRevalidation', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    revalidateTag.mockReset();
+  });
 
-  it('revalidates merchant-wide, feed, dashboard, and product-slug tags', () => {
+  it('revalidates merchant-wide, feed, dashboard, and product-slug tags without global tags', () => {
     productCacheRevalidation.revalidateProducts('merchant-1', ' phone ');
 
     expect(revalidateTag).toHaveBeenCalledWith(
@@ -22,11 +25,23 @@ describe('productCacheRevalidation', () => {
       'products'
     );
     expect(revalidateTag).toHaveBeenCalledWith(
+      'product-details-merchant-1',
+      'products'
+    );
+    expect(revalidateTag).toHaveBeenCalledWith(
+      'product-canonical-redirect-merchant-1',
+      'products'
+    );
+    expect(revalidateTag).toHaveBeenCalledWith(
+      'product-legacy-redirect-merchant-1',
+      'products'
+    );
+    expect(revalidateTag).toHaveBeenCalledWith(
       'merchant-feed-merchant-1',
       'products'
     );
     expect(revalidateTag).toHaveBeenCalledWith(
-      'openai-product-feed',
+      'merchant-feed-review-signals-merchant-1',
       'products'
     );
     expect(revalidateTag).toHaveBeenCalledWith(
@@ -37,6 +52,13 @@ describe('productCacheRevalidation', () => {
       'product-merchant-1-phone',
       'products'
     );
+
+    const calledTags = revalidateTag.mock.calls.map(([tag]) => tag);
+    expect(calledTags).not.toContain('product-details');
+    expect(calledTags).not.toContain('product-canonical-redirect');
+    expect(calledTags).not.toContain('product-legacy-redirect');
+    expect(calledTags).not.toContain('google-merchant-feed');
+    expect(calledTags).not.toContain('openai-product-feed');
   });
 
   it('limits tracked-inventory sales to the affected merchant feed', () => {
@@ -48,6 +70,10 @@ describe('productCacheRevalidation', () => {
       'merchant-feed-merchant-1',
       'products'
     );
+    expect(revalidateTag).toHaveBeenCalledWith(
+      'merchant-feed-review-signals-merchant-1',
+      'products'
+    );
     expect(revalidateTag).not.toHaveBeenCalledWith(
       'google-merchant-feed',
       'products'
@@ -56,10 +82,38 @@ describe('productCacheRevalidation', () => {
       'openai-product-feed',
       'products'
     );
-    expect(revalidateTag).not.toHaveBeenCalledWith(
+  });
+
+  it('invalidates global feed tags only when feedScope is explicitly all', () => {
+    productCacheRevalidation.revalidateProducts('merchant-1', undefined, {
+      feedScope: 'all',
+    });
+
+    expect(revalidateTag).toHaveBeenCalledWith(
+      'google-merchant-feed',
+      'products'
+    );
+    expect(revalidateTag).toHaveBeenCalledWith(
+      'openai-product-feed',
+      'products'
+    );
+    expect(revalidateTag).toHaveBeenCalledWith(
+      'merchant-feed-merchant-1',
+      'products'
+    );
+    expect(revalidateTag).toHaveBeenCalledWith(
       'merchant-feed-review-signals-merchant-1',
       'products'
     );
+  });
+
+  it('invalidates only merchant-a feed and review-signal tags by default on revalidateMerchantFeed', () => {
+    productCacheRevalidation.revalidateMerchantFeed('merchant-a');
+
+    expect(revalidateTag.mock.calls).toEqual([
+      ['merchant-feed-merchant-a', 'products'],
+      ['merchant-feed-review-signals-merchant-a', 'products'],
+    ]);
   });
 
   it('hard-expires product-derived category data before an outer CDN eviction', () => {
@@ -81,7 +135,9 @@ describe('productCacheRevalidation', () => {
   });
 
   it('can invalidate dashboard order metrics without churning product caches', () => {
-    productCacheRevalidation.revalidateDashboard('merchant-1');
+    expect(productCacheRevalidation.revalidateDashboard('merchant-1')).toBe(
+      true
+    );
 
     expect(revalidateTag).toHaveBeenCalledExactlyOnceWith(
       'dashboard-merchant-1',
@@ -90,12 +146,14 @@ describe('productCacheRevalidation', () => {
   });
 
   it('deduplicates product slugs and ignores blank values', () => {
-    productCacheRevalidation.revalidateProductSlugs('merchant-1', [
-      'phone',
-      ' phone ',
-      '',
-      null,
-    ]);
+    expect(
+      productCacheRevalidation.revalidateProductSlugs('merchant-1', [
+        'phone',
+        ' phone ',
+        '',
+        null,
+      ])
+    ).toBe(true);
 
     expect(revalidateTag).toHaveBeenCalledTimes(1);
     expect(revalidateTag).toHaveBeenCalledWith(
@@ -148,8 +206,70 @@ describe('productCacheRevalidation', () => {
     );
     expect(logger.error).toHaveBeenCalledWith(
       expect.objectContaining({
+        error: 'Error: cache unavailable',
         message: 'Failed to revalidate product cache tag',
         tag: 'products-merchant-1',
+      })
+    );
+    expect(revalidated).toBe(false);
+  });
+
+  it('skips error logging and remaining tags when Next static generation store is missing', () => {
+    revalidateTag.mockImplementation(() => {
+      throw new Error(
+        'Invariant: static generation store missing in revalidateTag("products-merchant-1")'
+      );
+    });
+
+    const revalidated =
+      productCacheRevalidation.revalidateProducts('merchant-1');
+
+    expect(revalidateTag).toHaveBeenCalledTimes(1);
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(revalidated).toBe(false);
+  });
+
+  it('skips error logging and remaining tags when incrementalCache is missing across slug, feed, and dashboard helpers', () => {
+    revalidateTag.mockImplementation(() => {
+      throw new Error('incrementalCache missing');
+    });
+
+    const slugsRevalidated = productCacheRevalidation.revalidateProductSlugs(
+      'merchant-1',
+      ['slug-1', 'slug-2']
+    );
+    expect(revalidateTag).toHaveBeenCalledTimes(1);
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(slugsRevalidated).toBe(false);
+
+    revalidateTag.mockClear();
+    const feedRevalidated =
+      productCacheRevalidation.revalidateMerchantFeed('merchant-1');
+    expect(revalidateTag).toHaveBeenCalledTimes(1);
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(feedRevalidated).toBe(false);
+
+    revalidateTag.mockClear();
+    const dashboardRevalidated =
+      productCacheRevalidation.revalidateDashboard('merchant-1');
+    expect(revalidateTag).toHaveBeenCalledTimes(1);
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(dashboardRevalidated).toBe(false);
+  });
+
+  it('logs errors mentioning incrementalCache when they are not missing-context errors', () => {
+    revalidateTag.mockImplementationOnce(() => {
+      throw new Error('incrementalCache adapter write failed');
+    });
+
+    const revalidated =
+      productCacheRevalidation.revalidateDashboard('merchant-1');
+
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error: 'Error: incrementalCache adapter write failed',
+        message: 'Failed to revalidate product cache tag',
+        tag: 'dashboard-merchant-1',
       })
     );
     expect(revalidated).toBe(false);

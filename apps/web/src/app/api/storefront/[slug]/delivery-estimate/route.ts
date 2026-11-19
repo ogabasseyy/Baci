@@ -9,6 +9,7 @@ import { isPlatformHost, normalizeHostname } from '@/lib/proxy/host';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { getSubdivisions } from '@/lib/shipping/merchant-rates/subdivisions';
 import { resolveStorefrontMerchantFromRequest } from '@/lib/storefront-merchant';
+import { isReservedMerchantSlug } from '@/lib/validation';
 import { chatDeliveryEstimateRequestSchema } from '@/schemas/chat-delivery-estimate';
 import { RouteIdentifierSchema } from '@/schemas/route-identifier';
 
@@ -27,10 +28,11 @@ export async function POST(
 
   const { slug: rawSlug } = await context.params;
   const slug = rawSlug.trim().toLowerCase();
-  // This route accepts merchant slugs, not domain identifiers.
+  // This route accepts non-reserved merchant slugs, not domain identifiers.
   if (
     !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(slug) ||
-    !RouteIdentifierSchema.safeParse(slug).success
+    !RouteIdentifierSchema.safeParse(slug).success ||
+    isReservedMerchantSlug(slug)
   ) {
     return errorResponse('Invalid storefront slug', 400);
   }
@@ -64,7 +66,8 @@ export async function POST(
       lookupError: 'Store delivery rates could not be loaded',
     });
     if (!hostMerchant.success) {
-      const safeStatus = hostMerchant.status === 500 ? 503 : hostMerchant.status;
+      const safeStatus =
+        hostMerchant.status === 500 ? 503 : hostMerchant.status;
       return errorResponse(
         safeStatus === 503
           ? 'Store delivery rates could not be loaded'

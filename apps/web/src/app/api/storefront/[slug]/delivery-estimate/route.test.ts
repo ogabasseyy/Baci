@@ -128,6 +128,9 @@ describe('POST /api/storefront/[slug]/delivery-estimate', () => {
     expect(
       (await POST(request({ state: 'Lagos' }), context('../bad'))).status
     ).toBe(400);
+    expect(
+      (await POST(request({ state: 'Lagos' }), context('api'))).status
+    ).toBe(400);
     expect((await POST(request({ state: 'Atlantis' }), context())).status).toBe(
       400
     );

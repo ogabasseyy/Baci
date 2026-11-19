@@ -26,6 +26,7 @@ import { useMerchant } from '@/hooks/use-merchant-client';
 import { useToast } from '@/hooks/use-toast';
 import { apiPost } from '@/lib/api-client';
 import { STORE_SLUG_PATTERN } from '@/schemas/rename-slug';
+import { getActiveCustomDomain } from './get-active-custom-domain';
 
 const ROOT_DOMAIN = process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'usebaci.com';
 
@@ -47,6 +48,12 @@ interface RenameSlugResponse {
   url: string;
 }
 
+interface RenamedSlug {
+  merchantId: string;
+  fromSlug: string;
+  slug: string;
+}
+
 /**
  * "Change store URL" — the sanctioned way for a merchant to rename their
  * storefront slug. Calls POST /api/merchant/rename-slug (which invokes the
@@ -57,10 +64,26 @@ export function ChangeStoreUrl() {
   const { merchant } = useMerchant();
   const { toast } = useToast();
 
-  const currentSlug = merchant?.slug ?? '';
+  const merchantSlug = merchant?.slug ?? '';
   const merchantId = merchant?.id ?? '';
-  // Dashboard context supplies only the primary active custom domain.
-  const customDomain = merchant?.custom_domain?.trim();
+
+  // The rename response is the source of truth until the merchant context
+  // catches up. It only applies to the store that was renamed, and only while
+  // the context still holds the slug it was renamed from.
+  const [renamed, setRenamed] = useState<RenamedSlug | null>(null);
+  const currentSlug =
+    renamed &&
+    renamed.merchantId === merchantId &&
+    renamed.fromSlug === merchantSlug
+      ? renamed.slug
+      : merchantSlug;
+
+  // The context's custom_domain is the primary active domain, which is often
+  // the generated Baci subdomain; only a domain outside the Baci root counts.
+  const customDomain = getActiveCustomDomain(
+    merchant?.custom_domain,
+    ROOT_DOMAIN
+  );
   const baciAddress = `${currentSlug}.${ROOT_DOMAIN}`;
 
   const [nextSlug, setNextSlug] = useState('');
@@ -81,16 +104,23 @@ export function ChangeStoreUrl() {
         '/api/merchant/rename-slug',
         { merchantId, new_slug: trimmed }
       );
-      toast({
-        title: 'Store URL changed',
-        description: `Your store is now at ${result.url.replace(
-          /^https?:\/\//,
-          ''
-        )}. The old link redirects here automatically.`,
-      });
+      const newAddress = result.url.replace(/^https?:\/\//, '');
+      toast(
+        customDomain
+          ? {
+              title: 'Baci subdomain changed',
+              description: `Your Baci subdomain is now ${newAddress}. Your custom domain ${customDomain} is unchanged, and the old Baci link redirects automatically.`,
+            }
+          : {
+              title: 'Store URL changed',
+              description: `Your store is now at ${newAddress}. The old link redirects here automatically.`,
+            }
+      );
       setNextSlug('');
       // The rename response is scoped to the captured merchant. Do not reload
-      // whichever merchant happens to be selected after this request finishes.
+      // whichever merchant happens to be selected after this request finishes;
+      // remember the new slug for that merchant instead.
+      setRenamed({ merchantId, fromSlug: merchantSlug, slug: result.slug });
     } catch (error) {
       toast({
         title: 'Could not change URL',

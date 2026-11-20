@@ -110,4 +110,36 @@ describe('mapKudaBillersAnswer', () => {
     ]);
     expect(billers[0]?.unreadableItemCodes).toEqual(['SUPER']);
   });
+
+  it('never records a kept code whose spelling differs only by case or spaces', () => {
+    const { billers } = mapKudaBillersAnswer(
+      {
+        billers: [
+          {
+            id: 'st',
+            name: 'STARTIMES NG',
+            description: 'Cable',
+            billTypeId: 'cable',
+            billItems: [
+              {
+                itemCode: 'kud-cab-1',
+                itemName: 'Basic',
+                amount: 500000,
+                isFixedPrice: true,
+              },
+              {
+                itemCode: 'KUD-CAB-1 ',
+                itemName: 'Basic',
+                amount: '',
+                isFixedPrice: true,
+              },
+            ],
+          },
+        ],
+      },
+      'CableTv'
+    );
+
+    expect(billers[0]).not.toHaveProperty('unreadableItemCodes');
+  });
 });

@@ -1,5 +1,6 @@
 import type { Biller } from './kuda';
 import { type BillItem, mapKudaBillItems } from './kuda-bill-items';
+import { normalizeKudaItemCode } from './kuda-item-code';
 import { collectRawFixedItemCodes } from './kuda-raw-fixed-item-codes';
 import { collectRawFixedPricesKobo } from './kuda-raw-fixed-prices';
 
@@ -10,7 +11,7 @@ export interface KudaCamelBiller {
   description: string;
   billerIconUrl?: string;
   billTypeId: string;
-  billItems?: unknown[];
+  billItems?: unknown;
 }
 
 /**
@@ -23,12 +24,12 @@ export interface KudaPascalBiller {
   Description: string;
   BillerIconUrl?: string;
   BillTypeId: string;
-  BillItems?: unknown[];
+  BillItems?: unknown;
 }
 
 function keptFixedItemCodes(items: BillItem[] | undefined, codes: Set<string>) {
   for (const item of items ?? []) {
-    if (item.isAmountFixed) codes.add(item.itemCode);
+    if (item.isAmountFixed) codes.add(normalizeKudaItemCode(item.itemCode));
     keptFixedItemCodes(item.billItems, codes);
   }
   return codes;
@@ -45,7 +46,7 @@ function toBiller(
   const kept = keptFixedItemCodes(billItems, new Set());
   const unreadableItemCodes = [
     ...new Set(collectRawFixedItemCodes(rawItems)),
-  ].filter((code) => !kept.has(code));
+  ].filter((code) => !kept.has(normalizeKudaItemCode(code)));
   return {
     ...fields,
     billItems,

@@ -7,6 +7,8 @@ import {
 } from '@/lib/kuda';
 import { KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE } from '@/lib/kuda-bill-item-price-messages';
 import { logger } from '@/lib/logger';
+import { formatNaira } from './kuda-format-naira';
+import { normalizeKudaItemCode } from './kuda-item-code';
 
 const DATA_PLAN_CACHE_TTL_MS = 60_000;
 
@@ -56,27 +58,6 @@ function normalizeComparable(value: string) {
 
 function amountMatches(a: number, b: number) {
   return Math.round(a * 100) === Math.round(b * 100);
-}
-
-// Module-scope cache: only minimumFractionDigits varies (0 for integers, 2 otherwise).
-const nairaFormatterCache = new Map<number, Intl.NumberFormat>();
-function getNairaFormatter(minimumFractionDigits: number): Intl.NumberFormat {
-  let formatter = nairaFormatterCache.get(minimumFractionDigits);
-  if (!formatter) {
-    formatter = new Intl.NumberFormat('en-NG', {
-      currency: 'NGN',
-      currencyDisplay: 'narrowSymbol',
-      maximumFractionDigits: 2,
-      minimumFractionDigits,
-      style: 'currency',
-    });
-    nairaFormatterCache.set(minimumFractionDigits, formatter);
-  }
-  return formatter;
-}
-
-function formatNaira(amount: number) {
-  return getNairaFormatter(Number.isInteger(amount) ? 0 : 2).format(amount);
 }
 
 function collectDataPlanCandidates(providers: Biller[]): DataPlanCandidate[] {
@@ -238,6 +219,18 @@ export async function resolveKudaDataPlanForPurchase({
   }
 
   const normalizedCode = normalizeComparable(originalDataPlanCode);
+  // A plan Kuda listed with an unusable price was dropped by the mapper. It
+  // fails closed here instead of falling through to the amount fallback
+  // below, which could sell a different plan at the same price.
+  if (
+    providers.some((provider) =>
+      provider.unreadableItemCodes?.some(
+        (code) => normalizeKudaItemCode(code) === normalizedCode
+      )
+    )
+  ) {
+    throw new Error(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
+  }
   const exactMatch = candidates.find(
     ({ item }) => normalizeComparable(item.itemCode) === normalizedCode
   );

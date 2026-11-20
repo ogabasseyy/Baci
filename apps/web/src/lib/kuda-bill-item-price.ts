@@ -10,6 +10,7 @@ import {
 import type { BillItem } from './kuda-bill-items';
 import { chosenListings } from './kuda-biller-name-match';
 import { getBillersByCategory } from './kuda-bills';
+import { normalizeKudaItemCode } from './kuda-item-code';
 import { logger } from './logger';
 
 const PRICE_LIST_CACHE_TTL_MS = 60_000;
@@ -109,21 +110,13 @@ async function loadPriceList(type: string): Promise<Biller[] | null> {
   return billers;
 }
 
-/** Item codes compared like the data-plan check does: case and punctuation free. */
-function normalizeItemCode(code: string) {
-  return code
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, '');
-}
-
 function collectBillItems(
   items: BillItem[] | undefined,
   itemCode: string,
   found: BillItem[]
 ): BillItem[] {
   for (const item of items ?? []) {
-    if (normalizeItemCode(item.itemCode) === itemCode) found.push(item);
+    if (normalizeKudaItemCode(item.itemCode) === itemCode) found.push(item);
     collectBillItems(item.billItems, itemCode, found);
   }
   return found;
@@ -190,7 +183,7 @@ export async function assertKudaBillItemPriceCurrent({
     throw new Error(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
   }
 
-  const code = normalizeItemCode(billItemIdentifier);
+  const code = normalizeKudaItemCode(billItemIdentifier);
   const offers = (biller: Biller) => {
     const items = collectBillItems(biller.billItems, code, []);
     // A listing Kuda sent with an unusable price was dropped by the mapper;
@@ -198,7 +191,7 @@ export async function assertKudaBillItemPriceCurrent({
     // can never be skipped as if it didn't offer the package.
     if (
       biller.unreadableItemCodes?.some(
-        (unreadable) => normalizeItemCode(unreadable) === code
+        (unreadable) => normalizeKudaItemCode(unreadable) === code
       )
     ) {
       items.push({ ...UNREADABLE_LISTING, itemCode: billItemIdentifier });

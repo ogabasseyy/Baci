@@ -16,6 +16,8 @@ SELECT * FROM (VALUES
   ('public.experience_public_snapshot(text,text,text)', 'published verified semantic snapshot, exact merchant/build/path'),
   ('public.experience_public_prerender_binding(text,text)', 'published verified companion binding, exact merchant/build'),
   ('public.persist_storefront_shipping_quote(jsonb,jsonb)', 'guest shipping quote requires scoped server attestation; does not create orders'),
+  ('public.read_brilstash_page(text,integer,integer,numeric)',
+   'BrilStash feed verifies an installation-scoped bearer before returning a published catalogue page'),
   ('public.read_storefront_shipping_quotes(uuid,text,uuid,jsonb)', 'guest shipping quote requires matching cart/session scope'),
   ('public.storefront_shipping_quote_storage_ready(uuid,uuid,jsonb)', 'guest storage readiness requires matching cart/session scope'),
   ('public.can_access_order(uuid,uuid)',

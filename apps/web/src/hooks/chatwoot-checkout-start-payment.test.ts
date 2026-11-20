@@ -80,6 +80,25 @@ describe('startChatwootCheckoutPayment', () => {
     ).toBe('ref-123');
   });
 
+  it('bills with the canonical state name the order was placed with', async () => {
+    const { calls } = stubCheckoutFetch({
+      '/api/payments/initialize': () => dvaReady,
+    });
+
+    await startChatwootCheckoutPayment(
+      input({
+        request: {
+          ...checkoutPlaceRequest,
+          address: { ...checkoutPlaceRequest.address, state: 'lagos' },
+        },
+      })
+    );
+
+    expect(JSON.parse(String(calls[0]?.init.body))).toMatchObject({
+      billing_address: { state: 'Lagos' },
+    });
+  });
+
   it.each([
     ['no tracking token', { ...order, trackingToken: null }],
     ['a missing currency', { ...order, currency: null }],

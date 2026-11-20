@@ -4,6 +4,7 @@ import { prepareSharedCartCheckout } from '@/hooks/cart/shared-cart-checkout-cli
 import { isQuizVoucherCartItem } from '@/lib/checkout/cart-entitlement-sanitizer';
 import { formatPhoneToE164 } from '@/lib/phone';
 import type { ChatwootCommerceMessage } from '@/schemas/chatwoot-commerce-message';
+import { pinChatwootCheckoutAttribution } from './chatwoot-checkout-attribution';
 import { resolveChatwootCheckoutDelivery } from './chatwoot-checkout-delivery';
 import { runChatwootCheckoutSerially } from './chatwoot-checkout-in-flight';
 import { deriveChatwootCheckoutKeys } from './chatwoot-checkout-keys';
@@ -212,17 +213,25 @@ async function placeForKeys(
     return fail('cart_changed');
   }
 
+  const orderRequest = buildChatwootCheckoutOrderRequest(
+    {
+      review,
+      display,
+      delivery,
+      customer: request.customer,
+      taxRate: merchant.taxRate,
+    },
+    items
+  );
   const outcome = await postChatwootCheckoutOrder(
-    buildChatwootCheckoutOrderRequest(
-      {
-        review,
-        display,
-        delivery,
-        customer: request.customer,
-        taxRate: merchant.taxRate,
-      },
-      items
-    ),
+    {
+      ...orderRequest,
+      // A retry must send the same body even if tracking cookies moved.
+      ad_tracking: pinChatwootCheckoutAttribution(
+        keys.idempotencyKey,
+        orderRequest.ad_tracking
+      ),
+    },
     keys.idempotencyKey
   );
   if (!outcome.ok) return fail(outcome.code);

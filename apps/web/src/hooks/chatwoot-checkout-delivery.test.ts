@@ -142,6 +142,18 @@ describe('resolveChatwootCheckoutDelivery', () => {
       });
     });
 
+    it('accepts the only pickup rate when the widget sends no location', async () => {
+      stub(pickup('Ikeja', 'a'));
+
+      expect(
+        await resolveChatwootCheckoutDelivery(input({ choice: choice() }))
+      ).toMatchObject({
+        ok: true,
+        merchantRateId: 'a',
+        method: 'pickup_station',
+      });
+    });
+
     it('refuses a location no rate has', async () => {
       stub(pickup('Ikeja', 'a'));
 

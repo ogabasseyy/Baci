@@ -1,3 +1,4 @@
+import { resolveChatwootCheckoutState } from './chatwoot-checkout-delivery';
 import { rememberChatwootCheckoutPayment } from './chatwoot-checkout-memory';
 import { initializeChatwootCheckoutBankTransfer } from './chatwoot-checkout-payment';
 import { readChatwootCheckoutPaymentStatus } from './chatwoot-checkout-payment-status';
@@ -83,7 +84,13 @@ export async function startChatwootCheckoutPayment(
     orderId: order.orderId,
     trackingToken: order.trackingToken,
     customer: request.customer,
-    address: request.address,
+    // The order was placed with the canonical state name; bill with the same.
+    address: {
+      ...request.address,
+      state:
+        resolveChatwootCheckoutState(request.address.state) ??
+        request.address.state,
+    },
   });
   if (!payment) return fail('payment_unavailable');
   rememberChatwootCheckoutPayment(input.orderKey, payment);

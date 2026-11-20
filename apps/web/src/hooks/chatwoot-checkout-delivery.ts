@@ -113,16 +113,25 @@ export async function resolveChatwootCheckoutDelivery(
 
   const quotes = await loadMerchantQuotes(input, state);
   const wantedName = input.choice.displayName.trim();
-  const matches = quotes.filter(
+  const candidates = quotes.filter(
     (quote) =>
       isMerchantQuote(quote) &&
       getMerchantRateId(String(quote.id)) !== null &&
       quote.displayName.trim().slice(0, 120) === wantedName &&
       (quote.isStationPickup === true) === input.choice.pickup &&
-      toMinor(quote.price) === toMinor(input.choice.priceMajor) &&
-      (!input.choice.pickup ||
-        formatChatwootPickupLocation(quote) === input.choice.pickupLocation)
+      toMinor(quote.price) === toMinor(input.choice.priceMajor)
   );
+  // The pickup location tells same-name, same-price pickup rates apart. It
+  // is not needed when only one rate fits, but a location the widget did send
+  // must still be that rate's.
+  const { pickupLocation } = input.choice;
+  const matches =
+    input.choice.pickup &&
+    (candidates.length > 1 || pickupLocation !== undefined)
+      ? candidates.filter(
+          (quote) => formatChatwootPickupLocation(quote) === pickupLocation
+        )
+      : candidates;
   const [quote] = matches;
   if (matches.length !== 1 || !quote) {
     return { ok: false, code: 'delivery_unavailable' };

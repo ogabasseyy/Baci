@@ -137,6 +137,11 @@ export function useStaffOrderFollowUps(
   const scope = ['staff-order-follow-ups', merchantId, viewerId];
   const openQueryKey = [...scope, 'open'];
   const queryKey = [...scope, orderIds];
+  const invalidateOpenScan = async () => {
+    const filters = { queryKey: openQueryKey, exact: true };
+    await queryClient.cancelQueries(filters);
+    await queryClient.invalidateQueries({ ...filters, refetchType: 'none' });
+  };
   const query = useQuery({
     queryKey,
     enabled: Boolean(merchantId && viewerId),
@@ -211,7 +216,10 @@ export function useStaffOrderFollowUps(
         UNREADABLE_REPLY_ERROR
       );
     },
-    onSuccess: (row) => {
+    onSuccess: async (row) => {
+      // Cancelling a refetch reverts its cache state. Do that before writing
+      // the saved row so the refetch cannot restore the pre-save queue.
+      await queryClient.cancelQueries({ queryKey, exact: true });
       queryClient.setQueryData<StaffFollowUpQueue>(queryKey, (current) => {
         if (!current) return current;
         return {
@@ -228,17 +236,17 @@ export function useStaffOrderFollowUps(
         };
       });
     },
-    onSettled: () => queryClient.invalidateQueries({ queryKey: scope }),
+    onSettled: () => {
+      void invalidateOpenScan().then(() =>
+        queryClient.invalidateQueries({ queryKey: scope })
+      );
+    },
   });
 
   return {
     ...query,
     refetch: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: openQueryKey,
-        exact: true,
-        refetchType: 'none',
-      });
+      await invalidateOpenScan();
       return query.refetch();
     },
     canWrite: !writeAccess.isError && writeAccess.data === true,

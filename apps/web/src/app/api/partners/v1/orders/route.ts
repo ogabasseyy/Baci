@@ -15,7 +15,7 @@ const orderSchema = z.strictObject({
   recipient: z.strictObject({
     name: z.string().trim().min(1).max(160),
     phone: z.string().regex(/^\+[1-9][0-9]{7,14}$/),
-    email: z.email().max(254).optional(),
+    email: z.email().max(254),
   }),
   payment: z.strictObject({
     source: z.string().regex(/^[a-z][a-z0-9_-]{0,39}$/),

@@ -209,7 +209,14 @@ describe.runIf(Boolean(pgSocket && pgPort))(
         total_minor: 172700,
       });
 
+      expect(quoted.quote_id).toMatch(/^[a-f0-9-]{36}$/);
       const capturedAt = new Date().toISOString();
+      // Advance the stored expiry in the disposable DB to exercise a late delivery.
+      const expiredAt = fixtureSql(`
+        UPDATE private.partner_delivery_quotes SET expires_at = clock_timestamp()
+        WHERE id = '${quoted.quote_id}'
+        RETURNING to_json(expires_at) #>> '{}';
+      `);
       const partnerOrderId = 'lifecycle-order';
       const orderPayload = {
         quote_id: quoted.quote_id,
@@ -270,6 +277,15 @@ describe.runIf(Boolean(pgSocket && pgPort))(
       expect(
         (await reconcile(request(reconcilePath, tokens.order, evidence))).status
       ).toBe(404);
+      await expectJson(
+        await reconcile(
+          request(reconcilePath, tokens.verify, {
+            ...evidence,
+            capture: { ...evidence.capture, captured_at: expiredAt },
+          })
+        ),
+        409
+      );
       const held = await expectJson(
         await reconcile(
           request(reconcilePath, tokens.verify, {

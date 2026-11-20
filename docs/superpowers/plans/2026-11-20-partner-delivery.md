@@ -34,7 +34,7 @@ The quote stores the merchant payable separately from the buyer total. The pilot
 
 ### Current order and tracking boundary
 
-The internal acceptance transaction requires verified capture and merchant settlement. The current implementation admits an exact NGN buyer capture and an exact NGN merchant allocation. FX and separately collected fees need an agreed policy before order acceptance. The Baci order writer requires a recipient email in addition to name and phone. A receipt can still record incomplete contact details for reconciliation after a payment attempt.
+The internal acceptance transaction requires verified capture and merchant settlement. The current implementation admits an exact NGN buyer capture and an exact NGN merchant allocation. FX and separately collected fees need an agreed policy before order acceptance. The Baci order writer requires a recipient email in addition to name and phone. The order API requires the recipient email at intake. The API records late delivery of a paid-order submission. Acceptance requires the verified capture to have occurred within the original quote window.
 
 On acceptance, Baci returns the same order ID on every identical submission retry. The order has a paid ledger entry, and its stored shipping address comes from the quote. The carrier quote remains unbound until the booking path establishes merchant-wallet funding and can check the current rate. Partners poll `GET /api/partners/v1/orders/{orderId}` for shipping status and waybill. The read returns only orders accepted through the same partner connection.
 
@@ -61,3 +61,11 @@ Register a server-side connection profile with a unique connection ID, the merch
 ### Local API lifecycle check
 
 Run `python3 supabase/tests/run_partner_api_lifecycle.py` with PostgreSQL and PostgREST on `PATH` and the workspace dependencies installed. It starts a disposable database and a loopback PostgREST instance, then calls the actual route handlers using Baci’s database client. It checks the feed envelope and conditional response, VAT-inclusive quote, paid-order receipt, wrong settlement hold, one accepted order and inventory decrement after reconciliation, idempotent replay, and connection-scoped tracking. The catalog input, carrier responses, and upstream payment evidence are fixtures. The test imports the live quote proof logic and runs the real storefront order writer on the reduced database schema.
+
+### CrossRem payment evidence to confirm
+
+CrossRem’s public terms name Square as a processor. Square uses the seller account’s currency for the charge and can expose that account’s payment and payout entries with authorized read access. Confirm the charge currency and account for Ogabassey, the reference that binds the charge to the Baci quote, and the source that proves the exact NGN allocation reached Ogabassey. If CrossRem charges in another currency, confirm the contractual FX rate source, conversion and rounding, fees, and payout timing before extending the verified NGN flow. An entry in a Square payout can reconcile a Square payment to that payout. Baci also needs evidence of the remittance to Ogabassey if it moves through a separate account. [CrossRem terms](https://www.crossrem.com/terms-of-service) · [Square payment currency](https://developer.squareup.com/reference/square/payments/create-payment) · [Square payout entries](https://developer.squareup.com/docs/payouts-api/list-payout-entries)
+
+### Hosted catalog baseline on 20 November 2026
+
+The deployed feed returned 4,496 unique listings. The authenticated full request took 2,811 ms to headers and 4,718 ms in total. At five-second smoke intervals, three conditional requests returned bodyless `304` responses in 645, 413, and 291 ms. The live Google ID and sellable-identity parity check also passed. Repeat the hosted measurement at the agreed partner interval after deploying the partner API, before enabling sync.

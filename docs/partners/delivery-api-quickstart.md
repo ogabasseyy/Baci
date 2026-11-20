@@ -30,13 +30,13 @@ Call `POST /quotes` with the quote credential and a JSON body. The following exa
 }
 ```
 
-A `201` returns `quote_id`, `currency`, the selected service and delivery estimate, line prices, `subtotal_minor`, `tax_minor`, `delivery_minor`, `total_minor`, and `expires_at`. The pilot offers domestic door delivery and sets expiry to the earlier of ten minutes after quoting or the validity limit returned by the shipping adapter. Show `total_minor` before payment. It includes the item subtotal, Baci VAT on the underlying merchant merchandise where applicable, and delivery. Get a new quote if the order or address changes, or if the quote expires. A quote does not reserve stock.
+A `201` returns `quote_id`, `currency`, the selected service and delivery estimate, line prices, `subtotal_minor`, `tax_minor`, `delivery_minor`, `total_minor`, and `expires_at`. The pilot offers domestic door delivery and sets expiry to the earlier of ten minutes after quoting or the validity limit returned by the shipping adapter. Show `total_minor` before payment. It includes the item subtotal, Baci VAT on the underlying merchant merchandise where applicable, and delivery. Get a new quote before charging if the order or address changes, or if the quote expires. A quote does not reserve stock.
 
 If Baci returns `ADDRESS_UNSERVICEABLE`, `CARRIER_UNAVAILABLE`, or `QUOTE_UNAVAILABLE`, Baci has issued no payable quote. An unconfigured settlement policy returns `QUOTE_UNAVAILABLE`. Keep checkout on hold for that address or retry after a temporary outage.
 
 ## 3. Submit the purchase
 
-After payment captures, call `POST /orders` using the order credential and an `Idempotency-Key` that matches `^[A-Za-z0-9_.:-]{16,128}$`. A UUID works. Keep that key and the original body for retries. Send the original quote ID and the same partner order reference each time. Baci uses the delivery address stored on the quote. Supply a recipient email for order acceptance.
+After payment captures, call `POST /orders` using the order credential and an `Idempotency-Key` that matches `^[A-Za-z0-9_.:-]{16,128}$`. A UUID works. Keep that key and the original body for retries. Send the original quote ID and the same partner order reference each time. Baci uses the delivery address stored on the quote. Include the recipient’s name, phone number, and email.
 
 ```json
 {
@@ -56,7 +56,7 @@ After payment captures, call `POST /orders` using the order credential and an `I
 }
 ```
 
-Submit the verified buyer amount in NGN using your configured provider source. Baci verifies the capture and settlement through the agreed evidence source. A `202` means Baci has recorded the submission. An accepted replay returns `200` with the original `order_id`. An incompatible reuse of an order reference, quote, or idempotency key returns `409 ORDER_CONFLICT`. After a timeout, check submission status or retry the original request. Do not collect payment again to recover a timed-out submission.
+Submit the verified buyer amount in NGN using your configured provider source. Baci verifies the capture and settlement through the agreed evidence source. A `202` means Baci has recorded the submission. If payment captured before expiry, submit its original reference and quote even after expiry. Baci checks the verified capture timestamp against the quote window. If the capture itself occurred at or after expiry, Baci holds order creation and the payment needs reconciliation. An accepted replay returns `200` with the original `order_id`. An incompatible reuse of an order reference, quote, or idempotency key returns `409 ORDER_CONFLICT`. After a timeout, check submission status or retry the original request. Do not collect payment again to recover a timed-out submission.
 
 ## 4. Read status and tracking
 

@@ -24,7 +24,11 @@ const idempotencyKey = 'synthetic-order-attempt-key';
 const input = {
   quote_id: '20000000-0000-4000-8000-000000000001',
   partner_order_id: 'external-reference-1',
-  recipient: { name: 'Test Recipient', phone: '+2348000000000' },
+  recipient: {
+    name: 'Test Recipient',
+    phone: '+2348000000000',
+    email: 'recipient@example.invalid',
+  },
   payment: {
     reference: 'reference-one',
     source: 'crossrem',
@@ -69,6 +73,18 @@ describe('partner order intake', () => {
 
     expect(response.status).toBe(429);
     expect(response.headers.get('retry-after')).toBe('60');
+    expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
+  it('rejects missing recipient email before accepting a paid submission', async () => {
+    const response = await POST(
+      request({
+        ...input,
+        recipient: { name: input.recipient.name, phone: input.recipient.phone },
+      })
+    );
+
+    expect(response.status).toBe(400);
     expect(mocks.rpc).not.toHaveBeenCalled();
   });
 

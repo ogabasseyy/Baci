@@ -78,6 +78,7 @@ paths:
   /orders:
     post:
       operationId: submitOrder
+      description: Submit payment captured during the quote validity window. Delivery of the submission may occur after the quote expires.
       security: [{OrderCredential: []}]
       parameters:
         - in: header
@@ -323,11 +324,11 @@ components:
         recipient:
           type: object
           additionalProperties: false
-          required: [name, phone]
+          required: [name, phone, email]
           properties:
             name: {type: string, minLength: 1, maxLength: 160}
             phone: {type: string, pattern: '^\+[1-9][0-9]{7,14}$'}
-            email: {type: string, format: email, maxLength: 254, description: Required for order acceptance.}
+            email: {type: string, format: email, maxLength: 254}
         payment:
           type: object
           additionalProperties: false

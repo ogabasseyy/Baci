@@ -116,6 +116,21 @@ describe('internal partner reconciliation', () => {
     expect(mocks.rpc).not.toHaveBeenCalled();
   });
 
+  it.each([
+    'capture',
+    'settlement',
+  ] as const)('rejects non-NGN %s evidence before storage', async (section) => {
+    const response = await POST(
+      request({
+        ...evidence,
+        [section]: { ...evidence[section], currency: 'USD' },
+      })
+    );
+
+    expect(response.status).toBe(400);
+    expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
   it('rejects malformed or oversized JSON before accessing storage', async () => {
     const malformed = new Request(request().url, {
       method: 'POST',

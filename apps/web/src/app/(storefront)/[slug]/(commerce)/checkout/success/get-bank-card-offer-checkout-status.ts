@@ -5,6 +5,7 @@ export function getBankCardOfferCheckoutStatus(
   payment: VerificationResponse
 ) {
   // fetchWithCsrf has already retried a recognized CSRF failure.
+  if (httpStatus === 401) return 'access_required';
   if (httpStatus === 403) {
     return payment.code === 'BANK_CARD_OFFER_VERIFICATION_DENIED'
       ? 'access_required'
@@ -13,7 +14,8 @@ export function getBankCardOfferCheckoutStatus(
   // Transient responses leave the capture unknown. Keep polling this reference.
   if (httpStatus === 408 || httpStatus === 429 || httpStatus >= 500)
     return 'pending';
-  if (httpStatus < 200 || httpStatus >= 300 || httpStatus === 202) return null;
+  if (httpStatus < 200 || httpStatus >= 300) return 'verification_unavailable';
+  if (httpStatus === 202) return null;
 
   if (payment.status === 'reversed') return 'reversed';
   if (

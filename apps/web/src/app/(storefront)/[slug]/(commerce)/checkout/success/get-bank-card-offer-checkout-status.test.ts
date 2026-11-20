@@ -67,3 +67,11 @@ it('honors an HTTP-date Retry-After', () => {
     vi.useRealTimers();
   }
 });
+
+it.each([
+  400, 404, 409, 422,
+])('keeps HTTP %s out of the payment failure path', (status) => {
+  expect(getBankCardOfferCheckoutStatus(status, {})).toBe(
+    'verification_unavailable'
+  );
+});

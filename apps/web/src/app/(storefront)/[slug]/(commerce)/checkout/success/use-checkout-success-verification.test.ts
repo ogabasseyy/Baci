@@ -142,6 +142,20 @@ describe('useCheckoutSuccessVerification', () => {
     }
   });
 
+  it('does not arm a polling timer after the first verification settles', async () => {
+    vi.useFakeTimers();
+    mockVerify.mockImplementationOnce(async (_params, handlers) => {
+      handlers.setStatus('reversed');
+    });
+    const { props } = setup();
+    const { result } = renderHook(() => useCheckoutSuccessVerification(props));
+
+    await act(async () => {});
+    expect(result.current.status).toBe('reversed');
+    expect(vi.getTimerCount()).toBe(0);
+    expect(mockVerify).toHaveBeenCalledTimes(1);
+  });
+
   it('waits for the rate-limit delay before polling again', async () => {
     vi.useFakeTimers();
     mockVerify

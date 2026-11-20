@@ -104,7 +104,6 @@ export interface VerifyCheckoutPaymentHandlers {
   }) => void;
 }
 
-// Keep payment verification outside the component body for React Compiler.
 export async function verifyCheckoutPayment(
   {
     merchantSlug,
@@ -177,7 +176,8 @@ export async function verifyCheckoutPayment(
       ? getBankCardOfferCheckoutStatus(response.status, data)
       : null;
     if (bankOfferStatus) {
-      const retryDelay = bankCardOfferRetryDelay(response);
+      const retryDelay =
+        bankOfferStatus === 'pending' && bankCardOfferRetryDelay(response);
       if (retryDelay) setStatus(bankOfferStatus, retryDelay);
       else setStatus(bankOfferStatus);
       setOrderNumber(response.status === 403 ? null : orderNumber);

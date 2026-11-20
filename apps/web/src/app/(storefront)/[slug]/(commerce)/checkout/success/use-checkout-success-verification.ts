@@ -61,9 +61,6 @@ export function useCheckoutSuccessVerification({
   const [paymentMethod, setPaymentMethod] = useState<string | null>(null);
   const statusRef = useRef<CheckoutVerificationStatus>('pending');
   const verificationIdentityRef = useRef<string | null>(null);
-  useEffect(() => {
-    statusRef.current = status;
-  }, [status]);
 
   useEffect(() => {
     if (!isReady) return;
@@ -187,6 +184,8 @@ export function useCheckoutSuccessVerification({
       setOrderNumber,
       setPaymentMethod,
       setStatus: (nextStatus, delayMs = 0) => {
+        if (disposed) return;
+        statusRef.current = nextStatus;
         retryAfterMs = delayMs;
         setStatus(nextStatus);
       },

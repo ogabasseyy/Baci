@@ -199,6 +199,26 @@ describe('verifyCheckoutPayment', () => {
     expect(callbacks.scheduleFailedRedirect).not.toHaveBeenCalled();
   });
 
+  it.each([
+    400, 404, 409,
+  ])('never prompts a second payment after bank-offer verification HTTP %s', async (status) => {
+    request.mockResolvedValue(
+      Response.json({}, { status, headers: { 'Retry-After': '30' } })
+    );
+    const callbacks = handlers();
+
+    await verifyCheckoutPayment(
+      { ...params, reference: `BCO-${'a'.repeat(32)}` },
+      callbacks
+    );
+
+    expect(callbacks.setStatus).toHaveBeenCalledWith(
+      'verification_unavailable'
+    );
+    expect(callbacks.capturePaymentFailed).not.toHaveBeenCalled();
+    expect(callbacks.scheduleFailedRedirect).not.toHaveBeenCalled();
+  });
+
   it('offers a safe refresh if bank-offer verification fails after the CSRF retry', async () => {
     request.mockResolvedValue(
       Response.json({ error: 'Invalid CSRF token' }, { status: 403 })

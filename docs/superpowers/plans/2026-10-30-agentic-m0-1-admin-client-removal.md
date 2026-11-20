@@ -910,6 +910,8 @@ with
     });
 ```
 
+Request the payment split only on the Paystack path (use the provider the handler has already parsed): pay-on-delivery never uses a subaccount, so a payment-split lookup failure must not turn a pay-on-delivery completion into `500 Agentic merchant not found`.
+
 In the `completeAgenticPayOnDelivery({ … })` call, delete the line
 
 ```ts
@@ -1162,7 +1164,7 @@ Write `/tmp/agentic-m0-1-pr-body.md` first. It must cover: the nine call sites; 
 
 - [ ] **Step 5: Follow the pull-request gates**
 
-Wait for green CI, the Codex review verdict and the required AI-review gate on the latest commit. A rebase or other history change invalidates earlier results. Do not merge or deploy without the owner's explicit approval.
+Keep the PR a draft until both Codex and Muse have a clean review for the exact head and base (see the draft-first policy in `AGENTS.md`), then run `gh pr ready`; the full CI suite only runs for ready PRs, so wait for it to be green on the latest commit and for every review thread to be resolved. A sync or other change to the diff returns the PR to draft and invalidates earlier results. Do not merge or deploy without the owner's explicit approval.
 
 - [ ] **Step 6: After an authorized merge and deploy, confirm the function is live**
 

@@ -84,6 +84,31 @@ describe('initiatePaystackCancellationRefunds', () => {
     );
   });
 
+  it('defers a bank-offer refund when capture lookup consumes the provider budget', async () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_200_000);
+    const reference = `BCO-${'a'.repeat(32)}`;
+    acceptedRefund({ transaction: { id: 55, reference } });
+    const rpc = vi.fn().mockImplementation(async () => {
+      now.mockReturnValue(1_210_000);
+      return { data: 9501, error: null };
+    });
+
+    try {
+      await expect(
+        initiatePaystackCancellationRefunds({
+          deadlineMs: 1_238_000,
+          order,
+          refundedPaymentIds: new Set(),
+          supabase: { from: vi.fn(() => ({ insert })), rpc } as never,
+          transactions: [{ ...transaction, gateway_reference: reference }],
+        })
+      ).rejects.toThrow('cancellation_refund_deadline_exceeded');
+      expect(mocks.initiatePaystackRefund).not.toHaveBeenCalled();
+    } finally {
+      now.mockRestore();
+    }
+  });
+
   it.each([
     false,
     true,

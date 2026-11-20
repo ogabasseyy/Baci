@@ -266,6 +266,12 @@ BEGIN
   IF public.get_bank_card_offer_verification_context(v_order, v_merchant, v_transaction)
     #>> '{completedGatewayResponse,reference}' IS DISTINCT FROM v_reference
   THEN RAISE EXCEPTION 'Pending completion must retain saved provider evidence'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.transactions
+    WHERE id = v_transaction AND status = 'pending'
+      AND metadata->>'guest_provider_confirmed' = 'true'
+      AND metadata->>'guest_provider_confirmed_at' IS NOT NULL
+  ) THEN RAISE EXCEPTION 'A verified pending capture must be eligible for the wedge sweep'; END IF;
   BEGIN
     IF NOT public.flag_bank_card_offer_terminal_review(v_order, v_merchant, v_transaction, 'reversed')
       OR NOT public.flag_bank_card_offer_terminal_review(v_order, v_merchant, v_transaction, 'abandoned')

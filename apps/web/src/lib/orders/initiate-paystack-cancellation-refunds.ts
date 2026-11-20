@@ -73,7 +73,54 @@ export async function initiatePaystackCancellationRefunds({
 
   for (const transaction of transactions) {
     if (refundedPaymentIds.has(transaction.id)) continue;
-    // Bound every leg to the remaining invocation deadline: a plain
+    const transactionAmount = Number(transaction.amount);
+    // A positive leg below half a kobo rounds to 0, and the provider
+    // call treats a non-positive amount as "refund the whole
+    // transaction": quarantine the leg for operations instead of
+    // over-refunding a multi-leg order.
+    // Read the order's persisted payment method. A bank reference on an
+    // unexpected order still goes through the same saved-capture gate.
+    const isBankOffer =
+      order.payment_method === 'bank_card_offer' ||
+      transaction.gateway_reference?.startsWith('BCO-');
+    let koboAmount = isBankOffer ? 0 : Math.round(transactionAmount * 100);
+    if (!isBankOffer && transactionAmount > 0 && koboAmount <= 0) {
+      await quarantineRefund({
+        metadata: {
+          failed_payment_transaction_id: transaction.id,
+          ambiguous_initiation: false,
+          leg_amount: transaction.amount,
+        },
+        order,
+        reason:
+          'Payment leg amount rounds to zero kobo and needs review before refund',
+        supabase,
+        transactions: [transaction],
+      });
+      continue;
+    }
+    if (isBankOffer) {
+      const capture = await supabase.rpc(
+        'get_bank_card_offer_refundable_amount',
+        {
+          p_order_id: order.id,
+          p_merchant_id: order.merchant_id,
+          p_transaction_id: transaction.id,
+          p_reference: transaction.gateway_reference,
+        }
+      );
+      if (capture.error) {
+        bankOfferLookupUnavailable = true;
+        if (isLastAttempt) bankOfferLegsForReview.push(transaction);
+        continue;
+      }
+      if (!Number.isSafeInteger(capture.data) || capture.data <= 0) {
+        bankOfferLegsForReview.push(transaction);
+        continue;
+      }
+      koboAmount = capture.data;
+    }
+    // Compute the budget after reading the saved capture. A plain
     // Error keeps the step retryable, so unattempted legs run on the
     // next tick instead of stranding a mid-flight claim. Legs start
     // only when a full provider call plus the audit reserve both fit;
@@ -127,53 +174,6 @@ export async function initiatePaystackCancellationRefunds({
         });
       }
       throw new Error('cancellation_refund_deadline_exceeded');
-    }
-    const transactionAmount = Number(transaction.amount);
-    // A positive leg below half a kobo rounds to 0, and the provider
-    // call treats a non-positive amount as "refund the whole
-    // transaction": quarantine the leg for operations instead of
-    // over-refunding a multi-leg order.
-    // Read the order's persisted payment method. A bank reference on an
-    // unexpected order still goes through the same saved-capture gate.
-    const isBankOffer =
-      order.payment_method === 'bank_card_offer' ||
-      transaction.gateway_reference?.startsWith('BCO-');
-    let koboAmount = isBankOffer ? 0 : Math.round(transactionAmount * 100);
-    if (!isBankOffer && transactionAmount > 0 && koboAmount <= 0) {
-      await quarantineRefund({
-        metadata: {
-          failed_payment_transaction_id: transaction.id,
-          ambiguous_initiation: false,
-          leg_amount: transaction.amount,
-        },
-        order,
-        reason:
-          'Payment leg amount rounds to zero kobo and needs review before refund',
-        supabase,
-        transactions: [transaction],
-      });
-      continue;
-    }
-    if (isBankOffer) {
-      const capture = await supabase.rpc(
-        'get_bank_card_offer_refundable_amount',
-        {
-          p_order_id: order.id,
-          p_merchant_id: order.merchant_id,
-          p_transaction_id: transaction.id,
-          p_reference: transaction.gateway_reference,
-        }
-      );
-      if (capture.error) {
-        bankOfferLookupUnavailable = true;
-        if (isLastAttempt) bankOfferLegsForReview.push(transaction);
-        continue;
-      }
-      if (!Number.isSafeInteger(capture.data) || capture.data <= 0) {
-        bankOfferLegsForReview.push(transaction);
-        continue;
-      }
-      koboAmount = capture.data;
     }
     const paystackRefund = await initiatePaystackRefund(
       transaction.gateway_reference as string,

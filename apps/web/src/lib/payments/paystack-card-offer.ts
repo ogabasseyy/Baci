@@ -57,9 +57,10 @@ export function verifyPaystackCardOffer({
     return null;
   }
 
-  const cardBrand = cardBrands.find(
-    (brand) => brand === parsed.data.data.authorization.brand.toLowerCase()
-  );
+  const providerBrand = parsed.data.data.authorization.brand
+    .trim()
+    .toLowerCase();
+  const cardBrand = cardBrands.find((brand) => brand === providerBrand);
   if (!cardBrand) {
     return null;
   }

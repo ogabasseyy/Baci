@@ -24,9 +24,7 @@ vi.mock('@/lib/events/record-platform-order-created-event', () => ({
 
 vi.mock('@/lib/checkout/order-negotiation-discount', async (importOriginal) => {
   const actual =
-    await importOriginal<
-      typeof import('@/lib/checkout/order-negotiation-discount')
-    >();
+    (await importOriginal()) as typeof import('@/lib/checkout/order-negotiation-discount');
   return {
     ...actual,
     computeOrderNegotiationDiscount: vi.fn(

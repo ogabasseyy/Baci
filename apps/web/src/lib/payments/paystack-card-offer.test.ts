@@ -80,9 +80,9 @@ describe('Paystack bank card offers', () => {
 
   it.each([
     ['Sterling Bank', 'visa', true],
-    [' sterling bank ', 'VISA', true],
+    [' sterling bank ', ' VISA ', true],
     ['Wema Bank', 'visa', false],
-    ['Sterling Bank', 'mastercard', false],
+    ['Sterling Bank', ' mastercard ', false],
   ])('verifies %s with %s against the selected offer', (bank, brand, accepted) => {
     expect(
       verifyPaystackCardOffer({

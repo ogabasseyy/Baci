@@ -41,3 +41,7 @@ The server computes the approved offer percentage and cap and signs the quote wi
 Before activating a campaign, verify the exact Paystack authorization issuer label using an approved card for that bank and confirm the refund path. If Paystack returns a different label from the configured bank-code mapping, confirm it with Paystack and update the mapping before enabling the offer.
 
 Native verification requires the signed-in buyer’s ownership proof. It records a verified terminal review before returning the terminal status. A verified payment that is still pending is flagged for reconciliation while settlement stays on the webhook and worker paths.
+
+Automatic cancellation refunds cover the full verified payment leg. For a partial-item refund, operations should use the saved per-unit net allocations to determine the refundable merchandise amount and reconcile it against the original capture.
+
+If capture lookup fails before the final worker attempt, the cancellation step is recorded as a retryable failure with any accepted refund IDs preserved. The drain reclaims failed steps within its retry budget. On the final attempt, unresolved legs enter review with the capture lookup outage recorded.

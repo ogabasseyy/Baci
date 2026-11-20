@@ -17,7 +17,7 @@ const VEND_FAILED_WORDING =
  * delivered vends when asked with the wrong reference (#2784).
  */
 const LOOKUP_WORDING =
-  /\b(?:not\s+found|no\s+(?:record|transaction)|does\s+not\s+exist|doesn't\s+exist|(?:status|lookup|query|requery|request|authentication|login)\s+(?:\w+\s+)?failed|invalid\s+(?:\w+\s+)?ref(?:erence)?|unknown\s+(?:\w+\s+)?ref(?:erence)?)\b/i;
+  /\b(?:not\s+found|no\s+(?:record|transaction)|does\s+not\s+exist|doesn't\s+exist|(?:status|lookup|query|requery|request|authentication|login|token|access)\s+(?:\w+\s+)?(?:failed|declined|rejected|refused|denied|unsuccessful|cancell?ed|reversed)|invalid\s+(?:\w+\s+)?ref(?:erence)?|unknown\s+(?:\w+\s+)?ref(?:erence)?)\b/i;
 
 /**
  * Whether a requery that Monnify answered with a business rejection (not a

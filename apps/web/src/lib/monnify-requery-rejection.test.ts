@@ -46,3 +46,24 @@ describe('bugfix: generic query failures do not prove the vend failed', () => {
     expect(check(message)).toBe(true);
   });
 });
+
+describe('bugfix: query-level refusals never prove the vend failed', () => {
+  it.each([
+    'Authentication declined',
+    'Request declined',
+    'Requery rejected',
+    'Access denied',
+    'Token reversed',
+    'Status lookup unsuccessful',
+  ])('keeps "%s" unresolved', (message) => {
+    expect(check(message)).toBe(false);
+  });
+
+  it.each([
+    'Vend declined',
+    'Transaction reversed',
+    'Purchase cancelled',
+  ])('still accepts "%s"', (message) => {
+    expect(check(message)).toBe(true);
+  });
+});

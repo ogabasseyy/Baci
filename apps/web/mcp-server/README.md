@@ -155,15 +155,14 @@ With trust disabled, the server uses the validated socket `remoteAddress`.
 ## Available Tools
 
 OAuth-connected callers discover the persistent cart update/read tools. They do
-not discover or invoke `prepare_storefront_cart_link` or `add_to_cart`: those
-stateless legacy tools remain available only on the anonymous connection.
+not discover or invoke `prepare_storefront_cart_link`; that link-only tool is
+available only on the anonymous connection.
 
 | Tool | Description |
 |------|-------------|
 | `update_ogabassey_guest_cart` | Persist a guest cart without login and return a website checkout handoff |
 | `get_ogabassey_guest_cart` | Read the OAuth connection’s persistent guest cart (connected callers only) |
 | `prepare_storefront_cart_link` | Prepare a storefront cart URL without saving a server-side cart |
-| `add_to_cart` | Deprecated alias of `prepare_storefront_cart_link` for cached tool lists |
 | `render_ogabassey_catalog` | Display selected products after a search or product lookup |
 | `browse_categories` | Browse active store categories |
 | `cancel_agentic_checkout_session` | Cancel a mutable signed Baci agentic checkout session |
@@ -188,10 +187,11 @@ stateless legacy tools remain available only on the anonymous connection.
 | `update_agentic_checkout_session` | Update items, shipping details, or fulfillment options on a signed Baci agentic checkout session |
 | `update_ucp_cart` | Replace UCP cart line items or fulfillment context |
 
-Rollout note: `prepare_storefront_cart_link` was renamed from `add_to_cart`;
-the old name stays registered for anonymous callers as a deprecated alias on the same handler, so
-callers with a cached `tools/list` entry or a hardcoded tool name keep working
-while they refresh tool discovery.
+Rollout note: the link-only `add_to_cart` name was retired because it implied
+that the tool saved a cart. Clients with a cached tool list must refresh it.
+Connected and anonymous callers can use `update_ogabassey_guest_cart` to save
+a guest cart. Anonymous callers can also use `prepare_storefront_cart_link`
+to prepare a link without saving one.
 
 ## Example Prompts
 

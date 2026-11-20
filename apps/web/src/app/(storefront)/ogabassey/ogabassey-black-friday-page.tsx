@@ -1,14 +1,15 @@
-import {
-  OGABASSEY_BLACK_FRIDAY_DATE,
-  OGABASSEY_BLACK_FRIDAY_DATE_LABEL,
-} from '@baci/shared';
+import { OGABASSEY_BLACK_FRIDAY_DATE_LABEL } from '@baci/shared';
 import Link from 'next/link';
 import { Suspense } from 'react';
+import heroSmall from '@/assets/campaigns/black-friday-2026-hero-384.webp';
+import heroLarge from '@/assets/campaigns/black-friday-2026-hero-768.webp';
 import { CdnFormatImage } from '@/components/storefront/cdn-format-image';
 import { IS_BLACK_FRIDAY_PREVIEW } from '@/config/ogabassey-black-friday';
 import { getBlackFridayProducts } from '@/lib/ogabassey-black-friday';
 import { asRoute } from '@/lib/routes';
+import { BlackFridayCountdown } from './black-friday-countdown';
 import { BlackFridayFilters } from './black-friday-filters';
+import { BLACK_FRIDAY_LAUNCH } from './black-friday-launch';
 import { getBlackFridayLineupView } from './black-friday-lineup-view';
 import styles from './ogabassey-black-friday-page.module.css';
 
@@ -31,6 +32,10 @@ export function OgabasseyBlackFridayPage(props: BlackFridayPageProps) {
           <h1 className={styles.title}>
             Black <span className={styles.accent}>Friday</span>
           </h1>
+          <time dateTime={BLACK_FRIDAY_LAUNCH} className={styles.campaignDate}>
+            {OGABASSEY_BLACK_FRIDAY_DATE_LABEL}
+          </time>
+          <BlackFridayCountdown />
           <div className={styles.heroDetails}>
             <Suspense fallback={null}>
               <BlackFridayHeroDetails lineup={lineup} />
@@ -41,10 +46,10 @@ export function OgabasseyBlackFridayPage(props: BlackFridayPageProps) {
         <img
           alt=""
           className={styles.heroArt}
-          width={768}
-          height={384}
-          src="/campaigns/black-friday-hero-768.webp"
-          srcSet="/campaigns/black-friday-hero-384.webp 384w, /campaigns/black-friday-hero-768.webp 768w"
+          width={heroLarge.width}
+          height={heroLarge.height}
+          src={heroLarge.src}
+          srcSet={`${heroSmall.src} ${heroSmall.width}w, ${heroLarge.src} ${heroLarge.width}w`}
           sizes="(min-width: 80rem) 616px, (min-width: 28rem) 50vw, calc(100vw - 2rem)"
           fetchPriority="high"
         />
@@ -72,12 +77,6 @@ export async function BlackFridayHeroDetails({ lineup }: { lineup: Lineup }) {
       <p className={styles.description}>
         Find your next upgrade in our Black Friday lineup.
       </p>
-      <time
-        dateTime={OGABASSEY_BLACK_FRIDAY_DATE}
-        className="block font-semibold text-rose-200"
-      >
-        {OGABASSEY_BLACK_FRIDAY_DATE_LABEL}
-      </time>
       <a className={styles.heroLink} href="#black-friday-offers">
         Shop the lineup <span aria-hidden="true">↓</span>
       </a>

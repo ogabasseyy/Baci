@@ -40,9 +40,9 @@ AS $$
 $$;
 
 -- One GIGL order with an attested quote and a booked GIGL shipment. A wallet
--- order (p_charge_status 'provider_submitting' or 'booked') also gets the
--- debit and the charge; 'booked' binds the charge to the shipment, which
--- stamps the waybill. The shipment's monitor is leased to 'worker-test'.
+-- order (p_charge_status 'reserved', 'provider_submitting' or 'booked') also
+-- gets the debit and the charge; 'booked' binds the charge to the shipment,
+-- which stamps the waybill. The shipment's monitor is leased to 'worker-test'.
 CREATE FUNCTION pg_temp.seed_gigl_order(
   p_n integer,
   p_shipping_status text,
@@ -64,9 +64,10 @@ DECLARE
 BEGIN
   INSERT INTO public.orders (
     id, merchant_id, order_number, total, amount_paid, payment_status,
-    shipping_status
+    payment_method, shipping_status
   ) VALUES (
     v_order, v_merchant, 'GIGL-CANCEL-REFUND-' || p_n, 150000, 150000, 'paid',
+    CASE WHEN p_charge_status = 'none' THEN 'paystack' ELSE NULL END,
     p_shipping_status
   );
   INSERT INTO public.shipping_quotes (
@@ -115,10 +116,16 @@ BEGIN
       charged_amount, provider_cost, platform_margin, attempt_token_digest,
       debit_transaction_id, provider_submitting_at
     ) VALUES (
-      v_charge, v_merchant, v_order, v_quote, 'provider_submitting', 'NGN',
+      v_charge, v_merchant, v_order, v_quote,
+      CASE
+        WHEN p_charge_status = 'reserved' THEN 'reserved'
+        ELSE 'provider_submitting'
+      END,
+      'NGN',
       48500.40, 44091.27, 4409.13,
       pg_catalog.encode(extensions.digest('attempt-' || p_n, 'sha256'), 'hex'),
-      v_debit, now()
+      v_debit,
+      CASE WHEN p_charge_status = 'reserved' THEN NULL ELSE now() END
     );
   END IF;
 
@@ -203,5 +210,6 @@ BEGIN
   PERFORM pg_temp.seed_gigl_order(21, 'shipped', 'booked');    -- T21
   PERFORM pg_temp.seed_gigl_order(22, 'shipped', 'provider_submitting'); -- T22
   PERFORM pg_temp.seed_gigl_order(23, 'shipped', 'booked');    -- T23
+  PERFORM pg_temp.seed_gigl_order(24, 'shipped', 'reserved');  -- T24
 END;
 $seed_orders$;

@@ -14,11 +14,14 @@ run_case() {
   [[ "$(cat "$output_file")" == "$expected" ]]
 }
 
-all_true=$'mobile_admin=true\nmobile_storefront=true\nweb=true\nquiz_db=true\ncwv_runner=true\ndeploy_scripts=true\npiggyvest_runbook=true'
-forced_web=$'mobile_admin=false\nmobile_storefront=false\nweb=true\nquiz_db=false\ncwv_runner=false\ndeploy_scripts=false\npiggyvest_runbook=false'
-filtered=$'mobile_admin=true\nmobile_storefront=false\nweb=false\nquiz_db=true\ncwv_runner=false\ndeploy_scripts=true\npiggyvest_runbook=true'
+all_true=$'mobile_admin=true\nmobile_storefront=true\nweb=true\nquiz_db=true\ncwv_runner=true\ndeploy_scripts=true\npiggyvest_runbook=true\nagent_gate_scripts=true'
+forced_web=$'mobile_admin=false\nmobile_storefront=false\nweb=true\nquiz_db=false\ncwv_runner=false\ndeploy_scripts=false\npiggyvest_runbook=false\nagent_gate_scripts=false'
+filtered=$'mobile_admin=true\nmobile_storefront=false\nweb=false\nquiz_db=true\ncwv_runner=false\ndeploy_scripts=true\npiggyvest_runbook=true\nagent_gate_scripts=true'
+only_agent_gate=$'mobile_admin=false\nmobile_storefront=false\nweb=false\nquiz_db=false\ncwv_runner=false\ndeploy_scripts=false\npiggyvest_runbook=false\nagent_gate_scripts=true'
 run_case merge_group "$all_true"
 run_case workflow_dispatch "$forced_web" FORCE_QUALITY_GATES=true
-run_case pull_request "$filtered" FILTER_MOBILE_ADMIN=true FILTER_MOBILE_STOREFRONT=false FILTER_WEB=false FILTER_QUIZ_DB=true FILTER_CWV_RUNNER=false FILTER_DEPLOY_SCRIPTS=true FILTER_PIGGYVEST_RUNBOOK=true
+run_case pull_request "$filtered" FILTER_MOBILE_ADMIN=true FILTER_MOBILE_STOREFRONT=false FILTER_WEB=false FILTER_QUIZ_DB=true FILTER_CWV_RUNNER=false FILTER_DEPLOY_SCRIPTS=true FILTER_PIGGYVEST_RUNBOOK=true FILTER_AGENT_GATE_SCRIPTS=true
+
+run_case pull_request "$only_agent_gate" FILTER_AGENT_GATE_SCRIPTS=true
 
 printf 'CI change-scope tests passed.\n'

@@ -7,6 +7,10 @@ vi.mock('@/hooks/use-merchant-inbox', () => ({
   useMerchantInbox: () => inbox.value,
 }));
 
+vi.mock('./insights-card', () => ({
+  InsightsCard: () => <div data-testid="insights-card" />,
+}));
+
 import MessagesPage from './page';
 
 const message = (id: number, sender: string, text: string, kind = 'text') => ({
@@ -68,6 +72,12 @@ describe('MessagesPage', () => {
     render(<MessagesPage />);
     expect(screen.getByRole(role)).toHaveTextContent(text);
     expect(screen.queryByRole('list')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('insights-card')).not.toBeInTheDocument();
+  });
+
+  it('shows the insights card once the inbox is ready', () => {
+    render(<MessagesPage />);
+    expect(screen.getByTestId('insights-card')).toBeInTheDocument();
   });
 
   it('lists conversations with previews and unread counts', async () => {

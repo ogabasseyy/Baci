@@ -17,6 +17,7 @@ describe('validateFastfileSubmitVersionGuard', () => {
 
     expect(validateFastfileSubmitVersionGuard(fastfile, versionSlot)).toEqual([]);
   });
+
 });
 
 describe('bugfix: submit lane died creating an App Store version Apple refuses to create', () => {

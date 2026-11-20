@@ -73,12 +73,30 @@ function readNonEmptyString(value: unknown, fallback: string): string {
   return fallback;
 }
 
+// Receiver name/phone must resolve exactly as bind_admin_gigl_quote resolves
+// the stored order side, or a fresh quote is rejected as stale_order_quote_inputs:
+// - only JSON strings and numbers count as a value (the SQL checks
+//   jsonb_typeof), and a number becomes the same text `->>` returns (exact for
+//   phone-length integers; a stored `1.0` loses its scale in JSON.parse);
+// - btrim removes ASCII spaces only, so String.prototype.trim (which also
+//   strips tabs, newlines and no-break spaces) must not be used here;
+// - a blank value falls back to the order's customer_name/customer_phone.
+function readContactText(value: unknown): string {
+  const text =
+    typeof value === 'string'
+      ? value
+      : typeof value === 'number' && Number.isFinite(value)
+        ? String(value)
+        : '';
+  return text.replace(/^ +| +$/g, '');
+}
+
 function readAddress(raw: unknown, order: OrderLike): ShippingAddress {
   const a =
     raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
   return {
-    name: String(a.name ?? order.customer_name ?? ''),
-    phone: String(a.phone ?? order.customer_phone ?? ''),
+    name: readContactText(a.name) || readContactText(order.customer_name),
+    phone: readContactText(a.phone) || readContactText(order.customer_phone),
     email: String(a.email ?? order.customer_email ?? ''),
     address: String(a.address ?? a.street ?? ''),
     city: String(a.city ?? ''),

@@ -116,53 +116,51 @@ export function hasConflictingVendStatuses(body: {
   return categories.size > 1;
 }
 
-const TOKEN_SEARCH_DEPTH = 6;
-/** A `token` under request/auth/error objects is a credential or echo, not a voucher. */
-const NON_VOUCHER_PARENT =
-  /^(?:request|lookup|query|requery|auth|authentication|credential|login|access|oauth|error|exception|customer|validation|refund|reversal|settlement|callback|webhook|notification|chargeback)s?$/;
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
 
-function findTokenIn(
-  value: unknown,
-  insideBody: boolean,
-  depth: number,
-  parentKey = ''
-): boolean {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-  // Nesting deeper than we scan can't be cleared: fail closed (hold), like the
-  // code and duplicate scans.
-  if (depth > TOKEN_SEARCH_DEPTH) {
-    return true;
-  }
-  const entries = Array.isArray(value)
-    ? value.map((item) => ['', item] as const)
-    : Object.entries(value);
-  return entries.some(([rawKey, child]) => {
-    const key = rawKey.replace(/[\s_-]/g, '').toLowerCase();
-    if (
-      insideBody &&
-      key === 'token' &&
-      typeof child === 'string' &&
-      !NON_VOUCHER_PARENT.test(parentKey)
-    ) {
-      if (readMonnifyBillToken({ token: child })) {
-        return true;
-      }
+/** The value under a key, ignoring case and "_" / "-" spelling. */
+function readKey(record: Record<string, unknown>, wanted: string): unknown {
+  for (const [key, value] of Object.entries(record)) {
+    if (key.replace(/[\s_-]/g, '').toLowerCase() === wanted) {
+      return value;
     }
-    return findTokenIn(
-      child,
-      insideBody || key === 'responsebody',
-      depth + 1,
-      key
-    );
+  }
+  return undefined;
+}
+
+/**
+ * The `responseBody` objects of an answer: the answer's own, or those of a
+ * parsed form-encoded answer (an array of one-pair objects). Nothing deeper
+ * is searched, so a credential token under some other object never counts.
+ */
+function responseBodies(answer: unknown): Record<string, unknown>[] {
+  const roots = Array.isArray(answer) ? answer : [answer];
+  return roots.flatMap((root) => {
+    const record = asRecord(root);
+    const body = record ? readKey(record, 'responsebody') : undefined;
+    return (Array.isArray(body) ? body : [body])
+      .map(asRecord)
+      .filter((item): item is Record<string, unknown> => item !== null);
   });
 }
 
 /**
- * Whether an answer's responseBody carries a real (non-placeholder) token, in
- * JSON or in a parsed form-encoded shape (nested objects or one-pair arrays).
+ * Whether an answer's responseBody carries a real (non-placeholder) voucher
+ * token where a vend puts it: `responseBody.token` or
+ * `responseBody.metaData.token`, in JSON or in a parsed form-encoded shape.
  */
 export function hasBodyToken(answer: unknown): boolean {
-  return findTokenIn(answer, false, 0);
+  return responseBodies(answer).some((body) => {
+    const metaData = asRecord(readKey(body, 'metadata'));
+    const direct = readKey(body, 'token');
+    const nested = metaData ? readKey(metaData, 'token') : undefined;
+    return !!readMonnifyBillToken({
+      token: typeof direct === 'string' ? direct : undefined,
+      metaData: { token: typeof nested === 'string' ? nested : undefined },
+    });
+  });
 }

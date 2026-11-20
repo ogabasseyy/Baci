@@ -71,19 +71,31 @@ describe('bugfix: tokens are found in parsed form-encoded bodies', () => {
   });
 });
 
-describe('bugfix: a body too deeply nested to scan for a token is held', () => {
-  it('treats overflow as a possible token (fail closed)', () => {
-    let deep: Record<string, unknown> = { token: 'N/A' };
+describe('bugfix: a token only counts where a vend puts it', () => {
+  it('counts responseBody.token and responseBody.metaData.token', () => {
+    expect(hasBodyToken({ responseBody: { token: '1111-2222' } })).toBe(true);
+    expect(
+      hasBodyToken({ responseBody: { metaData: { token: '1111-2222' } } })
+    ).toBe(true);
+  });
+
+  it('ignores a token nested under any other object, however deep', () => {
+    expect(
+      hasBodyToken({
+        responseBody: { data: { result: { token: 'sess-abc-123' } } },
+      })
+    ).toBe(false);
+    expect(
+      hasBodyToken({ responseBody: { session: { token: 'sess-abc-123' } } })
+    ).toBe(false);
+  });
+
+  it('has no depth limit to overflow', () => {
+    let deep: Record<string, unknown> = { token: 'sess-abc-123' };
     for (let i = 0; i < 12; i++) {
       deep = { nested: deep };
     }
 
-    expect(hasBodyToken({ responseBody: deep })).toBe(true);
-  });
-
-  it('still returns false for a shallow body without a token', () => {
-    expect(hasBodyToken({ responseBody: { vendStatus: 'FAILED' } })).toBe(
-      false
-    );
+    expect(hasBodyToken({ responseBody: deep })).toBe(false);
   });
 });

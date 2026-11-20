@@ -1,10 +1,6 @@
 {
   "platformBranches": [
     {
-      "path": "components/product/ProductImageGallery.tsx",
-      "justification": "The wide-window image crop switches on iOS; Android keeps cover while its keyboard resizes the window."
-    },
-    {
       "path": "components/product/hooks/use-product-detail-animations.ts",
       "justification": "Android adds back the keyboard height removed by adjustResize; all window sizes still cap the hero height and scroll thresholds."
     },

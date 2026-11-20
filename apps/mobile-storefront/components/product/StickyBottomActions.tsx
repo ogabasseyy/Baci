@@ -8,6 +8,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import type { EdgeInsets } from 'react-native-safe-area-context';
 import type Colors from '@/constants/Colors';
 import { RADIUS, SHADOWS, SPACING } from '@/constants/Colors';
 import { StickyAssuranceDefaultNote } from './StickyAssuranceDefaultNote';
@@ -15,6 +16,7 @@ import { StickyAssuranceDefaultNote } from './StickyAssuranceDefaultNote';
 type ColorsScheme = (typeof Colors)['light'];
 const ACTION_ROW_GAP = SPACING.md - SPACING.xs;
 const EMPHASIS_BORDER_WIDTH = SPACING.xs / 2;
+const BAR_SIDE_PADDING = 20;
 
 export interface StickyBottomActionsProps {
   canPurchase: boolean;
@@ -29,6 +31,7 @@ export interface StickyBottomActionsProps {
   floating?: boolean;
   bottomOffset?: number;
   paddingBottom?: number;
+  horizontalInsets?: Pick<EdgeInsets, 'left' | 'right'>;
 }
 
 export function StickyBottomActions({
@@ -44,6 +47,7 @@ export function StickyBottomActions({
   floating = true,
   bottomOffset = 0,
   paddingBottom = 16,
+  horizontalInsets,
 }: StickyBottomActionsProps) {
   const content =
     quantityInCart > 0 ? (
@@ -187,6 +191,8 @@ export function StickyBottomActions({
             borderTopColor: colors.border,
             bottom: bottomOffset,
             paddingBottom,
+            paddingLeft: BAR_SIDE_PADDING + (horizontalInsets?.left ?? 0),
+            paddingRight: BAR_SIDE_PADDING + (horizontalInsets?.right ?? 0),
           },
         ]}
       >
@@ -209,7 +215,6 @@ const styles = StyleSheet.create({
     right: 0,
     zIndex: 60,
     elevation: 60,
-    paddingHorizontal: 20,
     paddingTop: SPACING.md,
     paddingBottom: SPACING.md,
     borderTopWidth: 1,

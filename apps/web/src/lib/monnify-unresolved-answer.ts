@@ -5,6 +5,7 @@ import { hasMonnifyUnresolvedCode } from './monnify-non-definitive-code';
 import { hasMonnifyProviderReference } from './monnify-rejection-vend-reference';
 import { normaliseMonnifyWording } from './monnify-text-normalise';
 import { reportsMonnifyUnresolvedCode } from './monnify-unexpected-error-text';
+import { HTTP_STATUS_LABEL } from './monnify-vend-evidence';
 import { isMonnifyKnownVendRefusalText } from './monnify-vend-refusal';
 
 const MAX_DEPTH = 6;
@@ -38,6 +39,26 @@ const IN_FLIGHT_WORDING =
 /** Vend-specific status keys (not a bare `status`). */
 const VEND_STATUS_KEY =
   /^(?!(?:http|response|result)?status(?:code)?$).+status$/;
+
+/**
+ * A generic `status` that is not an HTTP reason phrase, an error label or a
+ * number ("UNKNOWN", a new provider state) is a vend state we do not know,
+ * like vend evidence reads it.
+ */
+function isGenericVendLikeStatus(key: string, value: string): boolean {
+  if (!/^(?:http|response|result)?status(?:code)?$/.test(key)) {
+    return false;
+  }
+  const label = value
+    .replace(/[_-]+/g, ' ')
+    .trim()
+    .replace(/^\d{3}\s+(?=\D)/, '');
+  return (
+    /\D/.test(label) &&
+    !HTTP_STATUS_LABEL.test(label) &&
+    !/^(?:false|null|no|n)$/i.test(label)
+  );
+}
 
 /** True outcome flags, key normalised: "delivered", "isPending", "vendFailed"... */
 const RUNNING_FLAG =
@@ -117,9 +138,9 @@ function readStructuredOutcome(
         }
         // A vend-specific status ("vendStatus: UNKNOWN", a new provider state)
         // that is not a known state proves nothing, so it is not a refusal.
-        // A generic `status` ("error", "Bad Request") only labels the error.
+        // A generic `status` counts only when it is not an HTTP/error label.
         found.unknown ||=
-          VEND_STATUS_KEY.test(key) &&
+          (VEND_STATUS_KEY.test(key) || isGenericVendLikeStatus(key, item)) &&
           status !== '' &&
           !RUNNING_STATUSES.has(status) &&
           !DONE_STATUSES.has(status) &&

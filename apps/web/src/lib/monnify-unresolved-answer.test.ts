@@ -296,3 +296,25 @@ describe('bugfix: conflicting vend-level terminal states stay unresolved', () =>
     ).toBe(true);
   });
 });
+
+describe('bugfix: an unknown generic status holds, an HTTP label does not', () => {
+  it("holds status: 'UNKNOWN' inside the body", () => {
+    expect(
+      open(
+        { responseCode: 'D01', responseBody: { status: 'UNKNOWN' } },
+        'Rejected'
+      )
+    ).toBe(true);
+  });
+
+  it.each([
+    'Bad Request',
+    'error',
+    '400 Bad Request',
+    'Unauthorized',
+  ])('does not hold the HTTP label %j', (label) => {
+    expect(
+      open({ responseCode: '01', status: label }, 'Invalid customer')
+    ).toBe(false);
+  });
+});

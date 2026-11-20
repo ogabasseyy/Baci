@@ -171,11 +171,10 @@ describe('bugfix: every reference shape vend evidence reads counts as a provider
     expect(hasMonnifyProviderReference(answer, ref)).toBe(true);
   });
 
-  it('ignores validation/request/customer references and a bare top-level reference', () => {
+  it('ignores validation/request/customer references', () => {
     expect(
       hasMonnifyProviderReference(
         {
-          reference: 'x',
           validationReference: 'v',
           customerReference: 'c',
           requestReference: 'r',
@@ -195,11 +194,20 @@ describe('bugfix: array-valued references and the short top-level ref key', () =
       )
     ).toBe(true);
   });
+});
 
-  it('ignores a bare top-level ref but not one inside responseBody', () => {
-    expect(hasMonnifyProviderReference({ ref: 'x-1' }, ref)).toBe(false);
-    expect(
-      hasMonnifyProviderReference({ responseBody: { ref: 'x-1' } }, ref)
-    ).toBe(true);
+describe('bugfix: a foreign bare top-level reference counts, an exact echo does not', () => {
+  it('counts a provider-issued top-level reference or ref', () => {
+    expect(hasMonnifyProviderReference({ reference: 'MFBP-1' }, ref)).toBe(
+      true
+    );
+    expect(hasMonnifyProviderReference({ ref: 'MFBP-1' }, ref)).toBe(true);
+  });
+
+  it('ignores an exact echo under reference or ref', () => {
+    expect(hasMonnifyProviderReference({ reference: ref }, ref)).toBe(false);
+    expect(hasMonnifyProviderReference({ ref: ref.toUpperCase() }, ref)).toBe(
+      false
+    );
   });
 });

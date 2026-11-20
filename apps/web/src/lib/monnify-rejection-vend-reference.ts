@@ -57,18 +57,19 @@ function collectBodyField(
 /**
  * Reference-like keys, the same shapes vend evidence reads: reference / ref /
  * a transaction, vend, order, payment or purchase id or number, a receipt or
- * invoice number. References we supplied (validation, request, customer) and
- * a bare top-level `reference` are echoes, not evidence.
+ * invoice number. References we supplied (validation, request, customer) are
+ * echoes, not evidence; an exact echo of the request reference is ignored by
+ * value.
  */
 const REFERENCE_LIKE_KEY =
   /(?:reference(?:no|number|id)?|ref|(?:transaction|txn|vend|order|payment|purchase)(?:id|number|no)|(?:receipt|invoice)(?:no|number|id)?)$/;
 const ECHO_REFERENCE_PREFIX = /^(?:validation|request|customer)/;
 
 const isVendReferenceKey: KeyMatcher = (key) => key === 'vendreference';
-const isProviderReferenceKey: KeyMatcher = (key, insideBody) =>
-  REFERENCE_LIKE_KEY.test(key) &&
-  !ECHO_REFERENCE_PREFIX.test(key) &&
-  ((key !== 'reference' && key !== 'ref') || insideBody);
+// A bare `reference` / `ref` counts too: an exact echo of our own request
+// reference is excluded by value, so a foreign one is evidence.
+const isProviderReferenceKey: KeyMatcher = (key) =>
+  REFERENCE_LIKE_KEY.test(key) && !ECHO_REFERENCE_PREFIX.test(key);
 
 /**
  * The reference at the shallowest depth. When two different references sit at

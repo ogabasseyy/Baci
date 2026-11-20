@@ -84,7 +84,7 @@ const GENERIC_STATUS_KEY = /^(?:http|response|result)?status(?:code)?$/;
  * `status` field. Any other non-numeric status (FAILED, PENDING, CANCELLED,
  * DECLINED, UNKNOWN…) is read as the vend's own state and fails closed.
  */
-const HTTP_STATUS_LABEL =
+export const HTTP_STATUS_LABEL =
   /^(?:errors?|ok|bad request|payment required|unauthori[sz]ed|forbidden|not found|method not allowed|not acceptable|request timeout|conflict|unprocessable entity|too many requests|internal server error|bad gateway|service unavailable|gateway timeout|invalid request|validation error)$/i;
 const MAX_NESTED_DEPTH = 6;
 

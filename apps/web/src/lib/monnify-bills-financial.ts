@@ -164,6 +164,12 @@ export async function purchaseBill(
       );
     }
 
+    if (isSuccess && !classified.isSuccess) {
+      // A token completed this vend although its status was missing or not
+      // one we know: a fixed label (no provider text) so support can spot a
+      // bad-token pattern.
+      console.warn('Monnify vend settled on a token with an unnamed status');
+    }
     if ((!isSuccess && !isProcessing && !isFailed) || (isFailed && hasToken)) {
       // A vend state Monnify did not name as success, in progress or failed
       // (missing, REVERSED, UNKNOWN...) proves nothing: hold, never refund.

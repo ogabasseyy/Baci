@@ -3,7 +3,6 @@
 import { describe, expect, it } from 'vitest';
 
 const PUBLIC_TOOL_NAMES = [
-  'add_to_cart',
   'browse_categories',
   'get_brands',
   'get_delivery_fee_info',
@@ -45,6 +44,9 @@ describe('GET /.well-known/mcp/server-card.json', () => {
     expect(
       body.tools.map((tool: { name: string }) => tool.name).sort()
     ).toEqual(PUBLIC_TOOL_NAMES);
+    expect(body.tools).not.toContainEqual(
+      expect.objectContaining({ name: 'add_to_cart' })
+    );
     expect(body.tools).not.toContainEqual(
       expect.objectContaining({ name: 'create_agentic_checkout_session' })
     );

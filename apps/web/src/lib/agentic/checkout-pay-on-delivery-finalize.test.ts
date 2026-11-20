@@ -450,11 +450,10 @@ describe('finalizeAgenticPayOnDeliveryCheckout', () => {
     const result = await callFinalize(supabase, trackedOrderSessionCalc);
 
     expect(result).toMatchObject({ status: 200 });
-    expect(mocks.revalidateProducts).toHaveBeenCalledExactlyOnceWith(
-      'merchant-1',
-      undefined,
-      { feedScope: 'merchant' }
-    );
+    expect(mocks.revalidateProducts.mock.calls).toEqual([
+      ['merchant-1', undefined, { feedScope: 'merchant' }],
+      ['merchant-1', undefined, { expireImmediately: true }],
+    ]);
     // The agentic layer skips its own per-slug invalidation when the product
     // read fails, but the order-purge helper still runs its fail-open local
     // invalidation (hard-expire) for the committed order.

@@ -6,6 +6,9 @@
     "node": "24.x"
   },
   "scripts": {
+    "brilstash:build": "tsx src/scripts/build-brilstash-catalogue.ts",
+    "brilstash:verify": "tsx src/scripts/verify-brilstash-feed.ts",
+    "brilstash:manage": "tsx src/scripts/manage-brilstash-catalogue.ts",
     "dev": "next dev",
     "build": "next typegen && node tools/prepare-typed-navigation.mjs --output .typed-navigation/link.d.ts && BACI_STOREFRONT_BUILD_READS=bounded NODE_ENV=production next build",
     "build:ci": "BACI_STOREFRONT_BUILD_READS=offline NODE_ENV=production next build --experimental-build-mode=compile",
@@ -149,7 +152,7 @@
     "embla-carousel-react": "^8.6.0",
     "entities": "^8.0.0",
     "expo-server-sdk": "^6.1.0",
-    "fast-xml-parser": "5.9.0",
+    "fast-xml-parser": "5.12.1",
     "feed": "^5.2.1",
     "framer-motion": "^12.40.0",
     "fuse.js": "^7.4.2",

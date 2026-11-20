@@ -1,0 +1,641 @@
+{
+  "fixture_only": true,
+  "query_examples": [
+    {
+      "query": "?page=1&limit=100",
+      "status": 200,
+      "headers": {
+        "content-type": "application/json",
+        "x-total-pages": "1",
+        "x-total-count": "7"
+      },
+      "body_file": "baseline.json"
+    },
+    {
+      "query": "?page=1&limit=3",
+      "status": 200,
+      "headers": {
+        "x-total-pages": "3",
+        "x-total-count": "7"
+      },
+      "body_slice": [
+        0,
+        3
+      ]
+    },
+    {
+      "query": "?page=2&limit=3",
+      "status": 200,
+      "headers": {
+        "x-total-pages": "3",
+        "x-total-count": "7"
+      },
+      "body_slice": [
+        3,
+        6
+      ]
+    },
+    {
+      "query": "?page=3&limit=3",
+      "status": 200,
+      "headers": {
+        "x-total-pages": "3",
+        "x-total-count": "7"
+      },
+      "body_slice": [
+        6,
+        7
+      ]
+    },
+    {
+      "query": "?page=1&limit=100&min_price=400000",
+      "status": 200,
+      "headers": {
+        "x-total-pages": "1",
+        "x-total-count": "3"
+      },
+      "expected_suffixes": [
+        "laptop-open-box",
+        "laptop-new",
+        "phone-256-new"
+      ]
+    }
+  ],
+  "failed_pull": {
+    "request_page": 2,
+    "status": 503,
+    "headers": {
+      "cache-control": "no-store",
+      "retry-after": "60"
+    },
+    "body": {
+      "error": "Catalogue temporarily unavailable",
+      "code": "FEED_UNAVAILABLE"
+    },
+    "required_partner_result": "Do not activate page 1 or remove missing listings; keep previous complete import. Confirm with partner before launch."
+  },
+  "excluded_cases": [
+    {
+      "source_id": "untracked-01",
+      "manage_stock": false,
+      "stock_quantity": null,
+      "reason": "No defensible numeric sellable quantity; excluded before first publication"
+    },
+    {
+      "source_id": "inconsistent-stock-01",
+      "manage_stock": true,
+      "stock_quantity": 0,
+      "stock": 5,
+      "reason": "Conflicting inventory fields; no legacy fallback to five; block generation for an existing listing until reconciled"
+    },
+    {
+      "source_id": "unmapped-category-01",
+      "reason": "No exact partner label; not publishable"
+    },
+    {
+      "source_id": "private-or-anchor-01",
+      "reason": "Draft/archived/cross-tenant/internal inventory rows never publish"
+    }
+  ],
+  "filter_crossing": {
+    "query": "?page=1&limit=100&min_price=355000",
+    "external_id": "ogabassey:pilot:variant:phone-128-new",
+    "before_price_naira": 365000,
+    "after_price_naira": 350000,
+    "same_positive_stock": 3,
+    "before_body_file": "price-change.json",
+    "after_body_file": "baseline.json",
+    "expected_partner_result": "Absence from the filtered result does not deactivate the listing in the full catalogue."
+  },
+  "urgent_withdrawal": {
+    "sequence": [
+      "Read page 1 of the current generation.",
+      "Suspend serving and revoke the generation while a build is underway.",
+      "Request page 2 and retry with the previously issued token if supported.",
+      "Attempt to promote the build using its old catalogue revision.",
+      "Request partner takedown and record confirmation."
+    ],
+    "expected_page_status": 503,
+    "expected_stale_promotion": "rejected",
+    "expected_partner_result": "The withdrawn listing is confirmed off sale before the operator resumes the feed.",
+    "late_job_after_initial_takedown": {
+      "incident_open_after_initial_off_sale_check": true,
+      "safe_finish": "Prove a partner pause survives the late job, or cancel or irrevocably drain pending jobs and confirm off-sale again."
+    }
+  },
+  "unpublish_between_pages": {
+    "initial_page": 1,
+    "unpublished_source_initial_page": 3,
+    "next_page": 2,
+    "expected_status": 503,
+    "expected_pinned_retry_status": 503,
+    "requires_rebuild_before_blocking": false
+  },
+  "missing_previously_published_row": {
+    "without_approved_retirement": "reject promotion and keep active generation",
+    "with_approved_retirement": "promote only if every other approved listing validates"
+  },
+  "out_of_order_builds": {
+    "starting_generation": "G0",
+    "first_to_finish": "G2",
+    "second_to_finish": "G1",
+    "expected_active_generation": "G2",
+    "expected_second_promotion": "rejected",
+    "winning_build_replay": "idempotent without changing source timestamp"
+  },
+  "source_repurposed": {
+    "source_uuid_changed": false,
+    "reviewed_storage_gb": 128,
+    "current_storage_gb": 256,
+    "old_generation_status": 503,
+    "promotion_without_identity_review": "rejected",
+    "repurposed_item_external_id": "new after approved retirement of the old binding"
+  },
+  "missed_refresh": {
+    "source_read_lagos": "2026-11-18T22:00:00+01:00",
+    "next_daily_build": "failed",
+    "scheduled_pull_lagos": "2026-11-19T23:59:00+01:00",
+    "hard_expiry_lagos": "2026-11-20T00:00:00+01:00",
+    "example_confirmed_pull_and_retry_window_seconds": 120,
+    "expected_initial_page_status": 503
+  },
+  "single_page_installation": {
+    "authoritative_query": "?page=1&limit=100&min_price=0",
+    "expected_count": 7,
+    "reject_queries": [
+      "?page=2&limit=100",
+      "?page=1&limit=3",
+      "?page=1&limit=100&min_price=400000"
+    ],
+    "expected_failure": "partner-agreed non-2xx without catalogue array",
+    "sandbox_can_use_paging_and_filters": true
+  },
+  "unverified_import": {
+    "feed_status": 200,
+    "partner_evidence_present": false,
+    "expected_run_state": "unverified",
+    "verify_against": "partner dashboard, confirmation or supported export"
+  },
+  "retirement_recovery": {
+    "active_generation": "G2",
+    "retired_listing_present_in": "G1",
+    "restore_as_active": "rejected",
+    "recovery": "Build and validate a complete generation from current approved bindings."
+  },
+  "late_partner_commit": {
+    "older_generation": "G1",
+    "newer_generation": "G2",
+    "retired_external_id": "ogabassey:pilot:product:accessory-01",
+    "order": [
+      "fully download G1",
+      "commit G2 with the reviewed retirement",
+      "attempt to apply the delayed G1 import"
+    ],
+    "expected_result": "G1 cannot commit or relist the retired item. If generation ordering is unavailable, G2 must be held until G1 finishes or is guaranteed unable to apply.",
+    "also_exercise": [
+      "single-page pull",
+      "multipage pull",
+      "manual retry",
+      "delayed approval or update job"
+    ],
+    "sequence_mode": {
+      "response_header": "X-Baci-Catalogue-Sequence",
+      "G1": 17,
+      "G2": 18,
+      "applied_first": 18,
+      "late_attempt": 17,
+      "expected": "discard older import and preserve the newer state"
+    }
+  },
+  "environment_isolation": {
+    "sandbox_and_live_share_project": false,
+    "cases": [
+      {
+        "host_environment": "live",
+        "key_environment": "sandbox",
+        "expected_status": 401
+      },
+      {
+        "host_environment": "sandbox",
+        "key_environment": "live",
+        "expected_status": 401
+      },
+      {
+        "host_environment": "sandbox",
+        "configured_project_environment": "live",
+        "expected_status": 503,
+        "database_rpc_called": false
+      }
+    ]
+  },
+  "reviewed_listing_facts": {
+    "different_conditions": [
+      {
+        "external_id": "ogabassey:pilot:product:laptop-new",
+        "revision": "fixture-new-r1",
+        "box_contents": "fixture laptop and fixture charger",
+        "warranty": "fixture 30-day cover"
+      },
+      {
+        "external_id": "ogabassey:pilot:offer:laptop-open-box",
+        "revision": "fixture-open-box-r1",
+        "box_contents": "fixture laptop only",
+        "warranty": "fixture 7-day cover"
+      }
+    ],
+    "pending_or_missing_revision": "reject row",
+    "revision_changed_before_promotion": "reject candidate and rebuild"
+  },
+  "daytime_stock_exception": {
+    "external_id": "ogabassey:pilot:variant:phone-128-used",
+    "nightly_stock": 1,
+    "authoritative_stock_after_local_sale": 0,
+    "partner_order": "fixture order after local sale",
+    "expected_fulfilment": "held",
+    "expected_partner_result": "Confirm takedown within the agreed target and record the synthetic customer outcome. Reconcile before relisting."
+  },
+  "drain_admission_race": {
+    "old_generation": "G1",
+    "replacement": "G2",
+    "events": [
+      "close old admission",
+      "record drain evidence",
+      "attempt page-one retry before promotion",
+      "promote replacement and reopen atomically"
+    ],
+    "retry_status": 503,
+    "accepted_generation_after_promotion": "G2",
+    "failed_promotion_admission": "closed"
+  },
+  "staging_and_promotion": {
+    "initial_active": "G1",
+    "staged_candidate": "candidate-G2",
+    "catalogue_revision_before_and_after_normal_closure": 12,
+    "closure_revision": 4,
+    "old_closure_revision": 3,
+    "stage_result_active": "G1",
+    "old_evidence_accepted": false,
+    "active_after_valid_promotion": "G2",
+    "catalogue_revision_after_urgent_suspension": 13,
+    "urgent_suspension_allows_old_candidate": false
+  },
+  "latest_safe_closure": {
+    "timezone": "Africa/Lagos",
+    "promotion_cutoff": "23:30:00",
+    "scheduled_pull": "23:59:00",
+    "max_in_flight_response_seconds": 10,
+    "example_partner_drain_seconds": 1200,
+    "example_confirmation_and_promotion_seconds": 120,
+    "latest_closure": "23:07:50",
+    "one_second_late": "23:07:51",
+    "late_or_failed_staging": "skip normal closure and promotion; keep current admission subject to freshness and eligibility",
+    "drain_misses_cutoff": "keep admission closed, alert, and do not promote during the pull window",
+    "window_date_lagos": "2026-11-18",
+    "window_opens": "22:00:00",
+    "reject_during_previous_pull": "2026-11-18T00:15:00+01:00",
+    "reject_stale_window_date_command_at": "2026-11-19T00:15:00+01:00",
+    "promotion_after_lock_past_cutoff": "rejected"
+  },
+  "first_activation": {
+    "candidate": "candidate-G1",
+    "success": {
+      "active_generation": null,
+      "historically_activated": false,
+      "partner_history": "confirmed no prior imported or staged catalogue",
+      "actor": "authorized operator",
+      "expected": "activate G1 and persist the marker while partner imports remain disabled",
+      "fresh_partner_installation": true,
+      "scheduled_imports_enabled": false,
+      "manual_imports_enabled": false,
+      "pending_partner_imports": 0
+    },
+    "reject": [
+      {
+        "active_generation": null,
+        "historically_activated": true,
+        "reason": "lost pointer requires recovery"
+      },
+      {
+        "partner_history": "unknown or previously staged or imported",
+        "reason": "fresh BrilStash installation required for the pilot"
+      },
+      {
+        "actor": "scheduler builder",
+        "reason": "operator authorization required"
+      },
+      {
+        "scheduled_imports_enabled": true,
+        "reason": "scheduled imports must stay disabled until Baci is verified"
+      },
+      {
+        "manual_imports_enabled": true,
+        "reason": "manual imports must stay disabled until Baci is verified"
+      },
+      {
+        "pending_partner_imports": 1,
+        "reason": "fresh installation must have no pending import jobs"
+      },
+      {
+        "evidence_partner_installation_matches": false,
+        "reason": "evidence must match the exact fresh partner installation"
+      }
+    ]
+  },
+  "activation_handoff": {
+    "fixture_partner_installation": "synthetic-fresh-installation",
+    "expected_feed_total_count": 7,
+    "ordered_steps": [
+      "confirm fresh installation and disabled imports",
+      "verify a manual import attempt cannot start or queue",
+      "approve the exact staged snapshot and full payload digest",
+      "commit Baci activation",
+      "read back Baci generation and compare the full feed and totals against the reviewed snapshot",
+      "save connection on the verified installation after authorization with import application disabled",
+      "read back saved URL and query and correlate the saved-credential test with Baci",
+      "enable imports or release the verified staged first import",
+      "read back partner enablement state"
+    ],
+    "failure_cases": [
+      {
+        "event": "Baci activation fails",
+        "enable_partner_imports": false
+      },
+      {
+        "event": "activation response lost",
+        "enable_partner_imports": false,
+        "next_step": "read persisted activation state and verify feed before enabling"
+      },
+      {
+        "event": "feed IDs mismatch",
+        "enable_partner_imports": false
+      },
+      {
+        "event": "Baci suspends before enablement",
+        "enable_partner_imports": false
+      },
+      {
+        "event": "partner enablement response lost",
+        "retry_enable_immediately": false,
+        "next_step": "read partner state before retrying"
+      },
+      {
+        "event": "feed has matching IDs and totals but a wrong price",
+        "observed_body_file": "price-change.json",
+        "reviewed_body_file": "baseline.json",
+        "expected_differing_field": "price_naira",
+        "enable_partner_imports": false
+      },
+      {
+        "event": "generation or catalogue revision changes during probe or before enablement",
+        "enable_partner_imports": false,
+        "next_step": "discard verification and probe the current reviewed generation again"
+      }
+    ],
+    "expected_snapshot_file": "baseline.json",
+    "verification_invalidation": [
+      {
+        "event": "normal closure and reopen after probe",
+        "generation_unchanged": true,
+        "catalogue_revision_unchanged": true,
+        "payload_digest_unchanged": true,
+        "verified_serving_revision": 8,
+        "current_serving_revision": 10,
+        "enable_partner_imports": false,
+        "next_step": "probe the reopened feed again"
+      },
+      {
+        "event": "rotation overlap after probe",
+        "generation_unchanged": true,
+        "payload_digest_unchanged": true,
+        "verified_credential_configuration_version": 2,
+        "current_credential_configuration_version": 3,
+        "old_credential_still_accepted": true,
+        "current_handoff_credential_id": "fixture-key-v3",
+        "enable_partner_imports": false,
+        "next_step": "probe again with the current intended handoff credential"
+      }
+    ]
+  },
+  "immutable_partner_binding": {
+    "partner_installation_id": "synthetic-fresh-installation",
+    "environment": "sandbox",
+    "concurrent_claims": [
+      "synthetic-baci-installation-a",
+      "synthetic-baci-installation-b"
+    ],
+    "expected_success_count": 1,
+    "expected_conflict_count": 1,
+    "binding_mutation": "rejected",
+    "binding_deletion": "rejected",
+    "second_claim_after_retirement": "rejected",
+    "credential_rotation_changes_binding": false
+  },
+  "staged_payload_approval": {
+    "digest_format": "canonical-json-sha256-v1",
+    "approved": {
+      "candidate_id": "candidate-G1",
+      "payload_file": "baseline.json",
+      "sha256": "638761f27632d82960b307000e2fd441909a7ae95efea9a85204b28381dc3c84"
+    },
+    "substitute": {
+      "candidate_id": "candidate-G1-rebuilt",
+      "payload_file": "price-change.json",
+      "sha256": "9a10274f7843ecb53107e029d02cdc586af3246058b9574bff0eb35ec6e9d939",
+      "same_listing_ids": true,
+      "expected_activation": "rejected until explicitly approved"
+    },
+    "identical_payload_substitute": {
+      "candidate_id": "candidate-G1-copied",
+      "payload_file": "baseline.json",
+      "sha256": "638761f27632d82960b307000e2fd441909a7ae95efea9a85204b28381dc3c84",
+      "expected_activation": "rejected until explicitly approved"
+    }
+  },
+  "saved_partner_connection": {
+    "expected_url": "https://feed.example.invalid/partners/yield/brilpay/products",
+    "expected_query": {
+      "page": 1,
+      "limit": 100,
+      "min_price": 0
+    },
+    "expected_credential_id": "fixture-key-v3",
+    "cases": [
+      {
+        "event": "Baci probe passes but wrong path is saved",
+        "saved_url": "https://feed.example.invalid/partners/yield/brilpay/other",
+        "enable_partner_imports": false
+      },
+      {
+        "event": "Baci probe passes but the previous masked key is saved during rotation overlap",
+        "partner_test_status": 200,
+        "authenticated_credential_id": "fixture-key-v2",
+        "enable_partner_imports": false
+      },
+      {
+        "event": "Baci operator probe succeeds but no correlated BrilStash saved-connection request exists",
+        "enable_partner_imports": false
+      },
+      {
+        "event": "partner test uses the expected saved URL and key and matches the approved generation and digest",
+        "authenticated_credential_id": "fixture-key-v3",
+        "enable_partner_imports": true,
+        "verified_configuration_revision": "fixture-config-r8",
+        "enabled_configuration_revision": "fixture-config-r8"
+      },
+      {
+        "event": "saved credential changes concurrently between verification and normal enablement",
+        "verified_configuration_revision": "fixture-config-r8",
+        "current_configuration_revision": "fixture-config-r9",
+        "enable_partner_imports": false,
+        "expected": "revision mismatch leaves imports disabled"
+      },
+      {
+        "event": "partner only supports unconditional normal enablement",
+        "enable_partner_imports": false,
+        "expected": "a selectively released staged import does not enable recurring pulls"
+      },
+      {
+        "event": "an edit follows successful revision-bound enablement",
+        "enabled_configuration_revision": "fixture-config-r8",
+        "new_unverified_configuration_revision": "fixture-config-r9",
+        "new_revision_can_import": false
+      }
+    ],
+    "auto_importing_registration": [
+      {
+        "event": "draft preflight verified before save",
+        "preflight_can_apply_import": false,
+        "saved_settings_match_verified_draft": true,
+        "next_step": "observe first pull and reconcile partner state"
+      },
+      {
+        "event": "saved draft revision changes after verification",
+        "draft_activation_allowed": false,
+        "next_step": "verify the new draft or use the verified hold path"
+      },
+      {
+        "event": "automatic pull staged under verified partner hold and correlated to the approved snapshot",
+        "hold_confirmed_before_save": true,
+        "release_staged_import": true,
+        "verified_configuration_revision": "fixture-config-r8",
+        "staged_run_id": "fixture-run-18",
+        "verified_attempt_id": "fixture-attempt-1",
+        "immutable_staged_result_id": "fixture-result-1",
+        "unverified_attempt_id": "fixture-attempt-2",
+        "released_attempt_ids": [
+          "fixture-attempt-1"
+        ],
+        "unverified_attempt_state": "held",
+        "future_pulls_enabled": false,
+        "expected_tracking_state_after_queued_ack": "awaiting_application"
+      },
+      {
+        "event": "automatic pull not correlated",
+        "hold_confirmed_before_save": true,
+        "release_staged_import": false,
+        "next_step": "keep hold, disable future pulls, cancel or drain job and confirm nothing applied"
+      },
+      {
+        "event": "no non-applying draft preflight and no verified hold",
+        "live_registration_allowed": false
+      },
+      {
+        "event": "partner offers only a bulk queue release",
+        "release_staged_import": false,
+        "live_registration_allowed_without_verified_draft": false
+      },
+      {
+        "event": "release of verified attempt returns an indeterminate response",
+        "staged_run_id": "fixture-run-18",
+        "verified_attempt_id": "fixture-attempt-1",
+        "retry_release_immediately": false,
+        "next_step": "read back that exact run and attempt before retrying"
+      },
+      {
+        "event": "partner replaces the staged result after verification",
+        "verified_attempt_id": "fixture-attempt-1",
+        "current_attempt_id": "fixture-attempt-2",
+        "release_staged_import": false,
+        "next_step": "keep hold and verify the replacement independently"
+      }
+    ],
+    "expected_configuration_revision": "fixture-config-r8",
+    "released_attempt_lifecycle": {
+      "staged_run_id": "fixture-run-18",
+      "attempt_id": "fixture-attempt-1",
+      "immutable_result_id": "fixture-result-1",
+      "state_before_request": "release_requested",
+      "state_after_queue_ack": "awaiting_application",
+      "cases": [
+        {
+          "event": "operator crashes after sending release",
+          "tracking_record_exists": true,
+          "terminal": false,
+          "next_step": "read back exact attempt before retrying"
+        },
+        {
+          "event": "application deadline passes without exact readback",
+          "terminal": false,
+          "escalate": true,
+          "ordinary_promotion_allowed": false,
+          "recurring_imports_enabled": false
+        },
+        {
+          "event": "suspension after queued release and cancellation wins",
+          "feed_status_after_suspension": 503,
+          "partner_disposition": "cancelled_without_application",
+          "terminal": true,
+          "attempt_applied": false,
+          "resumption_requires_off_sale_evidence": true
+        },
+        {
+          "event": "suspension after queued release and application wins",
+          "feed_status_after_suspension": 503,
+          "partner_disposition": "applied",
+          "terminal": true,
+          "incident_open_at_apply_readback": true,
+          "resumption_requires_off_sale_evidence": true,
+          "resumption_requires_other_jobs_blocked_or_drained": true
+        },
+        {
+          "event": "cancellation requested but result is unknown",
+          "terminal": false,
+          "incident_open": true,
+          "resumption_allowed": false
+        },
+        {
+          "event": "suspension races with a release request whose delivery is unknown",
+          "tracking_record_exists": true,
+          "terminal": false,
+          "retry_release_while_suspended": false,
+          "next_step": "cancel or contain the exact attempt and obtain partner readback"
+        },
+        {
+          "event": "partner reports cancellation after applying only part of the attempt",
+          "partner_reported_status": "cancelled",
+          "expected_changes": [
+            {
+              "external_id": "ogabassey:pilot:variant:phone-128-new",
+              "price_naira": 365000
+            },
+            {
+              "external_id": "ogabassey:pilot:variant:phone-256-new",
+              "stock_quantity": 0
+            }
+          ],
+          "observed_changes": [
+            {
+              "external_id": "ogabassey:pilot:variant:phone-128-new",
+              "price_naira": 365000
+            }
+          ],
+          "initial_terminal": false,
+          "cancelled_without_application_allowed": false,
+          "resumption_allowed_before_reconciliation": false,
+          "unknown_affected_set": "pause entire pilot assortment",
+          "terminal_disposition_after_verified_reconciliation": "partial_application_reconciled"
+        }
+      ]
+    }
+  }
+}

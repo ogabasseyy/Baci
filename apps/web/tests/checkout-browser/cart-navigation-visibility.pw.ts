@@ -1,3 +1,4 @@
+import { waitForSuccessfulCartValidation } from './cart-validation';
 import { cartItem } from './fixtures';
 import { expect, test } from './network';
 
@@ -9,6 +10,7 @@ test('desktop cart checkout action survives a product CSS route transition', asy
     localStorage.setItem('baci-cart-ogabassey-guest', JSON.stringify([item]));
   }, cartItem);
 
+  const initialValidation = waitForSuccessfulCartValidation(page);
   await page.goto('/cart-navigation-start');
   await page.getByRole('link', { name: 'View test phone' }).click();
   await expect(page).toHaveURL(/\/products\/test-phone$/);
@@ -51,7 +53,11 @@ test('desktop cart checkout action survives a product CSS route transition', asy
   await expect(
     page.getByRole('button', { name: /^Checkout • ₦100,000$/ })
   ).toBeHidden();
+  // Let the current document finish validation before tearing it down.
+  await initialValidation;
+  const reloadedValidation = waitForSuccessfulCartValidation(page);
   await page.reload();
+  await reloadedValidation;
   await expect(checkoutAction).toBeVisible();
   await checkoutAction.click();
   await expect(page).toHaveURL(/\/checkout$/);

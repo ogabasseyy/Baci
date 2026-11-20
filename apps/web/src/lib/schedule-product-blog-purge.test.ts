@@ -1,10 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockLookup = vi.fn();
+const mockRevalidateProductSlugs = vi.fn();
+const mockRevalidateProducts = vi.fn();
 const mockSchedule = vi.fn();
 const mockHostnamePurge = vi.fn();
 const mockExpire = vi.fn().mockResolvedValue(true);
 
+vi.mock('@/lib/cache-revalidation', () => ({
+  revalidateProductSlugs: (...args: unknown[]) =>
+    mockRevalidateProductSlugs(...args),
+  revalidateProducts: (...args: unknown[]) => mockRevalidateProducts(...args),
+}));
 vi.mock('@/lib/get-published-blog-post-slugs-for-products', () => ({
   getPublishedBlogPostSlugsForProducts: (...args: unknown[]) =>
     mockLookup(...args),
@@ -42,6 +49,8 @@ function makeBlogPostIdSupabase(rows: unknown[], error: unknown = null) {
 describe('scheduleProductBlogPurge', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockRevalidateProductSlugs.mockReturnValue(true);
+    mockRevalidateProducts.mockReturnValue(true);
     mockLookup.mockResolvedValue({ slugs: [], incomplete: false });
   });
 
@@ -66,10 +75,18 @@ describe('scheduleProductBlogPurge', () => {
       ['product-1'],
       ['smartphones']
     );
+    expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
+      'merchant-1',
+      ['pixel-11'],
+      { expireImmediately: true }
+    );
+    expect(mockRevalidateProductSlugs.mock.invocationCallOrder[0]).toBeLessThan(
+      mockSchedule.mock.invocationCallOrder[0]
+    );
     expect(mockSchedule).toHaveBeenCalledWith('store', entries, {
       blogPostSlugs: ['Pixel-Guide', 'pixel-guide'],
     });
-    expect(mockExpire).toHaveBeenCalledWith('merchant-1');
+    expect(mockExpire).toHaveBeenCalledWith('merchant-1', {});
   });
 
   it('uses a pre-delete snapshot without querying cascaded relationships', async () => {
@@ -180,7 +197,7 @@ describe('scheduleProductBlogPurge', () => {
     expect(mockSchedule).not.toHaveBeenCalled();
     expect(mockHostnamePurge).not.toHaveBeenCalled();
     expect(mockExpire).toHaveBeenCalledTimes(3);
-    expect(mockExpire).toHaveBeenCalledWith('merchant-1');
+    expect(mockExpire).toHaveBeenCalledWith('merchant-1', {});
   });
 
   it('can resolve linked posts after an immediate product purge without duplicating an empty purge', async () => {
@@ -193,7 +210,7 @@ describe('scheduleProductBlogPurge', () => {
       skipWhenNoLinkedPosts: true,
     });
 
-    expect(mockExpire).toHaveBeenCalledWith('merchant-1');
+    expect(mockExpire).toHaveBeenCalledWith('merchant-1', {});
     expect(mockSchedule).not.toHaveBeenCalled();
   });
 
@@ -209,6 +226,7 @@ describe('scheduleProductBlogPurge', () => {
       skipProductPurge: true,
     });
 
+    expect(mockRevalidateProductSlugs).not.toHaveBeenCalled();
     expect(mockSchedule).toHaveBeenCalledWith('store', entries, {
       blogPostSlugs: ['pixel-guide'],
       blogPostsOnly: true,
@@ -251,8 +269,9 @@ describe('scheduleProductBlogPurge', () => {
     expect(mockHostnamePurge).toHaveBeenCalledWith('store');
   });
 
-  it('retains pre-delete blog slugs when category fallback lookup fails', async () => {
-    mockLookup.mockRejectedValue(new Error('temporary read failure'));
+  it('aborts article purges when blog-cache expiry fails even with skipProductPurge', async () => {
+    mockExpire.mockResolvedValueOnce(false);
+    mockLookup.mockResolvedValue({ slugs: ['pixel-guide'], incomplete: false });
 
     await scheduleProductBlogPurge({
       supabase,
@@ -260,28 +279,10 @@ describe('scheduleProductBlogPurge', () => {
       merchantSlug: 'store',
       productIds: ['product-1'],
       entries,
-      blogPostSlugs: ['direct-guide'],
-      categorySlugs: ['smartphones'],
+      skipProductPurge: true,
     });
 
-    expect(mockSchedule).toHaveBeenCalledWith('store', entries, {
-      blogPostSlugs: ['direct-guide'],
-    });
-  });
-
-  it('swallows lookup failures so product mutations remain successful', async () => {
-    mockLookup.mockRejectedValue(new Error('temporary read failure'));
-
-    await expect(
-      scheduleProductBlogPurge({
-        supabase,
-        merchantId: 'merchant-1',
-        merchantSlug: 'store',
-        productIds: ['product-1'],
-        entries,
-      })
-    ).resolves.toBeUndefined();
-
-    expect(mockSchedule).toHaveBeenCalledWith('store', entries);
+    expect(mockSchedule).not.toHaveBeenCalled();
+    expect(mockHostnamePurge).not.toHaveBeenCalled();
   });
 });

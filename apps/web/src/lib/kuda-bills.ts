@@ -150,7 +150,8 @@ function normalizeBillVendOutcome(
  * Convenience wrapper that maps API bill type strings to Kuda category names.
  */
 export async function getBillersByCategory(
-  category: string
+  category: string,
+  { addElectricityMeterItems = true } = {}
 ): Promise<Biller[]> {
   const kudaName = KUDA_CATEGORY_NAMES[category];
   if (!kudaName) {
@@ -159,7 +160,10 @@ export async function getBillersByCategory(
 
   const billers = await getBillersByType(kudaName);
 
-  return category === 'electricity'
+  // Electricity billers Kuda lists without packages get Baci's standard
+  // meter products; `addElectricityMeterItems: false` returns Kuda's answer
+  // as it came, so a caller can tell whether Kuda listed any packages.
+  return category === 'electricity' && addElectricityMeterItems
     ? withKudaElectricityBillItems(billers)
     : billers;
 }

@@ -76,3 +76,31 @@ it.each([
     kind: 'mismatch',
   });
 });
+
+it.each([
+  { code: 'HTTP_404', error: 'Not found' },
+  { code: 'HTTP_400', error: 'Transaction reference not found' },
+  { code: 'HTTP_200', error: 'Transaction not found' },
+])('flags a missing provider reference for review (%j)', async (failure) => {
+  verify.mockResolvedValueOnce({ success: false, ...failure });
+
+  await expect(verifyBankCardOfferPaystack(attemptFixture)).resolves.toEqual({
+    kind: 'mismatch',
+  });
+});
+
+it.each([
+  'NETWORK_ERROR',
+  'HTTP_503',
+  'HTTP_429',
+  'HTTP_401',
+  'HTTP_400',
+])('keeps verification retryable when Paystack returns %s without a missing-reference result', async (code) => {
+  verify.mockResolvedValueOnce({
+    success: false,
+    code,
+    error: 'Verification unavailable',
+  });
+
+  await expect(verifyBankCardOfferPaystack(attemptFixture)).resolves.toBeNull();
+});

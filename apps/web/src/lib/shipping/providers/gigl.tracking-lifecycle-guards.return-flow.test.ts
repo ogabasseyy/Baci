@@ -115,4 +115,25 @@ describe('bugfix: no arrival promotion once the return flow has begun', () => {
       GIGL_ARRIVED_IN_CITY_RAW_STATUS
     );
   });
+
+  it.each([
+    ['ARF listed first', ['ARF', 'VFSSRR']],
+    ['completed return listed first', ['VFSSRR', 'ARF']],
+  ])('bugfix: a tied completed return (VFSSRR) fences the arrival whatever the payload order (%s)', (_label, order) => {
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W85',
+        Destination: 'ABUJA',
+        MobileShipmentTrackings: order.map((Status) => ({
+          Status,
+          DateTimeUtc: '2026-11-09T12:00:00.000Z',
+        })),
+      },
+      'W85',
+      OBSERVED_AT
+    );
+    expect(result.events.map((e) => e.rawStatus)).not.toContain(
+      GIGL_ARRIVED_IN_CITY_RAW_STATUS
+    );
+  });
 });

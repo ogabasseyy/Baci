@@ -1,12 +1,14 @@
 -- Minimal storefront writer contract for testing partner admission in isolation.
 -- This fixture is installed only in a disposable database.
+ALTER TABLE public.merchants ADD COLUMN vat_registration_status text DEFAULT 'not_registered';
+CREATE TABLE public.products (id uuid PRIMARY KEY, merchant_id uuid, vat_rate numeric, vat_category_code text);
 CREATE TABLE public.partner_writer_fixture_products (
   id uuid PRIMARY KEY, base_price numeric NOT NULL, stock integer NOT NULL
 );
 CREATE TABLE public.orders (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(), merchant_id uuid NOT NULL,
   currency text NOT NULL, source text NOT NULL, total numeric NOT NULL,
-  shipping_fee numeric NOT NULL, subtotal numeric NOT NULL, selected_quote_id uuid,
+  shipping_fee numeric NOT NULL, subtotal numeric NOT NULL, tax_amount numeric NOT NULL, selected_quote_id uuid,
   shipping_funding_source text, amount_paid numeric DEFAULT 0, payment_status text NOT NULL,
   shipping_status text, shipping_provider text, tracking_number text, updated_at timestamptz
 );
@@ -23,7 +25,7 @@ CREATE TABLE public.transactions (
 
 CREATE FUNCTION private.create_storefront_order(
   p_merchant_id uuid, p_customer_email text, p_customer_name text, p_items jsonb,
-  p_customer_phone text, p_shipping_fee numeric, p_payment_method text,
+  p_customer_phone text, p_shipping_fee numeric, p_tax_amount numeric, p_payment_method text,
   p_payment_status text, p_shipping_address jsonb, p_source text,
   p_expected_total numeric
 )
@@ -43,15 +45,15 @@ BEGIN
       SELECT base_price FROM public.partner_writer_fixture_products AS p WHERE p.id = line.product_id
     );
   END LOOP;
-  IF abs(v_subtotal + p_shipping_fee - p_expected_total) > 1 THEN
+  IF abs(v_subtotal + p_shipping_fee + p_tax_amount - p_expected_total) > 1 THEN
     RAISE EXCEPTION 'order_total_mismatch';
   END IF;
 
   INSERT INTO public.orders (
-    id, merchant_id, currency, source, total, shipping_fee, subtotal, payment_status
+    id, merchant_id, currency, source, total, shipping_fee, subtotal, tax_amount, payment_status
   ) VALUES (
-    v_id, p_merchant_id, 'NGN', p_source, v_subtotal + p_shipping_fee,
-    p_shipping_fee, v_subtotal, p_payment_status
+    v_id, p_merchant_id, 'NGN', p_source, v_subtotal + p_shipping_fee + p_tax_amount,
+    p_shipping_fee, v_subtotal, p_tax_amount, p_payment_status
   );
   INSERT INTO public.order_items (order_id, product_id, variant_id, product_offer_id, quantity, price)
   SELECT v_id, i.product_id, i.variant_id, i.offer_id, i.quantity, p.base_price

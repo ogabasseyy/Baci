@@ -10,6 +10,9 @@ CREATE TABLE private.partner_delivery_quotes (
   CHECK (expires_at > created_at)
 );
 
+CREATE INDEX IF NOT EXISTS partner_delivery_quotes_merchant_id_idx
+  ON private.partner_delivery_quotes (merchant_id);
+
 ALTER TABLE private.partner_delivery_quotes ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE private.partner_delivery_quotes FROM PUBLIC, anon, authenticated, service_role;
 

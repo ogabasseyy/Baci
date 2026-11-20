@@ -1,12 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { z } from 'zod';
 import { resolvePublicMerchantSender } from '@/app/api/shipping/quotes/resolve-public-merchant-sender';
 import { toShippingQuoteUpsert } from '@/app/api/shipping/quotes/shipping-quote-persistence';
+import { readBoundedJsonBody } from '@/lib/events/read-bounded-json-body';
 import { logger } from '@/lib/logger';
 import { shippingService } from '@/lib/shipping';
 import { normalizeNigerianQuoteReceiver } from '@/lib/shipping/normalize-nigerian-quote-receiver';
-import { readPackageDimensionsCm } from '@/lib/shipping/package-dimensions';
-import { productWeightToKg } from '@/lib/shipping/product-weight-to-kg';
 import { quoteProviderFailure } from '@/lib/shipping/quote-provider-failure';
 import { createShippingQuoteRouteProof } from '@/lib/shipping/shipping-quote-route-proof';
 import type { QuoteRequest } from '@/lib/shipping/types';
@@ -18,42 +16,13 @@ import {
 } from '../catalog/catalog-bindings';
 import { loadCrossRemCatalog } from '../catalog/catalog-service';
 import { authorizePartner } from '../partner-connection';
+import { buildPartnerQuoteParcel } from './quote-parcel';
+import { partnerQuoteRequestSchema } from './quote-request';
 
 export const maxDuration = 60;
 
-const requestSchema = z.strictObject({
-  items: z
-    .array(
-      z.strictObject({
-        listing_id: z.string().trim().min(1).max(128),
-        quantity: z.number().int().min(1).max(20),
-      })
-    )
-    .min(1)
-    .max(20)
-    .refine(
-      (items) =>
-        new Set(items.map((item) => item.listing_id)).size === items.length,
-      'Duplicate listing ID'
-    ),
-  destination: z.strictObject({
-    address_line1: z.string().trim().min(1).max(256),
-    address_line2: z.string().trim().min(1).max(256).optional(),
-    city: z.string().trim().min(1).max(100),
-    state: z.string().trim().min(1).max(100),
-    country_code: z.literal('NG'),
-    postal_code: z.string().trim().min(1).max(16).optional(),
-    coordinates: z
-      .strictObject({
-        latitude: z.number().min(-90).max(90),
-        longitude: z.number().min(-180).max(180),
-      })
-      .optional(),
-  }),
-});
-
-const quoteColumns = 'id, weight_value, weight_unit, dimensions';
-const defaultWeightKg = 1;
+const quoteColumns =
+  'id, weight_value, weight_unit, dimensions, vat_category_code, vat_rate';
 
 function errorResponse(
   status: number,
@@ -85,9 +54,13 @@ export async function POST(request: Request) {
         });
   }
 
-  const parsed = requestSchema.safeParse(
-    await request.json().catch(() => null)
-  );
+  const body = await readBoundedJsonBody(request, 8192);
+  if (!body.ok) {
+    return body.reason === 'too_large'
+      ? errorResponse(413, 'PAYLOAD_TOO_LARGE', requestId)
+      : errorResponse(400, 'INVALID_REQUEST', requestId);
+  }
+  const parsed = partnerQuoteRequestSchema.safeParse(body.body);
   if (!parsed.success) return errorResponse(400, 'INVALID_REQUEST', requestId);
 
   const { connectionId, merchantId } = access;
@@ -137,16 +110,23 @@ export async function POST(request: Request) {
     }
 
     const db = createAnonClient();
-    const [metadata, origin] = await Promise.all([
+    const [metadata, origin, merchant] = await Promise.all([
       db
         .from('products')
         .select(quoteColumns)
         .eq('merchant_id', merchantId)
         .in('id', [...new Set(items.map((item) => item.product_id))]),
       resolvePublicMerchantSender(db, merchantId),
+      db
+        .from('merchants')
+        .select('vat_registration_status')
+        .eq('id', merchantId)
+        .maybeSingle(),
     ]);
     if (
       metadata.error ||
+      merchant.error ||
+      !merchant.data ||
       !origin.ok ||
       !origin.sender ||
       origin.sender.countryCode !== 'NG'
@@ -154,21 +134,13 @@ export async function POST(request: Request) {
       return errorResponse(503, 'QUOTE_UNAVAILABLE', requestId);
     }
 
-    const products = new Map(metadata.data.map((row) => [row.id, row]));
-    const parcel = [];
-    for (const item of items) {
-      const product = products.get(item.product_id);
-      if (!product) return errorResponse(409, 'LISTING_UNAVAILABLE', requestId);
-      parcel.push({
-        name: item.title,
-        quantity: item.quantity,
-        value: item.base_unit_price_minor / 100,
-        weight:
-          productWeightToKg(product.weight_value, product.weight_unit) ??
-          defaultWeightKg,
-        ...readPackageDimensionsCm(product.dimensions),
-      });
-    }
+    const parcel = buildPartnerQuoteParcel(
+      items,
+      metadata.data,
+      merchant.data.vat_registration_status === 'registered'
+    );
+    if (!parcel) return errorResponse(409, 'LISTING_UNAVAILABLE', requestId);
+    const { taxMinor } = parcel;
     const destination = parsed.data.destination;
     const quoteRequest: QuoteRequest = {
       sessionId: requestId,
@@ -190,7 +162,7 @@ export async function POST(request: Request) {
         },
         'domestic'
       ),
-      items: parcel,
+      items: parcel.items,
       shipmentType: 'domestic',
       deliveryPreference: 'door',
     };
@@ -237,11 +209,12 @@ export async function POST(request: Request) {
     const merchantPayable = settlementBasis
       ? items.reduce(
           (sum, item) => sum + item.base_unit_price_minor * item.quantity,
-          delivery
+          delivery + taxMinor
         )
       : null;
+    const total = subtotal + delivery + taxMinor;
     if (
-      !Number.isSafeInteger(subtotal + delivery) ||
+      !Number.isSafeInteger(total) ||
       (merchantPayable !== null && !Number.isSafeInteger(merchantPayable))
     ) {
       return errorResponse(503, 'QUOTE_UNAVAILABLE', requestId);
@@ -259,7 +232,8 @@ export async function POST(request: Request) {
       ),
       subtotal_minor: subtotal,
       delivery_minor: delivery,
-      total_minor: subtotal + delivery,
+      tax_minor: taxMinor,
+      total_minor: total,
       service: selectedRate.serviceTier,
       estimated_days: selectedRate.estimatedDays,
       expires_at: expiry.toISOString(),

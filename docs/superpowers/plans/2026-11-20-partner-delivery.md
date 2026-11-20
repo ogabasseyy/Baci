@@ -30,7 +30,7 @@ Quote development, Baci-controlled tests, and documentation can proceed independ
 
 ### Current settlement boundary
 
-The quote stores the merchant payable separately from the buyer total. The pilot supports `base_plus_delivery` only when explicitly configured through `CROSSREM_SETTLEMENT_BASIS` after both parties agree. Earlier quotes and quotes without that configuration have no verified settlement basis. A trusted verifier records the actual payout allocation against the stored payable after capture verification. It must identify the authorized settlement account and a unique order allocation within the payout. A capture or settlement receipt alone cannot create an order or authorize a shipment.
+The quote stores the merchant payable separately from the buyer total. The pilot supports `base_plus_delivery` only when explicitly configured through `CROSSREM_SETTLEMENT_BASIS` after both parties agree. Set this before issuing a quote for a paid pilot order. Under that policy merchant payable is the base merchandise amount, Baci VAT where applicable, and delivery. The buyer total also includes the configured catalog markup. Quotes issued without the policy must be replaced before payment. A trusted verifier records the actual payout allocation against the stored payable after capture verification. It must identify the authorized settlement account and a unique order allocation within the payout. A capture or settlement receipt alone cannot create an order or authorize a shipment.
 
 ### Current order and tracking boundary
 
@@ -43,6 +43,10 @@ For a settled partner order, the existing merchant fulfillment flow must bind an
 ### Draft consumer guide and evidence ingress
 
 The [delivery API quickstart](../../partners/delivery-api-quickstart.md) documents the supported calls. The internal reconciliation route is for Baci’s authorized verifier only. It accepts normalized capture and settlement evidence using a separate connection-scoped verifier credential. Do not provision that credential for a partner or enable a live verifier until its payment and payout evidence sources are confirmed. The fixture checks exercise complete acceptance and a price-drift hold. Carrier booking and tracking still need verification against the real shipment path.
+
+### GIG contract check
+
+The existing Baci adapter maps to GIG’s documented domestic price (`/price/v3`), pre-shipment capture (`/capture/preshipment`), and waybill tracking (`/track/mobileShipment`). Keep those calls behind Baci’s quote, fulfillment, and order-status services, so future partners can use the same API regardless of the carrier. Verify a domestic quote, the merchant-funded booking, and retrieval of the same waybill through Baci’s order endpoint using authorized GIG credentials and a controlled shipment. Confirm the hosted catalog’s `200` and `304` behavior at the agreed poll interval before enabling partner sync. [GIG API documentation](https://dev-thirdpartynode.theagilitysystems.com/docs/)
 
 ### Local storefront writer check
 

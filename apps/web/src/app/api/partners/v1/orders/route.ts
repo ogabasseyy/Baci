@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
+import { readBoundedJsonBody } from '@/lib/events/read-bounded-json-body';
 import { logger } from '@/lib/logger';
 import { createShippingQuoteRouteProof } from '@/lib/shipping/shipping-quote-route-proof';
 import { createAnonClient } from '@/lib/supabase/anon';
@@ -48,7 +49,13 @@ export async function POST(request: Request) {
   if (!key || !/^[A-Za-z0-9_.:-]{16,128}$/.test(key)) {
     return invalid(400, 'INVALID_IDEMPOTENCY_KEY');
   }
-  const parsed = orderSchema.safeParse(await request.json().catch(() => null));
+  const body = await readBoundedJsonBody(request, 8192);
+  if (!body.ok) {
+    return body.reason === 'too_large'
+      ? invalid(413, 'PAYLOAD_TOO_LARGE')
+      : invalid(400, 'INVALID_REQUEST');
+  }
+  const parsed = orderSchema.safeParse(body.body);
   if (!parsed.success) return invalid(400, 'INVALID_REQUEST');
 
   const { connectionId, merchantId } = access;

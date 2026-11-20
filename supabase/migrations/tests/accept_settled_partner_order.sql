@@ -13,7 +13,7 @@ SELECT format('20000000-0000-4000-8000-00000000000%s', n)::uuid,
   now() - interval '20 minutes', now() - interval '10 minutes',
   jsonb_build_object(
     'currency', 'NGN', 'settlement_basis', 'base_plus_delivery', 'merchant_payable_minor', 170000,
-    'delivery_minor', 150000, 'total_minor', 171200,
+    'delivery_minor', 150000, 'tax_minor', 0, 'total_minor', 171200,
     'items', jsonb_build_array(jsonb_build_object(
       'product_id', format('40000000-0000-4000-8000-00000000000%s', least(n, 2)),
       'condition', 'new', 'quantity', 2, 'base_unit_price_minor', 10000

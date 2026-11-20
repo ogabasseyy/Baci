@@ -37,6 +37,9 @@ DECLARE
   v_delivery numeric;
   v_payable numeric;
   v_buyer_total numeric;
+  v_tax_minor numeric;
+  v_live_tax_minor numeric;
+  v_vat_registered boolean;
 BEGIN
   SELECT s.* INTO v_submission
   FROM private.partner_order_submissions AS s
@@ -77,12 +80,14 @@ BEGIN
      OR v_quote->>'settlement_basis' IS DISTINCT FROM 'base_plus_delivery'
      OR jsonb_typeof(v_quote->'merchant_payable_minor') IS DISTINCT FROM 'number'
      OR jsonb_typeof(v_quote->'delivery_minor') IS DISTINCT FROM 'number'
+     OR jsonb_typeof(v_quote->'tax_minor') IS DISTINCT FROM 'number'
      OR jsonb_typeof(v_quote->'total_minor') IS DISTINCT FROM 'number'
      OR jsonb_typeof(v_quote->'items') IS DISTINCT FROM 'array' THEN
     RAISE EXCEPTION 'partner_quote_economics_invalid' USING ERRCODE = '22023';
   END IF;
 
   v_delivery := (v_quote->>'delivery_minor')::numeric;
+  v_tax_minor := (v_quote->>'tax_minor')::numeric;
   v_payable := (v_quote->>'merchant_payable_minor')::numeric;
   v_buyer_total := (v_quote->>'total_minor')::numeric;
   -- An FX/fee conversion requires a verified allocation policy. Only a
@@ -91,7 +96,9 @@ BEGIN
      OR v_capture.amount_minor IS DISTINCT FROM v_buyer_total
      OR v_settlement.currency IS DISTINCT FROM 'NGN'
      OR v_settlement.amount_minor IS DISTINCT FROM v_payable
-     OR v_delivery < 0 OR v_delivery <> trunc(v_delivery) OR v_payable <= v_delivery THEN
+     OR v_delivery < 0 OR v_delivery <> trunc(v_delivery)
+     OR v_tax_minor < 0 OR v_tax_minor <> trunc(v_tax_minor)
+     OR v_payable <= v_delivery + v_tax_minor THEN
     RAISE EXCEPTION 'partner_quote_economics_mismatch' USING ERRCODE = '22023';
   END IF;
 
@@ -124,6 +131,11 @@ BEGIN
     quantity integer, base_unit_price_minor numeric
   );
 
+  SELECT COALESCE(m.vat_registration_status = 'registered', false)
+  INTO STRICT v_vat_registered FROM public.merchants AS m
+  WHERE m.id = p_merchant_id
+  FOR SHARE;
+
   -- Use Baci's inventory-aware writer and leave the carrier quote unbound.
   -- The existing storefront quote funding path would incorrectly treat the
   -- third-party delivery payment as platform-held shipping funds.
@@ -135,12 +147,27 @@ BEGIN
     p_items => v_lines,
     p_customer_phone => v_recipient->>'phone',
     p_shipping_fee => v_delivery / 100,
+    p_tax_amount => v_tax_minor / 100,
     p_payment_method => 'external',
     p_payment_status => 'pending',
     p_shipping_address => v_address,
     p_source => 'partner',
     p_expected_total => v_payable / 100
   ) AS created;
+
+  -- Recheck Baci's exact tax formula after the writer locks the product rows.
+  -- The storefront writer itself accepts up to one naira of tax drift.
+  SELECT CASE WHEN v_vat_registered THEN COALESCE(SUM(
+    CASE WHEN COALESCE(p.vat_category_code, 'S') = 'S'
+      THEN round(round(oi.quantity * oi.price, 2) * COALESCE(p.vat_rate, 7.5) / 100, 2)
+      ELSE 0 END
+  ), 0) * 100 ELSE 0 END INTO v_live_tax_minor
+  FROM public.order_items AS oi
+  JOIN public.products AS p ON p.id = oi.product_id AND p.merchant_id = p_merchant_id
+  WHERE oi.order_id = v_order_id;
+  IF v_live_tax_minor IS DISTINCT FROM v_tax_minor THEN
+    RAISE EXCEPTION 'partner_order_tax_changed' USING ERRCODE = '22023';
+  END IF;
 
   -- The storefront writer tolerates small total drift. Partner settlement
   -- requires the exact subtotal, delivery, and sellable item price snapshots.
@@ -149,7 +176,8 @@ BEGIN
     WHERE o.id = v_order_id AND o.merchant_id = p_merchant_id
       AND o.currency = 'NGN' AND o.source = 'partner'
       AND o.total = v_payable / 100 AND o.shipping_fee = v_delivery / 100
-      AND o.subtotal = (v_payable - v_delivery) / 100
+      AND o.tax_amount = v_tax_minor / 100
+      AND o.subtotal = (v_payable - v_delivery - v_tax_minor) / 100
       AND o.selected_quote_id IS NULL AND o.shipping_funding_source IS NULL
   ) OR EXISTS (
     SELECT item.product_id, item.variant_id, item.offer_id, item.quantity, item.price

@@ -5,6 +5,7 @@ import { POST } from './route';
 
 const mocks = vi.hoisted(() => ({
   lookup: vi.fn(),
+  merchant: vi.fn(),
   rpc: vi.fn(),
   catalog: vi.fn(),
   sender: vi.fn(),
@@ -14,7 +15,14 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock('@/lib/supabase/anon', () => ({
   createAnonClient: () => ({
-    from: () => ({ select: () => ({ eq: mocks.lookup }) }),
+    from: (table: string) => ({
+      select: () => ({
+        eq:
+          table === 'merchants'
+            ? () => ({ maybeSingle: mocks.merchant })
+            : mocks.lookup,
+      }),
+    }),
     rpc: mocks.rpc,
   }),
 }));
@@ -78,6 +86,10 @@ describe('partner delivery quotes', () => {
         },
       ],
     });
+    mocks.merchant.mockResolvedValue({
+      data: { vat_registration_status: 'not_registered' },
+      error: null,
+    });
     mocks.lookup.mockReturnValue({
       in: vi.fn().mockResolvedValue({
         data: [
@@ -116,6 +128,12 @@ describe('partner delivery quotes', () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllEnvs();
+  });
+
+  it('rejects oversized bodies before doing any partner work', async () => {
+    const response = await POST(request('x'.repeat(8193)));
+    expect(response.status).toBe(413);
+    expect(mocks.catalog).not.toHaveBeenCalled();
   });
 
   it('accepts the request example published in the partner quickstart', async () => {
@@ -189,6 +207,30 @@ describe('partner delivery quotes', () => {
         p_snapshot: expect.objectContaining({
           settlement_basis: 'base_plus_delivery',
           merchant_payable_minor: 170000,
+        }),
+      })
+    );
+  });
+
+  it('includes VAT in both buyer total and merchant payable from the merchandise basis', async () => {
+    vi.stubEnv('CROSSREM_SETTLEMENT_BASIS', 'base_plus_delivery');
+    mocks.merchant.mockResolvedValue({
+      data: { vat_registration_status: 'registered' },
+      error: null,
+    });
+    const response = await POST(request());
+
+    expect(response.status).toBe(201);
+    expect(await response.json()).toMatchObject({
+      tax_minor: 1500,
+      total_minor: 172700,
+    });
+    expect(mocks.rpc).toHaveBeenCalledWith(
+      'persist_partner_delivery_quote',
+      expect.objectContaining({
+        p_snapshot: expect.objectContaining({
+          merchant_payable_minor: 171500,
+          tax_minor: 1500,
         }),
       })
     );

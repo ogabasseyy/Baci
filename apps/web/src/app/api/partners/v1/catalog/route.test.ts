@@ -66,6 +66,17 @@ describe('CrossRem catalog', () => {
     expect(after).not.toHaveBeenCalled();
   });
 
+  it('reports a duplicated token without serving the catalog', async () => {
+    vi.stubEnv('CROSSREM_QUOTE_TOKEN', token);
+    const response = await GET(request(`Bearer ${token}`));
+
+    expect(response.status).toBe(401);
+    expect(warn).toHaveBeenCalledExactlyOnceWith({
+      message: 'CrossRem catalog credential matches multiple grants',
+    });
+    expect(loadCrossRemCatalog).not.toHaveBeenCalled();
+  });
+
   afterEach(() => vi.unstubAllEnvs());
 
   it('rejects missing, malformed and short configured credentials', async () => {

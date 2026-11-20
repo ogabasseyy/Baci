@@ -6,17 +6,17 @@ INSERT INTO public.merchants (
   id, email, business_name, slug, is_published, payout_currency, vat_registration_status
 ) VALUES (
   '7a100000-0000-4000-8000-000000000001', 'partner-replay@example.invalid',
-  'Partner Replay Merchant', 'partner-replay-fixture', true, 'NGN', 'not_registered'
+  'Partner Replay Merchant', 'partner-replay-fixture', true, 'NGN', 'registered'
 );
 
 INSERT INTO public.products (
   id, merchant_id, name, price, stock_quantity, manage_stock, status,
-  condition, has_condition_offers, has_variants
+  condition, has_condition_offers, has_variants, vat_category_code, vat_rate
 ) VALUES
   ('7a100000-0000-4000-8000-000000000011', '7a100000-0000-4000-8000-000000000001',
-   'Fixture new phone', 100, 10, true, 'active', 'new', false, false),
+   'Fixture new phone', 100, 10, true, 'active', 'new', false, false, 'S', 7.5),
   ('7a100000-0000-4000-8000-000000000012', '7a100000-0000-4000-8000-000000000001',
-   'Fixture used tablet', 150, 10, false, 'active', 'used', true, false);
+   'Fixture used tablet', 150, 10, false, 'active', 'used', true, false, 'Z', 0);
 
 INSERT INTO public.product_offers (
   id, product_id, merchant_id, condition, price, status, stock_quantity
@@ -46,8 +46,8 @@ BEGIN
       CASE WHEN n = 1 THEN quote_id ELSE '7a100000-0000-4000-8000-000000000032'::uuid END,
       merchant_id, connection_id, now() - interval '5 minutes', now() + interval '5 minutes',
       jsonb_build_object(
-        'currency', 'NGN', 'settlement_basis', 'base_plus_delivery', 'merchant_payable_minor', 180000,
-        'delivery_minor', 150000, 'total_minor', 181800,
+        'currency', 'NGN', 'settlement_basis', 'base_plus_delivery', 'merchant_payable_minor', 181500,
+        'delivery_minor', 150000, 'tax_minor', 1500, 'total_minor', 183300,
         'items', jsonb_build_array(
           jsonb_build_object('product_id', product_id, 'condition', 'new', 'quantity', 2, 'base_unit_price_minor', 10000),
           jsonb_build_object('product_id', offer_product_id, 'offer_id', offer_id,
@@ -66,7 +66,7 @@ BEGIN
       'fixture-order-' || n, repeat(n::text, 64),
       jsonb_build_object(
         'recipient', '{"name":"Partner Replay Buyer","email":"partner-buyer@example.invalid","phone":"+2348000000000"}'::jsonb,
-        'payment', jsonb_build_object('source', 'fixture', 'reference', 'capture-' || n, 'amount_minor', 181800, 'currency', 'NGN')
+        'payment', jsonb_build_object('source', 'fixture', 'reference', 'capture-' || n, 'amount_minor', 183300, 'currency', 'NGN')
       )
     );
 
@@ -74,13 +74,13 @@ BEGIN
       CASE WHEN n = 1 THEN submission_id ELSE '7a100000-0000-4000-8000-000000000042'::uuid END,
       merchant_id, connection_id,
       CASE WHEN n = 1 THEN quote_id ELSE '7a100000-0000-4000-8000-000000000032'::uuid END,
-      'fixture-order-' || n, 'fixture', 'partner-replay-provider', 'capture-' || n, 181800, 'NGN', now()
+      'fixture-order-' || n, 'fixture', 'partner-replay-provider', 'capture-' || n, 183300, 'NGN', now()
     );
 
     PERFORM private.record_verified_partner_settlement(
       CASE WHEN n = 1 THEN submission_id ELSE '7a100000-0000-4000-8000-000000000042'::uuid END,
       merchant_id, connection_id, 'fixture-payout', 'partner-replay-bank', 'payout-replay', 'allocation-' || n,
-      180000, 'NGN', now()
+      181500, 'NGN', now()
     );
   END LOOP;
 
@@ -90,7 +90,7 @@ BEGIN
      OR receipt IS DISTINCT FROM private.accept_settled_partner_order(submission_id, merchant_id, connection_id)
      OR NOT EXISTS (
        SELECT 1 FROM public.orders AS o WHERE o.id = accepted_id AND o.merchant_id = fixture.merchant_id
-         AND o.payment_status = 'paid' AND o.total = 1800 AND o.amount_paid = 1800
+         AND o.payment_status = 'paid' AND o.total = 1815 AND o.amount_paid = 1815 AND o.tax_amount = 15
          AND o.shipping_funding_source IS NULL AND o.selected_quote_id IS NULL
      )
      OR NOT EXISTS (
@@ -100,17 +100,26 @@ BEGIN
     RAISE EXCEPTION 'partner order failed real writer, payment, or offer identity checks';
   END IF;
 
+  UPDATE public.products AS p SET vat_rate = 7.75 WHERE p.id = fixture.product_id;
+  BEGIN
+    PERFORM private.accept_settled_partner_order('7a100000-0000-4000-8000-000000000042', merchant_id, connection_id);
+    RAISE EXCEPTION 'a real catalog tax change was accepted';
+  EXCEPTION WHEN invalid_parameter_value THEN
+    IF SQLERRM <> 'partner_order_tax_changed' THEN RAISE; END IF;
+  END;
+  UPDATE public.products AS p SET vat_rate = 7.5 WHERE p.id = fixture.product_id;
+
   UPDATE public.products AS p SET price = 100.25 WHERE p.id = fixture.product_id;
   BEGIN
     PERFORM private.accept_settled_partner_order('7a100000-0000-4000-8000-000000000042', merchant_id, connection_id);
     RAISE EXCEPTION 'a real catalog price change was accepted';
   EXCEPTION WHEN invalid_parameter_value THEN
-    IF SQLERRM <> 'partner_order_price_or_items_changed' THEN RAISE; END IF;
+    IF SQLERRM NOT IN ('partner_order_price_or_items_changed', 'partner_order_tax_changed') THEN RAISE; END IF;
   END;
 
   IF (SELECT count(*) FROM public.orders AS o WHERE o.merchant_id = fixture.merchant_id) <> 1
      OR (SELECT count(*) FROM public.transactions AS t WHERE t.order_id = accepted_id
-          AND t.gateway = 'partner_settlement' AND t.amount = 1800) <> 1
+          AND t.gateway = 'partner_settlement' AND t.amount = 1815) <> 1
      OR (SELECT stock_quantity FROM public.products AS p WHERE p.id = fixture.product_id) <> 8
      OR (SELECT stock_quantity FROM public.product_offers AS po WHERE po.id = fixture.offer_id) <> 4 THEN
     RAISE EXCEPTION 'real writer produced duplicate orders, funds, or inventory mutations';

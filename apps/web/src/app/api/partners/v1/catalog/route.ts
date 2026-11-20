@@ -35,6 +35,10 @@ export async function GET(request: Request) {
   if (!access.ok) {
     if (access.reason === 'unconfigured') {
       logger.warn({ message: 'CrossRem catalog credential is unconfigured' });
+    } else if (access.reason === 'ambiguous') {
+      logger.warn({
+        message: 'CrossRem catalog credential matches multiple grants',
+      });
     }
     return unauthorized();
   }

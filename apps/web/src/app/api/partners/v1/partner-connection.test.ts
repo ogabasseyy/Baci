@@ -48,7 +48,7 @@ describe('partner connection authorization', () => {
         [connections[0], { ...connections[1], token: catalogToken }],
         'catalog:read'
       )
-    ).toEqual({ ok: false, reason: 'unconfigured' });
+    ).toEqual({ ok: false, reason: 'ambiguous' });
   });
 
   it('distinguishes an unconfigured connection from an invalid credential', () => {

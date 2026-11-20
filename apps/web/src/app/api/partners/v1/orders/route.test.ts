@@ -62,6 +62,12 @@ describe('partner order intake', () => {
   });
   afterEach(() => vi.unstubAllEnvs());
 
+  it('rejects oversized bodies before doing any partner work', async () => {
+    const response = await POST(request('x'.repeat(8193)));
+    expect(response.status).toBe(413);
+    expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
   it('accepts the request example published in the partner quickstart', async () => {
     const guide = readFileSync(
       new URL(

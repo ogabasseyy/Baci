@@ -16,7 +16,10 @@ export type PartnerConnection = {
 
 type AuthorizationResult =
   | { ok: true; connectionId: string; merchantId: string }
-  | { ok: false; reason: 'unauthorized' | 'unconfigured' | 'scope_required' };
+  | {
+      ok: false;
+      reason: 'unauthorized' | 'unconfigured' | 'ambiguous' | 'scope_required';
+    };
 
 // 32 random bytes take 43 characters in unpadded base64url.
 const bearerTokenPattern = /^[A-Za-z0-9_-]{43,}$/;
@@ -43,7 +46,7 @@ export function authorizePartner(
     if (!token || !bearerTokenPattern.test(token)) continue;
     configured = true;
     if (!timingSafeEqual(credentialDigest, digest(token))) continue;
-    if (matched) return { ok: false, reason: 'unconfigured' };
+    if (matched) return { ok: false, reason: 'ambiguous' };
     matched = connection;
   }
 

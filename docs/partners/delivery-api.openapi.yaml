@@ -71,6 +71,7 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/Error'}
+        '413': {$ref: '#/components/responses/PayloadTooLarge'}
         '429': {$ref: '#/components/responses/RateLimited'}
         '503': {$ref: '#/components/responses/Unavailable'}
   /orders:
@@ -116,6 +117,7 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/Error'}
+        '413': {$ref: '#/components/responses/PayloadTooLarge'}
         '429': {$ref: '#/components/responses/RateLimited'}
         '503': {$ref: '#/components/responses/Unavailable'}
   /order-submissions:
@@ -203,6 +205,11 @@ components:
       content:
         application/json:
           schema: {$ref: '#/components/schemas/Error'}
+    PayloadTooLarge:
+      description: Request body exceeds 8192 bytes.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
     RateLimited:
       description: Retry after the provided delay, or use backoff when no delay is provided.
       headers:
@@ -281,7 +288,7 @@ components:
                 longitude: {type: number, minimum: -180, maximum: 180}
     DeliveryQuote:
       type: object
-      required: [quote_id, currency, items, subtotal_minor, delivery_minor, total_minor,
+      required: [quote_id, currency, items, subtotal_minor, tax_minor, delivery_minor, total_minor,
         service, estimated_days, expires_at, stock_reserved, request_id]
       properties:
         quote_id: {type: string, format: uuid}
@@ -297,6 +304,7 @@ components:
               condition: {type: string}
               unit_price_minor: {type: integer}
         subtotal_minor: {type: integer}
+        tax_minor: {type: integer, minimum: 0, description: Baci VAT due on the underlying merchant items.}
         delivery_minor: {type: integer}
         total_minor: {type: integer}
         service: {type: string}
@@ -368,5 +376,5 @@ components:
               enum: [INVALID_IDEMPOTENCY_KEY, INVALID_REQUEST, UNAUTHORIZED, SCOPE_REQUIRED,
                 ORDER_NOT_FOUND, ORDER_SUBMISSION_NOT_FOUND, QUOTE_NOT_FOUND, LISTING_UNAVAILABLE, ORDER_CONFLICT,
                 ADDRESS_UNSERVICEABLE, RATE_LIMITED, CARRIER_UNAVAILABLE, ORDER_INTAKE_UNAVAILABLE,
-                ORDER_LOOKUP_UNAVAILABLE, QUOTE_UNAVAILABLE]
+                ORDER_LOOKUP_UNAVAILABLE, QUOTE_UNAVAILABLE, PAYLOAD_TOO_LARGE]
         request_id: {type: string, format: uuid}

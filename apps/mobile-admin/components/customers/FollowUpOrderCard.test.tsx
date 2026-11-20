@@ -57,6 +57,25 @@ describe('FollowUpOrderCard', () => {
     });
   });
 
+  it('shows the recorded provider on standard follow-up rows', () => {
+    render(
+      <FollowUpOrderCard
+        item={{
+          ...oxygenProcessingOrder,
+          oxygen_follow_up_status: undefined,
+          payment_method: 'paystack',
+          payment_status: 'unpaid',
+        }}
+        displayTotal="₦10k"
+        initials="A"
+      />
+    );
+
+    expect(
+      screen.getByText('₦10k • Paystack · Checkout Drop-off')
+    ).toBeVisible();
+  });
+
   it.each([
     '+---',
     '+1',

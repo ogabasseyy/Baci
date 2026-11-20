@@ -2,6 +2,8 @@ import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockGetInternalApiSecret = vi.fn();
+const mockExpireProductBlogCache = vi.fn();
+const mockRevalidateProducts = vi.fn();
 const mockRevalidateProductSlugs = vi.fn();
 const mockScheduleStorefrontProductPurge = vi.fn();
 const mockCreatePublicClient = vi.fn();
@@ -9,7 +11,7 @@ vi.mock('@/env', () => ({
   getInternalApiSecret: () => mockGetInternalApiSecret(),
 }));
 vi.mock('@/lib/cache-revalidation', () => ({
-  revalidateProducts: vi.fn(),
+  revalidateProducts: (...args: unknown[]) => mockRevalidateProducts(...args),
   revalidateProductSlugs: (...args: unknown[]) =>
     mockRevalidateProductSlugs(...args),
 }));
@@ -18,7 +20,8 @@ vi.mock('@/lib/storefront-product-purge', () => ({
     mockScheduleStorefrontProductPurge(...args),
 }));
 vi.mock('@/lib/expire-product-blog-cache', () => ({
-  expireProductBlogCache: vi.fn(),
+  expireProductBlogCache: (...args: unknown[]) =>
+    mockExpireProductBlogCache(...args),
 }));
 vi.mock('@/lib/storefront-product-purge-hostnames', () => ({
   scheduleStorefrontHostnamePurge: vi.fn(),
@@ -51,16 +54,18 @@ describe('POST /api/internal/revalidate-products slug chunks', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetInternalApiSecret.mockReturnValue(SECRET);
+    mockRevalidateProductSlugs.mockReturnValue(true);
     mockCreatePublicClient.mockReturnValue({ from: vi.fn() });
   });
 
-  it('busts a separately supplied complete per-slug set without an edge purge', async () => {
+  it('busts a separately supplied complete per-slug set without omitting merchant-wide PDP tags by default', async () => {
     const productSlugs = ['phone-1', 'phone-2', 'phone-3'];
     const res = await POST(
       request({ merchantId: MERCHANT_ID, productSlugs }, `Bearer ${SECRET}`)
     );
 
     expect(res.status).toBe(200);
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(MERCHANT_ID);
     // Hard-expired even without purge inputs: a later control-metadata
     // chunk may schedule an edge purge over these tags.
     expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
@@ -69,5 +74,26 @@ describe('POST /api/internal/revalidate-products slug chunks', () => {
       { expireImmediately: true }
     );
     expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
+  });
+
+  it('forces broad PDP invalidation on slug-only calls even when caller sends omitMerchantWidePdpDetails without products', async () => {
+    const productSlugs = ['phone-1', 'phone-2'];
+    const res = await POST(
+      request(
+        {
+          merchantId: MERCHANT_ID,
+          productSlugs,
+          omitMerchantWidePdpDetails: true,
+        },
+        `Bearer ${SECRET}`
+      )
+    );
+
+    expect(res.status).toBe(200);
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      MERCHANT_ID,
+      undefined,
+      { expireImmediately: true }
+    );
   });
 });

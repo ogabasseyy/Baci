@@ -1,3 +1,5 @@
+import { bookingLockMustStay } from './booking-lock-must-stay';
+import { isProviderNeverReachedError } from './order-shipment-booking-failure';
 import { OrderShipmentBookingError } from './order-shipment-booking-utils';
 
 const RELEASEABLE_BOOKING_ERROR_CODES = new Set([
@@ -43,6 +45,12 @@ const RELEASEABLE_BOOKING_ERROR_CODES = new Set([
   'GIGL_INTERNATIONAL_RATE_INVALID',
   'GIGL_BOOKING_VALIDATION_FAILED',
   'GIGL_AUTHENTICATION_FAILED',
+  // Refused before any provider call: the quote belongs to another order.
+  'DOMESTIC_QUOTE_ORDER_MISMATCH',
+  // Topship refused the save (4xx), so nothing was created.
+  'TOPSHIP_SAVE_REJECTED',
+  // The shared GIG deadline expired before the booking POST was sent.
+  'GIGL_BOOKING_TIMED_OUT_BEFORE_SUBMIT',
   'GIGL_STATION_RESOLUTION_FAILED',
   'SHIPPING_PROVIDER_DISABLED',
   'EXISTING_SHIPMENT_LOOKUP_FAILED',
@@ -51,11 +59,12 @@ const RELEASEABLE_BOOKING_ERROR_CODES = new Set([
   'EXISTING_SHIPMENT_QUOTE_MISMATCH',
 ]);
 
-export function shouldReleaseBookingLock(
-  error: unknown
-): error is OrderShipmentBookingError {
+export function shouldReleaseBookingLock(error: unknown): boolean {
+  // A failed refund leaves the charge reserved: nothing may free the lock.
+  if (bookingLockMustStay(error)) return false;
   return (
-    error instanceof OrderShipmentBookingError &&
-    RELEASEABLE_BOOKING_ERROR_CODES.has(error.code)
+    isProviderNeverReachedError(error) ||
+    (error instanceof OrderShipmentBookingError &&
+      RELEASEABLE_BOOKING_ERROR_CODES.has(error.code))
   );
 }

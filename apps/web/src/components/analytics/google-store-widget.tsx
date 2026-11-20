@@ -53,7 +53,13 @@ export const MERCHANT_WIDGET_IFRAME_TITLE =
 // never occupies flow. `!important` beats the script's non-important inline
 // styles; the corner offsets mirror the LEFT_BOTTOM start() margins (mobile
 // 16/104, desktop 24/24) so it also never jumps once the script sets its own.
-const MERCHANT_WIDGET_WRAPPER_STYLE = `#google-merchantwidget-iframe-wrapper{position:fixed!important;bottom:104px;left:16px;contain:layout}@media (min-width:768px){#google-merchantwidget-iframe-wrapper{bottom:24px;left:24px}}`;
+//
+// `color-scheme:light` on the frame: Google's badge document is light-only. On
+// a dark storefront the frame inherits `color-scheme: dark`, and browsers then
+// paint an opaque canvas behind a frame whose scheme differs from its
+// document's — a white box around the round badge. Matching the frame to the
+// document keeps its backdrop transparent.
+const MERCHANT_WIDGET_WRAPPER_STYLE = `#google-merchantwidget-iframe-wrapper{position:fixed!important;bottom:104px;left:16px;contain:layout}#google-merchantwidget-iframe-wrapper iframe{color-scheme:light}@media (min-width:768px){#google-merchantwidget-iframe-wrapper{bottom:24px;left:24px}}`;
 
 function titleMerchantWidgetFrame() {
   const frame = resolveMerchantWidgetFrame();

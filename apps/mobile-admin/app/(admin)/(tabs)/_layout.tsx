@@ -1,8 +1,9 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { Tabs } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
+import { FeedbackLauncher } from '@/components/feedback/FeedbackLauncher';
 import { AdminFloatingTabBar } from '@/components/navigation/AdminFloatingTabBar';
-import { useFailedOrders } from '@/hooks/useFailedOrders';
+import { useStaffFollowUpQueue } from '@/hooks/useStaffFollowUpQueue';
 import { useTheme } from '@/hooks/useTheme';
 
 export const unstable_settings = { initialRouteName: 'index' };
@@ -12,8 +13,13 @@ export default function TabLayout() {
     console.log('[TabLayout] Rendering Debug View');
   }
   const { colors } = useTheme();
-  const { data: failedOrders } = useFailedOrders();
-  const failedCount = failedOrders?.length ?? 0;
+  const { confirmedCount, source, staff } = useStaffFollowUpQueue();
+  const customersBadge =
+    staff.isError || source.isFailedOrdersError
+      ? '!'
+      : confirmedCount > 0
+        ? confirmedCount
+        : undefined;
 
   return (
     <View
@@ -77,7 +83,7 @@ export default function TabLayout() {
           options={{
             title: 'Customers',
             // Follow-up checkout drop-offs belong with customer outreach, not Orders.
-            tabBarBadge: failedCount > 0 ? failedCount : undefined,
+            tabBarBadge: customersBadge,
             tabBarIcon: ({ color, focused, size }) => (
               <Ionicons
                 color={color}
@@ -103,6 +109,7 @@ export default function TabLayout() {
 
         <Tabs.Screen name="settings" options={{ href: null }} />
       </Tabs>
+      <FeedbackLauncher />
     </View>
   );
 }

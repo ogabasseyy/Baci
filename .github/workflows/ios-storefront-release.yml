@@ -14,9 +14,14 @@ on:
         description: 'iOS build number override (leave empty for auto)'
         required: false
         type: string
+      testflight_only:
+        description: 'Upload to TestFlight without submitting for App Review'
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
-  group: ios-storefront-release-${{ github.ref }}
+  group: ios-storefront-release-${{ github.ref }}${{ (github.event_name == 'workflow_dispatch' && inputs.testflight_only) && '-testflight' || '' }}
   cancel-in-progress: true
 
 permissions:
@@ -45,9 +50,10 @@ jobs:
     # with ios-storefront-submit.yml so the two submission paths can never race
     # to cancel the same review or rename the same version. This is job-level on
     # purpose: the workflow-level group above keeps cancelling superseded
-    # release builds, which this must not undo.
+    # release builds, which this must not undo. TestFlight-only uploads use
+    # their own queue so they cannot replace a pending production submission.
     concurrency:
-      group: ios-storefront-app-store-submission
+      group: ${{ (github.event_name == 'workflow_dispatch' && inputs.testflight_only) && 'ios-storefront-testflight-upload' || 'ios-storefront-app-store-submission' }}
       cancel-in-progress: false
 
     steps:
@@ -75,7 +81,7 @@ jobs:
         run: sudo xcode-select -s "/Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer"
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
 
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -85,7 +91,7 @@ jobs:
           cache-dependency-path: pnpm-lock.yaml
 
       - name: Setup Ruby
-        uses: ruby/setup-ruby@e81a8fa391b11a595c1b7ed84177cc0fe02faf83 # v1.328.0
+        uses: ruby/setup-ruby@b3aaceaef7e0ee231b499e7b5f49c03fc1d32199 # v1.338.0
         with:
           ruby-version: ${{ env.RUBY_VERSION }}
           bundler-cache: true
@@ -317,10 +323,11 @@ jobs:
       # gate is now driven by the App Store's actual live state via the
       # `ios-live-build-sync` cron reconciler (App Store Connect API).
       - name: Submit to App Store for review
+        id: submit
         # !cancelled() drops the implicit success() so a transient failure of the
         # preceding artifact-upload step can't skip submission once the build is
         # already on TestFlight; gate purely on the fastlane release outcome.
-        if: ${{ !cancelled() && steps.fastlane_release.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.fastlane_release.outcome == 'success' && !(github.event_name == 'workflow_dispatch' && inputs.testflight_only) }}
         working-directory: ${{ env.WORKING_DIR }}
         env:
           CI: '1'
@@ -343,6 +350,16 @@ jobs:
           # replace lives in ios-storefront-submit.yml, whose run is never
           # cancelled by a competing one.
         run: bundle exec fastlane ios submit
+
+      - name: Record release mode
+        if: ${{ always() && steps.fastlane_release.outcome == 'success' }}
+        env:
+          TESTFLIGHT_UPLOAD_COMPLETED: 'true'
+          TESTFLIGHT_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.testflight_only }}
+          SUBMISSION_OUTCOME: ${{ steps.submit.outcome }}
+          SUBMISSION_RESULT: ${{ steps.submit.outputs.app_store_submission }}
+        run: |
+          bash "${{ github.workspace }}/.github/scripts/record-ios-storefront-release-mode.sh"
 
       - name: Clean up secrets
         if: always()

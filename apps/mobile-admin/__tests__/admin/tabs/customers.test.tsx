@@ -1,10 +1,11 @@
 import '@testing-library/jest-dom/vitest';
+import '@/test/fixtures/customer-screen-follow-up-mocks';
 import { fireEvent, render, screen } from '@testing-library/react';
 import type React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import CustomersScreen from '@/app/(admin)/(tabs)/customers';
+import { oxygenProcessingOrder } from '@/test/fixtures/oxygen-follow-up';
 
-// Mock FlashList
 vi.mock('@shopify/flash-list', async () => {
   const React = await import('react');
   return {
@@ -40,7 +41,6 @@ vi.mock('@shopify/flash-list', async () => {
   };
 });
 
-// Mock other components/dependencies
 vi.mock('@react-native-vector-icons/ionicons', async () => {
   const React = await import('react');
   return {
@@ -94,6 +94,7 @@ const customerHookMocks = vi.hoisted(() => ({
   invalidateQueries: vi.fn(),
   useCustomers: vi.fn(),
   useFailedOrders: vi.fn(),
+  useOxygenFollowUps: vi.fn(),
   useCustomerStats: vi.fn(),
   useMerchant: vi.fn(),
 }));
@@ -113,6 +114,9 @@ vi.mock('@/hooks/useCustomers', () => ({
 vi.mock('@/hooks/useFailedOrders', () => ({
   useFailedOrders: customerHookMocks.useFailedOrders,
 }));
+vi.mock('@/hooks/useOxygenFollowUps', () => ({
+  useOxygenFollowUps: customerHookMocks.useOxygenFollowUps,
+}));
 
 vi.mock('@/hooks/useMerchant', () => ({
   useMerchant: customerHookMocks.useMerchant,
@@ -123,6 +127,13 @@ describe('CustomersScreen UI rendering', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    customerHookMocks.useOxygenFollowUps.mockReturnValue({
+      data: [],
+      isError: false,
+      isLoading: false,
+      isFetching: false,
+      refetch: vi.fn(),
+    });
     customerHookMocks.useCustomers.mockReturnValue({
       data: { pages: [{ customers: [] }] },
       isLoading: false,
@@ -150,6 +161,26 @@ describe('CustomersScreen UI rendering', () => {
   it('renders customers screen successfully', () => {
     const { getByText } = render(<CustomersScreen />);
     expect(getByText('Customers')).toBeTruthy();
+  });
+  it('shows an unavailable amount rather than zero for Oxygen', () => {
+    customerHookMocks.useOxygenFollowUps.mockReturnValue({
+      data: [
+        {
+          ...oxygenProcessingOrder,
+          total: null,
+          oxygen_follow_up_status: 'needs_review',
+        },
+      ],
+      isError: false,
+      isLoading: false,
+      isFetching: false,
+      refetch: vi.fn(),
+    });
+    render(<CustomersScreen />);
+    expect(screen.getByText(/Amount unavailable/)).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: /Amount unavailable/ })
+    ).toBeTruthy();
   });
 
   it('keeps the customer tab rail constrained to chip height', () => {
@@ -226,10 +257,9 @@ describe('CustomersScreen UI rendering', () => {
 
   it('renders empty states for failed orders and customer lists', () => {
     render(<CustomersScreen />);
-
     expect(screen.getByText('No issues')).toBeTruthy();
     expect(
-      screen.getByText('All recent transactions are successful!')
+      screen.getByText('No follow-ups need attention right now.')
     ).toBeTruthy();
 
     fireEvent.click(screen.getByRole('tab', { name: 'People' }));
@@ -251,7 +281,6 @@ describe('CustomersScreen UI rendering', () => {
 
     expect(screen.queryByText('No issues')).toBeNull();
   });
-
   it('suppresses the customer empty state while customers are loading', () => {
     customerHookMocks.useCustomers.mockReturnValue({
       data: { pages: [{ customers: [] }] },

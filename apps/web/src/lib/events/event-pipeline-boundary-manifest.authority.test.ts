@@ -61,7 +61,10 @@ describe('event pipeline authority importer boundary', () => {
       'apps/web/src/lib/immediate-order/confirmation-email.ts',
       'apps/web/src/app/api/payments/credit-direct/webhook/customer-inventory-failure.ts',
       'apps/web/src/lib/send-manual-order-document.ts',
+      'apps/web/src/lib/feedback/send-feedback-report-email.ts',
       'apps/web/src/scripts/reconcile-vtu-processing.ts',
+      'apps/web/src/scripts/purge-jumia-self-authorization-discoveries.ts',
+      'apps/web/src/scripts/cleanup-checkout-shipping-recovery-previews.ts',
     ]);
     expect(manifest.authority.serviceImporters).toEqual([
       'apps/web/src/app/api/cron/drain-cache-invalidations/route.ts',

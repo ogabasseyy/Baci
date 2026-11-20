@@ -65,9 +65,9 @@ export const RESERVED_PATHS = new Set([
  * Infrastructure subdomains that must not back a merchant storefront (they collide
  * with platform mail/app/CDN hosts). RESERVED_PATHS already covers the storefront
  * ROUTE words; these are the extra host-level names. This set MUST equal
- * RESERVED_SUBDOMAINS in proxy.ts (subdomain->storefront routing) and the infra
- * names in the database's `is_reserved_merchant_slug()` (migration 20260707074000)
- * — keep all three in sync.
+ * RESERVED_SUBDOMAINS in lib/proxy/host.ts (subdomain->storefront routing) and the
+ * infra names in the database's `is_reserved_merchant_slug()` (latest definition:
+ * migration 20261120110000) — keep all three in sync.
  */
 const INFRA_RESERVED_SUBDOMAINS = new Set([
   'www',
@@ -83,6 +83,7 @@ const INFRA_RESERVED_SUBDOMAINS = new Set([
   'status',
   'support',
   'help',
+  'chat',
 ]);
 
 /**

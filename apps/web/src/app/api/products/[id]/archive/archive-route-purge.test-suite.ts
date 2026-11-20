@@ -13,10 +13,14 @@ type PurgeSuiteOptions = {
   merchantId: string;
   mocks: {
     archiveResult: unknown;
+    dependentAliasesResult: { identifiers: string[]; incomplete: boolean };
+    expireProductBlogCache: Mock;
     merchantSlugRow: unknown;
     merchantThrows: boolean;
+    revalidateProducts: Mock;
     revalidateProductSlugs: Mock;
     scheduleProductBlogPurgeAfterResponse: Mock;
+    scheduleStorefrontHostnamePurge: Mock;
     scheduleStorefrontProductPurge: Mock;
     selectArgs: string[];
   };
@@ -29,13 +33,19 @@ export function defineArchiveRoutePurgeSuite({
   merchantId,
   mocks,
 }: PurgeSuiteOptions) {
-  it('schedules a purge for the archived product with its category segment', async () => {
+  it('schedules a purge for the archived product with its category segment and UUID alias', async () => {
     const response = await PATCH(makeRequest(), makeContext());
 
     expect(response.status).toBe(200);
     expect(mocks.scheduleStorefrontProductPurge).toHaveBeenCalledWith(
       'test-store',
-      [{ slug: 'phone-ultra', categorySegment: 'smartphones' }]
+      [
+        { slug: 'phone-ultra', categorySegment: 'smartphones' },
+        {
+          slug: '123e4567-e89b-42d3-a456-426614174000',
+          categorySegment: null,
+        },
+      ]
     );
   });
 
@@ -47,10 +57,47 @@ export function defineArchiveRoutePurgeSuite({
       merchantId,
       merchantSlug: 'test-store',
       productIds: ['123e4567-e89b-42d3-a456-426614174000'],
-      entries: [{ slug: 'phone-ultra', categorySegment: 'smartphones' }],
+      entries: [
+        { slug: 'phone-ultra', categorySegment: 'smartphones' },
+        {
+          slug: '123e4567-e89b-42d3-a456-426614174000',
+          categorySegment: null,
+        },
+      ],
       categorySlugs: ['smartphones'],
       skipProductPurge: true,
     });
+  });
+
+  it('includes dependent legacy child aliases in edge purges and escalates incomplete lookups', async () => {
+    mocks.dependentAliasesResult = {
+      identifiers: ['archived-child-slug', 'child-uuid'],
+      incomplete: true,
+    };
+
+    const response = await PATCH(makeRequest(), makeContext());
+
+    expect(response.status).toBe(200);
+    expect(mocks.scheduleStorefrontProductPurge).toHaveBeenCalledWith(
+      'test-store',
+      [
+        { slug: 'phone-ultra', categorySegment: 'smartphones' },
+        {
+          slug: '123e4567-e89b-42d3-a456-426614174000',
+          categorySegment: null,
+        },
+        { slug: 'archived-child-slug', categorySegment: null },
+        { slug: 'child-uuid', categorySegment: null },
+      ]
+    );
+    expect(mocks.scheduleStorefrontHostnamePurge).toHaveBeenCalledWith(
+      'test-store'
+    );
+
+    mocks.scheduleStorefrontHostnamePurge.mockClear();
+    mocks.expireProductBlogCache.mockReturnValueOnce(false);
+    await PATCH(makeRequest(), makeContext());
+    expect(mocks.scheduleStorefrontHostnamePurge).not.toHaveBeenCalled();
   });
 
   it('reads the category_id join and product_categories junction on the archive select', async () => {
@@ -85,18 +132,37 @@ export function defineArchiveRoutePurgeSuite({
 
     expect(mocks.scheduleStorefrontProductPurge).toHaveBeenCalledWith(
       'test-store',
-      [{ slug: 'phone-ultra', categorySegment: 'smartphones' }]
+      [
+        { slug: 'phone-ultra', categorySegment: 'smartphones' },
+        {
+          slug: '123e4567-e89b-42d3-a456-426614174000',
+          categorySegment: null,
+        },
+      ]
     );
   });
 
   it('busts the per-slug Next cache before scheduling the edge purge', async () => {
     await PATCH(makeRequest(), makeContext());
 
-    expect(mocks.revalidateProductSlugs).toHaveBeenCalledWith(merchantId, [
-      'phone-ultra',
-    ]);
+    expect(mocks.revalidateProductSlugs).toHaveBeenCalledWith(
+      merchantId,
+      ['phone-ultra', '123e4567-e89b-42d3-a456-426614174000'],
+      { expireImmediately: true }
+    );
+    expect(mocks.revalidateProducts).toHaveBeenCalledWith(
+      merchantId,
+      undefined,
+      { expireImmediately: true, omitMerchantWidePdpDetails: true }
+    );
+    expect(mocks.expireProductBlogCache).toHaveBeenCalledWith(merchantId);
     expect(
       mocks.revalidateProductSlugs.mock.invocationCallOrder[0]
+    ).toBeLessThan(
+      mocks.scheduleStorefrontProductPurge.mock.invocationCallOrder[0]
+    );
+    expect(
+      mocks.expireProductBlogCache.mock.invocationCallOrder[0]
     ).toBeLessThan(
       mocks.scheduleStorefrontProductPurge.mock.invocationCallOrder[0]
     );
@@ -115,9 +181,11 @@ export function defineArchiveRoutePurgeSuite({
 
     await PATCH(makeRequest(), makeContext());
 
-    expect(mocks.revalidateProductSlugs).toHaveBeenCalledWith(merchantId, [
-      '123e4567-e89b-42d3-a456-426614174000',
-    ]);
+    expect(mocks.revalidateProductSlugs).toHaveBeenCalledWith(
+      merchantId,
+      ['123e4567-e89b-42d3-a456-426614174000'],
+      { expireImmediately: true }
+    );
     expect(mocks.scheduleStorefrontProductPurge).toHaveBeenCalledWith(
       'test-store',
       [
@@ -150,9 +218,11 @@ export function defineArchiveRoutePurgeSuite({
       const response = await PATCH(makeRequest(), makeContext());
 
       expect(response.status).toBe(200);
-      expect(mocks.revalidateProductSlugs).toHaveBeenCalledWith(merchantId, [
-        'phone-ultra',
-      ]);
+      expect(mocks.revalidateProductSlugs).toHaveBeenCalledWith(
+        merchantId,
+        ['phone-ultra', '123e4567-e89b-42d3-a456-426614174000'],
+        { expireImmediately: true }
+      );
       expect(mocks.scheduleStorefrontProductPurge).not.toHaveBeenCalled();
     } finally {
       consoleWarnSpy.mockRestore();
@@ -167,6 +237,57 @@ export function defineArchiveRoutePurgeSuite({
     expect(response.status).toBe(200);
     expect(mocks.scheduleStorefrontProductPurge).toHaveBeenCalledWith(null, [
       { slug: 'phone-ultra', categorySegment: 'smartphones' },
+      {
+        slug: '123e4567-e89b-42d3-a456-426614174000',
+        categorySegment: null,
+      },
     ]);
+  });
+
+  it('falls back to broad hard expiry when per-slug expiry fails on archive', async () => {
+    mocks.revalidateProductSlugs.mockReturnValueOnce(false);
+
+    const response = await PATCH(makeRequest(), makeContext());
+
+    expect(response.status).toBe(200);
+    expect(mocks.revalidateProducts).toHaveBeenCalledWith(
+      merchantId,
+      undefined,
+      { expireImmediately: true }
+    );
+  });
+
+  it('skips edge purge when both per-slug and broad hard expiry fail on archive', async () => {
+    mocks.revalidateProductSlugs.mockReturnValueOnce(false);
+    mocks.revalidateProducts.mockReturnValueOnce(false);
+
+    const response = await PATCH(makeRequest(), makeContext());
+
+    expect(response.status).toBe(200);
+    expect(mocks.scheduleStorefrontProductPurge).not.toHaveBeenCalled();
+    expect(mocks.scheduleProductBlogPurgeAfterResponse).not.toHaveBeenCalled();
+  });
+
+  it('does not leak the category join/junction embeds in the response body', async () => {
+    mocks.archiveResult = {
+      id: '123e4567-e89b-42d3-a456-426614174000',
+      slug: 'phone-ultra',
+      status: 'archived',
+      name: 'Phone Ultra',
+      category: 'Smartphones',
+      categories: { slug: 'smartphones' },
+      product_categories: [{ categories: { slug: 'gadgets' } }],
+    };
+
+    const response = await PATCH(makeRequest(), makeContext());
+
+    await expect(response.json()).resolves.toEqual({
+      product: {
+        id: '123e4567-e89b-42d3-a456-426614174000',
+        slug: 'phone-ultra',
+        status: 'archived',
+      },
+      success: true,
+    });
   });
 }

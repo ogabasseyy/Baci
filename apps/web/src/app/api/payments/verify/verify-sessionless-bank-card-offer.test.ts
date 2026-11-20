@@ -1,0 +1,143 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { beforeEach, expect, it, vi } from 'vitest';
+import { createStorefrontOrderRpcClient } from '@/lib/checkout/storefront-order-rpc-client';
+import { verifyBankCardOfferPaystack } from '@/lib/checkout/verify-bank-card-offer-paystack';
+import { bankCardOfferContextFixture } from '@/schemas/bank-card-offer-payment-context.test-support';
+import type { GuestPaymentReferenceSnapshot } from './guest-payment-reference-snapshot';
+import { verifySessionlessBankCardOffer } from './verify-sessionless-bank-card-offer';
+
+vi.mock('@/lib/checkout/storefront-order-rpc-client', () => ({
+  createStorefrontOrderRpcClient: vi.fn(),
+}));
+vi.mock('@/lib/checkout/verify-bank-card-offer-paystack', () => ({
+  verifyBankCardOfferPaystack: vi.fn(),
+}));
+
+const verify = vi.mocked(verifyBankCardOfferPaystack);
+const rpc = vi.fn();
+const buyerRpc = vi.fn();
+const buyerClient = { rpc: buyerRpc } as unknown as SupabaseClient;
+const reference = `BCO-${'a'.repeat(32)}`;
+const saved = {
+  ...bankCardOfferContextFixture,
+  reference,
+  domain: 'test',
+  acceptedFilterPolicyHash: 'a'.repeat(64),
+};
+const snapshot: GuestPaymentReferenceSnapshot = {
+  orderId: 'order-1',
+  transactionId: 'transaction-1',
+  merchantId: saved.quote.merchantId,
+  orderNumber: 'ORD-1',
+  amount: 95,
+  currency: 'NGN',
+  transactionStatus: 'pending',
+  gateway: 'paystack',
+  gatewayReference: reference,
+  orderPaymentStatus: 'pending',
+  orderShippingStatus: 'pending',
+  orderTotal: 95,
+  inventoryConfirmed: false,
+};
+
+beforeEach(() => {
+  vi.resetAllMocks();
+  vi.mocked(createStorefrontOrderRpcClient).mockReturnValue({
+    rpc,
+  } as unknown as SupabaseClient);
+  rpc.mockResolvedValueOnce({ data: saved, error: null });
+  buyerRpc.mockResolvedValue({ data: true, error: null });
+});
+
+it.each([
+  'failed',
+  'cancelled',
+  'abandoned',
+  'reversed',
+] as const)('records a %s attempt before responding, without settling it', async (status) => {
+  verify.mockResolvedValueOnce({ kind: 'terminal', status });
+  rpc.mockResolvedValueOnce({ data: true, error: null });
+
+  const result = await verifySessionlessBankCardOffer(snapshot, buyerClient);
+
+  expect(result.status).toBe(200);
+  await expect(result.json()).resolves.toEqual({
+    success: false,
+    status,
+    orderId: snapshot.orderId,
+    orderNumber: 'ORD-1',
+  });
+  expect(rpc).toHaveBeenLastCalledWith('flag_bank_card_offer_terminal_review', {
+    p_order_id: snapshot.orderId,
+    p_merchant_id: snapshot.merchantId,
+    p_transaction_id: snapshot.transactionId,
+    p_status: status,
+  });
+  expect(rpc).toHaveBeenCalledTimes(2);
+  expect(buyerRpc).not.toHaveBeenCalled();
+});
+
+it('keeps the attempt pending when the review is unavailable', async () => {
+  verify.mockResolvedValueOnce({ kind: 'terminal', status: 'failed' });
+  rpc.mockResolvedValueOnce({ data: false, error: null });
+
+  const result = await verifySessionlessBankCardOffer(snapshot, buyerClient);
+
+  expect(result.status).toBe(202);
+  await expect(result.json()).resolves.toMatchObject({ status: 'pending' });
+});
+
+it('rejects saved context with a different reference before contacting Paystack', async () => {
+  rpc.mockReset().mockResolvedValue({
+    data: { ...saved, reference: `BCO-${'b'.repeat(32)}` },
+  });
+
+  const result = await verifySessionlessBankCardOffer(snapshot, buyerClient);
+
+  expect(result.status).toBe(202);
+  expect(verify).not.toHaveBeenCalled();
+});
+
+it('rejects another gateway without consulting the verification context', async () => {
+  const result = await verifySessionlessBankCardOffer(
+    { ...snapshot, gateway: 'korapay' },
+    buyerClient
+  );
+
+  expect(result.status).toBe(400);
+  expect(rpc).not.toHaveBeenCalled();
+});
+
+it('keeps the verified capture pending and flags it for reconciliation without settling it', async () => {
+  verify.mockResolvedValueOnce({ kind: 'verified' } as never);
+
+  const result = await verifySessionlessBankCardOffer(snapshot, buyerClient);
+
+  expect(result.status).toBe(202);
+  expect(rpc).toHaveBeenCalledTimes(1);
+  expect(buyerRpc).toHaveBeenCalledExactlyOnceWith(
+    'flag_sessionless_payment_provider_confirmed',
+    { p_gateway_reference: reference }
+  );
+});
+
+it('reports a verified payment that already settled with confirmed inventory', async () => {
+  verify.mockResolvedValueOnce({ kind: 'verified' } as never);
+
+  const result = await verifySessionlessBankCardOffer(
+    {
+      ...snapshot,
+      transactionStatus: 'completed',
+      orderPaymentStatus: 'paid',
+      inventoryConfirmed: true,
+    },
+    buyerClient
+  );
+
+  await expect(result.json()).resolves.toMatchObject({
+    success: true,
+    status: 'success',
+    finalizationOutcome: 'completed',
+  });
+  expect(buyerRpc).not.toHaveBeenCalled();
+});

@@ -217,6 +217,7 @@ function setup(
               merchant_id: merchantId,
               amount: 95,
               gateway_reference: reference,
+              gateway: 'paystack',
             },
           ],
         };
@@ -395,6 +396,46 @@ describe('bank card offer payment handlers', () => {
     expect(response.status).toBe(403);
     expect(mocks.rpc).not.toHaveBeenCalled();
     expect(mocks.initialize).not.toHaveBeenCalled();
+  });
+
+  it('records the terminal review for a buyer using native verification', async () => {
+    vi.stubEnv('PAYSTACK_SECRET_KEY', secret);
+    const { data } = setup('035', 'Wema Bank');
+    mocks.cookieAuth.mockResolvedValueOnce({
+      authMode: 'bearer',
+      user: { id: userId },
+      supabase: mocks,
+    });
+    mocks.verify.mockResolvedValueOnce({
+      success: true,
+      data: { ...data, status: 'abandoned' },
+    });
+
+    const result = await verify(
+      new NextRequest('http://localhost/api/payments/verify', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          authorization: 'Bearer test-only',
+        },
+        body: JSON.stringify({ reference }),
+      })
+    );
+
+    expect(result.status).toBe(200);
+    await expect(result.json()).resolves.toMatchObject({
+      status: 'abandoned',
+      orderId,
+    });
+    expect(mocks.rpc).toHaveBeenCalledWith(
+      'flag_bank_card_offer_terminal_review',
+      expect.objectContaining({ p_status: 'abandoned' })
+    );
+    expect(mocks.rpc).not.toHaveBeenCalledWith(
+      'complete_order_gateway_payment',
+      expect.anything()
+    );
+    expect(mocks.from).not.toHaveBeenCalled();
   });
 
   it('rejects verification from the wrong storefront before contacting Paystack', async () => {

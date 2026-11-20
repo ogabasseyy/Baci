@@ -21,6 +21,7 @@ import {
   verifyGuestPaymentReference,
   verifyGuestPaymentReferenceByQuery,
 } from './verify-guest-payment-reference';
+import { verifySessionlessBankCardOffer } from './verify-sessionless-bank-card-offer';
 
 // Read-only guest verification: CSRF validation covers non-GET requests
 // only, so sessionless callers prove their order here with the
@@ -527,13 +528,19 @@ export async function POST(request: NextRequest) {
   // (reference to order to customer.user_id = auth.uid()). Finalization
   // stays on the webhook/service boundary; settlement polling converges
   // on the next pass. Session (cookie-CSRF) requests carry no such header
-  // and keep their existing authority. Denials are uniform (no oracle).
+  // and keep their existing authority. Bank offers require buyer ownership
+  // and record terminal reviews without settling through the bearer lane.
+  const { reference, merchantSlug, trackingToken } = parsedBody.data;
+  const isBankOffer = bankCardOfferReferenceSchema.safeParse(reference).success;
   const authorizationHeader = request.headers.get('authorization');
   if (authorizationHeader && /^bearer\s+.+$/i.test(authorizationHeader)) {
-    if (parsedBody.data.trackingToken) {
+    if (reference.startsWith('BCO-') && !isBankOffer) {
+      return NextResponse.json({ error: 'Invalid reference' }, { status: 400 });
+    }
+    if (trackingToken && !isBankOffer) {
       const guestSnapshot = await getGuestPaymentReferenceSnapshot(
-        parsedBody.data.reference,
-        parsedBody.data.trackingToken
+        reference,
+        trackingToken
       );
       if (!guestSnapshot) {
         return NextResponse.json(
@@ -542,7 +549,7 @@ export async function POST(request: NextRequest) {
         );
       }
       return verifyGuestPaymentReference(guestSnapshot, {
-        trackingToken: parsedBody.data.trackingToken,
+        trackingToken,
       });
     }
     const authed = await getAuthenticatedUser(request);
@@ -564,13 +571,15 @@ export async function POST(request: NextRequest) {
         { status: 403 }
       );
     }
+    if (isBankOffer) {
+      return verifySessionlessBankCardOffer(sessionlessSnapshot, bearerClient);
+    }
     return verifyGuestPaymentReference(sessionlessSnapshot, {
       sessionlessClient: bearerClient,
     });
   }
 
-  const { reference, merchantSlug } = parsedBody.data;
-  if (bankCardOfferReferenceSchema.safeParse(reference).success) {
+  if (isBankOffer) {
     const binding = await getBankCardOfferVerificationBinding(
       request,
       reference,

@@ -173,12 +173,17 @@ export async function verifyCheckoutPayment(
     const data = isVerificationResponse(raw) ? raw : {};
     const orderNumber = data.orderNumber || fallbackOrderNumber;
 
+    if (isBankOffer && response.status === 403) {
+      setStatus('access_required');
+      setOrderNumber(null);
+      return;
+    }
+
     // A 202 or an explicit held/evidence/review code keeps the page
     // pending even when the payload also carries a success flag: the
     // capture has not settled and must not confirm the order.
     if (
       response.status === 202 ||
-      (isBankOffer && response.status === 403) ||
       data.code === 'REDVAULT_CAPTURE_HELD' ||
       data.code === 'REDVAULT_CAPTURE_EVIDENCE_REVIEW' ||
       data.code === 'REDVAULT_RECONCILIATION_REQUIRED' ||

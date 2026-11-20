@@ -34,6 +34,6 @@ A cancellation containing an unverified bank-offer leg enters refund review even
 
 Kobo rounding can fully discount a unit. Its saved merchandise refund value is zero, and that unit must contribute zero to any later merchandise refund.
 
-Browser verification of a bank offer requires the signed-in buyer's order ownership proof and the matching storefront. Pending and reversed views display only an order number returned by verification. A cancelled or expired authentication session leaves the display pending.
+Browser verification of a bank offer requires the signed-in buyer's order ownership proof and the matching storefront. Pending and reversed views display only an order number returned by verification. A denied session shows instructions for checking the order from the buyer's account and stops automatic polling.
 
 The server computes the approved offer percentage and cap and signs the quote with the order payload. The database validates the signed route proof, exact totals, and persisted allocation. The snapshot table denies direct access to application roles, including `service_role`. Supported checkout RPCs only insert or replay the original snapshot. The shared Paystack parser validates the provider payload structure. The card-offer verifier then checks both Paystack channel fields along with issuer, brand and amount before writing approval.

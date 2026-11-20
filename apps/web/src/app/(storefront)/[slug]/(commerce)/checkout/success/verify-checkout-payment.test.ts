@@ -143,6 +143,23 @@ describe('verifyCheckoutPayment', () => {
     expect(callbacks.setOrderNumber).toHaveBeenCalledWith(null);
   });
 
+  it('stops polling a denied bank-offer request without prompting a new payment', async () => {
+    request.mockResolvedValue(
+      Response.json({ error: 'Verification unavailable' }, { status: 403 })
+    );
+    const callbacks = handlers();
+
+    await verifyCheckoutPayment(
+      { ...params, reference: `BCO-${'a'.repeat(32)}` },
+      callbacks
+    );
+
+    expect(callbacks.setStatus).toHaveBeenCalledWith('access_required');
+    expect(callbacks.setOrderNumber).toHaveBeenCalledWith(null);
+    expect(callbacks.scheduleFailedRedirect).not.toHaveBeenCalled();
+    expect(callbacks.capturePaymentFailed).not.toHaveBeenCalled();
+  });
+
   it('shows reconciliation for a reversed bank-offer payment without triggering retry', async () => {
     request.mockResolvedValue(
       Response.json({

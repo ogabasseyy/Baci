@@ -53,7 +53,7 @@ describe('CheckoutReconciliationView', () => {
       <CheckoutReconciliationView
         orderNumber="BAC-42"
         getHref={getHref}
-        reversed
+        outcome="reversed"
       />
     );
 
@@ -67,6 +67,24 @@ describe('CheckoutReconciliationView', () => {
     expect(
       screen.getByRole('link', { name: /Contact our support team/ })
     ).toHaveAttribute('href', '/test-store/contact');
+  });
+
+  it('directs an unauthorized shopper to their orders without showing an order number', () => {
+    render(
+      <CheckoutReconciliationView
+        orderNumber={null}
+        getHref={getHref}
+        outcome="access_required"
+      />
+    );
+
+    expect(
+      screen.getByRole('heading', { name: 'Sign in to check your payment' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: /Track Order Status/ })
+    ).toHaveAttribute('href', '/test-store/account/orders');
+    expect(screen.queryByText(/^#/)).not.toBeInTheDocument();
   });
 
   it('omits the order number line when unknown', () => {

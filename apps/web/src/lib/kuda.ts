@@ -84,6 +84,11 @@ export interface Biller {
    * the price recheck can still see them. Never sent to clients.
    */
   unreadableItemCodes?: string[];
+  /**
+   * Server-only: Kuda sent this biller a package list that is not a list,
+   * so none of its packages can be confirmed. Never sent to clients.
+   */
+  packagesUnreadable?: true;
 }
 
 export type { BillItem } from './kuda-bill-items';

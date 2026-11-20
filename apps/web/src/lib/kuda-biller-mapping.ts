@@ -3,6 +3,7 @@ import { type BillItem, mapKudaBillItems } from './kuda-bill-items';
 import { normalizeKudaItemCode } from './kuda-item-code';
 import { collectRawFixedItemCodes } from './kuda-raw-fixed-item-codes';
 import { collectRawFixedPricesKobo } from './kuda-raw-fixed-prices';
+import { hasMalformedItemList } from './kuda-raw-malformed-items';
 
 /** A biller as Kuda returns it (camelCase in production). */
 export interface KudaCamelBiller {
@@ -36,7 +37,10 @@ function keptFixedItemCodes(items: BillItem[] | undefined, codes: Set<string>) {
 }
 
 function toBiller(
-  fields: Omit<Biller, 'billItems' | 'unreadableItemCodes'>,
+  fields: Omit<
+    Biller,
+    'billItems' | 'unreadableItemCodes' | 'packagesUnreadable'
+  >,
   rawItems: unknown
 ): Biller {
   const billItems = mapKudaBillItems(rawItems);
@@ -51,6 +55,7 @@ function toBiller(
     ...fields,
     billItems,
     ...(unreadableItemCodes.length > 0 && { unreadableItemCodes }),
+    ...(hasMalformedItemList(rawItems) && { packagesUnreadable: true }),
   };
 }
 

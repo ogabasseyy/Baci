@@ -34,7 +34,9 @@ export function overlayUnreadableCodes(
   saved: Biller[],
   fresh: Biller[]
 ): Biller[] {
-  const marked = fresh.filter((biller) => biller.unreadableItemCodes?.length);
+  const marked = fresh.filter(
+    (biller) => biller.unreadableItemCodes?.length || biller.packagesUnreadable
+  );
   if (marked.length === 0) return saved;
   const matched = new Set<Biller>();
   const corrected = saved.map((biller) => {
@@ -46,12 +48,17 @@ export function overlayUnreadableCodes(
     if (sources.length === 0) return biller;
     for (const source of sources) matched.add(source);
     const codes = sources.flatMap((source) => source.unreadableItemCodes ?? []);
+    // A malformed fresh package list voids every saved package of its biller.
+    const voided = sources.some((source) => source.packagesUnreadable);
     return {
       ...biller,
-      billItems: withoutCodes(
-        biller.billItems,
-        new Set(codes.map(normalizeKudaItemCode))
-      ),
+      billItems: voided
+        ? undefined
+        : withoutCodes(
+            biller.billItems,
+            new Set(codes.map(normalizeKudaItemCode))
+          ),
+      ...(voided && { packagesUnreadable: true as const }),
       unreadableItemCodes: [
         ...new Set([...(biller.unreadableItemCodes ?? []), ...codes]),
       ],

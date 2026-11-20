@@ -150,4 +150,63 @@ describe('bugfix: a dropped data plan fell back to another plan at the same pric
     await expect(buy()).rejects.toThrow(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
     vi.useRealTimers();
   });
+
+  it('fails closed when a request names the provider and one of its plans was dropped', async () => {
+    mockGetDataProviders.mockResolvedValue(
+      mtnAnswer([
+        { code: 'MTN-1GB-MONTHLY', amount: '' },
+        { code: 'MTN-1GB-PROMO', amount: 100000 },
+      ])
+    );
+
+    await expect(
+      resolveKudaDataPlanForPurchase({
+        amount: 1000,
+        dataPlanCode: 'MTN NG DATA',
+        networkProvider: NetworkProvider.MTN,
+      })
+    ).rejects.toThrow(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
+  });
+
+  it('fails closed when the network provider sent a malformed plan list', async () => {
+    mockGetDataProviders.mockResolvedValue([
+      ...mapKudaBillersAnswer(
+        {
+          billers: [
+            {
+              id: 'mtn',
+              name: 'MTN NG DATA',
+              description: 'Internet Data',
+              billTypeId: 'data',
+              billItems: [
+                {
+                  itemCode: 'G',
+                  itemName: 'G',
+                  amount: 0,
+                  isFixedPrice: false,
+                  billItems: {},
+                },
+              ],
+            },
+          ],
+        },
+        'Internet Data'
+      ).billers,
+      ...mtnAnswer([{ code: 'MTN-1GB-PROMO', amount: 100000 }]).map(
+        (provider) => ({
+          ...provider,
+          billerId: 'mtn-sme',
+          billerName: 'MTN SME DATA',
+        })
+      ),
+    ]);
+
+    await expect(
+      resolveKudaDataPlanForPurchase({
+        amount: 1000,
+        dataPlanCode: 'MTN-1GB-MONTHLY',
+        networkProvider: NetworkProvider.MTN,
+      })
+    ).rejects.toThrow(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
+  });
 });

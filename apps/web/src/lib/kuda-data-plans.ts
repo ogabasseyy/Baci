@@ -9,6 +9,7 @@ import { KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE } from '@/lib/kuda-bill-item-price-
 import { logger } from '@/lib/logger';
 import { formatNaira } from './kuda-format-naira';
 import { normalizeKudaItemCode } from './kuda-item-code';
+import { providerMatchesNetwork } from './kuda-provider-matches-network';
 import { overlayUnreadableCodes } from './kuda-unreadable-overlay';
 
 const DATA_PLAN_CACHE_TTL_MS = 60_000;
@@ -76,24 +77,6 @@ function providerMatchesCode(provider: Biller, dataPlanCode: string) {
     normalizeComparable(provider.billerId) === normalizedCode ||
     normalizeComparable(provider.billerName) === normalizedCode
   );
-}
-
-function providerMatchesNetwork(
-  provider: Biller,
-  networkProvider: NetworkProvider
-) {
-  const normalizedProviderName = normalizeComparable(provider.billerName);
-  const normalizedNetwork = normalizeComparable(networkProvider);
-  if (normalizedNetwork === '9mobile') {
-    return (
-      normalizedProviderName.includes('9mobile') ||
-      normalizedProviderName.includes('9') ||
-      normalizedProviderName.includes('t2') ||
-      normalizedProviderName.includes('etisalat')
-    );
-  }
-
-  return normalizedProviderName.includes(normalizedNetwork);
 }
 
 /** The saved data plans, while they are under a day old at `at`. */
@@ -266,6 +249,19 @@ export async function resolveKudaDataPlanForPurchase({
     );
   }
 
+  // The amount fallback can't tell a dropped plan from a stale one, so a
+  // provider in scope with a dropped plan or an unreadable package list
+  // (including one named instead of a plan code) makes it fail closed.
+  if (
+    providers.some(
+      (provider) =>
+        (provider.unreadableItemCodes?.length || provider.packagesUnreadable) &&
+        (providerMatchesCode(provider, originalDataPlanCode) ||
+          providerMatchesNetwork(provider, networkProvider))
+    )
+  ) {
+    throw new Error(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
+  }
   const providerScopedCandidates = candidates.filter(
     ({ provider }) =>
       providerMatchesCode(provider, originalDataPlanCode) ||

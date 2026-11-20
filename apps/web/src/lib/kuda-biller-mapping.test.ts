@@ -142,4 +142,24 @@ describe('mapKudaBillersAnswer', () => {
 
     expect(billers[0]).not.toHaveProperty('unreadableItemCodes');
   });
+
+  it('marks a biller whose package list is not a list', () => {
+    const { billers } = mapKudaBillersAnswer(
+      {
+        billers: [
+          {
+            id: 'x',
+            name: 'X',
+            description: 'Cable',
+            billTypeId: 'cable',
+            billItems: {},
+          },
+        ],
+      },
+      'CableTv'
+    );
+
+    expect(billers[0]?.packagesUnreadable).toBe(true);
+    expect(billers[0]?.billItems).toBeUndefined();
+  });
 });

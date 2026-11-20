@@ -198,6 +198,7 @@ export async function assertKudaBillItemPriceCurrent({
     // it stands in here as an unreadable (₦0) fixed price, so its biller
     // can never be skipped as if it didn't offer the package.
     if (
+      biller.packagesUnreadable ||
       biller.unreadableItemCodes?.some(
         (unreadable) => normalizeKudaItemCode(unreadable) === code
       )

@@ -13,6 +13,8 @@ vi.mock('@/hooks/useAuth', () => ({
 }));
 vi.mock('@/hooks/useStaffOrderFollowUps', () => ({
   useStaffOrderFollowUps: () => ({
+    canWrite: true,
+    refetchWriteAccess: vi.fn(),
     resetSave: vi.fn(),
     ...mocks.useStaffOrderFollowUps(),
   }),

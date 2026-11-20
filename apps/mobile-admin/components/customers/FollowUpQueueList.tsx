@@ -97,7 +97,9 @@ export function FollowUpQueueList({
   const refreshQueue = async () => {
     await Promise.allSettled([
       refresh(),
-      ...(merchant?.id && viewerId ? [staffFollowUps.refetch()] : []),
+      ...(merchant?.id && viewerId
+        ? [staffFollowUps.refetch(), staffFollowUps.refetchWriteAccess()]
+        : []),
     ]);
   };
 
@@ -168,6 +170,7 @@ export function FollowUpQueueList({
               <StaffFollowUpAction
                 followUp={followUp}
                 viewerId={viewerId}
+                canWrite={staffFollowUps.canWrite}
                 onPress={() => {
                   staffFollowUps.resetSave();
                   setSelection({
@@ -242,6 +245,7 @@ export function FollowUpQueueList({
             'Customer'
           }
           viewerId={viewerId}
+          canWrite={staffFollowUps.canWrite}
           followUp={selectedFollowUp}
           justClaimed={claimedOrderId === selectedOrder.id}
           busy={staffFollowUps.isSaving}

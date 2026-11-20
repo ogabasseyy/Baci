@@ -19,6 +19,7 @@ interface StaffFollowUpEditorProps {
   customerName: string;
   followUp?: StaffFollowUp;
   viewerId?: string;
+  canWrite: boolean;
   /** True right after this viewer claimed the follow-up in this sheet. */
   justClaimed?: boolean;
   busy: boolean;
@@ -33,6 +34,7 @@ export function StaffFollowUpEditor({
   customerName,
   followUp,
   viewerId,
+  canWrite,
   justClaimed = false,
   busy,
   saveError,
@@ -59,16 +61,18 @@ export function StaffFollowUpEditor({
   const [pickingDate, setPickingDate] = useState(false);
   const [error, setError] = useState('');
   const isClosed = followUp?.stage === 'closed';
-  const canClaim = Boolean(viewerId && !isClosed && !followUp?.assignee_id);
+  const canClaim = Boolean(
+    canWrite && viewerId && !isClosed && !followUp?.assignee_id
+  );
   const canEdit = Boolean(
-    viewerId && !isClosed && followUp?.assignee_id === viewerId
+    canWrite && viewerId && !isClosed && followUp?.assignee_id === viewerId
   );
 
   const stale = draft !== null && (!canEdit || revision !== followUp?.revision);
   const editDisabled = busy || stale;
 
   const submit = async () => {
-    if (editDisabled) return;
+    if (editDisabled || (!canClaim && !canEdit)) return;
     setError('');
     try {
       if (!followUp?.assignee_id) await onClaim();

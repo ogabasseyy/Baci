@@ -133,6 +133,17 @@ export function useStaffOrderFollowUps(
       return fetchFollowUps(merchantId, orderIds);
     },
   });
+  const writeAccess = useQuery({
+    queryKey: [...scope, 'can-write'],
+    enabled: Boolean(merchantId && viewerId),
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('can_write_order_follow_ups', {
+        p_merchant_id: merchantId,
+      });
+      if (error) throw error;
+      return data === true;
+    },
+  });
 
   const mutation = useMutation({
     mutationFn: async (change: FollowUpChange) => {
@@ -188,6 +199,8 @@ export function useStaffOrderFollowUps(
 
   return {
     ...query,
+    canWrite: !writeAccess.isError && writeAccess.data === true,
+    refetchWriteAccess: writeAccess.refetch,
     data: query.data?.records,
     openOrders: query.data?.openOrders,
     isLimited: query.data?.isLimited ?? false,

@@ -21,7 +21,9 @@ vi.mock('@/hooks/useTheme', () => ({
 describe('StaffFollowUpAction', () => {
   it('opens the claim flow for an unassigned follow-up', () => {
     const onPress = vi.fn();
-    render(<StaffFollowUpAction viewerId={VIEWER} onPress={onPress} />);
+    render(
+      <StaffFollowUpAction viewerId={VIEWER} canWrite onPress={onPress} />
+    );
     expect(screen.getByText('Needs follow-up · Unassigned')).toBeVisible();
     fireEvent.click(screen.getByText('Claim follow-up'));
     expect(onPress).toHaveBeenCalledOnce();
@@ -44,6 +46,7 @@ describe('StaffFollowUpAction', () => {
       <StaffFollowUpAction
         followUp={row}
         viewerId="teammate"
+        canWrite
         onPress={onPress}
       />
     );
@@ -52,7 +55,12 @@ describe('StaffFollowUpAction', () => {
     expect(screen.getByText('Follow up on 2026-11-24')).toBeVisible();
     expect(screen.getByText('View follow-up')).toBeVisible();
     rerender(
-      <StaffFollowUpAction followUp={row} viewerId={VIEWER} onPress={onPress} />
+      <StaffFollowUpAction
+        followUp={row}
+        viewerId={VIEWER}
+        canWrite
+        onPress={onPress}
+      />
     );
     expect(screen.getByText('Update follow-up')).toBeVisible();
   });

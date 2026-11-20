@@ -9,12 +9,14 @@ import {
 interface StaffFollowUpActionProps {
   followUp?: StaffFollowUp;
   viewerId?: string;
+  canWrite: boolean;
   onPress: () => void;
 }
 
 export function StaffFollowUpAction({
   followUp,
   viewerId,
+  canWrite,
   onPress,
 }: StaffFollowUpActionProps) {
   const { colors } = useTheme();
@@ -42,9 +44,9 @@ export function StaffFollowUpAction({
         </Text>
       ) : null}
       <Text style={{ color: colors.gold }}>
-        {!assigneeId
+        {canWrite && !assigneeId
           ? 'Claim follow-up'
-          : assigneeId === viewerId
+          : canWrite && assigneeId === viewerId
             ? 'Update follow-up'
             : 'View follow-up'}
       </Text>

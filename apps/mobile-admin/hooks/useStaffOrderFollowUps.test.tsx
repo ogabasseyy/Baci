@@ -26,6 +26,15 @@ describe('useStaffOrderFollowUps', () => {
   });
 
   describe('loading', () => {
+    it('loads the signed-in user’s follow-up write capability for this store', async () => {
+      mocks.rpc.mockResolvedValue(ok(true));
+      const { result } = render();
+      await waitFor(() => expect(result.current.canWrite).toBe(true));
+      expect(mocks.rpc).toHaveBeenCalledWith('can_write_order_follow_ups', {
+        p_merchant_id: MERCHANT,
+      });
+    });
+
     it('does not query until the store and the viewer are known', () => {
       const noStore = render([], { viewerId: VIEWER });
       const noViewer = render([], { merchantId: MERCHANT });

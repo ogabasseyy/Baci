@@ -36,12 +36,29 @@ function props() {
     orderId: 'order',
     customerName: 'Customer',
     viewerId: 'staff',
+    canWrite: true,
     busy: false,
     onClose: vi.fn(),
     onClaim: vi.fn().mockResolvedValue(claimed),
     onSave: vi.fn().mockResolvedValue(claimed),
   };
 }
+
+it.each([
+  undefined,
+  claimed,
+])('lets view-only staff read a follow-up without mutation controls', (followUp) => {
+  const options = props();
+  render(
+    <StaffFollowUpEditor {...options} followUp={followUp} canWrite={false} />
+  );
+  expect(
+    screen.getByText(followUp ? 'Handled by Ada' : 'Unassigned')
+  ).toBeVisible();
+  expect(screen.queryByRole('button', { name: 'Claim follow-up' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Save follow-up' })).toBeNull();
+  expect(screen.queryByLabelText('What happened')).toBeNull();
+});
 
 it('lets a team member claim an unassigned follow-up', async () => {
   const options = props();

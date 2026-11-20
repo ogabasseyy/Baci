@@ -11,6 +11,25 @@ import { FollowUpQueueList } from './FollowUpQueueList';
 describe('FollowUpQueueList', () => {
   beforeEach(resetFollowUpQueueMocks);
 
+  it('offers view-only staff a details action for unassigned work', () => {
+    mocks.useFollowUpQueue.mockReturnValue({
+      failedOrders: [{ id: 'order-1', created_at: '2026-07-27T08:00:00Z' }],
+      merchant: { id: 'merchant-1' },
+      viewState: { status: 'ready' },
+    });
+    mocks.useStaffOrderFollowUps.mockReturnValue({
+      isSuccess: true,
+      canWrite: false,
+    });
+    render(
+      <FollowUpQueueList {...defaultProps} renderOrder={() => <div>Ada</div>} />
+    );
+
+    expect(screen.queryByText('Claim follow-up')).toBeNull();
+    fireEvent.click(screen.getByText('View follow-up'));
+    expect(screen.getByText('Open follow-up editor')).toBeVisible();
+  });
+
   it('preserves a claim conflict when refreshing changes the editor revision', () => {
     mocks.useFollowUpQueue.mockReturnValue({
       failedOrders: [{ id: 'order-1', created_at: '2026-07-27T08:00:00Z' }],

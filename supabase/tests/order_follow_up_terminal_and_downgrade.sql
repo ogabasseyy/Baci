@@ -110,7 +110,7 @@ $$;
 RESET ROLE;
 
 -- A teammate may read follow-up labels without access to the staff directory.
-UPDATE public.staff_members SET name = NULL, permissions = '{}'
+UPDATE public.staff_members SET name = 'Staff <staff@example.invalid>', permissions = '{}'
 WHERE user_id = 'aa560000-0000-4000-8000-000000000002';
 UPDATE public.order_follow_ups SET assignee_id = NULL
 WHERE order_id = 'aa560000-0000-4000-8000-000000000021';
@@ -124,7 +124,10 @@ BEGIN
     'aa560000-0000-4000-8000-000000000011', 'aa560000-0000-4000-8000-000000000021'
   );
   IF row_data->>'assignee_name' IS DISTINCT FROM 'Team member' THEN
-    RAISE EXCEPTION 'An unnamed assignee exposed their email address';
+    RAISE EXCEPTION 'The assignee label exposed a formatted email address';
+  END IF;
+  IF public.can_write_order_follow_ups('aa560000-0000-4000-8000-000000000011') IS NOT TRUE THEN
+    RAISE EXCEPTION 'An eligible staff member did not receive write capability';
   END IF;
 END
 $$;
@@ -134,6 +137,17 @@ RESET ROLE;
 UPDATE public.role_permissions
 SET permissions = jsonb_set(permissions, '{customers,edit}', 'false')
 WHERE role = 'admin';
+
+SET LOCAL ROLE authenticated;
+DO $$
+BEGIN
+  PERFORM set_config('request.jwt.claim.sub', 'aa560000-0000-4000-8000-000000000002', true);
+  IF public.can_write_order_follow_ups('aa560000-0000-4000-8000-000000000011') IS NOT FALSE THEN
+    RAISE EXCEPTION 'A view-only staff member received write capability';
+  END IF;
+END
+$$;
+RESET ROLE;
 
 DO $$
 BEGIN

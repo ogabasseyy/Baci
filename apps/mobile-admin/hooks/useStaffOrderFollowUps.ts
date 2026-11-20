@@ -190,6 +190,11 @@ export function useStaffOrderFollowUps(
       if (error?.code === 'PT410') {
         throw new Error('This follow-up is already closed.');
       }
+      if (error?.code === '42501') {
+        throw new Error(
+          'This follow-up is no longer available to you. Refresh and try again.'
+        );
+      }
       if (error?.code === '23505') {
         throw new Error('Someone else has already claimed this follow-up.');
       }

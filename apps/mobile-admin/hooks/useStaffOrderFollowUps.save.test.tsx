@@ -99,7 +99,16 @@ describe('useStaffOrderFollowUps saving', () => {
         'PT409',
         'This follow-up changed. Check the latest details before saving.',
       ],
-      ['claim', '42501', 'Could not save the follow-up. Try again.'],
+      [
+        'claim',
+        '42501',
+        'This follow-up is no longer available to you. Refresh and try again.',
+      ],
+      [
+        'update',
+        '42501',
+        'This follow-up is no longer available to you. Refresh and try again.',
+      ],
       ['update', 'XX000', 'Could not save the follow-up. Try again.'],
       // bugfix: 40001 made PostgREST retry the transaction, so it is no longer the stale signal.
       ['update', '40001', 'Could not save the follow-up. Try again.'],

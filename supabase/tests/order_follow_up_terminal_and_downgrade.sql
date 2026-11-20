@@ -1,6 +1,13 @@
 BEGIN;
 DO $$
 BEGIN
+  IF EXISTS (
+    SELECT 1 FROM unnest(ARRAY['anon', 'authenticated', 'service_role']) AS db_role
+    WHERE has_function_privilege(db_role, 'private.normalize_order_follow_up_name()', 'EXECUTE')
+  ) THEN
+    RAISE EXCEPTION 'A client role can execute the private handler-label trigger';
+  END IF;
+
   IF NOT EXISTS (
     SELECT 1 FROM pg_index i
     WHERE i.indexrelid = to_regclass('public.order_follow_ups_open_due_idx')

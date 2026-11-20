@@ -45,6 +45,11 @@ BEGIN
     RAISE EXCEPTION 'Update returned more or fewer fields than the client contract';
   END IF;
   BEGIN
+    PERFORM public.update_order_follow_up(merchant_id, order_id, 2, 'waiting', 'Out of range', DATE '1899-12-31');
+    RAISE EXCEPTION 'An out-of-range follow-up date was accepted';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  BEGIN
     PERFORM public.update_order_follow_up(merchant_id, order_id, 1, 'closed', '', NULL);
     RAISE EXCEPTION 'Stale update overwrote a newer note';
   EXCEPTION WHEN SQLSTATE 'PT409' THEN NULL;

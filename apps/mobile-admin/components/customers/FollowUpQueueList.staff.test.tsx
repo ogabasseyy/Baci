@@ -99,6 +99,35 @@ describe('FollowUpQueueList', () => {
     expect(screen.queryByText('Claim follow-up')).toBeNull();
   });
 
+  it('keeps details readable and lets staff retry when write access cannot be checked', () => {
+    const refetchWriteAccess = vi.fn();
+    mocks.useFollowUpQueue.mockReturnValue({
+      failedOrders: [{ id: 'order-1', created_at: '2026-07-27T08:00:00Z' }],
+      merchant: { id: 'merchant-1' },
+      refresh: mocks.refresh,
+      viewState: { status: 'ready' },
+    });
+    mocks.useStaffOrderFollowUps.mockReturnValue({
+      isSuccess: true,
+      canWrite: false,
+      isWriteAccessError: true,
+      refetch: vi.fn(),
+      refetchWriteAccess,
+    });
+    render(
+      <FollowUpQueueList {...defaultProps} renderOrder={() => <div>Ada</div>} />
+    );
+
+    expect(screen.getByText('View follow-up')).toBeVisible();
+    expect(
+      screen.getByText("Couldn't check who can edit follow-ups.")
+    ).toBeVisible();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Retry loading follow-ups' })
+    );
+    expect(refetchWriteAccess).toHaveBeenCalledOnce();
+  });
+
   it('keeps the checkout provider status on a follow-up still present in the checkout feed', () => {
     const order = {
       id: 'order-1',

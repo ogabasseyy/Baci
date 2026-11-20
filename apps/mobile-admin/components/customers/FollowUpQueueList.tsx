@@ -75,6 +75,11 @@ export function FollowUpQueueList({
   const [claimedOrderId, setClaimedOrderId] = useState<string | null>(null);
   const followUpCount = orders.length;
   const isLimited = isFollowUpLimited || staffFollowUps.isLimited;
+  const hasQueueError = Boolean(isFailedOrdersError || staffFollowUps.isError);
+  const isRetrying =
+    isRefreshing ||
+    staffFollowUps.isRefetching ||
+    staffFollowUps.isRefetchingWriteAccess;
   const emptyViewState =
     followUpCount === 0 && staffFollowUps.isLoading
       ? ({ status: 'loading' } as const)
@@ -193,7 +198,7 @@ export function FollowUpQueueList({
         contentContainerStyle={styles.listContent}
         refreshControl={
           <RefreshControl
-            refreshing={isRefreshing || staffFollowUps.isRefetching}
+            refreshing={isRetrying}
             onRefresh={refreshQueue}
             tintColor={colors.gold}
             colors={[colors.gold]}
@@ -209,14 +214,14 @@ export function FollowUpQueueList({
                 Loading team follow-up details…
               </Text>
             ) : null}
-            {(isFailedOrdersError || isLimited || staffFollowUps.isError) &&
-            (followUpCount > 0 || staffFollowUps.isError) ? (
+            {followUpCount > 0 || staffFollowUps.isError ? (
               <FollowUpErrorBanner
-                hasError={Boolean(
-                  isFailedOrdersError || staffFollowUps.isError
-                )}
+                hasError={hasQueueError}
+                hasWriteAccessError={
+                  staffFollowUps.isWriteAccessError && followUpCount > 0
+                }
                 isLimited={isLimited}
-                isRetrying={isRefreshing || staffFollowUps.isRefetching}
+                isRetrying={isRetrying}
                 onRetry={refreshQueue}
               />
             ) : null}

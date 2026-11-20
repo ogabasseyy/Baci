@@ -35,6 +35,20 @@ describe('useStaffOrderFollowUps', () => {
       });
     });
 
+    it('distinguishes a failed capability check from a successful denial', async () => {
+      mocks.rpc
+        .mockResolvedValueOnce(failed())
+        .mockResolvedValueOnce(ok(false));
+      const { result } = render();
+      await waitFor(() => expect(result.current.isWriteAccessError).toBe(true));
+      expect(result.current.canWrite).toBe(false);
+      await result.current.refetchWriteAccess();
+      await waitFor(() =>
+        expect(result.current.isWriteAccessError).toBe(false)
+      );
+      expect(result.current.canWrite).toBe(false);
+    });
+
     it('does not query until the store and the viewer are known', () => {
       const noStore = render([], { viewerId: VIEWER });
       const noViewer = render([], { merchantId: MERCHANT });

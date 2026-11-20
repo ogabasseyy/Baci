@@ -200,6 +200,8 @@ export function useStaffOrderFollowUps(
   return {
     ...query,
     canWrite: !writeAccess.isError && writeAccess.data === true,
+    isWriteAccessError: writeAccess.isError,
+    isRefetchingWriteAccess: writeAccess.isRefetching,
     refetchWriteAccess: writeAccess.refetch,
     data: query.data?.records,
     openOrders: query.data?.openOrders,

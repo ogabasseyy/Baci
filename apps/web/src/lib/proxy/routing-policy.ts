@@ -1,3 +1,4 @@
+import { BRILSTASH_FEED_PATH } from '@/config/brilstash-feed';
 import { storefrontRouteSegments } from '@/config/storefront-route-segments';
 import {
   isPlatformHost,
@@ -43,6 +44,10 @@ export function getStorefrontContentSegments(
 
 export function normalizePathnameForCompare(pathname: string): string {
   return (pathname.replace(/\/+$/g, '') || '/').toLowerCase();
+}
+
+export function isBrilStashFeedPath(pathname: string): boolean {
+  return normalizePathnameForCompare(pathname) === BRILSTASH_FEED_PATH;
 }
 
 export function getNestedProductSubrouteSegment(
@@ -199,7 +204,9 @@ export function getRouteType(
     return 'auth';
   }
 
-  if (pathname.startsWith('/api')) {
+  // The generic API prefix is lowercase. The BrilStash match also excludes
+  // case and trailing-slash variants from storefront routing.
+  if (pathname.startsWith('/api') || isBrilStashFeedPath(pathname)) {
     return 'api';
   }
 

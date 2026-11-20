@@ -13,10 +13,20 @@ test('Swift lowers the Expo async promise callback for a noncopyable result', {
     'utf8'
   );
   const callback = source.match(
-    /\{\s*\[promise\]\s*(\w+)\s+in\s*(switch\s+consume\s+\1\s*\{[^{}]*\})/
+    /\{\s*\[promise\]\s*(\w+)\s+in\s*(switch\s+consume\s+\1\s*\{)/
   );
   assert.ok(callback, 'Expo must pass its owned result to the promise callback');
-  const [, parameter, resultSwitch] = callback;
+  const [, parameter, switchStart] = callback;
+  const bodyStart = callback.index + callback[0].length;
+  let end = bodyStart;
+  let braceDepth = 1;
+  while (braceDepth > 0 && end < source.length) {
+    if (source[end] === '{') braceDepth += 1;
+    if (source[end] === '}') braceDepth -= 1;
+    end += 1;
+  }
+  assert.equal(braceDepth, 0, 'Expo owned result switch must close');
+  const resultSwitch = switchStart + source.slice(bodyStart, end);
 
   const directory = mkdtempSync(join(tmpdir(), 'baci-expo-async-promise-'));
   try {

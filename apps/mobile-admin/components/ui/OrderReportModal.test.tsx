@@ -219,7 +219,7 @@ describe('OrderReportModal', () => {
     ).toContainElement(screen.getByText('Orders Report'));
     expect(screen.getByLabelText('order-report-modal')).toHaveAttribute(
       'data-orientations',
-      'portrait,landscape'
+      'portrait,portrait-upside-down,landscape'
     );
     expect(screen.getByText('Orders Report').closest('button')).toHaveStyle({
       maxHeight: '80%',

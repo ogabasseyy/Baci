@@ -116,7 +116,7 @@ describe('DateRangePicker', () => {
     ).toContainElement(screen.getByText('Select Date Range'));
     expect(screen.getByLabelText('date-range-picker')).toHaveAttribute(
       'data-orientations',
-      'portrait,landscape'
+      'portrait,portrait-upside-down,landscape'
     );
     expect(screen.getByText('Select Date Range').closest('button')).toHaveStyle(
       {

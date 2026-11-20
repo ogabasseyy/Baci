@@ -1,4 +1,4 @@
-import { Dimensions, Platform, useWindowDimensions } from 'react-native';
+import { Platform, useWindowDimensions } from 'react-native';
 import {
   Extrapolate,
   interpolate,
@@ -8,14 +8,18 @@ import {
   withTiming,
 } from 'react-native-reanimated';
 import type Colors from '@/constants/Colors';
+import { useKeyboard } from '@/hooks/use-keyboard';
 
 type ColorsScheme = (typeof Colors)['light'];
 
 export function useProductDetailAnimations(colors: ColorsScheme) {
   const { height, width } = useWindowDimensions();
-  // Android adjustResize changes window height for the keyboard, not screen height.
+  const { isKeyboardVisible, keyboardHeight } = useKeyboard();
+  // Android reports the window above the keyboard in adjustResize mode.
   const availableHeight =
-    Platform.OS === 'android' ? Dimensions.get('screen').height : height;
+    Platform.OS === 'android' && isKeyboardVisible
+      ? height + keyboardHeight
+      : height;
   const headerHeight = Math.min(width, availableHeight);
   const scrollY = useSharedValue(0);
   const onScroll = useAnimatedScrollHandler({

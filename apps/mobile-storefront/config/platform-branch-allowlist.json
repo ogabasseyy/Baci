@@ -6,7 +6,7 @@
     },
     {
       "path": "components/product/hooks/use-product-detail-animations.ts",
-      "justification": "Android caps the hero at the screen height so keyboard adjustResize preserves the scroll thresholds; other platforms use the live window height."
+      "justification": "Android adds back the keyboard height removed by adjustResize; all window sizes still cap the hero height and scroll thresholds."
     },
     {
       "path": "app/cart.tsx",

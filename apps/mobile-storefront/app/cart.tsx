@@ -1,11 +1,12 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
-import { type ReactNode, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useShallow } from 'zustand/react/shallow';
 import { CartEmptyState } from '@/components/cart/CartEmptyState';
 import CartLoadedView from '@/components/cart/CartLoadedView';
+import { renderCartShell } from '@/components/cart/CartScreenShell';
 import CartStateView from '@/components/cart/CartStateView';
 import { CartStatusOnlyScreen } from '@/components/cart/CartStatusOnlyScreen';
 import { NativeCartAccountPanel } from '@/components/cart/NativeCartAccountPanel';
@@ -18,7 +19,6 @@ import { useCartReprice } from '@/components/cart/use-cart-reprice';
 import { useCartScreenItemHandlers } from '@/components/cart/use-cart-screen-item-handlers';
 import { useCartStatusOnly } from '@/components/cart/use-cart-status-only';
 import { warmCheckoutEntry } from '@/components/checkout/checkout-entry-prefetch';
-import { StorefrontScreenShell } from '@/components/storefront/StorefrontScreenShell';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { MODAL_DISMISS_FALLBACK_MS } from '@/constants/modal-dismiss';
@@ -30,18 +30,6 @@ import { CONFIG } from '@/lib/config';
 import { getTemplateConfig } from '@/lib/templates';
 import { formatPrice, useCartStore } from '@/stores/cart-store';
 import { markSharedCartIntent } from '@/stores/shared-cart-writer';
-
-function renderCartShell(children: ReactNode) {
-  return (
-    <StorefrontScreenShell
-      edges={['left', 'right']}
-      themeBackground
-      testID="storefront-cart-safe-area"
-    >
-      {children}
-    </StorefrontScreenShell>
-  );
-}
 
 export default function CartScreen({
   onStartShopping = () => router.dismissTo('/'),

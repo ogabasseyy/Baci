@@ -87,4 +87,16 @@ describe('admin GIG delivery rate selection', () => {
       { p_order_id: order.id, p_merchant_id: order.merchant_id }
     );
   });
+  it('preserves regular quotes during a settlement lookup failure', async () => {
+    const { rpc, db } = fixture(null);
+    rpc.mockResolvedValue({ data: null, error: { code: '08006' } });
+    expect(
+      await selectAdminOrderGiglRate(db, { ...order, source: 'online_store' }, [
+        settled,
+        cheaper,
+      ])
+    ).toEqual({ quote: cheaper });
+    const partner = await selectAdminOrderGiglRate(db, order, [cheaper]);
+    expect(partner.error?.status).toBe(503);
+  });
 });

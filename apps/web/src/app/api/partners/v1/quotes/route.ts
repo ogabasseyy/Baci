@@ -92,7 +92,6 @@ export async function POST(request: Request) {
       });
       return errorResponse(503, 'QUOTE_UNAVAILABLE', requestId);
     }
-
     const catalog = await profile.loadCatalog();
     const byId = new Map(
       catalog.listings.map((listing) => [listing.listing_id, listing])
@@ -120,7 +119,6 @@ export async function POST(request: Request) {
         base_unit_price_minor: listing.base_price_minor,
       });
     }
-
     const db = createAnonClient();
     const [metadata, origin, merchant] = await Promise.all([
       db
@@ -135,17 +133,17 @@ export async function POST(request: Request) {
         .eq('id', merchantId)
         .maybeSingle(),
     ]);
-    if (
-      metadata.error ||
-      merchant.error ||
-      !merchant.data ||
-      !origin.ok ||
-      !origin.sender ||
-      origin.sender.countryCode !== 'NG'
-    ) {
+    if (metadata.error || merchant.error || !merchant.data || !origin.ok)
+      return errorResponse(503, 'QUOTE_UNAVAILABLE', requestId);
+    const country = origin.country?.trim().toUpperCase() || 'NG';
+    if (origin.sender?.countryCode !== 'NG' || country !== 'NG') {
+      logger.warn({
+        message: 'Partner quote sender is missing or outside Nigeria',
+        connectionId,
+        requestId,
+      });
       return errorResponse(503, 'QUOTE_UNAVAILABLE', requestId);
     }
-
     const parcel = buildPartnerQuoteParcel(
       items,
       metadata.data,

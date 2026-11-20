@@ -41,11 +41,21 @@ export function StaffFollowUpEditor({
   onSave,
 }: StaffFollowUpEditorProps) {
   const { colors } = useTheme();
-  const [stage, setStage] = useState<StaffFollowUpStage>(
-    followUp?.stage ?? 'needs_follow_up'
-  );
-  const [outcome, setOutcome] = useState(followUp?.outcome ?? '');
-  const [dueOn, setDueOn] = useState(followUp?.follow_up_on ?? null);
+  const [draft, setDraft] = useState<{
+    stage: StaffFollowUpStage;
+    outcome: string;
+    dueOn: string | null;
+    revision: number | undefined;
+  } | null>(null);
+  const saved = {
+    stage: followUp?.stage ?? 'needs_follow_up',
+    outcome: followUp?.outcome ?? '',
+    dueOn: followUp?.follow_up_on ?? null,
+    revision: followUp?.revision,
+  } as const;
+  const { stage, outcome, dueOn, revision } = draft ?? saved;
+  const editFields = (fields: Partial<typeof saved>) =>
+    setDraft({ stage, outcome, dueOn, revision, ...fields });
   const [pickingDate, setPickingDate] = useState(false);
   const [error, setError] = useState('');
   const isClosed = followUp?.stage === 'closed';
@@ -54,14 +64,18 @@ export function StaffFollowUpEditor({
     viewerId && !isClosed && followUp?.assignee_id === viewerId
   );
 
+  const stale = draft !== null && (!canEdit || revision !== followUp?.revision);
+  const editDisabled = busy || stale;
+
   const submit = async () => {
+    if (editDisabled) return;
     setError('');
     try {
       if (!followUp?.assignee_id) await onClaim();
       else {
         await onSave({
           order_id: orderId,
-          revision: followUp.revision,
+          revision: revision ?? followUp.revision,
           stage,
           outcome: outcome.trim(),
           follow_up_on: stage === 'closed' ? null : dueOn,
@@ -81,9 +95,7 @@ export function StaffFollowUpEditor({
     <AppSheetModal
       accessibilityLabel="Staff follow-up"
       visible
-      onClose={() => {
-        if (!busy) onClose();
-      }}
+      onClose={busy ? () => undefined : onClose}
       dismissOnBackdropPress={!busy}
     >
       <View style={styles.content}>
@@ -106,7 +118,7 @@ export function StaffFollowUpEditor({
             set the next follow-up date.
           </Text>
         ) : null}
-        {canEdit ? (
+        {canEdit || draft ? (
           <>
             <View style={styles.stages}>
               {staffFollowUpStages.map((item) => (
@@ -115,11 +127,11 @@ export function StaffFollowUpEditor({
                   accessibilityRole="button"
                   accessibilityState={{
                     selected: stage === item,
-                    disabled: busy,
+                    disabled: editDisabled,
                   }}
-                  disabled={busy}
+                  disabled={editDisabled}
                   onPress={() => {
-                    setStage(item);
+                    editFields({ stage: item });
                     setPickingDate(false);
                   }}
                   style={[
@@ -140,8 +152,8 @@ export function StaffFollowUpEditor({
               placeholder="What happened?"
               placeholderTextColor={colors.textSecondary}
               value={outcome}
-              onChangeText={setOutcome}
-              editable={!busy}
+              onChangeText={(note) => editFields({ outcome: note })}
+              editable={!editDisabled}
               maxLength={STAFF_FOLLOW_UP_OUTCOME_LIMIT}
               multiline
               style={[
@@ -159,7 +171,7 @@ export function StaffFollowUpEditor({
                 <Pressable
                   accessibilityRole="button"
                   onPress={() => setPickingDate(true)}
-                  disabled={busy}
+                  disabled={editDisabled}
                   style={styles.option}
                 >
                   <Text style={{ color: colors.text }}>
@@ -171,18 +183,20 @@ export function StaffFollowUpEditor({
                 {dueOn ? (
                   <Pressable
                     accessibilityRole="button"
-                    onPress={() => setDueOn(null)}
-                    disabled={busy}
+                    onPress={() => editFields({ dueOn: null })}
+                    disabled={editDisabled}
                     style={styles.option}
                   >
                     <Text style={{ color: colors.text }}>Clear date</Text>
                   </Pressable>
                 ) : null}
-                {pickingDate && (
+                {pickingDate && !editDisabled && (
                   <AppDatePickerField
                     value={dueOn ? new Date(`${dueOn}T12:00:00`) : new Date()}
                     onClose={() => setPickingDate(false)}
-                    onConfirm={(value) => setDueOn(getLocalDateKey(value))}
+                    onConfirm={(value) =>
+                      editFields({ dueOn: getLocalDateKey(value) })
+                    }
                   />
                 )}
               </>
@@ -201,6 +215,26 @@ export function StaffFollowUpEditor({
             ) : null}
           </>
         )}
+        {stale ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Discard draft and load saved details"
+            accessibilityHint="This follow-up changed while you were editing."
+            disabled={busy}
+            onPress={() => {
+              setDraft(null);
+              setPickingDate(false);
+              setError('');
+            }}
+          >
+            <Text style={{ color: colors.error }}>
+              This follow-up changed while you were editing.
+            </Text>
+            <Text style={{ color: colors.primary }}>
+              Discard draft and load saved details
+            </Text>
+          </Pressable>
+        ) : null}
         {saveError || error ? (
           <Text accessibilityRole="alert" style={{ color: colors.error }}>
             {saveError || error}
@@ -219,7 +253,7 @@ export function StaffFollowUpEditor({
             <Pressable
               accessibilityRole="button"
               onPress={() => void submit()}
-              disabled={busy}
+              disabled={editDisabled}
               style={[styles.option, { borderColor: colors.gold }]}
             >
               <Text style={{ color: colors.text }}>

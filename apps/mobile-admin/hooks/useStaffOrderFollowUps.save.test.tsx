@@ -92,6 +92,8 @@ describe('useStaffOrderFollowUps saving', () => {
 
     it.each([
       ['claim', '23505', 'Someone else has already claimed this follow-up.'],
+      ['claim', 'PT410', 'This follow-up is already closed.'],
+      ['update', 'PT410', 'This follow-up is already closed.'],
       [
         'update',
         'PT409',

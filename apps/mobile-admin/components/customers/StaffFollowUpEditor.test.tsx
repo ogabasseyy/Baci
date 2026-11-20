@@ -150,3 +150,33 @@ it.each([
   expect(screen.queryByText('Save follow-up')).toBeNull();
   expect(screen.queryByText('Claim follow-up')).toBeNull();
 });
+
+it('keeps an unsaved note after a revision change and requires loading the saved record before editing again', () => {
+  const options = props();
+  const { rerender } = render(
+    <StaffFollowUpEditor {...options} followUp={claimed} />
+  );
+  fireEvent.change(screen.getByLabelText('What happened'), {
+    target: { value: 'Unsaved callback details' },
+  });
+  rerender(
+    <StaffFollowUpEditor
+      {...options}
+      followUp={{
+        ...claimed,
+        revision: 2,
+        outcome: 'Saved by another session',
+      }}
+    />
+  );
+
+  expect(screen.getByDisplayValue('Unsaved callback details')).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Save follow-up' })).toBeDisabled();
+  expect(options.onSave).not.toHaveBeenCalled();
+
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Discard draft and load saved details' })
+  );
+  expect(screen.getByDisplayValue('Saved by another session')).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Save follow-up' })).toBeEnabled();
+});

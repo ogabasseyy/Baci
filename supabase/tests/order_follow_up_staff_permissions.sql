@@ -74,7 +74,7 @@ BEGIN
   BEGIN
     PERFORM public.claim_order_follow_up(store_id, 'aa550000-0000-4000-8000-000000000022');
     RAISE EXCEPTION 'A closed orphan was reclaimed';
-  EXCEPTION WHEN unique_violation THEN NULL;
+  EXCEPTION WHEN SQLSTATE 'PT410' THEN NULL;
   END;
 END
 $$;

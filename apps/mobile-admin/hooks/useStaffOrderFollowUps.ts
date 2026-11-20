@@ -147,6 +147,9 @@ export function useStaffOrderFollowUps(
               p_outcome: change.fields.outcome,
               p_follow_up_on: change.fields.follow_up_on,
             });
+      if (error?.code === 'PT410') {
+        throw new Error('This follow-up is already closed.');
+      }
       if (error?.code === '23505') {
         throw new Error('Someone else has already claimed this follow-up.');
       }

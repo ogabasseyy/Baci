@@ -234,7 +234,7 @@ export function FollowUpQueueList({
       />
       {selectedOrder && (
         <StaffFollowUpEditor
-          key={`${selectedOrder.id}:${selectedFollowUp?.revision ?? 0}`}
+          key={selectedOrder.id}
           orderId={selectedOrder.id}
           customerName={
             selectedOrder.customer_name ||
@@ -256,8 +256,6 @@ export function FollowUpQueueList({
               type: 'claim',
               orderId: selectedOrder.id,
             });
-            // The editor remounts on the new revision, so the parent carries
-            // the "you just claimed this" notice across the remount.
             setClaimedOrderId(selectedOrder.id);
             return claimed;
           }}

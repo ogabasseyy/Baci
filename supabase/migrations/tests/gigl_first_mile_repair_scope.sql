@@ -1,6 +1,6 @@
 BEGIN;
 
-SELECT plan(9);
+SELECT plan(11);
 
 CREATE TEMP TABLE repair_fixture (label text PRIMARY KEY, shipment_id uuid);
 
@@ -38,6 +38,14 @@ BEGIN
        CASE v_label WHEN 'genuine' THEN 'MSHC' WHEN 'then_failed' THEN 'DELIVERY_FAILED' ELSE 'DPC' END,
        CASE v_label WHEN 'genuine' THEN 'out_for_delivery' WHEN 'then_failed' THEN 'failed' ELSE 'in_transit' END,
        'scan b', '2026-11-09 12:00+00');
+    IF v_label = 'first_mile' THEN
+      INSERT INTO public.shipment_tracking_notification_outbox (
+        shipment_id, tracking_epoch_id, order_id, merchant_id, tracking_event_id,
+        audience, notification_kind
+      ) SELECT v_ship, v_epoch, v_order, v_merchant, event.id, 'merchant', 'out_for_delivery'
+      FROM public.shipment_tracking_events AS event
+      WHERE event.shipment_id = v_ship AND event.provider_event_key = 'first_mile-a';
+    END IF;
     -- with_sdr / with_terminal: histories the repair deliberately leaves alone.
     IF v_label IN ('with_sdr', 'with_terminal') THEN
       INSERT INTO public.shipment_tracking_events (
@@ -82,6 +90,12 @@ SELECT is((SELECT status FROM public.shipments WHERE id = (SELECT shipment_id FR
   'out_for_delivery', 'a history with an SDR is left to the normal poller');
 SELECT is((SELECT status FROM public.shipments WHERE id = (SELECT shipment_id FROM repair_fixture WHERE label = 'with_terminal')),
   'out_for_delivery', 'a history with a terminal event is left to the normal poller');
+SELECT is((SELECT status FROM public.shipment_tracking_notification_outbox WHERE shipment_id = (SELECT shipment_id FROM repair_fixture WHERE label = 'first_mile')),
+  'skipped', 'a pending out_for_delivery update for the demoted scan is skipped');
+SELECT is((SELECT m.state || ':' || coalesce(m.manual_terminal_override_at::text, 'none')
+  FROM public.shipment_tracking_monitors AS m
+  WHERE m.shipment_id = (SELECT shipment_id FROM repair_fixture WHERE label = 'then_failed')),
+  'active:none', 'repairing to failed leaves the monitor active with no manual override');
 SELECT is(private.repair_gigl_first_mile_out_for_delivery(), 0,
   'a second run repairs nothing (idempotent; terminal shipment untouched)');
 

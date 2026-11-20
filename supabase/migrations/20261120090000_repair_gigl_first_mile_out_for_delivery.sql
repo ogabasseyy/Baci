@@ -90,12 +90,30 @@ BEGIN
     FROM first_mile AS fm
     WHERE event.id = fm.id AND fm.shipment_id IN (SELECT shipment_id FROM repairable)
     RETURNING event.shipment_id, event.tracking_epoch_id, event.provider_event_key, event.normalized_status
+  ), skipped_outbox AS (
+    -- A pending or unstarted out_for_delivery update for a demoted scan must not
+    -- go out; sent history is kept.
+    UPDATE public.shipment_tracking_notification_outbox AS outbox
+    SET status = 'skipped', skipped_at = now(),
+      skip_reason = 'first_mile_repair',
+      locked_at = NULL, locked_by = NULL, updated_at = now()
+    FROM first_mile AS fm
+    WHERE outbox.tracking_event_id = fm.id
+      AND fm.shipment_id IN (SELECT shipment_id FROM repairable)
+      AND outbox.notification_kind = 'out_for_delivery'
+      AND (
+        outbox.status = 'pending'
+        OR (outbox.status = 'processing' AND outbox.delivery_started_at IS NULL)
+      )
+    RETURNING outbox.id
   ), new_status AS (
     SELECT shipment.id AS shipment_id,
       (SELECT candidate.status FROM (
          SELECT event.normalized_status AS status, event.occurred_at
          FROM public.shipment_tracking_events AS event
          WHERE event.shipment_id = shipment.id
+           -- Unrecognised scans are stored as pending and do not set the status.
+           AND event.normalized_status <> 'pending'
            AND event.tracking_epoch_id = (
            SELECT monitor.tracking_epoch_id
            FROM public.shipment_tracking_monitors AS monitor
@@ -118,6 +136,9 @@ BEGIN
   )
   UPDATE public.shipments AS shipment
   SET status = new_status.status,
+    -- Same as the apply function: without it the monitor trigger reads this as
+    -- a manual terminal override.
+    last_tracked_at = now(),
     tracking_events = coalesce((
       SELECT jsonb_agg(
         CASE WHEN fixed.provider_event_key IS NULL THEN entry.event

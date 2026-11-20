@@ -28,6 +28,7 @@ DECLARE
     || E'        event.normalized_status = v_effective_status\n'
     || E'        OR (\n'
     || E'          upper(event.raw_status) = ''ARRIVED IN DESTINATION CITY''\n'
+    || E'          AND event.normalized_status = ''in_transit''\n'
     || E'          AND v_effective_status IN (''in_transit'', ''out_for_delivery'')\n'
     || E'        )\n'
     || E'      )\n';

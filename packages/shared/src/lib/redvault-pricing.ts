@@ -74,7 +74,10 @@ function addSafely(left: number, right: number, name: string): number {
   return left + right;
 }
 
-function validateLine(input: unknown): ValidatedLine {
+function validateLine(
+  input: unknown,
+  additionalEligibleProductIds: ReadonlySet<string>
+): ValidatedLine {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
     throw new Error('line must be an object');
   }
@@ -128,7 +131,9 @@ function validateLine(input: unknown): ValidatedLine {
     ...line,
     brand,
     condition,
-    eligible: isRedvaultEligibleProduct({ brand, name }),
+    eligible:
+      isRedvaultEligibleProduct({ brand, name }) ||
+      additionalEligibleProductIds.has(productId),
     itemId,
     lineKey,
     lineSubtotalKobo: unitPriceKobo * quantity,
@@ -158,7 +163,9 @@ function roundDiscountKobo(subtotalKobo: number, percent: number): number {
 }
 
 export function calculateRedvaultPricing(
-  lines: unknown
+  lines: unknown,
+  // Server-resolved catalog IDs only; never populate from request eligibility flags.
+  additionalEligibleProductIds: ReadonlySet<string> = new Set()
 ): RedvaultPricingResult {
   if (!Array.isArray(lines)) {
     throw new Error('lines must be an array');
@@ -168,7 +175,9 @@ export function calculateRedvaultPricing(
       `lines exceed the maximum ${REDVAULT_MAX_ALLOCATION_UNITS_PER_QUOTE} allocation units per quote`
     );
   }
-  const validated = lines.map(validateLine).sort(compareLines);
+  const validated = lines
+    .map((line) => validateLine(line, additionalEligibleProductIds))
+    .sort(compareLines);
   const itemIds = new Set<string>();
   let productSubtotalKobo = 0;
   let eligibleSubtotalKobo = 0;

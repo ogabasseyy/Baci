@@ -67,6 +67,7 @@ describe('heavy jobs wait for the full stage, quick jobs do not', () => {
     'needs.changes.outputs.cwv_runner': 'true',
     'needs.changes.outputs.deploy_scripts': 'true',
     'needs.changes.outputs.piggyvest_runbook': 'true',
+    'needs.changes.outputs.agent_gate_scripts': 'true',
     'needs.changes.outputs.test_plan_mode': 'full-affected',
     'github.event_name': 'pull_request',
   };

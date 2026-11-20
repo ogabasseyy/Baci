@@ -6,8 +6,9 @@ SET LOCAL ROLE service_role;
 SELECT set_config('request.jwt.claim.role', 'service_role', true);
 
 -- A GIG-side cancellation (SSC or the preshipment IsCancelled read) must only
--- cancel the shipment. It may set shipping_status for the latest shipment
--- generation but must never change the paid order's own status.
+-- cancel the shipment. For the latest shipment generation it reopens the order
+-- (shipping_status back to processing, 20261114183000) but must never change
+-- the paid order's own status.
 DO $test$
 DECLARE
   v_merchant_id uuid := '63a63d82-0000-4000-8000-000000000601';
@@ -59,7 +60,8 @@ BEGIN
       'cancelling an older-generation shipment must leave the order untouched';
   END IF;
 
-  -- Latest generation cancelled: only shipping_status moves, never status.
+  -- Latest generation cancelled: only shipping_status moves (back to
+  -- processing, reopened for rebooking), never status.
   UPDATE public.shipments SET status = 'cancelled'
   WHERE id = v_current_shipment_id;
   SELECT status::text, shipping_status INTO v_order_status, v_shipping_status
@@ -67,9 +69,9 @@ BEGIN
   IF v_order_status IS DISTINCT FROM v_status_before THEN
     RAISE EXCEPTION 'a cancelled shipment must not cancel the paid order';
   END IF;
-  IF v_shipping_status IS DISTINCT FROM 'cancelled' THEN
+  IF v_shipping_status IS DISTINCT FROM 'processing' THEN
     RAISE EXCEPTION
-      'the latest-generation cancelled shipment must set shipping_status';
+      'the latest-generation cancelled shipment must reopen the order for rebooking';
   END IF;
 END;
 $test$;

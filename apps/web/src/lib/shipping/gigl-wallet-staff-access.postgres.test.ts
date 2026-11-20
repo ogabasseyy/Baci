@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createGiglWalletStaffAccessTestDatabase } from '../../../../../supabase/tests/gigl-wallet-staff-access-test-harness.mjs';
+import { describeBindContactFallback } from './gigl-wallet-staff-access.bind-contact.test-support';
 
 const merchantId = '10000000-0000-4000-8000-000000000001';
 const otherMerchantId = '10000000-0000-4000-8000-000000000002';
@@ -148,6 +149,16 @@ describe.skipIf(process.env.BACI_SHIPPING_QUOTE_POSTGRES !== '1')(
       expect(() =>
         run(`${staff(editOnly)} ${actor(staffId)} ${complete}`)
       ).toThrow(/forbidden/);
+    });
+
+    describeBindContactFallback({
+      run,
+      actor,
+      bind,
+      bindOrderId,
+      bindQuoteId,
+      merchantId,
+      ownerId,
     });
 
     it('lets the owner and orders.fulfill + orders.edit staff bind the attested quote', () => {

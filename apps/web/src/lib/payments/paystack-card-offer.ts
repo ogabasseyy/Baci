@@ -28,6 +28,7 @@ export function verifyPaystackCardOffer({
   expectedIssuerName,
   expectedBankCode,
   expectedReference,
+  onIssuerMismatch,
   verifyResponse,
 }: {
   acceptedFilterPolicyHash: string;
@@ -39,6 +40,7 @@ export function verifyPaystackCardOffer({
   expectedIssuerName: string;
   expectedBankCode?: Parameters<typeof matchBankCardOfferIssuer>[0];
   expectedReference: string;
+  onIssuerMismatch?: (issuer: string) => void;
   verifyResponse: unknown;
 }): PaystackVerifiedCardEvidence | null {
   const parsed = paystackVerifyResponseSchema.safeParse(verifyResponse);
@@ -67,7 +69,10 @@ export function verifyPaystackCardOffer({
       )
     : providerIssuer.trim().toUpperCase() ===
       expectedIssuerName.trim().toUpperCase();
-  if (!issuerMatches) return null;
+  if (!issuerMatches) {
+    onIssuerMismatch?.(providerIssuer);
+    return null;
+  }
 
   const providerBrand = parsed.data.data.authorization.brand
     .trim()

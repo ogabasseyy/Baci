@@ -1,3 +1,4 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { getAuthenticatedUser } from '@/lib/supabase/mobile-auth';
 import { readSessionlessPaymentReferenceSnapshot } from './sessionless-payment-reference-snapshot';
 
@@ -18,18 +19,31 @@ export async function getBankCardOfferVerificationBinding(
     );
     if (!snapshot) return null;
 
-    const { data, error } = await auth.supabase
-      .from('merchants')
-      .select('id')
-      .eq('slug', merchantSlug)
-      .eq('id', snapshot.merchantId)
-      .maybeSingle();
-
-    if (error) return 'unavailable';
-    if (data?.id !== snapshot.merchantId) return null;
+    const matches = await doesBankOfferMerchantMatch(
+      auth.supabase,
+      merchantSlug,
+      snapshot.merchantId
+    );
+    if (!matches) return null;
 
     return { orderId: snapshot.orderId, merchantId: snapshot.merchantId };
   } catch {
     return 'unavailable';
   }
+}
+
+export async function doesBankOfferMerchantMatch(
+  client: SupabaseClient,
+  slug: string,
+  merchantId: string
+): Promise<boolean> {
+  const { data, error } = await client
+    .from('merchants')
+    .select('id')
+    .eq('slug', slug)
+    .eq('id', merchantId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data?.id === merchantId;
 }

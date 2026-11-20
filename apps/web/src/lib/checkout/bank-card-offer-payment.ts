@@ -1,4 +1,5 @@
 import 'server-only';
+import { logger } from '@/lib/logger';
 import { verifyPaystackCardOffer } from '@/lib/payments/paystack-card-offer';
 import { bankCardOfferAttemptMatchesQuote } from './bank-card-offer-attempt-matches-quote';
 import type { quoteBankCardOffer } from './bank-card-offer-quote';
@@ -42,6 +43,15 @@ export function verifyBankCardOfferAttempt(
     expectedIssuerName: attempt.quote.paymentPolicy.issuerName,
     expectedBankCode: attempt.quote.paymentPolicy.bankCode,
     expectedReference: attempt.reference,
+    onIssuerMismatch: (issuer) => {
+      const label = issuer.trim();
+      logger.warn({
+        message: 'Paystack issuer label does not match the saved bank offer',
+        bankCode: attempt.quote.paymentPolicy.bankCode,
+        // Keep the label useful without emitting control characters, IDs, or card data.
+        ...(/^[A-Za-z .&'()-]{1,80}$/.test(label) && { issuer: label }),
+      });
+    },
     verifyResponse,
   });
 }

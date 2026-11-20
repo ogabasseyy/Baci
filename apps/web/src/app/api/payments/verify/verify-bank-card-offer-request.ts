@@ -2,7 +2,10 @@ import { NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
 import { getAuthenticatedUser } from '@/lib/supabase/mobile-auth';
 import { bankCardOfferReferenceSchema } from '@/schemas/bank-card-offer-reference';
-import { getBankCardOfferVerificationBinding } from './get-bank-card-offer-verification-binding';
+import {
+  doesBankOfferMerchantMatch,
+  getBankCardOfferVerificationBinding,
+} from './get-bank-card-offer-verification-binding';
 import type { PaymentVerificationDependencies } from './payment-verification-dependencies';
 import { readSessionlessPaymentReferenceSnapshot } from './sessionless-payment-reference-snapshot';
 import type { verifySessionlessBankCardOffer } from './verify-sessionless-bank-card-offer';
@@ -48,6 +51,18 @@ export async function verifyBankCardOfferRequest(
         reference
       );
       if (!snapshot) return denied();
+      // Account history may omit the slug. When a storefront is supplied,
+      // it must match the buyer-owned order's merchant.
+      if (
+        merchantSlug &&
+        !(await doesBankOfferMerchantMatch(
+          auth.supabase,
+          merchantSlug,
+          snapshot.merchantId
+        ))
+      ) {
+        return denied();
+      }
       return await verifyNative(snapshot, auth.supabase);
     } catch {
       return unavailable();

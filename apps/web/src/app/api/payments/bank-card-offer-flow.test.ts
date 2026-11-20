@@ -438,12 +438,23 @@ describe('bank card offer payment handlers', () => {
     expect(mocks.from).not.toHaveBeenCalled();
   });
 
-  it('rejects verification from the wrong storefront before contacting Paystack', async () => {
+  it.each([
+    'cookie',
+    'bearer',
+  ] as const)('rejects %s verification from the wrong storefront before contacting Paystack', async (authMode) => {
     setup('035', 'Wema Bank');
-
-    const result = await verify(
-      request('verify', { reference, merchantSlug: 'another-store' })
-    );
+    mocks.cookieAuth.mockResolvedValueOnce({
+      authMode,
+      user: { id: userId },
+      supabase: mocks,
+    });
+    const wrongStoreRequest = request('verify', {
+      reference,
+      merchantSlug: 'another-store',
+    });
+    if (authMode === 'bearer')
+      wrongStoreRequest.headers.set('authorization', 'Bearer test-only');
+    const result = await verify(wrongStoreRequest);
 
     expect(result.status).toBe(403);
     await expect(result.json()).resolves.toMatchObject({

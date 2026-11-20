@@ -16,14 +16,17 @@ import {
 } from './chatwoot-checkout-place-action';
 import {
   CHECKOUT_CART_ID,
+  CHECKOUT_CART_VERSION,
   checkoutDisplayCart,
   checkoutPlaceRequest,
   checkoutReview,
   happyHandlers,
   lastResult,
+  merchantQuote,
   paths,
   placeInput,
   preparedCheckout,
+  quotes,
   stubCheckoutFetch,
 } from './chatwoot-checkout-test-fixtures';
 
@@ -177,5 +180,43 @@ describe('handleChatwootCheckoutPlace idempotency key', () => {
       );
     expect(keys).toHaveLength(2);
     expect(keys[0]).toBe(keys[1]);
+  });
+});
+
+describe('handleChatwootCheckoutPlace nothing to pay', () => {
+  it('refuses a free cart with free delivery before preparing or posting an order', async () => {
+    const { calls } = stubCheckoutFetch({
+      ...happyHandlers(),
+      '/api/shipping/quotes': () =>
+        quotes(merchantQuote({ price: 0, displayName: 'Free pickup' })),
+    });
+    const input = placeInput({
+      request: {
+        ...checkoutPlaceRequest,
+        delivery: {
+          ...checkoutPlaceRequest.delivery,
+          displayName: 'Free pickup',
+          priceMajor: 0,
+        },
+      },
+      snapshot: {
+        cartVersion: CHECKOUT_CART_VERSION,
+        currency: 'NGN',
+        estimatedTotals: false,
+        itemsSubtotalMinor: 0,
+      },
+      getDisplayCart: () => [],
+    });
+
+    await handleChatwootCheckoutPlace(input);
+
+    expect(lastResult(input)).toMatchObject({
+      status: 'failed',
+      code: 'cart_unsupported',
+    });
+    expect(paths(calls).filter((path) => path === '/api/orders')).toHaveLength(
+      0
+    );
+    expect(mocks.prepare).not.toHaveBeenCalled();
   });
 });

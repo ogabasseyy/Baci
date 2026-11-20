@@ -15,6 +15,7 @@ import {
 import type { ChatwootCheckoutMerchant } from './chatwoot-checkout-merchant';
 import { postChatwootCheckoutOrder } from './chatwoot-checkout-order-post';
 import { buildChatwootCheckoutOrderRequest } from './chatwoot-checkout-order-request';
+import { answerChatwootCheckoutReplay } from './chatwoot-checkout-replay-answer';
 import { decideChatwootCheckoutReplay } from './chatwoot-checkout-replay-decision';
 import type {
   ChatwootCheckoutFailureCode,
@@ -111,7 +112,13 @@ async function placeForKeys(
     });
     if (replay.kind === 'refuse') return fail('order_failed');
     if (replay.kind === 'answer') {
-      if (input.canPost()) input.postResult(replay.result);
+      const answer = await answerChatwootCheckoutReplay({
+        cached: replay.result,
+        order: remembered.order,
+        storeSlug: input.storeSlug,
+        issuedAt: remembered.payment?.issuedAt ?? 0,
+      });
+      if (input.canPost()) input.postResult(answer);
       return;
     }
     return startChatwootCheckoutPayment({
@@ -183,6 +190,10 @@ async function placeForKeys(
     cartSubtotal: snapshot.itemsSubtotalMinor / 100,
   });
   if (!delivery.ok) return fail(delivery.code);
+  // Nothing to transfer: a free cart with free delivery would be finalized by
+  // the order route with no payment step for the chat to offer.
+  if (snapshot.itemsSubtotalMinor + Math.round(delivery.quote.price * 100) <= 0)
+    return fail('cart_unsupported');
   if (!sameCart()) return fail('cart_changed');
 
   const prepared = await prepareSharedCartCheckout(

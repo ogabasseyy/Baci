@@ -186,6 +186,10 @@ export function happyHandlers() {
     '/api/shipping/quotes': () => quotes(merchantQuote()),
     '/api/orders': () => orderCreated,
     '/api/payments/initialize': () => dvaReady,
+    // Read before a repeat is shown its bank details again.
+    '/api/storefront/orders/track-order': () => ({
+      body: { order: { id: 'order-uuid', payment_status: 'pending' } },
+    }),
   };
 }
 

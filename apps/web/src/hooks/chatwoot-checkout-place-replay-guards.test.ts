@@ -101,5 +101,34 @@ describe('handleChatwootCheckoutPlace', () => {
         paths(calls).filter((path) => path === '/api/orders')
       ).toHaveLength(1);
     });
+
+    it('a repeat for an order that has since been paid reports paid and shows no account again', async () => {
+      let paid = false;
+      const { calls } = stubCheckoutFetch({
+        ...happyHandlers(),
+        '/api/storefront/orders/track-order': () => ({
+          body: {
+            order: {
+              id: 'order-uuid',
+              payment_status: paid ? 'paid' : 'pending',
+            },
+          },
+        }),
+      });
+      await handleChatwootCheckoutPlace(placeInput());
+      paid = true;
+      const repeat = placeInput();
+
+      await handleChatwootCheckoutPlace(repeat);
+
+      expect(lastResult(repeat)).toEqual({
+        requestId: checkoutPlaceRequest.requestId,
+        status: 'paid',
+        orderNumber: 'ORD-1001',
+      });
+      expect(
+        paths(calls).filter((path) => path === '/api/payments/initialize')
+      ).toHaveLength(1);
+    });
   });
 });

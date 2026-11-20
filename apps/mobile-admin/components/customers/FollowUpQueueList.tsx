@@ -71,10 +71,10 @@ export function FollowUpQueueList({
   const followUpCount = orders.length;
   const isLimited = isFollowUpLimited || staffFollowUps.isLimited;
   const emptyViewState =
-    followUpCount === 0 && viewState.status === 'ready'
-      ? ({ status: 'empty' } as const)
-      : viewState.status === 'empty' && staffFollowUps.isLoading
-        ? ({ status: 'loading' } as const)
+    followUpCount === 0 && staffFollowUps.isLoading
+      ? ({ status: 'loading' } as const)
+      : followUpCount === 0 && viewState.status === 'ready'
+        ? ({ status: 'empty' } as const)
         : viewState;
   const selectedOrder = selectedOrderId
     ? ordersById.get(selectedOrderId)

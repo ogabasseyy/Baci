@@ -8,6 +8,7 @@ export function useStaffFollowUpQueue() {
   const orderIds = source.failedOrders?.map((order) => order.id).sort() ?? [];
   const staff = useStaffOrderFollowUps(source.merchant?.id, user?.id, orderIds);
 
+  // Keep the checkout feed’s payment context when both scans include an order.
   const ordersById = new Map(
     [...(staff.openOrders ?? []), ...(source.failedOrders ?? [])].map(
       (order) => [order.id, order]

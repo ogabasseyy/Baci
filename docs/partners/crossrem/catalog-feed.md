@@ -34,6 +34,8 @@ The Ogabassey baseline includes 4,501 Google listing IDs. The Riversong Vision 2
 
 The registry retains all 4,501 original IDs. Five IDs are retired after the Ogabassey catalog archived the Redmi Pad Pro 5G, Redmi Pad Pro and Redmi 15C 5G. The registry has 4,496 active listings.
 
+For managed base products, availability follows the quantity Baci can reserve for an order. When only the legacy stock field is positive, correct the managed quantity after verifying the inventory. A legacy count alone does not make the listing available for a quote.
+
 Run from the repository root. The command reads the configured merchant's public feed data and writes candidate bindings to standard output.
 The exporter requires SKU-expanded Google mode. It stops before reading the catalog in family mode because those Google IDs represent a different import baseline.
 

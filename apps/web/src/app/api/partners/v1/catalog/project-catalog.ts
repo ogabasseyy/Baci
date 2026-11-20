@@ -105,6 +105,8 @@ export function projectCatalog(
       if (binding.retired) return [];
       const row = rowsByIdentity.get(key);
       if (!row) return [];
+      // The order writer reserves stock_quantity. Google can still show a
+      // legacy stock count when that reservable quantity is zero.
       const managedStock = row.variant
         ? row.variant.stock_quantity
         : row.product.stock_quantity;

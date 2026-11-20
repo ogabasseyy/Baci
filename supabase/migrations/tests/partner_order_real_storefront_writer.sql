@@ -112,6 +112,18 @@ BEGIN
     'storefront_order_merchant_id', merchant_id
   )::text, true);
 
+  -- Legacy feed stock can persist after the reservable quantity reaches zero.
+  UPDATE public.products AS p SET stock = 10, stock_quantity = 0
+  WHERE p.id = fixture.product_id;
+  BEGIN
+    PERFORM private.accept_settled_partner_order(submission_id, merchant_id, connection_id);
+    RAISE EXCEPTION 'legacy stock was accepted as reservable inventory' USING ERRCODE = '22023';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'insufficient_stock' THEN RAISE; END IF;
+  END;
+  UPDATE public.products AS p SET stock = 0, stock_quantity = 10
+  WHERE p.id = fixture.product_id;
+
   INSERT INTO public.shipping_quotes (
     id, merchant_id, provider, currency, session_id, expires_at, price
   ) VALUES (

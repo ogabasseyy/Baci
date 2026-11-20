@@ -30,7 +30,8 @@ def reduced_schema_sql():
         (ROOT / 'supabase/tests/commerce_cart_condition_order.sql').read_text(),
         """
         ALTER TABLE public.merchants ADD COLUMN email text, ADD COLUMN business_name text, ADD COLUMN slug text;
-        ALTER TABLE public.products ADD COLUMN has_condition_offers boolean, ADD COLUMN has_variants boolean;
+        ALTER TABLE public.products ADD COLUMN has_condition_offers boolean, ADD COLUMN has_variants boolean,
+          ADD COLUMN stock integer;
         ALTER TABLE public.product_offers ADD COLUMN grade text, ADD COLUMN condition_notes text;
         ALTER TABLE public.orders ADD COLUMN shipping_funding_source text,
           ADD COLUMN shipping_platform_retained_amount numeric, ADD COLUMN amount_paid numeric DEFAULT 0;

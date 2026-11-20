@@ -72,7 +72,9 @@ const REFERENCE_LIKE_KEY =
 const ECHO_REFERENCE_PREFIX =
   /^(?:validation|request|customer|product|biller|item|service|package|plan|merchant|account|user|refund|reversal|settlement|callback|webhook|notification|chargeback|error|exception|auth|authentication|credential|login|access|oauth)/;
 
-const isVendReferenceKey: KeyMatcher = (key) => key === 'vendreference';
+// A vendReference under refund/request/error/... is not the vend's requery key.
+const isVendReferenceKey: KeyMatcher = (key, _insideBody, underNonVend) =>
+  key === 'vendreference' && !underNonVend;
 // A bare `reference` / `ref` counts too: an exact echo of our own request
 // reference is excluded by value, so a foreign one is evidence.
 // A bare `reference`/`ref` under customer/product/... describes that object

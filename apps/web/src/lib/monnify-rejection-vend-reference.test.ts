@@ -211,3 +211,29 @@ describe('bugfix: a foreign bare top-level reference counts, an exact echo does 
     );
   });
 });
+
+describe('bugfix: a vendReference under a non-vend ancestor is not the requery key', () => {
+  it.each([
+    'refund',
+    'request',
+    'error',
+    'reversal',
+  ])('ignores responseBody.%s.vendReference', (parent) => {
+    expect(
+      findMonnifyBodyVendReference({
+        responseBody: { [parent]: { vendReference: 'MFBP-OTHER' } },
+      })
+    ).toBeUndefined();
+  });
+
+  it('prefers the real responseBody.vendReference beside a refund one', () => {
+    expect(
+      findMonnifyBodyVendReference({
+        responseBody: {
+          vendReference: 'MFBP-REAL',
+          refund: { vendReference: 'MFBP-OTHER' },
+        },
+      })
+    ).toBe('MFBP-REAL');
+  });
+});

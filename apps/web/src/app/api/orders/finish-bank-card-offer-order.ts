@@ -152,7 +152,16 @@ export async function finishBankCardOfferOrder({
     );
   }
   const replayed = result.data.idempotency_replayed === true;
-  await repairEffects(result.data, merchantSlug);
+  try {
+    await repairEffects(result.data, merchantSlug);
+  } catch (error) {
+    logger.error({
+      message: 'Bank offer post-checkout effects failed',
+      merchantId,
+      orderId: result.data.id,
+      error,
+    });
+  }
   return NextResponse.json(
     {
       order: result.data,

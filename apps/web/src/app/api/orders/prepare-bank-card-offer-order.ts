@@ -120,24 +120,33 @@ export async function prepareBankCardOfferOrder({
     }
     // Replay repairs a missed enqueue. The recorder uses the saved order ID
     // as platform_purchase:<orderId>, deduplicated by record_platform_domain_event_v1.
-    await recordPlatformOrderCreatedEvent({
-      currency:
-        typeof offerOrder.currency === 'string' ? offerOrder.currency : 'NGN',
-      customerEmail,
-      eventTimestamp:
-        typeof offerOrder.created_at === 'string'
-          ? offerOrder.created_at
-          : new Date().toISOString(),
-      ipAddress: clientIp,
-      merchantId,
-      orderId: offerOrder.id,
-      orderNumber:
-        typeof offerOrder.order_number === 'string' && offerOrder.order_number
-          ? offerOrder.order_number
-          : offerOrder.id.slice(0, 8).toUpperCase(),
-      userAgent: clientUserAgent,
-      value: Number(offerOrder.total ?? 0),
-    });
+    try {
+      await recordPlatformOrderCreatedEvent({
+        currency:
+          typeof offerOrder.currency === 'string' ? offerOrder.currency : 'NGN',
+        customerEmail,
+        eventTimestamp:
+          typeof offerOrder.created_at === 'string'
+            ? offerOrder.created_at
+            : new Date().toISOString(),
+        ipAddress: clientIp,
+        merchantId,
+        orderId: offerOrder.id,
+        orderNumber:
+          typeof offerOrder.order_number === 'string' && offerOrder.order_number
+            ? offerOrder.order_number
+            : offerOrder.id.slice(0, 8).toUpperCase(),
+        userAgent: clientUserAgent,
+        value: Number(offerOrder.total ?? 0),
+      });
+    } catch (error) {
+      logger.error({
+        message: 'Failed to record the bank offer order event',
+        merchantId,
+        orderId: offerOrder.id,
+        error,
+      });
+    }
   }
 
   const scopedClient = createStorefrontOrderRpcClient({

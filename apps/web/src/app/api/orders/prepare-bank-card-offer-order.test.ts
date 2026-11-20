@@ -219,3 +219,22 @@ it('withholds a replay when its merchant context is unavailable', async () => {
   expect(mocks.purge).not.toHaveBeenCalled();
   expect(mocks.record).not.toHaveBeenCalled();
 });
+
+it('returns a saved order even if its event repair fails', async () => {
+  const order = {
+    id: 'order-1',
+    created_at: '2026-11-27T12:00:00Z',
+    total: 95,
+  };
+  rpc.mockResolvedValue({ data: order, error: null });
+  mocks.record.mockRejectedValueOnce(new Error('Event enqueue unavailable'));
+
+  const result = await prepareBankCardOfferOrder(bankRequest);
+
+  if (result.kind !== 'response') throw new Error('Expected replay response');
+  await expect(result.response.json()).resolves.toEqual({
+    order,
+    idempotency: { replayed: true },
+  });
+  expect(result.response.status).toBe(200);
+});

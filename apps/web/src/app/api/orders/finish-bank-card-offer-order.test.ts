@@ -130,3 +130,17 @@ it.each([
     options.merchantSlug
   );
 });
+
+it('returns the committed order even if a post-checkout effect fails', async () => {
+  const { options, rpc, repairEffects } = setup();
+  const order = { id: 'order-1', total: 95 };
+  rpc.mockResolvedValue({ data: order, error: null });
+  repairEffects.mockRejectedValue(
+    new Error('Post-checkout effect unavailable')
+  );
+
+  const response = await finishBankCardOfferOrder(options);
+
+  expect(response.status).toBe(201);
+  await expect(response.json()).resolves.toEqual({ order });
+});

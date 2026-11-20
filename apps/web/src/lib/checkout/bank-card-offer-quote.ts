@@ -1,5 +1,4 @@
 import 'server-only';
-import { REDVAULT_MAX_ALLOCATION_UNITS_PER_QUOTE } from '@baci/shared/contracts';
 import type { BankCardOffer } from '@/schemas/bank-card-offer';
 
 type CatalogLine = {
@@ -10,6 +9,7 @@ type CatalogLine = {
 };
 
 const BASIS_POINTS = 10_000n;
+const BANK_CARD_OFFER_MAX_ALLOCATION_UNITS = 10_000;
 
 function safeAmount(amount: bigint) {
   if (amount > BigInt(Number.MAX_SAFE_INTEGER)) {
@@ -59,7 +59,7 @@ export function quoteBankCardOffer({
     if (
       !Number.isSafeInteger(item.quantity) ||
       item.quantity < 1 ||
-      item.quantity > REDVAULT_MAX_ALLOCATION_UNITS_PER_QUOTE - units
+      item.quantity > BANK_CARD_OFFER_MAX_ALLOCATION_UNITS - units
     ) {
       throw new Error('Bank offer quantity is outside the allocation limit');
     }

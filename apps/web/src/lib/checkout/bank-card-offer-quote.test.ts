@@ -3,7 +3,6 @@ import type { BankCardOffer } from '@/schemas/bank-card-offer';
 import { bankCardOfferAuthorization } from './bank-card-offer-authorization';
 import { verifyBankCardOfferAttempt } from './bank-card-offer-payment';
 import { quoteBankCardOffer } from './bank-card-offer-quote';
-import { calculateBankCardOfferMerchandiseRefund } from './calculate-bank-card-offer-merchandise-refund';
 import { hashBankCardOfferFilter } from './hash-bank-card-offer-filter';
 
 const merchantId = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
@@ -50,16 +49,13 @@ describe('bank card offer quotes', () => {
     if (!quote)
       throw new Error('Expected a rounded discount on the first line');
     expect(quote.discountKobo).toBe(1);
-    expect(
-      calculateBankCardOfferMerchandiseRefund({
-        quote,
-        itemId: 'one-kobo',
-        returnedUnitIndexes: [0],
-      }).refundKobo
-    ).toBe(0);
+    expect(quote.allocations[0]).toMatchObject({
+      itemId: 'one-kobo',
+      unitNetAmountsKobo: [0],
+    });
   });
 
-  it('caps the discount and freezes the net refunds per eligible unit', () => {
+  it('caps the discount and records the net amounts per eligible unit', () => {
     const quote = quoteBankCardOffer({ offer, merchantId, items, now });
     expect(quote).toMatchObject({
       productSubtotalKobo: 22_000,
@@ -76,20 +72,12 @@ describe('bank card offer quotes', () => {
         { itemId: 'second', unitNetAmountsKobo: [2000] },
       ],
     });
-    if (!quote) throw new Error('Expected an eligible order');
-    expect(
-      calculateBankCardOfferMerchandiseRefund({
-        quote,
-        itemId: 'first',
-        returnedUnitIndexes: [1],
-      }).refundKobo
-    ).toBe(9501);
   });
 
   it.each([
     ['035', 'Wema Bank', '232', 'Sterling Bank'],
     ['232', 'Sterling Bank', '035', 'Wema Bank'],
-  ] as const)('verifies the booked %s issuer and refund after offer edits', (bankCode, issuerName, otherCode, otherIssuerName) => {
+  ] as const)('verifies the booked %s issuer after offer edits', (bankCode, issuerName, otherCode, otherIssuerName) => {
     const mutableOffer = {
       ...offer,
       bankCode,

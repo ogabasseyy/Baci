@@ -36,7 +36,7 @@ A cancellation containing an unverified bank-offer leg enters refund review even
 
 Kobo rounding can fully discount a unit. Its saved merchandise refund value is zero, and that unit must contribute zero to any later merchandise refund.
 
-Browser initialization of a bank offer uses the checkout CSRF token. Browser verification requires the signed-in buyer's order ownership proof and the matching storefront. Pending and reversed views display only an order number returned by verification. A denied session shows instructions for checking the order from the buyer's account and stops automatic polling. The checkout request helper refreshes the CSRF token and retries once. A remaining non-denial 403 stops polling and offers page refresh, order history, or support without requesting a new payment. Ordinary pending responses use the checkout page’s bounded polling budget.
+Browser order creation and payment initialization for a bank offer use the checkout CSRF token. Browser verification requires the signed-in buyer's order ownership proof and the matching storefront. Pending and reversed views display only an order number returned by verification. A denied session shows instructions for checking the order from the buyer's account and stops automatic polling. The checkout request helper refreshes the CSRF token and retries once. A remaining non-denial 403 stops polling and offers page refresh, order history, or support without requesting a new payment. Pending responses and temporary verification outages use the checkout page’s bounded polling budget.
 
 The server computes the approved offer percentage and cap and signs the quote with the order payload. The database validates the signed route proof, exact totals, and persisted allocation. The snapshot table denies direct access to application roles, including `service_role`. Supported checkout RPCs only insert or replay the original snapshot. The shared Paystack parser validates the provider payload structure. The card-offer verifier then checks both Paystack channel fields along with issuer, brand and amount before writing approval.
 
@@ -44,6 +44,6 @@ Before activating a campaign, verify the exact Paystack authorization issuer lab
 
 Native verification requires the signed-in buyer’s ownership proof. It records a verified terminal review before returning the terminal status. A verified payment that is still pending is flagged for reconciliation while settlement stays on the webhook and worker paths.
 
-Automatic cancellation refunds cover the full verified payment leg. For a partial-item refund, operations should use the saved per-unit net allocations to determine the refundable merchandise amount and reconcile it against the original capture.
+Automatic cancellation refunds cover the full verified payment leg. Partial-item refunds are handled by operations using the saved per-unit net allocations and the original capture.
 
 If capture lookup fails before the final worker attempt, the cancellation step is recorded as a retryable failure with any accepted refund IDs preserved. The drain reclaims failed steps within its retry budget. On the final attempt, unresolved legs enter review with the capture lookup outage recorded.

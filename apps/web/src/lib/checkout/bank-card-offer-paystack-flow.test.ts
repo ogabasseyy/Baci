@@ -1,10 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { processNextRedvaultRefund } from '@/lib/payments/redvault-refund-orchestrator';
-import { createRedvaultPaystackRefundProvider } from '@/lib/payments/redvault-refund-paystack-provider';
-import type { RedvaultRefund } from '@/lib/payments/redvault-refund-store';
 import { quoteBankCardOffer } from './bank-card-offer-quote';
-import { calculateBankCardOfferMerchandiseRefund } from './calculate-bank-card-offer-merchandise-refund';
 import { createBankCardOfferCheckout } from './create-bank-card-offer-checkout';
 import { hashBankCardOfferFilter } from './hash-bank-card-offer-filter';
 import { initializeBankCardOfferPaystack } from './initialize-bank-card-offer-paystack';
@@ -35,7 +31,7 @@ describe('bank card offer checkout and mocked Paystack flow', () => {
   it.each([
     ['035', 'Wema Bank', 'Sterling Bank'],
     ['232', 'Sterling Bank', 'Wema Bank'],
-  ] as const)('carries bank %s from the order into authorization, verification, and a refund', async (bankCode, issuerName, otherIssuerName) => {
+  ] as const)('carries bank %s from the order into authorization and verification', async (bankCode, issuerName, otherIssuerName) => {
     vi.stubEnv('QUIZ_RPC_SERVER_SECRET', 'synthetic-bank-offer-test-secret');
     const quote = quoteBankCardOffer({
       merchantId,
@@ -175,64 +171,5 @@ describe('bank card offer checkout and mocked Paystack flow', () => {
       amountKobo: 19_500,
       reference,
     });
-    if (!evidence) throw new Error('Expected verified provider evidence');
-
-    const { refundKobo } = calculateBankCardOfferMerchandiseRefund({
-      quote: persistedQuote,
-      itemId,
-      returnedUnitIndexes: [0],
-    });
-    const refund: RedvaultRefund = {
-      id: 'refund-1',
-      amountKobo: refundKobo,
-      attemptReference: evidence.reference,
-      providerReference: null,
-      providerStatus: null,
-      state: 'processing',
-      submittedAt: null,
-    };
-    const fetcher = vi.fn().mockResolvedValue(
-      Response.json({
-        status: true,
-        data: {
-          id: 44,
-          transaction: reference,
-          currency: 'NGN',
-          amount: 9500,
-          status: 'processed',
-        },
-      })
-    );
-    const store = {
-      claimNext: vi
-        .fn()
-        .mockResolvedValueOnce(refund)
-        .mockResolvedValueOnce(null),
-      recordProviderSubmission: vi.fn().mockResolvedValue(refund),
-      markSubmissionIndeterminate: vi.fn(),
-      finish: vi.fn().mockResolvedValue({ ...refund, state: 'processed' }),
-    };
-    const provider = createRedvaultPaystackRefundProvider({
-      fetcher,
-      getSecret: () => 'sk_test_synthetic',
-    });
-    await expect(
-      processNextRedvaultRefund({ provider, store })
-    ).resolves.toMatchObject({ kind: 'processed' });
-    await expect(
-      processNextRedvaultRefund({ provider, store })
-    ).resolves.toEqual({ kind: 'idle' });
-    expect(fetcher).toHaveBeenCalledTimes(1);
-    expect(fetcher).toHaveBeenCalledWith(
-      'https://api.paystack.co/refund',
-      expect.objectContaining({
-        body: JSON.stringify({
-          transaction: reference,
-          amount: 9500,
-          currency: 'NGN',
-          merchant_note: 'refund-1',
-        }),
-      })
-    );
   });
 });

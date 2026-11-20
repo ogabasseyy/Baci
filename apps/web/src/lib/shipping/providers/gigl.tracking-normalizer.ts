@@ -100,6 +100,7 @@ export function normalizeGiglTrackingShipment(
         const rawStatus = event.Status.trim();
         const scanStatusReason = event.ScanStatusReason?.trim();
         const scanStatusIncident = event.ScanStatusIncident?.trim();
+        const scanStatusComment = event.ScanStatusComment?.trim();
         const hasPickupEnRouteReason = [
           scanStatusReason,
           scanStatusIncident,
@@ -149,7 +150,7 @@ export function normalizeGiglTrackingShipment(
             } satisfies TrackingEvent,
             recognizedStatus,
             providerStatus: rawStatus,
-            scanText: [scanStatusReason, scanStatusIncident]
+            scanText: [scanStatusReason, scanStatusIncident, scanStatusComment]
               .filter(Boolean)
               .join(' '),
           },

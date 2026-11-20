@@ -113,4 +113,27 @@ describe('bugfix: explicit arrival codes and tied or mapped scans', () => {
     );
     expect(result.events[0]?.location).toContain('WUSE ABUJA');
   });
+
+  it('does not infer an arrival when the departure wording is in ScanStatusComment', () => {
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W95',
+        Origin: 'LAGOS',
+        Destination: 'ABUJA',
+        MobileShipmentTrackings: [
+          {
+            Status: 'MSVC',
+            DateTimeUtc: T,
+            Location: 'WUSE ABUJA (Wuse)',
+            ScanStatusComment: 'SHIPMENT DEPARTED SERVICE CENTRE',
+          },
+        ],
+      },
+      'W95',
+      OBSERVED_AT
+    );
+    expect(result.events.map((e) => e.rawStatus)).not.toContain(
+      GIGL_ARRIVED_IN_CITY_RAW_STATUS
+    );
+  });
 });

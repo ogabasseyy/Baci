@@ -5,18 +5,23 @@ import {
 } from '@/schemas/oxygen-bank-details';
 import type { OxygenEnvironment } from './environment';
 
-type Bank = { name: string; code: string };
-type Cache = {
+export type Bank = { name: string; code: string };
+export type Cache = {
   get(key: string): Promise<unknown>;
-  set(key: string, value: { banks: Bank[] }): Promise<unknown>;
+  set(
+    key: string,
+    value: unknown,
+    options?: { nx?: boolean; ex?: number }
+  ): Promise<unknown>;
 };
-type Provider = {
+export type Provider = {
   call(operation: 'banks', input: Record<string, unknown>): Promise<unknown>;
 };
 function key(environment: OxygenEnvironment, partner: string) {
   const digest = createHash('sha256').update(partner).digest('hex');
   return `oxygen:supported-banks:${environment}:${digest}:v1`;
 }
+
 export async function readSupportedBanks(
   cache: Cache,
   environment: OxygenEnvironment,
@@ -27,6 +32,7 @@ export async function readSupportedBanks(
   );
   return parsed.success ? parsed.data.banks : null;
 }
+
 /** Never replace the last good cache entry on a failed or malformed refresh. */
 export async function refreshSupportedBanks(
   cache: Cache,

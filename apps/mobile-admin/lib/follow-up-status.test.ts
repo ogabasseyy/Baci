@@ -92,6 +92,19 @@ describe('follow-up status label', () => {
     ).toBe(label);
   });
 
+  it.each([
+    ['failed', 'paystack', 'Paystack · Payment Failed'],
+    ['failed', 'card', 'Card · Payment Failed'],
+    ['expired', 'paystack', 'Paystack · Payment Expired'],
+    ['expired', 'bank_transfer', 'Bank Transfer · Payment Expired'],
+    ['failed', 'unknown_method', 'Payment Failed'],
+    ['expired', '', 'Payment Expired'],
+  ] as const)('keeps the %s wording behind a recorded "%s" method', (payment_status, payment_method, label) => {
+    expect(
+      getFollowUpStatusLabel({ ...order, payment_method, payment_status })
+    ).toBe(label);
+  });
+
   it('preserves generic attempt and gateway messages', () => {
     expect(getFollowUpStatusLabel({ ...order, attempt_count: 2 })).toBe(
       '2 attempts'

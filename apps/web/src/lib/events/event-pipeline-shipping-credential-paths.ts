@@ -41,10 +41,34 @@ const quoteRead = 'apps/web/src/lib/shipping/quote-session-capability.ts';
 const storefrontAttest =
   'apps/web/src/lib/shipping/storefront-quote-attestation.ts';
 const cachedRead = 'apps/web/src/app/api/shipping/quotes/read-cached-quotes.ts';
+const partnerVerifierPath =
+  'apps/web/src/app/api/internal/partner-order-reconciliation/route.ts';
 
 export const eventPipelineShippingCredentialPaths = [
   // Fixed read-continuation/provider-attestation signatures; ordinary clients/RLS still enforce access.
   [quoteRead, proofPath, envPath],
+  // Partner routes sign fixed actions after deriving merchant and connection
+  // from scoped credentials. Only the internal verifier mints an order JWT.
+  ['apps/web/src/app/api/partners/v1/quotes/route.ts', proofPath, envPath],
+  ['apps/web/src/app/api/partners/v1/orders/route.ts', proofPath, envPath],
+  [
+    'apps/web/src/app/api/partners/v1/orders/[orderId]/route.ts',
+    proofPath,
+    envPath,
+  ],
+  [
+    'apps/web/src/app/api/partners/v1/order-submissions/route.ts',
+    proofPath,
+    envPath,
+  ],
+  [partnerVerifierPath, proofPath, envPath],
+  [
+    partnerVerifierPath,
+    'apps/web/src/lib/checkout/storefront-order-rpc-client.ts',
+    'apps/web/src/lib/supabase/scoped-jwt.ts',
+    'apps/web/src/lib/agentic/jwt-signing-material.ts',
+    envPath,
+  ],
   [storefrontAttest, proofPath, envPath],
   [cachedRead, quoteRead, proofPath, envPath],
   [quotesRoutePath, quoteRead, proofPath, envPath],

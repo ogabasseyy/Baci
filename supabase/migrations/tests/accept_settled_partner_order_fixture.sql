@@ -10,7 +10,7 @@ CREATE TABLE public.orders (
   currency text NOT NULL, source text NOT NULL, total numeric NOT NULL,
   shipping_fee numeric NOT NULL, subtotal numeric NOT NULL, tax_amount numeric NOT NULL, selected_quote_id uuid,
   shipping_funding_source text, amount_paid numeric DEFAULT 0, payment_status text NOT NULL,
-  shipping_status text, shipping_provider text, tracking_number text, updated_at timestamptz
+  shipping_status text, shipping_provider text, tracking_number text, shipment_id uuid, updated_at timestamptz
 );
 CREATE TABLE public.order_items (
   order_id uuid NOT NULL REFERENCES public.orders (id), product_id uuid NOT NULL,
@@ -70,7 +70,7 @@ CREATE TABLE public.shipping_quotes (
   id uuid PRIMARY KEY, merchant_id uuid NOT NULL, provider text NOT NULL,
   currency text NOT NULL, session_id text NOT NULL, expires_at timestamptz NOT NULL,
   used boolean, is_station_pickup boolean, price numeric NOT NULL,
-  provider_rate_id text, quote_request jsonb
+  provider_rate_id text, quote_request jsonb, service_tier text
 );
 CREATE TABLE public.shipping_quote_attestations (
   quote_id uuid PRIMARY KEY REFERENCES public.shipping_quotes (id),

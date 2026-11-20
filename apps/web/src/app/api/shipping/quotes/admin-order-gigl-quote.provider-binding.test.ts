@@ -185,6 +185,18 @@ describe('Admin GIGL provider, persistence, binding, and wallet behavior', () =>
     });
   });
 
+  it('holds partner delivery when the fresh GIG service differs', async () => {
+    mocks.bindRpc.mockResolvedValue({
+      data: null,
+      error: { message: 'partner_delivery_service_changed' },
+    });
+    const response = await subject({ receiver });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      code: 'PARTNER_DELIVERY_SERVICE_CHANGED',
+    });
+  });
+
   it('maps a non-conflict binder error to 500', async () => {
     mocks.bindRpc.mockResolvedValue({
       data: null,

@@ -4,7 +4,6 @@ ALTER TABLE public.shipping_quotes
   ADD COLUMN pricing_version text,
   ADD COLUMN provider_cost numeric,
   ADD COLUMN platform_margin numeric,
-  ADD COLUMN service_tier text,
   ADD COLUMN carrier_name text,
   ADD COLUMN estimated_days int,
   ADD COLUMN min_days int,
@@ -39,7 +38,9 @@ $$;
 CREATE FUNCTION private.order_settled_gigl_retained_amount(uuid, uuid)
 RETURNS numeric LANGUAGE sql STABLE AS $$ SELECT 0::numeric; $$;
 
-CREATE FUNCTION private.seed_fixture_gigl_quote(p_order_id uuid, p_price numeric)
+CREATE FUNCTION private.seed_fixture_gigl_quote(
+  p_order_id uuid, p_price numeric, p_service text DEFAULT 'Standard'
+)
 RETURNS uuid LANGUAGE plpgsql AS $$
 DECLARE
   v_quote_id uuid := gen_random_uuid();
@@ -47,7 +48,7 @@ BEGIN
   INSERT INTO public.shipping_quotes (
     id, merchant_id, provider, currency, session_id, expires_at, used,
     is_station_pickup, price, provider_rate_id, quote_request,
-    pricing_version, provider_cost, platform_margin
+    pricing_version, provider_cost, platform_margin, service_tier
   )
   SELECT v_quote_id, o.merchant_id, 'GIGL', 'NGN', o.id::text,
     now() + interval '5 minutes', false, false, p_price, 'fixture-dispatch-rate',
@@ -59,7 +60,7 @@ BEGIN
         'quantity', i.quantity, 'value', i.price))
         FROM public.order_items i WHERE i.order_id = o.id)
     ),
-    'gigl_platform_margin_v1', 1000, p_price - 1000
+    'gigl_platform_margin_v1', 1000, p_price - 1000, p_service
   FROM public.orders o WHERE o.id = p_order_id;
 
   INSERT INTO public.shipping_quote_attestations (

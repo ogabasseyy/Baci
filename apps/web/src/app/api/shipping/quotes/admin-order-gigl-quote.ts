@@ -253,6 +253,16 @@ export async function postAdminOrderGiglQuote(
         { status: 409 }
       );
     }
+    if (bindError.message === 'partner_delivery_service_changed') {
+      return NextResponse.json(
+        {
+          code: 'PARTNER_DELIVERY_SERVICE_CHANGED',
+          error:
+            'The current GIG service differs from the settled delivery quote. Review the service before booking.',
+        },
+        { status: 409 }
+      );
+    }
     const already = bindError.message?.includes('already');
     const staleInputs = bindError.message?.includes('stale_order_quote_inputs');
     return NextResponse.json(

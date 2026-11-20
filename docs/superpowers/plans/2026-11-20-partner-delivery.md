@@ -89,6 +89,8 @@ Before provisioning live quote credentials, confirm that the managed database ha
 
 Use the hourly `partner_unclaimed_quote_expiry` database log to check deletion volume. A repeated `batch_full=true` indicates that cleanup may be falling behind. Use the PostHog event `partner_tracking_status_unknown` to detect unrecognized persisted tracking statuses. The event records which status fell back to `unknown`.
 
+The database logs `partner_settlement_operational_error` for unavailable settlement terms or missing verified capture. The submission stays held and any verified capture is preserved for reconciliation. Partner fulfillment requires a bound merchant-wallet GIG quote before a shipment, waybill, or dispatch status can be recorded. The GIG service must match the one on the original paid quote.
+
 ### Resolve orders that require review
 
 Use the submission ID and provider references to check the stored charge and payout evidence. For a settlement hold, submit a corrected allocation only after independently verifying the amount, currency, and destination account. For an order hold, reconcile the original charge with the agreed refund owner and record the verified disposition under the original references. A price, stock, or tax change after the original purchase leaves that submission held. Keeping the original reference held prevents a later retry from fulfilling a charge while its refund is being resolved. A replacement purchase uses a fresh quote and new references after the original charge is resolved. Use the same review process for a verified capture outside the original quote window.

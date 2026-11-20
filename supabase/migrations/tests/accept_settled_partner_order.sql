@@ -13,7 +13,7 @@ SELECT format('20000000-0000-4000-8000-00000000000%s', n)::uuid,
   now() - interval '20 minutes', now() - interval '10 minutes',
   jsonb_build_object(
     'currency', 'NGN', 'settlement_basis', 'base_plus_delivery', 'merchant_payable_minor', 170000,
-    'delivery_minor', 150000, 'tax_minor', 0, 'total_minor', 171200,
+    'delivery_minor', 150000, 'tax_minor', 0, 'total_minor', 171200, 'service', 'Standard',
     'items', jsonb_build_array(jsonb_build_object(
       'product_id', format('40000000-0000-4000-8000-00000000000%s', least(n, 2)),
       'condition', 'new', 'quantity', 2, 'base_unit_price_minor', 10000
@@ -131,11 +131,11 @@ BEGIN
 
   INSERT INTO public.shipping_quotes (
     id, merchant_id, provider, currency, session_id, expires_at,
-    used, is_station_pickup, price, provider_rate_id, quote_request
+    used, is_station_pickup, price, provider_rate_id, quote_request, service_tier
   )
   SELECT id, '10000000-0000-4000-8000-000000000001', 'GIGL', 'NGN', accepted_order_id::text,
     now() + interval '5 minutes', false, false, fee, 'fixture-rate',
-    '{"shipmentType":"domestic","admin_order_provenance":"server_gigl_v1"}'
+    '{"shipmentType":"domestic","admin_order_provenance":"server_gigl_v1"}', 'Standard'
   FROM (VALUES (wallet_quote, 1500), (expensive_quote, 1501), (unattested_quote, 1500)) AS f(id, fee);
 
   INSERT INTO public.shipping_quote_attestations (

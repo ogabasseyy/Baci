@@ -49,6 +49,20 @@ function verifyGiglWalletBinding(orderId: string) {
     BEGIN
       PERFORM set_config('baci_fixture.staff', '7a100000-0000-4000-8000-000000000101', true);
       SELECT * INTO STRICT v_order FROM public.orders WHERE id = '${orderId}';
+      BEGIN
+        UPDATE public.orders SET shipping_status = 'shipped' WHERE id = v_order.id;
+        RAISE EXCEPTION 'unbound partner order was marked shipped' USING ERRCODE = '22023';
+      EXCEPTION WHEN raise_exception THEN
+        IF SQLERRM <> 'partner_shipping_requires_merchant_wallet' THEN RAISE; END IF;
+      END;
+      v_quote_id := private.seed_fixture_gigl_quote(v_order.id, 1500, 'GoFaster');
+      BEGIN
+        PERFORM public.bind_admin_gigl_quote(v_order.id, v_order.merchant_id,
+          v_quote_id, v_order.shipping_address);
+        RAISE EXCEPTION 'a different GIG service was bound at the same price' USING ERRCODE = '22023';
+      EXCEPTION WHEN raise_exception THEN
+        IF SQLERRM <> 'partner_delivery_service_changed' THEN RAISE; END IF;
+      END;
       v_quote_id := private.seed_fixture_gigl_quote(v_order.id, 1501);
       BEGIN
         PERFORM public.bind_admin_gigl_quote(v_order.id, v_order.merchant_id,

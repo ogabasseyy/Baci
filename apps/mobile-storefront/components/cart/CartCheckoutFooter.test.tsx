@@ -6,6 +6,9 @@ import Colors from '@/constants/Colors';
 import CartCheckoutFooter from './CartCheckoutFooter';
 
 jest.mock('expo-router/react-navigation', () => ({ useIsFocused: () => true }));
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 0, bottom: 42, left: 0, right: 0 }),
+}));
 
 jest.mock('react-native-reanimated', () => {
   const { View } =
@@ -84,6 +87,10 @@ describe('CartCheckoutFooter', () => {
         surfaceInset={Colors.light.background}
       />
     );
+
+    expect(screen.getByTestId('cart-checkout-footer')).toHaveStyle({
+      paddingBottom: 42,
+    });
 
     fireEvent.press(
       screen.getByRole('button', { name: 'Negotiate cart total' })

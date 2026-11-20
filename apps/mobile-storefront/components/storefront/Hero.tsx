@@ -68,7 +68,9 @@ export function Hero({
 }: HeroProps) {
   const { colors, isDark } = useTheme();
   const styles = getHeroStyles(colors, isDark);
-  const { width: screenWidth, fontScale } = useWindowDimensions();
+  const { width: windowWidth, fontScale } = useWindowDimensions();
+  const [layoutWidth, setLayoutWidth] = useState(0);
+  const screenWidth = layoutWidth || windowWidth;
   const template = getTemplateConfig(CONFIG.BUSINESS_TYPE, CONFIG.TEMPLATE_ID);
   const scrollX = useSharedValue(0);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -134,21 +136,30 @@ export function Hero({
     scrollOffsetRef.current = offset;
   };
   const wasAdSlideShownRef = useRef(isAdSlideShown);
+  const previousWidthRef = useRef(screenWidth);
   useEffect(() => {
     // Consent resolving (or a load failure) inserts or removes the slide at
     // index 1 under a scrolled carousel; shift the offset by one page so the
     // visible hero stays put instead of being replaced by the ad (or
     // jumping back on removal). The active dot follows the compensated
     // offset because a programmatic scroll fires no momentum event.
-    const target = nextOffsetAfterAdToggle({
+    const previousWidth = previousWidthRef.current;
+    const didResize = previousWidth > 0 && previousWidth !== screenWidth;
+    const adjustedOffset = didResize
+      ? (scrollOffsetRef.current / previousWidth) * screenWidth
+      : scrollOffsetRef.current;
+    const adAdjustedOffset = nextOffsetAfterAdToggle({
       adSlotWidth: screenWidth,
       insertionOffset: screenWidth,
       isAdShown: isAdSlideShown,
-      scrollOffset: scrollOffsetRef.current,
+      scrollOffset: adjustedOffset,
       wasAdShown: wasAdSlideShownRef.current,
     });
     wasAdSlideShownRef.current = isAdSlideShown;
+    previousWidthRef.current = screenWidth;
+    const target = adAdjustedOffset ?? (didResize ? adjustedOffset : null);
     if (target !== null) {
+      scrollOffsetRef.current = target;
       flatListRef.current?.scrollToOffset({ offset: target, animated: false });
       setCurrentIndex(Math.round(target / screenWidth));
     }
@@ -245,7 +256,11 @@ export function Hero({
   };
 
   return (
-    <View style={{ height: getHeroHeight() }}>
+    <View
+      onLayout={({ nativeEvent: { layout } }) => setLayoutWidth(layout.width)}
+      style={{ height: getHeroHeight() }}
+      testID="hero-carousel-viewport"
+    >
       <Animated.FlatList
         ref={flatListRef}
         getItemLayout={(_, index) => ({

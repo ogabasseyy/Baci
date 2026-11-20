@@ -63,7 +63,7 @@ export function LoginScreen() {
 
       <SafeAreaView
         style={[styles.container, { backgroundColor: colors.background }]}
-        edges={['bottom']}
+        edges={['bottom', 'left', 'right']}
       >
         <AppKeyboardAwareScrollView
           style={styles.safeArea}

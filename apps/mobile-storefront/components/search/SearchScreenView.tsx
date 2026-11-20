@@ -171,7 +171,8 @@ export default function SearchScreenView({
     <SearchComparisonSession scope={committedQuery}>
       <SafeAreaView
         style={[styles.container, { backgroundColor: colors.background }]}
-        edges={['top']}
+        edges={['top', 'left', 'right']}
+        testID="storefront-search-safe-area"
         onLayout={(event) => {
           if (!isKeyboardVisible)
             setViewportHeight(event.nativeEvent.layout.height);

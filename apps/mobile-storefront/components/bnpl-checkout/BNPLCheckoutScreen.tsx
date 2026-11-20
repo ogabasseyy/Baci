@@ -86,7 +86,7 @@ export function BNPLCheckoutScreen() {
     return (
       <SafeAreaView
         style={[styles.container, { backgroundColor: colors.background }]}
-        edges={['top']}
+        edges={['top', 'left', 'right']}
       >
         <Stack.Screen
           options={{
@@ -151,7 +151,7 @@ export function BNPLCheckoutScreen() {
   return (
     <SafeAreaView
       style={[styles.container, { backgroundColor: colors.background }]}
-      edges={['top']}
+      edges={['top', 'left', 'right']}
     >
       <Stack.Screen
         options={{

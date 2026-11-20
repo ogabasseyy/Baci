@@ -47,7 +47,7 @@ export function FAQView({
   return (
     <SafeAreaView
       style={[styles.container, { backgroundColor: colors.background }]}
-      edges={['bottom']}
+      edges={['bottom', 'left', 'right']}
     >
       <ScrollView
         style={styles.scrollView}

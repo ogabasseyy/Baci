@@ -43,6 +43,14 @@ it('keeps the Android gallery stable when the keyboard reduces window height', (
       });
     });
     expect(result.current.headerHeight).toBe(390);
+
+    act(() => {
+      Dimensions.set({
+        screen: { ...originalScreen, width: 600, height: 480 },
+        window: { ...original, width: 600, height: 450 },
+      });
+    });
+    expect(result.current.headerHeight).toBe(480);
   } finally {
     act(() => Dimensions.set({ window: original, screen: originalScreen }));
     platform.restore();

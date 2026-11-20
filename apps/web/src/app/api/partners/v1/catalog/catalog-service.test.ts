@@ -21,8 +21,12 @@ vi.mock('@/lib/feed-identifier', () => ({
   resolveFeedMerchant: mocks.resolveMerchant,
 }));
 vi.mock('@/app/api/feed/google-merchant/feed-data', () => ({
-  getCachedGoogleMerchantFeedData: mocks.getFeedData,
+  getGoogleMerchantFeedData: mocks.getFeedData,
 }));
+vi.mock('./catalog-version', () => ({
+  readCrossRemCatalogVersion: async () => 'synthetic-version',
+}));
+vi.mock('@/lib/redis', () => ({ getRedis: () => null }));
 vi.mock('./catalog-bindings', () => ({
   crossRemCatalogConfig: {
     bindings: mocks.bindings,

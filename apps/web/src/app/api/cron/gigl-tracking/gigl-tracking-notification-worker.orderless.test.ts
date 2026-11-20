@@ -72,4 +72,34 @@ describe('processClaimedGiglTrackingNotifications orderless repair pickups', () 
       expect.any(Object)
     );
   });
+
+  it('bugfix: a cancelled repair pickup tells the merchant to book a new pickup, not to rebook an order', async () => {
+    const repairId = '00000000-0000-4000-8000-000000000099';
+    const supabase = createGiglTrackingNotificationSupabase({
+      description: 'Cancelled',
+      raw_status: 'MSCC',
+    });
+    const summary = await processClaimedGiglTrackingNotifications(
+      supabase as never,
+      [
+        {
+          ...notification,
+          notification_kind: 'cancelled',
+          order_id: null,
+          repair_id: repairId,
+        },
+      ],
+      'worker'
+    );
+
+    expect(summary.sent).toBe(1);
+    expect(notifyMerchant).toHaveBeenCalledWith(
+      notification.merchant_id,
+      'GIG pickup cancelled',
+      expect.stringContaining('book a new pickup'),
+      { repairId, type: 'repair' },
+      'orders',
+      expect.any(Object)
+    );
+  });
 });

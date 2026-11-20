@@ -183,3 +183,8 @@
 **Learning:** Submit buttons managing async operations like sign-in often miss the aria-busy attribute when disabling themselves during loading, depriving screen readers of clear state feedback.
 **Action:** When disabling buttons for loading state, always bind aria-busy to the same loading boolean.
 **Source:** WCAG 4.1.2 Name, Role, Value
+
+## 2025-02-05 — Prevent Double SR Announcements in RN Toasts
+**Learning:** Using manual `AccessibilityInfo.announceForAccessibility` alongside declarative `accessibilityLiveRegion` causes double announcements on Android, whereas iOS VoiceOver ignores `accessibilityLiveRegion`. Also, `accessibilityRole="alert"` already implies assertive priority while `accessibilityLiveRegion` controls announcement urgency (`assertive` for `error`, `polite` for non-error notifications).
+**Action:** Pair `accessibilityRole="alert"` with variant-appropriate `accessibilityLiveRegion` (`assertive` for errors, `polite` otherwise) for Android and web, and call `AccessibilityInfo.announceForAccessibility` only on iOS (`Platform.OS === 'ios'`) whenever a visible toast has non-empty text (including `duration={0}`).
+**Source:** React Native Accessibility Docs

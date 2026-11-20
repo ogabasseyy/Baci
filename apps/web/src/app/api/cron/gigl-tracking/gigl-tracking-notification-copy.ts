@@ -83,6 +83,10 @@ const audienceCopy: Record<
       title: 'GIG pickup delayed',
       body: 'Your GIG Logistics pickup is taking longer than expected.',
     },
+    cancelled: {
+      title: 'GIG shipment cancelled',
+      body: 'GIG Logistics cancelled the shipment. If the order still needs delivery, book a new shipment.',
+    },
     waybill_changed: {
       title: 'GIG waybill updated',
       body: 'The shipment now uses a new GIG waybill.',
@@ -90,11 +94,22 @@ const audienceCopy: Record<
   },
 };
 
+// A repair pickup has no order, so the merchant's cancellation alert is about
+// collecting the device, not delivering an order.
+const repairPickupCancelledCopy = {
+  title: 'GIG pickup cancelled',
+  body: 'GIG Logistics cancelled the repair pickup. If the device still needs collecting, book a new pickup.',
+};
+
 export function copyFor(
   kind: string,
   description: string,
-  audience?: Audience
+  audience?: Audience,
+  isRepairPickup = false
 ) {
+  if (isRepairPickup && audience === 'merchant' && kind === 'cancelled') {
+    return repairPickupCancelledCopy;
+  }
   return (
     (audience ? audienceCopy[audience][kind] : undefined) ??
     notificationCopy[kind] ?? {

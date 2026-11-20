@@ -13,11 +13,20 @@ export type PrimaryWalletClaim =
       intentId: string;
       claimToken: string;
       reclaimed?: boolean;
+      identityRefreshed?: boolean;
     }
   | { status: 'pending' | 'ready' | 'conflict' };
 
 export interface PrimaryWalletOnboardingStorage {
   claim(
+    input: PrimaryWalletIntentScope & { requestFingerprint: string }
+  ): Promise<PrimaryWalletClaim>;
+  /**
+   * Re-fingerprint an unresolved, walletless, unreviewed intent of this
+   * user as a fresh claim. Call only after PiggyVest's listing proved no
+   * customer exists for this account; otherwise 'conflict'.
+   */
+  refreshUnknown(
     input: PrimaryWalletIntentScope & { requestFingerprint: string }
   ): Promise<PrimaryWalletClaim>;
   recordAccepted(

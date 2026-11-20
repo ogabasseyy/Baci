@@ -67,7 +67,10 @@ async function loadMerchantQuotes(
       lName: customer.lastName,
       email: customer.email,
       merchantId: input.merchantId,
-      deliveryPreference: 'door',
+      // Ask for what the shopper chose, and for merchant rates only: the chat
+      // offers nothing else, so no carrier is queried.
+      deliveryPreference: input.choice.pickup ? 'pickup_station' : 'door',
+      merchantRatesOnly: true,
       country: 'Nigeria',
       countryCode: 'NG',
       cartSubtotal: input.cartSubtotal,

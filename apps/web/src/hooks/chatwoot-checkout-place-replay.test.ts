@@ -211,5 +211,25 @@ describe('handleChatwootCheckoutPlace', () => {
         paths(calls).filter((path) => path === '/api/payments/initialize')
       ).toHaveLength(1);
     });
+
+    it('two copies of the same request arriving together set up payment once', async () => {
+      const { calls } = stubCheckoutFetch(happyHandlers());
+      const first = placeInput();
+      const second = placeInput();
+
+      await Promise.all([
+        handleChatwootCheckoutPlace(first),
+        handleChatwootCheckoutPlace(second),
+      ]);
+
+      expect(lastResult(first)).toMatchObject({ status: 'payment_ready' });
+      expect(lastResult(second)).toEqual(lastResult(first));
+      expect(
+        paths(calls).filter((path) => path === '/api/orders')
+      ).toHaveLength(1);
+      expect(
+        paths(calls).filter((path) => path === '/api/payments/initialize')
+      ).toHaveLength(1);
+    });
   });
 });

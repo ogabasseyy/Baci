@@ -103,6 +103,43 @@ describe('handleChatwootCheckoutPlace customer country', () => {
   });
 });
 
+describe('handleChatwootCheckoutPlace order currency', () => {
+  it.each([
+    ['missing', undefined],
+    ['null', null],
+    ['not naira', 'USD'],
+  ])('starts no bank transfer when the order currency is %s', async (_label, currency) => {
+    const { calls } = stubCheckoutFetch({
+      ...happyHandlers(),
+      '/api/orders': () => ({
+        status: 201,
+        body: {
+          order: {
+            id: 'order-uuid',
+            order_number: 'ORD-1001',
+            total: 4650,
+            tracking_token: 'track-1',
+            ...(currency === undefined ? {} : { currency }),
+          },
+          amountDueToGateway: 4650,
+        },
+      }),
+    });
+    const input = placeInput();
+
+    await handleChatwootCheckoutPlace(input);
+
+    expect(lastResult(input)).toMatchObject({
+      status: 'failed',
+      code: 'payment_unavailable',
+      orderNumber: 'ORD-1001',
+    });
+    expect(
+      paths(calls).filter((path) => path === '/api/payments/initialize')
+    ).toHaveLength(0);
+  });
+});
+
 describe('handleChatwootCheckoutPlace delivery quote basis', () => {
   it('quotes on the cart subtotal the delivery options were shown for, not the catalog subtotal', async () => {
     const { calls } = stubCheckoutFetch(happyHandlers());

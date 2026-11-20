@@ -5,6 +5,7 @@ import { isQuizVoucherCartItem } from '@/lib/checkout/cart-entitlement-sanitizer
 import { formatPhoneToE164 } from '@/lib/phone';
 import type { ChatwootCommerceMessage } from '@/schemas/chatwoot-commerce-message';
 import { resolveChatwootCheckoutDelivery } from './chatwoot-checkout-delivery';
+import { runChatwootCheckoutSerially } from './chatwoot-checkout-in-flight';
 import { deriveChatwootCheckoutKeys } from './chatwoot-checkout-keys';
 import {
   getChatwootCheckoutRememberedOrder,
@@ -69,8 +70,8 @@ async function startPayment(
       });
     }
   };
-  if (order.currency && order.currency !== 'NGN')
-    return fail('payment_unavailable');
+  // Bank transfer is naira-only. A missing currency is not assumed to be NGN.
+  if (order.currency !== 'NGN') return fail('payment_unavailable');
   const payment = await initializeChatwootCheckoutBankTransfer({
     merchantId,
     orderId: order.orderId,
@@ -93,7 +94,7 @@ async function startPayment(
 }
 
 async function placeOrder(input: HandleChatwootCheckoutPlaceInput) {
-  const { request, snapshot, authorizedCartId, requestedCartRef } = input;
+  const { request } = input;
   const fail = (code: ChatwootCheckoutFailureCode) => {
     if (input.canPost()) {
       input.postResult({
@@ -107,6 +108,29 @@ async function placeOrder(input: HandleChatwootCheckoutPlaceInput) {
   if (!merchant) return fail('order_failed');
   const keys = await deriveChatwootCheckoutKeys(request.requestId, merchant.id);
   if (!keys) return fail('order_failed');
+  // One at a time per request: a duplicate that arrives mid-flight waits, then
+  // answers from what the first one remembered instead of racing it into a
+  // second payment setup.
+  return runChatwootCheckoutSerially(keys.idempotencyKey, () =>
+    placeForKeys(input, merchant, keys)
+  );
+}
+
+async function placeForKeys(
+  input: HandleChatwootCheckoutPlaceInput,
+  merchant: { id: string; taxRate: number },
+  keys: { idempotencyKey: string; operationId: string }
+) {
+  const { request, snapshot, authorizedCartId, requestedCartRef } = input;
+  const fail = (code: ChatwootCheckoutFailureCode) => {
+    if (input.canPost()) {
+      input.postResult({
+        requestId: request.requestId,
+        status: 'failed',
+        code,
+      });
+    }
+  };
 
   const remembered = getChatwootCheckoutRememberedOrder(keys.idempotencyKey);
   if (remembered) {

@@ -54,6 +54,25 @@ describe('resolveChatwootCheckoutDelivery', () => {
     });
   });
 
+  it('asks for the delivery type the shopper chose, merchant rates only', async () => {
+    const door = stub(merchantQuote());
+    await resolveChatwootCheckoutDelivery(input());
+    expect(JSON.parse(String(door.calls[0]?.init.body))).toMatchObject({
+      deliveryPreference: 'door',
+      merchant_rates_only: true,
+    });
+    vi.unstubAllGlobals();
+
+    const pickup = stub(merchantQuote());
+    await resolveChatwootCheckoutDelivery(
+      input({ choice: { ...checkoutPlaceRequest.delivery, pickup: true } })
+    );
+    expect(JSON.parse(String(pickup.calls[0]?.init.body))).toMatchObject({
+      deliveryPreference: 'pickup_station',
+      merchant_rates_only: true,
+    });
+  });
+
   it('fails for an unknown state without a request', async () => {
     const { fetchMock } = stub(merchantQuote());
 

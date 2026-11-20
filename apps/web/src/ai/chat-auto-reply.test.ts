@@ -89,9 +89,14 @@ describe('generateChatAutoReply', () => {
     expect(last.content).toContain('No matching products were found.');
   });
 
-  it('still answers when the catalog search fails', async () => {
+  it('hands over instead of telling the model nothing matched when the catalog search fails', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
     mocks.search.mockRejectedValue(new Error('down'));
-    expect(await generateChatAutoReply(input)).toMatchObject({ ok: true });
+    expect(await generateChatAutoReply(input)).toEqual({
+      ok: false,
+      reason: 'unavailable',
+    });
+    expect(mocks.generate).not.toHaveBeenCalled();
   });
 
   it('fails closed when the model chain is exhausted', async () => {

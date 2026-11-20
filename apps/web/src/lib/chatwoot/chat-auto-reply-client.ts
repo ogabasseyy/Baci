@@ -1,8 +1,9 @@
 import 'server-only';
 
+import { z } from 'zod';
 import type { ChatAutoReplyBinding } from './chat-auto-reply-config';
 
-const REQUEST_TIMEOUT_MS = 8_000;
+const REQUEST_TIMEOUT_MS = 5_000;
 
 async function providerPost(
   binding: ChatAutoReplyBinding,
@@ -85,4 +86,54 @@ export function setConversationLabels(
     binding.apiAccessToken,
     { labels: input.labels }
   );
+}
+
+const conversationSnapshotSchema = z.object({
+  status: z.string(),
+  labels: z.array(z.string()).max(50).default([]),
+});
+
+export type ConversationSnapshot = { status: string; labels: string[] };
+
+/**
+ * The conversation's live status and labels. A webhook snapshot can be stale
+ * by the time the assistant acts, so decisions that must not talk over a
+ * person or drop a label read this first. Null when it cannot be read.
+ */
+export async function getConversationSnapshot(
+  binding: ChatAutoReplyBinding,
+  conversationId: number
+): Promise<ConversationSnapshot | null> {
+  const path = `/conversations/${conversationId}`;
+  const url = new URL(
+    `/api/v1/accounts/${binding.accountId}${path}`,
+    binding.apiOrigin
+  );
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      cache: 'no-store',
+      headers: {
+        accept: 'application/json',
+        api_access_token: binding.apiAccessToken,
+      },
+      redirect: 'error',
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+    if (!response.ok) {
+      console.error('[chat-auto-reply] provider request failed', {
+        status: response.status,
+        path: '/conversations/:id',
+      });
+      return null;
+    }
+    const parsed = conversationSnapshotSchema.safeParse(await response.json());
+    return parsed.success ? parsed.data : null;
+  } catch {
+    console.error('[chat-auto-reply] provider request failed', {
+      status: null,
+      path: '/conversations/:id',
+    });
+    return null;
+  }
 }

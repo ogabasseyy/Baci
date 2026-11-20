@@ -1,6 +1,7 @@
 import 'server-only';
 
 import type { ChatAutoReplyTurn } from '@/ai/chat-auto-reply-prompt';
+import { CHAT_AUTO_REPLY_MAX_QUESTION_LENGTH } from '@/schemas/chat-auto-reply';
 import type { ChatAutoReplyBinding } from './chat-auto-reply-config';
 import { listMerchantInboxMessages } from './merchant-inbox-client';
 
@@ -19,10 +20,17 @@ export async function loadChatAutoReplyHistory(
   const result = await listMerchantInboxMessages(binding, { conversationId });
   if (!result.ok) return [];
   return result.messages
-    .filter((message) => message.id !== currentMessageId && message.text.trim())
+    .filter(
+      (message) =>
+        message.id !== currentMessageId &&
+        message.text.trim() &&
+        // A person's reply is not the assistant's: showing it as an
+        // assistant turn would let the model imitate staff wording.
+        (message.sender === 'customer' || message.sender === 'assistant')
+    )
     .slice(-MAX_TURNS)
     .map((message) => ({
       role: message.sender === 'customer' ? 'user' : 'assistant',
-      content: message.text,
+      content: message.text.slice(0, CHAT_AUTO_REPLY_MAX_QUESTION_LENGTH),
     }));
 }

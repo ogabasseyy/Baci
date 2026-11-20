@@ -19,7 +19,16 @@ describe('loadChatAutoReplyHistory', () => {
             body: {
               payload: [
                 message(1, { content: 'hi' }),
-                message(2, { content: 'hello!', message_type: 1 }),
+                message(2, {
+                  content: 'hello!',
+                  message_type: 1,
+                  sender: { type: 'agent_bot' },
+                }),
+                message(4, {
+                  content: 'Staff here, it costs 5',
+                  message_type: 1,
+                  sender: { type: 'user', name: 'Staff' },
+                }),
                 message(3, { content: 'price?' }),
               ],
             },
@@ -30,6 +39,25 @@ describe('loadChatAutoReplyHistory', () => {
       { role: 'user', content: 'hi' },
       { role: 'assistant', content: 'hello!' },
     ]);
+  });
+
+  it('never presents a staff reply to the model as an assistant turn', async () => {
+    stubFetch((url) =>
+      url.pathname.endsWith('/messages')
+        ? {
+            body: {
+              payload: [
+                message(1, {
+                  content: 'Staff wording',
+                  message_type: 1,
+                  sender: { type: 'user' },
+                }),
+              ],
+            },
+          }
+        : { body: conversation(7) }
+    );
+    expect(await loadChatAutoReplyHistory(bot, 7, 9)).toEqual([]);
   });
 
   it('returns nothing when the history cannot be read', async () => {

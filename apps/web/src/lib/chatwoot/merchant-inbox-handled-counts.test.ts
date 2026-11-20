@@ -28,7 +28,7 @@ describe('getHandledCounts', () => {
     });
     expect(payload[2]).toMatchObject({
       attribute_key: 'created_at',
-      values: ['2026-11-12'],
+      values: ['2026-11-11'],
       query_operator: null,
     });
   });

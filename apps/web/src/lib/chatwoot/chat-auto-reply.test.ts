@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   post: vi.fn(),
   status: vi.fn(),
   labels: vi.fn(),
+  snapshot: vi.fn(),
 }));
 vi.mock('@/ai/chat-auto-reply', () => ({
   generateChatAutoReply: mocks.generate,
@@ -17,6 +18,7 @@ vi.mock('./chat-auto-reply-client', () => ({
   postAssistantMessage: mocks.post,
   setConversationStatus: mocks.status,
   setConversationLabels: mocks.labels,
+  getConversationSnapshot: mocks.snapshot,
 }));
 
 import { recordMerchantTakeover, runChatAutoReply } from './chat-auto-reply';
@@ -62,6 +64,7 @@ beforeEach(() => {
   mocks.status.mockResolvedValue(true);
   mocks.labels.mockResolvedValue(true);
   mocks.generate.mockResolvedValue(draft());
+  mocks.snapshot.mockResolvedValue({ status: 'pending', labels: ['vip'] });
 });
 
 describe('runChatAutoReply', () => {
@@ -76,6 +79,48 @@ describe('runChatAutoReply', () => {
       labels: ['vip', 'handled-by-ai'],
     });
     expect(mocks.status).not.toHaveBeenCalled();
+  });
+
+  it('clears the merchant label when the assistant resumes a conversation', async () => {
+    mocks.snapshot.mockResolvedValue({
+      status: 'pending',
+      labels: ['vip', 'handled-by-merchant'],
+    });
+    await runChatAutoReply(binding, event());
+    expect(mocks.labels).toHaveBeenCalledWith(binding, {
+      conversationId: 7,
+      labels: ['vip', 'handled-by-ai'],
+    });
+  });
+
+  it('merges against the live labels, not the webhook snapshot', async () => {
+    mocks.snapshot.mockResolvedValue({
+      status: 'pending',
+      labels: ['vip', 'refund-risk'],
+    });
+    await runChatAutoReply(binding, event());
+    expect(mocks.labels).toHaveBeenCalledWith(binding, {
+      conversationId: 7,
+      labels: ['vip', 'refund-risk', 'handled-by-ai'],
+    });
+  });
+
+  it('does not talk over a person who replied while the model was working', async () => {
+    mocks.snapshot.mockResolvedValue({ status: 'open', labels: [] });
+    expect(await runChatAutoReply(binding, event())).toBe('skipped');
+    expect(mocks.post).not.toHaveBeenCalled();
+    expect(mocks.labels).not.toHaveBeenCalled();
+  });
+
+  it('does not reply when the live conversation cannot be read', async () => {
+    mocks.snapshot.mockResolvedValue(null);
+    expect(await runChatAutoReply(binding, event())).toBe('skipped');
+    expect(mocks.post).not.toHaveBeenCalled();
+  });
+
+  it('cuts a very long customer message before it reaches the model', async () => {
+    await runChatAutoReply(binding, event({ content: 'x'.repeat(50_000) }));
+    expect(mocks.generate.mock.calls[0][0].question).toHaveLength(2000);
   });
 
   it('does nothing when a person owns the conversation', async () => {
@@ -108,6 +153,15 @@ describe('runChatAutoReply', () => {
     expect(mocks.status).toHaveBeenCalledOnce();
   });
 
+  it('does not tell the customer a person is coming when the queue move fails', async () => {
+    mocks.status.mockResolvedValue(false);
+    expect(
+      await runChatAutoReply(binding, event({ content: 'agent please' }))
+    ).toBe('failed');
+    expect(mocks.post).not.toHaveBeenCalled();
+    expect(mocks.labels).not.toHaveBeenCalled();
+  });
+
   it('hands over when confidence is low and never sends the guess', async () => {
     mocks.generate.mockResolvedValue(draft({ confidence: 0.3 }));
     expect(await runChatAutoReply(binding, event())).toBe('handed_over');
@@ -132,13 +186,6 @@ describe('runChatAutoReply', () => {
     mocks.post.mockResolvedValue(false);
     expect(await runChatAutoReply(binding, event())).toBe('failed');
     expect(mocks.labels).not.toHaveBeenCalled();
-  });
-
-  it('reports failure when the hand-over could not reach the customer', async () => {
-    mocks.post.mockResolvedValue(false);
-    expect(
-      await runChatAutoReply(binding, event({ content: 'agent please' }))
-    ).toBe('failed');
   });
 });
 

@@ -138,4 +138,38 @@ describe('POST /api/webhooks/chatwoot/[webhookKey] assistant', () => {
     await settle();
     expect(mocks.takeover).not.toHaveBeenCalled();
   });
+
+  it('does not answer for a store the database no longer knows', async () => {
+    mocks.record.mockResolvedValue({
+      ok: true,
+      outcome: 'ignored',
+      duplicate: false,
+    });
+    await call(payload());
+    await settle();
+    expect(mocks.run).not.toHaveBeenCalled();
+  });
+
+  it('still answers when the merchant muted notifications', async () => {
+    mocks.record.mockResolvedValue({
+      ok: true,
+      outcome: 'muted',
+      duplicate: false,
+    });
+    await call(payload());
+    await settle();
+    expect(mocks.run).toHaveBeenCalledOnce();
+  });
+
+  it('never uses a credential from a different account or inbox than the signed webhook', async () => {
+    mocks.assistantBinding.mockReturnValue({ ...assistant, accountId: 9999 });
+    await call(payload());
+    await settle();
+    expect(mocks.run).not.toHaveBeenCalled();
+
+    mocks.assistantBinding.mockReturnValue({ ...assistant, inboxId: 9999 });
+    await call(payload());
+    await settle();
+    expect(mocks.run).not.toHaveBeenCalled();
+  });
 });

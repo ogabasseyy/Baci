@@ -29,6 +29,27 @@ function respond(status: number, body: Record<string, unknown>) {
   return NextResponse.json(body, { status, headers: NO_STORE_HEADERS });
 }
 
+/**
+ * The assistant's credential, only when it belongs to the same account and
+ * inbox the signed webhook came from: two settings that disagree must never
+ * mix one account's conversation number with another account's token.
+ */
+function assistantFor(webhook: {
+  merchantId: string;
+  accountId: number;
+  inboxId: number;
+}) {
+  const assistant = getChatAutoReplyBinding(webhook.merchantId);
+  if (
+    !assistant ||
+    assistant.accountId !== webhook.accountId ||
+    assistant.inboxId !== webhook.inboxId
+  ) {
+    return null;
+  }
+  return assistant;
+}
+
 type ChatEvent = Parameters<typeof sendChatEventPush>[0];
 
 async function pushChatMessage(chatEvent: ChatEvent) {
@@ -121,7 +142,7 @@ export async function POST(
   }
   // A staff reply takes the conversation over from the assistant.
   if (isMerchantReply(event)) {
-    const assistant = getChatAutoReplyBinding(binding.merchantId);
+    const assistant = assistantFor(binding);
     if (assistant) after(() => recordMerchantTakeover(assistant, event));
     return respond(200, { received: true, handled: false });
   }
@@ -160,9 +181,11 @@ export async function POST(
   }
   // The assistant answers each message once: a redelivery is not answered
   // again. It is off unless the store is switched on and has a bot credential.
-  const assistant = result.duplicate
-    ? null
-    : getChatAutoReplyBinding(binding.merchantId);
+  // A store the database no longer knows ("ignored") is never answered for.
+  const assistant =
+    result.duplicate || result.outcome === 'ignored'
+      ? null
+      : assistantFor(binding);
   if (assistant) after(() => runChatAutoReply(assistant, event));
   return respond(200, { received: true, handled: true });
 }

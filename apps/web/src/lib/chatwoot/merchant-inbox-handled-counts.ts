@@ -80,7 +80,10 @@ export async function getHandledCounts(
   binding: MerchantInboxBinding,
   input: { days: number; now: number }
 ): Promise<HandledCounts> {
-  const sinceDate = new Date(input.now - input.days * MS_PER_DAY)
+  // The provider compares whole dates with a strict "greater than", so start
+  // one day earlier: the window is never shorter than requested (it may
+  // include the partial day before the cutoff).
+  const sinceDate = new Date(input.now - (input.days + 1) * MS_PER_DAY)
     .toISOString()
     .slice(0, 10);
   const [handledByAi, handledByMerchant] = await Promise.all([

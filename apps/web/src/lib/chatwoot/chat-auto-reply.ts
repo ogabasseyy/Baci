@@ -2,11 +2,13 @@ import 'server-only';
 
 import { generateChatAutoReply } from '@/ai/chat-auto-reply';
 import {
+  CHAT_AUTO_REPLY_MAX_QUESTION_LENGTH,
   CHAT_AUTO_REPLY_MIN_CONFIDENCE,
   type ChatAutoReply,
 } from '@/schemas/chat-auto-reply';
 import type { ChatWebhookMessageCreated } from '@/schemas/chat-webhook';
 import {
+  getConversationSnapshot,
   postAssistantMessage,
   setConversationLabels,
   setConversationStatus,
@@ -33,42 +35,76 @@ export type ChatAutoReplyOutcome =
   | 'skipped'
   | 'failed';
 
-type Conversation = { conversationId: number; labels: readonly string[] };
+const HISTORY_DEADLINE_MS = 6_000;
 
-function labelsOf(event: ChatWebhookMessageCreated): Conversation {
-  return {
-    conversationId: event.conversation.id,
-    labels: event.conversation.labels ?? [],
-  };
+/** Labels are merged against the live list, never the webhook's old copy. */
+async function updateLabels(
+  binding: ChatAutoReplyBinding,
+  conversationId: number,
+  change: { add?: readonly string[]; remove?: readonly string[] }
+): Promise<boolean> {
+  const live = await getConversationSnapshot(binding, conversationId);
+  // The provider replaces the whole list, so without a live read a write
+  // could silently drop someone else's label: skip it instead.
+  if (!live) return false;
+  return setConversationLabels(binding, {
+    conversationId,
+    labels: mergeChatLabels(live.labels, change),
+  });
+}
+
+/** True only while the conversation is still the assistant's (pending). */
+async function isStillPending(
+  binding: ChatAutoReplyBinding,
+  conversationId: number
+): Promise<boolean> {
+  const live = await getConversationSnapshot(binding, conversationId);
+  return live?.status === 'pending';
 }
 
 async function handOver(
   binding: ChatAutoReplyBinding,
-  conversation: Conversation,
+  conversationId: number,
   reason: string
 ): Promise<ChatAutoReplyOutcome> {
-  // The customer is told first: if a later step fails they still know a
-  // person is coming. The status change is what actually stops the assistant.
-  const told = await postAssistantMessage(binding, {
-    conversationId: conversation.conversationId,
-    content: HANDOVER_MESSAGE,
-  });
+  if (!(await isStillPending(binding, conversationId))) return 'skipped';
+  // The status move comes first: it is what stops the assistant. If it fails
+  // the customer is not told anything, so the next message simply tries again
+  // instead of promising a person who was never notified.
   const opened = await setConversationStatus(binding, {
-    conversationId: conversation.conversationId,
+    conversationId,
     status: 'open',
   });
+  if (!opened) return 'failed';
   await postAssistantMessage(binding, {
-    conversationId: conversation.conversationId,
+    conversationId,
+    content: HANDOVER_MESSAGE,
+  });
+  await postAssistantMessage(binding, {
+    conversationId,
     content: `Assistant handed this over: ${reason}.`,
     isPrivate: true,
   });
-  await setConversationLabels(binding, {
-    conversationId: conversation.conversationId,
-    labels: mergeChatLabels(conversation.labels, {
-      add: [CHAT_LABEL_NEEDS_HUMAN],
-    }),
+  await updateLabels(binding, conversationId, {
+    add: [CHAT_LABEL_NEEDS_HUMAN],
   });
-  return told && opened ? 'handed_over' : 'failed';
+  return 'handed_over';
+}
+
+async function withDeadline<T>(
+  work: Promise<T>,
+  ms: number,
+  fallback: T
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const limit = new Promise<T>((resolve) => {
+    timer = setTimeout(() => resolve(fallback), ms);
+  });
+  try {
+    return await Promise.race([work, limit]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function needsHandover(draft: ChatAutoReply): string | null {
@@ -90,40 +126,42 @@ export async function runChatAutoReply(
 ): Promise<ChatAutoReplyOutcome> {
   const decision = decideChatAutoReply(event);
   if (decision.action === 'skip') return 'skipped';
-  const conversation = labelsOf(event);
+  const conversationId = event.conversation.id;
   if (decision.action === 'handover') {
-    return handOver(binding, conversation, 'the customer asked for a person');
+    return handOver(binding, conversationId, 'the customer asked for a person');
   }
 
-  const question = (event.content ?? '').trim();
-  const history = await loadChatAutoReplyHistory(
-    binding,
-    conversation.conversationId,
-    event.id
+  const question = (event.content ?? '')
+    .trim()
+    .slice(0, CHAT_AUTO_REPLY_MAX_QUESTION_LENGTH);
+  const history = await withDeadline(
+    loadChatAutoReplyHistory(binding, conversationId, event.id),
+    HISTORY_DEADLINE_MS,
+    []
   );
   const result = await generateChatAutoReply({
     merchantId: binding.merchantId,
-    conversationId: conversation.conversationId,
+    conversationId,
     question,
     history,
   });
   if (!result.ok) {
-    return handOver(binding, conversation, 'the assistant was unavailable');
+    return handOver(binding, conversationId, 'the assistant was unavailable');
   }
   const reason = needsHandover(result.reply);
-  if (reason) return handOver(binding, conversation, reason);
+  if (reason) return handOver(binding, conversationId, reason);
 
+  // Generation can take a while: a person may have replied, or a later
+  // message may have asked for one, since the webhook arrived.
+  if (!(await isStillPending(binding, conversationId))) return 'skipped';
   const sent = await postAssistantMessage(binding, {
-    conversationId: conversation.conversationId,
+    conversationId,
     content: result.reply.reply,
   });
   if (!sent) return 'failed';
-  await setConversationLabels(binding, {
-    conversationId: conversation.conversationId,
-    labels: mergeChatLabels(conversation.labels, {
-      add: [CHAT_LABEL_AI],
-      remove: [CHAT_LABEL_NEEDS_HUMAN],
-    }),
+  await updateLabels(binding, conversationId, {
+    add: [CHAT_LABEL_AI],
+    remove: [CHAT_LABEL_NEEDS_HUMAN, CHAT_LABEL_MERCHANT],
   });
   return 'replied';
 }
@@ -137,19 +175,13 @@ export async function recordMerchantTakeover(
   event: ChatWebhookMessageCreated
 ): Promise<ChatAutoReplyOutcome> {
   if (!isMerchantReply(event)) return 'skipped';
-  const conversation = labelsOf(event);
+  const conversationId = event.conversation.id;
   if (event.conversation.status === 'pending') {
-    await setConversationStatus(binding, {
-      conversationId: conversation.conversationId,
-      status: 'open',
-    });
+    await setConversationStatus(binding, { conversationId, status: 'open' });
   }
-  const done = await setConversationLabels(binding, {
-    conversationId: conversation.conversationId,
-    labels: mergeChatLabels(conversation.labels, {
-      add: [CHAT_LABEL_MERCHANT],
-      remove: [CHAT_LABEL_AI, CHAT_LABEL_NEEDS_HUMAN],
-    }),
+  const done = await updateLabels(binding, conversationId, {
+    add: [CHAT_LABEL_MERCHANT],
+    remove: [CHAT_LABEL_AI, CHAT_LABEL_NEEDS_HUMAN],
   });
   return done ? 'replied' : 'failed';
 }

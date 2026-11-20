@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  getConversationSnapshot,
   postAssistantMessage,
   setConversationLabels,
   setConversationStatus,
@@ -94,5 +95,29 @@ describe('chat auto-reply provider client', () => {
     ).toBe(false);
     expect(JSON.stringify(error.mock.calls)).not.toContain('synthetic-');
     expect(JSON.stringify(error.mock.calls)).toContain('/:id/');
+  });
+
+  it('reads the live status and labels with the agent credential', async () => {
+    const fetchMock = stubFetch(() => ({
+      body: { status: 'pending', labels: ['vip'], extra: 1 },
+    }));
+    expect(await getConversationSnapshot(binding, 7)).toEqual({
+      status: 'pending',
+      labels: ['vip'],
+    });
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(new URL(String(url)).pathname).toBe(
+      '/api/v1/accounts/2/conversations/7'
+    );
+    expect((init as RequestInit).method).toBe('GET');
+    expect(header(init)).toBe('synthetic-agent-token-aaaa');
+  });
+
+  it('returns null when the live conversation cannot be read', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    stubFetch(() => ({ status: 500 }));
+    expect(await getConversationSnapshot(binding, 7)).toBeNull();
+    stubFetch(() => ({ body: { nonsense: true } }));
+    expect(await getConversationSnapshot(binding, 7)).toBeNull();
   });
 });

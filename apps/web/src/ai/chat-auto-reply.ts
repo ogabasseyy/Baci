@@ -16,7 +16,7 @@ import {
   chatAutoReplySchema,
 } from '@/schemas/chat-auto-reply';
 
-const OVERALL_TIMEOUT_MS = 40_000;
+const OVERALL_TIMEOUT_MS = 20_000;
 
 export type ChatAutoReplyResult =
   | { ok: true; reply: ChatAutoReply }
@@ -51,9 +51,11 @@ export async function generateChatAutoReply(input: {
     // that store is this conversation's store; otherwise it would quote
     // another store's products.
     const tenant = await resolveAgenticChatTenant();
+    // A failed search throws: an outage must never reach the model as "no
+    // matching products", so the caller hands over instead.
     const [search, currency] = await Promise.all([
       tenant?.merchantId === input.merchantId
-        ? handleSearchProducts({ query: input.question }).catch(() => null)
+        ? handleSearchProducts({ query: input.question })
         : null,
       loadChatwootMerchantCurrency(input.merchantId),
     ]);

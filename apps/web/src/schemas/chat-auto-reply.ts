@@ -2,6 +2,8 @@ import { z } from 'zod';
 
 /** Below this the assistant hands the conversation to a person. */
 export const CHAT_AUTO_REPLY_MIN_CONFIDENCE = 0.6;
+/** Longest customer text sent to a model; the rest is cut. */
+export const CHAT_AUTO_REPLY_MAX_QUESTION_LENGTH = 2000;
 export const CHAT_AUTO_REPLY_MAX_LENGTH = 1000;
 
 /** What the model must return; anything else counts as a failed attempt. */

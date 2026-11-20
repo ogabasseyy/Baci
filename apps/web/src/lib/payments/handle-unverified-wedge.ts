@@ -66,7 +66,14 @@ export async function handleUnverifiedWedge({
         orderId: candidate.order_id,
         transactionId: candidate.id,
       });
-      await stamp(supabase, candidate, 'gateway_verification_negative');
+      if (
+        !(await stamp(supabase, candidate, 'gateway_verification_negative'))
+      ) {
+        summary.failed.push({
+          reason: 'bank_offer_reversal_stamp_failed',
+          transactionId: candidate.id,
+        });
+      }
     } else {
       // Leave the row eligible for retry while the reversal is unconfirmed.
       summary.failed.push({

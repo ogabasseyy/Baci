@@ -57,3 +57,16 @@ it('falls back to the canonical storefront during a domain lookup error', async 
     })
   ).resolves.toBe('https://ogabassey.usebaci.com');
 });
+
+it.each([
+  'usebaci.com',
+  'www.usebaci.com',
+])('preserves the cookie host and merchant path on %s', async (host) => {
+  await expect(
+    getBankCardOfferCallbackOrigin({
+      ...order,
+      request: new Request(`https://${host}/api/payments/initialize`),
+    })
+  ).resolves.toBe(`https://${host}/${order.merchantSlug}`);
+  expect(resolveDomain).not.toHaveBeenCalled();
+});

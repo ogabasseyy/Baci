@@ -24,6 +24,13 @@ export async function getBankCardOfferCallbackOrigin({
 
   const requestHost = getRequestHost(request);
   if (
+    requestHost === rootDomain.toLowerCase() ||
+    (!local && requestHost === `www.${rootDomain.toLowerCase()}`)
+  ) {
+    // Platform path routing keeps the shopper's host-scoped auth cookies.
+    return `${local ? 'http' : 'https'}://${requestHost}/${encodeURIComponent(merchantSlug)}`;
+  }
+  if (
     !/^[a-z0-9-]+(?:\.[a-z0-9-]+)+$/.test(requestHost) ||
     isLocalhostIdentifier(requestHost) ||
     requestHost === new URL(defaultOrigin).host

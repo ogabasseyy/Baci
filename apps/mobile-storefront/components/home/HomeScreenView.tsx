@@ -19,6 +19,7 @@ import { GadgetPattern } from '@/components/storefront/GadgetPattern';
 import { Header } from '@/components/storefront/Header';
 import { HomeServiceCards } from '@/components/storefront/HomeServiceCards';
 import { SearchDropdown } from '@/components/storefront/SearchDropdown';
+import { StorefrontScreenShell } from '@/components/storefront/StorefrontScreenShell';
 import { HeroSkeleton, ProductGridSkeleton } from '@/components/ui/Skeleton';
 import { SnowEffect } from '@/components/ui/SnowEffect';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -121,7 +122,10 @@ export function HomeScreenView({
 
   if (isConfigLoading) {
     return (
-      <View style={[styles.container, { backgroundColor }]}>
+      <StorefrontScreenShell
+        edges={['left', 'right']}
+        style={{ backgroundColor }}
+      >
         <StatusBar
           barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'}
         />
@@ -133,14 +137,18 @@ export function HomeScreenView({
         {nextDrop && <HomeServiceCards placement="underSearch" />}
         <HeroSkeleton />
         <ProductGridSkeleton count={4} fullWidth={nextDrop} />
-      </View>
+      </StorefrontScreenShell>
     );
   }
 
   return (
     // Background lives on the root container (was a separate absoluteFill layer)
     // to cut one full-screen overdraw pass — meaningful on low-end Android GPUs.
-    <View style={[styles.container, { backgroundColor }]}>
+    <StorefrontScreenShell
+      edges={['left', 'right']}
+      style={{ backgroundColor }}
+      testID="storefront-home-safe-area"
+    >
       <Stack.Screen options={{ headerShown: false, title: '' }} />
       {shouldRenderDecorations && <SnowEffect />}
       <StatusBar barStyle={barStyle} />
@@ -255,6 +263,6 @@ export function HomeScreenView({
         hideInput={true}
         onProductSelectionStart={() => clearTimeout(searchFocusTimer.current)}
       />
-    </View>
+    </StorefrontScreenShell>
   );
 }

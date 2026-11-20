@@ -61,6 +61,7 @@ export function ProductCard({
 }: ProductCardProps) {
   const { width: screenWidth } = useWindowDimensions();
   const insets = useContext(SafeAreaInsetsContext);
+  // Window metrics describe the screen before its surrounding shell adds padding.
   const safeWidth = screenWidth - (insets?.left ?? 0) - (insets?.right ?? 0);
   const gridWidth = Math.max(0, safeWidth - 48) / 2;
 
@@ -148,7 +149,7 @@ export function ProductCard({
     variant === 'list'
       ? 100
       : variant === 'editorial'
-        ? screenWidth - 32
+        ? Math.max(0, safeWidth - 32)
         : gridWidth;
   const imageSource = createSafeBoundedImageSource({
     fit: modernSearch ? 'inside' : 'cover',
@@ -223,7 +224,7 @@ export function ProductCard({
         animatedStyle={animatedStyle}
         heartAnimatedStyle={heartAnimatedStyle}
         textColor={colors.text}
-        screenWidth={screenWidth}
+        screenWidth={safeWidth}
       />
     );
   }

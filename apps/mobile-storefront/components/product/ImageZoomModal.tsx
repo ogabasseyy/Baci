@@ -122,6 +122,7 @@ function ActiveImageZoomModal({
     </Animated.View>
   );
 
+  // The app's Info.plist limits upside-down to iPad.
   return (
     <Modal
       supportedOrientations={['portrait', 'portrait-upside-down', 'landscape']}

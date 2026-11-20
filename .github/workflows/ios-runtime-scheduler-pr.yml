@@ -38,14 +38,18 @@ concurrency:
   group: ios-runtime-scheduler-pr-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 env:
   NODE_VERSION: '24'
   XCODE_VERSION: '27.2'
 
 jobs:
   runtime-scheduler:
-    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository))
+    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     name: Swift RuntimeScheduler compatibility
+    # GitHub-hosted ephemeral runner. This compile job uses no signing secrets.
     runs-on: xcode-27
     timeout-minutes: 30
     steps:

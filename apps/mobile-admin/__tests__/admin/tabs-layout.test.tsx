@@ -4,6 +4,7 @@ import type React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
+  sourceError: null as 'checkout' | 'oxygen' | null,
   staffFollowUps: { data: {}, openOrders: [] } as {
     data?: Record<string, { stage: string }>;
     isError?: boolean;
@@ -112,10 +113,16 @@ vi.mock('@/hooks/useStaffOrderFollowUps', () => ({
 }));
 
 vi.mock('@/hooks/useFailedOrders', () => ({
-  useFailedOrders: () => ({ data: mocks.failedOrders }),
+  useFailedOrders: () => ({
+    data: mocks.failedOrders,
+    isError: mocks.sourceError === 'checkout',
+  }),
 }));
 vi.mock('@/hooks/useOxygenFollowUps', () => ({
-  useOxygenFollowUps: () => ({ data: mocks.oxygenOrders }),
+  useOxygenFollowUps: () => ({
+    data: mocks.oxygenOrders,
+    isError: mocks.sourceError === 'oxygen',
+  }),
 }));
 vi.mock('@/hooks/useMerchant', () => ({
   useMerchant: () => ({ merchant: { id: 'merchant-1' } }),
@@ -140,8 +147,14 @@ import TabLayout, { unstable_settings } from '@/app/(admin)/(tabs)/_layout';
 
 type TabBarRenderer = (props: BottomTabBarProps) => React.ReactNode;
 
+function getCustomersBadge() {
+  return mocks.screens.find((screen) => screen.name === 'customers')?.options
+    ?.tabBarBadge;
+}
+
 describe('TabLayout', () => {
   beforeEach(() => {
+    mocks.sourceError = null;
     mocks.failedOrders = [];
     mocks.staffFollowUps = { data: {}, openOrders: [] };
     mocks.oxygenOrders = [];
@@ -155,22 +168,25 @@ describe('TabLayout', () => {
     ];
     mocks.staffFollowUps = { openOrders: [] };
     render(<TabLayout />);
-    expect(
-      mocks.screens.find((route) => route.name === 'customers')?.options
-        ?.tabBarBadge
-    ).toBeUndefined();
+    expect(getCustomersBadge()).toBeUndefined();
   });
 
-  it('signals a staff-data error without presenting checkout rows as a verified count', () => {
+  it.each([
+    'staff',
+    'checkout',
+    'oxygen',
+  ] as const)('warns when the %s feed fails', (source) => {
     mocks.failedOrders = [
       { id: 'unknown', created_at: '2026-07-27T08:00:00Z' },
     ];
-    mocks.staffFollowUps = { openOrders: [], isError: true };
+    mocks.staffFollowUps = {
+      data: {},
+      openOrders: [],
+      isError: source === 'staff',
+    };
+    mocks.sourceError = source === 'staff' ? null : source;
     render(<TabLayout />);
-    expect(
-      mocks.screens.find((route) => route.name === 'customers')?.options
-        ?.tabBarBadge
-    ).toBe('!');
+    expect(getCustomersBadge()).toBe('!');
   });
 
   it('counts open staff follow-ups and excludes closed drop-offs from the Customers badge', () => {
@@ -186,10 +202,7 @@ describe('TabLayout', () => {
       openOrders: [{ id: 'retained-1', created_at: '2026-07-27T08:00:00Z' }],
     };
     render(<TabLayout />);
-    expect(
-      mocks.screens.find((route) => route.name === 'customers')?.options
-        ?.tabBarBadge
-    ).toBe(1);
+    expect(getCustomersBadge()).toBe(1);
   });
 
   it('keeps admin tabs retained and delegates rendering to the floating bar', () => {
@@ -245,12 +258,8 @@ describe('TabLayout', () => {
     const ordersScreen = mocks.screens.find(
       (screen) => screen.name === 'orders'
     );
-    const customersScreen = mocks.screens.find(
-      (screen) => screen.name === 'customers'
-    );
-
     expect(ordersScreen?.options?.tabBarBadge).toBeUndefined();
-    expect(customersScreen?.options?.tabBarBadge).toBe(2);
+    expect(getCustomersBadge()).toBe(2);
   });
 
   it('counts Oxygen follow-ups without double-counting an order', () => {
@@ -260,10 +269,7 @@ describe('TabLayout', () => {
       { id: 'oxygen', created_at: '2026-11-17T08:00:00Z' },
     ];
     render(<TabLayout />);
-    expect(
-      mocks.screens.find((screen) => screen.name === 'customers')?.options
-        ?.tabBarBadge
-    ).toBe(2);
+    expect(getCustomersBadge()).toBe(2);
   });
 
   it('counts distinct follow-up orders for the same email as separate queue entries', () => {
@@ -282,18 +288,12 @@ describe('TabLayout', () => {
       },
     ];
     render(<TabLayout />);
-    expect(
-      mocks.screens.find((screen) => screen.name === 'customers')?.options
-        ?.tabBarBadge
-    ).toBe(2);
+    expect(getCustomersBadge()).toBe(2);
   });
 
   it('shows a Customers badge for an Oxygen-only follow-up', () => {
     mocks.oxygenOrders = [{ id: 'oxygen', created_at: '2026-11-17T08:00:00Z' }];
     render(<TabLayout />);
-    expect(
-      mocks.screens.find((screen) => screen.name === 'customers')?.options
-        ?.tabBarBadge
-    ).toBe(1);
+    expect(getCustomersBadge()).toBe(1);
   });
 });

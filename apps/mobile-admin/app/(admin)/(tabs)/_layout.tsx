@@ -13,13 +13,14 @@ export default function TabLayout() {
     console.log('[TabLayout] Rendering Debug View');
   }
   const { colors } = useTheme();
-  const { orders, staff } = useStaffFollowUpQueue();
+  const { orders, source, staff } = useStaffFollowUpQueue();
   const followUpCount = staff.data ? orders.length : 0;
-  const customersBadge = staff.isError
-    ? '!'
-    : followUpCount > 0
-      ? followUpCount
-      : undefined;
+  const customersBadge =
+    staff.isError || source.isFailedOrdersError
+      ? '!'
+      : followUpCount > 0
+        ? followUpCount
+        : undefined;
 
   return (
     <View

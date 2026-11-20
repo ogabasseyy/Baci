@@ -81,16 +81,6 @@ export function usePaymentMethodAvailability(
   const filteredMethods = candidateMethods
     .filter((method) => method.tab === selectedTab)
     .map((method) => {
-      if (
-        method.id === 'oxygen' &&
-        (walletSelection?.use || savingsSelection?.use)
-      )
-        return {
-          ...method,
-          disabled: true,
-          disabledReason:
-            'Oxygen cannot be combined with wallet credit or device savings',
-        };
       const walletDisablesKlump =
         method.id === 'klump' &&
         walletSelection?.use === true &&

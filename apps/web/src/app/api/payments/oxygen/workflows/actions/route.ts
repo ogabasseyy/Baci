@@ -1,4 +1,7 @@
-import { oxygenEligibilityProgressHeader } from '@baci/shared/oxygen';
+import {
+  oxygenEligibilityProgressHeader,
+  oxygenRuntimeUnavailableCode,
+} from '@baci/shared/oxygen';
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { authenticateApiRequest } from '@/lib/api-auth';
@@ -153,7 +156,10 @@ export async function POST(request: NextRequest) {
   const connection = connectOxygenRuntime();
   if (!connection)
     return NextResponse.json(
-      { error: 'Provider connection unavailable' },
+      {
+        code: oxygenRuntimeUnavailableCode,
+        error: 'Provider connection unavailable',
+      },
       { status: 503, headers }
     );
   const userClient = auth.supabase;

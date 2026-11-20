@@ -75,6 +75,25 @@ it.each([
   expect(init.credentials).toBe('omit');
   expect(init.redirect).toBe('error');
 });
+it.each([
+  [{ code: 'OXYGEN_RUNTIME_UNAVAILABLE' }, 'not_dispatched'],
+  [{ error: 'Service unavailable' }, 'unknown'],
+] as const)('preserves the dispatch certainty for a 503 with %j', async (body, dispatchState) => {
+  const client = createOxygenClient({
+    profile,
+    getSession: session,
+    fetch: jest.fn().mockResolvedValue(Response.json(body, { status: 503 })),
+  });
+  await expect(
+    client.action({
+      workflowId: id,
+      version: 1,
+      idempotencyKey: id,
+      command: { action: 'refresh_eligibility' },
+    })
+  ).rejects.toMatchObject({ status: 503, dispatchState });
+});
+
 it('reads disabled owned capabilities but checks pins', async () => {
   const transport = jest.fn().mockResolvedValue(
     new Response(

@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server';
-import { hasBearerAuthScheme } from '@/lib/api-auth';
+import { hasBearerAuthScheme } from '@/lib/bearer-auth-scheme';
 import { readOxygenMobileCapabilities } from '@/lib/payments/oxygen/mobile-capabilities';
 import type { OxygenRuntimeRpc } from '@/lib/payments/oxygen/runtime-service';
+import {
+  type MerchantCurrencySource,
+  resolveMerchantCurrencyConfig,
+} from '@/lib/resolve-merchant-currency';
 import type { OrderCreateInput } from '@/schemas/orders';
 
 // The native staging gate covers every Bearer Oxygen order regardless of source.
@@ -64,7 +68,7 @@ export async function rejectUnavailableMobileOxygenOrder({
 }: {
   request: Request;
   client: OxygenRuntimeRpc;
-  merchant: { id: string; slug: string };
+  merchant: MerchantCurrencySource & { id: string; slug: string };
   userId: string | null;
   paymentMethod: string;
   source: string;
@@ -74,6 +78,15 @@ export async function rejectUnavailableMobileOxygenOrder({
     return NextResponse.json(
       { error: 'Sign in to begin an Oxygen application' },
       { status: 401 }
+    );
+  }
+  if (resolveMerchantCurrencyConfig(merchant).code !== 'NGN') {
+    return NextResponse.json(
+      {
+        code: 'OXYGEN_MOBILE_UNAVAILABLE',
+        error: 'Oxygen requires a naira order',
+      },
+      { status: 409 }
     );
   }
   // Order POST can change the payment method on an idempotent replay.

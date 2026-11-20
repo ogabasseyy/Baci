@@ -2,10 +2,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { readOxygenMobileCapabilities } from '@/lib/payments/oxygen/mobile-capabilities';
 import { rejectUnavailableMobileOxygenOrder } from './mobile-oxygen-order-admission';
 
-vi.mock('@/lib/api-auth', () => ({
-  hasBearerAuthScheme: (request: Request) =>
-    request.headers.get('authorization')?.startsWith('Bearer ') ?? false,
-}));
 vi.mock('@/lib/payments/oxygen/mobile-capabilities', () => ({
   readOxygenMobileCapabilities: vi.fn(),
 }));
@@ -49,6 +45,15 @@ describe('mobile Oxygen order admission', () => {
   it('admits a signed-in staging customer for the current merchant', async () => {
     await expect(rejectUnavailableMobileOxygenOrder(args)).resolves.toBeNull();
     expect(declarations).toHaveBeenCalledWith(args.client, merchant.slug);
+  });
+
+  it('rejects non-NGN orders before checking capabilities', async () => {
+    const result = await rejectUnavailableMobileOxygenOrder({
+      ...args,
+      merchant: { ...merchant, payout_currency: 'USD' },
+    });
+    expect(result?.status).toBe(409);
+    expect(declarations).not.toHaveBeenCalled();
   });
 
   it('blocks unsigned mobile requests before checking capabilities', async () => {

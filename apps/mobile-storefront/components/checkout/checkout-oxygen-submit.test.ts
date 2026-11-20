@@ -11,7 +11,10 @@ describe('native Oxygen order admission', () => {
   const admit = jest.fn();
   beforeEach(() => {
     jest.clearAllMocks();
-    admit.mockResolvedValue({ merchant: { id: 'merchant-one' } });
+    admit.mockResolvedValue({
+      merchant: { id: 'merchant-one' },
+      userId: 'buyer-one',
+    });
     createOrder.mockResolvedValue({
       order: { id: 'aebdc237-5363-4e2b-b0ee-5be12ea9edab' },
     });
@@ -32,6 +35,7 @@ describe('native Oxygen order admission', () => {
       checkoutGeneration: 'generation-1',
       analyticsPaymentMethod: 'oxygen',
       expectedMerchantId: 'merchant-one',
+      expectedOwner: 'buyer-one',
     });
     expect(response.order.id).toBe('aebdc237-5363-4e2b-b0ee-5be12ea9edab');
   });

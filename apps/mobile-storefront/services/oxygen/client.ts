@@ -11,6 +11,7 @@ import {
   oxygenResidentialContextSchema,
   oxygenRuntimeSnapshotSchema,
   oxygenRuntimeSubmissionSchema,
+  oxygenRuntimeUnavailableCode,
   oxygenWorkflowRequestSchema,
   oxygenWorkflowSnapshotSchema,
   validateOxygenFile,
@@ -126,14 +127,23 @@ export function createOxygenClient(options: {
       (response.url && new URL(response.url).origin !== profile.apiOrigin)
     )
       throw new OxygenClientError('scope');
-    if (!response.ok)
+    if (!response.ok) {
+      const runtimeUnavailable =
+        response.status === 503 &&
+        method === 'POST' &&
+        path === 'workflows/actions'
+          ? z
+              .object({ code: z.literal(oxygenRuntimeUnavailableCode) })
+              .safeParse(await response.json().catch(() => null)).success
+          : false;
       throw new OxygenClientError(
         response.status === 401 ? 'auth' : 'http',
         response.status,
-        [400, 401, 403, 429].includes(response.status)
+        runtimeUnavailable || [400, 401, 403, 429].includes(response.status)
           ? 'not_dispatched'
           : 'unknown'
       );
+    }
     try {
       return schema.parse(await response.json());
     } catch {

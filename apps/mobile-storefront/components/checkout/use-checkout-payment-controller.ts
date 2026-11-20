@@ -78,8 +78,6 @@ export function useCheckoutPaymentController({
     merchantId,
     userId,
   });
-  // Bound shared-cart orders have no REDVAULT path; offering it only
-  // defers a deterministic server rejection to submit time.
   const sharedCartEnabled = useNativeSharedCartStore((state) => state.enabled);
   const redvaultAvailable = redvaultAvailability && !sharedCartEnabled;
   const availablePaymentMethods: PaymentMethodType[] = Array.from(
@@ -109,11 +107,9 @@ export function useCheckoutPaymentController({
     merchantSlug,
   });
   const walletQuery = useWallet();
-  // Orders spend the older balance: store credit for PiggyVest customers.
   const walletBalance = walletQuery.data?.wallet?.balance ?? 0;
   const piggyvestPossible = usePiggyvestPossible(merchantId);
   const verdictNow = usePiggyvestCapabilityNow(merchantId);
-  // A live ruling-out overrides a stale cached PiggyVest wallet (Codex).
   const walletIsStoreCredit =
     verdictNow !== false && isStoreCreditPurchaseCopy(walletQuery.data?.wallet);
 
@@ -126,6 +122,10 @@ export function useCheckoutPaymentController({
 
   const transferMode = useTransferModeAtSelection(setSelectedPaymentState);
   const handleSelectPaymentMethod = (method: PaymentMethodType) => {
+    if (method === 'oxygen') {
+      setWalletSelection(undefined);
+      savings.setSavingsSelection(undefined);
+    }
     transferMode.capture(method, walletFundedBankTransferOptionEnabled);
     setSelectedPaymentState(method);
     setPaymentTab(getPaymentTabForMethod(method));

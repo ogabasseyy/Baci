@@ -8,7 +8,7 @@ type Input = {
   hasCredits: boolean;
 };
 type Dependencies = {
-  admit: () => Promise<{ merchant: { id: string } }>;
+  admit: () => Promise<{ merchant: { id: string }; userId: string }>;
   createOrder: typeof createOrder;
 };
 
@@ -66,12 +66,14 @@ export async function submitOxygenCheckout(
       const { oxygenNativeSession } = await import(
         '@/services/oxygen/native-session'
       );
-      return oxygenNativeSession().capabilities(true);
+      const session = oxygenNativeSession();
+      const { merchant } = await session.capabilities(true);
+      return { merchant, userId: session.userId };
     },
     createOrder,
   };
   // Revalidate after every checkout await and immediately before order mutation.
-  const { merchant } = await deps.admit();
+  const { merchant, userId } = await deps.admit();
   return deps.createOrder(
     {
       ...input.request,
@@ -81,6 +83,7 @@ export async function submitOxygenCheckout(
       checkoutGeneration: input.checkoutGeneration,
       analyticsPaymentMethod: 'oxygen',
       expectedMerchantId: merchant.id,
+      expectedOwner: userId,
     }
   );
 }

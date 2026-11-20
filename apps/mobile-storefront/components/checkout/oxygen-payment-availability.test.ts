@@ -34,11 +34,11 @@ describe('isolated Oxygen payment selector', () => {
   it.each([
     { walletSelection: { use: true, amount: 10 } },
     { savingsSelection: { use: true, amount: 10, goalId: 'goal' } },
-  ])('disables unsupported local credit combinations', (selection) => {
+  ])('lets customers choose Oxygen and switch away from full-payment credit', (selection) => {
     jest
       .mocked(getOxygenMobileProfile)
       .mockReturnValue({} as ReturnType<typeof getOxygenMobileProfile>);
     const result = usePaymentMethodAvailability({ ...input, ...selection });
-    expect(result.filteredMethods[0].disabled).toBe(true);
+    expect(result.filteredMethods[0].disabled).not.toBe(true);
   });
 });

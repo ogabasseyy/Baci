@@ -198,14 +198,16 @@ const realGit = execFileSync('sh', ['-c', 'command -v git'], {
 
 // A `git` ahead of the real one on PATH. It records every `ls-remote` call
 // (call number in $n) and runs `onLsRemote` before delegating, so a test can
-// count remote reads or make one of them slow or stuck.
-function gitShim(root, onLsRemote = ':') {
+// count remote reads or make one of them slow or stuck. `version` makes
+// `git --version` report that version (to exercise old-Git handling).
+function gitShim(root, onLsRemote = ':', { version = '' } = {}) {
   const dir = join(root, 'shim');
   mkdirSync(dir);
   const log = join(root, 'ls-remote.log');
   writeFileSync(
     join(dir, 'git'),
     `#!/bin/sh
+${version ? `[ "$*" = --version ] && { echo "git version ${version}"; exit 0; }` : ''}
 for arg in "$@"; do
   if [ "$arg" = ls-remote ]; then
     echo "$*" >> "${log}"
@@ -226,10 +228,12 @@ exec "${realGit}" "$@"
 // An `ssh` that records its pid and never answers, ignoring every timeout
 // option it is given: a stand-in for a stall during DNS/TCP/TLS or SSH setup
 // that http.lowSpeed*, ConnectTimeout and ServerAlive* cannot end. `kill()`
-// removes any survivor so a failing test never leaves it behind.
-function hangingSsh(root) {
+// removes any survivor so a failing test never leaves it behind. With
+// `ignoreTerm` it also shrugs off SIGTERM, so only SIGKILL ends it.
+function hangingSsh(root, { ignoreTerm = false } = {}) {
   const pidLog = join(root, 'ssh.pids');
-  writeFileSync(join(root, 'ssh'), `#!/bin/sh\necho $$ >> "${pidLog}"\nexec sleep 600\n`);
+  const trap = ignoreTerm ? "trap '' TERM\n" : '';
+  writeFileSync(join(root, 'ssh'), `#!/bin/sh\n${trap}echo $$ >> "${pidLog}"\nexec sleep 600\n`);
   chmodSync(join(root, 'ssh'), 0o755);
   const pids = () =>
     existsSync(pidLog)
@@ -264,11 +268,11 @@ async function allGone(pids, timeoutMs = 5_000) {
   return !pids.some(isAlive);
 }
 
-// GIT_NO_LAZY_FETCH (the switch that keeps local lookups from demand-fetching
-// from a promisor remote) exists from Git 2.44.
+// GIT_NO_LAZY_FETCH (keeps local lookups from demand-fetching from a promisor
+// remote) first shipped in Git 2.45.0 (absent from v2.44.x).
 function gitSupportsNoLazyFetch() {
-  const match = /(\d+)\.(\d+)/.exec(git('.', '--version'));
-  return Boolean(match) && (Number(match[1]) > 2 || (Number(match[1]) === 2 && Number(match[2]) >= 44));
+  const [, major, minor] = /(\d+)\.(\d+)/.exec(git('.', '--version')) ?? [];
+  return Number(major) > 2 || (Number(major) === 2 && Number(minor) >= 45);
 }
 
 /** Fixtures for running the live behind-base hook against throwaway repos. */

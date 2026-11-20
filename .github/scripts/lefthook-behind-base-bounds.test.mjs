@@ -30,21 +30,26 @@ const withPath = (dir, extra = {}) => ({
   ...extra,
 });
 
-// A transport that survives its parent's SIGTERM must not outlive the hook:
-// git may start the SSH command through a wrapper shell that does not exec it
-// (git's own /bin/sh on Linux), so signalling only git's pid orphans it.
+// A stuck transport must not outlive the hook. Git may start the SSH command
+// through a wrapper shell that does not exec it (git's own /bin/sh on Linux),
+// so signalling only git's pid orphans it. A transport that ignores SIGTERM
+// dies only if the SIGKILL escalation still runs after git has exited, which
+// takes the wrapper shell: otherwise git waits for its child and exits last.
+const WRAPPED = { GIT_SSH_COMMAND: `sh -c 'ssh "$@"; exit $?' wrapper` };
 const STUCK_TRANSPORTS = [
-  ['direct', {}],
-  ['behind a wrapper shell', { GIT_SSH_COMMAND: `sh -c 'ssh "$@"; exit $?' wrapper` }],
+  ['direct', {}, {}],
+  ['behind a wrapper shell', WRAPPED, {}],
+  ['that ignores SIGTERM', {}, { ignoreTerm: true }],
+  ['behind a wrapper shell and ignoring SIGTERM', WRAPPED, { ignoreTerm: true }],
 ];
 
-for (const [shape, extraEnv] of STUCK_TRANSPORTS) {
+for (const [shape, extraEnv, sshOptions] of STUCK_TRANSPORTS) {
   test(
     `a hard deadline ends a remote read that ignores every transport timeout (${shape})`,
     { timeout: 60_000 },
     async () => {
       const { root, work, featureSha } = setup();
-      const ssh = hangingSsh(root);
+      const ssh = hangingSsh(root, sshOptions);
       try {
         git(work, 'remote', 'set-url', 'origin', 'ssh://git@example.invalid/repo.git');
         const result = await runHookBounded(
@@ -135,8 +140,8 @@ test(
       assert.equal(result.timedOut, false);
       assert.equal(result.status, 0);
       assert.match(result.stdout, /Couldn't read the base branches/);
-      // Separate budgets would add up to roughly 5s + 8s.
-      assert.ok(result.elapsedMs < 11_000, `took ${result.elapsedMs}ms`);
+      // Shared: 8s plus the 2s kill grace (~10s). Separate budgets: ~15s.
+      assert.ok(result.elapsedMs < 12_500, `took ${result.elapsedMs}ms`);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -145,7 +150,7 @@ test(
 
 test(
   'does not demand-fetch the base tip from a promisor remote',
-  { skip: gitSupportsNoLazyFetch() ? false : 'needs Git 2.44+' },
+  { skip: gitSupportsNoLazyFetch() ? false : 'needs Git 2.45+' },
   () => {
     const { root, remote, work, featureSha } = setup({ partial: true });
     try {
@@ -169,6 +174,46 @@ test(
     }
   }
 );
+
+// Git before 2.45 ignores GIT_NO_LAZY_FETCH, so in a partial clone a local
+// lookup of a missing base tip could demand-fetch with no time limit.
+test('skips loudly in a partial clone when Git cannot disable lazy fetching', () => {
+  const { root, remote, work, featureSha } = setup({ partial: true });
+  try {
+    advanceRemoteMain(root, remote);
+    const tip = git(remote, 'rev-parse', 'main');
+    const shim = gitShim(root, ':', { version: '2.44.0' });
+
+    const result = runHookWith(work, featureSha, withPath(shim.dir));
+
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.match(result.stdout, /Git older than 2\.45 cannot disable lazy fetching/);
+    assert.match(result.stdout, /skipping behind-base check/i);
+    assert.equal(shim.lsRemoteCalls(), 0, 'no remote read should be started');
+    const probe = spawnSync('git', ['cat-file', '-e', `${tip}^{commit}`], {
+      cwd: work,
+      env: { ...gitEnv, GIT_NO_LAZY_FETCH: '1' },
+    });
+    assert.notEqual(probe.status, 0, 'the base tip was fetched by the hook');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('keeps checking on old Git when the clone is not partial', () => {
+  const { root, remote, work, featureSha } = setup();
+  try {
+    advanceRemoteMain(root, remote);
+    const shim = gitShim(root, ':', { version: '2.44.0' });
+
+    const result = runHookWith(work, featureSha, withPath(shim.dir));
+
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.match(result.stdout, /behind origin\/main/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test('the fetch hint refreshes the base ref even in a single-branch clone', () => {
   const { root, remote, work, featureSha } = setup();

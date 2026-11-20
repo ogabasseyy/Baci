@@ -53,11 +53,10 @@ pre-push:
     behind-base:
       # Block the push when ANY pushed branch is behind its base. Reads
       # git's pre-push stdin protocol (`<local_ref> <local_sha> <remote_ref>
-      # <remote_sha>` per line) so we check the refs actually being pushed,
-      # NOT the checked-out HEAD (`git push origin feature-x` while on `main`
-      # must not short-circuit on the main check). Catches the BEHIND-branch
-      # silent-revert failure mode where a squash-merge of a stale branch
-      # silently reverts overlapping changes from peer PRs.
+      # <remote_sha>` per line) so the refs actually pushed are checked, NOT
+      # the checked-out HEAD (`git push origin feature-x` while on `main` must
+      # not short-circuit). Catches the silent-revert failure mode where a
+      # squash-merge of a stale branch reverts overlapping peer-PR changes.
       #
       # Base-resolution order (per pushed branch):
       #   1) per-branch override:  git config branch.<name>.base origin/<ref>
@@ -78,15 +77,14 @@ pre-push:
         if [ -t 0 ]; then exit 0; fi
 
         # Never let a local object lookup demand-fetch from a promisor remote
-        # (partial clone): that escapes the bounded reads below. Git 2.44+.
+        # (partial clone): that escapes the bounded reads below. Needs Git 2.45+.
         export GIT_NO_LAZY_FETCH=1
 
         # Read the pushed refs up front: ops/gigl-promote-record validation
-        # needs no default-branch lookup, so it must run even when the lookups
-        # below fail and skip the behind-base check. A temp file — not a pipe —
-        # feeds the loops, since a piped loop runs in a subshell and could not
-        # report failures. Fail closed: a failed mktemp or cat must not let
-        # the push through unvalidated.
+        # must run even when the lookups below fail and skip the behind-base
+        # check. A temp file (not a pipe) feeds the loops so they can report
+        # failures. Fail closed: a failed mktemp or cat must not let the push
+        # through unvalidated.
         refs_file=$(mktemp) || { echo '❌ Could not create temp file for pushed refs; refusing push.' >&2; exit 1; }
         trap 'rm -rf "$scratch"; rm -f "$refs_file"' EXIT
         scratch=$(mktemp -d) || { echo '❌ Could not create temp dir for the behind-base check; refusing push.' >&2; exit 1; }
@@ -95,9 +93,8 @@ pre-push:
         : > "$plan_file"; : > "$bases_file"
 
         # Validate the operational tree before resolving the default branch:
-        # the loud skip below must still refuse an invalid promote record.
-        # Deletions of THIS branch are refused (dropping operational history
-        # is not a fast-forward); the main loop skips its separate history.
+        # the loud skips below must still refuse an invalid promote record.
+        # Deleting THIS branch is refused (operational history must stay).
         promote_fail=0
         while IFS=' ' read -r _local_ref local_sha _remote_ref _remote_sha; do
           case "$_remote_ref" in
@@ -117,23 +114,34 @@ pre-push:
           fi
         done < "$refs_file"
 
+        # Git before 2.45 ignores GIT_NO_LAZY_FETCH, so in a partial clone a
+        # local lookup of a missing base tip could demand-fetch with no time
+        # limit: skip loudly there (under-block, but visible) rather than hang.
+        if ! git --version | awk '{ split($3, v, "."); exit !(v[1] > 2 || (v[1] == 2 && v[2] >= 45)) }' \
+          && { [ -n "$(git config --get extensions.partialclone 2>/dev/null)" ] \
+            || git config --get-regexp '^remote\..*\.promisor$' 2>/dev/null | grep -q true; }; then
+          echo "⚠️  Git older than 2.45 cannot disable lazy fetching in this partial clone, so a local"
+          echo "    lookup could hang the push. Skipping behind-base check; upgrade Git to re-enable it."
+          exit $promote_fail
+        fi
+
         # Destination remote: Lefthook injects hook args through `{1}` (`$1`
-        # is always empty here). An empty substitution (no args) falls back to
-        # `origin`; an unsubstituted literal `{1}` fails the remote read below
-        # and soft-skips — under-block, the right failure mode.
+        # is always empty here). An empty substitution falls back to `origin`;
+        # an unsubstituted literal `{1}` fails the remote read below and
+        # soft-skips (under-block, the right failure mode).
         remote="{1}"
         remote="${remote:-origin}"
 
         # Every remote read goes through bounded_ls_remote: a plain fetch or
         # ls-remote has no stall limit and hung pushes indefinitely.
         # http.lowSpeed* ends a stalled HTTP transfer; SSH gets connect and
-        # keepalive timeouts, but only when none of GIT_SSH_COMMAND, GIT_SSH
-        # or core.sshCommand is set, so a developer's own transport is never
-        # overridden. Neither covers DNS/TCP/TLS setup or a custom transport,
-        # so every read also shares ONE hard deadline for the whole hook
+        # keepalive timeouts unless GIT_SSH_COMMAND, GIT_SSH or core.sshCommand
+        # is set (a developer's own transport is never overridden). Neither
+        # covers DNS/TCP/TLS setup or a custom transport, so every read also
+        # shares ONE hard deadline for the whole hook
         # (BACI_BEHIND_BASE_DEADLINE_SECONDS, default 30): SIGTERM to the read
-        # and its descendants when it passes, SIGKILL 2s later. The hook reads
-        # the remote at most twice (default branch, then every base at once),
+        # and its descendants, SIGKILL 2s later even if git has exited by then.
+        # At most two reads happen (default branch, then every base at once),
         # however many branches are pushed. GIT_TERMINAL_PROMPT=0 and a closed
         # stdin prevent prompts.
         deadline_secs=${BACI_BEHIND_BASE_DEADLINE_SECONDS:-30}
@@ -142,16 +150,15 @@ pre-push:
         deadline_secs=$(expr "$deadline_secs" + 0 2>/dev/null)
         [ "${deadline_secs:-0}" -gt 0 ] || deadline_secs=30
         deadline_at=$(( $(date +%s) + deadline_secs ))
-        # pids of $1 plus every descendant, taken BEFORE killing while the
-        # parent links exist: git may run its transport through a wrapper
-        # shell, so signalling git alone can orphan a stuck transport.
+        # pids of $1 plus every descendant, taken BEFORE killing (parent links
+        # vanish after): git may run its transport through a wrapper shell.
         tree_pids() {
           ps -A -o pid= -o ppid= 2>/dev/null | awk -v root="$1" '
             { parent[$1] = $2 }
             END { keep[root] = 1; for (n = 0; n < 8; n++) for (p in parent) if (parent[p] in keep) keep[p] = 1; for (p in keep) print p }'
         }
-        # bounded_ls_remote <outfile> <ls-remote args...>: non-zero (and the
-        # outfile unusable) when the read fails or the deadline has passed.
+        # bounded_ls_remote <outfile> <ls-remote args...>: non-zero when the
+        # read failed or timed out (the outfile is then unusable).
         bounded_ls_remote() {
           out_path=$1; shift
           secs_left=$(( deadline_at - $(date +%s) ))
@@ -166,9 +173,11 @@ pre-push:
               ls-remote "$@" > "$out_path" 2>/dev/null < /dev/null
           ) &
           ls_pid=$!
+          rm -f "$scratch/timeout"
           (
             waited=0
             while [ "$waited" -lt "$secs_left" ]; do sleep 1; waited=$((waited + 1)); done
+            : > "$scratch/timeout"
             victims=$(tree_pids "$ls_pid")
             kill -TERM $victims 2>/dev/null
             sleep 2
@@ -177,19 +186,17 @@ pre-push:
           guard_pid=$!
           wait "$ls_pid" 2>/dev/null
           ls_status=$?
-          kill "$guard_pid" 2>/dev/null
+          [ -e "$scratch/timeout" ] || kill "$guard_pid" 2>/dev/null
           wait "$guard_pid" 2>/dev/null
           return $ls_status
         }
 
-        # Resolve the default branch once, for both the self-skip check and
-        # the base fallback (hardcoding `main|master` misses `develop`, …).
-        # Order: (1) local `refs/remotes/<remote>/HEAD` — fast but can be
-        # MISSING (`git remote set-head --delete`, fresh or partial clone), and
-        # guessing `main` then would silently disable the guard repo-wide;
-        # (2) `ls-remote --symref <remote> HEAD`, the server's answer; (3) if
-        # both fail, a LOUD skip rather than a guessed branch (under-block is
-        # the right failure mode, but it must be visible).
+        # Resolve the default branch once (self-skip check and base fallback;
+        # hardcoding `main|master` misses `develop`, …): (1) local
+        # `refs/remotes/<remote>/HEAD`, fast but can be MISSING (guessing `main`
+        # then would silently disable the guard repo-wide); (2) the server's
+        # answer via `ls-remote --symref`; (3) if both fail, a LOUD skip rather
+        # than a guessed branch (under-block, but visible).
         default_branch=$(git symbolic-ref -q --short "refs/remotes/${remote}/HEAD" 2>/dev/null | sed "s|^${remote}/||")
         if [ -z "$default_branch" ] && bounded_ls_remote "$heads_file" --symref "$remote" HEAD; then
           default_branch=$(awk 'NR==1 && /^ref:/ { sub("^refs/heads/", "", $2); print $2; exit }' "$heads_file")
@@ -207,18 +214,15 @@ pre-push:
         # so every base tip is read in a single bounded remote call.
         tab=$(printf '\t')
         while IFS=' ' read -r _local_ref local_sha _remote_ref _remote_sha; do
-          # Skip ref deletions. The "zero hash" varies by git's object-format
-          # (40 chars for SHA-1, 64 for SHA-256), so match any all-zero
-          # string of any length rather than hardcoding a fixed-width constant.
+          # Skip ref deletions: the all-zero "hash" is 40 chars (SHA-1) or 64
+          # (SHA-256), so match any length rather than a fixed width.
           case "$local_sha" in *[!0]*) ;; *) continue ;; esac
 
-          # Resolve the branch from the REMOTE ref — the push destination.
-          # <local-ref> is "what's pushed FROM" (a branch, HEAD, a raw SHA, …)
-          # and may differ from the destination: for `git push origin
-          # main:feature-x` deriving from local_ref would hit the
-          # default-branch skip below and bypass the guard for feature-x.
-          # Non-branch remote refs (tags, notes) are skipped: this guard only
-          # gates branch pushes.
+          # Resolve the branch from the REMOTE ref (the push destination).
+          # <local-ref> may be any expression and differ from it: for `git push
+          # origin main:feature-x` it would hit the default-branch skip below
+          # and bypass the guard for feature-x. Non-branch refs (tags, notes)
+          # are skipped: this guard only gates branch pushes.
           case "$_remote_ref" in
             refs/heads/*)
               branch="${_remote_ref#refs/heads/}"
@@ -228,19 +232,14 @@ pre-push:
               ;;
           esac
 
-          # The default branch is its own base — skip dynamically so
-          # repos whose default is `develop` (or any non-main name)
-          # don't get checked against themselves.
+          # The default branch is its own base.
           [ "$branch" = "$default_branch" ] && continue
 
-          # Already validated above; its separate history never
-          # compares against the default base.
+          # Validated above; its separate history never compares to the base.
           [ "$branch" = "ops/gigl-promote-record" ] && continue
 
           base=$(git config "branch.$branch.base" 2>/dev/null || true)
-          if [ -z "$base" ]; then
-            base="${remote}/${default_branch}"
-          fi
+          base=${base:-${remote}/${default_branch}}
           base_ref=${base#${remote}/}
           printf '%s\t%s\t%s\n' "$branch" "$local_sha" "$base" >> "$plan_file"
           grep -qxF -e "$base_ref" "$bases_file" || printf '%s\n' "$base_ref" >> "$bases_file"

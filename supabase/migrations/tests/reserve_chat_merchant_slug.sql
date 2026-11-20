@@ -13,6 +13,9 @@
 --      was replaced, so a dropped word would silently reopen it).
 --   3. generate_slug() will not hand a business named "Chat" the reserved slug.
 --   4. The existing EXECUTE grants survived the replacement.
+--   5. No store holds the slug 'chat' and no retired alias 'chat' exists: the
+--      proxy resolves aliases for reserved hosts, so either would send
+--      chat.<root domain> to a storefront instead of the chat engine.
 -- =============================================
 
 BEGIN;
@@ -59,6 +62,14 @@ BEGIN
      OR NOT pg_catalog.has_function_privilege('authenticated', 'public.is_reserved_merchant_slug(text)', 'EXECUTE')
      OR NOT pg_catalog.has_function_privilege('service_role', 'public.is_reserved_merchant_slug(text)', 'EXECUTE') THEN
     RAISE EXCEPTION 'is_reserved_merchant_slug lost an EXECUTE grant';
+  END IF;
+
+  -- 5.
+  IF EXISTS (SELECT 1 FROM public.merchants WHERE lower(btrim(slug)) = 'chat') THEN
+    RAISE EXCEPTION 'a store still holds the reserved slug chat';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.merchant_slug_aliases WHERE lower(btrim(old_slug)) = 'chat') THEN
+    RAISE EXCEPTION 'a retired alias still claims the reserved slug chat';
   END IF;
 
   RAISE NOTICE 'reserve_chat_merchant_slug: ALL ASSERTIONS PASSED';

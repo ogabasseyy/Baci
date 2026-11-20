@@ -34,20 +34,27 @@ AS $$
 $$;
 
 -- ----------------------------------------------------------------------------
--- Safety net, same rule as 20260707074000: a store that already holds a newly
--- reserved slug is moved to a safe slug and keeps its old URL as an alias. No
--- store named 'chat' is expected; this only covers a straggler.
+-- Safety net for a straggler. No store named 'chat' is expected.
+--
+-- Scoped to the one label this migration reserves, so it can never rename a
+-- store that holds some other reserved word.
+--
+-- Unlike 20260707074000, the old slug is NOT kept as an alias, and any existing
+-- 'chat' alias is removed: the proxy resolves aliases for reserved hosts, so a
+-- 'chat' alias would send chat.<root domain> to a storefront instead of the
+-- chat engine. The store stays reachable at its new slug.
 -- ----------------------------------------------------------------------------
 DO $backfill$
 DECLARE
   r        record;
   v_safe   text;
+  v_gone   integer;
 BEGIN
   -- Permit the immutability guard for this backfill only.
   PERFORM set_config('app.slug_rename_allowed', 'on', true);
   FOR r IN
     SELECT id, slug FROM public.merchants
-    WHERE public.is_reserved_merchant_slug(slug)
+    WHERE lower(btrim(slug)) = 'chat'
   LOOP
     v_safe := public.generate_slug(r.slug || '-store');
     -- Move the merchant's subdomain row to the safe label, preserving its root
@@ -59,12 +66,14 @@ BEGIN
       AND position('.' in d.domain) > 0
       AND left(d.domain, position('.' in d.domain) - 1) = r.slug;
     UPDATE public.merchants SET slug = v_safe WHERE id = r.id;
-    -- Record the retired reserved slug as this merchant's alias (its old URL 301s).
-    INSERT INTO public.merchant_slug_aliases (old_slug, merchant_id)
-    VALUES (r.slug, r.id)
-    ON CONFLICT (old_slug) DO NOTHING;
-    RAISE NOTICE 'Backfilled reserved slug % -> % (merchant %)', r.slug, v_safe, r.id;
+    RAISE WARNING 'Moved store off the reserved slug % -> % (merchant %); no alias kept', r.slug, v_safe, r.id;
   END LOOP;
   PERFORM set_config('app.slug_rename_allowed', 'off', true);
+
+  DELETE FROM public.merchant_slug_aliases WHERE lower(btrim(old_slug)) = 'chat';
+  GET DIAGNOSTICS v_gone = ROW_COUNT;
+  IF v_gone > 0 THEN
+    RAISE WARNING 'Removed % retired alias row(s) for the reserved slug chat', v_gone;
+  END IF;
 END
 $backfill$;

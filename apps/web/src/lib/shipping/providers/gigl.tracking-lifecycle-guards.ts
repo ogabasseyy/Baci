@@ -193,6 +193,16 @@ export function applyLifecycleGuards(
         event.rawStatus = GIGL_PICKUP_EN_ROUTE_RAW_STATUS;
         candidate.recognizedStatus = 'pickup_scheduled';
       }
+    } else if (
+      raw === 'MSHC' &&
+      returning &&
+      candidate.recognizedStatus === 'out_for_delivery'
+    ) {
+      // After the return began, a delivery-run scan is the parcel heading back
+      // to the sender, not out for delivery to the customer.
+      event.status = 'in_transit';
+      event.rawStatus = candidate.providerStatus;
+      candidate.recognizedStatus = 'in_transit';
     }
     if (
       raw === 'MSHC' &&

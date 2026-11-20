@@ -136,4 +136,34 @@ describe('bugfix: no arrival promotion once the return flow has begun', () => {
       GIGL_ARRIVED_IN_CITY_RAW_STATUS
     );
   });
+
+  it.each([
+    ['return scan first', ['MRTE', 'MSHC']],
+    ['MSHC listed first (tied)', ['MSHC', 'MRTE']],
+  ])('bugfix: an MSHC after the return began is not out-for-delivery (%s)', (_label, order) => {
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W86',
+        Origin: 'LAGOS',
+        Destination: 'ABUJA',
+        MobileShipmentTrackings: [
+          {
+            Status: 'DPC',
+            DateTimeUtc: '2026-11-09T10:00:00.000Z',
+            Location: 'IKEJA 2 (IKEJA)',
+          },
+          ...order.map((Status) => ({
+            Status,
+            DateTimeUtc: '2026-11-09T12:00:00.000Z',
+          })),
+        ],
+      },
+      'W86',
+      OBSERVED_AT
+    );
+    expect(result.status).toBe('in_transit');
+    expect(result.events.some((e) => e.status === 'out_for_delivery')).toBe(
+      false
+    );
+  });
 });

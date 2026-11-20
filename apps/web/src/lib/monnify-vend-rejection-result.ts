@@ -8,6 +8,7 @@ import {
 import { getMonnifyEnvelopeMessage } from './monnify-bills-shared';
 import { hasBodyToken } from './monnify-bills-status';
 import { isMonnifyDefiniteBusinessRefusal } from './monnify-business-refusal';
+import { hasMonnifyAuthOrThrottleCode } from './monnify-non-definitive-code';
 import { readMonnifyRejectionVendReference } from './monnify-rejection-vend-reference';
 import { readMonnifyResponseCode } from './monnify-response-code';
 import { isMonnifyUnresolvedAnswer } from './monnify-unresolved-answer';
@@ -62,6 +63,7 @@ export function buildMonnifyBusinessRejectionResult({
   // twice, so a token still holds even beside a 401/403/429 code.
   const isAuthOrThrottleCode =
     (/^\s*0*(?:401|403|429)\s*$/.test(parsedEnvelope.responseCode) ||
+      hasMonnifyAuthOrThrottleCode(envelope) ||
       // Authentication wording is refund-only whatever the code and body
       // (owner decision): "Invalid access token" with D01 and a PENDING echo.
       mentionsMonnifyAuthWording(

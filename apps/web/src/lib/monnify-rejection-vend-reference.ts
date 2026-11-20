@@ -82,7 +82,7 @@ const NON_VEND_PARENT =
 const isProviderReferenceKey: KeyMatcher = (key, _insideBody, underNonVend) =>
   REFERENCE_LIKE_KEY.test(key) &&
   !ECHO_REFERENCE_PREFIX.test(key) &&
-  !((key === 'reference' || key === 'ref') && underNonVend);
+  !underNonVend;
 
 /**
  * The reference at the shallowest depth. When two different references sit at

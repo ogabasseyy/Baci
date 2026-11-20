@@ -159,6 +159,7 @@ export async function purchaseBill(
         message: sanitizeMonnifyErrorDetail(
           parsedEnvelope.responseMessage || 'Vend outcome unclear'
         ),
+        ...(hasToken && { providerTokenSeen: true }),
         providerVendReference: vendReference,
         requestReference,
       });
@@ -236,7 +237,12 @@ export async function purchaseBill(
       ...(status === 'pending' && hasToken && { providerTokenSeen: true }),
     };
   } catch (error) {
-    if (error instanceof MonnifyHttpError && error.isClientError) {
+    // A 4xx is a rejection; an HTTP 5xx that already carries a voucher token is
+    // held too (a retry could submit after delivery).
+    if (
+      error instanceof MonnifyHttpError &&
+      (error.isClientError || error.bodyHasToken)
+    ) {
       return buildMonnifyHttpRejectionResult({
         amount,
         error,

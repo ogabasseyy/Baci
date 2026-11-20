@@ -85,3 +85,12 @@ export function hasMonnifyNonDefinitiveCode(
 export function hasMonnifyUnresolvedCode(answer: unknown): boolean {
   return hasResponseCodeMatching(answer, UNRESOLVED_CODE, 0);
 }
+
+/**
+ * Whether any response-code field in a Monnify answer, at any depth, is a
+ * login rejection or throttle (401/403/429): such an answer proves nothing
+ * about the vend.
+ */
+export function hasMonnifyAuthOrThrottleCode(answer: unknown): boolean {
+  return hasResponseCodeMatching(answer, /^0*(?:401|403|429)$/, 0);
+}

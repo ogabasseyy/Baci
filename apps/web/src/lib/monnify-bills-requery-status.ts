@@ -17,6 +17,7 @@ import {
   readMonnifyBillToken,
   toBillStatusInput,
 } from './monnify-bills-status';
+import { hasMonnifyAuthOrThrottleCode } from './monnify-non-definitive-code';
 import { isMonnifyRequeryRejectionDefiniteFailure } from './monnify-requery-rejection';
 import { readMonnifyResponseCode } from './monnify-response-code';
 
@@ -48,6 +49,7 @@ export async function checkTransactionStatus(
       // The same codes or authentication wording inside an HTTP 400 body are
       // login rejections/throttles: they prove nothing about the vend.
       !/^0*(?:401|403|429)$/.test(error.responseCode ?? '') &&
+      !error.authOrThrottleCode &&
       !error.mentionsAuthWording &&
       error.provesVendFailure
     ) {
@@ -118,6 +120,7 @@ export async function checkTransactionStatus(
   // even when the body also names it FAILED.
   const isAuthRejection =
     /^\s*0*(?:401|403|429)\s*$/.test(parsed.responseCode) ||
+    hasMonnifyAuthOrThrottleCode(envelope) ||
     mentionsMonnifyAuthWording(
       `${message} ${joinMonnifyAnswerStrings(envelope)}`
     );

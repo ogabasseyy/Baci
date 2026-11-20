@@ -4,7 +4,10 @@ import { mentionsMonnifyAuthWording } from './monnify-auth-wording';
 import { hasBodyToken } from './monnify-bills-status';
 import { hasMonnifyDuplicateFlag } from './monnify-duplicate-flag';
 import { isMonnifyDuplicateReferenceText } from './monnify-duplicate-reference';
-import { hasMonnifyNonDefinitiveCode } from './monnify-non-definitive-code';
+import {
+  hasMonnifyAuthOrThrottleCode,
+  hasMonnifyNonDefinitiveCode,
+} from './monnify-non-definitive-code';
 import {
   collectMonnifyProviderReferences,
   findMonnifyBodyVendReference,
@@ -31,6 +34,8 @@ export interface MonnifyAnswerReading {
   responseCode: string | undefined;
   /** The body is an explicit vend-level failure with nothing open (a requery proof). */
   provesVendFailure: boolean;
+  /** A 401/403/429 code anywhere in the body. */
+  authOrThrottleCode: boolean;
   /** The body carries a real (non-placeholder) voucher token. */
   bodyHasToken: boolean;
   /** The body leaves the vend's outcome open (see isMonnifyUnresolvedAnswer). */
@@ -94,6 +99,7 @@ export function readMonnifyAnswer(
       !hasBodyToken(parsed) &&
       hasMonnifyExplicitVendFailure(parsed) &&
       !isMonnifyUnresolvedAnswer({ answer: parsed, wording: text }),
+    authOrThrottleCode: hasMonnifyAuthOrThrottleCode(parsed),
     bodyHasToken: hasBodyToken(parsed),
     leavesOutcomeOpen:
       hasBodyToken(parsed) ||

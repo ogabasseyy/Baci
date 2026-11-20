@@ -51,7 +51,7 @@ const VEND_FLAG_KEY =
 /** customerStatus, productStatus, refundStatus...: another object's state, never the vend's. */
 export const NON_VEND_STATUS_PREFIX =
   /^(?:customer|product|biller|item|service|package|plan|validation|request|merchant|account|user|refund|reversal|settlement|callback|webhook|notification|chargeback|lookup|query|requery|enquiry|inquiry|error|exception|auth|authentication|credential|login|access|oauth).*status$/;
-const NON_VEND_PARENT =
+export const NON_VEND_PARENT =
   /^(?:customer|product|biller|item|service|package|plan|account|merchant|user|validation|request|lookup|query|requery|enquiry|inquiry|refund|reversal|settlement|callback|webhook|notification|chargeback|error|exception|auth|authentication|credential|login|access|oauth)s?$/;
 const STRONG_FAILED_FLAG = /^(?:is|was|has)?(?:been)?(?:failed|failure)$/;
 const PAYMENT_LEVEL_FLAG = /^(?:is|was|has)?(?:been)?payment/;

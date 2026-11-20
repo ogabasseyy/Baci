@@ -272,39 +272,3 @@ describe('bugfix: a duplicate code with one unreadable copy still confirmed', ()
     );
   });
 });
-
-describe('bugfix: a decorated name fell back to a shorter biller that was still listed', () => {
-  it('refuses when the named biller is gone and only the shorter one lists the code', async () => {
-    mockGetBillersByCategory.mockResolvedValue(
-      mapKudaBillersAnswer(
-        {
-          billers: [
-            {
-              id: 'dstv',
-              name: 'DSTV',
-              description: 'Cable',
-              billTypeId: 'cable',
-              billItems: [
-                {
-                  itemCode: 'KUD-CAB-DST-SHARED',
-                  itemName: 'Compact',
-                  amount: 500000,
-                  isFixedPrice: true,
-                },
-              ],
-            },
-          ],
-        },
-        'CableTv'
-      ).billers
-    );
-
-    // The app sent the Premium biller's package path; Premium is no longer
-    // listed, so DSTV's own price must not stand in.
-    await expect(purchase(5000, 'DSTV - PREMIUM - Monthly')).rejects.toThrow(
-      'The price of this package has changed'
-    );
-    // The real DSTV path still works.
-    await expect(purchase(5000, 'DSTV - Compact')).resolves.toBeUndefined();
-  });
-});

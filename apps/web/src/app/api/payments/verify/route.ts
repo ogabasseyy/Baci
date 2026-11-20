@@ -10,6 +10,7 @@ import { getAuthenticatedUser } from '@/lib/supabase/mobile-auth';
 import { createServiceClient } from '@/lib/supabase/service';
 import { bankCardOfferReferenceSchema } from '@/schemas/bank-card-offer-reference';
 import { referenceSchema, verifyPaymentBodySchema } from '@/schemas/payments';
+import { getBankCardOfferVerificationBinding } from './get-bank-card-offer-verification-binding';
 import { getGuestPaymentReferenceSnapshot } from './guest-payment-reference-snapshot';
 import { getSessionlessPaymentReferenceSnapshot } from './sessionless-payment-reference-snapshot';
 import {
@@ -31,12 +32,10 @@ export function GET(request: NextRequest) {
 
 async function verifyPaymentReference(
   reference: string,
-  // Order the sessionless proof binds this reference to (tracking token
-  // or validated user-customer relationship). The service-client lookup
-  // below must name the same order, or the finalization target has
-  // drifted from the authorized one. Absent for session requests, whose
-  // CSRF-validated cookie is the authority.
-  expectedOrderId?: string | null
+  // Bank-offer browser requests bind both identities with the buyer's
+  // ownership proof before the service-client lookup can settle the payment.
+  expectedOrderId?: string | null,
+  expectedMerchantId?: string
 ) {
   const parsedReference = referenceSchema.safeParse(reference);
 
@@ -97,6 +96,21 @@ async function verifyPaymentReference(
     );
   }
 
+  if (
+    (expectedOrderId && transaction.order_id !== expectedOrderId) ||
+    (expectedMerchantId && transaction.merchant_id !== expectedMerchantId)
+  ) {
+    // A changed reference binding must fail with the same response as an
+    // ownership denial before any order details or settlements are returned.
+    logger.warn({
+      message: 'Payment verification order binding mismatch',
+    });
+    return NextResponse.json(
+      { error: 'Verification unavailable' },
+      { status: 403 }
+    );
+  }
+
   const { data: existingOrder } = transaction.order_id
     ? await supabase
         .from('orders')
@@ -104,21 +118,6 @@ async function verifyPaymentReference(
         .eq('id', transaction.order_id)
         .maybeSingle()
     : { data: null };
-
-  if (expectedOrderId && transaction.order_id !== expectedOrderId) {
-    // The reference resolved to a different order than the sessionless
-    // proof authorized (stale binding, or a reference swapped between the
-    // proof check and this read). Fail closed with no existence oracle —
-    // identical to the proof denial below.
-    logger.warn({
-      message: 'Payment verification order binding mismatch',
-      reference: parsedReference.data,
-    });
-    return NextResponse.json(
-      { error: 'Verification unavailable' },
-      { status: 403 }
-    );
-  }
 
   if (isBankOfferReference && transaction.gateway !== 'paystack') {
     return NextResponse.json(
@@ -194,7 +193,7 @@ async function verifyPaymentReference(
     });
   }
   let gatewayResponse: Record<string, unknown> | undefined;
-  // Bank offers verify (or replay stored proof) inside the shared finalizer.
+  // Bank offers re-verify against the saved offer inside the shared finalizer.
   if (!isBankOfferReference) {
     const storedGatewayResponse = transaction.gateway_response;
     const hasStoredGatewayResponse =
@@ -367,9 +366,7 @@ async function verifyPaymentReference(
       success: false,
       status: finalizeOutcome.status,
       orderId: transaction.order_id,
-      orderNumber:
-        existingOrder?.order_number ||
-        transaction.gateway_reference.slice(0, 8).toUpperCase(),
+      orderNumber: existingOrder?.order_number ?? undefined,
     });
   }
   if (finalizeOutcome.kind === 'bank_offer_capture_review') {
@@ -461,7 +458,9 @@ async function verifyPaymentReference(
   const finalOrderNumber =
     ('orderNumber' in finalizeOutcome ? finalizeOutcome.orderNumber : null) ||
     existingOrder?.order_number ||
-    transaction.gateway_reference.slice(0, 8).toUpperCase();
+    (isBankOfferReference
+      ? undefined
+      : transaction.gateway_reference.slice(0, 8).toUpperCase());
 
   const verifiedTotal = Number(existingOrder?.total);
   const verifiedCurrency =
@@ -567,5 +566,24 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  return verifyPaymentReference(parsedBody.data.reference);
+  const { reference, merchantSlug } = parsedBody.data;
+  if (bankCardOfferReferenceSchema.safeParse(reference).success) {
+    const binding = await getBankCardOfferVerificationBinding(
+      request,
+      reference,
+      merchantSlug
+    );
+    if (!binding) {
+      return NextResponse.json(
+        { error: 'Verification unavailable' },
+        { status: 403 }
+      );
+    }
+    return verifyPaymentReference(
+      reference,
+      binding.orderId,
+      binding.merchantId
+    );
+  }
+  return verifyPaymentReference(reference);
 }

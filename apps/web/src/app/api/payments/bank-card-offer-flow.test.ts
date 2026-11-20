@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   initialize: vi.fn(),
   verify: vi.fn(),
   refund: vi.fn(),
+  cookieAuth: vi.fn(),
 }));
 const userId = 'c4c9b190-6486-418a-8f68-dce9269e0eac';
 const merchantId = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
@@ -46,7 +47,7 @@ vi.mock('@/lib/api-auth', () => ({
   authenticateApiRequest: async () => ({ user: { id: userId } }),
 }));
 vi.mock('@/lib/supabase/mobile-auth', () => ({
-  getAuthenticatedUser: async () => ({ user: { id: userId } }),
+  getAuthenticatedUser: mocks.cookieAuth,
 }));
 vi.mock('@/lib/csrf', () => ({
   checkCsrfProtection: async () => ({ valid: true }),
@@ -82,7 +83,9 @@ afterEach(() => {
 });
 
 function request(path: string, payload: Record<string, unknown>, sign = false) {
-  const body = JSON.stringify(payload);
+  const body = JSON.stringify(
+    path === 'verify' ? { merchantSlug: merchant.slug, ...payload } : payload
+  );
   const headers: Record<string, string> = {
     'content-type': 'application/json',
   };
@@ -143,6 +146,11 @@ function setup(
   saveCheckoutUrl = true,
   failFirstCompletion = false
 ) {
+  mocks.cookieAuth.mockResolvedValue({
+    authMode: 'cookie',
+    user: { id: userId },
+    supabase: mocks,
+  });
   let claimed = false;
   let checkoutUrl: string | null = null;
   let approved = false;
@@ -198,6 +206,18 @@ function setup(
   });
   mocks.rpc.mockImplementation(async (name, args) => {
     switch (name) {
+      case 'get_sessionless_payment_reference_snapshot':
+        return {
+          data: [
+            {
+              transaction_id: transactionId,
+              order_id: orderId,
+              merchant_id: merchantId,
+              amount: 95,
+              gateway_reference: reference,
+            },
+          ],
+        };
       case 'get_bank_card_offer_checkout_context':
         return {
           data: {
@@ -315,7 +335,9 @@ function setup(
     const row =
       table === 'transactions'
         ? transaction
-        : { ...order, payment_status: paid ? 'paid' : 'unpaid' };
+        : table === 'merchants'
+          ? merchant
+          : { ...order, payment_status: paid ? 'paid' : 'unpaid' };
     const chain = {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn((key, value) => {
@@ -329,7 +351,15 @@ function setup(
         error: null,
       }),
       single: vi.fn().mockResolvedValue({ data: row, error: null }),
-      maybeSingle: vi.fn().mockResolvedValue({ data: row, error: null }),
+      maybeSingle: vi.fn(async () => ({
+        data:
+          table === 'merchants' &&
+          filters.slug &&
+          filters.slug !== merchant.slug
+            ? null
+            : row,
+        error: null,
+      })),
       order: vi.fn(async () => ({
         data: filters.transaction_type === 'payment' ? [transaction] : [],
         error: null,
@@ -342,6 +372,18 @@ function setup(
 }
 
 describe('bank card offer payment handlers', () => {
+  it('rejects verification from the wrong storefront before contacting Paystack', async () => {
+    setup('035', 'Wema Bank');
+
+    const result = await verify(
+      request('verify', { reference, merchantSlug: 'another-store' })
+    );
+
+    expect(result.status).toBe(403);
+    expect(mocks.verify).not.toHaveBeenCalled();
+    expect(mocks.from).not.toHaveBeenCalledWith('transactions');
+  });
+
   it.each([
     { error: null, status: 200 },
     { error: { code: '57014' }, status: 503 },

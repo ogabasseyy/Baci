@@ -64,6 +64,11 @@ vi.mock('@/lib/logger', () => ({
   logger: { error: vi.fn(), info: vi.fn(), warn: vi.fn() },
 }));
 
+const getBankCardOfferBinding = vi.hoisted(() => vi.fn());
+vi.mock('./get-bank-card-offer-verification-binding', () => ({
+  getBankCardOfferVerificationBinding: getBankCardOfferBinding,
+}));
+
 const mockCreateServiceClient = vi.fn();
 vi.mock('@/lib/supabase/service', () => ({
   createServiceClient: () => mockCreateServiceClient(),
@@ -277,6 +282,10 @@ describe('POST /api/payments/verify — finalizer outcomes', () => {
   it('rejects a bank offer reference bound to a non-Paystack transaction', async () => {
     const supabase = buildSupabase({ completion: null, gateway: 'korapay' });
     mockCreateServiceClient.mockReturnValue(supabase);
+    getBankCardOfferBinding.mockResolvedValueOnce({
+      orderId: 'order-1',
+      merchantId: 'merchant-1',
+    });
 
     const response = await POST(createRequest(`BCO-${'a'.repeat(32)}`));
 

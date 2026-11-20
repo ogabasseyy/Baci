@@ -154,29 +154,38 @@ export async function verifyCheckoutPayment(
   }
 
   setIsVerifying(true);
+  const isBankOffer = bankCardOfferReferenceSchema.safeParse(reference).success;
+  const fallbackOrderNumber = isBankOffer
+    ? null
+    : reference.slice(0, 8).toUpperCase();
 
   try {
     const response = await fetchWithCsrf('/api/payments/verify', {
-      body: JSON.stringify({ reference }),
+      body: JSON.stringify({
+        reference,
+        ...(isBankOffer ? { merchantSlug } : {}),
+      }),
       headers: { 'Content-Type': 'application/json' },
       method: 'POST',
       signal,
     });
     const raw: unknown = await response.json();
     const data = isVerificationResponse(raw) ? raw : {};
+    const orderNumber = data.orderNumber || fallbackOrderNumber;
 
     // A 202 or an explicit held/evidence/review code keeps the page
     // pending even when the payload also carries a success flag: the
     // capture has not settled and must not confirm the order.
     if (
       response.status === 202 ||
+      (isBankOffer && response.status === 403) ||
       data.code === 'REDVAULT_CAPTURE_HELD' ||
       data.code === 'REDVAULT_CAPTURE_EVIDENCE_REVIEW' ||
       data.code === 'REDVAULT_RECONCILIATION_REQUIRED' ||
       data.status === 'pending'
     ) {
       setStatus('pending');
-      setOrderNumber(data.orderNumber || reference.slice(0, 8).toUpperCase());
+      setOrderNumber(orderNumber);
     } else if (!response.ok) {
       if (
         typeof data.finalizationOutcome === 'string' &&
@@ -191,7 +200,7 @@ export async function verifyCheckoutPayment(
           data.finalizationOutcome
         );
         setStatus('pending');
-        setOrderNumber(data.orderNumber || reference.slice(0, 8).toUpperCase());
+        setOrderNumber(orderNumber);
       } else {
         console.error('Payment verification failed:', data);
         setStatus('failed');
@@ -215,7 +224,7 @@ export async function verifyCheckoutPayment(
         RECONCILING_FINALIZATION_OUTCOMES.has(data.finalizationOutcome)
       ) {
         setStatus('reconciling');
-        setOrderNumber(data.orderNumber || reference.slice(0, 8).toUpperCase());
+        setOrderNumber(orderNumber);
         if (data.paymentMethod) {
           setPaymentMethod(data.paymentMethod);
         }
@@ -223,7 +232,7 @@ export async function verifyCheckoutPayment(
       }
       clearCart();
       setStatus('success');
-      setOrderNumber(data.orderNumber || reference.slice(0, 8).toUpperCase());
+      setOrderNumber(orderNumber);
       const verifiedOrderId = data.orderId || orderId;
       // Only a completed finalization leaves an active paid order, so only
       // it counts as a paid conversion.
@@ -240,14 +249,11 @@ export async function verifyCheckoutPayment(
           ...(verifiedCurrency ? { currency: verifiedCurrency } : {}),
         });
       }
-    } else if (
-      data.status === 'reversed' &&
-      bankCardOfferReferenceSchema.safeParse(reference).success
-    ) {
+    } else if (data.status === 'reversed' && isBankOffer) {
       // A reversal can follow a capture. Keep the shopper on reconciliation
       // while the provider's reversal and the order are matched.
       setStatus('reversed');
-      setOrderNumber(data.orderNumber || null);
+      setOrderNumber(orderNumber);
     } else if (
       data.status === 'failed' ||
       data.status === 'cancelled' ||
@@ -273,7 +279,7 @@ export async function verifyCheckoutPayment(
       scheduleFailedRedirect();
     } else {
       setStatus('pending');
-      setOrderNumber(reference.slice(0, 8).toUpperCase());
+      setOrderNumber(orderNumber);
     }
   } catch (error) {
     // An aborted bound is the loop working as intended — stay pending so
@@ -282,7 +288,7 @@ export async function verifyCheckoutPayment(
       console.error('Failed to verify payment:', error);
     }
     setStatus('pending');
-    setOrderNumber(reference.slice(0, 8).toUpperCase());
+    setOrderNumber(fallbackOrderNumber);
   } finally {
     setIsVerifying(false);
   }

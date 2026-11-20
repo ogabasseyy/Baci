@@ -34,6 +34,22 @@ describe('orderCreateSchema', () => {
     }
   });
 
+  it('requires an offer ID when bank-card-offer payment is selected', () => {
+    expect(
+      orderCreateSchema.safeParse({
+        ...validOrder,
+        payment_method: 'bank_card_offer',
+      }).error?.issues[0]?.path
+    ).toEqual(['bank_card_offer_id']);
+    expect(
+      orderCreateSchema.safeParse({
+        ...validOrder,
+        payment_method: 'bank_card_offer',
+        bank_card_offer_id: 'black-friday',
+      }).success
+    ).toBe(true);
+  });
+
   it('accepts valid input', () => {
     const result = orderCreateSchema.safeParse(validOrder);
     expect(result.success).toBe(true);

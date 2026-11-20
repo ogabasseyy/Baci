@@ -2313,7 +2313,16 @@ export async function POST(request: NextRequest) {
         currency: merchantResolvedCurrency,
         expectedTotal: body.expected_total,
         hasIncompatibleDiscount: Boolean(
-          discountCodeId || loyaltyRedemptionId || requestedSavingsRedemption
+          discountCodeId ||
+            loyaltyRedemptionId ||
+            requestedSavingsRedemption ||
+            hasVoucherItem ||
+            body.shared_cart ||
+            body.discount_code ||
+            body.use_wallet_credit ||
+            body.wallet_amount ||
+            body.use_savings_credit ||
+            body.savings_amount
         ),
         merchantId: merchant_id,
         merchantSlug: merchant.slug,

@@ -247,6 +247,13 @@ const orderCreateSchemaBase = z
   })
   .and(orderDeliveryMetadataSchema)
   .superRefine((data, ctx) => {
+    if (data.payment_method === 'bank_card_offer' && !data.bank_card_offer_id) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'A bank card offer ID is required for this payment method',
+        path: ['bank_card_offer_id'],
+      });
+    }
     if (data.bank_card_offer_id && data.payment_method !== 'bank_card_offer') {
       ctx.addIssue({
         code: 'custom',

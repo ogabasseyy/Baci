@@ -54,11 +54,18 @@ it('leaves standard checkout to the existing route without reading any offer', a
   expect(rpc).not.toHaveBeenCalled();
 });
 
-it('rejects a bank offer without a matching signed-in buyer before reading any replay', async () => {
+it.each([
+  { userId: undefined, userEmail: undefined, status: 401 },
+  { userId: 'session-user', userEmail: 'other@example.test', status: 403 },
+])('rejects bank-offer buyer authorization before replay with $status', async ({
+  userId,
+  userEmail,
+  status,
+}) => {
   const result = await prepareBankCardOfferOrder({
     ...options,
-    userId: 'session-user',
-    userEmail: 'other@example.test',
+    userId,
+    userEmail,
     body: {
       payment_method: 'bank_card_offer',
       bank_card_offer_id: 'black-friday',
@@ -66,7 +73,10 @@ it('rejects a bank offer without a matching signed-in buyer before reading any r
   });
   expect(result.kind).toBe('response');
   if (result.kind === 'response') {
-    expect(result.response.status).toBe(409);
+    expect(result.response.status).toBe(status);
+    await expect(result.response.json()).resolves.toMatchObject({
+      code: 'BANK_CARD_OFFER_BUYER_REQUIRED',
+    });
   }
   expect(rpc).not.toHaveBeenCalled();
 });
@@ -81,6 +91,20 @@ const bankRequest = {
     items: [],
   } as unknown as OrderCreateInput,
 };
+
+it('requires a checkout key before reading an order', async () => {
+  const result = await prepareBankCardOfferOrder({
+    ...bankRequest,
+    requestIdempotencyKey: null,
+  });
+
+  if (result.kind !== 'response') throw new Error('Expected a request error');
+  expect(result.response.status).toBe(400);
+  await expect(result.response.json()).resolves.toMatchObject({
+    code: 'BANK_CARD_OFFER_CHECKOUT_KEY_REQUIRED',
+  });
+  expect(rpc).not.toHaveBeenCalled();
+});
 
 it('selects the enabled offer for a fresh checkout owned by the buyer', async () => {
   const result = await prepareBankCardOfferOrder({

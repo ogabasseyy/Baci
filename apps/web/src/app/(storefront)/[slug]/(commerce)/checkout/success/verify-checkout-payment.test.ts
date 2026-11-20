@@ -125,6 +125,24 @@ describe('verifyCheckoutPayment', () => {
     expect(callbacks.scheduleFailedRedirect).not.toHaveBeenCalled();
   });
 
+  it('binds bank-offer verification to the storefront and leaves a missing order number blank', async () => {
+    const reference = `BCO-${'a'.repeat(32)}`;
+    request.mockResolvedValue(
+      Response.json({ status: 'pending' }, { status: 202 })
+    );
+    const callbacks = handlers();
+
+    await verifyCheckoutPayment({ ...params, reference }, callbacks);
+
+    expect(request).toHaveBeenCalledWith(
+      '/api/payments/verify',
+      expect.objectContaining({
+        body: JSON.stringify({ reference, merchantSlug: params.merchantSlug }),
+      })
+    );
+    expect(callbacks.setOrderNumber).toHaveBeenCalledWith(null);
+  });
+
   it('shows reconciliation for a reversed bank-offer payment without triggering retry', async () => {
     request.mockResolvedValue(
       Response.json({

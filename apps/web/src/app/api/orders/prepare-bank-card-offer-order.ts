@@ -46,9 +46,34 @@ export async function prepareBankCardOfferOrder({
       candidate.enabled
   );
   if (
-    !body.bank_card_offer_id ||
     !userId ||
-    userEmail?.trim().toLowerCase() !== customerEmail.trim().toLowerCase() ||
+    userEmail?.trim().toLowerCase() !== customerEmail.trim().toLowerCase()
+  ) {
+    return {
+      kind: 'response',
+      response: NextResponse.json(
+        {
+          code: 'BANK_CARD_OFFER_BUYER_REQUIRED',
+          error: 'Sign in with the checkout email for this bank card offer',
+        },
+        { status: userId ? 403 : 401 }
+      ),
+    } as const;
+  }
+  if (!requestIdempotencyKey && !hasVoucherItem) {
+    return {
+      kind: 'response',
+      response: NextResponse.json(
+        {
+          code: 'BANK_CARD_OFFER_CHECKOUT_KEY_REQUIRED',
+          error: 'A checkout key is required for this bank card offer',
+        },
+        { status: 400 }
+      ),
+    } as const;
+  }
+  if (
+    !body.bank_card_offer_id ||
     !requestIdempotencyKey ||
     body.shared_cart ||
     hasVoucherItem ||

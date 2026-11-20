@@ -55,6 +55,10 @@ function toBiller(
     ...fields,
     billItems,
     ...(unreadableItemCodes.length > 0 && { unreadableItemCodes }),
+    // Deliberately biller-wide: a package list that isn't a list hides which
+    // codes it held, so none of this biller's packages can be confirmed.
+    // One bad group blocks the whole biller (fail closed); live Kuda lists
+    // had no groups at all when this was written (2026-11-20).
     ...(hasMalformedItemList(rawItems) && { packagesUnreadable: true }),
   };
 }

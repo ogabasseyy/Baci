@@ -61,11 +61,18 @@ export function isMonnifyRequeryRejectionDefiniteFailure({
   if (hasMonnifyExplicitVendFailure(envelope)) {
     return !isMonnifyUnresolvedAnswer({ answer: envelope, wording });
   }
+  // Each guard qualifies only the clause it sits in: "Vend failed. Status
+  // lookup failed" still proves the vend failed.
+  const provesFailure = wording
+    .split(/[.;\n]+/)
+    .some(
+      (clause) =>
+        VEND_FAILED_WORDING.test(clause) &&
+        !LOOKUP_WORDING.test(clause) &&
+        !NEGATED_FAILURE_WORDING.test(clause) &&
+        !ANCILLARY_OPERATION_WORDING.test(clause)
+    );
   return (
-    VEND_FAILED_WORDING.test(wording) &&
-    !LOOKUP_WORDING.test(wording) &&
-    !NEGATED_FAILURE_WORDING.test(wording) &&
-    !ANCILLARY_OPERATION_WORDING.test(wording) &&
-    !isMonnifyUnresolvedAnswer({ answer: envelope, wording })
+    provesFailure && !isMonnifyUnresolvedAnswer({ answer: envelope, wording })
   );
 }

@@ -77,7 +77,7 @@ const isVendReferenceKey: KeyMatcher = (key) => key === 'vendreference';
 // A bare `reference`/`ref` under customer/product/... describes that object
 // (customer references are echoes), not a vend.
 const NON_VEND_PARENT =
-  /^(?:customer|validation|request|product|biller|item|service|package|plan|account|merchant|user)s?$/;
+  /^(?:customer|validation|request|product|biller|item|service|package|plan|account|merchant|user|refund|reversal|settlement|callback|webhook|notification|chargeback|error|exception|auth|authentication|credential|login|access|oauth)s?$/;
 const isProviderReferenceKey: KeyMatcher = (key, _insideBody, parentKey) =>
   REFERENCE_LIKE_KEY.test(key) &&
   !ECHO_REFERENCE_PREFIX.test(key) &&

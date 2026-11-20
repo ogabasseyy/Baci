@@ -75,7 +75,10 @@ export function readMonnifyAnswer(
     isKnownRefusal: isMonnifyKnownVendRefusalText(bodyText),
     mentionsVendOutcome: isMonnifyVendOutcomeText(text),
     reportsUnexpectedError:
-      reportsMonnifyUnexpectedError(body) ||
+      // A body that parses is matched on its string VALUES only (raw JSON text
+      // would read a catalog `product.code` as a response code); its codes are
+      // read structurally below. Plain text is matched as is.
+      reportsMonnifyUnexpectedError(parsed ? bodyText : body) ||
       hasMonnifyNonDefinitiveCode(parsed),
     showsVendEvidence: showsVendEvidence(body),
     // Auth wording counts from the HTTP reason phrase too (a proxy may move

@@ -52,7 +52,8 @@ const VEND_FLAG_KEY =
 const NON_VEND_STATUS_PREFIX =
   /^(?:customer|product|biller|item|service|package|plan|validation|request|merchant|account|user|refund|reversal|settlement|callback|webhook|notification|chargeback|lookup|query|requery|enquiry|inquiry).*status$/;
 const NON_VEND_PARENT =
-  /^(?:customer|product|biller|item|service|package|plan|account|merchant|user|validation|request|lookup|query|requery|enquiry|inquiry|refund|reversal|settlement|callback|webhook|notification|chargeback)s?$/;
+  /^(?:customer|product|biller|item|service|package|plan|account|merchant|user|validation|request|lookup|query|requery|enquiry|inquiry|refund|reversal|settlement|callback|webhook|notification|chargeback|error|exception|auth|authentication|credential|login|access|oauth)s?$/;
+const STRONG_FAILED_FLAG = /^(?:is|was|has)?(?:been)?(?:failed|failure)$/;
 const PAYMENT_LEVEL_FLAG = /^(?:is|was|has)?(?:been)?payment/;
 
 /** True outcome flags, key normalised: "delivered", "isPending", "vendFailed"... */
@@ -187,7 +188,11 @@ export function readStructuredOutcome(
         !NON_VEND_PARENT.test(parentKey)
       ) {
         found.vendDone ||= DONE_FLAG.test(key);
-        found.vendFailed ||= FAILED_FLAG.test(key);
+        // `failed`/`failure` inside the body prove it; "reversed" or "declined"
+        // alone do not (runbook decision), unless vend-scoped (vendReversed).
+        found.vendFailed ||=
+          FAILED_FLAG.test(key) &&
+          (VEND_FLAG_KEY.test(key) || STRONG_FAILED_FLAG.test(key));
       }
     }
     readStructuredOutcome(

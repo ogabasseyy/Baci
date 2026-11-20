@@ -117,11 +117,15 @@ export function hasConflictingVendStatuses(body: {
 }
 
 const TOKEN_SEARCH_DEPTH = 6;
+/** A `token` under request/auth/error objects is a credential or echo, not a voucher. */
+const NON_VOUCHER_PARENT =
+  /^(?:request|lookup|query|requery|auth|authentication|credential|login|access|oauth|error|exception|customer|validation|refund|reversal|settlement|callback|webhook|notification|chargeback)s?$/;
 
 function findTokenIn(
   value: unknown,
   insideBody: boolean,
-  depth: number
+  depth: number,
+  parentKey = ''
 ): boolean {
   if (!value || typeof value !== 'object') {
     return false;
@@ -136,12 +140,22 @@ function findTokenIn(
     : Object.entries(value);
   return entries.some(([rawKey, child]) => {
     const key = rawKey.replace(/[\s_-]/g, '').toLowerCase();
-    if (insideBody && key === 'token' && typeof child === 'string') {
+    if (
+      insideBody &&
+      key === 'token' &&
+      typeof child === 'string' &&
+      !NON_VOUCHER_PARENT.test(parentKey)
+    ) {
       if (readMonnifyBillToken({ token: child })) {
         return true;
       }
     }
-    return findTokenIn(child, insideBody || key === 'responsebody', depth + 1);
+    return findTokenIn(
+      child,
+      insideBody || key === 'responsebody',
+      depth + 1,
+      key
+    );
   });
 }
 

@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   fileWedgeReview: vi.fn(),
   getCronSecret: vi.fn(),
   logger: { error: vi.fn(), warn: vi.fn() },
+  recheckPaidBankCardOfferCaptures: vi.fn(),
   reconcileAbandonedPaystackAttempts: vi.fn(),
   reconcileWedgedGatewayOrders: vi.fn(),
 }));
@@ -26,6 +27,9 @@ vi.mock('@/lib/payments/reconcile-wedged-gateway-orders', () => ({
 }));
 vi.mock('@/lib/payments/reconcile-abandoned-paystack-attempts', () => ({
   reconcileAbandonedPaystackAttempts: mocks.reconcileAbandonedPaystackAttempts,
+}));
+vi.mock('@/lib/payments/recheck-paid-bank-card-offer-captures', () => ({
+  recheckPaidBankCardOfferCaptures: mocks.recheckPaidBankCardOfferCaptures,
 }));
 vi.mock('@/lib/payments/drain-failed-paid-order-side-effects', () => ({
   drainFailedPaidOrderSideEffects: mocks.drainFailedPaidOrderSideEffects,
@@ -74,6 +78,11 @@ beforeEach(() => {
     recovered: [],
     skipped: [],
     stranded: [],
+  });
+  mocks.recheckPaidBankCardOfferCaptures.mockResolvedValue({
+    checked: 0,
+    failed: 0,
+    reversed: 0,
   });
 });
 
@@ -139,7 +148,7 @@ describe('GET /api/cron/reconcile-gateway-paid-orders', () => {
     );
   });
 
-  it('shares the invocation budget across the three passes', async () => {
+  it('shares the invocation budget with a bounded paid bank-offer pass', async () => {
     mockSweepResult({ checked: 0 });
     const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
     try {
@@ -151,6 +160,12 @@ describe('GET /api/cron/reconcile-gateway-paid-orders', () => {
       );
       expect(mocks.reconcileWedgedGatewayOrders).toHaveBeenCalledWith(
         expect.objectContaining({ deadlineMs: 1_180_000 })
+      );
+      expect(mocks.recheckPaidBankCardOfferCaptures).toHaveBeenCalledWith(
+        expect.objectContaining({
+          deadlineMs: 1_020_000,
+          finalizePayment: mocks.finalizeOrderGatewayPayment,
+        })
       );
       expect(mocks.drainFailedPaidOrderSideEffects).toHaveBeenCalledWith(
         expect.objectContaining({ deadlineMs: 1_270_000 })

@@ -272,6 +272,8 @@ BEGIN
       AND metadata->>'guest_provider_confirmed' = 'true'
       AND metadata->>'guest_provider_confirmed_at' IS NOT NULL
   ) THEN RAISE EXCEPTION 'A verified pending capture must be eligible for the wedge sweep'; END IF;
+  IF EXISTS (SELECT 1 FROM public.claim_paid_bank_card_offer_recheck() c WHERE c.transaction_id = v_transaction)
+  THEN RAISE EXCEPTION 'A pending capture entered the paid recheck queue'; END IF;
   BEGIN
     IF NOT public.flag_bank_card_offer_terminal_review(v_order, v_merchant, v_transaction, 'reversed')
       OR NOT public.flag_bank_card_offer_terminal_review(v_order, v_merchant, v_transaction, 'abandoned')
@@ -295,6 +297,20 @@ BEGIN
     #>> '{completedGatewayResponse,reference}' IS DISTINCT FROM v_reference
   THEN RAISE EXCEPTION 'Completed capture could not replay its approved evidence'; END IF;
   UPDATE public.orders SET payment_status = 'paid' WHERE id = v_order;
+
+  IF has_function_privilege('authenticated', 'public.claim_paid_bank_card_offer_recheck()', 'EXECUTE')
+    OR has_function_privilege('anon', 'public.claim_paid_bank_card_offer_recheck()', 'EXECUTE')
+  THEN RAISE EXCEPTION 'Only the service worker may claim paid captures'; END IF;
+  SET LOCAL ROLE service_role;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.claim_paid_bank_card_offer_recheck() c
+    WHERE c.transaction_id = v_transaction AND c.merchant_id = v_merchant
+      AND c.order_id = v_order AND c.gateway_reference = v_reference
+  ) THEN RAISE EXCEPTION 'Paid captures must be eligible for a scheduled reversal check'; END IF;
+  IF EXISTS (
+    SELECT 1 FROM public.claim_paid_bank_card_offer_recheck() c WHERE c.transaction_id = v_transaction
+  ) THEN RAISE EXCEPTION 'Another worker must not claim the same capture immediately'; END IF;
+  RESET ROLE;
 
   BEGIN
     INSERT INTO public.transactions (id, order_id, merchant_id, transaction_type, amount,
@@ -334,6 +350,13 @@ BEGIN
   ) THEN RAISE EXCEPTION 'Terminal status must use the review that suppresses stale checkout URLs'; END IF;
   IF NOT public.flag_bank_card_offer_terminal_review(v_order, v_merchant, v_transaction, 'reversed')
   THEN RAISE EXCEPTION 'Unable to persist the capture reversal before refund verification'; END IF;
+  UPDATE private.bank_card_offer_payment_attempts SET paid_recheck_after = now()
+    WHERE transaction_id = v_transaction;
+  SET LOCAL ROLE service_role;
+  IF EXISTS (
+    SELECT 1 FROM public.claim_paid_bank_card_offer_recheck() c WHERE c.transaction_id = v_transaction
+  ) THEN RAISE EXCEPTION 'A recorded reversal must leave the paid recheck queue'; END IF;
+  RESET ROLE;
   IF public.bank_card_offer_refund_capture_matches(v_order, v_merchant, v_transaction, v_reference, 9500)
     OR public.get_bank_card_offer_refundable_amount(v_order, v_merchant, v_transaction, v_reference) IS NOT NULL
   THEN RAISE EXCEPTION 'Reconciled reversal must block another cancellation refund'; END IF;

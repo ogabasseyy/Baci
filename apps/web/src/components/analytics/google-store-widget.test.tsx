@@ -125,6 +125,29 @@ describe('GoogleStoreWidget', () => {
     expect(wrapperRule?.textContent).toContain('@media (min-width:768px)');
   });
 
+  it('keeps the badge frame on the light scheme so a dark store shows no white box', () => {
+    window.merchantwidget = { start: vi.fn() };
+
+    render(
+      <GoogleStoreWidget merchant={baseMerchant} hostname="www.ogabassey.com" />
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(20000);
+    });
+
+    // Google's badge document is light-only. A frame that inherits the dark
+    // storefront scheme gets an opaque white canvas painted behind it.
+    const wrapperRule = Array.from(document.querySelectorAll('style')).find(
+      (style) =>
+        style.textContent?.includes('#google-merchantwidget-iframe-wrapper')
+    );
+
+    expect(wrapperRule?.textContent).toContain(
+      '#google-merchantwidget-iframe-wrapper iframe{color-scheme:light}'
+    );
+  });
+
   it('renders when the merchant has no custom domain configured', () => {
     const start = vi.fn();
     window.merchantwidget = { start };

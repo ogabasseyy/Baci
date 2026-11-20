@@ -106,7 +106,7 @@ describe('useCheckoutPaymentController selection', () => {
   it('clears a selected Oxygen method when staging availability is lost', () => {
     mockOxygen = { visible: true };
     const { result, rerender } = renderHook(
-      ({ subtotal }) =>
+      ({ subtotal }: { subtotal: number }) =>
         useCheckoutPaymentController({
           ...checkoutParams,
           isAuthenticated: true,

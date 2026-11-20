@@ -578,6 +578,8 @@ export async function POST(request: NextRequest) {
       clientIp,
       clientUserAgent,
       supabase,
+      createScopedClient: createStorefrontOrderRpcClient,
+      recordOrderCreated: recordPlatformOrderCreatedEvent,
     });
     if (bankOfferOrder.kind === 'response') return bankOfferOrder.response;
     const bankCardOfferRequested = bankOfferOrder.kind === 'checkout';

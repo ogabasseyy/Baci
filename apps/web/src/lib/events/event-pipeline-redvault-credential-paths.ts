@@ -36,6 +36,14 @@ export const eventPipelineRedvaultCredentialPaths = [
     'apps/web/src/lib/agentic/jwt-signing-material.ts',
     'apps/web/src/env.ts',
   ],
+  // Native verification uses the merchant proven by the buyer-owned snapshot.
+  [
+    'apps/web/src/app/api/payments/verify/route.ts',
+    'apps/web/src/lib/checkout/storefront-order-rpc-client.ts',
+    'apps/web/src/lib/supabase/scoped-jwt.ts',
+    'apps/web/src/lib/agentic/jwt-signing-material.ts',
+    'apps/web/src/env.ts',
+  ],
   [
     'apps/web/src/app/api/payments/verify/route.ts',
     'apps/web/src/lib/payments/finalize-order-gateway-payment.ts',

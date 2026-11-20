@@ -29,7 +29,10 @@ BEGIN
   IF has_table_privilege('authenticated', 'private.bank_card_offer_payment_attempts', 'SELECT')
     OR has_function_privilege('anon', 'public.claim_bank_card_offer_attempt(uuid,uuid,bigint,text,text,bigint,bigint)', 'EXECUTE')
     OR has_function_privilege('authenticated', 'public.bank_card_offer_refund_capture_matches(uuid,uuid,uuid,text,bigint)', 'EXECUTE')
-  THEN RAISE EXCEPTION 'bank offer attempt privileges are too broad'; END IF;
+    OR has_function_privilege('anon', 'public.flag_bank_card_offer_capture_review(uuid,uuid,uuid)', 'EXECUTE')
+    OR has_function_privilege('service_role', 'public.flag_bank_card_offer_capture_review(uuid,uuid,uuid)', 'EXECUTE')
+    OR NOT has_function_privilege('authenticated', 'public.flag_bank_card_offer_capture_review(uuid,uuid,uuid)', 'EXECUTE')
+  THEN RAISE EXCEPTION 'bank offer attempt privileges are incorrect'; END IF;
 
   INSERT INTO auth.users (id, email) VALUES (v_user, 'bank-attempt-buyer@example.test');
   INSERT INTO public.merchants (id, email, business_name, slug, paystack_subaccount_code)
@@ -141,6 +144,9 @@ BEGIN
   IF public.get_bank_card_offer_verification_context(v_order, v_merchant, v_transaction) IS NOT NULL THEN
     RAISE EXCEPTION 'Customer scope cannot read internal capture context';
   END IF;
+  IF public.flag_bank_card_offer_capture_review(v_order, v_merchant, v_transaction) THEN
+    RAISE EXCEPTION 'Buyer claims cannot queue a provider capture review directly';
+  END IF;
   PERFORM public.flag_bank_card_offer_initialization_review(v_order, v_merchant, v_reference, true);
   DECLARE v_review_id uuid;
   BEGIN
@@ -175,6 +181,24 @@ BEGIN
     THEN RAISE EXCEPTION 'Shopper scope recorded a terminal provider status'; END IF;
   PERFORM set_config('request.jwt.claims', jsonb_build_object('role', 'authenticated',
     'storefront_order_context', 'route', 'storefront_order_merchant_id', v_merchant)::text, true);
+  IF public.flag_bank_card_offer_capture_review(v_order, gen_random_uuid(), v_transaction)
+    OR public.flag_bank_card_offer_capture_review(v_order, v_merchant, gen_random_uuid())
+  THEN RAISE EXCEPTION 'Mismatched context cannot queue a capture review'; END IF;
+  BEGIN
+    IF NOT public.flag_bank_card_offer_capture_review(v_order, v_merchant, v_transaction)
+      THEN RAISE EXCEPTION 'Scoped capture mismatch was not queued'; END IF;
+    IF NOT public.flag_bank_card_offer_capture_review(v_order, v_merchant, v_transaction)
+      THEN RAISE EXCEPTION 'Scoped capture mismatch did not accept an idempotent retry'; END IF;
+    IF (SELECT count(*) FROM public.reconciliation_review
+      WHERE issue_type = 'payment_match_ambiguous' AND merchant_id = v_merchant
+        AND order_id = v_order AND txn_id = v_transaction AND paystack_ref = v_reference) <> 1
+      OR (SELECT status FROM public.transactions WHERE id = v_transaction) <> 'pending'
+    THEN RAISE EXCEPTION 'Scoped capture review must be idempotent and leave settlement pending'; END IF;
+    -- Undo the capture review before the independent terminal review checks.
+    RAISE EXCEPTION 'capture_review_test_complete';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'capture_review_test_complete' THEN RAISE; END IF;
+  END;
   IF NOT public.flag_bank_card_offer_terminal_review(v_order, v_merchant, v_transaction, 'reversed')
     THEN RAISE EXCEPTION 'Unable to review a reversed initialized attempt'; END IF;
   PERFORM set_config('request.jwt.claims', jsonb_build_object('role', 'authenticated', 'sub', v_user,

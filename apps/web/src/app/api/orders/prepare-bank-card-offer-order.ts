@@ -4,9 +4,9 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import { BANK_CARD_OFFERS } from '@/config/bank-card-offers';
 import { scheduleCheckoutProductBlogPurge } from '@/lib/checkout/schedule-checkout-product-blog-purge';
-import { createStorefrontOrderRpcClient } from '@/lib/checkout/storefront-order-rpc-client';
-import { recordPlatformOrderCreatedEvent } from '@/lib/events/record-platform-order-created-event';
-import { getOrderItemProductId } from '@/lib/immediate-order-notification';
+import type { createStorefrontOrderRpcClient } from '@/lib/checkout/storefront-order-rpc-client';
+import type { recordPlatformOrderCreatedEvent } from '@/lib/events/record-platform-order-created-event';
+import { getOrderItemProductId } from '@/lib/immediate-order/order-item-primitives';
 import { logger } from '@/lib/logger';
 import { stableStringify } from '@/lib/stable-stringify';
 import type { OrderCreateInput } from '@/schemas/orders';
@@ -22,6 +22,8 @@ export async function prepareBankCardOfferOrder({
   clientIp,
   clientUserAgent,
   supabase,
+  createScopedClient,
+  recordOrderCreated,
 }: {
   body: OrderCreateInput;
   merchantId: string;
@@ -33,6 +35,8 @@ export async function prepareBankCardOfferOrder({
   clientIp: string;
   clientUserAgent?: string;
   supabase: SupabaseClient;
+  createScopedClient: typeof createStorefrontOrderRpcClient;
+  recordOrderCreated: typeof recordPlatformOrderCreatedEvent;
 }) {
   if (body.payment_method !== 'bank_card_offer')
     return { kind: 'standard' } as const;
@@ -121,7 +125,7 @@ export async function prepareBankCardOfferOrder({
     // Replay repairs a missed enqueue. The recorder uses the saved order ID
     // as platform_purchase:<orderId>, deduplicated by record_platform_domain_event_v1.
     try {
-      await recordPlatformOrderCreatedEvent({
+      await recordOrderCreated({
         currency:
           typeof offerOrder.currency === 'string' ? offerOrder.currency : 'NGN',
         customerEmail,
@@ -149,7 +153,7 @@ export async function prepareBankCardOfferOrder({
     }
   }
 
-  const scopedClient = createStorefrontOrderRpcClient({
+  const scopedClient = createScopedClient({
     fallbackClient: supabase,
     hasCanonicalDeliveryMetadata: false,
     merchantId,

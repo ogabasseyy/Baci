@@ -42,7 +42,7 @@ The server computes the approved offer percentage and cap and signs the quote wi
 
 Before activating a campaign, verify the exact Paystack authorization issuer label using an approved card for that bank and confirm the refund path. Verification accepts the canonical name and the documented legal-name variants for the saved Wema or Sterling bank code. Approvals still record the canonical issuer from the saved quote. Confirm any unfamiliar label with Paystack before adding it to the explicit bank-code allowlist.
 
-Native verification requires the signed-in buyer’s ownership proof. It records a verified terminal review before returning the terminal status. A verified payment that is still pending is flagged for reconciliation while settlement stays on the webhook and worker paths.
+Native verification requires the signed-in buyer’s ownership proof. It records a verified terminal review before returning the terminal status. A provider mismatch creates a scoped capture review and keeps the payment pending. A verified payment that is still pending is flagged for reconciliation while settlement stays on the webhook and worker paths.
 
 Automatic cancellation refunds cover the full verified payment leg. Partial-item refunds are handled by operations using the saved per-unit net allocations and the original capture.
 

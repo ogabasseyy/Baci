@@ -1,4 +1,3 @@
-import { initializeBankCardOfferCheckout } from '@/lib/checkout/initialize-bank-card-offer-checkout';
 /**
  * Payment Initialization API Route
  *
@@ -27,7 +26,6 @@ import {
   isRedvaultLivePilotReason,
 } from '@/lib/checkout/redvault-payment-availability';
 import { createStorefrontOrderRpcClient } from '@/lib/checkout/storefront-order-rpc-client';
-import { checkCsrfProtection } from '@/lib/csrf';
 import {
   capturePaymentWithCrypto,
   convertNgnKoboToUsdtCents,
@@ -66,6 +64,7 @@ import {
 import { sanitizeForLog } from '@/lib/sanitize-core';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient as createServerSupabaseClient } from '@/lib/supabase/server';
+import { initializeBankCardOfferRequest } from './initialize-bank-card-offer-request';
 import { retiredGatewayResponse } from './retired-gateway';
 
 // Types & Constants
@@ -1062,64 +1061,17 @@ export async function POST(request: NextRequest) {
     const retired = retiredGatewayResponse(data.gateway);
     if (retired) return retired;
     if (data.payment_method === 'bank_card_offer') {
-      const csrf = await checkCsrfProtection(request);
-      if (!csrf.valid) {
-        return (
-          csrf.response ??
-          NextResponse.json({ error: 'Invalid CSRF token' }, { status: 403 })
-        );
-      }
-      const merchantId = data.merchant_id.toLowerCase();
-      const auth = await authenticateApiRequest(request);
-      if (
-        !auth.user ||
-        (data.gateway && data.gateway !== 'paystack') ||
-        data.payment_type
-      ) {
-        return createErrorResponse(
-          'Bank card offer checkout unavailable',
-          'BANK_CARD_OFFER_UNAVAILABLE',
-          409
-        );
-      }
-      const client = createStorefrontOrderRpcClient({
-        fallbackClient: await createServerSupabaseClient(),
-        hasCanonicalDeliveryMetadata: false,
-        merchantId,
-        userId: auth.user.id,
-      });
-      const result = await initializeBankCardOfferCheckout({
-        client,
-        merchantId,
-        orderId: data.order_id,
-        email: data.customer_email,
-        currency: data.currency,
+      return await initializeBankCardOfferRequest(
         request,
-      });
-      if (result.kind === 'unavailable') {
-        return createErrorResponse(
-          'Bank card offer checkout unavailable',
-          'BANK_CARD_OFFER_UNAVAILABLE',
-          409
-        );
-      }
-      if (result.kind === 'pending') {
-        return NextResponse.json(
-          {
-            code: 'BANK_CARD_OFFER_RECONCILIATION_REQUIRED',
-            reference: result.reference,
-          },
-          { status: 202 }
-        );
-      }
-      return NextResponse.json({
-        success: true,
-        gateway: 'paystack',
-        payment_method: 'bank_card_offer',
-        reference: result.reference,
-        authorization_url: result.checkoutUrl,
-        checkout_url: result.checkoutUrl,
-      });
+        data,
+        async (merchantId, userId) =>
+          createStorefrontOrderRpcClient({
+            fallbackClient: await createServerSupabaseClient(),
+            hasCanonicalDeliveryMetadata: false,
+            merchantId,
+            userId,
+          })
+      );
     }
     const redvaultRequested = data.payment_method === 'uba_redvault';
     const redvaultCustomerAuth = redvaultRequested

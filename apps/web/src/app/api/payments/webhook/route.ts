@@ -758,7 +758,12 @@ export async function POST(request: NextRequest) {
     // Bank offer captures must pass the shared verification path before any
     // transaction flip or fallback settlement can run.
     if (reference.startsWith('BCO-')) {
-      return await handleBankCardOfferWebhook({ gateway, reference, supabase });
+      return await handleBankCardOfferWebhook({
+        gateway,
+        reference,
+        supabase,
+        finalize: finalizeOrderGatewayPayment,
+      });
     }
 
     // Verify payment with the appropriate gateway

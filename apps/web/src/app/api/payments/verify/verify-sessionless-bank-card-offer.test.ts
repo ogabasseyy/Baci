@@ -14,6 +14,15 @@ vi.mock('@/lib/checkout/verify-bank-card-offer-paystack', () => ({
 }));
 
 const verify = vi.mocked(verifyBankCardOfferPaystack);
+const verifyNative = (
+  snapshot: GuestPaymentReferenceSnapshot,
+  client: SupabaseClient
+) =>
+  verifySessionlessBankCardOffer(
+    snapshot,
+    client,
+    createStorefrontOrderRpcClient
+  );
 const rpc = vi.fn();
 const buyerRpc = vi.fn();
 const buyerClient = { rpc: buyerRpc } as unknown as SupabaseClient;
@@ -58,7 +67,7 @@ it.each([
   verify.mockResolvedValueOnce({ kind: 'terminal', status });
   rpc.mockResolvedValueOnce({ data: true, error: null });
 
-  const result = await verifySessionlessBankCardOffer(snapshot, buyerClient);
+  const result = await verifyNative(snapshot, buyerClient);
 
   expect(result.status).toBe(200);
   await expect(result.json()).resolves.toEqual({
@@ -81,7 +90,7 @@ it('keeps the attempt pending when the review is unavailable', async () => {
   verify.mockResolvedValueOnce({ kind: 'terminal', status: 'failed' });
   rpc.mockResolvedValueOnce({ data: false, error: null });
 
-  const result = await verifySessionlessBankCardOffer(snapshot, buyerClient);
+  const result = await verifyNative(snapshot, buyerClient);
 
   expect(result.status).toBe(202);
   await expect(result.json()).resolves.toMatchObject({ status: 'pending' });
@@ -92,14 +101,14 @@ it('rejects saved context with a different reference before contacting Paystack'
     data: { ...saved, reference: `BCO-${'b'.repeat(32)}` },
   });
 
-  const result = await verifySessionlessBankCardOffer(snapshot, buyerClient);
+  const result = await verifyNative(snapshot, buyerClient);
 
   expect(result.status).toBe(202);
   expect(verify).not.toHaveBeenCalled();
 });
 
 it('rejects another gateway without consulting the verification context', async () => {
-  const result = await verifySessionlessBankCardOffer(
+  const result = await verifyNative(
     { ...snapshot, gateway: 'korapay' },
     buyerClient
   );
@@ -111,7 +120,7 @@ it('rejects another gateway without consulting the verification context', async 
 it('keeps the verified capture pending and flags it for reconciliation without settling it', async () => {
   verify.mockResolvedValueOnce({ kind: 'verified' } as never);
 
-  const result = await verifySessionlessBankCardOffer(snapshot, buyerClient);
+  const result = await verifyNative(snapshot, buyerClient);
 
   expect(result.status).toBe(202);
   expect(rpc).toHaveBeenCalledTimes(1);
@@ -124,7 +133,7 @@ it('keeps the verified capture pending and flags it for reconciliation without s
 it('reports a verified payment that already settled with confirmed inventory', async () => {
   verify.mockResolvedValueOnce({ kind: 'verified' } as never);
 
-  const result = await verifySessionlessBankCardOffer(
+  const result = await verifyNative(
     {
       ...snapshot,
       transactionStatus: 'completed',
@@ -139,5 +148,32 @@ it('reports a verified payment that already settled with confirmed inventory', a
     status: 'success',
     finalizationOutcome: 'completed',
   });
+  expect(buyerRpc).not.toHaveBeenCalled();
+});
+
+it('records a capture mismatch without authorizing settlement', async () => {
+  verify.mockResolvedValueOnce({ kind: 'mismatch' });
+  rpc.mockResolvedValueOnce({ data: true, error: null });
+
+  const result = await verifyNative(snapshot, buyerClient);
+
+  expect(result.status).toBe(202);
+  await expect(result.json()).resolves.toMatchObject({ status: 'pending' });
+  expect(rpc).toHaveBeenLastCalledWith('flag_bank_card_offer_capture_review', {
+    p_order_id: snapshot.orderId,
+    p_merchant_id: snapshot.merchantId,
+    p_transaction_id: snapshot.transactionId,
+  });
+  expect(rpc).toHaveBeenCalledTimes(2);
+  expect(buyerRpc).not.toHaveBeenCalled();
+});
+
+it('keeps a provider outage pending without recording a capture mismatch', async () => {
+  verify.mockResolvedValueOnce(null);
+
+  const result = await verifyNative(snapshot, buyerClient);
+
+  expect(result.status).toBe(202);
+  expect(rpc).toHaveBeenCalledTimes(1);
   expect(buyerRpc).not.toHaveBeenCalled();
 });

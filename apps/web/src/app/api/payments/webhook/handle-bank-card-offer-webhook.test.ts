@@ -7,6 +7,7 @@ const reference = `BCO-${'a'.repeat(32)}`;
 it('declines a bank-offer reference on any gateway besides Paystack before looking it up', async () => {
   const rpc = vi.fn();
   const response = await handleBankCardOfferWebhook({
+    finalize: vi.fn(),
     gateway: 'korapay',
     reference,
     supabase: { rpc } as unknown as SupabaseClient,
@@ -20,6 +21,7 @@ it('files one platform review before acknowledging an unmatched Paystack referen
   const insert = vi.fn().mockResolvedValue({ error: { code: '23505' } });
   const from = vi.fn().mockReturnValue({ insert });
   const response = await handleBankCardOfferWebhook({
+    finalize: vi.fn(),
     gateway: 'paystack',
     reference,
     supabase: { rpc, from } as unknown as SupabaseClient,

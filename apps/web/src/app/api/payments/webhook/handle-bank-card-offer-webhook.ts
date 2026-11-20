@@ -1,7 +1,7 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { after, NextResponse } from 'next/server';
-import { finalizeOrderGatewayPayment } from '@/lib/payments/finalize-order-gateway-payment';
+import type { finalizeOrderGatewayPayment } from '@/lib/payments/finalize-order-gateway-payment';
 import { bankCardOfferReferenceSchema } from '@/schemas/bank-card-offer-reference';
 import { bankCardOfferWebhookTransactionSchema } from '@/schemas/bank-card-offer-webhook-transaction';
 
@@ -9,10 +9,12 @@ export async function handleBankCardOfferWebhook({
   gateway,
   reference,
   supabase,
+  finalize,
 }: {
   gateway: string;
   reference: string;
   supabase: SupabaseClient;
+  finalize: typeof finalizeOrderGatewayPayment;
 }) {
   if (
     gateway !== 'paystack' ||
@@ -62,7 +64,7 @@ export async function handleBankCardOfferWebhook({
     );
   }
   const transaction = match.data;
-  const outcome = await finalizeOrderGatewayPayment({
+  const outcome = await finalize({
     actor: `webhook:${reference}`,
     gateway,
     orderId: transaction.order_id,

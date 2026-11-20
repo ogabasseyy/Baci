@@ -15,14 +15,8 @@ const { rpc } = mocks;
 vi.mock('@/config/bank-card-offers', () => ({
   BANK_CARD_OFFERS: mocks.configuredOffers,
 }));
-vi.mock('@/lib/checkout/storefront-order-rpc-client', () => ({
-  createStorefrontOrderRpcClient: () => ({ rpc }),
-}));
 vi.mock('@/lib/checkout/schedule-checkout-product-blog-purge', () => ({
   scheduleCheckoutProductBlogPurge: mocks.purge,
-}));
-vi.mock('@/lib/events/record-platform-order-created-event', () => ({
-  recordPlatformOrderCreatedEvent: mocks.record,
 }));
 
 const maybeSingle = vi.fn();
@@ -42,6 +36,8 @@ const options = {
   hasVoucherItem: false,
   clientIp: '127.0.0.1',
   supabase: { rpc, from } as unknown as SupabaseClient,
+  createScopedClient: () => ({ rpc }) as unknown as SupabaseClient,
+  recordOrderCreated: mocks.record,
 };
 
 it('leaves standard checkout to the existing route without reading any offer', async () => {

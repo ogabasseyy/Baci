@@ -38,6 +38,7 @@ export interface FailedOrder {
   attempt_count: number;
   oxygen_follow_up_status?: OxygenFollowUpStatus;
   follow_up_at?: string;
+  staff_follow_up_only?: boolean;
 }
 
 type FailedOrderPaymentStatus = FailedOrder['payment_status'];

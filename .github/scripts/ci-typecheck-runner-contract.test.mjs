@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import test from 'node:test';
 import YAML from 'yaml';
 import { privateRunnerRoute } from './ci-private-runner-contract-utils.mjs';
@@ -60,4 +60,66 @@ test('builder fixture containers are scoped and cleaned after interruption', asy
     assert.match(webCleanup.run, /cleanup-builder-ci-containers\.mjs/);
   }
   assert.equal(workflow.jobs['quality-test-web'].env.BACI_FIXTURE_SCOPE, '${{ matrix.shard }}');
+});
+
+test('typecheck runs one compiler at a time so the web program never overlaps another package', () => {
+  const step = job.steps.find((candidate) => candidate.name === 'Run Typecheck');
+  const turboCalls = step.run.split('\n').filter((line) => line.includes('pnpm turbo typecheck:ci'));
+  assert.equal(turboCalls.length, 2);
+  for (const call of turboCalls) assert.match(call, /--concurrency=1\b/);
+});
+
+async function workspacePackages() {
+  const { packages } = YAML.parse(await readFile('pnpm-workspace.yaml', 'utf8'));
+  const dirs = [];
+  for (const pattern of packages) {
+    if (!pattern.endsWith('/*')) {
+      dirs.push(pattern);
+      continue;
+    }
+    const base = pattern.slice(0, -2);
+    for (const entry of await readdir(base, { withFileTypes: true })) {
+      if (entry.isDirectory()) dirs.push(`${base}/${entry.name}`);
+    }
+  }
+  const found = [];
+  for (const dir of dirs) {
+    try {
+      found.push({ dir, pkg: JSON.parse(await readFile(`${dir}/package.json`, 'utf8')) });
+    } catch {
+      // Not a package directory.
+    }
+  }
+  return found;
+}
+
+test('every workspace package with a typecheck script also defines typecheck:ci', async () => {
+  // `turbo typecheck:ci` only runs packages that define the script, so a package
+  // that has `typecheck` but not `typecheck:ci` silently drops out of CI.
+  const missing = (await workspacePackages())
+    .filter(({ pkg }) => pkg.scripts?.typecheck && !pkg.scripts['typecheck:ci'])
+    .map(({ pkg }) => pkg.name);
+  assert.deepEqual(missing, []);
+});
+
+test('only the @baci/web main program emits the typecheck budget diagnostics', async () => {
+  // The step summary greps the whole log for `--extendedDiagnostics` output and
+  // labels it as the @baci/web main program; a second flag would mix programs.
+  const flagged = (await workspacePackages()).flatMap(({ pkg }) =>
+    Object.entries(pkg.scripts ?? {})
+      .filter(([, command]) => command.includes('--extendedDiagnostics'))
+      .map(([name]) => `${pkg.name}#${name}`)
+  );
+  assert.deepEqual(flagged, ['@baci/web#typecheck:ci']);
+});
+
+test('the CI program excludes test files while the full typecheck keeps them', async () => {
+  const ci = JSON.parse(await readFile('apps/web/tsconfig.ci.json', 'utf8'));
+  assert.equal(ci.extends, './tsconfig.json');
+  for (const pattern of ['src/**/*.test.ts', 'src/**/*.test.tsx', 'src/**/*.spec.ts', 'src/**/*.spec.tsx']) {
+    assert.ok(ci.exclude.includes(pattern), `tsconfig.ci.json must exclude ${pattern}`);
+  }
+  const web = JSON.parse(await readFile('apps/web/package.json', 'utf8'));
+  assert.match(web.scripts['typecheck:ci'], /tsc --noEmit -p tsconfig\.ci\.json\b/);
+  assert.doesNotMatch(web.scripts.typecheck, /tsconfig\.ci\.json/);
 });

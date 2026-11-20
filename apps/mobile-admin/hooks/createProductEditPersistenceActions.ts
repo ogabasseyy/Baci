@@ -3,6 +3,7 @@ import { Alert } from 'react-native';
 import { z } from 'zod';
 import type { ProductEditFormData } from '@/components/product/product-edit.types';
 import { runSingleFlight } from '@/lib/single-flight';
+import { describeVariantOptionGaps } from '@/lib/variant-option-gap-warning';
 
 interface CreateProductEditPersistenceActionsParams {
   createCategory: (
@@ -147,6 +148,26 @@ export function createProductEditPersistenceActions({
       return;
     }
 
+    const optionGapWarning = formData.has_variants
+      ? describeVariantOptionGaps(formData.variants)
+      : null;
+    if (optionGapWarning) {
+      Alert.alert('Missing variant options', optionGapWarning, [
+        { text: 'Go back and fix', style: 'cancel' },
+        {
+          text: 'Save anyway',
+          onPress: () => {
+            void persistProduct();
+          },
+        },
+      ]);
+      return;
+    }
+
+    await persistProduct();
+  };
+
+  const persistProduct = async () => {
     try {
       await runSingleFlight(saveInFlightRef, async () => {
         if (isEditing && id) {

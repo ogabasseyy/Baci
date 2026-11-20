@@ -31,7 +31,11 @@ export async function startVerifierService(settings: {
   previewOrigin: string;
   executionOrigin: string;
   supabase: { url: string; anonKey: string };
-  canonicalBase(slug: string, client: SupabaseClient): string | Promise<string>;
+  canonicalBase(
+    slug: string,
+    client: SupabaseClient,
+    signal?: AbortSignal
+  ): string | Promise<string>;
   publicVerification?: {
     rootDomain: string;
     observe: Parameters<
@@ -80,7 +84,7 @@ export async function startVerifierService(settings: {
         throw Error('APPROVAL_MISMATCH');
       signal?.throwIfAborted();
       const worker = await workers.resolve(
-        { supabase: client, merchantId: approval.merchantId },
+        { supabase: client, merchantId: approval.merchantId, signal },
         approval.buildId
       );
       return createApprovalCapture(worker)(client, binding, signal);

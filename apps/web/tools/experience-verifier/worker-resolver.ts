@@ -15,7 +15,11 @@ export function createVerifierWorkerResolver(settings: {
   runner: Parameters<typeof createRunnerExecutor>[0];
   previewOrigin: string;
   executionOrigin: string;
-  canonicalBase(slug: string, client: SupabaseClient): string | Promise<string>;
+  canonicalBase(
+    slug: string,
+    client: SupabaseClient,
+    signal?: AbortSignal
+  ): string | Promise<string>;
 }) {
   const workers = new Map<
     string,
@@ -24,17 +28,26 @@ export function createVerifierWorkerResolver(settings: {
   return {
     async resolve(input: OwnerRequestContext, buildId: string) {
       const owner = await requireExperienceOwner(input);
-      const merchant = await owner.supabase
+      const signal = owner.signal;
+      const merchantQuery = owner.supabase
         .from('merchants')
         .select('slug')
-        .eq('id', owner.merchantId)
-        .maybeSingle();
-      const build = await owner.supabase
+        .eq('id', owner.merchantId);
+      const merchant = await (signal
+        ? merchantQuery.abortSignal(signal)
+        : merchantQuery
+      ).maybeSingle();
+      signal?.throwIfAborted();
+      const buildQuery = owner.supabase
         .from('experience_builds')
         .select('host_origin')
         .eq('merchant_id', owner.merchantId)
-        .eq('id', buildId)
-        .maybeSingle();
+        .eq('id', buildId);
+      const build = await (signal
+        ? buildQuery.abortSignal(signal)
+        : buildQuery
+      ).maybeSingle();
+      signal?.throwIfAborted();
       const slug = merchant.data?.slug;
       if (
         merchant.error ||
@@ -45,8 +58,9 @@ export function createVerifierWorkerResolver(settings: {
       )
         throw Error('APPROVAL_MISMATCH');
       const canonical = new URL(
-        await settings.canonicalBase(slug, owner.supabase)
+        await settings.canonicalBase(slug, owner.supabase, signal)
       );
+      signal?.throwIfAborted();
       if (
         canonical.username ||
         canonical.password ||
@@ -70,6 +84,7 @@ export function createVerifierWorkerResolver(settings: {
           bootstrap: loadOwnerPreviewBootstrap,
           runner: settings.runner,
         });
+        signal?.throwIfAborted();
         if (workers.size >= 32) {
           const oldest = workers.keys().next().value;
           if (oldest) workers.delete(oldest);

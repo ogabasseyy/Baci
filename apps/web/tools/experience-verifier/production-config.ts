@@ -83,8 +83,11 @@ export function parseVerifierProductionConfig(input: unknown) {
         ...config.runner,
         key: Buffer.from(config.runner.key, 'base64url'),
       },
-      canonicalBase: (slug: string, client: SupabaseClient) =>
-        resolveCanonicalBase(client, slug, config.rootDomain),
+      canonicalBase: (
+        slug: string,
+        client: SupabaseClient,
+        signal?: AbortSignal
+      ) => resolveCanonicalBase(client, slug, config.rootDomain, signal),
     };
   } catch {
     throw Error('INVALID_VERIFIER_CONFIG');

@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-20T06:47:41+00:00",
-  "source_revision": "35079d3a2db8688df77dc480cb7a57492c7ef2cc",
-  "evidence_digest": "edc4d9cb5ea150c197af4f8ca51f84396d183d2ff0c8eb10ebdc4883da13416e",
-  "claims_digest": "e205b970aa74c9fd9d619560418a989f301b4d6fa742a52b9f26d507ff7cdf66",
+  "reviewed_at": "2026-11-20T06:55:40+00:00",
+  "source_revision": "b11366690fce6eb8bf2669139e2164d658ce079a",
+  "evidence_digest": "9260ce6345493407e6963efcb7c7e731c1be569585b8e85d1a218fcf4a67906e",
+  "claims_digest": "cfb22fae7e937016d95ee538508fc2eba01157183ff27f33de8d10f4d6386939",
   "review_scope": "Source evidence only. Preserves current main\u2019s OAuth, cart retention and notices, payment reconciliation, merchant protocols and Oxygen pilot boundaries. Full-code storefront MCP remains disabled by default. Owner approval, evidence and public-verification schemas retain their existing validation. Direct local admission, source adoption, rollback and simulated commerce tests cover authority boundaries. Hosted qualification and activation remain separate. Re-reviewed the Shopping MCP access map after the misleading link-only add_to_cart alias was retired: anonymous discovery exposes prepare_storefront_cart_link, connected discovery omits it, and clients with cached tool lists must refresh discovery. The connected cart read tool text was reworded with no claim moved; all other register and access-map citations were checked unchanged from the prior reviewed tree. No new production capability promotion.",
   "capabilities": [
     {

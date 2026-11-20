@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-20T10:15:31+00:00",
-  "source_revision": "1f97293c533c71795b7659cfd8b99b8b8ccdb616",
-  "evidence_digest": "0c80d328e50397abb14ec6f9f501a32cdf65a724d7c7211fd5266ea8863715f7",
-  "claims_digest": "4ec3cef32078b4091bbbd01dceee1bb3e3aa57e9ddfb3759ecbac1fdaf940c24",
-  "review_scope": "Source evidence only. Preserves current main\u2019s OAuth, cart retention and notices, payment reconciliation, merchant protocols and Oxygen pilot boundaries. Full-code storefront MCP remains disabled by default. Owner approval, evidence and public-verification schemas retain their existing validation. Direct local admission, source adoption, rollback and simulated commerce tests cover authority boundaries. Hosted qualification and activation remain separate. Re-reviewed the Shopping MCP access map after the misleading link-only add_to_cart alias was retired: anonymous discovery exposes prepare_storefront_cart_link, connected discovery omits it, and clients with cached tool lists must refresh discovery. The connected cart read tool text was reworded with no claim moved; the full-code builder source was also re-reviewed against the merged tree for its durable worker and verified renderer storage, both still disabled by default. Reviewed builder admission and drain. Mobile Admin follow-up rows name known payment methods and lenders. No capability promotion.",
+  "reviewed_at": "2026-11-20T11:22:23+00:00",
+  "source_revision": "7787c4372557f3e11599f85f2d75ea1153aa6dd2",
+  "evidence_digest": "38b95a416608838a5f711ef116aff3c6e8f980092573701cd5c0c8d13e463f13",
+  "claims_digest": "aed4e7a40dfed868c239ddbc65f90a54a4de6f7f612a04c8e643f937d594d38d",
+  "review_scope": "Source review covers main\u2019s OAuth, cart retention and notices, payment reconciliation, merchant protocols, and Oxygen pilot boundaries. Shopping MCP anonymous discovery exposes prepare_storefront_cart_link and connected discovery omits it. Clients with cached tool lists must refresh discovery. The connected cart read copy changed without moving a capability. The full-code builder, durable worker, and verified renderer storage remain disabled by default. Local synthetic checks cover ownership, build admission and drain, rollback, and commerce. Mobile Admin follow-up rows name known payment methods and lenders. Hosted qualification and activation remain pending.",
   "capabilities": [
     {
       "id": "payments",

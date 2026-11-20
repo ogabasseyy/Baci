@@ -119,7 +119,10 @@ it('returns only customer-safe acknowledgement fields for the activated order', 
     recordedAt: '2026-11-20T12:00:00+00:00',
   };
   mocks.rpc.mockResolvedValue({
-    data: [{ ...receipt, transactionReference: 'private' }],
+    data: [
+      { ...receipt, transactionReference: 'private' },
+      { id: 'malformed', recordedAt: receipt.recordedAt },
+    ],
     error: null,
   });
   const { plan } = await (await GET(request())).json();

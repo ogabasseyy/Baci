@@ -139,14 +139,16 @@ export function OxygenOrderPlan({
         </div>
         {Boolean(plan.repaymentReceipts?.length) && (
           <div className="border-t pt-3">
-            <h3 className="font-semibold">Repayment acknowledgements</h3>
+            <h3 className="font-semibold">Repayment updates</h3>
             <ul className="mt-2 divide-y">
               {plan.repaymentReceipts?.map(({ id, recordedAt }) => (
                 <li
                   key={id}
                   className="flex flex-wrap justify-between gap-x-4 gap-y-1 py-2"
                 >
-                  <span className="font-medium">Payment received</span>
+                  <span className="font-medium">
+                    Oxygen reported a repayment
+                  </span>
                   <time className="text-muted-foreground" dateTime={recordedAt}>
                     Recorded {formatOxygenRepaymentReceiptDate(recordedAt)}
                   </time>

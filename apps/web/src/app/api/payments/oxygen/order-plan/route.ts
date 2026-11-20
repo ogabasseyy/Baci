@@ -1,6 +1,6 @@
 import {
   oxygenOrderPlanSchema,
-  oxygenRepaymentReceiptsSchema,
+  oxygenRepaymentReceiptSchema,
 } from '@baci/shared/schemas/oxygen-order-plan';
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -36,9 +36,11 @@ async function readRepaymentReceipts(client: OxygenRuntimeRpc, id: string) {
         p_order_id: id,
       }
     );
-    if (error) return undefined;
-    const result = oxygenRepaymentReceiptsSchema.safeParse(data);
-    return result.success ? result.data : undefined;
+    if (error || !Array.isArray(data)) return undefined;
+    return data.flatMap((item) => {
+      const receipt = oxygenRepaymentReceiptSchema.safeParse(item);
+      return receipt.success ? [receipt.data] : [];
+    });
   } catch {
     // The booked schedule is available even if receipt history cannot be read.
     return undefined;

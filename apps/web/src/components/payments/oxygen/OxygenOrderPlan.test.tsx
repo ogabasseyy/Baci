@@ -60,7 +60,7 @@ it('shows confirmed activation separately from merchant settlement', async () =>
   );
   render(<OxygenOrderPlan orderId="order" currency="NGN" />);
   expect(await screen.findByText('Payment plan active')).toBeVisible();
-  expect(screen.getAllByText('Payment received')).toHaveLength(1);
+  expect(screen.getAllByText('Oxygen reported a repayment')).toHaveLength(1);
   expect(screen.getByText('Recorded 20 Nov 2026')).toBeVisible();
   expect(screen.queryByText(/settlement received/i)).not.toBeInTheDocument();
 });

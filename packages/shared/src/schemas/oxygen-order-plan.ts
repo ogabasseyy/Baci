@@ -1,10 +1,12 @@
 import { z } from 'zod';
 
+export const oxygenRepaymentReceiptSchema = z.object({
+  id: z.string().uuid(),
+  recordedAt: z.string().datetime({ offset: true }),
+});
+
 export const oxygenRepaymentReceiptsSchema = z.array(
-  z.object({
-    id: z.uuid(),
-    recordedAt: z.iso.datetime({ offset: true }),
-  })
+  oxygenRepaymentReceiptSchema
 );
 
 function utcCalendarDate(year: number, month: number, day: number) {

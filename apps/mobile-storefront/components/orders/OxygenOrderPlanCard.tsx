@@ -130,12 +130,12 @@ export function OxygenOrderPlanCard({ colors, orderId, userId }: Props) {
             accessibilityRole="header"
             style={[styles.emphasis, titleColor]}
           >
-            Repayment acknowledgements
+            Repayment updates
           </Text>
           {plan.repaymentReceipts?.map(({ id, recordedAt }) => (
             <View key={id} style={styles.row}>
               <Text style={[styles.emphasis, titleColor]}>
-                Payment received
+                Oxygen reported a repayment
               </Text>
               <Text style={detailColor}>
                 Recorded {formatOxygenRepaymentReceiptDate(recordedAt)}

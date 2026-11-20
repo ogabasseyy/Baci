@@ -10,6 +10,8 @@ export type StorefrontChatwootWidgetConfig = {
   platformOrigin: string;
   storefrontOrigin: string;
   websiteToken: string;
+  /** In-chat order placement; off unless explicitly enabled on the server. */
+  checkoutEnabled: boolean;
 };
 
 /** Resolve only an explicitly enabled tenant binding; no client input selects a merchant. */
@@ -29,6 +31,7 @@ export function getStorefrontChatwootWidgetConfig(
       platformOrigin: getFixedChatwootPlatformOrigin(),
       storefrontOrigin: binding.origin,
       websiteToken: binding.websiteToken,
+      checkoutEnabled: process.env.EKAETTE_CHATWOOT_CHECKOUT_ENABLED === 'true',
     };
   } catch (error) {
     if (error instanceof ChatwootCommerceContextError) return null;

@@ -31,6 +31,7 @@ export function ChatwootWidget({
         <ChatwootInlineCartBridge
           storeSlug={config.storeSlug}
           widgetOrigin={config.platformOrigin}
+          checkoutEnabled={config.checkoutEnabled === true}
         />
       ) : null}
     </ChatwootSupportActiveContext.Provider>

@@ -13,6 +13,7 @@ export type ChatwootWidgetConfig = {
   storefrontOrigin: string;
   websiteToken: string;
   storeSlug: string;
+  checkoutEnabled?: boolean;
 };
 
 type ChatwootWidgetWindow = Window & {

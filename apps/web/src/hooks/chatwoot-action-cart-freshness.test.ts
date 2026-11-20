@@ -63,4 +63,30 @@ describe('evaluateChatwootActionCartFreshness', () => {
     ).toBe(false);
     expect(run('baci-cart-add', 5, null, ref(5)).cartRefIsCurrent).toBe(false);
   });
+
+  it('requires an exact cart version for an in-chat order placement', () => {
+    expect(run('baci-checkout-place-request', 3, ref(3), ref(3))).toMatchObject(
+      { authorizedVersionIsCurrent: true, cartRefIsCurrent: true }
+    );
+    expect(run('baci-checkout-place-request', 3, ref(3), ref(4))).toMatchObject(
+      { authorizedVersionIsCurrent: false, cartRefIsCurrent: false }
+    );
+  });
+
+  it('lets a payment poll proceed after the order moved the cart on', () => {
+    expect(
+      run('baci-checkout-payment-status-request', 4, ref(3), ref(5))
+    ).toMatchObject({
+      authorizedVersionIsCurrent: true,
+      cartRefIsCurrent: true,
+      stillCurrent: true,
+    });
+    expect(
+      run('baci-checkout-payment-status-request', 4, null, null)
+    ).toMatchObject({ stillCurrent: true });
+    expect(
+      run('baci-checkout-payment-status-request', null, ref(3), ref(3))
+        .authorizedVersionIsCurrent
+    ).toBe(false);
+  });
 });

@@ -1,5 +1,6 @@
 import type { PaystackBankOfferCardBrand } from '@/schemas/bank-card-offer';
 import { paystackVerifyResponseSchema } from '@/schemas/paystack-card-offer-verification';
+import { matchBankCardOfferIssuer } from './match-bank-card-offer-issuer';
 
 export type PaystackVerifiedCardEvidence = {
   acceptedFilterPolicyHash: string;
@@ -25,6 +26,7 @@ export function verifyPaystackCardOffer({
   expectedCustomerEmail,
   expectedDomain,
   expectedIssuerName,
+  expectedBankCode,
   expectedReference,
   verifyResponse,
 }: {
@@ -35,6 +37,7 @@ export function verifyPaystackCardOffer({
   expectedCustomerEmail: string;
   expectedDomain: 'live' | 'test';
   expectedIssuerName: string;
+  expectedBankCode?: Parameters<typeof matchBankCardOfferIssuer>[0];
   expectedReference: string;
   verifyResponse: unknown;
 }): PaystackVerifiedCardEvidence | null {
@@ -49,13 +52,22 @@ export function verifyPaystackCardOffer({
     parsed.data.data.domain !== expectedDomain ||
     parsed.data.data.channel !== 'card' ||
     parsed.data.data.authorization.channel !== 'card' ||
-    parsed.data.data.authorization.bank.trim().toUpperCase() !==
-      expectedIssuerName.trim().toUpperCase() ||
     parsed.data.data.customer.email.trim().toLowerCase() !==
       expectedCustomerEmail.trim().toLowerCase()
   ) {
     return null;
   }
+
+  const providerIssuer = parsed.data.data.authorization.bank;
+  const issuerMatches = expectedBankCode
+    ? matchBankCardOfferIssuer(
+        expectedBankCode,
+        expectedIssuerName,
+        providerIssuer
+      )
+    : providerIssuer.trim().toUpperCase() ===
+      expectedIssuerName.trim().toUpperCase();
+  if (!issuerMatches) return null;
 
   const providerBrand = parsed.data.data.authorization.brand
     .trim()

@@ -1,6 +1,7 @@
 import { CHECKOUT_PENDING_ORDER_STORAGE_KEY } from '@/components/storefront/ogabassey/pages/checkout/pending-checkout-order';
 import { fetchWithCsrf } from '@/lib/api-client';
 import { bankCardOfferReferenceSchema } from '@/schemas/bank-card-offer-reference';
+import { getBankCardOfferCheckoutStatus } from './get-bank-card-offer-checkout-status';
 import type { CheckoutVerificationStatus } from './verify-checkout-payment-lookup';
 import {
   isAbortError,
@@ -173,15 +174,12 @@ export async function verifyCheckoutPayment(
     const data = isVerificationResponse(raw) ? raw : {};
     const orderNumber = data.orderNumber || fallbackOrderNumber;
 
-    // fetchWithCsrf has already retried a recognized CSRF failure once.
-    // A remaining forbidden response must not send the buyer back to pay.
-    if (isBankOffer && response.status === 403) {
-      setStatus(
-        data.code === 'BANK_CARD_OFFER_VERIFICATION_DENIED'
-          ? 'access_required'
-          : 'verification_unavailable'
-      );
-      setOrderNumber(null);
+    const bankOfferStatus = isBankOffer
+      ? getBankCardOfferCheckoutStatus(response.status, data)
+      : null;
+    if (bankOfferStatus) {
+      setStatus(bankOfferStatus);
+      setOrderNumber(response.status === 403 ? null : orderNumber);
       return;
     }
 
@@ -260,19 +258,6 @@ export async function verifyCheckoutPayment(
           ...(verifiedCurrency ? { currency: verifiedCurrency } : {}),
         });
       }
-    } else if (data.status === 'reversed' && isBankOffer) {
-      // A reversal can follow a capture. Keep the shopper on reconciliation
-      // while the provider's reversal and the order are matched.
-      setStatus('reversed');
-      setOrderNumber(orderNumber);
-    } else if (
-      isBankOffer &&
-      (data.status === 'failed' ||
-        data.status === 'cancelled' ||
-        data.status === 'abandoned')
-    ) {
-      setStatus('bank_offer_review');
-      setOrderNumber(orderNumber);
     } else if (
       data.status === 'failed' ||
       data.status === 'cancelled' ||

@@ -40,6 +40,7 @@ export function verifyBankCardOfferAttempt(
     expectedCustomerEmail: attempt.customerEmail,
     expectedDomain: attempt.domain,
     expectedIssuerName: attempt.quote.paymentPolicy.issuerName,
+    expectedBankCode: attempt.quote.paymentPolicy.bankCode,
     expectedReference: attempt.reference,
     verifyResponse,
   });

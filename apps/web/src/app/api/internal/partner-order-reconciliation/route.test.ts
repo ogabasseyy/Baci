@@ -13,7 +13,7 @@ vi.mock('@/lib/shipping/shipping-quote-route-proof', () => ({
   createShippingQuoteRouteProof: mocks.proof,
 }));
 vi.mock('@/lib/tenant-rate-limit', () => ({
-  checkTenantRateLimit: mocks.limit,
+  checkTenantRateLimitDetailed: mocks.limit,
 }));
 
 const verifierToken = 'synthetic-verifier-token-with-enough-entropy-for-tests';
@@ -64,7 +64,7 @@ describe('internal partner reconciliation', () => {
     vi.resetAllMocks();
     vi.stubEnv('CROSSREM_ORDER_TOKEN', orderToken);
     vi.stubEnv('CROSSREM_VERIFIER_TOKEN', verifierToken);
-    mocks.limit.mockResolvedValue('allowed');
+    mocks.limit.mockResolvedValue({ verdict: 'allowed' });
     mocks.proof.mockReturnValue({ signature: 'test-only' });
     mocks.rpc.mockResolvedValue({
       data: { receipt, hold_reason: null },
@@ -100,6 +100,44 @@ describe('internal partner reconciliation', () => {
         p_route_proof: { signature: 'test-only' },
       }
     );
+  });
+
+  it('returns a retry delay when rate limited and fails closed if limiting is unavailable', async () => {
+    mocks.limit
+      .mockResolvedValueOnce({
+        verdict: 'denied',
+        resetAt: Date.now() + 15_000,
+      })
+      .mockResolvedValueOnce({ verdict: 'unavailable' });
+    const denied = await POST(request());
+    expect(denied.status).toBe(429);
+    expect(Number(denied.headers.get('retry-after'))).toBeGreaterThan(0);
+    expect((await POST(request())).status).toBe(503);
+    expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
+  it('rejects malformed or oversized JSON before accessing storage', async () => {
+    const malformed = new Request(request().url, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${verifierToken}` },
+      body: '{',
+    });
+    expect((await POST(malformed)).status).toBe(400);
+    expect((await POST(request('x'.repeat(8193)))).status).toBe(413);
+    expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['P0002', 404, 'NOT_FOUND'],
+    ['22023', 409, 'CAPTURE_EVIDENCE_CONFLICT'],
+    ['23505', 409, 'CAPTURE_EVIDENCE_CONFLICT'],
+  ])('maps storage error %s without issuing a success receipt', async (code, status, responseCode) => {
+    mocks.rpc.mockResolvedValue({ data: null, error: { code } });
+    const result = await POST(request());
+    expect(result.status).toBe(status);
+    expect(await result.json()).toMatchObject({
+      error: { code: responseCode },
+    });
   });
 
   it('returns a held receipt without reporting order acceptance', async () => {

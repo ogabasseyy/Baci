@@ -30,13 +30,13 @@ Call `POST /quotes` with the quote credential and a JSON body. The following exa
 }
 ```
 
-A `201` returns `quote_id`, `currency`, the selected service and delivery estimate, line prices, `subtotal_minor`, `delivery_minor`, `total_minor`, and `expires_at`. The pilot offers domestic door delivery and caps quote validity at ten minutes. Show the complete amount before payment. Get a new quote if the order or address changes, or if the quote expires. A quote does not reserve stock.
+A `201` returns `quote_id`, `currency`, the selected service and delivery estimate, line prices, `subtotal_minor`, `delivery_minor`, `total_minor`, and `expires_at`. The pilot offers domestic door delivery and sets expiry to the earlier of ten minutes after quoting or the validity limit returned by the shipping adapter. Show the complete amount before payment. Get a new quote if the order or address changes, or if the quote expires. A quote does not reserve stock.
 
 If Baci returns `ADDRESS_UNSERVICEABLE` or `CARRIER_UNAVAILABLE`, the delivery fee is unavailable. Keep checkout on hold for that address or retry after a temporary outage.
 
 ## 3. Submit the purchase
 
-After payment captures, call `POST /orders` using the order credential and an `Idempotency-Key` of 16 to 128 ASCII characters. Keep that key and the original body for retries. Send the original quote ID and the same partner order reference each time. Baci uses the delivery address stored on the quote. Supply a recipient email for order acceptance.
+After payment captures, call `POST /orders` using the order credential and an `Idempotency-Key` that matches `^[A-Za-z0-9_.:-]{16,128}$`. A UUID works. Keep that key and the original body for retries. Send the original quote ID and the same partner order reference each time. Baci uses the delivery address stored on the quote. Supply a recipient email for order acceptance.
 
 ```json
 {

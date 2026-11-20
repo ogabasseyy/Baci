@@ -43,3 +43,9 @@ For a settled partner order, the existing merchant fulfillment flow must bind an
 ### Draft consumer guide and evidence ingress
 
 The [delivery API quickstart](../../partners/delivery-api-quickstart.md) documents the supported calls. The internal reconciliation route is for Baci’s authorized verifier only. It accepts normalized capture and settlement evidence using a separate connection-scoped verifier credential. Do not provision that credential for a partner or enable a live verifier until its payment and payout evidence sources are confirmed. The fixture checks exercise complete acceptance and a price-drift hold. Carrier booking and tracking still need verification against the real shipment path.
+
+### Local storefront writer check
+
+Run `python3 supabase/tests/run_partner_order_real_storefront_writer.py` with PostgreSQL binaries on `PATH`. It creates an isolated database with a reduced schema, loads Baci's actual storefront order writer, and checks paid acceptance, replay, exact prices, and both product and offer inventory. The same SQL suite is registered for the complete Supabase schema replay in CI. The local check does not contact the carrier or payment provider.
+
+The internal verifier receives `409 CAPTURE_EVIDENCE_CONFLICT` for a capture mismatch or duplicate, `404` for an inaccessible submission, and `429` with `Retry-After` when it hits the reconciliation limit. These responses belong to the internal ingress and do not appear in the partner API contract.

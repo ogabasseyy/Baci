@@ -28,7 +28,7 @@ vi.mock('./catalog-version', () => ({
 }));
 vi.mock('@/lib/redis', () => ({ getRedis: () => null }));
 vi.mock('./catalog-bindings', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('./catalog-bindings')>()),
+  ...((await importOriginal()) as typeof import('./catalog-bindings')),
   crossRemCatalogConfig: {
     bindings: mocks.bindings,
     merchantId: 'ogabassey-id',

@@ -7,7 +7,7 @@ import { readBoundedJsonBody } from '@/lib/events/read-bounded-json-body';
 import { logger } from '@/lib/logger';
 import { createShippingQuoteRouteProof } from '@/lib/shipping/shipping-quote-route-proof';
 import { createAnonClient } from '@/lib/supabase/anon';
-import { checkTenantRateLimit } from '@/lib/tenant-rate-limit';
+import { checkTenantRateLimitDetailed } from '@/lib/tenant-rate-limit';
 
 const reference = z.string().trim().min(1).max(200);
 const moneyEvidence = {
@@ -47,8 +47,15 @@ export async function POST(request: Request) {
   const headers = { 'Cache-Control': 'private, no-store' };
   const reply = (body: object, status: number) =>
     Response.json({ ...body, request_id: requestId }, { status, headers });
-  const reject = (status: number, code: string) =>
-    reply({ error: { code } }, status);
+  const reject = (
+    status: number,
+    code: string,
+    extraHeaders: Record<string, string> = {}
+  ) =>
+    Response.json(
+      { error: { code }, request_id: requestId },
+      { status, headers: { ...headers, ...extraHeaders } }
+    );
 
   const connections = getCrossRemConnections();
   const [pilot] = connections;
@@ -78,7 +85,7 @@ export async function POST(request: Request) {
 
   const { merchantId, connectionId } = access;
   try {
-    const limit = await checkTenantRateLimit(
+    const limit = await checkTenantRateLimitDetailed(
       'partner-reconciliation',
       connectionId,
       {
@@ -86,9 +93,14 @@ export async function POST(request: Request) {
         windowMs: 60_000,
       }
     );
-    if (limit === 'unavailable')
+    if (limit.verdict === 'unavailable') {
       return reject(503, 'RECONCILIATION_UNAVAILABLE');
-    if (limit === 'denied') return reject(429, 'RATE_LIMITED');
+    }
+    if (limit.verdict === 'denied') {
+      const reset = limit.resetAt ?? Date.now() + 60_000;
+      const retryAfter = Math.max(1, Math.ceil((reset - Date.now()) / 1000));
+      return reject(429, 'RATE_LIMITED', { 'Retry-After': String(retryAfter) });
+    }
 
     const { submission_id, ...evidence } = parsed.data;
     const proof = createShippingQuoteRouteProof({

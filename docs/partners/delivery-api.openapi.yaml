@@ -89,8 +89,24 @@ paths:
           application/json:
             schema: {$ref: '#/components/schemas/OrderSubmission'}
       responses:
-        '200': {$ref: '#/components/responses/Receipt'}
-        '202': {$ref: '#/components/responses/Receipt'}
+        '200':
+          description: The submitted order has already been accepted. The receipt includes its original Baci order ID.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OrderReceipt'
+                  - properties:
+                      status: {const: accepted}
+        '202':
+          description: The submission was stored and either awaits verification or requires review.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OrderReceipt'
+                  - properties:
+                      status: {enum: [pending_verification, payment_verified, settlement_verified, review_required]}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -348,5 +364,9 @@ components:
           type: object
           required: [code]
           properties:
-            code: {type: string}
+            code:
+              enum: [INVALID_IDEMPOTENCY_KEY, INVALID_REQUEST, UNAUTHORIZED, SCOPE_REQUIRED,
+                ORDER_NOT_FOUND, ORDER_SUBMISSION_NOT_FOUND, QUOTE_NOT_FOUND, LISTING_UNAVAILABLE, ORDER_CONFLICT,
+                ADDRESS_UNSERVICEABLE, RATE_LIMITED, CARRIER_UNAVAILABLE, ORDER_INTAKE_UNAVAILABLE,
+                ORDER_LOOKUP_UNAVAILABLE, QUOTE_UNAVAILABLE]
         request_id: {type: string, format: uuid}

@@ -14,7 +14,7 @@ CREATE TABLE private.partner_order_submissions (
 );
 
 ALTER TABLE private.partner_order_submissions ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON TABLE private.partner_order_submissions FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON TABLE private.partner_order_submissions FROM PUBLIC, anon, authenticated, service_role;
 
 CREATE FUNCTION private.partner_order_receipt(s private.partner_order_submissions)
 RETURNS jsonb

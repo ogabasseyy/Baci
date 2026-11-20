@@ -11,7 +11,7 @@ CREATE TABLE private.partner_delivery_quotes (
 );
 
 ALTER TABLE private.partner_delivery_quotes ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON TABLE private.partner_delivery_quotes FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON TABLE private.partner_delivery_quotes FROM PUBLIC, anon, authenticated, service_role;
 
 CREATE FUNCTION public.persist_partner_delivery_quote(
   p_quote_id uuid,

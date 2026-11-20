@@ -84,6 +84,41 @@ describe('initiatePaystackCancellationRefunds', () => {
     );
   });
 
+  it.each([
+    false,
+    true,
+  ])('withholds the bank refund when capture lookup is denied (last attempt %s)', async (isLastAttempt) => {
+    const leg = { ...transaction, gateway_reference: `BCO-${'a'.repeat(32)}` };
+    const rpc = vi
+      .fn()
+      .mockResolvedValue({ data: null, error: { code: '42501' } });
+
+    await expect(
+      initiatePaystackCancellationRefunds({
+        order,
+        isLastAttempt,
+        refundedPaymentIds: new Set(),
+        supabase: { from: vi.fn(() => ({ insert })), rpc } as never,
+        transactions: [leg],
+      })
+    ).rejects.toThrow('Unable to verify bank card offer refund capture');
+
+    expect(mocks.initiatePaystackRefund).not.toHaveBeenCalled();
+    expect(insert).not.toHaveBeenCalled();
+    if (isLastAttempt) {
+      expect(mocks.quarantineRefund).toHaveBeenCalledWith(
+        expect.objectContaining({
+          transactions: [leg],
+          metadata: expect.objectContaining({
+            bank_offer_capture_lookup_unavailable: true,
+          }),
+        })
+      );
+    } else {
+      expect(mocks.quarantineRefund).not.toHaveBeenCalled();
+    }
+  });
+
   it('audits accepted refunds as refund_pending before returning', async () => {
     acceptedRefund();
 

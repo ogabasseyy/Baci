@@ -1,3 +1,6 @@
+// Activation requires the bank's verified Paystack issuer label. The
+// configured list stays empty until that check, and unknown labels enter
+// capture review instead of broadening the issuer rule during settlement.
 const labelsByBank = {
   '035': {
     canonical: 'wema bank',

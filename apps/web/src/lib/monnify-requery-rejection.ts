@@ -2,9 +2,14 @@ import { joinMonnifyAnswerStrings } from './monnify-answer-strings';
 import { normaliseMonnifyWording } from './monnify-text-normalise';
 import { isMonnifyUnresolvedAnswer } from './monnify-unresolved-answer';
 
-/** Wording that names the vend itself as failed. */
+/**
+ * Wording that names the VEND itself as failed: a vend noun near a failure
+ * word, "failed to vend", or a bare unsuccessful/declined/reversed/cancelled.
+ * A bare "failed" ("Request failed", "Status lookup failed", "Authentication
+ * failed") describes the query, not the vend, so it does not count.
+ */
 const VEND_FAILED_WORDING =
-  /\b(?:fail(?:ed|ure)?|unsuccessful|declined|reversed|cancell?ed)\b/i;
+  /\b(?:vend|transaction|purchase|airtime|payment|top\s?up|recharge)\w*(?:\s+\w+){0,2}?\s+(?:failed|failure|unsuccessful|declined|reversed|cancell?ed)\b|\bfail(?:ed|ure)(?:\s+\w+){0,2}?\s+(?:vend|transaction|purchase|airtime|payment|top\s?up|recharge)|\bfailed\s+to\s+vend\b|\b(?:unsuccessful|declined|reversed|cancell?ed)\b/i;
 
 /**
  * Wording about the requery itself rather than the vend: the reference is
@@ -12,7 +17,7 @@ const VEND_FAILED_WORDING =
  * delivered vends when asked with the wrong reference (#2784).
  */
 const LOOKUP_WORDING =
-  /\b(?:not\s+found|no\s+(?:record|transaction)|does\s+not\s+exist|doesn't\s+exist|invalid\s+(?:\w+\s+)?ref(?:erence)?|unknown\s+(?:\w+\s+)?ref(?:erence)?)\b/i;
+  /\b(?:not\s+found|no\s+(?:record|transaction)|does\s+not\s+exist|doesn't\s+exist|(?:status|lookup|query|requery|request|authentication|login)\s+(?:\w+\s+)?failed|invalid\s+(?:\w+\s+)?ref(?:erence)?|unknown\s+(?:\w+\s+)?ref(?:erence)?)\b/i;
 
 /**
  * Whether a requery that Monnify answered with a business rejection (not a

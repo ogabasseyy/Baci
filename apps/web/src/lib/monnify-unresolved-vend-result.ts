@@ -1,5 +1,7 @@
 import type { PurchaseResult } from '@/lib/kuda';
 
+const HELD_MESSAGE = 'Monnify vend outcome unresolved';
+
 /**
  * The result for a Monnify answer that leaves the vend's outcome open: held
  * as `pending` (the row stays `processing`) instead of `failed`, so the
@@ -33,7 +35,9 @@ export function buildMonnifyUnresolvedVendResult({
       providerVendReference,
       transactionId: providerVendReference,
     }),
-    message,
+    // Never empty: an empty error_message would let the stranded-row
+    // recovery treat a held row as never submitted and re-vend it.
+    message: message.trim() || HELD_MESSAGE,
     ...(providerErrorDetail && { providerErrorDetail }),
     ...(providerResponseCode && { providerResponseCode }),
     status: 'pending',

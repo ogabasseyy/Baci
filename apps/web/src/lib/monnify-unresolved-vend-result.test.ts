@@ -38,3 +38,14 @@ describe('buildMonnifyUnresolvedVendResult', () => {
     });
   });
 });
+
+describe('bugfix: a held result never has an empty message', () => {
+  it.each(['', '   '])('falls back for message "%s"', (message) => {
+    const result = buildMonnifyUnresolvedVendResult({
+      amount: 100,
+      message,
+      requestReference: 'REQ-1',
+    });
+    expect(result.message.trim()).not.toBe('');
+  });
+});

@@ -111,3 +111,14 @@ describe('buildMonnifyBusinessRejectionResult', () => {
     ).toMatchObject({ status: 'failed', providerDefiniteFailure: true });
   });
 });
+
+describe('bugfix: HTTP rejection carrying the success code 0 is held', () => {
+  it('holds a 400 whose body says responseCode 0', () => {
+    expect(
+      http(400, 'Bad Request', {
+        responseCode: '0',
+        responseMessage: 'Rejected',
+      })
+    ).toMatchObject({ status: 'pending', providerOutcomeUnresolved: true });
+  });
+});

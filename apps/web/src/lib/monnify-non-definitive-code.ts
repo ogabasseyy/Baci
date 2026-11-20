@@ -18,9 +18,10 @@ const MAX_DEPTH = 6;
  * re-query"), 2xx (accepted/processing), 408 (timeout), 409 (duplicate) and
  * 5xx (upstream error). Narrower than NON_DEFINITIVE_CODE: 401/403 login
  * rejections and 429 throttles are refused before any vend and stay
- * refundable (owner decision 2026-11-18 for 401/403).
+ * refundable (owner decision 2026-11-18 for 401/403). Monnify's success
+ * code 0 on a rejection is contradictory, so it leaves the outcome open too.
  */
-const UNRESOLVED_CODE = /^0*(?:99|2\d\d|408|409|5\d\d)$/;
+const UNRESOLVED_CODE = /^(?:0+|0*(?:99|2\d\d|408|409|5\d\d))$/;
 
 function hasResponseCodeMatching(
   answer: unknown,

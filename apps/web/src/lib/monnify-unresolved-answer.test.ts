@@ -67,3 +67,33 @@ describe('bugfix: an explicit FAILED vend status is not masked by a payment-leve
     ).toBe(true);
   });
 });
+
+describe('bugfix: structure and flags beat echoed wording', () => {
+  it('does not hold a production-shaped FAILED vend whose joined wording says SUCCESS', () => {
+    const envelope = {
+      requestSuccessful: false,
+      responseCode: '01',
+      responseBody: { status: 'SUCCESS', vendStatus: 'FAILED' },
+    };
+    expect(open(envelope, 'Vend rejected SUCCESS FAILED')).toBe(false);
+  });
+
+  it('holds a rejection whose body says delivered: true', () => {
+    expect(
+      open(
+        { responseCode: 'D01', responseBody: { delivered: true } },
+        'Rejected'
+      )
+    ).toBe(true);
+  });
+
+  it('does not hold a rejection whose body says failed: true', () => {
+    expect(
+      open({ responseCode: 'D01', responseBody: { failed: true } }, 'Rejected')
+    ).toBe(false);
+  });
+
+  it('holds a rejection carrying the success code 0', () => {
+    expect(open({ responseCode: '0' }, 'Rejected')).toBe(true);
+  });
+});

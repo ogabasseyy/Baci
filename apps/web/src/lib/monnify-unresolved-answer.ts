@@ -31,54 +31,64 @@ const FAILED_STATUSES = new Set(['FAILED', 'FAILURE', 'UNSUCCESSFUL']);
 const IN_FLIGHT_WORDING =
   /(?<!\b(?:not|never|no|cannot|n't)(?:\s+\w+){0,3}?\s+)(?<!(?:validation|verification|lookup|login|authentication|customer)\s+)\b(?:pending|processing|in\s+progress|queued|initiated|submitted|accepted|successful(?:ly)?|succeeded|success|delivered|completed|credited|vended|dispatched|timed?\s*out|re\s*quer(?:y|ied))\b/i;
 
-/** Every string value under a key ending in "status", normalised, at any depth. */
-function collectStatuses(answer: unknown, found: string[], depth = 0): boolean {
+/** True outcome flags, key normalised: "delivered", "isPending", "vendFailed"... */
+const RUNNING_FLAG =
+  /^(?:is|was|has)?(?:been)?(?:vend|transaction|txn|purchase|payment|airtime)?(?:has)?(?:been)?(?:pending|inprogress|queued|submitted|accepted|initiated|attempted|timedout)$/;
+const DONE_FLAG =
+  /^(?:is|was|has)?(?:been)?(?:vend|transaction|txn|purchase|payment|airtime)?(?:has)?(?:been)?(?:processed|delivered|completed|vended|successful|success|dispatched|fulfilled|credited|recharged|toppedup)$/;
+const FAILED_FLAG =
+  /^(?:is|was|has)?(?:been)?(?:vend|transaction|txn|purchase|payment|airtime)?(?:has)?(?:been)?(?:failed|failure|rejected|cancell?ed|reversed|declined)$/;
+
+function isTrueFlag(value: unknown): boolean {
+  return (
+    value === true ||
+    value === 1 ||
+    (typeof value === 'string' && /^(?:true|yes|y|1)$/i.test(value.trim()))
+  );
+}
+
+interface StructuredOutcome {
+  running: boolean;
+  done: boolean;
+  failed: boolean;
+  /** Nested deeper than we scan: can't be cleared, so it holds. */
+  incomplete: boolean;
+}
+
+/**
+ * Reads every string value under a key ending in "status" and every true
+ * outcome flag (delivered: true, pending: true...), at any depth.
+ */
+function readStructuredOutcome(
+  answer: unknown,
+  found: StructuredOutcome,
+  depth = 0
+): void {
   if (!answer || typeof answer !== 'object') {
-    return true;
+    return;
   }
-  // Nesting deeper than we scan can't be cleared: fail closed (hold).
   if (depth > MAX_DEPTH) {
-    return false;
+    found.incomplete = true;
+    return;
   }
   const children = Array.isArray(answer)
     ? answer.map((item) => ['', item] as const)
     : Object.entries(answer);
-  let complete = true;
-  for (const [key, value] of children) {
-    if (
-      key
-        .replace(/[\s_-]/g, '')
-        .toLowerCase()
-        .endsWith('status') &&
-      typeof value === 'string'
-    ) {
-      found.push(value.replace(/[\s_-]/g, '').toUpperCase());
+  for (const [rawKey, value] of children) {
+    const key = rawKey.replace(/[\s_-]/g, '').toLowerCase();
+    if (key.endsWith('status') && typeof value === 'string') {
+      const status = value.replace(/[\s_-]/g, '').toUpperCase();
+      found.running ||= RUNNING_STATUSES.has(status);
+      found.done ||= DONE_STATUSES.has(status);
+      found.failed ||= FAILED_STATUSES.has(status);
     }
-    if (!collectStatuses(value, found, depth + 1)) {
-      complete = false;
+    if (isTrueFlag(value)) {
+      found.running ||= RUNNING_FLAG.test(key);
+      found.done ||= DONE_FLAG.test(key);
+      found.failed ||= FAILED_FLAG.test(key);
     }
+    readStructuredOutcome(value, found, depth + 1);
   }
-  return complete;
-}
-
-/**
- * Holds on a vend that is running anywhere in the body, and on a done state
- * (payment taken, vend completed) unless the same body also names an explicit
- * failure: like classifyMonnifyBillStatus, a FAILED vend status beats a
- * payment-level SUCCESS/PAID, so a failed vend is refunded, not stranded.
- */
-function hasInFlightStatus(answer: unknown): boolean {
-  const statuses: string[] = [];
-  if (!collectStatuses(answer, statuses)) {
-    return true;
-  }
-  if (statuses.some((status) => RUNNING_STATUSES.has(status))) {
-    return true;
-  }
-  return (
-    statuses.some((status) => DONE_STATUSES.has(status)) &&
-    !statuses.some((status) => FAILED_STATUSES.has(status))
-  );
 }
 
 /**
@@ -99,11 +109,28 @@ export function isMonnifyUnresolvedAnswer({
   answer: unknown;
   wording: string;
 }): boolean {
+  const outcome: StructuredOutcome = {
+    running: false,
+    done: false,
+    failed: false,
+    incomplete: false,
+  };
+  readStructuredOutcome(answer, outcome);
+  // A running vend holds whatever else the body says. A done state (payment
+  // taken, delivered) holds unless the same body names an explicit failure,
+  // like classifyMonnifyBillStatus (FAILED beats a payment-level SUCCESS).
+  // With an explicit failure and nothing running, the structure wins over
+  // wording that only echoes the success state.
+  const structuredHold =
+    outcome.running || outcome.incomplete || (outcome.done && !outcome.failed);
+  const wordingHolds =
+    !(outcome.failed && !outcome.running) &&
+    IN_FLIGHT_WORDING.test(normaliseMonnifyWording(wording));
   const strong =
     hasMonnifyDuplicateFlag(answer) ||
     isMonnifyDuplicateReferenceText(wording) ||
-    hasInFlightStatus(answer) ||
-    IN_FLIGHT_WORDING.test(normaliseMonnifyWording(wording));
+    structuredHold ||
+    wordingHolds;
   if (strong) {
     return true;
   }

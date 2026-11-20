@@ -26,3 +26,23 @@ describe('isMonnifyRequeryRejectionDefiniteFailure', () => {
     ).toBe(false);
   });
 });
+
+describe('bugfix: generic query failures do not prove the vend failed', () => {
+  it.each([
+    'Request failed',
+    'Status lookup failed',
+    'Authentication failed',
+    'Requery failed',
+  ])('keeps "%s" unresolved', (message) => {
+    expect(check(message)).toBe(false);
+  });
+
+  it.each([
+    'Transaction failed',
+    'Airtime purchase failed',
+    'Vend unsuccessful',
+    'Vend reversed',
+  ])('accepts "%s"', (message) => {
+    expect(check(message)).toBe(true);
+  });
+});

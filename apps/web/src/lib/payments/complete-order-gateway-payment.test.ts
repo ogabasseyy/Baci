@@ -151,6 +151,21 @@ describe('completeOrderGatewayPayment', () => {
     });
   });
 
+  it('returns an error for a cancelled payment without a merchant identity', async () => {
+    const supabase = buildSupabaseMock({
+      data: { ...completionPayload, order_cancelled: true },
+    });
+    const result = await completeOrderGatewayPayment({
+      actor: 'webhook:BAC-REF',
+      gatewayResponse: { status: 'success' },
+      orderId: 'order-1',
+      supabase,
+      transactionId: 'txn-1',
+    });
+    expect(result).toMatchObject({ ok: false });
+    expect(supabase.rpc).toHaveBeenCalledTimes(1);
+  });
+
   it('fails closed when the RPC itself errors', async () => {
     const supabase = buildSupabaseMock({
       data: null,

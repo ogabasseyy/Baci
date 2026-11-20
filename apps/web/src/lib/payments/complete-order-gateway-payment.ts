@@ -56,7 +56,13 @@ export async function completeOrderGatewayPayment({
     return { error: parsed.error, ok: false };
   }
 
-  if (parsed.data.order_cancelled && gatewayResponse && merchantId) {
+  if (parsed.data.order_cancelled && gatewayResponse) {
+    if (!merchantId) {
+      return {
+        error: new Error('Late payment requires a merchant identity'),
+        ok: false,
+      };
+    }
     try {
       const reinstatement = await reinstateTimeoutOrderPayment(
         supabase,

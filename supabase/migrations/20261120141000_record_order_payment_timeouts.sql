@@ -13,6 +13,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS order_payment_timeouts_reinstated_transaction_
 
 ALTER TABLE private.order_payment_timeouts ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON private.order_payment_timeouts FROM PUBLIC, anon, authenticated;
+-- Cleanup can add provenance. The definer recovery function owns updates
+-- so callers cannot mark payments as reinstated by editing this table.
 GRANT SELECT, INSERT ON private.order_payment_timeouts TO service_role;
 CREATE POLICY service_record_order_payment_timeouts ON private.order_payment_timeouts
   FOR INSERT TO service_role WITH CHECK (true);
@@ -33,6 +35,9 @@ BEGIN
       USING ERRCODE = '22023';
   END IF;
 
+  -- Preserve the existing RedVault lock before its cancellation trigger
+  -- touches the payment ledger. Ordinary orders use row-level exclusion
+  -- against reinstatement, including the replacement-order lock.
   FOR v_order_id IN
     SELECT o.id
     FROM public.orders o

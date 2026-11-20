@@ -185,3 +185,44 @@ describe('BrilStash handoff and release schemas', () => {
     ).toBe(false);
   });
 });
+
+describe('bugfix: revisions beyond the PostgreSQL bigint maximum', () => {
+  const maximum = '9223372036854775807';
+  const overflow = '9223372036854775808';
+
+  it.each([
+    ['retire-installation', 'p_expected_revision', { p_reason: 'retired' }],
+    ['abort-drain', 'p_closure_revision', {}],
+  ] as const)('%s accepts the bigint maximum and rejects the next value', (name, field, extra) => {
+    const schema = commands[name].args;
+    const args = { ...installation, ...extra };
+    expect(schema.safeParse({ ...args, [field]: maximum }).success).toBe(true);
+    expect(schema.safeParse({ ...args, [field]: overflow }).success).toBe(
+      false
+    );
+    expect(schema.safeParse({ ...args, [field]: '9'.repeat(19) }).success).toBe(
+      false
+    );
+  });
+
+  it('rejects an overflowing revision inside a release request', () => {
+    const schema = commands['record-release-request'].args;
+    const request = {
+      generationId: id,
+      credentialId: id,
+      catalogueRevision: overflow,
+      servingRevision: '3',
+      credentialRevision: '0',
+      payloadDigest: digest,
+      configurationRevision: 'revision',
+      runId: 'run',
+      attemptId: 'attempt',
+      stagedResultId: 'result',
+      verificationId: id,
+      applicationDeadline: '2026-11-19T22:59:00Z',
+    };
+    expect(
+      schema.safeParse({ ...installation, p_request: request }).success
+    ).toBe(false);
+  });
+});

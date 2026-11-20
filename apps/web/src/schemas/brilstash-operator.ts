@@ -2,7 +2,13 @@ import { z } from 'zod';
 import { BRILSTASH_PILOT_LISTING_LIMIT } from '../config/brilstash-feed';
 
 const uuid = z.uuid();
-const revision = z.string().regex(/^\d{1,19}$/);
+// Revisions travel as decimal strings into PostgreSQL bigint parameters, so
+// reject anything above the bigint maximum before it reaches an RPC.
+const BIGINT_MAX = '9223372036854775807';
+const revision = z
+  .string()
+  .regex(/^\d{1,19}$/)
+  .refine((value) => value.length < BIGINT_MAX.length || value <= BIGINT_MAX);
 const digest = z.string().regex(/^[0-9a-f]{64}$/);
 const reference = z.string().trim().min(1).max(1024);
 const identifier = z.string().trim().min(1).max(256);

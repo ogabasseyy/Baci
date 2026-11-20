@@ -24,6 +24,12 @@ The preview delivery listener is the authoritative origin allowlist. It
 rejects origins outside its configured hosts and permits the opaque
 `Origin: null` used by sandboxed asset requests. The Worker admits private requests with no Origin or the sandbox Origin
 `null`, and only forwards an opaque CORS grant for an opaque request.
+Private output URLs carry short-lived vault tickets. The listener checks
+ticket expiry and the owner binding on each read and sends
+`Referrer-Policy: no-referrer`. Treat the entire URL as sensitive. The
+cross-origin embed relies on the CSP sandbox and `frame-ancestors`; the Worker
+does not forward COOP, COEP, or `X-Frame-Options`. Changes to that embed
+contract require browser verification through both the listener and the Worker.
 Published assets are deliberately public. The edge accepts at most one
 canonical published route parameter of up to 1,024 characters. The
 published listener normalizes the decoded `path` through
@@ -87,6 +93,13 @@ node --test apps/builder-execution-proxy/worker.test.mjs
 python3 apps/builder-execution-proxy/ingress.test.py
 ./node_modules/.bin/biome check apps/builder-execution-proxy
 ```
+
+CI checks the pinned Caddy archive's SHA-256 and SHA-512 and verifies its
+Cosign signature against Caddy's release workflow for the exact tag before
+extracting the binary. When updating `ci-ingress.sh`, verify the new release
+signature first, then update the version and both digests from its release
+asset metadata and checksums. Keep certificate identity and transparency-log
+verification enabled.
 
 The checked-in Worker and Caddy candidate are local only. Production
 certificate, DNS, secret, account observability and end-to-end browser

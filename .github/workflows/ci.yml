@@ -76,18 +76,12 @@ jobs:
         run: node --test .github/scripts/muse-comment-review-concurrency.test.mjs
       - name: Test builder execution proxy
         run: node --test apps/builder-execution-proxy/worker.test.mjs
+      - name: Install Cosign for the Caddy release signature
+        uses: sigstore/cosign-installer@d7543c93d881b35a8faa02e8e3605f69b7a1ce62
+        with:
+          cosign-release: v2.6.2
       - name: Test builder execution HTTPS ingress
-        run: |
-          caddy_dir=$(mktemp -d "$RUNNER_TEMP/baci-caddy.XXXXXXXX")
-          curl --fail --silent --show-error --location --proto "=https" --proto-redir "=https" --retry 2 --max-time 60 \
-            https://github.com/caddyserver/caddy/releases/download/v2.11.4/caddy_2.11.4_linux_amd64.tar.gz \
-            --output "$caddy_dir/caddy.tgz"
-          # SHA-256 from the release asset metadata at https://github.com/caddyserver/caddy/releases/tag/v2.11.4
-          echo "527fbf917c39189a1e3b31d34fa955601680b2d5c8055d2a87b8b9588dec7bb9  $caddy_dir/caddy.tgz" | sha256sum --check
-          # SHA-512 from https://github.com/caddyserver/caddy/releases/download/v2.11.4/caddy_2.11.4_checksums.txt
-          echo "8220d1f013b6f27510247b2360c9e0ca9f018feebd82515f07635318b34ff9777ccc8fd0b6e6f2486ce3a33fe389fbb7db12d05baa474f4587509fb4f5ebf1c9  $caddy_dir/caddy.tgz" | sha512sum --check
-          tar -xzf "$caddy_dir/caddy.tgz" -C "$caddy_dir" caddy
-          BACI_TEST_CADDY="$caddy_dir/caddy" python3 apps/builder-execution-proxy/ingress.test.py
+        run: bash apps/builder-execution-proxy/ci-ingress.sh
       - name: Test loyalty replay binary discovery
         run: node --test tools/test/loyalty-postgres-bin.test.mjs
       - name: Test pnpm store action input hardening

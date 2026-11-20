@@ -23,6 +23,8 @@ describe('isUserFacingCheckoutError', () => {
     'Monnify product not found for IKEDC',
     'Monnify validation failed. Please verify the details and try again.',
     'Multiple data bundles match mtn-1gb',
+    'The price of this package has changed. Please refresh and choose your package again.',
+    "We couldn't confirm the price of this package right now. Please try again shortly.",
   ])('passes through %s', (message) => {
     expect(isUserFacingCheckoutError(message)).toBe(true);
   });

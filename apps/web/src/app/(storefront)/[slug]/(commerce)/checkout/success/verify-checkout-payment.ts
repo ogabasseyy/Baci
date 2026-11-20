@@ -1,7 +1,10 @@
 import { CHECKOUT_PENDING_ORDER_STORAGE_KEY } from '@/components/storefront/ogabassey/pages/checkout/pending-checkout-order';
 import { fetchWithCsrf } from '@/lib/api-client';
 import { bankCardOfferReferenceSchema } from '@/schemas/bank-card-offer-reference';
-import { getBankCardOfferCheckoutStatus } from './get-bank-card-offer-checkout-status';
+import {
+  bankCardOfferRetryDelay,
+  getBankCardOfferCheckoutStatus,
+} from './get-bank-card-offer-checkout-status';
 import type { CheckoutVerificationStatus } from './verify-checkout-payment-lookup';
 import {
   isAbortError,
@@ -69,10 +72,7 @@ export interface VerifyCheckoutPaymentParams {
   pendingRedvaultOrder: boolean;
   reference: string | null;
   trackingToken: string | null;
-  /**
-   * Per-pass bound owned by the hook: aborts a hung request so the lane
-   * releases instead of stranding the page on "processing" forever.
-   */
+  // The polling hook bounds this request.
   signal?: AbortSignal;
 }
 
@@ -83,7 +83,10 @@ export interface VerifyCheckoutPaymentHandlers {
   setIsVerifying: (isVerifying: boolean) => void;
   setOrderNumber: (orderNumber: string | null) => void;
   setPaymentMethod: (paymentMethod: string | null) => void;
-  setStatus: (status: CheckoutVerificationStatus) => void;
+  setStatus: (
+    status: CheckoutVerificationStatus,
+    retryAfterMs?: number
+  ) => void;
   capturePaymentCompleted: (input: {
     currency?: string;
     orderId: string;
@@ -101,11 +104,7 @@ export interface VerifyCheckoutPaymentHandlers {
   }) => void;
 }
 
-/**
- * Runs payment/order verification and maps every outcome onto the page state
- * via the supplied handlers. Module-scope so the try/finally blocks stay
- * outside the component body (React Compiler cannot lower try/finally yet).
- */
+// Keep payment verification outside the component body for React Compiler.
 export async function verifyCheckoutPayment(
   {
     merchantSlug,
@@ -178,7 +177,9 @@ export async function verifyCheckoutPayment(
       ? getBankCardOfferCheckoutStatus(response.status, data)
       : null;
     if (bankOfferStatus) {
-      setStatus(bankOfferStatus);
+      const retryDelay = bankCardOfferRetryDelay(response);
+      if (retryDelay) setStatus(bankOfferStatus, retryDelay);
+      else setStatus(bankOfferStatus);
       setOrderNumber(response.status === 403 ? null : orderNumber);
       return;
     }

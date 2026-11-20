@@ -10,8 +10,9 @@ export function getBankCardOfferCheckoutStatus(
       ? 'access_required'
       : 'verification_unavailable';
   }
-  // A server outage leaves the capture unknown. Keep polling this reference.
-  if (httpStatus >= 500) return 'pending';
+  // Transient responses leave the capture unknown. Keep polling this reference.
+  if (httpStatus === 408 || httpStatus === 429 || httpStatus >= 500)
+    return 'pending';
   if (httpStatus < 200 || httpStatus >= 300 || httpStatus === 202) return null;
 
   if (payment.status === 'reversed') return 'reversed';
@@ -23,4 +24,12 @@ export function getBankCardOfferCheckoutStatus(
     return 'bank_offer_review';
 
   return null;
+}
+
+export function bankCardOfferRetryDelay(response: Response): number {
+  if (response.status !== 429) return 0;
+  const retryAfter = response.headers.get('Retry-After');
+  return retryAfter && /^\d{1,3}$/.test(retryAfter)
+    ? Number(retryAfter) * 1000
+    : 0;
 }

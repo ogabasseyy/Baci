@@ -142,6 +142,26 @@ describe('useCheckoutSuccessVerification', () => {
     }
   });
 
+  it('waits for the rate-limit delay before polling again', async () => {
+    vi.useFakeTimers();
+    mockVerify
+      .mockImplementationOnce(async (_params, handlers) => {
+        handlers.setStatus('pending', 30_000);
+      })
+      .mockResolvedValue(undefined);
+    const { props } = setup();
+    renderHook(() => useCheckoutSuccessVerification(props));
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(29_999);
+    });
+    expect(mockVerify).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(mockVerify).toHaveBeenCalledTimes(2);
+  });
+
   it('re-polls while pending and stops once terminal', async () => {
     vi.useFakeTimers();
     mockVerify.mockResolvedValue(undefined);

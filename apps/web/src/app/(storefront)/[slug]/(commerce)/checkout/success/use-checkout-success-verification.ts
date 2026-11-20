@@ -107,6 +107,7 @@ export function useCheckoutSuccessVerification({
     let disposed = false;
     let reverifyTimer: ReturnType<typeof setTimeout> | null = null;
     let reverifyAttempts = 0;
+    let retryAfterMs = 0;
     let passInFlight = false;
     let passController: AbortController | null = null;
     let passTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -126,19 +127,11 @@ export function useCheckoutSuccessVerification({
         passController = null;
       }
     };
-    // Serialized: the next attempt is scheduled only after the current
-    // verification settles, so a slow older response can never arrive
-    // after a newer success and overwrite the terminal state (or schedule
-    // a redirect after payment was confirmed). Each pass is abort-bounded
-    // so a hung request releases the lane for its retry instead of
-    // stalling every later pass behind a never-settling connection.
+    // Serialize bounded requests so stale responses cannot overwrite a newer result.
     const runVerificationPass = () => {
-      // Gate the pass itself on the terminal status: setStatus('success')
-      // only schedules the React update, so the settling promise's
-      // finally can still observe a stale 'pending' ref and arm another
-      // timer. Without this check that timer performs an extra
-      // verification after success, and a transient failure could flip a
-      // paid order to failed (payment_failed + checkout redirect).
+      // React may commit the terminal state after the current promise settles.
+      // Check again before sending a request so a stale timer cannot
+      // overwrite a confirmed payment.
       if (
         disposed ||
         passInFlight ||
@@ -148,6 +141,7 @@ export function useCheckoutSuccessVerification({
         return;
       }
       reverifyAttempts += 1;
+      retryAfterMs = 0;
       passInFlight = true;
       passController = new AbortController();
       passTimeout = setTimeout(() => {
@@ -174,10 +168,13 @@ export function useCheckoutSuccessVerification({
           reverifyAttempts < VERIFY_REPOLL_FAST_MAX_ATTEMPTS
             ? VERIFY_REPOLL_INTERVAL_MS
             : VERIFY_REPOLL_SLOW_INTERVAL_MS;
-        reverifyTimer = setTimeout(() => {
-          reverifyTimer = null;
-          runVerificationPass();
-        }, interval);
+        reverifyTimer = setTimeout(
+          () => {
+            reverifyTimer = null;
+            runVerificationPass();
+          },
+          Math.max(interval, retryAfterMs)
+        );
       });
     };
     const verifyHandlers: VerifyCheckoutPaymentHandlers = {
@@ -189,7 +186,10 @@ export function useCheckoutSuccessVerification({
       setIsVerifying,
       setOrderNumber,
       setPaymentMethod,
-      setStatus,
+      setStatus: (nextStatus, delayMs = 0) => {
+        retryAfterMs = delayMs;
+        setStatus(nextStatus);
+      },
       capturePaymentCompleted: (input) => {
         captureCheckoutFunnelEventOnce(
           CHECKOUT_FUNNEL_EVENTS.paymentCompleted,

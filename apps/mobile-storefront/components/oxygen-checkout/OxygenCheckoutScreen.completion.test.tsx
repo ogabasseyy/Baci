@@ -14,16 +14,23 @@ import {
 
 describe('saved native Oxygen checkout completion', () => {
   const { capabilities, refresh } = savedCheckoutFixture();
-  it('blocks a production deep link while mobile checkout is disabled', async () => {
-    const session = oxygenNativeSession();
+  it('continues an owned production order while new applications are disabled', async () => {
+    const session = jest
+      .mocked(oxygenNativeSession)
+      .getMockImplementation()?.();
+    if (!session) throw new Error('Expected test session');
     jest.mocked(oxygenNativeSession).mockReturnValue({
       ...session,
       profile: { ...session.profile, environment: 'production' },
     });
     capabilities.mockResolvedValue({ mobileEnabled: false });
     render(<OxygenCheckoutScreen orderId="order" />);
-    await screen.findByText(/Could not load your saved Oxygen order/);
-    expect(readOwnedOxygenOrder).not.toHaveBeenCalled();
+    expect(await screen.findByText('Saved workflow')).toBeTruthy();
+    expect(readOwnedOxygenOrder).toHaveBeenCalledWith(
+      'order',
+      'customer',
+      'merchant'
+    );
   });
 
   it.each([

@@ -87,11 +87,6 @@ function CheckoutSession({
             return null;
           throw failure;
         });
-      if (
-        session.profile.environment === 'production' &&
-        !capabilities?.mobileEnabled
-      )
-        throw new Error('Oxygen is unavailable on this app.');
       const customerId = useAuthStore.getState().customer?.id;
       if (!customerId)
         throw new Error('Sign in with your linked customer account.');

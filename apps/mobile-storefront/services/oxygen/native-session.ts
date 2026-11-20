@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
 import { createOxygenClient } from './client';
 import { OxygenIntentJournal } from './journal';
+import { findOwnedOxygenWorkflowId } from './owned-workflow';
 import { createOxygenSessionReader } from './session-reader';
 import { createOxygenWorkflow } from './workflow';
 
@@ -21,6 +22,7 @@ export function oxygenNativeSession() {
       userId: state.user?.id ?? null,
       customer: state.customer
         ? {
+            id: state.customer.id,
             user_id: state.customer.user_id ?? null,
             merchant_id: state.customer.merchant_id ?? '',
           }
@@ -34,23 +36,30 @@ export function oxygenNativeSession() {
     initialOwner.customer.merchant_id !== profile.merchantId
   )
     throw new Error('Oxygen requires a linked customer account');
+  const customerId = initialOwner.customer.id;
   const userId = initialOwner.userId;
   if (!userId) throw new Error('Sign in to continue Oxygen checkout');
+  const isCurrentOwner = () => {
+    const current = owner();
+    return (
+      current.userId === userId &&
+      current.customer?.id === customerId &&
+      current.customer.user_id === userId &&
+      current.customer.merchant_id === profile.merchantId
+    );
+  };
   const client = createOxygenClient({
     profile,
     fetch: globalThis.fetch,
-    getSession: createOxygenSessionReader(supabase.auth, userId, () => {
-      const current = owner();
-      return (
-        current.userId === userId &&
-        current.customer?.user_id === userId &&
-        current.customer.merchant_id === profile.merchantId
-      );
-    }),
+    getSession: createOxygenSessionReader(
+      supabase.auth,
+      userId,
+      isCurrentOwner
+    ),
   });
   async function capabilities(newInitiation: boolean) {
     const dto = await client.capabilities();
-    if (owner().userId !== userId) throw new Error('Oxygen session changed');
+    if (!isCurrentOwner()) throw new Error('Oxygen session changed');
     return assertOxygenCapabilities(profile, dto, owner(), newInitiation);
   }
   return {
@@ -62,6 +71,15 @@ export function oxygenNativeSession() {
       createOxygenWorkflow({
         client,
         environment: profile.environment,
+        findSaved: async (ownedOrderId) => {
+          if (!isCurrentOwner()) return null;
+          const id = await findOwnedOxygenWorkflowId(
+            ownedOrderId,
+            customerId,
+            profile.merchantId
+          );
+          return isCurrentOwner() ? id : null;
+        },
         journal: new OxygenIntentJournal(AsyncStorage, {
           storageKey: profile.storagePrefix,
           userId,

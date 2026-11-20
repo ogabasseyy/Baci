@@ -7,10 +7,6 @@ jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
 jest.mock('@/lib/oxygen-mobile-profile', () => ({
   getOxygenMobileProfile: jest.fn(),
 }));
-const mockAvailability = jest.fn();
-jest.mock('@/components/checkout/use-oxygen-checkout-availability', () => ({
-  useOxygenCheckoutAvailability: () => mockAvailability(),
-}));
 const mockCustomer = {
   id: 'customer-1',
   user_id: 'user-1',
@@ -64,16 +60,11 @@ describe('owned Oxygen history resume', () => {
     render(<OxygenOrderResume order={{ ...order, ...patch }} />);
     expect(screen.queryByRole('button')).toBeNull();
   });
-  it('checks production admission before offering to resume an owned order', () => {
+  it('offers resume in production after new applications are disabled', () => {
     jest.mocked(getOxygenMobileProfile).mockReturnValue({
       merchantId: 'merchant-1',
       environment: 'production',
     } as NonNullable<ReturnType<typeof getOxygenMobileProfile>>);
-    mockAvailability.mockReturnValue({ visible: false });
-    const { unmount } = render(<OxygenOrderResume order={order} />);
-    expect(screen.queryByRole('button')).toBeNull();
-    unmount();
-    mockAvailability.mockReturnValue({ visible: true });
     render(<OxygenOrderResume order={order} />);
     expect(screen.getByRole('button')).toBeTruthy();
   });

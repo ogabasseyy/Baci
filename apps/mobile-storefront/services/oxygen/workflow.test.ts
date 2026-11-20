@@ -259,3 +259,28 @@ it('never falls back past mismatched capability pins', async () => {
   expect(client.createOrResume).not.toHaveBeenCalled();
   expect(client.snapshot).not.toHaveBeenCalled();
 });
+
+it.each([
+  id,
+  null,
+])('reads only an existing production workflow (%s) when initiation is disabled', async (savedId) => {
+  const findSaved = jest.fn().mockResolvedValue(savedId);
+  const { controller, client, storage } = setup({
+    environment: 'production',
+    findSaved,
+  });
+  client.snapshot.mockResolvedValue({ ...snapshot, environment: 'production' });
+
+  await controller.initialize();
+
+  expect(findSaved).toHaveBeenCalledWith(id);
+  expect(client.createOrResume).not.toHaveBeenCalled();
+  expect(storage.setItem).not.toHaveBeenCalled();
+  if (savedId) {
+    expect(client.snapshot).toHaveBeenCalledWith(savedId);
+    expect(controller.getState().snapshot?.workflowId).toBe(savedId);
+  } else {
+    expect(client.snapshot).not.toHaveBeenCalled();
+    expect(controller.getState().error).toBeTruthy();
+  }
+});

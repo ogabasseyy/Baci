@@ -23,7 +23,9 @@ export const snapshot: OxygenRuntimeSnapshot = {
   checkoutPhone: '',
   checkoutAddress: {},
 };
-export function setup() {
+export function setup(
+  overrides: Partial<Parameters<typeof createOxygenWorkflow>[0]> = {}
+) {
   let stored: string | null = null;
   const storage = {
     getItem: jest.fn(() => Promise.resolve(stored)),
@@ -48,6 +50,7 @@ export function setup() {
     client: client as unknown as OxygenClient,
     journal,
     key: () => id,
+    ...overrides,
   });
   return { client, journal, storage, controller };
 }

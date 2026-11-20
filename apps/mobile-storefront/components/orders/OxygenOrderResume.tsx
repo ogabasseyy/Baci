@@ -1,7 +1,6 @@
 import { router } from 'expo-router';
 import { Text, TouchableOpacity } from 'react-native';
 import { z } from 'zod';
-import { useOxygenCheckoutAvailability } from '@/components/checkout/use-oxygen-checkout-availability';
 import { getOxygenMobileProfile } from '@/lib/oxygen-mobile-profile';
 import { isClosedOxygenShippingStatus } from '@/services/oxygen/oxygen-order-status';
 import { useAuthStore } from '@/stores/auth-store';
@@ -37,26 +36,13 @@ export function OxygenOrderResume({
     isClosedOxygenShippingStatus(order.shipping_status)
   )
     return null;
-  return profile.environment === 'production' ? (
-    <ProductionResume orderId={order.id} />
-  ) : (
-    <ResumeButton orderId={order.id} />
-  );
-}
-
-function ProductionResume({ orderId }: { orderId: string }) {
-  const { visible } = useOxygenCheckoutAvailability([]);
-  return visible ? <ResumeButton orderId={orderId} /> : null;
-}
-
-function ResumeButton({ orderId }: { orderId: string }) {
   return (
     <TouchableOpacity
       accessibilityRole="button"
       onPress={() =>
         router.push({
           pathname: '/oxygen-checkout',
-          params: { orderId },
+          params: { orderId: order.id },
         })
       }
       style={{ padding: 16 }}

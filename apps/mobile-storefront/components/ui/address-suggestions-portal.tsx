@@ -132,7 +132,10 @@ function AddressSuggestionsHost({
 }) {
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot);
   const { keyboardTop } = useKeyboard();
-  const [contentHeight, setContentHeight] = useState(0);
+  const [measurement, setMeasurement] = useState<{
+    resultsKey: string;
+    height: number;
+  } | null>(null);
 
   const layer = useRef<ViewInstance>(null);
   const [host, setHost] = useState<SuggestionsRect>(() => ({
@@ -156,6 +159,19 @@ function AddressSuggestionsHost({
         );
     });
   const { colors, isDark, onSelect, predictions } = state ?? {};
+  // A replacement list can measure to the same height, so remount its
+  // ScrollView to get a measurement even when the native size is unchanged.
+  const resultsKey = predictions
+    ? JSON.stringify(
+        predictions.map(({ placeId, mainText, secondaryText }) => [
+          placeId,
+          mainText,
+          secondaryText,
+        ])
+      )
+    : '';
+  const contentHeight =
+    measurement?.resultsKey === resultsKey ? measurement.height : 0;
   useAddressSuggestionsSpace({
     predictions,
     anchor: state?.anchor,
@@ -187,7 +203,10 @@ function AddressSuggestionsHost({
           accessibilityRole="list"
         >
           <ScrollView
-            onContentSizeChange={(_width, height) => setContentHeight(height)}
+            key={resultsKey}
+            onContentSizeChange={(_width, height) =>
+              setMeasurement({ resultsKey, height })
+            }
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >

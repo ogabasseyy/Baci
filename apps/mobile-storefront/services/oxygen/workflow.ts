@@ -6,7 +6,7 @@ import {
   pendingReadRecovery,
 } from '@baci/shared/oxygen';
 import { assertOxygenActionFile } from './action-file';
-import { verifyOxygenCapabilities } from './capability-readiness';
+import { readVerifiedOxygenCapabilities } from './capability-readiness';
 import type { OxygenClient } from './client';
 import { dispatchOxygenAction } from './dispatch';
 import { OxygenClientError } from './errors';
@@ -27,6 +27,7 @@ export function createOxygenWorkflow(options: {
   key: () => string;
   now?: () => number;
   environment?: OxygenRuntimeSnapshot['environment'];
+  findSaved?: (orderId: string) => Promise<string | null>;
 }) {
   let state: OxygenWorkflowState = {
     snapshot: null,
@@ -79,13 +80,24 @@ export function createOxygenWorkflow(options: {
   }
   async function refreshCapabilities() {
     publish({ capabilitiesVerified: false });
-    publish({
-      capabilitiesVerified: await verifyOxygenCapabilities(options.client),
-    });
+    const capabilities = await readVerifiedOxygenCapabilities(options.client);
+    publish({ capabilitiesVerified: capabilities !== null });
+    return capabilities;
   }
   async function initializeWorkflow(generation: number) {
+    const capabilities = await refreshCapabilities();
+    const orderId = options.journal.scope.orderId;
+    if (options.environment === 'production' && !capabilities?.mobileEnabled) {
+      // A disabled or unavailable initiation check cannot create a workflow.
+      // An existing workflow stays accessible through the authenticated read.
+      const savedId = await options.findSaved?.(orderId);
+      if (!alive || generation !== revision) return;
+      if (!savedId) throw new OxygenClientError('recovery');
+      ownedWorkflowId = savedId;
+      await read(generation);
+      return;
+    }
     // The owned order is the server's idempotent resume key after a lost response.
-    await refreshCapabilities();
     const saved = await options.journal.read();
     const creationKey = saved?.key ?? options.key();
     if (!saved)
@@ -97,9 +109,7 @@ export function createOxygenWorkflow(options: {
         key: creationKey,
         time: (options.now ?? Date.now)(),
       });
-    const created = await options.client.createOrResume(
-      options.journal.scope.orderId
-    );
+    const created = await options.client.createOrResume(orderId);
     if (!alive || generation !== revision) return;
     ownedWorkflowId = created.id;
     if (!saved?.workflowId || saved.workflowId !== created.id)

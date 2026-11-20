@@ -349,6 +349,8 @@ const serverSchema = z
     QUIZ_RPC_SERVER_SECRET: optionalTrimmedStringSchema,
     QUIZ_DEVICE_HASH_PEPPER: quizDeviceHashPepperSchema,
     QUIZ_APP_INTEGRITY_TIER_OVERRIDES_JSON: quizIntegrityTierOverridesSchema,
+    QUIZ_EDGE_WORKER_URL: optionalTrimmedUrlSchema,
+    QUIZ_TICKET_SECRET: optionalTrimmedStringSchema,
 
     // Push Notifications
     EXPO_ACCESS_TOKEN: z.string().optional(),
@@ -816,6 +818,8 @@ const getEnv = (): Partial<z.infer<typeof serverSchema>> &
         QUIZ_DEVICE_HASH_PEPPER: process.env.QUIZ_DEVICE_HASH_PEPPER,
         QUIZ_APP_INTEGRITY_TIER_OVERRIDES_JSON:
           process.env.QUIZ_APP_INTEGRITY_TIER_OVERRIDES_JSON,
+        QUIZ_EDGE_WORKER_URL: process.env.QUIZ_EDGE_WORKER_URL,
+        QUIZ_TICKET_SECRET: process.env.QUIZ_TICKET_SECRET,
         EXPO_ACCESS_TOKEN: process.env.EXPO_ACCESS_TOKEN,
         MONNIFY_API_KEY: process.env.MONNIFY_API_KEY,
         MONNIFY_SECRET_KEY: process.env.MONNIFY_SECRET_KEY,
@@ -1320,6 +1324,24 @@ export const getQuizIntegrityTierOverridesJson = () => {
     process.env.QUIZ_APP_INTEGRITY_TIER_OVERRIDES_JSON,
     env?.QUIZ_APP_INTEGRITY_TIER_OVERRIDES_JSON
   );
+};
+export const getQuizEdgeWorkerUrl = () => {
+  if (isBrowserRuntime())
+    throw new Error('QUIZ_EDGE_WORKER_URL cannot be accessed on the client');
+  const url = getRuntimeEnvValue(
+    process.env.QUIZ_EDGE_WORKER_URL,
+    env?.QUIZ_EDGE_WORKER_URL
+  );
+  return url ? url.replace(/\/$/, '') : undefined;
+};
+export const getQuizTicketSecret = () => {
+  if (isBrowserRuntime())
+    throw new Error('QUIZ_TICKET_SECRET cannot be accessed on the client');
+  const secret = getRuntimeEnvValue(
+    process.env.QUIZ_TICKET_SECRET,
+    env?.QUIZ_TICKET_SECRET
+  );
+  return secret || undefined;
 };
 export const getZeptoMailToken = () =>
   env?.ZEPTOMAIL_TOKEN?.trim() || undefined;

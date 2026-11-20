@@ -53,6 +53,7 @@ export const quizV2QuestionSchema = z.strictObject({
 
 export const quizV2EventSchema = z
   .strictObject({
+    backendMode: z.enum(['postgres', 'edge_rooms']).optional(),
     contractVersion: quizContractVersionSchema,
     endsAt: quizDateTimeSchema,
     id: quizIdSchema,

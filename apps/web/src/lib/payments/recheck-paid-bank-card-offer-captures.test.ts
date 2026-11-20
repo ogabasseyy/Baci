@@ -130,4 +130,30 @@ describe('recheckPaidBankCardOfferCaptures', () => {
       recheckPaidBankCardOfferCaptures(input)
     ).resolves.toMatchObject({ checked: 15 });
   });
+
+  it('stops without reporting a failed lookup when the claim deadline expires', async () => {
+    const input = worker();
+    const controller = new AbortController();
+    const timeout = vi
+      .spyOn(AbortSignal, 'timeout')
+      .mockReturnValue(controller.signal);
+    input.rpc.mockReturnValueOnce({
+      abortSignal: vi.fn(async () => {
+        controller.abort();
+        return { data: [], error: { code: 'ABORT' } };
+      }),
+    });
+    try {
+      await expect(
+        recheckPaidBankCardOfferCaptures(input)
+      ).resolves.toMatchObject({
+        checked: 0,
+        failed: 0,
+      });
+      expect(input.rpc).toHaveBeenCalledTimes(1);
+      expect(input.finalizePayment).not.toHaveBeenCalled();
+    } finally {
+      timeout.mockRestore();
+    }
+  });
 });

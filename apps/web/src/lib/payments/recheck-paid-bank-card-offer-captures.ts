@@ -21,6 +21,7 @@ export async function recheckPaidBankCardOfferCaptures({
     const signal = AbortSignal.timeout(remainingMs);
     const claim = supabase.rpc('claim_paid_bank_card_offer_recheck');
     const { data, error } = await claim.abortSignal(signal);
+    if (signal.aborted) break;
     if (error) {
       logger.warn({
         message: 'Unable to claim a paid bank card offer for recheck',

@@ -183,9 +183,14 @@ describe('verifyCheckoutPayment', () => {
     expect(callbacks.scheduleFailedRedirect).not.toHaveBeenCalled();
   });
 
-  it('keeps a rate-limited bank offer pending without scheduling a new payment', async () => {
+  it.each([
+    429, 503,
+  ])('honors Retry-After on HTTP %s even with a non-JSON body', async (status) => {
     request.mockResolvedValue(
-      Response.json({}, { status: 429, headers: { 'Retry-After': '30' } })
+      new Response('Temporary gateway error', {
+        status,
+        headers: { 'Retry-After': '30' },
+      })
     );
     const callbacks = handlers();
 

@@ -121,3 +121,13 @@ describe('hasMonnifyProviderReference', () => {
     expect(hasMonnifyProviderReference({ responseBody: {} })).toBe(false);
   });
 });
+
+describe('bugfix: a transactionReference that echoes our request reference is not provider evidence', () => {
+  it('is false for an own-shaped transactionReference', () => {
+    expect(
+      hasMonnifyProviderReference({
+        responseBody: { transactionReference: 'a1b2c3d4e5f6a1b2c3d4e5f6' },
+      })
+    ).toBe(false);
+  });
+});

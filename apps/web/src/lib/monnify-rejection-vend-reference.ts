@@ -76,17 +76,16 @@ export function findMonnifyBodyVendReference(
 
 /**
  * Whether the answer carries a Monnify-issued reference in its responseBody:
- * a transactionReference, or a vendReference that is not our own request
- * reference shape. Such a body means a vend may exist.
+ * a transactionReference or vendReference that is not an echo of our own
+ * request reference shape. Such a body means a vend may exist.
  */
 export function hasMonnifyProviderReference(answer: unknown): boolean {
   const transaction: Found[] = [];
   collectBodyField(answer, 'transactionreference', transaction);
   const vend: Found[] = [];
   collectBodyField(answer, 'vendreference', vend);
-  return (
-    transaction.length > 0 ||
-    vend.some((item) => !OWN_REQUEST_REFERENCE.test(item.value))
+  return [...transaction, ...vend].some(
+    (item) => !OWN_REQUEST_REFERENCE.test(item.value)
   );
 }
 

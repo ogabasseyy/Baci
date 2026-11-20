@@ -16,6 +16,8 @@ import {
 import type { RedvaultQuoteSummary } from './components/redvault/RedvaultPaymentOption';
 import type { RedvaultPreparedOrder } from './handlers/redvault-prepared-order-submit';
 
+import { recoverBankOfferCheckoutOrder } from './recover-bank-offer-checkout-order';
+
 export { normalizeOrderPaymentMethod } from './normalize-order-payment-method';
 
 export { buildPendingCheckoutFingerprint } from './checkout-fingerprint';
@@ -89,6 +91,9 @@ export interface ReusedCheckoutOrder {
   id: string;
   order_number?: string;
   tracking_token?: string;
+  currency?: string;
+  total?: number;
+  payment_method?: string;
 }
 
 export interface ResolvePendingCheckoutOrderOptions {
@@ -236,6 +241,9 @@ export async function resolvePendingCheckoutOrder({
   if (isNonReusableOrderState(existingOrder)) {
     return clearOrderUnlessOxygenIsUnresolved(oxygenOrder);
   }
+
+  const bankOffer = recoverBankOfferCheckoutOrder(existingOrder, pendingOrder);
+  if (bankOffer) return bankOffer;
 
   const mutationFetch = fetchImpl === fetch ? fetchWithCsrf : fetchImpl;
 

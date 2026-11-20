@@ -8,7 +8,7 @@ import {
 } from '@/lib/resolve-merchant-currency';
 import type { OrderCreateInput } from '@/schemas/orders';
 
-// The native staging gate covers every Bearer Oxygen order regardless of source.
+// Mobile admission covers every Bearer Oxygen order regardless of source.
 // Existing web checkout uses cookies to save an unpaid order. Its separate
 // Oxygen workflow entrypoint verifies the signed-in owner and merchant rollout.
 function isMobileOxygenOrder(

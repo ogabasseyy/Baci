@@ -24,6 +24,12 @@ const ZEPTOMAIL_REQUEST_TIMEOUT_MS = 30_000;
 export const ZEPTOMAIL_DELIVERY_OUTCOME_UNKNOWN_CODE =
   'ZEPTOMAIL_DELIVERY_OUTCOME_UNKNOWN';
 
+export const ZEPTOMAIL_REQUEST_NOT_SENT_CODE = 'ZEPTOMAIL_REQUEST_NOT_SENT';
+
+class ZeptoMailRequestNotSentError extends Error {
+  readonly code = ZEPTOMAIL_REQUEST_NOT_SENT_CODE;
+}
+
 class ZeptoMailDeliveryOutcomeUnknownError extends Error {
   readonly code = ZEPTOMAIL_DELIVERY_OUTCOME_UNKNOWN_CODE;
 }
@@ -142,7 +148,9 @@ function describeTransportFailure(error: unknown): Error {
       if (
         DEFINITE_PRE_SEND_NETWORK_CODES.has(getNetworkErrorCode(cause) ?? '')
       ) {
-        return new Error(`${error.message}: ${cause.message}`);
+        return new ZeptoMailRequestNotSentError(
+          `${error.message}: ${cause.message}`
+        );
       }
       return new ZeptoMailDeliveryOutcomeUnknownError(
         `${error.message}: ${cause.message}`

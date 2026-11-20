@@ -7,7 +7,10 @@ vi.mock('@/lib/expo-push-chunk-delivery', () => ({
 vi.mock('@/lib/expo-push-lazy-client', () => ({
   createLazyExpoGetter: () => () => ({}),
 }));
-vi.mock('@/lib/zeptomail-transport', () => ({ zeptoMailRequest: mail }));
+vi.mock('@/lib/zeptomail-transport', async (load) => ({
+  ...(await load<typeof import('@/lib/zeptomail-transport')>()),
+  zeptoMailRequest: mail,
+}));
 
 import { sendOxygenOffersReady } from './offers-ready-notification';
 
@@ -57,4 +60,24 @@ it('does not send a duplicate fallback when the push outcome is uncertain', asyn
   vi.stubEnv('ZEPTOMAIL_TOKEN', 'mock-token');
   expect(await sendOxygenOffersReady(recipient)).toBe(false);
   expect(mail).not.toHaveBeenCalled();
+});
+
+it.each([
+  ['ZEPTOMAIL_REQUEST_NOT_SENT', 75_000, true],
+  ['ZEPTOMAIL_REQUEST_NOT_SENT', 30_000, false],
+  ['ZEPTOMAIL_DELIVERY_OUTCOME_UNKNOWN', 75_000, false],
+])('handles email failure %s with %i ms remaining', async (code, remaining, retry) => {
+  vi.stubEnv('ZEPTOMAIL_TOKEN', 'mock-token');
+  const failure = Object.assign(new Error('Connection failed'), { code });
+  mail.mockRejectedValueOnce(failure);
+  const delivery = sendOxygenOffersReady(
+    { ...recipient, pushToken: null },
+    Date.now() + remaining
+  );
+  if (retry) {
+    await expect(delivery).resolves.toBe(true);
+  } else {
+    await expect(delivery).rejects.toBe(failure);
+  }
+  expect(mail).toHaveBeenCalledTimes(retry ? 2 : 1);
 });

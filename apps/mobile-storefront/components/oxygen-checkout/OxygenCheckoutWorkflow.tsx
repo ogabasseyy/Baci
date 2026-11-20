@@ -61,9 +61,7 @@ export function OxygenCheckoutWorkflow({
     setRefreshing(showRecovery ? 'recovery' : 'progress');
     try {
       await workflow.refresh?.();
-      const refreshed = await context.session
-        .capabilities(false)
-        .catch(() => null);
+      const refreshed = workflow.controller?.getCapabilities() ?? null;
       setCapabilities(refreshed);
       const state = workflow.controller?.getState();
       if (

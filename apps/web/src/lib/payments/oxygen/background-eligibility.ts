@@ -118,7 +118,7 @@ export async function runOxygenEligibilityBackground(options: Options) {
     if (!recipient) break;
     let delivered = false;
     try {
-      delivered = await sendOxygenOffersReady(recipient);
+      delivered = await sendOxygenOffersReady(recipient, options.deadlineMs);
     } finally {
       await queueRpc(options, 'finish_notification', {
         workflowId: recipient.workflowId,

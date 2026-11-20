@@ -18,6 +18,8 @@ type OxygenOrderItem = CreateOrderRequest['items'][number] & {
 };
 
 function hasVoucherIdentifier(item: OxygenOrderItem): boolean {
+  // Reject malformed voucher values before checkout. Direct API requests with
+  // those types fail order schema validation before the Oxygen combination gate.
   return [
     item.voucher_token,
     item.voucher_award_id,

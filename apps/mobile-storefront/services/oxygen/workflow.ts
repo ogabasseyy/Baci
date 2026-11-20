@@ -1,4 +1,5 @@
 import {
+  type OxygenMobileCapabilities,
   type OxygenRuntimeAction,
   type OxygenRuntimeSnapshot,
   type OxygenTransientFile,
@@ -35,6 +36,7 @@ export function createOxygenWorkflow(options: {
     error: null,
     capabilitiesVerified: false,
   };
+  let verifiedCapabilities: OxygenMobileCapabilities | null = null;
   let alive = true;
   let ownedWorkflowId: string | null = null;
   let revision = 0;
@@ -79,9 +81,13 @@ export function createOxygenWorkflow(options: {
     return snapshot;
   }
   async function refreshCapabilities() {
+    verifiedCapabilities = null;
     publish({ capabilitiesVerified: false });
     const capabilities = await readVerifiedOxygenCapabilities(options.client);
-    publish({ capabilitiesVerified: capabilities !== null });
+    if (alive) {
+      verifiedCapabilities = capabilities;
+      publish({ capabilitiesVerified: capabilities !== null });
+    }
     return capabilities;
   }
   async function initializeWorkflow(generation: number) {
@@ -89,6 +95,7 @@ export function createOxygenWorkflow(options: {
     const orderId = options.journal.scope.orderId;
     if (!capabilities?.mobileEnabled) {
       // A disabled or unavailable initiation check cannot create a workflow.
+      // A saved unpaid order without a workflow is still a new application.
       // An existing workflow stays accessible through the authenticated read.
       const savedId = await options.findSaved?.(orderId);
       if (!alive || generation !== revision) return;
@@ -125,6 +132,7 @@ export function createOxygenWorkflow(options: {
   }
   return {
     getState: () => state,
+    getCapabilities: () => verifiedCapabilities,
     subscribe(listener: () => void) {
       listeners.add(listener);
       return () => {

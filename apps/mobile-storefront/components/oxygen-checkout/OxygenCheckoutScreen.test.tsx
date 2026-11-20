@@ -47,6 +47,7 @@ describe('saved native Oxygen checkout', () => {
         },
       },
       controller: {
+        getCapabilities: () => ({ mobileEnabled: false }),
         getState: () => ({ error: null, capabilitiesVerified: true }),
       },
       capabilitiesVerified: true,
@@ -63,6 +64,7 @@ describe('saved native Oxygen checkout', () => {
     jest.mocked(useOxygenWorkflow).mockReturnValue({
       snapshot: { stage: 'payment_required', state: {} },
       controller: {
+        getCapabilities: () => ({ mobileEnabled: false }),
         getState: () => ({ error: null, capabilitiesVerified: true }),
       },
       capabilitiesVerified: true,
@@ -92,6 +94,7 @@ describe('saved native Oxygen checkout', () => {
         },
       },
       controller: {
+        getCapabilities: () => ({ mobileEnabled: false }),
         getState: () => ({ error: null, capabilitiesVerified: true }),
       },
       capabilitiesVerified: true,
@@ -107,6 +110,7 @@ describe('saved native Oxygen checkout', () => {
     const state = {
       snapshot: { stage: 'plan_required', state: { validated: true } },
       controller: {
+        getCapabilities: () => ({ mobileEnabled: false }),
         getState: () => ({ error: null, capabilitiesVerified: true }),
       },
       capabilitiesVerified: true,
@@ -150,9 +154,11 @@ describe('saved native Oxygen checkout', () => {
     expect(workflowUnmountCount()).toBe(0);
   });
   it('keeps a recovery action when refreshing saved progress loses capabilities', async () => {
+    let refreshedCapabilities: { mobileEnabled: boolean } | null = null;
     const state = {
       snapshot: { stage: 'plan_required', state: {} },
       controller: {
+        getCapabilities: () => refreshedCapabilities,
         getState: () => ({ error: null, capabilitiesVerified: true }),
       },
       capabilitiesVerified: true,
@@ -163,13 +169,16 @@ describe('saved native Oxygen checkout', () => {
       const [error, setError] = useState<Error | null>(
         () => new Error('Connection lost')
       );
-      refresh.mockImplementation(async () => setError(null));
+      refresh.mockImplementation(async () => {
+        if (refresh.mock.calls.length > 1)
+          refreshedCapabilities = { mobileEnabled: false };
+        setError(null);
+      });
       return { ...state, error } as unknown as ReturnType<
         typeof useOxygenWorkflow
       >;
     });
     capabilities.mockResolvedValueOnce({ mobileEnabled: false });
-    capabilities.mockRejectedValueOnce(new OxygenClientError('transport'));
     render(<OxygenCheckoutScreen orderId="order" />);
     const retry = await screen.findByRole('button', {
       name: 'Check for an update',
@@ -183,6 +192,7 @@ describe('saved native Oxygen checkout', () => {
       )
     );
     expect(refresh).toHaveBeenCalledTimes(2);
+    expect(capabilities).toHaveBeenCalledTimes(1);
     expect(await screen.findByText('See payment breakdown')).toBeTruthy();
   });
   it('recovers an initially verified order when its local capabilities read fails', async () => {
@@ -200,6 +210,7 @@ describe('saved native Oxygen checkout', () => {
     jest.mocked(useOxygenWorkflow).mockReturnValue({
       snapshot: { stage: 'plan_required', state: { validated: true } },
       controller: {
+        getCapabilities: () => ({ mobileEnabled: false }),
         getState: () => ({ error: null, capabilitiesVerified: true }),
       },
       capabilitiesVerified: true,

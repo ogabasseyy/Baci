@@ -188,3 +188,17 @@ describe('bugfix: negated duplicate wording and login rejections with an open co
     expect(open({ responseCode: '99' }, 'Unexpected error')).toBe(true);
   });
 });
+
+describe('bugfix: numeric vend-specific status holds', () => {
+  it.each([2, '2'])('holds vendStatus %j', (value) => {
+    expect(open({ responseBody: { vendStatus: value } }, 'Rejected')).toBe(
+      true
+    );
+  });
+
+  it('does not hold a numeric generic status (an HTTP code)', () => {
+    expect(open({ status: 400, responseCode: '01' }, 'Invalid customer')).toBe(
+      false
+    );
+  });
+});

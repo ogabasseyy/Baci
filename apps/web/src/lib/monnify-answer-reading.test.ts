@@ -64,3 +64,18 @@ describe('readMonnifyAnswer', () => {
     expect(reading.responseCode).toBe('99');
   });
 });
+
+describe('bugfix: negated duplicate wording in an HTTP error', () => {
+  it.each([
+    'Not a duplicate, vend rejected',
+    'No duplicate reference found',
+  ])('is not a duplicate: "%s"', (body) => {
+    expect(read('400', body).isDuplicateReference).toBe(false);
+  });
+
+  it('still flags a real duplicate', () => {
+    expect(read('400', 'Duplicate vendReference').isDuplicateReference).toBe(
+      true
+    );
+  });
+});

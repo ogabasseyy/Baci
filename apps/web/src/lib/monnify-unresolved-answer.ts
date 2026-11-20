@@ -114,10 +114,14 @@ function readStructuredOutcome(
       found.unknown ||=
         VEND_STATUS_KEY.test(key) &&
         status !== '' &&
-        !/^\d+$/.test(status) &&
         !RUNNING_STATUSES.has(status) &&
         !DONE_STATUSES.has(status) &&
         !FAILED_STATUSES.has(status);
+    }
+    // A numeric vend-specific state (vendStatus: 2) is a vend state we do not
+    // know: hold, like vend evidence does.
+    if (typeof value === 'number' && VEND_STATUS_KEY.test(key)) {
+      found.unknown = true;
     }
     if (isTrueFlag(value)) {
       found.running ||= RUNNING_FLAG.test(key);
@@ -128,14 +132,6 @@ function readStructuredOutcome(
     }
     readStructuredOutcome(value, found, depth + 1);
   }
-}
-
-/** "not a duplicate", "no duplicate reference": says the opposite of a duplicate. */
-function stripNegatedDuplicate(text: string): string {
-  return text.replace(
-    /\b(?:not|no|never|n't)\s+(?:an?\s+)?(?:\w+\s+)?duplicate\w*(?:\s+\w+)?/gi,
-    ' '
-  );
 }
 
 /**
@@ -186,7 +182,7 @@ export function isMonnifyUnresolvedAnswer({
     );
   const strong =
     hasMonnifyDuplicateFlag(answer) ||
-    isMonnifyDuplicateReferenceText(stripNegatedDuplicate(wording)) ||
+    isMonnifyDuplicateReferenceText(wording) ||
     structuredHold ||
     // A Monnify-issued reference in the body means a vend may exist.
     (requestReference !== undefined &&

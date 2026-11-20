@@ -19,7 +19,8 @@ function collectBodyField(
   fieldKey: string,
   out: Found[],
   insideBody = false,
-  depth = 0
+  depth = 0,
+  anywhere = false
 ): void {
   if (!answer || typeof answer !== 'object' || depth > MAX_DEPTH) {
     return;
@@ -29,7 +30,11 @@ function collectBodyField(
     : Object.entries(answer);
   for (const [rawKey, value] of children) {
     const key = normaliseKey(rawKey);
-    if (insideBody && key === fieldKey && typeof value === 'string') {
+    if (
+      (insideBody || anywhere) &&
+      key === fieldKey &&
+      typeof value === 'string'
+    ) {
       const text = value.trim();
       if (text) {
         out.push({ depth, value: text });
@@ -40,7 +45,8 @@ function collectBodyField(
       fieldKey,
       out,
       insideBody || key === 'responsebody',
-      depth + 1
+      depth + 1,
+      anywhere
     );
   }
 }
@@ -71,11 +77,13 @@ export function findMonnifyBodyVendReference(
   return pickShallowest(found);
 }
 
-/** Every transactionReference / vendReference the answer carries in its responseBody. */
+/** Every transactionReference / vendReference the answer carries, at any level. */
 export function collectMonnifyProviderReferences(answer: unknown): string[] {
   const found: Found[] = [];
-  collectBodyField(answer, 'transactionreference', found);
-  collectBodyField(answer, 'vendreference', found);
+  // Anywhere in the answer, top level included: a reference Monnify issued
+  // means a vend may exist whichever object it sits in.
+  collectBodyField(answer, 'transactionreference', found, false, 0, true);
+  collectBodyField(answer, 'vendreference', found, false, 0, true);
   return found.map((item) => item.value);
 }
 

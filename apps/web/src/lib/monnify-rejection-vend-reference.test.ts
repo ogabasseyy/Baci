@@ -135,3 +135,26 @@ describe('hasMonnifyProviderReference', () => {
     expect(hasMonnifyProviderReference({ responseBody: {} }, ref)).toBe(false);
   });
 });
+
+describe('bugfix: top-level provider references count as evidence', () => {
+  it('finds a top-level transactionReference or vendReference', () => {
+    expect(
+      hasMonnifyProviderReference({ transactionReference: 'T-1' }, ref)
+    ).toBe(true);
+    expect(hasMonnifyProviderReference({ vendReference: 'MFBP-1' }, ref)).toBe(
+      true
+    );
+  });
+
+  it('still ignores an exact top-level echo of our request reference', () => {
+    expect(hasMonnifyProviderReference({ vendReference: ref }, ref)).toBe(
+      false
+    );
+  });
+
+  it('does not use a top-level vendReference as the requery reference', () => {
+    expect(
+      findMonnifyBodyVendReference({ vendReference: 'MFBP-1' })
+    ).toBeUndefined();
+  });
+});

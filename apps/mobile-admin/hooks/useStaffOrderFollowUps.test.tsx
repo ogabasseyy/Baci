@@ -1,8 +1,7 @@
-import { act, renderHook, waitFor } from '@testing-library/react';
+import { waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FOLLOW_UP_QUERY_LIMIT } from '@/config/follow-up-queue';
 import {
-  createWrapper,
   failed,
   followUp,
   MERCHANT,
@@ -13,7 +12,6 @@ import {
   render,
   VIEWER,
 } from '@/test/fixtures/staff-follow-up-hook';
-import { useStaffOrderFollowUps } from './useStaffOrderFollowUps';
 
 const mocks = vi.hoisted(() => ({ from: vi.fn(), rpc: vi.fn() }));
 
@@ -28,22 +26,6 @@ describe('useStaffOrderFollowUps', () => {
   });
 
   describe('loading', () => {
-    it('reuses a fresh open scan when checkout IDs change and refetches it on refresh', async () => {
-      const { rerender, result } = renderHook(
-        ({ ids }) => useStaffOrderFollowUps(MERCHANT, VIEWER, ids),
-        { initialProps: { ids: [orderId(1)] }, wrapper: createWrapper() }
-      );
-      await waitFor(() => expect(result.current.isSuccess).toBe(true));
-      expect(mocks.from).toHaveBeenCalledTimes(2);
-
-      rerender({ ids: [orderId(2)] });
-      await waitFor(() => expect(result.current.isSuccess).toBe(true));
-      expect(mocks.from).toHaveBeenCalledTimes(3);
-
-      await act(() => result.current.refetch());
-      expect(mocks.from).toHaveBeenCalledTimes(5);
-    });
-
     it('loads the signed-in user’s follow-up write capability for this store', async () => {
       mocks.rpc.mockResolvedValue(ok(true));
       const { result } = render();

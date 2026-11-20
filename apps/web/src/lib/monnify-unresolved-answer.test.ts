@@ -119,3 +119,23 @@ describe('bugfix: service-unavailable and unrecognised vend statuses are held', 
     expect(open(null, 'Response code is 0')).toBe(true);
   });
 });
+
+describe('bugfix: vend-level status beats a generic payment status, both ways', () => {
+  it('holds payment FAILED with vendStatus COMPLETED (vend delivered)', () => {
+    expect(
+      open(
+        { responseBody: { status: 'FAILED', vendStatus: 'COMPLETED' } },
+        'Rejected'
+      )
+    ).toBe(true);
+  });
+
+  it('does not hold "Validation was successful but vend was rejected"', () => {
+    expect(
+      open(
+        { responseCode: '01' },
+        'Validation was successful but vend was rejected'
+      )
+    ).toBe(false);
+  });
+});

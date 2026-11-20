@@ -104,3 +104,13 @@ describe('bugfix: a bare failure word with no vend noun is not proof', () => {
     expect(check(message)).toBe(false);
   });
 });
+
+describe('bugfix: a negated failure is not proof the vend failed', () => {
+  it.each([
+    'Transaction has not failed',
+    'Vend was not unsuccessful',
+    'Purchase did not fail',
+  ])('keeps "%s" unresolved', (message) => {
+    expect(check(message)).toBe(false);
+  });
+});

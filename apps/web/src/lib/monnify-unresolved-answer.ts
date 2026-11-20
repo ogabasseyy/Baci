@@ -29,7 +29,7 @@ const FAILED_STATUSES = new Set(['FAILED', 'FAILURE', 'UNSUCCESSFUL']);
  * do not count.
  */
 const IN_FLIGHT_WORDING =
-  /(?<!\b(?:not|never|no|cannot|n't)(?:\s+\w+){0,3}?\s+)(?<!(?:validation|verification|lookup|login|authentication|customer)\s+)\b(?:pending|processing|in\s+progress|queued|initiated|submitted|accepted|successful(?:ly)?|succeeded|success|delivered|completed|credited|vended|dispatched|timed?\s*out|re\s*quer(?:y|ied)|(?:service\s+)?(?:temporarily\s+)?unavailable)\b/i;
+  /(?<!\b(?:not|never|no|cannot|n't)(?:\s+\w+){0,3}?\s+)(?<!(?:validation|verification|lookup|login|authentication|customer)\s+(?:(?:was|is|were|has|have|been|being|also|now)\s+)*)\b(?:pending|processing|in\s+progress|queued|initiated|submitted|accepted|successful(?:ly)?|succeeded|success|delivered|completed|credited|vended|dispatched|timed?\s*out|re\s*quer(?:y|ied)|(?:service\s+)?(?:temporarily\s+)?unavailable)\b/i;
 
 /** Vend-specific status keys (not a bare `status`). */
 const VEND_STATUS_KEY =
@@ -55,10 +55,23 @@ interface StructuredOutcome {
   running: boolean;
   done: boolean;
   failed: boolean;
+  /** Vend-level (not generic payment) done / failed: these take precedence. */
+  vendDone: boolean;
+  vendFailed: boolean;
   /** A vend-specific status Monnify named that is not a state we know. */
   unknown: boolean;
   /** Nested deeper than we scan: can't be cleared, so it holds. */
   incomplete: boolean;
+}
+
+/**
+ * A vend-level status beats a generic payment-level one, like
+ * classifyMonnifyBillStatus (vendStatus first): payment FAILED with vend
+ * COMPLETED is a delivered vend; payment SUCCESS with vend FAILED is failed.
+ */
+function settleVendPrecedence(found: StructuredOutcome): void {
+  found.failed = found.vendFailed || (found.failed && !found.vendDone);
+  found.done = found.done && !found.failed;
 }
 
 /**
@@ -87,6 +100,10 @@ function readStructuredOutcome(
       found.running ||= RUNNING_STATUSES.has(status);
       found.done ||= DONE_STATUSES.has(status);
       found.failed ||= FAILED_STATUSES.has(status);
+      if (VEND_STATUS_KEY.test(key)) {
+        found.vendDone ||= DONE_STATUSES.has(status);
+        found.vendFailed ||= FAILED_STATUSES.has(status);
+      }
       // A vend-specific status ("vendStatus: UNKNOWN", a new provider state)
       // that is not a known state proves nothing, so it is not a refusal.
       // A generic `status` ("error", "Bad Request") only labels the error.
@@ -102,6 +119,8 @@ function readStructuredOutcome(
       found.running ||= RUNNING_FLAG.test(key);
       found.done ||= DONE_FLAG.test(key);
       found.failed ||= FAILED_FLAG.test(key);
+      found.vendDone ||= DONE_FLAG.test(key);
+      found.vendFailed ||= FAILED_FLAG.test(key);
     }
     readStructuredOutcome(value, found, depth + 1);
   }
@@ -129,10 +148,13 @@ export function isMonnifyUnresolvedAnswer({
     running: false,
     done: false,
     failed: false,
+    vendDone: false,
+    vendFailed: false,
     unknown: false,
     incomplete: false,
   };
   readStructuredOutcome(answer, outcome);
+  settleVendPrecedence(outcome);
   // A running vend holds whatever else the body says. A done state (payment
   // taken, delivered) holds unless the same body names an explicit failure,
   // like classifyMonnifyBillStatus (FAILED beats a payment-level SUCCESS).
@@ -168,9 +190,12 @@ export function hasMonnifyExplicitVendFailure(answer: unknown): boolean {
     running: false,
     done: false,
     failed: false,
+    vendDone: false,
+    vendFailed: false,
     unknown: false,
     incomplete: false,
   };
   readStructuredOutcome(answer, outcome);
+  settleVendPrecedence(outcome);
   return outcome.failed && !outcome.running && !outcome.incomplete;
 }

@@ -20,6 +20,7 @@ import {
 import {
   classifyMonnifyBillStatus,
   hasConflictingVendStatuses,
+  isMonnifyPlainFreshDecline,
   readMonnifyBillToken,
   toBillStatusInput,
 } from './monnify-bills-status';
@@ -196,7 +197,14 @@ export async function purchaseBill(
       // bad-token pattern.
       console.warn('Monnify vend settled on a token with an unnamed status');
     }
-    if ((!isSuccess && !isProcessing && !isFailed) || (isFailed && hasToken)) {
+    const isFreshDecline = isMonnifyPlainFreshDecline(
+      body,
+      hasToken || !!vendReference || !!transactionReference
+    );
+    if (
+      !isFreshDecline &&
+      ((!isSuccess && !isProcessing && !isFailed) || (isFailed && hasToken))
+    ) {
       // A vend state Monnify did not name as success, in progress or failed
       // (missing, REVERSED, UNKNOWN...) proves nothing: hold, never refund.
       // A FAILED vend that also carries a token contradicts itself (the

@@ -174,3 +174,23 @@ export function hasBodyToken(answer: unknown): boolean {
     });
   });
 }
+
+/**
+ * A fresh vend Monnify plainly DECLINED: the vend-level state is exactly
+ * DECLINED (or REJECTED), with no token and no Monnify reference to requery.
+ * Such an answer is a refusal (refunded, never sent to another provider); on a
+ * requery the same word proves nothing and stays held.
+ */
+export function isMonnifyPlainFreshDecline(
+  body: {
+    status?: string | null;
+    vendStatus?: string | null;
+    transactionStatus?: string | null;
+    finalStatus?: string | null;
+  },
+  hasReferenceOrToken: boolean
+): boolean {
+  const input = toBillStatusInput(body);
+  const state = normalizeMonnifyStatus(input.vendStatus ?? input.status);
+  return !hasReferenceOrToken && (state === 'DECLINED' || state === 'REJECTED');
+}

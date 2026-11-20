@@ -4,6 +4,7 @@ import { hasMonnifyDuplicateFlag } from './monnify-duplicate-flag';
 import { isMonnifyDuplicateReferenceText } from './monnify-duplicate-reference';
 import { hasMonnifyNonDefinitiveCode } from './monnify-non-definitive-code';
 import { isMonnifyUnexpectedErrorCode } from './monnify-unexpected-error';
+import { reportsMonnifyUnresolvedCode } from './monnify-unexpected-error-text';
 import { hasMonnifyVendEvidence } from './monnify-vend-evidence';
 import { mentionsMonnifyVendEvidence } from './monnify-vend-evidence-text';
 import { isMonnifyVendOutcomeText } from './monnify-vend-outcome';
@@ -36,6 +37,8 @@ export function isMonnifyDefiniteBusinessRefusal({
     // the outcome is ambiguous: never a definite refusal.
     !/^\s*0+\s*$/.test(responseCode ?? '') &&
     !hasMonnifyNonDefinitiveCode(envelope) &&
+    // A code written into the message ("response code 99") leaves it open too.
+    !reportsMonnifyUnresolvedCode(wording) &&
     !hasMonnifyVendEvidence(envelope) &&
     !mentionsMonnifyVendEvidence(joinMonnifyAnswerStrings(envelope)) &&
     !hasMonnifyDuplicateFlag(envelope) &&

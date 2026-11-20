@@ -6,6 +6,7 @@ const text = (max: number) => z.string().min(1).max(max);
 export const chatwootCheckoutRememberedOrderSchema = z
   .object({
     merchantId: text(64),
+    conversationId: z.number().int().positive().safe(),
     order: z
       .object({
         orderId: text(64),

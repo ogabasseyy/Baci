@@ -3,6 +3,7 @@ import { chatwootCheckoutMemorySchema } from './chatwoot-checkout-memory';
 
 const entry = {
   merchantId: 'merchant-1',
+  conversationId: 905,
   order: {
     orderId: 'order-1',
     orderNumber: 'ORD-1',

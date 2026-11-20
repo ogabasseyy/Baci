@@ -54,13 +54,17 @@ export async function handleChatwootCheckoutAction({
       });
     }
   };
-  // The widget's reference only selects an order this page created; the
-  // order, token and merchant used for the poll come from page memory, never
-  // from the widget.
+  // The widget's reference only selects an order this conversation placed on
+  // this page; the order, token and merchant used for the poll come from page
+  // memory, never from the widget.
   const entry = getChatwootCheckoutRememberedOrderByReference(
     message.data.reference
   );
-  if (!entry?.payment || entry.merchantId !== place.getMerchant()?.id) {
+  if (
+    !entry?.payment ||
+    entry.merchantId !== place.getMerchant()?.id ||
+    entry.conversationId !== message.data.conversationId
+  ) {
     return unavailable();
   }
   const { readChatwootCheckoutPaymentStatus } = await import(

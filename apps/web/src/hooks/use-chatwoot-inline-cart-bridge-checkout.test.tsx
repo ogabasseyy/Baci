@@ -142,13 +142,17 @@ describe('ChatwootInlineCartBridge in-chat checkout', () => {
   it('answers a payment status request by polling the created order when enabled', async () => {
     // Only a reference this page issued for its own chat order may be polled.
     resetChatwootCheckoutOrderMemory();
-    rememberChatwootCheckoutOrder('issued-key', 'merchant-1', {
-      orderId: 'order-1',
-      orderNumber: 'ORD-1001',
-      trackingToken: 'track-1',
-      amountDueMajor: 1000,
-      currency: 'NGN',
-    });
+    rememberChatwootCheckoutOrder(
+      'issued-key',
+      { merchantId: 'merchant-1', conversationId: 905 },
+      {
+        orderId: 'order-1',
+        orderNumber: 'ORD-1001',
+        trackingToken: 'track-1',
+        amountDueMajor: 1000,
+        currency: 'NGN',
+      }
+    );
     rememberChatwootCheckoutPayment('issued-key', {
       bank: {
         bankName: 'Test Bank',

@@ -12,6 +12,8 @@ export interface ChatwootCheckoutIssuedPayment {
 export interface ChatwootCheckoutRememberedOrder {
   /** The merchant the order was created for; a replay must match it. */
   merchantId: string;
+  /** The chat conversation that placed the order; only it may replay or poll. */
+  conversationId: number;
   order: ChatwootCheckoutCreatedOrder;
   /** Set once bank details were issued, so a replay returns them unchanged. */
   payment: ChatwootCheckoutIssuedPayment | null;
@@ -71,11 +73,11 @@ export function getChatwootCheckoutRememberedOrder(key: string) {
 
 export function rememberChatwootCheckoutOrder(
   key: string,
-  merchantId: string,
+  owner: { merchantId: string; conversationId: number },
   order: ChatwootCheckoutCreatedOrder
 ) {
   hydrate();
-  remembered.set(key, { merchantId, order, payment: null });
+  remembered.set(key, { ...owner, order, payment: null });
   if (remembered.size > MAX_REMEMBERED_ORDERS) {
     const oldest = remembered.keys().next().value;
     if (oldest !== undefined) remembered.delete(oldest);

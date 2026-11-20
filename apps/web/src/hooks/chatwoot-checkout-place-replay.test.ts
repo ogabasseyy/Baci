@@ -235,5 +235,28 @@ describe('handleChatwootCheckoutPlace', () => {
         paths(calls).filter((path) => path === '/api/payments/initialize')
       ).toHaveLength(1);
     });
+
+    it('a repeat from a different conversation is refused and sets up no payment', async () => {
+      const { calls } = stubCheckoutFetch(happyHandlers());
+      await handleChatwootCheckoutPlace(placeInput());
+      const paymentCalls = () =>
+        paths(calls).filter((path) => path === '/api/payments/initialize');
+      const before = paymentCalls().length;
+      const other = placeInput({
+        request: { ...checkoutPlaceRequest, conversationId: 906 },
+      });
+
+      await handleChatwootCheckoutPlace(other);
+
+      expect(lastResult(other)).toEqual({
+        requestId: checkoutPlaceRequest.requestId,
+        status: 'failed',
+        code: 'order_failed',
+      });
+      expect(paymentCalls()).toHaveLength(before);
+      expect(
+        paths(calls).filter((path) => path === '/api/orders')
+      ).toHaveLength(1);
+    });
   });
 });

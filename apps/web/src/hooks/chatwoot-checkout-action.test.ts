@@ -32,18 +32,29 @@ const issuedBank = {
 function issueReference(
   key: string,
   reference: string,
-  overrides: { merchantId?: string; trackingToken?: string | null } = {}
+  overrides: {
+    merchantId?: string;
+    conversationId?: number;
+    trackingToken?: string | null;
+  } = {}
 ) {
-  rememberChatwootCheckoutOrder(key, overrides.merchantId ?? 'merchant-1', {
-    orderId: 'order-1',
-    orderNumber: 'ORD-1001',
-    trackingToken:
-      overrides.trackingToken === undefined
-        ? 'track-1'
-        : overrides.trackingToken,
-    amountDueMajor: 1000,
-    currency: 'NGN',
-  });
+  rememberChatwootCheckoutOrder(
+    key,
+    {
+      merchantId: overrides.merchantId ?? 'merchant-1',
+      conversationId: overrides.conversationId ?? 905,
+    },
+    {
+      orderId: 'order-1',
+      orderNumber: 'ORD-1001',
+      trackingToken:
+        overrides.trackingToken === undefined
+          ? 'track-1'
+          : overrides.trackingToken,
+      amountDueMajor: 1000,
+      currency: 'NGN',
+    }
+  );
   rememberChatwootCheckoutPayment(key, { bank: issuedBank, reference });
 }
 
@@ -144,6 +155,25 @@ describe('handleChatwootCheckoutAction payment status', () => {
     }));
 
     expect(post).toHaveBeenCalledWith(...posted('unavailable'));
+  });
+
+  it('answers unavailable without any request when another conversation asks about the order', async () => {
+    const { calls } = stubCheckoutFetch({});
+    const post = vi.fn();
+    await handleChatwootCheckoutAction({
+      ...baseInput,
+      message: {
+        ...statusMessage,
+        data: { ...statusMessage.data, conversationId: 906 },
+      },
+      post,
+    });
+
+    expect(calls).toHaveLength(0);
+    expect(post).toHaveBeenCalledWith('baci-checkout-payment-status:', {
+      requestId: 'status-request-1',
+      status: 'unavailable',
+    });
   });
 
   it('answers unavailable without any request for a reference this page did not issue', async () => {

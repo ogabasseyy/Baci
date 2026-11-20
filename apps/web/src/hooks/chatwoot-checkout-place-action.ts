@@ -136,9 +136,12 @@ async function placeForKeys(
 
   const remembered = getChatwootCheckoutRememberedOrder(keys.idempotencyKey);
   if (remembered) {
-    // A replay answers for the merchant the order was created for, never for
-    // whichever merchant context the page has since moved to.
-    if (remembered.merchantId !== merchant.id) return fail('order_failed');
+    // A replay answers only for the merchant and conversation that placed it.
+    if (
+      remembered.merchantId !== merchant.id ||
+      remembered.conversationId !== request.conversationId
+    )
+      return fail('order_failed');
     // Bank details already issued are returned as they were: asking again
     // could mint a second account and reference for the same order.
     if (remembered.payment) {
@@ -271,7 +274,7 @@ async function placeForKeys(
   if (!outcome.ok) return fail(outcome.code);
   rememberChatwootCheckoutOrder(
     keys.idempotencyKey,
-    merchant.id,
+    { merchantId: merchant.id, conversationId: request.conversationId },
     outcome.order
   );
   return startPayment(input, merchant.id, outcome.order, keys.idempotencyKey);

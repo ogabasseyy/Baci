@@ -109,11 +109,28 @@ $$;
 
 RESET ROLE;
 
--- Updating role defaults must release active members' claims too.
-UPDATE public.staff_members SET permissions = '{}'
+-- A teammate may read follow-up labels without access to the staff directory.
+UPDATE public.staff_members SET name = NULL, permissions = '{}'
 WHERE user_id = 'aa560000-0000-4000-8000-000000000002';
-UPDATE public.order_follow_ups SET assignee_id = 'aa560000-0000-4000-8000-000000000002'
+UPDATE public.order_follow_ups SET assignee_id = NULL
 WHERE order_id = 'aa560000-0000-4000-8000-000000000021';
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE
+  row_data jsonb;
+BEGIN
+  PERFORM set_config('request.jwt.claim.sub', 'aa560000-0000-4000-8000-000000000002', true);
+  row_data := public.claim_order_follow_up(
+    'aa560000-0000-4000-8000-000000000011', 'aa560000-0000-4000-8000-000000000021'
+  );
+  IF row_data->>'assignee_name' IS DISTINCT FROM 'Team member' THEN
+    RAISE EXCEPTION 'An unnamed assignee exposed their email address';
+  END IF;
+END
+$$;
+RESET ROLE;
+
+-- Updating role defaults must release active members' claims too.
 UPDATE public.role_permissions
 SET permissions = jsonb_set(permissions, '{customers,edit}', 'false')
 WHERE role = 'admin';
@@ -123,7 +140,7 @@ BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM public.order_follow_ups
     WHERE order_id = 'aa560000-0000-4000-8000-000000000021'
-      AND assignee_id IS NULL AND revision = 5 AND outcome = 'Call back'
+      AND assignee_id IS NULL AND revision = 6 AND outcome = 'Call back'
   ) THEN
     RAISE EXCEPTION 'A role-wide change stranded the open follow-up';
   END IF;

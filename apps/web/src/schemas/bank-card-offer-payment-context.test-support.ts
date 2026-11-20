@@ -1,3 +1,5 @@
+import type { BankCardOfferQuote } from '@/lib/checkout/bank-card-offer-payment';
+
 const id = '123e4567-e89b-12d3-a456-426614174000';
 
 export const bankCardOfferContextFixture = {
@@ -23,7 +25,7 @@ export const bankCardOfferContextFixture = {
         unitNetAmountsKobo: [9500],
       },
     ],
-  },
+  } satisfies BankCardOfferQuote,
   amountKobo: 9500,
   customerEmail: 'customer@example.test',
 };

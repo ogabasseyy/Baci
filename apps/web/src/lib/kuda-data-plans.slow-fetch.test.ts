@@ -51,7 +51,7 @@ const purchase = () =>
 function slowFailure(ms: number) {
   mockGetDataProviders.mockImplementationOnce(async () => {
     vi.setSystemTime(Date.now() + ms);
-    throw new Error('Kuda timeout');
+    throw new Error('Kuda GET_BILLERS_BY_TYPE request timed out');
   });
 }
 
@@ -110,7 +110,9 @@ describe('bugfix: a slow Kuda failure stretched the data-plan backup window', ()
     await purchase();
     // A day after the call began, but under a day after Kuda answered.
     vi.setSystemTime(T0 + DAY + 5_000);
-    mockGetDataProviders.mockRejectedValueOnce(new Error('Kuda timeout'));
+    mockGetDataProviders.mockRejectedValueOnce(
+      new Error('Kuda GET_BILLERS_BY_TYPE request timed out')
+    );
 
     await expect(purchase()).resolves.toMatchObject({
       itemCode: 'MTN-1GB-MONTHLY',

@@ -117,7 +117,7 @@ describe('bugfix: a slow Kuda failure stretched the price-list backup window', (
   function slowFailure(ms: number) {
     mockGetBillersByCategory.mockImplementationOnce(async () => {
       vi.setSystemTime(Date.now() + ms);
-      throw new Error('Kuda timeout');
+      throw new Error('Kuda GET_BILLERS_BY_TYPE request timed out');
     });
   }
 

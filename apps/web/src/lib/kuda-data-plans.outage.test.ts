@@ -64,7 +64,9 @@ describe('resolveKudaDataPlanForPurchase when Kuda is unavailable', () => {
       [
         'fails',
         () =>
-          mockGetDataProviders.mockRejectedValueOnce(new Error('Kuda timeout')),
+          mockGetDataProviders.mockRejectedValueOnce(
+            new Error('Kuda GET_BILLERS_BY_TYPE request timed out')
+          ),
       ],
       ['is empty', () => mockGetDataProviders.mockResolvedValueOnce([])],
     ])('fails closed with no recent plan list when Kuda %s', async (_label, breakKuda) => {
@@ -163,7 +165,9 @@ describe('resolveKudaDataPlanForPurchase when Kuda is unavailable', () => {
       );
 
       vi.setSystemTime(new Date('2026-11-17T10:06:00Z'));
-      mockGetDataProviders.mockRejectedValueOnce(new Error('Kuda timeout'));
+      mockGetDataProviders.mockRejectedValueOnce(
+        new Error('Kuda GET_BILLERS_BY_TYPE request timed out')
+      );
 
       await expect(resolveKudaDataPlanForPurchase(purchase)).rejects.toThrow(
         KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE
@@ -173,7 +177,9 @@ describe('resolveKudaDataPlanForPurchase when Kuda is unavailable', () => {
     it('waits 30 seconds before asking Kuda again after a failure', async () => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date('2026-11-17T10:00:00Z'));
-      mockGetDataProviders.mockRejectedValue(new Error('Kuda timeout'));
+      mockGetDataProviders.mockRejectedValue(
+        new Error('Kuda GET_BILLERS_BY_TYPE request timed out')
+      );
       const purchase = {
         amount: 3500,
         dataPlanCode: 'MTN-35GB-MONTHLY',
@@ -223,7 +229,9 @@ describe('resolveKudaDataPlanForPurchase when Kuda is unavailable', () => {
         networkProvider: NetworkProvider.MTN,
       });
       vi.setSystemTime(new Date('2026-11-17T12:00:00Z'));
-      mockGetDataProviders.mockRejectedValue(new Error('Kuda timeout'));
+      mockGetDataProviders.mockRejectedValue(
+        new Error('Kuda GET_BILLERS_BY_TYPE request timed out')
+      );
 
       await expect(
         resolveKudaDataPlanForPurchase({

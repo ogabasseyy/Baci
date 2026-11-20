@@ -10,7 +10,6 @@ describe('isKudaNoResponse', () => {
     ['a failed login', new KudaPreDispatchError('token failed')],
     ['a dropped connection', new TypeError('fetch failed')],
     ['a timeout', new Error('Kuda GET_BILLERS_BY_TYPE request timed out')],
-    ['a short timeout message', new Error('Kuda timeout')],
     ['an abort', Object.assign(new Error('aborted'), { name: 'AbortError' })],
     [
       'a reset connection',
@@ -38,6 +37,10 @@ describe('isKudaNoResponse', () => {
       new TypeError("Cannot read properties of null (reading 'id')"),
     ],
     ['an unknown error', new Error('Kuda down')],
+    [
+      'another error that mentions a timeout',
+      new Error('Bill prices could not be confirmed (timeout in unit check)'),
+    ],
     ['a non-error value', 'oops'],
   ])('treats %s as an answer Baci refuses', (_label, error) => {
     expect(isKudaNoResponse(error)).toBe(false);

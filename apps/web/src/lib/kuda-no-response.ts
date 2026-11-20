@@ -53,5 +53,9 @@ export function isKudaNoResponse(error: unknown): boolean {
     );
   }
   if (error instanceof Error && error.name === 'AbortError') return true;
-  return error instanceof Error && /\btime(?:d)?\s?out\b/i.test(error.message);
+  // kudaRequest's own timeout, by its exact wording, so another error that
+  // merely mentions a timeout is never mistaken for silence.
+  return (
+    error instanceof Error && /^Kuda \S+ request timed out$/.test(error.message)
+  );
 }

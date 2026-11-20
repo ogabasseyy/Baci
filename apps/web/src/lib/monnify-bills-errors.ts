@@ -3,7 +3,7 @@ import {
   readMonnifyAnswer,
 } from './monnify-answer-reading';
 import { redactMonnifyCredentials } from './monnify-credential-redaction';
-import { readMonnifyRejectionVendReference } from './monnify-rejection-vend-reference';
+import { ignoreMonnifyRequestEcho } from './monnify-rejection-vend-reference';
 
 const SENSITIVE_DIGIT_SEQUENCE_PATTERN = /(?<!\d)\d{7,}(?!\d)/g;
 /**
@@ -136,8 +136,8 @@ export class MonnifyHttpError extends Error {
 
   /** Monnify's own vendReference in the body, when it gave one. */
   providerVendReference(requestReference: string) {
-    return readMonnifyRejectionVendReference(
-      this.#reading.vendReferenceSource,
+    return ignoreMonnifyRequestEcho(
+      this.#reading.vendReferenceCandidate,
       requestReference
     );
   }

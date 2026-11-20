@@ -4,6 +4,7 @@ import { mentionsMonnifyAuthWording } from './monnify-auth-wording';
 import { hasMonnifyDuplicateFlag } from './monnify-duplicate-flag';
 import { isMonnifyDuplicateReferenceText } from './monnify-duplicate-reference';
 import { hasMonnifyNonDefinitiveCode } from './monnify-non-definitive-code';
+import { findMonnifyBodyVendReference } from './monnify-rejection-vend-reference';
 import { readMonnifyResponseCode } from './monnify-response-code';
 import { reportsMonnifyUnexpectedError } from './monnify-unexpected-error-text';
 import { isMonnifyUnresolvedAnswer } from './monnify-unresolved-answer';
@@ -23,8 +24,8 @@ export interface MonnifyAnswerReading {
   responseCode: string | undefined;
   /** The body leaves the vend's outcome open (see isMonnifyUnresolvedAnswer). */
   leavesOutcomeOpen: boolean;
-  /** The parsed body, kept only to read Monnify's own vendReference. */
-  vendReferenceSource: unknown;
+  /** Monnify's own responseBody.vendReference, if the answer carries one. */
+  vendReferenceCandidate: string | undefined;
 }
 
 /**
@@ -75,27 +76,9 @@ export function readMonnifyAnswer(
     responseCode: readMonnifyResponseCode(parsed),
     leavesOutcomeOpen: isMonnifyUnresolvedAnswer({
       answer: parsed,
-      wording: bodyText,
+      // The reason phrase counts too ("Vend in progress" with an empty body).
+      wording: text,
     }),
-    vendReferenceSource: pickVendReferenceSource(parsed),
-  };
-}
-
-/**
- * Only `responseBody.vendReference` is kept from the raw body: never logged
- * or persisted except as a requery reference.
- */
-function pickVendReferenceSource(parsed: unknown): unknown {
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    return null;
-  }
-  const body = (parsed as Record<string, unknown>).responseBody;
-  if (!body || typeof body !== 'object' || Array.isArray(body)) {
-    return null;
-  }
-  return {
-    responseBody: {
-      vendReference: (body as Record<string, unknown>).vendReference,
-    },
+    vendReferenceCandidate: findMonnifyBodyVendReference(parsed),
   };
 }

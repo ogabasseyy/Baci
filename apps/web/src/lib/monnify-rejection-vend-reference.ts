@@ -1,30 +1,77 @@
+const MAX_DEPTH = 6;
+
+function normaliseKey(key: string): string {
+  return key.replace(/[\s_-]/g, '').toLowerCase();
+}
+
 /**
- * The vendReference Monnify itself put in a rejected answer's responseBody,
- * the only reference its requery resolves (#2784). An echo of our own
- * request reference is not one (requery by it reports "not found" even for
- * delivered vends), so it is ignored and the row is held for review.
+ * The first string `vendReference` found under a `responseBody` key, in any
+ * key casing or "_"/"-" spelling and at any depth: JSON, or a form-encoded
+ * answer parsed into nested objects or an array of one-pair objects.
  */
+export function findMonnifyBodyVendReference(
+  answer: unknown,
+  insideBody = false,
+  depth = 0
+): string | undefined {
+  if (!answer || typeof answer !== 'object' || depth > MAX_DEPTH) {
+    return undefined;
+  }
+  if (Array.isArray(answer)) {
+    for (const item of answer) {
+      const found = findMonnifyBodyVendReference(item, insideBody, depth + 1);
+      if (found) {
+        return found;
+      }
+    }
+    return undefined;
+  }
+  for (const [rawKey, value] of Object.entries(answer)) {
+    const key = normaliseKey(rawKey);
+    if (insideBody && key === 'vendreference' && typeof value === 'string') {
+      const reference = value.trim();
+      if (reference) {
+        return reference;
+      }
+    }
+    const found = findMonnifyBodyVendReference(
+      value,
+      insideBody || key === 'responsebody',
+      depth + 1
+    );
+    if (found) {
+      return found;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Drops an echo of our own request reference: Monnify's requery resolves only
+ * the vendReference Monnify itself returned (#2784), and reports "not found"
+ * for ours even on delivered vends, so an echo is not a requeryable reference
+ * and the row is held for review instead.
+ */
+export function ignoreMonnifyRequestEcho(
+  candidate: string | undefined,
+  requestReference: string
+): string | undefined {
+  if (
+    !candidate ||
+    candidate.toLowerCase() === requestReference.trim().toLowerCase()
+  ) {
+    return undefined;
+  }
+  return candidate;
+}
+
+/** Monnify's own vendReference in a rejected answer's responseBody, if any. */
 export function readMonnifyRejectionVendReference(
   answer: unknown,
   requestReference: string
 ): string | undefined {
-  if (!answer || typeof answer !== 'object' || Array.isArray(answer)) {
-    return undefined;
-  }
-  const body = (answer as Record<string, unknown>).responseBody;
-  if (!body || typeof body !== 'object' || Array.isArray(body)) {
-    return undefined;
-  }
-  const value = (body as Record<string, unknown>).vendReference;
-  if (typeof value !== 'string') {
-    return undefined;
-  }
-  const reference = value.trim();
-  if (
-    !reference ||
-    reference.toLowerCase() === requestReference.trim().toLowerCase()
-  ) {
-    return undefined;
-  }
-  return reference;
+  return ignoreMonnifyRequestEcho(
+    findMonnifyBodyVendReference(answer),
+    requestReference
+  );
 }

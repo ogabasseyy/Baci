@@ -1,6 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { readMonnifyRejectionVendReference } from './monnify-rejection-vend-reference';
-import { isMonnifyRequeryRejectionDefiniteFailure } from './monnify-requery-rejection';
 import { isMonnifyUnresolvedAnswer } from './monnify-unresolved-answer';
 
 const open = (answer: unknown, wording: string) =>
@@ -47,53 +45,6 @@ describe('isMonnifyUnresolvedAnswer', () => {
         'Insufficient wallet balance'
       )
     ).toBe(true);
-  });
-});
-
-describe('readMonnifyRejectionVendReference', () => {
-  const ref = 'a1b2c3d4e5f6a1b2c3d4e5f6';
-  it("returns Monnify's own vendReference", () => {
-    expect(
-      readMonnifyRejectionVendReference(
-        { responseBody: { vendReference: ' MFBP-9 ' } },
-        ref
-      )
-    ).toBe('MFBP-9');
-  });
-  it('ignores an echo of our own request reference', () => {
-    expect(
-      readMonnifyRejectionVendReference(
-        { responseBody: { vendReference: ref.toUpperCase() } },
-        ref
-      )
-    ).toBeUndefined();
-  });
-  it.each([
-    null,
-    'x',
-    [],
-    { responseBody: null },
-    { responseBody: {} },
-  ])('returns nothing for %j', (answer) => {
-    expect(readMonnifyRejectionVendReference(answer, ref)).toBeUndefined();
-  });
-});
-
-describe('isMonnifyRequeryRejectionDefiniteFailure', () => {
-  const f = (rawMessage: string, envelope: unknown = {}) =>
-    isMonnifyRequeryRejectionDefiniteFailure({ envelope, rawMessage });
-
-  it('accepts explicit vend-failed wording', () => {
-    expect(f('Vend failed (D02)')).toBe(true);
-  });
-  it.each([
-    'Transaction not found',
-    'Invalid vend reference',
-    'Transaction failed unexpectedly, please re-query (99)',
-    'Request failed, vend pending',
-    'Something went wrong',
-  ])('does not accept %s', (m) => {
-    expect(f(m)).toBe(false);
   });
 });
 

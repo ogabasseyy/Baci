@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-20T06:12:10+00:00",
-  "source_revision": "16626b115971fee35fd7a9993a24fb5138a13d4b",
-  "evidence_digest": "944e5464e0391f4daad1a5794955e854a6a6e7e3471de30e0e8960631cc64f69",
-  "claims_digest": "02c4a15768b88f97c87f0564d5bdaf19971a9793b9671ba1cf49a3e3d8a5b235",
+  "reviewed_at": "2026-11-20T06:29:09+00:00",
+  "source_revision": "a2dbd0e4b50a5ba8035967f9b637e1dd02190bca",
+  "evidence_digest": "6fbe282962304c55e1b1755c45d9c897ba7b237a8507b163275989af88796801",
+  "claims_digest": "29c6b6b519cd4d3ef5e4af80cceb63bf307184959f4972ba03c42f9c1f7482da",
   "review_scope": "Source evidence only. Preserves current main\u2019s OAuth, cart retention and notices, payment reconciliation, merchant protocols and Oxygen pilot boundaries. Full-code storefront MCP remains disabled by default. Owner approval, evidence and public-verification schemas retain their existing validation. Direct local admission, source adoption, rollback and simulated commerce tests cover authority boundaries. Hosted qualification and activation remain separate. Re-reviewed the Shopping MCP access map after the misleading link-only add_to_cart alias was retired: anonymous discovery exposes prepare_storefront_cart_link, connected discovery omits it, and clients with cached tool lists must refresh discovery. The connected cart read tool text was reworded with no claim moved; all other register and access-map citations were checked unchanged from the prior reviewed tree. No new production capability promotion.",
   "capabilities": [
     {
@@ -148,7 +148,7 @@
       "id": "followups",
       "title": "Customer follow-up workflows",
       "status": "code_evidenced",
-      "claim": "Baci mobile-admin implements a customer follow-up queue for failed and stale unpaid checkouts, including categorized Oxygen applications. Staff with customer-view permission can see the shared records, and staff with customer-edit permission can also claim and update open work. Removing either permission from a staff member or their role releases open claims. Closed records are read-only. The Customers badge counts confirmed open work, including staff follow-ups that left the checkout feed, and signals when staff data fails to load.",
+      "claim": "Baci mobile-admin implements a customer follow-up queue for failed and stale unpaid checkouts, including categorized Oxygen applications. Staff with customer-view permission can see the shared records, and staff with customer-edit permission can also claim and update open work. The app reserves claim and update controls for staff with write access. Removing either permission from a staff member or their role releases open claims. Closed records are read-only. Retained follow-ups show when an order is paid, refunded, or cancelled. The Customers badge counts confirmed open work, including staff follow-ups that left the checkout feed, and signals when staff data fails to load.",
       "limitations": "This is an operational queue, not automatic customer outreach or evidence of full CRM segmentation or guaranteed recovery. The app offers claims on queue entries. The RPC accepts an authorized staff claim for an order in the same store even if it has left the checkout feed. Query bounds and contact permissions apply; Oxygen rollout is separately controlled.",
       "source_refs": [
         "apps/mobile-admin/components/customers/FollowUpQueueList.tsx",

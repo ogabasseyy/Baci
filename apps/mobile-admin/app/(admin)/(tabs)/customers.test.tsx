@@ -1,4 +1,5 @@
 import '@testing-library/jest-dom/vitest';
+import '@/test/fixtures/customer-screen-follow-up-mocks';
 import { fireEvent, render, screen } from '@testing-library/react';
 import type React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';

@@ -5,8 +5,6 @@ interface RawItemLike {
   itemCode?: unknown;
   KudaIdentifier?: unknown;
   kudaIdentifier?: unknown;
-  Amount?: unknown;
-  amount?: unknown;
   IsAmountFixed?: unknown;
   isAmountFixed?: unknown;
   IsFixedPrice?: unknown;
@@ -15,21 +13,12 @@ interface RawItemLike {
   billItems?: unknown;
 }
 
-function readAmount(value: unknown): number {
-  if (typeof value === 'number') return value;
-  if (typeof value !== 'string') return Number.NaN;
-  const cleaned = value.replace(/[,\s]/g, '');
-  return cleaned === '' ? Number.NaN : Number(cleaned);
-}
-
 /**
- * Codes of fixed-price items, at any depth, whose price the mapper cannot
- * use (blank, unreadable, zero or less) and therefore drops. The price
- * recheck needs them: a dropped listing would otherwise look as if its
- * biller never offered the package, letting another biller's price stand
- * in for it.
+ * Codes of every fixed-price item, at any depth, exactly as Kuda listed
+ * them (whatever their price). Compared with what the mapper kept, this
+ * shows which listings it dropped, for any reason.
  */
-export function collectUnreadableFixedItemCodes(
+export function collectRawFixedItemCodes(
   rawItems: unknown,
   codes: string[] = []
 ): string[] {
@@ -47,10 +36,8 @@ export function collectUnreadableFixedItemCodes(
       normalizeKudaString(item.itemCode) ??
       normalizeKudaString(item.KudaIdentifier) ??
       normalizeKudaString(item.kudaIdentifier);
-    if (isFixed && code && !(readAmount(item.Amount ?? item.amount) > 0)) {
-      codes.push(code);
-    }
-    collectUnreadableFixedItemCodes(item.BillItems ?? item.billItems, codes);
+    if (isFixed && code) codes.push(code);
+    collectRawFixedItemCodes(item.BillItems ?? item.billItems, codes);
   }
   return codes;
 }

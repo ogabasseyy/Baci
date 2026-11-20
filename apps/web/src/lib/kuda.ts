@@ -79,8 +79,9 @@ export interface Biller {
   billerIconUrl?: string;
   billItems?: BillItem[];
   /**
-   * Server-only: codes of fixed-price items Kuda listed with an unusable
-   * price (dropped from billItems), so the price recheck can still see them.
+   * Server-only: codes of fixed-price items Kuda listed that the mapper
+   * dropped from billItems (unusable price, unit in doubt, malformed), so
+   * the price recheck can still see them. Never sent to clients.
    */
   unreadableItemCodes?: string[];
 }

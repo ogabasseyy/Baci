@@ -204,6 +204,40 @@ describe('bugfix: billers chosen and unreadable listings seen end to end', () =>
     );
   });
 
+  it('fails closed with no biller named when one biller was dropped for unit doubt', async () => {
+    // "9500NGN" sent as 9500: that biller's list looks priced in naira.
+    const { mapKudaBillersAnswer } = await import('./kuda-biller-mapping');
+    const raw = (name: string, amount: number, itemName: string) => ({
+      id: name,
+      name,
+      description: 'Cable',
+      billTypeId: 'cable',
+      billItems: [
+        {
+          itemCode: 'KUD-CAB-DST-SHARED',
+          itemName,
+          amount,
+          isFixedPrice: true,
+        },
+      ],
+    });
+    mockGetBillersByCategory.mockResolvedValue(
+      mapKudaBillersAnswer(
+        {
+          billers: [
+            raw('DSTV', 950000, 'Package'),
+            raw('DSTV NG', 9500, 'Package 9500NGN'),
+          ],
+        },
+        'CableTv'
+      ).billers
+    );
+
+    await expect(purchase(9500)).rejects.toThrow(
+      KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE
+    );
+  });
+
   it('does not fall back to a shorter biller when the named one stopped listing it', async () => {
     mockGetBillersByCategory.mockResolvedValue([
       cableBiller('DSTV', 5000),

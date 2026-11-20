@@ -1,7 +1,7 @@
 import type { Biller } from './kuda';
-import { mapKudaBillItems } from './kuda-bill-items';
+import { type BillItem, mapKudaBillItems } from './kuda-bill-items';
+import { collectRawFixedItemCodes } from './kuda-raw-fixed-item-codes';
 import { collectRawFixedPricesKobo } from './kuda-raw-fixed-prices';
-import { collectUnreadableFixedItemCodes } from './kuda-unreadable-item-codes';
 
 /** A biller as Kuda returns it (camelCase in production). */
 export interface KudaCamelBiller {
@@ -26,14 +26,29 @@ export interface KudaPascalBiller {
   BillItems?: unknown[];
 }
 
+function keptFixedItemCodes(items: BillItem[] | undefined, codes: Set<string>) {
+  for (const item of items ?? []) {
+    if (item.isAmountFixed) codes.add(item.itemCode);
+    keptFixedItemCodes(item.billItems, codes);
+  }
+  return codes;
+}
+
 function toBiller(
   fields: Omit<Biller, 'billItems' | 'unreadableItemCodes'>,
   rawItems: unknown
 ): Biller {
-  const unreadableItemCodes = collectUnreadableFixedItemCodes(rawItems);
+  const billItems = mapKudaBillItems(rawItems);
+  // Every fixed-price listing the mapper dropped, whatever the reason (an
+  // unusable price, a list whose unit is in doubt, malformed children), so
+  // the price recheck never mistakes it for a package the biller lacks.
+  const kept = keptFixedItemCodes(billItems, new Set());
+  const unreadableItemCodes = [
+    ...new Set(collectRawFixedItemCodes(rawItems)),
+  ].filter((code) => !kept.has(code));
   return {
     ...fields,
-    billItems: mapKudaBillItems(rawItems),
+    billItems,
     ...(unreadableItemCodes.length > 0 && { unreadableItemCodes }),
   };
 }

@@ -75,4 +75,39 @@ describe('mapKudaBillersAnswer', () => {
       rawFixedPricesKobo: [],
     });
   });
+
+  it('records items dropped because their list looks priced in naira', () => {
+    const { billers } = mapKudaBillersAnswer(
+      {
+        billers: [
+          {
+            id: 'st',
+            name: 'STARTIMES NG',
+            description: 'Cable',
+            billTypeId: 'cable',
+            billItems: [
+              {
+                itemCode: 'SUPER',
+                itemName: 'DTT SUPER MONTHLY 9500NGN',
+                amount: 9500,
+                isFixedPrice: true,
+              },
+              {
+                itemCode: 'OPEN',
+                itemName: 'Top up',
+                amount: 0,
+                isFixedPrice: false,
+              },
+            ],
+          },
+        ],
+      },
+      'CableTv'
+    );
+
+    expect(billers[0]?.billItems?.map((item) => item.itemCode)).toEqual([
+      'OPEN',
+    ]);
+    expect(billers[0]?.unreadableItemCodes).toEqual(['SUPER']);
+  });
 });

@@ -74,7 +74,7 @@ test('contract: no untrusted value is interpolated into a script body', () => {
   for (const candidate of steps) assert.ok(!(candidate.run ?? '').includes('${{'), candidate.name);
 });
 
-describe('bugfix: Gemini failing to review must not fail the job or leave Diff Guardian without a status', () => {
+describe('bugfix: Gemini failing to review must not fail the job or leave the commit without a status', () => {
   test('every step before the report is advisory and the report always runs last, so an outage cannot fail the job or leave no status', () => {
     for (const name of ['Collect PR diff and build prompt', 'Decide whether to call Gemini', 'Review with Gemini']) {
       assert.equal(step(name)['continue-on-error'], true, name);
@@ -103,9 +103,8 @@ test('contract: the report step receives everything post.mjs reads, and every sc
   }
 });
 
-test('contract: the report step posts with the workflow token, so its review is authored by github-actions[bot], the author Diff Guardian reads', () => {
+test('contract: the report step posts with the workflow token, so its review is authored by github-actions[bot]', () => {
   assert.equal(stepEnv('Report Gemini review').GH_TOKEN, '${{ secrets.GITHUB_TOKEN }}');
-  assert.ok(readFileSync('.github/scripts/diff-guardian/votes.sh', 'utf8').includes('github-actions[bot]'));
 });
 
 test('contract: the prompt travels as a file, never through step outputs or environment variables', () => {

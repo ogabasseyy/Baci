@@ -2,7 +2,8 @@ import { createClient } from '@supabase/supabase-js';
 /** Dedicated linked-user bearer under existing RLS; never admin or cookie auth. */
 export async function getLinkedUser(
   config: { url: string; anonKey: string; fetchImpl?: typeof fetch },
-  accessToken: string
+  accessToken: string,
+  signal?: AbortSignal
 ) {
   const client = createClient(config.url, config.anonKey, {
     auth: {
@@ -11,7 +12,18 @@ export async function getLinkedUser(
       detectSessionInUrl: false,
     },
     global: {
-      fetch: config.fetchImpl,
+      fetch: signal
+        ? (input, init) => {
+            const requestSignal =
+              init?.signal ?? (input instanceof Request ? input.signal : null);
+            return (config.fetchImpl ?? fetch)(input, {
+              ...init,
+              signal: requestSignal
+                ? AbortSignal.any([signal, requestSignal])
+                : signal,
+            });
+          }
+        : config.fetchImpl,
       headers: { Authorization: `Bearer ${accessToken}` },
     },
   });

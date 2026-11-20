@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+export const LINKED_BUILD_READ_TIMEOUT_MS = 10_000;
 const uuid = z.uuid();
 const connectionSchema = z.object({
   connectionId: uuid,
@@ -28,7 +29,10 @@ export function createLinkedBuildDiscovery(deps: {
   listConnections(after: string | null, limit: number): Promise<string[]>;
   readConnection(id: string): Promise<unknown>;
   resolveLinkedAccessToken(binding: Binding): Promise<string>;
-  resolveUser(token: string): Promise<{ actorUserId: string; client: Client }>;
+  resolveUser(
+    token: string,
+    signal: AbortSignal
+  ): Promise<{ actorUserId: string; client: Client }>;
   execute(
     input: Binding & { merchantId: string; jobId: string }
   ): Promise<void>;
@@ -70,8 +74,12 @@ export function createLinkedBuildDiscovery(deps: {
           };
           const accessToken = await deps.resolveLinkedAccessToken(binding);
           admission?.throwIfAborted();
-          const user = await deps.resolveUser(accessToken);
-          admission?.throwIfAborted();
+          const deadline = AbortSignal.timeout(LINKED_BUILD_READ_TIMEOUT_MS);
+          const signal = admission
+            ? AbortSignal.any([admission, deadline])
+            : deadline;
+          const user = await deps.resolveUser(accessToken, signal);
+          signal.throwIfAborted();
           if (user.actorUserId !== row.actorUserId) throw Error('Reconnect');
           for (const merchantId of row.allowedMerchantIds) {
             const result = await user.client.rpc('experience_list_due_builds', {
@@ -79,7 +87,7 @@ export function createLinkedBuildDiscovery(deps: {
               p_connection: id,
               p_version: row.grantVersion,
             });
-            admission?.throwIfAborted();
+            signal.throwIfAborted();
             if (result.error) throw Error('Discovery unavailable');
             const jobs = z.array(uuid).max(20).parse(result.data);
             if (jobs.length) {

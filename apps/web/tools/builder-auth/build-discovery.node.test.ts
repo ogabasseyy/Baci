@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { createLinkedBuildDiscovery } from './build-discovery.ts';
+import { getLinkedUser } from './user-client.ts';
 
 test('discovers one user-authorized build without exposing tokens in the result', async () => {
   const [connectionId, actorUserId, merchantId, jobId] = Array.from(
@@ -131,3 +132,72 @@ test('advances across backlogged merchants and wraps after reaching the end', as
   }
   assert.deepEqual(executed, [...ids, ids[0]]);
 });
+
+for (const reason of ['shutdown', 'deadline'] as const) {
+  test(`cancels a stalled Data API read on ${reason} and admits no job`, async (t) => {
+    const [connectionId, actorUserId, merchantId, jobId] = Array.from(
+      { length: 4 },
+      () => randomUUID()
+    );
+    const admission = new AbortController();
+    const deadline = new AbortController();
+    const entered = Promise.withResolvers<AbortSignal | null | undefined>();
+    const budget = t.mock.method(AbortSignal, 'timeout', () => deadline.signal);
+    const execute = t.mock.fn(async () => {});
+    const discovery = createLinkedBuildDiscovery({
+      listConnections: async () => [connectionId],
+      readConnection: async () => ({
+        connectionId,
+        actorUserId,
+        grantVersion: 1,
+        status: 'active',
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+        revokedAt: null,
+        scopes: ['storefront.write'],
+        allowedMerchantIds: [merchantId],
+      }),
+      resolveLinkedAccessToken: async () => 'synthetic-token',
+      resolveUser: (token, signal) =>
+        getLinkedUser(
+          {
+            url: 'https://synthetic.example',
+            anonKey: 'synthetic-publishable-key',
+            fetchImpl: async (input, init) => {
+              if (String(input).includes('/auth/v1/user'))
+                return Response.json({ id: actorUserId });
+              entered.resolve(init?.signal);
+              return new Promise((resolve, reject) => {
+                const fallback = setTimeout(
+                  () => resolve(Response.json([jobId])),
+                  150
+                );
+                init?.signal?.addEventListener(
+                  'abort',
+                  () => {
+                    clearTimeout(fallback);
+                    reject(init.signal?.reason);
+                  },
+                  { once: true }
+                );
+              });
+            },
+          },
+          token,
+          signal
+        ),
+      execute,
+    });
+    const running = discovery.runOnce(null, admission.signal);
+    const signal = await entered.promise;
+    assert.equal(budget.mock.calls[0]?.arguments[0], 10_000);
+    if (reason === 'shutdown') {
+      admission.abort();
+      await assert.rejects(running, { name: 'AbortError' });
+    } else {
+      deadline.abort(new DOMException('Synthetic deadline', 'TimeoutError'));
+      assert.equal((await running).failed, 1);
+    }
+    assert.equal(signal?.aborted, true);
+    assert.equal(execute.mock.callCount(), 0);
+  });
+}

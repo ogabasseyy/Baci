@@ -1,6 +1,7 @@
 import type { IncomingMessage } from 'node:http';
 import type { Pool } from 'pg';
 import { listenPrivateAuth } from './auth-listener.ts';
+import { LINKED_BUILD_READ_TIMEOUT_MS } from './build-discovery.ts';
 import { createLinkedEditRunner } from './edit-runner.ts';
 import { createOpaqueVault } from './opaque-vault.ts';
 import { createBuilderProvider, type ProviderSettings } from './provider.ts';
@@ -67,7 +68,13 @@ export async function createBuilderAuthRuntime(settings: {
     storage,
     refresh: upstream.refresh,
     verifyUser: async (token) =>
-      (await getLinkedUser(settings.supabase, token)).actorUserId,
+      (
+        await getLinkedUser(
+          settings.supabase,
+          token,
+          AbortSignal.timeout(LINKED_BUILD_READ_TIMEOUT_MS)
+        )
+      ).actorUserId,
   });
   const handler = createBuilderAuthHandler({
     provider,
@@ -92,8 +99,8 @@ export async function createBuilderAuthRuntime(settings: {
     resolveLinkedAccessToken,
     listBuildConnections: storage.listActiveEditConnections,
     resolveBuildToken: resolveLinkedAccessToken,
-    resolveBuildUser: (token: string) =>
-      getLinkedUser(settings.supabase, token),
+    resolveBuildUser: (token: string, signal: AbortSignal) =>
+      getLinkedUser(settings.supabase, token, signal),
     editRunner: createLinkedEditRunner({
       listConnections: storage.listActiveEditConnections,
       readConnection: storage.readConnection,

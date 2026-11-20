@@ -38,6 +38,12 @@ export type ChatwootCheckoutPlaceResult =
       reference: string;
     }
   | {
+      /** A repeat found the order already paid; no bank details are issued. */
+      requestId: string;
+      status: 'paid';
+      orderNumber: string;
+    }
+  | {
       requestId: string;
       status: 'failed';
       code: ChatwootCheckoutFailureCode;

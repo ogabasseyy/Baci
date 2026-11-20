@@ -60,6 +60,10 @@ describe('handleChatwootCheckoutPlace', () => {
       let issued = 0;
       const { calls } = stubCheckoutFetch({
         ...happyHandlers(),
+        // The order is read before expired details are replaced.
+        '/api/storefront/orders/track-order': () => ({
+          body: { order: { id: 'order-uuid', payment_status: 'pending' } },
+        }),
         '/api/payments/initialize': () => {
           issued += 1;
           return {

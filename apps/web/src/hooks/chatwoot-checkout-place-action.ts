@@ -10,19 +10,17 @@ import { deriveChatwootCheckoutKeys } from './chatwoot-checkout-keys';
 import {
   getChatwootCheckoutRememberedOrder,
   rememberChatwootCheckoutOrder,
-  rememberChatwootCheckoutPayment,
 } from './chatwoot-checkout-memory';
 import type { ChatwootCheckoutMerchant } from './chatwoot-checkout-merchant';
 import { postChatwootCheckoutOrder } from './chatwoot-checkout-order-post';
 import { buildChatwootCheckoutOrderRequest } from './chatwoot-checkout-order-request';
-import { initializeChatwootCheckoutBankTransfer } from './chatwoot-checkout-payment';
 import { decideChatwootCheckoutReplay } from './chatwoot-checkout-replay-decision';
 import type {
-  ChatwootCheckoutCreatedOrder,
   ChatwootCheckoutFailureCode,
   ChatwootCheckoutPlaceResult,
 } from './chatwoot-checkout-result';
 import { reviewedChatwootCheckoutItems } from './chatwoot-checkout-reviewed-items';
+import { startChatwootCheckoutPayment } from './chatwoot-checkout-start-payment';
 import { isChatwootCheckoutSubtotalBasisEqual } from './chatwoot-checkout-subtotal-basis';
 
 type PlaceData = Extract<
@@ -55,46 +53,6 @@ export interface HandleChatwootCheckoutPlaceInput {
 }
 
 export { resetChatwootCheckoutOrderMemory } from './chatwoot-checkout-memory';
-
-async function startPayment(
-  input: HandleChatwootCheckoutPlaceInput,
-  merchantId: string,
-  order: ChatwootCheckoutCreatedOrder,
-  orderKey: string
-) {
-  const { request, postResult, canPost } = input;
-  const fail = (code: ChatwootCheckoutFailureCode) => {
-    if (canPost()) {
-      postResult({
-        requestId: request.requestId,
-        status: 'failed',
-        code,
-        orderNumber: order.orderNumber,
-      });
-    }
-  };
-  // Bank transfer is naira-only. A missing currency is not assumed to be NGN.
-  if (order.currency !== 'NGN') return fail('payment_unavailable');
-  const payment = await initializeChatwootCheckoutBankTransfer({
-    merchantId,
-    orderId: order.orderId,
-    trackingToken: order.trackingToken,
-    customer: request.customer,
-    address: request.address,
-  });
-  if (!payment) return fail('payment_unavailable');
-  rememberChatwootCheckoutPayment(orderKey, payment);
-  if (!canPost()) return;
-  postResult({
-    requestId: request.requestId,
-    status: 'payment_ready',
-    orderNumber: order.orderNumber,
-    amountMajor: order.amountDueMajor,
-    currency: 'NGN',
-    bank: payment.bank,
-    reference: payment.reference,
-  });
-}
 
 async function placeOrder(input: HandleChatwootCheckoutPlaceInput) {
   const { request } = input;
@@ -135,6 +93,14 @@ async function placeForKeys(
     }
   };
 
+  const paymentBase = {
+    request,
+    merchantId: merchant.id,
+    storeSlug: input.storeSlug,
+    orderKey: keys.idempotencyKey,
+    canPost: input.canPost,
+    postResult: input.postResult,
+  };
   const remembered = getChatwootCheckoutRememberedOrder(keys.idempotencyKey);
   if (remembered) {
     const replay = decideChatwootCheckoutReplay(remembered, {
@@ -147,7 +113,11 @@ async function placeForKeys(
       if (input.canPost()) input.postResult(replay.result);
       return;
     }
-    return startPayment(input, merchant.id, replay.order, keys.idempotencyKey);
+    return startChatwootCheckoutPayment({
+      ...paymentBase,
+      order: replay.order,
+      replacesExpiredDetails: remembered.payment !== null,
+    });
   }
 
   const sameCart = () => {
@@ -261,7 +231,11 @@ async function placeForKeys(
     { merchantId: merchant.id, conversationId: request.conversationId },
     outcome.order
   );
-  return startPayment(input, merchant.id, outcome.order, keys.idempotencyKey);
+  return startChatwootCheckoutPayment({
+    ...paymentBase,
+    order: outcome.order,
+    replacesExpiredDetails: false,
+  });
 }
 
 /** Places the order and starts the bank-transfer payment for one widget request. */

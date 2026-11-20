@@ -104,6 +104,13 @@ describe('launcher overlay CSS', () => {
     expect(matches(CHATWOOT_FILTER_DRAWER_OVERLAY_CSS)).toEqual(['open']);
   });
 
+  it('keeps a focused launcher visible, however it got focus', () => {
+    document.body.innerHTML = `<div data-storefront-cookie-consent></div>${LAUNCHER_MARKUP}`;
+    (document.getElementById('open') as HTMLElement).focus();
+
+    expect(matches(CHATWOOT_CONSENT_OVERLAY_CSS)).toEqual([]);
+  });
+
   it('does nothing without the consent prompt or the drawer', () => {
     document.body.innerHTML = LAUNCHER_MARKUP;
 
@@ -112,7 +119,8 @@ describe('launcher overlay CSS', () => {
   });
 
   it('keeps the non-modal consent launcher reachable by keyboard', () => {
-    expect(CHATWOOT_CONSENT_OVERLAY_CSS).toContain(':not(:focus-visible)');
+    expect(CHATWOOT_CONSENT_OVERLAY_CSS).toContain(':not(:focus)');
+    expect(CHATWOOT_CONSENT_OVERLAY_CSS).not.toContain('focus-visible');
     expect(CHATWOOT_CONSENT_OVERLAY_CSS).toContain(
       '{opacity:0;pointer-events:none}'
     );

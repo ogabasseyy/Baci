@@ -16,11 +16,14 @@ const LAUNCHER = '.woot--bubble-holder .woot-widget-bubble:not(.woot--close)';
 
 /**
  * The cookie prompt is non-modal: the launcher turns invisible and
- * unclickable, but keyboard focus still reveals it, because Tab must never
- * land on something invisible.
+ * unclickable, but while it holds focus it stays visible, because focus must
+ * never sit on something invisible. `:focus` rather than `:focus-visible`,
+ * since the SDK moves focus to the launcher by script when the chat closes,
+ * which does not always match `:focus-visible`; a mouse click cannot give it
+ * focus here (pointer-events is none).
  */
 export const CHATWOOT_CONSENT_OVERLAY_CSS =
-  `:root:has([data-storefront-cookie-consent]) ${LAUNCHER}:not(:focus-visible)` +
+  `:root:has([data-storefront-cookie-consent]) ${LAUNCHER}:not(:focus)` +
   '{opacity:0;pointer-events:none}';
 
 /**

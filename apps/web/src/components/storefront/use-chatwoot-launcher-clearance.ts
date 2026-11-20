@@ -15,6 +15,13 @@ const BAR_GAP_PX = 8;
  * The clearance is measured from the bar's real top edge, so it follows the
  * bar's height and offset instead of copying a number, and it disappears with
  * the bar (empty cart, desktop layout where the bar is hidden).
+ *
+ * Contract with the Chatwoot SDK launcher (sdk.css and bubbleDrag.js in the
+ * Baci Chatwoot fork): at max-width 667px the launcher sits at
+ * `bottom: calc(20px + var(--cw-bubble-bottom-clearance, 0px))`, and its drag
+ * limit keeps the same distance. So the variable is EXTRA clearance on top of
+ * the SDK's own 20px, which is why that 20px is subtracted below. Without the
+ * patched SDK build the variable is unused.
  */
 export function useChatwootLauncherClearance(
   barRef: RefObject<HTMLElement | null>

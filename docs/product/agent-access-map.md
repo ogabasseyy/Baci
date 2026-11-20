@@ -1,7 +1,7 @@
 # Baci capabilities and agent access
 
 Reviewed 20 November 2026 against source revision
-`ef8c88d5fe97b8df2abdc9cefb5990c7ffe899b3`. The mobile-admin follow-up queue no longer treats
+`042a5c1aea0b76264b369f3080b6e45eb4c45285`. The mobile-admin follow-up queue no longer treats
 stale unpaid staff-created orders as abandoned checkouts; their failed or BNPL payments still enter it. The source also categorizes Oxygen follow-ups, places reviews first and includes them in the customer badge. Merchant staff can claim follow-ups, record the latest outcome and set a next follow-up date. Closed follow-ups leave the work queue and its badge. A past follow-up date represents overdue work. The app offers claims from the queue, and the database checks that the order belongs to the caller’s store. Agentic checkout session quotes now include
 registered-merchant VAT using an exclusive basis; this is source evidence, not deployment or live-flow
 proof. Guest OAuth consent and renewable authorization were re-reviewed and tested. Upstream payment

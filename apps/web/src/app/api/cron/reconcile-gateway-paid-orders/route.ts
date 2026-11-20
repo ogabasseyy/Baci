@@ -144,10 +144,7 @@ export async function GET(request: NextRequest) {
         ...summary,
         sideEffectDrain,
       },
-      {
-        status:
-          abandonedAttemptSweepFailed || bankOfferRecheck.failed ? 503 : 200,
-      }
+      { status: abandonedAttemptSweepFailed ? 503 : 200 }
     );
   } catch (error) {
     logger.error({

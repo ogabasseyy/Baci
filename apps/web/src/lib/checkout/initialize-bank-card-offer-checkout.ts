@@ -29,8 +29,7 @@ export async function initializeBankCardOfferCheckout({
     : key?.startsWith('sk_live_')
       ? 'live'
       : null;
-  if (!domain || (currency && currency !== 'NGN'))
-    return { kind: 'unavailable' } as const;
+  if (!domain || currency !== 'NGN') return { kind: 'unavailable' } as const;
   const args = { p_order_id: orderId, p_merchant_id: merchantId };
   const result = await client.rpc('get_bank_card_offer_checkout_context', args);
   const context = bankCardOfferCheckoutContextSchema.safeParse(result.data);

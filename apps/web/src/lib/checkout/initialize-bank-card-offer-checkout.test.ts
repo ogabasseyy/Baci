@@ -67,6 +67,19 @@ afterEach(() => vi.unstubAllEnvs());
 
 describe('initializeBankCardOfferCheckout', () => {
   it.each([
+    undefined,
+    'USD',
+  ])('requires NGN before reading the checkout context (%s)', async (currency) => {
+    const { getContext, input, reserve } = setup();
+
+    await expect(
+      initializeBankCardOfferCheckout({ ...input, currency })
+    ).resolves.toEqual({ kind: 'unavailable' });
+    expect(getContext).not.toHaveBeenCalled();
+    expect(reserve).not.toHaveBeenCalled();
+  });
+
+  it.each([
     'context RPC error',
     'bad context',
     'wrong merchant',

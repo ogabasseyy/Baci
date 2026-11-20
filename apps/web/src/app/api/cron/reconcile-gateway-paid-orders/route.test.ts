@@ -211,11 +211,13 @@ describe('GET /api/cron/reconcile-gateway-paid-orders', () => {
     );
   });
 
-  it('reports temporary paid-offer retrying without failing the cron', async () => {
+  it.each([
+    { failed: 0, retrying: 1 },
+    { failed: 1, retrying: 0 },
+  ])('reports paid-offer recheck outcomes without failing the cron (%j)', async (counts) => {
     const bankOfferRecheck = {
       checked: 1,
-      failed: 0,
-      retrying: 1,
+      ...counts,
       reversed: 0,
     };
     mocks.recheckPaidBankCardOfferCaptures.mockResolvedValue(bankOfferRecheck);

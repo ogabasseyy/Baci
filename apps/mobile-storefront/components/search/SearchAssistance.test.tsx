@@ -58,7 +58,7 @@ describe('SearchAssistance', () => {
       />
     );
     fireEvent.press(
-      screen.getByLabelText('Search suggestion: iphone up to US$400')
+      screen.getByLabelText('Search suggestion: iphone up to $400')
     );
     expect(onApply).toHaveBeenCalledWith(
       expect.objectContaining({

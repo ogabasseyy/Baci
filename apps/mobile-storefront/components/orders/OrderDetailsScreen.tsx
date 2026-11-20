@@ -18,6 +18,7 @@ import {
   OrderDetailsSummaryCard,
 } from '@/components/orders/OrderDetailsSummaryCard';
 import { OrderDetailsTimelineCard } from '@/components/orders/OrderDetailsTimelineCard';
+import { OxygenOrderPlanCard } from '@/components/orders/OxygenOrderPlanCard';
 import { useOrderDetailsController } from '@/components/orders/use-order-details-controller';
 import { ReceiptPreviewModal } from '@/components/receipts/ReceiptPreviewModal';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -64,6 +65,7 @@ export function OrderDetailsScreen() {
     merchantInfo,
     order,
     receiptPreview,
+    userId,
   } = useOrderDetailsController();
 
   if (isLoading) {
@@ -205,6 +207,14 @@ export function OrderDetailsScreen() {
             paymentStatus={order.payment_status}
             summaryBreakdown={summaryBreakdown}
           />
+
+          {userId && order.payment_method === 'oxygen' && (
+            <OxygenOrderPlanCard
+              colors={colors}
+              orderId={order.id}
+              userId={userId}
+            />
+          )}
 
           <OrderDetailsActionsCard
             canCancel={canCancel}

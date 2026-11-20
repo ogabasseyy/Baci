@@ -155,6 +155,29 @@ test('fails closed on upstream redirects and transport errors', async (t) => {
   assert.equal(await failed.text(), '');
 });
 
+test('returns a sanitized gateway error for upstream auth and capacity denials', async (t) => {
+  const fetch = t.mock.method(globalThis, 'fetch', () => {
+    throw Error('unexpected request');
+  });
+  for (const status of [401, 403, 429]) {
+    fetch.mock.mockImplementationOnce(
+      async () =>
+        new Response('synthetic origin detail', {
+          status,
+          headers: { 'WWW-Authenticate': 'Bearer', 'Retry-After': '10' },
+        })
+    );
+    const result = await worker.fetch(
+      request(`/resource/${ticket}/app.js`),
+      env
+    );
+    assert.equal(result.status, 502);
+    assert.equal(await result.text(), '');
+    assert.equal(result.headers.get('WWW-Authenticate'), null);
+    assert.equal(result.headers.get('Retry-After'), null);
+  }
+});
+
 test('keeps private output CORS scoped to the opaque sandbox', async (t) => {
   const fetch = t.mock.method(
     globalThis,

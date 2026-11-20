@@ -1,21 +1,7 @@
 import 'server-only';
 import { createClient } from '@supabase/supabase-js';
+import { requestScopedFetch } from '@/lib/supabase/request-scoped-fetch';
 import type { Database } from '@/types/supabase';
-
-function ownerPreviewFetch(signal: AbortSignal): typeof fetch {
-  return (input, init) => {
-    const fetchSignal =
-      init?.signal !== undefined
-        ? init.signal
-        : input instanceof Request
-          ? input.signal
-          : undefined;
-    return fetch(input, {
-      ...init,
-      signal: fetchSignal ? AbortSignal.any([signal, fetchSignal]) : signal,
-    });
-  };
-}
 
 /** Creates no privileged client; the bridge separately verifies this user via getUser and RLS. */
 export function createOwnerPreviewUserClientResolver(config: {
@@ -50,7 +36,7 @@ export function createOwnerPreviewUserClientResolver(config: {
         },
         global: {
           headers: { Authorization: `Bearer ${accessToken}` },
-          ...(signal ? { fetch: ownerPreviewFetch(signal) } : {}),
+          ...(signal ? { fetch: requestScopedFetch(signal) } : {}),
         },
       })
     );

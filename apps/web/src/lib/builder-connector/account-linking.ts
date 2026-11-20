@@ -1,3 +1,4 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { createAuthenticatedUserClient } from '@/lib/supabase/authenticated-user-client';
 import { builderToolPolicy } from './tool-policy';
 import type { BuilderContext, BuilderIdentity, BuilderToolName } from './types';
@@ -8,14 +9,41 @@ type ResolverDependencies = {
   resolveLinkedAccessToken: (identity: BuilderIdentity) => Promise<string>;
 };
 export function createBuilderUserClientResolver(deps: ResolverDependencies) {
-  return async function resolveBuilderUserClient(identity: BuilderIdentity) {
+  return async function resolveBuilderUserClient(
+    identity: BuilderIdentity,
+    signal?: AbortSignal
+  ) {
+    signal?.throwIfAborted();
     const accessToken = await deps.resolveLinkedAccessToken(identity);
     return createAuthenticatedUserClient({
       ...deps.supabase,
       accessToken,
       actorUserId: identity.actorUserId,
+      ...(signal && { authSignal: signal }),
     });
   };
+}
+
+export async function readBuilderOwnedMerchant(
+  client: SupabaseClient,
+  merchantId: string,
+  actorUserId: string,
+  signal?: AbortSignal
+) {
+  signal?.throwIfAborted();
+  const query = client
+    .from('merchants')
+    .select('id,user_id')
+    .eq('id', merchantId)
+    .eq('user_id', actorUserId);
+  const { data, error } = await (signal
+    ? query.abortSignal(signal)
+    : query
+  ).maybeSingle();
+  signal?.throwIfAborted();
+  return !error && data?.user_id === actorUserId && typeof data.id === 'string'
+    ? data.id
+    : undefined;
 }
 export function createBuilderAccountResolver(deps: ResolverDependencies) {
   const resolveClient = createBuilderUserClientResolver(deps);
@@ -33,14 +61,12 @@ export function createBuilderAccountResolver(deps: ResolverDependencies) {
     )
       throw new Error('Storefront not found.');
     const supabase = await resolveClient(identity);
-    const { data, error } = await supabase
-      .from('merchants')
-      .select('id,user_id')
-      .eq('id', merchantId)
-      .eq('user_id', identity.actorUserId)
-      .maybeSingle();
-    if (error || !data || data.user_id !== identity.actorUserId)
-      throw new Error('Storefront not found.');
-    return { identity, merchantId: data.id, supabase };
+    const ownedMerchant = await readBuilderOwnedMerchant(
+      supabase,
+      merchantId,
+      identity.actorUserId
+    );
+    if (!ownedMerchant) throw new Error('Storefront not found.');
+    return { identity, merchantId: ownedMerchant, supabase };
   };
 }

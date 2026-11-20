@@ -4,7 +4,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { build } from 'esbuild';
 import { expect, it, vi } from 'vitest';
-import { runPublicObservationJob } from './public-observation-executor';
+import {
+  createPublicObservationExecutor,
+  runPublicObservationJob,
+} from './public-observation-executor';
 import { MAX_PUBLIC_OBSERVATION_START_BYTES } from './public-observation-resource-limit';
 
 it('uses one fixed helper job and accepts output only after successful process exit and cleanup', async () => {
@@ -71,12 +74,16 @@ it('never reports success if helper cleanup fails', async () => {
       ],
       { stdio: 'pipe' }
     );
-  await expect(
-    runPublicObservationJob(
-      { payload: {}, session: async () => ({ status: 200, body: '{}' }) },
-      { command, start }
-    )
-  ).rejects.toThrow('PUBLIC_OBSERVATION_CLEANUP_FAILED');
+  const run = createPublicObservationExecutor({ command, start });
+  const input = {
+    payload: {},
+    session: async () => ({ status: 200, body: '{}' }),
+  };
+  await expect(run(input)).rejects.toThrow('PUBLIC_OBSERVATION_CLEANUP_FAILED');
+  await expect(run(input)).rejects.toThrow(
+    'PUBLIC_OBSERVATION_RECONCILIATION_REQUIRED'
+  );
+  expect(command).toHaveBeenCalledTimes(2);
 });
 
 it('does not start an oversized job or run a job after preparation failure', async () => {
@@ -123,6 +130,26 @@ it('reconciles the exact prepared observer job when its receipt is lost', async 
   ).rejects.toThrow('PUBLIC_OBSERVATION_FAILED');
   expect(command).toHaveBeenCalledTimes(2);
   expect(prepared).toBeUndefined();
+  expect(start).not.toHaveBeenCalled();
+});
+
+it('rejects the next job after prepare and cleanup leave observer state uncertain', async () => {
+  const command = vi.fn(async () => {
+    throw Error('synthetic helper timeout');
+  });
+  const start = vi.fn();
+  const run = createPublicObservationExecutor({ command, start });
+  const input = {
+    payload: {},
+    session: async () => ({ status: 200, body: '{}' }),
+  };
+  await expect(run(input)).rejects.toThrow(
+    'PUBLIC_OBSERVATION_PREPARE_UNCERTAIN'
+  );
+  await expect(run(input)).rejects.toThrow(
+    'PUBLIC_OBSERVATION_RECONCILIATION_REQUIRED'
+  );
+  expect(command).toHaveBeenCalledTimes(2);
   expect(start).not.toHaveBeenCalled();
 });
 

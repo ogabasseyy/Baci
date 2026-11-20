@@ -17,7 +17,10 @@ export async function requireExperienceOwner(
     | 'storefront.write'
     | 'storefront.publish' = 'storefront.write'
 ): Promise<ExperienceContext> {
+  const signal = 'signal' in ctx ? ctx.signal : undefined;
+  signal?.throwIfAborted();
   const { data, error } = await ctx.supabase.auth.getUser();
+  signal?.throwIfAborted();
   if (
     error ||
     !data.user ||
@@ -30,7 +33,7 @@ export async function requireExperienceOwner(
       !ctx.identity.allowedMerchantIds.includes(ctx.merchantId))
   )
     throw Error('INSUFFICIENT_SCOPE');
-  const result = await (ctx.supabase as SupabaseClient).rpc(
+  const query = (ctx.supabase as SupabaseClient).rpc(
     scope === 'storefront.write'
       ? 'experience_require_owner'
       : scope === 'storefront.publish'
@@ -42,6 +45,8 @@ export async function requireExperienceOwner(
       p_version: ctx.identity?.grantVersion ?? null,
     }
   );
+  const result = await (signal ? query.abortSignal(signal) : query);
+  signal?.throwIfAborted();
   if (result.error || result.data !== true) throw Error('NOT_FOUND');
   return { ...ctx, actorUserId: data.user.id };
 }

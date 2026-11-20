@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
+import { readBuilderOwnedMerchant } from '@/lib/builder-connector/account-linking';
 import type { BuilderIdentity } from '@/lib/builder-connector/types';
 import {
   type ExperienceToolResult,
@@ -41,7 +42,10 @@ export interface ExperienceDispatcherDependencies {
   rendering?: 'client' | 'prerender-private';
   backgroundBuilds?: boolean;
   readPerformance?: PerformanceReader;
-  resolveUserClient(identity: BuilderIdentity): Promise<SupabaseClient>;
+  resolveUserClient(
+    identity: BuilderIdentity,
+    signal?: AbortSignal
+  ): Promise<SupabaseClient>;
   finalizeBuild(
     ctx: OwnerRequestContext,
     input: { jobId: string; idempotencyKey: string }
@@ -73,19 +77,18 @@ export function createExperienceToolDispatcher(
         return experienceError('INSUFFICIENT_SCOPE');
       if (!identity.allowedMerchantIds.includes(parsed.storefrontId))
         return experienceError('NOT_FOUND');
-      const client = await deps.resolveUserClient(identity);
-      const { data, error } = await client
-        .from('merchants')
-        .select('id,user_id')
-        .eq('id', parsed.storefrontId)
-        .eq('user_id', identity.actorUserId)
-        .maybeSingle();
-      if (error || !data || data.user_id !== identity.actorUserId)
-        return experienceError('NOT_FOUND');
+      const client = await deps.resolveUserClient(identity, signal);
+      const merchantId = await readBuilderOwnedMerchant(
+        client,
+        parsed.storefrontId,
+        identity.actorUserId,
+        signal
+      );
+      if (!merchantId) return experienceError('NOT_FOUND');
       const ctx = await requireExperienceOwner(
         {
           supabase: client,
-          merchantId: data.id,
+          merchantId,
           identity,
           ...(signal && { signal }),
         },

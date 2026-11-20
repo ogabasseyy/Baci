@@ -16,18 +16,19 @@ const start: Start = (jobId) =>
       NODE_ENV: 'production',
     },
   });
+type ObserverInput = {
+  payload: unknown;
+  signal?: AbortSignal;
+  session(request: Request): Promise<{ status: number; body: string }>;
+};
+type HelperDependencies = { command: LinuxRunnerCommand; start: Start };
+const helperDependencies: HelperDependencies = { command: runCommand, start };
 
 /** Fixed helper lifecycle; not registered as an ingress job until installed. */
 export async function runPublicObservationJob(
-  input: {
-    payload: unknown;
-    signal?: AbortSignal;
-    session(request: Request): Promise<{ status: number; body: string }>;
-  },
-  deps: { command: LinuxRunnerCommand; start: Start } = {
-    command: runCommand,
-    start,
-  }
+  input: ObserverInput,
+  deps: HelperDependencies = helperDependencies,
+  onCleanupFailure?: () => void
 ) {
   input.signal?.throwIfAborted();
   const encoded = JSON.stringify({ type: 'start', payload: input.payload });
@@ -56,6 +57,7 @@ export async function runPublicObservationJob(
     try {
       await invoke('delete');
     } catch {
+      onCleanupFailure?.();
       console.error('Public observation job preparation unresolved', { jobId });
       throw Error('PUBLIC_OBSERVATION_PREPARE_UNCERTAIN');
     }
@@ -121,9 +123,25 @@ export async function runPublicObservationJob(
   try {
     await invoke('delete');
   } catch {
+    onCleanupFailure?.();
     console.error('Public observation job cleanup failed', { jobId });
     throw Error('PUBLIC_OBSERVATION_CLEANUP_FAILED');
   }
   if (failure || !output) throw failure ?? Error('PUBLIC_OBSERVATION_FAILED');
   return { output, wallMs: Math.round(performance.now() - started), jobId };
+}
+
+export function createPublicObservationExecutor(
+  deps: HelperDependencies = helperDependencies
+) {
+  let reconciliationRequired = false;
+  return (input: ObserverInput) => {
+    if (reconciliationRequired)
+      return Promise.reject(
+        Error('PUBLIC_OBSERVATION_RECONCILIATION_REQUIRED')
+      );
+    return runPublicObservationJob(input, deps, () => {
+      reconciliationRequired = true;
+    });
+  };
 }

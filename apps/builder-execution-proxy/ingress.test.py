@@ -49,6 +49,13 @@ assert.equal(accepted.status, 200);
 assert.equal((await accepted.json()).path, published + '/index.html?path=' + boundary);
 assert.equal((await worker.fetch(new Request(url + boundary + 'a'), env)).status, 404);
 assert.equal(forwarded, 1);
+const staleKey = { EXECUTION_ORIGIN_KEY: 'r'.repeat(43) };
+const rejected = await worker.fetch(new Request(url + boundary), staleKey);
+assert.equal(rejected.status, 404);
+assert.equal(await rejected.text(), '');
+assert.equal(forwarded, 2);
+assert.equal((await worker.fetch(new Request(url + boundary), {})).status, 503);
+assert.equal(forwarded, 2);
 """, Path(__file__).resolve().with_name('worker.mjs').as_uri(),
         str(caddy_port), EXECUTION, published, KEY,
     ], check=True)

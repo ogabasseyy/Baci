@@ -119,16 +119,20 @@ export function createProductionExperienceIntegration(settings: {
   >();
   const pipelineFor = async (
     input: OwnerRequestContext,
-    scope: 'storefront.read' | 'storefront.write' = 'storefront.write',
-    signal?: AbortSignal
+    scope: 'storefront.read' | 'storefront.write' = 'storefront.write'
   ) => {
     if (!active) throw Error('PROFILE_DISABLED');
     const owner = await requireExperienceOwner(input, scope);
-    const merchant = await owner.supabase
+    const signal = owner.signal;
+    const lookup = owner.supabase
       .from('merchants')
       .select('slug')
-      .eq('id', owner.merchantId)
-      .maybeSingle();
+      .eq('id', owner.merchantId);
+    const merchant = await (signal
+      ? lookup.abortSignal(signal)
+      : lookup
+    ).maybeSingle();
+    signal?.throwIfAborted();
     if (
       merchant.error ||
       !merchant.data ||
@@ -136,7 +140,6 @@ export function createProductionExperienceIntegration(settings: {
       !isCanonicalMerchantSlug(merchant.data.slug)
     )
       throw Error('NOT_FOUND');
-    signal?.throwIfAborted();
     const canonicalBase = await (signal
       ? settings.canonicalBase(merchant.data.slug, signal)
       : settings.canonicalBase(merchant.data.slug));
@@ -217,9 +220,7 @@ export function createProductionExperienceIntegration(settings: {
     dispatcher: {
       rendering: 'prerender-private',
       finalizeBuild: async (ctx, input) =>
-        (
-          await pipelineFor(ctx, 'storefront.write', ctx.signal)
-        ).pipeline.finalizeBuild(ctx, input),
+        (await pipelineFor(ctx)).pipeline.finalizeBuild(ctx, input),
       readPerformance: async (binding, trusted) =>
         trusted
           ? (
@@ -227,13 +228,10 @@ export function createProductionExperienceIntegration(settings: {
             ).pipeline.readPerformance(binding, trusted)
           : undefined,
       preview: async (ctx, input) =>
-        (await pipelineFor(ctx, 'storefront.write', ctx.signal)).capture(
-          ctx,
-          input
-        ),
-      resolveUserClient: async (identity) => {
+        (await pipelineFor(ctx)).capture(ctx, input),
+      resolveUserClient: async (identity, signal) => {
         if (!active) throw Error('PROFILE_DISABLED');
-        const client = await settings.resolveUserClient(identity);
+        const client = await settings.resolveUserClient(identity, signal);
         if (!active) throw Error('PROFILE_DISABLED');
         return client;
       },
@@ -241,9 +239,7 @@ export function createProductionExperienceIntegration(settings: {
     owner: {
       approval: settings.approval,
       createPreviewLaunch: async (ctx, input) =>
-        (
-          await pipelineFor(ctx, 'storefront.write', ctx.signal)
-        ).pipeline.owner.createPreviewLaunch(ctx, input),
+        (await pipelineFor(ctx)).pipeline.owner.createPreviewLaunch(ctx, input),
     },
     storefront: published.runtime,
   };

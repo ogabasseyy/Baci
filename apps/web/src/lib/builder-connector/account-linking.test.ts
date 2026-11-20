@@ -1,6 +1,10 @@
 // @vitest-environment node
 import { afterEach, expect, it, vi } from 'vitest';
-import { createBuilderAccountResolver } from './account-linking';
+import {
+  createBuilderAccountResolver,
+  createBuilderUserClientResolver,
+  readBuilderOwnedMerchant,
+} from './account-linking';
 
 const actor = '10000000-0000-4000-8000-000000000001';
 const store = '20000000-0000-4000-8000-000000000001';
@@ -57,4 +61,62 @@ it('rejects upstream account mismatch, removed ownership and unconsented selecto
       'get_storefront_status'
     )
   ).rejects.toThrow();
+});
+
+it('cancels the linked user verification request when the MCP call disconnects', async () => {
+  const controller = new AbortController();
+  const entered = Promise.withResolvers<AbortSignal>();
+  vi.stubGlobal('fetch', (_input: RequestInfo | URL, init: RequestInit) => {
+    if (!init.signal) throw Error('Missing upstream auth signal');
+    const upstream = init.signal;
+    entered.resolve(upstream);
+    return new Promise((_, reject) => {
+      upstream.addEventListener('abort', () => reject(upstream.reason), {
+        once: true,
+      });
+    });
+  });
+  const resolve = createBuilderUserClientResolver({
+    supabase: { url: 'https://fixture.supabase.co', anonKey: 'public-anon' },
+    resolveLinkedAccessToken: async () => 'linked-upstream',
+  });
+  const response = resolve(identity, controller.signal);
+  const completed = expect(response).rejects.toMatchObject({
+    name: 'AbortError',
+  });
+  try {
+    const upstream = await Promise.race([
+      entered.promise,
+      response.then(() => {
+        throw Error('Unexpected user');
+      }),
+    ]);
+    controller.abort();
+    expect(upstream.aborted).toBe(true);
+    await completed;
+  } finally {
+    controller.abort();
+  }
+});
+
+it('binds the caller signal to the initial merchant ownership lookup', async () => {
+  const { signal } = new AbortController();
+  const query = {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    abortSignal: vi.fn().mockReturnThis(),
+    maybeSingle: async () => ({
+      data: { id: store, user_id: actor },
+      error: null,
+    }),
+  };
+  await expect(
+    readBuilderOwnedMerchant(
+      { from: () => query } as never,
+      store,
+      actor,
+      signal
+    )
+  ).resolves.toBe(store);
+  expect(query.abortSignal).toHaveBeenCalledExactlyOnceWith(signal);
 });

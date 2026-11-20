@@ -1,5 +1,5 @@
 import { productionOrigin } from '@/lib/experience/production-origins';
-import { runPublicObservationJob } from '../experience-runner/public-observation-executor';
+import { createPublicObservationExecutor } from '../experience-runner/public-observation-executor';
 import {
   MAX_PUBLIC_OBSERVATION_BYTES,
   MAX_PUBLIC_OBSERVATION_RESOURCES,
@@ -34,11 +34,12 @@ type Run = (input: {
   session: Args[4];
   signal?: AbortSignal;
 }) => Promise<{ output: Record<string, unknown> }>;
+const productionObserver = createPublicObservationExecutor();
 
 /** Adapt checked resources to the fixed isolated job; does not install the job. */
 export function createPublicObservationAdapter(
   productOrigin: string,
-  run: Run = runPublicObservationJob
+  run: Run = productionObserver
 ): Observe {
   const origin = productionOrigin(productOrigin);
   return async (

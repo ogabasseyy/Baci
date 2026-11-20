@@ -142,6 +142,7 @@ it('binds owner cancellation to merchant, catalog and serialized availability re
   const { signal } = new AbortController();
   await loadOwnerPreviewCatalog({ ...f.ctx, signal }, {});
   expect(f.abortSignal.mock.calls).toEqual([
+    ['experience_authorize_read', signal],
     ['merchants', signal],
     ['experience_catalog_generations', signal],
     ['products', signal],
@@ -150,6 +151,7 @@ it('binds owner cancellation to merchant, catalog and serialized availability re
     ['product_variants', signal],
     ['experience_owner_serialized_availability_counts', signal],
     ['experience_catalog_generations', signal],
+    ['experience_authorize_read', signal],
   ]);
 });
 

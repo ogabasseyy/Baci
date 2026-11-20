@@ -45,6 +45,26 @@ a valid certificate and DNS-only record for the fixed upstream hostname so
 the Worker no-store subrequest reaches Contabo directly. The runtime environment placeholder keeps the origin key out of adapted
 Caddy JSON. Protect the service environment and keep the log filter enabled.
 
+### Origin failure checks
+
+The Worker is the browser-facing entry point and the canonicalizer for
+published route queries. Caddy's output vhost is the authenticated Worker
+upstream. Its query allowlist requires the uppercase escapes produced by the
+Worker, so direct requests with lowercase escapes can return 404.
+
+Use a known synthetic output URL to check the pair after configuring or
+rotating the origin secret. A missing or malformed Worker binding returns
+503 without reaching Contabo. An unset or mismatched Caddy secret returns 404,
+which the Worker preserves. Treat 404 on the known probe as a reason to check
+both secret bindings and the route, using the secret references and sanitized
+service health. Never log or compare secret values in the probe output.
+
+The Worker discards upstream error bodies and headers. It preserves 404 and
+503 and maps other unexpected statuses, including upstream 401, 403 and 429,
+to an empty 502. Use origin health and rate-limit metrics to distinguish
+these cases from a transport failure. After rotation, verify the known probe
+returns 200 before reopening preview traffic.
+
 Wrangler disables Worker caching, invocation logs, traces, Logpush, and
 version preview URLs. Both layers return `Cache-Control: private, no-store`.
 The Worker uses a no-store upstream subrequest. Before sending any private

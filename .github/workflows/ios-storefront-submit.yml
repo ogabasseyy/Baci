@@ -4,12 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       build_number:
-        description: 'TestFlight build number to submit (leave empty for latest)'
-        required: false
+        description: 'TestFlight build number to submit'
+        required: true
         type: string
       app_version:
-        description: 'App Store version (leave empty for latest editable)'
-        required: false
+        description: 'App Store version for the selected build'
+        required: true
         type: string
       release_notes:
         description: 'What''s New in This Version (leave empty for default)'
@@ -73,7 +73,7 @@ jobs:
           fi
 
       - name: Setup Ruby
-        uses: ruby/setup-ruby@e81a8fa391b11a595c1b7ed84177cc0fe02faf83 # v1.328.0
+        uses: ruby/setup-ruby@b3aaceaef7e0ee231b499e7b5f49c03fc1d32199 # v1.338.0
         with:
           ruby-version: ${{ env.RUBY_VERSION }}
           bundler-cache: true
@@ -112,6 +112,7 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Fastlane submit
+        id: submit
         working-directory: ${{ env.WORKING_DIR }}
         env:
           CI: '1'
@@ -128,6 +129,15 @@ jobs:
           # withdrawing a build Apple may be actively reviewing.
           IOS_STOREFRONT_CANCEL_REVIEW_FOR_RESUBMIT: ${{ inputs.cancel_review_for_resubmit }}
         run: bundle exec fastlane ios submit
+
+      - name: Record submission mode
+        if: ${{ always() && steps.submit.outcome != 'skipped' }}
+        env:
+          TESTFLIGHT_UPLOAD_COMPLETED: 'false'
+          SUBMISSION_OUTCOME: ${{ steps.submit.outcome }}
+          SUBMISSION_RESULT: ${{ steps.submit.outputs.app_store_submission }}
+        run: |
+          bash "${{ github.workspace }}/.github/scripts/record-ios-storefront-release-mode.sh"
 
       - name: Clean up secrets
         if: always()

@@ -61,6 +61,7 @@ beforeEach(() => {
     api_customer_id: id === 'interest-wallet' ? 'ogabassey' : 'customer',
     currency: 'NGN',
     status: 'active',
+    type: 'api',
     balance: 12000,
   }));
 });

@@ -123,6 +123,7 @@ const ownWallet = {
   api_customer_id: 'ogabassey',
   currency: 'NGN',
   status: 'active',
+  type: 'api',
 };
 const goalWallet = {
   id: 'goal-wallet',

@@ -8,6 +8,12 @@ import {
 } from './routing-policy';
 
 describe('proxy routing policy', () => {
+  it('keeps generic API routes lowercase and reserves case variants of the partner feed', () => {
+    expect(getRouteType('/api/products')).toBe('api');
+    expect(getRouteType('/API/products')).toBe('storefront');
+    expect(getRouteType('/PARTNERS/Yield/BrilPay/Products/')).toBe('api');
+  });
+
   it('separates platform slug prefixes from custom-domain storefront paths', () => {
     expect(
       getStorefrontContentSegments(

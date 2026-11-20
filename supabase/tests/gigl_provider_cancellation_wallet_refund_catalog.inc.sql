@@ -21,7 +21,10 @@ DECLARE
 BEGIN
   FOREACH v_fn IN ARRAY ARRAY[
     'private.refund_gigl_wallet_charge_on_provider_cancellation(uuid, uuid, uuid, text, jsonb)'::regprocedure,
-    'private.stamp_booked_gigl_charge_waybill()'::regprocedure
+    'private.stamp_booked_gigl_charge_waybill()'::regprocedure,
+    'private.gigl_has_newer_order_shipment(uuid, uuid, integer)'::regprocedure,
+    'private.gigl_cancellation_reopens_order(uuid, uuid, uuid, integer)'::regprocedure,
+    'private.gigl_skip_unreopened_cancellation_alert(uuid)'::regprocedure
   ] LOOP
     FOREACH v_role IN ARRAY ARRAY[
       'anon', 'authenticated', 'service_role', 'gigl_tracking_worker'
@@ -134,6 +137,15 @@ BEGIN
   IF strpos(v_helper, 'NEW.attempt_token_digest IS NOT DISTINCT FROM OLD.attempt_token_digest') = 0
      OR strpos(v_helper, 'shipment.tracking_snapshot_version = 1') = 0 THEN
     RAISE EXCEPTION 'T9: only the server''s own complete() may stamp a waybill';
+  END IF;
+  -- The notification gate scopes its order lookups to the row's merchant and
+  -- asks the same reopen decision the order sync asks (20261114183100).
+  v_helper := pg_catalog.pg_get_functiondef(
+    'private.gate_gigl_tracking_notification()'::regprocedure
+  );
+  IF strpos(v_helper, 'orders.merchant_id = NEW.merchant_id') = 0
+     OR strpos(v_helper, 'private.gigl_cancellation_reopens_order(') = 0 THEN
+    RAISE EXCEPTION 'T9: the cancellation gate must be merchant-scoped and use the reopen decision';
   END IF;
   IF pg_catalog.to_regprocedure(
        'private.refund_gigl_wallet_charge_on_provider_cancellation(uuid, uuid, uuid, text)'

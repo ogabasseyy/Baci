@@ -145,7 +145,7 @@ describe('productCacheRevalidation', () => {
     );
   });
 
-  it('deduplicates product slugs and ignores blank values', () => {
+  it('deduplicates product slugs, ignores blank values, and busts per-slug redirect tags', () => {
     expect(
       productCacheRevalidation.revalidateProductSlugs('merchant-1', [
         'phone',
@@ -155,9 +155,17 @@ describe('productCacheRevalidation', () => {
       ])
     ).toBe(true);
 
-    expect(revalidateTag).toHaveBeenCalledTimes(1);
+    expect(revalidateTag).toHaveBeenCalledTimes(3);
     expect(revalidateTag).toHaveBeenCalledWith(
       'product-merchant-1-phone',
+      'products'
+    );
+    expect(revalidateTag).toHaveBeenCalledWith(
+      'product-canonical-redirect-merchant-1-phone',
+      'products'
+    );
+    expect(revalidateTag).toHaveBeenCalledWith(
+      'product-legacy-redirect-merchant-1-phone',
       'products'
     );
   });
@@ -273,5 +281,17 @@ describe('productCacheRevalidation', () => {
       })
     );
     expect(revalidated).toBe(false);
+  });
+
+  it('normalizes mixed-case slugs and UUIDs consistently across scoped revalidation helpers', () => {
+    productCacheRevalidation.revalidateProductSlugs('merchant-1', [
+      ' IPhone-16 ',
+      'iphone-16',
+    ]);
+    expect(revalidateTag).toHaveBeenCalledTimes(3);
+    expect(revalidateTag).toHaveBeenCalledWith(
+      'product-merchant-1-iphone-16',
+      'products'
+    );
   });
 });

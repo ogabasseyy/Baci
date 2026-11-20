@@ -20,13 +20,13 @@
     "scope": "approved_pilot_hosts_and_complete_browser_automatic_traffic",
     "zeroDenominatorVerdict": "NOT_PROVEN"
   },
-  "originMainSha": "a33f89f128519e9b3fc791fc854925a87ea197f1",
+  "originMainSha": "e68d5210a23ec34cce0d276a4f6711bff2aff1df",
   "pilotCandidateHostnameSha256": "6ecb417105cfa291c7286367f438872a3bf9e3d11bd6d32383aaf2a3e7c39705",
   "pilotCandidateHostnames": [
     "baci-edge-pilot.usebaci.com"
   ],
-  "routeTreeSha256": "1a0ac02d6af2581f0b3a614a2ad0385bdc96d41598db546cfd7b2f9f2fde08b0",
-  "routingProxyInputSha256": "95eb82c55ea095e736076c2840bca7f8367be3aaccb75dfd0a68e9408ced493f",
+  "routeTreeSha256": "9face1fa1c4a1cf512928f0de4cef5a2a0c4b11012663b1da829ecc10197deac",
+  "routingProxyInputSha256": "2e43b5d68267d79ce497b2255e173fef32821a012355f0183a5e81915d2c7707",
   "rows": [
     {
       "decision": "origin_dynamic",
@@ -1332,6 +1332,18 @@
     },
     {
       "decision": "origin_dynamic",
+      "id": "api-route:storefront/chatwoot/cart/add/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/chatwoot/cart/add",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/chatwoot/cart/add/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
       "id": "api-route:storefront/chatwoot/cart/quantity/route.ts",
       "methods": [
         "OPTIONS",
@@ -1368,6 +1380,18 @@
     },
     {
       "decision": "origin_dynamic",
+      "id": "api-route:storefront/chatwoot/context/delivery-options/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/chatwoot/context/delivery-options",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/chatwoot/context/delivery-options/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
       "id": "api-route:storefront/chatwoot/context/verify/route.ts",
       "methods": [
         "OPTIONS",
@@ -1377,6 +1401,18 @@
       "routePattern": "/api/storefront/chatwoot/context/verify",
       "sourceKind": "api_route",
       "sourcePath": "apps/web/src/app/api/storefront/chatwoot/context/verify/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/chatwoot/products/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/chatwoot/products",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/chatwoot/products/route.ts"
     },
     {
       "decision": "origin_dynamic",
@@ -9434,5 +9470,5 @@
     }
   ],
   "schemaVersion": 6,
-  "inventorySha256": "79cba3f6eb9a8b16c1e2e408deff63dccb473d793d87af22d10183132f06c680"
+  "inventorySha256": "687286dff25e61e4edc0c61c4dd0b1e630f2bed50336148b19a46be0eb43e4f5"
 }

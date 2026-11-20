@@ -41,8 +41,27 @@ VALUES ('d5010000-0000-4000-8000-000000000011', auth.uid(), 'receipt-partner', t
 INSERT INTO oxygen_private.commands (id, workflow_id, idempotency_key, expected_version, channel, command)
 VALUES ('d5010000-0000-4000-8000-000000000061', 'd5010000-0000-4000-8000-000000000041',
   'd5010000-0000-4000-8000-000000000071', 0, 'web', '{"action":"book"}');
-UPDATE oxygen_private.commands SET status = 'executing'
-WHERE id = 'd5010000-0000-4000-8000-000000000061';
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE
+  command_id constant uuid := 'd5010000-0000-4000-8000-000000000061';
+  owner_id constant text := 'd5010000-0000-4000-8000-000000000001';
+  worker_id constant text := 'd5010000-0000-4000-8000-000000000002';
+  payload jsonb := jsonb_build_object('commandId', command_id);
+BEGIN
+  PERFORM set_config('request.jwt.claim.sub', owner_id, true);
+  BEGIN
+    PERFORM public.oxygen_runtime('claim', command_id, payload);
+    RAISE EXCEPTION 'Customer identity unexpectedly claimed an Oxygen booking';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  PERFORM set_config('request.jwt.claim.sub', worker_id, true);
+  IF public.oxygen_runtime('claim', command_id, payload) #>> '{context,partnerReference}'
+    IS DISTINCT FROM 'receipt-partner' THEN
+    RAISE EXCEPTION 'Oxygen runtime claim did not return the partner pinned for repayment reports';
+  END IF;
+END $$;
+RESET ROLE;
 -- Rotate the binding while the booking result is in flight.
 UPDATE oxygen_private.runtime_bindings SET partner_reference = 'another-partner'
 WHERE merchant_id = 'd5010000-0000-4000-8000-000000000011';

@@ -162,8 +162,12 @@ paths:
                 properties:
                   order_id: {type: string, format: uuid}
                   partner_order_id: {type: string}
-                  payment_status: {type: string}
-                  shipping_status: {type: string}
+                  payment_status:
+                    type: string
+                    enum: [unpaid, pending, partially_paid, paid, partially_refunded, refunded, cancelled, chargeback, unknown]
+                  shipping_status:
+                    type: string
+                    enum: [pending, processing, shipped, picked_up, in_transit, out_for_delivery, delivered, cancelled, returned, failed, unknown]
                   tracking:
                     oneOf:
                       - {type: 'null'}

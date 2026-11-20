@@ -16,6 +16,35 @@ describe('partner order tracking schema', () => {
     );
   });
 
+  it('normalizes legacy statuses and masks unrecognized internal statuses', () => {
+    expect(
+      orderTrackingSchema.parse({
+        ...receipt,
+        shipping_status: 'completed',
+        payment_status: 'partially_refunded',
+      })
+    ).toMatchObject({
+      shipping_status: 'delivered',
+      payment_status: 'partially_refunded',
+    });
+    expect(
+      orderTrackingSchema.parse({
+        ...receipt,
+        shipping_status: 'canceled',
+        payment_status: 'unpublished-status',
+      })
+    ).toMatchObject({
+      shipping_status: 'cancelled',
+      payment_status: 'unknown',
+    });
+    expect(
+      orderTrackingSchema.parse({
+        ...receipt,
+        shipping_status: 'unpublished-status',
+      }).shipping_status
+    ).toBe('unknown');
+  });
+
   it('requires the carrier and waybill once tracking is present', () => {
     expect(
       orderTrackingSchema.safeParse({

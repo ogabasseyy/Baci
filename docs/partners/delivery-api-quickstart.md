@@ -65,6 +65,7 @@ Unsubmitted quotes remain available for late paid-order intake for seven days af
 Call `GET /order-submissions?partner_order_id=example-order-reference`. A receipt reports `pending_verification`, `payment_verified`, `settlement_verified`, `review_required`, or `accepted`. The `accepted` receipt includes `order_id`. A `review_required` receipt includes a `review_reason`. Retain the original payment and order references. A settlement review can clear when Baci verifies a corrected payout allocation. An order review means the original purchase needs a disposition before a replacement purchase can be attempted.
 
 Call `GET /orders/{orderId}` with that ID. Baci returns the payment status, shipping status, and tracking provider and waybill once available. Tracking is `null` until a waybill is recorded. Only the same merchant–partner connection can read an order.
+If either status is `unknown`, keep polling and wait for a recognized value before changing the order's state in your system.
 
 For the CrossRem pilot, Baci holds booking if the current GIG rate differs from the amount already settled for delivery. Reconcile the difference before booking.
 

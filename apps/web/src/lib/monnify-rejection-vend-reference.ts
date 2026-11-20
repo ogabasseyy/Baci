@@ -32,14 +32,15 @@ function collectBodyField(
     : Object.entries(answer);
   for (const [rawKey, value] of children) {
     const key = normaliseKey(rawKey);
-    if (
-      (insideBody || anywhere) &&
-      matches(key, insideBody) &&
-      (typeof value === 'string' || typeof value === 'number')
-    ) {
-      const text = String(value).trim();
-      if (text) {
-        out.push({ depth, value: text });
+    if ((insideBody || anywhere) && matches(key, insideBody)) {
+      // An array value ("transactionReference": ["MFBP-1"]) is read item by item.
+      for (const item of Array.isArray(value) ? value : [value]) {
+        if (typeof item === 'string' || typeof item === 'number') {
+          const text = String(item).trim();
+          if (text) {
+            out.push({ depth, value: text });
+          }
+        }
       }
     }
     collectBodyField(
@@ -67,7 +68,7 @@ const isVendReferenceKey: KeyMatcher = (key) => key === 'vendreference';
 const isProviderReferenceKey: KeyMatcher = (key, insideBody) =>
   REFERENCE_LIKE_KEY.test(key) &&
   !ECHO_REFERENCE_PREFIX.test(key) &&
-  (key !== 'reference' || insideBody);
+  ((key !== 'reference' && key !== 'ref') || insideBody);
 
 /**
  * The reference at the shallowest depth. When two different references sit at

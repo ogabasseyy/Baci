@@ -74,6 +74,11 @@ interface StructuredOutcome {
  * COMPLETED is a delivered vend; payment SUCCESS with vend FAILED is failed.
  */
 function settleVendPrecedence(found: StructuredOutcome): void {
+  // Two vend-level outcomes that contradict each other (FAILED beside
+  // SUCCESS, failed: true beside delivered: true): neither has authority.
+  if (found.vendFailed && found.vendDone) {
+    found.unknown = true;
+  }
   found.failed = found.vendFailed || (found.failed && !found.vendDone);
   found.done = found.done && !found.failed;
 }

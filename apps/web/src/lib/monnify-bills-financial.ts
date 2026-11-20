@@ -271,6 +271,11 @@ export async function checkTransactionStatus(
       };
     }
     if (isFailed) {
+      // A FAILED vend that also returns a token contradicts itself (the
+      // customer may hold a voucher): not proof, like on the first vend.
+      if (body && readMonnifyBillToken(body)) {
+        return { status: 'unknown', responseCode, message };
+      }
       return { status: 'failed', responseCode, message };
     }
     // No body, or a vend state Monnify did not name: not proof of failure,

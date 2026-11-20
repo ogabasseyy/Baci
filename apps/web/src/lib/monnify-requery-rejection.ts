@@ -14,6 +14,13 @@ import {
 const VEND_FAILED_WORDING =
   /\b(?:vend|transaction|purchase|airtime|payment|top\s?up|recharge)\w*(?:\s+\w+){0,2}?\s+(?:failed|failure|unsuccessful|declined|reversed|cancell?ed|rejected|refused|denied)\b|\bfail(?:ed|ure)(?:\s+\w+){0,2}?\s+(?:vend|transaction|purchase|airtime|payment|top\s?up|recharge)|\bfailed\s+to\s+vend\b/i;
 
+/**
+ * A failure of an ancillary operation (reversal, refund, settlement...) says
+ * nothing about whether the original vend completed.
+ */
+const ANCILLARY_OPERATION_WORDING =
+  /\b(?:reversal|refund|chargeback|settlement|callback|webhook|notification)\b/i;
+
 /** A negated failure ("has not failed", "was not unsuccessful") proves nothing. */
 const NEGATED_FAILURE_WORDING =
   /\b(?:not|never|no|n't|cannot)\s+(?:\w+\s+)?(?:fail(?:ed|ure)?|unsuccessful|declined|reversed|cancell?ed|rejected|refused|denied)\b/i;
@@ -53,6 +60,7 @@ export function isMonnifyRequeryRejectionDefiniteFailure({
     VEND_FAILED_WORDING.test(wording) &&
     !LOOKUP_WORDING.test(wording) &&
     !NEGATED_FAILURE_WORDING.test(wording) &&
+    !ANCILLARY_OPERATION_WORDING.test(wording) &&
     !isMonnifyUnresolvedAnswer({ answer: envelope, wording })
   );
 }

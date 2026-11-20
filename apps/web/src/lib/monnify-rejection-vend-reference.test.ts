@@ -185,3 +185,21 @@ describe('bugfix: every reference shape vend evidence reads counts as a provider
     ).toBe(false);
   });
 });
+
+describe('bugfix: array-valued references and the short top-level ref key', () => {
+  it('reads an array-valued transactionReference', () => {
+    expect(
+      hasMonnifyProviderReference(
+        { responseBody: { transactionReference: ['MFBP-1'] } },
+        ref
+      )
+    ).toBe(true);
+  });
+
+  it('ignores a bare top-level ref but not one inside responseBody', () => {
+    expect(hasMonnifyProviderReference({ ref: 'x-1' }, ref)).toBe(false);
+    expect(
+      hasMonnifyProviderReference({ responseBody: { ref: 'x-1' } }, ref)
+    ).toBe(true);
+  });
+});

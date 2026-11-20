@@ -277,3 +277,22 @@ describe('bugfix: any non-generic status key and array flags are read', () => {
     ).toBe(true);
   });
 });
+
+describe('bugfix: conflicting vend-level terminal states stay unresolved', () => {
+  it('holds vendStatus FAILED beside transactionStatus SUCCESS', () => {
+    expect(
+      open(
+        {
+          responseBody: { vendStatus: 'FAILED', transactionStatus: 'SUCCESS' },
+        },
+        'Rejected'
+      )
+    ).toBe(true);
+  });
+
+  it('holds failed: true beside delivered: true', () => {
+    expect(
+      open({ responseBody: { failed: true, delivered: true } }, 'Rejected')
+    ).toBe(true);
+  });
+});

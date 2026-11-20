@@ -257,3 +257,25 @@ describe('bugfix: a returned requery token completes the vend even with an unkno
     });
   });
 });
+
+describe('bugfix: a FAILED requery that returns a token is not proof of failure', () => {
+  it('returns unknown for vendStatus FAILED with a token', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        requestSuccessful: true,
+        responseCode: '0',
+        responseMessage: 'success',
+        responseBody: {
+          transactionReference: 'MON-TX-1',
+          vendStatus: 'FAILED',
+          metaData: { token: '1111-2222-3333' },
+        },
+      }),
+    });
+
+    await expect(checkTransactionStatus('MFBP-1')).resolves.toMatchObject({
+      status: 'unknown',
+    });
+  });
+});

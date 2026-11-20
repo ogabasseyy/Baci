@@ -156,3 +156,13 @@ describe('bugfix: negated rejection synonyms are not proof of failure', () => {
     expect(check(message)).toBe(false);
   });
 });
+
+describe('bugfix: ancillary-operation failures do not prove the vend failed', () => {
+  it.each([
+    'Transaction reversal failed',
+    'Transaction refund failed',
+    'Payment settlement failed',
+  ])('keeps "%s" unresolved', (message) => {
+    expect(check(message)).toBe(false);
+  });
+});

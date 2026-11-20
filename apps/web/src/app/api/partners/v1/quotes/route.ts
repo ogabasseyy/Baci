@@ -7,6 +7,7 @@ import { shippingService } from '@/lib/shipping';
 import { normalizeNigerianQuoteReceiver } from '@/lib/shipping/normalize-nigerian-quote-receiver';
 import { quoteProviderFailure } from '@/lib/shipping/quote-provider-failure';
 import { createShippingQuoteRouteProof } from '@/lib/shipping/shipping-quote-route-proof';
+import { toKobo } from '@/lib/shipping/to-kobo';
 import type { QuoteRequest } from '@/lib/shipping/types';
 import { createAnonClient } from '@/lib/supabase/anon';
 import { checkTenantRateLimitDetailed } from '@/lib/tenant-rate-limit';
@@ -196,8 +197,7 @@ export async function POST(request: Request) {
           rate.provider === carrier &&
           rate.currency === 'NGN' &&
           rate.providerRateId &&
-          Number.isFinite(rate.price) &&
-          Math.round(rate.price * 100) > 0 &&
+          (toKobo(rate.price) ?? 0) > 0 &&
           rate.expiresAt.getTime() > now
       )
       .sort(
@@ -210,7 +210,7 @@ export async function POST(request: Request) {
     const expiry = new Date(
       Math.min(now + validityMs, selectedRate.expiresAt.getTime())
     );
-    const delivery = Math.round(selectedRate.price * 100);
+    const delivery = toKobo(selectedRate.price) ?? 0;
     const subtotal = items.reduce(
       (sum, item) => sum + item.unit_price_minor * item.quantity,
       0

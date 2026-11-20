@@ -62,6 +62,8 @@ The [delivery API quickstart](../../partners/delivery-api-quickstart.md) documen
 | 500 | `RECONCILIATION_RESPONSE_INVALID` | Escalate with the request ID and check the current receipt. The database may have committed before producing the invalid response. |
 | 503 | `RECONCILIATION_UNAVAILABLE` | Check the receipt and retry the same evidence with backoff after service recovery. |
 
+Before acceptance, an allocation conflict returns `202 SETTLEMENT_REVIEW_REQUIRED` so the capture remains available while the payout is reconciled. After acceptance, conflicting replay evidence returns `409 SETTLEMENT_EVIDENCE_CONFLICT` and the accepted receipt remains available.
+
 ### GIG contract check
 
 The adapter generates the Baci UUID used as the partner `quote_id` locally. The GIG rate identifier is stored separately as `provider_rate_id`.

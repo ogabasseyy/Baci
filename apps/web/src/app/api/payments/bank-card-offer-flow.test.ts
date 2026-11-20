@@ -309,13 +309,8 @@ function setup(
           },
         };
       }
-      case 'bank_card_offer_refund_capture_matches':
-        return {
-          data:
-            paid &&
-            args.p_amount_kobo === 9500 &&
-            args.p_reference === reference,
-        };
+      case 'get_bank_card_offer_refundable_amount':
+        return { data: paid && args.p_reference === reference ? 9500 : null };
       default:
         return { data: null, error: null };
     }
@@ -760,6 +755,15 @@ describe('bank card offer payment handlers', () => {
         supabase: mocks as never,
       })
     ).resolves.toEqual({ refundIds: [64] });
+    expect(mocks.rpc).toHaveBeenCalledWith(
+      'get_bank_card_offer_refundable_amount',
+      {
+        p_order_id: orderId,
+        p_merchant_id: merchantId,
+        p_transaction_id: transactionId,
+        p_reference: reference,
+      }
+    );
     expect(mocks.refund).toHaveBeenCalledWith(
       reference,
       9500,

@@ -127,8 +127,9 @@ export async function initiatePaystackCancellationRefunds({
     // call treats a non-positive amount as "refund the whole
     // transaction": quarantine the leg for operations instead of
     // over-refunding a multi-leg order.
-    const koboAmount = Math.round(transactionAmount * 100);
-    if (transactionAmount > 0 && koboAmount <= 0) {
+    const isBankOffer = transaction.gateway_reference?.startsWith('BCO-');
+    let koboAmount = isBankOffer ? 0 : Math.round(transactionAmount * 100);
+    if (!isBankOffer && transactionAmount > 0 && koboAmount <= 0) {
       await quarantineRefund({
         metadata: {
           failed_payment_transaction_id: transaction.id,
@@ -143,15 +144,14 @@ export async function initiatePaystackCancellationRefunds({
       });
       continue;
     }
-    if (transaction.gateway_reference?.startsWith('BCO-')) {
+    if (isBankOffer) {
       const capture = await supabase.rpc(
-        'bank_card_offer_refund_capture_matches',
+        'get_bank_card_offer_refundable_amount',
         {
           p_order_id: order.id,
           p_merchant_id: order.merchant_id,
           p_transaction_id: transaction.id,
           p_reference: transaction.gateway_reference,
-          p_amount_kobo: koboAmount,
         }
       );
       if (capture.error) {
@@ -159,10 +159,11 @@ export async function initiatePaystackCancellationRefunds({
         if (isLastAttempt) bankOfferLegsForReview.push(transaction);
         continue;
       }
-      if (capture.data !== true) {
+      if (!Number.isSafeInteger(capture.data) || capture.data <= 0) {
         bankOfferLegsForReview.push(transaction);
         continue;
       }
+      koboAmount = capture.data;
     }
     const paystackRefund = await initiatePaystackRefund(
       transaction.gateway_reference as string,
@@ -188,7 +189,7 @@ export async function initiatePaystackCancellationRefunds({
         reason,
         supabase,
         transaction,
-        transactionAmount,
+        transactionAmount: isBankOffer ? koboAmount / 100 : transactionAmount,
       })
     );
   }

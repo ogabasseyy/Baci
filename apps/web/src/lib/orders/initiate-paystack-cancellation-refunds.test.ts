@@ -57,6 +57,33 @@ describe('initiatePaystackCancellationRefunds', () => {
     );
   });
 
+  it('uses the exact saved kobo amount for a bank-offer refund', async () => {
+    const reference = `BCO-${'a'.repeat(32)}`;
+    acceptedRefund({ transaction: { id: 55, reference } });
+    const rpc = vi.fn().mockResolvedValue({ data: 9501, error: null });
+
+    await expect(
+      initiatePaystackCancellationRefunds({
+        order,
+        refundedPaymentIds: new Set(),
+        supabase: { from: vi.fn(() => ({ insert })), rpc } as never,
+        transactions: [
+          { ...transaction, amount: 95, gateway_reference: reference },
+        ],
+      })
+    ).resolves.toEqual([101]);
+
+    expect(mocks.initiatePaystackRefund).toHaveBeenCalledWith(
+      reference,
+      9501,
+      'Order cancelled',
+      undefined
+    );
+    expect(insert).toHaveBeenCalledWith(
+      expect.objectContaining({ amount: 95.01 })
+    );
+  });
+
   it('audits accepted refunds as refund_pending before returning', async () => {
     acceptedRefund();
 

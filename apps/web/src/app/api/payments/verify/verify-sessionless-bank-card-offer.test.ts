@@ -150,6 +150,9 @@ it('reports a verified payment that already settled with confirmed inventory', a
     status: 'success',
     finalizationOutcome: 'completed',
   });
+  expect(verify).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({ reference })
+  );
   expect(buyerRpc).not.toHaveBeenCalled();
 });
 

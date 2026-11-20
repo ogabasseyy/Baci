@@ -29,6 +29,9 @@ BEGIN
   IF has_table_privilege('authenticated', 'private.bank_card_offer_payment_attempts', 'SELECT')
     OR has_function_privilege('anon', 'public.claim_bank_card_offer_attempt(uuid,uuid,bigint,text,text,bigint,bigint)', 'EXECUTE')
     OR has_function_privilege('authenticated', 'public.bank_card_offer_refund_capture_matches(uuid,uuid,uuid,text,bigint)', 'EXECUTE')
+    OR has_function_privilege('authenticated', 'public.get_bank_card_offer_refundable_amount(uuid,uuid,uuid,text)', 'EXECUTE')
+    OR has_function_privilege('anon', 'public.get_bank_card_offer_refundable_amount(uuid,uuid,uuid,text)', 'EXECUTE')
+    OR NOT has_function_privilege('service_role', 'public.get_bank_card_offer_refundable_amount(uuid,uuid,uuid,text)', 'EXECUTE')
     OR has_function_privilege('anon', 'public.flag_bank_card_offer_capture_review(uuid,uuid,uuid)', 'EXECUTE')
     OR has_function_privilege('service_role', 'public.flag_bank_card_offer_capture_review(uuid,uuid,uuid)', 'EXECUTE')
     OR NOT has_function_privilege('authenticated', 'public.flag_bank_card_offer_capture_review(uuid,uuid,uuid)', 'EXECUTE')
@@ -285,11 +288,15 @@ BEGIN
     OR public.get_bank_card_offer_webhook_transaction('BANK-OFFER-FALLBACK-FIXTURE') IS NOT NULL
   THEN RAISE EXCEPTION 'Webhook lookup returned a payment outside the saved merchant attempt'; END IF;
 
-  IF NOT public.bank_card_offer_refund_capture_matches(v_order, v_merchant, v_transaction, v_reference, 9500)
+  IF public.get_bank_card_offer_refundable_amount(v_order, v_merchant, v_transaction, v_reference) IS DISTINCT FROM 9500
+    OR public.get_bank_card_offer_refundable_amount(v_order, v_merchant, v_transaction, 'BCO-other') IS NOT NULL
+    OR NOT public.bank_card_offer_refund_capture_matches(v_order, v_merchant, v_transaction, v_reference, 9500)
     OR public.bank_card_offer_refund_capture_matches(v_order, v_merchant, v_transaction, v_reference, 10000)
   THEN RAISE EXCEPTION 'Refund must use the discounted capture'; END IF;
   IF NOT public.flag_bank_card_offer_terminal_review(v_order, v_merchant, v_transaction, 'reversed')
-    OR public.bank_card_offer_refund_capture_matches(v_order, v_merchant, v_transaction, v_reference, 9500)
+  THEN RAISE EXCEPTION 'Unable to persist the capture reversal before refund verification'; END IF;
+  IF public.bank_card_offer_refund_capture_matches(v_order, v_merchant, v_transaction, v_reference, 9500)
+    OR public.get_bank_card_offer_refundable_amount(v_order, v_merchant, v_transaction, v_reference) IS NOT NULL
   THEN RAISE EXCEPTION 'Reconciled reversal must block another cancellation refund'; END IF;
 
   -- Inventory can leave a completed transaction attached to a pending order.

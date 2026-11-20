@@ -225,6 +225,10 @@ function createSupabaseMock({
       throw new Error(`Unexpected table ${table}`);
     }),
     rpc: vi.fn((name: string, args: unknown) => {
+      if (name === 'reinstate_timeout_order_payment') {
+        return Promise.resolve({ data: 'blocked', error: null });
+      }
+
       if (name === 'record_merchant_settlement') {
         mocks.recordMerchantSettlement(args);
         return Promise.resolve(settlementResult);

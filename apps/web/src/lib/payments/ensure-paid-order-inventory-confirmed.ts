@@ -22,6 +22,29 @@ function withCause(message: string, cause: unknown) {
   return error;
 }
 
+export function refreshReclaimedOrderInventory(
+  supabase: SupabaseClient,
+  merchantId: string,
+  orderId: string
+): void {
+  try {
+    revalidateProducts(merchantId);
+  } catch (revalidateError) {
+    logger.error({
+      error: revalidateError,
+      message:
+        'Failed to revalidate product caches after inventory confirmation',
+      merchantId,
+      orderId,
+    });
+  }
+  scheduleOrderBlogPurgeForOrderAfterResponse({
+    supabase,
+    merchantId,
+    orderId,
+  });
+}
+
 /**
  * Ensures that inventory reservations for a paid or BNPL-approved order are confirmed.
  * Invokes the `confirm_order_inventory_reservations` database function.
@@ -61,22 +84,7 @@ export async function ensurePaidOrderInventoryConfirmed(
   // category tags on every hit. The re-claim already COMMITTED with the RPC, so
   // revalidate even if the exceptionCodes throw below fires for a different item.
   if ((result?.reclaimedUnitCount ?? 0) > 0) {
-    try {
-      revalidateProducts(merchantId);
-    } catch (revalidateError) {
-      logger.error({
-        error: revalidateError,
-        message:
-          'Failed to revalidate product caches after inventory confirmation',
-        merchantId,
-        orderId,
-      });
-    }
-    scheduleOrderBlogPurgeForOrderAfterResponse({
-      supabase,
-      merchantId,
-      orderId,
-    });
+    refreshReclaimedOrderInventory(supabase, merchantId, orderId);
   }
 
   if (

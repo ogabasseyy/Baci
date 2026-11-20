@@ -81,6 +81,15 @@ it('lets a team member claim an unassigned follow-up', async () => {
   await waitFor(() => expect(options.onClaim).toHaveBeenCalledOnce());
 });
 
+it('keeps up to 1,000 Unicode characters in the outcome', () => {
+  render(<StaffFollowUpEditor {...props()} followUp={claimed} />);
+  const note = screen.getByLabelText('What happened');
+  const accepted = `${'😀'.repeat(999)}a`;
+  fireEvent.change(note, { target: { value: `${accepted}😀` } });
+  expect(note).toHaveValue(accepted);
+  expect(note).not.toHaveAttribute('maxlength', '1000');
+});
+
 it('saves the stage, outcome and local calendar date for the assigned team member', async () => {
   const options = props();
   render(<StaffFollowUpEditor {...options} followUp={claimed} />);

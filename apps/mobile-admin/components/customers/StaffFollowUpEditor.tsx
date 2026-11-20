@@ -6,8 +6,8 @@ import { SPACING, TYPOGRAPHY } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
 import { getLocalDateKey } from '@/lib/customers-failed-orders';
 import {
+  limitStaffFollowUpOutcome,
   STAFF_FOLLOW_UP_LABELS,
-  STAFF_FOLLOW_UP_OUTCOME_LIMIT,
   type StaffFollowUp,
   type StaffFollowUpStage,
   type StaffFollowUpUpdate,
@@ -154,9 +154,10 @@ export function StaffFollowUpEditor({
               placeholder="What happened?"
               placeholderTextColor={colors.textSecondary}
               value={outcome}
-              onChangeText={(note) => editFields({ outcome: note })}
+              onChangeText={(note) =>
+                editFields({ outcome: limitStaffFollowUpOutcome(note) })
+              }
               editable={!editDisabled}
-              maxLength={STAFF_FOLLOW_UP_OUTCOME_LIMIT}
               multiline
               style={[
                 styles.note,

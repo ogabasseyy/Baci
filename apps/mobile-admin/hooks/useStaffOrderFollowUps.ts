@@ -3,7 +3,7 @@ import { FOLLOW_UP_QUERY_LIMIT } from '@/config/follow-up-queue';
 import type { FailedOrder } from '@/hooks/useFailedOrders';
 import { RETAINED_PAYMENT_STATUSES } from '@/lib/follow-up-status';
 import { supabase } from '@/lib/supabase';
-import { oxygenFollowUpOrderSchema } from '@/schemas/oxygen-follow-up';
+import { retainedFollowUpOrderSchema } from '@/schemas/retained-follow-up-order';
 import {
   type StaffFollowUp,
   type StaffFollowUpUpdate,
@@ -68,7 +68,7 @@ async function fetchFollowUps(
       OPEN_LOAD_ERROR
     );
     const order = readOrThrow(
-      () => oxygenFollowUpOrderSchema.parse(row.order),
+      () => retainedFollowUpOrderSchema.parse(row.order),
       OPEN_LOAD_ERROR
     );
     records[followUp.order_id] = followUp;
@@ -80,6 +80,7 @@ async function fetchFollowUps(
       customer_email: order.customer_email ?? '',
       customer_phone: order.customer_phone ?? '',
       payment_method: order.payment_method ?? '',
+      created_at: order.created_at ?? followUp.updated_at,
       total: Number.isFinite(total) ? total : null,
       payment_status:
         RETAINED_PAYMENT_STATUSES.find(

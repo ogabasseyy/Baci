@@ -16,6 +16,10 @@ export const STAFF_FOLLOW_UP_LABELS = {
 
 export const STAFF_FOLLOW_UP_OUTCOME_LIMIT = 1000;
 
+export function limitStaffFollowUpOutcome(outcome: string): string {
+  return [...outcome].slice(0, STAFF_FOLLOW_UP_OUTCOME_LIMIT).join('');
+}
+
 export const staffFollowUpSchema = z
   .object({
     order_id: z.uuid(),

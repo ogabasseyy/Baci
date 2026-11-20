@@ -30,6 +30,33 @@ describe('FollowUpQueueList', () => {
     expect(screen.getByText('Open follow-up editor')).toBeVisible();
   });
 
+  it('updates the action when write access changes and follow-up rows stay the same', () => {
+    const records = {};
+    mocks.useFollowUpQueue.mockReturnValue({
+      failedOrders: [{ id: 'order-1', created_at: '2026-07-27T08:00:00Z' }],
+      merchant: { id: 'merchant-1' },
+      viewState: { status: 'ready' },
+    });
+    mocks.useStaffOrderFollowUps.mockReturnValue({
+      isSuccess: true,
+      canWrite: false,
+      data: records,
+    });
+    const props = { ...defaultProps, renderOrder: () => <div>Ada</div> };
+    const { rerender } = render(<FollowUpQueueList {...props} />);
+    expect(screen.getByText('View follow-up')).toBeVisible();
+
+    mocks.useStaffOrderFollowUps.mockReturnValue({
+      isSuccess: true,
+      canWrite: true,
+      data: records,
+    });
+    rerender(<FollowUpQueueList {...props} />);
+
+    expect(screen.getByText('Claim follow-up')).toBeVisible();
+    expect(screen.queryByText('View follow-up')).toBeNull();
+  });
+
   it('preserves a claim conflict when refreshing changes the editor revision', () => {
     mocks.useFollowUpQueue.mockReturnValue({
       failedOrders: [{ id: 'order-1', created_at: '2026-07-27T08:00:00Z' }],

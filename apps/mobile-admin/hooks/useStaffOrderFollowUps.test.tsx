@@ -101,6 +101,7 @@ describe('useStaffOrderFollowUps', () => {
                 order_number: null,
                 payment_method: null,
                 total: null,
+                created_at: null,
               }
             ),
             openRow(
@@ -123,6 +124,7 @@ describe('useStaffOrderFollowUps', () => {
         customer_phone: '',
         payment_method: '',
         total: null,
+        created_at: '2026-11-19T10:00:00+00:00',
         payment_status: 'paid',
         attempt_count: 1,
         follow_up_at: '2026-11-19T10:00:00+00:00',

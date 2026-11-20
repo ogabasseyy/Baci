@@ -27,6 +27,8 @@ export interface FinalizeOrderGatewayPaymentArgs {
    * promoting. Unset preserves the legacy behavior.
    */
   expectedOutstandingMinor?: number | null;
+  /** The reversal sweep may record a reversal but cannot settle a capture. */
+  bankOfferReversalOnly?: true;
 }
 
 export type FinalizeOrderGatewayPaymentOutcome =

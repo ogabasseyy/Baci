@@ -36,21 +36,23 @@ export async function finalizeOrderGatewayPayment({
   fallbackDeadlineMs,
   emailMaxAttemptsPerSender,
   expectedOutstandingMinor,
+  bankOfferReversalOnly,
 }: FinalizeOrderGatewayPaymentArgs): Promise<FinalizeOrderGatewayPaymentOutcome> {
   const result = await resolveOrderGatewayCompletion({
     actor,
+    bankOfferReversalOnly,
     expectedOutstandingMinor,
     gateway,
     gatewayResponse,
     merchantId: transaction.merchant_id,
     orderId,
     reference,
+    signal,
     supabase,
     transactionId: transaction.id,
   });
   if (!result.ok) return result.outcome;
   const completion = result.completion;
-  // Bank offers flip inside completion itself, never before verification.
   const wonTransactionFlip =
     'atomicTransactionFlip' in result
       ? result.atomicTransactionFlip
@@ -64,9 +66,7 @@ export async function finalizeOrderGatewayPayment({
     transactionGatewayReference: transaction.gateway_reference,
     transactionId: transaction.id,
   });
-  if (blockedOutcome) {
-    return blockedOutcome;
-  }
+  if (blockedOutcome) return blockedOutcome;
 
   const {
     capturedOnAlreadyPaidOrder,

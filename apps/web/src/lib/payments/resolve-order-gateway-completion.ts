@@ -8,26 +8,42 @@ import { verifyAndCompleteRedvaultPayment } from './verify-and-complete-redvault
 
 export async function resolveOrderGatewayCompletion({
   actor,
+  bankOfferReversalOnly,
   expectedOutstandingMinor,
   gateway,
   gatewayResponse,
   merchantId,
   orderId,
   reference,
+  signal,
   supabase,
   transactionId,
 }: {
   actor: string;
+  bankOfferReversalOnly?: true;
   expectedOutstandingMinor?: number | null;
   gateway: 'juicyway' | 'paystack' | 'korapay';
   gatewayResponse?: Record<string, unknown>;
   merchantId: string;
   orderId: string;
   reference: string;
+  signal?: AbortSignal;
   supabase: SupabaseClient;
   transactionId: string;
 }) {
   try {
+    if (
+      bankOfferReversalOnly &&
+      (gateway !== 'paystack' || !reference.startsWith('BCO-'))
+    ) {
+      return {
+        ok: false as const,
+        outcome: {
+          kind: 'completion_failed' as const,
+          error: new Error('invalid_bank_offer_reversal_request'),
+        },
+      };
+    }
     // Capture moves money and must not ride the route's service-role client:
     // classification and capture run through the short-lived scoped route
     // client (merchant-bound authenticated claims), which the REDVAULT
@@ -43,9 +59,11 @@ export async function resolveOrderGatewayCompletion({
         gateway === 'paystack'
           ? await approveBankCardOfferPayment({
               client: redvaultScopedClient,
+              reversalOnly: bankOfferReversalOnly,
               merchantId,
               orderId,
               reference,
+              signal,
               transactionId,
             })
           : null;

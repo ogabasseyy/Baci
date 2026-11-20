@@ -34,6 +34,31 @@ BEGIN
 
   INSERT INTO public.merchants (id, email, business_name, slug)
     VALUES (v_merchant, 'bank-offer-fixture@example.test', 'Bank Offer Fixture', 'bank-offer-fixture');
+  BEGIN
+    INSERT INTO public.orders (merchant_id, order_number, currency, payment_method,
+      payment_status, customer_email, total, discount_amount, tax_basis)
+    VALUES (v_merchant, 'BANK-OFFER-NO-PAYSTACK', 'NGN', 'bank_card_offer',
+      'unpaid', 'buyer@example.test', 190, 10, 'exclusive');
+    RAISE EXCEPTION 'Bank offer order without a Paystack subaccount was created';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'bank_card_offer_paystack_unavailable' THEN RAISE; END IF;
+  END;
+  UPDATE public.merchants SET paystack_subaccount_code = 'ACCT_fixture'
+    WHERE id = v_merchant;
+  INSERT INTO public.merchant_feature_settings (merchant_id, paystack_enabled)
+    VALUES (v_merchant, false)
+    ON CONFLICT (merchant_id) DO UPDATE SET paystack_enabled = false;
+  BEGIN
+    INSERT INTO public.orders (merchant_id, order_number, currency, payment_method,
+      payment_status, customer_email, total, discount_amount, tax_basis)
+    VALUES (v_merchant, 'BANK-OFFER-PAYSTACK-DISABLED', 'NGN', 'bank_card_offer',
+      'unpaid', 'buyer@example.test', 190, 10, 'exclusive');
+    RAISE EXCEPTION 'Bank offer order with Paystack disabled was created';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'bank_card_offer_paystack_unavailable' THEN RAISE; END IF;
+  END;
+  UPDATE public.merchant_feature_settings SET paystack_enabled = true
+    WHERE merchant_id = v_merchant;
   INSERT INTO public.products (id, merchant_id, name, slug, price, status)
     VALUES (v_product, v_merchant, 'Fixture Phone', 'fixture-bank-offer-phone', 100, 'active');
 

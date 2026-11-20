@@ -128,6 +128,15 @@ export async function finishBankCardOfferOrder({
     quote,
     userId,
   });
+  if (result.error?.message === 'bank_card_offer_paystack_unavailable') {
+    return NextResponse.json(
+      {
+        code: 'BANK_CARD_OFFER_UNAVAILABLE',
+        error: 'Bank card offer checkout is unavailable',
+      },
+      { status: 409 }
+    );
+  }
   if (result.error?.message === 'checkout_idempotency_conflict') {
     return NextResponse.json(
       {

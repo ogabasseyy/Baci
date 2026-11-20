@@ -131,6 +131,37 @@ describe('reconcileWedgedGatewayOrders gateway verification', () => {
     );
   });
 
+  it.each([
+    [{ kind: 'bank_offer_terminal', status: 'reversed' }, true],
+    [{ kind: 'completion_failed' }, false],
+  ] as const)('rechecks a bank-offer reversal before deciding whether to retire (%j)', async (outcome, shouldStamp) => {
+    const reference = `BCO-${'a'.repeat(32)}`;
+    const supabase = buildSupabase([
+      { ...wedgedCandidate, gateway_reference: reference },
+    ]);
+    mocks.verifyPaystackPayment.mockResolvedValue({
+      data: { amount: 5829060, currency: 'NGN', status: 'reversed' },
+      success: true,
+    });
+    mocks.finalizeOrderGatewayPayment.mockResolvedValue(outcome);
+
+    await reconcileWedgedGatewayOrders({ scheduleAfter, supabase });
+
+    expect(mocks.finalizeOrderGatewayPayment).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        reference,
+        gateway: 'paystack',
+        orderId: wedgedCandidate.order_id,
+        bankOfferReversalOnly: true,
+      })
+    );
+    expect(
+      supabase.rpc.mock.calls.some(
+        ([name]) => name === 'stamp_wedge_sweep_resolution_v1'
+      )
+    ).toBe(shouldStamp);
+  });
+
   it('keeps retrying when gateway verification is unavailable', async () => {
     const supabase = buildSupabase([wedgedCandidate]);
     mocks.verifyPaystackPayment.mockResolvedValue({

@@ -9,12 +9,16 @@ export async function approveBankCardOfferPayment({
   orderId,
   transactionId,
   reference,
+  reversalOnly,
+  signal,
 }: {
   client: Pick<SupabaseClient, 'rpc'>;
   merchantId: string;
   orderId: string;
   transactionId: string;
   reference: string;
+  reversalOnly?: true;
+  signal?: AbortSignal;
 }) {
   const args = {
     p_merchant_id: merchantId,
@@ -37,12 +41,20 @@ export async function approveBankCardOfferPayment({
   // Saved approval survives a failed completion, but Paystack can reverse
   // the capture afterwards. Recheck the provider before any settlement retry.
   const { amountKobo, quote } = context.data;
-  const verified = await verifyBankCardOfferPaystack({
-    ...context.data,
-    currency: 'NGN',
-    adjustmentsKobo:
-      amountKobo - (quote.productSubtotalKobo - quote.discountKobo),
-  });
+  const verified = await verifyBankCardOfferPaystack(
+    {
+      ...context.data,
+      currency: 'NGN',
+      adjustmentsKobo:
+        amountKobo - (quote.productSubtotalKobo - quote.discountKobo),
+    },
+    signal
+  );
+  if (reversalOnly) {
+    return verified?.kind === 'terminal' && verified.status === 'reversed'
+      ? verified
+      : null;
+  }
   if (verified?.kind !== 'verified') return verified;
 
   const approval = await client.rpc('approve_bank_card_offer_capture', {

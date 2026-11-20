@@ -6,9 +6,10 @@ import {
 } from './bank-card-offer-payment';
 
 export async function verifyBankCardOfferPaystack(
-  attempt: BankCardOfferAttempt
+  attempt: BankCardOfferAttempt,
+  signal?: AbortSignal
 ) {
-  const response = await verifyTransaction(attempt.reference, undefined, {
+  const response = await verifyTransaction(attempt.reference, signal, {
     textIds: true,
   });
   if (!response.success) {

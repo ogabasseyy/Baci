@@ -77,3 +77,28 @@ it('withholds settlement when the verified capture fails to save', async () => {
     })
   );
 });
+
+it('does not approve a capture if the reversal-only recheck sees success', async () => {
+  const signal = new AbortController().signal;
+  vi.mocked(verifyBankCardOfferPaystack).mockResolvedValueOnce({
+    kind: 'verified',
+    evidence: { reference },
+    gatewayResponse: { status: 'success' },
+  } as never);
+  const rpc = vi.fn().mockResolvedValue({ data: context });
+
+  await expect(
+    approveBankCardOfferPayment({
+      ...input,
+      client: { rpc },
+      reversalOnly: true,
+      signal,
+    })
+  ).resolves.toBeNull();
+
+  expect(verifyBankCardOfferPaystack).toHaveBeenLastCalledWith(
+    expect.objectContaining({ reference }),
+    signal
+  );
+  expect(rpc).toHaveBeenCalledTimes(1);
+});

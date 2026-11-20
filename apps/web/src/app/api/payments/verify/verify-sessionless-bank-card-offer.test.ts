@@ -86,14 +86,16 @@ it.each([
   expect(buyerRpc).not.toHaveBeenCalled();
 });
 
-it('keeps the attempt pending when the review is unavailable', async () => {
+it('returns a retryable error when the terminal review is unavailable', async () => {
   verify.mockResolvedValueOnce({ kind: 'terminal', status: 'failed' });
   rpc.mockResolvedValueOnce({ data: false, error: null });
 
   const result = await verifyNative(snapshot, buyerClient);
 
-  expect(result.status).toBe(202);
-  await expect(result.json()).resolves.toMatchObject({ status: 'pending' });
+  expect(result.status).toBe(503);
+  await expect(result.json()).resolves.toEqual({
+    error: 'Verification unavailable',
+  });
 });
 
 it('rejects saved context with a different reference before contacting Paystack', async () => {
@@ -175,5 +177,13 @@ it('keeps a provider outage pending without recording a capture mismatch', async
 
   expect(result.status).toBe(202);
   expect(rpc).toHaveBeenCalledTimes(1);
+  expect(buyerRpc).not.toHaveBeenCalled();
+});
+
+it('returns a retryable failure when a capture mismatch could not be recorded', async () => {
+  verify.mockResolvedValueOnce({ kind: 'mismatch' });
+  rpc.mockResolvedValueOnce({ data: null, error: { code: 'unavailable' } });
+  const result = await verifyNative(snapshot, buyerClient);
+  expect(result.status).toBe(503);
   expect(buyerRpc).not.toHaveBeenCalled();
 });

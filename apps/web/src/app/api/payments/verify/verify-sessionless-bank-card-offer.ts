@@ -22,6 +22,9 @@ export async function verifySessionlessBankCardOffer(
       { status: 202 }
     );
 
+  const unavailable = () =>
+    NextResponse.json({ error: 'Verification unavailable' }, { status: 503 });
+
   if (snapshot.gateway !== 'paystack') {
     return NextResponse.json(
       { error: 'Invalid bank offer capture' },
@@ -66,7 +69,7 @@ export async function verifySessionlessBankCardOffer(
         ...args,
         p_status: verified.status,
       });
-      if (review.error || review.data !== true) return pending();
+      if (review.error || review.data !== true) return unavailable();
       return NextResponse.json({
         ...orderDetails,
         success: false,
@@ -84,6 +87,7 @@ export async function verifySessionlessBankCardOffer(
           orderId: snapshot.orderId,
           error: review.error,
         });
+        return unavailable();
       }
       return pending();
     }
@@ -117,6 +121,6 @@ export async function verifySessionlessBankCardOffer(
       orderId: snapshot.orderId,
       error,
     });
-    return pending();
+    return unavailable();
   }
 }

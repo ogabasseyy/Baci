@@ -87,6 +87,8 @@ interface StructuredOutcome {
   /** Vend-level (not generic payment) done / failed: these take precedence. */
   vendDone: boolean;
   vendFailed: boolean;
+  /** A bare `status: FAILED` inside responseBody. */
+  bodyStatusFailed: boolean;
   /** A vend-specific status Monnify named that is not a state we know. */
   unknown: boolean;
   /** Nested deeper than we scan: can't be cleared, so it holds. */
@@ -99,6 +101,18 @@ interface StructuredOutcome {
  * COMPLETED is a delivered vend; payment SUCCESS with vend FAILED is failed.
  */
 function settleVendPrecedence(found: StructuredOutcome): void {
+  // A bare `status: FAILED` inside the result body is the bill outcome (the
+  // success classifier reads it so) unless a vend-specific state says
+  // otherwise. A generic top-level status stays a lookup status.
+  if (
+    found.bodyStatusFailed &&
+    !found.vendFailed &&
+    !found.vendDone &&
+    !found.unknown &&
+    !found.running
+  ) {
+    found.vendFailed = true;
+  }
   // Two vend-level outcomes that contradict each other (FAILED beside
   // SUCCESS, failed: true beside delivered: true): neither has authority.
   if (found.vendFailed && found.vendDone) {
@@ -137,6 +151,9 @@ function readStructuredOutcome(
         found.running ||= RUNNING_STATUSES.has(status);
         found.done ||= DONE_STATUSES.has(status);
         found.failed ||= FAILED_STATUSES.has(status);
+        if (inBody && key === 'status' && FAILED_STATUSES.has(status)) {
+          found.bodyStatusFailed = true;
+        }
         if (VEND_STATUS_KEY.test(key)) {
           found.vendDone ||= DONE_STATUSES.has(status);
           found.vendFailed ||= FAILED_STATUSES.has(status);
@@ -210,6 +227,7 @@ export function isMonnifyUnresolvedAnswer({
     failed: false,
     vendDone: false,
     vendFailed: false,
+    bodyStatusFailed: false,
     unknown: false,
     incomplete: false,
   };
@@ -265,10 +283,12 @@ export function hasMonnifyExplicitVendFailure(answer: unknown): boolean {
     failed: false,
     vendDone: false,
     vendFailed: false,
+    bodyStatusFailed: false,
     unknown: false,
     incomplete: false,
   };
   readStructuredOutcome(answer, outcome);
+  settleVendPrecedence(outcome);
   // Only a VEND-level failure proves it: a generic top-level `status: FAILED`
   // may describe the lookup request itself.
   return (

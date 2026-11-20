@@ -152,6 +152,18 @@ export async function purchaseBill(
     const isSuccess =
       classified.isSuccess || (hasToken && !isProcessing && !isFailed);
 
+    if (hasConflictingVendStatuses(body)) {
+      // vendStatus and transactionStatus contradict each other: hold.
+      return buildMonnifyUnresolvedVendResult({
+        amount,
+        message: sanitizeMonnifyErrorDetail(
+          parsedEnvelope.responseMessage || 'Vend outcome unclear'
+        ),
+        providerVendReference: vendReference,
+        requestReference,
+      });
+    }
+
     // A delivered token is enough on its own: throwing for a missing reference
     // here would re-vend an already-delivered purchase.
     if (isSuccess && !transactionReference && !vendReference && !hasToken) {
@@ -165,17 +177,6 @@ export async function purchaseBill(
       );
     }
 
-    if (hasConflictingVendStatuses(body)) {
-      // vendStatus and transactionStatus contradict each other: hold.
-      return buildMonnifyUnresolvedVendResult({
-        amount,
-        message: sanitizeMonnifyErrorDetail(
-          parsedEnvelope.responseMessage || 'Vend outcome unclear'
-        ),
-        providerVendReference: vendReference,
-        requestReference,
-      });
-    }
     if (isSuccess && !classified.isSuccess) {
       // A token completed this vend although its status was missing or not
       // one we know: a fixed label (no provider text) so support can spot a

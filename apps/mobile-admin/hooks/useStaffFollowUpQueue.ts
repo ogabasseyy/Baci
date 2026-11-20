@@ -28,5 +28,13 @@ export function useStaffFollowUpQueue() {
     (order) => staff.data?.[order.id]?.stage !== 'closed'
   );
 
-  return { source, staff, orders, ordersById, viewerId: user?.id };
+  const confirmedCount = staff.data ? orders.length : 0;
+  return {
+    source,
+    staff,
+    orders,
+    ordersById,
+    confirmedCount,
+    viewerId: user?.id,
+  };
 }

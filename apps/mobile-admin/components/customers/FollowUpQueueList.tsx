@@ -52,6 +52,7 @@ export function FollowUpQueueList({
 }: FollowUpQueueListProps) {
   const { colors } = useTheme();
   const {
+    confirmedCount,
     source,
     staff: staffFollowUps,
     orders,
@@ -108,8 +109,8 @@ export function FollowUpQueueList({
   };
 
   useEffect(() => {
-    onFollowUpCountChange(followUpCount);
-  }, [followUpCount, onFollowUpCountChange]);
+    onFollowUpCountChange(confirmedCount);
+  }, [confirmedCount, onFollowUpCountChange]);
 
   const filteredFailedOrders = (() => {
     if (!searchQuery.trim()) return orders;

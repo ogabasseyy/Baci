@@ -69,6 +69,7 @@ describe('FollowUpQueueList', () => {
     expect(screen.getByText('Ada')).toBeVisible();
     expect(screen.getByText('Loading team follow-up details…')).toBeVisible();
     expect(screen.queryByText('Claim follow-up')).toBeNull();
+    expect(defaultProps.onFollowUpCountChange).toHaveBeenLastCalledWith(0);
   });
 
   it('keeps details readable and lets staff retry when write access cannot be checked', () => {

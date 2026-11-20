@@ -122,6 +122,9 @@ describe('FollowUpQueueList', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(
       'This follow-up changed.'
     );
+    expect(
+      screen.getByRole('button', { name: 'Claim from editor' })
+    ).toBeDisabled();
   });
 
   it('tells the editor a claim just succeeded and clears that when the editor closes', async () => {

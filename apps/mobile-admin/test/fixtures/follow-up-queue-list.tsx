@@ -22,6 +22,7 @@ vi.mock('@/hooks/useStaffOrderFollowUps', () => ({
 }));
 vi.mock('@/components/customers/StaffFollowUpEditor', () => ({
   StaffFollowUpEditor: (props: {
+    canWrite: boolean;
     justClaimed?: boolean;
     saveError?: string;
     onClaim: () => Promise<unknown>;
@@ -31,7 +32,11 @@ vi.mock('@/components/customers/StaffFollowUpEditor', () => ({
       Open follow-up editor
       {props.saveError ? <span role="alert">{props.saveError}</span> : null}
       {props.justClaimed ? <span>Claim confirmed</span> : null}
-      <button type="button" onClick={() => void props.onClaim()}>
+      <button
+        type="button"
+        disabled={!props.canWrite}
+        onClick={() => void props.onClaim()}
+      >
         Claim from editor
       </button>
       <button type="button" onClick={props.onClose}>

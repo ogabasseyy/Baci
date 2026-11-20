@@ -5,7 +5,8 @@ INSERT INTO auth.users (id, email) VALUES
   ('aa000000-0000-4000-8000-000000000002','staff@example.test'),
   ('aa000000-0000-4000-8000-000000000003','outsider@example.test');
 INSERT INTO public.merchants (id, user_id, slug, business_name, email) VALUES
-  ('aa000000-0000-4000-8000-000000000011','aa000000-0000-4000-8000-000000000001','follow-up-test','Follow-up test','owner@example.test');
+  ('aa000000-0000-4000-8000-000000000011','aa000000-0000-4000-8000-000000000001','follow-up-test','Follow-up test','owner@example.test'),
+  ('aa000000-0000-4000-8000-000000000012','aa000000-0000-4000-8000-000000000003','follow-up-other-store','Other test store','outsider@example.test');
 INSERT INTO public.staff_members (merchant_id, user_id, name, email, role, status) VALUES
   ('aa000000-0000-4000-8000-000000000011','aa000000-0000-4000-8000-000000000002','Test staff','staff@example.test','admin','active');
 SELECT set_config('request.jwt.claim.sub', 'aa000000-0000-4000-8000-000000000001', true);
@@ -81,6 +82,11 @@ BEGIN
   BEGIN
     PERFORM public.claim_order_follow_up(merchant_id, order_id);
     RAISE EXCEPTION 'An outsider could claim another store order';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    PERFORM public.claim_order_follow_up('aa000000-0000-4000-8000-000000000012', order_id);
+    RAISE EXCEPTION 'An owner could claim an order outside their store';
   EXCEPTION WHEN insufficient_privilege THEN NULL;
   END;
 END $$;

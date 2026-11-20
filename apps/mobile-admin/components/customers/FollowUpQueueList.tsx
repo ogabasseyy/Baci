@@ -249,7 +249,7 @@ export function FollowUpQueueList({
             'Customer'
           }
           viewerId={viewerId}
-          canWrite={canWrite}
+          canWrite={canWrite && ordersById.has(selectedOrder.id)}
           followUp={selectedFollowUp}
           justClaimed={activeSelection?.justClaimed}
           busy={staffFollowUps.isSaving}

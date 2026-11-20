@@ -27,6 +27,7 @@ import {
   isRedvaultLivePilotReason,
 } from '@/lib/checkout/redvault-payment-availability';
 import { createStorefrontOrderRpcClient } from '@/lib/checkout/storefront-order-rpc-client';
+import { checkCsrfProtection } from '@/lib/csrf';
 import {
   capturePaymentWithCrypto,
   convertNgnKoboToUsdtCents,
@@ -1042,9 +1043,8 @@ async function initializeKorapay(
 
 export async function POST(request: NextRequest) {
   try {
-    // CSRF exemption: This is a public storefront endpoint for checkout payment.
-    // Guest users do not have CSRF tokens. The route validates order ownership
-    // via get_order_payment_snapshot RPC (order_id + email match).
+    // Standard guest checkout validates order ownership with the payment
+    // snapshot RPC. Signed-in bank offers also require CSRF protection.
 
     // Parse and validate request body
     const body = await request.clone().json();
@@ -1062,6 +1062,13 @@ export async function POST(request: NextRequest) {
     const retired = retiredGatewayResponse(data.gateway);
     if (retired) return retired;
     if (data.payment_method === 'bank_card_offer') {
+      const csrf = await checkCsrfProtection(request);
+      if (!csrf.valid) {
+        return (
+          csrf.response ??
+          NextResponse.json({ error: 'Invalid CSRF token' }, { status: 403 })
+        );
+      }
       const merchantId = data.merchant_id.toLowerCase();
       const auth = await authenticateApiRequest(request);
       if (

@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   verify: vi.fn(),
   refund: vi.fn(),
   cookieAuth: vi.fn(),
+  csrf: vi.fn(),
 }));
 const userId = 'c4c9b190-6486-418a-8f68-dce9269e0eac';
 const merchantId = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
@@ -50,7 +51,7 @@ vi.mock('@/lib/supabase/mobile-auth', () => ({
   getAuthenticatedUser: mocks.cookieAuth,
 }));
 vi.mock('@/lib/csrf', () => ({
-  checkCsrfProtection: async () => ({ valid: true }),
+  checkCsrfProtection: mocks.csrf,
 }));
 vi.mock('@/lib/supabase/server', () => ({ createClient: async () => mocks }));
 vi.mock('@/lib/supabase/service', () => ({ createServiceClient: () => mocks }));
@@ -146,6 +147,7 @@ function setup(
   saveCheckoutUrl = true,
   failFirstCompletion = false
 ) {
+  mocks.csrf.mockResolvedValue({ valid: true });
   mocks.cookieAuth.mockResolvedValue({
     authMode: 'cookie',
     user: { id: userId },
@@ -372,6 +374,29 @@ function setup(
 }
 
 describe('bank card offer payment handlers', () => {
+  it('requires CSRF proof before reserving a bank-offer checkout', async () => {
+    vi.stubEnv('PAYSTACK_SECRET_KEY', secret);
+    setup('035', 'Wema Bank');
+    mocks.csrf.mockResolvedValueOnce({ valid: false });
+
+    const response = await initialize(
+      request('initialize', {
+        merchant_id: merchantId,
+        order_id: orderId,
+        payment_method: 'bank_card_offer',
+        currency: 'NGN',
+        customer_email: customerEmail,
+        customer_name: 'Buyer',
+        customer_phone: '08012345678',
+        gateway: 'paystack',
+      })
+    );
+
+    expect(response.status).toBe(403);
+    expect(mocks.rpc).not.toHaveBeenCalled();
+    expect(mocks.initialize).not.toHaveBeenCalled();
+  });
+
   it('rejects verification from the wrong storefront before contacting Paystack', async () => {
     setup('035', 'Wema Bank');
 

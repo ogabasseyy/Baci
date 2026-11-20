@@ -4,6 +4,7 @@ import { resolvePaystackSplitTransactionCharge } from '@/lib/payments/resolve-pa
 import { calculatePlatformFee } from '@/lib/paystack';
 import { bankCardOfferCheckoutContextSchema } from '@/schemas/bank-card-offer-checkout-context';
 import { bankCardOfferClaimSchema } from '@/schemas/bank-card-offer-claim';
+import { getBankCardOfferCallbackOrigin } from './get-bank-card-offer-callback-origin';
 import { hashBankCardOfferFilter } from './hash-bank-card-offer-filter';
 import { initializeBankCardOfferPaystack } from './initialize-bank-card-offer-paystack';
 
@@ -13,12 +14,14 @@ export async function initializeBankCardOfferCheckout({
   orderId,
   email,
   currency,
+  request,
 }: {
   client: Pick<SupabaseClient, 'rpc'>;
   merchantId: string;
   orderId: string;
   email: string;
   currency: string | undefined;
+  request?: Request;
 }) {
   const key = process.env.PAYSTACK_SECRET_KEY;
   const domain = key?.startsWith('sk_test_')
@@ -79,11 +82,11 @@ export async function initializeBankCardOfferCheckout({
       return { kind: 'initialized', reference, checkoutUrl } as const;
     return requestReview(false);
   }
-  const root = process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'usebaci.com';
-  const protocol =
-    process.env.NODE_ENV !== 'production' && /^localhost(?::\d+)?$/.test(root)
-      ? 'http'
-      : 'https';
+  const callbackOrigin = await getBankCardOfferCallbackOrigin({
+    request,
+    merchantId,
+    merchantSlug: slug,
+  });
   let url: string;
   try {
     url = await initializeBankCardOfferPaystack({
@@ -98,7 +101,7 @@ export async function initializeBankCardOfferCheckout({
       },
       subaccount,
       transactionChargeKobo,
-      callbackUrl: `${protocol}://${slug}.${root}/checkout/success?reference=${reference}`,
+      callbackUrl: `${callbackOrigin}/checkout/success?reference=${reference}`,
     });
   } catch {
     // Paystack may have accepted the initialization. Send the same reference

@@ -1087,6 +1087,7 @@ export async function POST(request: NextRequest) {
         orderId: data.order_id,
         email: data.customer_email,
         currency: data.currency,
+        request,
       });
       if (result.kind === 'unavailable') {
         return createErrorResponse(

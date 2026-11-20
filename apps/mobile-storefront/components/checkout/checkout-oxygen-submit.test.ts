@@ -8,11 +8,11 @@ const request = {
 jest.mock('@/services/orders', () => ({ createOrder: jest.fn() }));
 describe('native Oxygen order admission', () => {
   const createOrder = jest.fn();
-  const admit = jest.fn();
+  const readOwner = jest.fn();
   beforeEach(() => {
     jest.clearAllMocks();
-    admit.mockResolvedValue({
-      merchant: { id: 'merchant-one' },
+    readOwner.mockResolvedValue({
+      merchantId: 'merchant-one',
       userId: 'buyer-one',
     });
     createOrder.mockResolvedValue({
@@ -28,9 +28,9 @@ describe('native Oxygen order admission', () => {
         hasVoucher: false,
         hasCredits: false,
       },
-      { admit, createOrder }
+      { readOwner, createOrder }
     );
-    expect(admit).toHaveBeenCalledTimes(1);
+    expect(readOwner).toHaveBeenCalledTimes(1);
     expect(createOrder).toHaveBeenCalledWith(request, {
       checkoutGeneration: 'generation-1',
       analyticsPaymentMethod: 'oxygen',
@@ -47,13 +47,13 @@ describe('native Oxygen order admission', () => {
     await expect(
       submitOxygenCheckout(
         { request, checkoutGeneration: 'g', ...flags },
-        { admit, createOrder }
+        { readOwner, createOrder }
       )
     ).rejects.toThrow();
     expect(createOrder).not.toHaveBeenCalled();
   });
-  it('does not create without freshly verified capability', async () => {
-    admit.mockRejectedValue(new Error('capability unavailable'));
+  it('does not create without a scoped owner', async () => {
+    readOwner.mockRejectedValue(new Error('Owner unavailable'));
     await expect(
       submitOxygenCheckout(
         {
@@ -63,9 +63,9 @@ describe('native Oxygen order admission', () => {
           hasVoucher: false,
           hasCredits: false,
         },
-        { admit, createOrder }
+        { readOwner, createOrder }
       )
-    ).rejects.toThrow('capability');
+    ).rejects.toThrow('Owner unavailable');
     expect(createOrder).not.toHaveBeenCalled();
   });
   it.each([
@@ -86,10 +86,10 @@ describe('native Oxygen order admission', () => {
           hasVoucher: false,
           hasCredits: false,
         },
-        { admit, createOrder }
+        { readOwner, createOrder }
       )
     ).rejects.toThrow(/without vouchers/);
-    expect(admit).not.toHaveBeenCalled();
+    expect(readOwner).not.toHaveBeenCalled();
     expect(createOrder).not.toHaveBeenCalled();
   });
   it.each([
@@ -109,10 +109,10 @@ describe('native Oxygen order admission', () => {
           hasVoucher: false,
           hasCredits: false,
         },
-        { admit, createOrder }
+        { readOwner, createOrder }
       )
     ).rejects.toThrow('Invalid voucher identifier');
-    expect(admit).not.toHaveBeenCalled();
+    expect(readOwner).not.toHaveBeenCalled();
     expect(createOrder).not.toHaveBeenCalled();
   });
   it('omits whitespace-only voucher identifiers from the order request', async () => {
@@ -134,7 +134,7 @@ describe('native Oxygen order admission', () => {
         hasVoucher: false,
         hasCredits: false,
       },
-      { admit, createOrder }
+      { readOwner, createOrder }
     );
     expect(createOrder).toHaveBeenCalledWith(request, expect.anything());
   });
@@ -148,7 +148,7 @@ describe('native Oxygen order admission', () => {
         hasVoucher: false,
         hasCredits: false,
       },
-      { admit, createOrder }
+      { readOwner, createOrder }
     );
     expect(createOrder).toHaveBeenCalledWith(
       discounted,

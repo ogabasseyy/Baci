@@ -103,6 +103,7 @@ import { type OrderCreateInput, orderCreateSchema } from '@/schemas/orders';
 import { rejectMobileOxygenCreditCombination } from './mobile-oxygen-order-admission';
 import { resolveOrderCreationMerchant } from './order-creation-merchant';
 import { authenticateOrderRequest } from './order-request-auth';
+import { replayAdmittedOxygenOrder } from './replay-admitted-oxygen-order';
 
 function isPayOnDelivery(paymentMethod: string): boolean {
   return paymentMethod === 'pod' || paymentMethod === 'pay_on_delivery';
@@ -977,6 +978,7 @@ export async function POST(request: NextRequest) {
       supabase,
       order: body,
       userId: resolvedUserId,
+      allowReadOnlyOxygenReplay: Boolean(requestIdempotencyKey),
     });
     if (!merchantResult.ok) return merchantResult.response;
     const { merchant } = merchantResult;
@@ -2072,6 +2074,16 @@ export async function POST(request: NextRequest) {
       requestIdempotencyKey,
       supabase,
     });
+    if (merchantResult.oxygenAdmission)
+      return replayAdmittedOxygenOrder({
+        client: supabase,
+        merchantId: merchant_id,
+        userId: resolvedUserId,
+        key: requestIdempotencyKey,
+        hash: checkoutRequestHash,
+        rejection: merchantResult.oxygenAdmission,
+      });
+
     // When the replay probe adopts a per-provider alternate, that matched
     // carrier is the original order's provider: the RPC must receive the
     // same carrier the adopted hash encodes, never a leftover null.

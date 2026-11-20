@@ -8,7 +8,7 @@ type Input = {
   hasCredits: boolean;
 };
 type Dependencies = {
-  admit: () => Promise<{ merchant: { id: string }; userId: string }>;
+  readOwner: () => Promise<{ merchantId: string; userId: string }>;
   createOrder: typeof createOrder;
 };
 
@@ -62,18 +62,18 @@ export async function submitOxygenCheckout(
   }
   const items = input.request.items.map(prepareOxygenOrderItem);
   const deps = dependencies ?? {
-    admit: async () => {
+    readOwner: async () => {
       const { oxygenNativeSession } = await import(
         '@/services/oxygen/native-session'
       );
       const session = oxygenNativeSession();
-      const { merchant } = await session.capabilities(true);
-      return { merchant, userId: session.userId };
+      return { merchantId: session.profile.merchantId, userId: session.userId };
     },
     createOrder,
   };
-  // Revalidate after every checkout await and immediately before order mutation.
-  const { merchant, userId } = await deps.admit();
+  // Scope the send to the current owner. The API admits new orders and can
+  // still return an exact previously accepted order during a rollout pause.
+  const { merchantId, userId } = await deps.readOwner();
   return deps.createOrder(
     {
       ...input.request,
@@ -82,7 +82,7 @@ export async function submitOxygenCheckout(
     {
       checkoutGeneration: input.checkoutGeneration,
       analyticsPaymentMethod: 'oxygen',
-      expectedMerchantId: merchant.id,
+      expectedMerchantId: merchantId,
       expectedOwner: userId,
     }
   );

@@ -9,11 +9,13 @@ export async function resolveOrderCreationMerchant({
   supabase,
   order,
   userId,
+  allowReadOnlyOxygenReplay = false,
 }: {
   request: Request;
   supabase: SupabaseClient;
   order: Pick<OrderCreateInput, 'merchant_id' | 'payment_method' | 'source'>;
   userId: string | null;
+  allowReadOnlyOxygenReplay?: boolean;
 }) {
   // Fetch merchant to verify it exists (include business_name, slug for email)
   const { data: merchant, error: merchantFetchError } = await supabase
@@ -46,7 +48,11 @@ export async function resolveOrderCreationMerchant({
     paymentMethod: order.payment_method,
     source: order.source,
   });
-  if (oxygenAdmission) return { ok: false as const, response: oxygenAdmission };
+  if (oxygenAdmission) {
+    if (allowReadOnlyOxygenReplay && userId)
+      return { ok: true as const, merchant, oxygenAdmission };
+    return { ok: false as const, response: oxygenAdmission };
+  }
 
   return { ok: true as const, merchant };
 }

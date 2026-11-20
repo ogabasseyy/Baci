@@ -38,7 +38,7 @@ it('lets web checkout save an unpaid Oxygen order without using native admission
   );
 });
 
-it('checks merchant admission before any replay of a Bearer Oxygen order', async () => {
+it('permits only replay reads when Bearer Oxygen admission is closed', async () => {
   vi.mocked(readOxygenMobileCapabilities).mockResolvedValueOnce({
     ok: false,
     status: 404,
@@ -63,7 +63,9 @@ it('checks merchant admission before any replay of a Bearer Oxygen order', async
     expect.anything(),
     'test-merchant'
   );
-  expect(getLatestRpc()).not.toHaveBeenCalled();
+  expect(getLatestRpc().mock.calls.map(([operation]) => operation)).toEqual([
+    'storefront_checkout_replay_snapshot',
+  ]);
 });
 
 it.each([

@@ -1,6 +1,4 @@
 /** Multi-tenant hero carousel with parallax, carousel, and standard variants. */
-import type { ImageSource } from 'expo-image';
-import type { Href } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { type FlatListProps, useWindowDimensions, View } from 'react-native';
 import Animated, {
@@ -23,32 +21,12 @@ import { FashionSlide } from './FashionSlide';
 import { ELITE_HEIGHT, getHeroStyles } from './Hero.styles';
 import { HeroAdSlide } from './HeroAdSlide';
 import { CAROUSEL_HEIGHT, STANDARD_HEIGHT } from './hero-slide-dimensions';
+import type { HeroProps, HeroSlide } from './hero-slide-types';
 import { nextOffsetAfterAdToggle } from './launch-ad-offset';
 import { StandardSlide } from './StandardSlide';
 import { useHeroAutoplay } from './use-hero-autoplay';
 
-export interface HeroSlide {
-  campaign?: 'black-friday';
-  artwork?: ImageSource;
-  showSavingsProvider?: boolean;
-  title: string;
-  subtitle: string;
-  image: string;
-  ctaText: string;
-  ctaLink: Href;
-}
-
-interface HeroProps {
-  slides?: HeroSlide[];
-  autoplayDelay?: number;
-  autoplayPaused?: boolean;
-  /**
-   * Inserts one sponsored slide second (after the first CMS slide). The
-   * existing autoplay rotates onto it like any other slide. Ignored while
-   * ads are disabled.
-   */
-  trailingAdPlacement?: MobileAdBannerPlacementKey;
-}
+export type { HeroSlide } from './hero-slide-types';
 
 type HeroAdSlideItem = { kind: 'hero-ad-slide' };
 

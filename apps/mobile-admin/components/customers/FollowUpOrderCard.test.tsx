@@ -16,6 +16,28 @@ vi.mock('@/hooks/useTheme', () => ({
 describe('FollowUpOrderCard', () => {
   beforeEach(() => vi.clearAllMocks());
 
+  it.each([
+    ['paid', 'Staff follow-up · Paid'],
+    ['refunded', 'Staff follow-up · Refunded'],
+    ['cancelled', 'Staff follow-up · Cancelled'],
+    ['pending', 'Staff follow-up'],
+  ] as const)('shows a retained order with payment status %s', (status, label) => {
+    render(
+      <FollowUpOrderCard
+        item={{
+          ...oxygenProcessingOrder,
+          oxygen_follow_up_status: undefined,
+          payment_status: status,
+          staff_follow_up_only: true,
+        }}
+        displayTotal="₦10k"
+        initials="A"
+      />
+    );
+
+    expect(screen.getByText(`₦10k • ${label}`)).toBeInTheDocument();
+  });
+
   it('opens the Oxygen order and omits an empty email action', () => {
     render(
       <FollowUpOrderCard

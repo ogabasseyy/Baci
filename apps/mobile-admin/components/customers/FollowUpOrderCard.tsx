@@ -21,9 +21,7 @@ export function FollowUpOrderCard({
 }: FollowUpOrderCardProps) {
   const router = useRouter();
   const { colors, shadows } = useTheme();
-  const errorMessage = item.staff_follow_up_only
-    ? 'Staff follow-up'
-    : getFollowUpStatusLabel(item);
+  const errorMessage = getFollowUpStatusLabel(item);
 
   const displayName = item.customer_name || 'Guest';
   const emailLink = buildMailtoLink(item.customer_email);
@@ -104,7 +102,9 @@ export function FollowUpOrderCard({
                   : colors.error,
             },
           ]}
-          numberOfLines={item.oxygen_follow_up_status ? 2 : 1}
+          numberOfLines={
+            item.oxygen_follow_up_status || item.staff_follow_up_only ? 2 : 1
+          }
         >
           {displayTotal} • {errorMessage}
         </Text>

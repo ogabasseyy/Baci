@@ -91,7 +91,7 @@ DECLARE
   reassigned jsonb;
 BEGIN
   PERFORM set_config('request.jwt.claim.sub', 'aa560000-0000-4000-8000-000000000001', true);
-  IF NOT EXISTS (SELECT 1 FROM public.order_follow_ups WHERE order_id = open_id AND assignee_id IS NULL AND revision = 3) THEN
+  IF NOT EXISTS (SELECT 1 FROM public.order_follow_ups WHERE order_id = open_id AND assignee_id IS NULL AND assignee_name = 'Unassigned' AND revision = 3) THEN
     RAISE EXCEPTION 'Revoking edit permission did not release the open claim';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM public.order_follow_ups WHERE order_id = closed_id AND assignee_id = 'aa560000-0000-4000-8000-000000000002' AND revision = 2) THEN
@@ -140,7 +140,8 @@ BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM public.order_follow_ups
     WHERE order_id = 'aa560000-0000-4000-8000-000000000021'
-      AND assignee_id IS NULL AND revision = 6 AND outcome = 'Call back'
+      AND assignee_id IS NULL AND assignee_name = 'Unassigned'
+      AND revision = 6 AND outcome = 'Call back'
   ) THEN
     RAISE EXCEPTION 'A role-wide change stranded the open follow-up';
   END IF;

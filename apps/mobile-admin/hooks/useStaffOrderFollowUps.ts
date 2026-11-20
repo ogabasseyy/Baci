@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FOLLOW_UP_QUERY_LIMIT } from '@/config/follow-up-queue';
 import type { FailedOrder } from '@/hooks/useFailedOrders';
+import { RETAINED_PAYMENT_STATUSES } from '@/lib/follow-up-status';
 import { supabase } from '@/lib/supabase';
 import { oxygenFollowUpOrderSchema } from '@/schemas/oxygen-follow-up';
 import {
@@ -80,7 +81,10 @@ async function fetchFollowUps(
       customer_phone: order.customer_phone ?? '',
       payment_method: order.payment_method ?? '',
       total: Number.isFinite(total) ? total : null,
-      payment_status: 'unknown',
+      payment_status:
+        RETAINED_PAYMENT_STATUSES.find(
+          (status) => status === order.payment_status
+        ) ?? 'unknown',
       attempt_count: 1,
       follow_up_at: followUp.updated_at,
       staff_follow_up_only: true,

@@ -21,7 +21,21 @@ const PAYMENT_LABELS: Record<string, string> = {
   unknown: 'Payment status unavailable',
 };
 
+export const RETAINED_PAYMENT_STATUSES = [
+  'paid',
+  'refunded',
+  'cancelled',
+] as const;
+
 export function getFollowUpStatusLabel(order: FailedOrder): string {
+  if (order.staff_follow_up_only) {
+    const status = RETAINED_PAYMENT_STATUSES.find(
+      (status) => status === order.payment_status
+    );
+    return status
+      ? `Staff follow-up · ${PAYMENT_LABELS[status]}`
+      : 'Staff follow-up';
+  }
   if (order.oxygen_follow_up_status)
     return OXYGEN_LABELS[order.oxygen_follow_up_status];
   if (order.attempt_count > 1) return `${order.attempt_count} attempts`;

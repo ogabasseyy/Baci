@@ -96,7 +96,7 @@ describe('useStaffOrderFollowUps', () => {
         customer_phone: '',
         payment_method: '',
         total: null,
-        payment_status: 'unknown',
+        payment_status: 'paid',
         attempt_count: 1,
         follow_up_at: '2026-11-19T10:00:00+00:00',
         staff_follow_up_only: true,

@@ -86,10 +86,17 @@ function isSdr(candidate: Guardable): number {
   return candidate.providerStatus.trim().toUpperCase() === 'SDR' ? 1 : 0;
 }
 
+// A return signal: one of the return codes, or any scan the status map reads
+// as a completed return (e.g. VFSSRR).
+function startsReturnFlow(candidate: Guardable): boolean {
+  return (
+    RETURN_FLOW_CODES.has(candidate.providerStatus.trim().toUpperCase()) ||
+    candidate.recognizedStatus === 'returned'
+  );
+}
+
 function isReturnFlow(candidate: Guardable): number {
-  return RETURN_FLOW_CODES.has(candidate.providerStatus.trim().toUpperCase())
-    ? 1
-    : 0;
+  return startsReturnFlow(candidate) ? 1 : 0;
 }
 
 function locatedExplicitArrival(
@@ -217,7 +224,7 @@ export function applyLifecycleGuards(
           (!sameCity || leftDestinationCentre) &&
           matchesDestination(event.location, destination)));
     if (raw === 'SDR') destroyed = true;
-    if (RETURN_FLOW_CODES.has(raw)) returning = true;
+    if (startsReturnFlow(candidate)) returning = true;
     if (isArrival) {
       arrived = true;
       if (candidate.recognizedStatus === null) {

@@ -1,6 +1,8 @@
 import { z } from 'zod';
 
 export const OXYGEN_REPAYMENT_HISTORY_LIMIT = 50;
+// Match the Oxygen checkout booking action's maximum supported tenure.
+const OXYGEN_ORDER_PLAN_MAX_MONTHS = 12;
 
 export const oxygenRepaymentReceiptSchema = z.object({
   id: z.string().uuid(),
@@ -38,11 +40,12 @@ export const oxygenOrderPlanSchema = z.object({
   upfront: z.number().finite().nonnegative().nullable(),
   upfrontConfirmed: z.boolean(),
   activationConfirmed: z.boolean().default(false),
-  months: z.number().int().positive(),
+  months: z.number().int().positive().max(OXYGEN_ORDER_PLAN_MAX_MONTHS),
   repaymentReceipts: oxygenRepaymentReceiptsSchema.optional(),
   scheduleIncomplete: z.boolean().optional(),
   schedule: z
     .array(instalmentSchema)
+    .max(OXYGEN_ORDER_PLAN_MAX_MONTHS)
     .refine(
       (rows) => new Set(rows.map(({ period }) => period)).size === rows.length,
       'Duplicate repayment period'

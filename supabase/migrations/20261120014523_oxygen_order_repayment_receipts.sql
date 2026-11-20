@@ -2,7 +2,7 @@
 -- The inbox already deduplicates each typed reference per partner and environment.
 CREATE TABLE oxygen_private.repayment_booking_bindings (
   workflow_id uuid NOT NULL REFERENCES public.oxygen_workflows(id) ON DELETE CASCADE,
-  booking_reference text NOT NULL,
+  booking_reference text NOT NULL CHECK (booking_reference = lower(booking_reference)),
   partner_reference text NOT NULL,
   environment text NOT NULL CHECK (environment IN ('staging', 'production')),
   PRIMARY KEY (workflow_id, booking_reference)
@@ -52,6 +52,7 @@ BEGIN
   -- Runtime writes the reference history for the exact command that produced
   -- the booking, in the same transaction as the provider state. Move the
   -- claim into the booking binding. Incomplete claims follow command retention.
+  -- The reference history stores a UUID, whose text form is lowercase.
   WITH claimed AS (
     DELETE FROM oxygen_private.repayment_booking_claims
     WHERE command_id = NEW.command_id

@@ -65,6 +65,14 @@ describe('Oxygen order plan response', () => {
     { activationConfirmed: 'true' },
     { months: 0 },
     { months: 1.5 },
+    { months: 13 },
+    {
+      months: 12,
+      schedule: Array.from({ length: 13 }, (_, index) => ({
+        ...instalment,
+        period: index + 1,
+      })),
+    },
     { schedule: [{ ...instalment, period: 0 }] },
     { schedule: [{ ...instalment, amount: -1 }] },
     { schedule: [{ ...instalment, amount: Number.POSITIVE_INFINITY }] },

@@ -236,11 +236,13 @@ it('sorts known instalments around a gap and signals that the schedule is incomp
   expect(plan.scheduleIncomplete).toBe(true);
 });
 
-it('fails closed if the validated snapshot and plan contracts ever diverge', async () => {
+it.each([0, 13])('rejects unsupported saved tenure %d', async (loan_tenure) => {
   mocks.read.mockResolvedValue({
-    state: { booking: { status: 'BOOKED', loan_tenure: 0 }, schedule: [] },
+    stage: 'activated',
+    state: { booking: { status: 'ACTIVATED', loan_tenure }, schedule: [] },
   });
   const response = await GET(request());
   expect(response.status).toBe(503);
   expect(await response.json()).toEqual({ error: 'Plan unavailable' });
+  expect(mocks.rpc).not.toHaveBeenCalled();
 });

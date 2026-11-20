@@ -83,28 +83,27 @@ export async function GET(request: NextRequest) {
     const snapshot = await readOxygenSnapshot(auth.supabase, workflow.data.id);
     const { booking, schedule, paymentComplete } = snapshot.state;
     if (!booking) return NextResponse.json({ plan: null }, { headers });
-    // The runtime snapshot has already validated the saved booking's tenure
-    // and upfront amount. The shared schema also checks the public projection.
+    // Bound the customer projection before reading history or sorting rows.
+    const months = oxygenOrderPlanSchema.shape.months.parse(
+      booking.loan_tenure
+    );
     const activationConfirmed =
       snapshot.stage === 'activated' && booking.status === 'ACTIVATED';
     const repaymentReceipts = activationConfirmed
       ? await readRepaymentReceipts(auth.supabase, id.data)
       : undefined;
     const savedSchedule = schedule ?? [];
-    const projectedSchedule = projectSchedule(
-      savedSchedule,
-      booking.loan_tenure
-    );
+    const projectedSchedule = projectSchedule(savedSchedule, months);
     const plan = oxygenOrderPlanSchema.parse({
       upfront: booking.total_upfront_payment ?? null,
       upfrontConfirmed: paymentComplete === true,
       activationConfirmed,
       repaymentReceipts,
-      months: booking.loan_tenure,
+      months,
       schedule: projectedSchedule,
       scheduleIncomplete:
         savedSchedule.length > 0 &&
-        (projectedSchedule.length !== booking.loan_tenure ||
+        (projectedSchedule.length !== months ||
           projectedSchedule.length !== savedSchedule.length)
           ? true
           : undefined,

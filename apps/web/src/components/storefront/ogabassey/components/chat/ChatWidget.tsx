@@ -34,7 +34,6 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
   const merchant = useMerchantSafe();
   const isFooterVisible = useOgabasseyScrollVisibility();
   const isSanta = theme === 'santa';
-
   const {
     isOpen,
     setIsOpen,

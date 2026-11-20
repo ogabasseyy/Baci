@@ -1,11 +1,11 @@
 # Baci capabilities and agent access
 
 Reviewed 20 November 2026 against source revision
-`cc79b962add7e85415e15367dc95026bf9778863`. The Shopping MCP row was re-reviewed after the misleading link-only
+`52b91bdbd84f8b5f9d327a2b4c823fe92e154af8`. The Shopping MCP row was re-reviewed after the misleading link-only
 `add_to_cart` alias was retired from the server, discovery card and submission metadata, and again after the
 connected cart read tool's description and failure text were reworded (wording only; no claim moved).
 The mobile-admin follow-up queue no longer treats
-stale unpaid staff-created orders as abandoned checkouts; their failed or BNPL payments still enter it. The source also categorizes Oxygen follow-ups, places reviews first and includes them in the customer badge; it does not automatically contact customers. Agentic checkout session quotes now include
+stale unpaid staff-created orders as abandoned checkouts; their failed or BNPL payments still enter it. The source also categorizes Oxygen follow-ups, places reviews first and includes them in the customer badge; Follow-up reads require customer-view permission, and claims and updates also require customer-edit permission. Removing staff or revoking either permission from the staff member or their role releases their open work and preserves its outcome and date. The claim RPC scopes to orders in the same store so a checkout status change can leave its follow-up actionable. Closed records are read-only. Retained follow-up cards show when an order is BNPL approved, paid, refunded, or cancelled. Follow-up rows name known payment methods and lenders. Follow-up dates are optional. Past dates represent overdue work, and closing clears the date. Agentic checkout session quotes now include
 registered-merchant VAT using an exclusive basis; this is source evidence, not deployment or live-flow
 proof. Guest OAuth consent and renewable authorization were re-reviewed and tested. Upstream payment
 review confirms uncertain DVA outcomes retain their reconciliation claim and checkout eligibility

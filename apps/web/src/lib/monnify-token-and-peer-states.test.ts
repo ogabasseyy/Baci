@@ -211,3 +211,27 @@ describe('bugfix: explicit unknown-outcome wording is held', () => {
     ).toBe(false);
   });
 });
+
+describe('bugfix: request-object statuses and nested customer references', () => {
+  it('does not treat request.status FAILED as proof the vend failed', () => {
+    expect(
+      isMonnifyRequeryRejectionDefiniteFailure({
+        envelope: { responseBody: { request: { status: 'FAILED' } } },
+        rawMessage: 'Could not complete',
+      })
+    ).toBe(false);
+  });
+
+  it('ignores a nested customer.reference but keeps a vend reference', () => {
+    const answer = (responseBody: Record<string, unknown>) =>
+      isMonnifyUnresolvedAnswer({
+        answer: { responseCode: '01', responseBody },
+        requestReference: 'a1b2c3d4e5f6a1b2c3d4e5f6',
+        wording: 'Invalid customer',
+      });
+
+    expect(answer({ customer: { reference: 'CUST-1' } })).toBe(false);
+    expect(answer({ transactionReference: 'MNFY-1' })).toBe(true);
+    expect(answer({ reference: 'MFBP-1' })).toBe(true);
+  });
+});

@@ -9,7 +9,11 @@ interface Found {
   value: string;
 }
 
-type KeyMatcher = (key: string, insideBody: boolean) => boolean;
+type KeyMatcher = (
+  key: string,
+  insideBody: boolean,
+  parentKey: string
+) => boolean;
 
 /**
  * Every non-blank string or numeric value under a key the matcher accepts,
@@ -22,7 +26,8 @@ function collectBodyField(
   out: Found[],
   insideBody = false,
   depth = 0,
-  anywhere = false
+  anywhere = false,
+  parentKey = ''
 ): void {
   if (!answer || typeof answer !== 'object' || depth > MAX_DEPTH) {
     return;
@@ -32,7 +37,7 @@ function collectBodyField(
     : Object.entries(answer);
   for (const [rawKey, value] of children) {
     const key = normaliseKey(rawKey);
-    if ((insideBody || anywhere) && matches(key, insideBody)) {
+    if ((insideBody || anywhere) && matches(key, insideBody, parentKey)) {
       // An array value ("transactionReference": ["MFBP-1"]) is read item by item.
       for (const item of Array.isArray(value) ? value : [value]) {
         if (typeof item === 'string' || typeof item === 'number') {
@@ -49,7 +54,8 @@ function collectBodyField(
       out,
       insideBody || key === 'responsebody',
       depth + 1,
-      anywhere
+      anywhere,
+      key
     );
   }
 }
@@ -68,8 +74,14 @@ const ECHO_REFERENCE_PREFIX = /^(?:validation|request|customer)/;
 const isVendReferenceKey: KeyMatcher = (key) => key === 'vendreference';
 // A bare `reference` / `ref` counts too: an exact echo of our own request
 // reference is excluded by value, so a foreign one is evidence.
-const isProviderReferenceKey: KeyMatcher = (key) =>
-  REFERENCE_LIKE_KEY.test(key) && !ECHO_REFERENCE_PREFIX.test(key);
+// A bare `reference`/`ref` under customer/product/... describes that object
+// (customer references are echoes), not a vend.
+const NON_VEND_PARENT =
+  /^(?:customer|validation|request|product|biller|item|service|package|plan|account|merchant|user)s?$/;
+const isProviderReferenceKey: KeyMatcher = (key, _insideBody, parentKey) =>
+  REFERENCE_LIKE_KEY.test(key) &&
+  !ECHO_REFERENCE_PREFIX.test(key) &&
+  !((key === 'reference' || key === 'ref') && NON_VEND_PARENT.test(parentKey));
 
 /**
  * The reference at the shallowest depth. When two different references sit at

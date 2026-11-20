@@ -49,7 +49,7 @@ function isGenericVendLikeStatus(key: string, value: string): boolean {
 const VEND_FLAG_KEY =
   /^(?:is|was|has)?(?:been)?(?:vend|transaction|txn|purchase|airtime|delivered|dispatched|vended|credited|recharged|toppedup)/;
 const NON_VEND_PARENT =
-  /^(?:customer|product|biller|item|service|package|plan|account|merchant|user|validation)s?$/;
+  /^(?:customer|product|biller|item|service|package|plan|account|merchant|user|validation|request|lookup|query|requery|enquiry|inquiry)s?$/;
 const PAYMENT_LEVEL_FLAG = /^(?:is|was|has)?(?:been)?payment/;
 
 /** True outcome flags, key normalised: "delivered", "isPending", "vendFailed"... */

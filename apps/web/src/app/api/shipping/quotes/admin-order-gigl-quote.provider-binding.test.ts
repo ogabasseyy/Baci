@@ -161,7 +161,7 @@ describe('Admin GIGL provider, persistence, binding, and wallet behavior', () =>
     });
   });
 
-  it('holds partner delivery when the fresh GIG rate exceeds the settled fee', async () => {
+  it('holds partner delivery when the fresh GIG rate differs from the settled fee', async () => {
     mocks.bindRpc.mockResolvedValue({
       data: null,
       error: { message: 'partner_delivery_price_changed' },

@@ -193,6 +193,15 @@ BEGIN
      )) <> 3 THEN
     RAISE EXCEPTION 'quote expiry failed to remove abandoned data or keep protected quotes';
   END IF;
+  IF to_regclass('cron.job') IS NOT NULL THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM cron.job
+      WHERE jobname = 'partner-unclaimed-quote-expiry' AND active
+        AND schedule = '22 * * * *' AND command = 'SELECT private.expire_unclaimed_partner_quotes();'
+    ) THEN
+      RAISE EXCEPTION 'quote expiry job is missing from the managed scheduler';
+    END IF;
+  END IF;
 END;
 $$;
 

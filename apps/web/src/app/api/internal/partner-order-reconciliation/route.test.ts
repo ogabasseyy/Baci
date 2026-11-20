@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { logger } from '@/lib/logger';
 import { POST } from './route';
 
 const mocks = vi.hoisted(() => ({
@@ -80,11 +81,24 @@ describe('internal partner reconciliation', () => {
   afterEach(() => vi.unstubAllEnvs());
 
   it('requires the separate internal verifier credential', async () => {
+    using warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
     expect((await POST(request(evidence, orderToken))).status).toBe(404);
     vi.stubEnv('CROSSREM_VERIFIER_TOKEN', orderToken);
     expect((await POST(request(evidence, orderToken))).status).toBe(404);
     expect(mocks.rpc).not.toHaveBeenCalled();
     expect(mocks.scopedClient).not.toHaveBeenCalled();
+    expect(warn.mock.calls.map(([entry]) => entry)).toEqual([
+      {
+        message: 'Partner verifier access rejected',
+        reason: 'scope_required',
+        requestId: expect.any(String),
+      },
+      {
+        message: 'Partner verifier access rejected',
+        reason: 'ambiguous',
+        requestId: expect.any(String),
+      },
+    ]);
   });
 
   it('validates submitted evidence and derives merchant and connection server-side', async () => {

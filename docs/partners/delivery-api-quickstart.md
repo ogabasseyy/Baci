@@ -66,4 +66,6 @@ Call `GET /order-submissions?partner_order_id=example-order-reference`. A receip
 
 Call `GET /orders/{orderId}` with that ID. Baci returns the payment status, shipping status, and tracking provider and waybill once available. Tracking is `null` until a waybill is recorded. Only the same merchant–partner connection can read an order.
 
+For the CrossRem pilot, Baci holds booking if the current GIG rate differs from the amount already settled for delivery. Reconcile the difference before booking.
+
 For temporary failures, keep the last known status and retry with backoff. For `500 ORDER_RESPONSE_INVALID`, retain the response's `request_id` for support and check the original order reference before resubmitting. Keep recipient and payment data out of logs. A delivery exception should be reconciled against the shipment before a refund or repeat booking is initiated.

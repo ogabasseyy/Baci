@@ -30,7 +30,16 @@ export async function POST(request: Request) {
     'reconciliation:write',
     getPartnerProfiles()
   );
-  if (!access.ok) return reject(404, 'NOT_FOUND');
+  if (!access.ok) {
+    if (access.reason === 'ambiguous' || access.reason === 'scope_required') {
+      logger.warn({
+        message: 'Partner verifier access rejected',
+        reason: access.reason,
+        requestId,
+      });
+    }
+    return reject(404, 'NOT_FOUND');
+  }
 
   const bounded = await readBoundedJsonBody(request, 8192);
   if (!bounded.ok) {

@@ -55,6 +55,14 @@ function verifyGiglWalletBinding(orderId: string) {
       EXCEPTION WHEN raise_exception THEN
         IF SQLERRM <> 'partner_delivery_price_changed' THEN RAISE; END IF;
       END;
+      v_quote_id := private.seed_fixture_gigl_quote(v_order.id, 1499);
+      BEGIN
+        PERFORM public.bind_admin_gigl_quote(v_order.id, v_order.merchant_id,
+          v_quote_id, v_order.shipping_address);
+        RAISE EXCEPTION 'cheaper rate was bound without reconciling the settled amount' USING ERRCODE = '22023';
+      EXCEPTION WHEN raise_exception THEN
+        IF SQLERRM <> 'partner_delivery_price_changed' THEN RAISE; END IF;
+      END;
       v_quote_id := private.seed_fixture_gigl_quote(v_order.id, 1500);
       PERFORM public.bind_admin_gigl_quote(v_order.id, v_order.merchant_id,
         v_quote_id, v_order.shipping_address);

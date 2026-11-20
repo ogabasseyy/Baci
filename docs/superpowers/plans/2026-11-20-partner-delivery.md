@@ -38,7 +38,7 @@ The internal acceptance transaction requires verified capture and merchant settl
 
 On acceptance, Baci returns the same order ID on every identical submission retry. The order has a paid ledger entry, and its stored shipping address comes from the quote. The carrier quote remains unbound until the booking path establishes merchant-wallet funding and can check the current rate. Partners poll `GET /api/partners/v1/orders/{orderId}` for shipping status and waybill. The read returns only orders accepted through the same partner connection.
 
-Once the merchant moves a settled partner order to processing, the existing fulfillment flow must bind an attested, unused domestic GIG door quote to the order and fund it from the merchant shipping wallet. The database rejects a quote that exceeds the previously settled delivery fee. Baci reports a rate increase for reconciliation and keeps the carrier booking on hold. The existing shipment claim and wallet reservation continue to protect the actual booking. The shipping guard runs after the existing economics trigger so it checks the final funding state. Payment method and status updates can cause that trigger to rewrite the funding fields.
+Once the merchant moves a settled partner order to processing, the existing fulfillment flow must bind an attested, unused domestic GIG door quote to the order and fund it from the merchant shipping wallet. The rate must match the settled delivery fee to the kobo. Baci holds booking if the rate changes in either direction. The pilot requires that match until the merchant and partner agree who pays or receives a delivery rate difference. The existing shipment claim and wallet reservation continue to protect the actual booking. The shipping guard runs after the existing economics trigger so it checks the final funding state.
 
 ### Draft consumer guide and evidence ingress
 
@@ -74,7 +74,7 @@ Register a server-side connection profile with a unique connection ID, the merch
 
 ### Local API lifecycle check
 
-Run `python3 supabase/tests/run_partner_api_lifecycle.py` with PostgreSQL and PostgREST on `PATH` and the workspace dependencies installed. It starts a disposable database and a loopback PostgREST instance, then calls the actual route handlers using Baci’s database client. It checks the feed envelope and conditional response, VAT-inclusive quote, paid-order receipt, wrong settlement hold, one accepted order and inventory decrement after reconciliation, idempotent replay, and connection-scoped tracking. It also calls the real GIG quote binder for the accepted order. The binder rejects a rate above the settled delivery fee and binds an eligible rate to the merchant wallet. The catalog input, carrier responses, and upstream payment evidence are fixtures. The test imports the live quote proof logic and runs the real storefront order writer on the reduced database schema.
+Run `python3 supabase/tests/run_partner_api_lifecycle.py` with PostgreSQL and PostgREST on `PATH` and the workspace dependencies installed. It starts a disposable database and a loopback PostgREST instance, then calls the actual route handlers using Baci’s database client. It checks the feed envelope and conditional response, VAT-inclusive quote, paid-order receipt, wrong settlement hold, one accepted order and inventory decrement after reconciliation, idempotent replay, and connection-scoped tracking. It also calls the real GIG quote binder for the accepted order. The binder rejects higher and lower rates and binds the matching rate to the merchant wallet. The catalog input, carrier responses, and upstream payment evidence are fixtures. The test imports the live quote proof logic and runs the real storefront order writer on the reduced database schema.
 
 ### CrossRem payment evidence to confirm
 
@@ -83,6 +83,8 @@ CrossRem’s public terms name Square as a processor. Square uses the seller acc
 ### Hosted catalog baseline on 20 November 2026
 
 The deployed feed returned 4,496 unique listings. The authenticated full request took 2,811 ms to headers and 4,718 ms in total. At five-second smoke intervals, three conditional requests returned bodyless `304` responses in 645, 413, and 291 ms. The live Google ID and sellable-identity parity check also passed. Repeat the hosted measurement at the agreed partner interval after deploying the partner API, before enabling sync.
+
+Before provisioning live quote credentials, confirm that the managed database has `pg_cron` and that `cron.job` contains the active hourly `partner-unclaimed-quote-expiry` job calling `private.expire_unclaimed_partner_quotes()`. The migration supports local databases without that extension, where the retention check calls the private function directly.
 
 ### Resolve orders that require review
 

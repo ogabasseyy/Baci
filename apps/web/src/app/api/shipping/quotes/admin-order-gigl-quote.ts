@@ -238,7 +238,7 @@ export async function postAdminOrderGiglQuote(
         {
           code: 'PARTNER_DELIVERY_PRICE_CHANGED',
           error:
-            'The current GIG rate exceeds the settled delivery fee. Resolve the difference before booking.',
+            'The current GIG rate differs from the settled delivery fee. Resolve the difference before booking.',
         },
         { status: 409 }
       );

@@ -1,17 +1,17 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import { getAuthenticatedUser } from '@/lib/supabase/mobile-auth';
 import { getBankCardOfferVerificationBinding } from './get-bank-card-offer-verification-binding';
-import { getSessionlessPaymentReferenceSnapshot } from './sessionless-payment-reference-snapshot';
+import { readSessionlessPaymentReferenceSnapshot } from './sessionless-payment-reference-snapshot';
 
 vi.mock('@/lib/supabase/mobile-auth', () => ({
   getAuthenticatedUser: vi.fn(),
 }));
 vi.mock('./sessionless-payment-reference-snapshot', () => ({
-  getSessionlessPaymentReferenceSnapshot: vi.fn(),
+  readSessionlessPaymentReferenceSnapshot: vi.fn(),
 }));
 
 const authenticate = vi.mocked(getAuthenticatedUser);
-const getSnapshot = vi.mocked(getSessionlessPaymentReferenceSnapshot);
+const getSnapshot = vi.mocked(readSessionlessPaymentReferenceSnapshot);
 const reference = `BCO-${'a'.repeat(32)}`;
 const request = new Request('https://example.test/api/payments/verify');
 const query = {
@@ -70,11 +70,28 @@ it('rejects an order that the session does not own', async () => {
 it.each([
   { data: null, error: null },
   { data: { id: 'other-store' }, error: null },
-  { data: null, error: { message: 'unavailable' } },
-])('rejects mismatched or unavailable storefronts (%j)', async (result) => {
+])('rejects mismatched storefronts (%j)', async (result) => {
   query.maybeSingle.mockResolvedValueOnce(result);
 
   await expect(
     getBankCardOfferVerificationBinding(request, reference, 'wrong-store')
   ).resolves.toBeNull();
+});
+
+it('distinguishes a storefront lookup outage from a denied binding', async () => {
+  query.maybeSingle.mockResolvedValueOnce({
+    data: null,
+    error: { message: 'unavailable' },
+  });
+  await expect(
+    getBankCardOfferVerificationBinding(request, reference, 'ogabassey')
+  ).resolves.toBe('unavailable');
+});
+
+it('distinguishes an order lookup outage from a denied binding', async () => {
+  getSnapshot.mockRejectedValueOnce(new Error('database unavailable'));
+  await expect(
+    getBankCardOfferVerificationBinding(request, reference, 'ogabassey')
+  ).resolves.toBe('unavailable');
+  expect(supabase.from).not.toHaveBeenCalled();
 });

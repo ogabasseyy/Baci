@@ -279,6 +279,18 @@ describe('POST /api/payments/verify — finalizer outcomes', () => {
     expect(mockVerifyPaystack).not.toHaveBeenCalled();
   });
 
+  it('returns 503 for a temporary bank-offer binding outage before verification', async () => {
+    getBankCardOfferBinding.mockResolvedValueOnce('unavailable');
+    const response = await POST(createRequest(`BCO-${'a'.repeat(32)}`));
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({
+      error: 'Verification unavailable',
+    });
+    expect(mockCreateServiceClient).not.toHaveBeenCalled();
+    expect(mockVerifyPaystack).not.toHaveBeenCalled();
+  });
+
   it('rejects a bank offer reference bound to a non-Paystack transaction', async () => {
     const supabase = buildSupabase({ completion: null, gateway: 'korapay' });
     mockCreateServiceClient.mockReturnValue(supabase);

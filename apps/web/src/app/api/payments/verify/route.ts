@@ -585,6 +585,12 @@ export async function POST(request: NextRequest) {
       reference,
       merchantSlug
     );
+    if (binding === 'unavailable') {
+      return NextResponse.json(
+        { error: 'Verification unavailable' },
+        { status: 503 }
+      );
+    }
     if (!binding) {
       return NextResponse.json(
         {

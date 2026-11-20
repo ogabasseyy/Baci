@@ -10,6 +10,8 @@ export function getBankCardOfferCheckoutStatus(
       ? 'access_required'
       : 'verification_unavailable';
   }
+  // A server outage leaves the capture unknown. Keep polling this reference.
+  if (httpStatus >= 500) return 'pending';
   if (httpStatus < 200 || httpStatus >= 300 || httpStatus === 202) return null;
 
   if (payment.status === 'reversed') return 'reversed';

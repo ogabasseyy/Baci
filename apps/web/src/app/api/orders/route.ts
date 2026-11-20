@@ -50,6 +50,7 @@ import { selectIdempotencyShippingAddress } from '@/lib/checkout/select-idempote
 import { createStorefrontOrderRpcClient } from '@/lib/checkout/storefront-order-rpc-client';
 import { validateLocalAirportDeliveryFee } from '@/lib/checkout/validate-local-airport-delivery-fee';
 import { validateRedvaultRequest } from '@/lib/checkout/validate-redvault-request';
+import { checkCsrfProtection } from '@/lib/csrf';
 import { recordPlatformOrderCreatedEvent } from '@/lib/events/record-platform-order-created-event';
 import { hasPriceNegotiationEntitlement } from '@/lib/feature-flags';
 import { detectPrivacyRegion } from '@/lib/geo-privacy';
@@ -440,7 +441,7 @@ export async function GET(request: NextRequest) {
 
 // POST /api/orders - Create new order from storefront
 // CSRF exemption: This endpoint is called by unauthenticated storefront guests during checkout.
-// Guest users do not have CSRF tokens. Abuse is mitigated by rate limiting in proxy.ts,
+// Signed-in bank offers require CSRF validation below. Guest users do not have CSRF tokens. Abuse is mitigated by rate limiting in proxy.ts,
 // Zod validates input shape, while the SECURITY DEFINER RPC enforces merchant + item authorization server-side.
 
 export async function POST(request: NextRequest) {
@@ -480,6 +481,15 @@ export async function POST(request: NextRequest) {
     }
 
     const parsedOrder = parseResult.data;
+    if (parsedOrder.payment_method === 'bank_card_offer' && user) {
+      const csrf = await checkCsrfProtection(request);
+      if (!csrf.valid) {
+        return (
+          csrf.response ??
+          NextResponse.json({ error: 'Invalid CSRF token' }, { status: 403 })
+        );
+      }
+    }
     // Bank-offer config stores canonical UUIDs. Preserve standard checkout's
     // existing payload identity so old standard idempotency keys still replay.
     const body =

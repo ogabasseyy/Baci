@@ -55,6 +55,8 @@ vi.mock('@/config/bank-card-offers', () => ({
 it.each([
   { quantity: 1, expectedTotal: 95, status: 201 },
   { quantity: 1, expectedTotal: 95, status: 200 },
+  { quantity: 1, expectedTotal: 95, status: 403, csrf: false },
+  { quantity: 1, expectedTotal: 95, status: 201, csrf: false, bearer: true },
   {
     quantity: 10_001,
     expectedTotal: 95,
@@ -93,6 +95,8 @@ it.each([
   gift = 0,
   errorCode,
   negotiatedDiscount,
+  csrf = true,
+  bearer = false,
 }) => {
   primeAdminOrderCurrencyRead();
   if (negotiatedDiscount) {
@@ -135,7 +139,16 @@ it.each([
       POST(
         new NextRequest('http://localhost/api/orders', {
           method: 'POST',
-          headers: { 'Idempotency-Key': 'bank-offer-expected-total' },
+          headers: {
+            'Idempotency-Key': 'bank-offer-expected-total',
+            ...(csrf
+              ? {
+                  cookie: 'csrf-token=checkout-proof',
+                  'x-csrf-token': 'checkout-proof',
+                }
+              : {}),
+            ...(bearer ? { authorization: 'Bearer test-mobile-token' } : {}),
+          },
           body: JSON.stringify({
             ...baseOrderPayload,
             merchant_id: merchantId,
@@ -159,6 +172,11 @@ it.each([
     const res = await submit(MERCHANT_ID.toUpperCase());
     const response = await res.json();
     expect(res.status, JSON.stringify(response)).toBe(status);
+    if (status === 403) {
+      expect(response.error).toBe('Invalid CSRF token');
+      expect(supabase.rpc).not.toHaveBeenCalled();
+      return;
+    }
     if (status === 409) {
       expect(response.code).toBe(
         errorCode ??

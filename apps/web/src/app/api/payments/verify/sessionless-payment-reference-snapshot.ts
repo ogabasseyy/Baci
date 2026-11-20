@@ -19,19 +19,26 @@ export async function getSessionlessPaymentReferenceSnapshot(
   reference: string
 ): Promise<GuestPaymentReferenceSnapshot | null> {
   try {
-    const { data, error } = await bearerClient.rpc(
-      'get_sessionless_payment_reference_snapshot',
-      { p_gateway_reference: reference }
+    return await readSessionlessPaymentReferenceSnapshot(
+      bearerClient,
+      reference
     );
-    if (error) {
-      return null;
-    }
-    const row = Array.isArray(data) ? data[0] : null;
-    if (!row || typeof row !== 'object') {
-      return null;
-    }
-    return parsePaymentReferenceSnapshotRow(row as Record<string, unknown>);
   } catch {
     return null;
   }
+}
+
+/** Preserve read errors for callers that distinguish denial from an outage. */
+export async function readSessionlessPaymentReferenceSnapshot(
+  client: Pick<SupabaseClient, 'rpc'>,
+  reference: string
+): Promise<GuestPaymentReferenceSnapshot | null> {
+  const { data, error } = await client.rpc(
+    'get_sessionless_payment_reference_snapshot',
+    { p_gateway_reference: reference }
+  );
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : null;
+  if (!row || typeof row !== 'object') return null;
+  return parsePaymentReferenceSnapshotRow(row as Record<string, unknown>);
 }

@@ -29,8 +29,8 @@ it('identifies a reversal only on a successful terminal response', () => {
   expect(
     getBankCardOfferCheckoutStatus(202, { status: 'reversed' })
   ).toBeNull();
-  expect(
-    getBankCardOfferCheckoutStatus(500, { status: 'reversed' })
-  ).toBeNull();
+  expect(getBankCardOfferCheckoutStatus(500, { status: 'reversed' })).toBe(
+    'pending'
+  );
   expect(getBankCardOfferCheckoutStatus(200, { status: 'success' })).toBeNull();
 });

@@ -1,3 +1,4 @@
+import { fetchWithCsrf } from '@/lib/api-client';
 import type { buildCheckoutOrderRequest } from '../build-checkout-order-request';
 import type { RedvaultQuoteSummary } from '../components/redvault/RedvaultPaymentOption';
 import type { ResolvePendingCheckoutOrderResult } from '../pending-checkout-order';
@@ -49,7 +50,7 @@ export interface SubmitCheckoutOrderOptions {
     idempotencyKey: string;
     orderRequest: ReturnType<typeof buildCheckoutOrderRequest>;
   }) => void;
-  request?: typeof fetch;
+  request?: (url: string, init?: RequestInit) => Promise<Response>;
 }
 
 export interface SubmittedCheckoutOrder {
@@ -106,7 +107,9 @@ export async function submitCheckoutOrder({
   onShippingRateRejected,
   getOrderErrorMessage,
   onBeforeBoundRedvaultSend,
-  request = fetch,
+  request = orderRequest.payment_method === 'bank_card_offer'
+    ? fetchWithCsrf
+    : fetch,
   resolvedPendingOrder,
 }: SubmitCheckoutOrderOptions): Promise<SubmittedCheckoutOrder> {
   if (

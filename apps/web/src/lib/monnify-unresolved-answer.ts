@@ -22,7 +22,7 @@ const MAX_WORDING_LENGTH = 4000;
  * do not count.
  */
 const IN_FLIGHT_WORDING =
-  /(?<!\b(?:not|never|no|cannot|n't)(?:\s+\w+){0,3}?\s+)(?<!(?:validation|verification|lookup|login|authentication|customer)\s+(?:(?:was|is|were|has|have|been|being|also|now)\s+)*)\b(?:pending|processing|in\s+progress|queued|initiated|submitted|accepted|successful(?:ly)?|succeeded|success|delivered|completed|credited|vended|dispatched|timed?\s*out|re\s*quer(?:y|ied)|(?:service\s+)?(?:temporarily\s+)?unavailable)\b/i;
+  /(?<!\b(?:not|never|no|cannot|n't)(?:\s+\w+){0,3}?\s+)(?<!(?:validation|verification|lookup|login|authentication|customer)\s+(?:(?:was|is|were|has|have|been|being|also|now)\s+)*)\b(?:pending|processing|in\s+progress|queued|initiated|submitted|accepted|successful(?:ly)?|succeeded|success|delivered|completed|credited|vended|dispatched|timed?\s*out|re\s*quer(?:y|ied)|(?:service\s+)?(?:temporarily\s+)?unavailable|(?:(?:vend|transaction|purchase|payment|delivery)\s+)?(?:status|outcome|result|state)\s+(?:is\s+|was\s+)?(?:still\s+)?(?:unknown|unclear|uncertain|indeterminate|undetermined)|indeterminate|undetermined)\b/i;
 
 /**
  * Whether a Monnify rejection leaves the vend's outcome open, so the

@@ -189,3 +189,25 @@ describe('bugfix: auth codes inside an HTTP 400 body are refunded', () => {
     await expect(vend()).resolves.toMatchObject({ status: 'failed' });
   });
 });
+
+describe('bugfix: explicit unknown-outcome wording is held', () => {
+  it.each([
+    'Transaction status unknown',
+    'Vend outcome is indeterminate',
+    'The result was unclear',
+    'Delivery state undetermined',
+  ])('holds "%s"', (wording) => {
+    expect(
+      isMonnifyUnresolvedAnswer({ answer: { responseCode: '01' }, wording })
+    ).toBe(true);
+  });
+
+  it('does not hold an unrelated refusal', () => {
+    expect(
+      isMonnifyUnresolvedAnswer({
+        answer: { responseCode: '01' },
+        wording: 'Invalid customer reference',
+      })
+    ).toBe(false);
+  });
+});

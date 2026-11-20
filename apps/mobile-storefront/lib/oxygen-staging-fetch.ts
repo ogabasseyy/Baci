@@ -98,6 +98,13 @@ export function createOxygenStagingFetch(
       authRelativePath
     )?.[1];
     const allowedApi = isApi && apiRoutes[url.pathname]?.includes(method);
+    const canReadOwnedTable =
+      table &&
+      hasSignedInClaims &&
+      (ownedReadTables.has(table) ||
+        (table === 'oxygen_workflows' &&
+          url.searchParams.get('select') === 'id' &&
+          url.searchParams.get('environment') === 'eq.staging'));
     const allowedAuth =
       isAuth &&
       ((authPath &&
@@ -105,8 +112,7 @@ export function createOxygenStagingFetch(
           ? ['GET', 'PUT'].includes(method)
           : method === 'POST')) ||
         (table &&
-          (catalogTables.has(table) ||
-            (hasSignedInClaims && ownedReadTables.has(table))) &&
+          (catalogTables.has(table) || canReadOwnedTable) &&
           ['GET', 'HEAD'].includes(method)) ||
         (rpc && catalogReadRpcs.has(rpc) && method === 'POST'));
     const allowed = allowedApi || allowedAuth;

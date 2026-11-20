@@ -144,7 +144,8 @@ export function useCheckoutPaymentController({
   if (
     selectedPayment &&
     selectedPayment !== 'uba_redvault' &&
-    !availablePaymentMethods.includes(selectedPayment)
+    (!availablePaymentMethods.includes(selectedPayment) ||
+      (selectedPayment === 'oxygen' && oxygenAvailability.disabledReason))
   ) {
     transferMode.clearSelection();
   } else if (selectedPayment === 'uba_redvault' && !redvaultAvailable) {

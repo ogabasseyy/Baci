@@ -261,15 +261,18 @@ it('never falls back past mismatched capability pins', async () => {
 });
 
 it.each([
-  id,
-  null,
-])('reads only an existing production workflow (%s) when initiation is disabled', async (savedId) => {
+  ['production', id],
+  ['production', null],
+  ['staging', id],
+  ['staging', null],
+] as const)('reads only an existing %s workflow (%s) when initiation is disabled', async (environment, savedId) => {
   const findSaved = jest.fn().mockResolvedValue(savedId);
   const { controller, client, storage } = setup({
-    environment: 'production',
+    environment,
     findSaved,
   });
-  client.snapshot.mockResolvedValue({ ...snapshot, environment: 'production' });
+  client.capabilities.mockResolvedValue({ mobileEnabled: false });
+  client.snapshot.mockResolvedValue({ ...snapshot, environment });
 
   await controller.initialize();
 

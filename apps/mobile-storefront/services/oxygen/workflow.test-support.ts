@@ -39,7 +39,7 @@ export function setup(
     }),
   };
   const client = {
-    capabilities: jest.fn().mockResolvedValue({ mobileEnabled: false }),
+    capabilities: jest.fn().mockResolvedValue({ mobileEnabled: true }),
     createOrResume: jest.fn().mockResolvedValue({ id, version: 1 }),
     snapshot: jest.fn().mockResolvedValue(snapshot),
     action: jest.fn().mockResolvedValue(snapshot),
@@ -50,6 +50,7 @@ export function setup(
     client: client as unknown as OxygenClient,
     journal,
     key: () => id,
+    findSaved: async () => id,
     ...overrides,
   });
   return { client, journal, storage, controller };

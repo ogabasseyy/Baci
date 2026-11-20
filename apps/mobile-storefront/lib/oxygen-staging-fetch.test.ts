@@ -268,10 +268,15 @@ test.each([
   'customers',
   'orders',
   'order_items',
+  'oxygen_workflows',
 ])('requires a signed-in staging session for %s reads', async (table) => {
   const transport = jest.fn().mockResolvedValue(new Response('{}'));
   const guardedFetch = createOxygenStagingFetch(transport, profile);
-  const url = `${profile.authOrigin}/rest/v1/${table}?select=id`;
+  const query =
+    table === 'oxygen_workflows'
+      ? 'select=id&environment=eq.staging'
+      : 'select=id';
+  const url = `${profile.authOrigin}/rest/v1/${table}?${query}`;
   await expect(
     guardedFetch(url, {
       headers: { authorization: `Bearer ${profile.publicKey}` },

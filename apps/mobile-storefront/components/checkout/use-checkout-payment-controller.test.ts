@@ -8,6 +8,10 @@ const mockGetRedvaultPaymentAvailability =
   jest.fn<
     (...args: unknown[]) => Promise<{ available: boolean; reason: string }>
   >();
+let mockOxygen: { visible: boolean; disabledReason?: string };
+jest.mock('./use-oxygen-checkout-availability', () => ({
+  useOxygenCheckoutAvailability: () => mockOxygen,
+}));
 let mockEnabledPaymentMethods = ['paystack', 'bank_transfer'];
 
 jest.mock('@/hooks/use-checkout-savings', () => ({
@@ -54,9 +58,21 @@ const items: CartItem[] = [
   },
 ];
 
+const checkoutParams = {
+  assuranceFee: 0,
+  deliveryFee: 5_000,
+  isAuthenticated: false,
+  items,
+  merchantId: 'merchant-1',
+  merchantSlug: 'ogabassey',
+  step: 'payment' as const,
+  subtotal: 500_000,
+};
+
 describe('useCheckoutPaymentController selection', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockOxygen = { visible: false };
     mockEnabledPaymentMethods = ['paystack', 'bank_transfer'];
     mockCalculateCommerce.mockImplementation(() =>
       Promise.reject(new Error('offline'))
@@ -68,16 +84,7 @@ describe('useCheckoutPaymentController selection', () => {
 
   it('starts unselected and only selects an instrument after an intent opens', () => {
     const { result } = renderHook(() =>
-      useCheckoutPaymentController({
-        assuranceFee: 0,
-        deliveryFee: 5_000,
-        isAuthenticated: false,
-        items,
-        merchantId: 'merchant-1',
-        merchantSlug: 'ogabassey',
-        step: 'payment',
-        subtotal: 500_000,
-      })
+      useCheckoutPaymentController(checkoutParams)
     );
 
     expect(result.current.paymentTab).toBeNull();
@@ -96,22 +103,32 @@ describe('useCheckoutPaymentController selection', () => {
     expect(result.current.selectedPayment).toBeNull();
   });
 
+  it('clears a selected Oxygen method when staging availability is lost', () => {
+    mockOxygen = { visible: true };
+    const { result, rerender } = renderHook(
+      ({ subtotal }) =>
+        useCheckoutPaymentController({
+          ...checkoutParams,
+          isAuthenticated: true,
+          subtotal,
+        }),
+      { initialProps: { subtotal: 500_000 } }
+    );
+    act(() => result.current.setSelectedPayment('oxygen'));
+    expect(result.current.selectedPayment).toBe('oxygen');
+    mockOxygen = { visible: true, disabledReason: 'Oxygen unavailable' };
+    rerender({ subtotal: 500_001 });
+    expect(result.current.availablePaymentMethods).toContain('oxygen');
+    expect(result.current.selectedPayment).toBeNull();
+  });
+
   it('selects REDVAULT only after the server availability result succeeds', async () => {
     mockGetRedvaultPaymentAvailability.mockResolvedValue({
       available: true,
       reason: 'staging_test_mode',
     });
     const { result } = renderHook(() =>
-      useCheckoutPaymentController({
-        assuranceFee: 0,
-        deliveryFee: 5_000,
-        isAuthenticated: false,
-        items,
-        merchantId: 'merchant-1',
-        merchantSlug: 'ogabassey',
-        step: 'payment',
-        subtotal: 500_000,
-      })
+      useCheckoutPaymentController(checkoutParams)
     );
 
     await act(async () => undefined);

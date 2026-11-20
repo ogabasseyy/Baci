@@ -1,6 +1,6 @@
-import NetInfo from '@react-native-community/netinfo';
 import Constants from 'expo-constants';
 import { DEFAULT_TIMEOUT, fetchWithRetry } from '@/lib/api';
+import { checkNetworkConnectivity } from '@/lib/api-core';
 import { resolveApiBaseUrl } from '@/lib/api-url';
 import { assertQueuedCreateOrderSendOwner } from '@/lib/assert-queued-create-order-send-owner';
 import { getCheckoutAttemptKey } from '@/lib/checkout-attempt-key';
@@ -56,11 +56,6 @@ const MERCHANT_ID =
   Constants.expoConfig?.extra?.merchantId ||
   '6b5cb8a4-5575-456c-b936-8cdfae30db74';
 
-async function checkNetwork(): Promise<boolean> {
-  const state = await NetInfo.fetch();
-  return state.isConnected === true && state.isInternetReachable !== false;
-}
-
 export type CreateOrderOptions = {
   checkoutGeneration?: string;
   analyticsPaymentMethod?: string;
@@ -111,7 +106,7 @@ export async function createOrder(
     );
   }
 
-  const isOnline = await checkNetwork();
+  const isOnline = await checkNetworkConnectivity();
   if (!isOnline) {
     throw new OrderError(
       'No internet connection. Please check your network and try again.',

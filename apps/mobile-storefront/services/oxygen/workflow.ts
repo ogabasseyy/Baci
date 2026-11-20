@@ -87,7 +87,7 @@ export function createOxygenWorkflow(options: {
   async function initializeWorkflow(generation: number) {
     const capabilities = await refreshCapabilities();
     const orderId = options.journal.scope.orderId;
-    if (options.environment === 'production' && !capabilities?.mobileEnabled) {
+    if (!capabilities?.mobileEnabled) {
       // A disabled or unavailable initiation check cannot create a workflow.
       // An existing workflow stays accessible through the authenticated read.
       const savedId = await options.findSaved?.(orderId);

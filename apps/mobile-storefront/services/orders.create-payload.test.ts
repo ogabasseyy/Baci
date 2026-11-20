@@ -10,7 +10,10 @@ import type {
 } from './orders.create.test-utils';
 import { createFetchInspectors } from './orders.create.test-utils';
 
-const mockNetInfoFetch = jest.fn<() => Promise<{ isConnected: boolean }>>();
+const mockNetInfoFetch =
+  jest.fn<
+    () => Promise<{ isConnected: boolean; isInternetReachable?: boolean }>
+  >();
 const mockSupabaseGetUser = jest.fn<() => Promise<MockAuthUserResponse>>();
 const mockSupabaseGetSession =
   jest.fn<() => Promise<MockAuthSessionResponse>>();
@@ -61,7 +64,12 @@ jest.mock('@react-native-community/netinfo', () => ({
 jest.mock('expo-constants', () => ({
   default: {
     expoConfig: {
-      extra: { merchantId: 'merchant-1', apiUrl: 'https://test.api' },
+      extra: {
+        merchantId: 'merchant-1',
+        get apiUrl() {
+          return mockStaging.apiOrigin ?? 'https://test.api';
+        },
+      },
     },
   },
 }));
@@ -102,6 +110,11 @@ jest.mock('@/lib/supabase', () => ({
       getSession: mockSupabaseGetSession,
     },
   },
+}));
+
+const mockStaging: { apiOrigin?: string } = {};
+jest.mock('@/lib/oxygen-staging-profile', () => ({
+  getOxygenStagingProfile: () => (mockStaging.apiOrigin ? mockStaging : null),
 }));
 
 jest.mock('@/lib/api', () => ({
@@ -230,35 +243,47 @@ describe('createOrder — payload attributes', () => {
     );
   });
 
-  it('includes the selected image_url in the API payload', async () => {
+  it.each([
+    true,
+    false,
+  ])('preserves payload with internet reachability %s on loopback', async (reachable) => {
+    mockStaging.apiOrigin = 'http://127.0.0.1:3198';
+    mockNetInfoFetch.mockResolvedValueOnce({
+      isConnected: true,
+      isInternetReachable: reachable,
+    });
     const { createOrder } = require('./orders');
 
-    await createOrder({
-      customer_email: 'test@example.com',
-      customer_name: 'Test User',
-      customer_phone: '+2348012345678',
-      items: [
-        {
-          id: 'prod-1',
-          name: 'MacBook Air M1',
-          quantity: 1,
-          price: 720000,
-          image_url: 'https://cdn.example.com/gold.jpg',
+    try {
+      await createOrder({
+        customer_email: 'test@example.com',
+        customer_name: 'Test User',
+        customer_phone: '+2348012345678',
+        items: [
+          {
+            id: 'prod-1',
+            name: 'MacBook Air M1',
+            quantity: 1,
+            price: 720000,
+            image_url: 'https://cdn.example.com/gold.jpg',
+          },
+        ],
+        subtotal: 720000,
+        shipping_fee: 2000,
+        payment_method: 'oxygen',
+        shipping_address: {
+          firstName: 'Test',
+          lastName: 'User',
+          address: '123 St',
+          city: 'Lagos',
+          state: 'Lagos',
         },
-      ],
-      subtotal: 720000,
-      shipping_fee: 2000,
-      payment_method: 'card',
-      shipping_address: {
-        firstName: 'Test',
-        lastName: 'User',
-        address: '123 St',
-        city: 'Lagos',
-        state: 'Lagos',
-      },
-    });
+      });
 
-    const body = getLastFetchBody();
-    expect(body.items[0].image_url).toBe('https://cdn.example.com/gold.jpg');
+      const body = getLastFetchBody();
+      expect(body.items[0].image_url).toBe('https://cdn.example.com/gold.jpg');
+    } finally {
+      delete mockStaging.apiOrigin;
+    }
   });
 });

@@ -76,7 +76,8 @@ export function oxygenNativeSession() {
           const id = await findOwnedOxygenWorkflowId(
             ownedOrderId,
             customerId,
-            profile.merchantId
+            profile.merchantId,
+            profile.environment
           );
           return isCurrentOwner() ? id : null;
         },

@@ -56,6 +56,7 @@ The [delivery API quickstart](../../partners/delivery-api-quickstart.md) documen
 | 404 | `NOT_FOUND` | Check credential scope and the submission reference. |
 | 409 | `CAPTURE_EVIDENCE_CONFLICT` | Reconcile the existing capture claim before proceeding. |
 | 409 | `SETTLEMENT_EVIDENCE_CONFLICT` | Compare the replayed payout allocation to the evidence on the accepted order. |
+| 409 | `RECONCILIATION_CONFLICT` | Check the submission receipt and existing evidence before retrying. |
 | 413 | `PAYLOAD_TOO_LARGE` | Reduce the evidence payload to the normalized fields. |
 | 429 | `RATE_LIMITED` | Wait for `Retry-After`. |
 | 500 | `RECONCILIATION_RESPONSE_INVALID` | Escalate with the request ID and check the current receipt. The database may have committed before producing the invalid response. |
@@ -88,6 +89,8 @@ CrossRem’s public terms name Square as a processor. Square uses the seller acc
 The deployed feed returned 4,496 unique listings. The authenticated full request took 2,811 ms to headers and 4,718 ms in total. At five-second smoke intervals, three conditional requests returned bodyless `304` responses in 645, 413, and 291 ms. The live Google ID and sellable-identity parity check also passed. Repeat the hosted measurement at the agreed partner interval after deploying the partner API, before enabling sync.
 
 Before provisioning live quote credentials, confirm that the managed database has `pg_cron` and that `cron.job` contains the active hourly `partner-unclaimed-quote-expiry` job calling `private.expire_unclaimed_partner_quotes()`. The migration supports local databases without that extension, where the retention check calls the private function directly.
+
+Also verify the hourly `partner-unverified-submission-expiry` job. It removes only submissions that have no capture record and are past the seven-day window for both expiry and intake. Monitor its deletion count and review stuck verification receipts before that window closes.
 
 Use the hourly `partner_unclaimed_quote_expiry` database log to check deletion volume. A repeated `batch_full=true` indicates that cleanup may be falling behind. Use the PostHog event `partner_tracking_status_unknown` to detect unrecognized persisted tracking statuses. The event records which status fell back to `unknown`.
 

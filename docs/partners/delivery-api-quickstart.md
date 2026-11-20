@@ -11,6 +11,7 @@ Use the API base URL Baci gives your team. For the Ogabassey connection, the cat
 Call `GET /catalog` with your read-only credential. Keep each product's `listing_id` as the source key across imports. Use `price_minor` as the listed selling price. For Ogabassey–CrossRem, that price excludes delivery and optional device protection.
 
 Store the last complete catalog and its `ETag`. On subsequent requests send `If-None-Match` with that value. A `200` contains the entire new catalog. Validate it before replacing the old one. A `304` means your existing copy is current. Keep your last good copy on errors, including `503`.
+Catalog reads allow up to 120 requests per connection per minute, including conditional requests. If you receive `429`, wait for the interval in `Retry-After` before polling again.
 
 ## 2. Quote delivery before collecting payment
 
@@ -61,6 +62,8 @@ After payment captures, call `POST /orders` using the order credential and an `I
 Submit the verified buyer amount in NGN using your configured provider source. Baci verifies the capture and settlement through the agreed evidence source. A `202` means Baci has recorded the submission. If payment captured before expiry, submit its original reference and quote even after expiry. Baci checks the verified capture timestamp against the quote window. If the capture itself occurred at or after expiry, Baci rejects that evidence and the submission remains pending verification. Reconcile the original payment with the agreed refund owner before attempting a replacement purchase. An accepted replay returns `200` with the original `order_id`. An incompatible reuse of an order reference, quote, or idempotency key returns `409 ORDER_CONFLICT`. After a timeout, check submission status or retry the original request. Do not collect payment again to recover a timed-out submission.
 
 Unsubmitted quotes remain available for late paid-order intake for seven days after expiry. Submit promptly after payment. If an older paid order returns `404 QUOTE_NOT_FOUND`, reconcile the original payment with the agreed refund owner before collecting a replacement payment.
+
+Submissions that still lack a verified capture are removed after both the quote and the submission are at least seven days old. Baci retains verified capture and settlement records for reconciliation.
 
 ## 4. Read status and tracking
 

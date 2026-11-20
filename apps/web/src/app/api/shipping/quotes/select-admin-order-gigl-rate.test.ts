@@ -1,0 +1,61 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { describe, expect, it, vi } from 'vitest';
+import type { ShippingQuote } from '@/lib/shipping/types';
+import { selectAdminOrderGiglRate } from './select-admin-order-gigl-rate';
+
+const order = {
+  id: 'fixture-order',
+  merchant_id: 'fixture-merchant',
+  source: 'partner',
+};
+const cheaper = {
+  provider: 'GIGL',
+  currency: 'NGN',
+  serviceTier: 'GoStandard',
+  price: 1200,
+} as ShippingQuote;
+const settled = { ...cheaper, serviceTier: 'GoFaster', price: 1500 };
+
+function fixture(data: unknown) {
+  const rpc = vi.fn().mockResolvedValue({ data, error: null });
+  return { rpc, db: { rpc } as unknown as SupabaseClient };
+}
+
+describe('admin GIG delivery rate selection', () => {
+  it('selects the settled price and service even when other rates are cheaper', async () => {
+    const { db, rpc } = fixture({
+      service: 'GoFaster',
+      delivery_minor: 150000,
+    });
+    expect(
+      await selectAdminOrderGiglRate(db, order, [cheaper, settled])
+    ).toEqual({ quote: settled });
+    expect(rpc).toHaveBeenCalledExactlyOnceWith(
+      'read_settled_partner_delivery',
+      {
+        p_order_id: order.id,
+        p_merchant_id: order.merchant_id,
+      }
+    );
+  });
+
+  it('returns a conflict if no rate matches the settled terms', async () => {
+    const { db } = fixture({ service: 'GoFaster', delivery_minor: 150000 });
+    const { error } = await selectAdminOrderGiglRate(db, order, [cheaper]);
+    expect(error?.status).toBe(409);
+    expect(await error?.json()).toMatchObject({
+      code: 'PARTNER_DELIVERY_RATE_UNAVAILABLE',
+    });
+  });
+
+  it('preserves normal cheapest-rate selection for other orders', async () => {
+    const { db, rpc } = fixture(null);
+    expect(
+      await selectAdminOrderGiglRate(db, { ...order, source: 'online_store' }, [
+        settled,
+        cheaper,
+      ])
+    ).toEqual({ quote: cheaper });
+    expect(rpc).not.toHaveBeenCalled();
+  });
+});

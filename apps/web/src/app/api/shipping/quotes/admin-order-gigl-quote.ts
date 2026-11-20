@@ -18,7 +18,6 @@ import {
 } from './admin-order-gigl-customer-paid-conflict';
 import {
   calculateAdminWalletFunding,
-  selectEligibleAdminGiglQuote,
   toAdminPublicQuote,
 } from './admin-order-gigl-quote.helpers';
 import { resolveAdminOrderGiglQuoteInput } from './admin-order-gigl-quote-input';
@@ -35,6 +34,7 @@ import {
   shouldReuseBoundAdminWalletGiglQuote,
 } from './load-bound-admin-wallet-gigl-quote';
 import { resolveAdminGiglEligibility } from './resolve-admin-gigl-eligibility';
+import { selectAdminOrderGiglRate } from './select-admin-order-gigl-rate';
 import { toShippingQuoteUpsert } from './shipping-quote-persistence';
 
 export {
@@ -164,12 +164,13 @@ export async function postAdminOrderGiglQuote(
       { status: 503 }
     );
   }
-  const quote = selectEligibleAdminGiglQuote(quotes);
-  if (!quote)
-    return NextResponse.json(
-      { error: 'No eligible GIGL address-delivery quote' },
-      { status: 503 }
-    );
+  const candidate = await selectAdminOrderGiglRate(
+    auth.supabase,
+    order,
+    quotes
+  );
+  if (candidate.error) return candidate.error;
+  const quote = candidate.quote;
   if (isPreview) {
     const wallet = await readMerchantShippingWalletBalance(
       auth.supabase,

@@ -224,7 +224,7 @@ describe('internal partner reconciliation', () => {
       409,
       'CAPTURE_EVIDENCE_CONFLICT',
     ],
-    ['23505', 'an order write failed', 503, 'RECONCILIATION_UNAVAILABLE'],
+    ['23505', 'an order write failed', 409, 'RECONCILIATION_CONFLICT'],
     [
       '22023',
       'unexpected invalid order argument',

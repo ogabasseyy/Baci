@@ -11,10 +11,7 @@ export function selectEligibleAdminGiglQuote(quotes: ShippingQuote[]) {
           !quote.isStationPickup &&
           quote.price > 0
       )
-      .sort(
-        (a, b) =>
-          a.price - b.price || a.serviceTier.localeCompare(b.serviceTier)
-      )[0] ?? null
+      .sort((a, b) => a.price - b.price)[0] ?? null
   );
 }
 

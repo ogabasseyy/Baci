@@ -53,6 +53,14 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/CatalogError'}
+        '429':
+          description: The connection exceeded the catalog polling limit. Keep the last good catalog and honor Retry-After.
+          headers:
+            Retry-After:
+              schema: {type: integer, minimum: 1}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CatalogError'}
   /quotes:
     post:
       operationId: createDeliveryQuote

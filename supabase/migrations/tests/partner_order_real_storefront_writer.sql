@@ -45,6 +45,7 @@ DECLARE
   receiver constant jsonb := '{"address":"1 Fixture Road","city":"Ikeja","state":"Lagos","country":"Nigeria","countryCode":"NG"}';
   receipt jsonb;
   accepted_id uuid;
+  expired_submissions bigint;
   n integer;
 BEGIN
   FOR n IN 1..2 LOOP
@@ -214,7 +215,24 @@ BEGIN
     ('7a100000-0000-4000-8000-000000000052', merchant_id, connection_id,
       now() - interval '2 days', now() - interval '1 day', '{}'),
     ('7a100000-0000-4000-8000-000000000053', merchant_id, connection_id,
-      now(), now() + interval '10 minutes', '{}');
+      now(), now() + interval '10 minutes', '{}'),
+    ('7a100000-0000-4000-8000-000000000054', merchant_id, connection_id,
+      now() - interval '10 days', now() - interval '9 days', '{}');
+
+  INSERT INTO private.partner_order_submissions (
+    merchant_id, connection_id, quote_id, partner_order_id, idempotency_hash, submission, received_at
+  ) VALUES (
+    merchant_id, connection_id, '7a100000-0000-4000-8000-000000000054',
+    'abandoned-payment-fixture', repeat('a', 64), '{}', now() - interval '8 days'
+  );
+  expired_submissions := private.expire_unverified_partner_submissions();
+  IF expired_submissions <> 1
+     OR EXISTS (SELECT 1 FROM private.partner_delivery_quotes WHERE id = '7a100000-0000-4000-8000-000000000054')
+     OR NOT EXISTS (
+       SELECT 1 FROM private.partner_payment_captures AS c WHERE c.submission_id = fixture.submission_id
+     ) THEN
+    RAISE EXCEPTION 'submission expiry lost verified evidence or retained the abandoned quote (deleted %)', expired_submissions;
+  END IF;
 
   IF private.expire_unclaimed_partner_quotes() <> 1 THEN
     RAISE EXCEPTION 'quote expiry reported an unexpected deletion count';
@@ -232,6 +250,13 @@ BEGIN
         AND schedule = '22 * * * *' AND command = 'SELECT private.expire_unclaimed_partner_quotes();'
     ) THEN
       RAISE EXCEPTION 'quote expiry job is missing from the managed scheduler';
+    END IF;
+    IF NOT EXISTS (
+      SELECT 1 FROM cron.job
+      WHERE jobname = 'partner-unverified-submission-expiry' AND active
+        AND command = 'SELECT private.expire_unverified_partner_submissions();'
+    ) THEN
+      RAISE EXCEPTION 'submission expiry job is missing from the managed scheduler';
     END IF;
   END IF;
 END;

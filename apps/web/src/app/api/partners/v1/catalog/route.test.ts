@@ -6,6 +6,7 @@ const {
   after,
   captureServerEvent,
   loadCrossRemCatalog,
+  rateLimit,
   readVersion,
   redis,
   warn,
@@ -13,6 +14,7 @@ const {
   after: vi.fn<(callback: () => Promise<unknown>) => void>(),
   captureServerEvent: vi.fn(),
   loadCrossRemCatalog: vi.fn(),
+  rateLimit: vi.fn(),
   readVersion: vi.fn(),
   redis: { get: vi.fn(), set: vi.fn(), eval: vi.fn() },
   warn: vi.fn(),
@@ -21,6 +23,9 @@ const {
 vi.mock('next/server', () => ({ after }));
 vi.mock('@/lib/logger', () => ({ logger: { warn } }));
 vi.mock('@/lib/posthog/server', () => ({ captureServerEvent }));
+vi.mock('@/lib/tenant-rate-limit', () => ({
+  checkTenantRateLimitDetailed: rateLimit,
+}));
 vi.mock('./catalog-service', () => ({ loadCrossRemCatalog }));
 vi.mock('./catalog-version', () => ({
   readCrossRemCatalogVersion: readVersion,
@@ -48,6 +53,7 @@ describe('CrossRem catalog', () => {
     warn.mockClear();
     captureServerEvent.mockReset().mockResolvedValue(true);
     loadCrossRemCatalog.mockReset().mockResolvedValue(snapshot);
+    rateLimit.mockReset().mockResolvedValue({ verdict: 'allowed' });
     readVersion.mockReset().mockResolvedValue(version);
     redis.get.mockReset().mockResolvedValue(null);
     redis.set.mockReset().mockResolvedValue('OK');
@@ -66,7 +72,28 @@ describe('CrossRem catalog', () => {
       message: 'Partner catalog credential is unconfigured',
     });
     expect(loadCrossRemCatalog).not.toHaveBeenCalled();
+    expect(rateLimit).not.toHaveBeenCalled();
     expect(after).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['denied', 429, '60'],
+    ['unavailable', 503, null],
+  ])('stops authorized polls before reading the snapshot when rate limit is %s', async (verdict, status, retryAfter) => {
+    rateLimit.mockResolvedValueOnce({ verdict });
+    const response = await GET(request(`Bearer ${token}`, '*'));
+    expect(response.status).toBe(status);
+    expect(response.headers.get('retry-after')).toBe(retryAfter);
+    expectPartnerResponse('GET /catalog', status, await response.json());
+    expect(rateLimit).toHaveBeenCalledExactlyOnceWith(
+      'partner-catalog-read',
+      'crossrem-ogabassey',
+      {
+        maxRequests: 120,
+        windowMs: 60_000,
+      }
+    );
+    expect(readVersion).not.toHaveBeenCalled();
   });
 
   it('reports a duplicated token without serving the catalog', async () => {

@@ -111,6 +111,14 @@ export async function POST(request: Request) {
     ) {
       return reject(409, 'SETTLEMENT_EVIDENCE_CONFLICT');
     }
+    if (error?.code === '23505') {
+      logger.warn({
+        message: 'Unexpected partner reconciliation uniqueness conflict',
+        connectionId,
+        requestId,
+      });
+      return reject(409, 'RECONCILIATION_CONFLICT');
+    }
     if (error) throw new Error('Partner reconciliation unavailable');
     const outcome = outcomeSchema.safeParse(data);
     if (!outcome.success) {

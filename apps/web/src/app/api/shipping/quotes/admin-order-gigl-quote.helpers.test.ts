@@ -21,15 +21,6 @@ describe('admin-order-gigl-quote.helpers', () => {
     ).toMatchObject({ price: 1_800 });
   });
 
-  it('uses the same service tie-break as partner quoting', () => {
-    expect(
-      selectEligibleAdminGiglQuote([
-        { ...baseQuote, price: 1_800, serviceTier: 'GoStandard' },
-        { ...baseQuote, price: 1_800, serviceTier: 'GoFaster' },
-      ])
-    ).toMatchObject({ serviceTier: 'GoFaster' });
-  });
-
   it('calculates wallet shortfall for admin booking', () => {
     expect(calculateAdminWalletFunding(10_000, 12_000)).toEqual({
       availableBalance: 12_000,

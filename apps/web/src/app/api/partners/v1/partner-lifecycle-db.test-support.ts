@@ -49,6 +49,10 @@ function verifyGiglWalletBinding(orderId: string) {
     BEGIN
       PERFORM set_config('baci_fixture.staff', '7a100000-0000-4000-8000-000000000101', true);
       SELECT * INTO STRICT v_order FROM public.orders WHERE id = '${orderId}';
+      IF public.read_settled_partner_delivery(v_order.id, v_order.merchant_id)
+         IS DISTINCT FROM '{"service":"Standard","delivery_minor":150000}'::jsonb THEN
+        RAISE EXCEPTION 'admin route could not read settled delivery terms';
+      END IF;
       BEGIN
         UPDATE public.orders SET shipping_status = 'shipped' WHERE id = v_order.id;
         RAISE EXCEPTION 'unbound partner order was marked shipped' USING ERRCODE = '22023';

@@ -28,7 +28,10 @@ describe('isKudaNoResponse', () => {
         cause: Object.assign(new Error('getaddrinfo'), { code: 'ENOTFOUND' }),
       }),
     ],
-    ['a hung-up socket', new Error('socket hang up')],
+    [
+      'a hung-up socket',
+      Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' }),
+    ],
   ])('treats %s as no answer', (_label, error) => {
     expect(isKudaNoResponse(error)).toBe(true);
   });
@@ -43,6 +46,12 @@ describe('isKudaNoResponse', () => {
     ['an unknown type', new KudaApiHttpError(404, 'Not Found')],
     ['a refused list', new Error('Bill prices could not be confirmed as kobo')],
     ['a broken body', new SyntaxError('Unexpected token < in JSON')],
+    [
+      'a broken body that quotes "socket hang up"',
+      new SyntaxError(
+        'Unexpected token \'s\', "socket hang up" is not valid JSON'
+      ),
+    ],
     [
       'a broken answer that fails to map',
       new TypeError("Cannot read properties of null (reading 'id')"),

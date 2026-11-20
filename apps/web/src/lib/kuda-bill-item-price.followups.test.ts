@@ -69,11 +69,11 @@ describe('bugfix: a decorated biller name also matched the plain biller', () => 
 
   it('refuses the plain DStv price when the checkout adds the package path', async () => {
     // Real checkouts send "<biller> - <package path>".
-    await expect(purchase(5000, 'DSTV - PREMIUM - Monthly')).rejects.toThrow(
-      KUDA_BILL_PRICE_CHANGED_MESSAGE
-    );
     await expect(
-      purchase(9500, 'DSTV - PREMIUM - Monthly')
+      purchase(5000, 'DSTV - PREMIUM - Shared package')
+    ).rejects.toThrow(KUDA_BILL_PRICE_CHANGED_MESSAGE);
+    await expect(
+      purchase(9500, 'DSTV - PREMIUM - Shared package')
     ).resolves.toBeUndefined();
   });
 
@@ -84,7 +84,9 @@ describe('bugfix: a decorated biller name also matched the plain biller', () => 
   it('still matches a decorated checkout name to its listed biller', async () => {
     mockGetBillersByCategory.mockResolvedValue([cableBiller('GOTV', 4000)]);
 
-    await expect(purchase(4000, 'GOTV - Monthly')).resolves.toBeUndefined();
+    await expect(
+      purchase(4000, 'GOTV - Shared package')
+    ).resolves.toBeUndefined();
   });
 });
 
@@ -199,9 +201,9 @@ describe('bugfix: billers chosen and unreadable listings seen end to end', () =>
       ])
     );
 
-    await expect(purchase(5000, 'DSTV - PREMIUM - Monthly')).rejects.toThrow(
-      KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE
-    );
+    await expect(
+      purchase(5000, 'DSTV - PREMIUM - Shared package')
+    ).rejects.toThrow(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
   });
 
   it('fails closed with no biller named when one biller was dropped for unit doubt', async () => {
@@ -244,8 +246,8 @@ describe('bugfix: billers chosen and unreadable listings seen end to end', () =>
       { ...cableBiller('DSTV - PREMIUM', 9500), billItems: [] },
     ]);
 
-    await expect(purchase(5000, 'DSTV - PREMIUM - Monthly')).rejects.toThrow(
-      KUDA_BILL_PRICE_CHANGED_MESSAGE
-    );
+    await expect(
+      purchase(5000, 'DSTV - PREMIUM - Shared package')
+    ).rejects.toThrow(KUDA_BILL_PRICE_CHANGED_MESSAGE);
   });
 });

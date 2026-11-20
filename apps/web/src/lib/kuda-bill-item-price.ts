@@ -12,6 +12,7 @@ import { chosenListings } from './kuda-biller-name-match';
 import { getBillersByCategory } from './kuda-bills';
 import { normalizeKudaItemCode } from './kuda-item-code';
 import { isKudaNoResponse } from './kuda-no-response';
+import { isPackageNamePath } from './kuda-package-name-path';
 import { logger } from './logger';
 
 const PRICE_LIST_CACHE_TTL_MS = 60_000;
@@ -216,7 +217,15 @@ export async function assertKudaBillItemPriceCurrent({
   const candidates = billerName
     ? chosenListings(
         billers.map((biller) => ({ biller })),
-        billerName
+        billerName,
+        // The path is checked against the biller's packages; a biller that
+        // dropped this code as unreadable still owns it (then fails closed).
+        (listed, path) =>
+          isPackageNamePath(listed.billItems, code, path) ||
+          listed.packagesUnreadable === true ||
+          (listed.unreadableItemCodes ?? []).some(
+            (unreadable) => normalizeKudaItemCode(unreadable) === code
+          )
       ).map(({ biller }) => offers(biller))
     : billers.map(offers);
   // The current list no longer offers this package (or not under the named

@@ -23,10 +23,11 @@ function hasNetworkErrorCode(error: unknown): boolean {
     (error as { code?: unknown }).code,
     (error.cause as { code?: unknown } | undefined)?.code,
   ];
-  return (
-    codes.some(
-      (code) => typeof code === 'string' && NETWORK_ERROR_CODES.has(code)
-    ) || /socket hang up/i.test(error.message)
+  // Codes only, never message text: a broken answer's parse error can quote
+  // the body (e.g. "socket hang up"), which must not read as silence. A real
+  // hang-up carries ECONNRESET.
+  return codes.some(
+    (code) => typeof code === 'string' && NETWORK_ERROR_CODES.has(code)
   );
 }
 

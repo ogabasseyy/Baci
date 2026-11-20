@@ -15,15 +15,16 @@ interface RawItemLike {
 
 /**
  * Whether a raw Kuda item list, at any depth, can't be fully read: a package
- * list that is not a list (e.g. `BillItems: {}`), or a fixed-price package
- * with no code. The mapper drops either, and which package it was can't be
+ * list that is not a list (e.g. `BillItems: {}`), an entry that isn't an
+ * object (e.g. `null`), or a fixed-price package with no code. The mapper drops either, and which package it was can't be
  * told, so its biller's packages are unconfirmable.
  */
 export function hasMalformedItemList(rawItems: unknown): boolean {
   if (rawItems === undefined || rawItems === null) return false;
   if (!Array.isArray(rawItems)) return true;
   return rawItems.some((raw) => {
-    if (!raw || typeof raw !== 'object') return false;
+    // An entry that isn't an object (e.g. null) is an unreadable package.
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return true;
     const item = raw as RawItemLike;
     const isFixed = Boolean(
       item.IsAmountFixed ??

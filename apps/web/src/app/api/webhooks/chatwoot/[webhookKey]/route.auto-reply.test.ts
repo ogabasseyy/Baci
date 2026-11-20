@@ -45,7 +45,8 @@ vi.mock('@/lib/chatwoot/chat-auto-reply', () => ({
 
 import { binding, call, payload } from './route.test-support';
 
-const assistant = { ...binding, botApiAccessToken: 'synthetic-bot-token-bbbb' };
+const inbox = { ...binding, apiAccessToken: 'synthetic-agent-token-aaaa' };
+const assistant = { ...inbox, botApiAccessToken: 'synthetic-bot-token-bbbb' };
 const pending: Promise<unknown>[] = [];
 const settle = () => Promise.all(pending);
 
@@ -60,7 +61,7 @@ beforeEach(() => {
   });
   mocks.push.mockResolvedValue({ status: 'sent', sent: 1, failed: 0 });
   mocks.assistantBinding.mockReturnValue(assistant);
-  mocks.inboxBinding.mockReturnValue(binding);
+  mocks.inboxBinding.mockReturnValue(inbox);
   mocks.run.mockResolvedValue('replied');
   mocks.takeover.mockResolvedValue('replied');
   mocks.after.mockImplementation((work: () => Promise<unknown>) => {
@@ -129,12 +130,12 @@ describe('POST /api/webhooks/chatwoot/[webhookKey] assistant', () => {
     await settle();
     expect(mocks.takeover).toHaveBeenCalledOnce();
     expect(mocks.takeover.mock.calls[0][0].botApiAccessToken).toBe(
-      binding.apiAccessToken
+      inbox.apiAccessToken
     );
   });
 
   it('does not record a takeover from an inbox binding for another account', async () => {
-    mocks.inboxBinding.mockReturnValue({ ...binding, accountId: 9999 });
+    mocks.inboxBinding.mockReturnValue({ ...inbox, accountId: 9999 });
     await call(payload({ message_type: 'outgoing', sender: { type: 'user' } }));
     await settle();
     expect(mocks.takeover).not.toHaveBeenCalled();

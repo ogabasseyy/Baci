@@ -1,0 +1,47 @@
+{
+  "baseUrl": "https://baci-quiz-room-prototype.ogabassey-ai.workers.dev",
+  "botCount": 490,
+  "roomCount": 1,
+  "durationSec": 26.26,
+  "botsCompleted": 488,
+  "answersSucceeded": 4888,
+  "answerRps": 186.2,
+  "errors": {
+    "checkIn": 1,
+    "start": 0,
+    "answer": 1
+  },
+  "latencyMs": {
+    "checkIn": {
+      "p50": 158.9,
+      "p95": 753.1,
+      "p99": 4588.2
+    },
+    "start": {
+      "p50": 142.8,
+      "p95": 341.3,
+      "p99": 1920.4
+    },
+    "answer": {
+      "p50": 142.3,
+      "p95": 371.4,
+      "p99": 1598.2,
+      "max": 10933.7,
+      "under1sRatePct": 96.79
+    }
+  },
+  "errorSamples": [
+    {
+      "stage": "check-in",
+      "botId": 14,
+      "status": 0,
+      "error": "fetch failed"
+    },
+    {
+      "stage": "answer-q9",
+      "botId": 263,
+      "status": 0,
+      "error": "fetch failed"
+    }
+  ]
+}

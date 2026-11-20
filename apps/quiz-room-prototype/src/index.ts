@@ -7,6 +7,7 @@ import type {
   QuizEventConfig,
   QuizIntegrityTier,
   QuizLiveRankSubmission,
+  QuizPackedQueueMessage,
   QuizPlatform,
   QuizPrivateResultRecord,
   QuizRoomSealMode,
@@ -70,6 +71,7 @@ interface WorkerEnv {
   RESULT_SHARD: DurableObjectNamespace<ResultShardDO>;
   EVENT_COORDINATOR: DurableObjectNamespace<EventCoordinatorDO>;
   DEMO_STATE: DurableObjectNamespace<DemoStateDO>;
+  QUIZ_BATCH_QUEUE?: Queue<QuizPackedQueueMessage>;
   QUIZ_TICKET_SECRET?: string;
   QUIZ_JWT_SECRET?: string;
   QUIZ_INTERNAL_COORDINATOR_SECRET?: string;
@@ -143,6 +145,27 @@ export class QuizRoomDO extends DurableObject<WorkerEnv> {
       storage: adapter,
       controlState: this.controlState,
       hooks: {
+        onPublishBatches: async (messages) => {
+          if (
+            !env.QUIZ_BATCH_QUEUE ||
+            !env.SUPABASE_URL ||
+            !env.QUIZ_BATCH_WORKER_JWT ||
+            messages.length === 0
+          ) {
+            return;
+          }
+          const uuidRe =
+            /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+          const sendable = messages.filter((m) =>
+            uuidRe.test(m.message.eventId)
+          );
+          if (sendable.length === 0) return;
+          for (let i = 0; i < sendable.length; i += 100) {
+            await env.QUIZ_BATCH_QUEUE.sendBatch(
+              sendable.slice(i, i + 100).map((m) => ({ body: m.message }))
+            );
+          }
+        },
         onScoreboardTick: async (tick) => {
           if (!env.LIVE_RANK_INDEX || tick.submissions.length === 0) return;
           const rankStub = getWeurStub(env.LIVE_RANK_INDEX, tick.eventId);
@@ -790,6 +813,87 @@ export default {
         },
       });
       if (demoRes) return demoRes;
+
+      if (request.method === 'POST' && path === '/api/quiz/admin/init-rooms') {
+        verifyInternalCoordinatorAuth(
+          request.headers.get('Authorization'),
+          env.QUIZ_INTERNAL_COORDINATOR_SECRET
+        );
+        const body = await readJsonBody<{
+          roomIds: readonly string[];
+          config: QuizEventConfig;
+        }>(request);
+        await Promise.all(
+          body.roomIds.map(async (roomId) => {
+            const stub = getWeurStub(env.QUIZ_ROOM, roomId);
+            const res = await stub.fetch(
+              'https://room.internal/internal/init',
+              {
+                method: 'POST',
+                body: JSON.stringify(body.config),
+              }
+            );
+            if (!res.ok) {
+              throw new QuizRoomError(
+                'QUIZ_ROOM_INIT_FAILED',
+                `Failed to init room ${roomId}`,
+                res.status
+              );
+            }
+          })
+        );
+        const coordStub = getWeurStub(
+          env.EVENT_COORDINATOR,
+          body.config.eventId
+        );
+        await coordStub.fetch('https://coord.internal/internal/freeze', {
+          method: 'POST',
+          body: JSON.stringify({
+            eventId: body.config.eventId,
+            endsAtMs: body.config.endsAtMs,
+            expectedRoomIds: body.roomIds,
+          }),
+        });
+        await coordStub.fetch(
+          'https://coord.internal/internal/control-state/refresh',
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              eventId: body.config.eventId,
+              updatedAtMs: Date.now(),
+            }),
+          }
+        );
+        return jsonResponse({
+          ok: true,
+          eventId: body.config.eventId,
+          roomCount: body.roomIds.length,
+        });
+      }
+
+      if (request.method === 'POST' && path === '/api/quiz/admin/seal-room') {
+        verifyInternalCoordinatorAuth(
+          request.headers.get('Authorization'),
+          env.QUIZ_INTERNAL_COORDINATOR_SECRET
+        );
+        const body = await readJsonBody<{
+          roomId: string;
+          eventId: string;
+          endsAtMs: number;
+          persistedCloseAtMs: number;
+          mode?: QuizRoomSealMode;
+        }>(request);
+        const roomStub = getWeurStub(env.QUIZ_ROOM, body.roomId);
+        return roomStub.fetch('https://room.internal/internal/seal', {
+          method: 'POST',
+          body: JSON.stringify({
+            eventId: body.eventId,
+            endsAtMs: body.endsAtMs,
+            persistedCloseAtMs: body.persistedCloseAtMs,
+            mode: body.mode ?? 'persisted_close',
+          }),
+        });
+      }
 
       if (
         request.method === 'POST' &&

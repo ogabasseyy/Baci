@@ -12,6 +12,19 @@
       { "name": "DEMO_STATE", "class_name": "DemoStateDO" }
     ]
   },
+  "queues": {
+    "producers": [
+      { "queue": "baci-quiz-attempts-stage1", "binding": "QUIZ_BATCH_QUEUE" }
+    ],
+    "consumers": [
+      {
+        "queue": "baci-quiz-attempts-stage1",
+        "max_batch_size": 25,
+        "max_batch_timeout": 2,
+        "max_retries": 5
+      }
+    ]
+  },
   "migrations": [
     {
       "tag": "v1",

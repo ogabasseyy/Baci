@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-19T11:45:26+00:00",
-  "source_revision": "cd480ce78466243ab154c06badb3b56112b86a67",
-  "evidence_digest": "2de4d81b4802a0e9b50971f393429ae6f5828f24cd22e2d62449296ef24ebc71",
-  "claims_digest": "2deb149613446abbf524ebe6b679d7ee09beb386681aa08e6de5fe9b10f67935",
-  "review_scope": "Source evidence only. Preserves current main\u2019s OAuth, cart retention and notices, payment reconciliation, merchant protocols and Oxygen pilot boundaries. Full-code storefront MCP remains disabled by default. Owner approval, evidence and public-verification schemas retain their existing validation. Direct local admission, source adoption, rollback and simulated commerce tests cover authority boundaries. Hosted qualification and activation remain separate.",
+  "reviewed_at": "2026-11-19T22:18:55+00:00",
+  "source_revision": "0e51fec5ad2b4a27fd056787aa5a322bd51f8557",
+  "evidence_digest": "0e23d7c2f2f4fbd6da64809a63f77dbe32d02642a7c8b69ffbaee9140df9d0e7",
+  "claims_digest": "cedaec6da212e7f68a7df232992011be842a7ec1ed137e044793fea732c5b1fa",
+  "review_scope": "Source evidence only. Preserves current main\u2019s OAuth, cart retention and notices, payment reconciliation, merchant protocols and Oxygen pilot boundaries. Full-code storefront MCP remains disabled by default. Owner approval, evidence and public-verification schemas retain their existing validation. Direct local admission, source adoption, rollback and simulated commerce tests cover authority boundaries. Hosted qualification and activation remain separate. Re-reviewed the Shopping MCP access map after the misleading link-only add_to_cart alias was retired: anonymous discovery exposes prepare_storefront_cart_link, connected discovery omits it, and clients with cached tool lists must refresh discovery. All register and access-map citations were checked unchanged from the prior reviewed tree through the current main baseline. No new production capability promotion.",
   "capabilities": [
     {
       "id": "payments",

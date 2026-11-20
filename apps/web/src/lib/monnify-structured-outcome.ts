@@ -48,6 +48,9 @@ function isGenericVendLikeStatus(key: string, value: string): boolean {
 
 const VEND_FLAG_KEY =
   /^(?:is|was|has)?(?:been)?(?:vend|transaction|txn|purchase|airtime|delivered|dispatched|vended|credited|recharged|toppedup)/;
+/** customerStatus, productStatus, refundStatus...: another object's state, never the vend's. */
+const NON_VEND_STATUS_PREFIX =
+  /^(?:customer|product|biller|item|service|package|plan|validation|request|merchant|account|user|refund|reversal|settlement|callback|webhook|notification|chargeback|lookup|query|requery|enquiry|inquiry).*status$/;
 const NON_VEND_PARENT =
   /^(?:customer|product|biller|item|service|package|plan|account|merchant|user|validation|request|lookup|query|requery|enquiry|inquiry|refund|reversal|settlement|callback|webhook|notification|chargeback)s?$/;
 const PAYMENT_LEVEL_FLAG = /^(?:is|was|has)?(?:been)?payment/;
@@ -137,6 +140,7 @@ export function readStructuredOutcome(
     for (const item of Array.isArray(value) ? value : [value]) {
       if (
         key.endsWith('status') &&
+        !NON_VEND_STATUS_PREFIX.test(key) &&
         typeof item === 'string' &&
         // A bare `status` under customer/product/... describes that object.
         !(key === 'status' && NON_VEND_PARENT.test(parentKey))

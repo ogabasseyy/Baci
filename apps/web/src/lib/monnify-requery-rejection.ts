@@ -24,7 +24,7 @@ const ANCILLARY_OPERATION_WORDING =
 
 /** A negated or hedged failure ("has not failed", "was not unsuccessful") proves nothing. */
 const NEGATED_FAILURE_WORDING =
-  /\b(?:not|never|no|n't|cannot)\s+(?:\w+\s+)?(?:fail(?:ed|ure)?|unsuccessful|declined|reversed|cancell?ed|rejected|refused|denied)\b|\b(?:not|never|cannot|can't|couldn't|could\s+not)\s+(?:\w+\s+){0,2}?(?:confirm\w*|verif\w+|establish\w*)\b|\bun(?:confirmed|verified)\b|\b(?:may|might|possibly|probably|perhaps|presumably|likely|seems?|appears?)\b|\b(?:could|would)\s+have\b/i;
+  /\b(?:not|never|no|n't|cannot)\s+(?:\w+\s+)?(?:fail(?:ed|ure)?|unsuccessful|declined|reversed|cancell?ed|rejected|refused|denied)\b|\b(?:not|never|cannot|can't|couldn't|could\s+not)\s+(?:\w+\s+){0,2}?(?:confirm\w*|verif\w+|establish\w*)\b|\bun(?:confirmed|verified)\b|\b(?:may|might|possibly|probably|perhaps|presumably|likely|seems?|appears?|(?:could|would)\s+have)\b(?:\s+\w+){0,3}?\s+(?:fail\w*|unsuccessful|declined|reversed|cancell?ed|rejected|refused|denied)\b/i;
 
 /**
  * Wording about the requery itself rather than the vend: the reference is

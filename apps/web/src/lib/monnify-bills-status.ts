@@ -116,15 +116,34 @@ export function hasConflictingVendStatuses(body: {
   return categories.size > 1;
 }
 
-/** Whether an answer's responseBody carries a real (non-placeholder) token. */
-export function hasBodyToken(answer: unknown): boolean {
-  if (!answer || typeof answer !== 'object') {
+const TOKEN_SEARCH_DEPTH = 6;
+
+function findTokenIn(
+  value: unknown,
+  insideBody: boolean,
+  depth: number
+): boolean {
+  if (!value || typeof value !== 'object' || depth > TOKEN_SEARCH_DEPTH) {
     return false;
   }
-  const body = (answer as Record<string, unknown>).responseBody;
-  return (
-    !!body &&
-    typeof body === 'object' &&
-    !!readMonnifyBillToken(body as Parameters<typeof readMonnifyBillToken>[0])
-  );
+  const entries = Array.isArray(value)
+    ? value.map((item) => ['', item] as const)
+    : Object.entries(value);
+  return entries.some(([rawKey, child]) => {
+    const key = rawKey.replace(/[\s_-]/g, '').toLowerCase();
+    if (insideBody && key === 'token' && typeof child === 'string') {
+      if (readMonnifyBillToken({ token: child })) {
+        return true;
+      }
+    }
+    return findTokenIn(child, insideBody || key === 'responsebody', depth + 1);
+  });
+}
+
+/**
+ * Whether an answer's responseBody carries a real (non-placeholder) token, in
+ * JSON or in a parsed form-encoded shape (nested objects or one-pair arrays).
+ */
+export function hasBodyToken(answer: unknown): boolean {
+  return findTokenIn(answer, false, 0);
 }

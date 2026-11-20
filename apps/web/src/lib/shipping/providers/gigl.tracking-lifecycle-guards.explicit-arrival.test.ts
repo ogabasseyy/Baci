@@ -90,4 +90,27 @@ describe('bugfix: explicit arrival codes and tied or mapped scans', () => {
     );
     expect(arrival?.location).toContain('HEATHROW');
   });
+
+  it.each([
+    ['location-less ARF first', ['ARF', 'MSVC']],
+    ['located MSVC first', ['MSVC', 'ARF']],
+  ])('gives a located inferred arrival the synthetic status over a tied location-less explicit one (%s)', (_label, order) => {
+    const scans = {
+      ARF: { Status: 'ARF', DateTimeUtc: T },
+      MSVC: { Status: 'MSVC', DateTimeUtc: T, Location: 'WUSE ABUJA (Wuse)' },
+    };
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W94',
+        Origin: 'LAGOS',
+        Destination: 'ABUJA',
+        MobileShipmentTrackings: order.map(
+          (key) => scans[key as 'ARF' | 'MSVC']
+        ),
+      },
+      'W94',
+      OBSERVED_AT
+    );
+    expect(result.events[0]?.location).toContain('WUSE ABUJA');
+  });
 });

@@ -2,86 +2,19 @@ import {
   GIGL_ARRIVED_IN_CITY_RAW_STATUS,
   GIGL_PICKUP_EN_ROUTE_RAW_STATUS,
 } from '@/lib/shipping/gigl-tracking-notification-policy-matrix';
+import {
+  DEPARTURE_CODES,
+  DEPARTURE_WORD,
+  EXPLICIT_ARRIVAL_CODES,
+  FOREIGN_OFFICE_DESTINATIONS,
+  RETURN_CODES,
+  RETURN_FLOW_CODES,
+} from './gigl.tracking-arrival-codes';
 import { isMshc } from './gigl.tracking-mshc';
 import type { Guardable } from './gigl.tracking-status-rank';
 import { TERMINAL_STATUSES } from './gigl.tracking-terminal-statuses';
 
 const PLACE_NOISE_WORDS = new Set(['FCT', 'STATE', 'CITY', 'THE', 'OF']);
-// Intentionally narrow: other in_transit scans at a destination-named centre
-// count as arriving. Missing an arrival beats a false one, so extend with care.
-const DEPARTURE_CODES = new Set([
-  'DSC',
-  'DPC',
-  'DCC',
-  'DST',
-  'DTR',
-  'DIWN',
-  // GIG's "SHIPMENT DEPARTS SERVICE CENTRE" (code-only scans carry no reason).
-  'MDSE',
-  // Departures from the UK and US (international origin offices).
-  'IDK',
-  'IDH',
-]);
-
-// Return-flow and exception scans (damage, claims) can occur at the destination
-// centre after a failed delivery; they are not an arrival.
-const RETURN_CODES = new Set([
-  'SRC',
-  'RSR',
-  'MRTE',
-  'SSR',
-  'MRTD',
-  'DASH',
-  'CLS',
-  // Delay, customs and transfer scans are not arrivals either.
-  'DLD',
-  'CLC',
-  'UCC',
-  'GOP',
-  'TRO',
-  'SRIC',
-]);
-// Scans that start the return flow back to the sender: once seen, a later
-// arrival scan is the parcel reaching the sender, not the customer's city.
-// RSR: returned shipment received by Operations (GIG's scan-status list).
-// MRTD is "shipment rerouted" (ordinary transit), so it is not a return signal.
-// SRHUB: the return completed at the sender's hub (a later arrival scan is the
-// parcel reaching the sender, not the customer's city).
-const RETURN_FLOW_CODES = new Set(['SRC', 'MRTE', 'SSR', 'RSR', 'SRHUB']);
-// Explicit "arrived final destination" scans. AHD ("arrived final destination
-// for home delivery") has no entry in the shared status map.
-const EXPLICIT_ARRIVAL_CODES = new Set([
-  'ARF',
-  'MAFD',
-  'AHD',
-  'ADF',
-  'ARFTPKU',
-  // International final-destination arrivals (terminal pickup, home delivery).
-  'IAFDSC',
-  'IAFDHD',
-  'ARFGH',
-  'ARFFSTP',
-  'ARFFSHD',
-  'ARFGFR',
-  'ARFGFS',
-  // Daily / delayed-pickup scans only occur after reaching the destination.
-  'AD',
-  'DUBC',
-]);
-
-// Foreign-office arrivals only count when the shipment is headed to that
-// office's country; for a Nigeria-bound parcel they are the origin leg.
-const FOREIGN_OFFICE_DESTINATIONS: Record<string, RegExp> = {
-  ARFK: /\b(UK|U\.K|UNITED KINGDOM|ENGLAND|LONDON)\b/,
-  ARFP: /\b(UK|U\.K|UNITED KINGDOM|ENGLAND|LONDON)\b/,
-  ARFH: /\b(US|USA|UNITED STATES|HOUSTON|TEXAS)\b/,
-  ARUS: /\b(US|USA|UNITED STATES|HOUSTON|TEXAS)\b/,
-};
-
-// Whole word only, so unrelated text that merely contains DEPART (e.g.
-// DEPARTMENT) cannot suppress an arrival.
-const DEPARTURE_WORD = /\bDEPART(?:S|ED|ING|URES?)?\b/i;
-
 function isSdr(candidate: Guardable): number {
   return candidate.providerStatus.trim().toUpperCase() === 'SDR' ? 1 : 0;
 }
@@ -99,15 +32,27 @@ function isReturnFlow(candidate: Guardable): number {
   return startsReturnFlow(candidate) ? 1 : 0;
 }
 
-function locatedExplicitArrival(
+// A located scan that could take the arrival status (explicit code, or an
+// in-transit scan at the destination centre).
+function locatedArrivalCandidate(
   candidate: Guardable,
   destination: string | undefined
 ): number {
   const raw = candidate.providerStatus.trim().toUpperCase();
+  const { location } = candidate.event;
+  if (placeWords(location).length === 0) return 0;
   const explicit =
     EXPLICIT_ARRIVAL_CODES.has(raw) ||
     FOREIGN_OFFICE_DESTINATIONS[raw]?.test((destination ?? '').toUpperCase());
-  return explicit && placeWords(candidate.event.location).length > 0 ? 1 : 0;
+  const inferred =
+    candidate.recognizedStatus === 'in_transit' &&
+    !DEPARTURE_CODES.has(raw) &&
+    !RETURN_CODES.has(raw) &&
+    !DEPARTURE_WORD.test(
+      `${raw} ${candidate.scanText || candidate.event.description}`
+    ) &&
+    matchesDestination(location, destination);
+  return explicit || inferred ? 1 : 0;
 }
 
 function placeWords(value: string | undefined): string[] {
@@ -177,14 +122,15 @@ export function applyLifecycleGuards(
       isSdr(b) - isSdr(a) ||
       // A same-time return scan is processed before any arrival so it fences it.
       isReturnFlow(b) - isReturnFlow(a) ||
-      // Tied explicit arrivals: the located one takes the arrival status, so its
-      // centre can become the snapshot location whatever the payload order.
-      locatedExplicitArrival(b, destination) -
-        locatedExplicitArrival(a, destination) ||
       isMshc(a) - isMshc(b) ||
       // Tied scans: movement away from the destination first, so the result
       // does not depend on payload order.
-      awayFromDestination(b, destination) - awayFromDestination(a, destination)
+      awayFromDestination(b, destination) -
+        awayFromDestination(a, destination) ||
+      // Then the located arrival candidate takes the arrival status, so its
+      // centre can become the snapshot location whatever the payload order.
+      locatedArrivalCandidate(b, destination) -
+        locatedArrivalCandidate(a, destination)
   );
   let arrived = false;
   let movedThroughNetwork = false;

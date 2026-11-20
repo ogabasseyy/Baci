@@ -18,7 +18,7 @@ export async function dispatchCheckoutPayment(
   const {
     merchant,
     order,
-    paymentMethod,
+    paymentMethod: requestedPaymentMethod,
     total,
     paymentAmount,
     createdOrderNumber,
@@ -47,6 +47,10 @@ export async function dispatchCheckoutPayment(
     redirect,
     payForMeDetails,
   } = context;
+  const paymentMethod =
+    order.payment_method === 'bank_card_offer'
+      ? 'paystack'
+      : requestedPaymentMethod;
   if (paymentMethod === 'oxygen') {
     if (
       context.freshOrder === true &&

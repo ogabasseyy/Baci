@@ -47,7 +47,7 @@ it('preserves the configured localhost callback for development', async () => {
   expect(resolveDomain).not.toHaveBeenCalled();
 });
 
-it('falls back to the canonical storefront during a domain lookup error', async () => {
+it('withholds the callback during a domain lookup error', async () => {
   resolveDomain.mockRejectedValue(new Error('domain lookup unavailable'));
 
   await expect(
@@ -55,7 +55,7 @@ it('falls back to the canonical storefront during a domain lookup error', async 
       ...order,
       request: new Request('https://ogabassey.example/api/payments/initialize'),
     })
-  ).resolves.toBe('https://ogabassey.usebaci.com');
+  ).resolves.toBeNull();
 });
 
 it.each([

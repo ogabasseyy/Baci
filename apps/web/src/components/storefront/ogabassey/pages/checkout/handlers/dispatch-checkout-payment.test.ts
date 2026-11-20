@@ -66,6 +66,27 @@ describe('dispatchCheckoutPayment', () => {
       expect(context.capturePaymentStarted).not.toHaveBeenCalled();
     else expect(context.capturePaymentStarted).toHaveBeenCalledWith('ref');
   });
+  it('uses Paystack when the saved order is a bank offer', async () => {
+    const context = paymentDispatchContext();
+    context.paymentMethod = 'korapay';
+    context.order.payment_method = 'bank_card_offer';
+    vi.mocked(initializeCheckoutGateway).mockResolvedValue({
+      success: true,
+      reference: 'BCO-reference',
+      authorization_url: 'https://checkout.paystack.com/example',
+    });
+
+    await dispatchCheckoutPayment(context);
+
+    expect(initializeCheckoutGateway).toHaveBeenCalledWith(
+      expect.objectContaining({ gateway: 'paystack', order: context.order })
+    );
+    expect(context.redirect).toHaveBeenCalledWith(
+      'https://checkout.paystack.com/example'
+    );
+    expect(context.clearCart).not.toHaveBeenCalled();
+  });
+
   it('opens crypto selection using the residual amount and canonical total without initializing a gateway', async () => {
     const context = paymentDispatchContext();
     context.paymentMethod = 'juicyway';

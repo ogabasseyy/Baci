@@ -1,6 +1,7 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { verifyBankCardOfferPaystack } from '@/lib/checkout/verify-bank-card-offer-paystack';
+import type { BankCardOfferTerminalStatus } from '@/schemas/bank-card-offer-reference';
 import { bankCardOfferVerificationContextSchema } from '@/schemas/bank-card-offer-verification-context';
 
 export async function approveBankCardOfferPayment({
@@ -9,7 +10,7 @@ export async function approveBankCardOfferPayment({
   orderId,
   transactionId,
   reference,
-  reversalOnly,
+  expectedTerminalStatus,
   signal,
 }: {
   client: Pick<SupabaseClient, 'rpc'>;
@@ -17,7 +18,7 @@ export async function approveBankCardOfferPayment({
   orderId: string;
   transactionId: string;
   reference: string;
-  reversalOnly?: true;
+  expectedTerminalStatus?: BankCardOfferTerminalStatus;
   signal?: AbortSignal;
 }) {
   const args = {
@@ -50,8 +51,9 @@ export async function approveBankCardOfferPayment({
     },
     signal
   );
-  if (reversalOnly) {
-    return verified?.kind === 'terminal' && verified.status === 'reversed'
+  if (expectedTerminalStatus) {
+    return verified?.kind === 'terminal' &&
+      verified.status === expectedTerminalStatus
       ? verified
       : null;
   }

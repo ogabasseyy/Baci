@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { bankCardOfferTerminalStatusSchema } from '@/schemas/bank-card-offer-reference';
 import type { finalizeOrderGatewayPayment } from './finalize-order-gateway-payment';
 import type {
   WedgedCandidate,
@@ -35,6 +36,9 @@ export async function handleUnverifiedWedge({
   verification: Extract<GatewayChargeVerification, { ok: false }>;
 }) {
   const reference = candidate.gateway_reference;
+  const terminal = bankCardOfferTerminalStatusSchema.safeParse(
+    verification.gatewayStatus
+  );
   summary.skipped.push({
     reason: verification.reason,
     transactionId: candidate.id,
@@ -43,13 +47,13 @@ export async function handleUnverifiedWedge({
   if (
     candidate.gateway === 'paystack' &&
     reference?.startsWith('BCO-') &&
-    verification.gatewayStatus === 'reversed'
+    terminal.success
   ) {
     // The shared finalizer verifies the original domain, reference and
-    // currency against the saved offer before it records a reversal.
+    // currency against the saved offer before it records a terminal status.
     const outcome = await finalizePayment({
       actor: 'cron:reconcile-gateway-paid-orders',
-      bankOfferReversalOnly: true,
+      expectedBankOfferTerminalStatus: terminal.data,
       gateway: 'paystack',
       orderId: candidate.order_id,
       reference,
@@ -60,7 +64,7 @@ export async function handleUnverifiedWedge({
     });
     if (
       outcome.kind === 'bank_offer_terminal' &&
-      outcome.status === 'reversed'
+      outcome.status === terminal.data
     ) {
       summary.reviewsFiled.push({
         orderId: candidate.order_id,
@@ -70,12 +74,12 @@ export async function handleUnverifiedWedge({
         !(await stamp(supabase, candidate, 'gateway_verification_negative'))
       ) {
         summary.failed.push({
-          reason: 'bank_offer_reversal_stamp_failed',
+          reason: 'bank_offer_terminal_stamp_failed',
           transactionId: candidate.id,
         });
       }
     } else {
-      // Leave the row eligible for retry while the reversal is unconfirmed.
+      // Leave the row eligible for retry while the provider verdict is unconfirmed.
       summary.failed.push({
         reason: outcome.kind,
         transactionId: candidate.id,

@@ -310,6 +310,13 @@ BEGIN
     OR NOT public.bank_card_offer_refund_capture_matches(v_order, v_merchant, v_transaction, v_reference, 9500)
     OR public.bank_card_offer_refund_capture_matches(v_order, v_merchant, v_transaction, v_reference, 10000)
   THEN RAISE EXCEPTION 'Refund must use the discounted capture'; END IF;
+  IF NOT public.flag_bank_card_offer_terminal_review(v_order, v_merchant, v_transaction, 'failed')
+  THEN RAISE EXCEPTION 'The sweep must record a confirmed failed status for a completed attempt'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.reconciliation_review
+    WHERE txn_id = v_transaction AND metadata->>'source' = 'bank_card_offer_initialization'
+      AND metadata->>'provider_status' = 'failed' AND resolved_at IS NULL
+  ) THEN RAISE EXCEPTION 'Terminal status must use the review that suppresses stale checkout URLs'; END IF;
   IF NOT public.flag_bank_card_offer_terminal_review(v_order, v_merchant, v_transaction, 'reversed')
   THEN RAISE EXCEPTION 'Unable to persist the capture reversal before refund verification'; END IF;
   IF public.bank_card_offer_refund_capture_matches(v_order, v_merchant, v_transaction, v_reference, 9500)

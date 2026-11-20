@@ -77,7 +77,7 @@ it.each([
 
   expect(args.finalizePayment).toHaveBeenCalledWith(
     expect.objectContaining({
-      bankOfferReversalOnly: true,
+      expectedBankOfferTerminalStatus: 'reversed',
       reference: candidate.gateway_reference,
     })
   );
@@ -94,7 +94,7 @@ it.each([
       ? []
       : [
           {
-            reason: 'bank_offer_reversal_stamp_failed',
+            reason: 'bank_offer_terminal_stamp_failed',
             transactionId: 'transaction',
           },
         ]
@@ -113,4 +113,30 @@ it('leaves a bank-offer reversal eligible for retry when recording fails', async
   expect(args.summary.failed).toEqual([
     { reason: 'completion_failed', transactionId: 'transaction' },
   ]);
+});
+
+it.each([
+  'failed',
+  'cancelled',
+  'abandoned',
+] as const)('records the bank offer status %s before stamping', async (status) => {
+  const args = setup();
+  args.finalizePayment.mockResolvedValue({
+    kind: 'bank_offer_terminal',
+    status,
+  });
+  args.stamp.mockResolvedValue(true);
+
+  await handleUnverifiedWedge({
+    ...args,
+    verification: { ...args.verification, gatewayStatus: status },
+  });
+
+  expect(args.finalizePayment).toHaveBeenCalledWith(
+    expect.objectContaining({
+      expectedBankOfferTerminalStatus: status,
+    })
+  );
+  expect(args.stamp).toHaveBeenCalled();
+  expect(args.retire).not.toHaveBeenCalled();
 });

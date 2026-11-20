@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { BankCardOfferTerminalStatus } from '@/schemas/bank-card-offer-reference';
 import type { BlockedOrderPaymentOutcome } from './file-blocked-order-payment-review';
 
 export interface FinalizeOrderGatewayPaymentArgs {
@@ -27,8 +28,8 @@ export interface FinalizeOrderGatewayPaymentArgs {
    * promoting. Unset preserves the legacy behavior.
    */
   expectedOutstandingMinor?: number | null;
-  /** The reversal sweep may record a reversal but cannot settle a capture. */
-  bankOfferReversalOnly?: true;
+  /** This sweep pass can record only the corroborated terminal status. */
+  expectedBankOfferTerminalStatus?: BankCardOfferTerminalStatus;
 }
 
 export type FinalizeOrderGatewayPaymentOutcome =
@@ -37,7 +38,7 @@ export type FinalizeOrderGatewayPaymentOutcome =
   | { kind: 'bank_offer_capture_review' }
   | {
       kind: 'bank_offer_terminal';
-      status: 'failed' | 'abandoned' | 'cancelled' | 'reversed';
+      status: BankCardOfferTerminalStatus;
     }
   | { kind: 'capture_hold_failed'; error: unknown }
   | { kind: 'completion_failed'; error: unknown }

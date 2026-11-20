@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { getCachedMerchantByDomain } from '@/lib/cached-data';
 import { bankCardOfferContextFixture } from '@/schemas/bank-card-offer-payment-context.test-support';
 import { initializeBankCardOfferCheckout } from './initialize-bank-card-offer-checkout';
 import { initializeBankCardOfferPaystack } from './initialize-bank-card-offer-paystack';
 
+vi.mock('@/lib/cached-data', () => ({ getCachedMerchantByDomain: vi.fn() }));
 vi.mock('server-only', () => ({}));
 vi.mock('./initialize-bank-card-offer-paystack', () => ({
   initializeBankCardOfferPaystack: vi.fn(),
@@ -98,6 +100,24 @@ describe('initializeBankCardOfferCheckout', () => {
     await expect(initializeBankCardOfferCheckout(input)).resolves.toEqual({
       kind: 'unavailable',
     });
+    expect(paystack).not.toHaveBeenCalled();
+  });
+
+  it('retries a callback lookup outage before claiming a Paystack attempt', async () => {
+    const { input, reserve } = setup();
+    vi.mocked(getCachedMerchantByDomain).mockRejectedValueOnce(
+      new Error('lookup unavailable')
+    );
+
+    await expect(
+      initializeBankCardOfferCheckout({
+        ...input,
+        request: new Request(
+          'https://merchant.example/api/payments/initialize'
+        ),
+      })
+    ).resolves.toEqual({ kind: 'retryable', reference: undefined });
+    expect(reserve).not.toHaveBeenCalled();
     expect(paystack).not.toHaveBeenCalled();
   });
 

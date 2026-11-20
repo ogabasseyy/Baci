@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createStorefrontOrderRpcClient } from '@/lib/checkout/storefront-order-rpc-client';
+import type { BankCardOfferTerminalStatus } from '@/schemas/bank-card-offer-reference';
 import { approveBankCardOfferPayment } from './approve-bank-card-offer-payment';
 import { completeOrderGatewayPayment } from './complete-order-gateway-payment';
 import { fileRedvaultInventoryConfirmationReview } from './file-redvault-inventory-confirmation-review';
@@ -8,7 +9,7 @@ import { verifyAndCompleteRedvaultPayment } from './verify-and-complete-redvault
 
 export async function resolveOrderGatewayCompletion({
   actor,
-  bankOfferReversalOnly,
+  expectedBankOfferTerminalStatus,
   expectedOutstandingMinor,
   gateway,
   gatewayResponse,
@@ -20,7 +21,7 @@ export async function resolveOrderGatewayCompletion({
   transactionId,
 }: {
   actor: string;
-  bankOfferReversalOnly?: true;
+  expectedBankOfferTerminalStatus?: BankCardOfferTerminalStatus;
   expectedOutstandingMinor?: number | null;
   gateway: 'juicyway' | 'paystack' | 'korapay';
   gatewayResponse?: Record<string, unknown>;
@@ -33,14 +34,14 @@ export async function resolveOrderGatewayCompletion({
 }) {
   try {
     if (
-      bankOfferReversalOnly &&
+      expectedBankOfferTerminalStatus &&
       (gateway !== 'paystack' || !reference.startsWith('BCO-'))
     ) {
       return {
         ok: false as const,
         outcome: {
           kind: 'completion_failed' as const,
-          error: new Error('invalid_bank_offer_reversal_request'),
+          error: new Error('invalid_bank_offer_terminal_review_request'),
         },
       };
     }
@@ -59,7 +60,7 @@ export async function resolveOrderGatewayCompletion({
         gateway === 'paystack'
           ? await approveBankCardOfferPayment({
               client: redvaultScopedClient,
-              reversalOnly: bankOfferReversalOnly,
+              expectedTerminalStatus: expectedBankOfferTerminalStatus,
               merchantId,
               orderId,
               reference,

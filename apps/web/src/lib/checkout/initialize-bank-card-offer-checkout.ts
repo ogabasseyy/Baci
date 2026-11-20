@@ -43,6 +43,13 @@ export async function initializeBankCardOfferCheckout({
     return { kind: 'unavailable' } as const;
   }
   const { amountKobo, customerEmail, quote, slug, subaccount } = context.data;
+  const callbackOrigin = await getBankCardOfferCallbackOrigin({
+    request,
+    merchantId,
+    merchantSlug: slug,
+  });
+  if (!callbackOrigin)
+    return { kind: 'retryable', reference: undefined } as const;
   const platformFeeKobo = calculatePlatformFee(amountKobo).platformFee;
   const { retainedShippingKobo, transactionChargeKobo } =
     await resolvePaystackSplitTransactionCharge({
@@ -84,11 +91,6 @@ export async function initializeBankCardOfferCheckout({
       return { kind: 'initialized', reference, checkoutUrl } as const;
     return requestReview(false);
   }
-  const callbackOrigin = await getBankCardOfferCallbackOrigin({
-    request,
-    merchantId,
-    merchantSlug: slug,
-  });
   let url: string;
   try {
     url = await initializeBankCardOfferPaystack({

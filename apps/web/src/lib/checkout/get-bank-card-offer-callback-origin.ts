@@ -49,7 +49,7 @@ export async function getBankCardOfferCallbackOrigin({
       const merchant = await getCachedMerchantByDomain(identifier);
       if (merchant?.id === merchantId) return `https://${requestHost}`;
     } catch {
-      return defaultOrigin;
+      return null;
     }
   }
   return defaultOrigin;

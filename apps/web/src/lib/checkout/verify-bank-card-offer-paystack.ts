@@ -1,5 +1,6 @@
 import 'server-only';
 import { verifyTransaction } from '@/lib/paystack';
+import { bankCardOfferTerminalStatusSchema } from '@/schemas/bank-card-offer-reference';
 import {
   type BankCardOfferAttempt,
   verifyBankCardOfferAttempt,
@@ -28,23 +29,19 @@ export async function verifyBankCardOfferPaystack(
     return { kind: 'mismatch' } as const;
   }
   const status: string = data.status;
-  const terminal =
-    status === 'failed' ||
-    status === 'abandoned' ||
-    status === 'reversed' ||
-    status === 'cancelled';
+  const terminal = bankCardOfferTerminalStatusSchema.safeParse(status);
   if (data.reference !== attempt.reference) {
     return { kind: 'mismatch' } as const;
   }
   if (status !== 'success') {
     // A terminal status starts operator review for the same reference.
     // Only a successful capture can establish and approve the amount paid.
-    if (terminal) {
+    if (terminal.success) {
       return 'domain' in data &&
         data.domain === attempt.domain &&
         typeof data.currency === 'string' &&
         data.currency.toUpperCase() === attempt.currency
-        ? ({ kind: 'terminal', status } as const)
+        ? ({ kind: 'terminal', status: terminal.data } as const)
         : ({ kind: 'mismatch' } as const);
     }
     return null;

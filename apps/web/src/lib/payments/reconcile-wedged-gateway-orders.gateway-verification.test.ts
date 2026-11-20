@@ -152,7 +152,7 @@ describe('reconcileWedgedGatewayOrders gateway verification', () => {
         reference,
         gateway: 'paystack',
         orderId: wedgedCandidate.order_id,
-        bankOfferReversalOnly: true,
+        expectedBankOfferTerminalStatus: 'reversed',
       })
     );
     expect(

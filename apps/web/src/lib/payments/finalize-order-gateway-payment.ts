@@ -36,11 +36,11 @@ export async function finalizeOrderGatewayPayment({
   fallbackDeadlineMs,
   emailMaxAttemptsPerSender,
   expectedOutstandingMinor,
-  bankOfferReversalOnly,
+  expectedBankOfferTerminalStatus,
 }: FinalizeOrderGatewayPaymentArgs): Promise<FinalizeOrderGatewayPaymentOutcome> {
   const result = await resolveOrderGatewayCompletion({
     actor,
-    bankOfferReversalOnly,
+    expectedBankOfferTerminalStatus,
     expectedOutstandingMinor,
     gateway,
     gatewayResponse,

@@ -91,7 +91,7 @@ it('does not approve a capture if the reversal-only recheck sees success', async
     approveBankCardOfferPayment({
       ...input,
       client: { rpc },
-      reversalOnly: true,
+      expectedTerminalStatus: 'reversed',
       signal,
     })
   ).resolves.toBeNull();

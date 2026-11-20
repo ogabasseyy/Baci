@@ -228,10 +228,10 @@ overrides:
   "ws@>=8 <8.21.0": "8.21.0"
   h3: "1.15.9"
   tar: "^7.5.8"
-  # Pin to the current patched 5.x release for GHSA-gh4j-gqv2-49f6 in XMLBuilder comment/CDATA serialization while keeping transitive feed and storage XML tooling on the patched major.
-  fast-xml-parser: "5.9.0"
-  # Pin fast-xml-builder for Dependabot #161/#162 (compatible with fast-xml-parser ^1.1.5).
-  fast-xml-builder: "1.2.0"
+  # Pin to the current patched 5.x release for GHSA-gh4j-gqv2-49f6 and validator fixes while keeping transitive feed and storage XML tooling on the patched major.
+  fast-xml-parser: "5.12.1"
+  # Pin fast-xml-builder for Dependabot #161/#162 (compatible with fast-xml-parser 5.12.1).
+  fast-xml-builder: "1.3.2"
   # AJV 8.x has no fast-uri peer constraint, so this exact patched pin is compatible.
   # 3.1.8 closes the GHSA-qw65-cvwx-89v3 authority injection, GHSA-58mr-gqgx-xq4g
   # host confusion, and GHSA-hrr3-gc8f-f4qj normalization advisories.

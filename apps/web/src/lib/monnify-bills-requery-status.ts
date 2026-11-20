@@ -42,6 +42,10 @@ export async function checkTransactionStatus(
       error instanceof MonnifyHttpError &&
       error.isClientError &&
       ![401, 403, 429].includes(error.status) &&
+      // The same codes or authentication wording inside an HTTP 400 body are
+      // login rejections/throttles: they prove nothing about the vend.
+      !/^0*(?:401|403|429)$/.test(error.responseCode ?? '') &&
+      !error.mentionsAuthWording &&
       error.provesVendFailure
     ) {
       return {

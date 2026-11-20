@@ -147,3 +147,29 @@ describe('bugfix: negated "previously used" wording is not a duplicate', () => {
     ).toBe(true);
   });
 });
+
+describe('bugfix: auth codes and wording inside an HTTP requery body prove nothing', () => {
+  it.each([
+    '401',
+    '403',
+    '429',
+  ])('rethrows an HTTP 400 requery with code %s and vendStatus FAILED', async (code) => {
+    mockHttpError(400, {
+      responseCode: code,
+      responseMessage: 'Rejected',
+      responseBody: { vendStatus: 'FAILED' },
+    });
+
+    await expect(checkTransactionStatus('MFBP-1')).rejects.toBeDefined();
+  });
+
+  it('rethrows an HTTP 400 requery with authentication wording and vendStatus FAILED', async () => {
+    mockHttpError(400, {
+      responseCode: 'D01',
+      responseMessage: 'Invalid access token',
+      responseBody: { vendStatus: 'FAILED' },
+    });
+
+    await expect(checkTransactionStatus('MFBP-1')).rejects.toBeDefined();
+  });
+});

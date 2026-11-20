@@ -10,6 +10,9 @@ import type { PurchaseResult } from '@/lib/kuda';
  */
 export const VTU_MONNIFY_OUTCOME_UNRESOLVED_KEY = 'monnifyOutcomeUnresolved';
 
+/** The held answer carried a real voucher token (never stored): look for it. */
+export const VTU_MONNIFY_HELD_TOKEN_SEEN_KEY = 'monnifyHeldTokenSeen';
+
 /**
  * Flags a held Monnify result on the row's metadata and logs a fixed label
  * (no provider text) so held rows can be alerted on and found.
@@ -22,7 +25,7 @@ export function markVtuMonnifyUnresolvedHold({
   metadata: Record<string, unknown>;
   result: Pick<
     PurchaseResult,
-    'providerOutcomeUnresolved' | 'providerVendReference'
+    'providerOutcomeUnresolved' | 'providerTokenSeen' | 'providerVendReference'
   >;
   transactionId: string;
 }): void {
@@ -30,8 +33,12 @@ export function markVtuMonnifyUnresolvedHold({
     return;
   }
   metadata[VTU_MONNIFY_OUTCOME_UNRESOLVED_KEY] = true;
+  if (result.providerTokenSeen === true) {
+    metadata[VTU_MONNIFY_HELD_TOKEN_SEEN_KEY] = true;
+  }
   console.warn('Monnify answer left the vend outcome open; VTU row held:', {
     requeryable: !!result.providerVendReference,
+    tokenSeen: result.providerTokenSeen === true,
     transactionId,
   });
 }

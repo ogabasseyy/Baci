@@ -179,6 +179,7 @@ export async function purchaseBill(
         message: sanitizeMonnifyErrorDetail(
           parsedEnvelope.responseMessage || 'Vend outcome unclear'
         ),
+        providerTokenSeen: true,
         requestReference,
       });
     }

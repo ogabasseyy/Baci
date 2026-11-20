@@ -173,3 +173,47 @@ describe('bugfix: flattened ancillary statuses and hedged wording', () => {
     ).toBe(true);
   });
 });
+
+describe('bugfix: a held answer that carried a token says so', () => {
+  it('flags providerTokenSeen on a pending-with-token hold, without a pin', async () => {
+    mockJson({
+      requestSuccessful: true,
+      responseCode: '0',
+      responseMessage: 'success',
+      responseBody: {
+        transactionReference: 'MNFY-1',
+        vendStatus: 'PENDING',
+        metaData: { token: '1111-2222-3333' },
+      },
+    });
+
+    const result = await vend();
+
+    expect(result).toMatchObject({
+      status: 'pending',
+      providerTokenSeen: true,
+    });
+    expect(result.pin).toBeUndefined();
+  });
+
+  it('flags providerTokenSeen on a token beside a 401', async () => {
+    mockHttpError(401, {
+      responseMessage: 'Unauthorized',
+      responseBody: { token: '1111-2222-3333' },
+    });
+
+    await expect(vend()).resolves.toMatchObject({ providerTokenSeen: true });
+  });
+
+  it('does not flag a hold with no token', async () => {
+    mockJson({
+      requestSuccessful: false,
+      responseCode: '99',
+      responseMessage: 'Please re-query',
+    });
+
+    const result = await vend();
+
+    expect(result.providerTokenSeen).toBeUndefined();
+  });
+});

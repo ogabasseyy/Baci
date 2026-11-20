@@ -18,6 +18,7 @@ export function buildMonnifyUnresolvedVendResult({
   message,
   providerErrorDetail,
   providerResponseCode,
+  providerTokenSeen,
   providerVendReference,
   requestReference,
 }: {
@@ -25,6 +26,7 @@ export function buildMonnifyUnresolvedVendResult({
   message: string;
   providerErrorDetail?: string;
   providerResponseCode?: string;
+  providerTokenSeen?: boolean;
   providerVendReference?: string;
   requestReference: string;
 }): PurchaseResult {
@@ -44,5 +46,6 @@ export function buildMonnifyUnresolvedVendResult({
     amount,
     providerDefiniteFailure: false,
     providerOutcomeUnresolved: true,
+    ...(providerTokenSeen && { providerTokenSeen: true }),
   };
 }

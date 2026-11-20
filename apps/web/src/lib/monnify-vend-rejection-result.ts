@@ -88,6 +88,7 @@ export function buildMonnifyBusinessRejectionResult({
       message,
       providerErrorDetail: message,
       providerResponseCode,
+      providerTokenSeen: hasBodyToken(envelope),
       providerVendReference: readMonnifyRejectionVendReference(
         envelope,
         requestReference
@@ -154,6 +155,7 @@ export function buildMonnifyHttpRejectionResult({
       message: HTTP_REJECTION_MESSAGE,
       providerErrorDetail: error.diagnosticMessage,
       providerResponseCode: error.responseCode,
+      providerTokenSeen: error.bodyHasToken,
       providerVendReference: error.providerVendReference(requestReference),
       requestReference,
     });

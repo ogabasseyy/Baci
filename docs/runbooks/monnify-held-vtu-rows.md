@@ -17,6 +17,7 @@ never refunded and never sent to Kuda automatically.
 ```sql
 select id, merchant_id, type, amount, request_reference, created_at, updated_at,
        now() - created_at as age,
+       metadata->>'monnifyHeldTokenSeen' as token_seen,
        metadata->>'providerResponseCode' as provider_code
 from vtu_transactions
 where status = 'processing'
@@ -60,6 +61,9 @@ carry a voucher, or it would never settle or notify). When settling such a row
 by hand, open the transaction in Monnify's dashboard by `request_reference`:
 if a token was issued, deliver it to the customer and mark the row successful;
 only refund when Monnify shows the vend failed or was never created.
+Rows with `token_seen = 'true'` (any held answer that carried a real token) are
+the ones to settle first: Monnify issued a voucher. The token itself is never
+stored on the row.
 
 ## Decision log
 

@@ -48,6 +48,11 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/CatalogError'}
+        '403':
+          description: Valid partner credential without catalog scope.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CatalogError'}
         '503':
           description: A complete snapshot is unavailable. Keep the last good catalog.
           content:

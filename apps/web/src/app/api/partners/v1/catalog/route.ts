@@ -28,6 +28,9 @@ export async function GET(request: Request) {
     getPartnerProfiles()
   );
   if (!access.ok) {
+    if (access.reason === 'scope_required') {
+      return reject(403, 'Catalog scope required');
+    }
     if (access.reason === 'unconfigured') {
       logger.warn({
         message: 'Partner catalog credential is unconfigured',

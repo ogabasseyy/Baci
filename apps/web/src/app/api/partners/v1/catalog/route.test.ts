@@ -114,6 +114,17 @@ describe('CrossRem catalog', () => {
 
   afterEach(() => vi.unstubAllEnvs());
 
+  it('distinguishes a valid credential without catalog scope', async () => {
+    const quoteToken = 'synthetic-quote-only-credential-for-catalog-test';
+    vi.stubEnv('CROSSREM_QUOTE_TOKEN', quoteToken);
+    const response = await GET(request(`Bearer ${quoteToken}`, '*'));
+    expect(response.status).toBe(403);
+    expect(response.headers.has('www-authenticate')).toBe(false);
+    expectPartnerResponse('GET /catalog', 403, await response.json());
+    expect(rateLimit).not.toHaveBeenCalled();
+    expect(readVersion).not.toHaveBeenCalled();
+  });
+
   it('rejects missing, malformed and short configured credentials', async () => {
     for (const configuredToken of ['', 'bad:token', 'test']) {
       vi.stubEnv('CROSSREM_CATALOG_TOKEN', configuredToken);

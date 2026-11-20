@@ -94,6 +94,8 @@ export async function POST(request: Request) {
       });
       return reject(404, 'NOT_FOUND');
     }
+    // Settlement mismatches are returned by the RPC as review holds, while
+    // a capture mismatch rejects the evidence before recording a capture.
     if (
       error?.code === '22023' &&
       error.message === 'partner_payment_evidence_mismatch'

@@ -43,6 +43,19 @@ export async function handleChatwootCheckoutAction({
     });
     return;
   }
+  const { isChatwootCheckoutIssuedReference } = await import(
+    './chatwoot-checkout-memory'
+  );
+  // Only references this page issued for its own chat orders may be polled.
+  if (!isChatwootCheckoutIssuedReference(message.data.reference)) {
+    if (place.canPost()) {
+      post(CHATWOOT_CHECKOUT_STATUS_PREFIX, {
+        requestId: message.data.requestId,
+        status: 'unavailable',
+      });
+    }
+    return;
+  }
   const { readChatwootCheckoutPaymentStatus } = await import(
     './chatwoot-checkout-payment'
   );

@@ -5,6 +5,11 @@ import { calculateCartCatalogSubtotal } from '@/lib/checkout/cart-entitlement-sa
 import type { ChatwootCommerceMessage } from '@/schemas/chatwoot-commerce-message';
 import { resolveChatwootCheckoutDelivery } from './chatwoot-checkout-delivery';
 import {
+  getChatwootCheckoutRememberedOrder,
+  rememberChatwootCheckoutOrder,
+  rememberChatwootCheckoutPayment,
+} from './chatwoot-checkout-memory';
+import {
   buildChatwootCheckoutOrderRequest,
   type ChatwootCheckoutCreatedOrder,
   deriveChatwootCheckoutKeys,
@@ -40,32 +45,13 @@ export interface HandleChatwootCheckoutPlaceInput {
   postResult: (result: ChatwootCheckoutPlaceResult) => void;
 }
 
-/**
- * Orders already created by this page, keyed by the derived idempotency key.
- * A repeat of the same widget request id skips straight to the payment step
- * even if creating the order has since moved the cart version. The server
- * idempotency key still protects a reload or a second tab.
- */
-const createdOrders = new Map<string, ChatwootCheckoutCreatedOrder>();
-const MAX_REMEMBERED_ORDERS = 20;
-
-function remember(key: string, order: ChatwootCheckoutCreatedOrder) {
-  createdOrders.set(key, order);
-  if (createdOrders.size > MAX_REMEMBERED_ORDERS) {
-    const oldest = createdOrders.keys().next().value;
-    if (oldest !== undefined) createdOrders.delete(oldest);
-  }
-}
-
-/** Test seam: forget remembered orders between cases. */
-export function resetChatwootCheckoutOrderMemory() {
-  createdOrders.clear();
-}
+export { resetChatwootCheckoutOrderMemory } from './chatwoot-checkout-memory';
 
 async function startPayment(
   input: HandleChatwootCheckoutPlaceInput,
   merchantId: string,
-  order: ChatwootCheckoutCreatedOrder
+  order: ChatwootCheckoutCreatedOrder,
+  orderKey: string
 ) {
   const { request, postResult, canPost } = input;
   const fail = (code: ChatwootCheckoutFailureCode) => {
@@ -88,6 +74,7 @@ async function startPayment(
     address: request.address,
   });
   if (!payment) return fail('payment_unavailable');
+  rememberChatwootCheckoutPayment(orderKey, payment);
   if (!canPost()) return;
   postResult({
     requestId: request.requestId,
@@ -118,8 +105,34 @@ async function placeOrder(input: HandleChatwootCheckoutPlaceInput) {
   );
   if (!merchant || !keys) return fail('order_failed');
 
-  const remembered = createdOrders.get(keys.idempotencyKey);
-  if (remembered) return startPayment(input, merchant.id, remembered);
+  const remembered = getChatwootCheckoutRememberedOrder(keys.idempotencyKey);
+  if (remembered) {
+    // A replay answers for the merchant the order was created for, never for
+    // whichever merchant context the page has since moved to.
+    if (remembered.merchantId !== merchant.id) return fail('order_failed');
+    // Bank details already issued are returned as they were: asking again
+    // could mint a second account and reference for the same order.
+    if (remembered.payment) {
+      if (input.canPost()) {
+        input.postResult({
+          requestId: request.requestId,
+          status: 'payment_ready',
+          orderNumber: remembered.order.orderNumber,
+          amountMajor: remembered.order.amountDueMajor,
+          currency: 'NGN',
+          bank: remembered.payment.bank,
+          reference: remembered.payment.reference,
+        });
+      }
+      return;
+    }
+    return startPayment(
+      input,
+      merchant.id,
+      remembered.order,
+      keys.idempotencyKey
+    );
+  }
 
   const sameCart = () => {
     const current = input.getCurrentCartRef();
@@ -208,8 +221,12 @@ async function placeOrder(input: HandleChatwootCheckoutPlaceInput) {
     keys.idempotencyKey
   );
   if (!outcome.ok) return fail(outcome.code);
-  remember(keys.idempotencyKey, outcome.order);
-  return startPayment(input, merchant.id, outcome.order);
+  rememberChatwootCheckoutOrder(
+    keys.idempotencyKey,
+    merchant.id,
+    outcome.order
+  );
+  return startPayment(input, merchant.id, outcome.order, keys.idempotencyKey);
 }
 
 /** Places the order and starts the bank-transfer payment for one widget request. */

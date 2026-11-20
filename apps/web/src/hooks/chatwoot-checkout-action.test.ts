@@ -1,5 +1,10 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleChatwootCheckoutAction } from './chatwoot-checkout-action';
+import {
+  rememberChatwootCheckoutOrder,
+  rememberChatwootCheckoutPayment,
+  resetChatwootCheckoutOrderMemory,
+} from './chatwoot-checkout-memory';
 import {
   placeInput,
   stubCheckoutFetch,
@@ -17,6 +22,29 @@ const statusMessage = {
   },
 };
 
+const issuedBank = {
+  bankName: 'Test Bank',
+  accountNumber: '0123456789',
+  accountName: 'Test Store',
+};
+
+function issueReference(key: string, reference: string) {
+  rememberChatwootCheckoutOrder(key, 'merchant-1', {
+    orderId: 'order-1',
+    orderNumber: 'ORD-1001',
+    trackingToken: null,
+    amountDueMajor: 1000,
+    currency: 'NGN',
+  });
+  rememberChatwootCheckoutPayment(key, { bank: issuedBank, reference });
+}
+
+beforeEach(() => {
+  resetChatwootCheckoutOrderMemory();
+  // References the chat may poll: ones this page issued for its own orders.
+  issueReference('key-1', 'ref_abc-123');
+  issueReference('key-2', 'a=b.c');
+});
 afterEach(() => vi.unstubAllGlobals());
 
 describe('handleChatwootCheckoutAction payment status', () => {
@@ -47,6 +75,29 @@ describe('handleChatwootCheckoutAction payment status', () => {
     expect(post).toHaveBeenCalledWith('baci-checkout-payment-status:', {
       requestId: 'status-request-1',
       status: 'paid',
+    });
+  });
+
+  it('answers unavailable without calling the status route for a reference this page did not issue', async () => {
+    const { calls } = stubCheckoutFetch({
+      '/api/payments/status': () => ({
+        body: { success: true, is_confirmed: true },
+      }),
+    });
+    const post = vi.fn();
+    await handleChatwootCheckoutAction({
+      ...baseInput,
+      message: {
+        ...statusMessage,
+        data: { ...statusMessage.data, reference: 'someone-elses-reference' },
+      },
+      post,
+    });
+
+    expect(calls).toHaveLength(0);
+    expect(post).toHaveBeenCalledWith('baci-checkout-payment-status:', {
+      requestId: 'status-request-1',
+      status: 'unavailable',
     });
   });
 

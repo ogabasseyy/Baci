@@ -31,6 +31,11 @@ vi.mock('@/hooks/use-merchant-client', () => ({
   useMerchantSafe: () => ({ merchant: { id: 'merchant-1' } }),
 }));
 
+import {
+  rememberChatwootCheckoutOrder,
+  rememberChatwootCheckoutPayment,
+  resetChatwootCheckoutOrderMemory,
+} from './chatwoot-checkout-memory';
 import { useChatwootInlineCartBridge } from './use-chatwoot-inline-cart-bridge';
 
 function HookHarness({ checkoutEnabled }: { checkoutEnabled?: boolean }) {
@@ -133,6 +138,23 @@ describe('ChatwootInlineCartBridge in-chat checkout', () => {
   });
 
   it('answers a payment status request from the status route when enabled', async () => {
+    // Only a reference this page issued for its own chat order may be polled.
+    resetChatwootCheckoutOrderMemory();
+    rememberChatwootCheckoutOrder('issued-key', 'merchant-1', {
+      orderId: 'order-1',
+      orderNumber: 'ORD-1001',
+      trackingToken: null,
+      amountDueMajor: 1000,
+      currency: 'NGN',
+    });
+    rememberChatwootCheckoutPayment('issued-key', {
+      bank: {
+        bankName: 'Test Bank',
+        accountNumber: '0123456789',
+        accountName: 'Test Store',
+      },
+      reference: 'ref-123',
+    });
     const { target, postMessage } = installFrame();
     render(<HookHarness checkoutEnabled />);
 

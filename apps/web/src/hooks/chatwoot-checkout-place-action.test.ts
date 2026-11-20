@@ -260,6 +260,49 @@ describe('handleChatwootCheckoutPlace', () => {
       expect(mocks.prepare).toHaveBeenCalledTimes(1);
     });
 
+    it('a repeat after bank details were issued returns the same details without asking again', async () => {
+      const { calls } = stubCheckoutFetch(happyHandlers());
+      const first = placeInput();
+      const second = placeInput();
+
+      await handleChatwootCheckoutPlace(first);
+      await handleChatwootCheckoutPlace(second);
+
+      expect(lastResult(first)).toMatchObject({ status: 'payment_ready' });
+      expect(lastResult(second)).toEqual(lastResult(first));
+      expect(
+        paths(calls).filter((path) => path === '/api/orders')
+      ).toHaveLength(1);
+      expect(
+        paths(calls).filter((path) => path === '/api/payments/initialize')
+      ).toHaveLength(1);
+    });
+
+    it('a repeat under a different merchant context is refused and starts no payment', async () => {
+      const { calls } = stubCheckoutFetch({
+        ...happyHandlers(),
+        '/api/payments/initialize': () => ({ status: 502, body: {} }),
+      });
+      await handleChatwootCheckoutPlace(placeInput());
+      const paymentCallsBefore = paths(calls).filter(
+        (path) => path === '/api/payments/initialize'
+      ).length;
+      const replay = placeInput({
+        getMerchant: () => ({ id: 'another-merchant', taxRate: 0 }),
+      });
+
+      await handleChatwootCheckoutPlace(replay);
+
+      expect(lastResult(replay)).toEqual({
+        requestId: checkoutPlaceRequest.requestId,
+        status: 'failed',
+        code: 'order_failed',
+      });
+      expect(
+        paths(calls).filter((path) => path === '/api/payments/initialize')
+      ).toHaveLength(paymentCallsBefore);
+    });
+
     it('retries payment even after creating the order moved the cart version', async () => {
       let paymentAttempts = 0;
       const { calls } = stubCheckoutFetch({

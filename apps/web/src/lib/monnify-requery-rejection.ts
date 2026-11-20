@@ -19,7 +19,7 @@ const VEND_FAILED_WORDING =
  * nothing about whether the original vend completed.
  */
 const ANCILLARY_OPERATION_WORDING =
-  /\b(?:reversal|refund|chargeback|settlement|callback|webhook|notification)\w*(?:\s+\w+){0,2}?\s+(?:failed|failure|unsuccessful|declined|rejected|refused|denied|error)\b|\b(?:failed|failure|unable)\s+(?:to\s+)?(?:\w+\s+){0,2}?(?:reversal|refund|chargeback|settlement|callback|webhook|notification)/i;
+  /\b(?:reversal|refund|chargeback|settlement|callback|webhook|notification)\w*(?:\s+\w+){0,2}?\s+(?:failed|failure|unsuccessful|declined|rejected|refused|denied|error)\b|\b(?:failed|failure|unable)\s+(?:to\s+)?(?:\w+\s+){0,2}?(?:reversal|refund|chargeback|settlement|callback|webhook|notification)|\b(?:failed|unable)\s+to\s+(?:reverse|settle|refund|notify|call\s?back|send)\b/i;
 
 /** A negated failure ("has not failed", "was not unsuccessful") proves nothing. */
 const NEGATED_FAILURE_WORDING =

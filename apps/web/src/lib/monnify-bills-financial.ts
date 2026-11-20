@@ -20,6 +20,7 @@ import {
 } from './monnify-bills-shared';
 import {
   classifyMonnifyBillStatus,
+  hasConflictingVendStatuses,
   readMonnifyBillToken,
   toBillStatusInput,
 } from './monnify-bills-status';
@@ -167,6 +168,17 @@ export async function purchaseBill(
       );
     }
 
+    if (hasConflictingVendStatuses(body)) {
+      // vendStatus and transactionStatus contradict each other: hold.
+      return buildMonnifyUnresolvedVendResult({
+        amount,
+        message: sanitizeMonnifyErrorDetail(
+          parsedEnvelope.responseMessage || 'Vend outcome unclear'
+        ),
+        providerVendReference: vendReference,
+        requestReference,
+      });
+    }
     if (isSuccess && !classified.isSuccess) {
       // A token completed this vend although its status was missing or not
       // one we know: a fixed label (no provider text) so support can spot a
@@ -258,6 +270,9 @@ export async function checkTransactionStatus(
 
   if (isMonnifyBusinessSuccess(parsed)) {
     const body = parsed.responseBody;
+    if (body && hasConflictingVendStatuses(body)) {
+      return { status: 'unknown', responseCode, message };
+    }
     const classified = body
       ? classifyMonnifyBillStatus(toBillStatusInput(body))
       : { isSuccess: false, isProcessing: false, isFailed: false };

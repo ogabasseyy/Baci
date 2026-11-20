@@ -51,8 +51,14 @@ export function buildMonnifyBusinessRejectionResult({
   const contradictorySuccessCode = /^\s*0+\s*$/.test(
     parsedEnvelope.responseCode
   );
+  // 401/403/429 as a business code is a login rejection or throttle: refunded
+  // whatever the body shows (owner decision 2026-11-18), like the HTTP path.
+  const isAuthOrThrottleCode = /^\s*0*(?:401|403|429)\s*$/.test(
+    parsedEnvelope.responseCode
+  );
   if (
     !providerDefiniteFailure &&
+    !isAuthOrThrottleCode &&
     ((contradictorySuccessCode &&
       // A login rejection is refunded whatever its code (owner decision).
       !mentionsMonnifyAuthWording(

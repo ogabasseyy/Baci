@@ -73,3 +73,20 @@ export function toBillStatusInput(body: {
       : body.transactionStatus,
   };
 }
+
+/**
+ * `vendStatus` and `transactionStatus` that contradict each other (one
+ * success, one failed): neither has authority, so the answer proves nothing
+ * and must be held, not refunded and not settled.
+ */
+export function hasConflictingVendStatuses(body: {
+  vendStatus?: string | null;
+  transactionStatus?: string | null;
+}): boolean {
+  if (!body.vendStatus?.trim() || !body.transactionStatus?.trim()) {
+    return false;
+  }
+  const a = classifyMonnifyBillStatus({ vendStatus: body.vendStatus });
+  const b = classifyMonnifyBillStatus({ vendStatus: body.transactionStatus });
+  return (a.isSuccess && b.isFailed) || (a.isFailed && b.isSuccess);
+}

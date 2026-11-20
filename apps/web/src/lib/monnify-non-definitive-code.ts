@@ -23,10 +23,15 @@ const MAX_DEPTH = 6;
  */
 const UNRESOLVED_CODE = /^(?:0+|0*(?:99|2\d\d|408|409|5\d\d))$/;
 
+/** A bare `code` under these parents is a catalog code, not a response code. */
+const CATALOG_PARENT =
+  /^(?:product|biller|item|service|customer|package|plan)s?$/;
+
 function hasResponseCodeMatching(
   answer: unknown,
   pattern: RegExp,
-  depth: number
+  depth: number,
+  parentKey = ''
 ): boolean {
   if (!answer || typeof answer !== 'object') {
     return false;
@@ -37,19 +42,22 @@ function hasResponseCodeMatching(
   }
   if (Array.isArray(answer)) {
     return answer.some((item) =>
-      hasResponseCodeMatching(item, pattern, depth + 1)
+      hasResponseCodeMatching(item, pattern, depth + 1, parentKey)
     );
   }
   return Object.entries(answer).some(([key, value]) => {
     const normalisedKey = key.replace(/[\s_-]/g, '').toLowerCase();
+    const isCatalogCode =
+      normalisedKey === 'code' && CATALOG_PARENT.test(parentKey);
     return (
       (RESPONSE_CODE_KEY.test(normalisedKey) &&
+        !isCatalogCode &&
         (Array.isArray(value) ? value : [value]).some(
           (item) =>
             (typeof item === 'string' || typeof item === 'number') &&
             pattern.test(String(item).trim())
         )) ||
-      hasResponseCodeMatching(value, pattern, depth + 1)
+      hasResponseCodeMatching(value, pattern, depth + 1, normalisedKey)
     );
   });
 }

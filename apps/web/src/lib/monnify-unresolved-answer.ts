@@ -60,6 +60,8 @@ function isGenericVendLikeStatus(key: string, value: string): boolean {
   );
 }
 
+const VEND_FLAG_KEY =
+  /^(?:is|was|has)?(?:been)?(?:vend|transaction|txn|purchase|airtime|delivered|dispatched|vended|credited|recharged|toppedup)/;
 const PAYMENT_LEVEL_FLAG = /^(?:is|was|has)?(?:been)?payment/;
 
 /** True outcome flags, key normalised: "delivered", "isPending", "vendFailed"... */
@@ -113,7 +115,8 @@ function settleVendPrecedence(found: StructuredOutcome): void {
 function readStructuredOutcome(
   answer: unknown,
   found: StructuredOutcome,
-  depth = 0
+  depth = 0,
+  inBody = false
 ): void {
   if (!answer || typeof answer !== 'object') {
     return;
@@ -161,12 +164,22 @@ function readStructuredOutcome(
       found.failed ||= FAILED_FLAG.test(key);
       // A payment-level flag (paymentSuccessful) is subordinate to the vend:
       // only vend/delivery-level flags count as vend outcomes.
-      if (!PAYMENT_LEVEL_FLAG.test(key)) {
+      // And only a vend-specific flag, or one inside a result body, proves a
+      // vend outcome: a top-level `failed: true` may describe the request.
+      if (
+        !PAYMENT_LEVEL_FLAG.test(key) &&
+        (inBody || VEND_FLAG_KEY.test(key))
+      ) {
         found.vendDone ||= DONE_FLAG.test(key);
         found.vendFailed ||= FAILED_FLAG.test(key);
       }
     }
-    readStructuredOutcome(value, found, depth + 1);
+    readStructuredOutcome(
+      value,
+      found,
+      depth + 1,
+      inBody || key === 'responsebody'
+    );
   }
 }
 

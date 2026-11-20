@@ -4,6 +4,8 @@ Bank offers require a signed-in shopper whose account email matches the checkout
 
 `BANK_CARD_OFFERS` in the server is the source of truth for merchant eligibility, offer dates, eligible products, discount rate and cap. The checkout route signs the quote and order together. The database checks that proof, validates the allocations against the order, and saves the result for verification and refunds. It does not maintain a second offer configuration.
 
+Web and mobile clients must send `expected_total` for bank-offer orders. It is the total the shopper accepted after the offer and fees. If it is missing or differs from the server quote in kobo, checkout returns `BANK_CARD_OFFER_TOTAL_MISMATCH` before creating an order. Clients should refresh the total and ask the shopper to confirm it.
+
 A bank-offer order requires one verified Paystack capture at the saved discounted total. The database rejects other payment legs, including manual and fallback payments, because they cannot prove eligibility for that discount. If a shopper wants to switch payment methods, reconcile the original attempt and cancel the bank-offer order before creating a standard order.
 
 A signed-in customer can replay an already-created order with the same idempotency key and checkout request after an offer is disabled. This recovers the saved order and its post-creation work. Fresh orders still require an enabled offer, and payment attempts remain subject to the saved deadline.
@@ -15,6 +17,8 @@ For an initialization review, look up the original reference with Paystack. If P
 The checkout URL validators in TypeScript and migration `20261119153530` both preserve Paystack query parameters. The database recovery test exercises saving and restoring a URL with a query string.
 
 When Paystack verification reports a failed, abandoned, or cancelled attempt, checkout stops returning the old URL and opens a review. Operations must confirm that this reference cannot accept a charge before retiring it, including when the checkout was already initialized.
+
+A terminal provider status belongs in terminal review only when the reference, payment domain, and currency match the saved attempt. Otherwise the evidence goes to the ambiguous capture review queue and cannot establish that the saved attempt is terminal.
 
 For a capture review, reconcile the payment with Paystack under the original reference. Preserve the saved order and attempt while evaluating the provider evidence. The customer verification endpoint reports this state as pending with HTTP 202. The webhook returns HTTP 200 once the review is recorded so Paystack can stop retrying the delivery.
 

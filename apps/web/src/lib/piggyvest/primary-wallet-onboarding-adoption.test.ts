@@ -119,3 +119,18 @@ describe('keepCreatedWalletForReview', () => {
     expect(storage.recordRoutingPending).not.toHaveBeenCalled();
   });
 });
+
+describe('judgeCreatedCustomer after an identity refresh', () => {
+  it.each([
+    true,
+    false,
+  ])('bugfix (Codex P1): returns refreshed_review (new_customer=%s) so the ids are kept for review', (newCustomer) => {
+    expect(
+      judgeCreatedCustomer({
+        lookup: null,
+        created: { customer_id: 'x', new_customer: newCustomer },
+        identityRefreshed: true,
+      })
+    ).toBe('refreshed_review');
+  });
+});

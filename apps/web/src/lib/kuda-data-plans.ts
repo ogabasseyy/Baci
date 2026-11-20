@@ -126,8 +126,7 @@ function lastGoodDataProviders(at: number): Biller[] | null {
  * The current Kuda data plans, or the last good list from the past day when
  * Kuda fails or answers without any packages (which never replaces a good
  * list). After such a fetch Kuda is not asked again for 30 seconds. Null
- * when neither exists: the
- * caller must not trust the client's amount then, since apps may still hold
+ * when neither exists: the caller must not trust the client's amount then, since apps may still hold
  * plan prices from before Kuda's kobo amounts were converted (100x).
  */
 async function loadDataProviders(): Promise<Biller[] | null> {
@@ -169,9 +168,10 @@ async function loadDataProviders(): Promise<Biller[] | null> {
     return failFetch('Kuda data plan list came back without packages');
   }
   lastFailedDataPlanFetchAt = undefined;
+  const loadedAt = Date.now(); // from when Kuda answered, like failures
   dataProvidersCache = {
-    expiresAt: now + DATA_PLAN_CACHE_TTL_MS,
-    loadedAt: now,
+    expiresAt: loadedAt + DATA_PLAN_CACHE_TTL_MS,
+    loadedAt,
     providers,
   };
   return providers;

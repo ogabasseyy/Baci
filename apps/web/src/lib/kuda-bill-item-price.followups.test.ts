@@ -67,6 +67,16 @@ describe('bugfix: a decorated biller name also matched the plain biller', () => 
     );
   });
 
+  it('refuses the plain DStv price when the checkout adds the package path', async () => {
+    // Real checkouts send "<biller> - <package path>".
+    await expect(purchase(5000, 'DSTV - PREMIUM - Monthly')).rejects.toThrow(
+      KUDA_BILL_PRICE_CHANGED_MESSAGE
+    );
+    await expect(
+      purchase(9500, 'DSTV - PREMIUM - Monthly')
+    ).resolves.toBeUndefined();
+  });
+
   it('accepts DStv Premium at its own price', async () => {
     await expect(purchase(9500, 'DSTV - PREMIUM')).resolves.toBeUndefined();
   });

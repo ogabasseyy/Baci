@@ -1,6 +1,5 @@
 import {
   isKudaElectricityMeterItemCode,
-  stripProviderNames,
   withKudaElectricityBillItems,
 } from '@baci/shared/lib';
 import type { Biller } from './kuda';
@@ -9,6 +8,7 @@ import {
   KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE,
 } from './kuda-bill-item-price-messages';
 import type { BillItem } from './kuda-bill-items';
+import { chosenListings } from './kuda-biller-name-match';
 import { getBillersByCategory } from './kuda-bills';
 import { logger } from './logger';
 
@@ -107,52 +107,6 @@ async function loadPriceList(type: string): Promise<Biller[] | null> {
     loadedAt,
   });
   return billers;
-}
-
-function normalizeBillerName(name: string) {
-  return stripProviderNames(name).trim().replace(/\s+/g, ' ').toLowerCase();
-}
-
-/** The purchase names this biller, as the billers list showed it. */
-function namesMatch(listed: string, sent: string) {
-  return listed !== '' && (sent === listed || sent.startsWith(`${listed} - `));
-}
-
-function plainBillerName(name: string) {
-  return name.trim().replace(/\s+/g, ' ').toLowerCase();
-}
-
-/**
- * The listings under the biller the purchase names: an exact (case and
- * space free) name match first, so two billers that only differ by a
- * provider tag stay apart; the provider-stripped name (as the billers list
- * shows it) only when nothing matches exactly.
- */
-function chosenListings<T extends { biller: Biller }>(
-  listing: T[],
-  billerName: string
-): T[] {
-  // Most specific first: a literal name match, then the checkout's decorated
-  // "<biller> - <package group>" form, each before the provider-stripped
-  // name. A purchase naming "DSTV - PREMIUM" therefore uses that biller's
-  // own listings and never also a plain "DSTV" listing's price.
-  const sentPlain = plainBillerName(billerName);
-  const sentNormalized = normalizeBillerName(billerName);
-  const tiers: Array<(listed: Biller) => boolean> = [
-    (listed) => plainBillerName(listed.billerName) === sentPlain,
-    (listed) => namesMatch(plainBillerName(listed.billerName), sentPlain),
-    (listed) => {
-      const name = normalizeBillerName(listed.billerName);
-      return name !== '' && name === sentNormalized;
-    },
-    (listed) =>
-      namesMatch(normalizeBillerName(listed.billerName), sentNormalized),
-  ];
-  for (const matches of tiers) {
-    const found = listing.filter(({ biller }) => matches(biller));
-    if (found.length > 0) return found;
-  }
-  return [];
 }
 
 /** Item codes compared like the data-plan check does: case and punctuation free. */

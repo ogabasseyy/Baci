@@ -101,4 +101,19 @@ describe('bugfix: a slow Kuda failure stretched the data-plan backup window', ()
 
     expect(mockGetDataProviders).toHaveBeenCalledTimes(callsAfterFailure);
   });
+
+  it('dates a slow successful list from when Kuda answered', async () => {
+    mockGetDataProviders.mockImplementationOnce(async () => {
+      vi.setSystemTime(Date.now() + 10_000);
+      return mtn;
+    });
+    await purchase();
+    // A day after the call began, but under a day after Kuda answered.
+    vi.setSystemTime(T0 + DAY + 5_000);
+    mockGetDataProviders.mockRejectedValueOnce(new Error('Kuda timeout'));
+
+    await expect(purchase()).resolves.toMatchObject({
+      itemCode: 'MTN-1GB-MONTHLY',
+    });
+  });
 });

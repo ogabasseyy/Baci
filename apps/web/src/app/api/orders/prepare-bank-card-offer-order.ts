@@ -40,6 +40,9 @@ export async function prepareBankCardOfferOrder({
 }) {
   if (body.payment_method !== 'bank_card_offer')
     return { kind: 'standard' } as const;
+  // The validated request is the replay contract, including the buyer's
+  // accepted total. Key order is normalized. Changed values under the same
+  // key fail with checkout_idempotency_conflict before order creation.
   const requestHash = createHash('sha256')
     .update(stableStringify(body))
     .digest('hex');

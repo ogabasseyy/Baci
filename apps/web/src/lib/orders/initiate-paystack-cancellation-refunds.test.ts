@@ -80,7 +80,7 @@ describe('initiatePaystackCancellationRefunds', () => {
       undefined
     );
     expect(insert).toHaveBeenCalledWith(
-      expect.objectContaining({ amount: 95.01 })
+      expect.objectContaining({ amount: '95.01' })
     );
   });
 

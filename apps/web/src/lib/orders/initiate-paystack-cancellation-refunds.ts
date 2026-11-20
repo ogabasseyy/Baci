@@ -27,6 +27,11 @@ const REFUND_AUDIT_WRITE_RESERVE_MS = 8_000;
 export const REFUND_INITIATION_LEG_BUDGET_MS =
   REFUND_PROVIDER_CALL_WORST_MS + REFUND_AUDIT_WRITE_RESERVE_MS;
 
+function formatVerifiedKobo(amountKobo: number): string {
+  const digits = String(amountKobo).padStart(3, '0');
+  return `${digits.slice(0, -2)}.${digits.slice(-2)}`;
+}
+
 /**
  * Initiate a Paystack refund for every gateway leg that has no recorded
  * completed refund, auditing each accepted refund before moving on. Returns
@@ -189,7 +194,9 @@ export async function initiatePaystackCancellationRefunds({
         reason,
         supabase,
         transaction,
-        transactionAmount: isBankOffer ? koboAmount / 100 : transactionAmount,
+        transactionAmount: isBankOffer
+          ? formatVerifiedKobo(koboAmount)
+          : transactionAmount,
       })
     );
   }

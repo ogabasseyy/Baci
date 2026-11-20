@@ -53,3 +53,23 @@ describe('bugfix: children that are not a list aborted the whole mapping', () =>
     ).toEqual([950000]);
   });
 });
+
+describe('bugfix: a fixed price of zero was listed at ₦0', () => {
+  it.each([0, '0', '0.00', -500])('drops a fixed item priced %j', (amount) => {
+    const items = mapKudaBillItems([
+      { itemCode: 'zero', itemName: 'Zero', amount, isFixedPrice: true },
+      { itemCode: 'ok', itemName: 'Ok', amount: 100000, isFixedPrice: true },
+    ]);
+
+    expect(items?.map((item) => item.itemCode)).toEqual(['ok']);
+  });
+
+  it('keeps an open-amount item at zero', () => {
+    const [item] =
+      mapKudaBillItems([
+        { itemCode: 'open', itemName: 'Open', amount: 0, isFixedPrice: false },
+      ]) ?? [];
+
+    expect(item?.amount).toBe(0);
+  });
+});

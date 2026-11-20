@@ -150,9 +150,10 @@ function mapBillItem(raw: unknown): MappedBillItem | null {
     item.IsFixedPrice ??
     item.isFixedPrice ??
     false;
-  // A fixed price that cannot be read is dropped, so it is never listed as
-  // ₦0 or sold; the purchase check then treats the package as unlisted.
-  if (isAmountFixed && !Number.isFinite(toNumber(rawAmount, Number.NaN))) {
+  // A fixed price that cannot be read, or is zero or less, is dropped, so it
+  // is never listed as ₦0 or sold; the purchase check then treats the
+  // package as unlisted. Open-amount items keep their 0.
+  if (isAmountFixed && !(toNumber(rawAmount, Number.NaN) > 0)) {
     return null;
   }
   const amountValue = toNumber(rawAmount);

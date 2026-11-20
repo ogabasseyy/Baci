@@ -157,4 +157,23 @@ describe('resolveAggregate', () => {
     expect(result.status).toBe('returned');
     expect(result.lead).toBeUndefined();
   });
+
+  it('lets a newer failed scan supersede an older terminal scan', () => {
+    const failed = scan('DELIVERY_FAILED', 'failed', 11);
+    const result = resolveAggregate(
+      newestFirst(scan('SHD', 'delivered', 10), failed)
+    );
+    expect(result.status).toBe('failed');
+    expect(result.lead).toBeUndefined();
+  });
+
+  it('keeps a terminal scan that follows a failed attempt', () => {
+    const result = resolveAggregate(
+      newestFirst(
+        scan('DELIVERY_FAILED', 'failed', 9),
+        scan('SHD', 'delivered', 10)
+      )
+    );
+    expect(result.status).toBe('delivered');
+  });
 });

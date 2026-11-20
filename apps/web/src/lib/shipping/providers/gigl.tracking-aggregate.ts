@@ -62,17 +62,20 @@ export function resolveAggregate(
   );
   const recognizedStatus = toStatus(newestRecognized?.recognizedStatus);
   const sdrScans = sortedCandidates.filter(isSdr);
-  const newestSdrAt = sdrScans[0]?.event.timestamp.getTime();
-  // Only terminal scans at or after the newest SDR can outlive it (a tied
-  // terminal outranks the SDR, as in currentStatusRank);
-  // precedence is applied after that fence.
+  // A failure (an SDR or a plain failed attempt) newer than a terminal scan
+  // supersedes it, as the apply function allows; only terminal scans at or after
+  // the newest failure can outlive it (a tied terminal outranks it, as in
+  // currentStatusRank). Precedence is applied after that fence.
+  const newestFailureAt = sortedCandidates
+    .find((candidate) => candidate.recognizedStatus === 'failed')
+    ?.event.timestamp.getTime();
   const bestTerminal = sortedCandidates
     .filter(
       (candidate) =>
         candidate.recognizedStatus !== null &&
         TERMINAL_STATUSES.has(candidate.recognizedStatus) &&
-        (newestSdrAt === undefined ||
-          candidate.event.timestamp.getTime() >= newestSdrAt)
+        (newestFailureAt === undefined ||
+          candidate.event.timestamp.getTime() >= newestFailureAt)
     )
     .reduce<Guardable | undefined>(
       (best, candidate) =>

@@ -90,14 +90,12 @@ BEGIN
     FROM first_mile AS fm
     WHERE event.id = fm.id AND fm.shipment_id IN (SELECT shipment_id FROM repairable)
     RETURNING event.shipment_id, event.tracking_epoch_id, event.provider_event_key, event.normalized_status
-  ), skipped_outbox AS (
+  ), deleted_outbox AS (
     -- A pending or unstarted out_for_delivery update for a demoted scan must not
-    -- go out; sent history is kept.
-    UPDATE public.shipment_tracking_notification_outbox AS outbox
-    SET status = 'skipped', skipped_at = now(),
-      skip_reason = 'first_mile_repair',
-      locked_at = NULL, locked_by = NULL, updated_at = now()
-    FROM first_mile AS fm
+    -- go out, and (never sent) it must not keep occupying the milestone identity
+    -- a later genuine out-for-delivery scan needs. Sent history is kept.
+    DELETE FROM public.shipment_tracking_notification_outbox AS outbox
+    USING first_mile AS fm
     WHERE outbox.tracking_event_id = fm.id
       AND fm.shipment_id IN (SELECT shipment_id FROM repairable)
       AND outbox.notification_kind = 'out_for_delivery'

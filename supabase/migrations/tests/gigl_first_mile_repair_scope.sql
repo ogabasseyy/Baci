@@ -1,6 +1,6 @@
 BEGIN;
 
-SELECT plan(11);
+SELECT plan(12);
 
 CREATE TEMP TABLE repair_fixture (label text PRIMARY KEY, shipment_id uuid);
 
@@ -90,8 +90,18 @@ SELECT is((SELECT status FROM public.shipments WHERE id = (SELECT shipment_id FR
   'out_for_delivery', 'a history with an SDR is left to the normal poller');
 SELECT is((SELECT status FROM public.shipments WHERE id = (SELECT shipment_id FROM repair_fixture WHERE label = 'with_terminal')),
   'out_for_delivery', 'a history with a terminal event is left to the normal poller');
-SELECT is((SELECT status FROM public.shipment_tracking_notification_outbox WHERE shipment_id = (SELECT shipment_id FROM repair_fixture WHERE label = 'first_mile')),
-  'skipped', 'a pending out_for_delivery update for the demoted scan is skipped');
+SELECT is((SELECT count(*)::int FROM public.shipment_tracking_notification_outbox WHERE shipment_id = (SELECT shipment_id FROM repair_fixture WHERE label = 'first_mile')),
+  0, 'a pending out_for_delivery update for the demoted scan is removed');
+SELECT lives_ok($$
+  INSERT INTO public.shipment_tracking_notification_outbox (
+    shipment_id, tracking_epoch_id, order_id, merchant_id, tracking_event_id,
+    audience, notification_kind
+  ) SELECT s.id, e.tracking_epoch_id, s.order_id, s.merchant_id, e.id, 'merchant', 'out_for_delivery'
+  FROM public.shipments AS s
+  JOIN public.shipment_tracking_events AS e
+    ON e.shipment_id = s.id AND e.provider_event_key = 'first_mile-b'
+  WHERE s.id = (SELECT shipment_id FROM repair_fixture WHERE label = 'first_mile')
+$$, 'a later genuine out_for_delivery notice can claim the freed milestone identity');
 SELECT is((SELECT m.state || ':' || coalesce(m.manual_terminal_override_at::text, 'none')
   FROM public.shipment_tracking_monitors AS m
   WHERE m.shipment_id = (SELECT shipment_id FROM repair_fixture WHERE label = 'then_failed')),

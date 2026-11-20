@@ -3,6 +3,7 @@ import { prepareCheckoutDelivery } from '@/components/storefront/ogabassey/pages
 import { loadCheckoutShippingQuotes } from '@/components/storefront/ogabassey/pages/checkout/hooks/checkout-shipping-quote-loader';
 import { isMerchantQuote } from '@/components/storefront/ogabassey/pages/checkout/is-merchant-quote';
 import type { DeliveryMethod } from '@/components/storefront/ogabassey/pages/checkout/types';
+import { formatChatwootPickupLocation } from '@/lib/chatwoot/pickup-location';
 import {
   getSubdivisions,
   resolveSubdivisionCode,
@@ -20,7 +21,13 @@ export interface ChatwootCheckoutDeliveryInput {
   };
   address: { line1: string; city: string; state: string };
   /** The option the widget showed, as projected by the delivery-options route. */
-  choice: { displayName: string; priceMajor: number; pickup: boolean };
+  choice: {
+    displayName: string;
+    priceMajor: number;
+    pickup: boolean;
+    /** Required to tell apart pickup rates that share a name and price. */
+    pickupLocation?: string;
+  };
   quoteItems: {
     name: string;
     quantity: number;
@@ -112,7 +119,9 @@ export async function resolveChatwootCheckoutDelivery(
       getMerchantRateId(String(quote.id)) !== null &&
       quote.displayName.trim().slice(0, 120) === wantedName &&
       (quote.isStationPickup === true) === input.choice.pickup &&
-      toMinor(quote.price) === toMinor(input.choice.priceMajor)
+      toMinor(quote.price) === toMinor(input.choice.priceMajor) &&
+      (!input.choice.pickup ||
+        formatChatwootPickupLocation(quote) === input.choice.pickupLocation)
   );
   const [quote] = matches;
   if (matches.length !== 1 || !quote) {

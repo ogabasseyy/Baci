@@ -90,6 +90,7 @@ export const chatwootCommerceMessageSchema = z.discriminatedUnion('event', [
               displayName: shortText(120),
               priceMajor: z.number().finite().nonnegative().max(1_000_000_000),
               pickup: z.boolean(),
+              pickupLocation: z.string().min(1).max(240).optional(),
             })
             .strict(),
         })

@@ -12,6 +12,7 @@ import {
   rememberChatwootCheckoutOrder,
   rememberChatwootCheckoutPayment,
 } from './chatwoot-checkout-memory';
+import type { ChatwootCheckoutMerchant } from './chatwoot-checkout-merchant';
 import { postChatwootCheckoutOrder } from './chatwoot-checkout-order-post';
 import { buildChatwootCheckoutOrderRequest } from './chatwoot-checkout-order-request';
 import { initializeChatwootCheckoutBankTransfer } from './chatwoot-checkout-payment';
@@ -21,6 +22,7 @@ import type {
   ChatwootCheckoutPlaceResult,
 } from './chatwoot-checkout-result';
 import { reviewedChatwootCheckoutItems } from './chatwoot-checkout-reviewed-items';
+import { isChatwootCheckoutSubtotalBasisEqual } from './chatwoot-checkout-subtotal-basis';
 
 type PlaceData = Extract<
   ChatwootCommerceMessage,
@@ -43,7 +45,7 @@ export interface HandleChatwootCheckoutPlaceInput {
   getCurrentCartRef: () => CartRef;
   getDisplayCart: () => CartItem[];
   /** Merchant id and fractional VAT rate from the storefront merchant context. */
-  getMerchant: () => { id: string; taxRate: number } | null;
+  getMerchant: () => ChatwootCheckoutMerchant | null;
   /** The action is still the newest one for this live conversation. */
   isCurrent: () => boolean;
   /** The widget frame and conversation are still the ones that asked. */
@@ -118,7 +120,7 @@ async function placeOrder(input: HandleChatwootCheckoutPlaceInput) {
 
 async function placeForKeys(
   input: HandleChatwootCheckoutPlaceInput,
-  merchant: { id: string; taxRate: number },
+  merchant: ChatwootCheckoutMerchant,
   keys: { idempotencyKey: string; operationId: string }
 ) {
   const { request, snapshot, authorizedCartId, requestedCartRef } = input;
@@ -179,6 +181,9 @@ async function placeForKeys(
     return fail('cart_changed');
   }
   if (snapshot.currency !== 'NGN') return fail('delivery_unavailable');
+  // The order API commits (and completes the cart) before the payment route
+  // can refuse bank transfer, so apply the store checkout's gate up front.
+  if (!merchant.bankTransferAvailable) return fail('payment_unavailable');
   if (
     Object.keys(
       getContactErrors({
@@ -201,6 +206,11 @@ async function placeForKeys(
   // Chat checkout is bank transfer only: a quiz voucher can leave nothing to
   // pay and the order API would finalize it as already paid.
   if (display.some(isQuizVoucherCartItem)) return fail('cart_unsupported');
+  if (
+    !isChatwootCheckoutSubtotalBasisEqual(display, snapshot.itemsSubtotalMinor)
+  ) {
+    return fail('cart_unsupported');
+  }
   const delivery = await resolveChatwootCheckoutDelivery({
     merchantId: merchant.id,
     customer: request.customer,

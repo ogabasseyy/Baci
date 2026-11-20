@@ -141,7 +141,11 @@ describe('handleChatwootCheckoutPlace', () => {
         (path) => path === '/api/payments/initialize'
       ).length;
       const replay = placeInput({
-        getMerchant: () => ({ id: 'another-merchant', taxRate: 0 }),
+        getMerchant: () => ({
+          id: 'another-merchant',
+          taxRate: 0,
+          bankTransferAvailable: true,
+        }),
       });
 
       await handleChatwootCheckoutPlace(replay);

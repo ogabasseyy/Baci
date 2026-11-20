@@ -107,7 +107,11 @@ export function placeInput(
     requestedCartRef: ref,
     getCurrentCartRef: () => ref,
     getDisplayCart: () => checkoutDisplayCart,
-    getMerchant: () => ({ id: 'merchant-1', taxRate: 0.075 }),
+    getMerchant: () => ({
+      id: 'merchant-1',
+      taxRate: 0.075,
+      bankTransferAvailable: true,
+    }),
     isCurrent: () => true,
     canPost: () => true,
     postResult: vi.fn(),

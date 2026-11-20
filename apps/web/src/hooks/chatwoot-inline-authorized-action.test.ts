@@ -67,7 +67,11 @@ function input(message: unknown): AuthorizedChatwootActionInput {
       cart: [],
       sharedCartRef: { cartId: 'cart-1', version: 8 },
     }),
-    getMerchant: () => ({ id: 'merchant-1', taxRate: 0 }),
+    getMerchant: () => ({
+      id: 'merchant-1',
+      taxRate: 0,
+      bankTransferAvailable: true,
+    }),
     getSessionExpiresAt: () => Date.now() + 60_000,
     getAuthorizedSessionToken: () => 'renewed',
     hasSessionAlias: () => true,

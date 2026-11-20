@@ -123,6 +123,30 @@ describe('baci-checkout-place-request schema', () => {
   });
 });
 
+describe('baci-checkout-place-request pickup location', () => {
+  const withLocation = (pickupLocation: unknown) =>
+    place({
+      ...placeData,
+      delivery: {
+        displayName: 'Collect',
+        priceMajor: 0,
+        pickup: true,
+        pickupLocation,
+      },
+    });
+
+  it('accepts an optional bounded pickup location', () => {
+    expect(withLocation('Ikeja Shop · 1 Allen Avenue').success).toBe(true);
+    expect(withLocation('a'.repeat(240)).success).toBe(true);
+  });
+
+  it('rejects an empty, oversized or non-string pickup location', () => {
+    expect(withLocation('').success).toBe(false);
+    expect(withLocation('a'.repeat(241)).success).toBe(false);
+    expect(withLocation(5).success).toBe(false);
+  });
+});
+
 describe('baci-checkout-payment-status-request schema', () => {
   it('accepts a bounded payment reference', () => {
     expect(status(statusData).success).toBe(true);

@@ -99,4 +99,66 @@ describe('resolveChatwootCheckoutDelivery', () => {
       code: 'delivery_unavailable',
     });
   });
+
+  describe('pickup location identity', () => {
+    const pickup = (location: string, id: string) =>
+      merchantQuote({
+        id: `mrate_${id}`,
+        displayName: 'Collect',
+        price: 0,
+        isStationPickup: true,
+        stationName: location,
+        stationAddress: 'Road 1',
+      });
+    const choice = (pickupLocation?: string) => ({
+      displayName: 'Collect',
+      priceMajor: 0,
+      pickup: true,
+      ...(pickupLocation ? { pickupLocation } : {}),
+    });
+
+    it('selects the rate whose pickup location matches', async () => {
+      stub(pickup('Ikeja', 'a'), pickup('Lekki', 'b'));
+
+      const result = await resolveChatwootCheckoutDelivery(
+        input({ choice: choice('Lekki · Road 1') })
+      );
+
+      expect(result).toMatchObject({
+        ok: true,
+        merchantRateId: 'b',
+        method: 'pickup_station',
+      });
+    });
+
+    it('stays ambiguous when two same-name rates are asked for without a location', async () => {
+      stub(pickup('Ikeja', 'a'), pickup('Lekki', 'b'));
+
+      expect(
+        await resolveChatwootCheckoutDelivery(input({ choice: choice() }))
+      ).toEqual({
+        ok: false,
+        code: 'delivery_unavailable',
+      });
+    });
+
+    it('refuses a location no rate has', async () => {
+      stub(pickup('Ikeja', 'a'));
+
+      expect(
+        await resolveChatwootCheckoutDelivery(
+          input({ choice: choice('Elsewhere') })
+        )
+      ).toEqual({ ok: false, code: 'delivery_unavailable' });
+    });
+
+    it('does not require a location for a door choice', async () => {
+      stub(merchantQuote());
+
+      expect(await resolveChatwootCheckoutDelivery(input())).toMatchObject({
+        ok: true,
+        method: 'door',
+      });
+    });
+  });
 });

@@ -4,6 +4,7 @@ import { handleChatwootInlineProductLookup } from '@/components/storefront/ogaba
 import type { useCart } from '@/hooks/cart';
 import type { ChatwootCommerceMessage } from '@/schemas/chatwoot-commerce-message';
 import { handleChatwootCheckoutAction } from './chatwoot-checkout-action';
+import type { ChatwootCheckoutMerchant } from './chatwoot-checkout-merchant';
 import { handleChatwootDeliveryOptionsAction } from './chatwoot-delivery-options-action';
 import { createChatwootInlineActionContext } from './chatwoot-inline-cart-action-context';
 import { dispatchChatwootInlineCartMutation } from './chatwoot-inline-cart-mutation-dispatch';
@@ -30,7 +31,7 @@ export interface AuthorizedChatwootActionInput {
   /** Post an already-serialized message to the widget frame. */
   postRawPayload: (payload: string) => void;
   getCartState: () => CartState;
-  getMerchant: () => { id: string; taxRate: number } | null;
+  getMerchant: () => ChatwootCheckoutMerchant | null;
   getSessionExpiresAt: () => number;
   getAuthorizedSessionToken: () => string | null;
   hasSessionAlias: () => boolean;

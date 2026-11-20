@@ -125,7 +125,13 @@ describe('handleChatwootCheckoutPlace', () => {
     const { calls } = stubCheckoutFetch(happyHandlers());
 
     await handleChatwootCheckoutPlace(
-      placeInput({ getMerchant: () => ({ id: 'merchant-1', taxRate: 0 }) })
+      placeInput({
+        getMerchant: () => ({
+          id: 'merchant-1',
+          taxRate: 0,
+          bankTransferAvailable: true,
+        }),
+      })
     );
 
     expect(JSON.parse(String(calls[1]?.init.body))).toMatchObject({
@@ -153,7 +159,12 @@ describe('handleChatwootCheckoutPlace', () => {
     const input = placeInput({
       request: {
         ...checkoutPlaceRequest,
-        delivery: { displayName: 'Ikeja pickup', priceMajor: 0, pickup: true },
+        delivery: {
+          displayName: 'Ikeja pickup',
+          priceMajor: 0,
+          pickup: true,
+          pickupLocation: 'Ikeja Shop · 1 Allen Avenue',
+        },
       },
     });
 

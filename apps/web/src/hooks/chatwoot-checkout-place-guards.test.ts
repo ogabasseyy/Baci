@@ -141,22 +141,12 @@ describe('handleChatwootCheckoutPlace order currency', () => {
 });
 
 describe('handleChatwootCheckoutPlace delivery quote basis', () => {
-  it('quotes on the cart subtotal the delivery options were shown for, not the catalog subtotal', async () => {
+  it('quotes on the cart subtotal when it equals the catalog basis', async () => {
     const { calls } = stubCheckoutFetch(happyHandlers());
-    // Display lines carry a catalog price of 1000 x 2; the authorized cart
-    // (negotiated line) is 1800 in total.
-    const input = placeInput({
-      snapshot: {
-        cartVersion: 8,
-        currency: 'NGN',
-        estimatedTotals: false,
-        itemsSubtotalMinor: 180_000,
-      },
-    });
 
-    await handleChatwootCheckoutPlace(input);
+    await handleChatwootCheckoutPlace(placeInput());
 
-    expect(JSON.parse(String(calls[0]?.init.body)).cart_subtotal).toBe(1800);
+    expect(JSON.parse(String(calls[0]?.init.body)).cart_subtotal).toBe(2000);
   });
 });
 

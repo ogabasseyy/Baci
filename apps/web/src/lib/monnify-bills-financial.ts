@@ -154,7 +154,9 @@ export async function purchaseBill(
     const isSuccess =
       classified.isSuccess || (hasToken && !isProcessing && !isFailed);
 
-    if (isSuccess && !transactionReference && !vendReference) {
+    // A delivered token is enough on its own: throwing for a missing reference
+    // here would re-vend an already-delivered purchase.
+    if (isSuccess && !transactionReference && !vendReference && !hasToken) {
       throw new MonnifyTransientVendError(
         'Monnify success vend response missing both transaction and vend references'
       );

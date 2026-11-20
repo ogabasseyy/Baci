@@ -36,6 +36,9 @@ export function classifyMonnifyBillStatus(body: {
   return { isSuccess, isProcessing, isFailed };
 }
 
+/** Values a biller sends when there is no token ("0", "-", "N/A", "null"...). */
+const PLACEHOLDER_TOKEN = /^(?:0+|[-.\s]+|n\/?a|null|none|nil|undefined|na)$/i;
+
 /**
  * The delivered token: the first non-blank of metaData.token / token, trimmed.
  * A whitespace-only token is not a delivery (it would settle a row with no
@@ -48,7 +51,8 @@ export function readMonnifyBillToken(body: {
   return (
     [body.metaData?.token, body.token]
       .map((value) => (typeof value === 'string' ? value.trim() : ''))
-      .find((value) => value !== '') || undefined
+      .find((value) => value !== '' && !PLACEHOLDER_TOKEN.test(value)) ||
+    undefined
   );
 }
 

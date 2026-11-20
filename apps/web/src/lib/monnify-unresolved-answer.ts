@@ -60,6 +60,8 @@ function isGenericVendLikeStatus(key: string, value: string): boolean {
   );
 }
 
+const PAYMENT_LEVEL_FLAG = /^(?:is|was|has)?(?:been)?payment/;
+
 /** True outcome flags, key normalised: "delivered", "isPending", "vendFailed"... */
 const RUNNING_FLAG =
   /^(?:is|was|has)?(?:been)?(?:vend|transaction|txn|purchase|payment|airtime)?(?:has)?(?:been)?(?:pending|inprogress|queued|submitted|accepted|initiated|attempted|timedout)$/;
@@ -157,8 +159,12 @@ function readStructuredOutcome(
       found.running ||= RUNNING_FLAG.test(key);
       found.done ||= DONE_FLAG.test(key);
       found.failed ||= FAILED_FLAG.test(key);
-      found.vendDone ||= DONE_FLAG.test(key);
-      found.vendFailed ||= FAILED_FLAG.test(key);
+      // A payment-level flag (paymentSuccessful) is subordinate to the vend:
+      // only vend/delivery-level flags count as vend outcomes.
+      if (!PAYMENT_LEVEL_FLAG.test(key)) {
+        found.vendDone ||= DONE_FLAG.test(key);
+        found.vendFailed ||= FAILED_FLAG.test(key);
+      }
     }
     readStructuredOutcome(value, found, depth + 1);
   }

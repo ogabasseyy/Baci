@@ -41,3 +41,29 @@ describe('readMonnifyBillToken', () => {
     expect(readMonnifyBillToken(body)).toBeUndefined();
   });
 });
+
+describe('bugfix: placeholder tokens are not a delivered token', () => {
+  it.each([
+    '0',
+    '-',
+    'N/A',
+    'n/a',
+    'null',
+    'None',
+    '...',
+  ])('ignores the placeholder %j', (token) => {
+    expect(readMonnifyBillToken({ token })).toBeUndefined();
+  });
+
+  it('falls through to a real flat token behind a placeholder nested token', () => {
+    expect(
+      readMonnifyBillToken({ metaData: { token: 'N/A' }, token: 'ABCD-1234' })
+    ).toBe('ABCD-1234');
+  });
+
+  it('keeps a real token', () => {
+    expect(readMonnifyBillToken({ token: '3772-0340-4164' })).toBe(
+      '3772-0340-4164'
+    );
+  });
+});

@@ -318,3 +318,18 @@ describe('bugfix: an unknown generic status holds, an HTTP label does not', () =
     ).toBe(false);
   });
 });
+
+describe('bugfix: payment-level flags are subordinate to a vend failure', () => {
+  it('does not hold vendStatus FAILED beside paymentSuccessful: true', () => {
+    expect(
+      open(
+        { responseBody: { vendStatus: 'FAILED', paymentSuccessful: true } },
+        'Rejected'
+      )
+    ).toBe(false);
+  });
+
+  it('still holds a delivery-level delivered flag', () => {
+    expect(open({ responseBody: { delivered: true } }, 'Rejected')).toBe(true);
+  });
+});

@@ -422,3 +422,22 @@ describe('bugfix: blank token and blank vendReference are not evidence', () => {
     expect(result.providerVendReference).toBeUndefined();
   });
 });
+
+describe('bugfix: a delivered token completes a vend even with no references', () => {
+  it('returns success with the token when both references are missing', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        requestSuccessful: true,
+        responseCode: '0',
+        responseMessage: 'success',
+        responseBody: { metaData: { token: '1111-2222-3333' } },
+      }),
+    });
+
+    await expect(vend()).resolves.toMatchObject({
+      status: 'successful',
+      pin: '1111-2222-3333',
+    });
+  });
+});

@@ -73,6 +73,9 @@ async function loadPriceList(type: string): Promise<Biller[] | null> {
   const failFetch = (message: string, refused: boolean, error?: unknown) => {
     const failedAt = Date.now();
     lastFailedFetch.set(type, { at: failedAt, refused });
+    // A refused answer disagrees with the saved list, so the saved list is
+    // dropped: a later timeout can never bring its old prices back.
+    if (refused) priceListCache.delete(type);
     const backup = refused ? null : lastGoodPriceList(type, failedAt);
     logger.warn({
       message,

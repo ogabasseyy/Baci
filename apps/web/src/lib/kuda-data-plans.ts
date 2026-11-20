@@ -111,6 +111,7 @@ async function loadDataProviders(): Promise<Biller[] | null> {
   const failFetch = (message: string, refused: boolean, error?: unknown) => {
     const failedAt = Date.now();
     lastFailedDataPlanFetch = { at: failedAt, refused };
+    if (refused) dataProvidersCache = undefined; // not revived by a timeout
     const backup = refused ? null : lastGoodDataProviders(failedAt);
     logger.warn({
       message,

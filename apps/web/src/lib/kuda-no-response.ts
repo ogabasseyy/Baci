@@ -13,7 +13,14 @@ export function isKudaNoResponse(error: unknown): boolean {
     return error.status === 408 || error.status === 429 || error.status >= 500;
   }
   if (error instanceof KudaPreDispatchError) return true;
-  if (error instanceof TypeError) return true; // fetch: connection failed
+  // fetch rejects with a TypeError whose message names the network failure;
+  // a TypeError from reading a broken answer ("Cannot read properties of
+  // null") is Kuda answering badly, so it is refused, not treated as silence.
+  if (error instanceof TypeError) {
+    return /fetch failed|failed to fetch|network ?error|load failed/i.test(
+      error.message
+    );
+  }
   if (error instanceof Error && error.name === 'AbortError') return true;
   return error instanceof Error && /\btime(?:d)?\s?out\b/i.test(error.message);
 }

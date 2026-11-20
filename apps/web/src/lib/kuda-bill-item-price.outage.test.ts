@@ -105,6 +105,27 @@ describe('assertKudaBillItemPriceCurrent when Kuda is unavailable', () => {
       ).rejects.toThrow(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
     });
 
+    it('does not revive the saved list after a refused answer and then a timeout', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-11-17T10:00:00Z'));
+      await assertKudaBillItemPriceCurrent(superPackage);
+      vi.setSystemTime(new Date('2026-11-17T12:00:00Z'));
+      mockGetBillersByCategory.mockResolvedValue([]);
+      await expect(
+        assertKudaBillItemPriceCurrent(superPackage)
+      ).rejects.toThrow(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
+
+      // Past the 30-second pause, Kuda now times out.
+      vi.setSystemTime(new Date('2026-11-17T12:01:00Z'));
+      mockGetBillersByCategory.mockRejectedValue(
+        new Error('Kuda GET_BILLERS_BY_TYPE request timed out')
+      );
+
+      await expect(
+        assertKudaBillItemPriceCurrent(superPackage)
+      ).rejects.toThrow(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
+    });
+
     it('fails a fixed-price cable package closed with no list from the past day', async () => {
       mockGetBillersByCategory.mockRejectedValue(new Error('Kuda down'));
 

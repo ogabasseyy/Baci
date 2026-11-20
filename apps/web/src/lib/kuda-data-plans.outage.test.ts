@@ -147,6 +147,29 @@ describe('resolveKudaDataPlanForPurchase when Kuda is unavailable', () => {
       ).rejects.toThrow(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
     });
 
+    it('does not revive the saved plans after a refused answer and then a timeout', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-11-17T10:00:00Z'));
+      const purchase = {
+        amount: 3500,
+        dataPlanCode: 'MTN-35GB-MONTHLY',
+        networkProvider: NetworkProvider.MTN,
+      };
+      await resolveKudaDataPlanForPurchase(purchase);
+      vi.setSystemTime(new Date('2026-11-17T10:05:00Z'));
+      mockGetDataProviders.mockResolvedValueOnce([]);
+      await expect(resolveKudaDataPlanForPurchase(purchase)).rejects.toThrow(
+        KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE
+      );
+
+      vi.setSystemTime(new Date('2026-11-17T10:06:00Z'));
+      mockGetDataProviders.mockRejectedValueOnce(new Error('Kuda timeout'));
+
+      await expect(resolveKudaDataPlanForPurchase(purchase)).rejects.toThrow(
+        KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE
+      );
+    });
+
     it('waits 30 seconds before asking Kuda again after a failure', async () => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date('2026-11-17T10:00:00Z'));

@@ -22,6 +22,10 @@ describe('isKudaNoResponse', () => {
     ['an unknown type', new KudaApiHttpError(404, 'Not Found')],
     ['a refused list', new Error('Bill prices could not be confirmed as kobo')],
     ['a broken body', new SyntaxError('Unexpected token < in JSON')],
+    [
+      'a broken answer that fails to map',
+      new TypeError("Cannot read properties of null (reading 'id')"),
+    ],
     ['an unknown error', new Error('Kuda down')],
     ['a non-error value', 'oops'],
   ])('treats %s as an answer Baci refuses', (_label, error) => {

@@ -26,6 +26,7 @@ export function createOxygenWorkflow(options: {
   journal: OxygenIntentJournal;
   key: () => string;
   now?: () => number;
+  environment?: OxygenRuntimeSnapshot['environment'];
 }) {
   let state: OxygenWorkflowState = {
     snapshot: null,
@@ -63,7 +64,7 @@ export function createOxygenWorkflow(options: {
   }
   const accept = (snapshot: OxygenRuntimeSnapshot, generation: number) => {
     if (
-      snapshot.environment !== 'staging' ||
+      snapshot.environment !== (options.environment ?? 'staging') ||
       (state.snapshot && state.snapshot.workflowId !== snapshot.workflowId)
     )
       throw new OxygenClientError('scope');

@@ -1,11 +1,15 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { router } from 'expo-router';
-import { getOxygenStagingProfile } from '@/lib/oxygen-staging-profile';
+import { getOxygenMobileProfile } from '@/lib/oxygen-mobile-profile';
 import { OxygenOrderResume } from './OxygenOrderResume';
 
 jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
-jest.mock('@/lib/oxygen-staging-profile', () => ({
-  getOxygenStagingProfile: jest.fn(),
+jest.mock('@/lib/oxygen-mobile-profile', () => ({
+  getOxygenMobileProfile: jest.fn(),
+}));
+const mockAvailability = jest.fn();
+jest.mock('@/components/checkout/use-oxygen-checkout-availability', () => ({
+  useOxygenCheckoutAvailability: () => mockAvailability(),
 }));
 const mockCustomer = {
   id: 'customer-1',
@@ -25,9 +29,9 @@ describe('owned Oxygen history resume', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest
-      .mocked(getOxygenStagingProfile)
+      .mocked(getOxygenMobileProfile)
       .mockReturnValue({ merchantId: 'merchant-1' } as ReturnType<
-        typeof getOxygenStagingProfile
+        typeof getOxygenMobileProfile
       >);
   });
   const order = {
@@ -60,8 +64,22 @@ describe('owned Oxygen history resume', () => {
     render(<OxygenOrderResume order={{ ...order, ...patch }} />);
     expect(screen.queryByRole('button')).toBeNull();
   });
-  it('is hidden outside the staging app', () => {
-    jest.mocked(getOxygenStagingProfile).mockReturnValue(null);
+  it('checks production admission before offering to resume an owned order', () => {
+    jest.mocked(getOxygenMobileProfile).mockReturnValue({
+      merchantId: 'merchant-1',
+      environment: 'production',
+    } as NonNullable<ReturnType<typeof getOxygenMobileProfile>>);
+    mockAvailability.mockReturnValue({ visible: false });
+    const { unmount } = render(<OxygenOrderResume order={order} />);
+    expect(screen.queryByRole('button')).toBeNull();
+    unmount();
+    mockAvailability.mockReturnValue({ visible: true });
+    render(<OxygenOrderResume order={order} />);
+    expect(screen.getByRole('button')).toBeTruthy();
+  });
+
+  it('is hidden without a configured profile', () => {
+    jest.mocked(getOxygenMobileProfile).mockReturnValue(null);
     render(<OxygenOrderResume order={order} />);
     expect(screen.queryByRole('button')).toBeNull();
   });

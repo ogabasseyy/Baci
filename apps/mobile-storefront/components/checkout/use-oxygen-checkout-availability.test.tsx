@@ -1,9 +1,6 @@
 import NetInfo, { type NetInfoState } from '@react-native-community/netinfo';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
-import {
-  getOxygenStagingProfile,
-  type OxygenStagingProfile,
-} from '@/lib/oxygen-staging-profile';
+import { getOxygenMobileProfile } from '@/lib/oxygen-mobile-profile';
 import { oxygenNativeSession } from '@/services/oxygen/native-session';
 import type { CartItem } from '@/stores/cart-store';
 import { useOxygenCheckoutAvailability } from './use-oxygen-checkout-availability';
@@ -12,8 +9,8 @@ const mockCapabilities = jest.fn();
 jest.mock('@react-native-community/netinfo', () => ({
   addEventListener: jest.fn(),
 }));
-jest.mock('@/lib/oxygen-staging-profile', () => ({
-  getOxygenStagingProfile: jest.fn(),
+jest.mock('@/lib/oxygen-mobile-profile', () => ({
+  getOxygenMobileProfile: jest.fn(),
 }));
 jest.mock('@/services/oxygen/native-session', () => ({
   oxygenNativeSession: jest.fn(() => ({ capabilities: mockCapabilities })),
@@ -29,11 +26,14 @@ jest.mock('@/stores/auth-store', () => ({
 }));
 
 const profile = {
+  environment: 'staging' as const,
+  authOrigin: 'https://auth.example.com',
+  storagePrefix: 'oxygen-staging:',
   authBaseUrl: 'https://auth.example.com',
   apiOrigin: 'https://api.example.com',
   merchantId: 'merchant',
   merchantSlug: 'ogabassey',
-} as OxygenStagingProfile;
+};
 
 let listener: ((state: NetInfoState) => void) | undefined;
 
@@ -55,7 +55,7 @@ beforeEach(() => {
   });
   jest.mocked(oxygenNativeSession).mockClear();
   mockCapabilities.mockReset().mockResolvedValue(undefined);
-  jest.mocked(getOxygenStagingProfile).mockReturnValue(profile);
+  jest.mocked(getOxygenMobileProfile).mockReturnValue(profile);
 });
 
 it('does not probe for a voucher cart or mismatched staging customer', async () => {
@@ -70,13 +70,13 @@ it('does not probe for a voucher cart or mismatched staging customer', async () 
   await act(async () => {});
   expect(result.current.disabledReason).toContain('voucher');
   expect(oxygenNativeSession).not.toHaveBeenCalled();
-  jest.mocked(getOxygenStagingProfile).mockReturnValue({
+  jest.mocked(getOxygenMobileProfile).mockReturnValue({
     ...profile,
     merchantId: 'another-merchant',
   });
   rerender({ items: [] });
   await act(async () => {});
-  expect(result.current.disabledReason).toContain('linked staging customer');
+  expect(result.current.disabledReason).toContain('linked customer');
   expect(oxygenNativeSession).not.toHaveBeenCalled();
 });
 
@@ -85,7 +85,7 @@ it('discards the previous deployment readiness immediately on profile change', a
     useOxygenCheckoutAvailability([])
   );
   await waitFor(() => expect(result.current.disabledReason).toBeUndefined());
-  jest.mocked(getOxygenStagingProfile).mockReturnValue({
+  jest.mocked(getOxygenMobileProfile).mockReturnValue({
     ...profile,
     apiOrigin: 'https://new-api.example.com',
   });
@@ -175,4 +175,22 @@ it('leaves the checking state when the availability request hangs', async () => 
   } finally {
     jest.useRealTimers();
   }
+});
+
+it('keeps Oxygen hidden in production until the server admits the linked customer', async () => {
+  jest.mocked(getOxygenMobileProfile).mockReturnValue({
+    ...profile,
+    environment: 'production',
+  });
+  let allow!: () => void;
+  mockCapabilities.mockReturnValueOnce(
+    new Promise<void>((resolve) => {
+      allow = resolve;
+    })
+  );
+
+  const { result } = renderHook(() => useOxygenCheckoutAvailability([]));
+  expect(result.current.visible).toBe(false);
+  await act(async () => allow());
+  await waitFor(() => expect(result.current.visible).toBe(true));
 });

@@ -1,7 +1,8 @@
 import { router } from 'expo-router';
 import { Text, TouchableOpacity } from 'react-native';
 import { z } from 'zod';
-import { getOxygenStagingProfile } from '@/lib/oxygen-staging-profile';
+import { useOxygenCheckoutAvailability } from '@/components/checkout/use-oxygen-checkout-availability';
+import { getOxygenMobileProfile } from '@/lib/oxygen-mobile-profile';
 import { isClosedOxygenShippingStatus } from '@/services/oxygen/oxygen-order-status';
 import { useAuthStore } from '@/stores/auth-store';
 
@@ -19,7 +20,7 @@ export function OxygenOrderResume({
     shipping_status?: string | null;
   };
 }) {
-  const profile = getOxygenStagingProfile();
+  const profile = getOxygenMobileProfile();
   const userId = useAuthStore((state) => state.user?.id);
   const customer = useAuthStore((state) => state.customer);
   if (
@@ -36,13 +37,26 @@ export function OxygenOrderResume({
     isClosedOxygenShippingStatus(order.shipping_status)
   )
     return null;
+  return profile.environment === 'production' ? (
+    <ProductionResume orderId={order.id} />
+  ) : (
+    <ResumeButton orderId={order.id} />
+  );
+}
+
+function ProductionResume({ orderId }: { orderId: string }) {
+  const { visible } = useOxygenCheckoutAvailability([]);
+  return visible ? <ResumeButton orderId={orderId} /> : null;
+}
+
+function ResumeButton({ orderId }: { orderId: string }) {
   return (
     <TouchableOpacity
       accessibilityRole="button"
       onPress={() =>
         router.push({
           pathname: '/oxygen-checkout',
-          params: { orderId: order.id },
+          params: { orderId },
         })
       }
       style={{ padding: 16 }}

@@ -1,5 +1,5 @@
 import {
-  assertOxygenStagingCapabilities,
+  assertOxygenCapabilities,
   readOxygenStagingProfile,
 } from './oxygen-staging-profile';
 
@@ -43,7 +43,7 @@ test('profile requires development and independent canonical issuer', () => {
 test('capabilities require hydrated matching customer; disabled initiation preserves owned reads', () => {
   const profile = readOxygenStagingProfile(profileInput, true);
   expect(() =>
-    assertOxygenStagingCapabilities(
+    assertOxygenCapabilities(
       profile,
       capability,
       { userId: null, customer: null },
@@ -51,7 +51,7 @@ test('capabilities require hydrated matching customer; disabled initiation prese
     )
   ).toThrow('linked staging customer');
   expect(() =>
-    assertOxygenStagingCapabilities(
+    assertOxygenCapabilities(
       profile,
       capability,
       { ...owner, customer: { ...owner.customer, merchant_id: 'foreign' } },
@@ -59,7 +59,7 @@ test('capabilities require hydrated matching customer; disabled initiation prese
     )
   ).toThrow();
   expect(() =>
-    assertOxygenStagingCapabilities(
+    assertOxygenCapabilities(
       profile,
       { ...capability, environment: 'production' },
       owner,
@@ -67,7 +67,7 @@ test('capabilities require hydrated matching customer; disabled initiation prese
     )
   ).toThrow();
   expect(() =>
-    assertOxygenStagingCapabilities(
+    assertOxygenCapabilities(
       profile,
       { ...capability, mobileEnabled: false },
       owner,
@@ -75,7 +75,7 @@ test('capabilities require hydrated matching customer; disabled initiation prese
     )
   ).toThrow();
   expect(
-    assertOxygenStagingCapabilities(
+    assertOxygenCapabilities(
       profile,
       { ...capability, mobileEnabled: false },
       owner,
@@ -100,14 +100,14 @@ test('capabilities confirm the independent Auth base URL before permitting gatew
   );
   const localCaps = { ...capability, authOrigin, authBaseUrl };
   expect(() =>
-    assertOxygenStagingCapabilities(profile, localCaps, owner, true)
+    assertOxygenCapabilities(profile, localCaps, owner, true)
   ).not.toThrow();
   const { authBaseUrl: _omitted, ...missingBase } = localCaps;
   expect(() =>
-    assertOxygenStagingCapabilities(profile, missingBase, owner, false)
+    assertOxygenCapabilities(profile, missingBase, owner, false)
   ).toThrow();
   expect(() =>
-    assertOxygenStagingCapabilities(
+    assertOxygenCapabilities(
       profile,
       { ...localCaps, authBaseUrl: 'http://127.0.0.1:4000/qa-backend' },
       owner,

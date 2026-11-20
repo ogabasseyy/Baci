@@ -33,7 +33,7 @@ export async function readOwnedOxygenOrder(
     .single();
   if (error)
     throw new Error(
-      'Your saved order is unavailable. Check your staging account and connection.'
+      'Your saved order is unavailable. Check your account and connection.'
     );
   const order = orderSchema.parse(data);
   if (order.payment_method !== 'oxygen')

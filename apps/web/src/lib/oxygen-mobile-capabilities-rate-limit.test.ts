@@ -1,8 +1,6 @@
 import { expect, it, vi } from 'vitest';
-import {
-  __resetRateLimitStoreForTesting,
-  checkOxygenMobileCapabilitiesRateLimit,
-} from './rate-limit';
+import { checkOxygenMobileCapabilitiesRateLimit } from './oxygen-mobile-capabilities-rate-limit';
+import { __resetRateLimitStoreForTesting } from './rate-limit';
 
 vi.mock('./redis', () => ({ getRedis: () => null }));
 

@@ -175,3 +175,30 @@ it('requires valid transient signature bytes and never dispatches a missing file
   ).rejects.toMatchObject({ code: 'invalid' });
   expect(transport).not.toHaveBeenCalled();
 });
+
+it('accepts production snapshots only when this client is pinned to production', async () => {
+  const snapshot = {
+    workflowId: id,
+    version: 1,
+    stage: 'eligibility_required',
+    environment: 'production',
+    executionEnabled: true,
+    approvalOtpReady: false,
+    activationEnabled: false,
+    settlementEnabled: false,
+    state: {},
+  };
+  const fetch = jest
+    .fn()
+    .mockImplementation(async () => new Response(JSON.stringify(snapshot)));
+  const production = createOxygenClient({
+    profile: { ...profile, environment: 'production' },
+    getSession: session,
+    fetch,
+  });
+  await expect(production.snapshot(id)).resolves.toMatchObject({
+    environment: 'production',
+  });
+  const staging = createOxygenClient({ profile, getSession: session, fetch });
+  await expect(staging.snapshot(id)).rejects.toMatchObject({ code: 'scope' });
+});

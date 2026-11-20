@@ -8,22 +8,25 @@ import { readOxygenStagingProfile } from '../config/oxygen-staging-profile';
 export type { OxygenStagingProfile };
 export { readOxygenStagingProfile };
 
-export type OxygenStagingOwner = {
+type OxygenOwner = {
   userId: string | null;
   customer: { user_id: string | null; merchant_id: string } | null;
 };
 
-export function oxygenStagingCapabilityPinsMatch(
-  profile: Pick<
-    OxygenStagingProfile,
-    'authOrigin' | 'merchantId' | 'merchantSlug'
-  > & {
-    authBaseUrl?: string;
-  },
+export type OxygenCapabilityPins = Pick<
+  OxygenStagingProfile,
+  'authOrigin' | 'merchantId' | 'merchantSlug'
+> & {
+  environment?: OxygenMobileCapabilities['environment'];
+  authBaseUrl?: string;
+};
+
+export function oxygenCapabilityPinsMatch(
+  profile: OxygenCapabilityPins,
   capabilities: OxygenMobileCapabilities
 ): boolean {
   return (
-    capabilities.environment === 'staging' &&
+    capabilities.environment === (profile.environment ?? 'staging') &&
     capabilities.authOrigin === profile.authOrigin &&
     (capabilities.authBaseUrl ?? capabilities.authOrigin) ===
       (profile.authBaseUrl ?? profile.authOrigin) &&
@@ -32,10 +35,10 @@ export function oxygenStagingCapabilityPinsMatch(
   );
 }
 
-export function assertOxygenStagingCapabilities(
-  profile: OxygenStagingProfile,
+export function assertOxygenCapabilities(
+  profile: OxygenCapabilityPins,
   input: unknown,
-  owner: OxygenStagingOwner,
+  owner: OxygenOwner,
   newInitiation: boolean
 ) {
   if (
@@ -45,15 +48,15 @@ export function assertOxygenStagingCapabilities(
     owner.customer.merchant_id !== profile.merchantId
   )
     throw new Error(
-      'Oxygen setup requires a linked staging customer. Sign in to the staging merchant.'
+      profile.environment === 'production'
+        ? 'Oxygen checkout requires a linked customer account.'
+        : 'Oxygen setup requires a linked staging customer. Sign in to the staging merchant.'
     );
   const capabilities = oxygenMobileCapabilitiesSchema.parse(input);
-  if (!oxygenStagingCapabilityPinsMatch(profile, capabilities))
-    throw new Error('Oxygen staging capability pins do not match this app');
+  if (!oxygenCapabilityPinsMatch(profile, capabilities))
+    throw new Error('Oxygen capability pins do not match this app');
   if (newInitiation && !capabilities.mobileEnabled)
-    throw new Error(
-      'New Oxygen applications are unavailable in this staging environment'
-    );
+    throw new Error('New Oxygen applications are unavailable in this app');
   return capabilities;
 }
 

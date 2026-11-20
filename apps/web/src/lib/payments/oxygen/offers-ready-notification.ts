@@ -28,7 +28,7 @@ export async function sendOxygenOffersReady(
         to: recipient.pushToken,
         title,
         body,
-        data: { screen: 'order-details', params: { id: recipient.orderId } },
+        data: { type: 'order_update', orderId: recipient.orderId },
         channelId: 'orders',
         sound: 'default',
       },

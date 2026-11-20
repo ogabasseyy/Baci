@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
   host: vi.fn(),
 }));
 vi.mock('@/lib/api-auth', () => ({ authenticateApiRequest: mocks.auth }));
-vi.mock('@/lib/rate-limit', () => ({
+vi.mock('@/lib/oxygen-mobile-capabilities-rate-limit', () => ({
   checkOxygenMobileCapabilitiesRateLimit: mocks.limit,
 }));
 vi.mock('@/lib/payments/oxygen/mobile-capabilities', () => ({

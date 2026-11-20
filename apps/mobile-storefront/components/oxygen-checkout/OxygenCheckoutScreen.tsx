@@ -87,9 +87,14 @@ function CheckoutSession({
             return null;
           throw failure;
         });
+      if (
+        session.profile.environment === 'production' &&
+        !capabilities?.mobileEnabled
+      )
+        throw new Error('Oxygen is unavailable on this app.');
       const customerId = useAuthStore.getState().customer?.id;
       if (!customerId)
-        throw new Error('Sign in with your linked staging customer.');
+        throw new Error('Sign in with your linked customer account.');
       const order = await readOwnedOxygenOrder(
         orderId,
         customerId,
@@ -115,7 +120,7 @@ function CheckoutSession({
     })().catch(() => {
       if (live)
         setError(
-          'Could not load your saved Oxygen order. Check your staging account and connection.'
+          'Could not load your saved Oxygen order. Check your account and connection.'
         );
     });
     return () => {

@@ -14,7 +14,7 @@ export class OxygenClientError extends Error {
   ) {
     super(
       code === 'auth'
-        ? 'Please sign in to your staging account.'
+        ? 'Please sign in to your account.'
         : 'Oxygen progress could not be confirmed. Check for an update.'
     );
     this.name = 'OxygenClientError';

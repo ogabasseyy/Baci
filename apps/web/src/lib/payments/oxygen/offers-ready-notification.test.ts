@@ -31,7 +31,7 @@ it('routes mobile users to the saved order without sending a second email', asyn
   expect(push).toHaveBeenCalledWith(expect.anything(), [
     expect.objectContaining({
       to: recipient.pushToken,
-      data: { screen: 'order-details', params: { id: recipient.orderId } },
+      data: { type: 'order_update', orderId: recipient.orderId },
     }),
   ]);
   expect(mail).not.toHaveBeenCalled();

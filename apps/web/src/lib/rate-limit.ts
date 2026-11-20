@@ -152,7 +152,7 @@ function denyWithoutDistributedBackend(
   };
 }
 
-async function applyRateLimit(
+export async function applyRateLimit(
   identifier: string,
   pattern: string,
   config: RateLimitConfig
@@ -237,16 +237,6 @@ export function checkOxygenProviderRateLimit(
     maxRequests,
     windowMs: 60_000,
     failClosedWithoutRedis: true,
-  });
-}
-
-/** Read-only capability checks can use the normal bounded fallback. */
-export function checkOxygenMobileCapabilitiesRateLimit(
-  userId: string
-): Promise<RateLimitResult> {
-  return applyRateLimit(userId, 'oxygen-mobile-capabilities', {
-    maxRequests: 10,
-    windowMs: 60_000,
   });
 }
 

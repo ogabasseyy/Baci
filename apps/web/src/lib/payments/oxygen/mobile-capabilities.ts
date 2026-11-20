@@ -64,19 +64,30 @@ export async function readOxygenMobileCapabilities(
     if (!authPins) return { ok: false, status: 503 };
     const origins = readOxygenHostedOrigins();
     const runtime = readOxygenRuntimeConfiguration();
-    const reason =
-      environment !== 'staging'
-        ? 'Mobile staging is unavailable in production.'
-        : process.env.OXYGEN_STAGING_MOBILE_ENABLED !== 'true'
-          ? 'New mobile applications are disabled.'
-          : !runtime ||
-              runtime.environment !== environment ||
-              row.data.environment !== environment ||
-              !row.data.binding_ready
-            ? 'This storefront is not configured for mobile staging.'
-            : !origins.hosted.length || !origins.selfie.length
-              ? 'Hosted verification is not configured.'
-              : null;
+    const rolloutEnabled =
+      environment === 'staging'
+        ? process.env.OXYGEN_STAGING_MOBILE_ENABLED === 'true'
+        : merchantSlug === 'ogabassey' &&
+          process.env.OXYGEN_PRODUCTION_MOBILE_ENABLED === 'true' &&
+          process.env.OXYGEN_PRODUCTION_AUTOMATIC_ACTIVATION_ENABLED === 'true';
+    let reason = !rolloutEnabled
+      ? 'New mobile applications are disabled.'
+      : !runtime ||
+          runtime.environment !== environment ||
+          row.data.environment !== environment ||
+          !row.data.binding_ready
+        ? 'This storefront is not configured for Oxygen checkout.'
+        : !origins.hosted.length || !origins.selfie.length
+          ? 'Hosted verification is not configured.'
+          : null;
+    if (reason === null && environment === 'production') {
+      const admission = await client.rpc('oxygen_storefront_pilot_available', {
+        p_merchant_id: row.data.merchant_id,
+      });
+      if (admission.error) return { ok: false, status: 503 };
+      if (admission.data !== true)
+        reason = 'Oxygen is unavailable for this customer.';
+    }
     const parsed = oxygenMobileCapabilitiesSchema.safeParse({
       schemaVersion: 1,
       environment,

@@ -16,18 +16,17 @@ import {
   validateOxygenFile,
 } from '@baci/shared/oxygen';
 import { z } from 'zod';
-import { oxygenStagingCapabilityPinsMatch } from '@/lib/oxygen-staging-profile';
+import {
+  type OxygenCapabilityPins,
+  oxygenCapabilityPinsMatch,
+} from '@/lib/oxygen-staging-profile';
 import { assertOxygenActionFile } from './action-file';
 import { OxygenClientError } from './errors';
 import { prepareOxygenMultipart } from './multipart';
 
-export interface OxygenClientProfile {
+export type OxygenClientProfile = OxygenCapabilityPins & {
   apiOrigin: string;
-  authOrigin: string;
-  authBaseUrl?: string;
-  merchantId: string;
-  merchantSlug: string;
-}
+};
 export interface OxygenSession {
   access_token: string;
   user: { id: string };
@@ -53,6 +52,7 @@ export function createOxygenClient(options: {
   expectedUserId?: string;
 }) {
   const { profile } = options;
+  const environment = profile.environment ?? 'staging';
   const origin = new URL(profile.apiOrigin);
   if (origin.origin !== profile.apiOrigin || origin.username || origin.password)
     throw new OxygenClientError('scope');
@@ -148,7 +148,7 @@ export function createOxygenClient(options: {
         `mobile-capabilities?merchantSlug=${encodeURIComponent(profile.merchantSlug)}`,
         oxygenMobileCapabilitiesSchema
       );
-      if (!oxygenStagingCapabilityPinsMatch(profile, caps))
+      if (!oxygenCapabilityPinsMatch(profile, caps))
         throw new OxygenClientError('scope');
       return caps;
     },
@@ -163,7 +163,7 @@ export function createOxygenClient(options: {
         oxygenWorkflowRequestSchema.parse({ orderId, channel })
       );
       if (
-        result.workflow.environment !== 'staging' ||
+        result.workflow.environment !== environment ||
         result.workflow.order_id !== orderId
       )
         throw new OxygenClientError('scope');
@@ -174,7 +174,10 @@ export function createOxygenClient(options: {
         query('workflows/actions', workflowId),
         oxygenRuntimeSnapshotSchema
       );
-      if (result.environment !== 'staging' || result.workflowId !== workflowId)
+      if (
+        result.environment !== environment ||
+        result.workflowId !== workflowId
+      )
         throw new OxygenClientError('scope');
       return result;
     },
@@ -193,7 +196,7 @@ export function createOxygenClient(options: {
       );
       if (
         result.workflowId !== parsed.workflowId ||
-        result.environment !== 'staging'
+        result.environment !== environment
       )
         throw new OxygenClientError('scope');
       return result;

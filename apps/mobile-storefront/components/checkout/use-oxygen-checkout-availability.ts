@@ -1,14 +1,14 @@
 import { withTimeout } from '@baci/shared';
 import NetInfo from '@react-native-community/netinfo';
 import { useEffect, useState } from 'react';
-import { getOxygenStagingProfile } from '@/lib/oxygen-staging-profile';
+import { getOxygenMobileProfile } from '@/lib/oxygen-mobile-profile';
 import { oxygenNativeSession } from '@/services/oxygen/native-session';
 import { useAuthStore } from '@/stores/auth-store';
 import type { CartItem } from '@/stores/cart-store';
 import { cartHasVoucherLine } from './checkout-prize-cart-guard';
 
 const unavailable =
-  'Oxygen staging setup is unavailable. Check your staging account and connection.';
+  'Oxygen checkout is unavailable. Check your connection and try again.';
 const retryDelaysMs = [2000, 8000];
 
 export function useOxygenCheckoutAvailability(items: CartItem[]) {
@@ -19,11 +19,12 @@ export function useOxygenCheckoutAvailability(items: CartItem[]) {
     (state) => state.customer?.merchant_id
   );
   const merchantId = useAuthStore((state) => state.merchantId);
-  const profile = getOxygenStagingProfile();
+  const profile = getOxygenMobileProfile();
   const linked =
     Boolean(userId && customerId) &&
     customerUserId === userId &&
-    customerMerchantId === profile?.merchantId;
+    customerMerchantId === profile?.merchantId &&
+    merchantId === profile?.merchantId;
   const hasVoucher = cartHasVoucherLine(items);
   const scope =
     profile && linked && !hasVoucher
@@ -31,6 +32,7 @@ export function useOxygenCheckoutAvailability(items: CartItem[]) {
           userId,
           customerId,
           merchantId,
+          profile.environment,
           profile.merchantId,
           profile.merchantSlug,
           profile.apiOrigin,
@@ -109,11 +111,14 @@ export function useOxygenCheckoutAvailability(items: CartItem[]) {
 
   if (!profile) return { visible: false, disabledReason: undefined };
   const disabledReason = !linked
-    ? 'Sign in with your linked staging customer account'
+    ? 'Sign in with your linked customer account'
     : hasVoucher
       ? 'Oxygen is unavailable for voucher carts'
       : readiness?.scope !== scope
-        ? 'Checking Oxygen staging availability'
+        ? 'Checking Oxygen availability'
         : readiness.reason;
-  return { visible: true, disabledReason };
+  return {
+    visible: profile.environment === 'staging' || disabledReason === undefined,
+    disabledReason,
+  };
 }

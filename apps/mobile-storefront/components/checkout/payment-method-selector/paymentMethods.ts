@@ -5,7 +5,7 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
   {
     id: 'oxygen',
     label: 'Oxygen',
-    description: 'Continue your application in this staging app',
+    description: 'Apply to pay in installments',
     icon: 'wallet-outline',
     tab: 'installments',
   },

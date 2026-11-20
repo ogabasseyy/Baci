@@ -13,7 +13,19 @@ import {
 } from './OxygenCheckoutScreen.test-utils';
 
 describe('saved native Oxygen checkout completion', () => {
-  const { refresh } = savedCheckoutFixture();
+  const { capabilities, refresh } = savedCheckoutFixture();
+  it('blocks a production deep link while mobile checkout is disabled', async () => {
+    const session = oxygenNativeSession();
+    jest.mocked(oxygenNativeSession).mockReturnValue({
+      ...session,
+      profile: { ...session.profile, environment: 'production' },
+    });
+    capabilities.mockResolvedValue({ mobileEnabled: false });
+    render(<OxygenCheckoutScreen orderId="order" />);
+    await screen.findByText(/Could not load your saved Oxygen order/);
+    expect(readOwnedOxygenOrder).not.toHaveBeenCalled();
+  });
+
   it.each([
     'unpaid',
     'bnpl_approved',

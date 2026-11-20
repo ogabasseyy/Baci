@@ -1,4 +1,4 @@
-import { getOxygenStagingProfile } from '@/lib/oxygen-staging-profile';
+import { getOxygenMobileProfile } from '@/lib/oxygen-mobile-profile';
 import { isStoreCreditCompatiblePayment } from '@/lib/store-credit-compatible-payment';
 import { formatPrice } from '@/stores/cart-store';
 import { PAYMENT_METHODS } from './paymentMethods';
@@ -56,7 +56,9 @@ export function usePaymentMethodAvailability(
 
   const enabledCandidates = PAYMENT_METHODS.filter(
     (method) =>
-      (method.id !== 'oxygen' || Boolean(getOxygenStagingProfile())) &&
+      (method.id !== 'oxygen' ||
+        (enabledMethods?.includes('oxygen') &&
+          Boolean(getOxygenMobileProfile()))) &&
       (!enabledMethods || enabledMethods.includes(method.id))
   ).filter((method) => !hiddenMethods.includes(method.id));
 

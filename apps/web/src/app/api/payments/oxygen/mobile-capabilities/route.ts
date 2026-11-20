@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
+import { checkOxygenMobileCapabilitiesRateLimit } from '@/lib/oxygen-mobile-capabilities-rate-limit';
 import { readOxygenMobileCapabilities } from '@/lib/payments/oxygen/mobile-capabilities';
 import {
   extractLocalhostSubdomain,
@@ -10,7 +11,6 @@ import {
   RESERVED_SUBDOMAINS,
   ROOT_DOMAIN,
 } from '@/lib/proxy/host';
-import { checkOxygenMobileCapabilitiesRateLimit } from '@/lib/rate-limit';
 import { stripPort } from '@/lib/storefront-host';
 import { oxygenMobileCapabilitiesQuerySchema } from '@/schemas/oxygen-mobile-capabilities';
 

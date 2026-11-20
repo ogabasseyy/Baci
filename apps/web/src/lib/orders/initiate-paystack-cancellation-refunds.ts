@@ -60,6 +60,7 @@ export async function initiatePaystackCancellationRefunds({
     id: string;
     merchant_id: string;
     order_number: string | null;
+    payment_method?: string | null;
   };
   reason?: string;
   refundedPaymentIds: Set<string>;
@@ -132,7 +133,11 @@ export async function initiatePaystackCancellationRefunds({
     // call treats a non-positive amount as "refund the whole
     // transaction": quarantine the leg for operations instead of
     // over-refunding a multi-leg order.
-    const isBankOffer = transaction.gateway_reference?.startsWith('BCO-');
+    // Read the order's persisted payment method. A bank reference on an
+    // unexpected order still goes through the same saved-capture gate.
+    const isBankOffer =
+      order.payment_method === 'bank_card_offer' ||
+      transaction.gateway_reference?.startsWith('BCO-');
     let koboAmount = isBankOffer ? 0 : Math.round(transactionAmount * 100);
     if (!isBankOffer && transactionAmount > 0 && koboAmount <= 0) {
       await quarantineRefund({

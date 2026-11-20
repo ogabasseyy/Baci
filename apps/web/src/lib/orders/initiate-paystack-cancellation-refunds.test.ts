@@ -119,6 +119,26 @@ describe('initiatePaystackCancellationRefunds', () => {
     }
   });
 
+  it('checks the saved offer when a bank-offer order has an unexpected leg reference', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: null, error: null });
+
+    await expect(
+      initiatePaystackCancellationRefunds({
+        order: { ...order, payment_method: 'bank_card_offer' },
+        refundedPaymentIds: new Set(),
+        supabase: { from: vi.fn(() => ({ insert })), rpc } as never,
+        transactions: [transaction],
+      })
+    ).resolves.toEqual([]);
+
+    expect(rpc).toHaveBeenCalledWith(
+      'get_bank_card_offer_refundable_amount',
+      expect.objectContaining({ p_reference: transaction.gateway_reference })
+    );
+    expect(mocks.quarantineRefund).toHaveBeenCalled();
+    expect(mocks.initiatePaystackRefund).not.toHaveBeenCalled();
+  });
+
   it('audits accepted refunds as refund_pending before returning', async () => {
     acceptedRefund();
 

@@ -26,10 +26,16 @@ export function getBankCardOfferCheckoutStatus(
   return null;
 }
 
+const MAX_RETRY_AFTER_MS = 5 * 60_000;
+
 export function bankCardOfferRetryDelay(response: Response): number {
   if (response.status !== 429) return 0;
-  const retryAfter = response.headers.get('Retry-After');
-  return retryAfter && /^\d{1,3}$/.test(retryAfter)
+  const retryAfter = response.headers.get('Retry-After')?.trim();
+  if (!retryAfter) return 0;
+  const delay = /^\d+$/.test(retryAfter)
     ? Number(retryAfter) * 1000
-    : 0;
+    : Date.parse(retryAfter) - Date.now();
+  return Number.isNaN(delay)
+    ? 0
+    : Math.min(MAX_RETRY_AFTER_MS, Math.max(0, delay));
 }

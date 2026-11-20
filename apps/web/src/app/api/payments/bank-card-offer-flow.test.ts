@@ -117,6 +117,7 @@ const merchant = {
 const order = {
   id: orderId,
   order_number: 'ORD-BANK-OFFER',
+  payment_method: 'bank_card_offer',
   merchant_id: merchantId,
   amount_paid: 95,
   subtotal: 100,

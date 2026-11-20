@@ -1,7 +1,7 @@
 # Baci capabilities and agent access
 
 Reviewed 20 November 2026 against source revision
-`8a90e6546a7e0767e5fafd95520a4b93523f1680`. The Shopping MCP row was re-reviewed after the misleading link-only
+`6afd390188a87a7cd564d2ac08f199165f63a95e`. The Shopping MCP row was re-reviewed after the misleading link-only
 `add_to_cart` alias was retired from the server, discovery card and submission metadata, and again after the
 connected cart read tool's description and failure text were reworded (wording only; no claim moved).
 The mobile-admin follow-up queue no longer treats

@@ -15,6 +15,16 @@ DECLARE
   v_hash text := repeat('a', 64);
   v_evidence jsonb;
   v_gateway_response jsonb;
+  v_checkout_key text;
+  v_checkout_order jsonb;
+  v_checkout_quote jsonb;
+  v_proof jsonb;
+  v_proof_payload jsonb;
+  v_proof_hash text;
+  v_issued_at text := now()::text;
+  v_action text := 'storefront_bank_card_offer_order_create';
+  v_test_secret text := 'synthetic-checkout-replay-proof-secret';
+  v_checkout_replay jsonb;
 BEGIN
   IF has_table_privilege('authenticated', 'private.bank_card_offer_payment_attempts', 'SELECT')
     OR has_function_privilege('anon', 'public.claim_bank_card_offer_attempt(uuid,uuid,bigint,text,text,bigint,bigint)', 'EXECUTE')
@@ -65,6 +75,47 @@ BEGIN
   IF public.get_bank_card_offer_checkout_replay(v_merchant, 'bank-test-key', v_hash)->>'id' IS DISTINCT FROM v_order::text THEN
     RAISE EXCEPTION 'Checkout replay should return the saved order';
   END IF;
+  PERFORM set_config('app.quiz_rpc_server_secret_current', v_test_secret, true);
+  UPDATE public.orders SET payment_status = 'pending' WHERE id = v_order;
+  FOREACH v_checkout_key IN ARRAY ARRAY['bank-expired-test-key', 'bank-test-key']
+  LOOP
+    v_checkout_order := jsonb_build_object('merchant_id', v_merchant, 'user_id', v_user,
+      'checkout_idempotency_key', v_checkout_key, 'checkout_request_hash', v_hash);
+    v_checkout_quote := jsonb_set(v_quote, '{endsAt}', to_jsonb(
+      CASE WHEN v_checkout_key = 'bank-test-key' THEN now() + interval '1 hour'
+        ELSE now() - interval '1 second' END
+    ));
+    v_proof_payload := jsonb_build_object('order', v_checkout_order, 'quote', v_checkout_quote);
+    v_proof_hash := private.transaction_discount_payload_hash(v_proof_payload);
+    v_proof := jsonb_build_object('action', v_action, 'subject_id', v_merchant,
+      'user_id', v_user, 'scope', 'quiz_phase1a', 'version', 'quiz-rpc-proof:v1',
+      'issued_at', v_issued_at, 'proof_id', gen_random_uuid(), 'payload_hash', v_proof_hash,
+      'payload', v_proof_payload, 'signature', encode(extensions.hmac(
+        concat_ws(E'\n', 'quiz-rpc-proof:v1', 'quiz_phase1a', v_action,
+          v_merchant::text, v_user::text, v_issued_at, v_proof_hash), v_test_secret, 'sha256'
+      ), 'hex'));
+    IF v_checkout_key = 'bank-test-key' THEN
+      v_checkout_replay := public.create_storefront_bank_card_offer_order(
+        v_checkout_order, v_checkout_quote, v_proof
+      );
+      IF v_checkout_replay->>'id' IS DISTINCT FROM v_order::text
+        OR v_checkout_replay->>'idempotency_replayed' IS DISTINCT FROM 'true'
+        OR v_checkout_replay->>'payment_status' IS DISTINCT FROM 'pending'
+        OR (SELECT payment_status FROM public.orders WHERE id = v_order) <> 'pending'
+        OR v_checkout_replay->>'created_at' IS NULL
+        OR (v_checkout_replay->>'created_at')::timestamptz IS DISTINCT FROM (
+          SELECT created_at FROM public.orders WHERE id = v_order
+        )
+      THEN RAISE EXCEPTION 'Atomic retry must return the original order and timestamp'; END IF;
+    ELSE
+      BEGIN
+        PERFORM public.create_storefront_bank_card_offer_order(v_checkout_order, v_checkout_quote, v_proof);
+        RAISE EXCEPTION 'Expired bank offer created an order';
+      EXCEPTION WHEN raise_exception THEN
+        IF SQLERRM <> 'bank_card_offer_checkout_expired' THEN RAISE; END IF;
+      END;
+    END IF;
+  END LOOP;
   BEGIN
     PERFORM public.get_bank_card_offer_checkout_replay(v_merchant, 'bank-test-key', repeat('b', 64));
     RAISE EXCEPTION 'A different bank checkout body replayed the old order';

@@ -88,7 +88,11 @@ it.each([
       error: null,
       supabase: supabase as never,
     });
-    const order = { id: 'bank-offer-order', total: expectedTotal };
+    const order = {
+      id: 'bank-offer-order',
+      total: expectedTotal,
+      created_at: '2026-11-19T18:42:00.000Z',
+    };
     supabase.rpc.mockImplementation(async (...args: unknown[]) => ({
       data: (args[0] === 'create_storefront_bank_card_offer_order' ||
       (status === 200 && args[0] === 'get_bank_card_offer_checkout_replay')
@@ -137,7 +141,11 @@ it.each([
       })
     );
     expect(effects.record).toHaveBeenCalledWith(
-      expect.objectContaining({ orderId: order.id, value: expectedTotal })
+      expect.objectContaining({
+        orderId: order.id,
+        value: expectedTotal,
+        eventTimestamp: order.created_at,
+      })
     );
     if (status === 200) {
       expect(response.idempotency).toEqual({ replayed: true });

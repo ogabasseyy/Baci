@@ -10,6 +10,8 @@ The offer deadline closes new checkouts and payment attempts. An attempt opened 
 
 For an initialization review, look up the original reference with Paystack. If Paystack provides a usable checkout URL for that reference, authorized operations can call `restore_bank_card_offer_checkout_url` with the review ID and that URL. If Paystack confirms the reference cannot accept a charge, authorized operations can call `retire_bank_card_offer_initialization` with the review ID and the provider confirmation. The shopper can then retry on the same order if the offer is still available. A timeout or a missing verification result is insufficient to retire the reference.
 
+The checkout URL validators in TypeScript and migration `20261119153530` both preserve Paystack query parameters. The database recovery test exercises saving and restoring a URL with a query string.
+
 When Paystack verification reports a failed, abandoned, or cancelled attempt, checkout stops returning the old URL and opens a review. Operations must confirm that this reference cannot accept a charge before retiring it, including when the checkout was already initialized.
 
 For a capture review, reconcile the payment with Paystack under the original reference. Preserve the saved order and attempt while evaluating the provider evidence. The customer verification endpoint reports this state as pending with HTTP 202. The webhook returns HTTP 200 once the review is recorded so Paystack can stop retrying the delivery.

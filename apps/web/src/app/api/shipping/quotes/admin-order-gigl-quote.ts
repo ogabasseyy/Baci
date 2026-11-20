@@ -233,6 +233,16 @@ export async function postAdminOrderGiglQuote(
     // Settlement can land between the check above and this bind.
     if (bindError.message?.includes(CUSTOMER_CHECKOUT_REBIND_FORBIDDEN))
       return customerPaidGiglShippingResponse();
+    if (bindError.message === 'partner_settled_order_amounts_immutable') {
+      return NextResponse.json(
+        {
+          code: 'PARTNER_SETTLED_ORDER_AMOUNTS_IMMUTABLE',
+          error:
+            'The settled partner order amounts must be preserved. Review the settlement before booking.',
+        },
+        { status: 409 }
+      );
+    }
     if (bindError.message?.includes('partner_delivery_price_changed')) {
       return NextResponse.json(
         {

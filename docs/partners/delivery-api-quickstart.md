@@ -34,6 +34,8 @@ A `201` returns `quote_id`, `currency`, the selected service and delivery estima
 
 If Baci returns `ADDRESS_UNSERVICEABLE`, `CARRIER_UNAVAILABLE`, or `QUOTE_UNAVAILABLE`, Baci has issued no payable quote. An unconfigured settlement policy returns `QUOTE_UNAVAILABLE`. Keep checkout on hold for that address or retry after a temporary outage.
 
+Keep one active quote per purchase and reuse its ID while it remains valid. A quote request can be retried after a timeout **before** charging the buyer. Once charging starts, keep the quote ID tied to that payment attempt. If the payment outcome is unclear, check the original attempt before requesting a replacement quote or charge.
+
 ## 3. Submit the purchase
 
 After payment captures, call `POST /orders` using the order credential and an `Idempotency-Key` that matches `^[A-Za-z0-9_.:-]{16,128}$`. A UUID works. Keep that key and the original body for retries. Send the original quote ID and the same partner order reference each time. Baci uses the delivery address stored on the quote. Include the recipient’s name, phone number, and email.
@@ -63,6 +65,8 @@ Unsubmitted quotes remain available for late paid-order intake for seven days af
 ## 4. Read status and tracking
 
 Call `GET /order-submissions?partner_order_id=example-order-reference`. A receipt reports `pending_verification`, `payment_verified`, `settlement_verified`, `review_required`, or `accepted`. The `accepted` receipt includes `order_id`. A `review_required` receipt includes a `review_reason`. Retain the original payment and order references. A settlement review can clear when Baci verifies a corrected payout allocation. An order review means the original purchase needs a disposition before a replacement purchase can be attempted.
+
+Send exactly one `partner_order_id` parameter. Baci rejects duplicate references and additional query parameters.
 
 Call `GET /orders/{orderId}` with that ID. Baci returns the payment status, shipping status, and tracking provider and waybill once available. Tracking is `null` until a waybill is recorded. Only the same merchant–partner connection can read an order.
 If either status is `unknown`, keep polling and wait for a recognized value before changing the order's state in your system.

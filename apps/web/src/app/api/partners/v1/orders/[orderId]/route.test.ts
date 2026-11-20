@@ -6,7 +6,11 @@ const mocks = vi.hoisted(() => ({
   rpc: vi.fn(),
   proof: vi.fn(),
   rateLimit: vi.fn(),
+  after: vi.fn<(callback: () => Promise<void>) => void>(),
+  capture: vi.fn(),
 }));
+vi.mock('next/server', () => ({ after: mocks.after }));
+vi.mock('@/lib/posthog/server', () => ({ captureServerEvent: mocks.capture }));
 vi.mock('@/lib/supabase/anon', () => ({
   createAnonClient: () => ({ rpc: mocks.rpc }),
 }));
@@ -122,5 +126,12 @@ describe('partner tracking lookup', () => {
       paymentStatusUnknown: false,
       shippingStatusUnknown: true,
     });
+    expect(mocks.capture).not.toHaveBeenCalled();
+    expect(mocks.after).toHaveBeenCalledTimes(1);
+    await mocks.after.mock.calls[0]?.[0]();
+    expect(mocks.capture).toHaveBeenCalledExactlyOnceWith(
+      'partner_tracking_status_unknown',
+      { payment_status_unknown: false, shipping_status_unknown: true }
+    );
   });
 });

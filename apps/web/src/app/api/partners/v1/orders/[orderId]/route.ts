@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import { after } from 'next/server';
 import { logger } from '@/lib/logger';
+import { captureServerEvent } from '@/lib/posthog/server';
 import { createShippingQuoteRouteProof } from '@/lib/shipping/shipping-quote-route-proof';
 import { createAnonClient } from '@/lib/supabase/anon';
 import { checkTenantRateLimitDetailed } from '@/lib/tenant-rate-limit';
@@ -94,6 +96,12 @@ export async function GET(
         requestId,
         paymentStatusUnknown,
         shippingStatusUnknown,
+      });
+      after(async () => {
+        await captureServerEvent('partner_tracking_status_unknown', {
+          payment_status_unknown: paymentStatusUnknown,
+          shipping_status_unknown: shippingStatusUnknown,
+        });
       });
     }
     return Response.json({ ...reply.data, request_id: requestId }, { headers });

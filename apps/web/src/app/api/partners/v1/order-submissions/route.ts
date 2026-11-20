@@ -28,8 +28,14 @@ export async function GET(request: Request) {
   }
 
   const query = new URL(request.url).searchParams;
-  const partnerOrderId = query.get('partner_order_id')?.trim();
-  if (query.size !== 1 || !partnerOrderId || partnerOrderId.length > 128) {
+  const orderReferences = query.getAll('partner_order_id');
+  const partnerOrderId = orderReferences[0]?.trim();
+  if (
+    orderReferences.length !== 1 ||
+    query.size !== orderReferences.length ||
+    !partnerOrderId ||
+    partnerOrderId.length > 128
+  ) {
     return invalid(400, 'INVALID_REQUEST');
   }
 

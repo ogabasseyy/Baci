@@ -56,7 +56,7 @@ paths:
   /quotes:
     post:
       operationId: createDeliveryQuote
-      description: A configured settlement policy is required before Baci can issue a quote.
+      description: A configured settlement policy is required. Keep one active quote for each purchase and preserve its ID once charging starts. If a payment attempt is uncertain, reconcile it before requesting a replacement quote or charge.
       security: [{QuoteCredential: []}]
       requestBody:
         required: true
@@ -136,6 +136,7 @@ paths:
   /order-submissions:
     get:
       operationId: getOrderSubmission
+      description: Supply exactly one partner_order_id. Duplicate references and additional query parameters are rejected.
       security: [{OrderCredential: []}]
       parameters:
         - in: query

@@ -173,6 +173,18 @@ describe('Admin GIGL provider, persistence, binding, and wallet behavior', () =>
     });
   });
 
+  it('reports immutable settled order amounts as a conflict', async () => {
+    mocks.bindRpc.mockResolvedValue({
+      data: null,
+      error: { message: 'partner_settled_order_amounts_immutable' },
+    });
+    const response = await subject({ receiver });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      code: 'PARTNER_SETTLED_ORDER_AMOUNTS_IMMUTABLE',
+    });
+  });
+
   it('maps a non-conflict binder error to 500', async () => {
     mocks.bindRpc.mockResolvedValue({
       data: null,

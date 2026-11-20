@@ -205,7 +205,9 @@ BEGIN
     ('7a100000-0000-4000-8000-000000000053', merchant_id, connection_id,
       now(), now() + interval '10 minutes', '{}');
 
-  PERFORM private.expire_unclaimed_partner_quotes();
+  IF private.expire_unclaimed_partner_quotes() <> 1 THEN
+    RAISE EXCEPTION 'quote expiry reported an unexpected deletion count';
+  END IF;
   IF EXISTS (SELECT 1 FROM private.partner_delivery_quotes WHERE id = '7a100000-0000-4000-8000-000000000051')
      OR (SELECT count(*) FROM private.partner_delivery_quotes WHERE id IN (
        fixture.quote_id, '7a100000-0000-4000-8000-000000000052', '7a100000-0000-4000-8000-000000000053'

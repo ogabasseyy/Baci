@@ -20,7 +20,6 @@ interface StaffFollowUpEditorProps {
   followUp?: StaffFollowUp;
   viewerId?: string;
   canWrite: boolean;
-  /** True right after this viewer claimed the follow-up in this sheet. */
   justClaimed?: boolean;
   busy: boolean;
   saveError?: string;
@@ -70,7 +69,6 @@ export function StaffFollowUpEditor({
 
   const stale = draft !== null && (!canEdit || revision !== followUp?.revision);
   const editDisabled = busy || stale;
-
   const submit = async () => {
     if (editDisabled || (!canClaim && !canEdit)) return;
     setError('');

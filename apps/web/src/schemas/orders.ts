@@ -247,6 +247,13 @@ const orderCreateSchemaBase = z
   })
   .and(orderDeliveryMetadataSchema)
   .superRefine((data, ctx) => {
+    if (data.bank_card_offer_id && data.payment_method !== 'bank_card_offer') {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'A bank card offer requires bank card offer payment',
+        path: ['bank_card_offer_id'],
+      });
+    }
     if (!data.use_savings_credit) {
       return;
     }

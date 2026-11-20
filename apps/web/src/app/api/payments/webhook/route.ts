@@ -71,10 +71,8 @@ import {
   scheduleVoucherPinBackfill,
 } from '@/lib/vtu-voucher-backfill';
 import { sendEmail } from '@/lib/zeptomail';
-import {
-  bankCardOfferReferenceSchema,
-  bankCardOfferWebhookTransactionSchema,
-} from '@/schemas/bank-card-offer-payment-context';
+import { bankCardOfferReferenceSchema } from '@/schemas/bank-card-offer-reference';
+import { bankCardOfferWebhookTransactionSchema } from '@/schemas/bank-card-offer-webhook-transaction';
 import {
   paystackZeroCandidateReviewGatewayResponseSchema,
   referenceSchema,

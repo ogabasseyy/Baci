@@ -8,7 +8,7 @@ import { processMerchantInvoicePartialPayment } from '@/lib/payments/process-mer
 import type { GatewayVerificationResult } from '@/lib/payments/types';
 import { getAuthenticatedUser } from '@/lib/supabase/mobile-auth';
 import { createServiceClient } from '@/lib/supabase/service';
-import { bankCardOfferReferenceSchema } from '@/schemas/bank-card-offer-payment-context';
+import { bankCardOfferReferenceSchema } from '@/schemas/bank-card-offer-reference';
 import { referenceSchema, verifyPaymentBodySchema } from '@/schemas/payments';
 import { getGuestPaymentReferenceSnapshot } from './guest-payment-reference-snapshot';
 import { getSessionlessPaymentReferenceSnapshot } from './sessionless-payment-reference-snapshot';

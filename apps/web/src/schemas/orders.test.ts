@@ -23,6 +23,17 @@ const validOrder = {
 };
 
 describe('orderCreateSchema', () => {
+  it('rejects a bank card offer ID attached to a standard payment', () => {
+    const result = orderCreateSchema.safeParse({
+      ...validOrder,
+      bank_card_offer_id: 'black-friday',
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0]?.path).toEqual(['bank_card_offer_id']);
+    }
+  });
+
   it('accepts valid input', () => {
     const result = orderCreateSchema.safeParse(validOrder);
     expect(result.success).toBe(true);

@@ -1,0 +1,190 @@
+import 'server-only';
+import { createHash } from 'node:crypto';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { NextResponse } from 'next/server';
+import { BANK_CARD_OFFERS } from '@/config/bank-card-offers';
+import { scheduleCheckoutProductBlogPurge } from '@/lib/checkout/schedule-checkout-product-blog-purge';
+import { createStorefrontOrderRpcClient } from '@/lib/checkout/storefront-order-rpc-client';
+import { recordPlatformOrderCreatedEvent } from '@/lib/events/record-platform-order-created-event';
+import { getOrderItemProductId } from '@/lib/immediate-order-notification';
+import { logger } from '@/lib/logger';
+import { stableStringify } from '@/lib/stable-stringify';
+import type { OrderCreateInput } from '@/schemas/orders';
+
+export async function prepareBankCardOfferOrder({
+  body,
+  merchantId,
+  customerEmail,
+  userId,
+  userEmail,
+  requestIdempotencyKey,
+  hasVoucherItem,
+  clientIp,
+  clientUserAgent,
+  supabase,
+}: {
+  body: OrderCreateInput;
+  merchantId: string;
+  customerEmail: string;
+  userId?: string | null;
+  userEmail?: string | null;
+  requestIdempotencyKey: string | null;
+  hasVoucherItem: boolean;
+  clientIp: string;
+  clientUserAgent?: string;
+  supabase: SupabaseClient;
+}) {
+  if (body.payment_method !== 'bank_card_offer')
+    return { kind: 'standard' } as const;
+  const requestHash = createHash('sha256')
+    .update(stableStringify(body))
+    .digest('hex');
+  const offer = BANK_CARD_OFFERS.find(
+    (candidate) =>
+      candidate.id === body.bank_card_offer_id &&
+      candidate.merchantId === merchantId &&
+      candidate.enabled
+  );
+  if (
+    !body.bank_card_offer_id ||
+    !userId ||
+    userEmail?.trim().toLowerCase() !== customerEmail.trim().toLowerCase() ||
+    !requestIdempotencyKey ||
+    body.shared_cart ||
+    hasVoucherItem ||
+    body.discount_code ||
+    body.use_wallet_credit ||
+    body.wallet_amount ||
+    body.use_savings_credit ||
+    body.savings_amount
+  ) {
+    return {
+      kind: 'response',
+      response: NextResponse.json(
+        {
+          code: 'BANK_CARD_OFFER_UNAVAILABLE',
+          error: 'Bank card offer unavailable for this checkout',
+        },
+        { status: 409 }
+      ),
+    } as const;
+  }
+  async function repairBankOfferOrderEffects(
+    offerOrder: Record<string, unknown>,
+    merchantSlug: string
+  ) {
+    if (typeof offerOrder.id !== 'string') return;
+    try {
+      await scheduleCheckoutProductBlogPurge({
+        merchantId,
+        merchantSlug,
+        orderId: offerOrder.id,
+        orderItems: body.items.map((item) => ({
+          product_id: getOrderItemProductId(item),
+          variant_id: item.variantId || item.variant_id,
+        })),
+        supabase,
+      });
+    } catch (error) {
+      logger.error({
+        message:
+          'Failed to revalidate product caches after bank offer order creation',
+        merchantId,
+        error,
+      });
+    }
+    await recordPlatformOrderCreatedEvent({
+      currency:
+        typeof offerOrder.currency === 'string' ? offerOrder.currency : 'NGN',
+      customerEmail,
+      eventTimestamp:
+        typeof offerOrder.created_at === 'string'
+          ? offerOrder.created_at
+          : new Date().toISOString(),
+      ipAddress: clientIp,
+      merchantId,
+      orderId: offerOrder.id,
+      orderNumber:
+        typeof offerOrder.order_number === 'string' && offerOrder.order_number
+          ? offerOrder.order_number
+          : offerOrder.id.slice(0, 8).toUpperCase(),
+      userAgent: clientUserAgent,
+      value: Number(offerOrder.total ?? 0),
+    });
+  }
+
+  const scopedClient = createStorefrontOrderRpcClient({
+    fallbackClient: supabase,
+    hasCanonicalDeliveryMetadata: false,
+    merchantId,
+    userId,
+  });
+  const replay = await scopedClient.rpc('get_bank_card_offer_checkout_replay', {
+    p_merchant_id: merchantId,
+    p_key: requestIdempotencyKey,
+    p_hash: requestHash,
+  });
+  if (replay.error) {
+    const conflict = replay.error.message === 'checkout_idempotency_conflict';
+    return {
+      kind: 'response',
+      response: NextResponse.json(
+        {
+          code: conflict
+            ? 'CHECKOUT_IDEMPOTENCY_CONFLICT'
+            : 'BANK_CARD_OFFER_REPLAY_UNAVAILABLE',
+          error: conflict
+            ? 'This checkout key has already been used for a different order'
+            : 'Unable to load this bank card offer order',
+        },
+        { status: conflict ? 409 : 503 }
+      ),
+    } as const;
+  }
+  if (replay.data) {
+    const { data: replayMerchant, error: merchantError } = await supabase
+      .from('merchants')
+      .select('slug')
+      .eq('id', merchantId)
+      .maybeSingle();
+    if (merchantError || !replayMerchant?.slug) {
+      return {
+        kind: 'response',
+        response: NextResponse.json(
+          {
+            code: 'BANK_CARD_OFFER_REPLAY_UNAVAILABLE',
+            error: 'Unable to load this bank card offer order',
+          },
+          { status: 503 }
+        ),
+      } as const;
+    }
+    await repairBankOfferOrderEffects(replay.data, replayMerchant.slug);
+    return {
+      kind: 'response',
+      response: NextResponse.json(
+        { order: replay.data, idempotency: { replayed: true } },
+        { headers: { 'x-idempotency-replayed': 'true' } }
+      ),
+    } as const;
+  }
+  if (!offer) {
+    return {
+      kind: 'response',
+      response: NextResponse.json(
+        {
+          code: 'BANK_CARD_OFFER_UNAVAILABLE',
+          error: 'Bank card offer unavailable for this checkout',
+        },
+        { status: 409 }
+      ),
+    } as const;
+  }
+  return {
+    kind: 'checkout',
+    offer,
+    requestHash,
+    userId,
+    repairEffects: repairBankOfferOrderEffects,
+  } as const;
+}

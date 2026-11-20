@@ -1,6 +1,6 @@
 import 'server-only';
 import { initializeTransaction } from '@/lib/paystack';
-import { bankCardOfferCheckoutUrlSchema } from '@/schemas/bank-card-offer-payment-context';
+import { bankCardOfferCheckoutUrlSchema } from '@/schemas/bank-card-offer-checkout-url';
 import { bankCardOfferAuthorization } from './bank-card-offer-authorization';
 import type { BankCardOfferAttempt } from './bank-card-offer-payment';
 

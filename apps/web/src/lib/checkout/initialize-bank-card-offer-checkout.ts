@@ -2,10 +2,8 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { resolvePaystackSplitTransactionCharge } from '@/lib/payments/resolve-paystack-split-transaction-charge';
 import { calculatePlatformFee } from '@/lib/paystack';
-import {
-  bankCardOfferCheckoutContextSchema,
-  bankCardOfferClaimSchema,
-} from '@/schemas/bank-card-offer-payment-context';
+import { bankCardOfferCheckoutContextSchema } from '@/schemas/bank-card-offer-checkout-context';
+import { bankCardOfferClaimSchema } from '@/schemas/bank-card-offer-claim';
 import { hashBankCardOfferFilter } from './hash-bank-card-offer-filter';
 import { initializeBankCardOfferPaystack } from './initialize-bank-card-offer-paystack';
 

@@ -12,10 +12,24 @@ vi.mock('@/components/ui/AppSheetModal', () => ({
   ),
 }));
 vi.mock('@/components/ui/AppDatePickerField', () => ({
-  AppDatePickerField: ({ onConfirm }: { onConfirm: (d: Date) => void }) => (
-    <button type="button" onClick={() => onConfirm(new Date(2026, 10, 20, 12))}>
-      Submit test date
-    </button>
+  AppDatePickerField: ({
+    onConfirm,
+    value,
+  }: {
+    onConfirm: (d: Date) => void;
+    value: Date;
+  }) => (
+    <>
+      <button
+        type="button"
+        onClick={() => onConfirm(new Date(2026, 10, 20, 12))}
+      >
+        Submit test date
+      </button>
+      <button type="button" onClick={() => onConfirm(value)}>
+        Keep picker date
+      </button>
+    </>
   ),
 }));
 
@@ -87,6 +101,29 @@ it('saves the stage, outcome and local calendar date for the assigned team membe
       outcome: 'Customer will try again.',
       follow_up_on: '2026-11-20',
     })
+  );
+});
+
+it.each([
+  '2026-03-08', // US spring clock change
+  '2026-03-29', // European spring clock change
+  '2026-11-01', // US fall clock change
+])('reopens and saves the same calendar date on %s', async (date) => {
+  const options = props();
+  render(
+    <StaffFollowUpEditor
+      {...options}
+      followUp={{ ...claimed, follow_up_on: date }}
+    />
+  );
+
+  fireEvent.click(screen.getByRole('button', { name: `Follow up on ${date}` }));
+  fireEvent.click(screen.getByRole('button', { name: 'Keep picker date' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save follow-up' }));
+  await waitFor(() =>
+    expect(options.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ follow_up_on: date })
+    )
   );
 });
 

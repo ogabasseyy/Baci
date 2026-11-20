@@ -370,6 +370,37 @@ describe('FollowUpQueueList', () => {
     );
   });
 
+  it('keeps an open editor mounted when its retained order leaves the active queue', () => {
+    mocks.useFollowUpQueue.mockReturnValue({
+      failedOrders: [],
+      merchant: { id: 'merchant-1' },
+      refresh: mocks.refresh,
+      viewState: { status: 'empty' },
+    });
+    mocks.useStaffOrderFollowUps.mockReturnValue({
+      isSuccess: true,
+      openOrders: [{ id: 'order-1', created_at: '2026-07-27T08:00:00Z' }],
+      data: {
+        'order-1': { stage: 'waiting', assignee_id: 'viewer', revision: 1 },
+      },
+    });
+    const props = { ...defaultProps, renderOrder: () => <div>Ada</div> };
+    const { rerender } = render(<FollowUpQueueList {...props} />);
+    fireEvent.click(screen.getByText('Update follow-up'));
+    mocks.useStaffOrderFollowUps.mockReturnValue({
+      isSuccess: true,
+      openOrders: [],
+      data: {},
+      saveError:
+        'This follow-up changed. Check the latest details before saving.',
+    });
+    rerender(<FollowUpQueueList {...props} />);
+    expect(screen.getByText('Open follow-up editor')).toBeVisible();
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'This follow-up changed.'
+    );
+  });
+
   it('keeps a claimed follow-up visible after the checkout leaves the source queue', () => {
     const order = {
       id: 'order-1',

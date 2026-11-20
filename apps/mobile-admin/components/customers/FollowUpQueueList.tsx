@@ -22,6 +22,7 @@ import {
   type GroupedFailedOrderListItem,
   groupFailedOrdersByDate,
 } from '@/lib/customers-failed-orders';
+import type { StaffFollowUp } from '@/schemas/staff-follow-up';
 
 interface FollowUpQueueListProps {
   currencySymbol: string;
@@ -65,7 +66,12 @@ export function FollowUpQueueList({
     refresh,
     viewState,
   } = source;
-  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [selection, setSelection] = useState<{
+    order: FailedOrder;
+    followUp?: StaffFollowUp;
+    merchantId?: string;
+    viewerId?: string;
+  } | null>(null);
   const [claimedOrderId, setClaimedOrderId] = useState<string | null>(null);
   const followUpCount = orders.length;
   const isLimited = isFollowUpLimited || staffFollowUps.isLimited;
@@ -75,11 +81,18 @@ export function FollowUpQueueList({
       : followUpCount === 0 && viewState.status === 'ready'
         ? ({ status: 'empty' } as const)
         : viewState;
-  const selectedOrder = selectedOrderId
-    ? ordersById.get(selectedOrderId)
+  // A refresh can remove a retained order while its editor is open.
+  // Keep the snapshot scoped to this store and session so the draft and save
+  // error stay visible until the staff member dismisses the sheet.
+  const activeSelection =
+    selection?.merchantId === merchant?.id && selection?.viewerId === viewerId
+      ? selection
+      : null;
+  const selectedOrder = activeSelection
+    ? (ordersById.get(activeSelection.order.id) ?? activeSelection.order)
     : undefined;
   const selectedFollowUp = selectedOrder
-    ? staffFollowUps.data?.[selectedOrder.id]
+    ? (staffFollowUps.data?.[selectedOrder.id] ?? activeSelection?.followUp)
     : undefined;
   const refreshQueue = async () => {
     await Promise.allSettled([
@@ -157,7 +170,12 @@ export function FollowUpQueueList({
                 viewerId={viewerId}
                 onPress={() => {
                   staffFollowUps.resetSave();
-                  setSelectedOrderId(order.id);
+                  setSelection({
+                    order,
+                    followUp,
+                    merchantId: merchant?.id,
+                    viewerId,
+                  });
                 }}
               />
             </View>
@@ -202,14 +220,6 @@ export function FollowUpQueueList({
           )
         }
       />
-      {selectedOrderId && !selectedOrder && staffFollowUps.saveError ? (
-        <Text
-          accessibilityRole="alert"
-          style={{ color: colors.error, padding: SPACING.lg }}
-        >
-          {staffFollowUps.saveError}
-        </Text>
-      ) : null}
       {selectedOrder && (
         <StaffFollowUpEditor
           key={`${selectedOrder.id}:${selectedFollowUp?.revision ?? 0}`}
@@ -225,7 +235,7 @@ export function FollowUpQueueList({
           busy={staffFollowUps.isSaving}
           saveError={staffFollowUps.saveError}
           onClose={() => {
-            setSelectedOrderId(null);
+            setSelection(null);
             setClaimedOrderId(null);
             staffFollowUps.resetSave();
           }}

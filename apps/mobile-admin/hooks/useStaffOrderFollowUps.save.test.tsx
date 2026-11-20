@@ -154,6 +154,30 @@ describe('useStaffOrderFollowUps saving', () => {
       });
       expect(mocks.rpc).not.toHaveBeenCalled();
     });
+
+    it('explains an unsupported date before sending the update', async () => {
+      mocks.rpc.mockResolvedValue(ok(true));
+      const { result } = render();
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      await act(async () => {
+        await expect(
+          result.current.save({
+            type: 'update',
+            fields: {
+              order_id: orderId(1),
+              revision: 1,
+              stage: 'waiting',
+              outcome: '',
+              follow_up_on: '1899-12-31',
+            },
+          })
+        ).rejects.toThrow('Choose a follow-up date between 1900 and 9999.');
+      });
+      expect(mocks.rpc.mock.calls.map(([name]) => name)).not.toContain(
+        'update_order_follow_up'
+      );
+    });
   });
 
   describe('cache updates', () => {

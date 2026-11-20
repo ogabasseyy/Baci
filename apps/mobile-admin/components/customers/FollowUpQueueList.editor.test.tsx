@@ -45,6 +45,12 @@ describe('FollowUpQueueList', () => {
     const props = { ...defaultProps, renderOrder: () => <div>Ada</div> };
     const { rerender } = render(<FollowUpQueueList {...props} />);
     expect(screen.getByText('View follow-up')).toBeVisible();
+    expect(mocks.flashListExtraData).toHaveBeenLastCalledWith({
+      records,
+      canWrite: false,
+      viewerId: 'viewer',
+      isSuccess: true,
+    });
 
     mocks.useStaffOrderFollowUps.mockReturnValue({
       isSuccess: true,
@@ -55,6 +61,12 @@ describe('FollowUpQueueList', () => {
 
     expect(screen.getByText('Claim follow-up')).toBeVisible();
     expect(screen.queryByText('View follow-up')).toBeNull();
+    expect(mocks.flashListExtraData).toHaveBeenLastCalledWith({
+      records,
+      canWrite: true,
+      viewerId: 'viewer',
+      isSuccess: true,
+    });
   });
 
   it('preserves a claim conflict when refreshing changes the editor revision', () => {

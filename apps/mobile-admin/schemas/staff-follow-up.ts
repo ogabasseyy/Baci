@@ -16,6 +16,10 @@ export const STAFF_FOLLOW_UP_LABELS = {
 
 export const STAFF_FOLLOW_UP_OUTCOME_LIMIT = 1000;
 
+export const staffFollowUpDateSchema = z.iso
+  .date()
+  .refine((date) => date >= '1900-01-01' && date <= '9999-12-31');
+
 export function limitStaffFollowUpOutcome(outcome: string): string {
   return [...outcome].slice(0, STAFF_FOLLOW_UP_OUTCOME_LIMIT).join('');
 }
@@ -33,7 +37,7 @@ export const staffFollowUpSchema = z
     outcome: z
       .string()
       .refine((note) => [...note].length <= STAFF_FOLLOW_UP_OUTCOME_LIMIT),
-    follow_up_on: z.iso.date().nullable(),
+    follow_up_on: staffFollowUpDateSchema.nullable(),
     revision: z.number().int().positive(),
     updated_at: z.iso.datetime({ offset: true }),
   })

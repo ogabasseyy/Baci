@@ -3,6 +3,7 @@ import { vi } from 'vitest';
 import type { GroupedFailedOrderListItem } from '@/lib/customers-failed-orders';
 
 const mocks = vi.hoisted(() => ({
+  flashListExtraData: vi.fn(),
   refresh: vi.fn(),
   useFollowUpQueue: vi.fn(),
   useStaffOrderFollowUps: vi.fn(),
@@ -45,12 +46,14 @@ vi.mock('@shopify/flash-list', async () => {
   return {
     FlashList: ({
       data,
+      extraData,
       ListEmptyComponent,
       ListHeaderComponent,
       refreshControl,
       renderItem,
     }: {
       data?: GroupedFailedOrderListItem[] | null;
+      extraData?: unknown;
       renderItem: (info: {
         item: GroupedFailedOrderListItem;
       }) => React.ReactNode;
@@ -58,6 +61,7 @@ vi.mock('@shopify/flash-list', async () => {
       ListHeaderComponent?: React.ReactNode;
       refreshControl?: React.ReactNode;
     }) => {
+      mocks.flashListExtraData(extraData);
       const refreshProps = React.isValidElement(refreshControl)
         ? (refreshControl.props as {
             onRefresh?: () => void;

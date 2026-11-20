@@ -18,6 +18,14 @@ describe('staff follow-up schema', () => {
     expect(staffFollowUpSchema.parse(record)).toEqual(record);
   });
 
+  it.each([
+    '1900-01-01',
+    '9999-12-31',
+  ])('accepts the stored date boundary %s', (followUpOn) => {
+    const row = { ...record, follow_up_on: followUpOn };
+    expect(staffFollowUpSchema.parse(row)).toEqual(row);
+  });
+
   it('accepts names and notes at the database character limit', () => {
     const row = {
       ...record,
@@ -49,6 +57,7 @@ describe('staff follow-up schema', () => {
     { outcome: '🌱'.repeat(1001) },
     { stage: 'paid' },
     { follow_up_on: '2026-02-30' },
+    { follow_up_on: '1899-12-31' },
     { stage: 'closed' },
     { revision: 0 },
     { revision: -1 },

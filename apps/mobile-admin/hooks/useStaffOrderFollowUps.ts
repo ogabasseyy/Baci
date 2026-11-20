@@ -7,6 +7,7 @@ import { retainedFollowUpOrderSchema } from '@/schemas/retained-follow-up-order'
 import {
   type StaffFollowUp,
   type StaffFollowUpUpdate,
+  staffFollowUpDateSchema,
   staffFollowUpSchema,
 } from '@/schemas/staff-follow-up';
 
@@ -149,6 +150,13 @@ export function useStaffOrderFollowUps(
   const mutation = useMutation({
     mutationFn: async (change: FollowUpChange) => {
       if (!merchantId || !viewerId) throw new Error('Store unavailable.');
+      if (
+        change.type === 'update' &&
+        change.fields.follow_up_on !== null &&
+        !staffFollowUpDateSchema.safeParse(change.fields.follow_up_on).success
+      ) {
+        throw new Error('Choose a follow-up date between 1900 and 9999.');
+      }
       const { data, error } =
         change.type === 'claim'
           ? await supabase.rpc('claim_order_follow_up', {

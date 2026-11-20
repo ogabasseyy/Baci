@@ -58,6 +58,7 @@ export function FollowUpQueueList({
     ordersById,
     viewerId,
   } = useStaffFollowUpQueue();
+  const { data: records, canWrite, isSuccess } = staffFollowUps;
   const {
     isFailedOrdersError,
     isFollowUpLimited,
@@ -86,9 +87,7 @@ export function FollowUpQueueList({
       : followUpCount === 0 && viewState.status === 'ready'
         ? ({ status: 'empty' } as const)
         : viewState;
-  // A refresh can remove a retained order while its editor is open.
-  // Keep the snapshot scoped to this store and session so the draft and save
-  // error stay visible until the staff member dismisses the sheet.
+  // Keep the draft visible after a refresh, within the same store and session.
   const activeSelection =
     selection?.merchantId === merchant?.id && selection?.viewerId === viewerId
       ? selection
@@ -97,7 +96,7 @@ export function FollowUpQueueList({
     ? (ordersById.get(activeSelection.order.id) ?? activeSelection.order)
     : undefined;
   const selectedFollowUp = selectedOrder
-    ? (staffFollowUps.data?.[selectedOrder.id] ?? activeSelection?.followUp)
+    ? (records?.[selectedOrder.id] ?? activeSelection?.followUp)
     : undefined;
   const refreshQueue = async () => {
     await Promise.allSettled([
@@ -141,7 +140,7 @@ export function FollowUpQueueList({
       <FlashList<GroupedFailedOrderListItem>
         ref={scrollRef as never}
         data={groupedFailedOrders}
-        extraData={staffFollowUps.data}
+        extraData={{ records, canWrite, viewerId, isSuccess }}
         renderItem={({
           item,
         }: ListRenderItemInfo<GroupedFailedOrderListItem>) => {
@@ -166,16 +165,16 @@ export function FollowUpQueueList({
           }
 
           const order = item.data;
-          const followUp = staffFollowUps.data?.[order.id];
+          const followUp = records?.[order.id];
           const card = renderOrder(order, currencySymbol);
-          if (!card || !staffFollowUps.isSuccess) return card;
+          if (!card || !isSuccess) return card;
           return (
             <View style={styles.queueItem}>
               {card}
               <StaffFollowUpAction
                 followUp={followUp}
                 viewerId={viewerId}
-                canWrite={staffFollowUps.canWrite}
+                canWrite={canWrite}
                 onPress={() => {
                   staffFollowUps.resetSave();
                   setSelection({
@@ -250,7 +249,7 @@ export function FollowUpQueueList({
             'Customer'
           }
           viewerId={viewerId}
-          canWrite={staffFollowUps.canWrite}
+          canWrite={canWrite}
           followUp={selectedFollowUp}
           justClaimed={activeSelection?.justClaimed}
           busy={staffFollowUps.isSaving}

@@ -135,27 +135,30 @@ describe('mapKudaBillItems unit-flip guards', () => {
     });
 
     it('checks each nested list on its own', () => {
-      const [biller] =
-        mapKudaBillItems([
-          {
-            itemCode: 'group',
-            itemName: 'Group',
-            amount: 0,
-            isFixedPrice: false,
-            billItems: [
-              {
-                itemCode: 'cheap',
-                itemName: 'A',
-                amount: 100,
-                isFixedPrice: true,
-              },
-            ],
-          },
-          { itemCode: 'ok', itemName: 'B', amount: 100000, isFixedPrice: true },
-        ]) ?? [];
+      const items = mapKudaBillItems([
+        {
+          itemCode: 'group',
+          itemName: 'Group',
+          amount: 0,
+          isFixedPrice: false,
+          billItems: [
+            {
+              itemCode: 'cheap',
+              itemName: 'A',
+              amount: 100,
+              isFixedPrice: true,
+            },
+          ],
+        },
+        { itemCode: 'ok', itemName: 'B', amount: 100000, isFixedPrice: true },
+      ]);
 
-      expect(biller?.itemCode).toBe('group');
-      expect(biller?.billItems).toBeUndefined();
+      // The nested list's doubt does not reach its outer sibling, and the
+      // group left with no children is dropped rather than kept as an
+      // open-amount product.
+      expect(items?.map((item) => [item.itemCode, item.amount])).toEqual([
+        ['ok', 1000],
+      ]);
     });
   });
 

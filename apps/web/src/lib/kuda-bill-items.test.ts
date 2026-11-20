@@ -140,4 +140,160 @@ describe('mapKudaBillItems', () => {
       expect(mockLoggerWarn).not.toHaveBeenCalled();
     });
   });
+
+  describe('bugfix: a plan group with only rejected children became an open-amount product', () => {
+    const openAirtime = {
+      itemCode: 'KUD-AIR-MTN',
+      itemName: 'MTN Airtime',
+      amount: 0,
+      isFixedPrice: false,
+    };
+
+    it('drops a group whose fixed children all have unreadable prices', () => {
+      // Kept with no children, the group would read as an open-amount leaf
+      // that can be bought at any amount.
+      const items = mapKudaBillItems([
+        openAirtime,
+        {
+          itemCode: 'GRP-MONTHLY',
+          itemName: 'Monthly Plans',
+          amount: 0,
+          isFixedPrice: false,
+          billItems: [
+            {
+              itemCode: 'P1',
+              itemName: '1GB',
+              amount: 'oops',
+              isFixedPrice: true,
+            },
+            { itemCode: 'P2', itemName: '2GB', isFixedPrice: true },
+            { name: 'no code', amount: 100000, isFixedPrice: true },
+          ],
+        },
+      ]);
+
+      expect(items?.map((item) => item.itemCode)).toEqual(['KUD-AIR-MTN']);
+    });
+
+    it('drops a group whose fixed children were all dropped as naira-looking', () => {
+      const items = mapKudaBillItems([
+        openAirtime,
+        {
+          itemCode: 'GRP-DAILY',
+          itemName: 'Daily Plans',
+          amount: 0,
+          isFixedPrice: false,
+          billItems: [
+            {
+              itemCode: 'D1',
+              itemName: '100MB',
+              amount: 100,
+              isFixedPrice: true,
+            },
+            {
+              itemCode: 'D2',
+              itemName: '200MB',
+              amount: 200,
+              isFixedPrice: true,
+            },
+          ],
+        },
+      ]);
+
+      expect(items?.map((item) => item.itemCode)).toEqual(['KUD-AIR-MTN']);
+    });
+
+    it('returns nothing when the only item is such a group', () => {
+      expect(
+        mapKudaBillItems([
+          {
+            itemCode: 'GRP',
+            itemName: 'Plans',
+            amount: 0,
+            billItems: [
+              { itemCode: 'P', itemName: 'P', amount: 'x', isFixedPrice: true },
+            ],
+          },
+        ])
+      ).toBeUndefined();
+    });
+
+    it('keeps a group that still has a readable child, with only that child', () => {
+      const [group] =
+        mapKudaBillItems([
+          {
+            itemCode: 'GRP',
+            itemName: 'Plans',
+            amount: 0,
+            billItems: [
+              {
+                itemCode: 'BAD',
+                itemName: 'Bad',
+                amount: 'oops',
+                isFixedPrice: true,
+              },
+              {
+                itemCode: 'OK',
+                itemName: 'Ok',
+                amount: 100000,
+                isFixedPrice: true,
+              },
+            ],
+          },
+        ]) ?? [];
+
+      expect(group?.billItems?.map((item) => item.itemCode)).toEqual(['OK']);
+    });
+
+    it('keeps open-amount items that never had children, even with an empty list', () => {
+      const items = mapKudaBillItems([
+        openAirtime,
+        {
+          ...openAirtime,
+          itemCode: 'KUD-ELE-EKED-002',
+          itemName: 'EKEDC PREPAID',
+          billItems: [],
+        },
+        {
+          ...openAirtime,
+          itemCode: 'KUD-ELE-EKED-001',
+          itemName: 'EKEDC POSTPAID',
+          BillItems: [],
+        },
+      ]);
+
+      expect(items?.map((item) => item.itemCode)).toEqual([
+        'KUD-AIR-MTN',
+        'KUD-ELE-EKED-002',
+        'KUD-ELE-EKED-001',
+      ]);
+    });
+
+    it('keeps a group whose open-amount children survive while its fixed ones are dropped', () => {
+      const [group] =
+        mapKudaBillItems([
+          {
+            itemCode: 'GRP',
+            itemName: 'Mixed',
+            amount: 0,
+            billItems: [
+              {
+                itemCode: 'OPEN',
+                itemName: 'Open top-up',
+                amount: 0,
+                isFixedPrice: false,
+              },
+              {
+                itemCode: 'CHEAP',
+                itemName: 'Cheap',
+                amount: 100,
+                isFixedPrice: true,
+              },
+            ],
+          },
+        ]) ?? [];
+
+      expect(group?.billItems?.map((item) => item.itemCode)).toEqual(['OPEN']);
+    });
+  });
 });

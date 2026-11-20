@@ -109,6 +109,12 @@ function sentInNaira(
 
 interface MappedBillItem {
   item: BillItem;
+  /**
+   * A container (plan group) whose children were all rejected. Kept as it
+   * is it would read as an open-amount product, which can be bought at any
+   * amount, so it is dropped instead.
+   */
+  emptiedContainer: boolean;
   /** This fixed price suggests Kuda sent the list in naira, not kobo. */
   unitInDoubt: boolean;
 }
@@ -158,6 +164,8 @@ function mapBillItem(raw: unknown): MappedBillItem | null {
     });
   }
 
+  const rawChildren = item.BillItems ?? item.billItems;
+  const billItems = mapKudaBillItems(rawChildren);
   const mapped: BillItem = {
     itemCode,
     itemName,
@@ -166,9 +174,13 @@ function mapBillItem(raw: unknown): MappedBillItem | null {
       item.ItemCurrencySymbol ?? item.itemCurrencySymbol ?? 'NGN',
     isAmountFixed,
     itemFee: koboToNaira(item.ItemFee ?? item.itemFee),
-    billItems: mapKudaBillItems(item.BillItems ?? item.billItems),
+    billItems,
   };
-  return { item: mapped, unitInDoubt };
+  return {
+    emptiedContainer: !billItems && Boolean(rawChildren?.length),
+    item: mapped,
+    unitInDoubt,
+  };
 }
 
 /**
@@ -198,6 +210,7 @@ export function mapKudaBillItems(
     });
   }
   const billItems = mapped
+    .filter((entry) => !entry.emptiedContainer)
     .map((entry) => entry.item)
     .filter((item) => !(listUnitInDoubt && item.isAmountFixed));
 

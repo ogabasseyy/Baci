@@ -14,7 +14,7 @@ const MONNIFY_DUPLICATE_REFERENCE_PATTERN =
 
 /** "not a duplicate", "no duplicate reference": says the opposite of a duplicate. */
 const NEGATED_DUPLICATE =
-  /\b(?:not|no|never|n't)\s+(?:an?\s+)?(?:\w+\s+)?duplicate\w*(?:\s+\w+)?|\bduplicate\w*(?:\s+\w+){0,2}?\s+(?:was\s+|were\s+|is\s+|has\s+been\s+)?(?:not|never)\s+(?:\w+\s+)?(?:found|detected|present|seen)\b/gi;
+  /\b(?:not|no|never|n't)\s+(?:an?\s+)?(?:\w+\s+)?duplicate\w*(?:\s+\w+)?|\bduplicate\w*(?:\s+\w+){0,2}?\s+(?:was\s+|were\s+|is\s+|has\s+been\s+)?(?:not|never)\s+(?:\w+\s+)?(?:found|detected|present|seen)\b|\b(?:has|have|had|is|was|been)?\s*(?:not|never|n't)\s+(?:\w+\s+)?(?:previously|already)\s+(?:been\s+)?(?:used|processed|submitted|vended|delivered|paid|completed|fulfilled)\b/gi;
 
 /** Whether a Monnify message says the vend reference was already used. */
 export function isMonnifyDuplicateReferenceText(

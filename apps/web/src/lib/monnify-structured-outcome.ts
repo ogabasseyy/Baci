@@ -123,7 +123,7 @@ export function readStructuredOutcome(
   found: StructuredOutcome,
   depth = 0,
   inBody = false,
-  parentKey = ''
+  underNonVend = false
 ): void {
   if (!answer || typeof answer !== 'object') {
     return;
@@ -144,7 +144,7 @@ export function readStructuredOutcome(
         !NON_VEND_STATUS_PREFIX.test(key) &&
         typeof item === 'string' &&
         // A bare `status` under customer/product/... describes that object.
-        !(key === 'status' && NON_VEND_PARENT.test(parentKey))
+        !(key === 'status' && underNonVend)
       ) {
         const status = item.replace(/[\s_-]/g, '').toUpperCase();
         found.running ||= RUNNING_STATUSES.has(status);
@@ -185,7 +185,7 @@ export function readStructuredOutcome(
       if (
         !PAYMENT_LEVEL_FLAG.test(key) &&
         (inBody || VEND_FLAG_KEY.test(key)) &&
-        !NON_VEND_PARENT.test(parentKey)
+        !underNonVend
       ) {
         found.vendDone ||= DONE_FLAG.test(key);
         // `failed`/`failure` inside the body prove it; "reversed" or "declined"
@@ -200,7 +200,8 @@ export function readStructuredOutcome(
       found,
       depth + 1,
       inBody || key === 'responsebody',
-      key
+      // Any excluded ancestor (request, refund, error...) excludes the subtree.
+      underNonVend || NON_VEND_PARENT.test(key)
     );
   }
 }

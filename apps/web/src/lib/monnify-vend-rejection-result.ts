@@ -61,7 +61,12 @@ export function buildMonnifyBusinessRejectionResult({
   // A real voucher token dominates: refunding after a delivered voucher pays
   // twice, so a token still holds even beside a 401/403/429 code.
   const isAuthOrThrottleCode =
-    /^\s*0*(?:401|403|429)\s*$/.test(parsedEnvelope.responseCode) &&
+    (/^\s*0*(?:401|403|429)\s*$/.test(parsedEnvelope.responseCode) ||
+      // Authentication wording is refund-only whatever the code and body
+      // (owner decision): "Invalid access token" with D01 and a PENDING echo.
+      mentionsMonnifyAuthWording(
+        `${rawMessage} ${joinMonnifyAnswerStrings(envelope)}`
+      )) &&
     !hasBodyToken(envelope);
   if (
     !providerDefiniteFailure &&

@@ -43,8 +43,10 @@ to settle first. An automatic alert for this query is a follow-up PR.
 
 ## Wording decisions (kept fail-closed)
 
-- `reversed` / `declined` alone do not prove the vend failed: such rows stay
-  held until support confirms in Monnify's dashboard.
+- On a requery, `reversed` / `declined` alone do not prove the vend failed: the
+  row stays held until support confirms in Monnify's dashboard. A fresh vend
+  that Monnify plainly declines (no pending/duplicate/reference signal) is a
+  refusal and is refunded.
 - 401/403 login rejections are refunded even if the body shows a vend status
   (owner decision 2026-11-18).
 - An HTTP 5xx status is retried with the same request reference, which Monnify

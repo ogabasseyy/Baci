@@ -138,7 +138,9 @@ export class MonnifyHttpError extends Error {
       this.status === 401 ||
       this.status === 403 ||
       this.status === 429 ||
-      /^0*(?:401|403|429)$/.test(this.#reading.responseCode ?? '')
+      /^0*(?:401|403|429)$/.test(this.#reading.responseCode ?? '') ||
+      // Authentication wording is refund-only whatever the code and body.
+      this.#reading.mentionsAuthWording
     ) {
       return this.#reading.bodyHasToken;
     }
@@ -151,6 +153,11 @@ export class MonnifyHttpError extends Error {
         requestReference
       )
     );
+  }
+
+  /** An explicit vend-level FAILED with nothing open (proof for a requery). */
+  get provesVendFailure() {
+    return this.#reading.provesVendFailure;
   }
 
   /** The body carries a real voucher token: a vend may have delivered. */

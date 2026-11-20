@@ -11,7 +11,10 @@ import {
 } from './monnify-rejection-vend-reference';
 import { readMonnifyResponseCode } from './monnify-response-code';
 import { reportsMonnifyUnexpectedError } from './monnify-unexpected-error-text';
-import { isMonnifyUnresolvedAnswer } from './monnify-unresolved-answer';
+import {
+  hasMonnifyExplicitVendFailure,
+  isMonnifyUnresolvedAnswer,
+} from './monnify-unresolved-answer';
 import { hasMonnifyVendEvidence } from './monnify-vend-evidence';
 import { mentionsMonnifyVendEvidence } from './monnify-vend-evidence-text';
 import { isMonnifyVendOutcomeText } from './monnify-vend-outcome';
@@ -26,6 +29,8 @@ export interface MonnifyAnswerReading {
   showsVendEvidence: boolean;
   mentionsAuthWording: boolean;
   responseCode: string | undefined;
+  /** The body is an explicit vend-level failure with nothing open (a requery proof). */
+  provesVendFailure: boolean;
   /** The body carries a real (non-placeholder) voucher token. */
   bodyHasToken: boolean;
   /** The body leaves the vend's outcome open (see isMonnifyUnresolvedAnswer). */
@@ -85,6 +90,10 @@ export function readMonnifyAnswer(
     // "Unauthorized" there while keeping a 400 status).
     mentionsAuthWording: mentionsMonnifyAuthWording(text),
     responseCode: readMonnifyResponseCode(parsed),
+    provesVendFailure:
+      !hasBodyToken(parsed) &&
+      hasMonnifyExplicitVendFailure(parsed) &&
+      !isMonnifyUnresolvedAnswer({ answer: parsed, wording: text }),
     bodyHasToken: hasBodyToken(parsed),
     leavesOutcomeOpen:
       hasBodyToken(parsed) ||

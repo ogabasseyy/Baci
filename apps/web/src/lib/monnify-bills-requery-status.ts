@@ -2,6 +2,7 @@ import {
   monnifyEnvelopeSchema,
   requeryResponseBodySchema,
 } from '@/schemas/monnify-bills-schema';
+import { MonnifyHttpError } from './monnify-bills-errors';
 import { monnifyRequest } from './monnify-bills-request';
 import {
   getMonnifyEnvelopeMessage,
@@ -27,10 +28,30 @@ export async function checkTransactionStatus(
   responseCode?: string;
   units?: string;
 }> {
-  const envelope = await monnifyRequest(
-    `/api/v1/vas/bills-payment/requery?reference=${encodeURIComponent(transactionReference)}`,
-    { method: 'GET', timeoutMs: MONNIFY_FINANCIAL_TIMEOUT_MS }
-  );
+  let envelope: unknown;
+  try {
+    envelope = await monnifyRequest(
+      `/api/v1/vas/bills-payment/requery?reference=${encodeURIComponent(transactionReference)}`,
+      { method: 'GET', timeoutMs: MONNIFY_FINANCIAL_TIMEOUT_MS }
+    );
+  } catch (error) {
+    // A 4xx whose body names the vend as FAILED (nothing open, no token) is
+    // proof of failure, like the same body in an HTTP-200 rejection. Anything
+    // else (auth, throttle, 5xx, unclear) is rethrown and the row stays put.
+    if (
+      error instanceof MonnifyHttpError &&
+      error.isClientError &&
+      ![401, 403, 429].includes(error.status) &&
+      error.provesVendFailure
+    ) {
+      return {
+        status: 'failed',
+        responseCode: error.responseCode,
+        message: error.diagnosticMessage,
+      };
+    }
+    throw error;
+  }
   const parsed = monnifyEnvelopeSchema(requeryResponseBodySchema).parse(
     envelope
   );

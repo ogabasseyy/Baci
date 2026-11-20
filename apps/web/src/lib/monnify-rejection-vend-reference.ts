@@ -12,7 +12,7 @@ interface Found {
 type KeyMatcher = (
   key: string,
   insideBody: boolean,
-  parentKey: string
+  underNonVend: boolean
 ) => boolean;
 
 /**
@@ -27,7 +27,7 @@ function collectBodyField(
   insideBody = false,
   depth = 0,
   anywhere = false,
-  parentKey = ''
+  underNonVend = false
 ): void {
   if (!answer || typeof answer !== 'object' || depth > MAX_DEPTH) {
     return;
@@ -37,7 +37,7 @@ function collectBodyField(
     : Object.entries(answer);
   for (const [rawKey, value] of children) {
     const key = normaliseKey(rawKey);
-    if ((insideBody || anywhere) && matches(key, insideBody, parentKey)) {
+    if ((insideBody || anywhere) && matches(key, insideBody, underNonVend)) {
       // An array value ("transactionReference": ["MFBP-1"]) is read item by item.
       for (const item of Array.isArray(value) ? value : [value]) {
         if (typeof item === 'string' || typeof item === 'number') {
@@ -55,7 +55,7 @@ function collectBodyField(
       insideBody || key === 'responsebody',
       depth + 1,
       anywhere,
-      key
+      underNonVend || NON_VEND_PARENT.test(key)
     );
   }
 }
@@ -78,10 +78,10 @@ const isVendReferenceKey: KeyMatcher = (key) => key === 'vendreference';
 // (customer references are echoes), not a vend.
 const NON_VEND_PARENT =
   /^(?:customer|validation|request|product|biller|item|service|package|plan|account|merchant|user|refund|reversal|settlement|callback|webhook|notification|chargeback|error|exception|auth|authentication|credential|login|access|oauth)s?$/;
-const isProviderReferenceKey: KeyMatcher = (key, _insideBody, parentKey) =>
+const isProviderReferenceKey: KeyMatcher = (key, _insideBody, underNonVend) =>
   REFERENCE_LIKE_KEY.test(key) &&
   !ECHO_REFERENCE_PREFIX.test(key) &&
-  !((key === 'reference' || key === 'ref') && NON_VEND_PARENT.test(parentKey));
+  !((key === 'reference' || key === 'ref') && underNonVend);
 
 /**
  * The reference at the shallowest depth. When two different references sit at

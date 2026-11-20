@@ -83,7 +83,10 @@ const bankRequest = {
 };
 
 it('selects the enabled offer for a fresh checkout owned by the buyer', async () => {
-  const result = await prepareBankCardOfferOrder(bankRequest);
+  const result = await prepareBankCardOfferOrder({
+    ...bankRequest,
+    userEmail: ' BUYER@Example.Test ',
+  });
 
   expect(result).toMatchObject({
     kind: 'checkout',

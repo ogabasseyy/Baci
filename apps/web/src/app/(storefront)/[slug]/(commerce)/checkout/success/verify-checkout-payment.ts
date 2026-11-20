@@ -239,6 +239,11 @@ export async function verifyCheckoutPayment(
           ...(verifiedCurrency ? { currency: verifiedCurrency } : {}),
         });
       }
+    } else if (reference.startsWith('BCO-') && data.status === 'reversed') {
+      // A reversal can follow a capture. Keep the shopper on reconciliation
+      // while the provider's reversal and the order are matched.
+      setStatus('reconciling');
+      setOrderNumber(data.orderNumber || reference.slice(0, 8).toUpperCase());
     } else if (
       data.status === 'failed' ||
       data.status === 'cancelled' ||

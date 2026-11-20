@@ -125,6 +125,28 @@ describe('verifyCheckoutPayment', () => {
     expect(callbacks.scheduleFailedRedirect).not.toHaveBeenCalled();
   });
 
+  it('shows reconciliation for a reversed bank-offer payment without triggering retry', async () => {
+    request.mockResolvedValue(
+      Response.json({
+        success: false,
+        status: 'reversed',
+        orderNumber: 'ORD-1',
+      })
+    );
+    const callbacks = handlers();
+
+    await verifyCheckoutPayment(
+      { ...params, reference: `BCO-${'a'.repeat(32)}` },
+      callbacks
+    );
+
+    expect(callbacks.setStatus).toHaveBeenCalledWith('reconciling');
+    expect(callbacks.setOrderNumber).toHaveBeenCalledWith('ORD-1');
+    expect(callbacks.clearCart).not.toHaveBeenCalled();
+    expect(callbacks.capturePaymentFailed).not.toHaveBeenCalled();
+    expect(callbacks.scheduleFailedRedirect).not.toHaveBeenCalled();
+  });
+
   it.each([
     { status: 'failed', reason: 'payment_failed' },
     { status: 'cancelled', reason: 'payment_cancelled' },

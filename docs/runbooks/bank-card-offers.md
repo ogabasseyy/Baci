@@ -16,9 +16,9 @@ For an initialization review, look up the original reference with Paystack. If P
 
 The checkout URL validators in TypeScript and migration `20261119153530` both preserve Paystack query parameters. The database recovery test exercises saving and restoring a URL with a query string.
 
-When Paystack verification reports a failed, abandoned, or cancelled attempt, checkout stops returning the old URL and opens a review. Operations must confirm that this reference cannot accept a charge before retiring it, including when the checkout was already initialized.
+When Paystack verification reports a failed, abandoned, cancelled, or reversed attempt, checkout stops returning the old URL and opens a review. For reversals, the storefront shows reconciliation and keeps the shopper on the order status screen. Operations must confirm that this reference cannot accept a charge before retiring it, including when the checkout was already initialized.
 
-A terminal provider status belongs in terminal review only when the reference, payment domain, and currency match the saved attempt. Otherwise the evidence goes to the ambiguous capture review queue and cannot establish that the saved attempt is terminal.
+A terminal provider status belongs in terminal review only when the reference, payment domain, and currency match the saved attempt. Otherwise the evidence goes to the ambiguous capture review queue and cannot establish that the saved attempt is terminal. A terminal echo may carry an amount that differs from the order total. Use the original Paystack reference to confirm what happened before retiring the attempt. Only validated successful capture evidence can authorize settlement or a refund.
 
 For a capture review, reconcile the payment with Paystack under the original reference. Preserve the saved order and attempt while evaluating the provider evidence. The customer verification endpoint reports this state as pending with HTTP 202. The webhook returns HTTP 200 once the review is recorded so Paystack can stop retrying the delivery.
 

@@ -117,6 +117,10 @@ export function hasMonnifyDeliveredVendStatus(answer: unknown): boolean {
   settleVendPrecedence(outcome);
   // A running vend (PENDING...) may still deliver, so it is never retried.
   return (
-    outcome.running || outcome.vendDone || (outcome.done && !outcome.vendFailed)
+    outcome.running ||
+    // A vend state Monnify did not name (UNKNOWN...) proves nothing: no retry.
+    outcome.unknown ||
+    outcome.vendDone ||
+    (outcome.done && !outcome.vendFailed)
   );
 }

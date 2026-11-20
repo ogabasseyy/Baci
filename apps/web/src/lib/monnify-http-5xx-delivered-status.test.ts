@@ -39,6 +39,7 @@ describe('bugfix: an HTTP 5xx body that says the vend was delivered or is runnin
     'COMPLETED',
     'PENDING',
     'PROCESSING',
+    'UNKNOWN',
   ])('holds an HTTP 500 with vendStatus %s', async (vendStatus) => {
     mockHttpError(500, { responseBody: { vendStatus } });
 

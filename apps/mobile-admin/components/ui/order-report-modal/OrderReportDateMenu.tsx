@@ -1,5 +1,4 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
-import type { GestureResponderEvent } from 'react-native';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { RADIUS, SPACING, TYPOGRAPHY } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
@@ -31,10 +30,6 @@ export function OrderReportDateMenu({
 }: OrderReportDateMenuProps) {
   const { colors, shadows } = useTheme();
   const canChangeDate = Boolean(onCustomRangeSelect && onToggleDropdown);
-  const handleToggleDropdown = (event: GestureResponderEvent) => {
-    event.stopPropagation();
-    onToggleDropdown?.();
-  };
 
   return (
     <View style={styles.section}>
@@ -61,7 +56,7 @@ export function OrderReportDateMenu({
             accessibilityHint="Opens date range preset menu"
             accessibilityLabel="Change date range"
             accessibilityRole="button"
-            onPress={handleToggleDropdown}
+            onPress={onToggleDropdown}
             style={styles.changeButton}
           >
             <Text style={[styles.changeText, { color: colors.primary }]}>

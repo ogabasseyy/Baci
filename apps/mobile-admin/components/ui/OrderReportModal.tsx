@@ -60,11 +60,16 @@ export default function OrderReportModal({
 
   const stats = { totalOrders, totalRevenue, pendingCount, completedCount };
 
+  const handleClose = () => {
+    setShowDropdown(false);
+    onClose();
+  };
+
   const handleExport = async () => {
     setIsExporting(true);
     try {
       await onExport();
-      onClose();
+      handleClose();
     } catch (error) {
       console.error(error);
     }
@@ -80,7 +85,7 @@ export default function OrderReportModal({
         businessName,
         logoUrl
       );
-      onClose();
+      handleClose();
     } catch (error) {
       console.error(error);
     }
@@ -93,27 +98,20 @@ export default function OrderReportModal({
       transparent
       visible={visible}
       animationType="fade"
-      onRequestClose={onClose}
+      onRequestClose={handleClose}
     >
       <ModalSafeArea
         backdropColor="rgba(0,0,0,0.5)"
-        onBackdropPress={() => {
-          setShowDropdown(false);
-          onClose();
-        }}
+        onBackdropPress={handleClose}
         style={styles.overlay}
       >
-        <Pressable
-          accessible={false}
+        <View
           style={[
             styles.container,
             { backgroundColor: colors.card, maxHeight: '80%' },
             shadows.lg,
           ]}
-          onPress={(e) => {
-            if (showDropdown) setShowDropdown(false);
-            e.stopPropagation();
-          }}
+          testID="order-report-panel"
         >
           {/* Header */}
           <View style={[styles.header, { borderBottomColor: colors.border }]}>
@@ -135,7 +133,7 @@ export default function OrderReportModal({
               </Text>
             </View>
             <Pressable
-              onPress={onClose}
+              onPress={handleClose}
               hitSlop={10}
               accessibilityRole="button"
               accessibilityLabel="Close report"
@@ -236,7 +234,7 @@ export default function OrderReportModal({
               )}
             </Pressable>
           </View>
-        </Pressable>
+        </View>
       </ModalSafeArea>
     </Modal>
   );

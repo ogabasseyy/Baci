@@ -124,7 +124,22 @@ vi.mock('react-native', () => ({
     create: (styles: Record<string, unknown>) => styles,
   },
   Text: ({ children }: { children?: ReactNode }) => <span>{children}</span>,
-  View: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  View: ({
+    children,
+    style,
+    testID,
+  }: {
+    children?: ReactNode;
+    style?: CSSProperties | CSSProperties[];
+    testID?: string;
+  }) => (
+    <div
+      data-testid={testID}
+      style={Array.isArray(style) ? Object.assign({}, ...style) : style}
+    >
+      {children}
+    </div>
+  ),
 }));
 
 describe('OrderReportModal', () => {
@@ -196,6 +211,7 @@ describe('OrderReportModal', () => {
     const body = screen.getByRole('region', {
       name: 'Scrollable report contents',
     });
+    fireEvent.click(body);
     expect(body).toContainElement(
       screen.getByRole('button', { name: 'Select custom date range' })
     );
@@ -221,7 +237,7 @@ describe('OrderReportModal', () => {
       'data-orientations',
       'portrait,portrait-upside-down,landscape'
     );
-    expect(screen.getByText('Orders Report').closest('button')).toHaveStyle({
+    expect(screen.getByTestId('order-report-panel')).toHaveStyle({
       maxHeight: '80%',
     });
   });

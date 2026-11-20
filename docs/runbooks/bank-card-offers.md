@@ -4,7 +4,7 @@ Bank offers require a signed-in shopper whose account email matches the checkout
 
 `BANK_CARD_OFFERS` in the server is the source of truth for merchant eligibility, offer dates, eligible products, discount rate and cap. The checkout route signs the quote and order together. The database checks that proof, validates the allocations against the order, and saves the result for verification and refunds. It does not maintain a second offer configuration.
 
-Web and mobile clients must send `expected_total` for bank-offer orders. It is the total the shopper accepted after the offer and fees. If it is missing or differs from the server quote in kobo, checkout returns `BANK_CARD_OFFER_TOTAL_MISMATCH` before creating an order. Clients should refresh the total and ask the shopper to confirm it.
+Web and mobile clients must send `expected_total` for bank-offer orders. It is the total the shopper accepted after the offer, shipping, exclusive tax, gift wrapping, and assurance fees. If it is missing or differs from the server quote in kobo, checkout returns `BANK_CARD_OFFER_TOTAL_MISMATCH` before creating an order. Clients should refresh the total and ask the shopper to confirm it.
 
 A bank-offer order requires one verified Paystack capture at the saved discounted total. The database rejects other payment legs, including manual and fallback payments, because they cannot prove eligibility for that discount. If a shopper wants to switch payment methods, reconcile the original attempt and cancel the bank-offer order before creating a standard order.
 
@@ -26,7 +26,7 @@ For a capture review, reconcile the payment with Paystack under the original ref
 
 [Paystack's webhook list](https://paystack.com/docs/payments/webhooks/#types-of-events) includes `charge.success` for captures and separate refund and dispute notifications. The payment webhook dispatches Paystack refund notifications before the capture branch. The refund reconciliation worker checks recorded refunds independently of shopper visits. Use Paystack transaction verification to establish a `reversed` charge status. An externally initiated dispute or reversal with no tracked refund may still require operations to reconcile it with the saved order.
 
-When a signed webhook has no matching saved bank-offer attempt, platform operations should look up the `payment_match_zero_candidates` review by `paystack_ref`. The row is intentionally unassigned because tenant and order identity come from the saved attempt. The webhook metadata does not establish that relationship.
+When a signed webhook has no matching saved bank-offer attempt, platform operations should look up the `payment_match_zero_candidates` review by `paystack_ref`. The row is intentionally unassigned because tenant and order identity come from the saved attempt. The webhook metadata does not establish that relationship. The platform queue deduplicates open rows by issue type and Paystack reference, and the webhook acknowledges a duplicate.
 
 Hosted storefront callbacks use HTTPS with both Paystack test and live keys. Non-production localhost can use HTTP for local QA with mocked Paystack responses.
 
@@ -44,6 +44,6 @@ Before activating a campaign, verify the exact Paystack authorization issuer lab
 
 Native verification requires the signed-in buyer’s ownership proof and checks the merchant when a storefront slug is supplied. It records a verified terminal review before returning the terminal status. A provider mismatch creates a scoped capture review and keeps the payment pending. A failed review write returns a retryable 503. Paystack is rechecked before reporting success even for an already-paid order with confirmed inventory. A verified payment stays pending after the buyer-owned sweep marker is confirmed. A failed marker write returns a retryable 503. Settlement stays on the webhook and worker paths.
 
-Automatic cancellation refunds use the exact kobo amount from the verified payment leg. Partial-item refunds are handled by operations using the saved per-unit net allocations and the original capture.
+Automatic cancellation refunds use the exact kobo amount from the verified payment leg. A primary key permits one saved attempt per order, and the completion guard rejects a second transaction outside that attempt. Partial-item refunds are handled by operations using the saved per-unit net allocations and the original capture.
 
 If capture lookup fails before the final worker attempt, the cancellation step is recorded as a retryable failure with any accepted refund IDs preserved. The drain reclaims failed steps within its retry budget. On the final attempt, unresolved legs enter review with the capture lookup outage recorded.

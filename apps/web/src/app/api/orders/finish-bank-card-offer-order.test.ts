@@ -24,7 +24,7 @@ function setup() {
         quantity: 1,
       },
     ],
-    fees: [],
+    fees: [0, 0, 0] as const,
     currency: 'NGN',
     expectedTotal: 95,
     hasIncompatibleDiscount: false,
@@ -36,7 +36,10 @@ function setup() {
 }
 
 it.each([
-  { change: { fees: [0.005] }, code: 'BANK_CARD_OFFER_AMOUNT_INVALID' },
+  {
+    change: { fees: [0.005, 0, 0] as const },
+    code: 'BANK_CARD_OFFER_AMOUNT_INVALID',
+  },
   {
     change: { hasIncompatibleDiscount: true },
     code: 'BANK_CARD_OFFER_UNAVAILABLE',
@@ -143,4 +146,30 @@ it('returns the committed order even if a post-checkout effect fails', async () 
 
   expect(response.status).toBe(201);
   await expect(response.json()).resolves.toEqual({ order });
+});
+
+it('includes server-computed exclusive tax in the exact amount before order creation', async () => {
+  const { options, rpc } = setup();
+  const taxAmount = 2.5;
+  rpc.mockResolvedValue({
+    data: { id: 'taxed-order', total: 97.5 },
+    error: null,
+  });
+  const taxed = {
+    ...options,
+    fees: [0, taxAmount, 0] as const,
+    orderArgs: { p_tax_amount: taxAmount },
+  };
+
+  expect((await finishBankCardOfferOrder(taxed)).status).toBe(409);
+  expect(rpc).not.toHaveBeenCalled();
+  expect(
+    (await finishBankCardOfferOrder({ ...taxed, expectedTotal: 97.5 })).status
+  ).toBe(201);
+  expect(rpc).toHaveBeenCalledWith(
+    'create_storefront_bank_card_offer_order',
+    expect.objectContaining({
+      p_order: expect.objectContaining({ tax_amount: taxAmount }),
+    })
+  );
 });

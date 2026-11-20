@@ -38,14 +38,20 @@ export async function finishBankCardOfferOrder({
     product_id?: string | null;
     quantity: number;
   }[];
-  fees: readonly number[];
+  fees: readonly [shipping: number, exclusiveTax: number, giftWrapping: number];
   currency: string;
   expectedTotal?: number | null;
   hasIncompatibleDiscount: boolean;
   merchantId: string;
   merchantSlug: string;
 }) {
-  const feeAmounts = [...fees, ...items.map((item) => item.assurance_fee)];
+  const [shipping, exclusiveTax, giftWrapping] = fees;
+  const feeAmounts = [
+    shipping,
+    exclusiveTax,
+    giftWrapping,
+    ...items.map((item) => item.assurance_fee),
+  ];
   if (
     items.some((item) => !isMajorAmountRepresentable(item.price, 'NGN')) ||
     feeAmounts.some((amount) => !isMajorAmountRepresentable(amount, 'NGN')) ||

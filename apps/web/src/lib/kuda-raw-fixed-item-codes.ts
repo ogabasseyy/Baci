@@ -26,11 +26,14 @@ export function collectRawFixedItemCodes(
   for (const raw of rawItems) {
     if (!raw || typeof raw !== 'object') continue;
     const item = raw as RawItemLike;
-    const isFixed =
-      (item.IsAmountFixed ??
+    // Read like the mapper does (any truthy flag is fixed), so a dropped
+    // fixed item is never missed here.
+    const isFixed = Boolean(
+      item.IsAmountFixed ??
         item.isAmountFixed ??
         item.IsFixedPrice ??
-        item.isFixedPrice) === true;
+        item.isFixedPrice
+    );
     const code =
       normalizeKudaString(item.ItemCode) ??
       normalizeKudaString(item.itemCode) ??

@@ -35,17 +35,18 @@ describe('assertKudaBillItemPriceCurrent when Kuda is unavailable', () => {
   describe('when Kuda fails or answers with an empty list', () => {
     it.each([
       [
-        'fails',
+        'times out',
         () =>
-          mockGetBillersByCategory.mockRejectedValue(new Error('Kuda down')),
+          mockGetBillersByCategory.mockRejectedValue(
+            new Error('Kuda GET_BILLERS_BY_TYPE request timed out')
+          ),
       ],
-      ['is empty', () => mockGetBillersByCategory.mockResolvedValue([])],
       [
-        'lists billers without packages',
+        'drops the connection',
         () =>
-          mockGetBillersByCategory.mockResolvedValue([
-            startimes({ billItems: [] }),
-          ]),
+          mockGetBillersByCategory.mockRejectedValue(
+            new TypeError('fetch failed')
+          ),
       ],
     ])('keeps blocking stale prices with the last good list when Kuda %s', async (_label, breakKuda) => {
       vi.useFakeTimers();
@@ -61,6 +62,39 @@ describe('assertKudaBillItemPriceCurrent when Kuda is unavailable', () => {
         assertKudaBillItemPriceCurrent(superPackage)
       ).resolves.toBeUndefined();
       expect(mockLoggerWarn).toHaveBeenCalled();
+    });
+
+    it.each([
+      ['is empty', () => mockGetBillersByCategory.mockResolvedValue([])],
+      [
+        'lists billers without packages',
+        () =>
+          mockGetBillersByCategory.mockResolvedValue([
+            startimes({ billItems: [] }),
+          ]),
+      ],
+      [
+        'sends a list refused as priced in naira',
+        () =>
+          mockGetBillersByCategory.mockRejectedValue(
+            new Error('Bill prices could not be confirmed as kobo')
+          ),
+      ],
+    ])('refuses instead of using the last good list when Kuda %s', async (_label, breakKuda) => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-11-17T10:00:00Z'));
+      await assertKudaBillItemPriceCurrent(superPackage);
+      vi.setSystemTime(new Date('2026-11-17T12:00:00Z'));
+      breakKuda();
+
+      await expect(
+        assertKudaBillItemPriceCurrent(superPackage)
+      ).rejects.toThrow(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
+      // Still refused (not the saved list) while Kuda isn't asked again.
+      vi.setSystemTime(new Date('2026-11-17T12:00:10Z'));
+      await expect(
+        assertKudaBillItemPriceCurrent(superPackage)
+      ).rejects.toThrow(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
     });
 
     it('fails a fixed-price cable package closed with no list from the past day', async () => {
@@ -183,7 +217,7 @@ describe('assertKudaBillItemPriceCurrent when Kuda is unavailable', () => {
       });
     });
 
-    it('keeps the last good electricity list when Kuda lists no packages', async () => {
+    it('refuses rather than use the last good electricity list when Kuda lists no packages', async () => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date('2026-11-17T10:00:00Z'));
       mockGetBillersByCategory.mockResolvedValue([aedc([fixedMeterTopUp])]);
@@ -191,9 +225,9 @@ describe('assertKudaBillItemPriceCurrent when Kuda is unavailable', () => {
       vi.setSystemTime(new Date('2026-11-17T12:00:00Z'));
       mockGetBillersByCategory.mockResolvedValue([aedc([])]);
 
-      await expect(
-        assertKudaBillItemPriceCurrent(purchase)
-      ).resolves.toBeUndefined();
+      await expect(assertKudaBillItemPriceCurrent(purchase)).rejects.toThrow(
+        KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE
+      );
       expect(mockLoggerWarn).toHaveBeenCalledWith(
         expect.objectContaining({
           message: 'Kuda price list came back without packages',

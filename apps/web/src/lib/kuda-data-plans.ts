@@ -9,8 +9,8 @@ import { KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE } from '@/lib/kuda-bill-item-price-
 import { logger } from '@/lib/logger';
 import { formatNaira } from './kuda-format-naira';
 import { normalizeKudaItemCode } from './kuda-item-code';
+import { isKudaNoResponse } from './kuda-no-response';
 import { providerMatchesNetwork } from './kuda-provider-matches-network';
-import { overlayUnreadableCodes } from './kuda-unreadable-overlay';
 
 const DATA_PLAN_CACHE_TTL_MS = 60_000;
 
@@ -36,7 +36,8 @@ const DATA_PLAN_RETRY_AFTER_MS = 30_000;
 /** A fixed plan price under ₦10 means the list's units are in doubt. */
 const IMPLAUSIBLE_PLAN_PRICE_NAIRA = 10;
 
-let lastFailedDataPlanFetchAt: number | undefined;
+/** When the last fetch failed, and whether Kuda's answer was refused. */
+let lastFailedDataPlanFetch: { at: number; refused: boolean } | undefined;
 
 let dataProvidersCache:
   | {
@@ -48,7 +49,7 @@ let dataProvidersCache:
 
 export function clearKudaDataPlanCacheForTests() {
   dataProvidersCache = undefined;
-  lastFailedDataPlanFetchAt = undefined;
+  lastFailedDataPlanFetch = undefined;
 }
 
 function normalizeComparable(value: string) {
@@ -88,30 +89,29 @@ function lastGoodDataProviders(at: number): Biller[] | null {
 }
 
 /**
- * The current Kuda data plans, or the last good list from the past day when
- * Kuda fails or answers without any packages (which never replaces a good
- * list). After such a fetch Kuda is not asked again for 30 seconds. Null
- * when neither exists: the caller must not trust the client's amount then, since apps may still hold
- * plan prices from before Kuda's kobo amounts were converted (100x).
+ * The current Kuda data plans, or the last good list from the past day only
+ * when Kuda gave no answer (an HTTP error, timeout or dropped connection).
+ * An answer Baci can't trust (no packages, wrong unit, broken body) is
+ * refused, never covered by the saved list. After a failed fetch Kuda is not
+ * asked again for 30 seconds. Null when no list can be used: the caller must
+ * not trust the client's amount then (apps may hold 100x kobo prices).
  */
 async function loadDataProviders(): Promise<Biller[] | null> {
   const now = Date.now();
   if (dataProvidersCache && dataProvidersCache.expiresAt > now) {
     return dataProvidersCache.providers;
   }
-  if (
-    lastFailedDataPlanFetchAt !== undefined &&
-    now - lastFailedDataPlanFetchAt < DATA_PLAN_RETRY_AFTER_MS
-  ) {
-    return lastGoodDataProviders(now);
+  const failure = lastFailedDataPlanFetch;
+  if (failure && now - failure.at < DATA_PLAN_RETRY_AFTER_MS) {
+    return failure.refused ? null : lastGoodDataProviders(now);
   }
 
   // Kuda can take a while to answer, so after a failure the backup list's
   // age and the retry pause are both measured from when the fetch ended.
-  const failFetch = (message: string, error?: unknown) => {
+  const failFetch = (message: string, refused: boolean, error?: unknown) => {
     const failedAt = Date.now();
-    lastFailedDataPlanFetchAt = failedAt;
-    const backup = lastGoodDataProviders(failedAt);
+    lastFailedDataPlanFetch = { at: failedAt, refused };
+    const backup = refused ? null : lastGoodDataProviders(failedAt);
     logger.warn({
       message,
       ...(error !== undefined && {
@@ -127,17 +127,14 @@ async function loadDataProviders(): Promise<Biller[] | null> {
   try {
     providers = await getDataProviders();
   } catch (error) {
-    return failFetch('Kuda data plan list unavailable', error);
+    return isKudaNoResponse(error)
+      ? failFetch('Kuda data plan list unavailable', false, error)
+      : failFetch('Kuda data plan list answer refused', true, error);
   }
   if (collectDataPlanCandidates(providers).length === 0) {
-    // Plans this answer marked unreadable leave the saved list (same age).
-    const backup = failFetch('Kuda data plan list came back without packages');
-    if (!backup || !dataProvidersCache) return backup;
-    const corrected = overlayUnreadableCodes(backup, providers);
-    dataProvidersCache = { ...dataProvidersCache, providers: corrected };
-    return corrected;
+    return failFetch('Kuda data plan list came back without packages', true);
   }
-  lastFailedDataPlanFetchAt = undefined;
+  lastFailedDataPlanFetch = undefined;
   const loadedAt = Date.now(); // from when Kuda answered, like failures
   dataProvidersCache = {
     expiresAt: loadedAt + DATA_PLAN_CACHE_TTL_MS,

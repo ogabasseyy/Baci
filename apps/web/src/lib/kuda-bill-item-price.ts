@@ -11,7 +11,7 @@ import type { BillItem } from './kuda-bill-items';
 import { chosenListings } from './kuda-biller-name-match';
 import { getBillersByCategory } from './kuda-bills';
 import { normalizeKudaItemCode } from './kuda-item-code';
-import { overlayUnreadableCodes } from './kuda-unreadable-overlay';
+import { isKudaNoResponse } from './kuda-no-response';
 import { logger } from './logger';
 
 const PRICE_LIST_CACHE_TTL_MS = 60_000;
@@ -33,11 +33,12 @@ const priceListCache = new Map<
   string,
   { billers: Biller[]; expiresAt: number; loadedAt: number }
 >();
-const lastFailedFetchAt = new Map<string, number>();
+/** When the last fetch failed, and whether Kuda's answer was refused. */
+const lastFailedFetch = new Map<string, { at: number; refused: boolean }>();
 
 export function clearKudaBillItemPriceCacheForTests() {
   priceListCache.clear();
-  lastFailedFetchAt.clear();
+  lastFailedFetch.clear();
 }
 
 /** The saved list, while it is under a day old at `at`. */
@@ -49,9 +50,12 @@ function lastGoodPriceList(type: string, at: number): Biller[] | null {
 }
 
 /**
- * The current price list, or the last good one from the past day when Kuda
- * fails or answers with an empty list (an application-level Kuda failure
- * resolves to [] rather than throwing). Returns null when neither exists.
+ * The current price list, or the last good one from the past day only when
+ * Kuda gave no answer at all (an HTTP error, timeout or dropped connection).
+ * When Kuda answers with something Baci can't trust (no packages, refused
+ * as priced in the wrong unit, a broken body) the purchase fails closed:
+ * the saved list never stands in for an answer that disagrees with it.
+ * Returns null when no list can be used.
  */
 async function loadPriceList(type: string): Promise<Biller[] | null> {
   const now = Date.now();
@@ -59,17 +63,17 @@ async function loadPriceList(type: string): Promise<Biller[] | null> {
   if (cached && cached.expiresAt > now) {
     return cached.billers;
   }
-  const failedAt = lastFailedFetchAt.get(type);
-  if (failedAt !== undefined && now - failedAt < PRICE_LIST_RETRY_AFTER_MS) {
-    return lastGoodPriceList(type, now);
+  const failure = lastFailedFetch.get(type);
+  if (failure && now - failure.at < PRICE_LIST_RETRY_AFTER_MS) {
+    return failure.refused ? null : lastGoodPriceList(type, now);
   }
 
   // Kuda can take a while to answer, so after a failure the backup list's
   // age and the retry pause are both measured from when the fetch ended.
-  const failFetch = (message: string, error?: unknown) => {
+  const failFetch = (message: string, refused: boolean, error?: unknown) => {
     const failedAt = Date.now();
-    lastFailedFetchAt.set(type, failedAt);
-    const backup = lastGoodPriceList(type, failedAt);
+    lastFailedFetch.set(type, { at: failedAt, refused });
+    const backup = refused ? null : lastGoodPriceList(type, failedAt);
     logger.warn({
       message,
       ...(error !== undefined && {
@@ -87,19 +91,14 @@ async function loadPriceList(type: string): Promise<Biller[] | null> {
       addElectricityMeterItems: false,
     });
   } catch (error) {
-    return failFetch('Kuda price list unavailable', error);
+    return isKudaNoResponse(error)
+      ? failFetch('Kuda price list unavailable', false, error)
+      : failFetch('Kuda price list answer refused', true, error);
   }
   // No biller with any package is a broken answer (every production biller
-  // lists packages), so it never replaces a good list.
+  // lists packages): it is refused, and never replaces a good list.
   if (!billers.some((biller) => biller.billItems?.length)) {
-    // Packages this answer marked unreadable are removed from the saved
-    // list it falls back to (same age), so their older price can't confirm.
-    const backup = failFetch('Kuda price list came back without packages');
-    const saved = priceListCache.get(type);
-    if (!backup || !saved) return backup;
-    const corrected = overlayUnreadableCodes(backup, billers);
-    priceListCache.set(type, { ...saved, billers: corrected });
-    return corrected;
+    return failFetch('Kuda price list came back without packages', true);
   }
 
   // The meter products are added only after the check above, so Baci's own
@@ -108,7 +107,7 @@ async function loadPriceList(type: string): Promise<Biller[] | null> {
     billers = withKudaElectricityBillItems(billers);
   }
 
-  lastFailedFetchAt.delete(type);
+  lastFailedFetch.delete(type);
   const loadedAt = Date.now();
   priceListCache.set(type, {
     billers,

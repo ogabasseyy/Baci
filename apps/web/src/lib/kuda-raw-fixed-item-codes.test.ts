@@ -42,4 +42,13 @@ describe('collectRawFixedItemCodes', () => {
     ).toEqual([]);
     expect(collectRawFixedItemCodes({})).toEqual([]);
   });
+
+  it.each([
+    1,
+    'true',
+  ])('reads a truthy fixed flag (%j) like the mapper', (flag) => {
+    expect(
+      collectRawFixedItemCodes([{ ItemCode: 'X', IsAmountFixed: flag }])
+    ).toEqual(['X']);
+  });
 });

@@ -10,8 +10,8 @@ export function providerMatchesNetwork(
   const normalizedNetwork = normalizeKudaItemCode(networkProvider);
   if (normalizedNetwork === '9mobile') {
     return (
+      // Explicit names only: a bare "9" would match unrelated providers.
       normalizedProviderName.includes('9mobile') ||
-      normalizedProviderName.includes('9') ||
       normalizedProviderName.includes('t2') ||
       normalizedProviderName.includes('etisalat')
     );

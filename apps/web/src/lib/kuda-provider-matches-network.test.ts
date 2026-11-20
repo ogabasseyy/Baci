@@ -25,4 +25,13 @@ describe('providerMatchesNetwork', () => {
       )
     ).toBe(true);
   });
+
+  it('does not treat any provider with a 9 in its name as 9mobile', () => {
+    expect(
+      providerMatchesNetwork(
+        provider('SWIFT 9JA DATA'),
+        NetworkProvider.MOBILE_9
+      )
+    ).toBe(false);
+  });
 });

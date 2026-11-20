@@ -103,7 +103,7 @@ describe('resolveKudaDataPlanForPurchase when Kuda is unavailable', () => {
       ).rejects.toThrow(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
     });
 
-    it('never replaces a good plan list with one that has no packages', async () => {
+    it('refuses rather than use the saved plans when Kuda answers with no packages', async () => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date('2026-11-17T10:00:00Z'));
       await resolveKudaDataPlanForPurchase({
@@ -122,7 +122,29 @@ describe('resolveKudaDataPlanForPurchase when Kuda is unavailable', () => {
           dataPlanCode: 'MTN-35GB-MONTHLY',
           networkProvider: NetworkProvider.MTN,
         })
-      ).resolves.toMatchObject({ amount: 3500 });
+      ).rejects.toThrow(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
+    });
+
+    it('refuses rather than use the saved plans when Kuda sends a list refused as naira', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-11-17T10:00:00Z'));
+      await resolveKudaDataPlanForPurchase({
+        amount: 3500,
+        dataPlanCode: 'MTN-35GB-MONTHLY',
+        networkProvider: NetworkProvider.MTN,
+      });
+      vi.setSystemTime(new Date('2026-11-17T10:05:00Z'));
+      mockGetDataProviders.mockRejectedValue(
+        new Error('Bill prices could not be confirmed as kobo')
+      );
+
+      await expect(
+        resolveKudaDataPlanForPurchase({
+          amount: 3500,
+          dataPlanCode: 'MTN-35GB-MONTHLY',
+          networkProvider: NetworkProvider.MTN,
+        })
+      ).rejects.toThrow(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
     });
 
     it('waits 30 seconds before asking Kuda again after a failure', async () => {

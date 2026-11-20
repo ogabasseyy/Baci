@@ -2,7 +2,10 @@ import type { ChatWebhookMessageCreated } from '@/schemas/chat-webhook';
 
 export type ChatAutoReplyDecision =
   | { action: 'reply' }
-  | { action: 'handover'; reason: 'customer_requested_human' }
+  | {
+      action: 'handover';
+      reason: 'customer_requested_human' | 'customer_sent_attachment';
+    }
   | { action: 'skip'; reason: 'not_pending' | 'empty' };
 
 const HUMAN_REQUEST_PATTERNS = [
@@ -26,13 +29,22 @@ export function asksForHuman(text: string): boolean {
  * never talks over staff.
  */
 export function decideChatAutoReply(
-  event: Pick<ChatWebhookMessageCreated, 'content' | 'conversation'>
+  event: Pick<
+    ChatWebhookMessageCreated,
+    'content' | 'conversation' | 'attachments'
+  >
 ): ChatAutoReplyDecision {
   if (event.conversation.status !== 'pending') {
     return { action: 'skip', reason: 'not_pending' };
   }
   const text = (event.content ?? '').trim();
-  if (!text) return { action: 'skip', reason: 'empty' };
+  if (!text) {
+    // A picture or voice note carries no text the assistant can read: a
+    // person must look at it, or the customer waits with nobody queued.
+    return event.attachments?.length
+      ? { action: 'handover', reason: 'customer_sent_attachment' }
+      : { action: 'skip', reason: 'empty' };
+  }
   if (asksForHuman(text)) {
     return { action: 'handover', reason: 'customer_requested_human' };
   }
@@ -41,11 +53,24 @@ export function decideChatAutoReply(
 
 /** A visible reply written by staff (not the assistant, not a private note). */
 export function isMerchantReply(
-  event: Pick<ChatWebhookMessageCreated, 'message_type' | 'private' | 'sender'>
+  event: Pick<
+    ChatWebhookMessageCreated,
+    | 'message_type'
+    | 'private'
+    | 'sender'
+    | 'content_attributes'
+    | 'additional_attributes'
+  >
 ): boolean {
+  // Automation rules and campaigns send as a user too; like the provider's
+  // own "human response" check, they are not a person taking over.
+  const automated =
+    event.content_attributes?.automation_rule_id != null ||
+    event.additional_attributes?.campaign_id != null;
   return (
     event.message_type === 'outgoing' &&
     event.private !== true &&
-    event.sender?.type === 'user'
+    event.sender?.type === 'user' &&
+    !automated
   );
 }

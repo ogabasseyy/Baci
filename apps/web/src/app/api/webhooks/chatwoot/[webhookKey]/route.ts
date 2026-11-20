@@ -15,6 +15,7 @@ import { sendChatEventPush } from '@/lib/chatwoot/chat-event-push';
 import { readChatWebhookBody } from '@/lib/chatwoot/chat-webhook-body';
 import { getChatWebhookBinding } from '@/lib/chatwoot/chat-webhook-config';
 import { verifyChatWebhookSignature } from '@/lib/chatwoot/chat-webhook-signature';
+import { getMerchantInboxBinding } from '@/lib/chatwoot/merchant-inbox-config';
 import {
   chatWebhookEnvelopeSchema,
   chatWebhookMessageCreatedSchema,
@@ -48,6 +49,31 @@ function assistantFor(webhook: {
     return null;
   }
   return assistant;
+}
+
+/**
+ * A person's reply is recorded whether or not the assistant is switched on,
+ * so the handled-by counts stay right and a pending conversation never
+ * returns to the assistant after a person answered. It only needs the inbox
+ * credential; status moves fall back to it when there is no bot credential.
+ */
+function takeoverBindingFor(webhook: {
+  merchantId: string;
+  accountId: number;
+  inboxId: number;
+}) {
+  const inbox = getMerchantInboxBinding(webhook.merchantId);
+  if (
+    !inbox ||
+    inbox.accountId !== webhook.accountId ||
+    inbox.inboxId !== webhook.inboxId
+  ) {
+    return null;
+  }
+  return {
+    ...inbox,
+    botApiAccessToken: inbox.botApiAccessToken ?? inbox.apiAccessToken,
+  };
 }
 
 type ChatEvent = Parameters<typeof sendChatEventPush>[0];
@@ -142,8 +168,8 @@ export async function POST(
   }
   // A staff reply takes the conversation over from the assistant.
   if (isMerchantReply(event)) {
-    const assistant = assistantFor(binding);
-    if (assistant) after(() => recordMerchantTakeover(assistant, event));
+    const inbox = takeoverBindingFor(binding);
+    if (inbox) after(() => recordMerchantTakeover(inbox, event));
     return respond(200, { received: true, handled: false });
   }
   if (event.message_type !== 'incoming') {

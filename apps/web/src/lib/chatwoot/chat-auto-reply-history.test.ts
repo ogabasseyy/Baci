@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { loadChatAutoReplyHistory } from './chat-auto-reply-history';
+import {
+  isLatestChatMessage,
+  loadChatAutoReplyHistory,
+} from './chat-auto-reply-history';
 import {
   binding,
   conversation,
@@ -64,5 +67,30 @@ describe('loadChatAutoReplyHistory', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     stubFetch(() => ({ status: 500 }));
     expect(await loadChatAutoReplyHistory(bot, 7, 3)).toEqual([]);
+  });
+});
+
+describe('isLatestChatMessage', () => {
+  const stub = (ids: number[]) =>
+    stubFetch((url) =>
+      url.pathname.endsWith('/messages')
+        ? { body: { payload: ids.map((id) => message(id)) } }
+        : { body: conversation(7) }
+    );
+
+  it('is true when the answered message is the newest', async () => {
+    stub([1, 2, 3]);
+    expect(await isLatestChatMessage(bot, 7, 3)).toBe(true);
+  });
+
+  it('is false when the customer wrote again meanwhile', async () => {
+    stub([1, 2, 3, 4]);
+    expect(await isLatestChatMessage(bot, 7, 3)).toBe(false);
+  });
+
+  it('is false when the messages cannot be read', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    stubFetch(() => ({ status: 500 }));
+    expect(await isLatestChatMessage(bot, 7, 3)).toBe(false);
   });
 });

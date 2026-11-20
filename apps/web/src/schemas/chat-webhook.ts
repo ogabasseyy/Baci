@@ -27,6 +27,11 @@ export const chatWebhookMessageCreatedSchema = z.object({
   sender: z
     .object({ name: z.string().nullish(), type: z.string().max(40).nullish() })
     .nullish(),
+  // Only presence is read: an attachment-only message has no text, and an
+  // automation or campaign message is not a person's reply.
+  attachments: z.array(z.unknown()).max(100).nullish(),
+  content_attributes: z.record(z.string(), z.unknown()).nullish(),
+  additional_attributes: z.record(z.string(), z.unknown()).nullish(),
 });
 
 export type ChatWebhookMessageCreated = z.infer<

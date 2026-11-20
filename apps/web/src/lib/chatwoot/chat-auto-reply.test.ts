@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   generate: vi.fn(),
   history: vi.fn(),
+  latest: vi.fn(),
   post: vi.fn(),
   status: vi.fn(),
   labels: vi.fn(),
@@ -13,6 +14,7 @@ vi.mock('@/ai/chat-auto-reply', () => ({
 }));
 vi.mock('./chat-auto-reply-history', () => ({
   loadChatAutoReplyHistory: mocks.history,
+  isLatestChatMessage: mocks.latest,
 }));
 vi.mock('./chat-auto-reply-client', () => ({
   postAssistantMessage: mocks.post,
@@ -60,6 +62,7 @@ const draft = (over: Record<string, unknown> = {}) => ({
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.history.mockResolvedValue([]);
+  mocks.latest.mockResolvedValue(true);
   mocks.post.mockResolvedValue(true);
   mocks.status.mockResolvedValue(true);
   mocks.labels.mockResolvedValue(true);
@@ -116,6 +119,28 @@ describe('runChatAutoReply', () => {
     mocks.snapshot.mockResolvedValue(null);
     expect(await runChatAutoReply(binding, event())).toBe('skipped');
     expect(mocks.post).not.toHaveBeenCalled();
+  });
+
+  it('stays quiet when the customer wrote again while the model was working', async () => {
+    mocks.latest.mockResolvedValue(false);
+    expect(await runChatAutoReply(binding, event())).toBe('skipped');
+    expect(mocks.post).not.toHaveBeenCalled();
+  });
+
+  it('hands over when the reply is rejected so the conversation is not left pending', async () => {
+    mocks.post.mockResolvedValueOnce(false).mockResolvedValue(true);
+    expect(await runChatAutoReply(binding, event())).toBe('handed_over');
+    expect(mocks.status).toHaveBeenCalledWith(binding, {
+      conversationId: 7,
+      status: 'open',
+    });
+  });
+
+  it('hands an attachment-only message to a person instead of waiting silently', async () => {
+    const photo = event({ content: '', attachments: [{ file_type: 'image' }] });
+    expect(await runChatAutoReply(binding, photo)).toBe('handed_over');
+    expect(mocks.generate).not.toHaveBeenCalled();
+    expect(mocks.status).toHaveBeenCalledOnce();
   });
 
   it('cuts a very long customer message before it reaches the model', async () => {
@@ -184,6 +209,7 @@ describe('runChatAutoReply', () => {
 
   it('reports failure when the reply could not be posted, without labelling', async () => {
     mocks.post.mockResolvedValue(false);
+    mocks.status.mockResolvedValue(false);
     expect(await runChatAutoReply(binding, event())).toBe('failed');
     expect(mocks.labels).not.toHaveBeenCalled();
   });

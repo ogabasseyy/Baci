@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   assistantBinding: vi.fn(),
   run: vi.fn(),
   takeover: vi.fn(),
+  inboxBinding: vi.fn(),
 }));
 
 vi.mock('next/server', async () => {
@@ -34,6 +35,9 @@ vi.mock('@/lib/chatwoot/chat-event-push', () => ({
 vi.mock('@/lib/chatwoot/chat-auto-reply-config', () => ({
   getChatAutoReplyBinding: mocks.assistantBinding,
 }));
+vi.mock('@/lib/chatwoot/merchant-inbox-config', () => ({
+  getMerchantInboxBinding: mocks.inboxBinding,
+}));
 vi.mock('@/lib/chatwoot/chat-auto-reply', () => ({
   runChatAutoReply: mocks.run,
   recordMerchantTakeover: mocks.takeover,
@@ -56,6 +60,7 @@ beforeEach(() => {
   });
   mocks.push.mockResolvedValue({ status: 'sent', sent: 1, failed: 0 });
   mocks.assistantBinding.mockReturnValue(assistant);
+  mocks.inboxBinding.mockReturnValue(binding);
   mocks.run.mockResolvedValue('replied');
   mocks.takeover.mockResolvedValue('replied');
   mocks.after.mockImplementation((work: () => Promise<unknown>) => {
@@ -116,6 +121,23 @@ describe('POST /api/webhooks/chatwoot/[webhookKey] assistant', () => {
     expect(mocks.takeover).toHaveBeenCalledOnce();
     expect(mocks.record).not.toHaveBeenCalled();
     expect(mocks.run).not.toHaveBeenCalled();
+  });
+
+  it('records a staff takeover even when the assistant is switched off', async () => {
+    mocks.assistantBinding.mockReturnValue(null);
+    await call(payload({ message_type: 'outgoing', sender: { type: 'user' } }));
+    await settle();
+    expect(mocks.takeover).toHaveBeenCalledOnce();
+    expect(mocks.takeover.mock.calls[0][0].botApiAccessToken).toBe(
+      binding.apiAccessToken
+    );
+  });
+
+  it('does not record a takeover from an inbox binding for another account', async () => {
+    mocks.inboxBinding.mockReturnValue({ ...binding, accountId: 9999 });
+    await call(payload({ message_type: 'outgoing', sender: { type: 'user' } }));
+    await settle();
+    expect(mocks.takeover).not.toHaveBeenCalled();
   });
 
   it('ignores the assistant bot own messages', async () => {

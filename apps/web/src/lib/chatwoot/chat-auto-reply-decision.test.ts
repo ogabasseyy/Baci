@@ -78,7 +78,43 @@ describe('isMerchantReply', () => {
       { message_type: 'incoming', sender: { type: 'user' } },
     ],
     ['an unknown sender', { ...base, sender: null }],
+    [
+      'an automation rule message',
+      {
+        ...base,
+        sender: { type: 'user' },
+        content_attributes: { automation_rule_id: 4 },
+      },
+    ],
+    [
+      'a campaign message',
+      {
+        ...base,
+        sender: { type: 'user' },
+        additional_attributes: { campaign_id: 9 },
+      },
+    ],
   ])('is not %s', (_label, input) => {
     expect(isMerchantReply(input)).toBe(false);
+  });
+});
+
+describe('decideChatAutoReply attachments', () => {
+  const pending = { id: 1, status: 'pending', labels: [] };
+
+  it('hands an attachment-only message to a person', () => {
+    expect(
+      decideChatAutoReply({
+        content: '',
+        attachments: [{ file_type: 'image' }],
+        conversation: pending,
+      })
+    ).toEqual({ action: 'handover', reason: 'customer_sent_attachment' });
+  });
+
+  it('still skips an empty message with no attachment', () => {
+    expect(
+      decideChatAutoReply({ content: '  ', conversation: pending })
+    ).toEqual({ action: 'skip', reason: 'empty' });
   });
 });

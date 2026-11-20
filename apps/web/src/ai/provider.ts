@@ -69,6 +69,7 @@ export const imagen3 = google.image('imagen-3.0-generate-002');
  * Rate Limiting Configuration
  * Prevents API abuse and manages costs
  */
+// Limits are best effort: the counter is per server instance (see below).
 export const AI_RATE_LIMITS = {
   // Per-user limits (requests per minute)
   builder: { requests: 10, windowMs: 60 * 1000 },

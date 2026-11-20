@@ -18,7 +18,10 @@ import {
   decideChatAutoReply,
   isMerchantReply,
 } from './chat-auto-reply-decision';
-import { loadChatAutoReplyHistory } from './chat-auto-reply-history';
+import {
+  isLatestChatMessage,
+  loadChatAutoReplyHistory,
+} from './chat-auto-reply-history';
 import {
   CHAT_LABEL_AI,
   CHAT_LABEL_MERCHANT,
@@ -128,7 +131,13 @@ export async function runChatAutoReply(
   if (decision.action === 'skip') return 'skipped';
   const conversationId = event.conversation.id;
   if (decision.action === 'handover') {
-    return handOver(binding, conversationId, 'the customer asked for a person');
+    return handOver(
+      binding,
+      conversationId,
+      decision.reason === 'customer_sent_attachment'
+        ? 'the customer sent an attachment the assistant cannot read'
+        : 'the customer asked for a person'
+    );
   }
 
   const question = (event.content ?? '')
@@ -154,11 +163,18 @@ export async function runChatAutoReply(
   // Generation can take a while: a person may have replied, or a later
   // message may have asked for one, since the webhook arrived.
   if (!(await isStillPending(binding, conversationId))) return 'skipped';
+  if (!(await isLatestChatMessage(binding, conversationId, event.id))) {
+    return 'skipped';
+  }
   const sent = await postAssistantMessage(binding, {
     conversationId,
     content: result.reply.reply,
   });
-  if (!sent) return 'failed';
+  // A rejected reply (an expired bot credential, say) must not leave the
+  // customer pending with nobody queued: a person takes it from here.
+  if (!sent) {
+    return handOver(binding, conversationId, 'the reply could not be sent');
+  }
   await updateLabels(binding, conversationId, {
     add: [CHAT_LABEL_AI],
     remove: [CHAT_LABEL_NEEDS_HUMAN, CHAT_LABEL_MERCHANT],

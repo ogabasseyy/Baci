@@ -106,4 +106,35 @@ BEGIN
   END IF;
 END
 $$;
+
+RESET ROLE;
+
+-- Updating role defaults must release active members' claims too.
+UPDATE public.staff_members SET permissions = '{}'
+WHERE user_id = 'aa560000-0000-4000-8000-000000000002';
+UPDATE public.order_follow_ups SET assignee_id = 'aa560000-0000-4000-8000-000000000002'
+WHERE order_id = 'aa560000-0000-4000-8000-000000000021';
+UPDATE public.role_permissions
+SET permissions = jsonb_set(permissions, '{customers,edit}', 'false')
+WHERE role = 'admin';
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.order_follow_ups
+    WHERE order_id = 'aa560000-0000-4000-8000-000000000021'
+      AND assignee_id IS NULL AND revision = 5 AND outcome = 'Call back'
+  ) THEN
+    RAISE EXCEPTION 'A role-wide change stranded the open follow-up';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.order_follow_ups
+    WHERE order_id = 'aa560000-0000-4000-8000-000000000022'
+      AND assignee_id = 'aa560000-0000-4000-8000-000000000002'
+      AND revision = 2 AND stage = 'closed'
+  ) THEN
+    RAISE EXCEPTION 'A role-wide change rewrote a closed follow-up';
+  END IF;
+END
+$$;
 ROLLBACK;

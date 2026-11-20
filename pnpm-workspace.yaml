@@ -30,8 +30,8 @@ minimumReleaseAgeExclude:
   - next@16.3.8
   - '@next/env@16.3.8'
   # Security fixes for the open Dependabot alerts checked 2026-11-01.
-  - "next@16.4.1"
-  - "@next/env@16.4.1"
+  - "next@16.4.5"
+  - "@next/env@16.4.5"
   - "undici@7.30.1"
   - "zod@4.6.6"
   - "vitest@4.1.12"
@@ -256,11 +256,14 @@ overrides:
   # parse-diagnostic DoS, and GHSA-rpw4-54j3-4h4q / GHSA-2vr4-cq9g-pvrc SSRF
   # trust-boundary advisories.
   ip-address: "10.7.4"
-  # Keep every workspace package on the security-fixed Next.js 16.4.1 release.
+  # Keep every workspace package on the security-fixed Next.js 16.4.5 release.
+  # 16.4.5 closes seven advisories: use-cache cross-tenant/cache-poisoning leaks,
+  # the image-optimization SVG rejection bypass, the fetched-response forwarding
+  # leak, and HttpOnly cookie exposure on Edge routes.
   # 16.3.6 closed GHSA-vcvr-r3jv-pc5j (critical RCE in next/og ImageResponse);
   # 16.3.8 closes GHSA-cjq9-62q9-8jv4 (SSRF in Image Optimization) plus five
   # medium and one low cache-poisoning/disclosure advisories.
-  next: "16.4.1"
+  next: "16.4.5"
   flatted: "3.4.2"
   lodash: "4.18.1"
   lodash-es: "4.18.1"
@@ -436,7 +439,7 @@ patchedDependencies:
   "react-native-webview@14.0.1": "patches/react-native-webview@14.0.1.patch"
   react-native@0.88.0: patches/react-native@0.88.0.patch
   "react-native-fbsdk-next@13.4.3": "patches/react-native-fbsdk-next@13.4.3.patch"
-  "next@16.4.1": "patches/next@16.4.1.patch"
+  "next@16.4.5": "patches/next@16.4.5.patch"
   '@supabase/auth-js@2.108.2': patches/@supabase__auth-js@2.108.2.patch
   # Pause RecyclerView recycling while retaining exit content (screens PR 4755).
   react-native-screens@4.30.0: patches/react-native-screens@4.30.0.patch

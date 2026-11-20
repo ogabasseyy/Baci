@@ -44,12 +44,16 @@ const HISTORY_DEADLINE_MS = 6_000;
 async function updateLabels(
   binding: ChatAutoReplyBinding,
   conversationId: number,
-  change: { add?: readonly string[]; remove?: readonly string[] }
+  change: { add?: readonly string[]; remove?: readonly string[] },
+  options: { onlyIfAssistantOwns?: boolean } = {}
 ): Promise<boolean> {
   const live = await getConversationSnapshot(binding, conversationId);
   // The provider replaces the whole list, so without a live read a write
   // could silently drop someone else's label: skip it instead.
   if (!live) return false;
+  // A person who took over meanwhile (their reply moved it out of pending)
+  // keeps the conversation and its label.
+  if (options.onlyIfAssistantOwns && live.status !== 'pending') return true;
   return setConversationLabels(binding, {
     conversationId,
     labels: mergeChatLabels(live.labels, change),
@@ -90,6 +94,7 @@ async function handOver(
   });
   await updateLabels(binding, conversationId, {
     add: [CHAT_LABEL_NEEDS_HUMAN],
+    remove: [CHAT_LABEL_AI],
   });
   return 'handed_over';
 }
@@ -175,10 +180,15 @@ export async function runChatAutoReply(
   if (!sent) {
     return handOver(binding, conversationId, 'the reply could not be sent');
   }
-  await updateLabels(binding, conversationId, {
-    add: [CHAT_LABEL_AI],
-    remove: [CHAT_LABEL_NEEDS_HUMAN, CHAT_LABEL_MERCHANT],
-  });
+  await updateLabels(
+    binding,
+    conversationId,
+    {
+      add: [CHAT_LABEL_AI],
+      remove: [CHAT_LABEL_NEEDS_HUMAN, CHAT_LABEL_MERCHANT],
+    },
+    { onlyIfAssistantOwns: true }
+  );
   return 'replied';
 }
 
@@ -192,12 +202,15 @@ export async function recordMerchantTakeover(
 ): Promise<ChatAutoReplyOutcome> {
   if (!isMerchantReply(event)) return 'skipped';
   const conversationId = event.conversation.id;
-  if (event.conversation.status === 'pending') {
-    await setConversationStatus(binding, { conversationId, status: 'open' });
-  }
+  // The status move is what stops the assistant: if it fails the takeover
+  // is not complete, even when the label lands.
+  const moved =
+    event.conversation.status === 'pending'
+      ? await setConversationStatus(binding, { conversationId, status: 'open' })
+      : true;
   const done = await updateLabels(binding, conversationId, {
     add: [CHAT_LABEL_MERCHANT],
     remove: [CHAT_LABEL_AI, CHAT_LABEL_NEEDS_HUMAN],
   });
-  return done ? 'replied' : 'failed';
+  return done && moved ? 'replied' : 'failed';
 }

@@ -117,4 +117,14 @@ describe('decideChatAutoReply attachments', () => {
       decideChatAutoReply({ content: '  ', conversation: pending })
     ).toEqual({ action: 'skip', reason: 'empty' });
   });
+
+  it('hands over a captioned attachment: the assistant cannot see the picture', () => {
+    expect(
+      decideChatAutoReply({
+        content: 'how much is this?',
+        attachments: [{ file_type: 'image' }],
+        conversation: pending,
+      })
+    ).toEqual({ action: 'handover', reason: 'customer_sent_attachment' });
+  });
 });

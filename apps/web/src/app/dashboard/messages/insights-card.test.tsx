@@ -31,12 +31,16 @@ describe('InsightsCard', () => {
     render(<InsightsCard />);
     expect(await screen.findByText('9')).toBeInTheDocument();
     expect(screen.getByText('31')).toBeInTheDocument();
-    expect(screen.getByText('Your replies')).toBeInTheDocument();
+    expect(
+      screen.getByText('Replies sent (you and the assistant)')
+    ).toBeInTheDocument();
     expect(screen.getByText('22')).toBeInTheDocument();
     expect(screen.getByText('12 min')).toBeInTheDocument();
-    expect(screen.getByText('Answered by assistant')).toBeInTheDocument();
+    expect(
+      screen.getByText('New chats answered by assistant')
+    ).toBeInTheDocument();
     expect(screen.getByText('2')).toBeInTheDocument();
-    expect(screen.getByText('Handled by you')).toBeInTheDocument();
+    expect(screen.getByText('New chats handled by you')).toBeInTheDocument();
     // Time to resolve and Handled by you have nothing to show: dashes.
     expect(screen.getAllByText('—')).toHaveLength(2);
     expect(mocks.fetchInsights).toHaveBeenCalledWith(7);

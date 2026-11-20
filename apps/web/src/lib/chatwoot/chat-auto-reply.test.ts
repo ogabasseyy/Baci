@@ -136,6 +136,29 @@ describe('runChatAutoReply', () => {
     });
   });
 
+  it('drops the assistant label when it hands over, so only one owner label is set', async () => {
+    mocks.snapshot.mockResolvedValue({
+      status: 'pending',
+      labels: ['vip', 'handled-by-ai'],
+    });
+    await runChatAutoReply(binding, event({ content: 'agent please' }));
+    expect(mocks.labels).toHaveBeenCalledWith(binding, {
+      conversationId: 7,
+      labels: ['vip', 'needs-human'],
+    });
+  });
+
+  it('does not overwrite a takeover that happened after the reply was sent', async () => {
+    mocks.snapshot
+      .mockResolvedValueOnce({ status: 'pending', labels: ['vip'] })
+      .mockResolvedValue({
+        status: 'open',
+        labels: ['vip', 'handled-by-merchant'],
+      });
+    expect(await runChatAutoReply(binding, event())).toBe('replied');
+    expect(mocks.labels).not.toHaveBeenCalled();
+  });
+
   it('hands an attachment-only message to a person instead of waiting silently', async () => {
     const photo = event({ content: '', attachments: [{ file_type: 'image' }] });
     expect(await runChatAutoReply(binding, photo)).toBe('handed_over');
@@ -235,6 +258,14 @@ describe('recordMerchantTakeover', () => {
       conversationId: 7,
       labels: ['vip', 'handled-by-merchant'],
     });
+  });
+
+  it('reports failure when the queue move fails, so the assistant is not left running', async () => {
+    mocks.status.mockResolvedValue(false);
+    expect(await recordMerchantTakeover(binding, staff('pending'))).toBe(
+      'failed'
+    );
+    expect(mocks.labels).toHaveBeenCalledOnce();
   });
 
   it('only relabels a conversation that is already open', async () => {

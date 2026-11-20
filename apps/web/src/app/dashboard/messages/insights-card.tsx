@@ -74,16 +74,16 @@ export function InsightsCard() {
             value={String(state.insights.customerMessages)}
           />
           <Stat
-            label="Your replies"
+            label="Replies sent (you and the assistant)"
             value={String(state.insights.storeReplies)}
           />
           <Stat label="Resolved" value={String(state.insights.resolved)} />
           <Stat
-            label="Answered by assistant"
+            label="New chats answered by assistant"
             value={formatInsightCount(state.insights.handledByAi)}
           />
           <Stat
-            label="Handled by you"
+            label="New chats handled by you"
             value={formatInsightCount(state.insights.handledByMerchant)}
           />
           <Stat

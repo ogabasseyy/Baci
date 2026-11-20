@@ -26,3 +26,16 @@ export function withNarrowDownNudge(
   if (draft.reply.includes(CHAT_NARROW_DOWN_NUDGE)) return draft;
   return { ...draft, reply: `${draft.reply}\n\n${CHAT_NARROW_DOWN_NUDGE}` };
 }
+
+/**
+ * What the customer hears when they ask to add something to the cart. The
+ * assistant cannot change a cart, so the model's own wording (which may claim
+ * it did) is never shown for this intent.
+ */
+export const CHAT_CART_LIMIT_REPLY =
+  "I can't add items to your cart from this chat. Open the product and tap Add to cart, or tell me here and a team member will help you.";
+
+export function withCartLimit(draft: ChatAutoReply): ChatAutoReply {
+  if (draft.intent !== 'add_to_cart' || draft.needsHuman) return draft;
+  return { ...draft, reply: CHAT_CART_LIMIT_REPLY };
+}

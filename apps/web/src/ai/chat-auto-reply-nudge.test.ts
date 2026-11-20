@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { ChatAutoReply } from '@/schemas/chat-auto-reply';
 import {
+  CHAT_CART_LIMIT_REPLY,
   CHAT_NARROW_DOWN_NUDGE,
+  withCartLimit,
   withNarrowDownNudge,
 } from './chat-auto-reply-nudge';
 
@@ -66,5 +68,35 @@ describe('withNarrowDownNudge', () => {
       reply: `Here are two options. ${CHAT_NARROW_DOWN_NUDGE}`,
     });
     expect(withNarrowDownNudge(original, 2)).toEqual(original);
+  });
+});
+
+describe('withCartLimit', () => {
+  it('replaces whatever the model said for an add-to-cart request', () => {
+    const result = withCartLimit(
+      draft({ intent: 'add_to_cart', reply: 'Done, added to your cart!' })
+    );
+    expect(result.reply).toBe(CHAT_CART_LIMIT_REPLY);
+    expect(result.reply).toMatch(/can't/i);
+  });
+
+  it.each([
+    'discover',
+    'recommend',
+    'details',
+    'other',
+    undefined,
+  ] as const)('leaves a %s answer alone', (intent) => {
+    const original = draft({ intent });
+    expect(withCartLimit(original)).toEqual(original);
+  });
+
+  it('leaves a hand-over alone', () => {
+    const original = draft({
+      intent: 'add_to_cart',
+      needsHuman: true,
+      reply: '',
+    });
+    expect(withCartLimit(original)).toEqual(original);
   });
 });

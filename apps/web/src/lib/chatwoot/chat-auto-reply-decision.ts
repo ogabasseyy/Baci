@@ -38,13 +38,13 @@ export function decideChatAutoReply(
     return { action: 'skip', reason: 'not_pending' };
   }
   const text = (event.content ?? '').trim();
-  if (!text) {
-    // A picture or voice note carries no text the assistant can read: a
-    // person must look at it, or the customer waits with nobody queued.
-    return event.attachments?.length
-      ? { action: 'handover', reason: 'customer_sent_attachment' }
-      : { action: 'skip', reason: 'empty' };
+  // A picture or voice note (captioned or not) carries something the
+  // assistant cannot read: a person must look at it, or the customer would
+  // get an answer about the wrong thing, or wait with nobody queued.
+  if (event.attachments?.length) {
+    return { action: 'handover', reason: 'customer_sent_attachment' };
   }
+  if (!text) return { action: 'skip', reason: 'empty' };
   if (asksForHuman(text)) {
     return { action: 'handover', reason: 'customer_requested_human' };
   }

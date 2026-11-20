@@ -67,4 +67,9 @@ describe('CHAT_AUTO_REPLY_SYSTEM_PROMPT', () => {
     expect(CHAT_AUTO_REPLY_SYSTEM_PROMPT).toMatch(/"intent": string/);
     expect(CHAT_AUTO_REPLY_SYSTEM_PROMPT).toMatch(/narrow/i);
   });
+
+  it('tells the model it cannot change the cart or take orders', () => {
+    expect(CHAT_AUTO_REPLY_SYSTEM_PROMPT).toMatch(/cannot (add|change)/i);
+    expect(CHAT_AUTO_REPLY_SYSTEM_PROMPT).toMatch(/cart/i);
+  });
 });

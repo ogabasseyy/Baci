@@ -209,10 +209,20 @@ export async function purchaseBill(
   }
 }
 
+/**
+ * What a requery proved. `unknown` proves nothing (a rejected requery, an
+ * unnamed vend state): the row stays processing and is never refunded on it.
+ */
+export type MonnifyRequeryStatus =
+  | 'successful'
+  | 'processing'
+  | 'failed'
+  | 'unknown';
+
 export async function checkTransactionStatus(
   transactionReference: string
 ): Promise<{
-  status: string;
+  status: MonnifyRequeryStatus;
   message: string;
   pin?: string;
   responseCode?: string;

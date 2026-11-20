@@ -16,6 +16,7 @@ never refunded and never sent to Kuda automatically.
 
 ```sql
 select id, merchant_id, type, amount, request_reference, created_at, updated_at,
+       now() - updated_at as held_for,
        metadata->>'providerResponseCode' as provider_code
 from vtu_transactions
 where status = 'processing'
@@ -36,5 +37,14 @@ order by created_at;
 4. Not found at all after a day: treat as not delivered, same as step 3, and
    note the Monnify check in the row's support notes.
 
-An automatic aging alert for this query is a follow-up (needs an owner
-decision on the age threshold).
+Check this query at least once a day. Rows held for more than 24 hours are the
+ones to settle first. An automatic alert for this query is a follow-up PR.
+
+## Wording decisions (kept fail-closed)
+
+- `reversed` / `declined` alone do not prove the vend failed: such rows stay
+  held until support confirms in Monnify's dashboard.
+- 401/403 login rejections are refunded even if the body shows a vend status
+  (owner decision 2026-11-18).
+- An HTTP 5xx status is retried with the same request reference, which Monnify
+  dedupes; a duplicate answer on the retry is held.

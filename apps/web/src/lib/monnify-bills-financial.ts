@@ -21,6 +21,7 @@ import {
 import {
   classifyMonnifyBillStatus,
   readMonnifyBillToken,
+  toBillStatusInput,
 } from './monnify-bills-status';
 import { isMonnifyRequeryRejectionDefiniteFailure } from './monnify-requery-rejection';
 import { readMonnifyResponseCode } from './monnify-response-code';
@@ -144,7 +145,7 @@ export async function purchaseBill(
 
     const transactionReference = body.transactionReference?.trim() || undefined;
     const vendReference = body.vendReference?.trim() || undefined;
-    const classified = classifyMonnifyBillStatus(body);
+    const classified = classifyMonnifyBillStatus(toBillStatusInput(body));
     const { isProcessing, isFailed } = classified;
     // A delivered token is conclusive even when the status is missing or a
     // state we do not know: without it the customer would never get the
@@ -195,7 +196,9 @@ export async function purchaseBill(
       reference: requestReference,
       transactionId: transactionReference ?? vendReference,
       providerVendReference: vendReference,
-      pin: readMonnifyBillToken(body),
+      // Only a completed vend carries its token: a pending row holding a
+      // voucherPin would never settle or notify (reconciliation fills it in).
+      pin: status === 'successful' ? readMonnifyBillToken(body) : undefined,
       units: body.metaData?.unit || undefined,
       message: sanitizeMonnifyErrorDetail(
         parsedEnvelope.responseMessage ||
@@ -254,7 +257,7 @@ export async function checkTransactionStatus(
   if (isMonnifyBusinessSuccess(parsed)) {
     const body = parsed.responseBody;
     const classified = body
-      ? classifyMonnifyBillStatus(body)
+      ? classifyMonnifyBillStatus(toBillStatusInput(body))
       : { isSuccess: false, isProcessing: false, isFailed: false };
     const { isProcessing, isFailed } = classified;
     // A returned token is conclusive even with a missing or unrecognised

@@ -51,3 +51,21 @@ export function readMonnifyBillToken(body: {
       .find((value) => value !== '') || undefined
   );
 }
+
+/**
+ * The status pair classifyMonnifyBillStatus reads: `transactionStatus` stands
+ * in for a missing or blank `vendStatus`, so a body that only carries it is
+ * not mistaken for a body with no state.
+ */
+export function toBillStatusInput(body: {
+  status?: string | null;
+  vendStatus?: string | null;
+  transactionStatus?: string | null;
+}) {
+  return {
+    status: body.status,
+    vendStatus: body.vendStatus?.trim()
+      ? body.vendStatus
+      : body.transactionStatus,
+  };
+}

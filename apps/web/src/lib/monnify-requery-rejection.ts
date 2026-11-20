@@ -19,7 +19,7 @@ const VEND_FAILED_WORDING =
  * nothing about whether the original vend completed.
  */
 const ANCILLARY_OPERATION_WORDING =
-  /\b(?:reversal|refund|chargeback|settlement|callback|webhook|notification)\b/i;
+  /\b(?:reversal|refund|chargeback|settlement|callback|webhook|notification)\w*(?:\s+\w+){0,2}?\s+(?:failed|failure|unsuccessful|declined|rejected|refused|denied|error)\b|\b(?:failed|failure|unable)\s+(?:to\s+)?(?:\w+\s+){0,2}?(?:reversal|refund|chargeback|settlement|callback|webhook|notification)/i;
 
 /** A negated failure ("has not failed", "was not unsuccessful") proves nothing. */
 const NEGATED_FAILURE_WORDING =
@@ -31,7 +31,7 @@ const NEGATED_FAILURE_WORDING =
  * delivered vends when asked with the wrong reference (#2784).
  */
 const LOOKUP_WORDING =
-  /\b(?:not\s+found|no\s+(?:record|transaction)|does\s+not\s+exist|doesn't\s+exist|(?:status|lookup|query|requery|request|authentication|login|token|access)\s+(?:\w+\s+)?(?:failed|declined|rejected|refused|denied|unsuccessful|cancell?ed|reversed)|invalid\s+(?:\w+\s+)?ref(?:erence)?|unknown\s+(?:\w+\s+)?ref(?:erence)?)\b/i;
+  /\b(?:not\s+found|no\s+(?:record|transaction)|does\s+not\s+exist|doesn't\s+exist|(?:status|lookup|query|requery|enquiry|inquiry|retrieval|fetch|request|authentication|login|token|access)\s+(?:\w+\s+)?(?:failed|declined|rejected|refused|denied|unsuccessful|cancell?ed|reversed)|invalid\s+(?:\w+\s+)?ref(?:erence)?|unknown\s+(?:\w+\s+)?ref(?:erence)?)\b/i;
 
 /**
  * Whether a requery that Monnify answered with a business rejection (not a

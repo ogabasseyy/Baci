@@ -226,6 +226,13 @@ const billMetaDataSchema = z
   .optional()
   .nullable();
 
+// A vend state some Monnify answers carry as `transactionStatus` (string or
+// number). It is read as the vend state when `vendStatus` is absent.
+const transactionStatusSchema = z
+  .union([z.string(), z.number().transform(String)])
+  .optional()
+  .nullable();
+
 // Vend Response Body Schema
 export const vendResponseBodySchema = z.object({
   transactionReference: z.string().optional().nullable(),
@@ -235,6 +242,7 @@ export const vendResponseBodySchema = z.object({
   paymentReference: z.string().optional().nullable(),
   status: z.string().optional().nullable(),
   vendStatus: z.string().optional().nullable(),
+  transactionStatus: transactionStatusSchema,
   token: z.string().optional().nullable(),
   metaData: billMetaDataSchema,
 });
@@ -246,6 +254,7 @@ export const requeryResponseBodySchema = z.object({
   paymentReference: z.string().optional().nullable(),
   status: z.string().optional().nullable(),
   vendStatus: z.string().optional().nullable(),
+  transactionStatus: transactionStatusSchema,
   token: z.string().optional().nullable(),
   metaData: billMetaDataSchema,
 });

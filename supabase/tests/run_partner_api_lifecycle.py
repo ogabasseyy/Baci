@@ -47,7 +47,7 @@ def seed_fixture(directory):
         CREATE SCHEMA vault;
         CREATE TABLE vault.decrypted_secrets (name text, decrypted_secret text);
         CREATE ROLE baci_fixture_api LOGIN NOINHERIT;
-        GRANT anon TO baci_fixture_api;
+        GRANT anon, authenticated TO baci_fixture_api;
         ALTER TABLE public.products ADD COLUMN weight_value numeric DEFAULT 500,
           ADD COLUMN weight_unit text DEFAULT 'g', ADD COLUMN dimensions jsonb;
         GRANT SELECT (id, merchant_id, weight_value, weight_unit, dimensions, vat_category_code, vat_rate)
@@ -141,6 +141,8 @@ def run():
                 'NEXT_PUBLIC_SUPABASE_URL': base,
                 'NEXT_PUBLIC_SUPABASE_ANON_KEY': anon_jwt(jwt_secret),
                 'SUPABASE_SERVICE_ROLE_KEY': FIXTURE_PROOF_KEY,
+                'SUPABASE_JWT_SECRET': jwt_secret,
+                'SUPABASE_AGENTIC_JWT_PRIVATE_JWK': '',
             }
             subprocess.run(
                 [str(ROOT / 'node_modules/.bin/vitest'), 'run', '--root', 'apps/web', TEST_FILE],

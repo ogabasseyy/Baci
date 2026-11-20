@@ -42,7 +42,7 @@ Once the merchant moves a settled partner order to processing, the existing fulf
 
 ### Draft consumer guide and evidence ingress
 
-The [delivery API quickstart](../../partners/delivery-api-quickstart.md) documents the supported calls. The internal reconciliation route is for Baci’s authorized verifier only. It accepts normalized capture and settlement evidence using a separate connection-scoped verifier credential. Do not provision that credential for a partner or enable a live verifier until its payment and payout evidence sources are confirmed. The fixture checks exercise complete acceptance and a price-drift hold. Carrier booking and tracking still need verification against the real shipment path.
+The [delivery API quickstart](../../partners/delivery-api-quickstart.md) documents the supported calls. The internal reconciliation route is for Baci’s authorized verifier only. It accepts normalized capture and settlement evidence using a separate connection-scoped verifier credential. After verifying the credential, Baci calls the database with the existing short-lived, merchant-scoped storefront order token and a proof bound to the reconciliation request. Do not provision that credential for a partner or enable a live verifier until its payment and payout evidence sources are confirmed. The fixture checks exercise complete acceptance and a price-drift hold. Carrier booking and tracking still need verification against the real shipment path.
 
 #### Internal verifier responses
 

@@ -3,8 +3,12 @@ import { POST } from './route';
 
 const mocks = vi.hoisted(() => ({
   rpc: vi.fn(),
+  scopedClient: vi.fn(),
   proof: vi.fn(),
   limit: vi.fn(),
+}));
+vi.mock('@/lib/checkout/storefront-order-rpc-client', () => ({
+  createStorefrontOrderRpcClient: mocks.scopedClient,
 }));
 vi.mock('@/lib/supabase/anon', () => ({
   createAnonClient: () => ({ rpc: mocks.rpc }),
@@ -64,6 +68,7 @@ describe('internal partner reconciliation', () => {
     vi.resetAllMocks();
     vi.stubEnv('CROSSREM_ORDER_TOKEN', orderToken);
     vi.stubEnv('CROSSREM_VERIFIER_TOKEN', verifierToken);
+    mocks.scopedClient.mockReturnValue({ rpc: mocks.rpc });
     mocks.limit.mockResolvedValue({ verdict: 'allowed' });
     mocks.proof.mockReturnValue({ signature: 'test-only' });
     mocks.rpc.mockResolvedValue({
@@ -79,6 +84,7 @@ describe('internal partner reconciliation', () => {
     vi.stubEnv('CROSSREM_VERIFIER_TOKEN', orderToken);
     expect((await POST(request(evidence, orderToken))).status).toBe(404);
     expect(mocks.rpc).not.toHaveBeenCalled();
+    expect(mocks.scopedClient).not.toHaveBeenCalled();
   });
 
   it('validates submitted evidence and derives merchant and connection server-side', async () => {
@@ -89,6 +95,12 @@ describe('internal partner reconciliation', () => {
     const result = await POST(request());
     expect(result.status).toBe(200);
     expect(await result.json()).toMatchObject({ receipt, hold_reason: null });
+    expect(mocks.scopedClient).toHaveBeenCalledExactlyOnceWith({
+      fallbackClient: expect.anything(),
+      hasCanonicalDeliveryMetadata: false,
+      merchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+      userId: null,
+    });
     const { submission_id, ...expectedEvidence } = evidence;
     expect(mocks.rpc).toHaveBeenCalledExactlyOnceWith(
       'reconcile_verified_partner_order',

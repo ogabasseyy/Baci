@@ -43,6 +43,22 @@ def reduced_schema_sql():
             partner_fixture.index('CREATE FUNCTION private.create_storefront_order')
         ],
         partner_fixture[partner_fixture.index('CREATE TABLE public.shipping_quotes'):],
+        """
+        CREATE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS $$
+          SELECT nullif(pg_catalog.current_setting('request.jwt.claims', true), '')::jsonb;
+        $$;
+        CREATE FUNCTION auth.role() RETURNS text LANGUAGE sql STABLE AS $$
+          SELECT auth.jwt()->>'role';
+        $$;
+        CREATE FUNCTION public.has_merchant_access(uuid) RETURNS boolean LANGUAGE sql STABLE
+          AS $$ SELECT false; $$;
+        """,
+        migration('20260828101000'),
+        """
+        CREATE TRIGGER enforce_storefront_order_route_context
+        BEFORE INSERT ON public.orders FOR EACH ROW
+        EXECUTE FUNCTION private.enforce_storefront_order_route_context();
+        """,
         migration('20261001170000'),
         definition(migration('20261015130400'), 'CREATE OR REPLACE FUNCTION public.commerce_cart_resolve_merchant_currency('),
         definition(migration('20261015090000'), 'CREATE OR REPLACE FUNCTION public.commerce_cart_product_negotiable('),

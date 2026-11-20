@@ -90,6 +90,20 @@ BEGIN
     );
   END LOOP;
 
+  BEGIN
+    PERFORM private.accept_settled_partner_order(submission_id, merchant_id, connection_id);
+    RAISE EXCEPTION 'unscoped partner acceptance bypassed the storefront order guard';
+  EXCEPTION WHEN insufficient_privilege THEN
+    IF SQLERRM <> 'storefront_order_route_context_required' THEN RAISE; END IF;
+  END;
+
+  -- Mirror the claims PostgREST receives from Baci's existing scoped signer.
+  PERFORM pg_catalog.set_config('request.jwt.claims', jsonb_build_object(
+    'role', 'authenticated',
+    'storefront_order_context', 'route',
+    'storefront_order_merchant_id', merchant_id
+  )::text, true);
+
   receipt := private.accept_settled_partner_order(submission_id, merchant_id, connection_id);
   accepted_id := (receipt->>'order_id')::uuid;
   IF receipt->>'status' IS DISTINCT FROM 'accepted'

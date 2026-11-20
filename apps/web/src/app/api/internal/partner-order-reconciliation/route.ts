@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { authorizePartnerProfile } from '@/app/api/partners/v1/partner-profile';
 import { getPartnerProfiles } from '@/app/api/partners/v1/partner-profiles';
+import { createStorefrontOrderRpcClient } from '@/lib/checkout/storefront-order-rpc-client';
 import { readBoundedJsonBody } from '@/lib/events/read-bounded-json-body';
 import { logger } from '@/lib/logger';
 import { createShippingQuoteRouteProof } from '@/lib/shipping/shipping-quote-route-proof';
@@ -66,16 +67,19 @@ export async function POST(request: Request) {
       subjectId: submission_id,
       payload: { connection_id: connectionId, evidence },
     });
-    const { data, error } = await createAnonClient().rpc(
-      'reconcile_verified_partner_order',
-      {
-        p_submission_id: submission_id,
-        p_merchant_id: merchantId,
-        p_connection_id: connectionId,
-        p_evidence: evidence,
-        p_route_proof: proof,
-      }
-    );
+    const db = createStorefrontOrderRpcClient({
+      fallbackClient: createAnonClient(),
+      hasCanonicalDeliveryMetadata: false,
+      merchantId,
+      userId: null,
+    });
+    const { data, error } = await db.rpc('reconcile_verified_partner_order', {
+      p_submission_id: submission_id,
+      p_merchant_id: merchantId,
+      p_connection_id: connectionId,
+      p_evidence: evidence,
+      p_route_proof: proof,
+    });
     if (error?.code === 'P0002') return reject(404, 'NOT_FOUND');
     if (
       error?.code === '22023' &&

@@ -52,6 +52,7 @@ it('reports a reversal for reconciliation when its reference and domain match', 
 it.each([
   { status: 'reversed', domain: 'live' },
   { status: 'failed', reference: 'different-reference' },
+  { status: 'pending', reference: 'different-reference' },
   { amount: 10_000 },
 ])('classifies mismatched provider responses without capture evidence (%j)', async (changes) => {
   respond(changes);

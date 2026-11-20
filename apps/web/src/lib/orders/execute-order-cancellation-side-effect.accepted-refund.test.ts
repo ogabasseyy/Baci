@@ -165,7 +165,13 @@ describe('cancellation refund accepted-refund safety', () => {
           candidates: [
             expect.objectContaining({ paymentTransactionId: 'payment-1' }),
           ],
-          metadata: { accepted_refund_ids: [42], ambiguous_initiation: false },
+          metadata: {
+            accepted_refund_ids: [42],
+            ambiguous_initiation: false,
+            ...(mismatch
+              ? {}
+              : { bank_offer_capture_lookup_unavailable: true }),
+          },
         })
       );
     } else {

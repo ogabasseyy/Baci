@@ -23,9 +23,7 @@ export async function verifyBankCardOfferPaystack(
     status === 'reversed' ||
     status === 'cancelled';
   if (data.reference !== attempt.reference) {
-    return status === 'success' || terminal
-      ? ({ kind: 'mismatch' } as const)
-      : null;
+    return { kind: 'mismatch' } as const;
   }
   if (status !== 'success') {
     // A terminal status starts operator review for the same reference.

@@ -194,7 +194,14 @@ export async function initiatePaystackCancellationRefunds({
   }
   if (bankOfferLegsForReview.length > 0) {
     await quarantineRefund({
-      metadata: { accepted_refund_ids: refundIds, ambiguous_initiation: false },
+      metadata: {
+        accepted_refund_ids: refundIds,
+        // This worker never submitted the quarantined legs to Paystack.
+        ambiguous_initiation: false,
+        ...(bankOfferLookupUnavailable
+          ? { bank_offer_capture_lookup_unavailable: true }
+          : {}),
+      },
       order,
       reason:
         isLastAttempt && bankOfferLookupUnavailable

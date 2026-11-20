@@ -1,6 +1,9 @@
 import { joinMonnifyAnswerStrings } from './monnify-answer-strings';
 import { normaliseMonnifyWording } from './monnify-text-normalise';
-import { isMonnifyUnresolvedAnswer } from './monnify-unresolved-answer';
+import {
+  hasMonnifyExplicitVendFailure,
+  isMonnifyUnresolvedAnswer,
+} from './monnify-unresolved-answer';
 
 /**
  * Wording that names the VEND itself as failed: a vend noun near a failure
@@ -38,7 +41,8 @@ export function isMonnifyRequeryRejectionDefiniteFailure({
     `${rawMessage} ${joinMonnifyAnswerStrings(envelope)}`
   );
   return (
-    VEND_FAILED_WORDING.test(wording) &&
+    (VEND_FAILED_WORDING.test(wording) ||
+      hasMonnifyExplicitVendFailure(envelope)) &&
     !LOOKUP_WORDING.test(wording) &&
     !isMonnifyUnresolvedAnswer({ answer: envelope, wording })
   );

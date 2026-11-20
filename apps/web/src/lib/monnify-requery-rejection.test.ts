@@ -67,3 +67,29 @@ describe('bugfix: query-level refusals never prove the vend failed', () => {
     expect(check(message)).toBe(true);
   });
 });
+
+describe('bugfix: a FAILED vend status proves failure even when the message does not', () => {
+  it('accepts vendStatus FAILED with a neutral message', () => {
+    expect(
+      check('Request could not be completed', {
+        responseBody: { vendStatus: 'FAILED' },
+      })
+    ).toBe(true);
+  });
+
+  it('does not accept FAILED while another status is still pending', () => {
+    expect(
+      check('Rejected', {
+        responseBody: { status: 'FAILED', vendStatus: 'PENDING' },
+      })
+    ).toBe(false);
+  });
+
+  it.each([
+    'Status lookup unsuccessful',
+    'Authentication unsuccessful',
+    'Request declined',
+  ])('keeps "%s" unresolved', (message) => {
+    expect(check(message)).toBe(false);
+  });
+});

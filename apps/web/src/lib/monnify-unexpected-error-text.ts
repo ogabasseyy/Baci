@@ -21,7 +21,7 @@ const MONNIFY_UNEXPECTED_ERROR_TEXT =
  * 408, 409, 5xx); 401/403/429 are refusals before any vend.
  */
 const MONNIFY_UNRESOLVED_CODE_TEXT =
-  /(?<![A-Za-z_-])(?<!\b(?:product|biller|item|service|customer|package|plan)\s+)(?:(?:(?:response|error|result|status)[\s_-]*)?code|(?:(?:http|response|result)[\s_-]*)?status(?:[\s_-]*code)?)["'\s:=]*(?:(?:is|was)\s*[:=]?\s*)?\[?\s*"?0*(?:99|2\d\d|408|409|5\d\d)(?!\d)/i;
+  /(?<![A-Za-z_-])(?<!\b(?:product|biller|item|service|customer|package|plan)\s+)(?:(?:(?:response|error|result|status)[\s_-]*)?code|(?:(?:http|response|result)[\s_-]*)?status(?:[\s_-]*code)?)["'\s:=]*(?:(?:is|was)\s*[:=]?\s*)?\[?\s*"?(?:0+|0*(?:99|2\d\d|408|409|5\d\d))(?!\d)/i;
 
 /**
  * Whether a raw Monnify answer reports code 99: read as JSON where it parses,

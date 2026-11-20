@@ -97,3 +97,25 @@ describe('bugfix: structure and flags beat echoed wording', () => {
     expect(open({ responseCode: '0' }, 'Rejected')).toBe(true);
   });
 });
+
+describe('bugfix: service-unavailable and unrecognised vend statuses are held', () => {
+  it('holds "Service unavailable"', () => {
+    expect(open({ responseCode: '01' }, 'Service unavailable')).toBe(true);
+  });
+
+  it('holds an unrecognised vend status such as UNKNOWN', () => {
+    expect(open({ responseBody: { vendStatus: 'UNKNOWN' } }, 'Rejected')).toBe(
+      true
+    );
+  });
+
+  it('does not hold a generic HTTP status label', () => {
+    expect(
+      open({ status: 'Bad Request', responseCode: '01' }, 'Invalid customer')
+    ).toBe(false);
+  });
+
+  it('holds plain-text "Response code is 0"', () => {
+    expect(open(null, 'Response code is 0')).toBe(true);
+  });
+});

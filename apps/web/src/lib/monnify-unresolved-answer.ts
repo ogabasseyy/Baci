@@ -29,7 +29,11 @@ const FAILED_STATUSES = new Set(['FAILED', 'FAILURE', 'UNSUCCESSFUL']);
  * do not count.
  */
 const IN_FLIGHT_WORDING =
-  /(?<!\b(?:not|never|no|cannot|n't)(?:\s+\w+){0,3}?\s+)(?<!(?:validation|verification|lookup|login|authentication|customer)\s+)\b(?:pending|processing|in\s+progress|queued|initiated|submitted|accepted|successful(?:ly)?|succeeded|success|delivered|completed|credited|vended|dispatched|timed?\s*out|re\s*quer(?:y|ied))\b/i;
+  /(?<!\b(?:not|never|no|cannot|n't)(?:\s+\w+){0,3}?\s+)(?<!(?:validation|verification|lookup|login|authentication|customer)\s+)\b(?:pending|processing|in\s+progress|queued|initiated|submitted|accepted|successful(?:ly)?|succeeded|success|delivered|completed|credited|vended|dispatched|timed?\s*out|re\s*quer(?:y|ied)|(?:service\s+)?(?:temporarily\s+)?unavailable)\b/i;
+
+/** Vend-specific status keys (not a bare `status`). */
+const VEND_STATUS_KEY =
+  /^(?:vend|transaction|txn|purchase|order|payment|bill)status$/;
 
 /** True outcome flags, key normalised: "delivered", "isPending", "vendFailed"... */
 const RUNNING_FLAG =
@@ -51,6 +55,8 @@ interface StructuredOutcome {
   running: boolean;
   done: boolean;
   failed: boolean;
+  /** A vend-specific status Monnify named that is not a state we know. */
+  unknown: boolean;
   /** Nested deeper than we scan: can't be cleared, so it holds. */
   incomplete: boolean;
 }
@@ -81,6 +87,16 @@ function readStructuredOutcome(
       found.running ||= RUNNING_STATUSES.has(status);
       found.done ||= DONE_STATUSES.has(status);
       found.failed ||= FAILED_STATUSES.has(status);
+      // A vend-specific status ("vendStatus: UNKNOWN", a new provider state)
+      // that is not a known state proves nothing, so it is not a refusal.
+      // A generic `status` ("error", "Bad Request") only labels the error.
+      found.unknown ||=
+        VEND_STATUS_KEY.test(key) &&
+        status !== '' &&
+        !/^\d+$/.test(status) &&
+        !RUNNING_STATUSES.has(status) &&
+        !DONE_STATUSES.has(status) &&
+        !FAILED_STATUSES.has(status);
     }
     if (isTrueFlag(value)) {
       found.running ||= RUNNING_FLAG.test(key);
@@ -113,6 +129,7 @@ export function isMonnifyUnresolvedAnswer({
     running: false,
     done: false,
     failed: false,
+    unknown: false,
     incomplete: false,
   };
   readStructuredOutcome(answer, outcome);
@@ -122,7 +139,9 @@ export function isMonnifyUnresolvedAnswer({
   // With an explicit failure and nothing running, the structure wins over
   // wording that only echoes the success state.
   const structuredHold =
-    outcome.running || outcome.incomplete || (outcome.done && !outcome.failed);
+    outcome.running ||
+    outcome.incomplete ||
+    ((outcome.done || outcome.unknown) && !outcome.failed);
   const wordingHolds =
     !(outcome.failed && !outcome.running) &&
     IN_FLIGHT_WORDING.test(normaliseMonnifyWording(wording));
@@ -137,4 +156,21 @@ export function isMonnifyUnresolvedAnswer({
   const codeLeavesOutcomeOpen =
     hasMonnifyUnresolvedCode(answer) || reportsMonnifyUnresolvedCode(wording);
   return codeLeavesOutcomeOpen && !isMonnifyKnownVendRefusalText(wording);
+}
+
+/**
+ * Whether a parsed Monnify answer names the vend itself as failed (FAILED
+ * status or failed: true) with nothing still running or unrecognised: proof
+ * of failure for a rejected requery whose message does not say so.
+ */
+export function hasMonnifyExplicitVendFailure(answer: unknown): boolean {
+  const outcome: StructuredOutcome = {
+    running: false,
+    done: false,
+    failed: false,
+    unknown: false,
+    incomplete: false,
+  };
+  readStructuredOutcome(answer, outcome);
+  return outcome.failed && !outcome.running && !outcome.incomplete;
 }

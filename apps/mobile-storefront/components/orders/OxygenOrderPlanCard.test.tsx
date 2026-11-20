@@ -60,3 +60,15 @@ it('clears the old plan when moving to an order without a saved plan', async () 
   expect(screen.queryByText('27 Nov 2026')).toBeNull();
   expect(screen.queryByText('Oxygen payment plan')).toBeNull();
 });
+
+it('explains how to retry a failed plan read without exposing transport errors', async () => {
+  readPlan.mockRejectedValueOnce(new Error('Private transport details'));
+  render(<OxygenOrderPlanCard {...props} />);
+  expect(screen.getByText('Loading payment plan…')).toBeVisible();
+  expect(
+    await screen.findByText(
+      'Your saved payment plan is temporarily unavailable. Reopen this order to try again.'
+    )
+  ).toBeVisible();
+  expect(screen.queryByText('Private transport details')).toBeNull();
+});

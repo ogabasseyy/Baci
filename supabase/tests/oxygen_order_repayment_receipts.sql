@@ -94,6 +94,16 @@ BEGIN
 END $$;
 RESET ROLE;
 
+UPDATE oxygen_private.runtime_bindings SET enabled = false
+WHERE merchant_id = 'd5010000-0000-4000-8000-000000000011';
+SET LOCAL ROLE authenticated;
+DO $$ BEGIN
+  IF jsonb_array_length(public.oxygen_order_repayment_receipts('d5010000-0000-4000-8000-000000000031')) <> 2 THEN
+    RAISE EXCEPTION 'Disabling the provider hid previously recorded repayment acknowledgements';
+  END IF;
+END $$;
+RESET ROLE;
+
 UPDATE public.oxygen_workflows SET stage = 'payment_required'
 WHERE id = 'd5010000-0000-4000-8000-000000000041';
 SET LOCAL ROLE authenticated;

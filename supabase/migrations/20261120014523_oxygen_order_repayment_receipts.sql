@@ -17,8 +17,9 @@ AS $$
     AND o.customer_id = w.customer_id
   JOIN public.customers AS c
     ON c.id = w.customer_id AND c.merchant_id = w.merchant_id
+  -- The binding scopes historical callbacks even when execution is disabled.
   JOIN oxygen_private.runtime_bindings AS b
-    ON b.merchant_id = w.merchant_id AND b.environment = w.environment AND b.enabled
+    ON b.merchant_id = w.merchant_id AND b.environment = w.environment
   JOIN oxygen_private.provider_states AS s ON s.workflow_id = w.id
   JOIN oxygen_private.callback_inbox AS i
     ON i.partner_reference = b.partner_reference AND i.environment = w.environment

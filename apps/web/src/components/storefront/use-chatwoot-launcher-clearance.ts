@@ -1,42 +1,64 @@
-import { usePathname } from 'next/navigation';
-import { useEffect } from 'react';
+import { type RefObject, useEffect } from 'react';
 
 /** Read by the Chatwoot SDK launcher (phones only, where chat opens full screen). */
 export const CHATWOOT_BUBBLE_CLEARANCE_PROPERTY =
   '--cw-bubble-bottom-clearance';
 
-// The cart page's sticky checkout bar: the native launcher sat 6.75rem above
-// the screen bottom there. Chatwoot already keeps 20px (1.25rem), so lift by
-// the remaining 5.5rem. The SDK applies the same value as its drag limit.
-export const CHATWOOT_CART_BOTTOM_CLEARANCE = '5.5rem';
+// The SDK already keeps the launcher this far above the screen bottom.
+const SDK_BOTTOM_GAP_PX = 20;
+// Air between the launcher and the bar it clears.
+const BAR_GAP_PX = 8;
 
-function isCartRoute(
-  pathname: string | null,
-  storeSlug: string | undefined
-): boolean {
-  const segments = pathname?.split('/').filter(Boolean);
-  if (!segments?.length) return false;
-  const routeIndex = segments[0] === storeSlug ? 1 : 0;
-  return segments[routeIndex] === 'cart';
-}
-
-/** Lifts the launcher above the cart page's sticky bar while that page shows. */
+/**
+ * Lifts the Chatwoot launcher above a fixed bottom bar while that bar shows.
+ *
+ * The clearance is measured from the bar's real top edge, so it follows the
+ * bar's height and offset instead of copying a number, and it disappears with
+ * the bar (empty cart, desktop layout where the bar is hidden).
+ */
 export function useChatwootLauncherClearance(
-  storeSlug: string | undefined,
-  active: boolean
+  barRef: RefObject<HTMLElement | null>
 ) {
-  const pathname = usePathname();
-  const lifted = active && isCartRoute(pathname, storeSlug);
-
   useEffect(() => {
-    if (!lifted) return;
+    const bar = barRef.current;
+    if (!bar) return;
     const root = document.documentElement;
-    root.style.setProperty(
-      CHATWOOT_BUBBLE_CLEARANCE_PROPERTY,
-      CHATWOOT_CART_BOTTOM_CLEARANCE
-    );
+    let frame = 0;
+
+    const publish = () => {
+      const rect = bar.getBoundingClientRect();
+      if (!rect.width || !rect.height) {
+        root.style.removeProperty(CHATWOOT_BUBBLE_CLEARANCE_PROPERTY);
+        return;
+      }
+      const lift =
+        window.innerHeight - rect.top + BAR_GAP_PX - SDK_BOTTOM_GAP_PX;
+      root.style.setProperty(
+        CHATWOOT_BUBBLE_CLEARANCE_PROPERTY,
+        `${Math.max(0, Math.round(lift))}px`
+      );
+    };
+    const schedulePublish = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = 0;
+        publish();
+      });
+    };
+
+    publish();
+    const observer =
+      typeof ResizeObserver === 'undefined'
+        ? null
+        : new ResizeObserver(schedulePublish);
+    observer?.observe(bar);
+    window.addEventListener('resize', schedulePublish);
+
     return () => {
+      if (frame) window.cancelAnimationFrame(frame);
+      observer?.disconnect();
+      window.removeEventListener('resize', schedulePublish);
       root.style.removeProperty(CHATWOOT_BUBBLE_CLEARANCE_PROPERTY);
     };
-  }, [lifted]);
+  }, [barRef]);
 }

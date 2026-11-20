@@ -1,79 +1,135 @@
 import { renderHook } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   CHATWOOT_BUBBLE_CLEARANCE_PROPERTY,
-  CHATWOOT_CART_BOTTOM_CLEARANCE,
   useChatwootLauncherClearance,
 } from './use-chatwoot-launcher-clearance';
-
-const mocks = vi.hoisted(() => ({ pathname: '/shop' as string | null }));
-
-vi.mock('next/navigation', () => ({
-  usePathname: () => mocks.pathname,
-}));
 
 const clearance = () =>
   document.documentElement.style.getPropertyValue(
     CHATWOOT_BUBBLE_CLEARANCE_PROPERTY
   );
 
-afterEach(() => {
-  document.documentElement.style.removeProperty(
-    CHATWOOT_BUBBLE_CLEARANCE_PROPERTY
-  );
-});
+type Rect = { top: number; width: number; height: number };
 
 describe('useChatwootLauncherClearance', () => {
-  it.each([
-    ['/shop/cart', 'shop'],
-    ['/cart', 'shop'],
-    ['/shop/cart/', 'shop'],
-    ['/cart', undefined],
-  ])('lifts the launcher on the cart route %s', (pathname, slug) => {
-    mocks.pathname = pathname;
-    renderHook(() => useChatwootLauncherClearance(slug, true));
+  let bar: HTMLDivElement;
+  let rect: Rect;
+  let frames: FrameRequestCallback[];
+  let notifyResize: () => void;
+  let observer: {
+    observe: ReturnType<typeof vi.fn>;
+    disconnect: ReturnType<typeof vi.fn>;
+  };
 
-    expect(clearance()).toBe(CHATWOOT_CART_BOTTOM_CLEARANCE);
-  });
+  const flushFrames = () => {
+    const pending = frames.splice(0);
+    for (const callback of pending) callback(0);
+  };
+  const mount = () =>
+    renderHook(() => useChatwootLauncherClearance({ current: bar }));
 
-  it.each([
-    ['/shop', 'shop'],
-    ['/shop/products/cart-case', 'shop'],
-    ['/shop/cart-care', 'shop'],
-    ['/shop/checkout', 'shop'],
-    [null, 'shop'],
-  ])('leaves the launcher alone on %s', (pathname, slug) => {
-    mocks.pathname = pathname;
-    renderHook(() => useChatwootLauncherClearance(slug, true));
-
-    expect(clearance()).toBe('');
-  });
-
-  it('does nothing until the widget has started', () => {
-    mocks.pathname = '/shop/cart';
-    renderHook(() => useChatwootLauncherClearance('shop', false));
-
-    expect(clearance()).toBe('');
-  });
-
-  it('drops the clearance when the shopper leaves the cart', () => {
-    mocks.pathname = '/shop/cart';
-    const { rerender } = renderHook(() =>
-      useChatwootLauncherClearance('shop', true)
+  beforeEach(() => {
+    Object.defineProperty(window, 'innerHeight', {
+      configurable: true,
+      value: 812,
+    });
+    frames = [];
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {
+      frames = [];
+    });
+    observer = { observe: vi.fn(), disconnect: vi.fn() };
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(callback: () => void) {
+          notifyResize = callback;
+        }
+        observe = observer.observe;
+        disconnect = observer.disconnect;
+      }
     );
-    expect(clearance()).toBe(CHATWOOT_CART_BOTTOM_CLEARANCE);
+    // A bar 176px tall measured from the bottom: fixed bottom-24 plus its own height.
+    rect = { top: 636, width: 375, height: 80 };
+    bar = document.createElement('div');
+    bar.getBoundingClientRect = () => ({ ...rect }) as DOMRect;
+    document.body.append(bar);
+  });
 
-    mocks.pathname = '/shop/products';
-    rerender();
+  afterEach(() => {
+    bar.remove();
+    document.documentElement.style.removeProperty(
+      CHATWOOT_BUBBLE_CLEARANCE_PROPERTY
+    );
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('lifts the launcher to just above the bar it measured', () => {
+    mount();
+
+    // 812 - 636 = 176 from the bottom, +8 of air, minus the SDK's own 20.
+    expect(clearance()).toBe('164px');
+  });
+
+  it('publishes nothing while the bar is hidden (desktop layout)', () => {
+    rect = { top: 0, width: 0, height: 0 };
+    mount();
+
     expect(clearance()).toBe('');
   });
 
-  it('drops the clearance when the storefront unmounts', () => {
-    mocks.pathname = '/shop/cart';
-    const { unmount } = renderHook(() =>
-      useChatwootLauncherClearance('shop', true)
-    );
+  it('never publishes a negative clearance', () => {
+    rect = { top: 900, width: 375, height: 80 };
+    mount();
+
+    expect(clearance()).toBe('0px');
+  });
+
+  it('follows the bar when it resizes, in one frame', () => {
+    mount();
+    rect = { top: 600, width: 375, height: 116 };
+    notifyResize();
+    notifyResize();
+    window.dispatchEvent(new Event('resize'));
+
+    expect(window.requestAnimationFrame).toHaveBeenCalledTimes(1);
+    flushFrames();
+    expect(clearance()).toBe('200px');
+  });
+
+  it('drops the clearance when the bar becomes hidden', () => {
+    mount();
+    rect = { top: 0, width: 0, height: 0 };
+    window.dispatchEvent(new Event('resize'));
+    flushFrames();
+
+    expect(clearance()).toBe('');
+  });
+
+  it('cleans up everything on unmount', () => {
+    const { unmount } = mount();
     unmount();
+
+    expect(clearance()).toBe('');
+    expect(observer.disconnect).toHaveBeenCalledTimes(1);
+    window.dispatchEvent(new Event('resize'));
+    expect(frames).toHaveLength(0);
+  });
+
+  it('still works in browsers without ResizeObserver', () => {
+    vi.stubGlobal('ResizeObserver', undefined);
+    mount();
+
+    expect(clearance()).toBe('164px');
+  });
+
+  it('does nothing without a bar element', () => {
+    renderHook(() => useChatwootLauncherClearance({ current: null }));
 
     expect(clearance()).toBe('');
   });

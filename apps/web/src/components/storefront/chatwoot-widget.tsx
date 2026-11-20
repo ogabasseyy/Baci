@@ -3,7 +3,6 @@
 import { createContext, type ReactNode, useContext } from 'react';
 import { ChatwootLauncherOverlayStyle } from './chatwoot-launcher-overlay-style';
 import { ChatwootInlineCartBridge } from './ogabassey/components/chat/chatwoot-inline-cart-bridge';
-import { useChatwootLauncherClearance } from './use-chatwoot-launcher-clearance';
 import {
   type ChatwootWidgetConfig,
   useChatwootWidgetLifecycle,
@@ -25,7 +24,6 @@ export function ChatwootWidget({
   children: ReactNode;
 }) {
   const widgetStarted = useChatwootWidgetLifecycle(config);
-  useChatwootLauncherClearance(config?.storeSlug, widgetStarted);
 
   return (
     <ChatwootSupportActiveContext.Provider value={widgetStarted}>

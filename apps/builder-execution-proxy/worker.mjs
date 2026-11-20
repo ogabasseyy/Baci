@@ -109,7 +109,9 @@ export default {
       if (response.status !== 200) {
         await response.body?.cancel();
         if (response.status === 404) return unavailable(404);
-        return unavailable(response.status === 503 ? 503 : 502);
+        if (response.status === 429 || response.status === 503)
+          return unavailable(503);
+        return unavailable(502);
       }
       if (
         url.pathname.endsWith('/index.html') &&

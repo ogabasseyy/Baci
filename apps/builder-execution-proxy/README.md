@@ -60,10 +60,11 @@ both secret bindings and the route, using the secret references and sanitized
 service health. Never log or compare secret values in the probe output.
 
 The Worker discards upstream error bodies and headers. It preserves 404 and
-503 and maps other unexpected statuses, including upstream 401, 403 and 429,
-to an empty 502. Use origin health and rate-limit metrics to distinguish
-these cases from a transport failure. After rotation, verify the known probe
-returns 200 before reopening preview traffic.
+503, maps upstream capacity throttling (429) to an empty 503, and returns an
+empty 502 for unexpected statuses such as 401 and 403. Use origin health and
+rate-limit metrics to distinguish auth and transport failures from capacity
+denials. After rotation, verify the known probe returns 200 before reopening
+preview traffic.
 
 Wrangler disables Worker caching, invocation logs, traces, Logpush, and
 version preview URLs. Both layers return `Cache-Control: private, no-store`.

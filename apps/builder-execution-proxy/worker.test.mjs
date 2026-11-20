@@ -155,11 +155,16 @@ test('fails closed on upstream redirects and transport errors', async (t) => {
   assert.equal(await failed.text(), '');
 });
 
-test('returns a sanitized gateway error for upstream auth and capacity denials', async (t) => {
+test('distinguishes upstream capacity from auth denials without forwarding details', async (t) => {
   const fetch = t.mock.method(globalThis, 'fetch', () => {
     throw Error('unexpected request');
   });
-  for (const status of [401, 403, 429]) {
+  for (const [status, expected] of [
+    [401, 502],
+    [403, 502],
+    [429, 503],
+    [503, 503],
+  ]) {
     fetch.mock.mockImplementationOnce(
       async () =>
         new Response('synthetic origin detail', {
@@ -171,7 +176,7 @@ test('returns a sanitized gateway error for upstream auth and capacity denials',
       request(`/resource/${ticket}/app.js`),
       env
     );
-    assert.equal(result.status, 502);
+    assert.equal(result.status, expected);
     assert.equal(await result.text(), '');
     assert.equal(result.headers.get('WWW-Authenticate'), null);
     assert.equal(result.headers.get('Retry-After'), null);

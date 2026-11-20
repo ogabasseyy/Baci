@@ -37,6 +37,13 @@ describe('bank card offer configuration', () => {
     ).toBe(offer.merchantId);
   });
 
+  it('accepts offer terms without a storefront display name', () => {
+    expect(
+      bankCardOfferSchema.safeParse({ ...offer, displayName: undefined })
+        .success
+    ).toBe(true);
+  });
+
   it.each([1, 9999])('accepts discount bounds %s', (discountBasisPoints) => {
     expect(
       bankCardOfferSchema.safeParse({

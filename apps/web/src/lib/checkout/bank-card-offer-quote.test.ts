@@ -231,6 +231,35 @@ describe('bank card offer quotes', () => {
     });
   });
 
+  it.each([
+    { basisPoints: 4000, discountKobo: 2, firstNet: 1, secondNet: 2 },
+    { basisPoints: 6000, discountKobo: 3, firstNet: 0, secondNet: 2 },
+  ])('rounds cumulative allocations for an odd subtotal at $basisPoints basis points', ({
+    basisPoints,
+    discountKobo,
+    firstNet,
+    secondNet,
+  }) => {
+    expect(
+      quoteBankCardOffer({
+        offer: { ...offer, discountBasisPoints: basisPoints },
+        merchantId,
+        items: [
+          { ...items[0], unitPriceKobo: 1, quantity: 1 },
+          { ...items[1], productId, unitPriceKobo: 4, quantity: 1 },
+        ],
+        now,
+      })
+    ).toMatchObject({
+      eligibleSubtotalKobo: 5,
+      discountKobo,
+      allocations: [
+        { unitNetAmountsKobo: [firstNet] },
+        { unitNetAmountsKobo: [secondNet] },
+      ],
+    });
+  });
+
   it('matches uppercase catalog UUIDs and preserves integer kobo for decimal prices', () => {
     expect(
       quoteBankCardOffer({

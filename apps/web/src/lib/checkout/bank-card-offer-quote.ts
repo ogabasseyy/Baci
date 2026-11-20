@@ -93,6 +93,8 @@ export function quoteBankCardOffer({
     const unitNetAmountsKobo = Array.from({ length: item.quantity }, () => {
       if (!eligible) return item.unitPriceKobo;
       eligibleValue += BigInt(item.unitPriceKobo);
+      // For an odd divisor there is no exact half remainder. Adding its
+      // floor rounds up only once the integer remainder exceeds half.
       const next =
         (eligibleValue * discount + eligibleSubtotal / 2n) / eligibleSubtotal;
       const unitDiscount = next - allocatedDiscount;

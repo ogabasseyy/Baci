@@ -17,7 +17,7 @@ export const bankCardOfferSchema = z
     id: z.string().regex(/^[a-z][a-z0-9-]{1,63}$/),
     merchantId: z.uuid().transform((id) => id.toLowerCase()),
     bankCode: z.enum(['035', '232']),
-    displayName: nonEmpty,
+    displayName: nonEmpty.optional(),
     verifiedIssuerName: nonEmpty,
     cardBrands: z.array(cardBrand).min(1).max(3),
     eligibleProductIds: z.array(z.uuid()).min(1),

@@ -103,12 +103,14 @@ describe('primary wallet onboarding', () => {
     expect(input.storage.recordRejected).toHaveBeenCalledOnce();
   });
 
-  it('keeps an explicitly rejected intent in conflict on retry without provider contact', async () => {
+  it('keeps an explicitly rejected intent in conflict on retry without a create', async () => {
     const input = fixture();
     input.storage.claim.mockResolvedValue({ status: 'conflict' });
     expect(await onboardPiggyvestPrimaryWallet(input)).toEqual({
       status: 'conflict',
     });
+    // Only the read-only lookup runs; it lists a customer, so no refresh.
+    expect(input.storage.refreshUnknown).not.toHaveBeenCalled();
     expect(input.createCustomer).not.toHaveBeenCalled();
     expect(input.storage.recordAccepted).not.toHaveBeenCalled();
     expect(input.storage.recordUncertain).not.toHaveBeenCalled();

@@ -133,3 +133,43 @@ describe('bugfix: a numeric vendStatus is parsed and held, not thrown', () => {
     });
   });
 });
+
+describe('bugfix: flattened ancillary statuses and hedged wording', () => {
+  it.each([
+    'refundStatus',
+    'reversalStatus',
+    'settlementStatus',
+    'callbackStatus',
+  ])('does not treat %s FAILED as proof the vend failed', (key) => {
+    expect(
+      isMonnifyRequeryRejectionDefiniteFailure({
+        envelope: { responseBody: { [key]: 'FAILED' } },
+        rawMessage: 'Could not complete',
+      })
+    ).toBe(false);
+  });
+
+  it.each([
+    'Transaction may have failed',
+    'Vend might have failed',
+    'Transaction could have failed',
+    'Purchase possibly failed',
+    'The vend appears to have failed',
+  ])('keeps the hedged "%s" unresolved', (message) => {
+    expect(
+      isMonnifyRequeryRejectionDefiniteFailure({
+        envelope: {},
+        rawMessage: message,
+      })
+    ).toBe(false);
+  });
+
+  it('still accepts a plain "Vend failed"', () => {
+    expect(
+      isMonnifyRequeryRejectionDefiniteFailure({
+        envelope: {},
+        rawMessage: 'Vend failed',
+      })
+    ).toBe(true);
+  });
+});

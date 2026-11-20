@@ -24,7 +24,7 @@ export const FAILED_STATUSES = new Set(['FAILED', 'FAILURE', 'UNSUCCESSFUL']);
 
 /** Vend-specific status keys (not a bare `status`). */
 const VEND_STATUS_KEY =
-  /^(?!(?:http|response|result)?status(?:code)?$)(?!(?:customer|product|biller|item|service|package|plan|validation|request|merchant|account|user|payment)).+status$/;
+  /^(?!(?:http|response|result)?status(?:code)?$)(?!(?:customer|product|biller|item|service|package|plan|validation|request|merchant|account|user|payment|refund|reversal|settlement|callback|webhook|notification|chargeback|lookup|query|requery|enquiry|inquiry)).+status$/;
 
 /**
  * A generic `status` that is not an HTTP reason phrase, an error label or a

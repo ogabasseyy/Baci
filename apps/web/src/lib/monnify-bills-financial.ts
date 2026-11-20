@@ -171,6 +171,17 @@ export async function purchaseBill(
         'Monnify success vend response missing both transaction and vend references'
       );
     }
+    if (isProcessing && !vendReference && hasToken) {
+      // Pending but already carrying a token, and nothing to requery by: hold
+      // it (the token is not stored on a pending row) instead of re-vending.
+      return buildMonnifyUnresolvedVendResult({
+        amount,
+        message: sanitizeMonnifyErrorDetail(
+          parsedEnvelope.responseMessage || 'Vend outcome unclear'
+        ),
+        requestReference,
+      });
+    }
     if (isProcessing && !vendReference) {
       throw new MonnifyTransientVendError(
         'Monnify pending vend response missing a requeryable vend reference'

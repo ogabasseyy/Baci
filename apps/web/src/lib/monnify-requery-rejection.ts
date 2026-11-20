@@ -1,4 +1,5 @@
 import { joinMonnifyAnswerStrings } from './monnify-answer-strings';
+import { hasBodyToken } from './monnify-bills-status';
 import { normaliseMonnifyWording } from './monnify-text-normalise';
 import {
   hasMonnifyExplicitVendFailure,
@@ -53,6 +54,10 @@ export function isMonnifyRequeryRejectionDefiniteFailure({
   );
   // A vend-level FAILED status in the body is conclusive: it is not masked by
   // generic query wording such as "Request failed" in the message.
+  // A voucher token in the body means the vend may have delivered.
+  if (hasBodyToken(envelope)) {
+    return false;
+  }
   if (hasMonnifyExplicitVendFailure(envelope)) {
     return !isMonnifyUnresolvedAnswer({ answer: envelope, wording });
   }

@@ -88,13 +88,35 @@ export function hasConflictingVendStatuses(body: {
   transactionStatus?: string | null;
   finalStatus?: string | null;
 }): boolean {
-  const states = [body.vendStatus, body.transactionStatus, body.finalStatus]
-    .map((value) => value?.trim())
-    .filter((value): value is string => !!value);
-  const failed = states.filter(
-    (value) => classifyMonnifyBillStatus({ vendStatus: value }).isFailed
-  ).length;
-  // One says failed while another says anything else (success, pending, or a
-  // state we do not know): neither has authority.
-  return failed > 0 && failed < states.length;
+  const categories = new Set(
+    [body.vendStatus, body.transactionStatus, body.finalStatus]
+      .map((value) => value?.trim())
+      .filter((value): value is string => !!value)
+      .map((value) => {
+        const state = classifyMonnifyBillStatus({ vendStatus: value });
+        if (state.isSuccess) {
+          return 'success';
+        }
+        if (state.isFailed) {
+          return 'failed';
+        }
+        return state.isProcessing ? 'processing' : 'unknown';
+      })
+  );
+  // Peer vend states that name different outcomes (success beside pending,
+  // failed beside anything else): none has authority, so the answer is held.
+  return categories.size > 1;
+}
+
+/** Whether an answer's responseBody carries a real (non-placeholder) token. */
+export function hasBodyToken(answer: unknown): boolean {
+  if (!answer || typeof answer !== 'object') {
+    return false;
+  }
+  const body = (answer as Record<string, unknown>).responseBody;
+  return (
+    !!body &&
+    typeof body === 'object' &&
+    !!readMonnifyBillToken(body as Parameters<typeof readMonnifyBillToken>[0])
+  );
 }

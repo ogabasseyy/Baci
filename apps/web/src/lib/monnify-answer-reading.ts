@@ -1,6 +1,7 @@
 import { parseMonnifyAnswer } from './monnify-answer-parse';
 import { joinMonnifyAnswerStrings } from './monnify-answer-strings';
 import { mentionsMonnifyAuthWording } from './monnify-auth-wording';
+import { hasBodyToken } from './monnify-bills-status';
 import { hasMonnifyDuplicateFlag } from './monnify-duplicate-flag';
 import { isMonnifyDuplicateReferenceText } from './monnify-duplicate-reference';
 import { hasMonnifyNonDefinitiveCode } from './monnify-non-definitive-code';
@@ -79,11 +80,13 @@ export function readMonnifyAnswer(
     // "Unauthorized" there while keeping a 400 status).
     mentionsAuthWording: mentionsMonnifyAuthWording(text),
     responseCode: readMonnifyResponseCode(parsed),
-    leavesOutcomeOpen: isMonnifyUnresolvedAnswer({
-      answer: parsed,
-      // The reason phrase counts too ("Vend in progress" with an empty body).
-      wording: text,
-    }),
+    leavesOutcomeOpen:
+      hasBodyToken(parsed) ||
+      isMonnifyUnresolvedAnswer({
+        answer: parsed,
+        // The reason phrase counts too ("Vend in progress" with an empty body).
+        wording: text,
+      }),
     providerReferences: collectMonnifyProviderReferences(parsed),
     vendReferenceCandidate: findMonnifyBodyVendReference(parsed),
   };

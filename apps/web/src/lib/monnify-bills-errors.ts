@@ -134,6 +134,10 @@ export class MonnifyHttpError extends Error {
     if (this.status === 401 || this.status === 403 || this.status === 429) {
       return false;
     }
+    // The same codes inside an HTTP 400 body are login rejections/throttles too.
+    if (/^0*(?:401|403|429)$/.test(this.#reading.responseCode ?? '')) {
+      return false;
+    }
     return (
       this.status === 408 ||
       this.isDuplicateReference ||

@@ -62,6 +62,8 @@ function isGenericVendLikeStatus(key: string, value: string): boolean {
 
 const VEND_FLAG_KEY =
   /^(?:is|was|has)?(?:been)?(?:vend|transaction|txn|purchase|airtime|delivered|dispatched|vended|credited|recharged|toppedup)/;
+const NON_VEND_PARENT =
+  /^(?:customer|product|biller|item|service|package|plan|account|merchant|user|validation)s?$/;
 const PAYMENT_LEVEL_FLAG = /^(?:is|was|has)?(?:been)?payment/;
 
 /** True outcome flags, key normalised: "delivered", "isPending", "vendFailed"... */
@@ -130,7 +132,8 @@ function readStructuredOutcome(
   answer: unknown,
   found: StructuredOutcome,
   depth = 0,
-  inBody = false
+  inBody = false,
+  parentKey = ''
 ): void {
   if (!answer || typeof answer !== 'object') {
     return;
@@ -146,7 +149,12 @@ function readStructuredOutcome(
     const key = rawKey.replace(/[\s_-]/g, '').toLowerCase();
     // An array value ("transactionStatus": ["UNKNOWN"]) is read item by item.
     for (const item of Array.isArray(value) ? value : [value]) {
-      if (key.endsWith('status') && typeof item === 'string') {
+      if (
+        key.endsWith('status') &&
+        typeof item === 'string' &&
+        // A bare `status` under customer/product/... describes that object.
+        !(key === 'status' && NON_VEND_PARENT.test(parentKey))
+      ) {
         const status = item.replace(/[\s_-]/g, '').toUpperCase();
         found.running ||= RUNNING_STATUSES.has(status);
         found.done ||= DONE_STATUSES.has(status);
@@ -195,7 +203,8 @@ function readStructuredOutcome(
       value,
       found,
       depth + 1,
-      inBody || key === 'responsebody'
+      inBody || key === 'responsebody',
+      key
     );
   }
 }

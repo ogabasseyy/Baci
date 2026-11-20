@@ -48,7 +48,6 @@ describe('hasConflictingVendStatuses', () => {
     [{ vendStatus: 'SUCCESS', transactionStatus: 'SUCCESS' }],
     [{ vendStatus: 'FAILED' }],
     [{ transactionStatus: 'FAILED' }],
-    [{ vendStatus: 'PENDING', transactionStatus: 'SUCCESS' }],
   ])('is false for %j', (body) => {
     expect(hasConflictingVendStatuses(body)).toBe(false);
   });

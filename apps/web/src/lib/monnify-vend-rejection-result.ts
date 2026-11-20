@@ -6,6 +6,7 @@ import {
   sanitizeMonnifyErrorDetail,
 } from './monnify-bills-errors';
 import { getMonnifyEnvelopeMessage } from './monnify-bills-shared';
+import { hasBodyToken } from './monnify-bills-status';
 import { isMonnifyDefiniteBusinessRefusal } from './monnify-business-refusal';
 import { readMonnifyRejectionVendReference } from './monnify-rejection-vend-reference';
 import { readMonnifyResponseCode } from './monnify-response-code';
@@ -64,6 +65,7 @@ export function buildMonnifyBusinessRejectionResult({
       !mentionsMonnifyAuthWording(
         `${rawMessage} ${joinMonnifyAnswerStrings(envelope)}`
       )) ||
+      hasBodyToken(envelope) ||
       isMonnifyUnresolvedAnswer({
         answer: envelope,
         requestReference,

@@ -18,6 +18,7 @@ const OPEN_LOAD_ERROR = 'Could not load open follow-ups.';
 const STAFF_LOAD_ERROR = 'Could not load staff follow-ups.';
 const UNREADABLE_REPLY_ERROR =
   'Saved, but the latest details could not be shown. Pull down to refresh.';
+const OPEN_SCAN_STALE_TIME_MS = 10_000;
 
 /**
  * A row that breaks the follow-up contract fails the whole load with a plain
@@ -38,9 +39,8 @@ type StaffFollowUpQueue = {
   isLimited: boolean;
 };
 
-async function fetchFollowUps(
-  merchantId: string,
-  orderIds: string[]
+async function fetchOpenFollowUps(
+  merchantId: string
 ): Promise<StaffFollowUpQueue> {
   const records: Record<string, StaffFollowUp> = {};
   const openOrders: FailedOrder[] = [];
@@ -93,6 +93,19 @@ async function fetchFollowUps(
     });
   }
 
+  return {
+    records,
+    openOrders,
+    isLimited: (openRows?.length ?? 0) > FOLLOW_UP_QUERY_LIMIT,
+  };
+}
+
+async function fetchSourceFollowUps(
+  merchantId: string,
+  orderIds: string[],
+  open: StaffFollowUpQueue
+): Promise<StaffFollowUpQueue> {
+  const records = { ...open.records };
   const remainingIds = orderIds.filter((id) => !records[id]);
   for (let i = 0; i < remainingIds.length; i += 50) {
     const { data, error } = await supabase
@@ -108,11 +121,7 @@ async function fetchFollowUps(
     );
     for (const row of rows) records[row.order_id] = row;
   }
-  return {
-    records,
-    openOrders,
-    isLimited: (openRows?.length ?? 0) > FOLLOW_UP_QUERY_LIMIT,
-  };
+  return { ...open, records };
 }
 
 type FollowUpChange =
@@ -126,13 +135,20 @@ export function useStaffOrderFollowUps(
 ) {
   const queryClient = useQueryClient();
   const scope = ['staff-order-follow-ups', merchantId, viewerId];
+  const openQueryKey = [...scope, 'open'];
   const queryKey = [...scope, orderIds];
   const query = useQuery({
     queryKey,
     enabled: Boolean(merchantId && viewerId),
-    queryFn: () => {
+    queryFn: async () => {
       if (!merchantId || !viewerId) throw new Error('Store unavailable.');
-      return fetchFollowUps(merchantId, orderIds);
+      // Checkout and Oxygen can update the source ID list separately.
+      const open = await queryClient.fetchQuery({
+        queryKey: openQueryKey,
+        queryFn: () => fetchOpenFollowUps(merchantId),
+        staleTime: OPEN_SCAN_STALE_TIME_MS,
+      });
+      return fetchSourceFollowUps(merchantId, orderIds, open);
     },
   });
   const writeAccess = useQuery({
@@ -212,6 +228,14 @@ export function useStaffOrderFollowUps(
 
   return {
     ...query,
+    refetch: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: openQueryKey,
+        exact: true,
+        refetchType: 'none',
+      });
+      return query.refetch();
+    },
     canWrite: !writeAccess.isError && writeAccess.data === true,
     isWriteAccessError: writeAccess.isError,
     isRefetchingWriteAccess: writeAccess.isRefetching,

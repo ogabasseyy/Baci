@@ -30,7 +30,7 @@ Quote development, Baci-controlled tests, and documentation can proceed independ
 
 ### Current settlement boundary
 
-The quote stores the merchant payable separately from the buyer total. The pilot supports `base_plus_delivery` only when explicitly configured through `CROSSREM_SETTLEMENT_BASIS` after both parties agree. Set this before issuing a quote for a paid pilot order. Under that policy merchant payable is the base merchandise amount, Baci VAT where applicable, and delivery. The buyer total also includes the configured catalog markup. Quotes issued without the policy must be replaced before payment. A trusted verifier records the actual payout allocation against the stored payable after capture verification. It must identify the authorized settlement account and a unique order allocation within the payout. A capture or settlement receipt alone cannot create an order or authorize a shipment.
+The quote stores the merchant payable separately from the buyer total. The pilot supports `base_plus_delivery` only when explicitly configured through `CROSSREM_SETTLEMENT_BASIS` after both parties agree. Set this before issuing a quote for a paid pilot order. Under that policy merchant payable is the base merchandise amount, Baci VAT where applicable, and delivery. The buyer total also includes the configured catalog markup. Baci returns `503 QUOTE_UNAVAILABLE` until this policy is configured. The order API accepts NGN for the buyer payment. A trusted verifier records the actual payout allocation against the stored payable after capture verification. It must identify the authorized settlement account and a unique order allocation within the payout. A capture or settlement receipt alone cannot create an order or authorize a shipment.
 
 ### Current order and tracking boundary
 
@@ -57,3 +57,7 @@ The internal verifier receives `409 CAPTURE_EVIDENCE_CONFLICT` for a capture mis
 ### Provision another merchant connection
 
 Register a server-side connection profile with a unique connection ID, the merchant ID, and separate credentials for catalog, quotes, orders, and any Baci-operated evidence verifier. Supply the merchant's catalog loader, its versioned snapshot reader, and the supported delivery and settlement policy. Namespace the snapshot and all version or lease keys by connection. The API derives the merchant from the credential. Each profile provisions its own listing IDs and prices. CrossRem's six percent markup, catalog alert, and GIG configuration belong to its Ogabassey profile. The initial onboarding flow is operator-managed.
+
+### Local API lifecycle check
+
+Run `python3 supabase/tests/run_partner_api_lifecycle.py` with PostgreSQL and PostgREST on `PATH` and the workspace dependencies installed. It starts a disposable database and a loopback PostgREST instance, then calls the actual route handlers using Baci’s database client. It checks the feed envelope and conditional response, VAT-inclusive quote, paid-order receipt, wrong settlement hold, one accepted order and inventory decrement after reconciliation, idempotent replay, and connection-scoped tracking. The catalog input, carrier responses, and upstream payment evidence are fixtures. The test imports the live quote proof logic and runs the real storefront order writer on the reduced database schema.

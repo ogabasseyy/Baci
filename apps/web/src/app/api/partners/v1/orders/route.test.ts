@@ -72,6 +72,21 @@ describe('partner order intake', () => {
     expect(mocks.rpc).not.toHaveBeenCalled();
   });
 
+  it('rejects payment currency outside the NGN quote contract', async () => {
+    const response = await POST(
+      request({
+        ...input,
+        payment: { ...input.payment, currency: 'USD' },
+      })
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: { code: 'INVALID_REQUEST' },
+    });
+    expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
   it('rejects oversized bodies before doing any partner work', async () => {
     const response = await POST(request('x'.repeat(8193)));
     expect(response.status).toBe(413);

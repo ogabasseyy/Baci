@@ -80,7 +80,7 @@ describe('partner delivery quotes', () => {
     mocks.additionalProfiles.mockReturnValue([]);
     vi.stubEnv('CROSSREM_CATALOG_TOKEN', catalogToken);
     vi.stubEnv('CROSSREM_QUOTE_TOKEN', quoteToken);
-    vi.stubEnv('CROSSREM_SETTLEMENT_BASIS', undefined);
+    vi.stubEnv('CROSSREM_SETTLEMENT_BASIS', 'base_plus_delivery');
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-11-20T14:00:00Z'));
     mocks.rateLimit.mockResolvedValue({ verdict: 'allowed' });
@@ -235,7 +235,7 @@ describe('partner delivery quotes', () => {
         delivery: {
           carrier: 'GIGL',
           validityMs: 60_000,
-          settlementBasis: null,
+          settlementBasis: 'base_plus_delivery',
         },
       },
     ]);
@@ -259,7 +259,20 @@ describe('partner delivery quotes', () => {
     );
   });
 
-  it('snapshots the merchant payable only for an explicitly enabled settlement basis', async () => {
+  it('holds quoting until settlement terms are configured', async () => {
+    vi.stubEnv('CROSSREM_SETTLEMENT_BASIS', undefined);
+    const response = await POST(request());
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      error: { code: 'QUOTE_UNAVAILABLE' },
+    });
+    expect(mocks.catalog).not.toHaveBeenCalled();
+    expect(mocks.rates).not.toHaveBeenCalled();
+    expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
+  it('snapshots the merchant payable for the configured settlement basis', async () => {
     vi.stubEnv('CROSSREM_SETTLEMENT_BASIS', 'base_plus_delivery');
     const response = await POST(request());
 

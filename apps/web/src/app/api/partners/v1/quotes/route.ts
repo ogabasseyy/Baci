@@ -59,7 +59,10 @@ export async function POST(request: Request) {
   const parsed = partnerQuoteRequestSchema.safeParse(body.body);
   if (!parsed.success) return errorResponse(400, 'INVALID_REQUEST', requestId);
 
-  const { connectionId, merchantId } = access;
+  const { connectionId, merchantId, profile } = access;
+  const { carrier, validityMs, settlementBasis } = profile.delivery;
+  if (settlementBasis === null)
+    return errorResponse(503, 'QUOTE_UNAVAILABLE', requestId);
   try {
     const limit = await checkTenantRateLimitDetailed(
       'partner-delivery-quote',
@@ -163,7 +166,6 @@ export async function POST(request: Request) {
       deliveryPreference: 'door',
     };
 
-    const { carrier, validityMs, settlementBasis } = access.profile.delivery;
     const rates = await shippingService.getProviderQuotes(
       carrier,
       quoteRequest
@@ -201,16 +203,14 @@ export async function POST(request: Request) {
       (sum, item) => sum + item.unit_price_minor * item.quantity,
       0
     );
-    const merchantPayable = settlementBasis
-      ? items.reduce(
-          (sum, item) => sum + item.base_unit_price_minor * item.quantity,
-          delivery + taxMinor
-        )
-      : null;
+    const merchantPayable = items.reduce(
+      (sum, item) => sum + item.base_unit_price_minor * item.quantity,
+      delivery + taxMinor
+    );
     const total = subtotal + delivery + taxMinor;
     if (
       !Number.isSafeInteger(total) ||
-      (merchantPayable !== null && !Number.isSafeInteger(merchantPayable))
+      !Number.isSafeInteger(merchantPayable)
     ) {
       return errorResponse(503, 'QUOTE_UNAVAILABLE', requestId);
     }

@@ -46,6 +46,7 @@ paths:
   /quotes:
     post:
       operationId: createDeliveryQuote
+      description: A configured settlement policy is required before Baci can issue a quote.
       security: [{QuoteCredential: []}]
       requestBody:
         required: true
@@ -335,7 +336,7 @@ components:
             source: {type: string, pattern: '^[a-z][a-z0-9_-]{0,39}$'}
             reference: {type: string, minLength: 1, maxLength: 200}
             amount_minor: {type: integer, minimum: 1, maximum: 9007199254740991}
-            currency: {type: string, pattern: '^[A-Z]{3}$'}
+            currency: {const: NGN}
     OrderReceipt:
       type: object
       required: [submission_id, partner_order_id, received_at, status, request_id]

@@ -21,7 +21,7 @@ const orderSchema = z.strictObject({
     source: z.string().regex(/^[a-z][a-z0-9_-]{0,39}$/),
     reference: z.string().trim().min(1).max(200),
     amount_minor: z.number().int().positive(),
-    currency: z.string().regex(/^[A-Z]{3}$/),
+    currency: z.literal('NGN'),
   }),
 });
 

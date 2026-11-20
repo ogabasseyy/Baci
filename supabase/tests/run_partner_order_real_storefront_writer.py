@@ -54,14 +54,17 @@ def reduced_schema_sql():
     ]
 
 
-def run():
+def partner_schema_sql():
     versions = [
         '20261120143000', '20261120144500', '20261120150000', '20261120151500',
         '20261120153000', '20261120154500', '20261120160000',
     ]
+    return [*reduced_schema_sql(), *(migration(version) for version in versions)]
+
+
+def run():
     sql = '\n'.join([
-        *reduced_schema_sql(),
-        *(migration(version) for version in versions),
+        *partner_schema_sql(),
         (SQL_TESTS / 'partner_order_real_storefront_writer.sql').read_text(),
     ])
     with tempfile.TemporaryDirectory(prefix='baci-partner-writer-') as directory:

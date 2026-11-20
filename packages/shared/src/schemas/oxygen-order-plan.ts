@@ -33,16 +33,11 @@ export const oxygenOrderPlanResponseSchema = z.object({
 
 const paymentDateFormatter = new Intl.DateTimeFormat('en-NG', {
   dateStyle: 'medium',
-  timeZone: 'UTC',
-});
-
-const receiptDateFormatter = new Intl.DateTimeFormat('en-NG', {
-  dateStyle: 'medium',
   timeZone: 'Africa/Lagos',
 });
 
 export function formatOxygenRepaymentReceiptDate(recordedAt: string) {
-  return receiptDateFormatter.format(new Date(recordedAt));
+  return paymentDateFormatter.format(new Date(recordedAt));
 }
 
 export function formatOxygenPaymentDate([
@@ -50,5 +45,6 @@ export function formatOxygenPaymentDate([
   month,
   day,
 ]: OxygenOrderPlan['schedule'][number]['dueDate']) {
+  // Oxygen supplies a calendar date. UTC midnight stays on that date in Lagos.
   return paymentDateFormatter.format(new Date(Date.UTC(year, month - 1, day)));
 }

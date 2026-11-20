@@ -4,15 +4,30 @@
 DO $$
 DECLARE
   existing record;
-  expected constant text := $definition$CREATE INDEX oxygen_callback_repayment_receipts_idx ON oxygen_private.callback_inbox USING btree (partner_reference, environment, ((event ->> 'bookedLoanReference'::text)), received_at DESC, id) WHERE (((event ->> 'kind'::text) = 'transaction'::text) AND (deduplication_key = ('transaction-loan_repayment:'::text || (event ->> 'transactionReference'::text))))$definition$;
+  expected text;
 BEGIN
-  PERFORM pg_catalog.set_config('search_path', '', true);
-  SELECT i.indisvalid, i.indisready, pg_catalog.pg_get_indexdef(i.indexrelid) AS definition
+  SELECT i.indrelid, i.indisunique, i.indisvalid, i.indisready,
+    substring(pg_catalog.pg_get_indexdef(i.indexrelid) FROM ' USING .*$') AS definition
     INTO existing
   FROM pg_catalog.pg_index AS i
   WHERE i.indexrelid = pg_catalog.to_regclass('oxygen_private.oxygen_callback_repayment_receipts_idx');
   IF FOUND THEN
-    IF existing.definition IS DISTINCT FROM expected THEN
+    -- Compare definitions emitted by this server, ignoring only the
+    -- deliberately different index and table names.
+    CREATE TEMP TABLE oxygen_repayment_receipt_index_shape
+      (LIKE oxygen_private.callback_inbox) ON COMMIT DROP;
+    CREATE INDEX oxygen_repayment_receipt_expected_shape
+      ON pg_temp.oxygen_repayment_receipt_index_shape (
+        partner_reference, environment, (event->>'bookedLoanReference'), received_at DESC, id
+      )
+      WHERE event->>'kind' = 'transaction'
+        AND deduplication_key = 'transaction-loan_repayment:' || (event->>'transactionReference');
+    SELECT substring(pg_catalog.pg_get_indexdef(
+      'pg_temp.oxygen_repayment_receipt_expected_shape'::regclass
+    ) FROM ' USING .*$') INTO expected;
+    IF existing.indrelid <> 'oxygen_private.callback_inbox'::regclass
+      OR existing.indisunique OR expected IS NULL
+      OR existing.definition IS DISTINCT FROM expected THEN
       RAISE EXCEPTION 'Oxygen repayment receipt index has an unexpected definition';
     END IF;
     IF NOT existing.indisvalid OR NOT existing.indisready THEN

@@ -2,10 +2,10 @@ import Ionicons from '@react-native-vector-icons/ionicons';
 import { addMonths, subMonths } from 'date-fns';
 import { useState } from 'react';
 import {
-  Dimensions,
   Modal,
   Pressable,
   ScrollView,
+  StyleSheet,
   Text,
   View,
 } from 'react-native';
@@ -14,6 +14,7 @@ import { DateRangePickerPresetPanel } from '@/components/ui/date-range-picker/Da
 import { dateRangePickerHelpers } from '@/components/ui/date-range-picker/dateRangePickerHelpers';
 import styles from '@/components/ui/date-range-picker/dateRangePickerStyles';
 import type { DateRangeSelection } from '@/components/ui/date-range-picker/dateRangePickerTypes';
+import { ModalSafeArea } from '@/components/ui/ModalSafeArea';
 import { useTheme } from '@/hooks/useTheme';
 
 interface DateRangePickerProps {
@@ -30,7 +31,6 @@ export default function DateRangePicker({
   currentFilter,
 }: DateRangePickerProps) {
   const { colors, shadows } = useTheme();
-  const screenHeight = Dimensions.get('window').height;
 
   // State
   const [mode, setMode] = useState<'presets' | 'calendar'>('presets');
@@ -73,19 +73,20 @@ export default function DateRangePicker({
 
   return (
     <Modal
+      supportedOrientations={['portrait', 'portrait-upside-down', 'landscape']}
       transparent
       visible={visible}
       animationType="fade"
       onRequestClose={onClose}
     >
-      <Pressable
+      <ModalSafeArea
         style={[styles.overlay, { backgroundColor: colors.backdrop }]}
-        onPress={onClose}
       >
+        <Pressable onPress={onClose} style={StyleSheet.absoluteFill} />
         <Pressable
           style={[
             styles.container,
-            { backgroundColor: colors.card, maxHeight: screenHeight * 0.8 },
+            { backgroundColor: colors.card, maxHeight: '80%' },
             shadows.lg,
           ]}
           onPress={(e) => e.stopPropagation()}
@@ -191,7 +192,7 @@ export default function DateRangePicker({
             )}
           </ScrollView>
         </Pressable>
-      </Pressable>
+      </ModalSafeArea>
     </Modal>
   );
 }

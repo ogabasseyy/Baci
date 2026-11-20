@@ -9,7 +9,8 @@
  */
 
 import { jest } from '@jest/globals';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { Dimensions, Modal } from 'react-native';
 import * as imageZoomHook from './hooks/useImageZoom';
 import { ImageZoomModal } from './ImageZoomModal';
 
@@ -153,6 +154,26 @@ function renderModal(
 // ---------------------------------------------------------------------------
 
 describe('ImageZoomModal', () => {
+  it('resizes the open image and keeps the selected photo when the window shrinks', () => {
+    const original = Dimensions.get('window');
+    try {
+      Dimensions.set({ window: { ...original, width: 660, height: 840 } });
+      renderModal({ initialIndex: 1 });
+      expect(
+        screen.UNSAFE_getByType(Modal).props.supportedOrientations
+      ).toEqual(['portrait', 'portrait-upside-down', 'landscape']);
+      const photo = () => screen.getByLabelText('Product image 2 of 3');
+      expect(photo()).toHaveStyle({ width: 660, height: 588 });
+
+      act(() => {
+        Dimensions.set({ window: { ...original, width: 390, height: 740 } });
+      });
+      expect(photo()).toHaveStyle({ width: 390, height: 518 });
+    } finally {
+      act(() => Dimensions.set({ window: original }));
+    }
+  });
+
   describe('visibility', () => {
     it('renders the close button when visible is true', () => {
       renderModal({ visible: true });

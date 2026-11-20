@@ -41,7 +41,8 @@ export function ProductImageGallery({
   colors,
   headerHeight,
 }: ProductImageGalleryProps) {
-  const { width: screenWidth } = useWindowDimensions();
+  const { height, width } = useWindowDimensions();
+  const fitProductInWindow = width > height;
 
   return (
     <>
@@ -56,13 +57,13 @@ export function ProductImageGallery({
         <Animated.View style={[styles.parallaxWrapper, imageAnimatedStyle]}>
           <Image
             source={createSafeBoundedImageSource({
-              fit: 'cover',
+              fit: fitProductInWindow ? 'inside' : 'cover',
               height: headerHeight,
               uri: images[selectedImageIndex],
-              width: screenWidth,
+              width,
             })}
             style={styles.mainImage}
-            contentFit="cover"
+            contentFit={fitProductInWindow ? 'contain' : 'cover'}
             transition={300}
             placeholder={{ blurhash: BLURHASH_VARIANTS.default }}
             cachePolicy="memory-disk"

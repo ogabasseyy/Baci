@@ -24,6 +24,8 @@ import { useWarmTabScreens } from './useWarmTabScreens';
 
 const HAS_EXPO_BLUR = UIManager.hasViewManagerConfig('ExpoBlurView');
 const BlurContainer = HAS_EXPO_BLUR ? BlurView : View;
+const BAR_MARGIN = 16;
+const BAR_PADDING = 8;
 const CAPSULE_WIDTH = 36;
 const CAPSULE_HEIGHT = 36;
 const MOVE_SPRING = { damping: 11, stiffness: 145, mass: 0.8 };
@@ -33,6 +35,7 @@ const SCALE_PULSE_SPRING = { damping: 9, stiffness: 220 };
 export function CustomTabBarChrome({
   state,
   descriptors,
+  insets,
   emitter,
   navigateToTab,
   activeRouteName,
@@ -54,7 +57,13 @@ export function CustomTabBarChrome({
     return options.href !== null && route.name !== 'categories';
   });
 
-  const tabBarContentWidth = Math.max(screenWidth - 48, visibleRoutes.length);
+  const left = BAR_MARGIN + insets.left;
+  const right = BAR_MARGIN + insets.right;
+  const bottom = Math.max(insets.bottom, Platform.OS === 'ios' ? 24 : 16);
+  const tabBarContentWidth = Math.max(
+    screenWidth - left - right - BAR_PADDING * 2,
+    visibleRoutes.length
+  );
   const tabWidth =
     visibleRoutes.length > 0 ? tabBarContentWidth / visibleRoutes.length : 0;
   const activeIdx = visibleRoutes.findIndex((r) => r.name === activeRouteName);
@@ -100,7 +109,7 @@ export function CustomTabBarChrome({
     const stretchX = isAtRest ? 1 : 1 + Math.min(distance * 0.38, 0.3);
     const shrinkY = isAtRest ? 1 : 1 - Math.min(distance * 0.12, 0.1);
     const centerOffset = (tabWidth - CAPSULE_WIDTH) / 2;
-    const translateX = currentPos * tabWidth + centerOffset + 8;
+    const translateX = currentPos * tabWidth + centerOffset + BAR_PADDING;
 
     return {
       position: 'absolute',
@@ -131,7 +140,11 @@ export function CustomTabBarChrome({
 
   return (
     <View
-      style={[styles.outerContainer, branded && styles.brandedContainer]}
+      style={[
+        styles.outerContainer,
+        { bottom, left, right },
+        branded && styles.brandedContainer,
+      ]}
       testID="custom-tab-bar-wrapper"
     >
       <BlurContainer
@@ -262,9 +275,6 @@ export function CustomTabBarChrome({
 const styles = StyleSheet.create({
   outerContainer: {
     position: 'absolute',
-    bottom: Platform.OS === 'ios' ? 24 : 16,
-    left: 16,
-    right: 16,
     zIndex: 100,
     backgroundColor: 'transparent',
     borderRadius: 999,
@@ -276,7 +286,7 @@ const styles = StyleSheet.create({
     height: 64,
     borderRadius: 999,
     borderWidth: 0.5,
-    paddingHorizontal: 8,
+    paddingHorizontal: BAR_PADDING,
     alignItems: 'center',
     justifyContent: 'space-between',
     position: 'relative',

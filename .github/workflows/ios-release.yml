@@ -34,7 +34,7 @@ permissions:
 env:
   NODE_VERSION: '24'
   RUBY_VERSION: '3.4'
-  XCODE_VERSION: '26.2'
+  XCODE_VERSION: '27.2'
   WORKING_DIR: apps/mobile-admin
   # Offset added to github.run_number to avoid collisions with
   # build numbers previously uploaded via EAS or manual Xcode archives.
@@ -46,7 +46,7 @@ env:
 jobs:
   build-and-submit:
     name: Build IPA & Submit to App Store Connect
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 150
 
     steps:
@@ -56,7 +56,10 @@ jobs:
           persist-credentials: false
 
       - name: Select Xcode ${{ env.XCODE_VERSION }}
-        run: sudo xcode-select -s "/Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer"
+        run: |
+          sudo xcode-select -s "/Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer"
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
 
       - name: Setup pnpm
         uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
@@ -92,6 +95,9 @@ jobs:
           PUPPETEER_CHROME_HEADLESS_SHELL_SKIP_DOWNLOAD: 'true'
           PUPPETEER_SKIP_CHROME_HEADLESS_SHELL_DOWNLOAD: 'true'
         run: pnpm install --frozen-lockfile
+
+      - name: Verify Swift Expo async promise compatibility
+        run: node --test .github/scripts/ios-expo-async-promise.test.mjs
 
       - name: Verify Expo Router release tree
         run: >-

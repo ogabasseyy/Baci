@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom/vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { format } from 'date-fns';
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import DateRangePicker from '@/components/ui/DateRangePicker';
 
@@ -31,26 +31,51 @@ vi.mock('@/hooks/useTheme', () => ({
   }),
 }));
 
+vi.mock('react-native-safe-area-context', () => ({
+  SafeAreaProvider: ({ children }: { children?: ReactNode }) => (
+    <section aria-label="Presented window insets">{children}</section>
+  ),
+  SafeAreaView: ({ children }: { children?: ReactNode }) => (
+    <section aria-label="Dialog safe area">{children}</section>
+  ),
+}));
+
 vi.mock('react-native', () => ({
   StatusBar: () => null,
   Dimensions: {
     get: () => ({ height: 800, width: 400 }),
   },
-  Modal: ({ children, visible }: { children?: ReactNode; visible: boolean }) =>
+  Modal: ({
+    children,
+    visible,
+    supportedOrientations,
+  }: {
+    children?: ReactNode;
+    visible: boolean;
+    supportedOrientations?: string[];
+  }) =>
     visible ? (
-      <section aria-label="date-range-picker">{children}</section>
+      <section
+        aria-label="date-range-picker"
+        data-orientations={supportedOrientations?.join(',')}
+      >
+        {children}
+      </section>
     ) : null,
   Pressable: ({
     accessibilityLabel,
     children,
     onPress,
+    style,
   }: {
     accessibilityLabel?: string;
     children?: ReactNode;
+    style?: CSSProperties | CSSProperties[];
     onPress?: (event: { stopPropagation: () => void }) => void;
   }) => (
     <button
       aria-label={accessibilityLabel}
+      style={Array.isArray(style) ? Object.assign({}, ...style) : style}
       onClick={(event) =>
         onPress?.({ stopPropagation: () => event.stopPropagation() })
       }
@@ -70,6 +95,34 @@ vi.mock('react-native', () => ({
 describe('DateRangePicker', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('sizes the dialog relative to its presented window', () => {
+    render(
+      <DateRangePicker
+        currentFilter={null}
+        onClose={vi.fn()}
+        onSelect={vi.fn()}
+        visible
+      />
+    );
+    expect(
+      screen.getByRole('region', { name: 'Presented window insets' })
+    ).toContainElement(
+      screen.getByRole('region', { name: 'Dialog safe area' })
+    );
+    expect(
+      screen.getByRole('region', { name: 'Dialog safe area' })
+    ).toContainElement(screen.getByText('Select Date Range'));
+    expect(screen.getByLabelText('date-range-picker')).toHaveAttribute(
+      'data-orientations',
+      'portrait,portrait-upside-down,landscape'
+    );
+    expect(screen.getByText('Select Date Range').closest('button')).toHaveStyle(
+      {
+        maxHeight: '80%',
+      }
+    );
   });
 
   it('shows the preset mode and highlights the active preset filter', () => {

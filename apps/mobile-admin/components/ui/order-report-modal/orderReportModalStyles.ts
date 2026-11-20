@@ -38,6 +38,10 @@ const orderReportModalStyles = StyleSheet.create({
     fontFamily: TYPOGRAPHY.fontFamily.semiBold,
     fontSize: TYPOGRAPHY.size.lg,
   },
+  scrollBody: {
+    flexGrow: 0,
+    flexShrink: 1,
+  },
   content: {
     padding: SPACING.lg,
   },

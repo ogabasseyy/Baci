@@ -37,26 +37,26 @@ export function OrderReportDateMenu({
   };
 
   return (
-    <View style={styles.row}>
-      <Text
-        style={[
-          styles.subtitle,
-          { color: colors.textSecondary, marginBottom: 0 },
-        ]}
-      >
-        Summary for:{' '}
+    <View style={styles.section}>
+      <View style={styles.row}>
         <Text
-          style={{
-            color: colors.text,
-            fontFamily: TYPOGRAPHY.fontFamily.semiBold,
-          }}
+          style={[
+            styles.subtitle,
+            { color: colors.textSecondary, marginBottom: 0 },
+          ]}
         >
-          {dateRangeLabel}
+          Summary for:{' '}
+          <Text
+            style={{
+              color: colors.text,
+              fontFamily: TYPOGRAPHY.fontFamily.semiBold,
+            }}
+          >
+            {dateRangeLabel}
+          </Text>
         </Text>
-      </Text>
 
-      {canChangeDate ? (
-        <View style={styles.dropdownAnchor}>
+        {canChangeDate ? (
           <Pressable
             accessibilityHint="Opens date range preset menu"
             accessibilityLabel="Change date range"
@@ -69,59 +69,58 @@ export function OrderReportDateMenu({
             </Text>
             <Ionicons name="create-outline" size={16} color={colors.primary} />
           </Pressable>
-
-          {showDropdown ? (
-            <View
+        ) : null}
+      </View>
+      {canChangeDate && showDropdown ? (
+        <View
+          style={[
+            styles.dropdown,
+            {
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+            },
+            shadows.md,
+          ]}
+        >
+          {PRESETS.map((preset) => (
+            <Pressable
+              accessibilityLabel={`Select ${preset}`}
+              accessibilityRole="button"
+              key={preset}
+              onPress={() => onPresetSelect?.(preset)}
               style={[
-                styles.dropdown,
-                {
-                  backgroundColor: colors.card,
-                  borderColor: colors.border,
-                },
-                shadows.md,
+                styles.dropdownItem,
+                { borderBottomColor: `${colors.border}40` },
               ]}
             >
-              {PRESETS.map((preset) => (
-                <Pressable
-                  accessibilityLabel={`Select ${preset}`}
-                  accessibilityRole="button"
-                  key={preset}
-                  onPress={() => onPresetSelect?.(preset)}
-                  style={[
-                    styles.dropdownItem,
-                    { borderBottomColor: `${colors.border}40` },
-                  ]}
-                >
-                  <Text style={[styles.dropdownText, { color: colors.text }]}>
-                    {preset}
-                  </Text>
-                </Pressable>
-              ))}
-              <Pressable
-                accessibilityLabel="Select custom date range"
-                accessibilityRole="button"
-                onPress={onCustomRangeSelect}
-                style={[styles.dropdownItem, { borderBottomWidth: 0 }]}
-              >
-                <Text
-                  style={[
-                    styles.dropdownText,
-                    {
-                      color: colors.primary,
-                      fontFamily: TYPOGRAPHY.fontFamily.semiBold,
-                    },
-                  ]}
-                >
-                  Custom Range…
-                </Text>
-                <Ionicons
-                  name="calendar-outline"
-                  size={14}
-                  color={colors.primary}
-                />
-              </Pressable>
-            </View>
-          ) : null}
+              <Text style={[styles.dropdownText, { color: colors.text }]}>
+                {preset}
+              </Text>
+            </Pressable>
+          ))}
+          <Pressable
+            accessibilityLabel="Select custom date range"
+            accessibilityRole="button"
+            onPress={onCustomRangeSelect}
+            style={[styles.dropdownItem, { borderBottomWidth: 0 }]}
+          >
+            <Text
+              style={[
+                styles.dropdownText,
+                {
+                  color: colors.primary,
+                  fontFamily: TYPOGRAPHY.fontFamily.semiBold,
+                },
+              ]}
+            >
+              Custom Range…
+            </Text>
+            <Ionicons
+              name="calendar-outline"
+              size={14}
+              color={colors.primary}
+            />
+          </Pressable>
         </View>
       ) : null}
     </View>
@@ -129,19 +128,18 @@ export function OrderReportDateMenu({
 }
 
 const styles = StyleSheet.create({
+  section: {
+    gap: SPACING.sm,
+    marginBottom: SPACING.md,
+  },
   row: {
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: SPACING.md,
-    zIndex: 2,
   },
   subtitle: {
     fontFamily: TYPOGRAPHY.fontFamily.medium,
     fontSize: TYPOGRAPHY.size.sm,
-  },
-  dropdownAnchor: {
-    zIndex: 3,
   },
   changeButton: {
     alignItems: 'center',
@@ -154,14 +152,11 @@ const styles = StyleSheet.create({
     fontSize: TYPOGRAPHY.size.sm,
   },
   dropdown: {
+    alignSelf: 'flex-end',
     borderRadius: RADIUS.md,
     borderWidth: 1,
     minWidth: 160,
     padding: 4,
-    position: 'absolute',
-    right: 0,
-    top: 25,
-    zIndex: 100,
   },
   dropdownItem: {
     alignItems: 'center',

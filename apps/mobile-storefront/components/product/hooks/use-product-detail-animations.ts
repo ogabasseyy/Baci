@@ -1,4 +1,4 @@
-import { Dimensions } from 'react-native';
+import { useWindowDimensions } from 'react-native';
 import {
   Extrapolate,
   interpolate,
@@ -12,7 +12,8 @@ import type Colors from '@/constants/Colors';
 type ColorsScheme = (typeof Colors)['light'];
 
 export function useProductDetailAnimations(colors: ColorsScheme) {
-  const headerHeight = Dimensions.get('window').width;
+  const { height, width } = useWindowDimensions();
+  const headerHeight = Math.min(height, width);
   const scrollY = useSharedValue(0);
   const onScroll = useAnimatedScrollHandler({
     onScroll: (event) => {

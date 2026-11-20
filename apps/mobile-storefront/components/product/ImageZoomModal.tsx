@@ -39,7 +39,9 @@ function ActiveImageZoomModal({
   onIndexChange,
 }: ImageZoomModalProps) {
   const insets = useSafeAreaInsets();
-  const { height: screenHeight, width: screenWidth } = useWindowDimensions();
+  const { height, width } = useWindowDimensions();
+  const viewportWidth = width - insets.left - insets.right;
+  const imageHeight = height * 0.7;
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const { Gesture, GestureDetector } = getOptionalGestureHandlerRuntime();
 
@@ -73,11 +75,13 @@ function ActiveImageZoomModal({
     goToNext,
     currentIndex,
     totalImages: images.length,
+    viewportHeight: height,
+    viewportWidth,
     gestureRuntime: { Gesture },
   });
   const zoomDecodeBounds = getImageZoomDecodeBounds({
-    height: screenHeight * 0.7,
-    width: screenWidth,
+    height: imageHeight,
+    width: viewportWidth,
   });
 
   // Reset transforms and restore initial index each time the modal is shown
@@ -88,13 +92,19 @@ function ActiveImageZoomModal({
 
   const zoomableImage = (
     <Animated.View style={styles.imageWrapper}>
-      <Animated.View style={[styles.imageContainer, animatedImageStyle]}>
+      <Animated.View
+        style={[
+          styles.imageContainer,
+          { width: viewportWidth, height },
+          animatedImageStyle,
+        ]}
+      >
         <Image
           source={createSafeBoundedImageSource({
             ...zoomDecodeBounds,
             uri: images[currentIndex],
           })}
-          style={styles.image}
+          style={{ width: viewportWidth, height: imageHeight }}
           contentFit="contain"
           autoplay={false}
           transition={200}
@@ -108,6 +118,7 @@ function ActiveImageZoomModal({
 
   return (
     <Modal
+      supportedOrientations={['portrait', 'portrait-upside-down', 'landscape']}
       visible={visible}
       animationType="fade"
       transparent
@@ -116,7 +127,12 @@ function ActiveImageZoomModal({
       statusBarTranslucent
       accessibilityViewIsModal
     >
-      <View style={styles.container}>
+      <View
+        style={[
+          styles.container,
+          { paddingLeft: insets.left, paddingRight: insets.right },
+        ]}
+      >
         {/* Background */}
         <Animated.View
           entering={FadeIn.duration(200)}
@@ -127,7 +143,14 @@ function ActiveImageZoomModal({
         {/* Header */}
         <Animated.View
           entering={FadeIn.duration(300).delay(100)}
-          style={[styles.header, { paddingTop: insets.top + SPACING.sm }]}
+          style={[
+            styles.header,
+            {
+              paddingTop: insets.top + SPACING.sm,
+              left: insets.left,
+              right: insets.right,
+            },
+          ]}
         >
           <Pressable
             onPress={onClose}
@@ -164,7 +187,7 @@ function ActiveImageZoomModal({
             {currentIndex > 0 && (
               <Animated.View
                 entering={FadeIn.duration(200)}
-                style={[styles.navButton, styles.navLeft]}
+                style={[styles.navButton, { left: insets.left + SPACING.sm }]}
               >
                 <Pressable
                   onPress={goToPrevious}
@@ -180,7 +203,7 @@ function ActiveImageZoomModal({
             {currentIndex < images.length - 1 && (
               <Animated.View
                 entering={FadeIn.duration(200)}
-                style={[styles.navButton, styles.navRight]}
+                style={[styles.navButton, { right: insets.right + SPACING.sm }]}
               >
                 <Pressable
                   onPress={goToNext}
@@ -202,7 +225,11 @@ function ActiveImageZoomModal({
             entering={FadeIn.duration(300).delay(200)}
             style={[
               styles.thumbnailStrip,
-              { paddingBottom: insets.bottom + SPACING.md },
+              {
+                paddingBottom: insets.bottom + SPACING.md,
+                left: insets.left,
+                right: insets.right,
+              },
             ]}
           >
             <Animated.ScrollView
@@ -248,7 +275,7 @@ function ActiveImageZoomModal({
         {/* Zoom Hint */}
         <Animated.View
           entering={FadeIn.duration(300).delay(500)}
-          style={styles.hint}
+          style={[styles.hint, { left: insets.left, right: insets.right }]}
         >
           <Text style={styles.hintText}>Pinch or double-tap to zoom</Text>
         </Animated.View>

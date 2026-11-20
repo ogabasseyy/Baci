@@ -4,10 +4,11 @@ import Colors from '@/constants/Colors';
 import type { ProductImageGalleryProps } from './ProductImageGallery';
 
 const mockImage = jest.fn();
+const mockWindow = { fontScale: 1, height: 800, scale: 2, width: 400 };
 
 jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
   __esModule: true,
-  default: () => ({ fontScale: 1, height: 800, scale: 2, width: 400 }),
+  default: () => mockWindow,
 }));
 
 jest.mock('expo-image', () => {
@@ -53,6 +54,28 @@ function renderGallery(overrides: Partial<ProductImageGalleryProps> = {}) {
 }
 
 describe('ProductImageGallery image bounds', () => {
+  it('keeps the complete product photo visible in a short, wide window', () => {
+    mockWindow.width = 800;
+    mockWindow.height = 360;
+    try {
+      renderGallery({ headerHeight: 360 });
+      expect(mockImage.mock.calls[0]?.[0]).toEqual(
+        expect.objectContaining({
+          contentFit: 'contain',
+          source: {
+            height: 720,
+            uri: 'https://cdn.ogabassey.com/image/width=1600,height=720,quality=82,format=webp/core-assets/products/phone-side.avif',
+            width: 1600,
+          },
+        })
+      );
+    } finally {
+      mockWindow.width = 400;
+      mockWindow.height = 800;
+      mockImage.mockClear();
+    }
+  });
+
   it('uses bounded cover transforms for the selected image and thumbnails', () => {
     renderGallery();
 

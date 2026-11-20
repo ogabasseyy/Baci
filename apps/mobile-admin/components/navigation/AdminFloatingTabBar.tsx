@@ -50,8 +50,12 @@ export function AdminFloatingTabBar({
   });
 
   const visibleRouteCount = Math.max(visibleRoutes.length, 1);
-  const barContentWidth =
-    width - BAR_HORIZONTAL_MARGIN * 2 - BAR_HORIZONTAL_PADDING * 2;
+  const paddingLeft = BAR_HORIZONTAL_MARGIN + insets.left;
+  const paddingRight = BAR_HORIZONTAL_MARGIN + insets.right;
+  const barContentWidth = Math.max(
+    width - paddingLeft - paddingRight - BAR_HORIZONTAL_PADDING * 2,
+    visibleRouteCount
+  );
   const tabWidth = barContentWidth / visibleRouteCount;
   const activeIndex = visibleRoutes.findIndex(
     (route) => route.name === activeRouteName
@@ -130,6 +134,8 @@ export function AdminFloatingTabBar({
         {
           height: BAR_HEIGHT + bottomInset + 16,
           paddingBottom: bottomInset + 8,
+          paddingLeft,
+          paddingRight,
         },
       ]}
       testID="admin-floating-tab-bar-wrapper"
@@ -264,7 +270,6 @@ const styles = StyleSheet.create({
     bottom: 0,
     justifyContent: 'flex-end',
     left: 0,
-    paddingHorizontal: BAR_HORIZONTAL_MARGIN,
     position: 'absolute',
     right: 0,
     width: '100%',

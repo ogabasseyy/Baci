@@ -120,6 +120,8 @@ const buildParams = (
     goToNext: jest.fn(),
     currentIndex: 0,
     totalImages: 3,
+    viewportHeight: 800,
+    viewportWidth: 400,
     gestureRuntime: { Gesture: makeMockGestureFactory() },
     ...overrides,
   } satisfies Parameters<typeof useImageZoom>[0];

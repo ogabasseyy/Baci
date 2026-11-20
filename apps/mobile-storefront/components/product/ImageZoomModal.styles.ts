@@ -1,7 +1,5 @@
-import { Dimensions, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { RADIUS, SHADOWS, SPACING } from '@/constants/Colors';
-
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 const styles = StyleSheet.create({
   container: {
@@ -49,26 +47,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   imageContainer: {
-    width: SCREEN_WIDTH,
-    height: SCREEN_HEIGHT,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  image: {
-    width: SCREEN_WIDTH,
-    height: SCREEN_HEIGHT * 0.7,
   },
   navButton: {
     position: 'absolute',
     top: '50%',
     marginTop: -28,
     zIndex: 5,
-  },
-  navLeft: {
-    left: SPACING.sm,
-  },
-  navRight: {
-    right: SPACING.sm,
   },
   navButtonInner: {
     width: 56,

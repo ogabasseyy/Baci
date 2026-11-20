@@ -107,4 +107,47 @@ describe('bugfix: a dropped data plan fell back to another plan at the same pric
     await expect(buy()).rejects.toThrow(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
     vi.useRealTimers();
   });
+
+  it('refuses the saved plan when a provider the saved list lacks marks it unreadable', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-20T10:00:00Z'));
+    mockGetDataProviders.mockResolvedValue(
+      mtnAnswer([{ code: 'MTN-1GB-MONTHLY', amount: 100000 }])
+    );
+    const buy = () =>
+      resolveKudaDataPlanForPurchase({
+        amount: 1000,
+        dataPlanCode: 'MTN-1GB-MONTHLY',
+        networkProvider: NetworkProvider.MTN,
+      });
+    await buy();
+
+    vi.setSystemTime(new Date('2026-11-20T10:02:00Z'));
+    mockGetDataProviders.mockResolvedValue(
+      mapKudaBillersAnswer(
+        {
+          billers: [
+            {
+              id: 'mtn-2',
+              name: 'MTN DATA BUNDLES',
+              description: 'Internet Data',
+              billTypeId: 'data',
+              billItems: [
+                {
+                  itemCode: 'MTN-1GB-MONTHLY',
+                  itemName: 'Plan',
+                  amount: '',
+                  isFixedPrice: true,
+                },
+              ],
+            },
+          ],
+        },
+        'Internet Data'
+      ).billers
+    );
+
+    await expect(buy()).rejects.toThrow(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
+    vi.useRealTimers();
+  });
 });

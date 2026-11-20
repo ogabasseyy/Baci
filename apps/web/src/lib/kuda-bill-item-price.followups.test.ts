@@ -299,3 +299,43 @@ describe('bugfix: the saved list confirmed a package Kuda just marked unreadable
     );
   });
 });
+
+describe('bugfix: an unreadable mark under a biller the saved list lacks was ignored', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('refuses an unnamed purchase priced only by another saved biller', async () => {
+    const { mapKudaBillersAnswer } = await import('./kuda-biller-mapping');
+    const raw = (id: string, amount: number | string) => ({
+      id,
+      name: id.toUpperCase(),
+      description: 'Cable',
+      billTypeId: 'cable',
+      billItems: [
+        {
+          itemCode: 'KUD-CAB-DST-SHARED',
+          itemName: 'Package',
+          amount,
+          isFixedPrice: true,
+        },
+      ],
+    });
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-20T10:00:00Z'));
+    mockGetBillersByCategory.mockResolvedValue(
+      mapKudaBillersAnswer({ billers: [raw('dstv', 950000)] }, 'CableTv')
+        .billers
+    );
+    await purchase(9500);
+
+    vi.setSystemTime(new Date('2026-11-20T10:02:00Z'));
+    mockGetBillersByCategory.mockResolvedValue(
+      mapKudaBillersAnswer({ billers: [raw('newco', '')] }, 'CableTv').billers
+    );
+
+    await expect(purchase(9500)).rejects.toThrow(
+      KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE
+    );
+  });
+});

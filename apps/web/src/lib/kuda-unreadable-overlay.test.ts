@@ -62,4 +62,34 @@ describe('overlayUnreadableCodes', () => {
       ])[1]
     ).toBe(saved[1]);
   });
+
+  it('matches a saved biller by name when Kuda changed its ID', () => {
+    const saved = [biller('dstv', { billItems: [item('A'), item('B')] })];
+    const fresh = [
+      { ...biller('dstv-new'), billerName: 'DSTV', unreadableItemCodes: ['A'] },
+    ];
+
+    const corrected = overlayUnreadableCodes(saved, fresh);
+
+    expect(corrected).toHaveLength(1);
+    expect(corrected[0]?.billItems?.map((entry) => entry.itemCode)).toEqual([
+      'B',
+    ]);
+  });
+
+  it('adds a fresh biller the saved list lacks, with only its unreadable codes', () => {
+    const saved = [biller('dstv', { billItems: [item('A')] })];
+    const fresh = [
+      biller('newco', { billItems: [item('X')], unreadableItemCodes: ['A'] }),
+    ];
+
+    const corrected = overlayUnreadableCodes(saved, fresh);
+
+    expect(corrected[0]).toBe(saved[0]);
+    expect(corrected[1]).toMatchObject({
+      billerId: 'newco',
+      unreadableItemCodes: ['A'],
+    });
+    expect(corrected[1]?.billItems).toBeUndefined();
+  });
 });

@@ -11,6 +11,7 @@ import type { BillItem } from './kuda-bill-items';
 import { chosenListings } from './kuda-biller-name-match';
 import { getBillersByCategory } from './kuda-bills';
 import { normalizeKudaItemCode } from './kuda-item-code';
+import { overlayUnreadableCodes } from './kuda-unreadable-overlay';
 import { logger } from './logger';
 
 const PRICE_LIST_CACHE_TTL_MS = 60_000;
@@ -91,7 +92,14 @@ async function loadPriceList(type: string): Promise<Biller[] | null> {
   // No biller with any package is a broken answer (every production biller
   // lists packages), so it never replaces a good list.
   if (!billers.some((biller) => biller.billItems?.length)) {
-    return failFetch('Kuda price list came back without packages');
+    // Packages this answer marked unreadable are removed from the saved
+    // list it falls back to (same age), so their older price can't confirm.
+    const backup = failFetch('Kuda price list came back without packages');
+    const saved = priceListCache.get(type);
+    if (!backup || !saved) return backup;
+    const corrected = overlayUnreadableCodes(backup, billers);
+    priceListCache.set(type, { ...saved, billers: corrected });
+    return corrected;
   }
 
   // The meter products are added only after the check above, so Baci's own

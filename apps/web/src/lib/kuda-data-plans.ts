@@ -9,6 +9,7 @@ import { KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE } from '@/lib/kuda-bill-item-price-
 import { logger } from '@/lib/logger';
 import { formatNaira } from './kuda-format-naira';
 import { normalizeKudaItemCode } from './kuda-item-code';
+import { overlayUnreadableCodes } from './kuda-unreadable-overlay';
 
 const DATA_PLAN_CACHE_TTL_MS = 60_000;
 
@@ -146,7 +147,12 @@ async function loadDataProviders(): Promise<Biller[] | null> {
     return failFetch('Kuda data plan list unavailable', error);
   }
   if (collectDataPlanCandidates(providers).length === 0) {
-    return failFetch('Kuda data plan list came back without packages');
+    // Plans this answer marked unreadable leave the saved list (same age).
+    const backup = failFetch('Kuda data plan list came back without packages');
+    if (!backup || !dataProvidersCache) return backup;
+    const corrected = overlayUnreadableCodes(backup, providers);
+    dataProvidersCache = { ...dataProvidersCache, providers: corrected };
+    return corrected;
   }
   lastFailedDataPlanFetchAt = undefined;
   const loadedAt = Date.now(); // from when Kuda answered, like failures

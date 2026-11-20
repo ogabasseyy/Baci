@@ -249,3 +249,53 @@ describe('bugfix: billers chosen and unreadable listings seen end to end', () =>
     );
   });
 });
+
+describe('bugfix: the saved list confirmed a package Kuda just marked unreadable', () => {
+  const T0 = new Date('2026-11-20T10:00:00Z').getTime();
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('refuses the saved price after a fresh answer marks the package unreadable', async () => {
+    const { mapKudaBillersAnswer } = await import('./kuda-biller-mapping');
+    const answer = (amount: number | string) =>
+      mapKudaBillersAnswer(
+        {
+          billers: [
+            {
+              id: 'dstv',
+              name: 'DSTV',
+              description: 'Cable',
+              billTypeId: 'cable',
+              billItems: [
+                {
+                  itemCode: 'KUD-CAB-DST-SHARED',
+                  itemName: 'Package',
+                  amount,
+                  isFixedPrice: true,
+                },
+              ],
+            },
+          ],
+        },
+        'CableTv'
+      ).billers;
+    vi.useFakeTimers();
+    vi.setSystemTime(T0);
+    mockGetBillersByCategory.mockResolvedValue(answer(950000));
+    await purchase(9500, 'DSTV');
+
+    vi.setSystemTime(T0 + 2 * 60_000);
+    mockGetBillersByCategory.mockResolvedValue(answer(0));
+
+    await expect(purchase(9500, 'DSTV')).rejects.toThrow(
+      KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE
+    );
+    // Still refused from the corrected saved list while Kuda isn't re-asked.
+    vi.setSystemTime(T0 + 2 * 60_000 + 10_000);
+    await expect(purchase(9500, 'DSTV')).rejects.toThrow(
+      KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE
+    );
+  });
+});

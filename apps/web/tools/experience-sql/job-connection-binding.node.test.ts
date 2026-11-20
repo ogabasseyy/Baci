@@ -3,7 +3,10 @@ import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { asActor, experienceSqlFixture } from './fixture.ts';
-import { checkConnectionRecovery } from './job-connection-recovery-fixture.ts';
+import {
+  checkConnectionRecovery,
+  checkDistinctBuildReplay,
+} from './job-connection-recovery-fixture.ts';
 
 test('jobs: a build job cannot be replayed or claimed through a different connection', async () => {
   const f = await experienceSqlFixture();
@@ -169,19 +172,23 @@ test('jobs: a build job cannot be replayed or claimed through a different connec
         'http://127.0.0.1:4100',
       ]
     );
-    const finalize = (connection: string) =>
+    const finalize = (
+      connection: string,
+      targetJob = finalizeJob,
+      attempt = finalizeNonce
+    ) =>
       asActor(client, actor, () =>
         client.query(
           'SELECT experience_finalize_build($1,$2,1,$3,$4,$5,$6,$7,$8,$9,$10) id',
           [
             merchant,
             connection,
-            finalizeJob,
-            finalizeNonce,
+            targetJob,
+            attempt,
             'a'.repeat(64),
             build,
             receipt,
-            randomUUID(),
+            targetJob,
             JSON.stringify(files),
             'http://127.0.0.1:4100',
           ]
@@ -197,7 +204,21 @@ test('jobs: a build job cannot be replayed or claimed through a different connec
       "UPDATE experience_jobs SET lease_expires_at=clock_timestamp()+interval '1 minute' WHERE id=$1",
       [finalizeJob]
     );
-    assert.match((await finalize(first)).rows[0].id, /^[0-9a-f-]{36}$/);
+    const firstBuild = (await finalize(first)).rows[0].id;
+    assert.match(firstBuild, /^[0-9a-f-]{36}$/);
+    assert.equal((await finalize(first)).rows[0].id, firstBuild);
+    await checkDistinctBuildReplay({
+      f,
+      client,
+      actor,
+      merchant,
+      first,
+      artifact,
+      build,
+      receipt,
+      firstBuild,
+      finalize,
+    });
     await assert.rejects(finalize(second), /BUILD_FAILED/);
     await asActor(client, actor, () =>
       client.query('SELECT experience_fail_build($1,$2,1,$3,$4)', [

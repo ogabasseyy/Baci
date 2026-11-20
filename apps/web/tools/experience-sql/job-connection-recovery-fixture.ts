@@ -193,3 +193,67 @@ export async function checkConnectionRecovery(input: {
   );
   await assert.rejects(due(first), /CONNECTION_REVOKED/);
 }
+
+export async function checkDistinctBuildReplay(input: {
+  f: Awaited<ReturnType<typeof experienceSqlFixture>>;
+  client: PoolClient;
+  actor: string;
+  merchant: string;
+  first: string;
+  artifact: string;
+  build: string;
+  receipt: string;
+  firstBuild: string;
+  finalize(
+    connection: string,
+    job: string,
+    attempt: string
+  ): Promise<{ rows: Array<{ id: string }> }>;
+}) {
+  const {
+    f,
+    client,
+    actor,
+    merchant,
+    first,
+    artifact,
+    build,
+    receipt,
+    firstBuild,
+    finalize,
+  } = input;
+  const nextJob = (
+    await asActor(client, actor, () =>
+      client.query('SELECT experience_queue_build($1,$2,1,$3,$4) id', [
+        merchant,
+        first,
+        artifact,
+        randomUUID(),
+      ])
+    )
+  ).rows[0].id;
+  const nextAttempt = (
+    await f.pool.query(
+      'SELECT attempt_nonce FROM experience_jobs WHERE id=$1',
+      [nextJob]
+    )
+  ).rows[0].attempt_nonce;
+  await asActor(client, actor, () =>
+    client.query('SELECT experience_claim_build($1,$2,1,$3,$4)', [
+      merchant,
+      first,
+      nextJob,
+      nextAttempt,
+    ])
+  );
+  await f.pool.query(
+    'INSERT INTO experience_evidence(merchant_id,job_id,attempt_nonce,build_digest,receipt_digest,host_origin) VALUES($1,$2,$3,$4,$5,$6)',
+    [merchant, nextJob, nextAttempt, build, receipt, 'http://127.0.0.1:4100']
+  );
+  const nextBuild = (await finalize(first, nextJob, nextAttempt)).rows[0].id;
+  assert.notEqual(nextBuild, firstBuild);
+  assert.equal(
+    (await finalize(first, nextJob, nextAttempt)).rows[0].id,
+    nextBuild
+  );
+}

@@ -1,5 +1,11 @@
 # Bank card offer payment recovery
 
+## Release and activation
+
+The shipped offer list is empty. Before merging checkout or payment changes, require the full web tests, database migration replay, and both bank card offer SQL contracts on the reviewed commit. The SQL contracts cover saved quotes, exact capture and refund amounts, replay fences, and the paid-capture reversal queue.
+
+Before enabling a bank offer, the payments team records the bank approval, confirms the exact issuer label and refund behavior with Paystack, and assigns a duty owner for capture and terminal reviews. With the offer still disabled, confirm that both review types reach the team's alerting and agree on a response target. Review-gated checkout directs buyers to order history or support while that owner reconciles the original payment reference.
+
 Bank offers require a signed-in shopper whose account email matches the checkout email. The saved order must belong to that customer before a payment attempt can be claimed. Guest shoppers can still use standard checkout. A fresh bank-offer order requires Paystack to be enabled and a valid subaccount before inventory is reserved.
 
 `BANK_CARD_OFFERS` in the server is the source of truth for merchant eligibility, offer dates, eligible products, discount rate and cap. The checkout route signs the quote and order together. The database checks that proof, validates the allocations against the order, and saves the result for verification and refunds. It does not maintain a second offer configuration.

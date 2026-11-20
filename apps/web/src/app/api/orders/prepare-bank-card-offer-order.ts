@@ -93,6 +93,8 @@ export async function prepareBankCardOfferOrder({
         error,
       });
     }
+    // Replay repairs a missed enqueue. The recorder uses the saved order ID
+    // as platform_purchase:<orderId>, deduplicated by record_platform_domain_event_v1.
     await recordPlatformOrderCreatedEvent({
       currency:
         typeof offerOrder.currency === 'string' ? offerOrder.currency : 'NGN',

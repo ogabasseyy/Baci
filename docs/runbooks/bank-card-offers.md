@@ -8,7 +8,7 @@ Web and mobile clients must send `expected_total` for bank-offer orders. It is t
 
 A bank-offer order requires one verified Paystack capture at the saved discounted total. The database rejects other payment legs, including manual and fallback payments, because they cannot prove eligibility for that discount. If a shopper wants to switch payment methods, reconcile the original attempt and cancel the bank-offer order before creating a standard order.
 
-A signed-in customer can replay an already-created order with the same idempotency key and checkout request after an offer is disabled. This recovers the saved order and its post-creation work. Fresh orders still require an enabled offer, and payment attempts remain subject to the saved deadline.
+A signed-in customer can replay an already-created order with the same idempotency key and checkout request after an offer is disabled. This recovers the saved order and its post-creation work. Cache invalidation may safely repeat. The analytics recorder reuses the `platform_purchase:<orderId>` key, which deduplicates both the platform event and its delivery enqueue. Fresh orders still require an enabled offer, and payment attempts remain subject to the saved deadline.
 
 The offer deadline closes new checkouts and payment attempts. An attempt opened before the deadline retains its saved price and approval rules if Paystack settles it later.
 
@@ -27,3 +27,7 @@ When a signed webhook has no matching saved bank-offer attempt, platform operati
 Hosted storefront callbacks use HTTPS with both Paystack test and live keys. Non-production localhost can use HTTP for local QA with mocked Paystack responses.
 
 Before switching between Paystack test and live keys, finish or reconcile outstanding attempts with the original domain's credentials. Confirm abandoned references cannot charge before retiring them. Retain access to the original domain for payment reconciliation and refunds. Reusing a saved attempt across domains is blocked by design.
+
+A cancellation containing an unverified bank-offer leg enters refund review even if another leg has already been refunded. The quarantine path records the accepted refund IDs and raises a delivery-uncertain error, so the worker does not mark the whole step complete.
+
+Kobo rounding can fully discount a unit. Its saved merchandise refund value is zero, and that unit must contribute zero to any later merchandise refund.

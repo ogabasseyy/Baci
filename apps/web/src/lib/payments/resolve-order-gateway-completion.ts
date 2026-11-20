@@ -88,6 +88,8 @@ export async function resolveOrderGatewayCompletion({
         };
       }
       if (verified.kind === 'mismatch') {
+        // Open review uniqueness on issue type plus transaction/reference
+        // makes repeated polling safe. A duplicate already has an ops review.
         const review = await supabase.from('reconciliation_review').insert({
           issue_type: 'payment_match_ambiguous',
           merchant_id: merchantId,

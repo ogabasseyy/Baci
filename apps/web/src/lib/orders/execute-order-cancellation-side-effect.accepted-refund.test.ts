@@ -103,9 +103,13 @@ describe('cancellation refund accepted-refund safety', () => {
   });
 
   it.each([
-    false,
-    true,
-  ])('saves a later refund when a bank-offer lookup is unavailable (final attempt: %s)', async (isLastAttempt) => {
+    { isLastAttempt: false, mismatch: false },
+    { isLastAttempt: true, mismatch: false },
+    { isLastAttempt: false, mismatch: true },
+  ])('saves a later refund without completing a mixed refund run ($isLastAttempt, $mismatch)', async ({
+    isLastAttempt,
+    mismatch,
+  }) => {
     const refundInsert = vi.fn().mockResolvedValue({ error: null });
     const from = vi
       .fn()
@@ -132,7 +136,11 @@ describe('cancellation refund accepted-refund safety', () => {
       .mockReturnValue({ insert: refundInsert });
     const rpc = vi
       .fn()
-      .mockResolvedValue({ data: null, error: { code: '57014' } });
+      .mockResolvedValue(
+        mismatch
+          ? { data: false, error: null }
+          : { data: null, error: { code: '57014' } }
+      );
     mocks.initiateRefund.mockResolvedValue({
       success: true,
       data: {
@@ -149,7 +157,7 @@ describe('cancellation refund accepted-refund safety', () => {
       step: 'refund',
       supabase: { from, rpc } as never,
     });
-    if (isLastAttempt) {
+    if (isLastAttempt || mismatch) {
       await expect(result).rejects.toBeInstanceOf(DeliveryUncertainError);
       expect(refundInsert).toHaveBeenCalledWith(
         expect.objectContaining({

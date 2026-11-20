@@ -36,6 +36,29 @@ const items = [
 ];
 
 describe('bank card offer quotes', () => {
+  it('retains a zero refundable value when a unit is fully discounted by rounding', () => {
+    const quote = quoteBankCardOffer({
+      offer: { ...offer, discountBasisPoints: 9_999 },
+      merchantId,
+      items: [
+        { itemId: 'one-kobo', productId, unitPriceKobo: 1, quantity: 1 },
+        ...items.slice(1),
+      ],
+      now,
+    });
+
+    if (!quote)
+      throw new Error('Expected a rounded discount on the first line');
+    expect(quote.discountKobo).toBe(1);
+    expect(
+      calculateBankCardOfferMerchandiseRefund({
+        quote,
+        itemId: 'one-kobo',
+        returnedUnitIndexes: [0],
+      }).refundKobo
+    ).toBe(0);
+  });
+
   it('caps the discount and freezes the net refunds per eligible unit', () => {
     const quote = quoteBankCardOffer({ offer, merchantId, items, now });
     expect(quote).toMatchObject({

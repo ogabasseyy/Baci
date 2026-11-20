@@ -161,9 +161,11 @@ export async function purchaseBill(
       );
     }
 
-    if (!isSuccess && !isProcessing && !isFailed) {
+    if ((!isSuccess && !isProcessing && !isFailed) || (isFailed && hasToken)) {
       // A vend state Monnify did not name as success, in progress or failed
       // (missing, REVERSED, UNKNOWN...) proves nothing: hold, never refund.
+      // A FAILED vend that also carries a token contradicts itself (the
+      // customer may hold a voucher): hold it too.
       return buildMonnifyUnresolvedVendResult({
         amount,
         message: sanitizeMonnifyErrorDetail(

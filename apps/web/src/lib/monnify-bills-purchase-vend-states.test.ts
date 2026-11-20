@@ -342,3 +342,40 @@ describe('bugfix: an HTTP 5xx on a fresh vend is retried with the same reference
     });
   });
 });
+
+describe('bugfix: a FAILED vend that carries a token is held, not refunded', () => {
+  it('holds a success envelope whose vendStatus is FAILED but carries a token', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        requestSuccessful: true,
+        responseCode: '0',
+        responseMessage: 'success',
+        responseBody: {
+          transactionReference: 'MNFY-1',
+          vendStatus: 'FAILED',
+          metaData: { token: '1111-2222-3333' },
+        },
+      }),
+    });
+
+    await expect(vend()).resolves.toMatchObject({
+      status: 'pending',
+      providerOutcomeUnresolved: true,
+    });
+  });
+
+  it('still fails a FAILED vend with no token', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        requestSuccessful: true,
+        responseCode: '0',
+        responseMessage: 'success',
+        responseBody: { transactionReference: 'MNFY-1', vendStatus: 'FAILED' },
+      }),
+    });
+
+    await expect(vend()).resolves.toMatchObject({ status: 'failed' });
+  });
+});

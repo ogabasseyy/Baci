@@ -47,8 +47,14 @@
   ],
   "tasks": {
     "build": {
-      "dependsOn": ["^build"],
-      "outputs": [".next/**", "!.next/cache/**", "dist/**"],
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": [
+        ".next/**",
+        "!.next/cache/**",
+        "dist/**"
+      ],
       "env": [
         "NEXT_PUBLIC_SUPABASE_URL",
         "NEXT_PUBLIC_SUPABASE_ANON_KEY",
@@ -178,6 +184,13 @@
         "BACI_BUILDER_LOCAL_PG",
         "BACI_BUILDER_LOCAL_PG_MAJOR",
         "BACI_BUILDER_LOCAL_PG_BIN"
+      ]
+    },
+    "typecheck:ci": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "next.config*.ts",
+        "$TURBO_ROOT$/tsconfig*.json"
       ]
     },
     "qualify:experience:release": {

@@ -1,111 +1,15 @@
 import '@testing-library/jest-dom/vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
-import type React from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { GroupedFailedOrderListItem } from '@/lib/customers-failed-orders';
+import { beforeEach, describe, expect, it } from 'vitest';
+import {
+  defaultProps,
+  mocks,
+  resetFollowUpQueueMocks,
+} from '@/test/fixtures/follow-up-queue-list';
 import { FollowUpQueueList } from './FollowUpQueueList';
 
-const mocks = vi.hoisted(() => ({
-  refresh: vi.fn(),
-  useFollowUpQueue: vi.fn(),
-}));
-
-vi.mock('@shopify/flash-list', async () => {
-  const React = await import('react');
-  return {
-    FlashList: ({
-      data,
-      ListEmptyComponent,
-      ListHeaderComponent,
-      refreshControl,
-      renderItem,
-    }: {
-      data?: GroupedFailedOrderListItem[] | null;
-      renderItem: (info: {
-        item: GroupedFailedOrderListItem;
-      }) => React.ReactNode;
-      ListEmptyComponent?: React.ReactNode;
-      ListHeaderComponent?: React.ReactNode;
-      refreshControl?: React.ReactNode;
-    }) => {
-      const refreshProps = React.isValidElement(refreshControl)
-        ? (refreshControl.props as {
-            onRefresh?: () => void;
-            refreshing?: boolean;
-          })
-        : undefined;
-
-      return React.createElement(
-        React.Fragment,
-        null,
-        ListHeaderComponent,
-        React.createElement(
-          'button',
-          {
-            'aria-label': 'Refresh follow-ups',
-            'data-refreshing': String(Boolean(refreshProps?.refreshing)),
-            onClick: refreshProps?.onRefresh,
-            type: 'button',
-          },
-          'Refresh follow-ups'
-        ),
-        data?.length
-          ? data
-              .filter((item) => item.type !== 'header')
-              .map((item) => renderItem({ item }))
-          : ListEmptyComponent
-      );
-    },
-  };
-});
-
-vi.mock('@react-native-vector-icons/ionicons', async () => {
-  const React = await import('react');
-  return { default: () => React.createElement('div', null) };
-});
-
-vi.mock('@/hooks/useFollowUpQueue', () => ({
-  useFollowUpQueue: mocks.useFollowUpQueue,
-}));
-
-vi.mock('@/hooks/useTheme', () => ({
-  useTheme: () => ({
-    colors: {
-      background: '#000000',
-      backgroundLight: '#f2f2f7',
-      error: '#ff3b30',
-      gold: '#e6b800',
-      primary: '#0a84ff',
-      primaryLight: '#e6f2ff',
-      success: '#34c759',
-      text: '#ffffff',
-      textMuted: '#666666',
-      textSecondary: '#aeaeb2',
-      warning: '#ff9500',
-    },
-  }),
-}));
-
-const defaultProps = {
-  currencySymbol: '₦',
-  onFollowUpCountChange: vi.fn(),
-  onScroll: vi.fn(),
-  renderOrder: vi.fn(() => null),
-  searchQuery: '',
-};
-
 describe('FollowUpQueueList', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mocks.useFollowUpQueue.mockReturnValue({
-      failedOrders: [],
-      isFailedOrdersError: false,
-      isRefreshing: false,
-      merchant: { id: 'merchant-1' },
-      refresh: mocks.refresh,
-      viewState: { status: 'empty' },
-    });
-  });
+  beforeEach(resetFollowUpQueueMocks);
 
   it('shows pull-to-refresh progress while cached merchant context revalidates', () => {
     mocks.useFollowUpQueue.mockReturnValue({

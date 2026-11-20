@@ -9,6 +9,19 @@ CREATE TRIGGER prevent_cancelled_order_reopen
 BEFORE UPDATE ON public.orders
 FOR EACH ROW EXECUTE FUNCTION public.prevent_cancelled_order_reopen();
 
+CREATE FUNCTION private.test_reinstatement_clamp() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  IF current_setting('baci.test_clamp', true) = 'on' AND NEW.payment_status = 'paid' THEN
+    NEW.payment_status := OLD.payment_status;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER zz_test_reinstatement_clamp
+BEFORE UPDATE ON public.orders
+FOR EACH ROW EXECUTE FUNCTION private.test_reinstatement_clamp();
+
 SET LOCAL request.jwt.claim.role = 'service_role';
 
 DO $$
@@ -43,6 +56,15 @@ BEGIN
     IF (SELECT payment_status FROM public.orders WHERE id = test_order_id) IS DISTINCT FROM 'cancelled' THEN
       RAISE EXCEPTION 'Cleanup failed to close % order', provider;
     END IF;
+
+    PERFORM set_config('baci.test_clamp', 'on', true);
+    IF public.reinstate_timeout_order_payment(test_order_id, capture_id) IS DISTINCT FROM 'blocked'
+      OR EXISTS (SELECT 1 FROM private.inventory_test_effects e WHERE e.order_id = test_order_id)
+      OR NOT EXISTS (SELECT 1 FROM public.orders o WHERE o.id = test_order_id
+        AND o.payment_status = 'cancelled' AND o.amount_paid = 0 AND o.paid_transaction_id IS NULL) THEN
+      RAISE EXCEPTION 'Clamped paid transition did not roll back % reinstatement', provider;
+    END IF;
+    PERFORM set_config('baci.test_clamp', '', true);
 
     PERFORM set_config('baci.test_missing_inventory', 'on', true);
     result := public.reinstate_timeout_order_payment(test_order_id, capture_id);

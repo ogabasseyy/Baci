@@ -24,7 +24,7 @@ export const FAILED_STATUSES = new Set(['FAILED', 'FAILURE', 'UNSUCCESSFUL']);
 
 /** Vend-specific status keys (not a bare `status`). */
 const VEND_STATUS_KEY =
-  /^(?!(?:http|response|result)?status(?:code)?$)(?!(?:customer|product|biller|item|service|package|plan|validation|request|merchant|account|user|payment|refund|reversal|settlement|callback|webhook|notification|chargeback|lookup|query|requery|enquiry|inquiry)).+status$/;
+  /^(?!(?:http|response|result)?status(?:code)?$)(?!(?:customer|product|biller|item|service|package|plan|validation|request|merchant|account|user|payment|refund|reversal|settlement|callback|webhook|notification|chargeback|lookup|query|requery|enquiry|inquiry|error|exception|auth|authentication|credential|login|access|oauth)).+status$/;
 
 /**
  * A generic `status` that is not an HTTP reason phrase, an error label or a
@@ -50,7 +50,7 @@ const VEND_FLAG_KEY =
   /^(?:is|was|has)?(?:been)?(?:vend|transaction|txn|purchase|airtime|delivered|dispatched|vended|credited|recharged|toppedup)/;
 /** customerStatus, productStatus, refundStatus...: another object's state, never the vend's. */
 const NON_VEND_STATUS_PREFIX =
-  /^(?:customer|product|biller|item|service|package|plan|validation|request|merchant|account|user|refund|reversal|settlement|callback|webhook|notification|chargeback|lookup|query|requery|enquiry|inquiry).*status$/;
+  /^(?:customer|product|biller|item|service|package|plan|validation|request|merchant|account|user|refund|reversal|settlement|callback|webhook|notification|chargeback|lookup|query|requery|enquiry|inquiry|error|exception|auth|authentication|credential|login|access|oauth).*status$/;
 const NON_VEND_PARENT =
   /^(?:customer|product|biller|item|service|package|plan|account|merchant|user|validation|request|lookup|query|requery|enquiry|inquiry|refund|reversal|settlement|callback|webhook|notification|chargeback|error|exception|auth|authentication|credential|login|access|oauth)s?$/;
 const STRONG_FAILED_FLAG = /^(?:is|was|has)?(?:been)?(?:failed|failure)$/;

@@ -69,7 +69,8 @@ function collectBodyField(
  */
 const REFERENCE_LIKE_KEY =
   /(?:reference(?:no|number|id)?|ref|(?:transaction|txn|vend|order|payment|purchase)(?:id|number|no)|(?:receipt|invoice)(?:no|number|id)?)$/;
-const ECHO_REFERENCE_PREFIX = /^(?:validation|request|customer)/;
+const ECHO_REFERENCE_PREFIX =
+  /^(?:validation|request|customer|refund|reversal|settlement|callback|webhook|notification|chargeback|error|exception|auth|authentication|credential|login|access|oauth)/;
 
 const isVendReferenceKey: KeyMatcher = (key) => key === 'vendreference';
 // A bare `reference` / `ref` counts too: an exact echo of our own request

@@ -1,0 +1,2 @@
+supabase/migrations/tests/gigl_arrival_enqueue_with_newer_scan.sql
+supabase/migrations/tests/gigl_backfilled_terminal_override.sql

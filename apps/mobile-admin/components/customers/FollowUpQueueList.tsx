@@ -197,15 +197,27 @@ export function FollowUpQueueList({
           />
         }
         ListHeaderComponent={
-          (isFailedOrdersError || isLimited || staffFollowUps.isError) &&
-          (followUpCount > 0 || staffFollowUps.isError) ? (
-            <FollowUpErrorBanner
-              hasError={Boolean(isFailedOrdersError || staffFollowUps.isError)}
-              isLimited={isLimited}
-              isRetrying={isRefreshing || staffFollowUps.isRefetching}
-              onRetry={refreshQueue}
-            />
-          ) : null
+          <>
+            {followUpCount > 0 && staffFollowUps.isLoading ? (
+              <Text
+                accessibilityLiveRegion="polite"
+                style={[styles.staffLoading, { color: colors.textSecondary }]}
+              >
+                Loading team follow-up details…
+              </Text>
+            ) : null}
+            {(isFailedOrdersError || isLimited || staffFollowUps.isError) &&
+            (followUpCount > 0 || staffFollowUps.isError) ? (
+              <FollowUpErrorBanner
+                hasError={Boolean(
+                  isFailedOrdersError || staffFollowUps.isError
+                )}
+                isLimited={isLimited}
+                isRetrying={isRefreshing || staffFollowUps.isRefetching}
+                onRetry={refreshQueue}
+              />
+            ) : null}
+          </>
         }
         ListEmptyComponent={
           hasFilteredFollowUpSearchEmpty ? (
@@ -258,6 +270,7 @@ export function FollowUpQueueList({
 
 const styles = StyleSheet.create({
   queueItem: { gap: SPACING.xs },
+  staffLoading: { paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm },
   listContent: {
     padding: SPACING.lg,
     paddingTop: 0,

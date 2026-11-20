@@ -314,6 +314,22 @@ describe('FollowUpQueueList', () => {
     expect(screen.queryByText('No issues')).toBeNull();
   });
 
+  it('shows what is loading when checkout rows appear before staff actions', () => {
+    mocks.useFollowUpQueue.mockReturnValue({
+      failedOrders: [{ id: 'order-1', created_at: '2026-07-27T08:00:00Z' }],
+      merchant: { id: 'merchant-1' },
+      refresh: mocks.refresh,
+      viewState: { status: 'ready' },
+    });
+    mocks.useStaffOrderFollowUps.mockReturnValue({ isLoading: true });
+    render(
+      <FollowUpQueueList {...defaultProps} renderOrder={() => <div>Ada</div>} />
+    );
+    expect(screen.getByText('Ada')).toBeVisible();
+    expect(screen.getByText('Loading team follow-up details…')).toBeVisible();
+    expect(screen.queryByText('Claim follow-up')).toBeNull();
+  });
+
   it('keeps the checkout provider status on a follow-up still present in the checkout feed', () => {
     const order = {
       id: 'order-1',

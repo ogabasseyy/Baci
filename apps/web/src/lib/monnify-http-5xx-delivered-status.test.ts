@@ -33,7 +33,7 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-describe('bugfix: an HTTP 5xx body that says the vend was delivered is held', () => {
+describe('bugfix: an HTTP 5xx body that says the vend was delivered or is running is held', () => {
   it.each([
     'SUCCESS',
     'COMPLETED',

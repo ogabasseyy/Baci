@@ -108,12 +108,15 @@ export function hasMonnifyExplicitVendFailure(answer: unknown): boolean {
 
 /**
  * Whether a parsed Monnify answer names the vend as delivered/completed
- * (SUCCESS, COMPLETED...), even beside other states: a retry after such an
+ * (SUCCESS, COMPLETED...) or still running (PENDING...), even beside other states: a retry after such an
  * answer could pay the vend twice.
  */
 export function hasMonnifyDeliveredVendStatus(answer: unknown): boolean {
   const outcome = createStructuredOutcome();
   readStructuredOutcome(answer, outcome);
   settleVendPrecedence(outcome);
-  return outcome.vendDone || (outcome.done && !outcome.vendFailed);
+  // A running vend (PENDING...) may still deliver, so it is never retried.
+  return (
+    outcome.running || outcome.vendDone || (outcome.done && !outcome.vendFailed)
+  );
 }

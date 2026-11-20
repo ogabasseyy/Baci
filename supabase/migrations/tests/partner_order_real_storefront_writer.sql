@@ -92,6 +92,13 @@ BEGIN
   END LOOP;
 
   BEGIN
+    UPDATE private.partner_payment_captures AS c SET currency = 'USD'
+    WHERE c.submission_id = fixture.submission_id;
+    RAISE EXCEPTION 'partner capture stored unsupported currency' USING ERRCODE = '22023';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+
+  BEGIN
     PERFORM private.accept_settled_partner_order(submission_id, merchant_id, connection_id);
     RAISE EXCEPTION 'unscoped partner acceptance bypassed the storefront order guard';
   EXCEPTION WHEN insufficient_privilege THEN

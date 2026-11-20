@@ -55,6 +55,7 @@ The [delivery API quickstart](../../partners/delivery-api-quickstart.md) documen
 | 400 | `INVALID_REQUEST` or `CAPTURE_EVIDENCE_MISMATCH` | Check the submitted evidence against the original capture and quote. |
 | 404 | `NOT_FOUND` | Check credential scope and the submission reference. |
 | 409 | `CAPTURE_EVIDENCE_CONFLICT` | Reconcile the existing capture claim before proceeding. |
+| 409 | `SETTLEMENT_EVIDENCE_CONFLICT` | Compare the replayed payout allocation to the evidence on the accepted order. |
 | 413 | `PAYLOAD_TOO_LARGE` | Reduce the evidence payload to the normalized fields. |
 | 429 | `RATE_LIMITED` | Wait for `Retry-After`. |
 | 500 | `RECONCILIATION_RESPONSE_INVALID` | Escalate with the request ID and check the current receipt. The database may have committed before producing the invalid response. |

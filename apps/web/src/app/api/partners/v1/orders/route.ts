@@ -90,7 +90,9 @@ export async function POST(request: Request) {
     });
 
     if (error?.code === 'P0002') return invalid(404, 'QUOTE_NOT_FOUND');
-    if (error?.code === '23505') return invalid(409, 'ORDER_CONFLICT');
+    if (error?.code === '23505' && error.message === 'partner_order_conflict') {
+      return invalid(409, 'ORDER_CONFLICT');
+    }
     if (error) throw new Error('Partner order intake storage unavailable');
     const reply = partnerOrderReceiptSchema.safeParse(data);
     if (!reply.success) {

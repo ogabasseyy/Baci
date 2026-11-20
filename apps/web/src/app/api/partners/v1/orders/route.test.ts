@@ -178,8 +178,11 @@ describe('partner order intake', () => {
 
   it('maps quote ownership and immutable submission conflicts without reporting success', async () => {
     mocks.rpc.mockResolvedValueOnce({ error: { code: 'P0002' }, data: null });
+    mocks.rpc.mockResolvedValueOnce({
+      error: { code: '23505', message: 'partner_order_conflict' },
+      data: null,
+    });
     mocks.rpc.mockResolvedValueOnce({ error: { code: '23505' }, data: null });
-    mocks.rpc.mockResolvedValueOnce({ error: { code: '42501' }, data: null });
     expect((await POST(request())).status).toBe(404);
     expect((await POST(request())).status).toBe(409);
     expect((await POST(request())).status).toBe(503);

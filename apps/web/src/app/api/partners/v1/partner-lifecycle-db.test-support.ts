@@ -1,7 +1,9 @@
 import { execFileSync } from 'node:child_process';
 import { expect } from 'vitest';
 import { POST as reconcile } from '@/app/api/internal/partner-order-reconciliation/route';
+import { GET as tracking } from './orders/[orderId]/route';
 import { POST as submit } from './orders/route';
+import { expectPartnerResponse } from './partner-openapi.test-support';
 
 const pgSocket = process.env.BACI_PARTNER_LIFECYCLE_SOCKET;
 const pgPort = process.env.BACI_PARTNER_LIFECYCLE_PORT;
@@ -63,7 +65,7 @@ function verifyGiglWalletBinding(orderId: string) {
       EXCEPTION WHEN raise_exception THEN
         IF SQLERRM <> 'partner_delivery_price_changed' THEN RAISE; END IF;
       END;
-      v_quote_id := private.seed_fixture_gigl_quote(v_order.id, 1500);
+      v_quote_id := private.seed_fixture_gigl_quote(v_order.id, 1499.999);
       PERFORM public.bind_admin_gigl_quote(v_order.id, v_order.merchant_id,
         v_quote_id, v_order.shipping_address);
     END;
@@ -78,6 +80,34 @@ function assertFixtureId(id: string) {
   expect(id).toMatch(
     /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/
   );
+}
+
+async function verifyPartnerTracking(
+  orderId: string,
+  tokens: { order: string; other: string }
+) {
+  assertFixtureId(orderId);
+  const operation = 'GET /orders/{orderId}';
+  const state = (token = tokens.order) =>
+    tracking(request(`partners/v1/orders/${orderId}`, token), {
+      params: Promise.resolve({ orderId }),
+    });
+  expect((await expectJson(await state(), 200, operation)).tracking).toBeNull();
+  await expectJson(await state(tokens.other), 404, operation);
+  verifyGiglWalletBinding(orderId);
+  expect(await expectJson(await state(), 200, operation)).toMatchObject({
+    shipping_status: 'processing',
+    tracking: null,
+  });
+  // Substitute the carrier booking result persisted by fulfillment.
+  fixtureSql(`
+    UPDATE public.orders SET shipping_status = 'shipped', shipping_provider = 'GIGL',
+      tracking_number = 'FIXTURE-GIG-WAYBILL' WHERE id = '${orderId}';
+  `);
+  expect(await expectJson(await state(), 200, operation)).toMatchObject({
+    shipping_status: 'shipped',
+    tracking: { provider: 'GIGL', tracking_number: 'FIXTURE-GIG-WAYBILL' },
+  });
 }
 
 async function verifyAcceptedEvidenceReplay<T extends { settlement: object }>(
@@ -145,10 +175,31 @@ function request(
   });
 }
 
-async function expectJson(response: Response, status: number) {
+async function expectJson(
+  response: Response,
+  status: number,
+  operation?: Parameters<typeof expectPartnerResponse>[0]
+) {
   const body = await response.json();
   expect(response.status, JSON.stringify(body)).toBe(status);
+  if (operation) expectPartnerResponse(operation, status, body);
   return body;
+}
+
+async function verifyConcurrentRetry(
+  send: () => Promise<Response>,
+  expectedStatus: number,
+  operation?: Parameters<typeof expectPartnerResponse>[0]
+) {
+  const [first, retry] = await Promise.all([
+    send().then((response) => expectJson(response, expectedStatus, operation)),
+    send().then((response) => expectJson(response, expectedStatus, operation)),
+  ]);
+  const { request_id: firstRequestId, ...firstReceipt } = first;
+  const { request_id: retryRequestId, ...retryReceipt } = retry;
+  expect(firstRequestId).not.toBe(retryRequestId);
+  expect(retryReceipt).toEqual(firstReceipt);
+  return firstReceipt;
 }
 
 async function reconcileAfterCatalogDrift(
@@ -205,5 +256,6 @@ export {
   request,
   verifyAcceptedEvidenceReplay,
   verifyCatalogDriftHold,
-  verifyGiglWalletBinding,
+  verifyConcurrentRetry,
+  verifyPartnerTracking,
 };

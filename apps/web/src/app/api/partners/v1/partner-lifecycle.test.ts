@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { POST as reconcile } from '@/app/api/internal/partner-order-reconciliation/route';
 import { GET as catalog } from './catalog/route';
 import { GET as lookup } from './order-submissions/route';
-import { GET as tracking } from './orders/[orderId]/route';
 import { POST as submit } from './orders/route';
 import {
   expectJson,
@@ -12,7 +11,8 @@ import {
   request,
   verifyAcceptedEvidenceReplay,
   verifyCatalogDriftHold,
-  verifyGiglWalletBinding,
+  verifyConcurrentRetry,
+  verifyPartnerTracking,
 } from './partner-lifecycle-db.test-support';
 import { POST as quote } from './quotes/route';
 
@@ -55,10 +55,16 @@ vi.mock('./partner-profiles', () => {
       variant_id: null,
       offer_id: null,
       title: 'Fixture new phone',
+      image_url: 'https://example.invalid/phone.jpg',
+      product_url: 'https://example.invalid/phone',
+      product_type: null,
+      brand: null,
       condition: 'new',
+      condition_label: 'New',
       availability: 'in_stock',
       price_minor: 10600,
       base_price_minor: 10000,
+      protection_included: false,
     },
   ];
   return {
@@ -81,7 +87,11 @@ vi.mock('./partner-profiles', () => {
           body:
             validator === '"fixture-feed-v1"'
               ? null
-              : JSON.stringify({ listings }),
+              : JSON.stringify({
+                  schema_version: 1,
+                  currency: 'NGN',
+                  listings,
+                }),
         }),
         delivery: {
           carrier: 'GIGL',
@@ -136,14 +146,14 @@ describe.runIf(fixtureEnabled)(
       const feedPath = 'partners/v1/catalog';
       const feed = await catalog(request(feedPath, tokens.catalog));
       const validator = feed.headers.get('ETag');
-      expect(validator).toBeTruthy();
-      const { listings } = await expectJson(feed, 200);
+      const { listings } = await expectJson(feed, 200, 'GET /catalog');
       const unchanged = await catalog(
         request(feedPath, tokens.catalog, undefined, {
           'If-None-Match': validator ?? '',
         })
       );
       expect(unchanged.status).toBe(304);
+      expect(unchanged.headers.get('ETag')).toBe(validator);
       expect(await unchanged.text()).toBe('');
 
       const quoted = await expectJson(
@@ -158,7 +168,8 @@ describe.runIf(fixtureEnabled)(
             },
           })
         ),
-        201
+        201,
+        'POST /quotes'
       );
       expect(quoted).toMatchObject({
         delivery_minor: 150000,
@@ -197,14 +208,19 @@ describe.runIf(fixtureEnabled)(
             'Idempotency-Key': 'fixture-order-idempotency-0001',
           })
         );
-      const pending = await expectJson(await purchase(), 202);
+      const pending = await verifyConcurrentRetry(
+        purchase,
+        202,
+        'POST /orders'
+      );
       expect(pending.status).toBe('pending_verification');
       const receiptPath = `partners/v1/order-submissions?partner_order_id=${partnerOrderId}`;
       expect(
         (
           await expectJson(
             await lookup(request(receiptPath, tokens.order)),
-            200
+            200,
+            'GET /order-submissions'
           )
         ).submission_id
       ).toBe(pending.submission_id);
@@ -256,15 +272,17 @@ describe.runIf(fixtureEnabled)(
       expect(held.hold_reason).toBe('SETTLEMENT_REVIEW_REQUIRED');
       expect(fixtureSql('SELECT count(*) FROM public.orders;')).toBe('0');
 
-      const accepted = await expectJson(
-        await reconcile(request(reconcilePath, tokens.verify, evidence)),
+      const accepted = await verifyConcurrentRetry(
+        () => reconcile(request(reconcilePath, tokens.verify, evidence)),
         200
       );
       expect(accepted.receipt.status).toBe('accepted');
       await verifyAcceptedEvidenceReplay(tokens.verify, evidence);
       const { order_id: orderId } = accepted.receipt;
       expect(orderId).toMatch(/^[a-f0-9-]{36}$/);
-      expect((await expectJson(await purchase(), 200)).order_id).toBe(orderId);
+      expect(
+        (await expectJson(await purchase(), 200, 'POST /orders')).order_id
+      ).toBe(orderId);
       expect(
         fixtureSql(`
       SELECT count(*) FROM public.orders;
@@ -273,24 +291,7 @@ describe.runIf(fixtureEnabled)(
     `)
       ).toBe('1\n1\n8');
 
-      const state = (token = tokens.order) =>
-        tracking(request(`partners/v1/orders/${orderId}`, token), {
-          params: Promise.resolve({ orderId }),
-        });
-      expect((await expectJson(await state(), 200)).tracking).toBeNull();
-      expect((await state(tokens.other)).status).toBe(404);
-      verifyGiglWalletBinding(orderId);
-      expect(await expectJson(await state(), 200)).toMatchObject({
-        shipping_status: 'processing',
-        tracking: null,
-      });
-      // Substitute the carrier booking result persisted by fulfillment.
-      fixtureSql(`UPDATE public.orders SET shipping_status = 'shipped', shipping_provider = 'GIGL',
-      tracking_number = 'FIXTURE-GIG-WAYBILL' WHERE id = '${orderId}';`);
-      expect(await expectJson(await state(), 200)).toMatchObject({
-        shipping_status: 'shipped',
-        tracking: { provider: 'GIGL', tracking_number: 'FIXTURE-GIG-WAYBILL' },
-      });
+      await verifyPartnerTracking(orderId, tokens);
       await verifyCatalogDriftHold(quoted.quote_id, (id) =>
         reconcileAfterCatalogDrift(tokens, id, orderPayload, evidence)
       );

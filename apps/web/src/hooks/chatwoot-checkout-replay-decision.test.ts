@@ -21,6 +21,7 @@ const remembered = (
 ): ChatwootCheckoutRememberedOrder => ({
   merchantId: 'merchant-1',
   conversationId: 905,
+  cartId: 'cart-test',
   order,
   payment:
     issuedMinutesAgo === null

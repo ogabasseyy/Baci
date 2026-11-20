@@ -183,6 +183,28 @@ describe('handleChatwootCheckoutPlace idempotency key', () => {
   });
 });
 
+describe('handleChatwootCheckoutPlace server-reviewed price', () => {
+  it('refuses to order when the server review re-prices the cart, and posts no order', async () => {
+    const { calls } = stubCheckoutFetch(happyHandlers());
+    // The merchant changed a price after the shopper's cart was shown: same
+    // cart version, different reviewed subtotal.
+    mocks.prepare.mockResolvedValue(
+      preparedCheckout({ ...checkoutReview, subtotalMinor: 250_000 })
+    );
+    const input = placeInput();
+
+    await handleChatwootCheckoutPlace(input);
+
+    expect(lastResult(input)).toMatchObject({
+      status: 'failed',
+      code: 'cart_changed',
+    });
+    expect(paths(calls).filter((path) => path === '/api/orders')).toHaveLength(
+      0
+    );
+  });
+});
+
 describe('handleChatwootCheckoutPlace nothing to pay', () => {
   it('refuses a free cart with free delivery before preparing or posting an order', async () => {
     const { calls } = stubCheckoutFetch({

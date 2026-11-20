@@ -79,6 +79,8 @@ describe('postChatwootCheckoutOrder', () => {
     ['SHIPPING_RATE_INVALID', 'delivery_unavailable'],
     ['SHIPPING_FEE_MISMATCH', 'delivery_unavailable'],
     ['CHECKOUT_IDEMPOTENCY_CONFLICT', 'cart_changed'],
+    ['SHARED_CART_STALE', 'cart_changed'],
+    ['SHARED_CART_SESSION_EXPIRED', 'cart_changed'],
     ['CHECKOUT_ORDER_NOT_REUSABLE', 'cart_changed'],
     ['SOMETHING_ELSE', 'order_failed'],
   ])('maps server code %s to %s', async (code, expected) => {

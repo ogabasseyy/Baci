@@ -9,6 +9,7 @@ import { resolveChatwootCheckoutDelivery } from './chatwoot-checkout-delivery';
 import { runChatwootCheckoutSerially } from './chatwoot-checkout-in-flight';
 import { deriveChatwootCheckoutKeys } from './chatwoot-checkout-keys';
 import {
+  findChatwootCheckoutOrderForCart,
   getChatwootCheckoutRememberedOrder,
   rememberChatwootCheckoutOrder,
 } from './chatwoot-checkout-memory';
@@ -71,11 +72,12 @@ async function placeOrder(input: HandleChatwootCheckoutPlaceInput) {
   if (!merchant) return fail('order_failed');
   const keys = await deriveChatwootCheckoutKeys(request.requestId, merchant.id);
   if (!keys) return fail('order_failed');
-  // One at a time per request: a duplicate that arrives mid-flight waits, then
-  // answers from what the first one remembered instead of racing it into a
-  // second payment setup.
-  return runChatwootCheckoutSerially(keys.idempotencyKey, () =>
-    placeForKeys(input, merchant, keys)
+  // One at a time per cart: a second attempt that arrives mid-flight, under
+  // the same or a new request id, waits and then answers from the order the
+  // first one placed instead of racing it into a second payment setup.
+  return runChatwootCheckoutSerially(
+    `${merchant.id}:${input.authorizedCartId}`,
+    () => placeForKeys(input, merchant, keys)
   );
 }
 
@@ -95,15 +97,19 @@ async function placeForKeys(
     }
   };
 
+  const byRequest = getChatwootCheckoutRememberedOrder(keys.idempotencyKey);
+  const forCart = byRequest
+    ? null
+    : findChatwootCheckoutOrderForCart(authorizedCartId);
+  const remembered = byRequest ?? forCart?.entry ?? null;
   const paymentBase = {
     request,
     merchantId: merchant.id,
     storeSlug: input.storeSlug,
-    orderKey: keys.idempotencyKey,
+    orderKey: forCart?.key ?? keys.idempotencyKey,
     canPost: input.canPost,
     postResult: input.postResult,
   };
-  const remembered = getChatwootCheckoutRememberedOrder(keys.idempotencyKey);
   if (remembered) {
     const replay = decideChatwootCheckoutReplay(remembered, {
       requestId: request.requestId,
@@ -219,6 +225,9 @@ async function placeForKeys(
     review.cartId !== authorizedCartId ||
     review.cartVersion !== request.cartVersion ||
     review.merchantId !== merchant.id ||
+    // The review re-prices from the catalog: a subtotal the shopper was not
+    // shown is not ordered.
+    review.subtotalMinor !== snapshot.itemsSubtotalMinor ||
     !sameCart()
   ) {
     return fail('cart_changed');
@@ -248,7 +257,11 @@ async function placeForKeys(
   if (!outcome.ok) return fail(outcome.code);
   rememberChatwootCheckoutOrder(
     keys.idempotencyKey,
-    { merchantId: merchant.id, conversationId: request.conversationId },
+    {
+      merchantId: merchant.id,
+      conversationId: request.conversationId,
+      cartId: authorizedCartId,
+    },
     outcome.order
   );
   return startChatwootCheckoutPayment({

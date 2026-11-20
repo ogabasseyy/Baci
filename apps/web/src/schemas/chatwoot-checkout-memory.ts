@@ -7,6 +7,7 @@ export const chatwootCheckoutRememberedOrderSchema = z
   .object({
     merchantId: text(64),
     conversationId: z.number().int().positive().safe(),
+    cartId: text(64),
     order: z
       .object({
         orderId: text(64),

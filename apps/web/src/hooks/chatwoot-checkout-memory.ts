@@ -14,6 +14,8 @@ export interface ChatwootCheckoutRememberedOrder {
   merchantId: string;
   /** The chat conversation that placed the order; only it may replay or poll. */
   conversationId: number;
+  /** The cart the order was placed from; a second attempt on it reuses the order. */
+  cartId: string;
   order: ChatwootCheckoutCreatedOrder;
   /** Set once bank details were issued, so a replay returns them unchanged. */
   payment: ChatwootCheckoutIssuedPayment | null;
@@ -73,7 +75,7 @@ export function getChatwootCheckoutRememberedOrder(key: string) {
 
 export function rememberChatwootCheckoutOrder(
   key: string,
-  owner: { merchantId: string; conversationId: number },
+  owner: { merchantId: string; conversationId: number; cartId: string },
   order: ChatwootCheckoutCreatedOrder
 ) {
   hydrate();
@@ -94,6 +96,19 @@ export function rememberChatwootCheckoutPayment(
   if (!entry) return;
   entry.payment = { ...payment, issuedAt: Date.now() };
   persist();
+}
+
+/**
+ * The order already placed from a cart, with the key it is remembered under.
+ * A cart is completed by its order, so a later attempt on the same cart, even
+ * under a new widget request id, can only mean that same order.
+ */
+export function findChatwootCheckoutOrderForCart(cartId: string) {
+  hydrate();
+  for (const [key, entry] of remembered) {
+    if (entry.cartId === cartId) return { key, entry };
+  }
+  return null;
 }
 
 /** The remembered order a payment reference was issued for, if any. */

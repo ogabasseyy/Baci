@@ -43,6 +43,7 @@ function issueReference(
     {
       merchantId: overrides.merchantId ?? 'merchant-1',
       conversationId: overrides.conversationId ?? 905,
+      cartId: 'cart-test',
     },
     {
       orderId: 'order-1',

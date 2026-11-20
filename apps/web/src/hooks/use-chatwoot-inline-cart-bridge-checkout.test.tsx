@@ -144,7 +144,7 @@ describe('ChatwootInlineCartBridge in-chat checkout', () => {
     resetChatwootCheckoutOrderMemory();
     rememberChatwootCheckoutOrder(
       'issued-key',
-      { merchantId: 'merchant-1', conversationId: 905 },
+      { merchantId: 'merchant-1', conversationId: 905, cartId: 'cart-test' },
       {
         orderId: 'order-1',
         orderNumber: 'ORD-1001',

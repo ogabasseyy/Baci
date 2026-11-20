@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
+  findChatwootCheckoutOrderForCart,
   getChatwootCheckoutRememberedOrder,
   getChatwootCheckoutRememberedOrderByReference,
   isChatwootCheckoutIssuedReference,
@@ -31,13 +32,14 @@ describe('chat checkout order memory', () => {
   it('remembers an order with its merchant and no payment until one is issued', () => {
     rememberChatwootCheckoutOrder(
       'key-1',
-      { merchantId: 'merchant-1', conversationId: 905 },
+      { merchantId: 'merchant-1', conversationId: 905, cartId: 'cart-test' },
       order('ORD-1')
     );
 
     expect(getChatwootCheckoutRememberedOrder('key-1')).toEqual({
       merchantId: 'merchant-1',
       conversationId: 905,
+      cartId: 'cart-test',
       order: order('ORD-1'),
       payment: null,
     });
@@ -47,7 +49,7 @@ describe('chat checkout order memory', () => {
   it('treats only references issued for a remembered order as pollable', () => {
     rememberChatwootCheckoutOrder(
       'key-1',
-      { merchantId: 'merchant-1', conversationId: 905 },
+      { merchantId: 'merchant-1', conversationId: 905, cartId: 'cart-test' },
       order('ORD-1')
     );
     expect(isChatwootCheckoutIssuedReference('ref-1')).toBe(false);
@@ -75,14 +77,14 @@ describe('chat checkout order memory', () => {
   it('forgets the oldest order, and its reference, past the bound', () => {
     rememberChatwootCheckoutOrder(
       'key-0',
-      { merchantId: 'merchant-1', conversationId: 905 },
+      { merchantId: 'merchant-1', conversationId: 905, cartId: 'cart-test' },
       order('ORD-0')
     );
     rememberChatwootCheckoutPayment('key-0', payment('ref-0'));
     for (let index = 1; index <= 20; index += 1) {
       rememberChatwootCheckoutOrder(
         `key-${index}`,
-        { merchantId: 'merchant-1', conversationId: 905 },
+        { merchantId: 'merchant-1', conversationId: 905, cartId: 'cart-test' },
         order(`ORD-${index}`)
       );
     }
@@ -95,7 +97,7 @@ describe('chat checkout order memory', () => {
   it('keeps orders and issued bank details across a page reload', () => {
     rememberChatwootCheckoutOrder(
       'key-1',
-      { merchantId: 'merchant-1', conversationId: 905 },
+      { merchantId: 'merchant-1', conversationId: 905, cartId: 'cart-test' },
       order('ORD-1')
     );
     rememberChatwootCheckoutPayment('key-1', payment('ref-1'));
@@ -105,6 +107,7 @@ describe('chat checkout order memory', () => {
     expect(getChatwootCheckoutRememberedOrder('key-1')).toEqual({
       merchantId: 'merchant-1',
       conversationId: 905,
+      cartId: 'cart-test',
       order: order('ORD-1'),
       payment: { ...payment('ref-1'), issuedAt: expect.any(Number) },
     });
@@ -124,7 +127,7 @@ describe('chat checkout order memory', () => {
   it('stores no contact or address details', () => {
     rememberChatwootCheckoutOrder(
       'key-1',
-      { merchantId: 'merchant-1', conversationId: 905 },
+      { merchantId: 'merchant-1', conversationId: 905, cartId: 'cart-test' },
       order('ORD-1')
     );
     rememberChatwootCheckoutPayment('key-1', payment('ref-1'));
@@ -133,5 +136,19 @@ describe('chat checkout order memory', () => {
       window.sessionStorage.getItem('baci-chat-checkout-orders:v1') ?? '';
     expect(stored).toContain('ORD-1');
     expect(stored).not.toMatch(/email|phone|address|firstName|lastName/i);
+  });
+
+  it('finds the order already placed from a cart, with the key it is kept under', () => {
+    rememberChatwootCheckoutOrder(
+      'key-1',
+      { merchantId: 'merchant-1', conversationId: 905, cartId: 'cart-a' },
+      order('ORD-1')
+    );
+
+    expect(findChatwootCheckoutOrderForCart('cart-a')).toMatchObject({
+      key: 'key-1',
+      entry: { cartId: 'cart-a', order: { orderNumber: 'ORD-1' } },
+    });
+    expect(findChatwootCheckoutOrderForCart('cart-b')).toBeNull();
   });
 });

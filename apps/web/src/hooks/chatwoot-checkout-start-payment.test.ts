@@ -51,7 +51,7 @@ beforeEach(() => {
   resetChatwootCheckoutOrderMemory();
   rememberChatwootCheckoutOrder(
     'key-1',
-    { merchantId: 'merchant-1', conversationId: 905 },
+    { merchantId: 'merchant-1', conversationId: 905, cartId: 'cart-test' },
     order
   );
 });

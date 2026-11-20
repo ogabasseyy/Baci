@@ -16,7 +16,9 @@ import {
 } from './chatwoot-checkout-place-action';
 import {
   CHECKOUT_CART_ID,
+  CHECKOUT_CART_VERSION,
   checkoutPlaceRequest,
+  checkoutReview,
   dvaReady,
   happyHandlers,
   lastResult,
@@ -59,13 +61,24 @@ describe('handleChatwootCheckoutPlace', () => {
       expect(operationIds[0]).toBe(operationIds[1]);
     });
 
-    it('derives a different key for a different request id or cart', async () => {
+    it('derives a different key for a different request id on a different cart', async () => {
       const { calls } = stubCheckoutFetch(happyHandlers());
+      const otherCart = {
+        cartId: 'another-cart-id',
+        version: CHECKOUT_CART_VERSION,
+      };
+      mocks.prepare.mockResolvedValueOnce(preparedCheckout());
+      mocks.prepare.mockResolvedValueOnce(
+        preparedCheckout({ ...checkoutReview, cartId: otherCart.cartId })
+      );
 
       await handleChatwootCheckoutPlace(placeInput());
       await handleChatwootCheckoutPlace(
         placeInput({
           request: { ...checkoutPlaceRequest, requestId: 'place-request-2' },
+          authorizedCartId: otherCart.cartId,
+          requestedCartRef: otherCart,
+          getCurrentCartRef: () => otherCart,
         })
       );
 
@@ -77,6 +90,36 @@ describe('handleChatwootCheckoutPlace', () => {
         );
       expect(keys).toHaveLength(2);
       expect(keys[0]).not.toBe(keys[1]);
+    });
+
+    it('a second attempt on the same cart under a new request id reuses the order and answers the new request', async () => {
+      const { calls } = stubCheckoutFetch(happyHandlers());
+      const first = placeInput();
+      const second = placeInput({
+        request: { ...checkoutPlaceRequest, requestId: 'place-request-2' },
+      });
+
+      await Promise.all([
+        handleChatwootCheckoutPlace(first),
+        handleChatwootCheckoutPlace(second),
+      ]);
+
+      expect(lastResult(first)).toMatchObject({
+        requestId: checkoutPlaceRequest.requestId,
+        status: 'payment_ready',
+      });
+      expect(lastResult(second)).toMatchObject({
+        requestId: 'place-request-2',
+        status: 'payment_ready',
+        orderNumber: 'ORD-1001',
+        reference: 'ref-123',
+      });
+      expect(
+        paths(calls).filter((path) => path === '/api/orders')
+      ).toHaveLength(1);
+      expect(
+        paths(calls).filter((path) => path === '/api/payments/initialize')
+      ).toHaveLength(1);
     });
 
     it('a repeat of the same request id creates no second order and only retries payment', async () => {

@@ -17,6 +17,9 @@ const DELIVERY_REJECTION_CODES = new Set([
 const CART_REJECTION_CODES = new Set([
   'CHECKOUT_IDEMPOTENCY_CONFLICT',
   'CHECKOUT_ORDER_NOT_REUSABLE',
+  // The cart moved, or its review expired, after the last client-side check.
+  'SHARED_CART_STALE',
+  'SHARED_CART_SESSION_EXPIRED',
 ]);
 
 function failureCode(body: unknown): ChatwootCheckoutFailureCode {

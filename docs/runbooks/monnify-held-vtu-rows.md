@@ -49,3 +49,18 @@ to settle first. An automatic alert for this query is a follow-up PR.
   (owner decision 2026-11-18).
 - An HTTP 5xx status is retried with the same request reference, which Monnify
   dedupes; a duplicate answer on the retry is held.
+
+## A held row that Monnify already issued a token for
+
+A `PENDING` answer that already carries a voucher token but no Monnify
+vendReference is held without storing the token (a processing row must not
+carry a voucher, or it would never settle or notify). When settling such a row
+by hand, open the transaction in Monnify's dashboard by `request_reference`:
+if a token was issued, deliver it to the customer and mark the row successful;
+only refund when Monnify shows the vend failed or was never created.
+
+## Decision log
+
+- 401/403/429 answers are refunded (owner decision 2026-11-18), with one
+  exception added in PR #4401: an answer that also carries a real voucher
+  token is held, because the voucher was delivered.

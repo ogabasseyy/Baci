@@ -58,9 +58,11 @@ export function buildMonnifyBusinessRejectionResult({
   );
   // 401/403/429 as a business code is a login rejection or throttle: refunded
   // whatever the body shows (owner decision 2026-11-18), like the HTTP path.
-  const isAuthOrThrottleCode = /^\s*0*(?:401|403|429)\s*$/.test(
-    parsedEnvelope.responseCode
-  );
+  // A real voucher token dominates: refunding after a delivered voucher pays
+  // twice, so a token still holds even beside a 401/403/429 code.
+  const isAuthOrThrottleCode =
+    /^\s*0*(?:401|403|429)\s*$/.test(parsedEnvelope.responseCode) &&
+    !hasBodyToken(envelope);
   if (
     !providerDefiniteFailure &&
     !isAuthOrThrottleCode &&

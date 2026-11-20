@@ -131,12 +131,16 @@ export class MonnifyHttpError extends Error {
   // the row is held, not refunded and not sent to Kuda. A delayed manual
   // refund is safer than paying a possibly-delivered vend twice.
   leavesOutcomeOpenFor(requestReference: string) {
-    if (this.status === 401 || this.status === 403 || this.status === 429) {
-      return false;
-    }
-    // The same codes inside an HTTP 400 body are login rejections/throttles too.
-    if (/^0*(?:401|403|429)$/.test(this.#reading.responseCode ?? '')) {
-      return false;
+    // 401/403/429 (or the same codes inside an HTTP 400 body) are login
+    // rejections/throttles: refunded (owner decision 2026-11-18), except that
+    // a real voucher token means a vend delivered, so it still holds.
+    if (
+      this.status === 401 ||
+      this.status === 403 ||
+      this.status === 429 ||
+      /^0*(?:401|403|429)$/.test(this.#reading.responseCode ?? '')
+    ) {
+      return this.#reading.bodyHasToken;
     }
     return (
       this.status === 408 ||

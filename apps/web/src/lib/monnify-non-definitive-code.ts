@@ -31,18 +31,26 @@ function hasResponseCodeMatching(
   answer: unknown,
   pattern: RegExp,
   depth: number,
-  underCatalog = false
+  underCatalog = false,
+  overflowResult = true
 ): boolean {
   if (!answer || typeof answer !== 'object') {
     return false;
   }
-  // Nesting deeper than we scan can't be cleared: fail closed.
+  // Nesting deeper than we scan can't be cleared: fail closed (for the
+  // open-code scans). The auth scan passes false: overflow is not a match.
   if (depth > MAX_DEPTH) {
-    return true;
+    return overflowResult;
   }
   if (Array.isArray(answer)) {
     return answer.some((item) =>
-      hasResponseCodeMatching(item, pattern, depth + 1, underCatalog)
+      hasResponseCodeMatching(
+        item,
+        pattern,
+        depth + 1,
+        underCatalog,
+        overflowResult
+      )
     );
   }
   return Object.entries(answer).some(([key, value]) => {
@@ -60,7 +68,8 @@ function hasResponseCodeMatching(
         value,
         pattern,
         depth + 1,
-        underCatalog || CATALOG_PARENT.test(normalisedKey)
+        underCatalog || CATALOG_PARENT.test(normalisedKey),
+        overflowResult
       )
     );
   });
@@ -92,5 +101,13 @@ export function hasMonnifyUnresolvedCode(answer: unknown): boolean {
  * about the vend.
  */
 export function hasMonnifyAuthOrThrottleCode(answer: unknown): boolean {
-  return hasResponseCodeMatching(answer, /^0*(?:401|403|429)$/, 0);
+  // Too deeply nested to scan is NOT an auth match: it would skip the open
+  // checks and refund an answer we could not read.
+  return hasResponseCodeMatching(
+    answer,
+    /^0*(?:401|403|429)$/,
+    0,
+    false,
+    false
+  );
 }

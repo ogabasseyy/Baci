@@ -1,5 +1,6 @@
 import 'server-only';
 
+import { withNarrowDownNudge } from '@/ai/chat-auto-reply-nudge';
 import {
   buildChatAutoReplyPrompt,
   CHAT_AUTO_REPLY_SYSTEM_PROMPT,
@@ -87,7 +88,10 @@ export async function generateChatAutoReply(input: {
           ? 'empty reply without handover'
           : null,
     });
-    return { ok: true, reply: object };
+    return {
+      ok: true,
+      reply: withNarrowDownNudge(object, search?.products.length ?? 0),
+    };
   } catch {
     console.error('[chat-auto-reply] model failed', {
       merchantId: input.merchantId,

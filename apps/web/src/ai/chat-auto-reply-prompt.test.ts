@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ChatProductResult } from '@/ai/chat-product-result';
 import {
   buildChatAutoReplyPrompt,
+  CHAT_AUTO_REPLY_SYSTEM_PROMPT,
   formatChatAutoReplyProducts,
 } from './chat-auto-reply-prompt';
 
@@ -49,5 +50,21 @@ describe('buildChatAutoReplyPrompt', () => {
       products: '- A',
     });
     expect(prompt.indexOf('- A')).toBeLessThan(prompt.indexOf('price?'));
+  });
+});
+
+describe('CHAT_AUTO_REPLY_SYSTEM_PROMPT', () => {
+  it('asks the model to say what the customer is doing, so the store can add the narrow-down line itself', () => {
+    for (const intent of [
+      'discover',
+      'recommend',
+      'details',
+      'add_to_cart',
+      'other',
+    ]) {
+      expect(CHAT_AUTO_REPLY_SYSTEM_PROMPT).toContain(`"${intent}"`);
+    }
+    expect(CHAT_AUTO_REPLY_SYSTEM_PROMPT).toMatch(/"intent": string/);
+    expect(CHAT_AUTO_REPLY_SYSTEM_PROMPT).toMatch(/narrow/i);
   });
 });

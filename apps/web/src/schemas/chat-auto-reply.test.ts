@@ -37,4 +37,26 @@ describe('chatAutoReplySchema', () => {
   ])('rejects %s', (_label, value) => {
     expect(chatAutoReplySchema.safeParse(value).success).toBe(false);
   });
+
+  it('keeps a known intent', () => {
+    expect(
+      chatAutoReplySchema.safeParse({
+        reply: 'x',
+        confidence: 0.8,
+        needsHuman: false,
+        intent: 'add_to_cart',
+      })
+    ).toMatchObject({ success: true, data: { intent: 'add_to_cart' } });
+  });
+
+  it('ignores an unknown intent instead of failing the whole reply', () => {
+    const parsed = chatAutoReplySchema.safeParse({
+      reply: 'x',
+      confidence: 0.8,
+      needsHuman: false,
+      intent: 'greeting',
+    });
+    expect(parsed.success).toBe(true);
+    expect(parsed.success && parsed.data.intent).toBeUndefined();
+  });
 });

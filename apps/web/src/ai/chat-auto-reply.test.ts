@@ -28,6 +28,7 @@ vi.mock('@/lib/chatwoot/merchant-currency', () => ({
 }));
 
 import { generateChatAutoReply } from './chat-auto-reply';
+import { CHAT_NARROW_DOWN_NUDGE } from './chat-auto-reply-nudge';
 
 const MERCHANT = '11111111-1111-4111-8111-111111111111';
 const input = {
@@ -57,6 +58,42 @@ describe('generateChatAutoReply', () => {
     const last = call.messages.at(-1);
     expect(last.content).toContain('Demo Phone X | NGN 450000 | in stock');
     expect(call.messages[0]).toEqual({ role: 'user', content: 'hi' });
+  });
+
+  it('adds the narrow-down line after product suggestions', async () => {
+    mocks.generate.mockResolvedValue({
+      object: { ...reply, intent: 'discover' },
+      providerName: 'x',
+    });
+    const result = await generateChatAutoReply(input);
+    expect(result).toMatchObject({ ok: true });
+    expect(result.ok && result.reply.reply).toBe(
+      `Yes.\n\n${CHAT_NARROW_DOWN_NUDGE}`
+    );
+  });
+
+  it('does not add the narrow-down line to an add-to-cart answer', async () => {
+    const cartReply = {
+      reply: 'Added to your cart.',
+      confidence: 0.9,
+      needsHuman: false,
+      intent: 'add_to_cart',
+    };
+    mocks.generate.mockResolvedValue({ object: cartReply, providerName: 'x' });
+    expect(await generateChatAutoReply(input)).toEqual({
+      ok: true,
+      reply: cartReply,
+    });
+  });
+
+  it('does not add the narrow-down line when the store has no matching product', async () => {
+    mocks.search.mockResolvedValue({ products: [], total: 0 });
+    const noMatch = { ...reply, intent: 'discover' };
+    mocks.generate.mockResolvedValue({ object: noMatch, providerName: 'x' });
+    expect(await generateChatAutoReply(input)).toEqual({
+      ok: true,
+      reply: noMatch,
+    });
   });
 
   it('rate limits per conversation and per store', async () => {

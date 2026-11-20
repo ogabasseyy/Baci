@@ -60,6 +60,15 @@ export async function finishBankCardOfferOrder({
       { status: 409 }
     );
   }
+  if (currency !== 'NGN' || hasIncompatibleDiscount) {
+    return NextResponse.json(
+      {
+        code: 'BANK_CARD_OFFER_UNAVAILABLE',
+        error: 'Bank card offer unavailable for this checkout',
+      },
+      { status: 409 }
+    );
+  }
   let quote: ReturnType<typeof quoteBankCardOffer> = null;
   try {
     quote = quoteBankCardOffer({
@@ -77,10 +86,17 @@ export async function finishBankCardOfferOrder({
     logger.warn({
       message: 'Unable to quote bank card offer checkout',
       merchantId,
-      error,
+      errorType: error instanceof Error ? error.name : typeof error,
     });
+    return NextResponse.json(
+      {
+        code: 'BANK_CARD_OFFER_CART_INVALID',
+        error: 'Check the items and quantities in your cart and try again',
+      },
+      { status: 409 }
+    );
   }
-  if (currency !== 'NGN' || !quote || hasIncompatibleDiscount) {
+  if (!quote) {
     return NextResponse.json(
       {
         code: 'BANK_CARD_OFFER_UNAVAILABLE',

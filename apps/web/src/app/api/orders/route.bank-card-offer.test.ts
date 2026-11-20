@@ -43,7 +43,12 @@ vi.mock('@/config/bank-card-offers', () => ({
 it.each([
   { quantity: 1, expectedTotal: 95, status: 201 },
   { quantity: 1, expectedTotal: 95, status: 200 },
-  { quantity: 10_001, expectedTotal: 95, status: 409 },
+  {
+    quantity: 10_001,
+    expectedTotal: 95,
+    status: 409,
+    errorCode: 'BANK_CARD_OFFER_CART_INVALID',
+  },
   { quantity: 1, expectedTotal: undefined, status: 409 },
   { quantity: 1, expectedTotal: 100, status: 409 },
   {

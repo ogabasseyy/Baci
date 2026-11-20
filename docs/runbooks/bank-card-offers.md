@@ -6,6 +6,8 @@ Bank offers require a signed-in shopper whose account email matches the checkout
 
 A bank-offer order requires one verified Paystack capture at the saved discounted total. The database rejects other payment legs, including manual and fallback payments, because they cannot prove eligibility for that discount. If a shopper wants to switch payment methods, reconcile the original attempt and cancel the bank-offer order before creating a standard order.
 
+A signed-in customer can replay an already-created order with the same idempotency key and checkout request after an offer is disabled. This recovers the saved order and its post-creation work. Fresh orders still require an enabled offer, and payment attempts remain subject to the saved deadline.
+
 The offer deadline closes new checkouts and payment attempts. An attempt opened before the deadline retains its saved price and approval rules if Paystack settles it later.
 
 For an initialization review, look up the original reference with Paystack. If Paystack provides a usable checkout URL for that reference, authorized operations can call `restore_bank_card_offer_checkout_url` with the review ID and that URL. If Paystack confirms the reference cannot accept a charge, authorized operations can call `retire_bank_card_offer_initialization` with the review ID and the provider confirmation. The shopper can then retry on the same order if the offer is still available. A timeout or a missing verification result is insufficient to retire the reference.

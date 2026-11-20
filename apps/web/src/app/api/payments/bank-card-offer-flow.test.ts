@@ -424,6 +424,33 @@ describe('bank card offer payment handlers', () => {
   });
 
   it.each([
+    { amount: 9501 },
+    { currency: 'USD' },
+  ])('keeps verification pending for a capture that differs from the saved payable (%j)', async (changes) => {
+    vi.stubEnv('PAYSTACK_SECRET_KEY', secret);
+    const { data } = setup('035', 'Wema Bank');
+    mocks.verify.mockResolvedValue({
+      success: true,
+      data: { ...data, ...changes },
+    });
+
+    const response = await verify(request('verify', { reference }));
+
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'BANK_CARD_OFFER_CAPTURE_REVIEW',
+    });
+    expect(mocks.rpc).not.toHaveBeenCalledWith(
+      'approve_bank_card_offer_capture',
+      expect.anything()
+    );
+    expect(mocks.rpc).not.toHaveBeenCalledWith(
+      'complete_order_gateway_payment',
+      expect.anything()
+    );
+  });
+
+  it.each([
     { domain: 'live' },
     { reference: 'different-reference' },
   ])('quarantines mismatched terminal evidence %j', async (mismatch) => {

@@ -15,6 +15,12 @@ Stopping the scheduler closes job admission before waiting for an already
 admitted build to finish. A pending discovery scan cannot admit a job after
 drain begins.
 
+Queue and retry reclaim capacity from unfinished jobs whose grant has become
+unusable. The authorized merchant's quota transaction marks those jobs
+cancelled and rotates their attempt nonce. Existing job and evidence rows
+remain available for reconciliation. Native jobs still count toward the
+same quota.
+
 ## Chosen direction
 
 Run durable work in the existing dedicated builder service on Contabo, not in

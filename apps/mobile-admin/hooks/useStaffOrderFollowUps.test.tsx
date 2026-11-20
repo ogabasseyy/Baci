@@ -103,7 +103,11 @@ describe('useStaffOrderFollowUps', () => {
                 total: null,
               }
             ),
-            openRow(2, {}, { total: 'not-a-number' }),
+            openRow(
+              2,
+              {},
+              { total: 'not-a-number', payment_status: 'bnpl_approved' }
+            ),
           ])
         ).builder
       );
@@ -125,6 +129,9 @@ describe('useStaffOrderFollowUps', () => {
         staff_follow_up_only: true,
       });
       expect(result.current.openOrders?.[1]?.total).toBeNull();
+      expect(result.current.openOrders?.[1]?.payment_status).toBe(
+        'bnpl_approved'
+      );
     });
 
     it('keeps an older order of a consolidated email group in the open entries', async () => {

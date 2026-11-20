@@ -22,6 +22,7 @@ const PAYMENT_LABELS: Record<string, string> = {
 };
 
 export const RETAINED_PAYMENT_STATUSES = [
+  'bnpl_approved',
   'paid',
   'refunded',
   'cancelled',

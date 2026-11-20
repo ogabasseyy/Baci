@@ -1,5 +1,6 @@
 import type { PurchaseResult } from '@/lib/kuda';
 import { joinMonnifyAnswerStrings } from './monnify-answer-strings';
+import { mentionsMonnifyAuthWording } from './monnify-auth-wording';
 import {
   type MonnifyHttpError,
   sanitizeMonnifyErrorDetail,
@@ -52,7 +53,11 @@ export function buildMonnifyBusinessRejectionResult({
   );
   if (
     !providerDefiniteFailure &&
-    (contradictorySuccessCode ||
+    ((contradictorySuccessCode &&
+      // A login rejection is refunded whatever its code (owner decision).
+      !mentionsMonnifyAuthWording(
+        `${rawMessage} ${joinMonnifyAnswerStrings(envelope)}`
+      )) ||
       isMonnifyUnresolvedAnswer({
         answer: envelope,
         requestReference,

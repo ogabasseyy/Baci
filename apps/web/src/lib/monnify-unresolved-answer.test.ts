@@ -224,3 +224,27 @@ describe('bugfix: postposed duplicate negation', () => {
     expect(open({ responseCode: '01' }, wording)).toBe(false);
   });
 });
+
+describe('bugfix: array-valued vend states are read item by item', () => {
+  it.each([
+    ['UNKNOWN'],
+    [2],
+    ['PENDING'],
+  ])('holds transactionStatus %j', (value) => {
+    expect(
+      open(
+        { responseCode: 'D01', responseBody: { transactionStatus: value } },
+        'Rejected'
+      )
+    ).toBe(true);
+  });
+
+  it('does not hold a FAILED array on its own', () => {
+    expect(
+      open(
+        { responseCode: 'D01', responseBody: { vendStatus: ['FAILED'] } },
+        'Rejected'
+      )
+    ).toBe(false);
+  });
+});

@@ -16,7 +16,7 @@ const VEND_FAILED_WORDING =
 
 /** A negated failure ("has not failed", "was not unsuccessful") proves nothing. */
 const NEGATED_FAILURE_WORDING =
-  /\b(?:not|never|no|n't|cannot)\s+(?:\w+\s+)?(?:fail(?:ed|ure)?|unsuccessful|declined|reversed|cancell?ed)\b/i;
+  /\b(?:not|never|no|n't|cannot)\s+(?:\w+\s+)?(?:fail(?:ed|ure)?|unsuccessful|declined|reversed|cancell?ed|rejected|refused|denied)\b/i;
 
 /**
  * Wording about the requery itself rather than the vend: the reference is

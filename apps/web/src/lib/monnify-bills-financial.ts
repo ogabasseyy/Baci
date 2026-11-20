@@ -242,9 +242,18 @@ export async function checkTransactionStatus(
 
   if (isMonnifyBusinessSuccess(parsed)) {
     const body = parsed.responseBody;
-    const { isSuccess, isProcessing, isFailed } = body
+    const classified = body
       ? classifyMonnifyBillStatus(body)
       : { isSuccess: false, isProcessing: false, isFailed: false };
+    const { isProcessing, isFailed } = classified;
+    // A returned token is conclusive even with a missing or unrecognised
+    // status, like on the first vend.
+    const isSuccess =
+      classified.isSuccess ||
+      (!!body &&
+        !isProcessing &&
+        !isFailed &&
+        !!(body.metaData?.token || body.token));
     if (body && isSuccess) {
       return {
         status: 'successful',

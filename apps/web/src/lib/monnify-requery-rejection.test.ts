@@ -146,3 +146,13 @@ describe('bugfix: vend-level FAILED, generic status and terminal synonyms', () =
     expect(check('Request rejected')).toBe(false);
   });
 });
+
+describe('bugfix: negated rejection synonyms are not proof of failure', () => {
+  it.each([
+    'Vend was not rejected',
+    'Transaction was never refused',
+    'Payment was not denied',
+  ])('keeps "%s" unresolved', (message) => {
+    expect(check(message)).toBe(false);
+  });
+});

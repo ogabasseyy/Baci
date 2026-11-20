@@ -122,3 +122,17 @@ describe('bugfix: HTTP rejection carrying the success code 0 is held', () => {
     ).toMatchObject({ status: 'pending', providerOutcomeUnresolved: true });
   });
 });
+
+describe('bugfix: authentication wording overrides the success code 0', () => {
+  it('refunds a business rejection with code 0 and "Invalid access token"', () => {
+    expect(
+      business({ responseCode: '0', responseMessage: 'Invalid access token' })
+    ).toMatchObject({ status: 'failed' });
+  });
+
+  it('still holds code 0 without authentication wording', () => {
+    expect(
+      business({ responseCode: '0', responseMessage: 'Rejected' })
+    ).toMatchObject({ status: 'pending' });
+  });
+});

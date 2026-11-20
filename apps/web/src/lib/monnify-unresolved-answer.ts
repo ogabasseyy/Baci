@@ -99,29 +99,32 @@ function readStructuredOutcome(
     : Object.entries(answer);
   for (const [rawKey, value] of children) {
     const key = rawKey.replace(/[\s_-]/g, '').toLowerCase();
-    if (key.endsWith('status') && typeof value === 'string') {
-      const status = value.replace(/[\s_-]/g, '').toUpperCase();
-      found.running ||= RUNNING_STATUSES.has(status);
-      found.done ||= DONE_STATUSES.has(status);
-      found.failed ||= FAILED_STATUSES.has(status);
-      if (VEND_STATUS_KEY.test(key)) {
-        found.vendDone ||= DONE_STATUSES.has(status);
-        found.vendFailed ||= FAILED_STATUSES.has(status);
+    // An array value ("transactionStatus": ["UNKNOWN"]) is read item by item.
+    for (const item of Array.isArray(value) ? value : [value]) {
+      if (key.endsWith('status') && typeof item === 'string') {
+        const status = item.replace(/[\s_-]/g, '').toUpperCase();
+        found.running ||= RUNNING_STATUSES.has(status);
+        found.done ||= DONE_STATUSES.has(status);
+        found.failed ||= FAILED_STATUSES.has(status);
+        if (VEND_STATUS_KEY.test(key)) {
+          found.vendDone ||= DONE_STATUSES.has(status);
+          found.vendFailed ||= FAILED_STATUSES.has(status);
+        }
+        // A vend-specific status ("vendStatus: UNKNOWN", a new provider state)
+        // that is not a known state proves nothing, so it is not a refusal.
+        // A generic `status` ("error", "Bad Request") only labels the error.
+        found.unknown ||=
+          VEND_STATUS_KEY.test(key) &&
+          status !== '' &&
+          !RUNNING_STATUSES.has(status) &&
+          !DONE_STATUSES.has(status) &&
+          !FAILED_STATUSES.has(status);
       }
-      // A vend-specific status ("vendStatus: UNKNOWN", a new provider state)
-      // that is not a known state proves nothing, so it is not a refusal.
-      // A generic `status` ("error", "Bad Request") only labels the error.
-      found.unknown ||=
-        VEND_STATUS_KEY.test(key) &&
-        status !== '' &&
-        !RUNNING_STATUSES.has(status) &&
-        !DONE_STATUSES.has(status) &&
-        !FAILED_STATUSES.has(status);
-    }
-    // A numeric vend-specific state (vendStatus: 2) is a vend state we do not
-    // know: hold, like vend evidence does.
-    if (typeof value === 'number' && VEND_STATUS_KEY.test(key)) {
-      found.unknown = true;
+      // A numeric vend-specific state (vendStatus: 2) is a vend state we do not
+      // know: hold, like vend evidence does.
+      if (typeof item === 'number' && VEND_STATUS_KEY.test(key)) {
+        found.unknown = true;
+      }
     }
     if (isTrueFlag(value)) {
       found.running ||= RUNNING_FLAG.test(key);

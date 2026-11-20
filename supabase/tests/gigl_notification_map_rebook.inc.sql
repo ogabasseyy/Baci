@@ -36,9 +36,12 @@ END;
 $seed$;
 
 -- Writes the merchant 'cancelled' row, then the cancelled status; returns the
--- merchant alert as 'status/skip_reason'. p_cancel_order_between cancels the
--- order after the gate decided and before the order sync runs (a concurrent
--- order cancellation committing in between).
+-- merchant alert as 'status/skip_reason'. The status write also stamps
+-- last_tracked_at like the tracking apply path: a status change that leaves
+-- last_tracked_at alone is a manual override, which skips every pending alert
+-- of the shipment (tracking_terminal_override). p_cancel_order_between cancels
+-- the order after the gate decided and before the order sync runs (a
+-- concurrent order cancellation committing in between).
 CREATE FUNCTION pg_temp.map_cancel_shipment(
   p_ids uuid[], p_order uuid, p_merchant uuid,
   p_cancel_order_between boolean DEFAULT false
@@ -58,7 +61,8 @@ BEGIN
   IF p_cancel_order_between THEN
     UPDATE public.orders SET cancelled_at = now() WHERE id = p_order;
   END IF;
-  UPDATE public.shipments SET status = 'cancelled' WHERE id = p_ids[1];
+  UPDATE public.shipments SET status = 'cancelled', last_tracked_at = now()
+  WHERE id = p_ids[1];
   SELECT outbox.status || '/' || coalesce(outbox.skip_reason, '') INTO v_state
   FROM public.shipment_tracking_notification_outbox AS outbox
   WHERE outbox.shipment_id = p_ids[1] AND outbox.audience = 'merchant'

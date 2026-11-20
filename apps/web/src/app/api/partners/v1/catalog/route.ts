@@ -2,7 +2,9 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { after } from 'next/server';
 import { logger } from '@/lib/logger';
 import { captureServerEvent } from '@/lib/posthog/server';
-import { loadCrossRemCatalog } from './catalog-service';
+import { getVersionedCrossRemCatalog } from './catalog-snapshot';
+
+export const maxDuration = 60;
 
 // 32 random bytes encoded as unpadded base64url need at least 43 characters.
 const bearerTokenPattern = /^[A-Za-z0-9_-]{43,}$/;
@@ -10,13 +12,6 @@ const errorHeaders = { 'Cache-Control': 'private, no-store' };
 
 function digest(value: string) {
   return createHash('sha256').update(value).digest();
-}
-
-function matchesValidator(value: string | null, etag: string) {
-  if (value?.trim() === '*') return true;
-  return value
-    ?.split(',')
-    .some((candidate) => candidate.trim().replace(/^W\//, '') === etag);
 }
 
 function unavailable() {
@@ -54,19 +49,20 @@ export async function GET(request: Request) {
   }
 
   try {
-    const snapshot = JSON.stringify(await loadCrossRemCatalog());
-    const etag = `"${digest(snapshot).toString('hex')}"`;
+    const { body, etag } = await getVersionedCrossRemCatalog(
+      request.headers.get('if-none-match')
+    );
     const headers = {
       'Cache-Control': 'private, no-cache',
       ETag: etag,
       Vary: 'Authorization',
     };
 
-    if (matchesValidator(request.headers.get('if-none-match'), etag)) {
+    if (body === null) {
       return new Response(null, { status: 304, headers });
     }
 
-    return new Response(snapshot, {
+    return new Response(body, {
       headers: { ...headers, 'Content-Type': 'application/json' },
     });
   } catch {

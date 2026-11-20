@@ -1,22 +1,34 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GET } from './route';
 
-const { after, captureServerEvent, loadCrossRemCatalog, warn } = vi.hoisted(
-  () => ({
-    after: vi.fn<(callback: () => Promise<unknown>) => void>(),
-    captureServerEvent: vi.fn(),
-    loadCrossRemCatalog: vi.fn(),
-    warn: vi.fn(),
-  })
-);
+const {
+  after,
+  captureServerEvent,
+  loadCrossRemCatalog,
+  readVersion,
+  redis,
+  warn,
+} = vi.hoisted(() => ({
+  after: vi.fn<(callback: () => Promise<unknown>) => void>(),
+  captureServerEvent: vi.fn(),
+  loadCrossRemCatalog: vi.fn(),
+  readVersion: vi.fn(),
+  redis: { get: vi.fn(), set: vi.fn(), eval: vi.fn() },
+  warn: vi.fn(),
+}));
 
 vi.mock('next/server', () => ({ after }));
 vi.mock('@/lib/logger', () => ({ logger: { warn } }));
 vi.mock('@/lib/posthog/server', () => ({ captureServerEvent }));
 vi.mock('./catalog-service', () => ({ loadCrossRemCatalog }));
+vi.mock('./catalog-version', () => ({
+  readCrossRemCatalogVersion: readVersion,
+}));
+vi.mock('@/lib/redis', () => ({ getRedis: () => redis }));
 
 const token = 'synthetic-crossrem-access-token-qa-test-0001';
 const snapshot = { listings: [{ id: 'google-listed-variant' }] };
+const version = '10000000-0000-4000-8000-000000000001';
 
 function request(authorization?: string, ifNoneMatch?: string) {
   const headers = new Headers();
@@ -30,10 +42,15 @@ describe('CrossRem catalog', () => {
   beforeEach(() => {
     vi.stubEnv('CROSSREM_CATALOG_TOKEN', token);
     vi.stubEnv('VERCEL_ENV', 'preview');
+    vi.stubEnv('VERCEL_DEPLOYMENT_ID', 'dpl_synthetic_snapshot');
     after.mockClear();
     warn.mockClear();
     captureServerEvent.mockReset().mockResolvedValue(true);
     loadCrossRemCatalog.mockReset().mockResolvedValue(snapshot);
+    readVersion.mockReset().mockResolvedValue(version);
+    redis.get.mockReset().mockResolvedValue(null);
+    redis.set.mockReset().mockResolvedValue('OK');
+    redis.eval.mockReset().mockResolvedValue(1);
   });
 
   it('warns internally when a partner request reaches an unconfigured token', async () => {

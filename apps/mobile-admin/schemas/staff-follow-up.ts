@@ -21,9 +21,14 @@ export const staffFollowUpSchema = z
     order_id: z.uuid(),
     merchant_id: z.uuid(),
     assignee_id: z.uuid().nullable(),
-    assignee_name: z.string().min(1).max(160),
+    assignee_name: z
+      .string()
+      .min(1)
+      .refine((name) => [...name].length <= 160),
     stage: z.enum(staffFollowUpStages),
-    outcome: z.string().max(STAFF_FOLLOW_UP_OUTCOME_LIMIT),
+    outcome: z
+      .string()
+      .refine((note) => [...note].length <= STAFF_FOLLOW_UP_OUTCOME_LIMIT),
     follow_up_on: z.iso.date().nullable(),
     revision: z.number().int().positive(),
     updated_at: z.iso.datetime({ offset: true }),

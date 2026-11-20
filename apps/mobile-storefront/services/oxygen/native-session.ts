@@ -11,8 +11,10 @@ import { createOxygenWorkflow } from './workflow';
 
 /** Scope every request to the independently hydrated storefront customer. */
 export function oxygenNativeSession() {
-  const profile = getOxygenMobileProfile();
-  if (!profile) throw new Error('Oxygen checkout is unavailable in this app');
+  const configuredProfile = getOxygenMobileProfile();
+  if (!configuredProfile)
+    throw new Error('Oxygen checkout is unavailable in this app');
+  const profile = configuredProfile;
   const owner = () => {
     const state = useAuthStore.getState();
     return {

@@ -423,12 +423,15 @@ describe('bank card offer payment handlers', () => {
     ).toHaveLength(failure === 'save rejected' ? 1 : 0);
   });
 
-  it('quarantines terminal evidence from a different Paystack domain', async () => {
+  it.each([
+    { domain: 'live' },
+    { reference: 'different-reference' },
+  ])('quarantines mismatched terminal evidence %j', async (mismatch) => {
     vi.stubEnv('PAYSTACK_SECRET_KEY', secret);
     const { data } = setup('035', 'Wema Bank');
     mocks.verify.mockResolvedValue({
       success: true,
-      data: { ...data, status: 'failed', domain: 'live' },
+      data: { ...data, status: 'failed', ...mismatch },
     });
 
     const result = await verify(request('verify', { reference }));

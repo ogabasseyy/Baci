@@ -14,17 +14,20 @@ export async function verifyBankCardOfferPaystack(
   if (!response.success) return null;
   const { data } = response;
   const status = String(data.status);
-  if (data.reference !== attempt.reference)
-    return status === 'success' ? ({ kind: 'mismatch' } as const) : null;
+  const terminal =
+    status === 'failed' ||
+    status === 'abandoned' ||
+    status === 'reversed' ||
+    status === 'cancelled';
+  if (data.reference !== attempt.reference) {
+    return status === 'success' || terminal
+      ? ({ kind: 'mismatch' } as const)
+      : null;
+  }
   if (status !== 'success') {
     // A terminal status starts operator review for the same reference.
     // Only a successful capture can establish and approve the amount paid.
-    if (
-      status === 'failed' ||
-      status === 'abandoned' ||
-      status === 'reversed' ||
-      status === 'cancelled'
-    ) {
+    if (terminal) {
       return 'domain' in data &&
         data.domain === attempt.domain &&
         data.currency.toUpperCase() === attempt.currency

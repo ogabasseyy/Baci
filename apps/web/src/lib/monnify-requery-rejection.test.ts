@@ -93,3 +93,14 @@ describe('bugfix: a FAILED vend status proves failure even when the message does
     expect(check(message)).toBe(false);
   });
 });
+
+describe('bugfix: a bare failure word with no vend noun is not proof', () => {
+  it.each([
+    'Declined',
+    'Reversed',
+    'Unsuccessful',
+    'Cancelled',
+  ])('keeps "%s" unresolved', (message) => {
+    expect(check(message)).toBe(false);
+  });
+});

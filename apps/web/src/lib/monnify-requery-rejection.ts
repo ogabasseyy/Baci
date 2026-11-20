@@ -7,12 +7,12 @@ import {
 
 /**
  * Wording that names the VEND itself as failed: a vend noun near a failure
- * word, "failed to vend", or a bare unsuccessful/declined/reversed/cancelled.
+ * word, "failed to vend", (no bare "declined"/"reversed": those can describe the query).
  * A bare "failed" ("Request failed", "Status lookup failed", "Authentication
  * failed") describes the query, not the vend, so it does not count.
  */
 const VEND_FAILED_WORDING =
-  /\b(?:vend|transaction|purchase|airtime|payment|top\s?up|recharge)\w*(?:\s+\w+){0,2}?\s+(?:failed|failure|unsuccessful|declined|reversed|cancell?ed)\b|\bfail(?:ed|ure)(?:\s+\w+){0,2}?\s+(?:vend|transaction|purchase|airtime|payment|top\s?up|recharge)|\bfailed\s+to\s+vend\b|\b(?:unsuccessful|declined|reversed|cancell?ed)\b/i;
+  /\b(?:vend|transaction|purchase|airtime|payment|top\s?up|recharge)\w*(?:\s+\w+){0,2}?\s+(?:failed|failure|unsuccessful|declined|reversed|cancell?ed)\b|\bfail(?:ed|ure)(?:\s+\w+){0,2}?\s+(?:vend|transaction|purchase|airtime|payment|top\s?up|recharge)|\bfailed\s+to\s+vend\b/i;
 
 /**
  * Wording about the requery itself rather than the vend: the reference is

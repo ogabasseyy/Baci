@@ -48,6 +48,22 @@ describe('admin GIG delivery rate selection', () => {
     });
   });
 
+  it('reports missing settlement as a conflict and malformed storage as unavailable', async () => {
+    const missing = await selectAdminOrderGiglRate(fixture(null).db, order, [
+      settled,
+    ]);
+    expect(missing.error?.status).toBe(409);
+    expect(await missing.error?.json()).toMatchObject({
+      code: 'PARTNER_DELIVERY_NOT_SETTLED',
+    });
+    const malformed = await selectAdminOrderGiglRate(
+      fixture({ service: 'GoFaster' }).db,
+      order,
+      [settled]
+    );
+    expect(malformed.error?.status).toBe(503);
+  });
+
   it('preserves normal cheapest-rate selection for other orders', async () => {
     const { db, rpc } = fixture(null);
     expect(

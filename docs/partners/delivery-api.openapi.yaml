@@ -260,9 +260,10 @@ components:
     CatalogError:
       type: object
       additionalProperties: false
-      required: [error]
+      required: [error, request_id]
       properties:
         error: {type: string}
+        request_id: {type: string, format: uuid}
     CatalogListing:
       type: object
       required: [listing_id, product_id, title, image_url, product_url, product_type, brand, condition,

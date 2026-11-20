@@ -20,6 +20,17 @@ export async function selectAdminOrderGiglRate(
       'read_settled_partner_delivery' as never,
       { p_order_id: order.id, p_merchant_id: order.merchant_id } as never
     );
+    if (!error && data === null) {
+      return {
+        error: NextResponse.json(
+          {
+            code: 'PARTNER_DELIVERY_NOT_SETTLED',
+            error: 'Settled delivery terms are unavailable for this order.',
+          },
+          { status: 409 }
+        ),
+      };
+    }
     const settled = settledDeliverySchema.safeParse(data);
     if (error || !settled.success) {
       return {

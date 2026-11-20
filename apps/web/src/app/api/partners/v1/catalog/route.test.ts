@@ -66,10 +66,14 @@ describe('CrossRem catalog', () => {
 
     expect(response.status).toBe(401);
     const body = await response.json();
-    expect(body).toEqual({ error: 'Unauthorized' });
+    expect(body).toEqual({
+      error: 'Unauthorized',
+      request_id: expect.any(String),
+    });
     expectPartnerResponse('GET /catalog', 401, body);
     expect(warn).toHaveBeenCalledExactlyOnceWith({
       message: 'Partner catalog credential is unconfigured',
+      requestId: body.request_id,
     });
     expect(loadCrossRemCatalog).not.toHaveBeenCalled();
     expect(rateLimit).not.toHaveBeenCalled();
@@ -103,6 +107,7 @@ describe('CrossRem catalog', () => {
     expect(response.status).toBe(401);
     expect(warn).toHaveBeenCalledExactlyOnceWith({
       message: 'Partner catalog credential matches multiple grants',
+      requestId: expect.any(String),
     });
     expect(loadCrossRemCatalog).not.toHaveBeenCalled();
   });
@@ -177,6 +182,7 @@ describe('CrossRem catalog', () => {
     const body = await response.json();
     expect(body).toEqual({
       error: 'CrossRem catalog unavailable',
+      request_id: expect.any(String),
     });
     expectPartnerResponse('GET /catalog', 503, body);
     expect(captureServerEvent).not.toHaveBeenCalled();

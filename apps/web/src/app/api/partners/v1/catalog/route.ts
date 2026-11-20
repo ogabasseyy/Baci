@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { after } from 'next/server';
 import { logger } from '@/lib/logger';
 import { captureServerEvent } from '@/lib/posthog/server';
@@ -7,26 +8,20 @@ import { getPartnerProfiles } from '../partner-profiles';
 
 export const maxDuration = 60;
 
-const errorHeaders = { 'Cache-Control': 'private, no-store' };
-
-function unavailable(message: string) {
-  return Response.json(
-    { error: message },
-    { status: 503, headers: errorHeaders }
-  );
-}
-
-function unauthorized() {
-  return Response.json(
-    { error: 'Unauthorized' },
-    {
-      status: 401,
-      headers: { ...errorHeaders, 'WWW-Authenticate': 'Bearer' },
-    }
-  );
-}
-
 export async function GET(request: Request) {
+  const requestId = randomUUID();
+  const reject = (
+    status: number,
+    error: string,
+    headers: Record<string, string> = {}
+  ) =>
+    Response.json(
+      { error, request_id: requestId },
+      {
+        status,
+        headers: { 'Cache-Control': 'private, no-store', ...headers },
+      }
+    );
   const access = authorizePartnerProfile(
     request.headers.get('authorization'),
     'catalog:read',
@@ -34,13 +29,17 @@ export async function GET(request: Request) {
   );
   if (!access.ok) {
     if (access.reason === 'unconfigured') {
-      logger.warn({ message: 'Partner catalog credential is unconfigured' });
+      logger.warn({
+        message: 'Partner catalog credential is unconfigured',
+        requestId,
+      });
     } else if (access.reason === 'ambiguous') {
       logger.warn({
         message: 'Partner catalog credential matches multiple grants',
+        requestId,
       });
     }
-    return unauthorized();
+    return reject(401, 'Unauthorized', { 'WWW-Authenticate': 'Bearer' });
   }
 
   const { connectionId, profile } = access;
@@ -57,8 +56,9 @@ export async function GET(request: Request) {
       logger.warn({
         message: 'Partner catalog rate limiter unavailable',
         connectionId,
+        requestId,
       });
-      return unavailable(unavailableMessage);
+      return reject(503, unavailableMessage);
     }
     if (limit.verdict === 'denied') {
       const now = Date.now();
@@ -66,13 +66,9 @@ export async function GET(request: Request) {
         1,
         Math.ceil(((limit.resetAt ?? now + 60_000) - now) / 1000)
       );
-      return Response.json(
-        { error: 'Too many requests' },
-        {
-          status: 429,
-          headers: { ...errorHeaders, 'Retry-After': String(retryAfter) },
-        }
-      );
+      return reject(429, 'Too many requests', {
+        'Retry-After': String(retryAfter),
+      });
     }
     const { body, etag } = await profile.readCatalogSnapshot(
       request.headers.get('if-none-match')
@@ -91,6 +87,11 @@ export async function GET(request: Request) {
       headers: { ...headers, 'Content-Type': 'application/json' },
     });
   } catch {
+    logger.warn({
+      message: 'Partner catalog snapshot unavailable',
+      connectionId,
+      requestId,
+    });
     after(async () => {
       await captureServerEvent(
         catalogFailure?.event ?? 'partner_catalog_snapshot_unavailable',
@@ -100,6 +101,6 @@ export async function GET(request: Request) {
         }
       );
     });
-    return unavailable(unavailableMessage);
+    return reject(503, unavailableMessage);
   }
 }

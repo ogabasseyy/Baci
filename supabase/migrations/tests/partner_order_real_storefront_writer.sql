@@ -93,6 +93,18 @@ BEGIN
   END LOOP;
 
   BEGIN
+    PERFORM private.record_verified_partner_capture(
+      submission_id, merchant_id, connection_id, quote_id, 'fixture-order-1',
+      'fixture', 'partner-replay-provider', 'capture-1', 183300, 'NGN',
+      (SELECT s.received_at + interval '1 second'
+       FROM private.partner_order_submissions AS s WHERE s.id = fixture.submission_id)
+    );
+    RAISE EXCEPTION 'after-receipt capture was accepted' USING ERRCODE = 'P0001';
+  EXCEPTION WHEN invalid_parameter_value THEN
+    IF SQLERRM <> 'partner_capture_timestamp_after_receipt' THEN RAISE; END IF;
+  END;
+
+  BEGIN
     UPDATE private.partner_payment_captures AS c SET currency = 'USD'
     WHERE c.submission_id = fixture.submission_id;
     RAISE EXCEPTION 'partner capture stored unsupported currency' USING ERRCODE = '22023';

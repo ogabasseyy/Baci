@@ -115,7 +115,7 @@ describe('internal partner reconciliation', () => {
     vi.stubEnv('CROSSREM_VERIFIER_TOKEN', verifierToken);
     mocks.rpc.mockResolvedValueOnce({
       data: null,
-      error: { code: 'P0002', message: 'private storage detail' },
+      error: { code: 'P0002', message: 'partner_submission_not_found' },
     });
     const missing = await POST(request());
     for (const response of [unauthorized, unconfigured, missing]) {
@@ -211,12 +211,19 @@ describe('internal partner reconciliation', () => {
   });
 
   it.each([
-    ['P0002', 'not_found', 404, 'NOT_FOUND'],
+    ['P0002', 'partner_submission_not_found', 404, 'NOT_FOUND'],
+    ['P0002', 'query returned no rows', 503, 'RECONCILIATION_UNAVAILABLE'],
     [
       '22023',
       'partner_payment_evidence_mismatch',
       400,
       'CAPTURE_EVIDENCE_MISMATCH',
+    ],
+    [
+      '22023',
+      'partner_capture_timestamp_after_receipt',
+      409,
+      'CAPTURE_TIMESTAMP_AFTER_RECEIPT',
     ],
     [
       '23505',

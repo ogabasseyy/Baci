@@ -87,12 +87,26 @@ export async function POST(request: Request) {
       p_evidence: evidence,
       p_route_proof: proof,
     });
-    if (error?.code === 'P0002') {
+    if (
+      error?.code === 'P0002' &&
+      error.message === 'partner_submission_not_found'
+    ) {
       logger.warn({
         message: 'Partner reconciliation submission not found',
         requestId,
       });
       return reject(404, 'NOT_FOUND');
+    }
+    if (
+      error?.code === '22023' &&
+      error.message === 'partner_capture_timestamp_after_receipt'
+    ) {
+      logger.warn({
+        message: 'Partner capture timestamp after submission receipt',
+        connectionId,
+        requestId,
+      });
+      return reject(409, 'CAPTURE_TIMESTAMP_AFTER_RECEIPT');
     }
     // Settlement mismatches are returned by the RPC as review holds, while
     // a capture mismatch rejects the evidence before recording a capture.

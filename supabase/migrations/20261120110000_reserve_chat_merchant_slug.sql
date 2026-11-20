@@ -64,7 +64,9 @@ BEGIN
     WHERE d.merchant_id = r.id
       AND d.domain_type = 'subdomain'
       AND position('.' in d.domain) > 0
-      AND left(d.domain, position('.' in d.domain) - 1) = r.slug;
+      -- Same normalization as the cursor above: a legacy 'Chat' / ' chat ' slug
+      -- still owns the lowercased chat.<root> domain row.
+      AND lower(btrim(left(d.domain, position('.' in d.domain) - 1))) = 'chat';
     UPDATE public.merchants SET slug = v_safe WHERE id = r.id;
     RAISE WARNING 'Moved store off the reserved slug % -> % (merchant %); no alias kept', r.slug, v_safe, r.id;
   END LOOP;

@@ -149,6 +149,14 @@ BEGIN
   END;
   UPDATE public.products AS p SET vat_rate = 7.5 WHERE p.id = fixture.product_id;
 
+  BEGIN
+    UPDATE public.orders
+    SET shipping_fee = shipping_fee + 1, total = total + 1 WHERE id = accepted_id;
+    RAISE EXCEPTION 'accepted partner order pricing was edited' USING ERRCODE = '22023';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'partner_settled_order_amounts_immutable' THEN RAISE; END IF;
+  END;
+
   UPDATE public.products AS p SET price = 100.25 WHERE p.id = fixture.product_id;
   BEGIN
     PERFORM private.accept_settled_partner_order('7a100000-0000-4000-8000-000000000042', merchant_id, connection_id);

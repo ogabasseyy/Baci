@@ -48,6 +48,14 @@ describe('partner order submission lookup', () => {
   });
   afterEach(() => vi.unstubAllEnvs());
 
+  it('rejects duplicate order references without querying storage', async () => {
+    const response = await GET(
+      request('?partner_order_id=first&partner_order_id=second')
+    );
+    expect(response.status).toBe(400);
+    expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
   it('distinguishes an invalid database response from temporary unavailability', async () => {
     mocks.rpc.mockResolvedValue({ data: { unexpected: true }, error: null });
 

@@ -3,8 +3,9 @@ info:
   title: Baci Partner Commerce API
   version: 1.0.0
   description: |
-    Draft for implementation verification. The catalog is live for the pilot.
-    Baci supplies connection credentials and the base URL during onboarding.
+    The catalog is live for the pilot. Delivery quotes, paid-order intake, and tracking are pre-live
+    for CrossRem. Baci confirms live GIG booking and payment and payout verification before enabling
+    these capabilities. Baci supplies connection credentials and the base URL during onboarding.
 servers:
   - url: https://ogabassey.com/api/partners/v1
     description: Ogabassey pilot. Confirm capabilities with Baci before use.

@@ -1,6 +1,6 @@
 # Baci partner delivery API
 
-Draft for implementation verification. The Ogabassey catalog feed is live. The delivery, order, and tracking examples describe the implementation under test. See the [OpenAPI contract](delivery-api.openapi.yaml) for schemas and status codes.
+The Ogabassey catalog feed is live. Delivery quotes, paid-order intake, and tracking are pre-live for CrossRem. Wait for Baci to confirm live GIG booking and the payment and payout evidence workflow before collecting payment through this integration. See the [OpenAPI contract](delivery-api.openapi.yaml) for schemas and status codes.
 
 ## Before making requests
 

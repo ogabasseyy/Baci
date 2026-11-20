@@ -72,6 +72,25 @@ function assertFixtureId(id: string) {
   );
 }
 
+async function verifyAcceptedEvidenceReplay<T extends { settlement: object }>(
+  token: string,
+  evidence: T
+) {
+  const send = (body: object) =>
+    reconcile(request('internal/partner-order-reconciliation', token, body));
+  expect((await expectJson(await send(evidence), 200)).receipt.status).toBe(
+    'accepted'
+  );
+  const changed = await expectJson(
+    await send({
+      ...evidence,
+      settlement: { ...evidence.settlement, allocation_reference: 'changed' },
+    }),
+    409
+  );
+  expect(changed.error.code).toBe('SETTLEMENT_EVIDENCE_CONFLICT');
+}
+
 async function verifyCatalogDriftHold(
   quoteId: string,
   runReconciliation: (newQuoteId: string) => Promise<Response>
@@ -176,6 +195,7 @@ export {
   fixtureSql,
   reconcileAfterCatalogDrift,
   request,
+  verifyAcceptedEvidenceReplay,
   verifyCatalogDriftHold,
   verifyGiglWalletBinding,
 };

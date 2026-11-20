@@ -92,6 +92,12 @@ export async function POST(request: Request) {
     ) {
       return reject(409, 'CAPTURE_EVIDENCE_CONFLICT');
     }
+    if (
+      error?.code === '23505' &&
+      error.message === 'partner_accepted_settlement_evidence_conflict'
+    ) {
+      return reject(409, 'SETTLEMENT_EVIDENCE_CONFLICT');
+    }
     if (error) throw new Error('Partner reconciliation unavailable');
     const outcome = outcomeSchema.safeParse(data);
     if (!outcome.success) {

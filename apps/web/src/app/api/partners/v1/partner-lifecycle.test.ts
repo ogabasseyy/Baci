@@ -10,6 +10,7 @@ import {
   fixtureSql,
   reconcileAfterCatalogDrift,
   request,
+  verifyAcceptedEvidenceReplay,
   verifyCatalogDriftHold,
   verifyGiglWalletBinding,
 } from './partner-lifecycle-db.test-support';
@@ -260,6 +261,7 @@ describe.runIf(fixtureEnabled)(
         200
       );
       expect(accepted.receipt.status).toBe('accepted');
+      await verifyAcceptedEvidenceReplay(tokens.verify, evidence);
       const { order_id: orderId } = accepted.receipt;
       expect(orderId).toMatch(/^[a-f0-9-]{36}$/);
       expect((await expectJson(await purchase(), 200)).order_id).toBe(orderId);

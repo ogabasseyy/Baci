@@ -46,6 +46,7 @@ export type QuizEdgeCheckInSession = z.infer<
 };
 
 const activeEdgeSessions = new Map<string, QuizEdgeCheckInSession>();
+const activeAttemptSessions = new Map<string, QuizEdgeCheckInSession>();
 
 function sessionKey(eventId: string, expectedUserId?: string): string {
   return `${eventId}:${expectedUserId ?? 'anon'}`;
@@ -58,11 +59,25 @@ export function getQuizEdgeSession(
   return activeEdgeSessions.get(sessionKey(eventId, expectedUserId));
 }
 
+export function getQuizEdgeSessionForAttempt(
+  attemptId: string
+): QuizEdgeCheckInSession | undefined {
+  return activeAttemptSessions.get(attemptId);
+}
+
 export function clearQuizEdgeSession(
   eventId: string,
   expectedUserId?: string
 ): void {
-  activeEdgeSessions.delete(sessionKey(eventId, expectedUserId));
+  const key = sessionKey(eventId, expectedUserId);
+  const existing = activeEdgeSessions.get(key);
+  activeEdgeSessions.delete(key);
+  if (!existing) return;
+  for (const [attemptId, session] of activeAttemptSessions.entries()) {
+    if (session === existing) {
+      activeAttemptSessions.delete(attemptId);
+    }
+  }
 }
 
 export async function checkInQuizEdgeEvent(
@@ -187,7 +202,7 @@ async function fetchEdgeJson<T>(
   throw lastError;
 }
 
-export function startQuizEdgeAttempt(
+export async function startQuizEdgeAttempt(
   session: QuizEdgeCheckInSession,
   input: Pick<
     StartQuizAttemptV2Input,
@@ -199,7 +214,7 @@ export function startQuizEdgeAttempt(
   >
 ): Promise<QuizV2Attempt> {
   const { appVersion, platform } = getQuizAppMetadata();
-  return fetchEdgeJson(
+  const started = await fetchEdgeJson(
     session,
     `/api/quiz/events/${encodeURIComponent(input.eventId)}/start`,
     {
@@ -213,6 +228,8 @@ export function startQuizEdgeAttempt(
     quizV2AttemptResponseSchema,
     2
   );
+  activeAttemptSessions.set(started.attemptId, session);
+  return started;
 }
 
 export function submitQuizEdgeAnswer(

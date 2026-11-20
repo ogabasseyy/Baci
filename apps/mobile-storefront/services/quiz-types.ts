@@ -153,6 +153,7 @@ export interface StartQuizAttemptInput extends QuizServiceOptions {
 
 export interface StartQuizAttemptV2Input extends QuizServiceOptions {
   acceptedRulesVersion: string;
+  backendMode?: QuizBackendMode;
   deviceFingerprint?: string | null;
   eventId: string;
   expectedUserId: string;

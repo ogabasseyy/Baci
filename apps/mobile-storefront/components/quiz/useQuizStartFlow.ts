@@ -195,6 +195,9 @@ export function useQuizStartFlow({
             try {
               return await startQuizAttemptV2({
                 acceptedRulesVersion: event.rulesVersion,
+                ...(event.backendMode === 'edge_rooms'
+                  ? { backendMode: 'edge_rooms' as const }
+                  : {}),
                 deviceFingerprint,
                 eventId,
                 expectedUserId: startUserId,

@@ -103,7 +103,7 @@ export async function GET(request: NextRequest) {
       finalizePayment: authorities.finalizePayment,
       scheduleAfter,
       supabase,
-    }).catch(() => ({ checked: 0, failed: 1, reversed: 0 }));
+    }).catch(() => ({ checked: 0, failed: 1, retrying: 0, reversed: 0 }));
     const sideEffectDrain = await drainFailedPaidOrderSideEffects({
       deadlineMs: sideEffectDeadlineMs,
       finalizePayment: authorities.finalizePayment,
@@ -116,6 +116,7 @@ export async function GET(request: NextRequest) {
       abandonedAttemptSweep.checked > 0 ||
       abandonedAttemptSweepFailed ||
       bankOfferRecheck.failed > 0 ||
+      bankOfferRecheck.retrying > 0 ||
       bankOfferRecheck.reversed > 0 ||
       summary.checked > 0 ||
       sideEffectDrain.drained.length > 0 ||

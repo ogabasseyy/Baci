@@ -28,6 +28,8 @@ For a capture review, reconcile the payment with Paystack under the original ref
 
 The hourly gateway worker also rechecks verified captures on paid bank-offer orders. It takes up to ten due attempts in a 20-second pass. A failed check is eligible again after its 50-minute claim expires. A confirmed reversal records the existing reconciliation review and blocks another automatic cancellation refund. Operations should reconcile fulfillment and the original charge from that review. Monitor the worker's `bankOfferRecheck` results during onboarding.
 
+New bank-offer payment transactions start pending. The insert guard requires verified evidence linked to the transaction ID, and that evidence can exist only after the payment transaction is created. The reversal trigger therefore fences status updates. The separate order-payment and refund checks also read the recorded reversal.
+
 When a signed webhook has no matching saved bank-offer attempt, platform operations should look up the `payment_match_zero_candidates` review by `paystack_ref`. The row is intentionally unassigned because tenant and order identity come from the saved attempt. The webhook metadata does not establish that relationship. The platform queue deduplicates open rows by issue type and Paystack reference, and the webhook acknowledges a duplicate.
 
 Hosted storefront callbacks use HTTPS with both Paystack test and live keys. A custom-domain lookup error returns a retryable response before claiming a payment attempt. Non-production localhost can use HTTP for local QA with mocked Paystack responses.

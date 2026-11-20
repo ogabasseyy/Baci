@@ -16,7 +16,7 @@ export async function recheckPaidBankCardOfferCaptures({
   scheduleAfter: (task: () => Promise<void>) => void;
   supabase: SupabaseClient;
 }) {
-  const summary = { checked: 0, failed: 0, reversed: 0 };
+  const summary = { checked: 0, failed: 0, retrying: 0, reversed: 0 };
   for (let index = 0; index < CAPTURE_LIMIT; index += 1) {
     const signal = remainingVerificationSignal(deadlineMs);
     if (signal === null) break;
@@ -39,6 +39,16 @@ export async function recheckPaidBankCardOfferCaptures({
         signal
       );
       if (verification.ok) continue;
+      if (
+        verification.reason === 'paystack_verification_unavailable' ||
+        verification.gatewayStatus === 'pending' ||
+        verification.gatewayStatus === 'processing' ||
+        verification.gatewayStatus === 'ongoing' ||
+        verification.gatewayStatus === 'queued'
+      ) {
+        summary.retrying += 1;
+        continue;
+      }
       if (verification.gatewayStatus !== 'reversed') {
         summary.failed += 1;
         continue;

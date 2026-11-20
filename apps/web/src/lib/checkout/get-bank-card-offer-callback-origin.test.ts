@@ -47,6 +47,13 @@ it('preserves the configured localhost callback for development', async () => {
   expect(resolveDomain).not.toHaveBeenCalled();
 });
 
+it('withholds a callback when a storefront slug is not a valid domain label', async () => {
+  await expect(
+    getBankCardOfferCallbackOrigin({ ...order, merchantSlug: 'other.test/' })
+  ).resolves.toBeNull();
+  expect(resolveDomain).not.toHaveBeenCalled();
+});
+
 it('withholds the callback during a domain lookup error', async () => {
   resolveDomain.mockRejectedValue(new Error('domain lookup unavailable'));
 

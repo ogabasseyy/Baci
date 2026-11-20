@@ -82,6 +82,7 @@ beforeEach(() => {
   mocks.recheckPaidBankCardOfferCaptures.mockResolvedValue({
     checked: 0,
     failed: 0,
+    retrying: 0,
     reversed: 0,
   });
 });
@@ -208,6 +209,21 @@ describe('GET /api/cron/reconcile-gateway-paid-orders', () => {
     expect(mocks.logger.warn).toHaveBeenCalledWith(
       expect.objectContaining({ sideEffectDrain })
     );
+  });
+
+  it('reports temporary paid-offer retrying without failing the cron', async () => {
+    const bankOfferRecheck = {
+      checked: 1,
+      failed: 0,
+      retrying: 1,
+      reversed: 0,
+    };
+    mocks.recheckPaidBankCardOfferCaptures.mockResolvedValue(bankOfferRecheck);
+
+    const response = await GET(buildRequest(`Bearer ${CRON_SECRET}`));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ bankOfferRecheck });
   });
 
   it('keeps the existing repair passes running if the Paystack attempt sweep fails', async () => {

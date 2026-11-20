@@ -5,6 +5,7 @@ import {
   isLocalhostIdentifier,
   resolveStorefrontRouteIdentifiers,
 } from '@/lib/storefront-host';
+import { STORE_SLUG_PATTERN } from '@/schemas/rename-slug';
 
 export async function getBankCardOfferCallbackOrigin({
   request,
@@ -15,6 +16,9 @@ export async function getBankCardOfferCallbackOrigin({
   merchantId: string;
   merchantSlug: string;
 }) {
+  if (merchantSlug.length > 63 || !STORE_SLUG_PATTERN.test(merchantSlug)) {
+    return null;
+  }
   const rootDomain = process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'usebaci.com';
   const local =
     process.env.NODE_ENV !== 'production' &&

@@ -38,6 +38,7 @@ describe('recheckPaidBankCardOfferCaptures', () => {
     await expect(recheckPaidBankCardOfferCaptures(input)).resolves.toEqual({
       checked: 1,
       failed: 0,
+      retrying: 0,
       reversed: 1,
     });
 
@@ -70,6 +71,7 @@ describe('recheckPaidBankCardOfferCaptures', () => {
     await expect(recheckPaidBankCardOfferCaptures(input)).resolves.toEqual({
       checked: 1,
       failed: 0,
+      retrying: 0,
       reversed: 0,
     });
     expect(input.finalizePayment).not.toHaveBeenCalled();
@@ -87,7 +89,24 @@ describe('recheckPaidBankCardOfferCaptures', () => {
     await expect(recheckPaidBankCardOfferCaptures(input)).resolves.toEqual({
       checked: 1,
       failed: 1,
+      retrying: 0,
       reversed: 0,
     });
+  });
+
+  it('tracks a temporary provider outage as retryable', async () => {
+    const input = worker();
+    vi.mocked(verifyGatewayCharge).mockResolvedValueOnce({
+      ok: false,
+      reason: 'paystack_verification_unavailable',
+    });
+
+    await expect(recheckPaidBankCardOfferCaptures(input)).resolves.toEqual({
+      checked: 1,
+      failed: 0,
+      retrying: 1,
+      reversed: 0,
+    });
+    expect(input.finalizePayment).not.toHaveBeenCalled();
   });
 });

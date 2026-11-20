@@ -1,29 +1,116 @@
 import { expect, it, vi } from 'vitest';
-import type { BankCardOffer } from '@/schemas/bank-card-offer';
+import { offerFixture } from './bank-card-offer.test-support';
 import { finishBankCardOfferOrder } from './finish-bank-card-offer-order';
 
-it('rejects a fractional fee before writing an order or running post-commit work', async () => {
+vi.mock('@/lib/quiz-proof', () => ({
+  createQuizRpcServerProof: () => 'test-proof',
+}));
+
+function setup() {
   const rpc = vi.fn();
   const repairEffects = vi.fn();
-  const response = await finishBankCardOfferOrder({
-    offer: {} as BankCardOffer,
+  const options = {
+    offer: offerFixture,
     userId: 'session-user',
     requestHash: 'fixture',
     client: { rpc },
     orderArgs: {},
-    items: [],
-    fees: [0.005],
+    items: [
+      {
+        __baci_line_ordinal: 1,
+        assurance_fee: 0,
+        product_id: offerFixture.eligibleProductIds[0],
+        price: 100,
+        quantity: 1,
+      },
+    ],
+    fees: [],
     currency: 'NGN',
     expectedTotal: 95,
     hasIncompatibleDiscount: false,
-    merchantId: 'merchant',
+    merchantId: offerFixture.merchantId,
     merchantSlug: 'ogabassey',
     repairEffects,
-  });
+  };
+  return { rpc, repairEffects, options };
+}
+
+it.each([
+  { change: { fees: [0.005] }, code: 'BANK_CARD_OFFER_AMOUNT_INVALID' },
+  {
+    change: { hasIncompatibleDiscount: true },
+    code: 'BANK_CARD_OFFER_UNAVAILABLE',
+  },
+  { change: { currency: 'USD' }, code: 'BANK_CARD_OFFER_UNAVAILABLE' },
+  { change: { items: [] }, code: 'BANK_CARD_OFFER_UNAVAILABLE' },
+  { change: { expectedTotal: 100 }, code: 'BANK_CARD_OFFER_TOTAL_MISMATCH' },
+])('returns $code without creating an order or running effects', async ({
+  code,
+  change,
+}) => {
+  const { options, rpc, repairEffects } = setup();
+
+  const response = await finishBankCardOfferOrder({ ...options, ...change });
+
+  expect(response.status).toBe(409);
+  await expect(response.json()).resolves.toMatchObject({ code });
+  expect(rpc).not.toHaveBeenCalled();
+  expect(repairEffects).not.toHaveBeenCalled();
+});
+
+it('returns the cart validation error when quantity exceeds the quote limit', async () => {
+  const { options, rpc, repairEffects } = setup();
+  options.items[0].quantity = 10_001;
+
+  const response = await finishBankCardOfferOrder(options);
+
   expect(response.status).toBe(409);
   await expect(response.json()).resolves.toMatchObject({
-    code: 'BANK_CARD_OFFER_AMOUNT_INVALID',
+    code: 'BANK_CARD_OFFER_CART_INVALID',
   });
   expect(rpc).not.toHaveBeenCalled();
   expect(repairEffects).not.toHaveBeenCalled();
+});
+
+it.each([
+  { error: { code: 'P0001' }, data: null },
+  { error: null, data: null },
+])('withholds the order and effects when persistence returns %j', async (result) => {
+  const { options, rpc, repairEffects } = setup();
+  rpc.mockResolvedValue(result);
+
+  const response = await finishBankCardOfferOrder(options);
+
+  expect(response.status).toBe(409);
+  await expect(response.json()).resolves.toMatchObject({
+    code: 'BANK_CARD_OFFER_ORDER_REJECTED',
+  });
+  expect(repairEffects).not.toHaveBeenCalled();
+});
+
+it.each([
+  { replayed: false, status: 201 },
+  { replayed: true, status: 200 },
+])('runs post-commit effects before returning a $status response', async ({
+  replayed,
+  status,
+}) => {
+  const { options, rpc, repairEffects } = setup();
+  const order = { id: 'order-1', total: 95, idempotency_replayed: replayed };
+  rpc.mockResolvedValue({ data: order, error: null });
+
+  const response = await finishBankCardOfferOrder(options);
+
+  expect(response.status).toBe(status);
+  expect(response.headers.get('x-idempotency-replayed')).toBe(
+    replayed ? 'true' : null
+  );
+  await expect(response.json()).resolves.toEqual({
+    order,
+    ...(replayed ? { idempotency: { replayed: true } } : {}),
+  });
+  expect(repairEffects).toHaveBeenCalledExactlyOnceWith(
+    order,
+    options.merchantSlug
+  );
 });

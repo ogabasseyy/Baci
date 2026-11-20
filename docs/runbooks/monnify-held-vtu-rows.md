@@ -70,3 +70,12 @@ stored on the row.
 - 401/403/429 answers are refunded (owner decision 2026-11-18), with one
   exception added in PR #4401: an answer that also carries a real voucher
   token is held, because the voucher was delivered.
+- A re-check (requery) that is refused with 401/403/429, or with login wording,
+  stays put (processing) even if its body says `vendStatus FAILED`: a login
+  rejection proves nothing about the vend. It is retried by the next
+  reconciliation pass; if it keeps failing, settle it by hand like any held row.
+  (A fresh vend with those codes is refunded: owner decision 2026-11-18.)
+- A token that is exactly a placeholder word (`TEST`, `DUMMY`, `PENDING`,
+  `TBD`, `N/A`, runs of `0`/`x`) is treated as "no token". If support sees a
+  vend held because the token was one of those words, Monnify really did issue
+  that value: deliver it and mark the row successful.

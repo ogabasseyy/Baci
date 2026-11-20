@@ -30,7 +30,7 @@ Each plan is one pull request. Land them one at a time: several edit files bound
 - Work in a fresh worktree from `origin/main` (Task 1). The primary checkout has unrelated uncommitted work.
 - Run pnpm tools as `npm_config_verify_deps_before_run=false pnpm exec …`. Plain `pnpm exec` can start a full `pnpm install`, which has filled this machine's disk before.
 - Do not edit `apps/web/src/proxy.ts`, `apps/web/src/config/business-types.ts` or any `.env*` file. Never edit an existing migration.
-- Before every commit, run `coderabbit review --agent -t uncommitted` and fix valid critical or high findings. If CodeRabbit is unavailable, stop and report that; never claim a review ran.
+- Before every commit, run `coderabbit review --agent -t uncommitted` and fix valid critical or high findings. If CodeRabbit is rate-limited or unavailable, follow the owner-approved fallback in the program tracker (step 5 of the loop): keep building, record the gate as not run in the task report and the PR body, never claim a review ran, and rely on the draft-PR Codex and Muse reviews.
 - Pushing, opening the pull request, merging and deploying each need the owner's explicit go-ahead.
 
 ## Design decision: a separate payment-split function
@@ -1155,7 +1155,7 @@ Expected: all succeed.
 
 ```bash
 git push -u origin fix/agentic-remove-admin-client
-gh pr create --title "fix(agentic): remove the service-role client from agentic routes" --body-file /tmp/agentic-m0-1-pr-body.md
+gh pr create --draft --title "fix(agentic): remove the service-role client from agentic routes" --body-file /tmp/agentic-m0-1-pr-body.md
 ```
 
 Write `/tmp/agentic-m0-1-pr-body.md` first. It must cover: the nine call sites; the separate payment-split function and why the shared projection keeps withholding the subaccount; the migration and its registry entries; the capability-register refresh; and the test evidence from Steps 1–3. If the pre-push hook hangs, follow the repository's documented API-push fallback; never use `--no-verify`.

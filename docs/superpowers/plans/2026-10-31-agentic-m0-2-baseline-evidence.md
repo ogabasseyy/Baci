@@ -4486,6 +4486,7 @@ After the first checkpoint push (Task 1's commit), and again for the final push:
 ```bash
 cd /Users/mac/Baci-app/.worktrees/agentic-baseline-evidence
 export WORK="${TMPDIR:-/tmp}/agentic-baseline-2026-10-31"
+[ -f "$WORK/pr-body.md" ] || printf 'Checkpoint: baseline evidence, UCP/MCP/ACP fixtures and a two-merchant harness (work in progress; the full body is written in Task 9).\n' > "$WORK/pr-body.md"
 gh pr create --draft --title "chore(agentic): baseline evidence, UCP/MCP/ACP fixtures and a two-merchant harness" --body-file "$WORK/pr-body.md"
 gh pr comment "$(gh pr view --json number --jq .number)" --body "@codex review"
 ```

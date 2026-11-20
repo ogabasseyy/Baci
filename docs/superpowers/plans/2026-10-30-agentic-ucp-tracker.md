@@ -77,7 +77,7 @@ Plan: [2026-10-30-agentic-m0-1-admin-client-removal.md](2026-10-30-agentic-m0-1-
 - [x] Codex clean and CI green on `1537b8d0a7` (31 Oct)
 - [ ] PR gates green
 - [ ] Merged (owner OK, deploys)
-- [x] Production check (none beyond Task 1, which ran read-only on 31 Oct: shared cart enrolled, VAT registered at 7.50%, migration ledger matches the repository, public profile 200 for plain and browser requests with no checkout declared)
+- [x] Production check (none beyond Task 1, which ran read-only on 31 Oct: shared cart enrolled, VAT registered at 7.50%, migration ledger matches the repository within the newest 40 versions that Task 1 compared, public profile 200 for plain and browser requests with no checkout declared)
 
 ### Plan 3: truthful capability claims and the shared-cart gate (roadmap Task 3)
 

@@ -52,25 +52,31 @@ const METHOD_DETAIL_BY_STATUS: Partial<
   expired: 'Payment Expired',
 };
 
-export function getFollowUpStatusLabel(order: FailedOrder): string {
-  if (order.staff_follow_up_only) {
-    const status = RETAINED_PAYMENT_STATUSES.find(
-      (status) => status === order.payment_status
-    );
-    return status
-      ? `Staff follow-up · ${PAYMENT_LABELS[status]}`
-      : 'Staff follow-up';
-  }
-  if (order.oxygen_follow_up_status)
-    return OXYGEN_LABELS[order.oxygen_follow_up_status];
-
+function getMethodLabel(order: FailedOrder): string | undefined {
   const method = order.payment_method
     ?.trim()
     .toLowerCase()
     .replaceAll('-', '_');
+  return METHOD_DETAIL_BY_STATUS[order.payment_status] && method
+    ? METHOD_LABELS.get(method)
+    : undefined;
+}
+
+export function getFollowUpStatusLabel(order: FailedOrder): string {
+  const methodLabel = getMethodLabel(order);
+  if (order.staff_follow_up_only) {
+    const status = RETAINED_PAYMENT_STATUSES.find(
+      (status) => status === order.payment_status
+    );
+    const retained = status
+      ? `Staff follow-up · ${PAYMENT_LABELS[status]}`
+      : 'Staff follow-up';
+    return status && methodLabel ? `${methodLabel} · ${retained}` : retained;
+  }
+  if (order.oxygen_follow_up_status)
+    return OXYGEN_LABELS[order.oxygen_follow_up_status];
+
   const methodDetail = METHOD_DETAIL_BY_STATUS[order.payment_status];
-  const methodLabel =
-    methodDetail && method ? METHOD_LABELS.get(method) : undefined;
   let detail =
     (methodLabel && methodDetail) ??
     PAYMENT_LABELS[order.payment_status] ??

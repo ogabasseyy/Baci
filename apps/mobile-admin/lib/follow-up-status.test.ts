@@ -145,4 +145,30 @@ describe('follow-up status label', () => {
       })
     ).toBe(label);
   });
+
+  it.each([
+    [
+      'credit_direct',
+      'bnpl_approved',
+      'Credit Direct · Staff follow-up · BNPL Approved',
+    ],
+    [
+      'credit-direct',
+      'bnpl_approved',
+      'Credit Direct · Staff follow-up · BNPL Approved',
+    ],
+    ['paystack', 'pending', 'Staff follow-up'],
+    ['paystack', 'paid', 'Staff follow-up · Paid'],
+    ['unknown_method', 'bnpl_approved', 'Staff follow-up · BNPL Approved'],
+    ['', 'bnpl_approved', 'Staff follow-up · BNPL Approved'],
+  ] as const)('bugfix: a retained follow-up saved with method "%s" and %s status reads "%s"', (payment_method, status, label) => {
+    expect(
+      getFollowUpStatusLabel({
+        ...order,
+        payment_method,
+        payment_status: status,
+        staff_follow_up_only: true,
+      })
+    ).toBe(label);
+  });
 });

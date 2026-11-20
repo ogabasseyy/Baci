@@ -9,7 +9,6 @@ describe('bugfix: no arrival promotion once the return flow has begun', () => {
     'MRTE',
     'SRC',
     'SSR',
-    'MRTD',
     'RSR',
   ])('does not rewrite an ARF that follows a %s return scan', (returnCode) => {
     const result = normalizeGiglTrackingShipment(
@@ -73,6 +72,25 @@ describe('bugfix: no arrival promotion once the return flow has begun', () => {
       OBSERVED_AT
     );
     expect(result.events.map((e) => e.rawStatus)).not.toContain(
+      GIGL_ARRIVED_IN_CITY_RAW_STATUS
+    );
+  });
+
+  it('bugfix: an MRTD (rerouted) scan does not fence a later destination arrival', () => {
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W83',
+        Origin: 'LAGOS',
+        Destination: 'ABUJA',
+        MobileShipmentTrackings: [
+          { Status: 'MRTD', DateTimeUtc: '2026-11-09T11:00:00.000Z' },
+          { Status: 'ARF', DateTimeUtc: '2026-11-09T12:00:00.000Z' },
+        ],
+      },
+      'W83',
+      OBSERVED_AT
+    );
+    expect(result.events.map((e) => e.rawStatus)).toContain(
       GIGL_ARRIVED_IN_CITY_RAW_STATUS
     );
   });

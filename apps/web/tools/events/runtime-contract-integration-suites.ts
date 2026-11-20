@@ -32,8 +32,6 @@ export const runtimeIntegrationSuites: Readonly<Record<string, string>> = {
     'apps/web/src/lib/payments/oxygen/chat-pipeline.test.ts',
   'apps/web/src/schemas/oxygen-checkout-snapshot.ts':
     'apps/web/src/components/payments/oxygen/oxygen-checkout-snapshot.test.ts',
-  'apps/web/src/schemas/oxygen-order-plan.ts':
-    'apps/web/src/lib/payments/oxygen/canonical-activation.test.ts',
   'apps/web/src/schemas/oxygen-provider-diagnostic.ts':
     'apps/web/src/lib/payments/oxygen/local-validation-diagnostic.test.ts',
   'apps/web/src/schemas/oxygen-workflow.ts':

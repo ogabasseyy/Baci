@@ -10,6 +10,7 @@
   "scripts": {
     "lint": "biome check .",
     "typecheck": "tsc --noEmit",
+    "typecheck:ci": "pnpm run typecheck",
     "test": "vitest run",
     "build": "esbuild src/index.ts --bundle --format=esm --platform=browser --external:react --external:@baci/shared/experience --outfile=dist/index.js",
     "qualify:experience:release": "pnpm typecheck && pnpm test && pnpm build"

@@ -1,0 +1,103 @@
+[
+  {
+    "external_id": "ogabassey:pilot:offer:laptop-open-box",
+    "product_url": "https://catalogue.example.invalid/products/laptop-open-box",
+    "title": "Pilot Laptop — 8GB/256GB — Open Box",
+    "description": "SYNTHETIC REVIEW FIXTURE. Condition: Open Box. Specifications: 8GB RAM; 256GB SSD. Box contents: fixture laptop only. Warranty: fixture 7-day cover. Synthetic sample only.",
+    "category": "REVIEW_REQUIRED_EXACT_LABEL_COMPUTERS",
+    "price_naira": 440000,
+    "stock_quantity": 1,
+    "images": [
+      {
+        "url": "https://images.example.invalid/laptop-open-box.jpg"
+      }
+    ]
+  },
+  {
+    "external_id": "ogabassey:pilot:product:accessory-01",
+    "product_url": "https://catalogue.example.invalid/products/accessory-01",
+    "title": "Pilot USB-C accessory — New",
+    "description": "SYNTHETIC REVIEW FIXTURE. Condition: New. Specifications: USB-C; black. Box contents: fixture device and fixture cable only. Warranty: illustrative 30-day merchant warranty; not an Ogabassey policy claim.",
+    "category": "REVIEW_REQUIRED_EXACT_LABEL_ACCESSORIES",
+    "price_naira": 25000,
+    "stock_quantity": 6,
+    "images": [
+      {
+        "url": "https://images.example.invalid/accessory-01.jpg"
+      }
+    ]
+  },
+  {
+    "external_id": "ogabassey:pilot:product:laptop-new",
+    "product_url": "https://catalogue.example.invalid/products/laptop-new",
+    "title": "Pilot Laptop — 8GB/256GB — New",
+    "description": "SYNTHETIC REVIEW FIXTURE. Condition: New. Specifications: 8GB RAM; 256GB SSD. Box contents: fixture laptop and fixture charger. Warranty: fixture 30-day cover. Synthetic sample only.",
+    "category": "REVIEW_REQUIRED_EXACT_LABEL_COMPUTERS",
+    "price_naira": 500000,
+    "stock_quantity": 2,
+    "images": [
+      {
+        "url": "https://images.example.invalid/laptop-new.jpg"
+      }
+    ]
+  },
+  {
+    "external_id": "ogabassey:pilot:product:tablet-sold-out",
+    "product_url": "https://catalogue.example.invalid/products/tablet-sold-out",
+    "title": "Pilot Tablet — 64GB — New",
+    "description": "SYNTHETIC REVIEW FIXTURE. Condition: New. Specifications: 64GB storage. Box contents: fixture device and fixture cable only. Warranty: illustrative 30-day merchant warranty; not an Ogabassey policy claim.",
+    "category": "REVIEW_REQUIRED_EXACT_LABEL_TABLETS",
+    "price_naira": 200000,
+    "stock_quantity": 0,
+    "images": [
+      {
+        "url": "https://images.example.invalid/tablet-sold-out.jpg"
+      }
+    ]
+  },
+  {
+    "external_id": "ogabassey:pilot:variant:phone-128-new",
+    "product_url": "https://catalogue.example.invalid/products/phone-128-new",
+    "title": "Pilot Phone — 128GB — Black — New",
+    "description": "SYNTHETIC REVIEW FIXTURE. Condition: New. Specifications: 128GB storage; black. Box contents: fixture device and fixture cable only. Warranty: illustrative 30-day merchant warranty; not an Ogabassey policy claim.",
+    "category": "REVIEW_REQUIRED_EXACT_LABEL_PHONES",
+    "price_naira": 365000,
+    "stock_quantity": 3,
+    "images": [
+      {
+        "url": "https://images.example.invalid/phone-128-new.jpg"
+      }
+    ],
+    "brand": "FixtureBrand"
+  },
+  {
+    "external_id": "ogabassey:pilot:variant:phone-128-used",
+    "product_url": "https://catalogue.example.invalid/products/phone-128-used",
+    "title": "Pilot Phone — 128GB — Black — UK Used",
+    "description": "SYNTHETIC REVIEW FIXTURE. Condition: UK Used; fixture grade A. Specifications: 128GB storage; black. Box contents: fixture device and fixture cable only. Warranty: illustrative 30-day merchant warranty; not an Ogabassey policy claim.",
+    "category": "REVIEW_REQUIRED_EXACT_LABEL_PHONES",
+    "price_naira": 270000,
+    "stock_quantity": 1,
+    "images": [
+      {
+        "url": "https://images.example.invalid/phone-128-used.jpg"
+      }
+    ],
+    "brand": "FixtureBrand"
+  },
+  {
+    "external_id": "ogabassey:pilot:variant:phone-256-new",
+    "product_url": "https://catalogue.example.invalid/products/phone-256-new",
+    "title": "Pilot Phone — 256GB — Black — New",
+    "description": "SYNTHETIC REVIEW FIXTURE. Condition: New. Specifications: 256GB storage; black. Box contents: fixture device and fixture cable only. Warranty: illustrative 30-day merchant warranty; not an Ogabassey policy claim.",
+    "category": "REVIEW_REQUIRED_EXACT_LABEL_PHONES",
+    "price_naira": 400000,
+    "stock_quantity": 2,
+    "images": [
+      {
+        "url": "https://images.example.invalid/phone-256-new.jpg"
+      }
+    ],
+    "brand": "FixtureBrand"
+  }
+]

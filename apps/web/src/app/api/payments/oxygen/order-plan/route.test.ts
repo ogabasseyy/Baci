@@ -1,3 +1,4 @@
+import { OXYGEN_REPAYMENT_HISTORY_LIMIT } from '@baci/shared/schemas/oxygen-order-plan';
 import { NextRequest } from 'next/server';
 import { beforeEach, expect, it, vi } from 'vitest';
 
@@ -133,6 +134,25 @@ it('returns only customer-safe acknowledgement fields for the activated order', 
   });
 });
 
+it('fills the history limit with valid entries when a malformed entry appears first', async () => {
+  mocks.read.mockResolvedValue({
+    stage: 'activated',
+    state: { booking: { status: 'ACTIVATED', loan_tenure: 3 }, schedule: [] },
+  });
+  const valid = Array.from(
+    { length: OXYGEN_REPAYMENT_HISTORY_LIMIT + 1 },
+    (_, index) => ({
+      id: `bb3955b1-0571-49eb-919f-${String(index).padStart(12, '0')}`,
+      recordedAt: '2026-11-20T12:00:00+00:00',
+    })
+  );
+  mocks.rpc.mockResolvedValue({ data: [null, ...valid], error: null });
+  const { plan } = await (await GET(request())).json();
+  expect(plan.repaymentReceipts).toEqual(
+    valid.slice(0, OXYGEN_REPAYMENT_HISTORY_LIMIT)
+  );
+});
+
 it('keeps the schedule available when the acknowledgement lookup fails', async () => {
   const schedule = [{ period: 1, dueDate: [2026, 11, 27], amount: 55658 }];
   mocks.read.mockResolvedValue({
@@ -198,6 +218,21 @@ it('flags a discarded extra instalment even when every scheduled period is prese
   });
   const { plan } = await (await GET(request())).json();
   expect(plan.schedule).toEqual([first]);
+  expect(plan.scheduleIncomplete).toBe(true);
+});
+
+it('sorts known instalments around a gap and signals that the schedule is incomplete', async () => {
+  const first = { period: 1, dueDate: [2026, 11, 27], amount: 55000 };
+  const third = { period: 3, dueDate: [2027, 1, 27], amount: 55658 };
+  mocks.read.mockResolvedValue({
+    stage: 'booked',
+    state: {
+      booking: { status: 'BOOKED', loan_tenure: 3 },
+      schedule: [third, first],
+    },
+  });
+  const { plan } = await (await GET(request())).json();
+  expect(plan.schedule).toEqual([first, third]);
   expect(plan.scheduleIncomplete).toBe(true);
 });
 

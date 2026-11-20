@@ -113,6 +113,9 @@ AS $$
       AND i.event->>'kind' = 'transaction'
       AND nullif(i.event->>'transactionReference', '') IS NOT NULL
       AND i.deduplication_key = 'transaction-loan_repayment:' || (i.event->>'transactionReference')
+      -- The webhook's stringMoney schema accepts bounded decimal text with
+      -- up to two fractional digits and preserves that text in the inbox.
+      AND char_length(i.event->>'providerAmountSent') <= 32
       AND i.event->>'providerAmountSent' ~ '^[0-9]{1,32}([.][0-9]{1,2})?$'
       AND i.event->>'providerAmountSent' ~ '[1-9]'
     ORDER BY i.received_at DESC, i.id

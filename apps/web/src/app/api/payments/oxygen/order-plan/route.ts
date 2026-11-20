@@ -22,11 +22,14 @@ function projectSchedule(
   for (const { period } of saved) {
     counts.set(period, (counts.get(period) ?? 0) + 1);
   }
-  return saved.flatMap((row) => {
-    if (counts.get(row.period) !== 1 || row.period > months) return [];
-    const result = oxygenOrderPlanSchema.shape.schedule.element.safeParse(row);
-    return result.success ? [result.data] : [];
-  });
+  return saved
+    .flatMap((row) => {
+      if (counts.get(row.period) !== 1 || row.period > months) return [];
+      const result =
+        oxygenOrderPlanSchema.shape.schedule.element.safeParse(row);
+      return result.success ? [result.data] : [];
+    })
+    .sort((first, second) => first.period - second.period);
 }
 
 async function readRepaymentReceipts(client: OxygenRuntimeRpc, id: string) {
@@ -38,10 +41,13 @@ async function readRepaymentReceipts(client: OxygenRuntimeRpc, id: string) {
       }
     );
     if (error || !Array.isArray(data)) return undefined;
-    return data.slice(0, OXYGEN_REPAYMENT_HISTORY_LIMIT).flatMap((item) => {
+    const receipts: z.infer<typeof oxygenRepaymentReceiptSchema>[] = [];
+    for (const item of data) {
       const receipt = oxygenRepaymentReceiptSchema.safeParse(item);
-      return receipt.success ? [receipt.data] : [];
-    });
+      if (receipt.success) receipts.push(receipt.data);
+      if (receipts.length === OXYGEN_REPAYMENT_HISTORY_LIMIT) break;
+    }
+    return receipts;
   } catch {
     // The booked schedule is available even if receipt history cannot be read.
     return undefined;

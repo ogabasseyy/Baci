@@ -22,6 +22,7 @@ export async function verifyBankCardOfferPaystack(
     if (
       status === 'failed' ||
       status === 'abandoned' ||
+      status === 'reversed' ||
       status === 'cancelled'
     ) {
       return 'domain' in data &&

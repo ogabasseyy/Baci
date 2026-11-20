@@ -446,6 +446,7 @@ describe('bank card offer payment handlers', () => {
     { status: 'failed', amount: 9500 },
     { status: 'abandoned', amount: 9500 },
     { status: 'cancelled', amount: 9500 },
+    { status: 'reversed', amount: 9500 },
     { status: 'failed', amount: 1 },
   ])('holds the attempt after $status with a reported amount of $amount kobo', async ({
     status,

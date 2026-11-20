@@ -11,7 +11,13 @@ export type VerificationResponse = {
   orderNumber?: string;
   orderTotal?: number;
   paymentMethod?: string;
-  status?: 'success' | 'pending' | 'failed' | 'cancelled' | 'abandoned';
+  status?:
+    | 'success'
+    | 'pending'
+    | 'failed'
+    | 'cancelled'
+    | 'abandoned'
+    | 'reversed';
   success?: boolean;
   finalizationOutcome?: string;
 };
@@ -38,7 +44,8 @@ export function isVerificationResponse(
     candidate.status === 'pending' ||
     candidate.status === 'failed' ||
     candidate.status === 'cancelled' ||
-    candidate.status === 'abandoned';
+    candidate.status === 'abandoned' ||
+    candidate.status === 'reversed';
   const hasValidOrderNumber =
     candidate.orderNumber === undefined ||
     typeof candidate.orderNumber === 'string';

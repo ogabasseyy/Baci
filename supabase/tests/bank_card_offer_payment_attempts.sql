@@ -175,8 +175,8 @@ BEGIN
     THEN RAISE EXCEPTION 'Shopper scope recorded a terminal provider status'; END IF;
   PERFORM set_config('request.jwt.claims', jsonb_build_object('role', 'authenticated',
     'storefront_order_context', 'route', 'storefront_order_merchant_id', v_merchant)::text, true);
-  IF NOT public.flag_bank_card_offer_terminal_review(v_order, v_merchant, v_transaction, 'abandoned')
-    THEN RAISE EXCEPTION 'Unable to review a terminal initialized attempt'; END IF;
+  IF NOT public.flag_bank_card_offer_terminal_review(v_order, v_merchant, v_transaction, 'reversed')
+    THEN RAISE EXCEPTION 'Unable to review a reversed initialized attempt'; END IF;
   PERFORM set_config('request.jwt.claims', jsonb_build_object('role', 'authenticated', 'sub', v_user,
     'storefront_order_context', 'route', 'storefront_order_merchant_id', v_merchant)::text, true);
   v_attempt := public.claim_bank_card_offer_attempt(v_order, v_merchant, 9500, v_hash, 'test', 100, 0);

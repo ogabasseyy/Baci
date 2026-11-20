@@ -129,6 +129,7 @@ describe('verifyCheckoutPayment', () => {
     { status: 'failed', reason: 'payment_failed' },
     { status: 'cancelled', reason: 'payment_cancelled' },
     { status: 'abandoned', reason: 'payment_abandoned' },
+    { status: 'reversed', reason: 'payment_failed' },
   ])('fails a $status reference verification with the matching failure event', async ({
     status,
     reason,

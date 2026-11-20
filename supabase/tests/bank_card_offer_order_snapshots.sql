@@ -69,7 +69,8 @@ BEGIN
       PERFORM private.record_bank_card_offer_order(v_order, v_merchant, v_quote);
       RAISE EXCEPTION 'Expected the inconsistent order total to fail';
     EXCEPTION WHEN raise_exception THEN
-      IF SQLERRM <> 'bank_card_offer_order_total_mismatch' THEN RAISE; END IF;
+    -- Migration 20261119153526 raises this from the snapshot insert trigger.
+    IF SQLERRM <> 'bank_card_offer_order_total_mismatch' THEN RAISE; END IF;
     END;
 
     UPDATE public.orders

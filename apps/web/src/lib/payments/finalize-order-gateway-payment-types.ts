@@ -35,7 +35,7 @@ export type FinalizeOrderGatewayPaymentOutcome =
   | { kind: 'bank_offer_capture_review' }
   | {
       kind: 'bank_offer_terminal';
-      status: 'failed' | 'abandoned' | 'cancelled';
+      status: 'failed' | 'abandoned' | 'cancelled' | 'reversed';
     }
   | { kind: 'capture_hold_failed'; error: unknown }
   | { kind: 'completion_failed'; error: unknown }

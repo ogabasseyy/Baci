@@ -177,7 +177,7 @@ export async function verifyCheckoutPayment(
       setStatus(
         data.code === 'BANK_CARD_OFFER_VERIFICATION_DENIED'
           ? 'access_required'
-          : 'pending'
+          : 'verification_unavailable'
       );
       setOrderNumber(null);
       return;

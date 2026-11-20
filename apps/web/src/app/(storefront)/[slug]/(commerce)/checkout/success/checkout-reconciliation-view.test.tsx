@@ -105,6 +105,24 @@ describe('CheckoutReconciliationView', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('suggests refreshing after verification is unavailable without offering another payment', () => {
+    render(
+      <CheckoutReconciliationView
+        orderNumber={null}
+        getHref={getHref}
+        outcome="verification_unavailable"
+      />
+    );
+
+    expect(
+      screen.getByRole('heading', { name: 'Payment verification unavailable' })
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Refresh this page/)).toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: /try again/i })
+    ).not.toBeInTheDocument();
+  });
+
   it('omits the order number line when unknown', () => {
     render(<CheckoutReconciliationView orderNumber={null} getHref={getHref} />);
 

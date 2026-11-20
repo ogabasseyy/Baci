@@ -166,7 +166,7 @@ describe('verifyCheckoutPayment', () => {
     expect(callbacks.capturePaymentFailed).not.toHaveBeenCalled();
   });
 
-  it('keeps a bank-offer CSRF failure pending', async () => {
+  it('offers a safe refresh if bank-offer verification fails after the CSRF retry', async () => {
     request.mockResolvedValue(
       Response.json({ error: 'Invalid CSRF token' }, { status: 403 })
     );
@@ -177,7 +177,11 @@ describe('verifyCheckoutPayment', () => {
       callbacks
     );
 
-    expect(callbacks.setStatus).toHaveBeenCalledWith('pending');
+    expect(callbacks.setStatus).toHaveBeenCalledWith(
+      'verification_unavailable'
+    );
+    expect(callbacks.setOrderNumber).toHaveBeenCalledWith(null);
+    expect(callbacks.capturePaymentFailed).not.toHaveBeenCalled();
     expect(callbacks.scheduleFailedRedirect).not.toHaveBeenCalled();
   });
 

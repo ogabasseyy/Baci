@@ -30,6 +30,12 @@ const copy = {
       'Paystack reported that this payment did not complete. We need to check the original attempt before you can pay again.',
     cart: 'Your cart is intact. Check your order status or contact support for help.',
   },
+  verification_unavailable: {
+    title: 'Payment verification unavailable',
+    detail:
+      'Refresh this page to check your payment again, or see your order status in your account.',
+    cart: 'Check your payment status before starting another payment.',
+  },
   access_required: {
     title: 'Sign in to check your payment',
     detail:

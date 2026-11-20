@@ -168,14 +168,14 @@ it.each([false, true])('discovers one cart workflow for OAuth connection=%s', as
     const { tools } = await client.listTools();
     expect(tools.map((tool) => tool.name).sort()).toEqual(connected
       ? ['get_ogabassey_guest_cart', 'update_ogabassey_guest_cart']
-      : ['add_to_cart', 'prepare_storefront_cart_link', 'update_ogabassey_guest_cart']);
+      : ['prepare_storefront_cart_link', 'update_ogabassey_guest_cart']);
     // Discovery must not create a cart or resolve a private cart credential.
     expect(resolveToken).not.toHaveBeenCalled();
+    await expect(client.callTool({ name: 'add_to_cart', arguments: { product_id: charger } }))
+      .rejects.toThrow('Tool add_to_cart not found');
     if (connected) {
-      for (const name of ['add_to_cart', 'prepare_storefront_cart_link']) {
-        await expect(client.callTool({ name, arguments: { product_id: charger } }))
-          .rejects.toThrow(`Tool ${name} not found`);
-      }
+      await expect(client.callTool({ name: 'prepare_storefront_cart_link', arguments: { product_id: charger } }))
+        .rejects.toThrow('Tool prepare_storefront_cart_link not found');
       expect(resolveToken).not.toHaveBeenCalled();
     }
   } finally {

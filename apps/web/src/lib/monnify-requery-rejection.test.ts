@@ -166,3 +166,18 @@ describe('bugfix: ancillary-operation failures do not prove the vend failed', ()
     expect(check(message)).toBe(false);
   });
 });
+
+describe('bugfix: a failure that is not confirmed is not proof', () => {
+  it.each([
+    'Transaction failure was not confirmed',
+    'Vend failed, but this was not confirmed',
+    'Purchase failed (unconfirmed)',
+    'Vend failed and cannot be confirmed',
+  ])('keeps "%s" unresolved', (message) => {
+    expect(check(message)).toBe(false);
+  });
+
+  it('still accepts a plainly confirmed vend failure', () => {
+    expect(check('Vend failed')).toBe(true);
+  });
+});

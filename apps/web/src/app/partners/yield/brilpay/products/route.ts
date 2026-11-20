@@ -13,8 +13,6 @@ import { logger } from '@/lib/logger';
 import { createRateLimitResponse } from '@/lib/rate-limit';
 import { parseBrilStashFeedQuery } from '@/schemas/brilstash-feed-query';
 
-export const runtime = 'nodejs';
-
 export async function GET(request: NextRequest): Promise<Response> {
   const requestId = randomUUID();
   const headers = new Headers({

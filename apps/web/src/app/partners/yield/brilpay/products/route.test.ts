@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createBrilStashPageCorrelation } from '@/lib/brilstash/page-correlation';
-import { GET } from './route';
+import * as routeModule from './route';
 import { feedFixture } from './route.test-fixture';
 
 const dependencies = vi.hoisted(() => {
@@ -20,6 +20,7 @@ vi.mock('@/lib/brilstash/feed-rate-limit', () => ({
   checkBrilStashFeedRateLimit: dependencies.rateLimit,
 }));
 
+const { GET } = routeModule;
 const { bearer, host, request, result } = feedFixture;
 
 beforeEach(() => {
@@ -271,5 +272,16 @@ describe('BrilStash feed GET', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('bugfix: the compile build rejects route segment config under cacheComponents', () => {
+  it.each([
+    'runtime',
+    'dynamic',
+    'revalidate',
+    'fetchCache',
+  ])('does not export the incompatible %s segment config', (name) => {
+    expect(Object.keys(routeModule)).not.toContain(name);
   });
 });

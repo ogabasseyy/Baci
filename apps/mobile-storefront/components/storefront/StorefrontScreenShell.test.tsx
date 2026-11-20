@@ -113,7 +113,7 @@ describe('StorefrontScreenShell', () => {
     });
   });
 
-  it('renders without children and preserves explicit empty edges', () => {
+  it('reserves the sides when the screen handles its own vertical insets', () => {
     render(
       <StorefrontScreenShell edges={[]} testID="empty-shell">
         {null}
@@ -122,7 +122,7 @@ describe('StorefrontScreenShell', () => {
 
     const shell = screen.getByTestId('empty-shell');
 
-    expect(shell.props.edges).toEqual([]);
+    expect(shell.props.edges).toEqual(['left', 'right']);
     expect(StyleSheet.flatten(shell.props.style)).toMatchObject({
       flex: 1,
     });

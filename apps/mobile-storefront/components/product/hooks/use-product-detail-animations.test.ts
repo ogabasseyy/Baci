@@ -1,5 +1,5 @@
 import { act, renderHook } from '@testing-library/react-native';
-import { Dimensions } from 'react-native';
+import { Dimensions, Platform } from 'react-native';
 import Colors from '@/constants/Colors';
 import { useProductDetailAnimations } from './use-product-detail-animations';
 
@@ -18,5 +18,25 @@ it('resizes the header in the mounted product detail as the window changes', () 
     expect(result.current.headerHeight).toBe(360);
   } finally {
     act(() => Dimensions.set({ window: original }));
+  }
+});
+
+it('keeps the Android gallery stable when the keyboard reduces window height', () => {
+  const original = Dimensions.get('window');
+  const platform = jest.replaceProperty(Platform, 'OS', 'android');
+  try {
+    Dimensions.set({ window: { ...original, width: 800, height: 360 } });
+    const { result } = renderHook(() =>
+      useProductDetailAnimations(Colors.light)
+    );
+    expect(result.current.headerHeight).toBe(800);
+
+    act(() => {
+      Dimensions.set({ window: { ...original, width: 800, height: 180 } });
+    });
+    expect(result.current.headerHeight).toBe(800);
+  } finally {
+    act(() => Dimensions.set({ window: original }));
+    platform.restore();
   }
 });

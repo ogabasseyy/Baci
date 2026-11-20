@@ -1,4 +1,4 @@
-import { useWindowDimensions } from 'react-native';
+import { Platform, useWindowDimensions } from 'react-native';
 import {
   Extrapolate,
   interpolate,
@@ -13,7 +13,8 @@ type ColorsScheme = (typeof Colors)['light'];
 
 export function useProductDetailAnimations(colors: ColorsScheme) {
   const { height, width } = useWindowDimensions();
-  const headerHeight = Math.min(height, width);
+  // Android adjustResize also changes window height when the keyboard appears.
+  const headerHeight = Platform.OS === 'ios' ? Math.min(height, width) : width;
   const scrollY = useSharedValue(0);
   const onScroll = useAnimatedScrollHandler({
     onScroll: (event) => {

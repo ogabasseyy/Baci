@@ -4,5 +4,5 @@ self-hosted-runner:
     - baci-deploy
     - baci-lighthouse
     - baci-cwv-measurement
-    # GitHub-hosted preview label pending upstream actionlint support.
+    # The pinned actionlint 1.7.12 needs an allowlist entry for this GitHub-hosted label.
     - xcode-27

@@ -3,6 +3,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import type { StyleProp, ViewStyle } from 'react-native';
 import {
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -43,7 +44,8 @@ export function ProductImageGallery({
   headerHeight,
 }: ProductImageGalleryProps) {
   const { height, width } = useWindowDimensions();
-  const fitProductInWindow = width > height * WIDE_GALLERY_ASPECT_RATIO;
+  const fitProductInWindow =
+    Platform.OS === 'ios' && width > height * WIDE_GALLERY_ASPECT_RATIO;
 
   return (
     <>

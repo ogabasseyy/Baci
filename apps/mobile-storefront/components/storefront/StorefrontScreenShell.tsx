@@ -11,11 +11,11 @@ interface StorefrontScreenShellProps extends PropsWithChildren {
   themeBackground?: boolean;
 }
 
-// NativeStack already reserves the top inset. The shell keeps content
-// clear of the bottom and of either side when the window has unequal insets.
+// NativeStack already reserves the top inset. Callers can select which
+// vertical edges to pad. The shell always reserves both horizontal edges.
 export function StorefrontScreenShell({
   children,
-  edges = ['bottom', 'left', 'right'],
+  edges = ['bottom'],
   style,
   testID,
   themeBackground = false,
@@ -26,11 +26,7 @@ export function StorefrontScreenShell({
   return (
     <SafeAreaView
       testID={testID}
-      edges={
-        edges.length === 0
-          ? edges
-          : [...new Set<Edge>([...edges, 'left', 'right'])]
-      }
+      edges={[...new Set<Edge>([...edges, 'left', 'right'])]}
       style={[
         styles.container,
         themeBackground ? { backgroundColor: colors.background } : null,

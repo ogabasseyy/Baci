@@ -34,6 +34,7 @@ export function DrawerMenu() {
   const { Gesture, GestureDetector } = getOptionalGestureHandlerRuntime();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
+  // Leave 15% of the safe width exposed for the tap-to-dismiss backdrop.
   const safeWidth = Math.max(0, width - insets.left - insets.right);
   const drawerWidth = Math.min(safeWidth * 0.85, 320) + insets.left;
   const pathname = usePathname();

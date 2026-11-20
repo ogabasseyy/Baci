@@ -1,8 +1,9 @@
 # Baci capabilities and agent access
 
-Reviewed 19 November 2026 against source revision
-`0e51fec5ad2b4a27fd056787aa5a322bd51f8557`. The Shopping MCP row was re-reviewed after the misleading link-only
-`add_to_cart` alias was retired from the server, discovery card and submission metadata.
+Reviewed 20 November 2026 against source revision
+`cc79b962add7e85415e15367dc95026bf9778863`. The Shopping MCP row was re-reviewed after the misleading link-only
+`add_to_cart` alias was retired from the server, discovery card and submission metadata, and again after the
+connected cart read tool's description and failure text were reworded (wording only; no claim moved).
 The mobile-admin follow-up queue no longer treats
 stale unpaid staff-created orders as abandoned checkouts; their failed or BNPL payments still enter it. The source also categorizes Oxygen follow-ups, places reviews first and includes them in the customer badge; it does not automatically contact customers. Agentic checkout session quotes now include
 registered-merchant VAT using an exclusive basis; this is source evidence, not deployment or live-flow

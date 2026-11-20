@@ -115,4 +115,21 @@ describe('follow-up status label', () => {
       label
     );
   });
+
+  it.each([
+    ['bnpl_approved', 'Staff follow-up · BNPL Approved'],
+    ['paid', 'Staff follow-up · Paid'],
+    ['refunded', 'Staff follow-up · Refunded'],
+    ['cancelled', 'Staff follow-up · Cancelled'],
+    ['pending', 'Staff follow-up'],
+    ['unknown', 'Staff follow-up'],
+  ] as const)('labels a retained follow-up with %s status', (status, label) => {
+    expect(
+      getFollowUpStatusLabel({
+        ...order,
+        payment_status: status,
+        staff_follow_up_only: true,
+      })
+    ).toBe(label);
+  });
 });

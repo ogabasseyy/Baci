@@ -24,6 +24,13 @@ const PAYMENT_LABELS: Record<string, string> = {
   unknown: 'Payment status unavailable',
 };
 
+export const RETAINED_PAYMENT_STATUSES = [
+  'bnpl_approved',
+  'paid',
+  'refunded',
+  'cancelled',
+] as const;
+
 const METHOD_LABELS = new Map([
   ...PAYMENT_METHOD_SETTING_DEFINITIONS.map(
     ({ id, name }) => [id, name] as const
@@ -46,6 +53,14 @@ const METHOD_DETAIL_BY_STATUS: Partial<
 };
 
 export function getFollowUpStatusLabel(order: FailedOrder): string {
+  if (order.staff_follow_up_only) {
+    const status = RETAINED_PAYMENT_STATUSES.find(
+      (status) => status === order.payment_status
+    );
+    return status
+      ? `Staff follow-up · ${PAYMENT_LABELS[status]}`
+      : 'Staff follow-up';
+  }
   if (order.oxygen_follow_up_status)
     return OXYGEN_LABELS[order.oxygen_follow_up_status];
 
